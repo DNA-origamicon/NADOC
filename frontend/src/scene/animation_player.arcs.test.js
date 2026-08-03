@@ -199,3 +199,63 @@ describe('stop() returns the model to the loaded state', () => {
     expect(h.calls.lerp.length).toBe(0)
   })
 })
+
+/**
+ * `trajectoryKeyframes` is SHARED with the Animations panel's authoring preview, and
+ * main.js calls `animPlayer.stop()` on every departure from the Animations tab — even
+ * when nothing ever played. Releasing there tore down the user's preview and snapped the
+ * model back to design positions, with the panel's needle still claiming frame N.
+ */
+describe('trajectory ownership — stop() releases only what it took', () => {
+  const trajKf = () => kf({ is_trajectory: true, trajectory_job_id: 'J1',
+                            trajectory_engine: 'oxdna', trajectory_scope: 'job',
+                            trajectory_frame_start: 0, trajectory_frame_end: 9 })
+
+  it('does not release a hold it never took (no play at all)', () => {
+    const h = makeHarness({ design: design(3) })
+    h.player.stop()
+    expect(h.trajectoryKeyframes.release).not.toHaveBeenCalled()
+  })
+
+  it('does not release when the animation had no trajectory keyframe', async () => {
+    const h = makeHarness({ design: design(3) })
+    // prepare() returns an EMPTY map — nothing was loaded, so nothing is owned, even
+    // though the panel may be previewing a job through the same module.
+    await h.player.play({ id: 'a', name: 'A', fps: 30, loop: false,
+                          keyframes: [kf(), kf({ feature_log_index: 0 })] })
+    h.player.stop()
+    expect(h.trajectoryKeyframes.release).not.toHaveBeenCalled()
+  })
+
+  it('DOES release after playing an animation whose bake loaded a job', async () => {
+    const h = makeHarness({ design: design(3) })
+    h.trajectoryKeyframes.prepare = vi.fn(async () => new Map([['J1', 10]]))
+    await h.player.play({ id: 'a', name: 'A', fps: 30, loop: false,
+                          keyframes: [trajKf(), kf()] })
+    h.player.stop()
+    expect(h.trajectoryKeyframes.release).toHaveBeenCalledTimes(1)
+  })
+
+  it('releases at most once — a second stop() does not double-release', async () => {
+    const h = makeHarness({ design: design(3) })
+    h.trajectoryKeyframes.prepare = vi.fn(async () => new Map([['J1', 10]]))
+    await h.player.play({ id: 'a', name: 'A', fps: 30, loop: false,
+                          keyframes: [trajKf(), kf()] })
+    h.player.stop()
+    h.player.stop()
+    expect(h.trajectoryKeyframes.release).toHaveBeenCalledTimes(1)
+  })
+
+  it('still releases BEFORE the feature-log restore when it does own the hold', async () => {
+    // The ownership guard must not disturb stop()'s load-bearing order: the trajectory
+    // restore is applyFemPositions(null), which the feature-log restore would overwrite.
+    const h = makeHarness({ design: design(3) })
+    h.trajectoryKeyframes.prepare = vi.fn(async () => new Map([['J1', 10]]))
+    await h.player.play({ id: 'a', name: 'A', fps: 30, loop: false,
+                          keyframes: [trajKf(), kf({ feature_log_index: 0 })] })
+    h.calls.order.length = 0
+    h.player.stop()
+    expect(h.calls.order.indexOf('trajRelease')).toBeGreaterThanOrEqual(0)
+    expect(h.calls.order.indexOf('trajRelease')).toBeLessThan(h.calls.order.indexOf('lerp'))
+  })
+})

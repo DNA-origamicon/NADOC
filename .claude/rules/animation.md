@@ -52,7 +52,8 @@ field `configuration_id` (not `config_id`). Topic file: `memory/project_assembly
 | [ui/strand_anim_panel.js](../../frontend/src/ui/strand_anim_panel.js) | 292 | Per-overhang strand-anim setup UI, init [main.js:4604](../../frontend/src/main.js#L4604) |
 | [scene/animation_text_overlay.js](../../frontend/src/scene/animation_text_overlay.js) | 65 | `applyAnimationTextOverlay(el, state)` — DOM overlay, driven by the player's `onTextOverlayUpdate` [main.js:1619](../../frontend/src/main.js#L1619) |
 | [scene/assembly_config_animator.js](../../frontend/src/scene/assembly_config_animator.js) | 120 | Pure interpolation core for assembly configs, init [main.js:6348](../../frontend/src/main.js#L6348). **Unit-tested** (13 `it`) |
-| [scene/export_video.js](../../frontend/src/scene/export_video.js) | 384 | WebM (`MediaRecorder`+`captureStream`) + GIF (`await import('gifenc')`). **TWO exporters:** `exportVideo` (raw editor canvas, Animations tab) and `exportPhotoVideo` (photo-mode pipeline via `photoMode.beginFrameSession`, **Photo** tab — see `memory/project_photo_mode.md`). **Unit-tested** (11 `it`) |
+| [scene/export_video.js](../../frontend/src/scene/export_video.js) | ~410 | WebM (`MediaRecorder`+`captureStream`) + GIF (`await import('gifenc')`). **TWO exporters:** `exportVideo` (raw editor canvas, Animations tab) and `exportPhotoVideo` (photo-mode pipeline via `photoMode.beginFrameSession`, **Photo** tab — see `memory/project_photo_mode.md`). Both take `onPhase(key, {done,total})` alongside the old per-frame `onProgress`. **Unit-tested** (24 `it`) |
+| [scene/export_progress.js](../../frontend/src/scene/export_progress.js) | 320 | The phase-weighted export bar — see "Export progress" below. **Unit-tested** (41 `it`) |
 | [scene/overhang_unzip_overlay.js](../../frontend/src/scene/overhang_unzip_overlay.js) | 175 | `initOverhangUnzipOverlay({getHelixCtrl, getDesign})` `:36`; `update(items, geometry)` `:112`, `clear()` `:159` |
 | [scene/overhang_strand_anim.js](../../frontend/src/scene/overhang_strand_anim.js) | 711 | `initOverhangStrandAnim({…})` `:44` → `{bind, setPhi, getFrame, isBound, clear, dispose}` `:658` |
 | [api/animation_endpoints.js](../../frontend/src/api/animation_endpoints.js) | 107 | 18 exported client fns (design + assembly) |
@@ -179,6 +180,171 @@ stop on `'scene'`. Both pinned in `display_tab_policy.test.js`.
 `_bakedTrajSurf`, `_TRAJ_ATOM_MAX`/`_TRAJ_SURF_MAX` (40/20), `_ensureDesignAtoms`,
 `_mdAtomsActive`, `_lastMdAtomKey`, and the player's import of `framesToUpdates` from
 `ui/oxdna_display.js`. The player no longer calls `applyFemPositions` for trajectories at all.
+
+## Export progress — one bar, every subprocess named (2026-08-02)
+
+`scene/export_progress.js` owns the export popup for the whole run of an export from
+**either** tab. Both panels do the same three things: `planExportPhases(...)` →
+`beginExportSession({header, phases, onCancel, onStatus})` → `endExportSession()` in a
+`finally`. Phases, in order: `prepare · geometry · traj_load · traj_frames · session ·
+capture · encode · save`, weighted so no single one owns more than ~41% of the bar. The
+two `traj_*` phases are DROPPED from the plan (not skipped mid-run) when the animation has
+no trajectory keyframe / no heavy rep — that's what `hasTrajectory` (from `trajectoryJobs`)
+and `hasHeavyFrames` (from the player's new `hasHeavyRep()`) select.
+
+**What was wrong before.** Only the per-frame capture loop reported anything. On
+VoltronCoreScad + oxDNA run 17 at `scope='job'` (251 frames) the popup read
+`Preparing… 0%` for **4+ minutes** of trajectory download alone, and again through the
+surface prebuild — the user's own report is that this reads as a hang and invites a
+retry, which throws the download away.
+
+Three separate defects fed that, all now closed:
+
+1. **The Animations tab DROPPED every bake tick.** `_exportInFlight` suppressed the bake
+   popup (correctly — see 2), but `_bakeProgressOpen` then stayed false and the
+   `baking_progress` branch was gated on it, so geometry, trajectory and prebuild ticks
+   were all discarded. Bake events now route to `activeExportSession().handleBakeEvent`.
+2. **The Photo tab STOMPED its own popup.** `_exportInFlight` was panel-local, so a
+   Photo-tab export left it false: the bake called `showOpProgress('Rendering Animation')`
+   on top, and because `op_progress` is ref-counted over ONE shared header and ONE cancel
+   handler, the export got retitled and its Cancel replaced by the bake's — leaving the
+   long part uncancellable. `activeExportSession()` is the process-wide gate now.
+3. **The trajectory download was a single opaque await.** `trajectory_keyframes.js` takes
+   `pollLoadProgress` (wired in `main.js` to `api.getOxdnaTrajectoryProgress`, oxDNA only —
+   NAMD has no such route) and polls it for the duration of the load. It forwards **only
+   readings that moved**: re-emitting the same numbers resets the consumer's stall clock,
+   which made the elapsed tail restart every 400 ms through the response-body transfer.
+   The reuse path (`showing || resumed`) still emits one `{phase:'load', reused:true}` at
+   100% so a held trajectory is labelled rather than jumped silently.
+
+**The stall heartbeat is the part that carries the worst case.** A `setInterval` re-emits
+the current status with a `· still working, m:ss elapsed` tail once a phase has been quiet
+for `stallMs` (2.5 s). Measured in the app: the tail counts from 0:03 to 2:01+ through the
+response-body transfer with the bar honestly parked at 25%. It **never** advances the
+fraction — it explains, it does not fake progress.
+
+Residual, and not fixable from this layer: while the main thread is blocked (parsing a
+~50 MB JSON body, a synchronous surface rebuild) no timer fires, so one ~7 s gap between
+label changes was observed live. The label either side of it is the elapsed tail, so it
+reads as a slow tick rather than a freeze.
+
+`gif.finish()` + the Blob + `_download` used to run **after** the last progress event —
+the `encode` and `save` phases now bracket them, with a `_yield()` first so the label
+paints before the synchronous concat.
+
+## All simulated frames must reach the exported video (2026-08-03)
+
+Reported as "regardless of how many frames in a trajectory I only saw 8 frames through a
+whole gif". There are **two independent ways** frames go missing, and they need separate
+fixes — measured on `workspace/6hbx32.nadoc` + oxDNA job `4220ddf73b60` (500 written +
+1 seed = **501** composite frames at `scope='job'`, hold 20 s, fps 30).
+
+**1. Resampling (fps × hold vs frame count).** The export samples the timeline at a fixed
+rate and asks the player what to draw; the player maps that instant onto the range with
+`frameAtProgress`. So the trajectory is RESAMPLED, and **every frame appears iff
+`hold × fps ≥ frames − 1`**. `trajectorySampling` / `trajectorySamplingPlan`
+(`scene/trajectory_range.js`, pure, 12 `it`) compute this and the `minFps` that fixes it;
+both export panels show it as a live ⚠ note. Not a bug in the saved animations — 6hbx32 at
+20 s × 30 fps takes 601 samples over 501 frames, and a real export produced **501 distinct
+images inside a 601-frame GIF**. It bites the moment someone halves fps to shrink the file:
+20 s × 10 fps = 201 samples silently drops 300 of 501 frames.
+
+**2. The heavy-rep bake cap — this was the "8".** `_ensureGrid('surface')` used a fixed
+`_COARSE_SURF_CAP = 8` regardless of memory, while the atomistic grid had been
+budget-sized (`affordableAtomFrames`) for ages. A heavy rep snaps to the nearest baked
+cell, so the CG beads moved every frame and the surface showed 8 shapes. Now:
+
+- the surface grid is budget-sized too, from `_surfFrameBytes` — learned from the first
+  mesh that arrives (`_noteSurfFrameBytes`), since nothing knows what a mesh costs until
+  one exists. `_COARSE_SURF_CAP` survives only as the pre-first-frame fallback.
+- `prebuildHeavy` fetches cell 0 **before** reading the grid when the size is unknown,
+  or it would plan against that fallback and leave the rest to lazy one-at-a-time fetches.
+- ⚠ `_noteSurfFrameBytes` must be called AFTER the write loop in `_coarseFrames`, never
+  inside it: a re-grid REPLACES `_bakedSurf`, and the remaining writes would land in an
+  orphan — the hazard that function's header already warns about.
+- `prebuildHeavy`'s `capped` now reaches `trajectoryKeyframes.heavyBake(jobId)`, and the
+  panel warns when the budget still binds (big designs) instead of capping silently.
+
+Measured after: **501 distinct surface frames requested, range 0..500** (was 8).
+Red-verified — with the fix reverted the unit test reports `expected 8 to be greater than 8`.
+
+**Cost:** a full-resolution surface bake is now one backend marching-cubes run per frame
+rather than 8. It reports through the export bar's `traj_frames` phase, so it is visible,
+but it is the dominant time in a surface export. A bead representation needs no bake at all
+and shows every frame exactly.
+
+## An authoring preview survives the sidebar (2026-08-03)
+
+**`animation_player.stop()` releases `trajectoryKeyframes` ONLY when a bake loaded a job**
+(`_ownsTrajectory`, set from `prepare()`'s returned map). The module is shared with the
+panel's authoring preview, and `main.js _leaveAnimationsTab()` calls `stop()` on EVERY
+departure from the Animations tab — including when nothing ever played. It was therefore
+releasing a hold it never took: the preview died, the model snapped back to design
+coordinates, and the panel went on showing "■ Stop" with its needle at frame N.
+
+Three more pieces make the round trip whole:
+
+- `_leaveAnimationsTab()` **returns early** (skipping its `_seekFeaturesWithDelta` design
+  rebuild) while `trajectoryKeyframes.isPreviewing()` — the rebuild would overwrite the
+  previewed frame even with the release fixed.
+- `selectTab()` now goes through `_leaveAnimationsTabUnlessPhoto` like the click path
+  (it used to leave unconditionally, so even `selectTab('photo')` killed the preview),
+  and `toggleCollapsed` re-enters on expand.
+- The display-tab-policy teardown passes **`keepCache: true`**
+  (`oxdna_jobs_panel._allDisplaysOff({keepCache}) → _setTrajOff({keepCache})` →
+  `suspendToDesign()` instead of `stopAndRestore()`). Leaving a tab is not "I'm done with
+  this job"; dropping `_traj` there costs a full re-download.
+- `animation_panel.resumePreview()` (called from `main.js _enterAnimationsTab`) re-asserts
+  the frame on arrival, re-taking the hold out of cache if the policy dropped it. It keeps
+  `_previewSpec` for this — re-loading at the module's `lineage` fallback would point the
+  same frame index at a different instant.
+
+Measured in the app (VoltronCoreScad + run 17, scope='job', 251 frames), bead drift from
+the previewed frame across the whole walk:
+
+| photo | animations | dynamics | animations | collapse | expand | feature-log | animations |
+|---|---|---|---|---|---|---|---|
+| 0.0000 nm | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | **1.66** | 0.0000 |
+
+**one** trajectory download for the whole walk. Feature Log is the deliberate exception —
+that tab's slider owns the model, so the display reverts there; the cache is kept and the
+frame is restored exactly on return.
+
+## Export efficiency — what was actually costing time (2026-08-03)
+
+Fixed in `export_video.js` / `photo_mode.js`, all pinned in `export_video.test.js`
+(`describe('efficiency')`, red-verified against the pre-fix code):
+
+- **`_yield()` is a `MessageChannel` post, not `setTimeout(0)`.** Nested timers clamp to
+  4 ms, and a **backgrounded tab** throttles them to ≥1 s — then once per *minute* after
+  five minutes hidden. A 300-frame export the user switched away from spent hours purely
+  inside the yield. This was the single largest win and it is invisible in the foreground.
+- **`session.renderFrameToCanvas()`** — the photo path returned a PNG `Blob` that the
+  caller immediately undid with `createImageBitmap` + blit + `getImageData`. The pixels
+  were already in the session's stitch canvas. `renderFrame()` (Blob) is kept for stills
+  and as a fallback. Also fixes a latent bug: `finalCanvas` was never cleared between
+  frames, so on a transparent background frames composited onto each other.
+- **The GIF palette is re-quantized every `_PALETTE_EVERY` (12) frames**, not every frame.
+  `quantize()` is a histogram + PNN clustering pass over every pixel — the dominant CPU
+  cost of a GIF export. Every frame still writes its own explicit colour table.
+- **`GIFEncoder({initialCapacity})`** — gifenc grows by 1.125× past 1 MB, so a
+  hundreds-of-MB GIF reallocated dozens of times, copying the whole buffer each time.
+- **`willReadFrequently: true`** on all five 2D contexts that `getImageData` per frame.
+
+⚠️ **Do not benchmark this under Playwright.** Its Chromium runs WebGL on **SwiftShader**
+(software) — `ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device …))` — so `renderer.render`
+alone is ~4.4 s/frame on VoltronCoreScad and swamps every CPU-side saving. A headless
+before/after will show no change even when the change is real.
+
+**Known, not fixed** (each is its own change): the trajectory download is ~460 MB of
+unrounded float64 JSON with a blocking `JSON.parse` — three binary precedents exist
+(`pack_solvent_bin`, `pack_bundle_bin`, `pack_surface_bin` + `_oxdnaBin`) and none was
+applied here; the surface trajectory bake is capped at **8 distinct frames**
+(`_COARSE_SURF_CAP`) regardless of memory budget, so a 251-frame trajectory renders with 8
+surface shapes; `_heavyBatch` is false for oxDNA so `frames-surface` is called one index at
+a time; and the trajectory surface path forwards neither `stride` (no such field on
+`OxdnaFramesSurfaceBody`) nor `getSurfaceParams()`, so a prebuilt frame can use different
+probe radius / colour mode than the sidebar shows.
 
 ## Crossover arcs must be re-seated by EVERY path that moves beads (2026-08-02)
 
@@ -331,13 +497,15 @@ its only caller is the sandbox's own `strand-anim/app.js:42`. The editor path im
 | `frontend/src/scene/trajectory_keyframes.test.js` | 42 | job collection, `keyframeTrajSpec`, no-reload-when-held **and reload-on-resolution-mismatch**, per-engine routing, budget hand-off, frame-change guard, suspend/release/cancel, the preview API |
 | `frontend/src/ui/frame_range_slider.test.js` | 30 | offset↔frame geometry, handle picking, drag/push rules, clamp-on-resolution-change, arrow-key nudge |
 | `frontend/src/ui/traj_prebuild_plan.test.js` | 8 | RAM cache + which ceiling binds |
-| `frontend/src/scene/animation_player.arcs.test.js` | 7 | crossover-arc re-seating per frame + the `stop()` restore order |
+| `frontend/src/scene/animation_player.arcs.test.js` | 12 | crossover-arc re-seating per frame, the `stop()` restore order, and trajectory OWNERSHIP (stop() must not release the panel's preview) |
+| `frontend/src/scene/export_progress.test.js` | 39 | phase plan + weights, monotonicity, skipped-phase credit, the stall heartbeat, bake-event routing, session lifecycle, and a full replay of the VoltronCoreScad workflow asserting every phase is named and no status is unchanged >5 s |
 
-`frontend/src/scene/export_video.test.js` (12 `it`) covers `exportPhotoVideo` only: frame count +
+`frontend/src/scene/export_video.test.js` (24 `it`) covers `exportPhotoVideo`: frame count +
 seek times, the `play→pause→seek→stop` lifecycle, `followMotion`, the `setLockFov` bracket, abort,
-and session disposal on throw. The encode branches themselves are browser machinery.
+and session disposal on throw — plus a `phase reporting` block that also exercises `exportVideo`,
+the raw-canvas twin, for the first time. The encode branches themselves are browser machinery.
 
-**Zero tests** for the REST of `animation_player.js` (only the arc/restore slice above is covered), `exportVideo` (the raw-canvas twin),
+**Zero tests** for the REST of `animation_player.js` (only the arc/restore slice above is covered),
 `overhang_unzip_overlay.js`, `overhang_strand_anim.js`, `camera_panel.js`.
 **Zero e2e specs** touch animation.
 Names that sound relevant but are not: `tests/test_cluster_config.py` (Alpine HPC submission

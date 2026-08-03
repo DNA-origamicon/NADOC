@@ -171,6 +171,29 @@ live note. `animationDuration()` re-derives clip length as `Σ(transition + hold
 exactly as the player's `_buildSchedule` does, so pricing the export never calls
 `play()` — which would bake geometry just to populate a dropdown.
 
+**Progress reporting was rebuilt 2026-08-02 — see `.claude/rules/animation.md` →
+"Export progress".** The Export Video button no longer calls `showOpProgress` itself;
+it opens a `beginExportSession` from `scene/export_progress.js` with a weighted phase
+plan and passes `onPhase` into `exportPhotoVideo`. Two photo-specific gains: the
+`beginFrameSession` build (max-texture probe → offscreen renderer → shadow map →
+RenderPass/FigurePass/SMAA/Output) is announced as its own `session` phase before it
+runs rather than being silent seconds, and the GIF `finish()`+Blob+download tail is the
+`encode`/`save` phases instead of dead time after "100%". It also closed a live bug:
+because `_exportInFlight` lived in `animation_panel.js`, a **Photo**-tab export left it
+false, so the bake opened a second `op_progress` that retitled this popup to "Rendering
+Animation" and replaced its Cancel handler with the bake's.
+
+**`beginFrameSession` gained `renderFrameToCanvas()` (2026-08-03).** `renderFrame()`
+returned a PNG **Blob** that the video caller immediately undid — `createImageBitmap` +
+blit + `getImageData` — to recover the bytes already sitting in the session's own
+`finalCanvas`. That is a full deflate-encode plus decode per frame (~0.2–0.5 s at 1080p).
+`renderFrameToCanvas()` returns the stitch canvas directly; `renderFrame()` is now a thin
+`toBlob` wrapper over it and still serves the still-PNG export. The canvas is
+session-owned and reused, so consume it before the next frame. It also fixed a latent bug:
+the tiles are composited with `drawImage`, and `finalCanvas` was never cleared between
+frames — on a **transparent** background each frame showed through the next. It now clears
+first. Pinned in `export_video.test.js` (`describe('efficiency')`), both paths.
+
 **Known limits, all pre-existing and shared with the raw-canvas Animations-tab
 export** (logged in `issues_ledger.md`, none photo-specific): a trajectory frame
 can capture stale atoms (`oxdna_display._applyHeavy` is `async` and unawaited);

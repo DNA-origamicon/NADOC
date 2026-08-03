@@ -9,8 +9,10 @@
 
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { PRESET_LABELS } from '../scene/photo_renderer/material_presets.js'
-import { showOpProgress, hideOpProgress, setOpProgressLabel, setOpProgressFraction }
-  from './op_progress.js'
+import { trajectoryJobs } from '../scene/trajectory_keyframes.js'
+import { trajectorySamplingPlan } from '../scene/trajectory_range.js'
+import { planExportPhases, beginExportSession, endExportSession }
+  from '../scene/export_progress.js'
 
 /** B-DNA duplex diameter — the feature a shadow map has to resolve to be useful. */
 export const DUPLEX_NM = 2.0
@@ -129,7 +131,7 @@ export function formatShadowStatus(status) {
  * @param {object}       [deps.player]           — initAnimationPlayer, driven frame-by-frame
  * @param {function}     [deps.exportPhotoVideo] — from scene/export_video.js
  */
-export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVideo } = {}) {
+export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVideo, trajectoryKeyframes = null } = {}) {
   const $ = (id) => document.getElementById(id)
 
   const els = {
@@ -600,10 +602,27 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
     const fpsVal = parseInt(els.videoFps?.value)
     const fps = Number.isFinite(fpsVal) && fpsVal > 0 ? fpsVal : (anim.fps ?? 30)
     const plan = videoPlan({ durationS: animationDuration(anim), fps, width: w, height: h })
-    els.videoNote.textContent = plan.frames
-      ? plan.text
-      : 'Animation has no duration — check keyframe timings.'
+    // A trajectory keyframe is RESAMPLED onto the capture grid, so fps decides how much
+    // of the simulation reaches the file. Say so here rather than let the user discover
+    // it as "the motion looks coarser than the run was" after an hours-long render.
+    const warn = _samplingWarning(anim, fps)
+    els.videoNote.textContent = !plan.frames
+      ? 'Animation has no duration — check keyframe timings.'
+      : warn ? `${plan.text}  ·  ${warn}` : plan.text
+    els.videoNote.style.color = plan.frames && warn ? '#e3b341' : ''
     if (els.videoBtn) els.videoBtn.disabled = !plan.frames
+  }
+
+  /** One-line warning when `fps` cannot show every simulated frame of a trajectory
+   *  keyframe, or '' when it can. Silent until the trajectory has been loaded at least
+   *  once — guessing a frame count would be worse than saying nothing. */
+  function _samplingWarning(anim, fps) {
+    if (!anim || !trajectoryKeyframes) return ''
+    const plan = trajectorySamplingPlan(
+      anim, (jobId) => trajectoryKeyframes.frameCount?.(jobId) ?? 0, fps)
+    if (plan.ok || !plan.worst) return ''
+    const w = plan.worst
+    return `⚠ shows ${w.shown} of ${w.frames} simulated frames — use ${plan.minFps} fps`
   }
 
   /** Rebuild the picker, preserving the selection when the list is unchanged. */
@@ -646,8 +665,22 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
     els.videoBtn.disabled = true
     els.videoBtn.textContent = 'Rendering…'
 
+    // One session owns the popup for the whole run — the bake that happens inside
+    // exportPhotoVideo's `player.play()` (geometry, trajectory download, surface
+    // frame prebuild) reports into these same phases via the animation panel's
+    // player-event handler. Before this it opened a SECOND op-progress on top,
+    // which retitled this popup and replaced its Cancel with the bake's.
     const cancelCtl = new AbortController()
-    showOpProgress('Exporting Video', 'Preparing…', { onCancel: () => cancelCtl.abort() })
+    const session = beginExportSession({
+      header: 'Exporting Video',
+      phases: planExportPhases({
+        hasTrajectory:  trajectoryJobs(anim).size > 0,
+        hasHeavyFrames: player.hasHeavyRep?.() ?? false,
+        format,
+      }),
+      onCancel: () => { cancelCtl.abort(); player.cancelBake?.() },
+      onStatus: (u) => { if (els.videoNote) els.videoNote.textContent = u.text },
+    })
     try {
       await exportPhotoVideo({
         animation: anim,
@@ -656,13 +689,12 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
         width, height,
         options: { format, fps: Number.isFinite(fpsVal) && fpsVal > 0 ? fpsVal : undefined },
         signal: cancelCtl.signal,
-        onProgress: (p, info = null) => {
-          setOpProgressFraction(p)
-          setOpProgressLabel(null, info?.frame != null && info?.frames != null
-            ? `Rendering frame ${info.frame} of ${info.frames}`
-            : `Rendering… ${Math.round(p * 100)}%`)
+        onPhase: (key, info = null) => {
+          if (info?.total != null) session.tick(key, info.done, info.total)
+          else session.begin(key)
         },
       })
+      session.finish()
       if (els.videoNote) els.videoNote.textContent = 'Done.'
     } catch (err) {
       if (err?.name === 'AbortError') {
@@ -672,7 +704,7 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
         if (els.videoNote) els.videoNote.textContent = `Export failed: ${err.message}`
       }
     } finally {
-      hideOpProgress()
+      endExportSession()
       els.videoBtn.disabled = false
       els.videoBtn.textContent = label
     }

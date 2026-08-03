@@ -2165,12 +2165,22 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       _setTrajStatusEl(_trajBaseText, _trajBaseColor)
     }
   }
-  function _setTrajOff() {
+  /** @param {{keepCache?: boolean}} [opts] — `keepCache` restores the design display but
+   *  KEEPS the downloaded trajectory and its frame bakes (`suspendToDesign`), so coming
+   *  back is instant. Use it when the user did not ask to drop the job, only to stop
+   *  looking at it (leaving the tab). An explicit toggle-off still frees the memory. */
+  function _setTrajOff({ keepCache = false } = {}) {
     trajPlayer.stop()
     _trajBusy = false
     _trajJobId = null
     oxdnaDisplay?.cancelPendingLoad?.()
-    if (oxdnaDisplay?.mode() === 'trajectory') oxdnaDisplay.stopAndRestore()
+    if (oxdnaDisplay?.mode() === 'trajectory') {
+      if (keepCache && typeof oxdnaDisplay.suspendToDesign === 'function') {
+        oxdnaDisplay.suspendToDesign()
+      } else {
+        oxdnaDisplay.stopAndRestore()
+      }
+    }
     if (trajToggle) trajToggle.checked = false
     if (trajFullToggle) trajFullToggle.checked = false
     if (trajControls) trajControls.style.display = 'none'
@@ -2411,15 +2421,18 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   }
   // Turn off whichever overlay is active (relaxed display / flexibility map /
   // trajectory player) — they share the one bead overlay.
-  function _allDisplaysOff() {
+  function _allDisplaysOff({ keepCache = false } = {}) {
     if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
-    else if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
+    else if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff({ keepCache })
     else if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
     else if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
     else _setDisplayOff()
     // Defensive: ensure every checkbox is cleared and the renderer restored.
     trajPlayer.stop()
-    if (oxdnaDisplay?.isActive()) oxdnaDisplay.stopAndRestore()
+    if (oxdnaDisplay?.isActive()) {
+      if (keepCache && typeof oxdnaDisplay.suspendToDesign === 'function') oxdnaDisplay.suspendToDesign()
+      else oxdnaDisplay.stopAndRestore()
+    }
     if (displayToggle) displayToggle.checked = false
     if (flexToggle) flexToggle.checked = false
     if (trajToggle) trajToggle.checked = false
@@ -2553,7 +2566,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   window.addEventListener('nadoc:left-tab-change', (e) => {
     const tab = e.detail?.activeTab
     if (shouldTearDownDisplays(tab)) {
-      if (oxdnaDisplay?.isActive()) _allDisplaysOff()
+      // keepCache: leaving the tab is not "I'm done with this job". Dropping `_traj`
+      // here costs a full re-download on return — 1 GB / minutes on a production run —
+      // and the Animations tab's authoring preview drives this same controller, so a
+      // trip to Feature Log would otherwise bin the trajectory the user is scrubbing.
+      if (oxdnaDisplay?.isActive()) _allDisplaysOff({ keepCache: true })
     }
     if (shouldResumeDisplays(tab)) {
       if (_base.isOpen()) _onOpen()

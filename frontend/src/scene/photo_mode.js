@@ -937,7 +937,9 @@ export function createPhotoMode(sceneCtx) {
     const finalCanvas  = document.createElement('canvas')
     finalCanvas.width  = width
     finalCanvas.height = height
-    const finalCtx     = finalCanvas.getContext('2d')
+    // willReadFrequently: the video path reads this canvas back with getImageData on
+    // every frame, and a GPU-backed 2D context pays a full readback each time.
+    const finalCtx     = finalCanvas.getContext('2d', { willReadFrequently: true })
 
     const offCanvas = document.createElement('canvas')
     offCanvas.width  = tileW
@@ -967,13 +969,28 @@ export function createPhotoMode(sceneCtx) {
 
     let _disposed = false
 
-    async function renderFrame() {
+    /**
+     * Render every tile into `finalCanvas` and return it.
+     *
+     * The canvas IS the frame — `renderFrame()` only wraps this in a PNG because a
+     * still export wants a file. A video export does not: it used to pay a full
+     * PNG deflate-encode + decode + blit per frame purely to get back the bytes
+     * already sitting here. Callers that want pixels take this and read them.
+     *
+     * The returned canvas is session-owned and REUSED by the next call — consume it
+     * before rendering the next frame.
+     */
+    function renderFrameToCanvas() {
       if (_disposed) throw new Error('photo: renderFrame() called after dispose()')
       _syncForOfflineFrame(followMotion)
 
       const savedAspect = camera.aspect
       try {
         camera.aspect = width / height
+        // The tiles are drawn with drawImage, which COMPOSITES. On a transparent
+        // background that lets the previous frame show through the new one, so the
+        // canvas has to start empty on every frame, not just the first.
+        finalCtx.clearRect(0, 0, width, height)
         for (let ty = 0; ty < tilesY; ty++) {
           for (let tx = 0; tx < tilesX; tx++) {
             camera.setViewOffset(width, height, tx * tileW, ty * tileH, tileW, tileH)
@@ -991,7 +1008,11 @@ export function createPhotoMode(sceneCtx) {
         camera.aspect = savedAspect
         camera.updateProjectionMatrix()
       }
+      return finalCanvas
+    }
 
+    async function renderFrame() {
+      renderFrameToCanvas()
       return new Promise(resolve => finalCanvas.toBlob(resolve, 'image/png'))
     }
 
@@ -1003,7 +1024,7 @@ export function createPhotoMode(sceneCtx) {
       offRenderer.dispose()
     }
 
-    return { renderFrame, dispose, tiles: tilesX * tilesY }
+    return { renderFrame, renderFrameToCanvas, dispose, tiles: tilesX * tilesY }
   }
 
   /**
@@ -1263,7 +1284,7 @@ export function createPhotoMode(sceneCtx) {
 export function initPhotoMode({
   store, sceneCtx, designRenderer, assemblyRenderer,
   assemblyJointRenderer, bluntEnds, originAxes,
-  player, exportPhotoVideo,
+  player, exportPhotoVideo, trajectoryKeyframes = null,
 }) {
   const mode = createPhotoMode(sceneCtx)
   let _panel = null
@@ -1273,7 +1294,7 @@ export function initPhotoMode({
     if (mode.isActive()) return
     if (!_panel) _panel = initPhotoPanel(mode, {
       onExit: () => exit(),
-      store, player, exportPhotoVideo,
+      store, player, exportPhotoVideo, trajectoryKeyframes,
     })
 
     mode.activate()

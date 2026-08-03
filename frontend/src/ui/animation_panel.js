@@ -26,9 +26,12 @@ import { filterJobsForPart, makeSpinner, mdChildLabelFor } from './md_jobs_panel
 import { jobDisplayName, productionState, relaxIndexMap, relaxRowLabel, runRowLabel } from './oxdna_jobs_panel.js'
 import { flattenJobTree } from './job_tree.js'
 import { statusBadge, statusKeyFor } from './job_status_symbol.js'
-import { formatJobTime } from '../scene/trajectory_range.js'
 import { initFrameRangeSlider } from './frame_range_slider.js'
-import { keyframeTrajSpec } from '../scene/trajectory_keyframes.js'
+import { keyframeTrajSpec, trajectoryJobs } from '../scene/trajectory_keyframes.js'
+import { formatJobTime, trajectorySamplingPlan } from '../scene/trajectory_range.js'
+import {
+  planExportPhases, beginExportSession, endExportSession, activeExportSession,
+} from '../scene/export_progress.js'
 
 // Build a one-line label for a feature-log entry as shown in the keyframe
 // State dropdown. Mirrors the wording the user sees in the Feature Log tab.
@@ -464,6 +467,10 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   let _previewKfId = null
   let _previewJob  = null
   let _previewFrame = 0   // survives the row rebuild the next store change causes
+  // The {engine, scope, stride} the preview was loaded at. Needed to RESUME after a tab
+  // trip: frame indices only mean the same instant within one resolution, so re-loading
+  // at the module's `lineage` fallback would point the needle at a different frame.
+  let _previewSpec = null
 
   /** Stop playback AND any authoring preview. Every place that used to call
    *  `player.stop()` goes through here: both hold the same display controllers, and
@@ -503,8 +510,36 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     if (!_previewKfId) return
     _previewKfId = null
     _previewJob  = null
+    _previewSpec = null
     _previewFrame = 0
     trajectoryKeyframes?.release()
+  }
+
+  /**
+   * Put a surviving preview back on screen after a sidebar trip.
+   *
+   * Leaving the Animations tab no longer releases the preview (the player only releases
+   * holds it took, and `_leaveAnimationsTab` skips its design re-seek while one is live),
+   * so for Photo and Simulations the model never moved and this only re-asserts the
+   * frame. For Feature Log / Plates the display-tab policy DOES turn displays off — but
+   * with `keepCache`, so the trajectory and its frame bakes are still resident and
+   * `previewLoad` resolves through `resumeTrajectory` without touching the network.
+   *
+   * Called on arrival at the Animations tab. Safe and cheap when nothing is previewing.
+   */
+  async function resumePreview() {
+    if (!_previewKfId || !_previewJob || !_previewSpec) return false
+    if (!trajectoryKeyframes) return false
+    if (!trajectoryKeyframes.isPreviewing()) {
+      // The hold was dropped (Feature Log / Plates). Re-take it at the SAME resolution.
+      const n = await trajectoryKeyframes.previewLoad(_previewJob, _previewSpec).catch(() => 0)
+      if (!n) { _stopPreview(); return false }
+    }
+    // Something else may have moved the model while we were away, and `show()` no-ops on
+    // an unchanged (job, frame) pair — so drop the guard before re-asserting the frame.
+    trajectoryKeyframes.invalidate?.()
+    trajectoryKeyframes.previewShow(_previewJob, _previewSpec.engine, _previewFrame)
+    return true
   }
 
   /** Patch one keyframe (design or part-context mode; assembly unsupported). */
@@ -560,6 +595,43 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
    *  loading spinner — saving a range rebuilds the row, and a spinner flashing for one
    *  microtask on every drag release reads as the panel reloading under you. */
   const _trajMetaCached = (jobId, spec) => _trajMetaCache.has(_specKey(jobId, spec))
+
+  /** Frames a job's trajectory has at the resolution a keyframe addresses. Prefers the
+   *  LOADED count (authoritative — a job still writing can disagree with its meta), then
+   *  the meta cache, so the export check works before anything has been downloaded. */
+  function _framesForKeyframe(kf) {
+    const loaded = trajectoryKeyframes?.frameCount?.(kf.trajectory_job_id) ?? 0
+    if (loaded > 0) return loaded
+    return _trajMetaCache.get(_specKey(kf.trajectory_job_id, keyframeTrajSpec(kf)))?.nFrames ?? 0
+  }
+
+  /** One-line warning when the chosen export fps cannot show every simulated frame,
+   *  or '' when it can. See `trajectorySamplingPlan` for the arithmetic. */
+  function _samplingWarning(anim, fps) {
+    if (!anim) return ''
+    const byId = new Map()
+    for (const kf of anim.keyframes ?? []) {
+      if (kf?.trajectory_job_id) byId.set(kf.trajectory_job_id, _framesForKeyframe(kf))
+    }
+    const plan = trajectorySamplingPlan(anim, (j) => byId.get(j) ?? 0, fps)
+    const parts = []
+    if (!plan.ok && plan.worst) {
+      const w = plan.worst
+      parts.push(`${fps} fps shows only ${w.shown} of ${w.frames} simulated frames `
+               + `(${w.dropped} never drawn) — use ${plan.minFps} fps or lengthen the hold`)
+    }
+    // The OTHER way frames go missing: a heavy rep (surface / atomistic) snaps to the
+    // nearest baked cell, so the bake's size — not the trajectory's — caps how many
+    // different shapes the video can contain. Only reported once a bake has run.
+    for (const jobId of byId.keys()) {
+      const bake = trajectoryKeyframes?.heavyBake?.(jobId)
+      if (bake?.capped && bake.total > 0) {
+        parts.push(`the surface/atomistic bake holds ${bake.frames} of ${bake.total} `
+                 + `frames (memory-limited) — switch to a bead representation for all of them`)
+      }
+    }
+    return parts.length ? `⚠ ${parts.join('. ')}.` : ''
+  }
 
   /**
    * Build the trajectory State controls for a trajectory keyframe:
@@ -782,6 +854,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       if (!n) { _setLabel(bar.getRange().start, bar.getRange().end, _nFrames); return }
       _previewKfId = kf.id
       _previewJob  = kf.trajectory_job_id
+      _previewSpec = spec
       _previewFrame = Math.min(bar.getRange().start, Math.max(0, n - 1))
       // The download is authoritative about the frame count — the meta call and it can
       // disagree while a job is still writing.
@@ -1639,12 +1712,19 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   // is called the right number of times (its ref-counter fights with itself
   // if we lose track).
   let _bakeProgressOpen = false
-  // Set true while an export is running. Suppresses the bake popup that
-  // would otherwise overlay (and overwrite the header of) the export popup.
-  let _exportInFlight = false
 
   // Player calls this via onEvent callback (wired in main.js)
   function onPlayerEvent(evt) {
+    // An export (from EITHER tab — this panel's Export button or the Photo tab's
+    // Export Video) owns the popup for its whole run. The bake happens inside that
+    // run, so its ticks belong to the export's phase bar, not to a second popup:
+    // op_progress is ref-counted over ONE shared header and ONE cancel handler, so
+    // showing a bake popup on top silently retitles the export and replaces its
+    // Cancel with the bake's — which then does nothing for the hours-long part.
+    const _exportSession = activeExportSession()
+    if (_exportSession && evt.type?.startsWith('baking')) {
+      _exportSession.handleBakeEvent(evt)
+    }
     if (evt.type === 'baking') {
       // Geometry/atomistic batch fetch in progress — disable play button and show progress bar
       if (playPauseBtn) { playPauseBtn.disabled = true; playPauseBtn.textContent = '…' }
@@ -1653,9 +1733,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         : 'Preparing frames…'
       _showBakingBar(prepMsg)
       // Centred popup with frame-by-frame progress + Cancel button.
-      // Skipped during export — exportBtn already showed its own
-      // "Exporting Animation" popup with its own cancel handler.
-      if (!_exportInFlight) {
+      // Skipped during export — the export session already owns the popup.
+      if (!_exportSession) {
         _bakeProgressOpen = true
         showOpProgress('Rendering Animation', prepMsg, {
           onCancel: () => { player.cancelBake?.() },
@@ -1663,6 +1742,9 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       }
     } else if (evt.type === 'baking_progress') {
       const { done, total } = evt
+      // The panel-local indeterminate strip is all the user has to go on when the
+      // popup belongs to an export, so keep its label current either way.
+      if (evt.label) _showBakingBar(evt.label)
       if (_bakeProgressOpen) {
         if (total > 0) setOpProgressFraction(done / total)
         // The trajectory phase counts a different thing (frames of a simulation, not
@@ -1705,6 +1787,26 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   const exportProgress = document.getElementById('anim-export-progress')
   const exportStatus   = document.getElementById('anim-export-status')
 
+  /** Live resampling check. The user picks fps to control file size and has no way to
+   *  know it also decides how much of the SIMULATION survives into the video — the
+   *  trajectory is resampled onto the capture grid, so too low a rate drops frames with
+   *  no visible artefact beyond "the motion looks coarser than the run was". */
+  function _refreshSamplingNote() {
+    if (!exportStatus) return
+    const anim = _getActiveAnim()
+    const fpsVal = parseInt(exportFpsInput?.value)
+    const fps = Number.isFinite(fpsVal) && fpsVal > 0 ? fpsVal : (anim?.fps ?? 30)
+    const msg = _samplingWarning(anim, fps)
+    // Never stomp a live export's own status line.
+    if (activeExportSession()) return
+    exportStatus.textContent = msg
+    exportStatus.style.display = msg ? '' : 'none'
+    exportStatus.style.color = msg ? '#e3b341' : ''
+  }
+  exportFpsInput?.addEventListener('input',  _refreshSamplingNote)
+  exportFpsInput?.addEventListener('change', _refreshSamplingNote)
+  selectEl?.addEventListener('change', () => setTimeout(_refreshSamplingNote, 0))
+
   exportBtn?.addEventListener('click', async () => {
     const anim = _getActiveAnim()
     if (!anim?.keyframes?.length) return
@@ -1717,20 +1819,37 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       fps:        Number.isFinite(fpsVal) && fpsVal > 0 ? fpsVal : undefined,
     }
 
+    // Loud, once, at the moment it matters: this is the last point before a
+    // potentially hours-long render that throws away most of the simulation.
+    const samplingWarn = _samplingWarning(anim, options.fps ?? anim.fps ?? 30)
+    if (samplingWarn) console.warn('[export]', samplingWarn)
+
     exportBtn.disabled  = true
     exportBtn.textContent = '…'
     if (exportProgress) { exportProgress.value = 0; exportProgress.style.display = '' }
-    if (exportStatus)   { exportStatus.textContent = 'Rendering frames…'; exportStatus.style.display = '' }
+    if (exportStatus)   { exportStatus.textContent = 'Rendering frames…'; exportStatus.style.display = ''; exportStatus.style.color = '' }
 
     // Pause live playback while exporting
     if (player.isPlaying()) player.pause()
 
-    // Centred progress popup with Cancel button.
+    // Centred progress popup with Cancel button. The session owns the whole 0→1
+    // range: bake phases (geometry / trajectory download / trajectory frames) arrive
+    // via onPlayerEvent, capture/encode/save via onPhase below. Cancelling has to
+    // abort BOTH the export loop and an in-flight bake — the bake is what runs for
+    // the first several minutes, and it is the part users give up on.
     const cancelCtl = new AbortController()
-    let exportProgressOpen = true
-    _exportInFlight = true
-    showOpProgress('Exporting Animation', 'Preparing…', {
-      onCancel: () => { cancelCtl.abort() },
+    const session = beginExportSession({
+      header: 'Exporting Animation',
+      phases: planExportPhases({
+        hasTrajectory:  trajectoryJobs(anim).size > 0,
+        hasHeavyFrames: player.hasHeavyRep?.() ?? false,
+        format:         options.format,
+      }),
+      onCancel: () => { cancelCtl.abort(); player.cancelBake?.() },
+      onStatus: (u) => {
+        if (exportProgress) exportProgress.value = u.fraction
+        if (exportStatus)   exportStatus.textContent = u.text
+      },
     })
 
     try {
@@ -1742,18 +1861,12 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         player,
         options,
         signal: cancelCtl.signal,
-        onProgress: (p, info = null) => {
-          if (exportProgress) exportProgress.value = p
-          if (exportStatus)   exportStatus.textContent = `Rendering… ${Math.round(p * 100)}%`
-          if (exportProgressOpen) {
-            setOpProgressFraction(p)
-            const label = info?.frame != null && info?.frames != null
-              ? `Rendering frame ${info.frame} of ${info.frames}`
-              : `Rendering… ${Math.round(p * 100)}%`
-            setOpProgressLabel(null, label)
-          }
+        onPhase: (key, info = null) => {
+          if (info?.total != null) session.tick(key, info.done, info.total)
+          else session.begin(key)
         },
       })
+      session.finish()
       if (exportStatus) exportStatus.textContent = 'Done!'
       setTimeout(() => {
         if (exportStatus) { exportStatus.textContent = ''; exportStatus.style.display = 'none' }
@@ -1767,11 +1880,11 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         if (exportStatus) { exportStatus.textContent = `Error: ${err.message}`; exportStatus.style.display = '' }
       }
     } finally {
-      _exportInFlight = false
-      if (exportProgressOpen) { exportProgressOpen = false; hideOpProgress() }
+      endExportSession()
       exportBtn.disabled  = false
       exportBtn.textContent = '⬇ Export'
       if (exportProgress) exportProgress.value = 1
+      setTimeout(_refreshSamplingNote, 2100)   // after the "Done!" message clears
     }
   })
 
@@ -1865,5 +1978,5 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     }
   }
 
-  return { onPlayerEvent, setAssemblyMode, setPartContext, clearPartContext, getKeyframeContext }
+  return { onPlayerEvent, setAssemblyMode, setPartContext, clearPartContext, getKeyframeContext, resumePreview }
 }

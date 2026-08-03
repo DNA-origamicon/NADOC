@@ -89,6 +89,9 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   // memory budget and its job topology are fetched once and shared with the panel.
   // See scene/trajectory_keyframes.js for what used to live here and why it went.
   let _baking         = false
+  // True only while THIS player holds `trajectoryKeyframes` (a bake loaded a job).
+  // The Animations panel's authoring preview holds the same module independently.
+  let _ownsTrajectory = false
 
   // Joint update callback — set by play() when assemblyActive
   let _onJointUpdate  = null   // (jointId: string, value: number) => void
@@ -438,6 +441,10 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         doneUnits += 1
         onEvent?.({
           type:    'baking_progress',
+          // `stage` names which subprocess this tick belongs to, so an export's
+          // phase-weighted bar can attribute it (see scene/export_progress.js).
+          // The panel's own bar ignores it and keeps using done/total.
+          stage:   'geometry',
           done:    doneUnits,
           total:   totalUnits,
           frame:   Math.min(doneUnits, totalUnits),
@@ -497,14 +504,26 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       // within this machine's memory budget. Its progress has its own denominator, so it
       // reports as a labelled second phase rather than being folded into the unit count.
       if (trajectoryKeyframes) {
-        await trajectoryKeyframes.prepare(animation, {
+        const held = await trajectoryKeyframes.prepare(animation, {
           onProgress: ({ phase, done, total }) => {
             const label = phase === 'load'
-              ? 'Loading trajectory…'
+              ? (total > 0 && done > 0
+                  ? `Loading trajectory… ${done} of ${total} frames`
+                  : 'Loading trajectory…')
               : `Preparing trajectory frames ${done} of ${total}`
-            onEvent?.({ type: 'baking_progress', done, total, frame: done, frames: total, label })
+            onEvent?.({
+              type: 'baking_progress',
+              stage: phase === 'load' ? 'traj_load' : 'traj_frames',
+              done, total, frame: done, frames: total, label,
+            })
           },
         })
+        // Only a bake that actually loaded a job takes OWNERSHIP of the shared
+        // trajectory module. Without this, `stop()` releases holds it never took —
+        // and the Animations panel's authoring preview goes through the SAME module,
+        // so leaving the tab (which calls stop() unconditionally) silently killed the
+        // user's preview and snapped the model back to design positions.
+        _ownsTrajectory = held.size > 0
         // Cancel during THIS phase can't surface as a rejected geometry fetch (those
         // already resolved), so playback would have started over a half-loaded
         // trajectory. Raise the same AbortError the geometry phase raises.
@@ -1192,7 +1211,15 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     // the beads through designRenderer.applyFemPositions, and its restore
     // (applyFemPositions(null)) reverts them to the renderer's own base positions. Doing
     // that AFTER the feature-log restore below would overwrite it.
-    trajectoryKeyframes?.release()
+    //
+    // ...but release ONLY what this player took. `trajectoryKeyframes` is shared with the
+    // Animations panel's authoring preview, and `stop()` is called unconditionally on
+    // every departure from the Animations tab (main.js `_leaveAnimationsTab`) — including
+    // when nothing ever played. Releasing there tore down the user's preview.
+    if (_ownsTrajectory) {
+      trajectoryKeyframes?.release()
+      _ownsTrajectory = false
+    }
     // Then the beads the feature-log lerp moved, then the cluster-owned ones. Each
     // re-seats the crossover arcs on the helices it just moved.
     _restoreBaseGeometry()
@@ -1303,5 +1330,14 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   /** Synchronous read of the current overlay state — used by the export pipeline. */
   function getActiveTextOverlay() { return _textOverlayAt(getCurrentTime()) }
 
-  return { play, pause, resume, stop, seekTo, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay }
+  /** True when a heavy representation (atomistic or surface) is visible, so a bake
+   *  will have per-position batches AND a trajectory heavy-frame prebuild to do.
+   *  The export panels ask this to size their progress phases — it is the same test
+   *  `_bakeStates` uses to decide how many units of work exist. */
+  function hasHeavyRep() {
+    return getAtomisticRenderer?.()?.getMode?.() !== 'off'
+        || getSurfaceRenderer?.()?.getMode?.()   !== 'off'
+  }
+
+  return { play, pause, resume, stop, seekTo, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay, hasHeavyRep }
 }

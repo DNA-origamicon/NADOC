@@ -442,6 +442,9 @@ export function initOxdnaDisplay({
   // switch / granularity flip / stop.
   let _bakedAtom = null
   let _bakedSurf = null
+  // Bytes one surface frame's vertex array costs, learned from the first one fetched.
+  // 0 = unknown, in which case the grid falls back to the fixed _COARSE_SURF_CAP.
+  let _surfFrameBytes = 0
   // jobId whose atomistic ATOMS/BONDS the renderer currently holds.  The relaxed
   // positions are serial-indexed against the JOB's design snapshot, which can differ
   // from the design now loaded in the app (edited after the job ran) — applying them
@@ -749,8 +752,55 @@ export function initOxdnaDisplay({
       }
       return _bakedAtom
     }
-    if (!_bakedSurf) _bakedSurf = { grid: strideIndices(0, n - 1, _COARSE_SURF_CAP), byIdx: new Map() }
+    if (!_bakedSurf) {
+      // Same reasoning as the atomistic grid above, which the surface one never got:
+      // the bound is MEMORY, not reconstruction time, so ask for as many frames as the
+      // budget allows rather than a fixed 8-cell compromise. Until one frame has been
+      // fetched we don't know what a mesh costs, so start at the old fixed cap and
+      // re-grid once `_surfFrameBytes` is known (see `_noteSurfFrameBytes`).
+      //
+      // This is what made a 501-frame trajectory export as EIGHT distinct surface
+      // shapes: the CG beads moved every frame, the surface snapped to the nearest of
+      // 8 grid cells, and nothing said so.
+      const cap = _surfFrameBytes > 0
+        ? affordableAtomFrames(_surfFrameBytes / 12, n, _surfBudget())
+        : _COARSE_SURF_CAP
+      _bakedSurf = {
+        grid: strideIndices(0, n - 1, cap), byIdx: new Map(),
+        cap, capped: cap < n, total: n,
+      }
+    }
     return _bakedSurf
+  }
+
+  /** Budget for the SURFACE bake. Shares the caller-supplied prebuild budget with the
+   *  atomistic bake — only one heavy rep is visible at a time, so they never both hold
+   *  a full trajectory. */
+  function _surfBudget() { return _atomBudget }
+
+  /**
+   * Learn what one surface frame costs, from the first one that arrives, and re-grid if
+   * the budget now affords materially more frames.
+   *
+   * Re-gridding keeps every frame already fetched: `strideIndices` is a superset walk
+   * (a denser grid over the same span re-includes the old endpoints only when they line
+   * up), so entries are carried across by index rather than assumed.
+   */
+  function _noteSurfFrameBytes(data) {
+    if (_surfFrameBytes > 0 || !data) return
+    const len = data?.length ?? data?.vertices?.length ?? 0
+    if (!(len > 0)) return
+    _surfFrameBytes = len * 4          // Float32 per component after _narrowFrame
+    const n = _traj?.n_frames || _traj?.frames?.length || 0
+    if (!_bakedSurf || n <= 0) return
+    const cap = affordableAtomFrames(_surfFrameBytes / 12, n, _surfBudget())
+    if (cap <= _bakedSurf.cap) return  // no better than what we already have
+    const kept = _bakedSurf.byIdx
+    _bakedSurf = {
+      grid: strideIndices(0, n - 1, cap),
+      byIdx: new Map([...kept].filter(([g]) => g >= 0)),
+      cap, capped: cap < n, total: n,
+    }
   }
 
   /** Lazily fetch + cache ONE coarse-grid frame's heavy data. One network rebuild per
@@ -811,10 +861,19 @@ export function initOxdnaDisplay({
         ? await api.getOxdnaFramesAtomistic(_jobId, want, _align, _trajScope, _trajStride)
         : await api.getOxdnaFramesSurface(_jobId, want, { stride: _trajStride }, _align, _trajScope)
       if (epoch !== _epoch) return
+      let first = null
       for (const g of want) {
         const data = resp?.[String(g)]
-        if (data) bake.byIdx.set(g, _narrowFrame(data))
+        if (!data) continue
+        const narrowed = _narrowFrame(data)
+        bake.byIdx.set(g, narrowed)
+        if (first === null) first = narrowed
       }
+      // AFTER the writes, never inside the loop: learning the frame size can re-grid,
+      // which REPLACES `_bakedSurf`, and the remaining writes would then land in an
+      // orphaned bake (the same hazard this function's header warns about). The re-grid
+      // carries `bake.byIdx` across, so everything just written survives.
+      if (kind === 'surface' && first !== null) _noteSurfFrameBytes(first)
     })
   }
 
@@ -867,6 +926,12 @@ export function initOxdnaDisplay({
         ? affordableAtomFrames(_atomSerials, n, budgetBytes)
         : null
       if (!_bakedAtom || nextCap === null || nextCap !== _bakedAtom.cap) _bakedAtom = null
+      // Same test for the surface grid, which shares the budget. Only a different
+      // NUMBER of frames justifies discarding fetched meshes (see the note above).
+      const nextSurf = _surfFrameBytes > 0 && n > 0
+        ? affordableAtomFrames(_surfFrameBytes / 12, n, budgetBytes)
+        : null
+      if (_bakedSurf && nextSurf !== null && nextSurf !== _bakedSurf.cap) _bakedSurf = null
     }
     const kind = _repKind()
     if (kind === 'cg') return { ok: true, n: 0 }   // CG plays instantly — nothing to bake
@@ -876,6 +941,14 @@ export function initOxdnaDisplay({
     if (kind === 'atomistic') {
       const ar = getAtomisticRenderer?.()
       if (ar && ar.getMode?.() !== 'off') await _ensureJobAtomistic(ar, _epoch)
+    }
+    // For SURFACE the grid size depends on what one mesh costs, which is only known
+    // once a mesh has arrived. Fetch cell 0 first so `_noteSurfFrameBytes` can re-grid,
+    // then read the grid — otherwise the prebuild plans against the blind fallback of 8
+    // cells and every frame beyond them is left to a one-at-a-time lazy fetch.
+    if (kind === 'surface' && _surfFrameBytes === 0) {
+      const seed = _ensureGrid(kind)
+      if (seed?.grid?.length) await _coarseFrame(kind, seed.grid[0], _epoch)
     }
     const bake = _ensureGrid(kind)
     if (!bake || !bake.grid.length) return { ok: false, n: 0 }

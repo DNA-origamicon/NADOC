@@ -1577,10 +1577,21 @@ async function main() {
   // (declared ~1948 / ~2020 — resolved lazily, first call is a user Play), so an
   // animation and a panel scrub share one frame cache, one memory budget and one
   // backend fetch slot instead of racing each other.
+  // Forward-declared, not const-at-init: four callbacks registered BELOW but far ABOVE
+  // its `initAnimationPanel(...)` call read this — the player's onEvent (next block), the
+  // selection context menu, the assembly-mode subscriber, and the left-tab strip's
+  // enter-Animations hook. A `let` at the init site would leave all four in the temporal
+  // dead zone, and TDZ throws even through `?.` — inside a frame callback that kills the
+  // render loop outright (see .claude/rules/main-init.md).
+  let animPanel = null
   const _trajPlan = initTrajPrebuildPlan({ api })
   const trajectoryKeyframes = initTrajectoryKeyframes({
     getController: (engine) => (engine === 'namd' ? mdViz : oxdnaDisplay),
     planPrebuild:  (ctrl) => _trajPlan.planFor(ctrl),
+    // Only oxDNA exposes a live frames-processed counter for the build; NAMD's
+    // loader has no equivalent route, so it reports start/end only.
+    pollLoadProgress: (jobId, engine) =>
+      (engine === 'namd' ? null : api.getOxdnaTrajectoryProgress(jobId)),
   })
   const animPlayer = initAnimationPlayer({
     camera,
@@ -6469,6 +6480,13 @@ async function main() {
         try {
           animPlayer?.stop?.()
           animPlayer?.setDisablePoses?.(false)
+          // An authoring PREVIEW survives the tab change (the panel still shows
+          // "■ Stop" at frame N, and the trajectory is loaded and paid for). The
+          // re-seek below rebuilds the design from topology, which would overwrite
+          // the previewed frame with design coordinates and leave the panel's
+          // needle lying about what is on screen. `animPlayer.stop()` above no
+          // longer releases a hold it doesn't own, so the preview really is alive.
+          if (trajectoryKeyframes?.isPreviewing?.()) return
           const d = store.getState().currentDesign
           const cursor = d?.feature_log_cursor ?? -1
           const subCursor = d?.feature_log_sub_cursor ?? null
@@ -6491,6 +6509,14 @@ async function main() {
       function _leaveAnimationsTabUnlessPhoto(tabId) {
         if (preservesDisplays(tabId)) { _animLeaveDeferred = true; return }
         _leaveAnimationsTab()
+      }
+
+      // Arriving on Animations: put a surviving authoring preview back on screen. No-op
+      // unless the user actually left one running. Fire-and-forget — the only async path
+      // is re-taking a hold the Feature Log / Plates policy dropped, and that resolves
+      // out of the still-resident cache.
+      function _enterAnimationsTab() {
+        animPanel?.resumePreview?.()?.catch?.(() => {})
       }
 
       function setActiveTab(tabId) {
@@ -6521,6 +6547,8 @@ async function main() {
         const nowOnAnimations = !collapsed && activeTab === 'scene'
         if (wasOnAnimations && !nowOnAnimations) {
           _leaveAnimationsTabUnlessPhoto(collapsed ? null : activeTab)
+        } else if (!wasOnAnimations && nowOnAnimations) {
+          _enterAnimationsTab()
         }
         _render()
         // Idempotent — a second click on an active render-override tab only
@@ -6544,7 +6572,10 @@ async function main() {
         if (tabId !== 'photo') _photoMode.exit()
         const wasOnAnimations = !collapsed && activeTab === 'scene'
         activeTab = tabId
-        if (wasOnAnimations) _leaveAnimationsTab()
+        // Same photo/preview exemption as the click path — this used to leave
+        // unconditionally, so even selectTab('photo') tore the preview down.
+        if (wasOnAnimations) _leaveAnimationsTabUnlessPhoto(collapsed ? null : tabId)
+        else if (!collapsed && tabId === 'scene') _enterAnimationsTab()
         _render()
         window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', {
           detail: { activeTab, collapsed },
@@ -6557,6 +6588,7 @@ async function main() {
         const wasOnAnimations = !collapsed && activeTab === 'scene'
         collapsed = !collapsed
         if (wasOnAnimations && collapsed) _leaveAnimationsTab()
+        else if (!collapsed && activeTab === 'scene') _enterAnimationsTab()
         _render()
         _persist()
       }
@@ -6752,7 +6784,8 @@ async function main() {
   initSceneInspector({ scene, camera, canvas })
 
   // ── Animation panel ──────────────────────────────────────────────────────────
-  let animPanel = null
+  // (`animPanel` is forward-declared ~5200 lines up, next to the player it serves —
+  //  four call sites read it from callbacks registered long before this line.)
   _partAnimPanel = animPanel = initAnimationPanel(store, {
     player: animPlayer,
     captureCurrentCamera,
@@ -6800,6 +6833,9 @@ async function main() {
     // through this same pipeline. `animPlayer` is a plain pass — it is created
     // ~5200 lines above, so no lazy getter is needed.
     player: animPlayer, exportPhotoVideo,
+    // Frame counts for the export's resampling check — a low fps silently drops
+    // simulated frames (see trajectorySamplingPlan).
+    trajectoryKeyframes,
   })
   window.__photoMode = _photoMode.mode   // console seam for tuning
   // Close the adaptive-clip seam (~600): the shadow catcher extends past the

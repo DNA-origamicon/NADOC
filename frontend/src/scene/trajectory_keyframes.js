@@ -74,13 +74,28 @@ export function trajectoryJobs(animation) {
  * @param {object}   opts
  * @param {function(string): object|null} opts.getController  engine → display controller
  * @param {function(object): Promise<object|null>} [opts.planPrebuild]  controller → memory plan
+ * @param {function(string,string): Promise<object|null>} [opts.pollLoadProgress]
+ *   `(jobId, engine) → {active, done, total}` — server-side frames-processed for an
+ *   in-flight trajectory build. The download is otherwise ONE opaque await (minutes on
+ *   a 1 GB trajectory) that reports nothing until it lands; polling this is what keeps
+ *   the bake bar moving through it. Optional: without it the load phase still reports
+ *   its start and end, just no interior detail.
+ * @param {{set:function,clear:function}} [opts.timer]  setInterval/clearInterval, injectable
+ * @param {number} [opts.pollMs]
  */
-export function initTrajectoryKeyframes({ getController, planPrebuild = null } = {}) {
+export function initTrajectoryKeyframes({
+  getController, planPrebuild = null, pollLoadProgress = null,
+  timer = { set: (fn, ms) => setInterval(fn, ms), clear: (h) => clearInterval(h) },
+  pollMs = 400,
+} = {}) {
   // jobId → frame count of its loaded composite trajectory (0 = failed / not loaded).
   const _frames  = new Map()
   // jobId → the {engine, scope, stride} resolution it was asked for, so a mid-playback
   // swap and a preview scrub reload at the SAME resolution the frame indices assume.
   const _specs   = new Map()
+  // jobId → {frames, capped, total} from the last heavy prebuild, so a caller can warn
+  // when the heavy rep will show fewer distinct frames than the trajectory has.
+  const _bakes   = new Map()
   // controller → the jobId it currently holds FOR US.
   const _loaded  = new Map()
   // controller → its state before we touched it, so release() can put it back.
@@ -103,6 +118,40 @@ export function initTrajectoryKeyframes({ getController, planPrebuild = null } =
     })
   }
 
+  /**
+   * Poll the backend's in-flight trajectory-build counter for the duration of one
+   * download, forwarding it as `{phase:'load', done, total}`. Returns the stop fn.
+   *
+   * Monotonic and edge-triggered: the counter goes `{active:false}` again the instant
+   * the build finishes server-side, while the response body is still transferring.
+   * Letting the phase fall back to 0/0 there — or re-announcing the same frozen
+   * number — is exactly the "did it die?" moment this whole change exists to remove,
+   * so a reading is forwarded only when it has actually advanced and the consumer's
+   * own stall timer narrates the rest.
+   */
+  function _pollLoad(jobId, engine, onProgress) {
+    if (!pollLoadProgress || !onProgress) return () => {}
+    let live = true
+    let best = { done: 0, total: 0 }
+    let inFlight = false
+    const handle = timer.set(async () => {
+      if (!live || inFlight) return
+      inFlight = true
+      try {
+        const p = await Promise.resolve(pollLoadProgress(jobId, engine)).catch(() => null)
+        if (!live) return
+        if (!(p?.active && Number(p.total) > 0 && Number(p.done) > best.done)) return
+        // Only forward a reading that MOVED. Re-emitting the same numbers looks like
+        // progress to the consumer, which resets its stall clock — so the "still
+        // working, 0:12 elapsed" tail kept restarting at zero while the response body
+        // transferred, which is the one stretch that tail exists to narrate.
+        best = { done: Number(p.done), total: Number(p.total) }
+        onProgress({ phase: 'load', jobId, engine, done: best.done, total: best.total })
+      } finally { inFlight = false }
+    }, pollMs)
+    return () => { live = false; timer.clear(handle) }
+  }
+
   /** Load `jobId` into `ctrl` at `spec`'s resolution (skipped when it already holds that
    *  job AT THAT RESOLUTION — the whole point of sharing the panel's controller) and
    *  prebuild its heavy frames within budget. */
@@ -121,13 +170,32 @@ export function initTrajectoryKeyframes({ getController, planPrebuild = null } =
                      && ctrl.isActive?.()
     const resumed  = !showing && ctrl.resumeTrajectory?.(jobId, { scope, stride }) === true
     if (showing || resumed) {
-      _frames.set(jobId, Number(ctrl.trajectoryInfo?.()?.total) || 0)
+      const n = Number(ctrl.trajectoryInfo?.()?.total) || 0
+      // Report the phase even though it is instant. An export bar that leaps its
+      // download slice with nothing written next to it is its own kind of confusing
+      // — and this branch is reached exactly when the user was already scrubbing
+      // the job, which is the case they are most likely to try.
+      onProgress?.({ phase: 'load', jobId, engine, done: n, total: n, reused: true })
+      _frames.set(jobId, n)
     } else {
-      onProgress?.({ phase: 'load', jobId, engine, done: 0, total: 1 })
-      const r = await Promise.resolve(
-        ctrl.loadTrajectory?.(jobId, true, scope, stride)).catch(() => null)
+      onProgress?.({ phase: 'load', jobId, engine, done: 0, total: 0 })
+      // The download is a single await that returns only once the whole composite
+      // trajectory has been parsed, aligned and shipped — on VoltronCoreScad's run 17
+      // that is a 1 GB .dat and minutes of silence. Poll the backend's own
+      // frames-processed counter alongside it so the phase reports real interior
+      // progress instead of a dead bar.
+      const stop = _pollLoad(jobId, engine, onProgress)
+      let r = null
+      try {
+        r = await Promise.resolve(
+          ctrl.loadTrajectory?.(jobId, true, scope, stride)).catch(() => null)
+      } finally { stop() }
       if (!r?.ok) { _frames.set(jobId, 0); return false }
-      _frames.set(jobId, Number(r.n_frames) || 0)
+      const n = Number(r.n_frames) || 0
+      // Close the phase at 100% — the poller stops reporting the moment the build
+      // finishes server-side, but the JSON body is still in transfer after that.
+      onProgress?.({ phase: 'load', jobId, engine, done: n, total: n })
+      _frames.set(jobId, n)
     }
     _loaded.set(ctrl, jobId)
     _lastJob = null; _lastFrame = -1   // the model just moved under us
@@ -138,10 +206,16 @@ export function initTrajectoryKeyframes({ getController, planPrebuild = null } =
       const plan = planPrebuild
         ? await Promise.resolve(planPrebuild(ctrl)).catch(() => null)
         : null
-      await Promise.resolve(ctrl.prebuildHeavy(
+      const bake = await Promise.resolve(ctrl.prebuildHeavy(
         (done, total) => onProgress?.({ phase: 'frames', jobId, engine, done, total }),
         { budgetBytes: plan?.budgetBytes ?? null },
       )).catch(() => null)
+      // How many DISTINCT heavy frames the bake holds. A heavy rep snaps to the nearest
+      // baked cell, so this — not the trajectory's frame count — is how many different
+      // surfaces/atom sets an export can possibly show. Silent capping here is what made
+      // a 501-frame trajectory render as 8 surfaces.
+      if (bake) _bakes.set(jobId, { frames: bake.frames ?? bake.n ?? 0,
+                                    capped: !!bake.capped, total: bake.trajFrames ?? 0 })
     }
     return true
   }
@@ -154,6 +228,7 @@ export function initTrajectoryKeyframes({ getController, planPrebuild = null } =
   async function prepare(animation, { onProgress } = {}) {
     _frames.clear()
     _specs.clear()
+    _bakes.clear()
     const jobs = trajectoryJobs(animation)
     if (!jobs.size) return _frames
     const first = new Map()   // controller → the first job that lands on it
@@ -171,6 +246,10 @@ export function initTrajectoryKeyframes({ getController, planPrebuild = null } =
 
   /** Frames in this job's loaded trajectory (0 = not loaded / no trajectory). */
   function frameCount(jobId) { return _frames.get(jobId) ?? 0 }
+
+  /** Distinct HEAVY frames baked for this job, or null when no heavy rep was baked
+   *  (a bead-rep animation, where every trajectory frame is exact). */
+  function heavyBake(jobId) { return _bakes.get(jobId) ?? null }
 
   /** True when this animation touched any trajectory job. */
   function hasJobs() { return _prev.size > 0 }
@@ -254,7 +333,7 @@ export function initTrajectoryKeyframes({ getController, planPrebuild = null } =
         ctrl.stopAndRestore?.()
       }
     }
-    _prev.clear(); _loaded.clear(); _frames.clear(); _specs.clear()
+    _prev.clear(); _loaded.clear(); _frames.clear(); _specs.clear(); _bakes.clear()
     invalidate()
   }
 
@@ -284,7 +363,7 @@ export function initTrajectoryKeyframes({ getController, planPrebuild = null } =
   function isPreviewing() { return _prev.size > 0 }
 
   return {
-    prepare, frameCount, show, invalidate, suspend, setPlaying, cancel, release, hasJobs,
-    previewLoad, previewShow, isPreviewing,
+    prepare, frameCount, heavyBake, show, invalidate, suspend, setPlaying, cancel, release,
+    hasJobs, previewLoad, previewShow, isPreviewing,
   }
 }

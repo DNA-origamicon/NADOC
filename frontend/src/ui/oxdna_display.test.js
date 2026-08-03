@@ -972,6 +972,54 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     expect(api.getOxdnaFramesAtomistic).not.toHaveBeenCalled()
   })
 
+  /**
+   * The surface grid used to be a FIXED 8 cells regardless of memory, while the
+   * atomistic one had been budget-sized for ages. Symptom, reported from a real export:
+   * "regardless of how many frames in a trajectory I only saw 8 frames through a whole
+   * gif" — the CG beads moved every frame and the surface snapped to the nearest of 8.
+   */
+  describe('surface bake sizing', () => {
+    /** A heavy-deps set with `nFrames` trajectory frames and a `verts`-vertex mesh. */
+    function makeSurfDeps(nFrames, verts) {
+      const d = makeHeavyDeps('surface')
+      const frames = Array.from({ length: nFrames }, (_, i) => [i, 0, 0, 1, 0, 0])
+      d.api.getOxdnaTrajectory = vi.fn().mockResolvedValue(
+        { ready: true, n_frames: nFrames, keys: [['h0', 0, 'FORWARD']], frames })
+      const mesh = { vertices: new Array(verts * 3).fill(0), faces: [0, 1, 2] }
+      d.api.getOxdnaFramesSurface = vi.fn().mockImplementation((id, idxs) =>
+        Promise.resolve(Object.fromEntries(idxs.map((i) => [String(i), mesh]))))
+      return d
+    }
+
+    it('bakes far more than 8 cells when the meshes are small enough to afford it', async () => {
+      const { ctrl, api } = makeSurfDeps(100, 2_000)     // 24 KB/frame — all 100 fit
+      await ctrl.loadTrajectory('jobT'); await tick()
+      await ctrl.prebuildHeavy(() => {})
+      const built = new Set(api.getOxdnaFramesSurface.mock.calls.flatMap(c => c[1]))
+      expect(built.size).toBeGreaterThan(8)
+      expect(built.size).toBe(100)                        // every frame
+    })
+
+    it('reports the grid as capped, and stays within budget, when meshes are large', async () => {
+      // 4 M vertices ≈ 48 MB/frame against the 1.5 GB ceiling → ~32 frames of 500.
+      const { ctrl } = makeSurfDeps(500, 4_000_000)
+      await ctrl.loadTrajectory('jobT'); await tick()
+      const r = await ctrl.prebuildHeavy(() => {})
+      expect(r.capped).toBe(true)
+      expect(r.frames).toBeGreaterThan(8)                 // still better than the old fixed cap
+      expect(r.frames).toBeLessThan(500)
+    })
+
+    it('every baked cell is distinct and spans the whole trajectory', async () => {
+      const { ctrl, api } = makeSurfDeps(60, 2_000)
+      await ctrl.loadTrajectory('jobT'); await tick()
+      await ctrl.prebuildHeavy(() => {})
+      const built = [...new Set(api.getOxdnaFramesSurface.mock.calls.flatMap(c => c[1]))]
+      expect(Math.min(...built)).toBe(0)
+      expect(Math.max(...built)).toBe(59)
+    })
+  })
+
   it('prebuildHeavy is a no-op for the CG rep (frames are instant — nothing to bake)', async () => {
     const { ctrl, api, state } = makeHeavyDeps('ballstick')
     await ctrl.loadTrajectory('jobT'); await tick()
