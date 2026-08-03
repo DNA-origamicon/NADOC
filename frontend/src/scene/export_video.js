@@ -105,15 +105,25 @@ export async function exportPhotoVideo({ animation, player, photoRenderer, width
   if (typeof photoRenderer.beginFrameSession !== 'function') {
     throw new Error('photoRenderer.beginFrameSession() is required for video export.')
   }
-  const session = photoRenderer.beginFrameSession(width, height)
+  // followMotion: the animation moves clusters and drives binding hinges, which
+  // shifts the bounding box while every mesh stays the same — the session's
+  // cheap "did the meshes change" fingerprint cannot see that, so the shadow
+  // frustum has to be refitted per frame or it stays where the structure was.
+  const session = photoRenderer.beginFrameSession(width, height, { followMotion: true })
 
   try {
+    // Photo mode owns the lens (and dollied the camera to preserve framing when
+    // it was set), so camera poses drive position/target/up only — otherwise the
+    // publication lens snaps to whatever FOV the pose was captured at. Inside
+    // the try so the session is disposed even if this throws.
+    player.setLockFov?.(true)
     if (format === 'gif') {
       await _captureGIFPhoto({ animation, player, session, w: width, h: height, fps, totalDur, onProgress, signal })
     } else {
       await _captureWebMPhoto({ animation, player, session, w: width, h: height, fps, totalDur, onProgress, signal })
     }
   } finally {
+    player.setLockFov?.(false)
     session.dispose()
     player.stop()
   }

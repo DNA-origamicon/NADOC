@@ -424,6 +424,40 @@ export function createPhotoMode(sceneCtx) {
   }
 
   /**
+   * Refit to MOVED geometry without rebuilding the rig.
+   *
+   * `_rebuildRig` tears the light group down and constructs fresh Ambient +
+   * Directional lights every call (`applyLighting` clears the group first), which
+   * throws away the key light's shadow MAP — a 2048² texture reallocated per
+   * call. Fine once on a settings change; ruinous at 30 fps, which is what an
+   * animation export asks for.
+   *
+   * Everything that actually depends on where the structure IS lives in
+   * `_bounds`: the shadow frustum, the depth-cue window and the floor placement.
+   * So refit those, slide the rig to the new centre, keep each light's DIRECTION
+   * and just re-length it to the new 2R sphere — and let `_applyKeyShadow` redo
+   * the frustum and the floor. The lights, and their shadow maps, survive.
+   */
+  function _refitBounds() {
+    if (!_lightGroup) return
+    _bounds    = computeShadowBounds(scene)
+    _rejected  = rejectedObjects(_bounds)
+    _signature = sceneSignature(scene)
+    _sigFrame  = 0
+
+    const R = _bounds?.radius ?? 1
+    if (_bounds) _lightGroup.position.copy(_bounds.center)
+    for (const child of _lightGroup.children) {
+      // setLength, not a fresh direction: azimuth/elevation are settings and the
+      // fill keeps the preset's own direction — only the scene's scale moved.
+      if (child.isDirectionalLight && child.position.lengthSq() > 0) {
+        child.position.setLength(2 * R)
+      }
+    }
+    _applyKeyShadow()
+  }
+
+  /**
    * Fit the shadow-catching floor to the current bounds.
    *
    * Called from the tail of `_applyKeyShadow`, which is both the end of every
@@ -716,8 +750,8 @@ export function createPhotoMode(sceneCtx) {
    * reason; against a fixed length the cue is near-nothing on a shallow view and
    * strong only when you are genuinely looking down the depth of a bundle.
    */
-  function _pushCueRange() {
-    if (!_figurePass || !_bounds?.corners) return
+  function _pushCueRangeTo(pass) {
+    if (!pass || !_bounds?.corners) return
     camera.getWorldDirection(_camForward)
     let near = Infinity
     for (const c of _bounds.corners) {
@@ -727,16 +761,25 @@ export function createPhotoMode(sceneCtx) {
     // The camera can sit inside the box on a close-up, putting corners behind
     // it — clamp so the fade never starts behind the viewer.
     near = Math.max(near, camera.near)
-    _figurePass.setCueRange(near, near + (_bounds.diagonal || 1))
+    pass.setCueRange(near, near + (_bounds.diagonal || 1))
     // Same span feeds ChimeraX's depth_jump — it is a fraction OF the structure's
     // depth, so a 3% jump means the same nm gap whether you framed a 20 nm tile
     // or a 400 nm origami.
-    _figurePass.setSceneDepth(_bounds.diagonal || 0)
+    pass.setSceneDepth(_bounds.diagonal || 0)
   }
 
-  function _applyFigure() {
-    if (!_figurePass) return
-    _figurePass.setParams({
+  function _pushCueRange() { _pushCueRangeTo(_figurePass) }
+
+  /**
+   * The FigurePass parameter block, in one place.
+   *
+   * The preview pass and every offscreen export pass live in DIFFERENT GL
+   * contexts and are separate instances, so each has to be fed this itself —
+   * that is the "export parity is not automatic" rule. Having one source for it
+   * is what stops the preview and the export drifting apart silently.
+   */
+  function _figureParams() {
+    return {
       outline:                  _settings.outline,
       outlineColor:             _settings.outlineColor,
       outlineStrength:          _settings.outlineStrength,
@@ -748,7 +791,12 @@ export function createPhotoMode(sceneCtx) {
       depthCue:                 _settings.depthCue,
       depthCueColor:            _settings.depthCueColor,
       depthCueStrength:         _settings.depthCueStrength,
-    })
+    }
+  }
+
+  function _applyFigure() {
+    if (!_figurePass) return
+    _figurePass.setParams(_figureParams())
     _pushCueRange()
     // EffectComposer skips a disabled pass entirely, so both effects off costs
     // nothing — no depth/normal pre-pass at all.
@@ -816,7 +864,44 @@ export function createPhotoMode(sceneCtx) {
   }
 
   /**
-   * Render at an arbitrary resolution and return a PNG Blob.
+   * The per-frame scene sync an OFFLINE render has to do for itself.
+   *
+   * The live preview gets this from `_perFrameSync`, which only runs inside the
+   * render-loop override installed by `setRenderFn`. A frame-stepped export
+   * never ticks that loop, so without this a long export silently degrades:
+   *
+   *  - **Meshes get REPLACED mid-timeline.** Trajectory keyframes swap the heavy
+   *    atomistic/surface rep in and out, and pre-baked geometry frames rebuild
+   *    beads. Fresh meshes arrive with the EDITOR's materials and shadow flags,
+   *    so the photo look just stops applying to them. `sceneSignature` catches
+   *    exactly this, and `resync()` re-swaps + refits.
+   *  - **Geometry MOVES without any mesh changing.** Cluster rotations and
+   *    binding hinges move the bounding box while the mesh set is identical, so
+   *    the fingerprint cannot see it and the shadow frustum stays fitted to
+   *    where the structure used to be. Only a caller that knows the scene is
+   *    animating should pay for a full refit per frame — hence `followMotion`.
+   */
+  function _syncForOfflineFrame(followMotion) {
+    if (sceneSignature(scene) !== _signature) {
+      resync()                    // re-swaps materials, restores flags, refits rig + cue
+    } else if (followMotion) {
+      _refitBounds()              // same meshes, moved geometry → frustum + floor only
+    }
+    // The rig is welded to the camera, and a camera-pose keyframe moves the
+    // camera every frame — without this the key light stays where it was when
+    // the mode was activated and the shading stops tracking the shot.
+    if (_settings.pinLights) _syncRigToCamera()
+    // NB the cue window is NOT pushed here: it depends on the per-tile
+    // projection, so the session pushes it inside the tile loop instead.
+  }
+
+  /**
+   * Open a reusable offscreen render session at `width × height`.
+   *
+   * ONE offscreen renderer, composer and FigurePass for every frame. This is
+   * not an optimisation: browsers block new WebGL contexts after roughly 30
+   * ("Web page caused context loss and was blocked"), so building a fresh
+   * context per frame dies partway through any real animation.
    *
    * TILED, because a render target above the GPU's MAX_TEXTURE_SIZE silently
    * clamps and produces a black image — 300 DPI (4200×2970) already exceeds the
@@ -828,9 +913,15 @@ export function createPhotoMode(sceneCtx) {
    * composer, its own figure-pass parameters and its own shadowMap flag — none
    * of the live renderer's GPU state carries over. That is the rule that keeps
    * preview and export in sync.
+   *
+   * @param {number} width
+   * @param {number} height
+   * @param {{followMotion?: boolean}} [opts] — `followMotion` refits the shadow
+   *   frustum every frame, for callers stepping an animation. Stills leave it off.
+   * @returns {{renderFrame: () => Promise<Blob>, dispose: () => void, tiles: number}}
    */
-  async function renderToBlob(width, height) {
-    if (!_active) throw new Error('photo: renderToBlob requires the mode to be active')
+  function beginFrameSession(width, height, { followMotion = false } = {}) {
+    if (!_active) throw new Error('photo: beginFrameSession requires the mode to be active')
 
     const probeCanvas = document.createElement('canvas')
     const probeR = new THREE.WebGLRenderer({ canvas: probeCanvas, alpha: true })
@@ -874,52 +965,60 @@ export function createPhotoMode(sceneCtx) {
     composer.addPass(new OutputPass())
     composer.setSize(tileW, tileH)
 
-    const savedAspect = camera.aspect
-    try {
-      camera.aspect = width / height
-      for (let ty = 0; ty < tilesY; ty++) {
-        for (let tx = 0; tx < tilesX; tx++) {
-          camera.setViewOffset(width, height, tx * tileW, ty * tileH, tileW, tileH)
-          camera.updateProjectionMatrix()
-          // Per-tile: the cue window's near corner depends on the projection.
-          figure.setParams({
-            outline:                  _settings.outline,
-            outlineColor:             _settings.outlineColor,
-            outlineStrength:          _settings.outlineStrength,
-            outlineThickness:         _settings.outlineThickness,
-            outlineDepthSensitivity:  _settings.outlineDepthSensitivity,
-            outlineCreaseSensitivity: _settings.outlineCreaseSensitivity,
-            silhouette:               _settings.silhouette,
-            outlineDepthJump:         _settings.outlineDepthJump,
-            depthCue:                 _settings.depthCue,
-            depthCueColor:            _settings.depthCueColor,
-            depthCueStrength:         _settings.depthCueStrength,
-          })
-          if (_bounds?.corners) {
-            camera.getWorldDirection(_camForward)
-            let near = Infinity
-            for (const c of _bounds.corners) {
-              const d = _cueScratch.subVectors(c, camera.position).dot(_camForward)
-              if (d < near) near = d
-            }
-            figure.setCueRange(Math.max(near, camera.near), Math.max(near, camera.near) + (_bounds.diagonal || 1))
-            figure.setSceneDepth(_bounds.diagonal || 0)
+    let _disposed = false
+
+    async function renderFrame() {
+      if (_disposed) throw new Error('photo: renderFrame() called after dispose()')
+      _syncForOfflineFrame(followMotion)
+
+      const savedAspect = camera.aspect
+      try {
+        camera.aspect = width / height
+        for (let ty = 0; ty < tilesY; ty++) {
+          for (let tx = 0; tx < tilesX; tx++) {
+            camera.setViewOffset(width, height, tx * tileW, ty * tileH, tileW, tileH)
+            camera.updateProjectionMatrix()
+            // Per-tile: the cue window's near corner depends on the projection.
+            figure.setParams(_figureParams())
+            _pushCueRangeTo(figure)
+            figure.enabled = figure.hasEffect()
+            composer.render()
+            finalCtx.drawImage(offCanvas, tx * tileW, ty * tileH)
           }
-          figure.enabled = figure.hasEffect()
-          composer.render()
-          finalCtx.drawImage(offCanvas, tx * tileW, ty * tileH)
         }
+      } finally {
+        camera.clearViewOffset()
+        camera.aspect = savedAspect
+        camera.updateProjectionMatrix()
       }
-    } finally {
-      camera.clearViewOffset()
-      camera.aspect = savedAspect
-      camera.updateProjectionMatrix()
+
+      return new Promise(resolve => finalCanvas.toBlob(resolve, 'image/png'))
+    }
+
+    function dispose() {
+      if (_disposed) return
+      _disposed = true
       composer.dispose?.()
       figure.dispose?.()
       offRenderer.dispose()
     }
 
-    return new Promise(resolve => finalCanvas.toBlob(resolve, 'image/png'))
+    return { renderFrame, dispose, tiles: tilesX * tilesY }
+  }
+
+  /**
+   * Render one frame at an arbitrary resolution and return a PNG Blob.
+   * A one-shot session — see `beginFrameSession` for the tiling and
+   * separate-GL-context rules that govern both.
+   */
+  async function renderToBlob(width, height) {
+    if (!_active) throw new Error('photo: renderToBlob requires the mode to be active')
+    const session = beginFrameSession(width, height)
+    try {
+      return await session.renderFrame()
+    } finally {
+      session.dispose()
+    }
   }
 
   /** The four preset names, in the shape swapToFlatMaterials expects. */
@@ -1128,7 +1227,7 @@ export function createPhotoMode(sceneCtx) {
     getDiagnostics,
     isActive: () => _active,
     setBackground, setMaterialPreset,
-    setFOV, resetFOV, setParallel, setExportSize, renderToBlob,
+    setFOV, resetFOV, setParallel, setExportSize, renderToBlob, beginFrameSession,
     setOutline, setOutlineColor, setOutlineStrength, setOutlineThickness,
     setOutlineSensitivity, setOutlineDepthJump,
     setDepthCue, setDepthCueColor, setDepthCueStrength,
@@ -1143,6 +1242,7 @@ export function createPhotoMode(sceneCtx) {
     _syncFrame:    _perFrameSync,
     _getKeyLight:  () => _keyLight,
     _getFigurePass: () => _figurePass,
+    _getCamera:     () => camera,
     _getLightGroup: () => _lightGroup,
     _getFloor:      () => _floor,
   }
@@ -1163,6 +1263,7 @@ export function createPhotoMode(sceneCtx) {
 export function initPhotoMode({
   store, sceneCtx, designRenderer, assemblyRenderer,
   assemblyJointRenderer, bluntEnds, originAxes,
+  player, exportPhotoVideo,
 }) {
   const mode = createPhotoMode(sceneCtx)
   let _panel = null
@@ -1170,7 +1271,10 @@ export function initPhotoMode({
 
   function enter() {
     if (mode.isActive()) return
-    if (!_panel) _panel = initPhotoPanel(mode, { onExit: () => exit() })
+    if (!_panel) _panel = initPhotoPanel(mode, {
+      onExit: () => exit(),
+      store, player, exportPhotoVideo,
+    })
 
     mode.activate()
 

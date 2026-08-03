@@ -1538,3 +1538,61 @@ and "Display MD" stopping on the Animations tab (a stream keeps *writing* the sa
 would fight playback), while `shouldTearDownDisplays()` now preserves the painted frame.
 Related: **D11** (`#d11-2`) is the mirror image — an *inactive* overlay's `stopAndRestore`
 reverting geometry on `design-changed`.
+
+---
+
+## L13
+
+### L13. A ground-up rewrite left a feature "missing" when what it dropped was one function its own caller still asks for by name (2026-08-02, photo-mode video export)
+
+Symptom (as reported): "in our complete redo of photomode, we failed to include a video export."
+
+That framing is what makes this worth banking, because it was **wrong in a specific, useful way**.
+Nothing had to be written. `frontend/src/scene/export_video.js:91 exportPhotoVideo()` — the whole
+animation→video export, frame loop, WebM + GIF branches, text-overlay compositing, `AbortSignal`,
+progress callbacks, download — was **still in the tree, complete**, and had been since v1. It was
+unreachable for exactly two reasons:
+
+1. its first executable line is
+   `if (typeof photoRenderer.beginFrameSession !== 'function') throw`, and photo mode v2's public
+   API (`photo_mode.js`) exports `renderToBlob` and **not** `beginFrameSession`. The only
+   implementation left in the repo was `frontend/archive/photo_mode_v1/photo_renderer.js:1640`;
+2. nothing imported it — `main.js` imported only its sibling `exportVideo`.
+
+**Why every normal check missed it.** Grep-for-callers of the *retired* module (`photo_renderer.js`)
+came back clean, because the caller was in a third file that survived the rewrite untouched. The
+test suite was silent because `export_video.js` had zero tests. The rewrite's own topic file
+documented the new Export card honestly as "tiled PNG" and simply never mentioned video, so the
+docs were not wrong either — just silent.
+
+**The check that would have caught it:** after replacing a subsystem, diff the OLD module's exported
+API against the new one, and for each **dropped** name grep the whole of `src/` — not just "does
+anything still import the old module". A dropped export is a contract break even when no import of
+the old file remains, because callers reach it through the *new* object.
+
+**The second half of the lesson — offline render paths lose everything the render loop did for
+free.** Photo mode keeps its material swap and shadow frustum current in two places, and *neither*
+runs when frames are stepped by hand:
+
+- `store.subscribe` on design/assembly/staples/isolated-strand, and
+- a geometry fingerprint inside `_perFrameSync`, which only ticks from the render-loop override
+  installed via `setRenderFn`.
+
+An export bypasses the loop entirely. Meanwhile `animation_player._applyAt` genuinely *replaces
+meshes* mid-timeline (trajectory keyframes swap the heavy atomistic/surface rep in and out;
+pre-baked geometry frames rebuild beads), and every fresh mesh arrives with the EDITOR's materials
+and shadow flags. **Symptom shape to recognise: a render that starts correct and degrades partway
+through, with no error.** Fix was `_syncForOfflineFrame()` at the top of each frame — fingerprint →
+`resync()`, plus a `followMotion` flag for the case the fingerprint *cannot* see (cluster rotation
+moves the bounding box while the mesh set is identical).
+
+**And a performance trap inside that fix.** The obvious call for "refit to moved geometry" is
+`_rebuildRig()` — but it routes through `applyLighting`, which clears the light group and constructs
+fresh lights, **discarding the key light's 2048² shadow map**. Correct once on a settings change;
+a texture reallocation per frame at 30 fps. Split out `_refitBounds()`, which recomputes bounds,
+slides the rig, re-lengths each light along its existing direction, and refits the frustum + floor —
+keeping the light objects, and their shadow maps, alive. Pinned by asserting light **object
+identity** survives a `followMotion` frame (the test fails against `_rebuildRig`).
+
+Related: the same rewrite is why `beginFrameSession` exists at all rather than a `renderToBlob`
+loop — browsers block new WebGL contexts after ~30, so a per-frame context dies mid-export.

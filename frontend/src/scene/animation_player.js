@@ -56,6 +56,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   let _bounce       = false   // ping-pong: flip direction at each boundary
   let _loopMode     = false   // when true, restart at the opposite boundary instead of stopping
   let _disablePoses = false   // when true, camera-pose lerp is skipped so the user can orbit freely
+  let _lockFov      = false   // when true, poses drive position/target/up but NOT the lens
   let _startTime    = 0
   let _seekOffset   = 0
   let _animation    = null
@@ -786,7 +787,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         controls.target.copy(seg.spin.center)
         camera.up.copy(out.up)
         // fov: hold whatever the previous keyframe ended on
-        if (fromState.fov != null) {
+        if (!_lockFov && fromState.fov != null) {
           camera.fov = fromState.fov
           camera.updateProjectionMatrix()
         }
@@ -794,7 +795,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         if (toState.position) camera.position.lerpVectors(fromState.position, toState.position, t)
         if (toState.target)   controls.target.lerpVectors(fromState.target, toState.target, t)
         if (toState.up)       camera.up.lerpVectors(fromState.up, toState.up, t).normalize()
-        if (toState.fov != null && fromState.fov != null) {
+        if (!_lockFov && toState.fov != null && fromState.fov != null) {
           camera.fov = fromState.fov + (toState.fov - fromState.fov) * t
           camera.updateProjectionMatrix()
         }
@@ -1168,6 +1169,18 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   function getDisablePoses()        { return _disablePoses }
 
   /**
+   * When true, camera poses still drive position / target / up but NOT the lens.
+   *
+   * For the photo-mode video export. Photo mode owns FOV as a setting and
+   * `setFOV` DOLLIES to preserve framing, so a 15° publication lens would snap
+   * to whatever the pose was captured at (55°, the editor lens) on the first
+   * posed keyframe. This is deliberately NOT `setDisablePoses`, which kills the
+   * whole pose lerp — the camera move is exactly what we want to keep.
+   */
+  function setLockFov(enabled) { _lockFov = !!enabled }
+  function getLockFov()        { return _lockFov }
+
+  /**
    * Jump to a specific time position (seconds).
    * Keeps playing in the current direction if active.
    */
@@ -1201,5 +1214,5 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   /** Synchronous read of the current overlay state — used by the export pipeline. */
   function getActiveTextOverlay() { return _textOverlayAt(getCurrentTime()) }
 
-  return { play, pause, resume, stop, seekTo, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay }
+  return { play, pause, resume, stop, seekTo, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay }
 }

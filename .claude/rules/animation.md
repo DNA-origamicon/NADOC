@@ -51,7 +51,7 @@ field `configuration_id` (not `config_id`). Topic file: `memory/project_assembly
 | [ui/strand_anim_panel.js](../../frontend/src/ui/strand_anim_panel.js) | 292 | Per-overhang strand-anim setup UI, init [main.js:4604](../../frontend/src/main.js#L4604) |
 | [scene/animation_text_overlay.js](../../frontend/src/scene/animation_text_overlay.js) | 65 | `applyAnimationTextOverlay(el, state)` — DOM overlay, driven by the player's `onTextOverlayUpdate` [main.js:1619](../../frontend/src/main.js#L1619) |
 | [scene/assembly_config_animator.js](../../frontend/src/scene/assembly_config_animator.js) | 120 | Pure interpolation core for assembly configs, init [main.js:6348](../../frontend/src/main.js#L6348). **Unit-tested** (13 `it`) |
-| [scene/export_video.js](../../frontend/src/scene/export_video.js) | 374 | WebM (`MediaRecorder`+`captureStream`, `:205`) + GIF (`await import('gifenc')`, `:180/:267`) |
+| [scene/export_video.js](../../frontend/src/scene/export_video.js) | 384 | WebM (`MediaRecorder`+`captureStream`) + GIF (`await import('gifenc')`). **TWO exporters:** `exportVideo` (raw editor canvas, Animations tab) and `exportPhotoVideo` (photo-mode pipeline via `photoMode.beginFrameSession`, **Photo** tab — see `memory/project_photo_mode.md`). **Unit-tested** (11 `it`) |
 | [scene/overhang_unzip_overlay.js](../../frontend/src/scene/overhang_unzip_overlay.js) | 175 | `initOverhangUnzipOverlay({getHelixCtrl, getDesign})` `:36`; `update(items, geometry)` `:112`, `clear()` `:159` |
 | [scene/overhang_strand_anim.js](../../frontend/src/scene/overhang_strand_anim.js) | 711 | `initOverhangStrandAnim({…})` `:44` → `{bind, setPhi, getFrame, isBound, clear, dispose}` `:658` |
 | [api/animation_endpoints.js](../../frontend/src/api/animation_endpoints.js) | 107 | 18 exported client fns (design + assembly) |
@@ -80,9 +80,16 @@ getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOv
 `trajectoryKeyframes` replaced the four `onFetchTrajectory*` / `onRestoreDesignAtomistic`
 callbacks — see "Trajectory keyframes" below.
 
-Public API (`:1297`): `play, pause, resume, stop, seekTo, cancelBake, setBounce, getBounce,
-setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, isPlaying, getDirection,
-getCurrentTime, getTotalDuration, getActiveTextOverlay`.
+Public API (`:1217`): `play, pause, resume, stop, seekTo, cancelBake, setBounce, getBounce,
+setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying,
+getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay`.
+
+**`setLockFov` vs `setDisablePoses` — they are not interchangeable.** `setDisablePoses` skips the
+*whole* camera-pose lerp (so the user can orbit during playback). `setLockFov` keeps
+position/target/up and suppresses only the two `camera.fov =` writes (spin branch + lerp branch).
+It exists for the photo-mode video export: photo mode owns FOV as a setting and `setFOV` **dollies**
+to preserve framing, so an unguarded pose would snap a 15° publication lens back to the 55° it was
+captured at — and take the framing with it.
 
 Internals worth knowing:
 
@@ -249,8 +256,13 @@ its only caller is the sandbox's own `strand-anim/app.js:42`. The editor path im
 | `frontend/src/scene/trajectory_keyframes.test.js` | 26 | job collection, no-reload-when-held, per-engine routing, budget hand-off, frame-change guard, suspend/release/cancel |
 | `frontend/src/ui/traj_prebuild_plan.test.js` | 8 | RAM cache + which ceiling binds |
 
-**Zero tests** for `animation_player.js` (1205 LOC), `export_video.js`, `overhang_unzip_overlay.js`,
-`overhang_strand_anim.js`, `camera_panel.js`. **Zero e2e specs** touch animation.
+`frontend/src/scene/export_video.test.js` (12 `it`) covers `exportPhotoVideo` only: frame count +
+seek times, the `play→pause→seek→stop` lifecycle, `followMotion`, the `setLockFov` bracket, abort,
+and session disposal on throw. The encode branches themselves are browser machinery.
+
+**Zero tests** for `animation_player.js` (1205 LOC), `exportVideo` (the raw-canvas twin),
+`overhang_unzip_overlay.js`, `overhang_strand_anim.js`, `camera_panel.js`.
+**Zero e2e specs** touch animation.
 Names that sound relevant but are not: `tests/test_cluster_config.py` (Alpine HPC submission
 profiles), `frontend/src/ui/export_menu.test.js` / `metric_export_modal.test.js` /
 `oxdna_export_card.test.js` (unrelated export paths), `photo_renderer/figure_camera.test.js`

@@ -257,4 +257,16 @@ Symptom the user reported: "can't delete the chain-simulator's completed oxDNA j
   just under the 3.0 Å stretch threshold, on a path that never calls `audit_bonds`. 2xT-specific and
   the repair *multiplied* it (24hb_2xT 51 → 131). [detail](LESSONS_archive.md#l12)
 
+- **L13** — 🧩 **A ground-up rewrite can leave a feature "missing" when what it really dropped is one
+  function its own caller still asks for by name.** Photo mode v2 shipped `renderToBlob` but not
+  `beginFrameSession`; `export_video.js`'s `exportPhotoVideo()` — the entire animation→video export,
+  still present and fully written — throws on its first line without it, and nothing imported it, so
+  neither grep-for-callers nor the test suite noticed. **The check that would have caught it:** after
+  replacing a subsystem, diff the OLD public API against the new one and grep each dropped name across
+  `src/` *and* its own module's callers, rather than only asking "does anything still call the old
+  module". Corollary for offline/headless render paths: work the live render loop does for free
+  (`_perFrameSync` — material re-swap on mesh replacement, bounds refit, camera-pinned rig sync) is
+  simply *absent* when frames are stepped by hand, and the symptom is a render that starts correct and
+  degrades partway through. [detail](LESSONS_archive.md#l13)
+
 > **Detail.** Full entries live in [LESSONS_archive.md](LESSONS_archive.md). Open only the entry that matches your symptom.

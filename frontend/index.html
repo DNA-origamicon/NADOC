@@ -6448,6 +6448,32 @@
                 </div>
                 <div id="photo-export-note" class="pxr-note"></div>
                 <button id="photo-export-btn" class="pxr-btn">↓ Export PNG</button>
+
+                <hr style="border:none;border-top:1px solid #30363d;margin:10px 0 2px">
+                <div class="pxr-row">
+                  <span class="pxr-lbl">Animation</span>
+                  <select id="photo-anim-select" class="pxr-sel"></select>
+                </div>
+                <div class="pxr-row">
+                  <span class="pxr-lbl">Video size</span>
+                  <select id="photo-video-res" class="pxr-sel">
+                    <option value="720p">720p</option>
+                    <option value="1080p" selected>1080p</option>
+                    <option value="1440p">1440p</option>
+                    <option value="2160p">2160p (4K)</option>
+                  </select>
+                </div>
+                <div class="pxr-row">
+                  <span class="pxr-lbl">Format</span>
+                  <select id="photo-video-format" class="pxr-sel">
+                    <option value="webm" selected>WebM</option>
+                    <option value="gif">GIF</option>
+                  </select>
+                  <span style="color:#6a737d;font-size:11px">fps</span>
+                  <input id="photo-video-fps" type="number" min="1" max="60" step="1" value="30" class="pxr-sel" style="text-align:right">
+                </div>
+                <div id="photo-video-note" class="pxr-note"></div>
+                <button id="photo-video-btn" class="pxr-btn">↓ Export Video</button>
               </div>
             </div>
           </div>

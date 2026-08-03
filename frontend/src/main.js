@@ -161,7 +161,7 @@ import { initAnimationPlayer }                    from './scene/animation_player
 import { initTrajectoryKeyframes }                from './scene/trajectory_keyframes.js'
 import { initTrajPrebuildPlan }                   from './ui/traj_prebuild_plan.js'
 import { applyAnimationTextOverlay }              from './scene/animation_text_overlay.js'
-import { exportVideo }          from './scene/export_video.js'
+import { exportVideo, exportPhotoVideo } from './scene/export_video.js'
 import { initClusterGizmo, computeClusterPivotFromEntries, rebaseClusterTranslationForPivot } from './scene/cluster_gizmo.js'
 import { initSubDomainGizmo } from './scene/sub_domain_gizmo.js'
 import { initInstanceGizmo }       from './scene/instance_gizmo.js'
@@ -6792,6 +6792,10 @@ async function main() {
   const _photoMode = initPhotoMode({
     store, sceneCtx, designRenderer, assemblyRenderer,
     assemblyJointRenderer, bluntEnds, originAxes,
+    // Video export: the Photo tab renders a saved animation frame-by-frame
+    // through this same pipeline. `animPlayer` is a plain pass — it is created
+    // ~5200 lines above, so no lazy getter is needed.
+    player: animPlayer, exportPhotoVideo,
   })
   window.__photoMode = _photoMode.mode   // console seam for tuning
   // Close the adaptive-clip seam (~600): the shadow catcher extends past the

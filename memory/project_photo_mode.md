@@ -105,6 +105,78 @@ Chevron sits LEFT of the title. Collapse persists via
 computed styles against a live `#simulate-jobs` card — copy that shape for any
 new card here rather than inventing one.
 
+## Video export — an animation rendered through photo mode, 2026-08-02
+
+**The redo dropped the ONE API the video path needed, and it went unnoticed
+because the caller survived.** [scene/export_video.js:91](../frontend/src/scene/export_video.js#L91)
+`exportPhotoVideo()` was written for v1 and is still there, complete — frame loop,
+WebM + GIF, text-overlay compositing, abort, progress, download. It was dead code:
+nothing imported it, and its first act is to throw unless
+`photoRenderer.beginFrameSession()` exists, which only v1 had
+(`archive/photo_mode_v1/photo_renderer.js:1640`). v2 shipped `renderToBlob` alone.
+So "photo mode has no video export" was really "photo mode is missing a ~90-line
+function its own exporter asks for by name".
+
+`renderToBlob` is now a **one-shot wrapper** over
+`beginFrameSession(width, height, {followMotion})` → `{renderFrame, dispose, tiles}`.
+Everything previously rebuilt per call — the max-texture probe, tiling maths,
+stitch canvas, offscreen renderer, composer, FigurePass — is hoisted to the
+session; only `setViewOffset` + params + `composer.render()` stay per tile.
+**This is not an optimisation.** Browsers block new WebGL contexts after ~30, so a
+`renderToBlob`-per-frame loop dies around frame 30 with *"Web page caused context
+loss and was blocked"*. `photo_frame_session.test.js` pins both halves: 40 frames
+from one session = **2** renderer constructions, and the same 40 frames the old way
+= **80**. That second case is the *discriminator* — it is what proves the first
+test would have failed before the split (the adapted-code pin rule in `CLAUDE.md`).
+
+**Two things the live preview gets for free that an offline export must do
+itself.** `_perFrameSync` only runs inside the `setRenderFn` render-loop override,
+and a frame-stepped export never ticks it. `_syncForOfflineFrame()`, called at the
+top of `renderFrame`, replaces it:
+
+- **`sceneSignature` changed → `resync()`.** Meshes are REPLACED mid-timeline —
+  trajectory keyframes swap the heavy atomistic/surface rep in and out
+  (`trajectory_keyframes.js` `show`/`suspend`), pre-baked geometry frames rebuild
+  beads — and every fresh mesh arrives with the EDITOR's materials and shadow
+  flags. Without this an export starts correct and silently degrades partway.
+- **`followMotion` → `_rebuildRig()` every frame.** Cluster rotations and binding
+  hinges move the bounding box while the mesh set is IDENTICAL, so the fingerprint
+  cannot see it and the shadow frustum stays fitted to where the structure *used
+  to be*. Only the video caller pays this; stills leave it off (`false`).
+- `_syncRigToCamera()` — the rig is camera-pinned and a camera-pose keyframe moves
+  the camera every frame.
+
+**The photo lens wins over the animation's camera poses.** `animation_player.js`
+gained `setLockFov()` (mirrors `setDisablePoses` in shape and API slot) guarding
+its two `camera.fov =` writes at the spin and lerp branches; `exportPhotoVideo`
+brackets the frame loop with it. Deliberately **not** `setDisablePoses`, which
+suppresses the whole pose lerp — the camera *move* is exactly what we keep.
+Without the lock a 15° publication lens snaps to the 55° the pose was captured at
+on the first posed keyframe, and since `setFOV` had already dollied for 15°, the
+framing goes with it.
+
+`_figureParams()` and `_pushCueRangeTo(pass)` were extracted **first**: the 11-key
+param block and the cue-range fit each existed in two copies (preview + still
+export) and a third was about to be added. Same "export parity is not automatic"
+rule as the Export card above — duplicate copies are how preview and export drift.
+
+**The UI is in the Photo tab, not the Animations tab, and that is forced.**
+`main.js setActiveTab` exits photo mode for any `tabId !== 'photo'`, so the
+Animations panel can never be open while the mode is active. The Export card
+gained an animation picker (read straight off
+`currentAssembly?.animations ?? currentDesign?.animations`, same source and
+precedence as `animation_panel.js`), **video-only** size presets 720p–2160p (the
+*print* presets tile 4–6× per frame — wrong for 300 frames), format, fps and a
+live note. `animationDuration()` re-derives clip length as `Σ(transition + hold)`
+exactly as the player's `_buildSchedule` does, so pricing the export never calls
+`play()` — which would bake geometry just to populate a dropdown.
+
+**Known limits, all pre-existing and shared with the raw-canvas Animations-tab
+export** (logged in `issues_ledger.md`, none photo-specific): a trajectory frame
+can capture stale atoms (`oxdna_display._applyHeavy` is `async` and unawaited);
+assembly joints animate in NO exported video (`export_video` calls `play()` with
+no opts, so `onJointUpdate` is null); `configuration_id` is inert on the player.
+
 ## Shadow-catching floor — 2026-08-01
 
 **It started as a BUG the user liked.** In photo mode, selecting a cluster from the
@@ -245,6 +317,7 @@ its own FigurePass params, its own cue range per tile, and its own
 `shadowMap.enabled` — none of the live renderer's GPU state carries over. That is
 the rule that keeps preview and export in sync. Export representation is NOT
 wired (it needs the assembly rep-upgrade machinery + an `api` dep).
+The card also carries the **video export** — see its own section below.
 
 **Materials card** — one preset per representation (full / cylinders / surface /
 atomistic), dropdowns built from `PRESET_LABELS`, so adding a preset in

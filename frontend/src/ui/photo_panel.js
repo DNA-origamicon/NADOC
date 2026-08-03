@@ -9,6 +9,8 @@
 
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { PRESET_LABELS } from '../scene/photo_renderer/material_presets.js'
+import { showOpProgress, hideOpProgress, setOpProgressLabel, setOpProgressFraction }
+  from './op_progress.js'
 
 /** B-DNA duplex diameter — the feature a shadow map has to resolve to be useful. */
 export const DUPLEX_NM = 2.0
@@ -48,6 +50,59 @@ export function shadowDepthFraction({ keyIntensity, fillIntensity, ambientIntens
 }
 
 /**
+ * Video output sizes. Deliberately SEPARATE from the still presets below: those
+ * are print sizes (300 DPI = 4200×2970, 600 DPI = 8400×5940) which tile 4–12×
+ * per frame. Fine for one still, absurd for a 300-frame clip.
+ */
+export const VIDEO_RES_PRESETS = {
+  '720p':  [1280, 720],
+  '1080p': [1920, 1080],
+  '1440p': [2560, 1440],
+  '2160p': [3840, 2160],
+}
+
+/**
+ * Total playing time of an animation, in seconds.
+ *
+ * Mirrors the player's `_buildSchedule`, which walks keyframes accumulating
+ * `transition_duration_s + hold_duration_s` — an animation has no absolute-time
+ * field, so duration is only ever implied by the list. Re-derived here so the
+ * panel can price an export WITHOUT calling `play()` (which bakes geometry and
+ * would make merely opening the dropdown expensive).
+ *
+ * @param {{keyframes?: Array}} animation
+ * @returns {number} seconds
+ */
+export function animationDuration(animation) {
+  const kfs = animation?.keyframes
+  if (!Array.isArray(kfs)) return 0
+  let total = 0
+  for (const kf of kfs) {
+    total += (kf?.transition_duration_s ?? 0) + (kf?.hold_duration_s ?? 0)
+  }
+  return total
+}
+
+/**
+ * What an export will cost, as the note line under the button.
+ * Pure, so the arithmetic is testable without a GL context.
+ *
+ * @param {{durationS:number, fps:number, width:number, height:number}} p
+ * @returns {{frames:number, tiles:number, text:string}}
+ */
+export function videoPlan({ durationS, fps, width, height }) {
+  if (!(durationS > 0) || !(fps > 0)) return { frames: 0, tiles: 0, text: '' }
+  // +1 because the loop renders both endpoints (t=0 and t=duration).
+  const frames = Math.ceil(durationS * fps) + 1
+  const tiles  = Math.max(1, Math.ceil(width / 4096)) * Math.max(1, Math.ceil(height / 4096))
+  return {
+    frames, tiles,
+    text: `${durationS.toFixed(1)} s · ${frames} frames · ${width}×${height}`
+        + ` · ${tiles} tile${tiles === 1 ? '' : 's'}/frame`,
+  }
+}
+
+/**
  * Format the status line. Pure — the string is the whole contract, so the test
  * can assert it without a DOM.
  *
@@ -68,9 +123,13 @@ export function formatShadowStatus(status) {
 
 /**
  * @param {object} photoMode — controller from createPhotoMode()
- * @param {{onExit: () => void}} deps
+ * @param {object} deps
+ * @param {() => void}   deps.onExit
+ * @param {object}       [deps.store]            — for the saved-animation list
+ * @param {object}       [deps.player]           — initAnimationPlayer, driven frame-by-frame
+ * @param {function}     [deps.exportPhotoVideo] — from scene/export_video.js
  */
-export function initPhotoPanel(photoMode, { onExit } = {}) {
+export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVideo } = {}) {
   const $ = (id) => document.getElementById(id)
 
   const els = {
@@ -133,6 +192,12 @@ export function initPhotoPanel(photoMode, { onExit } = {}) {
     resH:       $('photo-res-h'),
     exportNote: $('photo-export-note'),
     exportBtn:  $('photo-export-btn'),
+    animSelect:  $('photo-anim-select'),
+    videoRes:    $('photo-video-res'),
+    videoFormat: $('photo-video-format'),
+    videoFps:    $('photo-video-fps'),
+    videoNote:   $('photo-video-note'),
+    videoBtn:    $('photo-video-btn'),
     bgType:  $('photo-bg-type'),
     bgColor: $('photo-bg-color'),
   }
@@ -500,6 +565,119 @@ export function initPhotoPanel(photoMode, { onExit } = {}) {
     }
   })
 
+  // ── Video export ────────────────────────────────────────────────────────────
+  // Renders a saved animation frame-by-frame through the SAME photo pipeline as
+  // the PNG button, via one long-lived offscreen session. It lives on this tab
+  // rather than the Animations tab because photo mode has to be ACTIVE to render
+  // and the sidebar exits it on any switch to a non-photo tab.
+
+  /** Animations live on the design/assembly itself — same source the animation panel reads. */
+  function _animations() {
+    const s = store?.getState?.()
+    return s?.currentAssembly?.animations ?? s?.currentDesign?.animations ?? []
+  }
+
+  function _selectedAnim() {
+    const id = els.animSelect?.value
+    return _animations().find(a => a.id === id) ?? null
+  }
+
+  function _videoSize() {
+    return VIDEO_RES_PRESETS[els.videoRes?.value] ?? VIDEO_RES_PRESETS['1080p']
+  }
+
+  function _refreshVideoNote() {
+    if (!els.videoNote) return
+    const anim = _selectedAnim()
+    if (!anim) {
+      els.videoNote.textContent = _animations().length
+        ? 'Pick an animation.'
+        : 'No saved animations — author one in the Animations tab.'
+      if (els.videoBtn) els.videoBtn.disabled = true
+      return
+    }
+    const [w, h] = _videoSize()
+    const fpsVal = parseInt(els.videoFps?.value)
+    const fps = Number.isFinite(fpsVal) && fpsVal > 0 ? fpsVal : (anim.fps ?? 30)
+    const plan = videoPlan({ durationS: animationDuration(anim), fps, width: w, height: h })
+    els.videoNote.textContent = plan.frames
+      ? plan.text
+      : 'Animation has no duration — check keyframe timings.'
+    if (els.videoBtn) els.videoBtn.disabled = !plan.frames
+  }
+
+  /** Rebuild the picker, preserving the selection when the list is unchanged. */
+  function _refreshAnimList() {
+    if (!els.animSelect) return
+    const anims = _animations()
+    const prev  = els.animSelect.value
+    els.animSelect.innerHTML = ''
+    for (const a of anims) {
+      const opt = document.createElement('option')
+      opt.value = a.id
+      opt.textContent = a.name || 'Animation'
+      els.animSelect.appendChild(opt)
+    }
+    if (anims.some(a => a.id === prev)) els.animSelect.value = prev
+    // A fresh pick adopts that animation's own fps, the way the Animations tab does.
+    const anim = _selectedAnim()
+    if (anim && els.videoFps && anim.id !== prev) els.videoFps.value = String(anim.fps ?? 30)
+    _refreshVideoNote()
+  }
+
+  els.animSelect?.addEventListener('change', () => {
+    const anim = _selectedAnim()
+    if (anim && els.videoFps) els.videoFps.value = String(anim.fps ?? 30)
+    _refreshVideoNote()
+  })
+  for (const el of [els.videoRes, els.videoFormat, els.videoFps]) {
+    el?.addEventListener('change', _refreshVideoNote)
+  }
+  els.videoFps?.addEventListener('input', _refreshVideoNote)
+
+  els.videoBtn?.addEventListener('click', async () => {
+    const anim = _selectedAnim()
+    if (!anim || !player || !exportPhotoVideo) return
+    const [width, height] = _videoSize()
+    const fpsVal = parseInt(els.videoFps?.value)
+    const format = els.videoFormat?.value ?? 'webm'
+
+    const label = els.videoBtn.textContent
+    els.videoBtn.disabled = true
+    els.videoBtn.textContent = 'Rendering…'
+
+    const cancelCtl = new AbortController()
+    showOpProgress('Exporting Video', 'Preparing…', { onCancel: () => cancelCtl.abort() })
+    try {
+      await exportPhotoVideo({
+        animation: anim,
+        player,
+        photoRenderer: photoMode,
+        width, height,
+        options: { format, fps: Number.isFinite(fpsVal) && fpsVal > 0 ? fpsVal : undefined },
+        signal: cancelCtl.signal,
+        onProgress: (p, info = null) => {
+          setOpProgressFraction(p)
+          setOpProgressLabel(null, info?.frame != null && info?.frames != null
+            ? `Rendering frame ${info.frame} of ${info.frames}`
+            : `Rendering… ${Math.round(p * 100)}%`)
+        },
+      })
+      if (els.videoNote) els.videoNote.textContent = 'Done.'
+    } catch (err) {
+      if (err?.name === 'AbortError') {
+        if (els.videoNote) els.videoNote.textContent = 'Cancelled.'
+      } else {
+        console.error('[photo] video export failed:', err)
+        if (els.videoNote) els.videoNote.textContent = `Export failed: ${err.message}`
+      }
+    } finally {
+      hideOpProgress()
+      els.videoBtn.disabled = false
+      els.videoBtn.textContent = label
+    }
+  })
+
   _initCard('lighting')
   _initCard('camera')
   _initCard('export')
@@ -516,7 +694,7 @@ export function initPhotoPanel(photoMode, { onExit } = {}) {
 
   return {
     syncToState,
-    onEnter: () => { syncToState(); _startStatusPolling() },
+    onEnter: () => { syncToState(); _refreshAnimList(); _startStatusPolling() },
     onExit:  () => { _stopStatusPolling() },
     dispose: _stopStatusPolling,
   }

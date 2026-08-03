@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
-import { initPhotoPanel, formatShadowStatus, shadowResolution, DUPLEX_NM } from './photo_panel.js'
+import { initPhotoPanel, formatShadowStatus, shadowResolution, DUPLEX_NM,
+         animationDuration, videoPlan, VIDEO_RES_PRESETS } from './photo_panel.js'
 
 // ── Pure helpers ─────────────────────────────────────────────────────────────
 
@@ -59,6 +60,59 @@ describe('formatShadowStatus', () => {
 })
 
 // ── Panel wiring ─────────────────────────────────────────────────────────────
+
+// ── Video export helpers ─────────────────────────────────────────────────────
+
+describe('animationDuration', () => {
+  it('sums transition + hold across keyframes, like the player schedule does', () => {
+    // An animation has no absolute-time field — duration is only ever implied
+    // by the list, so this has to mirror _buildSchedule exactly.
+    expect(animationDuration({ keyframes: [
+      { transition_duration_s: 0.5, hold_duration_s: 1.0 },
+      { transition_duration_s: 0.5, hold_duration_s: 2.0 },
+    ] })).toBeCloseTo(4.0, 9)
+  })
+
+  it('treats missing durations as zero rather than NaN', () => {
+    expect(animationDuration({ keyframes: [{}, { hold_duration_s: 1 }] })).toBe(1)
+  })
+
+  it('is 0 for nothing to play', () => {
+    expect(animationDuration(null)).toBe(0)
+    expect(animationDuration({ keyframes: [] })).toBe(0)
+  })
+})
+
+describe('videoPlan', () => {
+  it('counts both endpoints — the loop renders t=0 and t=duration', () => {
+    const p = videoPlan({ durationS: 2, fps: 10, width: 1920, height: 1080 })
+    expect(p.frames).toBe(21)
+    expect(p.tiles).toBe(1)
+    expect(p.text).toContain('2.0 s')
+    expect(p.text).toContain('21 frames')
+  })
+
+  it('reports the per-frame tile cost, which is what makes long exports slow', () => {
+    // 4K is still one tile; a 300-DPI still preset would be four.
+    expect(videoPlan({ durationS: 1, fps: 30, width: 3840, height: 2160 }).tiles).toBe(1)
+    expect(videoPlan({ durationS: 1, fps: 30, width: 8400, height: 5940 }).tiles).toBe(6)
+  })
+
+  it('is empty when there is nothing to render', () => {
+    expect(videoPlan({ durationS: 0, fps: 30, width: 1920, height: 1080 }).frames).toBe(0)
+    expect(videoPlan({ durationS: 5, fps: 0, width: 1920, height: 1080 }).text).toBe('')
+  })
+})
+
+describe('VIDEO_RES_PRESETS', () => {
+  it('are video sizes, not the print sizes — every one is a single tile', () => {
+    for (const [w, h] of Object.values(VIDEO_RES_PRESETS)) {
+      expect(w).toBeLessThanOrEqual(4096)
+      expect(h).toBeLessThanOrEqual(4096)
+    }
+    expect(VIDEO_RES_PRESETS['1080p']).toEqual([1920, 1080])
+  })
+})
 
 const PANEL_IDS = {
   'photo-exit-btn':               'button',
@@ -122,6 +176,12 @@ const PANEL_IDS = {
   'photo-res-h':                  'input',
   'photo-export-note':            'div',
   'photo-export-btn':             'button',
+  'photo-anim-select':            'select',
+  'photo-video-res':              'select',
+  'photo-video-format':           'select',
+  'photo-video-fps':              'input',
+  'photo-video-note':             'div',
+  'photo-video-btn':              'button',
   'photo-camera-heading':         'div',
   'photo-camera-body':            'div',
   'photo-camera-arrow':           'span',
@@ -457,5 +517,128 @@ describe('initPhotoPanel', () => {
     const afterExit = spy.mock.calls.length
     vi.advanceTimersByTime(1500)
     expect(spy.mock.calls.length).toBe(afterExit)
+  })
+})
+
+// ── Video export section ─────────────────────────────────────────────────────
+
+describe('initPhotoPanel — video export', () => {
+  let els, mode, panel, player, exportPhotoVideo, store
+
+  const ANIMS = [
+    { id: 'a1', name: 'Unfold', fps: 24, keyframes: [{ transition_duration_s: 0.5, hold_duration_s: 1.5 }] },
+    { id: 'a2', name: 'Spin',   fps: 30, keyframes: [{ transition_duration_s: 1, hold_duration_s: 1 }] },
+  ]
+
+  function mount(state) {
+    store = { getState: () => state }
+    panel = initPhotoPanel(mode, { onExit: vi.fn(), store, player, exportPhotoVideo })
+    panel.onEnter()
+  }
+
+  beforeEach(() => {
+    els = mountIds(PANEL_IDS)
+    for (const id of ['photo-pin-lights', 'photo-key-shadow', 'photo-outline',
+                      'photo-depthcue', 'photo-floor', 'photo-parallel']) els[id].type = 'checkbox'
+    for (const id of ['photo-outline-color', 'photo-depthcue-color']) els[id].type = 'color'
+    for (const id of ['photo-res-w', 'photo-res-h', 'photo-video-fps']) els[id].type = 'number'
+    // A <select> silently rejects a value that isn't one of its options, so the
+    // static markup's options have to exist here too.
+    const addOpts = (id, vals) => vals.forEach(v => {
+      const o = document.createElement('option'); o.value = v; els[id].appendChild(o)
+    })
+    addOpts('photo-video-res', Object.keys(VIDEO_RES_PRESETS))
+    addOpts('photo-video-format', ['webm', 'gif'])
+    els['photo-video-res'].value = '1080p'
+    mode = makeMode()
+    player = { id: 'player' }
+    exportPhotoVideo = vi.fn(async () => {})
+  })
+
+  afterEach(() => { panel?.dispose(); clearDom() })
+
+  it('lists the design\'s saved animations and adopts the first one\'s fps', () => {
+    mount({ currentDesign: { animations: ANIMS } })
+    expect([...els['photo-anim-select'].options].map(o => o.textContent)).toEqual(['Unfold', 'Spin'])
+    expect(els['photo-video-fps'].value).toBe('24')
+  })
+
+  it('prefers the assembly\'s animations when one is open', () => {
+    mount({ currentDesign: { animations: ANIMS }, currentAssembly: { animations: [ANIMS[1]] } })
+    expect([...els['photo-anim-select'].options].map(o => o.textContent)).toEqual(['Spin'])
+  })
+
+  it('says so, and disables the button, when there is nothing to export', () => {
+    mount({ currentDesign: { animations: [] } })
+    expect(els['photo-video-note'].textContent).toMatch(/No saved animations/)
+    expect(els['photo-video-btn'].disabled).toBe(true)
+  })
+
+  it('prices the export from the keyframes without ever calling play()', () => {
+    mount({ currentDesign: { animations: ANIMS } })
+    // 2.0 s at 24 fps = 49 frames. play() bakes geometry — merely opening the
+    // dropdown must not pay that.
+    expect(els['photo-video-note'].textContent).toContain('2.0 s')
+    expect(els['photo-video-note'].textContent).toContain('49 frames')
+    expect(els['photo-video-note'].textContent).toContain('1920×1080')
+  })
+
+  it('re-prices when the size or fps changes', () => {
+    mount({ currentDesign: { animations: ANIMS } })
+    els['photo-video-res'].value = '2160p'
+    els['photo-video-res'].dispatchEvent(new Event('change'))
+    expect(els['photo-video-note'].textContent).toContain('3840×2160')
+
+    els['photo-video-fps'].value = '10'
+    els['photo-video-fps'].dispatchEvent(new Event('change'))
+    expect(els['photo-video-note'].textContent).toContain('21 frames')
+  })
+
+  it('exports the SELECTED animation at the chosen size and format', async () => {
+    mount({ currentDesign: { animations: ANIMS } })
+    els['photo-anim-select'].value = 'a2'
+    els['photo-anim-select'].dispatchEvent(new Event('change'))
+    expect(els['photo-video-fps'].value).toBe('30')     // adopts that animation's fps
+
+    els['photo-video-format'].value = 'gif'
+    els['photo-video-res'].value = '720p'
+    els['photo-video-btn'].dispatchEvent(new Event('click'))
+
+    await vi.waitFor(() => expect(exportPhotoVideo).toHaveBeenCalled())
+    const arg = exportPhotoVideo.mock.calls[0][0]
+    expect(arg.animation.id).toBe('a2')
+    expect(arg.width).toBe(1280)
+    expect(arg.height).toBe(720)
+    expect(arg.options.format).toBe('gif')
+    expect(arg.options.fps).toBe(30)
+    // The frame session is opened on the photo mode itself, so every frame gets
+    // the live photo settings rather than a snapshot.
+    expect(arg.photoRenderer).toBe(mode)
+    expect(arg.player).toBe(player)
+    await vi.waitFor(() => expect(els['photo-video-btn'].disabled).toBe(false))
+  })
+
+  it('re-enables the button and reports a failure rather than dying silently', async () => {
+    exportPhotoVideo = vi.fn(async () => { throw new Error('GL died') })
+    mount({ currentDesign: { animations: ANIMS } })
+    els['photo-video-btn'].dispatchEvent(new Event('click'))
+    await vi.waitFor(() => expect(els['photo-video-note'].textContent).toContain('GL died'))
+    expect(els['photo-video-btn'].disabled).toBe(false)
+  })
+
+  it('reports a cancel as a cancel, not an error', async () => {
+    exportPhotoVideo = vi.fn(async () => {
+      const e = new Error('Aborted'); e.name = 'AbortError'; throw e
+    })
+    mount({ currentDesign: { animations: ANIMS } })
+    els['photo-video-btn'].dispatchEvent(new Event('click'))
+    await vi.waitFor(() => expect(els['photo-video-note'].textContent).toBe('Cancelled.'))
+  })
+
+  it('does nothing when the panel was built without the video deps', () => {
+    store = { getState: () => ({ currentDesign: { animations: ANIMS } }) }
+    panel = initPhotoPanel(mode, { onExit: vi.fn(), store })   // no player/exporter
+    panel.onEnter()
+    expect(() => els['photo-video-btn'].dispatchEvent(new Event('click'))).not.toThrow()
   })
 })

@@ -265,6 +265,56 @@ All four are the single-strand TARGET (`scaffold_strands == 1`). The "yields 5/1
 on a CORRUPT fixture (see below); on the clean fixture the standard routers route teeth to 1 strand. Clean
 pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 with `workspace/preroute_teeth.nadoc`).
 
+## ISSUE-21 — Exported animation video: three defects in the SHARED frame loop (found 2026-08-02 while building the photo-mode video export)
+
+- **Status:** `[ ]` OPEN — found while wiring `exportPhotoVideo` (see `memory/project_photo_mode.md`
+  → "Video export"). User decision 2026-08-02: **fix only the photo-specific material/bounds gap;
+  file these three.** None is photo-specific — all three hit the **existing** Animations-tab
+  raw-canvas export identically, and have since it shipped.
+- **Why filed together:** all three are the same root shape — `export_video.js`'s frame loop assumes
+  `player.seekTo(t)` leaves the scene fully settled and fully driven, and in three places it does not.
+
+**(a) A trajectory frame can capture the PREVIOUS frame's atoms.**
+`animation_player._applyAt` → `trajectoryKeyframes.show()` → `ctrl.showFrame(idx)`
+(`ui/oxdna_display.js:1460`), which calls **`_applyHeavy()` (`:938`) — `async`, and NOT awaited.**
+In a heavy rep it can `await api.getOxdnaFramesAtomistic(...)`. `seekTo` returns before the atoms
+land, so `renderFrame()` photographs the frame before. Partly masked by `play()` calling
+`trajectoryKeyframes.setPlaying(true)`, which forces coarse granularity onto the pre-built grid
+(usually a cache hit) — but a grid miss is a real `await`. Sibling: `trajectory_keyframes.js:137`
+`_swap()` returns from `show()` **without showing anything** while a second job on the same engine
+reloads, holding the stale frame for the whole reload.
+*Fix needs* a quiescence signal from the display controllers (`oxdnaDisplay` / `mdViz`) that the
+frame loop can await — there is none today.
+
+**(b) Assembly joints animate in NO exported video, at all.**
+`export_video.js` calls `player.play(animation)` with **no opts**, so the player's `_onJointUpdate`
+is null and the `joint_values` lerp writes nowhere. The panel supplies it only for live playback
+(`ui/animation_panel.js:1327`), and does so as an **unbatched fire-and-forget
+`api.patchAssemblyJoint` per joint per frame** — so the naive fix (pass it through) turns a 300-frame
+export into hundreds of unawaited HTTP writes whose effects land whenever. Wants a display-only
+joint path before it can be exported.
+
+**(c) `configuration_id` is authored but inert on the player.**
+Zero references to it in `animation_player.js` (`grep -c` → 0). The panel writes it
+(`animation_panel.js:1067`) and counts it in the dirty signature (`:1293`), but `_kfState` never
+reads it. Assembly configuration transitions run through a *separate* animator,
+`scene/assembly_config_animator.js:81`, with its own `performance.now()` + rAF tween and a trailing
+`await api.restoreAssemblyConfiguration(...)` — not on the player's frame path. So a keyframe with a
+configuration plays back as a no-op, in the app and in every export.
+
+- **Also noted, not filed as a defect:** a surface-rep animation whose baked states differ in vertex
+  count **snaps at `t=0.5`** and drops vertex colours until stop (`_rebuildTopology`, see
+  `memory/project_animation_all_reprs.md`). Deterministic, but visually discontinuous mid-clip.
+- **Suspected locations (leads — re-derive before investing):** `frontend/src/scene/export_video.js`
+  (the two frame loops), `frontend/src/ui/oxdna_display.js` (`_applyHeavy`, `showFrame`),
+  `frontend/src/scene/trajectory_keyframes.js` (`show`/`_swap`),
+  `frontend/src/scene/animation_player.js` (`_applyAt`, `play` opts).
+- **Repro shape (step 1 of the loop is still owed):** author an animation with (a) a trajectory
+  keyframe over a job whose heavy rep is on, (b) an assembly `joint_values` keyframe, (c) a keyframe
+  with a `configuration_id`; export it from either tab; compare frames against live playback.
+
+---
+
 ## ISSUE-20 — The fast-suite guard's per-test budget measures CONTENDED time, so it flags healthy sub-2s tests and ratchets them out of the fast suite
 
 - **Status:** `[ ]` OPEN — found 2026-07-16 during the AF-39 loop (`/automate-feature`). Diagnosed + evidenced,
