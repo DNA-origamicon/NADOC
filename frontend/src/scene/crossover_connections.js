@@ -307,14 +307,17 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
   beadsMesh.name     = 'xoverExtraBeads'    // DEBUG ID
   beadsMesh.userData = { debugType: 'xoverExtraBeads' }
 
+  // OPAQUE, matching the base-pair slabs in helix_renderer.js — these were 0.90
+  // to track the removed slab-opacity slider (2026-08-02). Per-cluster fades still
+  // work through `instanceAlpha`.
   const slabsMesh = new THREE.InstancedMesh(
     GEO_UNIT_BOX,
-    new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.90 }),
+    new THREE.MeshPhongMaterial({ color: 0xffffff }),
     Math.max(1, totalBeads),
   )
-  // Structure, not overlay — the slab-opacity slider drives depthWrite here too,
-  // and photo mode must still treat these as solid shadow casters. See the same
-  // flag on `baseSlabs` in helix_renderer.js.
+  // Structure, not overlay — once a per-instance fade turns the material
+  // transparent, photo mode must still treat these as solid shadow casters. See
+  // the same flag on `baseSlabs` in helix_renderer.js.
   slabsMesh.material.userData.photoForceDepthWrite = true
   slabsMesh.frustumCulled = false
   slabsMesh.name     = 'xoverExtraSlabs'    // DEBUG ID

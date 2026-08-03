@@ -357,7 +357,7 @@ ground up. The shipping photo mode keeps its own floor-gated shadow rig,
    casters, and defeated the depthWrite exclusion in `shadow_bounds.js`.
    **Corollary, 2026-08-01:** that inheritance is only right for *overlays*. A
    STRUCTURAL mesh whose `depthWrite` tracks a user opacity control (the base-pair
-   slabs + their crossover extra-base twins, driven by the new sidebar slab-opacity
+   slabs + their crossover extra-base twins, then driven by the sidebar slab-opacity
    slider) inherited `depthWrite:false` and was then dropped from the shadow pass by
    `isShadowExcluded` — `castShadow` *and* `receiveShadow` both went false, silently,
    only below the default opacity. Such meshes now set
@@ -365,6 +365,10 @@ ground up. The shipping photo mode keeps its own floor-gated shadow rig,
    honours. Pinned by two `photo_mode.test.js` cases (overlay stays false, flagged
    structure forces true). Verified in-app by A/B: toggling `baseSlabs.castShadow`
    changes the rendered figure at both 0.90 and 0.45 slab opacity.
+   **Update 2026-08-02:** the slab-opacity slider is gone and both slab materials are
+   built OPAQUE, so nothing drives their `depthWrite` down any more. The flag STAYS —
+   per-cluster/reference fades still turn those materials transparent through
+   `instanceAlpha`, which is the same hazard by a different route.
 4. Editor overlay geometry (~100 µm) silently sets the frustum and puts the whole
    design inside one texel. `shadow_bounds.js` rejects contributors >8× the
    median extent and names them in a console warning.

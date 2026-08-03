@@ -140,7 +140,20 @@ Two different scales, often confused:
    separate mesh path.
 
 **Sidebar tuning sliders** (`ui/repr_option_sliders.js`, rows in `index.html` under
-`#repr-options-section`): bead radius (full/beads) and **slab thickness + slab opacity (full only)**.
+`#repr-options-section`): bead radius (full/beads) and **slab thickness (full only)**.
+**Slab opacity is gone, 2026-08-02, and the slabs are now built OPAQUE.** The slider collided with
+the other opacity controls (per-cluster alpha, the surface slider), and removing it exposed the
+real source of the translucency: the slabs had always been *built* `transparent:true, opacity:0.90`
+— `SLAB_OPACITY` in `helix_renderer.js` and a hardcoded `0.90` on `slabsMesh` in
+`crossover_connections.js`. Both are plain opaque `MeshPhongMaterial`s now, and
+`setSlabOpacity` is deleted from both `design_renderer` and the helix controller along with the
+`_slabOpacity` post-rebuild re-apply. **Per-cluster / reference fades on slabs are unaffected** —
+they ride `instanceAlpha`, and `applyInstanceAlphaMaterial` sets `transparent = true` itself when a
+fade is installed. That is exactly why `userData.photoForceDepthWrite` stays on both slab
+materials (LESSONS D8): the moment a fade turns them transparent, photo mode must still treat them
+as shadow casters. **Other slab families keep their own baselines** and were deliberately not
+touched: `overhang_link_arcs.js` (arcs 0.85 / slabs 0.90, pinned by its test),
+`ui/conjugate_manager.js` (0.9), `flexible_arcs.js` (per-connection `alpha`, `transparent: alpha < 1`).
 Slab thickness is **`slabParams.width`** — mind the historical naming, `width` (0.06) is the plate's
 smallest dimension and `thickness` (0.70) is the long in-plane extent. It mutates the live
 `slabParams` in `helix_renderer.js` — the ~25 inline slab composes on the deform/lerp/cluster/MD

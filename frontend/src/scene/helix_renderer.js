@@ -971,18 +971,22 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // matrix-compose in this file reads, so the deform / MD / cluster paths that
   // compose slab matrices inline stay consistent with the user's chosen value.
   const SLAB_WIDTH_DEFAULT = 0.06
-  const SLAB_OPACITY = 0.90
   const slabParams = { length: 0.30, width: SLAB_WIDTH_DEFAULT, thickness: 0.70, distance: 0.55 }
 
   const _slabCount = _skipSlabs ? 1 : Math.max(1, assignedGeometry.length)
+  // OPAQUE. The slabs shipped at opacity 0.90 with a sidebar slider on top; the
+  // slider was removed 2026-08-02 for colliding with the other opacity controls,
+  // and the leftover 0.90 baseline kept them faintly see-through. Per-cluster /
+  // reference fades still work — they ride the `instanceAlpha` attribute, and
+  // `applyInstanceAlphaMaterial` flips `transparent` on when one is installed.
   const iSlabs = new THREE.InstancedMesh(
     GEO_UNIT_BOX,
-    new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: SLAB_OPACITY }),
+    new THREE.MeshPhongMaterial({ color: 0xffffff }),
     _slabCount,
   )
-  // Slabs are STRUCTURE, not overlay: their depthWrite tracks the opacity slider
-  // (LESSONS D8) but photo mode must still treat them as solid shadow casters.
-  // See photo_mode.js `swapToFlatMaterials` / shadow_bounds.js `isShadowExcluded`,
+  // Slabs are STRUCTURE, not overlay: once a per-instance fade makes the material
+  // transparent, photo mode must still treat them as solid shadow casters. See
+  // photo_mode.js `swapToFlatMaterials` / shadow_bounds.js `isShadowExcluded`,
   // which otherwise read depthWrite:false as "cannot occlude" and drop the slabs
   // out of the shadow pass entirely.
   iSlabs.material.userData.photoForceDepthWrite = true
@@ -2770,18 +2774,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iSlabs.setMatrixAt(entry.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
-    },
-
-    /** Set base-pair slab opacity (0–1).  Material-level; no matrix work.
-     *  `depthWrite` tracks opacity (LESSONS D8): a nearly-see-through slab that
-     *  still writes depth is an invisible occluder that punches voids into the
-     *  beads behind it.  The build default (SLAB_OPACITY) keeps depth writes —
-     *  at 0.90 the slabs are near-opaque and should sort as solids, which is how
-     *  they have always rendered. */
-    setSlabOpacity(o) {
-      iSlabs.material.opacity = o
-      iSlabs.material.transparent = true
-      iSlabs.material.depthWrite = o >= SLAB_OPACITY
     },
 
     /** Set the domain cylinder display radius (nm).  Rebuilds all cylinder matrices. */

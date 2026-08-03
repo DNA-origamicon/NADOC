@@ -54,11 +54,11 @@ export function initDesignRenderer(scene, storeRef) {
   let _simXbByCrossover = null
   let _detailLevel      = 0      // current LOD (0=full,1=beads,2=cylinders); re-applied to xover extras after _rebuild
   // Base-pair slab display tuning from the sidebar (Full representation). Held
-  // here — not in the helix controller — so it survives a rebuild; both are
-  // re-applied in the post-rebuild block. 0.06 nm / 0.90 are the build-time
-  // defaults (slab thickness = the plate's smallest dimension).
+  // here — not in the helix controller — so it survives a rebuild; it is
+  // re-applied in the post-rebuild block. 0.06 nm is the build-time default
+  // (slab thickness = the plate's smallest dimension). Slab OPACITY is gone —
+  // the slider was removed and the slabs are built opaque (2026-08-02).
   let _slabThickness    = 0.06
-  let _slabOpacity      = 0.90
   let _currentMode      = 'normal'
   // External (job-snapshot) render: while a CanDo display mode is active, the scene is
   // rebuilt from a job's OWN design snapshot (its topology at solve time) instead of the
@@ -632,14 +632,6 @@ export function initDesignRenderer(scene, storeRef) {
 
     // Re-apply post-rebuild visibility state
     if (_slabThickness !== 0.06) _helixCtrl.setSlabThickness(_slabThickness)
-    if (_slabOpacity !== 0.90) {
-      _helixCtrl.setSlabOpacity(_slabOpacity)
-      if (_xoverSlabsMesh) {
-        _xoverSlabsMesh.material.opacity = _slabOpacity
-        _xoverSlabsMesh.material.transparent = true
-        _xoverSlabsMesh.material.depthWrite = _slabOpacity >= 0.90
-      }
-    }
     if (staplesHidden) _helixCtrl.setStapleVisibility(false)
     if (isolatedStrandId) _helixCtrl.setIsolatedStrand(isolatedStrandId)
     if (_hiddenNucKeys.size) _helixCtrl.setHiddenNucs(_hiddenNucKeys)
@@ -1323,17 +1315,6 @@ export function initDesignRenderer(scene, storeRef) {
     setSlabThickness(nm) {
       _slabThickness = nm
       _helixCtrl?.setSlabThickness(nm)
-    },
-    /** Base-pair slab opacity (0–1). Also applied to the crossover extra-base
-     *  slabs so they fade with the rest of the base plates. */
-    setSlabOpacity(o) {
-      _slabOpacity = o
-      _helixCtrl?.setSlabOpacity(o)
-      if (_xoverSlabsMesh) {
-        _xoverSlabsMesh.material.opacity = o
-        _xoverSlabsMesh.material.transparent = true
-        _xoverSlabsMesh.material.depthWrite = o >= 0.90   // LESSONS D8 — see setSlabOpacity
-      }
     },
 
     /** Current GLOBAL LOD level: 0=full, 1=beads, 2=cylinders. Use this — not the
