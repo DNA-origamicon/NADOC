@@ -27,7 +27,7 @@ import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
 import { mountDirectoryButton } from './run_location.js'
 import { renderJobList } from './jobs_panel_render.js'
 import { runControlState, RUN_ACTION } from './job_run_control.js'
-import { jobDisplayName as oxDisplayName, runRowLabel, runChildTitle } from './oxdna_jobs_panel.js'
+import { relaxIndexMap, relaxRowLabel, runRowLabel, runChildTitle } from './oxdna_jobs_panel.js'
 import { jobDisplayName as mrdnaDisplayName } from './mrdna_jobs_panel.js'
 import { jobDisplayName as candoDisplayName } from './cando_jobs_panel.js'
 import { jobDisplayName as snupiDisplayName } from './snupi_jobs_panel.js'
@@ -394,9 +394,9 @@ export function initSimulateJobs({
     return mdJobRowCtx({ jobs: nodes.filter((n) => n.engine === 'namd'),
                          selectedId: _sel.id, formatTime: formatJobTime })
   }
-  function _displayName(n, md) {
+  function _displayName(n, md, relaxNo) {
     switch (n.engine) {
-      case 'oxdna': case 'lammps': return oxDisplayName(n)
+      case 'oxdna': case 'lammps': return relaxRowLabel(n, relaxNo.get(n.job_id))
       case 'mrdna': return mrdnaDisplayName(n)
       case 'cando': return candoDisplayName(n)
       case 'snupi': return snupiDisplayName(n)
@@ -431,12 +431,17 @@ export function initSimulateJobs({
 
   function _rowCtx(nodes) {
     const md = _mdCtx(nodes)
+    // "relax N" numbering is scoped to the oxDNA group (GPU oxDNA + its CPU/LAMMPS
+    // fallback runs) over ALL nodes, so it reads the same here as on the oxDNA tab
+    // and in the animation panel's trajectory dropdown — showing other engines or
+    // hiding a design must not renumber it.
+    const relaxNo = relaxIndexMap(_nodes.filter((n) => engineGroup(n) === 'oxdna'))
     return {
       engine: 'oxdna',                       // fallback; engineOf resolves per row
       engineOf: (n) => (n.engine === 'lammps' ? 'lammps' : n.engine),
       selectedId: _sel.id,
       hierarchical: true,
-      displayName: (n) => _displayName(n, md),
+      displayName: (n) => _displayName(n, md, relaxNo),
       childLabel: (n, i) => _childLabel(n, i, md),
       childTitle: (n) => _childTitle(n, md),
       productionState: (n) => (n.engine === 'oxdna' ? n.production_state : null),

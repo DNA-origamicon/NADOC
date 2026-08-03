@@ -151,6 +151,13 @@ SAME display controllers the jobs panels drive: `oxdnaDisplay` for oxDNA/LAMMPS,
   `scope='job'` is **not strictly more data**: on a CHILD job it drops the ancestor stages entirely
   (measured 2026-08-02 — job `071b38e1f593` is 200 lineage frames with 8 stage markers against 51
   own-frames with none), which is exactly why the picker exists rather than a hard switch.
+- **The job dropdown is named by the Simulations tab's own fns** (2026-08-02).
+  `normalizeTrajJobs` (exported, tested) runs each engine's jobs through `flattenJobTree` +
+  `relaxRowLabel`/`runRowLabel` (oxDNA) / `mdChildLabelFor` (NAMD) and returns
+  `{…job, id, engine, depth, listIndex, label}` — children under their parent, prefixed `↳`.
+  Don't reintroduce `jobDisplayName` per entry: it is the design-file **stem**, identical for
+  every job of one design, which is what made production runs unpickable. See
+  `memory/project_simulate_panel_overhaul.md` → "Job NAMES".
 - **Authoring preview** — `previewLoad(jobId, spec, {onProgress})` / `previewShow` / `isPreviewing`
   let `animation_panel.js` scrub the real model while you drag the bar's needle, through the SAME
   controller, so a preview then Play is one download. `release()` is shared with playback.

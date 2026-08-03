@@ -22,8 +22,9 @@
 import { openKeyframeTextPopup } from './keyframe_text_popup.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel, setOpProgressFraction } from './op_progress.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
-import { filterJobsForPart, makeSpinner } from './md_jobs_panel.js'
-import { jobDisplayName, productionState } from './oxdna_jobs_panel.js'
+import { filterJobsForPart, makeSpinner, mdChildLabelFor } from './md_jobs_panel.js'
+import { jobDisplayName, productionState, relaxIndexMap, relaxRowLabel, runRowLabel } from './oxdna_jobs_panel.js'
+import { flattenJobTree } from './job_tree.js'
 import { statusBadge, statusKeyFor } from './job_status_symbol.js'
 import { formatJobTime } from '../scene/trajectory_range.js'
 import { initFrameRangeSlider } from './frame_range_slider.js'
@@ -78,24 +79,42 @@ function _strandAnimSummary(strandAnimPhi, design) {
 }
 
 /**
+ * Pure: one engine's job list → dropdown entries in the SAME order and with the SAME
+ * names the Simulations tab shows — relaxations as "relax N", their derived runs as
+ * "Run N [A][H][E]" (oxDNA) / "Production N · seed S" (NAMD), each child right under
+ * its parent. The flat list this replaced ran every job through `jobDisplayName`, so a
+ * relaxation and all of its production runs rendered as the SAME string (the design-file
+ * stem) and only the timestamp told them apart.
+ */
+function _trajEntriesForEngine(jobs, engine) {
+  const relaxNo = relaxIndexMap(jobs)
+  const sorted = jobs.slice().sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
+  let rootNo = 0
+  return flattenJobTree(sorted).map(({ job, depth, index }) => ({
+    ...job,
+    id: job.job_id,
+    engine,
+    depth,
+    // Roots carry the tab's newest-first [N] position (roots only, as there); a child
+    // gets none, exactly as the tab leaves its indexLabel empty.
+    listIndex: depth === 0 ? (rootNo += 1) : 0,
+    label: depth > 0
+      ? (engine === 'namd' ? mdChildLabelFor(job, index) : runRowLabel(job, index))
+      : (engine === 'namd' ? (job.design_name || jobDisplayName(job))
+                           : relaxRowLabel(job, relaxNo.get(job.job_id))),
+  }))
+}
+
+/**
  * Pure: oxDNA + MD job lists → one unified list of trajectory-dropdown entries
- * (`{...job, id, engine}`), filtered to a part path. BOTH engines key their job id
- * as `job_id` (NOT `id`) — reading `j.id` yields undefined option values, leaving
- * the dropdown unselectable ("no trajectory yet"). Exported for regression testing.
+ * (`{...job, id, engine, depth, label}`), filtered to a part path. BOTH engines key
+ * their job id as `job_id` (NOT `id`) — reading `j.id` yields undefined option values,
+ * leaving the dropdown unselectable ("no trajectory yet"). Exported for regression testing.
  */
 export function normalizeTrajJobs(oxJobs, mdJobs, partPath) {
-  const out = []
-  if (Array.isArray(oxJobs)) {
-    for (const j of filterJobsForPart(oxJobs, partPath || null, false)) {
-      out.push({ ...j, id: j.job_id, engine: 'oxdna' })
-    }
-  }
-  if (Array.isArray(mdJobs)) {
-    for (const j of filterJobsForPart(mdJobs, partPath || null, false)) {
-      out.push({ ...j, id: j.job_id, engine: 'namd' })
-    }
-  }
-  return out
+  const ox = Array.isArray(oxJobs) ? filterJobsForPart(oxJobs, partPath || null, false) : []
+  const md = Array.isArray(mdJobs) ? filterJobsForPart(mdJobs, partPath || null, false) : []
+  return [..._trajEntriesForEngine(ox, 'oxdna'), ..._trajEntriesForEngine(md, 'namd')]
 }
 
 export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature, getWorkspacePath, trajectoryKeyframes = null }) {
@@ -783,15 +802,19 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       const none = document.createElement('option')
       none.value = ''; none.textContent = jobs.length ? '— select job —' : '— no oxDNA / NAMD jobs —'
       jobSel.appendChild(none)
-      jobs.forEach((j, i) => {
+      // Option text mirrors a Simulations-tab row: [position] [engine] status-glyph
+      // name · time. A derived run is prefixed "↳" instead of indented, because a
+      // <select> collapses leading whitespace.
+      jobs.forEach((j) => {
         const o = document.createElement('option')
         const when = formatJobTime(j.created_at)
         const tag = j.engine === 'namd' ? 'MD' : 'oxDNA'
         const key = statusKeyFor(j.engine, j.status, j.engine === 'oxdna' ? productionState(j) : null)
         const sym = statusBadge(key).symbol
+        const pos = j.depth ? '↳' : `[${j.listIndex}]`
         o.value = j.id
         o.dataset.engine = j.engine
-        o.textContent = `[${i + 1}] [${tag}] ${sym} ${jobDisplayName(j)}${when ? ` · ${when}` : ''}`
+        o.textContent = `${pos} [${tag}] ${sym} ${j.label}${when ? ` · ${when}` : ''}`
         jobSel.appendChild(o)
       })
       jobSel.value = kf.trajectory_job_id ?? ''

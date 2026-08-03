@@ -112,6 +112,36 @@ engine panel's detail block.
 Pinned by: `simulate_jobs.test.js` (3), `oxdna_jobs_panel.test.js` (2 — incl. "deselect does not
 unload the trajectory"), `md_jobs_panel.test.js` (2 — incl. "the poll does not re-select").
 
+## Job NAMES: "relax N" roots, and the animation dropdown reuses them (2026-08-02)
+
+Root rows used to be labelled `jobDisplayName(job)` = the design-file stem. One list is one
+design, so **every relaxation rendered as the same string**; only the `[N]` position and the
+timestamp told them apart. Roots are now **"relax 1", "relax 2", …**
+
+- `oxdna_jobs_panel.js` — `relaxIndexMap(jobs)` (job_id → 1-based number) + `relaxRowLabel`.
+  Numbering is **per design, by `created_at` ascending**, over the FULL job set: creation order
+  means an existing relax keeps its number when a newer one starts, and using the full set means
+  hiding a design (or archived runs) never renumbers what stays. Same rule `flattenJobTree` uses
+  for the `Run N` children — so the two numbers are read the same way, and `[N]` (newest-first
+  list position) legitimately differs from the relax number on the same row.
+- `simulate_jobs.js` scopes the map to the oxDNA **group** (oxDNA + its LAMMPS CPU fallback) so
+  "Show all job types" can't shift the numbers.
+- NAMD roots deliberately keep `design_name` — a NAMD root is not always a relaxation
+  (`mdHasAppendedProduction`), so "relax N" would lie there.
+- `md_jobs_panel.js` gained **`mdChildLabelFor(job, index)`** — the production / replica / refit
+  dispatch lifted out of `mdJobRowCtx` so other lists name NAMD children identically.
+- **The animation panel's trajectory dropdown now mirrors a Simulations row.**
+  `animation_panel.js` `normalizeTrajJobs` runs each engine's jobs through `flattenJobTree` +
+  the label fns above and returns `{…job, id, engine, depth, listIndex, label}`; children sort
+  under their parent and are prefixed `↳` (a `<select>` collapses leading whitespace). Before
+  this, the dropdown was a flat list where a relaxation and all of its production runs were the
+  same design stem — so **`Run 7 [A][H][E]` was unpickable in practice**, which is what the user
+  reported.
+
+Pinned by `oxdna_jobs_panel.test.js` (7 — numbering, per-design, orphans, no-renumber),
+`animation_panel.normalize.test.js` (4 — naming, tree order, depth/listIndex, NAMD labels).
+The per-design filtering tests there now assert `data-job-id`, not the design name.
+
 ## Gesture-level verification — the doc-context limit is solved
 
 `frontend/playwright.livedev.config.js` + opening the design through the **welcome-screen library

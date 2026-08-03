@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // Keep the heavy oxDNA panel out of the unit test — the master card only uses a few pure
 // label fns from it + dispatches to the panels.
 vi.mock('./oxdna_jobs_panel.js', () => ({
-  jobDisplayName: (j) => j.design_name || 'design',
+  relaxIndexMap: (jobs) => new Map((jobs || []).map((j, i) => [j.job_id, i + 1])),
+  relaxRowLabel: (j, n) => (n ? `relax ${n}` : j.design_name || 'design'),
   runRowLabel: (j, i) => `Run ${i}`,
   runChildTitle: () => 'child run',
 }))

@@ -48,8 +48,49 @@ import {
   resumeNote, flattenJobTree, descendantIds, fieldChildTitle, deleteConfirmMessage, samplingState,
   runConfigForJob, healthForDisplay, runElements, runIndicatorTags, runRowLabel, runChildTitle,
   jobHasFailure, errorLogText, jobOutOfDate, jobSelectionSignature,
-  trajectoryFrameEstimate,
+  trajectoryFrameEstimate, relaxIndexMap, relaxRowLabel,
 } from './oxdna_jobs_panel.js'
+
+describe('relaxIndexMap / relaxRowLabel (root job naming)', () => {
+  const j = (id, created_at, over = {}) =>
+    ({ job_id: id, created_at, design_source_path: 'A.nadoc', ...over })
+
+  it('numbers ROOTS by creation order, oldest first', () => {
+    const m = relaxIndexMap([j('r2', 20), j('r1', 10), j('r3', 30)])
+    expect([m.get('r1'), m.get('r2'), m.get('r3')]).toEqual([1, 2, 3])
+  })
+  it('skips child jobs — only relaxations get a number', () => {
+    const m = relaxIndexMap([j('r1', 10), j('c1', 20, { parent_job_id: 'r1' }), j('r2', 30)])
+    expect(m.get('c1')).toBeUndefined()
+    expect(m.get('r2')).toBe(2)      // the child did not consume a relax number
+  })
+  it('numbers per design, so each design starts at relax 1', () => {
+    const m = relaxIndexMap([
+      j('a1', 10, { design_source_path: 'A.nadoc' }),
+      j('b1', 20, { design_source_path: 'B.nadoc' }),
+      j('a2', 30, { design_source_path: 'A.nadoc' }),
+    ])
+    expect([m.get('a1'), m.get('a2'), m.get('b1')]).toEqual([1, 2, 1])
+  })
+  it('treats an ORPHAN child (parent absent) as its own root', () => {
+    const m = relaxIndexMap([j('c1', 10, { parent_job_id: 'gone' })])
+    expect(m.get('c1')).toBe(1)
+  })
+  it('a new relaxation does NOT renumber the existing ones', () => {
+    const before = relaxIndexMap([j('r1', 10), j('r2', 20)])
+    const after = relaxIndexMap([j('r1', 10), j('r2', 20), j('r3', 30)])
+    expect(after.get('r1')).toBe(before.get('r1'))
+    expect(after.get('r2')).toBe(before.get('r2'))
+  })
+  it('labels a numbered root "relax N", and falls back to the design stem', () => {
+    expect(relaxRowLabel(j('r1', 10), 2)).toBe('relax 2')
+    expect(relaxRowLabel({ design_source_path: '/ws/6hb_v3.nadoc' }, undefined)).toBe('6hb_v3')
+  })
+  it('tolerates empty / null input', () => {
+    expect(relaxIndexMap(null).size).toBe(0)
+    expect(relaxIndexMap([]).size).toBe(0)
+  })
+})
 
 describe('jobSelectionSignature (edge-triggered job-selected event)', () => {
   const job = (over = {}) => ({
@@ -618,12 +659,14 @@ describe('initOxdnaJobsPanel — per-design job filtering', () => {
   afterEach(() => clearDom())
 
   const listText = () => document.getElementById('oxdna-jobs-list').textContent
+  // Rows are named "relax N", not by design, so identity comes off the row's job id.
+  const listedIds = () => [...document.getElementById('oxdna-jobs-list')
+    .querySelectorAll('[data-job-id]')].map(r => r.dataset.jobId)
 
   it('shows only the current design’s jobs, not other designs’', async () => {
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => currentPath })
     await panel.refresh()
-    expect(listText()).toContain('AlphaJob')
-    expect(listText()).not.toContain('BetaJob')   // other design's job filtered out
+    expect(listedIds()).toEqual(['a1'])            // other design's job filtered out
   })
 
   it('re-filters when the open design changes (workspace-path-change)', async () => {
@@ -632,8 +675,7 @@ describe('initOxdnaJobsPanel — per-design job filtering', () => {
     currentPath = 'BetaJob.nadoc'
     window.dispatchEvent(new CustomEvent('nadoc:workspace-path-change', { detail: { path: 'BetaJob.nadoc' } }))
     await flush()   // the always-open panel now re-fetches (async) on a design switch
-    expect(listText()).toContain('BetaJob')
-    expect(listText()).not.toContain('AlphaJob')
+    expect(listedIds()).toEqual(['b1'])
   })
 
   it('shows a "no jobs yet" note for a new design with no matching jobs', async () => {

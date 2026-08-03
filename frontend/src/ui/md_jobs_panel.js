@@ -398,6 +398,16 @@ export function mdReplicaRowLabel(job, index) {
   return `Replica ${n} · seed ${job?.ensemble_seed}`
 }
 
+/** Pure: THE list-row label for any NAMD child job — production run, ensemble
+ *  replica, or a refit/retry.  Lifted out of `mdJobRowCtx` so every list that shows
+ *  NAMD children (the NAMD tab, the unified Simulate list, the animation panel's
+ *  trajectory dropdown) names them identically instead of re-deriving the dispatch. */
+export function mdChildLabelFor(job, index) {
+  if (mdIsProductionChild(job)) return mdProductionRowLabel(job, index)
+  if (mdIsEnsembleReplica(job)) return mdReplicaRowLabel(job, index)
+  return mdChildRowLabel(job, index)
+}
+
 /** Pure: one-line summary of a parent's seeded children for the collapsed parent row,
  *  e.g. "⧉ 8 replicas · 2 running · 5 queued · 1 done" (Alpine ensemble) or
  *  "⧉ 3 production runs · 1 running · 2 done" (local production fan-out).  Returns ''
@@ -645,9 +655,7 @@ export function mdJobRowCtx({ selectedId = null, collapsedIds = null, jobs = [],
     hierarchical: true,
     collapsedIds,
     displayName: (job) => job.design_name,
-    childLabel: (job, index) => mdIsProductionChild(job) ? mdProductionRowLabel(job, index)
-      : mdIsEnsembleReplica(job) ? mdReplicaRowLabel(job, index)
-      : mdChildRowLabel(job, index),
+    childLabel: mdChildLabelFor,
     childTitle: (job) => mdIsProductionChild(job)
       ? 'Production run branched from the relaxed parent (independent seed)'
       : mdIsEnsembleReplica(job) ? 'Ensemble production replica (independent seed)'

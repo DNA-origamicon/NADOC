@@ -106,6 +106,35 @@ export function jobDisplayName(job) {
   return job?.design_name || 'design'
 }
 
+/** Pure: job_id → 1-based relax number over the ROOT (relaxation) jobs in `jobs`,
+ *  numbered per design, oldest first.  Creation order — not list order — so an
+ *  existing relaxation keeps its number when a newer one is started, the same rule
+ *  `flattenJobTree` uses for the "Run N" child numbering. */
+export function relaxIndexMap(jobs) {
+  const list = jobs || []
+  const ids = new Set(list.map(j => j?.job_id))
+  const perDesign = new Map()
+  const out = new Map()
+  list.filter(j => j && !(j.parent_job_id && ids.has(j.parent_job_id)))
+    .slice().sort((a, b) => (a.created_at || 0) - (b.created_at || 0))
+    .forEach((j) => {
+      const key = j.design_source_path || j.design_name || ''
+      const n = (perDesign.get(key) || 0) + 1
+      perDesign.set(key, n)
+      out.set(j.job_id, n)
+    })
+  return out
+}
+
+/** Pure: list-row label for a root job — "relax 1", "relax 2", …  The design-file
+ *  stem this used to show is identical on every row (one list = one design), so the
+ *  run number is the only part that tells two relaxations apart; it also gives the
+ *  "Run N" children something to hang off.  Falls back to the stem when the job has
+ *  no number (not in the map it was built from). */
+export function relaxRowLabel(job, relaxNo) {
+  return relaxNo ? `relax ${relaxNo}` : jobDisplayName(job)
+}
+
 /** Pure: latest health sample of a job (or null). */
 export function latestHealth(job) {
   const hs = job?.health_samples
@@ -1388,11 +1417,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // stale markers). `_rowCtx()` supplies the oxDNA-specific data + callbacks; the
   // list-signature short-circuit still guards against spinner-restart churn.
   function _rowCtx() {
+    // Relax numbering runs over the FULL job set, not the visible slice, so hiding
+    // other designs (or archived runs) never renumbers the rows that stay.
+    const relaxNo = relaxIndexMap(_jobs)
     return {
       engine: 'oxdna',
       selectedId: _selectedId,
       hierarchical: true,
-      displayName: jobDisplayName,
+      displayName: (job) => relaxRowLabel(job, relaxNo.get(job.job_id)),
       childLabel: runRowLabel,
       childTitle: runChildTitle,
       productionState,
