@@ -45,8 +45,8 @@ field `configuration_id` (not `config_id`). Topic file: `memory/project_assembly
 | [scene/animation_player.js](../../frontend/src/scene/animation_player.js) | 1205 | The player. `initAnimationPlayer({…20 deps})` at `:52`, init site [main.js:1581](../../frontend/src/main.js#L1581) |
 | [scene/trajectory_keyframes.js](../../frontend/src/scene/trajectory_keyframes.js) | 290 | Trajectory keyframes → the jobs panels' display controllers, at a per-keyframe resolution, plus the authoring-preview API. **Unit-tested** (42 `it`) |
 | [ui/traj_prebuild_plan.js](../../frontend/src/ui/traj_prebuild_plan.js) | 62 | Free-RAM read + prebuild memory plan, shared by the MD panel and the animation path. **Unit-tested** (8 `it`) |
-| [ui/frame_range_slider.js](../../frontend/src/ui/frame_range_slider.js) | 270 | ONE bar carrying a trajectory keyframe's start + end + previewed frame. Pure geometry/drag core + DOM shell. **Unit-tested** (30 `it`, incl. a real pointer-event drag lifecycle). Only consumer: `animation_panel.js`. ⚠️ **`onRangeChange` is per-move (labels only); persist from `onRangeCommit`, which fires once on release** — saving per move PATCHed the keyframe every pixel and each save rebuilt the row mid-drag. Moving a BOUND pulls the playhead back inside the window; moving the playhead does not. |
-| [ui/animation_panel.js](../../frontend/src/ui/animation_panel.js) | 1796 | Authoring UI. `initAnimationPanel(store, {player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature, getWorkspacePath, trajectoryKeyframes})` at `:100`, init [main.js:6756](../../frontend/src/main.js#L6756). `trajectoryKeyframes` is the SAME instance the player gets — that is what makes the authoring preview share the player's download |
+| [ui/frame_range_slider.js](../../frontend/src/ui/frame_range_slider.js) | 270 | ONE bar carrying a trajectory keyframe's start + end + previewed frame. Pure geometry/drag core + DOM shell. **Unit-tested** (30 `it`, incl. a real pointer-event drag lifecycle). Only consumer: `animation_panel.js`. ⚠️ **`onRangeChange` is per-move (labels only); persist from `onRangeCommit`, which fires once on release** — saving per move PATCHed the keyframe every pixel and each save rebuilt the row mid-drag. Moving a BOUND pulls the playhead back inside the window; moving the playhead does not. `setPlayhead` does NOT clamp against an unsized bar — a rebuilt row restores its playhead before `setFrames` sizes it, and clamping there pinned the needle to frame 0. |
+| [ui/animation_panel.js](../../frontend/src/ui/animation_panel.js) | 1796 | Authoring UI. `initAnimationPanel(store, {player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature, getWorkspacePath, trajectoryKeyframes})` at `:100`, init [main.js:6756](../../frontend/src/main.js#L6756). `trajectoryKeyframes` is the SAME instance the player gets — that is what makes the authoring preview share the player's download | ⚠️ **`_selfKfPatch` / `_patchKfNoRebuild`:** a keyframe save replaces `currentDesign`, and the store subscriber answers by doing `kfListEl.innerHTML = ''` and rebuilding every row — new widgets, re-fetched job dropdowns, a trajectory bar that re-derives its playhead. On a drag release that reads as a hard reset. Panel-originated keyframe patches (range commit, job/scope/stride change) hold the counter so the subscriber skips ONE rebuild; the DOM already shows the new values. Unrelated edits still repaint immediately.
 | [ui/camera_panel.js](../../frontend/src/ui/camera_panel.js) | 363 | `initCameraPanel(store, {captureCurrentCamera, animateCameraTo, api})` `:15`, init [main.js:6357](../../frontend/src/main.js#L6357) |
 | [ui/keyframe_text_popup.js](../../frontend/src/ui/keyframe_text_popup.js) | 319 | `openKeyframeTextPopup` — text-keyframe editor, imported `animation_panel.js:22` |
 | [ui/strand_anim_panel.js](../../frontend/src/ui/strand_anim_panel.js) | 292 | Per-overhang strand-anim setup UI, init [main.js:4604](../../frontend/src/main.js#L4604) |
@@ -173,6 +173,52 @@ stop on `'scene'`. Both pinned in `display_tab_policy.test.js`.
 `_mdAtomsActive`, `_lastMdAtomKey`, and the player's import of `framesToUpdates` from
 `ui/oxdna_display.js`. The player no longer calls `applyFemPositions` for trajectories at all.
 
+## Crossover arcs must be re-seated by EVERY path that moves beads (2026-08-02)
+
+Arc lines live in `unfold_view.js` (`_arcGroup`) and extra-base beads in
+`design_renderer.js`; neither follows a bead move on its own — each is re-derived from
+`getNucLivePos` when someone asks. The player's single entry point is
+`_syncArcs(helixIds)` → `applyClusterArcUpdate` + `applyClusterExtArcUpdate` +
+`applyClusterCrossoverUpdate`. Despite the `Cluster` in those names they are generic:
+they re-read live positions for any helix in the set, and an empty set is a no-op.
+
+| Bead mover | Arc sync |
+|---|---|
+| `_applyClusterLerp` (cluster rigid body) | collects into `_lastClusterHelixIds` |
+| `applyPositionLerp` (feature-log geometry) | sets `movedByLerp`; ids are `_lerpHelixIds` |
+| `_driveBindingHinge` | its own `_syncArcs(base.helix_ids)` |
+| `applyFemPositions` (trajectory) | `design_renderer` calls `applyFemArcs` itself; `null` reverts |
+
+`_applyAt` fires **one** `_syncArcs` per frame over the union of the first two — two passes
+would run unfold_view's whole-arc-buffer rewrite twice per frame, which matters at export
+resolution.
+
+**The bug this closed.** `applyPositionLerp` (455 lines) never touched an arc, and `stop()`
+never restored the beads at all. So a feature-log animation dragged the structure out from
+under stationary arcs, and at stop `_restoreBaseClusters` — which recomputes arc endpoints
+*from live bead positions* — welded the arcs onto the animation's last frame. Reported as
+"after a photo-mode export the crossover arcs stay at the last rendered animation
+position": photo export is just where you go back and look at the model afterwards.
+It hid for so long because the player seeds `_bakedStates` with the design's live
+`feature_log_cursor` (`:117`), so an animation pinning no `feature_log_index` lerps that
+state against itself and lands back home by accident.
+
+**`stop()` order is load-bearing** (`:1183`): `trajectoryKeyframes.release()` →
+`_restoreBaseGeometry()` → `_restoreBaseClusters()`. The trajectory restore is
+`applyFemPositions(null)`, which reverts beads to the renderer's base positions — running
+it after the feature-log restore would overwrite it. `_restoreBaseGeometry` re-applies
+`_bakedStates.get(_baseFLI)` via `applyPositionLerp(baked, baked, 0)` (both endpoints the
+same map = an exact set-to-that-state, not an interpolation), excluding cluster-owned
+helices because `_restoreBaseClusters` slerps those back itself.
+
+Pinned in `frontend/src/scene/animation_player.arcs.test.js` (7 `it`) — the first tests
+`animation_player.js` has ever had. All 5 behavioural ones were confirmed red against the
+pre-fix code before being kept.
+
+⚠️ Fixture gotcha for anyone extending that file: `geometry.helix_axes` is an **array** of
+`{helix_id, start, end}`. Passing `{}` makes `_bakedFromGeo` throw inside the bake's
+`.catch`, so `_bakedStates` comes back empty and every assertion fails for the wrong reason.
+
 ## Renderer hooks (in `scene/helix_renderer.js`, covered by `rendering.md`)
 
 | Symbol | Line | Signature / note |
@@ -278,12 +324,13 @@ its only caller is the sandbox's own `strand-anim/app.js:42`. The editor path im
 | `frontend/src/scene/trajectory_keyframes.test.js` | 42 | job collection, `keyframeTrajSpec`, no-reload-when-held **and reload-on-resolution-mismatch**, per-engine routing, budget hand-off, frame-change guard, suspend/release/cancel, the preview API |
 | `frontend/src/ui/frame_range_slider.test.js` | 30 | offset↔frame geometry, handle picking, drag/push rules, clamp-on-resolution-change, arrow-key nudge |
 | `frontend/src/ui/traj_prebuild_plan.test.js` | 8 | RAM cache + which ceiling binds |
+| `frontend/src/scene/animation_player.arcs.test.js` | 7 | crossover-arc re-seating per frame + the `stop()` restore order |
 
 `frontend/src/scene/export_video.test.js` (12 `it`) covers `exportPhotoVideo` only: frame count +
 seek times, the `play→pause→seek→stop` lifecycle, `followMotion`, the `setLockFov` bracket, abort,
 and session disposal on throw. The encode branches themselves are browser machinery.
 
-**Zero tests** for `animation_player.js` (1205 LOC), `exportVideo` (the raw-canvas twin),
+**Zero tests** for the REST of `animation_player.js` (only the arc/restore slice above is covered), `exportVideo` (the raw-canvas twin),
 `overhang_unzip_overlay.js`, `overhang_strand_anim.js`, `camera_panel.js`.
 **Zero e2e specs** touch animation.
 Names that sound relevant but are not: `tests/test_cluster_config.py` (Alpine HPC submission

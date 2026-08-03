@@ -163,6 +163,24 @@ describe('initFrameRangeSlider', () => {
     expect(onPlayhead).not.toHaveBeenCalled()
   })
 
+  it('holds a playhead set before the bar knows its frame count', () => {
+    // A rebuilt keyframe row restores its playhead from panel state, then loads the
+    // trajectory meta that sizes the bar. Clamping against an unsized bar pinned the
+    // needle to frame 0, which read as the preview resetting on every drag release.
+    const s = initFrameRangeSlider()
+    s.setPlayhead(6000)
+    expect(s.getPlayhead()).toBe(6000)
+    s.setFrames(12000)
+    expect(s.getPlayhead()).toBe(6000)
+  })
+
+  it('clamps a held playhead once the real span turns out to be shorter', () => {
+    const s = initFrameRangeSlider()
+    s.setPlayhead(6000)
+    s.setFrames(200)
+    expect(s.getPlayhead()).toBe(199)
+  })
+
   it('keeps setRange ordered even when the caller passes them backwards', () => {
     const s = initFrameRangeSlider()
     s.setFrames(500)

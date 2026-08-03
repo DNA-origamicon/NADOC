@@ -259,9 +259,18 @@ export function initFrameRangeSlider({
       _render()
     },
     getRange: () => ({ start: _start, end: _end }),
-    /** `null` hides the playhead (no preview loaded). */
+    /**
+     * `null` hides the playhead (no preview loaded).
+     *
+     * Deliberately does NOT clamp against an unsized bar. A rebuilt row restores its
+     * playhead before it knows the frame count, and clamping to `_n - 1 === -1 → 0` there
+     * silently snapped the needle to frame 0 every time — which is what made dragging a
+     * bound look like it reset the preview. `setFrames` clamps once it knows the span.
+     */
     setPlayhead(i) {
-      _playhead = i == null ? null : Math.max(0, Math.min(Math.max(0, _n - 1), i | 0))
+      if (i == null) { _playhead = null; _render(); return }
+      _playhead = Math.max(0, i | 0)
+      if (_n > 0) _playhead = Math.min(_playhead, _n - 1)
       _render()
     },
     getPlayhead: () => _playhead,

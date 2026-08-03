@@ -455,6 +455,29 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     player.stop()
   }
 
+  /**
+   * Depth counter for a keyframe patch THIS PANEL just made, whose result is already on
+   * screen. While it is non-zero the keyframe list does not rebuild.
+   *
+   * Every keyframe save replaces `currentDesign`, and the store subscriber answers that by
+   * blowing the whole list away (`kfListEl.innerHTML = ''`) and rebuilding every row from
+   * scratch — new widgets, re-fetched job dropdowns, and a trajectory bar that has to
+   * re-derive its playhead. Harmless for a one-shot edit; visible as a hard reset when it
+   * fires on the release of a drag you are still looking at. The widget already shows the
+   * new values, so the rebuild has nothing to contribute.
+   *
+   * Scoped to the patch itself rather than "while previewing": an unrelated edit (a new
+   * keyframe, an undo) must still repaint the list immediately. The store is written
+   * synchronously inside the awaited call, so the subscriber always fires while the
+   * counter is up.
+   */
+  let _selfKfPatch = 0
+
+  async function _patchKfNoRebuild(kf, patch) {
+    _selfKfPatch++
+    try { await _patchKf(kf, patch) } finally { _selfKfPatch-- }
+  }
+
   /** Drop any active preview and put the display back the way it was found. Safe to call
    *  when nothing is previewing. */
   function _stopPreview() {
@@ -607,10 +630,13 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       // each save re-rendered this row, so the bar was rebuilt mid-drag.
       onRangeChange: ({ start, end }) => { _setLabel(start, end, _nFrames) },
       // Once, on release.
+      // Saved on release. `NoRebuild` because the bar you just let go of IS the current
+      // state — repainting the row from the store would throw the widget away and take
+      // the playhead with it.
       onRangeCommit: async ({ start, end }) => {
         kf.trajectory_frame_start = start
         kf.trajectory_frame_end   = end
-        await _patchKf(kf, { trajectory_frame_start: start, trajectory_frame_end: end })
+        await _patchKfNoRebuild(kf, { trajectory_frame_start: start, trajectory_frame_end: end })
       },
       onPlayhead: (i) => {
         _scrubTo(i)
@@ -770,8 +796,10 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       })
       jobSel.value = kf.trajectory_job_id ?? ''
       _syncResolutionControls()
-      _renderPreviewBtn()
+      // _loadMeta FIRST: it sizes the bar. Restoring the playhead before the bar knows
+      // its frame count is how a rebuilt row used to lose it.
       await _loadMeta()
+      _renderPreviewBtn()
     })()
 
     jobSel.addEventListener('change', async () => {
@@ -787,7 +815,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         trajectory_stride: engine === 'namd' ? 1 : null,
       }
       Object.assign(kf, patch)
-      await _patchKf(kf, patch)
+      await _patchKfNoRebuild(kf, patch)
       _syncResolutionControls()
       _renderPreviewBtn()
       await _loadMeta()
@@ -800,7 +828,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       const patch = { trajectory_scope: scopeSel.value === 'job' ? 'job' : 'lineage',
                       trajectory_frame_start: null, trajectory_frame_end: null }
       Object.assign(kf, patch)
-      await _patchKf(kf, patch)
+      await _patchKfNoRebuild(kf, patch)
       await _loadMeta()
     })
 
@@ -812,7 +840,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       const patch = { trajectory_stride: stride,
                       trajectory_frame_start: null, trajectory_frame_end: null }
       Object.assign(kf, patch)
-      await _patchKf(kf, patch)
+      await _patchKfNoRebuild(kf, patch)
       await _loadMeta()
     })
 
@@ -1752,12 +1780,14 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   store.subscribeSlice('design', (n, p) => {
     if (_assemblyMode || _partMode) return  // other mode has its own data source
     if (n.currentDesign === p.currentDesign) return
+    if (_selfKfPatch > 0) return           // our own edit; the row already shows it
     if (!_collapsed) _rebuildSelectMaybeDefer(n.currentDesign?.animations ?? [])
   })
 
   store.subscribeSlice('assembly', (n, p) => {
     if (!_assemblyMode) return
     if (n.currentAssembly === p.currentAssembly) return
+    if (_selfKfPatch > 0) return           // our own edit; the row already shows it
     if (!_collapsed) _rebuildSelectMaybeDefer(n.currentAssembly?.animations ?? [])
   })
 

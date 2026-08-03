@@ -68,6 +68,14 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   // Pre-baked geometry states: Map<featureLogIndex, BakedGeometry>
   // BakedGeometry = { posMap, axesMap, bnMap }
   let _bakedStates  = new Map()
+  // The feature-log index the design was ACTUALLY sitting at when Play was pressed, and
+  // therefore the state stop() has to put the beads back to. Keyframes may pin any other
+  // index; playback leaves the beads wherever the last one pinned.
+  let _baseFLI      = null
+  // Helix ids the feature-log lerp moves (everything not cluster-owned), and the ids the
+  // last cluster lerp moved. `_applyAt` re-seats the arcs over the union of the two.
+  let _lerpHelixIds        = null
+  let _lastClusterHelixIds = null
   // Pre-baked atomistic position arrays: Map<featureLogIndex, number[]>
   // Each value is a flat [x0,y0,z0, x1,y1,z1, ...] array indexed by atom serial.
   let _bakedAtomistic = new Map()
@@ -610,14 +618,47 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       clusterTransforms.push({ helix_ids: base.helix_ids, center, dummy, incrRot })
     }
 
-    // Keep crossover arcs, extension beads, and 3D crossover lines in sync.
-    if (affectedHelixIds.length) {
-      getUnfoldView?.()?.applyClusterArcUpdate(affectedHelixIds)
-      getUnfoldView?.()?.applyClusterExtArcUpdate(affectedHelixIds)
-      getDesignRenderer?.()?.applyClusterCrossoverUpdate(affectedHelixIds)
-    }
+    // Arcs are NOT synced here. _applyAt does it once per frame over the union of the
+    // helices this moved and the ones applyPositionLerp moved — syncing twice would run
+    // unfold_view's whole-arc-buffer rewrite twice per frame for no benefit.
+    _lastClusterHelixIds = affectedHelixIds
 
     return clusterTransforms
+  }
+
+  /**
+   * Re-seat crossover arc lines, extension beads and extra-base beads on the LIVE bead
+   * positions of `helixIds`.
+   *
+   * Every path that moves beads has to call this, and one of them didn't: the cluster
+   * lerp and the trajectory overlay (via designRenderer.applyFemPositions → applyFemArcs)
+   * both kept the arcs attached, but `applyPositionLerp` — the feature-log geometry lerp,
+   * 455 lines of helix_renderer — never touched an arc. So a feature-log animation moved
+   * the beads out from under stationary arcs, and at stop() `_restoreBaseClusters` then
+   * recomputed the arcs FROM those still-displaced beads, welding them to the animation's
+   * last frame. That is the bug this exists to close; see `_restoreBaseGeometry`.
+   *
+   * Despite the `Cluster` in their names, both renderer entry points are generic: they
+   * re-read `getNucLivePos` for any helix in the set. Empty/absent set = no-op (the
+   * renderer's own filter), so callers don't need to guard.
+   */
+  function _syncArcs(helixIds) {
+    if (!helixIds?.length) return
+    getUnfoldView?.()?.applyClusterArcUpdate(helixIds)
+    getUnfoldView?.()?.applyClusterExtArcUpdate(helixIds)
+    getDesignRenderer?.()?.applyClusterCrossoverUpdate(helixIds)
+  }
+
+  /** Helix ids the feature-log lerp is responsible for = every helix in the design that
+   *  is NOT owned by a cluster (those are rigid-body transformed instead). Computed once
+   *  per play — cluster membership cannot change mid-animation — because `_syncArcs` runs
+   *  on every frame. */
+  function _computeLerpHelixIds() {
+    const owned = new Set()
+    for (const base of _baseClusters ?? []) base.helix_ids.forEach(id => owned.add(id))
+    _lerpHelixIds = (getDesign()?.helices ?? [])
+      .map(h => h.id)
+      .filter(id => !owned.has(id))
   }
 
   /** Restore all clusters to their base (design) positions after stop. */
@@ -643,12 +684,34 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       allHelixIds.push(...base.helix_ids)
     }
     // Restore crossover arcs, extension beads, and 3D crossover lines.
-    if (allHelixIds.length) {
-      getUnfoldView?.()?.applyClusterArcUpdate(allHelixIds)
-      getUnfoldView?.()?.applyClusterExtArcUpdate(allHelixIds)
-      getDesignRenderer?.()?.applyClusterCrossoverUpdate(allHelixIds)
-    }
+    _syncArcs(allHelixIds)
     _baseClusters = null
+  }
+
+  /**
+   * Put the NON-cluster beads back to the feature-log state the design was loaded at,
+   * then re-seat their arcs. The cluster-owned helices are excluded — `_restoreBaseClusters`
+   * restores those through `applyClusterTransform`, and a linear lerp over them would
+   * undo its slerp.
+   *
+   * Without this, `stop()` left every bead at whatever feature-log state the last keyframe
+   * pinned. It usually went unnoticed because the player seeds `_bakedStates` with the
+   * design's live `feature_log_cursor`, so an animation that pins no index lerps a state
+   * against itself and lands back where it started by accident. Pin an index — or export
+   * from photo mode, where you go back and look at the model afterwards — and the beads
+   * stayed at the last frame, with `_restoreBaseClusters` then welding the arcs onto them.
+   *
+   * `applyPositionLerp(baked, baked, 0)` is an exact set-to-that-state, not an
+   * interpolation: both endpoints are the same map, so every bead lands on it for any t.
+   */
+  function _restoreBaseGeometry() {
+    if (_baseFLI == null) return
+    const baked = _bakedStates.get(_baseFLI)
+    if (!baked) return
+    const owned = new Set()
+    for (const base of _baseClusters ?? []) base.helix_ids.forEach(id => owned.add(id))
+    getHelixCtrl()?.applyPositionLerp(baked, baked, 0, owned.size ? owned : null)
+    _syncArcs(_lerpHelixIds)
   }
 
   // ── Binding bind/unbind φ (hinge drive + unzip overlay) ──────────────────────
@@ -836,6 +899,8 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     // Cluster configs
     let clusterHelixIds    = null
     let clusterTransforms  = []
+    let movedByLerp        = false
+    _lastClusterHelixIds   = null
     if (toState.clusterTransforms) {
       clusterTransforms = _applyClusterLerp(fromState.clusterTransforms, toState.clusterTransforms, t)
       // Build exclusion set so applyPositionLerp skips helices owned by rigid-body
@@ -874,6 +939,17 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         }
       }
       getHelixCtrl()?.applyPositionLerp(fromBaked, toBaked, t, clusterHelixIds, fadeOpts)
+      movedByLerp = true
+    }
+
+    // Re-seat the crossover arcs on wherever the beads ended up this frame — ONE pass
+    // over the union, so unfold_view's arc-buffer rewrite runs once per frame however
+    // many things moved. Without the `_lerpHelixIds` half the arcs simply stayed put
+    // while the structure animated under them.
+    if (_lastClusterHelixIds?.length || movedByLerp) {
+      _syncArcs(movedByLerp
+        ? [...(_lastClusterHelixIds ?? []), ...(_lerpHelixIds ?? [])]
+        : _lastClusterHelixIds)
     }
 
     // Overhang link arcs (linker bridge tubes + connector arcs) are rendered
@@ -1042,6 +1118,11 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     onEvent?.({ type: 'baking', hasSlow })
 
     const liveFLI = getDesign()?.feature_log_cursor ?? -1
+    // Where the design actually sits — what stop() must return the beads to, whatever
+    // feature-log index the keyframes wander off to. Taken from the value _bakeStates is
+    // called with, so `_bakedStates.get(_baseFLI)` is guaranteed present (it seeds its
+    // position set with exactly this index).
+    _baseFLI = liveFLI
 
     return _bakeStates(animation, liveFLI).then(() => {
       if (_animation !== animation) return   // user stopped while baking
@@ -1065,6 +1146,8 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       _playing    = true
 
       _captureAllBases()
+      // After _captureAllBases, so cluster ownership is known.
+      _computeLerpHelixIds()
 
       // Heavy reps must step the pre-built coarse grid while the loop runs — an exact
       // per-frame rebuild takes seconds and would stall it.
@@ -1103,8 +1186,16 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _raf = requestAnimationFrame(_loop)
   }
 
-  /** Stop completely, reset position, and restore cluster visual state. */
+  /** Stop completely, reset position, and restore the model's visual state. */
   function stop() {
+    // ORDER MATTERS. Hand the display controllers back FIRST: a trajectory segment drives
+    // the beads through designRenderer.applyFemPositions, and its restore
+    // (applyFemPositions(null)) reverts them to the renderer's own base positions. Doing
+    // that AFTER the feature-log restore below would overwrite it.
+    trajectoryKeyframes?.release()
+    // Then the beads the feature-log lerp moved, then the cluster-owned ones. Each
+    // re-seats the crossover arcs on the helices it just moved.
+    _restoreBaseGeometry()
     _restoreBaseClusters()
     // Restore overhang link arcs to full visibility — playback may have
     // scaled them down for linker creation/deletion fade-outs.
@@ -1115,11 +1206,6 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     // Tear down the rich strand-anim drivers: restores moved beads to authored
     // positions and hides any displacement-mode synthetic invaders.
     getMultiOverhangStrandAnim?.()?.clear?.()
-
-    // Hand the display controllers back: restore the design where the animation was the
-    // only thing showing a trajectory, or put the jobs panel's own frame back under it
-    // where it was already scrubbing that job. No-op if no trajectory played.
-    trajectoryKeyframes?.release()
 
     // Restore assembly joints to pre-play values if callback is set
     if (_onJointUpdate && _liveJointValues) {
@@ -1136,6 +1222,9 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _seekOffset      = 0
     _lastSeekKfId    = null
     _bakedStates     = new Map()
+    _baseFLI         = null
+    _lerpHelixIds        = null
+    _lastClusterHelixIds = null
     _bakedAtomistic  = new Map()
     _liveAtomistic   = null
     _bakedSurface    = new Map()
