@@ -32,12 +32,40 @@
  * positions and never touch topology (Three-Layer Law).
  */
 
-/** Pure: which trajectory jobs an animation references, in keyframe order.
- *  Map<jobId, engine>; engine defaults to 'oxdna' (what the model defaults to). */
+/**
+ * Pure: the composite RESOLUTION one trajectory keyframe addresses its frame indices in.
+ *
+ * The two engines say this differently and neither is optional detail — a frame index
+ * only means the same thing within one resolution:
+ *
+ *   oxDNA/LAMMPS  `scope`  'job'     = this job's own stages, EVERY frame oxDNA wrote.
+ *                          'lineage' = the whole ancestor chain strided to ~200 frames.
+ *   NAMD          `stride` N >= 1    = every Nth frame of each written segment.
+ *                          undefined = the backend's legacy 200-frame budget.
+ *
+ * A keyframe saved before these fields existed carries neither, and must keep resolving
+ * to the old sparse view or its saved start/end would address other frames.
+ */
+export function keyframeTrajSpec(kf) {
+  const engine = kf?.trajectory_engine || 'oxdna'
+  if (engine === 'namd') {
+    const s = Math.floor(Number(kf?.trajectory_stride))
+    // MD has no lineage/job scope; the adapter drops it. Pinned to 'lineage' only so
+    // the spec compares equal against a controller the MD panel loaded.
+    return { engine, scope: 'lineage', stride: s >= 1 ? s : undefined }
+  }
+  return { engine, scope: kf?.trajectory_scope === 'job' ? 'job' : 'lineage', stride: undefined }
+}
+
+/** Pure: which trajectory jobs an animation references, in keyframe order, and at what
+ *  resolution. `Map<jobId, {engine, scope, stride}>` — the FIRST keyframe naming a job
+ *  wins, since one controller holds one resolution of one job at a time. */
 export function trajectoryJobs(animation) {
   const out = new Map()
   for (const kf of animation?.keyframes ?? []) {
-    if (kf?.trajectory_job_id) out.set(kf.trajectory_job_id, kf.trajectory_engine || 'oxdna')
+    if (kf?.trajectory_job_id && !out.has(kf.trajectory_job_id)) {
+      out.set(kf.trajectory_job_id, keyframeTrajSpec(kf))
+    }
   }
   return out
 }
@@ -50,6 +78,9 @@ export function trajectoryJobs(animation) {
 export function initTrajectoryKeyframes({ getController, planPrebuild = null } = {}) {
   // jobId → frame count of its loaded composite trajectory (0 = failed / not loaded).
   const _frames  = new Map()
+  // jobId → the {engine, scope, stride} resolution it was asked for, so a mid-playback
+  // swap and a preview scrub reload at the SAME resolution the frame indices assume.
+  const _specs   = new Map()
   // controller → the jobId it currently holds FOR US.
   const _loaded  = new Map()
   // controller → its state before we touched it, so release() can put it back.
@@ -72,21 +103,29 @@ export function initTrajectoryKeyframes({ getController, planPrebuild = null } =
     })
   }
 
-  /** Load `jobId` into `ctrl` (skipped when it already holds it — the whole point of
-   *  sharing the panel's controller) and prebuild its heavy frames within budget. */
-  async function _loadInto(ctrl, jobId, engine, onProgress) {
+  /** Load `jobId` into `ctrl` at `spec`'s resolution (skipped when it already holds that
+   *  job AT THAT RESOLUTION — the whole point of sharing the panel's controller) and
+   *  prebuild its heavy frames within budget. */
+  async function _loadInto(ctrl, jobId, spec, onProgress) {
+    const { engine, scope, stride } = spec
     _remember(ctrl)
+    _specs.set(jobId, spec)
+    // Reusing a held trajectory is only sound at the SAME resolution: the caller's frame
+    // indices are composite indices, and 'job'/stride=1 is a different frame space from
+    // the sparse lineage view. A mismatch falls through to a real load.
+    const sameSpec = ctrl.trajSpecMatches ? ctrl.trajSpecMatches({ scope, stride }) : true
     // Three ways in, cheapest first: the panel (or a previous play) already has this job
     // showing; a previous play suspended it but the controller still holds every frame;
     // or it genuinely has to be downloaded.
-    const showing  = ctrl.activeJobId?.() === jobId && ctrl.mode?.() === 'trajectory'
+    const showing  = sameSpec && ctrl.activeJobId?.() === jobId && ctrl.mode?.() === 'trajectory'
                      && ctrl.isActive?.()
-    const resumed  = !showing && ctrl.resumeTrajectory?.(jobId) === true
+    const resumed  = !showing && ctrl.resumeTrajectory?.(jobId, { scope, stride }) === true
     if (showing || resumed) {
       _frames.set(jobId, Number(ctrl.trajectoryInfo?.()?.total) || 0)
     } else {
       onProgress?.({ phase: 'load', jobId, engine, done: 0, total: 1 })
-      const r = await Promise.resolve(ctrl.loadTrajectory?.(jobId)).catch(() => null)
+      const r = await Promise.resolve(
+        ctrl.loadTrajectory?.(jobId, true, scope, stride)).catch(() => null)
       if (!r?.ok) { _frames.set(jobId, 0); return false }
       _frames.set(jobId, Number(r.n_frames) || 0)
     }
@@ -114,16 +153,18 @@ export function initTrajectoryKeyframes({ getController, planPrebuild = null } =
    */
   async function prepare(animation, { onProgress } = {}) {
     _frames.clear()
+    _specs.clear()
     const jobs = trajectoryJobs(animation)
     if (!jobs.size) return _frames
     const first = new Map()   // controller → the first job that lands on it
-    for (const [jobId, engine] of jobs) {
-      const ctrl = getController?.(engine)
+    for (const [jobId, spec] of jobs) {
+      const ctrl = getController?.(spec.engine)
       if (!ctrl) { _frames.set(jobId, 0); continue }
-      if (!first.has(ctrl)) first.set(ctrl, { jobId, engine })
+      _specs.set(jobId, spec)
+      if (!first.has(ctrl)) first.set(ctrl, { jobId, spec })
     }
-    for (const [ctrl, { jobId, engine }] of first) {
-      await _loadInto(ctrl, jobId, engine, onProgress)
+    for (const [ctrl, { jobId, spec }] of first) {
+      await _loadInto(ctrl, jobId, spec, onProgress)
     }
     return _frames
   }
@@ -138,7 +179,8 @@ export function initTrajectoryKeyframes({ getController, planPrebuild = null } =
    *  frame loop is synchronous, so playback holds the current frame until it lands. */
   function _swap(ctrl, jobId, engine) {
     if (_swapping) return
-    _swapping = _loadInto(ctrl, jobId, engine, null)
+    const spec = _specs.get(jobId) ?? { engine, scope: 'lineage', stride: undefined }
+    _swapping = _loadInto(ctrl, jobId, spec, null)
       .catch(() => {})
       .finally(() => { _swapping = null })
   }
@@ -212,9 +254,37 @@ export function initTrajectoryKeyframes({ getController, planPrebuild = null } =
         ctrl.stopAndRestore?.()
       }
     }
-    _prev.clear(); _loaded.clear(); _frames.clear()
+    _prev.clear(); _loaded.clear(); _frames.clear(); _specs.clear()
     invalidate()
   }
 
-  return { prepare, frameCount, show, invalidate, suspend, setPlaying, cancel, release, hasJobs }
+  // ── Authoring preview ────────────────────────────────────────────────────────
+  // The animation panel's frame-range bar scrubs the model while you drag its playhead,
+  // so you can SEE which frames you are bracketing instead of guessing at index numbers.
+  // It goes through this module rather than touching a controller itself, so a preview
+  // and a subsequent Play share the one download, the one budget and the one restore
+  // path — the same reason the player does.
+
+  /**
+   * Load one keyframe's job for authoring preview. Same reuse rules as `prepare`
+   * (already-showing → free; suspended-but-held → free; otherwise a real download at the
+   * keyframe's own resolution). Returns the frame count, or 0 if it could not load.
+   */
+  async function previewLoad(jobId, spec, { onProgress } = {}) {
+    const ctrl = getController?.(spec?.engine)
+    if (!ctrl || !jobId) return 0
+    await _loadInto(ctrl, jobId, spec, onProgress)
+    return _frames.get(jobId) ?? 0
+  }
+
+  /** Scrub the preview to a composite frame index. Same frame-change guard as `show`. */
+  function previewShow(jobId, engine, frameIdx) { show(jobId, engine, frameIdx) }
+
+  /** True when this module is holding a controller for preview (nothing is playing). */
+  function isPreviewing() { return _prev.size > 0 }
+
+  return {
+    prepare, frameCount, show, invalidate, suspend, setPlaying, cancel, release, hasJobs,
+    previewLoad, previewShow, isPreviewing,
+  }
 }

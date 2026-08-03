@@ -22,7 +22,7 @@ paths:
 
 # animation
 
-Audited against live code **2026-07-30**. Everything below was verified by grep; the
+Audited against live code **2026-07-30**; trajectory-keyframe resolution + the range bar added **2026-08-02**. Everything below was verified by grep; the
 "Removed API" block at the bottom lists names that are **gone** — do not resurrect them.
 
 > **Scope note.** `.claude/rules/strand-anim.md` covers the *standalone sandbox*
@@ -43,9 +43,10 @@ field `configuration_id` (not `config_id`). Topic file: `memory/project_assembly
 | File | LOC | Role |
 |---|---|---|
 | [scene/animation_player.js](../../frontend/src/scene/animation_player.js) | 1205 | The player. `initAnimationPlayer({…20 deps})` at `:52`, init site [main.js:1581](../../frontend/src/main.js#L1581) |
-| [scene/trajectory_keyframes.js](../../frontend/src/scene/trajectory_keyframes.js) | 197 | Trajectory keyframes → the jobs panels' display controllers. **Unit-tested** (26 `it`) |
+| [scene/trajectory_keyframes.js](../../frontend/src/scene/trajectory_keyframes.js) | 290 | Trajectory keyframes → the jobs panels' display controllers, at a per-keyframe resolution, plus the authoring-preview API. **Unit-tested** (42 `it`) |
 | [ui/traj_prebuild_plan.js](../../frontend/src/ui/traj_prebuild_plan.js) | 62 | Free-RAM read + prebuild memory plan, shared by the MD panel and the animation path. **Unit-tested** (8 `it`) |
-| [ui/animation_panel.js](../../frontend/src/ui/animation_panel.js) | 1624 | Authoring UI. `initAnimationPanel(store, {player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature, getWorkspacePath})` at `:100`, init [main.js:6714](../../frontend/src/main.js#L6714) |
+| [ui/frame_range_slider.js](../../frontend/src/ui/frame_range_slider.js) | 270 | ONE bar carrying a trajectory keyframe's start + end + previewed frame. Pure geometry/drag core + DOM shell. **Unit-tested** (30 `it`, incl. a real pointer-event drag lifecycle). Only consumer: `animation_panel.js`. ⚠️ **`onRangeChange` is per-move (labels only); persist from `onRangeCommit`, which fires once on release** — saving per move PATCHed the keyframe every pixel and each save rebuilt the row mid-drag. Moving a BOUND pulls the playhead back inside the window; moving the playhead does not. |
+| [ui/animation_panel.js](../../frontend/src/ui/animation_panel.js) | 1796 | Authoring UI. `initAnimationPanel(store, {player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature, getWorkspacePath, trajectoryKeyframes})` at `:100`, init [main.js:6756](../../frontend/src/main.js#L6756). `trajectoryKeyframes` is the SAME instance the player gets — that is what makes the authoring preview share the player's download |
 | [ui/camera_panel.js](../../frontend/src/ui/camera_panel.js) | 363 | `initCameraPanel(store, {captureCurrentCamera, animateCameraTo, api})` `:15`, init [main.js:6357](../../frontend/src/main.js#L6357) |
 | [ui/keyframe_text_popup.js](../../frontend/src/ui/keyframe_text_popup.js) | 319 | `openKeyframeTextPopup` — text-keyframe editor, imported `animation_panel.js:22` |
 | [ui/strand_anim_panel.js](../../frontend/src/ui/strand_anim_panel.js) | 292 | Per-overhang strand-anim setup UI, init [main.js:4604](../../frontend/src/main.js#L4604) |
@@ -61,7 +62,7 @@ field `configuration_id` (not `config_id`). Topic file: `memory/project_assembly
 | [backend/api/routes_assembly_configs.py](../../backend/api/routes_assembly_configs.py) | — | assembly configurations + assembly camera poses |
 | [backend/api/routes_feature_log.py](../../backend/api/routes_feature_log.py) | — | seek + the three **pre-bake batch** routes |
 
-`main.js` is 8059 LOC and the four init sites are spread across ~5000 lines — they are **not** a
+`main.js` is 8116 LOC and the four init sites are spread across ~5000 lines — they are **not** a
 contiguous block, and `initClusterGizmo` ([main.js:4614](../../frontend/src/main.js#L4614)) is not
 adjacent to any of them.
 
@@ -134,6 +135,25 @@ SAME display controllers the jobs panels drive: `oxdnaDisplay` for oxDNA/LAMMPS,
 - **One job per controller at a time.** `prepare` loads the first job per controller; a second job
   on the SAME engine swaps in when its segment is reached (a reload each pass). Two jobs on
   different engines are free. No saved animation uses more than one job today.
+- **RESOLUTION is per keyframe, and it is part of the cache key** (2026-08-02). `keyframeTrajSpec(kf)`
+  (pure, exported) turns a keyframe into `{engine, scope, stride}`. oxDNA: `scope='job'` = this job's
+  own stages at every written frame, `'lineage'` = the whole ancestor chain strided to
+  `_SPARSE_FRAME_CAP` (200, `routes_oxdna.py:1653`). NAMD: `stride=N` = every Nth DCD frame,
+  `undefined` = the backend's legacy 200-frame budget (`routes_md.py:677`). Before this the module
+  called `ctrl.loadTrajectory(jobId)` bare, so **every animation silently got the 200-frame sparse
+  view** no matter how many frames the run wrote. New keyframes are created with
+  `trajectory_scope:'job'`; a keyframe saved without the fields stays on `'lineage'`, because its
+  saved `trajectory_frame_start/end` index that frame space.
+  ⚠️ A frame index only means the same instant within one resolution, so `_loadInto`'s
+  already-showing / resume shortcuts now gate on `ctrl.trajSpecMatches({scope, stride})` and
+  `resumeTrajectory(jobId, spec)` returns false on a mismatch. Reusing a lineage-loaded controller
+  for a `'job'` keyframe would point every authored frame number at a different instant.
+  `scope='job'` is **not strictly more data**: on a CHILD job it drops the ancestor stages entirely
+  (measured 2026-08-02 — job `071b38e1f593` is 200 lineage frames with 8 stage markers against 51
+  own-frames with none), which is exactly why the picker exists rather than a hard switch.
+- **Authoring preview** — `previewLoad(jobId, spec, {onProgress})` / `previewShow` / `isPreviewing`
+  let `animation_panel.js` scrub the real model while you drag the bar's needle, through the SAME
+  controller, so a preview then Play is one download. `release()` is shared with playback.
 - Bake progress for this phase has its own denominator, so it emits `baking_progress` with a
   `label` the panel prefers over its own "Rendering frame X of Y".
 
@@ -166,11 +186,13 @@ stop on `'scene'`. Both pinned in `display_tab_policy.test.js`.
 
 - **`CameraPose`** `:1241` — `{id, name, position, target, up, fov, orbit_mode}`.
 - **`DesignAnimation`** `:1759` — `{id, name, fps, loop, keyframes: List[AnimationKeyframe]}`.
-- **`AnimationKeyframe`** `:1696` — **27 fields**, five feature groups:
+- **`AnimationKeyframe`** `:1696` — **29 fields**, five feature groups:
   - core: `id, name, camera_pose_id, configuration_id, feature_log_index, hold_duration_s, transition_duration_s, easing`
   - assembly: `joint_values` (joint id → value), `binding_states` (driver id → φ)
   - strand anim: `strand_anim_phi` (overhang id → φ)
-  - trajectory: `is_trajectory, trajectory_job_id, trajectory_engine, trajectory_frame_start, trajectory_frame_end`
+  - trajectory: `is_trajectory, trajectory_job_id, trajectory_engine, trajectory_frame_start,
+    trajectory_frame_end, trajectory_scope, trajectory_stride` (the last two = the composite
+    resolution those indices address; both `None` = the pre-2026-08 sparse view)
   - camera spin: `spin_axis, spin_rotations, spin_invert`
   - text: `text, text_font_family, text_font_size_px, text_color, text_bold, text_italic, text_align`
 - **`AssemblyConfigurationSnapshot`** `:1291` + `AssemblyInstanceConfigState` `:1258`,
@@ -249,11 +271,12 @@ its only caller is the sandbox's own `strand-anim/app.js:42`. The editor path im
 
 | File | Count | Covers |
 |---|---|---|
-| `tests/test_animation.py` | 20 | pre-bake `geometry-batch` (10, incl. cursor invariance + surface vertex colors), `binding_states` roundtrip `:252,:278`, `strand_anim_phi` `:289,:312,:321`, trajectory keyframes `:339,:370`, `strand-anim-setup` `:393,:415`, model roundtrip `:422` |
+| `tests/test_animation.py` | 23 | pre-bake `geometry-batch` (10, incl. cursor invariance + surface vertex colors), `binding_states` roundtrip `:252,:278`, `strand_anim_phi` `:289,:312,:321`, trajectory keyframes `:339,:370` + **resolution fields (3)**, `strand-anim-setup`, model roundtrip |
 | `tests/test_assembly_api.py` | 3 of 75 | `:231` config restore ignores newer parts, `:275` assembly camera-pose CRUD, `:294` keyframe accepts pose+configuration |
 | `frontend/src/scene/assembly_config_animator.test.js` | 13 | pure interpolation core |
 | `frontend/src/ui/animation_panel.normalize.test.js` | 5 | panel normalization helpers only |
-| `frontend/src/scene/trajectory_keyframes.test.js` | 26 | job collection, no-reload-when-held, per-engine routing, budget hand-off, frame-change guard, suspend/release/cancel |
+| `frontend/src/scene/trajectory_keyframes.test.js` | 42 | job collection, `keyframeTrajSpec`, no-reload-when-held **and reload-on-resolution-mismatch**, per-engine routing, budget hand-off, frame-change guard, suspend/release/cancel, the preview API |
+| `frontend/src/ui/frame_range_slider.test.js` | 30 | offset↔frame geometry, handle picking, drag/push rules, clamp-on-resolution-change, arrow-key nudge |
 | `frontend/src/ui/traj_prebuild_plan.test.js` | 8 | RAM cache + which ceiling binds |
 
 `frontend/src/scene/export_video.test.js` (12 `it`) covers `exportPhotoVideo` only: frame count +

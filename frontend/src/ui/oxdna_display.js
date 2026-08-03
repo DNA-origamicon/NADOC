@@ -1066,11 +1066,31 @@ export function initOxdnaDisplay({
   }
 
   /** Re-activate a trajectory suspended by `suspendToDesign()` and show its last frame.
-   *  False when this controller isn't holding that job — the caller must load it. */
-  function resumeTrajectory(jobId) {
+   *  False when this controller isn't holding that job — the caller must load it.
+   *
+   *  `spec` (optional `{scope, stride}`) is the RESOLUTION the caller needs. A frame
+   *  index only means the same thing within one resolution, so resuming a job held at a
+   *  different scope/stride would silently address other frames — say no and make the
+   *  caller reload. Omit it to resume whatever is held (the jobs panels' behaviour). */
+  function resumeTrajectory(jobId, spec = null) {
     if (_active || _mode !== 'trajectory' || !_traj || _jobId !== jobId) return false
+    if (spec && !trajSpecMatches(spec)) return false
     _active = true
     showFrame(_frameIdx)
+    return true
+  }
+
+  /** The composite resolution the held trajectory was loaded at. `scope` is the oxDNA
+   *  lineage/job distinction; `stride` the MD frame interval (undefined = backend
+   *  default). Callers that cache frame INDICES must compare this before reusing. */
+  function trajSpec() { return { scope: _trajScope, stride: _trajStride } }
+
+  /** True when the held trajectory's resolution matches `spec`. Fields left undefined on
+   *  `spec` are "don't care", so `{scope:'job'}` ignores stride (oxDNA has none). */
+  function trajSpecMatches(spec = {}) {
+    const norm = (v) => (v == null ? null : v)
+    if ('scope'  in spec && norm(spec.scope)  !== norm(_trajScope))  return false
+    if ('stride' in spec && norm(spec.stride) !== norm(_trajStride)) return false
     return true
   }
 
@@ -1561,6 +1581,8 @@ export function initOxdnaDisplay({
     releaseHeavyToDesign,
     suspendToDesign,
     resumeTrajectory,
+    trajSpec,
+    trajSpecMatches,
     reapplyForRepr,
     granularity: () => _granularity,
     isActive: () => _active,

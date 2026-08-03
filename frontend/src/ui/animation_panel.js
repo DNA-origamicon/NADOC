@@ -25,8 +25,9 @@ import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_sta
 import { filterJobsForPart, makeSpinner } from './md_jobs_panel.js'
 import { jobDisplayName, productionState } from './oxdna_jobs_panel.js'
 import { statusBadge, statusKeyFor } from './job_status_symbol.js'
-import { markerPositions } from './oxdna_trajectory_player.js'
 import { formatJobTime } from '../scene/trajectory_range.js'
+import { initFrameRangeSlider } from './frame_range_slider.js'
+import { keyframeTrajSpec } from '../scene/trajectory_keyframes.js'
 
 // Build a one-line label for a feature-log entry as shown in the keyframe
 // State dropdown. Mirrors the wording the user sees in the Feature Log tab.
@@ -97,7 +98,7 @@ export function normalizeTrajJobs(oxJobs, mdJobs, partPath) {
   return out
 }
 
-export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature, getWorkspacePath }) {
+export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature, getWorkspacePath, trajectoryKeyframes = null }) {
   const panelEl    = document.getElementById('animation-panel')
   const heading    = document.getElementById('animation-panel-heading')
   const arrow      = document.getElementById('animation-panel-arrow')
@@ -188,7 +189,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   }
 
   selectEl?.addEventListener('change', () => {
-    player.stop()
+    _stopPlayback()
     _activeAnimId = selectEl.value
     const anim = _getAnimations().find(a => a.id === _activeAnimId)
     _rebuildKfList(anim?.keyframes ?? [])
@@ -310,7 +311,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   deleteAnimBtn?.addEventListener('click', async () => {
     if (actionsMenu) actionsMenu.style.display = 'none'
     if (!_activeAnimId) return
-    player.stop()
+    _stopPlayback()
     if (_partMode) {
       await _partPatchFn(d => {
         d.animations = d.animations?.filter(a => a.id !== _activeAnimId)
@@ -431,10 +432,38 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     await api.updateKeyframe(_activeAnimId, kf.id, { binding_states: cur })
   }
 
-  // ── Trajectory keyframes (oxDNA trajectory playback) ─────────────────────────
-  // Per-job metadata cache {nFrames, markers} so re-rendering a row doesn't
-  // re-download the (potentially large) trajectory each time the store changes.
+  // ── Trajectory keyframes (simulation trajectory playback) ────────────────────
+  // Per-(job, resolution) metadata cache {nFrames, markers} so re-rendering a row
+  // doesn't re-download the (potentially large) trajectory each time the store changes.
   const _trajMetaCache = new Map()
+
+  // Authoring PREVIEW state. It lives at panel scope, not inside the keyframe row, for
+  // one reason: the row is rebuilt from scratch on every store change, and a preview that
+  // died with its DOM would be torn down by any unrelated edit while you were scrubbing.
+  // At most one keyframe previews at a time — it holds a display controller, and two
+  // would fight over the model's positions.
+  let _previewKfId = null
+  let _previewJob  = null
+  let _previewFrame = 0   // survives the row rebuild the next store change causes
+
+  /** Stop playback AND any authoring preview. Every place that used to call
+   *  `player.stop()` goes through here: both hold the same display controllers, and
+   *  leaving a preview alive after the user switched animation / left the design would
+   *  keep a trajectory pinned over a model it no longer belongs to. */
+  function _stopPlayback() {
+    _stopPreview()
+    player.stop()
+  }
+
+  /** Drop any active preview and put the display back the way it was found. Safe to call
+   *  when nothing is previewing. */
+  function _stopPreview() {
+    if (!_previewKfId) return
+    _previewKfId = null
+    _previewJob  = null
+    _previewFrame = 0
+    trajectoryKeyframes?.release()
+  }
 
   /** Patch one keyframe (design or part-context mode; assembly unsupported). */
   async function _patchKf(kf, patch) {
@@ -462,25 +491,53 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     return normalizeTrajJobs(ox, md, path)
   }
 
-  /** Fetch {nFrames, markers} for a job's composite trajectory (per engine), via the
-   *  lightweight META endpoint (no coordinate download — instant). Caches only
-   *  SUCCESSES, so a transient failure can retry on the next selection instead of
-   *  sticking on "no trajectory yet". The full frame data is fetched at play/bake. */
-  async function _trajMeta(jobId, engine) {
+  /** Fetch {nFrames, markers} for a job's composite trajectory AT ONE RESOLUTION, via
+   *  the lightweight META endpoint (no coordinate download — instant). The cache is keyed
+   *  by resolution as well as job, because 'job'/stride=N and the sparse lineage view are
+   *  different frame spaces of the same trajectory and their counts differ by orders of
+   *  magnitude. Caches only SUCCESSES, so a transient failure can retry on the next
+   *  selection instead of sticking on "no trajectory yet". The full frame data is fetched
+   *  at preview / play / bake. */
+  async function _trajMeta(jobId, spec) {
     if (!jobId) return null
-    if (_trajMetaCache.has(jobId)) return _trajMetaCache.get(jobId)
-    const fetcher = engine === 'namd' ? api.getMdTrajectoryMeta : api.getOxdnaTrajectoryMeta
-    const resp = await fetcher(jobId).catch(() => null)
+    const key = _specKey(jobId, spec)
+    if (_trajMetaCache.has(key)) return _trajMetaCache.get(key)
+    const resp = await (spec.engine === 'namd'
+      ? api.getMdTrajectoryMeta(jobId, { stride: spec.stride })
+      : api.getOxdnaTrajectoryMeta(jobId, spec.scope)).catch(() => null)
     if (!resp?.ready || !(resp.n_frames > 0)) return null   // not cached → retryable
     const meta = { nFrames: resp.n_frames, markers: resp.markers || [] }
-    _trajMetaCache.set(jobId, meta)
+    _trajMetaCache.set(key, meta)
     return meta
   }
 
+  const _specKey = (jobId, spec) =>
+    `${jobId}|${spec?.engine || 'oxdna'}|${spec?.scope || 'lineage'}|${spec?.stride ?? ''}`
+
+  /** Sync: is this (job, resolution) already in the cache? Lets a row rebuild skip the
+   *  loading spinner — saving a range rebuilds the row, and a spinner flashing for one
+   *  microtask on every drag release reads as the panel reloading under you. */
+  const _trajMetaCached = (jobId, spec) => _trajMetaCache.has(_specKey(jobId, spec))
+
   /**
-   * Build the trajectory State controls for a trajectory keyframe: an oxDNA-job
-   * dropdown + a start/end frame range with stage-marker ticks. Populated
-   * asynchronously; returns the container synchronously.
+   * Build the trajectory State controls for a trajectory keyframe:
+   *
+   *   [ job dropdown ..................................... ]
+   *   [ resolution ▾ ] [ ▶ preview ]   frames 1200–8400 / 12000 · @3021
+   *   [ ◂──█████████▉──────────────▶ ]        ← ONE bar: start, end, playhead
+   *
+   * The bar is `ui/frame_range_slider.js`: start and end are grips, the previewed frame
+   * is a needle, and all three live on the same axis because they address the same thing.
+   *
+   * RESOLUTION is the other half of this. A composite frame index only means something
+   * relative to how the trajectory was sampled, and the animation path used to hard-wire
+   * the sparse whole-lineage view — every job flattened to ~200 frames, no matter how
+   * many its production runs actually wrote. The picker exposes what each backend really
+   * offers: for oxDNA, this job's own stages at every written frame ('job') against the
+   * ancestor chain strided to ~200 ('lineage'); for NAMD, a DCD frame interval. New
+   * keyframes default to the full per-job view — that is the thing worth animating.
+   *
+   * Populated asynchronously; returns the container synchronously.
    */
   function _makeTrajectoryControls(kf) {
     const wrap = document.createElement('div')
@@ -491,7 +548,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     jobRow.style.cssText = 'display:flex;align-items:center;gap:5px'
     const jobLbl = document.createElement('span')
     jobLbl.textContent = 'Traj'
-    jobLbl.title = 'oxDNA job whose trajectory this keyframe plays'
+    jobLbl.title = 'Simulation job whose trajectory this keyframe plays'
     jobLbl.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
     const jobSel = document.createElement('select')
     jobSel.style.cssText = [
@@ -502,44 +559,87 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     jobSel.addEventListener('keydown', e => e.stopPropagation())
     jobRow.append(jobLbl, jobSel)
 
-    // Range row: ticks strip + start slider + end slider + label
-    const rangeWrap = document.createElement('div')
-    rangeWrap.style.cssText = 'display:flex;flex-direction:column;gap:2px'
-    const ticks = document.createElement('div')
-    ticks.style.cssText = 'position:relative;height:6px;margin:0 6px'
-    const startRange = document.createElement('input')
-    const endRange   = document.createElement('input')
-    for (const r of [startRange, endRange]) {
-      r.type = 'range'; r.min = '0'; r.max = '0'; r.disabled = true
-      r.style.cssText = 'width:100%;margin:0;accent-color:#c050d0'
-      r.addEventListener('keydown', e => e.stopPropagation())
+    // Resolution row: oxDNA scope dropdown OR NAMD stride box, plus the preview toggle.
+    const resRow = document.createElement('div')
+    resRow.style.cssText = 'display:flex;align-items:center;gap:5px'
+    const scopeSel = document.createElement('select')
+    scopeSel.title = 'How much of the trajectory this keyframe addresses'
+    scopeSel.style.cssText = [
+      'flex:1;min-width:0;box-sizing:border-box',
+      'background:#0d1117;border:1px solid #30363d;border-radius:3px',
+      'color:#c9d1d9;padding:2px 3px;font-size:var(--text-xs)',
+    ].join(';')
+    for (const [v, t] of [['job', 'This job · every frame'],
+                          ['lineage', 'Whole lineage · ~200 frames']]) {
+      const o = document.createElement('option'); o.value = v; o.textContent = t
+      scopeSel.appendChild(o)
     }
+    scopeSel.addEventListener('keydown', e => e.stopPropagation())
+
+    const strideWrap = document.createElement('div')
+    strideWrap.style.cssText = 'flex:1;min-width:0;display:none;align-items:center;gap:4px'
+    const strideLbl = document.createElement('span')
+    strideLbl.textContent = 'every'
+    strideLbl.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
+    const strideIn = document.createElement('input')
+    strideIn.type = 'number'; strideIn.min = '1'; strideIn.step = '1'
+    strideIn.title = 'DCD frame interval — 1 loads every frame NAMD wrote'
+    strideIn.style.cssText = [
+      'width:52px;box-sizing:border-box',
+      'background:#0d1117;border:1px solid #30363d;border-radius:3px',
+      'color:#c9d1d9;padding:2px 3px;font-size:var(--text-xs)',
+    ].join(';')
+    strideIn.addEventListener('keydown', e => e.stopPropagation())
+    const strideSuffix = document.createElement('span')
+    strideSuffix.textContent = 'frames'
+    strideSuffix.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
+    strideWrap.append(strideLbl, strideIn, strideSuffix)
+
+    const previewBtn = document.createElement('button')
+    previewBtn.textContent = '▶ Preview'
+    previewBtn.title = 'Load this trajectory and scrub it with the bar below'
+    previewBtn.style.cssText = _editStyle
+    resRow.append(scopeSel, strideWrap, previewBtn)
+
+    // The one bar: start grip, end grip, previewed-frame needle, stage ticks.
+    const bar = initFrameRangeSlider({
+      // Per pointer move: label only. Saving here PATCHed the keyframe on every pixel and
+      // each save re-rendered this row, so the bar was rebuilt mid-drag.
+      onRangeChange: ({ start, end }) => { _setLabel(start, end, _nFrames) },
+      // Once, on release.
+      onRangeCommit: async ({ start, end }) => {
+        kf.trajectory_frame_start = start
+        kf.trajectory_frame_end   = end
+        await _patchKf(kf, { trajectory_frame_start: start, trajectory_frame_end: end })
+      },
+      onPlayhead: (i) => {
+        _scrubTo(i)
+        _setLabel(bar.getRange().start, bar.getRange().end, _nFrames)
+      },
+    })
+
     const rangeLbl = document.createElement('div')
     rangeLbl.style.cssText = 'font-size:var(--text-xs);color:#8b949e;text-align:center;display:flex;align-items:center;justify-content:center;gap:5px;min-height:14px'
     rangeLbl.textContent = '—'
-    rangeWrap.append(ticks, startRange, endRange, rangeLbl)
 
     // Heavy-rep notice: atomistic/surface reps re-build each frame → slower.
     const heavyNote = document.createElement('div')
     heavyNote.textContent = 'Atomistic / surface reps re-build each frame — playback + export are slower.'
     heavyNote.style.cssText = 'font-size:var(--text-xs);color:#6e7681;font-style:italic;line-height:1.3'
 
-    wrap.append(jobRow, rangeWrap, heavyNote)
+    wrap.append(jobRow, resRow, bar.el, rangeLbl, heavyNote)
 
-    function _renderTicks(markers, nFrames) {
-      ticks.innerHTML = ''
-      for (const m of markerPositions(markers, nFrames)) {
-        const t = document.createElement('div')
-        t.title = `${m.label}${m.stage_name ? ` (${m.stage_name})` : ''}`
-        t.style.cssText =
-          `position:absolute;top:0;left:${m.pct}%;width:2px;height:100%;` +
-          'transform:translateX(-1px);background:#6e7681;pointer-events:auto;cursor:help'
-        ticks.appendChild(t)
-      }
-    }
+    let _nFrames = 0
+
+    /** The resolution this row is currently editing, read straight off the keyframe so
+     *  the widget and every fetch agree with what playback will do. */
+    function _spec() { return keyframeTrajSpec(kf) }
 
     function _setLabel(s, e, n) {
-      rangeLbl.textContent = n > 0 ? `frames ${s}–${e} / ${n}` : 'no trajectory yet'
+      if (!n) { rangeLbl.textContent = 'no trajectory yet'; return }
+      const head = bar.getPlayhead()
+      rangeLbl.textContent = `frames ${s}–${e} / ${n}`
+        + (head == null ? '' : ` · showing ${head}`)
     }
 
     // Spinner + message while the (potentially large) trajectory downloads.
@@ -550,45 +650,100 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       rangeLbl.appendChild(t)
     }
 
-    // Fetch + apply trajectory metadata with a loading spinner in between.
-    async function _loadMeta(jobId, engine) {
-      if (!jobId) { _setLabel(0, 0, 0); return }
-      _setLoading('Loading trajectory…')
-      await _applyMeta(await _trajMeta(jobId, engine))
+    /** Mirror the keyframe's resolution onto whichever control the engine uses. */
+    function _syncResolutionControls() {
+      const spec = _spec()
+      const isMd = spec.engine === 'namd'
+      scopeSel.style.display = isMd ? 'none' : ''
+      strideWrap.style.display = isMd ? 'flex' : 'none'
+      scopeSel.value = spec.scope
+      strideIn.value = spec.stride == null ? '' : String(spec.stride)
+      strideIn.placeholder = 'auto'
+      const noJob = !kf.trajectory_job_id
+      scopeSel.disabled = strideIn.disabled = noJob
+      previewBtn.disabled = noJob
     }
 
-    // Apply trajectory metadata to the slider (enable + set bounds + values).
+    // Fetch + apply trajectory metadata with a loading spinner in between.
+    async function _loadMeta() {
+      if (!kf.trajectory_job_id) { _nFrames = 0; bar.setFrames(0); bar.setEnabled(false); _setLabel(0, 0, 0); return }
+      const spec = _spec()
+      if (!_trajMetaCached(kf.trajectory_job_id, spec)) _setLoading('Loading trajectory…')
+      await _applyMeta(await _trajMeta(kf.trajectory_job_id, spec))
+    }
+
+    // Apply trajectory metadata to the bar (enable + set bounds + values).
     async function _applyMeta(meta) {
+      _nFrames = meta?.nFrames ?? 0
       if (!meta || meta.nFrames < 2) {
-        startRange.disabled = endRange.disabled = true
-        startRange.max = endRange.max = '0'
-        _renderTicks([], 0)
-        _setLabel(0, 0, meta?.nFrames ?? 0)
+        bar.setFrames(0)
+        bar.setEnabled(false)
+        _setLabel(0, 0, _nFrames)
         return
       }
       const n = meta.nFrames
       const s0 = Number.isFinite(kf.trajectory_frame_start) ? Math.max(0, Math.min(n - 1, kf.trajectory_frame_start)) : 0
       const e0 = Number.isFinite(kf.trajectory_frame_end)   ? Math.max(0, Math.min(n - 1, kf.trajectory_frame_end))   : n - 1
-      startRange.max = endRange.max = String(n - 1)
-      startRange.value = String(s0); endRange.value = String(e0)
-      startRange.disabled = endRange.disabled = false
-      _renderTicks(meta.markers, n)
+      bar.setFrames(n, meta.markers)
+      bar.setRange(s0, e0)
+      bar.setEnabled(true)
       _setLabel(s0, e0, n)
     }
 
-    startRange.addEventListener('input', async () => {
-      let s = parseInt(startRange.value, 10) || 0
-      let e = parseInt(endRange.value, 10) || 0
-      if (s > e) { e = s; endRange.value = String(e) }
-      _setLabel(s, e, parseInt(startRange.max, 10) + 1)
-      await _patchKf(kf, { trajectory_frame_start: s, trajectory_frame_end: e })
-    })
-    endRange.addEventListener('input', async () => {
-      let s = parseInt(startRange.value, 10) || 0
-      let e = parseInt(endRange.value, 10) || 0
-      if (e < s) { s = e; startRange.value = String(s) }
-      _setLabel(s, e, parseInt(endRange.max, 10) + 1)
-      await _patchKf(kf, { trajectory_frame_start: s, trajectory_frame_end: e })
+    // ── Preview ────────────────────────────────────────────────────────────────
+    // Dragging the needle scrubs the real model, through the SAME display controller
+    // the Simulations tab and playback use — so a job already scrubbed over there costs
+    // nothing here, and pressing Play afterwards re-uses this download instead of
+    // repeating it. Refused while the animation is playing: the player owns the
+    // controller then, and two writers would fight over every frame.
+    function _previewing() {
+      return _previewKfId === kf.id && _previewJob === kf.trajectory_job_id
+    }
+
+    function _scrubTo(i) {
+      if (!_previewing() || i == null) return
+      _previewFrame = i
+      trajectoryKeyframes?.previewShow(kf.trajectory_job_id, _spec().engine, i)
+    }
+
+    function _renderPreviewBtn() {
+      const on = _previewing()
+      previewBtn.textContent = on ? '■ Stop' : '▶ Preview'
+      previewBtn.title = on
+        ? 'Stop previewing and restore the design'
+        : 'Load this trajectory and scrub it with the bar below'
+      // On a row rebuilt mid-preview, the panel-scope frame is the truth — the widget
+      // is brand new and knows nothing.
+      bar.setPlayhead(on ? (bar.getPlayhead() ?? _previewFrame) : null)
+    }
+
+    previewBtn.addEventListener('click', async () => {
+      if (_previewing()) { _stopPreview(); _renderPreviewBtn(); _setLabel(bar.getRange().start, bar.getRange().end, _nFrames); return }
+      if (!kf.trajectory_job_id) return
+      if (player?.isPlaying?.()) {
+        rangeLbl.textContent = 'stop playback first'
+        return
+      }
+      _stopPreview()
+      previewBtn.disabled = true
+      _setLoading('Loading trajectory…')
+      const spec = _spec()
+      const n = await (trajectoryKeyframes?.previewLoad(kf.trajectory_job_id, spec, {
+        onProgress: (p) => {
+          if (p?.phase === 'frames' && p.total) _setLoading(`Preparing frames ${p.done}/${p.total}…`)
+        },
+      }) ?? 0)
+      previewBtn.disabled = false
+      if (!n) { _setLabel(bar.getRange().start, bar.getRange().end, _nFrames); return }
+      _previewKfId = kf.id
+      _previewJob  = kf.trajectory_job_id
+      _previewFrame = Math.min(bar.getRange().start, Math.max(0, n - 1))
+      // The download is authoritative about the frame count — the meta call and it can
+      // disagree while a job is still writing.
+      if (n !== _nFrames) { _nFrames = n; bar.setFrames(n); bar.setEnabled(true) }
+      _renderPreviewBtn()
+      _scrubTo(bar.getPlayhead())
+      _setLabel(bar.getRange().start, bar.getRange().end, _nFrames)
     })
 
     // Async populate: jobs dropdown (with timestamps), then meta for the selected job.
@@ -614,22 +769,51 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         jobSel.appendChild(o)
       })
       jobSel.value = kf.trajectory_job_id ?? ''
-      await _loadMeta(kf.trajectory_job_id ?? null, kf.trajectory_engine)
+      _syncResolutionControls()
+      _renderPreviewBtn()
+      await _loadMeta()
     })()
 
     jobSel.addEventListener('change', async () => {
       const jobId = jobSel.value || null
       const engine = jobSel.selectedOptions[0]?.dataset.engine || 'oxdna'
-      // New job → reset range to full span on next meta apply.
-      await _patchKf(kf, {
+      _stopPreview()
+      // New job → full span at this engine's fullest resolution, and the saved
+      // start/end are meaningless in the new frame space, so clear them.
+      const patch = {
         trajectory_job_id: jobId, trajectory_engine: engine,
         trajectory_frame_start: null, trajectory_frame_end: null,
-      })
-      kf.trajectory_job_id = jobId
-      kf.trajectory_engine = engine
-      kf.trajectory_frame_start = null
-      kf.trajectory_frame_end = null
-      await _loadMeta(jobId, engine)
+        trajectory_scope:  engine === 'namd' ? null : 'job',
+        trajectory_stride: engine === 'namd' ? 1 : null,
+      }
+      Object.assign(kf, patch)
+      await _patchKf(kf, patch)
+      _syncResolutionControls()
+      _renderPreviewBtn()
+      await _loadMeta()
+    })
+
+    scopeSel.addEventListener('change', async () => {
+      _stopPreview(); _renderPreviewBtn()
+      // Frame indices do not survive a resolution change — 4000 of 12 000 is a
+      // different instant from 4000 of 200 — so re-open on the full span.
+      const patch = { trajectory_scope: scopeSel.value === 'job' ? 'job' : 'lineage',
+                      trajectory_frame_start: null, trajectory_frame_end: null }
+      Object.assign(kf, patch)
+      await _patchKf(kf, patch)
+      await _loadMeta()
+    })
+
+    strideIn.addEventListener('change', async () => {
+      _stopPreview(); _renderPreviewBtn()
+      const raw = Math.floor(Number(strideIn.value))
+      const stride = raw >= 1 ? raw : null
+      strideIn.value = stride == null ? '' : String(stride)
+      const patch = { trajectory_stride: stride,
+                      trajectory_frame_start: null, trajectory_frame_end: null }
+      Object.assign(kf, patch)
+      await _patchKf(kf, patch)
+      await _loadMeta()
     })
 
     return wrap
@@ -1247,6 +1431,9 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       is_trajectory:         true,
       trajectory_engine:     'oxdna',
       trajectory_job_id:     null,
+      // Full per-job resolution by default — every frame the run wrote, not the
+      // ~200-frame whole-lineage preview the animation path used to be pinned to.
+      trajectory_scope:      'job',
     }
     if (_partMode) {
       await _partPatchFn(d => {
@@ -1332,6 +1519,9 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
           }
         }
         _lastPlayedKfSig = sig
+        // Playback takes the controllers over; a preview still holding them would fight
+        // the player for every frame.
+        _stopPreview()
         player.play(anim, playOpts)
       } else {
         player.resume()
@@ -1355,7 +1545,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     if (player.isPlaying()) {
       player.seekTo(0)
     } else {
-      player.stop()
+      _stopPlayback()
       _updateScrub(0, player.getTotalDuration())
     }
   })
@@ -1587,7 +1777,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         ? 'Trajectory keyframes are available in the design editor only'
         : 'Add a keyframe that plays a range of frames from an oxDNA trajectory'
     }
-    player.stop()
+    _stopPlayback()
     _rebuildSelect(_getAnimations())
   }
 
@@ -1595,7 +1785,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     _partMode    = true
     _partDesign  = design
     _partPatchFn = patchFn
-    player.stop()
+    _stopPlayback()
     _rebuildSelect(_getAnimations())
   }
 
@@ -1603,7 +1793,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     _partMode    = false
     _partDesign  = null
     _partPatchFn = null
-    player.stop()
+    _stopPlayback()
     _rebuildSelect(_getAnimations())
   }
 

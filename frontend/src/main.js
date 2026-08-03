@@ -6778,6 +6778,10 @@ async function main() {
     }),
     // Used by trajectory keyframes to filter oxDNA jobs to the active design.
     getWorkspacePath: () => _workspacePath,
+    // The SAME instance the player uses (declared ~1581), so the panel's authoring
+    // preview, a Simulations-tab scrub and playback all share one download, one memory
+    // budget and one restore path.
+    trajectoryKeyframes,
   })
 
   // ── Photo mode → scene/photo_mode.js ────────────────────────────────────────

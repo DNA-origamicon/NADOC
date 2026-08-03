@@ -1781,6 +1781,24 @@ class AnimationKeyframe(BaseModel):
     trajectory_engine: Literal["oxdna", "namd"] = "oxdna"
     trajectory_frame_start: Optional[int] = None
     trajectory_frame_end: Optional[int] = None
+    # RESOLUTION of the composite frame space the two indices above address. A frame
+    # index only means the same thing within one resolution, so this is stored per
+    # keyframe and passed to every trajectory / frames-atomistic / frames-surface
+    # fetch the animation makes.
+    #
+    #   trajectory_scope  (oxDNA/LAMMPS) 'job'     = THIS job's own stages, every frame
+    #                                                oxDNA wrote, no stride.
+    #                                    'lineage' = the whole ancestor chain strided
+    #                                                down to _SPARSE_FRAME_CAP (200).
+    #   trajectory_stride (NAMD)         N >= 1    = keep every Nth frame of each
+    #                                                written segment (VMD's DCD stride).
+    #
+    # None on BOTH = the pre-2026-08 behaviour ('lineage' / the backend's 200-frame
+    # legacy budget). Left as None for keyframes authored before the field existed so
+    # their saved start/end keep addressing the frames they were authored against; the
+    # UI writes an explicit value on every new trajectory keyframe.
+    trajectory_scope: Optional[Literal["lineage", "job"]] = None
+    trajectory_stride: Optional[int] = None
 
     # Spin = camera orbits the model centroid for the full keyframe duration.
     # Mutually exclusive with camera_pose_id at the UI layer.

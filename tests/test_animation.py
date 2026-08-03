@@ -380,6 +380,64 @@ def test_keyframe_trajectory_defaults():
     assert kf["trajectory_frame_start"] is None
 
 
+def test_keyframe_trajectory_resolution_roundtrip():
+    """`trajectory_scope` (oxDNA lineage/job) and `trajectory_stride` (NAMD frame
+    interval) say WHICH composite frame space start/end index — a frame number only
+    means the same instant within one of them — so both must survive create + patch."""
+    design_state.set_design(_demo_design())
+    a = client.post("/api/design/animations", json={"name": "A"})
+    anim_id = a.json()["design"]["animations"][-1]["id"]
+
+    # The UI's default for a new oxDNA trajectory keyframe: this job, every frame.
+    k = client.post(
+        f"/api/design/animations/{anim_id}/keyframes",
+        json={"is_trajectory": True, "trajectory_engine": "oxdna",
+              "trajectory_scope": "job"},
+    )
+    assert k.status_code == 200, k.text
+    anim = next(an for an in k.json()["design"]["animations"] if an["id"] == anim_id)
+    kf = anim["keyframes"][-1]
+    assert kf["trajectory_scope"] == "job"
+    assert kf["trajectory_stride"] is None
+
+    # Switching the same keyframe to a NAMD job swaps which field carries the resolution.
+    p = client.patch(
+        f"/api/design/animations/{anim_id}/keyframes/{kf['id']}",
+        json={"trajectory_engine": "namd", "trajectory_scope": None,
+              "trajectory_stride": 1},
+    )
+    assert p.status_code == 200, p.text
+    anim = next(an for an in p.json()["design"]["animations"] if an["id"] == anim_id)
+    kf2 = next(x for x in anim["keyframes"] if x["id"] == kf["id"])
+    assert kf2["trajectory_engine"] == "namd"
+    assert kf2["trajectory_scope"] is None
+    assert kf2["trajectory_stride"] == 1
+
+
+def test_keyframe_trajectory_resolution_defaults_to_none():
+    """A keyframe authored before these fields existed carries neither, and must keep
+    resolving to the old sparse view — promoting it would repoint its saved frame
+    indices at other frames."""
+    design_state.set_design(_demo_design())
+    a = client.post("/api/design/animations", json={"name": "A"})
+    anim_id = a.json()["design"]["animations"][-1]["id"]
+    k = client.post(f"/api/design/animations/{anim_id}/keyframes",
+                    json={"is_trajectory": True})
+    kf = next(an for an in k.json()["design"]["animations"]
+              if an["id"] == anim_id)["keyframes"][-1]
+    assert kf["trajectory_scope"] is None
+    assert kf["trajectory_stride"] is None
+
+
+def test_keyframe_trajectory_scope_rejects_an_unknown_value():
+    design_state.set_design(_demo_design())
+    a = client.post("/api/design/animations", json={"name": "A"})
+    anim_id = a.json()["design"]["animations"][-1]["id"]
+    r = client.post(f"/api/design/animations/{anim_id}/keyframes",
+                    json={"is_trajectory": True, "trajectory_scope": "everything"})
+    assert r.status_code >= 400
+
+
 # ── Overhang strand_anim_setup endpoint ──────────────────────────────────────
 
 def _demo_design_with_overhang():

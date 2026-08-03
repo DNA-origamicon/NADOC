@@ -22,7 +22,7 @@ in ``backend/api/main.py`` via ``app.include_router(...)``.
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -61,6 +61,10 @@ class CreateKeyframeBody(BaseModel):
     trajectory_engine: str = "oxdna"
     trajectory_frame_start: Optional[int] = None
     trajectory_frame_end: Optional[int] = None
+    # Which composite frame space start/end index. Validated here rather than only on
+    # the model so a typo comes back as a 422 instead of a 500 from model construction.
+    trajectory_scope: Optional[Literal["lineage", "job"]] = None
+    trajectory_stride: Optional[int] = Field(default=None, ge=1)
     spin_axis: Optional[str] = None
     spin_rotations: float = 0.0
     spin_invert: bool = False
@@ -87,6 +91,10 @@ class PatchKeyframeBody(BaseModel):
     trajectory_engine: Optional[str] = None
     trajectory_frame_start: Optional[int] = None
     trajectory_frame_end: Optional[int] = None
+    # Which composite frame space start/end index. Validated here rather than only on
+    # the model so a typo comes back as a 422 instead of a 500 from model construction.
+    trajectory_scope: Optional[Literal["lineage", "job"]] = None
+    trajectory_stride: Optional[int] = Field(default=None, ge=1)
     spin_axis: Optional[str] = None
     spin_rotations: Optional[float] = None
     spin_invert: Optional[bool] = None
@@ -178,6 +186,8 @@ def create_keyframe(anim_id: str, body: CreateKeyframeBody) -> dict:
         trajectory_engine=body.trajectory_engine,
         trajectory_frame_start=body.trajectory_frame_start,
         trajectory_frame_end=body.trajectory_frame_end,
+        trajectory_scope=body.trajectory_scope,
+        trajectory_stride=body.trajectory_stride,
         spin_axis=body.spin_axis,
         spin_rotations=body.spin_rotations,
         spin_invert=body.spin_invert,
