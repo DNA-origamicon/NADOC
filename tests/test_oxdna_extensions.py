@@ -468,3 +468,52 @@ def test_stale_job_topology_is_rejected(tmp_path):
     grown = _small_with_extensions()           # design now has tails → more particles
     with pytest.raises(StaleJobTopologyError, match="predates"):
         assert_topology_matches_design(top, grown)
+
+
+# ── Trajectory frame 0 (the "everything at the origin" regression) ────────────
+
+
+def _write_traj(design, geo, path, n_frames, box_nm=80.0):
+    """A tiny oxDNA trajectory of *n_frames* identical design-pose frames."""
+    one = path.parent / f"_one_{path.stem}.dat"
+    write_configuration(design, geo, one, box_nm=box_nm)
+    lines = [l for l in one.read_text().splitlines() if l.strip()]
+    hdr, data = lines[:3], lines[3:]
+    out = []
+    for t in range(n_frames):
+        out.append(f"t = {t}")
+        out.extend(hdr[1:])
+        out.extend(data)
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+def test_trajectory_first_frame_places_tails_not_the_origin(tmp_path):
+    """CAN-GO-RED. The composite trajectory PREPENDS the design-reference conf as frame 0.
+    That reference used to be read with the synthetic particles dropped, so every
+    extension tail bead (and crossover extra base) was a MISSING key -> six zeros ->
+    drawn at the world origin.  The player opened on a starburst of tails converging on
+    (0,0,0) that snapped into place at frame 1.
+
+    Frame 0 must carry real coordinates for the tail beads, like every later frame does.
+    """
+    from backend.core.oxdna_health import composite_trajectory
+
+    d = _small_with_extensions()
+    geo = _geometry_for_design(d)
+    ref = tmp_path / "design_ref.dat"; _write_traj(d, geo, ref, 1)
+    prod = tmp_path / "prod.dat";      _write_traj(d, geo, prod, 2)
+
+    r = composite_trajectory(d, [("4_production", "production", prod)], ref, align=False)
+    assert r["n_frames"] == 3                       # seed + 2
+
+    ext_idx = [i for i, k in enumerate(r["keys"]) if is_extension_key(tuple(k))]
+    assert len(ext_idx) == 8                        # 2 + 1 + 5 tail beads
+
+    for f, frame in enumerate(r["frames"]):
+        for i in ext_idx:
+            xyz = np.array(frame[6 * i:6 * i + 3])
+            assert np.linalg.norm(xyz) > 1e-6, (
+                f"frame {f}: extension bead {r['keys'][i]} sits at the origin")
+        # and the seed must agree with the (identical) physical frames it precedes
+        if f:
+            assert np.allclose(frame, r["frames"][0], atol=1e-6)

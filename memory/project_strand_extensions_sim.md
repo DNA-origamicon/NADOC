@@ -81,6 +81,16 @@ top of each other, the FENE oracle does **not** catch a bad arc. The arc has its
 - **Modification-only extensions** (a cy3/biotin with no `sequence`) are not DNA: filtered
   at `strand_extension_tails()`, so they contribute zero particles and zero residues. They
   still render (a separate `is_modification` bead).
+- **THE TRAJECTORY SEED FRAME (fixed 2026-08-02).** `_aligned_downsampled_frames` PREPENDS
+  the design-reference conf as composite frame 0 — but read it with `include_extensions` /
+  `include_extra_bases` OFF, so every `__ext_` / `__xb__` key was *missing* from that dict.
+  `_flatten_cg_frame` fills a missing key with six zeros ⇒ **View-trajectory opened on every
+  tail and extra base at the world origin**, a starburst that snapped into place at frame 1.
+  Frames ≥ 1 never had this (`_parse_trajectory_frame_lines` has no drop filter). Fix: a
+  SECOND read, `ref_display`, with both flags on, used only for the seed frame — the plain
+  `ref` stays synthetic-free because it is also the **Kabsch alignment reference**, and
+  floppy tails must not join that fit. The prior spot-fix backfilled `cap*` keys only.
+  Pinned by `test_oxdna_extensions.py::test_trajectory_first_frame_places_tails_not_the_origin`.
 - **STALE JOBS.** The walk GREW, so a job run before this has fewer `.dat` lines than the
   order now expects — and `_protein_lead_offset` clamps the deficit, silently handing every
   nucleotide after the first extension the WRONG particle line.

@@ -2431,6 +2431,17 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
     ref = read_configuration_full(reference_conf_path, design, copies=copies,
                                   n_trailing_extra=n_trailing_extra,
                                   trailing_extra_strand_length=trailing_extra_strand_length)
+    # SEPARATE read for the prepended seed frame: the alignment reference deliberately
+    # omits synthetic particles (extra bases / extension tails would otherwise join the
+    # Kabsch fit as floppy outliers), but the seed frame IS a displayed frame and must
+    # carry them — design_ref.dat has real rows for every one of them.  Without this the
+    # first frame of every trajectory drew all extra bases + extension tails at the world
+    # origin (missing key → six zeros in _flatten_cg_frame), which snapped away at frame 1.
+    ref_display = read_configuration_full(
+        reference_conf_path, design, copies=copies,
+        include_extra_bases=True, include_extensions=True,
+        n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length)
     ref_sig = _ref_content_sig(reference_conf_path)   # content hash → siblings share frames
     # copies=True keeps loop-insertion copies distinct (full 4-tuple key); else collapse
     # to the 3-tuple so the CG trajectory key list is one entry per (helix,bp,dir).
@@ -2564,7 +2575,9 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
                 # The design-origin reference has no appended particles. Seed their
                 # renderer identities from the first physical trajectory frame so
                 # playback never starts with every capture bead at [0,0,0].
-                seed = dict(ref)
+                # (Extra bases + extension tails DO exist in design_ref.dat — they come
+                # from ref_display, at their design-pose positions.)
+                seed = dict(ref_display)
                 first = aligned.get(0) or {}
                 seed.update({k: v for k, v in first.items()
                              if isinstance(k[0], str) and k[0].startswith("cap")})
