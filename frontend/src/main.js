@@ -2277,15 +2277,11 @@ async function main() {
   _moveStopBelowLaunch(runControlEls.mrdna, 'mrdna-jobs-stop-btn')
   _moveStopBelowLaunch(runControlEls.cando, 'cando-jobs-stop-btn')
 
-  // NAMD: tuck the launch CONFIG (Protocol, Run-on, production steps / total time / note)
-  // into the Advanced card — only the Relax/Production buttons (extracted above) stay out.
-  // Runs AFTER the run-control move so md-launch-row is already gone from the launch form.
-  // The Alpine connect chip goes into the (always-visible) Cluster card instead, so it's
+  // NAMD: the Alpine connect chip goes into the (always-visible) Cluster card, so it's
   // reachable before any Alpine job exists — prepend so it sits at the top of that card.
+  // (The launch-config move that used to be here is gone with the Advanced card: job
+  // parameters live in the Job Wizard now.)
   {
-    const advBody = document.getElementById('md-jobs-adv-body')
-    const launchForm = document.getElementById('md-launch-form')
-    if (advBody && launchForm) advBody.prepend(launchForm)
     const clusterBody = document.getElementById('md-jobs-cluster-body')
     const clusterMount = document.getElementById('md-cluster-connection-mount')
     if (clusterBody && clusterMount) clusterBody.prepend(clusterMount)

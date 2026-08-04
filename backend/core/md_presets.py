@@ -16,8 +16,20 @@ Four tiers, from the protocol survey in
   10798) and Joshi et al. (Methods Mol Biol 2639): hold the solute, let the environment
   equilibrate, then release in stages and run long.
 
-The preset only supplies DEFAULTS.  Anything the user sets explicitly wins — a preset is a
-starting point, not a lock.
+Two more tiers exist for the Job Wizard, which asks the question that actually decides a
+run: *are you reproducing the literature, or getting an answer about your design?*
+
+* ``literature``   — the published protocol with nothing traded away for speed.  No
+  early stopping, no hydrogen-mass repartitioning, no water-shell carve, and the paper's
+  own 2 fs production integrator.
+* ``design_speed`` — every measured accelerator on.  The right choice while iterating on
+  a design; not the one whose numbers go in a paper.
+
+The preset supplies DEFAULTS: anything the user sets explicitly wins, so a preset is a
+starting point rather than a cage.  The two exceptions are ``protocol``, which a preset
+owns by definition, and a preset's ``locked`` fields — settings where an override would
+make the preset's NAME a lie rather than merely tune it.  Today that is exactly one field
+(`literature` locks ``allow_water_shell_carve``); see ``RelaxPreset.locked``.
 """
 from __future__ import annotations
 
@@ -27,6 +39,8 @@ FAST_SHAPE = "fast_shape"
 IMPLICIT_GBIS = "implicit_gbis"
 STANDARD = "standard"
 FULL_PHYSICS = "full_physics"
+LITERATURE = "literature"
+DESIGN_SPEED = "design_speed"
 DEFAULT_PRESET = STANDARD
 
 #: Every preset names the engine protocol it runs on.  This is the whole point of the
@@ -55,6 +69,14 @@ class RelaxPreset:
     summary: str
     #: Request-field defaults this preset applies when the user has not set them.
     defaults: dict = field(default_factory=dict)
+    #: Fields this preset OWNS ABSOLUTELY — applied even when the caller set them
+    #: explicitly, exactly as ``protocol`` already is.  Reserved for settings where an
+    #: override would make the preset's NAME a lie rather than merely tuning it: the
+    #: `literature` tier locks ``allow_water_shell_carve`` because carving away the bulk
+    #: water leaves no phase for the published ionic condition to be defined in, so a
+    #: carved run is not the published protocol under any reading.  Everything else stays
+    #: a default the user can overrule — a preset is a starting point, not a cage.
+    locked: frozenset = frozenset()
     #: False when the pipeline it needs does not exist yet — the UI shows it disabled
     #: with ``unavailable_reason`` rather than pretending it will run.
     available: bool = True
@@ -149,10 +171,79 @@ PRESETS: dict[str, RelaxPreset] = {
         reference=("Roodhuizen et al., ACS Nano 13, 10798 (2019); "
                    "Joshi, Li & Aksimentiev, Methods Mol Biol 2639 (2023)"),
     ),
+    DESIGN_SPEED: RelaxPreset(
+        id=DESIGN_SPEED,
+        label="Optimised for the design (fast)",
+        summary=(
+            "Every measured accelerator on: hydrogen-mass repartitioning with a 4 fs "
+            "timestep, GPU-resident integration, a stage that stops as soon as it has "
+            "settled, and the cheap bounding-box cell a restrained ladder does not need "
+            "to rotate in. Same chemistry as the published protocol — only integrator and "
+            "scheduling knobs move. Use it while you are still changing the design; "
+            "switch to Literature for numbers you intend to publish."
+        ),
+        defaults={
+            "protocol": EXPLICIT_PROTOCOL,
+            # 0 = auto: Gate A fits a water-shell carve if this design will not otherwise
+            # fit the card.  Losing the barostat costs the settle stage and the box trace,
+            # which matters far less when the point is turnaround time.
+            "water_shell_nm": 0.0,
+            "padding_nm": 1.2,
+            "salt_mode": "screening",
+            "early_stop_relax": True,
+            "fast": True,
+            "production_timestep_fs": 4.0,
+        },
+        reference=("NADOC measured defaults: exp47 electrostatics (+39 % throughput, "
+                   "structurally indistinguishable), exp49 integrator probe, the "
+                   "GPU-resident size crossover, bounding-box cell sizing under 20 ns"),
+    ),
+    LITERATURE: RelaxPreset(
+        id=LITERATURE,
+        label="Match the literature (Aksimentiev)",
+        summary=(
+            "The published protocol with nothing traded for speed. Full water box (a "
+            "carve is REFUSED rather than auto-fitted, because it would take the barostat "
+            "and with it the settle stage and the box-size equilibration criterion), every "
+            "stage run to its full length, standard hydrogen masses, and the paper's own "
+            "2 fs production integrator rather than NADOC's 4 fs default. Slower, and "
+            "reproducible against the reference."
+        ),
+        defaults={
+            "protocol": EXPLICIT_PROTOCOL,
+            "water_shell_nm": 0.0,
+            "allow_water_shell_carve": False,
+            # The tutorial's own recipe is the DNA bounding box +/- 20 A.
+            "padding_nm": 2.0,
+            # Mg(H2O)6 neutralises, no sodium — the published ionic condition.
+            "salt_mode": "screening",
+            # The tutorial's literal figure.  Still a floor: minimisation has to scale
+            # with the system, and the reference's own Note 2 attributes rigid-bond
+            # failures to insufficient minimisation.
+            "minimize_steps": 4_800,
+            "early_stop_relax": False,
+            "fast": False,
+            # 2 fs + rigidBonds all is what the paper ran.  This is the "manual medium"
+            # integrator, which is never auto-selected — choosing this preset IS the
+            # explicit choice, and the wizard says so in as many words.
+            "production_timestep_fs": 2.0,
+        },
+        # NOT overridable, unlike every other default here.  A carved cell has no bulk
+        # phase, so the published 12.5 mM Mg(2+) condition is not a concentration OF
+        # anything; the far field is vacuum (eps ~ 1) rather than water; and the
+        # water/vacuum interface pulls the shell onto the solute.  A carved run is a
+        # different experiment, so this tier does not offer it at any price.  If the
+        # system will not fit, the run is ATTEMPTED at full box with a warning — see
+        # md_gate_a.gateAMessage — rather than quietly becoming something else.
+        locked=frozenset({"allow_water_shell_carve"}),
+        reference=("Yoo, Li, Slone, Maffeo & Aksimentiev, Methods Mol Biol 1811 (2018) "
+                   "§3.3 — explicit MgCl2, Mg(H2O)6 + CUFIX, ENM ladder "
+                   "k = 0.5 / 0.1 / 0.01 / 0, 4.8 ns per stage at 2 fs"),
+    ),
 }
 
 #: Presentation order for the dropdown — cheapest first.
-PRESET_ORDER = (FAST_SHAPE, IMPLICIT_GBIS, STANDARD, FULL_PHYSICS)
+PRESET_ORDER = (FAST_SHAPE, IMPLICIT_GBIS, DESIGN_SPEED, STANDARD, LITERATURE, FULL_PHYSICS)
 
 
 def get_preset(preset_id: "str | None") -> RelaxPreset:
@@ -165,7 +256,8 @@ def apply_preset(preset_id: "str | None", requested: dict,
                  explicit: "set[str] | None" = None) -> dict:
     """Merge a preset's defaults under ``requested``.
 
-    ``explicit`` names the fields the caller actually set; those are never overridden.
+    ``explicit`` names the fields the caller actually set; those are never overridden —
+    EXCEPT the preset's ``locked`` fields, which it owns outright (see RelaxPreset.locked).
     Fields absent from ``explicit`` take the preset's value when it has one.  Returns a
     new dict — the input is not mutated.
     """
@@ -173,7 +265,7 @@ def apply_preset(preset_id: "str | None", requested: dict,
     explicit = explicit or set()
     out = dict(requested)
     for key, value in preset.defaults.items():
-        if key not in explicit:
+        if key not in explicit or key in preset.locked:
             out[key] = value
     return out
 
@@ -221,6 +313,7 @@ def preset_catalogue() -> list[dict]:
             "unavailable_reason": why,
             "reference": p.reference,
             "defaults": dict(p.defaults),
+            "locked": sorted(p.locked),
             "protocol": p.defaults.get("protocol", EXPLICIT_PROTOCOL),
             "is_default": p.id == DEFAULT_PRESET,
         })

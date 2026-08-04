@@ -319,6 +319,15 @@ def prepare_implicit_gbis_namd(
     gpu_resident_mode: str = "auto",       # noqa: ARG001
     production_timestep_fs: float = 4.0,   # noqa: ARG001
     devices: str = "0",                    # noqa: ARG001 — no box to size
+    # Recorded by the explicit path for its protocol_fidelity block; GBIS has no
+    # published protocol to be faithful to, so it accepts-and-ignores.
+    early_stop_relax: bool = False,        # noqa: ARG001
+    # Per-stage hand edits.  Accepted-and-ignored for now: the GBIS ladder writes its
+    # confs through its own emitter, so honouring them here would need the same
+    # apply_conf_overrides pass the explicit path got.  Left undone deliberately rather
+    # than half-done — the wizard only offers the editable table for the explicit
+    # protocol, and silently dropping edits would be worse than not offering them.
+    stage_overrides: Optional[dict] = None,   # noqa: ARG001
 ) -> tuple[str, str, list]:
     """Protocol entry point: prepare an implicit-solvent (GBIS) NAMD job.
 

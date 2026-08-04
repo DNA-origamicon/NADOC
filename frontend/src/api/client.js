@@ -2565,6 +2565,11 @@ export const applyCandoAutorefine = (id)          => _oxdnaJSON('POST', `/design
 // Named relaxation protocols for the panel's Protocol dropdown (backend owns the
 // catalogue; see backend/core/md_presets.py).
 export const getRelaxPresets     = ()            => _oxdnaJSON('GET',  '/md/relax-presets')
+/** Every parameter a NAMD job WOULD run, per stage, without preparing anything — the
+ *  Job Wizard's source of truth. Built server-side by running the real conf writers, so
+ *  it cannot drift from what the run does. Writes nothing and (for a relaxation) touches
+ *  no disk, so it is safe to re-request behind a short debounce as the user edits. */
+export const fetchProtocolPlan   = (body)        => _oxdnaJSON('POST', '/md/protocol-plan', body)
 export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs', body)
 /** Prepare (solvate) + start a DRAFT NAMD job with the given advanced settings
  *  (same body shape as createMdJob). Seeds from the draft's recorded oxDNA/mrDNA

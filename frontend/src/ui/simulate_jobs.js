@@ -69,6 +69,22 @@ export function nodeIsActive(node) {
   return _ACTIVE.includes(node?.status)
 }
 
+/** Is this node's state going to change on its own, so the list must keep polling?
+ *
+ *  Deliberately NARROWER than `nodeIsActive`: a job that was CREATED but not started
+ *  (`＋ New job → Create job`, i.e. `autostart:false`) sits at `queued` forever waiting
+ *  for the user, so treating it as active would poll every 1.5 s indefinitely for a row
+ *  that cannot change until someone clicks Run. A REMOTE queued job is different — its
+ *  scheduler moves it without us — hence the id check.
+ *
+ *  Kept separate from `nodeIsActive` on purpose: that one drives the spinner and the
+ *  master Stop button, where "queued" genuinely should read as pending. */
+export function nodeNeedsPolling(node) {
+  if (!nodeIsActive(node)) return false
+  if (node?.status !== 'queued') return true
+  return !!(node?.slurm_job_id || node?.runpod_pod_id)
+}
+
 /** Can the selected node be resumed? Only an oxDNA job that was stopped/failed —
  *  LAMMPS has no resume (a finished LAMMPS run is simply re-launchable). */
 export function nodeIsResumable(node) {
@@ -688,7 +704,7 @@ export function initSimulateJobs({
   function _schedulePoll() {
     if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
     const bodyVisible = document.getElementById('simulate-body')?.style.display !== 'none'
-    if (_dynamicsActive && bodyVisible && _nodes.some(nodeIsActive)) {
+    if (_dynamicsActive && bodyVisible && _nodes.some(nodeNeedsPolling)) {
       _pollTimer = setTimeout(_fetch, POLL_MS)
     }
   }

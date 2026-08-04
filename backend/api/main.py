@@ -73,6 +73,7 @@ from backend.api.routes_snupi import router as snupi_router
 from backend.api.routes_blade import router as blade_router
 from backend.api.routes_mrdna import router as mrdna_router
 from backend.api.routes_md_metrics import router as md_metrics_router
+from backend.api.routes_md_plan import router as md_plan_router
 from backend.api.routes_oxdna import router as oxdna_router
 from backend.api.routes_lammps import router as lammps_router
 from backend.api.routes_oxdna_live import router as oxdna_live_router
@@ -265,6 +266,7 @@ app.include_router(assembly_workspace_router, prefix="/api")
 app.include_router(jobs_router,        prefix="/api")
 app.include_router(md_router,          prefix="/api")
 app.include_router(md_metrics_router,  prefix="/api")
+app.include_router(md_plan_router,     prefix="/api")
 app.include_router(oxdna_router,       prefix="/api")
 app.include_router(lammps_router,      prefix="/api")
 app.include_router(mrdna_router,       prefix="/api")

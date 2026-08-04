@@ -10,6 +10,203 @@ metadata:
 Implemented Milestone 1 of the MD integration plan (memory/md_integration_plan.md).
 
 
+## The Job Wizard: every parameter, per stage, with its provenance (2026-08-03)
+
+Setting a NAMD job up used to mean a flat "Advanced" grid of ~17 controls that reflected
+none of the four layers actually deciding a run's settings — the request field's default,
+the preset merged over it, a server-side override that discarded both, and a per-stage
+derivation inside the conf writer. The number on screen was frequently not the number that
+ran, and the ladder was invisible.
+
+**`POST /md/protocol-plan` is now the source of truth** (`backend/api/routes_md_plan.py` →
+`backend/core/md_plan.py`). It does not DESCRIBE the protocol: it CALLS the real conf
+writers (`_segment_conf`, `_min_conf`, `build_production_conf`) and parses their output, so
+the plan *is* the conf and cannot drift. No disk, no job record, no solvation — safe to
+re-request behind a 250 ms debounce as the user types. It returns:
+
+- every effective request field with its **provenance** (`user` / `preset` / `default` /
+  `forced` / `derived`) and the reason — this is how you can tell whether a control does
+  anything (`salt_mode="screening"` reports `mg_conc_mM` as `forced`, with `overridden_from`);
+- the ordered stage table with each stage's full directive set, its **diff vs the previous
+  stage**, and which values are still `conditional` (GPU-resident, detected generically by
+  emitting each stage twice and diffing, not by a hardcoded key list);
+- `conditions` + `retries`, every threshold IMPORTED from the module that enforces it
+  (`CutoffParams`, `MAX_*_RESUMES`, `PISTON_SOFTEN_FACTOR`, `_RESIDENT_MIN_ATOMS`);
+- `deferred` — what only resolves at solvation (cell vectors; `minimize_steps` is a FLOOR).
+
+**The ladder is 22 columns, not 12 segments.** Every note in this repo saying "12/12" was
+stale: `LADDER_CHUNK_PCTS` has 5 entries, so 4 rungs × 5 chunks = 20, plus the minimisation
+slot and the `_0S_` settle stage. A carve drops the settle stage → 21.
+
+**`production_segment_spec` is shared** between the plan and `_append_production_segments`
+(LESSONS H16): two independent constructions is how a fix lands on one call site only.
+
+### UI shape
+
+- `＋ New job` (`#md-jobs-new-btn`) opens `frontend/src/ui/md_job_wizard.js`; the pure
+  shaping is `md_job_wizard_model.js` (56 vitest cases).
+- `▶ Run` (`#md-jobs-run-btn`) is now ONE control over the SELECTED job — Run / Stop /
+  Resume, via `runControlState`. `#md-jobs-job-ctl-btn` and `#md-jobs-prod-btn` are gone,
+  and with them `mdSelectedJobControl` / `mdProductionAction`. A production child gets
+  Stop/Resume like anything else.
+- **Created ≠ started.** "Create job" sends `autostart:false`: the package is solvated and
+  the job waits at `queued`, so every deferred value becomes real and Run is instant.
+  `simulate_jobs.nodeNeedsPolling` (NOT `nodeIsActive`) stops the 1.5 s poll for such a job.
+- The wizard sends **only touched fields + `relax_preset`**. The old panel sent every field
+  unconditionally, which marked them explicit in `model_fields_set` and defeated the preset
+  it was meant to follow — that is why the client-side merge mirror existed. It is gone.
+- Production mode hides the preset cards (a relax preset says nothing about production) and
+  labels each relaxation `"<part> run created YYYY-MM-DD HH:MM"`, never a job id.
+- The Advanced drawer is DELETED. Early-stop's *live* mid-relax role moved to
+  `#md-jobs-live-controls`, shown only for a running local relaxation. ⚡ Optimize moved
+  into the wizard (`onOptimizeMount`), writing into its touched state.
+
+### Two new presets (`md_presets.py`)
+
+`literature` (verbatim Aksimentiev: early-stop OFF, `fast=False`, production dt **2.0 fs**,
+padding 2.0 nm, and `allow_water_shell_carve=False`) and `design_speed` (every measured
+accelerator on). `DEFAULT_PRESET` is still `standard`. New request field
+`CreateJobRequest.allow_water_shell_carve` (default True): when False, prep REFUSES rather
+than auto-fitting a carve, because a carve forces NVT, which deletes the settle stage and
+the box-size equilibration criterion — the run stops being the published protocol.
+
+**The carve is LOCKED off, and an unfittable job is warned — never refused.** Two separate
+decisions, both revised after review:
+
+- **Locked, not defaulted.** `RelaxPreset.locked: frozenset` is a new field: settings the
+  preset owns outright, applied even against an explicit request, exactly as `protocol`
+  already was. `literature` locks `allow_water_shell_carve`; nothing else in the catalogue
+  locks anything. Rationale: a carved cell has no bulk phase, so the published 12.5 mM
+  Mg²⁺ condition is not a concentration *of* anything, the far field is vacuum (ε≈1) not
+  water, and the water/vacuum interface pulls the shell onto the solute — a carved run is
+  a different experiment wearing this tier's name. The plan reports the field as `forced`,
+  which is what makes the wizard render it read-only with the reason instead of offering a
+  control that silently does nothing.
+- **Warned, not refused.** Whether a system fits is a property of today's hardware, and
+  the pre-flight is an estimate rather than a measurement, so the user is entitled to
+  attempt the full box. `gateAMessage` returns `canProceed: true` / "Run anyway" for
+  **every** non-`ok` tier when `carve_allowed === false`, naming what will happen (OOM at
+  the first segment, before real compute) and the cheaper routes — lower padding, seed
+  from oxDNA/mrDNA so the all-atom leg is short (the reference group's own answer, mrDNA:
+  Maffeo & Aksimentiev NAR 2020), RunPod/cluster, or a tier that permits carving. Prep
+  DECLINES the carve and builds at full box, recording `declined_water_shell_nm` in
+  `prep_params`; it used to raise, which was wrong.
+
+An earlier revision shipped `carve_refused` as a **`blocking`** condition, which made the
+wizard refuse to create ANY literature run, fitting or not, with no way forward. The plan
+cannot know whether a design fits — that needs a solvation profile (~26 s), far too
+expensive for an endpoint re-requested per keystroke — so it states POLICY and the launch
+gate does the checking. Never mark a plan condition `blocking` for something the plan has
+not measured.
+
+Two supporting fixes: `preflight_md_vram` applies the preset before judging (it was
+pre-flighting padding 1.2 nm with carving allowed while prep would run 2.0 nm with it
+refused), and Gate A's trigger is `(payload.water_shell_nm ?? 0) === 0` — the wizard sends
+only touched fields, so an untouched shell is ABSENT and the old `=== 0` test skipped Gate
+A for exactly the launches that most needed it. `_launchRelax` reads `adv.carve_allowed`
+rather than the tier when deciding whether to apply a shell, because the tiers describe
+how well a *carve* would fit, which is not the question this protocol asks.
+
+### Every stage parameter is editable (2026-08-04)
+
+The stage table is no longer read-only. Any NAMD directive on any stage of either job type
+can be overridden by hand, and the table carries **two independent highlights** that answer
+different questions: `diff_vs_previous` ("what moves as the ladder advances") and
+`overridden` ("where have I departed from the protocol I picked" — the reviewer's
+question, and the one the protocol's NAME claims).
+
+- **`md_protocols.apply_conf_overrides(conf_text, overrides)`** rewrites directives in an
+  already-emitted conf: present ones replaced IN PLACE (so the conf keeps its order and its
+  comments), absent ones appended under a marked heading, `None` deletes. Returns the input
+  object unchanged when there is nothing to apply — the writers' byte-identical guarantees
+  that the ensemble path depends on must not move for a job that overrides nothing.
+- **`PROTECTED_DIRECTIVES`** refuses `structure`/`coordinates`/`outputName`/`binCoordinates`/
+  … — not physics, the names the runner and the restart chain address a stage by, so
+  rewriting one detaches the stage from its job rather than changing what it simulates. The
+  plan endpoint turns the ValueError into a 400; the table renders those cells read-only so
+  the edit cannot fail at submit.
+- **Keyed by stage INDEX, not name** (`{"*": {...}, "3": {...}}`, wildcard merged first so a
+  per-stage entry refines it). A stage's name carries the design stem, which the wizard does
+  not know until prep and which would change under it; the index is stable between preview
+  and run because both compute the ladder from the same builder.
+- `CreateJobRequest.stage_overrides` / `ProductionRunRequest.stage_overrides` → prep → the
+  emitted confs → recorded verbatim in the manifest → **declared in `protocol_fidelity` as
+  a `hand-edited stages` deviation.** A hand edit is a departure from every protocol by
+  definition, so it belongs in the package's own methods delta, not only in the confs.
+- The plan emits an edited stage TWICE — protocol-only and with the edits — and diffs them.
+  That makes "you have departed here" a computed fact rather than a claim, the same trick
+  `conditional_keys` uses for GPU-resident.
+- Wizard: click-to-edit in place (the value only makes sense beside its neighbours), a `⋯`
+  per row for "set on EVERY stage" (22 columns cell-by-cell is not a usable feature), and a
+  banner naming the protocol the run no longer is, with Reset. Blank restores the protocol;
+  `(none)` deletes the directive — deliberately different instructions.
+- CSS fix found while verifying: the body's first column is itself `position: sticky`, so
+  the header at `z-index: 1` was being overwritten by scrolled rows (the minimisation
+  column's name was showing a stray value). Header now outranks it, body cells opaque.
+
+`tests/test_prepare_signatures.py` caught the new kwarg twice — every protocol entry point
+must accept the one uniform set `routes_md` passes. GBIS accepts-and-ignores
+`stage_overrides` on purpose: its ladder writes confs through its own emitter and would
+need the same `apply_conf_overrides` pass, so silently dropping edits would be worse than
+not offering them.
+
+### Literature-comparability audit, 2026-08-03 → three fixes
+
+An audit of every emitted parameter against the published protocol, looking for what a
+critical reviewer could call a difference that makes NADOC results non-comparable. Three
+findings were acted on; the full list (13 items, tiered) is in the audit section of
+`REFERENCE_AKSIMENTIEV_PROTOCOL.md`.
+
+**1. Production was genuinely unrestrained; the published productions are not.**
+`build_production_conf` emitted `constraints off` and no network. This repo's own second
+literature audit (`project_periodic_md.md`, 2026-05-18, vs Yoo & Aksimentiev PNAS
+110:20099; Maffeo/Yoo/Aksimentiev NAR 44:3013; Shi et al. ACS Nano 13:12443) had already
+concluded their 200+ ns "unrestrained" runs retain a network at k = 0.1 throughout, and
+recorded a decision to adopt ENM-permanent production — **which was never implemented.**
+Now: `ProductionRunRequest.enm_restraints` = `auto|on|off`. `auto` = on iff the parent was
+relaxed with the `literature` protocol, so historical behaviour is preserved for every
+other tier and old trajectories stay comparable with new ones. The network is built by
+`md_protocols.write_production_enm` **from the equilibrated checkpoint the run starts
+from** — a prep-time network would pull the structure back to the pre-ladder build, which
+is worse than none. Remaining declared delta: base-ring/8 Å, not the papers' dense
+all-non-H/5 Å; same k, sparser network, so lower effective stiffness. Fails open with the
+reason in the manifest.
+
+**2. `langevinDamping` was 5 ps⁻¹ everywhere, including production.** That is the
+tutorial's *equilibration* value; production papers use ~1. At 5 the dynamics are
+overdamped, so diffusion, relaxation and correlation times, ion residence and breathing
+kinetics are all scaled by something unrelated to the system — equilibrium averages are
+unaffected, which is why it went unnoticed. Split into `LADDER_LANGEVIN_DAMPING = 5.0` /
+`PRODUCTION_LANGEVIN_DAMPING = 1.0`, settable per run via
+`ProductionRunRequest.langevin_damping`. **This changes the physics of every new
+production run** — hence the new `PRODUCTION_RECIPE_VERSION = 2`, which is to production
+what `RELAX_RECIPE_VERSION` is to the ladder.
+
+**3. `protocol_fidelity()` under-reported the delta.** Four always-on deviations were
+missing entirely (production damping, `stepspercycle`/`pairlistdist` 20-10 vs the
+tutorial's 12, the 200/100 production piston vs 1000/500, and stage chunking), plus
+early-stop and production restraints, which are conditional. A manifest that lists a
+shorter delta than the package actually has is worse than no manifest. `early_stop_relax`
+now threads down to `prepare_mgh_slow_release` purely so this block can declare it —
+a truncated ladder is a protocol deviation and the per-segment record was the only place
+the real stage length existed. Every protocol entry point had to grow the kwarg
+(`tests/test_prepare_signatures.py` pins that call-site uniformity, and caught it).
+
+Note `AKSIMENTIEV_STEPS_PER_CYCLE = 20` is **not** the tutorial's number (12) — the name
+asserts a provenance it does not have. Left as-is because renaming it touches the runner
+and the benchmark harness, but the fidelity block now says so.
+
+### Known defect, pinned not fixed
+
+`prepare_mgh_slow_release` sizes ladder step counts from the REQUESTED `fast` flag, but a
+declash design keeps `fast=True` while marking every segment `gentle` (2 fs). So each rung
+simulates **2.4 ns, not 4.8**; the soft-start chunk 240 ps not 480. Pinned by
+`tests/test_md_protocol_plan.py::test_declash_stages_run_half_their_intended_length` and
+DISPLAYED by the wizard (ns = steps × the timestep the segment really runs at). Fixing it
+doubles every declash relaxation and makes new runs non-comparable with existing declash
+trajectories — a deliberate decision, deferred on purpose.
+
+
 ## Microsecond production runs are allowed, and priced before they start (2026-07-30)
 
 **Symptom:** starting a 1 µs production child of a 2 ns `2hb_1xT` run showed only
@@ -215,8 +412,8 @@ until segment 1; the tooltip and the timeline row say what is running instead of
 **Symptom:** the panel's health bar (base-pairs / WC health / "latest") stayed empty for an entire
 production run. Not a broken pipeline — a sampling-granularity gap.
 
-`namd_runner` computed health only in its POST-segment block. A relaxation ladder has 12 segments
-so its bar fills in as it goes (10 samples on a real run); a **production run is ONE segment**, so
+`namd_runner` computed health only in its POST-segment block. A relaxation ladder has many
+segments (12 when this was written; 20 + minimisation + settle today) so its bar fills in as it goes (10 samples on a real run); a **production run is ONE segment**, so
 a 200 ns / 50M-step 4 fs job produced **exactly one sample, ~13 hours in**.
 
 That hid a real result. The single end-point sample read **c1=0.850 / wc=0.641 (FAILED)**, while a

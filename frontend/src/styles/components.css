@@ -945,3 +945,226 @@ body:has(#right-panel.locked-inactive) .toast {
   color: var(--color-text-dim);
   font-size: var(--text-xs);
 }
+
+/* ── Job Wizard (src/ui/md_job_wizard.js) ──────────────────────────────────────
+   A ~22-column stage table has to be readable without the page itself scrolling
+   sideways, so the table scrolls inside its own box with a sticky parameter column
+   and a sticky header. `.modal--xl` is 800px, far too narrow for this one view. */
+.modal--wizard { width: min(1500px, 96vw); }
+
+.wizard { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.wizard-modes,
+.wizard-preset-cards { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+.wizard-mode,
+.wizard-preset {
+  flex: 1 1 220px;
+  text-align: left;
+  padding: var(--space-2);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  color: inherit;
+  cursor: pointer;
+}
+.wizard-mode.is-selected,
+.wizard-preset.is-selected {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+.wizard-preset.is-unavailable { opacity: .55; cursor: not-allowed; }
+.wizard-mode__label,
+.wizard-preset__label { font-weight: 600; margin-bottom: 2px; }
+.wizard-mode__help,
+.wizard-preset__summary { font-size: var(--text-xs); color: var(--color-text-muted); }
+.wizard-preset__ref,
+.wizard-preset__note {
+  font-size: var(--text-xs);
+  color: var(--color-text-dim);
+  margin-top: var(--space-1);
+}
+
+.wizard-split { display: flex; gap: var(--space-3); align-items: flex-start; }
+.wizard-pane { flex: 1 1 320px; min-width: 0; }
+.wizard-pane--wide { flex: 2 1 620px; }
+.wizard-pane h3 {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-2);
+}
+
+.wizard-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px var(--space-2);
+  align-items: center;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border-default);
+}
+.wizard-field__label { font-size: var(--text-sm); }
+.wizard-field__unit { color: var(--color-text-dim); }
+.wizard-field__control { grid-column: 2; }
+.wizard-field__help {
+  grid-column: 1 / -1;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+/* Provenance: where this value came from. Without it a number on screen gives no clue
+   whether changing it does anything — which is the whole problem the wizard fixes. */
+.wizard-chip {
+  grid-column: 1 / -1;
+  justify-self: start;
+  font-size: var(--text-xs);
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-dim);
+}
+.wizard-chip--user   { border-color: var(--color-accent); color: var(--color-accent); }
+.wizard-chip--preset { border-color: var(--color-accent-strong); color: var(--color-accent-hover); }
+.wizard-chip--forced,
+.wizard-chip--derived { border-color: var(--color-warning); color: var(--color-warning); }
+
+.wizard-totals {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.wizard-stages { overflow: auto; max-height: 52vh; }
+.wizard-stages table { border-collapse: separate; border-spacing: 0; font-size: var(--text-xs); }
+.wizard-stages th,
+.wizard-stages td {
+  border-bottom: 1px solid var(--color-border-default);
+  padding: 3px 6px;
+  white-space: pre-line;
+  vertical-align: top;
+}
+.wizard-stages th.param {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  text-align: left;
+  background: var(--color-bg-surface);
+  min-width: 190px;
+}
+/* The header must outrank the sticky FIRST COLUMN, not just the ordinary cells: the body's
+   `th.param` is itself sticky at z-index 2, so a header at 1 let scrolled body rows show
+   through it — the minimisation column's name was being overwritten by whatever value
+   happened to scroll past. Opaque background on both, header above column. */
+.wizard-stages thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--color-bg-surface);
+  text-align: left;
+}
+.wizard-stages thead th.param { z-index: 5; }
+.wizard-stages tbody td { background: var(--color-bg-surface); }
+.wizard-col { min-width: 118px; }
+.wizard-col__name { font-family: var(--font-data); }
+.wizard-col__meta,
+.wizard-col__badge { color: var(--color-text-dim); font-weight: 400; }
+.wizard-col--settle .wizard-col__name,
+.wizard-col--production .wizard-col__name { color: var(--color-accent); }
+.wizard-group th { background: var(--color-bg-elevated); color: var(--color-text-muted); }
+
+.wizard-cell--changed {
+  background: var(--color-accent-soft);
+  border-left: 2px solid var(--color-accent);
+}
+.wizard-cell--conditional { background: rgba(210, 153, 34, .12); }
+.wizard-cell--absent { color: var(--color-text-dim); }
+
+/* A hand edit — a DIFFERENT thing from `--changed`, which means "differs from the stage
+   before". This one means "differs from the protocol you picked", which is the claim the
+   protocol's name makes and the one a reviewer checks. Deliberately the loudest state in
+   the table. */
+.wizard-cell--overridden {
+  background: rgba(210, 153, 34, .22);
+  outline: 1px solid var(--color-warning);
+  font-weight: 600;
+}
+.wizard-cell--locked { color: var(--color-text-dim); cursor: not-allowed; }
+.wizard-stages td:not(.wizard-cell--locked) { cursor: text; }
+.wizard-stages td:focus-visible { outline: 2px solid var(--color-accent); }
+.wizard-cell__input {
+  width: 100%;
+  min-width: 90px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-accent);
+  color: inherit;
+  font: inherit;
+  padding: 0 2px;
+}
+
+/* Set one directive across every stage — editing 22 columns by hand is not a feature. */
+.wizard-row-all {
+  float: right;
+  background: none;
+  border: none;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.wizard-row-all:hover { color: var(--color-accent); }
+
+.wizard-override-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--text-xs);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.wizard-conditions { margin-top: var(--space-3); }
+.wizard-cond-group h4 {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--color-text-muted);
+  margin: var(--space-3) 0 var(--space-1);
+}
+.wizard-cond {
+  border-left: 2px solid var(--color-border-default);
+  padding: 2px var(--space-2);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-xs);
+}
+.wizard-cond--blocking { border-left-color: var(--color-danger); }
+.wizard-cond--warning  { border-left-color: var(--color-warning); }
+.wizard-cond--skip,
+.wizard-cond--forced,
+.wizard-cond--conditional { border-left-color: var(--color-accent); }
+.wizard-cond__title { font-weight: 600; }
+.wizard-cond__detail,
+.wizard-cond__stages { color: var(--color-text-muted); line-height: 1.45; }
+.wizard-override { display: block; margin-top: var(--space-1); color: var(--color-warning); }
+
+.wizard-note {
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-xs);
+}
+.wizard-note h4 { margin: 0 0 var(--space-1); }
+
+.wizard-empty { font-size: var(--text-sm); color: var(--color-text-muted); }
+.wizard-status { font-size: var(--text-xs); color: var(--color-text-muted); min-height: 1em; }
+.wizard-check { accent-color: var(--color-accent); }
+
+@media (max-width: 900px) {
+  .wizard-split { flex-direction: column; }
+}

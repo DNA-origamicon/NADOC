@@ -30,12 +30,18 @@ from typing import Optional
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus
 from backend.core.md_protocols import (
     PRODUCTION_DCD_FREQ,
+    PRODUCTION_ENM_K,
+    PRODUCTION_LANGEVIN_DAMPING,
+    PRODUCTION_RECIPE_VERSION,
     SegmentSpec,
     build_production_conf,
     build_reseed_conf,
     package_npt_allowed,
+    overrides_for_stage,
+    protocol_fidelity,
     psf_atom_count,
     write_hmr_psf,
+    write_production_enm,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,6 +97,10 @@ def build_replica_package(
     workspace: Path,
     dcd_freq: int = PRODUCTION_DCD_FREQ,
     force_resident: Optional[bool] = None,
+    enm_restraints: bool = False,
+    enm_k: float = PRODUCTION_ENM_K,
+    damping: float = PRODUCTION_LANGEVIN_DAMPING,
+    stage_overrides: Optional[dict] = None,
 ) -> Path:
     """Build a production-only package for one ensemble replica; returns its package dir.
 
@@ -228,6 +238,22 @@ def build_replica_package(
     # half its labelled simulated time.  4 fs needs the HMR PSF (``use_fast``); if 4 fs was
     # requested but no HMR PSF exists, fall back to the safe 1 fs reference — mirrors the
     # missing-PSF guard in routes_md._append_production_segments.
+    # Elastic network retained through production, built from the coordinates this run
+    # STARTS from (see md_protocols.write_production_enm — a prep-time network would drag
+    # the structure back to the pre-ladder build).  Fails open: losing a production run
+    # over an unbuildable network would be worse than running it unrestrained, but the
+    # reason is recorded in the manifest rather than swallowed.
+    enm_file: Optional[str] = None
+    enm_error: Optional[str] = None
+    if enm_restraints:
+        try:
+            enm_file = write_production_enm(
+                child_pkg, name_stem, child_pkg / "equilibrated.coor", scale=enm_k)
+        except (OSError, RuntimeError, ValueError) as exc:
+            enm_error = (f"production elastic network could not be built "
+                         f"({type(exc).__name__}: {exc}); this run is UNRESTRAINED")
+            logger.warning("[%s] %s", child.job_id, enm_error)
+
     eff_timestep_fs = 1.0 if (timestep_fs == 4.0 and not use_fast) else timestep_fs
     length_ns = steps * eff_timestep_fs / 1_000_000.0
     label_ns = f"{length_ns:g}".replace(".", "p")
@@ -238,7 +264,7 @@ def build_replica_package(
         percent=100.0,
         steps=steps,
         temp=300.0,
-        damping=5.0,
+        damping=damping,
         scale=None,
         npt=True,
         previous=reseed_name,
@@ -259,6 +285,11 @@ def build_replica_package(
             n_atoms=psf_atom_count(child_pkg / f"{name_stem}.psf"),
             force_resident=force_resident,
             npt=npt_allowed,
+            damping=damping,
+            enm_file=enm_file,
+            # Stage 0 of a production child is the velocity reseed (which takes no
+            # overrides — it runs zero steps); the production stage itself is 1.
+            overrides=overrides_for_stage(stage_overrides, 1),
         )
     )
 
@@ -285,6 +316,29 @@ def build_replica_package(
         # Occupies the minimization slot but is a zero-step velocity reseed, not a
         # minimisation — hence the explicit label (md_protocols.minimization_slot).
         "minimization": {"name": reseed_name, "steps": 0, "stage": "Velocity reseed"},
+        # What this production run actually restrained and how hard it was thermostatted —
+        # both differ from the ladder, and both are things a methods section has to state.
+        "production_recipe": {
+            "version": PRODUCTION_RECIPE_VERSION,
+            "langevin_damping": damping,
+            "enm_restraints": bool(enm_file),
+            "enm_k": enm_k if enm_file else None,
+            "enm_file": enm_file,
+            "enm_network": "base-ring, inter-residue, 8 A cutoff" if enm_file else None,
+            "enm_built_from": "equilibrated checkpoint" if enm_file else None,
+            "enm_error": enm_error,
+        },
+        "stage_overrides": stage_overrides or {},
+        # A production child's OWN delta from the published protocol — the parent's
+        # block describes the ladder and cannot know what production ended up doing.
+        "protocol_fidelity": protocol_fidelity(
+            fast=use_fast,
+            carved=not npt_allowed,
+            padding_nm=float(((manifest.get("solvation") or {}).get("padding_nm")) or 2.0),
+            charge_audit=manifest.get("charge_audit") or {},
+            production_enm=bool(enm_file),
+            stage_overrides=stage_overrides,
+        ),
         "segments": [asdict(prod)],
         # total_ns_from_manifest = Σ(segment steps) × relax ts.  One production segment
         # at the production timestep → total_ns == length_ns (no production_extension,

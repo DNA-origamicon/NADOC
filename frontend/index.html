@@ -5248,52 +5248,35 @@
               <!-- Compute-cluster (Alpine) connection chip + connect modal mount -->
               <div id="md-cluster-connection-mount" style="margin-bottom:6px"></div>
 
-              <!-- Launch form (Protocol / Run-on / production steps) — relocated INTO the
-                   Advanced card at init (see main.js); the Relax/Production buttons inside it
-                   are first extracted to the run-controls host above the jobs card. -->
+              <!-- Launch form.  Once the two buttons below are extracted to the
+                   run-controls host above the jobs card, what remains here is the
+                   production/legacy-migration note.  The protocol dropdown and the whole
+                   Advanced parameter grid are GONE (2026-08-03): every job parameter now
+                   lives in the Job Wizard (＋ New job), where it is shown in the context
+                   of the stage it affects, with where its value came from. -->
               <div id="md-launch-form" style="margin-bottom:8px">
-                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:3px"
-                     title="Named relaxation protocol. Sets the solvent model, restraint ladder and run lengths to a published recipe; the engine protocol is derived from it. Anything you change by hand afterwards wins.">Protocol</div>
-                <select id="md-jobs-relax-preset"
-                        style="width:100%;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:3px 5px;margin-bottom:3px">
-                  <option value="standard" selected>Standard (Aksimentiev)</option>
-                </select>
-                <div id="md-jobs-relax-preset-note"
-                     style="color:#8b949e;font-size:var(--text-xs);line-height:1.35;margin-bottom:6px"></div>
-                <!-- Relax / Production buttons — relocated above the jobs card at init
-                     (see main.js run-control move). Run-on (Local/Alpine) radios live in the
-                     Cluster card now. -->
                 <div id="md-launch-row" style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
-                  <button id="md-jobs-run-btn"
-                          style="flex:1;font-size:var(--text-xs);padding:5px;background:#1a4a1a;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;font-weight:600">
-                    ▶ Relax
+                  <!-- Opens the Job Wizard: every parameter, per stage, with the
+                       differences and conditions spelled out (src/ui/md_job_wizard.js). -->
+                  <button id="md-jobs-new-btn"
+                          style="flex:1;font-size:var(--text-xs);padding:5px;background:#1c2333;border:1px solid #30456d;color:#8fb3ff;border-radius:3px;cursor:pointer;font-weight:600">
+                    ＋ New job
                   </button>
-                  <!-- Contextual Stop/Resume for the SELECTED job (Relax is decoupled: it always
-                       launches a fresh relaxation). Hidden unless the selected job is stoppable
-                       or resumable; painted by _paintJobControl. -->
-                  <button id="md-jobs-job-ctl-btn"
-                          style="display:none;flex:1;font-size:var(--text-xs);padding:5px;background:#2d2119;border:1px solid #d29922;color:#e3b341;border-radius:3px;cursor:pointer;font-weight:600">
-                    ■ Stop
-                  </button>
-                  <button id="md-jobs-prod-btn"
-                          disabled
+                  <!-- ONE control for the SELECTED job: Run / Stop / Resume.  Label and
+                       colour are painted by _paintRunControl; this markup is only what
+                       shows for the first frame. -->
+                  <button id="md-jobs-run-btn" disabled
                           style="flex:1;font-size:var(--text-xs);padding:5px;background:#122117;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">
-                    Start Production
+                    ▶ Run
                   </button>
                 </div>
                 <div id="md-jobs-production"
                      style="background:#0d1117;border:1px solid #21262d;border-radius:3px;padding:5px;margin-bottom:6px">
-                  <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
-                    <label for="md-jobs-prod-steps" style="font-size:var(--text-xs);color:#8b949e">Production steps</label>
-                    <input id="md-jobs-prod-steps" type="number" value="500000" min="100" max="50000000" step="10000"
-                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <span style="font-size:var(--text-xs);color:#8b949e">Total time</span>
-                    <span id="md-jobs-prod-time" style="font-size:var(--text-xs);color:#c9d1d9;font-family:var(--font-mono)">1.000 ns</span>
-                  </div>
-                  <div style="margin-top:5px;font-size:10px;color:#6e7681;line-height:1.35">
-                    Each production spawns a <strong>child job</strong> under the relaxation
-                    (own seed) — the relaxation stays selectable and you can fan out several.
-                    To chain, select a completed production child and run again.
+                  <div style="font-size:10px;color:#6e7681;line-height:1.35">
+                    Production runs are set up in <strong>＋ New job → Production</strong>, which
+                    shows how the run differs from the relaxation that seeds it. Each one spawns a
+                    <strong>child job</strong> under the relaxation (own seed), so the relaxation
+                    stays selectable and you can fan out several.
                   </div>
                   <div id="md-jobs-prod-status" style="font-size:10px;color:#484f58;margin-top:3px;min-height:12px"></div>
                   <button id="md-jobs-revert-prod-btn"
@@ -5381,104 +5364,23 @@
                 </div>
               </div>
 
-              <!-- ── Advanced (collapsible card) ──────────────────────────── -->
-              <div class="ox-card">
-                <div id="md-jobs-adv-toggle" class="ox-card__header" style="color:#8b949e;display:flex;align-items:center">
-                  <span id="md-jobs-adv-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Advanced</span>
-                  <button id="md-jobs-optimize" type="button"
-                          title="Optimize: pick the settings that suit this design and this machine (GPU, RAM, cores). Shows what it will change — and the caveats — before applying anything."
-                          style="margin-left:auto;background:#21262d;border:1px solid #30363d;color:#d29922;
-                                 border-radius:3px;cursor:pointer;padding:1px 7px;font-size:var(--text-xs);line-height:1.4">⚡</button>
-                </div>
-                <!-- ⚡ Optimize progress: directly under the card title and OUTSIDE the
-                     collapsible body, so it stays visible even if the drawer is shut. -->
-                <div id="md-jobs-optimize-progress" style="display:none;padding:4px 8px 2px"></div>
-                <div id="md-jobs-adv-body" class="ox-card__body" style="display:none">
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center">Threads</label>
-                    <input id="md-jobs-threads" type="number" value="16" min="1"
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center" title="GPU (CUDA) is fastest. CPU (multicore) has no VRAM limit and is REQUIRED for implicit solvent (GBIS) — and lets a large origami that overflows the GPU tile-list kernel still run.">Compute</label>
-                    <select id="md-jobs-compute"
-                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                      <option value="gpu">GPU (CUDA)</option>
-                      <option value="cpu">CPU (multicore)</option>
-                    </select>
-                    <label style="color:#8b949e;align-self:center">CUDA device</label>
-                    <input id="md-jobs-devices" type="text" value="0"
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center">Salt</label>
-                    <select id="md-jobs-salt-mode"
-                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                      <option value="screening">Auto screening</option>
-                      <option value="custom">Custom</option>
-                    </select>
-                    <label style="color:#8b949e;align-self:center">Mg (mM)</label>
-                    <input id="md-jobs-mg" type="number" value="12.5" min="0" step="0.5"
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center">NaCl (mM)</label>
-                    <input id="md-jobs-nacl" type="number" value="0" min="0" step="10"
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center">Padding (nm)</label>
-                    <input id="md-jobs-padding" type="number" value="2.0" min="0.5" step="0.1"
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center" title="How many UNRESTRAINED nanoseconds you intend to run off this package. Blank or ≤20 ns = the cheap bounding-box cell the restrained relaxation ladder needs. Above 20 ns the box is sized so the solute can turn through ANY orientation without meeting its own periodic image — several times the water, and proportionally slower. This is the ONLY point where the choice can be made: nothing after prep re-solvates, and a production child re-uses this package's cell verbatim.">Production intent (ns)</label>
-                    <input id="md-jobs-prod-intent" type="number" value="" min="0" step="10" placeholder="ladder only"
-                           title="How many UNRESTRAINED nanoseconds you intend to run off this package. Blank or ≤20 ns = the cheap bounding-box cell the relaxation ladder needs. Above 20 ns the cell is rotation-sized so a tumbling solute never meets its periodic image — several times the water, proportionally slower. Set it now: nothing after prep re-solvates, and a production child inherits this cell."
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center">Min. steps</label>
-                    <input id="md-jobs-minsteps" type="number" value="10000" min="100" step="1000"
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center" title="DCD trajectory output interval, in STEPS, for the PRODUCTION run. Default 2500 = one frame every 10 ps at 4 fs (~500 frames per 5 ns). Lower it for a denser trajectory when the run feeds fluctuation-based parameter extraction (FEM/SNUPI/mrDNA elastic constants); larger DCDs are the tradeoff.">DCD freq (steps)</label>
-                    <input id="md-jobs-dcd-freq" type="number" value="2500" min="100" max="1000000" step="100"
-                           title="DCD trajectory output interval, in STEPS, for the PRODUCTION run. Default 2500 = one frame every 10 ps at 4 fs. Lower = denser trajectory (more frames, larger DCD) for parameter extraction."
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center" title="0 = full box. >0 keeps only water within this distance of the DNA — shrinks large designs to fit a small GPU. Use ≥8 Å; 12 Å is the validated default. TRADE-OFF: a carve leaves vacuum in the cell, which forces NVT (no barostat) AND disables NAMD's GPU-resident mode (it aborts at step 0 on a sparse cell). The run stays CUDA-accelerated on the offload path. Worth it only when the carve removes >~2.6x the atoms — true for bent/concave designs, false for straight bundles. Use ⚡ to decide.">Water shell (Å)</label>
-                    <input id="md-jobs-watershell" type="number" value="0" min="0" step="1"
-                           title="0 = full box. >0 keeps only water within this distance of the DNA — shrinks large designs to fit a small GPU. Use ≥8 Å; 12 Å is the validated default. TRADE-OFF: a carve leaves vacuum in the cell, which forces NVT (no barostat) AND disables NAMD's GPU-resident mode (it aborts at step 0 on a sparse cell). The run stays CUDA-accelerated on the offload path. Worth it only when the carve removes >~2.6x the atoms — true for bent/concave designs, false for straight bundles. Use ⚡ to decide."
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center" title="Integrator timestep for the PRODUCTION run. 4 fs (default) needs the fast relaxation ladder (HMR + rigidBonds all validated); 2 fs is a stable manual medium path (rigidBonds all + GPU-resident, no HMR); 1 fs is the conservative reference (rigidBonds none). Only 4/2/1 are allowed — intermediate values are never a fix for instability (remove the clash instead). Lowering it costs proportional wall-clock.">Production timestep</label>
-                    <select id="md-jobs-prod-timestep"
-                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                      <option value="4">4 fs (fast, HMR)</option>
-                      <option value="2">2 fs (medium)</option>
-                      <option value="1">1 fs (conservative)</option>
-                    </select>
-                    <label style="color:#8b949e;align-self:center" title="NAMD GPU-resident mode: integration + bonded forces stay on the GPU instead of round-tripping to the CPU each step. Its advantage scales UP with system size — measured on an RTX 3080 Ti: 3.2x at 3.14M atoms, 2.0x at 770k, 1.3x at 181k, 1.1x at 111k, but a LOSS below ~100k (0.88-0.97x at 32.5k), where both paths hit the same fixed per-step kernel-launch floor and resident's setup is pure overhead. Auto picks by solvated atom count. On/Off force it. Resident is refused regardless for GBIS (no implicit-solvent path) and for a sparsely-filled water-shell carve (it aborts at step 0 on the exclusion count).">GPU-resident</label>
-                    <select id="md-jobs-gpu-resident"
-                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                      <option value="auto" selected>Auto (by system size)</option>
-                      <option value="on">On (force)</option>
-                      <option value="off">Off (CUDA offload)</option>
-                    </select>
-                  </div>
-                  <div id="md-jobs-resident-warn" style="display:none;margin-top:6px;padding:5px 7px;border-radius:3px;font-size:11px;line-height:1.4"></div>
-                  <div id="md-jobs-timestep-warn" style="display:none;margin-top:6px;padding:5px 7px;border-radius:3px;font-size:11px;line-height:1.4"></div>
-                  <!-- Derived, read-only: which NAMD code path the settings above actually
-                       select.  GPU-resident is ~2.6x faster per atom but is silently
-                       disabled by any water-shell carve, so it must be visible. -->
-                  <div id="md-jobs-path" style="margin-top:6px;font-size:var(--text-xs);color:#8b949e"></div>
-                  <label style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
-                    <input id="md-jobs-autostart" type="checkbox" checked style="accent-color:#3fb950">
-                    Start immediately
-                  </label>
-                  <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
-                         title="Hydrogen-mass repartitioning + 4 fs timestep + NAMD GPU-resident on the hard ladder. ~4x faster NPT on a capped box, same simulated ns per stage. Auto-disabled for declash/soft ladders. Uncheck if a very large design fails the first hard segment with a GPU out-of-memory error.">
-                    <input id="md-jobs-fast" type="checkbox" checked style="accent-color:#3fb950">
-                    Fast relaxation (HMR + GPU-resident, 4&nbsp;fs)
-                  </label>
-                  <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
-                         title="If the fastest GPU mode can't start on this structure, PAUSE and ask (default) rather than silently dropping to a ~3x slower mode. Uncheck to auto-accept the slower GPU mode for unattended runs. Remembered between runs.">
-                    <input id="md-jobs-gpu-ask" type="checkbox" checked style="accent-color:#3fb950">
-                    Prefer fastest GPU mode (ask before running slower)
-                  </label>
-                  <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
-                         title="Relaxation accelerator: skip a restraint stage's remaining p50/p100 chunks once its first chunk shows an energy + base-pairing plateau (multi-criteria). Never skips production/qualification stages. ON by default; large extra speedup on well-behaved designs, holds fragile low-restraint stages. The 'Slow (full physics)' preset turns it off. Also editable mid-relax: changing it while a running local relaxation is selected applies at the next stage checkpoint (no relaunch).">
+              <!-- ── Run controls for the SELECTED job ─────────────────────
+                   What used to live here was an "Advanced" grid of ~17 parameters that
+                   reflected none of the four layers deciding a job's actual settings, so
+                   the number on screen was frequently not the number that ran. Every one
+                   of those parameters moved into the Job Wizard (＋ New job), where it is
+                   shown with its provenance and in the context of the stage it affects.
+                   What stays is the ONE control that is not a launch setting: early-stop
+                   is also a LIVE control, applied at the next checkpoint of a relaxation
+                   that is already running. -->
+              <div class="ox-card" id="md-jobs-live-controls" style="display:none">
+                <div class="ox-card__body">
+                  <label style="display:flex;align-items:center;gap:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
+                         title="Skip a restraint stage's remaining chunks once its first chunk shows both an energy and a base-pairing plateau. Applies at the next stage checkpoint of the running relaxation — no relaunch. The launch-time default for a NEW job is set in the Job Wizard.">
                     <input id="md-jobs-early-stop" type="checkbox" checked style="accent-color:#3fb950">
-                    Early-stop settled stages
+                    Early-stop settled stages (applies at the next checkpoint)
                     <span id="md-jobs-early-stop-pending"
-                          style="display:none;color:#d29922"
-                          title="Change queued — it applies at the next stage checkpoint. Toggle is locked until then.">⧗ pending</span>
+                          style="display:none;color:#d29922">pending…</span>
                   </label>
                 </div>
               </div>
@@ -5820,6 +5722,14 @@
                     <span title="Run several independent NAMD production copies with different random seeds to sample an ensemble, using Alpine's free CPU cores.">Ensemble replicas:</span>
                     <input id="md-jobs-ensemble-count" type="number" min="1" max="64" value="4"
                            style="width:48px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <!-- Each replica's length. Lives here rather than in the Job Wizard
+                         because staging an ensemble is a single Alpine action, not a
+                         wizard flow — but it must still be settable, or every replica
+                         silently takes a hardcoded default. -->
+                    <span title="How long each replica samples for.">of</span>
+                    <input id="md-jobs-ensemble-ns" type="number" min="0.1" step="1" value="2"
+                           style="width:56px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <span>ns each</span>
                     <button id="md-jobs-ensemble-btn"
                             title="Stage N independent production replicas (distinct seeds) on the Alpine cluster"
                             style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer">

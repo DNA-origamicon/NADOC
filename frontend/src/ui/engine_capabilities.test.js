@@ -96,7 +96,7 @@ const CENSUS = {
     efield:     { on: 'md-efield-toggle' },
     anchors:    { on: 'md-anchors-toggle' },
     surface:    { off: 'md-surface-toggle' },
-    advanced:   { on: 'md-jobs-adv-toggle' },
+    advanced:   { on: 'md-jobs-new-btn' },   // the Job Wizard replaced the drawer
     viz:        { on: 'md-jobs-viz-toggle' },
     metrics:    { on: 'md-metrics-toggle' },
     joblist:    { on: 'md-jobs-list-toggle' },

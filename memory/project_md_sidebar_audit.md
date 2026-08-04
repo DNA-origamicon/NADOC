@@ -80,6 +80,13 @@ Audited the loose items under the Health card; user directed the cleanup. Done i
   ensemble roll-up, resume history, and an Alpine-only status line (`#md-jobs-cluster-status`,
   the awaiting-submit / SLURM-queued states rescued from the deleted status line). Visibility =
   OR of its parts, computed in `_applyJobState`.
+- **SUPERSEDED 2026-08-03 (Job Wizard):** the Advanced card is DELETED — every launch
+  parameter lives in the wizard (`＋ New job`). `#md-jobs-early-stop` kept ONLY its live
+  role, in `#md-jobs-live-controls`, shown only for a running local relaxation; its launch
+  default is a wizard field. `mdRunControl` is now one Run/Stop/Resume control over the
+  SELECTED job (production children included), and `mdProductionAction` /
+  `mdSelectedJobControl` are gone. The paragraphs below describe the pre-wizard layout.
+
 - **Early-stop unified:** the ONE Advanced toggle (`#md-jobs-early-stop`) is now BOTH the launch
   default AND the live mid-relax control — for a running local relaxation a change POSTs the
   override (`setMdEarlyStop`) with the `#md-jobs-early-stop-pending` badge; otherwise it's the

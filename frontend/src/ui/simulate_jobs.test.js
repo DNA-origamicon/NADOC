@@ -24,7 +24,7 @@ vi.mock('./md_jobs_panel.js', () => ({
 }))
 
 import {
-  initSimulateJobs, nodeIsActive, nodeIsResumable, verbForNode,
+  initSimulateJobs, nodeIsActive, nodeNeedsPolling, nodeIsResumable, verbForNode,
   masterProgressPct, masterProgressColor, masterProgressTooltip, masterStatusText, nodeDetailText, formatEta,
   masterStepText,
 } from './simulate_jobs.js'
@@ -40,6 +40,22 @@ const lmNode = (o = {}) => ({ engine: 'lammps', job_id: 'lm1', parent_job_id: nu
   current_step: 1000, ...o })
 
 describe('pure helpers', () => {
+  it('nodeNeedsPolling excludes a job that was created but never started', () => {
+    // `＋ New job → Create job` leaves a solvated package at `queued` waiting for the
+    // user. It is "active" for spinner purposes but its state cannot change on its own,
+    // so polling it every 1.5 s forever is pure waste.
+    expect(nodeNeedsPolling(oxNode({ status: 'queued' }))).toBe(false)
+    expect(nodeIsActive(oxNode({ status: 'queued' }))).toBe(true)   // still shows as pending
+  })
+  it('nodeNeedsPolling keeps polling a SUBMITTED remote job — its scheduler moves it', () => {
+    expect(nodeNeedsPolling(oxNode({ status: 'queued', slurm_job_id: '9' }))).toBe(true)
+    expect(nodeNeedsPolling(oxNode({ status: 'queued', runpod_pod_id: 'p' }))).toBe(true)
+  })
+  it('nodeNeedsPolling follows a job that is actually executing', () => {
+    expect(nodeNeedsPolling(oxNode({ status: 'running' }))).toBe(true)
+    expect(nodeNeedsPolling(oxNode({ status: 'preparing' }))).toBe(true)
+    expect(nodeNeedsPolling(oxNode({ status: 'completed' }))).toBe(false)
+  })
   it('nodeIsActive tracks the shared status vocab', () => {
     expect(nodeIsActive(lmNode({ status: 'running' }))).toBe(true)
     expect(nodeIsActive(oxNode({ status: 'completed' }))).toBe(false)

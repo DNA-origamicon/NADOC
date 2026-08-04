@@ -142,6 +142,92 @@ PME_MAX_INTERVAL_FS = 4.0
 XST_MAX_INTERVAL_PS = 10.0
 
 
+#: Directives a per-stage override may NOT touch.  Not physics — plumbing: the runner,
+#: the restart chain and every trajectory reader address a package through these names, so
+#: rewriting one does not change what is simulated, it detaches the stage from the job.
+#: Everything else is fair game, because everything else IS the physics and the whole
+#: point of exposing it is that a user can disagree with the protocol.
+PROTECTED_DIRECTIVES = frozenset({
+    "structure", "coordinates", "outputname", "dcdfile", "xstfile",
+    "veldcdfile", "forcedcdfile", "bincoordinates", "binvelocities", "extendedsystem",
+    "parameters", "paratypecharmm",
+})
+
+
+def apply_conf_overrides(conf_text: str, overrides: "dict | None") -> str:
+    """Rewrite directives in an emitted NAMD conf (pure).
+
+    ``overrides`` maps a directive (case-insensitive) to its new value.  A directive
+    already present is REPLACED IN PLACE, so the conf keeps its reading order and its
+    comments; one that is absent is appended in a clearly-marked block.  A value of
+    ``None`` DELETES the directive, which is how a user turns something off that the
+    protocol turned on.
+
+    Returns ``conf_text`` unchanged when there is nothing to apply — the conf writers
+    carry byte-identical guarantees that the ensemble path depends on, and this must not
+    disturb them for a job that overrides nothing.
+
+    Raises ``ValueError`` for a protected directive: see :data:`PROTECTED_DIRECTIVES`.
+    A repeated directive (``extraBondsFile``) is replaced at its FIRST occurrence and the
+    rest dropped, so an override of it means "these files, instead of those".
+    """
+    if not overrides:
+        return conf_text
+
+    clean: dict[str, "str | None"] = {}
+    spelling: dict[str, str] = {}          # lowercase key -> the caller's own casing
+    for key, value in overrides.items():
+        low = str(key).strip().lower()
+        if not low:
+            continue
+        spelling[low] = str(key).strip()
+        if low in PROTECTED_DIRECTIVES:
+            raise ValueError(
+                f"{key!r} cannot be overridden: it names a file or output the runner and "
+                f"the restart chain address this stage by. Changing it would detach the "
+                f"stage from its job rather than change the physics.")
+        clean[low] = None if value is None else str(value).strip()
+    if not clean:
+        return conf_text
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in conf_text.splitlines(keepends=True):
+        body = raw.split("#", 1)[0].strip()
+        key = body.split(None, 1)[0].lower() if body else ""
+        if key not in clean:
+            out.append(raw)
+            continue
+        if key in seen:          # a repeat of an overridden directive — the override wins
+            continue
+        seen.add(key)
+        value = clean[key]
+        if value is not None:
+            # NAMD is case-insensitive, but the conf is read by people: keep the spelling
+            # the directive already had in the file.
+            out.append(f"{body.split(None, 1)[0]:<18} {value}\n")
+    missing = [(k, v) for k, v in clean.items() if k not in seen and v is not None]
+    if missing:
+        out.append("\n# ── Per-stage overrides (set by hand; not from the protocol) ──\n")
+        out.extend(f"{spelling[k]:<18} {v}\n" for k, v in missing)
+    return "".join(out)
+
+
+def overrides_for_stage(stage_overrides: "dict | None", index: int) -> dict:
+    """Flatten ``{"*": {...}, "3": {...}}`` for one stage (pure).
+
+    Keyed by stage INDEX, not name: a stage's name carries the design stem, which the
+    wizard does not know until prep, and would change under it.  ``"*"`` applies to every
+    stage and is merged FIRST, so a per-stage entry refines it rather than being buried
+    by it — which is what makes "set this for the whole ladder, except stage 4" express.
+    """
+    if not stage_overrides:
+        return {}
+    out = dict(stage_overrides.get("*") or {})
+    out.update(stage_overrides.get(str(index)) or {})
+    return out
+
+
 def _pressure_block(npt: bool, *, period: float, decay: float, temp: float = 300.0,
                     margin_ang: float = NPT_MARGIN_ANG) -> str:
     """The barostat + patch-grid-margin lines for a conf.
@@ -191,9 +277,38 @@ RELAX_RECIPE_VERSION = 3
 #: the manifest can report it instead of a stale literal (it said 12.0 for a long time).
 LADDER_PAIRLISTDIST_ANG = 13.5
 
+#: Langevin coupling, ps^-1.  These are DIFFERENT NUMBERS FOR DIFFERENT JOBS and used to
+#: be one hardcoded 5.
+#:
+#: The ladder wants strong coupling: it is dumping the strain of a template-built
+#: structure while the restraint constant steps down, and 5 ps^-1 is the tutorial's own
+#: equilibration value.  PRODUCTION wants weak coupling: at 5 ps^-1 the dynamics are
+#: overdamped, so every time-dependent observable — diffusion, relaxation and correlation
+#: times, ion residence, hinge/breathing kinetics — is scaled by a factor that has nothing
+#: to do with the system.  Equilibrium averages survive it; nothing kinetic does.  The
+#: Aksimentiev-group production runs a NADOC trajectory would be compared against use
+#: ~1 ps^-1, so copying the equilibration value into production quietly made those
+#: comparisons invalid.  See project_periodic_md.md H003.
+LADDER_LANGEVIN_DAMPING = 5.0
+PRODUCTION_LANGEVIN_DAMPING = 1.0
+
+#: Bumped when a change alters the PHYSICS of a PRODUCTION run, so a finished trajectory
+#: can be traced to its recipe the same way ``RELAX_RECIPE_VERSION`` does for the ladder.
+#:
+#:   1  (…-2026-08-03)  langevinDamping 5 ps^-1 inherited from the ladder; no restraints
+#:                      of any kind (truly unrestrained).
+#:   2  (2026-08-03)    langevinDamping 1 ps^-1 (the literature production value); an
+#:                      optional elastic network retained through production, built from
+#:                      the EQUILIBRATED coordinates — the published "unrestrained" runs
+#:                      keep one, and NADOC's did not.
+PRODUCTION_RECIPE_VERSION = 2
+
 
 def protocol_fidelity(*, fast: bool, carved: bool, padding_nm: float,
-                      charge_audit: dict) -> dict:
+                      charge_audit: dict, early_stop: bool = False,
+                      chunk_pcts: tuple = LADDER_CHUNK_PCTS,
+                      production_enm: "bool | None" = None,
+                      stage_overrides: "dict | None" = None) -> dict:
     """What this package does and does not reproduce of the published protocol (pure).
 
     Yoo, Li, Slone, Maffeo & Aksimentiev, Methods Mol Biol 1811 (2018).  Every remaining
@@ -229,6 +344,98 @@ def protocol_fidelity(*, fast: bool, carved: bool, padding_nm: float,
                "2 would put PME on an 8 fs interval, past the r-RESPA resonance limit. "
                "The PME INTERVAL matches; the number does not.",
     })
+    # ── Always-on deviations.  These used to be absent from this list even though every
+    # package has them, which made the manifest read as a SHORTER delta than it is —
+    # exactly the failure this block exists to prevent.
+    deviations.append({
+        "item": "langevinDamping (production)",
+        "ours": f"{PRODUCTION_LANGEVIN_DAMPING:g} ps^-1",
+        "theirs": f"{LADDER_LANGEVIN_DAMPING:g} ps^-1 is the tutorial's EQUILIBRATION "
+                  f"value; the group's production papers use ~1",
+        "why": "the ladder keeps 5 (strong coupling while a template-built structure "
+               "dumps strain), but production runs weak: at 5 ps^-1 the dynamics are "
+               "overdamped and every time-dependent observable — diffusion, relaxation "
+               "and correlation times, ion residence, breathing kinetics — is scaled by "
+               "something unrelated to the system. Equilibrium averages are unaffected.",
+    })
+    deviations.append({
+        "item": "stepspercycle / pairlistdist",
+        "ours": f"{AKSIMENTIEV_STEPS_PER_CYCLE} (ladder) / 10 (production), "
+                f"pairlistdist {LADDER_PAIRLISTDIST_ANG:g} (ladder) / "
+                f"{PAIRLISTDIST_ANG:g} (production)",
+        "theirs": "12, pairlistdist 12",
+        "why": "a longer pairlist-rebuild cycle with a wider buffer to match. The "
+               "constant is named AKSIMENTIEV_STEPS_PER_CYCLE for historical reasons; it "
+               "is NOT the tutorial's number. No physical effect while the buffer covers "
+               "the cycle, but a methods table copied from the reference will not match.",
+    })
+    deviations.append({
+        "item": "production barostat",
+        "ours": "period 200 fs / decay 100 fs",
+        "theirs": "1000 / 500 (which the LADDER does match)",
+        "why": "a NADOC choice, not the reference. A stiffer piston changes the "
+               "volume-fluctuation spectrum and hence the apparent compressibility; it "
+               "does not move the structure.",
+    })
+    deviations.append({
+        "item": "stage chunking",
+        "ours": f"each k split into {len(chunk_pcts)} chunks ({', '.join(f'{p:g}%' for p in chunk_pcts)})",
+        "theirs": "each k run flat for 4.8 ns",
+        "why": "restart checkpoints + per-chunk health sampling. Velocities carry across "
+               "each boundary (binVelocities), so it is thermodynamically neutral, but "
+               "each boundary re-seeds the Langevin RNG stream.",
+    })
+    if early_stop:
+        deviations.append({
+            "item": "stage length",
+            "ours": "TRUNCATED — a stage stops at a chunk boundary once its energy and "
+                    "base pairing are both flat (md_cutoff)",
+            "theirs": "every stage runs its full 4.8 ns",
+            "why": "an unpublished accelerator. A stage can end at 10% of its nominal "
+                   "length, so the ladder this package ran is SHORTER than 19.2 ns and "
+                   "the per-segment record is the only place the real number exists. "
+                   "Turn it off (the 'literature' or 'full_physics' protocol) for any run "
+                   "whose stage lengths you intend to quote.",
+        })
+    # Restraints in production.  ``None`` = a relaxation package, where production has
+    # not been configured yet; the production CHILD records its own answer.
+    if production_enm is False:
+        deviations.append({
+            "item": "production restraints",
+            "ours": "none — genuinely unrestrained",
+            "theirs": "an elastic network at k = 0.1 kcal/mol/A^2 retained THROUGHOUT "
+                      "production (Yoo & Aksimentiev PNAS 110:20099; Maffeo, Yoo & "
+                      "Aksimentiev NAR 44:3013; Shi et al. ACS Nano 13:12443)",
+            "why": "their 'unrestrained' 200+ ns origami productions are not unrestrained. "
+                   "A template-built structure sampled with no network is a measurably "
+                   "SOFTER ensemble — more breathing, more terminal fraying, larger RMSD "
+                   "drift, lower apparent bending and torsional moduli. Any global-shape "
+                   "or fluctuation observable compared against those papers is affected. "
+                   "Set enm_restraints='on' (or relax with the 'literature' protocol, "
+                   "which turns it on) to keep one.",
+        })
+    elif production_enm is True:
+        deviations.append({
+            "item": "production elastic network",
+            "ours": "base-ring atoms, inter-residue, 8 A cutoff, k = 0.1, rebuilt from "
+                    "the equilibrated checkpoint",
+            "theirs": "ALL non-hydrogen DNA atom pairs within 5 A, PSF bonds filtered",
+            "why": "same restraint constant, sparser network, so the effective framework "
+                   "stiffness is lower than the published setup. NADOC has no dense-ENM "
+                   "writer yet; this reuses the tutorial's base-ring network from §3.3.",
+        })
+    if stage_overrides:
+        edited = sorted(stage_overrides, key=lambda k: (k != "*", k))
+        n_keys = len({k for v in stage_overrides.values() for k in (v or {})})
+        deviations.append({
+            "item": "hand-edited stages",
+            "ours": f"{n_keys} directive(s) overridden on stage(s) {', '.join(edited)}",
+            "theirs": "the protocol's own value everywhere",
+            "why": "set by hand in the Job Wizard, which is a deliberate departure from "
+                   "EVERY protocol — the exact edits are in the manifest's "
+                   "`stage_overrides` block, and the confs on disk are the final word.",
+            "overrides": {k: dict(v or {}) for k, v in stage_overrides.items()},
+        })
     deviations.append({
         "item": "wrapWater",
         "ours": "on",
@@ -775,8 +982,23 @@ def build_production_conf(
     n_atoms: Optional[int] = None,
     force_resident: Optional[bool] = None,
     npt: bool = True,
+    damping: float = PRODUCTION_LANGEVIN_DAMPING,
+    enm_file: Optional[str] = None,
+    overrides: Optional[dict] = None,
 ) -> str:
     """NPT production conf, continuing from a prior checkpoint (pure).
+
+    ``damping`` is the Langevin coupling in ps^-1 and defaults to the LITERATURE
+    PRODUCTION value, not the ladder's — see :data:`PRODUCTION_LANGEVIN_DAMPING`.
+
+    ``enm_file`` attaches an elastic network for the whole production run.  The published
+    Aksimentiev-group "unrestrained" origami productions are not unrestrained: they retain
+    a dense intra-helical network at k = 0.1 kcal/mol/A^2 throughout, and a template-built
+    structure sampled with no restraints at all is a measurably softer ensemble (more
+    breathing, more fraying, larger RMSD drift).  The file MUST be built from the
+    EQUILIBRATED coordinates this run starts from — see ``write_production_enm``; an ENM
+    built at prep time encodes the pre-ladder geometry and would pull the structure back
+    to it, which is worse than no restraint at all.
 
     ``colvars_file`` attaches a Colvars configuration — an umbrella window, an eABF bias
     or a steered pull (see ``backend/core/cpd_colvars.py``). The run is then NOT
@@ -817,6 +1039,12 @@ def build_production_conf(
     bx, by, bz = box
     cx, cy, cz = bx / 2, by / 2, bz / 2
     extras = "extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n" if mgh_extrabonds else ""
+    if enm_file:
+        # extraBonds may already be on for the Mg hydration shell; NAMD accepts the
+        # directive once and any number of files, so only add what is missing.
+        if not extras:
+            extras = "extraBonds         on\n"
+        extras += f"extraBondsFile     {enm_file}\n"
     # Fast mode = the fast-relaxation win applied to unrestrained production.  The
     # HMR PSF (non-water hydrogens x3) lets ``rigidBonds all`` run stably at a 4 fs
     # timestep; ``GPUresident on`` keeps integration + bonded forces on the GPU;
@@ -882,7 +1110,7 @@ def build_production_conf(
     prod_x = _xst_freq(spec.steps, ts, prod_e)
     # A cell with vacuum in it MUST run at constant volume — see _pressure_block.
     pressure = _pressure_block(npt, period=200.0, decay=100.0)
-    return f"""\
+    return apply_conf_overrides(f"""\
 structure          {psf}
 coordinates        {name_stem}.pdb
 
@@ -923,7 +1151,7 @@ fullElectFrequency {fef}
 stepspercycle      {spc}
 {gpu_line}langevin           on
 langevinTemp       300
-langevinDamping    5
+langevinDamping    {damping:g}
 langevinHydrogen   off
 {pressure}outputEnergies     {prod_e}
 xstFreq            {prod_x}
@@ -938,7 +1166,7 @@ binCoordinates     output/{prev}.coor
 binVelocities      output/{prev}.vel
 extendedSystem     output/{prev}.xsc
 run                {spec.steps}
-"""
+""", overrides)
 
 
 def build_reseed_conf(
@@ -1233,6 +1461,7 @@ def _segment_conf(
     capture_vel_force: bool = False,
     n_atoms: Optional[int] = None,
     force_resident: Optional[bool] = None,
+    overrides: Optional[dict] = None,
 ) -> str:
     from backend.core.namd_helpers import vel_force_dcd_block  # noqa: PLC0415
     # Soft integrator: flexible H bonds + 1 fs timestep.  Needed for declashed
@@ -1387,7 +1616,7 @@ def _segment_conf(
         lines.append(f"minimize           {minimize_steps}\n")
     if spec.steps:
         lines.append(f"run                {spec.steps}\n")
-    return "".join(lines)
+    return apply_conf_overrides("".join(lines), overrides)
 
 
 def _min_conf(
@@ -1405,6 +1634,7 @@ def _min_conf(
     gbis: bool = False,
     vacuum: bool = False,
     push_bonds_file: Optional[str] = None,
+    overrides: Optional[dict] = None,
 ) -> str:
     # enm_file overrides the default {name_stem}_k{scale}.enm.extra — used by the
     # declash protocol to minimise against an ss-excluded network.  Minimisation
@@ -1441,7 +1671,7 @@ def _min_conf(
     lines.append("constraints        off\n")
     lines.append(external_forces_block(anchors_file, field))
     lines.append(f"minimize           {minimize_steps}\n")
-    return "".join(lines)
+    return apply_conf_overrides("".join(lines), overrides)
 
 
 # ── Restraints PDB ────────────────────────────────────────────────────────────
@@ -1993,6 +2223,41 @@ def write_hmr_psf(
 _ENM_DECLASH_MIN_REF_ANG = 2.8
 
 
+#: Restraint constant for a production elastic network, kcal/mol/A^2.  The published
+#: origami productions run k = 0.1 throughout; this is that number.
+PRODUCTION_ENM_K = 0.1
+
+
+def write_production_enm(package_dir: Path, name_stem: str, coor_path: Path, *,
+                         scale: float = PRODUCTION_ENM_K,
+                         cut_ang: float = 8.0) -> str:
+    """Build a production elastic network from the EQUILIBRATED coordinates.
+
+    Returns the extraBonds filename, relative to ``package_dir``.
+
+    The coordinate source is the whole point.  An ENM is a set of springs at MEASURED
+    equilibrium lengths, so the structure it was measured on is the structure it pulls
+    towards.  Re-using the ladder's prep-time network here would restrain a finished run
+    back to the ideal, pre-relaxation build — actively worse than running unrestrained.
+    So this rebuilds from the checkpoint production actually starts from, which is what
+    the published protocol does when it transitions from restrained equilibration to its
+    ENM-retained production.
+
+    Remaining delta, and it is a real one: this is the tutorial's BASE-RING network (nine
+    ring atoms per residue, inter-residue, 8 A cutoff), not the dense all-non-hydrogen
+    5 A network the Aksimentiev-group production papers describe.  Same k, sparser
+    network, so the effective stiffness is lower.  Recorded in ``protocol_fidelity`` as a
+    deviation rather than papered over.
+    """
+    ref_pdb = package_dir / f"{name_stem}_prod_ref.pdb"
+    write_declashed_pdb(coor_path, package_dir / f"{name_stem}.pdb", ref_pdb)
+    write_aksimentiev_enm_files(
+        ref_pdb, package_dir, f"{name_stem}_prod",
+        base_k=scale, scales=(scale,), cut_ang=cut_ang,
+    )
+    return f"{name_stem}_prod_k{scale:g}.enm.extra"
+
+
 def rebuild_declashed_references(
     package_dir: Path,
     name_stem: str,
@@ -2406,6 +2671,8 @@ def prepare_mgh_slow_release(
     capture_vel_force: bool = False,
     allow_catenated_seed: bool = False,
     devices: str = "0",
+    early_stop_relax: bool = False,
+    stage_overrides: Optional[dict] = None,
 ) -> tuple[str, str, list[SegmentSpec]]:
     """Build the solvated package and all stage configs in job_dir.
 
@@ -2608,6 +2875,27 @@ def prepare_mgh_slow_release(
     # geometric-guess build could not: its stacked sugars minimised into a ~3.1 A
     # C4'-C5' bond that is fatal to a 4 fs RATTLE step). See the 24hb 4 fs
     # investigation + backend/core/oxdna_seed.py.
+    # ── MARKED FOR RE-AUDIT (2026-08-03) ──────────────────────────────────────
+    # Is this auto-enable still needed, and is it still sized right?  Three reasons to
+    # doubt it, none yet measured:
+    #
+    #   * The evidence that set the tier is exp49 (2026-07-30), a 25 ps probe on ideal
+    #     builds carrying 2 / 24 / 60 inserted bases.  25 ps is a very short window in
+    #     which to conclude a 19.2 ns ladder needs protection.
+    #   * The build path it protects against has moved since: oxDNA seeding
+    #     (``pre_declashed``) already suppresses the extra-base trigger, and the geometric
+    #     + Fix B extra-base build was adopted precisely to stop shipping clashed inserts.
+    #   * It is not free and it is currently WRONG: a declash ladder keeps ``fast=True``
+    #     while every segment carries ``gentle``, so step counts sized for 4 fs run at
+    #     2 fs and each rung simulates 2.4 ns instead of 4.8 (pinned by
+    #     tests/test_md_protocol_plan.py::test_declash_stages_run_half_their_intended_length).
+    #     Whatever the audit concludes, that arithmetic has to be settled with it — fixing
+    #     the ns while keeping the trigger doubles every declash relaxation.
+    #
+    # The audit wants a real arm: one design with inserted bases relaxed with and without
+    # the gentle tier, full ladder, compared on C1' pairing and RMSD-vs-design — not
+    # another short probe.  Until then the trigger stays as-is; it is conservative, and
+    # the cost is wall-clock rather than correctness.
     declash = (declash
                or (design_has_extra_bases(design) and not pre_declashed)
                or design_has_extensions(design))
@@ -2717,6 +3005,8 @@ def prepare_mgh_slow_release(
             no_enm=rebuild_enm_from_min,
             anchors_file=anchors_file,
             field=field,
+            # Stage 0 is the minimisation; the ladder segments are 1..N.
+            overrides=overrides_for_stage(stage_overrides, 0),
         )
     )
 
@@ -2725,7 +3015,7 @@ def prepare_mgh_slow_release(
     # agrees with the conf that was written.
     for spec in segments:
         spec.timestep_fs = effective_timestep_fs(spec, fast)
-    for spec in segments:
+    for idx, spec in enumerate(segments, start=1):
         (package_dir / f"{spec.name}.conf").write_text(
             _segment_conf(spec, name_stem, box, mgh_extrabonds,
                           fast=fast, carved=carve_shell, fill_fraction=resident_fill,
@@ -2733,7 +3023,8 @@ def prepare_mgh_slow_release(
                           anchors_file=anchors_file, field=field,
                           capture_vel_force=capture_vel_force,
                           n_atoms=solvated_atoms,
-                          force_resident=_resident_override)
+                          force_resident=_resident_override,
+                          overrides=overrides_for_stage(stage_overrides, idx))
         )
 
     charge_audit = {}
@@ -2925,9 +3216,13 @@ def prepare_mgh_slow_release(
             "production_piston_period_decay_fs": [200.0, 100.0],
             "settle_stage_ps": SETTLE_STAGE_PS if not carve_shell else 0.0,
         },
+        # Hand edits to individual stages.  Recorded verbatim: this is the one part of a
+        # package that no amount of protocol knowledge can reconstruct.
+        "stage_overrides": stage_overrides or {},
         "protocol_fidelity": protocol_fidelity(
             fast=fast, carved=carve_shell, padding_nm=padding_nm,
-            charge_audit=charge_audit),
+            charge_audit=charge_audit, early_stop=early_stop_relax,
+            chunk_pcts=LADDER_CHUNK_PCTS, stage_overrides=stage_overrides),
         "segments": segment_dicts,
         "health_checks": "After every segment: 10%, 50%, and 100% of each stage.",
     }

@@ -27,6 +27,40 @@ export function gateAMessage(advice) {
   const tier = advice?.tier
   if (!advice || advice.skipped || !tier || tier === 'ok') return null
 
+  // The chosen protocol may FORBID a carve — the `literature` preset locks it off, because
+  // a carved cell has no bulk phase for the published ionic condition to be defined in, no
+  // barostat (so no settle stage and no box-size trace), and a vacuum far field. Every
+  // fitting tier below exists to APPLY a carve, so when carving is off the only question
+  // left is whether the full box fits.
+  //
+  // The answer is a WARNING, not a refusal. Whether a system fits is a property of today's
+  // hardware and the pre-flight is an estimate — the user is entitled to attempt the full
+  // box and let NAMD answer. So: say plainly what is likely to happen, name the
+  // alternatives, and offer Cancel / Run anyway.
+  if (advice.carve_allowed === false && tier !== 'ok') {
+    const need = advice.required_vram_mb || advice.estimated_vram_mb
+    return {
+      tier, canProceed: true, proceedLabel: 'Run anyway',
+      title: 'This design may not fit — and this protocol will not shrink the water',
+      lines: [
+        need
+          ? `The full water box needs roughly ${_gb(need)} GB of GPU memory; your card has `
+            + `${_gb(advice.vram_mb)} GB.`
+          : `The full water box is unlikely to fit your ${_gb(advice.vram_mb)} GB GPU.`,
+        'This protocol reproduces a published recipe, so it will NOT trim the water to fit: '
+        + 'a carved cell has no bulk phase for its ionic condition to be defined in, no '
+        + 'barostat, and therefore neither the settle stage nor the box-size trace the '
+        + 'reference uses to judge equilibration.',
+        'You can run it anyway — the estimate is not a measurement, and NAMD will tell you '
+        + 'for certain. If it does run out of memory it fails at the first segment, before '
+        + 'any real compute is spent.',
+        'Alternatives: lower the water padding; seed from an oxDNA or mrDNA relaxation so '
+        + 'the all-atom leg is short; run it on RunPod or the cluster; or pick a protocol '
+        + 'that permits a carve.',
+      ],
+    }
+  }
+
   if (tier === 'a1') {
     const ang = Math.round((advice.recommended_shell_nm || 0) * 10)
     return {

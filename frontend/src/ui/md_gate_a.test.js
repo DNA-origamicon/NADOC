@@ -35,6 +35,68 @@ describe('gateAMessage', () => {
 
 // ── DOM modal (promise-based) ───────────────────────────────────────────────────
 
+describe('gateAMessage — a protocol that forbids a water carve', () => {
+  // The `literature` preset LOCKS allow_water_shell_carve off: a carved cell has no bulk
+  // phase for the published ionic condition to be a concentration of, no barostat, and so
+  // neither the settle stage nor the box-size trace. Every fitting tier exists to APPLY a
+  // carve, so with carving off the only question left is whether the full box fits — and
+  // that is answered with a WARNING, never a refusal, because the pre-flight is an
+  // estimate and the user is entitled to let NAMD decide.
+  const advice = (tier, extra = {}) => ({
+    tier, vram_mb: 12288, recommended_shell_nm: 1.2, estimated_atoms: 900000,
+    required_vram_mb: 41000, tightest_shell_nm: 0.6, tightest_atoms: 700000,
+    carve_allowed: false, ...extra,
+  })
+
+  it('never silently auto-fits a carve (A1 loses its notice)', () => {
+    // A1 normally applies the carve with only a toast — which would hand back a
+    // trajectory whose job record claims a protocol it did not run.
+    expect(gateAMessage(advice('a1')).isNotice).toBeUndefined()
+  })
+
+  it.each(['a1', 'a2', 'a3'])('offers Cancel / Run anyway at tier %s', (tier) => {
+    const m = gateAMessage(advice(tier))
+    expect(m.canProceed).toBe(true)
+    expect(m.proceedLabel).toBe('Run anyway')
+  })
+
+  it('says plainly that it will not shrink the water, and why', () => {
+    const lines = gateAMessage(advice('a1')).lines.join(' ')
+    expect(lines).toMatch(/will NOT trim the water/)
+    expect(lines).toMatch(/bulk phase/)
+    expect(lines).toMatch(/settle stage/)
+  })
+
+  it('says the estimate is not a measurement, and what failure costs', () => {
+    // Proceeding has to be an informed choice, not a dare.
+    const lines = gateAMessage(advice('a1')).lines.join(' ')
+    expect(lines).toMatch(/not a measurement/)
+    expect(lines).toMatch(/first segment/)
+  })
+
+  it('names the cheaper routes, including the reference group\'s own answer', () => {
+    const lines = gateAMessage(advice('a1')).lines.join(' ')
+    expect(lines).toMatch(/padding/)
+    expect(lines).toMatch(/oxDNA or mrDNA/)   // change resolution, not solvent
+    expect(lines).toMatch(/RunPod or the cluster/)
+  })
+
+  it('leaves a permitted carve alone — this is opt-in, not a new default', () => {
+    expect(gateAMessage({ ...advice('a1'), carve_allowed: true }).isNotice).toBe(true)
+    expect(gateAMessage({ ...advice('a1'), carve_allowed: undefined }).isNotice).toBe(true)
+  })
+
+  it('stays silent when the full box already fits', () => {
+    expect(gateAMessage({ tier: 'ok', carve_allowed: false })).toBeNull()
+  })
+
+  it('a permitted carve at a3 is still the old hard stop', () => {
+    const m = gateAMessage({ ...advice('a3'), carve_allowed: true })
+    expect(m.canProceed).toBe(false)
+    expect(m.title).toBe('Too large for this GPU')
+  })
+})
+
 describe('openGateAModal (DOM)', () => {
   afterEach(() => { document.body.innerHTML = '' })
   const modal = () => document.querySelector('[data-testid="gate-a-modal"]')

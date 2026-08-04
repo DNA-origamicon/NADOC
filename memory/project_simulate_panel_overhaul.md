@@ -38,7 +38,7 @@ History (every dated ⚡ block, the phase write-ups, the Chain-Simulations build
 |---|---|---|
 | Run-control primitive | `frontend/src/ui/job_run_control.js` — `RUN_ACTION`:19, `runControlState`:34 | live; imported by `simulate_jobs.js:29`, `oxdna_jobs_panel.js:32`, `md_jobs_panel.js:37` (RUN_ACTION only) |
 | oxDNA context button | `oxdna_jobs_panel.js` — `isRelaxRunning`:232, `_runControl`:1201, `_stopSelected`:1217, `_resumeSelected`:1224, dispatch:1237 | live |
-| NAMD run control | `md_jobs_panel.js` — `mdRemoteAwaitingSubmit`:143, `mdJobIsActive`:163, `mdRunControl`:176 (**always returns RUN**), `mdSelectedJobControl`:188, `_paintRunControl`:2142, `_paintJobControl`:2154 | live; button `#md-jobs-job-ctl-btn` (`index.html:5153`) in `#md-launch-row` (:5145), handler `md_jobs_panel.js:2214` |
+| NAMD run control | `md_jobs_panel.js` — `mdRemoteAwaitingSubmit`, `mdJobIsRunning` / `mdJobIsStartable` / `mdJobIsResumable`, `mdRunControl` (over `runControlState`), `_paintRunControl` | **DONE 2026-08-03**: ONE control (`#md-jobs-run-btn`) for the selected job — Run / Stop / Resume — beside `＋ New job` (`#md-jobs-new-btn` → the Job Wizard) in `#md-launch-row`. `#md-jobs-job-ctl-btn` + `#md-jobs-prod-btn` deleted, with `mdSelectedJobControl` / `mdProductionAction` / `_paintJobControl`. See `project_md_job_system.md`. |
 | Master jobs card | `frontend/src/ui/simulate_jobs.js` — `masterProgressPct`:103 + `_pct1`:95 (**one decimal**, so a long production leaves 0 % in minutes not hours — see [[project_md_job_system]]), `masterStepText`:213 (exported) + `_etaSuffix`:207 (**time remaining, for EVERY engine** — BLADE/SNUPI no longer append their own), `_stepTotal`:191, `formatEta`:276 (now coarsens to `2d 06h`) | live; **only importer is `main.js:207`**. Panels notify it by `window.dispatchEvent('nadoc:sim-jobs-changed')` → listener `simulate_jobs.js:691` |
 | mrDNA panel | `frontend/src/ui/mrdna_jobs_panel.js` (579 ln) | **no** `job_run_control` import; `coarseBtn`/`fineBtn`/`stopBtn`:202-218, launches:345, stop:459, own bar `#mrdna-jobs-progress` painted:416 |
 | CanDo panel | `frontend/src/ui/cando_jobs_panel.js` (721 ln) | same shape — buttons:268-286, launch:409, stop:649, own bar painted:603; plus `initCandoMetricsCard` (`cando_metrics_card.js:32`) wired at :323 |
@@ -162,7 +162,7 @@ Two gotchas it cost a run each to learn:
 - Each slice gated on `just test-frontend` (vitest) + `just smoke` (23/23). Chain Simulations
   touched Python → full suite run at the time: 4461 passed.
 - Tests pinning the shipped parts: `job_run_control.test.js` (9), `md_jobs_panel.test.js`
-  (mdRunControl "always ▶ Relax" matrix, `mdSelectedJobControl`, runpod cases),
+  (mdRunControl Run/Stop/Resume matrix — the "always ▶ Relax" matrix and `mdSelectedJobControl` were removed with the button merge),
   `chain_sim_model.test.js` (21), `chain_sim_panel.test.js` (4 jsdom),
   `tests/test_routes_chain_sim.py` (8), `tests/test_chain_spawn_dispatch.py` (7),
   `tests/test_md_sequence_guard.py` (5).

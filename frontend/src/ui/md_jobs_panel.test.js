@@ -217,7 +217,7 @@ describe('newestCompletedForPart (cross-engine compare fallback)', () => {
   })
 })
 
-import { mdJobIsActive, mdRunControl, mdSelectedJobControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdProductionAction, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle } from './md_jobs_panel.js'
+import { mdJobIsActive, mdJobIsRunning, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle } from './md_jobs_panel.js'
 
 describe('mdJobIsDraft / mdDraftRunLabel (deferred-prep seed)', () => {
   it('mdJobIsDraft is true only for status "draft"', () => {
@@ -304,73 +304,82 @@ describe('mdJobIsActive', () => {
   })
 })
 
-describe('mdRunControl (primary ▶ Relax — DECOUPLED: always a fresh launch, never Stop/Resume/disabled)', () => {
-  it('nothing selected → ▶ Relax (launch)', () => {
-    const rc = mdRunControl(null)
-    expect(rc.action).toBe('run')
-    expect(rc.label).toBe('▶ Relax')
+describe('mdJobIsRunning / mdJobIsStartable / mdJobIsResumable (what the one control acts on)', () => {
+  it('running and preparing are running', () => {
+    expect(mdJobIsRunning({ status: 'running' })).toBe(true)
+    expect(mdJobIsRunning({ status: 'preparing' })).toBe(true)
   })
-  it('ALWAYS ▶ Relax regardless of the selected job — the decouple (an auto-selected past job can no longer change/disable it)', () => {
-    for (const job of [
-      { status: 'completed', execution_target: 'local' },
-      { status: 'running', execution_target: 'local' },
-      { status: 'stopped', execution_target: 'local' },
-      { status: 'failed', execution_target: 'local' },
-      { status: 'completed', run_kind: 'production', execution_target: 'local' },   // ← 6hbx100_90deg case: used to be DISABLED
-      { status: 'running', run_kind: 'production', execution_target: 'local' },
-      { status: 'queued', execution_target: 'runpod' },                              // ← runpod hijack: used to be ■ Stop
-      { status: 'running', execution_target: 'alpine', slurm_job_id: '9' },
-    ]) {
-      const rc = mdRunControl(job)
-      expect(rc.action, JSON.stringify(job)).toBe('run')
-      expect(rc.label, JSON.stringify(job)).toBe('▶ Relax')
-      expect(rc.disabled, JSON.stringify(job)).toBeFalsy()
-    }
+  it('a LOCAL queued job is NOT running — it was created and is waiting for Run', () => {
+    // This is the "create without starting" state. Calling it running turned the control
+    // into a Stop button for a job that had never started.
+    expect(mdJobIsRunning({ status: 'queued', execution_target: 'local' })).toBe(false)
+    expect(mdJobIsStartable({ status: 'queued', execution_target: 'local' })).toBe(true)
   })
-  it('busy (a launch already in flight) → disabled', () => {
-    expect(mdRunControl(null, { busy: true }).disabled).toBe(true)
+  it('a SUBMITTED remote job is running even while its scheduler has it queued', () => {
+    expect(mdJobIsRunning({ status: 'queued', execution_target: 'alpine', slurm_job_id: '9' })).toBe(true)
+    expect(mdJobIsRunning({ status: 'queued', execution_target: 'runpod', runpod_pod_id: 'p' })).toBe(true)
   })
-  it('run-target Alpine relabels the fresh launch → "▶ Prepare for Alpine" (it only preps+queues)', () => {
-    expect(mdRunControl(null, { runTarget: 'alpine' }).label).toBe('▶ Prepare for Alpine')
-    expect(mdRunControl({ status: 'completed' }, { runTarget: 'alpine' }).label).toBe('▶ Prepare for Alpine')
-    expect(mdRunControl(null, { runTarget: 'local' }).label).toBe('▶ Relax')
+  it('a remote job prepared but never submitted is neither running nor startable here', () => {
+    const job = { status: 'queued', execution_target: 'alpine' }
+    expect(mdJobIsRunning(job)).toBe(false)
+    expect(mdJobIsStartable(job)).toBe(false)   // submission goes through the review card
+  })
+  it('stopped/failed local jobs resume; alpine resumes stay on their own gated button', () => {
+    expect(mdJobIsResumable({ status: 'stopped', execution_target: 'local' })).toBe(true)
+    expect(mdJobIsResumable({ status: 'failed', execution_target: 'local' })).toBe(true)
+    expect(mdJobIsResumable({ status: 'stopped', execution_target: 'alpine' })).toBe(false)
+    expect(mdJobIsResumable({ status: 'completed', execution_target: 'local' })).toBe(false)
+  })
+  it('a job paused on the GPU-resident decision is resumable', () => {
+    expect(mdJobIsResumable({ status: 'paused', execution_target: 'local', decision: { gate: 'gpu_resident' } }))
+      .toBe(true)
   })
 })
 
-describe('mdSelectedJobControl (contextual Stop/Resume for the SELECTED job — where Stop/Resume moved)', () => {
-  it('nothing selected → hidden', () => {
-    expect(mdSelectedJobControl(null).show).toBe(false)
+describe('mdRunControl (ONE control for the selected job: Run / Stop / Resume)', () => {
+  it('nothing selected → disabled, pointing at ＋ New job', () => {
+    // Creating a run is a separate act now, so an empty selection has nothing to do
+    // rather than silently launching whatever the form happens to hold.
+    const rc = mdRunControl(null)
+    expect(rc.disabled).toBe(true)
+    expect(rc.title).toMatch(/New job/)
   })
-  it('a running/preparing local job → ■ Stop', () => {
-    expect(mdSelectedJobControl({ status: 'running', execution_target: 'local' })).toMatchObject({ show: true, action: 'stop' })
-    expect(mdSelectedJobControl({ status: 'preparing', execution_target: 'local' })).toMatchObject({ show: true, action: 'stop' })
+  it('a prepared-but-unstarted job → ▶ Run', () => {
+    const rc = mdRunControl({ status: 'queued', execution_target: 'local' })
+    expect(rc).toMatchObject({ action: 'run', label: '▶ Run', disabled: false })
   })
-  it('a stopped/failed LOCAL job → ↻ Resume', () => {
-    expect(mdSelectedJobControl({ status: 'stopped', execution_target: 'local' })).toMatchObject({ show: true, action: 'resume' })
-    expect(mdSelectedJobControl({ status: 'failed', execution_target: 'local' })).toMatchObject({ show: true, action: 'resume' })
+  it('a running job → ■ Stop', () => {
+    expect(mdRunControl({ status: 'running', execution_target: 'local' }))
+      .toMatchObject({ action: 'stop', label: '■ Stop Run' })
   })
-  it('a completed job → hidden (use the always-fresh Relax for a new run)', () => {
-    expect(mdSelectedJobControl({ status: 'completed', execution_target: 'local' }).show).toBe(false)
+  it('a stopped job → ↻ Resume', () => {
+    expect(mdRunControl({ status: 'stopped', execution_target: 'local' }))
+      .toMatchObject({ action: 'resume', label: '↻ Resume Run' })
   })
-  it('a PRODUCTION child → hidden here (the Production button drives its lifecycle)', () => {
-    expect(mdSelectedJobControl({ status: 'running', run_kind: 'production' }).show).toBe(false)
-    expect(mdSelectedJobControl({ status: 'stopped', run_kind: 'production' }).show).toBe(false)
+  it('a PRODUCTION child gets Stop/Resume like anything else', () => {
+    // It used to be excluded, so its stop/resume lived on a separate Production button
+    // that knew a different subset of states.
+    expect(mdRunControl({ status: 'running', run_kind: 'production', execution_target: 'local' }))
+      .toMatchObject({ action: 'stop' })
+    expect(mdRunControl({ status: 'stopped', run_kind: 'production', execution_target: 'local' }))
+      .toMatchObject({ action: 'resume' })
   })
-  it('a stopped ALPINE job → hidden here (its resume is the cluster-gated button)', () => {
-    expect(mdSelectedJobControl({ status: 'stopped', execution_target: 'alpine' }).show).toBe(false)
+  it('a completed job → disabled, saying why', () => {
+    const rc = mdRunControl({ status: 'completed', execution_target: 'local' })
+    expect(rc.disabled).toBe(true)
+    expect(rc.title).toMatch(/finished/)
   })
-  it('a job PAUSED on a GPU-resident decision → ↻ Resume (re-opens the gate)', () => {
-    const job = { status: 'paused', execution_target: 'local', decision: { gate: 'gpu_resident' } }
-    expect(mdSelectedJobControl(job)).toMatchObject({ show: true, action: 'resume' })
-    expect(mdSelectedJobControl(job).title).toMatch(/fastest GPU mode/i)
-    // a plain paused job with no decision stays hidden here
-    expect(mdSelectedJobControl({ status: 'paused', execution_target: 'local' }).show).toBe(false)
+  it('a remote job awaiting submit → disabled, pointing at the review card', () => {
+    const rc = mdRunControl({ status: 'queued', execution_target: 'alpine' }, { runTarget: 'alpine' })
+    expect(rc.disabled).toBe(true)
+    expect(rc.title).toMatch(/review card/)
   })
-  it('an in-flight Alpine job (SLURM id) → ■ Stop (scancel)', () => {
-    expect(mdSelectedJobControl({ status: 'running', execution_target: 'alpine', slurm_job_id: '9' })).toMatchObject({ show: true, action: 'stop' })
+  it('a seeded draft names the engine it will start from', () => {
+    expect(mdRunControl({ status: 'draft', seed_oxdna_job_id: 'x' }).label).toBe('▶ Relax from oxDNA')
+    expect(mdRunControl({ status: 'draft', seed_blade_job_id: 'x' }).label).toBe('▶ Relax from BLADE')
   })
-  it('a never-launched RunPod queued job → hidden (awaiting submit, not active)', () => {
-    expect(mdSelectedJobControl({ status: 'queued', execution_target: 'runpod' }).show).toBe(false)
+  it('busy (a request already in flight) → disabled', () => {
+    expect(mdRunControl({ status: 'queued', execution_target: 'local' }, { busy: true }).disabled).toBe(true)
   })
 })
 
@@ -412,23 +421,6 @@ describe('mdRemoteReconnectPrompt (reconnect nudge for in-flight Alpine runs)', 
     expect(mdRemoteReconnectPrompt([{ execution_target: 'local', status: 'running' }], 'disconnected')).toBe('')
     expect(mdRemoteReconnectPrompt([], 'disconnected')).toBe('')
     expect(mdRemoteReconnectPrompt(null, 'disconnected')).toBe('')
-  })
-})
-
-describe('mdProductionAction (what the Production button does)', () => {
-  it('running/preparing production child → stop', () => {
-    expect(mdProductionAction({ status: 'running', run_kind: 'production', execution_target: 'local' })).toBe('stop')
-    expect(mdProductionAction({ status: 'preparing', run_kind: 'production', execution_target: 'local' })).toBe('stop')
-  })
-  it('stopped/failed production child → resume', () => {
-    expect(mdProductionAction({ status: 'stopped', run_kind: 'production' })).toBe('resume')
-    expect(mdProductionAction({ status: 'failed', run_kind: 'production' })).toBe('resume')
-  })
-  it('a relaxation root, or a completed production child → start (spawn/chain a new production)', () => {
-    expect(mdProductionAction({ status: 'completed' })).toBe('start')                       // relaxation
-    expect(mdProductionAction({ status: 'running', execution_target: 'local' })).toBe('start')  // relaxation running
-    expect(mdProductionAction({ status: 'completed', run_kind: 'production' })).toBe('start')  // chain off a finished production
-    expect(mdProductionAction(null)).toBe('start')
   })
 })
 
@@ -960,7 +952,7 @@ import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', () => {
   const IDS = [
     'md-jobs-panel', 'md-jobs-panel-heading', 'md-jobs-panel-arrow', 'md-jobs-panel-body',
-    'md-jobs-adv-toggle', 'md-jobs-adv-arrow', 'md-jobs-adv-body',
+    'md-jobs-new-btn', 'md-jobs-run-btn',
   ]
   const $ = (id) => document.getElementById(id)
   const heading = () => $('md-jobs-panel-heading')
@@ -972,8 +964,6 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
     // markup default: section body collapsed, arrow shows the is-collapsed class.
     $('md-jobs-panel-body').style.display = 'none'
     $('md-jobs-panel-arrow').classList.add('is-collapsed')
-    // markup default: advanced drawer body hidden, arrow un-rotated.
-    $('md-jobs-adv-body').style.display = 'none'
   })
   afterEach(() => { clearDom(); vi.useRealTimers() })
 
@@ -992,20 +982,15 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
     expect($('md-jobs-panel-body').style.display).not.toBe('none')     // still open
   })
 
-  it('the advanced drawer toggles its body + a `rotate(90deg)` arrow (first click opens)', async () => {
+  it('wires NO advanced drawer — every job parameter moved into the Job Wizard', () => {
+    // The drawer was a flat grid of ~17 controls that reflected none of the four layers
+    // deciding a job's real settings, so the value on screen was frequently not the one
+    // that ran. Pinned as an absence so it cannot quietly come back.
     mdApi.listMdJobs.mockResolvedValue([])
     initMdJobsPanel()
-    await flushMicro()
-    const advBody = $('md-jobs-adv-body'), advArrow = $('md-jobs-adv-arrow')
-    expect(advBody.style.display).toBe('none')                         // starts hidden
-
-    $('md-jobs-adv-toggle').click()                                    // first click → open
-    expect(advBody.style.display).not.toBe('none')
-    expect(advArrow.style.transform).toBe('rotate(90deg)')
-
-    $('md-jobs-adv-toggle').click()                                    // close
-    expect(advBody.style.display).toBe('none')
-    expect(advArrow.style.transform).toBe('')
+    expect($('md-jobs-adv-toggle')).toBeNull()
+    expect($('md-jobs-adv-body')).toBeNull()
+    expect($('md-jobs-new-btn')).not.toBeNull()
   })
 
   it('_onOpen fires on init (fetches the job list) and the remote SLURM poll runs while open', async () => {

@@ -188,9 +188,58 @@ a finer patch grid and so crashed *sooner*) only applied while the cell was coll
 with the box fixed it does not arise. NADOC's current values are not wrong — they match
 Roodhuizen/ACS Nano — but on this hardware they cost 39 % for no measurable gain.
 
+## Literature-comparability audit (2026-08-03) — the full list
+
+Every emitted parameter checked against the published protocol, asking what a critical
+reviewer could call a difference that makes a NADOC result non-comparable. **Tier 1–2
+items are now declared in every package's `protocol_fidelity` block**; read that for a
+given run rather than this table.
+
+**Tier 1 — genuinely different ensembles.** (1) Production was truly unrestrained while
+the published "unrestrained" runs retain an ENM at k = 0.1 — FIXED, see
+`project_md_job_system.md`. (2) `langevinDamping` 5 ps⁻¹ in production, an equilibration
+value that overdamps every kinetic observable — FIXED, now 1. (3) Early-stop truncates
+stages on an unpublished criterion and is ON by default, so "19.2 ns ladder" is false for
+most runs — now DECLARED in `protocol_fidelity`; `literature`/`full_physics` disable it.
+(4) The declash ns defect (2.4 ns/rung instead of 4.8) — pinned, displayed, and the
+trigger is marked for re-audit.
+
+**Tier 2 — defensible, now declared.** Production piston 200/100 vs 1000/500 ·
+`stepspercycle` 20/10 vs 12 (with `pairlistdist` 13.5 to compensate; the constant
+`AKSIMENTIEV_STEPS_PER_CYCLE` is misnamed — 20 is not their number) · stage chunking (5
+restart boundaries per rung; the tutorial runs each k flat) · 4 fs + HMR vs 2 fs ·
+bbox cell sizing below 20 ns free, so the solute cannot tumble and the minimum-image
+distance is smaller than a rotation-sized cell · no §3.2 vacuum pre-relaxation.
+
+**Tier 3 — open, verify before publishing.**
+
+- **Ion recipe 2 has never been validated head-to-head.** No arm against an exp47-style
+  baseline. The Mg-neutralisation setup is *believed* to match §3.3; it has not been shown
+  to reproduce a known result.
+- **Protein systems may be running on stub vdW parameters.** `namd_topology.py` maps
+  imported PDB residues to CHARMM36 *protein* RTF names, but `namd_solvate._FF_FILES`
+  ships only `top_all36_na.rtf` / `par_all36_na.prm` / water+ions /
+  `par_stub_ions_nbfix.str`. That stub file invents approximate terms for OC, OG2P1, NH3,
+  NC2… on the explicit premise that *"these residue types are NEVER present in a
+  DNA+water+Mg2+ simulation"* — which a protein attachment falsifies. Either psfgen fails
+  (safe) or the protein runs on fabricated parameters (not safe). **Untested; check before
+  any protein-containing result is used.**
+- **Water coordinates come from `spc216.gro` under a TIP3P topology.** SPC geometry
+  (r_OH 1.0 Å, θ 109.47°) ≠ TIP3P (0.9572 Å, 104.52°); SETTLE constrains it from step 0,
+  so it is a transient, but the shell's initial density is SPC-equilibrated. Mention in
+  methods; not a flag.
+
+**Checked and clean:** Mg(H₂O)₆ k = 1 kcal/mol/Å², r₀ = 1.94 Å · CHARMM36 nucleic + CUFIX ·
+base-ring ENM k = 0.5/0.1/0.01/0 at 8 Å · PME grid 1.5 · switch/cutoff 8/10 · isotropic
+NPT · `wrapAll off` · `langevinHydrogen off` · size-scaled minimisation · settle stage and
+×10 piston softening · 300 K throughout the ladder (the 310 K block in `namd_solvate` is
+the retired periodic-cell path, not the origami ladder).
+
 ## Relax presets shipped (2026-07-29) — `backend/core/md_presets.py`
 
-**ONE control** (`#md-jobs-relax-preset`, in the launch form), **defaults to Standard**.
+**ONE control**, **defaults to Standard**.  Since 2026-08-03 it lives in the **Job Wizard**
+(`＋ New job`), not in a launch-form dropdown — `#md-jobs-relax-preset` is gone with the
+Advanced card.  See `project_md_job_system.md`.
 The old `#md-jobs-preset` protocol dropdown is GONE — there were briefly two menus both
 labelled "Protocol", and they could contradict: the panel always sent `protocol`, so it
 always sat in `model_fields_set` and the preset's own protocol never won. "Standard
@@ -202,7 +251,13 @@ MgCl₂/CUFIX and running with no water at all, uncaught.
 | `fast_shape` | Fast Shape Check (Vacuum) | `vacuum_enrgmd_namd` | **SHIPPED 2026-07-30** |
 | `implicit_gbis` | Implicit Solvent (GBIS) | `implicit_gbis_namd` | **host-gated** — needs a non-CUDA NAMD build, so DISABLED on this machine |
 | `standard` | Standard (Aksimentiev) | `equilibrium_aware_namd` | **default**; runs the vacuum stage first |
-| `full_physics` | Slow (full physics) | `equilibrium_aware_namd` | padding 1.5 nm, early-stop OFF |
+| `full_physics` | Slow (full physics) | `equilibrium_aware_namd` | padding 2.5 nm, early-stop OFF |
+| `design_speed` | Optimised for the design (fast) | `equilibrium_aware_namd` | **2026-08-03**; every measured accelerator on: HMR + 4 fs, early-stop ON, bbox cell (padding 1.2 nm), production dt 4 fs |
+| `literature` | Match the literature (Aksimentiev) | `equilibrium_aware_namd` | **2026-08-03**; nothing traded for speed: early-stop OFF, `fast=False`, padding 2.0 nm, production dt **2.0 fs** (the paper's), and `allow_water_shell_carve=False` — a carve is REFUSED, not auto-fitted, because it forces NVT and so deletes the settle stage AND the box-size equilibration criterion |
+
+The two 2026-08-03 tiers exist because that is the question a run actually turns on: are you
+reproducing the reference, or getting an answer about your design?  `standard` /
+`full_physics` / `implicit_gbis` are unchanged so existing jobs stay reproducible.
 
 ⚠ **Availability is HOST-aware, not just build-aware** (`preset_availability`). GBIS is
 unsupported on the NAMD 3 CUDA nonbonded kernel (crashes in `buildTileLists`), so it needs

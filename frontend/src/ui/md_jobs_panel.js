@@ -16,7 +16,7 @@ import { initJobsPanelBase } from './jobs_panel_base.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progress.js'
 import { showToast } from './toast.js'
 import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
-import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk, preflightMdVram, getRelaxPresets } from '../api/client.js'
+import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk, preflightMdVram } from '../api/client.js'
 import { getRunDir, recommendArchive, archiveRecommendation } from './run_location.js'
 import { docKey } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
@@ -43,20 +43,16 @@ import {
 } from './job_activity.js'
 import { initMdSubmitReview, remoteJobBadge, alpineTargetDisabledReason } from './md_submit_review.js'
 import { runExclusive } from './primitives/button_busy.js'
-import { RUN_ACTION } from './job_run_control.js'
-import { initAdvancedOptimize, renderRunPath, productionTimestepWarning,
-         gpuResidentWarning, residentModeFromRecommendation } from './md_advanced_optimize.js'
+import { RUN_ACTION, runControlState } from './job_run_control.js'
+import { initAdvancedOptimize, residentModeFromRecommendation } from './md_advanced_optimize.js'
 import * as api from '../api/client.js'
 import { initRunpodStatus, runpodBlockReason, runpodCanLaunch } from './runpod_status.js'
 import { initRunpodSetup } from './runpod_setup.js'
 import { initRunpodGpuPicker } from './runpod_gpu_picker.js'
 import { shouldStopLiveSession, shouldResumeDisplays, displayTabIds } from './display_tab_policy.js'
-import { initRelaxPresets } from './md_relax_presets.js'
+import { initJobWizard } from './md_job_wizard.js'
 import { mdMinimizationRow, mdLatestStageLabel } from './md_stage_timeline.js'
 import { mdHealthTileStates, TILE_STATE } from './md_health_tiles.js'
-
-// Relax-protocol preset dropdown (see ./md_relax_presets.js); set during panel init.
-let _relaxPresets = null
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
 const _C = {
@@ -155,7 +151,6 @@ export function effectiveProductionTimestepFs({ selectValue, job } = {}) {
 }
 
 const _SHOW_ALL_KEY = 'nadoc:md-jobs-show-all'
-const _GPU_ASK_KEY  = 'nadoc:md-jobs-gpu-ask'
 
 /** Pure: the launch policy value from the "Prefer fastest GPU mode" toggle. */
 export function gpuFallbackFromToggle(checked) {
@@ -248,50 +243,91 @@ export function mdJobIsActive(job) {
   return true
 }
 
-/** Pure: the primary Relax button's state.  DECOUPLED (2026-07-20): the button ALWAYS
- *  launches a FRESH relaxation of the loaded design, independent of which past job is
- *  selected — so an auto-selected completed / production-child / failed / remote-queued
- *  job can no longer disable it or turn it into "■ Stop" / "↻ Resume" (the "can't click
- *  Relax" bug).  Stop/Resume of the SELECTED job now live on the contextual job-control
- *  button (see mdSelectedJobControl); production children stay on the Production button
- *  (mdProductionAction).  An Alpine launch only PREPARES + queues locally, so it relabels. */
-export function mdRunControl(_selectedJob, { busy = false, runTarget = 'local' } = {}) {
-  const label = runTarget === 'alpine' ? '▶ Prepare for Alpine' : '▶ Relax'
-  return { action: RUN_ACTION.RUN, label, disabled: busy }
+/** Pure: is this job actually executing?  A remote job sitting at `queued` with no
+ *  scheduler id has been prepared but never handed to its cluster — it is idle, not
+ *  running, and treating it as running turned the control into a Stop button for a job
+ *  that had not started. */
+export function mdJobIsRunning(job) {
+  if (!job) return false
+  if (['preparing', 'running'].includes(job.status)) return true
+  // A submitted remote job is genuinely in flight even while SLURM has it queued.
+  return job.status === 'queued' && !!(job.slurm_job_id || job.runpod_pod_id)
 }
 
-/** Pure: the CONTEXTUAL Stop/Resume control for the SELECTED relaxation job, shown beside
- *  the always-fresh Relax button (this is where Stop/Resume moved when Relax was decoupled).
- *    - active (running/preparing, minus awaiting-submit) → ■ Stop
- *    - a LOCAL stopped/failed job → ↻ Resume (from its last checkpoint)
- *    - a PRODUCTION child → hidden (the Production button drives it)
- *    - an Alpine job's cluster-gated resume stays on its dedicated resume button
- *  Returns { show:false } when there is nothing to act on. */
-export function mdSelectedJobControl(job) {
-  if (!job || mdIsProductionChild(job)) return { show: false }
-  if (mdJobIsActive(job)) {
-    return { show: true, action: 'stop', label: '■ Stop', title: 'Stop this relaxation.' }
-  }
-  const isAlpine = job?.execution_target === 'alpine'
-  // A job paused on a GPU-resident decision is resumable too — Resume re-opens the
-  // decision (or reassesses if the design changed), so the modal isn't the sole surface.
-  if (!isAlpine && (['stopped', 'failed'].includes(job?.status) || hasPendingGpuDecision(job))) {
-    return hasPendingGpuDecision(job)
-      ? { show: true, action: 'resume', label: '↻ Resume', title: "The fastest GPU mode couldn't start — resume to choose how to proceed." }
-      : { show: true, action: 'resume', label: '↻ Resume', title: 'Resume from the last checkpoint.' }
-  }
-  return { show: false }
+/** Pure: has this job been prepared and left waiting for the user to press Run?
+ *  This is what "create a job without starting it" produces — `autostart:false` leaves a
+ *  fully solvated package at `queued`, so every value the wizard had to call deferred is
+ *  now real and starting it is instant.  Remote jobs are excluded: theirs is a SUBMIT,
+ *  which goes through the review card. */
+export function mdJobIsStartable(job) {
+  return !!job && job.status === 'queued' && !job.slurm_job_id && !job.runpod_pod_id
+    && !mdRemoteAwaitingSubmit(job)
 }
 
-/** Pure: what the Production button does for the selected job.
- *  A running/preparing production child → 'stop'; a stopped/failed production child →
- *  'resume' (from its last checkpoint); anything else (a relaxation root, or a completed
- *  job) → 'start' — spawn a new production child (or chain one off a completed production). */
-export function mdProductionAction(job) {
-  if (mdIsProductionChild(job) && job?.status !== 'completed') {
-    return mdJobIsActive(job) ? 'stop' : 'resume'
+/** Pure: can this job be picked up from its last checkpoint?  A job paused on a
+ *  GPU-resident decision counts — resuming re-opens the decision, so the modal is not the
+ *  only way back in.  Alpine resumes are cluster-gated and stay on their own button. */
+export function mdJobIsResumable(job) {
+  if (!job || job.execution_target === 'alpine') return false
+  return ['stopped', 'failed'].includes(job.status) || hasPendingGpuDecision(job)
+}
+
+/** Pure: the primary control's state — ONE button, four meanings, all about the SELECTED
+ *  job (2026-08-03, with the Job Wizard).
+ *
+ *  Creating a run and running one are now separate acts: "＋ New job" opens the wizard,
+ *  and this button starts / stops / resumes whatever is selected.  That removes the old
+ *  split where a fresh Relax, a contextual Stop/Resume and a Production button competed
+ *  for the same row and each knew about a different subset of job states.
+ *
+ *    nothing selected            → disabled, with a hint pointing at ＋ New job
+ *    a seeded DRAFT              → solvate-from-seed and start it
+ *    running / preparing         → ■ Stop
+ *    stopped / failed / gated    → ↻ Resume
+ *    prepared but never started  → ▶ Run
+ *    anything else (completed)   → disabled, with a reason */
+export function mdRunControl(selectedJob, { busy = false, runTarget = 'local' } = {}) {
+  if (!selectedJob) {
+    return {
+      action: RUN_ACTION.RUN, label: '▶ Run', disabled: true,
+      title: 'Select a run in the list, or create one with ＋ New job.',
+    }
   }
-  return 'start'
+  if (mdJobIsDraft(selectedJob)) {
+    return {
+      action: RUN_ACTION.RUN, label: mdDraftRunLabel(selectedJob), disabled: busy,
+      title: 'Solvate this seeded job and start it.',
+    }
+  }
+  const base = runControlState(selectedJob, {
+    verb: 'Run', isActive: mdJobIsRunning, isResumable: mdJobIsResumable, busy,
+  })
+  if (base.action === RUN_ACTION.STOP) {
+    return { ...base, title: 'Stop this run. It can be resumed from its last checkpoint.' }
+  }
+  if (base.action === RUN_ACTION.RESUME) {
+    return {
+      ...base,
+      title: hasPendingGpuDecision(selectedJob)
+        ? "The fastest GPU mode couldn't start — resume to choose how to proceed."
+        : 'Resume from the last checkpoint.',
+    }
+  }
+  if (mdJobIsStartable(selectedJob)) {
+    return { ...base, label: '▶ Run', title: 'Start this prepared job.' }
+  }
+  if (mdRemoteAwaitingSubmit(selectedJob)) {
+    return {
+      ...base, disabled: true,
+      title: `Prepared for ${runTarget === 'runpod' ? 'RunPod' : 'the cluster'} — submit it from the review card.`,
+    }
+  }
+  return {
+    ...base, disabled: true,
+    title: selectedJob.status === 'completed'
+      ? 'This run has finished. Use ＋ New job to set up another.'
+      : `Nothing to run: this job is ${selectedJob.status}.`,
+  }
 }
 
 /** Pure: what should the detail-WebSocket watchdog do for the selected job?
@@ -744,8 +780,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   // Form elements
   const namdStatusEl  = document.getElementById('md-jobs-namd-status')
+  const newBtn        = document.getElementById('md-jobs-new-btn')      // opens the Job Wizard
   const runBtn        = document.getElementById('md-jobs-run-btn')
-  const jobCtlBtn     = document.getElementById('md-jobs-job-ctl-btn')   // contextual Stop/Resume for the SELECTED job
   const runTargetLocal  = document.getElementById('md-run-target-local')
   const runTargetAlpine = document.getElementById('md-run-target-alpine')
   const runTargetRunpod = document.getElementById('md-run-target-runpod')
@@ -757,88 +793,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const submitAlpineBtn = document.getElementById('md-jobs-submit-alpine-btn')
   const ensembleBtn   = document.getElementById('md-jobs-ensemble-btn')
   const ensembleCount = document.getElementById('md-jobs-ensemble-count')
+  const ensembleNsInput = document.getElementById('md-jobs-ensemble-ns')
   const resumeBtn     = document.getElementById('md-jobs-resume-btn')
   const resumeHistWrap   = document.getElementById('md-jobs-resume-history-wrap')
   const resumeHistToggle = document.getElementById('md-jobs-resume-history-toggle')
   const resumeHistArrow  = document.getElementById('md-jobs-resume-history-arrow')
   const resumeHistCount  = document.getElementById('md-jobs-resume-history-count')
   const resumeHistEl     = document.getElementById('md-jobs-resume-history')
-  const advToggle     = document.getElementById('md-jobs-adv-toggle')
-  const advArrow      = document.getElementById('md-jobs-adv-arrow')
-  const advBody       = document.getElementById('md-jobs-adv-body')
-  const threadsInput  = document.getElementById('md-jobs-threads')
-  const devicesInput  = document.getElementById('md-jobs-devices')
-  const computeSel    = document.getElementById('md-jobs-compute')
-  const saltModeSel   = document.getElementById('md-jobs-salt-mode')
-  const mgInput       = document.getElementById('md-jobs-mg')
-  const naclInput     = document.getElementById('md-jobs-nacl')
-  const paddingInput  = document.getElementById('md-jobs-padding')
-  const prodIntentInput = document.getElementById('md-jobs-prod-intent')
-  const watershellInput = document.getElementById('md-jobs-watershell')
-  const minstepsInput = document.getElementById('md-jobs-minsteps')
-  const dcdFreqInput  = document.getElementById('md-jobs-dcd-freq')
-  const autostartChk  = document.getElementById('md-jobs-autostart')
-  const prodTimestepSel = document.getElementById('md-jobs-prod-timestep')
-  const timestepWarnEl  = document.getElementById('md-jobs-timestep-warn')
-  const residentSel     = document.getElementById('md-jobs-gpu-resident')
-  const residentWarnEl  = document.getElementById('md-jobs-resident-warn')
-  const fastChk       = document.getElementById('md-jobs-fast')
-  const gpuAskChk     = document.getElementById('md-jobs-gpu-ask')
+  // Live mid-relax control.  Its LAUNCH-time counterpart moved into the Job Wizard; this
+  // one applies to a relaxation that is ALREADY running, at its next stage checkpoint.
+  const liveControlsCard = document.getElementById('md-jobs-live-controls')
   const earlyStopChk  = document.getElementById('md-jobs-early-stop')
-  const relaxPresetSel = document.getElementById('md-jobs-relax-preset')
-  const relaxPresetNote = document.getElementById('md-jobs-relax-preset-note')
-  // Named relaxation protocols (Fast Shape / Standard / Slow).  The module owns the
-  // dropdown; the panel only reads back which id to send.  Defaults to Standard, and
-  // the backend applies the preset's settings only to fields the request did not set.
-  // Write the selected preset's settings INTO the Advanced controls.
-  //
-  // Without this the preset's defaults were dead on the UI path: the panel always sends
-  // every Advanced field (index.html hardcodes `value="1.2"` for padding, and the payload
-  // reads the input unconditionally), so the backend saw `padding_nm` in
-  // `model_fields_set` on every request, treated it as an explicit user choice, and never
-  // applied the preset's own value.  Standard asks for the tutorial's 2.0 nm; jobs were
-  // silently built at 1.2.  Pushing the values into the inputs also means what the user
-  // SEES is what will run, which the old arrangement quietly broke.
-  //
-  // ``touched`` is respected: once the user edits a field by hand it is theirs, and
-  // switching preset will not overwrite it.
-  const _presetTouched = new Set()
-  const _markTouched = (key, el) =>
-    el?.addEventListener('input', () => _presetTouched.add(key))
-  _markTouched('padding_nm', paddingInput)
-  _markTouched('water_shell_nm', watershellInput)
-  _markTouched('early_stop_relax', earlyStopChk)
-  earlyStopChk?.addEventListener('change', () => _presetTouched.add('early_stop_relax'))
-
-  function _applyPresetToAdvanced () {
-    const d = _relaxPresets?.current()?.defaults ?? {}
-    if (!_presetTouched.has('padding_nm') && d.padding_nm != null && paddingInput) {
-      paddingInput.value = String(d.padding_nm)
-    }
-    // The panel's shell control is in ANGSTROM; the request field is nm.
-    if (!_presetTouched.has('water_shell_nm') && d.water_shell_nm != null && watershellInput) {
-      watershellInput.value = String(Math.round(d.water_shell_nm * 10))
-    }
-    if (!_presetTouched.has('early_stop_relax') && d.early_stop_relax != null && earlyStopChk) {
-      earlyStopChk.checked = Boolean(d.early_stop_relax)
-    }
-  }
-
-  _relaxPresets = initRelaxPresets({
-    selectEl: relaxPresetSel,
-    noteEl: relaxPresetNote,
-    fetchPresets: getRelaxPresets,
-    onChange: () => { _applyPresetToAdvanced(); _syncSolventFields() },
-  })
-  _relaxPresets.load()
-    .then(() => { _applyPresetToAdvanced(); _syncSolventFields() })
-    .catch(() => {})
-  // Protocol is DERIVED from the preset — there is no separate protocol control any
-  // more, so the two can never disagree (they used to: "Standard (Aksimentiev)" plus a
-  // separately-selected implicit solvent produced a job with no water at all).
-  const _protocol = () => _relaxPresets?.protocol() ?? 'equilibrium_aware_namd'
-  const optimizeBtn   = document.getElementById('md-jobs-optimize')
-  const runPathEl     = document.getElementById('md-jobs-path')
   const displayToggle = document.getElementById('md-jobs-display-toggle')
   const displayStatus = document.getElementById('md-jobs-display-status')
   const displayIndicator      = document.getElementById('md-jobs-display-indicator')
@@ -858,37 +823,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const anyOn = [displayToggle, flexToggle, trajToggle, occupancyToggle].some(t => t?.checked)
     if (!anyOn) vizOffRadio.checked = true
   }
-
-  // GBIS implicit solvent uses no water box → the explicit-solvent knobs (salt,
-  // padding, water shell, fast/HMR) don't apply.  Gray them out when GBIS is the
-  // selected protocol so the user isn't misled into tuning inert fields.
-  function _syncSolventFields() {
-    const implicit = isImplicitSolventProtocol(_protocol())
-    for (const el of [saltModeSel, mgInput, naclInput, paddingInput, watershellInput, fastChk]) {
-      if (!el) continue
-      el.disabled = implicit
-      const host = el.closest('label') || el
-      host.style.opacity = implicit ? '0.4' : ''
-    }
-    // GBIS cannot run on CUDA → force Compute=CPU and block the GPU option (auto-
-    // reverting a prior GPU selection).  The CUDA-device field is inert on CPU.
-    if (computeSel) {
-      const gpuOpt = computeSel.querySelector('option[value="gpu"]')
-      if (gpuOpt) gpuOpt.disabled = implicit
-      if (implicit) computeSel.value = 'cpu'
-      computeSel.title = implicit
-        ? 'Implicit solvent (GBIS) is CPU-only on NAMD 3 — GPU is unavailable for this protocol.'
-        : ''
-    }
-    const cpu = implicit || computeSel?.value === 'cpu'
-    if (devicesInput) {
-      devicesInput.disabled = cpu
-      const host = devicesInput.closest('label') || devicesInput
-      host.style.opacity = cpu ? '0.4' : ''
-    }
-  }
-  relaxPresetSel?.addEventListener('change', _syncSolventFields)
-  computeSel?.addEventListener('change', _syncSolventFields)
 
   // List + detail
   const listEl      = document.getElementById('md-jobs-list')
@@ -914,9 +848,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // simulate_jobs.js above the jobs list; here we just READ the chosen dir (getRunDir) into the
   // create payload as run_dir so a run writes there (archive-from-birth).
   const prodBox       = document.getElementById('md-jobs-production')
-  const prodStepsInput = document.getElementById('md-jobs-prod-steps')
-  const prodTimeEl    = document.getElementById('md-jobs-prod-time')
-  const prodBtn       = document.getElementById('md-jobs-prod-btn')
   const prodStatus    = document.getElementById('md-jobs-prod-status')
   const revertProdBtn = document.getElementById('md-jobs-revert-prod-btn')
   const ensembleRollupEl = document.getElementById('md-jobs-ensemble-rollup')
@@ -958,7 +889,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   let _wsProbing    = false  // a watchdog REST probe is in flight (avoid overlap)
   let _launching    = false
   let _enginesOk    = false  // both NAMD + GROMACS found
-  let _threadsInit  = false  // seeded the threads input from server recommendation once
   let _displayTimer = null
   let _prewarmTimer = null
   let _remotePollTimer = null   // periodic SLURM-status poll for in-flight Alpine jobs
@@ -1095,14 +1025,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   if (showAllToggle) showAllToggle.checked = localStorage.getItem(_SHOW_ALL_KEY) === '1'
 
-  // "Prefer fastest GPU mode" (ask-before-slower) is remembered between runs. Default
-  // ON (ask) — only an explicit '0' unchecks it.
-  if (gpuAskChk) {
-    gpuAskChk.checked = localStorage.getItem(_GPU_ASK_KEY) !== '0'
-    gpuAskChk.addEventListener('change',
-      () => localStorage.setItem(_GPU_ASK_KEY, gpuAskChk.checked ? '1' : '0'))
-  }
-
   // ── Section collapse + advanced drawer — shared jobs-panel base (U3 slice 2c-3b) ──
   // md accommodations: the section arrow is the `is-collapsed` class idiom
   // (arrowStyle:'class'), the advanced-drawer arrow is the CSS-transform idiom
@@ -1115,7 +1037,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // probes) to preserve the original apply-then-onOpen ordering.
   const _base = initJobsPanelBase({
     section: 'md-jobs-panel',
-    els: { heading, body, arrow, advToggle, advArrow, advBody },
+    els: { heading, body, arrow },
     arrowStyle: 'class',
     advArrowStyle: 'rotate',
     collapsible: false,   // engine header is a static label; Simulate owns the collapse
@@ -1126,108 +1048,43 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // ── Advanced: ⚡ Optimize + the derived run-path readout (md_advanced_optimize.js) ──
   // The module owns the policy UX (diff → caveat gate → apply); the panel only maps
   // its Advanced inputs to/from the module's field names.
-  const _advValues = () => ({
-    threads:        Number(threadsInput?.value) || undefined,
-    compute:        computeSel?.value ?? 'gpu',
-    water_shell_a:  Number(watershellInput?.value) || 0,
-    padding_nm:     Number(paddingInput?.value) || undefined,
-    minimize_steps: Number(minstepsInput?.value) || undefined,
-    fast:           !!fastChk?.checked,
-    production_timestep_fs: Number(prodTimestepSel?.value) || DEFAULT_PRODUCTION_TIMESTEP_FS,
-    gpu_resident:   residentSel?.value ?? 'auto',
-  })
-  const _paintRunPath = () => renderRunPath(runPathEl, _advValues())
-
-  // Single source of truth for the ETA, the "x ns" readout and the production POST —
-  // see effectiveProductionTimestepFs (pure, unit-tested) for why the dropdown wins.
-  const _effectiveProdTimestepFs = () => effectiveProductionTimestepFs({
-    selectValue: prodTimestepSel?.value,
-    job: _jobs.find(j => j.job_id === _selectedId),
-  })
-
-  // Warn (inline, under the Fast checkbox) when the chosen production timestep outruns
-  // what the fast relaxation ladder validated for this design.
-  const _TS_WARN_STYLE = {
-    warn:  'border:1px solid #9e6a03;background:#2d2000;color:#d0b184',
-    error: 'border:1px solid #a1332a;background:#2b0f0d;color:#f0b4ad',
-  }
-  // Warn when a FORCED GPU-resident choice fights the system size.  The atom count comes
-  // from the optimiser's own facts (its `full_atoms`/`chosen_atoms` are the solvated
-  // estimate the backend gate will use), so the warning only appears once ⚡ has sized
-  // this design — before that there is no honest number to compare against.
-  let _lastSizedAtoms = null
-  const _paintResidentWarning = () => {
-    if (!residentWarnEl) return
-    const w = gpuResidentWarning({
-      mode: residentSel?.value ?? 'auto',
-      nAtoms: _lastSizedAtoms,
+  /** ⚡ moved INTO the wizard with the settings it edits — it exists to write recommended
+   *  values into controls, and those controls are no longer in this panel. Wired the first
+   *  time the wizard builds its modal, since that is when its button exists. */
+  function _wireOptimize({ button, progressEl }) {
+    initAdvancedOptimize({
+      button,
+      progressEl,
+      getCurrent: () => _wizard.currentValues(),
+      fetchHardware: () => api.optimizeMdHardware(_wizardDevices()),
+      fetchRecommendation: async () => {
+        const cur = _wizard.currentValues()
+        const r = await api.optimizeMdAdvanced({
+          devices: _wizardDevices(),
+          padding_nm: cur.padding_nm || 1.2,
+          minimize_steps: cur.minimize_steps || 10000,
+        })
+        // Remember the sized atom count: the optimiser is the only thing that actually
+        // solvates, so this is the one real number the panel ever learns pre-run.
+        const f = r?.facts
+        if (f) _lastSizedAtoms = Number(f.chosen_atoms ?? f.full_atoms) || _lastSizedAtoms
+        return r
+      },
+      apply: rec => _wizard.applyRecommendation({
+        ...rec,
+        gpu_resident: rec.gpu_resident == null
+          ? null
+          : residentModeFromRecommendation(rec.gpu_resident) === 'on',
+      }),
+      notify: (msg, kind) => showToast(msg, kind === 'error' ? 'error' : 'info'),
     })
-    if (!w) { residentWarnEl.style.display = 'none'; residentWarnEl.textContent = ''; return }
-    residentWarnEl.style.cssText =
-      `display:block;margin-top:6px;padding:5px 7px;border-radius:3px;font-size:11px;line-height:1.4;${_TS_WARN_STYLE[w.tone]}`
-    residentWarnEl.textContent = `⚠ ${w.message}`
   }
 
-  const _paintTimestepWarning = () => {
-    if (!timestepWarnEl) return
-    const w = productionTimestepWarning({
-      timestepFs: Number(prodTimestepSel?.value) || DEFAULT_PRODUCTION_TIMESTEP_FS,
-      fastLadder: !!fastChk?.checked,
-    })
-    if (!w) { timestepWarnEl.style.display = 'none'; timestepWarnEl.textContent = ''; return }
-    timestepWarnEl.style.cssText =
-      `display:block;margin-top:6px;padding:5px 7px;border-radius:3px;font-size:11px;line-height:1.4;${_TS_WARN_STYLE[w.tone]}`
-    timestepWarnEl.textContent = `⚠ ${w.message}`
+  /** The device string the hardware probe should look at, from the wizard's own state. */
+  function _wizardDevices() {
+    const cur = _wizard.currentValues()
+    return cur.compute === 'cpu' ? 'cpu' : '0'
   }
-
-  const _optDevices = () => (computeSel?.value === 'cpu' ? 'cpu' : (devicesInput?.value || '0'))
-  initAdvancedOptimize({
-    button: optimizeBtn,
-    progressEl: document.getElementById('md-jobs-optimize-progress'),
-    getCurrent: _advValues,
-    fetchHardware: () => api.optimizeMdHardware(_optDevices()),
-    fetchRecommendation: async () => {
-      const r = await api.optimizeMdAdvanced({
-        devices: _optDevices(),
-        padding_nm: Number(paddingInput?.value) || 1.2,
-        minimize_steps: Number(minstepsInput?.value) || 10000,
-      })
-      // Remember the sized atom count so the GPU-resident warning has a real number to
-      // judge a forced choice against (the optimiser is the only thing that solvates).
-      const f = r?.facts
-      if (f) _lastSizedAtoms = Number(f.chosen_atoms ?? f.full_atoms) || _lastSizedAtoms
-      return r
-    },
-    apply: (rec) => {
-      if (rec.threads        != null && threadsInput)    threadsInput.value    = rec.threads
-      if (rec.compute        != null && computeSel)      computeSel.value      = rec.compute
-      if (rec.water_shell_a  != null && watershellInput) watershellInput.value = rec.water_shell_a
-      if (rec.padding_nm     != null && paddingInput)    paddingInput.value    = rec.padding_nm
-      if (rec.minimize_steps != null && minstepsInput)   minstepsInput.value   = rec.minimize_steps
-      if (rec.fast           != null && fastChk)         fastChk.checked       = !!rec.fast
-      // The recommender speaks booleans; the control is auto/on/off. ⚡ has an OPINION,
-      // so it lands on an explicit on/off rather than resetting the box to 'auto'.
-      if (rec.gpu_resident   != null && residentSel) {
-        residentSel.value = residentModeFromRecommendation(rec.gpu_resident)
-      }
-      _paintRunPath()
-      _paintResidentWarning()
-    },
-    notify: (msg, kind) => showToast(msg, kind === 'error' ? 'error' : 'info'),
-  })
-  for (const el of [computeSel, watershellInput, fastChk]) {
-    el?.addEventListener('change', _paintRunPath)
-  }
-  residentSel?.addEventListener('change', () => { _paintRunPath(); _paintResidentWarning() })
-  _paintRunPath()
-  _paintResidentWarning()
-
-  // Production-timestep dropdown + the Fast checkbox drive the ETA (fast runs cover 4x
-  // the ns per step) and the "you changed dt without the fast ladder" warning.
-  for (const el of [prodTimestepSel, fastChk]) {
-    el?.addEventListener('change', () => { _updateProductionTime(); _paintTimestepWarning() })
-  }
-  _paintTimestepWarning()
 
   // ── Jobs + Visualizations cards: simple collapse (start open), mirror oxDNA ──
   for (const [tid, bid, aid] of [
@@ -1264,21 +1121,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   _updateVizToggles(null)   // no job selected yet → only "Off" is selectable
 
-  function _applySaltMode() {
-    const screening = (saltModeSel?.value ?? 'screening') === 'screening'
-    if (mgInput) {
-      mgInput.disabled = screening
-      mgInput.value = screening ? '12.5' : mgInput.value
-      mgInput.style.opacity = screening ? '0.55' : '1'
-    }
-    if (naclInput) {
-      naclInput.disabled = screening
-      naclInput.value = screening ? '0' : naclInput.value
-      naclInput.style.opacity = screening ? '0.55' : '1'
-    }
-  }
-  saltModeSel?.addEventListener('change', _applySaltMode)
-  _applySaltMode()
 
   // ── Engine availability check ─────────────────────────────────────────────
   async function _checkEngines() {
@@ -1291,12 +1133,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
       _enginesOk = d.available
 
-      // Seed the threads input from the server's autodetect (half the logical
-      // CPUs) once, so the default matches the host instead of a hardcoded 16.
-      if (!_threadsInit && threadsInput && Number.isFinite(d.recommended_threads)) {
-        threadsInput.value = String(d.recommended_threads)
-        _threadsInit = true
-      }
+      // The threads default now comes from the server's own request-model default
+      // (half the logical CPUs), which the wizard shows as `default` provenance — so
+      // there is nothing to seed on this side.
 
       const missing = []
       if (!d.namd_available) missing.push('NAMD3 (install to ~/Applications/NAMD_3.0.2/)')
@@ -1465,6 +1304,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _displayMeta = null
     _closeWs()
     if (detailEl) detailEl.style.display = 'none'
+    // Nothing selected ⇒ nothing to early-stop.
+    if (liveControlsCard) liveControlsCard.style.display = 'none'
     // The Cluster card stays visible (it hosts the connect chip); just reset its per-job
     // parts so no stale submit/resume/ensemble/status lingers with nothing selected.
     if (clusterStatusEl) { clusterStatusEl.style.display = 'none'; clusterStatusEl.textContent = '' }
@@ -1486,23 +1327,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _paintRunControl()        // nothing selected → the control reverts to "▶ Relax"
   }
 
-  // Reset every MD INPUT back to its index.html default — used when a design is
-  // closed or a different one is opened, so the panel doesn't carry the previous
-  // design's (or last-selected job's) settings.  Threads is re-seeded from the
-  // host autodetect (clear _threadsInit so the next engine check re-applies it),
-  // and salt-mode visibility is re-synced.
+  // Reset the panel's own inputs back to their index.html defaults when a design is
+  // closed or a different one is opened, so it doesn't carry the previous design's
+  // settings.  Job PARAMETERS are no longer here — the wizard starts from the protocol's
+  // defaults on every open, which is the same guarantee without a reset to remember.
   function _resetControlsToDefaults() {
-    resetControlsToDefaults([
-      relaxPresetSel, threadsInput, devicesInput, saltModeSel, mgInput, naclInput,
-      paddingInput, watershellInput, minstepsInput, autostartChk, prodStepsInput,
-      trajInterval,
-    ])
-    _threadsInit = false
-    // A reset means "forget my edits", so the preset owns these fields again — without
-    // this the reset restores the markup's value and the preset's settings go dead.
-    _presetTouched.clear()
-    _applyPresetToAdvanced()
-    _applySaltMode()
+    resetControlsToDefaults([trajInterval])
     _checkEngines()
     _renderTrajFramesHint()
   }
@@ -1525,107 +1355,49 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     return filterJobsForPart(_jobs, _currentPartPath(), _showAllJobs())
   }
 
-  function _productionSteps() {
-    return Math.max(100, parseInt(prodStepsInput?.value ?? '500000', 10) || 500000)
-  }
-
-  function _productionNs(steps = _productionSteps()) {
-    return productionNsFromSteps(steps, _effectiveProdTimestepFs())
-  }
-
-  function _updateProductionTime() {
-    const steps = _productionSteps()
-    if (prodStepsInput && String(steps) !== prodStepsInput.value) prodStepsInput.value = String(steps)
-    if (prodTimeEl) {
-      const ts = _effectiveProdTimestepFs()
-      prodTimeEl.textContent = `${_productionNs(steps).toFixed(3)} ns (${ts % 1 ? ts : ts.toFixed(0)} fs)`
-    }
-  }
-
-  function _setProductionEnabled(enabled) {
-    if (!prodBtn) return
-    prodBtn.disabled = !enabled
-    prodBtn.style.background = enabled ? '#1a4a1a' : '#122117'
-    prodBtn.style.borderColor = enabled ? _C.ok : _C.border
-    prodBtn.style.color = enabled ? _C.ok : _C.dim
-    prodBtn.style.cursor = enabled ? 'pointer' : 'not-allowed'
-  }
-
+  /**
+   * The production card is now INFORMATIONAL.
+   *
+   * Setting a production run up moved into the Job Wizard, which is the only place the
+   * run can be shown side-by-side with the relaxation stage that seeds it — the
+   * difference between the two was the thing nobody could see. What stays here is the
+   * readiness verdict (so a selected relaxation says whether it can seed one yet) and the
+   * legacy-migration button for a job whose production was appended onto the relaxation
+   * under the old same-job layout.
+   */
   function _renderProductionControls(job, meta = _displayMeta) {
-    // The ETA depends on the selected job's production timestep (fast=4 fs covers 4x the
-    // ns per step), so refresh it whenever the selection/controls re-render.
-    _updateProductionTime()
-    // Chain mode: the Production button queues a production STAGE (enabled whenever the
-    // engines are present — queue ordering is preflight's job, not a live-parent check).
-    if (getChainMode?.()) {
-      if (revertProdBtn) revertProdBtn.style.display = 'none'
-      if (prodBox) prodBox.style.display = ''
-      if (prodBtn) prodBtn.textContent = '＋ Queue Production'
-      _setProductionEnabled(true)
-      _setProductionStatus('Queues a production stage into the active chain.', _C.dim)
-      return
+    if (revertProdBtn) {
+      revertProdBtn.style.display = mdHasAppendedProduction(job) ? '' : 'none'
     }
-    if (prodBtn) { prodBtn.textContent = 'Start Production'; prodBtn.dataset.prodAction = 'start'; prodBtn.title = '' }
-    // Legacy-migration button: only for a root job whose production was appended
-    // onto the relaxation (old same-job layout).  Peels it back to a clean relaxation.
-    if (revertProdBtn) revertProdBtn.style.display = mdHasAppendedProduction(job) ? '' : 'none'
-    if (!job) {
-      _setProductionEnabled(false)
-      _setProductionStatus('Select a relaxed job to enable production', _C.dim)
-      return
-    }
-    // A selected PRODUCTION child that is still running or was stopped: the Production
-    // button becomes its Stop / Resume control (the primary Relax button is inert for it).
-    const prodAction = mdProductionAction(job)
-    if (prodAction !== 'start') {
-      if (revertProdBtn) revertProdBtn.style.display = 'none'
-      if (prodBox) prodBox.style.display = ''
-      if (prodAction === 'stop') {
-        if (prodBtn) { prodBtn.textContent = '■ Stop Production'; prodBtn.dataset.prodAction = 'stop'; prodBtn.title = '' }
-        _setProductionEnabled(true)
-        _setProductionStatus('Production running — stop to halt this run.', _C.muted)
-      } else {   // resume (stopped / failed production child)
-        if (prodBtn) {
-          prodBtn.textContent = '↻ Resume Production'
-          prodBtn.dataset.prodAction = 'resume'
-          prodBtn.title = 'Stopped jobs can be resumed from their last checkpoint.'
-        }
-        _setProductionEnabled(true)
-        _setProductionStatus('Production stopped — resume to continue from the last checkpoint.', _C.warn)
-      }
-      return
-    }
-    // Production spawns a CHILD job seeded from the selected job's equilibrated coords.
-    // Enable off a completed relaxation (production_ready) OR a completed production
-    // (production_continue_available → chaining a fresh run off that run's end state).
-    const terminalOk = job.status === 'completed'
-    const chainMode = !meta?.production_ready && !!meta?.production_continue_available
-    const ready = terminalOk && (!!meta?.production_ready || !!meta?.production_continue_available)
     if (prodBox) prodBox.style.display = ''
-    _setProductionEnabled(ready)
-    _updateProductionTime()
+    if (getChainMode?.()) {
+      _setProductionStatus('Chain mode: ＋ New job → Production queues a stage into the chain.', _C.dim)
+      return
+    }
+    if (!job) {
+      _setProductionStatus('Select a completed relaxation, or open ＋ New job → Production.', _C.dim)
+      return
+    }
+    if (mdIsProductionChild(job)) {
+      _setProductionStatus('This is a production run — Run / Stop above controls it.', _C.muted)
+      return
+    }
+    const ready = job.status === 'completed'
+      && (!!meta?.production_ready || !!meta?.production_continue_available)
     if (!ready) {
-      const reason = meta?.production_ready_reason
-        || 'Production unlocks after minimization and restraint release complete'
-      _setProductionStatus(reason, _C.dim)
+      _setProductionStatus(
+        meta?.production_ready_reason
+          || 'Production unlocks once minimization and restraint release complete.',
+        _C.dim)
       return
     }
-    const checkpoint = chainMode ? meta.production_continue_checkpoint : meta.production_checkpoint
-    const verb = chainMode ? 'Chain a new production child from' : 'Spawn a production child from'
-    const readyText = `${verb} ${checkpoint}; ${_productionSteps().toLocaleString()} steps = ${_productionNs().toFixed(3)} ns`
-    if (!chainMode && meta.production_warning) {
-      _setProductionStatus(`${readyText}. Warning: ${meta.production_warning}`, _C.warn)
-      return
-    }
-    _setProductionStatus(readyText, _C.ok)
+    const chained = !meta?.production_ready && !!meta?.production_continue_available
+    const checkpoint = chained ? meta.production_continue_checkpoint : meta.production_checkpoint
+    const text = `Ready to seed production from ${checkpoint} — open ＋ New job → Production.`
+    _setProductionStatus(
+      !chained && meta.production_warning ? `${text} Warning: ${meta.production_warning}` : text,
+      !chained && meta.production_warning ? _C.warn : _C.ok)
   }
-
-  prodStepsInput?.addEventListener('input', () => {
-    _updateProductionTime()
-    const job = _jobs.find(j => j.job_id === _selectedId)
-    _renderProductionControls(job)
-  })
-  _updateProductionTime()
 
   async function _fetchDisplayMeta(jobId = _selectedId) {
     if (!jobId) return null
@@ -2146,7 +1918,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _syncVizOffRadio()
   }
   // Frame interval, clamped in JS — the min/max attributes are a hint to the browser,
-  // not a guarantee (same rule as _productionSteps).
+  // not a guarantee.
   function _trajInterval() {
     const n = parseInt(trajInterval?.value ?? '', 10)
     return Number.isFinite(n) && n >= 1 ? n : DEFAULT_TRAJ_INTERVAL
@@ -2417,109 +2189,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
   }
 
-  prodBtn?.addEventListener('click', async () => {
-    if (getChainMode?.()) return enqueueChainStage?.('production')
-    if (!_selectedId) return
-    if (prodBtn.disabled) return
-    // A running/stopped production child: the Production button is its Stop / Resume control.
-    const prodAct = mdProductionAction(_jobs.find(j => j.job_id === _selectedId))
-    if (prodAct === 'stop') return _stopSelected(prodBtn)
-    if (prodAct === 'resume') return _resumeSelected(prodBtn)
-    // Stale-design guard: if the design changed since this job was prepared, offer to
-    // roll back to the job's run-state (or cancel) before extending it.
-    const proceed = await ensureJobCurrent({
-      job: _jobs.find(j => j.job_id === _selectedId),
-      rollFn: rollMdJobDesign,
-      refetch: _fetchJobs,
-      isStale: () => jobOutOfDate(_jobs.find(j => j.job_id === _selectedId)),
-      actionLabel: 'a production run',
-    })
-    if (!proceed) return
-    // The Local/Alpine radio decides where THIS production runs (independent of where
-    // the relaxation ran).  Local-resource guards (concurrent job, disk) apply only to
-    // a local run — an Alpine run writes on the cluster's scratch.
-    const runTarget = _currentRunTarget()
-    const isLocalRun = mdIsLocalTarget(runTarget)
-    if (isLocalRun && !(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
-    const steps = _productionSteps()
-    const ns = _productionNs(steps)
-    const dcdFreq = parseInt(dcdFreqInput?.value ?? '2500', 10) || 2500
-    if (isLocalRun) {
-      try {
-        // Forecast with the SAME dt and DCD interval the run will use — trajectory
-        // bytes scale as 1/dcd_freq, so forecasting the defaults while the panel
-        // sends something else silently mis-states the size by that ratio.
-        const fc = await estimateMdProductionDisk(_selectedId, {
-          steps,
-          autostart: true,
-          dcd_freq: dcdFreq,
-          production_timestep_fs: _effectiveProdTimestepFs(),
-        })
-        // Two independent gates: "the disk will run short" (only fires on a full
-        // volume) and "this run is simply big/long" (fires on a roomy archive drive
-        // too, where the first never would).
-        if (!(await confirmDiskSpaceOk(fc))) return
-        if (!(await confirmBigRunOk(fc))) return
-      } catch { /* forecast is best-effort — never block a launch on it */ }
-    }
-    if (prodStatus) {
-      prodStatus.textContent = isLocalRun
-        ? `Spawning production child: ${steps.toLocaleString()} steps (${ns.toFixed(3)} ns)...`
-        : `Staging Alpine production child: ${steps.toLocaleString()} steps (${ns.toFixed(3)} ns)...`
-      prodStatus.style.color = _C.muted
-    }
-    prodBtn.disabled = true
-    try {
-      // Child-job model (mirrors oxDNA): the relaxation stays a distinct entry and each
-      // production nests under it as a new, independently-seeded child.  A local child
-      // autostarts; an Alpine child is left queued and handed to the submit-review card.
-      const body = {
-        steps,
-        autostart: isLocalRun,
-        execution_target: runTarget,
-        cluster_name: runTarget === 'alpine' ? 'alpine' : null,
-        runpod_gpu_key: runTarget === 'runpod' ? (_selectedRunpodGpu?.key ?? null) : null,
-        dcd_freq: dcdFreq,
-        // Pin the dropdown's dt to THIS run, so the trajectory matches the estimate shown
-        // above it.  Without this the timestep could only be chosen at prep time and the
-        // dropdown silently had no effect on production.
-        production_timestep_fs: _effectiveProdTimestepFs(),
-        // Same reason as the timestep: production hard-coded GPU-resident ON for 2/4 fs,
-        // so ⚡ could report "GPU-resident: off" while the run used it anyway.
-        gpu_resident: residentSel?.value ?? 'auto',
-      }
-      let d = await api.spawnMdProduction(_selectedId, body)
-      if (!d) {
-        const why = api.lastErrorMessage() ?? 'Server error'
-        // The cell-too-small refusal is advisory, not a hard error: the run is
-        // physically startable, it just risks periodic-image contamination. Offer the
-        // documented override here rather than making the user hand-craft a request.
-        if (!isUndersizedCellRefusal(why)) throw new Error(why)
-        if (!(await confirmUndersizedCell({ lengthNs: ns }))) return
-        d = await api.spawnMdProduction(_selectedId, { ...body, allow_undersized_cell: true })
-        if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
-      }
-      const childId = d.job?.job_id
-      await _fetchJobs()
-      if (isLocalRun) {
-        showToast(`Production started: ${steps.toLocaleString()} steps (${ns.toFixed(3)} ns)`, 'ok')
-        _selectJob(childId || _selectedId)
-      } else {
-        showToast('Alpine production staged — review resources to submit', 'ok')
-        if (childId) { _selectJob(childId); _submitReview.open(childId) }
-      }
-    } catch (err) {
-      if (prodStatus) {
-        prodStatus.textContent = err.message
-        prodStatus.style.color = _C.err
-      }
-      showToast(`Production failed: ${err.message}`, { severity: 'error', duration: 8000 })
-    } finally {
-      const job = _jobs.find(j => j.job_id === _selectedId)
-      _renderProductionControls(job)
-    }
-  })
-
   // Leaving the Dynamics tab stops the live DISPLAY (it deforms the model, which
   // shouldn't persist off-tab) but KEEPS the background prewarm socket warm, so
   // returning + re-toggling is instant.  Prewarm now spans tabs (Option 1); it is
@@ -2622,22 +2291,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const rc = _runControl()
     runBtn.textContent = rc.label
     runBtn.dataset.runAction = rc.action
-    runBtn.title = ''
-    // The Relax button is now ALWAYS a fresh launch (RUN), so it just needs the engines
-    // present. Chain mode only queues a plan → always enabled (engines checked at Launch).
+    runBtn.title = rc.title || ''
+    // Chain mode only queues a plan → always enabled (engines are checked at Launch).
     runBtn.disabled = getChainMode?.() ? false : (rc.disabled || _launching || !_enginesOk)
-    _paintJobControl()
-  }
-  /** Paint the contextual Stop/Resume button for the SELECTED job (decoupled from Relax). */
-  function _paintJobControl() {
-    if (!jobCtlBtn) return
-    const ctl = mdSelectedJobControl(_selectedJob())
-    jobCtlBtn.style.display = ctl.show ? '' : 'none'
-    if (!ctl.show) return
-    jobCtlBtn.textContent = ctl.label
-    jobCtlBtn.dataset.jobAction = ctl.action
-    jobCtlBtn.title = ctl.title || ''
-    jobCtlBtn.disabled = _launching
+    // Stop and Resume read as warnings, not as "go" — the green Run styling on a Stop
+    // button is the kind of thing that gets a live run killed by accident.
+    const stopping = rc.action !== RUN_ACTION.RUN
+    runBtn.style.background = runBtn.disabled ? '#122117' : (stopping ? '#2d2119' : '#1a4a1a')
+    runBtn.style.borderColor = runBtn.disabled ? _C.border : (stopping ? '#d29922' : _C.ok)
+    runBtn.style.color = runBtn.disabled ? _C.dim : (stopping ? '#e3b341' : _C.ok)
+    runBtn.style.cursor = runBtn.disabled ? 'not-allowed' : 'pointer'
   }
   function _stopSelected(btn = runBtn) {
     return runExclusive(btn, async () => {
@@ -2653,6 +2316,25 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }
     }, { label: 'Stopping…' })
   }
+  /** Start a job that was CREATED but not run — the "＋ New job → Create job" outcome.
+   *  The package is already solvated, so this is just the launch; the only gate that
+   *  still applies is not stepping on another local run. */
+  function _startSelected(btn = runBtn) {
+    return runExclusive(btn, async () => {
+      if (!_selectedId) return
+      if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
+      try {
+        const d = await api.startMdJob(_selectedId)
+        if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
+        showToast('Run started', 'ok')
+        await _fetchJobs()
+        _reselectJob(_selectedId)
+      } catch (err) {
+        showToast(`Could not start: ${err.message}`, 'error')
+      }
+    }, { label: 'Starting…' })
+  }
+
   function _resumeSelected(btn = runBtn) {
     return runExclusive(btn, async () => {
       if (!_selectedId) return
@@ -2679,28 +2361,144 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }
     }, { label: 'Resuming…' })
   }
-  // The Relax button ALWAYS launches a fresh relaxation (or queues one in chain mode, or
-  // runs a selected seed draft). Stop/Resume of the selected job live on jobCtlBtn below.
+  // ONE control for the SELECTED job: start it, stop it, or resume it.  Creating a run is
+  // a separate act now (＋ New job → the wizard), which is what let these three collapse
+  // into a single button — they used to be a fresh-Relax button, a contextual Stop/Resume
+  // button and a Production button, each aware of a different subset of job states.
   runBtn?.addEventListener('click', () => {
     if (getChainMode?.()) return enqueueChainStage?.('relax')
     const sel = _selectedJob()
-    // Draft → prepare-from-seed + start THIS job; else launch a fresh relax.
-    if (mdJobIsDraft(sel)) return _launchRelax(sel.job_id)
-    return _launchRelax()
+    if (!sel) return
+    const act = runBtn.dataset.runAction
+    if (act === RUN_ACTION.STOP) return _stopSelected(runBtn)
+    if (act === RUN_ACTION.RESUME) return _resumeSelected(runBtn)
+    // A seeded draft solvates from its source job's coordinates. Send it through the
+    // wizard too, prefilled with what the draft recorded — solvating from a seed is
+    // still a whole protocol's worth of choices, and it used to reveal a drawer of
+    // controls that no longer exists.
+    if (mdJobIsDraft(sel)) {
+      return _wizard.open('relaxation', { draftId: sel.job_id, prefill: _draftPrefill(sel) })
+    }
+    if (mdJobIsStartable(sel)) return _startSelected(runBtn)
   })
-  // Contextual per-job control: Stop a running selected job / Resume a stopped-or-failed one.
-  jobCtlBtn?.addEventListener('click', () => {
-    const act = jobCtlBtn.dataset.jobAction
-    if (act === 'stop') return _stopSelected(jobCtlBtn)
-    if (act === 'resume') return _resumeSelected(jobCtlBtn)
-  })
+  // "New job" opens the Job Wizard, which supplies a protocol payload to the same
+  // _launchRelax gate sequence the Advanced form uses.
+  newBtn?.addEventListener('click', () => { void _wizard.open('relaxation') })
   // Repaint the Relax/Production controls when chain mode is toggled.
   window.addEventListener('nadoc:chain-mode-change', () => {
     _paintRunControl()
     _renderProductionControls(_jobs.find(j => j.job_id === _selectedId) || null)
   })
 
-  async function _launchRelax(draftId = null) {
+  /**
+   * Spawn a production child from the wizard — the only production launch path.
+   *
+   * Carries every gate the old Production button had, because they are all about the
+   * ENVIRONMENT rather than the protocol and none of them belongs in the wizard: the
+   * stale-design guard, the local-concurrency confirm, the disk forecast with its two
+   * independent warnings, and the documented override when the inherited cell is too
+   * small for the requested length. That last refusal is advisory — the run is
+   * physically startable, it just risks the structure meeting its own periodic image —
+   * so it asks rather than making the user hand-craft a request.
+   */
+  async function _spawnProductionFromWizard(parentId, body) {
+    if (getChainMode?.()) { enqueueChainStage?.('production'); return { job_id: null } }
+    if (!parentId) return null
+    const parent = _jobs.find(j => j.job_id === parentId)
+
+    // If the design changed since the parent was prepared, offer to roll back to the
+    // job's run-state (or cancel) before seeding a run off coordinates it no longer
+    // matches.
+    const proceed = await ensureJobCurrent({
+      job: parent, rollFn: rollMdJobDesign, refetch: _fetchJobs,
+      isStale: () => jobOutOfDate(_jobs.find(j => j.job_id === parentId)),
+      actionLabel: 'a production run',
+    })
+    if (!proceed) return null
+
+    // The Local/Alpine radio decides where THIS production runs, independent of where
+    // the relaxation ran. Local-resource guards apply only to a local run.
+    const runTarget = _currentRunTarget()
+    const isLocalRun = mdIsLocalTarget(runTarget)
+    if (isLocalRun && !(await confirmNoConcurrentJob({ excludeJobId: parentId }))) return null
+
+    const full = {
+      ...body,
+      autostart: isLocalRun && body.autostart,
+      execution_target: runTarget,
+      cluster_name: runTarget === 'alpine' ? 'alpine' : null,
+      runpod_gpu_key: runTarget === 'runpod' ? (_selectedRunpodGpu?.key ?? null) : null,
+    }
+
+    if (isLocalRun) {
+      try {
+        // Forecast with the SAME dt and DCD interval the run will use — trajectory bytes
+        // scale as 1/dcd_freq, so forecasting the defaults while the panel sends
+        // something else silently mis-states the size by that ratio.
+        const fc = await estimateMdProductionDisk(parentId, {
+          length_ns: full.length_ns,
+          autostart: true,
+          dcd_freq: full.dcd_freq,
+          production_timestep_fs: full.production_timestep_fs,
+        })
+        // Two independent gates: "the disk will run short" (only fires on a full volume)
+        // and "this run is simply big/long" (fires on a roomy archive drive too).
+        if (!(await confirmDiskSpaceOk(fc))) return null
+        if (!(await confirmBigRunOk(fc))) return null
+      } catch { /* forecast is best-effort — never block a launch on it */ }
+    }
+
+    try {
+      let d = await api.spawnMdProduction(parentId, full)
+      if (!d) {
+        const why = api.lastErrorMessage() ?? 'Server error'
+        if (!isUndersizedCellRefusal(why)) throw new Error(why)
+        if (!(await confirmUndersizedCell({ lengthNs: full.length_ns }))) return null
+        d = await api.spawnMdProduction(parentId, { ...full, allow_undersized_cell: true })
+        if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
+      }
+      const childId = d.job?.job_id
+      await _fetchJobs()
+      if (childId) _selectJob(childId)
+      if (isLocalRun) {
+        showToast(full.autostart ? 'Production started' : 'Production job created', 'ok')
+      } else {
+        showToast('Alpine production staged — review resources to submit', 'ok')
+        if (childId) _submitReview.open(childId)
+      }
+      return d.job ?? { job_id: childId }
+    } catch (err) {
+      showToast(`Production failed: ${err.message}`, { severity: 'error', duration: 8000 })
+      return null
+    }
+  }
+
+  const _wizard = initJobWizard({
+    api: {
+      getRelaxPresets: () => api.getRelaxPresets(),
+      fetchProtocolPlan: body => api.fetchProtocolPlan(body),
+      // The client returns null on a non-OK response, so the wizard needs this to say
+      // WHY a plan came back empty instead of showing a blank table.
+      lastErrorMessage: () => api.lastErrorMessage?.(),
+    },
+    launch: (payload, opts) => _launchRelax(payload, opts),
+    spawnProduction: _spawnProductionFromWizard,
+    getJobs: () => _jobs,
+    getPartPath: () => _currentPartPath(),
+    onJobCreated: jobId => { _reselectJob(jobId) },
+    onOptimizeMount: mount => _wireOptimize(mount),
+  })
+
+  /**
+   * Launch a relaxation from a protocol payload, running every gate on the way.
+   *
+   * `protocolPayload` carries only the protocol settings — from the Advanced form or from
+   * the Job Wizard. Everything environmental (run target, anchors, electric field, run
+   * directory, GPU device string) is merged in HERE, so both callers inherit the same
+   * concurrency confirms, VRAM pre-flight, disk forecast and big-run confirmation rather
+   * than each growing its own copy.
+   */
+  async function _launchRelax(protocolPayload, { draftId = null } = {}) {
     if (_launching) {
       console.log(`[${_ts()}] md-jobs: Relax clicked but already launching`)
       return
@@ -2711,13 +2509,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const runTarget = _currentRunTarget()
     const isLocalRun = mdIsLocalTarget(runTarget)
 
+    // The device string comes from whichever surface supplied the protocol settings, so
+    // the multi-GPU and busy-GPU checks below judge the run that will actually happen —
+    // not whatever the (possibly hidden) Advanced form happens to hold.
+    const proto = protocolPayload ?? {}
+    const deviceStr = String(proto.devices ?? '0').trim()
+
     const anchors = _anchorsCard?.getAnchors?.() ?? []
     const fieldSpec = _efieldCard?.getFieldSpec?.()
     const fieldOn = !!_efieldCard?.isEnabled?.() && (fieldSpec?.field_pN ?? 0) > 0
     // A uniform field with no anchor just streams the whole structure (COM drift) —
     // the E-field card shows a warning notice, but the run is allowed (not blocked).
     // NAMD 3: "EField is not compatible with multi-GPU GPUresident".
-    if (fieldOn && (devicesInput?.value?.trim() || '0').includes(',')) {
+    if (fieldOn && deviceStr.includes(',')) {
       showToast('NAMD cannot combine an electric field with a multi-GPU run — use a single device.',
         { severity: 'warning' })
       return
@@ -2725,35 +2529,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
     if (isLocalRun && !(await confirmNoConcurrentJob())) return
     // Only warn about a busy GPU when this run actually targets the GPU.
-    const runsOnGpu = deviceStringForCompute(computeSel?.value, devicesInput?.value, _protocol()) !== 'cpu'
-    if (isLocalRun && runsOnGpu && !(await confirmGpuNotBusy(devicesInput?.value?.trim() || '0'))) return
+    const runsOnGpu = deviceStr.toLowerCase() !== 'cpu' && deviceStr.toLowerCase() !== 'none'
+    if (isLocalRun && runsOnGpu && !(await confirmGpuNotBusy(deviceStr || '0'))) return
     _launching = true
     runBtn.disabled = true
 
     const payload = {
-      protocol:       _protocol(),
-      threads:        parseInt(threadsInput?.value  ?? '16', 10),
-      devices:        deviceStringForCompute(computeSel?.value, devicesInput?.value, _protocol()),
-      salt_mode:      saltModeSel?.value ?? 'screening',
-      mg_conc_mM:     parseFloat(mgInput?.value     ?? '12.5'),
-      ion_conc_mM:    parseFloat(naclInput?.value   ?? '0'),
-      padding_nm:     parseFloat(paddingInput?.value ?? '1.2'),
-      // Blank = size for the ladder only (the cheap bbox cell). A value here sizes the
-      // cell for a solute that will actually tumble — the only chance to choose, since
-      // nothing after prep re-solvates and a production child inherits this cell.
-      production_ns_intent: Number(prodIntentInput?.value) > 0
-        ? Number(prodIntentInput.value)
-        : null,
-      // UI is in Å; API wants nm. 0 = full box (no carve).
-      water_shell_nm: (parseFloat(watershellInput?.value ?? '0') || 0) / 10,
-      minimize_steps: parseInt(minstepsInput?.value  ?? '10000', 10),
-      autostart:      autostartChk?.checked ?? true,
-      fast:           fastChk?.checked ?? true,
-      gpu_fallback_policy: gpuFallbackFromToggle(gpuAskChk?.checked ?? true),
-      production_timestep_fs: Number(prodTimestepSel?.value) || DEFAULT_PRODUCTION_TIMESTEP_FS,
-      gpu_resident:   residentSel?.value ?? 'auto',
-      relax_preset:   _relaxPresets?.id() ?? 'standard',
-      early_stop_relax: earlyStopChk?.checked ?? true,
+      ...proto,
       design_source_path: _currentPartPath() || null,
       execution_target: runTarget,
       cluster_name:   runTarget === 'alpine' ? 'alpine' : null,
@@ -2776,17 +2558,27 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // forecast so a chosen shell feeds that estimate. Only when sizing is auto (shell 0)
     // on a local GPU run; a seeded draft / CPU / manual shell skips it (the backend
     // returns skipped for those too). Best-effort — never blocks a launch on an error.
-    if (isLocalRun && !draftId && runsOnGpu && payload.water_shell_nm === 0) {
+    //
+    // ABSENT counts as auto. The wizard sends only the fields the user touched, so an
+    // untouched water shell is not in the payload at all — a `=== 0` test skipped Gate A
+    // for exactly the launches that most need it.
+    if (isLocalRun && !draftId && runsOnGpu && (payload.water_shell_nm ?? 0) === 0) {
       try {
         const adv = await preflightMdVram(payload)
         const gate = gateAMessage(adv)
-        if (gate?.isNotice) {                       // A1 — auto-fit a comfortable shell
+        // A protocol that forbids carving never gets a shell applied, whichever tier the
+        // advice came back as — it gets one warning with Cancel / Run anyway, and if the
+        // user proceeds the package is built at FULL box. Reading `adv.carve_allowed`
+        // rather than the tier is what keeps that true: the tiers describe how well a
+        // CARVE would fit, which is not a question this protocol is asking.
+        const mayCarve = adv?.carve_allowed !== false
+        if (gate?.isNotice && mayCarve) {           // A1 — auto-fit a comfortable shell
           payload.water_shell_nm = adv.recommended_shell_nm
           showToast(gate.notice, { severity: 'info' })
-        } else if (gate) {                          // A2 (decision) / A3 (hard stop)
+        } else if (gate) {                          // a decision, a hard stop, or a warning
           const proceed = await openGateAModal(adv)
           if (!proceed) { hideOpProgress(); _launching = false; runBtn.disabled = false; return }
-          if (adv.tier === 'a2') payload.water_shell_nm = adv.recommended_shell_nm
+          if (mayCarve && adv.tier === 'a2') payload.water_shell_nm = adv.recommended_shell_nm
         }
       } catch { /* preflight is best-effort — never block a launch */ }
     }
@@ -2845,6 +2637,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         showToast(`Prep failed: ${msg}`, 'error')
         await _fetchJobs()
         _selectJob(job.job_id)
+        // Deliberately not returned as a success: the Job Wizard stays open on a failed
+        // prep so the settings that produced it are still on screen to fix.
         return
       }
 
@@ -2861,6 +2655,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // A draft keeps its id through prepare — _reselectJob forces the WS to
       // re-subscribe for the now-preparing job (plain _selectJob would early-return).
       _reselectJob(job.job_id)
+      return job          // the wizard closes on a truthy result
     } catch (err) {
       hideOpProgress()
       console.error(`[${_ts()}] md-jobs: Run fetch threw`, err)
@@ -2892,19 +2687,30 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     return Number.isFinite(n) && n >= 1 ? Math.min(64, n) : 4
   }
 
+  /** Simulated nanoseconds per replica.  Staging an ensemble is one Alpine action rather
+   *  than a wizard flow, so its length control lives on the ensemble card — the wizard
+   *  sets the length of a SINGLE production child. */
+  function _ensembleNs() {
+    const ns = parseFloat(ensembleNsInput?.value ?? '')
+    return Number.isFinite(ns) && ns > 0 ? ns : 2.0
+  }
+
   // Ensemble on Alpine: stage N production replicas (distinct seeds) from THIS completed
   // relaxation, then open the review card (ensemble mode) to submit them all to amilan.
   ensembleBtn?.addEventListener('click', () => runExclusive(ensembleBtn, async () => {
     const parentId = _selectedId
     if (!parentId) return
     const n = _ensembleCount()
-    const steps = _productionSteps()
+    const lengthNs = _ensembleNs()
     try {
+      // length_ns rather than steps: the replica's step count depends on the timestep the
+      // package resolves to, and sending a raw step count means the same request produces
+      // a different amount of simulated time on a 4 fs package than on a 1 fs one.
       const d = await api.stageMdEnsemble(parentId, {
-        n_replicas: n, steps, cluster_name: 'alpine', partition: 'amilan',
+        n_replicas: n, length_ns: lengthNs, cluster_name: 'alpine', partition: 'amilan',
       })
       if (!d) throw new Error(api.lastErrorMessage?.() ?? 'Server error')
-      showToast(`Staged ${n} production replica${n === 1 ? '' : 's'}`, 'ok')
+      showToast(`Staged ${n} production replica${n === 1 ? '' : 's'} of ${lengthNs} ns`, 'ok')
       await _fetchJobs()
       _renderList()
       const firstChild = d.children?.[0]?.job_id
@@ -2932,17 +2738,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (_selectedId) _submitReview.open(_selectedId, { mode: 'resume' })
   })
 
-  // Is the selected job a job the early-stop toggle can control LIVE (a running LOCAL
-  // relaxation — not Alpine, not a production child)?  The single Advanced toggle is a
-  // launch default for everything else and a live control for this.
+  // Is the selected job one the early-stop toggle can control LIVE (a running LOCAL
+  // relaxation — not Alpine, not a production child)?  This is now the toggle's ONLY
+  // job: its launch-default counterpart moved into the Job Wizard, so the card is simply
+  // hidden when nothing live is selected rather than quietly meaning something else.
   function _isLiveRelax(job) {
     return !!job && job.status === 'running' && mdIsLocalTarget(job.execution_target) && !mdIsProductionChild(job)
   }
 
-  // The ONE early-stop toggle (Advanced): a launch default when configuring a run, and a
-  // LIVE control when a running local relaxation is selected — a change then POSTs the
-  // override (applied at the next stage checkpoint).  Merged from the old separate
-  // mid-run "live" toggle so there's a single option that can be changed mid-relax.
+  // The live early-stop toggle: changing it POSTs an override that the runner applies at
+  // the next stage checkpoint, without relaunching.
   earlyStopChk?.addEventListener('change', async () => {
     const job = _selectedJob()
     if (!_isLiveRelax(job) || _earlyStopBusy) return   // not live → just the launch default
@@ -3145,7 +2950,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _closeWs()
     _renderList()
     _openDetailForJob(jobId)
-    _maybePrefillDraft(jobId)
     if (displayToggle?.checked) _refreshMdDisplay()
     else _refreshMdPrewarm(true)
   }
@@ -3163,48 +2967,27 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _gateBDismissed = null
     _closeWs()
     if (detailEl) detailEl.style.display = 'none'
+    if (liveControlsCard) liveControlsCard.style.display = 'none'
     _renderList()
-    _paintRunControl()   // nothing selected → the control reverts to "▶ Relax"
+    _paintRunControl()   // nothing selected → the control disables with a hint
   }
 
-  /** When a DRAFT is selected, pre-fill the Advanced inputs from its stored prep
-   *  params (the defaults captured when "Use as NAMD seed" created it) and reveal the
-   *  Advanced drawer — so the user configures the standard relaxation, then presses
-   *  "Relax from oxDNA".  Runs once per selection; edits are read back on launch. */
-  function _maybePrefillDraft(jobId) {
-    const job = _jobs.find(j => j.job_id === jobId)
-    if (!mdJobIsDraft(job)) return
-    const p = job.prep_params || {}
-    const set = (el, v) => { if (el && v != null) el.value = String(v) }
-    // A draft records the PROTOCOL it was prepared with; the control is now the preset,
-    // so restore whichever preset runs that protocol (falls back to the default).
-    if (p.relax_preset || p.protocol) {
-      _relaxPresets?.load(p.relax_preset ?? _relaxPresets?.idForProtocol(p.protocol))
-        .then(() => _syncSolventFields()).catch(() => {})
+  /** A DRAFT's stored prep params, in the wizard's own vocabulary.
+   *
+   *  A draft is created by "Use as NAMD seed" with the settings that were current then;
+   *  opening the wizard for it should start from those rather than from the protocol's
+   *  defaults. Returned as a touched-field map so every restored value reads "you set
+   *  this" — which is true, and means switching protocol will not silently discard it. */
+  function _draftPrefill(job) {
+    const p = job?.prep_params || {}
+    const out = {}
+    for (const key of ['threads', 'devices', 'salt_mode', 'mg_conc_mM', 'ion_conc_mM',
+                       'padding_nm', 'water_shell_nm', 'minimize_steps', 'fast',
+                       'production_timestep_fs', 'gpu_resident', 'early_stop_relax',
+                       'production_ns_intent']) {
+      if (p[key] != null) out[key] = p[key]
     }
-    set(threadsInput, p.threads)
-    // "cpu" belongs to the Compute selector, not the CUDA-device text field.
-    if (computeSel) computeSel.value = computeFromDeviceString(p.devices)
-    if (computeFromDeviceString(p.devices) === 'gpu') set(devicesInput, p.devices)
-    set(saltModeSel, p.salt_mode)
-    set(mgInput, p.mg_conc_mM)
-    set(naclInput, p.ion_conc_mM)
-    set(paddingInput, p.padding_nm)
-    if (watershellInput && p.water_shell_nm != null) watershellInput.value = String((p.water_shell_nm || 0) * 10)  // nm→Å
-    set(minstepsInput, p.minimize_steps)
-    if (autostartChk) autostartChk.checked = p.autostart ?? true
-    if (fastChk) fastChk.checked = p.fast ?? true
-    if (prodTimestepSel && p.production_timestep_fs != null) {
-      prodTimestepSel.value = String(p.production_timestep_fs)
-      _paintTimestepWarning()
-    }
-    if (residentSel && p.gpu_resident != null) {
-      residentSel.value = String(p.gpu_resident)
-      _paintResidentWarning()
-    }
-    if (earlyStopChk) earlyStopChk.checked = p.early_stop_relax ?? true
-    _syncSolventFields()   // gray explicit-solvent knobs if the draft is GBIS
-    if (advBody && advBody.style.display === 'none') advToggle?.click()   // reveal the drawer
+    return { presetId: p.relax_preset || null, touched: out }
   }
 
   /** Re-open a job's detail after a (re)start.  `_selectJob` early-returns when the
@@ -3389,21 +3172,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // resume for the selected job (the old detail Start/Stop were retired + removed).
     // (Alpine submit/resume/ensemble keep their dedicated cluster-gated buttons below.)
     _paintRunControl()
-    // The single early-stop toggle (Advanced) doubles as the LIVE mid-relax control: for
-    // a running LOCAL relaxation, reflect the job's queued/persisted value + pending badge
-    // (mdEarlyStopToggleState honours the in-flight override so a 3 s state push can't snap
-    // it back off).  For anything else it's the launch default — re-enable it + clear the
-    // badge (don't overwrite the user's chosen default).
-    if (earlyStopChk) {
-      if (_isLiveRelax(job)) {
-        const { checked, pending } = mdEarlyStopToggleState(job, _earlyStopBusy)
-        earlyStopChk.checked = checked
-        earlyStopChk.disabled = pending
-        if (earlyStopPending) earlyStopPending.style.display = pending ? '' : 'none'
-      } else {
-        earlyStopChk.disabled = false
-        if (earlyStopPending) earlyStopPending.style.display = 'none'
-      }
+    // The live early-stop card is shown ONLY for a running local relaxation, because
+    // that is the only state in which it does anything. mdEarlyStopToggleState honours
+    // the in-flight override so a 3 s state push can't snap the box back off.
+    const live = _isLiveRelax(job)
+    if (liveControlsCard) liveControlsCard.style.display = live ? '' : 'none'
+    if (earlyStopChk && live) {
+      const { checked, pending } = mdEarlyStopToggleState(job, _earlyStopBusy)
+      earlyStopChk.checked = checked
+      earlyStopChk.disabled = pending
+      if (earlyStopPending) earlyStopPending.style.display = pending ? '' : 'none'
     }
     // Submit-to-Alpine: a prepared remote job not yet handed to SLURM.
     if (submitAlpineBtn) {
@@ -3966,6 +3744,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   _setDisplayStatus('Off', _C.dim)
   console.log(`[${_ts()}] md-jobs: panel initialised`)
   _base.initCollapsed(true)   // apply persisted collapse; fires _onOpen if starting open
+  // Paint the primary control up front: it acts on the SELECTED job now, so with nothing
+  // selected it must read "▶ Run", disabled, with the hint — not the markup's placeholder.
+  _paintRunControl()
   if (_isDynamicsTabVisible()) _startMdPrewarm()
 
   // The panel's external surface: the currently-selected job (consumed by the shared
@@ -4011,8 +3792,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       return {
         run_target: runTarget,
         cluster_name: runTarget === 'alpine' ? 'alpine' : null,
-        steps: _productionSteps(),
-        length_ns: _productionNs(),
+        // The chain planner captures a stage's conditions; a production stage's LENGTH
+        // is chosen in the Job Wizard when the stage actually runs, so record the
+        // ensemble card's per-replica figure as the stand-in rather than a bare literal.
+        length_ns: _ensembleNs(),
       }
     },
   }

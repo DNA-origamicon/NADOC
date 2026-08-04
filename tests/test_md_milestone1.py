@@ -862,7 +862,14 @@ class TestProductionAppend:
 
         assert [int(s.percent) for s in segments] == [10, 50, 100]
         assert all(s.min_wc_ref_relative == pytest.approx(0.25) for s in segments)
-        assert all(s.damping == pytest.approx(5.0) for s in segments)
+        # CHANGED 2026-08-03: production couples WEAKLY (1 ps^-1), the ladder strongly
+        # (5). Inheriting the ladder's equilibration value overdamped the dynamics, so
+        # every time-dependent observable was scaled by something unrelated to the system
+        # — and the group's production runs these would be compared with use ~1.
+        # See md_protocols.PRODUCTION_LANGEVIN_DAMPING / PRODUCTION_RECIPE_VERSION.
+        from backend.core.md_protocols import PRODUCTION_LANGEVIN_DAMPING
+        assert all(s.damping == pytest.approx(PRODUCTION_LANGEVIN_DAMPING)
+                   for s in segments)
         assert all(s.temp == pytest.approx(300.0) for s in segments)
         assert all("fast production" in s.stage for s in segments)
 
@@ -887,7 +894,10 @@ class TestProductionAppend:
         assert "pairlistdist       12.0" in conf
         # Thermostat/barostat aligned to the Aksimentiev reference.
         assert "langevinTemp       300" in conf
-        assert "langevinDamping    5" in conf
+        # 1 ps^-1, NOT the ladder's 5: that is an equilibration coupling, and carrying it
+        # into production overdamps every time-dependent observable. The group's own
+        # production runs use ~1. See PRODUCTION_LANGEVIN_DAMPING.
+        assert "langevinDamping    1" in conf
         assert "langevinPistonPeriod  200.0" in conf
         assert "langevinPistonDecay   100.0" in conf
 

@@ -1,17 +1,18 @@
-"""Relax presets: the four named protocols the panel offers."""
+"""Relax presets: the named protocols the panel and the Job Wizard offer."""
 from __future__ import annotations
 
 import pytest
 
-from backend.core.md_presets import (DEFAULT_PRESET, EXPLICIT_PROTOCOL, FAST_SHAPE,
-                                     FULL_PHYSICS, IMPLICIT_GBIS, IMPLICIT_PROTOCOL,
-                                     PRESET_ORDER, PRESETS, RETIRED_FROM_MENU, STANDARD,
-                                     apply_preset, get_preset, preset_catalogue,
-                                     protocol_for)
+from backend.core.md_presets import (DEFAULT_PRESET, DESIGN_SPEED, EXPLICIT_PROTOCOL,
+                                     FAST_SHAPE, FULL_PHYSICS, IMPLICIT_GBIS,
+                                     IMPLICIT_PROTOCOL, LITERATURE, PRESET_ORDER, PRESETS,
+                                     RETIRED_FROM_MENU, STANDARD, apply_preset, get_preset,
+                                     preset_catalogue, protocol_for)
 
 
-def test_four_presets_in_cheapest_first_order():
-    assert PRESET_ORDER == (FAST_SHAPE, IMPLICIT_GBIS, STANDARD, FULL_PHYSICS)
+def test_presets_are_listed_cheapest_first():
+    assert PRESET_ORDER == (FAST_SHAPE, IMPLICIT_GBIS, DESIGN_SPEED, STANDARD,
+                            LITERATURE, FULL_PHYSICS)
     assert set(PRESETS) == set(PRESET_ORDER)
 
 
@@ -55,6 +56,98 @@ def test_full_physics_disables_early_stop_and_pads_wider():
     assert PRESETS[STANDARD].defaults["early_stop_relax"] is True
     assert (PRESETS[FULL_PHYSICS].defaults["padding_nm"]
             > PRESETS[STANDARD].defaults["padding_nm"])
+
+
+# ── the two wizard tiers: reproduce the paper, or get an answer about the design ──
+def test_literature_trades_nothing_for_speed():
+    """Every accelerator NADOC has measured is OFF, and the paper's own integrator is on.
+
+    This preset exists so "I ran the published protocol" is a checkable claim rather than
+    a hopeful one.  Each assertion below is a place where NADOC's default deviates.
+    """
+    d = PRESETS[LITERATURE].defaults
+    assert d["early_stop_relax"] is False        # never truncate a stage you will publish
+    assert d["fast"] is False                    # no hydrogen-mass repartitioning
+    assert d["production_timestep_fs"] == 2.0    # the paper's 2 fs + rigidBonds all
+    assert d["padding_nm"] == 2.0                # the tutorial's bounding box +/- 20 A
+    assert d["salt_mode"] == "screening"         # Mg(H2O)6 neutralises, no sodium
+    assert d["minimize_steps"] == 4_800          # the tutorial's literal figure
+    assert "Methods Mol Biol 1811" in PRESETS[LITERATURE].reference
+
+
+def test_literature_refuses_a_water_shell_carve():
+    """A carve leaves vacuum in the cell, which forces constant volume, which removes both
+    the Note-4 fixed-DNA settle stage and the box-size trace the reference uses to judge
+    equilibration — and leaves no bulk phase for the published ionic condition to be a
+    concentration OF.  Auto-fitting one would quietly turn "the published protocol" into
+    something else.  Every other preset lets prep carve rather than fail.
+    """
+    assert PRESETS[LITERATURE].defaults["allow_water_shell_carve"] is False
+    assert all("allow_water_shell_carve" not in PRESETS[p].defaults
+               for p in PRESET_ORDER if p != LITERATURE)
+
+
+def test_literature_LOCKS_the_carve_rather_than_merely_defaulting_it():
+    """Not an option, not a default.
+
+    Every other setting a preset supplies is a starting point the user may overrule. This
+    one is not: a carved run is a different experiment, so allowing an override would make
+    the tier's own NAME untrue. It is the only locked field in the catalogue.
+    """
+    assert PRESETS[LITERATURE].locked == frozenset({"allow_water_shell_carve"})
+    assert all(not PRESETS[p].locked for p in PRESET_ORDER if p != LITERATURE)
+
+
+def test_a_locked_field_beats_an_explicit_request():
+    out = apply_preset(LITERATURE, {"allow_water_shell_carve": True},
+                       explicit={"allow_water_shell_carve"})
+    assert out["allow_water_shell_carve"] is False
+
+
+def test_locking_does_not_leak_into_the_presets_other_settings():
+    """A lock is surgical — everything else stays overridable."""
+    out = apply_preset(LITERATURE, {"padding_nm": 1.0, "early_stop_relax": True},
+                       explicit={"padding_nm", "early_stop_relax"})
+    assert out["padding_nm"] == 1.0
+    assert out["early_stop_relax"] is True
+    assert out["allow_water_shell_carve"] is False
+
+
+def test_the_catalogue_tells_the_ui_which_fields_are_locked():
+    """So the wizard can render the control read-only instead of offering a dead one."""
+    by_id = {p["id"]: p for p in preset_catalogue()}
+    assert by_id[LITERATURE]["locked"] == ["allow_water_shell_carve"]
+    assert by_id[STANDARD]["locked"] == []
+
+
+def test_design_speed_turns_every_measured_accelerator_on():
+    d = PRESETS[DESIGN_SPEED].defaults
+    assert d["fast"] is True                     # HMR + 4 fs + GPU-resident
+    assert d["early_stop_relax"] is True
+    assert d["production_timestep_fs"] == 4.0
+    assert d["padding_nm"] == 1.2                # the cheap bounding-box cell
+    assert d["protocol"] == EXPLICIT_PROTOCOL    # same chemistry, only scheduling moves
+
+
+def test_the_two_wizard_tiers_disagree_on_every_speed_axis():
+    """If they ever agreed on one, that axis would be a control with no effect."""
+    fast, lit = PRESETS[DESIGN_SPEED].defaults, PRESETS[LITERATURE].defaults
+    for key in ("fast", "early_stop_relax", "production_timestep_fs", "padding_nm"):
+        assert fast[key] != lit[key], key
+
+
+def test_every_preset_default_names_a_real_request_field():
+    """A typo'd key silently no-ops: the merge filters on the request model's fields.
+
+    Nothing else would notice — the job would be created, run, and quietly ignore the
+    setting the preset promised.
+    """
+    from backend.api.routes_md import CreateJobRequest
+
+    fields = set(CreateJobRequest.model_fields)
+    for pid in PRESET_ORDER:
+        unknown = set(PRESETS[pid].defaults) - fields
+        assert not unknown, f"{pid} defaults unknown request fields: {sorted(unknown)}"
 
 
 # ── merge semantics ───────────────────────────────────────────────────────────

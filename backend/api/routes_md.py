@@ -39,6 +39,7 @@ from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
 from backend.core import job_archive
 from backend.core import md_chain_executor as _chain
+from backend.core import md_plan
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
 from backend.core.md_pipeline import MdPipeline, PipelineStage, StagePlan, cross_engine_seed
 from backend.core.md_presets import (DEFAULT_PRESET, FAST_SHAPE, get_preset,
@@ -47,6 +48,7 @@ from backend.core.md_protocols import (
     EQUILIBRIUM_AWARE_PROTOCOL,
     IMPLICIT_GBIS_PROTOCOL,
     PRODUCTION_DCD_FREQ,
+    PRODUCTION_LANGEVIN_DAMPING,
     SUPPORTED_PROTOCOLS,
     SegmentSpec,
     build_production_conf,
@@ -122,6 +124,16 @@ class CreateJobRequest(BaseModel):
                     "and drop the rest, then run NVT. Halves the atom count for "
                     "large designs so GPU-resident NAMD fits a small card. "
                     "Use ≥0.6 nm (2·shell ≥ 12 Å cutoff); 1.5 nm recommended.",
+    )
+    allow_water_shell_carve: bool = Field(
+        True,
+        description="May prep fall back to a water-shell carve when the full box will "
+                    "not fit the compute target? Default yes — a carve is how a large "
+                    "origami runs at all on a small card. Set false to REFUSE instead: a "
+                    "carve leaves vacuum in the cell, which forces constant volume, which "
+                    "deletes the Note-4 settle stage AND the box-size equilibration "
+                    "criterion — so the run is no longer the published protocol. The "
+                    "'literature' preset sets this false for exactly that reason.",
     )
     minimize_steps: int = Field(4_800, ge=100)
     declash: bool = Field(
@@ -295,6 +307,10 @@ class CreateJobRequest(BaseModel):
                     "The 'Use as NAMD seed' button uses this so the user can set advanced "
                     "options first; the deferred solvation runs on POST /md/jobs/{id}/prepare "
                     "(the 'Relax from oxDNA' button).",
+    )
+    stage_overrides: dict = Field(
+        default_factory=dict,
+        description='Per-stage NAMD directive overrides, keyed by stage INDEX as a string (0 = minimisation, 1..N = the stages in order) plus "*" for every stage: {"*": {"langevinDamping": "2"}, "3": {"run": "50000"}}. "*" is merged first, so a per-stage entry refines it. A null value DELETES the directive. Directives that name the package\'s own files or outputs are refused — overriding one would detach the stage from its job rather than change the physics. Every override is recorded in the manifest and declared in its protocol_fidelity block, because a hand edit is a departure from every protocol by definition.',
     )
     allow_catenated_seed: bool = Field(
         False,
@@ -1512,32 +1528,21 @@ def _append_production_segments(
 
     existing = {s["name"] for s in manifest.get("segments", [])}
     stage_idx = len({s["stage"] for s in manifest.get("segments", [])}) + 1
-    length_ns = total_steps * timestep_fs / 1_000_000.0
-    label_ns = f"{length_ns:g}".replace(".", "p")
+    length_ns = md_plan.production_length_ns(total_steps, timestep_fs)
     previous = "" if from_seed else checkpoint.name
     segments: list[SegmentSpec] = []
-    for pct, frac in ((10.0, 0.10), (50.0, 0.40), (100.0, 0.50)):
-        steps = max(100, int(round(total_steps * frac)))
-        name = f"{name_stem}_{stage_idx:02d}_production_{label_ns}ns_k0_p{int(pct)}"
-        if name in existing:
-            previous = name
-            continue
-        stage_label = {4.0: "fast", 2.0: "medium", 1.0: "conservative"}.get(timestep_fs, "conservative")
-        spec = SegmentSpec(
-            name=name,
-            stage=f"{length_ns:g} ns {stage_label} production run",
-            percent=pct,
-            steps=steps,
-            temp=300.0,
-            damping=5.0,
-            scale=None,
-            npt=True,
-            previous=previous,
-            reinit=False,
-            dcd_freq=PRODUCTION_DCD_FREQ,
-            min_c1_paired=0.90,
-            min_wc_ref_relative=0.25,
+    # Built by md_plan so the Job Wizard's preview and the run that actually happens come
+    # from ONE function.  Two independent constructions is the shape of LESSONS H16: a fix
+    # lands on one and the other keeps the old behaviour, and both still look correct.
+    for pct, frac in md_plan.PRODUCTION_CHUNKS:
+        spec = md_plan.production_segment_spec(
+            name_stem, stage_idx=stage_idx, pct=pct, frac=frac,
+            total_steps=total_steps, timestep_fs=timestep_fs, previous=previous,
         )
+        if spec.name in existing:
+            previous = spec.name
+            continue
+        name = spec.name
         # The FIRST from-seed segment starts from the solvated PDB (minimize +
         # heat); every later split-segment continues from the prior restart.
         if from_seed and not previous:
@@ -1650,6 +1655,11 @@ def _apply_relax_preset(body: CreateJobRequest) -> CreateJobRequest:
     ask for "Standard (Aksimentiev)" (explicit MgCl2 + CUFIX) while separately selecting
     implicit solvent, and nothing caught it.
 
+    A preset's ``locked`` fields behave like ``protocol``: it owns them outright, so an
+    explicit request value does NOT win.  Reserved for settings whose override would make
+    the preset's name untrue — `literature` locks ``allow_water_shell_carve``, because a
+    carved cell has no bulk phase for the published ionic condition to be defined in.
+
     Backward compatibility for API callers, which the panel no longer exercises:
 
     * ``protocol`` alone, no ``relax_preset`` → honoured as before (legacy path);
@@ -1673,8 +1683,17 @@ def _apply_relax_preset(body: CreateJobRequest) -> CreateJobRequest:
     if not preset.defaults:
         return body
     updates = {k: v for k, v in preset.defaults.items()
-               if k in type(body).model_fields and (k == "protocol" or k not in explicit)}
+               if k in type(body).model_fields
+               and (k == "protocol" or k in preset.locked or k not in explicit)}
     return body.model_copy(update=updates) if updates else body
+
+
+#: Public names for the three resolvers the Job Wizard's plan endpoint reuses
+#: (backend/api/routes_md_plan.py).  The wizard MUST answer "what will this job run?" with
+#: the same code that decides what it does run — a preview computed by a parallel
+#: implementation is a preview that will eventually lie.  Aliases rather than renames so
+#: the ~40 existing call sites stay untouched.
+resolve_relax_preset = _apply_relax_preset
 
 
 @router.post("/md/jobs")
@@ -2021,8 +2040,19 @@ async def preflight_md_vram(body: CreateJobRequest) -> dict:
         return {"skipped": True, "tier": "ok"}
     try:
         design = design_state.get_or_404()
-        return await run_in_threadpool(
-            preflight_vram_advice, design, padding_nm=body.padding_nm, devices=body.devices)
+        # Judge the RESOLVED request, exactly as prep will.  Without the preset merge the
+        # padding and the carve policy would both read their field defaults, so a
+        # 'literature' launch would be pre-flighted at 1.2 nm with carving allowed and
+        # then prepared at 2.0 nm with carving refused.
+        resolved = _apply_relax_preset(body)
+        advice = await run_in_threadpool(
+            preflight_vram_advice, design,
+            padding_nm=resolved.padding_nm, devices=resolved.devices)
+        # Whether prep is even ALLOWED to take the carve this advice may recommend.  The
+        # 'literature' protocol refuses it, so the gate offers "stop" rather than "we'll
+        # shrink the water for you" — see CreateJobRequest.allow_water_shell_carve.
+        advice["carve_allowed"] = bool(resolved.allow_water_shell_carve)
+        return advice
     except Exception as exc:  # noqa: BLE001 — a preflight must never block a launch
         logger.warning("preflight_md_vram failed (allowing launch): %s", exc)
         return {"skipped": True, "tier": "ok"}
@@ -2428,7 +2458,32 @@ async def _prepare_job_bg(
                 padding_nm=body.padding_nm, devices=body.devices,
                 atomistic_model=seed_model,
             )
-            if auto["shell_nm"]:
+            if auto["shell_nm"] and not body.allow_water_shell_carve:
+                # DECLINE the carve, but build the job anyway.
+                #
+                # A carve is not a cheaper version of the same run: the vacuum corners
+                # force constant volume, which removes the fixed-DNA settle stage and the
+                # box-size trace the published protocol uses to JUDGE equilibration, and
+                # leaves no bulk phase for its ionic condition to be defined in.  So a
+                # protocol that promises the literature must not take one.
+                #
+                # It must not REFUSE either.  Whether a system fits is a property of
+                # today's hardware, not of the science, and the pre-flight is an estimate:
+                # the user is entitled to attempt the full box and find out.  The launch
+                # gate warns first with an explicit Cancel/Proceed (md_gate_a), and this
+                # is what happens once they proceed — full box, recorded, and NAMD gets to
+                # answer the memory question itself.
+                logger.warning(
+                    "prep %s: full box kept despite a %.2f nm carve recommendation — the "
+                    "chosen protocol forbids carving. %s",
+                    job_id, auto["shell_nm"], auto["note"])
+                job = MdJob.load(job_id, ws)
+                pp = dict(job.prep_params or {})
+                pp["declined_water_shell_nm"] = auto["shell_nm"]
+                pp["declined_water_shell_note"] = auto["note"]
+                job.prep_params = pp
+                job.save(ws)
+            elif auto["shell_nm"]:
                 water_shell_nm = auto["shell_nm"]
                 logger.info("prep %s: auto water shell %.2f nm — %s",
                             job_id, water_shell_nm, auto["note"])
@@ -2493,6 +2548,11 @@ async def _prepare_job_bg(
             devices         = body.devices,
             anchors         = body.anchors,
             field           = body.field,
+            # Recorded, not acted on, at this layer: the runner owns the skipping. The
+            # manifest needs it because a truncated ladder is a protocol deviation, and
+            # protocol_fidelity is where a package states its own deltas.
+            early_stop_relax = body.early_stop_relax,
+            stage_overrides = body.stage_overrides or None,
             progress        = tracker.report,
             **seed_kwargs,
         )
@@ -2917,6 +2977,40 @@ class ProductionRunRequest(BaseModel):
             raise ValueError("production_timestep_fs must be 1.0, 2.0, or 4.0")
         return None if v is None else float(v)
 
+    enm_restraints: str = Field(
+        "auto",
+        description="Keep an elastic network through production: 'auto' (DEFAULT — on "
+                    "when the parent was relaxed with a protocol that reproduces the "
+                    "literature, off otherwise), 'on', or 'off'. The published "
+                    "Aksimentiev-group 'unrestrained' origami productions are NOT "
+                    "unrestrained: they retain a network at k=0.1 throughout, and a "
+                    "template-built structure sampled with none at all is a measurably "
+                    "softer ensemble. The network is rebuilt from the equilibrated "
+                    "coordinates this run starts from, never from the prep-time build.",
+    )
+
+    @field_validator("enm_restraints")
+    @classmethod
+    def _sanctioned_enm(cls, v: str) -> str:
+        s = str(v or "auto").strip().lower()
+        if s not in ("auto", "on", "off"):
+            raise ValueError("enm_restraints must be 'auto', 'on', or 'off'")
+        return s
+
+    stage_overrides: dict = Field(
+        default_factory=dict,
+        description='Per-stage NAMD directive overrides, keyed by stage INDEX as a string (0 = minimisation, 1..N = the stages in order) plus "*" for every stage: {"*": {"langevinDamping": "2"}, "3": {"run": "50000"}}. "*" is merged first, so a per-stage entry refines it. A null value DELETES the directive. Directives that name the package\'s own files or outputs are refused — overriding one would detach the stage from its job rather than change the physics. Every override is recorded in the manifest and declared in its protocol_fidelity block, because a hand edit is a departure from every protocol by definition.',
+    )
+
+    langevin_damping: Optional[float] = Field(
+        None, gt=0.0, le=100.0,
+        description="Langevin coupling in ps^-1. Omit for the literature production value "
+                    "(1.0). The ladder's 5.0 is an EQUILIBRATION setting: at that coupling "
+                    "the dynamics are overdamped, so diffusion, relaxation and correlation "
+                    "times are all scaled by something unrelated to the system. Raise it "
+                    "only if you want equilibrium averages and do not care about kinetics.",
+    )
+
     gpu_resident: Optional[str] = Field(
         None,
         description="GPU-resident mode for this child: 'auto' (size gate), 'on' or 'off'. "
@@ -2963,6 +3057,50 @@ def _production_seed_checkpoint(parent: MdJob) -> tuple[Optional[SegmentSpec], s
     return spec, warning, reason
 
 
+#: See ``resolve_relax_preset`` — the wizard's plan endpoint resolves the seed checkpoint
+#: and the timestep through these, not through its own copy of the rules.
+production_seed_checkpoint = _production_seed_checkpoint
+production_fast_plan = _production_fast_plan
+
+
+def _production_restraint_plan(parent: MdJob, requested: str,
+                               damping: Optional[float]) -> dict:
+    """Resolve whether this production keeps an elastic network, and how hard to couple it.
+
+    ``auto`` reads the PARENT's relaxation preset: a package built to reproduce the
+    published protocol gets the network the published protocol keeps, and everything else
+    keeps NADOC's historical truly-unrestrained behaviour so existing trajectories stay
+    comparable with new ones.  An explicit 'on'/'off' always wins.
+    """
+    from backend.core.md_presets import LITERATURE  # noqa: PLC0415
+
+    parent_preset = ""
+    try:
+        manifest = json.loads(
+            (parent.package_dir(_workspace()) / "manifest.json").read_text())
+        parent_preset = str((manifest.get("relax_preset")
+                             or (parent.prep_params or {}).get("relax_preset") or ""))
+    except (OSError, ValueError):
+        parent_preset = str((parent.prep_params or {}).get("relax_preset") or "")
+
+    if requested == "on":
+        enm, why = True, "requested for this run"
+    elif requested == "off":
+        enm, why = False, "declined for this run"
+    else:
+        enm = parent_preset == LITERATURE
+        why = (f"the parent was relaxed with the {LITERATURE!r} protocol, which keeps the "
+               f"network the published productions keep"
+               if enm else
+               f"the parent's protocol ({parent_preset or 'unrecorded'}) does not ask for "
+               f"one, so this run is unrestrained as NADOC productions have always been")
+    return {
+        "enm_restraints": enm,
+        "enm_reason": why,
+        "damping": float(damping) if damping else PRODUCTION_LANGEVIN_DAMPING,
+    }
+
+
 @router.post("/md/jobs/{parent_id}/production-run")
 async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dict:
     """Branch a production run off a completed relaxation (or production) as a CHILD job.
@@ -2992,6 +3130,8 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         production_timestep_fs=body.production_timestep_fs,
         gpu_resident=body.gpu_resident,
     ))
+    restraints = _production_restraint_plan(
+        parent, body.enm_restraints, body.langevin_damping)
     # A child re-uses its parent's cell verbatim (build_replica_package hardlinks the
     # PSF/PDB and copies box_ang), so the parent's rotation verdict IS the child's.
     # This check lived only on the sibling append route while the panel's button came
@@ -3062,6 +3202,9 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         ready_checkpoint=spec.name, workspace=_workspace(),
         dcd_freq=(body.dcd_freq or PRODUCTION_DCD_FREQ),
         force_resident=plan.get("force_resident"),
+        enm_restraints=restraints["enm_restraints"],
+        damping=restraints["damping"],
+        stage_overrides=body.stage_overrides or None,
     )
 
     # Local target autostarts the NAMD run immediately; an Alpine child is left

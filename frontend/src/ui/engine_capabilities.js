@@ -178,17 +178,22 @@ export const ENGINE_CAPABILITIES = {
       efield: on('md-efield-toggle'),
       anchors: on('md-anchors-toggle'),
       surface: off('NAMD hard-surface / wall restraints are not wired yet.'),
-      advanced: on('md-jobs-adv-toggle'),
+      // NAMD has no Advanced drawer any more: every job parameter moved into the Job
+      // Wizard (＋ New job), where it is shown per stage with the difference from the
+      // previous stage and where its value came from.  The anchor is that button.
+      advanced: on('md-jobs-new-btn'),
       viz: on('md-jobs-viz-toggle'),
       metrics: on('md-metrics-toggle'),
       joblist: on('md-jobs-list-toggle'),
     },
     protocols: ['run', 'production', 'ensemble', 'alpine-submit', 'resume'],
+    // Wizard REQUEST fields, not DOM ids — the controls are built at runtime by
+    // md_job_wizard.js rather than declared in index.html.
     advancedParams: [
-      'md-jobs-preset', 'md-jobs-threads', 'md-jobs-devices', 'md-jobs-salt-mode',
-      'md-jobs-mg', 'md-jobs-nacl', 'md-jobs-padding', 'md-jobs-prod-intent',
-      'md-jobs-watershell',
-      'md-jobs-minsteps', 'md-jobs-autostart', 'md-jobs-fast', 'md-jobs-early-stop',
+      'padding_nm', 'water_shell_nm', 'production_ns_intent', 'salt_mode', 'mg_conc_mM',
+      'ion_conc_mM', 'minimize_steps', 'fast', 'early_stop_relax',
+      'production_timestep_fs', 'allow_water_shell_carve', 'gpu_resident',
+      'gpu_fallback_policy', 'threads', 'devices', 'force_soft',
     ],
   },
 }
