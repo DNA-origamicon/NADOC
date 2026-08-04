@@ -53,6 +53,7 @@ from __future__ import annotations
 import numpy as np
 
 from backend.core.occupancy_core import (  # noqa: F401  (re-exported for callers/tests)
+    OCC_FIT_MODES,
     OCCUPANCY_PRELIM_NEFF,
     _OCC_MIN_BP_COLUMNS,
     _OCC_MIN_FRAMES,
@@ -60,8 +61,10 @@ from backend.core.occupancy_core import (  # noqa: F401  (re-exported for caller
     _OCC_MIN_VISITS,
     _selection_sig,
     _superpose_on_subset,
+    apply_fit_plan,
     occupancy_clusters,
     occupancy_confidence,
+    occupancy_fit_plan,
     resolve_selection_keys,
     state_recurrence,
 )
@@ -77,7 +80,8 @@ from backend.physics.oxdna_interface import oxdna_backbone_sites
 
 
 # ── Scope: which nucleotides the clustering is allowed to see ─────────────────────
-def occupancy_features(frames, keys, design, *, basis: str = "nt", selection=None):
+def occupancy_features(frames, keys, design, *, basis: str = "nt", selection=None,
+                       fit: str = "selection"):
     """Build the ``(F, D)`` feature matrix from aligned per-nucleotide frame dicts.
 
     ``basis="nt"`` uses every nucleotide's backbone site — the same atom set the
@@ -95,13 +99,18 @@ def occupancy_features(frames, keys, design, *, basis: str = "nt", selection=Non
     box-scale bonds, making it maximally distant from every real frame — k-means would
     hand it its own cluster and this module would render it as a "configuration".
 
-    Returns ``(X, feature_keys, kept, basis_used)``.  ``kept`` lists the indices INTO
+    A SCOPED run is re-superposed before clustering — ``fit`` is ``"selection"`` (default),
+    ``"local"`` (each crossover extra base on its own junction) or ``"global"`` (leave the
+    whole-structure alignment alone). See :func:`occupancy_fit_plan`, which owns the choice
+    and the degradation rules; an unscoped run is always ``"global"``.
+
+    Returns ``(X, feature_keys, kept, basis_used, plan)``.  ``kept`` lists the indices INTO
     ``frames`` that survived the gate, so the caller can map a medoid row back to its real
     frame without re-deriving the rejections.  ``basis_used`` is the basis ACTUALLY used —
     a construct with fewer than :data:`_OCC_MIN_BP_COLUMNS` duplex columns has no duplex
     axis worth speaking of and falls back to ``"nt"``.  That fallback is returned rather
     than applied silently, so a payload can never claim ``basis="bp"`` while carrying
-    per-nucleotide data.
+    per-nucleotide data; ``plan`` carries the same honesty for the fit frame.
 
     ``X`` rows are in composite frame order; that ordering is load-bearing for the
     recurrence test in :func:`occupancy_clusters`.
@@ -137,6 +146,12 @@ def occupancy_features(frames, keys, design, *, basis: str = "nt", selection=Non
         if not sel_idx:
             raise ValueError("the selection matched no nucleotides in this basis")
 
+    # The key per FEATURE COLUMN of the basis actually in play — nucleotide keys for "nt",
+    # the forward key of each duplex column for "bp". This is what the fit plan indexes.
+    col_keys = key_list if basis == "nt" else [key_list[i] for i in ia_wc]
+    plan = occupancy_fit_plan(design, col_keys, sel_idx, fit=fit)
+    need = plan["need_idx"]
+
     rows: list[np.ndarray] = []
     kept: list[int] = []
     for i, fr in enumerate(frames):
@@ -149,22 +164,17 @@ def occupancy_features(frames, keys, design, *, basis: str = "nt", selection=Non
         if len(ia_bb) and _fene_violation_fraction(cm, a1, a3, ia_bb, ib_bb) > _STRAIN_FRAME_REJECT_FRAC:
             continue
         sites = oxdna_backbone_sites(cm, a1, a3)
-        if basis == "nt":
-            v = sites[sel_idx] if sel_idx is not None else sites
-        else:
-            mid = 0.5 * (sites[ia_wc] + sites[ib_wc])
-            v = mid[sel_idx] if sel_idx is not None else mid
-        rows.append(np.asarray(v, dtype=float).ravel())
+        cols = sites if basis == "nt" else 0.5 * (sites[ia_wc] + sites[ib_wc])
+        # Retained per frame in POINT shape, not ravelled: the fit plan needs (n, 3), and
+        # for "local" `need` is wider than the selection (a junction's frame is defined by
+        # duplex that was not picked). Same byte count either way.
+        rows.append(np.asarray(cols[need] if sel_idx is not None else cols, dtype=float))
         kept.append(i)
 
-    if basis == "nt":
-        feature_keys = [key_list[i] for i in sel_idx] if sel_idx is not None else key_list
-    else:
-        cols = [key_list[i] for i in ia_wc]
-        feature_keys = [cols[i] for i in sel_idx] if sel_idx is not None else cols
+    feature_keys = [col_keys[i] for i in sel_idx] if sel_idx is not None else list(col_keys)
     if not rows:
-        return np.zeros((0, 0)), feature_keys, [], basis
-    return np.array(rows, dtype=float), feature_keys, kept, basis
+        return np.zeros((0, 0)), feature_keys, [], basis, plan
+    return apply_fit_plan(np.array(rows, dtype=float), plan), feature_keys, kept, basis, plan
 
 
 # ── Clustering primitives ─────────────────────────────────────────────────────────
@@ -194,6 +204,7 @@ def _sampling_indices(out_stages) -> list[int]:
 def production_occupancy(design, stages, reference_conf_path, *, max_frames: int = 200,
                          n_clusters: int = 0, method: str = "pca", basis: str = "nt",
                          align: bool = True, progress=None, selection=None,
+                         fit: str = "selection",
                          n_trailing_extra: int = 0,
                          trailing_extra_strand_length: int = 0) -> dict:
     """Occupancy states for a job's sampling stages — the route payload.
@@ -203,6 +214,10 @@ def production_occupancy(design, stages, reference_conf_path, *, max_frames: int
 
     Emits ``keys`` and each medoid ``frame`` in exactly ``composite_trajectory``'s wire
     shape, so the frontend reuses ``framesToUpdates`` with no new mapping code.
+
+    ``fit`` chooses the reference frame for a SCOPED run — see :func:`occupancy_fit_plan`.
+    It is reported back as ``fit``/``fit_requested``/``fit_note`` because a mode degrades
+    rather than lying, the same contract ``basis`` has.
     """
     if method != "pca":
         raise ValueError("method must be 'pca'")
@@ -221,8 +236,8 @@ def production_occupancy(design, stages, reference_conf_path, *, max_frames: int
 
     samples = [ordered[i] for i in idx]
     try:
-        X, feature_keys, kept_rows, basis_used = occupancy_features(
-            samples, key_list, design, basis=basis, selection=selection)
+        X, feature_keys, kept_rows, basis_used, plan = occupancy_features(
+            samples, key_list, design, basis=basis, selection=selection, fit=fit)
     except ValueError as e:
         return {"ready": False, "reason": str(e)}
     n_torn = len(samples) - len(kept_rows)
@@ -243,6 +258,10 @@ def production_occupancy(design, stages, reference_conf_path, *, max_frames: int
     res["basis"] = basis_used           # what was actually used, not what was asked for
     res["basis_requested"] = basis
     res["scoped"] = bool(selection) and len(feature_keys) < len(key_list)
+    res["fit"] = plan["fit"]            # what was actually used, not what was asked for
+    res["fit_requested"] = plan["fit_requested"]
+    res["fit_note"] = plan["note"]
+    res["n_fit_points"] = plan["n_fit_points"]
     res["n_selected"] = len(feature_keys)
     res["n_total"] = len(key_list)
     res["n_frames_total"] = len(ordered)
@@ -259,7 +278,7 @@ def production_occupancy(design, stages, reference_conf_path, *, max_frames: int
 def production_occupancy_cached(design, stages, reference_conf_path, *, max_frames: int = 200,
                                 n_clusters: int = 0, method: str = "pca", basis: str = "nt",
                                 align: bool = True, progress=None, refetch: bool = False,
-                                selection=None,
+                                selection=None, fit: str = "selection",
                                 n_trailing_extra: int = 0,
                                 trailing_extra_strand_length: int = 0) -> dict:
     """LRU over :func:`production_occupancy`, keyed on the full parameter set.
@@ -276,7 +295,7 @@ def production_occupancy_cached(design, stages, reference_conf_path, *, max_fram
 
     key = (_aligned_cache_key(stages, reference_conf_path, max_frames, True),
            bool(align), int(n_trailing_extra), int(trailing_extra_strand_length),
-           int(n_clusters), str(method), str(basis), _selection_sig(selection))
+           int(n_clusters), str(method), str(basis), _selection_sig(selection), str(fit))
 
     if refetch:
         _OCCUPANCY_CACHE.pop(key, None)
@@ -292,7 +311,7 @@ def production_occupancy_cached(design, stages, reference_conf_path, *, max_fram
     res = production_occupancy(
         design, stages, reference_conf_path, max_frames=max_frames, n_clusters=n_clusters,
         method=method, basis=basis, align=align, progress=progress, selection=selection,
-        n_trailing_extra=n_trailing_extra,
+        fit=fit, n_trailing_extra=n_trailing_extra,
         trailing_extra_strand_length=trailing_extra_strand_length)
 
     _OCCUPANCY_CACHE[key] = res

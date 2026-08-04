@@ -2322,14 +2322,16 @@ export const getOxdnaOccupancy = (id, opts) => {
 }
 /** Occupancy clouds restricted to PART of the structure — same payload as
  *  getOxdnaOccupancy plus `opts.selection` (clusters / strands / domains / overhangs /
- *  bases). POST because a base-level selection is far too big for a query string. */
+ *  bases). POST because a base-level selection is far too big for a query string.
+ *  `opts.fit` is the reference frame the scoped feature set is re-superposed in
+ *  ('selection' | 'local' | 'global'); the response echoes what was actually used. */
 export const postOxdnaOccupancy = (id, opts) => {
   const { align, signal, scope } = _vizOpts(opts, 'postOxdnaOccupancy')
   const { nClusters = 0, maxFrames = 200, method = 'pca', basis = 'nt', refetch = false,
-          selection = null } = opts ?? {}
+          selection = null, fit = 'selection' } = opts ?? {}
   return _oxdnaJSON('POST', `/oxdna/jobs/${id}/occupancy`, {
     align, scope, max_frames: maxFrames, n_clusters: nClusters, method, basis, refetch,
-    selection,
+    selection, fit,
   }, { signal })
 }
 /** Live frames-processed progress for an in-flight occupancy build ({active,done,total}). */
@@ -2635,13 +2637,15 @@ export const getMdOccupancy = (id, signal, opts = {}) => {
     + `&basis=${basis}&refetch=${refetch}`,
     undefined, { signal })
 }
-/** Occupancy clouds restricted to picked clusters / strands / bases. POST because a
- *  base-level selection is far too big for a query string. */
+/** Occupancy clouds restricted to picked clusters / strands / bases / crossover extra
+ *  bases. POST because a base-level selection is far too big for a query string.
+ *  `opts.fit` picks the frame the scoped set is re-superposed in — same vocabulary as the
+ *  oxDNA twin, because both engines run the one shared `occupancy_fit_plan`. */
 export const postMdOccupancy = (id, signal, opts = {}) => {
   const { nClusters = 0, maxFrames = 200, basis = 'nt', refetch = false,
-          selection = null } = opts
+          selection = null, fit = 'selection' } = opts
   return _oxdnaJSON('POST', `/md/jobs/${id}/occupancy`, {
-    max_frames: maxFrames, n_clusters: nClusters, basis, refetch, selection,
+    max_frames: maxFrames, n_clusters: nClusters, basis, refetch, selection, fit,
   }, { signal })
 }
 /** Kill the in-flight trajectory/RMSF/surface analysis for a job (view toggled

@@ -763,6 +763,9 @@ class MdOccupancyBody(BaseModel):
     basis: str = "nt"
     refetch: bool = False
     selection: Optional[OccupancySelection] = None
+    #: Reference frame for a SCOPED run — "selection" | "local" | "global". Same vocabulary
+    #: and same shared implementation as the oxDNA twin (``occupancy_fit_plan``).
+    fit: str = "selection"
 
 
 #: Result-level LRU. There is no MD equivalent of oxDNA's shared ``_ALIGNED_CACHE``: every
@@ -774,7 +777,8 @@ _MD_OCC_CACHE: "OrderedDict[tuple, dict]" = OrderedDict()
 _MD_OCC_CACHE_MAX = 6
 
 
-def _md_occ_cache_key(segments, psf, max_frames, n_clusters, basis, selection):
+def _md_occ_cache_key(segments, psf, max_frames, n_clusters, basis, selection,
+                      fit="selection"):
     """size+mtime per DCD, so a GROWING trajectory self-invalidates — the property
     oxDNA's ``_aligned_cache_key`` relies on."""
     from backend.core.occupancy_core import _selection_sig
@@ -787,15 +791,19 @@ def _md_occ_cache_key(segments, psf, max_frames, n_clusters, basis, selection):
             return (str(path), -1, -1)
 
     return (tuple(sig(s[2]) for s in segments), sig(psf), int(max_frames), int(n_clusters),
-            str(basis), _selection_sig(selection))
+            str(basis), _selection_sig(selection), str(fit))
 
 
 async def _md_occupancy_impl(job_id: str, request: Request, *, max_frames: int,
                              n_clusters: int, basis: str, refetch: bool,
-                             selection=None) -> dict:
+                             selection=None, fit: str = "selection") -> dict:
     """Shared body for the GET (whole structure) and POST (scoped) MD occupancy routes."""
+    from backend.core.occupancy_core import OCC_FIT_MODES
+
     if basis not in ("nt", "bp"):
         raise HTTPException(400, "basis must be 'nt' or 'bp'")
+    if fit not in OCC_FIT_MODES:
+        raise HTTPException(400, f"fit must be one of {', '.join(OCC_FIT_MODES)}")
     n_clusters = int(max(0, min(6, n_clusters)))
     max_frames = int(max(0, max_frames)) or 200
 
@@ -805,7 +813,7 @@ async def _md_occupancy_impl(job_id: str, request: Request, *, max_frames: int,
                 "clusters": [], "keys": []}
     psf, ref, segments, design = inputs
 
-    key = _md_occ_cache_key(segments, psf, max_frames, n_clusters, basis, selection)
+    key = _md_occ_cache_key(segments, psf, max_frames, n_clusters, basis, selection, fit)
     if refetch:
         _MD_OCC_CACHE.pop(key, None)
     else:
@@ -817,7 +825,7 @@ async def _md_occupancy_impl(job_id: str, request: Request, *, max_frames: int,
     result = await _run_md_analysis(
         request, job_id, "occupancy", "md_occupancy",
         (psf, segments, ref, design, max_frames, n_clusters, basis,
-         selection.model_dump() if selection is not None else None),
+         selection.model_dump() if selection is not None else None, fit),
         timeout_s=900.0)
 
     if result.get("ready"):
@@ -858,11 +866,13 @@ async def post_md_occupancy(job_id: str, request: Request, body: MdOccupancyBody
     """Occupancy clouds restricted to PART of the structure — see the oxDNA POST twin.
 
     POST because a base-level selection is far too big for a query string. NAMD and oxDNA
-    speak the same nucleotide keys, so the selection vocabulary is literally identical.
+    speak the same nucleotide keys, so the selection vocabulary is literally identical —
+    including ``fit``, which re-superposes the scoped feature set (on the selection, or on
+    each crossover extra base's own junction) before clustering.
     """
     return await _md_occupancy_impl(
         job_id, request, max_frames=body.max_frames, n_clusters=body.n_clusters,
-        basis=body.basis, refetch=body.refetch, selection=body.selection)
+        basis=body.basis, refetch=body.refetch, selection=body.selection, fit=body.fit)
 
 
 @router.get("/md/jobs/{job_id}/shape-source")

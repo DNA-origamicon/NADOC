@@ -514,6 +514,26 @@ describe('the scope picker is reused, not reimplemented', () => {
     expect(block).toMatch(/value="all" selected/)
     expect(block).toMatch(/value="selection"/)
   })
+
+  // The fit frame decides what a scoped run MEANS — leave the whole-structure alignment
+  // on and the PCA reports where the region sat rather than what shape it took. Both
+  // engine cards carry it, and both hide it until a scope is chosen.
+  for (const prefix of ['oxdna', 'md']) {
+    it(`${prefix}: offers all three fit frames, defaulting to fit-on-selection`, () => {
+      const i = HTML.indexOf(`id="${prefix}-jobs-occupancy-fit"`)
+      expect(i, `#${prefix}-jobs-occupancy-fit`).toBeGreaterThan(-1)
+      const block = HTML.slice(i, i + 600)
+      expect(block).toMatch(/value="selection" selected/)
+      expect(block).toMatch(/value="local"/)
+      expect(block).toMatch(/value="global"/)
+    })
+
+    it(`${prefix}: hides the fit row until a scope is picked`, () => {
+      const i = HTML.indexOf(`id="${prefix}-occupancy-fit-row"`)
+      expect(i, `#${prefix}-occupancy-fit-row`).toBeGreaterThan(-1)
+      expect(HTML.slice(i, HTML.indexOf('>', i))).toMatch(/display:none/)
+    })
+  }
 })
 
 // ── Extra crossover bases and extension tails in the drawn states ─────────────────

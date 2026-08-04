@@ -4174,6 +4174,16 @@
                         <option value="selection">Specific elements…</option>
                       </select>
                     </label>
+                    <label id="oxdna-occupancy-fit-row" style="display:none;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px"
+                           title="The reference frame the selected coordinates are expressed in before clustering. Frames arrive fitted on the WHOLE structure, so a sub-region still carries its own rigid-body motion inside that fit — cluster on it and you learn where the region was, not what shape it took. Fit on the selection removes that (duplex-paired points only, when the pick mixes duplex with floppy bases). Junction frame is the crossover-extra-base mode: each insert is fitted on its own junction's flanking duplex, so what is left is the insert's own conformation.">
+                      Fit frame:
+                      <select id="oxdna-jobs-occupancy-fit"
+                              style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                        <option value="selection" selected>On the selection</option>
+                        <option value="local">On each crossover junction</option>
+                        <option value="global">Whole structure (no re-fit)</option>
+                      </select>
+                    </label>
                     <!-- Scope picker: the SAME shared anchor widget (chips, x-delete, Clear,
                          purple halo) the five engine panels use, on its own id skeleton. -->
                     <div id="oxdna-occupancy-scope-card" style="display:none;margin-top:4px">
@@ -5469,6 +5479,16 @@
                               style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
                         <option value="all" selected>Whole structure</option>
                         <option value="selection">Specific elements…</option>
+                      </select>
+                    </label>
+                    <label id="md-occupancy-fit-row" style="display:none;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px"
+                           title="The reference frame the selected coordinates are expressed in before clustering. NAMD frames arrive Kabsch-fitted on the whole rigid core, so a sub-region still carries its own rigid-body motion inside that fit. Fit on the selection removes it (duplex-paired points only, when the pick mixes duplex with floppy bases). Junction frame is the crossover-extra-base mode: each insert is fitted on its own junction's flanking duplex, leaving the insert's own conformation.">
+                      Fit frame:
+                      <select id="md-jobs-occupancy-fit"
+                              style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                        <option value="selection" selected>On the selection</option>
+                        <option value="local">On each crossover junction</option>
+                        <option value="global">Whole structure (no re-fit)</option>
                       </select>
                     </label>
                     <div id="md-occupancy-scope-card" style="display:none;margin-top:4px">

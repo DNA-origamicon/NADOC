@@ -2134,11 +2134,15 @@ async function main() {
   const _anchorsByEngine = {}   // engine key → that card's last highlighted anchor set
   const _refreshAnchorGlow = () => {
     const engine = engineSelector?.getSelected?.() ?? 'oxdna'
-    // The occupancy-cloud SCOPE picker is a sixth channel that is not an engine tab, so
-    // it would never be the "selected engine" — union it in, or its purple halo could
+    // The occupancy-cloud SCOPE pickers are channels that are not engine tabs, so neither
+    // would ever be the "selected engine" — union them in, or their purple halo could
     // never show. Each card gates its own contribution with its highlight checkbox.
+    // BOTH engines' cards: oxDNA registers as `occupancy` and NAMD as `md-occupancy`
+    // (`initOccupancyControls`), and listing only the first left the MD scope picker with
+    // chips but no halo — you could not see in the 3D view what you had picked.
     anchorGlow.setAnchors([...(_anchorsByEngine[engine] || []),
-                           ...(_anchorsByEngine.occupancy || [])])
+                           ...(_anchorsByEngine.occupancy || []),
+                           ...(_anchorsByEngine['md-occupancy'] || [])])
   }
   // The card owns which anchors are lit (its "Highlight all anchors" toggle + any focused
   // chip) and ships that subset on the event, so the chips and the halo can't disagree.

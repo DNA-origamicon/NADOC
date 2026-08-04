@@ -1758,14 +1758,17 @@ async def get_oxdna_occupancy(job_id: str, request: Request, align: bool = True,
 
 async def _occupancy_impl(job_id: str, request: Request, *, align: bool, scope: str,
                           max_frames: int, n_clusters: int, method: str, basis: str,
-                          refetch: bool, selection=None) -> dict:
+                          refetch: bool, selection=None, fit: str = "selection") -> dict:
     """Shared body for the GET (whole structure) and POST (scoped) occupancy routes."""
+    from backend.core.occupancy_core import OCC_FIT_MODES
     from backend.core.oxdna_occupancy import production_occupancy_cached
 
     if method != "pca":
         raise HTTPException(400, "method must be 'pca'")
     if basis not in ("nt", "bp"):
         raise HTTPException(400, "basis must be 'nt' or 'bp'")
+    if fit not in OCC_FIT_MODES:
+        raise HTTPException(400, f"fit must be one of {', '.join(OCC_FIT_MODES)}")
     n_clusters = int(max(0, min(6, n_clusters)))
     max_frames = int(max(0, max_frames))
 
@@ -1790,7 +1793,7 @@ async def _occupancy_impl(job_id: str, request: Request, *, align: bool, scope: 
             lambda: production_occupancy_cached(
                 design, stages, ref, max_frames=max_frames, n_clusters=n_clusters,
                 method=method, basis=basis, align=align, progress=_prog, refetch=refetch,
-                selection=selection,
+                selection=selection, fit=fit,
                 n_trailing_extra=_capture_bead_count(job),
                 trailing_extra_strand_length=_capture_strand_length(job))))
         while not task.done():
@@ -1843,6 +1846,9 @@ class OccupancyBody(BaseModel):
     basis: str = "nt"
     refetch: bool = False
     selection: Optional[OccupancySelection] = None
+    #: Reference frame for a SCOPED run — "selection" | "local" | "global". Ignored when
+    #: there is no selection (an unscoped run is always the whole-structure fit).
+    fit: str = "selection"
 
 
 @router.post("/oxdna/jobs/{job_id}/occupancy")
@@ -1856,18 +1862,21 @@ async def post_oxdna_occupancy(job_id: str, request: Request, body: OccupancyBod
     states can sit entirely inside the noise floor of that fit. Restricting the feature
     matrix is what makes those local states visible.
 
-    CAVEAT: this docstring used to claim the scoped run also re-superposes on the selection
-    so the region's rigid-body motion is removed rather than clustered on. It does not —
-    ``_superpose_on_subset`` has no production call site (verified 2026-08-01). So a scoped
-    PCA still sees the region's swing inside the GLOBAL fit. See
-    ``memory/project_oxdna_occupancy_clouds.md``.
+    The scoped run is then RE-SUPERPOSED, because the frames arrive fitted on the whole
+    structure and a sub-region still carries its rigid-body motion inside that fit — PCA
+    would cluster on where the region was rather than what shape it took. ``fit`` picks the
+    frame: ``"selection"`` (default, fit on the picked points — duplex-paired ones only
+    when the pick is mixed), ``"local"`` (each crossover extra base on its own junction's
+    flanking duplex), or ``"global"`` (the old behaviour, keep the whole-structure fit).
+    The response reports ``fit``/``fit_requested``/``fit_note``: a mode degrades rather
+    than lying, exactly as ``basis`` does.
 
     POST rather than GET because a base-level selection is far too big for a query string.
     """
     return await _occupancy_impl(
         job_id, request, align=body.align, scope=body.scope, max_frames=body.max_frames,
         n_clusters=body.n_clusters, method=body.method, basis=body.basis,
-        refetch=body.refetch,
+        refetch=body.refetch, fit=body.fit,
         selection=body.selection.model_dump() if body.selection else None)
 
 

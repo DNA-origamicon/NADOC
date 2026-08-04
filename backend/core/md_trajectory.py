@@ -1261,7 +1261,8 @@ def md_production_segments(segments) -> list[int]:
 
 
 def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: int = 200,
-                 n_clusters: int = 0, basis: str = "nt", selection=None) -> dict:
+                 n_clusters: int = 0, basis: str = "nt", selection=None,
+                 fit: str = "selection") -> dict:
     """Top-N most likely CONFIGURATIONS of a NAMD ensemble.
 
     The NAMD counterpart of :func:`backend.core.oxdna_occupancy.production_occupancy`.
@@ -1280,6 +1281,10 @@ def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: i
       frame, so no torn-frame rejection is applied here; MD frames arrive PBC-corrected
       and Kabsch-aligned from :func:`_extract_md_nadoc_frame` already.
 
+    ``fit`` is shared too: a scoped run re-superposes on the selection (or, for
+    ``"local"``, on each selected crossover extra base's own junction) before clustering.
+    See :func:`backend.core.occupancy_core.occupancy_fit_plan`.
+
     Unlike ``md_rmsf``'s one-pass accumulator this RETAINS every sampled frame — clustering
     needs them all at once — so cost scales with ``max_frames`` in memory as well as time.
 
@@ -1288,7 +1293,8 @@ def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: i
     """
     import MDAnalysis as mda  # type: ignore  # noqa: PLC0415  (heavy; lazy like its siblings)
 
-    from backend.core.occupancy_core import occupancy_clusters, resolve_selection_keys
+    from backend.core.occupancy_core import (
+        apply_fit_plan, occupancy_clusters, occupancy_fit_plan, resolve_selection_keys)
 
     seg_paths = [s[2] for s in segments]
     ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
@@ -1333,6 +1339,13 @@ def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: i
     want = set(scoped)
     sel_idx = [i for i, k in enumerate(key_list) if k in want] if is_scoped else None
 
+    # A scoped run is re-superposed before clustering, or its PCA reports where the region
+    # WAS inside the whole-structure fit rather than what shape it took. `need` is wider
+    # than the selection for fit="local" — a junction's frame is flanking duplex nobody
+    # picked. Identical machinery to the oxDNA twin; see occupancy_fit_plan.
+    plan = occupancy_fit_plan(design, key_list, sel_idx, fit=fit)
+    need = plan["need_idx"]
+
     n_p = len(p_order)
     rows: list[np.ndarray] = []
     kept: list[int] = []
@@ -1350,8 +1363,8 @@ def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: i
         elif term_specs:
             nrm = np.vstack([nrm, np.tile([0.0, 0.0, 1.0], (len(term_specs), 1))])
 
-        v = pos[sel_idx] if sel_idx is not None else pos
-        rows.append(np.asarray(v, dtype=float).ravel())
+        v = pos[need] if sel_idx is not None else pos
+        rows.append(np.asarray(v, dtype=float))
         kept.append(gidx)
         # Same 6-float stride as md_composite_trajectory / _flatten_cg_frame, so the
         # frontend consumes an MD medoid with the oxDNA code path unchanged.
@@ -1366,7 +1379,8 @@ def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: i
                 "reason": f"need at least 20 frames to cluster (have {len(rows)})",
                 "n_frames": len(rows)}
 
-    res = occupancy_clusters(np.array(rows, dtype=float), n_clusters=n_clusters)
+    res = occupancy_clusters(apply_fit_plan(np.array(rows, dtype=float), plan),
+                             n_clusters=n_clusters)
     if not res.get("ready"):
         return res
 
@@ -1374,6 +1388,10 @@ def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: i
     res["basis"] = "nt"          # MD has one site per nucleotide; no bp-midpoint basis yet
     res["basis_requested"] = basis
     res["scoped"] = bool(is_scoped)
+    res["fit"] = plan["fit"]
+    res["fit_requested"] = plan["fit_requested"]
+    res["fit_note"] = plan["note"]
+    res["n_fit_points"] = plan["n_fit_points"]
     res["n_selected"] = len(sel_idx) if sel_idx is not None else len(key_list)
     res["n_total"] = len(key_list)
     res["n_frames_total"] = sum(seg_counts)

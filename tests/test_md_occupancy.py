@@ -105,6 +105,53 @@ def test_md_does_not_route_through_oxdna_feature_assembly():
     # …but the CLUSTERING is shared, not reimplemented.
     assert "occupancy_clusters" in body
     assert "resolve_selection_keys" in body
+    # …and so is the scoped re-superposition. `_superpose_on_subset` sat unused for a whole
+    # release while both engines' docstrings claimed a scoped run was re-fitted, so pin the
+    # CALL, not the existence of the function.
+    assert "occupancy_fit_plan" in body
+    assert "apply_fit_plan" in body
+
+
+def test_md_scoped_run_is_refitted_and_reports_which_frame():
+    """A scoped NAMD run must re-superpose, and the payload must say how: the fit frame
+    changes the scientific answer (measured on job bfd050d2ce4c, 2hb_2xT 200 ns, 4 T
+    inserts — global says drift, fit-on-selection says a recurrent 2-state flip)."""
+    import inspect
+
+    from backend.core import md_trajectory
+
+    src = inspect.getsource(md_trajectory.md_occupancy)
+    for field in ('res["fit"]', 'res["fit_requested"]', 'res["fit_note"]',
+                  'res["n_fit_points"]'):
+        assert field in src, f"{field} missing — a degraded fit would go unreported"
+
+
+def test_md_occupancy_cache_key_separates_fit_frames():
+    """The same region re-superposed differently is a different analysis; sharing a cache
+    entry would serve the previous frame's answer."""
+    from backend.api.routes_md import _md_occ_cache_key
+    from backend.api.routes_oxdna import OccupancySelection
+
+    segs = [("s", "5 ns production replica", "/tmp/none.dcd")]
+    sel = OccupancySelection(extra_bases=[["xo1"]]).model_dump()
+    a = _md_occ_cache_key(segs, "/tmp/none.psf", 200, 0, "nt", sel, "selection")
+    b = _md_occ_cache_key(segs, "/tmp/none.psf", 200, 0, "nt", sel, "local")
+    assert a != b
+
+
+def test_md_occupancy_body_rejects_an_unknown_fit_mode():
+    """The route 400s rather than silently analysing in some other frame."""
+    import pytest
+    from fastapi import HTTPException
+
+    from backend.api import routes_md
+
+    with pytest.raises(HTTPException) as e:
+        import asyncio
+        asyncio.run(routes_md._md_occupancy_impl(
+            "nope", None, max_frames=200, n_clusters=0, basis="nt", refetch=False,
+            fit="whatever"))
+    assert e.value.status_code == 400
 
 
 def test_md_occupancy_is_reachable_by_the_subprocess_runner():

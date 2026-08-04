@@ -237,7 +237,7 @@ def test_features_reject_torn_frames_and_report_which_survived(monkeypatch):
     torn = _frame(keys, [[0, 0, 0], [0, 0, _BOND_NM], [0, 0, 90.0], [0, 0, 90.0 + _BOND_NM]])
     frames = [good[0], torn, good[1], good[2]]
 
-    X, _fk, kept, _basis = occ.occupancy_features(frames, keys, _FakeDesign(), basis="nt")
+    X, _fk, kept, _basis, _plan = occ.occupancy_features(frames, keys, _FakeDesign(), basis="nt")
 
     assert kept == [0, 2, 3], "the torn frame must be dropped, the rest kept in order"
     assert X.shape[0] == 3
@@ -284,7 +284,7 @@ def test_bp_basis_uses_only_paired_columns(monkeypatch):
     monkeypatch.setattr(occ, "_strain_index", fake_index)
     frames = [_frame(keys, positions, a1s) for _ in range(2)]
 
-    X, feature_keys, kept, basis_used = occ.occupancy_features(
+    X, feature_keys, kept, basis_used, _plan = occ.occupancy_features(
         frames, keys, _FakeDesign(), basis="bp")
 
     assert basis_used == "bp"
@@ -305,7 +305,7 @@ def test_bp_basis_falls_back_to_nt_and_says_so(monkeypatch):
     monkeypatch.setattr(occ, "_strain_index", fake_index)
     frames = [_frame(keys, positions, a1s) for _ in range(2)]
 
-    X, feature_keys, _kept, basis_used = occ.occupancy_features(
+    X, feature_keys, _kept, basis_used, _plan = occ.occupancy_features(
         frames, keys, _FakeDesign(), basis="bp")
 
     assert basis_used == "nt", "the fallback must be reported, not applied silently"
@@ -321,7 +321,7 @@ def test_nt_basis_keeps_every_nucleotide(monkeypatch):
                         lambda design, k, metric: (np.array([0, 1, 2]), np.array([1, 2, 3])))
     frames = [_frame(keys, [[0, 0, i * _BOND_NM] for i in range(4)]) for _ in range(2)]
 
-    X, feature_keys, _kept, _basis = occ.occupancy_features(frames, keys, _FakeDesign(), basis="nt")
+    X, feature_keys, _kept, _basis, _plan = occ.occupancy_features(frames, keys, _FakeDesign(), basis="nt")
     assert X.shape[1] == 4 * 3
     assert feature_keys == keys
 
@@ -636,6 +636,148 @@ def test_subset_superposition_keeps_a_real_shape_change():
     res = occupancy_clusters(_superpose_on_subset(np.array(frames)))
     assert res["verdict"] == "switching"
     assert res["k"] == 2
+
+
+# ── Fit frames for a scoped run ───────────────────────────────────────────────────
+#
+# The pin that matters: `occupancy_fit_plan` must actually be REACHED from production.
+# `_superpose_on_subset` was written, correct and tested for a whole release while having
+# no call site at all, so every scoped run silently clustered the region's rigid-body swing
+# inside the global fit. Prove the wiring, not just the maths.
+
+_XO_A = "xo-a"
+_FLANK_KEYS = [("h0", i, d) for i in range(11, 18) for d in ("FORWARD", "REVERSE")]
+
+
+class _FitHalf:
+    def __init__(self, hid, idx):
+        self.helix_id, self.index = hid, idx
+
+
+class _FitXover:
+    def __init__(self):
+        self.id = _XO_A
+        self.half_a = _FitHalf("h0", 14)
+        self.half_b = _FitHalf("h1", 14)
+
+
+class _FitDesign:
+    """A design with one crossover carrying two extra bases at h0/h1 index 14."""
+
+    crossovers = [_FitXover()]
+    cluster_transforms: list = []
+
+
+def _fit_keys():
+    """Duplex flanking both halves + the two inserts. Paired columns exist on h0 only, so
+    a selection spanning both is genuinely MIXED."""
+    keys = list(_FLANK_KEYS)
+    keys += [("h1", i, d) for i in range(11, 18) for d in ("FORWARD", "REVERSE")]
+    keys += [("__xb__", _XO_A, 0), ("__xb__", _XO_A, 1)]
+    return keys
+
+
+def test_an_unscoped_run_is_never_refitted():
+    """There is no sub-region whose rigid-body motion could be removed, so the whole
+    structure keeps the alignment every other overlay shares."""
+    from backend.core.occupancy_core import occupancy_fit_plan
+
+    plan = occupancy_fit_plan(_FitDesign(), _fit_keys(), None, fit="selection")
+    assert plan["fit"] == "global"
+    assert plan["groups"] == []
+
+
+def test_a_mixed_selection_fits_on_the_duplex_points_only():
+    """An unpaired bead's RMSF is several times the duplex value, and Kabsch weights every
+    point equally — let the inserts into the fit set and they drag the frame around."""
+    from backend.core.occupancy_core import occupancy_fit_plan
+
+    keys = _fit_keys()
+    sel = list(range(len(keys)))                       # duplex AND both inserts
+    plan = occupancy_fit_plan(_FitDesign(), keys, sel, fit="selection")
+
+    assert plan["fit"] == "selection"
+    assert plan["n_fit_points"] == len(keys) - 2, "the two __xb__ inserts stay out of the fit"
+    assert "duplex-paired" in (plan["note"] or "")
+    (fit_pos, out_pos, _slots), = plan["groups"]
+    assert len(out_pos) == len(keys), "every picked point is still a FEATURE"
+
+
+def test_too_few_points_keeps_the_global_fit_and_says_so():
+    from backend.core.occupancy_core import occupancy_fit_plan
+
+    keys = _fit_keys()
+    plan = occupancy_fit_plan(_FitDesign(), keys, [len(keys) - 2, len(keys) - 1],
+                              fit="selection")
+    assert plan["fit"] == "global"
+    assert "no rotation to remove" in plan["note"]
+
+
+def test_local_fit_uses_the_junction_flanking_duplex_not_the_inserts():
+    """The extra-base mode: each insert is expressed in ITS OWN junction's frame, which is
+    duplex nobody picked — so `need_idx` must be WIDER than the selection."""
+    from backend.core.occupancy_core import occupancy_fit_plan
+
+    keys = _fit_keys()
+    inserts = [len(keys) - 2, len(keys) - 1]
+    plan = occupancy_fit_plan(_FitDesign(), keys, inserts, fit="local")
+
+    assert plan["fit"] == "local"
+    assert len(plan["need_idx"]) > len(inserts), "the flanking duplex must be retained too"
+    (fit_pos, out_pos, slots), = plan["groups"]
+    assert plan["n_fit_points"] >= 3
+    assert sorted(slots) == [0, 1], "both inserts are features"
+    fit_keys = {keys[plan["need_idx"][p]] for p in fit_pos}
+    assert all(k[0] != "__xb__" for k in fit_keys), "a junction frame is duplex, not inserts"
+    assert all(abs(k[1] - 14) <= 3 for k in fit_keys), "±3 bp of the crossover, nothing else"
+
+
+def test_local_fit_degrades_to_selection_when_no_extra_bases_are_picked():
+    """A junction frame is undefined without a junction. Degrade and SAY so — a silent
+    fallback would report a different analysis than the one asked for."""
+    from backend.core.occupancy_core import occupancy_fit_plan
+
+    keys = _fit_keys()
+    plan = occupancy_fit_plan(_FitDesign(), keys, list(range(6)), fit="local")
+    assert plan["fit"] == "selection"
+    assert "junction frame is undefined" in plan["note"]
+
+
+def test_apply_fit_plan_removes_a_junction_swing_but_keeps_the_flip():
+    """End to end on synthetic frames: an insert that FLIPS between two poses while its
+    junction swings must come out as the flip. Under the global fit it does not."""
+    from backend.core.occupancy_core import apply_fit_plan, occupancy_clusters, occupancy_fit_plan
+
+    keys = _fit_keys()
+    inserts = [len(keys) - 2, len(keys) - 1]
+    plan = occupancy_fit_plan(_FitDesign(), keys, inserts, fit="local")
+    need = plan["need_idx"]
+
+    rng = np.random.default_rng(3)
+    home = rng.normal(size=(len(need), 3)) * 2.0        # the local rest geometry
+    P = []
+    for t in range(60):
+        th = 1.1 * np.sin(t / 4.0)                      # the junction swings…
+        R = np.array([[np.cos(th), -np.sin(th), 0], [np.sin(th), np.cos(th), 0], [0, 0, 1]])
+        f = home.copy()
+        flip = 1.0 if (t % 8) < 4 else -1.0             # …while the inserts flip
+        for slot, col in enumerate(plan["sel_pos"]):
+            f[col] = f[col] + np.array([0.0, flip * 1.4, 0.0])
+        P.append(f @ R.T + np.array([4 * np.cos(th), 0.0, 0.0])
+                 + rng.normal(scale=0.03, size=(len(need), 3)))
+    P = np.array(P)
+
+    X_local = apply_fit_plan(P, plan)
+    assert X_local.shape == (60, len(inserts) * 3)
+    assert occupancy_clusters(X_local)["k"] == 2, "the flip survives the junction fit"
+
+    # After the junction fit, ALL that is left is the flip — its own amplitude, no more.
+    assert X_local.std(axis=0).max() == pytest.approx(1.4, rel=0.05)
+
+    flat = occupancy_fit_plan(_FitDesign(), keys, inserts, fit="global")
+    X_global = apply_fit_plan(P[:, [need.index(c) for c in flat["need_idx"]], :], flat)
+    assert X_global.std(axis=0).max() > 2.5 * X_local.std(axis=0).max(), \
+        "the swing dominates the unfitted features — the reason this mode exists"
 
 
 def test_selection_by_domain_and_overhang(monkeypatch):

@@ -35,20 +35,57 @@ local hinge or a single flexible seam that flips between two well-defined states
 entirely inside its noise floor. `Analyse: [Whole structure | Specific elements…]` restricts
 the feature matrix to picked clusters / strands / domains / overhangs / individual bases.
 
-**⚠️ A scoped run does NOT currently re-superpose on the selection.** `_superpose_on_subset`
-exists and is correct (plain Kabsch, pinned by `test_subset_superposition_removes_rigid_body_motion`
-and `..._keeps_a_real_shape_change`) but **has no production call site** — `occupancy_features`
-never calls it, and `production_occupancy` goes straight to `occupancy_clusters`. Verified
-2026-08-01: the only callers repo-wide are those two tests.
+### The fit frame — what makes a scoped run mean anything (2026-08-02)
 
-Consequence, and it is a real one: a scoped run's PCA reports where the region WAS — its
-rigid-body swing inside the GLOBAL fit — rather than what shape it took, which is the thing
-scoping exists to avoid. This paragraph previously asserted the opposite, as did the route
-docstring; both were describing intent, not behaviour. **Unfixed** — wiring it changes the
-scientific output of every scoped run already shipped, so it needs a deliberate call, plus a
-decision about whether a MIXED selection (duplex + floppy tail) should fit on all of its
-points or only the duplex ones. Kabsch weights every point equally, and an ssDNA tail's RMSF
-is several times the duplex value.
+For a whole release `_superpose_on_subset` existed, was correct and was tested while having
+**no production call site**, so every scoped run silently clustered the region's rigid-body
+swing inside the GLOBAL fit — reporting where the region *was*, not what shape it took. Both
+engines' docstrings claimed otherwise. Wired now, and generalised, because the right frame is
+selection-dependent. `occupancy_fit_plan` + `apply_fit_plan` (in `occupancy_core`) own it and
+BOTH engines call them; the payload carries `fit` / `fit_requested` / `fit_note` /
+`n_fit_points` — the same don't-lie contract `basis` has.
+
+| `fit` | frame | for |
+|---|---|---|
+| `global` | leave the whole-structure Kabsch fit | when the region's PLACEMENT is the question. The old behaviour |
+| `selection` (default) | Kabsch on the picked points | a sub-region whose internal shape you want |
+| `local` | each `__xb__` insert on ITS OWN junction — both halves, both strands, ±3 bp | **crossover extra bases**: what the T does relative to its own junction |
+
+Three rules that are load-bearing:
+
+- **A MIXED selection fits on the DUPLEX-PAIRED members only** (`_strain_index(…, "wc")`).
+  Kabsch weights every point equally and an unpaired bead's RMSF is several times the duplex
+  value, so letting the floppy points into the fit set lets them drag the frame and smear the
+  motion the duplex part was picked to show. Below 3 paired points it fits on everything and
+  says so in `fit_note`.
+- **`local` is NOT subject to the 3-point floor; `selection` is.** Its fit set comes from the
+  junction, not the pick, so scoping to ONE crossover's one or two inserts — the most natural
+  extra-base question there is — still re-fits. Under `selection` that same pick honestly
+  degrades to `global` with a note.
+- **`need_idx` is wider than the selection under `local`**, because a junction's frame is
+  duplex nobody picked. Both feature builders retain those extra columns per frame and only
+  then apply the plan. Re-fitting is FEATURE-SPACE ONLY — the medoid frames handed back for
+  rendering stay globally aligned, so the drawn states share `/trajectory`'s pose.
+- Direction strings in a junction's flank keys are `"FORWARD"`/`"REVERSE"`, **not** the
+  `Direction` enum the model stores. Getting that wrong yields an empty flank set, which
+  degrades to `selection` silently-but-for-the-note. Cost one probe run.
+
+**The fit frame changes the answer.** Measured on `bfd050d2ce4c` (2hb_2xT, 200 ns production,
+4 T inserts, 80 frames), scoped to all extra bases:
+
+| fit | verdict |
+|---|---|
+| `global` | **drift**, k=5, sil +0.29 — one state visited once |
+| `selection` | **switching**, k=2, sil +0.38, 54 %/46 %, 5 visits each |
+| `local` (56 flank points) | drift, k=6, sil +0.33 |
+
+On the oxDNA twin `2d8b40a0d507` (2hb_1xT production, 2 inserts) the direction reverses, which
+is the point: `global` reads **switching** (46/46 visits) while the junction frame reads
+**unimodal** — what looked like the inserts flipping was the junction moving under them.
+
+UI: a `Fit frame` select on both cards, hidden until `Analyse: Specific elements…` (there is
+nothing to re-superpose on the whole structure). A degraded mode prints its `fit_note` under
+the legend in amber. Changing it drops the per-state colours, like any other reclustering.
 
 **The picker is the SHARED anchor widget, instantiated not forked.** `initOxdnaAnchorsSetup`
 already drives five engine cards off an `ids` override; occupancy adds a sixth channel with
@@ -62,6 +99,10 @@ already drives five engine cards off an `ids` override; occupancy adds a sixth c
   is already gated by the Analyse selector; a second click to reveal it is friction).
 - `main.js:_refreshAnchorGlow` showed only the *engine selector's* engine, and occupancy is
   not an engine tab — its halo could never appear. It now unions the `occupancy` channel in.
+  **The NAMD card registers as `md-occupancy`, a SEVENTH channel, and was left out of that
+  union until 2026-08-02** — chips appeared in the list, nothing lit in the 3D view. Both
+  names are listed explicitly now; pinned by a source-text test in `occupancy_controls.test.js`.
+  Any future card on this widget must add its own channel name there.
 
 Backend: `resolve_selection_keys(design, keys, selection)` — a UNION of `cluster_ids` /
 `helix_ids` / `strand_ids` / `overhang_ids` / `domains` / `bases` / `extra_bases` /
@@ -256,8 +297,11 @@ Populations carry autocorrelation-aware error bars — frames are not independen
 
 | File | Role |
 |---|---|
-| `backend/core/oxdna_occupancy.py` | features → PCA (Gram trick) → k-means → medoids → confidence |
-| `backend/api/routes_oxdna.py` | `GET .../occupancy`, `GET .../occupancy-progress`, `_OCC_PROGRESS` |
+| `backend/core/occupancy_core.py` | the engine-agnostic core: scoping, **the fit plan**, PCA, k-means, medoids, the verdict |
+| `backend/core/oxdna_occupancy.py` | oxDNA feature assembly (nt/bp basis, FENE gate) over that core |
+| `backend/core/md_trajectory.py` | `md_occupancy` — NAMD feature assembly over the same core |
+| `backend/api/routes_oxdna.py` | `GET .../occupancy`, `POST .../occupancy` (selection + `fit`), `_OCC_PROGRESS` |
+| `backend/api/routes_md.py` | the NAMD twin + `_MD_OCC_CACHE` (no shareable frame cache exists) |
 | `frontend/src/scene/occupancy_overlay.js` | one copy per state (build, tint, opacity, LOD, per-state show/recolour, dispose) |
 | `frontend/src/ui/occupancy_controls.js` | DOM, params, cache, scrollable state list, network |
 | `frontend/src/ui/oxdna_display.js` | `_mode = 'occupancy'`, `displayOccupancy`, `onOccupancyClear` |
@@ -351,3 +395,13 @@ panel chrome, not this feature — expect them in any new oxDNA spec):
 - `pc1_series` and `medoid_frame` are returned but nothing renders them — a PC1-vs-time
   switching plot and a "jump the scrubber to this medoid" button are both nearly free.
 - NAMD reuse via `md_viz_adapter.js` is deliberately wire-compatible but unwired.
+- **`fit="local"` covers crossover extra bases only.** An extension tail (`__ext_<id>`) has an
+  equally well-defined local frame — the duplex around its anchor base — but no group is built
+  for one, so a picked tail falls into the leftover group and is fitted on the selection. Cheap
+  to add once the anchor→(helix, bp) lookup is threaded in.
+- **`fit` has no `bp`-basis story for extra bases, and cannot.** Synthetic beads are unpaired,
+  so they never appear as duplex columns: scoping to extra bases with `basis="bp"` correctly
+  fails with *"the selection matched no nucleotides in this basis"*. NAMD is `nt`-only, so this
+  bites the oxDNA card only.
+- The `local` frame is per crossover and its groups are concatenated into one feature vector,
+  so PCA describes what the inserts do *collectively*. There is no per-insert breakdown yet.

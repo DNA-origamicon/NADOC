@@ -57,6 +57,14 @@ describe('normalizeOccupancyParams', () => {
     expect(normalizeOccupancyParams().basis).toBe('nt')
   })
 
+  it('defaults the fit frame to fit-on-selection and rejects anything else', () => {
+    // A scoped run left in the whole-structure fit clusters on where the region WAS.
+    expect(normalizeOccupancyParams().fit).toBe('selection')
+    expect(normalizeOccupancyParams({ fit: 'local' }).fit).toBe('local')
+    expect(normalizeOccupancyParams({ fit: 'global' }).fit).toBe('global')
+    expect(normalizeOccupancyParams({ fit: 'junction' }).fit).toBe('selection')
+  })
+
   it('defaults maxFrames to the trajectory route\'s budget so the frame cache is shared', () => {
     expect(normalizeOccupancyParams().maxFrames).toBe(200)
     expect(normalizeOccupancyParams({ maxFrames: 0 }).maxFrames).toBe(200)
@@ -181,6 +189,33 @@ describe('occupancyFooterHtml', () => {
 
   it('is empty for a not-ready response', () => {
     expect(occupancyFooterHtml({ ready: false })).toBe('')
+  })
+
+  // The fit frame is the difference between "what shape did this region take" and "where
+  // did it sit" — invisible in the picture, so it has to be in the footer.
+  it('names the fit frame for a scoped run and stays silent for an unscoped one', () => {
+    expect(occupancyFooterHtml(SWITCHING)).not.toMatch(/fitted on/)
+    const scoped = { ...SWITCHING, scoped: true, fit: 'selection', n_fit_points: 48 }
+    expect(occupancyFooterHtml(scoped)).toMatch(/fitted on the selection \(48 points\)/)
+    expect(occupancyFooterHtml({ ...scoped, fit: 'local', n_fit_points: 28 }))
+      .toMatch(/junction frame \(28 duplex points\)/)
+  })
+
+  it('surfaces a DEGRADED fit rather than reporting the mode that was asked for', () => {
+    const html = occupancyFooterHtml({
+      ...SWITCHING, scoped: true, fit: 'selection', fit_requested: 'local', n_fit_points: 6,
+      fit_note: 'no crossover extra bases in the selection — a junction frame is undefined',
+    })
+    expect(html).toMatch(/junction frame is undefined/)
+  })
+})
+
+describe('occupancyFitLabel', () => {
+  it('is empty unless the run was scoped', async () => {
+    const { occupancyFitLabel } = await import('./occupancy_controls.js')
+    expect(occupancyFitLabel({ fit: 'local', scoped: false })).toBe('')
+    expect(occupancyFitLabel(null)).toBe('')
+    expect(occupancyFitLabel({ scoped: true, fit: 'global' })).toBe('whole-structure frame')
   })
 })
 
@@ -574,6 +609,19 @@ describe('one card per engine, one overlay', () => {
     await ctrl.refresh()
     expect(fetchOccupancy).toHaveBeenCalled()
     expect(fetchOccupancy.mock.calls[0][0]).toMatchObject({ jobId: 'J1' })
+  })
+
+  it('main.js unions BOTH scope channels into the anchor halo', async () => {
+    // The scope pickers are not engine tabs, so neither is ever `getSelected()`; the halo
+    // has to name each channel explicitly. Listing only `occupancy` left the NAMD card
+    // with chips but nothing lit in the 3D view — you could not see what you had picked.
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const MAIN = readFileSync(resolve(process.cwd(), 'src/main.js'), 'utf8')
+    const i = MAIN.indexOf('_refreshAnchorGlow = ')
+    const block = MAIN.slice(i, i + 900)
+    expect(block).toMatch(/_anchorsByEngine\.occupancy/)
+    expect(block).toMatch(/_anchorsByEngine\['md-occupancy'\]/)
   })
 
   it('a second engine claiming the overlay stands the first one down', async () => {

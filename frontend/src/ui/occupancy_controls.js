@@ -38,6 +38,8 @@ export function occupancyIds(prefix = 'oxdna') {
     legend: `${prefix}-jobs-occupancy-legend`,
     scopeSel: `${prefix}-jobs-occupancy-scope`,
     scopeCard: `${prefix}-occupancy-scope-card`,
+    fit: `${prefix}-jobs-occupancy-fit`,
+    fitRow: `${prefix}-occupancy-fit-row`,
     scope: {
       add: `${prefix}-occupancy-scope-add`, clear: `${prefix}-occupancy-scope-clear`,
       list: `${prefix}-occupancy-scope-list`, status: `${prefix}-occupancy-scope-status`,
@@ -48,14 +50,20 @@ export function occupancyIds(prefix = 'oxdna') {
   }
 }
 
+/** The reference frame a SCOPED run is re-superposed in before clustering. Mirrors the
+ *  backend's `OCC_FIT_MODES`; anything else is a 400, so an unknown value clamps here. */
+export const OCC_FIT_MODES = ['selection', 'local', 'global']
+
 /** Clamp the UI parameters to what the route accepts. Pure. */
-export function normalizeOccupancyParams({ nClusters = 0, basis = 'nt', maxFrames = 200 } = {}) {
+export function normalizeOccupancyParams({ nClusters = 0, basis = 'nt', maxFrames = 200,
+                                           fit = 'selection' } = {}) {
   const n = Number.parseInt(nClusters, 10)
   return {
     nClusters: Number.isFinite(n) ? Math.min(6, Math.max(0, n)) : 0,
     basis: basis === 'bp' ? 'bp' : 'nt',
     maxFrames: Number.isFinite(+maxFrames) && +maxFrames > 0 ? Math.floor(+maxFrames) : 200,
     method: 'pca',
+    fit: OCC_FIT_MODES.includes(fit) ? fit : 'selection',
   }
 }
 
@@ -163,13 +171,31 @@ export function occupancyStateRowsHtml(resp, colors, visible) {
   }).join('')
 }
 
+/** How a scoped run was re-superposed, in the user's words. Pure.
+ *  Returns '' for an unscoped run — there is no sub-region whose frame could differ. */
+export function occupancyFitLabel(resp) {
+  if (!resp?.scoped) return ''
+  if (resp.fit === 'local') return `junction frame (${resp.n_fit_points ?? 0} duplex points)`
+  if (resp.fit === 'selection') return `fitted on the selection (${resp.n_fit_points ?? 0} points)`
+  if (resp.fit === 'global') return 'whole-structure frame'
+  return ''
+}
+
 /** The footer under the list: what the clustering saw, and how well it was sampled. */
 export function occupancyFooterHtml(resp) {
   if (!resp?.ready) return ''
   const pc = resp.variance_explained?.[0]
+  const fit = occupancyFitLabel(resp)
   const foot = `<div style="font-size:var(--text-xs);color:${C.dim};margin-top:3px">`
     + `PC1 ${_pct(pc)} of variance · separation ${resp.silhouette?.toFixed(2)}`
-    + `${resp.basis === 'bp' ? ' · base-pair midpoints' : ''}</div>`
+    + `${resp.basis === 'bp' ? ' · base-pair midpoints' : ''}`
+    + `${fit ? ` · ${fit}` : ''}</div>`
+
+  // A fit mode that DEGRADED says so, or the reading is wrong in a way nothing on screen
+  // would reveal — the same contract `basis` has when "bp" falls back to "nt".
+  const fitNote = resp.fit_note
+    ? `<div style="font-size:var(--text-xs);color:${C.warn};margin-top:2px">${resp.fit_note}</div>`
+    : ''
 
   // The single most important line in the feature: without enough independent visits the
   // populations above are decoration.
@@ -181,7 +207,7 @@ export function occupancyFooterHtml(resp) {
       + `${drift ? 'the run has not sampled either state repeatedly' : 'populations are not converged'}. `
       + 'Sample longer before quoting them.</div>'
     : ''
-  return foot + warn
+  return foot + fitNote + warn
 }
 
 export function initOccupancyControls({
@@ -197,6 +223,8 @@ export function initOccupancyControls({
   const rerunBtn = $(id.rerun)
   const scopeSel = $(id.scopeSel)
   const scopeCard = $(id.scopeCard)
+  const fitSel = $(id.fit)
+  const fitRow = $(id.fitRow)
   const statusEl = $(id.status)
   const legendEl = $(id.legend)
 
@@ -225,15 +253,23 @@ export function initOccupancyControls({
 
   function _paramKey(jobId, p, sel) {
     // The scope is part of the identity of the analysis — two different regions are two
-    // different clusterings and must never share a cached result.
-    return `${jobId}|${p.nClusters}|${p.basis}|${p.maxFrames}|${p.method}|${JSON.stringify(sel)}`
+    // different clusterings and must never share a cached result. So is the fit frame:
+    // the same region re-superposed differently is a different question.
+    return `${jobId}|${p.nClusters}|${p.basis}|${p.maxFrames}|${p.method}|${p.fit}`
+      + `|${JSON.stringify(sel)}`
   }
 
-  function params_() {
-    return normalizeOccupancyParams({
+  /** The parameters for THIS request. `fit` only means anything for a scoped run — an
+   *  unscoped one is the whole-structure fit by definition, so it is pinned to 'global'
+   *  rather than left to vary the cache key over a value the backend ignores. */
+  function params_(sel = undefined) {
+    const p = normalizeOccupancyParams({
       nClusters: nSel?.value ?? 0,
       basis: basisSel?.value ?? 'nt',
+      fit: fitSel?.value ?? 'selection',
     })
+    if (sel === null) p.fit = 'global'
+    return p
   }
 
   // Instantiated, not copied: initOxdnaAnchorsSetup already drives five engine panels
@@ -252,7 +288,12 @@ export function initOccupancyControls({
   }
 
   function _syncScopeCard() {
-    if (scopeCard) scopeCard.style.display = scopeSel?.value === 'selection' ? '' : 'none'
+    const on = scopeSel?.value === 'selection'
+    if (scopeCard) scopeCard.style.display = on ? '' : 'none'
+    // The fit frame is a property of a SCOPED analysis; on the whole structure there is
+    // nothing to re-superpose, so showing the control there would only invite a setting
+    // that does nothing.
+    if (fitRow) fitRow.style.display = on ? '' : 'none'
   }
   _syncScopeCard()
 
@@ -267,8 +308,8 @@ export function initOccupancyControls({
     const jobId = getSelectedJobId?.()
     if (!jobId) return { ok: false, reason: 'no job' }
 
-    const p = params_()
     const sel = selection_()
+    const p = params_(sel)
     const key = _paramKey(jobId, p, sel)
 
     // Becoming active must happen BEFORE the cache short-circuit: a re-toggle after off()
@@ -425,6 +466,9 @@ export function initOccupancyControls({
   })
   nSel?.addEventListener('change', () => { _resetChoices(); if (_active) refresh() })
   basisSel?.addEventListener('change', () => { _resetChoices(); if (_active) refresh() })
+  // A different fit frame is a different clustering, so the per-state colours/visibility
+  // are dropped with it — "state 2" fitted locally is not "state 2" fitted globally.
+  fitSel?.addEventListener('change', () => { _resetChoices(); if (_active) refresh() })
   rerunBtn?.addEventListener('click', () => { if (_active) refresh({ refetch: true }) })
 
   return {

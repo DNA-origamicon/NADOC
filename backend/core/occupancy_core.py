@@ -188,18 +188,231 @@ def _superpose_on_subset(X):
     Feature-space only: the medoid frames handed back for rendering are the untouched,
     globally-aligned ones, so the drawn states stay in the same pose as every other
     overlay. Same discipline as the mean-centring in :func:`_pca_scores`.
+
+    This is the ``fit="selection"`` mode with every selected point in the fit set; the
+    production path reaches it through :func:`occupancy_fit_plan` + :func:`apply_fit_plan`,
+    which additionally know how to fit on the RIGID members only.
     """
     X = np.asarray(X, dtype=float)
-    if X.shape[0] < 2 or X.shape[1] < 9:      # < 3 points: no rotation to speak of
-        return X
+    if X.shape[0] < 2 or X.shape[1] < 3 * _OCC_MIN_FIT_POINTS:
+        return X                              # < 3 points: no rotation to speak of
     n = X.shape[1] // 3
     P = X.reshape(X.shape[0], n, 3)
-    ref = P.mean(axis=0)
-    out = np.empty_like(P)
+    every = list(range(n))
+    return _refit(P, every, every, P.copy(), every).reshape(X.shape[0], -1)
+
+
+# ── Fit frames for a scoped run ───────────────────────────────────────────────────
+#
+# A scoped analysis is only as meaningful as the frame its coordinates are expressed in.
+# Three, and the right one depends on WHAT was picked:
+#
+#   "global"    — leave the whole-structure Kabsch fit alone. The region's own rigid-body
+#                 motion (hinge swing, riding a global bend) stays in the features, so PCA
+#                 can report where the region WAS rather than what shape it took. Correct
+#                 when that placement is the question.
+#   "selection" — fit on the picked points themselves, which removes exactly that rigid
+#                 part. The default for a scoped run, and what every docstring in this
+#                 module claimed was happening long before anything called it.
+#   "local"     — for crossover extra bases: fit each insert on ITS OWN junction (the
+#                 flanking duplex, ±_OCC_LOCAL_FLANK bp on both helices, both strands) and
+#                 cluster the insert coordinates in that frame. Answers "what does this T
+#                 do relative to its crossover", with the structure's global bending and
+#                 the junction's own placement both divided out.
+#
+# MIXED selections (rigid duplex + floppy inserts or an ssDNA tail) fit on the DUPLEX-PAIRED
+# members only. Kabsch weights every point equally and an unpaired bead's RMSF is several
+# times the duplex value, so including the floppy points lets them drag the frame around
+# and smear the very motion the duplex part was picked to show.
+
+OCC_FIT_MODES = ("global", "selection", "local")
+_OCC_LOCAL_FLANK = 3           # bp either side of a junction that define its local frame
+_OCC_MIN_FIT_POINTS = 3        # below 3 points a Kabsch fit has no rotation to remove
+
+
+def _refit(P, fit_pos, out_pos, Q, slots):
+    """Superpose frames on ``P[:, fit_pos]`` and write the transformed ``P[:, out_pos]``
+    into ``Q[:, slots]``. Helper for :func:`apply_fit_plan`; mutates and returns ``Q``."""
+    F = P[:, fit_pos, :]
+    ref = F.mean(axis=0)
     for i in range(P.shape[0]):
-        _R, Pa, _Qc, Qmean = _kabsch_superpose(P[i], ref)
-        out[i] = Pa + Qmean
-    return out.reshape(X.shape[0], -1)
+        R, _Pa, _Qc, Qmean = _kabsch_superpose(F[i], ref)
+        Q[i, slots, :] = (P[i, out_pos, :] - F[i].mean(axis=0)) @ R.T + Qmean
+    return Q
+
+
+def _local_flank_keys(crossover, flank: int):
+    """The duplex keys that define a crossover's local frame — both halves, both strands,
+    ``±flank`` bp. Directions are the KEY spelling (``"FORWARD"``/``"REVERSE"``), not the
+    ``Direction`` enum the model stores, which is the trap here."""
+    out = []
+    for half in (crossover.half_a, crossover.half_b):
+        hid = getattr(half, "helix_id", None)
+        idx = getattr(half, "index", None)
+        if hid is None or idx is None:
+            continue
+        for direction in ("FORWARD", "REVERSE"):
+            for off in range(-flank, flank + 1):
+                out.append((hid, int(idx) + off, direction))
+    return out
+
+
+def occupancy_fit_plan(design, key_list, sel_idx, *, fit: str = "selection",
+                       flank: int = _OCC_LOCAL_FLANK) -> dict:
+    """Plan the re-superposition of a scoped feature set. Pure; no frame data needed.
+
+    ``key_list`` is the key per FEATURE COLUMN of whatever basis is in play (nucleotide
+    keys for ``"nt"``, the forward key of each duplex column for ``"bp"``); ``sel_idx``
+    indexes into it, or is ``None``/all for an unscoped run.
+
+    Returns ``{fit, fit_requested, note, need_idx, sel_pos, groups, n_fit_points}``:
+
+    * ``need_idx`` — the columns a caller must retain per frame. For ``"local"`` this is
+      WIDER than the selection, because a junction's frame is defined by duplex that was
+      not picked.
+    * ``sel_pos`` — where each selected column sits inside ``need_idx``, in ``sel_idx``
+      order, so the feature ordering still matches ``feature_keys``.
+    * ``groups`` — ``[(fit_pos, out_pos, slots)]``, positions within ``need_idx`` and
+      slots within the emitted feature vector. Empty ⇒ nothing to re-superpose.
+
+    ``fit`` is what will ACTUALLY be used, which is not always what was asked: a mode
+    degrades (with a ``note``) rather than lying, exactly as ``basis`` already does. An
+    unscoped run is always ``"global"`` — there is no sub-region to remove motion from.
+    """
+    n = len(key_list)
+    requested = fit if fit in OCC_FIT_MODES else "selection"
+    sel = list(range(n)) if sel_idx is None else list(sel_idx)
+    plain = {"fit": "global", "fit_requested": requested, "note": None,
+             "need_idx": sel, "sel_pos": list(range(len(sel))), "groups": [],
+             "n_fit_points": 0}
+    # A "local" run is NOT subject to the point-count floor: its fit set comes from the
+    # junction, not the selection, so picking a single crossover's one or two inserts —
+    # the most natural extra-base question there is — must still re-fit.
+    if requested == "global" or sel_idx is None:
+        return plain
+    if requested == "selection" and len(sel) < _OCC_MIN_FIT_POINTS:
+        plain["note"] = (f"fewer than {_OCC_MIN_FIT_POINTS} points selected — a Kabsch fit "
+                         "has no rotation to remove, so the whole-structure alignment is "
+                         "kept")
+        return plain
+
+    # Which of the picked columns are duplex-paired.  These are the stable fit set for a
+    # MIXED selection; `_strain_index` already refuses to pair synthetic beads.
+    from backend.core.oxdna_health import _strain_index
+
+    try:
+        ia_wc, ib_wc = _strain_index(design, list(key_list), "wc")
+        paired = set(int(i) for i in ia_wc) | set(int(i) for i in ib_wc)
+    except Exception:                          # noqa: BLE001 — a design we cannot walk
+        paired = set()
+    pos_of = {c: p for p, c in enumerate(sel)}
+    rigid = [c for c in sel if c in paired]
+    mixed = 0 < len(rigid) < len(sel)
+
+    if requested == "local":
+        by_col = {}
+        for c in sel:
+            k = key_list[c]
+            if len(k) >= 3 and k[0] == _XB_SENTINEL:
+                by_col.setdefault(str(k[1]), []).append(c)
+        if by_col:
+            key_pos = {tuple(k): i for i, k in enumerate(key_list)}
+            need = list(sel)
+            need_pos = dict(pos_of)
+
+            def _need(col):
+                if col not in need_pos:
+                    need_pos[col] = len(need)
+                    need.append(col)
+                return need_pos[col]
+
+            groups, done, skipped = [], set(), 0
+            for xo in (getattr(design, "crossovers", None) or []):
+                cols = by_col.get(str(getattr(xo, "id", "")))
+                if not cols:
+                    continue
+                fl = sorted({key_pos[k] for k in _local_flank_keys(xo, flank)
+                             if k in key_pos} - set(cols))
+                if len(fl) < _OCC_MIN_FIT_POINTS:
+                    skipped += 1               # junction not in the basis (e.g. "bp")
+                    continue
+                groups.append(([_need(c) for c in fl], [_need(c) for c in cols],
+                               [pos_of[c] for c in cols]))
+                done.update(cols)
+            if groups:
+                # Anything picked that has no junction of its own — ordinary duplex, an
+                # extension tail — still gets the "selection" treatment rather than being
+                # left in a different (global) frame from its neighbours.
+                rest = [c for c in sel if c not in done]
+                rest_fit = [c for c in rest if c in paired] or rest
+                if len(rest) >= 1 and len(rest_fit) >= _OCC_MIN_FIT_POINTS:
+                    groups.append(([need_pos[c] for c in rest_fit],
+                                   [need_pos[c] for c in rest], [pos_of[c] for c in rest]))
+                note = None
+                if skipped:
+                    note = (f"{skipped} selected junction(s) had no flanking duplex in this "
+                            "basis and kept the whole-structure alignment")
+                return {"fit": "local", "fit_requested": requested, "note": note,
+                        "need_idx": need, "sel_pos": [need_pos[c] for c in sel],
+                        "groups": groups,
+                        "n_fit_points": sum(len(g[0]) for g in groups)}
+        # No extra bases picked (or none resolvable) → the local frame is undefined.
+        fit_cols = rigid if (mixed and len(rigid) >= _OCC_MIN_FIT_POINTS) else sel
+        if len(fit_cols) < _OCC_MIN_FIT_POINTS:
+            plain["note"] = ("no crossover extra bases in the selection and too few points "
+                             "for a fit of its own — the whole-structure alignment is kept")
+            return plain
+        return {"fit": "selection", "fit_requested": requested,
+                "note": "no crossover extra bases in the selection — a junction frame is "
+                        "undefined, so the fit is on the selection itself",
+                "need_idx": sel, "sel_pos": list(range(len(sel))),
+                "groups": [([pos_of[c] for c in fit_cols], list(range(len(sel))),
+                            list(range(len(sel))))],
+                "n_fit_points": len(fit_cols)}
+
+    # fit == "selection"
+    note = None
+    if mixed and len(rigid) >= _OCC_MIN_FIT_POINTS:
+        fit_cols = rigid
+        note = (f"mixed selection — fitted on the {len(rigid)} duplex-paired point(s) only, "
+                f"so the {len(sel) - len(rigid)} unpaired one(s) cannot drag the frame")
+    else:
+        fit_cols = sel
+        if mixed:
+            note = (f"only {len(rigid)} duplex-paired point(s) in the selection — too few "
+                    "for their own frame, so every selected point is in the fit")
+    return {"fit": "selection", "fit_requested": requested, "note": note,
+            "need_idx": sel, "sel_pos": list(range(len(sel))),
+            "groups": [([pos_of[c] for c in fit_cols], list(range(len(sel))),
+                        list(range(len(sel))))],
+            "n_fit_points": len(fit_cols)}
+
+
+def apply_fit_plan(P, plan) -> np.ndarray:
+    """``(F, len(need_idx), 3)`` retained coordinates → the ``(F, D)`` feature matrix.
+
+    Feature-space ONLY. The medoid frames handed back for rendering are the untouched,
+    globally-aligned ones, so a re-fitted analysis still draws its states in the same pose
+    as ``/trajectory`` and ``/rmsf``. Same discipline as the mean-centring in
+    :func:`_pca_scores`.
+    """
+    P = np.asarray(P, dtype=float)
+    if P.ndim != 3 or P.shape[0] == 0:
+        return P.reshape(P.shape[0] if P.ndim else 0, -1)
+    sel_pos = plan.get("sel_pos") or list(range(P.shape[1]))
+    groups = plan.get("groups") or []
+    if not groups and len(sel_pos) == P.shape[1]:
+        # The unscoped path, which is every whole-structure run: no re-fit, no reordering,
+        # so don't pay a full (F, N, 3) copy of a 15 k-nucleotide ensemble to say so.
+        return P.reshape(P.shape[0], -1)
+    Q = P[:, sel_pos, :].copy()
+    if P.shape[0] < 2:
+        return Q.reshape(P.shape[0], -1)
+    for fit_pos, out_pos, slots in groups:
+        if len(fit_pos) < _OCC_MIN_FIT_POINTS or not out_pos:
+            continue
+        _refit(P, list(fit_pos), list(out_pos), Q, list(slots))
+    return Q.reshape(P.shape[0], -1)
 
 
 # ── Feature vectors ───────────────────────────────────────────────────────────────
