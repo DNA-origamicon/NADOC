@@ -17,11 +17,16 @@ Law); these tests never mutate a Design.
 from __future__ import annotations
 
 from backend.core.atomistic import Atom, AtomisticModel, build_atomistic_model
+import pytest
+
 from backend.core.md_protocols import (
     SegmentSpec,
     _min_conf,
     _segment_conf,
+    build_production_conf,
+    external_forces_block,
     mgh_slow_release_segments,
+    retarget_anchor_pdb,
     write_anchor_restraints_pdb,
 )
 from backend.core.namd_topology import (
@@ -381,3 +386,151 @@ def test_export_pdb_residue_order_is_natural_not_sorted_on_many_strands():
     pdb_seq = _pdb_residue_sequence(export_pdb(design, model=model))
     assert pdb_seq == _model_seq("natural")   # export_pdb == sort_chains=False
     assert pdb_seq != _model_seq("sorted")     # and NOT the lexicographic order
+
+
+# ── atom-level anchoring (anchor_atoms) ───────────────────────────────────────
+#
+# The marker PDB was ALWAYS per-atom — column B is written atom by atom — but the
+# decision was per-residue, so one anchored base pinned ~20 heavy atoms.  A name filter
+# buys atom granularity with no atom picker, and keeps the choice a consistent,
+# physically meaningful site (C1'/P) rather than an arbitrary hand-picked set.
+
+def _anchor_fixture(tmp_path):
+    design = make_6hb_design()
+    model = build_atomistic_model(design)
+    _segments, full_text = _write_segment_pdbs(design, tmp_path, model)
+    pdb_path = tmp_path / "built.pdb"
+    pdb_path.write_text(full_text)
+    anchors = [{"kind": "strand", "id": design.strands[0].id}]
+    anchored = resolve_anchor_residue_indices(
+        design, anchors, model=model, full_topology=True)
+    assert anchored
+    return pdb_path, anchored
+
+
+def test_atom_filter_pins_one_named_atom_per_anchored_residue(tmp_path):
+    pdb_path, anchored = _anchor_fixture(tmp_path)
+
+    all_heavy = write_anchor_restraints_pdb(
+        pdb_path, tmp_path / "all.pdb", anchored)
+    dst = tmp_path / "c1.pdb"
+    n_c1 = write_anchor_restraints_pdb(
+        pdb_path, dst, anchored, atom_names={"C1'"})
+
+    fixed_ordinals, rows = _b1_residue_ordinals(dst.read_text())
+    # Same residues are still anchored — the filter narrows WITHIN a residue, it does
+    # not drop residues.
+    assert fixed_ordinals == anchored
+    marked = [(o, name) for o, name, b in rows if b > 0]
+    assert {name for _o, name in marked} == {"C1'"}
+    # Exactly one atom per anchored residue, and far fewer than the all-heavy default.
+    assert n_c1 == len(anchored) == len(marked)
+    assert n_c1 < all_heavy
+
+
+def test_atom_filter_accepts_several_names(tmp_path):
+    pdb_path, anchored = _anchor_fixture(tmp_path)
+    dst = tmp_path / "two.pdb"
+    n = write_anchor_restraints_pdb(
+        pdb_path, dst, anchored, atom_names={"P", "C1'"})
+    _fixed, rows = _b1_residue_ordinals(dst.read_text())
+    assert {name for _o, name, b in rows if b > 0} <= {"P", "C1'"}
+    # 5'-terminal residues carry no P, so this is "at most 2 per residue", not exactly 2.
+    assert len(anchored) < n <= 2 * len(anchored)
+
+
+def test_atom_filter_that_matches_nothing_marks_nothing(tmp_path):
+    """The caller turns this into a hard error.  It must NOT silently mark everything —
+    a typo'd atom name that anchored the whole residue set would be worse than useless."""
+    pdb_path, anchored = _anchor_fixture(tmp_path)
+    dst = tmp_path / "typo.pdb"
+    n = write_anchor_restraints_pdb(
+        pdb_path, dst, anchored, atom_names={"CA"})   # a protein name, absent from DNA
+    assert n == 0
+    _fixed, rows = _b1_residue_ordinals(dst.read_text())
+    assert all(b == 0.0 for _o, _n, b in rows)
+
+
+def test_k_writes_the_force_constant_into_column_b(tmp_path):
+    """`k` switches column B from a fixedAtoms marker (1.0) to a conskfile force
+    constant, so the SAME writer serves both mechanisms."""
+    pdb_path, anchored = _anchor_fixture(tmp_path)
+    dst = tmp_path / "soft.pdb"
+    write_anchor_restraints_pdb(pdb_path, dst, anchored, atom_names={"C1'"}, k=0.02)
+    bs = [float(ln[60:66]) for ln in dst.read_text().splitlines()
+          if ln.startswith("ATOM") and ln[12:16].strip() == "C1'"]
+    assert 0.02 in bs
+    assert all(b in (0.0, 0.02) for b in bs)
+
+
+# ── hard vs soft emission ─────────────────────────────────────────────────────
+
+def test_external_forces_block_switches_mechanism_on_anchor_k():
+    hard = external_forces_block("a.pdb", None)
+    assert "fixedAtoms         on" in hard and "constraints" not in hard
+
+    soft = external_forces_block("a.pdb", None, anchor_k=0.02)
+    assert "fixedAtoms" not in soft
+    for line in ("constraints        on", "consref            a.pdb",
+                 "conskfile          a.pdb", "conskcol           B"):
+        assert line in soft
+
+
+def test_production_conf_soft_anchor_does_not_also_disable_constraints():
+    """RED guard: build_production_conf emits an unconditional `constraints off`.  With
+    soft anchors that line would switch the restraints straight back off — a run that
+    reports itself anchored and is not."""
+    spec = SegmentSpec(name="demo_01_prod", stage="prod", percent=100.0, steps=1000,
+                       temp=300.0, damping=5.0, scale=None, npt=True, previous="prev")
+    box = (100.0, 100.0, 100.0)
+
+    soft = build_production_conf(spec, "demo", box, False,
+                                 anchors_file="a.pdb", anchor_k=0.02)
+    assert "constraints        on" in soft
+    assert "constraints        off" not in soft
+
+    # Unanchored and hard-anchored confs keep the historical line.
+    assert "constraints        off" in build_production_conf(spec, "demo", box, False)
+    hard = build_production_conf(spec, "demo", box, False, anchors_file="a.pdb")
+    assert "constraints        off" in hard and "fixedAtoms         on" in hard
+
+
+# ── retargeting a soft anchor onto equilibrated coordinates ───────────────────
+
+def test_retarget_moves_reference_coords_and_restamps_k(tmp_path):
+    """A soft anchor restrains atoms TO the reference coordinates in its consref file.
+    The prep-time file holds the idealised BUILD pose, which the ladder has since moved
+    away from — restraining to it would drag the structure back for the whole run."""
+    import numpy as np
+
+    pdb_path, anchored = _anchor_fixture(tmp_path)
+    src = tmp_path / "hard.pdb"
+    write_anchor_restraints_pdb(pdb_path, src, anchored, atom_names={"C1'"})
+
+    n_atoms = sum(1 for ln in src.read_text().splitlines()
+                  if ln.startswith(("ATOM", "HETATM")))
+    equil = np.arange(n_atoms * 3, dtype=float).reshape(n_atoms, 3) / 10.0
+
+    dst = tmp_path / "soft.pdb"
+    n = retarget_anchor_pdb(src, dst, coords=equil, k=0.02)
+    assert n == len(anchored)
+
+    rows = [ln for ln in dst.read_text().splitlines() if ln.startswith(("ATOM", "HETATM"))]
+    assert len(rows) == n_atoms
+    for i, ln in enumerate(rows):
+        assert float(ln[30:38]) == pytest.approx(equil[i][0], abs=5e-4)
+        assert float(ln[38:46]) == pytest.approx(equil[i][1], abs=5e-4)
+        assert float(ln[46:54]) == pytest.approx(equil[i][2], abs=5e-4)
+    assert {float(ln[60:66]) for ln in rows} == {0.0, 0.02}
+
+
+def test_retarget_refuses_a_coordinate_set_that_does_not_match(tmp_path):
+    """A .coor from a different package would silently scramble every reference
+    position, so a length mismatch is an error, not a truncation."""
+    import numpy as np
+
+    pdb_path, anchored = _anchor_fixture(tmp_path)
+    src = tmp_path / "hard.pdb"
+    write_anchor_restraints_pdb(pdb_path, src, anchored)
+    with pytest.raises(ValueError, match="does not match|coordinates"):
+        retarget_anchor_pdb(src, tmp_path / "bad.pdb", coords=np.zeros((3, 3)))

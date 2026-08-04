@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { DEFAULT_PRODUCTION_TIMESTEP_FS, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, productionNsFromSteps, seededBadge, stridedFrameCount } from './md_jobs_panel.js'
+import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, productionNsFromSteps, seededBadge, stridedFrameCount } from './md_jobs_panel.js'
 
 // Auto-mock the API client so the real panel constructs without touching the network
 // (only the shared-base parity block at the bottom drives the real panel; the
@@ -1552,5 +1552,49 @@ describe('mdHasProductionRun — occupancy is only offered for production dynami
 
   it('uses the same marker as the backend, so the UI and the analysis agree', () => {
     expect(MD_PRODUCTION_MARKER).toBe('production')
+  })
+})
+
+// ── anchor granularity + stiffness (the Hold-atoms / Stiffness selects) ────────
+// These feed BOTH launch paths. Production previously read neither — the anchors card
+// was wired only to the relax create payload, so picking anchors and clicking Production
+// silently discarded them.
+describe('mdAnchorAtomNames', () => {
+  it('maps the All-heavy-atoms option to null, not an empty list', () => {
+    // [] would ask the backend to anchor NOTHING; null is its "no filter" sentinel.
+    expect(mdAnchorAtomNames('')).toBeNull()
+    expect(mdAnchorAtomNames(null)).toBeNull()
+    expect(mdAnchorAtomNames(undefined)).toBeNull()
+  })
+
+  it('splits a comma-separated atom-name list and trims it', () => {
+    expect(mdAnchorAtomNames("C1'")).toEqual(["C1'"])
+    expect(mdAnchorAtomNames("P,C1'")).toEqual(['P', "C1'"])
+    expect(mdAnchorAtomNames(" P , C1' ")).toEqual(['P', "C1'"])
+  })
+
+  it('ignores empty entries rather than emitting a blank atom name', () => {
+    expect(mdAnchorAtomNames('P,,')).toEqual(['P'])
+    expect(mdAnchorAtomNames(',')).toBeNull()
+  })
+})
+
+describe('mdAnchorStiffness', () => {
+  it('maps the Hard-pin option to null (NAMD fixedAtoms)', () => {
+    expect(mdAnchorStiffness('')).toBeNull()
+    expect(mdAnchorStiffness(null)).toBeNull()
+  })
+
+  it('passes a positive force constant through as a number', () => {
+    expect(mdAnchorStiffness('0.02')).toBe(0.02)
+    expect(mdAnchorStiffness('1')).toBe(1)
+  })
+
+  it('treats zero and nonsense as a hard pin, never a zero-strength restraint', () => {
+    // k=0 would emit a conskfile that restrains nothing while the run reports itself
+    // anchored — the exact silent-no-op class of bug this whole change removes.
+    expect(mdAnchorStiffness('0')).toBeNull()
+    expect(mdAnchorStiffness('-1')).toBeNull()
+    expect(mdAnchorStiffness('abc')).toBeNull()
   })
 })

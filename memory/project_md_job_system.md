@@ -205,6 +205,78 @@ simulates **2.4 ns, not 4.8**; the soft-start chunk 240 ps not 480. Pinned by
 DISPLAYED by the wizard (ns = steps × the timestep the segment really runs at). Fixing it
 doubles every declash relaxation and makes new runs non-comparable with existing declash
 trajectories — a deliberate decision, deferred on purpose.
+## Anchors reach production, and can be soft (2026-08-03)
+
+**Two stacked bugs meant a NAMD production run could never be anchored at all.**
+
+1. **The anchors card is a RELAX-launch form.** `_anchorsCard` was read at exactly one
+   site (`_launchRelax`) and sent in the *create* payload. The Production button built its
+   own body and never read it, and `ProductionRunRequest` had no `anchors` field — so
+   picking bases and clicking Production silently discarded them. There is still no
+   per-job anchors *display*, which is why the card kept showing an unsubmitted selection
+   and looked like job state.
+2. **`build_replica_package` dropped anchors AND the E-field.** It called
+   `build_production_conf` without `anchors_file=`/`field=` and never staged the marker
+   PDB. So even a correctly anchored relaxation produced an unanchored child — and an
+   **E-field job's production child ran field-free** while its record claimed the field.
+   (The sibling *append* route never had this hole: it reads both back out of the
+   manifest.)
+
+What exists now:
+
+- **Anchors on the production request** — `ProductionRunRequest.anchors` (omit = inherit
+  the parent's; `[]` = explicitly unanchored, the way to spawn a free control off an
+  anchored parent), resolved by `routes_md._resolve_child_anchors` against the child's
+  frozen `design.json`.
+- **Atom-level anchoring without an atom picker.** The marker PDB was always per-atom;
+  only the decision was per-residue (~20 heavy atoms per base). `anchor_atoms` is a PDB
+  atom-NAME filter (`["C1'"]` → 1 atom/base). A filter matching nothing is a hard error,
+  never a silent unanchored run. Card control: `#md-anchors-atoms`.
+- **Soft anchors** (`anchor_k`, kcal/mol/Å²) — `constraints`/`consref`/`conskfile`,
+  `conskcol B`. **Production only**: the ladder's constraints channel is spent on the
+  slow-release restraint, so relax stays hard `fixedAtoms`. Card control:
+  `#md-anchors-stiffness`, default 0.02. A hard pin is a Dirichlet boundary — it
+  propagates strain, kills local fluctuation, and is not rescaled by the barostat.
+  Suppressing tumbling of a ~10 nm bundle held at both ends needs only ~0.01–0.03
+  (k·((L/2)·sin θ)² ≈ kT at θ ≈ 10°).
+- **`retarget_anchor_pdb`** re-points the soft reference at the child's OWN
+  `equilibrated.coor`. Restraining to the prep-time build pose would pull the structure
+  back to where the ladder moved it from, for the whole run — and would give each arm of a
+  comparison a different pre-strain.
+- `build_production_conf` no longer emits an unconditional `constraints off` (it would
+  switch soft anchors straight back off). Unanchored/hard-anchored confs are unchanged.
+
+Tests: `tests/test_namd_anchors.py` (atom filter, k-in-column-B, hard/soft emission,
+retarget + its length guard), `tests/test_md_ensemble.py` (child carries anchors+field,
+soft path references equilibrated coords, unanchored conf unchanged, missing file raises),
+`tests/test_md_milestone1.py` (route-level inherit / `anchors: []` turns it off),
+`frontend/src/ui/md_jobs_panel.test.js` (`mdAnchorAtomNames`, `mdAnchorStiffness`).
+
+## Velocity seeds are drawn, not fixed (2026-08-03)
+
+**Every path that starts a production run now draws a fresh random NAMD `seed`.** Before
+this, the first production child of any parent got `54321` (`_DEFAULT_BASE_SEED + index`),
+the append path inherited `build_production_conf`'s literal `54321`, and both the ensemble
+route and the chain executor defaulted to the same base. Consequence found while reviewing
+the 2hb extra-base set: `2hb_1xT`, `2hb_1-0xT` and `2hb_2xT` **all ran seed 54321** — three
+designs being compared against each other shared one velocity realisation and one Langevin
+force stream, which is a correlated thermal history in exactly the place a cross-design
+comparison needs independence.
+
+- `md_ensemble.random_seed(exclude=())` — `secrets`-backed draw in 1 .. `NAMD_SEED_MAX`
+  (2³¹−1), with headroom so `base + n_replicas` cannot overflow, and `exclude` (a parent's
+  existing sibling seeds) so a fan-out cannot collide onto one trajectory.
+- `generate_seeds(base, n)` is unchanged and still pure/consecutive — only the **base** is
+  now drawn. `md_pipeline.build_pipeline_plan` also keeps its fixed default (it is pure and
+  test-pinned); the live caller `md_chain_executor.init_chain_run` passes a random base.
+- **Reproducibility is by RECORDING, not by fixing.** The drawn value lands in
+  `MdJob.ensemble_seed`, the child manifest's `ensemble.seed`, the segment stage label, and
+  — for the append path — a new `production_extension.seed` key. `ProductionRunRequest.seed`
+  and `EnsembleProductionRequest.base_seed` accept an explicit value to replay a past run.
+- Tests assert the **contract** (in range, siblings distinct, pin honoured), never a
+  literal seed: `tests/test_md_ensemble.py::test_random_seed_*`,
+  `tests/test_md_milestone1.py::test_repeated_productions_get_distinct_seeds` /
+  `::test_production_seed_can_be_pinned_to_reproduce_a_run`.
 
 
 ## Microsecond production runs are allowed, and priced before they start (2026-07-30)
@@ -983,7 +1055,7 @@ stays a selectable root row and each production nests under it.
   `md_ensemble.build_replica_package` VERBATIM (single seed) to build the production-only
   child package (reseed conf in the `minimization` slot → one production segment). Child gets
   `parent_job_id=parent`, `run_kind="production"`, a distinct velocity `ensemble_seed`
-  (`54321+N` where N = existing production siblings → independent trajectories), takes its
+  (**randomised per run** — see "Velocity seeds are drawn, not fixed" below), takes its
   run target from the request; local + autostart → `start_job` immediately. Parent job is
   NEVER mutated (its segments/manifest untouched) — verified live on `c0e02dadf996` (2hb_noT).
 - **Alpine target (fix 2026-07-07):** the Production button must honor the panel's

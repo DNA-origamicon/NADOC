@@ -5320,6 +5320,33 @@
                   <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-top:6px">
                     <input type="checkbox" id="md-anchors-glow" checked> Highlight all anchors
                   </label>
+                  <!-- Which ATOMS of each anchored base to hold. The marker PDB was always
+                       per-atom; only the decision was per-residue, so a name filter gives
+                       atom-level anchoring without an atom picker. -->
+                  <label style="display:block;color:#8b949e;font-size:var(--text-xs);margin-top:6px">Hold atoms
+                    <select id="md-anchors-atoms" style="width:100%;margin-top:2px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:3px;font-size:var(--text-xs)">
+                      <option value="">All heavy atoms (~20/base)</option>
+                      <option value="C1'">C1′ only (1/base)</option>
+                      <option value="P">P only (1/base)</option>
+                      <option value="P,C1'">P + C1′ (2/base)</option>
+                    </select>
+                  </label>
+                  <!-- Hard vs soft. A hard pin is a Dirichlet boundary: it propagates strain
+                       into nearby structure, kills local fluctuation, and is not rescaled by
+                       the barostat. Soft restraints apply to PRODUCTION only — the relax
+                       ladder's constraints channel is spent on the slow-release restraint. -->
+                  <label style="display:block;color:#8b949e;font-size:var(--text-xs);margin-top:6px">Stiffness (production)
+                    <select id="md-anchors-stiffness" style="width:100%;margin-top:2px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:3px;font-size:var(--text-xs)">
+                      <option value="0.02">Soft 0.02 kcal/mol/Å² — damps tumbling only</option>
+                      <option value="0.1">Medium 0.1 kcal/mol/Å²</option>
+                      <option value="1">Stiff 1.0 kcal/mol/Å²</option>
+                      <option value="">Hard pin (fixedAtoms — immobile)</option>
+                    </select>
+                  </label>
+                  <div style="font-size:var(--text-xs);color:#6e7681;margin-top:4px;line-height:1.35">
+                    Relax always uses a hard pin. Production applies the stiffness above,
+                    referenced to its own equilibrated coordinates.
+                  </div>
                   <div id="md-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
                 </div>
               </div>

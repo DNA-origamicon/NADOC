@@ -26,8 +26,10 @@ stage on the previous stage's completion (and halts + resumes from a failed stag
 P2; the cross-engine coordinate conversion is P3; the planner UI is P4.
 
 Seed generation reuses :func:`backend.core.md_ensemble.generate_seeds` so a pipeline's
-per-stage velocity seeds match the ensemble/production convention (base .. base+n-1,
-base = 54321 so a single-stage plan's seed equals today's single-run production seed).
+per-stage velocity seeds match the ensemble/production convention (base .. base+n-1).
+``build_pipeline_plan`` keeps a fixed default base because it is PURE and pinned by
+tests; the live caller (:func:`md_chain_executor.init_chain_run`) draws a random base
+per chain so no two chains share a velocity realisation.
 """
 
 from __future__ import annotations
@@ -181,9 +183,10 @@ def build_pipeline_plan(
     * stage N (>0) seeds from stage N-1's output (:func:`stage_output_ref`), with
       ``parent_job_id`` = the previous stage's placeholder id.
 
-    Seeds come from :func:`generate_seeds` (base .. base+n-1), so a single-stage plan's
-    seed equals ``spawn_md_production``'s first-child seed (54321) — parity, no
-    regression.  No jobs are created and no coordinates are touched here.
+    Seeds come from :func:`generate_seeds` (base .. base+n-1).  ``base_seed`` keeps a
+    fixed default here so this function stays pure and reproducible; the live chain
+    entry point passes a random base per chain.  No jobs are created and no coordinates
+    are touched here.
     """
     validate_pipeline(pipeline)
     seeds = generate_seeds(base_seed, len(pipeline.stages))

@@ -67,6 +67,7 @@ def build_namd_gbis_package(
     declash: bool = False,
     force_soft: bool = False,
     anchors: Optional[list] = None,
+    anchor_atoms: Optional[list] = None,
     field: Optional[dict] = None,
     gbis_ion_conc_M: float = _GBIS_ION_CONC_M,
 ) -> tuple[str, str, list]:
@@ -139,8 +140,13 @@ def build_namd_gbis_package(
             design, anchors, model=atomistic_model, full_topology=True)
         if anchor_indices:
             n_anchored_atoms = write_anchor_restraints_pdb(
-                pdb_path, package_dir / "restraints_anchors.pdb", anchor_indices)
+                pdb_path, package_dir / "restraints_anchors.pdb", anchor_indices,
+                atom_names=set(anchor_atoms) if anchor_atoms else None)
             anchors_file = "restraints_anchors.pdb"
+            if not n_anchored_atoms:
+                raise ValueError(
+                    f"anchor_atoms {sorted(anchor_atoms or [])} matched no heavy atom in "
+                    f"the {len(anchor_indices)} anchored residue(s).")
 
     efield_vec = namd_efield_vector(field)
     if efield_vec is not None and anchors_file is None:
@@ -296,6 +302,7 @@ def prepare_implicit_gbis_namd(
     declash: bool = False,
     force_soft: bool = False,
     anchors: Optional[list] = None,
+    anchor_atoms: Optional[list] = None,
     field: Optional[dict] = None,
     # Accept-and-ignore the explicit-solvent kwargs so the shared prep call site
     # (routes_md) can pass one uniform kwarg set regardless of protocol.
@@ -344,6 +351,7 @@ def prepare_implicit_gbis_namd(
         declash=declash,
         force_soft=force_soft,
         anchors=anchors,
+        anchor_atoms=anchor_atoms,
         field=field,
         gbis_ion_conc_M=ion_M,
     )

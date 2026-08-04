@@ -87,6 +87,31 @@ def test_generate_seeds_rejects_zero():
         me.generate_seeds(1, 0)
 
 
+# ── random_seed ─────────────────────────────────────────────────────────────────
+
+def test_random_seed_in_namd_range_and_varies():
+    draws = [me.random_seed() for _ in range(64)]
+    assert all(1 <= s <= me.NAMD_SEED_MAX for s in draws)
+    # A fixed seed is the defect this replaces; 64 identical draws would mean the RNG
+    # is not being consumed at all.
+    assert len(set(draws)) > 1
+
+
+def test_random_seed_never_returns_an_excluded_value():
+    """`exclude` carries a parent's existing sibling seeds — a collision would put two
+    'independent' replicas on the same velocity realisation."""
+    taken = {me.random_seed() for _ in range(16)}
+    for _ in range(64):
+        assert me.random_seed(exclude=taken) not in taken
+
+
+def test_random_seed_leaves_headroom_for_ensemble_offsets():
+    """Ensembles use base .. base+n-1; the draw must not sit so high that base+n
+    overflows NAMD's signed-32-bit seed."""
+    for _ in range(64):
+        assert me.generate_seeds(me.random_seed(), 64)[-1] <= me.NAMD_SEED_MAX
+
+
 def test_replica_label():
     assert me.replica_label(2, 54323) == "Replica 3 · seed 54323"
 
@@ -410,3 +435,134 @@ def test_replica_no_downgrade_reason_when_4fs_actually_runs(tmp_path):
     ens = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())["ensemble"]
     assert ens["timestep_fs"] == 4.0
     assert ens["timestep_downgrade_reason"] is None
+
+
+# ── external forces on a production child (fix: they used to be dropped) ────────
+#
+# build_replica_package called build_production_conf without anchors_file or field and
+# never staged the marker PDB.  So an anchored relaxation produced an UNANCHORED
+# production child, and an E-field job's child ran FIELD-FREE while its record still
+# claimed the field.  The sibling append route never had this hole.
+
+def _write_namd_coor(path: Path, coords) -> None:
+    """A real NAMD binary .coor: int32 atom count + 3N little-endian float64."""
+    import struct
+    import numpy as np
+    a = np.asarray(coords, dtype="<f8")
+    path.write_bytes(struct.pack("<i", a.shape[0]) + a.tobytes())
+
+
+def _anchor_pdb_lines(n_atoms: int, anchored: set[int]) -> str:
+    """A minimal full-system marker PDB: `n_atoms` rows, B=1 on `anchored` row indices."""
+    out = []
+    for i in range(n_atoms):
+        b = 1.0 if i in anchored else 0.0
+        out.append(
+            f"ATOM  {i + 1:5d}  C1' DT  A{i + 1:4d}    "
+            f"{0.0:8.3f}{0.0:8.3f}{0.0:8.3f}  1.00{b:6.2f}\n")
+    return "".join(out)
+
+
+def _parent_with_anchors(ws: Path, *, n_atoms: int = 6, anchored=(1, 4)):
+    parent = _make_parent(ws)
+    pkg = parent.package_dir(ws)
+    (pkg / "restraints_anchors.pdb").write_text(_anchor_pdb_lines(n_atoms, set(anchored)))
+    manifest = json.loads((pkg / "manifest.json").read_text())
+    manifest["files"]["anchors"] = "restraints_anchors.pdb"
+    manifest["anchors"] = {"requested": [{"kind": "base", "helix_id": "h0",
+                                          "bp": 3, "direction": "FORWARD"}]}
+    (pkg / "manifest.json").write_text(json.dumps(manifest))
+    return parent
+
+
+def test_replica_carries_hard_anchors_and_field_into_production(tmp_path: Path):
+    parent = _parent_with_anchors(tmp_path)
+    child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
+                    parent_job_id=parent.job_id, ensemble_seed=7, ensemble_index=0)
+    field = {"field_pN": 5.0, "dir": [0.0, 0.0, 1.0]}
+    me.build_replica_package(
+        parent, child, seed=7, index=0, total_steps=1000, length_ns=1.0,
+        timestep_fs=1.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
+        anchors_file="restraints_anchors.pdb", field=field,
+        anchors_requested=[{"kind": "base"}],
+    )
+    pkg = child.package_dir(tmp_path)
+    conf = next(pkg.glob("demo_01_production_*.conf")).read_text()
+    assert "fixedAtoms         on" in conf
+    assert "fixedAtomsFile     restraints_anchors.pdb" in conf
+    assert "eFieldOn" in conf                      # the field survives the hop too
+    # The marker PDB is STAGED, not just referenced — a conf pointing at a missing file
+    # is a NAMD startup failure, not a silent un-anchoring, but both are bugs.
+    assert (pkg / "restraints_anchors.pdb").exists()
+
+    manifest = json.loads((pkg / "manifest.json").read_text())
+    assert manifest["anchors"]["n_atoms_anchored"] == 2
+    assert manifest["anchors"]["k_kcal_mol_a2"] is None
+    assert manifest["files"]["anchors"] == "restraints_anchors.pdb"
+    assert manifest["field"] == field
+
+
+def test_replica_soft_anchor_references_its_own_equilibrated_coords(tmp_path: Path):
+    """The soft path must restrain to where the child STARTS, not to the build pose the
+    prep-time marker PDB carries — otherwise the restraint pulls against the run for its
+    whole length, and each arm of a comparison inherits a different pre-strain."""
+    import numpy as np
+
+    parent = _parent_with_anchors(tmp_path, n_atoms=6, anchored=(1, 4))
+    equil = np.arange(18, dtype=float).reshape(6, 3) / 10.0
+    _write_namd_coor(parent.package_dir(tmp_path) / "output" / f"{READY}.coor", equil)
+
+    child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
+                    parent_job_id=parent.job_id, ensemble_seed=7, ensemble_index=0)
+    me.build_replica_package(
+        parent, child, seed=7, index=0, total_steps=1000, length_ns=1.0,
+        timestep_fs=1.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
+        anchors_file="restraints_anchors.pdb", anchor_k=0.02,
+    )
+    pkg = child.package_dir(tmp_path)
+    conf = next(pkg.glob("demo_01_production_*.conf")).read_text()
+    assert "constraints        on" in conf
+    assert "consref            restraints_anchors.pdb" in conf
+    assert "conskfile          restraints_anchors.pdb" in conf
+    assert "fixedAtoms" not in conf
+    assert "constraints        off" not in conf
+
+    rows = [ln for ln in (pkg / "restraints_anchors.pdb").read_text().splitlines()
+            if ln.startswith("ATOM")]
+    assert len(rows) == 6
+    for i, ln in enumerate(rows):
+        assert float(ln[30:38]) == pytest.approx(equil[i][0], abs=5e-4)
+    assert [float(ln[60:66]) for ln in rows] == [0.0, 0.02, 0.0, 0.0, 0.02, 0.0]
+
+    manifest = json.loads((pkg / "manifest.json").read_text())
+    assert manifest["anchors"]["k_kcal_mol_a2"] == 0.02
+    assert "harmonic" in manifest["anchors"]["mechanism"]
+
+
+def test_replica_without_anchors_stays_unanchored_and_unchanged(tmp_path: Path):
+    """Regression guard: the default (no anchors, no field) conf must be byte-identical
+    to what it was before external forces were threaded through."""
+    parent = _make_parent(tmp_path)
+    child = _build_replica(tmp_path, parent)
+    conf = next(child.package_dir(tmp_path).glob("demo_01_production_*.conf")).read_text()
+    assert "fixedAtoms" not in conf
+    assert "constraints        off" in conf
+    assert "eField" not in conf
+    manifest = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())
+    assert manifest["anchors"] is None
+    assert manifest["field"] is None
+    assert manifest["files"]["anchors"] is None
+
+
+def test_replica_missing_anchor_file_fails_loudly(tmp_path: Path):
+    """A named-but-absent anchor file must raise here rather than produce a conf that
+    NAMD dies on minutes into a queued cluster job."""
+    parent = _make_parent(tmp_path)
+    child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
+                    parent_job_id=parent.job_id, ensemble_seed=7, ensemble_index=0)
+    with pytest.raises(FileNotFoundError, match="anchor file missing"):
+        me.build_replica_package(
+            parent, child, seed=7, index=0, total_steps=1000, length_ns=1.0,
+            timestep_fs=1.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
+            anchors_file="restraints_anchors.pdb",
+        )

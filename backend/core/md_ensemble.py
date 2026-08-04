@@ -22,7 +22,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import secrets
 import shutil
+from collections.abc import Iterable
 from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
@@ -40,6 +42,7 @@ from backend.core.md_protocols import (
     overrides_for_stage,
     protocol_fidelity,
     psf_atom_count,
+    retarget_anchor_pdb,
     write_hmr_psf,
     write_production_enm,
 )
@@ -48,22 +51,67 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_BASE_SEED = 54321
 
+#: Largest NAMD ``seed``.  NAMD stores it as a signed 32-bit int, so the usable range is
+#: 1 .. 2^31-1.  Draws are held below the top so ``base + n_replicas`` cannot overflow.
+NAMD_SEED_MAX = 2**31 - 1
+_SEED_DRAW_CEILING = NAMD_SEED_MAX - 4096
+
 
 def generate_seeds(base: int, n: int) -> list[int]:
     """N distinct, reproducible NAMD seeds for an ensemble (pure).
 
     Consecutive integers from ``base`` — NAMD seeds only need to differ to give
-    independent PRNG streams (velocity draw + Langevin forces).  ``base`` defaults to
-    the 54321 used by the single-run production path so replica 0 matches it.
+    independent PRNG streams (velocity draw + Langevin forces).  ``base`` is drawn
+    fresh per ensemble by :func:`random_seed`; pass an explicit one only to reproduce
+    a specific past run.
     """
     if n < 1:
         raise ValueError("n_replicas must be >= 1")
     return [int(base) + i for i in range(int(n))]
 
 
+def random_seed(exclude: Iterable[int] = ()) -> int:
+    """A fresh NAMD velocity seed, uniform in 1 .. ``_SEED_DRAW_CEILING``.
+
+    Every production run draws its own — a fixed seed means two runs of the same
+    structure share one velocity realisation and one Langevin force stream, so they are
+    the SAME trajectory, not two samples of an ensemble.  When designs are compared
+    against each other that also correlates their thermal histories, which is exactly the
+    error a multi-replica comparison exists to avoid.
+
+    Reproducibility is preserved by RECORDING, not by fixing: the drawn value lands in
+    ``MdJob.ensemble_seed``, the manifest, and the segment's stage label, and can be
+    replayed by passing it back explicitly.
+
+    ``exclude`` (typically the seeds of a job's existing siblings) is never returned, so
+    a fan-out cannot collide onto one trajectory.  Uses :mod:`secrets` rather than
+    :mod:`random` so a run started from a freshly-forked worker cannot inherit a
+    process-global RNG state that another worker already drew from.
+    """
+    taken = {int(s) for s in exclude}
+    for _ in range(64):
+        seed = secrets.randbelow(_SEED_DRAW_CEILING) + 1
+        if seed not in taken:
+            return seed
+    # 64 collisions against a 2-billion-wide range is not chance; take the first free
+    # value rather than looping forever.
+    seed = secrets.randbelow(_SEED_DRAW_CEILING) + 1
+    while seed in taken:
+        seed = seed % _SEED_DRAW_CEILING + 1
+    return seed
+
+
 def replica_label(index: int, seed: int) -> str:
     """Human label for a replica row, e.g. ``"Replica 3 · seed 54324"`` (pure)."""
     return f"Replica {int(index) + 1} · seed {int(seed)}"
+
+
+def _anchor_weight(pdb_line: str) -> float:
+    """Column-B anchor weight of a PDB ATOM/HETATM line (0.0 when blank/unparsable)."""
+    try:
+        return float(pdb_line[60:66])
+    except (ValueError, IndexError):
+        return 0.0
 
 
 def _link_or_copy(src: Path, dst: Path) -> None:
@@ -101,6 +149,10 @@ def build_replica_package(
     enm_k: float = PRODUCTION_ENM_K,
     damping: float = PRODUCTION_LANGEVIN_DAMPING,
     stage_overrides: Optional[dict] = None,
+    anchors_file: Optional[str] = None,
+    anchor_k: Optional[float] = None,
+    anchors_requested: Optional[list] = None,
+    field: Optional[dict] = None,
 ) -> Path:
     """Build a production-only package for one ensemble replica; returns its package dir.
 
@@ -113,6 +165,21 @@ def build_replica_package(
     writes ``output/{reseed}.{coor,vel,xsc}``; and a **production** conf reading that
     reseed checkpoint.  The manifest is production-only (no ``declash`` key, so
     ``generate_sbatch`` accepts it) with ``total_ns == length_ns``.
+
+    ``anchors_file`` / ``field`` are the JOB's external forces.  They used to be dropped
+    here: this builder called ``build_production_conf`` without either, and never staged
+    the anchor PDB — so a relaxation prepared WITH anchors produced an UNANCHORED
+    production child, and an E-field job's production child ran FIELD-FREE while its
+    record still said otherwise.  (The sibling append route never had this hole; it reads
+    both back out of the manifest.)  The caller passes them; ``None`` keeps the
+    unanchored/field-free conf byte-identical to before.
+
+    ``anchor_k`` (kcal/mol/Å², column B) switches the anchor from a hard ``fixedAtoms``
+    pin to a **soft harmonic restraint** — see :func:`md_protocols.external_forces_block`.
+    Because a soft restraint needs REFERENCE coordinates and the prep-time anchor PDB
+    holds the idealised build pose, the file is re-pointed at this replica's equilibrated
+    start (:func:`md_protocols.retarget_anchor_pdb`) rather than hardlinked; otherwise the
+    restraint would pull the structure back to where the ladder moved it from.
 
     Mutates + saves ``child`` (name_stem, package_subdir, one production segment,
     ``status = queued``).  Pure-ish file IO; raises ``FileNotFoundError`` if the parent
@@ -218,6 +285,32 @@ def build_replica_package(
         # Copy (not link): the reseed reads these; keep them independent of the parent.
         shutil.copy2(src, child_pkg / dst_name)
 
+    # ── Anchors (external forces) ──────────────────────────────────────────────
+    # Staged AFTER the equilibrated checkpoint, because a soft anchor is re-referenced to
+    # it.  A hard anchor is coordinate-independent (fixedAtoms marks atoms, it does not
+    # restrain them TO anything), so it is hardlinked verbatim.
+    n_anchor_atoms = 0
+    if anchors_file:
+        src_anchor = parent_pkg / anchors_file
+        if not src_anchor.exists():
+            raise FileNotFoundError(f"anchor file missing from parent package: {src_anchor}")
+        dst_anchor = child_pkg / anchors_file
+        if anchor_k is None:
+            _link_or_copy(src_anchor, dst_anchor)
+            n_anchor_atoms = sum(
+                1 for ln in src_anchor.read_text().splitlines()
+                if ln.startswith(("ATOM", "HETATM")) and _anchor_weight(ln) > 0
+            )
+        else:
+            from backend.core.md_shell_reprep import read_namd_coor  # noqa: PLC0415
+            coords = read_namd_coor(child_pkg / "equilibrated.coor")
+            n_anchor_atoms = retarget_anchor_pdb(
+                src_anchor, dst_anchor, coords=coords, k=anchor_k)
+        logger.info(
+            "[%s] anchors: %d atom(s) %s", child.job_id, n_anchor_atoms,
+            "fixed (fixedAtoms)" if anchor_k is None
+            else f"restrained at k={anchor_k:g} kcal/mol/A^2 vs the equilibrated pose")
+
     # ── Reseed (velocity reinit for a replica; velocity-PRESERVING for a continuation) ──
     # A carved cell (vacuum corners) must stay at constant volume — the parent package's
     # manifest is the record of how it was solvated.  The replica inherits that.
@@ -290,6 +383,7 @@ def build_replica_package(
             # Stage 0 of a production child is the velocity reseed (which takes no
             # overrides — it runs zero steps); the production stage itself is 1.
             overrides=overrides_for_stage(stage_overrides, 1),
+            anchors_file=anchors_file, anchor_k=anchor_k, field=field,
         )
     )
 
@@ -299,9 +393,27 @@ def build_replica_package(
         "protocol": manifest.get("protocol"),
         "package_dir": str(child_pkg.resolve()),
         "name_stem": name_stem,
-        "files": manifest.get("files", {}),
+        # `files.anchors` must describe THIS package, not the parent's: a child can be
+        # anchored when its parent was not (or vice versa), and the append route reads
+        # this key back to keep an extended stage under the same forces.
+        "files": {**manifest.get("files", {}),
+                  **({"anchors": anchors_file} if anchors_file else {"anchors": None})},
         "box_ang": list(box),
         "mgh_extrabonds": mgh_extrabonds,
+        # The child's OWN external forces, so the run record states what it ran under
+        # instead of leaving an analysis to assume "production = unrestrained".
+        "field": field,
+        "anchors": ({
+            "requested": anchors_requested or [],
+            "file": anchors_file,
+            "n_atoms_anchored": n_anchor_atoms,
+            "k_kcal_mol_a2": anchor_k,
+            "mechanism": (
+                "fixedAtoms (fixedAtomsCol B); held immobile"
+                if anchor_k is None else
+                "harmonic restraints (constraints/consref/conskfile, conskcol B), "
+                "referenced to this replica's equilibrated coordinates"),
+        } if anchors_file else None),
         # NO "declash" key — a production replica never declashes; generate_sbatch
         # rejects a declash manifest (its mid-chain rebuild can't run in a bare sbatch).
         "charge_audit": manifest.get("charge_audit"),

@@ -671,26 +671,55 @@ def _efield_lines(field: Optional[dict]) -> list[str]:
     ]
 
 
-def external_forces_block(anchors_file: Optional[str], field: Optional[dict]) -> str:
-    """The ``fixedAtoms`` + ``eField`` directives — the ONE emitter every conf writer uses.
+def external_forces_block(anchors_file: Optional[str], field: Optional[dict],
+                          *, anchor_k: Optional[float] = None) -> str:
+    """The anchor + ``eField`` directives — the ONE emitter every conf writer uses.
 
-    Anchors hold selected nucleotides completely fixed (Dirichlet-style).  They are
-    orthogonal to the ramped all-DNA harmonic restraint: NAMD allows only one
-    ``conskfile``, already spent on the slow-release restraint, so anchors ride the
-    independent ``fixedAtoms`` mechanism and persist across the whole ladder while the
-    restraint ramps to zero.
+    Two anchor mechanisms, chosen by ``anchor_k``:
 
-    Caveat (NPT): fixed atoms are not rescaled by the barostat and add no virial, so a
-    LARGE fixed region biases the pressure; for a small end-anchor (the field use case)
-    this is negligible.  Caveat (GPU): NAMD 3 refuses ``eField`` under *multi-GPU*
-    ``GPUresident`` ("EField is not compatible with multi-GPU GPUresident"); single-GPU
-    is fine, and the API rejects a multi-device field job up front.
+    * ``anchor_k is None`` → **hard** ``fixedAtoms`` (Dirichlet).  Selected atoms are held
+      completely immobile.  This is what the relax ladder uses, and it is the only option
+      there: the ladder's ``conskfile`` channel is spent on the slow-release restraint, so
+      anchors must ride the independent ``fixedAtoms`` mechanism to persist while the
+      restraint ramps to zero.
+    * ``anchor_k > 0`` → **soft** harmonic restraints (``constraints``/``consref``/
+      ``conskfile``, k read from column B in kcal/mol/Å²).  Only valid where the
+      constraints channel is free, which for NADOC means **production** — every
+      production conf writer emits ``constraints off``, and the ENM ladder restrains via
+      ``extraBonds``, not ``constraints``.
+
+    Prefer the soft path for production.  A hard pin is a Dirichlet boundary that
+    propagates strain into whatever it is attached to, kills the local fluctuation
+    entirely, and — under NPT — is not rescaled by the barostat and adds no virial, so as
+    the cell contracts the pinned atoms stay put while everything around them scales.
+    Suppressing global tumbling does not need that: for a rod of length L restrained at
+    both ends, a tilt θ displaces each end by (L/2)·sin θ, so k·((L/2)·sin θ)² ≈ kT sets
+    the scale — of order 0.01–0.03 kcal/mol/Å² for a ~10 nm bundle held within ~10°,
+    which is far too weak to perturb structure tens of Å away.
+
+    ``consref`` and ``conskfile`` are deliberately the SAME file: NAMD reads reference
+    coordinates from one and per-atom force constants (column B) from the other, and one
+    file carrying both is the standard idiom.  The reference coordinates must be the
+    EQUILIBRATED ones — restraining to the idealised build pose would drag the structure
+    back to where the relaxation moved it from (see
+    :func:`retarget_anchor_pdb`).
+
+    Caveat (GPU): NAMD 3 refuses ``eField`` under *multi-GPU* ``GPUresident`` ("EField is
+    not compatible with multi-GPU GPUresident"); single-GPU is fine, and the API rejects a
+    multi-device field job up front.
     """
     lines: list[str] = []
     if anchors_file:
-        lines.append("fixedAtoms         on\n")
-        lines.append(f"fixedAtomsFile     {anchors_file}\n")
-        lines.append("fixedAtomsCol      B\n")
+        if anchor_k is None:
+            lines.append("fixedAtoms         on\n")
+            lines.append(f"fixedAtomsFile     {anchors_file}\n")
+            lines.append("fixedAtomsCol      B\n")
+        else:
+            lines.append("constraints        on\n")
+            lines.append(f"consref            {anchors_file}\n")
+            lines.append(f"conskfile          {anchors_file}\n")
+            lines.append("conskcol           B\n")
+            lines.append("consexp            2\n")
     lines.extend(_efield_lines(field))
     return "".join(lines)
 
@@ -977,6 +1006,7 @@ def build_production_conf(
     structure_psf: Optional[str] = None,
     start_checkpoint: Optional[str] = None,
     anchors_file: Optional[str] = None,
+    anchor_k: Optional[float] = None,
     field: Optional[dict] = None,
     colvars_file: Optional[str] = None,
     n_atoms: Optional[int] = None,
@@ -1095,7 +1125,11 @@ def build_production_conf(
     # actually develops.  Dropping them here would silently un-anchor the field job and
     # let the uniform force stream the whole structure across the box (COM drift).
     # Default (None, None) → "" so the ensemble path stays byte-identical.
-    ext_forces = external_forces_block(anchors_file, field)
+    ext_forces = external_forces_block(anchors_file, field, anchor_k=anchor_k)
+    # Soft anchors OWN the constraints channel; the unconditional "constraints off"
+    # below would switch them straight back off.  Emit it only when they are not in use,
+    # so an unanchored (or hard-anchored) production conf stays byte-identical.
+    constraints_line = "" if (anchors_file and anchor_k is not None) else "constraints        off\n"
     # Colvars rides alongside the external-forces block: both are optional NAMD stanzas
     # and neither knows about the other.
     if colvars_file:
@@ -1157,8 +1191,7 @@ langevinHydrogen   off
 xstFreq            {prod_x}
 restartfreq        {prod_r}
 binaryrestart      yes
-constraints        off
-{ext_forces}outputName         output/{spec.name}
+{constraints_line}{ext_forces}outputName         output/{spec.name}
 dcdFile            output/{spec.name}.dcd
 dcdFreq            {spec.dcd_freq}
 xstFile            output/{spec.name}.xst
@@ -1723,12 +1756,28 @@ def write_solute_fixed_pdb(pdb_path: Path, dst_path: Path) -> int:
 
 
 def write_anchor_restraints_pdb(
-    pdb_path: Path, dst_path: Path, anchored_indices: "set[int]"
+    pdb_path: Path, dst_path: Path, anchored_indices: "set[int]",
+    *, atom_names: "set[str] | None" = None, k: Optional[float] = None,
 ) -> int:
-    """Write a fixedAtoms marker PDB: B=1.0 for the heavy atoms of the anchored DNA
-    residues, B=0 for everything else (hydrogens, solvent, and every non-anchored
-    DNA atom).  NAMD reads col B via ``fixedAtomsCol B`` and holds the B=1 atoms
-    immobile — the Dirichlet-style "held" analogue of the oxDNA trap / CanDo BC.
+    """Write an anchor marker PDB: column B carries the anchor weight for the selected
+    atoms of the anchored DNA residues and 0 for everything else (hydrogens, solvent, and
+    every non-anchored DNA atom).
+
+    ``k`` selects what column B *means*, matching the two mechanisms in
+    :func:`external_forces_block`:
+
+    * ``k is None`` → **B = 1.0**, a ``fixedAtomsCol B`` marker: those atoms are held
+      completely immobile (Dirichlet).
+    * ``k`` given → **B = k**, a ``conskcol B`` per-atom harmonic force constant in
+      kcal/mol/Å².  The soft path, for production.
+
+    ``atom_names`` restricts the anchor WITHIN each selected residue — e.g. ``{"C1'"}``
+    pins one sugar carbon per base instead of all ~20 heavy atoms.  This is the whole
+    atom-level story: the file format was always per-atom, only the decision was
+    per-residue, so a name filter buys atom granularity without an atom picker (and keeps
+    the choice a consistent, physically meaningful site across designs rather than an
+    arbitrary hand-picked set).  ``None`` keeps the historical all-heavy-atoms behaviour.
+    Hydrogens are excluded either way.
 
     ``anchored_indices`` is the 0-based residue-ordinal set from
     :func:`backend.core.namd_topology.resolve_anchor_residue_indices`.  Residues are
@@ -1754,10 +1803,14 @@ def write_anchor_restraints_pdb(
                 res_idx += 1
                 prev_id = ident
             atom_name = raw[12:16].strip()
-            fixed = res_idx in anchored_indices and not atom_name.startswith("H")
+            fixed = (
+                res_idx in anchored_indices
+                and not atom_name.startswith("H")
+                and (atom_names is None or atom_name in atom_names)
+            )
             if fixed:
                 n_marked += 1
-            raw = _set_bfactor(raw, 1.0 if fixed else 0.0)
+            raw = _set_bfactor(raw, (1.0 if k is None else float(k)) if fixed else 0.0)
         elif raw.startswith("HETATM"):
             raw = _set_bfactor(raw, 0.0)
         lines.append(raw)
@@ -1771,6 +1824,64 @@ def _set_bfactor(line: str, value: float) -> str:
     if len(line) < 67:
         line = line.rstrip("\n").ljust(66) + "\n"
     return f"{line[:60]}{value:6.2f}{line[66:].rstrip()}\n"
+
+
+def _set_xyz(line: str, xyz) -> str:
+    x, y, z = (float(v) for v in xyz)
+    return f"{line[:30]}{x:8.3f}{y:8.3f}{z:8.3f}{line[54:]}"
+
+
+def retarget_anchor_pdb(
+    src_path: Path, dst_path: Path, *, coords=None, k: Optional[float] = None,
+) -> int:
+    """Re-point an existing anchor PDB at new reference coordinates and/or a new column-B
+    weight.  Returns the number of anchored (B > 0) atoms.
+
+    This is what makes a SOFT production anchor correct.  The anchor PDB is written at
+    prep time against the idealised build pose, but a production child starts from
+    coordinates the relaxation ladder has since moved (RMSD of order 10 Å).  Feeding that
+    build-pose file to ``consref`` would restrain the structure back to where the
+    relaxation moved it FROM — a standing force pulling on the run for its whole length,
+    which is worse than no anchor at all.  Passing the parent's equilibrated ``.coor``
+    here re-references the restraint to the structure the child actually starts from.
+
+    It also means each arm of a comparison is anchored to ITS OWN equilibrated geometry.
+    Sharing one reference pose across designs whose equilibrium crossover geometry differs
+    would impose a different pre-strain per arm — reintroducing exactly the
+    design-correlated bias a matched comparison exists to remove.
+
+    ``coords`` is an ``(N, 3)`` array in the file's atom order (a full-system NAMD
+    ``.coor`` matches the package PDB row for row); ``None`` leaves coordinates alone.
+    ``k`` rewrites every anchored atom's column B (``None`` leaves the existing marker),
+    which is how a hard ``fixedAtoms`` marker file becomes a ``conskfile``.
+    """
+    n_anchored = 0
+    out: list[str] = []
+    row = -1
+    for raw in src_path.read_text().splitlines(keepends=True):
+        if raw.startswith(("ATOM", "HETATM")):
+            row += 1
+            if coords is not None:
+                if row >= len(coords):
+                    raise ValueError(
+                        f"{src_path.name} has more atom records than the {len(coords)} "
+                        f"coordinates supplied — the .coor does not match this package")
+                raw = _set_xyz(raw, coords[row])
+            try:
+                b = float(raw[60:66])
+            except ValueError:
+                b = 0.0
+            if b > 0:
+                n_anchored += 1
+                if k is not None:
+                    raw = _set_bfactor(raw, float(k))
+        out.append(raw)
+    if coords is not None and row + 1 != len(coords):
+        raise ValueError(
+            f"{src_path.name} has {row + 1} atom records but {len(coords)} coordinates "
+            f"were supplied — the .coor does not match this package")
+    dst_path.write_text("".join(out))
+    return n_anchored
 
 
 # ── Aksimentiev-style ENM extraBonds ─────────────────────────────────────────
@@ -2667,6 +2778,9 @@ def prepare_mgh_slow_release(
     production_timestep_fs: float = 4.0,
     pre_declashed: bool = False,
     anchors: Optional[list] = None,
+    #: Restrict each anchored residue to these PDB atom names (e.g. ``["C1'"]``) instead
+    #: of all its heavy atoms.  See :func:`write_anchor_restraints_pdb`.
+    anchor_atoms: Optional[list] = None,
     field: Optional[dict] = None,
     capture_vel_force: bool = False,
     allow_catenated_seed: bool = False,
@@ -2847,8 +2961,17 @@ def prepare_mgh_slow_release(
             design, anchors, model=atomistic_model, full_topology=require_full_topology)
         if anchor_indices:
             n_anchored_atoms = write_anchor_restraints_pdb(
-                pdb_path, package_dir / "restraints_anchors.pdb", anchor_indices)
+                pdb_path, package_dir / "restraints_anchors.pdb", anchor_indices,
+                atom_names=set(anchor_atoms) if anchor_atoms else None)
             anchors_file = "restraints_anchors.pdb"
+            if not n_anchored_atoms:
+                # An atom filter that matches nothing (a typo, or a name that does not
+                # exist in CHARMM36 nucleic acids) would otherwise produce an all-zero
+                # marker file: a run that reports "anchored" and is not.
+                raise ValueError(
+                    f"anchor_atoms {sorted(anchor_atoms or [])} matched no heavy atom in "
+                    f"the {len(anchor_indices)} anchored residue(s). Check the atom names "
+                    f"(CHARMM36 nucleic acids use e.g. P, O5', C5', C4', C3', C1').")
 
     # E-field (optional): a uniform native NAMD q·E body force, also a JOB-REQUEST
     # annotation.  A field with no anchor just streams the whole box (COM drift).
@@ -3102,9 +3225,14 @@ def prepare_mgh_slow_release(
         "mgh_extrabonds": mgh_extrabonds,
         "anchors": {
             "requested": anchors or [],
+            "atom_names": list(anchor_atoms) if anchor_atoms else None,
             "file": anchors_file,
             "n_residues": len(anchor_indices),
             "n_atoms_fixed": n_anchored_atoms,
+            # The LADDER is always hard: its constraints channel is spent on the
+            # slow-release restraint, so anchors have to ride fixedAtoms here.  A
+            # production child may re-reference the same selection as a soft restraint
+            # (md_ensemble.build_replica_package, anchor_k).
             "mechanism": "fixedAtoms (fixedAtomsCol B); held immobile across the ladder",
         },
         # The E-field as launched.  ``efield_vector`` is the NAMD-unit vector actually

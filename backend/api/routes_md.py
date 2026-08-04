@@ -44,6 +44,7 @@ from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
 from backend.core.md_pipeline import MdPipeline, PipelineStage, StagePlan, cross_engine_seed
 from backend.core.md_presets import (DEFAULT_PRESET, FAST_SHAPE, get_preset,
                                      preset_availability, preset_catalogue)
+from backend.core.md_ensemble import NAMD_SEED_MAX, random_seed
 from backend.core.md_protocols import (
     EQUILIBRIUM_AWARE_PROTOCOL,
     IMPLICIT_GBIS_PROTOCOL,
@@ -264,6 +265,14 @@ class CreateJobRequest(BaseModel):
                     "/ domain / strand / base) to hold immobile via NAMD fixedAtoms for the "
                     "whole ladder. A JOB-REQUEST annotation, never a Design edit; a selection "
                     "that resolves to nothing leaves the run unanchored.",
+    )
+    anchor_atoms: Optional[list[str]] = Field(
+        None,
+        description="Restrict each anchored residue to these PDB atom names, e.g. [\"C1'\"] "
+                    "to pin one sugar carbon per base instead of all ~20 heavy atoms. Gives "
+                    "atom-level anchoring without an atom picker. None = all heavy atoms "
+                    "(hydrogens are never anchored). Names that match nothing are rejected "
+                    "rather than silently producing an unanchored run.",
     )
     field: Optional[dict] = Field(
         None,
@@ -1251,6 +1260,7 @@ def _seed_production_available(job: MdJob) -> bool:
 def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
                                   box: tuple[float, float, float],
                                   mgh_extrabonds: bool, *,
+                                  seed: Optional[int] = None,
                                   fast: bool = False,
                                   timestep_fs: Optional[float] = None,
                                   structure_psf: Optional[str] = None,
@@ -1270,18 +1280,23 @@ def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
     # A water-shell-carved cell has vacuum corners; running production under a barostat
     # collapses it onto the solute (see md_protocols._pressure_block).  The relax ladder
     # has always honoured this; production read nothing, so it hardcoded NPT.
+    # seed=None keeps build_production_conf's own default, which the pure-builder tests
+    # pin byte-for-byte; the append route passes an explicit random draw.
+    seed_kw = {} if seed is None else {"seed": int(seed)}
     return build_production_conf(
         spec, name_stem, box, mgh_extrabonds,
         fast=fast, timestep_fs=timestep_fs, structure_psf=structure_psf,
         anchors_file=anchors_file, field=field, colvars_file=colvars_file,
         n_atoms=n_atoms, force_resident=force_resident,
         npt=package_npt_allowed(package_dir) if package_dir else True,
+        **seed_kw,
     )
 
 
 def _seed_production_conf(spec: SegmentSpec, name_stem: str,
                          box: tuple[float, float, float],
                          mgh_extrabonds: bool, minimize_steps: int, *,
+                         seed: int = 54321,
                          anchors_file: Optional[str] = None,
                          field: Optional[dict] = None) -> str:
     """Production conf that starts DIRECTLY from the oxDNA-seeded solvated
@@ -1296,7 +1311,7 @@ def _seed_production_conf(spec: SegmentSpec, name_stem: str,
 structure          {name_stem}.psf
 coordinates        {name_stem}.pdb
 
-seed               54321
+seed               {seed}
 paraTypeCharmm     on
 parameters         forcefield/par_all36_na.prm
 parameters         forcefield/toppar_water_ions_cufix.str
@@ -1468,6 +1483,11 @@ def _append_production_segments(
     continue_from_production: bool = False,
 ) -> list[SegmentSpec]:
     total_steps = plan["total_steps"]
+    # One fresh velocity seed per appended production, recorded in the manifest below.
+    # Appending used to inherit build_production_conf's fixed 54321, so re-running the
+    # same design — or running a sibling design for comparison — reproduced one thermal
+    # history instead of sampling a second.
+    seed = random_seed()
     from_seed = False
     if continue_from_production:
         checkpoint_idx, checkpoint, reason = _completed_production_checkpoint(job)
@@ -1547,10 +1567,11 @@ def _append_production_segments(
         # heat); every later split-segment continues from the prior restart.
         if from_seed and not previous:
             conf = _seed_production_conf(spec, name_stem, box, mgh_extrabonds, min_steps,
+                                         seed=seed,
                                          anchors_file=anchors_file, field=field)
         else:
             conf = _conservative_production_conf(
-                spec, name_stem, box, mgh_extrabonds,
+                spec, name_stem, box, mgh_extrabonds, seed=seed,
                 fast=fast, timestep_fs=timestep_fs, structure_psf=structure_psf,
                 anchors_file=anchors_file, field=field,
                 n_atoms=_psf_atom_count(package_dir / f"{name_stem}.psf") or None,
@@ -1571,6 +1592,9 @@ def _append_production_segments(
         "steps": total_steps,
         "previous": checkpoint_name,
         "from_seed": from_seed,
+        # The velocity seed these confs actually carry.  Randomised per append, so it has
+        # to be recorded to stay reproducible.
+        "seed": seed,
         "continue_from_production": continue_from_production,
         "first_new_segment": segments[0].name,
         "last_new_segment": segments[-1].name,
@@ -2547,6 +2571,7 @@ async def _prepare_job_bg(
             production_timestep_fs = body.production_timestep_fs,
             devices         = body.devices,
             anchors         = body.anchors,
+            anchor_atoms    = body.anchor_atoms,
             field           = body.field,
             # Recorded, not acted on, at this layer: the runner owns the skipping. The
             # manifest needs it because a truncated ladder is a protocol deviation, and
@@ -3043,6 +3068,33 @@ class ProductionRunRequest(BaseModel):
                     "UNRESTRAINED child can walk the solute into its own periodic image "
                     "and quietly corrupt the trajectory. Off by default; set it only if "
                     "the run is short enough or the solute is effectively spherical.")
+    seed: Optional[int] = Field(
+        None, ge=1, le=NAMD_SEED_MAX,
+        description="NAMD velocity seed for this child. OMIT IT for normal work — a "
+                    "fresh random seed is drawn per run so replicas (and separate "
+                    "designs being compared) are genuinely independent samples. Pass an "
+                    "explicit value only to reproduce a specific past trajectory; the "
+                    "seed actually used is recorded on the job and in its manifest.")
+    anchors: Optional[list] = Field(
+        None,
+        description="Anchor scopes for THIS production run (same picker format as the "
+                    "relax request). Omit to inherit the parent's anchors verbatim; send "
+                    "[] to run explicitly unanchored. Re-resolving here is what lets a "
+                    "production child be anchored when its relaxation was not — anchors "
+                    "used to be a prep-only concept that production silently discarded.")
+    anchor_atoms: Optional[list[str]] = Field(
+        None,
+        description="Restrict each anchored residue to these PDB atom names, e.g. "
+                    "[\"C1'\"]. Only meaningful together with `anchors`.")
+    anchor_k: Optional[float] = Field(
+        None, ge=0.0, le=100.0,
+        description="Harmonic force constant (kcal/mol/Å²) for a SOFT anchor. Omit for a "
+                    "hard fixedAtoms pin. Soft is strongly preferred for production: a "
+                    "hard pin is a Dirichlet boundary that propagates strain into nearby "
+                    "structure, kills local fluctuation, and is not rescaled by the "
+                    "barostat. Suppressing global tumbling of a ~10 nm bundle held at "
+                    "both ends needs only ~0.01–0.03. The restraint is referenced to this "
+                    "child's own equilibrated coordinates, not the idealised build pose.")
 
 
 def _production_seed_checkpoint(parent: MdJob) -> tuple[Optional[SegmentSpec], str, str]:
@@ -3099,6 +3151,71 @@ def _production_restraint_plan(parent: MdJob, requested: str,
         "enm_reason": why,
         "damping": float(damping) if damping else PRODUCTION_LANGEVIN_DAMPING,
     }
+def _resolve_child_anchors(
+    parent: MdJob, child: MdJob, body: "ProductionRunRequest",
+) -> tuple[Optional[str], list, Optional[dict]]:
+    """Anchors + E-field for a production child: ``(anchors_file, requested, field)``.
+
+    Two paths, and the distinction is the whole point of the fix:
+
+    * ``body.anchors is None`` → **inherit** the parent's, exactly as the sibling append
+      route already does.  Before this, the replica builder never passed them on at all,
+      so an anchored relaxation produced an unanchored production child and a field job's
+      child ran field-free.
+    * ``body.anchors`` given → **re-resolve** against the child's frozen design snapshot
+      and write a fresh marker PDB into the parent package (the child hardlinks or
+      re-references it).  An empty list means "explicitly unanchored", which is how a
+      user turns an inherited anchor off.
+
+    Resolution reads the design read-only (Three-Layer Law): anchors are a job-request
+    annotation, never a topology edit.  A selection that resolves to nothing leaves the
+    run unanchored rather than raising — matching the prep path's stale-selection
+    tolerance — but a bad ``anchor_atoms`` filter DOES raise, because that is a typo and
+    silently running unanchored is the failure this whole change exists to remove.
+    """
+    parent_pkg = parent.package_dir(_workspace())
+    manifest = json.loads((parent_pkg / "manifest.json").read_text())
+    field = manifest.get("field") or None
+
+    if body.anchors is None:
+        inherited = (manifest.get("files") or {}).get("anchors")
+        requested = ((manifest.get("anchors") or {}).get("requested")) or []
+        return inherited, requested, field
+    if not body.anchors:
+        return None, [], field
+
+    snapshot = child.job_dir(_workspace()) / "design.json"
+    if not snapshot.exists():
+        snapshot = parent.job_dir(_workspace()) / "design.json"
+    if not snapshot.exists():
+        raise HTTPException(
+            400, "This job has no frozen design snapshot, so production anchors cannot be "
+                 "resolved. Re-prep the relaxation with the anchors selected instead.")
+
+    from backend.core.md_protocols import write_anchor_restraints_pdb  # noqa: PLC0415
+    from backend.core.models import Design  # noqa: PLC0415
+    from backend.core.namd_topology import resolve_anchor_residue_indices  # noqa: PLC0415
+
+    design = Design.model_validate_json(snapshot.read_text())
+    full_topology = bool((manifest.get("charge_audit") or {}).get("topology_builder"))
+    indices = resolve_anchor_residue_indices(
+        design, body.anchors, full_topology=full_topology)
+    if not indices:
+        logger.warning(
+            "[%s] production anchors %r resolved to no DNA residue — running unanchored",
+            child.job_id, body.anchors)
+        return None, [], field
+
+    name_stem = manifest["name_stem"]
+    n = write_anchor_restraints_pdb(
+        parent_pkg / f"{name_stem}.pdb", parent_pkg / "restraints_anchors.pdb", indices,
+        atom_names=set(body.anchor_atoms) if body.anchor_atoms else None)
+    if not n:
+        raise HTTPException(400, (
+            f"anchor_atoms {sorted(body.anchor_atoms or [])} matched no heavy atom in the "
+            f"{len(indices)} anchored residue(s). CHARMM36 nucleic-acid atom names look "
+            f"like P, O5', C5', C4', C3', C1'."))
+    return "restraints_anchors.pdb", list(body.anchors), field
 
 
 @router.post("/md/jobs/{parent_id}/production-run")
@@ -3145,15 +3262,20 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
     # work.  Nothing about a production request is a property of the run that produced
     # the coordinates.
 
-    # Distinct velocity seed per production child of this parent, so a fan-out samples
-    # independent trajectories from the same equilibrated coords.  Replica 0 uses the
-    # same 54321 as the historical single-run production path.
+    # Distinct velocity seed per production child, so a fan-out samples independent
+    # trajectories from the same equilibrated coords.  DRAWN AT RANDOM, not derived from
+    # a fixed base: the old base+index rule gave every design's first production the same
+    # 54321, so a 0xT/1xT/2xT comparison shared one velocity realisation and one Langevin
+    # stream across arms — correlated thermal histories in the one place independence is
+    # the whole point.  The draw is recorded (child.ensemble_seed, manifest, stage label)
+    # and `body.seed` replays a specific past run.
     siblings = [
         j for j in MdJob.list_jobs(_workspace())
         if j.parent_job_id == parent.job_id and j.run_kind == "production"
     ]
     index = len(siblings)
-    seed = md_ensemble.generate_seeds(md_ensemble._DEFAULT_BASE_SEED, index + 1)[-1]
+    seed = body.seed if body.seed is not None else md_ensemble.random_seed(
+        exclude=[j.ensemble_seed for j in siblings if j.ensemble_seed is not None])
 
     child = new_job(
         design_name=parent.design_name,
@@ -3194,6 +3316,8 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         idx[child.job_id] = child.archive_path
         job_archive._write_index(_workspace(), "md_jobs", idx)
 
+    anchors_file, anchors_requested, field = _resolve_child_anchors(parent, child, body)
+
     md_ensemble.build_replica_package(
         parent, child,
         seed=seed, index=index,
@@ -3205,6 +3329,8 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         enm_restraints=restraints["enm_restraints"],
         damping=restraints["damping"],
         stage_overrides=body.stage_overrides or None,
+        anchors_file=anchors_file, anchor_k=body.anchor_k,
+        anchors_requested=anchors_requested, field=field,
     )
 
     # Local target autostarts the NAMD run immediately; an Alpine child is left
@@ -3253,7 +3379,13 @@ class EnsembleProductionRequest(BaseModel):
                                  description="Raw integration steps per replica")
     length_ns: Optional[float] = Field(None, gt=0.0, le=MAX_PRODUCTION_NS,
                                        description="Simulated ns per replica (used if steps omitted)")
-    base_seed: int = Field(54321, description="First NAMD seed; replica i uses base_seed + i")
+    base_seed: Optional[int] = Field(
+        None, ge=1, le=NAMD_SEED_MAX,
+        description="First NAMD seed; replica i uses base_seed + i. OMIT IT for normal "
+                    "work — a fresh random base is drawn per ensemble, so two ensembles "
+                    "of the same structure (or of two designs being compared) do not "
+                    "share a velocity realisation. Pass a value only to reproduce a "
+                    "specific past ensemble; the seeds used are recorded per replica.")
     cluster_name: str = Field("alpine")
     partition: str = Field("amilan", description="Default SLURM partition (CPU by default)")
     safety_factor: float = Field(1.5, gt=0.0)
@@ -3283,7 +3415,8 @@ async def stage_md_ensemble(parent_id: str, body: EnsembleProductionRequest) -> 
     plan = _production_fast_plan(parent, ProductionRequest(
         steps=body.steps, length_ns=body.length_ns, autostart=False,
     ))
-    seeds = md_ensemble.generate_seeds(body.base_seed, body.n_replicas)
+    base_seed = body.base_seed if body.base_seed is not None else random_seed()
+    seeds = md_ensemble.generate_seeds(base_seed, body.n_replicas)
 
     children = []
     for i, seed in enumerate(seeds):

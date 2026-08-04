@@ -444,6 +444,25 @@ export function mdChildLabelFor(job, index) {
   return mdChildRowLabel(job, index)
 }
 
+/** Pure: the Hold-atoms select's value → the `anchor_atoms` request field.
+ *  '' (All heavy atoms) → null, which is the backend's "no filter" sentinel; anything
+ *  else is a comma-separated PDB atom-name list. Returning [] instead of null would ask
+ *  the backend to anchor NOTHING, which it now rejects rather than running unanchored. */
+export function mdAnchorAtomNames(value) {
+  const names = String(value ?? '').split(',').map(s => s.trim()).filter(Boolean)
+  return names.length ? names : null
+}
+
+/** Pure: the Stiffness select's value → the `anchor_k` request field (kcal/mol/Å²).
+ *  '' (Hard pin) → null, which selects NAMD fixedAtoms. A number selects harmonic
+ *  restraints. 0 is NOT a hard pin — it is a restraint of zero strength — so it maps to
+ *  null too rather than emitting a conskfile that restrains nothing. */
+export function mdAnchorStiffness(value) {
+  if (value === '' || value == null) return null
+  const k = Number(value)
+  return Number.isFinite(k) && k > 0 ? k : null
+}
+
 /** Pure: one-line summary of a parent's seeded children for the collapsed parent row,
  *  e.g. "⧉ 8 replicas · 2 running · 5 queued · 1 done" (Alpine ensemble) or
  *  "⧉ 3 production runs · 1 running · 2 done" (local production fan-out).  Returns ''
@@ -803,6 +822,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // Live mid-relax control.  Its LAUNCH-time counterpart moved into the Job Wizard; this
   // one applies to a relaxation that is ALREADY running, at its next stage checkpoint.
   const liveControlsCard = document.getElementById('md-jobs-live-controls')
+  // Anchor granularity + stiffness. Their card survives the Job Wizard move; these feed
+  // BOTH launch paths (relax bakes the marker PDB, production re-resolves the selection).
+  const anchorAtomsSel     = document.getElementById('md-anchors-atoms')
+  const anchorStiffnessSel = document.getElementById('md-anchors-stiffness')
   const earlyStopChk  = document.getElementById('md-jobs-early-stop')
   const displayToggle = document.getElementById('md-jobs-display-toggle')
   const displayStatus = document.getElementById('md-jobs-display-status')
@@ -2428,6 +2451,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       execution_target: runTarget,
       cluster_name: runTarget === 'alpine' ? 'alpine' : null,
       runpod_gpu_key: runTarget === 'runpod' ? (_selectedRunpodGpu?.key ?? null) : null,
+      // Anchors on the PRODUCTION request. This card used to be read only by the relax
+      // launch, so picking anchors and clicking Production silently discarded them — and
+      // even an anchored parent lost them, because the replica builder never passed them
+      // through. Sending [] (an empty card) means "explicitly unanchored".
+      anchors:      _anchorsCard?.getAnchors?.() ?? [],
+      anchor_atoms: mdAnchorAtomNames(anchorAtomsSel?.value),
+      anchor_k:     mdAnchorStiffness(anchorStiffnessSel?.value),
     }
 
     if (isLocalRun) {
@@ -2541,6 +2571,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       cluster_name:   runTarget === 'alpine' ? 'alpine' : null,
       runpod_gpu_key: runTarget === 'runpod' ? (_selectedRunpodGpu?.key ?? null) : null,
       anchors:        anchors.length ? anchors : null,
+      // The ladder pins hard regardless of the stiffness select (its constraints channel
+      // is spent on the slow-release restraint), but the ATOM filter applies to both.
+      anchor_atoms:   anchors.length ? mdAnchorAtomNames(anchorAtomsSel?.value) : null,
       field:          fieldOn ? { field_pN: fieldSpec.field_pN, dir: fieldSpec.dir } : null,
       run_dir:        getRunDir(),   // shared run-location: write this run into the chosen folder
     }

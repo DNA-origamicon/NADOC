@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from backend.core import md_ensemble
+
 
 # ── md_job ─────────────────────────────────────────────────────────────────────
 
@@ -1039,7 +1041,7 @@ class TestProductionAppend:
 
     # ── production-run child jobs (mirror oxDNA: relaxation stays, productions nest) ──
 
-    def _spawn(self, routes_md, tmp_path, monkeypatch, parent, *, autostart=False):
+    def _spawn(self, routes_md, tmp_path, monkeypatch, parent, *, autostart=False, seed=None):
         """Call the production-run endpoint with staleness + NAMD launch stubbed out."""
         import asyncio
         # build_replica_package hardlinks the parent PSF *and* PDB into the child pkg;
@@ -1049,7 +1051,8 @@ class TestProductionAppend:
         started: list = []
         monkeypatch.setattr(routes_md, "start_job", lambda job, ws: started.append(job.job_id))
         result = asyncio.run(routes_md.spawn_md_production(
-            parent.job_id, routes_md.ProductionRunRequest(length_ns=1.0, autostart=autostart)))
+            parent.job_id,
+            routes_md.ProductionRunRequest(length_ns=1.0, autostart=autostart, seed=seed)))
         return result, started
 
     def test_production_spawns_child_leaving_relaxation_intact(
@@ -1069,7 +1072,10 @@ class TestProductionAppend:
 
         assert child.parent_job_id == parent.job_id
         assert child.run_kind == "production"
-        assert child.ensemble_seed == 54321 and child.ensemble_index == 0
+        # The seed is DRAWN, not fixed — assert the contract (a recorded, in-range NAMD
+        # seed), never a literal value.
+        assert 1 <= child.ensemble_seed <= md_ensemble.NAMD_SEED_MAX
+        assert child.ensemble_index == 0
         assert child.execution_target == "local"
         assert child.status == MdStatus.queued          # autostart False
         # Child package is a fresh production-only package (reseed + one production seg).
@@ -1147,8 +1153,9 @@ class TestProductionAppend:
     def test_repeated_productions_get_distinct_seeds(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Each production child of the same parent draws its own velocity seed, so a
-        fan-out samples independent trajectories."""
+        """Each production child of the same parent draws its own RANDOM velocity seed, so
+        a fan-out samples independent trajectories — and so two designs being compared do
+        not silently share one velocity realisation, which a fixed base seed guaranteed."""
         from backend.core.md_job import MdJob
 
         routes_md = self._routes_md(tmp_path, monkeypatch)
@@ -1159,9 +1166,88 @@ class TestProductionAppend:
         r2, _ = self._spawn(routes_md, tmp_path, monkeypatch, parent)
 
         seeds = [MdJob.load(r["job"]["job_id"], tmp_path).ensemble_seed for r in (r0, r1, r2)]
-        assert seeds == [54321, 54322, 54323]
+        assert len(set(seeds)) == 3, f"siblings collided onto one trajectory: {seeds}"
+        assert all(1 <= s <= md_ensemble.NAMD_SEED_MAX for s in seeds)
+        # Not the old deterministic ladder — three consecutive integers from a fixed base
+        # would mean the randomisation regressed.
+        assert sorted(seeds) != [54321, 54322, 54323]
         idxs = [MdJob.load(r["job"]["job_id"], tmp_path).ensemble_index for r in (r0, r1, r2)]
         assert idxs == [0, 1, 2]
+
+    def test_production_inherits_the_parents_anchors_and_field(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """THE bug: the anchors card was read only by the relax launch, and the replica
+        builder never forwarded anchors/field — so an anchored relaxation produced an
+        unanchored production child, and an E-field job's child ran field-free."""
+        from backend.core.md_job import MdJob
+
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        parent = self._ready_job(tmp_path)
+        pkg = parent.package_dir(tmp_path)
+        (pkg / "restraints_anchors.pdb").write_text(
+            "ATOM      1  C1' DT  A   1       0.000   0.000   0.000  1.00  1.00\n")
+        manifest = json.loads((pkg / "manifest.json").read_text())
+        manifest["files"] = {"anchors": "restraints_anchors.pdb"}
+        manifest["anchors"] = {"requested": [{"kind": "base"}]}
+        manifest["field"] = {"field_pN": 5.0, "dir": [0.0, 0.0, 1.0]}
+        (pkg / "manifest.json").write_text(json.dumps(manifest))
+
+        result, _ = self._spawn(routes_md, tmp_path, monkeypatch, parent)
+        child = MdJob.load(result["job"]["job_id"], tmp_path)
+        child_pkg = child.package_dir(tmp_path)
+        conf = next(child_pkg.glob("D_01_production_*.conf")).read_text()
+        assert "fixedAtoms         on" in conf
+        assert "eFieldOn" in conf
+        assert (child_pkg / "restraints_anchors.pdb").exists()
+        cm = json.loads((child_pkg / "manifest.json").read_text())
+        assert cm["anchors"]["n_atoms_anchored"] == 1
+        assert cm["field"]["field_pN"] == 5.0
+
+    def test_production_request_can_turn_an_inherited_anchor_off(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`anchors: []` is meaningful — it is how an anchored parent spawns a free
+        control run.  It must not be confused with `anchors: None` (inherit)."""
+        import asyncio
+
+        from backend.core.md_job import MdJob
+
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        parent = self._ready_job(tmp_path)
+        pkg = parent.package_dir(tmp_path)
+        (pkg / "restraints_anchors.pdb").write_text(
+            "ATOM      1  C1' DT  A   1       0.000   0.000   0.000  1.00  1.00\n")
+        manifest = json.loads((pkg / "manifest.json").read_text())
+        manifest["files"] = {"anchors": "restraints_anchors.pdb"}
+        (pkg / "manifest.json").write_text(json.dumps(manifest))
+        (pkg / "D.pdb").write_text("* stub\n")
+        monkeypatch.setattr(routes_md, "_assert_md_job_current", lambda job: None)
+        monkeypatch.setattr(routes_md, "start_job", lambda job, ws: None)
+
+        result = asyncio.run(routes_md.spawn_md_production(
+            parent.job_id,
+            routes_md.ProductionRunRequest(length_ns=1.0, autostart=False, anchors=[])))
+        child = MdJob.load(result["job"]["job_id"], tmp_path)
+        conf = next(child.package_dir(tmp_path).glob("D_01_production_*.conf")).read_text()
+        assert "fixedAtoms" not in conf
+        assert "constraints        off" in conf
+
+    def test_production_seed_can_be_pinned_to_reproduce_a_run(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Randomised by default, reproducible on request: an explicit seed is honoured
+        verbatim and recorded, so a published trajectory can be re-run."""
+        from backend.core.md_job import MdJob
+
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        parent = self._ready_job(tmp_path)
+
+        result, _ = self._spawn(routes_md, tmp_path, monkeypatch, parent, seed=99991)
+        child = MdJob.load(result["job"]["job_id"], tmp_path)
+        assert child.ensemble_seed == 99991
+        conf = (child.package_dir(tmp_path) / f"{child.name_stem}_00_reseed.conf").read_text()
+        assert "seed               99991" in conf
 
     def test_production_autostart_launches_local(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,

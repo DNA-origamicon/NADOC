@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from backend.core import md_protocols
-from backend.core.md_ensemble import _DEFAULT_BASE_SEED
+from backend.core.md_ensemble import random_seed
 from backend.core.md_pipeline import (
     MdPipeline,
     StagePlan,
@@ -182,18 +182,23 @@ def init_chain_run(
     *,
     chain_id: str,
     root_checkpoint: Optional[str] = None,
-    base_seed: int = _DEFAULT_BASE_SEED,
+    base_seed: Optional[int] = None,
     stage_id_for: Callable[[int], str] = default_stage_id,
 ) -> ChainRun:
     """Resolve ``pipeline`` (via P1's :func:`build_pipeline_plan`) into a fresh chain.
 
     Every stage starts ``pending``; the chain starts ``pending``.  No jobs are created —
     the first :func:`step_chain` spawns stage 0.
+
+    ``base_seed=None`` (the normal case) draws a fresh random base, so two chains over
+    the same structure are independent samples rather than one trajectory run twice.
+    Pass an explicit base only to reproduce a past chain; the resolved per-stage seeds
+    are stored on the plan.
     """
     plan = build_pipeline_plan(
         pipeline,
         root_checkpoint=root_checkpoint,
-        base_seed=base_seed,
+        base_seed=random_seed() if base_seed is None else int(base_seed),
         stage_id_for=stage_id_for,
     )
     stages = [
