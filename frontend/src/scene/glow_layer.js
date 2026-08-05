@@ -150,7 +150,10 @@ export function createGlowLayer(scene, color = 0x3fb950, scale = GLOW_SCALE, nam
     _ensureCapacity(count)
     for (let i = 0; i < count; i++) {
       _dummy.position.copy(entries[i].pos)
-      _dummy.scale.setScalar(scale)
+      // Per-entry scale (same opt-in createMultiColorGlowLayer has): the anchor halo
+      // mixes coarse-grained beads with individual ATOMS, which are an order of
+      // magnitude smaller, in ONE layer and one draw call.
+      _dummy.scale.setScalar(entries[i].scale ?? scale)
       _dummy.updateMatrix()
       mesh.setMatrixAt(i, _dummy.matrix)
     }

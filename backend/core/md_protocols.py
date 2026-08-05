@@ -23,6 +23,7 @@ import logging
 import math
 import re
 import zipfile
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -1867,7 +1868,8 @@ SETTLE_RESTRAINT_K = 1.0
 
 
 def write_anchor_restraints_pdb(
-    pdb_path: Path, dst_path: Path, anchored_indices: "set[int]",
+    pdb_path: Path, dst_path: Path,
+    anchored_indices: "set[int] | Mapping[int, set[str] | None]",
     *, atom_names: "set[str] | None" = None, k: Optional[float] = None,
 ) -> int:
     """Write an anchor marker PDB: column B carries the anchor weight for the selected
@@ -1890,8 +1892,14 @@ def write_anchor_restraints_pdb(
     arbitrary hand-picked set).  ``None`` keeps the historical all-heavy-atoms behaviour.
     Hydrogens are excluded either way.
 
-    ``anchored_indices`` is the 0-based residue-ordinal set from
-    :func:`backend.core.namd_topology.resolve_anchor_residue_indices`.  Residues are
+    ``anchored_indices`` is either the 0-based residue-ordinal SET from
+    :func:`backend.core.namd_topology.resolve_anchor_residue_indices` — one atom filter
+    for the whole run — or the per-residue MAPPING from
+    :func:`~backend.core.namd_topology.resolve_anchor_atom_map`, ``{ordinal: names or
+    None}``, which is how each anchor holds its own atoms.  **A mapping is authoritative
+    and ``atom_names`` is then ignored**, because a ``None`` VALUE legitimately means
+    "all heavy atoms of THIS residue" and must not fall back to the job-level default
+    (the resolver has already folded that default in).  Residues are
     counted positionally by contiguity (a boundary at any change of
     ``(chain, resid, resname)`` or a ``TER`` record) — the same walk
     :func:`backend.core.md_protocols._parse_base_ring_residues` uses — because psfgen's
@@ -1899,6 +1907,7 @@ def write_anchor_restraints_pdb(
     residues are only addressable by their order (which matches
     :func:`~backend.core.namd_topology.built_pdb_residue_keys`).  Returns the number of
     atoms marked fixed."""
+    per_res = anchored_indices if isinstance(anchored_indices, Mapping) else None
     n_marked = 0
     lines = []
     res_idx = -1
@@ -1914,10 +1923,13 @@ def write_anchor_restraints_pdb(
                 res_idx += 1
                 prev_id = ident
             atom_name = raw[12:16].strip()
+            # `names` is only ever read for a residue that IS anchored (short-circuit),
+            # so the per-residue lookup is safe without a second membership test.
+            names = per_res.get(res_idx) if per_res is not None else atom_names
             fixed = (
                 res_idx in anchored_indices
                 and not atom_name.startswith("H")
-                and (atom_names is None or atom_name in atom_names)
+                and (names is None or atom_name in names)
             )
             if fixed:
                 n_marked += 1
@@ -3095,27 +3107,31 @@ def prepare_mgh_slow_release(
     # read-only from the topology — never a Design edit (Three-Layer Law).  A selection
     # that resolves to nothing (stale / ssDNA-only) leaves the run unanchored.
     anchors_file: Optional[str] = None
-    anchor_indices: set = set()
+    anchor_indices: dict = {}
     n_anchored_atoms = 0
     if anchors:
-        from backend.core.namd_topology import resolve_anchor_residue_indices  # noqa: PLC0415
+        from backend.core.namd_topology import (  # noqa: PLC0415
+            requested_atom_names, resolve_anchor_atom_map,
+        )
         # full_topology must match how the package {stem}.pdb was built (psfgen when
         # require_full_topology, else export_pdb) so the residue ordinals line up.
-        anchor_indices = resolve_anchor_residue_indices(
-            design, anchors, model=atomistic_model, full_topology=require_full_topology)
+        # Each anchor may name its own atoms; anchor_atoms is the fallback for those
+        # that don't.
+        anchor_indices = resolve_anchor_atom_map(
+            design, anchors, model=atomistic_model, full_topology=require_full_topology,
+            default_atoms=set(anchor_atoms) if anchor_atoms else None)
         if anchor_indices:
             n_anchored_atoms = write_anchor_restraints_pdb(
-                pdb_path, package_dir / "restraints_anchors.pdb", anchor_indices,
-                atom_names=set(anchor_atoms) if anchor_atoms else None)
+                pdb_path, package_dir / "restraints_anchors.pdb", anchor_indices)
             anchors_file = "restraints_anchors.pdb"
             if not n_anchored_atoms:
                 # An atom filter that matches nothing (a typo, or a name that does not
                 # exist in CHARMM36 nucleic acids) would otherwise produce an all-zero
                 # marker file: a run that reports "anchored" and is not.
                 raise ValueError(
-                    f"anchor_atoms {sorted(anchor_atoms or [])} matched no heavy atom in "
-                    f"the {len(anchor_indices)} anchored residue(s). Check the atom names "
-                    f"(CHARMM36 nucleic acids use e.g. P, O5', C5', C4', C3', C1').")
+                    f"anchor atoms {requested_atom_names(anchor_indices)} matched no heavy "
+                    f"atom in the {len(anchor_indices)} anchored residue(s). Check the atom "
+                    f"names (CHARMM36 nucleic acids use e.g. P, O5', C5', C4', C3', C1').")
 
     # E-field (optional): a uniform native NAMD q·E body force, also a JOB-REQUEST
     # annotation.  A field with no anchor just streams the whole box (COM drift).

@@ -6,7 +6,9 @@ import {
   arrowLenForPn, pnForArrowLen, EFIELD_MAX_LEN_NM, EFIELD_MIN_LEN_NM, EFIELD_NM_PER_PN,
   resolveSelectionAnchors, anchorSelectionState, highlightedAnchors, anchorKey, anchorLabel, dedupeAnchors, addAnchors, removeAnchor,
   partitionBaseKeys, unsupportedBaseKeys,
-  anchorsToSelection,
+  anchorsToSelection, makeAnchorLabeller,
+  atomNamesFromValue, anchorAtoms, hasAnchorAtoms, anchorAtomsKey,
+  withAnchorAtoms, withAllAnchorAtoms, commonAnchorAtomsKey, atomOptionByKey,
   buildFieldSpec, fieldSpecReady,
   fieldColorHex, fieldZone, EFIELD_PN_LOW, EFIELD_PN_GOOD, EFIELD_PN_DISRUPT,
   anchorAmplification, anchorTensionPn, safePnFor, disruptPnFor,
@@ -89,21 +91,23 @@ describe('anchor descriptors', () => {
     expect(anchorKey({ kind: 'strand', id: 's7' })).toBe('strand:s7')
     expect(anchorKey({ kind: 'base', helixId: 'h2', bp: 5, direction: 'forward' })).toBe('base:h2:5:forward')
   })
-  it('labels are human-readable', () => {
-    expect(anchorLabel({ kind: 'overhang', id: 'o1' })).toBe('overhang o1')
-    expect(anchorLabel({ kind: 'domain', strandId: 's2', domainIndex: 0 })).toBe('domain s2#0')
-    expect(anchorLabel({ kind: 'strand', id: 's7' })).toBe('strand s7')
-    expect(anchorLabel({ kind: 'base', helixId: 'h2', bp: 5, direction: 'reverse' })).toBe('base h2.5 reverse')
+  it('labels degrade to flagged ids when there is no design to resolve against', () => {
+    // Without a design there is no helix NUMBER, so the label says so (`?`) instead of
+    // inventing one — an unresolved anchor must never look like a resolved one.
+    expect(anchorLabel({ kind: 'overhang', id: 'o1' })).toBe('OH?o1')
+    expect(anchorLabel({ kind: 'strand', id: 's7' })).toBe('S?s7')
+    expect(anchorLabel({ kind: 'base', helixId: 'h2', bp: 5, direction: 'REVERSE' }))
+      .toBe('H?h2:bp5 Rev')
   })
-  it('synthetic kinds key and label distinctly, with a wildcard for the whole run/tail', () => {
+  it('synthetic kinds key distinctly, with a wildcard for the whole run/tail', () => {
     expect(anchorKey({ kind: 'extra_base', crossoverId: 'xo1', k: 2 })).toBe('extra_base:xo1:2')
     expect(anchorKey({ kind: 'extra_base', crossoverId: 'xo1' })).toBe('extra_base:xo1:*')
     expect(anchorKey({ kind: 'extension', extensionId: 'e1', k: 0 })).toBe('extension:e1:0')
     expect(anchorKey({ kind: 'extension', extensionId: 'e1' })).toBe('extension:e1:*')
-    expect(anchorLabel({ kind: 'extra_base', crossoverId: 'xo1', k: 2 })).toBe('xover base xo1#2')
-    expect(anchorLabel({ kind: 'extra_base', crossoverId: 'xo1' })).toBe('xover bases xo1')
-    expect(anchorLabel({ kind: 'extension', extensionId: 'e1', k: 0 })).toBe('ext base e1#0')
-    expect(anchorLabel({ kind: 'extension', extensionId: 'e1' })).toBe('ext tail e1')
+    expect(anchorLabel({ kind: 'extra_base', crossoverId: 'xo1', k: 2 })).toBe('XB?xo1+2')
+    expect(anchorLabel({ kind: 'extra_base', crossoverId: 'xo1' })).toBe('XB?xo1+*')
+    expect(anchorLabel({ kind: 'extension', extensionId: 'e1', k: 0 })).toBe('EX?e1›0')
+    expect(anchorLabel({ kind: 'extension', extensionId: 'e1' })).toBe('EX?e1›*')
   })
   it('a whole-run scope and its index-0 member are DIFFERENT anchors (no dedupe collision)', () => {
     const a = addAnchors([{ kind: 'extra_base', crossoverId: 'xo1' }],
@@ -632,5 +636,276 @@ describe('anchorsToSelection — anchor descriptors → the occupancy scope dict
     const sel = anchorsToSelection([{ kind: 'cluster', id: 'c1' }, { kind: 'wat', id: 'z' }])
     expect(sel.cluster_ids).toEqual(['c1'])
     expect(Object.values(sel).flat()).toHaveLength(1)
+  })
+})
+
+// ── Per-anchor atom holds ────────────────────────────────────────────────────
+
+describe('atomNamesFromValue', () => {
+  it('maps the all-heavy-atoms option to null, not to an empty list', () => {
+    // [] would ask the backend to anchor NOTHING, which it rejects.
+    expect(atomNamesFromValue('')).toBeNull()
+    expect(atomNamesFromValue(null)).toBeNull()
+    expect(atomNamesFromValue(undefined)).toBeNull()
+  })
+
+  it('splits and trims a comma-separated atom-name list', () => {
+    expect(atomNamesFromValue("P,C1'")).toEqual(['P', "C1'"])
+    expect(atomNamesFromValue(" P , C1' ")).toEqual(['P', "C1'"])
+  })
+})
+
+describe('anchorAtoms', () => {
+  it('reads our own `atoms` field', () => {
+    expect(anchorAtoms({ kind: 'strand', id: 's1', atoms: ['P'] })).toEqual(['P'])
+  })
+
+  it('accepts the backend `atom_names` spelling and a camelCase caller', () => {
+    expect(anchorAtoms({ atom_names: ["C1'"] })).toEqual(["C1'"])
+    expect(anchorAtoms({ atomNames: ["C1'"] })).toEqual(["C1'"])
+  })
+
+  it('accepts a raw comma-separated string, like a hand-written manifest', () => {
+    expect(anchorAtoms({ atoms: "P,C1'" })).toEqual(['P', "C1'"])
+  })
+
+  it('normalises an empty list to null — all heavy atoms, never "nothing"', () => {
+    expect(anchorAtoms({ atoms: [] })).toBeNull()
+    expect(anchorAtoms({ atoms: ['', '  '] })).toBeNull()
+    expect(anchorAtoms({ atoms: null })).toBeNull()
+  })
+
+  it('is null for a descriptor that never mentions atoms, and for nothing at all', () => {
+    expect(anchorAtoms({ kind: 'strand', id: 's1' })).toBeNull()
+    expect(anchorAtoms(null)).toBeNull()
+  })
+})
+
+describe('hasAnchorAtoms', () => {
+  it('distinguishes an explicit all-heavy choice from having no opinion', () => {
+    // THE sentinel. Both read as null through anchorAtoms; only presence separates them.
+    expect(hasAnchorAtoms({ kind: 'strand', id: 's1', atoms: null })).toBe(true)
+    expect(hasAnchorAtoms({ kind: 'strand', id: 's1' })).toBe(false)
+  })
+
+  it('counts the alias spellings as an opinion too', () => {
+    expect(hasAnchorAtoms({ atom_names: null })).toBe(true)
+    expect(hasAnchorAtoms({ atomNames: ['P'] })).toBe(true)
+    expect(hasAnchorAtoms(null)).toBe(false)
+  })
+})
+
+describe('anchorAtomsKey', () => {
+  it('is order-insensitive, so P+C1′ picked either way is one choice', () => {
+    expect(anchorAtomsKey({ atoms: ['P', "C1'"] })).toBe(anchorAtomsKey({ atoms: ["C1'", 'P'] }))
+  })
+
+  it('uses the empty string for all heavy atoms, matching the option value', () => {
+    expect(anchorAtomsKey({ atoms: null })).toBe('')
+    expect(anchorAtomsKey({})).toBe('')
+  })
+})
+
+describe('withAnchorAtoms / withAllAnchorAtoms', () => {
+  const LIST = [{ kind: 'strand', id: 's1' }, { kind: 'overhang', id: 'o1' }]
+
+  it('writes only the addressed row and leaves the list untouched', () => {
+    const out = withAnchorAtoms(LIST, 'overhang:o1', ['P'])
+    expect(anchorAtoms(out[1])).toEqual(['P'])
+    expect(hasAnchorAtoms(out[0])).toBe(false)
+    expect(LIST[1].atoms).toBeUndefined()          // input not mutated
+  })
+
+  it('keeps the row addressable — the key does not change', () => {
+    const out = withAnchorAtoms(LIST, 'overhang:o1', ['P'])
+    expect(anchorKey(out[1])).toBe('overhang:o1')
+  })
+
+  it('records an explicit all-heavy choice as present-null, not as absent', () => {
+    const out = withAnchorAtoms(LIST, 'strand:s1', null)
+    expect(hasAnchorAtoms(out[0])).toBe(true)
+    expect(anchorAtoms(out[0])).toBeNull()
+  })
+
+  it('drops the alias spellings so a row cannot carry two answers', () => {
+    const out = withAnchorAtoms([{ kind: 'strand', id: 's1', atom_names: ['P'] }], 'strand:s1', ["C1'"])
+    expect(out[0].atom_names).toBeUndefined()
+    expect(anchorAtoms(out[0])).toEqual(["C1'"])
+  })
+
+  it('applies to every row at once', () => {
+    const out = withAllAnchorAtoms(LIST, ["C1'"])
+    expect(out.map(anchorAtomsKey)).toEqual(["C1'", "C1'"])
+  })
+})
+
+describe('commonAnchorAtomsKey — the blank-when-mixed rule', () => {
+  it('returns the shared key when every row agrees', () => {
+    expect(commonAnchorAtomsKey(withAllAnchorAtoms(
+      [{ kind: 'strand', id: 's1' }, { kind: 'strand', id: 's2' }], ['P']))).toBe('P')
+  })
+
+  it('returns null when the rows disagree — that is what blanks the select', () => {
+    expect(commonAnchorAtomsKey([
+      { kind: 'strand', id: 's1', atoms: ['P'] },
+      { kind: 'strand', id: 's2', atoms: ["C1'"] },
+    ])).toBeNull()
+  })
+
+  it('does not call a reordered set mixed', () => {
+    expect(commonAnchorAtomsKey([
+      { kind: 'strand', id: 's1', atoms: ['P', "C1'"] },
+      { kind: 'strand', id: 's2', atoms: ["C1'", 'P'] },
+    ])).toBe("C1',P")
+  })
+
+  it('treats an opinion-less row as all heavy atoms, so it agrees with an explicit null', () => {
+    expect(commonAnchorAtomsKey([
+      { kind: 'strand', id: 's1' },
+      { kind: 'strand', id: 's2', atoms: null },
+    ])).toBe('')
+  })
+
+  it('an empty card is not mixed — it is the all-heavy default', () => {
+    expect(commonAnchorAtomsKey([])).toBe('')
+    expect(commonAnchorAtomsKey(null)).toBe('')
+  })
+})
+
+describe('atomOptionByKey', () => {
+  // The four presets as they exist in index.html.
+  const OPTIONS = ['', "C1'", 'P', "P,C1'"]
+
+  it('round-trips every real option value', () => {
+    const map = atomOptionByKey(OPTIONS)
+    for (const v of OPTIONS) {
+      expect(map.get(anchorAtomsKey({ atoms: atomNamesFromValue(v) }))).toBe(v)
+    }
+  })
+
+  it('finds the P+C1′ option however the stored set is ordered', () => {
+    const map = atomOptionByKey(OPTIONS)
+    expect(map.get(anchorAtomsKey({ atoms: ["C1'", 'P'] }))).toBe("P,C1'")
+  })
+
+  it('has no entry for a set no option offers, so the select stays blank', () => {
+    expect(atomOptionByKey(OPTIONS).get(anchorAtomsKey({ atoms: ["O3'"] }))).toBeUndefined()
+  })
+
+  it('accepts live <option> objects, not just strings', () => {
+    expect(atomOptionByKey([{ value: 'P' }, { value: '' }]).get('P')).toBe('P')
+  })
+})
+
+// ── Anchor labels: the compact H<n>:bp<i> vocabulary ─────────────────────────
+//
+// Modelled on the real 2hb_1-0xT design: helix ids are lattice tags (`h_XY_0_1`), and
+// the scaffold sits on REVERSE of helix 0 but FORWARD of helix 1 — which is exactly why
+// the suffix is the strand ROLE and not the direction word.
+
+const LABEL_DESIGN = {
+  helices: [{ id: 'h_XY_0_1' }, { id: 'h_XY_1_1' }],
+  strands: [
+    { id: 'stpl_a', strand_type: 'staple',
+      domains: [{ helix_id: 'h_XY_0_1', start_bp: 7, end_bp: 13, direction: 'FORWARD' },
+                { helix_id: 'h_XY_1_1', start_bp: 13, end_bp: 7, direction: 'REVERSE' }] },
+    { id: 'scaf_a', strand_type: 'scaffold',
+      domains: [{ helix_id: 'h_XY_1_1', start_bp: 5, end_bp: 30, direction: 'FORWARD' },
+                { helix_id: 'h_XY_0_1', start_bp: 30, end_bp: 5, direction: 'REVERSE' }] },
+  ],
+  crossovers: [{ id: 'xo1', half_a: { helix_id: 'h_XY_0_1', index: 13, strand: 'FORWARD' } }],
+  extensions: [{ id: 'e1', strand_id: 'scaf_a', end: 'three_prime' },
+               { id: 'e2', strand_id: 'stpl_a', end: 'five_prime' }],
+  cluster_transforms: [{ id: 'c_alpha' }, { id: 'c_beta' }],
+  overhangs: [{ id: 'ov_x' }, { id: 'ov_y' }],
+}
+
+describe('makeAnchorLabeller', () => {
+  const label = makeAnchorLabeller(LABEL_DESIGN)
+
+  it('names a base by helix NUMBER and bp, never the lattice id', () => {
+    expect(label({ kind: 'base', helixId: 'h_XY_0_1', bp: 7, direction: 'FORWARD' }))
+      .toBe('H0:bp7 Stap')
+  })
+
+  it('labels the strand ROLE, which flips direction between helices', () => {
+    // Helix 0: FORWARD is the staple. Helix 1: FORWARD is the scaffold. A direction word
+    // would tell the user nothing here — this is the whole reason for the lookup.
+    expect(label({ kind: 'base', helixId: 'h_XY_0_1', bp: 7, direction: 'REVERSE' }))
+      .toBe('H0:bp7 Scaf')
+    expect(label({ kind: 'base', helixId: 'h_XY_1_1', bp: 7, direction: 'FORWARD' }))
+      .toBe('H1:bp7 Scaf')
+    expect(label({ kind: 'base', helixId: 'h_XY_1_1', bp: 7, direction: 'REVERSE' }))
+      .toBe('H1:bp7 Stap')
+  })
+
+  it('gives the two strands of one base pair DIFFERENT rows', () => {
+    const fwd = label({ kind: 'base', helixId: 'h_XY_0_1', bp: 7, direction: 'FORWARD' })
+    const rev = label({ kind: 'base', helixId: 'h_XY_0_1', bp: 7, direction: 'REVERSE' })
+    expect(fwd).not.toBe(rev)
+  })
+
+  it('falls back to Fwd/Rev when no strand covers the slot, so rows still differ', () => {
+    const a = label({ kind: 'base', helixId: 'h_XY_0_1', bp: 99, direction: 'FORWARD' })
+    const b = label({ kind: 'base', helixId: 'h_XY_0_1', bp: 99, direction: 'REVERSE' })
+    expect(a).toBe('H0:bp99 Fwd')
+    expect(b).toBe('H0:bp99 Rev')
+  })
+
+  it('reads snake_case descriptors the same as the picker’s camelCase', () => {
+    expect(label({ kind: 'base', helix_id: 'h_XY_1_1', bp_index: 7, direction: 'FORWARD' }))
+      .toBe('H1:bp7 Scaf')
+  })
+
+  it('names a domain as its bp RANGE, low to high even when REVERSE', () => {
+    // REVERSE domains store start_bp > end_bp; the label must not read backwards.
+    expect(label({ kind: 'domain', strandId: 'stpl_a', domainIndex: 1 }))
+      .toBe('H1:bp7-13 Stap')
+    expect(label({ kind: 'domain', strandId: 'scaf_a', domainIndex: 0 }))
+      .toBe('H1:bp5-30 Scaf')
+  })
+
+  it('names an extra base by the bp its crossover leaves from', () => {
+    // An inserted base has no bp of its own — the host bp is where it actually sits.
+    expect(label({ kind: 'extra_base', crossoverId: 'xo1', k: 1 })).toBe('H0:bp13+1')
+    expect(label({ kind: 'extra_base', crossoverId: 'xo1' })).toBe('H0:bp13+*')
+  })
+
+  it('names an extension by the terminus it hangs off, per 5′/3′ end', () => {
+    // 3′ tail → the LAST domain's end_bp; 5′ tail → the FIRST domain's start_bp.
+    expect(label({ kind: 'extension', extensionId: 'e1', k: 2 })).toBe('H0:bp5›2')
+    expect(label({ kind: 'extension', extensionId: 'e2', k: 0 })).toBe('H0:bp7›0')
+    expect(label({ kind: 'extension', extensionId: 'e1' })).toBe('H0:bp5›*')
+  })
+
+  it('numbers the scopes that span many helices instead of faking a bp', () => {
+    expect(label({ kind: 'strand', id: 'scaf_a' })).toBe('S1')
+    expect(label({ kind: 'cluster', id: 'c_beta' })).toBe('C1')
+    expect(label({ kind: 'overhang', id: 'ov_y' })).toBe('OH1')
+  })
+
+  it('prefers an explicit helix label over the index', () => {
+    const l = makeAnchorLabeller({ ...LABEL_DESIGN,
+      helices: [{ id: 'h_XY_0_1', label: 7 }, { id: 'h_XY_1_1' }] })
+    expect(l({ kind: 'base', helixId: 'h_XY_0_1', bp: 7, direction: 'FORWARD' }))
+      .toBe('H7:bp7 Stap')
+  })
+
+  it('flags a stale anchor rather than renumbering it onto a real helix', () => {
+    expect(label({ kind: 'base', helixId: 'h_deleted', bp: 3, direction: 'FORWARD' }))
+      .toBe('H?h_de:bp3 Fwd')
+    expect(label({ kind: 'strand', id: 'gone' })).toBe('S?gone')
+  })
+
+  it('keeps every label short enough for the sidebar column', () => {
+    const all = [
+      { kind: 'base', helixId: 'h_XY_0_1', bp: 7, direction: 'FORWARD' },
+      { kind: 'domain', strandId: 'scaf_a', domainIndex: 0 },
+      { kind: 'extra_base', crossoverId: 'xo1', k: 1 },
+      { kind: 'extension', extensionId: 'e1', k: 2 },
+      { kind: 'strand', id: 'scaf_a' }, { kind: 'cluster', id: 'c_beta' },
+    ].map(label)
+    // The old format ran to ~50 chars and starved the Hold-atoms column to 6px.
+    for (const t of all) expect(t.length).toBeLessThanOrEqual(14)
   })
 })

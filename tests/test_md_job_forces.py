@@ -140,3 +140,56 @@ def test_get_forces_locks_editing_once_the_run_owns_its_confs(tmp_path, monkeypa
     job, _design, _pkg = _prepared_job(tmp_path, status="completed")
     d = asyncio.run(routes_md.get_md_job_forces(job.job_id))
     assert d["editable"] is False and d["status"] == "completed"
+
+
+def test_per_anchor_atoms_round_trip_through_the_forces_route(tmp_path, monkeypatch):
+    """Each anchor carries its own atom list, and it survives the round-trip verbatim —
+    that manifest echo is what lets the card repopulate a per-row choice when you select
+    a job.  Before this, the atoms select was write-only."""
+    import asyncio
+    routes_md = _routes(tmp_path, monkeypatch)
+    job, design, pkg = _prepared_job(tmp_path)
+    a0 = {"kind": "strand", "id": design.strands[0].id, "atoms": ["C1'"]}
+    a1 = {"kind": "strand", "id": design.strands[1].id, "atoms": ["P"]}
+
+    r = asyncio.run(routes_md.set_md_job_forces(
+        job.job_id, routes_md.JobForcesRequest(anchors=[a0, a1])))
+    assert r["ok"] and r["anchors"]["n_atoms_fixed"] > 0
+
+    got = asyncio.run(routes_md.get_md_job_forces(job.job_id))["anchors"]["requested"]
+    assert [a.get("atoms") for a in got] == [["C1'"], ["P"]]
+
+    # One atom per residue on the C1' side; the P side is one-per-residue MINUS the 5'
+    # termini, which have no phosphorus. So the mixed run marks fewer atoms than an
+    # all-heavy run over the same two strands, and more than either filter alone.
+    marked = sum(1 for ln in (pkg / "restraints_anchors.pdb").read_text().splitlines()
+                 if ln.startswith("ATOM") and float(ln[60:66]) > 0)
+    assert marked == r["anchors"]["n_atoms_fixed"]
+
+
+def test_a_per_anchor_atom_list_overrides_the_job_level_default(tmp_path, monkeypatch):
+    """`anchor_atoms` is now only the DEFAULT for anchors that state no opinion."""
+    import asyncio
+    routes_md = _routes(tmp_path, monkeypatch)
+    job, design, pkg = _prepared_job(tmp_path)
+
+    asyncio.run(routes_md.set_md_job_forces(job.job_id, routes_md.JobForcesRequest(
+        anchors=[{"kind": "strand", "id": design.strands[0].id, "atoms": None}],
+        anchor_atoms=["C1'"])))
+
+    names = {ln[12:16].strip() for ln in
+             (pkg / "restraints_anchors.pdb").read_text().splitlines()
+             if ln.startswith("ATOM") and float(ln[60:66]) > 0}
+    assert names != {"C1'"}, "an explicit atoms:null must beat the job-level default"
+
+
+def test_a_bad_per_anchor_atom_list_is_rejected_too(tmp_path, monkeypatch):
+    import asyncio
+    from fastapi import HTTPException
+    routes_md = _routes(tmp_path, monkeypatch)
+    job, design, _ = _prepared_job(tmp_path)
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(routes_md.set_md_job_forces(job.job_id, routes_md.JobForcesRequest(
+            anchors=[{"kind": "strand", "id": design.strands[0].id, "atoms": ["CA"]}])))
+    assert e.value.status_code == 400
+    assert "matched no heavy atom" in e.value.detail and "CA" in e.value.detail

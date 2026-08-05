@@ -132,21 +132,25 @@ def build_namd_gbis_package(
 
     # 4. Anchors (optional) — fixedAtoms marker PDB, GBIS honours it the same way.
     anchors_file: Optional[str] = None
-    anchor_indices: set = set()
+    anchor_indices: dict = {}
     n_anchored_atoms = 0
     if anchors:
-        from backend.core.namd_topology import resolve_anchor_residue_indices  # noqa: PLC0415
-        anchor_indices = resolve_anchor_residue_indices(
-            design, anchors, model=atomistic_model, full_topology=True)
+        from backend.core.namd_topology import (  # noqa: PLC0415
+            requested_atom_names, resolve_anchor_atom_map,
+        )
+        # Each anchor may name its own atoms; anchor_atoms is the fallback for those
+        # that don't.
+        anchor_indices = resolve_anchor_atom_map(
+            design, anchors, model=atomistic_model, full_topology=True,
+            default_atoms=set(anchor_atoms) if anchor_atoms else None)
         if anchor_indices:
             n_anchored_atoms = write_anchor_restraints_pdb(
-                pdb_path, package_dir / "restraints_anchors.pdb", anchor_indices,
-                atom_names=set(anchor_atoms) if anchor_atoms else None)
+                pdb_path, package_dir / "restraints_anchors.pdb", anchor_indices)
             anchors_file = "restraints_anchors.pdb"
             if not n_anchored_atoms:
                 raise ValueError(
-                    f"anchor_atoms {sorted(anchor_atoms or [])} matched no heavy atom in "
-                    f"the {len(anchor_indices)} anchored residue(s).")
+                    f"anchor atoms {requested_atom_names(anchor_indices)} matched no heavy "
+                    f"atom in the {len(anchor_indices)} anchored residue(s).")
 
     efield_vec = namd_efield_vector(field)
     if efield_vec is not None and anchors_file is None:

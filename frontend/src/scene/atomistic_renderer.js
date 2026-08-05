@@ -113,6 +113,43 @@ export function initAtomisticRenderer(scene) {
     geom:           createGeometryState(),
   }
 
+  // ── Anchor-halo entries ───────────────────────────────────────────────────
+
+  // One shared scratch pair: glow_layer._writeEntries copies entries[i].pos immediately,
+  // and refreshAllGlow re-reads every entry on every simulation frame, so allocating a
+  // Vector3 per anchored atom per frame is exactly what must not happen.
+  const _glowMat = new THREE.Matrix4()
+  const _glowPos = new THREE.Vector3()
+
+  /** A glow entry over ONE atom instance. The mesh is looked up at read time, never
+   *  captured, so the entry keeps working across a `_rebuild()` (which replaces every
+   *  InstancedMesh) and follows the atom under applyPositionLerp / unfold. */
+  function _atomGlowEntry(el, idx, scale) {
+    return {
+      scale,
+      get pos() {
+        const mesh = _state.elementMeshes[el]
+        if (!mesh || idx >= mesh.count) return _glowPos.set(0, 0, 0)
+        mesh.getMatrixAt(idx, _glowMat)
+        return _glowPos.setFromMatrixPosition(_glowMat)
+      },
+    }
+  }
+
+  // Observers of "which atoms are on screen" — see onAtomsChanged.
+  const _atomsCbs = []
+  let _atomsSig = null
+
+  /** Fire the atom-set observers, but only when (mode, atom count, payload kind) really
+   *  changed. The live MD path calls update() every frame with an identical signature,
+   *  so this is what keeps an O(N-atoms) re-match off the frame loop. */
+  function _notifyAtoms() {
+    const sig = `${_state.mode}|${_state.atoms.count}|${_state.atoms.columnar}`
+    if (sig === _atomsSig) return
+    _atomsSig = sig
+    for (const cb of _atomsCbs) cb()
+  }
+
   // ── Materials ─────────────────────────────────────────────────────────────
 
   /**
@@ -170,7 +207,7 @@ export function initAtomisticRenderer(scene) {
   function _rebuild(data) {
     _clearScene()
     const table = _state.atoms = makeAtomTable(data)
-    if (_state.mode === 'off' || !table.count) return
+    if (_state.mode === 'off' || !table.count) { _notifyAtoms(); return }
 
     const bonds = data.bonds ?? []
     const isVdw = _state.mode === 'vdw'
@@ -267,6 +304,7 @@ export function initAtomisticRenderer(scene) {
 
     // Re-apply last known highlight state after geometry rebuild
     _applyColors(_state.lastSel, _state.lastMulti)
+    _notifyAtoms()
   }
 
   // ── Colour application ────────────────────────────────────────────────────
@@ -394,6 +432,54 @@ export function initAtomisticRenderer(scene) {
       }
       return null
     },
+
+    /**
+     * Purple-halo entries for the exact atoms a NAMD anchor set holds.
+     *
+     * Returns **null** when this renderer cannot serve the request, so the caller can
+     * fall back to the coarse per-nucleotide halo:
+     *   • the atomistic rep is off, or nothing is loaded yet;
+     *   • the payload is the columnar oxDNA bundle, which drops atom `name` by design
+     *     (atom_table.js) — `element` alone cannot tell a C1′ from any other carbon;
+     *   • the match would exceed `max` (a cluster anchor × all-heavy atoms is a ~20×
+     *     multiplier, and these entries are re-read by refreshAllGlow every sim frame).
+     *
+     * Each entry's `pos` is a LIVE getter reading the instance matrix, mirroring the
+     * base-level selection glow: entries survive a rebuild (the mesh is resolved at read
+     * time, never captured) and track atoms moving under applyPositionLerp.
+     *
+     * @param {Map<string, Set<string>|null>} index 'helix:bp:dir' → held atom names,
+     *   null meaning all heavy atoms.
+     * @returns {Array<{scale:number, pos:THREE.Vector3}>|null}
+     */
+    anchorAtomEntries(index, { scale = 1.8, max = 20000 } = {}) {
+      const table = _state.atoms
+      if (_state.mode === 'off' || !table.count || !index?.size) return null
+      if (table.columnar) return null                    // no atom names in the bundle
+      if (table.get(0)?.name === undefined) return null   // nameless object payload
+
+      const out = []
+      for (const [el, group] of Object.entries(_state.elementAtoms)) {
+        for (let i = 0; i < group.length; i++) {
+          // Read every field before the next get() — the flyweight contract. Invisible
+          // on this (object) path, fatal on a columnar one, so keep it correct here.
+          const a = table.get(group[i])
+          const names = index.get(`${a.helix_id}:${a.bp_index}:${a.direction}`)
+          if (names === undefined) continue               // nucleotide not anchored
+          if (names !== null && !names.has(a.name)) continue
+          if (a.name?.startsWith('H')) continue           // hydrogens are never anchored
+          if (out.length >= max) return null
+          out.push(_atomGlowEntry(el, i, scale))
+        }
+      }
+      return out
+    },
+
+    /** Subscribe to "the atom set or the mode actually changed".  NOT every update():
+     *  the live MD display rebuilds every frame with the same atoms, and re-matching an
+     *  anchor set against millions of atoms per frame is the one cost that would make
+     *  the per-atom halo unaffordable. */
+    onAtomsChanged(cb) { if (typeof cb === 'function') _atomsCbs.push(cb) },
 
     /** Centroid of all currently-rendered atoms (world nm), or null. */
     centroidOf(predicate = null) {

@@ -32,6 +32,8 @@ from backend.core.md_protocols import (
 from backend.core.namd_topology import (
     _write_segment_pdbs,
     built_pdb_residue_keys,
+    requested_atom_names,
+    resolve_anchor_atom_map,
     resolve_anchor_residue_indices,
 )
 from tests.conftest import (
@@ -466,6 +468,171 @@ def test_k_writes_the_force_constant_into_column_b(tmp_path):
           if ln.startswith("ATOM") and ln[12:16].strip() == "C1'"]
     assert 0.02 in bs
     assert all(b in (0.0, 0.02) for b in bs)
+
+
+# ── per-anchor atom sets ──────────────────────────────────────────────────────
+#
+# One job-level filter could not hold a corner base rigidly while merely tethering a
+# distant overhang by its phosphate.  Each anchor descriptor now carries its own `atoms`
+# list, and `resolve_anchor_atom_map` turns the list into {residue ordinal: names}, which
+# the SAME writer consumes in place of a plain ordinal set.
+
+def _per_anchor_fixture(tmp_path):
+    """A design plus two anchors that resolve to DISJOINT residue sets, so each one's
+    atom choice can be checked independently."""
+    design = make_6hb_design()
+    model = build_atomistic_model(design)
+    _segments, full_text = _write_segment_pdbs(design, tmp_path, model)
+    pdb_path = tmp_path / "built.pdb"
+    pdb_path.write_text(full_text)
+
+    a0 = {"kind": "strand", "id": design.strands[0].id}
+    a1 = {"kind": "strand", "id": design.strands[1].id}
+    res0 = resolve_anchor_residue_indices(design, [a0], model=model, full_topology=True)
+    res1 = resolve_anchor_residue_indices(design, [a1], model=model, full_topology=True)
+    assert res0 and res1 and not (res0 & res1)
+    return design, model, pdb_path, (a0, res0), (a1, res1)
+
+
+def _marked_names_by_ordinal(pdb_text: str) -> "dict[int, set[str]]":
+    _fixed, rows = _b1_residue_ordinals(pdb_text)
+    out: dict[int, set[str]] = {}
+    for ordinal, name, b in rows:
+        if b > 0:
+            out.setdefault(ordinal, set()).add(name)
+    return out
+
+
+def test_per_anchor_atom_map_holds_different_atoms_per_anchor(tmp_path):
+    """The whole point: one anchor pinned by C1', another by P, in one run."""
+    design, model, pdb_path, (a0, res0), (a1, res1) = _per_anchor_fixture(tmp_path)
+    atom_map = resolve_anchor_atom_map(
+        design, [{**a0, "atoms": ["C1'"]}, {**a1, "atoms": ["P"]}],
+        model=model, full_topology=True)
+
+    dst = tmp_path / "mixed.pdb"
+    n = write_anchor_restraints_pdb(pdb_path, dst, atom_map)
+    marked = _marked_names_by_ordinal(dst.read_text())
+
+    assert {n for o in res0 for n in marked.get(o, ())} == {"C1'"}
+    # 5' termini carry no P, so that side may mark fewer residues — but never a C1'.
+    assert {n for o in res1 for n in marked.get(o, ())} == {"P"}
+    assert n == sum(len(v) for v in marked.values())
+
+
+def test_overlapping_anchors_union_their_atom_sets(tmp_path):
+    """Overlap is normal — a base anchor inside an anchored strand.  Union, not
+    last-wins: the result must not depend on list order, which the UI never shows."""
+    design, model, pdb_path, (a0, res0), _a1 = _per_anchor_fixture(tmp_path)
+    both = [{**a0, "atoms": ["C1'"]}, {**a0, "atoms": ["P"]}]
+
+    forward = resolve_anchor_atom_map(design, both, model=model, full_topology=True)
+    reverse = resolve_anchor_atom_map(design, both[::-1], model=model, full_topology=True)
+    assert forward == reverse
+    assert all(forward[o] == frozenset({"P", "C1'"}) for o in res0)
+
+
+def test_all_heavy_atoms_absorbs_the_union(tmp_path):
+    """`None` is the TOP element — an anchor asking for everything cannot be narrowed
+    by an overlapping anchor that asks for less."""
+    design, model, pdb_path, (a0, res0), _a1 = _per_anchor_fixture(tmp_path)
+    atom_map = resolve_anchor_atom_map(
+        design, [{**a0, "atoms": ["P"]}, {**a0, "atoms": None}],
+        model=model, full_topology=True)
+    assert all(atom_map[o] is None for o in res0)
+
+
+def test_an_anchor_without_atoms_falls_back_to_the_job_level_default(tmp_path):
+    design, model, pdb_path, (a0, res0), _a1 = _per_anchor_fixture(tmp_path)
+    atom_map = resolve_anchor_atom_map(
+        design, [a0], model=model, full_topology=True, default_atoms={"C1'"})
+    assert all(atom_map[o] == frozenset({"C1'"}) for o in res0)
+
+
+def test_an_explicit_null_atoms_beats_the_job_level_default(tmp_path):
+    """THE sentinel.  `atoms: None` is an anchor that deliberately holds every heavy
+    atom; only key PRESENCE separates it from "no opinion", and a `.get()`-style read
+    would collapse the two and leak the default in."""
+    design, model, pdb_path, (a0, res0), _a1 = _per_anchor_fixture(tmp_path)
+    atom_map = resolve_anchor_atom_map(
+        design, [{**a0, "atoms": None}], model=model, full_topology=True,
+        default_atoms={"C1'"})
+    assert all(atom_map[o] is None for o in res0)
+
+
+def test_the_backend_reads_the_atom_names_alias_too(tmp_path):
+    """A descriptor round-tripped through a manifest may arrive as `atom_names`."""
+    design, model, pdb_path, (a0, res0), _a1 = _per_anchor_fixture(tmp_path)
+    atom_map = resolve_anchor_atom_map(
+        design, [{**a0, "atom_names": ["P"]}], model=model, full_topology=True)
+    assert all(atom_map[o] == frozenset({"P"}) for o in res0)
+
+
+def test_resolve_anchor_residue_indices_still_returns_a_plain_set(tmp_path):
+    """The delegate keeps its old contract — 6 call sites depend on a set of ordinals."""
+    design, model, _pdb, (a0, res0), (a1, res1) = _per_anchor_fixture(tmp_path)
+    out = resolve_anchor_residue_indices(design, [a0, a1], model=model, full_topology=True)
+    assert isinstance(out, set)
+    assert out == res0 | res1
+
+
+def test_a_mapping_ignores_the_job_level_atom_names_argument(tmp_path):
+    """A `None` VALUE in the map means "all heavy atoms for THIS residue" and must not
+    fall back to `atom_names` — the resolver has already folded the default in."""
+    design, model, pdb_path, (a0, res0), _a1 = _per_anchor_fixture(tmp_path)
+    atom_map = resolve_anchor_atom_map(design, [a0], model=model, full_topology=True)
+    dst = tmp_path / "map.pdb"
+    write_anchor_restraints_pdb(pdb_path, dst, atom_map, atom_names={"C1'"})
+    marked = _marked_names_by_ordinal(dst.read_text())
+    assert any(len(names) > 1 for names in marked.values())
+
+
+def test_a_per_anchor_filter_matching_nothing_still_marks_nothing(tmp_path):
+    """The caller turns this into a hard error; it must not silently mark everything."""
+    design, model, pdb_path, (a0, _res0), _a1 = _per_anchor_fixture(tmp_path)
+    atom_map = resolve_anchor_atom_map(
+        design, [{**a0, "atoms": ["CA"]}], model=model, full_topology=True)
+    assert write_anchor_restraints_pdb(pdb_path, tmp_path / "typo.pdb", atom_map) == 0
+
+
+def test_requested_atom_names_reports_what_the_anchors_actually_asked_for(tmp_path):
+    design, model, _pdb, (a0, _r0), (a1, _r1) = _per_anchor_fixture(tmp_path)
+    atom_map = resolve_anchor_atom_map(
+        design, [{**a0, "atoms": ["C1'"]}, {**a1, "atoms": ["P"]}],
+        model=model, full_topology=True)
+    assert requested_atom_names(atom_map) == ["C1'", "P"]
+    # All-heavy anchors contribute no names rather than a misleading empty string.
+    assert requested_atom_names(resolve_anchor_atom_map(
+        design, [a0], model=model, full_topology=True)) == []
+
+
+def test_every_copy_sharing_a_residue_key_gets_the_filter():
+    """A +1 loop insertion emits a SECOND nucleotide with the same
+    (helix_id, bp_index, direction) — the reason ``Atom.copy_k`` exists.  The key→ordinal
+    index must therefore be a LIST; a scalar would silently anchor only one copy.
+
+    No conftest fixture carries loop insertions, so the duplicate is built by hand: the
+    same nucleotide's atoms re-emitted under a fresh chain, exactly what a second copy
+    looks like to :func:`built_pdb_residue_keys`."""
+    from dataclasses import replace
+
+    design = make_6hb_design()
+    base = build_atomistic_model(design)
+    keys = built_pdb_residue_keys(base, sort_chains=True)
+    assert len(set(keys)) == len(keys), "fixture unexpectedly already has duplicate keys"
+
+    key = keys[0]
+    dupe = [replace(a, chain_id="ZZ", seq_num=1) for a in base.atoms
+            if (a.helix_id, a.bp_index, a.direction) == key]
+    assert dupe
+    model = AtomisticModel(atoms=base.atoms + dupe, bonds=base.bonds)
+    assert built_pdb_residue_keys(model, sort_chains=True).count(key) == 2
+
+    anchors = [{"kind": "base", "helixId": key[0], "bp": key[1], "direction": key[2],
+                "atoms": ["C1'"]}]
+    atom_map = resolve_anchor_atom_map(design, anchors, model=model, full_topology=True)
+    assert len(atom_map) == 2
+    assert all(v == frozenset({"C1'"}) for v in atom_map.values())
 
 
 # ── hard vs soft emission ─────────────────────────────────────────────────────

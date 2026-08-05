@@ -300,3 +300,201 @@ describe('initOxdnaAnchorsSetup', () => {
     })
   })
 })
+
+// ── The Hold-atoms column (NAMD only, opt-in via ids.atoms) ──────────────────
+
+const MD_IDS = {
+  'md-anchors-toggle': 'div', 'md-anchors-arrow': 'span', 'md-anchors-body': 'div',
+  'md-anchors-add': 'button', 'md-anchors-clear': 'button',
+  'md-anchors-list': 'div', 'md-anchors-status': 'div', 'md-anchors-glow': 'input',
+}
+// The four presets exactly as index.html declares them — the card clones these.
+const ATOM_OPTIONS = [
+  ['', 'All heavy atoms (~20/base)'],
+  ["C1'", 'C1′ only (1/base)'],
+  ['P', 'P only (1/base)'],
+  ["P,C1'", 'P + C1′ (2/base)'],
+]
+
+function mountAtomsSelect() {
+  const sel = document.createElement('select')
+  sel.id = 'md-anchors-atoms'
+  for (const [value, label] of ATOM_OPTIONS) {
+    const o = document.createElement('option')
+    o.value = value; o.textContent = label
+    sel.appendChild(o)
+  }
+  document.body.appendChild(sel)
+  return sel
+}
+
+describe('the Hold-atoms column', () => {
+  let els, store, api, atomsEl, onChange
+
+  const rowSelect = (key) =>
+    els['md-anchors-list'].querySelector(`[data-key="${key}"] select`)
+
+  beforeEach(() => {
+    els = mountIds(MD_IDS)
+    atomsEl = mountAtomsSelect()
+    store = createMockStore({ multiSelectedOverhangIds: [], multiSelectedDomainIds: [], selectedObject: null })
+    onChange = vi.fn()
+    api = initOxdnaAnchorsSetup({
+      getSelection: () => store.getState(),
+      onChange,
+      engine: 'namd',
+      ids: {
+        toggle: 'md-anchors-toggle', arrow: 'md-anchors-arrow', body: 'md-anchors-body',
+        add: 'md-anchors-add', clear: 'md-anchors-clear', list: 'md-anchors-list',
+        status: 'md-anchors-status', glow: 'md-anchors-glow', atoms: 'md-anchors-atoms',
+      },
+    })
+    store.setState({ multiSelectedOverhangIds: ['o1', 'o2'] })
+    api.addSelectedAnchors()
+  })
+  afterEach(() => clearDom())
+
+  it('gives every row a select cloned from the ONE preset list', () => {
+    // The presets must not be duplicated into JS — a second copy would drift.
+    const sel = rowSelect('overhang:o1')
+    expect([...sel.options].map(o => [o.value, o.textContent])).toEqual(ATOM_OPTIONS)
+  })
+
+  it('renders NO column when the card was not given ids.atoms', () => {
+    // The other six instances of this factory are non-NAMD and must be untouched.
+    clearDom()
+    const plain = mountIds({
+      'oxdna-anchors-toggle': 'div', 'oxdna-anchors-arrow': 'span', 'oxdna-anchors-body': 'div',
+      'oxdna-anchors-add': 'button', 'oxdna-anchors-clear': 'button',
+      'oxdna-anchors-list': 'div', 'oxdna-anchors-status': 'div', 'oxdna-anchors-glow': 'input',
+    })
+    const s = createMockStore({ multiSelectedOverhangIds: ['o1'], multiSelectedDomainIds: [], selectedObject: null })
+    initOxdnaAnchorsSetup({ getSelection: () => s.getState() }).addSelectedAnchors()
+    expect(plain['oxdna-anchors-list'].querySelector('select')).toBeNull()
+    expect(s.getState()).toBeTruthy()
+  })
+
+  it('a row select writes ONLY that row', () => {
+    const sel = rowSelect('overhang:o1')
+    sel.value = "C1'"
+    sel.dispatchEvent(new Event('change'))
+    const [a1, a2] = api.getAnchors()
+    expect(a1.atoms).toEqual(["C1'"])
+    expect(a2.atoms).toBeNull()          // still the all-heavy default it was added with
+  })
+
+  it('a row change fires onChange — the held atoms are part of the run, unlike focus', () => {
+    onChange.mockClear()
+    const sel = rowSelect('overhang:o2')
+    sel.value = 'P'
+    sel.dispatchEvent(new Event('change'))
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect(onChange.mock.calls[0][0].find(a => a.id === 'o2').atoms).toEqual(['P'])
+  })
+
+  it('a row change does not destroy the select it came from', () => {
+    // A full re-render inside the select's own change handler would replace the element
+    // mid-event. The row path must resync the group select only.
+    const sel = rowSelect('overhang:o1')
+    sel.value = 'P'
+    sel.dispatchEvent(new Event('change'))
+    expect(rowSelect('overhang:o1')).toBe(sel)
+  })
+
+  it('clicking a row select opens the dropdown instead of focusing the row', () => {
+    rowSelect('overhang:o1').click()
+    expect(api.getFocusKey()).toBeNull()
+  })
+
+  it('"Apply hold to all" writes every row', () => {
+    atomsEl.value = "P,C1'"
+    atomsEl.dispatchEvent(new Event('change'))
+    expect(api.getAnchors().map(a => a.atoms)).toEqual([['P', "C1'"], ['P', "C1'"]])
+    expect(rowSelect('overhang:o2').value).toBe("P,C1'")
+  })
+
+  it('goes BLANK when the rows disagree, and back to a value when they agree', () => {
+    const sel = rowSelect('overhang:o1')
+    sel.value = 'P'
+    sel.dispatchEvent(new Event('change'))
+    expect(atomsEl.selectedIndex).toBe(-1)
+
+    const other = rowSelect('overhang:o2')
+    other.value = 'P'
+    other.dispatchEvent(new Event('change'))
+    expect(atomsEl.value).toBe('P')
+  })
+
+  it('removing the odd row out un-blanks the group select', () => {
+    const sel = rowSelect('overhang:o1')
+    sel.value = 'P'
+    sel.dispatchEvent(new Event('change'))
+    expect(atomsEl.selectedIndex).toBe(-1)
+    els['md-anchors-list'].querySelector('[data-key="overhang:o1"] [data-role="remove"]').click()
+    expect(atomsEl.value).toBe('')
+  })
+
+  it('newly added anchors inherit whatever the group select shows', () => {
+    atomsEl.value = "C1'"
+    atomsEl.dispatchEvent(new Event('change'))
+    store.setState({ multiSelectedOverhangIds: ['o1', 'o2', 'o3'] })
+    api.addSelectedAnchors()
+    expect(api.getAnchors().find(a => a.id === 'o3').atoms).toEqual(["C1'"])
+    expect(atomsEl.value).toBe("C1'")     // still uniform
+  })
+
+  it('re-adding an existing anchor preserves the atoms already on its row', () => {
+    const sel = rowSelect('overhang:o1')
+    sel.value = 'P'
+    sel.dispatchEvent(new Event('change'))
+    api.addSelectedAnchors()              // same selection, added again
+    expect(api.getAnchors().find(a => a.id === 'o1').atoms).toEqual(['P'])
+  })
+
+  it('applyConfig restores a per-row choice from a job', () => {
+    api.applyConfig([
+      { kind: 'overhang', id: 'oA', atoms: ["C1'"] },
+      { kind: 'overhang', id: 'oB', atoms: ['P'] },
+    ])
+    expect(rowSelect('overhang:oA').value).toBe("C1'")
+    expect(rowSelect('overhang:oB').value).toBe('P')
+    expect(atomsEl.selectedIndex).toBe(-1)   // mixed
+  })
+
+  it('applyConfig seeds rows with no atoms from the job-level default', () => {
+    // A job prepared before per-anchor holds existed recorded the choice only once, as
+    // manifest anchors.atom_names. Without this, selecting it would read as all-heavy.
+    api.applyConfig([{ kind: 'overhang', id: 'oA' }, { kind: 'overhang', id: 'oB' }],
+                    { defaultAtoms: ["C1'"] })
+    expect(api.getAnchors().map(a => a.atoms)).toEqual([["C1'"], ["C1'"]])
+    expect(atomsEl.value).toBe("C1'")
+  })
+
+  it('applyConfig does not overwrite an explicit all-heavy choice with the default', () => {
+    // `atoms: null` is an anchor that deliberately holds everything; only key presence
+    // separates it from "no opinion".
+    api.applyConfig([{ kind: 'overhang', id: 'oA', atoms: null }], { defaultAtoms: ['P'] })
+    expect(api.getAnchors()[0].atoms).toBeNull()
+    expect(atomsEl.value).toBe('')
+  })
+
+  it('leaves a row blank for an atom set no preset offers', () => {
+    api.applyConfig([{ kind: 'overhang', id: 'oA', atoms: ["O3'"] }])
+    expect(rowSelect('overhang:oA').selectedIndex).toBe(-1)
+    expect(api.getAnchors()[0].atoms).toEqual(["O3'"])   // and does not discard it
+  })
+
+  it('carries the per-row atoms into the halo event', () => {
+    const seen = []
+    const onEvt = (e) => seen.push(e.detail)
+    window.addEventListener('nadoc:anchors-change', onEvt)
+    try {
+      const sel = rowSelect('overhang:o1')
+      sel.value = 'P'
+      sel.dispatchEvent(new Event('change'))
+    } finally {
+      window.removeEventListener('nadoc:anchors-change', onEvt)
+    }
+    expect(seen.at(-1).highlighted.find(a => a.id === 'o1').atoms).toEqual(['P'])
+  })
+})

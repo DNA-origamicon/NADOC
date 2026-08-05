@@ -26,6 +26,7 @@ import { shouldForceDisplayReload, mdReadinessIndicator } from './md_display_sta
 import { initMdSolventControls } from './md_solvent_controls.js'
 import { initMdWeldControls } from './md_weld_controls.js'
 import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
+import { atomNamesFromValue } from '../scene/efield_math.js'
 import { initForcesCard } from './forces_card.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import { repKind } from './oxdna_display.js'
@@ -498,10 +499,6 @@ export function mdChildLabelFor(job, index) {
   return mdChildRowLabel(job, index)
 }
 
-/** Pure: the Hold-atoms select's value → the `anchor_atoms` request field.
- *  '' (All heavy atoms) → null, which is the backend's "no filter" sentinel; anything
- *  else is a comma-separated PDB atom-name list. Returning [] instead of null would ask
- *  the backend to anchor NOTHING, which it now rejects rather than running unanchored. */
 /** Pure: what the Anchors card is showing, in words — forces the selected job HOLDS, a
  *  selection that resolved to nothing, or an empty card that will apply on Run.
  *
@@ -536,10 +533,11 @@ export function mdForcesProvenance(d) {
     : { text: 'This run is unanchored.', tone: 'dim' }
 }
 
-export function mdAnchorAtomNames(value) {
-  const names = String(value ?? '').split(',').map(s => s.trim()).filter(Boolean)
-  return names.length ? names : null
-}
+/** The Hold-atoms select value → the `anchor_atoms` request field.  Now that each anchor
+ *  can carry its OWN atom list, this same parse has to run on both sides of the card, so
+ *  it lives with the rest of the descriptor algebra in scene/efield_math.js; this stays
+ *  as the panel's name for it (3 senders + its tests import it from here). */
+export const mdAnchorAtomNames = atomNamesFromValue
 
 /** Pure: the Stiffness select's value → the `anchor_k` request field (kcal/mol/Å²).
  *  '' (Hard pin) → null, which selects NAMD fixedAtoms. A number selects harmonic
@@ -3209,7 +3207,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (!jobId) return
     const d = await api.getMdJobForces(jobId)
     if (!d || jobId !== _selectedId) return      // selection moved on while in flight
-    _anchorsCard?.applyConfig?.(d.anchors?.requested ?? [])
+    // `atom_names` is the job-level filter — the only place a job prepared before
+    // per-anchor holds recorded the choice, so it seeds rows that carry no `atoms`.
+    _anchorsCard?.applyConfig?.(d.anchors?.requested ?? [],
+                               { defaultAtoms: d.anchors?.atom_names ?? null })
     _efieldCard?.applyConfig?.(d.field ?? null)
     _paintForcesProvenance(d)
   }
@@ -3997,6 +3998,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       toggle: 'md-anchors-toggle', arrow: 'md-anchors-arrow', body: 'md-anchors-body',
       add: 'md-anchors-add', clear: 'md-anchors-clear', list: 'md-anchors-list',
       status: 'md-anchors-status', glow: 'md-anchors-glow',
+      // NAMD only: gives each row a Hold-atoms <select> and binds this element as
+      // "Apply hold to all". The other six instances of this factory pass no `atoms`
+      // and render the plain two-column list.
+      atoms: 'md-anchors-atoms',
     },
   })
 

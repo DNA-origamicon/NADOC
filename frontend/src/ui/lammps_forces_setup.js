@@ -22,7 +22,7 @@
  */
 
 import {
-  resolveSelectionAnchors, anchorKey, anchorLabel, addAnchors, removeAnchor,
+  resolveSelectionAnchors, anchorKey, makeAnchorLabeller, addAnchors, removeAnchor,
 } from '../scene/efield_math.js'
 import { floorSurfaceSpec, formatOffsetNm } from '../scene/oxdna_floor_math.js'
 import { initForcesCard } from './forces_card.js'
@@ -82,13 +82,16 @@ export function initLammpsForcesSetup({
       anchorStatus.style.color = _C.dim
     }
     if (listEl) {
+      // One labeller per repaint (it indexes the design once) — same short
+      // H<n>:bp<i> vocabulary the shared anchors card uses, so the two agree.
+      const label = makeAnchorLabeller(getSelection?.()?.currentDesign ?? null)
       listEl.innerHTML = ''
       for (const a of _anchors) {
         const chip = document.createElement('span')
         chip.dataset.key = anchorKey(a)
         chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin:2px 4px 2px 0;padding:2px 6px;' +
           'background:#1c2733;border:1px solid #30363d;border-radius:10px;font-size:var(--text-xs);color:#c9d1d9'
-        const lbl = document.createElement('span'); lbl.textContent = anchorLabel(a)
+        const lbl = document.createElement('span'); lbl.textContent = label(a)
         const x = document.createElement('span')
         x.textContent = '×'; x.style.cssText = 'cursor:pointer;color:#8b949e;font-weight:700'
         x.addEventListener('click', () => { _anchors = removeAnchor(_anchors, anchorKey(a)); _renderAnchors() })

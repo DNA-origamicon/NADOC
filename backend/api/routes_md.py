@@ -263,16 +263,21 @@ class CreateJobRequest(BaseModel):
         None,
         description="Anchor scopes (shared oxDNA/CanDo picker format: overhang / cluster "
                     "/ domain / strand / base) to hold immobile via NAMD fixedAtoms for the "
-                    "whole ladder. A JOB-REQUEST annotation, never a Design edit; a selection "
-                    "that resolves to nothing leaves the run unanchored.",
+                    "whole ladder. Each entry may carry its own `atoms` list to hold only "
+                    "those PDB atom names (null = all heavy atoms for that anchor); anchors "
+                    "with no `atoms` key fall back to `anchor_atoms`. A JOB-REQUEST "
+                    "annotation, never a Design edit; a selection that resolves to nothing "
+                    "leaves the run unanchored.",
     )
     anchor_atoms: Optional[list[str]] = Field(
         None,
-        description="Restrict each anchored residue to these PDB atom names, e.g. [\"C1'\"] "
-                    "to pin one sugar carbon per base instead of all ~20 heavy atoms. Gives "
-                    "atom-level anchoring without an atom picker. None = all heavy atoms "
-                    "(hydrogens are never anchored). Names that match nothing are rejected "
-                    "rather than silently producing an unanchored run.",
+        description="DEFAULT atom-name filter, for anchors that do not carry their own "
+                    "`atoms` list. e.g. [\"C1'\"] pins one sugar carbon per base instead of "
+                    "all ~20 heavy atoms. Each entry of `anchors` may override this with its "
+                    "own `atoms` (null there means all heavy atoms for that anchor, and beats "
+                    "this default). None = all heavy atoms (hydrogens are never anchored). "
+                    "Names that match nothing are rejected rather than silently producing an "
+                    "unanchored run.",
     )
     field: Optional[dict] = Field(
         None,
@@ -1910,11 +1915,12 @@ class JobForcesRequest(BaseModel):
     here would be a switch wired to nothing.
     """
     anchors: Optional[list] = Field(
-        None, description="Anchor scopes (shared picker format). [] clears them.")
+        None, description="Anchor scopes (shared picker format). Each may carry its own "
+                          "`atoms` list; those without one use `anchor_atoms`. [] clears them.")
     anchor_atoms: Optional[list[str]] = Field(
-        None, description="Restrict each anchored residue to these PDB atom names, "
-                          "e.g. [\"C1'\"]. Prefer C1' over P: every nucleotide has a C1', "
-                          "but 5' termini have no phosphorus and would be dropped.")
+        None, description="DEFAULT atom-name filter for anchors that carry no `atoms` of "
+                          "their own, e.g. [\"C1'\"]. Prefer C1' over P: every nucleotide "
+                          "has a C1', but 5' termini have no phosphorus and would be dropped.")
     field: Optional[dict] = Field(
         None, description="Uniform E-field {'field_pN', 'dir'}. null clears it.")
 
@@ -1936,7 +1942,9 @@ async def set_md_job_forces(job_id: str, body: JobForcesRequest) -> dict:
         ANCHOR_MARKER_PDB, inject_external_forces, namd_efield_vector,
         write_anchor_restraints_pdb,
     )
-    from backend.core.namd_topology import resolve_anchor_residue_indices  # noqa: PLC0415
+    from backend.core.namd_topology import (  # noqa: PLC0415
+        requested_atom_names, resolve_anchor_atom_map,
+    )
 
     job = _load_job(job_id)
     if is_running(job_id) or job.status in (MdStatus.running, MdStatus.preparing):
@@ -1967,15 +1975,16 @@ async def set_md_job_forces(job_id: str, body: JobForcesRequest) -> dict:
         from backend.core.models import Design  # noqa: PLC0415
         design = Design.model_validate_json(snapshot.read_text())
         full_topology = bool((manifest.get("charge_audit") or {}).get("topology_builder"))
-        indices = resolve_anchor_residue_indices(
-            design, body.anchors, full_topology=full_topology)
+        # Per-anchor atom sets; anchor_atoms is the fallback for anchors that carry none.
+        indices = resolve_anchor_atom_map(
+            design, body.anchors, full_topology=full_topology,
+            default_atoms=set(body.anchor_atoms) if body.anchor_atoms else None)
         if indices:
             n_atoms = write_anchor_restraints_pdb(
-                pkg / f"{name_stem}.pdb", pkg / ANCHOR_MARKER_PDB, indices,
-                atom_names=set(body.anchor_atoms) if body.anchor_atoms else None)
+                pkg / f"{name_stem}.pdb", pkg / ANCHOR_MARKER_PDB, indices)
             if not n_atoms:
                 raise HTTPException(400, (
-                    f"anchor_atoms {sorted(body.anchor_atoms or [])} matched no heavy atom "
+                    f"anchor atoms {requested_atom_names(indices)} matched no heavy atom "
                     f"in the {len(indices)} selected residue(s). CHARMM36 nucleic-acid "
                     f"names look like P, O5', C5', C4', C3', C1' \u2014 and note 5' termini "
                     f"have no P."))
@@ -3273,8 +3282,8 @@ class ProductionRunRequest(BaseModel):
                     "used to be a prep-only concept that production silently discarded.")
     anchor_atoms: Optional[list[str]] = Field(
         None,
-        description="Restrict each anchored residue to these PDB atom names, e.g. "
-                    "[\"C1'\"]. Only meaningful together with `anchors`.")
+        description="DEFAULT atom-name filter for anchors that carry no `atoms` of their "
+                    "own, e.g. [\"C1'\"]. Only meaningful together with `anchors`.")
     anchor_k: Optional[float] = Field(
         None, ge=0.0, le=100.0,
         description="Harmonic force constant (kcal/mol/Å²) for a SOFT anchor. Omit for a "
@@ -3383,12 +3392,16 @@ def _resolve_child_anchors(
 
     from backend.core.md_protocols import write_anchor_restraints_pdb  # noqa: PLC0415
     from backend.core.models import Design  # noqa: PLC0415
-    from backend.core.namd_topology import resolve_anchor_residue_indices  # noqa: PLC0415
+    from backend.core.namd_topology import (  # noqa: PLC0415
+        requested_atom_names, resolve_anchor_atom_map,
+    )
 
     design = Design.model_validate_json(snapshot.read_text())
     full_topology = bool((manifest.get("charge_audit") or {}).get("topology_builder"))
-    indices = resolve_anchor_residue_indices(
-        design, body.anchors, full_topology=full_topology)
+    # Per-anchor atom sets; anchor_atoms is the fallback for anchors that carry none.
+    indices = resolve_anchor_atom_map(
+        design, body.anchors, full_topology=full_topology,
+        default_atoms=set(body.anchor_atoms) if body.anchor_atoms else None)
     if not indices:
         logger.warning(
             "[%s] production anchors %r resolved to no DNA residue — running unanchored",
@@ -3402,12 +3415,10 @@ def _resolve_child_anchors(
     # could disagree with the restraint energy NAMD had logged for it.
     staged = child.job_dir(_workspace()) / "restraints_anchors.pdb"
     staged.parent.mkdir(parents=True, exist_ok=True)
-    n = write_anchor_restraints_pdb(
-        parent_pkg / f"{name_stem}.pdb", staged, indices,
-        atom_names=set(body.anchor_atoms) if body.anchor_atoms else None)
+    n = write_anchor_restraints_pdb(parent_pkg / f"{name_stem}.pdb", staged, indices)
     if not n:
         raise HTTPException(400, (
-            f"anchor_atoms {sorted(body.anchor_atoms or [])} matched no heavy atom in the "
+            f"anchor atoms {requested_atom_names(indices)} matched no heavy atom in the "
             f"{len(indices)} anchored residue(s). CHARMM36 nucleic-acid atom names look "
             f"like P, O5', C5', C4', C3', C1'."))
     return "restraints_anchors.pdb", staged, list(body.anchors), field

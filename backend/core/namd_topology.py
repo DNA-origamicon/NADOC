@@ -342,6 +342,113 @@ def extra_base_segid_resids(
     return {seg_res[o] for o in xb_ordinals if o < len(seg_res)}
 
 
+_ATOMS_KEYS = ("atoms", "atom_names", "atomNames")
+_MISSING = object()
+
+
+def _anchor_atom_names(
+    anchor: dict, default_atoms: "set[str] | None"
+) -> "frozenset[str] | None":
+    """One descriptor's held atom names, or ``None`` for "all heavy atoms".
+
+    KEY PRESENCE is the authority signal, not truthiness.  ``{"atoms": None}`` is an
+    anchor that deliberately holds every heavy atom and must NOT fall back; a descriptor
+    with no ``atoms`` key at all has no opinion and inherits the job-level default.
+    Collapsing the two — e.g. with ``anchor.get("atoms") or default`` — leaks the job
+    default into rows that explicitly asked for all-heavy.  Mirrors ``hasAnchorAtoms`` /
+    ``anchorAtoms`` in ``frontend/src/scene/efield_math.js``."""
+    for key in _ATOMS_KEYS:
+        if key not in anchor:
+            continue
+        raw = anchor[key]
+        if raw is None:
+            return None
+        if isinstance(raw, str):
+            raw = raw.split(",")
+        names = {str(n).strip() for n in raw if str(n).strip()}
+        return frozenset(names) if names else None
+    return frozenset(default_atoms) if default_atoms else None
+
+
+def _union_atom_names(a, b):
+    """Merge two residue-level atom sets.  ``None`` is the TOP element (all heavy atoms),
+    so it absorbs anything.
+
+    UNION, not last-wins: anchors overlap routinely (a base anchor inside an anchored
+    strand), and last-wins would make the result depend on list order — which is add
+    order, is reshuffled by ``dedupeAnchors``, and is invisible in the UI.  Union is
+    monotone: adding an anchor can only ever hold more, never less."""
+    if a is _MISSING:
+        return b
+    if a is None or b is None:
+        return None
+    return a | b
+
+
+def requested_atom_names(atom_map: "dict[int, frozenset[str] | None]") -> list[str]:
+    """Every atom name any anchor asked for, sorted — for the "matched nothing" error
+    message, which must name what was actually requested rather than only the job-level
+    default now that each anchor can carry its own list."""
+    return sorted({n for names in atom_map.values() if names for n in names})
+
+
+def resolve_anchor_atom_map(
+    design: Design,
+    anchors: "list[dict] | None",
+    *,
+    model: AtomisticModel | None = None,
+    full_topology: bool = False,
+    default_atoms: "set[str] | None" = None,
+) -> "dict[int, frozenset[str] | None]":
+    """Resolve anchor descriptors → ``{residue ordinal: held atom names}``, where a
+    ``None`` value means "all heavy atoms of that residue".
+
+    The per-anchor twin of :func:`resolve_anchor_residue_indices` (which is now a thin
+    delegate).  Each descriptor may carry its own ``atoms`` list; ``default_atoms`` is
+    the job-level ``anchor_atoms`` fallback for descriptors that carry none.
+
+    Feeds :func:`backend.core.md_protocols.write_anchor_restraints_pdb` directly — it
+    accepts this mapping in place of a plain ordinal set.
+
+    Two things make this cheap enough to run on every prep:
+
+    * **Anchors are grouped by their atom set before resolving.**  The UI offers four
+      presets, so a design with 500 anchors still runs the O(nucleotides)
+      ``resolve_anchor_particles`` walk at most five times — not once per anchor.
+    * **The atomistic model is built once.**  Pass the generator's own ``model`` when you
+      have one; ``full_topology`` must match how the package PDB was built.
+
+    Overlapping anchors UNION their atom sets (see :func:`_union_atom_names`).  Stale /
+    ssDNA-only keys drop silently, exactly as before.  Read-only: anchors are a
+    JOB-REQUEST annotation, never a topology edit (Three-Layer Law)."""
+    if not anchors:
+        return {}
+    from backend.physics.oxdna_interface import resolve_anchor_particles  # noqa: PLC0415
+
+    groups: dict["frozenset[str] | None", list[dict]] = {}
+    for a in anchors:
+        groups.setdefault(_anchor_atom_names(a, default_atoms), []).append(a)
+
+    # One residue key can own SEVERAL ordinals: a +1 loop insertion emits a second
+    # nucleotide sharing (helix_id, bp_index, direction) — the reason Atom.copy_k
+    # exists.  A scalar index would silently anchor only one of the copies.
+    if model is None:
+        model = build_atomistic_model(design, include_proteins=full_topology)
+    ordinals_of_key: dict[tuple[str, int, str], list[int]] = {}
+    for i, key in enumerate(built_pdb_residue_keys(model, sort_chains=full_topology)):
+        ordinals_of_key.setdefault(key, []).append(i)
+
+    out: dict[int, "frozenset[str] | None"] = {}
+    for names, group in groups.items():
+        _parts, keys = resolve_anchor_particles(design, group)
+        for k in keys:
+            if len(k) < 3:
+                continue
+            for ordinal in ordinals_of_key.get((k[0], k[1], k[2]), ()):
+                out[ordinal] = _union_atom_names(out.get(ordinal, _MISSING), names)
+    return out
+
+
 def resolve_anchor_residue_indices(
     design: Design,
     anchors: "list[dict] | None",
@@ -368,19 +475,14 @@ def resolve_anchor_residue_indices(
     Stale / ssDNA-only / extra-base-insert keys drop silently, matching
     ``resolve_anchor_particles``' stale-selection tolerance.  Anchors are a
     JOB-REQUEST annotation, never a topology edit (Three-Layer Law): this only reads
-    positions/keys."""
-    if not anchors:
-        return set()
-    from backend.physics.oxdna_interface import resolve_anchor_particles  # noqa: PLC0415
+    positions/keys.
 
-    _parts, keys = resolve_anchor_particles(design, anchors)
-    key_set = {(k[0], k[1], k[2]) for k in keys if len(k) >= 3}
-    if not key_set:
-        return set()
-    if model is None:
-        model = build_atomistic_model(design, include_proteins=full_topology)
-    residue_keys = built_pdb_residue_keys(model, sort_chains=full_topology)
-    return {i for i, k in enumerate(residue_keys) if k in key_set}
+    Which ATOMS of each resolved residue are held is a separate question — see
+    :func:`resolve_anchor_atom_map`, which this delegates to and then discards the atom
+    sets of.  Callers that write the marker PDB want that one instead."""
+    return set(resolve_anchor_atom_map(
+        design, anchors, model=model, full_topology=full_topology,
+    ))
 
 
 def _psfgen_script(segments: list[dict], output_prefix: Path) -> str:

@@ -260,22 +260,146 @@ export function anchorKey(a) {
   return `${a.kind}:${a.id}`
 }
 
-/** Human label for an anchor chip. */
-export function anchorLabel(a) {
-  if (!a) return ''
-  if (a.kind === 'domain') return `domain ${a.strandId}#${a.domainIndex}`
-  if (a.kind === 'overhang') return `overhang ${a.id}`
-  if (a.kind === 'cluster') return `cluster ${a.id}`
-  if (a.kind === 'strand') return `strand ${a.id}`
-  if (a.kind === 'base') return `base ${a.helixId}.${a.bp} ${a.direction}`
-  // `k == null` means the whole run/tail, which the backend also accepts.
-  if (a.kind === 'extra_base') {
-    return a.k == null ? `xover bases ${a.crossoverId}` : `xover base ${a.crossoverId}#${a.k}`
+// ── Anchor labels ────────────────────────────────────────────────────────────
+//
+// Labels are read in a ~230 px sidebar column, so they have to be SHORT. Raw ids are
+// unusable there — a helix id is a UUID or a lattice tag like `h_XY_0_1`, and the old
+// `base <uuid>.7 FORWARD` ran to 50 characters.
+//
+// The vocabulary is `H<n>:bp<i>`, where `<n>` is the helix NUMBER shown in the viewport
+// (`helix.label ?? its index`, the same rule domain_ends.js uses for the 3D number
+// sprites) — never the lattice position. Everything else hangs off that:
+//
+//   H2:bp23 Scaf   one nucleotide          H2:bp10-24 Stap  a domain (a bp range)
+//   H2:bp23+1      extra base #1 inserted at the crossover leaving H2:bp23  (+* = all)
+//   H2:bp26›2      tail base #2 beyond terminus H2:bp26                     (›* = all)
+//   S3 / C1 / OH4  whole strand / cluster / overhang — these span many helices
+//
+// FORWARD/REVERSE is NOT shown: the two strands of a base pair are separate anchors, but
+// which one is scaffold flips per helix (in a 2hb, helix 0 FORWARD is the staple while
+// helix 1 FORWARD is the scaffold), so the direction word tells the user nothing. The
+// suffix is the STRAND ROLE, looked up from whichever strand owns that nucleotide.
+
+const _ROLE = { scaffold: 'Scaf', staple: 'Stap', linker: 'Link', oh_binder: 'Bind' }
+const _dirUp = (d) => String(d ?? '').toUpperCase()
+
+/**
+ * Build a labeller bound to one design.  Indexes the design ONCE, then labels each anchor
+ * in ~O(domains on its helix) — the card re-labels every row on each repaint, so a
+ * per-row full-design scan would be quadratic in a large origami.
+ *
+ * PURE: design in, `(anchor) => string` out. Never reads the store or the DOM.
+ */
+export function makeAnchorLabeller(design) {
+  const helices = design?.helices ?? []
+  const strands = design?.strands ?? []
+  const short = (id) => String(id ?? '').slice(0, 4)
+
+  const helixNum = new Map(helices.map((h, i) => [h.id, h.label ?? i]))
+  const strandById = new Map(strands.map((s) => [s.id, s]))
+  const strandNum = new Map(strands.map((s, i) => [s.id, i]))
+  const clusterNum = new Map((design?.cluster_transforms ?? []).map((c, i) => [c.id, i]))
+  const overhangNum = new Map((design?.overhangs ?? []).map((o, i) => [o.id, i]))
+  const xoverById = new Map((design?.crossovers ?? []).map((x) => [x.id, x]))
+  const extById = new Map((design?.extensions ?? []).map((e) => [e.id, e]))
+
+  // helix → its domains' bp ranges + owning strand role, for the Scaf/Stap suffix.
+  const domainsOnHelix = new Map()
+  for (const s of strands) {
+    const role = _ROLE[s.strand_type?.value ?? s.strand_type] ?? null
+    for (const d of s.domains ?? []) {
+      if (!d?.helix_id) continue
+      let arr = domainsOnHelix.get(d.helix_id)
+      if (!arr) domainsOnHelix.set(d.helix_id, (arr = []))
+      arr.push({                                   // REVERSE domains store start > end
+        lo: Math.min(d.start_bp, d.end_bp), hi: Math.max(d.start_bp, d.end_bp),
+        dir: _dirUp(d.direction), role,
+      })
+    }
   }
-  if (a.kind === 'extension') {
-    return a.k == null ? `ext tail ${a.extensionId}` : `ext base ${a.extensionId}#${a.k}`
+
+  /** `H<number>`, or `H?<id fragment>` when the design doesn't know the helix (a stale
+   *  anchor whose helix was deleted) — flagged rather than silently renumbered. */
+  const H = (id) => (helixNum.has(id) ? `H${helixNum.get(id)}` : `H?${short(id)}`)
+
+  const roleAt = (helixId, bp, direction) => {
+    const arr = domainsOnHelix.get(helixId)
+    if (!arr) return null
+    const dir = _dirUp(direction)
+    for (const d of arr) if (d.dir === dir && bp >= d.lo && bp <= d.hi) return d.role
+    return null
   }
-  return anchorKey(a)
+
+  /** Scaf/Stap suffix. Falls back to Fwd/Rev when no strand covers the slot: without
+   *  SOMETHING here the two strands of a base pair render as identical rows. */
+  const roleSuffix = (helixId, bp, direction) => {
+    const role = roleAt(helixId, bp, direction)
+    if (role) return ` ${role}`
+    return _dirUp(direction) === 'REVERSE' ? ' Rev' : ' Fwd'
+  }
+
+  const numbered = (map, id, prefix) =>
+    map.has(id) ? `${prefix}${map.get(id)}` : `${prefix}?${short(id)}`
+
+  return function label(a) {
+    if (!a) return ''
+    const kind = a.kind
+
+    if (kind === 'base') {
+      const hid = a.helixId ?? a.helix_id
+      const bp = a.bp ?? a.bp_index
+      return `${H(hid)}:bp${bp}${roleSuffix(hid, bp, a.direction)}`
+    }
+
+    if (kind === 'domain') {
+      const sid = a.strandId ?? a.strand_id
+      const di = a.domainIndex ?? a.domain_index
+      const d = strandById.get(sid)?.domains?.[di]
+      if (!d?.helix_id) return `${numbered(strandNum, sid, 'S')}#${di}`
+      const lo = Math.min(d.start_bp, d.end_bp)
+      const hi = Math.max(d.start_bp, d.end_bp)
+      const role = _ROLE[strandById.get(sid)?.strand_type?.value
+                         ?? strandById.get(sid)?.strand_type]
+      return `${H(d.helix_id)}:bp${lo}-${hi}${role ? ` ${role}` : ''}`
+    }
+
+    // `k == null` means the whole run/tail, which the backend also accepts → '*'.
+    if (kind === 'extra_base') {
+      const xid = a.crossoverId ?? a.crossover_id
+      const half = xoverById.get(xid)?.half_a
+      const k = a.k ?? '*'
+      // An extra base is INSERTED at a crossover, so it has no bp of its own — name it by
+      // the bp the crossover leaves from, which is where it actually sits in the model.
+      return half ? `${H(half.helix_id)}:bp${half.index}+${k}` : `XB?${short(xid)}+${k}`
+    }
+
+    if (kind === 'extension') {
+      const eid = a.extensionId ?? a.extension_id
+      const ext = extById.get(eid)
+      const k = a.k ?? '*'
+      const doms = strandById.get(ext?.strand_id)?.domains ?? []
+      // A tail hangs off a strand TERMINUS: the 5′ end is the first domain's start, the
+      // 3′ end the last domain's end.
+      const d = ext?.end === 'five_prime' ? doms[0] : doms[doms.length - 1]
+      if (!d?.helix_id) return `EX?${short(eid)}›${k}`
+      const bp = ext.end === 'five_prime' ? d.start_bp : d.end_bp
+      return `${H(d.helix_id)}:bp${bp}›${k}`
+    }
+
+    // These span many helices, so no H<n>:bp<i> fits them.
+    if (kind === 'strand') return numbered(strandNum, a.id ?? a.strand_id ?? a.strandId, 'S')
+    if (kind === 'cluster') return numbered(clusterNum, a.id ?? a.cluster_id, 'C')
+    if (kind === 'overhang') return numbered(overhangNum, a.id ?? a.overhang_id, 'OH')
+
+    return anchorKey(a)
+  }
+}
+
+/** Human label for one anchor row.  `design` resolves helix numbers and the Scaf/Stap
+ *  suffix; without it the label degrades to raw ids rather than lying about a number.
+ *  Labelling a whole list? Build the labeller once with `makeAnchorLabeller`. */
+export function anchorLabel(a, design = null) {
+  return makeAnchorLabeller(design)(a)
 }
 
 /**
@@ -327,6 +451,107 @@ export function addAnchors(existing, more) {
 }
 export function removeAnchor(existing, key) {
   return (existing || []).filter(a => anchorKey(a) !== key)
+}
+
+// ── Per-anchor atom holds (NAMD) ─────────────────────────────────────────────
+// Which ATOMS of each anchored base a given anchor holds.  The choice rides on the
+// descriptor itself (`atoms`), not beside the list, because descriptors already
+// round-trip through the job manifest (`anchors.requested`) → GET /forces →
+// applyConfig — so per-anchor read-back is free and nothing else had to learn a new
+// field.  `anchorKey` ignores it, so adding it never changes identity or dedupe.
+//
+// THE SENTINEL, and it is the subtle part:  `atoms` PRESENT (even as null) is that
+// anchor's own decision; ABSENT means "no opinion" and falls back to the job-level
+// `anchor_atoms`.  `null` ≡ all heavy atoms — the same meaning `anchor_atoms=None`
+// already carries on the backend.  Collapsing present-null into absent would leak the
+// job default into a row that explicitly asked for all-heavy.
+
+const _ATOMS_KEYS = ['atoms', 'atom_names', 'atomNames']
+
+/** Pure: a "Hold atoms" select value → an atom-name list, or null.
+ *  '' (All heavy atoms) → null, the backend's "no filter" sentinel; anything else is a
+ *  comma-separated PDB atom-name list. Returning [] instead of null would ask the
+ *  backend to anchor NOTHING, which it rejects rather than running unanchored. */
+export function atomNamesFromValue(value) {
+  const names = String(value ?? '').split(',').map(s => s.trim()).filter(Boolean)
+  return names.length ? names : null
+}
+
+/** Pure: one descriptor's held atom names, or null (= all heavy atoms).  Accepts the
+ *  three spellings a descriptor can arrive with (our own `atoms`, the backend's
+ *  `atom_names`, a camelCase caller) and a raw "P,C1'" string, mirroring the alias
+ *  tolerance `resolveAnchorEntries` already has for scope keys. */
+export function anchorAtoms(a) {
+  if (!a) return null
+  for (const k of _ATOMS_KEYS) {
+    if (!(k in a)) continue
+    const v = a[k]
+    if (v == null) return null
+    if (typeof v === 'string') return atomNamesFromValue(v)
+    const names = (Array.isArray(v) ? v : []).map(s => String(s).trim()).filter(Boolean)
+    return names.length ? names : null
+  }
+  return null
+}
+
+/** Pure: does this descriptor state an opinion about its atoms?  Key PRESENCE, not
+ *  truthiness — `{atoms: null}` (all heavy, deliberately) is an opinion; a descriptor
+ *  with no `atoms` key at all is not. */
+export function hasAnchorAtoms(a) {
+  return !!a && _ATOMS_KEYS.some(k => k in a)
+}
+
+/** Pure: order-insensitive canonical key for an atom set, so "P,C1'" and "C1',P" are
+ *  the same choice.  '' is all-heavy-atoms (matching the select's '' option value). */
+export function anchorAtomsKey(a) {
+  const names = anchorAtoms(a)
+  return names ? names.slice().sort().join(',') : ''
+}
+
+/** Pure: set one row's atoms, by anchor key.  Returns a NEW list; untouched rows keep
+ *  their identity so a re-render can diff cheaply. */
+export function withAnchorAtoms(anchors, key, names) {
+  return (anchors || []).map(a => (anchorKey(a) === key ? _withAtoms(a, names) : a))
+}
+
+/** Pure: set every row's atoms — the "Apply hold to all" write. */
+export function withAllAnchorAtoms(anchors, names) {
+  return (anchors || []).map(a => _withAtoms(a, names))
+}
+
+function _withAtoms(a, names) {
+  const list = Array.isArray(names) ? names.map(s => String(s).trim()).filter(Boolean) : null
+  const out = { ...a, atoms: list && list.length ? list : null }
+  // Drop the alias spellings so a descriptor can never carry two disagreeing answers.
+  delete out.atom_names
+  delete out.atomNames
+  return out
+}
+
+/** Pure: THE blank-when-mixed rule for "Apply hold to all".  Returns the canonical key
+ *  every row agrees on, or null when they disagree (→ the select renders blank).
+ *  An empty card returns '' — there is nothing to disagree about, and all-heavy is the
+ *  historical default a fresh card starts from. */
+export function commonAnchorAtomsKey(anchors) {
+  const list = anchors || []
+  if (!list.length) return ''
+  const first = anchorAtomsKey(list[0])
+  return list.every(a => anchorAtomsKey(a) === first) ? first : null
+}
+
+/** Pure: canonical atom-set key → the <option> value that represents it.  Built from
+ *  the LIVE option list (the four presets live once, in index.html) so the card never
+ *  duplicates the enum.  A set no option offers — a headless caller's custom names —
+ *  simply has no entry, and the select renders blank rather than lying. */
+export function atomOptionByKey(options) {
+  const map = new Map()
+  for (const o of options || []) {
+    const value = typeof o === 'string' ? o : o?.value
+    if (value == null) continue
+    const key = anchorAtomsKey({ atoms: atomNamesFromValue(value) })
+    if (!map.has(key)) map.set(key, value)
+  }
+  return map
 }
 
 /**

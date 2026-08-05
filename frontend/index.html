@@ -5310,8 +5310,11 @@
                   </label>
                   <!-- Which ATOMS of each anchored base to hold. The marker PDB was always
                        per-atom; only the decision was per-residue, so a name filter gives
-                       atom-level anchoring without an atom picker. -->
-                  <label style="display:block;color:#8b949e;font-size:var(--text-xs);margin-top:6px">Hold atoms
+                       atom-level anchoring without an atom picker.
+                       These four <option>s are the ONLY definition of the presets — each
+                       table row above clones them (oxdna_anchors_setup.js `ids.atoms`), so
+                       editing the list here changes every row too. -->
+                  <label style="display:block;color:#8b949e;font-size:var(--text-xs);margin-top:6px">Apply hold to all
                     <select id="md-anchors-atoms" style="width:100%;margin-top:2px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:3px;font-size:var(--text-xs)">
                       <option value="">All heavy atoms (~20/base)</option>
                       <option value="C1'">C1′ only (1/base)</option>
@@ -5319,6 +5322,10 @@
                       <option value="P,C1'">P + C1′ (2/base)</option>
                     </select>
                   </label>
+                  <div style="font-size:var(--text-xs);color:#6e7681;margin-top:2px;line-height:1.35">
+                    Writes to every anchor above. Blank means the anchors hold different atoms —
+                    set them per row.
+                  </div>
                   <!-- Hard vs soft. A hard pin is a Dirichlet boundary: it propagates strain
                        into nearby structure, kills local fluctuation, and is not rescaled by
                        the barostat. Soft restraints apply to PRODUCTION only — the relax

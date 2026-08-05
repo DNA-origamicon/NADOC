@@ -282,7 +282,8 @@ What exists now:
 - **Atom-level anchoring without an atom picker.** The marker PDB was always per-atom;
   only the decision was per-residue (~20 heavy atoms per base). `anchor_atoms` is a PDB
   atom-NAME filter (`["C1'"]` → 1 atom/base). A filter matching nothing is a hard error,
-  never a silent unanchored run. Card control: `#md-anchors-atoms`.
+  never a silent unanchored run. **Now PER ANCHOR — see the next section; `anchor_atoms`
+  survives as the job-level default.**
 - **Soft anchors** (`anchor_k`, kcal/mol/Å²) — `constraints`/`consref`/`conskfile`,
   `conskcol B`. **Production only**: the ladder's constraints channel is spent on the
   slow-release restraint, so relax stays hard `fixedAtoms`. Card control:
@@ -310,6 +311,106 @@ retarget + its length guard), `tests/test_md_ensemble.py` (child carries anchors
 soft path references equilibrated coords, unanchored conf unchanged, missing file raises),
 `tests/test_md_milestone1.py` (route-level inherit / `anchors: []` turns it off),
 `frontend/src/ui/md_jobs_panel.test.js` (`mdAnchorAtomNames`, `mdAnchorStiffness`).
+
+## Per-anchor atom holds + the per-ATOM halo (2026-08-05)
+
+One job-level `anchor_atoms` could not hold a corner base rigidly while merely tethering a
+distant overhang by its phosphate. **The choice now rides on the anchor DESCRIPTOR**, and
+the halo shows the atoms it actually pins.
+
+- **Data model — `atoms` on the descriptor**: `{kind:'strand', id:'s1', atoms:["C1'"]}`.
+  **KEY PRESENCE is the authority signal**: `atoms` present (even as `null`) is that
+  anchor's own decision; absent falls back to job-level `anchor_atoms`. `null` ≡ all heavy
+  atoms. A `.get("atoms") or default`-style read collapses the two and leaks the default
+  into rows that explicitly asked for all-heavy — the one subtle part, pinned on both
+  sides. Chosen over a parallel array because descriptors already round-trip through
+  `manifest.anchors.requested` → `GET /forces` → `applyConfig`, so **read-back came free**
+  (and fixed the atoms select, which had been write-only its whole life).
+- **Backend**: `namd_topology.resolve_anchor_atom_map(design, anchors, *, model,
+  full_topology, default_atoms) -> {residue ordinal: frozenset|None}`.
+  `resolve_anchor_residue_indices` is now a two-line delegate over it (its 6 callers
+  unchanged). `write_anchor_restraints_pdb` accepts that Mapping in place of a `set[int]`
+  — **a Mapping is authoritative and `atom_names` is then ignored**, since a `None` VALUE
+  means "all heavy atoms for THIS residue". Two cost/correctness notes: anchors are
+  GROUPED by atom set before resolving (≤5 groups for 4 presets, so the O(nucleotides)
+  `resolve_anchor_particles` walk runs ≤5×, not once per anchor), and the key→ordinal
+  index is `dict[key, list[int]]` because loop-insertion copies share
+  `(helix_id, bp_index, direction)`. **Overlaps UNION, with `None` as the top element**
+  (`_union_atom_names`) — monotone and order-independent; last-wins would depend on add
+  order, which `dedupeAnchors` reshuffles and the UI never shows. `requested_atom_names`
+  feeds the matched-nothing error so it names what was asked, not just the default.
+- **Row labels are `H<n>:bp<i> Scaf|Stap`** (`efield_math.makeAnchorLabeller(design)`).
+  `<n>` is the helix NUMBER shown in the viewport (`helix.label ?? its index`, the same
+  rule `domain_ends.js:208` uses for the 3D number sprites) — **never the lattice id**.
+  The old `base <uuid>.7 FORWARD` ran to ~50 chars; **that is what starved the Hold-atoms
+  select to 6 px in the ~230 px sidebar, so the column looked absent**. Fixed on both
+  sides: short labels AND `table-layout:fixed` + a `<colgroup>` (auto / 104px / 16px)
+  with the label cell ellipsis-truncating (`title` carries the full text). Select is now
+  96 px. **Never give the label cell `width:100%`.**
+  The suffix is the strand ROLE, not FORWARD/REVERSE: which direction is scaffold flips
+  per helix (2hb: helix 0 FORWARD is the staple, helix 1 FORWARD is the scaffold), so the
+  direction word carries no meaning for the user. Resolved by finding the domain covering
+  `(helix, bp, direction)` → `strand_type` (`scaffold→Scaf, staple→Stap, linker→Link,
+  oh_binder→Bind`); an uncovered slot falls back to `Fwd`/`Rev` so the two strands of a
+  base pair can never render as identical rows. Full vocabulary:
+  `H2:bp23 Scaf` base · `H2:bp10-24 Stap` domain (bp RANGE, min/max — REVERSE domains
+  store start > end) · `H2:bp23+1` extra base #1 at the crossover leaving that bp (`+*` =
+  all; an insert has no bp of its own, so it is named by `half_a`) · `H2:bp26›2` tail base
+  #2 beyond that terminus (`›*` = all; 5′ → first domain's `start_bp`, 3′ → last domain's
+  `end_bp`) · `S3` / `C1` / `OH4` for scopes spanning many helices. An id the design
+  doesn't know is flagged (`H?4a9c`, `S?gone`) rather than silently renumbered.
+  The labeller indexes the design ONCE and is built per repaint, not per row. All 7 cards
+  get it free: `getSelection()` returns the whole store state, so `currentDesign` is
+  already reachable. `lammps_forces_setup.js` uses the same labeller.
+  **e2e that assert on list text must match the vocabulary, not the old words** —
+  `base_anchors.spec.js` counted the literal `"base "`; it now counts `[data-key]` rows.
+- **Card is a scrollable TABLE** (`oxdna_anchors_setup.js`), one `<tr>` per anchor keeping
+  `data-key`/`data-hl` verbatim, label as bare `<td>` textContent, `data-role="remove"` on
+  the ×. **7 live instances** of this factory (oxdna/namd/cando/mrdna/snupi + occupancy ×2)
+  — the Hold-atoms column is **opt-in via `ids.atoms`**, and row `<option>`s are CLONED
+  from that element, so the four presets stay defined once in index.html. "Hold atoms" →
+  **"Apply hold to all"**, blank (`selectedIndex = -1`) when rows disagree
+  (`commonAnchorAtomsKey`). A row's `change` fires `_emit()` (not `_dispatch`) — unlike
+  focus, held atoms are part of the run. **Never `_renderAnchors()` from a row select's own
+  handler**: it wipes `innerHTML` and would replace the `<select>` mid-event.
+- **Descriptor algebra** lives in `scene/efield_math.js` (7 new pure exports:
+  `anchorAtoms`, `hasAnchorAtoms`, `anchorAtomsKey`, `withAnchorAtoms`,
+  `withAllAnchorAtoms`, `commonAnchorAtomsKey`, `atomOptionByKey`); `mdAnchorAtomNames`
+  moved there as `atomNamesFromValue` and is re-exported from `md_jobs_panel.js`.
+- **Per-ATOM halo** (`anchor_glow.buildAnchorAtomIndex` → `atomistic_renderer
+  .anchorAtomEntries`). Index is built from the **DESIGN, not geometry** — at `cylinders`
+  LOD `getBackboneEntries()` is empty, so a geometry-derived index would inherit the
+  long-standing "halo silently draws nothing" bug. `anchorAtomEntries` returns **null**
+  (→ caller falls back to the coarse halo) when the rep is off, atoms aren't loaded, the
+  payload is columnar, it has no `name` field, or the match exceeds `max` (20k).
+  **Only `GET /api/design/atomistic` carries atom names** — the oxDNA columnar bundle
+  drops them by design and the live MD frames never had them, so those paths fall back.
+  Entries expose a LIVE `pos` getter reading `getMatrixAt` through
+  `_state.elementMeshes[el]` resolved at READ time (survives `_rebuild`, tracks
+  `applyPositionLerp`), with one shared scratch Matrix4+Vector3 because `refreshAllGlow`
+  re-reads every entry each sim frame. **One glow layer, not an 8th**: `createGlowLayer`
+  now honours a per-entry `scale` (mirroring `createMultiColorGlowLayer`), so per-atom and
+  per-nucleotide entries share one draw call. `anchorAtomGlowScale` = 1.4 ballstick /
+  2.6 vdw / 3.6 CG.
+- **Switching on uses `atomisticRenderer.onAtomsChanged(cb)`, NOT
+  `nadoc:representation-change`** — that event fires before the async atom fetch resolves,
+  when the count is still 0. The callback is gated on a `${mode}|${count}|${columnar}`
+  signature, which is what keeps an O(N-atoms) re-match off the live-MD frame loop.
+  `main.js` gained one word (`atomisticRenderer` dep); **LOC Δ = 0**.
+- Anchors with NO `atoms` key (oxDNA cards, occupancy scope picks) keep the
+  per-nucleotide halo — that split is why this feature can't leak into the other cards.
+
+Measured in-app (e2e `anchor_atoms.spec.js`, 32-nt anchored strand, ball-and-stick):
+CG 32 spheres → `P` 32 → `P,C1'` 64 → all-heavy **640 (exactly 20×)**, and every glowing
+sphere position matches a real P atom of an anchored base. F4 restores exactly 32.
+
+Tests: `tests/test_namd_anchors.py` (+11: per-anchor map, union, `None` absorbs, absent →
+default, present-null beats default, `atom_names` alias, delegate still a set, Mapping
+ignores `atom_names`, duplicate residue keys, `requested_atom_names`),
+`tests/test_md_job_forces.py` (+3 route round-trip incl. `atoms` echoed in `requested`),
+`efield_math.test.js` (+27), `oxdna_anchors_setup.test.js` (+16, existing 26 green
+UNEDITED — the table is behaviour-preserving), `anchor_glow.test.js` (+17),
+`atomistic_renderer.test.js` (+11), e2e `anchor_atoms.spec.js` (2).
 
 ## Velocity seeds are drawn, not fixed (2026-08-03)
 

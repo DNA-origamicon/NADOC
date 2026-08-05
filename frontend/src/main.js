@@ -2114,7 +2114,7 @@ async function main() {
   // gate). Every engine's card fires `nadoc:anchors-change`; cache the last set per engine
   // and show the selected one, so switching tabs swaps the halo instead of mixing two
   // engines' anchors.  Never fired during construction → no TDZ on the consts below.
-  const anchorGlow = initAnchorGlow({ designRenderer, store })
+  const anchorGlow = initAnchorGlow({ designRenderer, store, atomisticRenderer })
   // Steric-clash overlay (the "clash" view-tool button) — owns its on/off + red
   // glow + count badge; re-fetches GET /design/clashes on posed-geometry change.
   const clashOverlay = initClashOverlay({ store, designRenderer })

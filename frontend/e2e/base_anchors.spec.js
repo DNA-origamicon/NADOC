@@ -92,7 +92,9 @@ test.describe('Base picks → anchors & occupancy scope', () => {
       glow:    window.__nadocTest.anchors.glowCount(),
     }))
     expect(r.anchors).toBe(pool)
-    expect(r.chips).toContain('base ')
+    // Rows are the compact vocabulary now: helix NUMBER + bp + strand role (Scaf/Stap),
+    // never the lattice id — see makeAnchorLabeller in scene/efield_math.js.
+    expect(r.chips).toMatch(/H\d+:bp\d+ (Scaf|Stap)/)
     expect(r.status, 'the count names bases, not strands').toMatch(/fixed bases?\./)
     expect(r.glow, 'purple anchor halo lit').toBeGreaterThan(before)
   })
@@ -107,10 +109,14 @@ test.describe('Base picks → anchors & occupancy scope', () => {
     await page.evaluate(() => document.getElementById('oxdna-occupancy-scope-add')?.click())
     await page.waitForTimeout(500)
 
-    const chips = await page.evaluate(() =>
-      document.getElementById('oxdna-occupancy-scope-list')?.textContent ?? '')
-    expect(chips).toContain('base ')
-    expect(chips.match(/base /g)?.length).toBe(pool)
+    const scope = await page.evaluate(() => ({
+      text: document.getElementById('oxdna-occupancy-scope-list')?.textContent ?? '',
+      rows: document.querySelectorAll('#oxdna-occupancy-scope-list [data-key]').length,
+    }))
+    expect(scope.text).toMatch(/H\d+:bp\d+/)
+    // Count the ROWS rather than a word in the text: the label vocabulary is display
+    // wording and will keep evolving, but one row per picked base is the contract.
+    expect(scope.rows).toBe(pool)
   })
 
   // Staleness, across all three descriptor kinds. The backend resolves a descriptor whose
@@ -199,6 +205,8 @@ test.describe('Base picks → anchors & occupancy scope', () => {
       n: window.__nadocTest.anchors.card?.getAnchors?.().length ?? -1,
     }))
     expect(card.n).toBe(seeded.length)
-    expect(card.chips).toContain('xover base')
+    // An extra base has no bp of its own, so it is named by the crossover's host bp
+    // with a `+k` insert index (`+*` = the whole run).
+    expect(card.chips).toMatch(/(H\d+:bp\d+|XB\?\w+)\+(\d+|\*)/)
   })
 })

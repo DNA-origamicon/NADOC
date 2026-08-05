@@ -441,3 +441,123 @@ describe('atomistic per-cluster colour + opacity', () => {
     ar.dispose()
   })
 })
+
+// ── anchorAtomEntries — the purple halo on the EXACT atoms a NAMD anchor holds ──
+//
+// The halo used to be one sphere per nucleotide regardless of which atoms the run
+// actually pinned. These entries put it on the atoms named in the marker PDB.
+
+const ANCHORED_ATOMS = [
+  { serial: 0, name: 'P',   element: 'P', helix_id: 'h0', bp_index: 0, direction: 'FORWARD', x: 0, y: 0, z: 0 },
+  { serial: 1, name: "C1'", element: 'C', helix_id: 'h0', bp_index: 0, direction: 'FORWARD', x: 1, y: 0, z: 0 },
+  { serial: 2, name: "O3'", element: 'O', helix_id: 'h0', bp_index: 0, direction: 'FORWARD', x: 2, y: 0, z: 0 },
+  // A different nucleotide, never anchored below.
+  { serial: 3, name: 'P',   element: 'P', helix_id: 'h0', bp_index: 1, direction: 'FORWARD', x: 3, y: 0, z: 0 },
+]
+
+function anchoredScene(atoms = ANCHORED_ATOMS, mode = 'ballstick') {
+  const scene = new THREE.Scene()
+  const ar = initAtomisticRenderer(scene)
+  ar.setMode(mode)
+  ar.update({ atoms, bonds: [] })
+  return { scene, ar }
+}
+
+const KEY = 'h0:0:FORWARD'
+
+describe('anchorAtomEntries', () => {
+  it('returns one entry per named atom of the anchored nucleotide', () => {
+    const { ar } = anchoredScene()
+    const out = ar.anchorAtomEntries(new Map([[KEY, new Set(['P'])]]))
+    expect(out).toHaveLength(1)
+    expect(out[0].pos.x).toBeCloseTo(0)      // the P of bp 0, not the P of bp 1
+  })
+
+  it('holds every heavy atom when the set is null, and no hydrogens', () => {
+    const withH = [...ANCHORED_ATOMS,
+      { serial: 4, name: "H1'", element: 'H', helix_id: 'h0', bp_index: 0, direction: 'FORWARD', x: 9, y: 0, z: 0 }]
+    const { ar } = anchoredScene(withH)
+    const out = ar.anchorAtomEntries(new Map([[KEY, null]]))
+    expect(out).toHaveLength(3)              // P + C1' + O3', never the H
+  })
+
+  it('a two-name set marks exactly those two atoms', () => {
+    const { ar } = anchoredScene()
+    expect(ar.anchorAtomEntries(new Map([[KEY, new Set(['P', "C1'"])]]))).toHaveLength(2)
+  })
+
+  it('ignores nucleotides the index does not mention', () => {
+    const { ar } = anchoredScene()
+    const out = ar.anchorAtomEntries(new Map([[KEY, new Set(['P'])]]))
+    expect(out.every(e => e.pos.x < 3)).toBe(true)
+  })
+
+  it('carries the requested scale, so the halo can shrink to atom size', () => {
+    const { ar } = anchoredScene()
+    expect(ar.anchorAtomEntries(new Map([[KEY, null]]), { scale: 1.4 })[0].scale).toBe(1.4)
+  })
+
+  it('pos is LIVE — it follows the atom under a position overlay', () => {
+    // refreshAllGlow re-reads entry.pos every simulation frame; a captured Vector3
+    // would leave the halo at the design position while the atoms moved.
+    const { ar } = anchoredScene()
+    const [e] = ar.anchorAtomEntries(new Map([[KEY, new Set(['P'])]]))
+    expect(e.pos.x).toBeCloseTo(0)
+    // flat xyz indexed by serial; move only the anchored P (serial 0) to x=7
+    const from = ANCHORED_ATOMS.flatMap(a => [a.x, a.y, a.z])
+    const to = from.slice(); to[0] = 7
+    ar.applyPositionLerp(from, to, 1)
+    expect(e.pos.x).toBeCloseTo(7)
+  })
+
+  it('returns null when the atomistic rep is off', () => {
+    const { ar } = anchoredScene()
+    ar.setMode('off')
+    expect(ar.anchorAtomEntries(new Map([[KEY, null]]))).toBeNull()
+  })
+
+  it('returns null for a payload with no atom names — the caller falls back', () => {
+    // The oxDNA columnar bundle and the live MD frames both drop `name`; `element`
+    // alone cannot tell a C1' from any other carbon.
+    const nameless = ANCHORED_ATOMS.map(({ name, ...rest }) => rest)
+    const { ar } = anchoredScene(nameless)
+    expect(ar.anchorAtomEntries(new Map([[KEY, new Set(['P'])]]))).toBeNull()
+  })
+
+  it('returns null for an empty index and for no atoms at all', () => {
+    const { ar } = anchoredScene()
+    expect(ar.anchorAtomEntries(new Map())).toBeNull()
+    const { ar: empty } = anchoredScene([])
+    expect(empty.anchorAtomEntries(new Map([[KEY, null]]))).toBeNull()
+  })
+
+  it('returns null rather than flooding the layer past `max`', () => {
+    // A cluster anchor × all-heavy atoms is a ~20× multiplier, and these entries are
+    // re-read every sim frame.
+    const { ar } = anchoredScene()
+    expect(ar.anchorAtomEntries(new Map([[KEY, null]]), { max: 2 })).toBeNull()
+  })
+})
+
+describe('onAtomsChanged', () => {
+  it('fires when the mode changes and when atoms arrive', () => {
+    const scene = new THREE.Scene()
+    const ar = initAtomisticRenderer(scene)
+    let n = 0
+    ar.onAtomsChanged(() => { n++ })
+    ar.setMode('ballstick')
+    ar.update({ atoms: ANCHORED_ATOMS, bonds: [] })
+    expect(n).toBeGreaterThan(0)
+  })
+
+  it('does NOT fire on a same-shape rebuild — the live MD path runs every frame', () => {
+    // This guard is the whole cost control: without it, every frame would re-match an
+    // anchor set against every atom.
+    const { ar } = anchoredScene()
+    let n = 0
+    ar.onAtomsChanged(() => { n++ })
+    ar.update({ atoms: ANCHORED_ATOMS, bonds: [] })
+    ar.update({ atoms: ANCHORED_ATOMS.map(a => ({ ...a, x: a.x + 1 })), bonds: [] })
+    expect(n).toBe(0)
+  })
+})
