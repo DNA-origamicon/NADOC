@@ -112,3 +112,47 @@ describe('initAnchorGlow', () => {
     expect(designRenderer.setAnchorGlow).toHaveBeenCalledTimes(1)
   })
 })
+
+// ── snake_case scopes (API / headless / saved manifests) ──────────────────────
+// The shared scope format accepts both spellings and the BACKEND resolver honours both,
+// so a run built from a script is correctly anchored. This resolver read only camelCase,
+// so those jobs rendered their chips and highlighted nothing — which reads in the app as
+// "the anchors were lost" even though NAMD was enforcing all of them.
+describe('resolveAnchorEntries accepts snake_case scopes', () => {
+  const entries = [
+    { nuc: { helix_id: 'h0', bp_index: 7, direction: 'FORWARD', strand_id: 's1', domain_index: 0 } },
+    { nuc: { helix_id: 'h0', bp_index: 8, direction: 'FORWARD', strand_id: 's1', domain_index: 1 } },
+    { nuc: { helix_id: 'h1', bp_index: 7, direction: 'REVERSE', strand_id: 's2', domain_index: 0 } },
+  ]
+
+  it('resolves a base scope written as helix_id', () => {
+    const snake = resolveAnchorEntries(
+      [{ kind: 'base', helix_id: 'h0', bp: 7, direction: 'FORWARD' }], entries, null)
+    const camel = resolveAnchorEntries(
+      [{ kind: 'base', helixId: 'h0', bp: 7, direction: 'FORWARD' }], entries, null)
+    expect(snake).toHaveLength(1)
+    expect(snake).toEqual(camel)
+  })
+
+  it('accepts bp_index as an alias for bp', () => {
+    expect(resolveAnchorEntries(
+      [{ kind: 'base', helix_id: 'h1', bp_index: 7, direction: 'REVERSE' }], entries, null),
+    ).toHaveLength(1)
+  })
+
+  it('resolves strand and domain scopes in either spelling', () => {
+    expect(resolveAnchorEntries([{ kind: 'strand', strand_id: 's1' }], entries, null))
+      .toHaveLength(2)
+    expect(resolveAnchorEntries([{ kind: 'strand', id: 's1' }], entries, null))
+      .toHaveLength(2)
+    expect(resolveAnchorEntries(
+      [{ kind: 'domain', strand_id: 's1', domain_index: 1 }], entries, null),
+    ).toHaveLength(1)
+  })
+
+  it('still matches nothing for a genuinely absent helix', () => {
+    expect(resolveAnchorEntries(
+      [{ kind: 'base', helix_id: 'nope', bp: 7, direction: 'FORWARD' }], entries, null),
+    ).toHaveLength(0)
+  })
+})
