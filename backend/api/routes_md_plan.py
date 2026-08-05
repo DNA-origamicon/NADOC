@@ -28,6 +28,7 @@ from backend.api.routes_md import (CreateJobRequest, ProductionRequest,
 from backend.core import md_plan
 from backend.core import md_presets
 from backend.core import md_protocols as _p
+from backend.core.md_integrator import integrator_warnings, resolve_integrator
 from backend.core.md_job import MdJob, MdStatus
 
 router = APIRouter()
@@ -71,6 +72,55 @@ class ProtocolPlanRequest(CreateJobRequest):
         description="Solvated atom count, when the caller already knows it (an existing "
                     "package, or a disk estimate). Resolves the values this plan would "
                     "otherwise have to report as deferred.")
+
+
+#: Which KIND OF RUN each request field governs.  The wizard groups its controls by this,
+#: because "does this setting affect the ladder or the production run?" was unanswerable
+#: from the flat list — `production_timestep_fs` sat between two relaxation settings and
+#: looked like it changed the ladder.  Anything unlisted is "both" (or neither, e.g.
+#: bookkeeping), which is the safe default: it stays in the shared group.
+FIELD_SCOPE: dict[str, str] = {
+    # The relaxation ladder only.
+    "relax_preset": "relaxation",
+    "relax_timestep_fs": "relaxation",
+    "relax_rigid_bonds": "relaxation",
+    "relax_hmr": "relaxation",
+    "fast": "relaxation",
+    "force_soft": "relaxation",
+    "declash": "relaxation",
+    "early_stop_relax": "relaxation",
+    "minimize_steps": "relaxation",
+    "protocol": "relaxation",
+    # The production run only — recorded at prep, applied when production runs.
+    "production_timestep_fs": "production",
+    "production_rigid_bonds": "production",
+    "production_hmr": "production",
+    "production_ns_intent": "production",
+    # Everything else — solvation, chemistry, hardware — is shared by both, because the
+    # cell and the PSF a relaxation builds are the ones production inherits verbatim.
+}
+
+
+def _integrator_conditions(resolved: CreateJobRequest) -> list[dict]:
+    """Every measured objection to the chosen integrator combinations, both scopes.
+
+    The ladder's base timestep still falls back to `fast` when the caller has not chosen
+    one, so this reports on what the confs will actually carry rather than on the raw
+    request.  Warnings only — see md_integrator.
+    """
+    ladder_dt = (float(resolved.relax_timestep_fs)
+                 if resolved.relax_timestep_fs is not None
+                 else (4.0 if resolved.fast else 2.0))
+    if resolved.force_soft:
+        ladder_dt = 1.0
+    out = integrator_warnings(
+        resolve_integrator(ladder_dt, resolved.relax_rigid_bonds, resolved.relax_hmr),
+        scope="relaxation")
+    out += integrator_warnings(
+        resolve_integrator(float(resolved.production_timestep_fs or 4.0),
+                           resolved.production_rigid_bonds, resolved.production_hmr),
+        scope="production")
+    return out
 
 
 def _provenance(body: ProtocolPlanRequest,
@@ -165,11 +215,28 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
     declash = bool(resolved.declash or flags["extra_bases"] or flags["extensions"])
     force_soft = bool(resolved.force_soft)
     gentle_ladder = declash and not force_soft
-    fast = bool(resolved.fast) and not force_soft
+    # The ladder's base timestep: explicit if chosen, else the historical fast-derived
+    # 4/2 fs.  `fast` is now only the NAME for "the base timestep is 4 fs" — mirrors
+    # prepare_mgh_slow_release so the preview and the run agree.
+    ladder_dt = (float(resolved.relax_timestep_fs)
+                 if resolved.relax_timestep_fs is not None
+                 else (4.0 if resolved.fast else 2.0))
+    fast = (ladder_dt >= 4.0) and not force_soft
 
     ctx = md_plan.PlanContext(
         name_stem="design",
         fast=fast,
+        # The two decoupled axes, so the stage table shows what the confs will really
+        # carry.  Without these the table kept reporting the auto values while the job
+        # ran the chosen ones.
+        rigid_bonds=resolved.relax_rigid_bonds,
+        hmr=resolved.relax_hmr,
+        base_timestep_fs=ladder_dt,
+        # An HMR ladder names the repartitioned PSF; the plan runs before solvation, so
+        # this is the name the package WILL have.
+        structure_psf=("design_hmr.psf"
+                       if resolve_integrator(ladder_dt, resolved.relax_rigid_bonds,
+                                             resolved.relax_hmr).hmr else None),
         carved=carved,
         gbis=gbis,
         minimize_steps=int(resolved.minimize_steps),
@@ -182,6 +249,7 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
     try:
         stages = md_plan.relaxation_stages(
             ctx, soft=force_soft, gentle=gentle_ladder, nvt_only=carved,
+            timestep_fs=ladder_dt,
             stage_overrides=body.stage_overrides or None)
     except ValueError as exc:      # a protected directive — say which, do not 500
         raise HTTPException(400, str(exc)) from exc
@@ -189,7 +257,40 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         carved=carved, gbis=gbis, force_soft=force_soft, gentle_ladder=gentle_ladder,
         early_stop=bool(resolved.early_stop_relax),
         gpu_resident_mode=str(resolved.gpu_resident or "auto"), stages=stages,
+        n_atoms=body.n_atoms_hint,
     )
+    # Will the full water box fit this machine?  A pre-flight ESTIMATE, reported and never
+    # acted on: prep no longer carves on the user's behalf (that silently turned one
+    # experiment into another), so this is the only thing standing between a too-large box
+    # and an OOM at segment 1.  `source` names the control, so the wizard renders it as a
+    # warning icon against Water shell carve rather than only in the list.
+    if not carved and body.n_atoms_hint:
+        try:
+            from backend.core.md_optimize import probe_hardware  # noqa: PLC0415
+            hw = probe_hardware(str(resolved.devices or "0"))
+            cap = hw.get("atom_cap")
+            if cap and body.n_atoms_hint > cap:
+                conditions.append({
+                    "id": "water_box_will_not_fit", "kind": "warning",
+                    "title": "The full water box may not fit this machine",
+                    "detail": (
+                        f"This system is about {body.n_atoms_hint:,} atoms and the "
+                        f"pre-flight estimates room for roughly {cap:,} on the selected "
+                        f"compute target. NADOC does NOT shrink the water for you — it "
+                        f"used to, and a carve is a different experiment (vacuum corners "
+                        f"force constant volume, which deletes the settle stage and the "
+                        f"box-size equilibration criterion). Set a Water shell carve "
+                        f"yourself if you want one, reduce the padding, seed from a "
+                        f"coarse-grained relaxation, or run it anyway — the estimate is "
+                        f"not a measurement and NAMD will answer the memory question "
+                        f"itself at the first segment, before real compute is spent."
+                    ),
+                    "applies_to": "all", "source": "CreateJobRequest.water_shell_nm",
+                })
+        except Exception:                                     # noqa: BLE001, S110
+            # A forecast must never break the preview.
+            pass
+
     if not resolved.allow_water_shell_carve and not carved:
         # A POLICY, not a verdict — deliberately not "blocking".
         #
@@ -217,6 +318,9 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             "applies_to": "all", "source": "CreateJobRequest.allow_water_shell_carve",
         })
 
+    # Both scopes' integrator objections, stated as conditions so each one lands against
+    # the control that caused it (their `source` names the request field).
+    conditions = list(conditions) + _integrator_conditions(resolved)
     warnings: list[str] = []
     if gbis:
         warnings.append(
@@ -229,6 +333,10 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             "rather than reading the design's extra bases and extensions.")
     return {
         "stages": stages,
+        # Which kind of run each setting governs, so the wizard can group its controls
+        # instead of presenting one flat list in which a production-only field sits
+        # between two ladder fields.
+        "field_scopes": dict(FIELD_SCOPE),
         "conditions": conditions,
         "retries": md_plan.retry_policy(),
         "deferred": md_plan.deferred_notes(
@@ -290,7 +398,10 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         fast=bool(plan.get("fast")),
         carved=carved,
         mgh_extrabonds=bool(manifest.get("mgh_extrabonds", True)),
-        structure_psf=f"{name_stem}_hmr.psf" if plan.get("fast") else None,
+        structure_psf=(f"{name_stem}_hmr.psf" if plan.get("hmr", plan.get("fast"))
+                       else None),
+        rigid_bonds=plan.get("rigid_bonds"),
+        hmr=plan.get("hmr"),
         n_atoms=body.n_atoms_hint,
         force_resident=plan.get("force_resident"),
     )
@@ -404,7 +515,11 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             "warning": plan.get("timestep_warning") or "",
         },
         "limits": {"max_steps": _max_steps(), "max_ns": _max_ns()},
-        "conditions": conditions,
+        "field_scopes": dict(FIELD_SCOPE),
+        "conditions": conditions + integrator_warnings(
+            resolve_integrator(float(plan.get("timestep_fs") or 4.0),
+                               plan.get("rigid_bonds"), plan.get("hmr")),
+            scope="production"),
         "retries": md_plan.retry_policy(),
         "deferred": [],
         "warnings": [w for w in (seed_warning, plan.get("timestep_warning")) if w],

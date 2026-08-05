@@ -1374,6 +1374,46 @@ def handle_resident_probe_failure(
     return False
 
 
+def build_cpu_reroute_decision(namd_cpu_available: bool) -> dict:
+    """Gate B2: the CUDA tile-list bug hit this geometry — CPU build, or cancel?
+
+    Same shape as :func:`build_gpu_fallback_decision`, because it is the same kind of
+    question: a pre-flight found the fast path cannot start, and the fallback is much
+    slower.  It used to reroute to the CPU build silently, with only a log line — roughly
+    a 12x slowdown that a user could discover only by watching the ETA.
+    """
+    return {
+        "gate": "cpu_reroute",
+        "severity": "decision",
+        "title": "This structure hits a known NAMD GPU bug",
+        "message": (
+            "NAMD's CUDA build crashes while building its neighbour lists on this "
+            "geometry (a known bug in 3.0.2's buildTileLists). The CPU build runs it "
+            "correctly, but roughly 12x slower. Nothing about the physics changes."
+            if namd_cpu_available else
+            "NAMD's CUDA build crashes while building its neighbour lists on this "
+            "geometry, and no CPU (-multicore) build is installed to fall back to. "
+            "Running anyway will crash at the first segment."
+        ),
+        "technical_reason": "gpu_tilelist_probe failed (illegal memory access in "
+                            "buildTileLists)",
+        "retry_hint": True,
+        "degrade_target": "cpu",
+        "checks": [
+            {"label": "GPU found", "ok": True},
+            {"label": "System fits in memory", "ok": True},
+            {"label": "CUDA neighbour lists built", "ok": False},
+            {"label": "CPU build available", "ok": bool(namd_cpu_available)},
+        ],
+        "options": (
+            [{"id": "cpu", "label": "Run on the CPU build (~12x slower)", "primary": True},
+             {"id": "cancel", "label": "Cancel", "primary": False}]
+            if namd_cpu_available else
+            [{"id": "cancel", "label": "Cancel", "primary": True}]
+        ),
+    }
+
+
 def resolve_gpu_decision(job: MdJob, choice: str, workspace_dir: Path) -> MdJob:
     """Apply the user's Gate-B choice to a paused job (caller then starts it if resumed).
 
@@ -1385,6 +1425,15 @@ def resolve_gpu_decision(job: MdJob, choice: str, workspace_dir: Path) -> MdJob:
         downgrade_gpu_resident_confs(job.package_dir(workspace_dir), job.job_id)
         job.decision = None
         job.status = MdStatus.running   # runner flips it on relaunch; resume skips probe
+        job.error = None
+    elif choice == "cpu":
+        # Gate B2. Recorded on the job so the reroute is a CHOICE with a trace, not a
+        # silent substitution the user can only infer from the ETA.
+        pp = dict(job.prep_params or {})
+        pp["cpu_reroute_accepted"] = True
+        job.prep_params = pp
+        job.decision = None
+        job.status = MdStatus.running
         job.error = None
     elif choice == "cancel":
         apply_user_stop(job)
@@ -1845,18 +1894,34 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             gpu_tilelist_probe, package_dir, min_name, namd_bin, run_devices, job.threads,
         )
         if not gpu_safe:
-            logger.warning(
-                "[%s] GPU pre-flight FAILED (NAMD CUDA tile-list bug on this geometry) "
-                "— routing this job to the CPU build.", job.job_id,
-            )
+            # ASK, do not reroute.  The CPU build is ~12x slower; swapping to it behind
+            # the user's back changed the run's cost by an order of magnitude with only a
+            # log line to show for it.  Same Gate-B contract as the GPU-resident probe:
+            # a previously-accepted reroute (or the auto policy) proceeds without asking.
             try:
-                namd_bin, run_devices = find_namd(prefer_cpu=True), ""
-                logger.info("[%s] NAMD binary (rerouted): %s (CPU build)", job.job_id, namd_bin)
+                cpu_bin = find_namd(prefer_cpu=True)
             except RuntimeError:
-                logger.error(
-                    "[%s] No CPU NAMD build installed — staying on the GPU build, which "
-                    "will crash on this geometry.  Install the -multicore build.", job.job_id,
-                )
+                cpu_bin = None
+            already = bool((job.prep_params or {}).get("cpu_reroute_accepted"))
+            policy = ((job.prep_params or {}).get("gpu_fallback_policy")
+                      or gpu_fallback_policy())
+            if already or policy == "auto_offload":
+                if cpu_bin:
+                    namd_bin, run_devices = cpu_bin, ""
+                    logger.info("[%s] NAMD binary (rerouted, accepted): %s (CPU build)",
+                                job.job_id, namd_bin)
+                else:
+                    logger.error(
+                        "[%s] No CPU NAMD build installed — staying on the GPU build, "
+                        "which will crash on this geometry.", job.job_id)
+            else:
+                logger.warning(
+                    "[%s] GPU pre-flight FAILED (NAMD CUDA tile-list bug on this "
+                    "geometry) — paused for user decision (Gate B2).", job.job_id)
+                job.decision = build_cpu_reroute_decision(bool(cpu_bin))
+                job.status = MdStatus.paused
+                job.save(workspace_dir)
+                return
 
     # Persist the live NAMD PID to job.json on every spawn, so a server restart can
     # still signal the orphaned process (see stop_job's restart fallback).

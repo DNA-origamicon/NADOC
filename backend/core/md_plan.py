@@ -33,6 +33,7 @@ from dataclasses import dataclass, replace
 from typing import Optional
 
 from backend.core import md_protocols as _p
+from backend.core.md_integrator import resident_decision
 from backend.core.md_cutoff import CutoffParams
 from backend.core.md_protocols import SegmentSpec
 
@@ -136,6 +137,12 @@ class PlanContext:
     carved: bool = False
     fill_fraction: float = 1.0
     structure_psf: Optional[str] = None
+    #: The two axes the timestep used to imply.  None = follow the segment's own tier, so
+    #: an untouched plan is byte-identical to what it emitted before they existed.
+    rigid_bonds: Optional[str] = None
+    hmr: Optional[bool] = None
+    #: The ladder's base timestep, so the preview's tiers CAP it rather than replace it.
+    base_timestep_fs: Optional[float] = None
     anchors_file: Optional[str] = None
     field: Optional[dict] = None
     gbis: bool = False
@@ -163,6 +170,8 @@ def stage_parameters(spec: SegmentSpec, ctx: PlanContext,
         spec, ctx.name_stem, ctx.box, ctx.mgh_extrabonds,
         fast=ctx.fast, carved=ctx.carved, fill_fraction=ctx.fill_fraction,
         structure_psf=ctx.structure_psf, colvars_file=ctx.colvars_file,
+        rigid_bonds=ctx.rigid_bonds, hmr=ctx.hmr,
+        base_timestep_fs=ctx.base_timestep_fs,
         anchors_file=ctx.anchors_file, field=ctx.field,
         gbis=ctx.gbis, vacuum=ctx.vacuum,
         capture_vel_force=ctx.capture_vel_force,
@@ -196,6 +205,7 @@ def production_parameters(spec: SegmentSpec, ctx: PlanContext, *,
         spec, ctx.name_stem, ctx.box, ctx.mgh_extrabonds,
         seed=ctx.seed, fast=ctx.fast, timestep_fs=timestep_fs,
         structure_psf=ctx.structure_psf, start_checkpoint=start_checkpoint,
+        rigid_bonds=ctx.rigid_bonds, hmr=ctx.hmr,
         anchors_file=ctx.anchors_file, field=ctx.field,
         colvars_file=ctx.colvars_file, n_atoms=ctx.n_atoms,
         force_resident=ctx.force_resident, npt=npt,
@@ -323,7 +333,8 @@ def production_length_ns(total_steps: int, timestep_fs: float) -> float:
 
 def production_segment_spec(name_stem: str, *, stage_idx: int, pct: float, frac: float,
                             total_steps: int, timestep_fs: float, previous: str,
-                            damping: float = _p.PRODUCTION_LANGEVIN_DAMPING) -> SegmentSpec:
+                            damping: float = _p.PRODUCTION_LANGEVIN_DAMPING,
+                            dcd_freq: Optional[int] = None) -> SegmentSpec:
     """One production chunk's SegmentSpec (pure).
 
     Shared by ``routes_md._append_production_segments`` (the path that really runs) and
@@ -347,7 +358,11 @@ def production_segment_spec(name_stem: str, *, stage_idx: int, pct: float, frac:
         npt=True,
         previous=previous,
         reinit=False,
-        dcd_freq=_p.PRODUCTION_DCD_FREQ,
+        # The user's trajectory interval when they set one.  This used to be hardcoded to
+        # PRODUCTION_DCD_FREQ while `ProductionRequest.dcd_freq` was validated, documented
+        # AND used by the disk forecast — so the forecast and the run disagreed by exactly
+        # the ratio the user had chosen.
+        dcd_freq=int(dcd_freq) if dcd_freq else _p.PRODUCTION_DCD_FREQ,
         min_c1_paired=0.90,
         # Deliberately looser than the ladder's: an unrestrained run is EXPECTED to lose
         # some base pairing, and gating it at the ladder's threshold would flag every
@@ -407,7 +422,7 @@ def _stage_row(index: int, name: str, stage: str, role: str, *, steps: int,
 
 
 def relaxation_stages(ctx: PlanContext, *, soft: bool = False, gentle: bool = False,
-                      nvt_only: bool = False,
+                      nvt_only: bool = False, timestep_fs: Optional[float] = None,
                       stage_overrides: Optional[dict] = None) -> list[dict]:
     """The full ordered stage table for a relaxation, minimisation included (pure).
 
@@ -416,7 +431,10 @@ def relaxation_stages(ctx: PlanContext, *, soft: bool = False, gentle: bool = Fa
     change to ``LADDER_CHUNK_PCTS`` or to the settle stage shows up in the wizard with no
     edit to this file.
     """
-    ladder_dt = 4.0 if ctx.fast else 2.0
+    # The caller's explicit ladder timestep wins; otherwise the historical fast-derived
+    # 4/2 fs. The step counts are sized from THIS, so a 1 fs ladder reports the step count
+    # it will really run rather than a 4 fs one's.
+    ladder_dt = float(timestep_fs) if timestep_fs is not None else (4.0 if ctx.fast else 2.0)
     min_name, segments = _p.mgh_slow_release_segments(
         ctx.name_stem, soft=soft, gentle=gentle, nvt_only=nvt_only,
         timestep_fs=ladder_dt,
@@ -442,8 +460,12 @@ def relaxation_stages(ctx: PlanContext, *, soft: bool = False, gentle: bool = Fa
         rows.append(_stage_row(
             i, spec.name, spec.stage, _role_for(spec),
             steps=spec.steps,
+            # SAME call the conf writer makes, base included — this used to omit the base
+            # and so reported 2 fs (and therefore double the ns) for a ladder whose confs
+            # said 1 fs.  The "one source of truth" the docstring promises only holds if
+            # both callers pass the same arguments.
             timestep_fs=_p.effective_timestep_fs(
-                spec, ctx.fast and not ctx.gbis and not ctx.vacuum),
+                spec, ctx.fast and not ctx.gbis and not ctx.vacuum, ladder_dt),
             params=params, prev_params=prev_params,
             conditional=conditional_keys(spec, ctx), spec=spec,
             protocol_params=stage_parameters(spec, ctx) if ov else None,
@@ -489,7 +511,9 @@ def production_stages(ctx: PlanContext, *, total_steps: int, timestep_fs: float,
 
 def protocol_conditions(*, carved: bool, gbis: bool, force_soft: bool,
                         gentle_ladder: bool, early_stop: bool,
-                        gpu_resident_mode: str, stages: list[dict]) -> list[dict]:
+                        gpu_resident_mode: str, stages: list[dict],
+                        n_atoms: Optional[int] = None,
+                        fill_fraction: float = 1.0) -> list[dict]:
     """Everything that can skip, alter or repeat a stage (pure).
 
     Every number here is IMPORTED from the module that enforces it.  Retyping a threshold
@@ -581,27 +605,38 @@ def protocol_conditions(*, carved: bool, gbis: bool, force_soft: bool,
             "source": "md_protocols.mgh_slow_release_segments",
         })
 
+    # GPU-resident, decided by the SAME function the confs use, so the reason shown here
+    # is the reason the run will actually have.  The timestep is not one of its inputs
+    # (exp52): production used to drop resident at 1 fs, discarding the user's own choice.
     mode = (gpu_resident_mode or "auto").lower()
-    if gbis:
-        gpu_detail = ("Implicit solvent has no GPU-resident path in NAMD at all, so this "
-                      "run uses the CUDA offload path regardless of the setting.")
-    elif mode in ("on", "off"):
-        gpu_detail = (f"Forced {mode} by hand, overriding the size heuristic. The two hard "
-                      f"incompatibilities still win: implicit solvent, and a sparsely "
-                      f"filled carved cell.")
-    else:
-        gpu_detail = (
-            f"Decided from the solvated atom count: GPU-resident is a measured LOSS below "
-            f"~{_p._RESIDENT_MIN_ATOMS:,} atoms (both paths hit the same per-step floor and "
-            f"resident's setup is pure overhead) and a growing win above it — 3.2x at 3.14M "
-            f"atoms. A carved cell also needs at least {_p._RESIDENT_MIN_FILL:.0%} fill, "
-            f"below which NAMD under-counts its GPU exclusion buffers and dies at step 0. "
-            f"A one-cycle probe re-checks the real structure before the first fast segment."
-        )
+    decision = resident_decision(
+        n_atoms=n_atoms, force_resident={"on": True, "off": False}.get(mode),
+        min_atoms=_p._RESIDENT_MIN_ATOMS, gbis=gbis,
+        carved_fill=fill_fraction if carved else None,
+        min_fill=_p._RESIDENT_MIN_FILL)
+    gpu_detail = (
+        f"{'ON' if decision.on else 'OFF'} for this run — {decision.reason}. "
+        f"GPU-resident changes WHERE integration runs, not what is computed, so it never "
+        f"alters the physics; it is decided by system size and hard compatibility only. "
+        f"Measured both ways on one system (exp52, 32.7k atoms): accepted and engaged at "
+        f"every sanctioned timestep, 1.86-2.06x faster with it on — note that contradicts "
+        f"the ~{_p._RESIDENT_MIN_ATOMS:,}-atom crossover on that hardware, so treat the "
+        f"crossover as a per-machine default and override it when you have measured yours. "
+        f"Two things override any choice because NAMD refuses them outright: implicit "
+        f"solvent, and a carved cell below {_p._RESIDENT_MIN_FILL:.0%} fill (resident "
+        f"under-counts its GPU exclusion buffers and dies at step 0). "
+        f"A one-cycle probe re-checks the real structure before the first fast segment."
+    )
     out.append({
-        "id": "gpu_resident_gate", "kind": "conditional",
-        "title": f"GPU-resident mode: {mode}", "detail": gpu_detail,
-        "applies_to": "all", "source": "md_protocols._segment_conf",
+        # A user choice that cannot be honoured is a WARNING, not a footnote: it is the
+        # one case where the control on screen and the run disagree.
+        "id": "gpu_resident_gate",
+        "kind": "warning" if decision.overridden else "conditional",
+        "title": (f"GPU-resident: {mode} requested, {'on' if decision.on else 'off'} in "
+                  f"this run" if decision.overridden
+                  else f"GPU-resident mode: {mode}"),
+        "detail": gpu_detail,
+        "applies_to": "all", "source": "CreateJobRequest.gpu_resident",
     })
 
     if early_stop:

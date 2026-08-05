@@ -92,7 +92,13 @@ _SMALL_SYSTEM_RESIDENT_PENALTY = 0.89   # 1.116 -> 1.266 ms/step at 32.5k atoms
 
 
 def predict_ns_per_day(n_atoms: int, *, gpu_resident: bool, gpu: bool = True) -> float:
-    """Rough throughput estimate for *n_atoms* on the given path (ns/day, 4 fs)."""
+    """Rough throughput ESTIMATE for *n_atoms* on the given path (ns/day, 4 fs).
+
+    An extrapolation from two benchmarks of one design on one card — not a measurement of
+    the caller's machine, and known to be wrong by ~2x on at least one box (exp52).  Every
+    caller must label its output as an estimate, and prefer ``md_bench_probe`` when a real
+    measurement for this machine exists.
+    """
     if n_atoms <= 0:
         return 0.0
     if not gpu:
@@ -105,9 +111,31 @@ def predict_ns_per_day(n_atoms: int, *, gpu_resident: bool, gpu: bool = True) ->
     return K_GPU_RESIDENT / n_atoms
 
 
-def gpu_resident_pays(n_atoms: int) -> bool:
-    """True when GPU-resident is worth using at this system size (measured crossover)."""
+def gpu_resident_pays(n_atoms: int, *, workspace=None, machine=None) -> bool:
+    """Is GPU-resident worth using at this system size?
+
+    A MEASUREMENT on this machine wins if one exists (md_bench_probe's cache); the
+    ``_RESIDENT_MIN_ATOMS`` crossover is only the fallback for a machine nobody has probed.
+    That order matters: the crossover was taken on an RTX 3080 Ti at +p16 and exp52
+    measured the opposite answer on this box at 32.7k atoms — a 2x error in the direction
+    that costs wall clock on every run.
+    """
+    m = measured_resident(n_atoms, workspace=workspace, machine=machine)
+    if m and m.get("faster"):
+        return m["faster"] == "on"
     return n_atoms >= _RESIDENT_MIN_ATOMS
+
+
+def measured_resident(n_atoms: int, *, workspace=None, machine=None) -> dict | None:
+    """This machine's own GPU-resident measurement at a comparable size, if any."""
+    if workspace is None or machine is None:
+        return None
+    from backend.core.md_bench_probe import (  # noqa: PLC0415
+        load_measurement,
+        resident_verdict,
+    )
+    entry = load_measurement(workspace, machine, n_atoms)
+    return resident_verdict(entry) if entry else None
 
 
 def physical_cores() -> int:

@@ -570,17 +570,41 @@ def _install_gpu_fakes(monkeypatch, gpu_safe: bool, launched: list[tuple[str, st
     monkeypatch.setattr(nr, "_run_namd_async", fake_namd)
 
 
-def test_gpu_unsafe_geometry_reroutes_to_cpu_build(
+def test_gpu_unsafe_geometry_ASKS_before_rerouting_to_cpu(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Probe says the geometry trips the tile-list bug → run on the CPU build, no +devices."""
+    """Probe says the geometry trips the tile-list bug → PAUSE and ask (Gate B2).
+
+    REPLACES test_gpu_unsafe_geometry_reroutes_to_cpu_build, which asserted the silent
+    reroute. The CPU build is ~12x slower; swapping to it behind the user's back changed
+    the cost of the run by an order of magnitude with only a log line to show for it.
+    """
     job = _setup_package(tmp_path)
     launched: list[tuple[str, str]] = []
     _install_gpu_fakes(monkeypatch, gpu_safe=False, launched=launched)
 
     asyncio.run(nr.run_job(job, tmp_path))
 
-    assert launched, "nothing was launched"
+    assert not launched, "nothing may run until the user has chosen"
+    saved = MdJob.load(job.job_id, tmp_path)
+    assert saved.status == MdStatus.paused
+    assert saved.decision["gate"] == "cpu_reroute"
+    assert [o["id"] for o in saved.decision["options"]] == ["cpu", "cancel"]
+
+
+def test_an_accepted_cpu_reroute_runs_without_asking_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Once chosen, the reroute is a recorded decision — not a question every resume."""
+    job = _setup_package(tmp_path)
+    job.prep_params = {**(job.prep_params or {}), "cpu_reroute_accepted": True}
+    job.save(tmp_path)
+    launched: list[tuple[str, str]] = []
+    _install_gpu_fakes(monkeypatch, gpu_safe=False, launched=launched)
+
+    asyncio.run(nr.run_job(job, tmp_path))
+
+    assert launched, "an accepted reroute should run"
     assert all(b == "/fake/cpu-namd3" for b, _ in launched), launched
     assert all(d == "" for _, d in launched), launched
     assert MdJob.load(job.job_id, tmp_path).status == MdStatus.completed

@@ -329,6 +329,15 @@ def prepare_implicit_gbis_namd(
     # tests/test_prepare_signatures.py now pins this.
     gpu_resident_mode: str = "auto",       # noqa: ARG001
     production_timestep_fs: float = 4.0,   # noqa: ARG001
+    # Accepted and ignored: implicit solvent has no GPU-resident path and no HMR PSF (the
+    # repartitioned copy is written by the explicit-solvent prep), and this ladder pins its
+    # own integrator.  routes_md passes one uniform kwarg set to every protocol, so these
+    # must be accepted here even though they cannot apply — see tests/test_prepare_signatures.
+    relax_timestep_fs: Optional[float] = None,      # noqa: ARG001
+    relax_rigid_bonds: Optional[str] = None,        # noqa: ARG001
+    relax_hmr: Optional[bool] = None,               # noqa: ARG001
+    production_rigid_bonds: Optional[str] = None,   # noqa: ARG001
+    production_hmr: Optional[bool] = None,          # noqa: ARG001
     devices: str = "0",                    # noqa: ARG001 — no box to size
     # Recorded by the explicit path for its protocol_fidelity block; GBIS has no
     # published protocol to be faithful to, so it accepts-and-ignores.

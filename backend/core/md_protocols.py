@@ -33,6 +33,7 @@ from scipy.spatial import cKDTree
 
 logger = logging.getLogger(__name__)
 
+from backend.core.md_integrator import resident_decision, resolve_integrator
 from backend.core.models import Design
 
 
@@ -890,11 +891,14 @@ def strip_gpu_resident(conf_text: str) -> str:
     regular multicore build aborts at startup.  Idempotent; a no-op when the directive
     is absent (e.g. the gentle ``_p10`` warmup confs never had it).
 
-    ⚠️ Stripping GPUresident ALONE is not enough to keep a fast conf stable: the 4 fs
-    timestep survives only under GPUresident's GPU constraint solver.  Without it, the
-    CPU RATTLE path blows up on the first step ("Constraint failure in RATTLE algorithm
-    for atom N") — measured on a 1.44M-atom GT_corner_v2 run.  Use
-    ``downgrade_gpu_resident()`` when you need a RUNNABLE non-GPU-resident fast conf.
+    ⚠️ SUPERSEDED (exp52, 2026-08-05).  This used to warn that "the 4 fs timestep survives
+    only under GPUresident's GPU constraint solver.  Without it, the CPU RATTLE path blows
+    up on the first step" — measured once on a 1.44M-atom GT_corner_v2 run.  A matched pair
+    on one system (2hb_1xT, 32.7k atoms, same equilibrated checkpoint) says otherwise:
+    4 fs + HMR + ``rigidBonds all`` with NO GPUresident line ran the full 25 ps probe clean
+    at 95.9 ns/day.  Stripping resident is therefore safe on a relaxed structure; the
+    original blow-up was a strained start, not the timestep.  ``downgrade_gpu_resident()``
+    remains available when you want the conservative halving as well.
     """
     return _GPU_RESIDENT_LINE_RE.sub("", conf_text)
 
@@ -1105,6 +1109,10 @@ def build_production_conf(
     seed: int = 54321,
     fast: bool = False,
     timestep_fs: Optional[float] = None,
+    #: The two axes the timestep used to imply.  None = auto from the timestep (see
+    #: md_integrator.resolve_integrator); pass a value to break the coupling deliberately.
+    rigid_bonds: Optional[str] = None,
+    hmr: Optional[bool] = None,
     structure_psf: Optional[str] = None,
     start_checkpoint: Optional[str] = None,
     anchors_file: Optional[str] = None,
@@ -1197,8 +1205,14 @@ def build_production_conf(
     # Advanced-card dropdown to "off" changed nothing because production never read it.
     # `force_resident` is that dropdown (None = auto → decide from n_atoms); `rigidBonds`
     # still follows the timestep, since that IS a physics choice.
-    resident_ok = (n_atoms is None or n_atoms >= _RESIDENT_MIN_ATOMS
-                   if force_resident is None else bool(force_resident))
+    # ONE resolver, shared with _segment_conf: hard incompatibility → the user's explicit
+    # choice → the measured size crossover.  The timestep is deliberately not an input.
+    _res = resident_decision(
+        n_atoms=n_atoms, force_resident=force_resident, min_atoms=_RESIDENT_MIN_ATOMS,
+        # A HARD anchor rides fixedAtoms, which NAMD 3 refuses under resident.  SOFT
+        # anchors are harmonic restraints and are unaffected.
+        fixed_atoms=bool(anchors_file and anchor_k is None))
+    resident_ok = _res.on
     # HARD anchors (anchor_k None) ride ``fixedAtoms``, which NAMD 3 refuses to run under
     # GPU-resident — "GPUresident is incompatible with the following options: ... fixed
     # atoms" — so a hard-anchored production must give resident up, whatever its size or
@@ -1207,30 +1221,27 @@ def build_production_conf(
     # production path (and every chained stage built on it) still emitting the fatal pair.
     # SOFT anchors are unaffected: harmonic restraints are GPU-resident-compatible, and
     # are what NAMD's manual recommends in place of fixed atoms.
-    if anchors_file and anchor_k is None:
-        resident_ok = False
     _res_line = "GPUresident        on\n" if resident_ok else ""
-    if ts == 4.0:
-        psf = structure_psf or f"{name_stem}.psf"
-        rigid, gpu_line = "all", _res_line
-        # fullElectFrequency 1 at 4 fs → reciprocal PME every 4 fs, matching the
-        # Aksimentiev reference (2 fs x 2).  fullElect 2 here would be PME every
-        # 8 fs, past the r-RESPA resonance-stability limit (~4 fs) — and it only
-        # bought ~0.7 ns/day.  stepspercycle 10 → 40 fs pairlist rebuild.
-        nbf, fef, spc = 1, 1, 10
-    elif ts == 2.0:
-        # Manual medium path: standard (non-HMR) masses, rigidBonds all lets 2 fs run
-        # stably.  This is the classic Aksimentiev 2 fs production config — no
-        # repartitioning needed.
-        psf = structure_psf or f"{name_stem}.psf"
-        rigid, gpu_line = "all", _res_line
-        nbf, fef, spc = 1, 1, 10
-    else:
-        # 1 fs conservative reference: rigidBonds none, and historically never resident.
-        # Kept that way — at the sizes anyone picks 1 fs for, resident is a measured loss.
-        psf = f"{name_stem}.psf"
-        rigid, gpu_line = "none", ""
-        nbf, fef, spc = 1, 1, 10
+    # The timestep no longer DECIDES the other two axes — it only supplies their defaults.
+    # Which combinations are sound is a measured question (exp51); see md_integrator.
+    choice = resolve_integrator(ts, rigid_bonds=rigid_bonds, hmr=hmr)
+    rigid = choice.rigid_bonds
+    # HMR is a property of the PSF, so it is expressed by WHICH PSF is named.  Falling back
+    # to the _hmr name (rather than the plain PSF, as this did before) closes the hole where
+    # a caller asking for 4 fs without supplying structure_psf silently got a 4 fs conf
+    # against unrepartitioned masses — the exact combination exp51 measured failing RATTLE.
+    psf = (structure_psf or f"{name_stem}_hmr.psf") if choice.hmr else f"{name_stem}.psf"
+    # NO timestep coupling.  This used to be `"" if ts == 1.0 else _res_line`, which
+    # silently discarded the user's GPU-resident choice at 1 fs on the grounds that
+    # resident is a loss at small sizes.  exp52 measured the pair on one system: resident
+    # is ACCEPTED at 1 fs with flexible bonds, engages, and runs 2.06x FASTER at 32.7k
+    # atoms.  It is a throughput axis and belongs to the size gate alone.
+    gpu_line = _res_line
+    # fullElectFrequency 1 at 4 fs → reciprocal PME every 4 fs, matching the Aksimentiev
+    # reference (2 fs x 2).  fullElect 2 would be PME every 8 fs, past the r-RESPA
+    # resonance-stability limit (~4 fs), and it only bought ~0.7 ns/day.  These are the
+    # same in every branch — the comment that claimed they varied with dt was stale.
+    nbf, fef, spc = 1, 1, 10
     require_sanctioned_production_timestep(ts, allow_manual_2fs=(ts == 2.0))
     prev = start_checkpoint or spec.previous
     # Anchors + E-field carry into the unrestrained run — where a field's deflection
@@ -1570,20 +1581,32 @@ def psf_atom_count(psf_path: Path) -> Optional[int]:
     return None
 
 
-def effective_timestep_fs(spec: "SegmentSpec", fast: bool) -> float:
+def effective_timestep_fs(spec: "SegmentSpec", fast: bool,
+                          base_timestep_fs: Optional[float] = None) -> float:
     """The timestep a segment will ACTUALLY run at (pure).
 
-    Three tiers: ``soft`` (flexible bonds) runs 1 fs, ``gentle`` runs 2 fs and never the
-    fast path, and everything else takes the package's 4 fs (fast) or 2 fs.  One source
-    of truth so the conf and the manifest cannot disagree — the box-settle report derives
-    its time axis from the recorded value, and a wrong one silently halves or doubles
-    every "flat after 300 ps" verdict.
+    Three tiers, and each is a CEILING rather than a fixed value: ``soft`` (flexible bonds)
+    caps at 1 fs, ``gentle`` caps at 2 fs and never takes the fast path, and everything else
+    runs the ladder's own base timestep.  One source of truth so the conf and the manifest
+    cannot disagree — the box-settle report derives its time axis from the recorded value,
+    and a wrong one silently halves or doubles every "flat after 300 ps" verdict.
+
+    A ceiling, not a fixed value, because the tiers exist to SLOW a stage that needs it.
+    Reading them as fixed values silently RAISED a user's explicit 1 fs request to 2 fs
+    while the step count stayed sized for 1 fs — so the stage ran twice its intended
+    simulated time, and the control appeared to do nothing.
     """
+    # `base_timestep_fs` is the ladder's own base, passed by whoever built it.  None means
+    # "no explicit choice" and reproduces the historical fixed-value behaviour exactly, so
+    # every caller that predates the ladder-timestep control is unchanged.  It is NOT read
+    # off `spec.timestep_fs`: that field is an OUTPUT, stamped with this function's result.
+    base = None if base_timestep_fs is None else float(base_timestep_fs)
     if spec.soft:
-        return 1.0
+        return 1.0 if base is None else min(1.0, base)
     if spec.gentle:
-        return 2.0
-    return 4.0 if fast else 2.0
+        return 2.0 if base is None else min(2.0, base)
+    tier = 4.0 if fast else 2.0
+    return tier if base is None else min(tier, base)
 
 
 def _segment_conf(
@@ -1597,6 +1620,13 @@ def _segment_conf(
     carved: bool = False,
     fill_fraction: float = 1.0,
     structure_psf: Optional[str] = None,
+    #: Explicit overrides for the two axes the timestep used to imply.  None = follow the
+    #: segment's tier (soft → flexible/plain PSF, fast → rigid/HMR).  See md_integrator.
+    rigid_bonds: Optional[str] = None,
+    hmr: Optional[bool] = None,
+    #: The ladder's base timestep, so a tier CAPS it instead of replacing it.  None keeps
+    #: the historical fixed-tier behaviour.
+    base_timestep_fs: Optional[float] = None,
     colvars_file: Optional[str] = None,
     anchors_file: Optional[str] = None,
     field: Optional[dict] = None,
@@ -1618,11 +1648,21 @@ def _segment_conf(
     # Vacuum runs the same standard-CUDA path as GBIS: there is no periodic cell, so
     # GPUresident's cell-density bookkeeping has nothing to work with.
     fast = fast and not spec.soft and not spec.gentle and not gbis and not vacuum
-    rigid_bonds = "none" if spec.soft else "all"
-    timestep = effective_timestep_fs(spec, fast)
-    # The HMR PSF (heavy hydrogens) is valid ONLY with rigid bonds, so soft
-    # segments fall back to the unmodified PSF; only the hard, fast segments use it.
-    eff_psf = structure_psf if fast else None
+    timestep = effective_timestep_fs(spec, fast, base_timestep_fs)
+    # The timestep supplies DEFAULTS for the other two axes; it no longer dictates them.
+    # `spec.soft` still means "1 fs, flexible" as a TIER, but an explicit rigid_bonds/hmr
+    # on the request overrides what that tier would have implied — exp51 measured 1 fs +
+    # rigidBonds all to be perfectly stable, and the old unconditional coupling made it
+    # unreachable.  GBIS and vacuum have no HMR PSF to point at, whatever was asked.
+    choice = resolve_integrator(
+        timestep,
+        rigid_bonds=rigid_bonds if rigid_bonds is not None else ("none" if spec.soft else "all"),
+        hmr=hmr if hmr is not None else (fast and not gbis and not vacuum),
+    )
+    rigid_bonds = choice.rigid_bonds
+    # HMR is carried by WHICH PSF is named.  `structure_psf` is the package's HMR copy when
+    # prep built one; without it there is nothing to point at, so the choice cannot apply.
+    eff_psf = structure_psf if (choice.hmr and not gbis and not vacuum) else None
     # GPU-resident is a SEPARATE axis from fast, and is now gated INDEPENDENTLY of it.
     #
     # It used to be `fast and (...)`, which silently tied it to the 4 fs/HMR/rigid-bond
@@ -1684,16 +1724,12 @@ def _segment_conf(
     # "auto", i.e. decide from the atom count.  It overrides only the SIZE heuristic — the
     # two hard incompatibilities below still win, because they are cases where resident
     # cannot run at all rather than cases where it is merely slower.
-    by_size = n_atoms is None or n_atoms >= _RESIDENT_MIN_ATOMS
-    if force_resident is not None:
-        by_size = bool(force_resident)
-    gpu_resident = (
-        (not gbis)
-        and (not vacuum)
-        and by_size
-        and (not carved or fill_fraction >= _RESIDENT_MIN_FILL)
-        and not (spec.fixed_atoms_file or anchors_file)
-    )
+    _res = resident_decision(
+        n_atoms=n_atoms, force_resident=force_resident, min_atoms=_RESIDENT_MIN_ATOMS,
+        gbis=gbis, vacuum=vacuum,
+        fixed_atoms=bool(spec.fixed_atoms_file or anchors_file),
+        carved_fill=fill_fraction if carved else None, min_fill=_RESIDENT_MIN_FILL)
+    gpu_resident = _res.on
     lines = [
         _common_header(
             name_stem, box, mgh_extrabonds, rigid_bonds=rigid_bonds, timestep=timestep,
@@ -2765,7 +2801,18 @@ def mgh_slow_release_segments(
     # Each stage targets 4.8 ns of relaxation.  Step count scales inversely with
     # the timestep so fast mode (4 fs) keeps the same simulated time (1.2M steps)
     # rather than doubling it — fast mode is a wall-clock win, not a science change.
-    stage_steps = int(round(2_400_000 * (2.0 / timestep_fs)))
+    #
+    # Size from the timestep the segments will REALLY run at.  ``soft`` caps every stage
+    # at 1 fs, and sizing from the uncapped value made a soft ladder run a fraction of its
+    # intended time: 2.4 ns per stage instead of 4.8 from a 2 fs base, 1.2 ns from a 4 fs
+    # base.  Nothing reported it — the stage table showed the reduced step count and the
+    # correct-looking 1 fs, and the product of the two was simply wrong.
+    #
+    # ``gentle`` is deliberately NOT capped here: it is the declash tier, whose
+    # half-length behaviour is a known open question with its own re-audit block above and
+    # a test pinning it.  Changing it is an experiment, not a sizing fix.
+    sizing_dt = 1.0 if soft else float(timestep_fs)
+    stage_steps = int(round(2_400_000 * (2.0 / sizing_dt)))
     npt_ladder = [
         (0.5,  stage_steps, "300K_NPT_ENM_k0p5"),
         (0.1,  stage_steps, "300K_NPT_ENM_k0p1"),
@@ -2810,8 +2857,10 @@ def mgh_slow_release_segments(
     # Skipped for a carved cell: there the barostat is off throughout (vacuum corners),
     # so there is no box for this stage to settle.
     if settle_ps > 0 and not nvt_only:
+        # Same sizing rule as the ladder stages: the timestep this stage will REALLY run
+        # at, so 500 ps of settling is 500 ps whatever the integrator tier caps it to.
         settle_steps = _round_up_to_cycle(
-            max(100, int(round(settle_ps * 1000.0 / timestep_fs))))
+            max(100, int(round(settle_ps * 1000.0 / sizing_dt))))
         # Deliberately NOT a numbered stage: the ENM ladder's 01..04 must mean the same
         # thing whether or not this stage exists, so a carved (NVT, no settle) package
         # and a full-box one stay comparable segment-for-segment.
@@ -2927,7 +2976,15 @@ def prepare_mgh_slow_release(
     declash: bool = False,
     force_soft: bool = False,
     fast: bool = False,
+    #: The ladder's three integrator axes, decoupled (exp51).  ``relax_timestep_fs`` None
+    #: keeps the historical ``fast``-derived 4/2 fs; ``relax_rigid_bonds`` / ``relax_hmr``
+    #: None follow each segment's own tier.  See backend/core/md_integrator.py.
+    relax_timestep_fs: Optional[float] = None,
+    relax_rigid_bonds: Optional[str] = None,
+    relax_hmr: Optional[bool] = None,
     production_timestep_fs: float = 4.0,
+    production_rigid_bonds: Optional[str] = None,
+    production_hmr: Optional[bool] = None,
     pre_declashed: bool = False,
     anchors: Optional[list] = None,
     #: Restrict each anchored residue to these PDB atom names (e.g. ``["C1'"]``) instead
@@ -3234,16 +3291,28 @@ def prepare_mgh_slow_release(
     # whole ladder must run NVT (barostat off) — an NPT piston would collapse the
     # cell onto the DNA's periodic image.  Fast mode halves the step count (4 fs)
     # to hold each stage at its 4.8 ns relaxation target.
+    # The ladder's base timestep: explicit if the user chose one, else the historical
+    # fast-derived 4/2 fs.  Per-stage tiers (soft 1 fs, gentle 2 fs) still apply on top.
+    ladder_dt = float(relax_timestep_fs) if relax_timestep_fs is not None else (4.0 if fast else 2.0)
+    # `fast` is now only "the ladder's base timestep is 4 fs".  Keeping it in sync means the
+    # manifest, the segment tiers and effective_timestep_fs all agree with the confs.
+    fast = fast or ladder_dt >= 4.0
+    if ladder_dt < 4.0:
+        fast = False
     min_name, segments = mgh_slow_release_segments(
         name_stem, soft=force_soft, gentle=gentle_ladder, nvt_only=carve_shell,
-        timestep_fs=4.0 if fast else 2.0,
+        timestep_fs=ladder_dt,
     )
 
     # The HMR PSF enters at the first hard, rigid-bond segment; minimisation and
     # the soft strain-relief first segment keep the unmodified PSF.
     structure_psf: Optional[str] = None
     n_hmr = 0
-    if fast:
+    # HMR is its own axis now: `relax_hmr` wins, and only falls back to "on iff the ladder
+    # runs 4 fs" when the user expressed no preference.  exp51 measured it load-bearing at
+    # 4 fs and a loss below it, so the auto rule is the measurement, not a habit.
+    ladder_choice = resolve_integrator(ladder_dt, rigid_bonds=relax_rigid_bonds, hmr=relax_hmr)
+    if ladder_choice.hmr:
         hmr_psf = package_dir / f"{name_stem}_hmr.psf"
         n_hmr = write_hmr_psf(package_dir / f"{name_stem}.psf", hmr_psf)
         structure_psf = hmr_psf.name
@@ -3297,12 +3366,14 @@ def prepare_mgh_slow_release(
     # FIRST, so the manifest (and every diagnostic that derives a time axis from it)
     # agrees with the conf that was written.
     for spec in segments:
-        spec.timestep_fs = effective_timestep_fs(spec, fast)
+        spec.timestep_fs = effective_timestep_fs(spec, fast, ladder_dt)
     for idx, spec in enumerate(segments, start=1):
         (package_dir / f"{spec.name}.conf").write_text(
             _segment_conf(spec, name_stem, box, mgh_extrabonds,
                           fast=fast, carved=carve_shell, fill_fraction=resident_fill,
                           structure_psf=structure_psf,
+                          rigid_bonds=relax_rigid_bonds, hmr=relax_hmr,
+                          base_timestep_fs=ladder_dt,
                           anchors_file=anchors_file, field=field,
                           capture_vel_force=capture_vel_force,
                           n_atoms=solvated_atoms,
@@ -3473,6 +3544,12 @@ def prepare_mgh_slow_release(
         # packages) it falls back to the fast-derived 4/1 fs default.  2.0 fs is only ever
         # here because the user picked it — never an automatic downgrade.
         "production_timestep_fs": float(production_timestep_fs),
+        # The two axes production used to derive from its timestep alone.  None = auto.
+        "production_rigid_bonds": production_rigid_bonds,
+        "production_hmr": production_hmr,
+        # What the LADDER actually ran, resolved — so a reader never has to re-derive it
+        # from `fast` and guess which tier applied.
+        "relax_integrator": ladder_choice.as_dict(),
         # The Advanced-card GPU-resident choice, so a later PRODUCTION run inherits it
         # instead of hard-coding resident on (which ignored both the size gate and the
         # user's selection).

@@ -45,6 +45,7 @@ from backend.core.md_pipeline import MdPipeline, PipelineStage, StagePlan, cross
 from backend.core.md_presets import (DEFAULT_PRESET, FAST_SHAPE, get_preset,
                                      preset_availability, preset_catalogue)
 from backend.core.md_ensemble import NAMD_SEED_MAX, random_seed
+from backend.core.md_integrator import resolve_integrator
 from backend.core.md_protocols import (
     EQUILIBRIUM_AWARE_PROTOCOL,
     IMPLICIT_GBIS_PROTOCOL,
@@ -156,6 +157,59 @@ class CreateJobRequest(BaseModel):
                     "Set false (or untick in the UI) if a very large design fails the "
                     "first hard segment with a GPU out-of-memory error.",
     )
+    relax_timestep_fs: Optional[float] = Field(
+        None,
+        description="RELAXATION LADDER timestep (fs): 4.0, 2.0 or 1.0. None → derived from "
+                    "`fast` (4.0 on, 2.0 off), which is the historical behaviour. Per-stage "
+                    "tiers still apply on top: a soft stage runs 1 fs and a gentle stage "
+                    "2 fs whatever this says. Does NOT affect production — that is "
+                    "`production_timestep_fs`.",
+    )
+    relax_rigid_bonds: Optional[str] = Field(
+        None,
+        description="RELAXATION LADDER bonds-to-hydrogen constraint: 'all' or 'none'. "
+                    "None → auto from the ladder timestep ('none' at 1 fs, 'all' above). "
+                    "Independent of the timestep since exp51 measured 1 fs + 'all' stable; "
+                    "'none' above 1 fs is a measured loss and is warned about, not blocked.",
+    )
+    relax_hmr: Optional[bool] = Field(
+        None,
+        description="RELAXATION LADDER hydrogen-mass repartitioning. None → auto (on only "
+                    "at 4 fs, where exp51 measured it load-bearing: 4 fs on standard masses "
+                    "fails RATTLE at 16.8 ps). Below 4 fs it is a measured LOSS in energy "
+                    "conservation, so it is never defaulted on.",
+    )
+    production_rigid_bonds: Optional[str] = Field(
+        None,
+        description="PRODUCTION RUN bonds-to-hydrogen constraint: 'all', 'none', or None "
+                    "for auto from `production_timestep_fs`. Recorded now, applied when "
+                    "production runs off this package.",
+    )
+    production_hmr: Optional[bool] = Field(
+        None,
+        description="PRODUCTION RUN hydrogen-mass repartitioning; None → auto (on only at "
+                    "4 fs). Recorded now, applied when production runs off this package.",
+    )
+
+    @field_validator("relax_timestep_fs")
+    @classmethod
+    def _sanctioned_relax_timestep(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return None
+        if float(v) not in (1.0, 2.0, 4.0):
+            raise ValueError("relax_timestep_fs must be 1.0, 2.0, or 4.0")
+        return float(v)
+
+    @field_validator("relax_rigid_bonds", "production_rigid_bonds")
+    @classmethod
+    def _sanctioned_rigid_bonds(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        s = str(v).strip().lower()
+        if s not in ("all", "none"):
+            raise ValueError("rigid_bonds must be 'all' or 'none'")
+        return s
+
     gpu_resident: Optional[str] = Field(
         None,
         description="NAMD GPU-resident mode for this run: 'auto' (DEFAULT — decided by "
@@ -370,6 +424,30 @@ class ProductionRequest(BaseModel):
                     "was PREPARED, so changing the Advanced-card dropdown before starting "
                     "production had no effect on the run at all.",
     )
+
+    rigid_bonds: Optional[str] = Field(
+        None,
+        description="Bonds-to-hydrogen constraint for THIS production run: 'all', 'none', "
+                    "or omit to inherit the package's prep-time choice (and, failing that, "
+                    "the auto value for the timestep). Independent of the timestep since "
+                    "exp51; unsound combinations are warned about, never blocked.",
+    )
+    hmr: Optional[bool] = Field(
+        None,
+        description="Hydrogen-mass repartitioning for THIS production run. Omit to inherit "
+                    "the package's prep-time choice, else auto (on only at 4 fs). The HMR "
+                    "PSF is built on demand when it is missing.",
+    )
+
+    @field_validator("rigid_bonds")
+    @classmethod
+    def _sanctioned_prod_rigid_bonds(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        s = str(v).strip().lower()
+        if s not in ("all", "none"):
+            raise ValueError("rigid_bonds must be 'all' or 'none'")
+        return s
 
     gpu_resident: Optional[str] = Field(
         None,
@@ -1278,6 +1356,8 @@ def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
                                   seed: Optional[int] = None,
                                   fast: bool = False,
                                   timestep_fs: Optional[float] = None,
+                                  rigid_bonds: Optional[str] = None,
+                                  hmr: Optional[bool] = None,
                                   structure_psf: Optional[str] = None,
                                   anchors_file: Optional[str] = None,
                                   field: Optional[dict] = None,
@@ -1301,6 +1381,7 @@ def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
     return build_production_conf(
         spec, name_stem, box, mgh_extrabonds,
         fast=fast, timestep_fs=timestep_fs, structure_psf=structure_psf,
+        rigid_bonds=rigid_bonds, hmr=hmr,
         anchors_file=anchors_file, field=field, colvars_file=colvars_file,
         n_atoms=n_atoms, force_resident=force_resident,
         npt=package_npt_allowed(package_dir) if package_dir else True,
@@ -1437,6 +1518,17 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
     # came out as a silent 1 fs run at ~80 ns/day.  The HMR PSF is built on demand now, so
     # the relaxation protocol has no say here.
     fast = (timestep_fs == 4.0)
+    # The other two axes, same precedence as the timestep: THIS request > the value baked
+    # in at prep > auto from the timestep.  `fast` above is now only a NAME for "4 fs", and
+    # `hmr` below is what actually decides whether a repartitioned PSF is used — exp51
+    # measured them to be separate questions.
+    req_rigid = body.rigid_bonds if getattr(body, "rigid_bonds", None) else None
+    if req_rigid is None:
+        req_rigid = manifest.get("production_rigid_bonds")
+    req_hmr = getattr(body, "hmr", None)
+    if req_hmr is None:
+        req_hmr = manifest.get("production_hmr")
+    choice = resolve_integrator(timestep_fs, rigid_bonds=req_rigid, hmr=req_hmr)
     #
     # This used to silently rewrite timestep_fs to 1.0 — including when the user had
     # PINNED 4 fs in the Advanced card.  The card then displayed 4 fs while the run
@@ -1486,6 +1578,10 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
         "length_ns": length_ns,
         "timestep_fs": timestep_fs,
         "fast": fast,
+        # The resolved axes, so the appender does not re-derive them from the timestep.
+        "rigid_bonds": choice.rigid_bonds,
+        "hmr": choice.hmr,
+        "dcd_freq": body.dcd_freq,
         "timestep_warning": warning,
         "force_resident": force_resident,
     }
@@ -1543,17 +1639,43 @@ def _append_production_segments(
     # {stem}_hmr.psf; otherwise build it once here.  2 fs (rigidBonds all, GPUresident,
     # standard masses) and 1 fs (conservative reference) use the plain PSF — no HMR.
     fast = (timestep_fs == 4.0)
+    # HMR is its own axis: the plan resolved it (request > manifest > auto-at-4-fs), and a
+    # 4 fs run with HMR deliberately turned off now gets the plain PSF and a warning
+    # instead of being silently repartitioned.
+    prod_rigid = plan.get("rigid_bonds")
+    use_hmr = bool(plan.get("hmr", fast))
+    hmr_downgrade_reason: Optional[str] = None
+    if from_seed:
+        # A from-seed job is forced to the 1 fs conservative path above; its axes follow.
+        prod_rigid, use_hmr = "none", False
+        if float(plan.get("timestep_fs") or 0) != 1.0:
+            # The old warning mentioned only "relaxation skipped"; a user who had PINNED
+            # 4 fs got a 4x longer run with nothing saying the timestep had moved.
+            seed_ts_note = (
+                f"Timestep forced to 1 fs: this job produces directly from its seeded "
+                f"structure, which has not been through the restrained ladder, so the "
+                f"{float(plan['timestep_fs']):g} fs you chose is not used for this run.")
+            warning = f"{warning} {seed_ts_note}".strip() if warning else seed_ts_note
     structure_psf: Optional[str] = None
     n_hmr = 0
-    if fast:
+    if use_hmr:
         src_psf = package_dir / f"{name_stem}.psf"
         hmr_psf = package_dir / f"{name_stem}_hmr.psf"
         if src_psf.exists():
             if not hmr_psf.exists():
                 n_hmr = write_hmr_psf(src_psf, hmr_psf)
             structure_psf = hmr_psf.name
-        else:                       # no PSF to repartition — fall back to safe path
-            fast, timestep_fs = False, 1.0
+        else:
+            # No PSF to repartition.  Say so — this used to be the one downgrade in the
+            # subsystem with no log line, no warning and no manifest note, so a pinned
+            # 4 fs run became a 1 fs run with nothing on screen to explain the 4x.
+            fast, timestep_fs, use_hmr = False, 1.0, False
+            prod_rigid = "none"
+            hmr_downgrade_reason = (
+                f"{name_stem}.psf is missing from the package, so no repartitioned copy "
+                f"could be built and 4 fs could not run. This production dropped to the "
+                f"1 fs conservative path.")
+            logger.warning("production %s: %s", job.job_id, hmr_downgrade_reason)
 
     # Anchors + E-field are properties of the JOB, recorded at prep; an extended
     # production stage must run under the same ones (a field job whose production stage
@@ -1573,6 +1695,7 @@ def _append_production_segments(
         spec = md_plan.production_segment_spec(
             name_stem, stage_idx=stage_idx, pct=pct, frac=frac,
             total_steps=total_steps, timestep_fs=timestep_fs, previous=previous,
+            dcd_freq=plan.get("dcd_freq"),
         )
         if spec.name in existing:
             previous = spec.name
@@ -1588,6 +1711,7 @@ def _append_production_segments(
             conf = _conservative_production_conf(
                 spec, name_stem, box, mgh_extrabonds, seed=seed,
                 fast=fast, timestep_fs=timestep_fs, structure_psf=structure_psf,
+                rigid_bonds=prod_rigid, hmr=use_hmr,
                 anchors_file=anchors_file, field=field,
                 n_atoms=_psf_atom_count(package_dir / f"{name_stem}.psf") or None,
                 force_resident=plan.get("force_resident"),
@@ -1603,6 +1727,9 @@ def _append_production_segments(
     start_idx = len(manifest["segments"])
     manifest["segments"].extend(asdict(s) for s in segments)
     manifest["production_extension"] = {
+        # Every value this route CHANGED from what was asked, recorded where the rest of
+        # the package's deviations live. Absent when nothing was overridden.
+        **({"integrator_downgrade": hmr_downgrade_reason} if hmr_downgrade_reason else {}),
         "length_ns": length_ns,
         "steps": total_steps,
         "previous": checkpoint_name,
@@ -2229,7 +2356,18 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
             return {**forecast(target, 0), "skipped": True}
         n_atoms = profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
         soft = body.declash or body.force_soft or design_has_extra_bases(design)
-        timestep_fs = 4.0 if (body.fast and not soft) else 2.0
+        # The ladder timestep the RUN will really use — the same tiers prepare applies,
+        # with the user's explicit choice as the base.  This used to read `body.fast`
+        # alone, so a job with an explicit relax_timestep_fs got a disk forecast and an
+        # ETA computed from a timestep it never ran at.
+        base_fs = (float(body.relax_timestep_fs) if body.relax_timestep_fs is not None
+                   else (4.0 if body.fast else 2.0))
+        if body.force_soft:
+            timestep_fs = min(1.0, base_fs)
+        elif soft:                      # declash / extra bases → the gentle 2 fs tier
+            timestep_fs = min(2.0, base_fs)
+        else:
+            timestep_fs = base_fs
         _, segments = mgh_slow_release_segments("est", timestep_fs=timestep_fs)
         predicted = namd_run_output_bytes(segments, n_atoms)
         length_ns = sum(int(s.steps) for s in segments) * timestep_fs / 1_000_000.0
@@ -2661,14 +2799,26 @@ async def _prepare_job_bg(
         if _sequenced_base_count(local_design) == 0:
             raise RuntimeError(_NO_SEQUENCE_MSG)
 
-        # Pre-flight size check: if the user left the water shell on auto (0) and
-        # the system won't fit the detected GPU, enable a carve that does — so a
-        # large origami runs first time instead of OOM-ing.  Records the choice on
-        # the job so the user can see what was auto-adjusted.
-        # Auto water-shell carve caps the atom count to fit the compute target's
-        # memory.  Implicit solvent (GBIS) has no water box → skip entirely.  For an
-        # explicit CPU run there is no VRAM limit, so auto_water_shell sizes to host
-        # RAM instead (see its `devices="cpu"` branch).
+        # Pre-flight size check — REPORT ONLY.
+        #
+        # This used to APPLY a carve on the user's behalf whenever the full box looked
+        # too big for the detected GPU.  A carve is not a cheaper version of the same
+        # run: the vacuum corners force constant volume, which deletes the fixed-DNA
+        # settle stage and the box-size trace the published protocol uses to judge
+        # equilibration, and leaves no bulk phase for its ionic condition to be defined
+        # in.  Silently substituting it turned one experiment into another.  The panel
+        # happened to show a modal first, so a UI user saw it; every headless and API
+        # caller got it with no trace they would ever read.
+        #
+        # Now the recommendation is COMPUTED and RECORDED, and the run proceeds with
+        # exactly the water the user asked for.  The wizard warns before launch (the
+        # `water_box_will_not_fit` plan condition, which carries a warning icon against
+        # the Water shell carve control) and the launch gate still offers Cancel/Proceed.
+        # If the box really does not fit, NAMD answers that question itself — which is a
+        # measurement, where the pre-flight is an estimate.
+        #
+        # Implicit solvent (GBIS) has no water box → skip entirely.  For an explicit CPU
+        # run there is no VRAM limit, so auto_water_shell sizes to host RAM instead.
         water_shell_nm = body.water_shell_nm
         if not water_shell_nm and body.protocol != IMPLICIT_GBIS_PROTOCOL:
             from backend.core.md_vram import auto_water_shell  # noqa: PLC0415
@@ -2680,8 +2830,8 @@ async def _prepare_job_bg(
                 padding_nm=body.padding_nm, devices=body.devices,
                 atomistic_model=seed_model,
             )
-            if auto["shell_nm"] and not body.allow_water_shell_carve:
-                # DECLINE the carve, but build the job anyway.
+            if auto["shell_nm"]:
+                # RECOMMEND the carve; never apply it.
                 #
                 # A carve is not a cheaper version of the same run: the vacuum corners
                 # force constant volume, which removes the fixed-DNA settle stage and the
@@ -2696,23 +2846,18 @@ async def _prepare_job_bg(
                 # is what happens once they proceed — full box, recorded, and NAMD gets to
                 # answer the memory question itself.
                 logger.warning(
-                    "prep %s: full box kept despite a %.2f nm carve recommendation — the "
-                    "chosen protocol forbids carving. %s",
+                    "prep %s: full box kept; a %.2f nm carve would be needed to fit. "
+                    "NOT applied — the user asked for the full box. %s",
                     job_id, auto["shell_nm"], auto["note"])
                 job = MdJob.load(job_id, ws)
                 pp = dict(job.prep_params or {})
-                pp["declined_water_shell_nm"] = auto["shell_nm"]
-                pp["declined_water_shell_note"] = auto["note"]
-                job.prep_params = pp
-                job.save(ws)
-            elif auto["shell_nm"]:
-                water_shell_nm = auto["shell_nm"]
-                logger.info("prep %s: auto water shell %.2f nm — %s",
-                            job_id, water_shell_nm, auto["note"])
-                job = MdJob.load(job_id, ws)
-                pp = dict(job.prep_params or {})
-                pp["auto_water_shell_nm"] = water_shell_nm
-                pp["auto_water_shell_note"] = auto["note"]
+                # One key, whatever the protocol says about carving: what was RECOMMENDED
+                # and not taken.  The old pair of keys (`auto_water_shell_nm` when it was
+                # applied, `declined_water_shell_nm` when the protocol forbade it) had no
+                # reader anywhere in the tree, and one of them meant "we changed your
+                # input" — which no longer happens.
+                pp["recommended_water_shell_nm"] = auto["shell_nm"]
+                pp["recommended_water_shell_note"] = auto["note"]
                 job.prep_params = pp
                 job.save(ws)
 
@@ -2766,7 +2911,14 @@ async def _prepare_job_bg(
             force_soft      = body.force_soft,
             fast            = body.fast,
             gpu_resident_mode = body.gpu_resident or "auto",
+            # The three ladder axes, decoupled (exp51).  None on any of them keeps the
+            # historical `fast`-derived behaviour, so an old client sends the same package.
+            relax_timestep_fs = body.relax_timestep_fs,
+            relax_rigid_bonds = body.relax_rigid_bonds,
+            relax_hmr       = body.relax_hmr,
             production_timestep_fs = body.production_timestep_fs,
+            production_rigid_bonds = body.production_rigid_bonds,
+            production_hmr  = body.production_hmr,
             devices         = body.devices,
             anchors         = body.anchors,
             anchor_atoms    = body.anchor_atoms,
@@ -3790,12 +3942,13 @@ async def start_md_job(job_id: str) -> dict:
 async def resolve_md_gpu_decision(job_id: str, body: dict) -> dict:
     """Resolve a Gate-B GPU-resident fallback decision on a paused job.
 
-    ``choice`` "offload" downgrades to the slower GPU mode and resumes; "cancel"
-    stops the job. The resume skips the resident probe (no conf still requests it).
+    ``choice`` "offload" downgrades to the slower GPU mode and resumes; "cpu" accepts the
+    CPU-build reroute for the tile-list gate (B2); "cancel" stops the job. The resume skips
+    the resident probe (no conf still requests it).
     """
     choice = str((body or {}).get("choice", "")).strip()
-    if choice not in ("offload", "cancel"):
-        raise HTTPException(400, "choice must be 'offload' or 'cancel'")
+    if choice not in ("offload", "cpu", "cancel"):
+        raise HTTPException(400, "choice must be 'offload', 'cpu' or 'cancel'")
     job = _load_job(job_id)
     if not job.decision:
         raise HTTPException(400, "Job has no pending GPU decision")
@@ -3803,7 +3956,7 @@ async def resolve_md_gpu_decision(job_id: str, body: dict) -> dict:
         resolve_gpu_decision(job, choice, _workspace())
     except ValueError as exc:
         raise HTTPException(400, str(exc))
-    if choice == "offload":
+    if choice in ("offload", "cpu"):
         start_job(job, _workspace())
         return {"ok": True, "job_id": job_id, "status": "running"}
     return {"ok": True, "job_id": job_id, "status": job.status.value}

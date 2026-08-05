@@ -965,7 +965,10 @@ class TestProductionAppend:
         assert "structure          D.psf" in conf
         assert "timestep           1\n" in conf
         assert "rigidBonds         none" in conf
-        assert "GPUresident" not in conf
+        # GPUresident is no longer asserted absent: it follows the SIZE gate, not the
+        # timestep (exp52, 2026-08-05 — accepted, engaged and 2.06x faster at 1 fs with
+        # flexible bonds). What this test is really about is the conservative INTEGRATOR
+        # a declash job falls back to, which the three assertions above cover.
         assert all("conservative production" in s.stage for s in segments)
         manifest = json.loads((package_dir / "manifest.json").read_text())
         assert manifest["production_extension"]["settings"] == "conservative_unrestrained"

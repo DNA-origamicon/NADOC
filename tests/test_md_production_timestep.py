@@ -69,7 +69,9 @@ class TestBuildProductionConfTimestep:
                                      timestep_fs=1.0)
         assert "timestep           1" in conf
         assert "rigidBonds         none" in conf
-        assert "GPUresident" not in conf
+        # GPUresident is NOT asserted here any more: exp52 measured it accepted, engaged
+        # and 2.06x faster at 1 fs with flexible bonds, so it belongs to the size gate,
+        # not to the timestep. See TestProductionGpuResident below.
 
     def test_timestep_none_reproduces_fast_binary(self) -> None:
         # Backward compat: no timestep_fs → derive from fast (4 fs) / not-fast (1 fs).
@@ -264,9 +266,25 @@ class TestProductionGpuResident:
         (md_ensemble) that do not size the system."""
         assert "GPUresident        on" in self._conf(timestep_fs=4.0)
 
-    def test_1fs_conservative_reference_is_never_resident(self) -> None:
-        for kw in ({}, {"n_atoms": 3_139_238}, {"force_resident": True}):
-            assert "GPUresident" not in self._conf(timestep_fs=1.0, **kw)
+    def test_1fs_follows_the_size_gate_like_every_other_timestep(self) -> None:
+        # REPLACES test_1fs_conservative_reference_is_never_resident, which asserted that
+        # a 1 fs conf is never resident EVEN WHEN force_resident=True — i.e. it pinned the
+        # user's own choice being silently discarded. exp52 (2026-08-05) ran the matched
+        # pair on one system: resident is accepted at 1 fs with rigidBonds none, engages,
+        # and is 2.06x faster at 32.7k atoms. The timestep does not decide this.
+        assert "GPUresident" not in self._conf(timestep_fs=1.0, n_atoms=32_754)
+        assert "GPUresident        on" in self._conf(timestep_fs=1.0, n_atoms=3_139_238)
+        assert "GPUresident        on" in self._conf(timestep_fs=1.0, force_resident=True)
+        assert "GPUresident" not in self._conf(timestep_fs=4.0, force_resident=False)
+
+    def test_an_explicit_choice_beats_the_size_gate_at_every_timestep(self) -> None:
+        for dt in (1.0, 2.0, 4.0):
+            assert "GPUresident        on" in self._conf(timestep_fs=dt,
+                                                         n_atoms=1_000,
+                                                         force_resident=True)
+            assert "GPUresident" not in self._conf(timestep_fs=dt,
+                                                   n_atoms=3_139_238,
+                                                   force_resident=False)
 
     def test_rigidbonds_still_follows_the_timestep_not_the_resident_choice(self) -> None:
         """Resident is WHERE integration runs; rigidBonds is physics. Turning resident
