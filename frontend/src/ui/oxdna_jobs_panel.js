@@ -452,7 +452,7 @@ export function runChildTitle(job) {
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, flexScale = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, getChainMode = null, enqueueChainStage = null, simGuard = null } = {}) {
+export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, flexScale = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, simGuard = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -1283,12 +1283,6 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // ── Primary run control: ▶ Relax ⇄ ■ Stop ⇄ ↻ Resume (Phase C) ─────────────
   // One button, three meanings driven by the SELECTED job's state (job_run_control).
   function _runControl() {
-    // Chain mode: the Relax button becomes "Queue Relax" — a plain launcher (no
-    // stop/resume semantics; queued stages aren't a live job yet).
-    if (getChainMode?.()) {
-      // Queuing authors a plan — always enabled (the engine need only be present at Launch).
-      return { action: RUN_ACTION.RUN, label: '＋ Queue Relax', disabled: false }
-    }
     // Gated to the RELAXATION phase: a job running its PRODUCTION phase keeps the
     // Relax button as "▶ Relax" (disabled) and is stopped via the production control.
     return runControlState(_selectedJob(), {
@@ -1317,14 +1311,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     }, { label: 'Resuming…' })
   }
   runBtn?.addEventListener('click', () => {
-    if (getChainMode?.()) return enqueueChainStage?.('relax')
     const action = _runControl().action
     if (action === RUN_ACTION.STOP) return _stopSelected()
     if (action === RUN_ACTION.RESUME) return _resumeSelected()
     return _launchRelax()
   })
-  // Repaint the Relax/Production button labels when chain mode is toggled.
-  window.addEventListener('nadoc:chain-mode-change', () => _updateButtons(_selectedJob()))
 
   // ── Launch ─────────────────────────────────────────────────────────────────
   async function _launchRelax() {
@@ -1813,12 +1804,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         runBtn.dataset.spinning = '0'          // drop any spinner state, then set the label
         runBtn.textContent = rc.label
       }
-      runBtn.disabled = getChainMode?.() ? false : (!_available || _launching ||
-        (rc.action === RUN_ACTION.RUN && prodRunning))
+      runBtn.disabled = !_available || _launching ||
+        (rc.action === RUN_ACTION.RUN && prodRunning)
       runBtn.dataset.runAction = rc.action
     }
-    const chainMode = !!getChainMode?.()
-    const prodLabel = chainMode ? '＋ Queue Production' : 'Full Sim'
+    const prodLabel = 'Full Sim'
     if (prodBtn) {
       if (prodActive) _setBtnSpinner(prodBtn, true, prodLabel, 'Running…')
       else { prodBtn.dataset.spinning = '0'; prodBtn.textContent = prodLabel }  // repaint idle label directly
@@ -1826,10 +1816,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     _updateAutorefineButton()   // gate by lattice + availability + in-flight autorefine
 
     if (prodBtn) {
-      // Chain mode: the button always queues a production STAGE — enabled regardless of
-      // a relaxed parent or engine install (queue ordering is preflight's job; the engine
-      // need only be present at Launch).
-      const prodEnabled = chainMode ? true : prodReady
+      const prodEnabled = prodReady
       prodBtn.disabled = !prodEnabled
       prodBtn.style.cursor = prodEnabled ? 'pointer' : 'not-allowed'
       prodBtn.style.background = prodEnabled ? '#1a4a1a' : '#122117'
@@ -1979,7 +1966,6 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   }
 
   prodBtn?.addEventListener('click', async () => {
-    if (getChainMode?.()) return enqueueChainStage?.('production')
     if (!_selectedId || prodBtn.disabled) return
     if (!(await _ensureJobCurrent('a production run'))) return
     if (!(await confirmNoConcurrentJob({
@@ -2684,9 +2670,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // card reads this to tag those rows in the unified list (it can't come from the backend).
     autorefineJobIds: () => _arJobIds,
     // Select a job in this panel's list (highlight the row + populate every card) exactly
-    // as a row click does — used by the Chain Simulations queue so clicking a launched
-    // stage selects its real job here. Refetches first if the job isn't in the list yet
-    // (a just-spawned chain stage the poll hasn't picked up).
+    // as a row click does. Refetches first if the job isn't in the list yet (a job the
+    // poll hasn't picked up).
     selectJob: async (jobId) => {
       if (!jobId) return
       if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()

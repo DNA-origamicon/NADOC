@@ -199,7 +199,6 @@ import { initReprOptionSliders } from './ui/repr_option_sliders.js'
 import { initColoringOptionsPanel } from './ui/coloring_options_panel.js'
 import { initRepresentationSwitcher } from './ui/representation_switcher.js'
 import { initMdJobsPanel } from './ui/md_jobs_panel.js'
-import { initChainSimPanel } from './ui/chain_sim_panel.js'
 import { initClusterConnection } from './ui/cluster_connection.js'
 import { initBenchmarkPanel } from './ui/benchmark_panel.js'
 import { initAnchorGlow } from './scene/anchor_glow.js'
@@ -1887,12 +1886,6 @@ async function main() {
   // ── Compute-cluster (Alpine) connection chip (Phase 1 remote-execution backend) ─
   const clusterConn = initClusterConnection({ mount: document.getElementById('md-cluster-connection-mount') })
 
-  // Chain Simulations: a live queue mode (built below, after the engine panels + selector
-  // exist). The engine panels read `chainSim.isEnabled()` at click time and enqueue into
-  // it instead of launching; declared here so the panel factories can bind lazily.
-  let chainSim = null
-  const _chainMode = () => chainSim?.isEnabled() ?? false
-
   // The single adjustable workspace colour-scale legend (middle-right), shared by every
   // scalar-coloured sim output — oxDNA/MD flexibility + deviation maps and the CanDo
   // RMSF/deviation/cylinder heat maps. Each engine's display controller drives it via
@@ -1925,9 +1918,6 @@ async function main() {
     getClusterState: () => clusterConn?.getState?.() ?? 'disconnected',
     // N2: the shared anchor-scope picker resolves the 3D selection to fixedAtoms scopes.
     getSelection: _anchorSelectionState,
-    // Chain Simulations: Relax/Production → "Queue …" when chain mode is on.
-    getChainMode: _chainMode,
-    enqueueChainStage: (protocol) => chainSim?.enqueue('namd', protocol),
   })
 
   // ── Benchmark controls (auto-tune oxDNA/NAMD hardware config per machine) ─────
@@ -2055,9 +2045,6 @@ async function main() {
     // is on screen (null = a relaxation stage → arrow hidden), so a chained run with
     // different field directions shows the direction used at each frame.
     onTrajectoryField: (field) => efieldSetup?.applyConfig?.(field),
-    // Chain Simulations: Relax/Production → "Queue …" when chain mode is on.
-    getChainMode: _chainMode,
-    enqueueChainStage: (protocol) => chainSim?.enqueue('oxdna', protocol),
     // Auto engine policy: when the GPU is busy, this guard shows the cross-engine
     // dialog and (on "Run on CPU") launches LAMMPS instead. Lazy — the coordinator is
     // built after the engine selector below.
@@ -2262,7 +2249,10 @@ async function main() {
   // run is in flight) — otherwise it would be stranded in the panel below.
   _moveRunControls(runControlEls.blade, 'blade-launch-row', 'blade-stop-row')
   _moveRunControls(runControlEls.snupi, 'snupi-launch-row', 'snupi-stop-row')
-  _moveRunControls(runControlEls.namd, 'md-launch-row')
+  // The run queue travels WITH the NAMD buttons: "＋ Queue" and the list of what is
+  // waiting are one thought, and leaving the list behind in the panel put it a whole
+  // jobs card away from the button that fills it.
+  _moveRunControls(runControlEls.namd, 'md-launch-row', 'md-queue-wrap')
 
   // Explicit Stop buttons used to live deep inside selected-job detail cards. Keep
   // them directly below the launch controls and above the unified Jobs card. NAMD's
@@ -2396,47 +2386,6 @@ async function main() {
   window.addEventListener('nadoc:workspace-path-change', _refreshSimPolicy)
   window.addEventListener('nadoc:design-changed', _refreshSimPolicy)
   _refreshSimPolicy()
-
-  // Chain Simulations panel (above Simulate): a named-project queue of oxDNA/NAMD
-  // relax→production stages that Launch turns into unattended MdPipeline chains. Wires
-  // the enable flag + enqueue into the engine panels declared above (bound lazily).
-  chainSim = initChainSimPanel({
-    store, api,
-    engines: {
-      oxdna: {
-        getRunElements: _oxdnaRunElements,
-        applyRunConfig: _oxdnaApplyConfig,
-        getSelectedJob: () => oxdnaPanel?.getSelectedJob?.(),
-        refreshJobs: () => oxdnaPanel?.refresh?.(),
-        selectJob: (jobId) => oxdnaPanel?.selectJob?.(jobId),
-        getAdvanced: () => ({
-          run_target: 'local',
-          steps: parseInt(document.getElementById('oxdna-jobs-prod-steps')?.value || '', 10) || null,
-        }),
-      },
-      namd: {
-        getRunElements: () => mdPanel?.getRunElements?.() || {},
-        applyRunConfig: (cfg) => mdPanel?.applyRunConfig?.(cfg),
-        getSelectedJob: () => mdPanel?.getSelectedJob?.(),
-        refreshJobs: () => mdPanel?.refresh?.(),
-        selectJob: (jobId) => mdPanel?.selectJob?.(jobId),
-        getAdvanced: () => mdPanel?.getAdvanced?.() || {},
-      },
-    },
-    selectEngine: (key) => engineSelector?.select?.(key),
-    getBaseCount: () => store.getState().currentGeometry?.length || 0,
-    // Stamped onto spawned jobs so they land in the per-design engine job list (same
-    // value the launch cards pass as design_source_path).
-    getDesignSourcePath: () => _workspacePath,
-    // Preflight uses each stage's stored seed metadata; a live list is optional (flags a
-    // seed job that has since been deleted). Left empty to avoid a synchronous job fetch.
-    getCompletedJobs: () => [],
-    getThroughput: () => {
-      const hd = store.getState().currentDesign?.hardware_defaults || {}
-      const first = Object.values(hd)[0]
-      return { oxdnaStepsPerSec: first?.oxdna?.steps_per_s ?? null, namdNsPerDay: first?.namd?.ns_per_day ?? null }
-    },
-  })
 
   // The Simulate section collapses as one (its header owns the collapse; each engine
   // header is a static label). Reuse the shared jobs-panel base for persist + arrow.

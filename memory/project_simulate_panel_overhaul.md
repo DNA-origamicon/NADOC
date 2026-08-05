@@ -47,7 +47,7 @@ History (every dated ⚡ block, the phase write-ups, the Chain-Simulations build
 | Engine selector | `engine_selector.js` — tablist:92, `.engine-selector-btn`:96, `renderStrip`:131, `stripMount`:68 · `#engine-capability-strip` `index.html:3688` ← `main.js:2292` · `engine_capabilities.js` `CARD_KEYS`:53 `CARD_LABELS`:57 | live |
 | Stop relocation | `main.js:2236` `_moveStopBelowLaunch` — covers **oxdna/mrdna/cando only** (:2246-2248); NAMD deliberately excluded (morphs in place); blade/snupi use `_moveRunControls`:2229 | live |
 | Anchors halo | `oxdna_anchors_setup.js` — `_dispatch`:88, single `_emit`:96 · `main.js` `_anchorsByEngine`:2108, `_refreshAnchorGlow`:2109, listener:2115, engine-switch refresh:2308 | live, **no E-field gate**. Event payload is `{engine, anchors, glow, focusKey, highlighted}`; the halo consumes `highlighted`, not `anchors` |
-| Chain Simulations | `chain_sim_model.js` + `chain_sim_panel.js:45` ← `main.js:195/2373`; `backend/api/routes_chain_sim.py` | live; tests `tests/test_routes_chain_sim.py` (8), `tests/test_chain_spawn_dispatch.py` (7) |
+| ~~Chain Simulations~~ | — | **REMOVED 2026-08-04** (user decision). The whole frontend went: `chain_sim_panel.js`, `chain_sim_model.js`, `stage_planner_model.js`, `chain_sim_endpoints.js`, the `#chain-sim-*` markup, and the `getChainMode`/`enqueueChainStage` wiring in `main.js` + the NAMD/oxDNA panels. Its one reusable piece, `surfaceOpposesField`, is now `frontend/src/ui/field_anchor_rules.js` (the mrDNA M8 guard's import). **Backend left alone**: `routes_chain_sim.py`, `chain_sim_projects` on the design, and the `MdPipeline` chain executor are all still live, so saved `.nadoc` files load unchanged. Replaced by the NAMD run queue → [[project_md_job_system]]. |
 | Sequence guard | `routes_md.py:1169` calls `require_sequenced_scaffold` (`backend/core/md_sequence_guard.py:70`) before job creation; backstop `md_protocols.py:1807` | live; `tests/test_md_sequence_guard.py:55` (5 tests) |
 | List progress | `routes_mrdna.py:237` / `routes_cando.py:192` — `progress_fraction` (4dp) + `eta_seconds` on running jobs only | live |
 
@@ -159,13 +159,13 @@ Two gotchas it cost a run each to learn:
 
 ## Verification + debt
 
-- Each slice gated on `just test-frontend` (vitest) + `just smoke` (23/23). Chain Simulations
-  touched Python → full suite run at the time: 4461 passed.
+- Each slice gated on `just test-frontend` (vitest) + `just smoke` (23/23).
 - Tests pinning the shipped parts: `job_run_control.test.js` (9), `md_jobs_panel.test.js`
-  (mdRunControl Run/Stop/Resume matrix — the "always ▶ Relax" matrix and `mdSelectedJobControl` were removed with the button merge),
-  `chain_sim_model.test.js` (21), `chain_sim_panel.test.js` (4 jsdom),
-  `tests/test_routes_chain_sim.py` (8), `tests/test_chain_spawn_dispatch.py` (7),
-  `tests/test_md_sequence_guard.py` (5).
+  (mdRunControl Run/Stop/Resume **+ the queue matrix** — the "always ▶ Relax" matrix and `mdSelectedJobControl` were removed with the button merge),
+  `field_anchor_rules.test.js` (6 — the one helper rescued from chain-sim),
+  `tests/test_md_sequence_guard.py` (5). The chain-sim vitest files went with the panel;
+  `tests/test_routes_chain_sim.py` (8) + `tests/test_chain_spawn_dispatch.py` (7) still pass
+  against the untouched backend.
 - Gesture-level verification is blocked by the doc-context limit above → the MV rows.
 
 Related: [[project_md_job_system]] · [[project_md_engines_panel]] (install gates — prepend to

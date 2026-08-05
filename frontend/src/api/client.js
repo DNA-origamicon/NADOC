@@ -2744,6 +2744,15 @@ export const startMdJob          = (id)          => _oxdnaJSON('POST',   `/md/jo
 export const stopMdJob           = (id)          => _oxdnaJSON('POST',   `/md/jobs/${id}/stop`)
 /** Flip the relaxation early-stop accelerator on a job without relaunching. */
 export const setMdEarlyStop      = (id, enabled) => _oxdnaJSON('POST',   `/md/jobs/${id}/early-stop`, { enabled })
+// ── The NAMD run queue ────────────────────────────────────────────────────────
+// The machine runs one NAMD job at a time, so a prepared job can be parked behind the
+// one that's going. The queue lives on the SERVER (backend/core/md_queue.py) and the
+// server starts the next job itself — closing the tab does not cancel what's waiting.
+// All four return {queue, running_job_id, busy}.
+export const getMdQueue          = ()            => _oxdnaJSON('GET',    '/md/queue')
+export const enqueueMdJob        = (id)          => _oxdnaJSON('POST',   '/md/queue', { job_id: id })
+export const dequeueMdJob        = (id)          => _oxdnaJSON('DELETE', `/md/queue/${id}`)
+export const reorderMdQueue      = (ids)         => _oxdnaJSON('PUT',    '/md/queue', { job_ids: ids })
 /** Append a production stage (the "continue from previous run" path). Body:
  *  {steps, autostart, continue_from_production}. 409 when the active design ≠ the
  *  job's — hence the doc header must be correct (see block comment above). */
@@ -4037,5 +4046,4 @@ export async function cancelBenchmark(id) {
 // (`import { createAnimation } from '.../api/client.js'` and
 //  `import * as api from '.../api/client.js'`) keep working unchanged.
 export * from './animation_endpoints.js'
-export * from './chain_sim_endpoints.js'
 export * from './overhang_endpoints.js'

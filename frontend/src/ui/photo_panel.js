@@ -423,9 +423,9 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
   els.bgColor?.addEventListener('input', () => photoMode.setBackground(undefined, els.bgColor.value))
 
   // ── Collapsible cards ──────────────────────────────────────────────────────
-  // Same markup, classes and persistence as the Simulations-tab cards
-  // (see ui/chain_sim_panel.js): a clickable <h2> with a rotating chevron and a
-  // sibling body div, with per-tab collapse state in localStorage.
+  // Same markup, classes and persistence as the Simulations-tab cards: a clickable
+  // <h2> with a rotating chevron and a sibling body div, with per-tab collapse state
+  // in localStorage.
   function _initCard(id) {
     const heading = $(`photo-${id}-heading`)
     const body    = $(`photo-${id}-body`)

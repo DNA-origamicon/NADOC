@@ -16,7 +16,14 @@
  * job_run_control.test.js; no DOM, no I/O.
  */
 
-export const RUN_ACTION = Object.freeze({ RUN: 'run', STOP: 'stop', RESUME: 'resume' })
+/**
+ * `QUEUE` / `DEQUEUE` are NOT produced by `runControlState` — an engine wrapper adds them
+ * when its machine is already busy (NAMD's run queue, `mdRunControl`). They live here so
+ * every panel reads one action vocabulary off `dataset.runAction`.
+ */
+export const RUN_ACTION = Object.freeze({
+  RUN: 'run', STOP: 'stop', RESUME: 'resume', QUEUE: 'queue', DEQUEUE: 'dequeue',
+})
 
 const GLYPH = Object.freeze({ run: '▶', stop: '■', resume: '↻' })
 

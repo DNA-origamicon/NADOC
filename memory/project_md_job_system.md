@@ -107,6 +107,57 @@ A for exactly the launches that most needed it. `_launchRelax` reads `adv.carve_
 rather than the tier when deciding whether to apply a shell, because the tiers describe
 how well a *carve* would fit, which is not the question this protocol asks.
 
+## The run queue replaced Chain Simulations (2026-08-04)
+
+With the wizard, a user can create any number of prepared jobs; the only way to run several
+in sequence used to be the **Chain Simulations** panel, which authored a plan of
+not-yet-existing stages. Jobs already sitting at `queued` had no way to say "go after that
+one". That panel is **deleted** (frontend only — see [[project_simulate_panel_overhaul]] for
+the removal surface; `routes_chain_sim.py`, `chain_sim_projects` and the `MdPipeline` chain
+executor are untouched, so saved designs load unchanged).
+
+**The model.** An ordered list of job ids in `<workspace>/md_queue.json`
+(`backend/core/md_queue.py`), served by `backend/api/routes_md_queue.py`
+(`GET/POST/PUT /md/queue`, `DELETE /md/queue/{id}`), drained once per MD-supervisor tick by
+`advance_md_queue` (registered in `main.py`'s `_md_supervisor_loop`).
+
+- **Server-owned and persistent.** The panel is a view onto it. Closing the tab does not
+  cancel what is waiting — that is the whole point, and it is why this is not a frontend
+  timer.
+- **Strictly serial.** While ANY NAMD job is in flight, nothing starts. The drain is
+  `running_job(jobs) is None` → start the head. Handoff latency is one supervisor tick
+  (`_MD_SUPERVISOR_INTERVAL_S = 30 s`), which is nothing against an hours-long run.
+- **One launch path.** The drain awaits the same `start_md_job` handler ▶ Run hits — a
+  queued launch and a manual one cannot diverge.
+- **Self-healing.** `next_startable` scans PAST a stale head (job deleted, started by hand,
+  already finished) and returns those ids as `stale` to drop, so starting B by hand while
+  `[A,B,C]` are queued never strands C. A launch that throws drops its entry (dequeued
+  BEFORE the start attempt) rather than retrying forever.
+- **Local-only.** `job_is_queueable` = local + (`queued` never-started OR `stopped`/`failed`).
+  Excluded: `draft` (needs the wizard), `paused` (a GPU-resident decision a human must
+  answer), and every remote job — an Alpine submit or a RunPod rental is a review-card
+  decision, not something to fire unattended hours later. **`mdQueueable` in
+  `md_jobs_panel.js` is the mirror; keep the two in lockstep** or the button offers a queue
+  the server refuses.
+
+**UI.** `▶ Run` (`#md-jobs-run-btn`) gains two more meanings via `mdRunControl`, which now
+takes `{machineBusy, queuedIds}` straight from `GET /md/queue`:
+
+| Selected job | Button |
+|---|---|
+| startable, machine free | `▶ Run` (unchanged) |
+| startable/stopped, machine busy | `＋ Queue` → `POST /md/queue` |
+| already in the queue | `✕ Queued #N` → `DELETE /md/queue/{id}` |
+
+`RUN_ACTION` grew `QUEUE`/`DEQUEUE` (`job_run_control.js`); `runControlState` does not
+produce them — the engine wrapper adds them. `#md-queue-wrap` under `#md-launch-row` lists
+who is waiting, in order, each row clickable (selects the job) with a `✕` to drop out.
+
+Pinned by `tests/test_md_queue.py` (23), `tests/test_routes_md_queue.py` (14),
+`md_jobs_panel.test.js` (the queue matrix + `mdQueueable` + `mdQueueRowLabel`), and the
+troubleshooting spec `frontend/e2e/md_run_queue.spec.js` (fakes `busy` by intercepting
+`GET /api/md/queue` — it never starts a real run).
+
 ### Every stage parameter is editable (2026-08-04)
 
 The stage table is no longer read-only. Any NAMD directive on any stage of either job type

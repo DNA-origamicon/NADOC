@@ -217,7 +217,7 @@ describe('newestCompletedForPart (cross-engine compare fallback)', () => {
   })
 })
 
-import { mdJobIsActive, mdJobIsRunning, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle } from './md_jobs_panel.js'
+import { mdJobIsActive, mdJobIsRunning, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle, mdQueueable, mdQueueRowLabel } from './md_jobs_panel.js'
 
 describe('mdJobIsDraft / mdDraftRunLabel (deferred-prep seed)', () => {
   it('mdJobIsDraft is true only for status "draft"', () => {
@@ -380,6 +380,85 @@ describe('mdRunControl (ONE control for the selected job: Run / Stop / Resume)',
   })
   it('busy (a request already in flight) → disabled', () => {
     expect(mdRunControl({ status: 'queued', execution_target: 'local' }, { busy: true }).disabled).toBe(true)
+  })
+})
+
+describe('mdRunControl + the run queue (one machine, one NAMD job at a time)', () => {
+  const prepared = { job_id: 'j1', status: 'queued', execution_target: 'local' }
+
+  it('machine free → ▶ Run, exactly as before', () => {
+    expect(mdRunControl(prepared, { machineBusy: false }))
+      .toMatchObject({ action: 'run', label: '▶ Run' })
+  })
+  it('machine busy → ＋ Queue, and it says the browser can be closed', () => {
+    const rc = mdRunControl(prepared, { machineBusy: true })
+    expect(rc).toMatchObject({ action: 'queue', label: '＋ Queue', disabled: false })
+    expect(rc.title).toMatch(/close the browser/)
+  })
+  it('already queued → ✕ Queued #N with its place in line', () => {
+    expect(mdRunControl(prepared, { machineBusy: true, queuedIds: ['j0', 'j1'] }))
+      .toMatchObject({ action: 'dequeue', label: '✕ Queued #2' })
+  })
+  it('a queued job shows its place even once the machine goes idle', () => {
+    // The drain runs on the server tick, so there is a window where nothing is running
+    // but the queue is not yet empty — the button must not flip back to ▶ Run and
+    // offer a second, competing start.
+    expect(mdRunControl(prepared, { machineBusy: false, queuedIds: ['j1'] }))
+      .toMatchObject({ action: 'dequeue' })
+  })
+  it('a STOPPED job queues too — the queue resumes it', () => {
+    expect(mdRunControl({ job_id: 'j2', status: 'stopped', execution_target: 'local' },
+      { machineBusy: true })).toMatchObject({ action: 'queue' })
+  })
+  it('the RUNNING job itself still says ■ Stop, never ＋ Queue', () => {
+    expect(mdRunControl({ job_id: 'j3', status: 'running', execution_target: 'local' },
+      { machineBusy: true })).toMatchObject({ action: 'stop' })
+  })
+  it('a completed job is not queueable while busy — still disabled with a reason', () => {
+    const rc = mdRunControl({ job_id: 'j4', status: 'completed', execution_target: 'local' },
+      { machineBusy: true })
+    expect(rc.disabled).toBe(true)
+    expect(rc.action).not.toBe('queue')
+  })
+})
+
+describe('mdQueueable (mirror of backend md_queue.job_is_queueable)', () => {
+  it('prepared and stopped/failed jobs qualify', () => {
+    expect(mdQueueable({ status: 'queued', execution_target: 'local' })).toBe(true)
+    expect(mdQueueable({ status: 'stopped', execution_target: 'local' })).toBe(true)
+    expect(mdQueueable({ status: 'failed', execution_target: 'local' })).toBe(true)
+  })
+  it('running, completed and draft jobs do not', () => {
+    expect(mdQueueable({ status: 'running', execution_target: 'local' })).toBe(false)
+    expect(mdQueueable({ status: 'completed', execution_target: 'local' })).toBe(false)
+    expect(mdQueueable({ status: 'draft', seed_oxdna_job_id: 'x' })).toBe(false)
+    expect(mdQueueable(null)).toBe(false)
+  })
+  it('the queue is local-only — a remote launch is a review-card decision', () => {
+    expect(mdQueueable({ status: 'queued', execution_target: 'alpine' })).toBe(false)
+    expect(mdQueueable({ status: 'stopped', execution_target: 'alpine' })).toBe(false)
+    expect(mdQueueable({ status: 'queued', execution_target: 'runpod' })).toBe(false)
+    expect(mdQueueable({ status: 'queued', execution_target: 'alpine', slurm_job_id: '77' })).toBe(false)
+  })
+})
+
+describe('mdQueueRowLabel (a queued run is named by part + creation time)', () => {
+  const fmt = () => '14:05'
+  it('names the design and when the run was set up', () => {
+    expect(mdQueueRowLabel({ design_name: '26hb', created_at: 1, status: 'queued' }, null, fmt))
+      .toBe('26hb · 14:05')
+  })
+  it('marks a production child so it is not mistaken for a duplicate relaxation', () => {
+    expect(mdQueueRowLabel({ design_name: '26hb', created_at: 1, run_kind: 'production' }, null, fmt))
+      .toBe('26hb · production · 14:05')
+  })
+  it('marks a stopped job as a resume', () => {
+    expect(mdQueueRowLabel({ design_name: '26hb', created_at: 1, status: 'stopped' }, null, fmt))
+      .toBe('26hb · resume · 14:05')
+  })
+  it('falls back to what the server recorded when the job is gone from the list', () => {
+    expect(mdQueueRowLabel(null, { design_name: '26hb' }, fmt)).toBe('26hb')
+    expect(mdQueueRowLabel(null, null, fmt)).toBe('Unknown run')
   })
 })
 

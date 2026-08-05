@@ -272,6 +272,36 @@ export function mdJobIsResumable(job) {
   return ['stopped', 'failed'].includes(job.status) || hasPendingGpuDecision(job)
 }
 
+/** Pure: how a queued run reads in the queue list.
+ *
+ *  Named by the PART it simulates plus when the run was created — this UI shows no job
+ *  ids, so that pair is what tells two runs of the same design apart.  A production child
+ *  says so, because "same part, same day" otherwise reads as a duplicate.  Falls back to
+ *  what the server recorded when the job itself is no longer in the list. */
+export function mdQueueRowLabel(job, entry = null, formatTime = null) {
+  const name = job?.design_name || entry?.design_name || 'Unknown run'
+  const when = job?.created_at != null && formatTime ? formatTime(job.created_at) : ''
+  const kind = mdIsProductionChild(job) ? ' · production'
+    : job?.status === 'stopped' || job?.status === 'failed' ? ' · resume' : ''
+  return `${name}${kind}${when ? ` · ${when}` : ''}`
+}
+
+/** Pure: can this job be parked behind the run that's going?
+ *
+ *  Mirror of `md_queue.job_is_queueable` on the backend — keep the two in lockstep, or
+ *  the button offers a queue the server then refuses.  Prepared-but-unstarted and
+ *  stopped/failed both qualify (POST …/start handles them identically).
+ *
+ *  The queue is LOCAL-only.  A `draft` needs the wizard, a GPU-decision pause needs an
+ *  answer, and an Alpine submit / RunPod rental is a decision made at the review card —
+ *  none of those should fire unattended hours later. */
+export function mdQueueable(job) {
+  if (!job) return false
+  if (job.execution_target && job.execution_target !== 'local') return false
+  if (mdJobIsDraft(job) || hasPendingGpuDecision(job)) return false
+  return mdJobIsStartable(job) || ['stopped', 'failed'].includes(job.status)
+}
+
 /** Pure: the primary control's state — ONE button, four meanings, all about the SELECTED
  *  job (2026-08-03, with the Job Wizard).
  *
@@ -283,10 +313,18 @@ export function mdJobIsResumable(job) {
  *    nothing selected            → disabled, with a hint pointing at ＋ New job
  *    a seeded DRAFT              → solvate-from-seed and start it
  *    running / preparing         → ■ Stop
+ *    already in the run queue    → ✕ Queued #N (click to take it back out)
+ *    startable while busy        → ＋ Queue  (the server starts it when the machine frees)
  *    stopped / failed / gated    → ↻ Resume
  *    prepared but never started  → ▶ Run
- *    anything else (completed)   → disabled, with a reason */
-export function mdRunControl(selectedJob, { busy = false, runTarget = 'local' } = {}) {
+ *    anything else (completed)   → disabled, with a reason
+ *
+ *  `machineBusy` is "a NAMD job is in flight right now" and `queuedIds` is the server's
+ *  queue order — both come from GET /md/queue, so what the button offers and what the
+ *  server would actually do can't drift apart. */
+export function mdRunControl(selectedJob, {
+  busy = false, runTarget = 'local', machineBusy = false, queuedIds = [],
+} = {}) {
   if (!selectedJob) {
     return {
       action: RUN_ACTION.RUN, label: '▶ Run', disabled: true,
@@ -304,6 +342,22 @@ export function mdRunControl(selectedJob, { busy = false, runTarget = 'local' } 
   })
   if (base.action === RUN_ACTION.STOP) {
     return { ...base, title: 'Stop this run. It can be resumed from its last checkpoint.' }
+  }
+  // Already waiting its turn → the button takes it back out of the queue.
+  const place = queuedIds.indexOf(selectedJob.job_id)
+  if (place >= 0) {
+    return {
+      action: RUN_ACTION.DEQUEUE, label: `✕ Queued #${place + 1}`, disabled: busy,
+      title: 'Waiting for the machine. Click to take it back out of the queue.',
+    }
+  }
+  // Something else is running → queue instead of refusing. The server starts it.
+  if (machineBusy && mdQueueable(selectedJob)) {
+    return {
+      action: RUN_ACTION.QUEUE, label: '＋ Queue', disabled: busy,
+      title: 'A run is already going. This one starts on its own when the machine frees up '
+           + '— you can close the browser.',
+    }
   }
   if (base.action === RUN_ACTION.RESUME) {
     return {
@@ -790,7 +844,7 @@ export function mdEarlyStopToggleState(job, busy = false) {
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getChainMode = null, enqueueChainStage = null, getSolventOverlay = null, getBoxOverlay = null, getCurrentRepr = null, getWeldOverlay = null } = {}) {
+export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getSolventOverlay = null, getBoxOverlay = null, getCurrentRepr = null, getWeldOverlay = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -801,6 +855,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const namdStatusEl  = document.getElementById('md-jobs-namd-status')
   const newBtn        = document.getElementById('md-jobs-new-btn')      // opens the Job Wizard
   const runBtn        = document.getElementById('md-jobs-run-btn')
+  const queueWrap     = document.getElementById('md-queue-wrap')
+  const queueList     = document.getElementById('md-queue-list')
   const runTargetLocal  = document.getElementById('md-run-target-local')
   const runTargetAlpine = document.getElementById('md-run-target-alpine')
   const runTargetRunpod = document.getElementById('md-run-target-runpod')
@@ -912,6 +968,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   let _wsProbing    = false  // a watchdog REST probe is in flight (avoid overlap)
   let _launching    = false
   let _enginesOk    = false  // both NAMD + GROMACS found
+  // The SERVER's run queue (GET /md/queue), refreshed with every job fetch. The panel is a
+  // view onto it and never its owner — the queue outlives this tab.
+  let _queue        = []     // [{job_id, position, design_name, status}] in run order
+  let _queueBusy    = false  // a NAMD job is in flight right now → ▶ Run becomes ＋ Queue
+  let _queueTimer   = null   // 5 s queue poll, armed ONLY while something is queued/running
   let _displayTimer = null
   let _prewarmTimer = null
   let _remotePollTimer = null   // periodic SLURM-status poll for in-flight Alpine jobs
@@ -1210,6 +1271,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       _selectBestJob()
       _notifyIfJobsChanged()
       _renderReconnectPrompt()   // in-flight Alpine runs + a down session → nudge to reconnect
+      void _fetchQueue()         // who's waiting, and is the machine busy (▶ Run vs ＋ Queue)
       if (displayToggle?.checked) _refreshMdDisplay()
       else _refreshMdPrewarm()
     } catch (err) {
@@ -1393,10 +1455,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       revertProdBtn.style.display = mdHasAppendedProduction(job) ? '' : 'none'
     }
     if (prodBox) prodBox.style.display = ''
-    if (getChainMode?.()) {
-      _setProductionStatus('Chain mode: ＋ New job → Production queues a stage into the chain.', _C.dim)
-      return
-    }
     if (!job) {
       _setProductionStatus('Select a completed relaxation, or open ＋ New job → Production.', _C.dim)
       return
@@ -2296,18 +2354,23 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // stopped/failed job resumes here; an Alpine job's cluster-gated resume stays on the
   // dedicated resume button.
   function _runControl() {
-    // Chain mode: the Relax button becomes "Queue Relax" — a plain launcher.
-    if (getChainMode?.()) {
-      // Queuing authors a plan — always enabled (engines need only be present at Launch).
-      return { action: RUN_ACTION.RUN, label: '＋ Queue Relax', disabled: false }
-    }
     // A selected DRAFT (deferred-prep seed) relabels the launcher "Relax from oxDNA"
     // and, when clicked, solvates-from-seed + starts THIS job (POST …/prepare).
     const sel = _selectedJob()
     if (mdJobIsDraft(sel)) {
       return { action: RUN_ACTION.RUN, label: mdDraftRunLabel(sel), disabled: _launching }
     }
-    return mdRunControl(sel, { busy: _launching, runTarget: _currentRunTarget() })
+    return mdRunControl(sel, {
+      busy: _launching,
+      runTarget: _currentRunTarget(),
+      // The machine runs one job at a time: while something is going, ▶ Run becomes
+      // ＋ Queue and the server starts this job when the current one finishes.
+      // Two sources, because neither alone is complete: this panel's own list is the
+      // freshest signal for THIS design, and the server's flag covers a run belonging to
+      // a design that isn't open (the queue is workspace-wide, the list is not).
+      machineBusy: _queueBusy || _jobs.some(mdJobIsRunning),
+      queuedIds: _queue.map((e) => e.job_id),
+    })
   }
   function _paintRunControl() {
     if (!runBtn) return
@@ -2316,15 +2379,104 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     runBtn.dataset.runAction = rc.action
     runBtn.title = rc.title || ''
     // Chain mode only queues a plan → always enabled (engines are checked at Launch).
-    runBtn.disabled = getChainMode?.() ? false : (rc.disabled || _launching || !_enginesOk)
-    // Stop and Resume read as warnings, not as "go" — the green Run styling on a Stop
-    // button is the kind of thing that gets a live run killed by accident.
-    const stopping = rc.action !== RUN_ACTION.RUN
-    runBtn.style.background = runBtn.disabled ? '#122117' : (stopping ? '#2d2119' : '#1a4a1a')
-    runBtn.style.borderColor = runBtn.disabled ? _C.border : (stopping ? '#d29922' : _C.ok)
-    runBtn.style.color = runBtn.disabled ? _C.dim : (stopping ? '#e3b341' : _C.ok)
+    runBtn.disabled = rc.disabled || _launching || !_enginesOk
+    // Three readings, three colours. GREEN = this starts a run now. AMBER = this stops or
+    // resumes a real run (the green Run styling on a Stop button is the kind of thing that
+    // gets a live run killed by accident). BLUE = scheduling only, nothing happens to the
+    // machine yet — the same blue as ＋ New job, which is also a "set it up" action.
+    const queueing = rc.action === RUN_ACTION.QUEUE || rc.action === RUN_ACTION.DEQUEUE
+    const stopping = !queueing && rc.action !== RUN_ACTION.RUN
+    runBtn.style.background = runBtn.disabled ? '#122117'
+      : queueing ? '#1c2333' : (stopping ? '#2d2119' : '#1a4a1a')
+    runBtn.style.borderColor = runBtn.disabled ? _C.border
+      : queueing ? '#30456d' : (stopping ? '#d29922' : _C.ok)
+    runBtn.style.color = runBtn.disabled ? _C.dim
+      : queueing ? '#8fb3ff' : (stopping ? '#e3b341' : _C.ok)
     runBtn.style.cursor = runBtn.disabled ? 'not-allowed' : 'pointer'
   }
+  // ── The run queue ─────────────────────────────────────────────────────────
+  // One machine, one NAMD job at a time.  While something is running, ▶ Run becomes
+  // ＋ Queue: the job is parked on the SERVER (POST /md/queue), which starts it when the
+  // machine frees up — so closing the browser doesn't cancel what's waiting.
+  function _applyQueue(res, { detectStart = false } = {}) {
+    if (!res) return
+    // The queue shrank with no click of ours → the server started something.
+    const started = detectStart && _queue.length > (res.queue?.length ?? 0)
+    _queue = Array.isArray(res.queue) ? res.queue : []
+    _queueBusy = !!res.busy
+    _renderQueue()
+    _paintRunControl()
+    _armQueuePoll()
+    // Pull the job list so the newly-running job appears without the user clicking.
+    if (started) void _fetchJobs()
+  }
+  async function _fetchQueue(opts = {}) {
+    try {
+      _applyQueue(await api.getMdQueue(), opts)
+    } catch (err) {
+      console.warn(`[${_ts()}] md-jobs: queue fetch failed`, err)
+    }
+  }
+  /** Watch the queue only while there IS something to watch.  This panel has no general
+   *  status poll (live updates ride the detail WebSocket), so without this the auto-start
+   *  would land on the server and the UI would keep showing the old state until the user
+   *  clicked something.  Stops itself the moment the machine is idle and nothing waits. */
+  function _armQueuePoll() {
+    const want = _queueBusy || _queue.length > 0 || _jobs.some(mdJobIsRunning)
+    if (want && !_queueTimer) {
+      _queueTimer = setInterval(() => _fetchQueue({ detectStart: true }), 5000)
+    } else if (!want && _queueTimer) {
+      clearInterval(_queueTimer)
+      _queueTimer = null
+    }
+  }
+  function _renderQueue() {
+    if (!queueWrap || !queueList) return
+    if (!_queue.length) { queueWrap.style.display = 'none'; queueList.replaceChildren(); return }
+    queueWrap.style.display = ''
+    queueList.replaceChildren(..._queue.map((entry) => {
+      const job = _jobs.find((j) => j.job_id === entry.job_id) || null
+      const row = document.createElement('div')
+      row.style.cssText = 'display:flex;align-items:center;gap:5px;padding:2px 3px;font-size:10px;color:' + _C.muted
+      const pos = document.createElement('span')
+      pos.textContent = `${entry.position}.`
+      pos.style.cssText = `color:${_C.dim};min-width:12px`
+      const label = document.createElement('span')
+      label.textContent = mdQueueRowLabel(job, entry, _fmtJobTime)
+      label.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer'
+      label.title = 'Show this run in the list'
+      label.addEventListener('click', () => _selectJob(entry.job_id))
+      const drop = document.createElement('button')
+      drop.textContent = '✕'
+      drop.title = 'Take this run out of the queue'
+      drop.style.cssText = `background:none;border:none;color:${_C.dim};cursor:pointer;font-size:10px;padding:0 2px`
+      drop.addEventListener('click', async () => {
+        drop.disabled = true
+        _applyQueue(await api.dequeueMdJob(entry.job_id))
+      })
+      row.append(pos, label, drop)
+      return row
+    }))
+  }
+  function _queueSelected(btn = runBtn) {
+    return runExclusive(btn, async () => {
+      if (!_selectedId) return
+      const res = await api.enqueueMdJob(_selectedId)
+      if (!res) { showToast(`Could not queue: ${api.lastErrorMessage() ?? 'Server error'}`, 'error'); return }
+      _applyQueue(res)
+      showToast('Queued — it starts when the machine is free', 'ok')
+    }, { label: 'Queueing…' })
+  }
+  function _dequeueSelected(btn = runBtn) {
+    return runExclusive(btn, async () => {
+      if (!_selectedId) return
+      const res = await api.dequeueMdJob(_selectedId)
+      if (!res) { showToast(`Could not dequeue: ${api.lastErrorMessage() ?? 'Server error'}`, 'error'); return }
+      _applyQueue(res)
+      showToast('Taken out of the queue', 'warn')
+    }, { label: 'Removing…' })
+  }
+
   function _stopSelected(btn = runBtn) {
     return runExclusive(btn, async () => {
       if (!_selectedId) return
@@ -2389,12 +2541,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // into a single button — they used to be a fresh-Relax button, a contextual Stop/Resume
   // button and a Production button, each aware of a different subset of job states.
   runBtn?.addEventListener('click', () => {
-    if (getChainMode?.()) return enqueueChainStage?.('relax')
     const sel = _selectedJob()
     if (!sel) return
     const act = runBtn.dataset.runAction
     if (act === RUN_ACTION.STOP) return _stopSelected(runBtn)
     if (act === RUN_ACTION.RESUME) return _resumeSelected(runBtn)
+    if (act === RUN_ACTION.QUEUE) return _queueSelected(runBtn)
+    if (act === RUN_ACTION.DEQUEUE) return _dequeueSelected(runBtn)
     // A seeded draft solvates from its source job's coordinates. Send it through the
     // wizard too, prefilled with what the draft recorded — solvating from a seed is
     // still a whole protocol's worth of choices, and it used to reveal a drawer of
@@ -2407,12 +2560,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // "New job" opens the Job Wizard, which supplies a protocol payload to the same
   // _launchRelax gate sequence the Advanced form uses.
   newBtn?.addEventListener('click', () => { void _wizard.open('relaxation') })
-  // Repaint the Relax/Production controls when chain mode is toggled.
-  window.addEventListener('nadoc:chain-mode-change', () => {
-    _paintRunControl()
-    _renderProductionControls(_jobs.find(j => j.job_id === _selectedId) || null)
-  })
-
   /**
    * Spawn a production child from the wizard — the only production launch path.
    *
@@ -2425,7 +2572,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
    * so it asks rather than making the user hand-craft a request.
    */
   async function _spawnProductionFromWizard(parentId, body) {
-    if (getChainMode?.()) { enqueueChainStage?.('production'); return { job_id: null } }
     if (!parentId) return null
     const parent = _jobs.find(j => j.job_id === parentId)
 
@@ -2983,6 +3129,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _closeWs()
     _renderList()
     _openDetailForJob(jobId)
+    // Repaint Run/Queue off CURRENT server state: this panel has no status poll, so
+    // without this the control could offer ▶ Run for a job the queue would refuse (or
+    // hide that the job is already waiting in line).
+    void _fetchQueue()
     if (displayToggle?.checked) _refreshMdDisplay()
     else _refreshMdPrewarm(true)
   }
@@ -3790,13 +3940,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     acceptLiveSolvent: (buf) => solvent?.liveBlob(buf),
 
     getSelectedJob: _selectedJob,
-    // Immediately re-fetch the job list (used when a chain launch spawns a NAMD job from
-    // the Chain Simulations panel — this panel wouldn't otherwise know to poll). A single
-    // fetch populates the list AND re-arms the poll once the new job reads active.
+    // Immediately re-fetch the job list (used when a job is spawned from somewhere other
+    // than this panel). A single fetch populates the list AND re-arms the poll once the
+    // new job reads active.
     refresh: _fetchJobs,
-    // Select a job in this panel's list (highlight + populate cards) as a row click does —
-    // used by the Chain Simulations queue to select a launched stage's real NAMD job.
-    // Refetches first if the job isn't listed yet (a just-spawned chain stage).
+    // Select a job in this panel's list (highlight + populate cards) as a row click does.
+    // Refetches first if the job isn't listed yet (a just-spawned job).
     selectJob: async (jobId) => {
       if (!jobId) return
       if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
@@ -3808,28 +3957,5 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // Consolidated Archive/Delete (the section-level #simulate-job-actions dispatches to the
     // selected node's engine panel; both operate on this panel's currently-selected job).
     deleteSelected, archiveSelected,
-    // Chain Simulations wiring: read/write this engine's field + anchor cards, and its
-    // advanced run knobs, so a queued stage captures — and a queue click restores — the
-    // exact conditions (the NAMD panel owns these cards internally).
-    getRunElements: () => ({
-      field: _efieldCard?.getFieldSpec?.() ?? null,
-      surface: null,   // NAMD has no hard-surface card
-      anchors: _anchorsCard?.getAnchors?.() ?? [],
-    }),
-    applyRunConfig: (cfg = {}) => {
-      _efieldCard?.applyConfig?.(cfg.field ?? null)
-      _anchorsCard?.applyConfig?.(cfg.anchors ?? [])
-    },
-    getAdvanced: () => {
-      const runTarget = _currentRunTarget()
-      return {
-        run_target: runTarget,
-        cluster_name: runTarget === 'alpine' ? 'alpine' : null,
-        // The chain planner captures a stage's conditions; a production stage's LENGTH
-        // is chosen in the Job Wizard when the stage actually runs, so record the
-        // ensemble card's per-replica figure as the stand-in rather than a bare literal.
-        length_ns: _ensembleNs(),
-      }
-    },
   }
 }

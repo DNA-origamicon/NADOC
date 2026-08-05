@@ -74,6 +74,7 @@ from backend.api.routes_blade import router as blade_router
 from backend.api.routes_mrdna import router as mrdna_router
 from backend.api.routes_md_metrics import router as md_metrics_router
 from backend.api.routes_md_plan import router as md_plan_router
+from backend.api.routes_md_queue import router as md_queue_router
 from backend.api.routes_oxdna import router as oxdna_router
 from backend.api.routes_lammps import router as lammps_router
 from backend.api.routes_oxdna_live import router as oxdna_live_router
@@ -135,6 +136,17 @@ async def _md_supervisor_loop() -> None:
             raise
         except Exception:
             logger.exception("MD chain advance pass failed")
+        # NAMD run queue: the machine runs one job at a time, so when nothing is in
+        # flight, start whatever the user queued behind the run that just finished.
+        try:
+            from backend.api.routes_md_queue import advance_md_queue
+            started = await advance_md_queue(_WORKSPACE_DIR)
+            if started:
+                logger.info("MD supervisor started queued jobs: %s", ", ".join(started))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("MD queue advance pass failed")
         # Vacuum pre-stage (Aksimentiev §3.2): when the in-vacuo shape relaxation
         # finishes, spawn the solvated run seeded from its relaxed coordinates.
         try:
@@ -267,6 +279,7 @@ app.include_router(jobs_router,        prefix="/api")
 app.include_router(md_router,          prefix="/api")
 app.include_router(md_metrics_router,  prefix="/api")
 app.include_router(md_plan_router,     prefix="/api")
+app.include_router(md_queue_router,    prefix="/api")
 app.include_router(oxdna_router,       prefix="/api")
 app.include_router(lammps_router,      prefix="/api")
 app.include_router(mrdna_router,       prefix="/api")

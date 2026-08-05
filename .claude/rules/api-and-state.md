@@ -43,7 +43,7 @@ and **restored on boot** ([session_cache.py:83, :184](../../backend/api/session_
 | [backend/api/ws.py](../../backend/api/ws.py) | 1585 | WebSockets — the **only** router mounted with no `/api` prefix ([main.py:273](../../backend/api/main.py#L273)) |
 | [backend/core/validator.py](../../backend/core/validator.py) | — | `ValidationReport`:25, `validate_design(design)`:70 |
 | [frontend/src/api/client.js](../../frontend/src/api/client.js) | 3880 | `_request`:251, `_syncFromDesignResponse`:360, **275 exported API functions** |
-| `frontend/src/api/` siblings | — | `overhang_endpoints.js` 347, `animation_endpoints.js` 107, `recent_files.js` 82, `chain_sim_endpoints.js` 31 |
+| `frontend/src/api/` siblings | — | `overhang_endpoints.js` 347, `animation_endpoints.js` 107, `recent_files.js` 82 |
 | [frontend/src/state/store.js](../../frontend/src/state/store.js) | 541 | The whole-app store. 53 keys, 7 slices, 31 importers, **zero tests** |
 
 ## The mutation contract (the load-bearing part)

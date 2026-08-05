@@ -3692,36 +3692,6 @@
         <!-- ── Simulations tab (data-tab="dynamics") ─────────────────────── -->
         <div id="tab-content-dynamics" class="tab-content" hidden>
 
-          <!-- ── Chain Simulations: queue oxDNA/NAMD relax→production chains that run unattended ──── -->
-          <div class="panel-section" id="chain-sim-panel">
-            <h2 id="chain-sim-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-              <span>Chain Simulations</span>
-              <span id="chain-sim-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
-            </h2>
-            <div id="chain-sim-body">
-              <!-- Enable toggle: flips the oxDNA/NAMD Relax/Production buttons to "Queue …" -->
-              <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9;margin-bottom:8px;cursor:pointer">
-                <input id="chain-sim-enable" type="checkbox">
-                <span>Enable chain simulations</span>
-              </label>
-              <!-- Project selector row (mirrors Animations): select + New / Duplicate / Delete -->
-              <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
-                <select id="chain-sim-project-select" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:11px"></select>
-                <input id="chain-sim-rename-input" type="text" style="flex:1;min-width:0;display:none;background:#0d1117;border:1px solid #388bfd;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:11px">
-                <button id="chain-sim-new-btn" class="panel-action-btn" style="width:auto;padding:2px 7px;font-size:13px;line-height:1" title="New chain project">+</button>
-                <button id="chain-sim-dup-btn" class="panel-action-btn" style="width:auto;padding:2px 7px;font-size:13px;line-height:1" title="Duplicate this project">⧉</button>
-                <button id="chain-sim-del-btn" class="panel-action-btn" style="width:auto;padding:2px 7px;font-size:13px;line-height:1;color:#c93c3c" title="Delete this project">×</button>
-              </div>
-              <!-- Scrollable queue of stages (rendered by chain_sim_panel.js) -->
-              <div id="chain-sim-queue" style="max-height:240px;overflow-y:auto;background:#010409;border:1px solid #21262d;border-radius:4px;padding:4px;margin-bottom:6px"></div>
-              <!-- Total ETA -->
-              <div id="chain-sim-total" style="font-size:11px;color:#8b949e;margin-bottom:6px"></div>
-              <!-- Launch + live chain status -->
-              <button id="chain-sim-launch-btn" class="panel-action-btn" style="width:100%;margin-bottom:4px" disabled>Launch chain</button>
-              <div id="chain-sim-status" style="font-size:11px;color:#8b949e"></div>
-            </div>
-          </div>
-
           <!-- ── Simulate: collapsible section — engine selector fronting the 5 engine panels ──── -->
           <div class="panel-section" id="simulate-panel">
             <h2 id="simulate-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -5279,6 +5249,14 @@
                           style="flex:1;font-size:var(--text-xs);padding:5px;background:#122117;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">
                     ▶ Run
                   </button>
+                </div>
+                <!-- The run queue: prepared jobs waiting for the machine, in order.  The
+                     server owns this list and starts the next one itself, so it survives a
+                     reload.  Rendered by md_jobs_panel.js; empty (hidden) when nothing is
+                     waiting. -->
+                <div id="md-queue-wrap" style="display:none;margin-bottom:6px">
+                  <div style="font-size:10px;color:#6e7681;margin-bottom:3px">Queued — starts automatically when the machine is free</div>
+                  <div id="md-queue-list" style="background:#0d1117;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
                 </div>
                 <div id="md-jobs-production"
                      style="background:#0d1117;border:1px solid #21262d;border-radius:3px;padding:5px;margin-bottom:6px">
