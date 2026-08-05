@@ -44,7 +44,125 @@ slot and the `_0S_` settle stage. A carve drops the settle stage → 21.
 ### UI shape
 
 - `＋ New job` (`#md-jobs-new-btn`) opens `frontend/src/ui/md_job_wizard.js`; the pure
-  shaping is `md_job_wizard_model.js` (56 vitest cases).
+  shaping is `md_job_wizard_model.js` (92 vitest cases).
+- **Two tabs, not one split screen (2026-08-05).** Tab 1 `Protocol & settings` = mode
+  (relaxation/production) + preset cards + every setting, full width in a 3-column flow
+  (`.wizard-fields { columns: 380px 3 }`), footer Cancel / **Next →**. Tab 2 `What each
+  stage runs` = totals, the 22-column table, conditions; footer Cancel / Create job /
+  Create & run. Create is only offered on tab 2 — a run is not creatable until its plan has
+  been shown. `state.tab` is NOT undoable (a tab is not a choice about the run).
+- **Undo (`↶ Undo` beside the tabs, Ctrl+Z).** One stack of pre-change snapshots
+  (`snapshotState` / `applySnapshot` / `pushUndo`, `UNDO_LIMIT = 50`) covering settings
+  fields, stage-table cells, `⋯` set-every-stage, protocol, mode and ⚡ alike; `record()` is
+  called at the top of every mutating handler. A commit that changes nothing never records
+  (identical top-of-stack is dropped), so undo is never a no-op press. Cleared on `open()`.
+  Escape inside a cell editor now `stopPropagation`s — it used to close the whole modal.
+- **The three integrator axes are SEPARATE controls (2026-08-05, exp51).** `backend/core/
+  md_integrator.py` is the single resolver: `resolve_integrator(dt, rigid_bonds, hmr)` fills
+  `None` from the timestep (rigid → `none` at 1 fs / `all` above; HMR → on only at 4 fs) and
+  `integrator_warnings()` returns the measured objections. New request fields:
+  `relax_timestep_fs` / `relax_rigid_bonds` / `relax_hmr` and `production_rigid_bonds` /
+  `production_hmr` (tri-state: null = auto). `_segment_conf` and `build_production_conf` take
+  `rigid_bonds=` / `hmr=` and no longer derive them from `spec.soft` / `fast` / `ts`; HMR is
+  expressed by WHICH PSF is named, and 4 fs with no `structure_psf` now falls back to
+  `{stem}_hmr.psf` instead of the plain PSF (that fallback was the silent-unrepartitioned
+  hole). `PlanContext` carries both, so **the stage table reflects the chosen axes** — it
+  previously showed the auto values while the job ran the chosen ones. **Warn, never block**:
+  every unsound combination is a `warning` condition whose `source` is
+  `CreateJobRequest.<field>`, which is what places it (⚠ + `(Cn)`) against its own control.
+  `plan.field_scopes` declares which run each field governs; the wizard groups its settings
+  into **Relaxation ladder / Production run / Both runs** from it. The `fast` checkbox is
+  retired from the UI (the backend field remains, and is what `relax_timestep_fs: None`
+  falls back to, so old clients and saved drafts are unaffected).
+- **The integrator controls are three plain widgets (2026-08-05).** Now that the axes are
+  decoupled, the UI stopped explaining the coupling: **Timestep** is a dropdown reading
+  `4 fs (faster, risks RATTLE)` / `2 fs (standard)` / `1 fs (conservative)` (same labels for
+  ladder and production), and **rigid bonds** and **HMR** are plain CHECKBOXES, not
+  auto/on/off dropdowns. A box shows the value the run will USE — untouched it follows the
+  timestep's recommendation via the field's `fallback(plan, effectiveValue)`; ticking it
+  makes the choice explicit and any mismatch raises its own ⚠ + `(Cn)` against that control.
+  `effectiveValue()` exists because a fallback that reads a SIBLING (both boxes follow the
+  timestep) must resolve that sibling's own fallback: an untouched timestep is stored as
+  null and `Number(null)` is 0, which read as "1 fs" and left both boxes unticked on a 4 fs
+  ladder. Field options: `check` maps the field's vocabulary onto the box ("all"/"none"),
+  `parse` maps it back.
+- **`Run every stage soft` is REMOVED from the wizard** — it is exactly
+  `timestep 1 fs + rigid bonds off`, pinned by `TestForceSoftIsExpressible`. The backend
+  `force_soft` field stays (the runner's automatic post-RATTLE rescue uses it).
+  Writing that test found a bug: **`soft=True` capped every stage to 1 fs but sized step
+  counts from the UNCAPPED timestep**, so a soft ladder ran 2.4 ns/stage from a 2 fs base
+  and 1.2 ns from a 4 fs base instead of 4.8. `mgh_slow_release_segments` now sizes from
+  `sizing_dt = 1.0 if soft else timestep_fs` (ladder stages AND the settle stage).
+  `gentle` is deliberately NOT capped there — that is the declash half-length question,
+  which has its own re-audit block and a test pinning it, and needs an experiment.
+- **No setting silently changes a user's input any more (2026-08-05 removal pass).**
+  Audited the whole MD subsystem for value substitutions; the ones that were invisible are
+  gone or surfaced:
+  - **Ladder tiers are a CEILING, not a fixed value** (`effective_timestep_fs(spec, fast,
+    base_timestep_fs)`). They used to RAISE an explicit `relax_timestep_fs=1.0` to 2 fs
+    while step counts stayed sized for 1 fs, so every stage ran **double** its intended
+    time and the control looked inert. `md_plan` made the same call without the base, so
+    the preview reported 2 fs and 2x the ns for confs that said 1 fs. Both fixed; a 1/2/4 fs
+    ladder now totals ~19.5 ns as designed.
+  - **The auto water-shell carve is REMOVED.** Prep computes the recommendation and records
+    it as `prep_params.recommended_water_shell_nm`, and never applies it. The plan emits
+    `water_box_will_not_fit` (source `CreateJobRequest.water_shell_nm`) so the wizard shows
+    a ⚠ against the control. The old `auto_water_shell_nm` / `declined_water_shell_nm` keys
+    had no reader anywhere and are gone.
+  - **The CUDA tile-list CPU reroute now ASKS** — Gate **B2**, `job.decision.gate ==
+    "cpu_reroute"`, same payload shape and modal as Gate B. It used to swap to the ~12x
+    slower CPU build with only a log line. `resolve_gpu_decision` accepts `choice="cpu"`;
+    acceptance is recorded as `prep_params.cpu_reroute_accepted` so a resume does not
+    re-ask. `md_gate_b.hasPendingGpuDecision` matches both gates.
+  - `ProductionRequest.dcd_freq` was validated, documented and used by the disk forecast,
+    then dropped on the route that runs — now honoured (`production_segment_spec(dcd_freq=)`).
+  - The missing-PSF 4 fs→1 fs downgrade and the from-seed 1 fs force now say so (warning
+    text + `manifest.production_extension.integrator_downgrade`).
+  - `estimate_md_disk` derived its timestep from `fast` alone; it now mirrors prep's tiers.
+- **⚡ Optimize prefers a MEASUREMENT over the table** — `md_bench_probe.py` runs two confs
+  differing by one line on the solvated package, reads NAMD's own `Benchmark time:`, and
+  caches per **(GPU, NAMD build, thread count)** + size bucket in `workspace/
+  md_bench_cache.json`. `md_optimize.gpu_resident_pays(n, workspace=, machine=)` consults it
+  first and falls back to `_RESIDENT_MIN_ATOMS` only when unprobed. Seeded with exp52: at
+  32.7k atoms the measurement says resident (True), the table says offload (False).
+  `K_GPU_RESIDENT`/`K_OFFLOAD`/`_SMALL_SYSTEM_RESIDENT_PENALTY` remain the unprobed
+  fallback and are now documented as extrapolations from one design on one card.
+- **GPU-resident is decoupled from the timestep (2026-08-05, exp52).**
+  `md_integrator.resident_decision()` is the single resolver for BOTH writers — hard
+  incompatibility (GBIS / vacuum / fixed atoms / carved cell under `_RESIDENT_MIN_FILL`) →
+  the user's explicit choice → the `_RESIDENT_MIN_ATOMS` size crossover. The timestep is
+  **not an input** (a test pins that). `build_production_conf`'s `gpu_line = "" if ts == 1.0`
+  is gone: it discarded an explicit `force_resident=True` at 1 fs. Measured on 2hb_1xT
+  (32.7k atoms, RTX 2080 SUPER): resident is accepted and engages at 1/2/4 fs and is
+  **1.86–2.06× FASTER** — which *contradicts* the ~100k-atom crossover that constant
+  encodes. `_RESIDENT_MIN_ATOMS` is deliberately LEFT at 100,000 (it was measured on a
+  3080 Ti at +p16); it is now a stated default the user's choice overrides, and the plan
+  says which of the three rules decided it via the `gpu_resident_gate` condition, whose
+  `source` is now `CreateJobRequest.gpu_resident` so it renders against that control.
+  A choice that cannot be honoured is a `warning`, not a footnote. **K6's rider
+  ("4 fs only survives under GPUresident") is refuted** — corrected in `LESSONS.md` and in
+  `strip_gpu_resident`'s docstring.
+- **`Timestep` (was "Production timestep") is the PRODUCTION integrator and is independent
+  of `Fast relaxation`** (checked against the code 2026-08-05). `fast` sets the LADDER
+  (4 fs vs 2 fs on hard segments; soft stays 1 fs, gentle 2 fs) and writes `{stem}_hmr.psf`
+  at prep. `production_timestep_fs` is written to the manifest and read back by
+  `_production_fast_plan` (`routes_md.py:1420`), which re-decides HMR itself — 4 fs builds
+  the HMR PSF **on demand** even from a non-fast package (`routes_md.py:1543`), 1/2 fs use
+  the plain PSF even from a fast one. So "fast on + 2 fs" is a legal, meaningful pairing,
+  not a contradiction, and nothing overrides anything. Each option really does change more
+  than the number (`build_production_conf`, `md_protocols.py:1117-1138`): 4 fs = rigidBonds
+  all + HMR PSF, 2 fs = rigidBonds all + standard masses, 1 fs = rigidBonds **none** + no
+  GPUresident line. The dropdown says so. Gap worth knowing: no validator couples them —
+  `build_production_conf(timestep_fs=4.0, structure_psf=None)` would emit 4 fs against an
+  unrepartitioned PSF; unreachable from the routes, which always pair them.
+- **Conditions are labelled C1…Cn** (`conditionBadges` assigns them AFTER the sort, so the
+  list order IS the numbering). Everywhere a condition applies, it is referenced as a
+  hyperlink-styled `(C1, C4)` — hover gives the whole text, click switches to tab 2 and
+  flashes it. References sit on: a stage column header (`conditionsByStage`), a settings
+  field (`conditionsByField`, matched ONLY on the backend's own
+  `source: "CreateJobRequest.<field>"` — never guessed from wording), and the totals line
+  for `applies_to: "all"` conditions (`allStageConditions`), which would otherwise repeat
+  on 22 identical column badges.
 - `▶ Run` (`#md-jobs-run-btn`) is now ONE control over the SELECTED job — Run / Stop /
   Resume, via `runControlState`. `#md-jobs-job-ctl-btn` and `#md-jobs-prod-btn` are gone,
   and with them `mdSelectedJobControl` / `mdProductionAction`. A production child gets
@@ -190,7 +308,9 @@ question, and the one the protocol's NAME claims).
 - Wizard: click-to-edit in place (the value only makes sense beside its neighbours), a `⋯`
   per row for "set on EVERY stage" (22 columns cell-by-cell is not a usable feature), and a
   banner naming the protocol the run no longer is, with Reset. Blank restores the protocol;
-  `(none)` deletes the directive — deliberately different instructions.
+  `(none)` deletes the directive — deliberately different instructions. Every one of these
+  (including Reset) is on the undo stack, and Escape abandons the cell without closing the
+  modal.
 - CSS fix found while verifying: the body's first column is itself `position: sticky`, so
   the header at `z-index: 1` was being overwritten by scrolled rows (the minimisation
   column's name was showing a stray value). Header now outranks it, body cells opaque.
