@@ -2,7 +2,7 @@
  * Job Wizard — exercise the real modal against the user's running dev servers.
  *
  * READ-ONLY by construction (see memory/feedback_no_live_server_mutation_for_verify.md):
- * boots on a pinned document, and NEVER clicks Create / Create & run, so no job is ever
+ * boots on a pinned document, and NEVER clicks Create job, so no job is ever
  * submitted, stopped, deleted or archived. It only opens the wizard and reads what the
  * plan endpoint renders.
  *
@@ -38,6 +38,12 @@ async function openDynamics(page) {
   await expect(page.locator('#md-jobs-new-btn')).toBeVisible()
 }
 
+/** The wizard opens on tab 1 (protocol + settings); the ladder and its conditions are on
+ *  tab 2. Everything about what a run WILL DO lives behind this click. */
+async function openPlanTab(modal) {
+  await modal.locator('.wizard-tab', { hasText: 'What each stage runs' }).click()
+}
+
 test.beforeEach(async ({ request }) => {
   const r = await request.post(`${API}/design/load`, {
     data: { path: DESIGN_PATH },
@@ -56,6 +62,25 @@ test('the wizard renders every ladder stage as a column', async ({ page }) => {
   const modal = page.locator('.modal--wizard')
   await expect(modal).toBeVisible()
 
+  // Tab 1 sets the run up and offers only Next; nothing is creatable until its plan has
+  // been shown.
+  await expect(modal.locator('.wizard-preset').first()).toBeVisible()
+  await expect(modal.locator('.modal__actions button', { hasText: 'Next' })).toBeVisible()
+  await expect(modal.locator('.modal__actions button', { hasText: 'Create job' }))
+    .toBeHidden()
+  await expect(modal.locator('.modal__actions button', { hasText: 'Previous' })).toBeHidden()
+  await modal.locator('.modal__actions button', { hasText: 'Next' }).click()
+  // ONE create button: Create always stops at a prepared job so forces can attach to it
+  // from the panel, and the panel's Run starts it.
+  await expect(modal.locator('.modal__actions button', { hasText: 'Create job' }))
+    .toBeVisible()
+
+  // Tab 2 swaps Next for Previous, which goes back without losing anything.
+  await expect(modal.locator('.modal__actions button', { hasText: 'Next' })).toBeHidden()
+  await modal.locator('.modal__actions button', { hasText: 'Previous' }).click()
+  await expect(modal.locator('.wizard-preset').first()).toBeVisible()
+  await modal.locator('.modal__actions button', { hasText: 'Next' }).click()
+
   // 22 stage columns + the sticky parameter column. Asserted as "many", not as a
   // literal: the ladder's chunk split is a backend constant and this spec must not
   // become another place that hard-codes it.
@@ -70,10 +95,65 @@ test('the wizard renders every ladder stage as a column', async ({ page }) => {
   // that is the whole point of the view.
   await expect(modal.locator('.wizard-cell--changed').first()).toBeVisible()
 
-  // Conditions are stated, not left implicit.
+  // Conditions are stated, not left implicit — and each one is labelled, so the columns
+  // and settings it governs can refer to it in parentheses instead of repeating it.
   await expect(modal.locator('.wizard-cond').first()).toBeVisible()
+  await expect(modal.locator('.wizard-cond__label').first()).toHaveText('C1')
+  // Scoped to the stage table: references now also render against the SETTINGS controls
+  // on tab 1, so an unscoped `.first()` picks one on the hidden tab.
+  const ref = modal.locator('.wizard-stages .wizard-condref').first()
+  await expect(ref).toBeVisible()
+  // The reference carries the whole condition, not just its headline.
+  expect((await ref.getAttribute('title')).length).toBeGreaterThan(40)
 
   expect(errors, `console/page errors: ${errors.join('\n')}`).toEqual([])
+})
+
+test('a change can be undone — including one made on the other tab', async ({ page }) => {
+  await openDynamics(page)
+  await page.click('#md-jobs-new-btn')
+  const modal = page.locator('.modal--wizard')
+  const undo = modal.locator('button', { hasText: 'Undo' })
+  await expect(undo).toBeDisabled()          // nothing has been changed yet
+
+  const padding = modal.locator('.wizard-field', { hasText: 'Water padding' })
+  const input = padding.locator('input')
+  const before = await input.inputValue()
+  await input.fill(String(Number(before) + 1))
+  await input.blur()
+  await expect(padding.locator('.wizard-chip')).toHaveText('you set this')
+  await expect(undo).toBeEnabled()
+
+  await undo.click()
+  await expect(input).toHaveValue(before)
+  await expect(undo).toBeDisabled()
+
+  // And a stage-table edit, which is the one the user cannot retype from memory.
+  await openPlanTab(modal)
+  await expect(modal.locator('.wizard-cell--changed').first()).toBeVisible({ timeout: 30_000 })
+  const row = modal.locator('tr', { has: page.locator('th', { hasText: 'Langevin damping' }) })
+  const cell = row.locator('td').nth(3)
+  const protocolValue = (await cell.textContent()).trim()
+  await cell.click()
+  await cell.locator('input').fill('2')
+  await cell.locator('input').press('Enter')
+  await expect(cell).toHaveClass(/wizard-cell--overridden/)
+  await undo.click()
+  await expect(cell).toHaveText(protocolValue)
+  await expect(modal.locator('.wizard-cell--overridden')).toHaveCount(0)
+})
+
+test('abandoning a cell edit with Escape does not close the wizard', async ({ page }) => {
+  await openDynamics(page)
+  await page.click('#md-jobs-new-btn')
+  const modal = page.locator('.modal--wizard')
+  await openPlanTab(modal)
+  await expect(modal.locator('.wizard-cell--changed').first()).toBeVisible({ timeout: 30_000 })
+  const cell = modal.locator('.wizard-stages tbody td').first()
+  await cell.click()
+  await cell.locator('input').press('Escape')
+  await expect(modal).toBeVisible()
+  await expect(modal.locator('.wizard-cell--overridden')).toHaveCount(0)
 })
 
 test('switching protocol changes the plan and the provenance chips', async ({ page }) => {
@@ -81,21 +161,25 @@ test('switching protocol changes the plan and the provenance chips', async ({ pa
   await page.click('#md-jobs-new-btn')
   const modal = page.locator('.modal--wizard')
   await expect(modal).toBeVisible()
+  await openPlanTab(modal)
   await expect(modal.locator('.wizard-stages thead th').first()).toBeVisible()
 
   const totals = modal.locator('.wizard-totals')
   await expect(totals).toContainText('stages')
 
+  await modal.locator('.wizard-tab', { hasText: 'Protocol' }).click()
   await modal.locator('.wizard-preset', { hasText: 'Match the literature' }).click()
   // The literature tier refuses a water-shell carve and SAYS so up front — but as a
   // policy, not a verdict: this plan cannot know whether the design fits (that needs a
   // solvation profile), so it must never stop the run being created. The fit check
   // belongs to the launch pre-flight.
+  await openPlanTab(modal)
   const carve = modal.locator('.wizard-cond', { hasText: 'water-shell carve is not allowed' })
   await expect(carve).toHaveCount(1)
   await expect(modal.locator('.wizard-cond--blocking')).toHaveCount(0)
   await expect(modal.locator('button', { hasText: 'Create job' })).toBeEnabled()
   // Its settings come from the protocol, so the chips say so.
+  await modal.locator('.wizard-tab', { hasText: 'Protocol' }).click()
   await expect(modal.locator('.wizard-chip--preset').first()).toBeVisible()
 
   // "Not an option" means LOCKED, not merely defaulted: a carved run is a different
@@ -107,6 +191,7 @@ test('switching protocol changes the plan and the provenance chips', async ({ pa
 
   await modal.locator('.wizard-preset', { hasText: 'Optimised for the design' }).click()
   await expect(carve).toHaveCount(0)
+  await expect(modal.locator('.wizard-tab', { hasText: 'Protocol' })).toHaveClass(/is-selected/)
   // ...and it goes back to being an ordinary editable choice on a tier that permits it.
   await expect(allow.locator('input[type=checkbox]')).toBeEnabled()
 })
@@ -120,6 +205,7 @@ test('every stage parameter is editable, and edits highlight as protocol deviati
     await openDynamics(page)
     await page.click('#md-jobs-new-btn')
     const modal = page.locator('.modal--wizard')
+    await openPlanTab(modal)
     await expect(modal.locator('.wizard-cell--changed').first()).toBeVisible({ timeout: 30_000 })
 
     const row = modal.locator('tr', { has: page.locator('th', { hasText: 'Langevin damping' }) })
@@ -159,6 +245,7 @@ test('the sticky header survives scrolling the stage table', async ({ page }) =>
   await openDynamics(page)
   await page.click('#md-jobs-new-btn')
   const modal = page.locator('.modal--wizard')
+  await openPlanTab(modal)
   await expect(modal.locator('.wizard-cell--changed').first()).toBeVisible({ timeout: 30_000 })
   await modal.locator('.wizard-stages').evaluate(el => { el.scrollTop = 260 })
   const heads = await modal.locator('.wizard-stages thead th').allTextContents()

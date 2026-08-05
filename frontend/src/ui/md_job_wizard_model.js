@@ -265,7 +265,39 @@ export const WIZARD_FIELDS = [
   'production_ns_intent', 'water_shell_nm', 'minimize_steps', 'fast',
   'gpu_fallback_policy', 'production_timestep_fs', 'gpu_resident', 'early_stop_relax',
   'allow_water_shell_carve', 'force_soft', 'declash',
+  // The three integrator axes, separated (exp51). null on any of them means "auto",
+  // which the backend resolves from that run's timestep.
+  'relax_timestep_fs', 'relax_rigid_bonds', 'relax_hmr',
+  'production_rigid_bonds', 'production_hmr',
 ]
+
+/** Which kind of run a setting governs. The backend declares this (`plan.field_scopes`);
+ *  this is the fallback for a plan that has not arrived yet, so the very first render
+ *  already groups correctly instead of reshuffling when the plan lands. */
+export const DEFAULT_FIELD_SCOPES = {
+  relax_preset: 'relaxation', relax_timestep_fs: 'relaxation',
+  relax_rigid_bonds: 'relaxation', relax_hmr: 'relaxation', fast: 'relaxation',
+  force_soft: 'relaxation', declash: 'relaxation', early_stop_relax: 'relaxation',
+  minimize_steps: 'relaxation', protocol: 'relaxation',
+  production_timestep_fs: 'production', production_rigid_bonds: 'production',
+  production_hmr: 'production', production_ns_intent: 'production',
+}
+
+/** Pure: the scope of one field — the plan's declaration wins, then the local table,
+ *  then 'both' (solvation, chemistry and hardware are shared by construction: the cell
+ *  and PSF a relaxation builds are what production inherits). */
+export function fieldScope(key, plan) {
+  return plan?.field_scopes?.[key] || DEFAULT_FIELD_SCOPES[key] || 'both'
+}
+
+/** Pure: does this field have a condition that objects to the current combination?
+ *  Returns the worst kind present, or null. Drives the warning icon on the control. */
+export function fieldAlert(conds) {
+  if (!conds?.length) return null
+  if (conds.some(c => c.kind === 'blocking')) return 'blocking'
+  if (conds.some(c => c.kind === 'warning')) return 'warning'
+  return null
+}
 
 /**
  * Pure: the create-job body for the wizard's current state.
@@ -412,6 +444,42 @@ export function conditionBadges(plan) {
       override: c.override || null,
     }))
     .sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9))
+    // C1, C2, … in the order the panel lists them. A condition's paragraph is far too
+    // long to repeat beside the field or the stage column it governs, so the list is the
+    // one place it is written out and everywhere else refers to it by this label.
+    .map((c, i) => ({ ...c, label: `C${i + 1}` }))
+}
+
+/** Pure: the full text a condition reference shows on hover — label, headline, and the
+ *  whole explanation, because a reference that only repeats the headline is no use. */
+export function conditionTooltip(c) {
+  const head = [c?.label, c?.title].filter(Boolean).join(' — ')
+  return [head, c?.detail].filter(Boolean).join('\n\n')
+}
+
+/** A condition the backend attributes to a request field, e.g. `CreateJobRequest.fast`.
+ *  This is the ONLY link between a condition and a settings control — it is stated by the
+ *  code that raises the condition, never guessed from the wording here. */
+const REQUEST_SOURCE = /^CreateJobRequest\.([A-Za-z_]\w*)$/
+
+/** Pure: field key -> the conditions that field is responsible for, so a control can carry
+ *  its own condition references instead of leaving the user to match prose to a checkbox. */
+export function conditionsByField(plan) {
+  const out = new Map()
+  for (const c of conditionBadges(plan)) {
+    const m = REQUEST_SOURCE.exec(c.source || '')
+    if (!m) continue
+    if (!out.has(m[1])) out.set(m[1], [])
+    out.get(m[1]).push(c)
+  }
+  return out
+}
+
+/** Pure: the conditions that govern EVERY stage. They deliberately never appear as a
+ *  per-column reference — 22 identical badges is noise — so they are referenced once,
+ *  next to the run totals. */
+export function allStageConditions(plan) {
+  return conditionBadges(plan).filter(c => c.allStages)
 }
 
 /** Pure: is anything in the plan a hard stop? Drives whether Create is offered. */
@@ -502,6 +570,53 @@ export function overrideSummary(overrides) {
         + `on ${stages.includes('*') ? 'every stage' : `${stages.length} stage${stages.length === 1 ? '' : 's'}`}`
       : '',
   }
+}
+
+// ── Undo ──────────────────────────────────────────────────────────────────────
+/**
+ * Every part of the wizard's state a user CHOSE, and therefore every part an undo has to
+ * put back. Deliberately not the plan, the preset catalogue or the open tab: those are
+ * consequences of a choice, not choices, and restoring them would make undo mean two
+ * different things.
+ */
+export const UNDOABLE_KEYS = [
+  'mode', 'presetId', 'touched', 'stageOverrides', 'parentJobId', 'lengthNs', 'dcdFreq',
+  'enmRestraints', 'langevinDamping', 'allowUndersizedCell',
+]
+
+/** Pure: a deep-enough copy of the undoable state. `touched` and `stageOverrides` are the
+ *  only nested values, and both are one level of plain object. */
+export function snapshotState(state = {}) {
+  const snap = {}
+  for (const key of UNDOABLE_KEYS) snap[key] = state[key]
+  snap.touched = { ...(state.touched || {}) }
+  snap.stageOverrides = Object.fromEntries(
+    Object.entries(state.stageOverrides || {}).map(([k, v]) => [k, { ...v }]))
+  return snap
+}
+
+/** Restore a snapshot onto the live state object, in place (the wizard holds one `state`
+ *  reference and its closures all read through it). Returns the same object. */
+export function applySnapshot(state, snap) {
+  if (!snap) return state
+  const restored = snapshotState(snap)
+  for (const key of UNDOABLE_KEYS) state[key] = restored[key]
+  return state
+}
+
+/**
+ * Pure: push a snapshot onto the undo stack, dropping the oldest past `limit`.
+ *
+ * Snapshots are taken BEFORE a change, so an identical top-of-stack means the edit before
+ * this one changed nothing — retyping a cell's existing value, re-picking the selected
+ * protocol. Those must not consume an undo press, or undo appears broken.
+ */
+export function pushUndo(stack, snap, limit = 50) {
+  const list = stack || []
+  const top = list[list.length - 1]
+  if (top && JSON.stringify(top) === JSON.stringify(snap)) return list
+  const out = [...list, snap]
+  return out.length > limit ? out.slice(out.length - limit) : out
 }
 
 /** Pure: the value a cell edit should send — trimmed, with empty meaning "clear". */

@@ -14,8 +14,14 @@
 // ── Pure helpers ──────────────────────────────────────────────────────────────
 
 /** True when a paused job is waiting on the GPU-resident fallback decision. */
+/** The gates that pause a job to ASK rather than substituting something quietly.
+ *  `gpu_resident` — the fastest GPU mode could not start.
+ *  `cpu_reroute`  — NAMD's CUDA build hits its tile-list bug on this geometry; the CPU
+ *                   build is ~12x slower. This used to reroute silently. */
+const DECISION_GATES = new Set(['gpu_resident', 'cpu_reroute'])
+
 export function hasPendingGpuDecision(job) {
-  return job?.status === 'paused' && job?.decision?.gate === 'gpu_resident'
+  return job?.status === 'paused' && DECISION_GATES.has(job?.decision?.gate)
 }
 
 /**

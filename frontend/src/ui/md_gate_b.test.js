@@ -96,3 +96,38 @@ describe('openGpuDecisionModal (DOM)', () => {
     expect(onChoose).not.toHaveBeenCalled()
   })
 })
+
+describe('the CPU-reroute gate (B2)', () => {
+  const CPU_DECISION = {
+    gate: 'cpu_reroute', severity: 'decision',
+    title: 'This structure hits a known NAMD GPU bug',
+    message: 'The CPU build runs it correctly, but roughly 12x slower.',
+    checks: [{ label: 'CUDA neighbour lists built', ok: false }],
+    options: [{ id: 'cpu', label: 'Run on the CPU build (~12x slower)', primary: true },
+              { id: 'cancel', label: 'Cancel', primary: false }],
+  }
+
+  it('pauses for a decision instead of rerouting silently', () => {
+    // The whole point: a ~12x slowdown must be a choice, not something the user infers
+    // from a slow ETA.
+    expect(hasPendingGpuDecision({ status: 'paused', decision: CPU_DECISION })).toBe(true)
+  })
+
+  it('still recognises the GPU-resident gate', () => {
+    expect(hasPendingGpuDecision({ status: 'paused', decision: DECISION })).toBe(true)
+  })
+
+  it('ignores an unknown gate rather than opening an empty modal', () => {
+    expect(hasPendingGpuDecision({ status: 'paused', decision: { gate: 'what' } })).toBe(false)
+  })
+
+  it('only fires for a PAUSED job', () => {
+    expect(hasPendingGpuDecision({ status: 'running', decision: CPU_DECISION })).toBe(false)
+  })
+
+  it('renders the payload it is given, without knowing this gate exists', () => {
+    const m = gateBMessage(CPU_DECISION)
+    expect(m.title).toMatch(/NAMD GPU bug/)
+    expect(m.options.map(o => o.id)).toEqual(['cpu', 'cancel'])
+  })
+})

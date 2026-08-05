@@ -985,9 +985,52 @@ body:has(#right-panel.locked-inactive) .toast {
   margin-top: var(--space-1);
 }
 
-.wizard-split { display: flex; gap: var(--space-3); align-items: flex-start; }
-.wizard-pane { flex: 1 1 320px; min-width: 0; }
-.wizard-pane--wide { flex: 2 1 620px; }
+/* Two tabs: set the run up, then read what it will do. Both are full width — the settings
+   used to be squeezed into a 320px column beside the table. */
+.wizard-tabbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--color-border-default);
+}
+.wizard-tabs { display: flex; gap: var(--space-1); flex: 1 1 auto; }
+.wizard-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.wizard-tab:hover { color: var(--color-text-primary); }
+.wizard-tab.is-selected { color: var(--color-accent); border-bottom-color: var(--color-accent); }
+.wizard-tab__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  font-size: var(--text-xs);
+}
+.wizard-tabpanel[hidden] { display: none; }
+.wizard-pane { min-width: 0; }
+/* Full width, so the settings read as a form instead of a stack in a sidebar. Column FLOW
+   rather than a grid: the fields differ wildly in height (one carries a paragraph of
+   explanation, the next a checkbox) and a grid would align every row to its tallest
+   member, leaving half the panel empty. */
+/* The groups stack; the FIELDS inside each group flow into columns. */
+.wizard-scope__fields {
+  columns: 380px 3;
+  column-gap: var(--space-4);
+}
+.wizard-fields .wizard-field { break-inside: avoid; }
 .wizard-pane h3 {
   font-size: var(--text-xs);
   text-transform: uppercase;
@@ -1036,7 +1079,7 @@ body:has(#right-panel.locked-inactive) .toast {
   margin-bottom: var(--space-2);
 }
 
-.wizard-stages { overflow: auto; max-height: 52vh; }
+.wizard-stages { overflow: auto; max-height: 58vh; }
 .wizard-stages table { border-collapse: separate; border-spacing: 0; font-size: var(--text-xs); }
 .wizard-stages th,
 .wizard-stages td {
@@ -1165,6 +1208,57 @@ body:has(#right-panel.locked-inactive) .toast {
 .wizard-status { font-size: var(--text-xs); color: var(--color-text-muted); min-height: 1em; }
 .wizard-check { accent-color: var(--color-accent); }
 
-@media (max-width: 900px) {
-  .wizard-split { flex-direction: column; }
+/* Condition references — "(C1, C4)" beside the control or stage column a condition
+   governs. The condition is written out ONCE, in the list; everywhere else refers to it
+   by label, hover shows the whole text, and clicking jumps to it. */
+.wizard-cond__label {
+  display: inline-block;
+  margin-right: var(--space-1);
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-muted);
+  font-family: var(--font-data);
+  font-weight: 400;
 }
+.wizard-condrefs { margin-left: 4px; color: var(--color-text-dim); font-weight: 400; }
+.wizard-condref {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font-family: var(--font-data);
+}
+.wizard-condref:hover { color: var(--color-accent-hover); }
+.wizard-cond.is-flash {
+  background: var(--color-accent-soft);
+  transition: background .4s ease;
+}
+
+/* Which run a setting governs. The flat list could not say, so a production-only field
+   sitting between two ladder fields read as a ladder setting. */
+.wizard-scope {
+  break-inside: avoid;
+  margin: var(--space-3) 0 var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-default);
+}
+.wizard-scope:first-child { margin-top: 0; border-top: none; padding-top: 0; }
+.wizard-scope__title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-accent);
+}
+.wizard-scope--production .wizard-scope__title { color: var(--color-warning); }
+.wizard-scope--both .wizard-scope__title { color: var(--color-text-muted); }
+.wizard-scope__help {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+/* ⚠ against the control whose value the plan objects to. */
+.wizard-field__alert { margin-left: 4px; cursor: help; }
+.wizard-field__alert--warning { color: var(--color-warning); }
+.wizard-field__alert--blocking { color: var(--color-danger); }

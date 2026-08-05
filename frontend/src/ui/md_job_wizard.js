@@ -19,9 +19,15 @@
  */
 import { createButton, createInput, createSelect, createModal, el } from './primitives/index.js'
 import {
+  allStageConditions,
+  applySnapshot,
   blockingConditions,
   conditionBadges,
+  conditionsByField,
   conditionsByStage,
+  conditionTooltip,
+  fieldAlert,
+  fieldScope,
   deferredNotes,
   makeDebounce,
   paramRows,
@@ -29,16 +35,30 @@ import {
   productionComparison,
   productionPayload,
   planPayload,
+  pushUndo,
   relaxationChoices,
   clearStageOverrides,
   normaliseOverrideInput,
   overrideSummary,
   setStageOverride,
+  snapshotState,
   stageColumns,
   wizardPayload,
 } from './md_job_wizard_model.js'
 
 const PLAN_DEBOUNCE_MS = 250
+
+/** How many changes back undo reaches. Deep enough that a session of tuning is safe,
+ *  shallow enough that the stack never becomes a memory question. */
+const UNDO_LIMIT = 50
+
+/** The two halves of the wizard. Setting up a run and reading what that run will do are
+ *  different tasks — every setting on one screen, the resulting 22-stage ladder and its
+ *  conditions on the next — so neither has to be squeezed into a column. */
+const TABS = [
+  ['setup', 'Protocol & settings'],
+  ['plan', 'What each stage runs'],
+]
 
 /** The one wizard setting that is a standing PREFERENCE rather than a per-run choice:
  *  whether an unattended run should pause and ask when the fastest GPU mode cannot
@@ -79,16 +99,49 @@ const FIELDS = [
   { key: 'ion_conc_mM', label: 'NaCl', unit: 'mM', type: 'number', step: 5, min: 0 },
   { key: 'minimize_steps', label: 'Minimisation steps', type: 'number', step: 100, min: 100,
     help: 'A FLOOR, not the value: minimisation scales to one step per 10 atoms after solvation. A flat count is safe on a small bundle and catastrophic on a large origami.' },
-  { key: 'fast', label: 'Fast relaxation (HMR + 4 fs)', type: 'checkbox',
-    help: 'Hydrogen-mass repartitioning lets rigid bonds run stably at 4 fs, roughly quartering the wall clock for the same simulated time. Turned off automatically for a design built with clashes.' },
+  // ── The three integrator axes, separated (exp51, 2026-08-05) ──
+  // These used to be one dial: "Fast relaxation (HMR + 4 fs)" bundled a timestep with a
+  // mass set, and rigidBonds was never exposed at all. exp51 measured the combinations
+  // the old code could not emit; each axis is now its own control, with the measurement
+  // stated as a condition whenever a combination is unsound.
+  { key: 'relax_timestep_fs', label: 'Ladder timestep', unit: 'fs', type: 'select',
+    options: [{ value: '4', label: '4 fs (faster, risks RATTLE)' },
+              { value: '2', label: '2 fs (standard)' },
+              { value: '1', label: '1 fs (conservative)' }],
+    parse: Number,
+    fallback: plan => (plan?.request?.fast?.value ? 4 : 2),
+    help: 'The base timestep for the relaxation ladder — NOT for production, which has its own below. Per-stage tiers still apply on top: a stage that needs the soft integrator runs 1 fs and a declashed ladder runs 2 fs whatever this says, and the stage table shows exactly what each column will use.' },
+  { key: 'relax_rigid_bonds', label: 'Ladder rigid bonds', type: 'checkbox',
+    // The box shows what the run WILL do: ticked = rigidBonds all. Untouched it follows
+    // the timestep's recommendation; touching it makes the choice explicit, and any
+    // mismatch with the timestep raises its own warning against this control.
+    fallback: (plan, valueOf) => (Number(valueOf('relax_timestep_fs')) <= 1 ? 'none' : 'all'),
+    check: v => v === 'all',
+    parse: on => (on ? 'all' : 'none'),
+    help: 'Hold bonds to hydrogen rigid (RATTLE). Constraining them removes the ~11 fs X–H stretch, which is what makes 2 fs possible at all. Recommended on above 1 fs; exp51 measured 1 fs + rigid to be perfectly stable too, so it is a free choice there.' },
+  { key: 'relax_hmr', label: 'Ladder H-mass repartitioning (HMR)', type: 'checkbox',
+    fallback: (plan, valueOf) => Number(valueOf('relax_timestep_fs')) >= 4,
+    check: v => !!v,
+    parse: on => !!on,
+    help: 'Move mass from each non-water hydrogen onto its bonded heavy atom (×3), slowing the X–H stretch so a 4 fs step is stable. Recommended on at 4 fs and off below: exp51 measured 4 fs on standard masses failing RATTLE after 16.8 ps, and HMR below 4 fs costing 3.5–35× in energy conservation.' },
   { key: 'early_stop_relax', label: 'Stop settled stages early', type: 'checkbox',
     help: 'Skip a stage’s remaining chunks once BOTH its energy and its base pairing are flat. Turn it off for a run whose numbers are going in a paper.' },
-  { key: 'production_timestep_fs', label: 'Production timestep', unit: 'fs', type: 'select',
-    options: [{ value: '4', label: '4 fs — HMR, the default' },
-              { value: '2', label: '2 fs — rigid bonds, standard masses (the paper’s value)' },
-              { value: '1', label: '1 fs — conservative reference' }],
+  { key: 'production_timestep_fs', label: 'Timestep', unit: 'fs', type: 'select',
+    options: [{ value: '4', label: '4 fs (faster, risks RATTLE)' },
+              { value: '2', label: '2 fs (standard)' },
+              { value: '1', label: '1 fs (conservative)' }],
     parse: Number,
-    help: 'Recorded now, used when you run production off this package. The relaxation never constrains it. Only these three are allowed — 2.5/3/3.5 fs are refused outright.' },
+    help: 'The PRODUCTION run’s integrator — recorded now, used when you run production off this package; the relaxation ladder runs at its own timestep and never constrains this. Only these three are allowed — 2.5/3/3.5 fs are refused outright.' },
+  { key: 'production_rigid_bonds', label: 'Production rigid bonds', type: 'checkbox',
+    fallback: (plan, valueOf) => (Number(valueOf('production_timestep_fs')) <= 1 ? 'none' : 'all'),
+    check: v => v === 'all',
+    parse: on => (on ? 'all' : 'none'),
+    help: 'The same axis as the ladder’s, for the production run.' },
+  { key: 'production_hmr', label: 'Production H-mass repartitioning (HMR)', type: 'checkbox',
+    fallback: (plan, valueOf) => Number(valueOf('production_timestep_fs')) >= 4,
+    check: v => !!v,
+    parse: on => !!on,
+    help: 'The repartitioned PSF is built on demand, so production does not need the ladder to have run with HMR.' },
   { key: 'allow_water_shell_carve', label: 'Allow a carve if the full box will not fit', type: 'checkbox',
     help: 'Off means the job STOPS rather than shrinking the water, because a carve stops the run being the published protocol.' },
   { key: 'gpu_resident', label: 'GPU-resident mode', type: 'select',
@@ -102,8 +155,18 @@ const FIELDS = [
   { key: 'threads', label: 'CPU threads', type: 'number', step: 1, min: 1 },
   { key: 'devices', label: 'CUDA devices', type: 'text',
     help: '"0" for the first GPU, "0,1" for two, or "cpu" for the multicore build.' },
-  { key: 'force_soft', label: 'Run every stage soft (1 fs, flexible bonds)', type: 'checkbox',
-    help: 'The manual escape hatch for a model that keeps failing rigid-bond constraints. Roughly doubles the wall clock.' },
+]
+
+/** The settings pane's groups, in order. Every control states which run it governs —
+ *  the flat list could not, and that is how a production-only field ended up looking
+ *  like a relaxation setting. */
+const SCOPE_GROUPS = [
+  { scope: 'relaxation', title: 'Relaxation ladder',
+    help: 'Applies to the 22-stage relaxation this job runs now — the stage table on the next tab is exactly these settings.' },
+  { scope: 'production', title: 'Production run',
+    help: 'Recorded now, applied when you later run production off this package. Changing these does not alter the ladder.' },
+  { scope: 'both', title: 'Both runs',
+    help: 'Solvation, chemistry and hardware. The cell and the PSF the relaxation builds are what production inherits, so these are shared by construction.' },
 ]
 
 const PROVENANCE_TEXT = {
@@ -123,7 +186,7 @@ const PROVENANCE_TEXT = {
  * @param {()=>string|null} deps.getPartPath
  * @param {(jobId:string)=>void} [deps.onJobCreated]
  * @param {(mount:{button:HTMLElement, progressEl:HTMLElement})=>void} [deps.onOptimizeMount]
- *        Called once, when the modal is first built, with the ⚡ "Recommend for this
+ *        Called once, when the modal is first built, with the ⚡ "Optimize for this
  *        machine" button and its progress host. The recommender lives in the panel (it
  *        needs the API client and the design), but its CONTROLS belong here now that this
  *        is where settings are.
@@ -137,6 +200,9 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
 
   const state = {
     mode: 'relaxation',
+    // Which half of the wizard is showing. Not undoable — moving between tabs changes
+    // nothing about the run.
+    tab: 'setup',
     presetId: 'design_speed',
     touched: {},          // only what the user actually changed — see wizardPayload
     // Set when the wizard was opened for a SEEDED DRAFT: submitting then solvates that
@@ -168,6 +234,41 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   }
 
   const refetch = makeDebounce(() => { void loadPlan() }, PLAN_DEBOUNCE_MS)
+
+  // ── Undo ────────────────────────────────────────────────────────────────────
+  /** Snapshots of the state BEFORE each change, newest last.
+   *
+   *  Every value in this wizard is typed into a control that then re-plans, and several
+   *  of them (a stage cell, a set-for-every-stage sweep, ⚡) are destructive enough that
+   *  "what was it before?" has no answer once the plan comes back. One stack covers all
+   *  of them uniformly — settings fields, stage-table cells, protocol and mode. */
+  let undoStack = []
+  let undoBtn = null
+
+  /** Call at the top of any handler that is about to change the state. */
+  function record() {
+    undoStack = pushUndo(undoStack, snapshotState(state), UNDO_LIMIT)
+    paintUndo()
+  }
+
+  function undo() {
+    const snap = undoStack[undoStack.length - 1]
+    if (!snap) return
+    undoStack = undoStack.slice(0, -1)
+    applySnapshot(state, snap)
+    paintUndo()
+    renderSource()
+    render()
+    void loadPlan()
+  }
+
+  function paintUndo() {
+    if (!undoBtn) return
+    undoBtn.disabled = !undoStack.length
+    undoBtn.title = undoStack.length
+      ? `Undo the last change (${undoStack.length} to go back through) — Ctrl+Z`
+      : 'Nothing to undo yet'
+  }
 
   // ── Plan ────────────────────────────────────────────────────────────────────
   /** Default the production parent to the newest completed relaxation for this part.
@@ -224,6 +325,18 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     return plan?.request?.[key]?.value
   }
 
+  /** The value a field will really use: what is stored, else what its own `fallback`
+   *  resolves. Fields whose default depends on a SIBLING (rigid bonds and HMR both follow
+   *  the timestep) must read through this, not `valueOf` — an untouched timestep is stored
+   *  as null, and Number(null) is 0, which silently read as "1 fs" and left both boxes
+   *  unticked on a 4 fs ladder. */
+  function effectiveValue(key) {
+    const v = valueOf(key)
+    if (v != null) return v
+    const field = FIELDS.find(f => f.key === key)
+    return field?.fallback ? field.fallback(plan, effectiveValue) : v
+  }
+
   function provenanceOf(key) {
     if (isForced(key)) return 'forced'
     if (Object.prototype.hasOwnProperty.call(state.touched, key)) return 'user'
@@ -231,6 +344,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   }
 
   function setField(key, value) {
+    record()
     state.touched[key] = value
     if (key === 'gpu_fallback_policy') {
       try { localStorage.setItem(GPU_FALLBACK_KEY, String(value)) } catch { /* private mode */ }
@@ -284,7 +398,8 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
                title: summary.unavailableReason || preset.reference || '' },
       on: {
         click: () => {
-          if (!summary.available) return
+          if (!summary.available || preset.id === state.presetId) return
+          record()
           state.presetId = preset.id
           // Deliberately NOT clearing `touched`: a value you set by hand survives a
           // protocol change, and its chip stays "you set this" so you can see that it
@@ -311,24 +426,64 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     mounts.fields.replaceChildren()
     if (state.mode === 'production') { renderProductionFields(); return }
 
+    const fieldConds = conditionsByField(plan)
+    // Grouped by WHICH RUN each setting governs. A flat list put the production timestep
+    // between two ladder settings, so nothing on screen said which run a control changed.
+    const groups = new Map(SCOPE_GROUPS.map(g => [g.scope, []]))
     for (const field of FIELDS) {
+      const scope = fieldScope(field.key, plan)
+      ;(groups.get(scope) || groups.get('both')).push(field)
+    }
+    for (const group of SCOPE_GROUPS) {
+      const fields = groups.get(group.scope) || []
+      if (!fields.length) continue
+      // Each group is its own block with its own column flow. One flow across all three
+      // would let a group's heading land in a different column from its fields, which is
+      // worse than no grouping at all.
+      const body = el('div', { className: 'wizard-scope__fields' })
+      mounts.fields.appendChild(el('section', {
+        className: `wizard-scope wizard-scope--${group.scope}`,
+        children: [
+          el('h4', { className: 'wizard-scope__title', text: group.title }),
+          el('div', { className: 'wizard-scope__help', text: group.help }),
+          body,
+        ],
+      }))
+      for (const field of fields) renderField(field, fieldConds, body)
+    }
+  }
+
+  function renderField(field, fieldConds, parent) {
+    {
       const provenance = provenanceOf(field.key)
-      const value = valueOf(field.key)
+      let value = valueOf(field.key)
+      // An unset field shows what the run WILL use, not a blank. `valueOf` is passed in
+      // so a fallback can read a sibling control (rigid bonds and HMR both follow the
+      // timestep that is selected RIGHT NOW, not the one the last plan was built with).
+      if (value == null && field.fallback) value = field.fallback(plan, effectiveValue)
       const forced = provenance === 'forced'
       const reason = plan?.request?.[field.key]?.reason || ''
 
       let control
       if (field.type === 'checkbox') {
+        // `check` maps the field's own vocabulary onto the box ("all"/"none" for
+        // rigidBonds); `parse` maps it back. Without them a string value would read as
+        // truthy and every rigid-bond box would show ticked.
+        const on = field.check ? field.check(value) : !!value
         control = el('input', {
           className: 'wizard-check',
-          attrs: { type: 'checkbox', checked: value ? true : undefined,
+          attrs: { type: 'checkbox', checked: on ? true : undefined,
                    disabled: forced || undefined },
-          on: { change: e => setField(field.key, e.target.checked) },
+          on: { change: e => setField(field.key,
+            field.parse ? field.parse(e.target.checked) : e.target.checked) },
         })
       } else if (field.type === 'select') {
+        // `format` exists for the tri-states: their VALUE is null/true/false but their
+        // option values are ''/'on'/'off', so String(value) would select nothing.
+        const shown = field.format ? field.format(value) : (value == null ? '' : String(value))
         control = createSelect({
           size: 'sm', options: field.options,
-          value: value == null ? '' : String(value),
+          value: shown,
           disabled: forced,
           onChange: v => setField(field.key, field.parse ? field.parse(v) : v),
         })
@@ -342,7 +497,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
         })
       }
 
-      mounts.fields.appendChild(el('div', {
+      ;(parent || mounts.fields).appendChild(el('div', {
         className: 'wizard-field',
         children: [
           el('label', {
@@ -350,6 +505,8 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
             children: [
               document.createTextNode(field.label),
               field.unit ? el('span', { className: 'wizard-field__unit', text: ` (${field.unit})` }) : null,
+              alertIcon(fieldConds.get(field.key)),
+              conditionRefs(fieldConds.get(field.key)),
             ],
           }),
           el('div', { className: 'wizard-field__control', children: [control] }),
@@ -364,6 +521,18 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
         ],
       }))
     }
+  }
+
+  /** ⚠ on a control whose current value the plan objects to. The objection itself is the
+   *  condition next to it — this is only what makes it visible without reading. */
+  function alertIcon(conds) {
+    const kind = fieldAlert(conds)
+    if (!kind) return null
+    return el('span', {
+      className: `wizard-field__alert wizard-field__alert--${kind}`,
+      attrs: { title: conds.map(conditionTooltip).join('\n\n'), 'aria-label': kind },
+      text: '⚠',
+    })
   }
 
   function renderProductionFields() {
@@ -393,7 +562,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
               value: c.job.job_id,
               label: c.stale ? `${c.label} (design has changed since)` : c.label,
             })),
-            onChange: v => { state.parentJobId = v; void loadPlan() },
+            onChange: v => { record(); state.parentJobId = v; void loadPlan() },
           })],
         }),
         el('div', {
@@ -404,11 +573,11 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     }))
 
     mounts.fields.appendChild(numberField('Run length', 'ns', state.lengthNs, v => {
-      state.lengthNs = v; refetch()
+      record(); state.lengthNs = v; refetch()
     }, 'How long the unrestrained run samples for. The cell was sized once, when the relaxation was prepared — a run longer than that cell supports is flagged below.'))
 
     mounts.fields.appendChild(numberField('Trajectory interval', 'steps', state.dcdFreq, v => {
-      state.dcdFreq = v; refetch()
+      record(); state.dcdFreq = v; refetch()
     }, 'How often a frame is written. Larger means a smaller file: the disk forecast scales directly with this.'))
 
     const enmOn = (plan?.conditions || [])
@@ -427,7 +596,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
               { value: 'on', label: 'Keep an elastic network (as the published runs do)' },
               { value: 'off', label: 'None — genuinely unrestrained' },
             ],
-            onChange: v => { state.enmRestraints = v; void loadPlan() },
+            onChange: v => { record(); state.enmRestraints = v; void loadPlan() },
           })],
         }),
         el('div', {
@@ -442,7 +611,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     }))
     mounts.fields.appendChild(numberField(
       'Langevin coupling', 'ps⁻¹', state.langevinDamping, v => {
-        state.langevinDamping = v; refetch()
+        record(); state.langevinDamping = v; refetch()
       },
       'Blank uses the literature production value (1). The ladder runs at 5, which is an '
       + 'equilibration setting: at that coupling the dynamics are overdamped, so anything '
@@ -452,7 +621,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     mounts.fields.appendChild(el('div', {
       className: 'wizard-field',
       children: [
-        el('label', { className: 'wizard-field__label', text: 'Production timestep' }),
+        el('label', { className: 'wizard-field__label', text: 'Timestep' }),
         el('div', {
           className: 'wizard-field__control',
           children: [createSelect({
@@ -510,8 +679,12 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
           children: [
             el('div', { className: 'wizard-col__name', text: shortStageName(col.name) }),
             el('div', { className: 'wizard-col__meta', text: `${col.ns} ns` }),
+            // Which conditions govern THIS column. A column is 118px wide, so the
+            // condition's own sentence cannot live here — the label does, and the whole
+            // text is one hover (or one click, which jumps to it) away.
             badges.has(col.name)
-              ? el('div', { className: 'wizard-col__badge', text: badges.get(col.name)[0].title })
+              ? el('div', { className: 'wizard-col__badge',
+                            children: [conditionRefs(badges.get(col.name))] })
               : null,
           ],
         })),
@@ -592,7 +765,13 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
             children: [
               el('th', { className: 'param', text: 'Parameter' }),
               el('th', { className: 'wizard-col', text: `Last relaxation stage — ${shortStageName(last.name)}` }),
-              el('th', { className: 'wizard-col wizard-col--production', text: 'Production' }),
+              el('th', {
+                className: 'wizard-col wizard-col--production',
+                children: [
+                  document.createTextNode('Production '),
+                  conditionRefs(conditionsByStage(plan).get(first.name)),
+                ],
+              }),
             ],
           })],
         }),
@@ -643,14 +822,20 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     const finish = (commit) => {
       if (done) return
       done = true
-      if (!commit) { td.textContent = before; return }
-      state.stageOverrides = setStageOverride(
-        state.stageOverrides, stageIndex, key, normaliseOverrideInput(input.value))
+      const next = commit ? normaliseOverrideInput(input.value) : undefined
+      const current = state.stageOverrides[String(stageIndex)]?.[key]
+      // Committing the value that is already there is not an edit: it must not re-plan,
+      // and above all it must not consume an undo.
+      if (!commit || next === current) { td.textContent = before; return }
+      record()
+      state.stageOverrides = setStageOverride(state.stageOverrides, stageIndex, key, next)
       void loadPlan()
     }
     input.addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); finish(true) }
-      if (e.key === 'Escape') { e.preventDefault(); finish(false) }
+      // stopPropagation, or the modal's own window-level Escape handler closes the whole
+      // wizard: abandoning one cell edit would throw away every other one too.
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false) }
     })
     input.addEventListener('blur', () => finish(true))
     td.replaceChildren(input)
@@ -675,8 +860,10 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       + 'Blank restores the protocol on all stages. "(none)" removes the directive.',
       current)
     if (next === null) return
-    state.stageOverrides = setStageOverride(
-      state.stageOverrides, '*', row.key, normaliseOverrideInput(next))
+    const value = normaliseOverrideInput(next)
+    if (value === state.stageOverrides['*']?.[row.key]) return
+    record()
+    state.stageOverrides = setStageOverride(state.stageOverrides, '*', row.key, value)
     void loadPlan()
   }
 
@@ -702,8 +889,15 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
           el('h4', { text: heading }),
           ...items.map(c => el('div', {
             className: `wizard-cond wizard-cond--${c.kind}`,
+            attrs: c.label ? { 'data-cond': String(c.id ?? c.label) } : undefined,
             children: [
-              el('div', { className: 'wizard-cond__title', text: c.title }),
+              el('div', {
+                className: 'wizard-cond__title',
+                children: [
+                  c.label ? el('span', { className: 'wizard-cond__label', text: c.label }) : null,
+                  document.createTextNode(c.title),
+                ],
+              }),
               el('div', { className: 'wizard-cond__detail', text: c.detail }),
               c.stages?.length
                 ? el('div', { className: 'wizard-cond__stages', text: `Affects: ${c.stages.map(shortStageName).join(', ')}` })
@@ -722,13 +916,54 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     }
   }
 
+  /**
+   * "(C1, C4)" — the conditions that govern whatever this sits next to.
+   *
+   * Written out where the condition IS (the list on the second tab) and referred to
+   * everywhere it APPLIES, because a condition's explanation is a paragraph and the
+   * places it applies to are a checkbox and a 118px table column. Hover gives the whole
+   * text; clicking jumps to it in the list.
+   */
+  function conditionRefs(conds) {
+    if (!conds?.length) return null
+    const children = [document.createTextNode('(')]
+    conds.forEach((c, i) => {
+      if (i) children.push(document.createTextNode(', '))
+      children.push(el('a', {
+        className: 'wizard-condref',
+        attrs: { href: '#', title: conditionTooltip(c) },
+        text: c.label,
+        on: {
+          click: e => {
+            e.preventDefault()
+            e.stopPropagation()
+            focusCondition(c.id ?? c.label)
+          },
+        },
+      }))
+    })
+    children.push(document.createTextNode(')'))
+    return el('span', { className: 'wizard-condrefs', children })
+  }
+
+  /** Show the condition itself — which lives on the other tab from most of its
+   *  references, so this has to switch tabs before it can scroll to it. */
+  function focusCondition(id) {
+    setTab('plan')
+    const node = mounts.conditions.querySelector(`[data-cond="${id}"]`)
+    if (!node) return
+    node.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    node.classList.add('is-flash')
+    setTimeout(() => node.classList.remove('is-flash'), 1400)
+  }
+
   function overrideCheckbox() {
     return el('label', {
       className: 'wizard-override',
       children: [
         el('input', {
           attrs: { type: 'checkbox', checked: state.allowUndersizedCell ? true : undefined },
-          on: { change: e => { state.allowUndersizedCell = e.target.checked; void loadPlan() } },
+          on: { change: e => { record(); state.allowUndersizedCell = e.target.checked; void loadPlan() } },
         }),
         document.createTextNode(' Run anyway — I accept that the structure may meet its own periodic image'),
       ],
@@ -739,9 +974,17 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     mounts.summary.replaceChildren()
     if (!plan) return
     const t = plan.totals || {}
+    // Conditions that hold for EVERY stage are referenced once here rather than repeated
+    // in 22 identical column badges.
+    const everywhere = allStageConditions(plan)
     mounts.summary.appendChild(el('div', {
       className: 'wizard-totals',
-      text: `${t.n_stages} stages · ${Number(t.total_steps || 0).toLocaleString()} steps · ${t.total_ns} ns simulated`,
+      children: [
+        document.createTextNode(
+          `${t.n_stages} stages · ${Number(t.total_steps || 0).toLocaleString()} steps · ${t.total_ns} ns simulated`),
+        everywhere.length ? document.createTextNode(' · applies throughout: ') : null,
+        conditionRefs(everywhere),
+      ],
     }))
     const ov = overrideSummary(state.stageOverrides)
     if (!ov.directives) return
@@ -753,7 +996,11 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
           + `job's manifest and declared in its protocol-fidelity block.`),
         createButton({
           label: 'Reset every edit', variant: 'ghost', size: 'sm',
-          onClick: () => { state.stageOverrides = clearStageOverrides(); void loadPlan() },
+          onClick: () => {
+            record()
+            state.stageOverrides = clearStageOverrides()
+            void loadPlan()
+          },
         }),
       ],
     }))
@@ -761,6 +1008,9 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
 
   // ── Actions ─────────────────────────────────────────────────────────────────
   function setMode(mode) {
+    // Recorded because this DISCARDS every field the user set — the one change in the
+    // wizard that throws work away, and so the one undo has to cover.
+    record()
     state.mode = mode
     state.touched = {}
     renderSource()
@@ -804,6 +1054,46 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   // stops at a prepared, not-yet-started job; forces attach to it from the panel, and the
   // panel's Run starts it.
   let createBtn = null
+  let nextBtn = null
+  let prevBtn = null
+
+  // ── Tabs ────────────────────────────────────────────────────────────────────
+  const tabBtns = {}
+  const panels = {}
+
+  function setTab(tab) {
+    if (state.tab === tab) return
+    state.tab = tab
+    paintTabs()
+  }
+
+  function paintTabs() {
+    for (const [tab, btn] of Object.entries(tabBtns)) {
+      const on = tab === state.tab
+      btn.classList.toggle('is-selected', on)
+      btn.setAttribute('aria-selected', on ? 'true' : 'false')
+    }
+    for (const [tab, panel] of Object.entries(panels)) panel.hidden = tab !== state.tab
+    paintActions()
+  }
+
+  function tabButton(tab, label, index) {
+    return el('button', {
+      className: `wizard-tab${state.tab === tab ? ' is-selected' : ''}`,
+      attrs: { type: 'button', role: 'tab', 'aria-selected': state.tab === tab ? 'true' : 'false' },
+      on: { click: () => setTab(tab) },
+      children: [
+        el('span', { className: 'wizard-tab__num', text: String(index + 1) }),
+        document.createTextNode(label),
+      ],
+    })
+  }
+
+  /** Buttons are `display:inline-flex` from their own class, so `hidden` alone would not
+   *  hide them — the footer swaps them by display. */
+  function showAction(btn, on) {
+    if (btn) btn.style.display = on ? '' : 'none'
+  }
 
   function paintActions() {
     const blocked = plan ? blockingConditions(plan).length > 0 : false
@@ -811,9 +1101,17 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     if (createBtn) {
       createBtn.disabled = disabled
       createBtn.title = blocked
-        ? 'Resolve the blocking condition above first.'
+        ? 'Resolve the blocking condition on the next tab first.'
         : 'Prepare the job and leave it ready to run.'
     }
+    if (nextBtn) nextBtn.disabled = busy
+    if (prevBtn) prevBtn.disabled = busy
+    // Creating a run is offered only once its plan has been shown — the second tab is
+    // where every consequence of these settings is stated.
+    const onPlan = state.tab === 'plan'
+    showAction(nextBtn, !onPlan)
+    showAction(prevBtn, onPlan)
+    showAction(createBtn, onPlan)
   }
 
   async function submit({ autostart }) {
@@ -851,9 +1149,9 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     }
   }
 
-  // ── ⚡ Recommend for this machine ────────────────────────────────────────────
+  // ── ⚡ Optimize for this machine ─────────────────────────────────────────────
   const optimizeBtn = createButton({
-    label: '⚡ Recommend for this machine', variant: 'ghost', size: 'sm',
+    label: '⚡ Optimize for this machine', variant: 'ghost', size: 'sm',
   })
   optimizeBtn.title = 'Pick the settings that suit this design and this hardware (GPU, '
     + 'RAM, cores). Shows what it will change — and the caveats — before applying anything.'
@@ -877,6 +1175,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   /** Apply a recommendation as if the user had typed it — so the chips read "you set
    *  this" and the values stop following the protocol, which is exactly what happened. */
   function applyRecommendation(rec = {}) {
+    record()
     if (rec.threads != null) state.touched.threads = Number(rec.threads)
     if (rec.compute != null) state.touched.devices = rec.compute === 'cpu' ? 'cpu' : '0'
     if (rec.water_shell_a != null) state.touched.water_shell_nm = Number(rec.water_shell_a) / 10
@@ -901,6 +1200,39 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       label: 'Create job', variant: 'primary',
       onClick: () => { void submit({ autostart: false }) },
     })
+    nextBtn = createButton({
+      label: 'Next →', variant: 'primary',
+      onClick: () => { setTab('plan') },
+    })
+    nextBtn.title = 'See what these settings actually run, stage by stage'
+    prevBtn = createButton({
+      label: '← Previous', variant: 'ghost',
+      onClick: () => { setTab('setup') },
+    })
+    prevBtn.title = 'Back to the protocol and settings'
+    undoBtn = createButton({ label: '↶ Undo', variant: 'ghost', size: 'sm', onClick: () => undo() })
+    paintUndo()
+
+    panels.setup = el('section', {
+      className: 'wizard-pane wizard-tabpanel',
+      attrs: { role: 'tabpanel' },
+      children: [
+        mounts.source,
+        mounts.preset,
+        el('h3', { text: 'Settings' }),
+        optimizeBtn,
+        optimizeProgress,
+        mounts.fields,
+      ],
+    })
+    panels.plan = el('section', {
+      className: 'wizard-pane wizard-tabpanel',
+      attrs: { role: 'tabpanel' },
+      children: [mounts.summary, mounts.stages, mounts.conditions],
+    })
+
+    for (const [i, [tab, label]] of TABS.entries()) tabBtns[tab] = tabButton(tab, label, i)
+
     modal = createModal({
       title: modalTitle(),
       size: 'xl',
@@ -908,40 +1240,37 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       body: el('div', {
         className: 'wizard',
         children: [
-          mounts.source,
-          mounts.preset,
-          mounts.status,
           el('div', {
-            className: 'wizard-split',
+            className: 'wizard-tabbar',
             children: [
-              el('section', {
-                className: 'wizard-pane',
-                children: [
-                  el('h3', { text: 'Settings' }),
-                  optimizeBtn,
-                  optimizeProgress,
-                  mounts.fields,
-                ],
-              }),
-              el('section', {
-                className: 'wizard-pane wizard-pane--wide',
-                children: [
-                  el('h3', { text: 'What each stage runs' }),
-                  mounts.summary,
-                  mounts.stages,
-                  mounts.conditions,
-                ],
-              }),
+              el('div', { className: 'wizard-tabs', attrs: { role: 'tablist' },
+                          children: Object.values(tabBtns) }),
+              undoBtn,
             ],
           }),
+          mounts.status,
+          panels.setup,
+          panels.plan,
         ],
       }),
       actions: [
         createButton({ label: 'Cancel', variant: 'ghost', onClick: () => close() }),
+        prevBtn,
+        nextBtn,
         createBtn,
       ],
       onClose: () => { refetch.cancel() },
     })
+    // Ctrl+Z anywhere in the wizard except inside a text control, where the browser's own
+    // undo is the one the user means.
+    modal.root.addEventListener('keydown', e => {
+      if (!(e.key === 'z' || e.key === 'Z') || !(e.ctrlKey || e.metaKey) || e.shiftKey) return
+      const tag = e.target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      e.preventDefault()
+      undo()
+    })
+    paintTabs()
     onOptimizeMount?.({ button: optimizeBtn, progressEl: optimizeProgress })
   }
 
@@ -949,6 +1278,12 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     if (!modal) build()
     if (mode) state.mode = mode
     state.draftId = draftId
+    // A fresh session starts on the first tab with nothing to undo — the previous run's
+    // history describes settings this wizard is no longer showing.
+    state.tab = 'setup'
+    undoStack = []
+    paintUndo()
+    paintTabs()
     restorePreferences()
     if (prefill) {
       // A draft's recorded settings arrive as TOUCHED, because they were chosen — so

@@ -1,14 +1,20 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  allStageConditions,
+  applySnapshot,
   blockingConditions,
   clearStageOverrides,
   normaliseOverrideInput,
   overrideSummary,
   setStageOverride,
   conditionBadges,
+  conditionsByField,
   conditionsByStage,
+  conditionTooltip,
   deferredNotes,
+  fieldAlert,
+  fieldScope,
   formatCreatedAt,
   formatValue,
   makeDebounce,
@@ -19,11 +25,14 @@ import {
   presetSummary,
   productionComparison,
   productionPayload,
+  pushUndo,
   relaxRunLabel,
   relaxationChoices,
+  snapshotState,
   stageColumns,
   stageDiff,
   wizardPayload,
+  WIZARD_FIELDS,
 } from './md_job_wizard_model.js'
 
 /** A miniature plan in the exact shape POST /md/protocol-plan returns. */
@@ -589,5 +598,191 @@ describe('payloads carry the stage edits', () => {
   it('productionPayload sends them', () => {
     expect(productionPayload({ lengthNs: 1, stageOverrides: { 1: { run: '9' } } }))
       .toMatchObject({ stage_overrides: { 1: { run: '9' } } })
+  })
+})
+
+describe('condition labels', () => {
+  it('numbers the conditions in the order the panel lists them', () => {
+    // The label is what every reference elsewhere in the wizard prints, so it has to be
+    // assigned AFTER the sort — otherwise "(C1)" beside a field points at a different
+    // condition from the C1 in the list.
+    expect(conditionBadges(plan()).map(c => [c.label, c.id]))
+      .toEqual([['C1', 'carve_refused'], ['C2', 'gpu'], ['C3', 'settle_stage']])
+  })
+
+  it('carries the label through to the per-stage map, so a column can reference it', () => {
+    expect(conditionsByStage(plan()).get('demo_0S_settle')[0].label).toBe('C3')
+  })
+
+  it('puts the label, headline and whole explanation in the hover text', () => {
+    const c = conditionBadges(plan())[0]
+    expect(conditionTooltip(c)).toBe('C1 — No carve allowed\n\n…')
+  })
+
+  it('does not invent a separator when a condition has no detail', () => {
+    expect(conditionTooltip({ label: 'C1', title: 'Only a headline' }))
+      .toBe('C1 — Only a headline')
+  })
+})
+
+describe('conditionsByField', () => {
+  const sourced = () => plan({
+    conditions: [
+      { id: 'force_soft', kind: 'forced', title: 'Soft', detail: '…',
+        applies_to: 'all', source: 'CreateJobRequest.force_soft' },
+      { id: 'early_stop_off', kind: 'info', title: 'Full length', detail: '…',
+        applies_to: 'all', source: 'CreateJobRequest.early_stop_relax' },
+      { id: 'gpu', kind: 'conditional', title: 'GPU-resident', detail: '…',
+        applies_to: 'all', source: 'md_protocols._segment_conf' },
+    ],
+  })
+
+  it('links a condition to the request field the backend says raised it', () => {
+    const map = conditionsByField(sourced())
+    expect(map.get('force_soft').map(c => c.id)).toEqual(['force_soft'])
+    // C3, not C2: the labels follow the LIST order (forced, then conditional, then info),
+    // which is what the reader sees.
+    expect(map.get('early_stop_relax').map(c => c.label)).toEqual(['C3'])
+  })
+
+  it('never guesses: a condition raised elsewhere belongs to no field', () => {
+    // The ONLY link is the backend's own `source`. Matching on wording would attach
+    // conditions to controls that do not govern them.
+    expect([...conditionsByField(sourced()).keys()]).toEqual(['force_soft', 'early_stop_relax'])
+  })
+})
+
+describe('allStageConditions', () => {
+  it('is the set referenced once beside the totals, not on 22 columns', () => {
+    expect(allStageConditions(plan()).map(c => c.id)).toEqual(['carve_refused', 'gpu'])
+  })
+})
+
+describe('undo', () => {
+  const state = () => ({
+    mode: 'relaxation', presetId: 'literature', tab: 'plan',
+    touched: { fast: true, threads: 8 },
+    stageOverrides: { 3: { timestep: '2' } },
+    parentJobId: null, lengthNs: 100, dcdFreq: null,
+    enmRestraints: null, langevinDamping: null, allowUndersizedCell: false,
+  })
+
+  it('copies the nested values, so a later edit cannot reach into the snapshot', () => {
+    const s = state()
+    const snap = snapshotState(s)
+    s.touched.threads = 32
+    s.stageOverrides[3].timestep = '4'
+    expect(snap.touched.threads).toBe(8)
+    expect(snap.stageOverrides[3].timestep).toBe('2')
+  })
+
+  it('does not snapshot the open tab — moving between tabs changes nothing about the run', () => {
+    expect(snapshotState(state())).not.toHaveProperty('tab')
+  })
+
+  it('restores every choice onto the live state object, in place', () => {
+    const s = state()
+    const snap = snapshotState(s)
+    s.touched = {}
+    s.presetId = 'design_speed'
+    s.stageOverrides = {}
+    s.mode = 'production'
+    const same = applySnapshot(s, snap)
+    expect(same).toBe(s)                       // the wizard holds one state reference
+    expect(s).toMatchObject({ mode: 'relaxation', presetId: 'literature',
+                              touched: { fast: true, threads: 8 },
+                              stageOverrides: { 3: { timestep: '2' } } })
+  })
+
+  it('leaves the state alone when there is nothing to restore', () => {
+    const s = state()
+    applySnapshot(s, undefined)
+    expect(s.presetId).toBe('literature')
+  })
+
+  it('stacks snapshots newest last', () => {
+    const a = snapshotState(state())
+    const b = snapshotState({ ...state(), presetId: 'design_speed' })
+    expect(pushUndo(pushUndo([], a), b).map(s => s.presetId))
+      .toEqual(['literature', 'design_speed'])
+  })
+
+  it('does not record a change that changed nothing', () => {
+    // Snapshots are taken BEFORE a change, so an identical top means the previous edit
+    // was a no-op — retyping a cell's own value. It must not cost an undo press.
+    const a = snapshotState(state())
+    const stack = pushUndo(pushUndo([], a), snapshotState(state()))
+    expect(stack).toHaveLength(1)
+  })
+
+  it('drops the oldest once the stack is full', () => {
+    let stack = []
+    for (let i = 0; i < 6; i++) {
+      stack = pushUndo(stack, snapshotState({ ...state(), lengthNs: i }), 3)
+    }
+    expect(stack.map(s => s.lengthNs)).toEqual([3, 4, 5])
+  })
+})
+
+describe('field scope', () => {
+  it('takes the backend’s declaration over the local table', () => {
+    // The plan is the source of truth; the local table only exists so the FIRST render
+    // groups correctly instead of reshuffling when the plan lands.
+    expect(fieldScope('padding_nm', { field_scopes: { padding_nm: 'relaxation' } }))
+      .toBe('relaxation')
+  })
+
+  it('falls back to the local table before the plan arrives', () => {
+    expect(fieldScope('relax_hmr', null)).toBe('relaxation')
+    expect(fieldScope('production_hmr', null)).toBe('production')
+  })
+
+  it('defaults an unknown field to both, not to one run', () => {
+    // Solvation and hardware are shared by construction — the cell and PSF a relaxation
+    // builds are what production inherits.
+    expect(fieldScope('padding_nm', null)).toBe('both')
+    expect(fieldScope('who_knows', null)).toBe('both')
+  })
+
+  it('separates the two timesteps, which is the whole point', () => {
+    expect(fieldScope('relax_timestep_fs', null)).toBe('relaxation')
+    expect(fieldScope('production_timestep_fs', null)).toBe('production')
+  })
+})
+
+describe('fieldAlert', () => {
+  it('is null when the plan has no objection to this control', () => {
+    expect(fieldAlert([])).toBeNull()
+    expect(fieldAlert(undefined)).toBeNull()
+    expect(fieldAlert([{ kind: 'info' }, { kind: 'stage' }])).toBeNull()
+  })
+
+  it('reports a warning', () => {
+    expect(fieldAlert([{ kind: 'warning' }])).toBe('warning')
+  })
+
+  it('reports the WORST kind when a control has several', () => {
+    expect(fieldAlert([{ kind: 'warning' }, { kind: 'blocking' }])).toBe('blocking')
+  })
+})
+
+describe('WIZARD_FIELDS carries the separated axes', () => {
+  it('sends each axis, so a deliberate combination is not silently dropped', () => {
+    for (const key of ['relax_timestep_fs', 'relax_rigid_bonds', 'relax_hmr',
+                       'production_rigid_bonds', 'production_hmr']) {
+      expect(WIZARD_FIELDS).toContain(key)
+    }
+  })
+
+  it('passes a false HMR through — false is a choice, not an absence', () => {
+    // The tri-states are null=auto / true=on / false=off. A payload builder that treated
+    // false as "unset" would silently re-enable HMR on the run the user turned it off for.
+    expect(wizardPayload({ presetId: 'x', touched: { relax_hmr: false } }))
+      .toMatchObject({ relax_hmr: false })
+  })
+
+  it('passes an explicit null (auto) through as well', () => {
+    expect(wizardPayload({ presetId: 'x', touched: { relax_rigid_bonds: null } }))
+      .toHaveProperty('relax_rigid_bonds', null)
   })
 })
