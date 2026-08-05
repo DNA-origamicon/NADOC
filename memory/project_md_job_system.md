@@ -729,15 +729,34 @@ selected terminal job won't live-update until the next `_fetchJobs` — button r
 covered; passive auto-resume heal is a remaining gap.
 
 **Crash/interruption resilience (added 2026-06-10):** NAMD jobs survive a
-server/runner death. Three layers in `namd_runner.py`:
+server/runner death. Four layers in `namd_runner.py`:
 
 - **Mid-segment resume.** If NAMD is killed partway through a segment,
   `_write_resume_conf` rewrites the segment conf to read its own
   `.restart.{coor,vel,xsc}` (copied to a `<seg>.resumeN.*` input set),
-  `firsttimestep` + `run upto N` runs only the remaining steps, and trajectory
+  `firsttimestep` + `run <REMAINING>` runs only the steps that are left, and trajectory
   continues in a fresh `<seg>.contN.dcd` (partial `<seg>.dcd` preserved —
   display picks the newest). `_resume_step` reads the checkpoint step from
   `.restart.xsc`; returns None (fresh run) if final `.coor` exists or no restart.
+  **Not `run upto N`** — NAMD 3.0.2's Tcl `run` rejects the `upto` keyword ("first arg
+  not norepeat"); pinned by `test_md_resume::test_rewrites_directives`.
+  The rewrite drops only `_RESUME_DROP` (inputs/outputs/step count) and keeps everything
+  else verbatim, so a segment's restraints and `GPUresident` survive a resume unchanged.
+- **Reconcile weighs evidence strongest-first (2026-08-05).** `reconcile_job_status`
+  used to judge an interrupted job ONLY by its current segment, so any interruption
+  landing *before* that segment wrote a checkpoint was reported as a dead segment and
+  marked `failed` — which `resume_interrupted_jobs` then skips, discarding recoverable
+  work. Two reachable windows did this: **during minimisation** (minutes long; every
+  segment chains from `output/<min>.coor`, so no segment can have run while it is
+  absent), and **between minimisation finishing and segment 0 spawning** (where the
+  GPU-resident pre-flight probe and the declash rebuild live). Order now: completed
+  outputs → missing `<min>.coor` (resumable, mirrors `run_job`'s own precondition for
+  re-running minimisation) → restart checkpoint (resume) → **no segment log = never
+  launched** (resumable; NAMD writes the log on spawn) → failed. No relaunch loop: a
+  minimisation that truly cannot run fails inside `run_job` with the real rc.
+  Tests: `test_md_resume::TestReconcileDuringMinimisation`. See LESSONS **C12**; the
+  sibling case (NAMD *outlives* the orchestrator) is `_external_process_running`,
+  pinned by `tests/test_md_min_orphan.py`.
 - **Auto-resume on "periodic cell too small" (2026-07-06).** A full-solvation NPT
   segment (`useFlexibleCell no` + langevinPiston) shrinks the box ~3% linear as it
   relaxes to equilibrium density; NAMD fixes the patch grid at startup with only a

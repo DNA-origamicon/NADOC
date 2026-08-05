@@ -8,6 +8,7 @@ reached for *completed* segments, which these tests deliberately avoid.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -175,10 +176,34 @@ class TestReconcileMidSegment:
         assert "480000" in (result.error or "")
 
     def test_no_checkpoint_fails(self, tmp_path: Path) -> None:
+        """A segment that LAUNCHED and died with nothing to resume from is a failure.
+
+        The log is what makes it a failure rather than a not-yet-started segment: NAMD
+        creates it on spawn, so its presence is the evidence of an attempt.
+        """
         job = _make_job(tmp_path)  # no restart, no coor
+        (job.package_dir(tmp_path) / "SEG0.log").write_text(
+            "Info: NAMD 3.0.2\nFATAL ERROR: died at startup\n")
         job.save(tmp_path)
         result = nr.reconcile_job_status(job, tmp_path)
         assert result.status == MdStatus.failed
+
+    def test_segment_that_never_launched_stays_resumable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The gap between minimisation finishing and segment 0 spawning is NOT
+        instantaneous — the GPU-resident pre-flight probe and the declash reference
+        rebuild both live there.  A restart landing in it was reported as a failed
+        segment that had never run, and the supervisor then refused to resume it."""
+        job = _make_job(tmp_path)  # no restart, no coor, and no log
+        job.save(tmp_path)
+        result = nr.reconcile_job_status(job, tmp_path)
+        assert result.status == MdStatus.running
+        assert result.segments[0].status == "pending"
+        assert "before SEG0 started" in (result.error or "")
+        launched: list[str] = []
+        monkeypatch.setattr(nr, "start_job", lambda j, ws: launched.append(j.job_id))
+        assert job.job_id in nr.resume_interrupted_jobs(tmp_path)
 
     def test_not_running_is_untouched(self, tmp_path: Path) -> None:
         job = _make_job(tmp_path)
@@ -186,6 +211,69 @@ class TestReconcileMidSegment:
         job.save(tmp_path)
         result = nr.reconcile_job_status(job, tmp_path)
         assert result.status == MdStatus.stopped
+
+
+class TestReconcileDuringMinimisation:
+    """A server death DURING minimisation must stay resumable.
+
+    Every segment chains from ``output/<min>.coor`` (its conf's ``binCoordinates``), so
+    while that file is absent no segment can have run.  Judging the job by segment 0 in
+    that state found neither outputs nor a restart file — of course, it had never
+    started — and failed the whole job with an error naming the wrong stage, which
+    ``resume_interrupted_jobs`` then refused to pick up.  Minimisation is minutes long
+    on a real system, so the window is not theoretical.
+    """
+
+    def _job(self, tmp_path: Path, *, min_done: bool) -> MdJob:
+        job = _make_job(tmp_path, n_segments=2)
+        job.minimization = MdSegmentStatus(
+            name="MIN", stage="Minimisation", percent=100.0, steps=23480)
+        job.minimization.status = "done" if min_done else "running"
+        pkg = job.package_dir(tmp_path)
+        (pkg / "manifest.json").write_text(
+            json.dumps({"minimization": {"name": "MIN"}, "segments": []}))
+        out = pkg / "output"
+        (out / ("MIN.coor" if min_done else "MIN.restart.coor")).write_text("x")
+        job.save(tmp_path)
+        return job
+
+    def test_interrupted_during_minimisation_stays_running(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        job = self._job(tmp_path, min_done=False)
+        result = nr.reconcile_job_status(job, tmp_path)
+        assert result.status == MdStatus.running
+        assert "minimisation" in (result.error or "").lower()
+        # the timeline stops spinning on a minimisation that is no longer running
+        assert result.minimization is not None
+        assert result.minimization.status == "pending"
+        launched: list[str] = []
+        monkeypatch.setattr(nr, "start_job", lambda j, ws: launched.append(j.job_id))
+        assert job.job_id in nr.resume_interrupted_jobs(tmp_path)
+
+    def test_it_does_not_blame_a_segment_that_never_ran(self, tmp_path: Path) -> None:
+        job = self._job(tmp_path, min_done=False)
+        result = nr.reconcile_job_status(job, tmp_path)
+        assert result.segments[0].status != "failed"
+        assert "SEG0" not in (result.error or "")
+
+    def test_a_finished_minimisation_hands_over_to_the_segment_logic(
+        self, tmp_path: Path
+    ) -> None:
+        """The guard must not swallow real post-minimisation failures."""
+        job = self._job(tmp_path, min_done=True)
+        (job.package_dir(tmp_path) / "SEG0.log").write_text("FATAL ERROR: boom\n")
+        result = nr.reconcile_job_status(job, tmp_path)
+        assert result.status == MdStatus.failed
+        assert "SEG0" in (result.error or "")
+
+    def test_unknown_min_name_leaves_the_judgement_alone(self, tmp_path: Path) -> None:
+        """No manifest and no timeline row = cannot tell; must not guess."""
+        job = _make_job(tmp_path)
+        (job.package_dir(tmp_path) / "SEG0.log").write_text("FATAL ERROR: boom\n")
+        job.save(tmp_path)
+        assert nr._reconcile_min_name(job, job.package_dir(tmp_path) / "manifest.json") is None
+        assert nr.reconcile_job_status(job, tmp_path).status == MdStatus.failed
 
 
 class TestReconcileAbandonedRemoteQueued:

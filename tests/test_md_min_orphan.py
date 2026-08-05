@@ -111,7 +111,14 @@ def test_reconcile_still_fails_a_job_with_no_process_and_no_checkpoint(
     from backend.core.md_job import MdStatus
     import backend.core.namd_runner as runner
 
-    job, _pkg = _job(tmp_path)
+    job, pkg = _job(tmp_path)
+    # The segment is marked `running`, so it was launched — and a launched segment
+    # always has a NAMD log.  The log is what separates "died" from "never started";
+    # without it this fixture describes a segment that never spawned, which IS
+    # resumable (see test_md_resume.TestReconcileDuringMinimisation).
+    (pkg / "D_01_300K_NPT_ENM_k0p5_p10.log").write_text(
+        "Info: NAMD 3.0.2\nFATAL ERROR: died at startup\n")
+    (pkg / "output" / "D_00_min.coor").write_text("minimised")   # minimisation finished
     out = runner.reconcile_job_status(job, tmp_path)     # nothing running at all
     assert out.status == MdStatus.failed
     assert "no usable checkpoint" in (out.error or "")

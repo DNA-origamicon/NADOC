@@ -714,6 +714,23 @@ def _remote_job_abandoned_queued(job: MdJob) -> bool:
     return (time.time() - created) >= _ABANDONED_QUEUED_MIN_AGE_S
 
 
+def _reconcile_min_name(job: MdJob, manifest_path: Path) -> Optional[str]:
+    """The minimisation output stem, from the job or its manifest, or None.
+
+    The manifest is authoritative (it is what ``run_job`` itself reads), with the job's
+    own timeline row as the fallback for a package whose manifest is unreadable.  None
+    means "cannot tell" — callers must then leave minimisation-state judgements alone
+    rather than guess.
+    """
+    try:
+        name = json.loads(manifest_path.read_text())["minimization"]["name"]
+        if isinstance(name, str) and name:
+            return name
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return getattr(getattr(job, "minimization", None), "name", None) or None
+
+
 def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
     """Repair stale running state after a server/runner interruption.
 
@@ -764,7 +781,38 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
 
     # Source of truth for "segment finished" is the presence of the final
     # output files (independent of which log — fresh or resume — produced them).
+    # This is checked FIRST: completed outputs are stronger evidence than any
+    # inference below, and a finished segment must be advanced past even if the
+    # minimisation coordinates it chained from have since been cleaned up.
     if not _segment_outputs_complete(output_dir, active.name):
+        # ── Interrupted during MINIMISATION ───────────────────────────────────
+        # Every segment chains from `output/<min>.coor` (its conf's binCoordinates),
+        # so while that file is absent no segment can have run — the interruption
+        # landed in the minimisation window, which is many minutes on a large system.
+        # Without this the code below judged the job by a segment that had never
+        # started, found neither outputs nor a restart file, and failed the whole job
+        # with an error naming the wrong stage; `resume_interrupted_jobs` then skipped
+        # it, so the advertised "server restarted while NAMD was active" recovery did
+        # not in fact cover minimisation.  (Its sibling — a minimisation that OUTLIVES
+        # the orchestrator — is handled by `_external_process_running` above; this is
+        # the case where the NAMD child died too.  See tests/test_md_min_orphan.py.)
+        #
+        # The condition mirrors `run_job`'s own precondition for (re-)running
+        # minimisation exactly, so the two can never disagree about what happens next.
+        # Leaving the job `running` is safe against a relaunch loop: a minimisation that
+        # truly cannot run fails inside `run_job`, with the real rc and log.
+        min_name = _reconcile_min_name(job, manifest_path)
+        if min_name and not (output_dir / f"{min_name}.coor").exists():
+            if job.minimization is not None and job.minimization.status == "running":
+                job.minimization.status = "pending"
+            job.status = MdStatus.running
+            job.error = (
+                f"Interrupted during minimisation ({min_name}); "
+                "it will re-run on resume."
+            )
+            job.save(workspace_dir)
+            return job
+
         step = _read_xsc_step(output_dir / f"{active.name}.restart.xsc")
         if step and step > 0:
             # Interrupted mid-segment but a NAMD checkpoint survives → resumable.
@@ -772,6 +820,21 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
             job.error = (
                 f"Interrupted during {active.name} at step {step}/{active.steps}; "
                 "resuming from the last checkpoint."
+            )
+            job.save(workspace_dir)
+            return job
+        # No checkpoint. Distinguish "died" from "never got to start", because the
+        # window between minimisation finishing and the first segment launching is
+        # not instantaneous — the GPU-resident pre-flight probe and the declash
+        # reference rebuild both live there, and both take real time on a large
+        # system.  A restart landing in that gap used to be reported as a failed
+        # segment that had in fact never run.  The segment's LOG is the evidence of
+        # a launch: NAMD creates it on spawn, so no log means no attempt.
+        if not _latest_segment_log(package_dir, active.name).exists():
+            active.status = "pending"
+            job.status = MdStatus.running
+            job.error = (
+                f"Interrupted before {active.name} started; it will run on resume."
             )
             job.save(workspace_dir)
             return job
