@@ -2741,6 +2741,14 @@ export const getMdMetricsRun     = (runId)       => _oxdnaJSON('GET',  `/md/metr
 export const getMdJob            = (id)          => _oxdnaJSON('GET',    `/md/jobs/${id}`)
 export const deleteMdJob         = (id)          => _oxdnaJSON('DELETE', `/md/jobs/${id}`)
 export const startMdJob          = (id)          => _oxdnaJSON('POST',   `/md/jobs/${id}/start`)
+/** Attach (or clear) anchors + E-field on a PREPARED-but-not-started job. Patches the
+ *  existing package's confs in place — no re-solvation. Send `anchors: []`/`field: null`
+ *  to clear. NAMD has no floor implementation, so no surface is sent. */
+/** What a job is ACTUALLY anchored/fielded with, from its own manifest. The anchors card
+ *  was write-only for its whole life — a selected run showed either someone else's
+ *  unsubmitted selection or nothing. This is the read side. */
+export const getMdJobForces      = (id)          => _oxdnaJSON('GET',    `/md/jobs/${id}/forces`)
+export const setMdJobForces      = (id, body)    => _oxdnaJSON('POST',   `/md/jobs/${id}/forces`, body)
 export const stopMdJob           = (id)          => _oxdnaJSON('POST',   `/md/jobs/${id}/stop`)
 /** Flip the relaxation early-stop accelerator on a job without relaunching. */
 export const setMdEarlyStop      = (id, enabled) => _oxdnaJSON('POST',   `/md/jobs/${id}/early-stop`, { enabled })

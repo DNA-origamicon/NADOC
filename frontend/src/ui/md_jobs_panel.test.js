@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, productionNsFromSteps, seededBadge, stridedFrameCount } from './md_jobs_panel.js'
+import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, mdForcesProvenance, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, productionNsFromSteps, seededBadge, stridedFrameCount } from './md_jobs_panel.js'
 
 // Auto-mock the API client so the real panel constructs without touching the network
 // (only the shared-base parity block at the bottom drives the real panel; the
@@ -1675,5 +1675,54 @@ describe('mdAnchorStiffness', () => {
     expect(mdAnchorStiffness('0')).toBeNull()
     expect(mdAnchorStiffness('-1')).toBeNull()
     expect(mdAnchorStiffness('abc')).toBeNull()
+  })
+})
+
+// ── the read side: what the Anchors card is showing ───────────────────────────
+// The card was write-only for its whole life, so the same chips could mean "this job is
+// anchored" or "someone typed this and never submitted it". A real debugging session in
+// this repo was misled by exactly that. The provenance line has to disambiguate.
+describe('mdForcesProvenance', () => {
+  it('reports a held anchor set, with its stiffness', () => {
+    const r = mdForcesProvenance({
+      prepared: true, editable: false,
+      anchors: { applied: true, n_atoms_fixed: 8, k_kcal_mol_a2: 0.02 },
+    })
+    expect(r.tone).toBe('ok')
+    expect(r.text).toContain('Holding 8 atoms')
+    expect(r.text).toContain('k=0.02')
+    expect(r.text).toContain('this run owns these')
+  })
+
+  it('says "fixed" when there is no k (a hard fixedAtoms pin)', () => {
+    const r = mdForcesProvenance({
+      prepared: true, editable: true, anchors: { applied: true, n_atoms_fixed: 1 },
+    })
+    expect(r.text).toContain('Holding 1 atom')      // singular
+    expect(r.text).toContain('(fixed)')
+    expect(r.text).toContain('editable until this job starts')
+  })
+
+  it('WARNS when a selection was recorded but resolved to nothing', () => {
+    // The exact failure this line exists for: chips present, run unanchored.
+    const r = mdForcesProvenance({
+      prepared: true, editable: true,
+      anchors: { applied: false, requested: [{ kind: 'base' }], n_atoms_fixed: 0 },
+    })
+    expect(r.tone).toBe('warn')
+    expect(r.text).toContain('NOT anchored')
+  })
+
+  it('distinguishes an editable empty card from a run that went unanchored', () => {
+    expect(mdForcesProvenance({ prepared: true, editable: true, anchors: null }).text)
+      .toContain('apply when you press Run')
+    expect(mdForcesProvenance({ prepared: true, editable: false, anchors: null }).text)
+      .toBe('This run is unanchored.')
+  })
+
+  it('handles an unprepared job and a missing payload without throwing', () => {
+    expect(mdForcesProvenance({ prepared: false }).text).toContain('No package yet')
+    expect(mdForcesProvenance(null).text).toContain('No package yet')
+    expect(mdForcesProvenance(undefined).tone).toBe('dim')
   })
 })

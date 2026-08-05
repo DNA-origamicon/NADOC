@@ -539,3 +539,141 @@ def test_retarget_refuses_a_coordinate_set_that_does_not_match(tmp_path):
     write_anchor_restraints_pdb(pdb_path, src, anchored)
     with pytest.raises(ValueError, match="does not match|coordinates"):
         retarget_anchor_pdb(src, tmp_path / "bad.pdb", coords=np.zeros((3, 3)))
+
+
+def test_anchor_file_directives_cannot_be_overridden():
+    """A per-stage override that repoints or deletes `consref`/`conskfile` leaves a conf
+    that still says `constraints on` but restrains nothing — or restrains to coordinates
+    that are not the pose the child started from.  Same class as `extendedsystem`: it
+    detaches the stage from the file that defines it, rather than changing the physics."""
+    from backend.core.md_protocols import apply_conf_overrides
+
+    conf = ("constraints        on\nconsref            restraints_anchors.pdb\n"
+            "conskfile          restraints_anchors.pdb\nconskcol           B\n")
+    for directive in ("consref", "conskfile", "conskcol", "fixedAtomsFile", "fixedAtomsCol"):
+        with pytest.raises(ValueError, match="cannot be overridden"):
+            apply_conf_overrides(conf, {directive: "something_else.pdb"})
+        with pytest.raises(ValueError, match="cannot be overridden"):
+            apply_conf_overrides(conf, {directive: None})       # deletion is also refused
+
+    # extraBondsFile stays overridable on purpose — that IS a physics choice.
+    out = apply_conf_overrides("extraBondsFile     a.exb\n", {"extraBondsFile": "b.exb"})
+    assert "b.exb" in out
+
+
+# ── attaching forces to an ALREADY-PREPARED package ───────────────────────────
+#
+# The wizard's Create makes a fully prepared 46 MB package. Attaching anchors afterwards
+# must not re-solvate it, and must not regenerate its confs: regeneration would have to
+# reproduce every prep-time parameter (timestep, GPU-resident, ENM names, cadences), and
+# any one it got wrong would change the physics silently.
+
+_LADDER = ("structure          demo.psf\ntimestep           2\n"
+           "extraBonds         on\nextraBondsFile     demo_k0.5.enm.extra\n"
+           "constraints        off\n"
+           "binCoordinates     output/prev.coor\nrun                1000\n")
+
+# A package prepared BEFORE the settle stage switched from fixing to restraining. Those
+# confs still exist on disk, so injection must still leave their whole-solute pin alone.
+_SETTLE = ("structure          demo.psf\ntimestep           2\n"
+           "constraints        off\nfixedAtoms         on\n"
+           "fixedAtomsFile     fixed_dna_all.pdb\nfixedAtomsCol      B\n"
+           "run                1000\n")
+
+_RESIDENT = ("structure          demo.psf\nGPUresident        on\ntimestep           4\n"
+             "constraints        off\nrun                1000\n")
+
+
+def test_inject_adds_the_block_where_the_writers_emit_it():
+    from backend.core.md_protocols import inject_external_forces
+    out = inject_external_forces(_LADDER, "restraints_anchors.pdb", None)
+    lines = [l.split()[0] for l in out.splitlines() if l.strip()]
+    assert lines.index("constraints") + 1 == lines.index("fixedAtoms")
+    assert "fixedAtomsFile     restraints_anchors.pdb" in out
+    # everything else is untouched, including the ENM the ladder depends on
+    assert "extraBondsFile     demo_k0.5.enm.extra" in out
+    assert "timestep           2" in out
+    assert "run                1000" in out
+
+
+def test_inject_is_idempotent_and_replaces_rather_than_stacks():
+    """Re-attaching replaces OUR marker rather than stacking a second fixedAtomsFile.
+    Keyed on the marker filename the anchor machinery owns, so a re-injection is
+    recognised as ours while a segment's own whole-solute pin is not."""
+    from backend.core.md_protocols import ANCHOR_MARKER_PDB, inject_external_forces
+    once = inject_external_forces(_LADDER, ANCHOR_MARKER_PDB, None)
+    twice = inject_external_forces(once, ANCHOR_MARKER_PDB, {"field_pN": 5.0, "dir": [0, 0, 1]})
+    assert twice.count("fixedAtomsFile") == 1
+    assert twice.count("eFieldOn") == 1
+
+
+def test_inject_never_strips_the_ladder_enm_restraint():
+    """`constraints`/`consref`/`conskfile` in a relax ladder are the slow-release ENM,
+    not anchors. Stripping them would silently unrestrain the ladder."""
+    from backend.core.md_protocols import inject_external_forces
+    enm = ("constraints        on\nconsref            restraints_dna_heavy.pdb\n"
+           "conskfile          restraints_dna_heavy.pdb\nconskcol           B\n"
+           "constraintScaling  0.5\nrun                1000\n")
+    out = inject_external_forces(enm, "restraints_anchors.pdb", None)
+    for keep in ("constraints        on", "consref            restraints_dna_heavy.pdb",
+                 "conskfile          restraints_dna_heavy.pdb", "constraintScaling  0.5"):
+        assert keep in out
+    # and the anchor block lands AFTER the whole constraints group, not inside it
+    assert out.index("constraintScaling") < out.index("fixedAtoms")
+
+
+def test_inject_leaves_a_whole_solute_pin_alone():
+    """The Note-4 settle stage pins ALL DNA. NAMD allows one fixedAtoms file, and that
+    superset already subsumes any anchor subset — so the stage keeps its own file and
+    receives only the field."""
+    from backend.core.md_protocols import inject_external_forces
+    out = inject_external_forces(_SETTLE, "restraints_anchors.pdb",
+                                 {"field_pN": 5.0, "dir": [0, 0, 1]})
+    assert "fixedAtomsFile     fixed_dna_all.pdb" in out
+    assert "restraints_anchors.pdb" not in out
+    assert out.count("fixedAtomsFile") == 1
+    assert "eFieldOn" in out
+
+
+def test_inject_with_no_forces_removes_them_again():
+    from backend.core.md_protocols import inject_external_forces
+    from backend.core.md_protocols import ANCHOR_MARKER_PDB
+    on = inject_external_forces(_LADDER, ANCHOR_MARKER_PDB, {"field_pN": 5.0, "dir": [0, 0, 1]})
+    off = inject_external_forces(on, None, None)
+    assert "fixedAtoms" not in off and "eField" not in off
+    assert "extraBondsFile     demo_k0.5.enm.extra" in off and "run                1000" in off
+
+
+def test_inject_refuses_a_conf_that_is_not_ours():
+    from backend.core.md_protocols import inject_external_forces
+    with pytest.raises(ValueError, match="no `constraints` directive"):
+        inject_external_forces("structure demo.psf\nrun 10\n", "a.pdb", None)
+
+
+def test_inject_drops_gpu_resident_for_a_hard_anchor():
+    """NAMD 3: "GPUresident is incompatible with the following options: ... fixed atoms".
+    Prep chose GPUresident before any anchor existed, so injecting a hard anchor into that
+    conf would write the fatal pair and the run would refuse to start."""
+    from backend.core.md_protocols import inject_external_forces
+    out = inject_external_forces(_RESIDENT, "restraints_anchors.pdb", None)
+    assert "fixedAtoms         on" in out
+    assert "GPUresident" not in out
+
+
+def test_inject_restores_gpu_resident_when_the_anchor_is_cleared():
+    """Only when the caller RECORDED that it was on — never by guessing."""
+    from backend.core.md_protocols import inject_external_forces
+    anchored = inject_external_forces(_RESIDENT, "restraints_anchors.pdb", None)
+    cleared = inject_external_forces(anchored, None, None, restore_resident=True)
+    assert "GPUresident        on" in cleared and "fixedAtoms" not in cleared
+    # and it lands where the writers emit it, before the integrator
+    assert cleared.index("GPUresident") < cleared.index("timestep")
+    # without the flag we do NOT invent it
+    assert "GPUresident" not in inject_external_forces(anchored, None, None)
+
+
+def test_inject_leaves_gpu_resident_alone_for_a_field_only_change():
+    """A field is GPU-resident-compatible; only fixedAtoms is not."""
+    from backend.core.md_protocols import inject_external_forces
+    out = inject_external_forces(_RESIDENT, None, {"field_pN": 5.0, "dir": [0, 0, 1]})
+    assert "GPUresident        on" in out and "eFieldOn" in out

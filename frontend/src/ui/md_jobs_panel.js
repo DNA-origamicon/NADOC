@@ -502,6 +502,40 @@ export function mdChildLabelFor(job, index) {
  *  '' (All heavy atoms) → null, which is the backend's "no filter" sentinel; anything
  *  else is a comma-separated PDB atom-name list. Returning [] instead of null would ask
  *  the backend to anchor NOTHING, which it now rejects rather than running unanchored. */
+/** Pure: what the Anchors card is showing, in words — forces the selected job HOLDS, a
+ *  selection that resolved to nothing, or an empty card that will apply on Run.
+ *
+ *  This distinction is the whole point of the read side. The same chips once meant
+ *  "this job is anchored" and "someone typed this and never submitted it", and a real
+ *  debugging session was misled by exactly that ambiguity.
+ *  @returns {{text: string, tone: 'ok'|'warn'|'dim'}}
+ */
+export function mdForcesProvenance(d) {
+  const a = d?.anchors
+  const n = a?.n_atoms_fixed ?? a?.n_atoms_anchored ?? 0
+  if (!d?.prepared) {
+    return { text: 'No package yet — forces apply when this job is prepared.', tone: 'dim' }
+  }
+  if (a && a.applied === false) {
+    return {
+      text: 'Selection recorded but resolved to no residue — this run is NOT anchored.',
+      tone: 'warn',
+    }
+  }
+  if (n) {
+    const k = a.k_kcal_mol_a2
+    return {
+      text: `Holding ${n} atom${n === 1 ? '' : 's'}`
+        + (k ? ` at k=${k} kcal/mol/Å²` : ' (fixed)')
+        + (d.editable ? ' — editable until this job starts.' : ' — this run owns these.'),
+      tone: 'ok',
+    }
+  }
+  return d.editable
+    ? { text: 'Not anchored. Pick anchors here and they apply when you press Run.', tone: 'dim' }
+    : { text: 'This run is unanchored.', tone: 'dim' }
+}
+
 export function mdAnchorAtomNames(value) {
   const names = String(value ?? '').split(',').map(s => s.trim()).filter(Boolean)
   return names.length ? names : null
@@ -880,6 +914,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const liveControlsCard = document.getElementById('md-jobs-live-controls')
   // Anchor granularity + stiffness. Their card survives the Job Wizard move; these feed
   // BOTH launch paths (relax bakes the marker PDB, production re-resolves the selection).
+  const forcesProvenanceEl = document.getElementById('md-anchors-provenance')
   const anchorAtomsSel     = document.getElementById('md-anchors-atoms')
   const anchorStiffnessSel = document.getElementById('md-anchors-stiffness')
   const earlyStopChk  = document.getElementById('md-jobs-early-stop')
@@ -2494,14 +2529,39 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   /** Start a job that was CREATED but not run — the "＋ New job → Create job" outcome.
    *  The package is already solvated, so this is just the launch; the only gate that
    *  still applies is not stepping on another local run. */
+  /** Push the anchors + E-field cards onto the SELECTED prepared job, returning a short
+   *  human summary (or '' when there is nothing to say). Production children carry their
+   *  own forces through the spawn payload, so this only applies to a relaxation. */
+  async function _applyForcesToSelected() {
+    const sel = _selectedJob()
+    if (!sel || mdIsProductionChild(sel) || mdIsEnsembleReplica(sel)) return ''
+    const anchors = _anchorsCard?.getAnchors?.() ?? []
+    const spec = _efieldCard?.getFieldSpec?.()
+    const on = !!_efieldCard?.isEnabled?.() && (spec?.field_pN ?? 0) > 0
+    const field = on ? { field_pN: spec.field_pN, dir: spec.dir } : null
+    if (!anchors.length && !field) return ''
+    const d = await api.setMdJobForces(_selectedId, {
+      anchors, anchor_atoms: mdAnchorAtomNames(anchorAtomsSel?.value), field,
+    })
+    if (!d) { showToast(api.lastErrorMessage() ?? 'Could not attach forces', 'error'); return '' }
+    const n = d.anchors?.n_atoms_fixed ?? 0
+    return [n ? `${n} anchored atom${n === 1 ? '' : 's'}` : '', field ? 'E-field' : '']
+      .filter(Boolean).join(' + ')
+  }
+
   function _startSelected(btn = runBtn) {
     return runExclusive(btn, async () => {
       if (!_selectedId) return
       if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
       try {
+        // Forces are chosen AFTER the job exists now (Create no longer runs), so the
+        // anchors/field cards describe THIS job and are applied to its prepared package
+        // before it starts. Reported in the toast rather than applied silently — a force
+        // the user cannot see landing is the bug this whole flow replaced.
+        const forced = await _applyForcesToSelected()
         const d = await api.startMdJob(_selectedId)
         if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
-        showToast('Run started', 'ok')
+        showToast(`Run started${forced ? ` — ${forced}` : ''}`, 'ok')
         await _fetchJobs()
         _reselectJob(_selectedId)
       } catch (err) {
@@ -3133,8 +3193,33 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // without this the control could offer ▶ Run for a job the queue would refuse (or
     // hide that the job is already waiting in line).
     void _fetchQueue()
+    void _applyRunConfig(jobId)
     if (displayToggle?.checked) _refreshMdDisplay()
     else _refreshMdPrewarm(true)
+  }
+
+  /** Repopulate the Anchors + E-field cards with what the SELECTED job actually carries,
+   *  so clicking a run shows the forces it holds instead of a stale launch form. Mirrors
+   *  the oxDNA/SNUPI panels' `_applyRunConfig` -> `applyConfig`. NAMD keeps its forces in
+   *  the package manifest rather than on the job row, so this reads them over the wire.
+   *
+   *  Called from `_selectJob` only — an explicit pick, never a status poll — so it cannot
+   *  clobber the user mid-edit. */
+  async function _applyRunConfig(jobId) {
+    if (!jobId) return
+    const d = await api.getMdJobForces(jobId)
+    if (!d || jobId !== _selectedId) return      // selection moved on while in flight
+    _anchorsCard?.applyConfig?.(d.anchors?.requested ?? [])
+    _efieldCard?.applyConfig?.(d.field ?? null)
+    _paintForcesProvenance(d)
+  }
+
+  /** Paint the provenance line for the selected job's forces. */
+  function _paintForcesProvenance(d) {
+    if (!forcesProvenanceEl) return
+    const { text, tone } = mdForcesProvenance(d)
+    forcesProvenanceEl.textContent = text
+    forcesProvenanceEl.style.color = tone === 'ok' ? _C.ok : tone === 'warn' ? '#e3b341' : _C.dim
   }
 
   /** Clicking the ALREADY-selected row deselects it.  Deliberately NON-destructive: unlike

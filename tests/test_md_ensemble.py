@@ -566,3 +566,50 @@ def test_replica_missing_anchor_file_fails_loudly(tmp_path: Path):
             timestep_fs=1.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
             anchors_file="restraints_anchors.pdb",
         )
+
+
+def test_replica_anchor_file_survives_a_later_launch_rewriting_the_source(tmp_path: Path):
+    """A completed run's marker PDB must not change when the NEXT anchored launch writes
+    its own.  The child used to HARDLINK the parent's file, so rewriting the parent
+    mutated every child that had ever linked it — a finished run's anchor file then
+    disagreed with the restraint energy NAMD had logged for it, and post-hoc analysis of
+    the run read a selection and a k it never used."""
+    parent = _parent_with_anchors(tmp_path, n_atoms=6, anchored=(1, 4))
+    src = parent.package_dir(tmp_path) / "restraints_anchors.pdb"
+
+    child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
+                    parent_job_id=parent.job_id, ensemble_seed=7, ensemble_index=0)
+    me.build_replica_package(
+        parent, child, seed=7, index=0, total_steps=1000, length_ns=1.0,
+        timestep_fs=1.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
+        anchors_file="restraints_anchors.pdb",          # hard path: the one that linked
+    )
+    staged = child.package_dir(tmp_path) / "restraints_anchors.pdb"
+    before = staged.read_text()
+
+    # A later launch rewrites the SOURCE in place (different selection, different k).
+    src.write_text(_anchor_pdb_lines(6, {0, 2, 3}).replace("  1.00", "  9.99"))
+
+    assert staged.read_text() == before, "the completed child's anchor file was mutated"
+
+
+def test_replica_reads_a_child_local_anchor_source(tmp_path: Path):
+    """The production route stages the marker PDB in the CHILD's own job dir and passes
+    it as `anchors_src`, so nothing is ever written into the shared parent package."""
+    parent = _make_parent(tmp_path)
+    external = tmp_path / "staged_elsewhere.pdb"
+    external.write_text(_anchor_pdb_lines(6, {2, 5}))
+
+    child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
+                    parent_job_id=parent.job_id, ensemble_seed=7, ensemble_index=0)
+    me.build_replica_package(
+        parent, child, seed=7, index=0, total_steps=1000, length_ns=1.0,
+        timestep_fs=1.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
+        anchors_file="restraints_anchors.pdb", anchors_src=external,
+    )
+    pkg = child.package_dir(tmp_path)
+    assert (pkg / "restraints_anchors.pdb").exists()
+    # The parent package was never given one.
+    assert not (parent.package_dir(tmp_path) / "restraints_anchors.pdb").exists()
+    manifest = json.loads((pkg / "manifest.json").read_text())
+    assert manifest["anchors"]["n_atoms_anchored"] == 2

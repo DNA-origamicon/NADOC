@@ -1859,6 +1859,185 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     return job.to_dict()
 
 
+@router.get("/md/jobs/{job_id}/forces")
+async def get_md_job_forces(job_id: str) -> dict:
+    """What this job is ACTUALLY anchored/fielded with, read from its own manifest.
+
+    The anchors card was write-only for its whole life: it rendered the launch form and
+    nothing ever populated it from a job, so a selected run showed either someone else's
+    unsubmitted selection or nothing at all.  Both readings were wrong, and both misled
+    real debugging sessions.  This is the read side.
+
+    ``editable`` mirrors the write route's guard, so the panel can offer the card for a
+    prepared job and lock it once the run owns its confs.
+    """
+    job = _load_job(job_id)
+    pkg = job.package_dir(_workspace())
+    manifest_path = pkg / "manifest.json"
+    if not manifest_path.exists():
+        return {"ok": True, "prepared": False, "editable": False,
+                "anchors": None, "field": None}
+    manifest = json.loads(manifest_path.read_text())
+    anchors = manifest.get("anchors") or None
+    # A package that recorded a selection but resolved none is NOT anchored; say so
+    # rather than letting a non-empty `requested` list read as an applied anchor.
+    if anchors and not (anchors.get("n_atoms_fixed") or anchors.get("n_atoms_anchored")):
+        anchors = {**anchors, "applied": False}
+    elif anchors:
+        anchors = {**anchors, "applied": True}
+    editable = not (is_running(job_id) or job.status in (
+        MdStatus.running, MdStatus.preparing, MdStatus.completed,
+        MdStatus.failed, MdStatus.stopped))
+    return {
+        "ok": True,
+        "prepared": True,
+        "editable": editable,
+        "status": job.status.value,
+        "anchors": anchors,
+        "field": manifest.get("field") or None,
+    }
+
+
+class JobForcesRequest(BaseModel):
+    """Attach (or clear) external forces on a job whose package is already prepared.
+
+    The wizard's Create builds the full solvated package; forces are chosen afterwards,
+    against the job you can actually see in the list.  Sending `anchors: []` and
+    `field: null` clears them, which is how a run goes back to unforced.
+
+    Deliberately NO surface/floor: NAMD has no floor implementation — the descriptor is
+    accepted elsewhere and discarded, and no conf writer emits one.  Offering the control
+    here would be a switch wired to nothing.
+    """
+    anchors: Optional[list] = Field(
+        None, description="Anchor scopes (shared picker format). [] clears them.")
+    anchor_atoms: Optional[list[str]] = Field(
+        None, description="Restrict each anchored residue to these PDB atom names, "
+                          "e.g. [\"C1'\"]. Prefer C1' over P: every nucleotide has a C1', "
+                          "but 5' termini have no phosphorus and would be dropped.")
+    field: Optional[dict] = Field(
+        None, description="Uniform E-field {'field_pN', 'dir'}. null clears it.")
+
+
+@router.post("/md/jobs/{job_id}/forces")
+async def set_md_job_forces(job_id: str, body: JobForcesRequest) -> dict:
+    """Attach anchors / E-field to a PREPARED-BUT-NOT-STARTED job.
+
+    Patches the existing package rather than re-preparing it: the marker PDB is written
+    beside the confs and :func:`inject_external_forces` rewrites only the four directives
+    that block owns.  Re-solvating would cost minutes and rebuild tens of MB every time an
+    anchor moved; regenerating the confs would have to reproduce every prep-time parameter
+    exactly, and any one it got wrong would change the physics silently.
+
+    Refused once a run has started: the confs are what NAMD already read, and a job's
+    forces must describe the trajectory it actually produced.
+    """
+    from backend.core.md_protocols import (  # noqa: PLC0415
+        ANCHOR_MARKER_PDB, inject_external_forces, namd_efield_vector,
+        write_anchor_restraints_pdb,
+    )
+    from backend.core.namd_topology import resolve_anchor_residue_indices  # noqa: PLC0415
+
+    job = _load_job(job_id)
+    if is_running(job_id) or job.status in (MdStatus.running, MdStatus.preparing):
+        raise HTTPException(400, "Cannot change forces while the job is running.")
+    if job.status in (MdStatus.completed, MdStatus.failed, MdStatus.stopped):
+        raise HTTPException(
+            400, f"This job has already run ({job.status.value}). Its forces describe the "
+                 f"trajectory it produced and cannot be rewritten \u2014 create a new job "
+                 f"instead.")
+    pkg = job.package_dir(_workspace())
+    manifest_path = pkg / "manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(
+            400, "This job has no prepared package yet, so there are no confs to attach "
+                 "forces to. Prepare it first.")
+    manifest = json.loads(manifest_path.read_text())
+    name_stem = manifest["name_stem"]
+
+    # ── Resolve anchors (read-only against the frozen design; never a topology edit) ──
+    anchors_file: Optional[str] = None
+    n_atoms = n_res = 0
+    if body.anchors:
+        snapshot = job.job_dir(_workspace()) / "design.json"
+        if not snapshot.exists():
+            raise HTTPException(
+                400, "This job has no frozen design snapshot, so anchor scopes cannot be "
+                     "resolved against the structure its package was built from.")
+        from backend.core.models import Design  # noqa: PLC0415
+        design = Design.model_validate_json(snapshot.read_text())
+        full_topology = bool((manifest.get("charge_audit") or {}).get("topology_builder"))
+        indices = resolve_anchor_residue_indices(
+            design, body.anchors, full_topology=full_topology)
+        if indices:
+            n_atoms = write_anchor_restraints_pdb(
+                pkg / f"{name_stem}.pdb", pkg / ANCHOR_MARKER_PDB, indices,
+                atom_names=set(body.anchor_atoms) if body.anchor_atoms else None)
+            if not n_atoms:
+                raise HTTPException(400, (
+                    f"anchor_atoms {sorted(body.anchor_atoms or [])} matched no heavy atom "
+                    f"in the {len(indices)} selected residue(s). CHARMM36 nucleic-acid "
+                    f"names look like P, O5', C5', C4', C3', C1' \u2014 and note 5' termini "
+                    f"have no P."))
+            anchors_file, n_res = ANCHOR_MARKER_PDB, len(indices)
+        else:
+            logger.warning("[%s] anchor scopes %r resolved to no DNA residue",
+                           job_id, body.anchors)
+    if not anchors_file:
+        (pkg / ANCHOR_MARKER_PDB).unlink(missing_ok=True)
+
+    field = body.field or None
+    if namd_efield_vector(field) is not None and anchors_file is None:
+        logger.warning("[%s] E-field with no anchor \u2014 the structure will drift "
+                       "down-field (COM drift).", job_id)
+
+    # ── Patch every conf ───────────────────────────────────────────────────────
+    # NAMD 3 refuses `fixedAtoms` under GPUresident, and prep chose GPUresident before any
+    # anchor existed.  A hard anchor therefore strips it; clearing puts it back, but only
+    # from what we RECORDED, never by guessing what prep had decided.
+    was_resident = bool((manifest.get("anchors") or {}).get("gpu_resident_stripped"))
+    patched, stripped = [], False
+    for conf in sorted(pkg.glob("*.conf")):
+        before = conf.read_text()
+        try:
+            new = inject_external_forces(before, anchors_file, field,
+                                         restore_resident=was_resident)
+        except ValueError:
+            continue                      # not one of ours (no `constraints` directive)
+        if "GPUresident" in before and "GPUresident" not in new:
+            stripped = True
+        conf.write_text(new)
+        patched.append(conf.name)
+
+    manifest.setdefault("files", {})["anchors"] = anchors_file
+    manifest["anchors"] = {
+        "requested": body.anchors or [],
+        "atom_names": list(body.anchor_atoms) if body.anchor_atoms else None,
+        "file": anchors_file,
+        "n_residues": n_res,
+        "n_atoms_fixed": n_atoms,
+        "mechanism": "fixedAtoms (fixedAtomsCol B); held immobile across the ladder",
+        "attached_after_prep": True,
+        # Remembered so clearing the anchor can restore what prep had chosen.
+        "gpu_resident_stripped": stripped or (was_resident and bool(anchors_file)),
+    }
+    manifest["field"] = field
+    manifest["efield_vector"] = namd_efield_vector(field)
+    text = json.dumps(manifest, indent=2)
+    manifest_path.write_text(text)
+    (pkg / "nadoc_md_run.json").write_text(text)
+
+    logger.info("[%s] forces set: %d anchored atom(s) over %d residue(s), field=%s, "
+                "%d conf(s) patched", job_id, n_atoms, n_res, bool(field), len(patched))
+    return {
+        "ok": True,
+        "job": job.to_dict(),
+        "anchors": manifest["anchors"],
+        "field": field,
+        "confs_patched": patched,
+    }
+
+
 @router.post("/md/jobs/{job_id}/prepare")
 async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
     """Prepare (solvate) a DRAFT job with the given advanced settings, then start it.
@@ -3163,8 +3342,8 @@ def _production_restraint_plan(parent: MdJob, requested: str,
     }
 def _resolve_child_anchors(
     parent: MdJob, child: MdJob, body: "ProductionRunRequest",
-) -> tuple[Optional[str], list, Optional[dict]]:
-    """Anchors + E-field for a production child: ``(anchors_file, requested, field)``.
+) -> tuple[Optional[str], "Optional[Path]", list, Optional[dict]]:
+    """Anchors + E-field for a child: ``(anchors_file, anchors_src, requested, field)``.
 
     Two paths, and the distinction is the whole point of the fix:
 
@@ -3190,9 +3369,9 @@ def _resolve_child_anchors(
     if body.anchors is None:
         inherited = (manifest.get("files") or {}).get("anchors")
         requested = ((manifest.get("anchors") or {}).get("requested")) or []
-        return inherited, requested, field
+        return inherited, None, requested, field
     if not body.anchors:
-        return None, [], field
+        return None, None, [], field
 
     snapshot = child.job_dir(_workspace()) / "design.json"
     if not snapshot.exists():
@@ -3214,18 +3393,24 @@ def _resolve_child_anchors(
         logger.warning(
             "[%s] production anchors %r resolved to no DNA residue — running unanchored",
             child.job_id, body.anchors)
-        return None, [], field
+        return None, None, [], field
 
     name_stem = manifest["name_stem"]
+    # Write the marker PDB into THIS CHILD's job dir, never the shared parent package.
+    # Writing it to the parent meant each new anchored launch overwrote the reference file
+    # that already-completed children still pointed at, so a finished run's marker PDB
+    # could disagree with the restraint energy NAMD had logged for it.
+    staged = child.job_dir(_workspace()) / "restraints_anchors.pdb"
+    staged.parent.mkdir(parents=True, exist_ok=True)
     n = write_anchor_restraints_pdb(
-        parent_pkg / f"{name_stem}.pdb", parent_pkg / "restraints_anchors.pdb", indices,
+        parent_pkg / f"{name_stem}.pdb", staged, indices,
         atom_names=set(body.anchor_atoms) if body.anchor_atoms else None)
     if not n:
         raise HTTPException(400, (
             f"anchor_atoms {sorted(body.anchor_atoms or [])} matched no heavy atom in the "
             f"{len(indices)} anchored residue(s). CHARMM36 nucleic-acid atom names look "
             f"like P, O5', C5', C4', C3', C1'."))
-    return "restraints_anchors.pdb", list(body.anchors), field
+    return "restraints_anchors.pdb", staged, list(body.anchors), field
 
 
 @router.post("/md/jobs/{parent_id}/production-run")
@@ -3326,7 +3511,8 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         idx[child.job_id] = child.archive_path
         job_archive._write_index(_workspace(), "md_jobs", idx)
 
-    anchors_file, anchors_requested, field = _resolve_child_anchors(parent, child, body)
+    anchors_file, anchors_src, anchors_requested, field = _resolve_child_anchors(
+        parent, child, body)
 
     md_ensemble.build_replica_package(
         parent, child,
@@ -3339,7 +3525,7 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         enm_restraints=restraints["enm_restraints"],
         damping=restraints["damping"],
         stage_overrides=body.stage_overrides or None,
-        anchors_file=anchors_file, anchor_k=body.anchor_k,
+        anchors_file=anchors_file, anchors_src=anchors_src, anchor_k=body.anchor_k,
         anchors_requested=anchors_requested, field=field,
     )
 

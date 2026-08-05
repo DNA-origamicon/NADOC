@@ -798,8 +798,12 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     paintActions()
   }
 
+  // ONE button. Creating and running used to be a single act, which meant forces had to
+  // be chosen before the job existed — and the anchors/field cards were only ever read at
+  // launch, so anything picked afterwards was silently discarded. Create now always
+  // stops at a prepared, not-yet-started job; forces attach to it from the panel, and the
+  // panel's Run starts it.
   let createBtn = null
-  let runBtn = null
 
   function paintActions() {
     const blocked = plan ? blockingConditions(plan).length > 0 : false
@@ -810,7 +814,6 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
         ? 'Resolve the blocking condition above first.'
         : 'Prepare the job and leave it ready to run.'
     }
-    if (runBtn) runBtn.disabled = disabled
   }
 
   async function submit({ autostart }) {
@@ -895,12 +898,8 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   // ── Modal ───────────────────────────────────────────────────────────────────
   function build() {
     createBtn = createButton({
-      label: 'Create job', variant: 'ghost',
+      label: 'Create job', variant: 'primary',
       onClick: () => { void submit({ autostart: false }) },
-    })
-    runBtn = createButton({
-      label: 'Create & run', variant: 'primary',
-      onClick: () => { void submit({ autostart: true }) },
     })
     modal = createModal({
       title: modalTitle(),
@@ -940,7 +939,6 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       actions: [
         createButton({ label: 'Cancel', variant: 'ghost', onClick: () => close() }),
         createBtn,
-        runBtn,
       ],
       onClose: () => { refetch.cancel() },
     })

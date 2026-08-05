@@ -151,6 +151,14 @@ PROTECTED_DIRECTIVES = frozenset({
     "structure", "coordinates", "outputname", "dcdfile", "xstfile",
     "veldcdfile", "forcedcdfile", "bincoordinates", "binvelocities", "extendedsystem",
     "parameters", "paratypecharmm",
+    # Anchors.  Same rule as the rest of this set: these name a file the PACKAGE stages
+    # (the marker PDB) and the column its weights live in.  Repointing or deleting one
+    # does not change the physics, it detaches the restraint from the file that defines
+    # it — leaving a conf that still says `constraints on` but restrains nothing, or one
+    # whose reference coordinates are no longer the equilibrated pose the child started
+    # from.  `extraBondsFile` is deliberately NOT here: overriding it means "these ENM
+    # files instead of those", which is a real physics choice.
+    "consref", "conskfile", "conskcol", "fixedatomsfile", "fixedatomscol",
 })
 
 
@@ -722,6 +730,93 @@ def external_forces_block(anchors_file: Optional[str], field: Optional[dict],
             lines.append("consexp            2\n")
     lines.extend(_efield_lines(field))
     return "".join(lines)
+
+
+#: Directives :func:`external_forces_block` owns, and therefore the ones
+#: :func:`inject_external_forces` may replace.  Deliberately NOT ``constraints`` /
+#: ``consref`` / ``conskfile``: in a relax ladder those are the slow-release ENM
+#: restraint, nothing to do with anchors, and stripping them would silently unrestrain
+#: the ladder.
+_EXTERNAL_FORCE_DIRECTIVES = frozenset({
+    "fixedatoms", "fixedatomsfile", "fixedatomscol", "efieldon", "efield",
+})
+
+
+#: The marker PDB filename the anchor machinery owns end-to-end.
+ANCHOR_MARKER_PDB = "restraints_anchors.pdb"
+
+
+def _reinsert_resident(lines: list, _key) -> list:
+    """Put ``GPUresident on`` back where the conf writers emit it (just before the
+    integrator's ``timestep``), so a restored conf reads like a freshly written one."""
+    i = next((n for n, ln in enumerate(lines) if _key(ln) == "timestep"), len(lines))
+    return lines[:i] + ["GPUresident        on\n"] + lines[i:]
+
+
+def inject_external_forces(conf_text: str, anchors_file: Optional[str],
+                           field: Optional[dict], *,
+                           restore_resident: bool = False) -> str:
+    """Add (or replace) the anchors + E-field block in an ALREADY-EMITTED conf (pure).
+
+    Lets forces be attached to a job whose package is already prepared, without
+    re-solvating it or regenerating its confs from scratch.  Regeneration would have to
+    reproduce every prep-time parameter exactly — timestep, GPU-resident decision, ENM
+    file names, output cadences — and any one it got wrong would change the physics
+    silently.  Rewriting only the four directives this module owns cannot.
+
+    The block is inserted directly after the ``constraints`` group, which is where every
+    conf writer already puts it, so a patched conf is byte-identical to one that had the
+    forces at prep time.
+
+    **A stage that pins the whole solute keeps its own file.** The Note-4 settle stage
+    runs ``fixedAtomsFile <all-DNA>``; NAMD allows exactly one such file, and that
+    superset already subsumes any anchor subset.  Such a conf keeps its ``fixedAtoms``
+    untouched and receives only the field — mirroring ``_segment_conf``'s
+    ``spec.fixed_atoms_file or anchors_file``.
+    """
+    lines = conf_text.splitlines(keepends=True)
+
+    def _key(ln: str) -> str:
+        body = ln.split("#", 1)[0].strip()
+        return body.split(None, 1)[0].lower() if body else ""
+
+    # Anything OTHER than the marker file we manage is a segment's own whole-solute pin,
+    # and off-limits.  Keyed on OUR filename, not the settle stage's: that stage now
+    # restrains rather than fixes (its constant is gone), but packages prepared before
+    # that change still carry `fixedAtomsFile fixed_dna_all.pdb` and must be left alone.
+    own_fixed = next((ln for ln in lines if _key(ln) == "fixedatomsfile"), None)
+    keeps_own = bool(own_fixed) and ANCHOR_MARKER_PDB not in own_fixed
+
+    drop = {"efieldon", "efield"} if keeps_own else set(_EXTERNAL_FORCE_DIRECTIVES)
+    kept = [ln for ln in lines if _key(ln) not in drop]
+
+    # NAMD 3: "GPUresident is incompatible with the following options: ... fixed atoms".
+    # Prep decided GPUresident before any anchor existed, so injecting a HARD anchor now
+    # would write the fatal pair into a conf that had been perfectly valid. Both writers
+    # already gate on this (`_segment_conf`, `build_production_conf`); patching has to as
+    # well, or forces-after-create produces runs that refuse to start.
+    hard = bool(anchors_file) and not keeps_own
+    if hard:
+        kept = [ln for ln in kept if _key(ln) != "gpuresident"]
+    elif restore_resident and not any(_key(ln) == "gpuresident" for ln in kept):
+        # Clearing the anchor that forced it off — put it back, but only when the caller
+        # knows it was on before (recorded at injection time), never by guessing.
+        kept = _reinsert_resident(kept, _key)
+
+    block = external_forces_block(None if keeps_own else anchors_file, field)
+    if not block:
+        return "".join(kept)
+
+    # Insert after the constraints group (constraints + its consref/conskfile/conskcol/
+    # constraintScaling continuation lines), which is exactly where the writers emit it.
+    tail = {"consref", "conskfile", "conskcol", "consexp", "constraintscaling"}
+    idx = next((i for i, ln in enumerate(kept) if _key(ln) == "constraints"), None)
+    if idx is None:
+        raise ValueError("conf has no `constraints` directive — not a NADOC NAMD conf")
+    j = idx + 1
+    while j < len(kept) and _key(kept[j]) in tail:
+        j += 1
+    return "".join(kept[:j] + [block] + kept[j:])
 
 
 # ── Segment spec ──────────────────────────────────────────────────────────────

@@ -150,6 +150,11 @@ def build_replica_package(
     damping: float = PRODUCTION_LANGEVIN_DAMPING,
     stage_overrides: Optional[dict] = None,
     anchors_file: Optional[str] = None,
+    #: Where to READ the marker PDB from.  Defaults to the parent package, but the
+    #: production route now stages a child-local copy: writing into the shared parent
+    #: package meant every new anchored launch overwrote the reference file that
+    #: already-completed children still pointed at.
+    anchors_src: "Optional[Path]" = None,
     anchor_k: Optional[float] = None,
     anchors_requested: Optional[list] = None,
     field: Optional[dict] = None,
@@ -291,12 +296,17 @@ def build_replica_package(
     # restrain them TO anything), so it is hardlinked verbatim.
     n_anchor_atoms = 0
     if anchors_file:
-        src_anchor = parent_pkg / anchors_file
+        src_anchor = Path(anchors_src) if anchors_src else (parent_pkg / anchors_file)
         if not src_anchor.exists():
-            raise FileNotFoundError(f"anchor file missing from parent package: {src_anchor}")
+            raise FileNotFoundError(f"anchor file missing: {src_anchor}")
         dst_anchor = child_pkg / anchors_file
         if anchor_k is None:
-            _link_or_copy(src_anchor, dst_anchor)
+            # COPY, never hardlink.  Unlike the PSF/PDB/forcefield this file is NOT
+            # immutable: a later anchored launch rewrites its source in place, and a
+            # hardlinked child would silently inherit the new selection and k — which is
+            # exactly how a completed run's marker PDB came to disagree with the restraint
+            # energy NAMD had logged for it.
+            shutil.copy2(src_anchor, dst_anchor)
             n_anchor_atoms = sum(
                 1 for ln in src_anchor.read_text().splitlines()
                 if ln.startswith(("ATOM", "HETATM")) and _anchor_weight(ln) > 0
