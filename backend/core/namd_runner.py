@@ -1183,6 +1183,40 @@ def gpu_resident_probe(
     return ok
 
 
+def retarget_settle_restraints(
+    package_dir: Path, min_coor: Path, job_id: str = "",
+) -> bool:
+    """Re-point the settle stage's restraint reference at the minimised coordinates.
+
+    Returns True if the file was rewritten.  Best-effort: a package without a settle
+    stage (carved/NVT, or prepped before the stage existed) simply has no such file, and
+    any failure leaves the shipped build-pose reference in place rather than failing the
+    job.  See the call site for why the build pose is not good enough.
+    """
+    from backend.core.md_protocols import (  # noqa: PLC0415
+        SOLUTE_RESTRAINT_PDB,
+        write_declashed_pdb,
+    )
+
+    ref = package_dir / SOLUTE_RESTRAINT_PDB
+    if not ref.exists() or not min_coor.exists():
+        return False
+    try:
+        n = write_declashed_pdb(min_coor, ref, ref)
+    except Exception as exc:
+        logger.error(
+            "[%s] Could not re-reference %s to the minimised coordinates (%s) — the "
+            "settle stage will restrain to the build pose instead.",
+            job_id, SOLUTE_RESTRAINT_PDB, exc,
+        )
+        return False
+    logger.info(
+        "[%s] Settle restraints re-referenced to the minimised structure (%d atoms).",
+        job_id, n,
+    )
+    return True
+
+
 def downgrade_gpu_resident_confs(package_dir: Path, job_id: str = "") -> list[str]:
     """Rewrite every GPU-resident conf in *package_dir* to a runnable non-GPU-resident
     form (GPUresident dropped, timestep halved, step counts + output cadence doubled so
@@ -1846,6 +1880,19 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     # Reached only when output/{min_name}.coor exists — either just written, or left by
     # an earlier attempt this resume is chaining from.  Either way the step is complete.
     _set_min_status("done")
+
+    # ── Settle-stage restraint reference ──────────────────────────────────────
+    # The Note-4 settle stage holds the solute with harmonic restraints while the barostat
+    # finds the box size the water actually wants.  Its reference PDB ships with the BUILD
+    # pose (prep runs before there are any minimised coordinates), but minimisation moves
+    # DNA heavy atoms ~1.2 Å RMSD — restraining back to the build pose would pull against
+    # the minimiser for the whole stage, at up to ~11 kcal/mol/Å on the atoms whose clashes
+    # minimisation just relieved.  Re-point it at the minimised structure now.
+    #
+    # Idempotent: the coordinates always come from the same ``.coor`` and the B column is
+    # preserved, so a resume that repeats this writes the identical file.  Best-effort —
+    # the build-pose reference is a usable fallback, so a failure here must not kill a job.
+    retarget_settle_restraints(package_dir, min_coor, job.job_id)
 
     # ── Declash reference rebuild ─────────────────────────────────────────────
     # For declash designs, re-anchor the ENM ladder, heavy-atom restraints and

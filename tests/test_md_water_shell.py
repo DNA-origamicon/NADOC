@@ -280,14 +280,15 @@ def test_soft_start_first_segment_only():
     bases.  2 fs with rigid bonds survived all of them; only 4 fs failed.  The old 1 fs
     flexible-bond tier cost 2x for protection that was never needed.
 
-    "First free" and not simply segs[0]: the Note-4 settle stage runs before it with
-    every DNA atom FIXED, so no solute strain can relieve there and no solute RATTLE can
-    fail there — softening it would spend the protection on the wrong segment.
+    "First free" and not simply segs[0]: the Note-4 settle stage runs before it holding
+    every DNA heavy atom on a stiff restraint, so no solute strain can relieve there and
+    no solute RATTLE can fail there — softening it would spend the protection on the
+    wrong segment.
     """
     from backend.core.md_protocols import _segment_conf, mgh_slow_release_segments
 
     _, segs = mgh_slow_release_segments("S")
-    free = [s for s in segs if s.fixed_atoms_file is None]
+    free = [s for s in segs if s.restraint_ref_file is None]
     assert free[0].gentle, "first free segment should be gentle"
     assert not free[0].soft, "gentle is rigid-bonded — 1 fs flexible is the escape hatch"
     assert not any(s.gentle or s.soft for s in free[1:]), "later segments run full speed"
@@ -352,6 +353,6 @@ def test_segments_nvt_only_disables_barostat():
     # The RELAXATION stages are identical — only the ensemble flag changes.  A carved
     # ladder additionally has no Note-4 settle stage: that stage exists to let the
     # barostat find the box the water wants, and a carved cell never runs a barostat.
-    assert [s.name for s in npt_segs if s.fixed_atoms_file is None] == \
+    assert [s.name for s in npt_segs if s.restraint_ref_file is None] == \
            [s.name for s in nvt_segs]
-    assert not any(s.fixed_atoms_file for s in nvt_segs)
+    assert not any(s.restraint_ref_file for s in nvt_segs)

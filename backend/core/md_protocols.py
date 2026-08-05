@@ -765,9 +765,15 @@ class SegmentSpec:
     #: so pre-existing manifests still resume.
     timestep_fs: float = 2.0
     #: A fixedAtoms marker PDB this segment holds immobile, overriding the job-level
-    #: anchors.  Used by the Note-4 settle stage, which pins the whole solute while the
-    #: barostat finds the box size the water actually wants.
+    #: anchors.  A HARD pin (Dirichlet), and therefore incompatible with GPU-resident —
+    #: setting it forces the segment onto the slower offload path (see ``_segment_conf``).
+    #: The Note-4 settle stage used to ride this; it now uses ``restraint_ref_file``.
     fixed_atoms_file: Optional[str] = None
+    #: Reference/force-constant PDB for this segment's harmonic position restraints
+    #: (``consref``/``conskfile``), used when ``scale`` is set.  None → the ladder's
+    #: shared ``restraints_dna_heavy.pdb``.  The settle stage points at its own file
+    #: because the runner re-references it to the MINIMISED coordinates.
+    restraint_ref_file: Optional[str] = None
 
 
 # ── NAMD conf template ────────────────────────────────────────────────────────
@@ -1097,6 +1103,16 @@ def build_production_conf(
     # still follows the timestep, since that IS a physics choice.
     resident_ok = (n_atoms is None or n_atoms >= _RESIDENT_MIN_ATOMS
                    if force_resident is None else bool(force_resident))
+    # HARD anchors (anchor_k None) ride ``fixedAtoms``, which NAMD 3 refuses to run under
+    # GPU-resident — "GPUresident is incompatible with the following options: ... fixed
+    # atoms" — so a hard-anchored production must give resident up, whatever its size or
+    # what the Advanced card asked for.  This mirrors the same gate in ``_segment_conf``;
+    # both emitters need it, because a fix applied only to the ladder leaves the
+    # production path (and every chained stage built on it) still emitting the fatal pair.
+    # SOFT anchors are unaffected: harmonic restraints are GPU-resident-compatible, and
+    # are what NAMD's manual recommends in place of fixed atoms.
+    if anchors_file and anchor_k is None:
+        resident_ok = False
     _res_line = "GPUresident        on\n" if resident_ok else ""
     if ts == 4.0:
         psf = structure_psf or f"{name_stem}.psf"
@@ -1549,13 +1565,22 @@ def _segment_conf(
     # ``n_atoms`` None means "unknown" and does NOT block resident — only a known count
     # below the threshold does.  (The one production caller always passes it.)
     #
-    # Two REAL incompatibilities remain, and only these:
+    # Three REAL incompatibilities remain, and only these:
     #   * GBIS / implicit solvent — GPU-resident has no implicit-solvent path at all.
     #   * A SPARSE cell — NAMD sizes its GPU tile/exclusion buffers from the cell-AVERAGE
     #     density, so a water-shell carve with vacuum corners under-counts exclusions and
     #     dies at step 0 ("Low global CUDA exclusion count!", measured: needs >=~90% fill;
     #     even 80% dies).  A TIGHT carved box the structure fills is fine, so this gates on
     #     fill_fraction rather than on `carved` alone.
+    #   * fixedAtoms — NAMD 3 refuses outright: "GPUresident is incompatible with the
+    #     following options: ... fixed atoms".  This is a CONFIG conflict, not a host
+    #     limitation, so it must be decided here rather than left to the runtime probe:
+    #     emitting both makes NAMD die at segment start, and the probe then misreads a
+    #     hard incompatibility as "this GPU can't do resident" and offers to downgrade the
+    #     WHOLE ladder.  Both fixedAtoms emitters are covered — a segment's own marker and
+    #     the job-level hard anchors (``external_forces_block`` with ``anchor_k is None``).
+    #     The settle stage avoids the trade entirely by restraining instead of fixing;
+    #     hard anchors genuinely need the Dirichlet pin, so those segments give up resident.
     # The one-cycle pre-flight probe (namd_runner.gpu_resident_probe) remains the backstop
     # for anything host-specific that slips through, e.g. a small pinned pool.
     #
@@ -1571,6 +1596,7 @@ def _segment_conf(
         and (not vacuum)
         and by_size
         and (not carved or fill_fraction >= _RESIDENT_MIN_FILL)
+        and not (spec.fixed_atoms_file or anchors_file)
     )
     lines = [
         _common_header(
@@ -1613,9 +1639,10 @@ def _segment_conf(
         lines.append(f"extraBondsFile     {push_bonds_file}\n")
 
     if spec.scale is not None and not spec.extra_bonds_file:
+        ref = spec.restraint_ref_file or "restraints_dna_heavy.pdb"
         lines.append("constraints        on\n")
-        lines.append("consref            restraints_dna_heavy.pdb\n")
-        lines.append("conskfile          restraints_dna_heavy.pdb\n")
+        lines.append(f"consref            {ref}\n")
+        lines.append(f"conskfile          {ref}\n")
         lines.append("conskcol           B\n")
         lines.append(f"constraintScaling  {spec.scale:g}\n")
     else:
@@ -1728,31 +1755,20 @@ def write_restraints_pdb(pdb_path: Path, dst_path: Path) -> None:
     dst_path.write_text("".join(lines))
 
 
-#: Filename of the all-DNA fixedAtoms marker the settle stage uses.
-SOLUTE_FIXED_PDB = "fixed_dna_all.pdb"
+#: Reference/force-constant PDB for the Note-4 settle stage's harmonic restraints.
+#: Same content as ``restraints_dna_heavy.pdb`` (DNA heavy atoms B=1.0) but a SEPARATE
+#: file, because the runner re-points its coordinates at the minimised structure once
+#: minimisation has run — see ``namd_runner.retarget_settle_restraints``.
+SOLUTE_RESTRAINT_PDB = "restraints_settle.pdb"
 
-
-def write_solute_fixed_pdb(pdb_path: Path, dst_path: Path) -> int:
-    """Write a fixedAtoms marker with B=1.0 for EVERY DNA atom, B=0 for solvent/ions.
-
-    Distinct from ``restraints_dna_heavy.pdb``, which zeroes hydrogens because it drives
-    a harmonic restraint where leaving H free is fine.  For ``fixedAtoms`` it is not:
-    fixing a heavy atom while its hydrogens move is a rigid-bond constraint between a
-    fixed and a free atom, which RATTLE cannot satisfy.
-
-    Returns the number of atoms marked.
-    """
-    n = 0
-    lines = []
-    for raw in pdb_path.read_text().splitlines(keepends=True):
-        if raw.startswith("ATOM"):
-            raw = _set_bfactor(raw, 1.0)
-            n += 1
-        elif raw.startswith("HETATM"):
-            raw = _set_bfactor(raw, 0.0)
-        lines.append(raw)
-    dst_path.write_text("".join(lines))
-    return n
+#: Restraint stiffness for the settle stage, kcal/mol/Å².  Aksimentiev's own published
+#: value for holding origami during equilibration (PNAS 2013 / NAR 2016: "harmonic
+#: restraints to all heavy atoms of DNA ... spring constant k of 1 kcal/mol/Å²").
+#: Measured on 6hbx32 (234 646 atoms, 50 ps): the DNA wanders 0.35 Å RMS at this k while
+#: the cell settles to the SAME volume a fixedAtoms run reaches (95.34 % vs 95.39 % of
+#: the starting cell, on a 4.6 % shrink) — indistinguishable for this stage's purpose,
+#: and it keeps GPU-resident (1.9× throughput).
+SETTLE_RESTRAINT_K = 1.0
 
 
 def write_anchor_restraints_pdb(
@@ -2668,6 +2684,22 @@ def mgh_slow_release_segments(
     # ladder that follows starts from a box that already holds the right amount of water.
     # NADOC had the detector (md_cell_health) and the collapse refusal but not the remedy.
     #
+    # "DNA position fixed" is realised as STIFF HARMONIC RESTRAINTS, not NAMD ``fixedAtoms``.
+    # Note 4 is prose in the protocol chapter — the tutorial's own step-4 scripts have no
+    # settle stage at all — so "fixed" describes the intent, not the keyword.  Three reasons
+    # the restraint is the better reading of it, and none of them is throughput:
+    #   * NAMD's own manual: "The use of constant pressure with significant numbers of fixed
+    #     atoms is not recommended."  Worse, forces BETWEEN fixed atoms are dropped from the
+    #     virial unless ``fixedAtomsForces`` is on — so the pressure driving the barostat is
+    #     incomplete in the one stage that exists to let the barostat find the right volume.
+    #   * Aksimentiev's own papers hold origami with harmonic restraints on DNA heavy atoms
+    #     at k = 1 kcal/mol/Å² (PNAS 2013, NAR 2016), which is exactly what this emits.
+    #   * NAMD 3 refuses ``fixedAtoms`` under GPU-resident and names harmonic restraints as
+    #     the sanctioned workaround.
+    # Measured equivalence on 6hbx32 (50 ps, 234 646 atoms): cell settles to 95.34 % of the
+    # starting volume restrained vs 95.39 % fixed — 0.05 pp apart on a 4.6 % shrink — while
+    # the DNA moves 0.35 Å RMS (minimisation alone moves it 1.19 Å; the ladder ~10 Å).
+    #
     # Skipped for a carved cell: there the barostat is off throughout (vacuum corners),
     # so there is no box for this stage to settle.
     if settle_ps > 0 and not nvt_only:
@@ -2676,21 +2708,28 @@ def mgh_slow_release_segments(
         # Deliberately NOT a numbered stage: the ENM ladder's 01..04 must mean the same
         # thing whether or not this stage exists, so a carved (NVT, no settle) package
         # and a full-box one stay comparable segment-for-segment.
+        #
+        # The segment NAME still says "fixed_dna" although the mechanism is now a restraint.
+        # That is deliberate: the name is the on-disk conf/output stem, and a job prepped
+        # before this change resumes by recomputing these specs and matching them against
+        # the confs already written.  Renaming would strand every in-flight package.
         seg_name = f"{name_stem}_0S_300K_NPT_settle_fixed_dna_p100"
         segments.append(SegmentSpec(
             name=seg_name,
-            stage="300K NPT settle (DNA fixed)",
+            stage="300K NPT settle (DNA restrained)",
             percent=100.0,
             steps=settle_steps,
             temp=300.0,
             damping=5.0,
-            scale=None,                 # no ENM: nothing is moving that needs restraining
+            # Not the ENM: this is the position restraint that holds the solute still.
+            # `extra_bonds_file=None` leaves the constraints channel free for it.
+            scale=SETTLE_RESTRAINT_K,
             npt=True,
             previous=previous,
             reinit=False,
             dcd_freq=_display_dcd_freq(settle_steps),
             extra_bonds_file=None,
-            fixed_atoms_file=SOLUTE_FIXED_PDB,
+            restraint_ref_file=SOLUTE_RESTRAINT_PDB,
             soft=soft,
             gentle=gentle,
         ))
@@ -2737,11 +2776,17 @@ def mgh_slow_release_segments(
     # safely; every later segment reverts to fast 2 fs rigid dynamics.  (When the
     # whole ladder is already soft — declash designs — this is a no-op.)
     #
-    # It must land on the first segment whose SOLUTE ATOMS MOVE.  The settle stage is
-    # earlier but holds every DNA atom fixed, so no solute strain can relieve there and
-    # no solute RATTLE can fail there either — softening it would spend the protection
-    # on the one segment that does not need it and leave the first free segment hard.
-    first_free = next((s for s in segments if s.fixed_atoms_file is None), None)
+    # It must land on the first segment whose SOLUTE ATOMS MOVE FREELY.  The settle stage
+    # is earlier but holds every DNA heavy atom on a stiff position restraint, so a build
+    # strain cannot relieve there (the restraint holds the strained atom at its minimised
+    # position just as a hard pin would) — softening it would spend the protection on the
+    # one segment that does not need it and leave the first free segment hard.
+    #
+    # Identified by the restraint reference, NOT by ``fixed_atoms_file``: the stage stopped
+    # using fixedAtoms when it moved to restraints, and keying on the old field silently
+    # moved the soft start onto the settle stage itself.
+    first_free = next(
+        (s for s in segments if not s.restraint_ref_file and not s.fixed_atoms_file), None)
     if first_free is not None and not soft and not gentle:
         first_free.gentle = True
 
@@ -2930,8 +2975,12 @@ def prepare_mgh_slow_release(
         progress("enm", None, "Building elastic-network restraints…")
     pdb_path = package_dir / f"{name_stem}.pdb"
     write_restraints_pdb(pdb_path, package_dir / "restraints_dna_heavy.pdb")
-    # All-DNA fixedAtoms marker for the Note-4 settle stage (see mgh_slow_release_segments).
-    write_solute_fixed_pdb(pdb_path, package_dir / SOLUTE_FIXED_PDB)
+    # Restraint reference for the Note-4 settle stage (see mgh_slow_release_segments).
+    # Written from the BUILD pose so the package is runnable stand-alone; the runner
+    # re-points it at the minimised coordinates before the stage runs, because
+    # minimisation moves DNA heavy atoms ~1.2 Å RMSD and restraining back to the build
+    # pose would stand against the minimiser for the whole stage.
+    write_restraints_pdb(pdb_path, package_dir / SOLUTE_RESTRAINT_PDB)
     # Exclude single-stranded crossover extra bases from the LADDER ENM so they relax to
     # their true conformation rather than being pinned into a stretched backbone bond.
     # Without this, an oxDNA-SEEDED FAST (4 fs) ladder restrains the seeded inserts and the
@@ -3175,6 +3224,7 @@ def prepare_mgh_slow_release(
             "gentle": s.gentle,
             "timestep_fs": s.timestep_fs,
             "fixed_atoms_file": s.fixed_atoms_file,
+            "restraint_ref_file": s.restraint_ref_file,
         }
         for s in segments
     ]
@@ -3477,6 +3527,11 @@ def segments_from_manifest(manifest_path: Path) -> tuple[str, list[SegmentSpec]]
             # it was the effective value on every non-fast ladder anyway.
             timestep_fs=s.get("timestep_fs", 2.0),
             fixed_atoms_file=s.get("fixed_atoms_file"),
+            # A manifest written before the settle stage restrained instead of fixing has
+            # no such key; it also still has fixed_atoms_file set, so it resumes on the
+            # confs it was prepped with (fixedAtoms, offload) rather than changing
+            # mechanism mid-job.
+            restraint_ref_file=s.get("restraint_ref_file"),
         )
         for s in data["segments"]
     ]

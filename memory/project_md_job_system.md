@@ -290,6 +290,14 @@ What exists now:
   propagates strain, kills local fluctuation, and is not rescaled by the barostat.
   Suppressing tumbling of a ~10 nm bundle held at both ends needs only ~0.01–0.03
   (k·((L/2)·sin θ)² ≈ kT at θ ≈ 10°).
+  **A hard anchor also costs GPU-resident** (2026-08-04): NAMD 3 refuses `fixedAtoms`
+  under `GPUresident`, so any segment emitting one drops to offload. Gated in BOTH conf
+  writers — `_segment_conf` AND `build_production_conf` — since a fix in one leaves the
+  other emitting the fatal pair (LESSONS H16/K12). Soft anchors are unaffected.
+- **The `_0S_` settle stage now owns the constraints channel** (it carries no ENM), holding
+  all DNA heavy atoms at k=1 rather than the old all-DNA `fixedAtoms` — that is what let it
+  keep GPU-resident. `namd_runner.retarget_settle_restraints` re-points its reference at the
+  minimised coords after minimisation. See [[REFERENCE_AKSIMENTIEV_PROTOCOL]].
 - **`retarget_anchor_pdb`** re-points the soft reference at the child's OWN
   `equilibrated.coor`. Restraining to the prep-time build pose would pull the structure
   back to where the ladder moved it from, for the whole run — and would give each arm of a

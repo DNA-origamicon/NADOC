@@ -359,7 +359,12 @@ def production_segment_spec(name_stem: str, *, stage_idx: int, pct: float, frac:
 # ── The stage table ───────────────────────────────────────────────────────────
 
 def _role_for(spec: SegmentSpec) -> str:
-    if spec.fixed_atoms_file:
+    # The settle stage is the one that holds the solute still while the barostat finds the
+    # box size.  It is identified by its restraint reference — it used to hold the solute
+    # with ``fixedAtoms``, which NAMD refuses under GPU-resident and warns against under
+    # constant pressure.  ``fixed_atoms_file`` is still honoured so any future hard-pinned
+    # stage classifies the same way.
+    if spec.restraint_ref_file or spec.fixed_atoms_file:
         return "settle"
     if "production" in spec.name.lower():
         return "production"
@@ -387,6 +392,7 @@ def _stage_row(index: int, name: str, stage: str, role: str, *, steps: int,
         "soft": bool(getattr(spec, "soft", False)),
         "gentle": bool(getattr(spec, "gentle", False)),
         "fixed_atoms_file": getattr(spec, "fixed_atoms_file", None),
+        "restraint_ref_file": getattr(spec, "restraint_ref_file", None),
         "min_c1_paired": getattr(spec, "min_c1_paired", None),
         "min_wc_ref_relative": getattr(spec, "min_wc_ref_relative", None),
         "params": params,

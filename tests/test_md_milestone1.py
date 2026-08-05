@@ -512,7 +512,7 @@ class TestMghSlowReleaseSegments:
         # segment (nothing is relaxing yet — the solute is pinned), so it is not part
         # of this invariant.
         _, segments = mgh_slow_release_segments("X")
-        ladder = [s for s in segments if s.fixed_atoms_file is None]
+        ladder = [s for s in segments if s.restraint_ref_file is None]
         stage_counts = Counter(s.stage for s in ladder)
         assert len(set(stage_counts.values())) == 1, stage_counts
         per_stage: dict[str, list[float]] = {}
@@ -568,7 +568,7 @@ class TestMghSlowReleaseSegments:
                                                mgh_slow_release_segments)
 
         _, segments = mgh_slow_release_segments("X")
-        ladder = [s for s in segments if s.fixed_atoms_file is None]
+        ladder = [s for s in segments if s.restraint_ref_file is None]
         stage_totals: dict[str, int] = {}
         for s in ladder:
             stage_totals[s.stage] = stage_totals.get(s.stage, 0) + s.steps

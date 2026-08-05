@@ -91,9 +91,27 @@ def test_every_ladder_segment_emits_constraints_off():
     ``_segment_conf`` only takes that branch when a scale is set WITHOUT an extrabonds
     file, and the ladder always sets both together.  A reader who assumes
     ``constraints on`` means "restrained" would misread every column.
+
+    The SETTLE stage is the sole exception and the reason the branch exists at all: it
+    carries no ENM, so the constraints channel is free for the position restraint that
+    holds the solute while the barostat works.
     """
     for row in md_plan.relaxation_stages(_ctx(fast=True))[1:]:
+        if row["role"] == "settle":
+            continue
         assert row["params"]["constraints"] == "off", row["name"]
+
+
+def test_the_settle_stage_is_the_one_that_uses_the_constraints_channel():
+    """And it must not also engage the ENM — the two would fight over the same solute."""
+    settle = [r for r in md_plan.relaxation_stages(_ctx(fast=True))
+              if r["role"] == "settle"]
+    assert len(settle) == 1
+    params = settle[0]["params"]
+    assert params["constraints"] == "on"
+    assert params["conskcol"] == "B"
+    assert "fixedatoms" not in params
+    assert "extrabondsfile" not in params or ".enm.extra" not in params["extrabondsfile"]
 
 
 def test_restraint_ladder_steps_down_through_the_extrabonds_file():
@@ -170,12 +188,12 @@ def test_a_carved_package_loses_the_settle_stage_and_the_barostat():
 
 
 def test_the_soft_start_lands_on_the_first_stage_whose_atoms_move():
-    """Not the settle stage — nothing can strain-relieve while every DNA atom is fixed."""
+    """Not the settle stage — nothing can strain-relieve while the solute is restrained."""
     rows = md_plan.relaxation_stages(_ctx(fast=True))
     gentle = [r for r in rows[1:] if r["gentle"]]
     assert len(gentle) == 1
     assert gentle[0]["role"] == "ladder"
-    assert gentle[0]["fixed_atoms_file"] is None
+    assert gentle[0]["restraint_ref_file"] is None
     assert gentle[0]["timestep_fs"] == 2.0
 
     conds = {c["id"] for c in md_plan.protocol_conditions(

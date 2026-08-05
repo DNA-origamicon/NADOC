@@ -23,6 +23,17 @@ def _total_ns(segments, timestep_fs=2.0):
     return sum(s.steps * timestep_fs / 1e6 for s in segments)
 
 
+def _is_settle(spec):
+    """True for the Note-4 settle stage, which is not part of the chunk schedule.
+
+    It is identified by its own restraint reference file — the marker that holds the
+    solute still while the barostat works.  (It used to be identified by
+    ``fixed_atoms_file``; the stage now restrains rather than fixes, because NAMD refuses
+    ``fixedAtoms`` under GPU-resident and warns against it under constant pressure.)
+    """
+    return spec.restraint_ref_file is not None
+
+
 # ── the fraction derivation ───────────────────────────────────────────────────
 def test_fractions_are_increments_of_the_cumulative_percents():
     assert _chunk_fractions((10.0, 50.0, 100.0)) == [
@@ -76,7 +87,7 @@ def test_every_stage_gets_the_same_chunk_labels_ending_at_p100():
     _, segs = mgh_slow_release_segments("X")
     by_stage: dict[str, list[float]] = {}
     for s in segs:
-        if s.fixed_atoms_file:
+        if _is_settle(s):
             continue
         by_stage.setdefault(s.stage, []).append(s.percent)
     assert len(by_stage) == 4                     # k=0.5, 0.1, 0.01, and k=0
@@ -93,22 +104,23 @@ def test_chunk_names_match_their_cumulative_percent():
 def test_restraint_schedule_and_soft_start_survive_the_finer_split():
     """The k ladder and the soft first segment are the parts that must not move."""
     _, all_segs = mgh_slow_release_segments("X")
-    segs = [s for s in all_segs if s.fixed_atoms_file is None]
+    segs = [s for s in all_segs if not _is_settle(s)]
     scales = [s.scale for s in segs]
     assert scales[0] == 0.5 and scales[-1] is None
     # k descends monotonically, with None (unrestrained) last
     numeric = [s for s in scales if s is not None]
     assert numeric == sorted(numeric, reverse=True)
-    # The gentle start belongs to the first segment whose solute atoms MOVE — the settle
-    # stage before it has every DNA atom fixed, so nothing can strain or fail there.
+    # The gentle start belongs to the first segment whose solute atoms MOVE FREELY — the
+    # settle stage before it holds every DNA heavy atom on a stiff restraint, so nothing
+    # can strain or fail there.
     assert segs[0].gentle is True
     assert not any(s.gentle for s in segs[1:])
-    assert not any(s.gentle or s.soft for s in all_segs if s.fixed_atoms_file)
+    assert not any(s.gentle or s.soft for s in all_segs if _is_settle(s))
 
 
 def test_a_single_chunk_per_stage_is_legal():
     """The degenerate split — one chunk per k — is what the tutorial itself does."""
     _, segs = mgh_slow_release_segments("X", chunk_pcts=(100.0,))
-    assert len([s for s in segs if s.fixed_atoms_file is None]) == 4
+    assert len([s for s in segs if not _is_settle(s)]) == 4
     assert _total_ns(segs) == pytest.approx(
         _total_ns(mgh_slow_release_segments("X")[1]), rel=1e-3)

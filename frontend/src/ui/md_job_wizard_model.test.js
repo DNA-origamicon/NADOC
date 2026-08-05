@@ -39,7 +39,7 @@ function plan(overrides = {}) {
         diff_vs_previous: {}, conditional_params: {},
       },
       {
-        index: 1, name: 'demo_0S_settle', stage: '300K NPT settle (DNA fixed)', role: 'settle',
+        index: 1, name: 'demo_0S_settle', stage: '300K NPT settle (DNA restrained)', role: 'settle',
         steps: 125000, timestep_fs: 4, ns: 0.5,
         params: { timestep: '4', rigidbonds: 'all', langevinpiston: 'on',
                   fixedatoms: 'on', gpuresident: 'on', outputname: 'output/demo_0S_settle' },

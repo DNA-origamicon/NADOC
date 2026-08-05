@@ -76,7 +76,7 @@ def test_segments_soft_flag_propagates():
     # the strained start past the RATTLE failure); every later segment reverts to rigid
     # 2 fs.  The Note-4 settle stage runs earlier with all DNA fixed, so it is excluded —
     # nothing can strain there.
-    free = [s for s in hard_segs if s.fixed_atoms_file is None]
+    free = [s for s in hard_segs if s.restraint_ref_file is None]
     assert free and free[0].gentle
     assert not any(s.gentle for s in free[1:])
 

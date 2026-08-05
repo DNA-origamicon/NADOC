@@ -303,12 +303,11 @@ def test_prepare_writes_anchor_restraints_end_to_end(tmp_path, monkeypatch):
     # Every LADDER conf (the minimization + each segment) enables fixedAtoms; the
     # solvation base template (namd.conf) is intentionally not a run conf.
     #
-    # A SETTLE segment is the one exception to "names the anchor file": it pins the
-    # whole solute while the solvent equilibrates, and NAMD allows only ONE
-    # fixedAtomsFile, so it names the all-DNA superset instead (md_protocols.py:
-    # `spec.fixed_atoms_file or anchors_file`).  That superset contains every anchor
-    # residue, so the anchors are still held — assert the substitution deliberately
-    # rather than exempting the segment, or a dropped anchor file would look the same.
+    # The SETTLE segment names the anchor file like every other segment.  It used to be
+    # the one exception — it pinned the whole solute with its own all-DNA fixedAtoms file,
+    # and NAMD allows only ONE fixedAtomsFile — but it now holds the solute with harmonic
+    # restraints instead, which is an independent channel.  So on an anchored job the
+    # settle stage carries BOTH: hard anchors via fixedAtoms and the all-DNA restraint.
     manifest = json.loads((pkg / "manifest.json").read_text())
     expected_fixed = [(pkg / f"{manifest['minimization']['name']}.conf",
                        "restraints_anchors.pdb")]
@@ -321,13 +320,19 @@ def test_prepare_writes_anchor_restraints_end_to_end(tmp_path, monkeypatch):
         assert f"fixedAtomsFile     {want}\n" in text
         assert "fixedAtomsCol      B" in text
 
-    # The settle stage's superset must really be a superset, not a silent replacement.
-    settle = [s for s in segments if s.fixed_atoms_file]
+    # The settle stage's own restraint must really cover the whole solute, not silently
+    # replace the anchors with a smaller set.
+    settle = [s for s in segments if s.restraint_ref_file]
     if settle:
-        all_dna = pkg / settle[0].fixed_atoms_file
+        conf = (pkg / f"{settle[0].name}.conf").read_text()
+        assert "fixedAtoms         on" in conf          # anchors still hard-held
+        assert f"consref            {settle[0].restraint_ref_file}\n" in conf
+        all_dna = pkg / settle[0].restraint_ref_file
         assert all_dna.exists()
         all_dna_ordinals, _ = _b1_residue_ordinals(all_dna.read_text())
         assert set(expected) <= set(all_dna_ordinals)
+        # An anchored ladder cannot run GPU-resident: NAMD refuses fixedAtoms there.
+        assert "GPUresident" not in conf
 
     assert manifest["anchors"]["file"] == "restraints_anchors.pdb"
     assert manifest["anchors"]["n_residues"] == len(expected)
