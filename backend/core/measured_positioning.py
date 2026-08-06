@@ -90,43 +90,117 @@ import numpy as np
 
 
 @dataclass(frozen=True)
+class Site:
+    """One landmark's cylindrical place in the base-pair frame: (radius, azimuth, rise)."""
+
+    radius_nm: float
+    azimuth_deg: float
+    axial_nm: float
+    """Offset along the helix axis from the base pair's own plane.  Small but real
+    (~0.1 nm for C3'), and dropping it would flatten the two strands into one plane."""
+
+    def azimuth_rad(self) -> float:
+        return math.radians(self.azimuth_deg)
+
+
+@dataclass(frozen=True)
 class MeasuredPositioning:
-    """One coherent placement parameter set, all measured about the local helix axis."""
+    """Where the CG beads go, all measured about the local helix axis.
 
-    backbone_radius_nm: float
-    """Where the phosphorus actually sits.  MD 0.925 ± 0.039 nm; the CG layer draws
-    the bead at 1.000 and the atomistic layer stamps P at 0.900."""
+    Every field is DERIVED from the all-atom template in ``measured_atomistic.py`` (see
+    :func:`_from_atomistic_template`) rather than measured separately.  That is the point:
+    the backbone bead is meant to BE the ribose C3' and the base bead its base-ring
+    centroid, so reading them off the same atoms the atomistic layer stamps is the only
+    way the two representations can be guaranteed to agree.  A bead placed from an
+    independent fit lands near the atom, not on it — the previous parameter set targeted
+    the phosphorus and still missed it by 0.13 nm.
+    """
 
-    base_radius_nm: float
-    """Base-ring centroid, MD 0.324 ± 0.052 nm.  The CG base bead is currently at
-    0.714 nm — more than twice too far out, the single largest placement error found."""
+    backbone_fwd: Site
+    backbone_rev: Site
+    """The ribose C3' of each strand.  MD: r = 0.804 nm at +24.5 deg on FORWARD and
+    +154.7 deg on REVERSE, i.e. a C3'-C3' separation of 130.2 deg — nothing like the
+    180 deg the phosphates take, because C3' sits a quarter-turn round from its own P."""
 
-    pp_separation_deg: float
-    """Azimuthal separation, CCW about the axis, from the FORWARD strand's phosphorus
-    to the REVERSE strand's at the same base pair.  PROVISIONAL — see module docstring."""
-
-    base_azimuth_offset_deg: float
-    """Azimuth of the base-ring centroid relative to its OWN phosphorus, signed toward
-    the partner strand.  MD puts them within a degree of each other (fwd 177.8° vs
-    178.6°, rev 2.60° vs 2.50°): the nucleotide runs essentially straight inward, so
-    the base bead is the backbone bead pulled in along the same radial."""
+    base_fwd: Site
+    base_rev: Site
+    """Base-ring centroid.  MD r = 0.314 nm; the legacy CG base bead is at 0.714 nm,
+    more than twice too far out — the single largest placement error found."""
 
     slab_extent_nm: float
-    """Long in-plane extent of the base slab, along the cross-strand direction.  Sized
-    to span its own base: from that strand's C1' (MD r = 0.566 nm) inward to just past
-    the Watson-Crick atom (r = 0.165 nm)."""
-
-    def pp_separation_rad(self) -> float:
-        return math.radians(self.pp_separation_deg)
+    """Long extent of the base slab, along the bead->base axis (NOT the cross-strand
+    direction).  Sized to run from the nucleotide's own backbone bead inward to just
+    past its Watson-Crick atom, so the slab visibly joins the base to its own sugar."""
 
 
-MEASURED = MeasuredPositioning(
-    backbone_radius_nm=0.925,
-    base_radius_nm=0.324,
-    pp_separation_deg=183.9,      # PROVISIONAL — pending the seed-sweep MD
-    base_azimuth_offset_deg=-0.8,
-    slab_extent_nm=0.45,
+def _site(vals: "list[tuple[float, float, float]]") -> Site:
+    """Sequence-average a landmark: mean radius/rise, CIRCULAR mean azimuth."""
+    r = float(np.mean([v[0] for v in vals]))
+    z = float(np.mean([v[2] for v in vals]))
+    ang = np.radians([v[1] for v in vals])
+    az = math.degrees(math.atan2(float(np.sin(ang).mean()), float(np.cos(ang).mean())))
+    return Site(radius_nm=round(r, 4), azimuth_deg=round(az, 2), axial_nm=round(z, 4))
+
+
+def _from_atomistic_template() -> "MeasuredPositioning | None":
+    """Read the bead sites straight off the measured all-atom template.
+
+    Returns ``None`` if that data file is unavailable, so the caller can fall back to
+    the frozen numbers below rather than fail a view.
+    """
+    from backend.core import measured_atomistic as _ma
+
+    PURINE_RING = ("N9", "C8", "N7", "C5", "C6", "N1", "C2", "N3", "C4")
+    PYRIMIDINE_RING = ("N1", "C2", "N3", "C4", "C5", "C6")
+    try:
+        tmpl = _ma.measured_templates()
+    except _ma.MeasuredTemplateUnavailable:
+        return None
+
+    def landmark(role: str, which: str) -> Site:
+        vals = []
+        for residue in ("DA", "DT", "DG", "DC"):
+            sugar, base = tmpl[(role, residue)]
+            pos = {n: np.array([x, y, z]) for n, _e, x, y, z in (*sugar, *base)}
+            if which == "C3'":
+                v = pos["C3'"]
+            elif which == "RING":
+                ring = PURINE_RING if residue in ("DA", "DG") else PYRIMIDINE_RING
+                v = np.mean([pos[a] for a in ring], axis=0)
+            else:  # the Watson-Crick donor/acceptor
+                v = pos["N1"] if residue in ("DA", "DG") else pos["N3"]
+            vals.append((float(math.hypot(v[0], v[1])),
+                         math.degrees(math.atan2(v[1], v[0])), float(v[2])))
+        return _site(vals)
+
+    bb_f, bb_r = landmark("FORWARD", "C3'"), landmark("REVERSE", "C3'")
+    ba_f, ba_r = landmark("FORWARD", "RING"), landmark("REVERSE", "RING")
+    wc_f = landmark("FORWARD", "WC")
+
+    # Slab length = bead -> own Watson-Crick atom, so the plate spans the whole base and
+    # its OUTER end lands on the bead.  Measured straight-line, not a radial difference:
+    # the bead sits 0.29 nm off the base's cross-strand line, so a slab merely lengthened
+    # radially reaches the right radius and still misses the bead entirely.
+    def xyz(s: Site) -> np.ndarray:
+        return np.array([s.radius_nm * math.cos(s.azimuth_rad()),
+                         s.radius_nm * math.sin(s.azimuth_rad()), s.axial_nm])
+
+    extent = float(np.linalg.norm(xyz(wc_f) - xyz(bb_f)))
+    return MeasuredPositioning(backbone_fwd=bb_f, backbone_rev=bb_r,
+                               base_fwd=ba_f, base_rev=ba_r,
+                               slab_extent_nm=round(extent, 4))
+
+
+# Frozen fallback, and the documentation of what the derivation produces today.
+_FALLBACK = MeasuredPositioning(
+    backbone_fwd=Site(0.8040, 24.52, 0.0992),
+    backbone_rev=Site(0.8032, 154.70, -0.0997),
+    base_fwd=Site(0.3136, 7.87, 0.0326),
+    base_rev=Site(0.3127, 171.35, -0.0320),
+    slab_extent_nm=0.6568,
 )
+
+MEASURED = _from_atomistic_template() or _FALLBACK
 
 
 def template_p_azimuth_offset_rad(p_radius_nm: float) -> float:
@@ -183,62 +257,38 @@ def template_p_azimuth_offset_rad(p_radius_nm: float) -> float:
 # the legacy path, which is still what the view shows with the toggle OFF.
 
 
-def _reconstruct_axis_point(
-    fwd: np.ndarray,
-    rev: np.ndarray,
-    tangent: np.ndarray,
-    legacy_radius: float,
-    legacy_groove_rad: float,
-) -> np.ndarray | None:
-    """Recover the helix-axis point for one base pair from its two backbone beads.
+def _axis_point_for(
+    bead: np.ndarray,
+    axis_origin: np.ndarray,
+    axis_hat: np.ndarray,
+) -> np.ndarray:
+    """The point on the helix axis level with this nucleotide — the foot of the
+    perpendicular from its backbone bead.
 
-    Both legacy beads sit at ``legacy_radius`` from the axis, so in the plane
-    perpendicular to ``tangent`` the axis point is a circumcentre: on the perpendicular
-    bisector of the bead chord, ``sqrt(r² − (d/2)²)`` from its midpoint.  Two solutions
-    exist; the correct one is the side for which the CCW angle from FORWARD to REVERSE
-    reproduces the legacy groove the beads were built with.
+    The axis is passed in rather than recovered from the beads, because it CANNOT be
+    recovered from them.  Two beads on a circle of known radius admit two circumcentres,
+    mirror images across their chord and ``2h`` = 0.52 nm apart, and nothing else in the
+    nucleotide arrays breaks the tie: the base beads are offset along the CROSS-STRAND
+    direction, so the pair's base midpoint coincides with its backbone midpoint exactly
+    (verified: |base_mid − bead_mid| = 0).
 
-    Returns ``None`` when the pair cannot be reconciled with that groove — a deformed
-    or otherwise non-circular pair — so the caller can leave it on legacy placement
-    rather than move it somewhere invented.
+    The previous code chose by reproducing the CCW angle the legacy groove was built
+    with, which depends on the sign convention of ``axis_tangent`` relative to the
+    helix's lattice cell type — and silently picked the MIRRORED circumcentre for one of
+    the two cell types.  Measured on ``6hb_test``: mean displacement 0.2588 nm = h, max
+    0.5176 = 2h, i.e. exactly half the base pairs were placed about a phantom axis.  The
+    caller has the real helix in hand, so it simply hands it over.
     """
-    t = tangent / np.linalg.norm(tangent)
-    mid = (fwd + rev) / 2.0
-    chord = rev - fwd
-    chord = chord - np.dot(chord, t) * t
-    d = float(np.linalg.norm(chord))
-    if d < 1e-9 or d > 2.0 * legacy_radius:
-        return None
-    chord_hat = chord / d
-    perp = np.cross(t, chord_hat)
-    h = math.sqrt(max(0.0, legacy_radius**2 - (d / 2.0) ** 2))
-
-    want = legacy_groove_rad % (2.0 * math.pi)
-    best: np.ndarray | None = None
-    best_err = float("inf")
-    for sign in (+1.0, -1.0):
-        cand = mid + sign * h * perp
-        rf = fwd - cand
-        rf = rf - np.dot(rf, t) * t
-        rr = rev - cand
-        rr = rr - np.dot(rr, t) * t
-        nf, nr = np.linalg.norm(rf), np.linalg.norm(rr)
-        if nf < 1e-9 or nr < 1e-9:
-            continue
-        rf, rr = rf / nf, rr / nr
-        ang = math.atan2(float(np.dot(np.cross(rf, rr), t)), float(np.dot(rf, rr)))
-        err = abs(((ang - want + math.pi) % (2.0 * math.pi)) - math.pi)
-        if err < best_err:
-            best_err, best = err, cand
-    # 3° of slack absorbs float noise without accepting a genuinely wrong circumcentre.
-    return best if best_err < math.radians(3.0) else None
+    d = bead - axis_origin
+    return axis_origin + float(np.dot(d, axis_hat)) * axis_hat
 
 
 def apply_measured_positioning(
     arrs: dict,
     *,
+    axis_origin: np.ndarray,
+    axis_hat: np.ndarray,
     legacy_radius: float,
-    legacy_groove_rad: float,
     params: MeasuredPositioning = MEASURED,
 ) -> dict:
     """Re-place the backbone beads and base beads of one helix's nucleotide arrays.
@@ -248,22 +298,35 @@ def apply_measured_positioning(
     dict; the input is not mutated, and ``bp_indices`` / ``directions`` /
     ``axis_tangents`` are carried through untouched.
 
-    The FORWARD strand's azimuth is held fixed and the REVERSE strand is moved to
-    ``pp_separation_deg`` from it.  Holding FORWARD still means a helix does not appear
-    to spin when the view is toggled; only the strand that is demonstrably in the wrong
-    place moves.
+    The frame is anchored on the FORWARD strand's EXISTING bead direction (azimuth 0),
+    which is also the frame the all-atom template's coordinates are quoted in — verified
+    on a built design, where the atomistic C3' lands at exactly the tabulated
+    (r, azimuth, z) with zero scatter.  So placing a bead at ``backbone_fwd`` puts it ON
+    the C3' atom rather than merely near it.
 
-    Base pairs whose axis point cannot be recovered (see ``_reconstruct_axis_point``)
-    are left exactly as they were, so a deformed helix degrades to legacy placement
-    per base pair instead of being displaced by a bad reconstruction.
+    Both strands are placed from their own measured site.  Earlier this held FORWARD
+    fixed and swung REVERSE by a single separation angle; that cannot express the
+    measurement now, because the backbone site is the C3' and the base site is the ring
+    centroid, and those two land at different azimuthal separations (130.2 deg vs
+    163.5 deg).  Deriving one from the other would put the base beads in the wrong place.
+
+    ``axis_origin`` / ``axis_hat`` are the helix's own centreline, cluster transforms and
+    all (``deformation.deformed_helix_axes``).
+
+    A base pair is re-placed only when BOTH of its beads are ``legacy_radius`` from that
+    centreline.  That check is not paranoia — cluster transforms are applied per DOMAIN,
+    so a base pair whose two strands belong to different domains has one bead moved and
+    the other left behind, and the two are then in different frames.  Measured on
+    ``workspace/VoltronCore.nadoc``: on ``h_XY_4_10`` only the reverse strand is covered
+    by a domain, leaving its forward partner 3.07 nm off the axis; anchoring the frame on
+    that stale bead threw the pair's placement out by 1.9 nm — worse than not moving it.
+    Such pairs keep their legacy placement, which is coherent even if not measured.
     """
     positions = np.array(arrs["positions"], dtype=float, copy=True)
     base_positions = np.array(arrs["base_positions"], dtype=float, copy=True)
     base_normals = np.array(arrs["base_normals"], dtype=float, copy=True)
     tangents = np.asarray(arrs["axis_tangents"], dtype=float)
 
-    sep = params.pp_separation_rad()
-    base_off = math.radians(params.base_azimuth_offset_deg)
     n_pairs = len(positions) // 2
 
     for k in range(n_pairs):
@@ -274,29 +337,34 @@ def apply_measured_positioning(
             continue
         t = t / nt
 
-        axis_pt = _reconstruct_axis_point(
-            positions[i], positions[j], t, legacy_radius, legacy_groove_rad
-        )
-        if axis_pt is None:
-            continue
+        axis_pt = _axis_point_for(positions[i], axis_origin, axis_hat)
 
         radial_f = positions[i] - axis_pt
         radial_f = radial_f - np.dot(radial_f, t) * t
         n = np.linalg.norm(radial_f)
         if n < 1e-9:
             continue
+        # Both beads must actually belong to this centreline — see the docstring.
+        radial_r = positions[j] - axis_pt
+        radial_r = radial_r - np.dot(radial_r, t) * t
+        if (abs(n - legacy_radius) > 1e-3
+                or abs(float(np.linalg.norm(radial_r)) - legacy_radius) > 1e-3):
+            continue
         radial_f = radial_f / n
         perp_f = np.cross(t, radial_f)   # +90° CCW about t, completing the frame
 
-        def at(angle: float, radius: float) -> np.ndarray:
-            return axis_pt + radius * (math.cos(angle) * radial_f + math.sin(angle) * perp_f)
+        def at(site: Site) -> np.ndarray:
+            a = site.azimuth_rad()
+            return (axis_pt
+                    + site.radius_nm * (math.cos(a) * radial_f + math.sin(a) * perp_f)
+                    + site.axial_nm * t)
 
-        # FORWARD holds azimuth 0 in this frame; REVERSE moves to the measured separation.
-        positions[i] = at(0.0, params.backbone_radius_nm)
-        positions[j] = at(sep, params.backbone_radius_nm)
-        # The base centroid sits on its own strand's radial, pulled in toward the axis.
-        base_positions[i] = at(+base_off, params.base_radius_nm)
-        base_positions[j] = at(sep - base_off, params.base_radius_nm)
+        # Backbone bead = the ribose C3'; base bead = the base-ring centroid.  Each
+        # strand from its own measured site, neither derived from the other.
+        positions[i] = at(params.backbone_fwd)
+        positions[j] = at(params.backbone_rev)
+        base_positions[i] = at(params.base_fwd)
+        base_positions[j] = at(params.base_rev)
 
         cross = base_positions[j] - base_positions[i]
         nc = np.linalg.norm(cross)

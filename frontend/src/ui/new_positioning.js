@@ -31,11 +31,14 @@
 const STORAGE_KEY = 'nadoc.newPositioning.v2'
 
 // Slab geometry that goes with the measured placement.  The legacy slab is centred
-// 0.45 nm inward from the bead along the cross-strand direction and is 0.70 nm long;
-// with measured positioning the slab is centred on the nucleotide's own measured
-// base-ring centroid and sized to span its base — from that strand's C1' (0.566 nm
-// from the axis) inward to just past the Watson-Crick atom (0.165 nm).
-export const MEASURED_SLAB_EXTENT = 0.45
+// 0.45 nm inward from the bead along the cross-strand direction and is 0.70 nm long.
+//
+// With measured positioning the slab runs along its own BEAD→BASE axis instead, from
+// the backbone bead (the ribose C3') inward to just past the Watson-Crick atom, so the
+// plate visibly joins the base to its own sugar.  It cannot simply be lengthened along
+// the cross-strand direction: measured, the C3' sits 0.29 nm off the base's cross-strand
+// line, so a slab extended that way reaches the right radius and still misses the bead.
+export const MEASURED_SLAB_EXTENT = 0.6568
 
 let _on = _read()
 const _listeners = new Set()
@@ -112,11 +115,40 @@ export function geometryQuerySuffix(hasQuery) {
  */
 export function slabCenterInto(bbPos, bnDir, legacyOffset, basePosition, out) {
   if (_on && basePosition) {
-    out.set(basePosition[0], basePosition[1], basePosition[2])
+    // Half a slab inward from the bead along the bead→base axis, so the plate's OUTER
+    // face lands exactly on the backbone bead — that is what makes the two connect,
+    // and it holds regardless of how the bead and base happen to be oriented.
+    slabAxisInto(bbPos, bnDir, basePosition, out)
+    out.multiplyScalar(MEASURED_SLAB_EXTENT / 2).add(bbPos)
     return out
   }
   out.copy(bbPos).addScaledVector(bnDir, legacyOffset)
   return out
+}
+
+/**
+ * Unit vector along the slab's LONG axis, written into `out`.
+ *
+ * Measured: from the backbone bead toward this nucleotide's own base-ring centroid.
+ * Legacy: the cross-strand direction, unchanged.
+ *
+ * This is the slab's orientation as well as its direction of travel — the caller builds
+ * the plate's basis from it — so the plate turns to face along the sugar→base line
+ * rather than across the base pair.  It stays perpendicular to the helix axis either
+ * way, because only the in-plane direction changes.
+ *
+ * @param {{x:number,y:number,z:number}} bbPos      backbone bead
+ * @param {{x:number,y:number,z:number}} bnDir      cross-strand unit vector (legacy)
+ * @param {number[]|null} basePosition              nuc.base_position, if available
+ * @param {{x:number,y:number,z:number}} out        vector to write into
+ */
+export function slabAxisInto(bbPos, bnDir, basePosition, out) {
+  if (_on && basePosition) {
+    out.set(basePosition[0] - bbPos.x, basePosition[1] - bbPos.y, basePosition[2] - bbPos.z)
+    const n = out.length()
+    if (n > 1e-9) return out.multiplyScalar(1 / n)
+  }
+  return out.copy(bnDir)
 }
 
 /** Long in-plane extent of the base slab, in nm. */

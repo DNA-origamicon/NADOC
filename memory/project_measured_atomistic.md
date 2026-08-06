@@ -15,6 +15,73 @@ so the measured templates are what NADOC draws **and** what it exports to every 
 affordance* that returns the 1ZEW geometry. Companion to [[project_extra_base_spacing]] and the CG
 half in `backend/core/measured_positioning.py`.
 
+## The CG beads are the ribose C3' (2026-08-06)
+
+The backbone bead used to stand in for the phosphorus; it is now the **ribose C3'**, and the base
+slab runs from that bead inward so the two visibly connect. Both are *derived from the all-atom
+template* (`measured_positioning._from_atomistic_template`) rather than fitted separately — that is
+what makes the bead land ON the atom: measured against the built model, bead→C3' went **0.461 →
+0.024 nm** (the residual is sequence-averaging, on an all-DT fixture).
+
+Sites in the base-pair frame (forward legacy bead = azimuth 0, which is the frame the template's
+coordinates are quoted in — verified with zero scatter on a built design):
+
+| landmark | FORWARD | REVERSE |
+|---|---|---|
+| C3' (backbone bead) | r 0.804, +24.5°, z +0.099 | r 0.803, +154.7°, z −0.100 |
+| base-ring centroid | r 0.314, +7.9°, z +0.033 | r 0.313, +171.4°, z −0.032 |
+
+Three consequences worth knowing:
+
+- **The forward bead now moves.** It used to be pinned at azimuth 0 so a helix wouldn't appear to
+  spin on toggle; that was only defensible while the bead meant "phosphorus" (azimuth ≈ 0). C3' is
+  +24.5° round, so holding it still would put it where no atom is.
+- **C3'–C3' separation is 130.2°**, not the phosphates' ~180°, and the base centroids sit at a
+  *different* separation again (163.5°). So neither strand's site can be derived from the other's
+  by one angle — each is placed from its own measurement.
+- **The slab aims at its own bead**, not along the cross-strand direction. It cannot simply be
+  lengthened radially: the C3' sits **0.29 nm off** the base's cross-strand line, so a slab
+  extended that way reaches the right radius and still misses the bead. Length 0.657 nm = bead →
+  own Watson-Crick atom, with the outer face on the bead (`slabAxisInto` + `slabCenterInto`).
+
+### Two more axis bugs, both found on `workspace/VoltronCore.nadoc`
+
+That design (59 helices, 3 cluster transforms, 14,774 nucleotides) is the fixture for this —
+one cluster's beads/slabs rendered visibly wrong and both causes were in the axis, not the sites.
+
+1. **`effective_helix_for_geometry` does NOT carry cluster transforms.** It handed back the
+   pre-transform centreline while the beads had already moved, so an 8-helix cluster was
+   re-placed about a phantom axis — median **2.5 nm** off its own atoms. Use
+   **`deformation.deformed_helix_axes(design)`**: against it, every one of the design's 14,774
+   legacy beads sits at exactly `HELIX_RADIUS`, clustered or not.
+2. **Cluster transforms are applied per DOMAIN**, so a base pair whose two strands belong to
+   different domains has one bead moved and the other left behind — the two are then in
+   different frames. On `h_XY_4_10` only the reverse strand is covered, leaving its forward
+   partner **3.07 nm** off the axis; anchoring the pair's frame on that stale bead threw the
+   placement out by 1.9 nm, *worse than not moving it*. `apply_measured_positioning` now
+   re-places a pair only when BOTH beads are `legacy_radius` from the centreline, and such pairs
+   keep legacy placement (20 of 14,774 nucleotides on VoltronCore).
+
+Result: 57/59 helices land on their C3' at 0.023 nm; the two stub helices (4 and 16 nucleotides,
+`length_bp` 288 but almost entirely uncovered) fall back to legacy. Max bead displacement across
+the design is 0.86 nm — the legitimate cell-type groove correction — where it had been 1.95 nm,
+which is geometrically impossible for two points at r = 1.0 and r = 0.804 about a common axis
+(max 1.807) and was the tell.
+
+### Bug found on the way: the axis point was reconstructed on the wrong side
+
+`_reconstruct_axis_point` recovered each base pair's axis as a circumcentre of its two beads and
+chose between the two mirror solutions by reproducing the legacy groove angle — which depends on
+the sign of `axis_tangent` relative to the helix's lattice cell type. It picked the **mirrored**
+candidate for one cell type: measured on `6hb_test`, mean displacement 0.2588 nm = *h*, max 0.5176
+= *2h*, i.e. half of all base pairs were placed about a phantom axis. That had been shipping since
+the CG measured view landed.
+
+It is not fixable from the arrays — the base beads are offset along the *cross-strand* direction,
+so a pair's base midpoint coincides with its backbone midpoint exactly and breaks no tie. The
+caller has the real (deformed) helix in hand, so `apply_measured_positioning` now takes
+`axis_origin`/`axis_hat` and projects onto it; the reconstruction is gone.
+
 **The CG bead layer is NOT native** — `nucleotide_geometry(measured_positioning=...)` still
 defaults False, and the app states the flag explicitly on both endpoints rather than relying on
 either default. Flipping the CG default was tried and reverted: the other CG position paths

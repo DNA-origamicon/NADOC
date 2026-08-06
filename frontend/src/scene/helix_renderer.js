@@ -19,7 +19,7 @@
  * accessing mesh.material directly.
  */
 
-import { slabCenterInto, slabExtent } from '../ui/new_positioning.js'
+import { slabAxisInto, slabCenterInto, slabExtent } from '../ui/new_positioning.js'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import {
@@ -257,6 +257,21 @@ function slabQuaternion(bnDir, tanDir) {
   const tangential = new THREE.Vector3().crossVectors(tanDir, bnDir).normalize()
   const m = new THREE.Matrix4().makeBasis(tangential, tanDir, bnDir)
   return new THREE.Quaternion().setFromRotationMatrix(m)
+}
+
+// Scratch for _offsetBase — the slab recompose runs per nucleotide per frame.
+const _offsetBaseBuf = [0, 0, 0]
+
+/** `nuc.base_position` translated by however far the bead has been moved from its
+ *  geometry position, or null when the nucleotide has no measured base. */
+function _offsetBase(nuc, movedBbPos) {
+  const b = nuc.base_position
+  if (!b) return null
+  const p = nuc.backbone_position
+  _offsetBaseBuf[0] = b[0] + (movedBbPos.x - p[0])
+  _offsetBaseBuf[1] = b[1] + (movedBbPos.y - p[1])
+  _offsetBaseBuf[2] = b[2] + (movedBbPos.z - p[2])
+  return _offsetBaseBuf
 }
 
 function slabCenter(bbPos, bnDir, distance, basePosition = null) {
@@ -1010,9 +1025,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       if (nuc.helix_id.startsWith('__ext_')) continue
       const bnDir  = new THREE.Vector3(...nuc.base_normal)
       const tanDir = new THREE.Vector3(...nuc.axis_tangent)
-      const quat   = slabQuaternion(bnDir, tanDir)
       const color  = nucSlabColor(nuc, stapleColorMap, customColors, loopSet)
       const bbPos  = new THREE.Vector3(...nuc.backbone_position)
+      // The slab's long axis is the bead→base line under measured positioning and the
+      // cross-strand direction otherwise; it sets the plate's orientation AND the
+      // direction the centre is offset along, so both must read the same vector.
+      const axis   = slabAxisInto(bbPos, bnDir, nuc.base_position, new THREE.Vector3())
+      const quat   = slabQuaternion(axis, tanDir)
       const center = slabCenter(bbPos, bnDir, slabParams.distance, nuc.base_position)
 
       _tMatrix.compose(center, quat,
@@ -2037,16 +2056,20 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           quat_   = _slabQuatS
         } else {
           slab.bbPos.set(nuc.backbone_position[0], nuc.backbone_position[1], nuc.backbone_position[2])
-          center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+          // Undeformed: bead and base come from the SAME geometry snapshot, so pass the
+          // base through and this reproduces the build-time placement exactly.  Omitting
+          // it would pair the stored (measured) orientation with a legacy centre.
+          center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance, nuc.base_position)
           quat_   = slab.quat
         }
       } else {
         const bp = nuc.backbone_position
         slab.bbPos.set(bp[0], bp[1], bp[2])
-        center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+        center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance, nuc.base_position)
         quat_   = slab.quat
       }
-      _tMatrix.compose(center_, quat_, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+      _tMatrix.compose(center_, quat_,
+        _tScale.set(slabParams.length, slabParams.width, slabExtent(slabParams.thickness)))
       iSlabs.setMatrixAt(slab.id, _tMatrix)
     }
     iSlabs.instanceMatrix.needsUpdate = true
@@ -2267,12 +2290,17 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         quat_   = _slabQuatS
       } else {
         slab.bbPos.copy(entry.pos)
-        center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance)
+        // The unfold offset is a rigid translation of the whole nucleotide, but only
+        // the BEAD carries it here — so translate the base by the same delta before
+        // using it, or the bead→base axis would be skewed by the offset itself.
+        center_ = slabCenter(slab.bbPos, slab.bnDir, slabParams.distance,
+                             _offsetBase(nuc, entry.pos))
         quat_   = slab.quat
       }
 
       slab.bbPos.copy(entry.pos)
-      _tMatrix.compose(center_, quat_, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+      _tMatrix.compose(center_, quat_,
+        _tScale.set(slabParams.length, slabParams.width, slabExtent(slabParams.thickness)))
       iSlabs.setMatrixAt(slab.id, _tMatrix)
     }
     iSlabs.instanceMatrix.needsUpdate = true

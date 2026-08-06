@@ -41,7 +41,7 @@ from backend.core.deformation import (
     deformed_nucleotide_arrays,
     effective_helix_for_geometry,
 )
-from backend.core.constants import BDNA_MINOR_GROOVE_ANGLE_RAD, SSDNA_CONTOUR_PER_NT_NM
+from backend.core.constants import SSDNA_CONTOUR_PER_NT_NM
 
 # How far the extension arc bows off the straight radial, as a fraction of the arc
 # length.  Bounds the worst consecutive bead spacing at
@@ -345,22 +345,22 @@ def _geometry_for_helices(
             if hid not in max_domain_bp or hi > max_domain_bp[hid]:
                 max_domain_bp[hid] = hi
 
-    def _emit_arrs(arrs: dict, helix_id: str, legacy_groove_rad: float | None = None) -> None:
+    def _emit_arrs(arrs: dict, helix_id: str, axis_line: "tuple | None" = None) -> None:
         """Append geometry dicts from a nucleotide arrays block."""
         M = len(arrs['bp_indices'])
         if M == 0:
             return
-        if measured_positioning and legacy_groove_rad is not None:
-            # Display-only re-placement onto the MD-measured backbone/base radii and
-            # P–P separation.  Applied here, at the serialiser, so the geometric layer
-            # itself is untouched and every other consumer of nucleotide_positions
-            # (MD seeds, exports, crossover solving) keeps the legacy placement.
-            from backend.core.constants import HELIX_RADIUS
+        if measured_positioning and axis_line is not None:
+            # Display-only re-placement: the backbone bead onto the MD-measured ribose
+            # C3' and the base bead onto its base-ring centroid.  Applied here, at the
+            # serialiser, so the geometric layer itself is untouched and every other
+            # consumer of nucleotide_positions (MD seeds, exports, crossover solving)
+            # keeps the legacy placement.
             from backend.core.measured_positioning import apply_measured_positioning
+            from backend.core.constants import HELIX_RADIUS
             arrs = apply_measured_positioning(
-                arrs,
+                arrs, axis_origin=axis_line[0], axis_hat=axis_line[1],
                 legacy_radius=HELIX_RADIUS,
-                legacy_groove_rad=legacy_groove_rad,
             )
         bp_list   = arrs['bp_indices'].tolist()
         dir_arr   = arrs['directions']
@@ -401,6 +401,27 @@ def _geometry_for_helices(
                 **sinfo,
             })
 
+    # Centrelines for the measured re-placement, which needs each base pair's REAL axis:
+    # its two beads admit two mirror-image axis candidates 0.52 nm apart and nothing in
+    # the arrays distinguishes them (see measured_positioning).
+    #
+    # It must come from deformed_helix_axes, NOT effective_helix_for_geometry: the latter
+    # does not carry cluster transforms, so on a clustered design it hands back the
+    # helix's PRE-transform centreline while the beads have already moved.  Measured on
+    # workspace/VoltronCore.nadoc, that put one 8-helix cluster's beads up to 2.7 nm off
+    # their own axis — the beads were re-placed about a phantom centreline.  Against
+    # deformed_helix_axes every one of the design's 14,774 legacy beads sits at exactly
+    # HELIX_RADIUS, clustered or not.
+    _measured_axes: dict = {}
+    if measured_positioning:
+        import numpy as _np
+        for _a in deformed_helix_axes(design):
+            _s = _np.asarray(_a["start"], dtype=float)
+            _v = _np.asarray(_a["end"], dtype=float) - _s
+            _n = float(_np.linalg.norm(_v))
+            if _n > 1e-12:
+                _measured_axes[_a["helix_id"]] = (_s, _v / _n)
+
     for helix in design.helices:
         if helix_ids is not None and helix.id not in helix_ids:
             continue
@@ -409,12 +430,7 @@ def _geometry_for_helices(
                        # bridge nucs come from _emit_bridge_nucs below instead)
         arrs = deformed_nucleotide_arrays(helix, design, compact_skips=compact_skips)
         arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
-        # The groove sign geometry.py used for THIS helix — the measured re-placement
-        # needs it to recover each base pair's axis point from its two beads.
-        _legacy_groove = (BDNA_MINOR_GROOVE_ANGLE_RAD
-                          if helix.direction == Direction.FORWARD
-                          else -BDNA_MINOR_GROOVE_ANGLE_RAD)
-        _emit_arrs(arrs, arrs['helix_id'], _legacy_groove)
+        _emit_arrs(arrs, arrs['helix_id'], _measured_axes.get(helix.id))
 
         # Render nucleotides outside the physical helix span (ss-scaffold loops).
         # These must go through the same deformation / cluster transform pipeline
