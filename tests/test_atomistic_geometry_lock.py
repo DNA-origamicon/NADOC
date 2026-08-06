@@ -187,17 +187,21 @@ def _assert_bridges(stem: str, lengths: dict[str, float]) -> None:
 
 # Fast: small crossover designs (<0.2 s each) — pin the per-atom stamp + the set and
 # closure of the crossover bridges.
+# Regenerated 2026-08-06: the MD-measured nucleotide templates became NADOC's native
+# geometry (backend/core/measured_atomistic.py), which moves every stamped atom by
+# design.  Approved change, not drift — the templates were re-extracted from free NAMD
+# rather than tweaked, and the _PHASE_* constants were NOT touched.
 _FAST_GOLDEN = {
-    "6hb_test":      "608b4720f69a3de9944863733ca10cdb",   # 2 crossover bridges
-    "Con4":          "bdaccffedd48d2bd0a5c041191fb04a5",   # 3
-    "2hb_xover_val": "4d1aa8ad7393943e06cd0031b6a3b709",   # 4
+    "6hb_test": "73877db318329102d30c767ea21ab03a",  # 2 crossover bridges
+    "Con4": "a4cea528cda69558da1351f261f80167",  # 3
+    "2hb_xover_val": "25b23da6176c2814e306d185d6a8136e",  # 4
 }
 
 # Slow: large designs that additionally exercise the SKIP-site bridge and the
 # deformation pass — the two paths most sensitive to any stamp perturbation.
 _SLOW_GOLDEN = {
-    "U6hb":                     "ac74058041002f76e6a394154d9abd4f",  # 353 bridges
-    "multi_domain_test3_bend90": "d71be3c5a2c5e03d358ce654906593f5",  # 563 bridges
+    "U6hb": "80cc3aab0e1baa8646d72c2370e83169",  # 353 bridges
+    "multi_domain_test3_bend90": "92a05d4550c77627502702ad0416452c",  # 563 bridges
 }
 
 

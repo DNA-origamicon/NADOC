@@ -254,11 +254,23 @@ def test_heavy_rep_extra_base_uses_full_simulated_orientation(routed_6hb):
         pos = {a.name: np.array([a.x, a.y, a.z]) for a in aa}
         return pos["N1"] - pos["C1'"]
 
-    vx = glycosidic_vector(built([1.0, 0.0, 0.0]))
-    vy = glycosidic_vector(built([0.0, 1.0, 0.0]))
-    assert np.linalg.norm(vx) == pytest.approx(np.linalg.norm(vy), abs=1e-8)
-    cosine = float(np.dot(vx, vy) / (np.linalg.norm(vx) * np.linalg.norm(vy)))
-    assert cosine < 0.99, "changing simulated a1 must change base orientation"
+    # Probe three orthogonal a1 directions and require that SOME pair reorients the
+    # base.  A single fixed pair is not a sound oracle here: the extra-base frame takes
+    # a1 projected perpendicular to the arc direction, so whenever the arc happens to
+    # run near the bisector of the two probes their projections coincide and the base
+    # legitimately does not move — which says nothing about whether a1 is being used.
+    vs = [
+        glycosidic_vector(built(a1))
+        for a1 in ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0])
+    ]
+    for v in vs[1:]:
+        assert np.linalg.norm(v) == pytest.approx(np.linalg.norm(vs[0]), abs=1e-8)
+    cosines = [
+        float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+        for i, a in enumerate(vs)
+        for b in vs[i + 1 :]
+    ]
+    assert min(cosines) < 0.5, "changing simulated a1 must change base orientation"
 
 
 # ── MD viz: extra-base P atoms get unique keys (no source collision) ──────────

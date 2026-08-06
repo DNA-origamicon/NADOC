@@ -7239,6 +7239,11 @@ async function main() {
     // getGeometry writes currentGeometry, and design_renderer rebuilds off that
     // store change (design_renderer.js:762) — no explicit rebuild needed.
     await api.getGeometry()
+    // The atomistic reps are a SEPARATE fetch with its own cache, so they need an
+    // explicit invalidate + refetch or the two representations would disagree —
+    // CG on measured placement, ball-and-stick still on the 1ZEW templates.
+    _atomSurface?.invalidateAtomCache()
+    await _atomSurface?.refetchAtomistic()
   })
 
   // ── Debug > Show LOD HUD ────────────────────────────────────────────────────

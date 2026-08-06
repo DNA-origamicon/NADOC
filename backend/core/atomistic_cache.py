@@ -63,6 +63,7 @@ def atomistic_fingerprint(design: "Design") -> str:
 
 def build_atomistic_model_cached(
     design: "Design", *, fingerprint: str | None = None, fast_bridges: bool = False,
+    measured_positioning: bool = True,
 ):
     """``build_atomistic_model(design)`` with a bounded cache + single-flight build.
 
@@ -73,8 +74,13 @@ def build_atomistic_model_cached(
 
     base_key = fingerprint if fingerprint is not None else atomistic_fingerprint(design)
     # Bridge construction changes coordinates, so keep exact and interpolated
-    # models in distinct cache entries.
-    key = f"{base_key}:fast_bridges={int(fast_bridges)}"
+    # models in distinct cache entries.  Positioning mode likewise: the fingerprint
+    # hashes the DESIGN, and the mode is a view/build setting outside it, so without
+    # it here a legacy build would be served for a native request and vice versa.
+    key = (
+        f"{base_key}:fast_bridges={int(fast_bridges)}"
+        f":measured={int(measured_positioning)}"
+    )
 
     # Fast path: already built.
     with _registry_lock:
@@ -92,7 +98,9 @@ def build_atomistic_model_cached(
                 _cache.move_to_end(key)
                 return _cache[key]
 
-        model = build_atomistic_model(design, fast_bridges=fast_bridges)
+        model = build_atomistic_model(
+            design, fast_bridges=fast_bridges, measured_positioning=measured_positioning
+        )
 
         with _registry_lock:
             _cache[key] = model

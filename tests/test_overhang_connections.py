@@ -21,7 +21,12 @@ from backend.api import state as design_state
 from backend.api.main import app
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP
-from backend.core.atomistic import _SUGAR, _atom_frame, build_atomistic_model
+from backend.core.atomistic import (
+    _SUGAR,
+    _atom_frame,
+    _native_local_defs,
+    build_atomistic_model,
+)
 from backend.core.deformation import deformed_nucleotide_arrays, effective_helix_for_geometry, _normalize_helix_for_grid
 from backend.core.geometry import nucleotide_positions
 from backend.core.lattice import assign_overhang_connection_names
@@ -1235,7 +1240,11 @@ def test_dedicated_overhang_phase_shared_by_cg_and_atomistic():
     axis_hat = (axis_end - axis_start) / np.linalg.norm(axis_end - axis_start)
     axis_pt = axis_start + (stored_nuc.bp_index - helix.bp_start) * BDNA_RISE_PER_BP * axis_hat
     origin, R = _atom_frame(stored_nuc, Direction.FORWARD, axis_point=axis_pt, helix_direction=helix.direction)
-    _, _, n, y, z = _SUGAR[0]
+    # Take the P from whichever template the build is actually native on, so this
+    # stays a test about the shared PHASE (the stored pose vs a re-normalised lattice
+    # cell) rather than about which nucleotide template is in force.
+    _sugar = _native_local_defs(p_atom.residue, "FORWARD") or _SUGAR
+    _, _, n, y, z = _sugar[0]
     expected_p = origin + R @ np.array([n, y, z])
     actual_p = np.array([p_atom.x, p_atom.y, p_atom.z])
     assert np.linalg.norm(actual_p - expected_p) < 1e-9

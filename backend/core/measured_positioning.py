@@ -154,9 +154,10 @@ def template_p_azimuth_offset_rad(p_radius_nm: float) -> float:
     return math.atan2(y_rot, p_radius_nm - n_rot)
 
 
-# ── Why there is no atomistic re-placement here ───────────────────────────────
-# The atomistic rep cannot be corrected by moving nucleotides.  Measured against the
-# free MD, the 1ZEW-derived template is wrong INTERNALLY, and not by a common factor:
+# ── The atomistic re-placement lives in measured_atomistic.py ─────────────────
+# RESOLVED 2026-08-06.  The audit below concluded that the atomistic rep could not be
+# fixed by moving nucleotides, because measured against the free MD the 1ZEW-derived
+# template is wrong INTERNALLY, and not by a common factor:
 #
 #     landmark            built      free MD    error
 #     P                   0.902 nm   0.925      -0.023
@@ -171,14 +172,15 @@ def template_p_azimuth_offset_rad(p_radius_nm: float) -> float:
 # measured 0.324.  The three landmarks are mutually inconsistent under every whole-body
 # transform, which is the signature of a template defect rather than a placement one.
 #
-# The real fix is to re-extract the sugar and base templates against measured geometry
-# — the recipe specified but never executed in project_o3prime_investigation.md, which
-# also records the known-wrong residual C3'-O3'-P angle (93.6 deg vs a 119.35 target)
-# in this same template.  ``pdb_import.analyze_duplex`` already averages per-residue
-# template coordinates in the NADOC frame and is the tool for it.
-#
-# ``template_p_azimuth_offset_rad`` above stays because it is the proof of the separate
-# frame-origin defect, and because a re-extraction has to account for it.
+# So the templates were re-extracted, which is what that conclusion called for:
+# ``scripts/measure_atomistic_template.py`` measures every heavy atom of both strands
+# in one base-pair frame from five free NAMD trajectories, and
+# ``backend/core/measured_atomistic.py`` stamps the result.  FORWARD and REVERSE are
+# measured separately — no z-mirrored templates, no per-strand frame flip — so the
+# frame-origin defect ``template_p_azimuth_offset_rad`` describes cannot arise: there
+# is no correction applied to an origin, because both nucleotides of a pair share one
+# frame.  ``template_p_azimuth_offset_rad`` is kept as the proof of what went wrong on
+# the legacy path, which is still what the view shows with the toggle OFF.
 
 
 def _reconstruct_axis_point(

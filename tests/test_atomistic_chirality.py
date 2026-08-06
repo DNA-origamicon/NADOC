@@ -195,13 +195,21 @@ def test_o3prime_displacement_is_a_bond_defect_not_a_chirality_one(built):
     bond C3'-C4' must stay rigid everywhere, so any C3' inversion is attributable to
     O3' alone and never to a mirrored stamp.
     """
-    _design, groups, _resnames = built
-    control = []
-    for res in groups.values():
+    _design, groups, resnames = built
+    # Grouped by (residue, strand): the MD-measured templates are per base and per
+    # strand, unlike the single shared 1ZEW _SUGAR, so C3'-C4' legitimately differs by
+    # tens of femtometres BETWEEN residue types.  What this test needs is that the
+    # stamp is rigid WITHIN a template — that is what makes a C3' sign flip
+    # attributable to O3' displacement rather than to a mirrored stamp.
+    control: dict = defaultdict(list)
+    for key, res in groups.items():
         if "C3'" in res and "C4'" in res:
-            control.append(float(np.linalg.norm(res["C3'"] - res["C4'"])))
-    arr = np.array(control)
-    assert arr.size
-    assert arr.std() < 1e-6, (
-        "C3'-C4' varies across residues — the template is no longer stamped rigidly, "
-        "so a C3' sign flip can no longer be attributed to O3' displacement alone")
+            control[(resnames[key], key[2])].append(
+                float(np.linalg.norm(res["C3'"] - res["C4'"])))
+    assert control
+    for (residue, direction), vals in control.items():
+        arr = np.array(vals)
+        assert arr.std() < 1e-6, (
+            f"C3'-C4' varies within {residue}/{direction} — the template is no longer "
+            "stamped rigidly, so a C3' sign flip can no longer be attributed to O3' "
+            "displacement alone")

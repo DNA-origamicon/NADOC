@@ -17,7 +17,7 @@ beforeEach(() => {
 })
 
 describe('the flag', () => {
-  it('defaults to off, so nothing moves until the user asks', () => {
+  it('is off after an explicit opt-out', () => {
     expect(isNewPositioningOn()).toBe(false)
   })
 
@@ -39,7 +39,15 @@ describe('the flag', () => {
 
   it('persists across a reload', () => {
     setNewPositioning(true)
-    expect(localStorage.getItem('nadoc.newPositioning.v1')).toBe('true')
+    expect(localStorage.getItem('nadoc.newPositioning.v2')).toBe('true')
+    setNewPositioning(false)
+    expect(localStorage.getItem('nadoc.newPositioning.v2')).toBe('false')
+  })
+
+  it('is ON when nothing was ever chosen — measured placement is native', () => {
+    localStorage.removeItem('nadoc.newPositioning.v2')
+    __resetForTests(undefined)
+    expect(isNewPositioningOn()).toBe(true)
   })
 
   it('survives localStorage being unavailable', () => {
@@ -53,9 +61,12 @@ describe('the flag', () => {
 })
 
 describe('geometryQuerySuffix', () => {
-  it('is empty when off, so the legacy request is byte-identical', () => {
-    expect(geometryQuerySuffix(false)).toBe('')
-    expect(geometryQuerySuffix(true)).toBe('')
+  it('states the mode explicitly when off, never relying on a default', () => {
+    // The two endpoints this feeds do NOT default alike — atomistic is measured
+    // natively, CG geometry is still opt-in — so an empty suffix would mean two
+    // different things depending on which URL it was appended to.
+    expect(geometryQuerySuffix(false)).toBe('?measured_positioning=false')
+    expect(geometryQuerySuffix(true)).toBe('&measured_positioning=false')
   })
 
   it('picks the right separator for the URL it is appended to', () => {

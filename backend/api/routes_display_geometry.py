@@ -59,7 +59,9 @@ def _flexible_display_override(design):
 
 
 @router.get("/design/atomistic")
-def get_atomistic(seed_lattice_nm: str | None = None) -> dict:
+def get_atomistic(
+    seed_lattice_nm: str | None = None, measured_positioning: bool = True
+) -> dict:
     """
     Return the heavy-atom all-atom model for the atomistic Three.js renderer.
 
@@ -70,6 +72,12 @@ def get_atomistic(seed_lattice_nm: str | None = None) -> dict:
 
     The −32° helical phase offset (aligning the all-atom backbone groove with the
     NADOC CG model) is baked into build_atomistic_model via _ATOMISTIC_PHASE_OFFSET_RAD.
+
+    ``measured_positioning`` defaults TRUE and is NADOC's native geometry: nucleotide
+    templates re-extracted from free NAMD, both strands measured separately in one
+    shared base-pair frame (``core/measured_atomistic.py``).  Pass false to get the
+    1ZEW-derived templates back for comparison — that is what Help ▸ New Positioning
+    switches off.  Topology and the geometric layer are untouched either way.
 
     ``seed_lattice_nm`` switches this to **MD SEED** mode — the t=0, pre-minimisation
     coordinates the simulation would actually start from, for EVERY atom:
@@ -135,6 +143,7 @@ def get_atomistic(seed_lattice_nm: str | None = None) -> dict:
             exclude_helix_ids=pdb_helix_ids,
             nuc_frame_override=nuc_frame_override,
             fast_bridges=True,   # display renderer: cheap interpolated linkers (6× faster on large designs)
+            measured_positioning=measured_positioning,
         )
         return atomistic_to_json(merge_models(pdb_model, template_model))
 
@@ -143,6 +152,7 @@ def get_atomistic(seed_lattice_nm: str | None = None) -> dict:
             design,
             nuc_frame_override=nuc_frame_override,
             fast_bridges=True,   # display renderer: cheap interpolated linkers (6× faster on large designs)
+            measured_positioning=measured_positioning,
         )
     )
 

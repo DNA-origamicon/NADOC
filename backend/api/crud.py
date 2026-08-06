@@ -1210,8 +1210,12 @@ def get_geometry(
         False,
         description="Display-only.  Re-place backbone beads and base beads onto the "
                     "MD-measured radii and P-P azimuthal separation instead of the "
-                    "legacy HELIX_RADIUS / +-150 deg groove.  Topology and the "
-                    "geometric layer are untouched; see core/measured_positioning.py.",
+        "legacy HELIX_RADIUS / +-150 deg groove.  The app always states "
+        "this explicitly; it stays opt-out here because the other CG "
+        "position paths (oxDNA seeding, linker relax, extension tails) do "
+        "not yet share the measured placement, unlike the ATOMISTIC layer, "
+        "which is measured natively.  Topology and the geometric layer are "
+        "untouched; see core/measured_positioning.py.",
     ),
 ):
     """Return geometry for the active design.

@@ -28,6 +28,7 @@ import {
 import { clusterDisplaySignature } from './cluster_entries.js'
 import { showPersistentToast, dismissToast, showToast } from '../ui/toast.js'
 import { docHeaders } from '../shared/doc_id.js'
+import { geometryQuerySuffix } from '../ui/new_positioning.js'
 import { parseSurfaceBin } from './surface_bin.js'
 
 // Stable signature for a design's per-region surface columns — used to skip a
@@ -415,9 +416,13 @@ export function initAtomSurfaceDisplay({
   let _seedLatticeNm = null
 
   function _atomisticUrl() {
-    return _seedLatticeNm === null
+    // The "new positioning" flag rides along the same way it does on the geometry
+    // endpoint, so the atomistic reps and the CG reps are never showing two
+    // different placements at once.
+    const base = _seedLatticeNm === null
       ? '/api/design/atomistic'
       : `/api/design/atomistic?seed_lattice_nm=${encodeURIComponent(_seedLatticeNm)}`
+    return base + geometryQuerySuffix(base.includes('?'))
   }
 
   /**

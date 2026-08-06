@@ -1,23 +1,34 @@
 /**
- * "New positioning" — the MD-measured placement of backbone beads and base slabs.
+/**
+ * "New positioning" — the MD-measured placement, which is now NADOC's native geometry.
  *
- * OFF (default) keeps every current position exactly as it was.  ON re-places the
- * full representation onto the geometry measured from free NAMD trajectories:
- * backbone bead at the phosphorus radius rather than HELIX_RADIUS, base bead on the
- * real base-ring centroid rather than 0.71 nm out, and one P-P azimuthal separation
- * for every helix instead of the +-150 deg mirror that FORWARD- and REVERSE-cell
- * helices are built with today.
+ * ON is the default and the normal state of the app.  The coarse-grained layer draws
+ * its backbone bead at the phosphorus radius rather than HELIX_RADIUS and its base bead
+ * on the real base-ring centroid rather than 0.71 nm out; the atomistic layer stamps
+ * nucleotide templates re-extracted from free NAMD trajectories, both strands measured
+ * separately in one shared base-pair frame.
  *
- * The positions themselves are computed in the backend
- * (`backend/core/measured_positioning.py`, which carries the provenance and the
- * measured numbers); this module owns only the flag and the slab geometry that
- * rides with it.
+ * Turning it OFF reverts to the legacy build geometry — HELIX_RADIUS beads, the +-150
+ * deg groove mirrored by lattice cell type, and the 1ZEW-derived atom templates whose
+ * frame-origin correction collapses Watson-Crick C1'-C1' to 0.967 nm.  That is a
+ * COMPARISON AFFORDANCE, not a supported mode: it is there to see what changed.
  *
- * Display-only.  Nothing here touches topology, and the flag is not part of the
- * design — it is a per-browser view preference, like the wireframe debug toggle.
+ * The positions themselves come from the backend
+ * (`backend/core/measured_positioning.py` for the beads, `measured_atomistic.py` for
+ * the atoms — both carry the provenance and the measured numbers); this module owns
+ * only the flag and the slab geometry that rides with it.
+ *
+ * Display-only in the sense that matters here: nothing touches topology, and the flag
+ * is not part of the design — it is a per-browser view preference.  Note the backend
+ * now uses the measured geometry for EXPORTS and SIMULATION SEEDS too, independently
+ * of this flag.
  */
 
-const STORAGE_KEY = 'nadoc.newPositioning.v1'
+// v2: the MD-measured placement became NATIVE (default ON) once the atomistic
+// templates were re-extracted from free NAMD.  The key is versioned so a browser
+// carrying the old opt-in `false` does not silently keep showing legacy geometry —
+// v1 was an opt-in flag, v2 is an opt-OUT.
+const STORAGE_KEY = 'nadoc.newPositioning.v2'
 
 // Slab geometry that goes with the measured placement.  The legacy slab is centred
 // 0.45 nm inward from the bead along the cross-strand direction and is 0.70 nm long;
@@ -31,9 +42,10 @@ const _listeners = new Set()
 
 function _read() {
   try {
-    return localStorage.getItem(STORAGE_KEY) === 'true'
+    // Absent = never chosen = native.  Only an explicit 'false' opts out.
+    return localStorage.getItem(STORAGE_KEY) !== 'false'
   } catch {
-    return false   // private mode / storage disabled — default OFF, never throw
+    return true    // private mode / storage disabled — native, never throw
   }
 }
 
@@ -76,8 +88,12 @@ export function onNewPositioningChange(fn) {
  * @param {boolean} hasQuery — whether the URL already carries a '?'
  */
 export function geometryQuerySuffix(hasQuery) {
-  if (!_on) return ''
-  return `${hasQuery ? '&' : '?'}measured_positioning=true`
+  // Always explicit, never inferred from a default.  The two endpoints this feeds do
+  // NOT default the same way — the atomistic build is measured natively, while the
+  // coarse-grained geometry stays opt-in until the other CG position paths (oxDNA
+  // seeding, linker relax, extension tails) share the measured placement — so the app
+  // states what it wants rather than relying on either default.
+  return `${hasQuery ? '&' : '?'}measured_positioning=${_on ? 'true' : 'false'}`
 }
 
 /**
@@ -108,8 +124,12 @@ export function slabExtent(legacyExtent) {
   return _on ? MEASURED_SLAB_EXTENT : legacyExtent
 }
 
-/** Test seam — reset module state without touching localStorage semantics. */
-export function __resetForTests(on = false) {
-  _on = on
+/**
+ * Test seam — reset module state without touching localStorage semantics.
+ * Called with no argument it re-reads storage, which is the only way to exercise
+ * the "never chosen ⇒ native" default without reloading the module.
+ */
+export function __resetForTests(on) {
+  _on = on === undefined ? _read() : on
   _listeners.clear()
 }

@@ -116,16 +116,29 @@ def _edge_distribution(faces):
 
 
 def test_radius_inflate_grows_envelope():
-    """A larger radius_scale must produce a strictly larger bounding box."""
+    """A larger radius_scale must produce a strictly larger enclosed volume.
+
+    Measured as the mesh's own volume, not its bounding box.  The bounding box is the
+    wrong oracle twice over: marching-cubes vertices land on grid planes, so scaling
+    1.2 -> 1.56 (which moves the envelope out by only ~0.11 nm) may or may not gain a
+    voxel on a 0.30 nm grid; and the probe close-operation can pull the EXTREME
+    vertices inward even as the body grows, so the box can shrink while the envelope
+    inflates.  Volume has neither problem.
+    """
     design = make_bundle_design(cells=_CELLS_6HB, length_bp=42, plane="XY")
     atoms = build_atomistic_model(design).atoms
-    base = compute_surface(atoms, grid_spacing=0.30, radius_scale=1.2)
-    fat  = compute_surface(atoms, grid_spacing=0.30, radius_scale=1.2 * 1.30)
-    base_ext = base.vertices.max(0) - base.vertices.min(0)
-    fat_ext  = fat.vertices.max(0)  - fat.vertices.min(0)
-    # Every axis grows, and total volume of the bbox grows noticeably.
-    assert (fat_ext >= base_ext - 1e-3).all()
-    assert float(fat_ext.prod()) > float(base_ext.prod()) * 1.10
+    base = compute_surface(atoms, grid_spacing=0.15, radius_scale=1.2)
+    fat = compute_surface(atoms, grid_spacing=0.15, radius_scale=1.2 * 1.30)
+
+    def enclosed_volume(mesh):
+        v = mesh.vertices[mesh.faces]
+        return abs(
+            float(
+                np.einsum("ij,ij->i", v[:, 0], np.cross(v[:, 1], v[:, 2])).sum() / 6.0
+            )
+        )
+
+    assert enclosed_volume(fat) > enclosed_volume(base) * 1.10
 
 
 def test_smooth_mesh_preserves_topology_and_closedness():

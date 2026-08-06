@@ -242,18 +242,35 @@ def test_export_import_roundtrip_preserves_coordinates_and_bond_endpoints():
     source = build_atomistic_model(design)
     _imported_design, restored, _warnings = import_pdb(export_pdb(design))
 
-    def atom_sig(atom):
-        return (atom.name, round(atom.x, 4), round(atom.y, 4), round(atom.z, 4))
+    # A ROUNDED signature cannot express this comparison.  The PDB record carries
+    # Angstrom to 3 dp, so a round trip perturbs a coordinate by up to ~1e-4 nm, and
+    # any fixed quantisation turns that into a spurious mismatch whenever a value sits
+    # on one of its boundaries.  Match on identity + tolerance instead, then express
+    # bonds as index pairs into that matching — which is what "same endpoints" means.
+    import numpy as np
+    from scipy.spatial import cKDTree
 
-    def bond_sigs(model):
-        by_serial = {a.serial: a for a in model.atoms}
-        return {
-            tuple(sorted((atom_sig(by_serial[i]), atom_sig(by_serial[j]))))
-            for i, j in model.bonds
-        }
+    assert len(restored.atoms) == len(source.atoms)
 
-    assert sorted(atom_sig(a) for a in restored.atoms) == sorted(atom_sig(a) for a in source.atoms)
-    assert bond_sigs(restored) == bond_sigs(source)
+    src_xyz = np.array([[a.x, a.y, a.z] for a in source.atoms])
+    tree = cKDTree(src_xyz)
+    restored_to_source: dict[int, int] = {}
+    for a in restored.atoms:
+        dist, idx = tree.query([a.x, a.y, a.z])
+        # A round trip perturbs by ~1e-4 nm; the nearest DISTINCT atom is >0.1 nm away,
+        # so the nearest neighbour is the same atom beyond any doubt.
+        assert dist < 1e-3, f"{a.name} moved {dist} nm through the round trip"
+        assert source.atoms[idx].name == a.name
+        restored_to_source[a.serial] = int(idx)
+
+    assert len(set(restored_to_source.values())) == len(source.atoms), "matching not 1:1"
+
+    def bond_pairs(model, remap):
+        return {tuple(sorted((remap(i), remap(j)))) for i, j in model.bonds}
+
+    src_index = {a.serial: i for i, a in enumerate(source.atoms)}
+    assert bond_pairs(restored, restored_to_source.__getitem__) == \
+           bond_pairs(source, src_index.__getitem__)
 
 
 def test_export_repairs_missing_consecutive_strand_backbone_bond():
