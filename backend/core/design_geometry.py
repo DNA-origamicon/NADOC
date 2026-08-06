@@ -41,7 +41,7 @@ from backend.core.deformation import (
     deformed_nucleotide_arrays,
     effective_helix_for_geometry,
 )
-from backend.core.constants import SSDNA_CONTOUR_PER_NT_NM
+from backend.core.constants import BDNA_MINOR_GROOVE_ANGLE_RAD, SSDNA_CONTOUR_PER_NT_NM
 
 # How far the extension arc bows off the straight radial, as a fraction of the arc
 # length.  Bounds the worst consecutive bead spacing at
@@ -289,6 +289,8 @@ def _geometry_for_helices(
     helix_ids: frozenset[str] | None = None,
     include_linker_helices: bool = False,
     compact_skips: bool = False,
+    *,
+    measured_positioning: bool = False,
 ) -> list[dict]:
     """Compute nucleotide geometry for *design*.
 
@@ -343,11 +345,23 @@ def _geometry_for_helices(
             if hid not in max_domain_bp or hi > max_domain_bp[hid]:
                 max_domain_bp[hid] = hi
 
-    def _emit_arrs(arrs: dict, helix_id: str) -> None:
+    def _emit_arrs(arrs: dict, helix_id: str, legacy_groove_rad: float | None = None) -> None:
         """Append geometry dicts from a nucleotide arrays block."""
         M = len(arrs['bp_indices'])
         if M == 0:
             return
+        if measured_positioning and legacy_groove_rad is not None:
+            # Display-only re-placement onto the MD-measured backbone/base radii and
+            # P–P separation.  Applied here, at the serialiser, so the geometric layer
+            # itself is untouched and every other consumer of nucleotide_positions
+            # (MD seeds, exports, crossover solving) keeps the legacy placement.
+            from backend.core.constants import HELIX_RADIUS
+            from backend.core.measured_positioning import apply_measured_positioning
+            arrs = apply_measured_positioning(
+                arrs,
+                legacy_radius=HELIX_RADIUS,
+                legacy_groove_rad=legacy_groove_rad,
+            )
         bp_list   = arrs['bp_indices'].tolist()
         dir_arr   = arrs['directions']
         pos_list  = arrs['positions'].tolist()
@@ -395,7 +409,12 @@ def _geometry_for_helices(
                        # bridge nucs come from _emit_bridge_nucs below instead)
         arrs = deformed_nucleotide_arrays(helix, design, compact_skips=compact_skips)
         arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
-        _emit_arrs(arrs, arrs['helix_id'])
+        # The groove sign geometry.py used for THIS helix — the measured re-placement
+        # needs it to recover each base pair's axis point from its two beads.
+        _legacy_groove = (BDNA_MINOR_GROOVE_ANGLE_RAD
+                          if helix.direction == Direction.FORWARD
+                          else -BDNA_MINOR_GROOVE_ANGLE_RAD)
+        _emit_arrs(arrs, arrs['helix_id'], _legacy_groove)
 
         # Render nucleotides outside the physical helix span (ss-scaffold loops).
         # These must go through the same deformation / cluster transform pipeline

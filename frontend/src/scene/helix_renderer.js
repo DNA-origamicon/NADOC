@@ -19,6 +19,7 @@
  * accessing mesh.material directly.
  */
 
+import { slabCenterInto, slabExtent } from '../ui/new_positioning.js'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import {
@@ -258,8 +259,12 @@ function slabQuaternion(bnDir, tanDir) {
   return new THREE.Quaternion().setFromRotationMatrix(m)
 }
 
-function slabCenter(bbPos, bnDir, distance) {
-  return bbPos.clone().addScaledVector(bnDir, HELIX_RADIUS - distance)
+function slabCenter(bbPos, bnDir, distance, basePosition = null) {
+  // With "new positioning" the slab sits on the nucleotide's MEASURED base-ring
+  // centroid (shipped as base_position) instead of a fixed offset inward from the
+  // bead; see ui/new_positioning.js.  Legacy construction is unchanged when off.
+  return slabCenterInto(bbPos, bnDir, HELIX_RADIUS - distance, basePosition,
+                        new THREE.Vector3())
 }
 
 // ── Main builder ──────────────────────────────────────────────────────────────
@@ -1008,9 +1013,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const quat   = slabQuaternion(bnDir, tanDir)
       const color  = nucSlabColor(nuc, stapleColorMap, customColors, loopSet)
       const bbPos  = new THREE.Vector3(...nuc.backbone_position)
-      const center = slabCenter(bbPos, bnDir, slabParams.distance)
+      const center = slabCenter(bbPos, bnDir, slabParams.distance, nuc.base_position)
 
-      _tMatrix.compose(center, quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+      _tMatrix.compose(center, quat,
+        _tScale.set(slabParams.length, slabParams.width, slabExtent(slabParams.thickness)))
       iSlabs.setMatrixAt(slabId, _tMatrix)
       iSlabs.setColorAt(slabId, _tColor.setHex(color))
 

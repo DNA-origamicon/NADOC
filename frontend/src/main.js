@@ -29,6 +29,7 @@ import { bundleMidOffset }           from './scene/bundle_geometry.js'
 import { quatToEulerDeg, extractJointAngleDeg } from './scene/rotation_math.js'
 import { initMeasurementTool }       from './scene/measurement_tool.js'
 import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverage.js'
+import { isNewPositioningOn, setNewPositioning } from './ui/new_positioning.js'
 import { initCreateSeam } from './scene/create_seam.js'
 import { strandLengthNt } from './scene/strand_length.js'
 import { buildSpecMap, buildDomainMapFromDesign, buildJunctionMapFromDomains, buildRootMap } from './scene/overhang_maps.js'
@@ -7223,6 +7224,22 @@ async function main() {
   document.getElementById('menu-help-md-engines')?.addEventListener('click', () => mdEngines.showStatusModal())
 
   initCreateSeam({ store, api })
+
+  // ── Help > New Positioning ──────────────────────────────────────────────────
+  // Display-only. OFF keeps every current position; ON re-places the full
+  // representation onto the geometry measured from free NAMD trajectories
+  // (backend/core/measured_positioning.py carries the numbers + provenance).
+  // The placement is computed server-side, so flipping this costs one geometry
+  // refetch; the slab centre/extent that rides with it lives in the renderer.
+  _setMenuToggle('menu-help-new-positioning', isNewPositioningOn())
+  document.getElementById('menu-help-new-positioning')?.addEventListener('click', async () => {
+    const next = !isNewPositioningOn()
+    if (!setNewPositioning(next)) return
+    _setMenuToggle('menu-help-new-positioning', next)
+    // getGeometry writes currentGeometry, and design_renderer rebuilds off that
+    // store change (design_renderer.js:762) — no explicit rebuild needed.
+    await api.getGeometry()
+  })
 
   // ── Debug > Show LOD HUD ────────────────────────────────────────────────────
   // Toggles the on-canvas LOD overlay (per-source bucket counts + pixel-size

@@ -10,6 +10,7 @@
  */
 
 import { store } from '../state/store.js'
+import { geometryQuerySuffix } from '../ui/new_positioning.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
 
 // Signal that the active design's content changed: cross-TAB (BroadcastChannel) so
@@ -1433,9 +1434,12 @@ export async function updateMetadata(fields) {
  *   Pass null (default) for a full fetch that replaces the whole geometry.
  */
 export async function getGeometry(helixIds = null) {
-  const url  = helixIds?.length
+  const base = helixIds?.length
     ? `/design/geometry?helix_ids=${helixIds.join(',')}`
     : '/design/geometry'
+  // Measured ("new positioning") placement is a query flag on this endpoint, so a
+  // toggle costs one refetch and the legacy request stays byte-identical when off.
+  const url  = base + geometryQuerySuffix(base.includes('?'))
   const json = await _request('GET', url)
   if (!json) return null
   // Response format: { nucleotides: [...], helix_axes: [...] }

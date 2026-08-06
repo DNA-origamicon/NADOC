@@ -211,13 +211,45 @@ at their own `BOW_FRAC_3D = 0.3`. Any return to t=0 collapses the bow. Measured 
 identical via the Q expand toggle**, which predates this work; unfold has it too. Not fixed: the
 two modules use different bow-direction conventions and guessing is how this area goes wrong.
 
-### ⚠ Pre-existing: the CG bead and the atomistic frame are ~5 Å out of register
+### The CG bead / atomistic ~5 Å register gap — DIAGNOSED 2026-08-05
 
 CG backbone bead → atomistic P atom is **5.02 Å mean** at the design lattice (5.05 Å scaled, so the
 lattice is not the cause). The bead's *nearest* atom is not consistently a backbone atom: C3′ for
 632 residues (2.9 Å), O5′ for 272 (2.8 Å), but for ~350 residues it is a **base** atom — N7 at
-6.1 Å, N4 at 4.6 Å, C7 at 4.4 Å. **Deferred to a dedicated CG↔atomistic audit session.** This is
-what makes beads and slabs read as offset from the atoms generally, independent of extra bases.
+6.1 Å, N4 at 4.6 Å, C7 at 4.4 Å.
+
+The dedicated audit session ran. **Two independent defects**, both now measured — full write-up +
+numbers + provenance in `backend/core/measured_positioning.py`, pinned by
+`tests/test_measured_positioning.py`:
+
+1. `geometry.py` flips the groove sign with the helix's lattice cell, so FORWARD cells build at
+   150° and REVERSE at 210°. Both stay right-handed, so these are **not enantiomers** — they are
+   two right-handed helices with the minor groove on opposite sides, one marking the major groove
+   as the minor. A wrong-side-marker defect, not a wrong-molecule one, and it is confined to the
+   CG bead layer (atomistic's per-cell correction equalises both). On a mixed design the P–P
+   separation reads **180° ± 30°**, the ±30 being purely the cell-type split.
+2. `atomistic.py`'s 208.2° correction is applied to the template **frame origin**, but the
+   template's P sits 0.1887 nm off that origin and the two strands' frames are z-mirrored → the
+   two phosphates rotate *toward* each other. Realised separation **183.84°**, exactly
+   208.2 − 2×12.182, identical at every bp in both cell types.
+
+Together: ~0.1 nm radial + 26–34° azimuth at r ≈ 0.93 = the 5 Å.
+
+**Measured truth** (`scripts/measure_cg_registration.py`, free `MGHH_only` stage of job
+`dbd8ad3b7d4f`, phosphate-cylinder axis fit; estimator reproduces 1ZEW at 208.5°/0.881 nm):
+P **0.925 nm**, C1′ 0.566, base-ring centroid **0.324**, C1′–C1′ 1.074, rise 0.347, twist 34.21°.
+The CG base bead sits at **0.714 nm** against a measured 0.324 — the largest single error found.
+
+**The atomistic rep cannot be fixed by re-placement.** Built vs measured: P −0.023, C1′ −0.073,
+base centroid +0.027 — mutually inconsistent under every whole-body transform (a rigid move onto
+the P cylinder opens WC 0.309→0.355 nm; a radial affine fit to P+C1′ throws the base centroid to
+0.442). It is a **template** defect → re-extraction, the never-executed recipe in
+[[project_o3prime_investigation]].
+
+Shipped: **Help ▸ New Positioning** (display-only, default OFF) re-places the *full* rep onto the
+measured geometry. ⚠ `pp_separation_deg = 183.9` is **PROVISIONAL** — every trajectory in this repo
+was seeded at 183.84°, so the MD cannot arbitrate it. `experiments/exp52_groove_seed_sweep`
+(4 arms seeded 150/184/208/232°, solvated and queued, not yet run) is the test that settles it.
 
 ## Open
 

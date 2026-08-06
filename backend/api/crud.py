@@ -1206,6 +1206,13 @@ def get_geometry(
                     "are returned (partial update for Fix B).  helix_axes always "
                     "covers all helices regardless of this filter.",
     ),
+    measured_positioning: bool = Query(
+        False,
+        description="Display-only.  Re-place backbone beads and base beads onto the "
+                    "MD-measured radii and P-P azimuthal separation instead of the "
+                    "legacy HELIX_RADIUS / +-150 deg groove.  Topology and the "
+                    "geometric layer are untouched; see core/measured_positioning.py.",
+    ),
 ):
     """Return geometry for the active design.
 
@@ -1230,7 +1237,8 @@ def get_geometry(
     )
     if apply_deformations:
         with trace.step("nucleotides"):
-            nucleotides = _geometry_for_helices(design, ids)
+            nucleotides = _geometry_for_helices(
+                design, ids, measured_positioning=measured_positioning)
         with trace.step("helix_axes"):
             axes = deformed_helix_axes(design)
         with trace.step("ovhg_rotations"):
@@ -1262,7 +1270,8 @@ def get_geometry(
         with trace.step("strip_deformations"):
             straight = design.model_copy(update={"deformations": [], "cluster_transforms": []})
         with trace.step("nucleotides_straight"):
-            nucleotides = _geometry_for_helices(straight, ids)
+            nucleotides = _geometry_for_helices(
+                straight, ids, measured_positioning=measured_positioning)
         with trace.step("helix_axes_straight"):
             axes = _straight_helix_axes(design)
         out = {
