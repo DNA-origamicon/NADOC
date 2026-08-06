@@ -1218,6 +1218,7 @@ def build_atomistic_model(
     apply_design_geometry: bool = True,
     frame_sink: "dict[tuple, tuple[_np.ndarray, _np.ndarray]] | None" = None,
     fast_bridges: bool = False,
+    solve_extra_base_pose: bool = False,
 ) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
@@ -1233,8 +1234,11 @@ def build_atomistic_model(
     - All intra-residue bonds (sugar + base ring)
     - Inter-residue backbone bonds: O3′(i) → P(i+1) for consecutive bp on the
       same strand segment (direction-aware; skips across crossovers/nicks).
-    - Extra crossover bases: full ribose + base placed along the interpolation
-      line between the two junction nucleotides, with backbone atoms minimised.
+    - Extra crossover bases: full ribose + base placed on the quadratic Bezier
+      arc bowing out between the two junction nucleotides — the same arc the
+      renderer draws — with only the phosphodiester linker atoms minimised to
+      close the O3′→P chain.  ``solve_extra_base_pose=True`` additionally runs
+      the per-insert rigid-body joint solve; see that parameter.
     """
     # frame_sink requires the full per-nucleotide loop (the cached-reference fast
     # path never computes per-nucleotide frames), so requesting one forces it.
@@ -1318,6 +1322,11 @@ def build_atomistic_model(
     # interpolation that is ALREADY the minimiser's initial guess: 6× faster, only the
     # ~1.5% phosphate-linker atoms move (≤2.4 Å at junctions).  Default False keeps the
     # exact geometry for MD seeds / PDB export / NAMD / periodic-cell.
+    #
+    # NOT to be confused with `solve_extra_base_pose`: this one chooses how the LINKER
+    # closes, that one chooses whether an insert's whole nucleotide is dragged off its
+    # Bezier arc.  They are independent, and the MD path now wants exact linkers
+    # (fast_bridges=False) on top of arc-pose inserts (solve_extra_base_pose=False).
     _bridge_fn = _interpolate_backbone_bridge if fast_bridges else _minimize_backbone_bridge
 
     for strand in design.strands:
@@ -1717,6 +1726,7 @@ def build_atomistic_model(
         xb_pos_override    = xb_pos_override,
         bridge_fn          = _bridge_fn,
         fast_bridges       = fast_bridges,
+        solve_extra_base_pose = solve_extra_base_pose,
     )
 
     # ── Strand-extension tail atoms (5′/3′ terminal tails) ────────────────────
@@ -2702,6 +2712,7 @@ def _build_extra_base_atoms(
     xb_pos_override:    "dict[tuple[str, int], _np.ndarray] | None" = None,
     bridge_fn=_minimize_backbone_bridge,
     fast_bridges: bool = False,
+    solve_extra_base_pose: bool = False,
 ) -> int:
     """
     Place atomistic atoms for all extra crossover bases in the design.
@@ -3091,14 +3102,40 @@ def _build_extra_base_atoms(
                 bridge_fn(atoms, prev_s_item, next_s_item)
         elif _xb_overridden:
             pass  # legacy position-only override remains strictly authoritative
-        elif fast_bridges and src_s is not None and dst_s is not None:
-            # DISPLAY speed (fast_bridges): skip the per-insert L-BFGS-B glycosidic +
-            # steric-repulsion solve.  The base already sits at its rigid arc pose; a
-            # viewer only needs the phosphodiester linker CLOSED, exactly what the
-            # crossover bridges and the >3-base fallback already do with the cheap
-            # interpolation.  This is the dominant cost on a crossover-dense design —
-            # ~566 solves ≈ 4.8 min on VoltronCore, all discarded for a relaxed frame.
-            # MD seeds / PDB / NAMD (fast_bridges=False) still take the exact minimiser.
+        elif not solve_extra_base_pose and src_s is not None and dst_s is not None:
+            # DEFAULT (2026-08-05): leave each insert exactly where the bowing Bezier
+            # arc put it and only close the phosphodiester linker — the same thing the
+            # >3-base fallback has always done, and the same arc the renderer draws, so
+            # the built structure and the picture finally agree.
+            #
+            # `bridge_fn` is still the EXACT L-BFGS-B linker minimiser on the MD path
+            # (only fast_bridges swaps in the cheap interpolation), so bond lengths and
+            # angles across O3′→P close properly here — what is skipped is the
+            # per-insert RIGID-BODY solve that used to drag the whole nucleotide off
+            # the arc.
+            #
+            # Two independent reasons this is the default rather than an option:
+            #   * That solve is the catenation source (`project_crossover_catenation`):
+            #     it optimises against a STATIC repulsion snapshot that never contains
+            #     the partner crossover's inserts, so it freely threads the linker
+            #     through the partner strand.  The arc pose measures Lk = 0 at every
+            #     helical phase for 1–2 inserts.
+            #   * It is the dominant build cost on a crossover-dense design (~566
+            #     solves ≈ 4.8 min on VoltronCore).
+            #
+            # Inserts land in a lattice that MD says is ~2 Å wider than the caDNAno
+            # pitch anyway (`project_extra_base_spacing`), which is the room the solve
+            # was trying to manufacture by hand.
+            #
+            # ⚠ The arc pose is NOT unconditionally unlinked.  Measured 2026-08-05 on
+            # the reciprocal fixture: one insert at bp=12 comes out Lk = +1 straight
+            # off the arc.  So the seed/export path still ARMS the repair — the pass
+            # below measures every reciprocal pair and only re-places the ones that
+            # actually link, falling back to the joint solve for those alone.  Arc pose
+            # is the default placement, not a promise of good topology.
+            if not fast_bridges:
+                _record_for_repair(xo.id, n, src_s, dst_s, eb_sugar_serials,
+                                   eb_glycosidic_ns, target_c1n, repel_pos, all_s)
             for prev_s_item, next_s_item in zip(all_s, all_s[1:]):
                 bridge_fn(atoms, prev_s_item, next_s_item)
         elif n == 1 and src_s is not None and dst_s is not None:
@@ -3153,8 +3190,10 @@ def _build_extra_base_atoms(
                 fut.result()   # re-raise any exception from the worker
 
     # ── Repair catenated reciprocal pairs ─────────────────────────────────────
-    # Only meaningful for the seed/export path: the display path (fast_bridges) and the
-    # oxDNA-override paths never queue a joint solve, so they never create the defect.
+    # Armed on every seed/export build, arc pose or joint solve alike — the arc pose
+    # links too (Lk = +1 for one insert at bp=12), it is just far rarer.  Only the
+    # display path (fast_bridges) skips this; a viewer does not care about Lk and the
+    # measurement is not free.
     if _xb_records:
         _repair_catenated_pairs(
             atoms, _xb_records, _reciprocal_crossover_id_pairs(design), bridge_fn,

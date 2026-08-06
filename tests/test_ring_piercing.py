@@ -321,10 +321,17 @@ def test_gate_reports_both_defects():
 
 
 def test_gate_refuses_a_pierced_seed():
-    """The gate must refuse a threaded ring even when nothing is catenated."""
+    """The gate must refuse a threaded ring even when nothing is catenated.
+
+    Needs `solve_extra_base_pose=True`: the per-insert joint solve is the only
+    thing that manufactures a threaded ring (3 of them on this fixture), and it
+    stopped being the default on 2026-08-05 — the default Bezier arc pose gives
+    a clean seed here, so without the opt-in there is nothing for the gate to
+    refuse and this asserts on an empty premise.
+    """
     design = _reciprocal_design("TT", bp=8)
     with _piercing_check_disabled():
-        model = build_atomistic_model(design)
+        model = build_atomistic_model(design, solve_extra_base_pose=True)
         with pytest.raises(RingPiercedError):
             gate_seed_topology(design, model=model)
         overridden = gate_seed_topology(design, model=model, allow=True)
@@ -348,7 +355,9 @@ def test_scoped_and_model_detectors_agree_on_a_pierced_build():
     gate refuses."""
     design = _reciprocal_design("TT", bp=8)
     with _piercing_check_disabled():
-        model = build_atomistic_model(design)
+        # Same reason as test_gate_refuses_a_pierced_seed: only the joint solve
+        # builds a pierced model, and it is no longer the default.
+        model = build_atomistic_model(design, solve_extra_base_pose=True)
     model_hits = model_piercings(model)
     assert model_hits
 

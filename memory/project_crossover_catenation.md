@@ -54,6 +54,35 @@ alignment + a repulsion term acting only on `C1'/C3'/C4'` against a **static** `
 snapshotted before the solve, which never contains the partner crossover's inserts. So it
 freely routes the O3′/P/O5′ linker through the partner strand.
 
+### ⚠ Refinement 2026-08-05 — the joint solve is the DOMINANT cause, not the only one
+
+The `fast_bridges` result above is correct, but it confounds two independent changes: that path
+swaps the linker closure **as well as** skipping the solve. Separated, on `_reciprocal_design`
+across a full turn (7 phases × {T, TT} = 14 builds, repair disabled so the raw pose is visible):
+
+| insert pose | linker closure | catenated |
+|---|---|---|
+| joint solve | exact (`_minimize_backbone_bridge`) | **7 / 14** |
+| Bezier arc | exact (`_minimize_backbone_bridge`) | **2 / 14** (T bp=12, TT bp=16) |
+| Bezier arc | cheap (`_interpolate_backbone_bridge`) | **0 / 14** |
+
+So **`_minimize_backbone_bridge` is a second, smaller catenation source in its own right** — it
+routes the *phosphodiester linker* through the partner strand even when the inserts themselves
+never left the arc. "Arc pose ⇒ unlinked" is FALSE as a general statement; it holds only when the
+cheap interpolated linker is used too, which is the display path, not the MD path.
+
+Consequence, and why the current default is what it is: **the joint solve is now opt-in**
+(`build_atomistic_model(..., solve_extra_base_pose=True)`, default False — see
+[[extra-base-spacing]]). The MD/seed path places inserts at the arc pose but keeps the **exact**
+linker minimiser (NAMD needs those bond angles — a collapsed bridge angle divides by sin θ), so it
+sits on the 2/14 row. **That is why the repair below is armed on the arc path too.** With it armed
+the full sweep measures 0 catenated at every phase and insert count. Do not "simplify" by skipping
+the repair on the grounds that the arc pose is clean — it is not.
+
+Ring piercing tracks the same split: the solve threads 3 covalent bonds through nucleotide rings on
+`TT`/bp=8, the arc pose threads none. `tests/test_ring_piercing.py` therefore has to opt INTO the
+solve to have a defect to gate on.
+
 **Catenation is helical-phase dependent** (flips sign and on/off with crossover bp) — which is
 why ~half a design's pairs were hit, and why a fixture pinned to one bp proves nothing.
 

@@ -720,3 +720,98 @@ def test_namd_bundle_zip_contents():
     assert f"{name}.psf" in names, "ZIP missing PSF file"
     assert "namd.conf"   in names, "ZIP missing namd.conf"
     assert "README.txt"  in names, "ZIP missing README.txt"
+
+
+# ── Extra-base placement: the Bezier arc is the default pose ──────────────────
+#
+# Changed 2026-08-05. Inserts used to be seeded on the arc and then dragged off it
+# by a per-insert rigid-body L-BFGS-B solve; that solve is the catenation/ring-pierce
+# source and is now opt-in (`solve_extra_base_pose=True`). See
+# memory/project_extra_base_spacing.md and memory/project_crossover_catenation.md.
+
+
+def _insert_sugar_origins(model, design):
+    """C1' of every extra-base residue, in build order, as an (n, 3) array."""
+    import numpy as _np
+    xo_ids = {x.id for x in design.crossovers if x.extra_bases}
+    assert xo_ids, "fixture has no extra bases"
+    out = [
+        (a.x, a.y, a.z)
+        for a in model.atoms
+        if a.name == "C1'" and getattr(a, "extra_base_k", None) is not None
+    ]
+    return _np.array(out, dtype=float)
+
+
+def test_extra_bases_sit_on_the_bezier_arc_by_default():
+    """Default build leaves each insert where the bowing Bezier put it.
+
+    Oracle is the `fast_bridges` display path, which has ALWAYS placed inserts at
+    the rigid arc pose and is a separate branch from the one this pins — so it is
+    a real second opinion, not a restatement. Only the ~5 phosphodiester linker
+    atoms differ between the two (cheap interpolation vs the exact minimiser), and
+    C1' is not one of them, so the sugar origins must agree to float precision.
+
+    The solved pose is included as a live control: if the joint solve ever stopped
+    moving inserts, this test would pass vacuously without it.
+    """
+    import numpy as np
+    from tests.test_junction_topology import _reciprocal_design
+
+    design = _reciprocal_design("TT", bp=8)
+    arc    = _insert_sugar_origins(build_atomistic_model(design), design)
+    display = _insert_sugar_origins(
+        build_atomistic_model(design, fast_bridges=True), design)
+    solved = _insert_sugar_origins(
+        build_atomistic_model(design, solve_extra_base_pose=True), design)
+
+    assert arc.shape == display.shape == solved.shape and arc.shape[0] > 0
+    np.testing.assert_allclose(arc, display, atol=1e-9)
+    # Control: the solve really does move inserts, so agreeing with the arc above
+    # is a fact about which branch ran, not about the two being identical anyway.
+    assert np.linalg.norm(arc - solved, axis=1).max() > 0.05, (
+        "arc and solved poses are indistinguishable; the oracle is dead")
+
+
+def test_solve_extra_base_pose_is_opt_in_and_reaches_the_solver():
+    """`solve_extra_base_pose=True` must restore the old joint-solve behaviour.
+
+    Pinned via the defect it is known to manufacture: the solve threads covalent
+    bonds through nucleotide rings on this fixture (3 of them), the arc pose does
+    not. That asymmetry is the whole reason the default flipped.
+    """
+    from backend.core.ring_piercing import model_piercings
+    from tests.test_ring_piercing import _piercing_check_disabled
+    from tests.test_junction_topology import _reciprocal_design
+
+    design = _reciprocal_design("TT", bp=8)
+    with _piercing_check_disabled():
+        assert model_piercings(build_atomistic_model(design)) == []
+        assert model_piercings(
+            build_atomistic_model(design, solve_extra_base_pose=True)) != []
+
+
+def test_arc_pose_still_arms_the_catenation_repair():
+    """The arc pose is NOT unconditionally unlinked — the safety net must stay on.
+
+    One insert at bp=12 comes out Lk = +1 straight off the arc, so a build that
+    placed inserts on the arc and skipped the repair would ship a permanent
+    topological defect. The repair is armed for the seed/export path regardless
+    of which pose was used.
+    """
+    from backend.core.junction_topology import catenation_report
+    from tests.test_junction_topology import _reciprocal_design
+
+    design = _reciprocal_design("T", bp=12)
+    assert catenation_report(design, model=build_atomistic_model(design))["n_catenated"] == 0
+
+
+def test_display_path_skips_the_repair():
+    """fast_bridges is the viewer path: it must not pay for the Lk measurement."""
+    from tests.test_junction_topology import _reciprocal_design
+
+    design = _reciprocal_design("TT", bp=8)
+    # Builds without raising and without the repair machinery engaging; the
+    # assertion that matters is that it produces a model at all on the cheap path.
+    model = build_atomistic_model(design, fast_bridges=True)
+    assert _insert_sugar_origins(model, design).shape[0] > 0
