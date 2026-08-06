@@ -119,3 +119,50 @@ def test_run_watched_returns_on_success():
 def test_run_watched_raises_on_failure():
     with pytest.raises(RuntimeError, match="Command failed"):
         _run_watched([sys.executable, "-c", "import sys; sys.exit(3)"], hard_timeout_s=30.0)
+
+
+# ── Seed lattice pre-expansion ────────────────────────────────────────────────
+#
+# Added 2026-08-05. See memory/project_extra_base_spacing.md; the measured
+# rationale for the "auto" gate is in _resolve_seed_lattice_nm's docstring.
+
+import pytest as _pytest_sl  # noqa: E402
+
+from backend.core.constants import RELAXED_HELIX_SPACING_NM  # noqa: E402
+from backend.core.lattice import make_bundle_design  # noqa: E402
+from backend.core.md_protocols import _resolve_seed_lattice_nm  # noqa: E402
+
+
+def _design_with_inserts(extra: str | None):
+    d = make_bundle_design(cells=[(0, 0), (0, 1)], length_bp=32)
+    if extra is not None:
+        for x in d.crossovers:
+            x.extra_bases = extra
+    return d
+
+
+def test_seed_lattice_none_builds_as_designed():
+    assert _resolve_seed_lattice_nm(_design_with_inserts("TT"), None) is None
+
+
+def test_seed_lattice_auto_declines_a_design_without_inserts():
+    """Nothing to relieve, and rigid expansion only stretches the backbone."""
+    assert _resolve_seed_lattice_nm(_design_with_inserts(None), "auto") is None
+
+
+def test_seed_lattice_auto_picks_the_measured_target_by_insert_count():
+    d1 = _design_with_inserts("T")
+    d2 = _design_with_inserts("TT")
+    if d1.crossovers:                       # fixture must actually carry inserts
+        assert _resolve_seed_lattice_nm(d1, "auto") == RELAXED_HELIX_SPACING_NM[1]
+        assert _resolve_seed_lattice_nm(d2, "auto") == RELAXED_HELIX_SPACING_NM[2]
+
+
+def test_seed_lattice_explicit_float_overrides_the_auto_gate():
+    """An explicit value is a deliberate experiment — it must not be second-guessed."""
+    assert _resolve_seed_lattice_nm(_design_with_inserts(None), 2.60) == 2.60
+
+
+def test_seed_lattice_rejects_an_unknown_string():
+    with _pytest_sl.raises(ValueError, match="auto"):
+        _resolve_seed_lattice_nm(_design_with_inserts("TT"), "wider")

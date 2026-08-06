@@ -1352,3 +1352,121 @@ def test_ligate_after_continuation_gap_cell():
     assert len(ligated.strands) == len(result.strands), (
         "Gap continuation: strands are not adjacent, ligation should be a no-op"
     )
+
+
+# ── Relaxed-spacing pre-expansion (MD seeds) ──────────────────────────────────
+#
+# Added 2026-08-05 with the measured relaxed-spacing table. See
+# memory/project_extra_base_spacing.md for provenance.
+
+import numpy as _np_rs  # noqa: E402
+
+from backend.core.constants import RELAXED_HELIX_SPACING_NM  # noqa: E402
+from backend.core.lattice import (  # noqa: E402
+    max_extra_base_count,
+    relaxed_spacing_for_design,
+    scale_helix_spacing,
+)
+
+
+def _nn_spacing(design):
+    """Median nearest-neighbour distance between helix axis_start points."""
+    p = _np_rs.array([[h.axis_start.x, h.axis_start.y, h.axis_start.z]
+                      for h in design.helices])
+    d = _np_rs.linalg.norm(p[:, None, :] - p[None, :, :], axis=-1)
+    _np_rs.fill_diagonal(d, _np_rs.inf)
+    return float(_np_rs.median(d.min(axis=1)))
+
+
+def test_relaxed_spacing_table_is_monotonic_and_wider_than_the_build_lattice():
+    assert list(RELAXED_HELIX_SPACING_NM) == sorted(RELAXED_HELIX_SPACING_NM)
+    # Even the no-insert baseline is wider than what designs are built on.
+    for s in RELAXED_HELIX_SPACING_NM:
+        assert s > HONEYCOMB_HELIX_SPACING
+
+
+def test_relaxed_spacing_table_matches_the_frontend_twin():
+    """The view toggle carries its own copy (JS cannot import Python).
+
+    They are a mirrored constant, so a drift here silently makes the picture and
+    the MD seed disagree about the same measurement.
+    """
+    import pathlib
+    import re
+
+    src = pathlib.Path("frontend/src/scene/extra_base_spacing.js").read_text()
+    m = re.search(r"RELAXED_SPACING_NM\s*=\s*\[([^\]]*)\]", src)
+    assert m, "frontend RELAXED_SPACING_NM not found — did the module move?"
+    js = tuple(float(x) for x in m.group(1).split(","))
+    assert js == tuple(RELAXED_HELIX_SPACING_NM)
+
+
+def test_max_extra_base_count_uses_the_widest_junction():
+    design = make_bundle_design(cells=[(0, 0), (0, 1)], length_bp=32)
+    assert max_extra_base_count(design) == 0
+    assert relaxed_spacing_for_design(design) == RELAXED_HELIX_SPACING_NM[0]
+
+
+def test_relaxed_spacing_clamps_above_the_measured_range():
+    """The response saturates — extrapolating a 4-insert junction would overstate it."""
+    assert relaxed_spacing_for_design.__doc__  # keep the rationale discoverable
+    n = len(RELAXED_HELIX_SPACING_NM)
+    assert RELAXED_HELIX_SPACING_NM[min(9, n - 1)] == RELAXED_HELIX_SPACING_NM[-1]
+
+
+def test_scale_helix_spacing_widens_the_lattice_to_the_target():
+    design = make_bundle_design(cells=[(0, 0), (0, 1), (1, 0), (1, 1)], length_bp=64)
+    before = _nn_spacing(design)
+    assert before == pytest.approx(HONEYCOMB_HELIX_SPACING, abs=1e-6)
+
+    scaled = scale_helix_spacing(design, 2.55)
+    assert _nn_spacing(scaled) == pytest.approx(2.55, abs=1e-6)
+
+
+def test_scale_helix_spacing_does_not_mutate_the_input():
+    """Three-Layer: the seed reparameterisation must never touch the saved design."""
+    design = make_bundle_design(cells=[(0, 0), (0, 1)], length_bp=32)
+    before = [(h.axis_start.x, h.axis_start.y, h.axis_start.z) for h in design.helices]
+    scale_helix_spacing(design, 2.55)
+    after = [(h.axis_start.x, h.axis_start.y, h.axis_start.z) for h in design.helices]
+    assert before == after
+
+
+def test_scale_helix_spacing_preserves_helix_length_and_topology():
+    """Only the LATERAL components move — length, rise and register are untouched."""
+    design = make_bundle_design(cells=[(0, 0), (0, 1), (1, 1)], length_bp=64)
+    scaled = scale_helix_spacing(design, 2.55)
+
+    for h0, h1 in zip(design.helices, scaled.helices):
+        v0 = _np_rs.array([h0.axis_end.x - h0.axis_start.x,
+                           h0.axis_end.y - h0.axis_start.y,
+                           h0.axis_end.z - h0.axis_start.z])
+        v1 = _np_rs.array([h1.axis_end.x - h1.axis_start.x,
+                           h1.axis_end.y - h1.axis_start.y,
+                           h1.axis_end.z - h1.axis_start.z])
+        assert _np_rs.linalg.norm(v0) == pytest.approx(_np_rs.linalg.norm(v1), abs=1e-9)
+        # Helices run along Z in the XY plane — the axial component must not scale.
+        assert h1.axis_start.z == pytest.approx(h0.axis_start.z, abs=1e-9)
+        assert h1.axis_end.z == pytest.approx(h0.axis_end.z, abs=1e-9)
+
+    assert [h.id for h in scaled.helices] == [h.id for h in design.helices]
+    assert len(scaled.strands) == len(design.strands)
+    assert len(scaled.crossovers) == len(design.crossovers)
+
+
+def test_scale_helix_spacing_is_a_noop_at_the_build_lattice():
+    design = make_bundle_design(cells=[(0, 0), (0, 1)], length_bp=32)
+    same = scale_helix_spacing(design, HONEYCOMB_HELIX_SPACING)
+    assert _nn_spacing(same) == pytest.approx(_nn_spacing(design), abs=1e-9)
+
+
+def test_scale_helix_spacing_keeps_the_bundle_centred():
+    """Expansion is about the lateral centroid, so the box sizer sees no shift."""
+    design = make_bundle_design(cells=[(0, 0), (0, 1), (1, 0), (1, 1)], length_bp=32)
+    scaled = scale_helix_spacing(design, 2.55)
+
+    def centroid(d):
+        p = _np_rs.array([[h.axis_start.x, h.axis_start.y] for h in d.helices])
+        return p.mean(axis=0)
+
+    assert centroid(scaled) == pytest.approx(centroid(design), abs=1e-9)

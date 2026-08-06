@@ -380,6 +380,21 @@ class CreateJobRequest(BaseModel):
         default_factory=dict,
         description='Per-stage NAMD directive overrides, keyed by stage INDEX as a string (0 = minimisation, 1..N = the stages in order) plus "*" for every stage: {"*": {"langevinDamping": "2"}, "3": {"run": "50000"}}. "*" is merged first, so a per-stage entry refines it. A null value DELETES the directive. Directives that name the package\'s own files or outputs are refused — overriding one would detach the stage from its job rather than change the physics. Every override is recorded in the manifest and declared in its protocol_fidelity block, because a hand edit is a departure from every protocol by definition.',
     )
+    seed_lattice_nm: "float | str | None" = Field(
+        None,
+        description="Pre-expand the lattice before building the seed, so the run starts "
+                    "at the interhelical spacing MD says the structure ends up at "
+                    "instead of spending relaxation swelling into it. null = build as "
+                    "designed (2.25 nm caDNAno lattice). \"auto\" = the measured relaxed "
+                    "spacing for this design's largest extra-base count, applied ONLY if "
+                    "it inserts extra bases. A float sets the centre-to-centre spacing in "
+                    "nm directly and skips that gate. Measured on 6hbx100: at TT inserts, "
+                    "2.25 -> 2.55 nm cuts steric contacts on the inserts by 58% AND "
+                    "relaxes the crossover bridges; with no inserts there is no slack to "
+                    "take up and the backbone only stretches. The saved design is never "
+                    "modified — a scaled copy feeds the seed. Recorded in manifest.json "
+                    "as seed_lattice_nm.",
+    )
     allow_catenated_seed: bool = Field(
         False,
         description="Build even when the seed carries a permanent topological defect: a "
@@ -2895,6 +2910,9 @@ async def _prepare_job_bg(
         # own signature and never sees it.
         if body.protocol != IMPLICIT_GBIS_PROTOCOL:
             seed_kwargs["allow_catenated_seed"] = body.allow_catenated_seed
+            # Same reason as above: the GBIS prep has its own signature and never
+            # takes an md_protocols kwarg.
+            seed_kwargs["seed_lattice_nm"] = body.seed_lattice_nm
         package_subdir, name_stem, segments = await run_in_threadpool(
             prepare,
             local_design,

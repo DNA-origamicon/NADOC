@@ -69,6 +69,28 @@ HONEYCOMB_ROW_PITCH: float = 3.0 * HONEYCOMB_LATTICE_RADIUS  # = 3.375 nm (cadna
 # Centre-to-centre distance between adjacent helices on a square lattice.
 SQUARE_HELIX_SPACING: float = HONEYCOMB_HELIX_SPACING  # = 2.25 nm
 
+# ── MD-relaxed inter-helix spacing (measured, NOT a build constant) ────────────
+#
+# What a bundle actually equilibrates to, indexed by extra bases per crossover.
+# Index 0 is the no-insert baseline: even with nothing inserted a relaxed bundle
+# sits ~2 A wider than the 2.25 nm caDNAno lattice above, which is a LARGER effect
+# than the inserts themselves.
+#
+# Measured 2026-08-05 from archived unrestrained NAMD trajectories of two matched
+# control series (24hb and 6hbx100, identical apart from their inserts), matched
+# MGHH-only stage. Response is strongly sub-linear, so callers clamp rather than
+# extrapolate past index 2. Provenance, method and uncertainty (~+/-0.3 A on a
+# delta): memory/project_extra_base_spacing.md.
+#
+# These NEVER change how a design is built — HONEYCOMB_LATTICE_RADIUS above is the
+# build lattice and stays locked. They are consumed by (a) the "Adjust for Extra
+# Bases" view toggle and (b) an opt-in MD seed pre-expansion.
+#
+# MIRRORED in frontend/src/scene/extra_base_spacing.js (RELAXED_SPACING_NM) — the
+# view toggle cannot import Python. Keep the two in sync; a test pins that they
+# agree.
+RELAXED_HELIX_SPACING_NM: tuple[float, ...] = (2.45, 2.53, 2.55)
+
 # ── Square lattice helix geometry ─────────────────────────────────────────────
 
 # Twist per base pair for the square lattice (33.75°/bp → 3 turns per 32 bp).

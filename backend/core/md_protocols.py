@@ -2951,6 +2951,40 @@ def mgh_slow_release_segments(
 
 # ── Full job preparation ──────────────────────────────────────────────────────
 
+def _resolve_seed_lattice_nm(design: Design, requested: "float | str | None") -> "float | None":
+    """Target seed spacing in nm, or None to build the design as-is.
+
+    ``"auto"`` expands ONLY a design that actually inserts extra bases, and this
+    restriction is measured, not cautious. Rigidly moving helices apart takes up
+    slack that only inserts provide; with none, the crossover backbone simply
+    stretches. On 6hbx100 (bonded-excluded insert contacts < 3 A; O3'-P bridge
+    length p99):
+
+        design  spacing       insert contacts    bridge p99
+        noT     2.25 -> 2.45      0 ->     0     2.67 -> 3.09 A   strictly worse
+        1xT     2.25 -> 2.53   3428 ->  2586     1.93 -> 3.18 A   relieved, strained
+        2xT     2.25 -> 2.55  14283 ->  6058     2.37 -> 1.80 A   relieved, relaxed
+
+    The benefit scales with insert count (-25% contacts at one T, -58% at TT) and
+    the bridge cost inverts: two inserts carry enough contour to span 2.55 nm and
+    the bridges actually RELAX, one insert is stretched by 2.53, and with none
+    there is nothing to relieve and the backbone only stretches — so "auto"
+    declines an insert-free design. An explicit float overrides the gate entirely.
+    """
+    if requested is None:
+        return None
+    if isinstance(requested, str):
+        if requested != "auto":
+            raise ValueError(f"seed_lattice_nm must be a float, 'auto' or None (got {requested!r})")
+        from backend.core.lattice import (  # noqa: PLC0415
+            max_extra_base_count, relaxed_spacing_for_design,
+        )
+        if max_extra_base_count(design) == 0:
+            return None
+        return relaxed_spacing_for_design(design)
+    return float(requested)
+
+
 def prepare_mgh_slow_release(
     design: Design,
     job_dir: Path,
@@ -2986,6 +3020,13 @@ def prepare_mgh_slow_release(
     production_rigid_bonds: Optional[str] = None,
     production_hmr: Optional[bool] = None,
     pre_declashed: bool = False,
+    #: Pre-expand the lattice to a wider centre-to-centre spacing (nm) before building
+    #: the seed, so the run starts where MD says the structure ends up instead of
+    #: spending relaxation swelling into it.  ``None`` = build as designed (2.25 nm).
+    #: ``"auto"`` = the measured relaxed spacing for this design's largest extra-base
+    #: count, and ONLY when it has inserts — see ``_resolve_seed_lattice_nm``.
+    #: The saved design is never modified; a scaled COPY feeds the seed.
+    seed_lattice_nm: "float | str | None" = None,
     anchors: Optional[list] = None,
     #: Restrict each anchored residue to these PDB atom names (e.g. ``["C1'"]``) instead
     #: of all its heavy atoms.  See :func:`write_anchor_restraints_pdb`.
@@ -3035,6 +3076,22 @@ def prepare_mgh_slow_release(
     if require_full_topology:
         from backend.core.md_sequence_guard import require_sequenced_scaffold  # noqa: PLC0415
         require_sequenced_scaffold(design)
+
+    # Pre-expand the lattice BEFORE anything reads geometry — the topology gate, the
+    # atomistic model, the box sizer and every exported map must all describe the same
+    # structure.  A scaled COPY is used from here down; the caller's design (and the
+    # saved .nadoc) stay on the 2.25 nm build lattice.  Three-Layer: geometric-layer
+    # reparameterisation for a physical-layer run, topology untouched.
+    _seed_lattice_nm = _resolve_seed_lattice_nm(design, seed_lattice_nm)
+    if _seed_lattice_nm is not None:
+        from backend.core.lattice import scale_helix_spacing  # noqa: PLC0415
+        design = scale_helix_spacing(design, _seed_lattice_nm)
+        # A prebuilt model was built at the ORIGINAL spacing, so it now contradicts the
+        # design we are about to package.  Drop it and let the seed rebuild.
+        if atomistic_model is not None:
+            logger.warning("seed_lattice_nm=%.3f discards the supplied atomistic_model "
+                        "(built at the original spacing)", _seed_lattice_nm)
+            atomistic_model = None
 
     # Refuse to build a package whose reciprocal crossover connectors are topologically
     # LINKED (Gauss Lk != 0).  The seed builder can swing the two inserted bases of an
@@ -3488,6 +3545,11 @@ def prepare_mgh_slow_release(
             else None
         ),
         "declash": declash,
+        # Centre-to-centre spacing this seed was BUILT at, in nm.  null = the design's
+        # own 2.25 nm lattice.  Recorded on every build: a trajectory measured against
+        # a pre-expanded seed is not comparable to one that swelled into its spacing,
+        # and nothing else in the package records which it was.
+        "seed_lattice_nm": _seed_lattice_nm,
         "declash_min_coor": (
             f"output/{min_name}.coor" if (declash or rebuild_enm_from_min) else None),
         "n_unpaired_excluded": n_unpaired if declash else 0,

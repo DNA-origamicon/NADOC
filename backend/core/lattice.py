@@ -42,8 +42,10 @@ from backend.core.constants import (
     BDNA_RISE_PER_BP,
     BDNA_TWIST_PER_BP_RAD,
     HONEYCOMB_COL_PITCH,
+    HONEYCOMB_HELIX_SPACING,
     HONEYCOMB_LATTICE_RADIUS,
     HONEYCOMB_ROW_PITCH,
+    RELAXED_HELIX_SPACING_NM,
     SQUARE_COL_PITCH,
     SQUARE_ROW_PITCH,
     SQUARE_TWIST_PER_BP_RAD,
@@ -100,6 +102,86 @@ def honeycomb_cell_value(row: int, col: int) -> int:
 def is_valid_honeycomb_cell(row: int, col: int) -> bool:
     """Return True — all cells are valid in cadnano2's honeycomb coordinate system."""
     return True
+
+
+# ── Relaxed-spacing pre-expansion (MD seeds only) ─────────────────────────────
+
+
+def max_extra_base_count(design: "Design") -> int:
+    """Largest extra-base count on any crossover or forced ligation. 0 if none.
+
+    Twin of ``maxExtraBaseCount`` in frontend/src/scene/extra_base_spacing.js.
+    """
+    counts = [len(x.extra_bases or "") for x in (design.crossovers or [])]
+    counts += [len(f.extra_bases or "") for f in (design.forced_ligations or [])]
+    return max(counts, default=0)
+
+
+def relaxed_spacing_for_design(design: "Design") -> float:
+    """MD-relaxed centre-to-centre spacing this design equilibrates to, in nm.
+
+    Keyed on the design's LARGEST extra-base count — the lattice is one rigid
+    frame, so the widest junction sets the pitch the whole bundle accommodates.
+    Clamps above the measured range instead of extrapolating (the response
+    saturates). Twin of ``adjustedSpacingForDesign`` in the frontend module.
+    """
+    n = max_extra_base_count(design)
+    return RELAXED_HELIX_SPACING_NM[min(n, len(RELAXED_HELIX_SPACING_NM) - 1)]
+
+
+def _bundle_axis_index(design: "Design") -> int:
+    """Index (0=x, 1=y, 2=z) of the axis the helices run along."""
+    h = design.helices[0]
+    d = [abs(h.axis_end.x - h.axis_start.x),
+         abs(h.axis_end.y - h.axis_start.y),
+         abs(h.axis_end.z - h.axis_start.z)]
+    return int(max(range(3), key=lambda i: d[i]))
+
+
+def scale_helix_spacing(design: "Design", target_nm: float) -> "Design":
+    """Return a COPY of ``design`` with its lattice widened to ``target_nm``.
+
+    Every helix axis is translated outward from the bundle's lateral centroid by
+    ``target_nm / 2.25``; the component along the helix axis is untouched, so
+    helices keep their length, rise and register. Because every caDNAno lattice
+    coordinate is linear in the lattice radius (see ``honeycomb_position``), a
+    uniform lateral scale reproduces exactly the geometry you would get by
+    building at the wider constant — without touching the locked
+    ``HONEYCOMB_LATTICE_RADIUS``.
+
+    THREE-LAYER NOTE. This is a geometric-layer reparameterisation applied to a
+    COPY for the benefit of a physical-layer run. It never mutates the caller's
+    design and never touches topology: strands, domains, crossovers and every
+    index are carried through untouched, only helix axis coordinates move. The
+    saved ``.nadoc`` stays on the 2.25 nm build lattice.
+
+    Intended for MD seeds, so a run starts where MD says the structure ends up
+    instead of spending relaxation swelling into it. See
+    ``relaxed_spacing_for_design`` for the measured targets.
+    """
+    if not design.helices:
+        return design.model_copy(deep=True)
+
+    scaled = design.model_copy(deep=True)
+    k = float(target_nm) / HONEYCOMB_HELIX_SPACING
+    if abs(k - 1.0) < 1e-12:
+        return scaled
+
+    ax = _bundle_axis_index(scaled)
+    lat = [i for i in range(3) if i != ax]
+    comp = ("x", "y", "z")
+
+    # Lateral centroid of the helix axes — the fixed point of the expansion, so a
+    # centred bundle stays centred and the box sizer sees no net translation.
+    starts = [[getattr(h.axis_start, c) for c in comp] for h in scaled.helices]
+    centre = [sum(s[i] for s in starts) / len(starts) for i in range(3)]
+
+    for h in scaled.helices:
+        for end in (h.axis_start, h.axis_end):
+            for i in lat:
+                c = comp[i]
+                setattr(end, c, centre[i] + (getattr(end, c) - centre[i]) * k)
+    return scaled
 
 
 def scaffold_direction_for_cell(row: int, col: int) -> Direction:
