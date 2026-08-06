@@ -1,18 +1,29 @@
 /**
  * Expanded Helix Spacing — cosmetic-only lateral expansion of helix positions.
  *
- * Toggled by 'Q'. Animates over 300 ms. A slider panel (upper-right) lets the
- * user tune the target spacing from 2.25 nm (natural) to 10 nm.
+ * Two modes share one offset channel and one animation:
+ *   'manual'     — toggled by 'Q'. A slider panel (upper-right) tunes the target
+ *                  spacing from 2.25 nm (natural) to 10 nm.
+ *   'extra-base' — View ▸ Adjust for Extra Bases. Snaps to the MD-measured
+ *                  relaxed spacing for the design's largest extra-base count
+ *                  (see `extra_base_spacing.js` for the numbers and provenance).
+ *                  No slider — the spacing is a measurement, not a preference.
+ *
+ * They are mutually exclusive by construction: `_mode` decides which target
+ * spacing `_targetSpacing()` returns, so there is never a second writer racing
+ * this one for the offsets.
  *
  * Architecture: reuses applyUnfoldOffsets() on all renderers — the spacing
  * offsets are per-helix 3D translation vectors (zero along the helix axis,
- * non-zero laterally). The Design model is never modified.
+ * non-zero laterally). The Design model is never modified: this is display
+ * state only, and nothing here is ever written back to topology.
  *
  * Auto-disabled when unfold view or slice plane activates.
  */
 
 import * as THREE from 'three'
 import { store }  from '../state/store.js'
+import { adjustedSpacingForDesign } from './extra_base_spacing.js'
 
 const ANIM_DURATION_MS  = 300
 const DEFAULT_SPACING_NM = 5.0
@@ -144,11 +155,42 @@ export function initExpandedSpacing(
   getSequenceOverlay,
   getUnfoldView,
   getAtomisticRenderer,
+  onModeChange,   // (isExtraBaseAdjustActive: boolean) => void — menu-pill sync
 ) {
   let _active    = false
   let _animFrame = null
   let _currentT  = 0
   let _spacingNm = DEFAULT_SPACING_NM
+  let _mode      = 'manual'   // 'manual' (Q + slider) | 'extra-base' (measured)
+  // `_active` only flips when the 300 ms animation lands, so it is the SETTLED
+  // state.  `_desiredOn` flips synchronously on the click, and is what decides
+  // the next toggle's direction and what a menu pill should read — otherwise a
+  // second click inside the animation window reads the pre-transition value and
+  // expands twice instead of collapsing.
+  let _desiredOn = false
+
+  const _isXbAdjust = () => _desiredOn && _mode === 'extra-base'
+
+  /**
+   * Publish the extra-base pill state.  Called from EVERY path that can change
+   * mode or turn spacing off — the menu toggle, the Q toggle taking ownership,
+   * and `forceOff` from slice/unfold/extrude — so the pill cannot go stale.
+   */
+  function _publishMode() { onModeChange?.(_isXbAdjust()) }
+
+  /**
+   * Spacing the current mode wants, in nm.
+   *
+   * In extra-base mode this is re-derived from the design on every call rather
+   * than cached, so editing a crossover's inserts while the view is on moves
+   * the helices to match on the next re-apply.
+   *
+   * @param {object} [design]  defaults to the live store design
+   */
+  function _targetSpacing(design) {
+    if (_mode !== 'extra-base') return _spacingNm
+    return adjustedSpacingForDesign(design ?? store.getState().currentDesign)
+  }
 
   // ── Slider panel wiring ───────────────────────────────────────────────────
   const _panel    = document.getElementById('spacing-panel')
@@ -200,7 +242,7 @@ export function initExpandedSpacing(
   function _reapplyImmediate() {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) return
-    _applyAll(_computeOffsets(currentDesign, _spacingNm), _currentT)
+    _applyAll(_computeOffsets(currentDesign, _targetSpacing(currentDesign)), _currentT)
   }
 
   // ── Animation ─────────────────────────────────────────────────────────────
@@ -226,21 +268,32 @@ export function initExpandedSpacing(
 
   // ── Public API ────────────────────────────────────────────────────────────
 
-  function toggle() {
+  /**
+   * Turn a mode on or off, animating between natural and target spacing.
+   * Switching straight from one active mode to the other re-animates from the
+   * current offsets to the new target without collapsing through t=0.
+   */
+  function _setMode(mode, showPanel) {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) return
 
-    const offsets = _computeOffsets(currentDesign, _spacingNm)
-    if (_active) {
-      console.log(`[EXPAND] toggle OFF: ${currentDesign.helices.length} helices, spacing=${_spacingNm.toFixed(2)} nm, t=${_currentT.toFixed(3)}→0`)
+    const turningOff = _desiredOn && _mode === mode
+    _mode = mode
+    _desiredOn = !turningOff
+    _publishMode()
+    const spacing = _targetSpacing(currentDesign)
+    const offsets = _computeOffsets(currentDesign, spacing)
+
+    if (turningOff) {
+      console.log(`[EXPAND] ${mode} OFF: ${currentDesign.helices.length} helices, spacing=${spacing.toFixed(2)} nm, t=${_currentT.toFixed(3)}→0`)
       _animate(_currentT, 0, offsets, () => {
         _active = false
         _hidePanel()
         console.log('[EXPAND] collapse complete — t=0, positions restored')
       })
     } else {
-      console.log(`[EXPAND] toggle ON: ${currentDesign.helices.length} helices, spacing=${_spacingNm.toFixed(2)} nm, t=${_currentT.toFixed(3)}→1`)
-      _showPanel()
+      console.log(`[EXPAND] ${mode} ON: ${currentDesign.helices.length} helices, spacing=${spacing.toFixed(2)} nm, t=${_currentT.toFixed(3)}→1`)
+      if (showPanel) _showPanel(); else _hidePanel()
       _animate(_currentT, 1, offsets, () => {
         _active = true
         console.log('[EXPAND] expand complete — t=1')
@@ -248,15 +301,25 @@ export function initExpandedSpacing(
     }
   }
 
+  function toggle() { _setMode('manual', true) }
+
+  /**
+   * View ▸ Adjust for Extra Bases — snap the lattice to the MD-measured
+   * relaxed spacing for this design's largest extra-base count.
+   */
+  function toggleExtraBaseAdjust() { _setMode('extra-base', false) }
+
   /**
    * Animate back to t=0 (natural spacing) without user interaction.
    * Called when unfold view / slice plane activates.
    */
   function forceOff() {
+    _desiredOn = false
+    _publishMode()
     if (!_active && _currentT === 0) return
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) { _active = false; _hidePanel(); return }
-    const offsets = _computeOffsets(currentDesign, _spacingNm)
+    const offsets = _computeOffsets(currentDesign, _targetSpacing(currentDesign))
     _animate(_currentT, 0, offsets, () => {
       _active = false
       _hidePanel()
@@ -267,6 +330,9 @@ export function initExpandedSpacing(
     _spacingNm = Math.max(MIN_SPACING_NM, Math.min(MAX_SPACING_NM, nm))
     if (_slider) _slider.value = _spacingNm
     _syncSliderLabel(_spacingNm)
+    // A manual spacing edit takes ownership back from the measured mode —
+    // otherwise the slider would move nothing and look broken.
+    if (_mode === 'extra-base' && (_active || _currentT > 0)) { _mode = 'manual'; _publishMode() }
     if (_active || _currentT > 0) _reapplyImmediate()
   }
 
@@ -282,14 +348,21 @@ export function initExpandedSpacing(
       newState.currentDesign?.helices?.length
     ) {
       // Snap to current t — no animation, just restore the visual state.
-      _applyAll(_computeOffsets(newState.currentDesign, _spacingNm), _currentT)
+      // In extra-base mode the target is re-derived from the NEW design, so an
+      // edit that changes the largest insert count re-spaces the bundle here.
+      _applyAll(
+        _computeOffsets(newState.currentDesign, _targetSpacing(newState.currentDesign)),
+        _currentT,
+      )
     }
   })
 
   return {
     toggle,
+    toggleExtraBaseAdjust,
     forceOff,
     isActive:   () => _active,
+    isExtraBaseAdjustActive: _isXbAdjust,
     setSpacing,
     getSpacing: () => _spacingNm,
   }

@@ -1564,6 +1564,7 @@ async function main() {
     () => sequenceOverlay,
     () => unfoldView,
     () => atomisticRenderer,
+    (on) => _setMenuToggle('menu-view-extra-base-spacing', on),
   )
 
   let jointRenderer = null
@@ -7189,6 +7190,10 @@ async function main() {
     const on = !jointRenderer?.isVisible()
     jointRenderer?.setVisible(on)
     _setMenuToggle('menu-view-joints', on)
+  })
+
+  document.getElementById('menu-view-extra-base-spacing')?.addEventListener('click', () => {
+    expandedSpacing.toggleExtraBaseAdjust()   // pill syncs via the onModeChange dep
   })
 
   // ── Help / Hotkeys modal ─────────────────────────────────────────────────────
