@@ -59,7 +59,7 @@ def _flexible_display_override(design):
 
 
 @router.get("/design/atomistic")
-def get_atomistic() -> dict:
+def get_atomistic(seed_lattice_nm: str | None = None) -> dict:
     """
     Return the heavy-atom all-atom model for the atomistic Three.js renderer.
 
@@ -70,6 +70,25 @@ def get_atomistic() -> dict:
 
     The −32° helical phase offset (aligning the all-atom backbone groove with the
     NADOC CG model) is baked into build_atomistic_model via _ATOMISTIC_PHASE_OFFSET_RAD.
+
+    ``seed_lattice_nm`` switches this to **MD SEED** mode — the t=0, pre-minimisation
+    coordinates the simulation would actually start from, for EVERY atom:
+
+      * exact L-BFGS-B phosphodiester linkers instead of the display build's cheap
+        interpolation (``fast_bridges``), which moves the ~1.5% linker atoms by up
+        to 2.4 A at junctions — the very atoms a junction clash is made of;
+      * no flexible-display frame override, which is a viewer affordance the seed
+        does not have;
+      * optional lattice pre-expansion — ``"auto"`` for the measured relaxed
+        spacing of this design's largest extra-base count, or a float in nm.
+
+    Absent = today's display build, unchanged. Values match ``seed_lattice_nm`` on
+    ``POST /md/jobs``, so what you see is what a job would build. Slower (~27 s on
+    a 60-crossover design) but cached.
+
+    Refused when a PDB-imported model is present: those atoms are measured
+    coordinates that no lattice scale applies to, so a seed built around them
+    would silently mix two frames.
     """
     from backend.core.atomistic import (
         build_atomistic_model,
@@ -81,6 +100,27 @@ def get_atomistic() -> dict:
     nuc_frame_override = _flexible_display_override(design)
 
     pdb_model = design_state.get_pdb_atomistic()
+
+    if seed_lattice_nm is not None:
+        from fastapi import HTTPException
+
+        from backend.core.atomistic_cache import build_atomistic_model_cached
+        from backend.core.lattice import scale_helix_spacing
+        from backend.core.md_protocols import _resolve_seed_lattice_nm
+
+        if pdb_model is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Seed view is unavailable for a PDB-imported design: its atoms are "
+                       "measured coordinates, so scaling the lattice around them would mix "
+                       "two frames.",
+            )
+        resolved = _resolve_seed_lattice_nm(design, seed_lattice_nm)
+        seed_design = scale_helix_spacing(design, resolved) if resolved is not None else design
+        out = atomistic_to_json(build_atomistic_model_cached(seed_design))
+        out["seed"] = True
+        out["lattice_nm"] = resolved
+        return out
 
     if pdb_model is not None:
         pdb_helix_ids = {a.helix_id for a in pdb_model.atoms}

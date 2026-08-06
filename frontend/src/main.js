@@ -1565,6 +1565,7 @@ async function main() {
     () => unfoldView,
     () => atomisticRenderer,
     (on) => _setMenuToggle('menu-view-extra-base-spacing', on),
+    () => _atomSurface,   // lazy: assigned ~900 lines below this init
   )
 
   let jointRenderer = null

@@ -155,7 +155,8 @@ export function initExpandedSpacing(
   getSequenceOverlay,
   getUnfoldView,
   getAtomisticRenderer,
-  onModeChange,   // (isExtraBaseAdjustActive: boolean) => void — menu-pill sync
+  onModeChange,     // (isExtraBaseAdjustActive: boolean) => void — menu-pill sync
+  getAtomSurface,   // () => atom_surface_display — drives the MD-seed atomistic view
 ) {
   let _active    = false
   let _animFrame = null
@@ -232,12 +233,25 @@ export function initExpandedSpacing(
     getLoopSkipHighlight?.()?.applyUnfoldOffsets(offsets, t)
     getOverhangLocations?.()?.applyUnfoldOffsets(offsets, t)
     getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, t, null)
-    // Atomistic atoms (extra-base atoms interpolate between src/dst helix offsets)
-    getAtomisticRenderer?.()?.applyUnfoldOffsets?.(offsets, t)
+    // Atomistic atoms (extra-base atoms interpolate between src/dst helix offsets).
+    // SKIPPED while the MD-seed view is on: those atoms were BUILT at the expanded
+    // lattice, so offsetting them again would double the expansion.
+    if (!getAtomSurface?.()?.isSeedLatticeActive?.()) {
+      getAtomisticRenderer?.()?.applyUnfoldOffsets?.(offsets, t)
+    }
     // Re-position selection glow spheres to match updated bead positions.
     // Must be last — all entry.pos vectors must be updated before refresh.
     designRenderer.refreshAllGlow()
   }
+
+  // ── MD seed atomistic view ────────────────────────────────────────────────
+  //
+  // The atomistic reps switch to the t=0 pre-minimisation build while this view is
+  // on.  Extra-base positions are NOT touched here: the CG representation is the
+  // single definition of where an insert sits, and the atomistic build follows it.
+
+  function _showSeedAtoms()  { getAtomSurface?.()?.setSeedLattice?.('auto') }
+  function _clearSeedAtoms() { getAtomSurface?.()?.setSeedLattice?.(null) }
 
   function _reapplyImmediate() {
     const { currentDesign } = store.getState()
@@ -286,6 +300,9 @@ export function initExpandedSpacing(
 
     if (turningOff) {
       console.log(`[EXPAND] ${mode} OFF: ${currentDesign.helices.length} helices, spacing=${spacing.toFixed(2)} nm, t=${_currentT.toFixed(3)}→0`)
+      // Drop the seeded inserts first so the collapse animates the ordinary arc all
+      // the way back, rather than leaving beads pinned at seed positions until t=0.
+      _clearSeedAtoms()
       _animate(_currentT, 0, offsets, () => {
         _active = false
         _hidePanel()
@@ -294,9 +311,12 @@ export function initExpandedSpacing(
     } else {
       console.log(`[EXPAND] ${mode} ON: ${currentDesign.helices.length} helices, spacing=${spacing.toFixed(2)} nm, t=${_currentT.toFixed(3)}→1`)
       if (showPanel) _showPanel(); else _hidePanel()
+      // Seed positions are absolute at the FINAL spacing, so applying them mid-slide
+      // would snap the inserts ahead of the helices. Load once the lattice settles.
       _animate(_currentT, 1, offsets, () => {
         _active = true
         console.log('[EXPAND] expand complete — t=1')
+        if (mode === 'extra-base') _showSeedAtoms()
       })
     }
   }
@@ -316,6 +336,7 @@ export function initExpandedSpacing(
   function forceOff() {
     _desiredOn = false
     _publishMode()
+    _clearSeedAtoms()
     if (!_active && _currentT === 0) return
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) { _active = false; _hidePanel(); return }
@@ -332,7 +353,11 @@ export function initExpandedSpacing(
     _syncSliderLabel(_spacingNm)
     // A manual spacing edit takes ownership back from the measured mode —
     // otherwise the slider would move nothing and look broken.
-    if (_mode === 'extra-base' && (_active || _currentT > 0)) { _mode = 'manual'; _publishMode() }
+    if (_mode === 'extra-base' && (_active || _currentT > 0)) {
+      _mode = 'manual'
+      _clearSeedAtoms()   // the seed was built for the measured spacing, not this one
+      _publishMode()
+    }
     if (_active || _currentT > 0) _reapplyImmediate()
   }
 
@@ -354,6 +379,9 @@ export function initExpandedSpacing(
         _computeOffsets(newState.currentDesign, _targetSpacing(newState.currentDesign)),
         _currentT,
       )
+      // A design edit invalidates the seed build; re-request it so the atomistic
+      // reps follow the new topology.
+      if (_mode === 'extra-base' && _desiredOn) _showSeedAtoms()
     }
   })
 

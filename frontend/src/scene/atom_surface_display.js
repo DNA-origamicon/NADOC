@@ -407,8 +407,43 @@ export function initAtomSurfaceDisplay({
     overhangLinkArcs?.setVisible?.(visible)
   }
 
+  // MD SEED view: when set (e.g. 'auto'), the atomistic reps show the t=0,
+  // PRE-MINIMISATION coordinates the simulation actually starts from, for every
+  // atom — exact phosphodiester linkers instead of the display build's cheap
+  // interpolation, and the lattice pre-expanded to the measured relaxed spacing.
+  // Driven by the "Adjust for Extra Bases" view toggle.
+  let _seedLatticeNm = null
+
   function _atomisticUrl() {
-    return '/api/design/atomistic'
+    return _seedLatticeNm === null
+      ? '/api/design/atomistic'
+      : `/api/design/atomistic?seed_lattice_nm=${encodeURIComponent(_seedLatticeNm)}`
+  }
+
+  /**
+   * Switch the atomistic reps between the ordinary display build and the MD seed.
+   *
+   * The two builds differ by ~3 A per atom on an insert-carrying design (lattice
+   * expansion plus the exact linkers), and the linker atoms are exactly the ones a
+   * junction clash is made of — so this is not a cosmetic difference.
+   *
+   * @param {number|string|null} latticeNm  null = ordinary display build;
+   *        'auto' = seed at the measured relaxed spacing; a number = seed at that
+   *        spacing. Mirrors `seed_lattice_nm` on POST /md/jobs.
+   */
+  async function setSeedLattice(latticeNm) {
+    const next = latticeNm ?? null
+    if (next === _seedLatticeNm) return
+    _seedLatticeNm = next
+    _atomDataCache = null           // different build → different atoms
+    if (atomisticRenderer.getMode() === 'off') return
+    showPersistentToast(next === null ? 'Loading atomistic model…'
+                                      : 'Building MD seed coordinates…')
+    try {
+      await _refetchAtomistic()
+    } finally {
+      dismissToast()
+    }
   }
 
   // Lazily fetch + cache the all-atom model. Shared by the global atomistic mode
@@ -599,6 +634,11 @@ export function initAtomSurfaceDisplay({
     setSurfacePanelVisible: _setSurfacePanelVisible,
     setAtomisticSlidersVisible: _setAtomisticSlidersVisible,
     refetchAtomistic: _refetchAtomistic,
+    setSeedLattice,
+    /** True while the atomistic reps are showing MD seed coordinates — the caller
+     *  must NOT also apply lattice offsets to the atoms, which are already at the
+     *  expanded positions. */
+    isSeedLatticeActive: () => _seedLatticeNm !== null,
     refreshAtomColors: _refreshAtomColors,
     /** Per-cluster opacity for the atomistic + surface reps. The store subscriber
      *  drives the committed path; this is the entry point for the sidebar swatch's
