@@ -1,12 +1,27 @@
 ---
 name: crossover-catenation
-description: "Crossover extra bases were built topologically CATENATED (Gauss Lk = ±1) at reciprocal pairs. Detector + hard build gate + verify-and-repair in the bridge minimiser. Read before touching extra-base placement or the joint solve."
+description: "Crossover extra bases can be built topologically CATENATED (Gauss Lk = ±1) at reciprocal pairs. Detector + hard build GATE. The repair and the joint solve were DELETED 2026-08-05 — a linked phase is now refused, not fixed."
 metadata:
   node_type: memory
   type: project
 ---
 
-# Catenated crossover junctions — detector, gate, repair
+# Catenated crossover junctions — detector and gate
+
+> **⚠ SUPERSEDED IN PART, 2026-08-05.** Everything below about the *joint solve* and the
+> *verify-and-repair ladder* describes code that **no longer exists**. Extra-base positions are now
+> a straight read of the CG representation and nothing modifies them afterwards
+> (`extra_base_repair.py`, `_minimize_{1,2,3}_extra_base` and `solve_extra_base_pose` are deleted —
+> see [[extra-base-spacing]]).
+>
+> **What still holds:** the detector, the Gauss-Lk measurement, the reciprocal-pair analysis, and
+> the **build gate** (`gate_seed_topology`), which is now the only protection. **What changed:** a
+> linked junction is **REFUSED** rather than repaired. Measured after the purge: 3 of 14 phases on
+> the reciprocal fixture link (T bp16, T bp18, TT bp16), and TT/bp8 threads 2 covalent bonds through
+> rings. Those designs cannot be packaged until their crossover phase changes.
+>
+> Read the rest as history — it is why the gate exists and how the defect behaves, not a
+> description of the current builder.
 
 **Status 2026-07-28: catenation FIXED and gated.** Every design screened is clean, including
 24hb_2xT (170 reciprocal pairs). MD-validated on 2hb (see the archive); 6hb in progress

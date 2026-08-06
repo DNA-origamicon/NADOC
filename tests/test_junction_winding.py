@@ -173,26 +173,23 @@ def test_verdict_wording_never_claims_strands_are_linked():
 # ── The duplex clamp, on a real build ────────────────────────────────────────
 
 
-def _reciprocal_pair_inputs(extra_bases, repaired):
+#: Helical phases of the reciprocal fixture that do / do not link, measured
+#: 2026-08-05 once extra-base positions became a straight read of the CG
+#: representation. There is no repair pass to switch on and off any more, so a
+#: wound build and a clean one are two different PHASES, not two settings.
+_WOUND_BP = 16
+_CLEAN_BP = 8
+
+
+def _reciprocal_pair_inputs(extra_bases, bp):
     """Build the reciprocal-pair fixture and return what clamp_sweep needs."""
-    import backend.core.atomistic as atomistic
-    import backend.core.atomistic_minimisers as minimisers
     from backend.core.atomistic import build_atomistic_model
     from backend.core import junction_topology as jt
 
     from tests.test_junction_topology import _reciprocal_design
 
-    design = _reciprocal_design(extra_bases)
-    original = atomistic._repair_catenated_pairs
-    if not repaired:
-        atomistic._repair_catenated_pairs = lambda *a, **k: {
-            "n_pairs": 0, "n_repaired": 0, "n_unrepaired": 0, "repairs": []}
-    minimisers._XB_CACHE.clear()
-    try:
-        model = build_atomistic_model(design)
-    finally:
-        atomistic._repair_catenated_pairs = original
-        minimisers._XB_CACHE.clear()
+    design = _reciprocal_design(extra_bases, bp=bp)
+    model = build_atomistic_model(design)
 
     prep = jt._prepare(design, model, None)
     i, j = jt.reciprocal_pairs(prep.connectors)[0]
@@ -206,8 +203,8 @@ def _reciprocal_pair_inputs(extra_bases, repaired):
 def test_clamp_converges_and_separates_wound_from_clean():
     """The duplex clamp's self-check: a genuine invariant settles on an integer as the
     rung retreats into the duplex. Wound -> ~1, clean -> ~0, both converged."""
-    wound = clamp_sweep(*_reciprocal_pair_inputs("T", repaired=False))
-    clean = clamp_sweep(*_reciprocal_pair_inputs("T", repaired=True))
+    wound = clamp_sweep(*_reciprocal_pair_inputs("T", bp=_WOUND_BP))
+    clean = clamp_sweep(*_reciprocal_pair_inputs("T", bp=_CLEAN_BP))
 
     assert wound["converged"] and clean["converged"]
     assert abs(wound["lk"]) > 0.5

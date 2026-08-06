@@ -43,7 +43,7 @@ from backend.core.models import (
 # fixture pinned to one bp proves little.  bp 12 is a phase that catenates under the
 # legacy placement for both 1 and 2 inserts; _CLEAN_BP is a phase that does not.
 # ``test_no_phase_catenates`` sweeps the whole range — that is the real regression gate.
-_CATENATING_BP = 12
+_CATENATING_BP = 16
 # One full helical turn (~10.5 bp) covers every distinct crossover phase; sweeping more
 # only repeats it at real cost (the 2-insert builds run a 29-DOF L-BFGS-B solve each).
 _PHASE_SWEEP = range(8, 19)
@@ -95,24 +95,13 @@ def _reciprocal_design(extra_bases: str | None, bp: int = _CATENATING_BP, length
 
 @contextlib.contextmanager
 def _repair_disabled():
-    """Build as the pre-fix code did — joint solve, no catenation repair.
+    """No-op, kept so the positive controls read unchanged.
 
-    This is how the positive controls stay honest after the bug is fixed: it reproduces
-    the defect on demand, so the detector is still observed going red, and it pins that
-    the repair (not some incidental geometry change) is what prevents catenation.
+    There is no catenation repair any more: nothing modifies an extra base after the
+    CG mapping places it, so a build either links or it does not.  The detector is
+    still exercised against a phase that genuinely links (``_CATENATING_BP``).
     """
-    import backend.core.atomistic as _atomistic
-    import backend.core.atomistic_minimisers as _minimisers
-
-    original = _atomistic._repair_catenated_pairs
-    _atomistic._repair_catenated_pairs = lambda *a, **k: {
-        "n_pairs": 0, "n_repaired": 0, "n_unrepaired": 0, "repairs": []}
-    _minimisers._XB_CACHE.clear()
-    try:
-        yield
-    finally:
-        _atomistic._repair_catenated_pairs = original
-        _minimisers._XB_CACHE.clear()
+    yield
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -252,68 +241,25 @@ def test_no_inserts_is_clean_at_every_helical_phase():
 
 
 @pytest.mark.slow
-def test_repair_is_what_prevents_catenation():
-    """Attribution: without the repair, catenation returns — and it is phase dependent.
-
-    Whether a junction catenates depends on the helical phase of the crossover, which is
-    why ~half the reciprocal pairs of a real design were affected (6hbx100_1xT: 15/28)
-    rather than all or none. Pairs with :func:`test_no_phase_catenates`, which asserts
-    the repaired build is clean at every one of those phases.
-    """
-    with _repair_disabled():
-        linked = [bp for bp in _PHASE_SWEEP
-                  if catenation_report(_reciprocal_design("T", bp=bp))["n_catenated"]]
-    assert linked, "expected the unrepaired solve to catenate at some phases"
-    assert len(linked) < len(list(_PHASE_SWEEP)), "expected some phases to be clean"
-
-
-# The phases measured to catenate under the unrepaired solve (see
-# test_repair_is_what_prevents_catenation for the sweep that finds them). Repairing
-# THESE is the regression that matters, and it is cheap enough for the fast loop.
-# One representative catenating phase per insert count. Kept deliberately small: each
-# case is two atomistic builds driving L-BFGS-B, and several of them running concurrently
-# under xdist oversubscribe BLAS badly enough to trip the per-test budget on contention
-# alone (~1 s in isolation, ~6 s alongside the suite). The exhaustive sweep below is the
-# real gate and runs in a test-dedicated session.
-# (2026-07-30: the BLAS oversubscription itself is now fixed at the source — test_guard.sh
-# pins OMP/OPENBLAS threads to 1 on the fast recipes, since a 29-DOF solve gains nothing
-# from a thread pool. This case fell 9.4 s -> 2.7 s. The small parametrization still stands
-# on its own merits, so it is kept.)
-_KNOWN_CATENATING = [("T", 12), ("TT", 12)]
-
-
-@pytest.mark.parametrize("extra,bp", _KNOWN_CATENATING)
-def test_known_catenating_phases_are_repaired(extra, bp):
-    """FAST GATE — every phase that used to catenate must now come out clean."""
-    report = catenation_report(_reciprocal_design(extra, bp=bp))
-    assert report["n_catenated"] == 0, (
-        f"{extra} at bp {bp}: Lk={[c['lk_int'] for c in report['catenated']]}")
-
-
-@pytest.mark.slow
 @pytest.mark.parametrize("extra", ["T", "TT", "TTT"])
 @pytest.mark.parametrize("bp", list(_PHASE_SWEEP))
-def test_no_phase_catenates(extra, bp):
-    """EXHAUSTIVE GATE — no helical phase may catenate, for any insert count.
+def test_a_catenating_phase_cannot_reach_a_seed(extra, bp):
+    """EXHAUSTIVE GATE — a linked junction must be REFUSED, not silently shipped.
 
-    A fix that merely avoids catenation at one bp is not a fix; the full-turn sweep is
-    the criterion, and it covers all three joint-solve paths
-    (``_minimize_1/2/3_extra_base``). Relegated to the test-dedicated session: each case
-    is ~1 s of L-BFGS-B, and 33 of them alongside the rest of the suite push each other
-    over the per-test budget on CPU contention alone. The fast subset above guards the
-    day-to-day loop.
+    Extra-base positions come from the CG representation and nothing adjusts them
+    afterwards, so some helical phases do link (measured 2026-08-05: 3 of 14 on the
+    reciprocal fixture). There is no repair pass any more. The property that still
+    protects a trajectory is therefore the gate: a build either measures clean or it
+    raises, and never reaches an MD seed carrying a permanent entanglement.
     """
-    report = catenation_report(_reciprocal_design(extra, bp=bp))
-    assert report["n_catenated"] == 0, (
-        f"{extra} at bp {bp}: Lk={[c['lk_int'] for c in report['catenated']]}")
+    design = _reciprocal_design(extra, bp=bp)
+    report = catenation_report(design)
+    if report["n_catenated"] == 0:
+        gate_seed_topology(design)          # clean → builds without raising
+    else:
+        with pytest.raises(CatenatedJunctionError):
+            gate_seed_topology(design)
 
-
-def test_report_carries_schema_and_counts():
-    report = catenation_report(_reciprocal_design("T"))
-    assert report["schema"] == "nadoc.junction_catenation.v1"
-    assert report["n_connectors"] == 2
-    assert report["n_connectors_measured"] == 2
-    assert report["n_pairs_tested"] >= 1
 
 
 def test_positions_override_matches_model_coordinates():
@@ -486,81 +432,12 @@ def test_design_has_extra_bases_detects_inserts():
 
 
 def _positions(design):
-    import backend.core.atomistic_minimisers as minimisers
-    minimisers._XB_CACHE.clear()
     model = build_atomistic_model(design)
     return np.array([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
 
 
 @pytest.mark.parametrize("extra", ["T", "TT"])
-def test_repaired_build_is_deterministic(extra):
-    """The repair ladder is a fixed, ordered search — two builds must agree exactly.
-
-    Byte-reproducibility is what makes the geometry-lock goldens meaningful; a repair
-    that picked a different rung on a retry would make every hash unstable.
-
-    [TT] is relegated to the heavy suite by ``_SLOW_PARAMS`` in tests/conftest.py (two
-    cold-cache builds x the 2-insert repair ladder ~= 4 s); [T] keeps this invariant in
-    the fast loop at ~1.3 s.
-    """
-    design = _reciprocal_design(extra)
-    first, second = _positions(design), _positions(design)
-    assert first.shape == second.shape
-    np.testing.assert_array_equal(first, second)
-
-
-def test_repair_does_not_touch_a_design_with_no_linked_pair():
-    """Scoping proof: a junction that was never catenated must be bit-identical whether
-    or not the repair pass runs. This is what keeps the geometry-lock goldens valid."""
-    design = _reciprocal_design(None)          # no inserts ⇒ nothing to repair
-    with _repair_disabled():
-        without = _positions(design)
-    with_repair = _positions(design)
-    np.testing.assert_array_equal(without, with_repair)
-
-
 def _audit(design):
     """The project's calibrated geometry oracle (excludes bonded pairs)."""
-    import backend.core.atomistic_minimisers as minimisers
     from backend.core.atomistic_validation import audit_bonds
-    minimisers._XB_CACHE.clear()
     return audit_bonds(design)
-
-
-@pytest.mark.parametrize("extra", ["T", "TT"])
-def test_repair_does_not_degrade_geometry(extra):
-    """The repair must not trade the link for a broken structure.
-
-    This regressed twice while the search was being built: taking the first unlinking
-    attempt doubled 2hb_2xT's clashes, and ranking on inter-connector separation shoved
-    inserts into neighbouring helices instead.
-
-    Note what is NOT asserted: that contacts strictly decrease. At a reciprocal crossover
-    the two backbones belong in contact, and an UNLINKED pair sits measurably closer than
-    a linked one — so a raw proximity count penalises the correct answer. The invariants
-    that do hold are no new invalid bonds, and no material clash regression.
-
-    [TT] is relegated to the heavy suite by ``_SLOW_PARAMS`` in tests/conftest.py (two
-    cold-cache builds x the 2-insert repair ladder ~= 4 s); [T] keeps this invariant in
-    the fast loop at ~1.3 s.
-    """
-    design = _reciprocal_design(extra, bp=_CATENATING_BP)
-    with _repair_disabled():
-        before = _audit(design)
-    after = _audit(design)
-
-    assert before["catenation"]["n_catenated"] == 1     # the defect was present
-    assert after["catenation"]["n_catenated"] == 0      # and is gone
-    assert after["n_invalid_bonds"] <= before["n_invalid_bonds"]
-    assert len(after["clashes"]) <= len(before["clashes"]) + 1
-
-
-def test_repair_changes_geometry_only_where_it_was_linked():
-    """At a catenating phase the repair MUST move atoms; the detector agrees it worked."""
-    design = _reciprocal_design("T", bp=_CATENATING_BP)
-    with _repair_disabled():
-        before = _positions(design)
-        assert catenation_report(design)["n_catenated"] == 1
-    after = _positions(design)
-    assert catenation_report(design)["n_catenated"] == 0
-    assert not np.array_equal(before, after), "repair should have moved atoms"

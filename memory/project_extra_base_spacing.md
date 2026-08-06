@@ -125,27 +125,99 @@ sets the pitch).
   (noT → 2.45, 2xT → 2.55) plus real bead movement. It copies its fixtures because **the library
   hides `__`-prefixed files**, so the usual `__e2e__` convention is unclickable here.
 
-## Also shipped — the Bezier arc is now the built insert pose
+## Extra-base positions are a READ of the CG representation (2026-08-05 purge)
 
-`build_atomistic_model(..., solve_extra_base_pose=False)` is the new default. Inserts stay exactly
-where the bowing quadratic Bezier put them — the same arc `crossover_connections.js` draws — and
-only the phosphodiester linker is minimised to close O3′→P. The per-insert rigid-body L-BFGS-B
-joint solve (`_minimize_{1,2,3}_extra_base`) that used to drag them off that arc is opt-in.
+**Everything that modified an extra base's 3D position after placement has been deleted**, and so
+has the prose that described how one ought to sit. The gap between what was intended and what came
+out kept widening with each attempt to specify it, so the specification was removed instead.
 
-Why the default flipped: that solve optimises against a **static** repulsion snapshot that never
-contains the partner crossover's inserts, so it is the dominant source of catenated junctions and
-ring-threaded bonds. Measured across a full helical turn on the reciprocal fixture, raw (repair
-disabled): joint solve **7/14** phases catenated, arc pose **2/14**, and the solve additionally
-threads 3 covalent bonds through nucleotide rings where the arc pose threads none.
+What the builder does now: stamp each insert's atoms on the quadratic Bezier between its two
+junction nucleotides' **CG backbone positions** — same endpoints, same bow as
+`crossover_connections.js` — and minimise only the phosphodiester linker. Nothing moves the residue
+afterwards. Verified on 6hbx100_2xT: all 120 insert origins sit on the CG chord to **0.000000 Å**
+(rigid-body fit of the ribose template; `test_extra_bases_are_placed_from_the_cg_representation`).
 
-**The catenation repair is still armed on the arc path — this is load-bearing.** The arc pose is
-*not* unconditionally unlinked (2/14 above; the residual comes from the exact linker minimiser
-routing the phosphodiester through the partner strand, not from the insert pose). With the repair
-armed the sweep measures 0 at every phase and insert count. See [[crossover-catenation]] for the
-full pose × linker table.
+Deleted: `extra_base_repair.py` (the catenation re-placement ladder), `_minimize_{1,2,3}_extra_base`
+and their rigid-body machinery, the `_XB_CACHE`, the `z_sign`/`target_c1n` glycosidic swing and its
+static repulsion snapshot, `solve_extra_base_pose`, `GET /design/extra-base-seed`,
+`designRenderer.setSeedExtraBases` and the CG insert pinning. −1735 lines.
 
-Pinned by 4 tests in `tests/test_atomistic.py`; the arc-pose oracle is the independent
-`fast_bridges` branch, which has always used the arc, with the solved pose as a live control.
+**One thing deliberately NOT routed through CG:** the oxDNA/trajectory override path still takes its
+chain direction from the real C3′/C5′ **atoms** (`chain_p0`/`chain_p1`). It orients a nucleotide
+from measured `a1` against its bonded neighbours — a fact about atoms, not about where a bead is
+drawn. Routing it through CG silently broke
+`test_heavy_rep_extra_base_uses_full_simulated_orientation`; that test is the guard.
+
+### ⚠ Consequence: a linked junction is now REFUSED, not repaired
+
+With nothing adjusting positions, **3 of 14 phases on the reciprocal fixture catenate** (T bp16,
+T bp18, TT bp16) and the build threads 2 covalent bonds through rings on TT/bp8. The repair that
+used to drive both to zero is gone. `gate_seed_topology` still detects them, so such a design now
+**raises instead of building a seed** — the defect cannot reach a trajectory silently, but the
+design cannot be packaged either until its phase changes.
+
+Tests were rewritten around the property that survives: a linked phase must be refused
+(`test_a_linked_phase_is_refused_rather_than_re_placed`, `test_a_catenating_phase_cannot_reach_a_seed`).
+The old "the repair guarantees Lk = 0" contract is deleted — it was a promise the code no longer
+makes. `_WOUND_BP`/`_CLEAN_BP` in `test_junction_winding` exist because a wound build and a clean
+one are now two different PHASES, not two settings.
+
+## Opt-in seed pre-expansion (`seed_lattice_nm`) — still live
+
+`POST /md/jobs` takes `seed_lattice_nm`: `null` (default, build as designed), `"auto"`, or a float
+in nm. It scales a **copy** of the design's helix axes laterally about the bundle centroid before
+anything reads geometry (`lattice.scale_helix_spacing`), so the topology gate, atomistic model, box
+sizer and every exported map describe one structure. Saved `.nadoc` and `HONEYCOMB_LATTICE_RADIUS`
+are untouched. Recorded in `manifest.json` — a trajectory from a pre-expanded seed is **not**
+comparable to one that swelled into its spacing.
+
+**Measured effect** (6hbx100; bonded-excluded insert contacts < 3 Å, O3′–P bridge p99):
+
+| design | spacing | insert contacts | bridge p99 |
+|---|---|---|---|
+| noT | 2.25 → 2.45 | 0 → 0 | 2.67 → 3.09 Å ✗ |
+| 1xT | 2.25 → 2.53 | 3428 → 2586 (−25%) | 1.93 → 3.18 Å ✗ |
+| 2xT | 2.25 → 2.55 | 14283 → **6058** (−58%) | 2.37 → **1.80 Å** ✓ |
+
+The benefit scales with insert count and the bridge cost **inverts**: two inserts carry enough
+contour to span 2.55 nm so the bridges actually relax; one insert is stretched by 2.53; with none
+there is nothing to relieve and the backbone only stretches. **That is why `"auto"` declines an
+insert-free design.** Not default-on: at 1xT it is a genuine trade, so the caller picks.
+
+(These contact numbers predate the CG-placement purge and were measured against the then-current
+arc pose. The *direction* of each effect is a lattice property and still holds; re-measure before
+quoting an absolute.)
+
+## The ATOMISTIC reps show the MD seed — still live
+
+`GET /design/atomistic?seed_lattice_nm=auto` returns the **t=0 pre-minimisation** coordinates for
+the whole model. Absent the param it is the old display build, unchanged. Seed mode differs by:
+exact L-BFGS-B linkers instead of `fast_bridges`' cheap interpolation (which moves the ~1.5%
+phosphodiester atoms by up to 2.4 Å at junctions); no flexible-display frame override; and optional
+lattice pre-expansion. Measured on 6hbx100_2xT: same 29 629 atoms, **mean 3.17 Å per-atom shift**
+display → seed. ~26 s then `build_atomistic_model_cached` serves it in 0.07 s.
+
+`atom_surface_display.setSeedLattice(nm|null)` swaps the URL and drops `_atomDataCache`;
+`expanded_spacing` drives it from the toggle. **`_applyAll` must NOT also call `applyUnfoldOffsets`
+on the atomistic renderer while seed mode is live** — those atoms were BUILT at the expanded
+lattice and offsetting them again doubles the expansion. `isSeedLatticeActive()` guards it.
+**Refused for a PDB-imported design** (409): measured coordinates that no lattice scale applies to.
+
+### ⚠ Pre-existing: returning to t=0 FLATTENS the insert chain (0.168 nm)
+
+`unfold_view._updateArcPositions` places the extra-base beads on the arc LINE's control point —
+`dist * MAX_BOW_FRAC * t`, i.e. **straight at t=0** — while `buildCrossoverConnections` built them
+at their own `BOW_FRAC_3D = 0.3`. Any return to t=0 collapses the bow. Measured **0.168 nm,
+identical via the Q expand toggle**, which predates this work; unfold has it too. Not fixed: the
+two modules use different bow-direction conventions and guessing is how this area goes wrong.
+
+### ⚠ Pre-existing: the CG bead and the atomistic frame are ~5 Å out of register
+
+CG backbone bead → atomistic P atom is **5.02 Å mean** at the design lattice (5.05 Å scaled, so the
+lattice is not the cause). The bead's *nearest* atom is not consistently a backbone atom: C3′ for
+632 residues (2.9 Å), O5′ for 272 (2.8 Å), but for ~350 residues it is a **base** atom — N7 at
+6.1 Å, N4 at 4.6 Å, C7 at 4.4 Å. **Deferred to a dedicated CG↔atomistic audit session.** This is
+what makes beads and slabs read as offset from the atoms generally, independent of extra bases.
 
 ## Open
 

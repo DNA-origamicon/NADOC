@@ -742,68 +742,81 @@ def _insert_sugar_origins(model, design):
     ]
     return _np.array(out, dtype=float)
 
+def test_extra_bases_are_placed_from_the_cg_representation():
+    """Insert atoms are stamped AT the CG view's own insert positions.
 
-def test_extra_bases_sit_on_the_bezier_arc_by_default():
-    """Default build leaves each insert where the bowing Bezier put it.
-
-    Oracle is the `fast_bridges` display path, which has ALWAYS placed inserts at
-    the rigid arc pose and is a separate branch from the one this pins — so it is
-    a real second opinion, not a restatement. Only the ~5 phosphodiester linker
-    atoms differ between the two (cheap interpolation vs the exact minimiser), and
-    C1' is not one of them, so the sugar origins must agree to float precision.
-
-    The solved pose is included as a live control: if the joint solve ever stopped
-    moving inserts, this test would pass vacuously without it.
+    Oracle is the CG chord: an insert's frame origin must sit on the quadratic
+    Bezier between its two junction nucleotides' CG BACKBONE positions — the same
+    curve crossover_connections.js draws. Nothing here asserts where an extra base
+    *ought* to go; it asserts that the atoms follow the representation.
     """
     import numpy as np
+
+    from backend.core.atomistic_helpers import _arc_bow_dir, _arc_ctrl_pt, _bezier_pt
+    from backend.core.geometry import nucleotide_positions
     from tests.test_junction_topology import _reciprocal_design
 
     design = _reciprocal_design("TT", bp=8)
-    arc    = _insert_sugar_origins(build_atomistic_model(design), design)
-    display = _insert_sugar_origins(
-        build_atomistic_model(design, fast_bridges=True), design)
-    solved = _insert_sugar_origins(
-        build_atomistic_model(design, solve_extra_base_pose=True), design)
+    model = build_atomistic_model(design)
 
-    assert arc.shape == display.shape == solved.shape and arc.shape[0] > 0
-    np.testing.assert_allclose(arc, display, atol=1e-9)
-    # Control: the solve really does move inserts, so agreeing with the arc above
-    # is a fact about which branch ran, not about the two being identical anyway.
-    assert np.linalg.norm(arc - solved, axis=1).max() > 0.05, (
-        "arc and solved poses are indistinguishable; the oracle is dead")
+    xo = next(x for x in design.crossovers if x.extra_bases)
+    nucs = {}
+    for h in design.helices:
+        for nuc in nucleotide_positions(h):
+            nucs[(h.id, nuc.bp_index, nuc.direction)] = nuc
+    a = nucs[(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)]
+    b = nucs[(xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)]
+
+    n = len(xo.extra_bases)
+    bow = _arc_bow_dir(a.position, b.position, a.axis_tangent, b.axis_tangent)
+    on_curve = []
+    for p0, p1 in ((np.array(a.position), np.array(b.position)),
+                   (np.array(b.position), np.array(a.position))):
+        ctrl = _arc_ctrl_pt(p0, p1, bow)
+        on_curve += [_bezier_pt(p0, ctrl, p1, (k + 1) / (n + 1)) for k in range(n)]
+
+    # No template atom sits AT the frame origin (C4' is exactly 0.5 nm out), so
+    # recover each insert's origin by rigid-body fit of the sugar template onto the
+    # built atoms — that point is what the Bezier placed.
+    # Ribose ring only: the phosphodiester atoms (P/OP1/OP2/O5'/O3') are re-placed
+    # by the linker minimiser afterwards, so including them would fit the bridge
+    # rather than the insert.
+    RING = {"C5'", "C4'", "O4'", "C3'", "C2'", "C1'"}
+    local = {nm: np.array([x, y, z]) for nm, _el, x, y, z in _SUGAR if nm in RING}
+    by_k = {}
+    for at in model.atoms:
+        if at.crossover_id == xo.id and at.name in local:
+            by_k.setdefault(at.extra_base_k, {})[at.name] = np.array([at.x, at.y, at.z])
+    assert by_k, "fixture built no extra-base atoms"
+
+    for names in by_k.values():
+        L = np.array([local[k] for k in names])
+        W = np.array([names[k] for k in names])
+        Lc, Wc = L - L.mean(0), W - W.mean(0)
+        U, _s, Vt = np.linalg.svd(Lc.T @ Wc)
+        d = np.sign(np.linalg.det(Vt.T @ U.T))
+        R = Vt.T @ np.diag([1.0, 1.0, d]) @ U.T
+        origin = W.mean(0) - R @ L.mean(0)
+        assert min(float(np.linalg.norm(origin - c)) for c in on_curve) < 1e-4, (
+            "insert origin is off the CG chord — something is re-placing it")
 
 
-def test_solve_extra_base_pose_is_opt_in_and_reaches_the_solver():
-    """`solve_extra_base_pose=True` must restore the old joint-solve behaviour.
+def test_a_linked_phase_is_refused_rather_than_re_placed():
+    """Nothing adjusts an insert after the CG mapping, so some phases DO link.
 
-    Pinned via the defect it is known to manufacture: the solve threads covalent
-    bonds through nucleotide rings on this fixture (3 of them), the arc pose does
-    not. That asymmetry is the whole reason the default flipped.
+    The protection is the gate, not a repair: a linked build must raise rather than
+    reach a seed. Pinned because the previous contract was the opposite — "the
+    repair guarantees Lk = 0" — and that promise no longer exists.
     """
-    from backend.core.ring_piercing import model_piercings
-    from tests.test_ring_piercing import _piercing_check_disabled
+    from backend.core.junction_topology import (
+        CatenatedJunctionError, catenation_report, gate_seed_topology)
     from tests.test_junction_topology import _reciprocal_design
 
-    design = _reciprocal_design("TT", bp=8)
-    with _piercing_check_disabled():
-        assert model_piercings(build_atomistic_model(design)) == []
-        assert model_piercings(
-            build_atomistic_model(design, solve_extra_base_pose=True)) != []
+    design = _reciprocal_design("T", bp=16)
+    assert catenation_report(design, model=build_atomistic_model(design))["n_catenated"] > 0
+    with pytest.raises(CatenatedJunctionError):
+        gate_seed_topology(design)
 
-
-def test_arc_pose_still_arms_the_catenation_repair():
-    """The arc pose is NOT unconditionally unlinked — the safety net must stay on.
-
-    One insert at bp=12 comes out Lk = +1 straight off the arc, so a build that
-    placed inserts on the arc and skipped the repair would ship a permanent
-    topological defect. The repair is armed for the seed/export path regardless
-    of which pose was used.
-    """
-    from backend.core.junction_topology import catenation_report
-    from tests.test_junction_topology import _reciprocal_design
-
-    design = _reciprocal_design("T", bp=12)
-    assert catenation_report(design, model=build_atomistic_model(design))["n_catenated"] == 0
 
 
 def test_display_path_skips_the_repair():

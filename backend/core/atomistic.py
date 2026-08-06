@@ -46,7 +46,6 @@ import hashlib as _hashlib
 import json as _json
 import math as _math
 import numpy as _np
-from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 
 from backend.core.atomistic_helpers import (
     _arc_bow_dir,
@@ -59,15 +58,8 @@ from backend.core.atomistic_helpers import (
 from backend.core.atomistic_minimisers import (
     _atom_pos,
     _interpolate_backbone_bridge,
-    _minimize_1_extra_base,
-    _minimize_2_extra_base,
-    _minimize_3_extra_base,
     _minimize_backbone_bridge,
     _set_atom_pos,
-)
-from backend.core.extra_base_repair import (
-    ExtraBaseRecord as _ExtraBaseRecord,
-    repair_catenated_pairs as _repair_catenated_pairs,
 )
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.geometry import (
@@ -1218,7 +1210,6 @@ def build_atomistic_model(
     apply_design_geometry: bool = True,
     frame_sink: "dict[tuple, tuple[_np.ndarray, _np.ndarray]] | None" = None,
     fast_bridges: bool = False,
-    solve_extra_base_pose: bool = False,
 ) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
@@ -1234,11 +1225,10 @@ def build_atomistic_model(
     - All intra-residue bonds (sugar + base ring)
     - Inter-residue backbone bonds: O3′(i) → P(i+1) for consecutive bp on the
       same strand segment (direction-aware; skips across crossovers/nicks).
-    - Extra crossover bases: full ribose + base placed on the quadratic Bezier
-      arc bowing out between the two junction nucleotides — the same arc the
-      renderer draws — with only the phosphodiester linker atoms minimised to
-      close the O3′→P chain.  ``solve_extra_base_pose=True`` additionally runs
-      the per-insert rigid-body joint solve; see that parameter.
+    - Extra crossover bases: full ribose + base stamped AT the CG representation's
+      own insert positions, with only the phosphodiester linker atoms minimised to
+      close the O3′→P chain.  Nothing here decides where an extra base belongs —
+      the CG view does, and this follows it.
     """
     # frame_sink requires the full per-nucleotide loop (the cached-reference fast
     # path never computes per-nucleotide frames), so requesting one forces it.
@@ -1322,11 +1312,6 @@ def build_atomistic_model(
     # interpolation that is ALREADY the minimiser's initial guess: 6× faster, only the
     # ~1.5% phosphate-linker atoms move (≤2.4 Å at junctions).  Default False keeps the
     # exact geometry for MD seeds / PDB export / NAMD / periodic-cell.
-    #
-    # NOT to be confused with `solve_extra_base_pose`: this one chooses how the LINKER
-    # closes, that one chooses whether an insert's whole nucleotide is dragged off its
-    # Bezier arc.  They are independent, and the MD path now wants exact linkers
-    # (fast_bridges=False) on top of arc-pose inserts (solve_extra_base_pose=False).
     _bridge_fn = _interpolate_backbone_bridge if fast_bridges else _minimize_backbone_bridge
 
     for strand in design.strands:
@@ -1726,7 +1711,6 @@ def build_atomistic_model(
         xb_pos_override    = xb_pos_override,
         bridge_fn          = _bridge_fn,
         fast_bridges       = fast_bridges,
-        solve_extra_base_pose = solve_extra_base_pose,
     )
 
     # ── Strand-extension tail atoms (5′/3′ terminal tails) ────────────────────
@@ -2712,7 +2696,6 @@ def _build_extra_base_atoms(
     xb_pos_override:    "dict[tuple[str, int], _np.ndarray] | None" = None,
     bridge_fn=_minimize_backbone_bridge,
     fast_bridges: bool = False,
-    solve_extra_base_pose: bool = False,
 ) -> int:
     """
     Place atomistic atoms for all extra crossover bases in the design.
@@ -2757,24 +2740,6 @@ def _build_extra_base_atoms(
             extra_seq_num[a.chain_id] = a.seq_num
 
     # Minimisation jobs collected here; run in parallel after all atoms are placed.
-    _mini_jobs: list = []
-    # Per-crossover context for the post-solve catenation repair.  The joint solve can
-    # walk an insert's rigid body through the PARTNER crossover's backbone, leaving the
-    # two topologically linked (Lk != 0) — an entanglement MD can never undo.  We snapshot
-    # the arc pose here so a linked pair can be re-solved under tighter bounds afterwards.
-    # See backend/core/extra_base_repair.py.
-    _xb_records: dict = {}
-
-    def _record_for_repair(xo_id, n_ins, src_sd, dst_sd, eb_sds, glyco_ns,
-                           tgt_c1n, repel, chain_sds):
-        rec = _ExtraBaseRecord(
-            crossover_id=xo_id, n=n_ins, src_s=src_sd, dst_s=dst_sd,
-            eb_s=list(eb_sds), glyco=list(glyco_ns), target_c1n=tgt_c1n,
-            repel_pos=repel, all_s=list(chain_sds),
-        )
-        rec.capture(atoms)
-        _xb_records[xo_id] = rec
-
     for xo in xovers_with_extra:
         ha, hb = xo.half_a, xo.half_b
 
@@ -2827,57 +2792,30 @@ def _build_extra_base_atoms(
         src_s = bp_to_sugar_serials.get(src_key)
         dst_s = bp_to_sugar_serials.get(dst_key)
 
-        # Interpolation line: C3′(src) → C5′(dst).  Fall back to nucleotide
-        # positions if either junction's atoms aren't in the model (excluded helix).
-        if src_s is not None and "C3'" in src_s:
-            line_p0 = _atom_pos(atoms, src_s["C3'"])
-        else:
-            line_p0 = _np.array(pos_src)
-        if dst_s is not None and "C5'" in dst_s:
-            line_p1 = _atom_pos(atoms, dst_s["C5'"])
-        else:
-            line_p1 = _np.array(pos_dst)
-        line_vec = line_p1 - line_p0
-        line_len = float(_np.linalg.norm(line_vec))
-        line_dir = line_vec / line_len if line_len > 1e-9 else bow_dir
-
-        # Bow the extra-base sugar origins outward along the rendered crossover
-        # arc (quadratic bezier bowing BOW_FRAC_3D of the chord) instead of the
-        # straight chord.  The straight chord threads the cramped inter-helix
-        # backbone gap, so the inserted single-stranded loop landed on top of
-        # the neighbouring helix backbones (steric clash); bowing it out lets the
-        # loop bulge into solvent, matching the arc the renderer already draws.
+        # Interpolation line: the two junction nucleotides' CG BACKBONE positions.
+        #
+        # These atoms are placed FROM the CG representation, not independently of it:
+        # the CG view is the single definition of where an extra base sits, and this
+        # reproduces it. Same endpoints, same quadratic Bezier, same bow as
+        # crossover_connections.js — so an insert's atoms land on the bead the user
+        # is looking at, by construction rather than by agreement.
+        line_p0 = _np.array(pos_src)
+        line_p1 = _np.array(pos_dst)
+        line_len = float(_np.linalg.norm(line_p1 - line_p0))
         arc_ctrl = _arc_ctrl_pt(line_p0, line_p1, bow_dir)
+
+        # Chain-direction endpoints for a SIMULATED insert stay the real C3'/C5'
+        # ATOMS.  That path orients a nucleotide from measured a1 against the
+        # direction of its bonded neighbours, which is a fact about the atoms, not
+        # about where the CG view draws the bead.
+        chain_p0 = (_atom_pos(atoms, src_s["C3'"])
+                    if src_s is not None and "C3'" in src_s else line_p0)
+        chain_p1 = (_atom_pos(atoms, dst_s["C5'"])
+                    if dst_s is not None and "C5'" in dst_s else line_p1)
 
         n = len(xo.extra_bases)
         eb_sugar_serials:  list[dict[str, int]] = []
         eb_glycosidic_ns:  list[str]            = []
-
-        # Collect C1′/C3′/C4′ positions from the OPPOSITE-direction nucleotides
-        # at each junction half — these are the atoms most likely to clash with
-        # extra bases at the Holliday junction.
-        repel_pos: list[_np.ndarray] = []
-        for _h_id, _bp_idx, _d_str in (
-            (ha.helix_id, ha.index, ha.strand.value),
-            (hb.helix_id, hb.index, hb.strand.value),
-        ):
-            _opp = "REVERSE" if _d_str == "FORWARD" else "FORWARD"
-            _opp_s = bp_to_sugar_serials.get((_h_id, _bp_idx, _opp))
-            if _opp_s is not None:
-                for _aname in ("C1'", "C3'", "C4'"):
-                    _s = _opp_s.get(_aname)
-                    if _s is not None:
-                        repel_pos.append(_atom_pos(atoms, _s))
-
-        # Target direction for the C1′→N glycosidic bond.
-        # avg_axis points along the helix bundle axis (≈ +Z for vertical helices).
-        # z_sign > 0: crossover bows "right" → align C1′→N with +avg_axis.
-        # z_sign < 0: crossover bows "left"  → align C1′→N with −avg_axis.
-        avg_axis   = _normalise(
-            _np.array(nucA.axis_tangent) + _np.array(nucB.axis_tangent)
-        )
-        z_sign     = float(_np.dot(_np.cross(bow_dir, line_dir), avg_axis))
-        target_c1n = avg_axis if z_sign > 0.0 else -avg_axis
 
         simulated_insert_sites = {
             k: _sim_override_parts(xb_pos_override[(xo.id, k)])[0]
@@ -2901,8 +2839,8 @@ def _build_extra_base_atoms(
             _xb_frame = None
             if _xb_sim is not None:
                 origin_pos, _xb_frame = _sim_override_parts(_xb_sim)
-                prev_site = simulated_insert_sites.get(i - 2, line_p0)
-                next_site = simulated_insert_sites.get(i, line_p1)
+                prev_site = simulated_insert_sites.get(i - 2, chain_p0)
+                next_site = simulated_insert_sites.get(i, chain_p1)
                 relaxed_dir = next_site - prev_site
                 if float(_np.linalg.norm(relaxed_dir)) > 1e-9:
                     arc_dir = _normalise(relaxed_dir)
@@ -2977,22 +2915,9 @@ def _build_extra_base_atoms(
                 base_name_to_serial[atom_name] = serial
                 serial += 1
 
-            # ── Glycosidic bond alignment ─────────────────────────────────────
-            # Rotate ribose + base as a rigid body about C2′ so that the
-            # C1′→N bond aligns with target_c1n (±avg_axis).
-            # Anchors excluded from rotation: P, OP1, OP2, O5′ (phosphate group) —
-            # EXCEPT for a position-only override insert (``_xb_sim`` set but no sim
-            # frame), where the bridge minimiser is skipped and would otherwise strand
-            # the phosphate (O5′-C5′ → ~0.6 nm, a fatal 4 fs RATTLE start): there we
-            # rotate it rigidly with its sugar.  Geometric build (``_xb_sim is None``)
-            # keeps the phosphate fixed — the minimiser re-places it — so that path is
-            # byte-unchanged.
-            if _xb_frame is None:
-                _glycosidic_n = _align_glycosidic(
-                    atoms, residue, sugar_name_to_serial, base_name_to_serial, target_c1n,
-                    rotate_phosphate=_xb_sim is not None)
-            else:
-                _glycosidic_n = "N9" if residue in {"DA", "DG"} else "N1"
+            # Glycosidic nitrogen — the bond partner's NAME only.  The residue is
+            # stamped in the frame above and is not rotated afterwards.
+            _glycosidic_n = "N9" if residue in {"DA", "DG"} else "N1"
 
             # ── Intra-residue bonds ───────────────────────────────────────────
             for a_name, b_name in _SUGAR_BONDS:
@@ -3024,15 +2949,6 @@ def _build_extra_base_atoms(
             p  = next_s_item.get("P")
             if o3 is not None and p is not None:
                 bonds.append((o3, p))
-
-        # ── Collect minimisation job (run in parallel below) ─────────────────
-        # Build a geometry-keyed cache entry so scipy is not re-run when the
-        # atomistic view is toggled off and on without design changes.
-        _rnd4 = lambda v: tuple(round(float(_x), 4) for _x in v)
-        _cache_key: "tuple | None" = (
-            xo.id, xo.extra_bases,
-            _rnd4(line_p0), _rnd4(line_p1), _rnd4(target_c1n),
-        ) if (src_s is not None and dst_s is not None) else None
 
         # Simulated insert centres are authoritative, but their coarse frames do not
         # contain explicit phosphodiester atoms.  Close only the linker atoms after
@@ -3102,104 +3018,11 @@ def _build_extra_base_atoms(
                 bridge_fn(atoms, prev_s_item, next_s_item)
         elif _xb_overridden:
             pass  # legacy position-only override remains strictly authoritative
-        elif not solve_extra_base_pose and src_s is not None and dst_s is not None:
-            # DEFAULT (2026-08-05): leave each insert exactly where the bowing Bezier
-            # arc put it and only close the phosphodiester linker — the same thing the
-            # >3-base fallback has always done, and the same arc the renderer draws, so
-            # the built structure and the picture finally agree.
-            #
-            # `bridge_fn` is still the EXACT L-BFGS-B linker minimiser on the MD path
-            # (only fast_bridges swaps in the cheap interpolation), so bond lengths and
-            # angles across O3′→P close properly here — what is skipped is the
-            # per-insert RIGID-BODY solve that used to drag the whole nucleotide off
-            # the arc.
-            #
-            # Two independent reasons this is the default rather than an option:
-            #   * That solve is the catenation source (`project_crossover_catenation`):
-            #     it optimises against a STATIC repulsion snapshot that never contains
-            #     the partner crossover's inserts, so it freely threads the linker
-            #     through the partner strand.  The arc pose measures Lk = 0 at every
-            #     helical phase for 1–2 inserts.
-            #   * It is the dominant build cost on a crossover-dense design (~566
-            #     solves ≈ 4.8 min on VoltronCore).
-            #
-            # Inserts land in a lattice that MD says is ~2 Å wider than the caDNAno
-            # pitch anyway (`project_extra_base_spacing`), which is the room the solve
-            # was trying to manufacture by hand.
-            #
-            # ⚠ The arc pose is NOT unconditionally unlinked.  Measured 2026-08-05 on
-            # the reciprocal fixture: one insert at bp=12 comes out Lk = +1 straight
-            # off the arc.  So the seed/export path still ARMS the repair — the pass
-            # below measures every reciprocal pair and only re-places the ones that
-            # actually link, falling back to the joint solve for those alone.  Arc pose
-            # is the default placement, not a promise of good topology.
-            if not fast_bridges:
-                _record_for_repair(xo.id, n, src_s, dst_s, eb_sugar_serials,
-                                   eb_glycosidic_ns, target_c1n, repel_pos, all_s)
-            for prev_s_item, next_s_item in zip(all_s, all_s[1:]):
-                bridge_fn(atoms, prev_s_item, next_s_item)
-        elif n == 1 and src_s is not None and dst_s is not None:
-            _record_for_repair(xo.id, n, src_s, dst_s, eb_sugar_serials,
-                               eb_glycosidic_ns, target_c1n, repel_pos, all_s)
-            _mini_jobs.append(_functools.partial(
-                _minimize_1_extra_base,
-                atoms, src_s, dst_s, eb_sugar_serials[0],
-                eb_glycosidic_ns[0], target_c1n, repel_pos,
-                cache_key=_cache_key,
-            ))
-        elif n == 2 and src_s is not None and dst_s is not None:
-            _record_for_repair(xo.id, n, src_s, dst_s, eb_sugar_serials,
-                               eb_glycosidic_ns, target_c1n, repel_pos, all_s)
-            _mini_jobs.append(_functools.partial(
-                _minimize_2_extra_base,
-                atoms, src_s, dst_s,
-                eb_sugar_serials[0], eb_sugar_serials[1],
-                eb_glycosidic_ns[0], eb_glycosidic_ns[1],
-                target_c1n, repel_pos,
-                cache_key=_cache_key,
-            ))
-        elif n == 3 and src_s is not None and dst_s is not None:
-            _record_for_repair(xo.id, n, src_s, dst_s, eb_sugar_serials,
-                               eb_glycosidic_ns, target_c1n, repel_pos, all_s)
-            _mini_jobs.append(_functools.partial(
-                _minimize_3_extra_base,
-                atoms, src_s, dst_s,
-                eb_sugar_serials[0], eb_sugar_serials[1], eb_sugar_serials[2],
-                eb_glycosidic_ns[0], eb_glycosidic_ns[1], eb_glycosidic_ns[2],
-                target_c1n, repel_pos,
-                cache_key=_cache_key,
-            ))
         else:
-            # Fallback for >3 extra bases: sequential per-pair bridge
+            # Close the phosphodiester linker; the inserts are left where the CG
+            # mapping above placed them.
             for prev_s_item, next_s_item in zip(all_s, all_s[1:]):
                 bridge_fn(atoms, prev_s_item, next_s_item)
-
-    # ── Run all minimisation jobs ─────────────────────────────────────────────
-    # Single crossover: no thread overhead.  Multiple: run in parallel.  Each job writes
-    # a DISJOINT set of atom serials, so no locking is needed on atom reads/writes —
-    # but note that disjoint serials do NOT mean disjoint SPACE: two jobs can happily
-    # place their atoms through one another, which is exactly the catenation the repair
-    # pass below measures and fixes.  scipy releases the GIL during BLAS calls, giving
-    # true parallelism on multi-core machines.
-    if len(_mini_jobs) == 1:
-        _mini_jobs[0]()
-    elif len(_mini_jobs) > 1:
-        with _ThreadPoolExecutor(max_workers=min(len(_mini_jobs), 4)) as pool:
-            futures = [pool.submit(job) for job in _mini_jobs]
-            for fut in futures:
-                fut.result()   # re-raise any exception from the worker
-
-    # ── Repair catenated reciprocal pairs ─────────────────────────────────────
-    # Armed on every seed/export build, arc pose or joint solve alike — the arc pose
-    # links too (Lk = +1 for one insert at bp=12), it is just far rarer.  Only the
-    # display path (fast_bridges) skips this; a viewer does not care about Lk and the
-    # measurement is not free.
-    if _xb_records:
-        _repair_catenated_pairs(
-            atoms, _xb_records, _reciprocal_crossover_id_pairs(design), bridge_fn,
-            {1: _minimize_1_extra_base, 2: _minimize_2_extra_base,
-             3: _minimize_3_extra_base},
-        )
 
     return serial
 

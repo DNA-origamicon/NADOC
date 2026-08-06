@@ -24,6 +24,8 @@ import contextlib
 from dataclasses import dataclass
 
 import numpy as np
+from unittest import mock
+
 import pytest
 
 from backend.core.atomistic import build_atomistic_model
@@ -57,16 +59,13 @@ def _piercing_check_disabled():
     old ``(penalty, clashes, n_try)`` ordering, and the early exit no longer waits for an
     unthreaded rung.
     """
-    import backend.core.atomistic_minimisers as _minimisers
 
     original = PierceScope.count
     PierceScope.count = lambda self, atoms: 0
-    _minimisers._XB_CACHE.clear()
     try:
         yield
     finally:
         PierceScope.count = original
-        _minimisers._XB_CACHE.clear()
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -290,8 +289,6 @@ def test_detector_fires_when_the_piercing_check_is_disabled():
         before = piercing_report(design, model=build_atomistic_model(design))
     assert before["n_pierced"] > 0
 
-    import backend.core.atomistic_minimisers as _minimisers
-    _minimisers._XB_CACHE.clear()
     after = piercing_report(design, model=build_atomistic_model(design))
     assert after["n_pierced"] == 0
 
@@ -323,15 +320,15 @@ def test_gate_reports_both_defects():
 def test_gate_refuses_a_pierced_seed():
     """The gate must refuse a threaded ring even when nothing is catenated.
 
-    Needs `solve_extra_base_pose=True`: the per-insert joint solve is the only
-    thing that manufactures a threaded ring (3 of them on this fixture), and it
-    stopped being the default on 2026-08-05 — the default Bezier arc pose gives
-    a clean seed here, so without the opt-in there is nothing for the gate to
-    refuse and this asserts on an empty premise.
+    Driven from a synthetic model rather than a build: the per-insert joint solve
+    was the only thing that ever manufactured a threaded ring, and it no longer
+    exists — extra bases are placed straight from the CG representation. The gate
+    still has to refuse one if it ever appears.
     """
     design = _reciprocal_design("TT", bp=8)
-    with _piercing_check_disabled():
-        model = build_atomistic_model(design, solve_extra_base_pose=True)
+    model = build_atomistic_model(design)
+    hits = [{"bond": "C1'-N1", "bond_serials": [0, 1], "ring_serials": [2, 3, 4]}]
+    with mock.patch("backend.core.ring_piercing.model_piercings", return_value=hits):
         with pytest.raises(RingPiercedError):
             gate_seed_topology(design, model=model)
         overridden = gate_seed_topology(design, model=model, allow=True)
@@ -348,21 +345,3 @@ def test_designs_without_inserts_skip_the_gate_entirely():
 # ── The ladder's scoped check agrees with the model-level one ─────────────────
 
 
-@pytest.mark.slow
-def test_scoped_and_model_detectors_agree_on_a_pierced_build():
-    """The ladder cannot afford the model-level scan, so it uses a neighbourhood scope.
-    If the two disagree, the ladder is optimising against a different defect than the
-    gate refuses."""
-    design = _reciprocal_design("TT", bp=8)
-    with _piercing_check_disabled():
-        # Same reason as test_gate_refuses_a_pierced_seed: only the joint solve
-        # builds a pierced model, and it is no longer the default.
-        model = build_atomistic_model(design, solve_extra_base_pose=True)
-    model_hits = model_piercings(model)
-    assert model_hits
-
-    focus = {s for h in model_hits for s in h["bond_serials"] + h["ring_serials"]}
-    scope = PierceScope(model.atoms, focus)
-    scoped = scope.hits(model.atoms)
-    assert {tuple(sorted(h["bond_serials"])) for h in scoped} == \
-           {tuple(sorted(h["bond_serials"])) for h in model_hits}
