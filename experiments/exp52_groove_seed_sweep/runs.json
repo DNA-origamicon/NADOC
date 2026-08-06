@@ -1,0 +1,26 @@
+{
+  "sep150": {
+    "job_id": "e8bc4c569393",
+    "target_deg": 150.0,
+    "package_subdir": "package/duplex_namd_solvated",
+    "name_stem": "duplex"
+  },
+  "sep184": {
+    "job_id": "42d26607b1c3",
+    "target_deg": 184.0,
+    "package_subdir": "package/duplex_namd_solvated",
+    "name_stem": "duplex"
+  },
+  "sep208": {
+    "job_id": "156805234fcc",
+    "target_deg": 208.0,
+    "package_subdir": "package/duplex_namd_solvated",
+    "name_stem": "duplex"
+  },
+  "sep232": {
+    "job_id": "4ec1e4cb93ba",
+    "target_deg": 232.0,
+    "package_subdir": "package/duplex_namd_solvated",
+    "name_stem": "duplex"
+  }
+}
