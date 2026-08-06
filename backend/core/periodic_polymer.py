@@ -62,10 +62,10 @@ from typing import TYPE_CHECKING, List, Tuple
 import numpy as np
 
 from backend.core.constants import (
-    BDNA_MINOR_GROOVE_ANGLE_RAD,
     BDNA_RISE_PER_BP,
     HELIX_RADIUS,
 )
+from backend.core.geometry import groove_offset_rad
 from backend.core.models import Direction, Mat4x4
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -146,8 +146,15 @@ def _section_frame_from_arrs(arrs: dict, bp: int, helix_dir: "Direction") -> "np
         e1 = _unit(np.cross(z, np.array([0.0, 1.0, 0.0])))
     e2 = np.cross(z, e1)
     c2 = np.array([float(chord @ e1), float(chord @ e2)])
-    delta_ang = (BDNA_MINOR_GROOVE_ANGLE_RAD if helix_dir == Direction.FORWARD
-                 else -BDNA_MINOR_GROOVE_ANGLE_RAD)
+    # ⚠ This function ANALYTICALLY INVERTS the build convention — HELIX_RADIUS and this
+    # groove offset — to recover the axis from two beads.  It is therefore only correct
+    # for beads the geometric layer placed.  It consumes `deformed_nucleotide_arrays`
+    # (raw geometry), NOT `_geometry_for_design`, which is what keeps it immune to the
+    # measured CG re-placement — that runs at the `_emit_arrs` serialiser boundary.
+    # Invariant (TD-27): measured positioning must never be pushed down into geometry.py,
+    # or this solve silently returns a wrong axis.  Sourced from the shared rule so a
+    # grep for `groove_offset_rad` finds this inverter too.
+    delta_ang = groove_offset_rad(helix_dir)
     ca, sa = np.cos(delta_ang), np.sin(delta_ang)
     m = np.array([[ca - 1.0, -sa], [sa, ca - 1.0]]) * HELIX_RADIUS
     try:

@@ -31,6 +31,7 @@ from backend.core.models import (
     Strand,  # noqa: F401  (string annotation in _emit_bridge_nucs)
 )
 from backend.core.geometry import (
+    groove_offset_rad,
     nucleotide_positions_arrays_extended,
     nucleotide_positions_arrays_extended_right,
 )
@@ -345,7 +346,8 @@ def _geometry_for_helices(
             if hid not in max_domain_bp or hi > max_domain_bp[hid]:
                 max_domain_bp[hid] = hi
 
-    def _emit_arrs(arrs: dict, helix_id: str, axis_line: "tuple | None" = None) -> None:
+    def _emit_arrs(arrs: dict, helix_id: str, axis_line: "tuple | None" = None,
+                   groove_line: "float | None" = None) -> None:
         """Append geometry dicts from a nucleotide arrays block."""
         M = len(arrs['bp_indices'])
         if M == 0:
@@ -360,7 +362,7 @@ def _geometry_for_helices(
             from backend.core.constants import HELIX_RADIUS
             arrs = apply_measured_positioning(
                 arrs, axis_origin=axis_line[0], axis_hat=axis_line[1],
-                legacy_radius=HELIX_RADIUS,
+                legacy_radius=HELIX_RADIUS, groove_rad=groove_line,
             )
         bp_list   = arrs['bp_indices'].tolist()
         dir_arr   = arrs['directions']
@@ -430,7 +432,8 @@ def _geometry_for_helices(
                        # bridge nucs come from _emit_bridge_nucs below instead)
         arrs = deformed_nucleotide_arrays(helix, design, compact_skips=compact_skips)
         arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
-        _emit_arrs(arrs, arrs['helix_id'], _measured_axes.get(helix.id))
+        _emit_arrs(arrs, arrs['helix_id'], _measured_axes.get(helix.id),
+                   groove_offset_rad(helix.direction))
 
         # Render nucleotides outside the physical helix span (ss-scaffold loops).
         # These must go through the same deformation / cluster transform pipeline
@@ -443,7 +446,8 @@ def _geometry_for_helices(
             norm_helix = effective_helix_for_geometry(helix, design)
             extra_arrs = nucleotide_positions_arrays_extended(norm_helix, lo_bp)
             extra_arrs = deform_extended_arrays(extra_arrs, helix, design, edge_bp=helix.bp_start)
-            _emit_arrs(extra_arrs, helix.id)
+            _emit_arrs(extra_arrs, helix.id, _measured_axes.get(helix.id),
+                       groove_offset_rad(helix.direction))
 
         hi_bp = max_domain_bp.get(helix.id, helix.bp_start + helix.length_bp - 1)
         helix_hi = helix.bp_start + helix.length_bp   # first bp past helix right edge
@@ -452,7 +456,8 @@ def _geometry_for_helices(
                 norm_helix = effective_helix_for_geometry(helix, design)
             extra_arrs = nucleotide_positions_arrays_extended_right(norm_helix, hi_bp)
             extra_arrs = deform_extended_arrays(extra_arrs, helix, design, edge_bp=helix_hi - 1)
-            _emit_arrs(extra_arrs, helix.id)
+            _emit_arrs(extra_arrs, helix.id, _measured_axes.get(helix.id),
+                       groove_offset_rad(helix.direction))
 
     # Emit bridge nucs for ds linkers AFTER the regular helix loop so they
     # can read the live OH/complement positions (cluster transforms applied)
@@ -603,9 +608,31 @@ def _geometry_for_design(
     design: Design,
     include_linker_helices: bool = False,
     compact_skips: bool = False,
+    *,
+    measured_positioning: bool = False,
 ) -> list[dict]:
+    """The design's per-nucleotide geometry.
+
+    This used to DROP ``measured_positioning`` on the floor, so the ~50 consumers that
+    go through here could only ever see the legacy placement while
+    ``GET /design/geometry`` served the measured one.  It now forwards (TD-27 Stage 3).
+
+    ⚠ The default is still LEGACY.  Flipping it is the one remaining step of Stage 3 and
+    it is BLOCKED on re-calibrating the relax / cluster pose-fitters — measured with the
+    flip in place: 24 fast-suite failures, 14 of them in linker_relax / direct_relax /
+    duplex_cluster / child-cluster composition, which fit poses against bead positions
+    and need their targets re-derived.  Three more are oxDNA tests whose PREMISE the
+    measured placement invalidates (they assert raw NADOC geometry is not oxDNA-bonded;
+    with measured base beads, base-pair retention goes 0 -> 100 %).  Full taxonomy in
+    the TD-27 ledger entry.
+
+    When it is flipped, the oxDNA/mrDNA/NAMD seed paths reading this get the display
+    placement converted back to oxDNA's centre-of-mass convention at the seed boundary —
+    ``oxdna_interface._oxdna_cm_radius_map``, a no-op on legacy geometry.
+    """
     return _geometry_for_helices(
-        design, include_linker_helices=include_linker_helices, compact_skips=compact_skips)
+        design, include_linker_helices=include_linker_helices, compact_skips=compact_skips,
+        measured_positioning=measured_positioning)
 
 
 def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
@@ -715,7 +742,9 @@ def _positions_by_helix(nucleotides: list[dict]) -> dict:
     return out
 
 
-def _positions_for_design(design: 'Design') -> tuple[dict, list[dict]]:
+def _positions_for_design(
+    design: 'Design', *, measured_positioning: bool = False,
+) -> tuple[dict, list[dict]]:
     """Compute positions for *design* in compact per-helix-per-direction
     parallel arrays, **without** materialising per-nuc dicts for the bulk
     geometry. Used by the ``positions_only`` fast path.
@@ -760,10 +789,35 @@ def _positions_for_design(design: 'Design') -> tuple[dict, list[dict]]:
 
     _DIR_NAMES = ("FORWARD", "REVERSE")
 
-    def _emit_compact(arrs: dict, helix_id: str) -> None:
+    # Same MD-measured re-placement the full-geometry path applies, and it has to be
+    # here too: crud ships this output as `straight_positions_by_helix` in the SAME
+    # response as the (measured) nucleotides, and the frontend's deform-revert,
+    # unfold and deform-lerp paths read the straight map.  While this path stayed
+    # legacy, those three drew legacy beads next to measured ones — which is why the
+    # `helix_renderer` sites that look like they bypass measured positioning are
+    # actually correct today (TD-27 Stage 3).
+    _measured_axes: dict = {}
+    if measured_positioning:
+        import numpy as _np
+        for _a in deformed_helix_axes(design):
+            _s = _np.asarray(_a["start"], dtype=float)
+            _v = _np.asarray(_a["end"], dtype=float) - _s
+            _n = float(_np.linalg.norm(_v))
+            if _n > 1e-12:
+                _measured_axes[_a["helix_id"]] = (_s, _v / _n)
+
+    def _emit_compact(arrs: dict, helix_id: str, axis_line: "tuple | None" = None,
+                      groove_line: "float | None" = None) -> None:
         M = len(arrs['bp_indices'])
         if M == 0:
             return
+        if measured_positioning and axis_line is not None:
+            from backend.core.measured_positioning import apply_measured_positioning
+            from backend.core.constants import HELIX_RADIUS
+            arrs = apply_measured_positioning(
+                arrs, axis_origin=axis_line[0], axis_hat=axis_line[1],
+                legacy_radius=HELIX_RADIUS, groove_rad=groove_line,
+            )
         bp_list   = arrs['bp_indices'].tolist()
         dir_arr   = arrs['directions']
         pos_list  = arrs['positions'].tolist()
@@ -794,7 +848,8 @@ def _positions_for_design(design: 'Design') -> tuple[dict, list[dict]]:
 
         arrs = deformed_nucleotide_arrays(helix, design)
         arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
-        _emit_compact(arrs, arrs['helix_id'])
+        _emit_compact(arrs, arrs['helix_id'], _measured_axes.get(helix.id),
+                      groove_offset_rad(helix.direction))
 
         norm_helix = None
         lo_bp = min_domain_bp.get(helix.id, helix.bp_start)
@@ -802,7 +857,8 @@ def _positions_for_design(design: 'Design') -> tuple[dict, list[dict]]:
             norm_helix = effective_helix_for_geometry(helix, design)
             extra = nucleotide_positions_arrays_extended(norm_helix, lo_bp)
             extra = deform_extended_arrays(extra, helix, design, edge_bp=helix.bp_start)
-            _emit_compact(extra, helix.id)
+            _emit_compact(extra, helix.id, _measured_axes.get(helix.id),
+                          groove_offset_rad(helix.direction))
 
         hi_bp = max_domain_bp.get(helix.id, helix.bp_start + helix.length_bp - 1)
         helix_hi = helix.bp_start + helix.length_bp
@@ -811,7 +867,8 @@ def _positions_for_design(design: 'Design') -> tuple[dict, list[dict]]:
                 norm_helix = effective_helix_for_geometry(helix, design)
             extra = nucleotide_positions_arrays_extended_right(norm_helix, hi_bp)
             extra = deform_extended_arrays(extra, helix, design, edge_bp=helix_hi - 1)
-            _emit_compact(extra, helix.id)
+            _emit_compact(extra, helix.id, _measured_axes.get(helix.id),
+                          groove_offset_rad(helix.direction))
 
     # Helix axes — same pipeline as the full-geometry path.
     axes = deformed_helix_axes(design)

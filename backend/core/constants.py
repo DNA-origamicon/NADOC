@@ -14,6 +14,12 @@ cross-referenced with standard B-DNA crystallographic parameters.
 BDNA_RISE_PER_BP: float = 0.334  # nm/bp
 
 # Twist per base pair, in degrees. Gives ~10.5 bp/turn, consistent with B-DNA.
+#
+# This is the PHYSICAL B-DNA value and is NOT what a lattice helix is built with — see
+# HONEYCOMB_TWIST_PER_BP_DEG below.  34.3 is a rounding of 360/10.5 = 34.2857, and on a
+# lattice that 0.0143°/bp residue accumulates: the honeycomb 21-bp crossover repeat comes
+# out at 720.3° instead of 720°, so crossover strain RAMPS along the helix instead of
+# repeating (measured: +0.657 oxDNA units per 1000 bp; TD-29).
 BDNA_TWIST_PER_BP_DEG: float = 34.3  # degrees/bp
 
 # Twist per base pair in radians (derived, for convenience in geometry code).
@@ -90,6 +96,24 @@ SQUARE_HELIX_SPACING: float = HONEYCOMB_HELIX_SPACING  # = 2.25 nm
 # view toggle cannot import Python. Keep the two in sync; a test pins that they
 # agree.
 RELAXED_HELIX_SPACING_NM: tuple[float, ...] = (2.45, 2.53, 2.55)
+
+# ── Honeycomb lattice helix geometry ──────────────────────────────────────────
+
+# Twist per base pair for the honeycomb lattice: 2 full turns per 21 bp, exactly.
+#
+# Written as a FORMULA, not a rounded decimal, for the same reason the square value below
+# is: the lattice's crossover period must be a whole number of turns or the geometry does
+# not repeat.  Honeycomb places crossovers at offsets {0,6,7,13,14,20} on a 21-bp cycle,
+# which is 2 turns at 10.5 bp/turn, so the twist must be 720/21 = 34.2857°/bp.
+#
+# Using the rounded physical constant (34.3) instead leaves +0.0143°/bp, i.e. +0.300° per
+# repeat, and that accumulates without bound — crossover strain ramped +0.657 oxDNA units
+# per 1000 bp, so two designs on the SAME lattice disagreed purely because one was longer
+# (6hb 1218 bp: one crossover class ran 1.069 → 1.841 units; 6hb 115 bp: 1.069 → 1.124).
+# With this value the drift is exactly zero and the two designs become numerically
+# identical.  TD-29; the physical B-DNA constant above is deliberately left at 34.3.
+HONEYCOMB_TWIST_PER_BP_DEG: float = 2 * 360.0 / 21  # = 34.285714… degrees/bp
+HONEYCOMB_TWIST_PER_BP_RAD: float = math.radians(HONEYCOMB_TWIST_PER_BP_DEG)
 
 # ── Square lattice helix geometry ─────────────────────────────────────────────
 

@@ -6,7 +6,7 @@ crystallographic parameters:
   rise          = 0.334 nm/bp
   twist         = 34.3 deg/bp  →  0.598430… rad/bp
   radius        = 1.0 nm
-  minor groove  = 120°  (FORWARD and REVERSE are NOT antipodal)
+  minor groove  = 150°  (caDNAno convention; FORWARD and REVERSE are NOT antipodal)
 
 The helix axis runs along +Z in all test cases for clarity.
 """
@@ -26,6 +26,12 @@ from backend.core.constants import (
     BDNA_TWIST_PER_BP_DEG,
     BDNA_TWIST_PER_BP_RAD,
     HELIX_RADIUS,
+    HONEYCOMB_COL_PITCH,
+    HONEYCOMB_HELIX_SPACING,
+    HONEYCOMB_LATTICE_RADIUS,
+    HONEYCOMB_ROW_PITCH,
+    SQUARE_HELIX_SPACING,
+    SQUARE_TWIST_PER_BP_DEG,
 )
 from backend.core.geometry import nucleotide_positions, helix_axis_point
 from backend.core.models import ClusterRigidTransform, Design, Direction, Helix, Vec3
@@ -122,7 +128,7 @@ def test_helix_radius_forward():
 def test_helix_radius_reverse():
     """
     Every REVERSE backbone bead must also be exactly HELIX_RADIUS from the axis.
-    With the major/minor groove geometry, REVERSE sits at 120° from FORWARD,
+    With the major/minor groove geometry, REVERSE sits at 150° from FORWARD,
     but at the same radial distance.
     """
     helix = make_z_helix(21)
@@ -142,7 +148,7 @@ def test_minor_groove_angle():
     """
     The angular separation between FORWARD and REVERSE backbone beads at the
     same bp index (measured at the helix axis) must equal
-    BDNA_MINOR_GROOVE_ANGLE_DEG (120°).
+    BDNA_MINOR_GROOVE_ANGLE_DEG (150°).
     """
     helix = make_z_helix(21)
     positions = nucleotide_positions(helix)
@@ -164,7 +170,7 @@ def test_minor_groove_angle():
 def test_forward_reverse_backbone_distance():
     """
     FORWARD–REVERSE backbone distance at each bp must equal
-    2 × HELIX_RADIUS × sin(MINOR_GROOVE_ANGLE / 2) ≈ 1.732 nm.
+    2 × HELIX_RADIUS × sin(MINOR_GROOVE_ANGLE / 2) ≈ 1.932 nm.
     (They are NOT antipodal — that would be 2.0 nm.)
     """
     expected = 2.0 * HELIX_RADIUS * math.sin(BDNA_MINOR_GROOVE_ANGLE_RAD / 2.0)
@@ -375,7 +381,7 @@ def test_base_pair_bead_distance():
     """
     FORWARD–REVERSE base bead distance at each bp =
     backbone_pair_distance − 2 × BASE_DISPLACEMENT.
-    With 120° groove angle: backbone pair distance = 2 × sin(60°) ≈ 1.732 nm.
+    With the 150° groove angle: backbone pair distance = 2 × sin(75°) ≈ 1.932 nm.
     """
     backbone_pair_dist = 2.0 * HELIX_RADIUS * math.sin(BDNA_MINOR_GROOVE_ANGLE_RAD / 2.0)
     expected = backbone_pair_dist - 2.0 * BASE_DISPLACEMENT
@@ -684,3 +690,317 @@ def test_adjacent_nonoverlapping_ops_still_compose_sequentially():
     # Second half bends → tangent tilts away from +Z by the far plane.
     _, _, tangent_end = _frame(design, 200)
     assert abs(tangent_end[2] - 1.0) > 1e-3
+
+
+# ── the one groove-sign rule ──────────────────────────────────────────────────
+
+
+def test_groove_offset_rad_is_the_one_sign_rule():
+    """+150 deg on FORWARD-cell helices, -150 on REVERSE, and -150 on unknown.
+
+    The whole geometric layer is built on this sign, and until 2026-08-06 it was
+    re-derived at eleven call sites across geometry.py, mrdna_bridge.py,
+    oxdna_interface.py and oxdna_surface_strands.py.  They did not all agree, which is
+    the point of having one implementation (TD-27).
+    """
+    from backend.core.geometry import groove_offset_rad
+
+    assert groove_offset_rad(Direction.FORWARD) == BDNA_MINOR_GROOVE_ANGLE_RAD
+    assert groove_offset_rad(Direction.REVERSE) == -BDNA_MINOR_GROOVE_ANGLE_RAD
+
+
+def test_the_unknown_direction_case_follows_the_reverse_branch():
+    """Pinned separately because it is where the re-derivations disagreed.
+
+    A helix whose lattice cell type was never resolved has ``direction is None``.  The
+    geometric layer and ``atomistic._atom_frame`` both fold that into the REVERSE branch;
+    ``oxdna_interface._compute_nuc_geometry`` gave it the OPPOSITE sign until TD-27
+    Stage 2.  A caller that means "forward" must say so explicitly.
+    """
+    from backend.core.geometry import groove_offset_rad
+
+    assert groove_offset_rad(None) == groove_offset_rad(Direction.REVERSE)
+    assert groove_offset_rad(None) == -BDNA_MINOR_GROOVE_ANGLE_RAD
+
+
+def test_the_scalar_and_array_bead_paths_agree():
+    """They are deliberately NOT one implementation, so pin that they still match.
+
+    ``nucleotide_positions`` uses ``math.cos``/``math.sin`` on Python floats;
+    ``nucleotide_positions_arrays`` uses the numpy pair, and can differ at the last ULP.
+    They were left separate for exactly that reason — ``nucleotide_positions_arrays``
+    falls back to the scalar path for helices carrying loops/skips, so merging them would
+    silently move every skip-bearing design.  Only the groove offset is shared.
+    """
+    from backend.core.geometry import nucleotide_positions, nucleotide_positions_arrays
+    from backend.core.models import Helix, Vec3
+
+    for direction in (Direction.FORWARD, Direction.REVERSE):
+        helix = Helix(
+            id="h_pin",
+            axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+            axis_end=Vec3(x=0.0, y=0.0, z=32 * BDNA_RISE_PER_BP),
+            phase_offset=0.37,
+            twist_per_bp_rad=math.radians(34.3),
+            length_bp=32,
+            bp_start=0,
+            direction=direction,
+        )
+        scalar = nucleotide_positions(helix)
+        arrays = nucleotide_positions_arrays(helix)
+        assert len(scalar) == len(arrays["positions"])
+        for i, nuc in enumerate(scalar):
+            for got, want, name in (
+                (arrays["positions"][i], nuc.position, "position"),
+                (arrays["base_positions"][i], nuc.base_position, "base_position"),
+                (arrays["base_normals"][i], nuc.base_normal, "base_normal"),
+            ):
+                assert np.allclose(got, want, atol=1e-12), f"{direction} {name} @ {i}"
+
+
+# ── Python is authoritative; the JS mirrors are pinned to it ──────────────────
+#
+# Same pattern as test_lattice.py's RELAXED_SPACING_NM twin: JS cannot import Python, so
+# it keeps a literal and a test regexes the source.  Nothing pinned these until TD-27.
+
+
+def _js_const(path: str, name: str) -> float:
+    """Read one exported numeric constant out of a JS source file.
+
+    Several of these are written as arithmetic (`1.125 * Math.sqrt(3)`, `3 * 360 / 32`)
+    rather than a bare literal, so the value is evaluated rather than parsed.  Only
+    `Math.*` and numeric operators are in scope.
+    """
+    import math as _math
+    import pathlib
+    import re
+
+    src = pathlib.Path(path).read_text()
+    m = re.search(rf"^\s*(?:export\s+)?const\s+{name}\s*=\s*(.+?)\s*(?://.*)?$", src, re.M)
+    assert m, f"{name} not found in {path} — did the module move or the constant rename?"
+    expr = m.group(1).strip().rstrip(";").replace("Math.", "")
+    assert re.fullmatch(r"[-\d.eE+*/() sqrtPIabspow,]+", expr), f"{name}: unparsed {expr!r}"
+    env = {"sqrt": _math.sqrt, "PI": _math.pi, "abs": abs, "pow": pow}
+    return float(eval(expr, {"__builtins__": {}}, env))  # noqa: S307 - numeric expr only
+
+
+def test_frontend_bdna_constants_match_the_backend():
+    """`frontend/src/constants.js` is a hand-maintained mirror of `constants.py`.
+
+    Its own header says it is "never used for rendering the actual design", which is no
+    longer true — several renderers import from it (and several more re-declare the same
+    numbers locally, which TD-27 Stage 1b collapses onto this file).  Either way a drift
+    here makes the live preview and the server disagree about the same helix.
+    """
+    js = "frontend/src/constants.js"
+    assert _js_const(js, "BDNA_RISE_PER_BP") == BDNA_RISE_PER_BP
+    assert _js_const(js, "BDNA_TWIST_PER_BP") == BDNA_TWIST_PER_BP_DEG
+    assert _js_const(js, "HELIX_RADIUS") == HELIX_RADIUS
+    assert _js_const(js, "HONEYCOMB_LATTICE_RADIUS") == HONEYCOMB_LATTICE_RADIUS
+    assert _js_const(js, "HONEYCOMB_HELIX_SPACING") == HONEYCOMB_HELIX_SPACING
+    assert _js_const(js, "HONEYCOMB_COL_PITCH") == pytest.approx(HONEYCOMB_COL_PITCH, abs=1e-12)
+    assert _js_const(js, "HONEYCOMB_ROW_PITCH") == pytest.approx(HONEYCOMB_ROW_PITCH, abs=1e-12)
+    assert _js_const(js, "SQUARE_HELIX_SPACING") == SQUARE_HELIX_SPACING
+    assert _js_const(js, "SQUARE_TWIST_PER_BP_DEG") == pytest.approx(
+        SQUARE_TWIST_PER_BP_DEG, abs=1e-12)
+
+
+def test_measured_slab_extent_matches_the_frontend_twin():
+    """The slab length is DERIVED from the measured atomistic template, not typed.
+
+    `new_positioning.js` carries a literal copy because JS cannot import Python.  It was
+    already stale when this pin was written — 0.6568 against a derived 0.6569 — so the
+    slab the app drew was a tenth of a picometre short of the one the backend computes.
+    Harmless at that size, and exactly the drift this pin exists to catch before it isn't.
+    """
+    from backend.core.measured_positioning import MEASURED
+
+    js = _js_const("frontend/src/ui/new_positioning.js", "MEASURED_SLAB_EXTENT")
+    assert js == pytest.approx(MEASURED.slab_extent_nm, abs=1e-12)
+
+
+def test_the_oxdna_fallback_geometry_agrees_with_the_geometric_layer():
+    """`_compute_nuc_geometry` is the fallback the oxDNA writer uses for nucleotides the
+    geometry list does not carry — overhang bp past `helix.length_bp`, and loop copies.
+
+    It used to re-implement the helix math inline, and had drifted from it twice
+    (TD-27 Stage 2, both fixed by delegating to `geometry.py` instead):
+
+      1. The groove sign was INVERTED — `-G` on FORWARD-cell helices where `geometry.py`
+         uses `+G`.  FORWARD beads do not depend on the groove so they were right; every
+         REVERSE bead sat exactly **1.000 nm** off (two points at r = 1.0 whose placements
+         differ by 2x150 deg give a chord of 2*sin(30 deg)).
+      2. It indexed by a raw `bp_index - bp_start`, ignoring loop/skip deltas, so on a
+         skip-bearing helix the FORWARD bead was half a rise out too.
+
+    The oracle is the STRAIGHT geometric layer — `nucleotide_positions_arrays` — NOT
+    `_geometry_for_design`.  That distinction is load-bearing and was got wrong when this
+    test was first written: the served geometry carries deformation and cluster
+    transforms, which this function deliberately does not apply (its `_extended` helpers
+    say so explicitly), so on a clustered design like 6hb_test the served positions differ
+    by up to 2.0 nm for entirely legitimate reasons.  Comparing against them would assert
+    a bug that isn't there and hide the two that were.
+    """
+    from pathlib import Path
+
+    from backend.core.geometry import nucleotide_positions_arrays
+    from backend.core.models import Design
+    from backend.physics.oxdna_interface import (
+        _compute_nuc_geometry,
+        _compute_nuc_geometry_copy,
+    )
+
+    checked = copies_checked = 0
+    for stem in ("6hb_test", "Con4", "U6hb"):        # U6hb carries 72 loop/skip sites
+        design = Design.model_validate_json(Path(f"Examples/{stem}.nadoc").read_text())
+        for helix in design.helices:
+            arrs = nucleotide_positions_arrays(helix)
+            # Group by (bp, direction): a LOOP puts several nucleotides on one bp_index,
+            # and the bare 3-tuple key can only mean the first of them.
+            rows: dict[tuple[int, str], list[int]] = {}
+            for i, bp in enumerate(arrs["bp_indices"]):
+                d = "FORWARD" if arrs["directions"][i] == 0 else "REVERSE"
+                rows.setdefault((int(bp), d), []).append(i)
+
+            for (bp, d), idxs in rows.items():
+                got = _compute_nuc_geometry(design, helix.id, bp, d)
+                if got is None:
+                    continue
+                checked += 1
+                assert np.allclose(
+                    got["backbone_position"], arrs["positions"][idxs[0]], atol=1e-12), (
+                    f"{stem} {helix.id}:{bp}:{d} backbone")
+                assert np.allclose(
+                    got["base_normal"], arrs["base_normals"][idxs[0]], atol=1e-12), (
+                    f"{stem} {helix.id}:{bp}:{d} base_normal")
+
+                # Every loop copy must come back at its own axial offset, NOT copy 0's.
+                for k, i in enumerate(idxs):
+                    ck = _compute_nuc_geometry_copy(design, helix.id, bp, d, k, len(idxs))
+                    copies_checked += 1
+                    assert np.allclose(
+                        ck["backbone_position"], arrs["positions"][i], atol=1e-12), (
+                        f"{stem} {helix.id}:{bp}:{d} copy {k}")
+    assert checked > 1000, "fixtures must actually exercise the fallback"
+    assert copies_checked > checked, "U6hb must contribute at least one loop copy"
+
+
+# ── lattice twist must close over the crossover period ────────────────────────
+
+
+def test_lattice_twists_are_commensurate_with_their_crossover_periods():
+    """A lattice's twist has to be a whole number of turns over its crossover period,
+    or the geometry does not REPEAT along the helix — it drifts.
+
+    Honeycomb places crossovers on a 21-bp cycle (offsets 0,6,7,13,14,20) = 2 turns at
+    10.5 bp/turn; square on a 32-bp cycle = 3 turns.  Honeycomb used the ROUNDED physical
+    constant (34.3, i.e. 360/10.4956) until 2026-08-06, leaving +0.0143 deg/bp.  That is
+    tiny per bp and unbounded in aggregate: crossover strain ramped +0.657 oxDNA units per
+    1000 bp, so two designs on the SAME lattice disagreed purely because one was longer
+    (one crossover class ran 1.069 -> 1.841 units over 1218 bp).  TD-29.
+
+    The physical B-DNA constant is deliberately NOT the lattice value and stays 34.3.
+    """
+    from backend.core.constants import (
+        HONEYCOMB_TWIST_PER_BP_DEG,
+        HONEYCOMB_TWIST_PER_BP_RAD,
+        SQUARE_TWIST_PER_BP_DEG,
+    )
+
+    assert 21 * HONEYCOMB_TWIST_PER_BP_DEG == pytest.approx(720.0, abs=1e-9)
+    assert 32 * SQUARE_TWIST_PER_BP_DEG == pytest.approx(1080.0, abs=1e-9)
+    assert 21 * HONEYCOMB_TWIST_PER_BP_RAD == pytest.approx(4 * math.pi, abs=1e-12)
+    # And the lattice value is NOT the rounded physical one — that is the whole point.
+    assert HONEYCOMB_TWIST_PER_BP_DEG != BDNA_TWIST_PER_BP_DEG
+    assert HONEYCOMB_TWIST_PER_BP_DEG == pytest.approx(34.285714, abs=1e-6)
+
+
+def test_honeycomb_crossover_geometry_does_not_drift_along_a_helix():
+    """The invariance the commensurate twist buys: a nucleotide's azimuth about its own
+    helix axis must be IDENTICAL every 21 bp, not merely close.
+
+    With the rounded twist this drifted 0.3 deg per repeat and accumulated without bound,
+    which is what made crossover strain depend on how far along the helix you were.
+    """
+    from backend.core.geometry import nucleotide_positions_arrays
+    from backend.core.models import Helix, Vec3
+    from backend.core.constants import HONEYCOMB_TWIST_PER_BP_RAD
+
+    helix = Helix(
+        id="h_drift",
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=210 * BDNA_RISE_PER_BP),
+        phase_offset=0.37,
+        twist_per_bp_rad=HONEYCOMB_TWIST_PER_BP_RAD,
+        length_bp=210,
+        bp_start=0,
+        direction=Direction.FORWARD,
+    )
+    arrs = nucleotide_positions_arrays(helix)
+    pos = np.asarray(arrs["positions"])
+    az = np.degrees(np.arctan2(pos[0::2, 1], pos[0::2, 0]))      # FORWARD strand
+    for k in range(0, 210 - 21, 21):
+        d = (az[k + 21] - az[k] + 540.0) % 360.0 - 180.0
+        assert abs(d) < 1e-9, f"azimuth drifted {d:+.6f} deg over the 21-bp repeat at bp {k}"
+
+
+def test_the_atomistic_representation_is_periodic_over_the_21bp_repeat_too():
+    """The commensurate honeycomb twist must reach the ALL-ATOM build, not just the beads.
+
+    It does, and by construction rather than by coincidence: both representations take
+    their phase from `deformation.effective_helix_for_geometry`, which re-derives it from
+    `grid_pos` via `_normalize_helix_for_grid` — so the STORED `twist_per_bp_rad` in a
+    saved .nadoc (still 34.3 in every existing file) is ignored for lattice helices and
+    the lattice value is used instead.  This pins that, because a future change that made
+    the atomistic path read the stored value would silently reintroduce the drift in the
+    representation people actually export to MD (TD-29).
+
+    Crossover and domain-end nucleotides are excluded: the build deliberately relocates
+    them (junction bridging / terminus handling), so they are not expected to reproduce
+    the pure stamp.  Measured on this fixture, every single deviation was one of those.
+    """
+    import math
+    from pathlib import Path
+
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.models import Design
+
+    path = Path("workspace/6hbx100_noT.nadoc")
+    if not path.exists():
+        pytest.skip("workspace/6hbx100_noT.nadoc not present")
+    design = Design.model_validate_json(path.read_text())
+    helix = design.helices[0]
+
+    relocated = {x.half_a.index for x in design.crossovers if x.half_a.helix_id == helix.id}
+    relocated |= {x.half_b.index for x in design.crossovers if x.half_b.helix_id == helix.id}
+    for strand in design.strands:
+        for dom in strand.domains:
+            if dom.helix_id == helix.id:
+                relocated |= {dom.start_bp, dom.end_bp}
+
+    model = build_atomistic_model(design, close_backbone=False)
+    p_of, res_of = {}, {}
+    for atom in model.atoms:
+        if (atom.name == "P" and atom.helix_id == helix.id
+                and str(atom.direction) == "FORWARD"):
+            p_of[atom.bp_index] = (atom.x, atom.y, atom.z)
+            res_of[atom.bp_index] = atom.residue
+
+    def azimuth(bp):
+        x, y, _ = p_of[bp]
+        return math.degrees(math.atan2(y - helix.axis_start.y, x - helix.axis_start.x))
+
+    checked = 0
+    for bp in sorted(p_of):
+        if bp + 21 not in p_of:
+            continue
+        if {bp, bp + 21} & relocated:
+            continue
+        # Compare like with like: the measured templates are per-residue, so two
+        # different bases legitimately place their phosphorus a little differently.
+        if res_of[bp] != res_of[bp + 21]:
+            continue
+        checked += 1
+        d = (azimuth(bp + 21) - azimuth(bp) + 540.0) % 360.0 - 180.0
+        assert abs(d) < 1e-6, f"atomistic azimuth drifted {d:+.6f} deg at bp {bp}"
+    assert checked >= 10, f"fixture exercised too few repeats ({checked})"

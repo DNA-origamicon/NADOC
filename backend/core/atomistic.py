@@ -61,7 +61,7 @@ from backend.core.atomistic_minimisers import (
     _minimize_backbone_bridge,
     _set_atom_pos,
 )
-from backend.core.constants import BDNA_RISE_PER_BP
+from backend.core.constants import BDNA_MINOR_GROOVE_ANGLE_RAD, BDNA_RISE_PER_BP
 from backend.core.geometry import (
     NucleotidePosition,
     nucleotide_positions,
@@ -509,10 +509,34 @@ def atomistic_model_from_reference(
 
 
 # ── Frame constants ───────────────────────────────────────────────────────────
-# _FRAME_ROT_RAD cancels the +37.05° pre-compensation baked into the templates
-# (both SUGAR and BASE_TEMPLATES).  Net effect = 0° rotation; kept so templates
-# stay self-consistent without re-extraction.
+# _FRAME_ROT_RAD un-rotates the frame by the +37.05° pre-compensation baked into the
+# template literals (_SUGAR, BASE_TEMPLATES, BASE_TEMPLATES_REV).
+#
+# ⚠ It is NOT a no-op, and a previous version of this comment claiming "net effect = 0°"
+# read as an invitation to delete it.  The PAIR (rotated frame × pre-rotated templates)
+# is the no-op; the constant alone is load-bearing.  It is applied as R = R @ Rz(θ), i.e.
+# it DEFINES the local frame the template coordinates are quoted in, so removing it
+# without re-quoting them rotates every nucleotide ∓37° about its own helix axis (e_z
+# flips sign by strand).  It also cannot be folded into _ATOMISTIC_PHASE_OFFSET_RAD: that
+# one rotates the frame ORIGIN about the HELIX axis and is strand-symmetric, this one
+# rotates the BASIS about the frame's own z and is strand-ANTI-symmetric.
+#
+# Retiring it means, in ONE commit: re-quoting ~300 1ZEW coordinates at full precision
+# AND dropping the same factor from _extra_base_frame (the third application site).  That
+# is blocked on the extra-base and strand-extension tail placers, which are calibrated
+# against these templates' local origin.  Tracked as TD-27; listed as locked alongside
+# the _PHASE_* constants in atomistic_minimisers.py.
 _FRAME_ROT_RAD: float = -0.646577   # −37.05° (template pre-compensation cancel)
+
+# Built once instead of at each of the three application sites (_atom_frame,
+# _atom_frames_batch, _extra_base_frame), so they cannot drift apart.  Read-only: it is
+# only ever the right operand of `R @ _FRAME_ROT_M`.
+_FRAME_ROT_M: "_np.ndarray" = _np.array([
+    [_math.cos(_FRAME_ROT_RAD), -_math.sin(_FRAME_ROT_RAD), 0.0],
+    [_math.sin(_FRAME_ROT_RAD),  _math.cos(_FRAME_ROT_RAD), 0.0],
+    [0.0,                        0.0,                       1.0],
+])
+_FRAME_ROT_M.setflags(write=False)
 
 # The geometric layer places backbone beads at HELIX_RADIUS (1.0 nm).
 # Correcting to _ATOMISTIC_P_RADIUS places the radial frame origin at the
@@ -533,7 +557,18 @@ _ATOMISTIC_P_RADIUS: float = 0.886  # nm  (measured mean P-to-axis from 1ZEW inn
 #   FORWARD helix: e_radial rotated +58.2° CCW → REV P lands at fwd+208.2°
 #   REVERSE helix: e_radial rotated  −1.8° (CW) → REV P lands at fwd+208.2°
 _ATOMISTIC_PP_SEP_RAD: float = _math.radians(208.2)          # 1ZEW empirical mean
-_ATOMISTIC_TOPOLOGY_GROOVE_RAD: float = _math.radians(150.0) # topology-layer groove constant
+# The topology-layer groove constant, imported rather than re-declared: a local
+# `radians(150.0)` would silently keep 150° if constants.py ever moved, rotating every
+# REVERSE nucleotide by the difference.
+_ATOMISTIC_TOPOLOGY_GROOVE_RAD: float = BDNA_MINOR_GROOVE_ANGLE_RAD
+
+# The per-lattice-cell REVERSE-P corrections, derived once instead of at every call site.
+# Both _atom_frame (scalar) and _atom_frames_batch (vectorised) consume these, which is
+# what keeps the two implementations of the correction chain from drifting apart.
+_REV_P_DELTA_FWD_CELL: float = _ATOMISTIC_PP_SEP_RAD - _ATOMISTIC_TOPOLOGY_GROOVE_RAD
+"""+58.2° — FORWARD-cell helices place REV P at fwd+150°; target is fwd+208.2°."""
+_REV_P_DELTA_REV_CELL: float = _ATOMISTIC_PP_SEP_RAD - (2 * _math.pi - _ATOMISTIC_TOPOLOGY_GROOVE_RAD)
+"""−1.8° — REVERSE-cell (and direction-unknown) helices place REV P at fwd+210°."""
 
 # ── Atomistic phase offset ────────────────────────────────────────────────────
 # Rigid-body rotation of every nucleotide about its helix axis, applied after
@@ -649,11 +684,8 @@ def _atom_frame(
     # FORWARD helix topology places REV P at fwd+150° (CCW); target fwd+208.2° → +58.2°.
     # REVERSE helix topology places REV P at fwd−150° (= fwd+210° CCW); target fwd+208.2° → −1.8°.
     if direction == Direction.REVERSE and e_radial is not None:
-        delta = (
-            _ATOMISTIC_PP_SEP_RAD - _ATOMISTIC_TOPOLOGY_GROOVE_RAD          # FWD helix: +58.2°
-            if helix_direction == Direction.FORWARD
-            else _ATOMISTIC_PP_SEP_RAD - (2 * _math.pi - _ATOMISTIC_TOPOLOGY_GROOVE_RAD)  # REV/None: −1.8°
-        )
+        delta = (_REV_P_DELTA_FWD_CELL if helix_direction == Direction.FORWARD
+                 else _REV_P_DELTA_REV_CELL)
         if abs(delta) > 1e-9:
             ax = nuc_pos.axis_tangent
             cd, sd = _math.cos(delta), _math.sin(delta)
@@ -693,8 +725,7 @@ def _atom_frame(
     R = _np.column_stack([e_n, e_y, e_z])
 
     # Cancel template pre-compensation (+37.05° baked into all templates).
-    c, s = _math.cos(_FRAME_ROT_RAD), _math.sin(_FRAME_ROT_RAD)
-    R = R @ _np.array([[c, -s, 0.], [s, c, 0.], [0., 0., 1.]])
+    R = R @ _FRAME_ROT_M
 
     return origin, R
 
@@ -733,9 +764,7 @@ def _atom_frames_batch(
         return _np.where(ang_mask[:, None], rotated, er)
 
     # REVERSE-strand P azimuthal correction (branch on the helix's lattice direction).
-    delta = _np.where(helix_fwd,
-                      _ATOMISTIC_PP_SEP_RAD - _ATOMISTIC_TOPOLOGY_GROOVE_RAD,
-                      _ATOMISTIC_PP_SEP_RAD - (2 * _math.pi - _ATOMISTIC_TOPOLOGY_GROOVE_RAD))
+    delta = _np.where(helix_fwd, _REV_P_DELTA_FWD_CELL, _REV_P_DELTA_REV_CELL)
     m = ok & (~dir_fwd) & (_np.abs(delta) > 1e-9)
     if m.any():
         bb_axial = bb - _ATOMISTIC_P_RADIUS * e_radial
@@ -757,8 +786,7 @@ def _atom_frames_batch(
     e_y = e_y / y_norm_safe[:, None]
 
     R = _np.stack([e_n, e_y, e_z], axis=2)                # per-row column_stack → (N,3,3)
-    c, s = _math.cos(_FRAME_ROT_RAD), _math.sin(_FRAME_ROT_RAD)
-    R = R @ _np.array([[c, -s, 0.], [s, c, 0.], [0., 0., 1.]])
+    R = R @ _FRAME_ROT_M
 
     # Repair the rare rows the vectorised path can't express (no radial frame or a
     # degenerate e_y fallback) with the authoritative scalar frame — keeps parity exact.
@@ -2754,8 +2782,7 @@ def _extra_base_frame(
 
     R = _np.column_stack([e_n, e_y, e_z])
     # Cancel template pre-compensation (+37.05° baked into all templates)
-    c, s = _math.cos(_FRAME_ROT_RAD), _math.sin(_FRAME_ROT_RAD)
-    R = R @ _np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+    R = R @ _FRAME_ROT_M
     return origin.copy(), R
 
 

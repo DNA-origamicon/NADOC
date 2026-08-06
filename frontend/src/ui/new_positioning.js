@@ -38,7 +38,12 @@ const STORAGE_KEY = 'nadoc.newPositioning.v2'
 // plate visibly joins the base to its own sugar.  It cannot simply be lengthened along
 // the cross-strand direction: measured, the C3' sits 0.29 nm off the base's cross-strand
 // line, so a slab extended that way reaches the right radius and still misses the bead.
-export const MEASURED_SLAB_EXTENT = 0.6568
+// MIRRORED from Python: `measured_positioning.MEASURED.slab_extent_nm`, which is DERIVED
+// from the measured atomistic template rather than typed.  JS cannot import it, so
+// `tests/test_geometry.py::test_measured_slab_extent_matches_the_frontend_twin` regexes
+// this line and asserts equality — it was already stale at 0.6568 when that pin was added
+// (TD-27 Stage 1).  Update both together.
+export const MEASURED_SLAB_EXTENT = 0.6569
 
 let _on = _read()
 const _listeners = new Set()

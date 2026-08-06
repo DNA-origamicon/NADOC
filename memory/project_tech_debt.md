@@ -88,6 +88,9 @@ outranks a stale comment; a stale comment outranks a program of work.
 | TD-24 | Photo-mode v1 stragglers | P2 | Orphaned fluorophore fn whose comment is the only record of *why* the clamp exists. |
 | TD-25 | `just lint`'s SCOPE hides 193 findings | P2 | Found closing TD-01. The gate is green but only lints `backend/ tests/`; `scripts/` + root are unlinted. |
 | TD-26 | 3D store's undeclared `unligatedCrossoverIds` | P2 | Found closing TD-03 — same defect, but adding the key means picking a store slice. |
+| ~~TD-29~~ | ~~Honeycomb twist incommensurate with the 21-bp repeat~~ | — | **FIXED 2026-08-06.** New lattice constant `HONEYCOMB_TWIST_PER_BP_DEG = 2*360/21` (physical `BDNA_TWIST_PER_BP_DEG` left at 34.3, square untouched). Drift 0.657 → 0.000 u/1000 bp; same-lattice designs now numerically identical; DX rotation optimum became design-independent (−3°). 8 test failures, all understood + fixed; 2 new pins. |
+| TD-28 | DEFERRED AUDIT: all linker + relax code (~5.2k LOC) | P2 · **BLOCKED by design** | Parked until TD-27's basic-design geometry is settled. These modules fit poses against bead positions and are the 14 failures blocking TD-27's flip — re-deriving them before the placement settles means doing it twice. |
+| TD-27 | Nucleotide-geometry correction stack — 5 tiers that partly cancel each other | P1 · staged | Mostly a program of work (→ P3 by the rubric), but it carries **two confirmed live groove-sign bugs** (`oxdna_interface.py:119`, `mrdna_bridge.py:381`) and a false "net effect = 0°" comment on a locked constant. Staged so the cheap, behaviour-preserving half lands first. |
 
 ## DECISIONS — one question each, the user's call
 
@@ -294,6 +297,377 @@ anchor as unverified.** Three passes in, the hit rate on prose-written anchors i
 ---
 
 ## Open items
+
+### TD-27 — the nucleotide-geometry correction stack: five tiers that partly cancel each other (found 2026-08-06, audit prompted by the measured-atomistic landing)
+
+The MD-measured templates shipped native on 2026-08-06 ([[measured-atomistic]]) but landed **on top
+of** the correction stack they were meant to replace: `measured_atomistic.legacy_local_templates()`
+exists *solely* to re-express the measured base-pair-frame coordinates in the old `_atom_frame`
+convention so the 1ZEW-era corrections don't have to be removed. Five tiers now stack:
+
+| tier | what it does | where |
+|---|---|---|
+| **1 build** | `BDNA_MINOR_GROOVE_ANGLE_DEG = 150.0` applied with a **per-lattice-cell sign flip** → FWD cells at 150°, REV at 210°. Measured value is 183.9°. | `geometry.py` ×4 (`:181,:324,:409,:496`), `mrdna_bridge.py` ×5, `oxdna_interface.py:119` (**opposite sign**), `oxdna_surface_strands.py:288` |
+| **2 stamp** | 4 stacked corrections: `_FRAME_ROT_RAD −37.05°`, `_ATOMISTIC_P_RADIUS 0.886`, per-cell `+58.2°/−1.8°` against a *hardcoded* `radians(150.0)`, `_ATOMISTIC_PHASE_OFFSET_RAD −32°` ("calibrated by overlaying on the bead rep"). Implemented twice (scalar + batch) plus a 5th `relaxed_oxdna_phase` override. | `atomistic.py:511-548`, `_atom_frame:602`, `_atom_frames_batch:702`, `:1545` |
+| **3 calibrate** | `_rigid_frame_calibration()` Kabsch-fits itself against its own output, bucketed to mirror tier 2's branches. | `atomistic.py:818-950` |
+| **4 measured** | The real MD table — served through `legacy_local_templates()` / `_legacy_frame_in_bp_coords()` purely to keep tiers 1–3 alive. | `measured_atomistic.py:165-235` |
+| **5 CG + JS** | `apply_measured_positioning` runs in **1 of ~50** geometry paths; `_geometry_for_design:602` drops the flag. Dual-mode branching in `new_positioning.js`; `0.6568` hardcoded in JS. | `design_geometry.py:359`, `new_positioning.js:41` |
+
+**Three findings that reshape the obvious fix** (each cost a wrong first guess — do not re-derive):
+
+1. **`_FRAME_ROT_RAD` is a trap, not dead weight.** Its comment claims "net effect = 0°" — false. It
+   *defines* the frame the template literals are quoted in; the **pair** is a no-op, the constant
+   alone is not. Three application sites (`atomistic.py:696`, `:760`, and `:2757` in
+   `_extra_base_frame`), external readers in `pdb_import.py:982` and `measured_positioning.py:222`,
+   and it is declared **locked** alongside `_PHASE_*` at `atomistic_minimisers.py:28`. Retiring it
+   means re-quoting ~300 1ZEW coordinates **and** moving `_extra_base_frame` in the same commit —
+   which the out-of-scope extra-base/tail placers depend on. **Gated on those placers.**
+2. **There is a fifth un-flagged CG path.** `_positions_for_design` (`design_geometry.py:718`) has no
+   measured branch at all, and `crud.py:1270`/`:446` ship its output as `straight_positions_by_helix`
+   **in the same response** as the measured nucleotides. So the four `helix_renderer.js` sites that
+   look like they bypass measured positioning (`:2055, :2284, :3865/:3869`) are **correct as
+   written** — they read straight positions, which genuinely are legacy. Backend before frontend, or
+   the picture gets worse.
+3. **The measured coating is already partial.** `_emit_arrs` at `design_geometry.py:446`/`:455` passes
+   no axis line, and `_emit_bridge_nucs` / `_strand_extension_geometry` bypass `_emit_arrs` entirely.
+   Overhang bp, ds-linker bridges and extension tails stay legacy even with the flag ON.
+
+**⚠ ARCHITECTURE DECIDED 2026-08-06 — read [[atomistic-source-of-truth]] before continuing TD-27.**
+The owner has settled the question this item kept circling: the atomistic rep is the source of truth,
+the CG rep is derived from it and tuned only for figures, and the CG rep must never reach a
+simulation. Several TD-27 stages are reframed by that (the Stage-3 default flip, the seed-boundary
+adapter, the −32° phase offset), and the plan doc supersedes this entry where they conflict.
+
+**⚠ THE MEASURED PLACEMENT BREAKS HOLLIDAY-JUNCTION SYMMETRY — quantified 2026-08-06.**
+User-reported ("crossovers still look asymmetric in both full and atomistic reps") and confirmed.
+This is separate from TD-29's twist drift, which is fixed: with the commensurate twist the LEGACY
+placement is uniform to ±0.0000 across all 28 junctions of `6hbx100_noT` and very nearly symmetric.
+The residual is the measured bead.
+
+At a DX junction with staple crossovers at bp *i* and *i*+1:
+
+| rep | metric | bp i | bp i+1 | Δ |
+|---|---|---|---|---|
+| full (CG) | bead–bead, legacy | 0.6797 | 0.6802 | **+0.0005 nm** |
+| full (CG) | bead–bead, **measured** | 0.7008 | **1.2455** | **+0.5448 nm** |
+| atomistic | O3′→P bond, legacy | 0.2687 ±0.0000 | 0.2470 ±0.0000 | **−0.0218 nm** |
+| atomistic | O3′→P bond, **measured** | 0.1775 | **0.2970** | **+0.1195 nm** |
+
+(ideal phosphodiester O3′–P = 0.160 nm.) The sign is identical across every junction (28/0, 336/0) —
+systematic, not scatter. **Cause:** measured places FORWARD at +24.52° and REVERSE at 154.70°
+(separation 130.2°) where legacy uses ±150°, so the junction's dyad symmetry is broken. Measured
+makes bond *i* nearly ideal (0.178 vs 0.160) at the cost of i+1 (0.297).
+
+**Two measurement traps here, both of which produced a wrong answer first:**
+1. The CG bead separation is a DISTANCE and so direction-agnostic, but the atomistic O3′→P bond is
+   NOT — assuming `half_a → half_b` is 5′→3′ is backwards for half of all crossovers and yields
+   garbage (±0.31 spread, `close_backbone=True` appearing to do nothing). Take the pairing from
+   `_walk_strand_nucleotides`, which gives true 5′→3′ order; the spread then collapses to ±0.0037.
+2. Report per-junction signed Δ, not means of the two populations. Here the sign happens to be
+   uniform so means were safe, but they would hide an alternating asymmetry entirely.
+
+**Two confirmed live bugs carried inside this item — both FIXED 2026-08-06 (Stage 2):**
+- `oxdna_interface._compute_nuc_geometry` used the **opposite** groove sign to `geometry.py`.
+  Measured: FORWARD beads 0.0000 nm out (they never depended on the groove), every REVERSE bead
+  exactly **1.000 nm** out — two points at r = 1.0 whose placements differ by 2×150° give a chord of
+  2·sin(30°). It carried a **second, previously unrecorded defect** as well: it indexed by a raw
+  `bp_index - bp_start`, ignoring loop/skip deltas, so on a skip-bearing helix even the FORWARD bead
+  was half a rise out (0.167 nm on `U6hb`). Both fixed by **delegating to `geometry.py`** rather than
+  flipping a sign, so neither can recur. `_compute_nuc_geometry_copy` had to move with it: the
+  geometric layer's emitted loop copies already carry the ±0.5·rise offset, so its old
+  "add `(k-(n-1)/2)·rise` to a nominal position" would have applied it twice — it now selects copy k
+  from the geometric layer's own emission order (verified 0.0 nm over all 72 loop copies on `U6hb`).
+- `mrdna_bridge.py:381` applied `+BDNA_MINOR_GROOVE_ANGLE_RAD` with **no** lattice sign flip, unlike
+  the other four sites in the same file. User-confirmed live bug; same 1.000 nm REVERSE-cell error.
+  `helix_info` now carries the per-helix groove.
+
+**Two things Stage 2 corrected in this ledger entry's own earlier claims:**
+- *"The `:896-898` workaround routes around the bug"* — half right. The bug is now fixed at source and
+  both paths agree exactly, but the workaround **still stands** for a different reason: the geometry
+  list carries deformation and cluster transforms, and the straight-geometry fallback deliberately
+  does not. Its comment now says so.
+- The Stage-1 pin `test_the_oxdna_fallback_geometry_agrees_with_the_geometric_layer` was written with
+  the **wrong oracle** — `_geometry_for_design` (deformed) instead of `nucleotide_positions_arrays`
+  (straight). On a clustered design the served positions legitimately differ by up to 2.0 nm, so that
+  oracle asserted a bug that wasn't there while hiding the two that were. **`_compute_nuc_geometry`
+  reproduces the STRAIGHT layer by design** — any future test of it must use the straight oracle.
+
+**Performance note (Stage 2):** delegating made `_compute_nuc_geometry` rebuild a helix's whole array
+per call — O(N²) over a helix, 26 s to walk three fixtures. `oxdna_interface._straight_arrays` memoises
+on a **value** fingerprint of the helix (never `id()`, which recycles across re-parsed designs); back to
+0.5 s. The fallback is rarely hit in the writer (0 keys on all 8 Examples fixtures), so this was a
+latent landmine rather than a live cost.
+
+**⚠ THE REAL BLOCKER, found 2026-08-06 (user observation, then confirmed): the relative phase
+between helices has NEVER been measured.** Correcting the intra-duplex geometry while holding the
+crossover phase fixed breaks half the crossovers, and the phase side of the problem rests on an
+assumption, not data.
+
+- **Mechanism, measured.** The measured sites are quoted with azimuth 0 = the *legacy forward bead*.
+  Swings: FORWARD-cell helix → FWD +24.5°, REV **+4.7°**; REVERSE-cell helix → FWD +24.5°, REV
+  **−55.3°** (a 0.83 nm chord — this IS the "max bead displacement 0.86 nm, the legitimate cell-type
+  groove correction" recorded in [[measured-atomistic]]). Collapsing both cell types onto one 130.2°
+  C3'–C3' separation is correct physics — cell type is caDNAno bookkeeping, not a molecule — but the
+  crossover phase was calibrated *to the 150/210 split*, so reverse-cell reverse beads end up 55°
+  from their crossover partner.
+- **Confirmed in the seed.** Crossover bonds split ~50/50 by strand (337/332, 493/503, 120/120) and
+  the damage lands almost entirely on the REVERSE half — newly-over-cliff FWD/REV: VoltronCore
+  11/27, NS_trans_fix 3/**54**, U6hb 1/**46**; U6hb REVERSE median Δlength **+0.557 units**.
+- **There is NO measurement to check it against.** `_lattice_phase_offset` (π/2, 2π/3) and
+  `BDNA_MINOR_GROOVE_ANGLE_DEG` are calibrated against **caDNAno** (`experiments/exp15_phase_offset_search`
+  uses caDNAno crossover positions as ground truth), and the 1ZEW numbers are crystal. `bundle_extract.py`
+  *cannot* hold the answer: its frame comes from an arbitrary lab vector and its rotation is the
+  minimal axis-to-axis rotation — a 2-DOF object with **no roll term by construction**, which is why
+  `q3`/`q5` are documented gimbal-locked "do not use". The only shipped inter-helix angle,
+  `hj_equilibrium_angle_deg = −7.5°`, comes from a **2-helix isolated DX system** and is flagged
+  `k_dihedral_converged: false`.
+- **MEASURED 2026-08-06 — and the phase convention SURVIVES.** `scripts/measure_interhelix_phase.py`
+  now measures it across all five free-NAMD origami. The equilibrated crossover backbone sits
+  **+7.6° ± 0.4°** off the inter-helix direction across the three insert-free systems
+  (6hbx100_noT +8.1°, 24hb_0xT +7.4°, 18hb +7.3°; |φ| median 19.1 ± 0.5°, n up to 13,182).
+  On the **same design** as the trajectory, NADOC legacy predicts +3.3° / |φ| median 17.2° — inside
+  the MD spread. **So `_PHASE_*` and the groove constant are validated against MD for the first
+  time; do NOT change them.** The measured CG *bead* is what loses registration (+15.4° / 21.9° on
+  the simple 6hb, and VoltronCore |φ| median 17.0° → 41.5°), so the fix belongs at the consumer
+  boundary — which is what `_oxdna_cm_radius_map` already does for the oxDNA seed. Full table,
+  the insert-series result, and the pipeline validation live in [[measured-atomistic]].
+- **Do not "fix" this by editing `_PHASE_*` or the groove constant** — both locked
+  ([[feedback_phase_constants_locked]]), and this is precisely the airtight-looking geometric
+  argument that rule exists to stop.
+
+**Also worth knowing:** `direction is None` is a *third* convention — `geometry.py` → `−G`,
+`atomistic._atom_frame` → the `−1.8°` branch (agrees), `oxdna_interface:119` → `+G` (opposite). Any
+shared helper must pin `None` explicitly or it silently picks a side.
+
+**Scope, decided by the user 2026-08-06** — Depth B (consolidate + make measured native everywhere),
+delete the legacy **mode** entirely, extra-base/tail placers out of scope. Staged:
+
+- **Stage 1 — behaviour-preserving consolidation.** One `groove_offset_rad` helper in `geometry.py`;
+  hoist `_FRAME_ROT_M` / `_REV_P_DELTA_*` / the hardcoded `radians(150.0)` in `atomistic.py`; four
+  `mrdna_bridge` sites onto the helper; move the zero-caller `template_p_azimuth_offset_rad` into its
+  test; add the missing Python↔JS agreement pins. Acceptance bar is `np.array_equal`, not a
+  tolerance — **`tests/test_atomistic_geometry_lock.py` must stay green with the SAME hashes.**
+- **Stage 1b** — rewire the JS constant copies (`0.334`/`34.3`/`1.0` ×6 files; four independent slab-
+  param copies) onto `constants.js` / a shared `SLAB_DEFAULTS`.
+- **Stage 2 — DONE 2026-08-06.** Both groove-sign bugs above, fixed by delegation rather than by
+  flipping signs. `BDNA_MINOR_GROOVE_ANGLE_RAD` is now unused in both `oxdna_interface.py` and
+  `mrdna_bridge.py` — removing the last re-derivation removed the need for the constant entirely, and
+  **`geometry.groove_offset_rad` is the only implementation of the sign rule left in the backend.**
+- **Stage 3 — INFRASTRUCTURE DONE 2026-08-06, THE DEFAULT FLIP IS BLOCKED.** Everything except the
+  flip has landed: `_positions_for_design` and both extended `_emit_arrs` calls now apply the
+  measured re-placement, `_geometry_for_design` **forwards** the flag instead of dropping it, and
+  the two firewalls are pinned as tests. `measured_positioning` still defaults **False**.
+
+  **Two of the planned items needed no code.** Extension tails already follow their anchor (they
+  read `nuc_pos_map`, populated *after* the re-placement — 0.389 nm move), and their internal step
+  is ssDNA contour (0.680 nm, identical in both modes). Bridge anchors likewise read
+  `backbone_position` out of `result`. Also: **no fixture in `Examples/` or `workspace/` has a ds
+  linker**, so the bridge ↔ `linker_relax` pairing cannot be verified locally at all.
+
+  **The FENE question did NOT need a test session.** The cliff is geometric; `oxdna_health` already
+  documents the right oracle (site-based, not CM-based). Measured through the real
+  `oxdna_native_seed_map`, bonds over `FENE_RMAX_UNITS`, legacy → measured → measured+conversion:
+  6hb_test 2/2/2 · 26hb 0/0/0 · NS_trans_fix 588/620/**535** · VoltronCore 538/580/**551** ·
+  U6hb 114/172/**165**.
+
+  **Why a delta re-tune could not fix it, and what does.** The newly-over-cliff bonds are NOT
+  already-broken junctions: they sit at 1.08–1.50 units having been 0.63–0.89 under legacy. The
+  mechanism is that pulling the bead from r=1.0 to the measured C3' at r=0.804 widens every
+  inter-helix crossover gap by 2×0.196 = 0.39 nm. `delta` slides CROSS-STRAND, so it is the wrong
+  degree of freedom. The fix is `oxdna_interface._oxdna_cm_radius_map`, which restores the oxDNA
+  **centre-of-mass** radius at the seed boundary (`nuc_conf_line` writes `backbone_position` as the
+  CM, and `HELIX_RADIUS` is defined as exactly that). It deliberately keeps the +24.5° azimuth —
+  restoring that too would just be reverting to legacy wholesale, which is why U6hb keeps most of
+  its regression. **Two traps it cost to find:** tail beads have no axis of their own and must be
+  translated RIGIDLY WITH THEIR ANCHOR (else 9 extension-FENE tests fail), and the trigger must be
+  "bead is at a MEASURED radius", never "bead is not at HELIX_RADIUS" — folded ssDNA seeds and
+  relaxed overrides are legitimately off-cylinder and get straightened by the looser rule
+  (`tests/test_cg_seed_ssdna_collapse.py` catches it).
+
+  **What blocks the flip — measured, not guessed.** With the default True the fast suite shows
+  **24 failures**:
+  - **14 pose-fitters needing re-calibration, not re-plumbing** — `linker_relax`, `direct_relax`,
+    `duplex_cluster`, child-cluster composition, `assembly_linker_relax`, `headless_build` relax
+    routes. They fit poses against bead positions and need their targets re-derived. This is the
+    real remaining work and it is a scientific job, not plumbing.
+  - **3 oxDNA tests whose PREMISE the measured placement invalidates** — they assert raw NADOC
+    geometry is *not* oxDNA-bonded (`assert frac < 0.1`). With measured base beads at the real ring
+    centroids (0.62 nm apart, not the reconstructed 1.33) **base-pair retention goes 0 → 100 %**:
+    every designed pair is inside oxDNA's H-bond range straight out of the builder. Those tests need
+    a deliberately-bad fixture rather than relying on NADOC geometry being bad. **This is the
+    headline result of Stage 3 and an argument FOR the flip.**
+  - 2 animation geometry-batch snapshot comparisons, 5 misc.
+
+  Still unverified for the flip: every `nuc_pos_override` producer (the measured FORWARD bead sits
+  at azimuth **+24.52°**, not 0° — feeding one in as an override rotates every atom ~24.5°),
+  `oxdna_surface_strands.py:280-310`, and `_rigid_frame_calibration` (its `assert m_res < 1e-6` at
+  `:938` is the tripwire).
+- **Stage 4 — NOT STARTED, gated on the Stage-3 flip.** Delete the mode: the flag, both query params,
+  the Help toggle, the dual-mode branches. Pointless before the flip lands, since the flag is what
+  Stage 4 removes.
+  **The 1ZEW arrays stay** (the out-of-scope placers + the `MeasuredTemplateUnavailable` fallback need
+  them). "Delete the legacy path" = delete the mode, not the arrays.
+
+**Invariant this item must not violate:** `periodic_polymer._section_frame_from_arrs:111-168`
+**analytically inverts** `HELIX_RADIUS` + `±150°` to recover the axis. It is immune only while the
+measured re-placement stays at the `_emit_arrs` *serialiser* boundary. **Never push measured
+positioning down into `geometry.py`.**
+
+**Deliberately out of scope, logged here so no future sweep re-finds them:**
+- The extra-crossover-base placer (`atomistic.py:2960`) and strand-extension-tail placer (`:3322`)
+  keep the 1ZEW templates. Their local origins are calibrated to it — swapping moved an insert
+  **0.41 nm** off the CG chord and stretched a tail bond to **3.5 Å** (limit 3.2). Re-deriving both is
+  its own job, and it **gates retiring `_FRAME_ROT_RAD`**.
+- Changing the build-layer groove angle (150°/210° → measured 183.9°). Phase-constant-adjacent, and
+  183.9° is flagged **provisional** in both `measured_positioning.py:70-82` and
+  [[measured-atomistic]] — every trajectory in the repo was seeded from NADOC's own 183.84° build.
+  Settling it needs `experiments/exp52_groove_seed_sweep`, whose **jobs are not on this machine**.
+
+### TD-29 — ⚠ `BDNA_TWIST_PER_BP_DEG = 34.3` is INCOMMENSURATE with the honeycomb 21-bp repeat — crossover strain ramps along every helix (found 2026-08-06)
+
+**The user's invariance principle is correct and NADOC currently violates it: crossover geometry
+should depend only on lattice type, and today it depends on how far along the helix you are.**
+
+Honeycomb assumes **10.5 bp/turn**, so the 21-bp repeat is exactly 2 turns and the twist must be
+`720/21 = 34.2857°/bp` (= 360/10.5). The shipped constant is the **rounded** `34.3`, leaving
+`+0.0143°/bp` → **+0.300° per 21-bp repeat**, which accumulates without bound.
+
+Measured on one invariant crossover class (face (0,1), FORWARD, bp%21 == 0), oxDNA backbone-site
+separation along the helix:
+
+| design | twist | drift / 1000 bp | class range (units) | mean | max |
+|---|---|---|---|---|---|
+| 6hb_validated (1218 bp) | 34.3 | **+0.657** | 1.069 … **1.841** | 0.979 | 1.850 |
+| 6hb_validated | **34.2857** | **−0.0000** | 1.069 … 1.069 | 0.920 | 1.069 |
+| 6hbx100_noT (115 bp) | 34.3 | +0.651 | 1.069 … 1.124 | 0.919 | 1.133 |
+| 6hbx100_noT | **34.2857** | **−0.0000** | 1.069 … 1.069 | 0.920 | 1.069 |
+
+With the commensurate twist the drift is exactly zero **and the two designs become numerically
+identical** — which is the invariance that should have held all along.
+
+**What was ruled OUT first** (so nobody re-derives it): the nucleotide geometry is bit-identical
+between the two designs (Δazimuth 0.000, Δz 0.000 at every helix/bp/strand — `bp_start` cancels
+exactly as the local-bp=0 convention intends); the crossover topology is identical (all spans
+`b.index − a.index == 0`, all cross-strand, identical (face, strand, bp%21) classes); XY spacing is
+identical at 2.25 nm. The ONLY difference is helix length, i.e. how much ramp each design samples.
+
+**Square lattice is already correct by construction** — `SQUARE_TWIST_PER_BP_DEG = 3*360/32` is
+written as a formula and 32 bp is exactly 3 turns. Only honeycomb got a rounded decimal.
+
+**Consequences already observed:**
+- It is why the DX-junction balancing rotation looked design-specific (−4° on `6hbx100_noT`, −14° on
+  `6hb_validated`). Those were not two optima — they were two samplings of one ramp, and a rigid
+  rotation cannot flatten a ramp (338 → 256 over-cliff at best on the long design).
+- The residual after fixing the twist is a **uniform** 1.069 u per crossover, slightly over
+  `FENE_RMAX_UNITS` = 1.0064. Uniform strain a rotation CAN address — see TD-27's rotation scan and
+  `scripts/build_rotated_seed.py`.
+
+**FIXED 2026-08-06 on the user's instruction** ("ensure the positions are periodic over every 21 bp
+interval and not cumulative"). The fix is a **new lattice-specific constant**, not a change to the
+physical one:
+
+- `constants.HONEYCOMB_TWIST_PER_BP_DEG = 2 * 360.0 / 21` — written as a FORMULA, mirroring
+  `SQUARE_TWIST_PER_BP_DEG = 3 * 360.0 / 32`, which was already commensurate by construction.
+- `lattice._lattice_twist` returns it for honeycomb. **`BDNA_TWIST_PER_BP_DEG` stays 34.3** as the
+  physical B-DNA value; only the LATTICE build changed. Square lattice is provably untouched (its
+  branch is unchanged and its designs still carry 33.75).
+- The alternative — wrapping the angle every 21 bp while keeping 34.3 — was rejected: it makes the
+  phase periodic by inserting a 0.3° kink at each repeat boundary, which is worse than the drift.
+- `_lattice_phase_offset` was NOT touched. Periodicity depends only on the twist, so the locked
+  phase constants are unaffected (the half-bp term differs by 0.007°, deliberately left alone).
+
+**Verified after the fix:** drift exactly `−0.000000` per 1000 bp; the crossover class collapses from
+a 1.069→1.841 ramp to the single value **1.0691**; and `6hbx100_noT`, `6hb_validated` and
+`6hbx100_1xT` now return **numerically identical** geometry (mean 0.920, max 1.069) — the invariance
+that motivated the fix. The DX-junction rotation optimum is now design-independent too: **−3°** takes
+BOTH designs to 0 over the FENE cliff and 0 over the safe threshold (was −4° / −14°, and −14° could
+only reach 338→256). CG bead separation across a junction is now exactly equal (0.680/0.680, Δ 0.000);
+the residual 0.299 u asymmetry is purely in the oxDNA SITE metric, i.e. the a1/a2 lever arm.
+
+**Test fallout — 8 failures, all understood, none a regression:**
+- 5 × `test_atomistic_geometry_lock` goldens. All five golden designs are honeycomb, so all five had
+  to move; regenerated deliberately via the documented `--update`. Square was checked as the control.
+- `test_hc_twist_is_bdna` asserted the HC twist IS the B-DNA constant — that was the premise being
+  changed. Renamed to `test_hc_twist_is_commensurate_with_the_21bp_repeat` and now asserts 21 bp = 2
+  turns exactly.
+- `test_extension_seed_bonds_sit_inside_the_fene_window[three_prime-10]`: missed an `abs=1e-6`
+  tolerance by 1.1e-6 on a bond SOLVED onto the rest length through an arccos/cos round trip.
+  Widened to 1e-5.
+- `test_configuration_map_matches_file_readout_real_oxpy`: a **periodic-boundary wrap** (50.615 vs
+  0.615 nm — exactly one box edge). Now compared under minimum image, with the tolerance set from the
+  measured readout distribution (median 3e-14, p99 1.4e-7, max 4.2e-7 nm, 3.8e-5 outlier across runs)
+  rather than guessed.
+
+**Pinned so it cannot silently regress** — three tests in `tests/test_geometry.py`:
+`test_lattice_twists_are_commensurate_with_their_crossover_periods` (21 × HC = 720°, 32 × SQ = 1080°,
+and HC ≠ the rounded physical constant), `test_honeycomb_crossover_geometry_does_not_drift_along_a_helix`
+(CG azimuth identical to 1e-9 across every 21-bp repeat over 210 bp), and
+`test_the_atomistic_representation_is_periodic_over_the_21bp_repeat_too`.
+
+**Reaches BOTH representations, verified not assumed.** The fix enters at
+`deformation.effective_helix_for_geometry` — the documented single phase/axis decision point shared
+by CG geometry, atomistic placement and deformation frames — so the STORED `twist_per_bp_rad` in a
+saved `.nadoc` (still 34.3 in every existing file) is ignored for lattice helices and the lattice
+value substituted. Measured per-nucleotide azimuth periodicity over a 21-bp repeat:
+
+| representation | drift per 21 bp |
+|---|---|
+| full / CG beads | **5.7e-12°** |
+| atomistic (P atoms) | **0.000°** median; deviations only at crossover / domain-end nucleotides |
+
+The atomistic outliers were chased down rather than waved through: on `6hbx100_noT` **all 4 of 4**
+sit on a crossover or a domain end, i.e. nucleotides the build deliberately relocates. Two traps in
+measuring this — the measured templates are **per-residue**, so bp *i* and *i*+21 must be the same
+base before comparing (different bases legitimately place P differently, up to 3.9°); and the raw
+max is meaningless because relocated junction nucleotides dominate it, so the median is the signal.
+
+**One documented non-participant:** helices where `_helix_preserves_stored_pose` is true (dedicated
+overhang and `__lnk__` helices) bypass `_normalize_helix_for_grid` and keep their stored 34.3. That
+is coherent, not a gap — they are free duplexes with no 21-bp crossover period to close over, so the
+physical B-DNA value is the right one. Noted in that function's docstring. Only `Untitled.nadoc`
+currently has any.
+
+**Still open for the owner:** the `_PHASE_*` calibration was fitted against caDNAno *with the rounded
+twist in place* (`experiments/exp15_phase_offset_search`). It was independently validated against
+equilibrated-origami MD after this change (NADOC legacy crossover azimuth |φ| median 17.1° vs MD
+18.6–19.5°, and now identical across designs), so there is no evidence it needs revisiting — but the
+fit's premise did move.
+
+### TD-28 — DEFERRED AUDIT: all linker + relax code, to be reviewed AFTER basic designs are settled (opened 2026-08-06, user decision)
+
+**⚠ SUPERSEDING CONTEXT (2026-08-06):** the owner has since decided the architecture — the ATOMISTIC
+rep becomes the single source of truth, the CG "full" rep becomes purely derived + figure-tuned, and
+the display rep may never reach a simulation. See [[atomistic-source-of-truth]]. That makes this
+audit's real job **re-fitting these modules against the atomistic model instead of CG beads**, not
+tidying them in place. It is also blocker #1 of that plan: these fitters write `cluster_transforms`,
+a PERSISTED design field, from CG bead positions — so the display rep cannot be tuned at all until
+they move. Do this audit and that plan step together.
+
+**Deliberately parked, not forgotten.** While TD-27 is settling the geometry of *basic* designs
+(plain lattice helices, staple crossovers, no extra bases, no skips, no ssDNA), the linker and relax
+family is explicitly out of scope and gets its own audit afterwards. Do not fix these piecemeal from
+inside a TD-27 session — the whole point is to settle the underlying placement first, because these
+modules all fit poses *against* bead positions and would have to be re-derived twice otherwise.
+
+**Surface (≈5.2k LOC):** `backend/core/linker_relax.py` (1016), `direct_relax.py` (623),
+`bond_relax.py` (472), `assembly_linker.py` (461), `assembly_linker_relax.py` (337),
+`flexible_relax.py` (282), `binding_relax.py`, plus `duplex_cluster.py`'s pose fitting and the
+`headless_build` relax routes.
+
+**What the audit already has to work with, measured rather than guessed:**
+- **These are exactly the 14 fast-suite failures that block TD-27's default flip** — `linker_relax`,
+  `direct_relax`, `duplex_cluster`, child-cluster composition, `assembly_linker_relax`,
+  `headless_build` relax routes. They need their targets re-derived, not re-plumbed.
+- `linker_relax.py:186-193` re-declares `_BDNA_TWIST_RAD` / `_MINOR_GROOVE_RAD` /
+  `_HELIX_RADIUS_NM` with the comment "must match the bridge geometry emitted by
+  `_emit_bridge_nucs`" — an unenforced hand-sync across two files, and its pointer is stale (it
+  names `crud.py`, which no longer owns that function). Atomic pair with any bridge change.
+- **No fixture in `Examples/` or `workspace/` has a ds linker at all**, so none of the bridge path is
+  covered by a local design. Building one is probably the audit's first task.
+- ds-linker bridges and extension tails bypass `_emit_arrs` entirely, so they never receive the
+  measured re-placement even when the flag is on (TD-27 finding 3).
+
+**Do not start this until TD-27's basic-design work is closed.**
 
 ### TD-25 — `just lint` is now green, but it only lints `backend/ tests/` — 193 findings sit outside the gate (found 2026-07-31, closing TD-01)
 

@@ -24,14 +24,19 @@ CLOCKWISE from the scaffold backbone to the staple backbone (viewing the
 cross-section with the axis pointing away from the viewer):
 
   FORWARD helix  (scaffold = fwd strand, staple = rev strand):
-      groove_offset = −BDNA_MINOR_GROOVE_ANGLE_RAD   (CW 150° from fwd → rev)
+      groove_offset = +BDNA_MINOR_GROOVE_ANGLE_RAD
 
   REVERSE helix  (scaffold = rev strand, staple = fwd strand):
-      groove_offset = +BDNA_MINOR_GROOVE_ANGLE_RAD   (CW 150° from rev → fwd,
-                                                       i.e. rev = fwd + 150° CCW)
+      groove_offset = −BDNA_MINOR_GROOVE_ANGLE_RAD
 
   Unknown direction (helix.direction is None):
-      groove_offset = +BDNA_MINOR_GROOVE_ANGLE_RAD   (same as REVERSE fallback)
+      groove_offset = −BDNA_MINOR_GROOVE_ANGLE_RAD   (same as REVERSE fallback)
+
+:func:`groove_offset_rad` is the ONE implementation of that rule — call it, never
+re-derive it.  Until 2026-08-06 this docstring stated all three signs BACKWARDS
+from the code directly below it, and re-deriving the rule from prose is the
+likeliest way ``oxdna_interface._compute_nuc_geometry`` acquired the inverted sign
+it carried until TD-27 Stage 2 (measured: every REVERSE bead 1.000 nm out).
 
 Base normals are cross-strand vectors, NOT inward radials:
     FORWARD base_normal = normalize(REVERSE_backbone − FORWARD_backbone)
@@ -125,6 +130,64 @@ def _frame_from_helix_axis(axis_vec: np.ndarray) -> np.ndarray:
     return np.column_stack([x_hat, y_hat, z_hat])
 
 
+def groove_offset_rad(helix_direction: "Direction | None") -> float:
+    """Azimuthal offset from the FORWARD strand's backbone to the REVERSE strand's.
+
+    +150° from scaffold to staple (cadnano CW = world CCW = math +): forward helix,
+    +150°; reverse helix, −150°.  This is the sign rule the whole geometric layer is
+    built on and it must have exactly one implementation — see the module docstring.
+
+    ``None`` maps to the REVERSE branch (−150°), pinned here because it is a real and
+    reachable case (helices whose lattice cell type was never resolved) and because the
+    code paths that used to re-derive this rule did NOT agree on it — ``atomistic.py``'s
+    per-cell correction folds ``None`` into the REVERSE branch and matches, while
+    ``oxdna_interface._compute_nuc_geometry`` gave it the OPPOSITE sign until TD-27
+    Stage 2.  A caller that means "forward" must say ``Direction.FORWARD``, not ``None``.
+    """
+    return (BDNA_MINOR_GROOVE_ANGLE_RAD if helix_direction == Direction.FORWARD
+            else -BDNA_MINOR_GROOVE_ANGLE_RAD)
+
+
+def _strand_beads(
+    axis_pts: np.ndarray,
+    angles: np.ndarray,
+    fx: np.ndarray,
+    fy: np.ndarray,
+    groove: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Both strands' backbone and base beads for one run of base pairs.
+
+    The vectorised bead placement shared by ``nucleotide_positions_arrays`` and its two
+    ``_extended`` variants, which carried three verbatim copies of it.  Returns
+    ``(fwd_bb, rev_bb, bp_hats, fwd_base, rev_base)``, each ``(N, 3)``.
+
+    Deliberately NOT shared with the scalar ``nucleotide_positions``: that path uses
+    ``math.cos``/``math.sin`` on Python floats where this uses ``np.cos``/``np.sin``, and
+    the two can differ at the last ULP.  ``nucleotide_positions_arrays`` falls back to the
+    scalar path via ``_nuc_arrays_from_list`` for helices with loops/skips, so merging
+    them would silently move every skip-bearing design.  They share the groove offset
+    (:func:`groove_offset_rad`) and nothing else.
+    """
+    cos_a = np.cos(angles)
+    sin_a = np.sin(angles)
+
+    fwd_radials = cos_a[:, None] * fx + sin_a[:, None] * fy
+    rev_angles  = angles + groove
+    rev_radials = np.cos(rev_angles)[:, None] * fx + np.sin(rev_angles)[:, None] * fy
+
+    fwd_bb = axis_pts + HELIX_RADIUS * fwd_radials
+    rev_bb = axis_pts + HELIX_RADIUS * rev_radials
+
+    # Base normals are cross-strand, not inward radial.
+    bp_vecs = rev_bb - fwd_bb
+    bp_hats = bp_vecs / np.linalg.norm(bp_vecs, axis=1, keepdims=True)
+
+    fwd_base = fwd_bb + BASE_DISPLACEMENT * bp_hats
+    rev_base = rev_bb - BASE_DISPLACEMENT * bp_hats
+
+    return fwd_bb, rev_bb, bp_hats, fwd_base, rev_base
+
+
 def nucleotide_positions(helix: Helix, compact_skips: bool = False) -> List[NucleotidePosition]:
     """
     Compute 3D positions for every nucleotide on both strands of *helix*.
@@ -177,9 +240,7 @@ def nucleotide_positions(helix: Helix, compact_skips: bool = False) -> List[Nucl
     for ls in helix.loop_skips:
         ls_map[ls.bp_index] = ls_map.get(ls.bp_index, 0) + ls.delta
 
-    # +150° from scaffold to staple (cadnano CW = world CCW = math +): forward helix, +150°; reverse helix, −150°.
-    minor_groove_rad = (BDNA_MINOR_GROOVE_ANGLE_RAD if helix.direction == Direction.FORWARD
-                        else -BDNA_MINOR_GROOVE_ANGLE_RAD)
+    minor_groove_rad = groove_offset_rad(helix.direction)
 
     results: List[NucleotidePosition] = []
 
@@ -313,33 +374,13 @@ def nucleotide_positions_arrays(helix: Helix, compact_skips: bool = False) -> di
     # Axis points for all bps: shape (N, 3)
     axis_pts = start + axis_hat * (local_bps.astype(float)[:, None] * BDNA_RISE_PER_BP)
 
-    # Twist angles and trig: shape (N,)
+    # Twist angles: shape (N,)
     angles = helix.phase_offset + local_bps * twist
-    cos_a  = np.cos(angles)
-    sin_a  = np.sin(angles)
     fx     = frame[:, 0]   # (3,)
     fy     = frame[:, 1]   # (3,)
 
-    # +150° from scaffold to staple (cadnano CW = world CCW = math +): forward helix, +150°; reverse helix, −150°.
-    minor_groove_rad = (BDNA_MINOR_GROOVE_ANGLE_RAD if helix.direction == Direction.FORWARD
-                        else -BDNA_MINOR_GROOVE_ANGLE_RAD)
-
-    # Radial directions for forward and reverse strands: (N, 3)
-    fwd_radials = cos_a[:, None] * fx + sin_a[:, None] * fy
-    rev_angles  = angles + minor_groove_rad
-    rev_radials = np.cos(rev_angles)[:, None] * fx + np.sin(rev_angles)[:, None] * fy
-
-    # Backbone positions: (N, 3)
-    fwd_bb = axis_pts + HELIX_RADIUS * fwd_radials
-    rev_bb = axis_pts + HELIX_RADIUS * rev_radials
-
-    # Base normals (cross-strand unit vectors): (N, 3)
-    bp_vecs  = rev_bb - fwd_bb
-    bp_hats  = bp_vecs / np.linalg.norm(bp_vecs, axis=1, keepdims=True)
-
-    # Base positions: (N, 3)
-    fwd_base = fwd_bb + BASE_DISPLACEMENT * bp_hats
-    rev_base = rev_bb - BASE_DISPLACEMENT * bp_hats
+    fwd_bb, rev_bb, bp_hats, fwd_base, rev_base = _strand_beads(
+        axis_pts, angles, fx, fy, groove_offset_rad(helix.direction))
 
     # Interleave fwd/rev → shape (2N, 3)
     # Order: fwd@bp0, rev@bp0, fwd@bp1, rev@bp1, …
@@ -406,27 +447,12 @@ def nucleotide_positions_arrays_extended(helix: Helix, lo_bp: int) -> dict:
     N = len(local_bps)
     axis_pts = start + axis_hat * (local_bps.astype(float)[:, None] * BDNA_RISE_PER_BP)
 
-    minor_groove_rad = (BDNA_MINOR_GROOVE_ANGLE_RAD if helix.direction == Direction.FORWARD
-                        else -BDNA_MINOR_GROOVE_ANGLE_RAD)
-
     angles = helix.phase_offset + local_bps * twist
-    cos_a  = np.cos(angles)
-    sin_a  = np.sin(angles)
     fx     = frame[:, 0]
     fy     = frame[:, 1]
 
-    fwd_radials = cos_a[:, None] * fx + sin_a[:, None] * fy
-    rev_angles  = angles + minor_groove_rad
-    rev_radials = np.cos(rev_angles)[:, None] * fx + np.sin(rev_angles)[:, None] * fy
-
-    fwd_bb = axis_pts + HELIX_RADIUS * fwd_radials
-    rev_bb = axis_pts + HELIX_RADIUS * rev_radials
-
-    bp_vecs  = rev_bb - fwd_bb
-    bp_hats  = bp_vecs / np.linalg.norm(bp_vecs, axis=1, keepdims=True)
-
-    fwd_base = fwd_bb + BASE_DISPLACEMENT * bp_hats
-    rev_base = rev_bb - BASE_DISPLACEMENT * bp_hats
+    fwd_bb, rev_bb, bp_hats, fwd_base, rev_base = _strand_beads(
+        axis_pts, angles, fx, fy, groove_offset_rad(helix.direction))
 
     M = 2 * N
     positions      = np.empty((M, 3), dtype=np.float64)
@@ -493,27 +519,12 @@ def nucleotide_positions_arrays_extended_right(helix: Helix, hi_bp: int) -> dict
     N = len(local_bps)
     axis_pts = start + axis_hat * (local_bps.astype(float)[:, None] * BDNA_RISE_PER_BP)
 
-    minor_groove_rad = (BDNA_MINOR_GROOVE_ANGLE_RAD if helix.direction == Direction.FORWARD
-                        else -BDNA_MINOR_GROOVE_ANGLE_RAD)
-
     angles = helix.phase_offset + local_bps * twist
-    cos_a  = np.cos(angles)
-    sin_a  = np.sin(angles)
     fx     = frame[:, 0]
     fy     = frame[:, 1]
 
-    fwd_radials = cos_a[:, None] * fx + sin_a[:, None] * fy
-    rev_angles  = angles + minor_groove_rad
-    rev_radials = np.cos(rev_angles)[:, None] * fx + np.sin(rev_angles)[:, None] * fy
-
-    fwd_bb = axis_pts + HELIX_RADIUS * fwd_radials
-    rev_bb = axis_pts + HELIX_RADIUS * rev_radials
-
-    bp_vecs  = rev_bb - fwd_bb
-    bp_hats  = bp_vecs / np.linalg.norm(bp_vecs, axis=1, keepdims=True)
-
-    fwd_base = fwd_bb + BASE_DISPLACEMENT * bp_hats
-    rev_base = rev_bb - BASE_DISPLACEMENT * bp_hats
+    fwd_bb, rev_bb, bp_hats, fwd_base, rev_base = _strand_beads(
+        axis_pts, angles, fx, fy, groove_offset_rad(helix.direction))
 
     M = 2 * N
     positions      = np.empty((M, 3), dtype=np.float64)

@@ -192,40 +192,23 @@ def _from_atomistic_template() -> "MeasuredPositioning | None":
 
 
 # Frozen fallback, and the documentation of what the derivation produces today.
+#
+# This exists so a missing or corrupt ``measured_atomistic_template.json`` degrades to the
+# right placement instead of hard-failing every geometry response at import time.  It is
+# NOT a second source of truth: nothing may read it directly, and
+# ``test_measured_positioning.py::test_the_frozen_fallback_still_matches_what_the_template
+# _derives`` pins it to the derivation field by field.  That pin caught this copy already
+# stale on its first run — ``slab_extent_nm`` had been left at 0.6568 against a derived
+# 0.6569 (TD-27 Stage 1).
 _FALLBACK = MeasuredPositioning(
     backbone_fwd=Site(0.8040, 24.52, 0.0992),
     backbone_rev=Site(0.8032, 154.70, -0.0997),
     base_fwd=Site(0.3136, 7.87, 0.0326),
     base_rev=Site(0.3127, 171.35, -0.0320),
-    slab_extent_nm=0.6568,
+    slab_extent_nm=0.6569,
 )
 
 MEASURED = _from_atomistic_template() or _FALLBACK
-
-
-def template_p_azimuth_offset_rad(p_radius_nm: float) -> float:
-    """Azimuth by which the template's phosphorus misses its own frame origin.
-
-    ``_atom_frame`` places the frame origin on the circle of radius ``p_radius_nm``
-    and treats that as the phosphorus.  It is not: the sugar template's P sits at
-    ``(n, y)`` in the frame plane, which after the ``_FRAME_ROT_RAD`` pre-compensation
-    cancel becomes a radial shift of ``-n'`` and a TANGENTIAL shift of ``y'``.  The
-    tangential part is an azimuth error of ``atan2(y', r - n')``.
-
-    It matters because the two strands' frames are z-mirrored (``e_z`` is
-    ``-axis_tangent`` on FORWARD and ``+axis_tangent`` on REVERSE), which flips the
-    sign of ``e_y`` and therefore of this offset.  The two phosphates rotate toward
-    each other and the realised P-P separation comes out 2x this angle short of the
-    intended one.  Computed from the template rather than hardcoded so it stays
-    correct if the template is ever re-extracted.
-    """
-    from backend.core.atomistic import _FRAME_ROT_RAD, _SUGAR
-
-    n, y = float(_SUGAR[0][2]), float(_SUGAR[0][3])
-    c, s = math.cos(_FRAME_ROT_RAD), math.sin(_FRAME_ROT_RAD)
-    n_rot = n * c - y * s
-    y_rot = n * s + y * c
-    return math.atan2(y_rot, p_radius_nm - n_rot)
 
 
 # ── The atomistic re-placement lives in measured_atomistic.py ─────────────────
@@ -251,10 +234,16 @@ def template_p_azimuth_offset_rad(p_radius_nm: float) -> float:
 # in one base-pair frame from five free NAMD trajectories, and
 # ``backend/core/measured_atomistic.py`` stamps the result.  FORWARD and REVERSE are
 # measured separately — no z-mirrored templates, no per-strand frame flip — so the
-# frame-origin defect ``template_p_azimuth_offset_rad`` describes cannot arise: there
-# is no correction applied to an origin, because both nucleotides of a pair share one
-# frame.  ``template_p_azimuth_offset_rad`` is kept as the proof of what went wrong on
-# the legacy path, which is still what the view shows with the toggle OFF.
+# frame-origin defect described above cannot arise: there is no correction applied to
+# an origin, because both nucleotides of a pair share one frame.
+#
+# The arithmetic of that defect — the azimuth by which the template's P misses its own
+# frame origin, and so the 2x collapse of the realised P-P separation — is kept as the
+# proof of what went wrong on the legacy path.  It lives in
+# ``tests/test_measured_positioning.py::_template_p_azimuth_offset_rad``, its only
+# consumer: it is an assertion about a defect, not a service this module provides, and
+# keeping it here made ``measured_positioning`` a live reader of ``atomistic._SUGAR``
+# and ``_FRAME_ROT_RAD`` for no production purpose (TD-27 Stage 1).
 
 
 def _axis_point_for(
@@ -290,6 +279,7 @@ def apply_measured_positioning(
     axis_hat: np.ndarray,
     legacy_radius: float,
     params: MeasuredPositioning = MEASURED,
+    groove_rad: float | None = None,
 ) -> dict:
     """Re-place the backbone beads and base beads of one helix's nucleotide arrays.
 
@@ -309,6 +299,22 @@ def apply_measured_positioning(
     measurement now, because the backbone site is the C3' and the base site is the ring
     centroid, and those two land at different azimuthal separations (130.2 deg vs
     163.5 deg).  Deriving one from the other would put the base beads in the wrong place.
+
+    ``groove_rad`` — CROSS-STRAND REGISTRATION OVERRIDE, and the default for the CG layer.
+    The raw measurement puts the two strands 130.2 deg apart regardless of lattice cell
+    type, which is correct for an isolated duplex but breaks the dyad symmetry of a
+    Holliday junction: measured at a DX junction on ``6hbx100_noT``, the two crossovers
+    of a pair went to 0.70 vs 1.25 nm bead separation (0.178 vs 0.297 nm O3'-P in the
+    all-atom rep) where the per-cell convention gives 0.6797 vs 0.6802.  Passing the
+    lattice's own groove (``geometry.groove_offset_rad(helix.direction)``) restores that
+    symmetry while keeping everything the measurement actually pins:  each strand keeps
+    its measured RADIUS, its measured AXIAL offset, and its measured base-to-backbone
+    azimuth; only the angle BETWEEN the strands is taken from the lattice instead.
+
+    The cost is explicit: on a REVERSE-cell helix the reverse bead is then no longer
+    exactly on its C3' atom.  That is the trade — junction symmetry over per-atom
+    coincidence on one strand — and it is the CG display's call to make, not the
+    atomistic layer's.  ``build_atomistic_model`` does NOT go through this function.
 
     ``axis_origin`` / ``axis_hat`` are the helix's own centreline, cluster transforms and
     all (``deformation.deformed_helix_axes``).
@@ -362,9 +368,32 @@ def apply_measured_positioning(
         # Backbone bead = the ribose C3'; base bead = the base-ring centroid.  Each
         # strand from its own measured site, neither derived from the other.
         positions[i] = at(params.backbone_fwd)
-        positions[j] = at(params.backbone_rev)
         base_positions[i] = at(params.base_fwd)
-        base_positions[j] = at(params.base_rev)
+        if groove_rad is None:
+            positions[j] = at(params.backbone_rev)
+            base_positions[j] = at(params.base_rev)
+        else:
+            # Re-register BOTH strands onto the lattice groove: forward to azimuth 0 (the
+            # legacy bead direction this frame is quoted in) and reverse to the groove.
+            # Each keeps its own measured RADIUS, AXIAL offset and base-to-backbone
+            # azimuth; only the angles between them come from the lattice.
+            #
+            # It has to be both.  Re-registering the reverse strand alone changes NOTHING
+            # — measured on 6hbx100_noT, the junction asymmetry stayed at +0.7948 nm for
+            # reverse azimuths of 130.2, 150 and 174.5 deg alike, because the asymmetry is
+            # driven by the FORWARD bead's +24.52 deg swing off the lattice direction.
+            # Putting both back gives +0.0003 nm.
+            g = math.degrees(groove_rad)
+            d_base_f = params.base_fwd.azimuth_deg - params.backbone_fwd.azimuth_deg
+            d_base_r = params.base_rev.azimuth_deg - params.backbone_rev.azimuth_deg
+            positions[i] = at(Site(params.backbone_fwd.radius_nm, 0.0,
+                                   params.backbone_fwd.axial_nm))
+            base_positions[i] = at(Site(params.base_fwd.radius_nm, d_base_f,
+                                        params.base_fwd.axial_nm))
+            positions[j] = at(Site(params.backbone_rev.radius_nm, g,
+                                   params.backbone_rev.axial_nm))
+            base_positions[j] = at(Site(params.base_rev.radius_nm, g + d_base_r,
+                                        params.base_rev.axial_nm))
 
         cross = base_positions[j] - base_positions[i]
         nc = np.linalg.norm(cross)

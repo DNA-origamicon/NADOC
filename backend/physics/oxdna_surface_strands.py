@@ -37,9 +37,10 @@ from backend.core.constants import (
     SSDNA_CONTOUR_PER_NT_NM,
     BDNA_RISE_PER_BP,
     BDNA_TWIST_PER_BP_RAD,
-    BDNA_MINOR_GROOVE_ANGLE_RAD,
     HELIX_RADIUS,
 )
+from backend.core.geometry import groove_offset_rad
+from backend.core.models import Direction
 
 # ── Constants ────────────────────────────────────────────────────────────────────
 NM2_PER_UM2 = 1.0e6
@@ -285,7 +286,9 @@ def build_capture_strands(
     rise_ox = BDNA_RISE_PER_BP * NM_TO_OXDNA
     radius_ox = HELIX_RADIUS * NM_TO_OXDNA
     twist = BDNA_TWIST_PER_BP_RAD
-    groove = BDNA_MINOR_GROOVE_ANGLE_RAD
+    # A capture strand is a synthetic FORWARD-cell helix — say so rather than relying on
+    # +GROOVE happening to equal the FORWARD branch.  Same value; explicit intent.
+    groove = groove_offset_rad(Direction.FORWARD)
 
     p_base = n_particles_origami       # running global particle index
     min_d2 = math.inf

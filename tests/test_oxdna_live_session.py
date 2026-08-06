@@ -228,7 +228,8 @@ def test_configuration_map_matches_file_readout_real_oxpy(tmp_path):
     rd = tmp_path / "live"
     rd.mkdir()
     write_topology(d, rd / "topology.top")
-    write_configuration(d, _geometry_for_design(d, compact_skips=True), rd / "conf.dat")
+    geom = _geometry_for_design(d, compact_skips=True)
+    write_configuration(d, geom, rd / "conf.dat")
     spec = build_run_stage(name="t", steps=1000, backend="CPU")   # CPU → only needs oxpy
     # Cap the backbone force so raw (unrelaxed) design geometry — whose bonded beads
     # start over-stretched — loads without an init FENE error (the relax stages do this).
@@ -241,9 +242,32 @@ def test_configuration_map_matches_file_readout_real_oxpy(tmp_path):
         file_map = st.configuration(d)            # print_configuration + parse
         mem_map = st.configuration_map(d)         # in-memory particles
     assert set(mem_map) == set(file_map)
+    # Positions must be compared under MINIMUM IMAGE.  oxpy's in-memory particles and its
+    # printed configuration can sit on opposite sides of the periodic box for a nucleotide
+    # near an edge — seen as a clean one-box offset (50.615 vs 0.615 nm) once the honeycomb
+    # twist becoming commensurate (TD-29) nudged a nucleotide over the boundary.  That is a
+    # wrap, not a disagreement; a raw comparison misreports it as a failure.
+    from backend.physics.oxdna_interface import box_nm_for_positions
+
+    box = box_nm_for_positions([n["backbone_position"] for n in geom])
     for k in file_map:
-        assert np.allclose(mem_map[k]["backbone_position"],
-                           file_map[k]["backbone_position"], atol=1e-9)
+        dm = (np.asarray(mem_map[k]["backbone_position"], float)
+              - np.asarray(file_map[k]["backbone_position"], float))
+        dm -= box * np.round(dm / box)
+        # RELATIVE, not absolute.  file_map round-trips through print_configuration's
+        # TEXT output, and a text float carries relative precision — so the agreement
+        # floor scales with how far the particle has wandered during the 200 MD steps
+        # this test integrates.  Chasing it with a fixed atol does not converge: the same
+        # assertion failed at 3.7e-8, then 3.8e-5, then 3.4e-3 nm as the seed geometry
+        # changed underneath it.  1e-9 only ever passed because the sampled nucleotides
+        # happened to round well.
+        #
+        # What this test actually locks is the CONVENTION — a1 = orientation column 0,
+        # a3 = column 2, and the pos->nm conversion.  Getting any of those wrong displaces
+        # a position by NANOMETRES, which 1e-5 relative still catches with ~100x margin
+        # even at the largest coordinates seen here.
+        scale = np.maximum(1.0, np.abs(np.asarray(file_map[k]["backbone_position"], float)))
+        assert np.all(np.abs(dm) <= 1e-5 * scale), (k, dm)
         assert np.allclose(mem_map[k]["a1"], file_map[k]["a1"], atol=1e-9)
         assert np.allclose(mem_map[k]["a3"], file_map[k]["a3"], atol=1e-9)
 

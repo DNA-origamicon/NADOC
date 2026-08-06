@@ -117,6 +117,16 @@ def _helix_preserves_stored_pose(helix: "Helix", design: "Design") -> bool:
     posed linker helices are different: their stored phase/axis encodes the
     actual 3D attachment pose. Normalizing those from grid_pos makes CG and
     atomistic disagree, especially for extruded overhang phase.
+
+    Consequence worth knowing (TD-29): a helix that keeps its stored pose also keeps its
+    stored ``twist_per_bp_rad``, so it does NOT pick up the commensurate lattice twist
+    (``HONEYCOMB_TWIST_PER_BP_RAD``, 720/21) that `_lattice_twist` hands to grid-derived
+    helices — it stays on whatever was saved, which for every existing file is the
+    physical 34.3. That is coherent rather than a bug: these are free duplexes hanging
+    off the structure, not lattice helices, so there is no 21-bp crossover period for
+    their twist to close over and the physical B-DNA value is the right one. It only
+    becomes a problem if such a helix ever has to keep crossover register with the
+    lattice, which today it does not.
     """
     if helix.id.startswith("__lnk__"):
         return True

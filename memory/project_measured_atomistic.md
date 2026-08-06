@@ -15,6 +15,31 @@ so the measured templates are what NADOC draws **and** what it exports to every 
 affordance* that returns the 1ZEW geometry. Companion to [[project_extra_base_spacing]] and the CG
 half in `backend/core/measured_positioning.py`.
 
+## ⚠ The CG bead is GROOVE-REGISTERED, not exactly on the C3' (2026-08-06, user decision)
+
+The section below describes the raw measurement. The CG layer no longer places beads at it,
+because doing so **breaks Holliday-junction symmetry**: the measurement's 130.2° cross-strand
+separation is right for an isolated duplex but not for a lattice, and at a DX junction the two
+crossovers went to **0.70 vs 1.25 nm** bead separation (0.178 vs 0.297 nm O3'–P in the all-atom
+rep) against **0.6797 vs 0.6802** for the lattice convention.
+
+`apply_measured_positioning(..., groove_rad=)` now re-registers **both** strands onto the lattice
+groove (`geometry.groove_offset_rad`), keeping each strand's measured RADIUS, AXIAL offset and
+base-to-backbone azimuth. Result: junction asymmetry **+0.5448 → +0.0003 nm** (legacy is +0.0005),
+identical across designs.
+
+**It must be both strands.** Re-registering only the reverse one changes nothing — the asymmetry
+is driven by the FORWARD bead's +24.52° swing off the lattice direction, and the junction Δ stayed
+at +0.7948 nm for reverse azimuths of 130.2°, 150° and 174.5° alike.
+
+**The bead is still closer to its C3' than legacy**, just not on it: on `6hbx100_noT` every bucket
+improves and the overall mean goes **0.5011 → 0.3828 nm**. The irreducible case is a REVERSE-cell
+reverse strand (0.745 nm), where the lattice groove and the measured C3' genuinely sit 55.3° apart —
+you cannot have both bead-on-atom and lattice registration.
+
+**`build_atomistic_model` is NOT affected** — it does not go through `apply_measured_positioning`,
+so the all-atom rep still stamps the measured templates exactly.
+
 ## The CG beads are the ribose C3' (2026-08-06)
 
 The backbone bead used to stand in for the phosphorus; it is now the **ribose C3'**, and the base
@@ -87,7 +112,54 @@ defaults False, and the app states the flag explicitly on both endpoints rather 
 either default. Flipping the CG default was tried and reverted: the other CG position paths
 (oxDNA seeding, `positions_for_design`, linker relax, extension tail beads) do not share
 `apply_measured_positioning`, so the default flip put them out of register with each other.
-Making CG native means threading the measured placement through those paths — a separate job.
+Making CG native means threading the measured placement through those paths — a separate job,
+now scoped as **TD-27** in [[project_tech_debt]] (Stage 3). Two things that audit found and this
+file did not know: `_positions_for_design` is a **fifth** un-flagged CG path whose output ships as
+`straight_positions_by_helix` in the *same* response as the measured nucleotides, and the coating is
+already partial even with the flag ON — `_emit_arrs` at `design_geometry.py:446`/`:455` passes no
+axis line, and bridges/extension tails bypass `_emit_arrs` entirely.
+
+## The inter-helix phase, measured at last (2026-08-06)
+
+Prompted by the observation that the measured CG placement stretches half of all crossovers.
+Until now **every phase number in NADOC was a caDNAno calibration or a 1ZEW crystal value** —
+`_lattice_phase_offset` (π/2, 2π/3) and `BDNA_MINOR_GROOVE_ANGLE_DEG` were fitted to caDNAno's own
+crossover positions (`experiments/exp15_phase_offset_search`), never to MD. `bundle_extract.py`
+*cannot* supply it: its rotation is the minimal axis-to-axis rotation, a 2-DOF object with **no roll
+term by construction** (hence its gimbal-locked `q3`/`q5`). The only shipped inter-helix angle came
+from a 2-helix isolated DX system.
+
+`scripts/measure_interhelix_phase.py` now measures it directly from the five free-NAMD origami:
+**at a crossover, the azimuth of the crossing phosphate about its own helix axis, taken from the
+A→B inter-helix direction.**
+
+| system | n | mean ± circstd | R | \|φ\| median | interhelix |
+|---|---|---|---|---|---|
+| 6hbx100_noT | 1700 | +8.1° ± 34.7° | 0.832 | 19.5° | 21.63 Å |
+| 24hb_0xT | 6030 | +7.4° ± 30.4° | 0.868 | 18.6° | 21.25 Å |
+| 24hb_1xT | 5225 | +1.5° ± 38.4° | 0.799 | 25.8° | 23.52 Å |
+| 24hb_2xT | 6790 | −3.7° ± 51.4° | 0.669 | 35.5° | 22.66 Å |
+| 18hb | 13182 | +7.3° ± 30.0° | 0.872 | 19.1° | 21.30 Å |
+
+**The locked phase constants are VALIDATED — do not change them.** On the *same design* as the
+trajectory (`workspace/6hbx100_noT.nadoc`), NADOC's own predicted crossover azimuth is **+3.3° ±
+19.6°, |φ| median 17.2°** against MD's **+8.1° ± 34.7°, 19.5°** — agreement well inside the MD
+spread. The measured CG placement predicts **+15.4°, |φ| median 21.9°**: also inside the spread on a
+simple 6hb, but it degrades badly on complex designs (VoltronCore |φ| median **17.0° → 41.5°**).
+So the phase convention is right and the measured *bead* is what loses crossover registration —
+which is why the fix belongs at the consumer boundary, not in `_PHASE_*`.
+
+**New, independent result: inserts disorder the crossover phase monotonically.** 0×T → 1×T → 2×T
+gives |φ| median 18.6 → 25.8 → 35.5° and R 0.868 → 0.799 → 0.669, with base pairing falling
+95 → 90 → 83 %. Relevant to [[project_extra_base_spacing]], which had distance data only.
+
+**Pipeline validation** (it took three tries to get right): helices come from union-find over
+Watson-Crick pairs **plus a stacking union on base-pair midpoints** — pairing alone fragments a
+helix into ~14 bp pieces because staple and scaffold crossovers roughly coincide (157 components
+where 6 were expected). C1′–C1′ is *not* a usable pairing criterion (it competes with the
+cross-strand diagonal: 45 % paired, zero crossovers); the WC nitrogens are. Independent check:
+on 6hbx100_noT the walker finds **68 crossovers where the design has 66**, and the component sizes
+recover the 6 helices exactly.
 
 ## What changed
 

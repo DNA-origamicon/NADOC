@@ -16,7 +16,12 @@ from fastapi.testclient import TestClient
 from backend.api.main import app
 from backend.api import state as design_state
 from backend.api.routes import _demo_design
-from backend.core.constants import BDNA_RISE_PER_BP, BDNA_TWIST_PER_BP_DEG, BDNA_TWIST_PER_BP_RAD, SQUARE_TWIST_PER_BP_RAD
+from backend.core.constants import (
+    BDNA_RISE_PER_BP,
+    BDNA_TWIST_PER_BP_DEG,
+    HONEYCOMB_TWIST_PER_BP_RAD,
+    SQUARE_TWIST_PER_BP_RAD,
+)
 from backend.core.lattice import honeycomb_position, square_position
 
 
@@ -94,12 +99,20 @@ class TestHelixAtCell:
         h = r.json()['design']['helices'][0]
         assert abs(h['phase_offset'] - math.radians(60.0 + BDNA_TWIST_PER_BP_DEG / 2)) < 1e-5
 
-    def test_hc_twist_is_bdna(self, client):
-        """HC helix gets B-DNA twist per bp (34.3°/bp)."""
+    def test_hc_twist_is_commensurate_with_the_21bp_repeat(self, client):
+        """An HC helix gets the LATTICE twist (720/21 = 34.2857 deg/bp), not the rounded
+        physical B-DNA constant (34.3).
+
+        The lattice value has to close exactly over the 21-bp crossover period or the
+        geometry does not repeat: at 34.3 the period came out 720.3 deg and crossover
+        strain ramped +0.657 oxDNA units per 1000 bp, so two designs on the same lattice
+        disagreed purely because one was longer (TD-29).
+        """
         _make_hc_design(client)
         r = client.post('/api/design/helix-at-cell', json={'row': 0, 'col': 0})
         h = r.json()['design']['helices'][0]
-        assert abs(h['twist_per_bp_rad'] - BDNA_TWIST_PER_BP_RAD) < 1e-8
+        assert abs(h['twist_per_bp_rad'] - HONEYCOMB_TWIST_PER_BP_RAD) < 1e-12
+        assert abs(21 * h['twist_per_bp_rad'] - 4 * math.pi) < 1e-12, "21 bp must be 2 turns"
 
     def test_hc_custom_length_bp(self, client):
         """length_bp parameter is respected."""

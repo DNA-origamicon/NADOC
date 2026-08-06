@@ -24,15 +24,26 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from backend.core.constants import (
-    BDNA_MINOR_GROOVE_ANGLE_RAD,
     BDNA_RISE_PER_BP,
     HELIX_RADIUS,
     SSDNA_CONTOUR_PER_NT_NM,
 )
-from backend.core.models import Design, Direction
+from backend.core.geometry import groove_offset_rad
+from backend.core.models import Design
 from backend.core.sequences import _build_loop_skip_map, domain_bp_range
 
 _NM_TO_ANGSTROM = 10.0
+
+
+def _rodrigues(v: np.ndarray, axis: np.ndarray, angle: float) -> np.ndarray:
+    """Rotate *v* about the unit vector *axis* by *angle* (Rodrigues).
+
+    Was four byte-identical nested closures — three named ``_rotate``, one ``_rot`` — one
+    per override builder.  ``axis`` must already be normalised; every caller here passes
+    a helix ``axis_hat``.
+    """
+    c, s = math.cos(angle), math.sin(angle)
+    return v * c + np.cross(axis, v) * s + axis * np.dot(axis, v) * (1.0 - c)
 
 # Synthetic helix_id prefix of a strand-extension tail bead — the key the geometry layer,
 # oxDNA and the atomistic model already share (``("__ext_<ext_id>", bead_index, dir)``).
@@ -263,13 +274,13 @@ def nuc_pos_override_from_mrdna(
     from scipy.ndimage import gaussian_filter1d
 
     # ── Step 1: helix axis geometry ────────────────────────────────────────
-    helix_info: dict = {}   # h_id → (ax_s_ang, axis_hat, bp_start)
+    helix_info: dict = {}   # h_id → (ax_s_ang, axis_hat, bp_start, groove)
     for h in design.helices:
         ax_s = h.axis_start.to_array() * 10.0   # nm → Å
         ax_e = h.axis_end.to_array()   * 10.0
         v = ax_e - ax_s
         axis_hat = v / np.linalg.norm(v)
-        helix_info[h.id] = (ax_s, axis_hat, h.bp_start)
+        helix_info[h.id] = (ax_s, axis_hat, h.bp_start, groove_offset_rad(h.direction))
 
     h_ids     = list(helix_info.keys())
     ax_s_arr  = np.array([helix_info[h][0] for h in h_ids])   # (H, 3)
@@ -336,16 +347,12 @@ def nuc_pos_override_from_mrdna(
     for entries in helix_entries.values():
         entries.sort(key=lambda x: x[0])
 
-    def _rotate(v: np.ndarray, axis: np.ndarray, angle: float) -> np.ndarray:
-        c, s = math.cos(angle), math.sin(angle)
-        return v * c + np.cross(axis, v) * s + axis * np.dot(axis, v) * (1.0 - c)
-
     helix_radius_ang = HELIX_RADIUS * 10.0
 
     override: dict[tuple, np.ndarray] = {}
 
     for h_id, entries in helix_entries.items():
-        ax_s, axis_hat, bp_start = helix_info[h_id]
+        ax_s, axis_hat, bp_start, groove = helix_info[h_id]
 
         bp_idxs = [e[0] for e in entries]
         pair_is = [e[1] for e in entries]
@@ -377,8 +384,16 @@ def nuc_pos_override_from_mrdna(
             fwd_ang = axis_pt + helix_radius_ang * fwd_radial_hat
             override[(h_id, bp_idx, 'FORWARD')] = fwd_ang / 10.0   # Å → nm
 
-            # REVERSE: rotate fwd_radial by minor groove angle about ideal axis.
-            rev_radial_hat = _rotate(fwd_radial_hat, axis_hat, BDNA_MINOR_GROOVE_ANGLE_RAD)
+            # REVERSE: rotate fwd_radial by the minor groove angle about the ideal axis.
+            #
+            # This site used to apply +GROOVE unconditionally, the only one of the five in
+            # this file that did not branch on the helix's lattice cell type — so on a
+            # REVERSE-cell helix the reverse strand was placed on the wrong groove side,
+            # 1.0 nm from where the geometric layer puts it.  Fixed 2026-08-06, TD-27
+            # Stage 2.  The forward radial here comes from a smoothed mrDNA bead rather
+            # than the design phase, but the groove is a property of the CELL, not of how
+            # the forward radial was obtained, so the same rule applies.
+            rev_radial_hat = _rodrigues(fwd_radial_hat, axis_hat, groove)
             rev_ang = axis_pt + helix_radius_ang * rev_radial_hat
             override[(h_id, bp_idx, 'REVERSE')] = rev_ang / 10.0  # Å → nm
 
@@ -509,10 +524,6 @@ def nuc_pos_override_from_mrdna_coarse(
     for entries in helix_entries.values():
         entries.sort(key=lambda x: x[0])
 
-    def _rotate(v: np.ndarray, axis: np.ndarray, angle: float) -> np.ndarray:
-        c, s = math.cos(angle), math.sin(angle)
-        return v * c + np.cross(axis, v) * s + axis * np.dot(axis, v) * (1.0 - c)
-
     helix_radius_ang = HELIX_RADIUS * 10.0
     override: dict[tuple, np.ndarray] = {}
 
@@ -572,11 +583,9 @@ def nuc_pos_override_from_mrdna_coarse(
             pn = np.linalg.norm(perp_comp)
             fwd_rad = perp_comp / pn if pn > 1e-6 else ideal_fwd_rad
 
-            groove = (BDNA_MINOR_GROOVE_ANGLE_RAD
-                      if h_dir == Direction.FORWARD
-                      else -BDNA_MINOR_GROOVE_ANGLE_RAD)
+            groove = groove_offset_rad(h_dir)
             fwd_ang = ideal_axis_pt + helix_radius_ang * fwd_rad
-            rev_rad = _rotate(fwd_rad, axis_hat, groove)
+            rev_rad = _rodrigues(fwd_rad, axis_hat, groove)
             rev_ang = ideal_axis_pt + helix_radius_ang * rev_rad
 
             override[(h_id, bp_idx, 'FORWARD')] = fwd_ang / 10.0
@@ -764,10 +773,6 @@ def nuc_pos_override_display_from_coarse(
     for entries in helix_entries.values():
         entries.sort(key=lambda x: x[0])
 
-    def _rot(v, axis, angle):
-        c, s = math.cos(angle), math.sin(angle)
-        return v * c + np.cross(axis, v) * s + axis * np.dot(axis, v) * (1.0 - c)
-
     helix_radius_ang = HELIX_RADIUS * 10.0
     override: dict[tuple, np.ndarray] = {}
 
@@ -802,10 +807,9 @@ def nuc_pos_override_display_from_coarse(
             pn = np.linalg.norm(perp_comp)
             fwd_rad = perp_comp / pn if pn > 1e-6 else ideal_fwd_rad
 
-            groove = (BDNA_MINOR_GROOVE_ANGLE_RAD if h_dir == Direction.FORWARD
-                      else -BDNA_MINOR_GROOVE_ANGLE_RAD)
+            groove = groove_offset_rad(h_dir)
             override[(h_id, bp_idx, 'FORWARD')] = (axis_pt + helix_radius_ang * fwd_rad) / 10.0
-            rev_rad = _rot(fwd_rad, axis_hat, groove)
+            rev_rad = _rodrigues(fwd_rad, axis_hat, groove)
             override[(h_id, bp_idx, 'REVERSE')] = (axis_pt + helix_radius_ang * rev_rad) / 10.0
 
     print(
@@ -942,10 +946,6 @@ def nuc_pos_override_from_arbd_strands(
     for entries in helix_entries.values():
         entries.sort(key=lambda x: x[0])
 
-    def _rotate(v: np.ndarray, axis: np.ndarray, angle: float) -> np.ndarray:
-        c, s = math.cos(angle), math.sin(angle)
-        return v * c + np.cross(axis, v) * s + axis * np.dot(axis, v) * (1.0 - c)
-
     helix_radius_ang = HELIX_RADIUS * 10.0
     override: dict[tuple, np.ndarray] = {}
 
@@ -990,11 +990,9 @@ def nuc_pos_override_from_arbd_strands(
             pn            = np.linalg.norm(perp_comp)
             fwd_rad       = perp_comp / pn if pn > 1e-6 else ideal_fwd_rad
 
-            groove = (BDNA_MINOR_GROOVE_ANGLE_RAD
-                      if h_dir == Direction.FORWARD
-                      else -BDNA_MINOR_GROOVE_ANGLE_RAD)
+            groove = groove_offset_rad(h_dir)
             fwd_ang = axis_pt + helix_radius_ang * fwd_rad
-            rev_rad = _rotate(fwd_rad, axis_hat, groove)
+            rev_rad = _rodrigues(fwd_rad, axis_hat, groove)
             rev_ang = axis_pt + helix_radius_ang * rev_rad
 
             override[(h_id, bp_idx, 'FORWARD')] = fwd_ang / 10.0   # Å → nm
@@ -1422,10 +1420,7 @@ def _build_nt_arrays(
         ax_e = h.axis_end.to_array()
         axis_hat = ax_e - ax_s
         axis_hat /= np.linalg.norm(axis_hat)
-        # Grove offset sign: +GROOVE for FORWARD helix, −GROOVE for REVERSE/None
-        groove = (BDNA_MINOR_GROOVE_ANGLE_RAD
-                  if h.direction == Direction.FORWARD
-                  else -BDNA_MINOR_GROOVE_ANGLE_RAD)
+        groove = groove_offset_rad(h.direction)
         helix_geom[h.id] = (ax_s, axis_hat, h.phase_offset, h.twist_per_bp_rad, h.bp_start, groove)
 
     # ── Pass 1: enumerate nucleotides and assign indices ──────────────────────

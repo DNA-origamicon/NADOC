@@ -40,16 +40,105 @@ import numpy as np
 import math
 
 from backend.core.constants import (
-    BDNA_MINOR_GROOVE_ANGLE_RAD,
     BDNA_RISE_PER_BP,
-    HELIX_RADIUS,
     NM_TO_OXDNA,
     OXDNA_LENGTH_UNIT,
+)
+from backend.core.geometry import (
+    nucleotide_positions_arrays,
+    nucleotide_positions_arrays_extended,
+    nucleotide_positions_arrays_extended_right,
 )
 from backend.core.models import Design, Direction
 
 
 # ── Geometry helpers ─────────────────────────────────────────────────────────
+
+
+def _helix_fingerprint(helix) -> tuple:
+    """Value key for the straight-geometry cache — everything the build depends on.
+
+    Deliberately by VALUE, not ``id(helix)``: designs are re-parsed constantly and a
+    recycled id would serve one helix's beads for another's.
+    """
+    return (
+        helix.id, helix.bp_start, helix.length_bp, helix.phase_offset,
+        helix.twist_per_bp_rad, helix.direction,
+        tuple(helix.axis_start.to_array()), tuple(helix.axis_end.to_array()),
+        tuple(sorted((ls.bp_index, ls.delta) for ls in helix.loop_skips)),
+    )
+
+
+# Bounded memo for the straight-geometry arrays, keyed by (fingerprint, branch, edge_bp).
+# Not functools.lru_cache: that would have to hash the Helix, which is an unhashable
+# pydantic model.  Resolving N nucleotides on one helix otherwise rebuilds its whole
+# array N times — 26 s to walk three fixtures, against 0.5 s memoised.
+_STRAIGHT_ARRAYS_CACHE: "dict[tuple, dict]" = {}
+_STRAIGHT_ARRAYS_CACHE_MAX = 256
+
+
+def _straight_arrays(helix, branch: str, edge_bp: int) -> dict:
+    """Build (and memoise) one helix's straight-geometry arrays."""
+    key = (_helix_fingerprint(helix), branch, edge_bp)
+    hit = _STRAIGHT_ARRAYS_CACHE.get(key)
+    if hit is not None:
+        return hit
+    if branch == "lo":
+        arrs = nucleotide_positions_arrays_extended(helix, edge_bp)
+    elif branch == "hi":
+        arrs = nucleotide_positions_arrays_extended_right(helix, edge_bp)
+    else:
+        arrs = nucleotide_positions_arrays(helix)
+    if len(_STRAIGHT_ARRAYS_CACHE) >= _STRAIGHT_ARRAYS_CACHE_MAX:
+        _STRAIGHT_ARRAYS_CACHE.clear()
+    _STRAIGHT_ARRAYS_CACHE[key] = arrs
+    return arrs
+
+
+def _straight_nuc_rows(helix, bp_index: int, direction: str):
+    """Every straight-geometry row for one (bp_index, direction), in emission order.
+
+    THE single point where this module reads the geometric layer.  Returns a list of
+    ``(backbone, base, base_normal, axis_tangent)`` tuples — more than one only where a
+    loop puts several nucleotides on the same bp_index, and then ordered by ascending
+    axial offset, which is the order ``geometry.py`` emits them in and the order the
+    writer's ``geo_copies`` lists rely on.
+
+    Straight geometry on purpose: deformation and cluster transforms are NOT applied
+    (the ``_extended`` helpers document the same), because the caller is resolving
+    nucleotides that the deformed geometry list did not carry at all.
+    """
+    if bp_index < helix.bp_start:
+        branch, edge = "lo", bp_index
+    elif bp_index >= helix.bp_start + helix.length_bp:
+        branch, edge = "hi", bp_index
+    else:
+        branch, edge = "in", 0
+    arrs = _straight_arrays(helix, branch, edge)
+
+    if len(arrs.get("bp_indices", ())) == 0:
+        return None
+    want_dir = 0 if direction == "FORWARD" else 1
+    idx = np.nonzero((arrs["bp_indices"] == bp_index) & (arrs["directions"] == want_dir))[0]
+    return [
+        (arrs["positions"][i], arrs["base_positions"][i],
+         arrs["base_normals"][i], arrs["axis_tangents"][i])
+        for i in idx
+    ] or None
+
+
+def _nuc_dict(helix_id: str, bp_index: int, direction: str,
+              backbone, base, base_normal, axis_tangent) -> dict:
+    """The geometry-API-shaped dict this module hands to the writer."""
+    return {
+        "helix_id": helix_id,
+        "bp_index": bp_index,
+        "direction": direction,
+        "backbone_position": np.asarray(backbone).tolist(),
+        "base_position": np.asarray(base).tolist(),
+        "base_normal": np.asarray(base_normal).tolist(),
+        "axis_tangent": np.asarray(axis_tangent).tolist(),
+    }
 
 
 def _compute_nuc_geometry_copy(
@@ -60,13 +149,30 @@ def _compute_nuc_geometry_copy(
     copy_k: int,
     n_copies: int,
 ) -> dict:
-    """Like _compute_nuc_geometry but offset along the axis for loop copies."""
-    nuc = _compute_nuc_geometry(design, helix_id, bp_index, direction)
-    if nuc is None or n_copies <= 1:
-        return nuc
-    # Apply fractional axial offset: same formula as geometry.py nucleotide_positions().
+    """Like _compute_nuc_geometry but selects the k-th loop copy at *bp_index*.
+
+    Sources the copy from the geometric layer's own emission order (copies ascend by
+    axial offset) rather than re-deriving an offset.  It used to add
+    ``(copy_k - (n_copies-1)/2) * rise`` on top of a nominal position; that stopped being
+    correct when ``_compute_nuc_geometry`` began delegating to ``geometry.py``, whose
+    emitted copies ALREADY carry the +/-0.5*rise loop offset, so the old formula would
+    apply it twice (TD-27 Stage 2).
+
+    *n_copies* is retained for the caller's signature and as the fallback's divisor; it
+    is not needed when the geometric layer supplies the copies.
+    """
     helix = design.find_helix(helix_id)
     if helix is None:
+        return None
+
+    copies = _straight_nuc_rows(helix, bp_index, direction)
+    if copies is not None and 0 <= copy_k < len(copies):
+        return _nuc_dict(helix_id, bp_index, direction, *copies[copy_k])
+
+    # Fallback: the geometric layer did not emit this copy (n_copies came from a
+    # loop_skip delta the straight build does not reproduce).  Offset from copy 0.
+    nuc = _compute_nuc_geometry(design, helix_id, bp_index, direction)
+    if nuc is None or n_copies <= 1:
         return nuc
     start = np.array([helix.axis_start.x, helix.axis_start.y, helix.axis_start.z])
     end   = np.array([helix.axis_end.x,   helix.axis_end.y,   helix.axis_end.z])
@@ -76,8 +182,7 @@ def _compute_nuc_geometry_copy(
         return nuc
     axis_hat /= axis_len
     copy_frac = (copy_k - (n_copies - 1) / 2.0)
-    offset = copy_frac * BDNA_RISE_PER_BP * axis_hat
-    pos_shifted = np.array(nuc["backbone_position"]) + offset
+    pos_shifted = np.array(nuc["backbone_position"]) + copy_frac * BDNA_RISE_PER_BP * axis_hat
     return {**nuc, "backbone_position": pos_shifted.tolist()}
 
 
@@ -91,6 +196,23 @@ def _compute_nuc_geometry(
     Compute geometry for a nucleotide that may be outside the helix's defined
     bp range (e.g. an overhang domain that extends beyond helix.length_bp).
     Returns a dict with the same keys as the geometry API response.
+
+    Delegates to the geometric layer rather than re-deriving the helix math, because
+    the copy that used to live here had drifted from it in two ways (TD-27 Stage 2):
+
+      1. It applied the minor-groove offset with the OPPOSITE sign — ``-G`` on
+         FORWARD-cell helices where ``geometry.py`` uses ``+G``.  FORWARD-strand beads
+         do not depend on the groove, so they were right; every REVERSE-strand bead
+         landed **1.000 nm** away from where the geometric layer puts it (two points at
+         r = 1.0 whose placements differ by 2x150 deg give a chord of 2*sin(30 deg)).
+         That is what the writer's loop-copy comment below is routing around.
+      2. It indexed by a raw ``bp_index - bp_start``, ignoring loop/skip deltas, so on a
+         skip-bearing helix even the FORWARD bead was half a rise out (measured 0.167 nm
+         on ``Examples/U6hb.nadoc``, 72 skips).
+
+    This is the STRAIGHT geometric layer by design — deformation and cluster transforms
+    are deliberately not applied, exactly as the ``_extended`` helpers document.  The
+    caller is resolving nucleotides the deformed geometry list did not carry at all.
     """
     helix = design.find_helix(helix_id)
     if helix is None:
@@ -103,48 +225,12 @@ def _compute_nuc_geometry(
     if axis_len == 0:
         return None
 
-    axis_hat = axis_vec / axis_len
-    # Build local frame (same as geometry.py's _frame_from_helix_axis)
-    ref = np.array([0.0, 0.0, 1.0])
-    if abs(np.dot(axis_hat, ref)) > 0.9:
-        ref = np.array([1.0, 0.0, 0.0])
-    x_hat = np.cross(ref, axis_hat)
-    x_hat /= np.linalg.norm(x_hat)
-    y_hat = np.cross(axis_hat, x_hat)
-
-    local_i = bp_index - helix.bp_start
-    axis_point = start + axis_hat * (local_i * BDNA_RISE_PER_BP)
-
-    is_fwd_helix = (helix.direction == Direction.FORWARD)
-    groove_offset = -BDNA_MINOR_GROOVE_ANGLE_RAD if is_fwd_helix else BDNA_MINOR_GROOVE_ANGLE_RAD
-
-    fwd_angle = helix.phase_offset + local_i * helix.twist_per_bp_rad
-    rev_angle = fwd_angle + groove_offset
-
-    fwd_radial = math.cos(fwd_angle) * x_hat + math.sin(fwd_angle) * y_hat
-    rev_radial = math.cos(rev_angle) * x_hat + math.sin(rev_angle) * y_hat
-
-    fwd_backbone = axis_point + HELIX_RADIUS * fwd_radial
-    rev_backbone = axis_point + HELIX_RADIUS * rev_radial
-
-    base_pair_vec = rev_backbone - fwd_backbone
-    base_pair_hat = base_pair_vec / (np.linalg.norm(base_pair_vec) + 1e-14)
-
-    if direction == "FORWARD":
-        backbone = fwd_backbone
-        base_normal = base_pair_hat
-    else:
-        backbone = rev_backbone
-        base_normal = -base_pair_hat
-
-    return {
-        "helix_id": helix_id,
-        "bp_index": bp_index,
-        "direction": direction,
-        "backbone_position": backbone.tolist(),
-        "base_normal": base_normal.tolist(),
-        "axis_tangent": axis_hat.tolist(),
-    }
+    rows = _straight_nuc_rows(helix, bp_index, direction)
+    if rows is None:
+        return None
+    # A loop puts several nucleotides on one bp_index; the bare 3-tuple key means the
+    # first of them.  Callers that need copy k ask _compute_nuc_geometry_copy.
+    return _nuc_dict(helix_id, bp_index, direction, *rows[0])
 
 
 # ── Nucleotide ordering helper ────────────────────────────────────────────────
@@ -892,11 +978,17 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
     }
     # Loop copies collapse in geo_map (all n copies share the 3-tuple key), so also
     # keep the per-(helix,bp,dir) list IN EMISSION ORDER (geometry.py emits copy
-    # k=0..n-1 by ascending axial offset).  Sourcing the k-th copy from here — rather
-    # than recomputing it with _compute_nuc_geometry_copy — keeps loop copies on the
-    # SAME groove side as the real bases (the two code paths use OPPOSITE minor-groove
-    # signs; the recomputed reverse copy landed across the duplex → a spurious
-    # over-stretched junction bond on every reverse-strand loop).
+    # k=0..n-1 by ascending axial offset).
+    #
+    # This list is still preferred over _compute_nuc_geometry_copy, but NOT for the
+    # reason originally recorded here.  That reason — "the two code paths use OPPOSITE
+    # minor-groove signs; the recomputed reverse copy landed across the duplex → a
+    # spurious over-stretched junction bond on every reverse-strand loop" — was a real
+    # bug and it is now FIXED at source: _compute_nuc_geometry delegates to geometry.py,
+    # so the two paths agree exactly (verified to 0.0 nm over all 72 loop copies on
+    # Examples/U6hb.nadoc).  The surviving reason is DEFORMATION: this list carries the
+    # design's deformations and cluster transforms, and the straight-geometry fallback
+    # deliberately does not.  Prefer it wherever it has the copy (TD-27 Stage 2).
     geo_copies: dict[tuple[str, int, str], list[dict]] = {}
     for n in geometry:
         geo_copies.setdefault((n["helix_id"], n["bp_index"], n["direction"]), []).append(n)
@@ -1110,6 +1202,98 @@ _POS_BASE_NM: float = 0.4 * OXDNA_LENGTH_UNIT   # ≈ 0.341 nm
 OXDNA_NATIVE_HBOND_NM: float = 0.37
 
 
+def _oxdna_cm_radius_map(
+    design: Design, resolved_map: dict[tuple, dict]
+) -> dict[tuple, dict]:
+    """Put every backbone bead back on oxDNA's centre-of-mass cylinder.
+
+    ``nuc_conf_line`` writes ``backbone_position`` straight into the conf as the oxDNA
+    CENTRE OF MASS, and ``HELIX_RADIUS`` is defined as exactly that ("the radius from
+    helix axis to the nucleotide centre of mass ... in the oxDNA model", constants.py).
+    The DISPLAY bead is a different landmark: since TD-27 it is the MD-measured ribose
+    C3' at 0.804 nm.  Feeding the C3' in as a CM pulls every bead 0.196 nm inward, which
+    widens each inter-helix crossover gap by 2 x 0.196 = 0.39 nm and pushes borderline
+    backbone bonds over oxDNA's FENE cliff.  Measured before this conversion existed:
+    on VoltronCore 42 bonds that were comfortably safe under the legacy placement
+    (median 0.77 units) landed at a median of 1.38, over ``FENE_RMAX_UNITS`` = 1.0064,
+    which aborts oxDNA at configuration load.
+
+    ``delta`` in :func:`oxdna_native_seed_map` cannot fix that — it slides CROSS-STRAND
+    along a1, and the crossover gap is a radial, inter-helix quantity.  So the seed
+    boundary restores the radius instead, keeping each bead's azimuth and axial offset.
+
+    NO-OP ON LEGACY GEOMETRY BY CONSTRUCTION: legacy beads already sit at exactly
+    ``HELIX_RADIUS`` from ``deformed_helix_axes`` (every one of VoltronCore's 14,774),
+    so this returns them unchanged and cannot perturb an existing seed.
+
+    Not a full inversion: the measured placement also rotates the bead +24.5 deg in
+    azimuth, which this deliberately keeps.  Restoring that too would just be reverting
+    to the legacy geometry wholesale.  Measured residual (bonds over the cliff, legacy /
+    measured / measured+this): NS_trans_fix 588 / 620 / 535, VoltronCore 538 / 580 / 551,
+    U6hb 170 / 211 / 210, 6hb_test 2 / 2 / 2, 26hb_platform_v3 0 / 0 / 0.  Skip-dense
+    designs (U6hb) keep most of their regression — see TD-27 Stage 3.
+    """
+    from backend.core.constants import HELIX_RADIUS
+    from backend.core.deformation import deformed_helix_axes
+    from backend.core.measured_positioning import MEASURED
+
+    # The two radii the measured display placement puts backbone beads at (the ribose
+    # C3' of each strand).  Only beads AT one of these are converted — see below.
+    _MEASURED_CM_RADII = (MEASURED.backbone_fwd.radius_nm, MEASURED.backbone_rev.radius_nm)
+    _MEASURED_R_TOL = 1e-6
+
+    axes: dict[str, tuple] = {}
+    for a in deformed_helix_axes(design):
+        start = np.asarray(a["start"], dtype=float)
+        vec = np.asarray(a["end"], dtype=float) - start
+        n = float(np.linalg.norm(vec))
+        if n > 1e-12:
+            axes[a["helix_id"]] = (start, vec / n)
+    if not axes:
+        return resolved_map
+
+    shift_of: dict[tuple, np.ndarray] = {}
+    out: dict[tuple, dict] = {}
+    for key, nuc in resolved_map.items():
+        entry = axes.get(key[0]) if isinstance(key, tuple) and key else None
+        if entry is None:                    # inserts, tails, __lnk__ bridges
+            continue
+        origin, tangent = entry
+        pos = np.asarray(nuc["backbone_position"], dtype=float)
+        d = pos - origin
+        axial = float(d @ tangent)
+        radial = d - axial * tangent
+        r = float(np.linalg.norm(radial))
+        # Convert ONLY beads sitting at a MEASURED backbone radius.  "Anything not at
+        # HELIX_RADIUS" is the wrong test and was a real bug: a bead can be legitimately
+        # off the ideal cylinder without being measured — folded ssDNA seeds, relaxed
+        # overrides, flexible segments — and snapping those onto the cylinder destroys
+        # the very fold the caller built (caught by
+        # tests/test_cg_seed_ssdna_collapse.py, whose collapse fixture stopped
+        # reproducing because its folded beads were being straightened).
+        if r < 1e-9 or not any(abs(r - m) < _MEASURED_R_TOL for m in _MEASURED_CM_RADII):
+            continue
+        shift_of[key] = (origin + axial * tangent + (radial / r) * HELIX_RADIUS) - pos
+    if not shift_of:
+        return resolved_map
+
+    # A tail bead has no helix axis of its own, so it must be translated RIGIDLY WITH
+    # ITS ANCHOR — the same rule oxdna_native_seed_map's delta shift already follows,
+    # and for the same reason: moving the anchor while leaving the tail behind snaps the
+    # anchor->tail backbone bond straight over the FENE cliff.
+    for bead_key, anchor_key, _end in extension_beads(design):
+        if bead_key in resolved_map and anchor_key in shift_of:
+            shift_of[bead_key] = shift_of[anchor_key]
+
+    for key, nuc in resolved_map.items():
+        shift = shift_of.get(key)
+        out[key] = nuc if shift is None else {
+            **nuc,
+            "backbone_position": np.asarray(nuc["backbone_position"], dtype=float) + shift,
+        }
+    return out
+
+
 def oxdna_native_seed_map(
     design: Design, resolved_map: dict[tuple, dict]
 ) -> dict[tuple, dict]:
@@ -1144,6 +1328,8 @@ def oxdna_native_seed_map(
     never written back into Design topology.  Orientation (a1/a3) is untouched.
     Returns the map unchanged when there are no designed pairs to seed.
     """
+    resolved_map = _oxdna_cm_radius_map(design, resolved_map)
+
     a1_of: dict[tuple, np.ndarray] = {}
     for key, nuc in resolved_map.items():
         a1 = np.asarray(nuc["base_normal"], dtype=float)

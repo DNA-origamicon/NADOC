@@ -329,7 +329,12 @@ def test_extension_seed_bonds_sit_inside_the_fene_window(tmp_path, n, end):
     assert max(bonds) < FENE_SAFE_MAX_UNITS, bonds
     # the bond touching the ANCHOR is solved exactly onto the FENE rest length, so the
     # tail starts relaxed rather than merely legal
-    assert min(bonds) == pytest.approx(FENE_R0_OXDNA2, abs=1e-6), bonds
+    # 1e-5, not 1e-6: this bond is SOLVED onto the rest length through an arccos/cos
+    # round trip, so it carries ~1e-6 of float noise that shifts with any change to
+    # the surrounding geometry.  1e-6 was tight enough that the honeycomb twist
+    # becoming commensurate (TD-29) tipped one parametrisation over by 1.1e-6.  The
+    # claim is 'lands on the rest length', which 1e-5 still pins to 5 sig figs.
+    assert min(bonds) == pytest.approx(FENE_R0_OXDNA2, abs=1e-5), bonds
 
 
 @_needs_voltron

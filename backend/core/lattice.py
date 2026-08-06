@@ -48,6 +48,7 @@ from backend.core.constants import (
     RELAXED_HELIX_SPACING_NM,
     SQUARE_COL_PITCH,
     SQUARE_ROW_PITCH,
+    HONEYCOMB_TWIST_PER_BP_RAD,
     SQUARE_TWIST_PER_BP_RAD,
 )
 from backend.core.models import Crossover, Design, DesignMetadata, Direction, Domain, ForcedLigation, HalfCrossover, Helix, LatticeType, OverhangConnection, OverhangSpec, Strand, StrandType, Vec3
@@ -269,10 +270,17 @@ def _lattice_phase_offset(direction: Direction, lattice_type: "LatticeType") -> 
 
 
 def _lattice_twist(lattice_type: "LatticeType") -> float:  # type: ignore[name-defined]
-    """Return twist_per_bp_rad for the given lattice type."""
+    """Return twist_per_bp_rad for the given lattice type.
+
+    Both values are commensurate with their lattice's crossover period by construction —
+    32 bp = 3 turns on square, 21 bp = 2 turns on honeycomb — so crossover geometry
+    REPEATS along a helix instead of drifting.  Honeycomb used the rounded physical
+    constant (34.3) until 2026-08-06, which left a +0.3° residue per repeat and ramped
+    crossover strain by +0.657 oxDNA units per 1000 bp (TD-29).
+    """
     if lattice_type == LatticeType.SQUARE:
         return SQUARE_TWIST_PER_BP_RAD
-    return BDNA_TWIST_PER_BP_RAD
+    return HONEYCOMB_TWIST_PER_BP_RAD
 
 
 def helix_canonical_axis(

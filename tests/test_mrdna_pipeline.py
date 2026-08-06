@@ -823,3 +823,54 @@ class TestPhase3bRegression:
             f"Phase 3b EM ratio {ratio:.2f}× — expected < 0.50×. "
             f"Baseline {baseline_steps} steps, Phase 3b {spline_steps} steps."
         )
+
+
+# ── Tier 1: the groove rule the fine-stage override applies ───────────────────
+
+
+@pytest.mark.parametrize("cell", ["FORWARD", "REVERSE"])
+def test_the_fine_override_rotates_the_reverse_bead_onto_the_geometric_layer(cell):
+    """`nuc_pos_override_from_mrdna` places the REVERSE bead by rotating the FORWARD
+    radial about the helix axis by the minor-groove angle.
+
+    Until 2026-08-06 it applied `+GROOVE` unconditionally — the only one of the five
+    groove sites in `mrdna_bridge.py` that did not branch on the helix's lattice cell
+    type.  On a REVERSE-cell helix that put the reverse strand on the wrong groove side,
+    1.000 nm from where the geometric layer places it (TD-27 Stage 2; user-confirmed as a
+    live bug rather than an intentional exception).
+
+    The forward radial in that function comes from a smoothed mrDNA bead rather than from
+    the design phase, which is why the exception looked plausible — but the groove is a
+    property of the CELL, not of how the forward radial was obtained.  Pinned here
+    without ARBD by feeding the rotation an IDEAL forward radial: the rule must carry it
+    onto the geometric layer's own reverse bead.
+    """
+    import numpy as np
+
+    from backend.core.constants import HELIX_RADIUS
+    from backend.core.geometry import groove_offset_rad, nucleotide_positions_arrays
+    from backend.core.mrdna_bridge import _rodrigues
+    from backend.core.models import Direction, Helix, Vec3
+
+    direction = Direction[cell]
+
+    helix = Helix(
+        id="h_groove",
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=16 * 0.334),
+        phase_offset=0.37,
+        twist_per_bp_rad=math.radians(34.3),
+        length_bp=16,
+        bp_start=0,
+        direction=direction,
+    )
+    arrs = nucleotide_positions_arrays(helix)
+    axis_hat = np.array([0.0, 0.0, 1.0])
+    groove = groove_offset_rad(helix.direction)
+
+    for k in range(helix.length_bp):
+        fwd, rev = arrs["positions"][2 * k], arrs["positions"][2 * k + 1]
+        axis_pt = np.array([0.0, 0.0, float(fwd[2])])
+        fwd_radial = (fwd - axis_pt) / np.linalg.norm(fwd - axis_pt)
+        got = axis_pt + HELIX_RADIUS * _rodrigues(fwd_radial, axis_hat, groove)
+        assert np.allclose(got, rev, atol=1e-12), f"{direction} bp {k}"

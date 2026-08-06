@@ -1267,7 +1267,8 @@ def get_geometry(
                 straight_design = design.model_copy(
                     update={"deformations": [], "cluster_transforms": []})
             with trace.step("straight_positions_embed"):
-                straight_positions, straight_axes = _positions_for_design(straight_design)
+                straight_positions, straight_axes = _positions_for_design(
+                    straight_design, measured_positioning=measured_positioning)
             out["straight_positions_by_helix"] = straight_positions
             out["straight_helix_axes"]         = straight_axes
     else:
