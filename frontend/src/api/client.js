@@ -2783,6 +2783,11 @@ export const refitMdJob          = (id, body)    => _oxdnaJSON('POST',   `/md/jo
 export const resolveMdGpuDecision = (id, choice)  => _oxdnaJSON('POST',   `/md/jobs/${id}/gpu-decision`, { choice })
 /** Live-display metadata for a job ({ready, config_path, …}). */
 export const getMdDisplayMeta    = (id)          => _oxdnaJSON('GET',    `/md/jobs/${id}/display`)
+/** Pull ONE current frame off a job still running on the cluster, so it can be
+ *  displayed.  Cheap counterpart to the whole-output `fetch-remote`: one
+ *  `.restart.coor`, not a multi-GB DCD.  Needs a live (Duo) cluster session. */
+export const fetchMdLiveFrame    = (id, force = false) =>
+  _oxdnaJSON('POST', `/md/jobs/${id}/fetch-live-frame${force ? '?force=true' : ''}`)
 export const getMdJobMetrics     = (id)          => _oxdnaJSON('GET',    `/md/jobs/${id}/metrics`)
 export const getMdJobFixAdvice   = (id)          => _oxdnaJSON('GET',    `/md/jobs/${id}/fix-advice`)
 /** NAMD/GROMACS availability + recommended thread count. */
@@ -2819,6 +2824,11 @@ export const getClusterStatus    = ()            => _oxdnaJSON('GET',    '/clust
  * `jobId` shapes the estimate around a specific prepared job; `force` bypasses the
  * backend's 60 s probe cache (the popup's Re-check button).
  */
+/**
+ * The SLURM request a job WOULD be submitted with, before it exists — resolved
+ * resources plus the literal sbatch header. Offline; no cluster session needed.
+ */
+export const getSlurmPreview = (body = {}) => _oxdnaJSON('POST', '/cluster/slurm-preview', body)
 export const getClusterAvailability = ({ jobId = null, force = false, historyDays = 30 } = {}) => {
   const q = new URLSearchParams()
   if (jobId) q.set('job_id', jobId)

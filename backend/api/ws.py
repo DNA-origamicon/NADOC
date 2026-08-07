@@ -1691,11 +1691,13 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
                 # Both numbers, from the same helper the REST list uses: the bar's text
                 # would otherwise gain and lose its time-remaining estimate depending on
                 # which channel last painted it.
-                frac, eta = _namd_live_progress(job, _WORKSPACE_DIR)
+                frac, eta, estimated = _namd_live_progress(job, _WORKSPACE_DIR)
                 if frac is not None:
                     payload["progress_fraction"] = frac
                 if eta is not None:
                     payload["eta_seconds"] = eta
+                if estimated:
+                    payload["progress_estimated"] = True
             except Exception:
                 pass
 

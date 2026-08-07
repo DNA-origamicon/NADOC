@@ -1596,3 +1596,38 @@ identity** survives a `followMotion` frame (the test fails against `_rebuildRig`
 
 Related: the same rewrite is why `beginFrameSession` exists at all rather than a `renderToBlob`
 loop — browsers block new WebGL contexts after ~30, so a per-frame context dies mid-export.
+
+## L14 — The login node is not a compute node (Alpine, 2026-08-07)
+
+**Context.** Building a CUDA/GPU-resident NAMD on Alpine and wiring NADOC to submit to it.
+
+**Three failures, one root cause: I probed the cluster from the login node and treated the
+answer as universal.**
+
+1. `list_namd_modules` ran a bare `module -t avail namd` and returned **empty** — right after
+   SLURM 30948986 died on an unknown module `namd/3.0.1_gpu`. Alpine's Lmod is **hierarchical**:
+   `namd` is invisible to `avail` until a compiler is loaded. The tool was useless at exactly the
+   moment it was needed. Fix: load a compiler first, then fall back to `module spider`, which
+   searches every branch regardless of what is loaded.
+
+2. A submit pre-flight built on `module load … && command -v <namd>` **failed on the login node**
+   with `These module(s) exist but cannot be loaded as requested: "gcc/11.2.0"` — while the build
+   job had loaded that same module successfully inside `acpu`, and `module spider gcc/11.2.0`
+   reported *"This module can be loaded directly"*. Adding `module purge` (mirroring the sbatch)
+   did not help. The login node simply has a different module environment.
+
+3. The build's own artifact check ran `namd3 --version` on an `acpu` node and **segfaulted** — a
+   `-DNAMD_CUDA` binary can crash during CUDA init where no device exists. Worse, the check ended
+   in `|| true`, so the script printed `BUILD OK` over a core dump.
+
+**Why it matters.** A false negative here blocks work that would have succeeded; a false positive
+(the `BUILD OK`) is worse, because it certifies an artifact nobody validated.
+
+**How to apply.** From a login node, verify only what does not vary between nodes:
+- **existence** of a module → `module spider <name>` (never `module load`)
+- **existence/executability** of a binary → `test -x <absolute path>`
+- **never** infer "it runs" — a GPU binary cannot be exercised on a CPU node; that is what a short
+  job on the target partition is for.
+
+Mirror the *job's* environment when you must load (`module purge` then load), and remember that
+even then the login node may refuse. See [[alpine-cluster-submission]].

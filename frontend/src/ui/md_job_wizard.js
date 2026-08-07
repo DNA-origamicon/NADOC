@@ -18,6 +18,8 @@
  * the panel runs the gates it already runs.
  */
 import { createButton, createInput, createSelect, createModal, el } from './primitives/index.js'
+import { initWizardTargetStep } from './md_job_wizard_target.js'
+import { renderSlurmDetails } from './md_job_wizard_target_model.js'
 import {
   allStageConditions,
   applySnapshot,
@@ -59,6 +61,7 @@ const UNDO_LIMIT = 50
  *  different tasks — every setting on one screen, the resulting 22-stage ladder and its
  *  conditions on the next — so neither has to be squeezed into a column. */
 const TABS = [
+  ['target', 'Where it runs'],
   ['setup', 'Protocol & settings'],
   ['plan', 'What each stage runs'],
 ]
@@ -271,7 +274,7 @@ const PROVENANCE_TEXT = {
  *        is where settings are.
  */
 export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPath,
-  onJobCreated, onOptimizeMount } = {}) {
+  onJobCreated, onOptimizeMount, onTargetChange = () => {} } = {}) {
   let modal = null
   let presets = []
   let plan = null
@@ -279,9 +282,13 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
 
   const state = {
     mode: 'relaxation',
-    // Which half of the wizard is showing. Not undoable — moving between tabs changes
-    // nothing about the run.
-    tab: 'setup',
+    // Which step is showing. Not undoable — moving between tabs changes nothing about
+    // the run.
+    tab: 'target',
+    // Step 1's answer. WHERE a job runs is a property of the run, so unlike `tab` it is
+    // undoable and it rides along in the payload.
+    target: 'local',
+    partition: null,
     presetId: 'design_speed',
     touched: {},          // only what the user actually changed — see wizardPayload
     // Set when the wizard was opened for a SEEDED DRAFT: submitting then solvates that
@@ -303,6 +310,8 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     summary: el('div', { className: 'wizard-summary' }),
     source: el('div', { className: 'wizard-source' }),
     status: el('div', { className: 'wizard-status' }),
+    // Only filled for a cluster target — a local run has no SLURM request to inspect.
+    slurm: el('div', { className: 'wizard-slurm' }),
   }
 
   const refetch = makeDebounce(() => { void loadPlan() }, PLAN_DEBOUNCE_MS)
@@ -1141,6 +1150,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   }
 
   function renderSummary() {
+    if (state.tab === 'plan') void loadSlurmPreview()   // run length may have changed
     mounts.summary.replaceChildren()
     if (!plan) return
     const t = plan.totals || {}
@@ -1238,6 +1248,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   let createBtn = null
   let nextBtn = null
   let prevBtn = null
+  let targetStep = null
 
   // ── Tabs ────────────────────────────────────────────────────────────────────
   const tabBtns = {}
@@ -1245,8 +1256,91 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
 
   function setTab(tab) {
     if (state.tab === tab) return
+    // Clicking a later tab is the same commitment as Next, so it obeys the same gate.
+    if (tab !== 'target' && targetStep && !targetStep.isReady()) return
     state.tab = tab
     paintTabs()
+  }
+
+  // ── SLURM preview (cluster targets only) ────────────────────────────────────
+  let slurmPreview = null
+  let slurmBusy = false
+  let slurmError = ''
+  let slurmKey = ''          // partition|total_ns — refetch only when those change
+  // Collapsed on every entry to the step. The stage ladder is what this step is FOR;
+  // the sbatch details are for the rarer "what exactly will be submitted" question.
+  let slurmOpen = false
+
+  function paintSlurm() {
+    if (!mounts.slurm) return
+    if (state.target !== 'alpine') { mounts.slurm.innerHTML = ''; return }
+    const summary = slurmPreview?.resources
+      ? `${slurmPreview.resources.partition} · ${slurmPreview.resources.qos} · `
+        + `${slurmPreview.resources.walltime} · `
+        + `${Math.round(slurmPreview.resources.est_cost_su).toLocaleString()} SU`
+      : slurmBusy ? 'sizing…' : 'partition, QoS, walltime, memory and the sbatch script'
+    const warn = (slurmPreview?.warnings || []).length
+    mounts.slurm.innerHTML = `
+      <button type="button" id="wiz-slurm-toggle" aria-expanded="${slurmOpen}"
+        style="width:100%;display:flex;align-items:baseline;gap:8px;margin:14px 0 0;
+               background:none;border:0;padding:4px 0;cursor:pointer;text-align:left">
+        <span style="color:#8b949e;font-size:10px;width:10px">${slurmOpen ? '▾' : '▸'}</span>
+        <span style="font-size:12px;color:#c9d1d9;font-weight:600">SLURM request</span>
+        <span style="font-size:10px;color:#6e7681">${summary}</span>
+        ${warn ? '<span style="font-size:10px;color:#d29922">⚠</span>' : ''}
+      </button>
+      <div id="wiz-slurm-body" ${slurmOpen ? '' : 'hidden'} style="padding:6px 0 0 18px"></div>
+    `
+    const body = mounts.slurm.querySelector('#wiz-slurm-body')
+    if (body && slurmOpen) {
+      body.innerHTML = renderSlurmDetails(slurmPreview, { busy: slurmBusy, error: slurmError })
+    }
+    mounts.slurm.querySelector('#wiz-slurm-toggle')?.addEventListener('click', () => {
+      slurmOpen = !slurmOpen
+      // Sized only when actually opened: the atom estimate behind it builds the
+      // design's whole heavy-atom model (~26 s on a 6-helix bundle), and most visits
+      // to this step never ask the question.
+      if (slurmOpen) void loadSlurmPreview()
+      else paintSlurm()
+    })
+  }
+
+  /**
+   * Size the SLURM request for the plan currently on screen.
+   *
+   * Only for a cluster target, and only once per (partition, run length): the atom
+   * estimate behind it builds the design's heavy-atom model, which is slow the first
+   * time. Never blocks the plan table — the block fills in beside it.
+   */
+  async function loadSlurmPreview() {
+    if (state.target !== 'alpine' || !plan || !slurmOpen) { paintSlurm(); return }
+    const totalNs = Number(plan.totals?.total_ns || 0)
+    const key = `${state.partition || ''}|${totalNs}`
+    if (key === slurmKey && (slurmPreview || slurmBusy)) return
+    slurmKey = key
+    slurmBusy = true
+    slurmError = ''
+    paintSlurm()
+    try {
+      slurmPreview = await api.getSlurmPreview?.({
+        cluster_name: 'alpine', partition: state.partition, total_ns: totalNs,
+        job_name: 'nadoc_job',
+      })
+      if (!slurmPreview) slurmError = api.lastErrorMessage?.() || 'Could not size the SLURM request.'
+    } catch (err) {
+      slurmPreview = null
+      slurmError = `Could not size the SLURM request: ${err?.message || err}`
+    } finally {
+      slurmBusy = false
+      paintSlurm()
+    }
+  }
+
+  /** Move `delta` steps through TABS from wherever we are. */
+  function stepBy(delta) {
+    const i = TABS.findIndex(([id]) => id === state.tab)
+    const next = TABS[(i < 0 ? 0 : i) + delta]
+    if (next) setTab(next[0])
   }
 
   function paintTabs() {
@@ -1256,6 +1350,9 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       btn.setAttribute('aria-selected', on ? 'true' : 'false')
     }
     for (const [tab, panel] of Object.entries(panels)) panel.hidden = tab !== state.tab
+    // Entering the step always starts collapsed — the stage ladder is the subject
+    // here, and the sbatch details are opt-in (and expensive to size).
+    if (state.tab === 'plan') { slurmOpen = false; paintSlurm() }
     paintActions()
   }
 
@@ -1286,13 +1383,23 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
         ? 'Resolve the blocking condition on the next tab first.'
         : 'Prepare the job and leave it ready to run.'
     }
-    if (nextBtn) nextBtn.disabled = busy
+    // The first step must be ANSWERED before the rest of the wizard means anything:
+    // an Alpine run with no node picked would be sized against nothing.
+    const onTarget = state.tab === 'target'
+    const targetReady = !targetStep || targetStep.isReady()
+    if (nextBtn) {
+      nextBtn.disabled = busy || (onTarget && !targetReady)
+      nextBtn.title = onTarget && !targetReady
+        ? (targetStep?.readiness().reason || 'Choose where this job runs.')
+        : ''
+    }
     if (prevBtn) prevBtn.disabled = busy
-    // Creating a run is offered only once its plan has been shown — the second tab is
+    // Creating a run is offered only once its plan has been shown — the last tab is
     // where every consequence of these settings is stated.
+    const idx = TABS.findIndex(([id]) => id === state.tab)
     const onPlan = state.tab === 'plan'
-    showAction(nextBtn, !onPlan)
-    showAction(prevBtn, onPlan)
+    showAction(nextBtn, idx < TABS.length - 1)
+    showAction(prevBtn, idx > 0)
     showAction(createBtn, onPlan)
   }
 
@@ -1310,7 +1417,10 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
           lengthNs: valueOf('length_ns'),
           stageOverrides: state.stageOverrides,
         })
-        const job = await spawnProduction?.(state.parentJobId, body)
+        // Step 1's answer, spread OVER the built body: productionPayload takes camelCase
+        // args, so these snake_case API fields have to land on the result, not the args.
+        const job = await spawnProduction?.(state.parentJobId,
+          { ...body, ...targetStep.payloadFields() })
         if (job) { onJobCreated?.(job.job_id); close() }
       } else {
         // Drop anything the server would force anyway. Sending it changes nothing, but it
@@ -1318,10 +1428,15 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
         // under THIS protocol — and would come back to life under the next one.
         const touched = Object.fromEntries(
           Object.entries(state.touched).filter(([k]) => !isForced(k)))
-        const job = await launch?.(wizardPayload({
-          presetId: state.presetId, touched, autostart,
-          stageOverrides: state.stageOverrides,
-        }), { draftId: state.draftId })
+        const job = await launch?.({
+          ...wizardPayload({
+            presetId: state.presetId, touched, autostart,
+            stageOverrides: state.stageOverrides,
+          }),
+          // Step 1's answer. Spread OVER the protocol payload so the wizard's choice is
+          // what actually reaches the API, not the panel's older radio state.
+          ...targetStep.payloadFields(),
+        }, { draftId: state.draftId })
         if (job) { onJobCreated?.(job.job_id); close() }
       }
     } finally {
@@ -1381,18 +1496,46 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       label: 'Create job', variant: 'primary',
       onClick: () => { void submit({ autostart: false }) },
     })
+    // Index arithmetic, not hardcoded ids: there are three steps now, and the next one
+    // is whatever follows the current index.
     nextBtn = createButton({
       label: 'Next →', variant: 'primary',
-      onClick: () => { setTab('plan') },
+      onClick: () => { stepBy(1) },
     })
     nextBtn.title = 'See what these settings actually run, stage by stage'
     prevBtn = createButton({
       label: '← Previous', variant: 'ghost',
-      onClick: () => { setTab('setup') },
+      onClick: () => { stepBy(-1) },
     })
-    prevBtn.title = 'Back to the protocol and settings'
+    prevBtn.title = 'Back to the previous step'
     undoBtn = createButton({ label: '↶ Undo', variant: 'ghost', size: 'sm', onClick: () => undo() })
     paintUndo()
+
+    // Step 1 — where it runs.  Its own module owns the hardware probe, the cluster
+    // login and the partition table; the wizard only holds the answer and re-paints
+    // the footer gate when it changes.
+    mounts.target = el('div')
+    targetStep = initWizardTargetStep({
+      mount: mounts.target,
+      fetchHardware: api?.fetchHardware,
+      fetchAvailability: api?.fetchAvailability,
+      fsApi: api?.fsApi,
+      initialTarget: state.target,
+      onChange: ({ target, partition }) => {
+        state.target = target
+        state.partition = partition
+        // A different node is a different SLURM request; drop the sized one.
+        slurmPreview = null
+        slurmKey = ''
+        onTargetChange({ target, partition })
+        paintActions()
+      },
+    })
+    panels.target = el('section', {
+      className: 'wizard-pane wizard-tabpanel',
+      attrs: { role: 'tabpanel' },
+      children: [mounts.target],
+    })
 
     panels.setup = el('section', {
       className: 'wizard-pane wizard-tabpanel',
@@ -1409,7 +1552,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     panels.plan = el('section', {
       className: 'wizard-pane wizard-tabpanel',
       attrs: { role: 'tabpanel' },
-      children: [mounts.summary, mounts.stages, mounts.conditions],
+      children: [mounts.summary, mounts.slurm, mounts.stages, mounts.conditions],
     })
 
     for (const [i, [tab, label]] of TABS.entries()) tabBtns[tab] = tabButton(tab, label, i)
@@ -1430,6 +1573,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
             ],
           }),
           mounts.status,
+          panels.target,
           panels.setup,
           panels.plan,
         ],
@@ -1470,10 +1614,11 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     if (state.mode === 'production' && !prefill) state.touched = {}
     // A fresh session starts on the first tab with nothing to undo — the previous run's
     // history describes settings this wizard is no longer showing.
-    state.tab = 'setup'
+    state.tab = 'target'
     undoStack = []
     paintUndo()
     paintTabs()
+    targetStep?.render()
     restorePreferences()
     if (prefill) {
       // A draft's recorded settings arrive as TOUCHED, because they were chosen — so

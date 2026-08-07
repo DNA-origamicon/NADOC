@@ -73,6 +73,13 @@ async function selectCompleted(page, kind = 'relaxation') {
 
 const selectARelaxation = (page) => selectCompleted(page, 'relaxation')
 
+/** The wizard now opens on step 1 ("Where it runs"). Local is preselected and always
+ *  ready, so every existing assertion about the protocol form just needs the step
+ *  advanced first. */
+async function openSettingsTab(modal) {
+  await modal.locator('.wizard-tab', { hasText: 'Protocol & settings' }).click()
+}
+
 test.describe('New job on a finished relaxation opens Production, seeded from it', () => {
   test('the wizard lands on Production with that run as the parent', async ({ page }) => {
     await openDesign(page, 'prod-wizard', DESIGN)
@@ -82,6 +89,7 @@ test.describe('New job on a finished relaxation opens Production, seeded from it
     await page.locator('#md-jobs-new-btn').click({ timeout: 15_000 })
     const modal = page.locator('.modal--wizard')
     await expect(modal).toBeVisible({ timeout: 20_000 })
+    await openSettingsTab(modal)
 
     // Production, not the blank relaxation form the button used to always open.
     await expect(modal.locator('.wizard-mode.is-selected .wizard-mode__label'))
@@ -103,6 +111,7 @@ test.describe('New job on a finished relaxation opens Production, seeded from it
     await page.locator('#md-jobs-new-btn').click({ timeout: 15_000 })
     const modal = page.locator('.modal--wizard')
     await expect(modal).toBeVisible({ timeout: 20_000 })
+    await openSettingsTab(modal)
     await expect(modal.locator('.wizard-status')).toHaveText('', { timeout: 30_000 })
 
     // The controls that did not exist before: GPU-resident, the two integrator axes, the
@@ -133,6 +142,7 @@ test.describe('New job on a finished relaxation opens Production, seeded from it
     await page.locator('#md-jobs-new-btn').click({ timeout: 15_000 })
     const modal = page.locator('.modal--wizard')
     await expect(modal).toBeVisible({ timeout: 20_000 })
+    await openSettingsTab(modal)
     await expect(modal.locator('.wizard-status')).toHaveText('', { timeout: 30_000 })
 
     await modal.locator('.wizard-tab', { hasText: 'What each stage runs' }).click()
@@ -163,6 +173,7 @@ test.describe('New job on a finished relaxation opens Production, seeded from it
     await page.locator('#md-jobs-new-btn').click({ timeout: 15_000 })
     const modal = page.locator('.modal--wizard')
     await expect(modal).toBeVisible({ timeout: 20_000 })
+    await openSettingsTab(modal)
     await expect(modal.locator('.wizard-status')).toHaveText('', { timeout: 30_000 })
     await modal.locator('.wizard-tab', { hasText: 'What each stage runs' }).click()
     await expect(modal.locator('.wizard-stages table')).toBeVisible({ timeout: 20_000 })
@@ -194,6 +205,7 @@ test.describe('New job on a finished relaxation opens Production, seeded from it
     await page.locator('#md-jobs-new-btn').click({ timeout: 15_000 })
     const modal = page.locator('.modal--wizard')
     await expect(modal).toBeVisible({ timeout: 20_000 })
+    await openSettingsTab(modal)
     await expect(modal.locator('.wizard-status')).toHaveText('', { timeout: 30_000 })
     await modal.locator('.wizard-tab', { hasText: 'What each stage runs' }).click()
 
@@ -220,6 +232,7 @@ test.describe('New job on a finished relaxation opens Production, seeded from it
     await page.locator('#md-jobs-new-btn').click({ timeout: 15_000 })
     const modal = page.locator('.modal--wizard')
     await expect(modal).toBeVisible({ timeout: 20_000 })
+    await openSettingsTab(modal)
     await expect(modal.locator('.wizard-mode.is-selected .wizard-mode__label'))
       .toHaveText('Production')
     expect(await modal.locator('.wizard-scope--parent select').inputValue()).toBe(parentId)
@@ -253,6 +266,7 @@ test.describe('New job on a finished relaxation opens Production, seeded from it
     await page.locator('#md-jobs-new-btn').click({ timeout: 15_000 })
     const modal = page.locator('.modal--wizard')
     await expect(modal).toBeVisible({ timeout: 20_000 })
+    await openSettingsTab(modal)
     await expect(modal.locator('.wizard-status')).toHaveText('', { timeout: 30_000 })
     await modal.locator('.wizard-tab', { hasText: 'What each stage runs' }).click()
     await expect(modal.locator('.wizard-stages table')).toBeVisible({ timeout: 20_000 })

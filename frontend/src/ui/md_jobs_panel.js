@@ -619,6 +619,10 @@ export function mdIsRemoteJob(job) {
 
 export function mdHasLocalReadouts(job) {
   if (!mdIsRemoteJob(job)) return true
+  // Live metrics now DO arrive for a cluster run: nadoc_live_metrics.py computes them
+  // on the node and the poll retrieves them, so `live_metrics` counts as a readout
+  // even before any health sample exists.
+  if (job?.live_metrics && Object.keys(job.live_metrics).length) return true
   return (job?.health_samples?.length ?? 0) > 0
 }
 
@@ -629,10 +633,10 @@ export function mdRemoteReadoutNote(job) {
   if (mdHasLocalReadouts(job) || mdRemoteAwaitingSubmit(job)) return null
   const slurm = job?.slurm_job_id ? ` (SLURM ${job.slurm_job_id})` : ''
   if (job?.status === 'running' || (job?.execution_target === 'alpine' && job?.status === 'queued')) {
-    return `Running on Alpine${slurm}. Live metrics aren’t streamed for cluster runs — ` +
-           `health and graphs appear after the run completes and results are fetched.`
+    return `Running on Alpine${slurm}. Speed and temperature arrive from the node each ` +
+           `poll; health needs the trajectory, so use Fetch results to pull it mid-run.`
   }
-  return `On Alpine${slurm} — no local metrics for this run.`
+  return `On Alpine${slurm} — no local readouts yet. Use Fetch results to pull them.`
 }
 
 /** Pure: classify a segment's timeline glyph.  Separated from colour/symbol mapping
@@ -672,6 +676,34 @@ export function mdIsRemoteQueued(job) {
     && job?.status === 'queued'
     && !!job?.slurm_job_id
     && (job?.slurm_state == null || String(job.slurm_state).toUpperCase() !== 'RUNNING')
+}
+
+/** Pure: is this job actually executing on a cluster node right now?
+ *  Queued-but-not-started has no `.restart.coor` to fetch, so it must not qualify. */
+export function mdIsRemoteRunning(job) {
+  return job?.execution_target === 'alpine'
+    && !!job?.slurm_job_id
+    && (job?.status === 'running' || String(job?.slurm_state ?? '').toUpperCase() === 'RUNNING')
+}
+
+/** Pure: should we pull a single display frame off the cluster for this job?
+ *
+ *  Only when there is nothing local to show (`ready` false) — once a real
+ *  trajectory has been fetched it outranks any snapshot.  Cluster auth is
+ *  Duo-gated, so a live session is a hard precondition, not an optimisation. */
+export function shouldFetchLiveFrame(job, { clusterState, displayReady } = {}) {
+  return clusterState === 'connected' && !displayReady && mdIsRemoteRunning(job)
+}
+
+/** Pure: how to describe a fetched snapshot. It is ONE frame from a run still going
+ *  on the cluster — it does not advance on its own, and saying "trajectory" would
+ *  imply results that do not exist locally. */
+export function liveFrameLabel(liveFrame) {
+  if (!liveFrame) return ''
+  const step = Number(liveFrame.step)
+  return Number.isFinite(step) && step > 0
+    ? `Snapshot at step ${step.toLocaleString()} — still running on Alpine`
+    : 'Snapshot from the running Alpine job'
 }
 
 /** Pure: compact duration label from a number of seconds (e.g. "45s", "6m", "1h 3m"). */
@@ -1036,11 +1068,44 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   // Alpine submit-review card (Phase 4): fetches the auto-recommended SLURM
   // resources for a prepared job, lets the user review/override, then submits.
+  // Set while a package is uploading to the cluster, so the job row and the cluster
+  // status line can say so.  A remote submit stages hundreds of MB over SFTP before
+  // SLURM ever sees the job; without this the UI showed a plain "queued" the whole
+  // time and looked like nothing was happening.
+  let _remoteSubmitting = null      // { jobId, label } | null
+
   const _submitReview = initMdSubmitReview({
     api,
     toast: showToast,
     onSubmitted: async (jobId) => { await _fetchJobs(); _selectJob(jobId) },
+    onSubmitStart: ({ jobId, parentId, label }) => {
+      _remoteSubmitting = { jobId: jobId || parentId, label }
+      // Indeterminate: SFTP gives no byte-level progress through this path, and a fake
+      // percentage that stalls is worse than an honest spinner.
+      showOpProgress(label, 'Uploading the prepared package to Alpine…', { indeterminate: true })
+      _paintRemoteSubmitting()
+    },
+    onSubmitEnd: ({ ok, message }) => {
+      _remoteSubmitting = null
+      hideOpProgress()
+      if (!ok && message && clusterStatusEl) {
+        clusterStatusEl.style.display = ''
+        clusterStatusEl.style.color = _C.err
+        clusterStatusEl.textContent = message
+      }
+      _paintRemoteSubmitting()
+    },
   })
+
+  /** Show the upload/prepare phase on the cluster status line while it is happening. */
+  function _paintRemoteSubmitting() {
+    if (!clusterStatusEl) return
+    if (!_remoteSubmitting) return          // normal painting resumes on the next render
+    clusterStatusEl.style.display = ''
+    clusterStatusEl.style.color = _C.accent
+    clusterStatusEl.textContent =
+      `${_remoteSubmitting.label} — uploading package to Alpine, then sbatch…`
+  }
 
   // ── Run target (Local subprocess vs. Alpine cluster) ────────────────────────
   function _currentRunTarget() {
@@ -1134,9 +1199,21 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     })
   }
 
+  let _lastClusterState = null
   window.addEventListener('nadoc:cluster-state-change', (e) => {
-    _updateRunTargetGate(e.detail?.state)
+    const state = e.detail?.state
+    _updateRunTargetGate(state)
     _renderReconnectPrompt()
+    // Edge-detect: the chip re-broadcasts on every 15 s poll, not just transitions.
+    const became = state === 'connected' && _lastClusterState !== 'connected'
+    _lastClusterState = state
+    // Signing in is the ONE moment a running cluster job can be looked at (Duo), so
+    // that is when we go get a frame — for the job already selected, or for whichever
+    // one gets selected next (_selectJob's tail runs the same refresh).
+    if (became) {
+      _liveFrameTried.clear()          // a new session deserves a fresh attempt
+      _refreshMdDisplay()
+    }
   })
   _updateRunTargetGate()
   // Switching Local↔Alpine repaints the primary control ("▶ Relax" ⇄ "▶ Prepare for Alpine").
@@ -1521,6 +1598,26 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       !chained && meta.production_warning ? _C.warn : _C.ok)
   }
 
+  // Jobs we already pulled a frame for this session, so a failed pull (no checkpoint
+  // written yet) is not retried on every 15 s display tick for the rest of the run.
+  const _liveFrameTried = new Set()
+
+  /** Pull one display frame off the cluster.  Returns true if something landed. */
+  async function _fetchLiveFrame(jobId, { force = false } = {}) {
+    if (!force && _liveFrameTried.has(jobId)) return false
+    _liveFrameTried.add(jobId)
+    _setDisplayStatus('Fetching a snapshot from Alpine…', _C.warn, true)
+    try {
+      const res = await api.fetchMdLiveFrame(jobId, force)
+      if (res?.ok) return true
+      console.info(`[${_ts()}] md-jobs: no live frame yet — ${res?.reason ?? 'unavailable'}`)
+      return false
+    } catch (err) {
+      console.warn(`[${_ts()}] md-jobs: live frame fetch failed`, err)
+      return false
+    }
+  }
+
   async function _fetchDisplayMeta(jobId = _selectedId) {
     if (!jobId) return null
     try {
@@ -1656,11 +1753,22 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (!displayToggle?.checked || !_isDynamicsTabVisible()) return
       _renderProductionControls(job, d)
       if (!d.ready || !d.config_path) {
+        // A job running on Alpine has its trajectory on the cluster, so `ready` stays
+        // false for the WHOLE run and this used to spin forever.  Pull one frame
+        // instead — cheap, and the only moment we can is while the user is signed in.
+        if (shouldFetchLiveFrame(job, { clusterState: getClusterState?.(), displayReady: d.ready })) {
+          const got = await _fetchLiveFrame(job.job_id)
+          if (got) { _refreshMdDisplay(); return }
+        }
         _displayJobId = job.job_id
         _displayKey = null
         // Seed placeholder already on screen (if seeded) → leave it; else say waiting.
         if (!_inheritedSeedShown) {
-          _setDisplayStatus(`Waiting for trajectory output (${job.status})`, _C.warn, true)
+          _setDisplayStatus(
+            mdIsRemoteRunning(job)
+              ? 'Running on Alpine — sign in to the cluster to pull a snapshot'
+              : `Waiting for trajectory output (${job.status})`,
+            _C.warn, true)
         }
         return
       }
@@ -1684,6 +1792,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         _setDisplayStatus(forceReload ? `Loading ${d.segment_name ?? 'latest MD segment'}...` : `Refreshing ${d.segment_name ?? 'latest frame'}...`, _C.muted, forceReload)
       }
       mdDisplayController.displayLatest(d.config_path, { forceReload, live, jobId: job.job_id })
+      // A fetched snapshot is ONE frame and does not advance — say so, or it reads as
+      // a live trajectory that has silently frozen.
+      if (d.live_frame) _setDisplayStatus(liveFrameLabel(d.live_frame), _C.warn, false)
       if (!live) {
         clearInterval(_displayTimer)
         _displayTimer = null
@@ -2737,6 +2848,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // The client returns null on a non-OK response, so the wizard needs this to say
       // WHY a plan came back empty instead of showing a blank table.
       lastErrorMessage: () => api.lastErrorMessage?.(),
+      // Step 1 ("Where it runs") probes: this machine's hardware, and — once a cluster
+      // session exists — live Alpine availability.  Same endpoints the Optimize button
+      // and the Clusters card already use; no new backend surface.
+      fetchHardware: () => api.optimizeMdHardware(_wizardDevices()),
+      fetchAvailability: opts => api.getClusterAvailability(opts),
+      // Sizes the sbatch request for the plan step, so the whole SLURM story is
+      // inspectable before the job exists.
+      getSlurmPreview: body => api.getSlurmPreview(body),
+      // The folder picker browses the server's filesystem through the same client.
+      fsApi: api,
     },
     launch: (payload, opts) => _launchRelax(payload, opts),
     spawnProduction: _spawnProductionFromWizard,
@@ -2744,6 +2865,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     getPartPath: () => _currentPartPath(),
     onJobCreated: jobId => { _reselectJob(jobId) },
     onOptimizeMount: mount => _wireOptimize(mount),
+    // The wizard now asks WHERE the job runs as its first step.  Mirror that answer onto
+    // the panel's run-target radios so there is one source of truth: every launch gate
+    // and payload site already reads `_currentRunTarget()`, and they keep working
+    // untouched.  Jobs launched from the Advanced form (not the wizard) still drive the
+    // radios directly.
+    onTargetChange: ({ target }) => {
+      const radio = { local: runTargetLocal, alpine: runTargetAlpine, runpod: runTargetRunpod }[target]
+      if (radio && !radio.checked) {
+        radio.checked = true
+        radio.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+    },
   })
 
   /**
@@ -2939,6 +3072,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   submitAlpineBtn?.addEventListener('click', () => {
+    // Belt and braces with the review card's own guard: while a package is uploading
+    // the button must not reopen the card at all.
+    if (_remoteSubmitting) return
     if (_selectedId) _submitReview.open(_selectedId)
   })
 
@@ -2995,6 +3131,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // can review/edit resources — e.g. bump the walltime after a promising short run —
   // before officially resuming from the checkpoint.
   resumeBtn?.addEventListener('click', () => {
+    if (_remoteSubmitting) return
     if (_selectedId) _submitReview.open(_selectedId, { mode: 'resume' })
   })
 
@@ -3442,7 +3579,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // above — the old duplicate detail status line was removed).  Shown inside the
     // Cluster (Alpine) card for a prepared-but-unsubmitted or SLURM-queued job.
     if (clusterStatusEl) {
-      if (awaitingSubmit) {
+      // An in-flight upload outranks the record's own state: the job is still
+      // "prepared, awaiting submit" on disk for the whole transfer, so reading the
+      // record alone would show "Prepared — submit below" while a submit is running.
+      if (_remoteSubmitting && _remoteSubmitting.jobId === job.job_id) {
+        _paintRemoteSubmitting()
+      } else if (awaitingSubmit) {
         clusterStatusEl.textContent = job.error
           ? 'Submit to Alpine failed — retry below'
           : 'Prepared — submit to Alpine below'

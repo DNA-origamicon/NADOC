@@ -1726,3 +1726,42 @@ describe('mdForcesProvenance', () => {
     expect(mdForcesProvenance(undefined).tone).toBe('dim')
   })
 })
+
+// ── live-frame fetch for a job still running on the cluster ──────────────────
+import { mdIsRemoteRunning, shouldFetchLiveFrame, liveFrameLabel } from './md_jobs_panel.js'
+
+describe('live-frame fetch (a running Alpine job has its trajectory on the cluster)', () => {
+  const running   = { execution_target: 'alpine', status: 'running',  slurm_job_id: '30958617' }
+  const queued    = { execution_target: 'alpine', status: 'queued',   slurm_job_id: '30958617' }
+  const byState   = { execution_target: 'alpine', status: 'queued',   slurm_job_id: '30958617', slurm_state: 'RUNNING' }
+  const noSlurm   = { execution_target: 'alpine', status: 'running',  slurm_job_id: null }
+  const local     = { execution_target: 'local',  status: 'running' }
+
+  it('mdIsRemoteRunning: needs a slurm id AND actually started', () => {
+    expect(mdIsRemoteRunning(running)).toBe(true)
+    expect(mdIsRemoteRunning(byState)).toBe(true)   // slurm_state overrides a lagging status
+    expect(mdIsRemoteRunning(queued)).toBe(false)   // PENDING: no .restart.coor exists yet
+    expect(mdIsRemoteRunning(noSlurm)).toBe(false)  // never submitted
+    expect(mdIsRemoteRunning(local)).toBe(false)
+    expect(mdIsRemoteRunning(null)).toBe(false)
+  })
+
+  it('shouldFetchLiveFrame: only when signed in and nothing local to show', () => {
+    expect(shouldFetchLiveFrame(running, { clusterState: 'connected', displayReady: false })).toBe(true)
+    // Duo-gated: no session, no fetch — this is the whole reason it is on-login.
+    expect(shouldFetchLiveFrame(running, { clusterState: 'disconnected', displayReady: false })).toBe(false)
+    expect(shouldFetchLiveFrame(running, { clusterState: 'expired', displayReady: false })).toBe(false)
+    // A real fetched trajectory outranks a one-frame snapshot.
+    expect(shouldFetchLiveFrame(running, { clusterState: 'connected', displayReady: true })).toBe(false)
+    expect(shouldFetchLiveFrame(queued,  { clusterState: 'connected', displayReady: false })).toBe(false)
+    expect(shouldFetchLiveFrame(local,   { clusterState: 'connected', displayReady: false })).toBe(false)
+    expect(shouldFetchLiveFrame(running, {})).toBe(false)
+  })
+
+  it('liveFrameLabel: says snapshot, never trajectory (it does not advance)', () => {
+    expect(liveFrameLabel({ step: 285000 })).toBe('Snapshot at step 285,000 — still running on Alpine')
+    expect(liveFrameLabel({ step: null })).toBe('Snapshot from the running Alpine job')
+    expect(liveFrameLabel({ step: 0 })).toBe('Snapshot from the running Alpine job')
+    expect(liveFrameLabel(null)).toBe('')
+  })
+})

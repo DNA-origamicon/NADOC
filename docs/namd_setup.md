@@ -167,6 +167,30 @@ takes a long time. Only go this route if no prebuilt binary fits your platform.
 The output `namd3` then goes in any recognized path or is pointed at via
 `$NADOC_NAMD_BIN`.
 
+### On the Alpine cluster you have no choice — there is no CUDA NAMD module
+
+CURC ships only CPU NAMD modules, and the local binary cannot be uploaded (Alpine is
+glibc 2.28, our desktop build is 2.38). So NADOC builds its own GPU-resident NAMD 3 on
+the cluster. `backend/core/cluster_build.py` drives it end to end — tarball the source,
+submit an `acompile` job, verify the binary — via `POST /api/cluster/build/namd`.
+
+The settings that are not obvious, each of which cost a failed build:
+
+| Setting | Why |
+|---|---|
+| `--with-single-node-cuda` | The only flag that sets `-DNODEGROUP_FORCE_REGISTER`. Without it you get a CUDA build with **no** GPU-resident mode, which is the entire point. |
+| `--with-tcl` + `tcltk/8.6.11` | `run` and `minimize` are **Tcl** commands, not native NAMD ones. Every conf ends in `run N`, so `--without-tcl` produces a binary that dies with `NOT VALID / run`. |
+| `-ltcl8.6 -lz` | Alpine ships a *static* `libtcl8.6.a`, which does not pull zlib in transitively the way Ubuntu's `.so` does. |
+| `cmake/3.27.7` | Absent from the default environment; without it the build silently falls back to `buildold`. |
+| default gencodes | Leave NAMD's curated arch list alone. The sm_90 binary PTX-JITs onto sm_89 (al40) — measured — so one build covers the fleet. |
+
+Modules: `gcc/11.2.0 cuda/12.1.1 cmake/3.27.7 fftw/3.3.10 tcltk/8.6.11`. Point the
+cluster profile's `gpu_namd_bin` at the result.
+
+**Probe with `module spider`, never `module load`.** Alpine's Lmod is hierarchical, so a
+login node refuses loads that succeed on a compute node — a pre-flight built on `module
+load` reports confident false negatives. See LESSON L14.
+
 ---
 
 ## Troubleshooting

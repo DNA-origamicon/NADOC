@@ -515,6 +515,12 @@ def summarize_availability(
                 row["job_ns_per_day_measured"] = bool(measured)
                 row["job_walltime_h"] = rec["walltime_h"]
                 row["job_cost_su"] = rec["est_cost_su"]
+                # SU per ns is what actually separates two equally-fast partitions.
+                # Measured 2026-08-07: ah200 and artxpro6000 run the same speed, but
+                # Blackwell bills 242 vs 334 SU/GPU-h — ~30% more science per SU.
+                if job_shape.get("total_ns"):
+                    row["job_su_per_ns"] = round(
+                        rec["est_cost_su"] / float(job_shape["total_ns"]), 1)
                 row["job_qos"] = rec["qos"]
                 if wait_min is not None:
                     row["time_to_result_h"] = round(wait_min / 60.0 + rec["walltime_h"], 2)
@@ -550,6 +556,51 @@ def _top_reason(reasons: dict[str, int]) -> str:
         return ""
     name, count = max(reasons.items(), key=lambda kv: kv[1])
     return f"{name} ({count})"
+
+
+# ── Read-only cluster probes ──────────────────────────────────────────────────
+#
+# A NAMED REGISTRY, not an allowlist over free text: the caller picks a probe by
+# name and may supply at most one sanitised argument, so there is no path by which a
+# caller-supplied string becomes a command.  Everything here only reads state.
+
+# `/` is included because module names legitimately contain it (namd/3.0.1_cpu);
+# it carries no shell meaning. Everything with shell significance stays out.
+_ARG_OK = re.compile(r"^[A-Za-z0-9_.+/-]{1,64}$")
+
+_PROBES: dict[str, str] = {
+    # What software exists.  `spider` searches every hierarchy branch, unlike `avail`,
+    # which hides modules until their compiler is loaded.
+    "modules": "source /etc/profile >/dev/null 2>&1; module -t spider {arg} 2>&1",
+    # Runtime floor for any binary we might upload: a build made against a newer glibc
+    # than the cluster's simply will not start.
+    "os": "cat /etc/os-release 2>/dev/null; echo '--- glibc ---'; ldd --version 2>&1 | head -2",
+    # Driver version bounds the CUDA toolkit that can run here, and the compute
+    # capability bounds what a build must target (sm_90 Hopper, sm_120 Blackwell, ...).
+    "gpu": "nvidia-smi --query-gpu=name,driver_version,compute_cap --format=csv 2>&1 | head -12",
+    "cuda-compilers": "source /etc/profile >/dev/null 2>&1; module -t spider cuda 2>&1",
+    # My own queue — the only way to see a job NADOC did not submit.
+    "squeue-mine": "squeue -u $USER -o '%i|%P|%j|%T|%M|%L|%R' 2>&1",
+    "job": "scontrol show job {arg} 2>&1",
+    "sinfo": "sinfo -o '%P|%D|%T|%G' 2>&1",
+}
+
+
+def probe_command(name: str, arg: str | None = None) -> str:
+    """Resolve a named read-only probe to its shell command.
+
+    Raises ``ValueError`` for an unknown probe or a malformed argument.  ``{arg}``
+    placeholders are filled only from a strictly-validated token.
+    """
+    template = _PROBES.get(name)
+    if template is None:
+        raise ValueError(f"unknown probe {name!r}; expected one of {', '.join(sorted(_PROBES))}")
+    if "{arg}" not in template:
+        return template
+    token = (arg or "").strip()
+    if not _ARG_OK.match(token):
+        raise ValueError(f"probe {name!r} needs an argument matching [A-Za-z0-9_.+/-]{{1,64}}")
+    return template.format(arg=token)
 
 
 def build_test_only_cmd(partition: str, *, gres: str, gpus: int, cores: int,

@@ -34,6 +34,13 @@ _DECLASH_UNSUPPORTED_MSG = (
 # executor and invoked by the sbatch at each non-final relaxation chunk.
 EARLY_STOP_EVAL_NAME = "nadoc_cutoff_eval.py"
 
+# Node-side live-metrics collector: parses the NAMD log ON the node every 30 s and
+# writes output/live_metrics.json, so NADOC can `cat` a ~200-byte file instead of
+# pulling a growing multi-hundred-KB log on every poll.
+LIVE_METRICS_NAME = "nadoc_live_metrics.py"
+LIVE_METRICS_FILE = "output/live_metrics.json"
+LIVE_METRICS_INTERVAL_S = 30
+
 # Tier A only: the node WC health step + the verbatim md_health copy it imports.
 EARLY_STOP_HEALTH_NAME = "nadoc_health_eval.py"
 STAGED_MD_HEALTH_NAME = "md_health.py"
@@ -211,6 +218,69 @@ def is_gpu_target(profile: ClusterProfile, resources: dict) -> bool:
     return part.kind == "gpu"
 
 
+def preview_header(profile: ClusterProfile, resources: dict, *,
+                   job_name: str = "nadoc_job") -> dict:
+    """The sbatch header a job WOULD get, without needing a prepared package.
+
+    ``generate_sbatch`` needs a manifest (the real segment chain), which only exists
+    after solvation — far too late for the Job Wizard, where the user is still
+    deciding whether to run on Alpine at all.  This renders the parts that depend
+    only on the resolved *resources*: the ``#SBATCH`` block, the module loads and the
+    NAMD invocation.
+
+    It deliberately calls the SAME builders as the real script
+    (``_sbatch_directives`` / ``_module_block`` / ``_exec_line``) rather than
+    re-describing them, so the preview cannot drift from what actually gets submitted
+    — the same reason ``/md/protocol-plan`` calls the real conf writers.
+
+    Returns the pieces separately (so the UI can label them) plus a ready-to-read
+    ``text`` rendering, and the two warnings that are worth seeing before submitting.
+    """
+    gpu = is_gpu_target(profile, resources)
+    directives = list(_sbatch_directives(job_name, resources, gpu))
+    if not gpu:
+        directives.append("#SBATCH --constraint=ib")   # InfiniBand (OpenMPI)
+    modules = list(profile.modules_for(gpu))
+    exec_line = _exec_line("<stage>", "output/<stage>.log", resources, gpu,
+                           profile.namd_command(gpu))
+
+    warnings: list[str] = []
+    # Only meaningful when NAMD comes FROM a module.  A private binary is addressed by
+    # absolute path, so a CPU-looking module set beside it (cuda/gcc, or even
+    # namd/3.0.1_cpu left in place) says nothing about the exec path.
+    if gpu and profile.namd_command(gpu) == "namd3" and _looks_cpu_only(modules):
+        warnings.append(
+            "This GPU partition is paired with a NAMD module that looks CPU-only "
+            "(namd/*_cpu). The +devices exec line will FATAL. Confirm the GPU module "
+            "and set gpu_module_loads in workspace/clusters.json before submitting."
+        )
+    # A clamped walltime is not a slower run — it is a run that CANNOT finish in one
+    # submission and will need resume-from-checkpoint.  Saying so here is the whole
+    # point of letting the user inspect this before committing.
+    qos = profile.qos(resources.get("qos", ""))
+    if qos is not None and float(resources.get("walltime_h", 0)) >= qos.max_walltime_h:
+        warnings.append(
+            f"Walltime is capped at the {qos.name} ceiling ({qos.max_walltime_h} h). "
+            "The run will time out mid-ladder and need a Resume from its checkpoint."
+        )
+
+    text = "\n".join([
+        "#!/bin/bash", *directives, "",
+        "source /etc/profile", "set -eo pipefail", "export SLURM_EXPORT_ENV=ALL", "",
+        *_module_block(profile, gpu), "",
+        "cd '<remote scratch dir>'", "mkdir -p output", "",
+        "# for each stage in the ladder:", exec_line,
+    ])
+    return {
+        "directives": directives,
+        "modules": modules,
+        "exec_line": exec_line,
+        "gpu": gpu,
+        "warnings": warnings,
+        "text": text,
+    }
+
+
 def _segment_chain(manifest: dict) -> list[str]:
     """Ordered conf base-names to run: minimization first, then every segment."""
     min_name = (manifest.get("minimization") or {}).get("name")
@@ -264,18 +334,21 @@ def _looks_cpu_only(modules: list[str]) -> bool:
     )
 
 
-def _exec_line(conf: str, log: str, resources: dict, gpu: bool) -> str:
+def _exec_line(conf: str, log: str, resources: dict, gpu: bool, namd: str = "namd3") -> str:
     """The NAMD invocation for one conf.
 
     GPU: NAMD3 GPU-resident, ``+p<cores> +setcpuaffinity +devices 0[,1,...]``.
     CPU: OpenMPI build, ``mpirun -np $SLURM_NTASKS namd3``.
+
+    ``namd`` is the executable — a bare name resolved from a module's PATH, or the
+    absolute path of a privately-built binary (Alpine has no CUDA NAMD module).
     """
     if gpu:
         cores = resources.get("cores", 1)
         gpus = resources.get("gpus", 1)
         devices = ",".join(str(i) for i in range(max(1, gpus)))
-        return f"namd3 +p{cores} +setcpuaffinity +devices {devices} {conf}.conf > {log} 2>&1"
-    return f"mpirun -np $SLURM_NTASKS namd3 {conf}.conf > {log} 2>&1"
+        return f"{namd} +p{cores} +setcpuaffinity +devices {devices} {conf}.conf > {log} 2>&1"
+    return f"mpirun -np $SLURM_NTASKS {namd} {conf}.conf > {log} 2>&1"
 
 
 def generate_sbatch(
@@ -372,6 +445,12 @@ def generate_sbatch(
         # from the upload); each conf writes to output/<name>.* so it must exist.
         "mkdir -p output",
         "",
+        # Background live-metrics collector.  Losing it must never fail the run, so
+        # every failure is swallowed; the trap kills it however the job ends.
+        f"python3 {LIVE_METRICS_NAME} . {LIVE_METRICS_INTERVAL_S} >/dev/null 2>&1 &",
+        "NADOC_METRICS_PID=$!",
+        'trap \'kill $NADOC_METRICS_PID 2>/dev/null || true\' EXIT',
+        "",
         "# NADOC MD ladder: minimization, then each relaxation segment in order.",
         "# Each conf reads the previous segment's restart coords by relative path.",
         "# Each step is skipped if its final output/<conf>.coor already exists, so a",
@@ -389,7 +468,8 @@ def generate_sbatch(
         lines.append(f'  echo "[NADOC] skip {conf} (already complete)"')
         lines.append("else")
         lines.append(f'  echo "[NADOC] {verb} {conf}"')
-        lines.append("  " + _exec_line(run_conf, log, resources, gpu))
+        lines.append("  " + _exec_line(run_conf, log, resources, gpu,
+                                       profile.namd_command(gpu)))
         lines.append("fi")
         # In-sbatch early-stop: after a non-final relaxation chunk, let the node
         # evaluate the plateau and bridge the stage's remaining chunks.

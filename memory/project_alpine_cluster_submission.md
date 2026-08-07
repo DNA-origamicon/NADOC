@@ -174,6 +174,117 @@ ami100, artxpro6000, atesting, dtn, gh200`.
 - **`gh200` is request-only** — surfaced in the popup as greyed/"request access", never as a
   submission target.
 
+### MEASURED benchmark matrix (2026-08-07) — supersedes the guessed speed factors
+
+Head-to-head, our own GPU-resident NAMD 3 build, identical inputs/settings per system, 4 fs HMR:
+
+| System | ah200 (H200) | artxpro6000 (Blackwell) | al40 (Ada) | al40/ah200 |
+|---|---|---|---|---|
+| 2hb (~63k atoms) | 644.4 ns/day | **650.0** | 481.6 | 0.75 |
+| 24hb | 38.2 ns/day | **41.9** | 23.0 | 0.60 |
+| VoltronCore | 1.1 (0.0753 s/step) | 1.1 (0.0761) | 0.6 (0.1371) | 0.55 |
+
+Four findings that changed the code:
+
+1. **artxpro6000 ≥ ah200 on every system size, and bills 242 vs 334 SU/GPU-h.** Blackwell is the
+   SU-efficient choice on *both* axes — not a trade-off. `_GPU_SPEED_FACTOR` holds both at 2.5.
+   (Their ratio wanders 0.99–1.10 across the three sizes with no trend — they are equal.)
+2. **al40 was underrated ~2×.** The old 0.75 reasoned from fp64, which is irrelevant to NAMD3
+   GPU-resident (single precision throughout). Now `1.4`, anchored on the VoltronCore ratio.
+   Mirrored in the wizard's `_LOCAL_GPU_FACTORS` (`'l40'`). This matters because al40 is *much*
+   easier to get into than ah200 — underrating it pushed users onto contended partitions.
+3. **A single scalar speed factor is LOSSY for al40** — see the ratio column: it degrades
+   monotonically with system size (0.75 → 0.60 → 0.55). That is a memory-bandwidth story, L40
+   GDDR6 ~0.9 TB/s vs H200 HBM3e ~4.8 TB/s: small systems are latency-bound and hide the gap,
+   large ones are bandwidth-bound and expose it. The factor is anchored at the production end,
+   so it *over-promises on small systems*. If that starts to matter, make the factor
+   size-dependent rather than re-tuning the scalar. ah200/artxpro6000 show no such trend.
+4. **The sm_90 binary JITs onto Ada sm_89.** al40 ran with no separate build. PTX forward-JIT
+   covers the fleet; do not add per-partition builds without re-checking this.
+
+**Single-GPU VoltronCore is not viable for production lengths**: at 1.1 ns/day a 200 ns run is
+~6 months of wall-clock on the best card in the fleet. Anything at that scale needs multi-GPU,
+a shorter target, or CG. The benchmark says the *hardware ranking* is right, not that the run
+is affordable.
+
+**aa100 is NOT in this table on purpose** — it is effectively unschedulable (rank ~608/621,
+`squeue --start` returns N/A), so those jobs were killed rather than waited out. The 1.0 anchor
+therefore rests on the earlier production measurement, not on this matrix.
+
+**VoltronCore cost 4 crashed attempts first** (velocity-limit ×2 → missing `.enm.extra`, a CUDA
+exclusion-count error → missing `.vel`), all seeding/restart-file problems, not GPU problems.
+
+### Seeing a RUNNING cluster job in the viewport — the one-frame fetch (2026-08-07)
+
+The 3D display was local-only: every link reads a local DCD, so a running Alpine job sat on
+"Waiting for trajectory output" for its whole duration with no guard and no explanation. It could
+not simply be made to stream — measured on job 3e9e2df26012 (24hb, 1.32M atoms):
+
+| source on the node | size | grows? |
+|---|---|---|
+| `output/<seg>.dcd` | **2.88 GB** after ~90 min | yes, without bound |
+| `output/<seg>.restart.coor` | **31.7 MB** | no — rewritten every `restartfreq` (5 000) steps |
+
+So `backend/core/remote_live_frame.py` pulls the *restart checkpoint*, not the trajectory, and
+writes it as a **one-frame DCD** at `output/<seg>.dcd` — the exact path the real trajectory will
+later occupy. That path choice is the design: `_latest_display_segment`, `resolve_md_config`,
+`ws.py` and `md_panel.js` are **completely unchanged**; the only missing local artefact for
+`ready:true` was that one file (PSF/PDB/manifest are always local, because prep + solvation run
+here before upload).
+
+**Cadence is on-login, not on a timer, and that is forced by Duo** — NADOC can only talk to Alpine
+while the user is signed in, so there is no background session to stream into. Triggers are the
+`nadoc:cluster-state-change` **connect edge** (the chip re-broadcasts every 15 s, so it must be
+edge-detected) and job selection. `POST /md/jobs/{id}/fetch-live-frame`.
+
+**Three traps, all guarded, all with tests:**
+1. **A one-frame DCD is ~16 MB and sails past `_segment_has_trajectory`'s 4096-byte floor**, so
+   health/RMSF would have run on it — and RMSF over one frame is identically 0.0, which reads as a
+   *good* measurement. Every write is recorded in `job.live_frame`; that gate now takes `job` and
+   refuses a marked segment. `fetch_outputs` clears the marker when real results land, and the
+   module refuses to overwrite a real trajectory with a snapshot.
+2. **`mda.Writer` infers format from the file extension** — the atomic `.dcd.part` temp made it
+   fail with `No trajectory or frame writer for format 'PART'`. Pass `format="DCD"` explicitly.
+3. **The package ships more than one PSF** (`X.psf` *and* `X_hmr.psf`, identical atom counts). The
+   frame must be written against the one the *viewer* will open, so `resolve_topology` was split
+   out of `resolve_md_config` and both call it. Do not re-inline that rule.
+
+Solute is contiguous at the head of the atom ordering (24hb: atoms 1–213 445 of 1 320 174, 16.2%,
+independently confirmed by an MDAnalysis `nucleic` selection), and NAMD's binary `.coor` puts atom
+*i* at byte `4 + 24i` — so a **byte-prefix fetch would give a solute-only frame for 5.1 MB instead
+of 31.7 MB**. Not taken: it needs a solute-only PSF to pair with and the package only ships
+solvated ones. Available if a once-per-login 31.7 MB ever feels slow.
+
+### The progress bar between sign-ins — carried forward, never invented (2026-08-07)
+
+`_namd_live_progress` derived the running step from `live_segment_step`, which reads the **local**
+log/xsc. A cluster job writes those on the node, so the step was `None` for the entire run and the
+master bar sat at **0 %** until a segment flipped to done. Fixed in two layers:
+
+1. **Use the node's last reported step.** `_remote_projected_step` reads `job.live_metrics["step"]`
+   and takes whichever of (local read, node reading) is further along — a stale local file must
+   never drag the bar backwards. On the live 50M-step job this alone moved 0 % → 1.16 %.
+2. **Carry it forward at the last measured rate** (`namd_metrics.projected_step`, pure) using
+   elapsed wall time, because Duo means the job is unobservable while signed out.
+
+**Anchor on NADOC's clock, not the node's.** The blob's `collected_at` is the compute node's
+`time.time()`; extrapolating against our clock would turn any host/node skew into fake progress.
+`apply_live_metrics` now stamps `retrieved_at` — and *only when the blob actually changed*: an
+identical blob means the collector has not rewritten it, so the run HAS advanced since we first saw
+that step, and re-anchoring would silently discard that progress.
+
+**Two honesty rules, both tested:**
+- **A projection never crosses 99 %** (`_MAX_PROJECTED_FRACTION`). Reaching 100 % asserts a
+  completion nobody observed — the run may have crashed or hit its walltime a second after the
+  last report. Verified: 7 days signed out on a 5.3-day job reads 99.00 %, not 100 %.
+- **No rate → no extrapolation.** Missing/zero `s_per_step`, or a clock that went backwards,
+  returns the last step unchanged. A frozen bar is honest; a fabricated one is not. A reading with
+  no anchor yet is returned as a real (if stale) observation with `estimated=False`, so it is not
+  hedged — only genuine projections carry the `~` and "estimated from last cluster sync".
+
+`progress_estimated` rides on both channels (`GET /md/jobs` and `/ws/md-jobs/{id}`) from the one
+shared helper, so the two can never disagree about whether a number was measured.
+
 ### `workspace/clusters.json` shadows the embedded profile — edit BOTH
 
 `cluster_config.load_profiles()` **overwrites the whole `alpine` entry** with the JSON on disk.
@@ -247,16 +358,101 @@ read as **56 GPUs**. NADOC requests `--gres=gpu:h200:1` — a whole card — so 
 unusable capacity. `cluster_queue.is_mig_type()` (matches `\d+g\.\d+gb`) splits them; the popup
 shows slices on a separate sub-line, never added to the whole-GPU count.
 
+### Re-verified live 2026-08-06 (second session, after the fixes)
+
+- **Zero drift warnings** — the profile now matches the live partition list exactly, so the
+  `acpu` rename is correct end to end.
+- **Per-partition ns/day is real**: ah200 115.7 / artxpro6000 74.0 / aa100 46.3 / al40 34.7 /
+  ami100 23.1 for a 63k-atom job — exactly the base guess × each `_GPU_SPEED_FACTOR`. Before
+  the fix every row read an identical 221.6. `job_ns_per_day_measured: false` everywhere,
+  correctly: no learned Alpine throughput exists for this size bucket yet.
+  **Those five numbers are now stale** — they predate both the `_GPU_NSDAY_ATOM_CONSTANT`
+  recalibration (2.9e6 → 4.5e6) and the measured artxpro6000/al40 factors above. The *point*
+  they were recorded to make (per-partition scaling reaches the popup at all) still stands;
+  the magnitudes do not. Re-read them from the live popup, not from here.
+- **Time-to-result ordering does its job**: ami100 is *free right now* yet ranks 3rd (168 h)
+  because it is slow, behind ah200 (62 h) and artxpro6000 (136 h). Starts-first ≠ finishes-first.
+- **Cost is closer than the rate suggests**: ah200 21,286 SU vs aa100 18,081 SU — ~18% more in
+  total, not 3×, because the faster card holds the allocation for far less time.
+
+### Known gap — a clamped walltime reads as a completion time
+
+ami100's "done in 168 h" is the `gpu-long` ceiling, not a real finish: `recommend()` clamped
+the walltime and recorded a note saying the run will need resume-from-checkpoint. The
+availability row does not surface that note, so a clamped row looks like a slower-but-viable
+option instead of one that cannot finish in a single submission. Same family as the four wait
+bugs fixed above; not yet fixed.
+
+### GPU-resident NAMD on Alpine: there is no module, you must build it (2026-08-07)
+
+**The failure.** SLURM 30948986 (24hb_0xT) died instantly: `Lmod ... The following
+module(s) are unknown: "namd/3.0.1_gpu"`. That string was never real — the profile comment
+said outright it was a guess from the `_cpu`→`_gpu` convention. July's jobs worked because
+they were CPU; this was the first GPU submission, so the guess was exercised for the first
+time. Cost: an 814 MB upload and a queue wait to learn about a typo.
+
+**Live cluster facts (probed 2026-08-07 — do not re-derive):**
+
+| | |
+|---|---|
+| NAMD modules | `namd/2.14`, `namd/3.0.1_cpu` — **no CUDA build exists** |
+| OS / glibc | RHEL 8.10, **glibc 2.28** |
+| CUDA modules | 11.2, 11.3, 11.4, 11.8, **12.1.1** (newest) |
+| GCC modules | 10.3.0, 11.2.0, 13.2.0, 14.2.0 |
+| FFTW | 3.3.8 / 3.3.9 / 3.3.10 |
+
+**Three consequences, each load-bearing:**
+1. **A desktop binary cannot be uploaded.** The local Dec-2025 build needs GLIBC_2.38 vs
+   Alpine's 2.28. Not a near miss — building on the cluster is mandatory.
+2. **CUDA 12.1.1 caps the targets.** sm_80 (aa100) ✓, sm_89 (al40) ✓, **sm_90 (ah200) ✓**,
+   but **sm_120 (artxpro6000, Blackwell) needs CUDA ≥ 12.8 → cannot be targeted at all**.
+   ah200 is therefore the GPU target, which is also the fastest and least contended.
+3. **nvcc 12.1 rejects GCC > 12.2**, so the profile's `gcc/14.2.0` cannot build CUDA. Use
+   **`gcc/11.2.0` + `cuda/12.1.1`** — and per CURC's own rule the sbatch must load the same
+   set, so `gpu_module_loads` must match the build exactly.
+
+**CURC endorses building** ("begin a compile job by using the `acompile` command"); nothing
+discourages user-built software. `acompile` has no GPUs (4 cores/12 h) — fine, `nvcc`
+cross-compiles — so NADOC submits the build as a normal `acpu` batch job instead, which
+survives disconnection and logs.
+
+**What was built for this** (all tested, `main.js` untouched):
+- `ClusterProfile.namd_bin` / `gpu_namd_bin` + `namd_command(gpu)` — a private build is
+  addressed by absolute path since it is on no module's PATH. Reaches both the real sbatch
+  and the wizard preview; the "CPU-looking module" warning self-suppresses for private paths.
+- **Submit pre-flight** (`md_executor.submit_job`): `module load … && command -v <namd>` on
+  the LOGIN node before staging. Catches both a bad module and a module set that loads fine
+  while leaving no `namd3` — Alpine's normal state for GPU. Fails in ~2 s with nothing uploaded.
+- `list_namd_modules` now loads a compiler first and falls back to `module spider`: Alpine's
+  Lmod is **hierarchical**, so the old bare `module avail namd` returned EMPTY precisely when
+  it was needed.
+- `GET /cluster/probe` — read-only, a **named registry** (`os`, `modules`, `cuda-compilers`,
+  `gpu`, `squeue-mine`, `job`, `sinfo`), not an allowlist over free text; `arg` validated to
+  `[A-Za-z0-9_.+/-]{1,64}`. A test asserts every probe is non-mutating.
+- `backend/core/cluster_build.py` + `POST|GET /cluster/build/namd` — packs the source
+  (dropping the local build tree and `.git`: 618 MB → 89 MB), uploads, and submits a
+  generated build script. Also not a shell: every module/gencode/name is validated and
+  writes are confined to `<project_base>/nadoc_builds/<name>`.
+
+**When the build lands**, it is a two-line `workspace/clusters.json` edit:
+`"gpu_namd_bin": "<build_dir>/<src>/Linux-x86_64-g++/namd3"` and
+`"gpu_module_loads": ["gcc/11.2.0", "cuda/12.1.1"]`.
+
 ### Owed — needs the user present for Duo
 
 1. **Confirm the GPU NAMD module on ah200.** `gpu_module_loads` is still `namd/3.0.1_gpu`;
    Hopper (sm_90) may need a newer CUDA build, and this is now the DEFAULT partition. `GET
    /api/cluster/namd-modules` lists what's there. **Highest-value remaining check.**
 2. **One real ah200 submission** end-to-end — nothing has actually run on the new default.
-3. **In-app exercise of the popup** — the button/modal has never been clicked in a browser
-   (`just smoke` was blocked by a running NAMD production job).
+3. **In-app exercise of the popup and of the wizard's new first step** — neither has been
+   clicked in a browser (`just smoke` blocked by a running NAMD production job).
 4. **CPU QoS names are docs-derived**, not live-tested by sbatch. The GPU half of the same docs
    table was live-confirmed, which is good corroboration, but `cpu-normal` has not been submitted.
+
+**Editing `backend/**` drops the SSH session** — uvicorn `--reload` watches `backend` and
+`scripts` only, and the asyncssh connection lives in that process. `memory/**` and
+`workspace/**` are excluded, so profile-JSON and memory edits are safe mid-session. Batch
+backend edits, then reconnect once.
 
 ---
 

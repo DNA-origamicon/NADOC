@@ -45,12 +45,85 @@ slot and the `_0S_` settle stage. A carve drops the settle stage → 21.
 
 - `＋ New job` (`#md-jobs-new-btn`) opens `frontend/src/ui/md_job_wizard.js`; the pure
   shaping is `md_job_wizard_model.js` (92 vitest cases).
-- **Two tabs, not one split screen (2026-08-05).** Tab 1 `Protocol & settings` = mode
-  (relaxation/production) + preset cards + every setting, full width in a 3-column flow
-  (`.wizard-fields { columns: 380px 3 }`), footer Cancel / **Next →**. Tab 2 `What each
-  stage runs` = totals, the 22-column table, conditions; footer Cancel / Create job /
-  Create & run. Create is only offered on tab 2 — a run is not creatable until its plan has
-  been shown. `state.tab` is NOT undoable (a tab is not a choice about the run).
+- **THREE steps since 2026-08-06.** Step 1 `Where it runs` (new — see below), step 2
+  `Protocol & settings` = mode (relaxation/production) + preset cards + every setting, full
+  width in a 3-column flow (`.wizard-fields { columns: 380px 3 }`), step 3 `What each stage
+  runs` = totals, the 22-column table, conditions; footer Cancel / Create job / Create & run.
+  Create is only offered on the LAST step — a run is not creatable until its plan has been
+  shown. `state.tab` is NOT undoable (a tab is not a choice about the run), but
+  `state.target`/`state.partition` ARE (where a job runs is a property of the run).
+  **Navigation is index arithmetic over `TABS`, not hardcoded ids** — it was
+  `setTab('plan')`/`setTab('setup')` when there were only two.
+
+### Step 1 — "Where it runs" (2026-08-06)
+
+`md_job_wizard_target.js` (factory) + `md_job_wizard_target_model.js` (pure, 28 vitest
+cases) + `md_job_wizard_target.test.js` (15 jsdom cases).
+
+**Why first.** The compute targets stopped being interchangeable once Alpine got H200s: an
+H200 behind a 13-day A100 queue, a local RTX, and a rented cloud GPU differ enough in
+throughput and latency that the sensible run length and protocol depend on which you pick.
+Asking last would mean re-deciding everything.
+
+- **local** — probes `GET /md/optimize-advanced/hardware` (same endpoint the ⚡ Optimize
+  button uses; no new backend surface) and shows GPU/VRAM/RAM/cores + the atom cap, plus the
+  run directory via `run_location.mountDirectoryButton` — the SHARED app-wide preference,
+  not a second setting.
+- **alpine** — mounts the existing `cluster_connection.js` login chip (**lazily**, on first
+  Alpine selection: mounting it eagerly would give every user a second
+  `/api/cluster/status` poller for a target they may never choose), then the live
+  `GET /cluster/availability` table: free whole GPUs, expected wait with its provenance, and
+  **speed relative to THIS computer**. That comparison works because the availability
+  response carries each partition's `speed_factor` on the same A100 anchor as
+  `localGpuSpeedFactor()`. An unrecognised local GPU yields `null`, NOT 1.0 — claiming an
+  unknown card is A100-equivalent would put a confident wrong number beside every row.
+- **runpod** — deliberately inert (`UNWIRED_TARGETS`), its own session.
+
+**The gate:** `targetReadiness()` blocks Next until the step is answered — Alpine needs BOTH
+a live session AND a chosen partition. Tab clicks obey the same gate as Next, so a later step
+cannot be reached around it. Local is always ready, so the default path is unchanged.
+
+**Where the choice goes.** `targetPayloadFields()` emits `execution_target` / `cluster_name` /
+`partition` / `runpod_gpu_key`, spread OVER the protocol payload at submit. The wizard also
+mirrors its answer onto the panel's run-target radios (`onTargetChange`), so
+`_currentRunTarget()` stays the single source of truth and **every launch gate and payload
+site in `md_jobs_panel.js` keeps working untouched**. Note `productionPayload()` takes
+camelCase args, so the snake_case API fields must be spread onto its RESULT, not its args.
+
+**`partition` now persists** — `CreateJobRequest.partition` → `MdJob.partition` → honoured by
+`_remote_resources` and defaulted into the review card's dropdown. A node picked against a
+live queue picture must survive to submission, which can happen in a later session long
+after that queue picture is gone.
+
+### Step 3 also carries the full SLURM request (2026-08-06)
+
+When the target is Alpine, the plan step renders a **SLURM request** block above the stage
+table: partition + GRES token, QoS, walltime, cores/GPUs, memory, ns/day (labelled measured
+vs estimated), SU cost, system size — plus the **literal sbatch text**. The submit-review
+card already showed some of this, but only *after* the package was built, which is far too
+late to change your mind about the protocol.
+
+`POST /api/cluster/slurm-preview` (`routes_cluster.py`) → `slurm_script.preview_header()`.
+**Offline — no cluster session needed, nothing submitted.** The key property is that
+`preview_header` calls the SAME builders as the real script (`_sbatch_directives` /
+`_module_block` / `_exec_line`) rather than re-describing them, so the preview cannot drift
+from what gets submitted — the same discipline as `/md/protocol-plan` calling the real conf
+writers. `test_preview_header_matches_the_real_script` asserts every previewed directive
+appears verbatim in `generate_sbatch` output.
+
+`generate_sbatch` needs a manifest (the real segment chain) which only exists post-solvation;
+`preview_header` needs only the resolved `resources`, which is why it can run at wizard time.
+`n_atoms` comes from `estimate_profile_from_design` (memoised, but ~26 s on first call for a
+6-helix bundle) — so the block is fetched **lazily when the plan step is opened**, keyed on
+`(partition, total_ns)`, and never blocks the stage table.
+
+**It surfaces two warnings worth seeing before committing:**
+1. **A capped walltime** — `walltime_h` at the QoS ceiling means the run CANNOT finish in one
+   submission and needs Resume-from-checkpoint. This closes the honesty gap noted in
+   [[alpine-cluster-submission]]: the availability popup still renders a clamped 168 h as if
+   it were a completion time. Live example: ami100 for a 63k-atom / 200 ns job.
+2. **A GPU partition paired with a `namd/*_cpu` module** — the `+devices` exec line would
+   FATAL. Relevant now that ah200 is the default and its module is unconfirmed.
 - **Undo (`↶ Undo` beside the tabs, Ctrl+Z).** One stack of pre-change snapshots
   (`snapshotState` / `applySnapshot` / `pushUndo`, `UNDO_LIMIT = 50`) covering settings
   fields, stage-table cells, `⋯` set-every-stage, protocol, mode and ⚡ alike; `record()` is

@@ -123,6 +123,23 @@ def _latest_existing_dcd(package_dir: Path, stage_names: list[str], output_dir: 
     return None, None
 
 
+def resolve_topology(package_dir: Path, files: dict | None = None, name_stem: str | None = None) -> Path | None:
+    """The PSF this package's manifest points at — manifest entry, ``<name_stem>.psf``, then any.
+
+    Split out of ``resolve_md_config`` so a caller that has to MATERIALISE a
+    trajectory can find the same PSF the viewer will later open.  A package often
+    ships more than one (``X.psf`` and ``X_hmr.psf``), and writing a frame against a
+    different one than the display loads is an atom-count mismatch that surfaces only
+    at render time.  ``remote_live_frame`` is that caller.
+    """
+    files = files if isinstance(files, dict) else {}
+    return _first_existing([
+        _manifest_file(package_dir, files, "topology") or package_dir / "__missing__.psf",
+        package_dir / f"{name_stem}.psf" if name_stem else package_dir / "__missing__.psf",
+        *sorted(package_dir.glob("*.psf")),
+    ])
+
+
 def resolve_md_config(config_path: str | Path) -> MdTrajectorySource:
     """Resolve a NAMD JSON manifest or .namd/.conf file into PSF/PDB/DCD paths."""
     path = Path(config_path).expanduser().resolve()
@@ -145,11 +162,7 @@ def resolve_md_config(config_path: str | Path) -> MdTrajectorySource:
             psfs = sorted(package_dir.glob("*.psf"))
             name_stem = psfs[0].stem if psfs else None
 
-        topology = _first_existing([
-            _manifest_file(package_dir, files, "topology") or package_dir / "__missing__.psf",
-            package_dir / f"{name_stem}.psf" if name_stem else package_dir / "__missing__.psf",
-            *sorted(package_dir.glob("*.psf")),
-        ])
+        topology = resolve_topology(package_dir, files, name_stem)
         coordinate = _first_existing([
             _manifest_file(package_dir, files, "coordinates") or package_dir / "__missing__.pdb",
             package_dir / f"{name_stem}.pdb" if name_stem else package_dir / "__missing__.pdb",

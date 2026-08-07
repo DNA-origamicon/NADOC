@@ -56,8 +56,15 @@ export function connectPayload({ clusterName = 'alpine', host = '', user = '', p
   return body
 }
 
+// Instance counter: there can now be more than one chip on screen at once (the
+// Clusters card and the Job Wizard's first step), and they must not collide on a DOM
+// id or echo each other's broadcasts forever.
+let _chipSeq = 0
+
 export function initClusterConnection({ mount, fetchImpl = fetch } = {}) {
   if (!mount) return { refresh: async () => {}, getState: () => 'disconnected', dispose: () => {} }
+
+  const instanceId = `cc${++_chipSeq}`
 
   let state = 'disconnected'
   let status = { state: 'disconnected', who: null, host: null }
@@ -65,12 +72,33 @@ export function initClusterConnection({ mount, fetchImpl = fetch } = {}) {
 
   const chip = document.createElement('button')
   chip.type = 'button'
-  chip.id = 'md-cluster-chip'
+  // The first chip keeps the canonical id (selectors and tests use it); any additional
+  // chip gets a unique one, because duplicate ids silently break querySelector.
+  chip.id = _chipSeq === 1 ? 'md-cluster-chip' : `md-cluster-chip-${instanceId}`
   chip.style.cssText =
     'width:100%;text-align:left;font-size:var(--text-xs);padding:4px 8px;border-radius:3px;cursor:pointer;font-weight:600'
   mount.appendChild(chip)
 
   const _json = async (r) => { try { return await r.json() } catch { return {} } }
+
+  // True while we are mirroring a sibling chip, to suppress the echo.
+  let adopting = false
+
+  /**
+   * Adopt another chip's state.  Signing in through the Job Wizard has to light up the
+   * Clusters card and vice versa: only the chip that owns the live session polls, so
+   * without this a second chip would sit on a stale "Disconnected" indefinitely.
+   */
+  function adopt(detail) {
+    if (!detail || detail.source === instanceId) return
+    const next = detail.state || 'disconnected'
+    const nextWho = detail.status?.who ?? null
+    if (next === state && nextWho === (status?.who ?? null)) return
+    state = next
+    status = detail.status || { state: next, who: null, host: null }
+    adopting = true
+    try { render() } finally { adopting = false }
+  }
 
   function render() {
     const s = chipStyleForState(state)
@@ -88,8 +116,13 @@ export function initClusterConnection({ mount, fetchImpl = fetch } = {}) {
       : expiry ? `${expiry} — click to reconnect`
       : 'Click to connect to the CU Alpine cluster'
     // Notify listeners (e.g. the MD panel's Alpine run-target toggle) so they can
-    // enable/disable promptly on connect/disconnect/expiry.
-    window.dispatchEvent(new CustomEvent('nadoc:cluster-state-change', { detail: { state, status } }))
+    // enable/disable promptly on connect/disconnect/expiry.  `source` lets sibling
+    // chips tell our broadcast from their own; adopting a sibling's state must not
+    // re-broadcast or two chips would ping-pong forever.
+    if (!adopting) {
+      window.dispatchEvent(new CustomEvent('nadoc:cluster-state-change',
+        { detail: { state, status, source: instanceId } }))
+    }
   }
 
   async function refresh() {
@@ -203,9 +236,16 @@ export function initClusterConnection({ mount, fetchImpl = fetch } = {}) {
   // while connected — once expired/disconnected the user must act.
   const pollTimer = setInterval(() => { if (state === 'connected') refresh() }, 15000)
 
+  const onSiblingState = (e) => adopt(e?.detail)
+  window.addEventListener('nadoc:cluster-state-change', onSiblingState)
+
   return {
     refresh,
     getState: () => state,
-    dispose: () => { clearInterval(pollTimer); chip.remove() },
+    dispose: () => {
+      clearInterval(pollTimer)
+      window.removeEventListener('nadoc:cluster-state-change', onSiblingState)
+      chip.remove()
+    },
   }
 }

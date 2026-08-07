@@ -225,12 +225,27 @@ function _etaSuffix(node) {
   return Number.isFinite(eta) && eta > 0 ? ` · ~${formatEta(eta)} remaining` : ''
 }
 
+/** Marks a bar whose position is CARRIED FORWARD from the last cluster reading rather
+ *  than measured.  A remote job is only observable while the user is signed in (Duo),
+ *  so between sign-ins the number is a projection at the last known rate — it has to
+ *  read as one, or a stale estimate passes for a live measurement. */
+export function progressIsEstimated(node) {
+  return !!node?.progress_estimated
+}
+
+/** Prefix for an estimated readout: "~" the way the ETA already hedges. */
+function _estPrefix(node) {
+  return progressIsEstimated(node) ? '~' : ''
+}
+
 /** Engine-symmetric numeric progress appended beneath the unified Jobs bar. */
 export function masterStepText(node) {
   if (!node) return ''
   const pct = masterProgressPct(node)
   const total = _stepTotal(node)
-  if (!(total > 0)) return `${pct}%${_etaSuffix(node)}`
+  const est = _estPrefix(node)
+  const tail = progressIsEstimated(node) ? ' · estimated from last cluster sync' : ''
+  if (!(total > 0)) return `${est}${pct}%${_etaSuffix(node)}${tail}`
   const explicit = Number(node.current_step ?? node.completed_steps ?? node.steps_completed)
   // Derive the step count from the RAW fraction, not the displayed percent: rounding to
   // a tenth of a percent is 125,000 steps of slop on a 125M-step production, which would
@@ -242,8 +257,8 @@ export function masterStepText(node) {
       ? Math.max(0, Math.min(total, Math.round(total * fraction)))
       : Math.max(0, Math.min(total, Math.round(total * pct / 100)))
   const left = Math.max(0, total - completed)
-  return `${pct}% · ${completed.toLocaleString()} / ${total.toLocaleString()} steps`
-       + ` · ${left.toLocaleString()} left${_etaSuffix(node)}`
+  return `${est}${pct}% · ${completed.toLocaleString()} / ${total.toLocaleString()} steps`
+       + ` · ${left.toLocaleString()} left${_etaSuffix(node)}${tail}`
 }
 
 /** One-line master status text for the selected node (engine-symmetric). */

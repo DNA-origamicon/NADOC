@@ -610,3 +610,35 @@ describe('one consolidated progress bar + relocated timeline', () => {
     expect(document.getElementById('md-jobs-timeline').style.display).toBe('')
   })
 })
+
+// ── progress carried forward while signed out of the cluster ─────────────────
+import { progressIsEstimated, masterStepText as _stepText, masterProgressPct as _pct } from './simulate_jobs.js'
+
+describe('estimated progress (a cluster job is only observable while signed in)', () => {
+  const base = { engine: 'namd', status: 'running', segments: [{ status: 'running', steps: 500000 }] }
+
+  it('progressIsEstimated reflects the backend flag', () => {
+    expect(progressIsEstimated({ ...base, progress_estimated: true })).toBe(true)
+    expect(progressIsEstimated(base)).toBe(false)
+    expect(progressIsEstimated(null)).toBe(false)
+  })
+
+  it('an estimate is marked "~" and named, so it cannot pass for a measurement', () => {
+    const est = { ...base, progress_fraction: 0.57, progress_estimated: true, steps: 500000 }
+    const txt = _stepText(est)
+    expect(txt.startsWith('~')).toBe(true)
+    expect(txt).toContain('estimated from last cluster sync')
+  })
+
+  it('a measured reading carries no hedge', () => {
+    const measured = { ...base, progress_fraction: 0.57, steps: 500000 }
+    const txt = _stepText(measured)
+    expect(txt.startsWith('~')).toBe(false)
+    expect(txt).not.toContain('estimated')
+  })
+
+  it('the flag does not disturb the percentage itself', () => {
+    expect(_pct({ ...base, progress_fraction: 0.57, progress_estimated: true }))
+      .toBe(_pct({ ...base, progress_fraction: 0.57 }))
+  })
+})

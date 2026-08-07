@@ -162,9 +162,16 @@ const _C = {
  * submitMdJobRemote). `onSubmitted(jobId, result)` fires after a successful submit
  * so the panel can refetch/select. `toast` is optional (falls back to no-op).
  */
-export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null } = {}) {
+export function initMdSubmitReview({
+  api, onSubmitted = () => {}, toast = null,
+  onSubmitStart = () => {}, onSubmitEnd = () => {},
+} = {}) {
   let _overlay = null
   let _ctx = null   // { jobId, clusterName, editOpen } — kept across partition re-fetches
+  // True from the click until the request settles.  Survives `dispose()` on purpose:
+  // the card closes immediately but the upload keeps running, and reopening + clicking
+  // again during that window is exactly how a job gets submitted twice.
+  let _submitting = false
 
   const _notify = (msg, kind) => { try { toast?.(msg, kind) } catch { /* no-op */ } }
 
@@ -172,13 +179,20 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
     if (_overlay) { _overlay.remove(); _overlay = null }
   }
 
-  function dispose() {
+  function dispose({ keepGuard = false } = {}) {
     _teardownOverlay()
     _ctx = null
+    if (!keepGuard) _submitting = false
   }
 
   async function open(jobId, { clusterName = 'alpine', mode = 'submit', parentId = null, count = 0, partition = null } = {}) {
     if (!jobId) return
+    // Refuse to reopen while a submit is still uploading — the whole point of the
+    // guard is that there is no second path to the button.
+    if (_submitting) {
+      _notify('A submission is already uploading to the cluster — wait for it to finish.', 'warn')
+      return
+    }
     dispose()
     // `jobId` is the job to SIZE against (a replica child in ensemble mode); `parentId`
     // is what an ensemble submit posts to.  `partition` (ensemble) forces the initial
@@ -300,10 +314,17 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
       if (_ctx) _ctx.editOpen = true
       _load(e.target.value)
     }
-    box.querySelector('#mr-cancel').onclick = dispose
-    _overlay.onclick = (e) => { if (e.target === _overlay) dispose() }
+    // Cancel and backdrop-dismiss are inert once a submit is in flight.  Closing the
+    // card mid-upload used to leave the request running with no feedback, and the
+    // obvious next move — reopen and submit again — produced a SECOND SLURM job.
+    box.querySelector('#mr-cancel').onclick = () => { if (!_submitting) dispose() }
+    _overlay.onclick = (e) => { if (e.target === _overlay && !_submitting) dispose() }
 
     box.querySelector('#mr-go').onclick = async () => {
+      // Re-entry guard. `disabled` alone is not enough: the card can be reopened, and
+      // a slow submit (an 800 MB package upload takes minutes) is exactly when an
+      // impatient second click happens.
+      if (_submitting) return
       errEl.textContent = ''
       const overrides = {
         partition: box.querySelector('#mr-partition').value.trim(),
@@ -315,10 +336,16 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
       }
       const payload = reviewSubmitPayload({ clusterName, baseResources: r, overrides })
       const goBtn = box.querySelector('#mr-go')
+      _submitting = true
       goBtn.disabled = true
       errEl.style.color = _C.muted
-      errEl.textContent = ensemble ? `Submitting ${count} replicas…`
-                        : resume ? 'Resuming from checkpoint…' : 'Staging package + submitting…'
+
+      // Close the card NOW rather than holding it open for the whole upload.  The
+      // decision has been made; what follows is a long transfer whose progress belongs
+      // on the panel's progress bar, not behind a modal the user cannot dismiss.
+      const what = ensemble ? `Submitting ${count} replicas` : resume ? 'Resuming' : 'Submitting'
+      dispose({ keepGuard: true })
+      onSubmitStart({ jobId, parentId, ensemble, resume, label: what })
       try {
         if (ensemble) {
           const result = await api.submitMdEnsemble(parentId, { ...payload, partition: _ctx.partition || 'acpu' })
@@ -327,7 +354,8 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
           const nErr = result.errors?.length ?? 0
           _notify(`Submitted ${nSub}/${nSub + nErr} replica${nSub === 1 ? '' : 's'} on Alpine${nErr ? ` (${nErr} failed)` : ''}`,
                   nErr ? 'warn' : 'ok')
-          dispose()
+          _submitting = false
+          onSubmitEnd({ ok: true })
           onSubmitted(parentId, result)
           return
         }
@@ -336,12 +364,17 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
           : await api.submitMdJobRemote(jobId, payload)
         if (!result) throw new Error(api.lastErrorMessage?.() ?? (resume ? 'Resume failed' : 'Submit failed'))
         _notify(`${resume ? 'Resumed' : 'Submitted'} on Alpine as SLURM ${result.slurm_job_id}`, 'ok')
-        dispose()
+        _submitting = false
+        onSubmitEnd({ ok: true })
         onSubmitted(jobId, result)
       } catch (err) {
-        goBtn.disabled = false
-        errEl.style.color = _C.err
-        errEl.textContent = err?.message || (ensemble ? 'Ensemble submit failed' : resume ? 'Resume failed' : 'Submit failed')
+        // The card is already gone, so the failure has to reach the user through the
+        // toast — silently dropping it would look like a submit that just never landed.
+        const msg = err?.message
+          || (ensemble ? 'Ensemble submit failed' : resume ? 'Resume failed' : 'Submit failed')
+        _submitting = false
+        onSubmitEnd({ ok: false, message: msg })
+        _notify(msg, 'error')
       }
     }
   }
@@ -355,5 +388,5 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
     )
   }
 
-  return { open, dispose }
+  return { open, dispose, isSubmitting: () => _submitting }
 }

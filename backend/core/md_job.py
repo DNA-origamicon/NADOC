@@ -245,6 +245,20 @@ class MdJob:
     # dict actually used; ``slurm_state`` is the last-seen raw SLURM state (badge).
     execution_target: str = "local"
     cluster_name: Optional[str] = None
+    # Partition chosen in the Job Wizard's first step, while live availability and wait
+    # times were on screen.  Kept separate from ``resources`` (which is the full
+    # recommendation, written at submit time) because the choice is made long before.
+    partition: Optional[str] = None
+    # Scalars computed ON the cluster node by nadoc_live_metrics.py and retrieved
+    # each poll (ns_per_day, temperature_k, pressure_bar, step, ...).  The MD panel
+    # already renders `live_metrics`; for a LOCAL run the runner fills it by tailing
+    # the log, and this is the remote equivalent.
+    live_metrics: Optional[dict] = None
+    # Set when `remote_live_frame` has written a ONE-FRAME stand-in DCD into
+    # output/<segment>.dcd so a still-running cluster job can be shown.  It marks
+    # that file as a snapshot, not results: health recompute skips a marked segment,
+    # and `fetch_outputs` clears this the moment the real trajectory lands.
+    live_frame: Optional[dict] = None
     slurm_job_id: Optional[str] = None
     slurm_state: Optional[str] = None
     remote_project_dir: Optional[str] = None
@@ -356,6 +370,9 @@ class MdJob:
         data.setdefault("archive_path", None)
         data.setdefault("execution_target", "local")
         data.setdefault("cluster_name", None)
+        data.setdefault("partition", None)
+        data.setdefault("live_metrics", None)
+        data.setdefault("live_frame", None)
         data.setdefault("slurm_job_id", None)
         data.setdefault("pending_scancel", False)
         data.setdefault("slurm_state", None)

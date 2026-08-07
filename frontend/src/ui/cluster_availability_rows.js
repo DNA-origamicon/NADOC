@@ -79,6 +79,8 @@ export function availabilityView(row) {
     waitBasis: row.wait_basis || '',
     ttr: formatHours(row.time_to_result_h),
     cost: formatSu(row.job_cost_su),
+    // Cost EFFICIENCY, not just total: equally-fast partitions can differ ~30%.
+    suPerNs: row.job_su_per_ns != null ? `${Math.round(row.job_su_per_ns)} SU/ns` : '',
     nsday: row.job_ns_per_day != null ? `${row.job_ns_per_day} ns/day` : '',
     maxWall: row.max_walltime_h != null ? `${row.max_walltime_h} h` : '—',
     requestOnly: !!row.request_only,
@@ -117,7 +119,9 @@ export function renderAvailabilityRows(rows) {
         `</span>` +
         `<span style="color:#8b949e" title="${_esc(v.reason)}">${_esc(v.pending)}</span>` +
         `<span style="color:#c9d1d9" title="${_esc(v.waitBasis)}">${_esc(v.wait)}</span>` +
-        `<span style="color:#8b949e" title="${_esc(v.nsday)}">${_esc(v.cost)}</span>` +
+        `<span style="color:#8b949e" title="${_esc(v.nsday)}">${_esc(v.cost)}` +
+        (v.suPerNs ? `<br><span style="color:#6e7681;font-size:9px">${_esc(v.suPerNs)}</span>` : '') +
+        `</span>` +
         `<span style="color:#3fb950" title="est. wait + runtime">${_esc(v.ttr)}</span>` +
         `</div>`
       )

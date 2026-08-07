@@ -79,6 +79,22 @@ class ClusterProfile:
     # ``module_loads`` — else `+devices` FATALs with "GPUresident not supported on
     # regular multicore builds".  Empty → fall back to ``module_loads``.
     gpu_module_loads: list[str] = field(default_factory=list)
+    # Absolute path to a privately-built NAMD, used INSTEAD of a bare ``namd3`` from a
+    # module's PATH.  Alpine ships only namd/2.14 and namd/3.0.1_cpu — there is no
+    # CUDA NAMD module at all — so GPU-resident there requires a build the user owns
+    # (see project_alpine_cluster_submission.md).  Empty → plain ``namd3``.
+    namd_bin: str = ""
+    gpu_namd_bin: str = ""          # GPU-specific override; falls back to namd_bin
+
+    def namd_command(self, gpu: bool) -> str:
+        """The NAMD executable to invoke for this target.
+
+        A private build is addressed by absolute path because it is not on any
+        module's PATH; everything else keeps the bare name so a module provides it.
+        """
+        if gpu and self.gpu_namd_bin:
+            return self.gpu_namd_bin
+        return self.namd_bin or "namd3"
 
     def modules_for(self, gpu: bool) -> list[str]:
         """`module load` set for the sbatch header, by target build.
@@ -229,6 +245,8 @@ def _profile_from_dict(d: dict) -> ClusterProfile:
         project_base=d["project_base"],
         scratch_base=d["scratch_base"],
         module_loads=list(d.get("module_loads", [])),
+        namd_bin=d.get("namd_bin", ""),
+        gpu_namd_bin=d.get("gpu_namd_bin", ""),
         default_partition=d["default_partition"],
         default_qos=d["default_qos"],
         partitions=[Partition(**p) for p in d.get("partitions", [])],

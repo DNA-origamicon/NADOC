@@ -271,4 +271,17 @@ Symptom the user reported: "can't delete the chain-simulator's completed oxDNA j
   simply *absent* when frames are stepped by hand, and the symptom is a render that starts correct and
   degrades partway through. [detail](LESSONS_archive.md#l13)
 
+- **L14** — 🖧 **A login node is NOT a compute node: probing the cluster from the wrong one gives
+  confident wrong answers.** On Alpine, `module load gcc/11.2.0` is REFUSED on the login node
+  ("exist but cannot be loaded as requested") while the identical load succeeds inside an `acpu`
+  job, and `module avail namd` returns EMPTY on the login node because Lmod is hierarchical (it
+  hides modules until a compiler is loaded) — so the diagnostic tool reported "no NAMD modules"
+  at the exact moment a job had just died on an unknown NAMD module. I built a submit pre-flight
+  on `module load` and it produced FALSE NEGATIVES twice, blocking submissions that would have
+  run. Symptom: a check that disagrees with what the batch job actually does. Fix: verify only
+  things that do not vary between nodes — `module spider` (does it EXIST, whole tree) and
+  `test -x <absolute path>` (filesystem). Same family: a `-DNAMD_CUDA` binary segfaults on a
+  GPU-less node, so "does it run" is untestable there and must not be asserted.
+  [detail](LESSONS_archive.md#l14)
+
 > **Detail.** Full entries live in [LESSONS_archive.md](LESSONS_archive.md). Open only the entry that matches your symptom.

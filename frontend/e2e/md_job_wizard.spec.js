@@ -38,11 +38,20 @@ async function openDynamics(page) {
   await expect(page.locator('#md-jobs-new-btn')).toBeVisible()
 }
 
-/** The wizard opens on tab 1 (protocol + settings); the ladder and its conditions are on
- *  tab 2. Everything about what a run WILL DO lives behind this click. */
+/** The wizard opens on step 1 ("Where it runs"); the protocol form is step 2 and the
+ *  ladder with its conditions is step 3. Everything about what a run WILL DO lives
+ *  behind this click. */
 async function openPlanTab(modal) {
   await modal.locator('.wizard-tab', { hasText: 'What each stage runs' }).click()
 }
+
+/** The wizard now opens on step 1 ("Where it runs"). Local is preselected and always
+ *  ready, so every existing assertion about the protocol form just needs the step
+ *  advanced first. */
+async function openSettingsTab(modal) {
+  await modal.locator('.wizard-tab', { hasText: 'Protocol & settings' }).click()
+}
+
 
 test.beforeEach(async ({ request }) => {
   const r = await request.post(`${API}/design/load`, {
@@ -61,6 +70,7 @@ test('the wizard renders every ladder stage as a column', async ({ page }) => {
 
   const modal = page.locator('.modal--wizard')
   await expect(modal).toBeVisible()
+  await openSettingsTab(modal)
 
   // Tab 1 sets the run up and offers only Next; nothing is creatable until its plan has
   // been shown.
@@ -115,6 +125,7 @@ test('a change can be undone — including one made on the other tab', async ({ 
   const modal = page.locator('.modal--wizard')
   const undo = modal.locator('button', { hasText: 'Undo' })
   await expect(undo).toBeDisabled()          // nothing has been changed yet
+  await openSettingsTab(modal)
 
   const padding = modal.locator('.wizard-field', { hasText: 'Water padding' })
   const input = padding.locator('input')
@@ -161,6 +172,7 @@ test('switching protocol changes the plan and the provenance chips', async ({ pa
   await page.click('#md-jobs-new-btn')
   const modal = page.locator('.modal--wizard')
   await expect(modal).toBeVisible()
+  await openSettingsTab(modal)
   await openPlanTab(modal)
   await expect(modal.locator('.wizard-stages thead th').first()).toBeVisible()
 
@@ -258,6 +270,7 @@ test('production offers a relaxation picker or says to run one first', async ({ 
   await page.click('#md-jobs-new-btn')
   const modal = page.locator('.modal--wizard')
   await expect(modal).toBeVisible()
+  await openSettingsTab(modal)
 
   await modal.locator('.wizard-mode', { hasText: 'Production' }).click()
 

@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from backend.core import cluster_config as cc
+from backend.core import cluster_resources as cr
 from backend.core import md_executor as ex
 from backend.core.cluster_ssh import RunResult
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
@@ -887,3 +888,127 @@ def test_record_submit_failure_marks_job_without_losing_prepared_state(tmp_path,
     assert reloaded.slurm_job_id is None
     assert "Cluster submission failed" in (reloaded.error or "")
     assert "bad QoS" in reloaded.error
+
+
+# ── module pre-flight (SLURM 30948986 post-mortem) ───────────────────────────
+
+def test_submit_preflights_modules_before_uploading_anything(tmp_path, alpine, resources):
+    """SLURM 30948986 died instantly on `namd/3.0.1_gpu` (which does not exist on
+    Alpine) AFTER an 814 MB upload and a queue wait. Catch it on the login node."""
+    job = _make_prepared_job(tmp_path)
+    conn = FakeConn(canned={
+        "module spider": RunResult(
+            1, "",
+            'Lmod has detected the following error: The following module(s) '
+            'are unknown: "namd/3.0.1_gpu"'),
+    })
+    with pytest.raises(RuntimeError, match="Pre-flight failed"):
+        _run(ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn))
+    # Nothing was staged — that is the whole point of checking first.
+    assert conn.puts == []
+    assert conn.mirrors == []
+    assert not any("sbatch" in c for c in conn.runs)
+
+
+def test_submit_preflight_reports_the_module_that_failed(tmp_path, alpine, resources):
+    job = _make_prepared_job(tmp_path)
+    conn = FakeConn(canned={"module spider": RunResult(1, "", "unknown module")})
+    with pytest.raises(RuntimeError) as exc:
+        _run(ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn))
+    msg = str(exc.value)
+    assert "clusters.json" in msg              # tells the user where to fix it
+    assert "namd-modules" in msg               # ...and how to find the right name
+
+
+def test_submit_proceeds_when_modules_load_cleanly(tmp_path, alpine, resources):
+    job = _make_prepared_job(tmp_path)
+    conn = FakeConn(canned={"sbatch": RunResult(0, "Submitted batch job 4242", "")})
+    out = _run(ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn))
+    assert out.slurm_job_id == "4242"
+    assert any("module spider" in c for c in conn.runs)    # the pre-flight really ran
+
+
+def test_submit_preflight_catches_a_missing_namd_binary(tmp_path, alpine, resources):
+    """A private build is an absolute path, so `test -x` settles whether it is really
+    there — the same filesystem answer from the login node or a compute node."""
+    from dataclasses import replace as _replace
+    prof = _replace(alpine, gpu_namd_bin="/projects/me/gone/namd3")
+    job = _make_prepared_job(tmp_path)
+    conn = FakeConn(canned={"test -x": RunResult(1, "", "NOT EXECUTABLE")})
+    gpu_res = cr.recommend(prof, n_atoms=100_000, total_ns=2.0, partition="ah200")
+    with pytest.raises(RuntimeError, match="Pre-flight failed"):
+        _run(ex.submit_job(job, tmp_path, profile=prof, resources=gpu_res, conn=conn))
+    assert conn.puts == []
+
+
+def test_submit_preflight_checks_the_private_binary_path(tmp_path, alpine, resources):
+    from dataclasses import replace as _replace
+    prof = _replace(alpine, gpu_namd_bin="/projects/me/namd3")
+    job = _make_prepared_job(tmp_path)
+    conn = FakeConn(canned={"sbatch": RunResult(0, "Submitted batch job 77", "")})
+    gpu_res = cr.recommend(prof, n_atoms=100_000, total_ns=2.0, partition="ah200")
+    _run(ex.submit_job(job, tmp_path, profile=prof, resources=gpu_res, conn=conn))
+    assert any("/projects/me/namd3" in c for c in conn.runs)
+
+
+# ── live metrics retrieved from the node (SLURM 30954752 post-mortem) ─────────
+
+def test_poll_retrieves_node_computed_metrics(tmp_path, alpine):
+    """A remote run showed no speed/temp/pressure for its whole duration: the poll
+    listed filenames only, and metrics.jsonl is written just once a segment
+    completes — which never happens inside a short walltime."""
+    job = _make_prepared_job(tmp_path)
+    job.slurm_job_id = "1"
+    job.remote_scratch_dir = "/scratch/x"
+    blob = '{"ns_per_day": 30.8, "temperature_k": 296.7, "step": 200000}'
+    conn = FakeConn(canned={"ls -1": RunResult(0, "---NADOC-METRICS---\n" + blob, "")})
+    _run(ex.poll_remote_progress(job, conn=conn))
+    assert job.live_metrics["ns_per_day"] == 30.8
+    assert job.live_metrics["step"] == 200000
+
+
+def test_live_metrics_ignores_a_missing_or_torn_blob(tmp_path):
+    """The collector rewrites atomically, but an early poll sees no file at all —
+    that must leave the previous reading alone rather than blanking the panel."""
+    j = _make_prepared_job(tmp_path)
+    j.live_metrics = {"ns_per_day": 12.0}
+    assert ex.apply_live_metrics(j, "") is False
+    assert ex.apply_live_metrics(j, "{not json") is False
+    assert j.live_metrics == {"ns_per_day": 12.0}
+
+
+def test_live_metrics_no_change_reports_false(tmp_path):
+    j = _make_prepared_job(tmp_path)
+    assert ex.apply_live_metrics(j, '{"ns_per_day": 5}') is True
+    assert ex.apply_live_metrics(j, '{"ns_per_day": 5}') is False
+
+
+def test_submit_stages_the_live_metrics_collector(tmp_path, alpine, resources):
+    """Staged unconditionally — it is not tied to the early-stop feature."""
+    job = _make_prepared_job(tmp_path)
+    conn = FakeConn(canned={"sbatch": RunResult(0, "Submitted batch job 5", "")})
+    _run(ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn))
+    remotes = [remote for _, remote in conn.puts]
+    assert any(r.endswith("/nadoc_live_metrics.py") for r in remotes), remotes
+
+
+# ── health for INTERRUPTED segments (health card empty, 2026-08-07) ───────────
+
+def test_partial_segment_with_a_trajectory_is_processed(tmp_path):
+    """`_segment_outputs_complete` needs .coor+.vel+.xsc, which NAMD writes only when
+    a segment FINISHES. Under short-walltime + resume nothing finishes, so the health
+    card stayed empty forever. A partial DCD is enough to compute health."""
+    out = tmp_path / "output"
+    out.mkdir()
+    (out / "seg1.dcd").write_bytes(b"x" * 8192)
+    assert ex._segment_has_trajectory(out, "seg1") is True
+
+
+def test_a_header_only_dcd_does_not_count():
+    """A freshly-created DCD has a header and no frames — nothing to measure."""
+    import tempfile
+    from pathlib import Path as _P
+    with tempfile.TemporaryDirectory() as td:
+        out = _P(td); (out / "tiny.dcd").write_bytes(b"x" * 100)
+        assert ex._segment_has_trajectory(out, "tiny") is False
+        assert ex._segment_has_trajectory(out, "absent") is False

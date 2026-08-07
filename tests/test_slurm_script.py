@@ -455,3 +455,125 @@ def test_early_stop_run_guards_still_present(alpine, gpu_resources):
     # the per-conf skip guard that no-ops a bridged chunk must remain
     script = _gen(alpine, gpu_resources, _ladder_manifest(early_stop=True))
     assert 'if [ -f "output/6hb_demo_01_300K_NPT_ENM_k0p5_p50.coor" ]; then' in script
+
+
+# ── preview_header: the wizard's manifest-free sbatch preview ─────────────────
+
+def test_preview_header_needs_no_manifest(alpine):
+    """generate_sbatch needs a prepared package; the wizard asks BEFORE one exists."""
+    res = cr.recommend(alpine, n_atoms=62_673, total_ns=200.0, partition="ah200")
+    h = ss.preview_header(alpine, res, job_name="nadoc_2hb")
+    assert "#SBATCH --partition=ah200" in h["directives"]
+    assert "#SBATCH --gres=gpu:h200:1" in h["directives"]
+    assert "#SBATCH --job-name=nadoc_2hb" in h["directives"]
+    assert h["gpu"] is True
+
+
+def test_preview_header_matches_the_real_script(alpine):
+    """The preview must not drift from what is actually submitted, so it calls the
+    same builders — assert the directives are a subset of the real script."""
+    res = cr.recommend(alpine, n_atoms=100_000, total_ns=4.0, partition="ah200")
+    h = ss.preview_header(alpine, res, job_name="j")
+    real = ss.generate_sbatch(_manifest(), alpine, res, "/scratch/x", job_name="j")
+    for line in h["directives"]:
+        assert line in real, line
+    assert h["exec_line"].split()[0] in real          # same NAMD invocation form
+
+
+def test_preview_header_cpu_adds_infiniband_and_mpirun(alpine):
+    res = cr.recommend(alpine, n_atoms=100_000, total_ns=4.0, partition="acpu")
+    h = ss.preview_header(alpine, res)
+    assert h["gpu"] is False
+    assert "#SBATCH --constraint=ib" in h["directives"]
+    assert "mpirun" in h["exec_line"]
+    assert not any("--gres" in d for d in h["directives"])
+
+
+def test_preview_header_warns_when_walltime_is_capped(alpine):
+    """A capped walltime is not a slower run — it cannot finish in one submission."""
+    res = cr.recommend(alpine, n_atoms=62_673, total_ns=5000.0, partition="ami100")
+    h = ss.preview_header(alpine, res)
+    assert any("capped" in w and "Resume" in w for w in h["warnings"]), h["warnings"]
+
+
+def test_preview_header_no_warning_when_walltime_fits(alpine):
+    res = cr.recommend(alpine, n_atoms=62_673, total_ns=1.0, partition="ah200")
+    h = ss.preview_header(alpine, res)
+    assert not any("capped" in w for w in h["warnings"])
+
+
+def test_preview_header_warns_on_a_cpu_module_for_a_gpu_partition(alpine):
+    from dataclasses import replace as _replace
+    bad = _replace(alpine, gpu_module_loads=["gcc/14.2.0", "namd/3.0.1_cpu"])
+    res = cr.recommend(bad, n_atoms=62_673, total_ns=10.0, partition="ah200")
+    h = ss.preview_header(bad, res)
+    assert any("CPU-only" in w for w in h["warnings"])
+
+
+def test_preview_header_text_is_readable_shell(alpine):
+    res = cr.recommend(alpine, n_atoms=62_673, total_ns=10.0, partition="ah200")
+    text = ss.preview_header(alpine, res)["text"]
+    assert text.startswith("#!/bin/bash")
+    assert "module load" in text
+    assert "namd3" in text
+
+
+# ── private NAMD build (Alpine has no CUDA NAMD module) ──────────────────────
+
+def _with_private_namd(alpine, path="/projects/me/namd3-git/namd3"):
+    from dataclasses import replace as _replace
+    return _replace(alpine, gpu_namd_bin=path)
+
+
+def test_private_binary_replaces_the_bare_command(alpine):
+    prof = _with_private_namd(alpine)
+    res = cr.recommend(prof, n_atoms=62_673, total_ns=10.0, partition="ah200")
+    h = ss.preview_header(prof, res)
+    assert h["exec_line"].startswith("/projects/me/namd3-git/namd3 ")
+    assert "+devices" in h["exec_line"]
+
+
+def test_private_binary_reaches_the_real_sbatch(alpine):
+    prof = _with_private_namd(alpine)
+    res = cr.recommend(prof, n_atoms=62_673, total_ns=10.0, partition="ah200")
+    script = ss.generate_sbatch(_manifest(), prof, res, "/scratch/x", job_name="j")
+    assert "/projects/me/namd3-git/namd3 +p" in script
+
+
+def test_cpu_target_still_uses_the_module_binary(alpine):
+    prof = _with_private_namd(alpine)          # gpu-only override
+    res = cr.recommend(prof, n_atoms=100_000, total_ns=4.0, partition="acpu")
+    h = ss.preview_header(prof, res)
+    assert "mpirun -np $SLURM_NTASKS namd3" in h["exec_line"]
+
+
+def test_no_cpu_module_warning_when_namd_comes_from_a_private_path(alpine):
+    """Alpine's only NAMD modules are 2.14 and 3.0.1_cpu, so a GPU run legitimately
+    loads a CPU-looking module set (just cuda/gcc) beside a private binary."""
+    from dataclasses import replace as _replace
+    prof = _replace(alpine, gpu_namd_bin="/projects/me/namd3", gpu_module_loads=["namd/3.0.1_cpu"])
+    res = cr.recommend(prof, n_atoms=62_673, total_ns=10.0, partition="ah200")
+    assert not any("CPU-only" in w for w in ss.preview_header(prof, res)["warnings"])
+
+
+def test_namd_command_roundtrips_through_json(tmp_path):
+    import json as _json
+    from backend.core import cluster_config as _cc
+    (tmp_path / "clusters.json").write_text(_json.dumps([{
+        "name": "c", "host": "h", "project_base": "/p/$USER", "scratch_base": "/s/$USER",
+        "default_partition": "g", "default_qos": "n", "gpu_namd_bin": "/opt/namd3",
+    }]))
+    prof = _cc.load_profiles(tmp_path)["c"]
+    assert prof.namd_command(gpu=True) == "/opt/namd3"
+    assert prof.namd_command(gpu=False) == "namd3"
+
+
+def test_sbatch_runs_the_live_metrics_collector_in_background(alpine):
+    """Without it a remote job reports nothing while it runs."""
+    res = cr.recommend(alpine, n_atoms=62_673, total_ns=10.0, partition="ah200")
+    script = ss.generate_sbatch(_manifest(), alpine, res, "/scratch/x", job_name="j")
+    assert "nadoc_live_metrics.py . 30 >/dev/null 2>&1 &" in script
+    assert "NADOC_METRICS_PID=$!" in script
+    # However the job ends, the collector must not outlive it.
+    assert "trap 'kill $NADOC_METRICS_PID" in script
+    assert script.index("nadoc_live_metrics.py") < script.index("namd3")

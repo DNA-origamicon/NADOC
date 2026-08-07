@@ -305,6 +305,14 @@ class CreateJobRequest(BaseModel):
     cluster_name: Optional[str] = Field(
         None, description="Cluster profile name for remote execution (default 'alpine').",
     )
+    partition: Optional[str] = Field(
+        None,
+        description="Preferred SLURM partition, chosen in the Job Wizard's first step "
+                    "while the user could see live availability and wait times. Stored on "
+                    "the job so that context survives to submission — which can happen in a "
+                    "later session, long after the queue picture that motivated the choice. "
+                    "None → auto-pick at submit time.",
+    )
     run_dir: Optional[str] = Field(
         None,
         description="Directory to write this run into (archive-from-birth). A NAMD run "
@@ -1181,12 +1189,24 @@ async def md_solvent_meta(job_id: str) -> dict:
     out: dict = {"ready": False, "n_waters": 0, "n_ions": 0, "species": {},
                  "box_nm": None, "mg_hexahydrate": False}
 
-    audit = package_dir / "charge_audit.json"
-    if audit.exists():
+    def _read(path: Path) -> dict:
         try:
-            ca = json.loads(audit.read_text())
+            return json.loads(path.read_text()) or {}
         except Exception:  # noqa: BLE001
-            ca = {}
+            return {}
+
+    manifest = package_dir / "manifest.json"
+    mf = _read(manifest) if manifest.exists() else {}
+
+    # Not every package writes a standalone charge_audit.json — replica packages
+    # hardlink only the immutable structure files, and some builders fold the audit
+    # into the manifest instead.  Those packages are fully solvated and ionised; if we
+    # only look for the file we report zero of everything, and the panel then draws a
+    # cell full of Mg2+ under the words "no ions in this job".  Same fallback
+    # atomistic_to_nadoc._segid_chain_map() already uses.
+    audit = package_dir / "charge_audit.json"
+    ca = _read(audit) if audit.exists() else (mf.get("charge_audit") or {})
+    if ca:
         ion = ca.get("ionization") or {}
         n_na = int(ion.get("n_na") or 0)
         n_cl = int(ion.get("n_cl") or 0)
@@ -1201,14 +1221,8 @@ async def md_solvent_meta(job_id: str) -> dict:
             box_nm=ion.get("box_nm"),
         )
 
-    manifest = package_dir / "manifest.json"
-    if out.get("box_nm") is None and manifest.exists():
-        try:
-            box_ang = (json.loads(manifest.read_text()) or {}).get("box_ang")
-        except Exception:  # noqa: BLE001
-            box_ang = None
-        if box_ang:
-            out["box_nm"] = [float(v) / 10.0 for v in box_ang]
+    if out.get("box_nm") is None and mf.get("box_ang"):
+        out["box_nm"] = [float(v) / 10.0 for v in mf["box_ang"]]
     return out
 
 
@@ -2561,6 +2575,7 @@ def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
     )
     job.execution_target = body.execution_target
     job.cluster_name = body.cluster_name or ("alpine" if body.execution_target == "alpine" else None)
+    job.partition = body.partition
     job.early_stop_relax = body.early_stop_relax
     job.early_stop_tier = (body.early_stop_tier or "B").upper()
     job.prep_params = body.model_dump()
@@ -2700,6 +2715,7 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
     # is connected.  Tagging here lets the UI show the intended target from creation.
     job.execution_target = body.execution_target
     job.cluster_name = body.cluster_name or ("alpine" if body.execution_target == "alpine" else None)
+    job.partition = body.partition
     job.early_stop_relax = body.early_stop_relax
     job.early_stop_tier = (body.early_stop_tier or "B").upper()
     # Capture the request so a later refit can rebuild the job with one knob moved.
@@ -3032,7 +3048,31 @@ def _backfill_failure_kind(job: MdJob) -> None:
     job.save(_workspace())
 
 
-def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None]:
+def _remote_projected_step(job: MdJob, seg_steps: int | None) -> tuple[int | None, bool]:
+    """``(step, is_estimate)`` for a job whose log lives on the cluster.
+
+    A remote run writes its log on the compute node, so ``live_segment_step`` finds
+    nothing locally and the master bar sat at 0 % for the entire run.  The node
+    collector's last reported step, carried forward at its last measured rate, is the
+    honest reading in between sign-ins — and it re-anchors to the truth on the next
+    poll the moment the user signs back in to Alpine.
+    """
+    import time  # noqa: PLC0415
+
+    from backend.core.namd_metrics import projected_step  # noqa: PLC0415
+
+    live = job.live_metrics or {}
+    step = live.get("step")
+    if not step:
+        return None, False
+    anchor = live.get("retrieved_at")
+    rate = live.get("s_per_step")
+    if not anchor or not rate:
+        return int(step), False  # a real observation, just not extrapolatable
+    return projected_step(int(step), float(rate), time.time() - float(anchor), seg_steps), True
+
+
+def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None, bool]:
     """``(overall fraction 0..1, seconds remaining)`` for a RUNNING NAMD job — the two
     live numbers under the master progress bar.  Both are ``None`` for a non-running job
     (the bar falls back to done/total segments and shows no estimate).
@@ -3048,11 +3088,11 @@ def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None]:
     ladder, not to the end of its current chunk.
     """
     if job.status != MdStatus.running:
-        return None, None
+        return None, None, False
     segs = job.segments or []
     total = len(segs)
     if not total:
-        return None, None
+        return None, None, False
     from backend.core.namd_metrics import (  # noqa: PLC0415
         benchmark_s_per_step, eta_seconds, live_segment_step, overall_fraction,
     )
@@ -3060,6 +3100,7 @@ def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None]:
     ts = None
     steps = None
     eta = None
+    estimated = False
     idx = job.current_segment_idx
     if 0 <= idx < total and segs[idx].status == "running":
         seg = segs[idx]
@@ -3072,7 +3113,16 @@ def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None]:
             eta = eta_seconds(remaining, benchmark_s_per_step(pkg / f"{seg.name}.log"))
         except Exception:  # noqa: BLE001 — progress/ETA are advisory, never fatal
             pass
-    return overall_fraction(done, total, ts, steps), eta
+        # A cluster job has no local log, so the read above is None for its whole run.
+        # Take whichever source is further along: a stale local file must not drag the
+        # bar backwards, and the node's reading must not be ignored once it is ahead.
+        projected, is_estimate = _remote_projected_step(job, steps)
+        if projected is not None and (ts is None or projected > ts):
+            ts, estimated = projected, is_estimate
+            rate = (job.live_metrics or {}).get("s_per_step")
+            remaining = max(0, int(steps or 0) - ts) + sum(int(s.steps or 0) for s in segs[idx + 1:])
+            eta = eta_seconds(remaining, rate) if rate else eta
+    return overall_fraction(done, total, ts, steps), eta, estimated
 
 
 # Strong refs to in-flight background dir-size walks so the event loop can't GC them
@@ -3103,11 +3153,15 @@ async def list_md_jobs() -> list[dict]:
         if size is None:
             to_warm.append(job_dir)
         d["early_stop_pending"] = pending_early_stop(j.job_id)
-        frac, eta = _namd_live_progress(j, ws)
+        frac, eta, estimated = _namd_live_progress(j, ws)
         if frac is not None:
             d["progress_fraction"] = frac
         if eta is not None:
             d["eta_seconds"] = eta
+        # Carried forward from the last cluster reading rather than measured — the UI
+        # marks it so a projection is never mistaken for an observation.
+        if estimated:
+            d["progress_estimated"] = True
         out.append(d)
     if to_warm:
         # Fire-and-forget: walk the uncached dirs in a threadpool AFTER returning, keeping
@@ -3170,6 +3224,14 @@ async def get_md_job_display(job_id: str) -> dict:
         "package_dir": str(package_dir.resolve()) if package_dir.exists() else None,
         "segment_name": segment_name,
         "trajectory_path": str(dcd_path.resolve()) if dcd_path else None,
+        # Set when what's on disk is a single fetched frame from a job still running
+        # on the cluster, not a trajectory.  The panel must say so: it looks
+        # identical to real results otherwise, and it does not advance on its own.
+        "live_frame": (
+            job.live_frame
+            if job.live_frame and job.live_frame.get("segment") == segment_name
+            else None
+        ),
         "production_ready": production_ready,
         "production_from_seed": from_seed,
         "production_checkpoint": production_checkpoint,
@@ -4202,7 +4264,9 @@ def _remote_resources(job: MdJob, profile, body: "SubmitRemoteRequest") -> dict:
     ns/day."""
     if body.resources:
         return body.resources
-    sizing = _size_prepared_job(job, profile, body.safety_factor)
+    # Fall back to the partition chosen in the wizard, so a node picked against a live
+    # queue picture is still honoured when the job is finally submitted.
+    sizing = _size_prepared_job(job, profile, body.safety_factor, partition=job.partition)
     if sizing is None:
         raise HTTPException(400, "Job is not prepared yet (no manifest.json) — cannot size resources.")
     return sizing["resources"]
@@ -4233,7 +4297,8 @@ def md_job_remote_recommendation(
         raise HTTPException(404, f"Unknown cluster profile {cluster_name!r}.")
 
     try:
-        sizing = _size_prepared_job(job, profile, safety_factor, partition=partition)
+        sizing = _size_prepared_job(job, profile, safety_factor,
+                                    partition=partition or job.partition)
     except ValueError as exc:  # unknown forced partition
         raise HTTPException(400, str(exc)) from exc
     # Resume review: seed the card with the job's CURRENT resources (e.g. the short
@@ -4620,6 +4685,64 @@ def md_display_design_for_job(job_id: str):
     return _md_run_design(job), getattr(job, "design_name", None)
 
 
+@router.post("/md/jobs/{job_id}/fetch-remote")
+async def fetch_md_job_remote(job_id: str) -> dict:
+    """Pull a remote job's outputs down now, whatever state it is in.
+
+    The recovery path for results stranded on the cluster: a stopped or already-
+    terminal job is no longer polled by the supervisor, so nothing else will ever
+    fetch it, and /scratch is auto-purged.  Safe to call repeatedly.
+    """
+    from backend.core import cluster_ssh, md_executor
+
+    job = _load_job(job_id)
+    if job.execution_target == "local":
+        raise HTTPException(400, "This is a local job; there is nothing to fetch.")
+    if not job.slurm_job_id:
+        raise HTTPException(400, "Job was never submitted to the cluster.")
+    mgr = cluster_ssh.get_manager()
+    if not mgr.is_connected():
+        raise HTTPException(409, "not connected to a cluster")
+    try:
+        await md_executor.fetch_outputs(job, _workspace(), conn=mgr)
+    except cluster_ssh.ClusterSSHError as exc:
+        raise HTTPException(502, f"Cluster transport error: {exc}") from exc
+    job.save(_workspace())
+    return {"ok": True, "job_id": job.job_id, "slurm_job_id": job.slurm_job_id}
+
+
+@router.post("/md/jobs/{job_id}/fetch-live-frame")
+async def fetch_md_job_live_frame(job_id: str, force: bool = False) -> dict:
+    """Pull ONE current frame off a running cluster job so it can be displayed.
+
+    The cheap counterpart to ``fetch-remote``: that one drags the whole multi-GB
+    output tree and is only sane at a terminal state, whereas this pulls a single
+    ``.restart.coor`` (~24 bytes/atom) and writes it as a one-frame DCD.  Cluster
+    auth is Duo-gated, so this is called when the user connects or picks a job —
+    the only moments a running remote job can be looked at at all.
+    """
+    from backend.core import cluster_ssh, remote_live_frame
+
+    job = _load_job(job_id)
+    # Permanent conditions before transient ones: telling the user to sign in to
+    # fetch a frame for a LOCAL job would send them somewhere that cannot help.
+    if job.execution_target == "local":
+        raise HTTPException(400, "This is a local job; its trajectory is already here.")
+    mgr = cluster_ssh.get_manager()
+    if not mgr.is_connected():
+        raise HTTPException(409, "not connected to a cluster")
+    try:
+        result = await remote_live_frame.fetch_live_frame(
+            job, _workspace(), conn=mgr, force=force
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except cluster_ssh.ClusterSSHError as exc:
+        raise HTTPException(502, f"Cluster transport error: {exc}") from exc
+    job.save(_workspace())
+    return {"job_id": job.job_id, **result}
+
+
 @router.post("/md/jobs/{job_id}/stop")
 async def stop_md_job(job_id: str) -> dict:
     """Cancel a running job."""
@@ -4684,6 +4807,18 @@ async def stop_md_job(job_id: str) -> dict:
         except cluster_ssh.ClusterSSHError as exc:
             raise HTTPException(502, f"Cluster transport error: {exc}") from exc
         job.pending_scancel = False
+        # FETCH BEFORE MARKING STOPPED.  `fetch_outputs` is only ever called from
+        # `reconcile_remote_job`, and the supervisor only polls jobs whose status is
+        # queued/running — so once `apply_user_stop` writes `stopped`, the job is
+        # never polled again and its results are stranded on /scratch, which CURC
+        # auto-purges.  A 43-minute run lost 1.7 GB this way (2026-08-07) with no
+        # route to recover it from the UI.  Best-effort: a fetch hiccup must not
+        # prevent the stop from being recorded.
+        if job.slurm_job_id:
+            try:
+                await md_executor.fetch_outputs(job, _workspace(), conn=mgr)
+            except Exception:  # noqa: BLE001
+                logger.exception("[%s] post-stop fetch failed", job.job_id)
         apply_user_stop(job)
         job.save(_workspace())
         return {"ok": True, "job_id": job_id,

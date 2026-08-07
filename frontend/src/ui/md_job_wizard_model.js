@@ -824,7 +824,9 @@ export const UNDOABLE_KEYS = [
   // Production's own settings used to be five separate state slots; they are now ordinary
   // entries in `touched`, which is what let them render through the same field machinery
   // (provenance chips, condition references, warning icons) as every relaxation control.
-  'mode', 'presetId', 'touched', 'stageOverrides', 'parentJobId',
+  // `target`/`partition` are step 1's answer. Unlike `tab`, WHERE a job runs is a
+  // property of the run, so undo must restore it.
+  'mode', 'presetId', 'touched', 'stageOverrides', 'parentJobId', 'target', 'partition',
 ]
 
 /** Pure: a deep-enough copy of the undoable state. `touched` and `stageOverrides` are the

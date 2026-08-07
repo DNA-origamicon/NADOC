@@ -1,11 +1,19 @@
+// @vitest-environment jsdom
 /**
  * Unit tests for the pure helpers of md_submit_review.js (Phase-4 Alpine submit).
- * All pure — no DOM needed.
+ * Pure helpers plus a jsdom factory test for the submit guard.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
-  fmtQueueMinutes, fmtNs, formatResourceSummary, reviewSubmitPayload,
-  alpineTargetDisabledReason, remoteJobBadge, partitionSelectOptions, qosSelectOptions,
+  fmtQueueMinutes,
+  fmtNs,
+  formatResourceSummary,
+  reviewSubmitPayload,
+  alpineTargetDisabledReason,
+  remoteJobBadge,
+  partitionSelectOptions,
+  qosSelectOptions,
+  initMdSubmitReview,
 } from './md_submit_review.js'
 
 describe('fmtQueueMinutes', () => {
@@ -171,5 +179,75 @@ describe('remoteJobBadge', () => {
   })
   it('falls back to Alpine before submission', () => {
     expect(remoteJobBadge({ execution_target: 'alpine' })).toBe('Alpine')
+  })
+})
+
+describe('submit guard (double-submit prevention)', () => {
+  const rec = {
+    prepared: true, cluster_name: 'alpine', design_name: 'd', status: 'queued',
+    already_submitted: false, n_atoms: 1000, total_ns: 1,
+    available_partitions: [{ name: 'ah200', kind: 'gpu', gpu_model: 'H200' }],
+    available_qos: [{ name: 'gpu-normal', max_walltime_h: 24 }],
+    resources: { partition: 'ah200', qos: 'gpu-normal', cores: 8, gpus: 1, mem_gb: 32,
+                 walltime: '24:00:00', est_cost_su: 100, expected_ns_per_day: 5 },
+  }
+
+  function mount(over = {}) {
+    document.body.innerHTML = ''
+    let resolveSubmit
+    const api = {
+      getMdRemoteRecommendation: async () => rec,
+      submitMdJobRemote: vi.fn(() => new Promise(r => { resolveSubmit = () => r({ slurm_job_id: '1' }) })),
+      lastErrorMessage: () => 'boom',
+      ...over,
+    }
+    const onSubmitStart = vi.fn()
+    const onSubmitEnd = vi.fn()
+    const card = initMdSubmitReview({ api, onSubmitStart, onSubmitEnd, toast: () => {} })
+    return { card, api, onSubmitStart, onSubmitEnd, release: () => resolveSubmit?.() }
+  }
+
+  it('closes the card immediately on submit instead of holding it open for the upload', async () => {
+    const { card, onSubmitStart, release } = mount()
+    await card.open('j1')
+    expect(document.querySelector('#mr-go')).toBeTruthy()
+    document.querySelector('#mr-go').click()
+    await Promise.resolve()
+    expect(document.querySelector('#mr-go')).toBeNull()      // gone at once
+    expect(onSubmitStart).toHaveBeenCalled()
+    expect(card.isSubmitting()).toBe(true)                   // ...but still guarded
+    release()
+  })
+
+  it('refuses to reopen while the upload is still running', async () => {
+    const { card, release } = mount()
+    await card.open('j1')
+    document.querySelector('#mr-go').click()
+    await Promise.resolve()
+    await card.open('j1')                                    // the impatient second try
+    expect(document.querySelector('#mr-go')).toBeNull()
+    release()
+  })
+
+  it('only ever posts once, however many times submit is clicked', async () => {
+    const { card, api, release } = mount()
+    await card.open('j1')
+    const go = document.querySelector('#mr-go')
+    go.click(); go.click(); go.click()
+    await Promise.resolve()
+    expect(api.submitMdJobRemote).toHaveBeenCalledTimes(1)
+    release()
+  })
+
+  it('releases the guard and reports the failure once the request settles', async () => {
+    const { card, onSubmitEnd } = mount({
+      submitMdJobRemote: async () => { throw new Error('module not found') },
+    })
+    await card.open('j1')
+    document.querySelector('#mr-go').click()
+    await vi.waitFor(() => expect(onSubmitEnd).toHaveBeenCalled())
+    expect(onSubmitEnd).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: false, message: 'module not found' }))
+    expect(card.isSubmitting()).toBe(false)                  // retry is allowed now
   })
 })

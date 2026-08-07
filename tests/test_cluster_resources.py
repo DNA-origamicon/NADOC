@@ -103,12 +103,20 @@ def test_walltime_format_is_hhmmss(alpine):
 
 
 def test_measured_throughput_beats_guess(alpine):
+    """A measured value is used verbatim and drives the walltime.
+
+    The measured number here is deliberately well above the size guess: after the
+    2026-08-07 recalibration the anchor is fast enough that a mediocre measured
+    value would legitimately produce a LONGER walltime, which is correct behaviour
+    but would not test what this asserts.
+    """
     guessed = cr.recommend(alpine, n_atoms=100_000, total_ns=10.0)
-    measured = cr.recommend(alpine, n_atoms=100_000, total_ns=10.0, measured_ns_per_day=99.0)
+    measured = cr.recommend(alpine, n_atoms=100_000, total_ns=10.0,
+                            measured_ns_per_day=500.0)
     assert not guessed["measured"]
     assert measured["measured"]
-    assert measured["expected_ns_per_day"] == pytest.approx(99.0)
-    # A faster measured throughput → a shorter walltime than the size guess.
+    assert measured["expected_ns_per_day"] == pytest.approx(500.0)
+    assert measured["expected_ns_per_day"] > guessed["expected_ns_per_day"]
     assert measured["walltime_h"] < guessed["walltime_h"]
 
 
@@ -130,7 +138,10 @@ def test_cost_uses_gpu_billing(alpine):
 
 
 def test_estimate_queue_time_known_and_unknown():
-    assert cr.estimate_queue_time_min("aa100") == 240
+    # Offline fallback only — measured 30-day medians (Alpine, 2026-08-06).  A live
+    # session supersedes these via GET /cluster/availability.
+    assert cr.estimate_queue_time_min("aa100") >= 1425     # effectively unschedulable
+    assert cr.estimate_queue_time_min("ah200") == 1         # new + wide open
     assert cr.estimate_queue_time_min("who_knows") == 60
 
 
@@ -245,3 +256,34 @@ def test_gpu_speed_factor_defaults_to_one_for_unknown_partitions():
 def test_big_vram_partitions_raise_the_cpu_fallback_ceiling():
     assert cr.gpu_atom_ceiling("ah200") > cr.gpu_atom_ceiling("aa100")
     assert cr.gpu_atom_ceiling("aa100") == cr._GPU_ATOM_CEILING
+
+
+# ── recalibration from measured benchmarks (2026-08-07) ──────────────────────
+
+def test_blackwell_measured_equal_to_hopper_not_slower(alpine):
+    """Head-to-head under identical settings: 2hb 650.0 vs 644.4 ns/day, 24hb 41.9
+    vs 38.2. The old 1.6 factor claimed the H200 was 1.56x faster; it is not."""
+    assert cr.gpu_speed_factor("artxpro6000") == cr.gpu_speed_factor("ah200")
+
+
+def test_artxpro6000_is_the_su_efficient_choice(alpine):
+    """Same speed, lower billing rate — so the same job must cost less there."""
+    a = cr.recommend(alpine, n_atoms=62_673, total_ns=200.0, partition="ah200")
+    b = cr.recommend(alpine, n_atoms=62_673, total_ns=200.0, partition="artxpro6000")
+    assert b["expected_ns_per_day"] == a["expected_ns_per_day"]   # equally fast
+    assert b["est_cost_su"] < a["est_cost_su"]                    # but cheaper
+
+
+def test_throughput_anchor_matches_the_measured_production_run(alpine):
+    """2hb_1-0xT (62,673 atoms) sustained 30.8 ns/day on an a100_3g.20gb MIG slice
+    (~3/7 of a card) with DCD + ENM, so a whole A100 is ~70 ns/day. The estimate for
+    that system on aa100 should land near it — the old constant said 46."""
+    r = cr.recommend(alpine, n_atoms=62_673, total_ns=100.0, partition="aa100")
+    assert 60.0 < r["expected_ns_per_day"] < 85.0
+
+
+def test_aa100_queue_guess_says_do_not_plan_around_it(alpine):
+    """621 pending vs 28 running, `squeue --start` returns N/A — SLURM will not even
+    predict a start. The fallback must not imply it is merely slow."""
+    assert cr.estimate_queue_time_min("aa100") >= 24 * 60
+    assert cr.estimate_queue_time_min("ah200") < 60

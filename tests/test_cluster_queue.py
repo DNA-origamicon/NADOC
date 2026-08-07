@@ -389,3 +389,45 @@ def test_fmt_minutes_reads_naturally():
     assert cq._fmt_minutes(200) == "~3 h 20 m"
     assert cq._fmt_minutes(2880) == "~2 d"
     assert cq._fmt_minutes(None) is None
+
+
+# ── read-only probe registry ─────────────────────────────────────────────────
+
+def test_probe_registry_is_named_not_freeform():
+    """No caller string may become a command — unknown names are rejected outright."""
+    with pytest.raises(ValueError, match="unknown probe"):
+        cq.probe_command("rm -rf /")
+    with pytest.raises(ValueError, match="unknown probe"):
+        cq.probe_command("")
+
+
+def test_probe_argument_is_strictly_validated():
+    # A shell metacharacter must never survive into the command.
+    for bad in ("cuda; rm -rf /", "$(whoami)", "a b", "`id`", "x" * 80, ""):
+        with pytest.raises(ValueError, match="needs an argument"):
+            cq.probe_command("modules", bad)
+
+
+def test_probe_argument_is_interpolated_when_valid():
+    assert "spider cuda" in cq.probe_command("modules", "cuda")
+    assert "scontrol show job 30948828" in cq.probe_command("job", "30948828")
+    # Module names carry a slash; it has no shell meaning, so it is allowed.
+    assert "spider namd/3.0.1_cpu" in cq.probe_command("modules", "namd/3.0.1_cpu")
+
+
+def test_argless_probes_ignore_a_supplied_argument():
+    assert cq.probe_command("os") == cq.probe_command("os", "ignored")
+
+
+def test_every_probe_is_read_only():
+    """Guard the registry itself: a future probe must not mutate cluster state."""
+    import re as _re
+    # Word-bounded: `ldd --version` must not trip a naive "dd " substring check.
+    forbidden = ("rm", "sbatch", "scancel", "mv", "cp", "chmod", "chown",
+                 "mkdir", "touch", "dd", "kill", "tee", "sed")
+    for name, tmpl in cq._PROBES.items():
+        for bad in forbidden:
+            assert not _re.search(rf"(?<![\w/.-]){bad}\b", tmpl), \
+                f"probe {name} looks mutating: {bad!r} in {tmpl!r}"
+        assert ">" not in tmpl.replace("2>&1", "").replace(">/dev/null", ""), \
+            f"probe {name} redirects output somewhere"

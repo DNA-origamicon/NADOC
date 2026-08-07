@@ -299,6 +299,37 @@ def benchmark_s_per_step(log_path: Path, head_bytes: int = 256 * 1024) -> float 
     return v if v > 0 else None
 
 
+# An extrapolation must never claim the last 1 %: reaching 100 % asserts a completion
+# nobody observed.  The run may have crashed, been cancelled, or hit its walltime one
+# second after the last report we saw.
+_MAX_PROJECTED_FRACTION = 0.99
+
+
+def projected_step(
+    last_step: int,
+    s_per_step: float | None,
+    age_seconds: float | None,
+    cap_steps: int | None = None,
+) -> int:
+    """Where a run has probably reached, ``age_seconds`` after it was last observed (pure).
+
+    A job on the cluster is only observable while the user is signed in (Duo), so
+    between sign-ins the honest reading is the last reported step carried forward at
+    the last measured rate.  Returns ``last_step`` unchanged when there is no usable
+    rate — a frozen bar is better than an invented one.
+
+    Never decreases, and never crosses ``_MAX_PROJECTED_FRACTION`` of ``cap_steps``.
+    """
+    step = max(0, int(last_step))
+    if not s_per_step or float(s_per_step) <= 0 or age_seconds is None or float(age_seconds) <= 0:
+        return step
+    step += int(float(age_seconds) / float(s_per_step))
+    if cap_steps and int(cap_steps) > 0:
+        step = min(step, int(int(cap_steps) * _MAX_PROJECTED_FRACTION))
+        step = max(step, int(last_step))  # a real observation outranks the ceiling
+    return step
+
+
 def eta_seconds(remaining_steps: int, s_per_step: float | None) -> float | None:
     """Seconds of wall clock left for ``remaining_steps`` at the measured step cost (pure).
 

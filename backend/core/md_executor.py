@@ -24,6 +24,7 @@ reconcile) treats ``execution_target != "local"`` jobs as hands-off.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
@@ -35,6 +36,8 @@ from backend.core import md_protocols
 from backend.core.md_protocols import strip_gpu_resident
 from backend.core.slurm_script import (
     EARLY_STOP_EVAL_NAME,
+    LIVE_METRICS_FILE,
+    LIVE_METRICS_NAME,
     EARLY_STOP_HEALTH_NAME,
     STAGED_MD_HEALTH_NAME,
     generate_sbatch,
@@ -331,6 +334,47 @@ async def submit_job(
     #    path (same is_gpu_target decision).  Only the p10 warmup confs lack it; this
     #    makes all of them consistent with the chosen partition.
     gpu = is_gpu_target(profile, resources)
+
+    # Pre-flight the module set on the LOGIN node before staging anything.  The
+    # `module load` line is the first thing the compute node runs, and if a name is
+    # wrong the job dies instantly — after we have already pushed the whole package
+    # (hundreds of MB) and burned a queue slot.  Live-confirmed 2026-08-06: SLURM
+    # 30948986 died on `namd/3.0.1_gpu`, which does not exist on Alpine, having
+    # uploaded an 814 MB package and waited in the queue first.  Two seconds here
+    # turns that into an immediate, readable error.
+    mods = profile.modules_for(gpu)
+    namd_cmd = profile.namd_command(gpu)
+    if mods or namd_cmd:
+        # Verify with `module spider` and a filesystem test — NOT `module load`.
+        #
+        # The login node's module environment is not the compute node's: `module load
+        # gcc/11.2.0` is refused on the login node ("exist but cannot be loaded as
+        # requested") while the same load succeeds inside an acpu job, so loading here
+        # produces FALSE NEGATIVES that block submissions which would have run fine
+        # (live-confirmed 2026-08-07).  `spider` searches the whole tree and answers
+        # the question we actually care about — does this module EXIST — which is what
+        # caught `namd/3.0.1_gpu` (SLURM 30948986).  A private binary is an absolute
+        # path, identical from either node, so `test -x` settles it outright.
+        checks = [f"module spider {_shq(m)} >/dev/null 2>&1 || "
+                  f'{{ echo \"MISSING MODULE: {m}\"; exit 1; }}' for m in mods]
+        if namd_cmd.startswith("/"):
+            checks.append(f'test -x {_shq(namd_cmd)} || '
+                          f'{{ echo \"NOT EXECUTABLE: {namd_cmd}\"; exit 1; }}')
+        check = await conn.run(
+            "source /etc/profile >/dev/null 2>&1; " + "; ".join(checks) + "; echo PREFLIGHT_OK"
+        )
+        # Each guard ends in `exit 1`, so a failure propagates as the command's exit
+        # code; the echoed marker is for the log, not the decision.
+        blob = f"{check.stdout}\n{check.stderr}".strip()
+        if check.rc != 0:
+            raise RuntimeError(
+                f"Pre-flight failed on {profile.name}: the job would die immediately on "
+                f"the compute node instead of after the upload. Fix module_loads / "
+                f"gpu_module_loads / gpu_namd_bin in workspace/clusters.json (GET "
+                f"/api/cluster/namd-modules lists the NAMD modules that exist).\n"
+                f"{blob[:600]}"
+            )
+
     plan = stage_plan(package_dir)
     logger.info("[%s] staging %d files → %s (gpu=%s)", job.job_id, len(plan), project_dir, gpu)
     await conn.mkdir_p(project_dir)
@@ -342,7 +386,13 @@ async def submit_job(
         else:
             await conn.sftp_put(str(local_path), remote)
 
-    # 1b) stage the node early-stop scripts into project (mirrored to scratch next).
+    # 1b) the node live-metrics collector — ALWAYS staged, independent of early-stop.
+    #     Without it a remote run shows no speed/temp/pressure at all while it runs.
+    from backend.core import remote_live_metrics  # noqa: PLC0415
+    await _put_text(conn, Path(remote_live_metrics.__file__).read_text(),
+                    f"{project_dir}/{LIVE_METRICS_NAME}", workspace_dir, job)
+
+    # 1c) stage the node early-stop scripts into project (mirrored to scratch next).
     if early_stop:
         await _stage_early_stop_evaluator(conn, project_dir, workspace_dir, job, tier=es_tier)
 
@@ -376,16 +426,34 @@ async def submit_job(
     return job
 
 
-async def list_namd_modules(conn=None) -> list[str]:
-    """Live-discover the NAMD modules available on the cluster (``module avail namd``).
+async def list_namd_modules(conn=None, *, compilers=("gcc/14.2.0",)) -> list[str]:
+    """Live-discover the NAMD modules available on the cluster.
 
     Lets the user confirm the exact GPU (CUDA) vs CPU NAMD module name — the embedded
-    Alpine profile can only guess the GPU one (``namd/3.0.1_gpu``).  Combines stdout +
-    stderr because LMOD writes ``module avail`` to stderr.
+    Alpine profile can only guess the GPU one.  Combines stdout + stderr because LMOD
+    writes ``module avail`` to stderr.
+
+    **Alpine's Lmod is HIERARCHICAL**: ``namd`` is invisible to a bare
+    ``module avail namd`` until a compiler is loaded, so the plain form returned an
+    empty list precisely when it was needed — after a job died on an unknown module
+    (live-confirmed 2026-08-06, ``namd/3.0.1_gpu`` unknown while avail showed nothing).
+    So: try under each compiler, then fall back to ``module spider``, which searches
+    the whole tree regardless of what is loaded.
     """
     conn = conn or _default_conn()
-    res = await conn.run("source /etc/profile >/dev/null 2>&1; module -t avail namd 2>&1")
-    return parse_namd_modules(f"{res.stdout}\n{res.stderr}")
+    found: list[str] = []
+    for comp in compilers:
+        res = await conn.run(
+            f"source /etc/profile >/dev/null 2>&1; module load {comp} >/dev/null 2>&1; "
+            "module -t avail namd 2>&1"
+        )
+        found += parse_namd_modules(f"{res.stdout}\n{res.stderr}")
+    if not found:
+        # `spider` walks every hierarchy branch; its output is prose, but the module
+        # tokens still match the same `namd/...` shape the parser looks for.
+        res = await conn.run("source /etc/profile >/dev/null 2>&1; module -t spider namd 2>&1")
+        found += parse_namd_modules(f"{res.stdout}\n{res.stderr}")
+    return sorted(set(found))
 
 
 async def poll_status(job: MdJob, *, conn=None) -> tuple[str, str]:
@@ -423,11 +491,46 @@ async def poll_remote_progress(job: MdJob, *, conn=None) -> bool:
     scratch = job.remote_scratch_dir
     if not scratch or not job.segments:
         return False
+    # One command: the file listing AND the node-computed metrics blob.  The blob is
+    # a couple of hundred bytes written by nadoc_live_metrics.py on the node, so this
+    # stays a metadata-sized poll rather than a log transfer.
     res = await conn.run(
-        f"cd {_shq(scratch)} && ls -1 output/*.coor 2>/dev/null; ls -1 *.log 2>/dev/null"
+        f"cd {_shq(scratch)} && ls -1 output/*.coor 2>/dev/null; ls -1 *.log 2>/dev/null; "
+        f"echo '---NADOC-METRICS---'; cat {LIVE_METRICS_FILE} 2>/dev/null"
     )
-    finished, started = parse_progress_listing(res.stdout)
-    return apply_remote_progress(job, finished, started)
+    listing, _, metrics_blob = (res.stdout or "").partition("---NADOC-METRICS---")
+    finished, started = parse_progress_listing(listing)
+    advanced = apply_remote_progress(job, finished, started)
+    return apply_live_metrics(job, metrics_blob) or advanced
+
+
+def apply_live_metrics(job: MdJob, blob: str) -> bool:
+    """Store the node-computed metrics on the job; True if anything changed.
+
+    A missing/half-written blob is simply ignored — the panel treats absent values
+    as "not known yet", which is the honest state early in a stage before NAMD has
+    printed its first ENERGY line.
+    """
+    text = (blob or "").strip()
+    if not text:
+        return False
+    try:
+        data = json.loads(text)
+    except (ValueError, TypeError):
+        return False
+    if not isinstance(data, dict) or not data:
+        return False
+    # `collected_at` inside the blob is the COMPUTE NODE's clock.  Progress is
+    # extrapolated from this reading between sign-ins, so it needs an anchor on
+    # NADOC's own clock — otherwise any host/node skew becomes fake progress.
+    prior = {k: v for k, v in (job.live_metrics or {}).items() if k != "retrieved_at"}
+    if data == prior:
+        # Identical blob = the collector has not rewritten it, so the run HAS advanced
+        # since we first saw this step.  Re-anchoring now would throw that away.
+        return False
+    data["retrieved_at"] = time.time()
+    job.live_metrics = data
+    return True
 
 
 async def resume_job(
@@ -584,6 +687,13 @@ async def fetch_outputs(job: MdJob, workspace_dir: Path, *, conn=None) -> None:
         except Exception as exc:  # noqa: BLE001 — one bad file must not abort fetch
             logger.warning("[%s] fetch %s failed: %s", job.job_id, rel, exc)
 
+    # Real trajectories have landed on top of any one-frame stand-in, so the marker
+    # is void.  Leaving it set would let `remote_live_frame` overwrite real results
+    # with a single frame on the next connect.
+    from backend.core import remote_live_frame  # noqa: PLC0415 — cycle
+
+    remote_live_frame.clear_live_frame(job)
+
 
 async def cancel_job(job: MdJob, *, conn=None) -> bool:
     """``scancel`` the remote job.  Returns True if a cancel was issued."""
@@ -592,6 +702,34 @@ async def cancel_job(job: MdJob, *, conn=None) -> bool:
         return False
     res = await conn.run(f"scancel {job.slurm_job_id}")
     return res.rc == 0
+
+
+class _SkipHealth(Exception):
+    """Internal: this segment's health is already recorded and final."""
+
+
+def _segment_has_trajectory(output_dir: Path, segment_name: str, job: MdJob | None = None) -> bool:
+    """True if a segment wrote a non-trivial DCD, finished or not.
+
+    ``run_health_check`` reads ``output/<segment>.dcd``, so a partial trajectory is
+    enough to compute C1'/WC health for a segment still in flight or interrupted
+    mid-way.  The size floor skips a freshly-created, header-only file.
+
+    A single-frame stand-in fetched by ``remote_live_frame`` sits at that same path
+    and sails past the size floor (tens of MB for a solvated system), so it must be
+    excluded explicitly: RMSF over one frame is identically zero, which would read as
+    a real — and reassuring — measurement.  Pass ``job`` to get that check.
+    """
+    if job is not None:
+        from backend.core import remote_live_frame  # noqa: PLC0415 — cycle
+
+        if remote_live_frame.is_live_stand_in(job, segment_name):
+            return False
+    dcd = output_dir / f"{segment_name}.dcd"
+    try:
+        return dcd.is_file() and dcd.stat().st_size > 4096
+    except OSError:
+        return False
 
 
 def _completion_checkpoint_present(job: MdJob, workspace_dir: Path) -> bool:
@@ -910,25 +1048,45 @@ def _finalize_local_bookkeeping(job: MdJob, workspace_dir: Path) -> None:
     health_path = output_dir / "health.jsonl"
 
     for seg, spec in zip(job.segments, specs):
-        if not _segment_outputs_complete(output_dir, seg.name):
+        complete = _segment_outputs_complete(output_dir, seg.name)
+        # An INTERRUPTED segment still has a usable trajectory.  The gate used to be
+        # `complete` alone — all three of .coor/.vel/.xsc, which NAMD writes only when
+        # a segment FINISHES.  Under the short-walltime + resume workflow no segment
+        # finishes inside a block, so a stopped or timed-out Alpine run produced no
+        # health samples and no metrics at all, and the health card stayed empty
+        # forever (reported 2026-08-07).  A partial DCD is enough for both.
+        if not complete and not _segment_has_trajectory(output_dir, seg.name, job):
             continue
-        seg.status = "done"
+        if complete:
+            seg.status = "done"
         log_path = _latest_segment_log(package_dir, seg.name)
         try:
-            if not _jsonl_has_segment(metrics_path, seg.name):
+            # A partial segment's numbers change as it runs, so only skip a segment
+            # that is genuinely finished.
+            if complete and not _jsonl_has_segment(metrics_path, seg.name):
+                _append_metrics_jsonl(output_dir, seg.name, seg.stage, log_path)
+            elif not complete:
                 _append_metrics_jsonl(output_dir, seg.name, seg.stage, log_path)
         except Exception:  # noqa: BLE001
             pass
         try:
-            if not _jsonl_has_segment(health_path, seg.name):
-                hres = run_health_check(
-                    package_dir, seg.name, job.name_stem,
-                    min_c1_paired=spec.min_c1_paired,
-                    min_wc_ref_relative=spec.min_wc_ref_relative,
-                )
-                append_health_jsonl(output_dir, seg.name, seg.stage, hres)
-                job.health_samples.append(MdHealthSample.from_result(
-                    hres, seg.stage, seg.name, blocking=hres.blocking))
+            if complete and _jsonl_has_segment(health_path, seg.name):
+                raise _SkipHealth
+            hres = run_health_check(
+                package_dir, seg.name, job.name_stem,
+                min_c1_paired=spec.min_c1_paired,
+                min_wc_ref_relative=spec.min_wc_ref_relative,
+            )
+            append_health_jsonl(output_dir, seg.name, seg.stage, hres)
+            sample = MdHealthSample.from_result(
+                hres, seg.stage, seg.name, blocking=hres.blocking)
+            # Replace an earlier partial sample for the same segment rather than
+            # appending a second one, or a long run accretes duplicates.
+            job.health_samples = [h for h in job.health_samples
+                                  if getattr(h, "segment", None) != seg.name]
+            job.health_samples.append(sample)
+        except _SkipHealth:
+            pass
         except Exception:  # noqa: BLE001
             pass
     job.current_segment_idx = max(0, len(job.segments) - 1)

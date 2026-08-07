@@ -26,11 +26,22 @@ from backend.core.cluster_config import ClusterProfile, Partition
 
 # ── Tunables ──────────────────────────────────────────────────────────────────
 
-# NAMD3 GPU-resident throughput scales ~ 1/atoms.  Anchor: ~180k-atom fast
-# production projected >16 ns/day on an A100 (see project_md_job_system.md), so
-# C ≈ 16 * 180_000 ≈ 2.9e6 atom·ns/day.  This is a first-run guess only; Phase 5
-# replaces it with a learned per-bucket value.
-_GPU_NSDAY_ATOM_CONSTANT = 2.9e6
+# NAMD3 GPU-resident throughput scales ~ 1/atoms: ns/day ≈ C / atoms × speed factor.
+#
+# C was 2.9e6, a projection ("~180k atoms → >16 ns/day on an A100") never checked
+# against a real run.  It is now anchored on a MEASURED production run: 2hb_1-0xT
+# (62,673 atoms, 4 fs, with DCD + ENM restraints) sustained 30.8 ns/day on an
+# a100_3g.20gb MIG slice (SLURM 30954752, 2026-08-07).  A 3g.20gb slice is ~3/7 of
+# an A100, so a whole card is ~70 ns/day → C ≈ 70 × 62_673 ≈ 4.5e6.
+#
+# CAVEAT, deliberately conservative: this is ONE production point, and the whole-card
+# scaling from a MIG slice is an estimate.  Bare-hardware BENCHMARKS on the same
+# design run far faster still (644 ns/day for this system on an H200 with no DCD and
+# no ENM — see project_alpine_cluster_submission.md), but benchmark conditions are an
+# upper bound and using them here would under-request walltime and time jobs out.
+# cluster_throughput.py supersedes this with real per-partition measurements as they
+# accumulate; C only has to be right enough for a first run.
+_GPU_NSDAY_ATOM_CONSTANT = 4.5e6
 
 # NAMD3 GPU-resident throughput relative to an A100, per partition.  The constant
 # above is A100-anchored, so every other GPU needs a multiplier.  This is load-
@@ -41,8 +52,28 @@ _GPU_NSDAY_ATOM_CONSTANT = 2.9e6
 _GPU_SPEED_FACTOR = {
     "aa100": 1.0,           # the anchor
     "ah200": 2.5,           # H200: ~2-3x A100 on NAMD3 GPU-resident
-    "artxpro6000": 1.6,     # Blackwell RTX Pro 6000, strong fp64-light MD
-    "al40": 0.75,           # L40 has no fast fp64 path
+    # MEASURED equal to the H200, not 1.6.  Head-to-head under identical settings
+    # (2026-08-07): 2hb 650.0 vs 644.4 ns/day, 24hb 41.9 vs 38.2, VoltronCore 0.0761
+    # vs 0.0753 s/step — Blackwell within ~10% either way across three system sizes.
+    # It also bills LESS (242 vs 334 SU/GPU-h), so it is the SU-efficient choice.
+    "artxpro6000": 2.5,
+    # MEASURED 2026-08-07, not 0.75.  The old guess reasoned from fp64, which is
+    # irrelevant to NAMD3 GPU-resident (single precision throughout).
+    #
+    # al40/ah200 measured at three sizes -- the ratio degrades MONOTONICALLY as the
+    # system grows, which is a bandwidth story: L40 GDDR6 (~0.9 TB/s) vs H200 HBM3e
+    # (~4.8 TB/s).  Small systems are latency-bound and hide it; large ones are
+    # bandwidth-bound and expose it.
+    #     2hb   63k atoms : 481.6 / 644.4 ns/day = 0.75
+    #     24hb            :  23.0 /  38.2        = 0.60
+    #     VoltronCore     :   0.6 /   1.1        = 0.55   <- production scale
+    # Anchored on VoltronCore, the real production case: 0.55 * 2.5 = ~1.4.
+    # A single scalar is therefore LOSSY for al40 -- it over-promises on small
+    # systems.  If that starts to matter, make the factor size-dependent rather
+    # than re-tuning this number.
+    #
+    # Also confirms the sm_90 binary JITs onto Ada sm_89 -- no separate al40 build.
+    "al40": 1.4,
     "ami100": 0.5,          # AMD MI100 via HIP, historically the slowest here
     "atesting_a100": 1.0,
 }
@@ -66,17 +97,25 @@ _DEFAULT_SAFETY_FACTOR = 1.5
 _GPU_CORES = 8
 _CPU_CORES = 32
 
-# Rough per-partition queue-time guesses (minutes).  Very approximate — surfaced
-# as an estimate with a caveat, not a promise.  Phase 5 can refine from history.
+# Per-partition queue-time fallback (minutes) for when there is NO live session.
+# These are the 30-day MEDIAN waits measured on Alpine 2026-08-06 via `sacct -a`,
+# not invented numbers — the previous guesses had aa100 at 240 min when its real
+# median was 1425 and `sbatch --test-only` for a long job answered 13 DAYS.
+# `GET /cluster/availability` supersedes all of this whenever a session is live.
 _QUEUE_GUESS_MIN = {
-    "aa100": 240,          # A100s are contended
+    # aa100 is effectively UNSCHEDULABLE for a normal submission: 621 pending vs 28
+    # running (2026-08-07), only 1 of those blocked on hardware — the rest are behind
+    # fair-share, so backfill cannot help even a 15-minute job.  `squeue --start`
+    # returns N/A: SLURM itself declines to predict a start.  The number below is a
+    # placeholder that says "do not plan around this", not a real estimate.
+    "aa100": 10080,        # 7 days
+    "al40": 428,           # 638 samples
+    "ami100": 1,           # 650 samples, median 0.5 min — unpopular, so wide open
+    "ah200": 1,            # 97 samples — new, and the fastest card here
+    "artxpro6000": 1,      # 58 samples; whole cards contended, MIG slices free
     "atesting_a100": 15,
-    "al40": 120,
-    "ami100": 90,
-    "ah200": 180,          # new + fast, so popular; only 8 nodes
-    "artxpro6000": 120,    # new, less contended than the H200s
-    "acpu": 60,
-    "amem": 120,
+    "acpu": 60,            # not measured (GPU-only probe); pre-2026 amilan figure
+    "amem": 120,           # not measured
 }
 
 

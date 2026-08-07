@@ -94,3 +94,13 @@ the run has headroom to pin GPU staging buffers — the fix for a host pinned-me
 (`cudaHostAlloc`, [[water-shell-carve]] `FAILURE_HOST_OOM`). Roomy machine → free RAM stays
 above floor → nothing dropped (no viewer thrash); only bites under real pressure. None RAM
 reading → no-op (don't reclaim on a guess). Tests: `test_reclaim_cache_if_low_*`.
+
+**Remote (Alpine) jobs reach this display path via a fetched snapshot, not a stream
+(2026-08-07).** The `/ws/md-run` handler can only address LOCAL filesystem paths, and a running
+cluster job's DCD is on the node and multi-GB (2.88 GB after 90 min on a 1.32M-atom system), so it
+is never streamed. `backend/core/remote_live_frame.py` instead pulls one `.restart.coor` when the
+user signs in and writes a **one-frame DCD** into `output/<seg>.dcd`; everything in this file —
+the Universe cache, `_file_identity`, single-flight, the reclaim path — then applies unchanged,
+because from here it is just another local DCD that changed size/mtime. See
+[[project_alpine_cluster_submission]] for the traps (the marker that stops health running on a
+single frame, and the `format="DCD"` / `resolve_topology` gotchas).

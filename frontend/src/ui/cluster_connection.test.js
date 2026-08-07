@@ -93,3 +93,60 @@ describe('initClusterConnection factory', () => {
     expect(chip.textContent).toContain('jojo@alpine')
   })
 })
+
+describe('two chips on screen (Clusters card + Job Wizard)', () => {
+  it('mirrors a sign-in from one chip onto the other', async () => {
+    // Only the chip that owns the session polls, so without adoption the second chip
+    // would sit on a stale "Disconnected" forever.
+    document.body.innerHTML = '<div id="a"></div><div id="b"></div>'
+    const fetchImpl = async () => ({ json: async () => ({ state: 'disconnected', who: null }) })
+    const a = initClusterConnection({ mount: document.getElementById('a'), fetchImpl })
+    const b = initClusterConnection({ mount: document.getElementById('b'), fetchImpl })
+
+    window.dispatchEvent(new CustomEvent('nadoc:cluster-state-change', {
+      detail: { state: 'connected', status: { state: 'connected', who: 'me@alpine' }, source: 'external' },
+    }))
+    expect(a.getState()).toBe('connected')
+    expect(b.getState()).toBe('connected')
+    a.dispose(); b.dispose()
+  })
+
+  it('gives each chip a unique DOM id', () => {
+    // Duplicate ids silently break querySelector for whichever came second.
+    document.body.innerHTML = '<div id="a"></div><div id="b"></div>'
+    const fetchImpl = async () => ({ json: async () => ({ state: 'disconnected' }) })
+    const a = initClusterConnection({ mount: document.getElementById('a'), fetchImpl })
+    const b = initClusterConnection({ mount: document.getElementById('b'), fetchImpl })
+    const ids = [...document.querySelectorAll('button')].map(n => n.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    a.dispose(); b.dispose()
+  })
+
+  it('does not echo a sibling broadcast back out', () => {
+    document.body.innerHTML = '<div id="a"></div><div id="b"></div>'
+    const fetchImpl = async () => ({ json: async () => ({ state: 'disconnected' }) })
+    const a = initClusterConnection({ mount: document.getElementById('a'), fetchImpl })
+    const b = initClusterConnection({ mount: document.getElementById('b'), fetchImpl })
+    let seen = 0
+    const count = () => { seen += 1 }
+    window.addEventListener('nadoc:cluster-state-change', count)
+    window.dispatchEvent(new CustomEvent('nadoc:cluster-state-change', {
+      detail: { state: 'connected', status: { who: 'me' }, source: 'external' },
+    }))
+    // Exactly the one we dispatched — adoption must be silent or the chips ping-pong.
+    expect(seen).toBe(1)
+    window.removeEventListener('nadoc:cluster-state-change', count)
+    a.dispose(); b.dispose()
+  })
+
+  it('stops adopting after dispose', () => {
+    document.body.innerHTML = '<div id="a"></div>'
+    const fetchImpl = async () => ({ json: async () => ({ state: 'disconnected' }) })
+    const a = initClusterConnection({ mount: document.getElementById('a'), fetchImpl })
+    a.dispose()
+    window.dispatchEvent(new CustomEvent('nadoc:cluster-state-change', {
+      detail: { state: 'connected', status: { who: 'me' }, source: 'external' },
+    }))
+    expect(a.getState()).toBe('disconnected')
+  })
+})
