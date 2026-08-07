@@ -2328,7 +2328,15 @@ async function main() {
     // The unified Simulate job list re-scopes to the newly-active engine tab (bound
     // lazily — simulateJobs is constructed just below, after the panels).  The anchor
     // halo follows too, so it always shows the anchors of the card you're looking at.
-    onSelect: (engine) => { simulateJobs?.setActiveEngine?.(engine); _refreshAnchorGlow() },
+    // The NAMD early-stop card lives at section level (directly under the jobs card, next
+    // to the run it acts on), so it is outside the panel the selector hides — its NAMD-only
+    // visibility rides the tab here. The card inside stays hidden unless a local relaxation
+    // is actually live (md_jobs_panel.js owns that gate).
+    onSelect: (engine) => {
+      simulateJobs?.setActiveEngine?.(engine); _refreshAnchorGlow()
+      const namdLiveHost = document.getElementById('namd-live-controls-host')
+      if (namdLiveHost) namdLiveHost.style.display = engine === 'namd' ? '' : 'none'
+    },
   })
 
   // "Use as NAMD seed" (oxDNA / mrDNA panels) creates a NAMD job — surface it by

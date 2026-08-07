@@ -3786,6 +3786,30 @@
                 </div><!-- /#simulate-jobs-body -->
               </div>
 
+              <!-- ── NAMD live run control (early-stop) — section-level host so the ONE
+                   control that acts on the RUNNING relaxation sits directly under the jobs
+                   card, next to the run it affects. The rest of the old "Advanced" grid
+                   (~17 launch parameters that reflected none of the four layers deciding a
+                   job's real settings) moved into the Job Wizard; early-stop stays because
+                   it is not a launch setting — it applies at the next checkpoint of a
+                   relaxation already running.
+                   Two independent gates: this host is shown only on the NAMD tab (main.js
+                   engine-selector onSelect), the card inside only while a local relaxation
+                   is live (md_jobs_panel.js). -->
+              <div id="namd-live-controls-host" style="display:none">
+                <div class="ox-card" id="md-jobs-live-controls" style="display:none">
+                  <div class="ox-card__body">
+                    <label style="display:flex;align-items:center;gap:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
+                           title="Skip a restraint stage's remaining chunks once its first chunk shows both an energy and a base-pairing plateau. Applies at the next stage checkpoint of the running relaxation — no relaunch. The launch-time default for a NEW job is set in the Job Wizard.">
+                      <input id="md-jobs-early-stop" type="checkbox" checked style="accent-color:#3fb950">
+                      Early-stop settled stages (applies at the next checkpoint)
+                      <span id="md-jobs-early-stop-pending"
+                            style="display:none;color:#d29922">pending…</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
               <!-- ── Cross-engine shape comparison (S5) — section-level: it compares ALL
                    engines' predictions for the design, so it lives under the unified Jobs
                    card rather than inside the oxDNA tab. -->
@@ -5393,26 +5417,8 @@
                 </div>
               </div>
 
-              <!-- ── Run controls for the SELECTED job ─────────────────────
-                   What used to live here was an "Advanced" grid of ~17 parameters that
-                   reflected none of the four layers deciding a job's actual settings, so
-                   the number on screen was frequently not the number that ran. Every one
-                   of those parameters moved into the Job Wizard (＋ New job), where it is
-                   shown with its provenance and in the context of the stage it affects.
-                   What stays is the ONE control that is not a launch setting: early-stop
-                   is also a LIVE control, applied at the next checkpoint of a relaxation
-                   that is already running. -->
-              <div class="ox-card" id="md-jobs-live-controls" style="display:none">
-                <div class="ox-card__body">
-                  <label style="display:flex;align-items:center;gap:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
-                         title="Skip a restraint stage's remaining chunks once its first chunk shows both an energy and a base-pairing plateau. Applies at the next stage checkpoint of the running relaxation — no relaunch. The launch-time default for a NEW job is set in the Job Wizard.">
-                    <input id="md-jobs-early-stop" type="checkbox" checked style="accent-color:#3fb950">
-                    Early-stop settled stages (applies at the next checkpoint)
-                    <span id="md-jobs-early-stop-pending"
-                          style="display:none;color:#d29922">pending…</span>
-                  </label>
-                </div>
-              </div>
+              <!-- (The NAMD live early-stop card that used to sit here now lives directly
+                   under the unified Jobs card — see #namd-live-controls-host above.) -->
 
               <!-- ── Visualizations & processing (collapsible; mutually-exclusive views;
                    the view radios enable only once a job is selected). Moved below the

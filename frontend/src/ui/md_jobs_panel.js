@@ -976,8 +976,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const detailEl    = document.getElementById('md-jobs-detail')
   // Relax start/stop/resume is owned by the master run control (the retired detail
   // Start/Stop were removed); Archive/Delete are consolidated into #simulate-job-actions.
-  // The single early-stop toggle lives in Advanced (#md-jobs-early-stop) and is also the
-  // live mid-relax control — its pending badge is #md-jobs-early-stop-pending.
+  // The single early-stop toggle (#md-jobs-early-stop) is the live mid-relax control; its
+  // card sits at section level, directly under the unified Jobs card
+  // (#namd-live-controls-host), not inside this panel. Pending badge: #md-jobs-early-stop-pending.
   const earlyStopPending = document.getElementById('md-jobs-early-stop-pending')
   const errorEl     = document.getElementById('md-jobs-detail-error')
   const timelineEl  = document.getElementById('md-jobs-timeline')

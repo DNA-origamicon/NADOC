@@ -1,5 +1,15 @@
 # MD Sidebar UX Audit (2026-06-11)
 
+## Early-stop card moved under the Jobs card — SHIPPED 2026-08-07
+`#md-jobs-live-controls` left the NAMD panel (it used to sit between E-field and
+Visualizations) and now lives at **section level, directly under the unified Jobs card**, in
+the new host `#namd-live-controls-host` (`index.html`, above the Shape-comparison card) —
+the one control that acts on the RUNNING relaxation sits next to the run it affects.
+**Two independent visibility gates now:** the host is shown only on the NAMD tab (one line of
+wiring in the engine-selector `onSelect`, `main.js`), the card inside only while a local
+relaxation is live (`_isLiveRelax`, unchanged, `md_jobs_panel.js`). Ids unchanged, so all the
+panel wiring and `mdEarlyStopToggleState` are untouched. vitest 5029; smoke 23 pass.
+
 ## Cluster card promoted + connect chip moved + early-stop de-experimentalized — SHIPPED 2026-07-11
 - Dropped the "(experimental)" tag from the early-stop toggle label + tooltip (well-tested now).
 - **Cluster (Alpine) card pulled OUT of `#md-jobs-detail` to a top-level, always-visible card**

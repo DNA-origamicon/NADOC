@@ -374,7 +374,9 @@ deliberate but means those choices are not in the wizard's own summary; and noth
 *renders* a chain as a chain — `chain_position` is stated in the wizard but the job list
 still shows each leg as an independent child of the relaxation.
 - The Advanced drawer is DELETED. Early-stop's *live* mid-relax role moved to
-  `#md-jobs-live-controls`, shown only for a running local relaxation. ⚡ Optimize moved
+  `#md-jobs-live-controls`, shown only for a running local relaxation (and, since
+  2026-08-07, sitting directly under the unified Jobs card rather than inside the NAMD
+  panel — see `project_md_sidebar_audit.md`). ⚡ Optimize moved
   into the wizard (`onOptimizeMount`), writing into its touched state.
   - **That move shipped ⚡ Optimize broken and it stayed broken until 2026-08-06.** The
     commit deleted `let _lastSizedAtoms` *and* its only reader (the panel's GPU-resident
