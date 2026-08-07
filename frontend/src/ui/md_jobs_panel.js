@@ -1177,16 +1177,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       fetchHardware: () => api.optimizeMdHardware(_wizardDevices()),
       fetchRecommendation: async () => {
         const cur = _wizard.currentValues()
-        const r = await api.optimizeMdAdvanced({
+        // The optimiser's `facts.chosen_atoms`/`full_atoms` (the real solvated count) used
+        // to be cached here for the panel's GPU-resident warning; that warning moved into
+        // the wizard, which reads the package PSF directly. No panel-side cache needed.
+        return await api.optimizeMdAdvanced({
           devices: _wizardDevices(),
           padding_nm: cur.padding_nm || 1.2,
           minimize_steps: cur.minimize_steps || 10000,
         })
-        // Remember the sized atom count: the optimiser is the only thing that actually
-        // solvates, so this is the one real number the panel ever learns pre-run.
-        const f = r?.facts
-        if (f) _lastSizedAtoms = Number(f.chosen_atoms ?? f.full_atoms) || _lastSizedAtoms
-        return r
       },
       apply: rec => _wizard.applyRecommendation({
         ...rec,

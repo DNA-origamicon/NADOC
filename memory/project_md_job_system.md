@@ -303,6 +303,17 @@ still shows each leg as an independent child of the relaxation.
 - The Advanced drawer is DELETED. Early-stop's *live* mid-relax role moved to
   `#md-jobs-live-controls`, shown only for a running local relaxation. ⚡ Optimize moved
   into the wizard (`onOptimizeMount`), writing into its touched state.
+  - **That move shipped ⚡ Optimize broken and it stayed broken until 2026-08-06.** The
+    commit deleted `let _lastSizedAtoms` *and* its only reader (the panel's GPU-resident
+    warning painter) but left the write behind in `fetchRecommendation`. ES modules are
+    strict mode, so the orphaned assignment threw `ReferenceError: assignment to
+    undeclared variable _lastSizedAtoms` on every click, before the recommendation
+    returned — ⚡ could never succeed. Fixed by deleting the write; nothing reads a
+    panel-side atom count now (the wizard reads the package PSF directly), and
+    `gpuResidentWarning` in `md_advanced_optimize.js` is left with no production caller.
+    Note there is **no JS linter** in this repo (`just lint` is ruff-only), so this whole
+    bug class — write to an undeclared name, only throws when the line runs — is invisible
+    to both CI and the vitest suite.
 
 ### Two new presets (`md_presets.py`)
 
