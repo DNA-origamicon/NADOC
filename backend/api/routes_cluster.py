@@ -9,6 +9,7 @@ Routes
   POST /cluster/connect           — authenticate (password + Duo) → status
   GET  /cluster/status            — current connection state
   POST /cluster/disconnect        — drop the live connection + clear creds
+  GET  /cluster/availability      — live per-partition GPU availability + wait estimate
 
 Mounted in ``backend/api/main.py`` via ``app.include_router(..., prefix="/api")``.
 Note: distinct from ``routes_clusters.py`` (plural) which is deformation-cluster
@@ -106,3 +107,76 @@ async def cluster_namd_modules():
     except cluster_ssh.ClusterSSHError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"modules": modules}
+
+
+def _job_shape(job_id: str, profile) -> dict | None:
+    """Turn a prepared MD job into the shape the availability probe needs.
+
+    Reuses ``routes_md._size_prepared_job`` so the ``sbatch --test-only`` probe asks
+    about the *real* job (its atom count, ns and resource request) rather than a
+    generic placeholder.  ``None`` when the job is unknown or not prepared yet — the
+    probe then falls back to a partition-only view.
+    """
+    from backend.api.routes_md import _load_job, _size_prepared_job  # noqa: PLC0415
+    try:
+        job = _load_job(job_id)
+    except Exception:  # noqa: BLE001 — an unknown job just means "no job shape"
+        return None
+    sizing = _size_prepared_job(job, profile, 1.5)
+    if sizing is None:
+        return None
+    res = sizing["resources"]
+    return {
+        "n_atoms": sizing["n_atoms"],
+        "total_ns": sizing["total_ns"],
+        "measured_ns_per_day": sizing["measured_ns_per_day"],
+        "gpus": res.get("gpus", 1),
+        "cores": res.get("cores", 8),
+        "mem_gb": res.get("mem_gb", 32),
+        "walltime": res.get("walltime", "24:00:00"),
+        "qos": res.get("qos"),
+    }
+
+
+@router.get("/cluster/availability")
+async def cluster_availability(
+    cluster_name: str = "alpine",
+    job_id: str | None = None,
+    history_days: int = 30,
+    force: bool = False,
+):
+    """Live GPU availability per partition, with a queue-wait estimate.
+
+    Read-only throughout — ``scontrol``/``squeue``/``sacct`` plus ``sbatch
+    --test-only``, which predicts a start time without ever queuing a job.  Pass
+    ``job_id`` to shape the estimate around a specific prepared job; ``force=true``
+    bypasses the 60 s probe cache (the popup's "Re-check" button).
+    """
+    profiles = cluster_config.load_profiles(_WORKSPACE_DIR)
+    profile = profiles.get(cluster_name)
+    if profile is None:
+        raise HTTPException(status_code=404, detail=f"unknown cluster '{cluster_name}'")
+    mgr = cluster_ssh.get_manager()
+    if not mgr.is_connected():
+        raise HTTPException(status_code=409, detail="not connected to a cluster")
+    from backend.core import cluster_queue, cluster_throughput  # noqa: PLC0415
+    shape = _job_shape(job_id, profile) if job_id else None
+
+    def _throughput_for(partition: str):
+        """Learned ns/day for THIS partition, or None.  Per-partition on purpose —
+        reusing one measured number across partitions makes every row report the
+        same speed and cancels the comparison."""
+        if not shape:
+            return None
+        return cluster_throughput.lookup_throughput(
+            _WORKSPACE_DIR, cluster=profile.name,
+            partition=partition, n_atoms=shape["n_atoms"],
+        )
+
+    try:
+        return await cluster_queue.probe_availability(
+            mgr, profile, job_shape=shape, throughput_for=_throughput_for,
+            history_days=history_days, force=force,
+        )
+    except cluster_ssh.ClusterSSHError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc

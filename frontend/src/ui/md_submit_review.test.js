@@ -112,18 +112,18 @@ describe('alpineTargetDisabledReason', () => {
 
 describe('partitionSelectOptions', () => {
   const rec = {
-    resources: { partition: 'amilan' },
+    resources: { partition: 'acpu' },
     available_partitions: [
       { name: 'aa100', kind: 'gpu', gpu_model: 'NVIDIA A100' },
-      { name: 'amilan', kind: 'cpu', gpu_model: '' },
-      { name: 'amilan', kind: 'cpu' },          // duplicate
+      { name: 'acpu', kind: 'cpu', gpu_model: '' },
+      { name: 'acpu', kind: 'cpu' },          // duplicate
     ],
   }
   it('builds labelled, deduped options and marks the current partition selected', () => {
     const opts = partitionSelectOptions(rec)
     expect(opts).toHaveLength(2)                 // duplicate dropped
     expect(opts[0]).toEqual({ value: 'aa100', label: 'aa100 (gpu) — NVIDIA A100', selected: false })
-    expect(opts[1]).toEqual({ value: 'amilan', label: 'amilan (cpu)', selected: true })
+    expect(opts[1]).toEqual({ value: 'acpu', label: 'acpu (cpu)', selected: true })
   })
   it('injects the current partition when the profile list omits it', () => {
     const opts = partitionSelectOptions({ resources: { partition: 'foo' }, available_partitions: [] })

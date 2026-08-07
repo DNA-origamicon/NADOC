@@ -329,12 +329,12 @@ def test_fast_replica_uses_hmr_psf(tmp_path):
     assert "GPUresident        on" in prod          # stripped later for a CPU target
 
 
-def test_replica_generates_valid_amilan_sbatch(tmp_path):
+def test_replica_generates_valid_acpu_sbatch(tmp_path):
     parent = _make_parent(tmp_path)
     child = _build_replica(tmp_path, parent)
     manifest = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())
     profile = cc.alpine_profile()
-    resources = cr.recommend(profile, n_atoms=120_000, total_ns=2.0, partition="amilan")
+    resources = cr.recommend(profile, n_atoms=120_000, total_ns=2.0, partition="acpu")
     sbatch = generate_sbatch(manifest, profile, resources, "/scratch/x", job_name="demo")
     # Two-step chain: reseed (min slot) then production, each idempotent-guarded.
     assert "demo_00_reseed" in sbatch

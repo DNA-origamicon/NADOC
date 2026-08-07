@@ -35,10 +35,15 @@ class Partition:
     # it rejects a bare ``gpu:N``.  None → emit the untyped form.
     gres_type: str = ""
     # QoS names this partition actually accepts.  Alpine validates QoS PER PARTITION,
-    # not just per kind: amilan rejects ``testing``/``mem`` (live-confirmed 2026-07-03:
-    # "The amilan partition accepts the following QoS values: admin or normal or long").
-    # Empty → fall back to the kind-based split.
+    # not just per kind — and namespaces them by partition family (``acpu`` takes
+    # ``cpu-normal``/``cpu-long``, ``amem`` takes ``mem-*``, the GPU partitions take
+    # ``gpu-*``).  Empty → fall back to the kind-based split.
     allowed_qos: list[str] = field(default_factory=list)
+    # Per-GPU billing rate (SU/GPU-hour), overriding the profile-wide value.
+    # Alpine's newer GPUs are NOT billed at the A100 rate: ah200 bills 12.63 SU per
+    # core-hour vs 6.13 for aa100, so one profile-wide number under-quotes an H200 job
+    # by ~4x.  0.0 → fall back to ``ClusterProfile.su_per_gpu_hour``.
+    su_per_gpu_hour: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -96,15 +101,15 @@ class ClusterProfile:
     def qos_for(self, kind: str, tier: str) -> QoS | None:
         """Resolve a QoS tier ("normal"|"long"|"testing") for a partition kind.
 
-        Alpine's GPU partitions (aa100/al40/…) require the ``gpu-<tier>`` QoS names
-        (SLURM rejects the plain ones there); CPU partitions use ``<tier>``.  Falls
-        back to the plain tier when a profile doesn't define the gpu- variant, so
-        this stays correct for clusters that don't namespace GPU QoS.
+        Alpine namespaces QoS by partition family — GPU partitions require
+        ``gpu-<tier>`` and (since the 2026 rename) CPU partitions require
+        ``cpu-<tier>``; SLURM rejects the bare names on both.  Try ``<kind>-<tier>``
+        first, then fall back to the plain tier so this stays correct for clusters
+        that don't namespace their QoS at all.
         """
-        if kind == "gpu":
-            gpu = self.qos(f"gpu-{tier}")
-            if gpu is not None:
-                return gpu
+        prefixed = self.qos(f"{kind}-{tier}")
+        if prefixed is not None:
+            return prefixed
         return self.qos(tier)
 
     def qos_tiers_for_kind(self, kind: str) -> list[QoS]:
@@ -122,9 +127,9 @@ class ClusterProfile:
         """QoS tiers a SPECIFIC partition accepts — the correct source for the
         review-card dropdown.
 
-        Alpine validates QoS per partition (amilan takes only normal/long, not the
-        other CPU tiers), so prefer the partition's ``allowed_qos`` allow-list; fall
-        back to the kind-based split for partitions/profiles that don't declare one.
+        Alpine validates QoS per partition (``acpu`` takes only cpu-normal/cpu-long,
+        not the amem or testing tiers), so prefer the partition's ``allowed_qos``
+        allow-list; fall back to the kind-based split for profiles without one.
         """
         part = self.partition(name)
         if part is None:
@@ -139,8 +144,9 @@ class ClusterProfile:
 def alpine_profile() -> ClusterProfile:
     """The built-in CU Research Computing "Alpine" profile.
 
-    GPU-first (the ``aa100`` A100 partition) per the plan's decision #3 — NADOC's
-    local pipeline is CUDA and NAMD3 GPU-resident is far faster than the CPU build.
+    GPU-first per the plan's decision #3 — NADOC's local pipeline is CUDA and NAMD3
+    GPU-resident is far faster than the CPU build.  The default GPU partition moved
+    aa100 -> ah200 on 2026-08-06 (see ``default_partition`` below).
     """
 
     return ClusterProfile(
@@ -163,28 +169,43 @@ def alpine_profile() -> ClusterProfile:
             "gcc/14.2.0",
             "namd/3.0.1_gpu",
         ],
-        default_partition="aa100",
+        # ah200 (H200) is the default since 2026-08-06.  Live `sbatch --test-only` for
+        # a 63k-atom / 200 ns job: aa100 would start in 13 d 16 h (630 jobs pending),
+        # ah200 immediately.  It bills ~3x the A100 rate per GPU-hour, but finishes the
+        # same job ~15 days sooner and at ~2.5x the throughput, so the SU cost per ns is
+        # comparable while the wall-clock is not close.  The availability popup shows
+        # both axes; override per job from the review card.
+        default_partition="ah200",
         default_qos="gpu-normal",
         partitions=[
-            # allowed_qos: amilan is live-confirmed (normal/long only — rejects
-            # testing/mem/compile); the rest are best-guess by partition family and
-            # should be corrected against live sbatch errors as they surface.
-            Partition("amilan", "cpu", max_cores=64, mem_per_core_gb=3.75, allowed_qos=["normal", "long"]),
-            Partition("amilan128c", "cpu", max_cores=128, mem_per_core_gb=2.01, allowed_qos=["normal", "long"]),
-            Partition("amem", "cpu", max_cores=128, mem_per_core_gb=21.5, allowed_qos=["normal", "long", "mem"]),
+            # `acpu` REPLACED `amilan`/`amilan128c` in the 2026 expansion — live-confirmed
+            # 2026-08-06 via `scontrol show node`: the cluster reports aa100, acompile,
+            # acpu, ah200, al40, amem, ami100, artxpro6000, atesting, dtn, gh200, and NO
+            # amilan.  Submitting to amilan now fails at sbatch.  QoS was renamed with it
+            # (cpu-normal/cpu-long, mem-normal/mem-long).
+            Partition("acpu", "cpu", max_cores=64, mem_per_core_gb=3.8, allowed_qos=["cpu-normal", "cpu-long"]),
+            Partition("amem", "cpu", max_cores=128, mem_per_core_gb=21.5, allowed_qos=["mem-normal", "mem-long"]),
             # aa100 GRES type "a100-40gb" + gpu-* QoS are live-confirmed; the others
             # are best-guess Alpine tokens.
             Partition("aa100", "gpu", max_cores=64, mem_per_core_gb=3.75, gpus=3, gpu_model="NVIDIA A100", gres_type="a100-40gb", allowed_qos=["gpu-normal", "gpu-long", "gpu-testing"]),
             Partition("ami100", "gpu", max_cores=64, mem_per_core_gb=3.75, gpus=3, gpu_model="AMD MI100", gres_type="mi100", allowed_qos=["gpu-normal", "gpu-long", "gpu-testing"]),
             Partition("al40", "gpu", max_cores=64, mem_per_core_gb=3.75, gpus=3, gpu_model="NVIDIA L40", gres_type="l40", allowed_qos=["gpu-normal", "gpu-long", "gpu-testing"]),
+            # 2026 GPU expansion (CURC alpine-hardware docs).  Both are CU-Boulder-only,
+            # 4 GPUs/node on 128-core nodes with 12 GB/core, and — unlike aa100/ami100 —
+            # they do NOT offer gpu-testing.  su_per_gpu_hour is scaled from the A100 rate
+            # by (billing_weight/core x cores-per-GPU); confirm against `sacctmgr`/sreport.
+            Partition("ah200", "gpu", max_cores=128, mem_per_core_gb=12.0, gpus=4, gpu_model="NVIDIA H200", gres_type="h200", allowed_qos=["gpu-normal", "gpu-long"], su_per_gpu_hour=334.0),
+            Partition("artxpro6000", "gpu", max_cores=128, mem_per_core_gb=12.0, gpus=4, gpu_model="NVIDIA RTX Pro 6000", gres_type="rtx_pro_6000", allowed_qos=["gpu-normal", "gpu-long"], su_per_gpu_hour=242.0),
             Partition("atesting", "cpu", max_cores=64, mem_per_core_gb=3.75, allowed_qos=["testing"]),
             Partition("atesting_a100", "gpu", max_cores=64, mem_per_core_gb=3.75, gpus=1, gpu_model="NVIDIA A100", gres_type="a100-40gb", allowed_qos=["gpu-testing"]),
         ],
         qos_tiers=[
-            # CPU partitions (amilan/amem/…) use the plain tier names.
-            QoS("normal", max_walltime_h=24),
-            QoS("long", max_walltime_h=168),
-            QoS("mem", max_walltime_h=168),
+            # Every family namespaces its QoS; the bare normal/long/mem names were
+            # retired with amilan and SLURM now rejects them.
+            QoS("cpu-normal", max_walltime_h=24),
+            QoS("cpu-long", max_walltime_h=168),
+            QoS("mem-normal", max_walltime_h=24),
+            QoS("mem-long", max_walltime_h=168),
             QoS("testing", max_walltime_h=1),
             QoS("compile", max_walltime_h=12),
             # GPU partitions (aa100/al40/ami100/…) namespace their QoS as gpu-*

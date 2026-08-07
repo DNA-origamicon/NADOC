@@ -15,7 +15,7 @@ def test_alpine_profile_shape():
     assert p.name == "alpine"
     assert p.host == "login.rc.colorado.edu"
     assert p.scheduler == "slurm"
-    assert p.default_partition == "aa100"        # GPU-first (decision #3)
+    assert p.default_partition == "ah200"        # GPU-first; H200 since 2026-08-06
     assert "$USER" in p.project_base and "$USER" in p.scratch_base
     assert p.su_per_gpu_hour == pytest.approx(108.2)
     assert p.su_per_core_hour == pytest.approx(1.0)
@@ -26,18 +26,21 @@ def test_alpine_partitions_and_qos_lookup():
     aa100 = p.partition("aa100")
     assert aa100 is not None and aa100.kind == "gpu" and aa100.gpus == 3
     assert p.partition("nope") is None
-    normal = p.qos("normal")
+    normal = p.qos("cpu-normal")
     assert normal is not None and normal.max_walltime_h == 24
-    assert p.qos("long").max_walltime_h == 168
+    assert p.qos("cpu-long").max_walltime_h == 168
+    # The bare names were retired with amilan in the 2026 rename.
+    assert p.qos("normal") is None and p.qos("long") is None
 
 
 def test_qos_for_is_partition_kind_aware():
-    # GPU partitions on Alpine need the gpu-* QoS names; CPU uses the plain ones.
+    # Alpine namespaces QoS by partition family: gpu-* and (since the 2026 rename)
+    # cpu-*.  SLURM rejects the bare names on both.
     p = cc.alpine_profile()
     assert p.qos_for("gpu", "normal").name == "gpu-normal"
     assert p.qos_for("gpu", "long").name == "gpu-long"
-    assert p.qos_for("cpu", "normal").name == "normal"
-    assert p.qos_for("cpu", "long").name == "long"
+    assert p.qos_for("cpu", "normal").name == "cpu-normal"
+    assert p.qos_for("cpu", "long").name == "cpu-long"
     assert p.default_qos == "gpu-normal"
 
 
@@ -46,15 +49,15 @@ def test_qos_tiers_for_kind_splits_gpu_and_cpu():
     gpu = {q.name for q in p.qos_tiers_for_kind("gpu")}
     cpu = {q.name for q in p.qos_tiers_for_kind("cpu")}
     assert gpu == {"gpu-normal", "gpu-long", "gpu-testing"}
-    assert "normal" in cpu and "long" in cpu and "testing" in cpu
+    assert "cpu-normal" in cpu and "cpu-long" in cpu and "testing" in cpu
     assert not any(n.startswith("gpu-") for n in cpu)   # no gpu-* leaks into CPU
 
 
 def test_qos_tiers_for_partition_respects_allow_list():
-    # amilan is live-confirmed to accept ONLY normal/long (rejects testing/mem).
+    # acpu is live-confirmed to accept ONLY cpu-normal/cpu-long.
     p = cc.alpine_profile()
-    amilan = {q.name for q in p.qos_tiers_for_partition("amilan")}
-    assert amilan == {"normal", "long"}          # no testing/mem/compile offered
+    acpu = {q.name for q in p.qos_tiers_for_partition("acpu")}
+    assert acpu == {"cpu-normal", "cpu-long"}    # no testing/mem/compile offered
     aa100 = {q.name for q in p.qos_tiers_for_partition("aa100")}
     assert aa100 == {"gpu-normal", "gpu-long", "gpu-testing"}
     assert p.qos_tiers_for_partition("nope") == []
@@ -142,3 +145,79 @@ def test_profile_with_gpu_modules_is_nonmutating():
     gpu = cc.profile_with_gpu_modules(p, ["gcc/14.2.0", "cuda/12.4", "namd/3.0.1_gpu"])
     assert gpu.module_loads[-1] == "namd/3.0.1_gpu"
     assert p.module_loads[-1] == "namd/3.0.1_cpu"    # original untouched
+
+
+# ── 2026 GPU expansion (ah200 / artxpro6000) ──────────────────────────────────
+
+def test_new_gpu_partitions_present_with_correct_gres():
+    p = cc.alpine_profile()
+    ah200 = p.partition("ah200")
+    assert ah200 is not None
+    assert ah200.kind == "gpu" and ah200.gpus == 4
+    assert ah200.gres_type == "h200"             # sbatch --gres=gpu:h200:N
+    assert ah200.max_cores == 128 and ah200.mem_per_core_gb == pytest.approx(12.0)
+
+    rtx = p.partition("artxpro6000")
+    assert rtx is not None
+    assert rtx.gres_type == "rtx_pro_6000" and rtx.gpus == 4
+
+
+def test_new_gpu_partitions_reject_gpu_testing():
+    """ah200/artxpro6000 offer only gpu-normal + gpu-long — gpu-testing is
+    aa100/ami100 only, and offering it would produce a rejected sbatch."""
+    p = cc.alpine_profile()
+    for name in ("ah200", "artxpro6000"):
+        tiers = {q.name for q in p.qos_tiers_for_partition(name)}
+        assert tiers == {"gpu-normal", "gpu-long"}
+    assert "gpu-testing" in {q.name for q in p.qos_tiers_for_partition("aa100")}
+
+
+def test_new_gpu_partitions_carry_their_own_billing_rate():
+    """A profile-wide A100 SU rate under-quotes an H200 job several-fold."""
+    p = cc.alpine_profile()
+    assert p.partition("ah200").su_per_gpu_hour > p.su_per_gpu_hour
+    assert p.partition("artxpro6000").su_per_gpu_hour > p.su_per_gpu_hour
+    # Unchanged partitions keep 0.0 → fall back to the profile-wide rate.
+    assert p.partition("aa100").su_per_gpu_hour == 0.0
+
+
+def test_partition_su_rate_roundtrips_through_json(tmp_path):
+    (tmp_path / "clusters.json").write_text(json.dumps([{
+        "name": "myclust", "host": "h", "project_base": "/p/$USER",
+        "scratch_base": "/s/$USER", "default_partition": "g", "default_qos": "n",
+        "partitions": [{"name": "g", "kind": "gpu", "max_cores": 128,
+                        "gres_type": "h200", "su_per_gpu_hour": 334.0}],
+    }]))
+    prof = cc.load_profiles(tmp_path)["myclust"]
+    assert prof.partition("g").su_per_gpu_hour == pytest.approx(334.0)
+
+
+def test_workspace_clusters_json_has_not_drifted_from_the_embedded_profile():
+    """workspace/clusters.json OVERWRITES the embedded alpine profile wholesale
+    (load_profiles), so a partition added only in Python is invisible to the running
+    app.  Guard the trap: shared partitions must agree, and the GPU submission
+    targets must all be present."""
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[1] / "workspace" / "clusters.json"
+    if not path.is_file():
+        pytest.skip("no workspace/clusters.json in this checkout")
+    entries = json.loads(path.read_text())
+    alpine = next((e for e in entries if e.get("name") == "alpine"), None)
+    if alpine is None:
+        pytest.skip("workspace/clusters.json defines no alpine profile")
+
+    on_disk = {p["name"]: p for p in alpine.get("partitions", [])}
+    embedded = cc.alpine_profile()
+
+    for name in ("aa100", "ami100", "al40", "ah200", "artxpro6000"):
+        assert name in on_disk, (
+            f"{name} missing from workspace/clusters.json — it shadows the embedded "
+            f"profile, so the app will not offer this partition"
+        )
+    for name, entry in on_disk.items():
+        ref = embedded.partition(name)
+        if ref is None:
+            continue                       # a deliberate local-only partition is fine
+        assert entry.get("kind") == ref.kind, f"{name}: kind drifted"
+        assert entry.get("gres_type", "") == ref.gres_type, f"{name}: gres_type drifted"
+        assert entry.get("allowed_qos", []) == ref.allowed_qos, f"{name}: allowed_qos drifted"

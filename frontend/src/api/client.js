@@ -2814,6 +2814,19 @@ export const stageMdEnsemble     = (id, body = {}) => _oxdnaJSON('POST', `/md/jo
 export const submitMdEnsemble    = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/ensemble-submit`, body)
 /** Current cluster connection status ({state, who, host}); used to gate the Alpine target. */
 export const getClusterStatus    = ()            => _oxdnaJSON('GET',    '/cluster/status')
+/**
+ * Live per-partition GPU availability + queue-wait estimate (needs a live session).
+ * `jobId` shapes the estimate around a specific prepared job; `force` bypasses the
+ * backend's 60 s probe cache (the popup's Re-check button).
+ */
+export const getClusterAvailability = ({ jobId = null, force = false, historyDays = 30 } = {}) => {
+  const q = new URLSearchParams()
+  if (jobId) q.set('job_id', jobId)
+  if (force) q.set('force', 'true')
+  if (historyDays !== 30) q.set('history_days', String(historyDays))
+  const qs = q.toString()
+  return _oxdnaJSON('GET', `/cluster/availability${qs ? `?${qs}` : ''}`)
+}
 
 // ── Cluster rigid transforms ──────────────────────────────────────────────────
 

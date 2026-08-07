@@ -199,7 +199,7 @@ def test_submit_amends_confs_for_cpu_target(tmp_path, alpine):
     """A CPU/multicore Alpine target must not inherit ``GPUresident on`` — every
     staged .conf is amended, not just the ones that happen to lack it."""
     from backend.core import cluster_resources as cr
-    cpu = cr.recommend(alpine, n_atoms=100_000, total_ns=2.0, partition="amilan")
+    cpu = cr.recommend(alpine, n_atoms=100_000, total_ns=2.0, partition="acpu")
     job = _make_prepared_job(tmp_path)
     conf = _add_gpu_conf(job, tmp_path)
     conn = FakeConn(canned={"sbatch": RunResult(0, "Submitted batch job 5", "")})
@@ -564,7 +564,7 @@ def _make_resumable_job(tmp_path, alpine):
     job.slurm_job_id = "42"
     job.cluster_name = "alpine"
     job.remote_scratch_dir = "/scratch/alpine/jojo/nadoc_jobs/" + job.job_id
-    job.resources = cr.recommend(alpine, n_atoms=100_000, total_ns=2.0, partition="amilan")
+    job.resources = cr.recommend(alpine, n_atoms=100_000, total_ns=2.0, partition="acpu")
     job.resumable = True
     job.status = MdStatus.paused
     job.segments = [
@@ -638,16 +638,16 @@ def test_remote_recommendation_current_seeds_from_job_resources(tmp_path, monkey
     from backend.api import routes_md
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     job = _make_prepared_job(tmp_path)
-    job.resources = {"partition": "amilan", "kind": "cpu", "gpus": 0, "cores": 8,
+    job.resources = {"partition": "acpu", "kind": "cpu", "gpus": 0, "cores": 8,
                      "mem_gb": 12, "walltime": "00:10:00", "qos": "normal"}
     job.slurm_job_id = "42"          # already submitted (resumable)
     job.save(tmp_path)
     out = routes_md.md_job_remote_recommendation(job.job_id, current=True)
     assert out["prepared"] is True
     assert out["resources"]["walltime"] == "00:10:00"   # current, not a fresh long auto-size
-    assert out["resources"]["partition"] == "amilan"
-    # amilan → plain QoS tiers offered (keyed off the seeded partition).
-    assert {q["name"] for q in out["available_qos"]} == {"normal", "long"}
+    assert out["resources"]["partition"] == "acpu"
+    # acpu -> cpu-* QoS tiers offered (keyed off the seeded partition).
+    assert {q["name"] for q in out["available_qos"]} == {"cpu-normal", "cpu-long"}
 
 
 def test_resume_job_no_checkpoint_reruns_fresh(tmp_path, alpine):
@@ -671,7 +671,7 @@ def test_reconcile_completed_records_learned_throughput(tmp_path):
     job = _make_prepared_job(tmp_path)
     job.slurm_job_id = "42"
     job.cluster_name = "alpine"
-    job.resources = {"partition": "amilan"}
+    job.resources = {"partition": "acpu"}
     job.remote_scratch_dir = "/scratch/x/" + job.job_id
     job.remote_project_dir = "/projects/x/" + job.job_id
     out_dir = job.package_dir(tmp_path) / "output"
@@ -689,7 +689,7 @@ def test_reconcile_completed_records_learned_throughput(tmp_path):
     })
     _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
     learned = cluster_throughput.lookup_throughput(
-        tmp_path, cluster="alpine", partition="amilan", n_atoms=100_000
+        tmp_path, cluster="alpine", partition="acpu", n_atoms=100_000
     )
     assert learned == 12.5
 
@@ -837,25 +837,26 @@ def test_remote_recommendation_unknown_profile_404(tmp_path, monkeypatch):
 
 
 def test_remote_recommendation_lists_partitions_and_honours_forced_partition(tmp_path, monkeypatch):
-    """The dropdown needs the partition list, and forcing amilan re-sizes to CPU."""
+    """The dropdown needs the partition list, and forcing acpu re-sizes to CPU."""
     from backend.api import routes_md
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     job = _make_prepared_job(tmp_path)
 
     out = routes_md.md_job_remote_recommendation(job.job_id)
     names = {p["name"] for p in out["available_partitions"]}
-    assert {"aa100", "amilan"} <= names
+    assert {"aa100", "acpu"} <= names
 
-    # GPU auto-pick → gpu-* QoS tiers offered.
-    assert {q["name"] for q in out["available_qos"]} == {"gpu-normal", "gpu-long", "gpu-testing"}
+    # GPU auto-pick → gpu-* QoS tiers offered.  The default ah200 has no gpu-testing
+    # (that is aa100/ami100 only), so the dropdown must not offer it.
+    assert {q["name"] for q in out["available_qos"]} == {"gpu-normal", "gpu-long"}
 
-    forced = routes_md.md_job_remote_recommendation(job.job_id, partition="amilan")
-    assert forced["resources"]["partition"] == "amilan"
+    forced = routes_md.md_job_remote_recommendation(job.job_id, partition="acpu")
+    assert forced["resources"]["partition"] == "acpu"
     assert forced["resources"]["kind"] == "cpu"
     assert forced["resources"]["gpus"] == 0
-    # amilan accepts ONLY normal/long (live-confirmed) — the dropdown must not offer
-    # testing/mem/compile, which SLURM rejects on amilan.
-    assert {q["name"] for q in forced["available_qos"]} == {"normal", "long"}
+    # acpu accepts ONLY cpu-normal/cpu-long (live-confirmed 2026-08-06) — the dropdown
+    # must not offer testing/mem/compile, which SLURM rejects on acpu.
+    assert {q["name"] for q in forced["available_qos"]} == {"cpu-normal", "cpu-long"}
 
 
 def test_remote_recommendation_unknown_partition_400(tmp_path, monkeypatch):

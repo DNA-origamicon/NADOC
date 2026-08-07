@@ -182,7 +182,7 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
     dispose()
     // `jobId` is the job to SIZE against (a replica child in ensemble mode); `parentId`
     // is what an ensemble submit posts to.  `partition` (ensemble) forces the initial
-    // sizing partition (amilan by default).
+    // sizing partition (acpu by default).
     _ctx = { jobId, clusterName, editOpen: false, mode, parentId, count, partition }
     await _load(null)
   }
@@ -190,13 +190,13 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
   /** Fetch the recommendation (optionally forcing a partition) and (re)render.
    *  Resume mode seeds the card with the job's CURRENT resources (`current:true`) so
    *  the user reviews/edits what they last ran, and skips the already-submitted gate.
-   *  Ensemble mode forces the initial partition (amilan) so replicas size on CPU. */
+   *  Ensemble mode forces the initial partition (acpu) so replicas size on CPU. */
   async function _load(partition) {
     if (!_ctx) return
     const { jobId, clusterName, mode } = _ctx
     const resume = mode === 'resume'
     const ensemble = mode === 'ensemble'
-    const effPartition = partition ?? (ensemble ? (_ctx.partition || 'amilan') : null)
+    const effPartition = partition ?? (ensemble ? (_ctx.partition || 'acpu') : null)
     const rec = await api.getMdRemoteRecommendation(jobId, { clusterName, partition: effPartition, current: resume && !partition }).catch(() => null)
     if (!_ctx) return   // disposed while awaiting
     if (!rec) {
@@ -321,7 +321,7 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
                         : resume ? 'Resuming from checkpoint…' : 'Staging package + submitting…'
       try {
         if (ensemble) {
-          const result = await api.submitMdEnsemble(parentId, { ...payload, partition: _ctx.partition || 'amilan' })
+          const result = await api.submitMdEnsemble(parentId, { ...payload, partition: _ctx.partition || 'acpu' })
           if (!result) throw new Error(api.lastErrorMessage?.() ?? 'Ensemble submit failed')
           const nSub = result.submitted?.length ?? 0
           const nErr = result.errors?.length ?? 0

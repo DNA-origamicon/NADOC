@@ -3853,7 +3853,7 @@ class EnsembleProductionRequest(BaseModel):
                     "share a velocity realisation. Pass a value only to reproduce a "
                     "specific past ensemble; the seeds used are recorded per replica.")
     cluster_name: str = Field("alpine")
-    partition: str = Field("amilan", description="Default SLURM partition (CPU by default)")
+    partition: str = Field("acpu", description="Default SLURM partition (CPU by default)")
     safety_factor: float = Field(1.5, gt=0.0)
 
 
@@ -3931,7 +3931,7 @@ class EnsembleSubmitRequest(BaseModel):
         None, description="Shared SLURM resources applied to every replica (override; "
                           "omit to auto-size on the partition below).",
     )
-    partition: str = Field("amilan")
+    partition: str = Field("acpu")
     safety_factor: float = Field(1.5, gt=0.0)
 
 
@@ -3939,7 +3939,7 @@ class EnsembleSubmitRequest(BaseModel):
 async def submit_md_ensemble(parent_id: str, body: EnsembleSubmitRequest) -> dict:
     """Submit every prepared, not-yet-submitted replica of a parent (needs a live session).
 
-    Replicas are identical size, so resources are sized ONCE (default amilan CPU) and
+    Replicas are identical size, so resources are sized ONCE (default acpu CPU) and
     applied to all.  One child's failure doesn't abort the rest — the response lists
     per-replica slurm ids + errors, and each is submitted as its own sbatch (own SLURM
     id) so the supervisor tracks them independently.

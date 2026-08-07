@@ -17,19 +17,23 @@ def alpine():
 
 # ── recommend: partition / GPU vs CPU ─────────────────────────────────────────
 
-def test_recommend_defaults_to_gpu_aa100(alpine):
+def test_recommend_defaults_to_gpu_ah200(alpine):
+    # Default moved aa100 -> ah200 on 2026-08-06: live `sbatch --test-only` put an
+    # aa100 start 13 d out (630 jobs pending) against an immediate ah200 start.
     r = cr.recommend(alpine, n_atoms=178_518, total_ns=10.0)
-    assert r["partition"] == "aa100"
+    assert r["partition"] == "ah200"
     assert r["kind"] == "gpu"
     assert r["gpus"] == 1
     assert r["cores"] == cr._GPU_CORES
 
 
 def test_recommend_falls_back_to_cpu_when_too_big(alpine):
-    r = cr.recommend(alpine, n_atoms=cr._GPU_ATOM_CEILING + 1, total_ns=5.0)
+    # Ceiling is per-partition now — the default ah200 has 141 GB, so the fallback
+    # trips well above the old A100-derived number.
+    r = cr.recommend(alpine, n_atoms=cr.gpu_atom_ceiling("ah200") + 1, total_ns=5.0)
     assert r["kind"] == "cpu"
     assert r["gpus"] == 0
-    assert r["partition"] == "amilan"
+    assert r["partition"] == "acpu"
     assert any("exceeds the single-GPU ceiling" in n for n in r["notes"])
 
 
@@ -50,24 +54,25 @@ def test_long_run_bumps_to_long_qos(alpine):
     assert any("bumped to 'gpu-long'" in n for n in r["notes"])
 
 
-def test_cpu_fallback_uses_plain_qos_names(alpine):
-    # A system past the single-GPU ceiling falls back to amilan (cpu) → plain QoS.
-    r = cr.recommend(alpine, n_atoms=5_000_000, total_ns=2.0, measured_ns_per_day=50.0)
+def test_cpu_fallback_uses_cpu_namespaced_qos_names(alpine):
+    # A system past the single-GPU ceiling falls back to acpu -> cpu-* QoS.
+    r = cr.recommend(alpine, n_atoms=8_000_000, total_ns=2.0, measured_ns_per_day=50.0)
     assert r["kind"] == "cpu"
-    assert r["qos"] == "normal"
+    assert r["partition"] == "acpu"
+    assert r["qos"] == "cpu-normal"
 
 
-def test_forced_amilan_partition_derives_cpu_resources(alpine):
-    # A small system would auto-pick the GPU aa100; forcing amilan (fast-queue CPU
+def test_forced_acpu_partition_derives_cpu_resources(alpine):
+    # A small system would auto-pick the GPU aa100; forcing acpu (fast-queue CPU
     # validation) must flip kind/gpus/qos/gres consistently — no GPU leftovers.
-    r = cr.recommend(alpine, n_atoms=178_518, total_ns=2.0, partition="amilan")
-    assert r["partition"] == "amilan"
+    r = cr.recommend(alpine, n_atoms=178_518, total_ns=2.0, partition="acpu")
+    assert r["partition"] == "acpu"
     assert r["kind"] == "cpu"
     assert r["gpus"] == 0
     assert r["gres_type"] == ""
-    assert r["qos"] in ("normal", "long")          # plain CPU QoS, never gpu-*
+    assert r["qos"] in ("cpu-normal", "cpu-long")  # cpu-* QoS, never gpu-*
     assert not r["qos"].startswith("gpu-")
-    assert any("manually set to amilan" in n for n in r["notes"])
+    assert any("manually set to acpu" in n for n in r["notes"])
 
 
 def test_forced_gpu_partition_keeps_gpu_resources(alpine):
@@ -117,7 +122,8 @@ def test_mem_scales_with_atoms_and_has_floor(alpine):
 
 
 def test_cost_uses_gpu_billing(alpine):
-    r = cr.recommend(alpine, n_atoms=100_000, total_ns=10.0, measured_ns_per_day=50.0)
+    r = cr.recommend(alpine, n_atoms=100_000, total_ns=10.0, measured_ns_per_day=50.0,
+                     partition="aa100")
     hours = r["walltime_h"]
     expected = r["cores"] * hours * 1.0 + r["gpus"] * hours * 108.2
     assert r["est_cost_su"] == pytest.approx(round(expected, 1))
@@ -180,3 +186,62 @@ def test_latest_ns_per_day_reads_last_value(tmp_path):
 
 def test_latest_ns_per_day_missing_file(tmp_path):
     assert cr.latest_ns_per_day(tmp_path / "nope.jsonl") is None
+
+
+# ── 2026 GPU expansion: per-partition speed + billing ─────────────────────────
+
+def test_faster_gpu_gets_a_shorter_walltime(alpine):
+    """Walltime is derived from throughput, and throughput was A100-anchored.  An
+    H200 job that asks for 2.5x the walltime it needs gets worse queue priority for
+    no reason — so the partition's speed factor must reach the walltime."""
+    a100 = cr.recommend(alpine, n_atoms=180_000, total_ns=100.0, partition="aa100")
+    h200 = cr.recommend(alpine, n_atoms=180_000, total_ns=100.0, partition="ah200")
+    assert h200["expected_ns_per_day"] > a100["expected_ns_per_day"]
+    assert h200["walltime_h"] < a100["walltime_h"]
+    assert h200["partition"] == "ah200" and h200["gres_type"] == "h200"
+
+
+def test_measured_throughput_still_overrides_the_speed_factor(alpine):
+    """A real measured ns/day is ground truth — the guess multiplier must not
+    re-scale it."""
+    r = cr.recommend(alpine, n_atoms=180_000, total_ns=10.0,
+                     measured_ns_per_day=40.0, partition="ah200")
+    assert r["expected_ns_per_day"] == pytest.approx(40.0)
+    assert r["measured"] is True
+
+
+def test_new_partitions_use_their_own_su_rate(alpine):
+    """Same job, same hours → the H200 must cost more per GPU-hour than the A100."""
+    per_hour_a100 = cr.estimate_cost_su(8, 1, 1.0, alpine, alpine.partition("aa100"))
+    per_hour_h200 = cr.estimate_cost_su(8, 1, 1.0, alpine, alpine.partition("ah200"))
+    assert per_hour_h200 > per_hour_a100
+    # Omitting the partition falls back to the profile-wide (A100) rate.
+    assert cr.estimate_cost_su(8, 1, 1.0, alpine) == pytest.approx(per_hour_a100)
+
+
+def test_recommend_costs_against_the_chosen_partition(alpine):
+    r = cr.recommend(alpine, n_atoms=180_000, total_ns=10.0,
+                     measured_ns_per_day=20.0, partition="ah200")
+    expected = cr.estimate_cost_su(
+        r["cores"], r["gpus"], r["walltime_h"], alpine, alpine.partition("ah200"),
+    )
+    assert r["est_cost_su"] == pytest.approx(round(expected, 1))
+
+
+def test_new_partitions_bump_to_gpu_long_not_gpu_testing(alpine):
+    """ah200 has no gpu-testing QoS; a long run must land on gpu-long."""
+    r = cr.recommend(alpine, n_atoms=180_000, total_ns=500.0,
+                     measured_ns_per_day=5.0, partition="ah200")
+    assert r["qos"] == "gpu-long"
+
+
+def test_gpu_speed_factor_defaults_to_one_for_unknown_partitions():
+    assert cr.gpu_speed_factor("aa100") == 1.0
+    assert cr.gpu_speed_factor("ah200") > 1.0
+    assert cr.gpu_speed_factor("something-new") == 1.0
+    assert cr.gpu_speed_factor(None) == 1.0
+
+
+def test_big_vram_partitions_raise_the_cpu_fallback_ceiling():
+    assert cr.gpu_atom_ceiling("ah200") > cr.gpu_atom_ceiling("aa100")
+    assert cr.gpu_atom_ceiling("aa100") == cr._GPU_ATOM_CEILING

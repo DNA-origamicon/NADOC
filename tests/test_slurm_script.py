@@ -38,12 +38,12 @@ def gpu_resources(alpine):
 # ── is_gpu_target ─────────────────────────────────────────────────────────────
 
 def test_is_gpu_target_gpu_partition(alpine, gpu_resources):
-    assert gpu_resources["partition"] == "aa100"
+    assert gpu_resources["partition"] == "ah200"
     assert ss.is_gpu_target(alpine, gpu_resources) is True
 
 
 def test_is_gpu_target_cpu_partition(alpine):
-    cpu = cr.recommend(alpine, n_atoms=100_000, total_ns=4.0, partition="amilan")
+    cpu = cr.recommend(alpine, n_atoms=100_000, total_ns=4.0, partition="acpu")
     assert cpu["kind"] == "cpu"
     assert ss.is_gpu_target(alpine, cpu) is False
 
@@ -176,8 +176,8 @@ def test_ladder_is_idempotent_skip_guarded(alpine, gpu_resources):
 
 def test_gpu_exec_line_is_gpu_resident(alpine, gpu_resources):
     script = ss.generate_sbatch(_manifest(), alpine, gpu_resources, "/scratch/x")
-    # aa100 requires a TYPED GRES — bare "gpu:1" is rejected by SLURM.
-    assert "#SBATCH --gres=gpu:a100-40gb:1" in script
+    # Alpine GPU partitions require a TYPED GRES — bare "gpu:1" is rejected by SLURM.
+    assert "#SBATCH --gres=gpu:h200:1" in script
 
 
 def test_untyped_gres_when_partition_has_no_gres_type(alpine):
@@ -192,7 +192,7 @@ def test_untyped_gres_when_partition_has_no_gres_type(alpine):
 
 
 def test_cpu_partition_uses_mpirun(alpine):
-    res = cr.recommend(alpine, n_atoms=cr._GPU_ATOM_CEILING + 1, total_ns=4.0,
+    res = cr.recommend(alpine, n_atoms=cr.gpu_atom_ceiling("ah200") + 1, total_ns=4.0,
                        measured_ns_per_day=5.0)
     script = ss.generate_sbatch(_manifest(), alpine, res, "/scratch/x")
     assert "mpirun -np $SLURM_NTASKS namd3" in script
@@ -209,7 +209,7 @@ def test_module_block_present(alpine, gpu_resources):
 
 
 def test_cpu_target_loads_cpu_module_block(alpine):
-    cpu = cr.recommend(alpine, n_atoms=100_000, total_ns=4.0, partition="amilan")
+    cpu = cr.recommend(alpine, n_atoms=100_000, total_ns=4.0, partition="acpu")
     script = ss.generate_sbatch(_manifest(), alpine, cpu, "/scratch/x")
     assert "module load " + " ".join(alpine.module_loads) in script
     assert "namd/3.0.1_cpu" in script and "namd/3.0.1_gpu" not in script
@@ -281,7 +281,7 @@ def test_gpu_job_omits_infiniband_constraint(alpine, gpu_resources):
 
 def test_cpu_job_keeps_infiniband_constraint(alpine):
     # CPU/MPI runs still want InfiniBand.
-    res = cr.recommend(alpine, n_atoms=5_000_000, total_ns=2.0, measured_ns_per_day=50.0)
+    res = cr.recommend(alpine, n_atoms=8_000_000, total_ns=2.0, measured_ns_per_day=50.0)
     assert res["kind"] == "cpu"
     script = ss.generate_sbatch(_manifest(), alpine, res, "/scratch/x")
     assert "#SBATCH --constraint=ib" in script

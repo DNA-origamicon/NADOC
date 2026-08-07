@@ -9,7 +9,7 @@ convenience extractors are used.
 
 Design decisions (from the plan):
 - **GPU by default** — Alpine ``aa100`` (A100), one GPU, NAMD3 GPU-resident.  CPU
-  ``amilan`` only when a system is too large for a single GPU.
+  ``acpu`` only when a system is too large for a single GPU.
 - ``walltime = total_ns / expected_ns_per_day * safety_factor`` (in days → hours),
   clamped to the QoS ceiling; auto-bump ``normal``→``long`` rather than truncate.
 - ``expected_ns_per_day`` uses a *measured* value when available (Phase 5 learns
@@ -22,7 +22,7 @@ import json
 import math
 from pathlib import Path
 
-from backend.core.cluster_config import ClusterProfile
+from backend.core.cluster_config import ClusterProfile, Partition
 
 # ── Tunables ──────────────────────────────────────────────────────────────────
 
@@ -32,10 +32,32 @@ from backend.core.cluster_config import ClusterProfile
 # replaces it with a learned per-bucket value.
 _GPU_NSDAY_ATOM_CONSTANT = 2.9e6
 
+# NAMD3 GPU-resident throughput relative to an A100, per partition.  The constant
+# above is A100-anchored, so every other GPU needs a multiplier.  This is load-
+# bearing beyond cost display: walltime is derived from throughput, and an H200 job
+# that requests 2.5x the walltime it needs gets WORSE queue priority for no reason.
+# First-run guesses only — cluster_throughput.py is keyed cluster:partition:bucket,
+# so real measured ns/day per partition supersedes these as soon as one run lands.
+_GPU_SPEED_FACTOR = {
+    "aa100": 1.0,           # the anchor
+    "ah200": 2.5,           # H200: ~2-3x A100 on NAMD3 GPU-resident
+    "artxpro6000": 1.6,     # Blackwell RTX Pro 6000, strong fp64-light MD
+    "al40": 0.75,           # L40 has no fast fp64 path
+    "ami100": 0.5,          # AMD MI100 via HIP, historically the slowest here
+    "atesting_a100": 1.0,
+}
+
 # Above this atom count a single A100 is no longer the obvious choice; fall back
 # to a large CPU allocation.  A100 (80 GB) comfortably handles millions of atoms,
 # so this ceiling is high on purpose — CPU is the exception, not the rule.
 _GPU_ATOM_CEILING = 3_000_000
+
+# Per-partition override of the ceiling above, for GPUs with much more VRAM than
+# the 80 GB A100 the default was set against (H200 = 141 GB).
+_GPU_ATOM_CEILING_BY_PARTITION = {
+    "ah200": 6_000_000,
+    "artxpro6000": 4_000_000,
+}
 
 _DEFAULT_SAFETY_FACTOR = 1.5
 
@@ -51,16 +73,31 @@ _QUEUE_GUESS_MIN = {
     "atesting_a100": 15,
     "al40": 120,
     "ami100": 90,
-    "amilan": 60,
-    "amilan128c": 90,
+    "ah200": 180,          # new + fast, so popular; only 8 nodes
+    "artxpro6000": 120,    # new, less contended than the H200s
+    "acpu": 60,
     "amem": 120,
 }
 
 
-def _gpu_nsday_guess(n_atoms: int) -> float:
-    """Conservative first-run GPU throughput guess (ns/day) for ``n_atoms``."""
+def gpu_speed_factor(partition: str | None) -> float:
+    """Throughput of ``partition``'s GPU relative to an A100 (1.0 = A100)."""
+    return _GPU_SPEED_FACTOR.get(partition or "", 1.0)
+
+
+def gpu_atom_ceiling(partition: str | None) -> int:
+    """Atom count above which ``partition``'s GPU stops being the obvious choice."""
+    return _GPU_ATOM_CEILING_BY_PARTITION.get(partition or "", _GPU_ATOM_CEILING)
+
+
+def _gpu_nsday_guess(n_atoms: int, partition: str | None = None) -> float:
+    """Conservative first-run GPU throughput guess (ns/day) for ``n_atoms``.
+
+    Scaled by the partition's GPU speed relative to the A100 the constant is
+    anchored to; ``None`` (or an unknown partition) means no scaling.
+    """
     n = max(1, int(n_atoms))
-    return _GPU_NSDAY_ATOM_CONSTANT / n
+    return _GPU_NSDAY_ATOM_CONSTANT / n * gpu_speed_factor(partition)
 
 
 def _mem_gb_for_atoms(n_atoms: int) -> int:
@@ -81,13 +118,22 @@ def _format_walltime(hours: float) -> str:
 
 
 def estimate_cost_su(
-    cores: int, gpus: int, hours: float, profile: ClusterProfile
+    cores: int,
+    gpus: int,
+    hours: float,
+    profile: ClusterProfile,
+    partition: Partition | None = None,
 ) -> float:
-    """SU cost = cores·hours·su_per_core_hour + gpus·hours·su_per_gpu_hour."""
-    return (
-        cores * hours * profile.su_per_core_hour
-        + gpus * hours * profile.su_per_gpu_hour
-    )
+    """SU cost = cores·hours·su_per_core_hour + gpus·hours·su_per_gpu_hour.
+
+    ``partition`` (optional) supplies a per-partition GPU rate — Alpine's ah200 /
+    artxpro6000 are billed well above the A100 rate the profile-wide value carries,
+    so omitting it under-quotes those jobs several-fold.
+    """
+    gpu_rate = profile.su_per_gpu_hour
+    if partition is not None and partition.su_per_gpu_hour:
+        gpu_rate = partition.su_per_gpu_hour
+    return cores * hours * profile.su_per_core_hour + gpus * hours * gpu_rate
 
 
 def estimate_queue_time_min(partition: str) -> int:
@@ -112,7 +158,7 @@ def recommend(
         total_ns: total simulated nanoseconds the job will run (relax + prod).
         measured_ns_per_day: a real throughput if known (else a size-based guess).
         safety_factor: multiply the walltime estimate for headroom.
-        partition: force a specific partition (e.g. ``amilan`` for a fast-queue
+        partition: force a specific partition (e.g. ``acpu`` for a fast-queue
             validation run).  Everything dependent — kind, gpus, cores, gres_type,
             QoS, throughput class, cost — is re-derived from it so the request stays
             self-consistent.  ``None`` = auto-pick (GPU by default).  Raises
@@ -127,7 +173,7 @@ def recommend(
     total_ns = max(0.0, float(total_ns))
 
     if partition is not None:
-        # User forced a partition (e.g. amilan for a quick, fast-queueing CPU
+        # User forced a partition (e.g. acpu for a quick, fast-queueing CPU
         # validation run).  Derive the rest from its kind so we never pair, say, a
         # CPU partition with a GPU QoS + GRES.
         part = profile.partition(partition)
@@ -141,20 +187,23 @@ def recommend(
         cores = _GPU_CORES if use_gpu else min(_CPU_CORES, part.max_cores)
         notes.append(f"Partition manually set to {partition_name} ({part.kind}).")
     else:
-        use_gpu = n_atoms <= _GPU_ATOM_CEILING and profile.partition(profile.default_partition) is not None
+        atom_ceiling = gpu_atom_ceiling(profile.default_partition)
+        use_gpu = n_atoms <= atom_ceiling and profile.partition(profile.default_partition) is not None
         if not use_gpu:
             notes.append(
                 f"{n_atoms:,} atoms exceeds the single-GPU ceiling "
-                f"({_GPU_ATOM_CEILING:,}); using a CPU partition."
+                f"({atom_ceiling:,}); using a CPU partition."
             )
         if use_gpu:
             partition_name = profile.default_partition
             gpus = 1
             cores = _GPU_CORES
         else:
-            # Prefer a plain CPU partition (amilan) for the fallback.
-            cpu = profile.partition("amilan") or next(
-                (p for p in profile.partitions if p.kind == "cpu"), None
+            # Prefer the general CPU partition (`acpu`; `amilan` pre-2026) for the fallback.
+            cpu = (
+                profile.partition("acpu")
+                or profile.partition("amilan")
+                or next((p for p in profile.partitions if p.kind == "cpu"), None)
             )
             partition_name = cpu.name if cpu else profile.default_partition
             gpus = 0
@@ -168,10 +217,16 @@ def recommend(
         expected = float(measured_ns_per_day)
         notes.append(f"Using measured throughput {expected:.1f} ns/day.")
     else:
-        expected = _gpu_nsday_guess(n_atoms) if use_gpu else _gpu_nsday_guess(n_atoms) * 0.15
+        if use_gpu:
+            expected = _gpu_nsday_guess(n_atoms, partition_name)
+            factor = gpu_speed_factor(partition_name)
+            scaled = "" if factor == 1.0 else f" x{factor:g} for {partition_name}"
+        else:
+            expected = _gpu_nsday_guess(n_atoms) * 0.15
+            scaled = ""
         notes.append(
-            f"No measured throughput yet — guessing {expected:.1f} ns/day from system size "
-            "(first run per size is a guess by design)."
+            f"No measured throughput yet — guessing {expected:.1f} ns/day from system size"
+            f"{scaled} (first run per size is a guess by design)."
         )
 
     raw_days = total_ns / expected if expected > 0 else 0.0
@@ -217,7 +272,7 @@ def recommend(
                 f"Memory clamped to {mem_gb} GB (partition ceiling {part.mem_per_core_gb} GB/core × {cores})."
             )
 
-    est_cost = estimate_cost_su(cores, gpus, walltime_h, profile)
+    est_cost = estimate_cost_su(cores, gpus, walltime_h, profile, part)
     est_queue = estimate_queue_time_min(partition_name)
 
     return {

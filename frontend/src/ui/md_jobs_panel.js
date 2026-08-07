@@ -50,6 +50,7 @@ import * as api from '../api/client.js'
 import { initRunpodStatus, runpodBlockReason, runpodCanLaunch } from './runpod_status.js'
 import { initRunpodSetup } from './runpod_setup.js'
 import { initRunpodGpuPicker } from './runpod_gpu_picker.js'
+import { initClusterAvailability } from './cluster_availability.js'
 import { shouldStopLiveSession, shouldResumeDisplays, displayTabIds } from './display_tab_policy.js'
 import { initJobWizard } from './md_job_wizard.js'
 import { isProductionParent } from './md_job_wizard_model.js'
@@ -896,6 +897,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const runpodStatusEl  = document.getElementById('md-jobs-runpod-status')
   const runpodSetupEl   = document.getElementById('md-runpod-setup-mount')
   const runpodPickerEl  = document.getElementById('md-jobs-runpod-picker')
+  const alpineAvailEl   = document.getElementById('md-jobs-alpine-availability')
   const runTargetAlpineLabel = document.getElementById('md-run-target-alpine-label')
   const runTargetHint   = document.getElementById('md-run-target-hint')
   const submitAlpineBtn = document.getElementById('md-jobs-submit-alpine-btn')
@@ -1099,6 +1101,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   initRunpodGpuPicker({
     mount: runpodPickerEl,
     onSelect: (row) => { _selectedRunpodGpu = row },
+  })
+
+  // Alpine GPU availability: free GPUs, queue depth and estimated wait per partition.
+  // Passes the selected job so the estimate is sized for the real run, not a generic one.
+  initClusterAvailability({
+    mount: alpineAvailEl,
+    getJobId: () => _selectedId,
   })
 
   function _paintRunpodGate() {
@@ -2947,7 +2956,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   // Ensemble on Alpine: stage N production replicas (distinct seeds) from THIS completed
-  // relaxation, then open the review card (ensemble mode) to submit them all to amilan.
+  // relaxation, then open the review card (ensemble mode) to submit them all to acpu.
   ensembleBtn?.addEventListener('click', () => runExclusive(ensembleBtn, async () => {
     const parentId = _selectedId
     if (!parentId) return
@@ -2958,7 +2967,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // package resolves to, and sending a raw step count means the same request produces
       // a different amount of simulated time on a 4 fs package than on a 1 fs one.
       const d = await api.stageMdEnsemble(parentId, {
-        n_replicas: n, length_ns: lengthNs, cluster_name: 'alpine', partition: 'amilan',
+        n_replicas: n, length_ns: lengthNs, cluster_name: 'alpine', partition: 'acpu',
       })
       if (!d) throw new Error(api.lastErrorMessage?.() ?? 'Server error')
       showToast(`Staged ${n} production replica${n === 1 ? '' : 's'} of ${lengthNs} ns`, 'ok')
@@ -2967,7 +2976,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       const firstChild = d.children?.[0]?.job_id
       if (firstChild) {
         _submitReview.open(firstChild, {
-          mode: 'ensemble', parentId, count: n, clusterName: 'alpine', partition: 'amilan',
+          mode: 'ensemble', parentId, count: n, clusterName: 'alpine', partition: 'acpu',
         })
       }
     } catch (err) {

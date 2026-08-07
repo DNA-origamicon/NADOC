@@ -902,7 +902,7 @@ describe('U3 slice 2b — NAMD canonical convergence (payload parity)', () => {
   const JOBS = [
     { job_id: 'p', status: 'completed', created_at: 100, design_name: 'origami' },
     { job_id: 'r1', status: 'running', created_at: 90, parent_job_id: 'p', design_name: 'origami',
-      ensemble_seed: 7001, ensemble_index: 0, execution_target: 'alpine', slurm_job_id: '555', resources: { partition: 'amilan' } },
+      ensemble_seed: 7001, ensemble_index: 0, execution_target: 'alpine', slurm_job_id: '555', resources: { partition: 'acpu' } },
     { job_id: 'r2', status: 'queued', created_at: 89, parent_job_id: 'p', design_name: 'origami',
       ensemble_seed: 7002, ensemble_index: 1, execution_target: 'alpine' },
     { job_id: 'seed', status: 'completed', created_at: 80, design_name: 'from-cg', seed_oxdna_job_id: 'ox42' },
@@ -945,7 +945,7 @@ describe('U3 slice 2b — NAMD canonical convergence (payload parity)', () => {
     ])
     const r1 = model.rows.find(r => r.jobId === 'r1')
     expect(r1.postLabelMarkers).toEqual([
-      expect.objectContaining({ text: 'SLURM 555 · amilan', title: 'Running on Alpine (SLURM 555)' }),
+      expect.objectContaining({ text: 'SLURM 555 · acpu', title: 'Running on Alpine (SLURM 555)' }),
     ])
   })
 

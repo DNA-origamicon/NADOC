@@ -34,7 +34,7 @@ def test_record_and_lookup_roundtrip(tmp_path):
     # Same size bucket (100k-200k) → averaged.
     assert ct.lookup_throughput(tmp_path, cluster="alpine", partition="aa100", n_atoms=120_000) == 18.0
     # Different partition / bucket → independent (no value yet).
-    assert ct.lookup_throughput(tmp_path, cluster="alpine", partition="amilan", n_atoms=150_000) is None
+    assert ct.lookup_throughput(tmp_path, cluster="alpine", partition="acpu", n_atoms=150_000) is None
     assert ct.lookup_throughput(tmp_path, cluster="alpine", partition="aa100", n_atoms=2_000_000) is None
 
 
