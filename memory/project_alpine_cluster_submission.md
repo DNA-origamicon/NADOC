@@ -440,14 +440,33 @@ survives disconnection and logs.
 
 ### Owed — needs the user present for Duo
 
-1. **Confirm the GPU NAMD module on ah200.** `gpu_module_loads` is still `namd/3.0.1_gpu`;
-   Hopper (sm_90) may need a newer CUDA build, and this is now the DEFAULT partition. `GET
-   /api/cluster/namd-modules` lists what's there. **Highest-value remaining check.**
-2. **One real ah200 submission** end-to-end — nothing has actually run on the new default.
-3. **In-app exercise of the popup and of the wizard's new first step** — neither has been
-   clicked in a browser (`just smoke` blocked by a running NAMD production job).
-4. **CPU QoS names are docs-derived**, not live-tested by sbatch. The GPU half of the same docs
+**Items 1–3 are DISCHARGED (2026-08-07).** ~~Confirm the GPU NAMD module on ah200~~ — moot: no
+CUDA NAMD module exists on Alpine at all, so we build our own and point `gpu_namd_bin` at it.
+~~One real ah200 submission~~ — done many times over: the whole benchmark matrix plus the 24hb
+production run (SLURM 30958617). ~~In-app exercise of the popup and the wizard's new first step~~
+— **user-confirmed in app 2026-08-07, all features pass** (see below).
+
+1. **CPU QoS names are docs-derived**, not live-tested by sbatch. The GPU half of the same docs
    table was live-confirmed, which is good corroboration, but `cpu-normal` has not been submitted.
+   Untouched by the 2026-08-07 validation — that exercised the GPU/display path only.
+
+### User-validated in app — 2026-08-07
+
+Every feature of this arc was hand-exercised by the user and **all pass**:
+
+- GPU-availability popup; wizard step 1 "Where it runs" (local probe, Alpine partition table with
+  wait/speed/SU, node selection) and the step-3 SLURM inspection block.
+- Submit review: close-on-submit + double-submit guard; upload/prepare progress and stages.
+- Cluster-chip ⇄ wizard state sync; the availability button's disabled reason when signed out.
+- Live metrics on a running job, **including ns/day** (the `days/ns`-only regex fix).
+- Health card populating on reconnect.
+- One-frame display fetch for a running Alpine job, and its "Snapshot at step N" label.
+- Progress bar carried forward while signed out, re-anchoring on sign-in.
+
+So this feature set is **no longer manual-validation debt**; see `manual_validation_debt.md`
+(`MV-ALPINE-GPU`). What that validation does *not* cover: the CPU-partition path above, and
+`just smoke` (the console-error gate) still never ran — it stayed blocked by a running NAMD
+production job throughout.
 
 **Editing `backend/**` drops the SSH session** — uvicorn `--reload` watches `backend` and
 `scripts` only, and the asyncssh connection lives in that process. `memory/**` and

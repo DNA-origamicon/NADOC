@@ -71,6 +71,19 @@ over-reported the work left. Counts below are derived from the actual index, not
 - **PENDING (genuinely open): 82.** The index now holds 83 rows: 82 pending + MV-5 (generated, see below).
   *(Was 84/85 — `MV-PHOTO-1`/`MV-PHOTO-2` struck 2026-07-30, see "Retired" below.)*
 - **GENERATED (block written, not yet run): 1** — MV-5.
+- **VALIDATED: 12** — **MV-ALPINE-GPU (2026-08-07, user-confirmed in app — all pass)** — the whole
+  Alpine GPU arc, hand-exercised end to end: GPU-availability popup; the Job Wizard's new step 1
+  ("Where it runs" — local hardware probe, Alpine partition table with wait/relative-speed/SU, node
+  selection) and the step-3 SLURM inspection block; submit review close-on-submit + double-submit
+  guard, with upload/prepare progress and stages; cluster-chip ⇄ wizard state sync; live metrics on
+  a running job **including ns/day**; health card populating on reconnect; the one-frame display
+  fetch for a running cluster job plus its "Snapshot at step N" label; and the progress bar carried
+  forward while signed out, re-anchoring on sign-in.
+  **Never entered the PENDING queue** — it was shipped and validated inside one arc, so the debt
+  was discharged before it could be mined. Counts above are unaffected.
+  **Not covered:** the CPU-partition path (`cpu-normal` is still docs-derived, never sbatch-tested),
+  and `just smoke` — the console-error gate stayed blocked by a running NAMD production job
+  throughout, so this is a hand-validation, not a smoke-gated one.
 - **VALIDATED: 11** — **MV-CLUSTYLE (2026-08-01, user-confirmed in app)** — per-cluster colour + opacity
   across all seven geometry families, incl. the per-nucleotide atomistic fix. The one caveat the user
   accepted: surface still resolved per STRAND at validation time. **That caveat is now GONE** —
