@@ -9,6 +9,7 @@ barostat was 200/100 fs when it is 1000/500).
 from __future__ import annotations
 
 import inspect
+import json
 
 import pytest
 
@@ -352,6 +353,104 @@ def test_production_carries_no_elastic_network():
     assert prod[0]["params"]["constraints"] == "off"
 
 
+# ── The production CHILD (what the Job Wizard actually creates) ───────────────
+#
+# Two production routes exist and they build different packages.  `production_stages`
+# above describes the legacy APPEND route (chunked segments bolted onto the parent job);
+# `replica_production_stages` describes `POST /md/jobs/{parent}/production-run`, which the
+# wizard's Create button hits and which builds a replica package.  The wizard used to
+# preview the first while creating the second.
+
+def test_a_production_child_is_a_reseed_bridge_and_ONE_production_conf():
+    """The replica package has exactly two confs — not the append route's three chunks.
+
+    Previewing the chunk ladder meant the wizard's first column carried 10 % of the step
+    count of a run that was never going to be split.
+    """
+    rows = md_plan.replica_production_stages(
+        _ctx(fast=True), total_steps=25_000_000, timestep_fs=4.0)
+    assert [r["role"] for r in rows] == ["reseed", "production"]
+    assert [r["index"] for r in rows] == [0, 1]
+    assert rows[0]["steps"] == 0
+    assert rows[1]["steps"] == 25_000_000
+    assert rows[1]["ns"] == pytest.approx(100.0)
+
+
+def test_the_child_stage_names_match_the_builder_that_writes_them():
+    """The names the runner and the restart chain address these stages by."""
+    rows = md_plan.replica_production_stages(
+        _ctx(fast=True), total_steps=25_000_000, timestep_fs=4.0)
+    assert rows[0]["name"] == "demo_00_reseed"
+    assert rows[1]["name"] == "demo_01_production_100ns_k0"
+    # The production conf continues from the reseed, not straight from the checkpoint.
+    assert rows[1]["params"]["bincoordinates"] == "output/demo_00_reseed.coor"
+
+
+def test_the_replica_builder_and_the_preview_come_from_ONE_spec_builder():
+    """Guards LESSONS H16 for the spawn path, as the append path is already guarded.
+
+    Both must construct the production SegmentSpec the same way, or a fix lands on the
+    preview and the run keeps the old behaviour — with both looking correct.
+    """
+    from backend.core import md_ensemble
+
+    src = inspect.getsource(md_ensemble.build_replica_package)
+    spec = md_plan.replica_production_spec(
+        _ctx(), total_steps=25_000_000, timestep_fs=4.0, previous="demo_00_reseed")
+    assert spec.name == "demo_01_production_100ns_k0"
+    # The builder's own arithmetic, mirrored: 100 % of the steps in one segment.
+    assert spec.percent == 100.0 and spec.scale is None
+    assert spec.min_c1_paired == 0.90 and spec.min_wc_ref_relative == 0.25
+    assert "_00_reseed" in src and "_01_production_" in src
+
+
+def test_only_the_production_stage_accepts_a_hand_edit():
+    """The reseed conf is written without an overrides pass, so an edit there is dropped.
+
+    The table renders that column read-only rather than accepting an edit it would
+    silently discard — the same reason PROTECTED_DIRECTIVES cells are locked.
+    """
+    rows = md_plan.replica_production_stages(
+        _ctx(fast=True), total_steps=1_000_000, timestep_fs=4.0)
+    assert rows[0]["accepts_overrides"] is False
+    assert rows[1]["accepts_overrides"] is True
+
+
+def test_a_child_override_lands_on_slot_1_the_way_the_builder_reads_it():
+    """`build_replica_package` applies `overrides_for_stage(stage_overrides, 1)`."""
+    rows = md_plan.replica_production_stages(
+        _ctx(fast=True), total_steps=1_000_000, timestep_fs=4.0,
+        stage_overrides={"1": {"langevinDamping": "2.5"}})
+    assert rows[1]["params"]["langevindamping"] == "2.5"
+    assert rows[1]["overridden"]["langevindamping"] == ["1", "2.5"]
+    # And the reseed is untouched by it.
+    assert rows[0]["overridden"] == {}
+
+
+def test_a_child_keeps_its_elastic_network_when_one_was_asked_for():
+    rows = md_plan.replica_production_stages(
+        _ctx(fast=True), total_steps=1_000_000, timestep_fs=4.0,
+        enm_file="demo_prod_k0.1.enm.extra")
+    files = rows[1]["params"]["extrabondsfile"]
+    files = files if isinstance(files, list) else [files]
+    assert any("enm.extra" in str(f) for f in files)
+
+
+def test_a_continuation_carries_velocities_instead_of_redrawing_them():
+    """Chaining a production off a completed production is a true continuation.
+
+    Redrawing velocities on a warm NPT endpoint injects force-uncorrelated velocities
+    that overflow the startup RATTLE constraint.
+    """
+    spawn = md_plan.replica_production_stages(
+        _ctx(fast=True), total_steps=1_000_000, timestep_fs=4.0)
+    chain = md_plan.replica_production_stages(
+        _ctx(fast=True), total_steps=1_000_000, timestep_fs=4.0, continuation=True)
+    assert "reinitvels" in spawn[0]["params"]
+    assert chain[0]["params"].get("binvelocities") == "equilibrated.vel"
+    assert chain[0]["stage"] == "Velocity continuation"
+
+
 # ── The declash step-count defect (pinned, deliberately NOT fixed) ────────────
 
 def test_declash_stages_run_half_their_intended_length():
@@ -522,6 +621,325 @@ def test_a_production_plan_needs_a_parent(client):
     r = client.post("/api/md/protocol-plan", json={"kind": "production"})
     assert r.status_code == 400
     assert "parent_job_id" in r.json()["detail"]
+
+
+# ── The production plan, end to end ───────────────────────────────────────────
+
+READY = "demo_04_300K_NPT_MGHH_only_p100"
+
+
+@pytest.fixture()
+def parent_job(tmp_path, monkeypatch):
+    """A completed relaxation with a real package, so the plan can read it back."""
+    import backend.api.routes_md as rm
+    from backend.core.md_job import MdSegmentStatus, MdStatus, new_job
+
+    monkeypatch.setattr(rm, "_workspace", lambda: tmp_path)
+    job = new_job("demo", "equilibrium_aware_namd", name_stem="demo", package_subdir="pkg")
+    job.status = MdStatus.completed
+    job.prep_params = {"relax_preset": "literature", "mg_conc_mM": 12.5, "ion_conc_mM": 0.0}
+    job.segments = [MdSegmentStatus(name=READY, stage="300K NPT MgHH only",
+                                    percent=100.0, steps=2_400_000, status="done")]
+    job.save(tmp_path)
+
+    pkg = job.package_dir(tmp_path)
+    (pkg / "output").mkdir(parents=True, exist_ok=True)
+    for ext in ("coor", "vel", "xsc"):
+        (pkg / "output" / f"{READY}.{ext}").write_text(ext)
+    (pkg / "demo.psf").write_text(f"{224000:10d} !NATOM\n")
+    (pkg / "manifest.json").write_text(json.dumps({
+        "name_stem": "demo",
+        "protocol": "equilibrium_aware_namd",
+        "relax_preset": "literature",
+        "box_ang": [180.5, 190.25, 210.0],
+        "mgh_extrabonds": True,
+        "solvation": {"padding_nm": 2.0, "water_shell_nm": 0.0, "carved": False,
+                      "npt_allowed": True, "sized_for_free_ns": 100.0},
+        "relax_protocol_settings": {"timestep_fs": 2.0},
+        "fast_relaxation": {"enabled": False},
+        "production_timestep_fs": 2.0,
+        "minimization": {"name": "demo_00_min", "steps": 4800},
+        "segments": [{"name": READY, "stage": "300K NPT MgHH only", "percent": 100.0,
+                      "steps": 2_400_000, "temp": 300.0, "damping": 5.0, "scale": None,
+                      "npt": True, "previous": "demo_03_k0p01_p100"}],
+    }))
+    return job
+
+
+def _prod_plan(client, parent_job, **body) -> dict:
+    r = client.post("/api/md/protocol-plan",
+                    json={"kind": "production", "parent_job_id": parent_job.job_id, **body})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_the_production_plan_is_the_two_confs_the_child_package_contains(client, parent_job):
+    """Not the append route's three chunks — the wizard creates a replica package."""
+    plan = _prod_plan(client, parent_job)
+    assert [s["role"] for s in plan["stages"]] == ["reseed", "production"]
+    assert plan["run_stage_index"] == 1
+    assert plan["totals"]["n_stages"] == 2
+
+
+def test_the_production_plan_carries_the_relaxation_stage_it_continues(client, parent_job):
+    plan = _prod_plan(client, parent_job)
+    assert plan["source_stage"] == {
+        "name": READY, "stage": "300K NPT MgHH only", "kind": "relaxation",
+        "params": plan["source_stage"]["params"],
+    }
+    assert plan["continuation"] is False
+    # Real directives, emitted by the same conf writer the ladder used — not a description.
+    assert plan["source_stage"]["params"]["langevindamping"] == "5"
+    # And the difference that matters is computed, not claimed.
+    assert plan["comparison"]["langevindamping"] == ["5", "1"]
+
+
+def test_the_production_plan_states_what_it_inherits_rather_than_offering_it(client, parent_job):
+    """A child hardlinks its parent's topology and copies its cell — none of it is choosable."""
+    inh = _prod_plan(client, parent_job)["inherited"]
+    assert inh["seed_checkpoint"] == READY
+    assert inh["relax_preset"] == "literature"
+    assert inh["box_ang"] == [180.5, 190.25, 210.0]
+    assert inh["padding_nm"] == 2.0
+    assert inh["mg_conc_mM"] == 12.5
+    assert inh["ladder_timestep_fs"] == 2.0
+    # Read from the package's own PSF, so GPU-resident is a fact rather than deferred.
+    assert inh["n_atoms"] == 224_000
+
+
+def test_an_untouched_production_setting_reports_where_it_really_came_from(client, parent_job):
+    """Without this every production control rendered with no chip at all."""
+    req = _prod_plan(client, parent_job)["production_request"]
+    # The package pinned 2 fs at prep; the create-request merge would have said 4.
+    assert req["production_timestep_fs"] == {"value": 2.0, "provenance": "inherited",
+                                             "reason": "recorded when the relaxation "
+                                                       "package was prepared"}
+    assert req["length_ns"]["provenance"] == "default"
+    assert req["length_ns"]["value"] == 100.0
+    # 'auto' resolved against the parent's protocol, with the reason it decided that way.
+    assert req["enm_restraints"] == {"value": "on", "provenance": "derived",
+                                     "reason": req["enm_restraints"]["reason"]}
+    assert "literature" in req["enm_restraints"]["reason"]
+
+
+def test_a_touched_production_setting_reports_itself_as_the_users(client, parent_job):
+    req = _prod_plan(client, parent_job, length_ns=25, langevin_damping=2.0,
+                     enm_restraints="off")["production_request"]
+    assert req["length_ns"] == {"value": 25.0, "provenance": "user", "reason": ""}
+    assert req["langevin_damping"]["provenance"] == "user"
+    assert req["enm_restraints"]["provenance"] == "user"
+
+
+def test_the_production_integrator_axes_reach_the_previewed_conf(client, parent_job):
+    """The stage table has to reflect the chosen axes, not the auto ones.
+
+    Same defect class as the ladder's, fixed there in exp51: the table showed the auto
+    values while the job ran the chosen ones.
+    """
+    plan = _prod_plan(client, parent_job, production_timestep_fs=2.0,
+                      production_rigid_bonds="none")
+    run = plan["stages"][plan["run_stage_index"]]
+    assert run["params"]["timestep"] == "2"
+    assert run["params"]["rigidbonds"] == "none"
+
+
+def test_the_form_and_the_preview_agree_about_the_default_run_length(client, parent_job):
+    """`ProductionRequest` falls back to 1 ns, which would preview a run the form isn't
+    offering. The wizard reads this number rather than carrying its own."""
+    plan = _prod_plan(client, parent_job)
+    assert plan["defaults"]["length_ns"] == 100.0
+    assert plan["timestep_plan"]["length_ns"] == 100.0
+
+
+def test_every_production_condition_names_the_control_that_owns_it(client, parent_job):
+    """`source` is the ONLY link between a condition and a settings field.
+
+    A source naming a private Python helper renders nowhere near the control the user has
+    to change, which for `box_fit` (the one blocking condition here) means a refusal with
+    nothing on screen to act on.
+    """
+    plan = _prod_plan(client, parent_job)
+    by_id = {c["id"]: c.get("source", "") for c in plan["conditions"]}
+    assert by_id["production_restraints"] == "ProductionRunRequest.enm_restraints"
+    assert by_id["production_damping"] == "ProductionRunRequest.langevin_damping"
+    assert by_id["box_fit"] == "ProductionRunRequest.length_ns"
+    assert by_id["timestep_independence"] == "CreateJobRequest.production_timestep_fs"
+
+
+def test_the_velocity_seed_is_declared_deferred_unless_it_is_pinned(client, parent_job):
+    """It is drawn when the job is created, so the reseed column shows a placeholder."""
+    keys = [d["key"] for d in _prod_plan(client, parent_job)["deferred"]]
+    assert keys == ["seed"]
+    assert _prod_plan(client, parent_job, seed=4242)["deferred"] == []
+
+
+def test_a_hand_edit_on_the_production_stage_shows_up_as_a_departure(client, parent_job):
+    plan = _prod_plan(client, parent_job,
+                      stage_overrides={"1": {"langevinDamping": "3.5"}})
+    run = plan["stages"][plan["run_stage_index"]]
+    assert run["params"]["langevindamping"] == "3.5"
+    assert run["overridden"]["langevindamping"][1] == "3.5"
+
+
+def test_a_production_plan_still_writes_nothing_to_disk(client, parent_job, tmp_path):
+    """It is re-requested on every keystroke behind a 250 ms debounce."""
+    before = sorted(p.relative_to(tmp_path) for p in tmp_path.rglob("*"))
+    _prod_plan(client, parent_job, length_ns=7)
+    assert sorted(p.relative_to(tmp_path) for p in tmp_path.rglob("*")) == before
+
+
+# ── Chaining: a completed PRODUCTION as the parent ────────────────────────────
+#
+# The backend has always been able to (`_production_seed_checkpoint` branches on
+# `run_kind`, `build_replica_package` stages the parent's restart set and preserves
+# velocities).  What it did NOT do was describe it correctly: a chained plan read its
+# chemistry off a production-only manifest and reported "unrecorded", ran the parent's
+# production segment back through the LADDER's conf writer, and told the user its
+# velocities would be redrawn — the opposite of what happens.
+
+PROD_SEG = "demo_01_production_200ns_k0"
+
+
+@pytest.fixture()
+def chain_parent(tmp_path, monkeypatch, parent_job):
+    """A completed production CHILD of `parent_job`, ready to be continued."""
+    import backend.api.routes_md as rm
+    from backend.core.md_job import MdSegmentStatus, MdStatus, new_job
+
+    monkeypatch.setattr(rm, "_workspace", lambda: tmp_path)
+    child = new_job("demo", "equilibrium_aware_namd", name_stem="demo",
+                    package_subdir="prodpkg", parent_job_id=parent_job.job_id,
+                    ensemble_seed=1234, ensemble_index=0, run_kind="production")
+    child.status = MdStatus.completed
+    child.segments = [MdSegmentStatus(name=PROD_SEG, stage="200 ns production replica",
+                                      percent=100.0, steps=50_000_000, status="done")]
+    child.save(tmp_path)
+
+    pkg = child.package_dir(tmp_path)
+    (pkg / "output").mkdir(parents=True, exist_ok=True)
+    for ext in ("coor", "vel", "xsc"):
+        (pkg / "output" / f"{PROD_SEG}.{ext}").write_text(ext)
+    (pkg / "demo.psf").write_text(f"{224000:10d} !NATOM\n")
+    # A production-only manifest: no relax_preset, no solvation, no ion concentrations.
+    # That absence is the whole point — the plan has to walk to the root relaxation.
+    (pkg / "manifest.json").write_text(json.dumps({
+        "name_stem": "demo",
+        "protocol": "equilibrium_aware_namd",
+        "box_ang": [180.5, 190.25, 210.0],
+        "mgh_extrabonds": True,
+        "production_recipe": {"version": 2, "langevin_damping": 2.0,
+                              "enm_restraints": True, "enm_k": 0.1,
+                              "enm_file": "demo_prod_k0.1.enm.extra"},
+        "ensemble": {"parent_job_id": parent_job.job_id, "seed": 1234,
+                     "length_ns": 200.0, "steps": 50_000_000, "timestep_fs": 4.0},
+        "minimization": {"name": "demo_00_reseed", "steps": 0},
+        "segments": [{"name": PROD_SEG, "stage": "200 ns production replica",
+                      "percent": 100.0, "steps": 50_000_000, "temp": 300.0,
+                      "damping": 2.0, "scale": None, "npt": True,
+                      "previous": "demo_00_reseed", "timestep_fs": 4.0}],
+    }))
+    return child
+
+
+def test_a_chained_plan_says_it_is_a_continuation(client, chain_parent):
+    plan = _prod_plan(client, chain_parent)
+    assert plan["continuation"] is True
+    assert plan["source_stage"]["kind"] == "production"
+    assert plan["source_stage"]["name"] == PROD_SEG
+    # The bridge conf preserves velocities instead of redrawing them.
+    assert plan["stages"][0]["stage"] == "Velocity continuation"
+    assert plan["stages"][0]["params"]["binvelocities"] == "equilibrated.vel"
+    assert "reinitvels" not in plan["stages"][0]["params"]
+
+
+def test_a_chained_plan_reads_its_chemistry_from_the_ROOT_relaxation(client, chain_parent,
+                                                                    parent_job):
+    """A production child's manifest has no preset, no solvation and no ions.
+
+    Reading the immediate parent's blindly is what made a chained plan report
+    "the parent's protocol (unrecorded)" and blank ion concentrations.
+    """
+    inh = _prod_plan(client, chain_parent)["inherited"]
+    assert inh["continuation"] is True
+    assert inh["root_job_id"] == parent_job.job_id
+    assert inh["chain_position"] == 2
+    assert inh["relax_preset"] == "literature"
+    assert inh["mg_conc_mM"] == 12.5
+    assert inh["padding_nm"] == 2.0
+    assert inh["parent_length_ns"] == 200.0
+
+
+def test_a_continuation_inherits_the_network_the_run_it_continues_was_using(client,
+                                                                           chain_parent):
+    """Otherwise one trajectory is restrained for its first leg and free for its second.
+
+    `auto` used to look for a relaxation preset, find none on a production manifest, and
+    fall through to "unrestrained" — silently dropping the network halfway along a chain.
+    """
+    req = _prod_plan(client, chain_parent)["production_request"]
+    assert req["enm_restraints"]["value"] == "on"
+    assert "continues" in req["enm_restraints"]["reason"]
+    # …and the thermostat coupling it was running under, for the same reason.
+    assert req["langevin_damping"]["value"] == 2.0
+
+
+def test_an_explicit_choice_still_beats_the_inherited_one(client, chain_parent):
+    req = _prod_plan(client, chain_parent, enm_restraints="off",
+                     langevin_damping=1.0)["production_request"]
+    assert req["enm_restraints"]["value"] == "off"
+    assert req["langevin_damping"]["value"] == 1.0
+
+
+def test_the_chain_reference_column_uses_the_PRODUCTION_conf_writer(client, chain_parent):
+    """Running a production segment back through the ladder's writer would invent
+    differences that are artefacts of the wrong emitter, not real changes."""
+    plan = _prod_plan(client, chain_parent)
+    ref = plan["source_stage"]["params"]
+    # `stepspercycle` is one of the six ladder-vs-production asymmetries; both columns are
+    # productions here, so it must agree rather than showing the ladder's 20.
+    run = plan["stages"][plan["run_stage_index"]]["params"]
+    assert ref["stepspercycle"] == run["stepspercycle"]
+    assert ref["pairlistdist"] == run["pairlistdist"]
+    # And the annotated ladder-vs-production notes are suppressed entirely.
+    assert plan["asymmetries"] == []
+
+
+def test_a_continuation_says_its_frames_are_correlated_with_the_parents(client,
+                                                                       chain_parent):
+    """The single most consequential sentence on the screen, and it is the OPPOSITE of
+    the relaxation case — treating two legs of one trajectory as two samples
+    double-counts."""
+    conds = {c["id"]: c for c in _prod_plan(client, chain_parent)["conditions"]}
+    assert "extends that trajectory" in conds["seed_checkpoint"]["detail"]
+    assert "correlated" in conds["seed_checkpoint"]["detail"]
+    # …and the seed's meaning changes with it.
+    detail = _prod_plan(client, chain_parent)["deferred"][0]["detail"]
+    assert "does not choose them" in detail
+
+
+def test_a_chain_states_the_health_of_the_frame_it_continues(client, chain_parent):
+    """`_completed_production_checkpoint` has NO health gate, unlike the relaxation path.
+
+    Say so rather than implying the checkpoint was vetted.
+    """
+    conds = {c["id"]: c for c in _prod_plan(client, chain_parent)["conditions"]}
+    assert conds["chain_source_health"]["kind"] == "info"
+    assert "No health sample" in conds["chain_source_health"]["detail"]
+
+
+def test_a_degraded_chain_source_is_a_warning_not_a_refusal(client, chain_parent,
+                                                            tmp_path):
+    from backend.core.md_job import MdHealthSample
+
+    chain_parent.health_samples = [MdHealthSample(
+        segment=PROD_SEG, stage="200 ns production replica", wall_time=0.0,
+        c1_paired_fraction=0.42, passed=False)]
+    chain_parent.save(tmp_path)
+    conds = {c["id"]: c for c in _prod_plan(client, chain_parent)["conditions"]}
+    assert conds["chain_source_health"]["kind"] == "warning"
+    assert "42%" in conds["chain_source_health"]["detail"]
+    # Warned, never blocked — the checkpoint is on disk and the user may want it anyway.
+    assert conds["chain_source_health"].get("ok") is not False
 
 
 def test_the_plan_writes_nothing_to_disk(client, tmp_path, monkeypatch):

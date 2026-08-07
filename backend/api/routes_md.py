@@ -3370,6 +3370,35 @@ class ProductionRunRequest(BaseModel):
             raise ValueError("production_timestep_fs must be 1.0, 2.0, or 4.0")
         return None if v is None else float(v)
 
+    #: The other two integrator axes, which the sibling ``ProductionRequest`` has carried
+    #: since exp51 but this model did not — so a child spawned from the Job Wizard could
+    #: pick a timestep and had no way to say anything about rigid bonds or HMR.  Same
+    #: precedence as the timestep: this request > the package's prep-time value > auto.
+    rigid_bonds: Optional[str] = Field(
+        None,
+        description="Bonds-to-hydrogen constraint for THIS child: 'all', 'none', or omit "
+                    "to inherit the package's prep-time choice (and, failing that, the "
+                    "auto value for the timestep). Independent of the timestep since "
+                    "exp51; unsound combinations are warned about, never blocked.",
+    )
+    hmr: Optional[bool] = Field(
+        None,
+        description="Hydrogen-mass repartitioning for THIS child. Omit to inherit the "
+                    "package's prep-time choice, else auto (on only at 4 fs). The "
+                    "repartitioned PSF is built on demand, so a child may run HMR even "
+                    "when its relaxation did not.",
+    )
+
+    @field_validator("rigid_bonds")
+    @classmethod
+    def _sanctioned_child_rigid_bonds(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        s = str(v).strip().lower()
+        if s not in ("all", "none"):
+            raise ValueError("rigid_bonds must be 'all' or 'none'")
+        return s
+
     enm_restraints: str = Field(
         "auto",
         description="Keep an elastic network through production: 'auto' (DEFAULT — on "
@@ -3483,30 +3512,77 @@ production_seed_checkpoint = _production_seed_checkpoint
 production_fast_plan = _production_fast_plan
 
 
+def _read_manifest(job: MdJob) -> dict:
+    """A job's package manifest, or ``{}`` — never raises."""
+    try:
+        return json.loads((job.package_dir(_workspace()) / "manifest.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def root_relaxation(job: MdJob) -> MdJob:
+    """Walk up the parent chain to the relaxation every package in it descends from.
+
+    A production child's own manifest is production-only: it carries no ``relax_preset``,
+    no solvation block and no ion concentrations, because it never solvated anything.  So
+    anything asking "what chemistry / which protocol is this?" of a CHAINED production has
+    to keep walking, or it reads a blank and answers "unrecorded".
+    """
+    seen = {job.job_id}
+    cur = job
+    while cur.run_kind == "production" and cur.parent_job_id:
+        if cur.parent_job_id in seen:        # a cycle cannot happen, but never spin on one
+            break
+        seen.add(cur.parent_job_id)
+        try:
+            cur = _load_job(cur.parent_job_id)
+        except HTTPException:
+            break                            # the ancestor was deleted; this is the root
+    return cur
+
+
 def _production_restraint_plan(parent: MdJob, requested: str,
                                damping: Optional[float]) -> dict:
     """Resolve whether this production keeps an elastic network, and how hard to couple it.
 
-    ``auto`` reads the PARENT's relaxation preset: a package built to reproduce the
-    published protocol gets the network the published protocol keeps, and everything else
-    keeps NADOC's historical truly-unrestrained behaviour so existing trajectories stay
-    comparable with new ones.  An explicit 'on'/'off' always wins.
+    ``auto`` means "carry on doing what this package already does".  Two cases:
+
+    * The parent is a **relaxation** — read its preset: a package built to reproduce the
+      published protocol gets the network the published protocol keeps, and everything
+      else keeps NADOC's historical truly-unrestrained behaviour so existing trajectories
+      stay comparable with new ones.
+    * The parent is a **production** — this run CONTINUES it, so read what that run
+      actually ran (``production_recipe``) rather than a preset.  Its manifest has no
+      preset to read, so the old lookup fell through to "unrecorded" and silently dropped
+      the network halfway along a chain: the same trajectory would have been restrained
+      for its first leg and free for the second, which is not a comparable series.
+
+    An explicit 'on'/'off' always wins.
     """
     from backend.core.md_presets import LITERATURE  # noqa: PLC0415
 
-    parent_preset = ""
-    try:
-        manifest = json.loads(
-            (parent.package_dir(_workspace()) / "manifest.json").read_text())
-        parent_preset = str((manifest.get("relax_preset")
-                             or (parent.prep_params or {}).get("relax_preset") or ""))
-    except (OSError, ValueError):
-        parent_preset = str((parent.prep_params or {}).get("relax_preset") or "")
+    manifest = _read_manifest(parent)
+    chained = parent.run_kind == "production"
+    recipe = manifest.get("production_recipe") or {}
+    parent_preset = str((manifest.get("relax_preset")
+                         or (parent.prep_params or {}).get("relax_preset") or ""))
+    if chained and not parent_preset:
+        root = root_relaxation(parent)
+        root_manifest = _read_manifest(root) if root is not parent else manifest
+        parent_preset = str((root_manifest.get("relax_preset")
+                             or (root.prep_params or {}).get("relax_preset") or ""))
 
     if requested == "on":
         enm, why = True, "requested for this run"
     elif requested == "off":
         enm, why = False, "declined for this run"
+    elif chained and "enm_restraints" in recipe:
+        enm = bool(recipe["enm_restraints"])
+        why = (f"the run this continues kept a network at k={recipe.get('enm_k')}, and a "
+               f"continuation that dropped it would leave one trajectory restrained for "
+               f"its first leg and free for its second"
+               if enm else
+               "the run this continues was unrestrained, and a continuation inherits it")
     else:
         enm = parent_preset == LITERATURE
         why = (f"the parent was relaxed with the {LITERATURE!r} protocol, which keeps the "
@@ -3514,11 +3590,22 @@ def _production_restraint_plan(parent: MdJob, requested: str,
                if enm else
                f"the parent's protocol ({parent_preset or 'unrecorded'}) does not ask for "
                f"one, so this run is unrestrained as NADOC productions have always been")
+
+    # A continuation also inherits the thermostat coupling it was running under, for the
+    # same reason: a chain whose damping changes partway is two different experiments
+    # sharing one set of coordinates.
+    if damping:
+        resolved = float(damping)
+    elif chained and recipe.get("langevin_damping"):
+        resolved = float(recipe["langevin_damping"])
+    else:
+        resolved = PRODUCTION_LANGEVIN_DAMPING
     return {
         "enm_restraints": enm,
         "enm_reason": why,
-        "damping": float(damping) if damping else PRODUCTION_LANGEVIN_DAMPING,
+        "damping": resolved,
     }
+
 def _resolve_child_anchors(
     parent: MdJob, child: MdJob, body: "ProductionRunRequest",
 ) -> tuple[Optional[str], "Optional[Path]", list, Optional[dict]]:
@@ -3621,6 +3708,7 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
     plan = _production_fast_plan(parent, ProductionRequest(
         steps=body.steps, length_ns=body.length_ns, autostart=False,
         production_timestep_fs=body.production_timestep_fs,
+        rigid_bonds=body.rigid_bonds, hmr=body.hmr,
         gpu_resident=body.gpu_resident,
     ))
     restraints = _production_restraint_plan(
@@ -3700,6 +3788,7 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         seed=seed, index=index,
         total_steps=plan["total_steps"], length_ns=plan["length_ns"],
         timestep_fs=plan["timestep_fs"], fast=plan["fast"],
+        rigid_bonds=plan.get("rigid_bonds"), hmr=plan.get("hmr"),
         ready_checkpoint=spec.name, workspace=_workspace(),
         dcd_freq=(body.dcd_freq or PRODUCTION_DCD_FREQ),
         force_resident=plan.get("force_resident"),

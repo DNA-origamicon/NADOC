@@ -52,6 +52,7 @@ import { initRunpodSetup } from './runpod_setup.js'
 import { initRunpodGpuPicker } from './runpod_gpu_picker.js'
 import { shouldStopLiveSession, shouldResumeDisplays, displayTabIds } from './display_tab_policy.js'
 import { initJobWizard } from './md_job_wizard.js'
+import { isProductionParent } from './md_job_wizard_model.js'
 import { mdMinimizationRow, mdLatestStageLabel } from './md_stage_timeline.js'
 import { mdHealthTileStates, TILE_STATE } from './md_health_tiles.js'
 
@@ -2617,7 +2618,22 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   })
   // "New job" opens the Job Wizard, which supplies a protocol payload to the same
   // _launchRelax gate sequence the Advanced form uses.
-  newBtn?.addEventListener('click', () => { void _wizard.open('relaxation') })
+  //
+  // With ANY completed run selected — a relaxation or a production — it opens on
+  // Production, seeded from that run. Selecting a finished run and pressing New job is
+  // the gesture for "carry on from this": off a relaxation that means an independent
+  // sample, off a production it means extending that trajectory (the backend has always
+  // chained, via `_production_seed_checkpoint`; only the UI had no way to ask). It used
+  // to land on a blank relaxation form, so continuing a specific run meant switching mode
+  // by hand and then finding it again in a picker that had silently defaulted to the
+  // newest one instead.
+  newBtn?.addEventListener('click', () => {
+    const sel = _selectedJob()
+    if (isProductionParent(sel)) {
+      return void _wizard.open('production', { parentJobId: sel.job_id })
+    }
+    void _wizard.open('relaxation')
+  })
   /**
    * Spawn a production child from the wizard — the only production launch path.
    *

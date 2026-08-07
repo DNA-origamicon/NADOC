@@ -175,6 +175,131 @@ slot and the `_0S_` settle stage. A carve drops the settle stage → 21.
   it was meant to follow — that is why the client-side merge mirror existed. It is gone.
 - Production mode hides the preset cards (a relax preset says nothing about production) and
   labels each relaxation `"<part> run created YYYY-MM-DD HH:MM"`, never a job id.
+
+### Production mode reached parity with relaxation (2026-08-06)
+
+Setting a production run up through the wizard was half-built: it opened on a blank
+relaxation form whatever was selected, it previewed a run it was not about to create, and
+its settings were six hand-written controls with no provenance chip, no condition
+reference and no warning icon. All of it is now the same machinery the ladder uses.
+
+- **`＋ New job` on ANY selected completed run opens on Production, seeded from THAT run**
+  (`md_jobs_panel.js` `newBtn` handler → `_wizard.open('production', {parentJobId})`).
+  `open()` takes `parentJobId`; `ensureParent` no longer clobbers it, and
+  `productionParents(..., {includeJobId})` keeps a deliberately chosen parent in the picker
+  even when the part filter would drop it. `isProductionParent(job)` in the model is the
+  ONE test both sides use, so the button and the picker cannot disagree.
+- **An ARCHIVED relaxation is a legal parent now.** Archiving is a *disk* decision — the
+  job dir moves to the archive drive and `MdJob.package_dir` follows it — and the spawn
+  route always accepted one. The old `!j.archived` filter meant that on a machine where
+  every finished relaxation had been archived to reclaim space (this one), production mode
+  could only ever say "no completed relaxation for this part yet". The picker labels it
+  `(archived — needs the archive drive mounted)`.
+- **THE plan was of the wrong route.** `_production_plan` used
+  `md_plan.production_stages` — the 10/40/50 % chunk ladder of the LEGACY append route
+  (`POST /md/jobs/{id}/production`). The wizard's Create hits
+  `POST /md/jobs/{parent}/production-run` → `md_ensemble.build_replica_package`, whose
+  package is a **velocity reseed + ONE unchunked production conf**. So the table's first
+  column carried 10 % of a step count for a run that was never going to be split, and its
+  override indices were off by one against the builder's (`overrides_for_stage(…, 1)`).
+  New `md_plan.replica_production_stages` / `replica_production_spec` / `reseed_parameters`
+  mirror the builder; `production_stages` stays as the append route's model.
+  `_stage_row` gained `accepts_overrides` (False on the reseed — the builder writes that
+  conf without an overrides pass, so the column renders locked rather than accepting an
+  edit it would drop).
+- **Tab 2 is the relaxation stage being continued, then every stage the child runs.**
+  `productionColumns(plan)` builds `[last_relax_stage (read-only reference), reseed,
+  production]`; `changed` is computed against the RELAXATION column, not the previous
+  stage. Rows are the union INCLUDING the relaxation's own directives (`paramRowsFor`), so
+  a directive that exists only there — the ladder's ENM, its fixed atoms — still gets a
+  row. Production cells are click-to-edit + `⋯` exactly like the ladder's.
+- **Every production setting is a `renderField` descriptor** (`PRODUCTION_FIELD_DEFS`,
+  grouped `This production run` / `Integrator and hardware`), so all of them carry a
+  provenance chip, a `(Cn)` reference and a ⚠. Three controls that did not exist are
+  there: **GPU-resident** (it was *sent* from `valueOf('gpu_resident')` but never drawn, so
+  it could only ever be the package's default), **production rigid bonds** and **HMR**.
+  Plus **velocity seed** and the undersized-cell override.
+- **`ProductionRunRequest` gained `rigid_bonds`/`hmr`** — the sibling `ProductionRequest`
+  has carried them since exp51, so every off-diagonal combination exp51 measured was
+  unreachable from the one route the wizard uses. `build_replica_package` takes them too:
+  `use_fast` is now `fast if hmr is None else hmr`, and the 4 fs→1 fs downgrade keys off a
+  genuine **`hmr_build_failed`**, not off `not use_fast` — an explicit `hmr=False` at 4 fs
+  is a warned-but-allowed choice, and treating it as a failed repartition silently ran a
+  quarter of the requested time. The child manifest records the resolved
+  `production_{timestep_fs,rigid_bonds,hmr}` so the next hop reads them instead of
+  re-deriving.
+- **New provenance: `inherited`** — "from the relaxation", i.e. recorded when the package
+  was prepared. Distinct from `default` (nobody chose it). Served in a separate
+  `plan.production_request` block, because the four shared keys resolve differently there:
+  the create-request merge reports the PRESET's value while a child inherits the
+  manifest's. `productionField(plan, key)` reads that block first, `plan.request` second.
+- **`plan.inherited`** — parent, protocol, seed checkpoint, **real solvated atom count**
+  (read from the package PSF, so GPU-resident is a fact rather than a deferred cell), cell,
+  padding, ions, ladder base timestep, anchors, field. Rendered as a read-only
+  "Inherited from this relaxation" block: a child hardlinks its parent's topology and
+  copies its cell, so a control for any of it would be a control that does nothing.
+- **Conditions now name the CONTROL that owns them** — `ProductionRunRequest.enm_restraints`
+  / `.langevin_damping` / `.length_ns`, `CreateJobRequest.production_timestep_fs`. They
+  used to be sourced to private helpers (`routes_md._assert_cell_fits_a_free_run`), which
+  matches no field, so every production warning — including the one BLOCKING condition —
+  sat in a list with nothing beside the control the user had to change.
+  `REQUEST_SOURCE` in the model accepts both request models.
+- **`WIZARD_DEFAULT_PRODUCTION_NS = 100.0`** lives in `routes_md_plan` and is returned in
+  `plan.defaults`. `ProductionRequest.length_ns` falls back to 1 ns, which is a fine API
+  default and a useless form one: the preview would show a 1 ns run while the control read
+  100. The wizard reads the number rather than carrying its own, and an untouched length
+  honestly reports `default` instead of "you set this".
+- Production's five bespoke state slots (`lengthNs`/`dcdFreq`/`enmRestraints`/
+  `langevinDamping`/`allowUndersizedCell`) are gone — they are ordinary `touched` entries,
+  which is what let them render through the shared field machinery. `productionPayload`
+  takes `{touched}` and sends **only what was touched** (renaming the two integrator axes
+  to the spawn request's own field names), same law as `wizardPayload`.
+- ⚡ Optimize is hidden in production mode: it recommends solvation and ladder settings,
+  and a child re-solvates nothing.
+
+#### Chaining: a completed PRODUCTION is a parent too (2026-08-06)
+
+The backend has ALWAYS chained — `_production_seed_checkpoint` branches on `run_kind`,
+`_completed_production_checkpoint` picks the last finished production segment, and
+`build_replica_package` sets `continuation = parent.run_kind == "production"`, which stages
+the parent's `restart.{coor,vel,xsc}` and makes the bridge conf *preserve* velocities. Only
+the UI had no way to ask for it, and the plan endpoint DESCRIBED it wrongly.
+
+**The distinction is the whole feature, and it is scientific, not cosmetic.** Off a
+relaxation the child redraws velocities → an INDEPENDENT sample. Off a production the
+velocities carry → it EXTENDS that trajectory, its frames are correlated with the parent's,
+and the pair is one longer run. Treating the second as the first double-counts.
+`plan.continuation` drives every sentence that differs; the picker labels each option
+`… relaxation created …` / `… production run created …` (they read as duplicates otherwise),
+and the help under it renders in `--strong` (warning-bordered) for a continuation.
+
+What was wrong before, all now fixed and pinned:
+
+| | Was | Now |
+|---|---|---|
+| Reference column | the parent's production segment run back through the **ladder's** conf writer (`stage_parameters`), inventing differences that were artefacts of the wrong emitter — `stepspercycle` 20 vs 10, the piston, the pairlist | `production_parameters` when the source stage is a production; the six ladder-vs-production `asymmetries` are suppressed entirely for a chain |
+| `auto` restraints | looked for `relax_preset` on a production-only manifest, found none, fell through to **unrestrained** — silently dropping the network halfway along a chain | reads the parent's `production_recipe.enm_restraints`/`.langevin_damping`: a continuation inherits what it continues |
+| Chemistry | `mg_conc_mM`/`ion_conc_mM`/preset read off the immediate parent → blank, "protocol (unrecorded)" | `routes_md.root_relaxation(job)` walks the parent chain; `inherited` also gains `root_job_id`, `chain_position`, `parent_length_ns` |
+| Seed copy | "so repeated runs sample independent trajectories" — the opposite of what a continuation does | branches: in a chain the seed drives the Langevin stream from the inherited velocities on, it does not choose them |
+| `last_relax_stage` | the key name was a lie on every chained plan | renamed **`source_stage`** `{name, stage, kind, params}`; tab 2 heads it `Continuing — …` vs `Relaxation — …` |
+| Chain source health | `_completed_production_checkpoint` has **no health gate** (unlike the relaxation path) and nothing said so | new `chain_source_health` condition — info when the last sample passed or none was taken, warning with the measured C1′ when it failed. Warned, never blocked |
+
+Also: `renderField` now renders the provenance **reason** and the field **help** as separate
+lines. Reason used to REPLACE help — harmless while most reasons were empty, but once every
+production field had one, every production control lost its explanation to a one-line
+provenance note. A field's `help` may now be a function of `{continuation}`.
+
+Pinned by `md_job_wizard_model.test.js` (137), `tests/test_md_protocol_plan.py` (119 — incl.
+end-to-end fixtures for both a real relaxation package AND a chained production child),
+`tests/test_md_ensemble.py` (the exp51 axes on the spawn path, incl. a
+byte-identical-when-untouched pin), and the read-only live-server spec
+`frontend/e2e/production_wizard.spec.js` (7).
+
+**Still open:** there are no production PRESETS (the tiers are relaxation-only); the panel
+still owns the environment for a production spawn (anchors, run target, E-field), which is
+deliberate but means those choices are not in the wizard's own summary; and nothing yet
+*renders* a chain as a chain — `chain_position` is stated in the wizard but the job list
+still shows each leg as an independent child of the relaxation.
 - The Advanced drawer is DELETED. Early-stop's *live* mid-relax role moved to
   `#md-jobs-live-controls`, shown only for a running local relaxation. ⚡ Optimize moved
   into the wizard (`onOptimizeMount`), writing into its touched state.

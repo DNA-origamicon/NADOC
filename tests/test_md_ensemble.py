@@ -57,7 +57,8 @@ def _make_parent(ws: Path, *, fast: bool = False, mgh: bool = False):
 
 
 def _build_replica(ws: Path, parent, *, seed=54321, index=0, fast=False,
-                   timestep_fs=None, total_steps=500_000):
+                   timestep_fs=None, total_steps=500_000,
+                   rigid_bonds=None, hmr=None):
     child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
                     parent_job_id=parent.job_id, ensemble_seed=seed, ensemble_index=index)
     child.execution_target = "alpine"
@@ -68,7 +69,8 @@ def _build_replica(ws: Path, parent, *, seed=54321, index=0, fast=False,
     me.build_replica_package(
         parent, child, seed=seed, index=index,
         total_steps=total_steps, length_ns=length_ns, timestep_fs=timestep_fs,
-        fast=fast, ready_checkpoint=READY, workspace=ws,
+        fast=fast, rigid_bonds=rigid_bonds, hmr=hmr,
+        ready_checkpoint=READY, workspace=ws,
     )
     return child
 
@@ -251,6 +253,70 @@ def test_replica_4fs_falls_back_safely_when_the_psf_cannot_be_repartitioned(tmp_
     conf = _prod_conf(child, tmp_path)
     assert "timestep           1" in conf
     assert not (child.package_dir(tmp_path) / "demo_hmr.psf").exists()  # no half-written file
+
+
+# ── The three integrator axes, on the SPAWN path (exp51) ─────────────────────
+#
+# The sibling append route has carried rigid_bonds/hmr since exp51; this builder derived
+# both from `fast`, which is only a NAME for 4 fs.  So a production child spawned from the
+# Job Wizard could pick a timestep and had no way to say anything about the other two —
+# every off-diagonal combination exp51 measured was unreachable from the one route the
+# wizard uses.
+
+def test_a_child_can_run_flexible_bonds_at_2fs(tmp_path):
+    """exp51 measured this combination; the spawn path could not emit it."""
+    parent = _make_parent(tmp_path)
+    child = _build_replica(tmp_path, parent, timestep_fs=2.0, rigid_bonds="none")
+    conf = _prod_conf(child, tmp_path)
+    assert "timestep           2" in conf
+    assert "rigidBonds         none" in conf
+
+
+def test_a_child_can_run_4fs_on_standard_masses(tmp_path):
+    """HMR off at 4 fs is a warned-but-allowed choice, NOT a failed repartition.
+
+    It used to be indistinguishable from one: `use_fast` was `fast`, and anything that
+    left it False dropped the timestep to 1 fs — so a deliberate hmr=False silently ran a
+    quarter of the requested simulated time.
+    """
+    parent = _make_parent(tmp_path, fast=True)      # an HMR PSF exists and is buildable
+    child = _build_replica(tmp_path, parent, fast=True, timestep_fs=4.0, hmr=False)
+    conf = _prod_conf(child, tmp_path)
+    assert "timestep           4" in conf                    # NOT downgraded
+    assert "structure          demo_hmr.psf" not in conf     # plain masses, as asked
+    manifest = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())
+    assert manifest["ensemble"]["timestep_fs"] == 4.0
+    assert manifest["ensemble"]["timestep_downgrade_reason"] is None
+
+
+def test_a_child_records_its_resolved_axes_for_the_next_hop(tmp_path):
+    """Chaining a production off THIS job must read its real choice, not re-derive it."""
+    parent = _make_parent(tmp_path)
+    child = _build_replica(tmp_path, parent, timestep_fs=2.0, rigid_bonds="none")
+    manifest = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())
+    assert manifest["production_timestep_fs"] == 2.0
+    assert manifest["production_rigid_bonds"] == "none"
+    assert manifest["production_hmr"] is False
+
+
+def test_an_unbuildable_hmr_psf_still_costs_the_timestep_and_the_constraint(tmp_path):
+    """The one case that IS a failure keeps its downgrade — and says so."""
+    parent = _make_parent(tmp_path)          # fixture PSF is literally "psf" — no !NATOM
+    child = _build_replica(tmp_path, parent, fast=True, timestep_fs=4.0, hmr=True)
+    conf = _prod_conf(child, tmp_path)
+    assert "timestep           1" in conf
+    assert "rigidBonds         none" in conf
+    manifest = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())
+    assert manifest["ensemble"]["timestep_downgrade_reason"]
+
+
+def test_untouched_axes_are_byte_identical_to_the_pre_exp51_emission(tmp_path):
+    """None on both must change nothing: `fast` keeps deciding, exactly as before."""
+    parent = _make_parent(tmp_path, fast=True)
+    a = _prod_conf(_build_replica(tmp_path, parent, fast=True, index=0), tmp_path)
+    b = _prod_conf(_build_replica(tmp_path, parent, fast=True, index=1,
+                                  rigid_bonds=None, hmr=None), tmp_path)
+    assert a == b
 
 
 def test_fast_replica_uses_hmr_psf(tmp_path):

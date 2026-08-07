@@ -1072,6 +1072,10 @@ body:has(#right-panel.locked-inactive) .toast {
 .wizard-chip--preset { border-color: var(--color-accent-strong); color: var(--color-accent-hover); }
 .wizard-chip--forced,
 .wizard-chip--derived { border-color: var(--color-warning); color: var(--color-warning); }
+/* Production only: the value came from the package the relaxation built, not from a
+   preset and not from a default. Distinct because it is the one provenance a production
+   run can have that a relaxation cannot. */
+.wizard-chip--inherited { border-color: var(--color-accent-strong); color: var(--color-text-muted); }
 
 .wizard-totals {
   font-size: var(--text-xs);
@@ -1135,6 +1139,26 @@ body:has(#right-panel.locked-inactive) .toast {
 }
 .wizard-cell--locked { color: var(--color-text-dim); cursor: not-allowed; }
 .wizard-stages td:not(.wizard-cell--locked) { cursor: text; }
+
+/* The production table's first column is the relaxation stage the run continues from —
+   already-run, so read-only, and the reference every `--changed` highlight to its right
+   is computed against. Recessed so the eye reads it as context rather than as a stage
+   that is about to run. */
+.wizard-col--relaxation .wizard-col__name { color: var(--color-text-muted); }
+.wizard-stages tbody td.wizard-cell--reference {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  border-right: 2px solid var(--color-border);
+}
+.wizard-stages thead th.wizard-col--relaxation { border-right: 2px solid var(--color-border); }
+.wizard-cell--reference.wizard-cell--changed { border-left: none; }
+
+/* A ladder-vs-production difference that is a deliberate choice with a reason. */
+.wizard-asym {
+  color: var(--color-warning);
+  cursor: help;
+  margin-left: 2px;
+}
 .wizard-stages td:focus-visible { outline: 2px solid var(--color-accent); }
 .wizard-cell__input {
   width: 100%;
@@ -1252,10 +1276,50 @@ body:has(#right-panel.locked-inactive) .toast {
 }
 .wizard-scope--production .wizard-scope__title { color: var(--color-warning); }
 .wizard-scope--both .wizard-scope__title { color: var(--color-text-muted); }
+.wizard-scope--integrator .wizard-scope__title { color: var(--color-text-muted); }
+
+/* What a production run takes from the relaxation it continues, rather than choosing.
+   Stated, never offered: a production child hardlinks its parent's topology and copies
+   its cell, so a control for any of it would be a control that does nothing. */
+.wizard-inherited { margin-top: var(--space-2); }
+.wizard-inherited > summary {
+  cursor: pointer;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.wizard-inherited__grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px var(--space-2);
+  margin-top: var(--space-1);
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--color-border-default);
+  font-size: var(--text-xs);
+}
+.wizard-inherited__label { color: var(--color-text-muted); }
+.wizard-inherited__value { font-family: var(--font-data); color: var(--color-text-default); }
 .wizard-scope__help {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
   line-height: 1.4;
+}
+
+/* WHY a control holds this value (the plan's provenance reason), above WHAT the control
+   does (its help). They answer different questions and the reason used to replace the
+   help, which cost every production control its explanation. */
+.wizard-field__why {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* The one help line that has to be read: continuing a production EXTENDS a trajectory
+   instead of sampling a new one, and mistaking the two double-counts the statistics. */
+.wizard-field__help--strong {
+  color: var(--color-warning);
+  border-left: 2px solid var(--color-warning);
+  padding-left: var(--space-2);
 }
 
 /* ⚠ against the control whose value the plan objects to. */

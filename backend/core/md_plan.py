@@ -213,6 +213,23 @@ def production_parameters(spec: SegmentSpec, ctx: PlanContext, *,
     )))
 
 
+def reseed_parameters(reseed_name: str, ctx: PlanContext, *,
+                      npt: bool = True, preserve_velocities: bool = False) -> dict:
+    """Every directive ``build_reseed_conf`` would write for the bridge stage (pure).
+
+    The velocity reseed is a real conf the production child executes — a zero-step run
+    that re-draws velocities from this run's own seed (or, for a true continuation,
+    carries the parent's forward).  It was invisible in the plan, which meant the wizard
+    showed the production run starting from a checkpoint it does not actually read.
+    """
+    return _strip(parse_conf_directives(_p.build_reseed_conf(
+        reseed_name, ctx.name_stem, ctx.box, ctx.mgh_extrabonds,
+        seed=ctx.seed, equil_base="equilibrated",
+        structure_psf=ctx.structure_psf,
+        preserve_velocities=preserve_velocities, npt=npt,
+    )))
+
+
 def conditional_keys(spec: SegmentSpec, ctx: PlanContext, *, emit=None) -> dict:
     """Directives whose presence/value depends on the solvated atom count (pure).
 
@@ -389,9 +406,15 @@ def _role_for(spec: SegmentSpec) -> str:
 def _stage_row(index: int, name: str, stage: str, role: str, *, steps: int,
                timestep_fs: float, params: dict, prev_params: Optional[dict],
                conditional: dict, spec: Optional[SegmentSpec] = None,
-               protocol_params: Optional[dict] = None) -> dict:
+               protocol_params: Optional[dict] = None,
+               accepts_overrides: bool = True) -> dict:
     return {
         "index": index,
+        # Whether a hand edit on THIS stage reaches the conf that runs.  Every ladder and
+        # production stage does; the production child's velocity-reseed bridge does not —
+        # ``build_replica_package`` writes it without an overrides pass — so the table
+        # renders it read-only rather than accepting an edit that would be dropped.
+        "accepts_overrides": accepts_overrides,
         "name": name,
         "stage": stage,
         "role": role,
@@ -504,6 +527,87 @@ def production_stages(ctx: PlanContext, *, total_steps: int, timestep_fs: float,
             protocol_params=_emit(spec, ctx) if ov else None,
         ))
         prev_params, prev_name = params, spec.name
+    return rows
+
+
+def replica_production_spec(ctx: PlanContext, *, total_steps: int, timestep_fs: float,
+                            previous: str,
+                            damping: float = _p.PRODUCTION_LANGEVIN_DAMPING,
+                            dcd_freq: Optional[int] = None) -> SegmentSpec:
+    """The ONE production segment a production CHILD job runs (pure).
+
+    Mirrors ``md_ensemble.build_replica_package`` line for line — the child package is a
+    velocity reseed followed by a single unchunked production run, not the append route's
+    10/40/50 % chunk ladder.  Two independent constructions is the shape of LESSONS H16,
+    so the numbers here come from the same arithmetic the builder uses.
+    """
+    steps = max(100, int(total_steps))
+    length_ns = production_length_ns(steps, timestep_fs)
+    label_ns = f"{length_ns:g}".replace(".", "p")
+    return SegmentSpec(
+        name=f"{ctx.name_stem}_01_production_{label_ns}ns_k0",
+        stage=f"{length_ns:g} ns production replica",
+        percent=100.0,
+        steps=steps,
+        temp=300.0,
+        damping=damping,
+        scale=None,
+        npt=True,
+        previous=previous,
+        reinit=False,
+        dcd_freq=int(dcd_freq or _p.PRODUCTION_DCD_FREQ),
+        min_c1_paired=0.90,
+        min_wc_ref_relative=0.25,
+    )
+
+
+def replica_production_stages(ctx: PlanContext, *, total_steps: int, timestep_fs: float,
+                              npt: bool = True,
+                              damping: float = _p.PRODUCTION_LANGEVIN_DAMPING,
+                              enm_file: Optional[str] = None,
+                              dcd_freq: Optional[int] = None,
+                              continuation: bool = False,
+                              stage_overrides: Optional[dict] = None) -> list[dict]:
+    """The stage table a production CHILD really runs: reseed bridge, then production.
+
+    ``production_stages`` above describes the OTHER production path — the legacy route
+    that appends chunked segments onto the parent job.  The wizard's Create button goes to
+    ``POST /md/jobs/{parent}/production-run``, which builds a replica package, and that
+    package has exactly two confs.  Showing three chunks there was a table of a run the
+    user was not about to start, with a first column carrying 10 % of the step count.
+
+    The override indices match the builder's: the reseed takes none (it runs zero steps
+    and ``build_replica_package`` writes it without an overrides pass), and the production
+    stage is slot ``1``.
+    """
+    reseed_name = f"{ctx.name_stem}_00_reseed"
+    reseed_params = reseed_parameters(reseed_name, ctx, npt=npt,
+                                      preserve_velocities=continuation)
+    rows = [_stage_row(
+        0, reseed_name,
+        "Velocity continuation" if continuation else "Velocity reseed",
+        "reseed", steps=0, timestep_fs=timestep_fs,
+        params=reseed_params, prev_params=None, conditional={},
+        accepts_overrides=False,
+    )]
+
+    spec = replica_production_spec(ctx, total_steps=total_steps, timestep_fs=timestep_fs,
+                                   previous=reseed_name, damping=damping,
+                                   dcd_freq=dcd_freq)
+
+    def _emit(s, c, ov=None):
+        return production_parameters(s, c, timestep_fs=timestep_fs, npt=npt,
+                                     damping=damping, enm_file=enm_file, overrides=ov)
+
+    ov = _p.overrides_for_stage(stage_overrides, 1)
+    params = _emit(spec, ctx, ov)
+    rows.append(_stage_row(
+        1, spec.name, spec.stage, "production",
+        steps=spec.steps, timestep_fs=timestep_fs,
+        params=params, prev_params=reseed_params,
+        conditional=conditional_keys(spec, ctx, emit=_emit), spec=spec,
+        protocol_params=_emit(spec, ctx) if ov else None,
+    ))
     return rows
 
 

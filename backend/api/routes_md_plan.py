@@ -41,6 +41,14 @@ _FORCED_BY_SALT_MODE = ("ion_conc_mM", "mg_conc_mM")
 #: What screening mode pins them to (mirrors routes_md's own override at prep time).
 _SCREENING_VALUES = {"ion_conc_mM": 0.0, "mg_conc_mM": 12.5}
 
+#: The run length a production plan assumes when the caller has not chosen one.
+#: ``ProductionRequest.length_ns`` falls back to 1 ns, which is a sane API default and a
+#: useless one for a form: the wizard would preview a 1 ns run while its own control read
+#: 100.  Stated here, returned in ``defaults``, and used by the wizard as the value it
+#: shows — so the preview and the control can never disagree, and an untouched length
+#: honestly reports itself as a default rather than as the user's choice.
+WIZARD_DEFAULT_PRODUCTION_NS = 100.0
+
 
 class ProtocolPlanRequest(CreateJobRequest):
     """A job request, plus what the plan needs that a job request does not carry.
@@ -62,6 +70,10 @@ class ProtocolPlanRequest(CreateJobRequest):
                             "('auto' | 'on' | 'off').")
     langevin_damping: Optional[float] = Field(
         None, gt=0.0, description="Production only: Langevin coupling, ps^-1.")
+    seed: Optional[int] = Field(
+        None, ge=1,
+        description="Production only: pin the NAMD velocity seed to reproduce a past run. "
+                    "Omit and one is drawn when the job is created.")
     stage_overrides: dict = Field(
         default_factory=dict,
         description="Per-stage NAMD directive overrides, keyed by stage index (and '*'). "
@@ -368,13 +380,31 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
     if spec is None:
         raise HTTPException(400, seed_reason or "No equilibrated checkpoint is available.")
 
+    # Only the fields the caller EXPLICITLY set may reach the resolver: `resolved` carries
+    # a preset-merged value for every field, and passing an unset production axis through
+    # would look explicit and defeat the manifest's prep-time choice, which is what a
+    # production child is supposed to inherit.
+    explicit = set(body.model_fields_set)
     req = ProductionRequest(
-        length_ns=body.length_ns, steps=body.steps, dcd_freq=body.dcd_freq,
-        production_timestep_fs=resolved.production_timestep_fs,
-        gpu_resident=resolved.gpu_resident,
+        length_ns=(body.length_ns if body.length_ns is not None
+                   else (None if body.steps is not None
+                         else WIZARD_DEFAULT_PRODUCTION_NS)),
+        steps=body.steps, dcd_freq=body.dcd_freq,
+        production_timestep_fs=(resolved.production_timestep_fs
+                                if "production_timestep_fs" in explicit else None),
+        rigid_bonds=(resolved.production_rigid_bonds
+                     if "production_rigid_bonds" in explicit else None),
+        hmr=(resolved.production_hmr if "production_hmr" in explicit else None),
+        gpu_resident=(resolved.gpu_resident if "gpu_resident" in explicit else None),
     )
     plan = production_fast_plan(parent, req)
 
+    # Continuing a PRODUCTION run is a different act from sampling off a relaxation, and
+    # almost every sentence this endpoint emits has to know which: a continuation carries
+    # the parent's velocities forward (so it extends one trajectory rather than drawing an
+    # independent sample), and its parent's manifest is production-only, so the chemistry
+    # has to be read from the relaxation the whole chain descends from.
+    chained = parent.run_kind == "production"
     package_dir = parent.package_dir(_workspace_dir())
     try:
         manifest = json.loads((package_dir / "manifest.json").read_text())
@@ -383,6 +413,11 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
     name_stem = manifest.get("name_stem") or "design"
     carved = bool((manifest.get("solvation") or {}).get("carved"))
     ladder_fast = bool((manifest.get("fast_relaxation") or {}).get("enabled"))
+    # The child runs the parent's PSF verbatim, so the solvated atom count is a FACT here,
+    # not something solvation has yet to decide. Reading it turns GPU-resident from a
+    # "conditional" cell into a resolved one — the relaxation plan cannot do this because
+    # its package does not exist yet.
+    n_atoms = body.n_atoms_hint or _p.psf_atom_count(package_dir / f"{name_stem}.psf")
 
     from backend.api.routes_md import _production_restraint_plan  # noqa: PLC0415
     restraints = _production_restraint_plan(
@@ -402,26 +437,51 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
                        else None),
         rigid_bonds=plan.get("rigid_bonds"),
         hmr=plan.get("hmr"),
-        n_atoms=body.n_atoms_hint,
+        n_atoms=n_atoms,
         force_resident=plan.get("force_resident"),
+        # The velocity seed the reseed conf carries. A pinned seed is a real number; an
+        # unpinned one is drawn at launch, so the table shows the placeholder and the
+        # `deferred` note below says where the real one comes from.
+        seed=int(body.seed) if body.seed is not None else md_plan.PlanContext.seed,
     )
     timestep_fs = float(plan["timestep_fs"])
-    stages = md_plan.production_stages(
+    # The stage table of the run this wizard is about to CREATE.  `production_stages` (the
+    # 10/40/50 % chunk ladder) belongs to the other production route — the legacy one that
+    # appends segments onto the parent job.  `POST /md/jobs/{parent}/production-run` builds
+    # a replica package, and that package is a velocity reseed plus ONE production conf.
+    stages = md_plan.replica_production_stages(
         ctx, total_steps=int(plan["total_steps"]), timestep_fs=timestep_fs,
-        stage_idx=len({s.get("stage") for s in manifest.get("segments", [])}) + 1,
-        previous=spec.name, npt=not carved,
-        damping=restraints["damping"], enm_file=enm_file,
+        npt=not carved, damping=restraints["damping"], enm_file=enm_file,
+        dcd_freq=plan.get("dcd_freq"),
+        continuation=chained,
         stage_overrides=body.stage_overrides or None,
     )
 
-    # The relaxation column to diff against: the SAME conf writer, run on the parent's own
-    # recorded segment, so "what changes when I go to production" is a real comparison and
-    # not two differently-derived descriptions.
-    last_ctx = md_plan.PlanContext(
+    # The column to diff against: the parent's own recorded segment, put back through the
+    # SAME conf writer that produced it, so "what changes when I go to production" is a
+    # real comparison and not two differently-derived descriptions.
+    #
+    # WHICH writer depends on what that segment was.  A relaxation stage came from
+    # `_segment_conf`; the last stage of a PRODUCTION parent came from
+    # `build_production_conf`, and running it back through the ladder's writer would
+    # describe the run being continued with a conf that never existed — inventing
+    # differences (the restraint block, the piston, the pairlist) that are artefacts of
+    # the wrong emitter rather than real changes.
+    source_ctx = md_plan.PlanContext(
         name_stem=name_stem, fast=ladder_fast, carved=carved,
-        mgh_extrabonds=ctx.mgh_extrabonds, n_atoms=body.n_atoms_hint,
+        mgh_extrabonds=ctx.mgh_extrabonds, n_atoms=n_atoms,
     )
-    last_params = md_plan.stage_parameters(spec, last_ctx)
+    if chained:
+        parent_recipe = manifest.get("production_recipe") or {}
+        source_params = md_plan.production_parameters(
+            spec, ctx, timestep_fs=spec.timestep_fs or timestep_fs,
+            npt=not carved,
+            damping=float(parent_recipe.get("langevin_damping")
+                          or _p.PRODUCTION_LANGEVIN_DAMPING),
+            enm_file=parent_recipe.get("enm_file"),
+        )
+    else:
+        source_params = md_plan.stage_parameters(spec, source_ctx)
 
     conditions: list[dict] = []
     if seed_warning:
@@ -433,17 +493,61 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
     else:
         conditions.append({
             "id": "seed_checkpoint", "kind": "info",
-            "title": f"Starting from {spec.name}",
-            "detail": ("Coordinates and cell come from this stage; velocities are drawn "
-                       "fresh at 300 K with this run's own random seed, so several "
-                       "productions off one relaxation are independent samples."),
+            "title": (f"Continuing {spec.name}" if chained
+                      else f"Starting from {spec.name}"),
+            # The single most consequential sentence on this screen, and it is the OPPOSITE
+            # in the two cases. Off a relaxation, only coordinates and cell carry over and
+            # velocities are redrawn, so each run is an independent sample. Off a
+            # production, the velocities carry too — this EXTENDS one trajectory, and
+            # treating two legs of it as two samples would double-count.
+            "detail": (
+                ("Coordinates, cell AND velocities carry over from this stage, so this run "
+                 "extends that trajectory rather than sampling a new one. Its frames are "
+                 "correlated with the parent's — treat the pair as one longer run, not as "
+                 "two independent replicas. To get an independent sample instead, start "
+                 "from the relaxation this chain descends from.")
+                if chained else
+                ("Coordinates and cell come from this stage; velocities are drawn fresh "
+                 "at 300 K with this run's own random seed, so several productions off "
+                 "one relaxation are independent samples.")),
             "applies_to": [spec.name], "source": "md_ensemble.build_replica_package",
+        })
+    if chained:
+        # `_completed_production_checkpoint` has no health gate at all, unlike the
+        # relaxation path — it takes the last completed production segment with a full
+        # restart set on disk, healthy or not. Say so rather than implying it was vetted.
+        last_health = next((h for h in reversed(parent.health_samples)
+                            if h.segment == spec.name), None)
+        ok = last_health is None or last_health.passed
+        conditions.append({
+            "id": "chain_source_health",
+            "kind": "info" if ok else "warning",
+            "title": ("The run being continued passed its last health check" if ok
+                      else "The run being continued FAILED its last health check"),
+            "detail": (
+                ("Base pairing and C1'-C1' distances were within gate at the last sample "
+                 "of this segment. Continuing from it carries that structure forward."
+                 if last_health is not None else
+                 "No health sample was recorded for this segment, so nothing vouches for "
+                 "the structure being continued. Continuing is still allowed — the "
+                 "checkpoint is on disk and complete — but check the trajectory before "
+                 "reading anything off the extension.")
+                if ok else
+                (f"Its last sample read C1' paired {last_health.c1_paired_fraction:.0%} "
+                 f"(gate {spec.min_c1_paired:.0%}). A continuation inherits that "
+                 f"structure verbatim, so the extension starts from a structure that has "
+                 f"already degraded — the extra nanoseconds will not recover it.")),
+            "applies_to": [spec.name],
+            "source": "routes_md._completed_production_checkpoint",
         })
     if plan.get("timestep_warning"):
         conditions.append({
             "id": "timestep_warning", "kind": "warning",
             "title": "Timestep advisory", "detail": plan["timestep_warning"],
-            "applies_to": "all", "source": "routes_md._production_fast_plan",
+            # Sourced to the CONTROL, not to the function that raised it: this is the one
+            # link the wizard has between a condition and a settings field, and a source
+            # naming a Python function renders nowhere near the dropdown it is about.
+            "applies_to": "all", "source": "CreateJobRequest.production_timestep_fs",
         })
     conditions.append({
         "id": "timestep_independence", "kind": "info",
@@ -453,7 +557,7 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
                    "sanctioned timestep — 4 fs (the default, hydrogen-mass repartitioned), "
                    "2 fs (rigid bonds, standard masses) or 1 fs (the conservative "
                    "reference). Anything in between is refused outright."),
-        "applies_to": "all", "source": "md_protocols.require_sanctioned_production_timestep",
+        "applies_to": "all", "source": "CreateJobRequest.production_timestep_fs",
     })
     conditions.append({
         "id": "production_restraints",
@@ -475,7 +579,7 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
              "with none at all gives a measurably softer ensemble: more breathing, more "
              "terminal fraying, larger RMSD drift. "
              f"Chosen because {restraints['enm_reason']}.")),
-        "applies_to": "all", "source": "routes_md._production_restraint_plan",
+        "applies_to": "all", "source": "ProductionRunRequest.enm_restraints",
     })
     conditions.append({
         "id": "production_damping", "kind": "info",
@@ -486,7 +590,7 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
                    "(diffusion, relaxation and correlation times, breathing kinetics) is "
                    "scaled by something unrelated to the system. Equilibrium averages are "
                    "unaffected either way."),
-        "applies_to": "all", "source": "md_protocols.PRODUCTION_LANGEVIN_DAMPING",
+        "applies_to": "all", "source": "ProductionRunRequest.langevin_damping",
     })
     conditions.append(_box_fit_condition(parent, float(plan["length_ns"]),
                                          bool(body.allow_undersized_cell)))
@@ -499,14 +603,34 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             "applies_to": "all", "source": "md_protocols.build_production_conf",
         })
 
+    # The run stage, not the reseed bridge — every "vs the relaxation" comparison is about
+    # the segment that integrates.
+    run_stage = next((s for s in stages if s["role"] == "production"), stages[-1])
+    choice = resolve_integrator(float(plan.get("timestep_fs") or 4.0),
+                                plan.get("rigid_bonds"), plan.get("hmr"))
+
     return {
         "stages": stages,
+        "run_stage_index": run_stage["index"],
+        # Whether this run EXTENDS its parent (velocities carry) or samples independently
+        # off a relaxation. Almost every label the wizard writes branches on it.
+        "continuation": chained,
         "seed_checkpoint": {"name": spec.name, "stage": spec.stage,
                             "warning": seed_warning or ""},
-        "last_relax_stage": {"name": spec.name, "stage": spec.stage,
-                             "params": last_params},
-        "asymmetries": md_plan.production_asymmetries(last_params, stages[0]["params"]),
-        "comparison": md_plan.stage_diff(last_params, stages[0]["params"]),
+        # The stage this run continues, whatever kind it is. Called `last_relax_stage`
+        # until a production could be a parent — at which point the name was a lie on
+        # every chained plan.
+        "source_stage": {"name": spec.name, "stage": spec.stage,
+                         "kind": "production" if chained else "relaxation",
+                         "params": source_params},
+        # `production_asymmetries` annotates the LADDER-vs-production differences. In a
+        # chain both columns are productions, so those differences do not exist — and its
+        # one note that could still fire (`extrabondsfile`) is written in ladder terms and
+        # would misdescribe a network the continuation deliberately dropped.
+        "asymmetries": ([] if chained
+                        else md_plan.production_asymmetries(source_params,
+                                                            run_stage["params"])),
+        "comparison": md_plan.stage_diff(source_params, run_stage["params"]),
         "timestep_plan": {
             "timestep_fs": timestep_fs,
             "total_steps": int(plan["total_steps"]),
@@ -514,15 +638,193 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             "fast": bool(plan.get("fast")),
             "warning": plan.get("timestep_warning") or "",
         },
+        # What this run takes from its parent rather than choosing. Every one of these is
+        # fixed the moment the package was solvated, so the wizard shows them as facts
+        # about the run being continued instead of offering controls that do nothing.
+        "inherited": _inherited_from_parent(parent, manifest, spec, n_atoms=n_atoms,
+                                            chained=chained),
         "limits": {"max_steps": _max_steps(), "max_ns": _max_ns()},
+        "defaults": {"length_ns": WIZARD_DEFAULT_PRODUCTION_NS,
+                     "dcd_freq": _p.PRODUCTION_DCD_FREQ},
         "field_scopes": dict(FIELD_SCOPE),
-        "conditions": conditions + integrator_warnings(
-            resolve_integrator(float(plan.get("timestep_fs") or 4.0),
-                               plan.get("rigid_bonds"), plan.get("hmr")),
-            scope="production"),
+        "production_request": _production_provenance(body, plan, restraints, choice,
+                                                     manifest=manifest, chained=chained),
+        "conditions": conditions + integrator_warnings(choice, scope="production"),
         "retries": md_plan.retry_policy(),
-        "deferred": [],
+        "deferred": _production_deferred(body, chained=chained),
         "warnings": [w for w in (seed_warning, plan.get("timestep_warning")) if w],
+    }
+
+
+def _inherited_from_parent(parent: MdJob, manifest: dict, spec, *,
+                           n_atoms: Optional[int], chained: bool = False) -> dict:
+    """The facts a production child takes verbatim from the run it continues.
+
+    Read-only by construction: the child hardlinks the parent's PSF/PDB and copies its
+    cell, so re-solvating is not on the table.  Surfacing them is what makes "continue off
+    this run" a statement the user can check rather than one they have to trust.
+
+    A chained production's own manifest is production-only — no ``relax_preset``, no
+    solvation block, no ion concentrations — so the chemistry is read from the ROOT
+    relaxation the whole chain descends from.  Reading the immediate parent's blindly is
+    what made a chained plan report "protocol: unrecorded" and blank ion concentrations.
+    """
+    from backend.api.routes_md import root_relaxation  # noqa: PLC0415
+
+    root = root_relaxation(parent) if chained else parent
+    root_manifest = manifest if root.job_id == parent.job_id else _read_job_manifest(root)
+
+    solvation = (manifest.get("solvation") or root_manifest.get("solvation") or {})
+    relax_settings = (root_manifest.get("relax_protocol_settings")
+                      or manifest.get("relax_protocol_settings") or {})
+    box = manifest.get("box_ang") or root_manifest.get("box_ang") or []
+    prep = root.prep_params or parent.prep_params or {}
+    # How many production legs already sit between the root relaxation and this new run.
+    depth, cur = 0, parent
+    while cur.run_kind == "production" and cur.parent_job_id and depth < 64:
+        depth += 1
+        if cur.job_id == root.job_id:
+            break
+        try:
+            cur = _load_parent(cur.parent_job_id)
+        except HTTPException:
+            break
+    return {
+        "parent_job_id": parent.job_id,
+        "parent_run_kind": parent.run_kind or "relaxation",
+        "design_name": parent.design_name,
+        "created_at": parent.created_at,
+        "continuation": chained,
+        # The relaxation the whole chain descends from, and how many production legs are
+        # already between it and this run.
+        "root_job_id": root.job_id,
+        "root_created_at": root.created_at,
+        "chain_position": depth + 1,
+        "protocol": (root_manifest.get("protocol") or manifest.get("protocol")
+                     or root.protocol),
+        "relax_preset": (root_manifest.get("relax_preset")
+                         or manifest.get("relax_preset")
+                         or prep.get("relax_preset") or ""),
+        "seed_checkpoint": spec.name,
+        "seed_stage": spec.stage,
+        "n_atoms": n_atoms,
+        "box_ang": [round(float(v), 2) for v in box] if box else [],
+        "carved": bool(solvation.get("carved")),
+        "npt_allowed": bool(solvation.get("npt_allowed", not solvation.get("carved"))),
+        "padding_nm": solvation.get("padding_nm"),
+        "water_shell_nm": solvation.get("water_shell_nm"),
+        "sized_for_free_ns": solvation.get("sized_for_free_ns"),
+        "mg_conc_mM": prep.get("mg_conc_mM"),
+        "ion_conc_mM": prep.get("ion_conc_mM"),
+        "ladder_timestep_fs": relax_settings.get("timestep_fs"),
+        "anchors": bool((manifest.get("anchors") or {}).get("file")),
+        "field": manifest.get("field") or root_manifest.get("field") or None,
+        # Only meaningful in a chain: the simulated time already accumulated in the run
+        # being continued, so the wizard can say what the extended trajectory totals.
+        "parent_length_ns": ((manifest.get("ensemble") or {}).get("length_ns")
+                             if chained else None),
+    }
+
+
+def _read_job_manifest(job: MdJob) -> dict:
+    try:
+        return json.loads(
+            (job.package_dir(_workspace_dir()) / "manifest.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _production_deferred(body: ProtocolPlanRequest, *,
+                         chained: bool = False) -> list[dict]:
+    """Values a production child only resolves when it is created."""
+    if body.seed is not None:
+        return []
+    return [{
+        "key": "seed",
+        "title": "The random seed is drawn when the job is created",
+        # What the seed DOES differs between the two cases, and the old wording described
+        # only one of them. Off a relaxation it picks the initial velocities, which is
+        # what makes sibling runs independent. In a continuation the velocities come from
+        # the checkpoint, so the seed only drives the Langevin stream from there on.
+        "detail": (
+            ("This run inherits its velocities from the checkpoint it continues, so the "
+             "seed does not choose them — it drives the Langevin thermostat's random "
+             "force from that point on. Two continuations of the same checkpoint with "
+             "different seeds do diverge, but they share the parent's whole history, so "
+             "they are not independent samples of it. The number in the reseed column is "
+             "a placeholder; the seed actually used is recorded on the job.")
+            if chained else
+            ("Every production run draws a fresh random NAMD seed, so repeated runs off "
+             "one relaxation are independent samples rather than one thermal history "
+             "repeated. The number in the reseed column is a placeholder; the seed "
+             "actually used is recorded on the job and in its manifest. Pin it only to "
+             "reproduce a specific past trajectory.")),
+    }]
+
+
+#: Where each production-only value came from.  Mirrors ``_provenance`` for the fields that
+#: live on ``ProductionRunRequest`` rather than on ``CreateJobRequest`` — without it every
+#: production control rendered with no chip, so nothing on screen said whether a number was
+#: the user's, the package's, or a default.
+def _production_provenance(body: ProtocolPlanRequest, plan: dict, restraints: dict,
+                           choice, *, manifest: dict, chained: bool = False) -> dict:
+    explicit = set(body.model_fields_set)
+
+    def entry(value, name, *, reason="", inherited_key=None, inherited_reason=""):
+        if name in explicit and getattr(body, name, None) is not None:
+            return {"value": value, "provenance": "user", "reason": ""}
+        if inherited_key and manifest.get(inherited_key) is not None:
+            return {"value": value, "provenance": "inherited",
+                    "reason": inherited_reason or
+                              "recorded when the relaxation package was prepared"}
+        return {"value": value, "provenance": "default", "reason": reason}
+
+    return {
+        "length_ns": entry(float(plan["length_ns"]), "length_ns",
+                           reason="the wizard's own default run length"),
+        "dcd_freq": entry(int(plan.get("dcd_freq") or _p.PRODUCTION_DCD_FREQ), "dcd_freq",
+                          reason=f"the protocol default ({_p.PRODUCTION_DCD_FREQ} steps "
+                                 f"= 10 ps at 4 fs)"),
+        "production_timestep_fs": entry(
+            float(plan["timestep_fs"]), "production_timestep_fs",
+            inherited_key="production_timestep_fs",
+            reason="derived: 4 fs when the ladder validated rigid 4 fs dynamics for this "
+                   "design, else the 1 fs conservative reference"),
+        "production_rigid_bonds": entry(
+            choice.rigid_bonds, "production_rigid_bonds",
+            inherited_key="production_rigid_bonds",
+            reason=f"auto from the {choice.timestep_fs:g} fs timestep"),
+        "production_hmr": entry(
+            bool(choice.hmr), "production_hmr", inherited_key="production_hmr",
+            reason=f"auto from the {choice.timestep_fs:g} fs timestep"),
+        "gpu_resident": entry(
+            body.gpu_resident if "gpu_resident" in explicit else "auto", "gpu_resident",
+            reason="auto — decided from the solvated atom count"),
+        "enm_restraints": {
+            "value": "on" if restraints["enm_restraints"] else "off",
+            "provenance": "user" if (body.enm_restraints or "auto") != "auto" else "derived",
+            "reason": restraints["enm_reason"],
+        },
+        "langevin_damping": entry(
+            float(restraints["damping"]), "langevin_damping",
+            reason=f"the literature production value "
+                   f"({_p.PRODUCTION_LANGEVIN_DAMPING:g} ps⁻¹)"),
+        "seed": {
+            "value": body.seed,
+            "provenance": "user" if body.seed is not None else "derived",
+            # What the seed DOES depends on whether velocities are being redrawn. In a
+            # continuation they are not, so calling it the thing that makes runs
+            # independent would be exactly backwards.
+            "reason": ("" if body.seed is not None
+                       else ("drawn fresh when the job is created; it drives the thermostat "
+                             "from the inherited velocities on, it does not choose them"
+                             if chained else
+                             "drawn fresh when the job is created, so repeated runs sample "
+                             "independent trajectories")),
+        },
+        "allow_undersized_cell": entry(bool(body.allow_undersized_cell),
+                                       "allow_undersized_cell",
+                                       reason="off — an undersized cell refuses by default"),
     }
 
 
@@ -551,7 +853,9 @@ def _box_fit_condition(parent: MdJob, length_ns: float, allow: bool) -> dict:
         "title": "Cell size" if ok else "The cell is too small for this run length",
         "detail": detail, "ok": ok,
         "override": None if ok else "allow_undersized_cell",
-        "applies_to": "all", "source": "routes_md._assert_cell_fits_a_free_run",
+        # The RUN LENGTH is what the user changes to resolve this, so the warning belongs
+        # against that control — not against a private helper's name.
+        "applies_to": "all", "source": "ProductionRunRequest.length_ns",
     }
 
 

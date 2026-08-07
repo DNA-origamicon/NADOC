@@ -77,20 +77,29 @@ export function paramLabel(key) {
  * looking for, and a per-stage row list would hide it.
  */
 export function paramRows(plan) {
-  const stages = plan?.stages || []
-  const groupOrder = plan?.param_groups || []
+  return paramRowsFor((plan?.stages || []).map(s => s?.params || {}),
+                      plan?.param_groups || [])
+}
+
+/** Pure: the same row list, over an explicit set of parameter maps.
+ *
+ *  Production's table has a column the plan's `stages` do not contain — the last
+ *  relaxation stage it is being compared against — and a directive that exists ONLY
+ *  there (the ladder's elastic network, its fixed atoms) is the most interesting row on
+ *  the whole table. Building rows from `stages` alone silently dropped them. */
+export function paramRowsFor(paramMaps, groupOrder = []) {
   const seen = new Map()          // key -> group, first-seen order preserved
-  for (const stage of stages) {
-    for (const key of Object.keys(stage?.params || {})) {
+  for (const params of paramMaps || []) {
+    for (const key of Object.keys(params || {})) {
       if (NOISE_KEYS.has(key)) continue
       if (!seen.has(key)) seen.set(key, groupFor(key))
     }
   }
   const rows = [...seen.entries()].map(([key, group]) => ({ key, group, label: paramLabel(key) }))
-  const rank = new Map(groupOrder.map((g, i) => [g, i]))
+  const rank = new Map((groupOrder || []).map((g, i) => [g, i]))
   return rows.sort((a, b) => {
-    const ga = rank.has(a.group) ? rank.get(a.group) : groupOrder.length
-    const gb = rank.has(b.group) ? rank.get(b.group) : groupOrder.length
+    const ga = rank.has(a.group) ? rank.get(a.group) : (groupOrder || []).length
+    const gb = rank.has(b.group) ? rank.get(b.group) : (groupOrder || []).length
     return ga - gb
   })
 }
@@ -174,6 +183,81 @@ export function stageColumns(plan) {
       cells,
     }
   })
+}
+
+/**
+ * Pure: the PRODUCTION tab-2 table — the relaxation stage this run continues from as a
+ * read-only reference column, followed by every stage the production child will run.
+ *
+ * The `changed` highlight is computed against the RELAXATION column, not against the
+ * previous stage: the question this table answers is "what is different about production",
+ * and the reseed bridge in between is a zero-step conf nobody is comparing to.
+ *
+ * A stage whose `accepts_overrides` is false renders read-only throughout — the runner
+ * writes that conf without an overrides pass, so an edit there would be silently dropped.
+ */
+export function productionColumns(plan) {
+  const relax = plan?.source_stage
+  if (!relax) return { rows: [], columns: [] }
+  const stages = plan?.stages || []
+  const rows = paramRowsFor([relax.params, ...stages.map(s => s?.params || {})],
+                            plan?.param_groups || [])
+
+  const cellsFor = (params, { reference = false, stage = null } = {}) => {
+    const diff = reference ? {} : stageDiff(relax.params, params)
+    const conditional = stage?.conditional_params || {}
+    const overridden = stage?.overridden || {}
+    const editable = !reference && stage?.accepts_overrides !== false
+    const out = {}
+    for (const { key } of rows) {
+      out[key] = {
+        value: formatValue(params?.[key]),
+        present: !!params && key in params,
+        changed: key in diff,
+        was: key in diff ? diff[key][0] : null,
+        conditional: key in conditional,
+        reason: conditional[key] || '',
+        overridden: key in overridden,
+        protocolValue: key in overridden ? formatValue(overridden[key][0]) : null,
+        editable: editable && !PROTECTED_KEYS.has(key),
+      }
+    }
+    return out
+  }
+
+  const columns = [{
+    key: '__source__',
+    name: relax.name,
+    label: relax.stage,
+    // 'relaxation' | 'production' — the reference column's header says which, because a
+    // chained run's reference IS a production stage and calling it "Relaxation" was the
+    // one label on the screen that could send someone to the wrong conclusion.
+    role: relax.kind === 'production' ? 'production' : 'relaxation',
+    sourceKind: relax.kind || 'relaxation',
+    reference: true,
+    index: null,
+    steps: null,
+    ns: null,
+    timestepFs: null,
+    cells: cellsFor(relax.params, { reference: true }),
+  }]
+  for (const stage of stages) {
+    columns.push({
+      key: stage.name,
+      name: stage.name,
+      label: stage.stage,
+      role: stage.role,
+      reference: false,
+      index: stage.index,
+      steps: stage.steps,
+      ns: stage.ns,
+      timestepFs: stage.timestep_fs,
+      acceptsOverrides: stage.accepts_overrides !== false,
+      changedCount: Object.keys(stageDiff(relax.params, stage.params || {})).length,
+      cells: cellsFor(stage.params || {}, { stage }),
+    })
+  }
+  return { rows, columns }
 }
 
 /**
@@ -326,11 +410,20 @@ export function planPayload(state = {}) {
   body.kind = state.mode === 'production' ? 'production' : 'relaxation'
   if (state.mode === 'production') {
     if (state.parentJobId) body.parent_job_id = state.parentJobId
-    if (state.lengthNs != null) body.length_ns = state.lengthNs
-    if (state.dcdFreq != null) body.dcd_freq = state.dcdFreq
-    if (state.enmRestraints) body.enm_restraints = state.enmRestraints
-    if (state.langevinDamping) body.langevin_damping = state.langevinDamping
-    body.allow_undersized_cell = !!state.allowUndersizedCell
+    // Only what was touched, for the same reason the relaxation half does it: a value the
+    // wizard merely DISPLAYED, sent back, marks itself explicit and overwrites the
+    // package's own prep-time choice — which is precisely what a production child is
+    // meant to inherit. The plan reports the resolved value either way.
+    const t = state.touched || {}
+    const send = (key, as = key) => {
+      if (Object.prototype.hasOwnProperty.call(t, key) && t[key] != null) body[as] = t[key]
+    }
+    send('length_ns')
+    send('dcd_freq')
+    send('seed')
+    send('langevin_damping')
+    if (t.enm_restraints && t.enm_restraints !== 'auto') body.enm_restraints = t.enm_restraints
+    body.allow_undersized_cell = !!t.allow_undersized_cell
   }
   if (state.nAtomsHint) body.n_atoms_hint = state.nAtomsHint
   // Sent for BOTH modes: the preview has to show the run as edited, or the highlight has
@@ -341,32 +434,131 @@ export function planPayload(state = {}) {
   return body
 }
 
-/** Pure: the production-spawn body for `POST /md/jobs/{parent}/production-run`. */
-export function productionPayload({ lengthNs, dcdFreq, autostart = false,
-  allowUndersizedCell = false, executionTarget = 'local',
-  clusterName = null, gpuResident = null, timestepFs = null,
-  enmRestraints = null, langevinDamping = null, stageOverrides = null } = {}) {
+/**
+ * Every setting the wizard may send on a production spawn, keyed by the wizard's own
+ * state name. Same role `WIZARD_FIELDS` plays for a relaxation: an allowlist, so a stray
+ * key in `touched` can never reach the request and 400 it.
+ */
+export const PRODUCTION_FIELDS = [
+  'length_ns', 'dcd_freq', 'production_timestep_fs', 'production_rigid_bonds',
+  'production_hmr', 'gpu_resident', 'enm_restraints', 'langevin_damping', 'seed',
+  'allow_undersized_cell',
+]
+
+/** Pure: the production-spawn body for `POST /md/jobs/{parent}/production-run`.
+ *
+ *  Like the relaxation payload, this sends ONLY what the user touched: everything else is
+ *  resolved server-side from the parent package (its prep-time integrator choice, its
+ *  protocol's restraint policy), and sending a value the wizard merely displayed would
+ *  overwrite that inheritance with a number nobody chose. */
+export function productionPayload({ touched = {}, autostart = false,
+  executionTarget = 'local', clusterName = null, stageOverrides = null,
+  lengthNs = null } = {}) {
+  const has = k => Object.prototype.hasOwnProperty.call(touched, k)
+                   && touched[k] !== undefined && touched[k] !== null
   const body = {
-    length_ns: lengthNs,
+    // The one field with no useful server-side default: a run has to have a length, and
+    // the wizard always shows one, so it is always explicit.
+    length_ns: has('length_ns') ? touched.length_ns : lengthNs,
     autostart: !!autostart,
-    allow_undersized_cell: !!allowUndersizedCell,
+    allow_undersized_cell: !!touched.allow_undersized_cell,
     execution_target: executionTarget,
   }
-  if (dcdFreq != null) body.dcd_freq = dcdFreq
   if (clusterName) body.cluster_name = clusterName
-  if (gpuResident) body.gpu_resident = gpuResident
+  if (has('dcd_freq')) body.dcd_freq = touched.dcd_freq
+  if (has('gpu_resident')) body.gpu_resident = touched.gpu_resident
   // Pin the chosen dt to THIS run, so the trajectory matches the plan shown next to it.
   // Without it the timestep could only be chosen at prep time, and the control silently
   // had no effect on production.
-  if (timestepFs) body.production_timestep_fs = timestepFs
+  if (has('production_timestep_fs')) body.production_timestep_fs = touched.production_timestep_fs
+  // The other two integrator axes. The request field names drop the `production_` prefix:
+  // ProductionRunRequest is already about production, so `rigid_bonds` there is what
+  // `production_rigid_bonds` is on a create request.
+  if (has('production_rigid_bonds')) body.rigid_bonds = touched.production_rigid_bonds
+  if (has('production_hmr')) body.hmr = touched.production_hmr
   // Whether the run keeps an elastic network, and how hard it is thermostatted. Both
   // differ from the ladder and both change what the trajectory can be compared with.
-  if (enmRestraints) body.enm_restraints = enmRestraints
-  if (langevinDamping) body.langevin_damping = langevinDamping
+  if (has('enm_restraints') && touched.enm_restraints !== 'auto') {
+    body.enm_restraints = touched.enm_restraints
+  }
+  if (has('langevin_damping')) body.langevin_damping = touched.langevin_damping
+  if (has('seed')) body.seed = touched.seed
   if (stageOverrides && Object.keys(stageOverrides).length) {
     body.stage_overrides = stageOverrides
   }
   return body
+}
+
+/** Pure: what the plan says about one production setting — value, provenance, reason.
+ *
+ *  `production_request` is the production-resolved block (request > the parent package's
+ *  prep-time value > auto); `request` is the create-request merge, which is what the four
+ *  shared keys fall back to. Reading the wrong one showed the preset's 4 fs on a package
+ *  whose manifest pinned 2. */
+export function productionField(plan, key) {
+  return plan?.production_request?.[key] || plan?.request?.[key] || null
+}
+
+/** Pure: the read-only "this comes from the relaxation" rows, in display order.
+ *
+ *  A production child hardlinks its parent's topology and copies its cell, so none of
+ *  this is choosable here. Stating it is what turns "continue off this relaxation" into a
+ *  claim the user can check. */
+export function inheritedRows(plan) {
+  const inh = plan?.inherited
+  if (!inh) return []
+  const chained = !!inh.continuation
+  const rows = []
+  const push = (label, value, note = '') => {
+    if (value === null || value === undefined || value === '') return
+    rows.push({ label, value: String(value), note })
+  }
+  push('Continuing from', inh.seed_stage || inh.seed_checkpoint,
+       chained
+         ? 'The last completed stage of the production run being extended: its '
+           + 'coordinates, cell AND velocities are what this run starts from.'
+         : 'The last unrestrained checkpoint of the relaxation: its coordinates and cell '
+           + 'are what this run starts from.')
+  if (chained) {
+    push('Position in the chain',
+         `run ${inh.chain_position} off this relaxation`,
+         'How many production legs already sit between the relaxation this package was '
+         + 'built from and this new run. Every leg shares one thermal history.')
+    push('Already simulated', inh.parent_length_ns == null ? '' : `${inh.parent_length_ns} ns`,
+         'The run being extended. Add this run\'s length to it for the total simulated '
+         + 'time of the combined trajectory.')
+  }
+  push('Relaxation protocol', inh.relax_preset || inh.protocol,
+       'The ladder that produced these coordinates, read from the relaxation the whole '
+       + 'chain descends from. A production run has no protocol of its own — it inherits '
+       + 'the package that ladder built.')
+  push('Solvated atoms', inh.n_atoms == null ? '' : Number(inh.n_atoms).toLocaleString(),
+       'Read from the package PSF, so the GPU-resident size gate is decided here rather '
+       + 'than deferred.')
+  if (Array.isArray(inh.box_ang) && inh.box_ang.length === 3) {
+    push('Cell', `${inh.box_ang.map(v => `${v}`).join(' × ')} Å`,
+         'Sized once, when the relaxation was solvated. Nothing after preparation '
+         + 're-solvates, so a production run inherits it verbatim.')
+  }
+  push('Water padding', inh.padding_nm == null ? '' : `${inh.padding_nm} nm`)
+  push('Water shell carve', inh.carved ? `${inh.water_shell_nm} nm — constant volume` : '',
+       'A carved cell contains vacuum, so production runs NVT for the same reason the '
+       + 'ladder did.')
+  push('Magnesium', inh.mg_conc_mM == null ? '' : `${inh.mg_conc_mM} mM`)
+  push('NaCl', inh.ion_conc_mM == null ? '' : `${inh.ion_conc_mM} mM`)
+  // The ladder's BASE, which the per-stage tiers cap: a declashed or soft stage runs
+  // slower than this whatever it says, so the stage table's relaxation column can
+  // legitimately show a smaller number than this row does.
+  push('Ladder base timestep',
+       inh.ladder_timestep_fs == null ? '' : `${inh.ladder_timestep_fs} fs`,
+       'What the relaxation was sized for — its per-stage tiers cap it, so an individual '
+       + 'stage may have run slower. It does not constrain this run either way: a ladder '
+       + 'exists to hand over equilibrated coordinates, and once it has, production is free.')
+  push('Anchors', inh.anchors ? 'inherited from the relaxation' : '',
+       'Sent with the run from the panel’s anchors card; an empty card means explicitly '
+       + 'unanchored.')
+  if (inh.field) push('Electric field', `${inh.field.field_pN} pN`)
+  return rows
 }
 
 /** Pure: the part name a job was created from — the file stem of its design path. */
@@ -403,24 +595,70 @@ export function relaxRunLabel(job, siblings = []) {
   return `${part} run created ${stamp}`
 }
 
-/**
- * Pure: the completed relaxations a production run can start from, newest first.
+/** Pure: the same name, saying WHICH KIND of run it is.
  *
- * A production child seeds from equilibrated coordinates, so only a COMPLETED job
- * qualifies; a production job itself is excluded here because chaining one is done by
- * selecting it in the job list, not by starting a new run from the wizard. An empty
- * array is the signal for the "run a relaxation first" state.
+ *  Once a production run could be a parent too, "<part> run created …" stopped
+ *  identifying anything: a picker holding both reads as a list of duplicates, and the
+ *  choice between them is the difference between an independent sample and an extension
+ *  of one trajectory. */
+export function productionParentLabel(job, siblings = []) {
+  const kind = job?.run_kind === 'production' ? 'production run' : 'relaxation'
+  return relaxRunLabel(job, siblings).replace(' run created ', ` ${kind} created `)
+}
+
+/**
+ * Pure: the completed runs a new production can start from, newest first.
+ *
+ * Two kinds, and the distinction is load-bearing:
+ *
+ * * a **relaxation** hands over equilibrated coordinates and the child draws fresh
+ *   velocities, so each child is an INDEPENDENT sample;
+ * * a **production** hands over coordinates *and* velocities, so the child EXTENDS that
+ *   trajectory — its frames are correlated with the parent's and the pair is one longer
+ *   run, not two replicas.
+ *
+ * An empty array is the signal for the "run a relaxation first" state.
  */
-export function relaxationChoices(jobs, partPath) {
+export function productionParents(jobs, partPath, { includeJobId = null } = {}) {
   const want = String(partPath || '').replace(/\\/g, '/').replace(/\/+$/, '')
+  // `includeJobId` keeps a DELIBERATELY chosen parent in the list even when the part
+  // filter would drop it — the user selected that run in the job list and pressed New
+  // job, and silently continuing a different run is the one outcome that must not happen.
   const out = (jobs || []).filter(j =>
-    j
-    && j.status === 'completed'
-    && j.run_kind !== 'production'
-    && !j.archived
-    && (!want || String(j.design_source_path || '').replace(/\\/g, '/').replace(/\/+$/, '') === want))
+    isProductionParent(j)
+    && (!want
+        || j.job_id === includeJobId
+        || String(j.design_source_path || '').replace(/\\/g, '/').replace(/\/+$/, '') === want))
   out.sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
-  return out.map(job => ({ job, label: relaxRunLabel(job, out), stale: !!job.out_of_date }))
+  return out.map(job => ({
+    job,
+    label: productionParentLabel(job, out),
+    stale: !!job.out_of_date,
+    // Archiving moves the job directory to the archive drive to reclaim disk; the
+    // package is intact and every path that reads it honours `archive_path`, so the run
+    // is still a legal parent. It is called out because the drive has to be mounted.
+    archived: !!job.archived,
+    // Picking this one EXTENDS a trajectory instead of sampling a new one.
+    continuation: job.run_kind === 'production',
+  }))
+}
+
+/** Pure: can a new production run be seeded from this job by selecting it and pressing
+ *  "New job"? The mirror of `productionParents`'s own test, so the panel's detection and
+ *  the wizard's picker can never disagree about what counts as a parent.
+ *
+ *  A completed PRODUCTION qualifies: the backend has always chained off one
+ *  (`_production_seed_checkpoint` branches on `run_kind`, `build_replica_package` stages
+ *  the parent's `restart.{coor,vel,xsc}` and preserves velocities), it was only the UI
+ *  that had no way to ask for it.
+ *
+ *  Deliberately NOT excluding an archived run. Archiving is a DISK decision — the job
+ *  directory moves to the archive drive and `MdJob.package_dir` follows it — not a
+ *  retirement, and the spawn route accepts one. Excluding them meant that on a machine
+ *  where every finished relaxation had been archived to reclaim space, production mode
+ *  could only ever show "no completed relaxation for this part yet". */
+export function isProductionParent(job) {
+  return !!job && job.status === 'completed'
 }
 
 /**
@@ -457,10 +695,13 @@ export function conditionTooltip(c) {
   return [head, c?.detail].filter(Boolean).join('\n\n')
 }
 
-/** A condition the backend attributes to a request field, e.g. `CreateJobRequest.fast`.
- *  This is the ONLY link between a condition and a settings control — it is stated by the
- *  code that raises the condition, never guessed from the wording here. */
-const REQUEST_SOURCE = /^CreateJobRequest\.([A-Za-z_]\w*)$/
+/** A condition the backend attributes to a request field, e.g. `CreateJobRequest.fast` or
+ *  `ProductionRunRequest.enm_restraints`. This is the ONLY link between a condition and a
+ *  settings control — it is stated by the code that raises the condition, never guessed
+ *  from the wording here. Both models are accepted because a production run's controls are
+ *  spread across the two: its integrator axes are create-request fields recorded at prep,
+ *  while its length, restraints and coupling belong to the spawn request. */
+const REQUEST_SOURCE = /^(?:CreateJobRequest|ProductionRunRequest)\.([A-Za-z_]\w*)$/
 
 /** Pure: field key -> the conditions that field is responsible for, so a control can carry
  *  its own condition references instead of leaving the user to match prose to a checkbox. */
@@ -580,8 +821,10 @@ export function overrideSummary(overrides) {
  * different things.
  */
 export const UNDOABLE_KEYS = [
-  'mode', 'presetId', 'touched', 'stageOverrides', 'parentJobId', 'lengthNs', 'dcdFreq',
-  'enmRestraints', 'langevinDamping', 'allowUndersizedCell',
+  // Production's own settings used to be five separate state slots; they are now ordinary
+  // entries in `touched`, which is what let them render through the same field machinery
+  // (provenance chips, condition references, warning icons) as every relaxation control.
+  'mode', 'presetId', 'touched', 'stageOverrides', 'parentJobId',
 ]
 
 /** Pure: a deep-enough copy of the undoable state. `touched` and `stageOverrides` are the

@@ -29,14 +29,17 @@ import {
   fieldAlert,
   fieldScope,
   deferredNotes,
+  inheritedRows,
   makeDebounce,
+  paramLabel,
   paramRows,
   presetSummary,
-  productionComparison,
+  productionColumns,
+  productionField,
   productionPayload,
   planPayload,
   pushUndo,
-  relaxationChoices,
+  productionParents,
   clearStageOverrides,
   normaliseOverrideInput,
   overrideSummary,
@@ -157,6 +160,78 @@ const FIELDS = [
     help: '"0" for the first GPU, "0,1" for two, or "cpu" for the multicore build.' },
 ]
 
+/**
+ * Every parameter a PRODUCTION run exposes, in the same descriptor shape as `FIELDS`.
+ *
+ * Production used to render a hand-written half-dozen controls with no provenance chip,
+ * no condition reference and no warning icon, and with three of its settings missing
+ * outright — GPU-resident was sent from a control that was never drawn, so it could only
+ * ever be the package's default, and the two integrator axes the ladder exposes had no
+ * production counterpart at all. These go through `renderField` exactly as the relaxation
+ * ones do, so everything the wizard promises about a setting is true of these too.
+ *
+ * Keys are the wizard's own state names. `production_*` and `gpu_resident` deliberately
+ * match the create-request field names, because the plan reports them under those names
+ * and the condition sources point at them; `productionPayload` renames the two integrator
+ * axes on the way out (see its comment).
+ */
+const PRODUCTION_FIELD_DEFS = [
+  { key: 'length_ns', label: 'Run length', unit: 'ns', type: 'number', step: 1, min: 0.001,
+    group: 'run',
+    help: 'How long the unrestrained run samples for. The cell was sized once, when the relaxation was prepared — a run longer than that cell supports is flagged as a condition on the next tab, with the override.' },
+  { key: 'dcd_freq', label: 'Trajectory interval', unit: 'steps', type: 'number', step: 100, min: 100,
+    group: 'run',
+    help: 'How often a frame is written. Larger means a smaller file: the disk forecast scales directly with this. Lower it when the trajectory feeds fluctuation-based parameter extraction (FEM/SNUPI/mrDNA).' },
+  { key: 'enm_restraints', label: 'Restraints', type: 'select', group: 'run',
+    options: [{ value: 'auto', label: 'Follow the parent’s protocol' },
+              { value: 'on', label: 'Keep an elastic network (as the published runs do)' },
+              { value: 'off', label: 'None — genuinely unrestrained' }],
+    format: v => (v == null ? 'auto' : String(v)),
+    help: 'The published “unrestrained” origami productions retain a network at k = 0.1 kcal/mol/Å² throughout. Sampling a template-built structure with none at all gives a softer ensemble — more breathing, more fraying, larger RMSD drift. The network is rebuilt from the equilibrated coordinates this run starts from, never from the pre-relaxation build.' },
+  { key: 'langevin_damping', label: 'Langevin coupling', unit: 'ps⁻¹', type: 'number',
+    step: 0.5, min: 0.01, group: 'run',
+    help: 'Blank uses the literature production value (1). The ladder runs at 5, which is an equilibration setting: at that coupling the dynamics are overdamped, so anything time-dependent — diffusion, relaxation times, breathing kinetics — is scaled by something unrelated to the system. Equilibrium averages are unaffected.' },
+  { key: 'seed', label: 'Random seed', type: 'number', step: 1, min: 1, group: 'run',
+    help: ({ continuation }) => (continuation
+      ? 'Blank draws a fresh seed when the job is created. This run inherits its velocities from the checkpoint it continues, so the seed does not choose them — it drives the Langevin thermostat from that point on. Two continuations of one checkpoint with different seeds diverge, but both carry the parent’s whole history, so they are not independent samples of it.'
+      : 'Blank draws a fresh seed when the job is created, which is what makes several productions off one relaxation independent samples. Set one only to reproduce a specific past trajectory — the seed a run used is recorded on the job and in its manifest.') },
+  { key: 'production_timestep_fs', label: 'Timestep', unit: 'fs', type: 'select',
+    group: 'integrator',
+    options: [{ value: '4', label: '4 fs (faster, risks RATTLE)' },
+              { value: '2', label: '2 fs (standard)' },
+              { value: '1', label: '1 fs (conservative)' }],
+    parse: Number,
+    help: ({ continuation }) => 'The relaxation does not constrain this — a ladder exists to hand over equilibrated coordinates, and once it has, production may run at any sanctioned timestep. Each option changes more than the number: 4 fs is rigid bonds on a repartitioned PSF, 2 fs is rigid bonds on standard masses, 1 fs is flexible. Only these three are allowed.'
+      + (continuation
+        ? ' Changing it mid-chain is legal but makes a discontinuity: the two legs are then not one trajectory at one integrator, which matters for anything read off the combined run.'
+        : '') },
+  { key: 'production_rigid_bonds', label: 'Rigid bonds', type: 'checkbox',
+    group: 'integrator',
+    fallback: (plan, valueOf) => (Number(valueOf('production_timestep_fs')) <= 1 ? 'none' : 'all'),
+    check: v => v === 'all',
+    parse: on => (on ? 'all' : 'none'),
+    help: 'Hold bonds to hydrogen rigid (RATTLE). Constraining them removes the ~11 fs X–H stretch, which is what makes 2 fs possible at all. Recommended on above 1 fs; exp51 measured 1 fs + rigid to be perfectly stable too, so it is a free choice there.' },
+  { key: 'production_hmr', label: 'H-mass repartitioning (HMR)', type: 'checkbox',
+    group: 'integrator',
+    fallback: (plan, valueOf) => Number(valueOf('production_timestep_fs')) >= 4,
+    check: v => !!v,
+    parse: on => !!on,
+    help: 'Move mass from each non-water hydrogen onto its bonded heavy atom (×3), slowing the X–H stretch so a 4 fs step is stable. The repartitioned PSF is built on demand from the package’s own topology, so this run may use HMR even if the relaxation did not.' },
+  { key: 'gpu_resident', label: 'GPU-resident mode', type: 'select', group: 'integrator',
+    options: [{ value: 'auto', label: 'Auto (decide from the atom count)' },
+              { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
+    format: v => (v == null ? 'auto' : String(v)),
+    help: 'Keeps integration and bonded forces on the GPU. The atom count is known here (it is the package’s own PSF), so auto resolves to a fact rather than a deferred value. A hard anchor forces this off — NAMD 3 refuses fixedAtoms under GPU-resident.' },
+]
+
+/** The production pane's groups, in order. */
+const PRODUCTION_GROUPS = [
+  { key: 'run', title: 'This production run',
+    help: 'What this run samples, for how long, and under what restraints. None of it is inherited — each is a choice about this trajectory.' },
+  { key: 'integrator', title: 'Integrator and hardware',
+    help: 'Recorded on the package when the relaxation was prepared, and overridable here for this run alone. An untouched control shows what the package’s own choice resolves to.' },
+]
+
 /** The settings pane's groups, in order. Every control states which run it governs —
  *  the flat list could not, and that is how a production-only field ended up looking
  *  like a relaxation setting. */
@@ -175,6 +250,10 @@ const PROVENANCE_TEXT = {
   default: 'default',
   forced: 'forced by the server',
   derived: 'derived',
+  // Production only: chosen when the relaxation package was prepared. Distinct from
+  // "default" because a default is what nobody chose, and this is what somebody chose
+  // for the run being continued.
+  inherited: 'from the relaxation',
 }
 
 /**
@@ -209,17 +288,10 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     // job in place (from its source engine's coordinates) instead of creating a new one.
     draftId: null,
     parentJobId: null,
-    lengthNs: 100,
-    dcdFreq: null,
-    // null = let the parent's protocol decide (the backend's 'auto'); the control
-    // shows what that resolved to.
-    enmRestraints: null,
-    langevinDamping: null,
     // {stageIndex|'*': {directive: value}} — hand edits to individual stages. Sent with
     // the job, applied to the emitted confs, and declared in the package's own fidelity
     // block, because a hand edit is a departure from every protocol by definition.
     stageOverrides: {},
-    allowUndersizedCell: false,
   }
 
   // Mounts, so a re-render replaces content instead of rebuilding the modal.
@@ -276,7 +348,8 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
    *  first plan would fire with no parent and the table would come back empty. */
   function ensureParent() {
     if (state.mode !== 'production') return
-    const choices = relaxationChoices(getJobs?.() || [], getPartPath?.())
+    const choices = productionParents(getJobs?.() || [], getPartPath?.(),
+                                      { includeJobId: state.parentJobId })
     if (!choices.length) { state.parentJobId = null; return }
     if (!state.parentJobId || !choices.some(c => c.job.job_id === state.parentJobId)) {
       state.parentJobId = choices[0].job.job_id
@@ -310,11 +383,21 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     render()
   }
 
+  /** What the plan says about a field. In production mode the production-resolved block
+   *  wins, because the four settings that exist in both are resolved differently there:
+   *  the create-request merge reports the preset's value, while a production child
+   *  inherits whatever its package recorded at prep time. */
+  function planField(key) {
+    return state.mode === 'production'
+      ? productionField(plan, key)
+      : (plan?.request?.[key] || null)
+  }
+
   /** Is this field one the SERVER decides, whatever we send? Screening mode's ion
    *  concentrations, and any field the chosen protocol locks. A stale touched value must
    *  never win over one of these, or the control would display a lie. */
   function isForced(key) {
-    return plan?.request?.[key]?.provenance === 'forced'
+    return planField(key)?.provenance === 'forced'
   }
 
   /** The effective value of a field: what the user typed, else what the plan resolved. */
@@ -322,7 +405,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     if (!isForced(key) && Object.prototype.hasOwnProperty.call(state.touched, key)) {
       return state.touched[key]
     }
-    return plan?.request?.[key]?.value
+    return planField(key)?.value
   }
 
   /** The value a field will really use: what is stored, else what its own `fallback`
@@ -333,14 +416,20 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   function effectiveValue(key) {
     const v = valueOf(key)
     if (v != null) return v
-    const field = FIELDS.find(f => f.key === key)
+    const field = fieldDef(key)
     return field?.fallback ? field.fallback(plan, effectiveValue) : v
+  }
+
+  /** The descriptor for a field key, from whichever list this mode renders. */
+  function fieldDef(key) {
+    return (state.mode === 'production' ? PRODUCTION_FIELD_DEFS : FIELDS)
+      .find(f => f.key === key)
   }
 
   function provenanceOf(key) {
     if (isForced(key)) return 'forced'
     if (Object.prototype.hasOwnProperty.call(state.touched, key)) return 'user'
-    return plan?.request?.[key]?.provenance || 'default'
+    return planField(key)?.provenance || 'default'
   }
 
   function setField(key, value) {
@@ -462,7 +551,10 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       // timestep that is selected RIGHT NOW, not the one the last plan was built with).
       if (value == null && field.fallback) value = field.fallback(plan, effectiveValue)
       const forced = provenance === 'forced'
-      const reason = plan?.request?.[field.key]?.reason || ''
+      // Through `planField`, not `plan.request` — in production mode the four settings
+      // that exist in both blocks resolve differently, and reading the create-request one
+      // captioned an inherited 4 fs with the RELAXATION preset that set the ladder's.
+      const reason = planField(field.key)?.reason || ''
 
       let control
       if (field.type === 'checkbox') {
@@ -515,12 +607,25 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
             attrs: { title: reason },
             text: PROVENANCE_TEXT[provenance] || provenance,
           }),
-          (reason || field.help)
-            ? el('div', { className: 'wizard-field__help', text: reason || field.help })
+          // The reason and the help answer different questions — "why is it THIS value"
+          // and "what does this setting do" — and the reason used to REPLACE the help.
+          // Harmless while most reasons were empty; once production gave every field one,
+          // every production control lost its explanation to a one-line provenance note.
+          reason ? el('div', { className: 'wizard-field__why', text: reason }) : null,
+          field.help
+            ? el('div', { className: 'wizard-field__help', text: helpText(field) })
             : null,
         ],
       }))
     }
+  }
+
+  /** A field's help, which a few settings have to word differently in a CONTINUATION —
+   *  a run extending a production is not doing the same thing as one sampling off a
+   *  relaxation, and the sentence that explains the seed is the clearest example. */
+  function helpText(field) {
+    const help = field.help
+    return typeof help === 'function' ? help({ continuation: !!plan?.continuation }) : help
   }
 
   /** ⚠ on a control whose current value the plan objects to. The objection itself is the
@@ -536,7 +641,8 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   }
 
   function renderProductionFields() {
-    const choices = relaxationChoices(getJobs?.() || [], getPartPath?.())
+    const choices = productionParents(getJobs?.() || [], getPartPath?.(),
+                                      { includeJobId: state.parentJobId })
     if (!choices.length) {
       mounts.fields.appendChild(el('div', {
         className: 'wizard-empty',
@@ -550,112 +656,93 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       }))
       return
     }
-    mounts.fields.appendChild(el('div', {
-      className: 'wizard-field',
+
+    // Which run this continues, first and on its own: everything below is a property of
+    // THAT package, so changing it re-resolves the whole pane.
+    //
+    // The choice between a relaxation and a production is not cosmetic — off a
+    // relaxation the child draws fresh velocities and is an INDEPENDENT sample; off a
+    // production the velocities carry over and the child EXTENDS that trajectory. Both
+    // the option labels and the help below say which one is selected.
+    const chained = !!plan?.continuation
+    mounts.fields.appendChild(el('section', {
+      className: 'wizard-scope wizard-scope--parent',
       children: [
-        el('label', { className: 'wizard-field__label', text: 'Start from' }),
+        el('h4', { className: 'wizard-scope__title', text: 'Continue from' }),
         el('div', {
-          className: 'wizard-field__control',
-          children: [createSelect({
-            size: 'sm', value: state.parentJobId,
-            options: choices.map(c => ({
-              value: c.job.job_id,
-              label: c.stale ? `${c.label} (design has changed since)` : c.label,
-            })),
-            onChange: v => { record(); state.parentJobId = v; void loadPlan() },
-          })],
-        }),
-        el('div', {
-          className: 'wizard-field__help',
-          text: 'Coordinates and cell come from this run’s last unrestrained stage; velocities are drawn fresh, so several productions off one relaxation are independent samples.',
-        }),
-      ],
-    }))
-
-    mounts.fields.appendChild(numberField('Run length', 'ns', state.lengthNs, v => {
-      record(); state.lengthNs = v; refetch()
-    }, 'How long the unrestrained run samples for. The cell was sized once, when the relaxation was prepared — a run longer than that cell supports is flagged below.'))
-
-    mounts.fields.appendChild(numberField('Trajectory interval', 'steps', state.dcdFreq, v => {
-      record(); state.dcdFreq = v; refetch()
-    }, 'How often a frame is written. Larger means a smaller file: the disk forecast scales directly with this.'))
-
-    const enmOn = (plan?.conditions || [])
-      .some(c => c.id === 'production_restraints' && c.kind === 'info')
-    mounts.fields.appendChild(el('div', {
-      className: 'wizard-field',
-      children: [
-        el('label', { className: 'wizard-field__label', text: 'Restraints' }),
-        el('div', {
-          className: 'wizard-field__control',
-          children: [createSelect({
-            size: 'sm',
-            value: state.enmRestraints || 'auto',
-            options: [
-              { value: 'auto', label: `Follow the protocol (currently ${enmOn ? 'keep' : 'none'})` },
-              { value: 'on', label: 'Keep an elastic network (as the published runs do)' },
-              { value: 'off', label: 'None — genuinely unrestrained' },
+          className: 'wizard-scope__fields',
+          children: [el('div', {
+            className: 'wizard-field',
+            children: [
+              el('label', { className: 'wizard-field__label', text: 'Run' }),
+              el('div', {
+                className: 'wizard-field__control',
+                children: [createSelect({
+                  size: 'sm', value: state.parentJobId,
+                  options: choices.map(c => ({
+                    value: c.job.job_id,
+                    label: [c.label,
+                            c.stale ? '(design has changed since)' : '',
+                            c.archived ? '(archived — needs the archive drive mounted)' : '']
+                      .filter(Boolean).join(' '),
+                  })),
+                  onChange: v => { record(); state.parentJobId = v; void loadPlan() },
+                })],
+              }),
+              el('div', {
+                className: `wizard-field__help${chained ? ' wizard-field__help--strong' : ''}`,
+                text: chained
+                  ? 'Coordinates, cell AND velocities carry over, so this EXTENDS that trajectory rather than sampling a new one — its frames are correlated with the parent’s. Treat the pair as one longer run. Pick the relaxation instead for an independent sample.'
+                  : 'Coordinates and cell come from this run’s last unrestrained stage; velocities are drawn fresh, so several productions off one relaxation are independent samples.',
+              }),
             ],
-            onChange: v => { record(); state.enmRestraints = v; void loadPlan() },
           })],
         }),
-        el('div', {
-          className: 'wizard-field__help',
-          text: 'The published “unrestrained” origami productions retain a network at '
-              + 'k = 0.1 kcal/mol/Å² throughout. Sampling a template-built structure with '
-              + 'none at all gives a softer ensemble — more breathing, more fraying, larger '
-              + 'RMSD drift. The network is rebuilt from the equilibrated coordinates this '
-              + 'run starts from.',
-        }),
+        renderInherited(),
       ],
     }))
-    mounts.fields.appendChild(numberField(
-      'Langevin coupling', 'ps⁻¹', state.langevinDamping, v => {
-        record(); state.langevinDamping = v; refetch()
-      },
-      'Blank uses the literature production value (1). The ladder runs at 5, which is an '
-      + 'equilibration setting: at that coupling the dynamics are overdamped, so anything '
-      + 'time-dependent — diffusion, relaxation times, breathing kinetics — is scaled by '
-      + 'something unrelated to the system. Equilibrium averages are unaffected.'))
 
-    mounts.fields.appendChild(el('div', {
-      className: 'wizard-field',
-      children: [
-        el('label', { className: 'wizard-field__label', text: 'Timestep' }),
-        el('div', {
-          className: 'wizard-field__control',
-          children: [createSelect({
-            size: 'sm',
-            value: String(valueOf('production_timestep_fs') ?? 4),
-            options: FIELDS.find(f => f.key === 'production_timestep_fs').options,
-            onChange: v => setField('production_timestep_fs', Number(v)),
-          })],
-        }),
-        el('div', {
-          className: 'wizard-field__help',
-          text: 'The relaxation does not constrain this — a ladder exists to hand over equilibrated coordinates, and once it has, production may run at any sanctioned timestep.',
-        }),
-      ],
-    }))
+    const fieldConds = conditionsByField(plan)
+    for (const group of PRODUCTION_GROUPS) {
+      const fields = PRODUCTION_FIELD_DEFS.filter(f => f.group === group.key)
+      if (!fields.length) continue
+      const body = el('div', { className: 'wizard-scope__fields' })
+      mounts.fields.appendChild(el('section', {
+        className: `wizard-scope wizard-scope--${group.key}`,
+        children: [
+          el('h4', { className: 'wizard-scope__title', text: group.title }),
+          el('div', { className: 'wizard-scope__help', text: group.help }),
+          body,
+        ],
+      }))
+      for (const field of fields) renderField(field, fieldConds, body)
+    }
   }
 
-  function numberField(label, unit, value, onChange, help) {
-    return el('div', {
-      className: 'wizard-field',
+  /** What this run takes from the relaxation rather than choosing — stated, not offered.
+   *  A production child hardlinks its parent's topology and copies its cell, so a control
+   *  for any of these would be a control that does nothing. */
+  function renderInherited() {
+    const rows = inheritedRows(plan)
+    if (!rows.length) return null
+    return el('details', {
+      className: 'wizard-inherited',
+      attrs: { open: true },
       children: [
-        el('label', {
-          className: 'wizard-field__label',
-          children: [document.createTextNode(label),
-                     el('span', { className: 'wizard-field__unit', text: ` (${unit})` })],
+        el('summary', {
+          text: plan?.continuation
+            ? 'Inherited from the run being extended'
+            : 'Inherited from this relaxation',
         }),
         el('div', {
-          className: 'wizard-field__control',
-          children: [createInput({
-            size: 'sm', type: 'number', value: value == null ? '' : String(value), min: 0,
-            onChange: v => onChange(v === '' ? null : Number(v)),
-          })],
+          className: 'wizard-inherited__grid',
+          children: rows.flatMap(r => [
+            el('div', { className: 'wizard-inherited__label', attrs: { title: r.note },
+                        text: r.label }),
+            el('div', { className: 'wizard-inherited__value', attrs: { title: r.note },
+                        text: r.value }),
+          ]),
         }),
-        help ? el('div', { className: 'wizard-field__help', text: help }) : null,
       ],
     })
   }
@@ -751,56 +838,138 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     }))
   }
 
+  /**
+   * The production tab-2 table.
+   *
+   * Column 1 is the relaxation stage this run continues from — read-only, and the
+   * reference every other column's highlight is computed against. Then every stage the
+   * production child really runs: the velocity-reseed bridge and the production segment
+   * itself, both editable exactly as a relaxation stage is (the reseed excepted, which
+   * the runner writes without an overrides pass and which therefore renders locked).
+   */
   function renderProductionTable() {
-    const last = plan?.last_relax_stage
-    const first = plan?.stages?.[0]
-    if (!last || !first) return
-    const { rows, asymmetries } = productionComparison(last.params, first.params,
-                                                      plan.asymmetries)
+    const last = plan?.source_stage
+    const { rows, columns } = productionColumns(plan)
+    if (!last || !columns.length) return
+    const badges = conditionsByStage(plan)
+    const notes = new Map((plan.asymmetries || []).map(a => [a.key, a.note]))
 
-    const table = el('table', {
+    const head = el('tr', {
       children: [
-        el('thead', {
-          children: [el('tr', {
-            children: [
-              el('th', { className: 'param', text: 'Parameter' }),
-              el('th', { className: 'wizard-col', text: `Last relaxation stage — ${shortStageName(last.name)}` }),
-              el('th', {
-                className: 'wizard-col wizard-col--production',
-                children: [
-                  document.createTextNode('Production '),
-                  conditionRefs(conditionsByStage(plan).get(first.name)),
-                ],
-              }),
-            ],
-          })],
-        }),
-        el('tbody', {
-          children: rows.map(r => el('tr', {
-            children: [
-              el('th', { className: 'param', attrs: { scope: 'row', title: r.note }, text: r.label }),
-              el('td', { className: r.changed ? 'wizard-cell wizard-cell--changed' : 'wizard-cell', text: r.relaxation }),
-              el('td', { className: r.changed ? 'wizard-cell wizard-cell--changed' : 'wizard-cell', text: r.production }),
-            ],
-          })),
-        }),
+        el('th', { className: 'param', text: 'Parameter' }),
+        ...columns.map(col => el('th', {
+          className: `wizard-col wizard-col--${col.reference ? 'relaxation' : col.role}`,
+          attrs: {
+            title: col.reference
+              ? `${col.label} — the last stage of the ${col.sourceKind} this run continues. Every highlight below is a difference from THIS column.`
+              : `${col.label} — ${Number(col.steps || 0).toLocaleString()} steps at ${col.timestepFs} fs`,
+          },
+          children: [
+            el('div', {
+              className: 'wizard-col__name',
+              // Name the reference column by WHAT IT IS. A chained run's reference is a
+              // production stage, and heading it "Relaxation" was the one label here
+              // that could send a reader to the wrong conclusion.
+              text: col.reference
+                ? `${col.sourceKind === 'production' ? 'Continuing' : 'Relaxation'} — ${shortStageName(col.name)}`
+                : shortStageName(col.name),
+            }),
+            el('div', {
+              className: 'wizard-col__meta',
+              text: col.reference ? 'continues from' : `${col.ns} ns`,
+            }),
+            badges.has(col.name)
+              ? el('div', { className: 'wizard-col__badge',
+                            children: [conditionRefs(badges.get(col.name))] })
+              : null,
+          ],
+        })),
       ],
     })
 
-    if (asymmetries.length) {
+    const body = el('tbody')
+    let group = null
+    for (const row of rows) {
+      if (row.group !== group) {
+        group = row.group
+        body.appendChild(el('tr', {
+          className: 'wizard-group',
+          children: [el('th', { className: 'param',
+                                attrs: { colspan: columns.length + 1 }, text: group })],
+        }))
+      }
+      const note = notes.get(row.key) || ''
+      body.appendChild(el('tr', {
+        children: [
+          el('th', {
+            className: 'param',
+            attrs: { scope: 'row', title: note },
+            children: [
+              document.createTextNode(row.label),
+              // An annotated ladder-vs-production difference: a deliberate choice with a
+              // reason, and the one thing about this table that is not self-evident.
+              note ? el('span', { className: 'wizard-asym', attrs: { title: note },
+                                  text: '†' }) : null,
+              PROTECTED_ROWS.has(row.key) ? null : el('button', {
+                className: 'wizard-row-all',
+                attrs: { type: 'button', title: `Set ${row.label} for EVERY stage at once` },
+                text: '⋯',
+                on: { click: () => editAllStages(row) },
+              }),
+            ],
+          }),
+          ...columns.map(col => {
+            const cell = col.cells[row.key]
+            const classes = ['wizard-cell']
+            if (col.reference) classes.push('wizard-cell--reference')
+            if (cell.changed) classes.push('wizard-cell--changed')
+            if (cell.conditional) classes.push('wizard-cell--conditional')
+            if (!cell.present) classes.push('wizard-cell--absent')
+            if (cell.overridden) classes.push('wizard-cell--overridden')
+            if (!cell.editable) classes.push('wizard-cell--locked')
+            const title = [
+              cell.changed ? `differs from the relaxation, which had ${cell.was}` : '',
+              cell.overridden ? `the protocol value is ${cell.protocolValue}` : '',
+              cell.reason,
+              cell.editable
+                ? 'Click to edit this stage. Blank restores the protocol; “(none)” removes the directive.'
+                : (col.reference
+                  ? 'The relaxation has already run — this column is what it did.'
+                  : (col.acceptsOverrides === false
+                    ? 'Not editable: the velocity-reseed bridge is written without an overrides pass.'
+                    : 'Not editable: this names a file the runner addresses the stage by.')),
+            ].filter(Boolean).join(' — ')
+            const td = el('td', { className: classes.join(' '), attrs: { title },
+                                  text: cell.value })
+            if (cell.editable) {
+              td.tabIndex = 0
+              td.addEventListener('click', () => editCell(td, col.index, row.key, cell))
+              td.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); editCell(td, col.index, row.key, cell) }
+              })
+            }
+            return td
+          }),
+        ],
+      }))
+    }
+
+    if ((plan.asymmetries || []).length) {
       mounts.stages.appendChild(el('div', {
         className: 'wizard-note',
         children: [
-          el('h4', { text: 'Production is not just the last stage without restraints' }),
+          el('h4', { text: '† Production is not just the last stage without restraints' }),
           el('ul', {
-            children: asymmetries.map(a => el('li', {
-              text: `${a.key}: ${a.relaxation} → ${a.production}. ${a.note}`,
+            children: plan.asymmetries.map(a => el('li', {
+              text: `${paramLabel(a.key)}: ${a.relaxation} → ${a.production}. ${a.note}`,
             })),
           }),
         ],
       }))
     }
-    mounts.stages.appendChild(table)
+    mounts.stages.appendChild(el('table', {
+      children: [el('thead', { children: [head] }), body],
+    }))
   }
 
   /**
@@ -962,8 +1131,9 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       className: 'wizard-override',
       children: [
         el('input', {
-          attrs: { type: 'checkbox', checked: state.allowUndersizedCell ? true : undefined },
-          on: { change: e => { record(); state.allowUndersizedCell = e.target.checked; void loadPlan() } },
+          attrs: { type: 'checkbox',
+                   checked: state.touched.allow_undersized_cell ? true : undefined },
+          on: { change: e => setField('allow_undersized_cell', e.target.checked) },
         }),
         document.createTextNode(' Run anyway — I accept that the structure may meet its own periodic image'),
       ],
@@ -988,12 +1158,17 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     }))
     const ov = overrideSummary(state.stageOverrides)
     if (!ov.directives) return
+    // A production run has no protocol of its own — it inherits the package its
+    // relaxation built — so naming the relaxation's preset here would claim the edit
+    // departed from something this run was never following.
+    const departedFrom = state.mode === 'production'
+      ? 'this run no longer matches the protocol its package records'
+      : `this run is no longer the ${plan.preset?.label || 'selected protocol'}`
     mounts.summary.appendChild(el('div', {
       className: 'wizard-override-summary',
       children: [
-        document.createTextNode(`⚑ ${ov.text} — this run is no longer the `
-          + `${plan.preset?.label || 'selected protocol'}. The edits are recorded in the `
-          + `job's manifest and declared in its protocol-fidelity block.`),
+        document.createTextNode(`⚑ ${ov.text} — ${departedFrom}. The edits are recorded `
+          + `in the job's manifest and declared in its protocol-fidelity block.`),
         createButton({
           label: 'Reset every edit', variant: 'ghost', size: 'sm',
           onClick: () => {
@@ -1022,7 +1197,8 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       className: 'wizard-modes',
       children: [
         modeButton('relaxation', 'Relaxation', 'Bring a freshly built design to equilibrium through the restraint-release ladder.'),
-        modeButton('production', 'Production', 'Sample from a relaxation that has already finished.'),
+        modeButton('production', 'Production',
+                   'Sample from a finished relaxation — or extend a finished production run.'),
       ],
     }))
   }
@@ -1045,6 +1221,12 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     renderStages()
     renderConditions()
     renderSummary()
+    // ⚡ recommends SOLVATION and ladder settings — padding, water shell, minimisation
+    // steps, fast mode. A production child re-solvates nothing, so every one of those
+    // would write into a run that cannot use them.
+    const prod = state.mode === 'production'
+    optimizeBtn.style.display = prod ? 'none' : ''
+    optimizeProgress.style.display = prod ? 'none' : ''
     paintActions()
   }
 
@@ -1121,12 +1303,11 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     try {
       if (state.mode === 'production') {
         const body = productionPayload({
-          lengthNs: state.lengthNs, dcdFreq: state.dcdFreq, autostart,
-          allowUndersizedCell: state.allowUndersizedCell,
-          gpuResident: valueOf('gpu_resident'),
-          timestepFs: valueOf('production_timestep_fs'),
-          enmRestraints: state.enmRestraints,
-          langevinDamping: state.langevinDamping,
+          touched: state.touched, autostart,
+          // The run length always reaches the request: it is the one production setting
+          // with no server-side inheritance, so an omitted one would silently fall to the
+          // API's 1 ns default rather than to what the form is showing.
+          lengthNs: valueOf('length_ns'),
           stageOverrides: state.stageOverrides,
         })
         const job = await spawnProduction?.(state.parentJobId, body)
@@ -1274,10 +1455,19 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     onOptimizeMount?.({ button: optimizeBtn, progressEl: optimizeProgress })
   }
 
-  async function open(mode = null, { draftId = null, prefill = null } = {}) {
+  async function open(mode = null, { draftId = null, prefill = null,
+    parentJobId = null } = {}) {
     if (!modal) build()
     if (mode) state.mode = mode
     state.draftId = draftId
+    // Opening ON a job means continuing THAT run, not the newest one for this part —
+    // which is what `ensureParent` would otherwise pick, silently, while the user had a
+    // different relaxation selected in the list.
+    if (parentJobId) state.parentJobId = parentJobId
+    // A production session starts clean: the previous session's settings describe a
+    // different parent package, so carrying them over would present another run's
+    // integrator choice as this one's.
+    if (state.mode === 'production' && !prefill) state.touched = {}
     // A fresh session starts on the first tab with nothing to undo — the previous run's
     // history describes settings this wizard is no longer showing.
     state.tab = 'setup'

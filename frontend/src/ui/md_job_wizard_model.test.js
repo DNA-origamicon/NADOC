@@ -17,17 +17,21 @@ import {
   fieldScope,
   formatCreatedAt,
   formatValue,
+  inheritedRows,
+  isProductionParent,
   makeDebounce,
   paramLabel,
   paramRows,
   partNameFor,
   planPayload,
   presetSummary,
+  productionColumns,
   productionComparison,
+  productionField,
   productionPayload,
   pushUndo,
   relaxRunLabel,
-  relaxationChoices,
+  productionParents,
   snapshotState,
   stageColumns,
   stageDiff,
@@ -232,6 +236,218 @@ describe('productionComparison', () => {
   })
 })
 
+/** A miniature PRODUCTION plan, in the shape `_production_plan` returns: the relaxation
+ *  stage being continued, then the two confs the replica package really contains. */
+function prodPlan(overrides = {}) {
+  return {
+    kind: 'production',
+    param_groups: ['Integrator', 'Thermostat & barostat', 'Restraints & fixed atoms'],
+    source_stage: {
+      kind: 'relaxation',
+      name: 'demo_04_k0', stage: '300K NPT MgHH only',
+      params: { timestep: '2', rigidbonds: 'all', langevindamping: '5',
+                extrabondsfile: 'mgh_extrabonds.txt', stepspercycle: '20',
+                fixedatoms: 'on', outputname: 'output/demo_04_k0' },
+    },
+    stages: [
+      {
+        index: 0, name: 'demo_00_reseed', stage: 'Velocity reseed', role: 'reseed',
+        steps: 0, timestep_fs: 4, ns: 0, accepts_overrides: false,
+        params: { timestep: '2', reinitvels: '300', langevindamping: '5',
+                  outputname: 'output/demo_00_reseed' },
+        diff_vs_previous: {}, conditional_params: {}, overridden: {},
+      },
+      {
+        index: 1, name: 'demo_01_production_100ns_k0', stage: '100 ns production replica',
+        role: 'production', steps: 25000000, timestep_fs: 4, ns: 100,
+        accepts_overrides: true,
+        params: { timestep: '4', rigidbonds: 'all', langevindamping: '1',
+                  extrabondsfile: 'mgh_extrabonds.txt', stepspercycle: '10',
+                  parameters: 'forcefield/par_all36_na.prm',
+                  outputname: 'output/demo_01_production_100ns_k0' },
+        diff_vs_previous: {}, conditional_params: {}, overridden: {},
+      },
+    ],
+    asymmetries: [{ key: 'stepspercycle', relaxation: '20', production: '10',
+                    note: 'why it differs' }],
+    inherited: {
+      seed_stage: '300K NPT MgHH only', seed_checkpoint: 'demo_04_k0',
+      relax_preset: 'literature', n_atoms: 224000, box_ang: [180.5, 190.25, 210.0],
+      padding_nm: 2.0, carved: false, mg_conc_mM: 12.5, ion_conc_mM: 0,
+      ladder_timestep_fs: 2.0, anchors: false, field: null,
+    },
+    production_request: {
+      length_ns: { value: 100, provenance: 'default', reason: 'the wizard default' },
+      production_timestep_fs: { value: 4, provenance: 'inherited', reason: 'from prep' },
+    },
+    request: { production_timestep_fs: { value: 2, provenance: 'preset', reason: '' },
+               padding_nm: { value: 2, provenance: 'preset', reason: '' } },
+    ...overrides,
+  }
+}
+
+describe('productionColumns', () => {
+  it('leads with the relaxation stage the run continues from, read-only', () => {
+    const { columns } = productionColumns(prodPlan())
+    expect(columns.map(c => c.name)).toEqual(
+      ['demo_04_k0', 'demo_00_reseed', 'demo_01_production_100ns_k0'])
+    expect(columns[0].reference).toBe(true)
+    expect(Object.values(columns[0].cells).every(c => !c.editable)).toBe(true)
+  })
+
+  it('highlights against the RELAXATION column, not against the previous stage', () => {
+    // The question this table answers is "what is different about production". The
+    // zero-step reseed bridge sitting in between is not what anyone is comparing to.
+    const prod = productionColumns(prodPlan()).columns[2]
+    expect(prod.cells.timestep).toMatchObject({ changed: true, was: '2' })
+    expect(prod.cells.langevindamping).toMatchObject({ changed: true, was: '5' })
+    expect(prod.cells.extrabondsfile.changed).toBe(false)
+  })
+
+  it('shows a directive that exists ONLY on the relaxation side', () => {
+    // The ladder's fixed atoms disappear in production. Building the row list from the
+    // plan's `stages` alone dropped exactly the rows worth looking at.
+    const { rows, columns } = productionColumns(prodPlan())
+    expect(rows.map(r => r.key)).toContain('fixedatoms')
+    expect(columns[2].cells.fixedatoms).toMatchObject({ present: false, changed: true })
+  })
+
+  it('locks the reseed bridge — the runner writes it without an overrides pass', () => {
+    const reseed = productionColumns(prodPlan()).columns[1]
+    expect(reseed.acceptsOverrides).toBe(false)
+    expect(reseed.cells.timestep.editable).toBe(false)
+  })
+
+  it('leaves the production stage editable, except the directives that name its files', () => {
+    const prod = productionColumns(prodPlan()).columns[2]
+    expect(prod.cells.timestep.editable).toBe(true)
+    // Protected: rewriting it detaches the stage from its package rather than changing
+    // what it simulates, so the cell is rendered read-only instead of failing at submit.
+    expect(prod.cells.parameters.editable).toBe(false)
+    // A NOISE key gets no row at all — 22 per-stage output paths would bury the physics.
+    expect(prod.cells.outputname).toBeUndefined()
+  })
+
+  it('is empty when there is no relaxation to compare against', () => {
+    expect(productionColumns({ stages: [] })).toEqual({ rows: [], columns: [] })
+  })
+
+  it('carries a hand edit through as its own highlight', () => {
+    const p = prodPlan()
+    p.stages[1].overridden = { langevindamping: ['1', '2'] }
+    const cell = productionColumns(p).columns[2].cells.langevindamping
+    expect(cell).toMatchObject({ overridden: true, protocolValue: '1' })
+  })
+})
+
+/** The same plan for a CHAINED run: the parent is a production, so the reference column
+ *  is a production stage and the reseed carries velocities instead of redrawing them. */
+function chainPlan(overrides = {}) {
+  const p = prodPlan()
+  p.continuation = true
+  p.source_stage = {
+    kind: 'production', name: 'demo_01_production_200ns_k0',
+    stage: '200 ns production replica',
+    params: { timestep: '4', rigidbonds: 'all', langevindamping: '1',
+              extrabondsfile: 'mgh_extrabonds.txt', stepspercycle: '10',
+              run: '50000000', outputname: 'output/demo_01_production_200ns_k0' },
+  }
+  p.stages[0].stage = 'Velocity continuation'
+  p.stages[0].params = { timestep: '2', binvelocities: 'equilibrated.vel',
+                         langevindamping: '1', outputname: 'output/demo_00_reseed' }
+  p.asymmetries = []
+  p.inherited = { ...p.inherited, continuation: true, chain_position: 3,
+                  parent_length_ns: 200.0, seed_stage: '200 ns production replica' }
+  return { ...p, ...overrides }
+}
+
+describe('productionColumns — chaining off a finished production', () => {
+  it('names the reference column by what it IS, not "Relaxation"', () => {
+    const ref = productionColumns(chainPlan()).columns[0]
+    expect(ref).toMatchObject({ reference: true, sourceKind: 'production',
+                                role: 'production' })
+    expect(ref.name).toBe('demo_01_production_200ns_k0')
+  })
+
+  it('still diffs the new run against the run it continues', () => {
+    // Both columns are productions now, so the ladder-vs-production asymmetries are gone
+    // and what is left is the real change: the run length.
+    const prod = productionColumns(chainPlan()).columns[2]
+    expect(prod.cells.run).toMatchObject({ changed: true, was: '50000000' })
+    expect(prod.cells.langevindamping.changed).toBe(false)
+    expect(prod.cells.stepspercycle.changed).toBe(false)
+  })
+
+  it('keeps the continuation bridge locked, same as the reseed', () => {
+    expect(productionColumns(chainPlan()).columns[1].acceptsOverrides).toBe(false)
+  })
+})
+
+describe('inheritedRows — chaining', () => {
+  it('says where in the chain this run sits and how much is already simulated', () => {
+    const rows = Object.fromEntries(inheritedRows(chainPlan()).map(r => [r.label, r.value]))
+    expect(rows['Position in the chain']).toBe('run 3 off this relaxation')
+    expect(rows['Already simulated']).toBe('200 ns')
+  })
+
+  it('says that VELOCITIES carry over — the thing that makes it not a new sample', () => {
+    const row = inheritedRows(chainPlan()).find(r => r.label === 'Continuing from')
+    expect(row.note).toMatch(/velocities/i)
+    expect(row.value).toBe('200 ns production replica')
+  })
+
+  it('does not claim a chain position for a run seeded off a relaxation', () => {
+    const labels = inheritedRows(prodPlan()).map(r => r.label)
+    expect(labels).not.toContain('Position in the chain')
+    expect(labels).not.toContain('Already simulated')
+    expect(inheritedRows(prodPlan()).find(r => r.label === 'Continuing from').note)
+      .not.toMatch(/velocities/i)
+  })
+})
+
+describe('productionField', () => {
+  it('prefers the production-resolved value over the create-request merge', () => {
+    // The four settings that exist in both resolve differently: the create merge reports
+    // the PRESET's value, while a production child inherits what its package recorded.
+    expect(productionField(prodPlan(), 'production_timestep_fs'))
+      .toMatchObject({ value: 4, provenance: 'inherited' })
+  })
+
+  it('falls back to the create request for a field production does not resolve', () => {
+    expect(productionField(prodPlan(), 'padding_nm')).toMatchObject({ value: 2 })
+  })
+
+  it('is null for a field neither block carries', () => {
+    expect(productionField(prodPlan(), 'nonesuch')).toBe(null)
+  })
+})
+
+describe('inheritedRows', () => {
+  it('states what the run takes from the relaxation rather than choosing', () => {
+    const labels = inheritedRows(prodPlan()).map(r => r.label)
+    expect(labels).toEqual(expect.arrayContaining(
+      ['Continuing from', 'Relaxation protocol', 'Solvated atoms', 'Cell',
+       'Water padding', 'Magnesium', 'Ladder base timestep']))
+  })
+
+  it('formats the cell and the atom count for reading, not for parsing', () => {
+    const rows = inheritedRows(prodPlan())
+    expect(rows.find(r => r.label === 'Cell').value).toBe('180.5 × 190.25 × 210 Å')
+    expect(rows.find(r => r.label === 'Solvated atoms').value).toMatch(/224[,.\s]000/)
+  })
+
+  it('omits what the package does not record, rather than showing a blank', () => {
+    const labels = inheritedRows(prodPlan()).map(r => r.label)
+    expect(labels).not.toContain('Water shell carve')     // not carved
+    expect(labels).not.toContain('Anchors')               // none
+    expect(labels).not.toContain('Electric field')
+  })
+
+  it('is empty for a relaxation plan, which inherits nothing', () => {
+    expect(inheritedRows(plan())).toEqual([])
+  })
+})
+
 describe('presetSummary', () => {
   it('counts what the preset is actually still supplying, not what it declares', () => {
     const s = presetSummary({ id: 'literature', label: 'Lit', summary: 's', reference: 'r' }, plan())
@@ -284,15 +500,33 @@ describe('planPayload', () => {
   })
 
   it('carries the parent and length for a production plan', () => {
-    expect(planPayload({ presetId: 'x', mode: 'production', parentJobId: 'abc', lengthNs: 100 }))
+    expect(planPayload({ presetId: 'x', mode: 'production', parentJobId: 'abc',
+                         touched: { length_ns: 100 } }))
       .toMatchObject({ kind: 'production', parent_job_id: 'abc', length_ns: 100,
                        allow_undersized_cell: false })
   })
 
   it('carries the production restraint and damping choices into the preview', () => {
     expect(planPayload({ presetId: 'x', mode: 'production', parentJobId: 'a',
-                         enmRestraints: 'off', langevinDamping: 5 }))
+                         touched: { enm_restraints: 'off', langevin_damping: 5 } }))
       .toMatchObject({ enm_restraints: 'off', langevin_damping: 5 })
+  })
+
+  it('omits an untouched production setting, so the package keeps deciding it', () => {
+    // The preview has to resolve the same way the run will. A length or a restraint
+    // choice sent because the form displayed it would mark itself explicit and beat the
+    // prep-time value a production child is supposed to inherit.
+    const body = planPayload({ presetId: 'x', mode: 'production', parentJobId: 'a' })
+    expect(body).not.toHaveProperty('length_ns')
+    expect(body).not.toHaveProperty('enm_restraints')
+    expect(body).not.toHaveProperty('langevin_damping')
+    expect(body).not.toHaveProperty('seed')
+  })
+
+  it('never sends the auto restraint choice as an explicit one', () => {
+    expect(planPayload({ presetId: 'x', mode: 'production', parentJobId: 'a',
+                         touched: { enm_restraints: 'auto' } }))
+      .not.toHaveProperty('enm_restraints')
   })
 
   it('passes an atom-count hint so deferred values resolve exactly', () => {
@@ -302,7 +536,7 @@ describe('planPayload', () => {
 
 describe('productionPayload', () => {
   it('builds the spawn body', () => {
-    expect(productionPayload({ lengthNs: 100, dcdFreq: 5000, autostart: true }))
+    expect(productionPayload({ touched: { length_ns: 100, dcd_freq: 5000 }, autostart: true }))
       .toEqual({ length_ns: 100, autostart: true, allow_undersized_cell: false,
                  execution_target: 'local', dcd_freq: 5000 })
   })
@@ -313,17 +547,106 @@ describe('productionPayload', () => {
     expect(body).not.toHaveProperty('cluster_name')
   })
 
+  it('always sends a run length, from the plan when the user did not type one', () => {
+    // The one production setting with no server-side inheritance: omitted, it would fall
+    // to the API's 1 ns default rather than to the 100 ns the form was showing.
+    expect(productionPayload({ lengthNs: 100 }).length_ns).toBe(100)
+    expect(productionPayload({ touched: { length_ns: 25 }, lengthNs: 100 }).length_ns).toBe(25)
+  })
+
   it('carries the restraint choice and the thermostat coupling', () => {
     // Both differ from the ladder, and both change what the trajectory can be compared
     // with: the published "unrestrained" productions keep a network, and their thermostat
     // couples an order of magnitude more weakly than an equilibration run.
-    const body = productionPayload({ lengthNs: 10, enmRestraints: 'on', langevinDamping: 1 })
+    const body = productionPayload({
+      touched: { length_ns: 10, enm_restraints: 'on', langevin_damping: 1 } })
     expect(body).toMatchObject({ enm_restraints: 'on', langevin_damping: 1 })
   })
 
   it('leaves the restraint choice to the server when not set', () => {
     // Absent means "follow the parent protocol" — the backend's 'auto'.
     expect(productionPayload({ lengthNs: 10 })).not.toHaveProperty('enm_restraints')
+    expect(productionPayload({ touched: { enm_restraints: 'auto' }, lengthNs: 10 }))
+      .not.toHaveProperty('enm_restraints')
+  })
+
+  it('renames the two integrator axes to the spawn request’s own field names', () => {
+    // ProductionRunRequest is already about production, so `rigid_bonds` there is what
+    // `production_rigid_bonds` is on a create request. Sending the create-request name
+    // would be silently dropped by pydantic and the run would use the auto value.
+    const body = productionPayload({
+      touched: { production_rigid_bonds: 'none', production_hmr: false,
+                 production_timestep_fs: 2 }, lengthNs: 10 })
+    expect(body).toMatchObject({ rigid_bonds: 'none', hmr: false,
+                                 production_timestep_fs: 2 })
+    expect(body).not.toHaveProperty('production_rigid_bonds')
+  })
+
+  it('sends GPU-resident, the seed and the undersized-cell override', () => {
+    const body = productionPayload({
+      touched: { gpu_resident: 'off', seed: 4242, allow_undersized_cell: true },
+      lengthNs: 10 })
+    expect(body).toMatchObject({ gpu_resident: 'off', seed: 4242,
+                                 allow_undersized_cell: true })
+  })
+
+  it('sends nothing the user did not touch, so the package keeps deciding', () => {
+    const body = productionPayload({ lengthNs: 10 })
+    for (const key of ['gpu_resident', 'seed', 'rigid_bonds', 'hmr',
+                       'production_timestep_fs', 'langevin_damping']) {
+      expect(body).not.toHaveProperty(key)
+    }
+  })
+})
+
+describe('isProductionParent', () => {
+  const done = { job_id: 'a', status: 'completed', run_kind: null, archived: false }
+
+  it('accepts a completed relaxation — the New-job gesture that means "carry on"', () => {
+    expect(isProductionParent(done)).toBe(true)
+  })
+
+  it('refuses anything a production run cannot seed from', () => {
+    expect(isProductionParent(null)).toBe(false)
+    expect(isProductionParent({ ...done, status: 'running' })).toBe(false)
+    expect(isProductionParent({ ...done, status: 'stopped' })).toBe(false)
+    expect(isProductionParent({ ...done, status: 'failed' })).toBe(false)
+  })
+
+  it('accepts a completed PRODUCTION run — that is the chain gesture', () => {
+    // The backend has always chained (`_production_seed_checkpoint` branches on
+    // `run_kind`, and `build_replica_package` stages the parent's restart set and
+    // preserves velocities). Only the UI had no way to ask for it.
+    const child = { ...done, job_id: 'child', run_kind: 'production' }
+    expect(isProductionParent(child)).toBe(true)
+    const choice = productionParents([child], '')[0]
+    expect(choice.continuation).toBe(true)
+    expect(choice.label).toMatch(/production run created/)
+  })
+
+  it('marks a relaxation parent as NOT a continuation — it is an independent sample', () => {
+    const choice = productionParents([done], '')[0]
+    expect(choice.continuation).toBe(false)
+    expect(choice.label).toMatch(/relaxation created/)
+  })
+
+  it('accepts an ARCHIVED relaxation — archiving is a disk decision, not a retirement', () => {
+    // The job directory moves to the archive drive and `package_dir` follows it, so the
+    // package is intact and the spawn route accepts it. Excluding them meant that on a
+    // machine where every finished relaxation had been archived to reclaim space,
+    // production mode could only ever say "no completed relaxation for this part yet".
+    expect(isProductionParent({ ...done, archived: true })).toBe(true)
+    const choice = productionParents([{ ...done, archived: true }], '')[0]
+    expect(choice.archived).toBe(true)     // called out: the drive has to be mounted
+  })
+
+  it('agrees with the wizard’s own picker about what counts as a parent', () => {
+    // The two must never disagree: the button would open a mode whose picker then
+    // silently swapped in a different run.
+    const jobs = [done, { ...done, job_id: 'b', run_kind: 'production' },
+                  { ...done, job_id: 'c', status: 'failed' }]
+    expect(productionParents(jobs, '').map(c => c.job.job_id))
+      .toEqual(jobs.filter(isProductionParent).map(j => j.job_id))
   })
 })
 
@@ -371,7 +694,7 @@ describe('formatCreatedAt', () => {
   })
 })
 
-describe('relaxationChoices', () => {
+describe('productionParents', () => {
   const base = { design_source_path: 'w/belt.nadoc', status: 'completed' }
   const jobs = [
     { ...base, job_id: 'old', created_at: 100 },
@@ -382,28 +705,42 @@ describe('relaxationChoices', () => {
     { ...base, job_id: 'archived', archived: true, created_at: 700 },
   ]
 
-  it('offers only completed relaxations for this part, newest first', () => {
-    expect(relaxationChoices(jobs, 'w/belt.nadoc').map(c => c.job.job_id))
-      .toEqual(['new', 'old'])
+  it('offers every completed run for this part, newest first', () => {
+    // 'archived' is in the list on purpose: archiving moves the package to the archive
+    // drive to reclaim disk, and every path that reads it follows `archive_path`.
+    // 'child' is in it because a completed production is a legal parent — picking it
+    // EXTENDS that trajectory instead of sampling a new one.
+    expect(productionParents(jobs, 'w/belt.nadoc').map(c => c.job.job_id))
+      .toEqual(['archived', 'child', 'new', 'old'])
   })
 
   it('tolerates a trailing slash and backslashes in the part path', () => {
-    expect(relaxationChoices(jobs, 'w\\belt.nadoc/').map(c => c.job.job_id))
-      .toEqual(['new', 'old'])
+    expect(productionParents(jobs, 'w\\belt.nadoc/').map(c => c.job.job_id))
+      .toEqual(['archived', 'child', 'new', 'old'])
   })
 
   it('is empty when nothing qualifies — the "run a relaxation first" signal', () => {
-    expect(relaxationChoices(jobs, 'w/never-run.nadoc')).toEqual([])
-    expect(relaxationChoices([], 'w/belt.nadoc')).toEqual([])
+    expect(productionParents(jobs, 'w/never-run.nadoc')).toEqual([])
+    expect(productionParents([], 'w/belt.nadoc')).toEqual([])
   })
 
   it('flags a stale relaxation rather than hiding it', () => {
     const stale = [{ ...base, job_id: 's', created_at: 1, out_of_date: true }]
-    expect(relaxationChoices(stale, 'w/belt.nadoc')[0].stale).toBe(true)
+    expect(productionParents(stale, 'w/belt.nadoc')[0].stale).toBe(true)
   })
 
-  it('labels each choice by part and time', () => {
-    expect(relaxationChoices(jobs, 'w/belt.nadoc')[0].label).toMatch(/^belt run created /)
+  it('says WHICH KIND each choice is — the two mean different experiments', () => {
+    // "<part> run created …" identified nothing once both kinds were in one picker: the
+    // choice between them is an independent sample versus an extension of one trajectory.
+    const byId = Object.fromEntries(
+      productionParents(jobs, 'w/belt.nadoc').map(c => [c.job.job_id, c.label]))
+    expect(byId.new).toMatch(/^belt relaxation created /)
+    expect(byId.child).toMatch(/^belt production run created /)
+  })
+
+  it('keeps a deliberately chosen parent even when the part filter would drop it', () => {
+    expect(productionParents(jobs, 'w/belt.nadoc', { includeJobId: 'other-part' })
+      .map(c => c.job.job_id)).toContain('other-part')
   })
 })
 
@@ -650,6 +987,22 @@ describe('conditionsByField', () => {
     // conditions to controls that do not govern them.
     expect([...conditionsByField(sourced()).keys()]).toEqual(['force_soft', 'early_stop_relax'])
   })
+
+  it('links a production condition too — its controls live on the spawn request', () => {
+    // A production run's controls are split across the two request models: its integrator
+    // axes are create-request fields recorded at prep, while its length, restraints and
+    // coupling belong to ProductionRunRequest. Matching only the first left every
+    // production warning stranded in the list with no control beside it.
+    const p = plan({ conditions: [
+      { id: 'production_restraints', kind: 'warning', title: 'Unrestrained', detail: '…',
+        applies_to: 'all', source: 'ProductionRunRequest.enm_restraints' },
+      { id: 'box_fit', kind: 'blocking', title: 'Cell too small', detail: '…',
+        applies_to: 'all', source: 'ProductionRunRequest.length_ns' },
+    ] })
+    const map = conditionsByField(p)
+    expect(map.get('enm_restraints').map(c => c.id)).toEqual(['production_restraints'])
+    expect(map.get('length_ns').map(c => c.id)).toEqual(['box_fit'])
+  })
 })
 
 describe('allStageConditions', () => {
@@ -663,8 +1016,7 @@ describe('undo', () => {
     mode: 'relaxation', presetId: 'literature', tab: 'plan',
     touched: { fast: true, threads: 8 },
     stageOverrides: { 3: { timestep: '2' } },
-    parentJobId: null, lengthNs: 100, dcdFreq: null,
-    enmRestraints: null, langevinDamping: null, allowUndersizedCell: false,
+    parentJobId: null,
   })
 
   it('copies the nested values, so a later edit cannot reach into the snapshot', () => {
@@ -718,9 +1070,20 @@ describe('undo', () => {
   it('drops the oldest once the stack is full', () => {
     let stack = []
     for (let i = 0; i < 6; i++) {
-      stack = pushUndo(stack, snapshotState({ ...state(), lengthNs: i }), 3)
+      stack = pushUndo(stack, snapshotState({ ...state(), parentJobId: `job${i}` }), 3)
     }
-    expect(stack.map(s => s.lengthNs)).toEqual([3, 4, 5])
+    expect(stack.map(s => s.parentJobId)).toEqual(['job3', 'job4', 'job5'])
+  })
+
+  it('covers a production setting, which now lives in `touched` like every other', () => {
+    // They used to be five separate state slots, which is why moving them into `touched`
+    // is what let them render through the same field machinery as the ladder's controls.
+    const s = { ...state(), mode: 'production',
+                touched: { length_ns: 100, enm_restraints: 'on' } }
+    const snap = snapshotState(s)
+    s.touched.length_ns = 25
+    applySnapshot(s, snap)
+    expect(s.touched).toEqual({ length_ns: 100, enm_restraints: 'on' })
   })
 })
 

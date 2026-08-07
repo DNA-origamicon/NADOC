@@ -141,6 +141,12 @@ def build_replica_package(
     length_ns: float,
     timestep_fs: float,
     fast: bool,
+    #: The two integrator axes the timestep used to imply.  ``None`` = follow ``fast``
+    #: (which is only a NAME for 4 fs), so an untouched call is byte-identical to what it
+    #: emitted before they existed.  Passing them is how a child runs, say, 2 fs WITHOUT
+    #: rigid bonds — a combination exp51 measured and the spawn route could not express.
+    rigid_bonds: Optional[str] = None,
+    hmr: Optional[bool] = None,
     ready_checkpoint: str,
     workspace: Path,
     dcd_freq: int = PRODUCTION_DCD_FREQ,
@@ -226,8 +232,13 @@ def build_replica_package(
     # sanctioned timestep.  Reseeding (build_reseed_conf below) re-draws velocities at
     # temperature, so the mass change never inherits a checkpoint's old kinetic energy.
     hmr_downgrade_reason: Optional[str] = None
+    hmr_build_failed = False
     hmr_name = f"{name_stem}_hmr.psf"
-    use_fast = bool(fast)
+    # `fast` is only a NAME for 4 fs; HMR is its own axis since exp51.  An explicit
+    # hmr=False at 4 fs is a legal, measured-but-warned choice (standard masses), and it
+    # must NOT be treated as a failed repartition — only a PSF that cannot be built is
+    # that, and only that downgrades the timestep below.
+    use_fast = bool(fast) if hmr is None else bool(hmr)
     if use_fast:
         if (parent_pkg / hmr_name).exists():
             _link_or_copy(parent_pkg / hmr_name, child_pkg / hmr_name)
@@ -240,6 +251,7 @@ def build_replica_package(
             except (OSError, RuntimeError, ValueError, IndexError) as exc:
                 (child_pkg / hmr_name).unlink(missing_ok=True)
                 use_fast = False
+                hmr_build_failed = True
                 # LOUD.  A downgrade the user cannot see is the bug this whole area keeps
                 # reproducing: a "4 fs" run that quietly delivers 1 fs looks like a
                 # mysterious 3x throughput loss, not a fallback.  Recorded in the manifest
@@ -357,7 +369,10 @@ def build_replica_package(
                          f"({type(exc).__name__}: {exc}); this run is UNRESTRAINED")
             logger.warning("[%s] %s", child.job_id, enm_error)
 
-    eff_timestep_fs = 1.0 if (timestep_fs == 4.0 and not use_fast) else timestep_fs
+    # ONLY an unbuildable HMR PSF drops the timestep.  It used to be `not use_fast`, which
+    # after exp51 would also fire for a deliberate hmr=False at 4 fs — silently running a
+    # quarter of the requested simulated time for a combination the user chose on purpose.
+    eff_timestep_fs = 1.0 if (timestep_fs == 4.0 and hmr_build_failed) else timestep_fs
     length_ns = steps * eff_timestep_fs / 1_000_000.0
     label_ns = f"{length_ns:g}".replace(".", "p")
     prod_name = f"{name_stem}_01_production_{label_ns}ns_k0"
@@ -384,6 +399,10 @@ def build_replica_package(
         build_production_conf(
             prod, name_stem, box, mgh_extrabonds,
             seed=seed, fast=use_fast, timestep_fs=eff_timestep_fs,
+            # The third axis. Without it a child that asked for 2 fs with rigid bonds OFF
+            # got `rigidBonds all` anyway, because the writer derived it from the timestep.
+            rigid_bonds=("none" if hmr_build_failed else rigid_bonds),
+            hmr=use_fast,
             structure_psf=structure_psf,
             n_atoms=psf_atom_count(child_pkg / f"{name_stem}.psf"),
             force_resident=force_resident,
@@ -467,6 +486,12 @@ def build_replica_package(
         # which would double-count).
         "relax_protocol_settings": {"timestep_fs": eff_timestep_fs},
         "fast_relaxation": {"enabled": use_fast, "structure_psf": structure_psf},
+        # The three integrator axes this child resolved to, in the same manifest keys the
+        # prep path writes them under — so chaining a production off THIS job reads its
+        # parent's real choice instead of falling back to the auto value for the timestep.
+        "production_timestep_fs": eff_timestep_fs,
+        "production_rigid_bonds": rigid_bonds,
+        "production_hmr": use_fast,
         "ensemble": {
             "parent_job_id": parent.job_id,
             "seed": int(seed),
