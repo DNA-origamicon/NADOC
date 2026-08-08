@@ -9,8 +9,8 @@ metadata:
 # One helical site, many cheap representations
 
 **Status: Phases 0–9 all closed (2026-08-07) — 7 as a false premise, 8 by the owner's
-"leave saved poses as-is", 9 by re-justification. Phase 10 has no consumer. ONE open
-question remains and it is new: the 14.6° between junction symmetry and MD azimuth.** Owner instruction: *"why not have a unified abstraction then?
+"leave saved poses as-is", 9 by re-justification. Phase 10 has no consumer. The 14.6° between junction symmetry and
+MD azimuth is SETTLED in favour of symmetry — see below. No open questions.** Owner instruction: *"why not have a unified abstraction then?
 From which all representations and models can be built from cheaply"* — yes, and this is what
 that costs. Companion to [[project_atomistic_source_of_truth]] (whose audit table this is the
 remedy for) and TD-27 in [[project_tech_debt]].
@@ -435,13 +435,20 @@ permanently out:
    applied downstream. Do not let a consumer read a site and skip the deformation pass — that is
    how `mrdna_bridge` ended up re-deriving from the straight helix in the first place.
 
-## Open question for the owner — the 14.6° (raised 2026-08-07)
+## The 14.6° — SETTLED 2026-08-07: symmetry-first stays
 
-The atomistic roll cannot satisfy both measured criteria at once. Shipping is symmetry-first
-(−46.6°, azimuth 8.5° off MD); MD-first would be about −38.1°, which puts the mean on +7.3° and
-leaves the DX pair ~7° imbalanced, i.e. roughly half the original 0.500 nm gap asymmetry back.
-Options: keep symmetry-first (status quo, visually confirmed), go MD-first, or split. Nothing
-should change without this call — the number is phase-constant-adjacent.
+The atomistic roll cannot satisfy both measured criteria at once, and the owner's call is the
+**status quo**: the shipping total of **−46.6°** (−32° + the −14.6° DX-junction balance), which
+equalises the junction linkers and leaves the crossover azimuth 8.5° from the MD mean.
+
+Rejected: MD-first at ≈−38.1°, which would put the azimuth mean on +7.3° and give back roughly
+half the original 0.500 nm junction-gap asymmetry.
+
+Rationale to preserve: the two criteria measure different things — a built structure's local
+linker strain versus where relaxed DNA settles — and the balanced build is the one the owner has
+actually inspected in the app on both lattices. **This is now a decision, not an accident: do not
+"fix" the 8.5° against MD.** `test_the_atomistic_crossover_azimuth_stays_in_the_md_envelope`
+stays deliberately loose so it guards the physical range without re-litigating this.
 
 ## Earlier open question — ANSWERED 2026-08-07
 

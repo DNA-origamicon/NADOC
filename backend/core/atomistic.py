@@ -663,10 +663,15 @@ _REV_P_DELTA_REV_CELL: float = _ATOMISTIC_PP_SEP_RAD - (
 # measured DX-junction balance (−14.6° on honeycomb), which takes the crossover azimuth
 # 8.5° to the far side of the MD mean.  Two measured criteria disagree by 14.6°: junction
 # linker SYMMETRY (user-reported, fixed by the balance roll) and equilibrium crossover
-# AZIMUTH (best near −32°).  They measure different things — a seed's local strain versus
-# where relaxed DNA settles — and the owner has seen and approved the balanced build.
-# Pinned loosely by `test_the_atomistic_crossover_azimuth_stays_in_the_md_envelope`, which
-# catches gross drift without pretending the 8.5° is resolved.
+# AZIMUTH (best near −32°).  They measure different things — a built structure's local linker
+# strain versus where relaxed DNA settles.
+#
+# SETTLED 2026-08-07, owner decision: symmetry-first, i.e. this total stays.  The balanced
+# build is the one inspected in the app on both lattices; MD-first (≈−38.1°) was rejected
+# because it gives back roughly half the 0.500 nm junction-gap asymmetry.  This is a
+# decision, not an accident — do NOT "fix" the 8.5° against MD.
+# `test_the_atomistic_crossover_azimuth_stays_in_the_md_envelope` is deliberately loose so it
+# guards the physical range without re-litigating it.
 #
 # NOT the same constant as `_FRAME_ROT_RAD`, and not gated on it: this rotates e_radial
 # (orbiting the whole nucleotide about the helix axis), `_FRAME_ROT_M` post-multiplies the
