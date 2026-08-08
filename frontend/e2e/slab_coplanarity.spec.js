@@ -105,5 +105,7 @@ test('live full-representation pair keeps both largest faces coplanar', async ({
   // Instanced matrices are Float32-backed, so payload-to-GPU roundoff is ~1e-7 nm.
   expect(result.beadInitialError).toBeLessThan(1e-6)
   expect(result.beadMoveDistance).toBeGreaterThan(5)
-  expect(result.slabMatrixDelta).toBeLessThan(1e-12)
+  // Bead-only overrides must re-run the same contact solve instead of snapping
+  // slabs back to a legacy center or leaving them disconnected.
+  expect(result.slabMatrixDelta).toBeGreaterThan(1)
 })
