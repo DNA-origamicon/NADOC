@@ -597,7 +597,7 @@ def test_a_display_default_flip_cannot_reach_the_pose_fitters():
 
 # ── Round 2: the atomistic phase answers to MD, not to the display ───────────
 
-MD_18HB = Path("workspace/18hb.nadoc")
+MD_HC = Path("workspace/6hb_e_test.nadoc")   # 6 helices, 234 crossovers
 
 
 def test_the_atomistic_crossover_azimuth_stays_in_the_md_envelope():
@@ -609,18 +609,22 @@ def test_the_atomistic_crossover_azimuth_stays_in_the_md_envelope():
     ``scripts/measure_interhelix_phase.py`` measures on free-NAMD origami: the azimuth of a
     crossing phosphate about its own helix axis, 0 deg = the inter-helix direction.
 
-    MD on 18hb: mean +7.3 deg, |phi| median 19.1 (circstd ~30 deg across systems).  This
-    build: mean -1.2, |phi| median 21.5 over 1420 crossovers — inside the spread, and 8.5 deg
-    from the mean because the DX-junction balance roll pulls the other way.  The envelope is
-    deliberately loose: it catches a phase that has drifted out of physical range, not the
-    unresolved 8.5 deg.
+    MD across the insert-free free-NAMD systems: mean +7.3 to +8.1 deg, |phi| median 19.1-19.5,
+    circstd ~30 deg.  This build on ``6hb_e_test``: mean -0.1, |phi| median 19.63 over 468
+    crossovers — inside the spread, and ~8 deg from the mean because the DX-junction balance
+    roll pulls the other way, which is a settled owner decision (symmetry-first), not drift.
+
+    The envelope is deliberately loose: it catches a phase that has left physical range, not
+    the ~8 deg.  Fixture is the 6hb rather than ``18hb`` (same verdict: mean -1.2, |phi| median
+    21.5 over 1420 crossovers) because the 18-helix build costs 5.5 s — over the per-test
+    budget — against 1.2 s here.
     """
     import math
 
     from backend.core.atomistic import build_atomistic_model
     from backend.core.deformation import effective_helix_for_geometry
 
-    design = _load(MD_18HB)
+    design = _load(MD_HC)
     model = build_atomistic_model(design, fast_bridges=True)
     P = {
         (a.helix_id, a.bp_index, a.direction): np.array([a.x, a.y, a.z])
@@ -665,7 +669,7 @@ def test_the_atomistic_crossover_azimuth_stays_in_the_md_envelope():
                 math.degrees(math.atan2(float(d @ np.cross(ua, e1)), float(d @ e1)))
             )
 
-    assert len(phis) > 500, "fixture lost its crossovers"
+    assert len(phis) > 300, "fixture lost its crossovers"
     a = np.radians(np.asarray(phis))
     mean = math.degrees(math.atan2(np.sin(a).mean(), np.cos(a).mean()))
     R = float(np.hypot(np.cos(a).mean(), np.sin(a).mean()))
