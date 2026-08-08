@@ -747,6 +747,27 @@ def _geometry_for_design(
         measured_positioning=measured_positioning, junction_balance=junction_balance)
 
 
+def fitting_geometry(design: Design) -> list[dict]:
+    """The geometry a POSE FITTER fits against — explicitly not the display.
+
+    `direct_relax`, `linker_relax` and `duplex_cluster` fit a rigid pose and write it to
+    ``design.cluster_transforms``, which is **persisted in the .nadoc file**.  So whatever
+    layer they fit against becomes load-bearing for every pose a user has already saved.
+
+    They were reading ``_geometry_for_design(design)`` and were correct only by accident:
+    both display tweaks (the MD-measured bead re-placement and the junction-balance roll)
+    happen to default OFF.  TD-27 Stage 3's stated goal is to flip ``measured_positioning``
+    to True — the day that lands, all three fitters would silently start fitting against
+    measured beads and writing different saved poses, with nothing to catch it.
+
+    This states the contract instead of inheriting it.  Deformation and cluster transforms
+    ARE applied (a fitter must see the design as posed); only the display tweaks are
+    excluded.  Pinned by ``test_a_display_default_flip_cannot_reach_the_pose_fitters``.
+    """
+    return _geometry_for_design(design, measured_positioning=False,
+                                junction_balance=False)
+
+
 def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
     """Convert a flat list of nucleotide dicts into the COMPACT
     per-helix-per-direction parallel-array form used by the

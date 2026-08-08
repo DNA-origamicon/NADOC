@@ -605,8 +605,7 @@ def relax_linker(
 
     # Resolve anchor positions + base_normals in the live geometry frame
     # (cluster transforms already applied).
-    from backend.api.crud import _geometry_for_design  # local import to avoid cycles
-
+    from backend.core.design_geometry import fitting_geometry as _geometry_for_design
     nucs = _geometry_for_design(design)
     anchor_a, normal_a = _anchor_pos_and_normal(nucs, conn, conn.overhang_a_id, True)
     anchor_b, normal_b = _anchor_pos_and_normal(nucs, conn, conn.overhang_b_id, False)
@@ -961,7 +960,7 @@ def fjc_positions_in_design_frame(design: Design, conn) -> list[list[float]]:
     R_ee histogram bin's representative shape). Returns an empty list
     when geometry isn't ready or the bp length is out of the lookup range.
     """
-    from backend.api.crud import _geometry_for_design
+    from backend.core.design_geometry import fitting_geometry as _geometry_for_design
     from backend.core import ssdna_fjc
 
     n_bp = _linker_bp(conn)
@@ -1056,8 +1055,7 @@ def relax_ss_linker(
             )
         )
 
-    from backend.api.crud import _geometry_for_design
-
+    from backend.core.design_geometry import fitting_geometry as _geometry_for_design
     nucs = _geometry_for_design(design)
     anchor_a, _normal_a = _anchor_pos_and_normal(nucs, conn, conn.overhang_a_id, True)
     anchor_b, _normal_b = _anchor_pos_and_normal(nucs, conn, conn.overhang_b_id, False)

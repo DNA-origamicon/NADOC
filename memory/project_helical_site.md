@@ -8,9 +8,9 @@ metadata:
 
 # One helical site, many cheap representations
 
-**Status: Phases 0–6 DONE (2026-08-07); Phases 7–10 added the same day from the re-verified
-audit.** 7 and 8 each need an owner decision before code — they are decisions with code
-attached, not refactors. 9 is gated on 7. 10 has no consumer yet. Owner instruction: *"why not have a unified abstraction then?
+**Status: Phases 0–6 DONE; Phase 7 RESOLVED as a false premise; Phase 8 part done
+(2026-08-07). What is left needs decisions or has no consumer: Phase 8's fitter re-target
+(migration question), Phase 9 (the −32° constant), Phase 10 (no consumer).** Owner instruction: *"why not have a unified abstraction then?
 From which all representations and models can be built from cheaply"* — yes, and this is what
 that costs. Companion to [[project_atomistic_source_of_truth]] (whose audit table this is the
 remedy for) and TD-27 in [[project_tech_debt]].
@@ -261,10 +261,31 @@ Phases 0–6 closed 4 of the 11 live CG couplings.  These cover the rest.  **Non
 refactor**: 7 and 8 are decisions with code attached, which is why they were out of the first
 plan's scope rather than forgotten.
 
-### Phase 7 — the extra-base and extension-tail placers (audit rows 8, 9)  ⟨needs a decision⟩
+### Phase 7 — the placers — **RESOLVED 2026-08-07: the premise was false, no change needed**
 
-More precisely than "still CG": **both placers already take their ANCHOR from atoms and their
-SHAPE from the CG layer.**
+**Audit rows 8 and 9 said "the one place a display decision reaches an exported atom". That is
+wrong.** Both placers read `geometry.nucleotide_positions` — the GEOMETRIC layer — not
+`_geometry_for_design`, the display serialiser:
+
+- `_build_extra_base_atoms`: `nucA`/`nucB` come from a `nuc_pos_cache` filled by
+  `nucleotide_positions(helix)` (`atomistic.py:3010`).
+- `_build_extension_atoms`: reads the same cache. Its docstring *mentions*
+  `design_geometry._strand_extension_geometry` but does **not call it** — it replicates the arc.
+
+So neither the MD-measured bead re-placement nor the junction-balance roll can reach an exported
+atom through these, and the chord endpoints are the site projected at `HELIX_RADIUS`
+(`position == axis_point + HELIX_RADIUS·radial_hat`) — i.e. already a site read in all but name.
+**No decision is required and no code should change.** The remaining choice — chord on the bead
+radius vs on the atomistic anchor — is not worth taking: insert bonds are already clean (0 of
+25,470 over 0.32 nm on `VoltronCoreScad`, max 0.2298), the chain endpoints already use the real
+C3'/C5' atoms, and moving the chord would take inserts off the bead the user is looking at, which
+is the property the placer was built to have.
+
+⚠ The one thing to preserve: they must keep reading `nucleotide_positions`, not
+`_geometry_for_design`. There is no test for that; add one if either placer is ever touched.
+
+*Superseded detail, kept because it is the reason the rows read as they did:* both placers take
+their ANCHOR from atoms and their SHAPE from the geometric layer.
 
 - `_build_extra_base_atoms` (`atomistic.py:3046`): the interpolation line's endpoints
   `line_p0/line_p1` are the two junction nucleotides' **CG backbone beads**, and the
@@ -289,7 +310,21 @@ land on the bead the user is looking at, by construction rather than by agreemen
   25,470 insert bonds, tails 0.5364 max over 7,348).
 - **Unblocks Phase 9.**
 
-### Phase 8 — the pose fitters (audit row 12 = TD-28)  ⟨needs a decision⟩
+### Phase 8 — the pose fitters — **PART DONE 2026-08-07; the rest still needs a decision**
+
+**Done, decision-free:** `design_geometry.fitting_geometry(design)` now states the contract the
+three fitters were only inheriting, and all 8 call sites use it. They were correct *by accident* —
+both display tweaks default OFF, and flipping `measured_positioning` to True is TD-27 Stage 3's
+stated goal, at which point all three would have silently started fitting against measured beads
+and writing different PERSISTED poses with nothing to catch it. Pinned by
+`test_a_display_default_flip_cannot_reach_the_pose_fitters`, which simulates the flip and requires
+`fitting_geometry` to be unmoved while the plain call follows it.
+
+**Still open (needs the migration decision):** re-targeting the fitters from the bead onto the
+site, so the pose stops depending on what radius the display picks. Not urgent now that the
+default-flip hazard is closed.
+
+*Original framing:*
 
 `direct_relax` (4 sites), `linker_relax` (3), `duplex_cluster` (2) call
 `_geometry_for_design(design)` and write **persisted** `cluster_transforms`.

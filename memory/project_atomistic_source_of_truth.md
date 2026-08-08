@@ -230,18 +230,22 @@ Suite: **6865 passed, 0 failed.**  Phase detail in [[project_helical_site]].
 | 5 | oxDNA seed | **CORRECT, misleadingly named** | `nuc_conf_line:1405` still writes `backbone_position` into the CM slot, but `oxdna_native_seed_map` converts it and all 3 production call sites pass `oxdna_native_seed=True`. Phase 4 replaced its fitted 0.37 nm with the published `HYDR_R0` |
 | 6 | LAMMPS | **CORRECT** | same writer + native seed |
 | 7 | mrDNA | **FIXED** | inline formula gone (0 hits); reads the site. Fixed a live bug: stale stored pose, pre-TD-29 twist, `6hb_test` 175° out of phase |
-| 8 | **extra-base positions** | **STILL CG** | `atomistic.py:3046` interpolates between the two junction nucleotides' CG beads — deliberate, and the one place a display decision reaches an exported atom |
-| 9 | extension tails | **STILL CG** | same placer family |
+| 8 | extra-base positions | **NOT A DISPLAY COUPLING** — row was wrong | reads `nucleotide_positions` (the GEOMETRIC layer), not `_geometry_for_design`; the chord endpoints are the site at `HELIX_RADIUS`. No display tweak can reach an exported atom here |
+| 9 | extension tails | **NOT A DISPLAY COUPLING** — row was wrong | same cache; its docstring mentions `_strand_extension_geometry` but does not call it |
 | 10 | `_rigid_frame_calibration` | **FIXED** | frames from `nucleotide_positions`; no conf round trip, no display dependency (only a comment mentions `_geometry_for_design`) |
 | 11 | periodic seam solver | **FIXED** | no `np.linalg.solve` left; reads the axis. Fixed a live bug on base pairs split across two domain-level clusters |
-| 12 | **pose fitters** | **STILL CG** | `direct_relax` / `linker_relax` / `duplex_cluster`, 6 `_geometry_for_design` refs each, writing persisted `cluster_transforms`. TD-28 |
+| 12 | pose fitters | **HAZARD CLOSED**, re-target still open | all 8 sites now call `design_geometry.fitting_geometry`, which states `measured_positioning=False, junction_balance=False` instead of inheriting defaults TD-27 intends to flip. Re-targeting bead→site still wants the migration decision |
 | 13 | `_ATOMISTIC_PHASE_OFFSET_RAD = −32°` | **STILL** | `atomistic.py:583`, now summed inside `atomistic_phase_offset_rad` |
 | 14 | FEM (CanDo/SNUPI) | not a coupling | places nodes on the helix axis inline |
 | 15 | display junction-balance roll | display-only | `junction_balance=` on render feeds only |
 
-**Four of the eleven live couplings are closed** (7, 10, 11, and 5 corrected). **Three remain and
-they are all out of the site plan's scope by construction**: rows 8/9 are the placers (a decision,
-not a refactor) and row 12 is fitting + persisted state (TD-28). Row 13 is gated on 8/9.
+**Round 2 (2026-08-07) resolved three more rows, two of them by finding the row itself wrong.**
+Rows 8/9 are not display couplings at all — both placers read the geometric layer — so nothing
+needs to change and the "a display decision reaches an exported atom" claim is retracted. Row 12's
+active hazard is closed by `fitting_geometry`; only the bead→site re-target remains, and it wants
+the migration decision. **Row 13 (`_ATOMISTIC_PHASE_OFFSET_RAD`) is now the only untouched
+coupling**, and it is no longer gated on the placers — it is gated on re-quoting ~300 1ZEW
+coordinates alongside `_FRAME_ROT_RAD`.
 
 ## The blockers, in order of difficulty
 

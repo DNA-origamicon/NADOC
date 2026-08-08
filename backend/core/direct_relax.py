@@ -214,7 +214,7 @@ def duplex_midpoint_placement(
     driver with no embedded root) — caller then leaves rotation/translation identity.
     Pure read — does not mutate ``design``.
     """
-    from backend.api.crud import _geometry_for_design
+    from backend.core.design_geometry import fitting_geometry as _geometry_for_design
 
     nucs = _geometry_for_design(design)
 
@@ -374,7 +374,8 @@ def relax_direct_binding(
     Returns ``(updated_design, info)``. ``info["mode"]`` ∈
     ``"same_body"`` / ``"joints"`` / ``"translate"``.
     """
-    from backend.api.crud import _cluster_pair_for_bond_relax, _geometry_for_design
+    from backend.api.crud import _cluster_pair_for_bond_relax
+    from backend.core.design_geometry import fitting_geometry as _geometry_for_design
     from backend.core.duplex_cluster import (
         dematerialize_duplex_cluster,
         duplex_cluster_for,

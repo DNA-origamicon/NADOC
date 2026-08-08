@@ -201,7 +201,7 @@ def materialize_duplex_cluster(
     ``test_duplex_cluster_parity``). Idempotent: returns the existing cluster id if one is
     already materialized for this driver. Returns ``(design, cluster_id | None)``; ``None``
     when the driver overhang / its domain can't be resolved."""
-    from backend.api.crud import _geometry_for_design
+    from backend.core.design_geometry import fitting_geometry as _geometry_for_design
     from backend.core.direct_relax import _overhang_root_pivot
 
     existing = duplex_cluster_for(design, driver_oh_id)
@@ -281,7 +281,7 @@ def duplex_cluster_rotation_points(
     """Candidate rotation POINTS for a duplex cluster's gizmo, in the REST frame the child
     transform applies in: each participating overhang's ROOT bead + the duplex CENTROID
     (user decision 4). Returns ``[{kind, overhang_id?, label, point}]``; empty if unresolved."""
-    from backend.api.crud import _geometry_for_design
+    from backend.core.design_geometry import fitting_geometry as _geometry_for_design
     from backend.core.direct_relax import _root_anchors
 
     driver = cluster.overhang_duplex_driver_id
@@ -402,7 +402,7 @@ def dematerialize_duplex_cluster(design: Design, driver_oh_id: str) -> Design:
     """Inverse of :func:`materialize_duplex_cluster`: fold the duplex cluster's pose back
     onto the driver ``OverhangSpec`` (world frame) and drop the cluster. Used on unbind /
     connection teardown. No-op when no duplex cluster exists for the driver."""
-    from backend.api.crud import _geometry_for_design
+    from backend.core.design_geometry import fitting_geometry as _geometry_for_design
     from backend.core.direct_relax import _overhang_root_pivot
 
     cluster = duplex_cluster_for(design, driver_oh_id)
