@@ -410,6 +410,18 @@ export function initWizardTargetStep({
           readOnly,
           getRecorded: () => _recordedRunpod,
         })
+        if (!_ro()) {
+          body.appendChild(el('div', {
+            html: '<div style="font-size:11px;color:#8b949e;margin:12px 0 4px">'
+              + 'Final download location</div><div id="wiz-runpod-rundir"></div>'
+              + '<div style="font-size:10px;color:#6e7681;margin-top:6px;line-height:1.5">'
+              + 'Finished trajectories and checkpoints download here. If unchanged, RunPod '
+              + 'jobs default to <code>/media/jojo/Archive/nadoc_jobs</code>.</div>',
+          }))
+          const dirMount = body.querySelector('#wiz-runpod-rundir')
+          const btn = mountDirectoryButton(dirMount, { api: fsApi })
+          if (!btn && dirMount) dirMount.textContent = runDirLabel(getRunDir())
+        }
       }
       card.appendChild(body)
       mount.appendChild(card)

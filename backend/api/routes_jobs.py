@@ -69,7 +69,19 @@ def _live_remote_pod_names() -> "set[str] | None":
                 pods = await asyncio.wait_for(client.list_pods(), timeout=10)
             finally:
                 await client.aclose()
-            return {(p.raw or {}).get("name", "") for p in pods if not p.is_destroyed}
+            # The persisted pod id is authoritative.  Names are only a compatibility
+            # fallback for old job records created before the id was saved reliably.
+            # Matching names alone falsely orphaned live jobs when RunPod omitted or
+            # truncated a display name in a list response.
+            identifiers: set[str] = set()
+            for p in pods:
+                if p.is_destroyed:
+                    continue
+                identifiers.add(p.id)
+                name = str((p.raw or {}).get("name") or "")
+                if name:
+                    identifiers.add(name)
+            return identifiers
 
         names = asyncio.run(_names())
     except Exception:  # noqa: BLE001 — any failure → undeterminable → fail-open
@@ -153,15 +165,27 @@ def _collect_active() -> list[dict]:
                         supervised = _rp_running(j.job_id)
                     except Exception:  # noqa: BLE001
                         supervised = False
-                    if not supervised and not any(j.job_id in nm for nm in pod_names):
+                    recorded_pod_live = bool(
+                        getattr(j, "runpod_pod_id", None) in pod_names
+                    )
+                    legacy_name_live = any(j.job_id in ident for ident in pod_names)
+                    if not supervised and not recorded_pod_live and not legacy_name_live:
                         try:
                             from backend.core.md_job import MdStatus
 
-                            j.status = MdStatus.failed
+                            # A missing pod is not evidence that NAMD failed.  Ordinary
+                            # causes include the dollar kill-switch, a spot reclaim, and
+                            # a server restart in the narrow window before the supervisor
+                            # persisted PAUSED.  The network-volume checkpoint survives
+                            # all three, so preserve the truthful, recoverable state.
+                            j.status = MdStatus.paused
+                            j.resumable = True
                             j.error = (
-                                "Remote pod is gone (orphaned launcher) — marked "
-                                "terminal by the job reconciler."
+                                "Remote pod is gone; progress on the network volume is "
+                                "safe. Resume to continue from the checkpoint."
                             )
+                            j.runpod_pod_id = None
+                            j.runpod_pid = None
                             j.save(ws)
                         except Exception:  # noqa: BLE001
                             pass

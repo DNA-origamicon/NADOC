@@ -44,3 +44,24 @@ networkingMode=mirrored
 
 then run `wsl --shutdown` in PowerShell and reopen Ubuntu. `localhost` works
 from then on.
+
+## Moving between the two development computers
+
+This is a human-operated synchronization procedure, not an automatic agent action.
+
+Before starting work, first make sure no other session has uncommitted changes, then run:
+
+```bash
+git status
+git pull --rebase origin master
+```
+
+When intentionally publishing completed work:
+
+```bash
+git status
+git push origin master
+```
+
+If the tree is dirty or a push is rejected, stop and reconcile deliberately. Do not use
+`git stash`, destructive restore/reset commands, or force-push in the shared worktree.

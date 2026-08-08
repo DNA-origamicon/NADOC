@@ -138,6 +138,18 @@ id_rsa.pub
 id_ed25519
 id_ed25519.pub
 
+# ── API credentials and local environment ────────────────────────────────────
+# Real credentials belong in the process environment or a mode-0600 file under $HOME,
+# never beside project code. Keep an explicit example file trackable for documentation.
+.env
+.env.*
+!.env.example
+*.credentials.json
+*_credentials.json
+*.secret
+*.secrets
+.runpod_key*
+
 # ── Misc logs ────────────────────────────────────────────────────────────────
 monitor_v2.log
 

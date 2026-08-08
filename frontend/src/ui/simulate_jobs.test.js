@@ -637,6 +637,14 @@ describe('estimated progress (a cluster job is only observable while signed in)'
     expect(txt).not.toContain('estimated')
   })
 
+  it('a disconnected RunPod observation is named last-known and keeps its percent', () => {
+    const paused = { ...base, status: 'paused', progress_fraction: 0.0498,
+      progress_last_known: true, runpod_sync_notice: 'No live RunPod pod is connected.' }
+    expect(_pct(paused)).toBe(5)
+    expect(_stepText(paused)).toContain('last known')
+    expect(masterStatusText(paused)).toContain('⚠ No live RunPod pod is connected.')
+  })
+
   it('the flag does not disturb the percentage itself', () => {
     expect(_pct({ ...base, progress_fraction: 0.57, progress_estimated: true }))
       .toBe(_pct({ ...base, progress_fraction: 0.57 }))

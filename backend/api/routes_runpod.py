@@ -74,6 +74,7 @@ class _Session:
         # "env" | "file" | "manual" | "none" — surfaced in /runpod/status so the UI can say
         # WHY it is already connected instead of looking like it remembered a secret.
         self.key_source: str = "none"
+        self.connection_error: Optional[str] = None
 
     def is_connected(self) -> bool:
         return self.client is not None
@@ -89,6 +90,7 @@ class _Session:
         self.client = None
         self.api_key = None
         self.key_source = "none"
+        self.connection_error = None
 
 
 _SESSION = _Session()
@@ -148,6 +150,7 @@ async def _adopt(
     _SESSION.network_volume_id = keep_volume
     _SESSION.api_key = api_key
     _SESSION.key_source = key_source
+    _SESSION.connection_error = None
     logger.info("runpod: connected via %s (%d live pods)", key_source, len(live_pods))
 
     # ── REAP ORPHANS ─────────────────────────────────────────────────────────
@@ -200,7 +203,8 @@ async def autoconnect() -> Optional[dict]:
     """
     if os.environ.get("NADOC_RUNPOD_AUTOCONNECT", "1") == "0":
         return None
-    api_key, source = runpod_api.resolve_api_key()
+    resolved = runpod_api.resolve_api_key()
+    api_key, source = resolved.value, resolved.source
     if not api_key:
         logger.info(
             "runpod: no stored key ($%s or %s) — connect from the setup wizard",
@@ -214,6 +218,8 @@ async def autoconnect() -> Optional[dict]:
         pods = await client.list_pods()
     except Exception as exc:  # noqa: BLE001 — startup must not fail on a RunPod outage
         await client.aclose()
+        _SESSION.key_source = source
+        _SESSION.connection_error = str(exc)
         logger.warning("runpod: stored key did not connect (%s): %s", source, exc)
         return None
 
@@ -523,7 +529,7 @@ class JobPreviewRequest(BaseModel):
         None, description="For the disk forecast. Omitted → no output-size estimate."
     )
     package_bytes: int = Field(0, ge=0)
-    budget_usd: float = Field(DEFAULT_BUDGET_USD, ge=0)
+    budget_usd: float = Field(DEFAULT_BUDGET_USD, gt=0)
     padding_nm: Optional[float] = Field(
         None,
         gt=0,
@@ -709,4 +715,5 @@ def _status_payload(live_pods: int = 0) -> dict:
         # Where the live key came from, so the UI can explain an already-connected session
         # rather than looking like it stashed a secret behind the user's back.
         "key_source": _SESSION.key_source,
+        "connection_error": _SESSION.connection_error,
     }

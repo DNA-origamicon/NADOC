@@ -366,6 +366,80 @@ class TestBudgetThreading:
             == sup.DEFAULT_BUDGET_USD
         )
 
+    def test_zero_budget_is_rejected_not_promoted_to_default(self, tmp_path, monkeypatch):
+        """A falsey-dollar cap must never silently become the $15 default."""
+        job = _job_with_package(tmp_path)
+        job.runpod_budget_usd = 0.0
+        with pytest.raises(ValueError, match="greater than"):
+            sup.start_job(job, tmp_path, client=FakeClient(), network_volume_id="v")
+
+    def test_budget_lifetime_does_not_authorize_another_full_cap(
+        self, tmp_path, monkeypatch
+    ):
+        """Hitting the cap is a spend boundary, not a spot reclaim.
+
+        The old loop immediately rented another pod with a fresh full cap, making the
+        wizard's advertised cap multiply by up to MAX_AUTO_RESUMES.
+        """
+        calls = {"n": 0}
+        job = _job_with_package(tmp_path)
+
+        async def fake_run(j, ws, **kw):
+            calls["n"] += 1
+            j.status = MdStatus.paused
+            j.resumable = True
+            j.error = "Pod hit its maximum lifetime; resume to continue."
+            return MdStatus.paused
+
+        monkeypatch.setattr(sup, "run_job_on_pod", fake_run)
+
+        async def go():
+            sup.start_job(job, tmp_path, client=FakeClient(), network_volume_id="v")
+            await sup._RUNNING[job.job_id]  # noqa: SLF001
+
+        asyncio.run(go())
+        assert calls["n"] == 1
+        assert job.status == MdStatus.paused
+        assert job.resumable is True
+
+
+class TestReloadHandoffKeepsTheDurableClaim:
+    def test_cancelled_supervisor_does_not_mark_handed_off_job_stopped(
+        self, tmp_path, monkeypatch
+    ):
+        """The replacement process can adopt only records still claiming a live pod."""
+        from backend.core import runpod_api
+
+        job = _job_with_package(tmp_path)
+        job.execution_target = "runpod"
+        job.status = MdStatus.running
+        job.runpod_pod_id = "pod-survives-reload"
+        entered = asyncio.Event()
+
+        async def fake_run(j, ws, **kw):
+            entered.set()
+            await asyncio.Event().wait()
+
+        monkeypatch.setattr(sup, "run_job_on_pod", fake_run)
+
+        async def go():
+            runpod_api.set_handoff(True)
+            try:
+                sup.start_job(job, tmp_path, client=FakeClient(), network_volume_id="v")
+                task = sup._RUNNING[job.job_id]  # noqa: SLF001
+                await entered.wait()
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+            finally:
+                runpod_api.set_handoff(False)
+
+        asyncio.run(go())
+        saved = type(job).load(job.job_id, tmp_path)
+        assert saved.status == MdStatus.running
+        assert saved.runpod_pod_id == "pod-survives-reload"
+        assert saved.user_stopped is False
+
     def test_the_job_wins_over_the_call_default(self, tmp_path, monkeypatch):
         """A cap recorded on the job was a decision about THIS run; a caller default is not."""
         job = _job_with_package(tmp_path)
@@ -429,6 +503,43 @@ class TestTheWizardsChoicesSurvive:
         assert back.runpod_gpu_key == "NVIDIA RTX 6000 Ada Generation"
         assert back.runpod_budget_usd == 7.5
         assert back.runpod_volume_id == "77pnhye88p"
+
+
+class TestRunpodGpuResidentDefault:
+    """The rented-card default must not reuse the local 3080 Ti atom crossover."""
+
+    def test_relaxation_defaults_gpu_resident_on(self):
+        from backend.api import routes_md
+
+        body = routes_md.CreateJobRequest(execution_target="runpod")
+        resolved = routes_md._apply_runpod_gpu_resident_default(body)  # noqa: SLF001
+        assert resolved.gpu_resident == "on"
+
+    def test_production_defaults_gpu_resident_on(self):
+        from backend.api import routes_md
+
+        body = routes_md.ProductionRunRequest(
+            execution_target="runpod", length_ns=1.0
+        )
+        resolved = routes_md._apply_runpod_gpu_resident_default(body)  # noqa: SLF001
+        assert resolved.gpu_resident == "on"
+
+    @pytest.mark.parametrize("choice", ["auto", "off", "on"])
+    def test_explicit_advanced_choice_wins(self, choice):
+        from backend.api import routes_md
+
+        body = routes_md.CreateJobRequest(
+            execution_target="runpod", gpu_resident=choice
+        )
+        resolved = routes_md._apply_runpod_gpu_resident_default(body)  # noqa: SLF001
+        assert resolved.gpu_resident == choice
+
+    def test_local_default_remains_auto(self):
+        from backend.api import routes_md
+
+        body = routes_md.CreateJobRequest(execution_target="local")
+        resolved = routes_md._apply_runpod_gpu_resident_default(body)  # noqa: SLF001
+        assert resolved.gpu_resident is None
 
 
 class TestAClaimedPodIsNotAnOrphan:

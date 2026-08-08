@@ -342,7 +342,7 @@ export function mdRunpodPhase(job) {
  *  only way back in.  Alpine resumes are cluster-gated and stay on their own button. */
 export function mdJobIsResumable(job) {
   if (!job || job.execution_target === 'alpine') return false
-  return ['stopped', 'failed'].includes(job.status) || hasPendingGpuDecision(job)
+  return ['paused', 'stopped', 'failed'].includes(job.status) || hasPendingGpuDecision(job)
 }
 
 /** Pure: how a queued run reads in the queue list.

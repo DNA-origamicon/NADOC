@@ -27,26 +27,8 @@ Format per entry: short title → one-paragraph what-went-wrong → "How to avoi
 - **A8** — oxDNA long-bundle twist scatter is an equilibration transient — twist "slow mode" is really ~8M-step burn-in drift. [detail](LESSONS_archive.md#a8)
 - **A10** — **The scaffold is route OUTPUT; the STAPLES are the design.** Autoscaffold read its own previous output as the face to extend from → every re-route ratcheted the helices outward (a plain 4HB bundle: 168→189→199→210 bp), persisted to `.nadoc`. Any mutation whose input is derived from its own prior output is non-idempotent by construction — normalise the input against something the mutation *cannot* touch (here: staple spans). [detail](LESSONS_archive.md#a10)
 - **A9** — mrDNA `simulate(coarse_steps=)` silently skips the fine stage — CG curvature comes out ~straight; use `multiresolution_simulation`. [detail](LESSONS_archive.md#a9)
-
-### A10. NAMD Flexibility-map leaves 21 bases unmoved/uncoloured on an ENSEMBLE-REPLICA job — the replica package was missing `charge_audit.json`, forcing the reference-PDB P-order that can't recover 5'-termini (2026-07-09)
-Symptom: toggle Flexibility map (RMSF) on a NAMD **production replica** (child of an equilibration parent, e.g. prod job `6d7c2e38e455` under parent `07c05aaecc12`) → a handful of bases stay at design positions in the strand palette, never repositioned/recoloured. Same design toggled on the **parent** job looked fine — which is the trap: the parent's package HAS `charge_audit.json`, the child's does not.
-
-ROOT CAUSE: `md_ensemble.build_replica_package` builds a production-only child package by hardlinking only the immutable structure files (PSF/PDB/hmr/forcefield) — it did **not** copy `charge_audit.json` (the psfgen segid→NADOC-chain map). Without it, `load_segid_chain_map(pkg)` returns `None`, so `_select_p_order` falls back to the **reference-PDB** P-order (`p_order_source="reference-pdb"`). That path maps the phosphate-bearing nucleotides fine, but `build_termini_specs` needs the segid map → returns `[]` → the **21 phosphate-less 5'-termini** (one per strand; pdb2gmx strips the 5' P) are never recovered → RMSF returns **1307/1328** keys. The renderer moves/colours strictly by `(helix_id, bp_index, direction)` key; the 21 render keys with no map entry stay put in default colour = the symptom. **The PSF/PDB are byte-identical hardlinks between parent and child — only the standalone `charge_audit.json` differed.**
-
-FIX (two layers): (A) `build_replica_package` now `_link_or_copy`s `charge_audit.json` from parent → child (immutable, shareable). (B) `load_segid_chain_map` falls back to `manifest.json`'s embedded `charge_audit` field when the standalone file is absent — the replica's child manifest already carries the identical `topology_metadata.segments`, so this fixes replicas ALREADY on disk with no data migration. Verified on `6d7c2e38e455`: live RMSF route 1307→**1328**, 0 render keys unmapped.
-
-**How to avoid**: when a code path reads a file straight from a package dir (`load_segid_chain_map`, etc.), audit EVERY package builder — full-prep AND the replica/reseed/child builders in `md_ensemble.py` — to confirm they emit that file. A fallback that reads the same data from the manifest makes the loader resilient to a builder that forgets. And **verify the actual job the user clicks**, not a sibling: parent vs. child jobs can have different package contents even for the same design. See [[project_alpine_cluster_submission]], [[project_md_viz_tools]].
-
-### A11. NAMD metrics say "no NAMD trajectory yet" on a finished production run — the production child never inherited the parent's `design.json` snapshot (SAME failure mode as A10) (2026-07-10)
-Symptom: 20 ns production run for `6hbx100_noT` (child job `892ad3d12d4f`) completes, a 1.9 GB DCD sits in `output/`, but clicking Generate for twist/curvature/base-pairing returns **"no NAMD trajectory yet for the selected job(s)"** — a lie: the trajectory is fine.
-
-ROOT CAUSE: `md_ensemble.build_replica_package` copied PSF/PDB/forcefield/`charge_audit.json` into the child but **not `design.json`** (the frozen topology snapshot). `routes_md_metrics._job_inputs` needs it to map P atoms → base pairs; when absent it falls back to the *active* design, and when no design is loaded (`GET /api/design` → 404) that fallback raises → `_job_inputs` returns `None` for every job → the code hits its blanket "no trajectory" branch, misattributing a **missing-snapshot** failure to a missing trajectory. Only the relaxation-prep path ([routes_md.py](../backend/api/routes_md.py) ~L1287) writes `design.json`; the `spawn_md_production` / `stage_md_ensemble` child paths (both via `build_replica_package`) forgot it — while **oxDNA's child spawn already `shutil.copy`s it** (engine-parity drift).
-
-FIX (both layers): (A) write side — `build_replica_package` now copies `parent.job_dir/design.json` → child (mirrors oxDNA). (B) read side — `_md_snapshot_design` **walks up `parent_job_id`** to the nearest ancestor with a snapshot (self-heals existing children + robust vs a legacy parent that also lacks one), and `_job_inputs` returns a **str reason** so a missing snapshot no longer masquerades as "no trajectory". Backfilled the two stuck jobs by copying the relaxation root's snapshot down. Verified: live metrics run on `892ad3d12d4f` → `ready=True`, 520 frames.
-
-**How to avoid**: this is A10 again — **any per-child MD package builder must propagate EVERY parent artifact a downstream reader expects.** When oxDNA and NAMD have parallel child-spawn paths, diff them: if oxDNA copies a file into children and NAMD doesn't, that's the bug. And never let a resolver report the FIRST thing it couldn't find ("no trajectory") when it actually failed on the SECOND ("no topology") — return the specific reason. See [[project_oxdna_metrics_card]], [[project_md_job_system]].
-
----
+- **A10** — NAMD Flexibility-map leaves 21 bases unmoved/uncoloured on an ENSEMBLE-REPLICA job — the replica package was missing `charge_audit.json`, forcing the reference-PDB P-order that can't recover 5'-termini (2026-07-09) [detail](LESSONS_archive.md#a10)
+- **A11** — NAMD metrics say "no NAMD trajectory yet" on a finished production run — the production child never inherited the parent's `design.json` snapshot (SAME failure mode as A10) (2026-07-10) [detail](LESSONS_archive.md#a11)
 
 ## B. Three-Layer Law violations
 - **B1** — Physics writing back to topology — relaxed positions written into the design corrupt it invisibly. [detail](LESSONS_archive.md#b1)
@@ -129,14 +111,7 @@ FIX (both layers): (A) write side — `build_replica_package` now copies `parent
 - **H15** — **A last-ULP "identical" speedup silently moved backbone geometry 0.8 Å — because it feeds an optimizer.** Batching the atomistic per-atom stamp (`origin + R @ local` → `local_stack @ R.T`) changed floats only at ~1e-16, but those atoms seed an L-BFGS-B backbone-bridge minimiser with near-degenerate minima that amplified it to 0.1–0.8 Å at crossover/skip junctions. Also: the stamp wasn't even the bottleneck (profiling: the bridge minimiser is 86%). Profile before optimising; never assume a downstream numerical solver is ULP-stable. [detail](LESSONS_archive.md#h15)
 - **H13** — Believing a failing spec's NAME instead of reading its error — ISSUE-14 sat open a week as "console error on assembly teardown"; there was no console error and the teardown was fine (the spec died in the e2e *harness*, during setup). [detail](LESSONS_archive.md#h13)
 - **H12** — Removing a DOM element that a factory reads-then-guards-on silently kills the WHOLE factory. Deleting the per-engine `<h2>` headers made `heading` null; all 4 `*_jobs_panel.js` factories do `if (!panel || !heading || !body) return` up top → they early-returned and wired NOTHING (dead buttons/toggles/availability). Symptom the user reported was narrow ("oxDNA Advanced card won't expand") but the panel was fully inert. DOM presence + moved-node checks (main.js appendChild) all passed and hid it — only *exercising an in-panel toggle* exposed it. Before deleting an element referenced in a factory, grep the factory's guard/`getElementById`; verify by clicking a real in-panel control, not by asserting DOM presence. Fixed 2026-07-10 (guard → `if (!panel || !body)`; heading now optional). See [[project_simulate_panel_overhaul]].
-
-### H9. A bare `export { x } from './y'` re-export does NOT create a local binding — using `x` in the same module throws a SILENT ReferenceError in an async handler ("greyed/dead button") (2026-07-09)
-Symptom the user reported: "can't delete the chain-simulator's completed oxDNA jobs in 6hbx100_1xT" — the Delete button looked present but greyed/did nothing. **The backend delete route was 100% fine** (verified over HTTP: `DELETE /api/oxdna/jobs/{id}` → 200, dir removed, even without a doc header). The bug was entirely frontend and NOT job/design-specific. Root cause in [oxdna_jobs_panel.js](frontend/src/ui/oxdna_jobs_panel.js): the module did `export { flattenJobTree, descendantIds } from './job_tree.js'` — a **re-export**, which forwards the names to *importers* but does NOT bind them in the module's own scope. The delete click handler calls `descendantIds(_jobs, _selectedId)` locally → `ReferenceError: descendantIds is not defined`. Because the handler is an **async arrow**, the throw became a silently-rejected promise: no confirm modal, no network request, no console error the user notices → "button does nothing." Fix: add a real `import { flattenJobTree, descendantIds } from './job_tree.js'` and keep a separate `export { … }` for back-compat (one line each).
-
-**What cost the cycle** (why static analysis kept saying "the button should work"): the render/enable logic WAS correct — the button shows + is enabled for a completed job — so reading the code never revealed the fault; the fault only exists at the moment the handler *executes*. Traps that hid it: (1) unit tests imported `descendantIds` FROM the panel and passed — a re-export resolves fine for an external importer, so `descendantIds` tests were green while the panel's *internal* use was broken; the tests never drove the delete handler. (2) `console`-error capture showed nothing; only `page.on('pageerror')` surfaced the `ReferenceError` (an unhandled promise rejection from the async handler is a pageerror, not a console.error).
-
-**How to avoid**: (1) If a module both *uses* a symbol and wants to *re-expose* it, you need BOTH `import { x } from …` AND `export { x }` (or `export { x }` + a local `import`) — a lone `export … from` is re-export-only. ESLint `no-undef` catches this if enabled on the file; grep suspicion: any `export { … } from './…'` in a module that also *calls* one of those names. (2) Debugging a "dead"/silent UI control: reproduce in a real browser and listen for `pageerror` (not just console) — async event handlers swallow throws into unhandled rejections. (3) A regression test for a UI action must DRIVE THE HANDLER (mount panel → select → click the button → assert the API/modal fired), not just import+call the helper the handler uses. RED-verified: reverting to the bare re-export makes the new `oxdna_jobs_panel.test.js` delete test fail (no modal). See [[project_simulate_panel_overhaul]].
-
+- **H9** — A bare `export { x } from './y'` re-export does NOT create a local binding — using `x` in the same module throws a SILENT ReferenceError in an async handler ("greyed/dead button") (2026-07-09) [detail](LESSONS_archive.md#h9)
 - **H16** — 🔁 **Fixed the leaf, not the PATH IN USE — 3× in one session.** GPU-resident gate, production timestep, and the PBC snap were each correct + unit-tested at the function touched, and absent from the route the button calls (a second `build_production_conf` call site; `fast` still ANDed with `declash`; `ws.py`'s own inlined copy of the snap). Symptom: user retries and nothing changes. Ask "what does the button actually call?", grep every call site, prefer an API-level integration test, and guard shared helpers against re-implementation. [detail](LESSONS_archive.md#h16)
 - **H18** — 🟢➡️❌ **Five green scaffold-routing tests over a visually wrong dumbbell — the tests asserted the wrong oracle, and the whole approach was later deleted.** The 2026-04 `auto_scaffold(mode="seam_line", scaffold_loops=True)` dumbbell work (`_assemble_dumbbell_path`, `_build_seam_line_domains`, `_HC_SCAF_VALID`) shipped 5 passing tests while the app result stayed wrong, because nothing asserted the properties the fix was *about*: crossover bp validity (`bp % 21` ∈ the scaffold set) and negative-bp near-side loops. Those symbols are all **gone** — the per-helix `mode=` router was replaced by shape-dispatched `section_router.route_sections` (`has_multisection_helix`), and even the successor's tests still assert only coverage/gap/nick-burial, never crossover-bp validity. Rule for this area: a scaffold-routing test must pin the *geometric* invariant the change targets, and a routing change is not done until a real design is loaded in the running app and eyeballed. See [[project_autoscaffold_single_strand]].
 - **H19** — 🖥️≠🖥️ **A byte-exact golden over an optimizer's output pinned the CPU, not the geometry.** Two atomistic geometry goldens failed on one computer, passed on the other, tree clean — and five commits in a row "fixed" it by regenerating the hashes, each flipping them to whichever box ran last. `build_atomistic_model` stamps atoms deterministically, then closes crossover/skip backbones with a near-flat L-BFGS-B solve; a last-ULP BLAS difference walks it to another basin, moving ONLY the 5 atoms per junction it places (up to 1.3 Å) while everything else stays bit-identical. `OPENBLAS_CORETYPE=Haswell` reproduced all four stale goldens exactly at HEAD — thread count is neutral, kernel dispatch is not. Rule out `OPENBLAS_CORETYPE` before regenerating any golden "no code change explains"; hash only what's deterministic by construction and put a tolerance on what a solver placed. [detail](LESSONS_archive.md#h19)
@@ -160,138 +135,22 @@ Symptom the user reported: "can't delete the chain-simulator's completed oxDNA j
 - **K6** — NAMD dies at segment START with `cudaMallocHost` / `cudaHostAlloc` (`CudaUtils.C`, `allocate_host_T`) = **GPU-resident mode ran out of PINNED host memory**, NOT VRAM and NOT RAM (this WSL box pins only **1.0 GB** with 15 GB free). Hits `GPUresident on` fast segments above ~800k atoms (756k OK, 971k fails). FIXED: `gpu_resident_probe()` + `downgrade_gpu_resident()` (GPUresident off, 4→2 fs, steps/freqs ×2 → same ns, same frames). ⚠ **The old rider "dropping GPUresident alone then blows up RATTLE — 4 fs only survives under its GPU constraint solver" is REFUTED (exp52, 2026-08-05)**: a matched pair on one system ran 4 fs + HMR + `rigidBonds all` with no GPUresident line clean at 95.9 ns/day. The 4→2 fs halving is conservative insurance for the pinned-memory case, not a stability requirement. [detail](LESSONS_archive.md#k6)
 - **K10** — A context menu that dismisses on a bare `document` `pointerdown` (no containment check) makes **every item in it dead to a real mouse**: the press detaches the menu before mouseup, so `click` never fires on the now-disconnected item. It "works" in jsdom (which happily dispatches to a detached node) and for a synthetic `el.click()`, so unit tests pass — only a real browser shows it. `frontend/src/ui/spreadsheet.js` shipped this for its Sequence/overhang cell menus; fixed to `if (!menu.contains(e.target)) close()` (the rule `ui/primitives/context_menu.js` already had), and drop `{once:true}` or an inside press consumes the listener. Symptom: "the menu item does nothing." [detail](LESSONS_archive.md#k10)
 - **K7** — Right-drag-to-pan pops the app context menu on native Linux but not Windows/WSL — Linux GTK browsers fire `contextmenu` on button PRESS (before any drag movement), so the click-vs-pan move check reads ~0 and every pan is mistaken for a click. FIXED: `frontend/src/scene/right_click_menu.js` `deferrableContextMenu()` defers the menu to `pointerup` when `e.buttons & 2` (right still held). Any new canvas contextmenu handler must use it. [detail](LESSONS_archive.md#k7)
-
 - **K12** — 🩺 **"FATAL ERROR: GPUresident is incompatible with the following options" is a CONFIG conflict, not a hardware verdict — and NAMD names the culprit for you.** The settle stage emitted `GPUresident on` *and* `fixedAtoms on`; no NAMD 3 build accepts that pair, on any GPU. But `gpu_resident_probe` probes the FIRST resident conf, saw a FATAL, and raised the Gate-B "this GPU can't run the fastest mode" modal — whose remedy downgrades **every** conf (resident off + 2→1 fs, steps ×2), i.e. ~4× the wall clock of a 19.7 ns ladder to accommodate one 2.5 %-length segment. **Read the probe log's own "Configuration could amend the following options:" line before believing the modal.** FIXED: the settle stage restrains instead of fixing (see [[REFERENCE_AKSIMENTIEV_PROTOCOL]] — NAMD's manual recommends exactly that substitution, and it measured indistinguishable: cell to 95.34 % vs 95.39 %, DNA 0.35 Å RMS, 1.9× faster), plus a gate in **both** conf writers (`_segment_conf` AND `build_production_conf` — H16 again) so fixedAtoms and GPUresident can never be emitted together. Hard anchors still forfeit resident; that one is real.
 - **K11** — ⏱️ **A budget "violator" that MOVES between runs is a shared cache warming, not a heavy test.** Four junction tests were relegated on 41 s / 28.8 s / 11.4 s readings, then un-relegated: serially on an idle box the slowest is 2.32 s. `_XB_CACHE` is module-level, so under `-n auto` whichever test lands first on a cold worker pays the whole one-time minimisation (and a +p16 NAMD job was running). The tell: a different test named every run. Re-run the file alone, serially, idle, before relegating. [detail](LESSONS_archive.md#k11)
 
 ## L. Rented-GPU runs / cost safety (RunPod)
-
-> **Read [REFERENCE_RUNPOD_RUNBOOK](REFERENCE_RUNPOD_RUNBOOK.md) BEFORE renting anything, and run
-> `experiments/exp43_runpod_bench/preflight.py <job>` — it mechanically refuses every failure below.**
-> The 3x6x400 run (1.94M atoms, $13/$15) found **11 bugs; 9 of them produced NO error of any kind.**
-> A passing 6hb e2e (225k atoms, 5 min, $0.03) reached **none** of them. **Scale, duration and money each
-> expose a disjoint class of failure.**
-
-- **L1** — ⚠️ **THE META-LESSON: on a rented pod, "fails safe" can mean "fails expensive."** The relaxation
-  early-stop evaluator fails safe to **HOLD** (run everything) — correct for the science, ruinous for the
-  wallet (~4x). Two subsystems were *documented* as fail-safe and both did, into the most expensive possible
-  behaviour. **Always ask: safe for whom — the science, or the bill?** [detail](LESSONS_archive.md#l1)
-- **L2** — **`fast=True` SILENTLY disabled relaxation early-stop (a 4x cost bug, zero errors).**
-  `outputEnergies` was a hardcoded **9600 STEPS**; chunk step-counts derive from a target simulated *TIME*, so
-  4 fs HALVES the steps for identical physics while a step-denominated cadence fires half as often *per ns*.
-  Frames/chunk fell **25 → 12**, under the evaluator's `min_frames=20`; every `p10` reported HOLD forever and
-  no chunk could bridge. The accelerator still ran, still answered — always "no". **General rule: any
-  step-denominated cadence is a latent bug the moment the timestep becomes a variable.** (Bit us TWICE — a
-  late `cell_shrink` resume runs `total-restart_step` and starves the same way.) [detail](LESSONS_archive.md#l2)
-- **L3** — **`cell_shrink` was NOT self-healing; "bounded retry" meant "fails 4x".** The retry re-ran the
-  ORIGINAL conf, whose `extendedSystem` points at the *previous* segment's `.xsc` — the ORIGINAL cell. NAMD
-  rebuilt the same patch grid and shrank into the same wall, identically, four times. Measured:
-  156.6x89.1x1436.2 → 152.0x86.5x1393.4 (-3.0%). FIXED: `remote_resume_conf.py` resumes from the segment's
-  OWN restart files. **A documented "self-healing" behaviour is worthless until something has watched it
-  heal.** [detail](LESSONS_archive.md#l3)
-- **L4** — **A DNS blip orphaned a billing pod — and its id had never been persisted.** A transient
-  `Temporary failure in name resolution` on a routine poll became a fatal error, killed the launcher, and the
-  launcher's `finally` is the ONLY thing that destroys a pod. NAMD (setsid-detached, output on the volume)
-  carried on happily, so nothing looked wrong. Worse: `runpod_executor` never called `job.save()`, so the
-  orphan could not even be **named**, let alone reaped. **The on-pod kill-switch has no API key: it can stop
-  NAMD, never the billing.** [detail](LESSONS_archive.md#l4)
-- **L5** — **The spend ledger FROZE while a real GPU billed on.** It deduped pod rows by keeping the FIRST
-  seen — which was the *closed* row written by the dying launcher — so the live row was discarded and
-  `spent()` stuck at $0.95 while the true figure was $1.35. The budget guard reads that number; it could never
-  have fired. **A safety net can have the same hole as the thing it protects** (the ledger existed *because*
-  the kill-switch had no memory). **A ledger that under-reports is worse than no ledger, because it is
-  trusted.** [detail](LESSONS_archive.md#l5)
-- **L7** — **PRODUCTION IS NOT AS FAST AS THE RELAXATION — sizing it off the relaxation's rate mis-sized this
-  run 2x.** `build_production_conf` DELIBERATELY runs a more expensive integrator: `fullElectFrequency 1`
-  (vs 2 — PME every step; at 4 fs that is PME every 4 fs, matching the Aksimentiev reference, and
-  `fullElect 2` here would be PME every **8 fs**, past the r-RESPA resonance limit) and `stepspercycle 10`
-  (vs 20). **Measured on the same card and system: relaxation 26.4 ms/step, production 35.5.** Always cost
-  production from a PRODUCTION measurement. ⚠️ **Separately, `outputEnergies 100` + `restartfreq 1000` were
-  hardcoded** — fine for a 250k-atom local job, ruinous for 1.9M atoms GPU-resident: an energy reduction
-  pulled off the GPU every 100 steps, and **90 MB of restart files written to a NETWORK filesystem every
-  1000 steps**. Pure overhead, ZERO effect on the trajectory: **50.0 → 35.5 ms/step (29%) just by scaling
-  them to the run.** [detail](LESSONS_archive.md#l7)
-- **L10** — 🛑 **NEVER attach `supervise.py` to a healthy launcher — it destroys your own pod.**
-  The runbook's §2 said to (now fixed). During STAGING NAMD hasn't started, so the pod reports
-  `alive=False, segment=None, stale=True`; the supervisor reads that as "ladder finished" and
-  terminates the pod mid-upload (measured: 62 s after creation). It is a **RE-ATTACH** tool —
-  for a pod whose launcher already DIED. **A done-test that can't tell NOT-STARTED from
-  FINISHED, whose false-positive branch is destructive, is a destroy-your-own-work bug.**
-  Also: `spend_ledger.HARD_CAP_USD` was a stale $15 against a ~$70 run — it silently truncates
-  production (`launch_production` sizes off `ledger.remaining()`) and makes `supervise` reap on
-  sight. [detail](LESSONS_archive.md#l10)
-- **L8** — ⚠️ **Extra crossover bases silently VETO the fast integrator, so every 0xT-vs-NxT MD
-  comparison is CONFOUNDED and costs 4x.** `design_has_extra_bases()` auto-routes any such design
-  to the declash protocol, which forces `fast=False` (1 fs, `rigidBonds none`, no HMR) in BOTH the
-  ladder *and* production. The 0xT control then samples at 4 fs+HMR while 1xT/2xT sample at 1 fs —
-  any stiffness difference is part integrator, part extra-base. Measured (24hb, 50 ns): $87/1.8 d
-  for 0xT vs **$348/7.3 d each** for 1xT/2xT; budget said $196-262, truth ~$784. `preflight.py`
-  catches the cost half; **nothing catches the confound half but a cross-variant CONF diff.**
-  [detail](LESSONS_archive.md#l8)
-- **L9** — **A RunPod GraphQL 403 with body `error code: 1010` is CLOUDFLARE blocking urllib, NOT a
-  bad key.** Reading the status code instead of the body produced a confident, false "your key is
-  scoped REST-only" diagnosis — and defended a **$7.96** balance figure that was really **$207.53**
-  (26x). Use `httpx`; **read the body of a 403 before believing it.** [detail](LESSONS_archive.md#l9)
-- **L6** — **You pay GPU rates to DOWNLOAD your results, and the price table lied.** The network volume is
-  reachable only *through a live pod*, so fetching 5.2 GB burned ~100 min (~$1.20) with the card idle — a
-  quarter of what the science cost. Fetch selectively: the final checkpoint is ~140 MB and is all production
-  needs; DCDs persist on the volume. Separately, `GPU_TYPES` carried **COMMUNITY** prices while Community
-  cloud is excluded in code — every estimate was **~2.2x low**. And the per-Matom throughput fit does **not**
-  transfer across GPU architectures (4090 fit predicted 20.9 ms/step; the Blackwell did **26.4**).
-  [detail](LESSONS_archive.md#l6)
-
-- **L11** — 🧬 **A "successful" MD run can be measuring a topologically ENTANGLED structure, and every
-  health check will say it is fine.** Crossover extra bases at a reciprocal (antiparallel) pair were
-  built with the two backbones wound around each other (Gauss `Lk = ±1`); because both chain ends are
-  covalently pinned, MD can never undo it — measured unchanged through minimisation and every ENM
-  stage, while `c1_paired_fraction` read **1.0**. Base pairing does not see strand topology. The cause
-  was NOT the pose (arc + glycosidic swing are fine — `fast_bridges=True` never links) but the
-  L-BFGS-B joint solve, whose repulsion term only sees a static snapshot that never contains the
-  PARTNER crossover. Also: it is **helical-phase dependent**, so a fixture pinned to one bp proves
-  nothing — sweep a full turn. [detail](LESSONS_archive.md#l11)
-- **L12** — 🧬 **A repair that optimises against one measured defect manufactured a different one
-  it cannot measure.** The catenation repair ladder unlinked a `2hb_2xT` reciprocal pair by
-  choosing a rung that built a phosphate bond **through a ribose ring** — invisible to Gauss `Lk`
-  (the connector polyline takes the C4'→C3' step, so the sugar ring is off-curve) and invisible to
-  the clash count (a bond through the ring centre keeps every ring atom 2.2–2.6 Å away, so the
-  pierced rung scored as an *improvement*, 34 → 17). Permanent, like a linking number: minimisation
-  could only stretch the impaled bond 1.60 → 3.08 Å, and it stayed 2.98 Å through the whole run —
-  just under the 3.0 Å stretch threshold, on a path that never calls `audit_bonds`. 2xT-specific and
-  the repair *multiplied* it (24hb_2xT 51 → 131). [detail](LESSONS_archive.md#l12)
-
-- **L13** — 🧩 **A ground-up rewrite can leave a feature "missing" when what it really dropped is one
-  function its own caller still asks for by name.** Photo mode v2 shipped `renderToBlob` but not
-  `beginFrameSession`; `export_video.js`'s `exportPhotoVideo()` — the entire animation→video export,
-  still present and fully written — throws on its first line without it, and nothing imported it, so
-  neither grep-for-callers nor the test suite noticed. **The check that would have caught it:** after
-  replacing a subsystem, diff the OLD public API against the new one and grep each dropped name across
-  `src/` *and* its own module's callers, rather than only asking "does anything still call the old
-  module". Corollary for offline/headless render paths: work the live render loop does for free
-  (`_perFrameSync` — material re-swap on mesh replacement, bounds refit, camera-pinned rig sync) is
-  simply *absent* when frames are stepped by hand, and the symptom is a render that starts correct and
-  degrades partway through. [detail](LESSONS_archive.md#l13)
-
-- **L14** — 🖧 **A login node is NOT a compute node: probing the cluster from the wrong one gives
-  confident wrong answers.** On Alpine, `module load gcc/11.2.0` is REFUSED on the login node
-  ("exist but cannot be loaded as requested") while the identical load succeeds inside an `acpu`
-  job, and `module avail namd` returns EMPTY on the login node because Lmod is hierarchical (it
-  hides modules until a compiler is loaded) — so the diagnostic tool reported "no NAMD modules"
-  at the exact moment a job had just died on an unknown NAMD module. I built a submit pre-flight
-  on `module load` and it produced FALSE NEGATIVES twice, blocking submissions that would have
-  run. Symptom: a check that disagrees with what the batch job actually does. Fix: verify only
-  things that do not vary between nodes — `module spider` (does it EXIST, whole tree) and
-  `test -x <absolute path>` (filesystem). Same family: a `-DNAMD_CUDA` binary segfaults on a
-  GPU-less node, so "does it run" is untestable there and must not be asserted.
-  [detail](LESSONS_archive.md#l14)
-
-- **H16** — 🔍 **Four ways a check lied, one family: the check ran, so I believed it.** (a) Measured
-  `design_ref.dat` (an unconverted REFERENCE) instead of `conf.dat` (the seed) and declared a
-  shipping pipeline broken; (b) three pins that could not fail — exact equality where 1 ULP was
-  correct, a test that `skip`ped, and `multi_domain_test3_bend90` whose stored
-  `curvature_deg_per_bp` is **0.0** so it deforms nothing; (c) "byte-identical" as an acceptance
-  bar that would have preserved the pre-TD-29 twist ramp and a 175° phase error; (d)
-  `just test | tee | tail` reported `tail`'s exit code, turning a guard refusal into a fake
-  "suite passed". Break the pin on purpose; `set -o pipefail`; find the artefact the pipeline
-  actually consumes. [detail](LESSONS_archive.md#h16)
-
-> **Detail.** Full entries live in [LESSONS_archive.md](LESSONS_archive.md). Open only the entry that matches your symptom.
+- **L1** — On rented GPUs, “fail safe” can mean scientifically safe but financially expensive. [detail](LESSONS_archive.md#l1)
+- **L2** — Fixed step cadences plus a variable timestep silently disabled early stopping. [detail](LESSONS_archive.md#l2)
+- **L3** — A retry using the original checkpoint is repetition, not self-healing. [detail](LESSONS_archive.md#l3)
+- **L4** — A DNS failure orphaned a billing pod whose ID had not been persisted. [detail](LESSONS_archive.md#l4)
+- **L5** — A first-row-wins spend ledger froze while the real GPU continued billing. [detail](LESSONS_archive.md#l5)
+- **L6** — Result downloads consume billed GPU time; pricing and architecture-specific throughput must be measured. [detail](LESSONS_archive.md#l6)
+- **L7** — Production throughput differs from relaxation; cost from a production measurement. [detail](LESSONS_archive.md#l7)
+- **L8** — Extra crossover bases selected a slower integrator, confounding both cost and comparisons. [detail](LESSONS_archive.md#l8)
+- **L9** — RunPod GraphQL 403/1010 was Cloudflare blocking `urllib`, not an invalid key. [detail](LESSONS_archive.md#l9)
+- **L10** — Never attach `supervise.py` to a healthy launcher; it is a re-attachment tool. [detail](LESSONS_archive.md#l10)
+- **L11** — MD health checks can pass on a topologically catenated structure. [detail](LESSONS_archive.md#l11)
+- **L12** — Catenation repair can introduce a sugar-ring piercing invisible to its objective. [detail](LESSONS_archive.md#l12)
+- **L13** — A subsystem rewrite dropped one method still required by its caller. [detail](LESSONS_archive.md#l13)
+- **L14** — Cluster login-node probes can confidently misrepresent compute-node modules and hardware. [detail](LESSONS_archive.md#l14)
+- **H16** — A check can run successfully against the wrong artifact or a pin that cannot fail. [detail](LESSONS_archive.md#h16)

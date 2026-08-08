@@ -278,12 +278,25 @@ ENV_VAR = "RUNPOD_API_KEY"
 KEY_FILE = Path.home() / ".runpod_key"
 
 
+@dataclass(frozen=True)
+class ResolvedApiKey:
+    """A credential plus non-secret provenance.
+
+    This deliberately is not a tuple.  Passing the old ``(key, source)`` result directly
+    to ``RunpodClient`` produced an Authorization header containing the tuple repr and a
+    misleading 401, even though the key itself was valid.
+    """
+
+    value: Optional[str]
+    source: str
+
+
 def resolve_api_key(
     *,
     env: Optional[Mapping[str, str]] = None,
     key_file: Optional[Path] = None,
-) -> tuple[Optional[str], str]:
-    """The stored key and its origin: ``(key, "env"|"file")``, or ``(None, "none")``.
+) -> ResolvedApiKey:
+    """The stored key and its origin, without exposing it in logs or status payloads.
 
     Never raises. A missing or unreadable key file is not an error — the setup wizard can
     always ask the user to paste one, which is exactly what happened before this existed.
@@ -291,20 +304,20 @@ def resolve_api_key(
     environ = os.environ if env is None else env
     from_env = (environ.get(ENV_VAR) or "").strip()
     if from_env:
-        return from_env, "env"
+        return ResolvedApiKey(from_env, "env")
 
     path = KEY_FILE if key_file is None else key_file
     try:
         if not path.exists():
-            return None, "none"
+            return ResolvedApiKey(None, "none")
         raw = path.read_text().strip()
     except OSError as exc:
         log.warning("runpod: could not read %s: %s", path, exc)
-        return None, "none"
+        return ResolvedApiKey(None, "none")
     if not raw:
-        return None, "none"
+        return ResolvedApiKey(None, "none")
     _warn_if_group_or_world_readable(path)
-    return raw, "file"
+    return ResolvedApiKey(raw, "file")
 
 
 def _warn_if_group_or_world_readable(path: Path) -> None:
@@ -336,6 +349,11 @@ class RunpodClient:
         transport: Optional[httpx.AsyncBaseTransport] = None,
         timeout: float = 30.0,
     ):
+        if not isinstance(api_key, str):
+            raise TypeError(
+                "RunpodClient requires the credential string. Pass "
+                "resolve_api_key().value, not the resolution object."
+            )
         if not api_key:
             raise RunpodError("A RunPod API key is required.")
         self._client = httpx.AsyncClient(

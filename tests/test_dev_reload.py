@@ -80,6 +80,20 @@ def test_reads_the_real_process_tree_without_raising():
     assert isinstance(dev_reload.under_reloader(), bool)
 
 
+def test_reload_handoff_is_armed_synchronously(monkeypatch):
+    """The structural pod guard is set without needing an async cleanup round-trip."""
+    from backend.api import main
+    from backend.core import runpod_api
+
+    monkeypatch.setattr(dev_reload, "under_reloader", lambda: True)
+    runpod_api.set_handoff(False)
+    try:
+        assert main._begin_runpod_reload_handoff() is True  # noqa: SLF001
+        assert runpod_api._handing_off() is True  # noqa: SLF001
+    finally:
+        runpod_api.set_handoff(False)
+
+
 def test_ppid_parse_survives_a_comm_with_spaces_and_parens():
     """`raw.split()[3]` is wrong: field 2 is the executable name in parentheses and may
     contain both spaces and ')'. NAMD renames itself "NAMD masterPe" — exactly this shape."""

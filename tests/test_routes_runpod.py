@@ -37,6 +37,7 @@ def _reset_session():
     routes_runpod._SESSION.network_volume_id = None  # noqa: SLF001
     routes_runpod._SESSION.api_key = None  # noqa: SLF001 — else /balance hits GraphQL for real
     routes_runpod._SESSION.key_source = "none"  # noqa: SLF001
+    routes_runpod._SESSION.connection_error = None  # noqa: SLF001
 
 
 def _pod(pid="p1", status="RUNNING"):

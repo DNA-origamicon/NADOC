@@ -40,6 +40,9 @@ EARLY_STOP_EVAL_NAME = "nadoc_cutoff_eval.py"
 LIVE_METRICS_NAME = "nadoc_live_metrics.py"
 LIVE_METRICS_FILE = "output/live_metrics.json"
 LIVE_METRICS_INTERVAL_S = 30
+LIVE_HEALTH_NAME = "nadoc_live_health.py"
+LIVE_HEALTH_FILE = "output/live_health.json"
+LIVE_HEALTH_INTERVAL_S = 300
 
 # Tier A only: the node WC health step + the verbatim md_health copy it imports.
 EARLY_STOP_HEALTH_NAME = "nadoc_health_eval.py"

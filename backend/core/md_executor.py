@@ -38,6 +38,7 @@ from backend.core.slurm_script import (
     EARLY_STOP_EVAL_NAME,
     LIVE_METRICS_FILE,
     LIVE_METRICS_NAME,
+    LIVE_HEALTH_FILE,
     EARLY_STOP_HEALTH_NAME,
     STAGED_MD_HEALTH_NAME,
     generate_sbatch,
@@ -554,12 +555,15 @@ async def poll_remote_progress(job: MdJob, *, conn=None) -> bool:
     # stays a metadata-sized poll rather than a log transfer.
     res = await conn.run(
         f"cd {_shq(scratch)} && ls -1 output/*.coor 2>/dev/null; ls -1 *.log 2>/dev/null; "
-        f"echo '---NADOC-METRICS---'; cat {LIVE_METRICS_FILE} 2>/dev/null"
+        f"echo '---NADOC-METRICS---'; cat {LIVE_METRICS_FILE} 2>/dev/null; "
+        f"echo '---NADOC-HEALTH---'; cat {LIVE_HEALTH_FILE} 2>/dev/null"
     )
-    listing, _, metrics_blob = (res.stdout or "").partition("---NADOC-METRICS---")
+    listing, _, tail = (res.stdout or "").partition("---NADOC-METRICS---")
+    metrics_blob, _, health_blob = tail.partition("---NADOC-HEALTH---")
     finished, started = parse_progress_listing(listing)
     advanced = apply_remote_progress(job, finished, started)
-    return apply_live_metrics(job, metrics_blob) or advanced
+    health_changed = apply_live_health(job, health_blob)
+    return apply_live_metrics(job, metrics_blob) or health_changed or advanced
 
 
 def apply_live_metrics(job: MdJob, blob: str) -> bool:
@@ -588,6 +592,54 @@ def apply_live_metrics(job: MdJob, blob: str) -> bool:
         return False
     data["retrieved_at"] = time.time()
     job.live_metrics = data
+    return True
+
+
+def apply_live_health(job: MdJob, blob: str) -> bool:
+    """Merge the pod-computed compact health bundle into the job.
+
+    Samples are advisory while NAMD is running. The raw scalar bundle is retained under
+    ``health_probe.latest`` so newer metrics need no schema migration to remain visible.
+    """
+    text = (blob or "").strip()
+    if not text:
+        return False
+    try:
+        data = json.loads(text)
+    except (ValueError, TypeError):
+        return False
+    if not isinstance(data, dict) or not data:
+        return False
+    probe = dict(job.health_probe or {})
+    if data.get("collected_at") == probe.get("node_collected_at"):
+        return False
+    probe.update(
+        enabled=True,
+        interval_s=300.0,
+        last_tick_at=time.time(),
+        node_collected_at=data.get("collected_at"),
+        reason=data.get("reason"),
+        last_error=None if data.get("ready") else data.get("reason"),
+        latest=data.get("health") or {},
+    )
+    if data.get("ready"):
+        health = data.get("health") or {}
+        from types import SimpleNamespace
+        from backend.core.md_job import MdHealthSample
+
+        result = SimpleNamespace(**health)
+        segment = str(data.get("segment") or "")
+        stage = str(data.get("stage") or segment)
+        sample = MdHealthSample.from_result(
+            result,
+            stage,
+            segment,
+            blocking=False,
+            wall_time=float(data.get("collected_at") or time.time()),
+        )
+        job.health_samples.append(sample)
+        probe["last_at"] = time.time()
+    job.health_probe = probe
     return True
 
 
@@ -746,7 +798,7 @@ def _segment_total_steps(manifest: dict, seg_name: str) -> int:
     return 0
 
 
-async def fetch_outputs(job: MdJob, workspace_dir: Path, *, conn=None) -> None:
+async def fetch_outputs(job: MdJob, workspace_dir: Path, *, conn=None) -> bool:
     """Bring a finished remote run's results back to the login node and locally.
 
     Mirrors scratch → project (persist before scratch is purged), then downloads the
@@ -757,7 +809,7 @@ async def fetch_outputs(job: MdJob, workspace_dir: Path, *, conn=None) -> None:
     scratch = job.remote_scratch_dir
     project = job.remote_project_dir
     if not scratch:
-        return
+        return True
     if project:
         try:
             await conn.mirror(scratch, project)
@@ -767,12 +819,23 @@ async def fetch_outputs(job: MdJob, workspace_dir: Path, *, conn=None) -> None:
     package_dir = job.package_dir(workspace_dir)
     # List the remote files to pull: output/ tree + top-level logs + sbatch out/err.
     rels = await _remote_relpaths(conn, scratch)
+    failed: list[str] = []
     for rel in rels:
         local = package_dir / rel
-        try:
-            await conn.sftp_get(f"{scratch}/{rel}", str(local))
-        except Exception as exc:  # noqa: BLE001 — one bad file must not abort fetch
-            logger.warning("[%s] fetch %s failed: %s", job.job_id, rel, exc)
+        for attempt in range(3):
+            try:
+                await conn.sftp_get(f"{scratch}/{rel}", str(local))
+                break
+            except Exception as exc:  # noqa: BLE001 — retry transient SSH/SFTP failures
+                logger.warning(
+                    "[%s] fetch %s failed (%d/3): %s",
+                    job.job_id,
+                    rel,
+                    attempt + 1,
+                    exc,
+                )
+        else:
+            failed.append(rel)
 
     # Real trajectories have landed on top of any one-frame stand-in, so the marker
     # is void.  Leaving it set would let `remote_live_frame` overwrite real results
@@ -780,6 +843,7 @@ async def fetch_outputs(job: MdJob, workspace_dir: Path, *, conn=None) -> None:
     from backend.core import remote_live_frame  # noqa: PLC0415 — cycle
 
     remote_live_frame.clear_live_frame(job, package_dir=package_dir)
+    return not failed
 
 
 async def cancel_job(job: MdJob, *, conn=None) -> bool:

@@ -609,38 +609,40 @@ class TestResolveApiKey:
     def test_env_var_wins_over_the_file(self, tmp_path):
         f = tmp_path / "key"
         f.write_text("rpa_fromfile")
-        key, src = rp.resolve_api_key(env={"RUNPOD_API_KEY": "rpa_fromenv"}, key_file=f)
-        assert (key, src) == ("rpa_fromenv", "env")
+        resolved = rp.resolve_api_key(
+            env={"RUNPOD_API_KEY": "rpa_fromenv"}, key_file=f
+        )
+        assert (resolved.value, resolved.source) == ("rpa_fromenv", "env")
 
     def test_falls_back_to_the_key_file(self, tmp_path):
         f = tmp_path / "key"
         f.write_text("rpa_fromfile")
-        assert rp.resolve_api_key(env={}, key_file=f) == ("rpa_fromfile", "file")
+        assert rp.resolve_api_key(env={}, key_file=f) == rp.ResolvedApiKey(
+            "rpa_fromfile", "file"
+        )
 
     def test_a_trailing_newline_is_stripped(self, tmp_path):
         """`echo key > ~/.runpod_key` adds one; an unstripped key 401s every request."""
         f = tmp_path / "key"
         f.write_text("rpa_fromfile\n")
-        assert rp.resolve_api_key(env={}, key_file=f)[0] == "rpa_fromfile"
+        assert rp.resolve_api_key(env={}, key_file=f).value == "rpa_fromfile"
 
     def test_an_empty_env_var_is_not_a_key(self, tmp_path):
         f = tmp_path / "key"
         f.write_text("rpa_fromfile")
         assert rp.resolve_api_key(env={"RUNPOD_API_KEY": "  "}, key_file=f) == (
-            "rpa_fromfile",
-            "file",
+            rp.ResolvedApiKey("rpa_fromfile", "file")
         )
 
     def test_no_key_anywhere_is_none_not_an_error(self, tmp_path):
-        assert rp.resolve_api_key(env={}, key_file=tmp_path / "absent") == (
-            None,
-            "none",
-        )
+        assert rp.resolve_api_key(
+            env={}, key_file=tmp_path / "absent"
+        ) == rp.ResolvedApiKey(None, "none")
 
     def test_an_empty_key_file_is_none(self, tmp_path):
         f = tmp_path / "key"
         f.write_text("\n")
-        assert rp.resolve_api_key(env={}, key_file=f) == (None, "none")
+        assert rp.resolve_api_key(env={}, key_file=f) == rp.ResolvedApiKey(None, "none")
 
     def test_an_unreadable_key_file_is_none_not_a_crash(self, tmp_path):
         """A key file we cannot read must degrade to "paste one in the wizard"."""
@@ -648,6 +650,6 @@ class TestResolveApiKey:
         f.write_text("rpa_fromfile")
         f.chmod(0o000)
         try:
-            assert rp.resolve_api_key(env={}, key_file=f) == (None, "none")
+            assert rp.resolve_api_key(env={}, key_file=f) == rp.ResolvedApiKey(None, "none")
         finally:
             f.chmod(0o600)

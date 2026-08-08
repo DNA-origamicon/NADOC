@@ -132,7 +132,17 @@ def start_job(
     if is_running(job.job_id):
         return
 
-    budget = job.runpod_budget_usd or budget_usd or DEFAULT_BUDGET_USD
+    # ``0`` used to fall through this ``or`` chain and silently authorize the full
+    # default cap.  Routes reject non-positive caps now, but keep the core boundary
+    # explicit too: callers outside FastAPI must never turn "$0" into "$15".
+    configured_budget = (
+        job.runpod_budget_usd
+        if job.runpod_budget_usd is not None
+        else budget_usd
+    )
+    budget = DEFAULT_BUDGET_USD if configured_budget is None else float(configured_budget)
+    if budget <= 0:
+        raise ValueError("RunPod budget must be greater than $0.")
 
     n_atoms = n_atoms_for(job, workspace_dir)
     min_name = min_name_for(job, workspace_dir)
@@ -174,6 +184,17 @@ def start_job(
                 _PODS.pop(job.job_id, None)
 
                 resumable = status == MdStatus.paused and job.resumable
+                # A lifetime stop means the user-authorised spend cap was consumed.  It
+                # is technically resumable, but doing so automatically with a fresh cap
+                # made the cap "$N per retry" and could spend 20x what the wizard showed.
+                # Leave the checkpoint paused; a deliberate Start is the next authority.
+                budget_exhausted = bool(
+                    resumable
+                    and job.error
+                    and "maximum lifetime" in job.error.lower()
+                )
+                if budget_exhausted:
+                    break
                 if not resumable or job.user_stopped:
                     break
 
@@ -204,9 +225,16 @@ def start_job(
 
         except asyncio.CancelledError:
             # run_job_on_pod's `finally` already terminated the pod on the way out.
-            job.status = MdStatus.stopped
-            job.user_stopped = True
-            job.error = None
+            # EXCEPT during a dev-reload handoff: runpod_api's context manager deliberately
+            # leaves the pod alive for the replacement server.  Marking the record stopped
+            # here removed its durable claim, so startup's orphan reaper immediately killed
+            # the supposedly handed-off pod.  Preserve RUNNING + pod id for adoption.
+            from backend.core import runpod_api
+
+            if not runpod_api._handing_off():  # noqa: SLF001 — shared lifecycle flag
+                job.status = MdStatus.stopped
+                job.user_stopped = True
+                job.error = None
             raise
         except Exception as exc:  # noqa: BLE001 — a crash must not strand a pod
             log.exception("runpod job %s failed", job.job_id)

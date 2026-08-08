@@ -1,185 +1,79 @@
 # NADOC — Project Instructions
 
-Personal research-grade DNA-origami CAD. Python 3.12 + FastAPI backend, Three.js + Vite frontend, vanilla ES modules. `uv` for Python deps.
+Personal research-grade DNA-origami CAD. Python 3.12 + FastAPI, Three.js + Vite,
+vanilla ES modules, `uv` for Python dependencies.
 
-## Three-Layer Law (CRITICAL — applies to every task)
+## Binding scientific rules
 
-1. **Topological** — strand graph + crossover graph. Ground truth. Edits go here only.
-2. **Geometric** — helix axes, nucleotide positions derived from topology + B-DNA constants. Read-only output.
-3. **Physical** — XPBD/oxDNA relaxed positions. Display state only. Never written back to topology.
+### Three-Layer Law
 
-Never let physical/geometric layers mutate topology. If a "fix" tempts you to write back, stop and check assumptions.
+1. **Topological** — strand graph and crossover graph. Ground truth; edits happen here.
+2. **Geometric** — helix axes and nucleotide positions derived from topology and B-DNA constants. Read-only output.
+3. **Physical** — XPBD/oxDNA relaxed positions. Display state only; never written back to topology.
 
-## DNA Topology — Ask First
+Never let physical or geometric layers mutate topology. If a fix appears to require that, stop and check assumptions.
 
-Any confusion about strand polarity, helix orientation, domain traversal, or scaffold path → **ask the user first, implement nothing**. Reasoning about geometry/topology/directionality alone consistently produces wrong results in this codebase. See `memory/REFERENCE_DNA_TOPOLOGY.md`.
+Any uncertainty about strand polarity, helix orientation, domain traversal, or scaffold path → ask the user and implement nothing. Read [DNA topology](memory/REFERENCE_DNA_TOPOLOGY.md).
 
-Helical phase constants (`_PHASE_FORWARD`, `_PHASE_REVERSE`, `_SQ_PHASE_FORWARD`, `_SQ_PHASE_REVERSE`) are **locked**. Never change without explicit approval. They affect every downstream system.
+Helical phase constants (`_PHASE_FORWARD`, `_PHASE_REVERSE`, `_SQ_PHASE_FORWARD`, `_SQ_PHASE_REVERSE`) are locked. Never change them without explicit approval.
 
 ## Commands
 
 ```bash
-# Always export PATH for uv first (or use the explicit path):
 export PATH="$HOME/.local/bin:$PATH"
-
-just dev            # backend (FastAPI on :8000)
-just frontend       # Vite dev server (:5173)
-just test-smart     # DEFAULT per-change loop: fast suite, scoped. ~60s; 90s backstop.
-just test-affected FILE... # tightest inner loop: point pytest at the area you edit
-just test-file FILE # single test file (fast tests only)
-just test-frontend  # JS unit tests (Vitest)
-just fmt            # format
-just lint           # lint
-
-# TEST-DEDICATED SESSION ONLY (the user opens the window; see below):
-just test-session   # USER runs this in THEIR terminal — 4h window, TTY-only
-just test-slow      # only the heavy sims/solves
-just test           # FULL suite (minutes) — the pre-push gate
-just test-status    # session open? which heavy groups are owed?
+just dev                  # FastAPI :8000
+just frontend             # Vite :5173
+just test-smart           # default backend loop; fast suite, scoped
+just test-affected FILE…  # tight backend loop
+just test-file FILE       # one fast test file
+just test-frontend        # Vitest
+just fmt
+just lint
+just lint-memory
 ```
 
-## Test policy (THE LAW)
+The app is at `http://localhost:5173` when both servers run. See [START.md](START.md) for setup and networking.
 
-**Heavy (`slow`) tests — real oxDNA/NAMD/mrdna sims, CanDo-FEM solves, trajectory benchmarks — never run in an ordinary coding session.** Reflexively escalating to the full suite after a change that "distantly touches simulations" is what killed dev velocity. They run **only inside a test-dedicated session**: a window the *user* opens in their own terminal with `just test-session` (TTY-only, expiring). `scripts/test_guard.sh` refuses `just test` / `just test-slow` / `just test-all` outside one.
+## Verification law
 
-As an agent:
+- Backend behavior change → run `just test-smart`; report its `FAST`/`fast+slow[area]` decision, pass count, and any `DEFERRED` groups verbatim.
+- Frontend behavior change → run `just test-frontend` and exercise the feature in the running app. If that is impossible, lead the final report with `NOT VERIFIED IN APP` and explain why.
+- Geometry/topology change → also load a representative `.nadoc` design and inspect it visually.
+- Never claim a test or app check passed unless it was actually run.
+- Heavy tests (`just test`, `just test-slow`, real simulations/solves/benchmarks) run only in a user-opened `just test-session`. Never bypass `scripts/test_guard.sh`, create its session marker, or set force/budget escape hatches.
+- If the guard identifies an unmarked test over its per-test budget or a fast-suite overrun, use the `triage-slow-tests` skill. Do not raise the budget.
 
-- **Your loop is `just test-smart`** (fast-only, no confirm). It runs the fast suite and *parks* any newly-stale heavy group in `.nadoc-slow-pending` instead of running it. Report it ("deferred slow[cando] — needs a test-dedicated session"): that is complete verification for a normal change, **not** a gap to close.
-- **Never work around the guard.** No hand-writing `.nadoc-test-session`, no `NADOC_TEST_FORCE=1`, no bare `uv run pytest tests/` (dodging the `-m "not slow"` wrapper is exactly what this forbids). If the heavy suite truly must run, **ask the user to open a test-dedicated session**.
-- **The gate is PER-TEST, not total time.** Any *unmarked* test over ~5s (`NADOC_PER_TEST_BUDGET_SEC`) → the guard prints `HEAVY TEST IN THE FAST SUITE` (offenders in `.nadoc-slow-candidates.json`); **launch a triage subagent** (`/triage-slow-tests` → `.claude/skills/triage-slow-tests/SKILL.md`) to relegate them (`slow` + area marker in `tests/conftest.py`). Never raise the budget.
-- **Total wall-clock is a 90s backstop, not a target** — it grows with test *count* and CPU load, so a fixed ceiling just ratchets healthy tests out. 60–90s requires nothing; only above 90s with no single over-budget test does the guard ask for triage (`FAST SUITE TOO SLOW`).
-- Pytest runs under `nice -n 10` (`NADOC_TEST_NICE=0` opts out). Overlapping `just test*` runs refuse while one is live; heavy tests also auto-skip during a production NAMD/oxDNA/mrDNA job (`NADOC_IGNORE_SIM_GUARD=1` overrides). See `memory/project_test_parallelization.md`.
+Detailed extraction verification lives in the path-scoped [main-init rule](.claude/rules/main-init.md). Test-session mechanics live in [test parallelization](memory/project_test_parallelization.md).
 
-App URL when both servers run: `http://localhost:5173` (or WSL eth0 IP if `mirrored` networking is off — see `START.md`).
+## Context and memory routing
 
-## Memory layout
+- This file contains only durable, cross-cutting instructions.
+- [memory/MEMORY.md](memory/MEMORY.md) is the concise navigation index; open only matching topic files.
+- `memory/project_*.md` is current subsystem state; `memory/REFERENCE_*.md` is stable domain knowledge; `memory/feedback_*.md` records user-specific rules.
+- `memory/LESSONS.md` is a symptom index. Open only the matching detail in `memory/LESSONS_archive.md`.
+- `*_archive.md` is history. Do not read it routinely; open it only to recover a specific past decision.
+- `.claude/rules/*.md` supplies path-scoped architecture. `.claude/runbooks/` supplies debugging procedures. `.claude/skills/` supplies task-specific workflows.
+- Before completing a behavior change, read the relevant project head and any clearly matching feedback file. Update stale current-state claims that the change resolves.
+- Before adding a feature, read [FEATURE_DEVELOPMENT.md](FEATURE_DEVELOPMENT.md). Cohesive behavior belongs in a tested module; composition roots such as `main.js` receive only imports, initialization, and thin wiring.
 
-This project uses Claude Code's hierarchical memory — load only what's relevant:
+Do not pre-load unrelated areas. Assembly work does not need cadnano-editor context; physics work does not need scaffold-routing context.
 
-- `CLAUDE.md` (this file) — durable rules, always loaded.
-- `memory/MEMORY.md` — auto-memory index. Lean pointer-only file; content lives in topic files. **Edit it rarely** — it sits in the always-loaded prompt prefix, so every change invalidates the prompt cache for all sessions. Feature updates go in the topic file, not here.
-- `memory/LESSONS.md` — **index** of past struggles and anti-patterns, one line per entry with a symptom hook. Scan it when debugging an unclear symptom; open only the matching entry's detail in `memory/LESSONS_archive.md`. Not a substitute for `project_*.md` topic files on clean refactors with named feature areas.
-- **`*_archive.md` (anywhere) — history, never read in a routine loop.** Every large ledger and topic file is split into a lean *head* (current state, invariants, open items, handoff) and an archive holding the completed/superseded history. Read the head. Open an archive only to mine a specific past decision you know is in there. Reading archives by reflex is the single largest avoidable token cost in this repo.
-- `memory/project_*.md` — current-work topic files. Open the one(s) relevant to the task.
-- `memory/REFERENCE_*.md` — stable domain knowledge (DNA topology, B-DNA constants, atomistic, FEM theory).
-- `memory/feedback_*.md` — user feedback rules. Read whenever they touch the area you're editing.
-- `.claude/rules/*.md` — path-scoped architectural maps. Loaded automatically when you read matching files, so keep them lean. **Symptom→diagnosis debugging content lives in `.claude/runbooks/RUNBOOK_<AREA>.md`** (no frontmatter → not auto-loaded; each rule links to its runbook via a `## Diagnostics →` pointer). Read a runbook only when actually debugging that area; don't re-inline diagnostics into a rule.
-- `.claude/skills/*/SKILL.md` — the session loops (`/carve-router`, `/automate-feature`, `/continue-coverage`, …).
+## Git and shared-worktree safety
 
-**What syncs between the two computers.** `.gitignore` uses `.claude/*` plus negations, so **`.claude/rules/` and `.claude/skills/` are versioned and shared** — edit them like any other source file and they reach the other machine on push. **`.claude/settings.local.json` (permission allowlist) and `.claude/worktrees/` stay machine-local** and are never committed. `memory/` is tracked too, and `~/.claude/projects/-home-joshua-NADOC/memory/` is a **symlink** to it, so there is exactly one copy of every memory file to maintain. Consequence: a rule or skill edited on one computer and not pushed will silently diverge — if you change guidance, commit it.
+Multiple sessions can share this worktree. Existing dirty files may belong to another session.
 
-**Working scope guidance**: when working on assemblies, you don't need the cadnano editor's context. When editing physics, you don't need scaffold routing. Trust path-scoping and the index — don't preemptively load everything.
+- Inspect `git status` and `git log -1` before Git work.
+- Never use `git stash`, `git reset`, `git restore`, or `git checkout -- <path>` without explicit approval.
+- Commit, push, branch, rebase, merge, amend, and branch deletion require an explicit user request. Never force-push or bypass hooks.
+- Pull/rebase only when synchronization is requested and the worktree is safe. A rejected push is resolved with a safe fetch/pull workflow, never `-f`.
+- Commit only files belonging to the requested task. Use recent `area: summary` commit-message style.
 
-## Workflow conventions
+The human-operated two-computer synchronization procedure belongs in [START.md](START.md); it is not an automatic agent first/last action.
 
-- **Delegate file-heavy investigation to a read-only subagent (context economy).** Before reading more than ~3 files to answer a *where/how does X work* question — or before any broad grep/search sweep across subsystems — spawn a `general-purpose` (or `Explore`) subagent to do the search and report back **paths + the load-bearing snippet only**. The subagent's file reads never enter this session's context; only its summary does. Reserve the main window for reasoning and the edit, not grep output. Brief every subagent **read-only and no-git** (see Git conventions). This applies to the load/context step of the session loops (`/carve-router`, `/automate-feature`) too — mirror how `/continue-coverage` already delegates its read phase.
-- **Before claiming done on a change that alters behavior in a subsystem with a `memory/project_*.md` topic file, confirm you have read that topic file's head.** Order doesn't matter — grep first, read topic file second is fine — but skipping it entirely is the failure mode. Changes that do *not* alter subsystem behavior (renames, comments, test-only edits, formatting, a fix wholly described by the prompt) don't need it — say so in the done message instead of reading it. Never read the topic file's `*_archive.md` for this.
-- **Skim `memory/feedback_*.md` filenames against the area you're touching.** If one matches (e.g. `feedback_crossover_no_reasoning` while editing crossover code), open it. They're short and the cost of skipping a relevant one is high.
-- Before claiming a feature works, run `just test-smart` (it scopes to what your change affects) and verify the affected behavior in the running app.
-- For UI changes: `just frontend` must be running and you must exercise the feature. Type-checking and tests do not validate UI correctness.
-- Prefer modifying existing modules over adding new ones — this codebase has many small interconnected files already. **But never grow `main.js` (or any composition root) with new cohesive logic** (see next bullet): the precedence is existing module > new module > *never* a new block in the closure.
-- **Module-first law (anti-backslip — read [FEATURE_DEVELOPMENT.md](FEATURE_DEVELOPMENT.md) before adding any feature).** The carve-up shrank `main.js` 16.5k→~7.5k by pulling cohesive subsystems into modules. Feature work must not re-grow it. New cohesive logic (multi-function behavior, owned state, subscribers) lands in a **new/existing tested module** (`initX({deps})→{api}`); `main.js` gains ONLY an import + a one-line factory init + thin per-action wiring (Feathers' Sprout Method). A feature commit leaves `main.js` LOC **flat or lower** — a net rise that isn't pure wiring means a cohesive block crept in; extract it before committing. Cite `main.js` LOC Δ in the done message.
-- Three-Layer Law violations are silent and corrupting. When unsure which layer a change belongs in, ask.
-- **When you finish a code change in an area with a `project_*.md` topic file, scan it for stale claims** (TODOs, "deferred", "not yet wired", line numbers, "still has bug") that your change has addressed. Update the file. Same for code comments referencing "TODO/FIXME/not yet" in files you touched.
+## Confirm before risky actions
 
-## Git conventions
+Get explicit approval before deleting files, branches, or database-like state; rewriting history; modifying CI or hooks; pushing or posting remotely; bulk-migrating saved `.nadoc` files; weakening test guards; or touching locked phase constants.
 
-Solo dev, two computers (work happens on either), GitHub remote `origin` at `DNA-origamicon/NADOC`. Default branch is `master`.
+## Communication
 
-### Default workflow
-
-Commit straight to `master`. Branches are overhead for solo work and mostly aren't needed. Create a branch only when:
-- The work is risky and might be thrown away (so master stays clean)
-- A feature spans many commits and master needs to stay shippable in between
-- An experimental approach is unsure and you want a clean discard path
-
-When branching: `git checkout -b <short-name>`, commit, then either fast-forward merge to master (`git checkout master && git merge --ff-only <name>`) or delete the branch if it's not worth keeping. Branch naming barely matters — keep it short and descriptive.
-
-### Two-computer protocol (critical)
-
-Two rules, every session:
-
-1. **Pull before you start.** First action on either computer:
-   ```bash
-   git pull --rebase origin master
-   ```
-2. **Push before you stop.** Last action:
-   ```bash
-   git status   # confirm clean
-   git push origin master
-   ```
-
-`--rebase` keeps history linear. If both computers committed before pulling, the rebase replays local commits on top of remote — resolve any conflicts and continue.
-
-### My defaults
-
-- Commit only when explicitly asked ("commit", "make a commit"). Never preemptively.
-- Never push without being asked.
-- Never create a branch without asking, unless I tell you why first and you confirm.
-- Never amend, rebase published commits, or force-push (especially to master).
-- Never use `--no-verify` or skip hooks.
-- Run `git status` and `git log -1` at the start of any git work to confirm we're where we expect.
-- **More than one Claude session may be working in this tree at once.** Never run `git stash`, `git reset`, `git checkout -- <path>`, or `git restore` without asking — they revert the *whole tree* and will clobber the other session's in-flight work (and yours). Read files from disk, not from `git show HEAD:<path>`. **Forbid git commands explicitly in every subagent prompt.** Dirty files in `git status` may not be yours. If a file you just wrote reverts to its committed state, check `git stash list` / `git reflog` before re-applying anything. Snapshot to the scratchpad before bulk rewrites — git is not a safe backup here.
-
-### Commit message style
-
-Follow recent `git log`: `area: summary` (`feat:`, `fix:`, `perf:`, `docs:`). One-line subject; body for the "why" if non-obvious.
-
-### Newbie gotchas to flag
-
-If any of these come up, I'll stop and explain rather than charge ahead:
-- `git push` rejected as non-fast-forward → `git pull --rebase`, **never** `-f`
-- Uncommitted changes blocking a pull → `git stash` / pull / `git stash pop`, or commit first
-- "HEAD detached at..." → `git checkout -b temp-save` immediately, then sort out
-- Untracked scratch files that didn't sync — either commit or `.gitignore` them
-- ~30 stale local-only branches from past work exist; safe to prune with `git fetch --prune` + targeted `git branch -D`, but I'll ask first
-
-## Verification expectations
-
-- **Every backend code change runs `just test-smart` before claiming done — no exceptions, even a one-line change.** Cite the decision (`FAST` / `fast+slow[area]`) **and** pass count; flag any unexpected drop; report `DEFERRED` heavy groups verbatim (deferring is correct, not a gap). Frontend-only changes touch no Python → `FAST`; run `just test-frontend` for the JS. (Guard/triage/escalation rules: see Test policy above.)
-- **Every frontend code change must be exercised in the running app before claiming done.** If `just frontend` isn't running or no representative design has been loaded, your "done" message must lead with `NOT VERIFIED IN APP` and explain why. Type-checking and tests do not validate UI correctness.
-- Geometry/topology changes: load a representative `.nadoc` design (e.g. `Examples/26hb_platform_v3.nadoc`) and visually confirm.
-- Don't claim "tests pass" without running them.
-- **Refactor extractions (closure → module): every pure function extracted gets ≥1 vitest test asserting its input→output behavior; `just test-frontend` must be green before claiming the extraction done.** This is the fast loop (`just test-frontend-watch` to iterate). See the streamlined extraction-loop in [.claude/rules/main-init.md](.claude/rules/main-init.md). Stateful (DOM/scene/store) extractions additionally need one app exercise + `just smoke` (the console-error commit gate) before commit — this is the *one* sanctioned routine use of Playwright.
-  - **Prove the pin for ADAPTED code (test-ordering).** A test written against the *moved* code and passing first-run only proves behavior preservation for a **verbatim lift** (byte-identical body — the cut-paste itself preserves behavior). For **adapted** code — get/set shims, alias rewiring, lazy-arrow wrapping, any non-byte-identical change — "green first run" is *not* proof: either get the test green against the code **in place** first then move test+code together, or run the new test once against a `git stash`'d copy of the old code. State in the log row how each adapted pin was proven.
-  - **"Extraction done" is judged by coupling + cohesion, not LOC.** Done = the new module has ONE reason to change and a small, countable dep surface (the dep list you already write in the log row). LOC-Δ is *narrative only* — never the pass criterion or the goal. The carve-up's terminal state is reached when the residual closure is composition-root glue (imports + factory inits + thin per-action wiring) you're no longer *touching* — that's done, not unfinished.
-- **Playwright/E2E is NOT part of the routine dev cycle — it's too slow for tight iteration.** Default frontend verification is exercising the running app directly. Reach for Playwright only to (a) reproduce or troubleshoot a specific error/bug, or (b) clarify behavior when you're unsure what the user is describing. Do not write or run E2E specs as a default "done" step. See [REFERENCE_PLAYWRIGHT](memory/REFERENCE_PLAYWRIGHT.md).
-- Verification of specific features often needs user-generated designs. Ask which design should be used for testing.
-
-### Done checklist (acknowledge each before claiming a task done)
-
-- [ ] Tests run: `just test-smart` (cite its decision — `FAST`/`fast+slow[area]` — the pass count, and any `DEFERRED` heavy groups). Frontend-only changes get `FAST` (no Python touched → no backend tests); run `just test-frontend` and say so explicitly. `just test` / `just test-slow` are test-dedicated-session only — never run them, ask the user
-- [ ] Budget honoured: no unmarked test over ~5s, and the run stayed under the 90s backstop. If either tripped, a triage subagent (`/triage-slow-tests`) ran and the offenders were relegated. Between 60s and 90s = fine, no action
-- [ ] Frontend changes exercised in running app, OR `NOT VERIFIED IN APP` caveat at top of message
-- [ ] If the change alters subsystem behavior: relevant `project_*.md` topic file **head** was read this session (cite which one). If it doesn't alter behavior, say "no topic file needed: [why]" — don't read one to satisfy the checklist
-- [ ] Topic file **head** scanned for stale claims this change addressed; updated if needed (update the head, not the archive)
-- [ ] If you touched a known-bug area (crossover, three-layer boundary, length/index conventions, cluster/deformation, rendering invariants, stale-state) — scan the `LESSONS.md` index and cite the entry you checked, or explicitly say "LESSONS not relevant: [why]". Open `LESSONS_archive.md` only for the one entry that matches
-- [ ] No `*_archive.md` was read unless you were mining a specific past decision (name it)
-- [ ] If this was a refactor extraction from a closure: ≥1 vitest test per extracted pure function, `just test-frontend` green (cite count); stateful extractions also ran `just smoke` + one app exercise. **Adapted (non-verbatim) code: cite how the pin was proven** (in-place-first / stash-rerun). **Done judged by coupling+cohesion** (one reason to change, small dep surface), not LOC.
-
-## Risky-action policy
-
-Confirm before any of these unless you explicitly pre-authorized:
-- Deleting branches, files, or DB-like state
-- `git reset --hard`, force-push, history rewrites
-- Modifying CI configuration or hooks
-- Pushing to remote, creating PRs, posting on shared services
-- Touching the `_PHASE_*` constants in `lattice.py`
-- Anything that unlocks or weakens the test guard: creating `.nadoc-test-session`, setting `NADOC_TEST_FORCE=1`/`NADOC_TEST_BUDGET_SEC`, calling `pytest` outside the `just` recipes without `-m "not slow"`. Ask the user to open a test-dedicated session instead
-- Bulk migrations of saved `.nadoc` files
-
-## Audience & communication
-
-The user has a PhD in biophysics specializing in DNA origami. Biology / biophysics / DNA-nanotech content should be dense and technical — assume domain fluency, use precise terminology, don't define standard concepts. Statements and questions in this domain can carry compressed meaning.
-
-Programming knowledge is at a basic level. Any explanation involving code, data structures, algorithms, build systems, or infrastructure must be framed simply — short concrete examples over abstract terms, name what's happening rather than the jargon for it, and unpack acronyms on first use. When a fix touches code, default to explaining *what changed for the user-visible behavior*, not the mechanism, unless asked.
-
-When in doubt about which mode applies: bio = dense and assumed, code = ELI5.
-
-## Tone
-
-Terse responses. No trailing summary blocks unless asked. Use markdown file links (`[name](path#Lline)`) when citing code. Don't restate the diff after editing. Don't use emojis unless requested.
-
-## When you don't know
-
-Default to asking, not guessing. The DNA-topology and three-layer rules above exist because past sessions burned cycles on plausible-looking fixes that violated invariants.
+The user has a PhD in biophysics specializing in DNA origami: use dense, precise domain language. Explain programming and infrastructure simply, with concrete examples and acronyms expanded on first use. Be terse. Ask rather than guess when scientific topology or directionality is uncertain.

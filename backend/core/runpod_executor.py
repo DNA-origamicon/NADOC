@@ -183,7 +183,7 @@ async def _ensure_mdanalysis(conn: RunpodConnection) -> None:
     # retries: setup runs over a freshly-booted pod whose SSH sometimes drops a channel
     # (EU-RO-1 flake); a transient drop here once aborted the whole run. probe + pip are
     # idempotent, so reconnect-and-retry rather than crash.
-    probe = 'python3 -c "import MDAnalysis; print(MDAnalysis.__version__)"'
+    probe = 'python3 -c "import MDAnalysis, numpy, scipy; print(MDAnalysis.__version__)"'
     res = await conn.run(probe, retries=3)
     if res.rc == 0:
         log.info("runpod: MDAnalysis %s already present", res.stdout.strip())
@@ -310,6 +310,29 @@ async def submit_job(
         job,
     )
 
+    # Full health stays on the pod: stage the canonical implementation plus a tiny
+    # periodic wrapper. The output is metadata-sized and is collected by the same poll
+    # as live speed/progress. Install/prove dependencies before NAMD starts so the Health
+    # card cannot silently remain empty for an entire paid run.
+    from backend.core import md_health, remote_live_health  # noqa: PLC0415
+    from backend.core.slurm_script import LIVE_HEALTH_NAME, STAGED_MD_HEALTH_NAME
+
+    await md_executor._put_text(
+        conn,
+        Path(md_health.__file__).read_text(),
+        f"{remote}/{STAGED_MD_HEALTH_NAME}",
+        workspace_dir,
+        job,
+    )
+    await md_executor._put_text(
+        conn,
+        Path(remote_live_health.__file__).read_text(),
+        f"{remote}/{LIVE_HEALTH_NAME}",
+        workspace_dir,
+        job,
+    )
+    await _ensure_mdanalysis(conn)
+
     if early_stop:
         # Same three scripts the sbatch stages, uploaded through the same helper — the
         # conn duck-type means the Alpine stager works verbatim over an SSH'd pod.
@@ -321,7 +344,8 @@ async def submit_job(
             # FULL 9.6M-step ladder at ~$41. A silent import failure here is therefore
             # a budget event, not a degraded-quality event: prove MDAnalysis is
             # importable NOW, while we have spent cents, not at chunk 1 of stage 4.
-            await _ensure_mdanalysis(conn)
+            # Already proven above for the continuous health collector.
+            pass
 
     script = render_chain_script(
         steps=chain_steps_for(job, min_name),
@@ -436,8 +460,19 @@ async def cancel_job(job: MdJob, *, conn: RunpodConnection) -> None:
 async def fetch_results(
     job: MdJob, workspace_dir: Path, *, conn: RunpodConnection
 ) -> bool:
-    """Pull outputs back. REUSED verbatim from the Alpine executor."""
-    return await md_executor.fetch_outputs(job, workspace_dir, conn=conn)
+    """Pull outputs back, refusing to call a partial download successful."""
+    for attempt in range(3):
+        if await md_executor.fetch_outputs(job, workspace_dir, conn=conn):
+            return True
+        log.warning(
+            "runpod job %s: output fetch incomplete (%d/3) — retrying before teardown",
+            job.job_id,
+            attempt + 1,
+        )
+    raise RuntimeError(
+        "RunPod job finished, but its outputs could not be downloaded completely after "
+        "three attempts. They remain safe on the RunPod network volume."
+    )
 
 
 # ── Whole-job orchestration ──────────────────────────────────────────────────
@@ -694,6 +729,17 @@ async def _supervise_run(
             "billing guard.",
             FETCH_TIMEOUT_S,
         )
+        job.status = MdStatus.paused
+        job.resumable = True
+        job.error = (
+            "RunPod finished, but downloading its outputs timed out. The results remain "
+            "safe on the network volume; resume to retry the download."
+        )
+    except Exception as exc:  # noqa: BLE001 — preserve the finished remote result
+        log.error("runpod output fetch failed: %s", exc)
+        job.status = MdStatus.paused
+        job.resumable = True
+        job.error = str(exc)
     job.save(workspace_dir)
     return job.status
 

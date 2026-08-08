@@ -215,6 +215,25 @@ async def _terminate_runpod_pods() -> None:
         logger.warning("runpod: pod cleanup on shutdown failed", exc_info=True)
 
 
+def _begin_runpod_reload_handoff() -> bool:
+    """Arm pod handoff synchronously at the first instant shutdown begins.
+
+    This must run before ANY await in lifespan teardown. With uvicorn's five-second
+    graceful timeout, cancelling/awaiting another task first allowed the pod-owning task
+    to unwind before the later cleanup hook set the flag.
+    """
+    try:
+        from backend.core import runpod_api
+        from backend.core.dev_reload import under_reloader
+
+        if under_reloader():
+            runpod_api.set_handoff(True)
+            return True
+    except Exception:  # noqa: BLE001 — fail toward teardown, never a leaked pod
+        logger.warning("runpod: could not arm reload handoff", exc_info=True)
+    return False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Server startup/shutdown hook."""
@@ -232,6 +251,8 @@ async def lifespan(app: FastAPI):
 
     runpod_connect = asyncio.create_task(routes_runpod.autoconnect())
     yield
+    # FIRST shutdown instruction: setting this after even one await has killed live pods.
+    _begin_runpod_reload_handoff()
     runpod_connect.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await runpod_connect

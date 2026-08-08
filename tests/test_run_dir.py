@@ -47,6 +47,20 @@ def test_apply_run_dir_none_is_noop(tmp_path, monkeypatch):
     assert job.archived is False and job.archive_path is None
 
 
+def test_runpod_without_picker_defaults_to_archive(tmp_path, monkeypatch):
+    archive = tmp_path / "Archive" / "nadoc_jobs"
+    archive.mkdir(parents=True)
+    monkeypatch.setattr(rm, "_DEFAULT_RUNPOD_RUN_DIR", archive)
+    monkeypatch.setattr(rm, "_workspace", lambda: tmp_path / "workspace")
+    (tmp_path / "workspace" / "md_jobs").mkdir(parents=True)
+
+    job = _job()
+    rm._apply_run_dir(job, None, execution_target="runpod")
+
+    assert job.archived is True
+    assert job.archive_path == str(archive / job.job_id)
+
+
 def test_apply_run_dir_rejects_missing_or_unwritable(tmp_path, monkeypatch):
     monkeypatch.setattr(rm, "_workspace", lambda: tmp_path)
     with pytest.raises(HTTPException):

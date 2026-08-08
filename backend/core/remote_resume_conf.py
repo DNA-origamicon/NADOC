@@ -60,7 +60,8 @@ _RESUME_DROP = frozenset(
     ]
 )
 
-# ...and these, which the resume must RE-DERIVE rather than inherit. See _output_freq.
+# ...and these, which the resume must re-emit. Their original cadence is retained when
+# it is already denser than the minimum needed by a short continuation.
 _RESUME_RECOMPUTE = frozenset(["outputEnergies", "dcdFreq", "xstFreq", "restartfreq"])
 
 # Tier-A/B early-stop refuses to judge a plateau on fewer than CutoffParams.min_frames
@@ -85,6 +86,26 @@ def _output_freq(steps):
     """
     f = max(_STEPS_PER_CYCLE, steps // _FRAMES_PER_CHUNK)
     return max(_STEPS_PER_CYCLE, f - (f % _STEPS_PER_CYCLE))
+
+
+def _original_frequency(conf_text, directive):
+    """Return a positive integer cadence from the original conf, if present."""
+    for line in reversed(conf_text.splitlines()):
+        fields = line.split()
+        if fields and fields[0] == directive and len(fields) >= 2:
+            try:
+                value = int(fields[1])
+            except ValueError:
+                return None
+            return value if value > 0 else None
+    return None
+
+
+def _resume_frequency(conf_text, directive, remaining):
+    """Never make output sparser on resume; tighten it for very short tails."""
+    target = _output_freq(remaining)
+    original = _original_frequency(conf_text, directive)
+    return min(original, target) if original is not None else target
 
 
 def restart_step_of(xsc_text):
@@ -115,7 +136,10 @@ def build_resume_conf(conf_text, segment_name, restart_step, total_steps):
         for line in conf_text.splitlines()
         if (line.split()[0] if line.split() else "") not in drop
     ]
-    freq = _output_freq(remaining)
+    frequencies = {
+        key: _resume_frequency(conf_text, key, remaining)
+        for key in _RESUME_RECOMPUTE
+    }
     kept += [
         "binCoordinates     output/%s.restart.coor" % segment_name,
         "binVelocities      output/%s.restart.vel" % segment_name,
@@ -123,13 +147,13 @@ def build_resume_conf(conf_text, segment_name, restart_step, total_steps):
         "extendedSystem     output/%s.restart.xsc" % segment_name,
         "dcdFile            output/%s.dcd" % segment_name,
         "xstFile            output/%s.xst" % segment_name,
-        # Re-derived from the REMAINING steps, so the resumed chunk still yields enough
-        # frames for early-stop to judge it. Inheriting the original cadence silently
-        # starves a late restart of frames and kills its bridge.
-        "outputEnergies     %d" % freq,
-        "dcdFreq            %d" % freq,
-        "xstFreq            %d" % freq,
-        "restartfreq        %d" % freq,
+        # Preserve the original (possibly much denser) cadence, while tightening it for
+        # a short tail when needed. Increasing these intervals on a long production
+        # resume starves live health and leaves large amounts of work uncheckpointed.
+        "outputEnergies     %d" % frequencies["outputEnergies"],
+        "dcdFreq            %d" % frequencies["dcdFreq"],
+        "xstFreq            %d" % frequencies["xstFreq"],
+        "restartfreq        %d" % frequencies["restartfreq"],
         "firsttimestep      %d" % int(restart_step),
         # NAMD 3's Tcl `run` has no `upto`; firsttimestep already advanced the label, so
         # run only what is left. restart_step is a multiple of restartfreq (itself a

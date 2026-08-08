@@ -96,3 +96,21 @@ def test_ws_state_push_omits_progress_fraction_for_non_running(tmp_path, monkeyp
 
     assert msg["job"]["status"] == "queued"
     assert "progress_fraction" not in msg["job"]
+
+
+def test_paused_remote_job_keeps_exact_last_observed_progress(tmp_path):
+    """A vanished pod must show its durable observation, not fall back to 0 %."""
+    from backend.api.routes_md import _namd_live_progress
+
+    job = _running_job(tmp_path)
+    job.execution_target = "runpod"
+    job.status = MdStatus.paused
+    job.current_segment_idx = 2
+    job.live_metrics = {"segment": "s2", "step": 250, "retrieved_at": 123.0}
+
+    fraction, eta, estimated = _namd_live_progress(job, tmp_path)
+
+    # 2 completed segments plus 25 % of segment 3, across four equal segments.
+    assert fraction == 0.5625
+    assert eta is None
+    assert estimated is False

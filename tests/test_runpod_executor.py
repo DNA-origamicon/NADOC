@@ -585,7 +585,7 @@ class TestTierAEarlyStopGate:
         )
         assert calls["n"] == 2, "must re-probe after installing, not assume pip worked"
 
-    def test_off_by_default_stages_nothing_and_never_probes(self, tmp_path):
+    def test_health_is_staged_and_probed_even_when_early_stop_is_off(self, tmp_path):
         job = _job(tmp_path)  # early_stop_relax defaults False
         conn = _conn({"setsid": (0, "1\n", "")})
         _run(
@@ -595,7 +595,8 @@ class TestTierAEarlyStopGate:
         )
         script = (job.job_dir(tmp_path) / rx.CHAIN_SCRIPT).read_text()
         assert "nadoc_cutoff_eval.py" not in script
-        assert not any("MDAnalysis" in c for c in conn._conn.commands)  # noqa: SLF001
+        assert any("MDAnalysis" in c for c in conn._conn.commands)  # noqa: SLF001
+        assert "nadoc_live_health.py" in script
 
 
 class _R:
@@ -647,7 +648,13 @@ class TestStagingReusesTheVolume:
         # the live-metrics collector is refreshed so a stale copy on the volume can never
         # outlive a change to NADOC's own collector code.
         # The point of this test is that no PACKAGE file (the 1.21 GB) is re-uploaded.
-        always = (rx.CHAIN_SCRIPT, rx.RESUME_CONF_NAME, rx.LIVE_METRICS_NAME)
+        always = (
+            rx.CHAIN_SCRIPT,
+            rx.RESUME_CONF_NAME,
+            rx.LIVE_METRICS_NAME,
+            "md_health.py",
+            "nadoc_live_health.py",
+        )
         package_files = [p for p in sent if not p.endswith(always)]
         assert package_files == [], package_files
 
@@ -761,7 +768,13 @@ class TestProductionChildSeedsFromParentOnTheVolume:
         assert any("cp -n" in c and "PARENT123456" in c for c in cmds), (
             "must copy from the parent's dir on the volume"
         )
-        always = (rx.CHAIN_SCRIPT, rx.RESUME_CONF_NAME, rx.LIVE_METRICS_NAME)
+        always = (
+            rx.CHAIN_SCRIPT,
+            rx.RESUME_CONF_NAME,
+            rx.LIVE_METRICS_NAME,
+            "md_health.py",
+            "nadoc_live_health.py",
+        )
         assert [p for p in sent if not p.endswith(always)] == [], "no package re-upload"
 
     def test_never_drags_across_the_parents_output_or_sentinels(self, tmp_path):

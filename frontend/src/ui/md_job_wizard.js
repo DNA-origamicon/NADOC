@@ -169,7 +169,7 @@ const FIELDS = [
   { key: 'gpu_resident', label: 'GPU-resident mode', type: 'select',
     options: [{ value: 'auto', label: 'Auto (decide from the atom count)' },
               { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
-    help: 'Keeps integration and bonded forces on the GPU. A large win above ~100k atoms and a measured loss below it, so auto is usually right.' },
+    help: 'Keeps integration and bonded forces on the GPU. RunPod defaults this on: its RTX 4090 delivered ~301 ns/day versus ~175 in CUDA-offload mode on the 62.7k-atom 2hb. Hard incompatibilities still force it off safely.' },
   { key: 'gpu_fallback_policy', label: 'If the fastest GPU mode cannot start', type: 'select',
     options: [{ value: 'ask', label: 'Pause and ask' },
               { value: 'auto_offload', label: 'Fall back automatically' }],
@@ -260,7 +260,7 @@ const PRODUCTION_FIELD_DEFS = [
     options: [{ value: 'auto', label: 'Auto (decide from the atom count)' },
               { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
     format: v => (v == null ? 'auto' : String(v)),
-    help: 'Keeps integration and bonded forces on the GPU. The atom count is known here (it is the package’s own PSF), so auto resolves to a fact rather than a deferred value. A hard anchor forces this off — NAMD 3 refuses fixedAtoms under GPU-resident.' },
+    help: 'Keeps integration and bonded forces on the GPU. RunPod defaults this on because its RTX 4090 wins even below the local machine’s generic atom-count crossover. A hard anchor still forces it off — NAMD 3 refuses fixedAtoms under GPU-resident.' },
 ]
 
 /** The production pane's groups, in order. */
@@ -315,6 +315,10 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   let presets = []
   let plan = null
   let busy = false
+  // Selecting RunPod makes GPU-resident the visible default. Track whether this value
+  // came from the target default so moving back to Local/Alpine can restore Auto without
+  // erasing a user's explicit On/Off/Auto choice.
+  let runpodResidentDefaulted = false
 
   /**
    * Read-only mode — the wizard showing a job that has ALREADY been created.
@@ -525,6 +529,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     if (readOnly) return
     record()
     state.touched[key] = value
+    if (key === 'gpu_resident') runpodResidentDefaulted = false
     if (key === 'gpu_fallback_policy') {
       try { localStorage.setItem(GPU_FALLBACK_KEY, String(value)) } catch { /* private mode */ }
     }
@@ -1808,6 +1813,16 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
         const nodeMoved = targetMoved || state.partition !== partition
         state.target = target
         state.partition = partition
+        if (targetMoved && target === 'runpod'
+            && !Object.prototype.hasOwnProperty.call(state.touched, 'gpu_resident')) {
+          state.touched.gpu_resident = 'on'
+          runpodResidentDefaulted = true
+          void loadPlan()
+        } else if (targetMoved && target !== 'runpod' && runpodResidentDefaulted) {
+          delete state.touched.gpu_resident
+          runpodResidentDefaulted = false
+          void loadPlan()
+        }
         // A different node is a different SLURM request; drop the sized one.
         if (nodeMoved) { slurmPreview = null; slurmKey = '' }
         onTargetChange({ target, partition })
@@ -1932,6 +1947,11 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     }
     if (mode && !readOnly) state.mode = mode
     if (!readOnly) state.draftId = draftId
+    if (!readOnly && state.target === 'runpod'
+        && !Object.prototype.hasOwnProperty.call(state.touched, 'gpu_resident')) {
+      state.touched.gpu_resident = 'on'
+      runpodResidentDefaulted = true
+    }
     // Opening ON a job means continuing THAT run, not the newest one for this part —
     // which is what `ensureParent` would otherwise pick, silently, while the user had a
     // different relaxation selected in the list.

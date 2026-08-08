@@ -45,6 +45,7 @@ from backend.core.slurm_script import (
     _early_stop_block,
     _early_stop_eligible,
     _stage_last_chunk_index,
+    LIVE_HEALTH_NAME,
     LIVE_METRICS_NAME,
 )
 
@@ -352,6 +353,7 @@ WATCHDOG_POLL_S = 30  # how often the watchdog checks the log mtime + heartbeat
 # NAMD's own writes to the same network volume, on a machine that is billing by the
 # second. Raise it (or set 0 to disable) if a run ever looks I/O-starved.
 LIVE_METRICS_INTERVAL_S = 60
+LIVE_HEALTH_INTERVAL_S = 300
 
 
 def render_chain_script(
@@ -371,6 +373,7 @@ def render_chain_script(
     name_stem: str = "",
     health_python: str = "python3",
     live_metrics_s: int = LIVE_METRICS_INTERVAL_S,
+    live_health_s: int = LIVE_HEALTH_INTERVAL_S,
 ) -> str:
     """Emit the bash script that runs the whole ladder on the pod.
 
@@ -456,6 +459,17 @@ def render_chain_script(
             f'if [ -f "{LIVE_METRICS_NAME}" ]; then',
             f'  ( {health_python} "{LIVE_METRICS_NAME}" . {int(live_metrics_s)} '
             ") >/dev/null 2>&1 & LIVE_METRICS_PID=$!",
+            "fi",
+            "",
+        ]
+
+    if live_health_s and name_stem:
+        lines += [
+            "# Full structural health runs beside the trajectory on the pod and publishes",
+            "# one compact atomic bundle; NADOC never downloads the growing DCD to monitor it.",
+            f'if [ -f "{LIVE_HEALTH_NAME}" ]; then',
+            f'  ( {health_python} "{LIVE_HEALTH_NAME}" . {int(live_health_s)} '
+            f'"{name_stem}" ) >/dev/null 2>&1 & LIVE_HEALTH_PID=$!',
             "fi",
             "",
         ]
@@ -590,6 +604,7 @@ def render_chain_script(
         # kills the whole process GROUP (the chain script is a setsid leader), so this is
         # only about the clean-exit path.
         '[ -n "${LIVE_METRICS_PID:-}" ] && kill "$LIVE_METRICS_PID" 2>/dev/null',
+        '[ -n "${LIVE_HEALTH_PID:-}" ] && kill "$LIVE_HEALTH_PID" 2>/dev/null',
         'echo "completed" > nadoc_status',
         "date +%s > nadoc_heartbeat",
         "exit 0",

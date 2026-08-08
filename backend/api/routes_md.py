@@ -369,10 +369,11 @@ class CreateJobRequest(BaseModel):
     )
     runpod_budget_usd: Optional[float] = Field(
         None,
-        ge=0,
+        gt=0,
         description="Spend cap for this job's pod, in USD. A BUDGET, not a duration — the "
         "kill-switch wall-clock is derived from the rate of the card actually "
-        "obtained. Caps ONE pod and has no memory, so resumes each get it afresh. "
+        "obtained. Reaching it pauses for explicit user approval; a manual resume "
+        "authorizes a fresh cap. "
         "None → the backend default.",
     )
     runpod_volume_id: Optional[str] = Field(
@@ -2222,6 +2223,7 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     blocked for the whole 60-120 s+ preparation, so the UI could only show an
     indeterminate spinner with no ETA and no way to detect a hung run.
     """
+    body = _apply_runpod_gpu_resident_default(body)
     preset = get_preset(body.relax_preset)
     # Host-aware, not just build-aware: GBIS needs a non-CUDA NAMD binary, and finding
     # that out AFTER solvation (which is what happened) wastes a prep and looks like a
@@ -2991,13 +2993,49 @@ def _apply_runpod_choices(job: MdJob, body) -> None:
     )
 
 
-def _apply_run_dir(job: MdJob, run_dir: Optional[str]) -> None:
+def _apply_runpod_gpu_resident_default(body):
+    """Default rented CUDA jobs to GPU-resident without defeating an explicit choice.
+
+    The local atom-count crossover was measured on a 3080 Ti and is not portable to the
+    RTX 4090-class cards selected by RunPod.  A 62.7k-atom 2hb job demonstrated the
+    failure directly: ``auto`` chose CUDA offload (47%, 175 ns/day), while resident used
+    78-81% and delivered ~301 ns/day.  The protocol emitter still enforces hard
+    incompatibilities (fixed atoms, sparse carved cells), and an explicit auto/off from
+    Advanced remains authoritative; only an OMITTED wizard/API field gets this default.
+    """
+    fields_set = getattr(body, "model_fields_set", set())
+    if (
+        getattr(body, "execution_target", "local") == "runpod"
+        and "gpu_resident" not in fields_set
+    ):
+        return body.model_copy(update={"gpu_resident": "on"})
+    return body
+
+
+_DEFAULT_RUNPOD_RUN_DIR = Path(
+    os.environ.get("NADOC_RUNPOD_RUN_DIR", "/media/jojo/Archive/nadoc_jobs")
+)
+
+
+def _apply_run_dir(
+    job: MdJob,
+    run_dir: Optional[str],
+    *,
+    execution_target: Optional[str] = None,
+) -> None:
     """Archive a FRESH job at ``run_dir`` from birth so its (multi-GB) NAMD outputs land
     there instead of the workspace/system disk.  Validates the target, sets the archive
     fields, creates ``<run_dir>/<job_id>``, and indexes it so the app resolves the job via
     the archive index (same mechanism as the post-hoc archive flow, just applied up front).
     No-op when ``run_dir`` is falsy.  Raises HTTPException(400) on a bad/unwritable target.
     """
+    # RunPod outputs are fetched onto this machine after the paid pod finishes.  A missing
+    # browser preference must never turn that multi-GB download into a write to the small
+    # system disk.  Keep the default at the backend boundary so API/script callers receive
+    # the same protection as the wizard.  The environment override makes this portable to
+    # hosts whose archive is mounted elsewhere.
+    if not run_dir and (execution_target or "").lower() == "runpod":
+        run_dir = str(_DEFAULT_RUNPOD_RUN_DIR)
     if not run_dir:
         return
     base = Path(run_dir).expanduser()
@@ -3049,7 +3087,7 @@ def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
     job.prep_params = body.model_dump()
     job.prep_params_set = sorted(body.model_fields_set)
     job.status = MdStatus.draft
-    _apply_run_dir(job, body.run_dir)
+    _apply_run_dir(job, body.run_dir, execution_target=body.execution_target)
     job.save(_workspace())
     logger.info(
         "create_md_job: DRAFT job_id=%s design=%s seed_oxdna=%s seed_mrdna=%s",
@@ -3193,7 +3231,7 @@ def _spawn_prep_job(
         # Archive a fresh (non-draft) job at the requested run_dir BEFORE prep runs, so the
         # solvated package + trajectory are built there.  A draft was already placed by
         # _spawn_draft_job; a refit keeps its existing location.
-        _apply_run_dir(job, body.run_dir)
+        _apply_run_dir(job, body.run_dir, execution_target=body.execution_target)
     # Remote-execution tag (default "local"): submission itself happens later via
     # /md/jobs/{id}/submit-remote once the package is prepared and a cluster session
     # is connected.  Tagging here lets the UI show the intended target from creation.
@@ -3629,8 +3667,6 @@ def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None, boo
     segment still queued behind it — so a relaxation ladder counts down to the end of the
     ladder, not to the end of its current chunk.
     """
-    if job.status != MdStatus.running:
-        return None, None, False
     segs = job.segments or []
     total = len(segs)
     if not total:
@@ -3651,6 +3687,13 @@ def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None, boo
     if 0 <= idx < total and segs[idx].status == "running":
         seg = segs[idx]
         steps = seg.steps
+        # A disconnected remote job still owns a durable last observation. Do not throw
+        # it away because the pod vanished, and never project beyond that observation
+        # while disconnected: that is how a real ~5 % run displayed 0 %.
+        if job.status != MdStatus.running:
+            live = job.live_metrics or {}
+            observed = live.get("step") if live.get("segment") == seg.name else None
+            return overall_fraction(done, total, observed, steps), None, False
         pkg = job.package_dir(ws)
         try:
             ts = live_segment_step(pkg, seg.name)
@@ -3714,6 +3757,33 @@ async def list_md_jobs() -> list[dict]:
         # marks it so a projection is never mistaken for an observation.
         if estimated:
             d["progress_estimated"] = True
+        if frac is not None and j.status != MdStatus.running and j.live_metrics:
+            d["progress_last_known"] = True
+            d["progress_observed_at"] = (
+                j.live_metrics.get("retrieved_at")
+                or j.live_metrics.get("collected_at")
+                or j.runpod_heartbeat
+            )
+        if j.execution_target == "runpod":
+            # Account connectivity and pod connectivity are separate. A valid API session
+            # with no pod means we KNOW the run is disconnected; no API session means we
+            # cannot verify it. Both deserve an explicit notice beside persisted progress.
+            from backend.api import routes_runpod  # noqa: PLC0415
+
+            d["runpod_connected"] = routes_runpod._SESSION.is_connected()  # noqa: SLF001
+            d["runpod_pod_connected"] = bool(
+                d["runpod_connected"] and j.runpod_pod_id
+            )
+            if not d["runpod_connected"]:
+                d["runpod_sync_notice"] = (
+                    "NADOC is not connected to RunPod; showing the last locally recorded "
+                    "status. Open RunPod setup to reconnect."
+                )
+            elif not d["runpod_pod_connected"]:
+                d["runpod_sync_notice"] = (
+                    "No live RunPod pod is connected to this run; showing its last locally "
+                    "recorded status."
+                )
         out.append(d)
     if to_warm:
         # Fire-and-forget: walk the uncached dirs in a threadpool AFTER returning, keeping
@@ -4142,7 +4212,7 @@ class ProductionRunRequest(BaseModel):
     )
     runpod_budget_usd: Optional[float] = Field(
         None,
-        ge=0,
+        gt=0,
         description="Spend cap for a runpod child's pod. None → the parent's.",
     )
     runpod_volume_id: Optional[str] = Field(
@@ -4442,6 +4512,8 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
     productions that render nested under the parent (mirroring oxDNA's child runs)."""
     from backend.core import md_ensemble
 
+    body = _apply_runpod_gpu_resident_default(body)
+
     parent = _load_job(parent_id)
     if is_running(parent_id) or parent.status != MdStatus.completed:
         raise HTTPException(
@@ -4548,8 +4620,11 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         child.runpod_gpu_key = (
             getattr(body, "runpod_gpu_key", None) or parent.runpod_gpu_key
         )
+        requested_budget = getattr(body, "runpod_budget_usd", None)
         child.runpod_budget_usd = (
-            getattr(body, "runpod_budget_usd", None) or parent.runpod_budget_usd
+            requested_budget
+            if requested_budget is not None
+            else parent.runpod_budget_usd
         )
         child.runpod_volume_id = (
             getattr(body, "runpod_volume_id", None) or parent.runpod_volume_id
@@ -4577,6 +4652,10 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         idx = job_archive.read_index(_workspace(), "md_jobs")
         idx[child.job_id] = child.archive_path
         job_archive._write_index(_workspace(), "md_jobs", idx)
+    elif target == "runpod":
+        # Old/local parents may predate archive-from-birth.  The production child is the
+        # trajectory-heavy part, so its RunPod fetch still belongs on Archive.
+        _apply_run_dir(child, None, execution_target=target)
 
     anchors_file, anchors_src, anchors_requested, field = _resolve_child_anchors(
         parent, child, body
@@ -4999,7 +5078,7 @@ async def _start_runpod_job(job: MdJob) -> dict:
             network_volume_id=volume_id,
             client_keys=_runpod_client_keys(),
         )
-    except RuntimeError as exc:  # unsizable system / unreadable package
+    except (RuntimeError, ValueError) as exc:  # unsizable package / invalid saved cap
         raise HTTPException(400, str(exc)) from exc
 
     job.status = MdStatus.running
@@ -5659,7 +5738,13 @@ async def fetch_md_job_live_frame(job_id: str, force: bool = False) -> dict:
             raise HTTPException(400, str(exc)) from exc
         except cluster_ssh.ClusterSSHError as exc:
             raise HTTPException(502, f"Cluster transport error: {exc}") from exc
-    job.save(_workspace())
+    # The supervisor owns a separate in-memory MdJob and saves progress every poll.
+    # This route can spend seconds transferring a frame; saving its stale whole record
+    # afterwards used to roll back a newly assigned pod/PID, status, heartbeat, budget,
+    # or progress.  Merge only the field this errand owns into the latest disk record.
+    latest = MdJob.load(job.job_id, _workspace())
+    latest.live_frame = job.live_frame
+    latest.save(_workspace())
     return {"job_id": job.job_id, **result}
 
 

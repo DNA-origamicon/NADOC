@@ -125,6 +125,22 @@ class TestResumeConf:
         for steps in (76_000, 116_000, 1_000):
             assert _output_freq(steps) % 20 == 0
 
+    def test_long_resume_never_makes_original_output_or_checkpoints_sparser(self):
+        """Production configs intentionally emit DCD/checkpoints far more often than
+        the early-stop minimum. A resume must not inflate those intervals to remaining/30.
+        """
+        conf = CONF + """\
+outputEnergies     125000
+dcdFreq            2500
+xstFreq            2500
+restartfreq        5000
+"""
+        out = build_resume_conf(conf, "s_01_p10", 1_654_320, 50_000_000)
+        assert re.search(r"^outputEnergies\s+125000$", out, re.M)
+        assert re.search(r"^dcdFreq\s+2500$", out, re.M)
+        assert re.search(r"^xstFreq\s+2500$", out, re.M)
+        assert re.search(r"^restartfreq\s+5000$", out, re.M)
+
     def test_drop_list_stays_in_lockstep_with_md_protocols(self):
         """This file is VENDORED to the pod with no NADOC on sys.path. If the protocol's
         drop-list gains a directive and this copy doesn't, the resume conf silently keeps

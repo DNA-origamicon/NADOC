@@ -44,9 +44,9 @@ def test_collect_active_tags_execution_target(tmp_path, monkeypatch):
     assert all("execution_target" in j for j in active)
 
 
-def test_orphaned_runpod_job_is_dropped_and_marked_failed(tmp_path, monkeypatch):
+def test_missing_runpod_job_is_dropped_and_marked_resumable(tmp_path, monkeypatch):
     """A runpod job with no live pod backing it (killed CLI launcher) is orphaned — the
-    detector must stop claiming it and persist it terminal, NOT report a phantom."""
+    detector must stop claiming it as active without falsely declaring NAMD failed."""
     ws = tmp_path
     monkeypatch.setattr(routes_jobs, "_WORKSPACE_DIR", ws)
     monkeypatch.setattr(routes_jobs, "_md_eta_seconds", lambda *a, **k: None)
@@ -67,7 +67,32 @@ def test_orphaned_runpod_job_is_dropped_and_marked_failed(tmp_path, monkeypatch)
     assert dead.job_id not in ids  # orphaned → dropped
     from backend.core.md_job import MdJob, MdStatus
 
-    assert MdJob.load(dead.job_id, ws).status == MdStatus.failed  # persisted terminal
+    recovered = MdJob.load(dead.job_id, ws)
+    assert recovered.status == MdStatus.paused
+    assert recovered.resumable is True
+    assert recovered.runpod_pod_id is None
+
+
+def test_runpod_liveness_uses_persisted_pod_id_not_only_display_name(
+    tmp_path, monkeypatch
+):
+    """RunPod list responses can omit a pod display name; the durable id still proves
+    that the job is live and must prevent a false orphan classification."""
+    ws = tmp_path
+    monkeypatch.setattr(routes_jobs, "_WORKSPACE_DIR", ws)
+    monkeypatch.setattr(routes_jobs, "_md_eta_seconds", lambda *a, **k: None)
+    import backend.core.namd_runner as namd_runner
+
+    monkeypatch.setattr(namd_runner, "reconcile_job_status", lambda j, w: j)
+    job = _make_md_job(ws, execution_target="runpod")
+    job.runpod_pod_id = "pod-authoritative-id"
+    job.save(ws)
+    monkeypatch.setattr(
+        routes_jobs, "_live_remote_pod_names", lambda: {"pod-authoritative-id"}
+    )
+
+    ids = {j["job_id"] for j in routes_jobs._collect_active() if j["engine"] == "md"}
+    assert job.job_id in ids
 
 
 def test_runpod_job_kept_when_liveness_undeterminable(tmp_path, monkeypatch):

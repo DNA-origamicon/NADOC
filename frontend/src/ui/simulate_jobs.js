@@ -245,7 +245,9 @@ export function masterStepText(node) {
   const pct = masterProgressPct(node)
   const total = _stepTotal(node)
   const est = _estPrefix(node)
-  const tail = progressIsEstimated(node) ? ' · estimated from last cluster sync' : ''
+  const tail = progressIsEstimated(node)
+    ? ' · estimated from last cluster sync'
+    : node?.progress_last_known ? ' · last known' : ''
   if (!(total > 0)) return `${est}${pct}%${_etaSuffix(node)}${tail}`
   const explicit = Number(node.current_step ?? node.completed_steps ?? node.steps_completed)
   // Derive the step count from the RAW fraction, not the displayed percent: rounding to
@@ -275,6 +277,10 @@ export function masterStatusText(node) {
   // NAMD (and any engine with a live/segment fraction) shows overall % while running so a
   // single-segment production reads as progress, not a bare "running".
   if (node.engine === 'namd' && node.status === 'running') return `${eng} · running · ${masterStepText(node)}`
+  if (node.engine === 'namd' && node.progress_last_known) {
+    return `${eng} · ${node.status} · ${masterStepText(node)}`
+      + (node.runpod_sync_notice ? ` · ⚠ ${node.runpod_sync_notice}` : '')
+  }
   // BLADE reports a REAL fraction streamed out of the OpenMM process, plus its phase. Naming the
   // phase matters here: `build` is psfgen constructing the CHARMM topology, which on a large design
   // is a minute of legitimately step-less work that would otherwise read as a stuck bar.

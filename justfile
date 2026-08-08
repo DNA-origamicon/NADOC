@@ -161,3 +161,7 @@ fmt:
 # Lint code
 lint:
     uv run ruff check backend/ tests/
+
+# Check agent-memory size, indexing, and link integrity without changing files.
+lint-memory:
+    scripts/lint_memory.sh
