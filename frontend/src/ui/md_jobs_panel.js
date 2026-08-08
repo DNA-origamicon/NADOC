@@ -15,6 +15,11 @@ import { initOccupancyControls } from './occupancy_controls.js'
 import { initJobsPanelBase } from './jobs_panel_base.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progress.js'
 import { showToast } from './toast.js'
+import {
+  applyMdVisualizationJobSwitch,
+  mdVisualizationJobSwitchAction,
+  selectionUpdatesVisualization,
+} from './visualization_selection_policy.js'
 import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
 import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk, preflightMdVram } from '../api/client.js'
 import { getRunDir, recommendArchive, archiveRecommendation } from './run_location.js'
@@ -2162,6 +2167,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     try {
       const d = await _fetchDisplayMeta(job.job_id)
       if (!d) throw new Error('Could not load MD display metadata')
+      // A quick second row click can finish while the first metadata request is in
+      // flight. Never let that older response repaint the newly-selected job.
+      if (_selectedId && _selectedId !== job.job_id) return
       // The user may have toggled Display MD OFF (or left the tab) while the metadata
       // fetch was in flight — bail rather than re-activating the stream behind their back.
       if (!displayToggle?.checked || !_isDynamicsTabVisible()) return
@@ -2561,9 +2569,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   async function _refreshFlex() {
     const v = getMdViz?.()
     if (!_selectedId || !v) return
+    const jobId = _selectedId
     _setFlexStatus('Computing average structure + RMSF…', _C.accent)
     _setFlexBar('computing')
-    const r = await v.displayRmsf(_selectedId)
+    const r = await v.displayRmsf(jobId)
+    if (jobId !== _selectedId) return
     if (r.ok) {
       _setFlexBar('done')
       _setFlexLegend(r.min, r.max)
@@ -3842,11 +3852,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (_selectedId === jobId) return
     _gateBDismissed = null   // a fresh selection may re-show a pending decision
     console.log(`[${_ts()}] md-jobs: selecting job ${jobId}`)
-    _setFlexOff()   // the loaded trajectory / flex map belonged to the previous job
-    _setTrajOff()
+    const selectedJob = _jobs.find(j => j.job_id === jobId) || null
+    const visualizationAction = mdVisualizationJobSwitchAction({
+      display: displayToggle?.checked,
+      flex: flexToggle?.checked,
+      occupancy: occupancyToggle?.checked,
+      trajectory: trajToggle?.checked,
+    })
     _selectedId = jobId
-    _displayMeta = null
-    _resetDisplayIndicator()   // the dot described the PREVIOUS job; see the function
+    if (visualizationAction === 'display') {
+      _displayMeta = null
+      _resetDisplayIndicator()
+    }
     _closeWs()
     _renderList()
     _openDetailForJob(jobId)
@@ -3854,19 +3871,34 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // without this the control could offer ▶ Run for a job the queue would refuse (or
     // hide that the job is already waiting in line).
     void _fetchQueue()
-    void _applyRunConfig(jobId)
+    if (selectionUpdatesVisualization(selectedJob)) void _applyRunConfig(jobId)
     // ▶ Rent & Run is gated on the RunPod pre-flight, and until now that only ran when the
     // run-target RADIO was moved. Selecting a prepared RunPod job is the other moment the
     // answer matters — without this the gate would still be showing whatever it last saw
     // (often nothing at all, for a job created in an earlier session).
     if (_selectedJob()?.execution_target === 'runpod') void _runpod.refresh()
     _paintRunpodGate()   // reveal the RunPod status box for a RunPod job
-    if (displayToggle?.checked) _refreshMdDisplay()
-    else _refreshMdPrewarm(true)
+    void _applyVisualizationJobSwitch(visualizationAction, selectedJob)
   }
 
-  /** Repopulate the Anchors + E-field cards with what the SELECTED job actually carries,
-   *  so clicking a run shows the forces it holds instead of a stale launch form. Mirrors
+  async function _applyVisualizationJobSwitch(action, job) {
+    return applyMdVisualizationJobSwitch(action, {
+      off: _setTrajOff,
+      display: async () => {
+        solvent?.setJob(_selectedId)
+        weld?.setJob(_selectedId)
+        await _refreshMdDisplay()
+      },
+      flex: () => _mdHasTrajectory(job) && flexToggle?.checked ? _refreshFlex() : undefined,
+      occupancy: () => mdHasProductionRun(job) && occupancyToggle?.checked
+        ? _occupancy?.refresh()
+        : undefined,
+      none: () => selectionUpdatesVisualization(job) ? _refreshMdPrewarm(true) : undefined,
+    })
+  }
+
+  /** Repopulate the Anchors + E-field cards with what the selected RUNNING job carries.
+   *  Historical selections deliberately retain the current visualization state. Mirrors
    *  the oxDNA/SNUPI panels' `_applyRunConfig` -> `applyConfig`. NAMD keeps its forces in
    *  the package manifest rather than on the job row, so this reads them over the wire.
    *
@@ -3942,7 +3974,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const job = _jobs.find(j => j.job_id === jobId)
     if (job) _applyJobState(job)
     if (detailEl) detailEl.style.display = ''
-    _fetchDisplayMeta(jobId)
+    if (selectionUpdatesVisualization(job)) _fetchDisplayMeta(jobId)
     _fetchJobMetrics(jobId)
 
     // A job handed to SLURM (slurm_job_id set) runs on the cluster — it pushes NOTHING
@@ -4146,9 +4178,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _renderProductionControls(job)
     _updateVizToggles(job)
     _maybeOpenGpuDecision(job)   // Gate B: auto-open/close the GPU fallback modal
-    if (_TERMINAL_STATUSES.has(job.status) && _displayMeta?.job_id !== job.job_id) {
-      _fetchDisplayMeta(job.job_id)
-    }
   }
 
   function _renderResumeHistory(job) {

@@ -25,6 +25,7 @@
  */
 
 import { initJobsPanelBase } from './jobs_panel_base.js'
+import { selectionUpdatesVisualization } from './visualization_selection_policy.js'
 import { showToast } from './toast.js'
 import { filterJobsForPart } from './md_jobs_panel.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
@@ -497,10 +498,10 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   async function _selectJob(jobId) {
     _selectedId = jobId
     _progress = await api.getSnupiProgress(jobId)
-    _applyRunConfig(_selectedJob())   // echo this run's field + anchors into the cards (oxDNA parity)
+    if (selectionUpdatesVisualization(_selectedJob())) _applyRunConfig(_selectedJob())
     _renderList()
     _renderDetail()
-    await _retargetDisplayToSelection()
+    if (selectionUpdatesVisualization(_selectedJob())) await _retargetDisplayToSelection()
     _base.schedulePoll()
   }
 
@@ -516,10 +517,8 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     _base.schedulePoll()
   }
 
-  /** Repopulate the E-field + Anchors cards with the conditions the selected job ran with, so
-   *  clicking a job shows exactly what it used — mirrors the oxDNA panel's `_applyRunControls` →
-   *  `applyConfig`. `_selectJob` fires only on an explicit selection (never on a status poll), so
-   *  this can't clobber the user mid-edit. A job with no field/anchors resets the cards (off/empty). */
+  /** Repopulate E-field + Anchors from a running selection. The shared selection policy keeps
+   *  these visualization inputs stable for deselection and historical job inspection. */
   function _applyRunConfig(job) {
     if (!job) return
     const cfg = snupiRunConfig(job)

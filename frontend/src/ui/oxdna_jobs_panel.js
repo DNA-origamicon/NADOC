@@ -18,6 +18,7 @@
 import { initJobsPanelBase } from './jobs_panel_base.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { showToast } from './toast.js'
+import { selectionUpdatesVisualization } from './visualization_selection_policy.js'
 import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
 import { filterJobsForPart, newestCompletedForPart } from './md_jobs_panel.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
@@ -1453,10 +1454,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     })
   }
 
-  // Select a job by id: pull its progress, render list + detail, echo its run
-  // conditions into every card (field arrow / surface / anchors), and follow the
-  // OxDNA display to it.  Used by row clicks AND by auto-selecting a freshly
-  // started run so the new list item is selected.
+  // Select a job by id and render its ordinary detail. Only a running selection may
+  // update the visualization controls or follow the live display; historical rows
+  // are observational and leave the existing visualization state intact.
   async function _selectJob(jobId, { confirmTrajUnload = false } = {}) {
     const job = _jobs.find(j => j.job_id === jobId)
     if (!job) return
@@ -1490,10 +1490,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     _progress = await api.getOxdnaProgress(jobId).catch(() => null)
     _renderList()
     _renderDetail(job)
-    _applyRunControls(job)   // echo this run's conditions into every card
+    if (selectionUpdatesVisualization(job)) _applyRunControls(job)
     // If the "OxDNA display" toggle is on, follow it to the newly-selected job
     // (re-deform the model to THIS job's relaxed positions, not the old one's).
-    if (displayToggle?.checked && oxdnaDisplay?.mode() !== 'rmsf' && oxdnaDisplay?.mode() !== 'trajectory') {
+    if (selectionUpdatesVisualization(job) && displayToggle?.checked
+        && oxdnaDisplay?.mode() !== 'rmsf' && oxdnaDisplay?.mode() !== 'trajectory') {
       _lastFrameIndex = null
       await _refreshDisplay()
     }
@@ -1520,8 +1521,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
 
   // Repopulate the panel's own relaxation/production inputs AND the external
   // Hard-surface / Anchors / E-field cards with the conditions this job ran with,
-  // so clicking a job shows exactly what it used.  Fired only on an explicit row
-  // click (never on a status poll, which would clobber the user mid-edit).
+  // for a running selection. Fired only on an explicit row click (never on a status
+  // poll, which would clobber the user mid-edit).
   function _applyRunControls(job) {
     const cfg = runConfigForJob(job)
     if (cfg.advanced) {

@@ -30,6 +30,7 @@
  */
 
 import { initJobsPanelBase } from './jobs_panel_base.js'
+import { selectionUpdatesVisualization } from './visualization_selection_policy.js'
 import { showToast } from './toast.js'
 import { filterJobsForPart } from './md_jobs_panel.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
@@ -435,7 +436,7 @@ export function initBladeJobsPanel({ bladeDisplay = null, getWorkspacePath = nul
     _progress = await api.getBladeProgress(jobId)
     _renderList()
     _renderDetail()
-    await _retargetDisplayToSelection()
+    if (selectionUpdatesVisualization(_selectedJob())) await _retargetDisplayToSelection()
     _base.schedulePoll()
   }
 
