@@ -319,6 +319,16 @@ export function pairedSlabCenter(
   return out
 }
 
+/** Translate a nucleotide's authoritative equilibrium base site by its live bead
+ * displacement. Simulation overlays currently carry P/bead positions + orientation,
+ * not a second base-centroid position; keeping the equilibrium base fixed mixes two
+ * frames and was the full-vs-atomistic MD display regression. */
+export function translatedBasePosition(
+  basePosition, equilibriumBead, liveBead, out = new THREE.Vector3(),
+) {
+  return out.copy(basePosition).add(liveBead).sub(equilibriumBead)
+}
+
 // ── Main builder ──────────────────────────────────────────────────────────────
 
 /**
@@ -3661,6 +3671,27 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             normalMap.set(`${upd.helix_id}:${upd.bp_index}:${upd.direction}:${upd.copy ?? 0}`, upd)
         }
       }
+      // The unified slab path treats base_position as authoritative. An MD/FEM frame
+      // does not send that position, so derive its live value by the SAME displacement
+      // already applied to the nucleotide bead. Before this map existed the beads moved
+      // to the MD frame while slabs stayed at equilibrium, making Full visibly disagree
+      // with the atomistic view of that exact frame.
+      const liveBaseMap = new Map()
+      for (const slab of slabEntries) {
+        const n = slab.nuc
+        const entry = _nucToEntry.get(n)
+        if (!entry || !n.base_position) continue
+        const key = `${n.helix_id}:${n.bp_index}:${n.direction}`
+        const upd = normalMap?.get(`${key}:${entry._copy ?? 0}`)
+        liveBaseMap.set(key, upd?.base_position
+          ? new THREE.Vector3(...upd.base_position)
+          : translatedBasePosition(
+            _tPos.set(...n.base_position),
+            _slabBaseS.set(...n.backbone_position),
+            entry.pos,
+            new THREE.Vector3(),
+          ))
+      }
       for (const slab of slabEntries) {
         const entry = _nucToEntry.get(slab.nuc)
         if (!entry) continue
@@ -3678,16 +3709,22 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()  // tangential
             _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
             _slabQuatS.setFromRotationMatrix(_slabBasis)
-            const center = _slabCenterAt(slab, _slabAxisDir.normalize(), null, null, _slabCenterD)
+            const center = _slabCenterAt(
+              slab, _slabAxisDir.normalize(), liveBaseMap, null, _slabCenterD,
+            )
             _tMatrix.compose(center, _slabQuatS, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
           } else {
             _slabAxisDir.set(...slab.nuc.axis_tangent).normalize()
-            const center = _slabCenterAt(slab, _slabAxisDir, null, null, _slabCenterD)
+            const center = _slabCenterAt(
+              slab, _slabAxisDir, liveBaseMap, null, _slabCenterD,
+            )
             _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
           }
         } else {
           _slabAxisDir.set(...slab.nuc.axis_tangent).normalize()
-          const center = _slabCenterAt(slab, _slabAxisDir, null, null, _slabCenterD)
+          const center = _slabCenterAt(
+            slab, _slabAxisDir, liveBaseMap, null, _slabCenterD,
+          )
           _tMatrix.compose(center, slab.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
         }
         iSlabs.setMatrixAt(slab.id, _tMatrix)

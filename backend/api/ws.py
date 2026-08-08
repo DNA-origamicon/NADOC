@@ -72,6 +72,28 @@ def _universe_cache_key(topology_path, xtc_path) -> str:
     return _file_identity(topology_path) + "||" + _file_identity(xtc_path)
 
 
+def _has_usable_unit_cell(universe) -> bool:
+    """Whether the trajectory's current frame carries a real periodic cell.
+
+    A live Alpine snapshot is synthesized from NAMD's ``.restart.coor``. Older
+    snapshots (and snapshots from runs whose ``.restart.xsc`` is unavailable) have
+    no cell, represented by MDAnalysis as ``None`` or zero lengths. Installing the
+    unwrap transformation on such a trajectory succeeds lazily, then raises ``No box
+    information available`` on the first atomistic frame access.
+
+    Treat a missing cell like the supported GRO/no-bonds case: skip the redundant
+    whole-system unwrap and let the per-frame DNA reassembly handle the coordinates.
+    This also keeps legacy one-frame DCDs displayable.
+    """
+    try:
+        dims = universe.trajectory.ts.dimensions
+        if dims is None or len(dims) < 3:
+            return False
+        return all(float(v) > 0 for v in dims[:3])
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
 def _cache_get_universe(key: str):
     with _UNIVERSE_CACHE_LOCK:
         u = _UNIVERSE_CACHE.get(key)
@@ -270,6 +292,16 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     "threshold — mda_unwrap is O(bond-graph)/frame and would stall "
                     "the load). The in-house per-frame P-atom unwrap handles PBC for "
                     "the displayed DNA."
+                )
+                return
+
+            # mda_unwrap validates the box only when the first transformed frame is
+            # read, outside this try block. Guard it eagerly so a boxless Alpine
+            # stand-in remains displayable in atomistic modes.
+            if not _has_usable_unit_cell(u):
+                logs.append(
+                    "No periodic cell in trajectory. PBC unwrap skipped; "
+                    "per-frame DNA reassembly is still applied."
                 )
                 return
 
@@ -605,6 +637,21 @@ async def md_run_ws(websocket: WebSocket) -> None:
             f"C1' map: {int((c1p_idx >= 0).sum())}/{len(c1p_idx)} entries valid"
         )
 
+        # Actual base-ring atoms per P-bearing residue. Full-representation MD display
+        # uses their per-frame centroid for its slab position, so the slab and the
+        # atomistic base describe the SAME coordinates rather than translating an
+        # equilibrium base site by the P displacement (which misses local base motion).
+        purine_ring = {"N9", "C8", "N7", "C5", "C6", "N1", "C2", "N3", "C4"}
+        pyrimidine_ring = {"N1", "C2", "N3", "C4", "C5", "C6"}
+        base_ring_idx: list[_np.ndarray] = []
+        for p_atom in dna_p_sel:
+            names = purine_ring if str(p_atom.resname) in {"DA", "DG", "ADE", "GUA"} else pyrimidine_ring
+            idx = [int(a.index) for a in p_atom.residue.atoms if str(a.name) in names]
+            base_ring_idx.append(_np.asarray(idx, dtype=_np.int64))
+        logs.append(
+            f"Base rings: {sum(len(v) >= 5 for v in base_ring_idx)}/{len(base_ring_idx)} entries valid"
+        )
+
         result: dict = {
             "universe": u,
             "topology_path": str(topology_path),
@@ -638,6 +685,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             "atom_bonds": None,
             "heavy_idx": None,
             "c1p_idx": c1p_idx,
+            "base_ring_idx": base_ring_idx,
             "term_specs": term_specs,  # 5'-terminal bases recovered via O5'
             "dna_p_idx": dna_p_sel.indices,  # cached for the O(1) last-frame fast path
             "logs": logs,
@@ -958,6 +1006,25 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 norms = _np.where(norms > 1e-6, norms, 1.0)
                 normals = dn / norms  # unit vectors
 
+            # Actual base-ring centroid in the same final pose as p_nm. Reconstruct it
+            # residue-locally from the raw P (minimum image when a cell exists), then
+            # apply the identical Kabsch rotation. This is the Full slab's authoritative
+            # live base_position and can be compared directly to the atomistic ring.
+            base_centers = [None] * len(p_order)
+            for i, idx in enumerate(_ctx.get("base_ring_idx") or []):
+                if i >= len(p_raw) or len(idx) < 5:
+                    continue
+                ring_raw = (
+                    _all_pos[idx] if _injected is not None else u.atoms[idx].positions
+                ) / 10.0
+                delta = ring_raw.mean(axis=0) - p_raw[i]
+                if dims is not None and dims[0] > 0:
+                    box_nm = dims[:3] / 10.0
+                    delta -= _np.round(delta / box_nm) * box_nm
+                if R_align is not None:
+                    delta = delta @ R_align.T
+                base_centers[i] = p_nm[i] + delta
+
             positions = []
             for i, key in enumerate(p_order):
                 hid, bpi, d = key[0], key[1], key[2]
@@ -974,6 +1041,10 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     entry["nx"] = float(normals[i, 0])
                     entry["ny"] = float(normals[i, 1])
                     entry["nz"] = float(normals[i, 2])
+                if i < len(base_centers) and base_centers[i] is not None:
+                    entry["bx"] = float(base_centers[i][0])
+                    entry["by"] = float(base_centers[i][1])
+                    entry["bz"] = float(base_centers[i][2])
                 positions.append(entry)
 
             # 5'-terminal bases (no P atom) recovered via O5', anchored off the aligned
@@ -1020,7 +1091,15 @@ async def md_run_ws(websocket: WebSocket) -> None:
             heavy_idx = _ctx["heavy_idx"]
             atom_meta = _ctx["atom_meta"]
             ag = u.atoms[heavy_idx]
-            pos_raw = ag.positions / 10.0
+            # The live latest-frame path injects the raw DCD coordinates directly.
+            # Use them here too: reading `ag.positions` instead goes through any
+            # MDAnalysis unwrap transformation installed on the Universe, while the
+            # Full branch starts from raw DCD coordinates. Both branches subsequently
+            # run NADOC's own PBC reassembly + Kabsch, so entering that shared pipeline
+            # from two different periodic images creates a global repr-dependent pose.
+            pos_raw = (
+                _all_pos[heavy_idx] if _injected is not None else ag.positions
+            ) / 10.0
             pos_nm = pos_raw + T
 
             # Keep atomistic MD display in one coherent periodic image.  The CG
@@ -1034,8 +1113,12 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 dna_p = u.select_atoms(
                     "name P and resname " + " ".join(_GRO_DNA_RESNAMES)
                 )
-                p_raw = dna_p.positions / 10.0
-                dims = u.dimensions
+                p_raw = (
+                    _all_pos[dna_p.indices]
+                    if _injected is not None
+                    else dna_p.positions
+                ) / 10.0
+                dims = _dims_inj if _injected is not None else u.dimensions
                 eq_pos = _ctx.get("eq_positions")
                 rigid_mask = _ctx.get("rigid_mask")
                 snap_mask = _ctx.get("snap_mask")
@@ -1043,6 +1126,14 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     snap_mask = rigid_mask
                 eq_centroid = _ctx.get("eq_centroid")
                 eq_centered = _ctx.get("eq_centered")
+                # Box-independent baseline. A fetched Alpine stand-in may have no
+                # unit cell; it still needs the SAME Kabsch rotation as Full. The
+                # valid-box branch below only improves periodic-image reconstruction.
+                p_pre = p_raw + T
+                pos_pre = pos_raw + T
+                T_dyn = T
+                c_box = None
+                box_nm = None
                 if dims is not None and dims[0] > 0 and len(p_raw) == len(p_order):
                     box_nm = dims[:3] / 10.0
                     p_box = _unwrap_min_image(p_raw, box_nm)
@@ -1141,46 +1232,49 @@ async def md_run_ws(websocket: WebSocket) -> None:
                                 delta[d] -= _np.round(delta[d] / box_nm[d]) * box_nm[d]
                         pos_pre[i] = pc + delta
 
-                    # Use the same rigid-body Kabsch alignment as the P-bead path
-                    # so atomistic and NADOC representations occupy the same view.
-                    if (
-                        eq_centered is not None
-                        and eq_centroid is not None
-                        and len(eq_centered) == len(p_pre)
-                    ):
-                        rm = (
-                            rigid_mask
-                            if (rigid_mask is not None and rigid_mask.any())
-                            else None
-                        )
-                        mob_c = (
-                            p_pre[rm].mean(axis=0)
-                            if rm is not None
-                            else p_pre.mean(axis=0)
-                        )
-                        mc = p_pre - mob_c
-                        H = mc.T @ eq_centered
-                        U2, _, Vt2 = _np.linalg.svd(H)
-                        det = _np.linalg.det(Vt2.T @ U2.T)
-                        R_align = Vt2.T @ _np.diag([1.0, 1.0, det]) @ U2.T
-                        pos_nm = (pos_pre - mob_c) @ R_align.T + eq_centroid
-                    else:
-                        pos_nm = pos_pre
-                        mob_c = R_align = None
-                    # Hand the solvent/box overlay this frame's affine and the DNA
-                    # anchor arrays it already built — never re-derive them.
-                    _ctx["xf_parts"] = {
-                        "T_dyn": T_dyn,
-                        "c_box": c_box,
-                        "box_nm": box_nm,
-                        "mob_c": mob_c,
-                        "R": R_align,
-                        "eq_centroid": eq_centroid if R_align is not None else None,
-                    }
-                    _ctx["heavy_raw"] = pos_raw
-                    _ctx["heavy_pre"] = pos_pre
-                    _ctx["p_raw"] = p_raw
-                    _ctx["p_pre"] = p_pre
+
+                # Use the same rigid-body Kabsch alignment as the P-bead path so
+                # atomistic and NADOC representations occupy the same view. This is
+                # deliberately OUTSIDE the unit-cell branch: rotation alignment does
+                # not require a box, and Alpine live snapshots can legitimately lack it.
+                if (
+                    eq_centered is not None
+                    and eq_centroid is not None
+                    and len(eq_centered) == len(p_pre)
+                ):
+                    rm = (
+                        rigid_mask
+                        if (rigid_mask is not None and rigid_mask.any())
+                        else None
+                    )
+                    mob_c = (
+                        p_pre[rm].mean(axis=0)
+                        if rm is not None
+                        else p_pre.mean(axis=0)
+                    )
+                    mc = p_pre - mob_c
+                    H = mc.T @ eq_centered
+                    U2, _, Vt2 = _np.linalg.svd(H)
+                    det = _np.linalg.det(Vt2.T @ U2.T)
+                    R_align = Vt2.T @ _np.diag([1.0, 1.0, det]) @ U2.T
+                    pos_nm = (pos_pre - mob_c) @ R_align.T + eq_centroid
+                else:
+                    pos_nm = pos_pre
+                    mob_c = R_align = None
+                # Hand the solvent/box overlay this frame's affine and the DNA
+                # anchor arrays it already built — never re-derive them.
+                _ctx["xf_parts"] = {
+                    "T_dyn": T_dyn,
+                    "c_box": c_box,
+                    "box_nm": box_nm,
+                    "mob_c": mob_c,
+                    "R": R_align,
+                    "eq_centroid": eq_centroid if R_align is not None else None,
+                }
+                _ctx["heavy_raw"] = pos_raw
+                _ctx["heavy_pre"] = pos_pre
+                _ctx["p_raw"] = p_raw
+                _ctx["p_pre"] = p_pre
             except Exception as exc:
                 print(
                     f"[ws seek] atomistic PBC correction skipped "
@@ -1246,9 +1340,11 @@ async def md_run_ws(websocket: WebSocket) -> None:
         # Fast path — O(1) direct last-frame read.  A DCD is fixed-record, so the
         # latest frame's byte offset is arithmetic from the file size; we skip
         # MDAnalysis' load_new (which rescans offsets and, on a file NAMD is mid-write
-        # on, retry-storms a core).  CG/bead display only; ballstick and any non
-        # fixed-record DCD fall through to the MDAnalysis path below.
-        if _ctx.get("mode") in ("nadoc", "beads"):
+        # on, retry-storms a core). All representations consume this SAME raw frame;
+        # `_seek_sync` then applies their shared PBC/Kabsch pose. Keeping ballstick on
+        # MDAnalysis here let its lazy unwrap transform choose a different periodic
+        # image from Full before the shared alignment even began.
+        if _ctx.get("mode") in ("nadoc", "beads", "ballstick"):
             from backend.core import dcd_fast  # noqa: PLC0415
 
             try:
@@ -1284,8 +1380,8 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     except Exception:  # noqa: BLE001 — torn trailing frame → try one back
                         continue
 
-        # Fallback: MDAnalysis load_new + seek (full-trajectory scrub, ballstick mode,
-        # or a DCD whose layout dcd_fast can't treat as fixed-record).
+        # Fallback: MDAnalysis load_new + seek (full-trajectory scrub or a trajectory
+        # whose layout dcd_fast can't treat as fixed-record).
         u.load_new(_ctx["xtc_path"])
         n_frames = len(u.trajectory)
         _ctx["n_frames"] = n_frames

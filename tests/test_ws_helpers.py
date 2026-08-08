@@ -47,6 +47,25 @@ import pytest
 from backend.api import state as design_state
 from backend.api.main import app
 from backend.api.routes import _demo_design
+from backend.api.ws import _has_usable_unit_cell
+
+
+@pytest.mark.parametrize(
+    ("dimensions", "expected"),
+    [
+        (None, False),
+        ([0.0, 0.0, 0.0, 90.0, 90.0, 90.0], False),
+        ([92.5, 104.25, 130.75, 90.0, 90.0, 90.0], True),
+    ],
+)
+def test_unit_cell_gate_for_atomistic_unwrap(dimensions, expected):
+    """A boxless Alpine stand-in must skip lazy mda_unwrap instead of failing seek."""
+
+    class _Trajectory:
+        ts = type("_TS", (), {"dimensions": dimensions})()
+
+    universe = type("_Universe", (), {"trajectory": _Trajectory()})()
+    assert _has_usable_unit_cell(universe) is expected
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -228,13 +247,13 @@ def namd_dcd_fixture(demo_design_loaded):
         u.dimensions = [200.0, 200.0, 200.0, 90.0, 90.0, 90.0]
         u.atoms.write(gro)
 
-        def write(k, shift=0.05):
+        def write(k, shift=0.05, dimensions=(200.0, 200.0, 200.0, 90.0, 90.0, 90.0)):
             with mda.Writer(dcd, n_atoms=n_atoms) as w:
                 for fr in range(k):
                     pos = base.copy()
                     pos[:, 0] += fr * shift
                     u.atoms.positions = pos
-                    u.dimensions = [200.0, 200.0, 200.0, 90.0, 90.0, 90.0]
+                    u.dimensions = dimensions
                     w.write(u.atoms)
 
         write(3)
@@ -606,6 +625,89 @@ def test_md_run_ws_dcd_alignment_matches_design_eq(client, namd_dcd_fixture):
         d = np.linalg.norm(pos[rm] - eq[rm], axis=1)
         rmsd_A = float(np.sqrt((d**2).mean()) * 10.0)
         assert rmsd_A < 0.5, f"rigid RMSD to design eq = {rmsd_A:.2f} Å"
+
+
+def test_md_run_ws_full_and_atomistic_share_the_same_p_positions(
+    client, namd_dcd_fixture
+):
+    """The same MD frame cannot acquire a different pose when repr changes.
+
+    Full renders the trajectory's P landmarks as beads; atomistic renders those same
+    P atoms among the heavy atoms.  Compare them directly, including the PBC reassembly
+    and Kabsch transforms that used to be duplicated between the two branches.
+    """
+    fix = namd_dcd_fixture
+
+    def frame(mode):
+        with client.websocket_connect("/ws/md-run") as socket:
+            _load_namd(socket, fix, mode)
+            _await_md_ready(socket, expect_frames=3)
+            socket.send_json({"action": "seek", "frame_idx": 0})
+            return socket.receive_json()
+
+    full = frame("nadoc")
+    atomistic = frame("ballstick")
+    full_p = np.array([[p["x"], p["y"], p["z"]] for p in full["positions"]])
+    # The fixture is P,C1',P,C1',... and serial is the Universe atom index.
+    atom_p = np.array(
+        [[a["x"], a["y"], a["z"]] for a in atomistic["atoms"] if a["serial"] % 2 == 0]
+    )
+    assert atom_p.shape == full_p.shape
+    assert np.max(np.linalg.norm(atom_p - full_p, axis=1)) < 1e-6
+
+
+def test_md_run_ws_live_latest_full_and_atomistic_share_the_same_p_positions(
+    client, namd_dcd_fixture
+):
+    """Live get_latest must use one raw DCD frame for both representations.
+
+    This is distinct from an explicit seek: Full has an O(1) raw-DCD fast path, while
+    atomistic historically re-read through an MDAnalysis Universe (and its optional
+    unwrap transform) before applying the same NADOC alignment a second time.
+    """
+    fix = namd_dcd_fixture
+    fix["write"](5, shift=0.35)
+
+    def latest(mode):
+        with client.websocket_connect("/ws/md-run") as socket:
+            _load_namd(socket, fix, mode)
+            _await_md_ready(socket, expect_frames=5)
+            socket.send_json({"action": "get_latest"})
+            return socket.receive_json()
+
+    full = latest("nadoc")
+    atomistic = latest("ballstick")
+    assert full["frame_idx"] == atomistic["frame_idx"] == 4
+    full_p = np.array([[p["x"], p["y"], p["z"]] for p in full["positions"]])
+    atom_p = np.array(
+        [[a["x"], a["y"], a["z"]] for a in atomistic["atoms"] if a["serial"] % 2 == 0]
+    )
+    assert atom_p.shape == full_p.shape
+    assert np.max(np.linalg.norm(atom_p - full_p, axis=1)) < 1e-6
+
+
+def test_boxless_alpine_snapshot_still_aligns_atomistic_to_full(
+    client, namd_dcd_fixture
+):
+    """Missing XSC/cell may skip PBC unwrapping, never the rigid pose alignment."""
+    fix = namd_dcd_fixture
+    fix["write"](1, dimensions=None)
+
+    def latest(mode):
+        with client.websocket_connect("/ws/md-run") as socket:
+            _load_namd(socket, fix, mode)
+            _await_md_ready(socket, expect_frames=1)
+            socket.send_json({"action": "get_latest"})
+            return socket.receive_json()
+
+    full = latest("nadoc")
+    atomistic = latest("ballstick")
+    full_p = np.array([[p["x"], p["y"], p["z"]] for p in full["positions"]])
+    atom_p = np.array(
+        [[a["x"], a["y"], a["z"]] for a in atomistic["atoms"] if a["serial"] % 2 == 0]
+    )
+    assert atom_p.shape == full_p.shape
+    assert np.max(np.linalg.norm(atom_p - full_p, axis=1)) < 1e-6
 
 
 def test_md_run_ws_load_seek_ballstick(client, md_fixture_dir):

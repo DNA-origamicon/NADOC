@@ -647,6 +647,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
           direction:         p.direction,
           copy:              p.copy ?? 0,   // loop-insertion copy → right bead
           backbone_position: [p.x, p.y, p.z],
+          base_position: p.bx === undefined ? undefined : [p.bx, p.by, p.bz],
           nx: p.nx, ny: p.ny, nz: p.nz,
         })),
         _amp

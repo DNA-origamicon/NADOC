@@ -5,9 +5,19 @@ import {
   SLAB_BEAD_CENTER_PENETRATION,
   pairedSlabCenter,
   slabQuaternion,
+  translatedBasePosition,
 } from './helix_renderer.js'
 
 describe('base slab coordinate abstraction', () => {
+  it('moves an overlay base site by exactly the live bead displacement', () => {
+    const base = new THREE.Vector3(1, 2, 3)
+    const equilibriumBead = new THREE.Vector3(2, 4, 6)
+    const liveBead = new THREE.Vector3(7, 1, 8)
+
+    expect(translatedBasePosition(base, equilibriumBead, liveBead).toArray())
+      .toEqual([6, -1, 5])
+  })
+
   it('does not invent an offset when bead and base positions coincide', () => {
     const basePosition = [1.25, -2.5, 3.75]
 
