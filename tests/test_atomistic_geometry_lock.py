@@ -200,16 +200,16 @@ def _assert_bridges(stem: str, lengths: dict[str, float]) -> None:
 # design.  Approved change, not drift — the templates were re-extracted from free NAMD
 # rather than tweaked, and the _PHASE_* constants were NOT touched.
 _FAST_GOLDEN = {
-    "6hb_test": "c24a6b76b2d2f6afcd2b85babd6aa48e",  # 2 crossover bridges
-    "Con4": "a87d7a5d46c10dcd79e3c7bd88169b67",  # 3
-    "2hb_xover_val": "ea17151dd67fe5f6d487a45061f29b4f",  # 4
+    "6hb_test": "68b486cd3356d9aa6f1d4553efe924bd",  # 2 crossover bridges
+    "Con4": "954d26293804168311a65caf3224a930",  # 3
+    "2hb_xover_val": "abd46fcda6d2686e768f363a75efff2b",  # 4
 }
 
 # Slow: large designs that additionally exercise the SKIP-site bridge and the
 # deformation pass — the two paths most sensitive to any stamp perturbation.
 _SLOW_GOLDEN = {
-    "U6hb": "b4da6fb23c943ebbcb807b7605bb73a5",  # 353 bridges
-    "multi_domain_test3_bend90": "c2286ad66749c85c7e2887121c475064",  # 563 bridges
+    "U6hb": "b62226e0a61e626d41a1de9765d76674",  # 353 bridges
+    "multi_domain_test3_bend90": "8ba40dc2b2c1511614c3065fc9f1344f",  # 563 bridges
 }
 
 

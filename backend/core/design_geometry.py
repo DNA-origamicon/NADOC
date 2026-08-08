@@ -42,7 +42,11 @@ from backend.core.deformation import (
     deformed_nucleotide_arrays,
     effective_helix_for_geometry,
 )
-from backend.core.constants import SSDNA_CONTOUR_PER_NT_NM
+from backend.core.constants import (
+    FULL_REP_BALANCE_ROLL_HONEYCOMB_DEG,
+    FULL_REP_BALANCE_ROLL_SQUARE_DEG,
+    SSDNA_CONTOUR_PER_NT_NM,
+)
 
 # How far the extension arc bows off the straight radial, as a fraction of the arc
 # length.  Bounds the worst consecutive bead spacing at
@@ -52,9 +56,37 @@ from backend.core.constants import SSDNA_CONTOUR_PER_NT_NM
 _EXT_BOW_FRAC: float = 0.30
 
 
-def _strand_nucleotide_info(
-    design: Design, helix_ids: frozenset[str] | None = None
-) -> dict:
+def full_rep_balance_roll_rad(design: Design) -> float:
+    """Display-only roll that equalises the two arcs of each i:i+1 DX junction.
+
+    Returns the angle every helix is rotated about its own axis by, for the FULL
+    (coarse-grained) representation only: 0 on honeycomb, which already draws its
+    junctions symmetrically, and +13.125° on square, which without it draws one arc of
+    every pair at 1.126 nm and the other at 0.286 nm.  Provenance, the measurement and
+    the firewall rule are on ``constants.FULL_REP_BALANCE_ROLL_*``.
+
+    Never call this from a path that feeds a simulation, an export or a pose fitter.
+    """
+    from backend.core.models import LatticeType
+    deg = (FULL_REP_BALANCE_ROLL_SQUARE_DEG
+           if design.lattice_type == LatticeType.SQUARE
+           else FULL_REP_BALANCE_ROLL_HONEYCOMB_DEG)
+    return math.radians(deg)
+
+
+def _rolled(helix, roll_rad: float):
+    """Apply the junction-balance roll to an ALREADY-normalised helix.
+
+    For the ss-loop extension paths, which call ``effective_helix_for_geometry``
+    themselves and hand the result straight to ``geometry``.  Rolling before
+    normalisation would be a no-op — the grid re-derives ``phase_offset``.
+    """
+    if not roll_rad:
+        return helix
+    return helix.model_copy(update={"phase_offset": helix.phase_offset + roll_rad})
+
+
+def _strand_nucleotide_info(design: Design, helix_ids: frozenset[str] | None = None) -> dict:
     """(helix_id, bp_index, Direction) → strand metadata dict.
 
     If *helix_ids* is given, only nucleotides whose domain is on one of those
@@ -300,6 +332,7 @@ def _geometry_for_helices(
     compact_skips: bool = False,
     *,
     measured_positioning: bool = False,
+    junction_balance: bool = False,
 ) -> list[dict]:
     """Compute nucleotide geometry for *design*.
 
@@ -311,6 +344,12 @@ def _geometry_for_helices(
     on positions from arbitrary helices and must be returned together with the
     full geometry.
 
+    *junction_balance* rolls every helix about its own axis so the two arcs of each
+    i:i+1 DX junction come out equal (see :func:`full_rep_balance_roll_rad`).  DISPLAY
+    ONLY — pass it from the render feeds and from nowhere else; the default False is what
+    keeps the oxDNA/LAMMPS/mrDNA seeds, the exporters, the FEM node placers and the pose
+    fitters on the unrolled geometric layer.
+
     *include_linker_helices*: per-design rendering skips ``__lnk__`` virtual
     bridge helices and emits their bridge nucs via ``_emit_bridge_nucs`` (which
     reads ``design.overhang_connections``). The cross-part assembly path has the
@@ -321,7 +360,8 @@ def _geometry_for_helices(
     from types import SimpleNamespace
 
     full_mode = helix_ids is None
-    nuc_info = _strand_nucleotide_info(design, helix_ids)
+    nuc_info  = _strand_nucleotide_info(design, helix_ids)
+    roll      = full_rep_balance_roll_rad(design) if junction_balance else 0.0
 
     # Suppress is_five_prime on the real-helix terminal for strands with a 5' extension.
     five_prime_ext_strands = {
@@ -450,9 +490,10 @@ def _geometry_for_helices(
         if helix_ids is not None and helix.id not in helix_ids:
             continue
         if helix.id.startswith("__lnk__") and not include_linker_helices:
-            continue  # virtual linker helices have no real geometry (per-design:
-            # bridge nucs come from _emit_bridge_nucs below instead)
-        arrs = deformed_nucleotide_arrays(helix, design, compact_skips=compact_skips)
+            continue   # virtual linker helices have no real geometry (per-design:
+                       # bridge nucs come from _emit_bridge_nucs below instead)
+        arrs = deformed_nucleotide_arrays(helix, design, compact_skips=compact_skips,
+                                          phase_roll_rad=roll)
         arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
         _emit_arrs(
             arrs,
@@ -470,7 +511,7 @@ def _geometry_for_helices(
 
         lo_bp = min_domain_bp.get(helix.id, helix.bp_start)
         if lo_bp < helix.bp_start:
-            norm_helix = effective_helix_for_geometry(helix, design)
+            norm_helix = _rolled(effective_helix_for_geometry(helix, design), roll)
             extra_arrs = nucleotide_positions_arrays_extended(norm_helix, lo_bp)
             extra_arrs = deform_extended_arrays(
                 extra_arrs, helix, design, edge_bp=helix.bp_start
@@ -486,7 +527,7 @@ def _geometry_for_helices(
         helix_hi = helix.bp_start + helix.length_bp  # first bp past helix right edge
         if hi_bp >= helix_hi:
             if norm_helix is None:
-                norm_helix = effective_helix_for_geometry(helix, design)
+                norm_helix = _rolled(effective_helix_for_geometry(helix, design), roll)
             extra_arrs = nucleotide_positions_arrays_extended_right(norm_helix, hi_bp)
             extra_arrs = deform_extended_arrays(
                 extra_arrs, helix, design, edge_bp=helix_hi - 1
@@ -676,6 +717,7 @@ def _geometry_for_design(
     compact_skips: bool = False,
     *,
     measured_positioning: bool = False,
+    junction_balance: bool = False,
 ) -> list[dict]:
     """The design's per-nucleotide geometry.
 
@@ -695,13 +737,14 @@ def _geometry_for_design(
     When it is flipped, the oxDNA/mrDNA/NAMD seed paths reading this get the display
     placement converted back to oxDNA's centre-of-mass convention at the seed boundary —
     ``oxdna_interface._oxdna_cm_radius_map``, a no-op on legacy geometry.
+
+    ``junction_balance`` is the display-only i:i+1 arc roll and defaults OFF here for the
+    same reason: most of this function's ~50 consumers are seeds, exporters and pose
+    fitters.  The render feeds pass it explicitly.
     """
     return _geometry_for_helices(
-        design,
-        include_linker_helices=include_linker_helices,
-        compact_skips=compact_skips,
-        measured_positioning=measured_positioning,
-    )
+        design, include_linker_helices=include_linker_helices, compact_skips=compact_skips,
+        measured_positioning=measured_positioning, junction_balance=junction_balance)
 
 
 def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
@@ -792,13 +835,15 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
     return out
 
 
-def _compact_geometry_for_design(design: "Design") -> dict:
+def _compact_geometry_for_design(design: 'Design', *,
+                                 junction_balance: bool = False) -> dict:
     """Compute full deformed geometry in COMPACT per-helix-per-direction
     parallel-arrays form. Wire size is ~50% of the equivalent dict-list
     ``nucleotides`` payload because field names don't repeat per nuc;
     JSON.parse on the frontend is roughly proportionally faster.
     """
-    return _compact_geometry_from_nucleotides(_geometry_for_design(design))
+    return _compact_geometry_from_nucleotides(
+        _geometry_for_design(design, junction_balance=junction_balance))
 
 
 def _positions_by_helix(nucleotides: list[dict]) -> dict:
@@ -827,9 +872,8 @@ def _positions_by_helix(nucleotides: list[dict]) -> dict:
 
 
 def _positions_for_design(
-    design: "Design",
-    *,
-    measured_positioning: bool = False,
+    design: 'Design', *, measured_positioning: bool = False,
+    junction_balance: bool = False,
 ) -> tuple[dict, list[dict]]:
     """Compute positions for *design* in compact per-helix-per-direction
     parallel arrays, **without** materialising per-nuc dicts for the bulk
@@ -854,6 +898,11 @@ def _positions_for_design(
     )
 
     positions: dict = {}
+    # Junction-balance roll: this output ships as `straight_positions_by_helix` in the
+    # SAME response as the (rolled) nucleotides, so it must carry the same roll or the
+    # deform-revert / unfold / deform-lerp paths would draw unrolled beads beside rolled
+    # ones — the identical trap the measured re-placement hit in TD-27 Stage 3.
+    roll = full_rep_balance_roll_rad(design) if junction_balance else 0.0
     # Occupancy map (real strand nucleotides) — used to suppress ghost lattice slots so
     # this fast path stays IDENTICAL to _geometry_for_helices (both emit only real bases;
     # ss-overhang regions render single-stranded, no phantom complementary base).
@@ -941,7 +990,7 @@ def _positions_for_design(
         if helix.id.startswith("__lnk__"):
             continue  # virtual linker helix has no real geometry of its own
 
-        arrs = deformed_nucleotide_arrays(helix, design)
+        arrs = deformed_nucleotide_arrays(helix, design, phase_roll_rad=roll)
         arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
         _emit_compact(
             arrs,
@@ -953,7 +1002,7 @@ def _positions_for_design(
         norm_helix = None
         lo_bp = min_domain_bp.get(helix.id, helix.bp_start)
         if lo_bp < helix.bp_start:
-            norm_helix = effective_helix_for_geometry(helix, design)
+            norm_helix = _rolled(effective_helix_for_geometry(helix, design), roll)
             extra = nucleotide_positions_arrays_extended(norm_helix, lo_bp)
             extra = deform_extended_arrays(extra, helix, design, edge_bp=helix.bp_start)
             _emit_compact(
@@ -967,7 +1016,7 @@ def _positions_for_design(
         helix_hi = helix.bp_start + helix.length_bp
         if hi_bp >= helix_hi:
             if norm_helix is None:
-                norm_helix = effective_helix_for_geometry(helix, design)
+                norm_helix = _rolled(effective_helix_for_geometry(helix, design), roll)
             extra = nucleotide_positions_arrays_extended_right(norm_helix, hi_bp)
             extra = deform_extended_arrays(extra, helix, design, edge_bp=helix_hi - 1)
             _emit_compact(

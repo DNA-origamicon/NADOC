@@ -1876,7 +1876,7 @@ def seek_instance_features(instance_id: str, body: InstanceSeekFeaturesRequest) 
     # DISPLAY geometry strips reference strands (see _display_design); the
     # persisted updated_design above keeps them so topology isn't lost.
     display_design = _display_design(updated_design)
-    nucleotides = _geometry_for_design(display_design)
+    nucleotides = _geometry_for_design(display_design, junction_balance=True)
     axes = deformed_helix_axes(display_design)
     _apply_ovhg_rotations_to_axes(display_design, axes, nucleotides)
     design_dict = display_design.to_dict()
@@ -2833,8 +2833,13 @@ def _linker_geometry_for_assembly(assembly) -> dict:
         # include_linker_helices=True: render the world-space __lnk__ bridge
         # helix directly (the assembly synthetic design has no
         # overhang_connections, so _emit_bridge_nucs can't emit the bridge).
-        "nucleotides": _geometry_for_design(synthetic, include_linker_helices=True),
-        "helix_axes": deformed_helix_axes(synthetic),
+        # junction_balance is a no-op here: `synthetic` is hardcoded HONEYCOMB above,
+        # whose balance roll is 0.  A ds linker on a SQUARE design therefore draws its
+        # bridge unrolled beside rolled part beads — a known gap, unexercised (no
+        # fixture in Examples/ or workspace/ has a ds linker).
+        "nucleotides":     _geometry_for_design(synthetic, include_linker_helices=True,
+                                                junction_balance=True),
+        "helix_axes":      deformed_helix_axes(synthetic),
         "aliased_helices": [h.model_dump(mode="json") for h in aliased],
     }
 

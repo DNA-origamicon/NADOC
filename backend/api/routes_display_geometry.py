@@ -293,7 +293,7 @@ def _build_design_surface_mesh(
         from backend.core.design_geometry import _geometry_for_design
 
         beads = []
-        for g in _geometry_for_design(design):
+        for g in _geometry_for_design(design, junction_balance=True):
             for _k in ("backbone_position", "base_position"):
                 p = g.get(_k)
                 if p is None:

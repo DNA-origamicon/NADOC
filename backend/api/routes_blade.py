@@ -417,7 +417,7 @@ async def get_blade_snapshot_geometry(job_id: str) -> dict:
         }
 
     def _compute() -> tuple[list, list]:
-        nucleotides = _geometry_for_helices(design, None)
+        nucleotides = _geometry_for_helices(design, None, junction_balance=True)
         axes = deformed_helix_axes(design)
         _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
         return nucleotides, axes

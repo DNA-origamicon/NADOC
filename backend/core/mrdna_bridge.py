@@ -1478,22 +1478,41 @@ def _build_nt_arrays(
     """
     ls_map = _build_loop_skip_map(design)
 
-    # Pre-compute per-helix axis geometry once.
+    # ── The HELICAL SITE, read rather than re-derived (Phase 2, 2026-08-07) ────────
+    #
+    # This function used to re-implement geometry.py's helix formula inline — axis point
+    # with loop copies, twist angle, radial, bead at HELIX_RADIUS — reading `h.phase_offset`
+    # / `h.twist_per_bp_rad` STRAIGHT OFF the stored helix.  Every other representation goes
+    # through `effective_helix_for_geometry`, which re-derives phase, axis and twist from
+    # `grid_pos` for a lattice helix, so mrDNA was the only engine seeded on the stored
+    # values.  Measured, that was not academic:
+    #
+    #   * every HONEYCOMB design kept the pre-TD-29 incommensurate twist (34.3 vs the
+    #     commensurate 34.2857 deg/bp) — the crossover-strain ramp that was fixed
+    #     everywhere else on 2026-08-06, and it grows without bound along a helix;
+    #   * `Examples/6hb_test.nadoc` was 175 deg out of phase on one helix, i.e. 19.97 A
+    #     (a full helix diameter) away from the geometry the user is looking at.
+    #
+    # Keyed (helix_id, bp_index, direction, copy_k) with copy_k the emission order within a
+    # bp, which is the same convention `atomistic.py` uses for loop copies.
+    from backend.core.deformation import effective_helix_for_geometry  # noqa: PLC0415
+    from backend.core.geometry import nucleotide_positions             # noqa: PLC0415
+
+    site: Dict[Tuple[str, int, str, int], object] = {}
     helix_geom: Dict[str, tuple] = {}
     for h in design.helices:
-        ax_s = h.axis_start.to_array()
-        ax_e = h.axis_end.to_array()
+        eh = effective_helix_for_geometry(h, design)
+        ax_s = eh.axis_start.to_array()
+        ax_e = eh.axis_end.to_array()
         axis_hat = ax_e - ax_s
         axis_hat /= np.linalg.norm(axis_hat)
-        groove = groove_offset_rad(h.direction)
-        helix_geom[h.id] = (
-            ax_s,
-            axis_hat,
-            h.phase_offset,
-            h.twist_per_bp_rad,
-            h.bp_start,
-            groove,
-        )
+        helix_geom[h.id] = (ax_s, axis_hat, eh.bp_start)
+        seen: Dict[Tuple[int, str], int] = {}
+        for n in nucleotide_positions(eh):
+            dk = (n.bp_index, n.direction.value)
+            k = seen.get(dk, 0)
+            seen[dk] = k + 1
+            site[(h.id, n.bp_index, n.direction.value, k)] = n
 
     # ── Pass 1: enumerate nucleotides and assign indices ──────────────────────
     # Index map: (helix_id, bp_index, 'FORWARD'|'REVERSE') → global nt index
@@ -1554,8 +1573,7 @@ def _build_nt_arrays(
 
         for di, domain in enumerate(strand.domains):
             h_id = domain.helix_id
-            ax_s, axis_hat, phase_offset, twist, bp_start, groove = helix_geom[h_id]
-            x_hat, y_hat = _xy_frame(axis_hat)
+            ax_s, axis_hat, bp_start = helix_geom[h_id]
             direction = domain.direction.value  # 'FORWARD' or 'REVERSE'
 
             for bp_idx in domain_bp_range(domain):
@@ -1563,7 +1581,6 @@ def _build_nt_arrays(
                 if delta <= -1:
                     continue  # skip — no nucleotide at this position
 
-                local_i = bp_idx - bp_start
                 # delta=0 → 1 copy; delta=+1 → 2 copies evenly straddling the bp.
                 n_copies = max(1, delta + 1)
 
@@ -1575,21 +1592,13 @@ def _build_nt_arrays(
                     else range(n_copies)
                 )
                 for k in k_range:
-                    # Axial offset: same formula as geometry.py nucleotide_positions().
-                    copy_frac = (k - (n_copies - 1) / 2.0) if n_copies > 1 else 0.0
-                    axis_pt = (
-                        ax_s
-                        + (local_i * BDNA_RISE_PER_BP + copy_frac * BDNA_RISE_PER_BP)
-                        * axis_hat
-                    )
+                    nuc = site.get((h_id, bp_idx, direction, k))
+                    if nuc is None:
+                        continue   # geometry emitted no nucleotide here (skip/short helix)
 
-                    # Twist angle: use integer local_i (same as geometry.py).
-                    fwd_angle = phase_offset + local_i * twist
-                    angle = fwd_angle if direction == "FORWARD" else fwd_angle + groove
-
-                    rad = _radial(angle, x_hat, y_hat)
-                    backbone_ang = (axis_pt + HELIX_RADIUS * rad) * _NM_TO_ANGSTROM
-                    orient = _orientation_matrix(rad, axis_hat)
+                    rad = nuc.radial_hat
+                    backbone_ang = nuc.position * _NM_TO_ANGSTROM
+                    orient = _orientation_matrix(rad, nuc.axis_tangent)
 
                     char = "N"
                     if strand.sequence is not None and seq_offset < len(

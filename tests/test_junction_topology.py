@@ -469,9 +469,22 @@ def test_gate_uses_the_supplied_model_not_a_fresh_build():
     with _repair_disabled():
         model = build_atomistic_model(design)
     # Collapse the inserts onto a single point: no longer threaded, so no longer linked.
+    #
+    # The point has to be OUTSIDE the structure.  This used the world origin until
+    # 2026-08-07, and `make_bundle_design` puts helix 0's axis start exactly there — so the
+    # collapsed inserts sat inside the first base pair's rings and their O3'-P bonds ran out
+    # through the middle of the bundle.  Whether one clipped a ring was luck, and it began
+    # clipping A1DT when the atomistic junction-balance roll moved every atom ~0.2 nm,
+    # failing this test for a reason it never meant to assert.  Collapsing to a corner
+    # outside the bounding box keeps the linking trivial (one common point) while the two
+    # long bonds leave the structure instead of crossing it.
+    import numpy as _np
+    _xyz = _np.array([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
+    _pt = (float(_xyz[:, 0].min()) - 20.0, float(_xyz[:, 1].min()) - 20.0,
+           float(_xyz[:, 2].mean()))
     for atom in model.atoms:
         if atom.crossover_id is not None and atom.extra_base_k is not None:
-            atom.x, atom.y, atom.z = 0.0, 0.0, 0.0
+            atom.x, atom.y, atom.z = _pt
     verdict = gate_seed_topology(design, model=model)
     assert verdict["gate"] == "passed"
 

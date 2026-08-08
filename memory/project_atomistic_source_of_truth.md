@@ -8,7 +8,108 @@ metadata:
 
 # The atomistic rep becomes the source of truth
 
-**Status: PLAN ONLY, nothing implemented.** Written 2026-08-06 for a fresh session.
+**Status: PLAN, plus ONE piece shipped (2026-08-07) — step 7 for square, ahead of the rest.**
+Written 2026-08-06 for a fresh session.
+
+## SHIPPED 2026-08-07 — the display CG carries its own junction-balance roll
+
+The first concrete instance of *"the full rep is derived and tuned for figures"*.  A DX junction is
+two staple crossovers between one helix pair at bp i and i+1; the full rep draws each as a
+bead-to-bead arc and they must be equal.  **Honeycomb was; square was not** — 1.1262 vs 0.2860 nm
+(Δ −0.8402), i.e. one arc of every pair drawn stretched to the far side of the neighbour and the
+other collapsed onto it.
+
+`constants.FULL_REP_BALANCE_ROLL_{SQUARE,HONEYCOMB}_DEG` rolls every helix about its own axis on
+the **display path only**, behind `design_geometry._geometry_for_helices(junction_balance=True)`,
+which the render feeds pass and nothing else does.  Square: **+13.125° = 30.000° − ½·33.75°**,
+exact and design-independent (`2x3x100_Sq_test` 21 junctions, `3x6Sq_oxDNA` 110, `3x6_Sq_full` 297
+→ Δ = −0.000000, and all 610 staple crossovers collapse onto ONE 0.6708 nm arc against
+honeycomb's own 0.680).  Honeycomb: 0.0.  Also balanced under Help ▸ New Positioning (uniform
+0.8742 nm).  `_lattice_phase_offset`'s "+½ bp of twist" Holliday correction is right for honeycomb
+(17.143° balances it) and wrong for square, which wants a round 30°.
+
+**What this says about the plan:** `_PHASE_*` and `_lattice_phase_offset` were NOT touched, the
+atomistic build and every seed writer are byte-identical (pinned), and the display roll enters at
+the serialiser — the same boundary the measured bead re-placement uses.  Pins:
+`tests/test_junction_balance.py` (7), including the two firewalls and the square-without-the-roll
+bug itself so a silent revert cannot pass as "no change".
+
+**Known gap:** the assembly ds-linker bridge feed (`assembly.py:2521`) builds a synthetic design
+hardcoded `lattice_type="HONEYCOMB"`, so its roll is 0 — a square design's bridge would draw
+unrolled beside rolled part beads.  Unexercised: no fixture in `Examples/` or `workspace/` has a
+ds linker.
+
+**Consequence to know:** on a square design the CG beads are now 13.125° off the atoms.  Displaying
+the full rep and the atomistic rep together shows that offset — deliberate under this plan's
+doctrine, and the reason the roll must never leak past the render feeds.
+
+## The atomistic junctions were NOT balanced on either lattice — measured, then fixed (2026-08-07)
+
+Same metric, on the minimiser-independent quantity: the **C3′(src)→C5′(dst) anchor gap** the
+phosphodiester bridge has to span (canonical ≈ 0.394 nm).  Do NOT use the O3′→P bond for this —
+`_minimize_backbone_bridge` places O3′/P/O5′ between fixed C3′/C5′ anchors, so it distributes the
+error and reports a junction as nearly balanced (square 0.204/0.217) when the anchors are 0.694/0.746.
+
+| lattice | gap(i) / gap(i+1) at roll 0 | roll that balances the atomistic | balanced gap |
+|---|---|---|---|
+| honeycomb | 0.586 / 1.086 (Δ +0.500) | **−14.60° / −14.75°** (2 designs) | 0.724 |
+| square | 0.694 / 0.746 (Δ +0.052) | **−1.33 / −1.53 / −1.45°** (3 designs) | 0.719 |
+
+Both lattices land on the *same* balanced gap, and the CG-vs-atomistic balance points differ by a
+constant **≈14.5°** on both — that offset is the measured template's 130.2° C3′–C3′ separation
+against the CG lattice groove (±150°), i.e. the 2026-08-06 re-registration.  So the two reps cannot
+both be balanced at one helix roll while those conventions differ.
+
+**Owner decision 2026-08-07: fix both lattices' atomistic balance too.** Rolling the SHARED phase
+to do it is blocked, and the blocker is measured, not guessed: the shared CG layer moves with it and
+**half of every design's crossover bonds go over the FENE cliff** (honeycomb 114/228, square
+305/610; site max 1.41–1.44 u) — the "half of all crossovers" symptom returning, which clears only
+once the seeds stop reading display CG (**steps 3–4 below gate that**).
+
+### SHIPPED instead 2026-08-07 — the roll lives INSIDE the atomistic build
+
+`atomistic.atomistic_phase_offset_rad(design)` adds the balance to `_ATOMISTIC_PHASE_OFFSET_RAD`,
+which is already a rigid roll of every nucleotide about its helix axis, so the atoms move and the CG
+layer does not.  oxDNA / mrDNA / LAMMPS seeds and every pose fitter are byte-identical; the all-atom
+display, the PDB/PSF exports and the NAMD/GROMACS seeds shift, which is the point.
+
+Written as ONE measured constant, `_ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG = 14.6`, because the
+atomistic balance sits that far off the full rep's on **both** lattices (honeycomb 14.60/14.75,
+square 14.45/14.65/14.57) — it is the template convention (130.2° C3'-C3') against the CG lattice
+groove (±150°), not a lattice property.  So `atomistic_roll = FULL_REP_BALANCE_ROLL[lattice] − 14.6`
+and the two reps' constants can never drift apart.
+
+Result (mean over junctions): honeycomb Δ **+0.500 → +0.0002 nm**, square **+0.485 → −0.0057**;
+worst single linker 1.126 → 0.761; per-junction spread 0.561 → 0.060 (the residual is sequence —
+per-residue templates, so a junction's two linkers see different bases).  On `VoltronCoreScad`
+(566 inserts, 263 junctions) mean Δ 0.0591 → 0.0010 and the worst gap 0.786 → 0.755.
+
+**Collateral, measured — all of it favourable.** Extra-base bonds improve (`2hb_xover_atoms_test`
+max 0.2111 → 0.1835; VoltronCoreScad 0.2322 → 0.2298) because `_extra_base_frame` interpolates
+between the C3'(src)/C5'(dst) **atomistic** anchors, so inserts follow the roll — the CG-chord
+coupling of blocker 2 does not bite here.  Extension tails are untouched (they translate rigidly
+with their anchor).  `_rigid_frame_calibration`'s `m_res < 1e-6` tripwire still passes; a uniform
+roll is rigid, so it absorbs exactly.  21 bonds crossed a 0.32 nm over-stretch line on
+VoltronCoreScad and 2 left, all of them 0.321–0.327 — threshold jitter, not a regression.
+
+**Three tests changed premise, not correctness** — worth knowing because two are load-bearing
+elsewhere: `test_the_bead_lands_on_the_ribose_c3_prime` (the balanced atoms now sit CLOSER to the
+legacy lattice-groove bead than to the measured one — 0.4612 → 0.2887 vs 0.5589 → 0.5448 on
+`6hb_test`; a consistency signal for the roll and an open question for the measured CG bead, i.e.
+TD-27's), `test_dedicated_overhang_phase_shared_by_cg_and_atomistic` (its oracle built its own frame
+and had to be given the same total phase), and
+`test_gate_uses_the_supplied_model_not_a_fresh_build` (it collapsed inserts onto the **world
+origin**, which `make_bundle_design` puts inside the first base pair, so its O3'-P bond ran out
+through the middle of the bundle and began clipping a ring when atoms moved 0.2 nm — now collapsed
+outside the bounding box).  The 5 `test_atomistic_geometry_lock` goldens were regenerated
+deliberately via the documented `--update`; the change they record is real (Con4's worst junction
+O3'-P 3.00 → 2.17 Å).
+
+**Still open:** −14.6° descends from the cross-strand azimuth flagged **provisional** in
+[[project_measured_atomistic]], the DOF `exp52_groove_seed_sweep` was meant to settle (its jobs are
+not on this machine).  If that number moves, this one must be re-measured — as must the display roll
+if the shared lattice phase ever changes.  `tests/test_junction_balance.py` asserts the property,
+not the constant, so both fail rather than drifting.
 Owner decision, stated directly: *"We want one source of truth which is the atomistic
 representation. We want the full rep to be purely derived from the atomistic rep and tuned to look
 nicer for figures and visualization. The NADOC full rep should never inform or impact any
@@ -17,6 +118,40 @@ simulation in any way."*
 Read this before touching `atomistic.py`, `geometry.py`, `design_geometry.py`, or any simulation
 seed path. Companion to [[project_measured_atomistic]] (the templates) and TD-27 / TD-29 in
 [[project_tech_debt]] (the correction stack and the twist fix).
+
+## SHIPPED 2026-08-07 — step 1 done: the stamp no longer reads the display bead
+
+`geometry.NucleotidePosition` now carries the helical phase as a quantity —
+`radial_hat`, `axis_point`, `azimuth_rad` — and **the CG bead is a projection of it**:
+`position == axis_point + HELIX_RADIUS * radial_hat`, exactly (`np.array_equal`).
+`atomistic._atom_frame` and `_atom_frames_batch` read `radial_hat` directly and place the P
+at `_ATOMISTIC_P_RADIUS`; they no longer recover the phase by subtracting an axis point from
+the r=1.0 display bead and re-normalising.
+
+**Byte-identical**: 0.000e+00 nm max atom displacement on `6hb_test`, `Con4`,
+`2x3x100_Sq_test`; the 5 geometry-lock goldens pass unchanged. It is exact rather than
+ULP-close because `HELIX_RADIUS` is exactly 1.0, so the old reconstruction divided by a norm
+of exactly 1.0 — a dependency nobody had written down.
+
+Pinned by `test_the_stamp_ignores_the_bead_and_reads_the_phase`: move every bead to r=3.7 nm
+and **zero atoms move**. That assertion is the inversion; the docstrings are commentary.
+
+**The one real bug this introduced, and the rule it produced.** `nuc_pos_override` (relaxed
+oxDNA/mrDNA display, folded ssDNA seeds) and `axis_override` (bent centreline) move a
+nucleotide, which invalidates the carried lattice phase — the stamp kept trusting it and
+applied only the override's AXIAL component. Five tests caught it
+(`test_displaced_nucleotide_flags_backbone_and_hidden`, `test_overlapping_nucleotides_clash`,
+`test_wc_helix_imbalance_detector`, `test_ssdna_fold_does_not_collapse_seed_atoms`,
+`test_deformed_axis_slashes_clashes_on_a_displaced_helix`). **Any code path that moves a
+nucleotide must call `atomistic._phase_invalidated`** — the phase fields describe LATTICE
+geometry only, and dropping them is what returns that nucleotide to the bead-derived frame.
+
+**What this does NOT do:** the CG bead is not computed *from atoms*. A literal
+atoms→beads projection would move the full rep by the correction chain (−32° − balance
++ the per-cell REV delta, i.e. 15–46°) — the owner has ruled the current reps correct — and
+it would cost an atom build per geometry request on the hot path. So atoms and beads are
+siblings off one owned phase, with the bead the derived one. Treat the remaining audit table
+below as the real backlog.
 
 ## Why — the one-paragraph version
 
@@ -80,6 +215,31 @@ Do not write these from scratch:
 | display→sim adapter precedent | `oxdna_interface._oxdna_cm_radius_map()` — an explicit boundary converter, already in place, no-op on legacy geometry |
 | atoms → helix axes | `pdb_to_design.py:521`, `pdb_import.py:843` — two independent fitters already exist; reconcile rather than add a third |
 
+## Audit 2026-08-07 — every CG coupling, verified against live code
+
+Suite state after the inversion: **6837 passed, 0 failed**.
+
+| # | Coupling | Live evidence | State |
+|---|---|---|---|
+| 1 | atomistic stamp phase | `atomistic.py` `_atom_frame` / `_atom_frames_batch` | **INVERTED** |
+| 2 | CG backbone bead | `geometry.py` `_emit` | **DERIVED** from the site |
+| 3 | surface point cloud | `surface_atom_cloud` passes `radial_hat=` | **INVERTED** |
+| 4 | override paths | `_phase_invalidated` | bead-derived **by design** |
+| 5 | **oxDNA seed** | `oxdna_interface.nuc_conf_line` writes the CG `backbone_position` into the conf's **centre-of-mass** slot | STILL CG — needs the atoms→(CM,a1,a3) adapter (step 3) |
+| 6 | LAMMPS | inherits the oxDNA writer | STILL CG |
+| 7 | **mrDNA** | `mrdna_bridge.py:1502` re-derives the CG formula inline ("same formula as geometry.py") | STILL CG — a THIRD copy, drifts independently |
+| 8 | **extra-base positions** | `atomistic.py:3036` interpolates between the two junction nucleotides' **CG backbone beads** | STILL CG, deliberately — a display retune moves exported insert atoms |
+| 9 | extension tails | same placer family (`atomistic.py:3322`) | STILL CG |
+| 10 | `_rigid_frame_calibration` | `atomistic.py:964` writes an oxDNA conf **from `_geometry_for_design`**, reads it back, Kabsch-fits against the atomistic build | STILL a CG→atomistic round trip baked into a cached constant |
+| 11 | `periodic_polymer._section_frame_from_arrs` | `periodic_polymer.py:149` analytically inverts `HELIX_RADIUS` + ±150° to recover the axis | STILL inverts the CG convention |
+| 12 | **pose fitters** | `direct_relax` / `linker_relax` / `duplex_cluster` read `_geometry_for_design` and write persisted `cluster_transforms` | THE blocker on tuning display CG (TD-28) |
+| 13 | `_ATOMISTIC_PHASE_OFFSET_RAD = −32°` | still "calibrated by overlaying on the bead rep", now inside `atomistic_phase_offset_rad` | unjustified constant survives |
+| 14 | FEM (CanDo/SNUPI) | places nodes on the helix axis inline | independent of both — not a coupling |
+| 15 | display junction-balance roll | `junction_balance=` on the render feeds only | display-only, firewalled |
+
+Rows 5–7 are the engine adapters (steps 3–4); 8–9 are the placers; 10–12 are the ones that
+make display CG un-tunable today.
+
 ## The blockers, in order of difficulty
 
 ### 1. HARD — pose fitters write SAVED `cluster_transforms` fitted against CG beads
@@ -103,6 +263,10 @@ re-derived to place from atoms. Out of scope for a first pass; keep them on the 
 **mark the two placers as the last CG consumers**.
 
 ### 3. MEDIUM — `_ATOMISTIC_PHASE_OFFSET_RAD = −32°` is calibrated to the CG rep
+
+*2026-08-07:* it is no longer read directly by the build — `atomistic_phase_offset_rad(design)` is,
+and it adds the measured DX-junction balance on top. The −32° itself is still the unjustified CG
+overlay this item describes; retiring it now means re-deriving that sum, not just this constant.
 
 Once atoms are the source, a constant whose stated purpose is to align atoms *to the beads* is
 meaningless. It must be removed and the frame re-derived, or re-justified against MD. Note this sits
@@ -151,6 +315,9 @@ Each step should leave the suite green and be independently shippable.
 6. **Re-fit the pose fitters against atoms** (blocker 1 / TD-28). Decide the migration story for
    designs with `cluster_transforms` already saved.
 7. **Only then** cut display CG loose as a leaf and tune it for figures.
+   *Partially done out of order, 2026-08-07:* the junction-balance roll (top of this file) is a
+   display-only tune that landed early because it needed no seed change. It does NOT make display
+   CG a leaf — the seeds still read the unrolled layer, which is exactly why it was safe.
 
 ## Open questions for the owner — ask, do not guess
 
@@ -165,6 +332,10 @@ Each step should leave the suite green and be independently shippable.
    inverted `oxdna_backbone_site` off the phosphorus? These differ.
 4. **Does the display CG keep the lattice groove or follow the atoms?** They disagree by 19.8° on
    FORWARD cells and 79.75° on REVERSE (measured). This is question 2 in concrete form.
+   *Answered in part 2026-08-07:* display CG keeps the lattice groove AND is free to deviate — the
+   junction-balance roll is exactly such a deviation and the owner chose it over rolling every rep.
+   The unresolved half is whether unifying the two azimuth conventions (making CG follow the
+   measured 130.2° separation) is preferable, since that would let ONE roll balance both reps.
 
 ## What must NOT move
 

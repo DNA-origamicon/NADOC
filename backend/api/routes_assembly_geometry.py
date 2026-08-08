@@ -113,9 +113,9 @@ def get_instance_geometry(instance_id: str) -> dict:
             "design": cached.get("design"),
         }
 
-    design = _display_design(_design_with_instance_overrides(inst))
-    nucleotides = _geometry_for_design(design)
-    axes = deformed_helix_axes(design)
+    design      = _display_design(_design_with_instance_overrides(inst))
+    nucleotides = _geometry_for_design(design, junction_balance=True)
+    axes        = deformed_helix_axes(design)
     _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
     design_dict = design.to_dict()
     # Derive world-space cluster-joint axes (axis_origin / axis_direction) from the
@@ -281,9 +281,9 @@ def get_assembly_geometry() -> dict:
                 }
                 continue
 
-            design = _display_design(_design_with_instance_overrides(inst))
-            nucleotides = _geometry_for_design(design)
-            axes = deformed_helix_axes(design)
+            design      = _display_design(_design_with_instance_overrides(inst))
+            nucleotides = _geometry_for_design(design, junction_balance=True)
+            axes        = deformed_helix_axes(design)
             _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
             design_dict = design.to_dict()
             if key:

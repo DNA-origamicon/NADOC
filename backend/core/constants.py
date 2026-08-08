@@ -130,6 +130,44 @@ SQUARE_COL_PITCH: float = SQUARE_HELIX_SPACING  # = 2.6 nm
 SQUARE_ROW_PITCH: float = SQUARE_HELIX_SPACING  # = 2.6 nm
 
 
+# ── Full-representation junction-balance roll (DISPLAY ONLY) ───────────────────
+#
+# A DX junction is two staple crossovers between the same helix pair at bp i and bp i+1.
+# In the coarse-grained "full" representation the arc drawn for each is the backbone
+# bead-to-bead distance, and the two should be equal — a Holliday junction is symmetric.
+#
+# Honeycomb already is: 0.6797 / 0.6802 nm (Δ +0.0005) on every one of the 112 junctions
+# of `workspace/6hb_e_test.nadoc`.  Square is NOT: 1.1262 / 0.2860 nm (Δ −0.8402), i.e.
+# one arc of every pair is drawn stretched to the far side of the neighbouring helix and
+# the other collapsed onto it.
+#
+# Rotating every helix about its own axis by these angles equalises them.  For square the
+# balance point is EXACT and design-independent — `2x3x100_Sq_test` (21 junctions),
+# `3x6Sq_oxDNA` (110) and `3x6_Sq_full` (297) all give Δ = −0.000000 at +13.125°, where
+# all 610 staple crossovers collapse onto a single 0.6708 nm arc (honeycomb's own value is
+# 0.680).  13.125° = 30.000° − ½·33.75°: `lattice._lattice_phase_offset` adds "+½ bp of
+# twist" as its Holliday correction, which is right for honeycomb (17.143° balances it)
+# and wrong for square, where the balance wants a round 30°.
+#
+# ⚠ DISPLAY ONLY — this must never reach a simulation, an export or a pose fitter.  It is
+# applied at the geometry SERIALISER behind an explicit `junction_balance` flag that only
+# the render feeds pass (`design_geometry._geometry_for_helices`), exactly as the measured
+# bead re-placement is.  The geometric layer, the atomistic build and every seed writer are
+# untouched.  Rationale: the atomistic model is the source of truth and the full rep is
+# derived from it and tuned for figures — see memory/project_atomistic_source_of_truth.md.
+#
+# ⚠ These numbers are the balance point GIVEN the current shared lattice phase
+# (`_lattice_phase_offset`).  If that ever changes, re-measure — the pin in
+# `tests/test_junction_balance.py` asserts the PROPERTY (equal arcs), not the constant, so
+# it will fail rather than silently drift.
+#
+# Not covered: scaffold crossovers.  They sit at router-chosen bp rather than the lattice's
+# crossover offsets, so their arcs are scattered in both lattices (honeycomb 0.30–2.00 nm
+# as shipped) and no single roll balances them.
+FULL_REP_BALANCE_ROLL_HONEYCOMB_DEG: float = 0.0
+FULL_REP_BALANCE_ROLL_SQUARE_DEG: float = 30.0 - SQUARE_TWIST_PER_BP_DEG / 2  # = 13.125°
+
+
 # ── oxDNA simulation units ────────────────────────────────────────────────────
 
 # 1 oxDNA length unit in nanometres.

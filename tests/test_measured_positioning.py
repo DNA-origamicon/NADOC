@@ -309,10 +309,17 @@ def test_the_bead_lands_on_the_ribose_c3_prime():
     # the worst case for it: 6hb_test's helices all carry direction=None, so every one
     # is treated as a REVERSE cell, where the lattice groove and the measured C3' sit
     # 55.3 deg apart.
-    assert miss(measured=False) > 0.40, "legacy bead is nowhere near the C3'"
-    assert miss(measured=True) < miss(measured=False) + 0.15, (
-        "the groove-registered bead should stay in the same neighbourhood as legacy"
-    )
+    # ⚠ Updated 2026-08-07: the ATOMISTIC junction-balance roll moved these.  Balancing
+    # the DX junction rolls every nucleotide −14.6° on honeycomb, which happens to carry the
+    # C3' TOWARD the lattice-groove azimuth the legacy bead uses and away from the measured
+    # template's own +24.5°.  On this fixture: legacy 0.4612 → 0.2887, measured 0.5589 →
+    # 0.5448.  So the balanced atoms now agree BETTER with the legacy lattice convention
+    # than with the measured one — a consistency signal for the roll (honeycomb's CG
+    # junctions are balanced under exactly that convention), and an open question for the
+    # measured CG bead, which is TD-27's business and not this test's.
+    assert 0.25 < miss(measured=False) < 0.35, "legacy bead is no longer where it was"
+    assert miss(measured=True) < 0.60, (
+        "the groove-registered bead should stay in the same neighbourhood as the C3'")
 
 
 def test_the_frozen_fallback_still_matches_what_the_template_derives():
