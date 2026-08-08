@@ -212,7 +212,11 @@ class TestChainScriptActuallyRuns:
     pattern-matched.
     """
 
-    STEPS = [ChainStep("s0_min", is_minimization=True), ChainStep("s1"), ChainStep("s2")]
+    STEPS = [
+        ChainStep("s0_min", is_minimization=True),
+        ChainStep("s1"),
+        ChainStep("s2"),
+    ]
 
     @staticmethod
     def _fake_namd(
@@ -256,13 +260,21 @@ class TestChainScriptActuallyRuns:
         script = tmp_path / "chain.sh"
         script.write_text(
             render_chain_script(
-                steps=self.STEPS, remote_dir=str(tmp_path),
-                namd_bin=str(namd), threads=2, **kw,
+                steps=self.STEPS,
+                remote_dir=str(tmp_path),
+                namd_bin=str(namd),
+                threads=2,
+                **kw,
             )
         )
         script.chmod(0o755)
-        return subprocess.run(["bash", str(script)], cwd=tmp_path,
-                              capture_output=True, text=True, timeout=120)
+        return subprocess.run(
+            ["bash", str(script)],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
 
     def test_full_ladder_runs_and_reports_completed(self, tmp_path):
         proc = self._run(tmp_path, self._fake_namd(tmp_path))
@@ -298,7 +310,9 @@ class TestChainScriptActuallyRuns:
         assert proc.returncode == 1
         status = (tmp_path / "nadoc_status").read_text().strip()
         assert status == "failed:s1"
-        assert not (tmp_path / "output" / "s2.coor").exists(), "must not run past a failure"
+        assert not (tmp_path / "output" / "s2.coor").exists(), (
+            "must not run past a failure"
+        )
 
     def test_cell_shrink_is_retried_not_treated_as_a_failure(self, tmp_path):
         """MEASURED on the 4090: BOTH offload VoltronCore cells died with "Periodic
@@ -314,7 +328,9 @@ class TestChainScriptActuallyRuns:
         assert proc.returncode == 0, proc.stdout + proc.stderr
         assert "SHRINK s1" in proc.stdout
         assert (tmp_path / "nadoc_status").read_text().strip() == "completed"
-        assert (tmp_path / "output" / "s2.coor").exists(), "ladder must continue past it"
+        assert (tmp_path / "output" / "s2.coor").exists(), (
+            "ladder must continue past it"
+        )
 
     def test_cell_shrink_retries_are_bounded(self, tmp_path):
         """A box that shrinks forever is a real failure. Don't loop on the meter."""
@@ -330,8 +346,10 @@ class TestChainScriptActuallyRuns:
         """The zombie scenario: NAMD alive, producing no output, forever. Bill stops
         here or it doesn't stop at all."""
         proc = self._run(
-            tmp_path, self._fake_namd(tmp_path, hang_on="s1"),
-            stall_timeout_s=1, watchdog_poll_s=1,
+            tmp_path,
+            self._fake_namd(tmp_path, hang_on="s1"),
+            stall_timeout_s=1,
+            watchdog_poll_s=1,
         )
         assert proc.returncode == 1
         assert (tmp_path / "nadoc_stall").exists()
@@ -400,7 +418,9 @@ class TestOnlyOfferCardsTheBinaryCanRun:
         Offering a card the binary cannot run on is not a fallback — it is a guaranteed
         failure that bills."""
         for gpu in bm.recommend_gpus(SIXHB):
-            assert gpu.sm in bm.NAMD_BUILD_ARCHS, f"{gpu.label} is {gpu.sm}, binary is {bm.NAMD_BUILD_ARCHS}"
+            assert gpu.sm in bm.NAMD_BUILD_ARCHS, (
+                f"{gpu.label} is {gpu.sm}, binary is {bm.NAMD_BUILD_ARCHS}"
+            )
 
     def test_the_shipped_gpu_table_contains_no_incompatible_cards(self):
         for gpu in bm.GPU_TYPES:
@@ -485,8 +505,12 @@ class TestRelaxationEarlyStop:
     # stage 02 is the fragile low-restraint one (k=0.01) that ONLY Tier A may skip.
     STEPS = [
         ChainStep("m", is_minimization=True),
-        ChainStep("s_01_k0p5_p10"), ChainStep("s_01_k0p5_p50"), ChainStep("s_01_k0p5_p100"),
-        ChainStep("s_02_k0p01_p10"), ChainStep("s_02_k0p01_p50"), ChainStep("s_02_k0p01_p100"),
+        ChainStep("s_01_k0p5_p10"),
+        ChainStep("s_01_k0p5_p50"),
+        ChainStep("s_01_k0p5_p100"),
+        ChainStep("s_02_k0p01_p10"),
+        ChainStep("s_02_k0p01_p50"),
+        ChainStep("s_02_k0p01_p100"),
     ]
     MANIFEST = {
         "minimization": {"name": "m"},
@@ -543,16 +567,30 @@ class TestRelaxationEarlyStop:
         script = tmp_path / "chain.sh"
         script.write_text(
             render_chain_script(
-                steps=self.STEPS, remote_dir=str(tmp_path),
-                namd_bin=str(self._fake_namd(tmp_path)), threads=2,
-                manifest=self.MANIFEST, early_stop_relax=True,
-                early_stop_tier=tier, name_stem="s", **kw,
+                steps=self.STEPS,
+                remote_dir=str(tmp_path),
+                namd_bin=str(self._fake_namd(tmp_path)),
+                threads=2,
+                manifest=self.MANIFEST,
+                early_stop_relax=True,
+                early_stop_tier=tier,
+                name_stem="s",
+                **kw,
             )
         )
         script.chmod(0o755)
-        proc = subprocess.run(["bash", str(script)], cwd=tmp_path,
-                              capture_output=True, text=True, timeout=120)
-        ran = (tmp_path / "ran.txt").read_text().split() if (tmp_path / "ran.txt").exists() else []
+        proc = subprocess.run(
+            ["bash", str(script)],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        ran = (
+            (tmp_path / "ran.txt").read_text().split()
+            if (tmp_path / "ran.txt").exists()
+            else []
+        )
         return proc, ran
 
     def test_tier_a_plateau_bridges_and_the_skipped_chunks_never_run(self, tmp_path):
@@ -568,8 +606,12 @@ class TestRelaxationEarlyStop:
 
         # Both stages plateaued at their first chunk: only _p10 of each ever ran.
         assert ran == ["m", "s_01_k0p5_p10", "s_02_k0p01_p10"], ran
-        for skipped in ("s_01_k0p5_p50", "s_01_k0p5_p100",
-                        "s_02_k0p01_p50", "s_02_k0p01_p100"):
+        for skipped in (
+            "s_01_k0p5_p50",
+            "s_01_k0p5_p100",
+            "s_02_k0p01_p50",
+            "s_02_k0p01_p100",
+        ):
             assert skipped not in ran
             # ...and the bridge left them a checkpoint, so the NEXT stage can read it.
             assert (tmp_path / "output" / f"{skipped}.coor").exists()
@@ -592,24 +634,92 @@ class TestRelaxationEarlyStop:
         assert proc.returncode == 0, proc.stdout + proc.stderr
         assert ran == [
             "m",
-            "s_01_k0p5_p10",                                     # plateaued -> bridged
-            "s_02_k0p01_p10", "s_02_k0p01_p50", "s_02_k0p01_p100",  # never eligible
+            "s_01_k0p5_p10",  # plateaued -> bridged
+            "s_02_k0p01_p10",
+            "s_02_k0p01_p50",
+            "s_02_k0p01_p100",  # never eligible
         ], ran
 
     def test_off_by_default_emits_no_evaluator_call(self):
         """A job that didn't opt in must render the exact script it rendered before."""
-        s = render_chain_script(steps=self.STEPS, remote_dir="/w", namd_bin="/n",
-                                threads=2, manifest=self.MANIFEST)
+        s = render_chain_script(
+            steps=self.STEPS,
+            remote_dir="/w",
+            namd_bin="/n",
+            threads=2,
+            manifest=self.MANIFEST,
+        )
         assert "nadoc_cutoff_eval.py" not in s
 
     def test_no_manifest_means_no_skipping(self):
         """Fail-safe: without scales we cannot judge restraint, so we run everything."""
-        s = render_chain_script(steps=self.STEPS, remote_dir="/w", namd_bin="/n",
-                                threads=2, early_stop_relax=True, early_stop_tier="A")
+        s = render_chain_script(
+            steps=self.STEPS,
+            remote_dir="/w",
+            namd_bin="/n",
+            threads=2,
+            early_stop_relax=True,
+            early_stop_tier="A",
+        )
         assert "nadoc_cutoff_eval.py" not in s
 
     def test_rejects_an_unknown_tier(self):
         with pytest.raises(ValueError, match="must be 'A' or 'B'"):
-            render_chain_script(steps=self.STEPS, remote_dir="/w", namd_bin="/n",
-                                threads=2, manifest=self.MANIFEST,
-                                early_stop_relax=True, early_stop_tier="Z")
+            render_chain_script(
+                steps=self.STEPS,
+                remote_dir="/w",
+                namd_bin="/n",
+                threads=2,
+                manifest=self.MANIFEST,
+                early_stop_relax=True,
+                early_stop_tier="Z",
+            )
+
+
+class TestLiveMetricsCollector:
+    """The progress bar's only source of MID-SEGMENT truth on a rented pod.
+
+    Progress otherwise advances only when a whole segment lands its ``.coor``, so a
+    single-segment 200 ns production reads 0% for its entire multi-day life. The blob this
+    writes is already `cat`-ed by the existing poll, so it costs the poll nothing extra.
+    """
+
+    def _script(self, **kw):
+        return bm.render_chain_script(
+            steps=[bm.ChainStep(name="seg1", steps=1000)],
+            remote_dir="/workspace/nadoc_jobs/x",
+            namd_bin="/n/namd3",
+            threads=16,
+            **kw,
+        )
+
+    def test_launches_the_collector_in_the_background(self):
+        s = self._script()
+        assert bm.LIVE_METRICS_NAME in s
+        assert "LIVE_METRICS_PID=$!" in s, "must not block the ladder"
+
+    def test_samples_far_slower_than_the_ui_polls(self):
+        """Decoupled on purpose: NADOC anchors each reading and extrapolates between them,
+        so a 60 s collector still drives a smooth 1.5 s bar. Sampling faster would only
+        contend with NAMD's own writes to the same network volume — on a billing machine."""
+        assert bm.LIVE_METRICS_INTERVAL_S >= 30
+        assert f'. {bm.LIVE_METRICS_INTERVAL_S}' in self._script()
+
+    def test_the_interval_is_tunable(self):
+        assert ". 5 " in self._script(live_metrics_s=5)
+
+    def test_can_be_switched_off_entirely(self):
+        assert bm.LIVE_METRICS_NAME not in self._script(live_metrics_s=0)
+
+    def test_tolerates_a_pod_without_the_collector(self):
+        """A resumed job whose volume predates the collector must still run — the launch is
+        guarded, not assumed."""
+        assert f'if [ -f "{bm.LIVE_METRICS_NAME}" ]; then' in self._script()
+
+    def test_stops_sampling_before_the_final_status_is_written(self):
+        """Otherwise the last thing NADOC reads could be a tick that landed after the run
+        finished, leaving the bar short of 100%."""
+        s = self._script()
+        kill = s.index('kill "$LIVE_METRICS_PID"')
+        done = s.index('echo "completed" > nadoc_status')
+        assert kill < done

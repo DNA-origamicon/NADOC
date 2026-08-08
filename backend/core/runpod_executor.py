@@ -37,6 +37,7 @@ from backend.core.runpod_api import (
     ssh_endpoint,
 )
 from backend.core.runpod_conn import RunpodConnection, RunpodSSHError
+from backend.core.slurm_script import LIVE_METRICS_NAME
 from backend.core.runpod_script import (
     DEFAULT_BUDGET_USD,
     RESUME_CONF_NAME,
@@ -118,7 +119,9 @@ async def _remote_file_sizes(conn: RunpodConnection, remote: str) -> dict[str, i
     file over SSH to EU-RO-1 is ~150 ms, and we are paying for the pod while we ask.
     Returns {} on any failure — the safe direction is to re-upload, never to skip.
     """
-    res = await conn.run(f"cd {remote} 2>/dev/null && find . -type f -printf '%s %P\\n'")
+    res = await conn.run(
+        f"cd {remote} 2>/dev/null && find . -type f -printf '%s %P\\n'"
+    )
     if res.rc != 0:
         return {}
     sizes: dict[str, int] = {}
@@ -143,7 +146,8 @@ async def _seed_from_parent(conn, job: MdJob, remote: str, plan: list) -> None:
         return
 
     reusable = [
-        rel for local_path, rel in plan
+        rel
+        for local_path, rel in plan
         if parent_sizes.get(rel) == local_path.stat().st_size
     ]
     if not reusable:
@@ -158,7 +162,8 @@ async def _seed_from_parent(conn, job: MdJob, remote: str, plan: list) -> None:
     await conn.run(f"{mk} ; {cmds} ; true", timeout=300.0)
     log.info(
         "runpod: seeded %d file(s) from parent %s on the volume (no re-upload)",
-        len(reusable), job.parent_job_id,
+        len(reusable),
+        job.parent_job_id,
     )
 
 
@@ -266,7 +271,9 @@ async def submit_job(
             continue
         await conn.sftp_put(str(local_path), f"{remote}/{rel}")
         sent += 1
-    log.info("runpod: staged %d file(s), reused %d already on the volume", sent, skipped)
+    log.info(
+        "runpod: staged %d file(s), reused %d already on the volume", sent, skipped
+    )
 
     # The cell-shrink resume writer. Staged ALWAYS — an NPT box crossing its patch grid
     # has nothing to do with early-stop, and without this the chain script's "bounded
@@ -274,13 +281,34 @@ async def submit_job(
     from backend.core import remote_resume_conf
 
     await md_executor._put_text(
-        conn, Path(remote_resume_conf.__file__).read_text(),
-        f"{remote}/{RESUME_CONF_NAME}", workspace_dir, job,
+        conn,
+        Path(remote_resume_conf.__file__).read_text(),
+        f"{remote}/{RESUME_CONF_NAME}",
+        workspace_dir,
+        job,
     )
 
     manifest = json.loads((pkg / "manifest.json").read_text())
     early_stop = md_executor._early_stop_on(job, manifest)
     tier = md_executor._early_stop_tier(job)
+
+    # The node live-metrics collector — the SAME script the Alpine path stages, and the
+    # only thing that makes a rented run's progress bar move mid-segment. Without it,
+    # progress advances only when a whole segment lands its .coor, so a single-segment
+    # 200 ns production reads 0% for its entire life.
+    #
+    # `poll_job` already `cat`s the blob this writes (it delegates to the shared
+    # `md_executor.poll_remote_progress`), so staging it costs the poll nothing extra —
+    # the endpoint was there all along with nothing writing to it.
+    from backend.core import remote_live_metrics  # noqa: PLC0415
+
+    await md_executor._put_text(
+        conn,
+        Path(remote_live_metrics.__file__).read_text(),
+        f"{remote}/{LIVE_METRICS_NAME}",
+        workspace_dir,
+        job,
+    )
 
     if early_stop:
         # Same three scripts the sbatch stages, uploaded through the same helper — the
@@ -330,14 +358,21 @@ async def submit_job(
     # this record is the ONLY link back to a run that is still very much alive.
     job.save(workspace_dir)
 
-    log.info("runpod: job %s launched on pod %s as pid %s", job.job_id, job.runpod_pod_id, pid)
+    log.info(
+        "runpod: job %s launched on pod %s as pid %s",
+        job.job_id,
+        job.runpod_pod_id,
+        pid,
+    )
     return pid
 
 
 # ── Poll ─────────────────────────────────────────────────────────────────────
 
 
-async def poll_job(job: MdJob, *, conn: RunpodConnection, now: Optional[int] = None) -> dict:
+async def poll_job(
+    job: MdJob, *, conn: RunpodConnection, now: Optional[int] = None
+) -> dict:
     """One poll pass: chain status + heartbeat + live segment progress.
 
     Returns ``{state, segment, alive, stale, advanced}``. ``state`` is the chain
@@ -346,8 +381,12 @@ async def poll_job(job: MdJob, *, conn: RunpodConnection, now: Optional[int] = N
     """
     now = now or int(time.time())
 
-    status = parse_status_file(await conn.read_file(f"{job.remote_scratch_dir}/{STATUS_FILE}"))
-    hb_raw = (await conn.read_file(f"{job.remote_scratch_dir}/{HEARTBEAT_FILE}")).strip()
+    status = parse_status_file(
+        await conn.read_file(f"{job.remote_scratch_dir}/{STATUS_FILE}")
+    )
+    hb_raw = (
+        await conn.read_file(f"{job.remote_scratch_dir}/{HEARTBEAT_FILE}")
+    ).strip()
     heartbeat = int(hb_raw) if hb_raw.isdigit() else None
     job.runpod_heartbeat = heartbeat
 
@@ -394,7 +433,9 @@ async def cancel_job(job: MdJob, *, conn: RunpodConnection) -> None:
 # ── Fetch ────────────────────────────────────────────────────────────────────
 
 
-async def fetch_results(job: MdJob, workspace_dir: Path, *, conn: RunpodConnection) -> bool:
+async def fetch_results(
+    job: MdJob, workspace_dir: Path, *, conn: RunpodConnection
+) -> bool:
     """Pull outputs back. REUSED verbatim from the Alpine executor."""
     return await md_executor.fetch_outputs(job, workspace_dir, conn=conn)
 
@@ -402,8 +443,9 @@ async def fetch_results(job: MdJob, workspace_dir: Path, *, conn: RunpodConnecti
 # ── Whole-job orchestration ──────────────────────────────────────────────────
 
 
-def pod_payloads_for(job: MdJob, n_atoms: int, *, network_volume_id: str,
-                     interruptible: bool = True) -> list[dict]:
+def pod_payloads_for(
+    job: MdJob, n_atoms: int, *, network_volume_id: str, interruptible: bool = True
+) -> list[dict]:
     """Size the pod from the system (MEASURED VRAM model), cheapest tier first.
 
     Returns MULTIPLE payloads because the network volume PINS the pod to its datacenter,
@@ -420,6 +462,22 @@ def pod_payloads_for(job: MdJob, n_atoms: int, *, network_volume_id: str,
     # and let it pick whatever is actually free in the volume's datacenter.
     gpu_ids = [g.key for g in plan["gpus"]]
 
+    # The card the user CHOSE in the Job Wizard goes to the front.
+    #
+    # Without this the wizard shows one card and rents another: the wizard's table comes from
+    # `runpod_select` (live stock, live prices, arch-vs-build gate, $/ns AND ns/day ranking)
+    # while this list comes from `plan_execution` — VRAM fit against the pinned price table,
+    # cheapest first, none of the other three. They routinely disagree.
+    #
+    # It is a PREFERENCE, not a replacement: the network volume pins the datacenter, so a
+    # single named card frequently comes back 500 "no instances currently available". Keeping
+    # the rest as fallbacks is what makes a launch survive that. A card that does not fit this
+    # system is ignored rather than honoured — it is not in `plan["gpus"]`, and renting a card
+    # too small for the box just OOMs at step 0.
+    chosen = getattr(job, "runpod_gpu_key", None)
+    if chosen and chosen in gpu_ids:
+        gpu_ids = [chosen] + [g for g in gpu_ids if g != chosen]
+
     # SECURE ONLY (user decision, 2026-07-14). Community Cloud is a pool of third-party
     # hosts: cheaper, but variable reliability, and in EU-RO-1 (where the network volume
     # pins us) it frequently has NO card at all — every COMMUNITY attempt so far returned
@@ -427,18 +485,21 @@ def pod_payloads_for(job: MdJob, n_atoms: int, *, network_volume_id: str,
     # the halved price is not worth the variance.
     payloads = []
     for cloud_type, spot in (("SECURE", interruptible), ("SECURE", False)):
-        payloads.append(build_create_payload(
-            name=name,
-            gpu_type_ids=gpu_ids,
-            network_volume_id=network_volume_id,
-            interruptible=spot,
-            cloud_type=cloud_type,
-        ))
+        payloads.append(
+            build_create_payload(
+                name=name,
+                gpu_type_ids=gpu_ids,
+                network_volume_id=network_volume_id,
+                interruptible=spot,
+                cloud_type=cloud_type,
+            )
+        )
     return payloads
 
 
-def pod_payload_for(job: MdJob, n_atoms: int, *, network_volume_id: str,
-                    interruptible: bool = True) -> dict:
+def pod_payload_for(
+    job: MdJob, n_atoms: int, *, network_volume_id: str, interruptible: bool = True
+) -> dict:
     """The preferred (cheapest) payload. See :func:`pod_payloads_for` for the fallbacks."""
     return pod_payloads_for(
         job, n_atoms, network_volume_id=network_volume_id, interruptible=interruptible
@@ -483,8 +544,9 @@ async def run_job_on_pod(
         if on_pod is not None:
             on_pod(info.id)
 
-    async with client.pod(payloads[0], fallbacks=payloads[1:],
-                          on_created=_created) as pod:  # terminates in a finally
+    async with client.pod(
+        payloads[0], fallbacks=payloads[1:], on_created=_created
+    ) as pod:  # terminates in a finally
         job.runpod_pod_id = pod.id
         # ...and PERSIST it the instant it exists, for exactly the same reason: a crash
         # between here and the first save would leave a billing pod that no later process
@@ -495,7 +557,7 @@ async def run_job_on_pod(
             # pod cannot kill it, and an unkillable pod bills until a human notices.
             on_pod(pod.id)
         endpoint = ssh_endpoint(pod)
-        if endpoint is None:                          # wait_for_ssh guarantees this, belt+braces
+        if endpoint is None:  # wait_for_ssh guarantees this, belt+braces
             raise RunpodError(f"pod {pod.id} exposed no SSH endpoint")
         host, port = endpoint
 
@@ -511,74 +573,188 @@ async def run_job_on_pod(
             lifetime_s = lifetime_for_budget(budget_usd, pod.cost_per_hr)
             log.info(
                 "runpod: pod %s at $%s/hr, $%.2f budget -> kill-switch at %.1f h",
-                pod.id, pod.cost_per_hr, budget_usd, lifetime_s / 3600,
+                pod.id,
+                pod.cost_per_hr,
+                budget_usd,
+                lifetime_s / 3600,
             )
             await submit_job(
-                job, workspace_dir, conn=conn, min_name=min_name,
-                n_atoms=n_atoms, vcpus=vcpus, max_lifetime_s=lifetime_s,
+                job,
+                workspace_dir,
+                conn=conn,
+                min_name=min_name,
+                n_atoms=n_atoms,
+                vcpus=vcpus,
+                max_lifetime_s=lifetime_s,
             )
 
-            ssh_failures = 0
-            while True:
-                try:
-                    st = await poll_job(job, conn=conn)
-                    ssh_failures = 0
-                except RunpodSSHError as exc:
-                    # A transient SSH drop must not abort a live run — the chain is detached
-                    # and the volume keeps every completed step. conn.run already reconnects
-                    # per-call; tolerate a longer wobble here, then pause (resumable).
-                    ssh_failures += 1
-                    if ssh_failures > MAX_POLL_SSH_FAILURES:
-                        log.error("lost SSH to pod %s for %d consecutive polls — pausing "
-                                  "(resumable; the volume holds all progress): %s",
-                                  pod.id, ssh_failures, exc)
-                        job.status = MdStatus.paused
-                        job.resumable = True
-                        job.error = "Lost SSH to the pod; resume to continue from the checkpoint."
-                        break
-                    log.warning("poll SSH error %d/%d — reconnecting and retrying: %s",
-                                ssh_failures, MAX_POLL_SSH_FAILURES, exc)
-                    await conn._reconnect()
-                    await sleep(poll_s)
-                    continue
-                if st["state"] == "completed":
-                    job.status = MdStatus.completed
-                    break
-                if st["state"] == "failed":
-                    job.status = MdStatus.failed
-                    job.error = f"NAMD failed at segment {st['segment']}"
-                    break
-                if st["state"] == "lifetime":
-                    job.status = MdStatus.paused
-                    job.resumable = True
-                    job.error = "Pod hit its maximum lifetime; resume to continue."
-                    break
-                if not st["alive"] and st["stale"]:
-                    # The pod was reclaimed (interruptible) or the script died. Both are
-                    # resumable: the volume holds every completed step.
-                    job.status = MdStatus.paused
-                    job.resumable = True
-                    job.error = "Pod stopped mid-run; resume to continue from the checkpoint."
-                    break
-                await sleep(poll_s)
-
-            # Always fetch what exists — even a failed/paused run has useful output.
-            # BOUNDED: a hung fetch must not keep the pod billing.  On timeout, abandon the
-            # fetch and fall through to teardown — the outputs remain on the volume.
-            try:
-                await asyncio.wait_for(
-                    fetch_results(job, workspace_dir, conn=conn), timeout=FETCH_TIMEOUT_S
-                )
-            except asyncio.TimeoutError:
-                log.error(
-                    "fetch_outputs exceeded %.0fs — ABANDONING the fetch so the pod is destroyed "
-                    "(outputs persist on the volume; pull them later). This is the stuck-fetch "
-                    "billing guard.", FETCH_TIMEOUT_S,
-                )
+            await _supervise_run(
+                job, workspace_dir, conn=conn, pod_id=pod.id, poll_s=poll_s, sleep=sleep
+            )
         finally:
             await conn.close()
 
     job.runpod_pid = None
+    return job.status
+
+
+async def _supervise_run(
+    job: MdJob,
+    workspace_dir: Path,
+    *,
+    conn: RunpodConnection,
+    pod_id: str,
+    poll_s: float = 30.0,
+    sleep=None,
+) -> MdStatus:
+    """Watch an ALREADY-LAUNCHED chain to a terminal state, then fetch what exists.
+
+    Split out of ``run_job_on_pod`` so a re-attach can reuse it verbatim: the difference
+    between starting a run and inheriting one is entirely in how the pod and the chain
+    script come to exist, not in how they are watched. Sharing this is what stops the two
+    paths drifting on the things that decide whether a pod keeps billing — the SSH-wobble
+    tolerance, the resumable/paused classification, and the bounded fetch.
+
+    Does NOT terminate the pod: that belongs to the caller's context manager.
+    """
+    import asyncio
+
+    sleep = sleep or asyncio.sleep
+
+    ssh_failures = 0
+    while True:
+        try:
+            st = await poll_job(job, conn=conn)
+            ssh_failures = 0
+        except RunpodSSHError as exc:
+            # A transient SSH drop must not abort a live run — the chain is detached
+            # and the volume keeps every completed step. conn.run already reconnects
+            # per-call; tolerate a longer wobble here, then pause (resumable).
+            ssh_failures += 1
+            if ssh_failures > MAX_POLL_SSH_FAILURES:
+                log.error(
+                    "lost SSH to pod %s for %d consecutive polls — pausing "
+                    "(resumable; the volume holds all progress): %s",
+                    pod_id,
+                    ssh_failures,
+                    exc,
+                )
+                job.status = MdStatus.paused
+                job.resumable = True
+                job.error = "Lost SSH to the pod; resume to continue from the checkpoint."
+                break
+            log.warning(
+                "poll SSH error %d/%d — reconnecting and retrying: %s",
+                ssh_failures,
+                MAX_POLL_SSH_FAILURES,
+                exc,
+            )
+            await conn._reconnect()
+            await sleep(poll_s)
+            continue
+        if st["state"] == "completed":
+            job.status = MdStatus.completed
+            break
+        if st["state"] == "failed":
+            job.status = MdStatus.failed
+            job.error = f"NAMD failed at segment {st['segment']}"
+            break
+        if st["state"] == "lifetime":
+            job.status = MdStatus.paused
+            job.resumable = True
+            job.error = "Pod hit its maximum lifetime; resume to continue."
+            break
+        if not st["alive"] and st["stale"]:
+            # The pod was reclaimed (interruptible) or the script died. Both are
+            # resumable: the volume holds every completed step.
+            job.status = MdStatus.paused
+            job.resumable = True
+            job.error = "Pod stopped mid-run; resume to continue from the checkpoint."
+            break
+        # Persist every pass: progress and health advanced by poll_job are what the UI
+        # reads, and a supervisor that dies between terminal states must not take the
+        # last known step count with it.
+        job.save(workspace_dir)
+        await sleep(poll_s)
+
+    # Always fetch what exists — even a failed/paused run has useful output.
+    # BOUNDED: a hung fetch must not keep the pod billing.  On timeout, abandon the
+    # fetch and fall through to teardown — the outputs remain on the volume.
+    try:
+        await asyncio.wait_for(
+            fetch_results(job, workspace_dir, conn=conn),
+            timeout=FETCH_TIMEOUT_S,
+        )
+    except asyncio.TimeoutError:
+        log.error(
+            "fetch_outputs exceeded %.0fs — ABANDONING the fetch so the pod is destroyed "
+            "(outputs persist on the volume; pull them later). This is the stuck-fetch "
+            "billing guard.",
+            FETCH_TIMEOUT_S,
+        )
+    job.save(workspace_dir)
+    return job.status
+
+
+async def reattach_job_on_pod(
+    job: MdJob,
+    workspace_dir: Path,
+    *,
+    client: RunpodClient,
+    client_keys: Optional[list[str]] = None,
+    poll_s: float = 30.0,
+    sleep=None,
+    on_pod: Optional[Callable[[str], None]] = None,
+) -> MdStatus:
+    """Inherit a run already going on a pod this process did not start → fetch → **destroy**.
+
+    The counterpart to ``run_job_on_pod`` for a pod that outlived its supervisor — the
+    ordinary case after a dev-server reload, and the recovery case after a crash. NAMD is
+    detached (``setsid``, output on the network volume), so it carries on regardless; what
+    it loses is the thing that was watching it, which is also the only thing that would
+    have destroyed the pod. Adopting restores both.
+
+    **Never relaunches a live chain.** If the recorded PID is still alive we only resume
+    watching it; starting a second chain would put two NAMDs on one GPU, each corrupting
+    the other's restart files. A chain that has died is left to the ordinary resume path
+    rather than being restarted from here, because a fresh launch needs the staging and
+    budget decisions that ``run_job_on_pod`` makes.
+    """
+    if not job.runpod_pod_id:
+        raise RunpodError(f"job {job.job_id} has no pod to adopt")
+
+    async with client.adopt(job.runpod_pod_id) as pod:
+        if on_pod is not None:
+            on_pod(pod.id)  # registered = killable; do this before anything can fail
+        endpoint = ssh_endpoint(pod)
+        if endpoint is None:
+            raise RunpodError(f"pod {pod.id} exposed no SSH endpoint")
+        host, port = endpoint
+        conn = RunpodConnection(
+            host=host, port=port, pod_id=pod.id, client_keys=client_keys
+        )
+        await conn.connect()
+        try:
+            alive = await conn.pid_alive(job.runpod_pid) if job.runpod_pid else False
+            log.info(
+                "runpod: adopted pod %s for job %s (chain pid %s %s)",
+                pod.id,
+                job.job_id,
+                job.runpod_pid,
+                "alive" if alive else "GONE — will fetch and tear down",
+            )
+            if alive:
+                job.status = MdStatus.running
+                job.error = None
+                job.save(workspace_dir)
+            await _supervise_run(
+                job, workspace_dir, conn=conn, pod_id=pod.id, poll_s=poll_s, sleep=sleep
+            )
+        finally:
+            await conn.close()
+
+    job.runpod_pid = None
+    job.save(workspace_dir)
     return job.status
 
 

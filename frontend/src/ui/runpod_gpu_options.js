@@ -54,6 +54,83 @@ export function gpuOptionView(row) {
 const _esc = s => String(s).replace(/[&<>"]/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 
+/**
+ * One row's display fields for the Job Wizard's WHOLE-PLAN table (pure).
+ *
+ * The wizard asks a wider question than the Clusters card: it knows the production length as
+ * well as the ladder, so relaxation and production are shown as separate columns plus a total.
+ * `overBudget` is advisory — an over-budget row is flagged but stays selectable, because
+ * raising the cap is a legitimate response to seeing the number.
+ */
+export function jobOptionView(row, { budgetUsd = null } = {}) {
+  const total = row.total_cost
+  return {
+    ...gpuOptionView(row),
+    relaxCost: formatCost(row.relax_cost),
+    production: formatRelaxTime(row.production_hours),
+    productionCost: formatCost(row.production_cost),
+    total: formatRelaxTime(row.total_hours),
+    totalCost: formatCost(total),
+    nsdayRelax: row.ns_day_relax != null ? `${row.ns_day_relax} ns/day relaxing` : '',
+    overBudget: budgetUsd != null && total != null && total > budgetUsd,
+  }
+}
+
+/** Column header for the wizard's six-column table. */
+export function jobOptionsHeader() {
+  return (
+    `<div style="display:grid;grid-template-columns:1.6fr auto auto auto auto;gap:8px;` +
+    `padding:2px 7px;font-size:9px;color:#6e7681;text-transform:uppercase;letter-spacing:.04em">` +
+    `<span>GPU</span><span>$/hr</span><span>relax</span><span>production</span>` +
+    `<span>total</span></div>`
+  )
+}
+
+/**
+ * Rows for the wizard's table; `selectedKey` highlights the chosen card.
+ *
+ * **The order is the backend's and is never re-sorted here.** `plan_options` already applied
+ * the two-axis rule (within 0.6x of the fastest card's ns/day, then cheapest $/ns). A
+ * client-side "cheapest first" would put a glacially slow card at the top — exactly the
+ * fallback that silently degraded a real run by 4x.
+ */
+export function renderJobOptionRows(gpus, selectedKey = null, { budgetUsd = null } = {}) {
+  if (!(gpus && gpus.length)) return ''
+  return gpus
+    .map((row, i) => {
+      const v = jobOptionView(row, { budgetUsd })
+      const sel = row.key === selectedKey
+      const costColor = v.overBudget ? '#d29922' : '#3fb950'
+      const title = v.overBudget
+        ? `Estimated ${v.totalCost} — over your cap. Raise the cap or shorten the run.`
+        : 'est. total cost for this whole plan'
+      return (
+        `<div class="runpod-gpu-row" data-key="${_esc(row.key)}" role="button" tabindex="0" ` +
+        `style="display:grid;grid-template-columns:1.6fr auto auto auto auto;gap:8px;` +
+        `align-items:baseline;padding:5px 7px;border-radius:4px;cursor:pointer;` +
+        `background:${sel ? 'rgba(31,111,235,.18)' : 'transparent'};` +
+        `border:1px solid ${sel ? '#1f6feb' : 'transparent'}">` +
+        `<span><span style="color:#c9d1d9;font-weight:${sel ? 600 : 400}">${_esc(v.label)}</span> ` +
+        `<span style="color:#6e7681;font-size:9px">${v.vram}</span> ` +
+        `<span style="color:${v.stock.color};font-size:9px">● ${v.stock.text}</span>` +
+        (i === 0
+          ? ' <span style="color:#58a6ff;font-size:9px">best value</span>'
+          : '') +
+        `<br><span style="color:#6e7681;font-size:9px">${v.nsday}` +
+        `${v.nsdayRelax ? ` · ${v.nsdayRelax}` : ''}</span></span>` +
+        `<span style="color:#8b949e" title="price per hour">${v.price}</span>` +
+        `<span style="color:#8b949e" title="relaxation ladder">${v.time}<br>` +
+        `<span style="font-size:9px">${v.relaxCost}</span></span>` +
+        `<span style="color:#8b949e" title="production run">${v.production}<br>` +
+        `<span style="font-size:9px">${v.productionCost}</span></span>` +
+        `<span style="color:${costColor}" title="${_esc(title)}">${v.total}<br>` +
+        `<span style="font-size:9px;font-weight:600">${v.totalCost}</span></span>` +
+        `</div>`
+      )
+    })
+    .join('')
+}
+
 /** Column header for the scrollable box. */
 export function gpuOptionsHeader() {
   return (

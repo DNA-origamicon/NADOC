@@ -22,7 +22,7 @@ import { docKey } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
 import { renderJobList } from './jobs_panel_render.js'
-import { shouldForceDisplayReload, mdReadinessIndicator } from './md_display_state.js'
+import { shouldForceDisplayReload, mdReadinessIndicator, mdDisplayReadinessFromMeta } from './md_display_state.js'
 import { initMdSolventControls } from './md_solvent_controls.js'
 import { initMdWeldControls } from './md_weld_controls.js'
 import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
@@ -268,6 +268,38 @@ export function mdJobIsStartable(job) {
     && !mdRemoteAwaitingSubmit(job)
 }
 
+/** Pure: is this a prepared RunPod job that the Run button should launch?
+ *
+ *  Kept separate from `mdJobIsStartable` on purpose. That predicate means "startable by the
+ *  plain local path", and `mdQueueable` leans on it to keep remote jobs out of the local run
+ *  queue — widening it would silently park a rented-GPU run behind a desktop one.
+ *
+ *  Renting is a real start, not a submit: `POST /md/jobs/{id}/start` dispatches straight to
+ *  `_start_runpod_job`, which pre-flights and then provisions. Alpine needs its review card
+ *  because an sbatch spends a shared allocation; a pod is rented, run and destroyed by NADOC
+ *  in one act, and the wizard already collected the card, the cap and the volume. */
+export function mdRunpodStartable(job) {
+  return job?.execution_target === 'runpod' && mdRemoteAwaitingSubmit(job)
+}
+
+/** Pure: which unattended phase of a RunPod launch is this job in, or `null` when it is not
+ *  in one? Nothing here is clickable — the control spins and waits.
+ *
+ *    'preparing' — solvating and packaging ON THIS COMPUTER. Nothing is rented yet.
+ *    'renting'   — asking RunPod for a pod. Billing starts the moment one exists.
+ *    'uploading' — staging the package over SFTP. The GPU is idle and BILLING; on the
+ *                  1.9M-atom run this was ~15 min and ~$0.20 before NAMD ran a step.
+ *
+ *  The signals are already on the job: `runpod_pod_id` lands when the pod is created and
+ *  `runpod_pid` when the chain script actually launches, so "pod but no pid" is exactly the
+ *  staging window. */
+export function mdRunpodPhase(job) {
+  if (job?.execution_target !== 'runpod') return null
+  if (job.status === 'preparing') return 'preparing'
+  if (job.status !== 'running' || job.runpod_pid) return null
+  return job.runpod_pod_id ? 'uploading' : 'renting'
+}
+
 /** Pure: can this job be picked up from its last checkpoint?  A job paused on a
  *  GPU-resident decision counts — resuming re-opens the decision, so the modal is not the
  *  only way back in.  Alpine resumes are cluster-gated and stay on their own button. */
@@ -333,9 +365,29 @@ export function mdQueueable(job) {
  *  queue order — both come from GET /md/queue, so what the button offers and what the
  *  server would actually do can't drift apart.  `clusterState` gates the submit: there is
  *  no point offering an upload with no session behind it. */
+const RUNPOD_PHASE_LABEL = Object.freeze({
+  preparing: 'Preparing…', renting: 'Renting a GPU…', uploading: 'Uploading…',
+})
+
+const RUNPOD_PHASE_TITLE = Object.freeze({
+  preparing: 'Solvating and building the package on this computer. Nothing is rented yet — '
+    + 'attach anchors or an electric field meanwhile.',
+  renting: 'Asking RunPod for the GPU you chose. Billing starts the moment a pod exists.',
+  uploading: 'Uploading the package to the pod. The GPU is rented and billing while this '
+    + 'runs, and NAMD starts by itself when it finishes. To abandon it, terminate the pod '
+    + 'from the Clusters card.',
+})
+
+/**
+ * @param {object|null} selectedJob
+ * @param {object} opts
+ * @param {boolean} [opts.runpodReady]    RunPod pre-flight passes (gates ▶ Rent & Run)
+ * @param {string}  [opts.runpodBlocked]  why it does not, for the tooltip
+ */
 export function mdRunControl(selectedJob, {
   busy = false, runTarget = 'local', machineBusy = false, queuedIds = [],
   clusterState = 'disconnected', submitting = false,
+  runpodReady = false, runpodBlocked = '',
 } = {}) {
   if (!selectedJob) {
     return {
@@ -378,6 +430,31 @@ export function mdRunControl(selectedJob, {
       }
     }
   }
+  // A RunPod job has THREE unattended waits before NAMD starts, and the control used to
+  // misread all of them: it said "■ Stop Run" through the local package build (offering to
+  // stop a run that had not begun), and a prepared job's button was disabled entirely,
+  // pointing at a review card the Job Wizard replaced. Now it mirrors Alpine — spin while
+  // the machine works, then be the button that actually starts it.
+  if (selectedJob.execution_target === 'runpod') {
+    const phase = mdRunpodPhase(selectedJob)
+    if (phase) {
+      return {
+        action: RUN_ACTION.PREPARING, disabled: true, spinner: true,
+        label: RUNPOD_PHASE_LABEL[phase],
+        title: RUNPOD_PHASE_TITLE[phase],
+      }
+    }
+    if (mdRunpodStartable(selectedJob)) {
+      return {
+        action: RUN_ACTION.RUN, label: '▶ Rent & Run',
+        disabled: busy || !runpodReady,
+        title: runpodReady
+          ? 'Rent the GPU you chose, upload this package, run the whole ladder, fetch the '
+            + 'results, then destroy the pod.'
+          : `Cannot run on RunPod yet:\n${runpodBlocked || 'pre-flight has not passed.'}`,
+      }
+    }
+  }
   const base = runControlState(selectedJob, {
     verb: 'Run', isActive: mdJobIsRunning, isResumable: mdJobIsResumable, busy,
   })
@@ -401,6 +478,17 @@ export function mdRunControl(selectedJob, {
     }
   }
   if (base.action === RUN_ACTION.RESUME) {
+    // Resuming on RunPod rents a pod, so it needs the SAME gate as starting one. It did
+    // not have it, and that is the whole reason a stopped run "could not be resumed": the
+    // API key is held in backend memory only, so every dev-server reload silently
+    // disconnects the session — and the button stayed lit, offering a resume that could
+    // only ever come back as a 400.
+    if (selectedJob.execution_target === 'runpod' && !runpodReady) {
+      return {
+        ...base, disabled: true,
+        title: `Cannot resume on RunPod yet:\n${runpodBlocked || 'pre-flight has not passed.'}`,
+      }
+    }
     return {
       ...base,
       title: hasPendingGpuDecision(selectedJob)
@@ -411,12 +499,10 @@ export function mdRunControl(selectedJob, {
   if (mdJobIsStartable(selectedJob)) {
     return { ...base, label: '▶ Run', title: 'Start this prepared job.' }
   }
-  if (mdRemoteAwaitingSubmit(selectedJob)) {
-    return {
-      ...base, disabled: true,
-      title: `Prepared for ${runTarget === 'runpod' ? 'RunPod' : 'the cluster'} — submit it from the review card.`,
-    }
-  }
+  // (There used to be an `mdRemoteAwaitingSubmit` catch-all here, disabling the button and
+  // sending the user to "the review card". It is unreachable now and its advice was stale:
+  // an awaiting-submit job is either Alpine — handled above, ☁ Submit to Alpine — or RunPod,
+  // handled above as ▶ Rent & Run. The wizard replaced the review card for both.)
   return {
     ...base, disabled: true,
     title: selectedJob.status === 'completed'
@@ -436,7 +522,9 @@ export function mdRunControl(selectedJob, {
 export function mdWatchdogDecision({ job = null, wsOpen = false, msSinceMsg = 0, staleMs = _WS_STALE_MS } = {}) {
   if (!job) return 'disarm'
   if (_TERMINAL_STATUSES.has(job.status)) return 'disarm'
-  if (job.slurm_job_id || job.execution_target === 'alpine') return 'disarm'
+  // Any remote target, not just Alpine: a RunPod run is NAMD on a rented box, so there is no
+  // local status socket to reconnect to and the watchdog would retry one forever.
+  if (job.slurm_job_id || mdIsRemoteJob(job)) return 'disarm'
   if (!wsOpen) return 'reconnect'
   if (msSinceMsg > staleMs) return 'refresh'
   return 'idle'
@@ -476,7 +564,10 @@ export function mdDraftRunLabel(job) {
  *  SLURM status)?  Gates the remote-poll timer — false when nothing remote is active,
  *  so idle panels don't hit the network. */
 export function hasActiveRemoteJob(jobs) {
-  return (jobs ?? []).some(j => j?.execution_target === 'alpine' && mdJobIsActive(j))
+  // Alpine AND RunPod. It was Alpine-only, which meant the 20 s remote poll never armed for
+  // a rented run — so a pod could be provisioning, uploading, or finished, and the panel
+  // would sit on whatever it last saw until the user clicked something.
+  return (jobs ?? []).some(j => mdIsRemoteJob(j) && mdJobIsActive(j))
 }
 
 /** Pure: list-row label for a derived (refit/retry) child job — "Refit N", where N
@@ -736,12 +827,15 @@ export function shouldFetchLiveFrame(job, { clusterState, displayReady } = {}) {
 /** Pure: how to describe a fetched snapshot. It is ONE frame from a run still going
  *  on the cluster — it does not advance on its own, and saying "trajectory" would
  *  imply results that do not exist locally. */
-export function liveFrameLabel(liveFrame) {
+export function liveFrameLabel(liveFrame, executionTarget = 'alpine') {
   if (!liveFrame) return ''
+  // Name the machine it is still running on. Hardcoding "Alpine" mislabelled every
+  // snapshot from a rented RunPod GPU.
+  const where = executionTarget === 'runpod' ? 'the pod' : 'Alpine'
   const step = Number(liveFrame.step)
   return Number.isFinite(step) && step > 0
-    ? `Snapshot at step ${step.toLocaleString()} — still running on Alpine`
-    : 'Snapshot from the running Alpine job'
+    ? `Snapshot at step ${step.toLocaleString()} — still running on ${where}`
+    : `Snapshot from the running ${where === 'the pod' ? 'pod' : 'Alpine'} job`
 }
 
 /** Pure: compact duration label from a number of seconds (e.g. "45s", "6m", "1h 3m"). */
@@ -1215,19 +1309,28 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     getJobId: () => _selectedId,
   })
 
+  /**
+   * Show or hide the Clusters-card RunPod boxes for the run-target radio.
+   *
+   * It used to paint the primary Run button too — and that was a second painter fighting
+   * `_paintRunControl` over the same element, keyed on the wrong thing: the RADIO says where
+   * the NEXT job will run, while the button is about the job that is SELECTED. Selecting a
+   * finished local run with the radio on RunPod left the button lit and titled "Rent a GPU".
+   * The pre-flight gate did not disappear — it moved into `mdRunControl`, where it is pure,
+   * tested, and applied to the job the button will actually act on.
+   */
   function _paintRunpodGate() {
-    const isRunpod = _currentRunTarget() === 'runpod'
-    if (runpodStatusEl) runpodStatusEl.style.display = isRunpod ? 'block' : 'none'
-    if (runpodPickerEl) runpodPickerEl.style.display = isRunpod ? 'block' : 'none'
-    if (!isRunpod || !runBtn) return
-    const pre = _runpod.preflight
-    const ready = runpodCanLaunch(pre)
-    runBtn.disabled = !ready
-    runBtn.style.opacity = ready ? '1' : '0.5'
-    runBtn.style.cursor = ready ? 'pointer' : 'not-allowed'
-    runBtn.title = ready
-      ? 'Rent a GPU, run the ladder, fetch the results, then destroy the pod'
-      : `Cannot run on RunPod yet:\n${runpodBlockReason(pre)}`
+    const forNextJob = _currentRunTarget() === 'runpod'
+    // Also when the SELECTED job is a RunPod run. The key lives in backend memory only, so
+    // a dev-server reload disconnects the session silently — and with the box tied to the
+    // radio alone, a user looking at a stopped RunPod run saw no hint of why Resume would
+    // not work. The pre-flight rows are the explanation.
+    const forThisJob = _selectedJob()?.execution_target === 'runpod'
+    const show = forNextJob || forThisJob
+    if (runpodStatusEl) runpodStatusEl.style.display = show ? 'block' : 'none'
+    // The GPU picker is about the NEXT job, so it stays tied to the radio.
+    if (runpodPickerEl) runpodPickerEl.style.display = forNextJob ? 'block' : 'none'
+    _paintRunControl()
   }
 
   // Selecting RunPod must refresh the connection box. Otherwise it keeps showing Alpine's
@@ -1505,7 +1608,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // user can see when toggling will paint instantly vs pay the ~5 s load.
   let _displayIndicatorState = 'off'
   let _warmTimer = null
-  function _setDisplayIndicator(state) {
+  function _setDisplayIndicator(state, title = '') {
     _displayIndicatorState = state
     // A background load that hangs (huge PSF, wedged WS) fires no follow-up event, so a
     // 'warming' dot could sit amber forever.  Time it out to 'error' so it stops implying
@@ -1520,6 +1623,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (!displayIndicator) return
     const spec = mdReadinessIndicator(state)
     displayIndicator.style.display = spec.show ? 'inline-flex' : 'none'
+    // The dot is small and its label is two words; the WHY lives in the tooltip, which is
+    // the only place a "no frames yet" can explain that the data is on a rented GPU.
+    displayIndicator.title = title || ''
     if (spec.show) {
       if (displayIndicatorDot) displayIndicatorDot.style.background = _C[spec.color] ?? _C.dim
       if (displayIndicatorLabel) displayIndicatorLabel.textContent = spec.text
@@ -1806,11 +1912,20 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         _displayKey = null
         // Seed placeholder already on screen (if seeded) → leave it; else say waiting.
         if (!_inheritedSeedShown) {
+          // The backend already worked out WHY (`not_ready_reason`) and it is per-target:
+          // this line used to say "Running on Alpine" for a job on a rented RunPod GPU,
+          // because `mdIsRemoteRunning` is Alpine-only.
+          //
+          // The spinner is reserved for waits that end on their own. A trajectory sitting
+          // on a pod is not one of them — it needs a fetch, and spinning at the user
+          // promises an arrival that will never come.
+          const remote = d.not_ready_code === 'remote'
           _setDisplayStatus(
-            mdIsRemoteRunning(job)
-              ? 'Running on Alpine — sign in to the cluster to pull a snapshot'
-              : `Waiting for trajectory output (${job.status})`,
-            _C.warn, true)
+            d.not_ready_reason
+              || (mdIsRemoteRunning(job)
+                ? 'Running on Alpine — sign in to the cluster to pull a snapshot'
+                : `Waiting for trajectory output (${job.status})`),
+            _C.warn, !remote)
         }
         return
       }
@@ -1836,7 +1951,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       mdDisplayController.displayLatest(d.config_path, { forceReload, live, jobId: job.job_id })
       // A fetched snapshot is ONE frame and does not advance — say so, or it reads as
       // a live trajectory that has silently frozen.
-      if (d.live_frame) _setDisplayStatus(liveFrameLabel(d.live_frame), _C.warn, false)
+      if (d.live_frame) {
+        _setDisplayStatus(liveFrameLabel(d.live_frame, job.execution_target), _C.warn, false)
+      }
       if (!live) {
         clearInterval(_displayTimer)
         _displayTimer = null
@@ -1872,7 +1989,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // Bail so this stale prewarm can't clobber the controller's _displayVisible
       // back to false and suppress the just-started live stream.
       if (displayToggle?.checked) return
-      if (!d?.ready || !d.config_path) { _setDisplayIndicator('off'); return }
+      if (!d?.ready || !d.config_path) {
+        // NOT always 'off'. A job running on a pod, or one still writing its first frame,
+        // has a real reason the display is empty — and hiding the dot made that look
+        // identical to having no job at all.
+        const v = mdDisplayReadinessFromMeta(d)
+        _setDisplayIndicator(v.state, v.title)
+        return
+      }
       const key = `${d.config_path}|${d.trajectory_path ?? ''}|${d.segment_name ?? ''}`
       const forceReload = force || key !== _prewarmKey
       // A fresh load will emit 'loading'→'ready'; show 'warming' up front. A reuse of
@@ -1934,7 +2058,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // job's DETAIL (status / cleared error / SLURM state) wouldn't refresh on its
     // own — re-apply it explicitly.
     const sel = _jobs.find(j => j.job_id === _selectedId)
-    if (sel && sel.execution_target === 'alpine') _applyJobState(sel)
+    if (sel && mdIsRemoteJob(sel)) _applyJobState(sel)
+    // The primary control reads the phase off runpod_pod_id / runpod_pid, which only move
+    // on this poll — without a repaint it would stay on "Renting a GPU…" through the whole
+    // upload and on into the run.
+    _paintRunControl()
     _refreshQueuedWaits()
   }
 
@@ -2567,6 +2695,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // Gates ☁ Submit to Alpine — an upload with no Duo session behind it only 409s.
       clusterState: getClusterState?.() ?? 'disconnected',
       submitting: !!_remoteSubmitting && _remoteSubmitting.jobId === sel?.job_id,
+      // Gates ▶ Rent & Run the way clusterState gates ☁ Submit: renting a pod that cannot
+      // run the job still bills. Until a pre-flight has come back we do NOT block — the
+      // backend runs the same check and answers with the same reason, and a button that is
+      // dead on arrival because a probe has not finished is worse than one 400.
+      runpodReady: !_runpod.preflight || runpodCanLaunch(_runpod.preflight),
+      runpodBlocked: runpodBlockReason(_runpod.preflight),
     })
   }
   function _paintRunControl() {
@@ -2727,9 +2861,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   function _startSelected(btn = runBtn) {
+    const runpod = mdRunpodStartable(_selectedJob())
     return runExclusive(btn, async () => {
       if (!_selectedId) return
-      if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
+      // The concurrency confirm is about THIS machine's single GPU. A rented pod is a
+      // different computer, so asking "another job is already running here, continue?"
+      // before renting one is a question about nothing.
+      if (!runpod && !(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
       try {
         // Forces are chosen AFTER the job exists now (Create no longer runs), so the
         // anchors/field cards describe THIS job and are applied to its prepared package
@@ -2738,7 +2876,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         const forced = await _applyForcesToSelected()
         const d = await api.startMdJob(_selectedId)
         if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
-        showToast(`Run started${forced ? ` — ${forced}` : ''}`, 'ok')
+        showToast(
+          (runpod ? 'Renting a GPU — the pod is destroyed when the run finishes' : 'Run started')
+          + (forced ? ` — ${forced}` : ''), 'ok')
         await _fetchJobs()
         _reselectJob(_selectedId)
       } catch (err) {
@@ -2798,7 +2938,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (mdJobIsDraft(sel)) {
       return _wizard.open('relaxation', { draftId: sel.job_id, prefill: _draftPrefill(sel) })
     }
-    if (mdJobIsStartable(sel)) return _startSelected(runBtn)
+    // Renting is a start, not a submit — POST /md/jobs/{id}/start dispatches to
+    // _start_runpod_job, which pre-flights and provisions. This line is what makes the
+    // button at the top actually launch a RunPod run; before it, the click fell through
+    // and nothing happened at all.
+    if (mdJobIsStartable(sel) || mdRunpodStartable(sel)) return _startSelected(runBtn)
   })
   // "New job" opens the Job Wizard, which supplies a protocol payload to the same
   // _launchRelax gate sequence the Advanced form uses.
@@ -2924,6 +3068,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // Sizes the sbatch request for the plan step, so the whole SLURM story is
       // inspectable before the job exists.
       getSlurmPreview: body => api.getSlurmPreview(body),
+      // The RunPod half of step 1: what this whole plan would cost on each currently-available
+      // card, what it writes, and whether it fits the network volume.  One round trip carries
+      // the cards, storage, balance, live pods AND the pre-flight.
+      getRunpodJobPreview: body => api.getRunpodJobPreview(body),
+      getRunpodVolumes: () => api.getRunpodVolumes(),
+      setRunpodVolume: id => api.setRunpodVolume(id),
       // The folder picker browses the server's filesystem through the same client.
       fsApi: api,
     },
@@ -3451,6 +3601,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // hide that the job is already waiting in line).
     void _fetchQueue()
     void _applyRunConfig(jobId)
+    // ▶ Rent & Run is gated on the RunPod pre-flight, and until now that only ran when the
+    // run-target RADIO was moved. Selecting a prepared RunPod job is the other moment the
+    // answer matters — without this the gate would still be showing whatever it last saw
+    // (often nothing at all, for a job created in an earlier session).
+    if (_selectedJob()?.execution_target === 'runpod') void _runpod.refresh()
+    _paintRunpodGate()   // reveal the RunPod status box for a RunPod job
     if (displayToggle?.checked) _refreshMdDisplay()
     else _refreshMdPrewarm(true)
   }

@@ -93,10 +93,23 @@ describe('targetReadiness', () => {
     expect(targetReadiness('alpine', { clusterState: 'connected' }).reason).toMatch(/partition/)
   })
 
-  it('blocks unwired targets with their own reason', () => {
-    const r = targetReadiness('runpod')
-    expect(r.ready).toBe(false)
-    expect(r.reason).toBe(UNWIRED_TARGETS.runpod)
+  it('still blocks anything left in UNWIRED_TARGETS', () => {
+    // RunPod is wired now, so the map is empty — but the escape hatch has to keep working for
+    // the next target that appears in the list before its UI does.
+    expect(UNWIRED_TARGETS).toEqual({})
+  })
+
+  it('defers the RunPod verdict to the RunPod block', () => {
+    // "Not ready" for a rented GPU has five distinct causes (no key, no volume, failing
+    // pre-flight, no card, over budget). A generic message helps with none of them.
+    expect(targetReadiness('runpod', { runpod: { ready: true, reason: '' } }).ready).toBe(true)
+    const blocked = targetReadiness('runpod',
+      { runpod: { ready: false, reason: 'Pick a GPU.' } })
+    expect(blocked).toEqual({ ready: false, reason: 'Pick a GPU.' })
+  })
+
+  it('blocks RunPod until its block has reported', () => {
+    expect(targetReadiness('runpod').ready).toBe(false)
   })
 
   it('blocks an unknown target', () => {
@@ -108,15 +121,39 @@ describe('targetPayloadFields', () => {
   it('local carries no cluster fields', () => {
     expect(targetPayloadFields('local')).toEqual({
       execution_target: 'local', cluster_name: null, partition: null,
-      slurm_resources: null, runpod_gpu_key: null,
+      slurm_resources: null, runpod_gpu_key: null, runpod_budget_usd: null,
+      runpod_volume_id: null,
     })
   })
 
   it('alpine carries the cluster and the chosen partition', () => {
     expect(targetPayloadFields('alpine', { partition: 'ah200' })).toEqual({
       execution_target: 'alpine', cluster_name: 'alpine', partition: 'ah200',
-      slurm_resources: null, runpod_gpu_key: null,
+      slurm_resources: null, runpod_gpu_key: null, runpod_budget_usd: null,
+      runpod_volume_id: null,
     })
+  })
+
+  it('runpod carries the card, the spend cap and the volume', () => {
+    // All three were chosen against a live price/stock picture that will be long gone by
+    // launch — which can be a later session.
+    expect(targetPayloadFields('runpod', {
+      runpodGpuKey: 'NVIDIA GeForce RTX 4090', runpodBudgetUsd: 25, runpodVolumeId: 'vol1',
+    })).toEqual({
+      execution_target: 'runpod', cluster_name: null, partition: null, slurm_resources: null,
+      runpod_gpu_key: 'NVIDIA GeForce RTX 4090', runpod_budget_usd: 25,
+      runpod_volume_id: 'vol1',
+    })
+  })
+
+  it('clears stale RunPod choices when the target is not runpod', () => {
+    // A leftover card or cap on a job re-pointed at the local GPU would resurface at launch.
+    const p = targetPayloadFields('local', {
+      runpodGpuKey: 'NVIDIA GeForce RTX 4090', runpodBudgetUsd: 25, runpodVolumeId: 'vol1',
+    })
+    expect(p.runpod_gpu_key).toBeNull()
+    expect(p.runpod_budget_usd).toBeNull()
+    expect(p.runpod_volume_id).toBeNull()
   })
 
   it('clears a stale partition when the target is not alpine', () => {

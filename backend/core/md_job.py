@@ -22,37 +22,37 @@ class MdStatus(str, Enum):
     # A seeded job created by "Use as NAMD seed" whose expensive solvation is
     # DEFERRED — it sits in the list unprepared until the user sets advanced options
     # and clicks "Relax from oxDNA" (POST /md/jobs/{id}/prepare).
-    draft      = "draft"
-    queued     = "queued"
-    preparing  = "preparing"
-    running    = "running"
-    paused     = "paused"
-    failed     = "failed"
-    stopped    = "stopped"
-    completed  = "completed"
+    draft = "draft"
+    queued = "queued"
+    preparing = "preparing"
+    running = "running"
+    paused = "paused"
+    failed = "failed"
+    stopped = "stopped"
+    completed = "completed"
 
 
 @dataclass
 class MdHealthSample:
-    wall_time:               float
-    stage:                   str
-    segment:                 str
-    c1_paired_fraction:      Optional[float] = None
-    c1_mean_ang:             Optional[float] = None
-    c1_p90_ang:              Optional[float] = None
+    wall_time: float
+    stage: str
+    segment: str
+    c1_paired_fraction: Optional[float] = None
+    c1_mean_ang: Optional[float] = None
+    c1_p90_ang: Optional[float] = None
     wc_ref_relative_fraction: Optional[float] = None
-    wc_mean_hbond_ang:       Optional[float] = None
-    passed:                  bool = True
+    wc_mean_hbond_ang: Optional[float] = None
+    passed: bool = True
     # False only for a non-blocking advisory failure (WC-only breach): the checkpoint
     # did not fully pass but the run was allowed to continue.  Blocking failures
     # (C1' breach / hard error) keep the default True and stop the job.
-    blocking:                bool = True
-    reason:                  str  = ""
+    blocking: bool = True
+    reason: str = ""
     #: Broken base pairs by the TUTORIAL's definition (central WC bond within 3.0 Å and
     #: near-linear) — the citable number, alongside the ref-relative fraction that gates.
-    broken_bp_count:         Optional[int] = None
+    broken_bp_count: Optional[int] = None
     #: Net charge (e) within 2 nm of the DNA: has the counterion atmosphere converged?
-    charge_within_shell_e:   Optional[float] = None
+    charge_within_shell_e: Optional[float] = None
     #: Provenance of the two per-frame diagnostics above.  Three-valued, and the UI
     #: depends on all three being distinguishable:
     #:   ``None``  — this sample predates the field, or the probe skipped the per-frame
@@ -63,11 +63,18 @@ class MdHealthSample:
     #: A key-presence test cannot substitute for this: ``MdJob.load`` reconstructs every
     #: sample through ``MdHealthSample(**h)`` and ``save`` re-emits it via ``asdict``, so
     #: old samples are normalised to the current shape on the next save.
-    diagnostics:             Optional[str] = None
+    diagnostics: Optional[str] = None
 
     @classmethod
-    def from_result(cls, hresult, stage: str, segment: str, *, blocking: bool,
-                    wall_time: Optional[float] = None) -> "MdHealthSample":
+    def from_result(
+        cls,
+        hresult,
+        stage: str,
+        segment: str,
+        *,
+        blocking: bool,
+        wall_time: Optional[float] = None,
+    ) -> "MdHealthSample":
         """Build a sample from a ``md_health.HealthCheckResult``.
 
         The single construction point for every producer (end-of-segment, in-flight,
@@ -84,30 +91,30 @@ class MdHealthSample:
         if diagnostics is None and getattr(hresult, "per_frame_ran", False):
             diagnostics = "ok"
         return cls(
-            wall_time                = time.time() if wall_time is None else wall_time,
-            stage                    = stage,
-            segment                  = segment,
-            c1_paired_fraction       = hresult.c1_paired_fraction,
-            c1_mean_ang              = hresult.c1_mean_ang,
-            c1_p90_ang               = hresult.c1_p90_ang,
-            wc_ref_relative_fraction = hresult.wc_ref_relative_fraction,
-            wc_mean_hbond_ang        = hresult.wc_mean_hbond_ang,
-            passed                   = hresult.passed,
-            blocking                 = blocking,
-            reason                   = hresult.reason or (hresult.error or ""),
-            broken_bp_count          = hresult.broken_bp_count,
-            charge_within_shell_e    = hresult.charge_within_shell_e,
-            diagnostics              = diagnostics,
+            wall_time=time.time() if wall_time is None else wall_time,
+            stage=stage,
+            segment=segment,
+            c1_paired_fraction=hresult.c1_paired_fraction,
+            c1_mean_ang=hresult.c1_mean_ang,
+            c1_p90_ang=hresult.c1_p90_ang,
+            wc_ref_relative_fraction=hresult.wc_ref_relative_fraction,
+            wc_mean_hbond_ang=hresult.wc_mean_hbond_ang,
+            passed=hresult.passed,
+            blocking=blocking,
+            reason=hresult.reason or (hresult.error or ""),
+            broken_bp_count=hresult.broken_bp_count,
+            charge_within_shell_e=hresult.charge_within_shell_e,
+            diagnostics=diagnostics,
         )
 
 
 @dataclass
 class MdSegmentStatus:
-    name:    str
-    stage:   str
+    name: str
+    stage: str
     percent: float
-    steps:   int
-    status:  str = "pending"   # pending / running / done / failed
+    steps: int
+    status: str = "pending"  # pending / running / done / failed
     # True when this chunk was never actually run: the early-stop accelerator
     # (md_cutoff) found the stage had already plateaued, so this redundant chunk
     # was marked done without executing.  status stays "done" (it counts as
@@ -337,6 +344,23 @@ class MdJob:
     # fail.  The chain script is idempotent, so resume = relaunch it.
     runpod_heartbeat: Optional[int] = None
 
+    # The three choices the Job Wizard makes BEFORE the pod exists, recorded so they survive
+    # to launch — which can be a later session, long after the price and stock picture that
+    # motivated them. Same rationale as ``partition`` for Alpine.
+    #
+    # ``runpod_gpu_key`` is the card the user actually chose from the ranked table (live price,
+    # live stock, $/ns AND ns/day). It is a PREFERENCE, not a demand: the network volume pins
+    # the datacenter, so a single named GPU frequently 500s with "no instances currently
+    # available" — it heads the priority list rather than replacing it.
+    #
+    # ``runpod_budget_usd`` is a BUDGET, not a duration: ``lifetime_for_budget`` derives the
+    # pod's kill-switch wall-clock from the rate of the card actually obtained, because the
+    # same $15 buys 44 h at $0.34/hr and 6 h at $2.39/hr.  ⚠️ It caps ONE pod and has no
+    # memory — N resumes can cost N x the cap. Cumulative spend is still unbuilt.
+    runpod_gpu_key: Optional[str] = None
+    runpod_budget_usd: Optional[float] = None
+    runpod_volume_id: Optional[str] = None
+
     # ── Paths ──────────────────────────────────────────────────────────────────
 
     def job_dir(self, workspace_dir: Path) -> Path:
@@ -364,9 +388,10 @@ class MdJob:
     @classmethod
     def load(cls, job_id: str, workspace_dir: Path) -> "MdJob":
         from backend.core.job_archive import resolve_job_json
+
         path = resolve_job_json(workspace_dir, "md_jobs", job_id)
         data = json.loads(path.read_text())
-        data["status"]   = MdStatus(data["status"])
+        data["status"] = MdStatus(data["status"])
         data["segments"] = [MdSegmentStatus(**s) for s in data.get("segments", [])]
         _min = data.get("minimization")
         data["minimization"] = MdSegmentStatus(**_min) if _min else None
@@ -385,7 +410,9 @@ class MdJob:
         data.setdefault("ensemble_seed", None)
         data.setdefault("ensemble_index", None)
         data.setdefault("run_kind", None)
-        data.setdefault("early_stop_relax", False)   # pre-existing jobs keep their setting
+        data.setdefault(
+            "early_stop_relax", False
+        )  # pre-existing jobs keep their setting
         data.setdefault("early_stop_tier", "B")
         data.setdefault("failure_kind", None)
         data.setdefault("decision", None)
@@ -417,11 +444,15 @@ class MdJob:
         data.setdefault("runpod_pod_id", None)
         data.setdefault("runpod_pid", None)
         data.setdefault("runpod_heartbeat", None)
+        data.setdefault("runpod_gpu_key", None)
+        data.setdefault("runpod_budget_usd", None)
+        data.setdefault("runpod_volume_id", None)
         return cls(**data)
 
     @classmethod
     def list_jobs(cls, workspace_dir: Path) -> list["MdJob"]:
         from backend.core.job_archive import archived_job_ids
+
         result = []
         seen: set[str] = set()
         jobs_dir = workspace_dir / "md_jobs"
@@ -468,24 +499,24 @@ def new_job(
     run_kind: Optional[str] = None,
 ) -> MdJob:
     return MdJob(
-        job_id         = uuid.uuid4().hex[:12],
-        design_name    = design_name,
-        protocol       = protocol,
-        status         = MdStatus.queued,
-        created_at     = time.time(),
-        package_subdir = package_subdir,
-        name_stem      = name_stem,
-        threads        = threads,
-        devices        = devices,
-        design_source_path = design_source_path,
-        seed_oxdna_job_id = seed_oxdna_job_id,
-        seed_mrdna_job_id = seed_mrdna_job_id,
-        seed_blade_job_id = seed_blade_job_id,
-        seed_vacuum_job_id = seed_vacuum_job_id,
-        parent_job_id  = parent_job_id,
-        ensemble_seed  = ensemble_seed,
-        ensemble_index = ensemble_index,
-        run_kind       = run_kind,
+        job_id=uuid.uuid4().hex[:12],
+        design_name=design_name,
+        protocol=protocol,
+        status=MdStatus.queued,
+        created_at=time.time(),
+        package_subdir=package_subdir,
+        name_stem=name_stem,
+        threads=threads,
+        devices=devices,
+        design_source_path=design_source_path,
+        seed_oxdna_job_id=seed_oxdna_job_id,
+        seed_mrdna_job_id=seed_mrdna_job_id,
+        seed_blade_job_id=seed_blade_job_id,
+        seed_vacuum_job_id=seed_vacuum_job_id,
+        parent_job_id=parent_job_id,
+        ensemble_seed=ensemble_seed,
+        ensemble_index=ensemble_index,
+        run_kind=run_kind,
     )
 
 
@@ -521,7 +552,9 @@ def revert_appended_production(job: "MdJob", workspace_dir: Path) -> dict:
     manifest_path = pkg / "manifest.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
 
-    prod_names = [s.name for s in job.segments if _is_production_segment_name(s.name, s.stage)]
+    prod_names = [
+        s.name for s in job.segments if _is_production_segment_name(s.name, s.stage)
+    ]
     has_manifest_ext = bool(manifest and "production_extension" in manifest)
     if not prod_names and not has_manifest_ext:
         return {"reverted": False, "reason": "no appended production found"}
@@ -545,12 +578,15 @@ def revert_appended_production(job: "MdJob", workspace_dir: Path) -> dict:
             moved += 1
 
     # Trim the job's segment list back to relaxation.
-    job.segments = [s for s in job.segments if not _is_production_segment_name(s.name, s.stage)]
+    job.segments = [
+        s for s in job.segments if not _is_production_segment_name(s.name, s.stage)
+    ]
 
     # Trim the manifest + drop the production_extension record.
     if manifest is not None:
         manifest["segments"] = [
-            s for s in manifest.get("segments", [])
+            s
+            for s in manifest.get("segments", [])
             if not _is_production_segment_name(s.get("name", ""), s.get("stage", ""))
         ]
         manifest.pop("production_extension", None)

@@ -246,14 +246,51 @@ export function nextLivePollAction({ pending, waitedMs, timeoutMs }) {
  *   'ready'   — the socket load finished (Universe + model parsed); toggling paints
  *               the latest frame near-instantly.
  *   'error'   — the last load/stream failed.
- *   anything else (incl. 'off'/undefined) — hidden (no job to warm / idle).
+ *   'waiting' — there IS a job, but nothing displayable yet (no frames written, or the
+ *               trajectory is still on a pod/cluster). Shows, because hiding it made a
+ *               live remote run look identical to no job at all.
+ *   'remote'  — the trajectory exists but is not on this computer; waiting will not
+ *               help, it needs a fetch. Distinct from 'waiting' so the wording can say so.
+ *   anything else (incl. 'off'/undefined) — hidden (no job selected / idle).
  */
 export function mdReadinessIndicator(state) {
   switch (state) {
     case 'warming': return { show: true, color: 'warn', text: 'warming…' }
     case 'ready':   return { show: true, color: 'ok',   text: 'ready' }
     case 'error':   return { show: true, color: 'err',  text: 'error' }
+    case 'waiting': return { show: true, color: 'dim',  text: 'no frames yet' }
+    case 'remote':  return { show: true, color: 'warn', text: 'on the pod' }
     default:        return { show: false, color: 'dim', text: '' }
+  }
+}
+
+/**
+ * Which readiness state a not-ready display-meta payload deserves.
+ *
+ * The panel used to collapse every `ready: false` to 'off', which HID the indicator — so a
+ * job running on a rented GPU showed nothing at all and offered no reason. The backend now
+ * classifies the four cases (`not_ready_code`); this maps them to a state and a tooltip.
+ *
+ * `null` meta (the request failed) is an ERROR, not an absence: the display genuinely
+ * cannot be assessed, and saying "off" would claim it had been.
+ */
+export function mdDisplayReadinessFromMeta(meta) {
+  if (meta === null || meta === undefined) {
+    return { state: 'error', title: 'Could not read this job’s display status.' }
+  }
+  if (meta.ready) return { state: 'ready', title: '' }
+  const reason = meta.not_ready_reason || ''
+  switch (meta.not_ready_code) {
+    case 'remote':
+      return { state: 'remote', title: reason }
+    case 'pending':
+      return { state: 'waiting', title: reason }
+    case 'empty':
+      return { state: 'error', title: reason }
+    // 'no_package' (and an older backend that sends no code at all) is the one honest
+    // "nothing to see here": there is no run to display, so the dot stays hidden.
+    default:
+      return { state: 'off', title: reason }
   }
 }
 

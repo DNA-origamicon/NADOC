@@ -2163,6 +2163,17 @@ export const oxdnaAvailable      = ()            => _oxdnaJSON('GET',  '/oxdna/a
  *  estimated relax wall-clock, and estimated cost. nAtoms omitted → backend sizes the design. */
 export const getRunpodGpuOptions = (nAtoms)      =>
   _oxdnaJSON('POST', '/runpod/gpu-options', nAtoms ? { n_atoms: nAtoms } : {})
+/** The Job Wizard's RunPod feed: the WHOLE plan costed (relaxation + production, at their own
+ *  timesteps) plus storage, balance, live pods and the pre-flight — in ONE round trip, so the
+ *  card does not fetch the same live stock four times. Body is `runpodPlanShape(plan)`. */
+export const getRunpodJobPreview = (body)        =>
+  _oxdnaJSON('POST', '/runpod/job-preview', body || {})
+/** Every network volume on the account (id, name, size_gb, data_center_id). */
+export const getRunpodVolumes    = ()            => _oxdnaJSON('GET',  '/runpod/volumes')
+/** Point the live session at a network volume. The wizard needs this because, unlike the
+ *  setup modal, it does not hold the API key that `/runpod/connect` requires. */
+export const setRunpodVolume     = (id)          =>
+  _oxdnaJSON('POST', '/runpod/volume', { network_volume_id: id })
 /** MD-engine status report (oxDNA/NAMD/GROMACS/… availability + GPU + toolchain). */
 export const enginesStatus       = ()            => _oxdnaJSON('GET',  '/engines/status')
 /** List a directory for the "pick a downloaded file" navigator ({cwd, parent, entries}).

@@ -14,6 +14,8 @@ import re
 import httpx
 import pytest
 
+from backend.core import runpod_api
+
 from backend.core import runpod_api as rp
 from backend.core.runpod_api import (
     DEFAULT_IMAGE,
@@ -42,8 +44,10 @@ def _pod_json(pod_id="p1", status="RUNNING", ip="1.2.3.4", port=10341, cost=0.34
 class TestCreatePayload:
     def payload(self, **kw):
         return build_create_payload(
-            name="nadoc-job-abc", gpu_type_ids=["NVIDIA GeForce RTX 4090"],
-            network_volume_id=VOLUME, **kw,
+            name="nadoc-job-abc",
+            gpu_type_ids=["NVIDIA GeForce RTX 4090"],
+            network_volume_id=VOLUME,
+            **kw,
         )
 
     def test_attaches_the_network_volume_at_the_right_mount(self):
@@ -87,7 +91,9 @@ class TestCreatePayload:
         """NAMD is statically linked and lives on the volume, so the image only has to
         supply the driver stack — it never needs rebuilding."""
         assert self.payload()["imageName"] == DEFAULT_IMAGE
-        assert "runpod/" in DEFAULT_IMAGE  # a bogus tag 500s at pod-create with no way to discover valid ones
+        assert (
+            "runpod/" in DEFAULT_IMAGE
+        )  # a bogus tag 500s at pod-create with no way to discover valid ones
 
 
 class TestParsePod:
@@ -111,8 +117,14 @@ class TestParsePod:
         assert parse_pod(_pod_json(status="TERMINATED")).is_terminated
 
     def test_garbage_fields_do_not_raise(self):
-        pod = parse_pod({"id": "x", "desiredStatus": "RUNNING",
-                         "portMappings": {"22": "not-a-port"}, "costPerHr": "free"})
+        pod = parse_pod(
+            {
+                "id": "x",
+                "desiredStatus": "RUNNING",
+                "portMappings": {"22": "not-a-port"},
+                "costPerHr": "free",
+            }
+        )
         assert pod.ssh_port is None
         assert pod.cost_per_hr is None
 
@@ -124,10 +136,19 @@ class TestNetworkVolumes:
 
     def test_parses_a_volume_object(self):
         v = parse_network_volume(
-            {"id": "77pnhye88p", "name": "namd-vol", "size": 60, "dataCenterId": "EU-RO-1"}
+            {
+                "id": "77pnhye88p",
+                "name": "namd-vol",
+                "size": 60,
+                "dataCenterId": "EU-RO-1",
+            }
         )
-        assert v == {"id": "77pnhye88p", "name": "namd-vol",
-                     "size_gb": 60, "data_center_id": "EU-RO-1"}
+        assert v == {
+            "id": "77pnhye88p",
+            "name": "namd-vol",
+            "size_gb": 60,
+            "data_center_id": "EU-RO-1",
+        }
 
     def test_tolerates_garbage_size(self):
         v = parse_network_volume({"id": "x", "size": "huge"})
@@ -137,10 +158,13 @@ class TestNetworkVolumes:
     def test_lists_volumes(self):
         def handler(req):
             assert req.url.path.endswith("/networkvolumes")
-            return httpx.Response(200, json=[
-                {"id": "v1", "name": "a", "size": 60, "dataCenterId": "EU-RO-1"},
-                {"id": "v2", "name": "b", "size": 100, "dataCenterId": "US-KS-2"},
-            ])
+            return httpx.Response(
+                200,
+                json=[
+                    {"id": "v1", "name": "a", "size": 60, "dataCenterId": "EU-RO-1"},
+                    {"id": "v2", "name": "b", "size": 100, "dataCenterId": "US-KS-2"},
+                ],
+            )
 
         async def go():
             c = _client(handler)
@@ -154,6 +178,7 @@ class TestNetworkVolumes:
 
     def test_unwraps_a_wrapped_response(self):
         """Some deployments wrap the list in {"networkVolumes": [...]}."""
+
         def handler(req):
             return httpx.Response(200, json={"networkVolumes": [{"id": "v1"}]})
 
@@ -177,9 +202,7 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-PAYLOAD = build_create_payload(
-    name="n", gpu_type_ids=["g"], network_volume_id=VOLUME
-)
+PAYLOAD = build_create_payload(name="n", gpu_type_ids=["g"], network_volume_id=VOLUME)
 
 
 class TestClient:
@@ -265,7 +288,9 @@ class TestClient:
         async def go():
             c = _client(handler)
             try:
-                await c.wait_for_ssh("p1", timeout_s=3, poll_s=0, sleep=_nosleep, now=clock)
+                await c.wait_for_ssh(
+                    "p1", timeout_s=3, poll_s=0, sleep=_nosleep, now=clock
+                )
             finally:
                 await c.aclose()
 
@@ -313,7 +338,9 @@ class TestClient:
 
         with pytest.raises(ZeroDivisionError):
             _run(go())
-        assert deleted == ["/v1/pods/p1"], "pod must be terminated even when the body raises"
+        assert deleted == ["/v1/pods/p1"], (
+            "pod must be terminated even when the body raises"
+        )
 
 
 async def _nosleep(_):
@@ -353,7 +380,9 @@ class TestTransientFailuresDoNotKillTheRun:
         def handler(request):
             calls["n"] += 1
             if calls["n"] < 3:
-                raise httpx.ConnectError("[Errno -3] Temporary failure in name resolution")
+                raise httpx.ConnectError(
+                    "[Errno -3] Temporary failure in name resolution"
+                )
             return httpx.Response(200, json={"id": "p1", "desiredStatus": "RUNNING"})
 
         pod = asyncio.run(self._client(handler).get_pod("p1"))
@@ -428,20 +457,24 @@ class TestAPodThatNeverProvisionsSTILLBILLS:
 
         def handler(request):
             if request.method == "POST" and request.url.path.endswith("/pods"):
-                return httpx.Response(200, json={"id": "DEAD1", "desiredStatus": "RUNNING",
-                                                 "costPerHr": 0.69})
+                return httpx.Response(
+                    200,
+                    json={"id": "DEAD1", "desiredStatus": "RUNNING", "costPerHr": 0.69},
+                )
             if request.method == "DELETE":
                 terminated.append(request.url.path)
                 return httpx.Response(200, json={})
             # GET: RUNNING forever, but NEVER an ssh endpoint.
-            return httpx.Response(200, json={"id": "DEAD1", "desiredStatus": "RUNNING",
-                                             "costPerHr": 0.69})
+            return httpx.Response(
+                200, json={"id": "DEAD1", "desiredStatus": "RUNNING", "costPerHr": 0.69}
+            )
 
         client = RunpodClient("k", transport=httpx.MockTransport(handler))
 
         async def go():
-            async with client.pod({"x": 1}, wait_timeout_s=0.0,
-                                  on_created=lambda p: booked.append(p.id)):
+            async with client.pod(
+                {"x": 1}, wait_timeout_s=0.0, on_created=lambda p: booked.append(p.id)
+            ):
                 pass  # pragma: no cover — wait_for_ssh must raise before we get here
 
         with pytest.raises(Exception):
@@ -455,15 +488,21 @@ class TestAPodThatNeverProvisionsSTILLBILLS:
         seen = {}
 
         def handler(request):
-            body = {"id": "P1", "desiredStatus": "RUNNING", "costPerHr": 0.74,
-                    "publicIp": "1.2.3.4", "portMappings": {"22": 1234}}
+            body = {
+                "id": "P1",
+                "desiredStatus": "RUNNING",
+                "costPerHr": 0.74,
+                "publicIp": "1.2.3.4",
+                "portMappings": {"22": 1234},
+            }
             return httpx.Response(200, json=body)
 
         client = RunpodClient("k", transport=httpx.MockTransport(handler))
 
         async def go():
-            async with client.pod({"x": 1},
-                                  on_created=lambda p: seen.update(id=p.id, rate=p.cost_per_hr)):
+            async with client.pod(
+                {"x": 1}, on_created=lambda p: seen.update(id=p.id, rate=p.cost_per_hr)
+            ):
                 pass
 
         asyncio.run(go())
@@ -487,9 +526,75 @@ class TestNeverRentAHostThatCannotRunTheImage:
         """
         m = re.search(r"cu(\d{2})(\d)", rp.DEFAULT_IMAGE)
         assert m, f"cannot read a CUDA version out of {rp.DEFAULT_IMAGE!r}"
-        want = f"{m.group(1)}.{m.group(2)}"          # "12.8"
+        want = f"{m.group(1)}.{m.group(2)}"  # "12.8"
         assert want in rp.DEFAULT_ALLOWED_CUDA, (
             f"image needs CUDA {want} but allowedCudaVersions is "
             f"{rp.DEFAULT_ALLOWED_CUDA} — hosts too old for the image would be rented, "
             f"boot, never start sshd, and bill for the whole wait_for_ssh timeout"
         )
+
+
+class TestHandoffAcrossAReload:
+    """A pod survives a dev-server reload only if the UNWIND spares it.
+
+    The teardown is structural: at process exit every in-flight task is cancelled, the
+    CancelledError unwinds through ``pod()``'s finally, and the pod dies. Skipping the
+    explicit shutdown hook does nothing about that — which is how a live 200 ns run was
+    lost twice, once to the hook and once to the unwind.
+    """
+
+    def _client(self, deleted):
+        def handler(req):
+            if req.method == "DELETE":
+                deleted.append(req.url.path)
+                return httpx.Response(200)
+            if req.method == "POST":
+                return httpx.Response(201, json=_pod_json())
+            return httpx.Response(200, json=_pod_json())
+
+        return RunpodClient("k", transport=httpx.MockTransport(handler))
+
+    def teardown_method(self):
+        runpod_api.set_handoff(False)   # never leak the flag between tests
+
+    def test_a_cancelled_run_normally_destroys_the_pod(self):
+        deleted: list[str] = []
+        client = self._client(deleted)
+
+        async def go():
+            async with client.pod({"name": "nadoc-x"}):
+                raise asyncio.CancelledError()
+
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(go())
+        assert deleted == ["/v1/pods/p1"], "the default MUST stay destroy-on-unwind"
+
+    def test_handoff_spares_the_pod_on_the_unwind(self):
+        deleted: list[str] = []
+        client = self._client(deleted)
+        runpod_api.set_handoff(True)
+
+        async def go():
+            async with client.pod({"name": "nadoc-x"}):
+                raise asyncio.CancelledError()
+
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(go())
+        assert deleted == [], "a handed-off pod must survive for the next process to adopt"
+
+    def test_handoff_spares_an_adopted_pod_too(self):
+        deleted: list[str] = []
+        client = self._client(deleted)
+        runpod_api.set_handoff(True)
+
+        async def go():
+            async with client.adopt("p1"):
+                raise asyncio.CancelledError()
+
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(go())
+        assert deleted == []
+
+    def test_the_flag_is_off_by_default(self):
+        """Fail toward destroying pods: the expensive mistake is the one that bills."""
+        assert runpod_api._handing_off() is False  # noqa: SLF001

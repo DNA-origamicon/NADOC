@@ -37,8 +37,13 @@ def _reset_session():
 
 
 def _pod(pid="p1", status="RUNNING"):
-    return {"id": pid, "desiredStatus": status, "publicIp": "1.2.3.4",
-            "portMappings": {"22": 10341}, "costPerHr": 0.34}
+    return {
+        "id": pid,
+        "desiredStatus": status,
+        "publicIp": "1.2.3.4",
+        "portMappings": {"22": 10341},
+        "costPerHr": 0.34,
+    }
 
 
 def _mock_runpod(monkeypatch, handler):
@@ -83,7 +88,9 @@ class TestEstimate:
         assert "carve" in body["reason"].lower() or "gbis" in body["reason"].lower()
 
     def test_rejects_a_nonsense_atom_count(self, client):
-        assert client.post("/api/runpod/estimate", json={"n_atoms": 0}).status_code == 422
+        assert (
+            client.post("/api/runpod/estimate", json={"n_atoms": 0}).status_code == 422
+        )
 
     def test_gpu_types_are_listed_cheapest_first(self, client):
         gpus = client.get("/api/runpod/gpu-types").json()["gpus"]
@@ -99,8 +106,10 @@ class TestConnect:
 
     def test_connect_verifies_the_key_and_reports_live_pods(self, client, monkeypatch):
         _mock_runpod(monkeypatch, lambda req: httpx.Response(200, json=[_pod()]))
-        r = client.post("/api/runpod/connect",
-                        json={"api_key": "rp_abcdefgh", "network_volume_id": VOLUME})
+        r = client.post(
+            "/api/runpod/connect",
+            json={"api_key": "rp_abcdefgh", "network_volume_id": VOLUME},
+        )
         assert r.status_code == 200
         body = r.json()
         assert body["connected"] is True
@@ -109,8 +118,10 @@ class TestConnect:
 
     def test_a_bad_key_is_a_400_not_a_500(self, client, monkeypatch):
         _mock_runpod(monkeypatch, lambda req: httpx.Response(401, text="nope"))
-        r = client.post("/api/runpod/connect",
-                        json={"api_key": "rp_bogus1234", "network_volume_id": VOLUME})
+        r = client.post(
+            "/api/runpod/connect",
+            json={"api_key": "rp_bogus1234", "network_volume_id": VOLUME},
+        )
         assert r.status_code == 400
         assert "API key" in r.json()["detail"]
 
@@ -120,8 +131,10 @@ class TestConnect:
 
     def test_disconnect_clears_the_key(self, client, monkeypatch):
         _mock_runpod(monkeypatch, lambda req: httpx.Response(200, json=[]))
-        client.post("/api/runpod/connect",
-                    json={"api_key": "rp_abcdefgh", "network_volume_id": VOLUME})
+        client.post(
+            "/api/runpod/connect",
+            json={"api_key": "rp_abcdefgh", "network_volume_id": VOLUME},
+        )
         assert client.post("/api/runpod/disconnect").json()["connected"] is False
         assert client.get("/api/runpod/pods").status_code == 400
 
@@ -142,8 +155,10 @@ class TestSetupWizard:
     def test_a_key_only_reverify_keeps_the_chosen_volume(self, client, monkeypatch):
         """Reconnecting to refresh status must not wipe a volume the user already set."""
         _mock_runpod(monkeypatch, lambda req: httpx.Response(200, json=[]))
-        client.post("/api/runpod/connect",
-                    json={"api_key": "rp_abcdefgh", "network_volume_id": VOLUME})
+        client.post(
+            "/api/runpod/connect",
+            json={"api_key": "rp_abcdefgh", "network_volume_id": VOLUME},
+        )
         r = client.post("/api/runpod/connect", json={"api_key": "rp_abcdefgh"})
         assert r.json()["network_volume_id"] == VOLUME
 
@@ -153,9 +168,17 @@ class TestSetupWizard:
     def test_volumes_are_listed_for_the_dropdown(self, client, monkeypatch):
         def handler(req):
             if req.url.path.endswith("/networkvolumes"):
-                return httpx.Response(200, json=[
-                    {"id": VOLUME, "name": "namd", "size": 60, "dataCenterId": "EU-RO-1"},
-                ])
+                return httpx.Response(
+                    200,
+                    json=[
+                        {
+                            "id": VOLUME,
+                            "name": "namd",
+                            "size": 60,
+                            "dataCenterId": "EU-RO-1",
+                        },
+                    ],
+                )
             return httpx.Response(200, json=[])
 
         _mock_runpod(monkeypatch, handler)
@@ -176,15 +199,21 @@ class TestSetupWizard:
         async def fake_balance(api_key, **kw):
             return {"available": True, "balance": 207.0, "spend_per_hr": 0.0}
 
-        monkeypatch.setattr(routes_runpod.runpod_preflight, "fetch_balance", fake_balance)
+        monkeypatch.setattr(
+            routes_runpod.runpod_preflight, "fetch_balance", fake_balance
+        )
         body = client.get("/api/runpod/balance").json()
         assert body["available"] is True
         assert body["balance"] == 207.0
 
-    def test_ssh_public_key_reports_present_when_it_exists(self, client, monkeypatch, tmp_path):
+    def test_ssh_public_key_reports_present_when_it_exists(
+        self, client, monkeypatch, tmp_path
+    ):
         home = tmp_path
         (home / ".ssh").mkdir()
-        (home / ".ssh" / "id_ed25519.pub").write_text("ssh-ed25519 AAAAC3Nz user@host\n")
+        (home / ".ssh" / "id_ed25519.pub").write_text(
+            "ssh-ed25519 AAAAC3Nz user@host\n"
+        )
         monkeypatch.setattr(routes_runpod.Path, "home", staticmethod(lambda: home))
         body = client.get("/api/runpod/ssh-public-key").json()
         assert body["present"] is True
@@ -200,10 +229,13 @@ class TestSetupWizard:
 class TestPodLeakCheck:
     def test_lists_live_pods_with_their_hourly_cost(self, client, monkeypatch):
         """Anything here is BILLING. The cost is shown so a forgotten pod is obvious."""
-        _mock_runpod(monkeypatch, lambda req: httpx.Response(
-            200, json=[_pod("p1"), _pod("p2")]))
-        client.post("/api/runpod/connect",
-                    json={"api_key": "rp_abcdefgh", "network_volume_id": VOLUME})
+        _mock_runpod(
+            monkeypatch, lambda req: httpx.Response(200, json=[_pod("p1"), _pod("p2")])
+        )
+        client.post(
+            "/api/runpod/connect",
+            json={"api_key": "rp_abcdefgh", "network_volume_id": VOLUME},
+        )
         pods = client.get("/api/runpod/pods").json()["pods"]
         assert [p["id"] for p in pods] == ["p1", "p2"]
         assert pods[0]["cost_per_hr"] == 0.34
@@ -211,14 +243,17 @@ class TestPodLeakCheck:
 
     def test_terminate_is_idempotent(self, client, monkeypatch):
         """Called from cleanup paths — an exception here leaks the pod it was killing."""
+
         def handler(req):
             if req.method == "DELETE":
                 return httpx.Response(404, text="gone")
             return httpx.Response(200, json=[])
 
         _mock_runpod(monkeypatch, handler)
-        client.post("/api/runpod/connect",
-                    json={"api_key": "rp_abcdefgh", "network_volume_id": VOLUME})
+        client.post(
+            "/api/runpod/connect",
+            json={"api_key": "rp_abcdefgh", "network_volume_id": VOLUME},
+        )
         r = client.post("/api/runpod/pods/p1/terminate")
         assert r.status_code == 200
         assert r.json()["ok"] is True
@@ -234,8 +269,15 @@ class TestGpuOptions:
         assert d["ok"] and d["gpus"], d
         assert d["n_atoms"] == 1_310_154 and d["relax_ns"] == 19.2
         row = d["gpus"][0]
-        for k in ("label", "usd_per_hour", "vram_gb", "available", "ns_day",
-                  "relax_hours", "est_cost"):
+        for k in (
+            "label",
+            "usd_per_hour",
+            "vram_gb",
+            "available",
+            "ns_day",
+            "relax_hours",
+            "est_cost",
+        ):
             assert k in row, f"missing {k}"
         assert row["relax_hours"] > 0 and row["est_cost"] > 0
 
@@ -251,3 +293,163 @@ class TestGpuOptions:
         r = client.post("/api/runpod/gpu-options", json={})
         assert r.status_code == 200
         assert "gpus" in r.json()
+
+
+class TestSetVolume:
+    """The wizard's volume picker.
+
+    It cannot re-POST ``/connect`` the way the setup modal does: the modal still holds the API
+    key in its own closure, and the wizard must never hold it at all.
+    """
+
+    def test_sets_the_session_volume_without_an_api_key(self, client, monkeypatch):
+        _mock_runpod(monkeypatch, lambda r: httpx.Response(200, json=[]))
+        client.post("/api/runpod/connect", json={"api_key": "k" * 12})
+        r = client.post("/api/runpod/volume", json={"network_volume_id": "abc123"})
+        assert r.status_code == 200
+        assert r.json()["network_volume_id"] == "abc123"
+        assert routes_runpod._SESSION.network_volume_id == "abc123"  # noqa: SLF001
+
+    def test_refuses_when_not_connected(self, client):
+        r = client.post("/api/runpod/volume", json={"network_volume_id": "abc123"})
+        assert r.status_code == 400
+
+
+class TestJobPreview:
+    """The Job Wizard's feed: a WHOLE plan costed — relax + production + storage + budget.
+
+    Distinct from ``/gpu-options`` in the one way that matters to the wizard: the numbers move
+    when the run being designed moves.
+    """
+
+    BODY = {
+        "n_atoms": 1_310_154,
+        "relax_ns": 19.2,
+        "production_ns": 50.0,
+        "relax_timestep_fs": 2.0,
+        "production_timestep_fs": 4.0,
+    }
+
+    def test_costs_relax_and_production_separately(self, client):
+        d = client.post("/api/runpod/job-preview", json=self.BODY).json()
+        assert d["sized"] is True and d["gpus"]
+        row = d["gpus"][0]
+        for k in (
+            "relax_hours",
+            "relax_cost",
+            "production_hours",
+            "production_cost",
+            "total_hours",
+            "total_cost",
+            "ns_day",
+            "ns_day_relax",
+        ):
+            assert k in row, f"missing {k}"
+        assert (
+            abs(row["total_cost"] - (row["relax_cost"] + row["production_cost"])) < 0.02
+        )
+
+    def test_a_longer_production_moves_the_total_but_not_the_ladder(self, client):
+        """The reactivity the wizard exists to provide: change the run length on a later tab
+        and the cost follows, while the fixed relaxation cost stays put."""
+        short = client.post(
+            "/api/runpod/job-preview", json={**self.BODY, "production_ns": 10.0}
+        ).json()["gpus"][0]
+        long = client.post(
+            "/api/runpod/job-preview", json={**self.BODY, "production_ns": 100.0}
+        ).json()["gpus"][0]
+        assert long["relax_cost"] == short["relax_cost"]
+        assert long["total_cost"] > short["total_cost"]
+
+    def test_storage_forecast_from_the_stage_table(self, client):
+        d = client.post(
+            "/api/runpod/job-preview",
+            json={
+                **self.BODY,
+                "stages": [{"steps": 240_000, "dcd_freq": 5_000}] * 4,
+                "package_bytes": 1_300_000_000,
+            },
+        ).json()
+        st = d["storage"]
+        assert st["output_bytes"] > 0
+        assert st["needed_bytes"] > st["output_bytes"]  # the staged package counts too
+        assert st["staging"]["minutes"] > 0
+        assert st["used_known"] is False  # no live pod => usage unknowable
+
+    def test_budget_gate_includes_the_staging_upload(self, client):
+        """Staging bills before NAMD runs a step, so leaving it out of the comparison is how a
+        'just under budget' run goes over."""
+        d = client.post(
+            "/api/runpod/job-preview",
+            json={
+                **self.BODY,
+                "budget_usd": 0.01,
+                "package_bytes": 1_300_000_000,
+            },
+        ).json()
+        assert d["budget"]["over_budget"] is True
+        assert d["budget"]["estimated_usd"] >= d["gpus"][0]["total_cost"]
+
+    def test_generous_budget_is_not_flagged(self, client):
+        d = client.post(
+            "/api/runpod/job-preview", json={**self.BODY, "budget_usd": 100_000.0}
+        ).json()
+        assert d["budget"]["over_budget"] is False
+
+    def test_git_build_drops_sm120(self, client):
+        """A card outside the build's arch set rents fine and dies at step 0."""
+        d = client.post(
+            "/api/runpod/job-preview", json={**self.BODY, "build": "git"}
+        ).json()
+        assert d["gpus"] and all(g["sm"] != "sm_120" for g in d["gpus"])
+
+    def test_unknown_build_is_a_400_not_a_500(self, client):
+        r = client.post("/api/runpod/job-preview", json={**self.BODY, "build": "nope"})
+        assert r.status_code == 400
+
+    def test_not_connected_still_answers_with_indicative_prices(self, client):
+        d = client.post("/api/runpod/job-preview", json=self.BODY).json()
+        assert d["connected"] is False
+        assert d["note"] and "indicative" in d["note"].lower()
+        assert all(g["available"] is None for g in d["gpus"])
+        assert d["balance"]["available"] is False
+        assert d["live_pods"] == []
+
+    def test_no_design_and_no_size_says_so(self, client):
+        """No size, no honest cost — and no 500 either."""
+        r = client.post("/api/runpod/job-preview", json={})
+        assert r.status_code == 200
+        d = r.json()
+        if d["sized"] is False:
+            assert d["reason"]
+        else:  # a design happened to be loaded in the session
+            assert d["n_atoms"] > 0 and d["n_atoms_source"] == "estimated"
+
+    def test_stock_failure_degrades_instead_of_500ing(self, client, monkeypatch):
+        """A Cloudflare hiccup on the GraphQL stock query must not take the panel down."""
+
+        async def boom(*a, **kw):
+            raise RuntimeError("cloudflare 1010")
+
+        monkeypatch.setattr(routes_runpod.runpod_preflight, "fetch_gpu_stock", boom)
+        routes_runpod._SESSION.api_key = "k" * 12  # noqa: SLF001
+        r = client.post("/api/runpod/job-preview", json=self.BODY)
+        assert r.status_code == 200
+        assert r.json()["gpus"]
+
+    def test_live_pods_surface_as_a_billing_warning(self, client, monkeypatch):
+        """Anything in `live_pods` is billing right now — the wizard shows it in red."""
+
+        def handler(request):
+            if request.url.path.endswith("/pods"):
+                return httpx.Response(200, json=[_pod()])
+            return httpx.Response(200, json=[])
+
+        _mock_runpod(monkeypatch, handler)
+        client.post(
+            "/api/runpod/connect",
+            json={"api_key": "k" * 12, "network_volume_id": VOLUME},
+        )
+        d = client.post("/api/runpod/job-preview", json=self.BODY).json()
+        assert d["connected"] is True
+        assert [p["id"] for p in d["live_pods"]] == ["p1"]

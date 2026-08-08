@@ -9,6 +9,39 @@ metadata:
 
 The MD jobs panel got oxDNA-parity visualization tools (trajectory scrub + flexibility/RMSF map) to replace VMD for viewing NAMD runs. Built 2026-06-22.
 
+## Display-MD readiness dot: "off" used to mean "shrug" (fixed 2026-08-07)
+
+`GET /md/jobs/{id}/display` returned a bare `ready: false` with no reason, and the panel
+collapsed every such case to `'off'` — which **hides the indicator**. A run going on a
+rented RunPod GPU therefore looked identical to having no job at all: toggle Display MD,
+get nothing, no explanation anywhere.
+
+`backend/core/md_display_status.display_not_ready()` (pure, tested) now classifies the four
+genuinely different cases, and only one of them is a problem:
+
+| code | meaning | dot |
+|---|---|---|
+| `no_package` | never built — nothing exists to show | hidden (the one honest absence) |
+| `pending` | running here, no frames yet; resolves itself | `no frames yet` (dim) |
+| `remote` | trajectory is on the pod/cluster; waiting will NOT help, it needs a fetch | `on the pod` (amber) |
+| `empty` | terminal having written no trajectory | `error` |
+
+`mdDisplayReadinessFromMeta()` in `md_display_state.js` maps code → state; the reason rides
+in the dot's tooltip. A **null** meta (request failed) is `error`, not `off` — saying "off"
+would claim the display had been assessed and found empty.
+
+Two Alpine-isms fixed alongside: the toggle-on status line said *"Running on Alpine"* for a
+RunPod job (`mdIsRemoteRunning` is Alpine-only, so it fell through to a generic "waiting"),
+and `liveFrameLabel` labelled every snapshot "Alpine". Both take the execution target now.
+The **spinner is reserved for waits that end on their own** — a trajectory sitting on a pod
+gets none, because spinning promises an arrival that will never come.
+
+All four cases verified in the running app, zero console errors.
+
+⚠️ Testing this in Playwright needs `#md-jobs-show-all` checked: `filterJobsForPart` drops a
+mock job that carries no part path, so `_selectDisplayJob()` returns null and the dot stays
+'off' no matter what the meta says. That cost a while to spot.
+
 **Architecture — reuse, don't reimplement.** `initOxdnaDisplay({api, ...})` is a factory that takes its data source as an injected `api` dep and calls it through oxDNA-named methods (getOxdnaTrajectory, getOxdnaRmsf, ...). The CG/nadoc-bead trajectory + RMSF payloads are byte-identical between oxDNA and MD (`md_trajectory.py` mirrors `oxdna_health`'s shapes). So a SECOND controller instance pointed at `mdVizApiAdapter(api)` (frontend/src/ui/md_viz_adapter.js — maps getOxdnaTrajectory→getMdTrajectory, getOxdnaRmsf→getMdRmsf) gives NAMD jobs the whole scrub/colour/recolor machinery with ZERO changes to the validated oxDNA controller. `mdViz` is created in main.js right after `oxdnaDisplay` (same renderer deps) and passed to initMdJobsPanel as `getMdViz`.
 
 **Backend.** `md_rmsf()` in backend/core/md_trajectory.py pools ALL written segments (user chose "all segments" gating), Kabsch-aligns each sampled frame via the existing `_extract_md_nadoc_frame`, returns the oxDNA `/rmsf` shape. Route: `GET /md/jobs/{id}/rmsf` in routes_md.py. Trajectory endpoints (`/trajectory`, `/trajectory-meta`, `/frames-atomistic`, `/frames-surface`) already existed. RMSF default max_frames=150 (statistics fine; bounds per-frame Kabsch cost).

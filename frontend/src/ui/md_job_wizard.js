@@ -20,6 +20,7 @@
 import { createButton, createInput, createSelect, createModal, el } from './primitives/index.js'
 import { initWizardTargetStep } from './md_job_wizard_target.js'
 import { renderSlurmDetails } from './md_job_wizard_target_model.js'
+import { runpodPlanShape } from './md_job_wizard_runpod_model.js'
 import {
   allStageConditions,
   applySnapshot,
@@ -1754,6 +1755,16 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       // the job has already been built.
       getSlurmPreview: api?.getSlurmPreview,
       getTotalNs: () => Number(plan?.totals?.total_ns || 0),
+      // The RunPod card prices the WHOLE plan — ladder and production at their own timesteps —
+      // so it needs the stage table, not just the total. `runpodPlanShape` derives everything
+      // from the plan the wizard already has, and `refreshSizing()` re-runs it on every plan
+      // change, which is what makes the cost follow the later tabs.
+      getJobPreview: api?.getRunpodJobPreview,
+      getVolumes: api?.getRunpodVolumes,
+      setVolume: api?.setRunpodVolume,
+      getPlanShape: () => runpodPlanShape(plan, {
+        productionNsIntent: valueOf('production_ns_intent'),
+      }),
       fsApi: api?.fsApi,
       initialTarget: state.target,
       readOnly: () => readOnly,
@@ -1879,6 +1890,14 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       targetStep?.showRecorded?.({
         target: view.target, partition: view.partition,
         resources: job?.resources || null, requested: job?.requested_resources || null,
+        // Read off the JOB, not `prep_params`: a job can be re-pointed at a different target
+        // after it was created, which is why `target`/`partition` come from there too.
+        runpod: {
+          gpuKey: job?.runpod_gpu_key || null,
+          budgetUsd: job?.runpod_budget_usd ?? null,
+          volumeId: job?.runpod_volume_id || null,
+          podId: job?.runpod_pod_id || null,
+        },
       })
     }
     if (mode && !readOnly) state.mode = mode

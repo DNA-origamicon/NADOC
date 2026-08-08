@@ -3,8 +3,11 @@ import {
   formatCost,
   formatRelaxTime,
   gpuOptionView,
+  gpuOptionsHeader,
   gpuOptionsMessage,
+  jobOptionView,
   renderGpuOptionRows,
+  renderJobOptionRows,
   stockBadge,
 } from './runpod_gpu_options.js'
 
@@ -79,5 +82,78 @@ describe('renderGpuOptionRows', () => {
     expect(html).toContain('&lt;x&gt;')
     expect(html).toContain('a&quot;b')
     expect(renderGpuOptionRows([], null)).toBe('')
+  })
+})
+
+// ── the Job Wizard's whole-plan table ────────────────────────────────────────────
+const JOB_ROW = {
+  key: 'NVIDIA GeForce RTX 4090', label: 'RTX 4090', vram_gb: 24, usd_per_hour: 0.69,
+  live_price: true, available: true, ns_day: 24.0, ns_day_relax: 12.0,
+  relax_hours: 4.0, relax_cost: 2.76, production_hours: 5.0, production_cost: 3.45,
+  total_hours: 9.0, total_cost: 6.21,
+}
+
+describe('jobOptionView', () => {
+  it('carries relaxation, production and the total separately', () => {
+    const v = jobOptionView(JOB_ROW)
+    expect(v.time).toBe('4.0 h')
+    expect(v.relaxCost).toBe('$2.76')
+    expect(v.production).toBe('5.0 h')
+    expect(v.productionCost).toBe('$3.45')
+    expect(v.total).toBe('9.0 h')
+    expect(v.totalCost).toBe('$6.21')
+  })
+
+  it('quotes the relaxation rate as well as the production one', () => {
+    // The ladder runs at a slower timestep, so one ns/day number would misdescribe half the run.
+    expect(jobOptionView(JOB_ROW).nsdayRelax).toMatch(/12 ns\/day relaxing/)
+  })
+
+  it('flags a card whose total exceeds the cap', () => {
+    expect(jobOptionView(JOB_ROW, { budgetUsd: 5 }).overBudget).toBe(true)
+    expect(jobOptionView(JOB_ROW, { budgetUsd: 20 }).overBudget).toBe(false)
+    expect(jobOptionView(JOB_ROW).overBudget).toBe(false)   // no cap => no claim
+  })
+})
+
+describe('renderJobOptionRows', () => {
+  it('keeps the selectable-row contract the click wiring depends on', () => {
+    const html = renderJobOptionRows([JOB_ROW], null)
+    expect(html).toContain('class="runpod-gpu-row"')
+    expect(html).toContain('data-key="NVIDIA GeForce RTX 4090"')
+    expect(html).toContain('role="button"')
+    expect(html).toContain('tabindex="0"')
+  })
+
+  it('badges only the first row as best value', () => {
+    const html = renderJobOptionRows([JOB_ROW, { ...JOB_ROW, key: 'b', label: 'L40S' }], null)
+    expect(html.match(/best value/g)).toHaveLength(1)
+  })
+
+  it('leaves an over-budget row selectable — raising the cap is a valid answer', () => {
+    const html = renderJobOptionRows([JOB_ROW], null, { budgetUsd: 1 })
+    expect(html).toContain('runpod-gpu-row')
+    expect(html).toMatch(/over your cap/)
+  })
+
+  it('renders nothing for an empty list', () => {
+    expect(renderJobOptionRows([], null)).toBe('')
+  })
+})
+
+describe('the Clusters card is untouched', () => {
+  it('still renders its original four-column header', () => {
+    // The wizard's six-column table is a SEPARATE renderer. If this ever picks up the
+    // production columns, the Clusters card silently changed shape.
+    const h = gpuOptionsHeader()
+    expect(h).toContain('<span>relax</span>')
+    expect(h).not.toContain('<span>production</span>')
+    expect(h).not.toContain('<span>total</span>')
+  })
+
+  it('still renders its original rows, with no best-value badge', () => {
+    const html = renderGpuOptionRows([{ ...JOB_ROW, relax_hours: 4.0, est_cost: 2.76 }], null)
+    expect(html).toContain('runpod-gpu-row')
+    expect(html).not.toMatch(/best value/)
   })
 })

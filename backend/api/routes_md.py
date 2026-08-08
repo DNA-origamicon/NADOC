@@ -41,9 +41,19 @@ from backend.core import job_archive
 from backend.core import md_chain_executor as _chain
 from backend.core import md_plan
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
-from backend.core.md_pipeline import MdPipeline, PipelineStage, StagePlan, cross_engine_seed
-from backend.core.md_presets import (DEFAULT_PRESET, FAST_SHAPE, get_preset,
-                                     preset_availability, preset_catalogue)
+from backend.core.md_pipeline import (
+    MdPipeline,
+    PipelineStage,
+    StagePlan,
+    cross_engine_seed,
+)
+from backend.core.md_presets import (
+    DEFAULT_PRESET,
+    FAST_SHAPE,
+    get_preset,
+    preset_availability,
+    preset_catalogue,
+)
 from backend.core.md_ensemble import NAMD_SEED_MAX, random_seed
 from backend.core.md_integrator import resolve_integrator
 from backend.core.md_protocols import (
@@ -69,7 +79,19 @@ from backend.core.md_prep_progress import (
     design_size_factor,
     write_prep_progress,
 )
-from backend.core.namd_runner import apply_user_stop, default_threads, find_gmx, find_namd, is_running, pending_early_stop, reconcile_job_status, resolve_gpu_decision, set_early_stop, start_job, stop_job
+from backend.core.namd_runner import (
+    apply_user_stop,
+    default_threads,
+    find_gmx,
+    find_namd,
+    is_running,
+    pending_early_stop,
+    reconcile_job_status,
+    resolve_gpu_decision,
+    set_early_stop,
+    start_job,
+    stop_job,
+)
 from backend.core.md_vram import (
     detect_vram_mb,
     package_solvation_profile,
@@ -98,44 +120,58 @@ MAX_PRODUCTION_NS = 10_000.0
 
 # ── Request/response models ────────────────────────────────────────────────────
 
+
 class CreateJobRequest(BaseModel):
-    protocol:    str   = Field(EQUILIBRIUM_AWARE_PROTOCOL, description="Protocol preset name")
-    threads:     int   = Field(default_factory=default_threads, ge=1,
-                               description="NAMD +p thread count; defaults to half the logical CPUs")
-    devices:     str   = Field("0", description="CUDA device IDs (e.g. '0' or '0,1')")
-    autostart:   bool  = Field(False, description="Start NAMD immediately after preparation")
-    salt_mode:   str   = Field("screening", description="'screening' uses validated origami screening defaults; 'custom' uses Mg/NaCl fields")
+    protocol: str = Field(
+        EQUILIBRIUM_AWARE_PROTOCOL, description="Protocol preset name"
+    )
+    threads: int = Field(
+        default_factory=default_threads,
+        ge=1,
+        description="NAMD +p thread count; defaults to half the logical CPUs",
+    )
+    devices: str = Field("0", description="CUDA device IDs (e.g. '0' or '0,1')")
+    autostart: bool = Field(
+        False, description="Start NAMD immediately after preparation"
+    )
+    salt_mode: str = Field(
+        "screening",
+        description="'screening' uses validated origami screening defaults; 'custom' uses Mg/NaCl fields",
+    )
     # Advanced overrides (all optional)
-    ion_conc_mM: float = Field(0.0,  ge=0.0)
-    mg_conc_mM:  float = Field(12.5, ge=0.0)
-    padding_nm:  float = Field(1.2,  gt=0.0)
+    ion_conc_mM: float = Field(0.0, ge=0.0)
+    mg_conc_mM: float = Field(12.5, ge=0.0)
+    padding_nm: float = Field(1.2, gt=0.0)
     production_ns_intent: Optional[float] = Field(
-        None, gt=0.0, le=MAX_PRODUCTION_NS,
+        None,
+        gt=0.0,
+        le=MAX_PRODUCTION_NS,
         description="How many UNRESTRAINED nanoseconds you intend to run off this "
-                    "package. Drives the cell-sizing rule: above "
-                    "ROTATION_FREE_NS_THRESHOLD (20 ns) the box is sized so the solute "
-                    "can turn through any orientation without meeting its periodic "
-                    "image, instead of the cheap bbox cell the restrained ladder needs. "
-                    "Costs several times the water — set it only when you will actually "
-                    "run a long production, which a production CHILD cannot fix later "
-                    "because it re-uses this package's cell verbatim.",
+        "package. Drives the cell-sizing rule: above "
+        "ROTATION_FREE_NS_THRESHOLD (20 ns) the box is sized so the solute "
+        "can turn through any orientation without meeting its periodic "
+        "image, instead of the cheap bbox cell the restrained ladder needs. "
+        "Costs several times the water — set it only when you will actually "
+        "run a long production, which a production CHILD cannot fix later "
+        "because it re-uses this package's cell verbatim.",
     )
     water_shell_nm: float = Field(
-        0.0, ge=0.0,
+        0.0,
+        ge=0.0,
         description="If >0, keep only water within this distance (nm) of the DNA "
-                    "and drop the rest, then run NVT. Halves the atom count for "
-                    "large designs so GPU-resident NAMD fits a small card. "
-                    "Use ≥0.6 nm (2·shell ≥ 12 Å cutoff); 1.5 nm recommended.",
+        "and drop the rest, then run NVT. Halves the atom count for "
+        "large designs so GPU-resident NAMD fits a small card. "
+        "Use ≥0.6 nm (2·shell ≥ 12 Å cutoff); 1.5 nm recommended.",
     )
     allow_water_shell_carve: bool = Field(
         True,
         description="May prep fall back to a water-shell carve when the full box will "
-                    "not fit the compute target? Default yes — a carve is how a large "
-                    "origami runs at all on a small card. Set false to REFUSE instead: a "
-                    "carve leaves vacuum in the cell, which forces constant volume, which "
-                    "deletes the Note-4 settle stage AND the box-size equilibration "
-                    "criterion — so the run is no longer the published protocol. The "
-                    "'literature' preset sets this false for exactly that reason.",
+        "not fit the compute target? Default yes — a carve is how a large "
+        "origami runs at all on a small card. Set false to REFUSE instead: a "
+        "carve leaves vacuum in the cell, which forces constant volume, which "
+        "deletes the Note-4 settle stage AND the box-size equilibration "
+        "criterion — so the run is no longer the published protocol. The "
+        "'literature' preset sets this false for exactly that reason.",
     )
     minimize_steps: int = Field(4_800, ge=100)
     declash: bool = Field(
@@ -145,50 +181,50 @@ class CreateJobRequest(BaseModel):
     force_soft: bool = Field(
         False,
         description="Run the WHOLE ladder with the soft integrator (rigidBonds none "
-                    "+ 1 fs), not just the first segment. The instability 'Fix' remedy "
-                    "sets this for a model that keeps blowing up rigid-bond RATTLE.",
+        "+ 1 fs), not just the first segment. The instability 'Fix' remedy "
+        "sets this for a model that keeps blowing up rigid-bond RATTLE.",
     )
     fast: bool = Field(
         True,
         description="Fast relaxation (DEFAULT): hydrogen-mass repartitioning + 4 fs "
-                    "timestep + NAMD GPU-resident on the hard ladder (~4x NPT throughput "
-                    "on a capped box). Auto-disabled for soft/declash ladders. Same "
-                    "simulated ns per stage (step count halved), wall-clock ~4x shorter. "
-                    "Set false (or untick in the UI) if a very large design fails the "
-                    "first hard segment with a GPU out-of-memory error.",
+        "timestep + NAMD GPU-resident on the hard ladder (~4x NPT throughput "
+        "on a capped box). Auto-disabled for soft/declash ladders. Same "
+        "simulated ns per stage (step count halved), wall-clock ~4x shorter. "
+        "Set false (or untick in the UI) if a very large design fails the "
+        "first hard segment with a GPU out-of-memory error.",
     )
     relax_timestep_fs: Optional[float] = Field(
         None,
         description="RELAXATION LADDER timestep (fs): 4.0, 2.0 or 1.0. None → derived from "
-                    "`fast` (4.0 on, 2.0 off), which is the historical behaviour. Per-stage "
-                    "tiers still apply on top: a soft stage runs 1 fs and a gentle stage "
-                    "2 fs whatever this says. Does NOT affect production — that is "
-                    "`production_timestep_fs`.",
+        "`fast` (4.0 on, 2.0 off), which is the historical behaviour. Per-stage "
+        "tiers still apply on top: a soft stage runs 1 fs and a gentle stage "
+        "2 fs whatever this says. Does NOT affect production — that is "
+        "`production_timestep_fs`.",
     )
     relax_rigid_bonds: Optional[str] = Field(
         None,
         description="RELAXATION LADDER bonds-to-hydrogen constraint: 'all' or 'none'. "
-                    "None → auto from the ladder timestep ('none' at 1 fs, 'all' above). "
-                    "Independent of the timestep since exp51 measured 1 fs + 'all' stable; "
-                    "'none' above 1 fs is a measured loss and is warned about, not blocked.",
+        "None → auto from the ladder timestep ('none' at 1 fs, 'all' above). "
+        "Independent of the timestep since exp51 measured 1 fs + 'all' stable; "
+        "'none' above 1 fs is a measured loss and is warned about, not blocked.",
     )
     relax_hmr: Optional[bool] = Field(
         None,
         description="RELAXATION LADDER hydrogen-mass repartitioning. None → auto (on only "
-                    "at 4 fs, where exp51 measured it load-bearing: 4 fs on standard masses "
-                    "fails RATTLE at 16.8 ps). Below 4 fs it is a measured LOSS in energy "
-                    "conservation, so it is never defaulted on.",
+        "at 4 fs, where exp51 measured it load-bearing: 4 fs on standard masses "
+        "fails RATTLE at 16.8 ps). Below 4 fs it is a measured LOSS in energy "
+        "conservation, so it is never defaulted on.",
     )
     production_rigid_bonds: Optional[str] = Field(
         None,
         description="PRODUCTION RUN bonds-to-hydrogen constraint: 'all', 'none', or None "
-                    "for auto from `production_timestep_fs`. Recorded now, applied when "
-                    "production runs off this package.",
+        "for auto from `production_timestep_fs`. Recorded now, applied when "
+        "production runs off this package.",
     )
     production_hmr: Optional[bool] = Field(
         None,
         description="PRODUCTION RUN hydrogen-mass repartitioning; None → auto (on only at "
-                    "4 fs). Recorded now, applied when production runs off this package.",
+        "4 fs). Recorded now, applied when production runs off this package.",
     )
 
     @field_validator("relax_timestep_fs")
@@ -213,13 +249,13 @@ class CreateJobRequest(BaseModel):
     gpu_resident: Optional[str] = Field(
         None,
         description="NAMD GPU-resident mode for this run: 'auto' (DEFAULT — decided by "
-                    "solvated atom count against the measured crossover), 'on' (force it) "
-                    "or 'off' (force CUDA offload). Resident keeps integration + bonded "
-                    "forces on the GPU and is a LARGE-system win (3.2x at 3.14M atoms), "
-                    "but a LOSS below ~100k (both paths hit the same per-step floor and "
-                    "resident's setup is pure overhead — measured 0.88-0.97x at 32.5k). "
-                    "'on' is still refused for GBIS and for a sparsely-filled carved cell, "
-                    "where it cannot run at all.",
+        "solvated atom count against the measured crossover), 'on' (force it) "
+        "or 'off' (force CUDA offload). Resident keeps integration + bonded "
+        "forces on the GPU and is a LARGE-system win (3.2x at 3.14M atoms), "
+        "but a LOSS below ~100k (both paths hit the same per-step floor and "
+        "resident's setup is pure overhead — measured 0.88-0.97x at 32.5k). "
+        "'on' is still refused for GBIS and for a sparsely-filled carved cell, "
+        "where it cannot run at all.",
     )
 
     @field_validator("gpu_resident")
@@ -235,20 +271,20 @@ class CreateJobRequest(BaseModel):
     gpu_fallback_policy: Optional[str] = Field(
         None,
         description="What to do if the fastest GPU (resident) mode can't start on this "
-                    "structure: 'ask' (DEFAULT — pause and ask the user, so an unattended "
-                    "run stops & notifies rather than silently slowing) or 'auto_offload' "
-                    "(auto-accept the ~3x slower GPU mode). None → the NADOC_GPU_FALLBACK "
-                    "env default ('ask'). Stored on the job; the UI remembers it in "
-                    "localStorage.",
+        "structure: 'ask' (DEFAULT — pause and ask the user, so an unattended "
+        "run stops & notifies rather than silently slowing) or 'auto_offload' "
+        "(auto-accept the ~3x slower GPU mode). None → the NADOC_GPU_FALLBACK "
+        "env default ('ask'). Stored on the job; the UI remembers it in "
+        "localStorage.",
     )
     production_timestep_fs: float = Field(
         4.0,
         description="Integrator timestep (fs) for the PRODUCTION run: 4.0 (fast, HMR + "
-                    "GPUresident — the default; needs the fast relaxation ladder), 2.0 "
-                    "(rigidBonds all + GPUresident, no HMR — a manual medium path), or 1.0 "
-                    "(conservative reference, rigidBonds none). Only these three are allowed; "
-                    "2.0 is a deliberate manual choice, never auto-selected. See "
-                    "memory/feedback_namd_4fs_production_only.md.",
+        "GPUresident — the default; needs the fast relaxation ladder), 2.0 "
+        "(rigidBonds all + GPUresident, no HMR — a manual medium path), or 1.0 "
+        "(conservative reference, rigidBonds none). Only these three are allowed; "
+        "2.0 is a deliberate manual choice, never auto-selected. See "
+        "memory/feedback_namd_4fs_production_only.md.",
     )
 
     @field_validator("production_timestep_fs")
@@ -257,6 +293,7 @@ class CreateJobRequest(BaseModel):
         if v not in (1.0, 2.0, 4.0):
             raise ValueError("production_timestep_fs must be 1.0, 2.0, or 4.0")
         return float(v)
+
     design_source_path: Optional[str] = Field(
         None,
         description="Workspace path of the part used to create this job",
@@ -264,133 +301,156 @@ class CreateJobRequest(BaseModel):
     oxdna_job_id: Optional[str] = Field(
         None,
         description="If set, seed the NAMD run from this completed oxDNA job's "
-                    "relaxed coordinates (its OWN design.json + latest last_conf) "
-                    "instead of ideal B-DNA.",
+        "relaxed coordinates (its OWN design.json + latest last_conf) "
+        "instead of ideal B-DNA.",
     )
     mrdna_job_id: Optional[str] = Field(
         None,
         description="If set, seed the NAMD run from this completed FINE-stage mrDNA "
-                    "job's relaxed CG structure (its OWN design.json snapshot) instead "
-                    "of ideal B-DNA.  Mutually exclusive with oxdna_job_id.",
+        "job's relaxed CG structure (its OWN design.json snapshot) instead "
+        "of ideal B-DNA.  Mutually exclusive with oxdna_job_id.",
     )
     blade_job_id: Optional[str] = Field(
         None,
         description="If set, seed the NAMD run from this completed BLADE relax job's "
-                    "EXACT all-atom relaxed coordinates (its OWN design.json snapshot). "
-                    "Unlike the oxDNA/mrDNA seeds (reconstructed from a coarse-grained "
-                    "frame), BLADE is already atomistic, so the exact conformation is fed "
-                    "straight into solvation via solute_coords=. Forces full-topology "
-                    "(psfgen, with hydrogens) prep. Mutually exclusive with the others.",
+        "EXACT all-atom relaxed coordinates (its OWN design.json snapshot). "
+        "Unlike the oxDNA/mrDNA seeds (reconstructed from a coarse-grained "
+        "frame), BLADE is already atomistic, so the exact conformation is fed "
+        "straight into solvation via solute_coords=. Forces full-topology "
+        "(psfgen, with hydrogens) prep. Mutually exclusive with the others.",
     )
     vacuum_job_id: Optional[str] = Field(
         None,
         description="If set, seed solvation from this completed in-vacuo ENRG-MD "
-                    "pre-stage (Aksimentiev tutorial §3.2) — the tutorial's §3.3 starts "
-                    "from the vacuum run's last frame, not the idealised build. Normally "
-                    "set automatically by the standard preset rather than by hand.",
+        "pre-stage (Aksimentiev tutorial §3.2) — the tutorial's §3.3 starts "
+        "from the vacuum run's last frame, not the idealised build. Normally "
+        "set automatically by the standard preset rather than by hand.",
     )
     skip_vacuum_prestage: bool = Field(
         False,
         description="Skip the in-vacuo shape-relaxation pre-stage. It is on by default "
-                    "because the published protocol runs it, but it is measurably "
-                    "counter-productive below ~4 helices (a 2hb's solvation box GREW "
-                    "6.8%), so the UI asks first on small designs.",
+        "because the published protocol runs it, but it is measurably "
+        "counter-productive below ~4 helices (a 2hb's solvation box GREW "
+        "6.8%), so the UI asks first on small designs.",
     )
     execution_target: str = Field(
         "local",
         description="'local' runs NAMD as a local subprocess (default); 'alpine' "
-                    "tags the job for remote SLURM submission (submit via "
-                    "/md/jobs/{id}/submit-remote once prepared + connected).",
+        "tags the job for remote SLURM submission (submit via "
+        "/md/jobs/{id}/submit-remote once prepared + connected).",
     )
     cluster_name: Optional[str] = Field(
-        None, description="Cluster profile name for remote execution (default 'alpine').",
+        None,
+        description="Cluster profile name for remote execution (default 'alpine').",
     )
     partition: Optional[str] = Field(
         None,
         description="Preferred SLURM partition, chosen in the Job Wizard's first step "
-                    "while the user could see live availability and wait times. Stored on "
-                    "the job so that context survives to submission — which can happen in a "
-                    "later session, long after the queue picture that motivated the choice. "
-                    "None → auto-pick at submit time.",
+        "while the user could see live availability and wait times. Stored on "
+        "the job so that context survives to submission — which can happen in a "
+        "later session, long after the queue picture that motivated the choice. "
+        "None → auto-pick at submit time.",
     )
     slurm_resources: Optional[dict] = Field(
         None,
         description="SLURM resources adjusted in the Job Wizard's first step alongside the "
-                    "partition (any of cores/gpus/mem_gb/walltime/qos). SPARSE: send only "
-                    "what the user actually changed. Anything omitted is re-derived at "
-                    "submit time from the built package's exact atom count, which is more "
-                    "accurate than the wizard's pre-solvation estimate.",
+        "partition (any of cores/gpus/mem_gb/walltime/qos). SPARSE: send only "
+        "what the user actually changed. Anything omitted is re-derived at "
+        "submit time from the built package's exact atom count, which is more "
+        "accurate than the wizard's pre-solvation estimate.",
+    )
+    runpod_gpu_key: Optional[str] = Field(
+        None,
+        description="RunPod GPU type id chosen in the Job Wizard's first step from the ranked "
+        "live table. A PREFERENCE, not a demand: the network volume pins the pod's "
+        "datacenter, so a single named card frequently comes back 'no instances "
+        "currently available'. It heads the priority list; same-value fallbacks "
+        "follow. None → rank at launch time.",
+    )
+    runpod_budget_usd: Optional[float] = Field(
+        None,
+        ge=0,
+        description="Spend cap for this job's pod, in USD. A BUDGET, not a duration — the "
+        "kill-switch wall-clock is derived from the rate of the card actually "
+        "obtained. Caps ONE pod and has no memory, so resumes each get it afresh. "
+        "None → the backend default.",
+    )
+    runpod_volume_id: Optional[str] = Field(
+        None,
+        description="RunPod network volume to mount. Carries the patched NAMD, the packages "
+        "and every checkpoint, and pins the datacenter. None → the connected "
+        "session's volume.",
     )
     run_dir: Optional[str] = Field(
         None,
         description="Directory to write this run into (archive-from-birth). A NAMD run "
-                    "produces multi-GB trajectories; pointing it at a roomy volume (e.g. an "
-                    "external Archive drive) keeps them off a full system disk. The job's "
-                    "folder is created at <run_dir>/<job_id> and the app resolves it via the "
-                    "archive index. None → the default workspace location.",
+        "produces multi-GB trajectories; pointing it at a roomy volume (e.g. an "
+        "external Archive drive) keeps them off a full system disk. The job's "
+        "folder is created at <run_dir>/<job_id> and the app resolves it via the "
+        "archive index. None → the default workspace location.",
     )
     anchors: Optional[list] = Field(
         None,
         description="Anchor scopes (shared oxDNA/CanDo picker format: overhang / cluster "
-                    "/ domain / strand / base) to hold immobile via NAMD fixedAtoms for the "
-                    "whole ladder. Each entry may carry its own `atoms` list to hold only "
-                    "those PDB atom names (null = all heavy atoms for that anchor); anchors "
-                    "with no `atoms` key fall back to `anchor_atoms`. A JOB-REQUEST "
-                    "annotation, never a Design edit; a selection that resolves to nothing "
-                    "leaves the run unanchored.",
+        "/ domain / strand / base) to hold immobile via NAMD fixedAtoms for the "
+        "whole ladder. Each entry may carry its own `atoms` list to hold only "
+        "those PDB atom names (null = all heavy atoms for that anchor); anchors "
+        "with no `atoms` key fall back to `anchor_atoms`. A JOB-REQUEST "
+        "annotation, never a Design edit; a selection that resolves to nothing "
+        "leaves the run unanchored.",
     )
     anchor_atoms: Optional[list[str]] = Field(
         None,
         description="DEFAULT atom-name filter, for anchors that do not carry their own "
-                    "`atoms` list. e.g. [\"C1'\"] pins one sugar carbon per base instead of "
-                    "all ~20 heavy atoms. Each entry of `anchors` may override this with its "
-                    "own `atoms` (null there means all heavy atoms for that anchor, and beats "
-                    "this default). None = all heavy atoms (hydrogens are never anchored). "
-                    "Names that match nothing are rejected rather than silently producing an "
-                    "unanchored run.",
+        '`atoms` list. e.g. ["C1\'"] pins one sugar carbon per base instead of '
+        "all ~20 heavy atoms. Each entry of `anchors` may override this with its "
+        "own `atoms` (null there means all heavy atoms for that anchor, and beats "
+        "this default). None = all heavy atoms (hydrogens are never anchored). "
+        "Names that match nothing are rejected rather than silently producing an "
+        "unanchored run.",
     )
     field: Optional[dict] = Field(
         None,
         description="Uniform electric field, shared cross-engine descriptor "
-                    "{'field_pN': <force per NUCLEOTIDE, pN>, 'dir': [x,y,z]} — the same "
-                    "per-nucleotide load oxDNA/LAMMPS apply per bead and CanDo applies per "
-                    "duplex node. Emitted as native NAMD eFieldOn/eField (q·E, exact: a DNA "
-                    "nucleotide carries -1 e). Requires >=1 anchor (an unanchored uniform "
-                    "force just streams the structure). A JOB-REQUEST annotation, never a "
-                    "Design edit.",
+        "{'field_pN': <force per NUCLEOTIDE, pN>, 'dir': [x,y,z]} — the same "
+        "per-nucleotide load oxDNA/LAMMPS apply per bead and CanDo applies per "
+        "duplex node. Emitted as native NAMD eFieldOn/eField (q·E, exact: a DNA "
+        "nucleotide carries -1 e). Requires >=1 anchor (an unanchored uniform "
+        "force just streams the structure). A JOB-REQUEST annotation, never a "
+        "Design edit.",
     )
     relax_preset: str = Field(
         DEFAULT_PRESET,
         description="Named relaxation protocol (backend/core/md_presets.py): "
-                    "'fast_shape' (vacuum ENRG-MD), 'standard' (Aksimentiev explicit "
-                    "MgCl2 + ENM ladder, the default), or 'full_physics' (solvent-first "
-                    "staged release). Supplies DEFAULTS only — any field the caller sets "
-                    "explicitly wins.",
+        "'fast_shape' (vacuum ENRG-MD), 'standard' (Aksimentiev explicit "
+        "MgCl2 + ENM ladder, the default), or 'full_physics' (solvent-first "
+        "staged release). Supplies DEFAULTS only — any field the caller sets "
+        "explicitly wins.",
     )
     early_stop_relax: bool = Field(
         True,
         description="Relaxation accelerator: skip a stage's remaining p50/p100 chunks "
-                    "once its first chunk shows an energy+WC plateau (multi-criteria, "
-                    "backend/core/md_cutoff.py). Never skips production/qualification "
-                    "stages. ON by default; the 'full_physics' preset turns it off, "
-                    "since a stage you intend to publish should not be truncated.",
+        "once its first chunk shows an energy+WC plateau (multi-criteria, "
+        "backend/core/md_cutoff.py). Never skips production/qualification "
+        "stages. ON by default; the 'full_physics' preset turns it off, "
+        "since a stage you intend to publish should not be truncated.",
     )
     early_stop_tier: str = Field(
         "B",
         description="Remote (Alpine) early-stop criterion tier. 'B' (default) = "
-                    "energy(+volume) only, stdlib on-node evaluator, well-restrained "
-                    "stages only. 'A' = energy AND WC base-pairing (full local parity) "
-                    "via an on-node MDAnalysis health step (numpy/scipy/MDAnalysis must "
-                    "be on the node python; fails safe to no-skip otherwise). Ignored "
-                    "for local runs.",
+        "energy(+volume) only, stdlib on-node evaluator, well-restrained "
+        "stages only. 'A' = energy AND WC base-pairing (full local parity) "
+        "via an on-node MDAnalysis health step (numpy/scipy/MDAnalysis must "
+        "be on the node python; fails safe to no-skip otherwise). Ignored "
+        "for local runs.",
     )
     draft: bool = Field(
         False,
         description="Create the job as an unprepared DRAFT (status='draft') instead of "
-                    "solvating immediately. Only valid for a seeded job (oxdna/mrdna). "
-                    "The 'Use as NAMD seed' button uses this so the user can set advanced "
-                    "options first; the deferred solvation runs on POST /md/jobs/{id}/prepare "
-                    "(the 'Relax from oxDNA' button).",
+        "solvating immediately. Only valid for a seeded job (oxdna/mrdna). "
+        "The 'Use as NAMD seed' button uses this so the user can set advanced "
+        "options first; the deferred solvation runs on POST /md/jobs/{id}/prepare "
+        "(the 'Relax from oxDNA' button).",
     )
     stage_overrides: dict = Field(
         default_factory=dict,
@@ -399,28 +459,28 @@ class CreateJobRequest(BaseModel):
     seed_lattice_nm: "float | str | None" = Field(
         None,
         description="Pre-expand the lattice before building the seed, so the run starts "
-                    "at the interhelical spacing MD says the structure ends up at "
-                    "instead of spending relaxation swelling into it. null = build as "
-                    "designed (2.25 nm caDNAno lattice). \"auto\" = the measured relaxed "
-                    "spacing for this design's largest extra-base count, applied ONLY if "
-                    "it inserts extra bases. A float sets the centre-to-centre spacing in "
-                    "nm directly and skips that gate. Measured on 6hbx100: at TT inserts, "
-                    "2.25 -> 2.55 nm cuts steric contacts on the inserts by 58% AND "
-                    "relaxes the crossover bridges; with no inserts there is no slack to "
-                    "take up and the backbone only stretches. The saved design is never "
-                    "modified — a scaled copy feeds the seed. Recorded in manifest.json "
-                    "as seed_lattice_nm.",
+        "at the interhelical spacing MD says the structure ends up at "
+        "instead of spending relaxation swelling into it. null = build as "
+        'designed (2.25 nm caDNAno lattice). "auto" = the measured relaxed '
+        "spacing for this design's largest extra-base count, applied ONLY if "
+        "it inserts extra bases. A float sets the centre-to-centre spacing in "
+        "nm directly and skips that gate. Measured on 6hbx100: at TT inserts, "
+        "2.25 -> 2.55 nm cuts steric contacts on the inserts by 58% AND "
+        "relaxes the crossover bridges; with no inserts there is no slack to "
+        "take up and the backbone only stretches. The saved design is never "
+        "modified — a scaled copy feeds the seed. Recorded in manifest.json "
+        "as seed_lattice_nm.",
     )
     allow_catenated_seed: bool = Field(
         False,
         description="Build even when the seed carries a permanent topological defect: a "
-                    "reciprocal crossover pair whose two backbones are LINKED (Gauss "
-                    "Lk != 0), or a covalent bond threaded through a nucleotide ring. "
-                    "Off by default: every chain end is covalently pinned into the "
-                    "network, so neither defect survives being relaxed away — the "
-                    "trajectory just measures an artefact (a threaded ring turns into a "
-                    "permanently 3 A phosphodiester bond). Recorded in manifest.json "
-                    "either way.",
+        "reciprocal crossover pair whose two backbones are LINKED (Gauss "
+        "Lk != 0), or a covalent bond threaded through a nucleotide ring. "
+        "Off by default: every chain end is covalently pinned into the "
+        "network, so neither defect survives being relaxed away — the "
+        "trajectory just measures an artefact (a threaded ring turns into a "
+        "permanently 3 A phosphodiester bond). Recorded in manifest.json "
+        "either way.",
     )
 
 
@@ -429,45 +489,48 @@ class ProductionRequest(BaseModel):
     steps: Optional[int] = Field(None, ge=100, le=MAX_PRODUCTION_STEPS)
     autostart: bool = Field(True)
     dcd_freq: Optional[int] = Field(
-        None, ge=100, le=1_000_000,
+        None,
+        ge=100,
+        le=1_000_000,
         description="DCD trajectory output interval (steps). Defaults to PRODUCTION_DCD_FREQ "
-                    "(2500 = every 10 ps at 4 fs). The disk forecast reads this too, so a "
-                    "raised interval shrinks the predicted trajectory the same way it "
-                    "shrinks the real one.")
+        "(2500 = every 10 ps at 4 fs). The disk forecast reads this too, so a "
+        "raised interval shrinks the predicted trajectory the same way it "
+        "shrinks the real one.",
+    )
     continue_from_production: bool = Field(False)
     allow_undersized_cell: bool = Field(
         False,
         description="Run even when the package's cell is too small for the solute to "
-                    "rotate freely. A relaxation package is sized for its short "
-                    "restrained ladder, so a long UNRESTRAINED run in it can walk the "
-                    "solute into its own periodic image and quietly corrupt the "
-                    "trajectory. Off by default; set it only if you know the run is "
-                    "short enough or the solute is effectively spherical.",
+        "rotate freely. A relaxation package is sized for its short "
+        "restrained ladder, so a long UNRESTRAINED run in it can walk the "
+        "solute into its own periodic image and quietly corrupt the "
+        "trajectory. Off by default; set it only if you know the run is "
+        "short enough or the solute is effectively spherical.",
     )
     production_timestep_fs: Optional[float] = Field(
         None,
         description="Integrator timestep (fs) for THIS production run: 1.0, 2.0 or 4.0. "
-                    "Sending it PINS the choice — if the package cannot honour it the run "
-                    "fails with FAILURE_TIMESTEP_PINNED rather than quietly substituting a "
-                    "different one. Omit to inherit the value baked into the package "
-                    "manifest at prep time, or (absent that) the auto-derived default. "
-                    "Until this existed the timestep could only be chosen when the package "
-                    "was PREPARED, so changing the Advanced-card dropdown before starting "
-                    "production had no effect on the run at all.",
+        "Sending it PINS the choice — if the package cannot honour it the run "
+        "fails with FAILURE_TIMESTEP_PINNED rather than quietly substituting a "
+        "different one. Omit to inherit the value baked into the package "
+        "manifest at prep time, or (absent that) the auto-derived default. "
+        "Until this existed the timestep could only be chosen when the package "
+        "was PREPARED, so changing the Advanced-card dropdown before starting "
+        "production had no effect on the run at all.",
     )
 
     rigid_bonds: Optional[str] = Field(
         None,
         description="Bonds-to-hydrogen constraint for THIS production run: 'all', 'none', "
-                    "or omit to inherit the package's prep-time choice (and, failing that, "
-                    "the auto value for the timestep). Independent of the timestep since "
-                    "exp51; unsound combinations are warned about, never blocked.",
+        "or omit to inherit the package's prep-time choice (and, failing that, "
+        "the auto value for the timestep). Independent of the timestep since "
+        "exp51; unsound combinations are warned about, never blocked.",
     )
     hmr: Optional[bool] = Field(
         None,
         description="Hydrogen-mass repartitioning for THIS production run. Omit to inherit "
-                    "the package's prep-time choice, else auto (on only at 4 fs). The HMR "
-                    "PSF is built on demand when it is missing.",
+        "the package's prep-time choice, else auto (on only at 4 fs). The HMR "
+        "PSF is built on demand when it is missing.",
     )
 
     @field_validator("rigid_bonds")
@@ -483,9 +546,9 @@ class ProductionRequest(BaseModel):
     gpu_resident: Optional[str] = Field(
         None,
         description="GPU-resident mode for THIS production run: 'auto' (size gate), 'on' "
-                    "or 'off'. Omit to inherit the package's prep-time choice. Production "
-                    "used to hard-code resident ON for 2/4 fs regardless of size or of the "
-                    "Advanced-card dropdown.",
+        "or 'off'. Omit to inherit the package's prep-time choice. Production "
+        "used to hard-code resident ON for 2/4 fs regardless of size or of the "
+        "Advanced-card dropdown.",
     )
 
     @field_validator("production_timestep_fs")
@@ -507,18 +570,19 @@ class ProductionRequest(BaseModel):
 
 
 class JobSummary(BaseModel):
-    job_id:         str
-    design_name:    str
-    protocol:       str
-    status:         str
-    created_at:     float
-    n_segments:     int
+    job_id: str
+    design_name: str
+    protocol: str
+    status: str
+    created_at: float
+    n_segments: int
     current_segment_idx: int
-    error:          Optional[str]
-    latest_health:  Optional[dict]
+    error: Optional[str]
+    latest_health: Optional[dict]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _workspace() -> Path:
     return _WORKSPACE_DIR
@@ -569,8 +633,9 @@ def _md_snapshot_design(job: MdJob):
 
 
 def _md_job_fingerprint(job: MdJob) -> "str | None":
-    if job.design_fingerprint and (job.design_fingerprint.startswith("v2:")
-                                   or len(job.design_fingerprint) != 64):
+    if job.design_fingerprint and (
+        job.design_fingerprint.startswith("v2:") or len(job.design_fingerprint) != 64
+    ):
         return job.design_fingerprint
     cached = _MD_DERIVED_FP_CACHE.get(job.job_id)
     if cached is not None:
@@ -579,6 +644,7 @@ def _md_job_fingerprint(job: MdJob) -> "str | None":
     if snap is None:
         return None
     from backend.core.oxdna_staleness import design_build_fingerprint
+
     fp = design_build_fingerprint(snap)
     _MD_DERIVED_FP_CACHE[job.job_id] = fp
     return fp
@@ -586,6 +652,7 @@ def _md_job_fingerprint(job: MdJob) -> "str | None":
 
 def _md_job_out_of_date(job: MdJob, current_fp: "str | None") -> bool:
     from backend.core.oxdna_staleness import job_out_of_date
+
     return job_out_of_date(_md_job_fingerprint(job), current_fp)
 
 
@@ -595,17 +662,23 @@ def _assert_md_job_current(job: MdJob) -> None:
     popup.  Stands down for an unattended chain spawn (seeds from the job's own frozen
     state, not the loaded design — see ``md_chain_executor.in_unattended_chain_spawn``)."""
     from backend.core.md_chain_executor import in_unattended_chain_spawn
+
     if in_unattended_chain_spawn():
         return
     from backend.core.oxdna_staleness import (
-        current_active_design_fingerprint, describe_staleness, job_out_of_date)
+        current_active_design_fingerprint,
+        describe_staleness,
+        job_out_of_date,
+    )
+
     if job_out_of_date(_md_job_fingerprint(job), current_active_design_fingerprint()):
         try:
             current = design_state.get_or_404()
         except Exception:  # noqa: BLE001 — staleness messaging must never 500
             current = None
         raise HTTPException(
-            409, describe_staleness(_md_snapshot_design(job), current, stage="prepared"))
+            409, describe_staleness(_md_snapshot_design(job), current, stage="prepared")
+        )
 
 
 def _jsonl_records(path: Path) -> list[dict]:
@@ -627,17 +700,18 @@ def _job_to_summary(job: MdJob) -> JobSummary:
     latest_dict = None
     if latest is not None:
         from dataclasses import asdict
+
         latest_dict = asdict(latest)
     return JobSummary(
-        job_id               = job.job_id,
-        design_name          = job.design_name,
-        protocol             = job.protocol,
-        status               = job.status.value,
-        created_at           = job.created_at,
-        n_segments           = len(job.segments),
-        current_segment_idx  = job.current_segment_idx,
-        error                = job.error,
-        latest_health        = latest_dict,
+        job_id=job.job_id,
+        design_name=job.design_name,
+        protocol=job.protocol,
+        status=job.status.value,
+        created_at=job.created_at,
+        n_segments=len(job.segments),
+        current_segment_idx=job.current_segment_idx,
+        error=job.error,
+        latest_health=latest_dict,
     )
 
 
@@ -719,7 +793,8 @@ def _md_segment_dcds(job: MdJob) -> list[tuple[str, str, Path]]:
     out: list[tuple[str, str, Path]] = []
     for seg in job.segments:
         dcds = [
-            d for d in (
+            d
+            for d in (
                 *output_dir.glob(f"{seg.name}.cont*.dcd"),
                 output_dir / f"{seg.name}.dcd",
                 package_dir / f"{seg.name}.dcd",
@@ -729,6 +804,7 @@ def _md_segment_dcds(job: MdJob) -> list[tuple[str, str, Path]]:
         if not dcds:
             continue
         stage = getattr(seg, "stage", "md") or "md"
+
         # Tiebreak matters: when two headers report the same start (a DCD whose header
         # carries no start step, or an unreadable one) a bare time sort keeps the glob
         # order, which lists cont* BEFORE the base. Sort the base first explicitly.
@@ -741,15 +817,30 @@ def _md_segment_dcds(job: MdJob) -> list[tuple[str, str, Path]]:
     return out
 
 
-async def _run_md_analysis(request, job_id: str, kind: str, qualname: str,
-                           args: tuple, *, timeout_s: float = 180.0):
+async def _run_md_analysis(
+    request,
+    job_id: str,
+    kind: str,
+    qualname: str,
+    args: tuple,
+    *,
+    timeout_s: float = 180.0,
+):
     """Run a heavy md_trajectory analysis in a killable subprocess, cancelling it if
     the client disconnects (the frontend aborts the fetch when the view is toggled
     off).  Supersedes any in-flight analysis for the same (job_id, kind)."""
     from backend.core import md_analysis_runner  # noqa: PLC0415
 
-    task = asyncio.create_task(md_analysis_runner.run_analysis(
-        job_id, kind, "backend.core.md_trajectory", qualname, args, timeout_s=timeout_s))
+    task = asyncio.create_task(
+        md_analysis_runner.run_analysis(
+            job_id,
+            kind,
+            "backend.core.md_trajectory",
+            qualname,
+            args,
+            timeout_s=timeout_s,
+        )
+    )
     try:
         while not task.done():
             if request is not None and await request.is_disconnected():
@@ -812,9 +903,13 @@ async def get_md_job_trajectory(
     # (the panel confirms first), so give it a far longer ceiling — the route already
     # kills the subprocess when the client aborts the fetch.
     result = await _run_md_analysis(
-        request, job_id, "trajectory", "md_composite_trajectory",
+        request,
+        job_id,
+        "trajectory",
+        "md_composite_trajectory",
         (psf, segments, ref, design, 200, stride),
-        timeout_s=180.0 if stride is None else 900.0)
+        timeout_s=180.0 if stride is None else 900.0,
+    )
     return {"ready": result["n_frames"] > 0, **result}
 
 
@@ -854,11 +949,15 @@ async def get_md_job_rmsf(job_id: str, request: Request) -> dict:
 
     inputs = _md_traj_inputs(job_id)
     if inputs is None:
-        return {"ready": False, "reason": "topology/reference or trajectory not found",
-                "positions": []}
+        return {
+            "ready": False,
+            "reason": "topology/reference or trajectory not found",
+            "positions": [],
+        }
     psf, ref, segments, design = inputs
     result = await _run_md_analysis(
-        request, job_id, "rmsf", "md_rmsf", (psf, segments, ref, design))
+        request, job_id, "rmsf", "md_rmsf", (psf, segments, ref, design)
+    )
     if result.get("ready"):
         result["confidence"] = rmsf_confidence(result.get("n_frames", 0))
     return result
@@ -871,6 +970,7 @@ class MdOccupancyBody(BaseModel):
     """Scoped occupancy request. Mirrors ``OccupancyBody`` minus the oxDNA-only knobs
     (``align``/``scope``/``basis='bp'``): NAMD frames arrive already Kabsch-aligned, have
     no job lineage, and have one site per nucleotide."""
+
     model_config = ConfigDict(extra="forbid")
     max_frames: int = 200
     n_clusters: int = 0
@@ -891,8 +991,9 @@ _MD_OCC_CACHE: "OrderedDict[tuple, dict]" = OrderedDict()
 _MD_OCC_CACHE_MAX = 6
 
 
-def _md_occ_cache_key(segments, psf, max_frames, n_clusters, basis, selection,
-                      fit="selection"):
+def _md_occ_cache_key(
+    segments, psf, max_frames, n_clusters, basis, selection, fit="selection"
+):
     """size+mtime per DCD, so a GROWING trajectory self-invalidates — the property
     oxDNA's ``_aligned_cache_key`` relies on."""
     from backend.core.occupancy_core import _selection_sig
@@ -904,13 +1005,28 @@ def _md_occ_cache_key(segments, psf, max_frames, n_clusters, basis, selection,
         except OSError:
             return (str(path), -1, -1)
 
-    return (tuple(sig(s[2]) for s in segments), sig(psf), int(max_frames), int(n_clusters),
-            str(basis), _selection_sig(selection), str(fit))
+    return (
+        tuple(sig(s[2]) for s in segments),
+        sig(psf),
+        int(max_frames),
+        int(n_clusters),
+        str(basis),
+        _selection_sig(selection),
+        str(fit),
+    )
 
 
-async def _md_occupancy_impl(job_id: str, request: Request, *, max_frames: int,
-                             n_clusters: int, basis: str, refetch: bool,
-                             selection=None, fit: str = "selection") -> dict:
+async def _md_occupancy_impl(
+    job_id: str,
+    request: Request,
+    *,
+    max_frames: int,
+    n_clusters: int,
+    basis: str,
+    refetch: bool,
+    selection=None,
+    fit: str = "selection",
+) -> dict:
     """Shared body for the GET (whole structure) and POST (scoped) MD occupancy routes."""
     from backend.core.occupancy_core import OCC_FIT_MODES
 
@@ -923,11 +1039,17 @@ async def _md_occupancy_impl(job_id: str, request: Request, *, max_frames: int,
 
     inputs = _md_traj_inputs(job_id)
     if inputs is None:
-        return {"ready": False, "reason": "topology/reference or trajectory not found",
-                "clusters": [], "keys": []}
+        return {
+            "ready": False,
+            "reason": "topology/reference or trajectory not found",
+            "clusters": [],
+            "keys": [],
+        }
     psf, ref, segments, design = inputs
 
-    key = _md_occ_cache_key(segments, psf, max_frames, n_clusters, basis, selection, fit)
+    key = _md_occ_cache_key(
+        segments, psf, max_frames, n_clusters, basis, selection, fit
+    )
     if refetch:
         _MD_OCC_CACHE.pop(key, None)
     else:
@@ -937,10 +1059,23 @@ async def _md_occupancy_impl(job_id: str, request: Request, *, max_frames: int,
             return hit
 
     result = await _run_md_analysis(
-        request, job_id, "occupancy", "md_occupancy",
-        (psf, segments, ref, design, max_frames, n_clusters, basis,
-         selection.model_dump() if selection is not None else None, fit),
-        timeout_s=900.0)
+        request,
+        job_id,
+        "occupancy",
+        "md_occupancy",
+        (
+            psf,
+            segments,
+            ref,
+            design,
+            max_frames,
+            n_clusters,
+            basis,
+            selection.model_dump() if selection is not None else None,
+            fit,
+        ),
+        timeout_s=900.0,
+    )
 
     if result.get("ready"):
         _MD_OCC_CACHE[key] = result
@@ -950,9 +1085,14 @@ async def _md_occupancy_impl(job_id: str, request: Request, *, max_frames: int,
 
 
 @router.get("/md/jobs/{job_id}/occupancy")
-async def get_md_occupancy(job_id: str, request: Request, max_frames: int = 200,
-                           n_clusters: int = 0, basis: str = "nt",
-                           refetch: bool = False) -> dict:
+async def get_md_occupancy(
+    job_id: str,
+    request: Request,
+    max_frames: int = 200,
+    n_clusters: int = 0,
+    basis: str = "nt",
+    refetch: bool = False,
+) -> dict:
     """The top-N most likely CONFIGURATIONS of this NAMD run's free-sampling ensemble.
 
     Where the flexibility map gives one mean structure, this gives several REAL frames —
@@ -971,12 +1111,20 @@ async def get_md_occupancy(job_id: str, request: Request, max_frames: int = 200,
     Read ``verdict`` before believing anything else — ``"switching"`` | ``"drift"`` |
     ``"unimodal"``; see :mod:`backend.core.occupancy_core`.
     """
-    return await _md_occupancy_impl(job_id, request, max_frames=max_frames,
-                                    n_clusters=n_clusters, basis=basis, refetch=refetch)
+    return await _md_occupancy_impl(
+        job_id,
+        request,
+        max_frames=max_frames,
+        n_clusters=n_clusters,
+        basis=basis,
+        refetch=refetch,
+    )
 
 
 @router.post("/md/jobs/{job_id}/occupancy")
-async def post_md_occupancy(job_id: str, request: Request, body: MdOccupancyBody) -> dict:
+async def post_md_occupancy(
+    job_id: str, request: Request, body: MdOccupancyBody
+) -> dict:
     """Occupancy clouds restricted to PART of the structure — see the oxDNA POST twin.
 
     POST because a base-level selection is far too big for a query string. NAMD and oxDNA
@@ -985,8 +1133,15 @@ async def post_md_occupancy(job_id: str, request: Request, body: MdOccupancyBody
     each crossover extra base's own junction) before clustering.
     """
     return await _md_occupancy_impl(
-        job_id, request, max_frames=body.max_frames, n_clusters=body.n_clusters,
-        basis=body.basis, refetch=body.refetch, selection=body.selection, fit=body.fit)
+        job_id,
+        request,
+        max_frames=body.max_frames,
+        n_clusters=body.n_clusters,
+        basis=body.basis,
+        refetch=body.refetch,
+        selection=body.selection,
+        fit=body.fit,
+    )
 
 
 @router.get("/md/jobs/{job_id}/shape-source")
@@ -1009,21 +1164,35 @@ async def get_md_shape_source(job_id: str, request: Request) -> dict:
 
     inputs = _md_traj_inputs(job_id)
     if inputs is None:
-        return {"job_id": job_id, "ready": False,
-                "reason": "topology/reference or trajectory not found"}
+        return {
+            "job_id": job_id,
+            "ready": False,
+            "reason": "topology/reference or trajectory not found",
+        }
     psf, ref, segments, design = inputs
     result = await _run_md_analysis(
-        request, job_id, "rmsf", "md_rmsf", (psf, segments, ref, design))
+        request, job_id, "rmsf", "md_rmsf", (psf, segments, ref, design)
+    )
     if not result.get("ready") or not result.get("positions"):
-        return {"job_id": job_id, "ready": False,
-                "reason": result.get("reason", "no trajectory frames")}
+        return {
+            "job_id": job_id,
+            "ready": False,
+            "reason": result.get("reason", "no trajectory frames"),
+        }
     reference = await run_in_threadpool(core_reference_geometry, design)
     bundle = await run_in_threadpool(
-        build_namd_shape_source, result["positions"], reference,
-        rmsf_positions=result["positions"])
+        build_namd_shape_source,
+        result["positions"],
+        reference,
+        rmsf_positions=result["positions"],
+    )
     ready = bundle["descriptors"] is not None
-    return {"job_id": job_id, "ready": ready,
-            "n_frames": result.get("n_frames", 0), **bundle}
+    return {
+        "job_id": job_id,
+        "ready": ready,
+        "n_frames": result.get("n_frames", 0),
+        **bundle,
+    }
 
 
 class MdFramesAtomisticBody(BaseModel):
@@ -1096,8 +1265,9 @@ def _md_traj_inputs(job_id: str):
 
 
 @router.post("/md/jobs/{job_id}/frames-atomistic")
-async def md_frames_atomistic_route(job_id: str, body: MdFramesAtomisticBody,
-                                    request: Request) -> dict:
+async def md_frames_atomistic_route(
+    job_id: str, body: MdFramesAtomisticBody, request: Request
+) -> dict:
     """Per-frame DNA heavy atoms for NAMD trajectory frame indices (Phase 2b) —
     {idx: {atoms, bonds}}. The NAMD model's own atoms, rendered directly.  Indices are
     COMPOSITE (what the scrub slider shows) — pass the same `stride` the trajectory was
@@ -1112,10 +1282,22 @@ async def md_frames_atomistic_route(job_id: str, body: MdFramesAtomisticBody,
     # the batch instead of letting a legitimate prebuild hit the 180 s ceiling.
     n_req = max(1, len(body.frame_indices))
     return await _run_md_analysis(
-        request, job_id, "atomistic", "md_frames_atomistic",
-        (psf, segments, ref, design, body.frame_indices, 200,
-         _traj_stride(body.stride), body.positions_only),
-        timeout_s=min(3600.0, 180.0 + 20.0 * n_req))
+        request,
+        job_id,
+        "atomistic",
+        "md_frames_atomistic",
+        (
+            psf,
+            segments,
+            ref,
+            design,
+            body.frame_indices,
+            200,
+            _traj_stride(body.stride),
+            body.positions_only,
+        ),
+        timeout_s=min(3600.0, 180.0 + 20.0 * n_req),
+    )
 
 
 @router.get("/md/jobs/{job_id}/atomistic-model")
@@ -1129,13 +1311,19 @@ async def md_atomistic_model_route(job_id: str, request: Request) -> dict:
         return {"atoms": [], "bonds": []}
     psf, ref, segments, design = inputs
     return await _run_md_analysis(
-        request, job_id, "atomistic-model", "md_atomistic_model",
-        (psf, segments, ref, design), timeout_s=600.0)
+        request,
+        job_id,
+        "atomistic-model",
+        "md_atomistic_model",
+        (psf, segments, ref, design),
+        timeout_s=600.0,
+    )
 
 
 @router.post("/md/jobs/{job_id}/frames-surface")
-async def md_frames_surface_route(job_id: str, body: MdFramesSurfaceBody,
-                                  request: Request) -> dict:
+async def md_frames_surface_route(
+    job_id: str, body: MdFramesSurfaceBody, request: Request
+) -> dict:
     """Per-frame molecular surface from the NAMD DNA heavy atoms (Phase 2b) —
     surface-batch shape {idx: {vertices, faces}}.  COMPOSITE indices, same `stride`
     rule as frames-atomistic."""
@@ -1144,15 +1332,30 @@ async def md_frames_surface_route(job_id: str, body: MdFramesSurfaceBody,
         return {}
     psf, ref, segments, design = inputs
     return await _run_md_analysis(
-        request, job_id, "surface", "md_frames_surface",
-        (psf, segments, ref, design, body.frame_indices, body.probe_radius,
-         body.grid_spacing, body.radius_inflate, body.smooth, 200,
-         _traj_stride(body.stride)))
+        request,
+        job_id,
+        "surface",
+        "md_frames_surface",
+        (
+            psf,
+            segments,
+            ref,
+            design,
+            body.frame_indices,
+            body.probe_radius,
+            body.grid_spacing,
+            body.radius_inflate,
+            body.smooth,
+            200,
+            _traj_stride(body.stride),
+        ),
+    )
 
 
 @router.post("/md/jobs/{job_id}/frames-solvent-bin")
-async def md_frames_solvent_route(job_id: str, body: MdFramesSolventBody,
-                                  request: Request) -> Response:
+async def md_frames_solvent_route(
+    job_id: str, body: MdFramesSolventBody, request: Request
+) -> Response:
     """Per-frame explicit solvent + periodic cell, as a binary blob.
 
     Binary rather than JSON because whole-box atomistic water is millions of
@@ -1166,16 +1369,29 @@ async def md_frames_solvent_route(job_id: str, body: MdFramesSolventBody,
 
     inputs = _md_traj_inputs(job_id)
     if inputs is None:
-        return Response(content=empty_solvent_bin(),
-                        media_type="application/octet-stream")
+        return Response(
+            content=empty_solvent_bin(), media_type="application/octet-stream"
+        )
     psf, ref, segments, design = inputs
     n_req = max(1, len(body.frame_indices))
     opts = body.model_dump(exclude={"frame_indices", "stride"})
     buf = await _run_md_analysis(
-        request, job_id, "solvent", "md_frames_solvent",
-        (psf, segments, ref, design, body.frame_indices, 200,
-         _traj_stride(body.stride), opts),
-        timeout_s=min(3600.0, 240.0 + 30.0 * n_req))
+        request,
+        job_id,
+        "solvent",
+        "md_frames_solvent",
+        (
+            psf,
+            segments,
+            ref,
+            design,
+            body.frame_indices,
+            200,
+            _traj_stride(body.stride),
+            opts,
+        ),
+        timeout_s=min(3600.0, 240.0 + 30.0 * n_req),
+    )
     if not isinstance(buf, (bytes, bytearray)):
         buf = empty_solvent_bin()
     return Response(content=bytes(buf), media_type="application/octet-stream")
@@ -1194,8 +1410,14 @@ async def md_solvent_meta(job_id: str) -> dict:
     counts only the bulk, so the two legitimately differ by ``6 * n_mg``."""
     job = _load_job(job_id)
     package_dir = job.package_dir(_workspace())
-    out: dict = {"ready": False, "n_waters": 0, "n_ions": 0, "species": {},
-                 "box_nm": None, "mg_hexahydrate": False}
+    out: dict = {
+        "ready": False,
+        "n_waters": 0,
+        "n_ions": 0,
+        "species": {},
+        "box_nm": None,
+        "mg_hexahydrate": False,
+    }
 
     def _read(path: Path) -> dict:
         try:
@@ -1246,23 +1468,32 @@ async def md_cancel_analysis(job_id: str, kind: Optional[str] = None) -> dict:
     return {"cancelled": md_analysis_runner.cancel(job_id, kind)}
 
 
-def _production_checkpoint_warning(job: MdJob, spec: SegmentSpec, *, fallback_reason: str = "") -> str:
+def _production_checkpoint_warning(
+    job: MdJob, spec: SegmentSpec, *, fallback_reason: str = ""
+) -> str:
     warnings: list[str] = []
     if fallback_reason:
         warnings.append(fallback_reason)
 
-    sample = next((h for h in reversed(job.health_samples) if h.segment == spec.name), None)
+    sample = next(
+        (h for h in reversed(job.health_samples) if h.segment == spec.name), None
+    )
     if sample is None:
         warnings.append("No health metrics were recorded for this checkpoint.")
     else:
         if not sample.passed:
-            warnings.append(f"Checkpoint health did not pass: {sample.reason or 'unknown reason'}.")
+            warnings.append(
+                f"Checkpoint health did not pass: {sample.reason or 'unknown reason'}."
+            )
         if sample.c1_paired_fraction is not None and sample.c1_paired_fraction < 0.95:
             warnings.append(
                 f"C1' paired fraction is {sample.c1_paired_fraction * 100:.1f}%, "
                 "below the normal 95.0% production qualification target."
             )
-        if sample.wc_ref_relative_fraction is not None and sample.wc_ref_relative_fraction < 0.80:
+        if (
+            sample.wc_ref_relative_fraction is not None
+            and sample.wc_ref_relative_fraction < 0.80
+        ):
             warnings.append(
                 f"WC ref-relative pairing is {sample.wc_ref_relative_fraction * 100:.1f}%, "
                 "below the normal 80.0% production qualification target."
@@ -1270,7 +1501,9 @@ def _production_checkpoint_warning(job: MdJob, spec: SegmentSpec, *, fallback_re
     return " ".join(warnings)
 
 
-def _completed_production_checkpoint(job: MdJob) -> tuple[Optional[int], Optional[SegmentSpec], str]:
+def _completed_production_checkpoint(
+    job: MdJob,
+) -> tuple[Optional[int], Optional[SegmentSpec], str]:
     package_dir = job.package_dir(_workspace())
     manifest_path = package_dir / "manifest.json"
     if not manifest_path.exists():
@@ -1286,14 +1519,22 @@ def _completed_production_checkpoint(job: MdJob) -> tuple[Optional[int], Optiona
             continue
         if spec.name not in done:
             continue
-        has_restart = all((output / f"{spec.name}.{ext}").exists() for ext in ("coor", "vel", "xsc"))
+        has_restart = all(
+            (output / f"{spec.name}.{ext}").exists() for ext in ("coor", "vel", "xsc")
+        )
         if not has_restart:
             continue
         return idx, spec, ""
-    return None, None, "No completed production checkpoint is available to continue from."
+    return (
+        None,
+        None,
+        "No completed production checkpoint is available to continue from.",
+    )
 
 
-def _production_ready_checkpoint(job: MdJob) -> tuple[Optional[int], Optional[SegmentSpec], str, str]:
+def _production_ready_checkpoint(
+    job: MdJob,
+) -> tuple[Optional[int], Optional[SegmentSpec], str, str]:
     package_dir = job.package_dir(_workspace())
     manifest_path = package_dir / "manifest.json"
     if not manifest_path.exists():
@@ -1320,7 +1561,9 @@ def _production_ready_checkpoint(job: MdJob) -> tuple[Optional[int], Optional[Se
         if passed and spec.name not in passed:
             continue
         output = package_dir / "output"
-        has_restart = all((output / f"{spec.name}.{ext}").exists() for ext in ("coor", "vel", "xsc"))
+        has_restart = all(
+            (output / f"{spec.name}.{ext}").exists() for ext in ("coor", "vel", "xsc")
+        )
         if not has_restart:
             continue
         stage_l = spec.stage.lower()
@@ -1332,7 +1575,12 @@ def _production_ready_checkpoint(job: MdJob) -> tuple[Optional[int], Optional[Se
             continue
         if "production" in stage_l or "prod" in name_l:
             continue
-        if "probe" in stage_l or "probe" in name_l or "qualification" in stage_l or "qual" in name_l:
+        if (
+            "probe" in stage_l
+            or "probe" in name_l
+            or "qualification" in stage_l
+            or "qual" in name_l
+        ):
             return idx, spec, "", _production_checkpoint_warning(job, spec)
         if latest_unqualified is None:
             latest_unqualified = (idx, spec)
@@ -1349,7 +1597,11 @@ def _production_ready_checkpoint(job: MdJob) -> tuple[Optional[int], Optional[Se
         )
         return idx, spec, "", warning
 
-    if job.status == MdStatus.completed and latest_restrained is not None and latest_restrained_idx is not None:
+    if (
+        job.status == MdStatus.completed
+        and latest_restrained is not None
+        and latest_restrained_idx is not None
+    ):
         warning = _production_checkpoint_warning(
             job,
             latest_restrained,
@@ -1368,7 +1620,12 @@ def _production_ready_checkpoint(job: MdJob) -> tuple[Optional[int], Optional[Se
             "run an unrestrained qualification/probe before production.",
             "",
         )
-    return None, None, "No passing unrestrained qualification/probe checkpoint is available yet", ""
+    return (
+        None,
+        None,
+        "No passing unrestrained qualification/probe checkpoint is available yet",
+        "",
+    )
 
 
 def _seed_production_available(job: MdJob) -> bool:
@@ -1387,21 +1644,25 @@ def _seed_production_available(job: MdJob) -> bool:
     return False
 
 
-def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
-                                  box: tuple[float, float, float],
-                                  mgh_extrabonds: bool, *,
-                                  seed: Optional[int] = None,
-                                  fast: bool = False,
-                                  timestep_fs: Optional[float] = None,
-                                  rigid_bonds: Optional[str] = None,
-                                  hmr: Optional[bool] = None,
-                                  structure_psf: Optional[str] = None,
-                                  anchors_file: Optional[str] = None,
-                                  field: Optional[dict] = None,
-                                  colvars_file: Optional[str] = None,
-                                  n_atoms: Optional[int] = None,
-                                  force_resident: Optional[bool] = None,
-                                  package_dir: Optional[Path] = None) -> str:
+def _conservative_production_conf(
+    spec: SegmentSpec,
+    name_stem: str,
+    box: tuple[float, float, float],
+    mgh_extrabonds: bool,
+    *,
+    seed: Optional[int] = None,
+    fast: bool = False,
+    timestep_fs: Optional[float] = None,
+    rigid_bonds: Optional[str] = None,
+    hmr: Optional[bool] = None,
+    structure_psf: Optional[str] = None,
+    anchors_file: Optional[str] = None,
+    field: Optional[dict] = None,
+    colvars_file: Optional[str] = None,
+    n_atoms: Optional[int] = None,
+    force_resident: Optional[bool] = None,
+    package_dir: Optional[Path] = None,
+) -> str:
     # Thin delegate to the shared, parameterized builder in md_protocols (the ensemble
     # path calls the same builder with a per-replica seed + start_checkpoint).  Defaults
     # here reproduce the original template byte-for-byte; timestep_fs (1/2/4) selects the
@@ -1416,29 +1677,47 @@ def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
     # pin byte-for-byte; the append route passes an explicit random draw.
     seed_kw = {} if seed is None else {"seed": int(seed)}
     return build_production_conf(
-        spec, name_stem, box, mgh_extrabonds,
-        fast=fast, timestep_fs=timestep_fs, structure_psf=structure_psf,
-        rigid_bonds=rigid_bonds, hmr=hmr,
-        anchors_file=anchors_file, field=field, colvars_file=colvars_file,
-        n_atoms=n_atoms, force_resident=force_resident,
+        spec,
+        name_stem,
+        box,
+        mgh_extrabonds,
+        fast=fast,
+        timestep_fs=timestep_fs,
+        structure_psf=structure_psf,
+        rigid_bonds=rigid_bonds,
+        hmr=hmr,
+        anchors_file=anchors_file,
+        field=field,
+        colvars_file=colvars_file,
+        n_atoms=n_atoms,
+        force_resident=force_resident,
         npt=package_npt_allowed(package_dir) if package_dir else True,
         **seed_kw,
     )
 
 
-def _seed_production_conf(spec: SegmentSpec, name_stem: str,
-                         box: tuple[float, float, float],
-                         mgh_extrabonds: bool, minimize_steps: int, *,
-                         seed: int = 54321,
-                         anchors_file: Optional[str] = None,
-                         field: Optional[dict] = None) -> str:
+def _seed_production_conf(
+    spec: SegmentSpec,
+    name_stem: str,
+    box: tuple[float, float, float],
+    mgh_extrabonds: bool,
+    minimize_steps: int,
+    *,
+    seed: int = 54321,
+    anchors_file: Optional[str] = None,
+    field: Optional[dict] = None,
+) -> str:
     """Production conf that starts DIRECTLY from the oxDNA-seeded solvated
     structure (no relaxation checkpoint): minimize first to clear fresh-solvent
     clashes, assign velocities at 300 K, then run unrestrained.  Used when the
     user skips the NAMD relaxation ladder on a seeded job."""
     bx, by, bz = box
     cx, cy, cz = bx / 2, by / 2, bz / 2
-    extras = "extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n" if mgh_extrabonds else ""
+    extras = (
+        "extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n"
+        if mgh_extrabonds
+        else ""
+    )
     ext_forces = external_forces_block(anchors_file, field)
     return f"""\
 structure          {name_stem}.psf
@@ -1499,7 +1778,9 @@ run                {spec.steps}
 """
 
 
-def _production_steps_and_ns(body: ProductionRequest, timestep_fs: float) -> tuple[int, float]:
+def _production_steps_and_ns(
+    body: ProductionRequest, timestep_fs: float
+) -> tuple[int, float]:
     """Convert a production request into (integration steps, simulated ns).
 
     ``steps`` is a raw integration-step count (timestep-independent); ``length_ns``
@@ -1554,7 +1835,7 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
     # declash it went False, the replica builder read that as "no HMR", and a requested 4 fs
     # came out as a silent 1 fs run at ~80 ns/day.  The HMR PSF is built on demand now, so
     # the relaxation protocol has no say here.
-    fast = (timestep_fs == 4.0)
+    fast = timestep_fs == 4.0
     # The other two axes, same precedence as the timestep: THIS request > the value baked
     # in at prep > auto from the timestep.  `fast` above is now only a NAME for "4 fs", and
     # `hmr` below is what actually decides whether a repartitioned PSF is used — exp51
@@ -1605,9 +1886,7 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
         )
     # GPU-resident for production: this request's choice > the package's prep-time mode >
     # "auto" (the atom-count gate inside build_production_conf).  None here means auto.
-    resident_mode = (body.gpu_resident
-                     or manifest.get("gpu_resident_mode")
-                     or "auto")
+    resident_mode = body.gpu_resident or manifest.get("gpu_resident_mode") or "auto"
     force_resident = {"on": True, "off": False}.get(str(resident_mode).lower())
     total_steps, length_ns = _production_steps_and_ns(body, timestep_fs)
     return {
@@ -1651,8 +1930,10 @@ def _append_production_segments(
             if _seed_production_available(job):
                 from_seed = True
                 checkpoint_name = "oxdna_seed"
-                warning = ("NAMD relaxation skipped: the oxDNA-seeded structure is "
-                           "minimized then produced unrestrained. Watch the first frames.")
+                warning = (
+                    "NAMD relaxation skipped: the oxDNA-seeded structure is "
+                    "minimized then produced unrestrained. Watch the first frames."
+                )
             else:
                 raise HTTPException(400, reason)
         else:
@@ -1675,7 +1956,7 @@ def _append_production_segments(
     # rigidBonds all stays stable at 4 fs.  A fast relaxation ladder already wrote
     # {stem}_hmr.psf; otherwise build it once here.  2 fs (rigidBonds all, GPUresident,
     # standard masses) and 1 fs (conservative reference) use the plain PSF — no HMR.
-    fast = (timestep_fs == 4.0)
+    fast = timestep_fs == 4.0
     # HMR is its own axis: the plan resolved it (request > manifest > auto-at-4-fs), and a
     # 4 fs run with HMR deliberately turned off now gets the plain PSF and a warning
     # instead of being silently repartitioned.
@@ -1691,7 +1972,8 @@ def _append_production_segments(
             seed_ts_note = (
                 f"Timestep forced to 1 fs: this job produces directly from its seeded "
                 f"structure, which has not been through the restrained ladder, so the "
-                f"{float(plan['timestep_fs']):g} fs you chose is not used for this run.")
+                f"{float(plan['timestep_fs']):g} fs you chose is not used for this run."
+            )
             warning = f"{warning} {seed_ts_note}".strip() if warning else seed_ts_note
     structure_psf: Optional[str] = None
     n_hmr = 0
@@ -1711,7 +1993,8 @@ def _append_production_segments(
             hmr_downgrade_reason = (
                 f"{name_stem}.psf is missing from the package, so no repartitioned copy "
                 f"could be built and 4 fs could not run. This production dropped to the "
-                f"1 fs conservative path.")
+                f"1 fs conservative path."
+            )
             logger.warning("production %s: %s", job.job_id, hmr_downgrade_reason)
 
     # Anchors + E-field are properties of the JOB, recorded at prep; an extended
@@ -1730,8 +2013,13 @@ def _append_production_segments(
     # lands on one and the other keeps the old behaviour, and both still look correct.
     for pct, frac in md_plan.PRODUCTION_CHUNKS:
         spec = md_plan.production_segment_spec(
-            name_stem, stage_idx=stage_idx, pct=pct, frac=frac,
-            total_steps=total_steps, timestep_fs=timestep_fs, previous=previous,
+            name_stem,
+            stage_idx=stage_idx,
+            pct=pct,
+            frac=frac,
+            total_steps=total_steps,
+            timestep_fs=timestep_fs,
+            previous=previous,
             dcd_freq=plan.get("dcd_freq"),
         )
         if spec.name in existing:
@@ -1741,15 +2029,30 @@ def _append_production_segments(
         # The FIRST from-seed segment starts from the solvated PDB (minimize +
         # heat); every later split-segment continues from the prior restart.
         if from_seed and not previous:
-            conf = _seed_production_conf(spec, name_stem, box, mgh_extrabonds, min_steps,
-                                         seed=seed,
-                                         anchors_file=anchors_file, field=field)
+            conf = _seed_production_conf(
+                spec,
+                name_stem,
+                box,
+                mgh_extrabonds,
+                min_steps,
+                seed=seed,
+                anchors_file=anchors_file,
+                field=field,
+            )
         else:
             conf = _conservative_production_conf(
-                spec, name_stem, box, mgh_extrabonds, seed=seed,
-                fast=fast, timestep_fs=timestep_fs, structure_psf=structure_psf,
-                rigid_bonds=prod_rigid, hmr=use_hmr,
-                anchors_file=anchors_file, field=field,
+                spec,
+                name_stem,
+                box,
+                mgh_extrabonds,
+                seed=seed,
+                fast=fast,
+                timestep_fs=timestep_fs,
+                structure_psf=structure_psf,
+                rigid_bonds=prod_rigid,
+                hmr=use_hmr,
+                anchors_file=anchors_file,
+                field=field,
                 n_atoms=_psf_atom_count(package_dir / f"{name_stem}.psf") or None,
                 force_resident=plan.get("force_resident"),
                 package_dir=package_dir,
@@ -1766,7 +2069,11 @@ def _append_production_segments(
     manifest["production_extension"] = {
         # Every value this route CHANGED from what was asked, recorded where the rest of
         # the package's deviations live. Absent when nothing was overridden.
-        **({"integrator_downgrade": hmr_downgrade_reason} if hmr_downgrade_reason else {}),
+        **(
+            {"integrator_downgrade": hmr_downgrade_reason}
+            if hmr_downgrade_reason
+            else {}
+        ),
         "length_ns": length_ns,
         "steps": total_steps,
         "previous": checkpoint_name,
@@ -1791,8 +2098,8 @@ def _append_production_segments(
             "gpu_resident": timestep_fs in (2.0, 4.0),
             "timestep_fs": timestep_fs,
             "note": "HMR (non-water H x3) + GPUresident + 4 fs; production "
-                    "electrostatics unchanged from the conservative path — "
-                    "integrator/throughput knobs only (~10x, 1.3 -> >16 ns/day).",
+            "electrostatics unchanged from the conservative path — "
+            "integrator/throughput knobs only (~10x, 1.3 -> >16 ns/day).",
         },
         "health_gate": {"min_c1_paired": 0.90, "min_wc_ref_relative": 0.25},
         "advisory_gate": {"wc_ref_relative": 0.75},
@@ -1821,6 +2128,7 @@ def _append_production_segments(
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
+
 
 def _sequenced_base_count(design) -> int:
     return sum(
@@ -1876,18 +2184,22 @@ def _apply_relax_preset(body: CreateJobRequest) -> CreateJobRequest:
 
     if "protocol" in explicit and wanted and body.protocol != wanted:
         if "relax_preset" not in explicit:
-            return body                      # legacy caller: protocol alone still rules
+            return body  # legacy caller: protocol alone still rules
         raise HTTPException(
             400,
             f"protocol={body.protocol!r} contradicts relax_preset={preset.id!r}, which "
             f"runs {wanted!r}. Protocol is derived from the preset — send one or the "
-            f"other.")
+            f"other.",
+        )
 
     if not preset.defaults:
         return body
-    updates = {k: v for k, v in preset.defaults.items()
-               if k in type(body).model_fields
-               and (k == "protocol" or k in preset.locked or k not in explicit)}
+    updates = {
+        k: v
+        for k, v in preset.defaults.items()
+        if k in type(body).model_fields
+        and (k == "protocol" or k in preset.locked or k not in explicit)
+    }
     return body.model_copy(update=updates) if updates else body
 
 
@@ -1916,8 +2228,7 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     # crash rather than an unmet requirement.
     _ok, _why = preset_availability(preset)
     if not _ok:
-        raise HTTPException(
-            400, f"The {preset.label!r} preset cannot run here. {_why}")
+        raise HTTPException(400, f"The {preset.label!r} preset cannot run here. {_why}")
     # Preset supplies defaults for anything the caller did not set explicitly.
     body = _apply_relax_preset(body)
 
@@ -1933,7 +2244,9 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         _has_field = namd_efield_vector(body.field) is not None
     except (TypeError, ValueError) as exc:
         raise HTTPException(
-            400, f"Malformed field spec (expected {{'field_pN': <pN>, 'dir': [x,y,z]}}): {exc}")
+            400,
+            f"Malformed field spec (expected {{'field_pN': <pN>, 'dir': [x,y,z]}}): {exc}",
+        )
     if _has_field:
         # A uniform force on every nucleotide is a net force on the centre of mass: an
         # unanchored structure just streams across the box instead of deflecting.  Anchors
@@ -1941,8 +2254,10 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         if "," in (body.devices or ""):
             # NAMD 3: "EField is not compatible with multi-GPU GPUresident".
             raise HTTPException(
-                400, "NAMD cannot combine an electric field with a multi-GPU run. "
-                     "Use a single device (e.g. devices='0').")
+                400,
+                "NAMD cannot combine an electric field with a multi-GPU run. "
+                "Use a single device (e.g. devices='0').",
+            )
 
     # Engine availability is cheap — fail fast (synchronously) so the user gets a
     # 400 instead of a job that immediately fails in the background.
@@ -1952,23 +2267,32 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     except RuntimeError as exc:
         raise HTTPException(400, str(exc))
 
-    if sum(bool(x) for x in (body.oxdna_job_id, body.mrdna_job_id, body.blade_job_id)) > 1:
+    if (
+        sum(bool(x) for x in (body.oxdna_job_id, body.mrdna_job_id, body.blade_job_id))
+        > 1
+    ):
         raise HTTPException(400, "Seed from ONE of oxDNA / mrDNA / BLADE, not several.")
     # A BLADE seed carries the exact all-atom conformation via solute_coords, which only
     # lines up under the full psfgen topology (with hydrogens); GBIS is itself implicit
     # solvent and re-solvating a BLADE-implicit relax under GBIS defeats the purpose.
     if body.blade_job_id and body.protocol == IMPLICIT_GBIS_PROTOCOL:
         raise HTTPException(
-            400, "A BLADE seed feeds an EXPLICIT-solvent NAMD run — the implicit-GBIS "
-                 "protocol re-solvates implicitly and cannot use the exact all-atom seed. "
-                 "Choose an explicit-solvent protocol.")
+            400,
+            "A BLADE seed feeds an EXPLICIT-solvent NAMD run — the implicit-GBIS "
+            "protocol re-solvates implicitly and cannot use the exact all-atom seed. "
+            "Choose an explicit-solvent protocol.",
+        )
     if body.vacuum_job_id and body.protocol == IMPLICIT_GBIS_PROTOCOL:
         raise HTTPException(
-            400, "A vacuum pre-stage seeds an EXPLICIT-solvent run; the implicit-GBIS "
-                 "protocol has no solvation step to seed.")
+            400,
+            "A vacuum pre-stage seeds an EXPLICIT-solvent run; the implicit-GBIS "
+            "protocol has no solvation step to seed.",
+        )
     seeded = bool(body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id)
     if body.draft and not seeded:
-        raise HTTPException(400, "A draft job must be seeded from an oxDNA / mrDNA / BLADE job.")
+        raise HTTPException(
+            400, "A draft job must be seeded from an oxDNA / mrDNA / BLADE job."
+        )
     if seeded:
         # The seed's design lives on disk (the source job's snapshot); it is resolved in
         # the background worker so its (slow) reconstruction shows on the progress
@@ -1977,19 +2301,28 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         try:
             if body.oxdna_job_id:
                 from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
-                await run_in_threadpool(assert_namd_seed_available, body.oxdna_job_id, _workspace())
+
+                await run_in_threadpool(
+                    assert_namd_seed_available, body.oxdna_job_id, _workspace()
+                )
             elif body.mrdna_job_id:
                 from backend.core.mrdna_runner import assert_mrdna_namd_seed_available  # noqa: PLC0415
-                await run_in_threadpool(assert_mrdna_namd_seed_available, body.mrdna_job_id, _workspace())
+
+                await run_in_threadpool(
+                    assert_mrdna_namd_seed_available, body.mrdna_job_id, _workspace()
+                )
             else:
                 from backend.core.blade_runner import assert_blade_namd_seed_available  # noqa: PLC0415
-                await run_in_threadpool(assert_blade_namd_seed_available, body.blade_job_id, _workspace())
+
+                await run_in_threadpool(
+                    assert_blade_namd_seed_available, body.blade_job_id, _workspace()
+                )
         except FileNotFoundError as exc:
             # A seed is named deliberately ("Use as NAMD seed"), so an unusable one is a
             # real error rather than something to quietly relax without.
             raise HTTPException(400, str(exc))
         design = None
-        name = _seed_design_name(body)   # nice list label; provisional otherwise
+        name = _seed_design_name(body)  # nice list label; provisional otherwise
         size_factor = 1.0
     else:
         # The active design is request-scoped (doc session contextvar), so it must
@@ -2003,6 +2336,7 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         # a job that spawns "preparing" then dies in background prep.  The build-time
         # guard in prepare_mgh_slow_release stays as the backstop for seeded/RunPod paths.
         from backend.core.md_sequence_guard import require_sequenced_scaffold  # noqa: PLC0415
+
         try:
             require_sequenced_scaffold(design)
         except ValueError as exc:
@@ -2024,7 +2358,9 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     if _wants_vacuum_prestage(body, design):
         return _spawn_vacuum_prestage(body, design=design, name=name).to_dict()
 
-    job = _spawn_prep_job(body, design=design, seeded=seeded, name=name, size_factor=size_factor)
+    job = _spawn_prep_job(
+        body, design=design, seeded=seeded, name=name, size_factor=size_factor
+    )
     return job.to_dict()
 
 
@@ -2044,19 +2380,34 @@ async def get_md_job_forces(job_id: str) -> dict:
     pkg = job.package_dir(_workspace())
     manifest_path = pkg / "manifest.json"
     if not manifest_path.exists():
-        return {"ok": True, "prepared": False, "editable": False,
-                "anchors": None, "field": None}
+        return {
+            "ok": True,
+            "prepared": False,
+            "editable": False,
+            "anchors": None,
+            "field": None,
+        }
     manifest = json.loads(manifest_path.read_text())
     anchors = manifest.get("anchors") or None
     # A package that recorded a selection but resolved none is NOT anchored; say so
     # rather than letting a non-empty `requested` list read as an applied anchor.
-    if anchors and not (anchors.get("n_atoms_fixed") or anchors.get("n_atoms_anchored")):
+    if anchors and not (
+        anchors.get("n_atoms_fixed") or anchors.get("n_atoms_anchored")
+    ):
         anchors = {**anchors, "applied": False}
     elif anchors:
         anchors = {**anchors, "applied": True}
-    editable = not (is_running(job_id) or job.status in (
-        MdStatus.running, MdStatus.preparing, MdStatus.completed,
-        MdStatus.failed, MdStatus.stopped))
+    editable = not (
+        is_running(job_id)
+        or job.status
+        in (
+            MdStatus.running,
+            MdStatus.preparing,
+            MdStatus.completed,
+            MdStatus.failed,
+            MdStatus.stopped,
+        )
+    )
     return {
         "ok": True,
         "prepared": True,
@@ -2078,15 +2429,21 @@ class JobForcesRequest(BaseModel):
     accepted elsewhere and discarded, and no conf writer emits one.  Offering the control
     here would be a switch wired to nothing.
     """
+
     anchors: Optional[list] = Field(
-        None, description="Anchor scopes (shared picker format). Each may carry its own "
-                          "`atoms` list; those without one use `anchor_atoms`. [] clears them.")
+        None,
+        description="Anchor scopes (shared picker format). Each may carry its own "
+        "`atoms` list; those without one use `anchor_atoms`. [] clears them.",
+    )
     anchor_atoms: Optional[list[str]] = Field(
-        None, description="DEFAULT atom-name filter for anchors that carry no `atoms` of "
-                          "their own, e.g. [\"C1'\"]. Prefer C1' over P: every nucleotide "
-                          "has a C1', but 5' termini have no phosphorus and would be dropped.")
+        None,
+        description="DEFAULT atom-name filter for anchors that carry no `atoms` of "
+        "their own, e.g. [\"C1'\"]. Prefer C1' over P: every nucleotide "
+        "has a C1', but 5' termini have no phosphorus and would be dropped.",
+    )
     field: Optional[dict] = Field(
-        None, description="Uniform E-field {'field_pN', 'dir'}. null clears it.")
+        None, description="Uniform E-field {'field_pN', 'dir'}. null clears it."
+    )
 
 
 @router.post("/md/jobs/{job_id}/forces")
@@ -2103,11 +2460,14 @@ async def set_md_job_forces(job_id: str, body: JobForcesRequest) -> dict:
     forces must describe the trajectory it actually produced.
     """
     from backend.core.md_protocols import (  # noqa: PLC0415
-        ANCHOR_MARKER_PDB, inject_external_forces, namd_efield_vector,
+        ANCHOR_MARKER_PDB,
+        inject_external_forces,
+        namd_efield_vector,
         write_anchor_restraints_pdb,
     )
     from backend.core.namd_topology import (  # noqa: PLC0415
-        requested_atom_names, resolve_anchor_atom_map,
+        requested_atom_names,
+        resolve_anchor_atom_map,
     )
 
     job = _load_job(job_id)
@@ -2115,15 +2475,19 @@ async def set_md_job_forces(job_id: str, body: JobForcesRequest) -> dict:
         raise HTTPException(400, "Cannot change forces while the job is running.")
     if job.status in (MdStatus.completed, MdStatus.failed, MdStatus.stopped):
         raise HTTPException(
-            400, f"This job has already run ({job.status.value}). Its forces describe the "
-                 f"trajectory it produced and cannot be rewritten \u2014 create a new job "
-                 f"instead.")
+            400,
+            f"This job has already run ({job.status.value}). Its forces describe the "
+            f"trajectory it produced and cannot be rewritten \u2014 create a new job "
+            f"instead.",
+        )
     pkg = job.package_dir(_workspace())
     manifest_path = pkg / "manifest.json"
     if not manifest_path.exists():
         raise HTTPException(
-            400, "This job has no prepared package yet, so there are no confs to attach "
-                 "forces to. Prepare it first.")
+            400,
+            "This job has no prepared package yet, so there are no confs to attach "
+            "forces to. Prepare it first.",
+        )
     manifest = json.loads(manifest_path.read_text())
     name_stem = manifest["name_stem"]
 
@@ -2134,35 +2498,52 @@ async def set_md_job_forces(job_id: str, body: JobForcesRequest) -> dict:
         snapshot = job.job_dir(_workspace()) / "design.json"
         if not snapshot.exists():
             raise HTTPException(
-                400, "This job has no frozen design snapshot, so anchor scopes cannot be "
-                     "resolved against the structure its package was built from.")
+                400,
+                "This job has no frozen design snapshot, so anchor scopes cannot be "
+                "resolved against the structure its package was built from.",
+            )
         from backend.core.models import Design  # noqa: PLC0415
+
         design = Design.model_validate_json(snapshot.read_text())
-        full_topology = bool((manifest.get("charge_audit") or {}).get("topology_builder"))
+        full_topology = bool(
+            (manifest.get("charge_audit") or {}).get("topology_builder")
+        )
         # Per-anchor atom sets; anchor_atoms is the fallback for anchors that carry none.
         indices = resolve_anchor_atom_map(
-            design, body.anchors, full_topology=full_topology,
-            default_atoms=set(body.anchor_atoms) if body.anchor_atoms else None)
+            design,
+            body.anchors,
+            full_topology=full_topology,
+            default_atoms=set(body.anchor_atoms) if body.anchor_atoms else None,
+        )
         if indices:
             n_atoms = write_anchor_restraints_pdb(
-                pkg / f"{name_stem}.pdb", pkg / ANCHOR_MARKER_PDB, indices)
+                pkg / f"{name_stem}.pdb", pkg / ANCHOR_MARKER_PDB, indices
+            )
             if not n_atoms:
-                raise HTTPException(400, (
-                    f"anchor atoms {requested_atom_names(indices)} matched no heavy atom "
-                    f"in the {len(indices)} selected residue(s). CHARMM36 nucleic-acid "
-                    f"names look like P, O5', C5', C4', C3', C1' \u2014 and note 5' termini "
-                    f"have no P."))
+                raise HTTPException(
+                    400,
+                    (
+                        f"anchor atoms {requested_atom_names(indices)} matched no heavy atom "
+                        f"in the {len(indices)} selected residue(s). CHARMM36 nucleic-acid "
+                        f"names look like P, O5', C5', C4', C3', C1' \u2014 and note 5' termini "
+                        f"have no P."
+                    ),
+                )
             anchors_file, n_res = ANCHOR_MARKER_PDB, len(indices)
         else:
-            logger.warning("[%s] anchor scopes %r resolved to no DNA residue",
-                           job_id, body.anchors)
+            logger.warning(
+                "[%s] anchor scopes %r resolved to no DNA residue", job_id, body.anchors
+            )
     if not anchors_file:
         (pkg / ANCHOR_MARKER_PDB).unlink(missing_ok=True)
 
     field = body.field or None
     if namd_efield_vector(field) is not None and anchors_file is None:
-        logger.warning("[%s] E-field with no anchor \u2014 the structure will drift "
-                       "down-field (COM drift).", job_id)
+        logger.warning(
+            "[%s] E-field with no anchor \u2014 the structure will drift "
+            "down-field (COM drift).",
+            job_id,
+        )
 
     # ── Patch every conf ───────────────────────────────────────────────────────
     # NAMD 3 refuses `fixedAtoms` under GPUresident, and prep chose GPUresident before any
@@ -2173,10 +2554,11 @@ async def set_md_job_forces(job_id: str, body: JobForcesRequest) -> dict:
     for conf in sorted(pkg.glob("*.conf")):
         before = conf.read_text()
         try:
-            new = inject_external_forces(before, anchors_file, field,
-                                         restore_resident=was_resident)
+            new = inject_external_forces(
+                before, anchors_file, field, restore_resident=was_resident
+            )
         except ValueError:
-            continue                      # not one of ours (no `constraints` directive)
+            continue  # not one of ours (no `constraints` directive)
         if "GPUresident" in before and "GPUresident" not in new:
             stripped = True
         conf.write_text(new)
@@ -2200,8 +2582,15 @@ async def set_md_job_forces(job_id: str, body: JobForcesRequest) -> dict:
     manifest_path.write_text(text)
     (pkg / "nadoc_md_run.json").write_text(text)
 
-    logger.info("[%s] forces set: %d anchored atom(s) over %d residue(s), field=%s, "
-                "%d conf(s) patched", job_id, n_atoms, n_res, bool(field), len(patched))
+    logger.info(
+        "[%s] forces set: %d anchored atom(s) over %d residue(s), field=%s, "
+        "%d conf(s) patched",
+        job_id,
+        n_atoms,
+        n_res,
+        bool(field),
+        len(patched),
+    )
     return {
         "ok": True,
         "job": job.to_dict(),
@@ -2226,7 +2615,8 @@ async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
         raise HTTPException(400, "Job is not a draft (already prepared).")
 
     try:
-        find_namd(); find_gmx()
+        find_namd()
+        find_gmx()
     except RuntimeError as exc:
         raise HTTPException(400, str(exc))
 
@@ -2239,27 +2629,49 @@ async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
     params.setdefault("design_source_path", job.design_source_path)
     new_body = CreateJobRequest(**params)
 
-    seeded = bool(new_body.oxdna_job_id or new_body.mrdna_job_id or new_body.blade_job_id)
+    seeded = bool(
+        new_body.oxdna_job_id or new_body.mrdna_job_id or new_body.blade_job_id
+    )
     if not seeded:
         raise HTTPException(400, "Draft has no seed source; cannot prepare.")
     try:
         if new_body.oxdna_job_id:
             from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
-            await run_in_threadpool(assert_namd_seed_available, new_body.oxdna_job_id, _workspace())
+
+            await run_in_threadpool(
+                assert_namd_seed_available, new_body.oxdna_job_id, _workspace()
+            )
         elif new_body.mrdna_job_id:
             from backend.core.mrdna_runner import assert_mrdna_namd_seed_available  # noqa: PLC0415
-            await run_in_threadpool(assert_mrdna_namd_seed_available, new_body.mrdna_job_id, _workspace())
+
+            await run_in_threadpool(
+                assert_mrdna_namd_seed_available, new_body.mrdna_job_id, _workspace()
+            )
         else:
             from backend.core.blade_runner import assert_blade_namd_seed_available  # noqa: PLC0415
-            await run_in_threadpool(assert_blade_namd_seed_available, new_body.blade_job_id, _workspace())
+
+            await run_in_threadpool(
+                assert_blade_namd_seed_available, new_body.blade_job_id, _workspace()
+            )
     except FileNotFoundError as exc:
         raise HTTPException(400, str(exc))
 
-    _spawn_prep_job(new_body, design=None, seeded=True, name=job.design_name or "design",
-                    size_factor=1.0, existing_job=job)
-    logger.info("prepare draft %s (seed_oxdna=%s seed_mrdna=%s seed_blade=%s autostart=%s)",
-                job_id, job.seed_oxdna_job_id, job.seed_mrdna_job_id, job.seed_blade_job_id,
-                new_body.autostart)
+    _spawn_prep_job(
+        new_body,
+        design=None,
+        seeded=True,
+        name=job.design_name or "design",
+        size_factor=1.0,
+        existing_job=job,
+    )
+    logger.info(
+        "prepare draft %s (seed_oxdna=%s seed_mrdna=%s seed_blade=%s autostart=%s)",
+        job_id,
+        job.seed_oxdna_job_id,
+        job.seed_mrdna_job_id,
+        job.seed_blade_job_id,
+        new_body.autostart,
+    )
     return MdJob.load(job_id, _workspace()).to_dict()
 
 
@@ -2346,8 +2758,12 @@ def _throughput_estimate(
         ns_per_day = rate * (timestep_fs / measured_at_fs)
         source = f"measured:{segment}"
     elif n_atoms > 0:
-        resident = force_resident if force_resident is not None else gpu_resident_pays(n_atoms)
-        ns_per_day = predict_ns_per_day(n_atoms, gpu_resident=bool(resident)) * (timestep_fs / 4.0)
+        resident = (
+            force_resident if force_resident is not None else gpu_resident_pays(n_atoms)
+        )
+        ns_per_day = predict_ns_per_day(n_atoms, gpu_resident=bool(resident)) * (
+            timestep_fs / 4.0
+        )
         source = "model"
     else:
         return {"est_ns_per_day": None, "est_hours": None, "throughput_source": None}
@@ -2377,7 +2793,10 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
     or vice versa.
     """
     from backend.core.disk_guard import forecast, namd_run_output_bytes
-    from backend.core.md_protocols import design_has_extra_bases, mgh_slow_release_segments
+    from backend.core.md_protocols import (
+        design_has_extra_bases,
+        mgh_slow_release_segments,
+    )
     from backend.core.md_vram import estimate_profile_from_design
 
     target = Path(body.run_dir).expanduser() if body.run_dir else _workspace()
@@ -2388,20 +2807,26 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
     try:
         design = design_state.get_or_404()
         profile = await run_in_threadpool(
-            estimate_profile_from_design, design, padding_nm=body.padding_nm)
+            estimate_profile_from_design, design, padding_nm=body.padding_nm
+        )
         if not profile:
             return {**forecast(target, 0), "skipped": True}
-        n_atoms = profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
+        n_atoms = (
+            profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
+        )
         soft = body.declash or body.force_soft or design_has_extra_bases(design)
         # The ladder timestep the RUN will really use — the same tiers prepare applies,
         # with the user's explicit choice as the base.  This used to read `body.fast`
         # alone, so a job with an explicit relax_timestep_fs got a disk forecast and an
         # ETA computed from a timestep it never ran at.
-        base_fs = (float(body.relax_timestep_fs) if body.relax_timestep_fs is not None
-                   else (4.0 if body.fast else 2.0))
+        base_fs = (
+            float(body.relax_timestep_fs)
+            if body.relax_timestep_fs is not None
+            else (4.0 if body.fast else 2.0)
+        )
         if body.force_soft:
             timestep_fs = min(1.0, base_fs)
-        elif soft:                      # declash / extra bases → the gentle 2 fs tier
+        elif soft:  # declash / extra bases → the gentle 2 fs tier
             timestep_fs = min(2.0, base_fs)
         else:
             timestep_fs = base_fs
@@ -2443,8 +2868,11 @@ async def preflight_md_vram(body: CreateJobRequest) -> dict:
         # then prepared at 2.0 nm with carving refused.
         resolved = _apply_relax_preset(body)
         advice = await run_in_threadpool(
-            preflight_vram_advice, design,
-            padding_nm=resolved.padding_nm, devices=resolved.devices)
+            preflight_vram_advice,
+            design,
+            padding_nm=resolved.padding_nm,
+            devices=resolved.devices,
+        )
         # Whether prep is even ALLOWED to take the carve this advice may recommend.  The
         # 'literature' protocol refuses it, so the gate offers "stop" rather than "we'll
         # shrink the water for you" — see CreateJobRequest.allow_water_shell_carve.
@@ -2504,9 +2932,13 @@ async def estimate_md_production_disk(job_id: str, body: ProductionRequest) -> d
     predicted = namd_run_output_bytes(segments, n_atoms)
     return {
         **forecast(package_dir if package_dir.exists() else _workspace(), predicted),
-        **_throughput_estimate(n_atoms, plan["length_ns"], timestep_fs,
-                               force_resident=plan["force_resident"],
-                               measured=_measured_ns_per_day(job)),
+        **_throughput_estimate(
+            n_atoms,
+            plan["length_ns"],
+            timestep_fs,
+            force_resident=plan["force_resident"],
+            measured=_measured_ns_per_day(job),
+        ),
         "n_atoms": n_atoms,
         "total_steps": total_steps,
         "length_ns": plan["length_ns"],
@@ -2525,16 +2957,38 @@ def _seed_design_name(body: CreateJobRequest) -> str:
     try:
         if body.oxdna_job_id:
             from backend.core.oxdna_job import OxdnaJob  # noqa: PLC0415
+
             return OxdnaJob.load(body.oxdna_job_id, ws).design_name or "design"
         if body.mrdna_job_id:
             from backend.core.mrdna_job import MrdnaJob  # noqa: PLC0415
+
             return MrdnaJob.load(body.mrdna_job_id, ws).design_name or "design"
         if body.blade_job_id:
             from backend.core.blade_job import BladeJob  # noqa: PLC0415
+
             return BladeJob.load(body.blade_job_id, ws).design_name or "design"
     except Exception:  # noqa: BLE001 — a label lookup must never block job creation
         pass
     return "design"
+
+
+def _apply_runpod_choices(job: MdJob, body) -> None:
+    """Record the three RunPod answers the wizard collected before the pod existed.
+
+    Kept for the same reason ``partition`` is kept for Alpine: the choice is made against a
+    live price/stock picture that is long gone by launch time, which can be a later session.
+
+    Cleared for every other target rather than left stale — a leftover ``runpod_gpu_key`` on a
+    job the user re-pointed at the local GPU would resurface at launch and rank a rented card.
+    """
+    is_runpod = getattr(body, "execution_target", "local") == "runpod"
+    job.runpod_gpu_key = getattr(body, "runpod_gpu_key", None) if is_runpod else None
+    job.runpod_budget_usd = (
+        getattr(body, "runpod_budget_usd", None) if is_runpod else None
+    )
+    job.runpod_volume_id = (
+        getattr(body, "runpod_volume_id", None) if is_runpod else None
+    )
 
 
 def _apply_run_dir(job: MdJob, run_dir: Optional[str]) -> None:
@@ -2570,23 +3024,26 @@ def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
     """
     job_threads = body.threads
     job = new_job(
-        design_name    = name,
-        protocol       = body.protocol,
-        name_stem      = "",
-        package_subdir = "",
-        threads        = job_threads,
-        devices        = body.devices,
-        design_source_path = body.design_source_path,
-        seed_oxdna_job_id  = body.oxdna_job_id,
-        seed_mrdna_job_id  = body.mrdna_job_id,
-        seed_blade_job_id  = body.blade_job_id,
+        design_name=name,
+        protocol=body.protocol,
+        name_stem="",
+        package_subdir="",
+        threads=job_threads,
+        devices=body.devices,
+        design_source_path=body.design_source_path,
+        seed_oxdna_job_id=body.oxdna_job_id,
+        seed_mrdna_job_id=body.mrdna_job_id,
+        seed_blade_job_id=body.blade_job_id,
     )
     job.execution_target = body.execution_target
-    job.cluster_name = body.cluster_name or ("alpine" if body.execution_target == "alpine" else None)
+    job.cluster_name = body.cluster_name or (
+        "alpine" if body.execution_target == "alpine" else None
+    )
     job.partition = body.partition
     # Sparse: only what the wizard's first step actually had edited.  Kept so a submit
     # in a later session still honours the request made against the live queue picture.
     job.requested_resources = body.slurm_resources or None
+    _apply_runpod_choices(job, body)
     job.early_stop_relax = body.early_stop_relax
     job.early_stop_tier = (body.early_stop_tier or "B").upper()
     job.prep_params = body.model_dump()
@@ -2594,8 +3051,13 @@ def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
     job.status = MdStatus.draft
     _apply_run_dir(job, body.run_dir)
     job.save(_workspace())
-    logger.info("create_md_job: DRAFT job_id=%s design=%s seed_oxdna=%s seed_mrdna=%s",
-                job.job_id, name, body.oxdna_job_id, body.mrdna_job_id)
+    logger.info(
+        "create_md_job: DRAFT job_id=%s design=%s seed_oxdna=%s seed_mrdna=%s",
+        job.job_id,
+        name,
+        body.oxdna_job_id,
+        body.mrdna_job_id,
+    )
     return job
 
 
@@ -2647,14 +3109,17 @@ def _spawn_vacuum_prestage(body: CreateJobRequest, *, design, name: str) -> MdJo
     """
     from backend.core.namd_vacuum import VACUUM_PROTOCOL  # noqa: PLC0415
 
-    vac_body = body.model_copy(update={
-        "protocol": VACUUM_PROTOCOL,
-        "relax_preset": FAST_SHAPE,
-        # The follow-up owns solvation; this stage has no box, salt or shell.
-        "water_shell_nm": 0.0,
-    })
-    job = _spawn_prep_job(vac_body, design=design, seeded=False, name=name,
-                          size_factor=1.0)
+    vac_body = body.model_copy(
+        update={
+            "protocol": VACUUM_PROTOCOL,
+            "relax_preset": FAST_SHAPE,
+            # The follow-up owns solvation; this stage has no box, salt or shell.
+            "water_shell_nm": 0.0,
+        }
+    )
+    job = _spawn_prep_job(
+        vac_body, design=design, seeded=False, name=name, size_factor=1.0
+    )
     job = MdJob.load(job.job_id, _workspace())
     job.run_kind = VACUUM_PRESTAGE_RUN_KIND
     # Everything the follow-up needs, recorded so a server restart cannot lose it.
@@ -2665,9 +3130,16 @@ def _spawn_vacuum_prestage(body: CreateJobRequest, *, design, name: str) -> MdJo
     return job
 
 
-def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
-                    size_factor: float, parent_job_id: Optional[str] = None,
-                    existing_job: Optional[MdJob] = None) -> MdJob:
+def _spawn_prep_job(
+    body: CreateJobRequest,
+    *,
+    design,
+    seeded: bool,
+    name: str,
+    size_factor: float,
+    parent_job_id: Optional[str] = None,
+    existing_job: Optional[MdJob] = None,
+) -> MdJob:
     """Create the MdJob, persist its prep params, and launch background prep.
 
     Shared by :func:`create_md_job` and :func:`refit_md_job` so a refit reuses the
@@ -2706,17 +3178,17 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
             job.design_source_path = body.design_source_path
     else:
         job = new_job(
-            design_name    = name,
-            protocol       = body.protocol,
-            name_stem      = "",       # filled in after prep
-            package_subdir = "",       # filled in after prep
-            threads        = job_threads,
-            devices        = body.devices,
-            design_source_path = body.design_source_path,
-            seed_oxdna_job_id  = body.oxdna_job_id if seeded else None,
-            seed_mrdna_job_id  = body.mrdna_job_id if seeded else None,
-            seed_blade_job_id  = body.blade_job_id if seeded else None,
-            parent_job_id      = parent_job_id,
+            design_name=name,
+            protocol=body.protocol,
+            name_stem="",  # filled in after prep
+            package_subdir="",  # filled in after prep
+            threads=job_threads,
+            devices=body.devices,
+            design_source_path=body.design_source_path,
+            seed_oxdna_job_id=body.oxdna_job_id if seeded else None,
+            seed_mrdna_job_id=body.mrdna_job_id if seeded else None,
+            seed_blade_job_id=body.blade_job_id if seeded else None,
+            parent_job_id=parent_job_id,
         )
         # Archive a fresh (non-draft) job at the requested run_dir BEFORE prep runs, so the
         # solvated package + trajectory are built there.  A draft was already placed by
@@ -2726,11 +3198,14 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
     # /md/jobs/{id}/submit-remote once the package is prepared and a cluster session
     # is connected.  Tagging here lets the UI show the intended target from creation.
     job.execution_target = body.execution_target
-    job.cluster_name = body.cluster_name or ("alpine" if body.execution_target == "alpine" else None)
+    job.cluster_name = body.cluster_name or (
+        "alpine" if body.execution_target == "alpine" else None
+    )
     job.partition = body.partition
     # Sparse: only what the wizard's first step actually had edited.  Kept so a submit
     # in a later session still honours the request made against the live queue picture.
     job.requested_resources = body.slurm_resources or None
+    _apply_runpod_choices(job, body)
     job.early_stop_relax = body.early_stop_relax
     job.early_stop_tier = (body.early_stop_tier or "B").upper()
     # Capture the request so a later refit can rebuild the job with one knob moved.
@@ -2740,27 +3215,35 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
     job.prep_params_set = sorted(body.model_fields_set)
     job.status = MdStatus.preparing
     job.save(_workspace())
-    logger.info("create_md_job: job_id=%s design=%s protocol=%s seeded=%s",
-                job.job_id, name, body.protocol, seeded)
+    logger.info(
+        "create_md_job: job_id=%s design=%s protocol=%s seeded=%s",
+        job.job_id,
+        name,
+        body.protocol,
+        seeded,
+    )
 
     tracker = PrepTracker(
         build_prep_phases(
-            seeded=seeded, size_factor=size_factor,
+            seeded=seeded,
+            size_factor=size_factor,
             implicit=(body.protocol == IMPLICIT_GBIS_PROTOCOL),
         ),
         clock=time.monotonic,
     )
     write_prep_progress(job.job_dir(_workspace()), tracker.snapshot())
 
-    task = asyncio.create_task(_prepare_job_bg(
-        job_id      = job.job_id,
-        body        = body,
-        design      = design,
-        seeded      = seeded,
-        ion_conc_mM = ion_conc_mM,
-        mg_conc_mM  = mg_conc_mM,
-        tracker     = tracker,
-    ))
+    task = asyncio.create_task(
+        _prepare_job_bg(
+            job_id=job.job_id,
+            body=body,
+            design=design,
+            seeded=seeded,
+            ion_conc_mM=ion_conc_mM,
+            mg_conc_mM=mg_conc_mM,
+            tracker=tracker,
+        )
+    )
     _PREP_TASKS.add(task)
     task.add_done_callback(_PREP_TASKS.discard)
 
@@ -2803,6 +3286,7 @@ async def _prepare_job_bg(
             if body.oxdna_job_id:
                 tracker.report("seed", None, "Reconstructing relaxed atomic model…")
                 from backend.core.oxdna_runner import build_namd_seed  # noqa: PLC0415
+
                 seed = await run_in_threadpool(build_namd_seed, body.oxdna_job_id, ws)
                 local_design = seed.design
                 seed_model = seed.atomistic_model
@@ -2810,7 +3294,10 @@ async def _prepare_job_bg(
             elif body.mrdna_job_id:
                 tracker.report("seed", None, "Reconstructing relaxed atomic model…")
                 from backend.core.mrdna_runner import build_namd_seed_from_mrdna  # noqa: PLC0415
-                seed = await run_in_threadpool(build_namd_seed_from_mrdna, body.mrdna_job_id, ws)
+
+                seed = await run_in_threadpool(
+                    build_namd_seed_from_mrdna, body.mrdna_job_id, ws
+                )
                 local_design = seed.design
                 seed_model = seed.atomistic_model
                 _seed_src = f"mrDNA job {body.mrdna_job_id} (stage {seed.stage_name})"
@@ -2819,7 +3306,10 @@ async def _prepare_job_bg(
                 # coordinates and feed them to solvation via solute_coords (below).
                 tracker.report("seed", None, "Reading BLADE relaxed coordinates…")
                 from backend.core.blade_runner import build_namd_seed_from_blade  # noqa: PLC0415
-                seed = await run_in_threadpool(build_namd_seed_from_blade, body.blade_job_id, ws)
+
+                seed = await run_in_threadpool(
+                    build_namd_seed_from_blade, body.blade_job_id, ws
+                )
                 local_design = seed.design
                 seed_solute_coords = seed.solute_coords
                 _seed_src = f"BLADE job {body.blade_job_id} ({seed.n_atoms} atoms)"
@@ -2839,11 +3329,18 @@ async def _prepare_job_bg(
         if body.vacuum_job_id:
             tracker.report("seed", None, "Reading vacuum-relaxed coordinates…")
             from backend.core.namd_vacuum import build_namd_seed_from_vacuum  # noqa: PLC0415
+
             vac = await run_in_threadpool(
-                build_namd_seed_from_vacuum, body.vacuum_job_id, ws)
+                build_namd_seed_from_vacuum, body.vacuum_job_id, ws
+            )
             seed_solute_coords = vac.solute_coords
-            logger.info("prep %s: seeded coordinates from vacuum job %s (%s, %d atoms)",
-                        job_id, body.vacuum_job_id, vac.source, vac.n_atoms)
+            logger.info(
+                "prep %s: seeded coordinates from vacuum job %s (%s, %d atoms)",
+                job_id,
+                body.vacuum_job_id,
+                vac.source,
+                vac.n_atoms,
+            )
 
         if _sequenced_base_count(local_design) == 0:
             raise RuntimeError(_NO_SEQUENCE_MSG)
@@ -2871,12 +3368,19 @@ async def _prepare_job_bg(
         water_shell_nm = body.water_shell_nm
         if not water_shell_nm and body.protocol != IMPLICIT_GBIS_PROTOCOL:
             from backend.core.md_vram import auto_water_shell  # noqa: PLC0415
-            tracker.report("topology", None,
-                           "Checking CPU memory headroom…" if body.devices.strip().lower() in ("cpu", "none")
-                           else "Checking GPU memory headroom…")
+
+            tracker.report(
+                "topology",
+                None,
+                "Checking CPU memory headroom…"
+                if body.devices.strip().lower() in ("cpu", "none")
+                else "Checking GPU memory headroom…",
+            )
             auto = await run_in_threadpool(
-                auto_water_shell, local_design,
-                padding_nm=body.padding_nm, devices=body.devices,
+                auto_water_shell,
+                local_design,
+                padding_nm=body.padding_nm,
+                devices=body.devices,
                 atomistic_model=seed_model,
             )
             if auto["shell_nm"]:
@@ -2897,7 +3401,10 @@ async def _prepare_job_bg(
                 logger.warning(
                     "prep %s: full box kept; a %.2f nm carve would be needed to fit. "
                     "NOT applied — the user asked for the full box. %s",
-                    job_id, auto["shell_nm"], auto["note"])
+                    job_id,
+                    auto["shell_nm"],
+                    auto["note"],
+                )
                 job = MdJob.load(job_id, ws)
                 pp = dict(job.prep_params or {})
                 # One key, whatever the protocol says about carving: what was RECOMMENDED
@@ -2914,7 +3421,10 @@ async def _prepare_job_bg(
         # fingerprint, so a later design edit flags the job and "Roll & run" can
         # restore this exact state (mirrors oxDNA).
         from backend.core.oxdna_staleness import (
-            design_build_fingerprint, effective_feature_log_position)
+            design_build_fingerprint,
+            effective_feature_log_position,
+        )
+
         (job_dir / "design.json").write_text(local_design.model_dump_json())
         job = MdJob.load(job_id, ws)
         job.design_fingerprint = design_build_fingerprint(local_design)
@@ -2923,6 +3433,7 @@ async def _prepare_job_bg(
 
         if body.protocol == IMPLICIT_GBIS_PROTOCOL:
             from backend.core.namd_gbis import prepare_implicit_gbis_namd  # noqa: PLC0415
+
             prepare = prepare_implicit_gbis_namd
         elif body.protocol == EQUILIBRIUM_AWARE_PROTOCOL:
             prepare = prepare_equilibrium_aware_namd
@@ -2951,40 +3462,45 @@ async def _prepare_job_bg(
             prepare,
             local_design,
             job_dir,
-            ion_conc_mM     = ion_conc_mM,
-            mg_conc_mM      = mg_conc_mM,
-            salt_mode       = body.salt_mode,
-            padding_nm      = body.padding_nm,
-            free_ns         = body.production_ns_intent,
-            water_shell_nm  = water_shell_nm,
-            minimize_steps  = body.minimize_steps,
-            atomistic_model = seed_model,
-            declash         = body.declash,
-            force_soft      = body.force_soft,
-            fast            = body.fast,
-            gpu_resident_mode = body.gpu_resident or "auto",
+            ion_conc_mM=ion_conc_mM,
+            mg_conc_mM=mg_conc_mM,
+            salt_mode=body.salt_mode,
+            padding_nm=body.padding_nm,
+            free_ns=body.production_ns_intent,
+            water_shell_nm=water_shell_nm,
+            minimize_steps=body.minimize_steps,
+            atomistic_model=seed_model,
+            declash=body.declash,
+            force_soft=body.force_soft,
+            fast=body.fast,
+            gpu_resident_mode=body.gpu_resident or "auto",
             # The three ladder axes, decoupled (exp51).  None on any of them keeps the
             # historical `fast`-derived behaviour, so an old client sends the same package.
-            relax_timestep_fs = body.relax_timestep_fs,
-            relax_rigid_bonds = body.relax_rigid_bonds,
-            relax_hmr       = body.relax_hmr,
-            production_timestep_fs = body.production_timestep_fs,
-            production_rigid_bonds = body.production_rigid_bonds,
-            production_hmr  = body.production_hmr,
-            devices         = body.devices,
-            anchors         = body.anchors,
-            anchor_atoms    = body.anchor_atoms,
-            field           = body.field,
+            relax_timestep_fs=body.relax_timestep_fs,
+            relax_rigid_bonds=body.relax_rigid_bonds,
+            relax_hmr=body.relax_hmr,
+            production_timestep_fs=body.production_timestep_fs,
+            production_rigid_bonds=body.production_rigid_bonds,
+            production_hmr=body.production_hmr,
+            devices=body.devices,
+            anchors=body.anchors,
+            anchor_atoms=body.anchor_atoms,
+            field=body.field,
             # Recorded, not acted on, at this layer: the runner owns the skipping. The
             # manifest needs it because a truncated ladder is a protocol deviation, and
             # protocol_fidelity is where a package states its own deltas.
-            early_stop_relax = body.early_stop_relax,
-            stage_overrides = body.stage_overrides or None,
-            progress        = tracker.report,
+            early_stop_relax=body.early_stop_relax,
+            stage_overrides=body.stage_overrides or None,
+            progress=tracker.report,
             **seed_kwargs,
         )
-        logger.info("prep %s: done; package=%s name_stem=%s segments=%d",
-                    job_id, package_subdir, name_stem, len(segments))
+        logger.info(
+            "prep %s: done; package=%s name_stem=%s segments=%d",
+            job_id,
+            package_subdir,
+            name_stem,
+            len(segments),
+        )
     except Exception as exc:
         logger.error("prep %s: FAILED: %s", job_id, exc, exc_info=True)
         tracker.fail(str(exc))
@@ -3001,14 +3517,14 @@ async def _prepare_job_bg(
 
     job = MdJob.load(job_id, ws)
     job.package_subdir = package_subdir
-    job.name_stem      = name_stem
-    job.segments       = [
+    job.name_stem = name_stem
+    job.segments = [
         MdSegmentStatus(
-            name    = s.name,
-            stage   = s.stage,
-            percent = s.percent,
-            steps   = s.steps,
-            status  = "pending",
+            name=s.name,
+            stage=s.stage,
+            percent=s.percent,
+            steps=s.steps,
+            status="pending",
         )
         for s in segments
     ]
@@ -3024,8 +3540,11 @@ async def _prepare_job_bg(
         logger.info("prep %s: autostart=True, launching", job_id)
         start_job(job, ws)
     elif body.autostart:
-        logger.info("prep %s: remote target %s — submit via /submit-remote when connected",
-                    job_id, job.execution_target)
+        logger.info(
+            "prep %s: remote target %s — submit via /submit-remote when connected",
+            job_id,
+            job.execution_target,
+        )
 
 
 def _minimization_from_package(package_dir: Path) -> Optional[MdSegmentStatus]:
@@ -3056,6 +3575,7 @@ def _backfill_failure_kind(job: MdJob) -> None:
     kind = "other"
     if pkg.exists():
         from backend.core.md_vram import classify_failure_log_file  # noqa: PLC0415
+
         logs = sorted(pkg.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
         for lg in logs[:4]:
             k = classify_failure_log_file(lg)
@@ -3066,7 +3586,9 @@ def _backfill_failure_kind(job: MdJob) -> None:
     job.save(_workspace())
 
 
-def _remote_projected_step(job: MdJob, seg_steps: int | None) -> tuple[int | None, bool]:
+def _remote_projected_step(
+    job: MdJob, seg_steps: int | None
+) -> tuple[int | None, bool]:
     """``(step, is_estimate)`` for a job whose log lives on the cluster.
 
     A remote run writes its log on the compute node, so ``live_segment_step`` finds
@@ -3087,7 +3609,9 @@ def _remote_projected_step(job: MdJob, seg_steps: int | None) -> tuple[int | Non
     rate = live.get("s_per_step")
     if not anchor or not rate:
         return int(step), False  # a real observation, just not extrapolatable
-    return projected_step(int(step), float(rate), time.time() - float(anchor), seg_steps), True
+    return projected_step(
+        int(step), float(rate), time.time() - float(anchor), seg_steps
+    ), True
 
 
 def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None, bool]:
@@ -3112,8 +3636,12 @@ def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None, boo
     if not total:
         return None, None, False
     from backend.core.namd_metrics import (  # noqa: PLC0415
-        benchmark_s_per_step, eta_seconds, live_segment_step, overall_fraction,
+        benchmark_s_per_step,
+        eta_seconds,
+        live_segment_step,
+        overall_fraction,
     )
+
     done = sum(1 for s in segs if s.status == "done")
     ts = None
     steps = None
@@ -3127,7 +3655,7 @@ def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None, boo
         try:
             ts = live_segment_step(pkg, seg.name)
             remaining = max(0, int(seg.steps) - int(ts or 0))
-            remaining += sum(int(s.steps or 0) for s in segs[idx + 1:])
+            remaining += sum(int(s.steps or 0) for s in segs[idx + 1 :])
             eta = eta_seconds(remaining, benchmark_s_per_step(pkg / f"{seg.name}.log"))
         except Exception:  # noqa: BLE001 — progress/ETA are advisory, never fatal
             pass
@@ -3138,7 +3666,9 @@ def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None, boo
         if projected is not None and (ts is None or projected > ts):
             ts, estimated = projected, is_estimate
             rate = (job.live_metrics or {}).get("s_per_step")
-            remaining = max(0, int(steps or 0) - ts) + sum(int(s.steps or 0) for s in segs[idx + 1:])
+            remaining = max(0, int(steps or 0) - ts) + sum(
+                int(s.steps or 0) for s in segs[idx + 1 :]
+            )
             eta = eta_seconds(remaining, rate) if rate else eta
     return overall_fraction(done, total, ts, steps), eta, estimated
 
@@ -3151,7 +3681,11 @@ _SIZE_WARM_TASKS: set = set()
 @router.get("/md/jobs")
 async def list_md_jobs() -> list[dict]:
     from backend.core.oxdna_staleness import current_active_design_fingerprint
-    from backend.core.design_disk_usage import dir_size_bytes_cached_only, warm_dir_sizes
+    from backend.core.design_disk_usage import (
+        dir_size_bytes_cached_only,
+        warm_dir_sizes,
+    )
+
     ws = _workspace()
     jobs = MdJob.list_jobs(ws)
     jobs = [reconcile_job_status(j, ws) for j in jobs]
@@ -3194,6 +3728,7 @@ async def list_md_jobs() -> list[dict]:
 @router.get("/md/jobs/{job_id}")
 async def get_md_job(job_id: str) -> dict:
     from backend.core.oxdna_staleness import current_active_design_fingerprint
+
     job = _load_job(job_id)
     d = job.to_dict()
     # Every job that predates MdJob.minimization has None here.  Read it back off the
@@ -3218,7 +3753,9 @@ async def get_md_job_display(job_id: str) -> dict:
         manifest = package_dir / "manifest.json"
 
     segment_name, dcd_path = _latest_display_segment(job)
-    ready_idx, ready_spec, ready_reason, ready_warning = _production_ready_checkpoint(job)
+    ready_idx, ready_spec, ready_reason, ready_warning = _production_ready_checkpoint(
+        job
+    )
     continue_idx, continue_spec, continue_reason = _completed_production_checkpoint(job)
     ready = manifest.exists() and dcd_path is not None
     busy = job.status in {MdStatus.running, MdStatus.preparing}
@@ -3234,10 +3771,25 @@ async def get_md_job_display(job_id: str) -> dict:
         production_checkpoint = None
         production_warning = ""
 
+    # WHY there is nothing to show. Without this the panel's readiness dot collapsed to
+    # "off" — it hid itself — so a run going on a rented GPU looked exactly like no job at
+    # all: toggle Display MD, get nothing, no explanation.
+    from backend.core.md_display_status import display_not_ready
+
+    not_ready = display_not_ready(
+        has_manifest=manifest.exists(),
+        has_trajectory=dcd_path is not None,
+        status=job.status.value,
+        execution_target=job.execution_target or "local",
+        has_live_frame=bool(job.live_frame),
+    )
+
     return {
         "job_id": job.job_id,
         "status": job.status.value,
         "ready": ready,
+        "not_ready_code": (not_ready or {}).get("code"),
+        "not_ready_reason": (not_ready or {}).get("reason", ""),
         "config_path": str(manifest.resolve()) if manifest.exists() else None,
         "package_dir": str(package_dir.resolve()) if package_dir.exists() else None,
         "segment_name": segment_name,
@@ -3265,6 +3817,7 @@ async def get_md_job_display(job_id: str) -> dict:
 async def delete_md_job(job_id: str) -> dict:
     """Delete an MD job and every generated file/folder beneath its job dir."""
     from backend.core.job_archive import purge_index_entry
+
     ws = _workspace()
     job = _load_job(job_id)
     if is_running(job_id) or job.status == MdStatus.running:
@@ -3272,20 +3825,22 @@ async def delete_md_job(job_id: str) -> dict:
     job_dir = job.job_dir(ws)
     if job_dir.exists():
         shutil.rmtree(job_dir)
-    purge_index_entry(ws, "md_jobs", job_id)   # drop archived-job index entry if any
+    purge_index_entry(ws, "md_jobs", job_id)  # drop archived-job index entry if any
     return {"ok": True, "job_id": job_id, "deleted": str(job_dir)}
 
 
 # ── Archive / unarchive ────────────────────────────────────────────────────────
 
+
 class ArchiveRequest(BaseModel):
-    dest_root: str   # parent directory; the job moves to <dest_root>/<job_id>
+    dest_root: str  # parent directory; the job moves to <dest_root>/<job_id>
 
 
 @router.post("/md/jobs/{job_id}/archive", status_code=202)
 async def archive_md_job(job_id: str, body: ArchiveRequest) -> dict:
     """Start moving a job's folder to ``dest_root`` in the background (poll status)."""
     from backend.core import job_archive
+
     ws = _workspace()
     job = _load_job(job_id)
     if is_running(job_id) or job.status == MdStatus.running:
@@ -3301,6 +3856,7 @@ async def archive_md_job(job_id: str, body: ArchiveRequest) -> dict:
 async def unarchive_md_job(job_id: str) -> dict:
     """Start moving an archived job's folder back into the workspace (poll status)."""
     from backend.core import job_archive
+
     ws = _workspace()
     job = _load_job(job_id)
     try:
@@ -3313,6 +3869,7 @@ async def unarchive_md_job(job_id: str) -> dict:
 @router.get("/md/jobs/{job_id}/archive-status")
 async def md_archive_status(job_id: str) -> dict:
     from backend.core import job_archive
+
     return job_archive.task_status("md_jobs", job_id) or {"state": "idle"}
 
 
@@ -3386,11 +3943,15 @@ def _assert_cell_fits_a_free_run(job: MdJob, length_ns: float, *, allow: bool) -
     # Kept short on purpose: the panel shows its own one-line version, and the two
     # option tokens below are the load-bearing part (the frontend keys its
     # "continue anyway" offer off allow_undersized_cell).
-    raise HTTPException(400, (
-        f"A {length_ns:g} ns run drifts this structure into its own periodic "
-        f"image{how_close}. Re-prep with a larger cell (production_ns_intent), keep the "
-        f"run under {ROTATION_FREE_NS_THRESHOLD:g} ns, or resend with "
-        f"allow_undersized_cell=true."))
+    raise HTTPException(
+        400,
+        (
+            f"A {length_ns:g} ns run drifts this structure into its own periodic "
+            f"image{how_close}. Re-prep with a larger cell (production_ns_intent), keep the "
+            f"run under {ROTATION_FREE_NS_THRESHOLD:g} ns, or resend with "
+            f"allow_undersized_cell=true."
+        ),
+    )
 
 
 @router.post("/md/jobs/{job_id}/production")
@@ -3430,17 +3991,28 @@ class ProductionRunRequest(BaseModel):
     distinct, selectable entry and each production nests under it, so the user can fan
     out several independent productions (distinct velocity seeds) from one equilibrated
     structure — or chain one (spawn a production off a completed production child)."""
-    steps: Optional[int] = Field(None, ge=100, le=MAX_PRODUCTION_STEPS,
-                                 description="Raw integration steps (falls back to length_ns)")
-    length_ns: Optional[float] = Field(None, gt=0.0, le=MAX_PRODUCTION_NS,
-                                       description="Simulated ns (used if steps omitted)")
-    autostart: bool = Field(True, description="Start the child right away (local target only)")
+
+    steps: Optional[int] = Field(
+        None,
+        ge=100,
+        le=MAX_PRODUCTION_STEPS,
+        description="Raw integration steps (falls back to length_ns)",
+    )
+    length_ns: Optional[float] = Field(
+        None,
+        gt=0.0,
+        le=MAX_PRODUCTION_NS,
+        description="Simulated ns (used if steps omitted)",
+    )
+    autostart: bool = Field(
+        True, description="Start the child right away (local target only)"
+    )
     production_timestep_fs: Optional[float] = Field(
         None,
         description="Integrator timestep (fs) for this child: 1.0, 2.0 or 4.0. Sending it "
-                    "PINS the choice — an unrunnable one fails the child with "
-                    "FAILURE_TIMESTEP_PINNED instead of silently substituting another. Omit "
-                    "to inherit the package manifest's prep-time value.",
+        "PINS the choice — an unrunnable one fails the child with "
+        "FAILURE_TIMESTEP_PINNED instead of silently substituting another. Omit "
+        "to inherit the package manifest's prep-time value.",
     )
 
     @field_validator("production_timestep_fs")
@@ -3457,16 +4029,16 @@ class ProductionRunRequest(BaseModel):
     rigid_bonds: Optional[str] = Field(
         None,
         description="Bonds-to-hydrogen constraint for THIS child: 'all', 'none', or omit "
-                    "to inherit the package's prep-time choice (and, failing that, the "
-                    "auto value for the timestep). Independent of the timestep since "
-                    "exp51; unsound combinations are warned about, never blocked.",
+        "to inherit the package's prep-time choice (and, failing that, the "
+        "auto value for the timestep). Independent of the timestep since "
+        "exp51; unsound combinations are warned about, never blocked.",
     )
     hmr: Optional[bool] = Field(
         None,
         description="Hydrogen-mass repartitioning for THIS child. Omit to inherit the "
-                    "package's prep-time choice, else auto (on only at 4 fs). The "
-                    "repartitioned PSF is built on demand, so a child may run HMR even "
-                    "when its relaxation did not.",
+        "package's prep-time choice, else auto (on only at 4 fs). The "
+        "repartitioned PSF is built on demand, so a child may run HMR even "
+        "when its relaxation did not.",
     )
 
     @field_validator("rigid_bonds")
@@ -3482,13 +4054,13 @@ class ProductionRunRequest(BaseModel):
     enm_restraints: str = Field(
         "auto",
         description="Keep an elastic network through production: 'auto' (DEFAULT — on "
-                    "when the parent was relaxed with a protocol that reproduces the "
-                    "literature, off otherwise), 'on', or 'off'. The published "
-                    "Aksimentiev-group 'unrestrained' origami productions are NOT "
-                    "unrestrained: they retain a network at k=0.1 throughout, and a "
-                    "template-built structure sampled with none at all is a measurably "
-                    "softer ensemble. The network is rebuilt from the equilibrated "
-                    "coordinates this run starts from, never from the prep-time build.",
+        "when the parent was relaxed with a protocol that reproduces the "
+        "literature, off otherwise), 'on', or 'off'. The published "
+        "Aksimentiev-group 'unrestrained' origami productions are NOT "
+        "unrestrained: they retain a network at k=0.1 throughout, and a "
+        "template-built structure sampled with none at all is a measurably "
+        "softer ensemble. The network is rebuilt from the equilibrated "
+        "coordinates this run starts from, never from the prep-time build.",
     )
 
     @field_validator("enm_restraints")
@@ -3505,18 +4077,20 @@ class ProductionRunRequest(BaseModel):
     )
 
     langevin_damping: Optional[float] = Field(
-        None, gt=0.0, le=100.0,
+        None,
+        gt=0.0,
+        le=100.0,
         description="Langevin coupling in ps^-1. Omit for the literature production value "
-                    "(1.0). The ladder's 5.0 is an EQUILIBRATION setting: at that coupling "
-                    "the dynamics are overdamped, so diffusion, relaxation and correlation "
-                    "times are all scaled by something unrelated to the system. Raise it "
-                    "only if you want equilibrium averages and do not care about kinetics.",
+        "(1.0). The ladder's 5.0 is an EQUILIBRATION setting: at that coupling "
+        "the dynamics are overdamped, so diffusion, relaxation and correlation "
+        "times are all scaled by something unrelated to the system. Raise it "
+        "only if you want equilibrium averages and do not care about kinetics.",
     )
 
     gpu_resident: Optional[str] = Field(
         None,
         description="GPU-resident mode for this child: 'auto' (size gate), 'on' or 'off'. "
-                    "Omit to inherit the package's prep-time choice.",
+        "Omit to inherit the package's prep-time choice.",
     )
 
     @field_validator("gpu_resident")
@@ -3528,60 +4102,95 @@ class ProductionRunRequest(BaseModel):
         if s not in ("auto", "on", "off"):
             raise ValueError("gpu_resident must be 'auto', 'on', or 'off'")
         return s
+
     execution_target: Optional[str] = Field(
-        None, description="'local' or 'alpine'; defaults to the parent's target. An "
-                          "'alpine' child is left queued for the submit-review card.")
-    cluster_name: Optional[str] = Field(None, description="Cluster for an alpine target")
+        None,
+        description="'local', 'alpine' or 'runpod'; defaults to the parent's target. An "
+        "'alpine' child is left queued for the submit-review card.",
+    )
+    cluster_name: Optional[str] = Field(
+        None, description="Cluster for an alpine target"
+    )
+    runpod_gpu_key: Optional[str] = Field(
+        None,
+        description="RunPod GPU type id for a runpod child. None → inherit the parent's.",
+    )
+    runpod_budget_usd: Optional[float] = Field(
+        None,
+        ge=0,
+        description="Spend cap for a runpod child's pod. None → the parent's.",
+    )
+    runpod_volume_id: Optional[str] = Field(
+        None, description="Network volume for a runpod child. None → the parent's."
+    )
     partition: Optional[str] = Field(
-        None, description="Preferred SLURM partition for an alpine child, chosen in the Job "
-                          "Wizard's first step against live availability. None → auto-pick.")
+        None,
+        description="Preferred SLURM partition for an alpine child, chosen in the Job "
+        "Wizard's first step against live availability. None → auto-pick.",
+    )
     slurm_resources: Optional[dict] = Field(
-        None, description="Sparse SLURM resource edits from the Job Wizard's first step "
-                          "(cores/gpus/mem_gb/walltime/qos); omitted keys are re-derived "
-                          "from the built package at submit time.")
+        None,
+        description="Sparse SLURM resource edits from the Job Wizard's first step "
+        "(cores/gpus/mem_gb/walltime/qos); omitted keys are re-derived "
+        "from the built package at submit time.",
+    )
     dcd_freq: Optional[int] = Field(
-        None, ge=100, le=1_000_000,
+        None,
+        ge=100,
+        le=1_000_000,
         description="DCD trajectory output interval (steps). Defaults to PRODUCTION_DCD_FREQ "
-                    "(2500 = every 10 ps at 4 fs). Lower it for denser sampling when the "
-                    "trajectory feeds fluctuation-based parameter extraction (FEM/SNUPI/mrdna).")
+        "(2500 = every 10 ps at 4 fs). Lower it for denser sampling when the "
+        "trajectory feeds fluctuation-based parameter extraction (FEM/SNUPI/mrdna).",
+    )
     allow_undersized_cell: bool = Field(
         False,
         description="Run even when the package's cell is too small for the solute to "
-                    "rotate freely. A child re-uses its parent's cell verbatim, and a "
-                    "relaxation cell is sized for the restrained ladder — so a long "
-                    "UNRESTRAINED child can walk the solute into its own periodic image "
-                    "and quietly corrupt the trajectory. Off by default; set it only if "
-                    "the run is short enough or the solute is effectively spherical.")
+        "rotate freely. A child re-uses its parent's cell verbatim, and a "
+        "relaxation cell is sized for the restrained ladder — so a long "
+        "UNRESTRAINED child can walk the solute into its own periodic image "
+        "and quietly corrupt the trajectory. Off by default; set it only if "
+        "the run is short enough or the solute is effectively spherical.",
+    )
     seed: Optional[int] = Field(
-        None, ge=1, le=NAMD_SEED_MAX,
+        None,
+        ge=1,
+        le=NAMD_SEED_MAX,
         description="NAMD velocity seed for this child. OMIT IT for normal work — a "
-                    "fresh random seed is drawn per run so replicas (and separate "
-                    "designs being compared) are genuinely independent samples. Pass an "
-                    "explicit value only to reproduce a specific past trajectory; the "
-                    "seed actually used is recorded on the job and in its manifest.")
+        "fresh random seed is drawn per run so replicas (and separate "
+        "designs being compared) are genuinely independent samples. Pass an "
+        "explicit value only to reproduce a specific past trajectory; the "
+        "seed actually used is recorded on the job and in its manifest.",
+    )
     anchors: Optional[list] = Field(
         None,
         description="Anchor scopes for THIS production run (same picker format as the "
-                    "relax request). Omit to inherit the parent's anchors verbatim; send "
-                    "[] to run explicitly unanchored. Re-resolving here is what lets a "
-                    "production child be anchored when its relaxation was not — anchors "
-                    "used to be a prep-only concept that production silently discarded.")
+        "relax request). Omit to inherit the parent's anchors verbatim; send "
+        "[] to run explicitly unanchored. Re-resolving here is what lets a "
+        "production child be anchored when its relaxation was not — anchors "
+        "used to be a prep-only concept that production silently discarded.",
+    )
     anchor_atoms: Optional[list[str]] = Field(
         None,
         description="DEFAULT atom-name filter for anchors that carry no `atoms` of their "
-                    "own, e.g. [\"C1'\"]. Only meaningful together with `anchors`.")
+        'own, e.g. ["C1\'"]. Only meaningful together with `anchors`.',
+    )
     anchor_k: Optional[float] = Field(
-        None, ge=0.0, le=100.0,
+        None,
+        ge=0.0,
+        le=100.0,
         description="Harmonic force constant (kcal/mol/Å²) for a SOFT anchor. Omit for a "
-                    "hard fixedAtoms pin. Soft is strongly preferred for production: a "
-                    "hard pin is a Dirichlet boundary that propagates strain into nearby "
-                    "structure, kills local fluctuation, and is not rescaled by the "
-                    "barostat. Suppressing global tumbling of a ~10 nm bundle held at "
-                    "both ends needs only ~0.01–0.03. The restraint is referenced to this "
-                    "child's own equilibrated coordinates, not the idealised build pose.")
+        "hard fixedAtoms pin. Soft is strongly preferred for production: a "
+        "hard pin is a Dirichlet boundary that propagates strain into nearby "
+        "structure, kills local fluctuation, and is not rescaled by the "
+        "barostat. Suppressing global tumbling of a ~10 nm bundle held at "
+        "both ends needs only ~0.01–0.03. The restraint is referenced to this "
+        "child's own equilibrated coordinates, not the idealised build pose.",
+    )
 
 
-def _production_seed_checkpoint(parent: MdJob) -> tuple[Optional[SegmentSpec], str, str]:
+def _production_seed_checkpoint(
+    parent: MdJob,
+) -> tuple[Optional[SegmentSpec], str, str]:
     """Resolve the coords a production child should seed from: ``(spec, warning, reason)``.
 
     A production child (chaining) seeds from the parent's completed production stage;
@@ -3618,18 +4227,19 @@ def root_relaxation(job: MdJob) -> MdJob:
     seen = {job.job_id}
     cur = job
     while cur.run_kind == "production" and cur.parent_job_id:
-        if cur.parent_job_id in seen:        # a cycle cannot happen, but never spin on one
+        if cur.parent_job_id in seen:  # a cycle cannot happen, but never spin on one
             break
         seen.add(cur.parent_job_id)
         try:
             cur = _load_job(cur.parent_job_id)
         except HTTPException:
-            break                            # the ancestor was deleted; this is the root
+            break  # the ancestor was deleted; this is the root
     return cur
 
 
-def _production_restraint_plan(parent: MdJob, requested: str,
-                               damping: Optional[float]) -> dict:
+def _production_restraint_plan(
+    parent: MdJob, requested: str, damping: Optional[float]
+) -> dict:
     """Resolve whether this production keeps an elastic network, and how hard to couple it.
 
     ``auto`` means "carry on doing what this package already does".  Two cases:
@@ -3651,13 +4261,23 @@ def _production_restraint_plan(parent: MdJob, requested: str,
     manifest = _read_manifest(parent)
     chained = parent.run_kind == "production"
     recipe = manifest.get("production_recipe") or {}
-    parent_preset = str((manifest.get("relax_preset")
-                         or (parent.prep_params or {}).get("relax_preset") or ""))
+    parent_preset = str(
+        (
+            manifest.get("relax_preset")
+            or (parent.prep_params or {}).get("relax_preset")
+            or ""
+        )
+    )
     if chained and not parent_preset:
         root = root_relaxation(parent)
         root_manifest = _read_manifest(root) if root is not parent else manifest
-        parent_preset = str((root_manifest.get("relax_preset")
-                             or (root.prep_params or {}).get("relax_preset") or ""))
+        parent_preset = str(
+            (
+                root_manifest.get("relax_preset")
+                or (root.prep_params or {}).get("relax_preset")
+                or ""
+            )
+        )
 
     if requested == "on":
         enm, why = True, "requested for this run"
@@ -3665,18 +4285,22 @@ def _production_restraint_plan(parent: MdJob, requested: str,
         enm, why = False, "declined for this run"
     elif chained and "enm_restraints" in recipe:
         enm = bool(recipe["enm_restraints"])
-        why = (f"the run this continues kept a network at k={recipe.get('enm_k')}, and a "
-               f"continuation that dropped it would leave one trajectory restrained for "
-               f"its first leg and free for its second"
-               if enm else
-               "the run this continues was unrestrained, and a continuation inherits it")
+        why = (
+            f"the run this continues kept a network at k={recipe.get('enm_k')}, and a "
+            f"continuation that dropped it would leave one trajectory restrained for "
+            f"its first leg and free for its second"
+            if enm
+            else "the run this continues was unrestrained, and a continuation inherits it"
+        )
     else:
         enm = parent_preset == LITERATURE
-        why = (f"the parent was relaxed with the {LITERATURE!r} protocol, which keeps the "
-               f"network the published productions keep"
-               if enm else
-               f"the parent's protocol ({parent_preset or 'unrecorded'}) does not ask for "
-               f"one, so this run is unrestrained as NADOC productions have always been")
+        why = (
+            f"the parent was relaxed with the {LITERATURE!r} protocol, which keeps the "
+            f"network the published productions keep"
+            if enm
+            else f"the parent's protocol ({parent_preset or 'unrecorded'}) does not ask for "
+            f"one, so this run is unrestrained as NADOC productions have always been"
+        )
 
     # A continuation also inherits the thermostat coupling it was running under, for the
     # same reason: a chain whose damping changes partway is two different experiments
@@ -3693,8 +4317,11 @@ def _production_restraint_plan(parent: MdJob, requested: str,
         "damping": resolved,
     }
 
+
 def _resolve_child_anchors(
-    parent: MdJob, child: MdJob, body: "ProductionRunRequest",
+    parent: MdJob,
+    child: MdJob,
+    body: "ProductionRunRequest",
 ) -> tuple[Optional[str], "Optional[Path]", list, Optional[dict]]:
     """Anchors + E-field for a child: ``(anchors_file, anchors_src, requested, field)``.
 
@@ -3731,25 +4358,33 @@ def _resolve_child_anchors(
         snapshot = parent.job_dir(_workspace()) / "design.json"
     if not snapshot.exists():
         raise HTTPException(
-            400, "This job has no frozen design snapshot, so production anchors cannot be "
-                 "resolved. Re-prep the relaxation with the anchors selected instead.")
+            400,
+            "This job has no frozen design snapshot, so production anchors cannot be "
+            "resolved. Re-prep the relaxation with the anchors selected instead.",
+        )
 
     from backend.core.md_protocols import write_anchor_restraints_pdb  # noqa: PLC0415
     from backend.core.models import Design  # noqa: PLC0415
     from backend.core.namd_topology import (  # noqa: PLC0415
-        requested_atom_names, resolve_anchor_atom_map,
+        requested_atom_names,
+        resolve_anchor_atom_map,
     )
 
     design = Design.model_validate_json(snapshot.read_text())
     full_topology = bool((manifest.get("charge_audit") or {}).get("topology_builder"))
     # Per-anchor atom sets; anchor_atoms is the fallback for anchors that carry none.
     indices = resolve_anchor_atom_map(
-        design, body.anchors, full_topology=full_topology,
-        default_atoms=set(body.anchor_atoms) if body.anchor_atoms else None)
+        design,
+        body.anchors,
+        full_topology=full_topology,
+        default_atoms=set(body.anchor_atoms) if body.anchor_atoms else None,
+    )
     if not indices:
         logger.warning(
             "[%s] production anchors %r resolved to no DNA residue — running unanchored",
-            child.job_id, body.anchors)
+            child.job_id,
+            body.anchors,
+        )
         return None, None, [], field
 
     name_stem = manifest["name_stem"]
@@ -3761,10 +4396,14 @@ def _resolve_child_anchors(
     staged.parent.mkdir(parents=True, exist_ok=True)
     n = write_anchor_restraints_pdb(parent_pkg / f"{name_stem}.pdb", staged, indices)
     if not n:
-        raise HTTPException(400, (
-            f"anchor atoms {requested_atom_names(indices)} matched no heavy atom in the "
-            f"{len(indices)} anchored residue(s). CHARMM36 nucleic-acid atom names look "
-            f"like P, O5', C5', C4', C3', C1'."))
+        raise HTTPException(
+            400,
+            (
+                f"anchor atoms {requested_atom_names(indices)} matched no heavy atom in the "
+                f"{len(indices)} anchored residue(s). CHARMM36 nucleic-acid atom names look "
+                f"like P, O5', C5', C4', C3', C1'."
+            ),
+        )
     return "restraints_anchors.pdb", staged, list(body.anchors), field
 
 
@@ -3781,32 +4420,47 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
     parent = _load_job(parent_id)
     if is_running(parent_id) or parent.status != MdStatus.completed:
         raise HTTPException(
-            400, "Production requires a completed relaxation (or production) to seed from.")
+            400,
+            "Production requires a completed relaxation (or production) to seed from.",
+        )
     _assert_md_job_current(parent)
 
     spec, warning, reason = _production_seed_checkpoint(parent)
     if spec is None:
         raise HTTPException(
-            400, reason or "No equilibrated checkpoint is available to seed production from.")
+            400,
+            reason
+            or "No equilibrated checkpoint is available to seed production from.",
+        )
     output = parent.package_dir(_workspace()) / "output"
     if not all((output / f"{spec.name}.{ext}").exists() for ext in ("coor", "xsc")):
-        raise HTTPException(400, f"Checkpoint {spec.name} coordinates were not found locally.")
+        raise HTTPException(
+            400, f"Checkpoint {spec.name} coordinates were not found locally."
+        )
 
-    plan = _production_fast_plan(parent, ProductionRequest(
-        steps=body.steps, length_ns=body.length_ns, autostart=False,
-        production_timestep_fs=body.production_timestep_fs,
-        rigid_bonds=body.rigid_bonds, hmr=body.hmr,
-        gpu_resident=body.gpu_resident,
-    ))
+    plan = _production_fast_plan(
+        parent,
+        ProductionRequest(
+            steps=body.steps,
+            length_ns=body.length_ns,
+            autostart=False,
+            production_timestep_fs=body.production_timestep_fs,
+            rigid_bonds=body.rigid_bonds,
+            hmr=body.hmr,
+            gpu_resident=body.gpu_resident,
+        ),
+    )
     restraints = _production_restraint_plan(
-        parent, body.enm_restraints, body.langevin_damping)
+        parent, body.enm_restraints, body.langevin_damping
+    )
     # A child re-uses its parent's cell verbatim (build_replica_package hardlinks the
     # PSF/PDB and copies box_ang), so the parent's rotation verdict IS the child's.
     # This check lived only on the sibling append route while the panel's button came
     # here — the one path that can start a microsecond-long free run was the one path
     # that never asked whether the box could hold it.
-    _assert_cell_fits_a_free_run(parent, plan["length_ns"],
-                                 allow=body.allow_undersized_cell)
+    _assert_cell_fits_a_free_run(
+        parent, plan["length_ns"], allow=body.allow_undersized_cell
+    )
     # ⚠️ `parent` is the COMPLETED RELAXATION and is READ-ONLY from here.  An earlier
     # version failed the parent when it disliked a production setting, which flipped a
     # finished 12/12 ladder to "failed" and discarded the record of hours of successful
@@ -3821,12 +4475,18 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
     # the whole point.  The draw is recorded (child.ensemble_seed, manifest, stage label)
     # and `body.seed` replays a specific past run.
     siblings = [
-        j for j in MdJob.list_jobs(_workspace())
+        j
+        for j in MdJob.list_jobs(_workspace())
         if j.parent_job_id == parent.job_id and j.run_kind == "production"
     ]
     index = len(siblings)
-    seed = body.seed if body.seed is not None else md_ensemble.random_seed(
-        exclude=[j.ensemble_seed for j in siblings if j.ensemble_seed is not None])
+    seed = (
+        body.seed
+        if body.seed is not None
+        else md_ensemble.random_seed(
+            exclude=[j.ensemble_seed for j in siblings if j.ensemble_seed is not None]
+        )
+    )
 
     child = new_job(
         design_name=parent.design_name,
@@ -3846,13 +4506,29 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
     target = (body.execution_target or parent.execution_target or "local").lower()
     child.execution_target = target
     child.cluster_name = (
-        body.cluster_name or (parent.cluster_name if target == "alpine" else None)
-        or ("alpine" if target == "alpine" else None))
+        body.cluster_name
+        or (parent.cluster_name if target == "alpine" else None)
+        or ("alpine" if target == "alpine" else None)
+    )
     if target == "alpine":
         # Same first-step answers a relaxation carries: the node picked off the live queue
         # table, plus whatever resources were edited beside it.
         child.partition = body.partition or parent.partition
         child.requested_resources = body.slurm_resources or None
+    if target == "runpod":
+        # Same idea for a rented pod: the child's own choices if the wizard made any, else
+        # inherit the parent's — a production child on the card and budget that relaxed it is
+        # the sane default, and re-ranking silently at launch is how a run lands on a
+        # 4x-worse-value card (RUNBOOK §7).
+        child.runpod_gpu_key = (
+            getattr(body, "runpod_gpu_key", None) or parent.runpod_gpu_key
+        )
+        child.runpod_budget_usd = (
+            getattr(body, "runpod_budget_usd", None) or parent.runpod_budget_usd
+        )
+        child.runpod_volume_id = (
+            getattr(body, "runpod_volume_id", None) or parent.runpod_volume_id
+        )
     # Capture the spawn request so the read-only settings viewer can replay this child's
     # own plan.  Kept apart from `prep_params` (a CreateJobRequest dump) on purpose — see
     # the field comment on MdJob.spawn_params.
@@ -3878,22 +4554,32 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         job_archive._write_index(_workspace(), "md_jobs", idx)
 
     anchors_file, anchors_src, anchors_requested, field = _resolve_child_anchors(
-        parent, child, body)
+        parent, child, body
+    )
 
     md_ensemble.build_replica_package(
-        parent, child,
-        seed=seed, index=index,
-        total_steps=plan["total_steps"], length_ns=plan["length_ns"],
-        timestep_fs=plan["timestep_fs"], fast=plan["fast"],
-        rigid_bonds=plan.get("rigid_bonds"), hmr=plan.get("hmr"),
-        ready_checkpoint=spec.name, workspace=_workspace(),
+        parent,
+        child,
+        seed=seed,
+        index=index,
+        total_steps=plan["total_steps"],
+        length_ns=plan["length_ns"],
+        timestep_fs=plan["timestep_fs"],
+        fast=plan["fast"],
+        rigid_bonds=plan.get("rigid_bonds"),
+        hmr=plan.get("hmr"),
+        ready_checkpoint=spec.name,
+        workspace=_workspace(),
         dcd_freq=(body.dcd_freq or PRODUCTION_DCD_FREQ),
         force_resident=plan.get("force_resident"),
         enm_restraints=restraints["enm_restraints"],
         damping=restraints["damping"],
         stage_overrides=body.stage_overrides or None,
-        anchors_file=anchors_file, anchors_src=anchors_src, anchor_k=body.anchor_k,
-        anchors_requested=anchors_requested, field=field,
+        anchors_file=anchors_file,
+        anchors_src=anchors_src,
+        anchor_k=body.anchor_k,
+        anchors_requested=anchors_requested,
+        field=field,
     )
 
     # Local target autostarts the NAMD run immediately; an Alpine child is left
@@ -3937,20 +4623,36 @@ async def revert_md_production(job_id: str) -> dict:
 
 class EnsembleProductionRequest(BaseModel):
     """Stage N independent NAMD production replicas (distinct seeds) from a parent."""
-    n_replicas: int = Field(4, ge=1, le=64, description="Number of independent replicas")
-    steps: Optional[int] = Field(None, ge=100, le=MAX_PRODUCTION_STEPS,
-                                 description="Raw integration steps per replica")
-    length_ns: Optional[float] = Field(None, gt=0.0, le=MAX_PRODUCTION_NS,
-                                       description="Simulated ns per replica (used if steps omitted)")
+
+    n_replicas: int = Field(
+        4, ge=1, le=64, description="Number of independent replicas"
+    )
+    steps: Optional[int] = Field(
+        None,
+        ge=100,
+        le=MAX_PRODUCTION_STEPS,
+        description="Raw integration steps per replica",
+    )
+    length_ns: Optional[float] = Field(
+        None,
+        gt=0.0,
+        le=MAX_PRODUCTION_NS,
+        description="Simulated ns per replica (used if steps omitted)",
+    )
     base_seed: Optional[int] = Field(
-        None, ge=1, le=NAMD_SEED_MAX,
+        None,
+        ge=1,
+        le=NAMD_SEED_MAX,
         description="First NAMD seed; replica i uses base_seed + i. OMIT IT for normal "
-                    "work — a fresh random base is drawn per ensemble, so two ensembles "
-                    "of the same structure (or of two designs being compared) do not "
-                    "share a velocity realisation. Pass a value only to reproduce a "
-                    "specific past ensemble; the seeds used are recorded per replica.")
+        "work — a fresh random base is drawn per ensemble, so two ensembles "
+        "of the same structure (or of two designs being compared) do not "
+        "share a velocity realisation. Pass a value only to reproduce a "
+        "specific past ensemble; the seeds used are recorded per replica.",
+    )
     cluster_name: str = Field("alpine")
-    partition: str = Field("acpu", description="Default SLURM partition (CPU by default)")
+    partition: str = Field(
+        "acpu", description="Default SLURM partition (CPU by default)"
+    )
     safety_factor: float = Field(1.5, gt=0.0)
 
 
@@ -3966,18 +4668,30 @@ async def stage_md_ensemble(parent_id: str, body: EnsembleProductionRequest) -> 
 
     parent = _load_job(parent_id)
     if parent.status != MdStatus.completed:
-        raise HTTPException(400, "The parent relaxation must be completed before staging an ensemble.")
+        raise HTTPException(
+            400, "The parent relaxation must be completed before staging an ensemble."
+        )
 
     _idx, spec, reason, _warning = _production_ready_checkpoint(parent)
     if spec is None:
-        raise HTTPException(400, reason or "No equilibrated checkpoint is available on the parent.")
+        raise HTTPException(
+            400, reason or "No equilibrated checkpoint is available on the parent."
+        )
     output = parent.package_dir(_workspace()) / "output"
     if not all((output / f"{spec.name}.{ext}").exists() for ext in ("coor", "xsc")):
-        raise HTTPException(400, f"Equilibrated checkpoint {spec.name} coordinates were not found locally.")
+        raise HTTPException(
+            400,
+            f"Equilibrated checkpoint {spec.name} coordinates were not found locally.",
+        )
 
-    plan = _production_fast_plan(parent, ProductionRequest(
-        steps=body.steps, length_ns=body.length_ns, autostart=False,
-    ))
+    plan = _production_fast_plan(
+        parent,
+        ProductionRequest(
+            steps=body.steps,
+            length_ns=body.length_ns,
+            autostart=False,
+        ),
+    )
     base_seed = body.base_seed if body.base_seed is not None else random_seed()
     seeds = md_ensemble.generate_seeds(base_seed, body.n_replicas)
 
@@ -4010,17 +4724,23 @@ async def stage_md_ensemble(parent_id: str, body: EnsembleProductionRequest) -> 
         }
         child.spawn_params_set = sorted(
             set(body.model_fields_set)
-            | {"length_ns", "steps", "production_timestep_fs", "seed"})
+            | {"length_ns", "steps", "production_timestep_fs", "seed"}
+        )
         # Carry the parent's staleness provenance so replica rows never spuriously flag
         # out-of-date — they derive from the parent's frozen package, not the live design.
         child.design_fingerprint = parent.design_fingerprint
         child.feature_log_position = parent.feature_log_position
         md_ensemble.build_replica_package(
-            parent, child,
-            seed=seed, index=i,
-            total_steps=plan["total_steps"], length_ns=plan["length_ns"],
-            timestep_fs=plan["timestep_fs"], fast=plan["fast"],
-            ready_checkpoint=spec.name, workspace=_workspace(),
+            parent,
+            child,
+            seed=seed,
+            index=i,
+            total_steps=plan["total_steps"],
+            length_ns=plan["length_ns"],
+            timestep_fs=plan["timestep_fs"],
+            fast=plan["fast"],
+            ready_checkpoint=spec.name,
+            workspace=_workspace(),
         )
         children.append(child.to_dict())
 
@@ -4037,10 +4757,12 @@ async def stage_md_ensemble(parent_id: str, body: EnsembleProductionRequest) -> 
 
 class EnsembleSubmitRequest(BaseModel):
     """Submit every prepared replica of a parent to the cluster in one action."""
+
     cluster_name: str = Field("alpine")
     resources: Optional[dict] = Field(
-        None, description="Shared SLURM resources applied to every replica (override; "
-                          "omit to auto-size on the partition below).",
+        None,
+        description="Shared SLURM resources applied to every replica (override; "
+        "omit to auto-size on the partition below).",
     )
     partition: str = Field("acpu")
     safety_factor: float = Field(1.5, gt=0.0)
@@ -4068,32 +4790,45 @@ async def submit_md_ensemble(parent_id: str, body: EnsembleSubmitRequest) -> dic
         raise HTTPException(404, f"Unknown cluster profile {body.cluster_name!r}.")
 
     replicas = [
-        j for j in MdJob.list_jobs(_workspace())
-        if j.parent_job_id == parent_id and j.ensemble_seed is not None
-        and j.execution_target == "alpine" and not j.slurm_job_id
+        j
+        for j in MdJob.list_jobs(_workspace())
+        if j.parent_job_id == parent_id
+        and j.ensemble_seed is not None
+        and j.execution_target == "alpine"
+        and not j.slurm_job_id
     ]
-    replicas.sort(key=lambda j: (j.ensemble_index if j.ensemble_index is not None else 0))
+    replicas.sort(key=lambda j: j.ensemble_index if j.ensemble_index is not None else 0)
     if not replicas:
         raise HTTPException(400, "No prepared, unsubmitted replicas for this parent.")
 
     if body.resources:
         resources = body.resources
     else:
-        sizing = _size_prepared_job(replicas[0], profile, body.safety_factor, partition=body.partition)
+        sizing = _size_prepared_job(
+            replicas[0], profile, body.safety_factor, partition=body.partition
+        )
         if sizing is None:
-            raise HTTPException(400, "Replica package is not prepared yet — cannot size resources.")
+            raise HTTPException(
+                400, "Replica package is not prepared yet — cannot size resources."
+            )
         resources = sizing["resources"]
 
     submitted, errors = [], []
     for child in replicas:
         try:
             job = await md_executor.submit_job(
-                child, _workspace(), profile=profile, resources=resources, conn=mgr,
+                child,
+                _workspace(),
+                profile=profile,
+                resources=resources,
+                conn=mgr,
             )
             submitted.append({"job_id": job.job_id, "slurm_job_id": job.slurm_job_id})
         except cluster_ssh.ClusterSSHError as exc:
             _record_submit_failure(child, f"Cluster transport error: {exc}")
-            errors.append({"job_id": child.job_id, "error": f"Cluster transport error: {exc}"})
+            errors.append(
+                {"job_id": child.job_id, "error": f"Cluster transport error: {exc}"}
+            )
         except (ValueError, RuntimeError) as exc:
             _record_submit_failure(child, str(exc))
             errors.append({"job_id": child.job_id, "error": str(exc)})
@@ -4117,9 +4852,13 @@ async def roll_md_job_design(job_id: str) -> dict:
     job = _load_job(job_id)
     design = _md_snapshot_design(job)
     if design is None:
-        raise HTTPException(400, "This MD job has no saved design snapshot to roll back to.")
+        raise HTTPException(
+            400, "This MD job has no saved design snapshot to roll back to."
+        )
     name = job.design_name or "this job"
-    return roll_active_to_job_state(design, job.feature_log_position, f"Latest — before viewing {name}")
+    return roll_active_to_job_state(
+        design, job.feature_log_position, f"Latest — before viewing {name}"
+    )
 
 
 @router.post("/md/jobs/{job_id}/start")
@@ -4212,9 +4951,14 @@ async def _start_runpod_job(job: MdJob) -> dict:
         except Exception:  # noqa: BLE001 — becomes a FAILED check, not a 500
             logger.warning("runpod: GPU stock lookup failed", exc_info=True)
 
+    # The volume recorded on the job wins over the session's: the wizard's choice was made
+    # against this job's storage forecast, and the shared session may have been re-pointed
+    # since (or by another panel).
+    volume_id = job.runpod_volume_id or session.network_volume_id
+
     pre = runpod_preflight.evaluate(
         connected=session.is_connected(),
-        network_volume_id=session.network_volume_id,
+        network_volume_id=volume_id,
         ssh_key_present=bool(_runpod_client_keys()),
         stock=stock,
         n_atoms=n_atoms,
@@ -4227,7 +4971,7 @@ async def _start_runpod_job(job: MdJob) -> dict:
             job,
             _workspace(),
             client=session.require(),
-            network_volume_id=session.network_volume_id,
+            network_volume_id=volume_id,
             client_keys=_runpod_client_keys(),
         )
     except RuntimeError as exc:  # unsizable system / unreadable package
@@ -4254,12 +4998,16 @@ def _runpod_client_keys() -> Optional[list[str]]:
 
 class SubmitRemoteRequest(BaseModel):
     """Submit a prepared job to a compute cluster (Alpine/SLURM)."""
+
     cluster_name: str = Field("alpine", description="Cluster profile name")
     resources: Optional[dict] = Field(
-        None, description="Override the auto-recommended SLURM resources (partition/"
-                          "cores/gpus/mem_gb/walltime/qos). Omit to auto-recommend.",
+        None,
+        description="Override the auto-recommended SLURM resources (partition/"
+        "cores/gpus/mem_gb/walltime/qos). Omit to auto-recommend.",
     )
-    safety_factor: float = Field(1.5, gt=0.0, description="Walltime headroom multiplier")
+    safety_factor: float = Field(
+        1.5, gt=0.0, description="Walltime headroom multiplier"
+    )
 
 
 def _size_prepared_job(
@@ -4274,6 +5022,7 @@ def _size_prepared_job(
     the user picks one from the dropdown.
     """
     from backend.core import cluster_resources, cluster_throughput
+
     package_dir = job.package_dir(_workspace())
     manifest_path = package_dir / "manifest.json"
     if not manifest_path.exists():
@@ -4286,17 +5035,28 @@ def _size_prepared_job(
     # both the local-GPU metrics (wrong hardware for a CPU target) and the size guess;
     # fall back to local metrics, then to the size-based guess inside recommend().
     chosen_partition = cluster_resources.recommend(
-        profile, n_atoms=n_atoms, total_ns=total_ns, safety_factor=safety_factor,
+        profile,
+        n_atoms=n_atoms,
+        total_ns=total_ns,
+        safety_factor=safety_factor,
         partition=partition,
     )["partition"]
     measured = cluster_throughput.lookup_throughput(
-        _workspace(), cluster=profile.name, partition=chosen_partition, n_atoms=n_atoms,
+        _workspace(),
+        cluster=profile.name,
+        partition=chosen_partition,
+        n_atoms=n_atoms,
     )
     if measured is None:
-        measured = cluster_resources.latest_ns_per_day(package_dir / "output" / "metrics.jsonl")
+        measured = cluster_resources.latest_ns_per_day(
+            package_dir / "output" / "metrics.jsonl"
+        )
     resources = cluster_resources.recommend(
-        profile, n_atoms=n_atoms, total_ns=total_ns,
-        measured_ns_per_day=measured, safety_factor=safety_factor,
+        profile,
+        n_atoms=n_atoms,
+        total_ns=total_ns,
+        measured_ns_per_day=measured,
+        safety_factor=safety_factor,
         partition=chosen_partition,
     )
     return {
@@ -4315,9 +5075,13 @@ def _remote_resources(job: MdJob, profile, body: "SubmitRemoteRequest") -> dict:
         return body.resources
     # Fall back to the partition chosen in the wizard, so a node picked against a live
     # queue picture is still honoured when the job is finally submitted.
-    sizing = _size_prepared_job(job, profile, body.safety_factor, partition=job.partition)
+    sizing = _size_prepared_job(
+        job, profile, body.safety_factor, partition=job.partition
+    )
     if sizing is None:
-        raise HTTPException(400, "Job is not prepared yet (no manifest.json) — cannot size resources.")
+        raise HTTPException(
+            400, "Job is not prepared yet (no manifest.json) — cannot size resources."
+        )
     return _merge_requested(sizing["resources"], job)
 
 
@@ -4335,8 +5099,11 @@ def _merge_requested(resources: dict, job: MdJob) -> dict:
 
 @router.get("/md/jobs/{job_id}/remote-recommendation")
 def md_job_remote_recommendation(
-    job_id: str, cluster_name: str = "alpine", safety_factor: float = 1.5,
-    partition: Optional[str] = None, current: bool = False,
+    job_id: str,
+    cluster_name: str = "alpine",
+    safety_factor: float = 1.5,
+    partition: Optional[str] = None,
+    current: bool = False,
 ) -> dict:
     """Preview the auto-recommended SLURM resources for a prepared job — read-only,
     no cluster connection needed. Drives the Phase-4 submit-review card so the user
@@ -4358,8 +5125,9 @@ def md_job_remote_recommendation(
         raise HTTPException(404, f"Unknown cluster profile {cluster_name!r}.")
 
     try:
-        sizing = _size_prepared_job(job, profile, safety_factor,
-                                    partition=partition or job.partition)
+        sizing = _size_prepared_job(
+            job, profile, safety_factor, partition=partition or job.partition
+        )
     except ValueError as exc:  # unknown forced partition
         raise HTTPException(400, str(exc)) from exc
     # Resume review: seed the card with the job's CURRENT resources (e.g. the short
@@ -4384,7 +5152,9 @@ def md_job_remote_recommendation(
             "available_partitions": available,
             "reason": "Job is still preparing — resources can be sized once the package is built.",
         }
-    rec_partition = (sizing["resources"] or {}).get("partition", profile.default_partition)
+    rec_partition = (sizing["resources"] or {}).get(
+        "partition", profile.default_partition
+    )
     available_qos = [
         {"name": q.name, "max_walltime_h": q.max_walltime_h}
         for q in profile.qos_tiers_for_partition(rec_partition)
@@ -4431,7 +5201,9 @@ async def submit_md_job_remote(job_id: str, body: SubmitRemoteRequest) -> dict:
     if job.status in (MdStatus.preparing,):
         raise HTTPException(400, "Job is still preparing — wait for prep to finish.")
     if job.slurm_job_id:
-        raise HTTPException(409, f"Job already submitted to the cluster as SLURM {job.slurm_job_id}.")
+        raise HTTPException(
+            409, f"Job already submitted to the cluster as SLURM {job.slurm_job_id}."
+        )
 
     mgr = cluster_ssh.get_manager()
     if not mgr.is_connected():
@@ -4445,7 +5217,11 @@ async def submit_md_job_remote(job_id: str, body: SubmitRemoteRequest) -> dict:
     resources = _remote_resources(job, profile, body)
     try:
         job = await md_executor.submit_job(
-            job, _workspace(), profile=profile, resources=resources, conn=mgr,
+            job,
+            _workspace(),
+            profile=profile,
+            resources=resources,
+            conn=mgr,
         )
     except cluster_ssh.ClusterSSHError as exc:
         _record_submit_failure(job, f"Cluster transport error: {exc}")
@@ -4500,7 +5276,11 @@ async def resume_md_job_remote(job_id: str, body: ResumeRemoteRequest) -> dict:
 
     try:
         job = await md_executor.resume_job(
-            job, _workspace(), profile=profile, resources=body.resources, conn=mgr,
+            job,
+            _workspace(),
+            profile=profile,
+            resources=body.resources,
+            conn=mgr,
         )
     except cluster_ssh.ClusterSSHError as exc:
         raise HTTPException(502, f"Cluster transport error: {exc}") from exc
@@ -4515,6 +5295,7 @@ class RefitRequest(BaseModel):
     The "Fix" popup sends whichever apply to the diagnosed failure: a water-shell
     carve for a VRAM downsize, force_soft for an instability, or none to retry.
     """
+
     water_shell_nm: Optional[float] = Field(None, ge=0.0)
     force_soft: Optional[bool] = Field(None)
     minimize_steps: Optional[int] = Field(None, ge=100)
@@ -4522,15 +5303,15 @@ class RefitRequest(BaseModel):
 
 # Failure kind → the remedy the "Fix" popup offers.
 _REMEDY_BY_KIND = {
-    "vram_oom": "downsize",     # refit with a water-shell carve sized to the GPU
-    "host_oom": "retry",        # host pinned-RAM alloc failed — free RAM & resume
-    "instability": "gentle",    # refit with the soft integrator across the ladder
-    "gpu_error": "retry",       # resume — often a transient GPU/driver state
+    "vram_oom": "downsize",  # refit with a water-shell carve sized to the GPU
+    "host_oom": "retry",  # host pinned-RAM alloc failed — free RAM & resume
+    "instability": "gentle",  # refit with the soft integrator across the ladder
+    "gpu_error": "retry",  # resume — often a transient GPU/driver state
     # A pinned-timestep conflict is a CONFIG decision, not something the server may
     # silently repair — offering a one-click remedy here would recreate the downgrade
     # this failure exists to prevent. The popup explains; the user chooses.
     "timestep_pinned": "none",
-    "other": "none",            # show the log; no automatic remedy
+    "other": "none",  # show the log; no automatic remedy
 }
 
 
@@ -4567,14 +5348,17 @@ def _fix_advice(job: MdJob) -> dict:
             "error": job.error,
             "vram_mb": detect_vram_mb(job.devices),
         }
-        prof = (package_solvation_profile(job.package_dir(_workspace()), job.name_stem)
-                if job.name_stem else None)
+        prof = (
+            package_solvation_profile(job.package_dir(_workspace()), job.name_stem)
+            if job.name_stem
+            else None
+        )
         out["current_water_shell_nm"] = (prof or {}).get("current_water_shell_nm")
 
     out["failure_kind"] = kind
     out["remedy"] = _REMEDY_BY_KIND.get(kind, "none")
     if kind == "vram_oom" and not out.get("feasible"):
-        out["remedy"] = "none"   # can't downsize enough for this GPU
+        out["remedy"] = "none"  # can't downsize enough for this GPU
     out["log_excerpt"] = _failed_log_excerpt(job)
     return out
 
@@ -4587,7 +5371,8 @@ def _vram_advice(job: MdJob) -> dict:
     vram_mb = detect_vram_mb(job.devices)
     profile = (
         package_solvation_profile(job.package_dir(_workspace()), job.name_stem)
-        if job.name_stem else None
+        if job.name_stem
+        else None
     )
     out: dict = {
         "job_id": job.job_id,
@@ -4601,14 +5386,16 @@ def _vram_advice(job: MdJob) -> dict:
     }
     if profile is None or vram_mb is None:
         return out
-    out.update(recommend_downsize(
-        dna_xyz_nm = profile["dna_xyz_nm"],
-        box_nm     = profile["box_nm"],
-        full_water = profile["full_water"],
-        dna_atoms  = profile["dna_atoms"],
-        ion_atoms  = profile["ion_atoms"],
-        vram_mb    = vram_mb,
-    ))
+    out.update(
+        recommend_downsize(
+            dna_xyz_nm=profile["dna_xyz_nm"],
+            box_nm=profile["box_nm"],
+            full_water=profile["full_water"],
+            dna_atoms=profile["dna_atoms"],
+            ion_atoms=profile["ion_atoms"],
+            vram_mb=vram_mb,
+        )
+    )
     return out
 
 
@@ -4632,12 +5419,18 @@ async def refit_md_job(job_id: str, body: RefitRequest) -> dict:
     (a water-shell carve also forces the ladder to NVT downstream).
     """
     old = _load_job(job_id)
-    if not (old.prep_params or old.design_source_path
-            or old.seed_oxdna_job_id or old.seed_mrdna_job_id or old.seed_blade_job_id):
+    if not (
+        old.prep_params
+        or old.design_source_path
+        or old.seed_oxdna_job_id
+        or old.seed_mrdna_job_id
+        or old.seed_blade_job_id
+    ):
         raise HTTPException(400, "Cannot refit: original job has no design provenance.")
 
     try:
-        find_namd(); find_gmx()
+        find_namd()
+        find_gmx()
     except RuntimeError as exc:
         raise HTTPException(400, str(exc))
 
@@ -4659,18 +5452,33 @@ async def refit_md_job(job_id: str, body: RefitRequest) -> dict:
     valid = {k: v for k, v in params.items() if k in CreateJobRequest.model_fields}
     new_body = CreateJobRequest(**valid)
 
-    seeded = bool(new_body.oxdna_job_id or new_body.mrdna_job_id or new_body.blade_job_id)
+    seeded = bool(
+        new_body.oxdna_job_id or new_body.mrdna_job_id or new_body.blade_job_id
+    )
     if seeded:
         try:
             if new_body.oxdna_job_id:
                 from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
-                await run_in_threadpool(assert_namd_seed_available, new_body.oxdna_job_id, _workspace())
+
+                await run_in_threadpool(
+                    assert_namd_seed_available, new_body.oxdna_job_id, _workspace()
+                )
             elif new_body.mrdna_job_id:
                 from backend.core.mrdna_runner import assert_mrdna_namd_seed_available  # noqa: PLC0415
-                await run_in_threadpool(assert_mrdna_namd_seed_available, new_body.mrdna_job_id, _workspace())
+
+                await run_in_threadpool(
+                    assert_mrdna_namd_seed_available,
+                    new_body.mrdna_job_id,
+                    _workspace(),
+                )
             else:
                 from backend.core.blade_runner import assert_blade_namd_seed_available  # noqa: PLC0415
-                await run_in_threadpool(assert_blade_namd_seed_available, new_body.blade_job_id, _workspace())
+
+                await run_in_threadpool(
+                    assert_blade_namd_seed_available,
+                    new_body.blade_job_id,
+                    _workspace(),
+                )
         except FileNotFoundError as exc:
             raise HTTPException(400, str(exc))
         design = None
@@ -4689,12 +5497,28 @@ async def refit_md_job(job_id: str, body: RefitRequest) -> dict:
         name = (design.metadata.name or "design").replace(" ", "_")
         size_factor = design_size_factor(design)
 
-    job = _spawn_prep_job(new_body, design=design, seeded=seeded, name=name,
-                          size_factor=size_factor, parent_job_id=job_id)
-    logger.info("refit %s → new job %s (water_shell_nm=%.2f force_soft=%s)",
-                job_id, job.job_id, new_body.water_shell_nm, new_body.force_soft)
-    return {"ok": True, "job_id": job.job_id, "refit_from": job_id,
-            "water_shell_nm": new_body.water_shell_nm, "force_soft": new_body.force_soft}
+    job = _spawn_prep_job(
+        new_body,
+        design=design,
+        seeded=seeded,
+        name=name,
+        size_factor=size_factor,
+        parent_job_id=job_id,
+    )
+    logger.info(
+        "refit %s → new job %s (water_shell_nm=%.2f force_soft=%s)",
+        job_id,
+        job.job_id,
+        new_body.water_shell_nm,
+        new_body.force_soft,
+    )
+    return {
+        "ok": True,
+        "job_id": job.job_id,
+        "refit_from": job_id,
+        "water_shell_nm": new_body.water_shell_nm,
+        "force_soft": new_body.force_soft,
+    }
 
 
 def _load_design_for_refit(source_path: Optional[str]):
@@ -4702,7 +5526,7 @@ def _load_design_for_refit(source_path: Optional[str]):
     from backend.core.models import Design  # noqa: PLC0415
 
     if source_path:
-        p = (_workspace() / source_path)
+        p = _workspace() / source_path
         if p.exists():
             try:
                 return Design.from_json(p.read_text())
@@ -4729,6 +5553,7 @@ def _md_run_design(job):
     sp = getattr(job, "design_source_path", None)
     if sp:
         from backend.core.models import Design  # noqa: PLC0415
+
         p = _workspace() / sp
         if p.exists():
             try:
@@ -4853,6 +5678,7 @@ async def stop_md_job(job_id: str) -> dict:
     # on the main loop the asyncssh connection is bound to).
     if job.execution_target != "local":
         from backend.core import cluster_ssh, md_executor
+
         mgr = cluster_ssh.get_manager()
         if not mgr.is_connected():
             # Can't scancel a disconnected session — but DON'T silently leave the SLURM
@@ -4863,11 +5689,17 @@ async def stop_md_job(job_id: str) -> dict:
                 job.pending_scancel = True
             apply_user_stop(job)
             job.save(_workspace())
-            msg = ("Cluster not connected — marked stopped locally; the SLURM job will be "
-                   "cancelled automatically when you reconnect."
-                   if job.slurm_job_id else
-                   "Cluster not connected — marked stopped locally (job was not submitted yet).")
-            return {"ok": True, "message": msg, "pending_scancel": bool(job.slurm_job_id)}
+            msg = (
+                "Cluster not connected — marked stopped locally; the SLURM job will be "
+                "cancelled automatically when you reconnect."
+                if job.slurm_job_id
+                else "Cluster not connected — marked stopped locally (job was not submitted yet)."
+            )
+            return {
+                "ok": True,
+                "message": msg,
+                "pending_scancel": bool(job.slurm_job_id),
+            }
         try:
             issued = await md_executor.cancel_job(job, conn=mgr)
         except cluster_ssh.ClusterSSHError as exc:
@@ -4887,9 +5719,12 @@ async def stop_md_job(job_id: str) -> dict:
                 logger.exception("[%s] post-stop fetch failed", job.job_id)
         apply_user_stop(job)
         job.save(_workspace())
-        return {"ok": True, "job_id": job_id,
-                "status": "cancelled" if issued else "stopped",
-                "slurm_job_id": job.slurm_job_id}
+        return {
+            "ok": True,
+            "job_id": job_id,
+            "status": "cancelled" if issued else "stopped",
+            "slurm_job_id": job.slurm_job_id,
+        }
 
     cancelled = stop_job(job_id, _workspace())
     if not cancelled:
@@ -4912,10 +5747,14 @@ async def toggle_md_early_stop(job_id: str, body: EarlyStopRequest) -> dict:
 
     If the job is running, the runner picks the new value up at its next chunk
     boundary; if idle, it's persisted for the next start/resume."""
-    _load_job(job_id)   # 404s if the job doesn't exist
+    _load_job(job_id)  # 404s if the job doesn't exist
     val = set_early_stop(job_id, body.enabled, _workspace())
-    return {"ok": True, "job_id": job_id, "early_stop_relax": val,
-            "running": is_running(job_id)}
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "early_stop_relax": val,
+        "running": is_running(job_id),
+    }
 
 
 @router.get("/md/jobs/{job_id}/health")
@@ -4952,11 +5791,11 @@ async def namd_available() -> dict:
         gmx_ok = False
 
     return {
-        "available":      namd_ok and gmx_ok,
+        "available": namd_ok and gmx_ok,
         "namd_available": namd_ok,
-        "namd_path":      namd_path,
-        "gmx_available":  gmx_ok,
-        "gmx_path":       gmx_path,
+        "namd_path": namd_path,
+        "gmx_available": gmx_ok,
+        "gmx_path": gmx_path,
         "recommended_threads": default_threads(),
     }
 
@@ -5007,8 +5846,11 @@ async def optimize_advanced(
 
     design = design_state.get_or_404()
     return await run_in_threadpool(
-        recommend_advanced, design,
-        devices=devices, padding_nm=padding_nm, minimize_steps=minimize_steps,
+        recommend_advanced,
+        design,
+        devices=devices,
+        padding_nm=padding_nm,
+        minimize_steps=minimize_steps,
     )
 
 
@@ -5048,14 +5890,18 @@ def md_browse(dir: str = "", ext: str = "") -> dict:
             continue
         try:
             if p.is_dir():
-                entries.append({"name": p.name, "path": str(p), "type": "dir", "size": 0})
+                entries.append(
+                    {"name": p.name, "path": str(p), "type": "dir", "size": 0}
+                )
             elif not exts or p.suffix.lower() in exts:
-                entries.append({
-                    "name": p.name,
-                    "path": str(p),
-                    "type": "file",
-                    "size": p.stat().st_size,
-                })
+                entries.append(
+                    {
+                        "name": p.name,
+                        "path": str(p),
+                        "type": "file",
+                        "size": p.stat().st_size,
+                    }
+                )
         except (PermissionError, OSError):
             continue
 
@@ -5068,6 +5914,7 @@ def md_browse(dir: str = "", ext: str = "") -> dict:
 # from the failed stage.  The engine-agnostic state machine lives in
 # ``backend.core.md_chain_executor``; this is the NAMD spawn/status adapter + the
 # create/list/resume routes + the supervisor driver (`advance_chains`).
+
 
 def _chain_job_status(job_id: Optional[str]) -> str:
     """Map a chain stage's job status onto the executor's running/completed/failed vocab.
@@ -5092,6 +5939,7 @@ def _oxdna_chain_job_status(job_id: str) -> str:
     """Status of an oxDNA chain stage's job, in the executor's vocabulary."""
     from backend.api.routes_oxdna import _load_job as _load_oxdna_job  # noqa: PLC0415
     from backend.core.oxdna_job import OxdnaStatus  # noqa: PLC0415
+
     try:
         job = _load_oxdna_job(job_id)  # already reconciles status from disk
     except HTTPException:
@@ -5142,7 +5990,9 @@ async def _chain_spawn(ctx: _chain.SpawnContext) -> str:
         # Same-engine oxDNA hop: a production/field child branched off the completed
         # previous oxDNA stage (or an existing completed oxDNA root job).
         return await _spawn_oxdna_child(ctx.parent_job_id, plan)
-    seed = cross_engine_seed(plan, ctx.parent_job_id)  # None ⇒ same-engine checkpoint hop
+    seed = cross_engine_seed(
+        plan, ctx.parent_job_id
+    )  # None ⇒ same-engine checkpoint hop
     if seed is not None:
         forces = ctx.forces or {}
         # The cross-engine hop goes through the RELAXATION-creation endpoint (it builds +
@@ -5152,8 +6002,10 @@ async def _chain_spawn(ctx: _chain.SpawnContext) -> str:
         # path, which uses ProductionRunRequest); map any non-relaxation name onto the
         # default relaxation preset so a default oxDNA/mrDNA→NAMD stage isn't rejected.
         create_protocol = (
-            plan.protocol if plan.protocol in SUPPORTED_PROTOCOLS
-            else EQUILIBRIUM_AWARE_PROTOCOL)
+            plan.protocol
+            if plan.protocol in SUPPORTED_PROTOCOLS
+            else EQUILIBRIUM_AWARE_PROTOCOL
+        )
         body = CreateJobRequest(
             protocol=create_protocol,
             autostart=(plan.run_target == "local"),
@@ -5189,20 +6041,26 @@ async def _spawn_fresh_relax(plan: "StagePlan") -> str:
     forces = plan.forces or {}
     if plan.engine == "oxdna":
         from backend.api.routes_oxdna import (  # noqa: PLC0415
-            CreateOxdnaJobRequest, create_oxdna_job,
+            CreateOxdnaJobRequest,
+            create_oxdna_job,
         )
+
         surface = forces.get("surface")
         anchors = forces.get("anchors") or []
-        body = CreateOxdnaJobRequest.model_validate({
-            "autostart": plan.run_target == "local",
-            "surface": surface,
-            "anchors": anchors,
-            "design_source_path": plan.design_source_path,
-        })
+        body = CreateOxdnaJobRequest.model_validate(
+            {
+                "autostart": plan.run_target == "local",
+                "surface": surface,
+                "anchors": anchors,
+                "design_source_path": plan.design_source_path,
+            }
+        )
         result = await create_oxdna_job(body)
         job_id = result.get("job_id")
         if not job_id or result.get("status") == "failed":
-            raise RuntimeError(f"oxDNA relax spawn failed: {result.get('error') or 'no job id'}")
+            raise RuntimeError(
+                f"oxDNA relax spawn failed: {result.get('error') or 'no job id'}"
+            )
         return job_id
     body = CreateJobRequest(
         protocol=EQUILIBRIUM_AWARE_PROTOCOL,
@@ -5240,13 +6098,15 @@ async def advance_vacuum_prestages(workspace: Path) -> list[str]:
         if not followup or params.get("vacuum_followup_job_id"):
             continue
         try:
-            body = CreateJobRequest.model_validate({
-                **followup,
-                "vacuum_job_id": job.job_id,
-                # Belt and braces against a spawn loop: the follow-up must never itself
-                # decide it wants a pre-stage.
-                "skip_vacuum_prestage": True,
-            })
+            body = CreateJobRequest.model_validate(
+                {
+                    **followup,
+                    "vacuum_job_id": job.job_id,
+                    # Belt and braces against a spawn loop: the follow-up must never itself
+                    # decide it wants a pre-stage.
+                    "skip_vacuum_prestage": True,
+                }
+            )
             result = await create_md_job(body)
         except Exception as exc:  # noqa: BLE001 — one bad job must not stall the pass
             logger.exception("vacuum follow-up for %s failed to spawn", job.job_id)
@@ -5276,6 +6136,7 @@ async def _spawn_oxdna_child(parent_job_id: str, plan: "StagePlan") -> str:
     completed previous oxDNA stage (``append_oxdna_run`` → a fresh child job seeded from
     the parent's relaxed conf), carrying the stage's field / surface / anchors."""
     from backend.api.routes_oxdna import RunRequest, append_oxdna_run  # noqa: PLC0415
+
     forces = plan.forces or {}
     run_body: dict = {"steps": plan.steps or 2_000_000}
     field = forces.get("field")
@@ -5327,18 +6188,23 @@ async def advance_chains(workspace: Path) -> list[str]:
                 stage.spawn_attempts += 1
                 logger.exception(
                     "chain %s stage %d spawn failed (attempt %d/%d)",
-                    chain.chain_id, ctx.stage_index, stage.spawn_attempts,
-                    _MAX_STAGE_SPAWN_ATTEMPTS)
+                    chain.chain_id,
+                    ctx.stage_index,
+                    stage.spawn_attempts,
+                    _MAX_STAGE_SPAWN_ATTEMPTS,
+                )
                 if stage.spawn_attempts >= _MAX_STAGE_SPAWN_ATTEMPTS:
                     stage.status = _chain.STAGE_FAILED
                     chain.status = _chain.CHAIN_FAILED
                     chain.error = (
                         f"stage {ctx.stage_index} spawn failed after "
-                        f"{stage.spawn_attempts} attempts: {exc}")
+                        f"{stage.spawn_attempts} attempts: {exc}"
+                    )
                 else:  # leave the stage pending — the next tick retries
                     chain.error = (
                         f"stage {ctx.stage_index} spawn attempt {stage.spawn_attempts} "
-                        f"failed (will retry): {exc}")
+                        f"failed (will retry): {exc}"
+                    )
             else:
                 _chain.mark_spawned(chain, ctx.stage_index, job_id)
         if chain.to_dict() != before:
@@ -5349,6 +6215,7 @@ async def advance_chains(workspace: Path) -> list[str]:
 
 class ChainStageRequest(BaseModel):
     """One stage in a chain request (mirrors ``PipelineStage``)."""
+
     engine: str = Field(..., description="Engine for this stage, e.g. 'namd'")
     protocol: str = Field("production", description="Run protocol for the stage")
     field: Optional[dict] = Field(None, description="Shared E-field descriptor")
@@ -5372,12 +6239,17 @@ class CreateChainRequest(BaseModel):
       structure from the active design (the "Queue Relax → Queue Production" case). Its
       first stage must be a relaxation (``protocol == "relax"``).
     """
+
     root_job_id: Optional[str] = Field(
-        None, description="Completed job whose checkpoint seeds stage 0; None = stage 0 is a fresh relax")
+        None,
+        description="Completed job whose checkpoint seeds stage 0; None = stage 0 is a fresh relax",
+    )
     root_engine: Optional[str] = Field(None, description="Engine of the root job")
     design_source_path: Optional[str] = Field(
-        None, description="Workspace path of the active design — stamped onto spawned jobs so "
-        "they appear in the per-design engine job list")
+        None,
+        description="Workspace path of the active design — stamped onto spawned jobs so "
+        "they appear in the per-design engine job list",
+    )
     stages: list[ChainStageRequest] = Field(..., description="Ordered stage specs")
 
 
@@ -5399,31 +6271,41 @@ async def create_md_chain(body: CreateChainRequest) -> dict:
         # It must therefore be a relaxation — a production has nothing to seed from.
         if not _is_relax_protocol(body.stages[0].protocol):
             raise HTTPException(
-                400, "A rootless chain's first stage must be a relaxation (it creates the "
-                "initial structure); a production needs an upstream job to seed from.")
+                400,
+                "A rootless chain's first stage must be a relaxation (it creates the "
+                "initial structure); a production needs an upstream job to seed from.",
+            )
         root_engine = (body.root_engine or body.stages[0].engine or "namd").lower()
     else:
         root_engine = (body.root_engine or "namd").lower()
         if root_engine == "oxdna":
             from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
+
             # A cross-engine oxDNA→NAMD root needs a NAMD seed frame; a same-engine
             # oxDNA→oxDNA production just restarts the completed oxDNA job's relaxed conf.
             if body.stages[0].engine != "oxdna":
                 try:
-                    await run_in_threadpool(assert_namd_seed_available, body.root_job_id, _workspace())
+                    await run_in_threadpool(
+                        assert_namd_seed_available, body.root_job_id, _workspace()
+                    )
                 except FileNotFoundError as exc:
                     raise HTTPException(400, str(exc))
         elif root_engine == "mrdna":
             from backend.core.mrdna_runner import assert_mrdna_namd_seed_available  # noqa: PLC0415
+
             try:
-                await run_in_threadpool(assert_mrdna_namd_seed_available, body.root_job_id, _workspace())
+                await run_in_threadpool(
+                    assert_mrdna_namd_seed_available, body.root_job_id, _workspace()
+                )
             except FileNotFoundError as exc:
                 raise HTTPException(400, str(exc))
         else:
             root = _load_job(body.root_job_id)  # 404 if missing
             if root.status != MdStatus.completed:
                 raise HTTPException(
-                    400, "The chain's root job must be a completed run to seed the first stage.")
+                    400,
+                    "The chain's root job must be a completed run to seed the first stage.",
+                )
     pipeline = MdPipeline(
         root_job_id=body.root_job_id,
         root_engine=root_engine,

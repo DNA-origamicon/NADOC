@@ -34,19 +34,19 @@ router = APIRouter()
 
 class SlurmPreviewRequest(BaseModel):
     cluster_name: str = "alpine"
-    partition: str | None = None       # None → auto-pick
+    partition: str | None = None  # None → auto-pick
     total_ns: float = 0.0
-    n_atoms: int | None = None         # None → estimate from the active design
+    n_atoms: int | None = None  # None → estimate from the active design
     job_name: str = "nadoc_job"
     safety_factor: float = 1.5
 
 
 class ConnectRequest(BaseModel):
     cluster_name: str = "alpine"
-    host: str | None = None            # defaults to the profile host
+    host: str | None = None  # defaults to the profile host
     user: str
     password: str
-    duo_method: str = "push"           # "push" or a 6-digit passcode
+    duo_method: str = "push"  # "push" or a 6-digit passcode
 
 
 @router.get("/cluster/profiles")
@@ -76,7 +76,9 @@ async def cluster_connect(req: ConnectRequest):
     profiles = cluster_config.load_profiles(_WORKSPACE_DIR)
     profile = profiles.get(req.cluster_name)
     if profile is None:
-        raise HTTPException(status_code=404, detail=f"unknown cluster '{req.cluster_name}'")
+        raise HTTPException(
+            status_code=404, detail=f"unknown cluster '{req.cluster_name}'"
+        )
     host = req.host or profile.host
     if not req.user or not req.password:
         raise HTTPException(status_code=400, detail="user and password are required")
@@ -91,6 +93,7 @@ async def cluster_connect(req: ConnectRequest):
     # drained.  Best-effort: a poll hiccup must never fail the connect.
     try:
         from backend.core import md_executor  # noqa: PLC0415
+
         await md_executor.poll_remote_jobs(_WORKSPACE_DIR, conn=mgr)
     except Exception:  # noqa: BLE001
         logger.exception("post-connect remote poll failed")
@@ -112,6 +115,7 @@ async def cluster_namd_modules():
     if not mgr.is_connected():
         raise HTTPException(status_code=409, detail="not connected to a cluster")
     from backend.core import md_executor
+
     try:
         modules = await md_executor.list_namd_modules(conn=mgr)
     except cluster_ssh.ClusterSSHError as exc:
@@ -121,10 +125,10 @@ async def cluster_namd_modules():
 
 class NamdBuildRequest(BaseModel):
     cluster_name: str = "alpine"
-    source_dir: str                      # local NAMD source tree to ship
-    name: str = "namd-git"               # build folder under <project>/nadoc_builds/
-    modules: list[str] | None = None     # None → gcc/11.2.0 + cuda/12.1.1
-    gencodes: list[str] | None = None    # None → sm_80/89/90 + compute_90 PTX
+    source_dir: str  # local NAMD source tree to ship
+    name: str = "namd-git"  # build folder under <project>/nadoc_builds/
+    modules: list[str] | None = None  # None → gcc/11.2.0 + cuda/12.1.1
+    gencodes: list[str] | None = None  # None → sm_80/89/90 + compute_90 PTX
     cores: int = 8
     partition: str = "acpu"
     qos: str = "cpu-normal"
@@ -148,7 +152,9 @@ async def cluster_build_namd(req: NamdBuildRequest):
     profiles = cluster_config.load_profiles(_WORKSPACE_DIR)
     profile = profiles.get(req.cluster_name)
     if profile is None:
-        raise HTTPException(status_code=404, detail=f"unknown cluster '{req.cluster_name}'")
+        raise HTTPException(
+            status_code=404, detail=f"unknown cluster '{req.cluster_name}'"
+        )
     mgr = cluster_ssh.get_manager()
     if not mgr.is_connected():
         raise HTTPException(status_code=409, detail="not connected to a cluster")
@@ -158,11 +164,18 @@ async def cluster_build_namd(req: NamdBuildRequest):
         raise HTTPException(status_code=400, detail=f"source_dir not found: {src}")
     try:
         return await cluster_build.run_namd_build(
-            mgr, profile, source_dir=src, name=req.name,
-            modules=req.modules, gencodes=req.gencodes, cores=req.cores,
-            partition=req.partition, qos=req.qos, walltime=req.walltime,
+            mgr,
+            profile,
+            source_dir=src,
+            name=req.name,
+            modules=req.modules,
+            gencodes=req.gencodes,
+            cores=req.cores,
+            partition=req.partition,
+            qos=req.qos,
+            walltime=req.walltime,
         )
-    except ValueError as exc:                       # a rejected module/gencode/name
+    except ValueError as exc:  # a rejected module/gencode/name
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except cluster_ssh.ClusterSSHError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -184,7 +197,9 @@ async def cluster_build_namd_status(tail: int = 40):
                     state["slurm_state"] = tok.split("=", 1)[1]
             log = state.get("log")
             if log:
-                out = await mgr.run(f"tail -n {max(1, min(int(tail), 400))} '{log}' 2>&1", timeout=30.0)
+                out = await mgr.run(
+                    f"tail -n {max(1, min(int(tail), 400))} '{log}' 2>&1", timeout=30.0
+                )
                 state["log_tail"] = out.stdout or out.stderr
         except Exception:  # noqa: BLE001 — status must never fail the poll
             logger.exception("build status poll failed")
@@ -216,8 +231,13 @@ async def cluster_probe(name: str, arg: str | None = None):
         res = await mgr.run(cmd, timeout=60.0)
     except cluster_ssh.ClusterSSHError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return {"probe": name, "arg": arg, "rc": res.rc,
-            "stdout": res.stdout, "stderr": res.stderr}
+    return {
+        "probe": name,
+        "arg": arg,
+        "rc": res.rc,
+        "stdout": res.stdout,
+        "stderr": res.stderr,
+    }
 
 
 @router.post("/cluster/slurm-preview")
@@ -239,7 +259,9 @@ async def cluster_slurm_preview(req: SlurmPreviewRequest):
     profiles = cluster_config.load_profiles(_WORKSPACE_DIR)
     profile = profiles.get(req.cluster_name)
     if profile is None:
-        raise HTTPException(status_code=404, detail=f"unknown cluster '{req.cluster_name}'")
+        raise HTTPException(
+            status_code=404, detail=f"unknown cluster '{req.cluster_name}'"
+        )
 
     n_atoms, source = req.n_atoms, "provided"
     if not n_atoms:
@@ -249,6 +271,7 @@ async def cluster_slurm_preview(req: SlurmPreviewRequest):
 
             from backend.api import state as design_state  # noqa: PLC0415
             from backend.core.md_vram import estimate_profile_from_design  # noqa: PLC0415
+
             design = design_state.get_or_404()
             prof = await run_in_threadpool(estimate_profile_from_design, design)
             if prof:
@@ -259,15 +282,21 @@ async def cluster_slurm_preview(req: SlurmPreviewRequest):
             logger.exception("slurm-preview: atom estimate failed")
     if not n_atoms:
         # Without a size there is no honest walltime; say so rather than invent one.
-        return {"sized": False, "reason": "No design loaded, so the system size is unknown.",
-                "cluster_name": profile.name}
+        return {
+            "sized": False,
+            "reason": "No design loaded, so the system size is unknown.",
+            "cluster_name": profile.name,
+        }
 
     try:
         resources = cluster_resources.recommend(
-            profile, n_atoms=int(n_atoms), total_ns=float(req.total_ns),
-            safety_factor=req.safety_factor, partition=req.partition,
+            profile,
+            n_atoms=int(n_atoms),
+            total_ns=float(req.total_ns),
+            safety_factor=req.safety_factor,
+            partition=req.partition,
         )
-    except ValueError as exc:                     # unknown forced partition
+    except ValueError as exc:  # unknown forced partition
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     header = slurm_script.preview_header(profile, resources, job_name=req.job_name)
@@ -299,6 +328,7 @@ def _job_shape(job_id: str, profile) -> dict | None:
     probe then falls back to a partition-only view.
     """
     from backend.api.routes_md import _load_job, _size_prepared_job  # noqa: PLC0415
+
     try:
         job = _load_job(job_id)
     except Exception:  # noqa: BLE001 — an unknown job just means "no job shape"
@@ -341,6 +371,7 @@ async def cluster_availability(
     if not mgr.is_connected():
         raise HTTPException(status_code=409, detail="not connected to a cluster")
     from backend.core import cluster_queue, cluster_throughput  # noqa: PLC0415
+
     shape = _job_shape(job_id, profile) if job_id else None
 
     def _throughput_for(partition: str):
@@ -350,14 +381,20 @@ async def cluster_availability(
         if not shape:
             return None
         return cluster_throughput.lookup_throughput(
-            _WORKSPACE_DIR, cluster=profile.name,
-            partition=partition, n_atoms=shape["n_atoms"],
+            _WORKSPACE_DIR,
+            cluster=profile.name,
+            partition=partition,
+            n_atoms=shape["n_atoms"],
         )
 
     try:
         return await cluster_queue.probe_availability(
-            mgr, profile, job_shape=shape, throughput_for=_throughput_for,
-            history_days=history_days, force=force,
+            mgr,
+            profile,
+            job_shape=shape,
+            throughput_for=_throughput_for,
+            history_days=history_days,
+            force=force,
         )
     except cluster_ssh.ClusterSSHError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

@@ -25,7 +25,8 @@ from typing import Optional
 
 from backend.core.md_job import MdJob, MdStatus
 from backend.core.runpod_api import RunpodClient
-from backend.core.runpod_executor import run_job_on_pod
+from backend.core.runpod_executor import reattach_job_on_pod, run_job_on_pod
+from backend.core.runpod_script import DEFAULT_BUDGET_USD
 
 log = logging.getLogger(__name__)
 
@@ -119,10 +120,19 @@ def start_job(
     network_volume_id: str,
     client_keys: Optional[list[str]] = None,
     interruptible: bool = True,
+    budget_usd: Optional[float] = None,
 ) -> None:
-    """Launch the job on a pod in the background. Returns immediately."""
+    """Launch the job on a pod in the background. Returns immediately.
+
+    ``budget_usd`` (and ``job.runpod_budget_usd``, which wins) is the spend cap the user set
+    in the Job Wizard. It was previously a module constant no one could see or change.
+    ⚠️ It caps ONE pod: the auto-resume loop below relaunches with a FRESH budget on every
+    reclaim, so N resumes can cost up to N x the cap. Cumulative spend is not tracked.
+    """
     if is_running(job.job_id):
         return
+
+    budget = job.runpod_budget_usd or budget_usd or DEFAULT_BUDGET_USD
 
     n_atoms = n_atoms_for(job, workspace_dir)
     min_name = min_name_for(job, workspace_dir)
@@ -150,13 +160,15 @@ def start_job(
         try:
             while True:
                 status = await run_job_on_pod(
-                    job, workspace_dir,
+                    job,
+                    workspace_dir,
                     client=client,
                     network_volume_id=network_volume_id,
                     min_name=min_name,
                     n_atoms=n_atoms,
                     client_keys=client_keys,
                     interruptible=interruptible,
+                    budget_usd=budget,
                     on_pod=lambda pid: _PODS.__setitem__(job.job_id, pid),
                 )
                 _PODS.pop(job.job_id, None)
@@ -178,7 +190,9 @@ def start_job(
                 log.warning(
                     "runpod job %s: pod reclaimed, auto-resuming (%d/%d) — completed "
                     "steps are on the volume and will be skipped",
-                    job.job_id, attempt, MAX_AUTO_RESUMES,
+                    job.job_id,
+                    attempt,
+                    MAX_AUTO_RESUMES,
                 )
                 job.resubmit_count = attempt
                 job.status = MdStatus.running
@@ -234,15 +248,49 @@ async def stop_job(job_id: str, *, client: Optional[RunpodClient] = None) -> boo
     return task is not None or pod_id is not None
 
 
-async def reap_orphan_pods(client: RunpodClient) -> list[str]:
-    """Terminate any live pod NADOC started but is no longer tracking.
+def _claimed_pods(workspace_dir: Path) -> dict[str, MdJob]:
+    """``{pod_id: job}`` for every job whose record says it is still on a pod.
 
-    Called on server startup. A dev-server reload, a crash, or a lost job.json orphans
-    the pod — it keeps running, keeps billing, and nothing is watching it. Only pods whose
-    name carries our prefix are touched, so a pod the user started by hand is left alone.
+    A pod is only an ORPHAN if nothing claims it. After a dev-server reload the in-memory
+    registry is empty but the job records on disk are not — and those records are the whole
+    reason the pod id is persisted the instant a pod exists.
+    """
+    out: dict[str, MdJob] = {}
+    try:
+        jobs = MdJob.list_jobs(workspace_dir)
+    except Exception:  # noqa: BLE001 — an unreadable workspace must not block a reap
+        return out
+    for j in jobs:
+        if (
+            j.execution_target == "runpod"
+            and j.runpod_pod_id
+            and j.status in (MdStatus.running, MdStatus.preparing, MdStatus.queued)
+        ):
+            out[j.runpod_pod_id] = j
+    return out
+
+
+async def reap_orphan_pods(
+    client: RunpodClient, workspace_dir: Optional[Path] = None
+) -> tuple[list[str], list[MdJob]]:
+    """Terminate every live pod nothing claims; return the ones that ARE claimed.
+
+    Returns ``(killed_pod_ids, adoptable_jobs)``.
+
+    Called on reconnect. A crash or a lost job.json orphans a pod — it keeps running, keeps
+    billing, and nothing watches it. Only pods whose name carries our prefix are touched, so
+    a pod the user started by hand is left alone.
+
+    ⚠️ **A pod a running job still claims is NOT an orphan.** Reaping by "absent from the
+    in-memory registry" alone killed exactly the pods a reload was meant to preserve: the
+    registry is empty in a fresh process, so the first reconnect destroyed the live run it
+    was supposed to rescue. Those come back as ``adoptable_jobs`` for the caller to
+    re-attach instead.
     """
     killed: list[str] = []
+    adoptable: list[MdJob] = []
     tracked = set(_PODS.values())
+    claimed = _claimed_pods(workspace_dir) if workspace_dir else {}
     for pod in await client.list_pods():
         name = str(pod.raw.get("name") or "")
         if not name.startswith("nadoc-"):
@@ -252,8 +300,60 @@ async def reap_orphan_pods(client: RunpodClient) -> list[str]:
         # orphaned pod 2tnfzwx9j3mvhm — it sat EXITED and every reap walked past it.
         if pod.id in tracked or pod.is_destroyed:
             continue
+        job = claimed.get(pod.id)
+        if job is not None:
+            adoptable.append(job)
+            log.info(
+                "runpod: pod %s (%s) is claimed by job %s (%s) — adopting, not reaping",
+                pod.id,
+                name,
+                job.job_id,
+                job.status.value,
+            )
+            continue
         with contextlib.suppress(Exception):
             await client.terminate_pod(pod.id)
             killed.append(pod.id)
             log.warning("runpod: reaped orphaned pod %s (%s)", pod.id, name)
-    return killed
+    return killed, adoptable
+
+
+def reattach_job(
+    job: MdJob,
+    workspace_dir: Path,
+    *,
+    client: RunpodClient,
+    client_keys: Optional[list[str]] = None,
+) -> None:
+    """Resume supervision of a run already going on its pod. Returns immediately.
+
+    Same registry and task shape as :func:`start_job`, so a re-attached run is stopped,
+    polled and torn down by exactly the same code paths as one this process launched —
+    including the guarantee that the pod dies when the run does.
+    """
+    if is_running(job.job_id):
+        return
+
+    async def _main() -> None:
+        try:
+            await reattach_job_on_pod(
+                job,
+                workspace_dir,
+                client=client,
+                client_keys=client_keys,
+                on_pod=lambda pid: _PODS.__setitem__(job.job_id, pid),
+            )
+        except Exception as exc:  # noqa: BLE001
+            # An adopt that fails must not leave the job claiming a pod forever: the next
+            # reconnect would try again and never reap it.
+            log.exception("runpod: could not adopt pod for job %s", job.job_id)
+            job.status = MdStatus.paused
+            job.resumable = True
+            job.error = f"Lost the pod supervising this run ({exc}); resume to continue."
+            job.runpod_pod_id = None
+            job.save(workspace_dir)
+        finally:
+            _PODS.pop(job.job_id, None)
+            _RUNNING.pop(job.job_id, None)
+
+    _RUNNING[job.job_id] = asyncio.create_task(_main(), name=f"runpod-adopt:{job.job_id}")

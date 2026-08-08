@@ -22,6 +22,7 @@ import { el } from './primitives/dom.js'
 import { initClusterConnection } from './cluster_connection.js'
 import { getRunDir, mountDirectoryButton, runDirLabel } from './run_location.js'
 import { initWizardResources } from './md_job_wizard_resources.js'
+import { initWizardRunpod } from './md_job_wizard_runpod.js'
 import {
   TARGETS, UNWIRED_TARGETS,
   atomCapLabel, defaultPartition, localGpuSpeedFactor, localHardwareSummary,
@@ -50,6 +51,10 @@ export function initWizardTargetStep({
   fetchAvailability,
   getSlurmPreview = undefined,
   getTotalNs = () => 0,
+  getJobPreview = undefined,
+  getVolumes = undefined,
+  setVolume = undefined,
+  getPlanShape = () => null,
   fsApi = undefined,
   connect = initClusterConnection,
   onChange = () => {},
@@ -67,6 +72,9 @@ export function initWizardTargetStep({
   let _conn = null
   let _chipMount = null
   let _resources = null
+  let _runpod = null
+  let _runpodActivated = false
+  let _recordedRunpod = null
   // What an EXISTING job recorded, in read-only mode: where it ran and the SLURM request
   // it was submitted with. Null in the ordinary live wizard.
   let _recorded = null
@@ -85,7 +93,11 @@ export function initWizardTargetStep({
   // printing it twice was just noise.
   const readiness = () => (_ro()
     ? { ready: true, reason: '' }
-    : targetReadiness(_target, { clusterState: _clusterState, partition: _partition }))
+    : targetReadiness(_target, {
+      clusterState: _clusterState,
+      partition: _partition,
+      runpod: _runpod?.readiness?.() || null,
+    }))
 
   // ── local ────────────────────────────────────────────────────────────────
   async function _loadHardware() {
@@ -277,7 +289,30 @@ export function initWizardTargetStep({
       _loadHardware()          // still needed: the speed column is relative to local
       _loadAvailability()
     }
+    if (target === 'runpod') _activateRunpod()
     _emit()
+  }
+
+  /**
+   * Opening the RunPod card.
+   *
+   * The one-time part (loading the volume list) is deferred to the FIRST selection for the
+   * same reason the Alpine login chip is: otherwise every user pays a stock + balance +
+   * live-pod round trip for a target they may never choose.
+   *
+   * The re-price, though, runs on EVERY selection. `refreshSizing` only touches the currently
+   * selected target, so a user who picks RunPod, switches to Local, changes the run length and
+   * comes back would otherwise be looking at a price for the old run. Its own cache key makes
+   * this free when nothing actually moved.
+   */
+  function _activateRunpod() {
+    if (_ro() || !_runpod) return
+    if (!_runpodActivated) {
+      _runpodActivated = true
+      _runpod.activate()
+      return
+    }
+    void _runpod.refresh()
   }
 
   function render() {
@@ -349,10 +384,21 @@ export function initWizardTargetStep({
         // the Clusters card's, for a target they may never choose.
         _chipMount = chip
       } else if (t.id === 'runpod') {
-        body.appendChild(el('div', {
-          text: UNWIRED_TARGETS.runpod,
-          attrs: { style: 'font-size:11px;color:#8b949e' },
-        }))
+        // Everything about renting a GPU: setup + pre-flight, the live card table with what
+        // this whole plan costs on each, storage against the network volume, and the spend
+        // cap. Nothing fetches until the card is actually selected (see _select).
+        const rpMount = el('div', { id: 'wiz-target-runpod' })
+        body.appendChild(rpMount)
+        _runpod = initWizardRunpod({
+          mount: rpMount,
+          getJobPreview,
+          getVolumes,
+          setVolume,
+          getPlanShape,
+          onChange: _emit,
+          readOnly,
+          getRecorded: () => _recordedRunpod,
+        })
       }
       card.appendChild(body)
       mount.appendChild(card)
@@ -366,9 +412,11 @@ export function initWizardTargetStep({
     _paintCards()
     _paintLocal()
     _paintAlpine()
+    _runpod?.render()
     // Every one of these reads the live world; each no-ops in read-only.
     if (_target === 'local' || _target === 'alpine') _loadHardware()
     if (_target === 'alpine') { _ensureConnectionChip(); _loadAvailability() }
+    if (_target === 'runpod') _activateRunpod()
   }
 
   // The login chip broadcasts this; availability becomes readable the moment a
@@ -398,9 +446,13 @@ export function initWizardTargetStep({
     render,
     setChoice,
     /** Load an existing job's recorded answer for the read-only view. */
-    showRecorded({ target = 'local', partition = null, resources = null, requested = null } = {}) {
+    showRecorded({
+      target = 'local', partition = null, resources = null, requested = null, runpod = null,
+    } = {}) {
       setChoice({ target, partition })
       _recorded = { resources, requested }
+      // What this job was set up to rent — never re-priced. See _paintRecorded there.
+      _recordedRunpod = runpod
       _resources?.reset?.()
     },
     get target() { return _target },
@@ -411,10 +463,18 @@ export function initWizardTargetStep({
     payloadFields: () => targetPayloadFields(_target, {
       partition: _partition,
       resources: _resources?.overrides?.() || null,
+      runpodGpuKey: _runpod?.gpuKey?.() || null,
+      runpodBudgetUsd: _runpod?.budgetUsd?.() ?? null,
+      runpodVolumeId: _runpod?.volumeId?.() || null,
     }),
     refreshAvailability: () => _loadAvailability({ force: true }),
-    /** Re-size the SLURM request — the wizard calls this when the run length changes. */
-    refreshSizing: () => { if (_target === 'alpine') void _resources?.refresh() },
+    /** Re-size the request for the CURRENT target — the wizard calls this whenever the plan
+     *  changes, which is what makes the estimates follow the later tabs. Each block's own
+     *  cache key makes this a no-op unless something that moves a number actually moved. */
+    refreshSizing: () => {
+      if (_target === 'alpine') void _resources?.refresh()
+      if (_target === 'runpod') void _runpod?.refresh()
+    },
     dispose() {
       window.removeEventListener('nadoc:cluster-state-change', _onClusterState)
       _conn?.dispose?.()

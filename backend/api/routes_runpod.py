@@ -9,9 +9,12 @@ Routes
   POST /runpod/connect        — hold an API key in memory + verify it, list volumes
   GET  /runpod/status         — connected? which volume? any live pods?
   POST /runpod/disconnect     — drop the key and close the client
+  POST /runpod/volume         — set the session's network volume (no API key needed)
   GET  /runpod/pods           — live pods (the leak check: anything here is BILLING)
   POST /runpod/pods/{id}/terminate — manual kill switch
   POST /runpod/estimate       — GPU + cost estimate for a system size (no pod created)
+  POST /runpod/gpu-options    — ranked cards for a RELAXATION ladder (Clusters-card picker)
+  POST /runpod/job-preview    — ranked cards + storage + budget for a WHOLE plan (Job Wizard)
 
 ⚠️ **The API key is held in memory only, never written to disk** — the same rule as the
 Alpine credentials in ``cluster_ssh``. Unlike Alpine there is no Duo, so re-entering it
@@ -23,6 +26,7 @@ Mounted in ``backend/api/main.py`` via ``app.include_router(..., prefix="/api")`
 from __future__ import annotations
 
 import logging
+from functools import partial
 from pathlib import Path
 from typing import Optional
 
@@ -35,11 +39,17 @@ from backend.core import runpod_preflight
 from backend.core.md_vram import estimate_profile_from_design
 from backend.core.runpod_api import RunpodClient, RunpodError
 from backend.core.runpod_script import (
+    DEFAULT_BUDGET_USD,
     GPU_TYPES,
     plan_execution,
     required_vram_mb,
 )
-from backend.core.runpod_select import gpu_options as _rank_gpu_options, load_rate_registry
+from backend.core.runpod_select import (
+    gpu_options as _rank_gpu_options,
+    load_rate_registry,
+    plan_options,
+)
+from backend.core.runpod_storage import storage_estimate
 
 logger = logging.getLogger(__name__)
 
@@ -110,14 +120,36 @@ async def connect(body: ConnectRequest):
     # outlived its NADOC process is billing with nothing watching it.
     #
     # Only pods named `nadoc-*` are touched, so a pod you started by hand is safe.
+    # Lazy: routes_md imports THIS module inside its own handlers, so a module-level
+    # import either way would be a cycle.
+    from backend.api.routes_md import _runpod_client_keys, _workspace
     from backend.core import runpod_supervisor
 
-    reaped = await runpod_supervisor.reap_orphan_pods(client)
+    reaped, adoptable = await runpod_supervisor.reap_orphan_pods(client, _workspace())
     if reaped:
         logger.warning("runpod: reaped %d orphaned pod(s): %s", len(reaped), reaped)
 
+    # ── RE-ATTACH ────────────────────────────────────────────────────────────
+    # A pod a still-running job claims is not an orphan — it is a run whose supervisor
+    # died (a dev-server reload, a crash). NAMD is detached and carried on regardless;
+    # what it lost is the only thing that polls it and the only thing that will ever
+    # destroy the pod. Adopting restores both, and is why the shutdown hook is allowed
+    # to leave pods up across a reload.
+    adopted: list[str] = []
+    for job in adoptable:
+        try:
+            runpod_supervisor.reattach_job(
+                job, _workspace(), client=client, client_keys=_runpod_client_keys()
+            )
+            adopted.append(job.job_id)
+        except Exception:  # noqa: BLE001 — one bad job must not block the connect
+            logger.exception("runpod: could not re-attach job %s", job.job_id)
+    if adopted:
+        logger.warning("runpod: re-attached %d in-flight job(s): %s", len(adopted), adopted)
+
     payload = _status_payload(live_pods=max(0, len(pods) - len(reaped)))
     payload["reaped_pods"] = reaped
+    payload["adopted_jobs"] = adopted
     return payload
 
 
@@ -146,7 +178,10 @@ async def balance():
     ``{"available": false, "reason": ...}`` so the wizard can warn rather than crash.
     """
     if not _SESSION.api_key:
-        return {"available": False, "reason": "not connected — enter your API key first"}
+        return {
+            "available": False,
+            "reason": "not connected — enter your API key first",
+        }
     return await runpod_preflight.fetch_balance(_SESSION.api_key)
 
 
@@ -159,6 +194,27 @@ async def volumes():
     """
     vols = await _SESSION.require().list_network_volumes()
     return {"volumes": vols}
+
+
+class VolumeRequest(BaseModel):
+    network_volume_id: str = Field(..., min_length=1)
+
+
+@router.post("/runpod/volume")
+async def set_volume(body: VolumeRequest):
+    """Point the live session at a network volume — **without needing the API key.**
+
+    The setup modal can re-POST ``/runpod/connect`` to change the volume because it still
+    holds the key in its own closure. The Job Wizard does not and must not: the key is
+    backend-memory-only, so a wizard volume picker had no way to record its choice at all.
+
+    Setting the session id is what makes the ``volume`` pre-flight check pass, so this has to
+    take effect immediately rather than waiting for launch.
+    """
+    _SESSION.require()
+    _SESSION.network_volume_id = body.network_volume_id
+    logger.info("runpod: network volume set to %s", body.network_volume_id)
+    return _status_payload()
 
 
 @router.get("/runpod/ssh-public-key")
@@ -196,7 +252,9 @@ async def list_pods():
                 "status": p.desired_status,
                 "cost_per_hr": p.cost_per_hr,
                 "ssh": (
-                    f"{p.public_ip}:{p.ssh_port}" if p.public_ip and p.ssh_port else None
+                    f"{p.public_ip}:{p.ssh_port}"
+                    if p.public_ip and p.ssh_port
+                    else None
                 ),
             }
             for p in pods
@@ -227,7 +285,9 @@ def estimate(body: EstimateRequest):
     gpu = plan["gpu"]
     return {
         "n_atoms": body.n_atoms,
-        "gpu": None if gpu is None else {
+        "gpu": None
+        if gpu is None
+        else {
             "key": gpu.key,
             "label": gpu.label,
             "vram_mb": gpu.vram_mb,
@@ -272,7 +332,8 @@ async def preflight(body: PreflightRequest | None = None):
 
 class GpuOptionsRequest(BaseModel):
     n_atoms: Optional[int] = Field(
-        None, gt=0, description="System size; if omitted, sized from the active design")
+        None, gt=0, description="System size; if omitted, sized from the active design"
+    )
 
 
 @router.post("/runpod/gpu-options")
@@ -288,12 +349,23 @@ async def gpu_options(body: GpuOptionsRequest | None = None):
             design = design_state.get_or_404()
             profile = await run_in_threadpool(estimate_profile_from_design, design)
             if profile:
-                n_atoms = profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
+                n_atoms = (
+                    profile["dna_atoms"]
+                    + profile["full_water"] * 3
+                    + profile["ion_atoms"]
+                )
         except Exception:  # noqa: BLE001 — no design / sizing failure => soft "load a design"
-            logger.warning("runpod gpu-options: could not size active design", exc_info=True)
+            logger.warning(
+                "runpod gpu-options: could not size active design", exc_info=True
+            )
     if not n_atoms:
-        return {"ok": False, "gpus": [], "n_atoms": None, "connected": _SESSION.is_connected(),
-                "note": "Load a design first — couldn't size the system."}
+        return {
+            "ok": False,
+            "gpus": [],
+            "n_atoms": None,
+            "connected": _SESSION.is_connected(),
+            "note": "Load a design first — couldn't size the system.",
+        }
 
     stock = None
     if _SESSION.is_connected() and _SESSION.api_key:
@@ -302,16 +374,206 @@ async def gpu_options(body: GpuOptionsRequest | None = None):
         except Exception:  # noqa: BLE001 — a stock failure means indicative prices, not a 500
             logger.warning("runpod gpu-options: GPU stock lookup failed", exc_info=True)
 
-    rows = _rank_gpu_options(n_atoms, build="release", stock=stock, registry=load_rate_registry())
+    rows = _rank_gpu_options(
+        n_atoms, build="release", stock=stock, registry=load_rate_registry()
+    )
     return {
         "ok": True,
         "n_atoms": n_atoms,
         "relax_ns": 19.2,
         "connected": _SESSION.is_connected(),
         "gpus": rows,
-        "note": (None if stock else
-                 "Prices/availability indicative — connect RunPod for live stock."),
+        "note": (
+            None
+            if stock
+            else "Prices/availability indicative — connect RunPod for live stock."
+        ),
     }
+
+
+class JobPreviewStage(BaseModel):
+    """One planned NAMD stage, as the Job Wizard's plan table already describes it."""
+
+    steps: int = Field(0, ge=0)
+    dcd_freq: int = Field(1, ge=1)
+
+
+class JobPreviewRequest(BaseModel):
+    """Everything the wizard knows about a run that does not exist yet.
+
+    Deliberately all-optional-with-defaults: the wizard calls this on every debounced plan
+    refresh, including before a design is loaded, and a validation error there would be a dead
+    panel rather than a "load a design" message.
+    """
+
+    n_atoms: Optional[int] = Field(
+        None, gt=0, description="Sized from the active design if omitted"
+    )
+    relax_ns: float = Field(0.0, ge=0)
+    production_ns: float = Field(0.0, ge=0)
+    relax_timestep_fs: float = Field(4.0, gt=0)
+    production_timestep_fs: float = Field(4.0, gt=0)
+    stages: Optional[list[JobPreviewStage]] = Field(
+        None, description="For the disk forecast. Omitted → no output-size estimate."
+    )
+    package_bytes: int = Field(0, ge=0)
+    budget_usd: float = Field(DEFAULT_BUDGET_USD, ge=0)
+    padding_nm: Optional[float] = Field(
+        None,
+        gt=0,
+        description="Solvation padding, so the atom estimate follows the wizard's "
+        "solvent settings. Omitted → the estimator's own default.",
+    )
+    build: str = Field(
+        "release", description="NAMD build whose arch set gates the card list"
+    )
+
+
+@router.post("/runpod/job-preview")
+async def job_preview(body: JobPreviewRequest | None = None):
+    """What would this WHOLE plan cost and take on RunPod, and does it fit? Creates no pod.
+
+    The Job Wizard's RunPod counterpart to ``/cluster/slurm-preview``. Unlike
+    ``/runpod/gpu-options`` — which answers the narrower "what would a relaxation ladder cost"
+    for the Clusters card — this takes the run the user is actually designing: its real ladder
+    length, its real production length, and the timestep of each, all of which move while they
+    are still on a later tab.
+
+    Never raises on a missing session: a disconnected user still gets the ranked card list at
+    indicative prices, because seeing roughly what a run costs is the whole point of asking
+    before renting.
+    """
+    body = body or JobPreviewRequest()
+
+    n_atoms, source = body.n_atoms, "provided"
+    if not n_atoms:
+        source = "estimated"
+        try:
+            design = design_state.get_or_404()
+            kwargs = {"padding_nm": body.padding_nm} if body.padding_nm else {}
+            profile = await run_in_threadpool(
+                partial(estimate_profile_from_design, design, **kwargs)
+            )
+            if profile:
+                n_atoms = (
+                    profile["dna_atoms"]
+                    + profile["full_water"] * 3
+                    + profile["ion_atoms"]
+                )
+        except Exception:  # noqa: BLE001 — includes get_or_404's HTTPException, deliberately
+            # The wizard re-asks this on EVERY debounced plan refresh, including before a
+            # design is open. Letting `get_or_404` propagate would turn "you haven't loaded a
+            # design yet" into an error toast on a panel the user is still filling in, so an
+            # unsizable request is answered softly below — the same contract
+            # ``/runpod/gpu-options`` already has.
+            logger.warning(
+                "runpod job-preview: could not size the active design", exc_info=True
+            )
+    if not n_atoms:
+        # Without a size there is no honest cost. Say so rather than invent one.
+        return {
+            "sized": False,
+            "connected": _SESSION.is_connected(),
+            "reason": "No design loaded, so the system size is unknown.",
+        }
+
+    stock = None
+    if _SESSION.is_connected() and _SESSION.api_key:
+        try:
+            stock = await runpod_preflight.fetch_gpu_stock(_SESSION.api_key)
+        except Exception:  # noqa: BLE001 — a stock failure means indicative prices, not a 500
+            logger.warning("runpod job-preview: GPU stock lookup failed", exc_info=True)
+
+    try:
+        gpus = plan_options(
+            int(n_atoms),
+            relax_ns=body.relax_ns,
+            production_ns=body.production_ns,
+            build=body.build,
+            relax_timestep_fs=body.relax_timestep_fs,
+            production_timestep_fs=body.production_timestep_fs,
+            stock=stock,
+            registry=load_rate_registry(),
+        )
+    except ValueError as exc:  # unknown build
+        raise HTTPException(400, str(exc)) from exc
+
+    # Storage and staging are quoted against the card the user would get FIRST, since that is
+    # the one whose hourly rate the staging upload bills at.
+    top = gpus[0] if gpus else None
+    volume = await _volume_info(_SESSION.network_volume_id)
+    storage = storage_estimate(
+        stages=[(s.steps, s.dcd_freq) for s in (body.stages or [])],
+        n_atoms=int(n_atoms),
+        package_bytes=body.package_bytes,
+        volume_size_gb=(volume or {}).get("size_gb"),
+        usd_per_hour=(top or {}).get("usd_per_hour"),
+    )
+
+    balance = {"available": False, "reason": "not connected"}
+    live_pods: list[dict] = []
+    if _SESSION.api_key:
+        balance = await runpod_preflight.fetch_balance(_SESSION.api_key)
+    if _SESSION.is_connected():
+        try:
+            live_pods = [
+                {"id": p.id, "status": p.desired_status, "cost_per_hr": p.cost_per_hr}
+                for p in await _SESSION.require().list_pods()
+            ]
+        except Exception:  # noqa: BLE001 — a leak check that 500s is worse than one that is blank
+            logger.warning("runpod job-preview: pod list failed", exc_info=True)
+
+    pre = runpod_preflight.evaluate(
+        connected=_SESSION.is_connected(),
+        network_volume_id=_SESSION.network_volume_id,
+        ssh_key_present=_ssh_key_present(),
+        stock=stock,
+        n_atoms=int(n_atoms),
+    )
+
+    estimated = (top or {}).get("total_cost")
+    # The staging upload bills before NAMD starts a step, so it belongs INSIDE the budget
+    # comparison — leaving it out is how a "just under budget" run goes over.
+    staging_usd = storage["staging"].get("usd") or 0.0
+    projected = (estimated + staging_usd) if estimated is not None else None
+
+    return {
+        "sized": True,
+        "connected": _SESSION.is_connected(),
+        "n_atoms": int(n_atoms),
+        "n_atoms_source": source,
+        "relax_ns": body.relax_ns,
+        "production_ns": body.production_ns,
+        "gpus": gpus,
+        "storage": storage,
+        "volume": volume,
+        "balance": balance,
+        "live_pods": live_pods,
+        "preflight": pre.to_dict(),
+        "budget": {
+            "budget_usd": body.budget_usd,
+            "estimated_usd": None if projected is None else round(projected, 2),
+            "over_budget": bool(projected is not None and projected > body.budget_usd),
+        },
+        "note": (
+            None
+            if stock
+            else "Prices and availability are indicative — connect RunPod for live stock."
+        ),
+    }
+
+
+async def _volume_info(volume_id: Optional[str]) -> Optional[dict]:
+    """The chosen network volume's row, or ``None``. Never raises — the storage forecast
+    degrades to "size unknown" rather than taking the whole preview down with it."""
+    if not volume_id or not _SESSION.is_connected():
+        return None
+    try:
+        vols = await _SESSION.require().list_network_volumes()
+    except Exception:  # noqa: BLE001
+        logger.warning("runpod job-preview: volume lookup failed", exc_info=True)
+        return None
+    return next((v for v in vols if v.get("id") == volume_id), None)
 
 
 def _ssh_key_present() -> bool:
@@ -322,8 +584,12 @@ def _ssh_key_present() -> bool:
 def gpu_types():
     return {
         "gpus": [
-            {"key": g.key, "label": g.label, "vram_mb": g.vram_mb,
-             "usd_per_hour": g.usd_per_hour}
+            {
+                "key": g.key,
+                "label": g.label,
+                "vram_mb": g.vram_mb,
+                "usd_per_hour": g.usd_per_hour,
+            }
             for g in GPU_TYPES
         ]
     }

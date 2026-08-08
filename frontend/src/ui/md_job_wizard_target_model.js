@@ -23,8 +23,14 @@ export const TARGETS = [
 
 export const TARGET_IDS = TARGETS.map(t => t.id)
 
-/** Targets that are not wired up yet — selectable-looking but blocked, with a reason. */
-export const UNWIRED_TARGETS = { runpod: 'RunPod setup lives in the Clusters card for now.' }
+/**
+ * Targets that are not wired up yet — selectable-looking but blocked, with a reason.
+ *
+ * Empty now that RunPod has its own block in step 1. The mechanism stays: it is the general
+ * escape hatch for a target that exists in the list before its UI does, and re-populating it
+ * is a one-line change.
+ */
+export const UNWIRED_TARGETS = {}
 
 /**
  * NAMD3 GPU-resident throughput of a local GPU relative to an A100.
@@ -102,10 +108,18 @@ export function atomCapLabel(hw) {
  * worse than no choice at all, because the failure would otherwise surface after the
  * whole protocol is configured and the package built.
  */
-export function targetReadiness(target, { clusterState = 'disconnected', partition = null } = {}) {
+export function targetReadiness(target, {
+  clusterState = 'disconnected', partition = null, runpod = null,
+} = {}) {
   if (!TARGET_IDS.includes(target)) return { ready: false, reason: 'Choose where this job runs.' }
   if (UNWIRED_TARGETS[target]) return { ready: false, reason: UNWIRED_TARGETS[target] }
   if (target === 'local') return { ready: true, reason: '' }
+  // RunPod owns its own gate — connected, a volume, a card, and an estimate inside budget.
+  // The RunPod block computes it (purely) and hands the verdict here, because "not ready" for
+  // a rented GPU has five distinct causes and a generic message helps with none of them.
+  if (target === 'runpod') {
+    return runpod || { ready: false, reason: 'Setting up RunPod…' }
+  }
   if (clusterState !== 'connected') {
     return { ready: false, reason: 'Sign in to Alpine to see availability and pick a node.' }
   }
@@ -122,17 +136,23 @@ export function targetReadiness(target, { clusterState = 'disconnected', partiti
  * empty edit set is sent as null so the backend keeps auto-recommending.
  */
 export function targetPayloadFields(target, {
-  partition = null, runpodGpuKey = null, resources = null,
+  partition = null, runpodGpuKey = null, runpodBudgetUsd = null, runpodVolumeId = null,
+  resources = null,
 } = {}) {
   const edits = target === 'alpine' && resources && Object.keys(resources).length
     ? resources
     : null
+  const isRunpod = target === 'runpod'
   return {
     execution_target: TARGET_IDS.includes(target) ? target : 'local',
     cluster_name: target === 'alpine' ? 'alpine' : null,
     partition: target === 'alpine' ? (partition || null) : null,
     slurm_resources: edits,
-    runpod_gpu_key: target === 'runpod' ? (runpodGpuKey || null) : null,
+    // Cleared for every other target for the same reason `partition` is: a leftover card or
+    // spend cap on a job the user re-pointed at the local GPU would resurface at launch.
+    runpod_gpu_key: isRunpod ? (runpodGpuKey || null) : null,
+    runpod_budget_usd: isRunpod && runpodBudgetUsd != null ? Number(runpodBudgetUsd) : null,
+    runpod_volume_id: isRunpod ? (runpodVolumeId || null) : null,
   }
 }
 

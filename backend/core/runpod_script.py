@@ -45,6 +45,7 @@ from backend.core.slurm_script import (
     _early_stop_block,
     _early_stop_eligible,
     _stage_last_chunk_index,
+    LIVE_METRICS_NAME,
 )
 
 # ── VRAM model ───────────────────────────────────────────────────────────────
@@ -146,8 +147,13 @@ GPU_TYPES: tuple[GpuType, ...] = (
     #   RTX PRO 6000  $1.99  18.5 ms/step  18.6 ns/day  $2.56/ns   (2.7x price -> 2.0x speed)
     # The premium buys WALL-CLOCK, not throughput-per-dollar.
     GpuType("NVIDIA A100 80GB PCIe", "A100 PCIe", 81_920, 1.39, "sm_80"),
-    GpuType("NVIDIA RTX PRO 6000 Blackwell Server Edition",
-            "RTX PRO 6000", 97_887, 1.99, "sm_120"),
+    GpuType(
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "RTX PRO 6000",
+        97_887,
+        1.99,
+        "sm_120",
+    ),
 )
 
 
@@ -278,7 +284,9 @@ def lifetime_for_budget(
     the pod was rented under, so it is the worst case it CAN be billing. Guessing high
     yields a SHORTER lifetime, which is the safe direction to be wrong in.
     """
-    rate = cost_per_hr if (cost_per_hr and cost_per_hr > 0) else DEFAULT_MAX_USD_PER_HOUR
+    rate = (
+        cost_per_hr if (cost_per_hr and cost_per_hr > 0) else DEFAULT_MAX_USD_PER_HOUR
+    )
     return max(MIN_LIFETIME_S, int(budget_usd / rate * 3600))
 
 
@@ -333,7 +341,17 @@ MAX_CELL_SHRINK_RETRIES = 4
 # ORIGINAL box, and shrinks into the same wall — so "bounded retry" means "fails four
 # times", not "self-heals".
 RESUME_CONF_NAME = "nadoc_resume_conf.py"
-WATCHDOG_POLL_S = 30    # how often the watchdog checks the log mtime + heartbeat
+WATCHDOG_POLL_S = 30  # how often the watchdog checks the log mtime + heartbeat
+
+# The node-side live-metrics collector, reused verbatim from the Alpine path
+# (`slurm_script.LIVE_METRICS_NAME` / `remote_live_metrics.py`).
+#
+# 60 s, NOT the 1.5 s the UI polls at. The two are decoupled on purpose: NADOC anchors
+# each reading and extrapolates from it (`_remote_projected_step`), so the bar moves
+# smoothly between collector ticks. Sampling faster would only add I/O contention with
+# NAMD's own writes to the same network volume, on a machine that is billing by the
+# second. Raise it (or set 0 to disable) if a run ever looks I/O-starved.
+LIVE_METRICS_INTERVAL_S = 60
 
 
 def render_chain_script(
@@ -352,6 +370,7 @@ def render_chain_script(
     early_stop_min_k: Optional[float] = None,
     name_stem: str = "",
     health_python: str = "python3",
+    live_metrics_s: int = LIVE_METRICS_INTERVAL_S,
 ) -> str:
     """Emit the bash script that runs the whole ladder on the pod.
 
@@ -409,7 +428,7 @@ def render_chain_script(
         f"cd {q(remote_dir)} || exit 90",
         "mkdir -p output",
         'echo "running" > nadoc_status',
-        'date +%s > nadoc_heartbeat',
+        "date +%s > nadoc_heartbeat",
         "",
     ]
 
@@ -421,10 +440,30 @@ def render_chain_script(
             "",
         ]
 
+    if live_metrics_s:
+        lines += [
+            "# Live-metrics collector — the ONLY thing that makes the progress bar move",
+            "# mid-segment. Without it a run advances only when a whole segment lands its",
+            "# .coor, so a single-segment 200 ns production sat at 0% for its entire life.",
+            "#",
+            "# It runs ON THE POD and writes a ~200-byte JSON blob that NADOC's existing",
+            f"# poll already `cat`s, so it costs the poll nothing extra. The {live_metrics_s} s",
+            "# interval is the only pod cost: one bounded head+tail of the active log",
+            "# (~384 kB off the network volume) per tick, against a GPU that is busy",
+            "# anyway. NADOC extrapolates between readings, so the bar still moves",
+            "# smoothly on a 1.5 s UI poll — a faster collector would buy nothing but I/O",
+            "# contention with NAMD's own writes to the same volume.",
+            f'if [ -f "{LIVE_METRICS_NAME}" ]; then',
+            f'  ( {health_python} "{LIVE_METRICS_NAME}" . {int(live_metrics_s)} '
+            ") >/dev/null 2>&1 & LIVE_METRICS_PID=$!",
+            "fi",
+            "",
+        ]
+
     lines += [
         "run_step() {",
         "  local name=$1 conf=$2 attempt=${3:-0} total=${4:-0}",
-        "  if [ -f \"output/${name}.coor\" ]; then",
+        '  if [ -f "output/${name}.coor" ]; then',
         '    echo "SKIP  $name (already complete)"',
         "    return 0",
         "  fi",
@@ -445,7 +484,7 @@ def render_chain_script(
         "  #     was only ever true BETWEEN segments; this makes it true WITHIN one.",
         '  local runconf="$conf"',
         '  if [ -f "output/${name}.restart.xsc" ] && [ "$total" -gt 0 ]; then',
-        f"    if python3 {RESUME_CONF_NAME} --seg \"$name\" --total-steps \"$total\"; then",
+        f'    if python3 {RESUME_CONF_NAME} --seg "$name" --total-steps "$total"; then',
         '      runconf="${name}.resume.conf"',
         '      echo "RESUME $name from its own checkpoint (attempt $attempt)"',
         "    else",
@@ -461,7 +500,7 @@ def render_chain_script(
         "  # Watchdog: the ONLY reliable handle on NAMD is the pid we just spawned.",
         "  ( while kill -0 $pid 2>/dev/null; do",
         "      date +%s > nadoc_heartbeat",
-        '      local now=$(date +%s)',
+        "      local now=$(date +%s)",
         '      local mtime=$(stat -c %Y "${name}.log" 2>/dev/null || echo $now)',
         f"      if [ $((now - mtime)) -gt {int(stall_timeout_s)} ]; then",
         '        echo "STALL $name — no log output; killing" >> nadoc_stall',
@@ -479,7 +518,7 @@ def render_chain_script(
         "  kill $watchdog 2>/dev/null",
         "  wait $watchdog 2>/dev/null",
         "",
-        "  if [ $rc -ne 0 ] || [ ! -f \"output/${name}.coor\" ]; then",
+        '  if [ $rc -ne 0 ] || [ ! -f "output/${name}.coor" ]; then',
         "    # An NPT cell shrinking past its patch grid is SELF-HEALING: restart from",
         "    # the checkpoint and NAMD rebuilds the grid at the smaller box. Treating it",
         "    # as fatal would throw away a 25-minute minimisation. Bounded, so a genuinely",
@@ -515,7 +554,11 @@ def render_chain_script(
     tier = (early_stop_tier or "B").upper()
     if early_stop_relax and tier not in ("A", "B"):
         raise ValueError(f"early_stop_tier {tier!r} must be 'A' or 'B'")
-    min_k = _DEFAULT_EARLY_STOP_MIN_K if early_stop_min_k is None else float(early_stop_min_k)
+    min_k = (
+        _DEFAULT_EARLY_STOP_MIN_K
+        if early_stop_min_k is None
+        else float(early_stop_min_k)
+    )
 
     chain = [s.name for s in steps]
     # Scales come from the manifest, positionally aligned to the chain (chain[0] is the
@@ -527,18 +570,26 @@ def render_chain_script(
         kind = "minimization" if step.is_minimization else "segment"
         lines.append(f"# {kind}: {step.name}")
         lines.append(
-            f'run_step_with_retries {q(step.name)} {q(step.name + ".conf")} '
+            f"run_step_with_retries {q(step.name)} {q(step.name + '.conf')} "
             f"{int(step.steps)} || exit 1"
         )
         if scales and _early_stop_eligible(chain, scales, i, min_k, tier):
             last = _stage_last_chunk_index(chain, i)
             lines += _early_stop_block(
-                step.name, chain[i + 1 : last + 1],
-                tier=tier, name_stem=name_stem, health_python=health_python,
+                step.name,
+                chain[i + 1 : last + 1],
+                tier=tier,
+                name_stem=name_stem,
+                health_python=health_python,
             )
 
     lines += [
         "",
+        # Stop sampling before the final status lands, so the last thing NADOC reads is
+        # the finished run rather than a collector tick that arrived after it.  A cancel
+        # kills the whole process GROUP (the chain script is a setsid leader), so this is
+        # only about the clean-exit path.
+        '[ -n "${LIVE_METRICS_PID:-}" ] && kill "$LIVE_METRICS_PID" 2>/dev/null',
         'echo "completed" > nadoc_status',
         "date +%s > nadoc_heartbeat",
         "exit 0",
@@ -562,8 +613,9 @@ def parse_status_file(text: str) -> dict:
     return {"state": "unknown", "segment": None}
 
 
-def heartbeat_is_stale(heartbeat_epoch: Optional[int], now_epoch: int,
-                       *, tolerance_s: int = 300) -> bool:
+def heartbeat_is_stale(
+    heartbeat_epoch: Optional[int], now_epoch: int, *, tolerance_s: int = 300
+) -> bool:
     """True when the pod stopped writing its heartbeat — the run is dead or the pod
     was reclaimed (which, on an interruptible pod, is a NORMAL event: resume it)."""
     if heartbeat_epoch is None:

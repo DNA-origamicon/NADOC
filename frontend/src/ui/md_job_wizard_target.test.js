@@ -84,11 +84,13 @@ describe('the gate', () => {
     step.dispose()
   })
 
-  it('runpod is selectable but never ready — it is not wired up', () => {
+  it('runpod is blocked until its own block reports ready', () => {
+    // No preview has come back yet (nothing is stubbed here), so the RunPod gate is still
+    // waiting on the pre-flight — but it is a REAL gate now, not an "unwired" stub.
     const { mount, step } = setup()
     clickTarget(mount, 'runpod')
     expect(step.isReady()).toBe(false)
-    expect(step.readiness().reason).toMatch(/Clusters card/)
+    expect(step.readiness().reason).not.toMatch(/Clusters card/)
     step.dispose()
   })
 
@@ -185,5 +187,80 @@ describe('failures', () => {
     step.dispose()
     connectCluster()
     expect(fetchAvailability).not.toHaveBeenCalled()
+  })
+})
+
+describe('the RunPod block follows the run being designed', () => {
+  const PREVIEW = {
+    sized: true, connected: false, n_atoms: 100000, n_atoms_source: 'estimated',
+    gpus: [{ key: 'k', label: 'RTX 4090', vram_gb: 24, usd_per_hour: 0.69, available: null,
+      ns_day: 24, ns_day_relax: 12, relax_hours: 4, relax_cost: 2.76,
+      production_hours: null, production_cost: null, total_hours: 4, total_cost: 2.76 }],
+    storage: { output_bytes: 1, package_bytes: 0, needed_bytes: 1, used_known: false,
+      staging: {}, warn: false, reason: '' },
+    volume: null, balance: { available: false }, live_pods: [],
+    preflight: { ok: true, checks: [] },
+    budget: { budget_usd: 15, estimated_usd: 2.76, over_budget: false },
+  }
+
+  function runpodSetup(planRef) {
+    const getJobPreview = vi.fn(async () => structuredClone(PREVIEW))
+    const { step, mount } = setup({
+      getJobPreview,
+      getVolumes: vi.fn(async () => ({ volumes: [] })),
+      setVolume: vi.fn(),
+      getPlanShape: () => planRef.value,
+    })
+    return { step, mount, getJobPreview }
+  }
+
+  it('re-prices when the plan changes and the card is re-opened', async () => {
+    // The failure this pins: pick RunPod, switch to Local, change the run length, switch
+    // back — `refreshSizing` only touches the SELECTED target, so the RunPod card was left
+    // showing a price for the old run.
+    const plan = { value: { relax_steps: 100, production_steps: 0, stages: [] } }
+    const { step, mount, getJobPreview } = runpodSetup(plan)
+
+    clickTarget(mount, 'runpod')
+    await vi.waitFor(() => expect(getJobPreview).toHaveBeenCalledTimes(1))
+
+    clickTarget(mount, 'local')
+    plan.value = { relax_steps: 100, production_steps: 999_999, stages: [] }
+    clickTarget(mount, 'runpod')
+    await vi.waitFor(() => expect(getJobPreview).toHaveBeenCalledTimes(2))
+    step.dispose()
+  })
+
+  it('does not re-price when nothing about the run moved', async () => {
+    const plan = { value: { relax_steps: 100, production_steps: 0, stages: [] } }
+    const { step, mount, getJobPreview } = runpodSetup(plan)
+
+    clickTarget(mount, 'runpod')
+    await vi.waitFor(() => expect(getJobPreview).toHaveBeenCalledTimes(1))
+    clickTarget(mount, 'local')
+    clickTarget(mount, 'runpod')
+    await new Promise(r => setTimeout(r, 20))
+    expect(getJobPreview).toHaveBeenCalledTimes(1)
+    step.dispose()
+  })
+
+  it('fetches nothing until RunPod is actually chosen', async () => {
+    const plan = { value: { relax_steps: 100, production_steps: 0, stages: [] } }
+    const { step, getJobPreview } = runpodSetup(plan)
+    await new Promise(r => setTimeout(r, 20))
+    expect(getJobPreview).not.toHaveBeenCalled()
+    step.dispose()
+  })
+
+  it('carries the RunPod choices into the create payload', async () => {
+    const plan = { value: { relax_steps: 100, production_steps: 0, stages: [] } }
+    const { step, mount, getJobPreview } = runpodSetup(plan)
+    clickTarget(mount, 'runpod')
+    await vi.waitFor(() => expect(getJobPreview).toHaveBeenCalled())
+    const p = step.payloadFields()
+    expect(p.execution_target).toBe('runpod')
+    expect(p.runpod_gpu_key).toBe('k')          // the backend's best-value row, preselected
+    expect(p.runpod_budget_usd).toBe(15)
+    step.dispose()
   })
 })

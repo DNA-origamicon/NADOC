@@ -30,6 +30,31 @@ import httpx
 
 log = logging.getLogger(__name__)
 
+# ── Hand-off (dev-server reload) ──────────────────────────────────────────────
+# A pod is destroyed in ``pod()``/``adopt()``'s ``finally``, and that is STRUCTURAL: at
+# process exit the supervisor task is cancelled, the CancelledError unwinds through the
+# context manager, and the pod dies. So skipping the explicit shutdown hook does NOT save a
+# pod across a dev-server reload — the cancellation destroys it anyway. That is exactly how
+# a live 200 ns run was lost twice: once to the hook, once to the unwind.
+#
+# This flag is the only way to suppress that, and it is deliberately global + explicit:
+# `main.lifespan` sets it when ``dev_reload.under_reloader()`` says another process is
+# starting immediately and will adopt the pod on ``/runpod/connect``.
+#
+# ⚠️ Setting this when nothing adopts the pod leaks a billing GPU. It is never set on a real
+# shutdown, and never outside a reload.
+_HANDOFF = False
+
+
+def set_handoff(on: bool) -> None:
+    """Suppress pod destruction on unwind, because another process is taking over."""
+    global _HANDOFF
+    _HANDOFF = bool(on)
+
+
+def _handing_off() -> bool:
+    return _HANDOFF
+
 # A transient network failure must not kill a 10-hour run. Retry the network layer and
 # 5xx/429; never a 4xx (it will fail identically forever and just burns pod-time).
 _MAX_API_RETRIES = 5
@@ -148,7 +173,8 @@ def build_create_payload(
         "interruptible": interruptible,
         # Never rent a host whose driver cannot run the image (see DEFAULT_ALLOWED_CUDA).
         "allowedCudaVersions": list(
-            allowed_cuda_versions if allowed_cuda_versions is not None
+            allowed_cuda_versions
+            if allowed_cuda_versions is not None
             else DEFAULT_ALLOWED_CUDA
         ),
         # ⚠️ Do NOT set `dockerStartCmd`. RunPod's images run their own start script,
@@ -303,14 +329,21 @@ class RunpodClient:
                 return None
             return resp.json()
 
-        raise RunpodError(f"RunPod API unreachable after {_MAX_API_RETRIES} tries: {last}")
+        raise RunpodError(
+            f"RunPod API unreachable after {_MAX_API_RETRIES} tries: {last}"
+        )
 
     async def _backoff(self, attempt: int, why: str) -> None:
         if attempt >= _MAX_API_RETRIES - 1:
             return
-        delay = _RETRY_BASE_S * (2 ** attempt)
-        log.warning("runpod: %s — retrying in %.0fs (%d/%d)",
-                    why, delay, attempt + 1, _MAX_API_RETRIES)
+        delay = _RETRY_BASE_S * (2**attempt)
+        log.warning(
+            "runpod: %s — retrying in %.0fs (%d/%d)",
+            why,
+            delay,
+            attempt + 1,
+            _MAX_API_RETRIES,
+        )
         await asyncio.sleep(delay)
 
     async def create_pod(self, payload: dict[str, Any]) -> PodInfo:
@@ -384,7 +417,9 @@ class RunpodClient:
             f"(last status {last.desired_status if last else 'unknown'}); terminated it."
         )
 
-    async def create_pod_first_available(self, payloads: list[dict[str, Any]]) -> PodInfo:
+    async def create_pod_first_available(
+        self, payloads: list[dict[str, Any]]
+    ) -> PodInfo:
         """Try each payload until one gets an instance.
 
         A network volume PINS the pod to its datacenter, and a given GPU/cloud-tier is
@@ -430,9 +465,45 @@ class RunpodClient:
         """
         info = await self.create_pod_first_available([payload, *(fallbacks or [])])
         if on_created is not None:
-            on_created(info)                       # it is BILLING from this moment
+            on_created(info)  # it is BILLING from this moment
         try:
             yield await self.wait_for_ssh(info.id, timeout_s=wait_timeout_s)
         finally:
-            with contextlib.suppress(Exception):
-                await self.terminate_pod(info.id)
+            if _handing_off():
+                log.warning(
+                    "runpod: HANDING OFF pod %s instead of destroying it (dev-server "
+                    "reload). The next process adopts it on /runpod/connect; if it does "
+                    "not, this pod bills until it is reaped.",
+                    info.id,
+                )
+            else:
+                with contextlib.suppress(Exception):
+                    await self.terminate_pod(info.id)
+
+    @contextlib.asynccontextmanager
+    async def adopt(self, pod_id: str, *, wait_timeout_s: float = 300.0):
+        """Take ownership of an EXISTING pod, yield it ready-for-SSH, and ALWAYS terminate it.
+
+        The counterpart to :meth:`pod` for a run this process did not start — a pod left up
+        by a dev-server reload, or one whose supervisor died. It carries the same `finally`,
+        so the rule "a pod dies exactly one way" still holds: adopting is how a second
+        process inherits that obligation instead of orphaning it.
+
+        Raises ``RunpodError`` if the pod is gone or already destroyed, so a caller cannot
+        mistake a vanished pod for an adopted one and sit polling nothing.
+        """
+        info = await self.get_pod(pod_id)
+        if info.is_destroyed:
+            raise RunpodError(f"pod {pod_id} is already destroyed; nothing to adopt")
+        try:
+            yield await self.wait_for_ssh(pod_id, timeout_s=wait_timeout_s)
+        finally:
+            if _handing_off():
+                log.warning(
+                    "runpod: HANDING OFF adopted pod %s instead of destroying it "
+                    "(dev-server reload).",
+                    pod_id,
+                )
+            else:
+                with contextlib.suppress(Exception):
+                    await self.terminate_pod(pod_id)

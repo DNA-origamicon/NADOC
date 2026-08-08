@@ -217,7 +217,7 @@ describe('newestCompletedForPart (cross-engine compare fallback)', () => {
   })
 })
 
-import { mdJobIsActive, mdJobIsRunning, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle, mdQueueable, mdQueueRowLabel } from './md_jobs_panel.js'
+import { mdJobIsActive, mdJobIsRunning, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle, mdQueueable, mdQueueRowLabel, mdRunpodStartable, mdRunpodPhase } from './md_jobs_panel.js'
 
 describe('mdJobIsDraft / mdDraftRunLabel (deferred-prep seed)', () => {
   it('mdJobIsDraft is true only for status "draft"', () => {
@@ -369,11 +369,77 @@ describe('mdRunControl (ONE control for the selected job: Run / Stop / Resume)',
     expect(rc.disabled).toBe(true)
     expect(rc.title).toMatch(/finished/)
   })
-  it('a RunPod job awaiting submit → disabled, pointing at the review card', () => {
-    const rc = mdRunControl({ status: 'queued', execution_target: 'runpod' }, { runTarget: 'runpod' })
-    expect(rc.disabled).toBe(true)
-    expect(rc.title).toMatch(/review card/)
+  it('a prepared RunPod job → ▶ Rent & Run, and it is the button that starts it', () => {
+    // It used to be DISABLED with "submit it from the review card" — a card the Job Wizard
+    // replaced, so the top button did nothing at all for a RunPod job.
+    const job = { status: 'queued', execution_target: 'runpod' }
+    const rc = mdRunControl(job, { runTarget: 'runpod', runpodReady: true })
+    expect(rc.label).toBe('▶ Rent & Run')
+    expect(rc.disabled).toBe(false)
+    expect(rc.action).toBe('run')
+    expect(mdRunpodStartable(job)).toBe(true)
   })
+
+  it('▶ Rent & Run is blocked while the pre-flight fails, and says why', () => {
+    const rc = mdRunControl({ status: 'queued', execution_target: 'runpod' },
+      { runpodReady: false, runpodBlocked: 'Network volume: none set' })
+    expect(rc.disabled).toBe(true)
+    expect(rc.title).toMatch(/Network volume: none set/)
+  })
+  it('spins, disabled, through every unattended RunPod phase', () => {
+    // Before this it read "■ Stop Run" for all three — offering to stop a run that had
+    // not started, on a button whose click did nothing.
+    const cases = [
+      [{ status: 'preparing' }, 'Preparing…'],
+      [{ status: 'running' }, 'Renting a GPU…'],
+      [{ status: 'running', runpod_pod_id: 'p1' }, 'Uploading…'],
+    ]
+    for (const [extra, label] of cases) {
+      const rc = mdRunControl({ execution_target: 'runpod', ...extra })
+      expect(rc.label, label).toBe(label)
+      expect(rc.disabled).toBe(true)
+      expect(rc.spinner).toBe(true)
+      expect(rc.action).toBe('preparing')
+    }
+  })
+
+  it('becomes Stop only once NAMD is actually running on the pod', () => {
+    // runpod_pid is written when the chain script launches — that is the boundary between
+    // "we are paying while nothing computes" and "the run is going".
+    const rc = mdRunControl(
+      { status: 'running', execution_target: 'runpod', runpod_pod_id: 'p1', runpod_pid: 42 })
+    expect(rc.label).toMatch(/Stop/)
+    expect(rc.disabled).toBe(false)
+  })
+
+  it('blocks Resume on RunPod while the session is disconnected', () => {
+    // THE "I cannot resume the stopped run" BUG. The API key is backend-memory-only, so
+    // every dev-server reload drops the session — and Resume stayed lit, firing a start
+    // that could only come back 400 "RunPod API key — not connected".
+    const job = { status: 'failed', execution_target: 'runpod', runpod_pod_id: 'p1' }
+    const rc = mdRunControl(job, {
+      runpodReady: false, runpodBlocked: 'RunPod API key: not connected',
+    })
+    expect(rc.action).toBe('resume')
+    expect(rc.disabled).toBe(true)
+    expect(rc.title).toMatch(/RunPod API key: not connected/)
+  })
+
+  it('allows Resume on RunPod once the pre-flight passes', () => {
+    const job = { status: 'failed', execution_target: 'runpod', runpod_pod_id: 'p1' }
+    const rc = mdRunControl(job, { runpodReady: true })
+    expect(rc.action).toBe('resume')
+    expect(rc.disabled).toBe(false)
+  })
+
+  it('does not apply the RunPod gate to a local job', () => {
+    // A local resume needs no cloud session; gating it would strand every offline run.
+    const rc = mdRunControl({ status: 'failed', execution_target: 'local' },
+      { runpodReady: false, runpodBlocked: 'not connected' })
+    expect(rc.action).toBe('resume')
+    expect(rc.disabled).toBe(false)
+  })
+
   it('a seeded draft names the engine it will start from', () => {
     expect(mdRunControl({ status: 'draft', seed_oxdna_job_id: 'x' }).label).toBe('▶ Relax from oxDNA')
     expect(mdRunControl({ status: 'draft', seed_blade_job_id: 'x' }).label).toBe('▶ Relax from BLADE')
@@ -1803,5 +1869,48 @@ describe('live-frame fetch (a running Alpine job has its trajectory on the clust
     expect(liveFrameLabel({ step: null })).toBe('Snapshot from the running Alpine job')
     expect(liveFrameLabel({ step: 0 })).toBe('Snapshot from the running Alpine job')
     expect(liveFrameLabel(null)).toBe('')
+    // It used to say "Alpine" for a snapshot pulled off a rented RunPod GPU.
+    expect(liveFrameLabel({ step: 285000 }, 'runpod'))
+      .toBe('Snapshot at step 285,000 — still running on the pod')
+    expect(liveFrameLabel({ step: 0 }, 'runpod')).toBe('Snapshot from the running pod job')
+  })
+})
+
+describe('mdRunpodPhase (which unattended wait a rented run is in)', () => {
+  const rp = extra => mdRunpodPhase({ execution_target: 'runpod', ...extra })
+
+  it('names each phase from signals the job already carries', () => {
+    expect(rp({ status: 'preparing' })).toBe('preparing')
+    expect(rp({ status: 'running' })).toBe('renting')
+    expect(rp({ status: 'running', runpod_pod_id: 'p1' })).toBe('uploading')
+  })
+
+  it('is null once the chain script is up, and for every other state', () => {
+    expect(rp({ status: 'running', runpod_pod_id: 'p1', runpod_pid: 7 })).toBeNull()
+    expect(rp({ status: 'queued' })).toBeNull()
+    expect(rp({ status: 'completed' })).toBeNull()
+  })
+
+  it('never claims a phase for a job that is not on RunPod', () => {
+    expect(mdRunpodPhase({ status: 'preparing', execution_target: 'alpine' })).toBeNull()
+    expect(mdRunpodPhase({ status: 'preparing', execution_target: 'local' })).toBeNull()
+    expect(mdRunpodPhase(null)).toBeNull()
+  })
+})
+
+describe('a rented run stays visible while it provisions', () => {
+  it('arms the remote poll for RunPod, not just Alpine', () => {
+    // Alpine-only here meant the panel never refreshed a rented run: it could be
+    // provisioning, uploading or finished and the button would not move.
+    expect(hasActiveRemoteJob([{ execution_target: 'runpod', status: 'running' }])).toBe(true)
+    expect(hasActiveRemoteJob([{ execution_target: 'alpine', status: 'running' }])).toBe(true)
+    expect(hasActiveRemoteJob([{ execution_target: 'local', status: 'running' }])).toBe(false)
+    expect(hasActiveRemoteJob([{ execution_target: 'runpod', status: 'completed' }])).toBe(false)
+  })
+
+  it('does not chase a local status socket for a pod-side run', () => {
+    expect(mdWatchdogDecision({
+      job: { execution_target: 'runpod', status: 'running' }, wsOpen: false,
+    })).toBe('disarm')
   })
 })

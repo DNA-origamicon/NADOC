@@ -1,20 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  WS,
-  targetStreamMode,
-  sceneUsesAtomistic,
-  sceneUsesNativeCg,
-  decideReload,
-  canReapplyFrame,
-  nextLivePollAction,
-  mdReadinessIndicator,
-  shouldForceDisplayReload,
-  sceneUsesHeavy,
-  solventRepMode,
-  restorePlan,
-  zipAtomIdentity,
-  toBondPairs,
-} from './md_display_state.js'
+import { WS, targetStreamMode, sceneUsesAtomistic, sceneUsesNativeCg, decideReload, canReapplyFrame, nextLivePollAction, mdReadinessIndicator, shouldForceDisplayReload, sceneUsesHeavy, solventRepMode, restorePlan, zipAtomIdentity, toBondPairs, mdDisplayReadinessFromMeta } from './md_display_state.js'
 
 describe('targetStreamMode', () => {
   it('maps atomistic scene reprs to ballstick', () => {
@@ -330,5 +315,60 @@ describe('toBondPairs', () => {
   it('keeps large universe-global serials exact (Int32, not Float32)', () => {
     // A solvated origami PSF runs past a million atoms; serial IS the universe index.
     expect(Array.from(toBondPairs([1_048_577, 1_400_003]))).toEqual([1_048_577, 1_400_003])
+  })
+})
+
+describe('mdDisplayReadinessFromMeta — why the display is empty', () => {
+  it('a ready job needs no explanation', () => {
+    expect(mdDisplayReadinessFromMeta({ ready: true })).toEqual({ state: 'ready', title: '' })
+  })
+
+  it('a run on a pod SHOWS, with the reason — it used to hide', () => {
+    // Collapsing every `ready:false` to 'off' hid the dot, so a live rented-GPU run
+    // looked identical to having no job at all.
+    const v = mdDisplayReadinessFromMeta({
+      ready: false, not_ready_code: 'remote',
+      not_ready_reason: 'This run’s trajectory is on the pod, not on this computer.',
+    })
+    expect(v.state).toBe('remote')
+    expect(mdReadinessIndicator(v.state).show).toBe(true)
+    expect(v.title).toMatch(/on the pod/)
+  })
+
+  it('a local run with no frames yet reads as waiting, not broken', () => {
+    const v = mdDisplayReadinessFromMeta({
+      ready: false, not_ready_code: 'pending', not_ready_reason: 'no frames yet',
+    })
+    expect(v.state).toBe('waiting')
+    expect(mdReadinessIndicator('waiting')).toMatchObject({ show: true, color: 'dim' })
+  })
+
+  it('a finished run that wrote nothing is an error', () => {
+    expect(mdDisplayReadinessFromMeta({ ready: false, not_ready_code: 'empty' }).state)
+      .toBe('error')
+  })
+
+  it('no package is the one honest "nothing to see here"', () => {
+    expect(mdDisplayReadinessFromMeta({ ready: false, not_ready_code: 'no_package' }).state)
+      .toBe('off')
+    expect(mdReadinessIndicator('off').show).toBe(false)
+  })
+
+  it('a failed request is an ERROR, not an absence', () => {
+    // Saying "off" would claim the display had been assessed and found empty.
+    expect(mdDisplayReadinessFromMeta(null).state).toBe('error')
+    expect(mdDisplayReadinessFromMeta(undefined).state).toBe('error')
+  })
+
+  it('an older backend with no code still hides rather than crying error', () => {
+    expect(mdDisplayReadinessFromMeta({ ready: false }).state).toBe('off')
+  })
+
+  it('every shown state has a label', () => {
+    for (const s of ['warming', 'ready', 'error', 'waiting', 'remote']) {
+      const spec = mdReadinessIndicator(s)
+      expect(spec.show).toBe(true)
+      expect(spec.text.length).toBeGreaterThan(0)
+    }
   })
 })

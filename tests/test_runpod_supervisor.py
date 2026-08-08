@@ -75,8 +75,12 @@ class TestPackageIntrospection:
         in neither and every real job died with AttributeError: 'NoneType'."""
         job = _job_with_package(tmp_path, n_atoms=1_442_735)
         psf = job.package_dir(tmp_path) / "d.psf"
-        assert psf.stat().st_size > 100_000, "fixture must have a realistically big header"
-        assert psf.read_text()[:4096].find("!NATOM") == -1, "must NOT be in the first 4 KB"
+        assert psf.stat().st_size > 100_000, (
+            "fixture must have a realistically big header"
+        )
+        assert psf.read_text()[:4096].find("!NATOM") == -1, (
+            "must NOT be in the first 4 KB"
+        )
         assert sup.n_atoms_for(job, tmp_path) == 1_442_735
 
     def test_a_package_with_no_psf_is_a_clear_error_not_a_crash(self, tmp_path):
@@ -131,22 +135,38 @@ class TestOrphanReaper:
         class C(FakeClient):
             async def list_pods(self):
                 from backend.core.runpod_api import parse_pod
-                return [parse_pod({"id": "ghost", "desiredStatus": "RUNNING",
-                                   "name": "nadoc-6hb-abc"})]
+
+                return [
+                    parse_pod(
+                        {
+                            "id": "ghost",
+                            "desiredStatus": "RUNNING",
+                            "name": "nadoc-6hb-abc",
+                        }
+                    )
+                ]
 
         c = C()
-        assert _run(sup.reap_orphan_pods(c)) == ["ghost"]
+        assert _run(sup.reap_orphan_pods(c))[0] == ["ghost"]
         assert c.terminated == ["ghost"]
 
     def test_leaves_pods_the_user_started_by_hand_alone(self):
         class C(FakeClient):
             async def list_pods(self):
                 from backend.core.runpod_api import parse_pod
-                return [parse_pod({"id": "mine", "desiredStatus": "RUNNING",
-                                   "name": "my-jupyter-box"})]
+
+                return [
+                    parse_pod(
+                        {
+                            "id": "mine",
+                            "desiredStatus": "RUNNING",
+                            "name": "my-jupyter-box",
+                        }
+                    )
+                ]
 
         c = C()
-        assert _run(sup.reap_orphan_pods(c)) == []
+        assert _run(sup.reap_orphan_pods(c))[0] == []
         assert c.terminated == []
 
     def test_reaps_an_exited_pod(self):
@@ -157,11 +177,19 @@ class TestOrphanReaper:
         class C(FakeClient):
             async def list_pods(self):
                 from backend.core.runpod_api import parse_pod
-                return [parse_pod({"id": "zombie", "desiredStatus": "EXITED",
-                                   "name": "nadoc-6hb-abc"})]
+
+                return [
+                    parse_pod(
+                        {
+                            "id": "zombie",
+                            "desiredStatus": "EXITED",
+                            "name": "nadoc-6hb-abc",
+                        }
+                    )
+                ]
 
         c = C()
-        assert _run(sup.reap_orphan_pods(c)) == ["zombie"]
+        assert _run(sup.reap_orphan_pods(c))[0] == ["zombie"]
         assert c.terminated == ["zombie"]
 
     def test_does_not_reap_an_already_destroyed_pod(self):
@@ -170,24 +198,40 @@ class TestOrphanReaper:
         class C(FakeClient):
             async def list_pods(self):
                 from backend.core.runpod_api import parse_pod
-                return [parse_pod({"id": "gone", "desiredStatus": "TERMINATED",
-                                   "name": "nadoc-6hb-abc"})]
+
+                return [
+                    parse_pod(
+                        {
+                            "id": "gone",
+                            "desiredStatus": "TERMINATED",
+                            "name": "nadoc-6hb-abc",
+                        }
+                    )
+                ]
 
         c = C()
-        assert _run(sup.reap_orphan_pods(c)) == []
+        assert _run(sup.reap_orphan_pods(c))[0] == []
         assert c.terminated == []
 
     def test_does_not_reap_a_pod_it_is_currently_tracking(self):
         class C(FakeClient):
             async def list_pods(self):
                 from backend.core.runpod_api import parse_pod
-                return [parse_pod({"id": "live", "desiredStatus": "RUNNING",
-                                   "name": "nadoc-6hb-abc"})]
+
+                return [
+                    parse_pod(
+                        {
+                            "id": "live",
+                            "desiredStatus": "RUNNING",
+                            "name": "nadoc-6hb-abc",
+                        }
+                    )
+                ]
 
         sup._PODS["j3"] = "live"  # noqa: SLF001
         try:
             c = C()
-            assert _run(sup.reap_orphan_pods(c)) == []
+            assert _run(sup.reap_orphan_pods(c))[0] == []
             assert c.terminated == []
         finally:
             sup._PODS.pop("j3", None)  # noqa: SLF001
@@ -231,7 +275,8 @@ class TestAutoResumeOnSpotReclaim:
 
     def test_a_reclaim_auto_resumes_and_the_job_completes(self, tmp_path, monkeypatch):
         job, n = self._drive(
-            tmp_path, monkeypatch,
+            tmp_path,
+            monkeypatch,
             [MdStatus.paused, MdStatus.paused, MdStatus.completed],
         )
         assert n == 3, "must relaunch on each reclaim, not stop at the first"
@@ -269,7 +314,7 @@ class TestAutoResumeOnSpotReclaim:
             calls["n"] += 1
             j.status = MdStatus.paused
             j.resumable = True
-            j.user_stopped = True          # as if Stop was pressed mid-run
+            j.user_stopped = True  # as if Stop was pressed mid-run
             return MdStatus.paused
 
         monkeypatch.setattr(sup, "run_job_on_pod", fake_run)
@@ -281,3 +326,240 @@ class TestAutoResumeOnSpotReclaim:
 
         asyncio.run(go())
         assert calls["n"] == 1, "a user stop must not be auto-resumed"
+
+
+class TestBudgetThreading:
+    """The wizard's spend cap must actually reach the pod.
+
+    Before this, ``run_job_on_pod`` was always called with the module constant
+    ``DEFAULT_BUDGET_USD`` — the user could neither see the cap nor change it. The cap is what
+    derives the pod's kill-switch wall-clock, so a cap that does not arrive is a run with a
+    budget the user never authorised.
+    """
+
+    def _capture(self, tmp_path, monkeypatch, job):
+        seen = {}
+
+        async def fake_run(j, ws, **kw):
+            seen.update(kw)
+            j.status = MdStatus.completed
+            return MdStatus.completed
+
+        monkeypatch.setattr(sup, "run_job_on_pod", fake_run)
+
+        async def go():
+            sup.start_job(job, tmp_path, client=FakeClient(), network_volume_id="v")
+            await sup._RUNNING[job.job_id]  # noqa: SLF001
+
+        asyncio.run(go())
+        return seen
+
+    def test_the_jobs_budget_reaches_the_pod(self, tmp_path, monkeypatch):
+        job = _job_with_package(tmp_path)
+        job.runpod_budget_usd = 5.0
+        assert self._capture(tmp_path, monkeypatch, job)["budget_usd"] == 5.0
+
+    def test_no_budget_falls_back_to_the_default(self, tmp_path, monkeypatch):
+        job = _job_with_package(tmp_path)
+        assert (
+            self._capture(tmp_path, monkeypatch, job)["budget_usd"]
+            == sup.DEFAULT_BUDGET_USD
+        )
+
+    def test_the_job_wins_over_the_call_default(self, tmp_path, monkeypatch):
+        """A cap recorded on the job was a decision about THIS run; a caller default is not."""
+        job = _job_with_package(tmp_path)
+        job.runpod_budget_usd = 3.0
+        seen = {}
+
+        async def fake_run(j, ws, **kw):
+            seen.update(kw)
+            j.status = MdStatus.completed
+            return MdStatus.completed
+
+        monkeypatch.setattr(sup, "run_job_on_pod", fake_run)
+
+        async def go():
+            sup.start_job(
+                job,
+                tmp_path,
+                client=FakeClient(),
+                network_volume_id="v",
+                budget_usd=99.0,
+            )
+            await sup._RUNNING[job.job_id]  # noqa: SLF001
+
+        asyncio.run(go())
+        assert seen["budget_usd"] == 3.0
+
+
+class TestTheWizardsChoicesSurvive:
+    """The three answers the wizard collects before the pod exists must reach launch.
+
+    ``runpod_gpu_key`` in particular was already being SENT by the frontend and silently
+    dropped by pydantic — the user picked a card and the server never heard about it.
+    """
+
+    def test_old_job_json_without_the_new_keys_still_loads(self, tmp_path):
+        from backend.core.md_job import MdJob
+
+        job = _job_with_package(tmp_path)
+        job.save(tmp_path)
+        path = job.job_dir(tmp_path) / "job.json"
+        raw = json.loads(path.read_text())
+        for k in ("runpod_gpu_key", "runpod_budget_usd", "runpod_volume_id"):
+            raw.pop(k, None)
+        path.write_text(json.dumps(raw))
+
+        back = MdJob.load(job.job_id, tmp_path)
+        assert back.runpod_gpu_key is None
+        assert back.runpod_budget_usd is None
+        assert back.runpod_volume_id is None
+
+    def test_the_choices_round_trip(self, tmp_path):
+        from backend.core.md_job import MdJob
+
+        job = _job_with_package(tmp_path)
+        job.runpod_gpu_key = "NVIDIA RTX 6000 Ada Generation"
+        job.runpod_budget_usd = 7.5
+        job.runpod_volume_id = "77pnhye88p"
+        job.save(tmp_path)
+
+        back = MdJob.load(job.job_id, tmp_path)
+        assert back.runpod_gpu_key == "NVIDIA RTX 6000 Ada Generation"
+        assert back.runpod_budget_usd == 7.5
+        assert back.runpod_volume_id == "77pnhye88p"
+
+
+class TestAClaimedPodIsNotAnOrphan:
+    """The bug this closes cost a live 200 ns run.
+
+    Reaping by "absent from the in-memory registry" is wrong in exactly the case the
+    registry cannot speak for: a fresh process. After a dev-server reload it is empty, so
+    the first reconnect destroyed the very run the reload was supposed to preserve. The
+    job RECORD is the durable claim — that is why the pod id is persisted the instant a
+    pod exists.
+    """
+
+    def _pod(self, pid="pod-live", name="nadoc-2hb-abc"):
+        from backend.core.runpod_api import parse_pod
+
+        return parse_pod({"id": pid, "desiredStatus": "RUNNING", "name": name})
+
+    def _client(self, pods):
+        class C(FakeClient):
+            async def list_pods(self):
+                return pods
+
+        return C()
+
+    def _job_on_pod(self, tmp_path, pod_id="pod-live", status=MdStatus.running):
+        job = _job_with_package(tmp_path)
+        job.execution_target = "runpod"
+        job.runpod_pod_id = pod_id
+        job.status = status
+        job.save(tmp_path)
+        return job
+
+    def test_a_running_jobs_pod_is_adopted_not_killed(self, tmp_path):
+        job = self._job_on_pod(tmp_path)
+        c = self._client([self._pod()])
+        killed, adoptable = _run(sup.reap_orphan_pods(c, tmp_path))
+        assert killed == [], "a pod a running job claims must NOT be terminated"
+        assert c.terminated == []
+        assert [j.job_id for j in adoptable] == [job.job_id]
+
+    def test_a_pod_no_job_claims_is_still_reaped(self, tmp_path):
+        """The wallet guarantee has to survive the fix: a genuine orphan still dies."""
+        self._job_on_pod(tmp_path, pod_id="some-other-pod")
+        c = self._client([self._pod(pid="ghost")])
+        killed, adoptable = _run(sup.reap_orphan_pods(c, tmp_path))
+        assert killed == ["ghost"]
+        assert adoptable == []
+
+    def test_a_finished_jobs_pod_is_reaped(self, tmp_path):
+        """A terminal job has no business holding a pod — its record is a stale handle,
+        not a claim."""
+        self._job_on_pod(tmp_path, status=MdStatus.completed)
+        c = self._client([self._pod()])
+        killed, adoptable = _run(sup.reap_orphan_pods(c, tmp_path))
+        assert killed == ["pod-live"]
+        assert adoptable == []
+
+    def test_without_a_workspace_it_behaves_as_before(self, tmp_path):
+        """No workspace => no claims knowable => reap. Fail toward not leaking pods."""
+        self._job_on_pod(tmp_path)
+        c = self._client([self._pod()])
+        killed, _ = _run(sup.reap_orphan_pods(c))
+        assert killed == ["pod-live"]
+
+
+class TestReattach:
+    def test_reattach_registers_the_job_and_its_pod(self, tmp_path, monkeypatch):
+        """A re-attached run must land in the SAME registry as a launched one, or Stop and
+        the shutdown teardown would both walk straight past it."""
+        job = _job_with_package(tmp_path)
+        job.execution_target = "runpod"
+        job.runpod_pod_id = "pod-live"
+        seen = {}
+
+        async def fake_adopt(j, ws, **kw):
+            seen["job"] = j.job_id
+            kw["on_pod"]("pod-live")
+            seen["registered"] = sup.pod_id_for(j.job_id)
+            seen["running"] = sup.is_running(j.job_id)
+            return MdStatus.completed
+
+        monkeypatch.setattr(sup, "reattach_job_on_pod", fake_adopt)
+
+        async def go():
+            sup.reattach_job(job, tmp_path, client=FakeClient())
+            await sup._RUNNING[job.job_id]  # noqa: SLF001
+
+        asyncio.run(go())
+        assert seen["job"] == job.job_id
+        assert seen["registered"] == "pod-live"
+        assert seen["running"] is True
+
+    def test_a_failed_adopt_releases_the_pod_claim(self, tmp_path, monkeypatch):
+        """Otherwise the job claims a pod forever: every later reconnect would try to adopt
+        it again and never reap it — a leak dressed up as a rescue."""
+        job = _job_with_package(tmp_path)
+        job.execution_target = "runpod"
+        job.runpod_pod_id = "pod-gone"
+        job.save(tmp_path)
+
+        async def boom(j, ws, **kw):
+            raise RuntimeError("pod is already destroyed")
+
+        monkeypatch.setattr(sup, "reattach_job_on_pod", boom)
+
+        async def go():
+            sup.reattach_job(job, tmp_path, client=FakeClient())
+            await sup._RUNNING[job.job_id]  # noqa: SLF001
+
+        asyncio.run(go())
+        assert job.runpod_pod_id is None
+        assert job.status == MdStatus.paused
+        assert job.resumable is True
+        assert "resume" in (job.error or "").lower()
+
+    def test_does_not_double_attach(self, tmp_path, monkeypatch):
+        job = _job_with_package(tmp_path)
+        job.runpod_pod_id = "pod-live"
+        calls = {"n": 0}
+
+        async def fake_adopt(j, ws, **kw):
+            calls["n"] += 1
+            await asyncio.sleep(0.05)
+            return MdStatus.completed
+
+        monkeypatch.setattr(sup, "reattach_job_on_pod", fake_adopt)
+
+        async def go():
+            sup.reattach_job(job, tmp_path, client=FakeClient())
+            sup.reattach_job(job, tmp_path, client=FakeClient())  # must no-op
+            await sup._RUNNING[job.job_id]  # noqa: SLF001
+
+        asyncio.run(go())
+        assert calls["n"] == 1

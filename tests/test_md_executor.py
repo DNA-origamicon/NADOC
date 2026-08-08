@@ -26,6 +26,7 @@ def _run(coro):
 
 # ── Pure parsers ──────────────────────────────────────────────────────────────
 
+
 def test_parse_sbatch_job_id():
     assert ex.parse_sbatch_job_id("Submitted batch job 1234567") == "1234567"
     assert ex.parse_sbatch_job_id("garbage") is None
@@ -71,13 +72,14 @@ def test_stage_plan_skips_output_and_logs(tmp_path):
     (pkg / "manifest.json").write_text("{}")
     (pkg / "demo.psf").write_text("psf")
     (pkg / "forcefield" / "par.prm").write_text("prm")
-    (pkg / "demo.log").write_text("log")                 # skip: *.log
-    (pkg / "output" / "demo_01.dcd").write_text("dcd")   # skip: output/ tree
+    (pkg / "demo.log").write_text("log")  # skip: *.log
+    (pkg / "output" / "demo_01.dcd").write_text("dcd")  # skip: output/ tree
     rels = {rel for _, rel in ex.stage_plan(pkg)}
     assert rels == {"manifest.json", "demo.psf", "forcefield/par.prm"}
 
 
 # ── FakeConn + fixtures ───────────────────────────────────────────────────────
+
 
 class FakeConn:
     """Records ops; returns canned outputs by command substring."""
@@ -86,10 +88,12 @@ class FakeConn:
         self.user = user
         self._connected = connected
         self.canned: dict[str, RunResult] = canned or {}
-        self.get_contents: dict[str, str] = get_contents or {}   # remote substr → downloaded text
+        self.get_contents: dict[str, str] = (
+            get_contents or {}
+        )  # remote substr → downloaded text
         self.runs: list[str] = []
         self.puts: list[tuple[str, str]] = []
-        self.put_contents: dict[str, str | None] = {}   # remote → uploaded text
+        self.put_contents: dict[str, str | None] = {}  # remote → uploaded text
         self.gets: list[tuple[str, str]] = []
         self.mkdirs: list[str] = []
         self.mirrors: list[tuple[str, str]] = []
@@ -129,11 +133,14 @@ class FakeConn:
 
 
 def _make_prepared_job(workspace: Path) -> MdJob:
-    job = new_job("6hb_demo", "mgh_slow_release", name_stem="6hb_demo",
-                  package_subdir="pkg")
+    job = new_job(
+        "6hb_demo", "mgh_slow_release", name_stem="6hb_demo", package_subdir="pkg"
+    )
     job.execution_target = "alpine"
     job.segments = [
-        MdSegmentStatus(name="6hb_demo_01_p100", stage="relax", percent=100, steps=1000),
+        MdSegmentStatus(
+            name="6hb_demo_01_p100", stage="relax", percent=100, steps=1000
+        ),
     ]
     job.save(workspace)
     pkg = job.package_dir(workspace)
@@ -160,20 +167,24 @@ def alpine():
 @pytest.fixture
 def resources(alpine):
     from backend.core import cluster_resources as cr
+
     return cr.recommend(alpine, n_atoms=100_000, total_ns=2.0, measured_ns_per_day=50.0)
 
 
 # ── submit_job ────────────────────────────────────────────────────────────────
 
+
 def test_submit_job_stages_and_parses_id(tmp_path, alpine, resources):
     job = _make_prepared_job(tmp_path)
     conn = FakeConn(canned={"sbatch": RunResult(0, "Submitted batch job 987654", "")})
 
-    out = _run(ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn))
+    out = _run(
+        ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn)
+    )
 
     assert out.slurm_job_id == "987654"
     assert out.status == MdStatus.queued
-    assert out.queued_at is not None          # stamped for the queued-wait tooltip
+    assert out.queued_at is not None  # stamped for the queued-wait tooltip
     assert out.execution_target == "alpine"
     assert out.cluster_name == "alpine"
     assert out.remote_project_dir == "/projects/jojo/nadoc_jobs/" + job.job_id
@@ -200,6 +211,7 @@ def test_submit_amends_confs_for_cpu_target(tmp_path, alpine):
     """A CPU/multicore Alpine target must not inherit ``GPUresident on`` — every
     staged .conf is amended, not just the ones that happen to lack it."""
     from backend.core import cluster_resources as cr
+
     cpu = cr.recommend(alpine, n_atoms=100_000, total_ns=2.0, partition="acpu")
     job = _make_prepared_job(tmp_path)
     conf = _add_gpu_conf(job, tmp_path)
@@ -207,7 +219,7 @@ def test_submit_amends_confs_for_cpu_target(tmp_path, alpine):
     _run(ex.submit_job(job, tmp_path, profile=alpine, resources=cpu, conn=conn))
     remote = next(r for r in conn.put_contents if r.endswith("/" + conf))
     assert "GPUresident" not in (conn.put_contents[remote] or "")
-    assert "timestep" in (conn.put_contents[remote] or "")   # rest preserved
+    assert "timestep" in (conn.put_contents[remote] or "")  # rest preserved
 
 
 def test_submit_keeps_confs_verbatim_for_gpu_target(tmp_path, alpine, resources):
@@ -224,19 +236,24 @@ def test_submit_job_idempotent(tmp_path, alpine, resources):
     job = _make_prepared_job(tmp_path)
     job.slurm_job_id = "111"
     conn = FakeConn(canned={"sbatch": RunResult(0, "Submitted batch job 999", "")})
-    out = _run(ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn))
-    assert out.slurm_job_id == "111"          # not re-submitted
-    assert not conn.runs                       # no sbatch issued
+    out = _run(
+        ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn)
+    )
+    assert out.slurm_job_id == "111"  # not re-submitted
+    assert not conn.runs  # no sbatch issued
 
 
 def test_submit_job_raises_on_sbatch_failure(tmp_path, alpine, resources):
     job = _make_prepared_job(tmp_path)
     conn = FakeConn(canned={"sbatch": RunResult(1, "", "sbatch: error: bad qos")})
     with pytest.raises(RuntimeError, match="sbatch failed"):
-        _run(ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn))
+        _run(
+            ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn)
+        )
 
 
 # ── early-stop evaluator staging ───────────────────────────────────────────────
+
 
 def _staged_basenames(conn):
     return {r.rsplit("/", 1)[-1] for _, r in conn.puts} | set(conn.put_contents)
@@ -250,7 +267,7 @@ def _submit(job, tmp_path, alpine, resources):
 
 def test_no_early_stop_staging_when_off(tmp_path, alpine, resources):
     job = _make_prepared_job(tmp_path)
-    job.early_stop_relax = False        # ON by default since 2026-07-29; opt OUT here
+    job.early_stop_relax = False  # ON by default since 2026-07-29; opt OUT here
     conn = _submit(job, tmp_path, alpine, resources)
     staged = {r for r in conn.put_contents}
     assert not any("nadoc_cutoff_eval.py" in r for r in staged)
@@ -258,7 +275,7 @@ def test_no_early_stop_staging_when_off(tmp_path, alpine, resources):
 
 def test_tier_b_stages_only_stdlib_evaluator(tmp_path, alpine, resources):
     job = _make_prepared_job(tmp_path)
-    job.early_stop_relax = True                     # tier defaults to B
+    job.early_stop_relax = True  # tier defaults to B
     conn = _submit(job, tmp_path, alpine, resources)
     staged = {r for r in conn.put_contents}
     assert any(r.endswith("/nadoc_cutoff_eval.py") for r in staged)
@@ -276,11 +293,14 @@ def test_tier_a_stages_health_scripts(tmp_path, alpine, resources):
     assert any(r.endswith("/nadoc_health_eval.py") for r in staged)
     assert any(r.endswith("/md_health.py") for r in staged)
     # the staged md_health is the verbatim backend module (has run_health_check)
-    md_health_text = next(t for r, t in conn.put_contents.items() if r.endswith("/md_health.py"))
+    md_health_text = next(
+        t for r, t in conn.put_contents.items() if r.endswith("/md_health.py")
+    )
     assert "def run_health_check" in md_health_text
 
 
 # ── NAMD module discovery ─────────────────────────────────────────────────────
+
 
 def test_parse_namd_modules_keeps_only_namd_tokens():
     terse = (
@@ -300,13 +320,16 @@ def test_parse_namd_modules_empty():
 
 
 def test_list_namd_modules_runs_module_avail(tmp_path):
-    conn = FakeConn(canned={"module": RunResult(0, "", "namd/3.0.1_cpu\nnamd/3.0.1_gpu\n")})
+    conn = FakeConn(
+        canned={"module": RunResult(0, "", "namd/3.0.1_cpu\nnamd/3.0.1_gpu\n")}
+    )
     mods = _run(ex.list_namd_modules(conn=conn))
     assert mods == ["namd/3.0.1_cpu", "namd/3.0.1_gpu"]
     assert any("module -t avail namd" in c for c in conn.runs)
 
 
 # ── poll_status ───────────────────────────────────────────────────────────────
+
 
 def test_poll_status_squeue_hit(tmp_path):
     job = new_job("d", "p", name_stem="d", package_subdir="pkg")
@@ -319,10 +342,12 @@ def test_poll_status_squeue_hit(tmp_path):
 def test_poll_status_falls_back_to_sacct(tmp_path):
     job = new_job("d", "p", name_stem="d", package_subdir="pkg")
     job.slurm_job_id = "42"
-    conn = FakeConn(canned={
-        "squeue": RunResult(0, "", ""),                  # gone from the queue
-        "sacct": RunResult(0, "42|COMPLETED", ""),
-    })
+    conn = FakeConn(
+        canned={
+            "squeue": RunResult(0, "", ""),  # gone from the queue
+            "sacct": RunResult(0, "42|COMPLETED", ""),
+        }
+    )
     raw, bucket = _run(ex.poll_status(job, conn=conn))
     assert bucket == "completed"
 
@@ -336,6 +361,7 @@ def test_poll_status_absent_everywhere_is_completed(tmp_path):
 
 
 # ── reconcile_remote_job ──────────────────────────────────────────────────────
+
 
 def test_reconcile_running_updates_state(tmp_path, alpine, resources):
     job = _make_prepared_job(tmp_path)
@@ -354,17 +380,19 @@ def test_reconcile_completed_fetches_and_marks_done(tmp_path, alpine, resources)
     job.remote_project_dir = "/projects/jojo/nadoc_jobs/" + job.job_id
     # A genuinely-completed run brings back the segment's restart set (.coor/.vel/.xsc)
     # — that checkpoint is what resume + downstream chain-seeds restart from.
-    conn = FakeConn(canned={
-        "squeue": RunResult(0, "", ""),
-        "sacct": RunResult(0, "42|COMPLETED", ""),
-        "find": RunResult(
-            0,
-            "output/6hb_demo_01_p100.coor\noutput/6hb_demo_01_p100.vel\n"
-            "output/6hb_demo_01_p100.xsc\noutput/6hb_demo_01_p100.dcd\n"
-            "6hb_demo_01_p100.log\n",
-            "",
-        ),
-    })
+    conn = FakeConn(
+        canned={
+            "squeue": RunResult(0, "", ""),
+            "sacct": RunResult(0, "42|COMPLETED", ""),
+            "find": RunResult(
+                0,
+                "output/6hb_demo_01_p100.coor\noutput/6hb_demo_01_p100.vel\n"
+                "output/6hb_demo_01_p100.xsc\noutput/6hb_demo_01_p100.dcd\n"
+                "6hb_demo_01_p100.log\n",
+                "",
+            ),
+        }
+    )
     out = _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
     assert out.status == MdStatus.completed
     assert out.fetch_attempts == 0
@@ -373,7 +401,9 @@ def test_reconcile_completed_fetches_and_marks_done(tmp_path, alpine, resources)
     assert conn.gets
 
 
-def test_reconcile_completed_missing_checkpoint_stays_repollable(tmp_path, alpine, resources):
+def test_reconcile_completed_missing_checkpoint_stays_repollable(
+    tmp_path, alpine, resources
+):
     """ISSUE-15: SLURM says COMPLETED but the checkpoint restart files failed to
     download → the job must NOT flip to `completed` (that ends polling and strands the
     missing files). It stays re-pollable so the supervisor re-fetches next pass."""
@@ -381,30 +411,40 @@ def test_reconcile_completed_missing_checkpoint_stays_repollable(tmp_path, alpin
     job.slurm_job_id = "42"
     job.remote_scratch_dir = "/scratch/x/" + job.job_id
     # Fetch brings back only trajectory/log — NO .coor/.vel/.xsc (the dropped restart).
-    conn = FakeConn(canned={
-        "squeue": RunResult(0, "", ""),
-        "sacct": RunResult(0, "42|COMPLETED", ""),
-        "find": RunResult(0, "output/6hb_demo_01_p100.dcd\n6hb_demo_01_p100.log\n", ""),
-    })
+    conn = FakeConn(
+        canned={
+            "squeue": RunResult(0, "", ""),
+            "sacct": RunResult(0, "42|COMPLETED", ""),
+            "find": RunResult(
+                0, "output/6hb_demo_01_p100.dcd\n6hb_demo_01_p100.log\n", ""
+            ),
+        }
+    )
     out = _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
     assert out.status != MdStatus.completed
-    assert ex.is_remote_active(out.status)          # still polled → will re-fetch
+    assert ex.is_remote_active(out.status)  # still polled → will re-fetch
     assert out.fetch_attempts == 1
     assert "download" in (out.error or "").lower()
 
 
-def test_reconcile_completed_missing_checkpoint_fails_after_retries(tmp_path, alpine, resources):
+def test_reconcile_completed_missing_checkpoint_fails_after_retries(
+    tmp_path, alpine, resources
+):
     """Once the bounded re-fetch retries exhaust, a completed-but-never-downloaded
     checkpoint surfaces as a genuine failure naming the missing restart files."""
     job = _make_prepared_job(tmp_path)
     job.slurm_job_id = "42"
     job.remote_scratch_dir = "/scratch/x/" + job.job_id
-    job.fetch_attempts = ex._MAX_FETCH_ATTEMPTS - 1   # this pass is the last
-    conn = FakeConn(canned={
-        "squeue": RunResult(0, "", ""),
-        "sacct": RunResult(0, "42|COMPLETED", ""),
-        "find": RunResult(0, "output/6hb_demo_01_p100.dcd\n6hb_demo_01_p100.log\n", ""),
-    })
+    job.fetch_attempts = ex._MAX_FETCH_ATTEMPTS - 1  # this pass is the last
+    conn = FakeConn(
+        canned={
+            "squeue": RunResult(0, "", ""),
+            "sacct": RunResult(0, "42|COMPLETED", ""),
+            "find": RunResult(
+                0, "output/6hb_demo_01_p100.dcd\n6hb_demo_01_p100.log\n", ""
+            ),
+        }
+    )
     out = _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
     assert out.status == MdStatus.failed
     assert out.fetch_attempts == ex._MAX_FETCH_ATTEMPTS
@@ -416,11 +456,13 @@ def test_reconcile_cancelled_marks_stopped(tmp_path):
     job = _make_prepared_job(tmp_path)
     job.slurm_job_id = "42"
     job.remote_scratch_dir = "/scratch/x/" + job.job_id
-    conn = FakeConn(canned={
-        "squeue": RunResult(0, "", ""),
-        "sacct": RunResult(0, "42|CANCELLED", ""),
-        "find": RunResult(0, "", ""),
-    })
+    conn = FakeConn(
+        canned={
+            "squeue": RunResult(0, "", ""),
+            "sacct": RunResult(0, "42|CANCELLED", ""),
+            "find": RunResult(0, "", ""),
+        }
+    )
     out = _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
     assert out.status == MdStatus.stopped
     assert out.user_stopped is True
@@ -431,11 +473,13 @@ def test_reconcile_failed_marks_failed(tmp_path):
     job.slurm_job_id = "42"
     job.remote_scratch_dir = "/scratch/x/" + job.job_id
     # NODE_FAIL is a genuine error (not a walltime TIMEOUT) → no auto-resubmit.
-    conn = FakeConn(canned={
-        "squeue": RunResult(0, "", ""),
-        "sacct": RunResult(0, "42|NODE_FAIL", ""),
-        "find": RunResult(0, "", ""),
-    })
+    conn = FakeConn(
+        canned={
+            "squeue": RunResult(0, "", ""),
+            "sacct": RunResult(0, "42|NODE_FAIL", ""),
+            "find": RunResult(0, "", ""),
+        }
+    )
     out = _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
     assert out.status == MdStatus.failed
     assert "NODE_FAIL" in (out.error or "")
@@ -452,15 +496,17 @@ def test_reconcile_failed_surfaces_namd_cause(tmp_path):
         "Info: Startup phase 0\n"
         "FATAL ERROR: GPUresident not supported on regular multicore builds\n"
     )
-    conn = FakeConn(canned={
-        "squeue": RunResult(0, "", ""),
-        "sacct": RunResult(0, "42|FAILED", ""),
-        "find": RunResult(0, "", ""),
-    })
+    conn = FakeConn(
+        canned={
+            "squeue": RunResult(0, "", ""),
+            "sacct": RunResult(0, "42|FAILED", ""),
+            "find": RunResult(0, "", ""),
+        }
+    )
     out = _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
     assert out.status == MdStatus.failed
     assert "GPUresident not supported" in (out.error or "")
-    assert "FAILED" in (out.error or "")          # keeps the SLURM state too
+    assert "FAILED" in (out.error or "")  # keeps the SLURM state too
     assert out.failure_kind == "other"
 
 
@@ -483,11 +529,12 @@ def test_scan_logs_none_when_clean(tmp_path):
 
 # ── live segment progress (running remote job) ────────────────────────────────
 
+
 def test_parse_progress_listing():
     finished, started = ex.parse_progress_listing(
         "output/s_p10.coor\noutput/s_p10.restart.coor\ns_p10.log\ns_p50.log\n"
     )
-    assert finished == {"s_p10", "s_p10.restart"}   # .restart harmlessly present
+    assert finished == {"s_p10", "s_p10.restart"}  # .restart harmlessly present
     assert started == {"s_p10", "s_p50"}
 
 
@@ -523,10 +570,14 @@ def test_reconcile_running_reflects_segment_progress(tmp_path):
         MdSegmentStatus(name="s_p50", stage="relax", percent=50, steps=1),
         MdSegmentStatus(name="s_p100", stage="relax", percent=100, steps=1),
     ]
-    conn = FakeConn(canned={
-        "squeue": RunResult(0, "42|RUNNING", ""),
-        "ls -1 output": RunResult(0, "output/s_p10.coor\ns_p10.log\ns_p50.log\n", ""),
-    })
+    conn = FakeConn(
+        canned={
+            "squeue": RunResult(0, "42|RUNNING", ""),
+            "ls -1 output": RunResult(
+                0, "output/s_p10.coor\ns_p10.log\ns_p50.log\n", ""
+            ),
+        }
+    )
     out = _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
     assert [s.status for s in out.segments] == ["done", "running", "pending"]
     assert out.current_segment_idx == 1
@@ -536,23 +587,26 @@ def test_reconcile_running_reflects_segment_progress(tmp_path):
 
 # ── TIMEOUT → resumable + user-driven resume ──────────────────────────────────
 
+
 def test_reconcile_timeout_marks_resumable_not_failed(tmp_path):
     """A walltime TIMEOUT is expected for the short-job strategy — the job goes
     resumable (paused), NOT failed, and does NOT auto-resubmit (Duo needs the user)."""
     job = _make_prepared_job(tmp_path)
     job.slurm_job_id = "42"
     job.remote_scratch_dir = "/scratch/x/" + job.job_id
-    conn = FakeConn(canned={
-        "squeue": RunResult(0, "", ""),
-        "sacct": RunResult(0, "42|TIMEOUT", ""),
-        "find": RunResult(0, "", ""),
-    })
+    conn = FakeConn(
+        canned={
+            "squeue": RunResult(0, "", ""),
+            "sacct": RunResult(0, "42|TIMEOUT", ""),
+            "find": RunResult(0, "", ""),
+        }
+    )
     out = _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
     assert out.status == MdStatus.paused
     assert out.resumable is True
     assert out.failure_kind == "cluster_timeout"
     assert "Resume" in (out.error or "")
-    assert out.resubmit_count == 0                 # no automatic resubmit
+    assert out.resubmit_count == 0  # no automatic resubmit
     assert not any("sbatch" in c for c in conn.runs)
     # the finished attempt is recorded for the expand chevron.
     assert out.resume_history[-1]["slurm_job_id"] == "42"
@@ -561,11 +615,14 @@ def test_reconcile_timeout_marks_resumable_not_failed(tmp_path):
 
 def _make_resumable_job(tmp_path, alpine):
     from backend.core import cluster_resources as cr
+
     job = _make_prepared_job(tmp_path)
     job.slurm_job_id = "42"
     job.cluster_name = "alpine"
     job.remote_scratch_dir = "/scratch/alpine/jojo/nadoc_jobs/" + job.job_id
-    job.resources = cr.recommend(alpine, n_atoms=100_000, total_ns=2.0, partition="acpu")
+    job.resources = cr.recommend(
+        alpine, n_atoms=100_000, total_ns=2.0, partition="acpu"
+    )
     job.resumable = True
     job.status = MdStatus.paused
     job.segments = [
@@ -596,8 +653,9 @@ def test_resume_job_mid_segment_from_checkpoint(tmp_path, alpine):
             "ls -1 output": RunResult(0, "6hb_demo_01_p50.log\n", ""),
             "sbatch": RunResult(0, "Submitted batch job 88", ""),
         },
-        get_contents={"6hb_demo_01_p50.restart.xsc":
-                      "# NAMD\n144000 100.0 0 0 0 100.0 0 0 0 100.0 50 50 50\n"},
+        get_contents={
+            "6hb_demo_01_p50.restart.xsc": "# NAMD\n144000 100.0 0 0 0 100.0 0 0 0 100.0 50 50 50\n"
+        },
     )
     out = _run(ex.resume_job(job, tmp_path, profile=alpine, conn=conn))
     assert out.slurm_job_id == "88"
@@ -606,13 +664,18 @@ def test_resume_job_mid_segment_from_checkpoint(tmp_path, alpine):
     assert out.resumable is False
     # A resume conf was uploaded, continuing from step 144000 for the remainder, and
     # GPUresident stripped (CPU target).
-    resume = next(v for k, v in conn.put_contents.items()
-                  if k.endswith("6hb_demo_01_p50.resume.conf"))
+    resume = next(
+        v
+        for k, v in conn.put_contents.items()
+        if k.endswith("6hb_demo_01_p50.resume.conf")
+    )
     assert "firsttimestep      144000" in resume
-    assert "run                336000" in resume          # 480000 - 144000
+    assert "run                336000" in resume  # 480000 - 144000
     assert "GPUresident" not in resume
     # The uploaded sbatch runs the resume conf for the interrupted segment.
-    sbatch = next(v for k, v in conn.put_contents.items() if k.endswith(ex._SBATCH_NAME))
+    sbatch = next(
+        v for k, v in conn.put_contents.items() if k.endswith(ex._SBATCH_NAME)
+    )
     assert "6hb_demo_01_p50.resume.conf" in sbatch
 
 
@@ -622,14 +685,20 @@ def test_resume_job_applies_resource_override(tmp_path, alpine):
     override = dict(job.resources)
     override["walltime"] = "02:00:00"
     conn = FakeConn(
-        canned={"ls -1 output": RunResult(0, "", ""),
-                "sbatch": RunResult(0, "Submitted batch job 55", "")},
+        canned={
+            "ls -1 output": RunResult(0, "", ""),
+            "sbatch": RunResult(0, "Submitted batch job 55", ""),
+        },
         get_contents={"restart.xsc": "not-an-xsc"},
     )
-    out = _run(ex.resume_job(job, tmp_path, profile=alpine, resources=override, conn=conn))
+    out = _run(
+        ex.resume_job(job, tmp_path, profile=alpine, resources=override, conn=conn)
+    )
     assert out.resources["walltime"] == "02:00:00"
-    assert out.queued_at is not None          # re-stamped on resume (fresh queue wait)
-    sbatch = next(v for k, v in conn.put_contents.items() if k.endswith(ex._SBATCH_NAME))
+    assert out.queued_at is not None  # re-stamped on resume (fresh queue wait)
+    sbatch = next(
+        v for k, v in conn.put_contents.items() if k.endswith(ex._SBATCH_NAME)
+    )
     assert "#SBATCH --time=02:00:00" in sbatch
 
 
@@ -637,15 +706,25 @@ def test_remote_recommendation_current_seeds_from_job_resources(tmp_path, monkey
     """Resume review (current=true) shows the job's CURRENT resources, not a fresh
     auto-recommend — so the user reviews the (short) walltime they actually ran."""
     from backend.api import routes_md
+
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     job = _make_prepared_job(tmp_path)
-    job.resources = {"partition": "acpu", "kind": "cpu", "gpus": 0, "cores": 8,
-                     "mem_gb": 12, "walltime": "00:10:00", "qos": "normal"}
-    job.slurm_job_id = "42"          # already submitted (resumable)
+    job.resources = {
+        "partition": "acpu",
+        "kind": "cpu",
+        "gpus": 0,
+        "cores": 8,
+        "mem_gb": 12,
+        "walltime": "00:10:00",
+        "qos": "normal",
+    }
+    job.slurm_job_id = "42"  # already submitted (resumable)
     job.save(tmp_path)
     out = routes_md.md_job_remote_recommendation(job.job_id, current=True)
     assert out["prepared"] is True
-    assert out["resources"]["walltime"] == "00:10:00"   # current, not a fresh long auto-size
+    assert (
+        out["resources"]["walltime"] == "00:10:00"
+    )  # current, not a fresh long auto-size
     assert out["resources"]["partition"] == "acpu"
     # acpu -> cpu-* QoS tiers offered (keyed off the seeded partition).
     assert {q["name"] for q in out["available_qos"]} == {"cpu-normal", "cpu-long"}
@@ -657,10 +736,10 @@ def test_resume_job_no_checkpoint_reruns_fresh(tmp_path, alpine):
     job = _make_resumable_job(tmp_path, alpine)
     conn = FakeConn(
         canned={
-            "ls -1 output": RunResult(0, "", ""),        # nothing finished/started
+            "ls -1 output": RunResult(0, "", ""),  # nothing finished/started
             "sbatch": RunResult(0, "Submitted batch job 99", ""),
         },
-        get_contents={"6hb_demo_01_p50.restart.xsc": "not-an-xsc"},   # no step
+        get_contents={"6hb_demo_01_p50.restart.xsc": "not-an-xsc"},  # no step
     )
     out = _run(ex.resume_job(job, tmp_path, profile=alpine, conn=conn))
     assert out.slurm_job_id == "99"
@@ -669,6 +748,7 @@ def test_resume_job_no_checkpoint_reruns_fresh(tmp_path, alpine):
 
 def test_reconcile_completed_records_learned_throughput(tmp_path):
     from backend.core import cluster_throughput
+
     job = _make_prepared_job(tmp_path)
     job.slurm_job_id = "42"
     job.cluster_name = "alpine"
@@ -683,11 +763,13 @@ def test_reconcile_completed_records_learned_throughput(tmp_path):
     # A completed run has its checkpoint restart set present (else it stays re-pollable).
     for ext in ("coor", "vel", "xsc"):
         (out_dir / f"6hb_demo_01_p100.{ext}").write_text("restart")
-    conn = FakeConn(canned={
-        "squeue": RunResult(0, "", ""),
-        "sacct": RunResult(0, "42|COMPLETED", ""),
-        "find": RunResult(0, "", ""),
-    })
+    conn = FakeConn(
+        canned={
+            "squeue": RunResult(0, "", ""),
+            "sacct": RunResult(0, "42|COMPLETED", ""),
+            "find": RunResult(0, "", ""),
+        }
+    )
     _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
     learned = cluster_throughput.lookup_throughput(
         tmp_path, cluster="alpine", partition="acpu", n_atoms=100_000
@@ -696,6 +778,7 @@ def test_reconcile_completed_records_learned_throughput(tmp_path):
 
 
 # ── cancel_job + poll_remote_jobs ─────────────────────────────────────────────
+
 
 def test_cancel_job_issues_scancel(tmp_path):
     job = new_job("d", "p", name_stem="d", package_subdir="pkg")
@@ -752,28 +835,36 @@ def test_cluster_connect_kicks_remote_poll(tmp_path, monkeypatch):
     from backend.core import cluster_ssh, cluster_config
 
     monkeypatch.setattr(routes_cluster, "_WORKSPACE_DIR", tmp_path)
-    monkeypatch.setattr(cluster_config, "load_profiles",
-                        lambda ws: {"alpine": types.SimpleNamespace(host="login.example")})
+    monkeypatch.setattr(
+        cluster_config,
+        "load_profiles",
+        lambda ws: {"alpine": types.SimpleNamespace(host="login.example")},
+    )
 
     class _Mgr:
         async def connect(self, *a, **k):
             return None
+
         def is_connected(self):
             return True
+
         def status(self):
             return {"state": "connected"}
+
     monkeypatch.setattr(cluster_ssh, "get_manager", lambda: _Mgr())
 
     called = {}
+
     async def _spy(ws, conn=None):
         called["ws"] = ws
         return []
+
     monkeypatch.setattr(ex, "poll_remote_jobs", _spy)
 
     req = routes_cluster.ConnectRequest(cluster_name="alpine", user="u", password="p")
     out = _run(routes_cluster.cluster_connect(req))
     assert out == {"state": "connected"}
-    assert called.get("ws") == tmp_path   # the post-connect poll ran
+    assert called.get("ws") == tmp_path  # the post-connect poll ran
 
 
 def test_stop_disconnected_defers_scancel(tmp_path, monkeypatch):
@@ -781,6 +872,7 @@ def test_stop_disconnected_defers_scancel(tmp_path, monkeypatch):
     sets pending_scancel (so the SLURM job is cancelled on reconnect, not orphaned)."""
     from backend.api import routes_md
     from backend.core import cluster_ssh
+
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     job = _make_prepared_job(tmp_path)
     job.slurm_job_id = "88"
@@ -790,6 +882,7 @@ def test_stop_disconnected_defers_scancel(tmp_path, monkeypatch):
     class _DisconnectedMgr:
         def is_connected(self):
             return False
+
     monkeypatch.setattr(cluster_ssh, "get_manager", lambda: _DisconnectedMgr())
 
     out = _run(routes_md.stop_md_job(job.job_id))
@@ -801,9 +894,11 @@ def test_stop_disconnected_defers_scancel(tmp_path, monkeypatch):
 
 # ── GET /md/jobs/{id}/remote-recommendation (Phase 4 review-card preview) ──────
 
+
 def test_remote_recommendation_prepared(tmp_path, monkeypatch):
     """A prepared job returns sizing + auto-recommended resources, no submission."""
     from backend.api import routes_md
+
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     job = _make_prepared_job(tmp_path)
     out = routes_md.md_job_remote_recommendation(job.job_id)
@@ -818,6 +913,7 @@ def test_remote_recommendation_prepared(tmp_path, monkeypatch):
 def test_remote_recommendation_unprepared_is_not_error(tmp_path, monkeypatch):
     """Still-preparing job → prepared:false with a reason, not a 400."""
     from backend.api import routes_md
+
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     job = new_job("np", "mgh_slow_release", name_stem="np", package_subdir="pkg_np")
     job.execution_target = "alpine"
@@ -830,6 +926,7 @@ def test_remote_recommendation_unprepared_is_not_error(tmp_path, monkeypatch):
 def test_remote_recommendation_unknown_profile_404(tmp_path, monkeypatch):
     from fastapi import HTTPException
     from backend.api import routes_md
+
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     job = _make_prepared_job(tmp_path)
     with pytest.raises(HTTPException) as exc:
@@ -837,9 +934,12 @@ def test_remote_recommendation_unknown_profile_404(tmp_path, monkeypatch):
     assert exc.value.status_code == 404
 
 
-def test_remote_recommendation_lists_partitions_and_honours_forced_partition(tmp_path, monkeypatch):
+def test_remote_recommendation_lists_partitions_and_honours_forced_partition(
+    tmp_path, monkeypatch
+):
     """The dropdown needs the partition list, and forcing acpu re-sizes to CPU."""
     from backend.api import routes_md
+
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     job = _make_prepared_job(tmp_path)
 
@@ -866,6 +966,7 @@ def test_remote_recommendation_prefills_the_wizard_request(tmp_path, monkeypatch
     recommendation sized against the package's exact atom count, not from the wizard's
     pre-solvation estimate."""
     from backend.api import routes_md
+
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     job = _make_prepared_job(tmp_path)
     auto = routes_md.md_job_remote_recommendation(job.job_id)["resources"]
@@ -884,8 +985,10 @@ def test_remote_recommendation_prefills_the_wizard_request(tmp_path, monkeypatch
 def test_remote_submit_uses_the_wizard_request(tmp_path, monkeypatch):
     """Same merge on the submit path: what step 1 asked for is what gets requested."""
     from backend.api import routes_md
+
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     from backend.core import cluster_config
+
     job = _make_prepared_job(tmp_path)
     job.requested_resources = {"walltime": "48:00:00"}
     job.save(tmp_path)
@@ -902,6 +1005,7 @@ def test_remote_submit_uses_the_wizard_request(tmp_path, monkeypatch):
 def test_wizard_request_ignores_blank_fields(tmp_path, monkeypatch):
     """A blanked control means "keep auto", not "request an empty wall time"."""
     from backend.api import routes_md
+
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     job = _make_prepared_job(tmp_path)
     auto = routes_md.md_job_remote_recommendation(job.job_id)["resources"]
@@ -915,6 +1019,7 @@ def test_wizard_request_ignores_blank_fields(tmp_path, monkeypatch):
 def test_remote_recommendation_unknown_partition_400(tmp_path, monkeypatch):
     from fastapi import HTTPException
     from backend.api import routes_md
+
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     job = _make_prepared_job(tmp_path)
     with pytest.raises(HTTPException) as exc:
@@ -924,10 +1029,14 @@ def test_remote_recommendation_unknown_partition_400(tmp_path, monkeypatch):
 
 # ── Failed remote submit records the error on the job (UI cleanup) ─────────────
 
-def test_record_submit_failure_marks_job_without_losing_prepared_state(tmp_path, monkeypatch):
+
+def test_record_submit_failure_marks_job_without_losing_prepared_state(
+    tmp_path, monkeypatch
+):
     """A rejected submit must leave a visible error but keep the job queued (prepared,
     retryable) — so it stops looking like a clean/running job in the UI."""
     from backend.api import routes_md
+
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     job = _make_prepared_job(tmp_path)
     job.status = MdStatus.queued
@@ -936,7 +1045,7 @@ def test_record_submit_failure_marks_job_without_losing_prepared_state(tmp_path,
     routes_md._record_submit_failure(job, "sbatch failed (rc=1): bad QoS")
 
     reloaded = MdJob.load(job.job_id, tmp_path)
-    assert reloaded.status == MdStatus.queued        # still prepared / retryable
+    assert reloaded.status == MdStatus.queued  # still prepared / retryable
     assert reloaded.slurm_job_id is None
     assert "Cluster submission failed" in (reloaded.error or "")
     assert "bad QoS" in reloaded.error
@@ -944,18 +1053,27 @@ def test_record_submit_failure_marks_job_without_losing_prepared_state(tmp_path,
 
 # ── module pre-flight (SLURM 30948986 post-mortem) ───────────────────────────
 
-def test_submit_preflights_modules_before_uploading_anything(tmp_path, alpine, resources):
+
+def test_submit_preflights_modules_before_uploading_anything(
+    tmp_path, alpine, resources
+):
     """SLURM 30948986 died instantly on `namd/3.0.1_gpu` (which does not exist on
     Alpine) AFTER an 814 MB upload and a queue wait. Catch it on the login node."""
     job = _make_prepared_job(tmp_path)
-    conn = FakeConn(canned={
-        "module spider": RunResult(
-            1, "",
-            'Lmod has detected the following error: The following module(s) '
-            'are unknown: "namd/3.0.1_gpu"'),
-    })
+    conn = FakeConn(
+        canned={
+            "module spider": RunResult(
+                1,
+                "",
+                "Lmod has detected the following error: The following module(s) "
+                'are unknown: "namd/3.0.1_gpu"',
+            ),
+        }
+    )
     with pytest.raises(RuntimeError, match="Pre-flight failed"):
-        _run(ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn))
+        _run(
+            ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn)
+        )
     # Nothing was staged — that is the whole point of checking first.
     assert conn.puts == []
     assert conn.mirrors == []
@@ -966,24 +1084,29 @@ def test_submit_preflight_reports_the_module_that_failed(tmp_path, alpine, resou
     job = _make_prepared_job(tmp_path)
     conn = FakeConn(canned={"module spider": RunResult(1, "", "unknown module")})
     with pytest.raises(RuntimeError) as exc:
-        _run(ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn))
+        _run(
+            ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn)
+        )
     msg = str(exc.value)
-    assert "clusters.json" in msg              # tells the user where to fix it
-    assert "namd-modules" in msg               # ...and how to find the right name
+    assert "clusters.json" in msg  # tells the user where to fix it
+    assert "namd-modules" in msg  # ...and how to find the right name
 
 
 def test_submit_proceeds_when_modules_load_cleanly(tmp_path, alpine, resources):
     job = _make_prepared_job(tmp_path)
     conn = FakeConn(canned={"sbatch": RunResult(0, "Submitted batch job 4242", "")})
-    out = _run(ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn))
+    out = _run(
+        ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn)
+    )
     assert out.slurm_job_id == "4242"
-    assert any("module spider" in c for c in conn.runs)    # the pre-flight really ran
+    assert any("module spider" in c for c in conn.runs)  # the pre-flight really ran
 
 
 def test_submit_preflight_catches_a_missing_namd_binary(tmp_path, alpine, resources):
     """A private build is an absolute path, so `test -x` settles whether it is really
     there — the same filesystem answer from the login node or a compute node."""
     from dataclasses import replace as _replace
+
     prof = _replace(alpine, gpu_namd_bin="/projects/me/gone/namd3")
     job = _make_prepared_job(tmp_path)
     conn = FakeConn(canned={"test -x": RunResult(1, "", "NOT EXECUTABLE")})
@@ -995,6 +1118,7 @@ def test_submit_preflight_catches_a_missing_namd_binary(tmp_path, alpine, resour
 
 def test_submit_preflight_checks_the_private_binary_path(tmp_path, alpine, resources):
     from dataclasses import replace as _replace
+
     prof = _replace(alpine, gpu_namd_bin="/projects/me/namd3")
     job = _make_prepared_job(tmp_path)
     conn = FakeConn(canned={"sbatch": RunResult(0, "Submitted batch job 77", "")})
@@ -1004,6 +1128,7 @@ def test_submit_preflight_checks_the_private_binary_path(tmp_path, alpine, resou
 
 
 # ── live metrics retrieved from the node (SLURM 30954752 post-mortem) ─────────
+
 
 def test_poll_retrieves_node_computed_metrics(tmp_path, alpine):
     """A remote run showed no speed/temp/pressure for its whole duration: the poll
@@ -1046,6 +1171,7 @@ def test_submit_stages_the_live_metrics_collector(tmp_path, alpine, resources):
 
 # ── health for INTERRUPTED segments (health card empty, 2026-08-07) ───────────
 
+
 def test_partial_segment_with_a_trajectory_is_processed(tmp_path):
     """`_segment_outputs_complete` needs .coor+.vel+.xsc, which NAMD writes only when
     a segment FINISHES. Under short-walltime + resume nothing finishes, so the health
@@ -1060,7 +1186,9 @@ def test_a_header_only_dcd_does_not_count():
     """A freshly-created DCD has a header and no frames — nothing to measure."""
     import tempfile
     from pathlib import Path as _P
+
     with tempfile.TemporaryDirectory() as td:
-        out = _P(td); (out / "tiny.dcd").write_bytes(b"x" * 100)
+        out = _P(td)
+        (out / "tiny.dcd").write_bytes(b"x" * 100)
         assert ex._segment_has_trajectory(out, "tiny") is False
         assert ex._segment_has_trajectory(out, "absent") is False

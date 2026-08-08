@@ -118,6 +118,7 @@ async def _md_supervisor_loop() -> None:
         # when disconnected.
         try:
             from backend.core.md_executor import poll_remote_jobs
+
             touched = await poll_remote_jobs(_WORKSPACE_DIR)
             if touched:
                 logger.info("MD supervisor polled remote jobs: %s", ", ".join(touched))
@@ -129,6 +130,7 @@ async def _md_supervisor_loop() -> None:
         # stage N when stage N-1 completes; a halted chain waits for a manual resume.
         try:
             from backend.api.routes_md import advance_chains
+
             advanced = await advance_chains(_WORKSPACE_DIR)
             if advanced:
                 logger.info("MD supervisor advanced chains: %s", ", ".join(advanced))
@@ -140,6 +142,7 @@ async def _md_supervisor_loop() -> None:
         # flight, start whatever the user queued behind the run that just finished.
         try:
             from backend.api.routes_md_queue import advance_md_queue
+
             started = await advance_md_queue(_WORKSPACE_DIR)
             if started:
                 logger.info("MD supervisor started queued jobs: %s", ", ".join(started))
@@ -151,10 +154,13 @@ async def _md_supervisor_loop() -> None:
         # finishes, spawn the solvated run seeded from its relaxed coordinates.
         try:
             from backend.api.routes_md import advance_vacuum_prestages
+
             seeded = await advance_vacuum_prestages(_WORKSPACE_DIR)
             if seeded:
-                logger.info("MD supervisor spawned solvated runs from vacuum "
-                            "pre-stages: %s", ", ".join(seeded))
+                logger.info(
+                    "MD supervisor spawned solvated runs from vacuum pre-stages: %s",
+                    ", ".join(seeded),
+                )
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -163,15 +169,45 @@ async def _md_supervisor_loop() -> None:
 
 
 async def _terminate_runpod_pods() -> None:
-    """Destroy every pod this process still owns.  Best-effort; never blocks shutdown."""
+    """Destroy every pod this process still owns.  Best-effort; never blocks shutdown.
+
+    **Skipped on a dev-server RELOAD.**  `just dev` runs uvicorn with
+    ``--reload --reload-dir backend``, so saving any backend file used to tear the server
+    down and destroy a live, paid, multi-day GPU run with it — a 200 ns production died at
+    0.4% exactly this way.  A reload is not the last moment we can reach the pod: another
+    process is starting immediately, and ``POST /runpod/connect`` re-attaches to any pod a
+    still-running job record claims (see ``runpod_supervisor.adoptable_pods``).
+
+    On a REAL shutdown this still fires, because the API key is memory-only: once we exit,
+    NADOC cannot terminate a pod it started.  ``under_reloader`` fails toward False — i.e.
+    toward terminating — so a detection failure costs a dev run, never a leaked pod.
+    """
     try:
         from backend.api import routes_runpod
         from backend.core import runpod_supervisor
+        from backend.core.dev_reload import under_reloader
 
         session = routes_runpod._SESSION  # noqa: SLF001
         if not session.is_connected():
             return
-        for job_id in runpod_supervisor.running_job_ids():
+        live = runpod_supervisor.running_job_ids()
+        if live and under_reloader():
+            # Skipping the loop below is NOT enough. The pod dies in ``client.pod()``'s
+            # finally, and that fires on the CancelledError every in-flight task gets at
+            # process exit — so the run would be torn down on the unwind regardless. The
+            # flag is what actually suppresses it.
+            from backend.core import runpod_api
+
+            runpod_api.set_handoff(True)
+            logger.warning(
+                "runpod: dev-server RELOAD — leaving %d pod(s) up for the next process to "
+                "adopt (%s). Reconnect to RunPod if it does not re-attach; an unadopted "
+                "pod bills until it is reaped.",
+                len(live),
+                ", ".join(live),
+            )
+            return
+        for job_id in live:
             with contextlib.suppress(Exception):
                 await runpod_supervisor.stop_job(job_id, client=session.client)
     except Exception:  # noqa: BLE001 — shutdown must not raise
@@ -234,32 +270,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router,             prefix="/api")
-app.include_router(documents_router,   prefix="/api")
-app.include_router(crud_router,        prefix="/api")
-app.include_router(loop_skip_router,   prefix="/api")
+app.include_router(router, prefix="/api")
+app.include_router(documents_router, prefix="/api")
+app.include_router(crud_router, prefix="/api")
+app.include_router(loop_skip_router, prefix="/api")
 app.include_router(camera_poses_router, prefix="/api")
-app.include_router(clusters_router,    prefix="/api")
-app.include_router(cluster_router,     prefix="/api")
-app.include_router(runpod_router,      prefix="/api")
+app.include_router(clusters_router, prefix="/api")
+app.include_router(cluster_router, prefix="/api")
+app.include_router(runpod_router, prefix="/api")
 app.include_router(cluster_joints_router, prefix="/api")
-app.include_router(animations_router,  prefix="/api")
-app.include_router(chain_sim_router,    prefix="/api")
-app.include_router(simulate_router,     prefix="/api")
-app.include_router(extensions_router,  prefix="/api")
+app.include_router(animations_router, prefix="/api")
+app.include_router(chain_sim_router, prefix="/api")
+app.include_router(simulate_router, prefix="/api")
+app.include_router(extensions_router, prefix="/api")
 app.include_router(feature_log_router, prefix="/api")
 app.include_router(deformation_router, prefix="/api")
 app.include_router(display_geometry_router, prefix="/api")
 app.include_router(display_metadata_router, prefix="/api")
 app.include_router(flexible_segments_router, prefix="/api")
-app.include_router(duplex_router,      prefix="/api")
+app.include_router(duplex_router, prefix="/api")
 app.include_router(export_3dprint_router, prefix="/api")
-app.include_router(export_md_router,   prefix="/api")
+app.include_router(export_md_router, prefix="/api")
 app.include_router(export_structure_router, prefix="/api")
-app.include_router(sequences_router,   prefix="/api")
+app.include_router(sequences_router, prefix="/api")
 app.include_router(scaffold_routing_router, prefix="/api")
 app.include_router(assign_sequences_router, prefix="/api")
-app.include_router(assembly_router,    prefix="/api")
+app.include_router(assembly_router, prefix="/api")
 app.include_router(assembly_animations_router, prefix="/api")
 app.include_router(assembly_belts_router, prefix="/api")
 app.include_router(assembly_configs_router, prefix="/api")
@@ -275,29 +311,29 @@ app.include_router(assembly_overhangs_router, prefix="/api")
 app.include_router(assembly_polymerize_router, prefix="/api")
 app.include_router(assembly_validation_router, prefix="/api")
 app.include_router(assembly_workspace_router, prefix="/api")
-app.include_router(jobs_router,        prefix="/api")
-app.include_router(md_router,          prefix="/api")
-app.include_router(md_metrics_router,  prefix="/api")
-app.include_router(md_plan_router,     prefix="/api")
-app.include_router(md_queue_router,    prefix="/api")
-app.include_router(oxdna_router,       prefix="/api")
-app.include_router(lammps_router,      prefix="/api")
-app.include_router(mrdna_router,       prefix="/api")
-app.include_router(cando_router,       prefix="/api")
+app.include_router(jobs_router, prefix="/api")
+app.include_router(md_router, prefix="/api")
+app.include_router(md_metrics_router, prefix="/api")
+app.include_router(md_plan_router, prefix="/api")
+app.include_router(md_queue_router, prefix="/api")
+app.include_router(oxdna_router, prefix="/api")
+app.include_router(lammps_router, prefix="/api")
+app.include_router(mrdna_router, prefix="/api")
+app.include_router(cando_router, prefix="/api")
 app.include_router(cando_autorefine_router, prefix="/api")
-app.include_router(snupi_router,       prefix="/api")
-app.include_router(blade_router,       prefix="/api")
-app.include_router(oxdna_live_router,  prefix="/api")
-app.include_router(autorefine_router,  prefix="/api")
+app.include_router(snupi_router, prefix="/api")
+app.include_router(blade_router, prefix="/api")
+app.include_router(oxdna_live_router, prefix="/api")
+app.include_router(autorefine_router, prefix="/api")
 app.include_router(oxdna_metrics_router, prefix="/api")
 app.include_router(shape_metrics_router, prefix="/api")
-app.include_router(system_router,      prefix="/api")
-app.include_router(benchmark_router,   prefix="/api")
-app.include_router(engines_router,     prefix="/api")
-app.include_router(primitives_router,  prefix="/api")
-app.include_router(fs_router,          prefix="/api")
-app.include_router(protein_router,     prefix="/api")
-app.include_router(ws_router)          # WebSocket routes have no /api prefix
+app.include_router(system_router, prefix="/api")
+app.include_router(benchmark_router, prefix="/api")
+app.include_router(engines_router, prefix="/api")
+app.include_router(primitives_router, prefix="/api")
+app.include_router(fs_router, prefix="/api")
+app.include_router(protein_router, prefix="/api")
+app.include_router(ws_router)  # WebSocket routes have no /api prefix
 
 
 @app.get("/", include_in_schema=False)
@@ -322,8 +358,6 @@ def cadnano_editor():
 
 
 # Serve the built Vite frontend if present (production mode).
-_frontend_dist = os.path.join(
-    os.path.dirname(__file__), "..", "..", "frontend", "dist"
-)
+_frontend_dist = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
 if os.path.isdir(_frontend_dist):
     app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="frontend")

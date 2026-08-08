@@ -19,6 +19,7 @@ never over-promises; the on-pod preflight bench refines it to the real pod (per-
 Pure functions (`select_cards`, `estimate_rate`) are unit-tested; `pick_cards` is the thin async
 wrapper that fetches live stock and calls them.
 """
+
 from __future__ import annotations
 
 import json
@@ -34,7 +35,9 @@ from backend.core.runpod_script import GPU_TYPES, GpuType, fits_on
 # set dies at step 0. Keep in lockstep with the packaged binaries.
 BUILD_ARCHS: dict[str, frozenset[str]] = {
     # ~/Applications/NAMD_Git-2025-12-04 (sparse-cell GPU-resident capable). NO sm_120.
-    "git": frozenset({"sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86", "sm_89", "sm_90"}),
+    "git": frozenset(
+        {"sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86", "sm_89", "sm_90"}
+    ),
     # nadoc_bench_pkg/namd_cuda.tar.gz (3.0.2p1 multi-arch). Has sm_120; NOT sparse-resident.
     "release": frozenset({"sm_80", "sm_89", "sm_90", "sm_120"}),
 }
@@ -44,13 +47,13 @@ BUILD_ARCHS: dict[str, frozenset[str]] = {
 # Sources: RUNBOOK §1 (1.94M RTX PRO 4500), §7 (1.31M 4090 14.3-21.5 ms), fullbox bench
 # (11.3M: H200 86ms, H100 SXM 93ms, H100 PCIe 123ms).
 _MS_PER_STEP_PER_MATOM: dict[str, float] = {
-    "sm_90": 10.0,    # H100 / H200 (measured 7.6-10.9 @ 11.3M)
-    "sm_89": 15.0,    # RTX 4090 / 6000 Ada / L40S — Ada (measured 10.9-16.4 @ 1.31M)
-    "sm_120": 14.0,   # Blackwell PRO 4500/5000/6000 (measured 13.6 @ 1.94M)
-    "sm_80": 12.0,    # A100
-    "sm_86": 24.0,    # A6000 / 3090 — Ampere is genuinely ~1.6x slower than Ada (RUNBOOK §7:
-                      # the A6000 that silently degraded the run)
-    "sm_75": 30.0,    # Turing
+    "sm_90": 10.0,  # H100 / H200 (measured 7.6-10.9 @ 11.3M)
+    "sm_89": 15.0,  # RTX 4090 / 6000 Ada / L40S — Ada (measured 10.9-16.4 @ 1.31M)
+    "sm_120": 14.0,  # Blackwell PRO 4500/5000/6000 (measured 13.6 @ 1.94M)
+    "sm_80": 12.0,  # A100
+    "sm_86": 24.0,  # A6000 / 3090 — Ampere is genuinely ~1.6x slower than Ada (RUNBOOK §7:
+    # the A6000 that silently degraded the run)
+    "sm_75": 30.0,  # Turing
 }
 _OFFLOAD_PENALTY = 2.6
 # "balanced" ranking excludes any card slower than this fraction of the FASTEST available card's
@@ -69,7 +72,9 @@ _EXTRA_CARDS = (
     GpuType("NVIDIA RTX A6000", "RTX A6000", 49_152, 0.53, "sm_86"),
     GpuType("NVIDIA GeForce RTX 3090", "RTX 3090", 24_576, 0.22, "sm_86"),
 )
-CARDS: tuple[GpuType, ...] = tuple({g.key: g for g in (*GPU_TYPES, *_EXTRA_CARDS)}.values())
+CARDS: tuple[GpuType, ...] = tuple(
+    {g.key: g for g in (*GPU_TYPES, *_EXTRA_CARDS)}.values()
+)
 
 
 # ── Learned per-arch rate registry ───────────────────────────────────────────────────────────
@@ -90,8 +95,9 @@ def load_rate_registry(path: Path = DEFAULT_RATES_PATH) -> dict:
         return {}
 
 
-def record_rate(sm: str, n_atoms: int, ms_step: float, *,
-                path: Path = DEFAULT_RATES_PATH) -> None:
+def record_rate(
+    sm: str, n_atoms: int, ms_step: float, *, path: Path = DEFAULT_RATES_PATH
+) -> None:
     """Fold one accepted resident run's ms/step into the running mean for its arch. Resilient —
     never raises (a stats write must not crash a paid run)."""
     try:
@@ -109,13 +115,14 @@ def record_rate(sm: str, n_atoms: int, ms_step: float, *,
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(reg, indent=2, sort_keys=True))
-        os.replace(tmp, p)          # atomic
+        os.replace(tmp, p)  # atomic
     except Exception:  # noqa: BLE001
         pass
 
 
-def ms_per_matom(sm: str, *, registry: Optional[dict] = None,
-                 min_samples: int = _MIN_LEARN_SAMPLES) -> Optional[float]:
+def ms_per_matom(
+    sm: str, *, registry: Optional[dict] = None, min_samples: int = _MIN_LEARN_SAMPLES
+) -> Optional[float]:
     """Learned ms/step-per-Matom for an arch (enough samples) else the static prior."""
     if registry:
         row = registry.get(sm)
@@ -127,20 +134,29 @@ def ms_per_matom(sm: str, *, registry: Optional[dict] = None,
 @dataclass(frozen=True)
 class Candidate:
     """One rankable card: identity + live economics + a pre-rent value estimate."""
+
     key: str
     label: str
     sm: str
     vram_mb: int
-    usd_per_hour: float          # LIVE price if known, else the indicative table price
-    live_price: bool             # True => usd_per_hour came from fetch_gpu_stock
-    available: Optional[bool]    # None => stock unknown (proceed, RunPod will 500 if truly out)
+    usd_per_hour: float  # LIVE price if known, else the indicative table price
+    live_price: bool  # True => usd_per_hour came from fetch_gpu_stock
+    available: Optional[
+        bool
+    ]  # None => stock unknown (proceed, RunPod will 500 if truly out)
     ns_day_est: float
     usd_per_ns_est: float
 
 
-def estimate_rate(sm: str, n_atoms: int, usd_per_hour: float, *,
-                  timestep_fs: float = 4.0, resident: bool = True,
-                  registry: Optional[dict] = None) -> Optional[dict]:
+def estimate_rate(
+    sm: str,
+    n_atoms: int,
+    usd_per_hour: float,
+    *,
+    timestep_fs: float = 4.0,
+    resident: bool = True,
+    registry: Optional[dict] = None,
+) -> Optional[dict]:
     """Pre-rent ms/step, ns/day and $/ns for a card+system. None if the arch is unknown.
 
     Uses the LEARNED per-arch rate if ``registry`` supplies enough samples, else the conservative
@@ -155,10 +171,18 @@ def estimate_rate(sm: str, n_atoms: int, usd_per_hour: float, *,
     return {"ms_step": ms_step, "ns_day": ns_day, "usd_per_ns": usd_per_ns}
 
 
-def select_cards(n_atoms: int, *, build: str, resident: bool = True, timestep_fs: float = 4.0,
-                 stock: Optional[dict] = None, max_usd_per_hour: Optional[float] = None,
-                 prefer: str = "balanced", registry: Optional[dict] = None,
-                 cards: tuple[GpuType, ...] = CARDS) -> list[Candidate]:
+def select_cards(
+    n_atoms: int,
+    *,
+    build: str,
+    resident: bool = True,
+    timestep_fs: float = 4.0,
+    stock: Optional[dict] = None,
+    max_usd_per_hour: Optional[float] = None,
+    prefer: str = "balanced",
+    registry: Optional[dict] = None,
+    cards: tuple[GpuType, ...] = CARDS,
+) -> list[Candidate]:
     """Rank the arch-compatible, VRAM-fitting, in-stock cards (best first).
 
     Filters, each a step-0-or-worse failure if skipped:
@@ -193,19 +217,32 @@ def select_cards(n_atoms: int, *, build: str, resident: bool = True, timestep_fs
         available = None
         if stock is not None:
             # in stock only if we have a row AND its stock field is a real level
-            available = bool(live) and str(live.get("stock") or "").strip().lower() not in (
-                "", "none", "null")
+            available = bool(live) and str(
+                live.get("stock") or ""
+            ).strip().lower() not in ("", "none", "null")
             if not available:
                 continue
-        est = estimate_rate(g.sm, n_atoms, price, timestep_fs=timestep_fs, resident=resident,
-                            registry=registry)
-        out.append(Candidate(
-            key=g.key, label=g.label, sm=g.sm, vram_mb=g.vram_mb,
-            usd_per_hour=float(price), live_price=bool(live.get("on_demand")),
-            available=available,
-            ns_day_est=(est or {}).get("ns_day", 0.0),
-            usd_per_ns_est=(est or {}).get("usd_per_ns", float("inf")),
-        ))
+        est = estimate_rate(
+            g.sm,
+            n_atoms,
+            price,
+            timestep_fs=timestep_fs,
+            resident=resident,
+            registry=registry,
+        )
+        out.append(
+            Candidate(
+                key=g.key,
+                label=g.label,
+                sm=g.sm,
+                vram_mb=g.vram_mb,
+                usd_per_hour=float(price),
+                live_price=bool(live.get("on_demand")),
+                available=available,
+                ns_day_est=(est or {}).get("ns_day", 0.0),
+                usd_per_ns_est=(est or {}).get("usd_per_ns", float("inf")),
+            )
+        )
     if prefer == "speed":
         out.sort(key=lambda c: (-c.ns_day_est, c.usd_per_ns_est))
         return out
@@ -213,7 +250,7 @@ def select_cards(n_atoms: int, *, build: str, resident: bool = True, timestep_fs
         best_ns = max((c.ns_day_est for c in out), default=0.0)
         floor = best_ns * _SPEED_FLOOR_FRAC
         fast = [c for c in out if c.ns_day_est >= floor and c.ns_day_est > 0]
-        pool = fast or out          # if nothing has a rate estimate, fall back to the whole set
+        pool = fast or out  # if nothing has a rate estimate, fall back to the whole set
         pool.sort(key=lambda c: (c.usd_per_ns_est, c.usd_per_hour))
         return pool
     # "value": best $/ns first; unknown-rate cards (inf) sink, then by price
@@ -235,9 +272,16 @@ def same_tier(cands: list[Candidate], *, factor: float = 1.5) -> list[Candidate]
     return [c for c in cands if c.usd_per_ns_est <= best * factor]
 
 
-async def pick_cards(api_key: str, n_atoms: int, *, build: str, resident: bool = True,
-                     timestep_fs: float = 4.0, max_usd_per_hour: Optional[float] = None,
-                     max_fallbacks: int = 4) -> list[Candidate]:
+async def pick_cards(
+    api_key: str,
+    n_atoms: int,
+    *,
+    build: str,
+    resident: bool = True,
+    timestep_fs: float = 4.0,
+    max_usd_per_hour: Optional[float] = None,
+    max_fallbacks: int = 4,
+) -> list[Candidate]:
     """Live wrapper: fetch current RunPod stock/prices, value-rank, return a FALLBACK LIST.
 
     Returns the balanced pool (RUNBOOK §7 two-axis: cards within the speed floor, cheapest $/ns
@@ -248,42 +292,180 @@ async def pick_cards(api_key: str, n_atoms: int, *, build: str, resident: bool =
     Never raises on a stock-fetch failure — degrades to indicative prices with stock unknown (a
     Cloudflare/GraphQL hiccup falls back to pinned-table behaviour, not a dead launch)."""
     from backend.core.runpod_preflight import fetch_gpu_stock
+
     try:
         stock = await fetch_gpu_stock(api_key)
     except Exception:
         stock = None
-    ranked = select_cards(n_atoms, build=build, resident=resident, timestep_fs=timestep_fs,
-                          stock=stock, max_usd_per_hour=max_usd_per_hour, prefer="balanced",
-                          registry=load_rate_registry())
+    ranked = select_cards(
+        n_atoms,
+        build=build,
+        resident=resident,
+        timestep_fs=timestep_fs,
+        stock=stock,
+        max_usd_per_hour=max_usd_per_hour,
+        prefer="balanced",
+        registry=load_rate_registry(),
+    )
     return ranked[:max_fallbacks]
 
 
-def gpu_options(n_atoms: int, *, build: str = "release", relax_ns: float = 19.2,
-                resident: bool = True, timestep_fs: float = 4.0, stock: Optional[dict] = None,
-                registry: Optional[dict] = None, prefer: str = "balanced") -> list[dict]:
-    """Ranked, JSON-ready GPU options for the cluster-card picker: each row carries price,
+def _phase(
+    sm: str,
+    n_atoms: int,
+    usd_per_hour: float,
+    ns: float,
+    *,
+    timestep_fs: float,
+    resident: bool,
+    registry: Optional[dict],
+) -> tuple[Optional[float], Optional[float], Optional[float]]:
+    """``(hours, cost, ns_day)`` for one phase of a run. ``(None, None, ns_day)`` when the
+    phase is empty; all-``None`` when the arch has no rate estimate.
+
+    Split out because a plan's two phases run at DIFFERENT timesteps and must be costed
+    separately — the ladder's soft first chunk is 1-2 fs and is the most expensive chunk per
+    ns in the whole run (~40% of a best-case ladder, RUNBOOK §1). Costing a whole plan at the
+    production timestep under-reports it badly.
+    """
+    est = estimate_rate(
+        sm,
+        n_atoms,
+        usd_per_hour,
+        timestep_fs=timestep_fs,
+        resident=resident,
+        registry=registry,
+    )
+    if not est:
+        return None, None, None
+    ns_day = est["ns_day"]
+    usd_per_ns = est["usd_per_ns"]
+    if ns <= 0:
+        return None, None, ns_day
+    hours = (ns / ns_day * 24.0) if ns_day > 0 else None
+    cost = ns * usd_per_ns if usd_per_ns not in (0.0, float("inf")) else None
+    return hours, cost, ns_day
+
+
+def plan_options(
+    n_atoms: int,
+    *,
+    relax_ns: float = 0.0,
+    production_ns: float = 0.0,
+    build: str = "release",
+    resident: bool = True,
+    relax_timestep_fs: float = 4.0,
+    production_timestep_fs: float = 4.0,
+    stock: Optional[dict] = None,
+    registry: Optional[dict] = None,
+    prefer: str = "balanced",
+    cards: tuple[GpuType, ...] = CARDS,
+) -> list[dict]:
+    """Ranked, JSON-ready GPU rows for a WHOLE plan — relaxation and production costed
+    separately, at their own timesteps, plus a total.
+
+    This is the generalisation ``gpu_options`` could not express: the Job Wizard knows the real
+    ladder length, the real production length and the real per-phase timestep, and all three
+    change while the user is still designing the run.
+
+    Ranking is delegated to ``select_cards`` unchanged, so the RUNBOOK §7 two-axis rule still
+    holds. Note the ORDER is timestep-invariant — ns/day scales linearly with the timestep for
+    every card and $/ns inversely, so the ranking is the same whichever phase you rank on; only
+    the printed numbers differ. Per-phase figures are therefore recomputed from
+    ``estimate_rate`` rather than read off the Candidate.
+
+    Pure given ``stock`` + ``registry``. Best-value in-stock card first.
+    """
+    ranked = select_cards(
+        n_atoms,
+        build=build,
+        resident=resident,
+        timestep_fs=production_timestep_fs,
+        stock=stock,
+        prefer=prefer,
+        registry=registry,
+        cards=cards,
+    )
+    rows: list[dict] = []
+    for c in ranked:
+        relax_h, relax_cost, relax_nsday = _phase(
+            c.sm,
+            n_atoms,
+            c.usd_per_hour,
+            relax_ns,
+            timestep_fs=relax_timestep_fs,
+            resident=resident,
+            registry=registry,
+        )
+        prod_h, prod_cost, prod_nsday = _phase(
+            c.sm,
+            n_atoms,
+            c.usd_per_hour,
+            production_ns,
+            timestep_fs=production_timestep_fs,
+            resident=resident,
+            registry=registry,
+        )
+        hours = [h for h in (relax_h, prod_h) if h is not None]
+        costs = [x for x in (relax_cost, prod_cost) if x is not None]
+        rows.append(
+            {
+                "key": c.key,
+                "label": c.label,
+                "sm": c.sm,
+                "vram_gb": round(c.vram_mb / 1024),
+                "usd_per_hour": round(c.usd_per_hour, 2),
+                "live_price": c.live_price,
+                "available": c.available,  # True / False / None (stock unknown)
+                # ns/day is quoted at the PRODUCTION timestep — the number a user compares cards
+                # on — with the relax rate alongside it because the ladder runs slower per ns.
+                "ns_day": round(prod_nsday, 1) if prod_nsday else None,
+                "ns_day_relax": round(relax_nsday, 1) if relax_nsday else None,
+                "relax_hours": round(relax_h, 1) if relax_h else None,
+                "relax_cost": round(relax_cost, 2) if relax_cost else None,
+                "production_hours": round(prod_h, 1) if prod_h else None,
+                "production_cost": round(prod_cost, 2) if prod_cost else None,
+                "total_hours": round(sum(hours), 1) if hours else None,
+                "total_cost": round(sum(costs), 2) if costs else None,
+            }
+        )
+    return rows
+
+
+def gpu_options(
+    n_atoms: int,
+    *,
+    build: str = "release",
+    relax_ns: float = 19.2,
+    resident: bool = True,
+    timestep_fs: float = 4.0,
+    stock: Optional[dict] = None,
+    registry: Optional[dict] = None,
+    prefer: str = "balanced",
+) -> list[dict]:
+    """Ranked, JSON-ready GPU options for the Clusters-card picker: each row carries price,
     estimated **relax wall-clock**, and **estimated cost** for a job's relaxation ladder.
 
-    Fuses ``select_cards`` (arch/VRAM/value ranking with live stock + learned rates) with the
-    relax ladder length ``relax_ns`` (default the 4×4.8 = 19.2 ns mgh/aksimentiev ladder):
-      relax_hours = relax_ns / ns_day * 24 ;  est_cost = relax_ns * $/ns.
-    Pure given ``stock`` + ``registry`` — the route supplies live stock (fetch_gpu_stock) and
-    the learned registry. Best-value in-stock card first."""
-    cards = select_cards(n_atoms, build=build, resident=resident, timestep_fs=timestep_fs,
-                         stock=stock, prefer=prefer, registry=registry)
-    rows: list[dict] = []
-    for c in cards:
-        relax_h = (relax_ns / c.ns_day_est * 24.0) if c.ns_day_est > 0 else None
-        cost = (relax_ns * c.usd_per_ns_est
-                if c.usd_per_ns_est not in (0.0, float("inf")) else None)
-        rows.append({
-            "key": c.key, "label": c.label, "sm": c.sm,
-            "vram_gb": round(c.vram_mb / 1024),
-            "usd_per_hour": round(c.usd_per_hour, 2),
-            "live_price": c.live_price,
-            "available": c.available,          # True / False / None (stock unknown)
-            "ns_day": round(c.ns_day_est, 1),
-            "relax_hours": round(relax_h, 1) if relax_h else None,
-            "est_cost": round(cost, 2) if cost else None,
-        })
+    A relax-only view of :func:`plan_options`, kept as its own name because the Clusters-card
+    picker asks a narrower question (default the 4x4.8 = 19.2 ns mgh/aksimentiev ladder) and
+    renders a 4-column table. Delegating rather than duplicating keeps ONE rate path — two
+    would drift, and a drifting cost estimate on a rented GPU costs real money.
+    """
+    rows = plan_options(
+        n_atoms,
+        relax_ns=relax_ns,
+        production_ns=0.0,
+        build=build,
+        resident=resident,
+        relax_timestep_fs=timestep_fs,
+        production_timestep_fs=timestep_fs,
+        stock=stock,
+        registry=registry,
+        prefer=prefer,
+    )
+    for r in rows:
+        # `est_cost` is this view's name for the relax cost, and `ns_day` must stay the plain
+        # rate at `timestep_fs` (there is no separate production phase here).
+        r["est_cost"] = r["relax_cost"]
+        r["ns_day"] = r["ns_day_relax"]
     return rows

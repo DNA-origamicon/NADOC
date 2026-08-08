@@ -49,10 +49,14 @@ def _job(tmp_path, n_segs=2) -> MdJob:
     # submit_job reads the manifest to get the per-chunk ENM scales that decide
     # early-stop eligibility. No manifest => no scales => nothing is skippable (the
     # fail-safe direction), so a package without one must still submit cleanly.
-    (pkg / "manifest.json").write_text(json.dumps({
-        "minimization": {"name": "d_min"},
-        "segments": [{"name": s.name, "scale": 0.5} for s in job.segments],
-    }))
+    (pkg / "manifest.json").write_text(
+        json.dumps(
+            {
+                "minimization": {"name": "d_min"},
+                "segments": [{"name": s.name, "scale": 0.5} for s in job.segments],
+            }
+        )
+    )
     return job
 
 
@@ -129,10 +133,51 @@ class TestPodSizing:
         but variable, and in EU-RO-1 (where the volume pins us) it frequently has NO card at
         all: every COMMUNITY attempt returned 500 "no instances currently available". For an
         unattended overnight run the halved price is not worth the variance."""
-        payloads = rx.pod_payloads_for(_job(tmp_path), 225_504, network_volume_id=VOLUME)
+        payloads = rx.pod_payloads_for(
+            _job(tmp_path), 225_504, network_volume_id=VOLUME
+        )
         tiers = [(p["cloudType"], p["interruptible"]) for p in payloads]
         assert all(t == "SECURE" for t, _ in tiers), tiers
         assert ("SECURE", False) in tiers, "on-demand must be reachable for a long run"
+
+    def test_the_wizards_chosen_card_goes_first(self, tmp_path):
+        """Otherwise the wizard shows one card and rents another.
+
+        The wizard's table comes from `runpod_select` (live stock, live prices, arch-vs-build
+        gate, $/ns AND ns/day). This payload list comes from `plan_execution` — VRAM fit
+        against the pinned table, cheapest first. They routinely disagree, and a user who
+        deliberately picked a faster card would silently get the cheapest one.
+        """
+        job = _job(tmp_path)
+        job.runpod_gpu_key = "NVIDIA RTX 6000 Ada Generation"
+        ids = rx.pod_payloads_for(job, 225_504, network_volume_id=VOLUME)[0][
+            "gpuTypeIds"
+        ]
+        assert ids[0] == "NVIDIA RTX 6000 Ada Generation"
+        assert len(ids) > 1, "the choice is a PREFERENCE — fallbacks must survive"
+        assert len(set(ids)) == len(ids), "the promoted card must not also appear later"
+
+    def test_no_choice_leaves_the_order_untouched(self, tmp_path):
+        """The no-regression pin: a job without a chosen card behaves exactly as before."""
+        job = _job(tmp_path)
+        assert job.runpod_gpu_key is None
+        ids = rx.pod_payloads_for(job, 225_504, network_volume_id=VOLUME)[0][
+            "gpuTypeIds"
+        ]
+        assert ids[0] == "NVIDIA GeForce RTX 4090"
+
+    def test_a_card_that_cannot_hold_the_system_is_ignored(self, tmp_path):
+        """A stale or impossible choice must not be honoured — renting a card too small for
+        the box just OOMs at step 0, having already billed."""
+        job = _job(tmp_path)
+        job.runpod_gpu_key = "NVIDIA GeForce RTX 4090"
+        ids = rx.pod_payloads_for(job, 9_000_000, network_volume_id=VOLUME)[0][
+            "gpuTypeIds"
+        ]
+        assert "NVIDIA GeForce RTX 4090" not in ids, (
+            "24 GB cannot hold a 9M-atom system"
+        )
+        assert ids, "and the launch still has cards to try"
 
     def test_refuses_a_system_no_gpu_can_hold(self, tmp_path):
         with pytest.raises(RunpodError, match="carve|GBIS"):
@@ -141,7 +186,10 @@ class TestPodSizing:
     def test_pod_name_is_within_runpods_191_char_limit(self, tmp_path):
         job = _job(tmp_path)
         job.design_name = "x" * 400
-        assert len(rx.pod_payload_for(job, 225_504, network_volume_id=VOLUME)["name"]) <= 191
+        assert (
+            len(rx.pod_payload_for(job, 225_504, network_volume_id=VOLUME)["name"])
+            <= 191
+        )
 
 
 # ── Chain ────────────────────────────────────────────────────────────────────
@@ -163,9 +211,16 @@ class TestSubmit:
     def test_stages_the_package_and_launches_detached(self, tmp_path):
         job = _job(tmp_path)
         conn = _conn({"setsid": (0, "4242\n", "")})
-        pid = _run(rx.submit_job(
-            job, tmp_path, conn=conn, min_name="d_00_min", n_atoms=225_504, vcpus=32,
-        ))
+        pid = _run(
+            rx.submit_job(
+                job,
+                tmp_path,
+                conn=conn,
+                min_name="d_00_min",
+                n_atoms=225_504,
+                vcpus=32,
+            )
+        )
         assert pid == 4242
         assert job.runpod_pid == 4242
         assert job.status == MdStatus.running
@@ -176,9 +231,16 @@ class TestSubmit:
         Oversubscribing SMT HALVES throughput. The chain script must ask for vcpus//2."""
         job = _job(tmp_path)
         conn = _conn({"setsid": (0, "1\n", "")})
-        _run(rx.submit_job(
-            job, tmp_path, conn=conn, min_name="m", n_atoms=225_504, vcpus=32,
-        ))
+        _run(
+            rx.submit_job(
+                job,
+                tmp_path,
+                conn=conn,
+                min_name="m",
+                n_atoms=225_504,
+                vcpus=32,
+            )
+        )
         script = (tmp_path / "md_jobs" / job.job_id / rx.CHAIN_SCRIPT).read_text()
         assert "+p16" in script
         assert "+p32" not in script
@@ -188,8 +250,11 @@ class TestSubmit:
         disposable; a pod that had to rebuild NAMD would cost more than the run."""
         job = _job(tmp_path)
         conn = _conn({"setsid": (0, "1\n", "")})
-        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="m",
-                           n_atoms=225_504, vcpus=8))
+        _run(
+            rx.submit_job(
+                job, tmp_path, conn=conn, min_name="m", n_atoms=225_504, vcpus=8
+            )
+        )
         script = (tmp_path / "md_jobs" / job.job_id / rx.CHAIN_SCRIPT).read_text()
         assert rx.NAMD_ON_VOLUME in script
 
@@ -202,11 +267,13 @@ class TestPoll:
         job = _job(tmp_path)
         job.remote_scratch_dir = "/workspace/nadoc_jobs/x"
         job.runpod_pid = 5
-        conn = _conn({
-            "nadoc_status": (0, "completed\n", ""),
-            "nadoc_heartbeat": (0, "1000\n", ""),
-            "kill -0": (0, "dead\n", ""),
-        })
+        conn = _conn(
+            {
+                "nadoc_status": (0, "completed\n", ""),
+                "nadoc_heartbeat": (0, "1000\n", ""),
+                "kill -0": (0, "dead\n", ""),
+            }
+        )
         st = _run(rx.poll_job(job, conn=conn, now=1010))
         assert st["state"] == "completed"
 
@@ -214,11 +281,13 @@ class TestPoll:
         job = _job(tmp_path)
         job.remote_scratch_dir = "/w/x"
         job.runpod_pid = 5
-        conn = _conn({
-            "nadoc_status": (0, "failed:d_02\n", ""),
-            "nadoc_heartbeat": (0, "1000\n", ""),
-            "kill -0": (0, "dead\n", ""),
-        })
+        conn = _conn(
+            {
+                "nadoc_status": (0, "failed:d_02\n", ""),
+                "nadoc_heartbeat": (0, "1000\n", ""),
+                "kill -0": (0, "dead\n", ""),
+            }
+        )
         st = _run(rx.poll_job(job, conn=conn, now=1010))
         assert st["state"] == "failed"
         assert st["segment"] == "d_02"
@@ -230,11 +299,13 @@ class TestPoll:
         job = _job(tmp_path)
         job.remote_scratch_dir = "/w/x"
         job.runpod_pid = 5
-        conn = _conn({
-            "nadoc_status": (0, "running\n", ""),
-            "nadoc_heartbeat": (0, "1000\n", ""),
-            "kill -0": (0, "dead\n", ""),
-        })
+        conn = _conn(
+            {
+                "nadoc_status": (0, "running\n", ""),
+                "nadoc_heartbeat": (0, "1000\n", ""),
+                "kill -0": (0, "dead\n", ""),
+            }
+        )
         st = _run(rx.poll_job(job, conn=conn, now=99999))
         assert st["state"] == "running"
         assert st["alive"] is False
@@ -263,8 +334,13 @@ class TestCancel:
 
 
 def _pod_json(status="RUNNING"):
-    return {"id": "pod1", "desiredStatus": status, "publicIp": "1.2.3.4",
-            "portMappings": {"22": 10341}, "costPerHr": 0.34}
+    return {
+        "id": "pod1",
+        "desiredStatus": status,
+        "publicIp": "1.2.3.4",
+        "portMappings": {"22": 10341},
+        "costPerHr": 0.34,
+    }
 
 
 def _client_recording(deleted):
@@ -291,44 +367,69 @@ class TestRunJobOnPodAlwaysTerminates:
         monkeypatch.setattr(RunpodConnection, "close", fake_close)
 
     def test_terminates_the_pod_after_a_successful_run(self, tmp_path, monkeypatch):
-        self._patch_conn(monkeypatch, {
-            "setsid": (0, "9\n", ""),
-            "nadoc_status": (0, "completed\n", ""),
-            "nadoc_heartbeat": (0, "1000\n", ""),
-            "kill -0": (0, "dead\n", ""),
-            "nproc": (0, "32\n", ""),
-        })
+        self._patch_conn(
+            monkeypatch,
+            {
+                "setsid": (0, "9\n", ""),
+                "nadoc_status": (0, "completed\n", ""),
+                "nadoc_heartbeat": (0, "1000\n", ""),
+                "kill -0": (0, "dead\n", ""),
+                "nproc": (0, "32\n", ""),
+            },
+        )
         deleted: list[str] = []
         client = _client_recording(deleted)
         job = _job(tmp_path)
 
-        status = _run(rx.run_job_on_pod(
-            job, tmp_path, client=client, network_volume_id=VOLUME,
-            min_name="d_00_min", n_atoms=225_504, poll_s=0, sleep=_nosleep,
-        ))
+        status = _run(
+            rx.run_job_on_pod(
+                job,
+                tmp_path,
+                client=client,
+                network_volume_id=VOLUME,
+                min_name="d_00_min",
+                n_atoms=225_504,
+                poll_s=0,
+                sleep=_nosleep,
+            )
+        )
         assert status == MdStatus.completed
         assert deleted == ["/v1/pods/pod1"], "the pod MUST be destroyed"
 
     def test_terminates_the_pod_when_the_run_fails(self, tmp_path, monkeypatch):
-        self._patch_conn(monkeypatch, {
-            "setsid": (0, "9\n", ""),
-            "nadoc_status": (0, "failed:d_01\n", ""),
-            "nadoc_heartbeat": (0, "1000\n", ""),
-            "kill -0": (0, "dead\n", ""),
-            "nproc": (0, "8\n", ""),
-        })
+        self._patch_conn(
+            monkeypatch,
+            {
+                "setsid": (0, "9\n", ""),
+                "nadoc_status": (0, "failed:d_01\n", ""),
+                "nadoc_heartbeat": (0, "1000\n", ""),
+                "kill -0": (0, "dead\n", ""),
+                "nproc": (0, "8\n", ""),
+            },
+        )
         deleted: list[str] = []
         job = _job(tmp_path)
-        status = _run(rx.run_job_on_pod(
-            job, tmp_path, client=_client_recording(deleted), network_volume_id=VOLUME,
-            min_name="m", n_atoms=225_504, poll_s=0, sleep=_nosleep,
-        ))
+        status = _run(
+            rx.run_job_on_pod(
+                job,
+                tmp_path,
+                client=_client_recording(deleted),
+                network_volume_id=VOLUME,
+                min_name="m",
+                n_atoms=225_504,
+                poll_s=0,
+                sleep=_nosleep,
+            )
+        )
         assert status == MdStatus.failed
         assert "d_01" in (job.error or "")
         assert deleted == ["/v1/pods/pod1"]
 
-    def test_terminates_the_pod_when_something_raises_mid_run(self, tmp_path, monkeypatch):
+    def test_terminates_the_pod_when_something_raises_mid_run(
+        self, tmp_path, monkeypatch
+    ):
         """The one that keeps you solvent. If NADOC crashes mid-job, the GPU still dies."""
+
         async def boom(self, **kw):
             raise RuntimeError("ssh exploded")
 
@@ -336,29 +437,47 @@ class TestRunJobOnPodAlwaysTerminates:
         deleted: list[str] = []
         job = _job(tmp_path)
         with pytest.raises(RuntimeError, match="ssh exploded"):
-            _run(rx.run_job_on_pod(
-                job, tmp_path, client=_client_recording(deleted),
-                network_volume_id=VOLUME, min_name="m", n_atoms=225_504,
-                poll_s=0, sleep=_nosleep,
-            ))
+            _run(
+                rx.run_job_on_pod(
+                    job,
+                    tmp_path,
+                    client=_client_recording(deleted),
+                    network_volume_id=VOLUME,
+                    min_name="m",
+                    n_atoms=225_504,
+                    poll_s=0,
+                    sleep=_nosleep,
+                )
+            )
         assert deleted == ["/v1/pods/pod1"], "a crash must not leak a billing GPU"
 
     def test_a_reclaimed_pod_becomes_resumable_not_failed(self, tmp_path, monkeypatch):
         """An interruptible pod vanishing is the EXPECTED case. The volume holds every
         completed step, so this is 'paused, resume me' — not 'failed, start over'."""
-        self._patch_conn(monkeypatch, {
-            "setsid": (0, "9\n", ""),
-            "nadoc_status": (0, "running\n", ""),
-            "nadoc_heartbeat": (0, "1\n", ""),   # ancient => stale
-            "kill -0": (0, "dead\n", ""),
-            "nproc": (0, "8\n", ""),
-        })
+        self._patch_conn(
+            monkeypatch,
+            {
+                "setsid": (0, "9\n", ""),
+                "nadoc_status": (0, "running\n", ""),
+                "nadoc_heartbeat": (0, "1\n", ""),  # ancient => stale
+                "kill -0": (0, "dead\n", ""),
+                "nproc": (0, "8\n", ""),
+            },
+        )
         deleted: list[str] = []
         job = _job(tmp_path)
-        status = _run(rx.run_job_on_pod(
-            job, tmp_path, client=_client_recording(deleted), network_volume_id=VOLUME,
-            min_name="m", n_atoms=225_504, poll_s=0, sleep=_nosleep,
-        ))
+        status = _run(
+            rx.run_job_on_pod(
+                job,
+                tmp_path,
+                client=_client_recording(deleted),
+                network_volume_id=VOLUME,
+                min_name="m",
+                n_atoms=225_504,
+                poll_s=0,
+                sleep=_nosleep,
+            )
+        )
         assert status == MdStatus.paused
         assert job.resumable is True
         assert deleted == ["/v1/pods/pod1"]
@@ -389,20 +508,31 @@ class TestTierAEarlyStopGate:
         job.early_stop_relax = True
         job.early_stop_tier = "A"
         job.segments = [
-            MdSegmentStatus(name=f"d_01_k0p5_p{p}", stage="relax", percent=float(p), steps=100)
+            MdSegmentStatus(
+                name=f"d_01_k0p5_p{p}", stage="relax", percent=float(p), steps=100
+            )
             for p in (10, 50, 100)
         ]
-        (job.package_dir(tmp_path) / "manifest.json").write_text(json.dumps({
-            "minimization": {"name": "d_min"},
-            "segments": [{"name": s.name, "scale": 0.5} for s in job.segments],
-        }))
+        (job.package_dir(tmp_path) / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "minimization": {"name": "d_min"},
+                    "segments": [{"name": s.name, "scale": 0.5} for s in job.segments],
+                }
+            )
+        )
         return job
 
     def test_stages_the_evaluators_and_enables_early_stop_in_the_script(self, tmp_path):
         job = self._tier_a_job(tmp_path)
-        conn = _conn({"setsid": (0, "7\n", ""), "import MDAnalysis": (0, "2.7.0\n", "")})
-        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
-                           n_atoms=225_504, vcpus=8))
+        conn = _conn(
+            {"setsid": (0, "7\n", ""), "import MDAnalysis": (0, "2.7.0\n", "")}
+        )
+        _run(
+            rx.submit_job(
+                job, tmp_path, conn=conn, min_name="d_min", n_atoms=225_504, vcpus=8
+            )
+        )
         script = (job.job_dir(tmp_path) / rx.CHAIN_SCRIPT).read_text()
         assert "nadoc_cutoff_eval.py" in script
         assert "nadoc_health_eval.py" in script, "Tier A must run the WC health step"
@@ -410,13 +540,22 @@ class TestTierAEarlyStopGate:
     def test_refuses_to_launch_when_the_pod_cannot_import_mdanalysis(self, tmp_path):
         """The $33 test. A silent fallthrough here bills the full ladder."""
         job = self._tier_a_job(tmp_path)
-        conn = _conn({
-            "import MDAnalysis": (1, "", "ModuleNotFoundError: No module named 'MDAnalysis'"),
-            "pip install": (1, "", "network unreachable"),
-        })
+        conn = _conn(
+            {
+                "import MDAnalysis": (
+                    1,
+                    "",
+                    "ModuleNotFoundError: No module named 'MDAnalysis'",
+                ),
+                "pip install": (1, "", "network unreachable"),
+            }
+        )
         with pytest.raises(rx.MdAnalysisMissing):
-            _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
-                               n_atoms=225_504, vcpus=8))
+            _run(
+                rx.submit_job(
+                    job, tmp_path, conn=conn, min_name="d_min", n_atoms=225_504, vcpus=8
+                )
+            )
 
     def test_installs_mdanalysis_when_the_image_lacks_it(self, tmp_path):
         """The pytorch image ships numpy+scipy but not MDAnalysis; a ~30 s pip fixes it."""
@@ -428,23 +567,32 @@ class TestTierAEarlyStopGate:
                 if "import MDAnalysis" in cmd:
                     calls["n"] += 1
                     # Absent on the first probe, present once pip has run.
-                    return (_R(1, "", "ModuleNotFoundError") if calls["n"] == 1
-                            else _R(0, "2.7.0", ""))
+                    return (
+                        _R(1, "", "ModuleNotFoundError")
+                        if calls["n"] == 1
+                        else _R(0, "2.7.0", "")
+                    )
                 if "setsid" in cmd:
                     return _R(0, "9\n", "")
                 return _R(0, "", "")
 
         conn = _Conn(host="h", port=1, pod_id="p1")
         conn._conn = FakeSSH()  # noqa: SLF001
-        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
-                           n_atoms=225_504, vcpus=8))
+        _run(
+            rx.submit_job(
+                job, tmp_path, conn=conn, min_name="d_min", n_atoms=225_504, vcpus=8
+            )
+        )
         assert calls["n"] == 2, "must re-probe after installing, not assume pip worked"
 
     def test_off_by_default_stages_nothing_and_never_probes(self, tmp_path):
-        job = _job(tmp_path)                       # early_stop_relax defaults False
+        job = _job(tmp_path)  # early_stop_relax defaults False
         conn = _conn({"setsid": (0, "1\n", "")})
-        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
-                           n_atoms=225_504, vcpus=8))
+        _run(
+            rx.submit_job(
+                job, tmp_path, conn=conn, min_name="d_min", n_atoms=225_504, vcpus=8
+            )
+        )
         script = (job.job_dir(tmp_path) / rx.CHAIN_SCRIPT).read_text()
         assert "nadoc_cutoff_eval.py" not in script
         assert not any("MDAnalysis" in c for c in conn._conn.commands)  # noqa: SLF001
@@ -473,10 +621,12 @@ class TestStagingReusesTheVolume:
                 if "find . -type f" in cmd:
                     # Everything already present, at its true local size.
                     pkg = job.package_dir(tmp_path)
-                    lines = [f"{p.stat().st_size} {rel}"
-                             for p, rel in __import__(
-                                 "backend.core.md_executor", fromlist=["x"]
-                             ).stage_plan(pkg)]
+                    lines = [
+                        f"{p.stat().st_size} {rel}"
+                        for p, rel in __import__(
+                            "backend.core.md_executor", fromlist=["x"]
+                        ).stage_plan(pkg)
+                    ]
                     return _R(0, "\n".join(lines), "")
                 if "setsid" in cmd:
                     return _R(0, "3\n", "")
@@ -487,12 +637,17 @@ class TestStagingReusesTheVolume:
 
         conn = _Conn(host="h", port=1, pod_id="p1")
         conn._conn = FakeSSH()  # noqa: SLF001
-        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
-                           n_atoms=225_504, vcpus=8))
+        _run(
+            rx.submit_job(
+                job, tmp_path, conn=conn, min_name="d_min", n_atoms=225_504, vcpus=8
+            )
+        )
         # The small generated/helper scripts are always re-sent — the chain script encodes
-        # THIS run's kill-switch and early-stop wiring, and the resume writer is a few KB.
+        # THIS run's kill-switch and early-stop wiring, the resume writer is a few KB, and
+        # the live-metrics collector is refreshed so a stale copy on the volume can never
+        # outlive a change to NADOC's own collector code.
         # The point of this test is that no PACKAGE file (the 1.21 GB) is re-uploaded.
-        always = (rx.CHAIN_SCRIPT, rx.RESUME_CONF_NAME)
+        always = (rx.CHAIN_SCRIPT, rx.RESUME_CONF_NAME, rx.LIVE_METRICS_NAME)
         package_files = [p for p in sent if not p.endswith(always)]
         assert package_files == [], package_files
 
@@ -504,7 +659,7 @@ class TestStagingReusesTheVolume:
         class _Conn(RunpodConnection):
             async def run(self, cmd, timeout=60.0, retries=0):
                 if "find . -type f" in cmd:
-                    return _R(0, "1 d.psf", "")     # 1 byte — truncated
+                    return _R(0, "1 d.psf", "")  # 1 byte — truncated
                 if "setsid" in cmd:
                     return _R(0, "3\n", "")
                 return _R(0, "", "")
@@ -514,9 +669,14 @@ class TestStagingReusesTheVolume:
 
         conn = _Conn(host="h", port=1, pod_id="p1")
         conn._conn = FakeSSH()  # noqa: SLF001
-        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
-                           n_atoms=225_504, vcpus=8))
-        assert any(p.endswith("d.psf") for p in sent), "a truncated file must be re-sent"
+        _run(
+            rx.submit_job(
+                job, tmp_path, conn=conn, min_name="d_min", n_atoms=225_504, vcpus=8
+            )
+        )
+        assert any(p.endswith("d.psf") for p in sent), (
+            "a truncated file must be re-sent"
+        )
 
     def test_a_failed_listing_reuploads_everything(self, tmp_path):
         """Fail-safe: if we cannot tell what is there, send it. Wasting $0.19 beats
@@ -537,8 +697,11 @@ class TestStagingReusesTheVolume:
 
         conn = _Conn(host="h", port=1, pod_id="p1")
         conn._conn = FakeSSH()  # noqa: SLF001
-        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
-                           n_atoms=225_504, vcpus=8))
+        _run(
+            rx.submit_job(
+                job, tmp_path, conn=conn, min_name="d_min", n_atoms=225_504, vcpus=8
+            )
+        )
         assert any(p.endswith("d.psf") for p in sent)
 
 
@@ -556,7 +719,9 @@ class TestProductionChildSeedsFromParentOnTheVolume:
         job.run_kind = "production"
         return job
 
-    def test_copies_the_parents_identical_files_instead_of_uploading_them(self, tmp_path):
+    def test_copies_the_parents_identical_files_instead_of_uploading_them(
+        self, tmp_path
+    ):
         job = self._child(tmp_path)
         sent: list[str] = []
         cmds: list[str] = []
@@ -566,13 +731,17 @@ class TestProductionChildSeedsFromParentOnTheVolume:
                 cmds.append(cmd)
                 if "find . -type f" in cmd and "PARENT123456" in cmd:
                     pkg = job.package_dir(tmp_path)
-                    lines = [f"{p.stat().st_size} {rel}"
-                             for p, rel in md_executor.stage_plan(pkg)]
+                    lines = [
+                        f"{p.stat().st_size} {rel}"
+                        for p, rel in md_executor.stage_plan(pkg)
+                    ]
                     return _R(0, "\n".join(lines), "")
-                if "find . -type f" in cmd:          # the child's own dir, post-copy
+                if "find . -type f" in cmd:  # the child's own dir, post-copy
                     pkg = job.package_dir(tmp_path)
-                    lines = [f"{p.stat().st_size} {rel}"
-                             for p, rel in md_executor.stage_plan(pkg)]
+                    lines = [
+                        f"{p.stat().st_size} {rel}"
+                        for p, rel in md_executor.stage_plan(pkg)
+                    ]
                     return _R(0, "\n".join(lines), "")
                 if "setsid" in cmd:
                     return _R(0, "11\n", "")
@@ -583,12 +752,16 @@ class TestProductionChildSeedsFromParentOnTheVolume:
 
         conn = _Conn(host="h", port=1, pod_id="p1")
         conn._conn = FakeSSH()  # noqa: SLF001
-        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
-                           n_atoms=225_504, vcpus=8))
+        _run(
+            rx.submit_job(
+                job, tmp_path, conn=conn, min_name="d_min", n_atoms=225_504, vcpus=8
+            )
+        )
 
-        assert any("cp -n" in c and "PARENT123456" in c for c in cmds), \
+        assert any("cp -n" in c and "PARENT123456" in c for c in cmds), (
             "must copy from the parent's dir on the volume"
-        always = (rx.CHAIN_SCRIPT, rx.RESUME_CONF_NAME)
+        )
+        always = (rx.CHAIN_SCRIPT, rx.RESUME_CONF_NAME, rx.LIVE_METRICS_NAME)
         assert [p for p in sent if not p.endswith(always)] == [], "no package re-upload"
 
     def test_never_drags_across_the_parents_output_or_sentinels(self, tmp_path):
@@ -605,10 +778,15 @@ class TestProductionChildSeedsFromParentOnTheVolume:
                 if "find . -type f" in cmd and "PARENT123456" in cmd:
                     # The parent's dir ALSO holds completed outputs and sentinels.
                     pkg = job.package_dir(tmp_path)
-                    lines = [f"{p.stat().st_size} {rel}"
-                             for p, rel in md_executor.stage_plan(pkg)]
-                    lines += ["999 output/d_01.coor", "5 nadoc_status",
-                              "12 nadoc_chain.out"]
+                    lines = [
+                        f"{p.stat().st_size} {rel}"
+                        for p, rel in md_executor.stage_plan(pkg)
+                    ]
+                    lines += [
+                        "999 output/d_01.coor",
+                        "5 nadoc_status",
+                        "12 nadoc_chain.out",
+                    ]
                     return _R(0, "\n".join(lines), "")
                 if "setsid" in cmd:
                     return _R(0, "11\n", "")
@@ -619,16 +797,21 @@ class TestProductionChildSeedsFromParentOnTheVolume:
 
         conn = _Conn(host="h", port=1, pod_id="p1")
         conn._conn = FakeSSH()  # noqa: SLF001
-        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
-                           n_atoms=225_504, vcpus=8))
+        _run(
+            rx.submit_job(
+                job, tmp_path, conn=conn, min_name="d_min", n_atoms=225_504, vcpus=8
+            )
+        )
 
         copies = " ".join(c for c in cmds if "cp -n" in c)
-        assert "output/" not in copies, "a copied .coor would make the child SKIP its work"
+        assert "output/" not in copies, (
+            "a copied .coor would make the child SKIP its work"
+        )
         assert "nadoc_status" not in copies
         assert "nadoc_chain.out" not in copies
 
     def test_a_relaxation_job_never_seeds_from_anything(self, tmp_path):
-        job = _job(tmp_path)                     # no parent_job_id
+        job = _job(tmp_path)  # no parent_job_id
         cmds: list[str] = []
 
         class _Conn(RunpodConnection):
@@ -641,8 +824,11 @@ class TestProductionChildSeedsFromParentOnTheVolume:
 
         conn = _Conn(host="h", port=1, pod_id="p1")
         conn._conn = FakeSSH()  # noqa: SLF001
-        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
-                           n_atoms=225_504, vcpus=8))
+        _run(
+            rx.submit_job(
+                job, tmp_path, conn=conn, min_name="d_min", n_atoms=225_504, vcpus=8
+            )
+        )
         assert not any("cp -n" in c for c in cmds)
 
 
@@ -661,12 +847,17 @@ class TestTheJobRecordSurvivesACrashedLauncher:
         job = _job(tmp_path)
         job.runpod_pod_id = "POD123"
         conn = _conn({"setsid": (0, "4242\n", "")})
-        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
-                           n_atoms=225_504, vcpus=8))
+        _run(
+            rx.submit_job(
+                job, tmp_path, conn=conn, min_name="d_min", n_atoms=225_504, vcpus=8
+            )
+        )
 
         # Re-read from DISK — an in-memory field is worth nothing to a new process.
         reloaded = MdJob.load(job.job_id, tmp_path)
-        assert reloaded.runpod_pod_id == "POD123", "a pod nobody can name is a pod nobody can kill"
+        assert reloaded.runpod_pod_id == "POD123", (
+            "a pod nobody can name is a pod nobody can kill"
+        )
         assert reloaded.runpod_pid == 4242
         assert reloaded.remote_scratch_dir == rx.remote_dir_for(job)
         assert reloaded.status == MdStatus.running
@@ -683,8 +874,17 @@ class TestOvernightSafety:
         the guard renders whenever a lifetime is supplied."""
         job = _job(tmp_path)
         conn = _conn({"setsid": (0, "1\n", "")})
-        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="m",
-                           n_atoms=225_504, vcpus=16, max_lifetime_s=16 * 3600))
+        _run(
+            rx.submit_job(
+                job,
+                tmp_path,
+                conn=conn,
+                min_name="m",
+                n_atoms=225_504,
+                vcpus=16,
+                max_lifetime_s=16 * 3600,
+            )
+        )
         script = (tmp_path / "md_jobs" / job.job_id / rx.CHAIN_SCRIPT).read_text()
         assert "LIFETIME_GUARD" in script
         assert str(16 * 3600) in script
@@ -695,7 +895,117 @@ class TestOvernightSafety:
         so this only documents that the backstop is opt-in at the submit_job boundary."""
         job = _job(tmp_path)
         conn = _conn({"setsid": (0, "1\n", "")})
-        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="m",
-                           n_atoms=225_504, vcpus=16))
+        _run(
+            rx.submit_job(
+                job, tmp_path, conn=conn, min_name="m", n_atoms=225_504, vcpus=16
+            )
+        )
         script = (tmp_path / "md_jobs" / job.job_id / rx.CHAIN_SCRIPT).read_text()
         assert "LIFETIME_GUARD" not in script
+
+
+class TestAdoptAlsoAlwaysTerminates:
+    """Inheriting a run must carry the SAME obligation as starting one.
+
+    A pod left up by a dev-server reload is only safe to leave if the next process both
+    picks up watching it AND destroys it at the end. If adopt could return with the pod
+    alive, "don't tear down on reload" would just be a slower leak.
+    """
+
+    def _patch_conn(self, monkeypatch, responses):
+        async def fake_connect(self, **kw):
+            self._conn = FakeSSH(responses)
+
+        async def fake_close(self):
+            self._conn = None
+
+        monkeypatch.setattr(RunpodConnection, "connect", fake_connect)
+        monkeypatch.setattr(RunpodConnection, "close", fake_close)
+
+    def _job_on_pod(self, tmp_path, pid=9):
+        job = _job(tmp_path)
+        job.execution_target = "runpod"
+        job.runpod_pod_id = "pod1"
+        job.runpod_pid = pid
+        job.remote_scratch_dir = "/workspace/nadoc_jobs/x"
+        return job
+
+    def test_destroys_the_pod_when_the_adopted_run_finishes(self, tmp_path, monkeypatch):
+        self._patch_conn(
+            monkeypatch,
+            {
+                "nadoc_status": (0, "completed\n", ""),
+                "nadoc_heartbeat": (0, "1000\n", ""),
+                "kill -0": (0, "", ""),
+            },
+        )
+        deleted: list[str] = []
+        job = self._job_on_pod(tmp_path)
+        status = _run(
+            rx.reattach_job_on_pod(
+                job, tmp_path, client=_client_recording(deleted), poll_s=0, sleep=_nosleep
+            )
+        )
+        assert status == MdStatus.completed
+        assert deleted == ["/v1/pods/pod1"], "an adopted pod MUST still be destroyed"
+
+    def test_destroys_the_pod_when_the_adopted_run_failed(self, tmp_path, monkeypatch):
+        self._patch_conn(
+            monkeypatch,
+            {
+                "nadoc_status": (0, "failed:d_01\n", ""),
+                "nadoc_heartbeat": (0, "1000\n", ""),
+                "kill -0": (0, "", ""),
+            },
+        )
+        deleted: list[str] = []
+        job = self._job_on_pod(tmp_path)
+        _run(
+            rx.reattach_job_on_pod(
+                job, tmp_path, client=_client_recording(deleted), poll_s=0, sleep=_nosleep
+            )
+        )
+        assert deleted == ["/v1/pods/pod1"]
+
+    def test_never_relaunches_a_live_chain(self, tmp_path, monkeypatch):
+        """Two chains on one GPU means two NAMDs writing the same restart files. Adopt
+        RESUMES watching; it must never call submit_job."""
+        self._patch_conn(
+            monkeypatch,
+            {
+                "nadoc_status": (0, "completed\n", ""),
+                "nadoc_heartbeat": (0, "1000\n", ""),
+                "kill -0": (0, "", ""),
+            },
+        )
+        called = {"n": 0}
+
+        async def boom(*a, **kw):
+            called["n"] += 1
+
+        monkeypatch.setattr(rx, "submit_job", boom)
+        job = self._job_on_pod(tmp_path)
+        _run(
+            rx.reattach_job_on_pod(
+                job, tmp_path, client=_client_recording([]), poll_s=0, sleep=_nosleep
+            )
+        )
+        assert called["n"] == 0
+
+    def test_refuses_a_job_with_no_pod(self, tmp_path):
+        job = _job(tmp_path)
+        job.runpod_pod_id = None
+        with pytest.raises(RunpodError, match="no pod"):
+            _run(rx.reattach_job_on_pod(job, tmp_path, client=_client_recording([])))
+
+    def test_refuses_an_already_destroyed_pod(self, tmp_path):
+        """A vanished pod must raise, not be mistaken for an adopted one — otherwise the
+        supervisor sits polling a machine that no longer exists."""
+
+        def handler(req):
+            return httpx.Response(200, json={**_pod_json(), "desiredStatus": "TERMINATED"})
+
+        client = RunpodClient("k", transport=httpx.MockTransport(handler))
+        job = self._job_on_pod(tmp_path)
+        with pytest.raises(RunpodError, match="destroyed"):
+            _run(rx.reattach_job_on_pod(job, tmp_path, client=client))
