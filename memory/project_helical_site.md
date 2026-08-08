@@ -8,9 +8,9 @@ metadata:
 
 # One helical site, many cheap representations
 
-**Status: Phases 0–6 DONE; Phase 7 RESOLVED as a false premise; Phase 8 part done
-(2026-08-07). What is left needs decisions or has no consumer: Phase 8's fitter re-target
-(migration question), Phase 9 (the −32° constant), Phase 10 (no consumer).** Owner instruction: *"why not have a unified abstraction then?
+**Status: Phases 0–9 all closed (2026-08-07) — 7 as a false premise, 8 by the owner's
+"leave saved poses as-is", 9 by re-justification. Phase 10 has no consumer. ONE open
+question remains and it is new: the 14.6° between junction symmetry and MD azimuth.** Owner instruction: *"why not have a unified abstraction then?
 From which all representations and models can be built from cheaply"* — yes, and this is what
 that costs. Companion to [[project_atomistic_source_of_truth]] (whose audit table this is the
 remedy for) and TD-27 in [[project_tech_debt]].
@@ -347,7 +347,44 @@ load-bearing for every pose a user has already committed to disk.
   within a stated tolerance, or the migration is explicit and tested.  Fixtures that exercise it:
   `VoltronCore` (3 transforms), `DollarSign` (2 deformations + 3), `Ultimate Polymer Hinge` (4).
 
-### Phase 9 — retire `_ATOMISTIC_PHASE_OFFSET_RAD` (audit row 13)  ⟨gated on Phase 7⟩
+### Phase 9 — **DONE 2026-08-07: decoupled by re-justification; the value did not move**
+
+**Two scoping errors corrected first.** (a) It is NOT gated on the placers, and (b) it is NOT
+gated on re-quoting the 1ZEW templates — that is `_FRAME_ROT_RAD`'s gate. The two are separable
+operations: this rotates `e_radial` (orbiting the whole nucleotide about the helix axis),
+`_FRAME_ROT_M` post-multiplies the frame (spinning the template in place, origin fixed).
+
+The constant's problem was its JUSTIFICATION, not its value. It read "calibrated by overlaying
+the atomistic model on the NADOC bead/slab representation" — the display deciding where atoms go.
+Checked instead against the only measurement that can settle it, the crossover-backbone azimuth
+of equilibrated free-NAMD origami, on `18hb` with 1420 crossovers in
+`measure_interhelix_phase.py`'s exact convention:
+
+| roll | φ mean | R | \|φ\| median |
+|---|---|---|---|
+| −32° alone | **+5.72°** | 0.920 | 15.68 |
+| −32° + junction balance (ships) | −1.22° | 0.924 | 21.53 |
+| junction balance alone | +13.93° | 0.896 | 3.48 |
+| **MD (free NAMD, 18hb)** | **+7.30°** | — | **19.10** |
+
+**−32° is 1.6° from the MD mean.** It stands on its own atomistic evidence, so the decoupling is
+a re-justification: no geometry moved, no golden moved, no test needed reconfirming because
+nothing changed. Pinned by `test_the_atomistic_crossover_azimuth_stays_in_the_md_envelope`.
+
+**⚠ What this measurement EXPOSED, and it is open.** The TOTAL that ships is −46.6°, because
+`atomistic_phase_offset_rad` adds the DX-junction balance (−14.6° on honeycomb). That takes the
+crossover azimuth **8.5° to the far side of the MD mean** (−1.22 vs +7.30). Two measured criteria
+disagree by 14.6°:
+
+- **junction linker SYMMETRY** — user-reported defect, anchor gaps 0.586/1.086 → 0.724/0.724,
+  worst linker 1.126 → 0.761 nm, visually confirmed by the owner;
+- **equilibrium crossover AZIMUTH** — best near −32°, which is where the balance roll is absent.
+
+They measure different things (a seed's local strain vs where relaxed DNA settles) and both are
+real. The envelope pin is deliberately loose so it catches drift out of physical range without
+pretending the 8.5° is resolved. **Needs an owner call — see the open question below.**
+
+*Original entry:*
 
 `atomistic.py:583`, −32°, "calibrated by overlaying the atomistic model on the NADOC bead/slab
 representation" — a constant whose stated purpose is to align atoms to the DISPLAY.  It is now
@@ -398,7 +435,15 @@ permanently out:
    applied downstream. Do not let a consumer read a site and skip the deformation pass — that is
    how `mrdna_bridge` ended up re-deriving from the straight helix in the first place.
 
-## Open question for the owner — ANSWERED 2026-08-07
+## Open question for the owner — the 14.6° (raised 2026-08-07)
+
+The atomistic roll cannot satisfy both measured criteria at once. Shipping is symmetry-first
+(−46.6°, azimuth 8.5° off MD); MD-first would be about −38.1°, which puts the mean on +7.3° and
+leaves the DX pair ~7° imbalanced, i.e. roughly half the original 0.500 nm gap asymmetry back.
+Options: keep symmetry-first (status quo, visually confirmed), go MD-first, or split. Nothing
+should change without this call — the number is phase-constant-adjacent.
+
+## Earlier open question — ANSWERED 2026-08-07
 
 Phase 4's CM definition was a false dichotomy: neither the atomistic mass centroid nor the
 inverted `oxdna_backbone_site`, but oxDNA's own published HB equilibrium (`HYDR_R0`), applied by

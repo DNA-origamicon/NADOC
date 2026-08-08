@@ -545,3 +545,75 @@ def test_a_display_default_flip_cannot_reach_the_pose_fitters():
                              - np.asarray(b["backbone_position"], float)))
         for a, b in zip(before, followed))
     assert moved > 0.01, "the simulated flip changed nothing — this pin would be vacuous"
+
+
+# ── Round 2: the atomistic phase answers to MD, not to the display ───────────
+
+MD_18HB = Path("workspace/18hb.nadoc")
+
+
+def test_the_atomistic_crossover_azimuth_stays_in_the_md_envelope():
+    """The atomistic phase must be justified by MD, not by matching the bead rep.
+
+    ``_ATOMISTIC_PHASE_OFFSET_RAD`` used to be "calibrated by overlaying the atomistic model
+    on the NADOC bead/slab representation".  Under atomistic-as-ground-truth that is not a
+    justification, so the constant now answers to the observable
+    ``scripts/measure_interhelix_phase.py`` measures on free-NAMD origami: the azimuth of a
+    crossing phosphate about its own helix axis, 0 deg = the inter-helix direction.
+
+    MD on 18hb: mean +7.3 deg, |phi| median 19.1 (circstd ~30 deg across systems).  This
+    build: mean -1.2, |phi| median 21.5 over 1420 crossovers — inside the spread, and 8.5 deg
+    from the mean because the DX-junction balance roll pulls the other way.  The envelope is
+    deliberately loose: it catches a phase that has drifted out of physical range, not the
+    unresolved 8.5 deg.
+    """
+    import math
+
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.deformation import effective_helix_for_geometry
+
+    design = _load(MD_18HB)
+    model = build_atomistic_model(design, fast_bridges=True)
+    P = {(a.helix_id, a.bp_index, a.direction): np.array([a.x, a.y, a.z])
+         for a in model.atoms
+         if a.name == "P" and a.crossover_id is None and a.extension_id is None}
+    axes = {}
+    for h in design.helices:
+        eh = effective_helix_for_geometry(h, design)
+        s0 = eh.axis_start.to_array()
+        v = eh.axis_end.to_array() - s0
+        axes[h.id] = (s0, v / np.linalg.norm(v))
+
+    def foot(c, u, p):
+        return c + float((p - c) @ u) * u
+
+    phis = []
+    for x in design.crossovers:
+        for ha, hb in ((x.half_a, x.half_b), (x.half_b, x.half_a)):
+            pa = P.get((ha.helix_id, ha.index, ha.strand.value))
+            pb = P.get((hb.helix_id, hb.index, hb.strand.value))
+            if pa is None or pb is None or ha.helix_id not in axes or hb.helix_id not in axes:
+                continue
+            ca, ua = axes[ha.helix_id]
+            cb, ub = axes[hb.helix_id]
+            fa, fb = foot(ca, ua, pa), foot(cb, ub, pb)
+            ref = fb - fa
+            e1 = ref - float(ref @ ua) * ua
+            if np.linalg.norm(e1) < 1e-9:
+                continue
+            e1 /= np.linalg.norm(e1)
+            d = pa - fa
+            d = d - float(d @ ua) * ua
+            if np.linalg.norm(d) < 1e-9:
+                continue
+            phis.append(math.degrees(math.atan2(float(d @ np.cross(ua, e1)), float(d @ e1))))
+
+    assert len(phis) > 500, "fixture lost its crossovers"
+    a = np.radians(np.asarray(phis))
+    mean = math.degrees(math.atan2(np.sin(a).mean(), np.cos(a).mean()))
+    R = float(np.hypot(np.cos(a).mean(), np.sin(a).mean()))
+    med = float(np.median(np.abs(np.degrees(a))))
+
+    assert abs(mean - 7.3) < 20.0, f"crossover azimuth {mean:+.2f} deg is outside the MD envelope"
+    assert 5.0 < med < 40.0, f"|phi| median {med:.2f} deg is outside the MD envelope"
+    assert R > 0.75, f"crossover phase is disordered (R={R:.3f}); MD sits at 0.87"

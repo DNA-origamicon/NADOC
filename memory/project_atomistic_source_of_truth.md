@@ -235,7 +235,7 @@ Suite: **6865 passed, 0 failed.**  Phase detail in [[project_helical_site]].
 | 10 | `_rigid_frame_calibration` | **FIXED** | frames from `nucleotide_positions`; no conf round trip, no display dependency (only a comment mentions `_geometry_for_design`) |
 | 11 | periodic seam solver | **FIXED** | no `np.linalg.solve` left; reads the axis. Fixed a live bug on base pairs split across two domain-level clusters |
 | 12 | pose fitters | **HAZARD CLOSED**, re-target still open | all 8 sites now call `design_geometry.fitting_geometry`, which states `measured_positioning=False, junction_balance=False` instead of inheriting defaults TD-27 intends to flip. Re-targeting bead→site still wants the migration decision |
-| 13 | `_ATOMISTIC_PHASE_OFFSET_RAD = −32°` | **STILL** | `atomistic.py:583`, now summed inside `atomistic_phase_offset_rad` |
+| 13 | `_ATOMISTIC_PHASE_OFFSET_RAD = −32°` | **DECOUPLED** (value unchanged) | re-justified against MD, not the bead rep: on 18hb it sits 1.6° from the free-NAMD crossover azimuth (+5.72 vs +7.30). Exposed an OPEN question — the shipping total (−46.6°, with the junction-balance roll) is 8.5° the other side of MD |
 | 14 | FEM (CanDo/SNUPI) | not a coupling | places nodes on the helix axis inline |
 | 15 | display junction-balance roll | display-only | `junction_balance=` on render feeds only |
 

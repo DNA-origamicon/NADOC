@@ -640,9 +640,38 @@ _REV_P_DELTA_REV_CELL: float = _ATOMISTIC_PP_SEP_RAD - (
 # all P azimuthal corrections.  Rotates e_radial (moving the frame origin and
 # co-rotating e_n/e_y) so all atoms in the template orbit the axis as one body.
 #
-# Value calibrated by overlaying the atomistic model on the NADOC bead/slab
-# representation: −32° aligns the backbone groove phase of the all-atom model
-# with the coarse-grained model at phase_offset=0.
+# ⚠ RE-JUSTIFIED 2026-08-07 — the value did not change, its reason did.  It used to read
+# "calibrated by overlaying the atomistic model on the NADOC bead/slab representation:
+# −32° aligns the backbone groove phase of the all-atom model with the coarse-grained
+# model at phase_offset=0", i.e. the DISPLAY deciding where atoms go.  Under
+# atomistic-as-ground-truth that is not a justification, so it was checked against the
+# only measurement that can settle it: the crossover-backbone azimuth of equilibrated
+# free-NAMD origami (`scripts/measure_interhelix_phase.py` — the azimuth of the crossing
+# phosphate about its own helix axis, 0° = the inter-helix direction).
+#
+# On `workspace/18hb.nadoc`, 1420 crossover measurements in that exact convention:
+#
+#   roll                       φ mean     R      |φ| median
+#   −32° alone                 +5.72     0.920     15.68
+#   −32° + junction balance    −1.22     0.924     21.53   ← what ships
+#   junction balance alone    +13.93     0.896      3.48
+#   MD (free NAMD, 18hb)       +7.30       —       19.10
+#
+# So −32° is 1.6° from the MD mean and the value stands on ITS OWN atomistic evidence.
+#
+# ⚠ The number that is NOT settled is the TOTAL.  `atomistic_phase_offset_rad` adds the
+# measured DX-junction balance (−14.6° on honeycomb), which takes the crossover azimuth
+# 8.5° to the far side of the MD mean.  Two measured criteria disagree by 14.6°: junction
+# linker SYMMETRY (user-reported, fixed by the balance roll) and equilibrium crossover
+# AZIMUTH (best near −32°).  They measure different things — a seed's local strain versus
+# where relaxed DNA settles — and the owner has seen and approved the balanced build.
+# Pinned loosely by `test_the_atomistic_crossover_azimuth_stays_in_the_md_envelope`, which
+# catches gross drift without pretending the 8.5° is resolved.
+#
+# NOT the same constant as `_FRAME_ROT_RAD`, and not gated on it: this rotates e_radial
+# (orbiting the whole nucleotide about the helix axis), `_FRAME_ROT_M` post-multiplies the
+# frame (spinning the template in place, origin fixed).  Retiring _FRAME_ROT_RAD needs
+# ~300 template coordinates re-quoted; re-justifying this one needed a measurement.
 _ATOMISTIC_PHASE_OFFSET_RAD: float = _math.radians(-32.0)
 
 # ── Junction-balance roll for the ATOMISTIC rep (2026-08-07) ──────────────────
