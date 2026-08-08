@@ -95,6 +95,18 @@ permanently out:
   (the correction chain) and cost an atom build per geometry request. The owner has ruled the
   current reps correct; siblings off one site is the design.
 
+## ⚠ Known red: TD-30 (added 2026-08-07)
+
+The first full-suite run since 2026-07-20 is **43 failed / 7248 passed**, 41 of them one root:
+extra-base inserts thread nucleotide rings at 17 of 22 swept helical phases. **Pre-existing** —
+identical on a worktree at `6076989` — and parked by owner decision for a dedicated session, so a
+red slow suite here is expected, not a surprise. Full attribution in [[project_tech_debt]] TD-30.
+
+One item there IS from this plan: the atomistic junction-balance roll took catenating phases on
+the synthetic reciprocal fixture from **7/33 to 11/33**. It causes none of the failures, but it
+means Phase 7's "no change needed" was right only about DISPLAY leakage — moving the duplex atoms
+does move inserts relative to their neighbours' rings.
+
 ## Risks, each with its countermeasure
 
 1. **ULP drift is not cosmetic here.** The scalar path uses `math.cos`, the array path

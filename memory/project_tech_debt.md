@@ -90,6 +90,7 @@ outranks a stale comment; a stale comment outranks a program of work.
 | TD-26 | 3D store's undeclared `unligatedCrossoverIds` | P2 | Found closing TD-03 — same defect, but adding the key means picking a store slice. |
 | ~~TD-29~~ | ~~Honeycomb twist incommensurate with the 21-bp repeat~~ | — | **FIXED 2026-08-06.** New lattice constant `HONEYCOMB_TWIST_PER_BP_DEG = 2*360/21` (physical `BDNA_TWIST_PER_BP_DEG` left at 34.3, square untouched). Drift 0.657 → 0.000 u/1000 bp; same-lattice designs now numerically identical; DX rotation optimum became design-independent (−3°). 8 test failures, all understood + fixed; 2 new pins. |
 | TD-28 | DEFERRED AUDIT: all linker + relax code (~5.2k LOC) | P2 · **BLOCKED by design** | Parked until TD-27's basic-design geometry is settled. These modules fit poses against bead positions and are the 14 failures blocking TD-27's flip — re-deriving them before the placement settles means doing it twice. |
+| TD-30 | Extra-base inserts pierce nucleotide rings at most helical phases — 41 slow tests red | P1 · **needs a dedicated session** | Full suite 2026-08-07: 17 of 22 swept phases thread a ring on the reciprocal fixture, and the build gate refuses them. Pre-existing (identical on `6076989`) and red since the suite last passed on 2026-07-20. Owner: park it, do not fix in a normal session. |
 | TD-27 | Nucleotide-geometry correction stack — 5 tiers that partly cancel each other | P1 · staged | Mostly a program of work (→ P3 by the rubric), but it carries **two confirmed live groove-sign bugs** (`oxdna_interface.py:119`, `mrdna_bridge.py:381`) and a false "net effect = 0°" comment on a locked constant. Staged so the cheap, behaviour-preserving half lands first. |
 
 ## DECISIONS — one question each, the user's call
@@ -297,6 +298,53 @@ anchor as unverified.** Three passes in, the hit rate on prose-written anchors i
 ---
 
 ## Open items
+
+### TD-30 — extra-base inserts pierce nucleotide rings at most helical phases (found 2026-08-07 by the first full-suite run since 2026-07-20)
+
+**Owner decision 2026-08-07: PARK IT.** Not to be fixed in an ordinary coding session — piercing,
+clash and extra-base geometry get a dedicated session. This entry exists so the red suite is a
+known, attributed state rather than a surprise.
+
+**The failure.** `just test` → **43 failed, 7248 passed, 88 skipped** (33 min). 41 of the 43 share
+one root: an extra base's own `C3'-O3'` bond threads a nucleotide ring.
+
+| failures | test | note |
+|---|---|---|
+| 20 | `test_ring_piercing.py` — `test_no_phase_pierces[bp-T/TT]` and siblings | the direct symptom |
+| 21 | `test_junction_topology.py::test_a_catenating_phase_cannot_reach_a_seed` | **not a second bug**: it asserts a catenation-clean phase builds without raising, and `gate_seed_topology` also checks piercing, so it raises |
+| 1 | `test_namd_topology::test_extra_base_junction_backbone_bonds_are_sane` | same family |
+| 1 | `test_surface_visual_regression[VoltronCore]` | **different root** — see below |
+
+**Attributed, not assumed.** Measured on a worktree at `6076989` (before this session and before
+the other computer's three commits): the pre-session tree pierces the **same 17 of 22** phases.
+`test_namd_topology` also fails there. So the piercing is pre-existing and has been red since the
+watermark, `29d8c9af` (2026-07-20) — through the measured-template landing and the honeycomb twist
+fix, both of which moved insert geometry.
+
+**The gate is working.** These builds are being REFUSED, not silently shipped. A pierced ring is a
+permanent topological defect that no relaxation can undo, so refusing is the correct behaviour;
+what is broken is that most phases produce one.
+
+**One thing the 2026-08-07 atomistic junction-balance roll DID make worse, recorded so the
+dedicated session has it:** catenating phases on the synthetic reciprocal fixture went **7/33 →
+11/33**. It causes none of the failures above (those are piercing), but it is a real degradation of
+insert topology, and it is the coupling helical-site Phase 7 closed as "no change needed" — that
+judgement was about DISPLAY leakage, which was right, and did not consider that moving the duplex
+atoms moves inserts relative to their neighbours' rings.
+
+**The one unrelated failure.** `test_surface_visual_regression[VoltronCore]` is a stale baseline,
+not a topology bug: area **+4.98%** against a 5% band WITHOUT the balance roll (i.e. it was 0.02
+percentage points from failing on its own) and **+5.35%** with it. Subject is
+`workspace/oxdna_jobs/154d3ea291b7/design.json`, not `workspace/VoltronCore.nadoc` — measuring the
+latter gives a different area and a wrong attribution. Re-baselining is a judgement call on a
+visual-regression panel and was deliberately left alone.
+
+**For the dedicated session.** `_reciprocal_design(extra, bp)` in `tests/test_junction_topology.py`
+is the sweep fixture; `_PHASE_SWEEP` is bp 8-18 (one helical turn). `piercing_report` /
+`catenation_report` are the oracles and both are cheap (seconds for the whole sweep), so the inner
+loop is fast. Insert positions come from `_build_extra_base_atoms` (`atomistic.py:3046`), which
+interpolates a Bezier between the two junction nucleotides' geometric-layer beads — inserts follow
+that chord and nothing adjusts them afterwards.
 
 ### TD-27 — the nucleotide-geometry correction stack: five tiers that partly cancel each other (found 2026-08-06, audit prompted by the measured-atomistic landing)
 
