@@ -13,7 +13,7 @@
 // It also pins the flat-list convergence (mrDNA-shaped ctx), the poll-signature
 // short-circuit, and run-button enablement.
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   buildJobRowModel, buildJobListModel, jobListSignature, runButtonEnabled,
 } from './jobs_panel_model.js'
@@ -184,6 +184,35 @@ describe('U3 parity pin — canonical row matches old oxDNA _jobRow byte-for-byt
     const unsel = renderJobRow(buildJobRowModel(OX_JOBS[0], oxdnaCtx(S()), { depth: 0, listIndex: 1 }))
     expect(sel.style.background).toBeTruthy()
     expect(unsel.style.background).toBeFalsy()
+  })
+
+  describe('right-click is opt-in per panel', () => {
+    const row = (opts) =>
+      renderJobRow(buildJobRowModel(OX_JOBS[0], oxdnaCtx(S()), { depth: 0, listIndex: 1 }),
+                   { doc: document, ...opts })
+
+    const rightClick = (el) => {
+      const e = new window.MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+      el.dispatchEvent(e)
+      return e
+    }
+
+    it('reports the job id and forwards the event when a handler is passed', () => {
+      const onContextMenu = vi.fn()
+      rightClick(row({ onContextMenu }))
+      expect(onContextMenu).toHaveBeenCalledWith('root1', expect.anything())
+    })
+
+    it('leaves preventDefault to the handler, not the row', () => {
+      // The unified Simulate list mixes engines and offers a menu on NAMD rows only.
+      // Suppressing the browser menu here would leave every other engine's rows with no
+      // menu at all — the handler is the only thing that knows whether it will show one.
+      expect(rightClick(row({ onContextMenu: () => {} })).defaultPrevented).toBe(false)
+    })
+
+    it('leaves the native menu alone for panels that pass no handler', () => {
+      expect(rightClick(row({})).defaultPrevented).toBe(false)
+    })
   })
 })
 

@@ -1195,6 +1195,29 @@ body:has(#right-panel.locked-inactive) .toast {
   margin-bottom: var(--space-2);
 }
 
+/* The read-only ("View settings" on an existing job) banner. Same shape as the override
+   summary, in the neutral accent rather than the warning colour — a locked view is not a
+   problem with the run. */
+.wizard-readonly-banner {
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  background: rgba(31, 111, 235, 0.1);
+  border: 1px solid rgba(31, 111, 235, 0.4);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.wizard-readonly-banner strong { color: var(--color-text-primary); }
+
+/* A value the locked view STATES rather than offers (the parent a production run
+   continued). Sits where a control would, so the field grid still lines up. */
+.wizard-field__static {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  padding: 3px 0;
+}
+
 .wizard-conditions { margin-top: var(--space-3); }
 .wizard-cond-group h4 {
   font-size: var(--text-xs);

@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
-  TARGETS, TARGET_IDS, UNWIRED_TARGETS,
+  RESOURCE_FIELDS, TARGETS, TARGET_IDS, UNWIRED_TARGETS,
   atomCapLabel, defaultPartition, localGpuSpeedFactor, localHardwareSummary,
   partitionChoices, relativeSpeedLabel, renderSlurmDetails, slurmFacts,
+  resourceContextRows, resourceFieldValues, resourceNotes,
   targetPayloadFields, targetReadiness,
 } from './md_job_wizard_target_model.js'
 
@@ -106,13 +107,15 @@ describe('targetReadiness', () => {
 describe('targetPayloadFields', () => {
   it('local carries no cluster fields', () => {
     expect(targetPayloadFields('local')).toEqual({
-      execution_target: 'local', cluster_name: null, partition: null, runpod_gpu_key: null,
+      execution_target: 'local', cluster_name: null, partition: null,
+      slurm_resources: null, runpod_gpu_key: null,
     })
   })
 
   it('alpine carries the cluster and the chosen partition', () => {
     expect(targetPayloadFields('alpine', { partition: 'ah200' })).toEqual({
-      execution_target: 'alpine', cluster_name: 'alpine', partition: 'ah200', runpod_gpu_key: null,
+      execution_target: 'alpine', cluster_name: 'alpine', partition: 'ah200',
+      slurm_resources: null, runpod_gpu_key: null,
     })
   })
 
@@ -123,6 +126,97 @@ describe('targetPayloadFields', () => {
 
   it('falls back to local for an unknown target', () => {
     expect(targetPayloadFields('nonsense').execution_target).toBe('local')
+  })
+
+  it('carries edited SLURM resources for alpine', () => {
+    const out = targetPayloadFields('alpine', {
+      partition: 'ah200', resources: { walltime: '48:00:00', cores: 16 },
+    })
+    expect(out.slurm_resources).toEqual({ walltime: '48:00:00', cores: 16 })
+  })
+
+  it('sends null rather than {} when nothing was edited', () => {
+    // An empty dict would read as "the user chose these", and the backend would stop
+    // re-deriving the request from the built package's exact atom count.
+    expect(targetPayloadFields('alpine', { partition: 'ah200', resources: {} }).slurm_resources)
+      .toBeNull()
+  })
+
+  it('drops resources when the run is not on the cluster', () => {
+    expect(targetPayloadFields('local', { resources: { cores: 16 } }).slurm_resources).toBeNull()
+  })
+})
+
+const SIZING = {
+  sized: true,
+  n_atoms: 623_400,
+  n_atoms_source: 'estimated',
+  total_ns: 12,
+  resources: {
+    partition: 'ah200', kind: 'gpu', gpus: 1, cores: 8, mem_gb: 52,
+    walltime: '10:00:00', qos: 'normal', expected_ns_per_day: 28.75, measured: false,
+    est_cost_su: 1240.4, safety_factor: 1.5, notes: ['GPU-resident above 100k atoms.'],
+  },
+  available_qos: [{ name: 'normal', max_walltime_h: 24 }, { name: 'long', max_walltime_h: 168 }],
+}
+
+describe('resourceFieldValues', () => {
+  it('shows the recommendation when nothing has been edited', () => {
+    const v = resourceFieldValues(SIZING, {})
+    expect(v.cores).toEqual({ value: '8', recommended: '8', edited: false })
+    expect(v.walltime.value).toBe('10:00:00')
+    expect(v.qos.edited).toBe(false)
+  })
+
+  it('an edit wins and is marked as the user’s', () => {
+    const v = resourceFieldValues(SIZING, { walltime: '48:00:00' })
+    expect(v.walltime).toEqual({ value: '48:00:00', recommended: '10:00:00', edited: true })
+    expect(v.cores.edited).toBe(false)
+  })
+
+  it('typing the recommended value still counts as pinned', () => {
+    // It is what gets SENT, so the chip must not claim it is still following the
+    // recommendation — the value would otherwise change under the user at submit time.
+    expect(resourceFieldValues(SIZING, { cores: '8' }).cores.edited).toBe(true)
+  })
+
+  it('is blank, not broken, with no sizing yet', () => {
+    const v = resourceFieldValues(null, {})
+    expect(RESOURCE_FIELDS.every(f => v[f.key].value === '')).toBe(true)
+  })
+})
+
+describe('resourceContextRows', () => {
+  it('states the size, its provenance, throughput and cost', () => {
+    const rows = Object.fromEntries(resourceContextRows(SIZING))
+    expect(rows['System size']).toBe('623,400 atoms (estimated — not solvated yet)')
+    expect(rows['Simulation']).toBe('12 ns total')
+    expect(rows['Throughput']).toBe('28.8 ns/day (estimated)')
+    expect(rows['Est. cost']).toBe('1,240 SU')
+  })
+
+  it('drops the estimate caveat once the count is real', () => {
+    const rows = Object.fromEntries(
+      resourceContextRows({ ...SIZING, n_atoms_source: 'provided' }))
+    expect(rows['System size']).toBe('623,400 atoms')
+  })
+
+  it('returns nothing without a sizing', () => {
+    expect(resourceContextRows(null)).toEqual([])
+    expect(resourceContextRows({ sized: false })).toEqual([])
+  })
+})
+
+describe('resourceNotes', () => {
+  it('leads with the walltime headroom, then the recommender’s own notes', () => {
+    expect(resourceNotes(SIZING)).toEqual([
+      'Wall time carries 1.5× headroom.', 'GPU-resident above 100k atoms.',
+    ])
+  })
+
+  it('tolerates a bare string note and no sizing', () => {
+    expect(resourceNotes({ resources: { notes: 'one thing' } })).toEqual(['one thing'])
+    expect(resourceNotes(null)).toEqual([])
   })
 })
 

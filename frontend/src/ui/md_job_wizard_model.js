@@ -419,6 +419,11 @@ export function planPayload(state = {}) {
       if (Object.prototype.hasOwnProperty.call(t, key) && t[key] != null) body[as] = t[key]
     }
     send('length_ns')
+    // Raw steps, for a job whose length can only be recovered by counting what it ran (a
+    // child created before its spawn request was recorded — see `jobSettingsState`). The
+    // backend prefers `length_ns` and falls back to `steps`; sending NEITHER would silently
+    // plan the wizard's 1 ns default over a 200 ns run.
+    send('steps')
     send('dcd_freq')
     send('seed')
     send('langevin_damping')
@@ -440,7 +445,7 @@ export function planPayload(state = {}) {
  * key in `touched` can never reach the request and 400 it.
  */
 export const PRODUCTION_FIELDS = [
-  'length_ns', 'dcd_freq', 'production_timestep_fs', 'production_rigid_bonds',
+  'length_ns', 'steps', 'dcd_freq', 'production_timestep_fs', 'production_rigid_bonds',
   'production_hmr', 'gpu_resident', 'enm_restraints', 'langevin_damping', 'seed',
   'allow_undersized_cell',
 ]
@@ -487,6 +492,111 @@ export function productionPayload({ touched = {}, autostart = false,
     body.stage_overrides = stageOverrides
   }
   return body
+}
+
+/** The two production request fields whose names differ from the wizard's own. Inverse of
+ *  the rename `productionPayload` applies — see its comment. */
+const PRODUCTION_REQUEST_ALIASES = { rigid_bonds: 'production_rigid_bonds', hmr: 'production_hmr' }
+
+/**
+ * Pure: total integration steps across a job's PRODUCTION segments.
+ *
+ * How long a run was is otherwise unrecoverable for a child whose spawn request predates
+ * being recorded. The step counts are on the record and exact; the segment's stage text
+ * ("0.5 ns production replica (seed 54321)") also carries it, but parsing prose is a worse
+ * source than counting. A velocity-reseed bridge is excluded — it is not sampled time.
+ */
+export function productionSteps(job) {
+  // Same test the backend applies (`md_job._is_production_segment_name`): name OR stage
+  // text, plus the `_prod` short form. One definition, mirrored — not a second guess.
+  const isProduction = (s) => {
+    const n = String(s?.name || '').toLowerCase()
+    return n.includes('production') || n.includes('_prod')
+      || String(s?.stage || '').toLowerCase().includes('production')
+  }
+  return (job?.segments || [])
+    .filter(isProduction)
+    .reduce((n, s) => n + (Number(s?.steps) || 0), 0)
+}
+
+/**
+ * Pure: rebuild the wizard's state from a job that has ALREADY been created, for the
+ * read-only "View settings" view.
+ *
+ * The inverse of `wizardPayload` / `productionPayload`. A job records the request it was
+ * created from (`prep_params` for a relaxation, `spawn_params` for a production child),
+ * so replaying that request through `POST /md/protocol-plan` reproduces the very plan the
+ * user was looking at when they pressed Create — stage table, conditions and totals
+ * included, with no stored copy of any of it.
+ *
+ * **Why the explicit-key set matters.** The stored request is a `model_dump()`: every
+ * default is materialised in it, so it cannot say which values the user actually chose.
+ * The plan's provenance chips ("you set this" vs "from the protocol") are computed from
+ * the request's `model_fields_set`, so replaying the dense dump would report every single
+ * field as user-set. Jobs therefore also record the key set (`prep_params_set` /
+ * `spawn_params_set`) and only those keys are restored, which makes the replay
+ * byte-equivalent to the original request. Jobs created before that was recorded have no
+ * key set; they fall back to restoring every stored value and `provenanceKnown` is false,
+ * so the view can say the chips are not to be trusted rather than quietly lying.
+ *
+ * @param {object} job  a job record from `GET /md/jobs`
+ * @returns {{available: boolean, mode: string, presetId: string|null, touched: object,
+ *   stageOverrides: object, parentJobId: string|null, target: string, partition: string|null,
+ *   provenanceKnown: boolean}}
+ */
+export function jobSettingsState(job) {
+  // A run off a finished package, either way it was made: the "Production" button
+  // (`run_kind`) or an ensemble fan-out (`ensemble_index`, whose replicas leave `run_kind`
+  // unset). Both inherit their chemistry, cell and ladder from the parent's package, which
+  // is exactly what the wizard's production mode renders.
+  const production = job?.run_kind === 'production' || job?.ensemble_index != null
+  const source = (production ? job?.spawn_params : job?.prep_params) || null
+  const explicit = production ? job?.spawn_params_set : job?.prep_params_set
+  const allowed = production ? PRODUCTION_FIELDS : WIZARD_FIELDS
+  const known = Array.isArray(explicit)
+  const touched = {}
+  for (const [rawKey, value] of Object.entries(source || {})) {
+    // Restrict to what the user chose when we know it; otherwise every stored value, which
+    // is right about the VALUES and over-reports the provenance (flagged by the caller).
+    if (known && !explicit.includes(rawKey)) continue
+    const key = (production && PRODUCTION_REQUEST_ALIASES[rawKey]) || rawKey
+    if (!allowed.includes(key)) continue
+    if (value == null) continue
+    touched[key] = value
+  }
+  const parentJobId = production ? (job?.parent_job_id || null) : null
+  // A child created before spawn requests were recorded still has a viewable plan: the
+  // protocol endpoint resolves a production run's inherited values from the ROOT
+  // relaxation's own request and manifest, not from the child's. So everything except what
+  // the child chose FOR ITSELF reconstructs exactly — and the two things it did choose are
+  // still on the record: the velocity seed, and how long it ran (recoverable by counting
+  // the steps its production segments actually carry, rather than parsing a stage label).
+  if (!source && parentJobId) {
+    if (job?.ensemble_seed != null) touched.seed = job.ensemble_seed
+    const steps = productionSteps(job)
+    if (steps) touched.steps = steps
+  }
+  return {
+    // Viewable when there is a recorded request, OR when it is a child whose parent can
+    // rebuild the plan. Only a ROOT relaxation with no request has genuinely nothing left.
+    available: !!source || !!parentJobId,
+    // True when there was no request to replay and the view is standing on the parent
+    // instead. The two cases need different things said about them: this one reconstructs
+    // faithfully, a relaxation with no key set merely cannot caption what it shows.
+    rebuiltFromParent: !source && !!parentJobId,
+    mode: production ? 'production' : 'relaxation',
+    presetId: source?.relax_preset || null,
+    touched,
+    stageOverrides: source?.stage_overrides || {},
+    parentJobId,
+    // Where it RAN, from the job record itself rather than the request — a job submitted
+    // to Alpine from the panel after being created locally has moved since.
+    target: job?.execution_target || 'local',
+    partition: job?.partition || null,
+    // An explicit-key list means nothing without the request it indexes: a child rebuilt
+    // from its parent has no per-field provenance to report, whatever it carries.
+    provenanceKnown: known && !!source,
+  }
 }
 
 /** Pure: what the plan says about one production setting — value, provenance, reason.

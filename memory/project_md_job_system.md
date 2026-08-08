@@ -55,10 +55,101 @@ slot and the `_0S_` settle stage. A carve drops the settle stage → 21.
   **Navigation is index arithmetic over `TABS`, not hardcoded ids** — it was
   `setTab('plan')`/`setTab('setup')` when there were only two.
 
+### The wizard is also the job's settings VIEWER (read-only) — 2026-08-07
+
+Right-click any NAMD job row → **View settings…** reopens *this* wizard on that job, locked.
+There is deliberately **no second "summary" view** — a separate one would drift out of step
+with the wizard within a release.
+
+**Wire it to `simulate_jobs.js`, NOT `md_jobs_panel.js`.** `#md-jobs-list` still exists and
+still renders, but it is **display:none** — the list the user actually sees and right-clicks
+is `#simulate-jobs-list`, the unified cross-engine list from the simulate-panel overhaul.
+The first cut of this feature wired the MD panel's own list and looked completely dead in
+the app; a Playwright survey (`md-jobs-list` present, `offsetParent === null`, 0 rows) is
+what found it. `renderJobRow` gained an opt-in `onContextMenu`, and **the handler — not the
+renderer — calls `preventDefault`**: the unified list mixes engines and only NAMD rows get a
+menu, so suppressing in the renderer would leave oxDNA/mrDNA/CanDo rows with no menu at all.
+`simulate_jobs.js` nodes are a reduced cross-engine shape with no `prep_params`, so the
+lookup lives behind `mdPanel.openJobSettings(jobId)` / `hasJobSettings(jobId)`, which read
+the MD panel's full records (refetching if it has not polled since the job appeared).
+
+**How it reconstructs the run.** Nothing about the plan is stored. `jobSettingsState(job)`
+(pure, in `md_job_wizard_model.js`, 14 vitest cases) inverts `wizardPayload` /
+`productionPayload` back into `state`, and replaying that request through
+`POST /md/protocol-plan` — which is side-effect-free — regenerates the identical stage
+table, conditions and totals the user saw when they pressed Create.
+
+**Provenance is why two new fields exist.** `prep_params` is a `model_dump()`, so every
+default is materialised in it and it cannot say what the user actually *chose* — but the
+chips ("you set this" vs "from the protocol") are computed from `model_fields_set`. So
+`MdJob.prep_params_set` now records the explicit key set at creation, and only those keys
+are restored; a dense replay would caption every protocol default as a user choice. Jobs
+created before this get the fallback (all stored values, `provenanceKnown:false`) and the
+banner says the chips can't be trusted. **Production children record
+`spawn_params`/`spawn_params_set`** — deliberately NOT `prep_params`, because refit
+(`routes_md.py`), the plan's preset lookup and the runner's GPU-fallback policy all key off
+a production child having none, and a `ProductionRunRequest` dump there would reroute them.
+
+**What read-only suppresses, and why each matters:** `onTargetChange` (mirrors onto the
+panel's run-target radios → would move where the NEXT job runs), the run-directory picker
+(shared app-wide preference), the cluster login chip (a second `/api/cluster/status`
+poller), `restorePreferences()` (would overwrite the run's own recorded answer),
+`/cluster/slurm-preview` + `/md/optimize-advanced/hardware` + `/cluster/availability` (all
+read the world NOW, not the run — step 3 shows `job.resources`, step 1 the recorded
+partition), the preset-availability re-pick (would silently recaption a retired protocol),
+and the step-1 readiness gate (Alpine's demands a *current* session, which would refuse to
+page through a finished run). Locking is applied where controls are BUILT, not by a blanket
+DOM pass, so a control added later cannot quietly become editable.
+`md_job_wizard_readonly.test.js` (17 jsdom cases) pins all of it, including that the live
+wizard's state is parked and restored so a viewed job's settings never leak into the next
+new job, and that `ensureParent` is skipped (it would repoint a viewed production child at
+the newest relaxation, or null its parent out when the list is filtered to another part).
+
+**A CHILD needs no stored request at all (2026-08-07 fix).** Every Alpine job reported
+"settings were not recorded for this run", because Alpine is mostly where fan-outs run and
+`available` demanded a stored request. Two misses: **an ensemble replica leaves `run_kind`
+unset** (its marker is `ensemble_index`), so it was read as a relaxation; and children
+predating `spawn_params` had nothing. But `_inherited_from_parent` resolves a production
+run's chemistry, cell and ladder from the **ROOT relaxation**, so the parent id alone
+rebuilds the plan. `available` is now `stored request OR a parent`; only a root relaxation
+with no request is genuinely unviewable. The two things a child chose *for itself* are still
+on the record — `ensemble_seed`, and its length via `productionSteps(job)` (summing
+production segments, mirroring `md_job._is_production_segment_name`; parsing the stage
+label's "0.5 ns" would be the worse source). `steps` joined `PRODUCTION_FIELDS` +
+`planPayload`, since sending neither length nor steps silently plans the wizard's 1 ns
+default over the real run. The ensemble fan-out route now records `spawn_params` too.
+
+**Never render a child's parent from a picker over the live list.** `productionParents` is
+built from the panel's *current* jobs; a parent that is archived, filtered to another part
+or deleted is absent, and **a `<select>` whose value matches no option displays its first
+one** — an Alpine replica was captioned with an unrelated run's name and time. Read-only
+states the parent from `plan.inherited` instead, which is the run the stage table was
+actually built against.
+
+**Two things the plan replay makes lie, both suppressed.** The preset card's note counts
+settings "from this protocol"; on a job with no recorded key set the replay sends every
+value explicitly, so the note read *"every setting has been overridden"* about a run that
+overrode nothing — it is dropped when `provenanceKnown` is false. And step 1's readiness
+hint repeated the card's own sentence, so read-only returns an empty reason.
+
+Related: **a field's `reason` explains how the PLAN resolved it**, so it is shown only when
+the chip's provenance matches the plan's. A replica whose length came back as raw steps read
+"you set this · 0.5" over "the wizard's own default run length". No-op when they agree,
+which is every ordinary field. The banner also distinguishes *rebuilt from parent*
+(`rebuiltFromParent`) from *provenance unknown* — only the latter makes the chips
+untrustworthy.
+
+**Verified in-app 2026-08-07** (Playwright, read-only: the `2hb_1xT` run created
+2026-07-30 15:26:38). Menu opens on NAMD rows only; all 3 steps page; 19 controls, 0
+enabled; 1034 stage cells, 0 unlocked; no `⋯` buttons; footer Close / ← Previous / Next →;
+zero console errors. The design file was byte-identical afterwards.
+
 ### Step 1 — "Where it runs" (2026-08-06)
 
 `md_job_wizard_target.js` (factory) + `md_job_wizard_target_model.js` (pure, 28 vitest
-cases) + `md_job_wizard_target.test.js` (15 jsdom cases).
+cases) + `md_job_wizard_target.test.js` (15 jsdom cases). Both the step and
+`md_job_wizard_resources.js` take a `readOnly()` getter — see the settings-viewer section
+above for what that turns off.
 
 **Why first.** The compute targets stopped being interchangeable once Alpine got H200s: an
 H200 behind a 13-day A100 queue, a local RTX, and a rented cloud GPU differ enough in
@@ -94,6 +185,40 @@ camelCase args, so the snake_case API fields must be spread onto its RESULT, not
 `_remote_resources` and defaulted into the review card's dropdown. A node picked against a
 live queue picture must survive to submission, which can happen in a later session long
 after that queue picture is gone.
+
+### The SLURM resources moved INTO step 1, and the popup stopped auto-opening (2026-08-07)
+
+The submit-review card used to open by itself the moment an Alpine job finished preparing
+(`_maybeOpenAlpineReview`). Two things were wrong with that: the resources it asked about
+(cores, wall time, memory, GPUs, QoS) are answers to *which node*, decided a whole wizard
+earlier — and it pre-empted the panel, so **anchors and an electric field, which attach to a
+prepared job, could not be set before something demanded a submit decision**.
+
+- `md_job_wizard_resources.js` (new factory) renders those five controls under the partition
+  table in step 1, **autopopulated** from `POST /cluster/slurm-preview`, which estimates the
+  solvated atom count from the LIVE DESIGN and runs the same recommender the submit path uses.
+  Re-sizes on a node change or a run-length change, memoised on `partition|total_ns`.
+- **Only edited fields are sent** (`slurm_resources`, sparse) → `MdJob.requested_resources`
+  → `_merge_requested()` lays them over the auto-recommendation on both the submit path and
+  the review-card preview. The estimate informs the choice without freezing it: an untouched
+  wall time is still re-derived from the built package's EXACT atom count.
+- `_maybeAnnounceAlpineReady` replaces the auto-open with a toast. Submitting is now always a
+  deliberate click; the review card still opens from **Submit to Alpine** (pre-filled with the
+  wizard's numbers), Resume and Ensemble.
+- **The ☁ button left the Cluster card — it IS the primary run control now.** `mdRunControl`
+  gained two Alpine-only states ahead of the generic `runControlState` branch:
+  `PREPARING` (disabled, `spinner:true`, label `Preparing…`) while the local package builds,
+  then `SUBMIT` (`☁ Submit to Alpine`, gated on `clusterState` via
+  `alpineTargetDisabledReason`), and `Submitting…` + spinner for the length of the upload
+  (`submitting` option, fed from `_remoteSubmitting`). `#md-jobs-submit-alpine-btn` is deleted
+  from `index.html`. **Consequence to know: an Alpine job's local prep can no longer be
+  stopped** — the primary control is the only Stop, and it now spins instead. A submitted
+  cluster job still shows ■ Stop (scancel); a LOCAL preparing job is untouched.
+- **CPU threads / CUDA devices are local-only** (`localOnly: true` in the wizard's `FIELDS`):
+  hidden from step 2 and stripped from the payload whenever the target is not `local`, because
+  on a cluster the allocation decides both.
+- `/cluster/slurm-preview` now also returns `available_qos` (the tiers valid for the resolved
+  partition), same shape as the review card's.
 
 ### Step 3 also carries the full SLURM request (2026-08-06)
 

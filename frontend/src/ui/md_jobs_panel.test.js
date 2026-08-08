@@ -369,8 +369,8 @@ describe('mdRunControl (ONE control for the selected job: Run / Stop / Resume)',
     expect(rc.disabled).toBe(true)
     expect(rc.title).toMatch(/finished/)
   })
-  it('a remote job awaiting submit → disabled, pointing at the review card', () => {
-    const rc = mdRunControl({ status: 'queued', execution_target: 'alpine' }, { runTarget: 'alpine' })
+  it('a RunPod job awaiting submit → disabled, pointing at the review card', () => {
+    const rc = mdRunControl({ status: 'queued', execution_target: 'runpod' }, { runTarget: 'runpod' })
     expect(rc.disabled).toBe(true)
     expect(rc.title).toMatch(/review card/)
   })
@@ -380,6 +380,46 @@ describe('mdRunControl (ONE control for the selected job: Run / Stop / Resume)',
   })
   it('busy (a request already in flight) → disabled', () => {
     expect(mdRunControl({ status: 'queued', execution_target: 'local' }, { busy: true }).disabled).toBe(true)
+  })
+})
+
+describe('mdRunControl on Alpine (the ☁ button in the Cluster card folded in here)', () => {
+  const connected = { runTarget: 'alpine', clusterState: 'connected' }
+  const prepping = { job_id: 'j1', status: 'preparing', execution_target: 'alpine' }
+  const ready = { job_id: 'j1', status: 'queued', execution_target: 'alpine' }
+
+  it('while the package is being built → a disabled, spinning Preparing…', () => {
+    // NOT "■ Stop Run" (what the generic isActive branch gave it): the local phase of an
+    // Alpine job exists only to produce a package, and its outcome is a submit.
+    const rc = mdRunControl(prepping, connected)
+    expect(rc).toMatchObject({ action: 'preparing', label: 'Preparing…', disabled: true, spinner: true })
+  })
+
+  it('once prepared → ☁ Submit to Alpine', () => {
+    expect(mdRunControl(ready, connected))
+      .toMatchObject({ action: 'submit', label: '☁ Submit to Alpine', disabled: false })
+  })
+
+  it('no cluster session → the submit is disabled and says why', () => {
+    const rc = mdRunControl(ready, { runTarget: 'alpine', clusterState: 'disconnected' })
+    expect(rc.action).toBe('submit')
+    expect(rc.disabled).toBe(true)
+    expect(rc.title).toMatch(/cluster/i)
+  })
+
+  it('while the package uploads → Submitting…, disabled, so it cannot be sent twice', () => {
+    const rc = mdRunControl(ready, { ...connected, submitting: true })
+    expect(rc).toMatchObject({ label: 'Submitting…', disabled: true, spinner: true })
+  })
+
+  it('a SUBMITTED cluster job still stops (scancel), it does not offer submit again', () => {
+    const live = { job_id: 'j1', status: 'running', execution_target: 'alpine', slurm_job_id: '42' }
+    expect(mdRunControl(live, connected)).toMatchObject({ action: 'stop' })
+  })
+
+  it('a LOCAL job preparing is untouched — it still stops', () => {
+    expect(mdRunControl({ status: 'preparing', execution_target: 'local' }, connected))
+      .toMatchObject({ action: 'stop', label: '■ Stop Run' })
   })
 })
 

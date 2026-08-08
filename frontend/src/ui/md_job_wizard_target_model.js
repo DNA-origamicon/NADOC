@@ -118,14 +118,95 @@ export function targetReadiness(target, { clusterState = 'disconnected', partiti
  *
  * `cluster_name`/`partition` are cleared for non-Alpine targets rather than left
  * stale — a leftover partition on a local job would resurface at submit time.
+ * `slurm_resources` carries only what the user edited (see `resourceOverrides`); an
+ * empty edit set is sent as null so the backend keeps auto-recommending.
  */
-export function targetPayloadFields(target, { partition = null, runpodGpuKey = null } = {}) {
+export function targetPayloadFields(target, {
+  partition = null, runpodGpuKey = null, resources = null,
+} = {}) {
+  const edits = target === 'alpine' && resources && Object.keys(resources).length
+    ? resources
+    : null
   return {
     execution_target: TARGET_IDS.includes(target) ? target : 'local',
     cluster_name: target === 'alpine' ? 'alpine' : null,
     partition: target === 'alpine' ? (partition || null) : null,
+    slurm_resources: edits,
     runpod_gpu_key: target === 'runpod' ? (runpodGpuKey || null) : null,
   }
+}
+
+/**
+ * The SLURM resources the first step lets you adjust, in the order they render.
+ *
+ * These used to live in the submit-review card that popped up AFTER the job was created,
+ * which was both too late to reconsider the node and too early to attach anchors. They
+ * belong next to the partition table: picking a node and sizing the request against it
+ * is one decision, and the recommendation below is derived from the design already on
+ * screen.
+ */
+export const RESOURCE_FIELDS = [
+  { key: 'gpus', label: 'GPUs', type: 'number', min: 0, step: 1 },
+  { key: 'cores', label: 'CPU cores', type: 'number', min: 1, step: 1 },
+  { key: 'mem_gb', label: 'Memory', unit: 'GB', type: 'number', min: 1, step: 1 },
+  { key: 'walltime', label: 'Wall time', type: 'text', placeholder: 'HH:MM:SS' },
+  { key: 'qos', label: 'QoS', type: 'select' },
+]
+
+/**
+ * Pure: what each resource control shows — the user's edit if there is one, else the
+ * recommendation sized from this design.  `edited` marks which is which, so the UI can
+ * say "recommended" vs "you set this" and the payload can send only the latter.
+ */
+export function resourceFieldValues(preview, edited = {}) {
+  const rec = preview?.resources || {}
+  const out = {}
+  for (const f of RESOURCE_FIELDS) {
+    const own = Object.prototype.hasOwnProperty.call(edited, f.key) ? edited[f.key] : null
+    const recommended = rec[f.key]
+    // Presence in `edited`, not a value comparison: typing the recommended number is
+    // still a decision to PIN it, and it is what gets sent, so the chip must say so.
+    const isEdited = own != null && own !== ''
+    out[f.key] = {
+      value: isEdited ? String(own) : (recommended == null ? '' : String(recommended)),
+      recommended: recommended == null ? '' : String(recommended),
+      edited: isEdited,
+    }
+  }
+  return out
+}
+
+/**
+ * Pure: the read-only context rows shown above the editable resources — the facts that
+ * EXPLAIN the recommendation rather than being part of it.  The partition table above
+ * already carries free GPUs, wait and relative speed, so those are not repeated.
+ */
+export function resourceContextRows(preview) {
+  const r = preview?.resources
+  if (!r) return []
+  const rows = []
+  if (preview.n_atoms) {
+    rows.push(['System size', `${Number(preview.n_atoms).toLocaleString()} atoms${
+      preview.n_atoms_source === 'estimated' ? ' (estimated — not solvated yet)' : ''}`])
+  }
+  if (preview.total_ns != null) rows.push(['Simulation', `${preview.total_ns} ns total`])
+  if (r.expected_ns_per_day != null) {
+    rows.push(['Throughput', `${Number(r.expected_ns_per_day).toFixed(1)} ns/day${
+      r.measured ? ' (measured)' : ' (estimated)'}`])
+  }
+  if (r.est_cost_su != null) {
+    rows.push(['Est. cost', `${Math.round(r.est_cost_su).toLocaleString()} SU`])
+  }
+  return rows
+}
+
+/** Pure: the recommendation's own caveats — headroom multiplier plus any notes. */
+export function resourceNotes(preview) {
+  const r = preview?.resources
+  if (!r) return []
+  const notes = Array.isArray(r.notes) ? [...r.notes] : (r.notes ? [String(r.notes)] : [])
+  if (r.safety_factor) notes.unshift(`Wall time carries ${r.safety_factor}× headroom.`)
+  return notes
 }
 
 /**

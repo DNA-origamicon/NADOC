@@ -53,7 +53,8 @@ import { initRunpodGpuPicker } from './runpod_gpu_picker.js'
 import { initClusterAvailability } from './cluster_availability.js'
 import { shouldStopLiveSession, shouldResumeDisplays, displayTabIds } from './display_tab_policy.js'
 import { initJobWizard } from './md_job_wizard.js'
-import { isProductionParent } from './md_job_wizard_model.js'
+import { isProductionParent, jobSettingsState } from './md_job_wizard_model.js'
+import { createContextMenu } from './primitives/context_menu.js'
 import { mdMinimizationRow, mdLatestStageLabel } from './md_stage_timeline.js'
 import { mdHealthTileStates, TILE_STATE } from './md_health_tiles.js'
 
@@ -315,6 +316,8 @@ export function mdQueueable(job) {
  *
  *    nothing selected            → disabled, with a hint pointing at ＋ New job
  *    a seeded DRAFT              → solvate-from-seed and start it
+ *    an Alpine job still prepping→ ⟳ Preparing…  (disabled, spinner)
+ *    an Alpine job ready to go   → ☁ Submit to Alpine
  *    running / preparing         → ■ Stop
  *    already in the run queue    → ✕ Queued #N (click to take it back out)
  *    startable while busy        → ＋ Queue  (the server starts it when the machine frees)
@@ -322,11 +325,17 @@ export function mdQueueable(job) {
  *    prepared but never started  → ▶ Run
  *    anything else (completed)   → disabled, with a reason
  *
+ *  The two Alpine rows used to be a separate ☁ button buried in the Cluster card, which
+ *  split the "what do I press to run this?" question across two places — and left the
+ *  primary control saying "■ Stop Run" during a prep whose only outcome is a submit.
+ *
  *  `machineBusy` is "a NAMD job is in flight right now" and `queuedIds` is the server's
  *  queue order — both come from GET /md/queue, so what the button offers and what the
- *  server would actually do can't drift apart. */
+ *  server would actually do can't drift apart.  `clusterState` gates the submit: there is
+ *  no point offering an upload with no session behind it. */
 export function mdRunControl(selectedJob, {
   busy = false, runTarget = 'local', machineBusy = false, queuedIds = [],
+  clusterState = 'disconnected', submitting = false,
 } = {}) {
   if (!selectedJob) {
     return {
@@ -338,6 +347,35 @@ export function mdRunControl(selectedJob, {
     return {
       action: RUN_ACTION.RUN, label: mdDraftRunLabel(selectedJob), disabled: busy,
       title: 'Solvate this seeded job and start it.',
+    }
+  }
+  // An Alpine job's whole local phase exists to produce a package to upload, so the
+  // primary control tracks that: it spins while the package builds, then becomes the
+  // submit. (Only Alpine — a RunPod job's rental flow is still its own thing.)
+  if (selectedJob.execution_target === 'alpine') {
+    if (selectedJob.status === 'preparing') {
+      return {
+        action: RUN_ACTION.PREPARING, label: 'Preparing…', disabled: true, spinner: true,
+        title: 'Solvating and building the package on this computer. Submit unlocks when '
+             + 'it is done — attach anchors or an electric field meanwhile.',
+      }
+    }
+    // The upload itself is minutes of SFTP for an 800 MB package, and a second click on
+    // an enabled-looking button during it is exactly how a job gets submitted twice.
+    if (submitting) {
+      return {
+        action: RUN_ACTION.PREPARING, label: 'Submitting…', disabled: true, spinner: true,
+        title: 'Uploading the package to Alpine, then sbatch.',
+      }
+    }
+    if (mdRemoteAwaitingSubmit(selectedJob)) {
+      const blocked = alpineTargetDisabledReason(clusterState)
+      return {
+        action: RUN_ACTION.SUBMIT, label: '☁ Submit to Alpine', disabled: busy || !!blocked,
+        title: blocked
+          || 'Upload this package and queue it on the cluster with the resources you chose '
+           + 'in the wizard.',
+      }
     }
   }
   const base = runControlState(selectedJob, {
@@ -932,7 +970,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const alpineAvailEl   = document.getElementById('md-jobs-alpine-availability')
   const runTargetAlpineLabel = document.getElementById('md-run-target-alpine-label')
   const runTargetHint   = document.getElementById('md-run-target-hint')
-  const submitAlpineBtn = document.getElementById('md-jobs-submit-alpine-btn')
   const ensembleBtn   = document.getElementById('md-jobs-ensemble-btn')
   const ensembleCount = document.getElementById('md-jobs-ensemble-count')
   const ensembleNsInput = document.getElementById('md-jobs-ensemble-ns')
@@ -1065,7 +1102,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   let _mdFrameShown = false       // has a real MD frame been displayed for the current display job?
   let _earlyStopBusy = false      // a live early-stop POST is in flight (locks the toggle until the server confirms)
   const _metricsByJob = new Map()
-  let _pendingAlpineReview = null   // jobId whose review card opens once prep finishes
+  let _pendingAlpineReview = null   // jobId to announce as ready once its prep finishes
 
   // Alpine submit-review card (Phase 4): fetches the auto-recommended SLURM
   // resources for a prepared job, lets the user review/override, then submits.
@@ -1085,6 +1122,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // percentage that stalls is worse than an honest spinner.
       showOpProgress(label, 'Uploading the prepared package to Alpine…', { indeterminate: true })
       _paintRemoteSubmitting()
+      _paintRunControl()   // ☁ Submit → ⟳ Submitting… for the duration of the upload
     },
     onSubmitEnd: ({ ok, message }) => {
       _remoteSubmitting = null
@@ -1095,6 +1133,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         clusterStatusEl.textContent = message
       }
       _paintRemoteSubmitting()
+      _paintRunControl()
     },
   })
 
@@ -1205,6 +1244,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const state = e.detail?.state
     _updateRunTargetGate(state)
     _renderReconnectPrompt()
+    // ☁ Submit to Alpine is gated on a live session, so signing in has to unlock it
+    // without the user having to reselect the job.
+    _paintRunControl()
     // Edge-detect: the chip re-broadcasts on every 15 s poll, not just transitions.
     const became = state === 'connected' && _lastClusterState !== 'connected'
     _lastClusterState = state
@@ -1513,7 +1555,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // The Cluster card stays visible (it hosts the connect chip); just reset its per-job
     // parts so no stale submit/resume/ensemble/status lingers with nothing selected.
     if (clusterStatusEl) { clusterStatusEl.style.display = 'none'; clusterStatusEl.textContent = '' }
-    if (submitAlpineBtn) submitAlpineBtn.style.display = 'none'
     if (resumeBtn) resumeBtn.style.display = 'none'
     const _ensWrap = document.getElementById('md-jobs-ensemble-wrap')
     if (_ensWrap) _ensWrap.style.display = 'none'
@@ -2523,6 +2564,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // a design that isn't open (the queue is workspace-wide, the list is not).
       machineBusy: _queueBusy || _jobs.some(mdJobIsRunning),
       queuedIds: _queue.map((e) => e.job_id),
+      // Gates ☁ Submit to Alpine — an upload with no Duo session behind it only 409s.
+      clusterState: getClusterState?.() ?? 'disconnected',
+      submitting: !!_remoteSubmitting && _remoteSubmitting.jobId === sel?.job_id,
     })
   }
   function _paintRunControl() {
@@ -2533,12 +2577,27 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     runBtn.title = rc.title || ''
     // Chain mode only queues a plan → always enabled (engines are checked at Launch).
     runBtn.disabled = rc.disabled || _launching || !_enginesOk
-    // Three readings, three colours. GREEN = this starts a run now. AMBER = this stops or
+    // A greyed-out button with no motion reads as "broken", not "working" — so the one
+    // state the user is expected to WAIT through carries a spinner beside its label.
+    if (rc.spinner) {
+      runBtn.prepend(makeSpinner(_C.dim, 10))
+      runBtn.style.display = 'inline-flex'
+      runBtn.style.alignItems = 'center'
+      runBtn.style.justifyContent = 'center'
+      runBtn.style.gap = '5px'
+    } else {
+      runBtn.style.display = ''
+      runBtn.style.gap = ''
+    }
+    // Three readings, three colours. GREEN = this starts a run now (including sending it
+    // to the cluster — a submit spends SU and starts a real run). AMBER = this stops or
     // resumes a real run (the green Run styling on a Stop button is the kind of thing that
     // gets a live run killed by accident). BLUE = scheduling only, nothing happens to the
     // machine yet — the same blue as ＋ New job, which is also a "set it up" action.
     const queueing = rc.action === RUN_ACTION.QUEUE || rc.action === RUN_ACTION.DEQUEUE
-    const stopping = !queueing && rc.action !== RUN_ACTION.RUN
+    const starting = rc.action === RUN_ACTION.RUN || rc.action === RUN_ACTION.SUBMIT
+      || rc.action === RUN_ACTION.PREPARING
+    const stopping = !queueing && !starting
     runBtn.style.background = runBtn.disabled ? '#122117'
       : queueing ? '#1c2333' : (stopping ? '#2d2119' : '#1a4a1a')
     runBtn.style.borderColor = runBtn.disabled ? _C.border
@@ -2726,6 +2785,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (act === RUN_ACTION.RESUME) return _resumeSelected(runBtn)
     if (act === RUN_ACTION.QUEUE) return _queueSelected(runBtn)
     if (act === RUN_ACTION.DEQUEUE) return _dequeueSelected(runBtn)
+    // The cluster hand-off: same review card the ☁ button in the Cluster card used to
+    // open, now reached from the one control that answers "how do I run this?".
+    if (act === RUN_ACTION.SUBMIT) {
+      if (_remoteSubmitting) return       // a package is already uploading
+      return _submitReview.open(sel.job_id)
+    }
     // A seeded draft solvates from its source job's coordinates. Send it through the
     // wizard too, prefilled with what the draft recorded — solvating from a seed is
     // still a whole protocol's worth of choices, and it used to reveal a drawer of
@@ -2832,8 +2897,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (isLocalRun) {
         showToast(full.autostart ? 'Production started' : 'Production job created', 'ok')
       } else {
-        showToast('Alpine production staged — review resources to submit', 'ok')
-        if (childId) _submitReview.open(childId)
+        // Same rule as a relaxation: the wizard's first step already sized the request,
+        // so the child waits for a deliberate Submit rather than opening a card over the
+        // panel the moment it is staged.
+        showToast('Alpine production staged — Submit to Alpine when ready', 'ok')
       }
       return d.job ?? { job_id: childId }
     } catch (err) {
@@ -3037,11 +3104,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }
 
       console.log(`[${_ts()}] md-jobs: job created OK job_id=${job.job_id} status=${job.status}`)
-      // Alpine target: prep runs locally, then the review card opens once the
-      // package is built (_maybeOpenAlpineReview watches for the 'queued' state).
+      // Alpine target: prep runs locally and then STOPS. Nothing is submitted until the
+      // user says so — the wizard already sized the request, and this is the window in
+      // which anchors and an electric field get attached to the prepared job. A popup
+      // here used to close that window the moment prep finished.
       if (payload.execution_target === 'alpine') {
         _pendingAlpineReview = job.job_id
-        showToast('Preparing for Alpine — review opens when the package is ready', 'ok')
+        showToast('Preparing for Alpine — add anchors or a field while it builds, then Submit', 'ok')
       } else {
         showToast(`Preparing: ${job.job_id}`, 'ok')
       }
@@ -3060,24 +3129,24 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
   }
 
-  // Once a queued-for-Alpine job finishes preparing, open the submit-review card.
+  // Once a queued-for-Alpine job finishes preparing, SAY SO — and stop there.
+  //
+  // This used to open the submit-review card automatically, which made the resources it
+  // asked about unanswerable in the right place (the node was chosen a wizard ago) and
+  // pre-empted the panel, so anchors and an electric field — which attach to a prepared
+  // job — could not be set before something demanded a submit decision. The resources now
+  // come from the wizard's first step; submitting is the user's own click.
   // Clears the pending flag on prep failure too so it can't fire on a later run.
-  function _maybeOpenAlpineReview(job) {
+  function _maybeAnnounceAlpineReady(job) {
     if (!job || job.job_id !== _pendingAlpineReview) return
     if (job.status === 'queued') {
       _pendingAlpineReview = null
-      _submitReview.open(job.job_id)
+      showToast('Package ready for Alpine — attach anchors or a field, then Submit to Alpine',
+        { severity: 'info', duration: 8000 })
     } else if (['failed', 'stopped'].includes(job.status)) {
       _pendingAlpineReview = null
     }
   }
-
-  submitAlpineBtn?.addEventListener('click', () => {
-    // Belt and braces with the review card's own guard: while a package is uploading
-    // the button must not reopen the card at all.
-    if (_remoteSubmitting) return
-    if (_selectedId) _submitReview.open(_selectedId)
-  })
 
   function _ensembleCount() {
     const n = parseInt(ensembleCount?.value ?? '', 10)
@@ -3211,9 +3280,38 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       onClick: (jobId) => (jobId === _selectedId ? _deselectJob() : _selectJob(jobId)),
       onChevron: (jobId) => _toggleCollapse(jobId),
       onAction: (jobId) => _openVramFix(jobId),   // the "Fix" VRAM-OOM row action
+      onContextMenu: (jobId, e) => _openJobRowMenu(jobId, e),
       emptyText: _jobs.length && !_showAllJobs() ? 'No jobs for this part.' : 'No jobs yet.',
       dimColor: _C.dim,
       legendState: _legend,
+    })
+  }
+
+  /**
+   * Right-click on a job row.
+   *
+   * The wizard asks about two dozen things — protocol, ion chemistry, box padding, the
+   * integrator's three axes, the whole 22-stage ladder — and once the job existed there
+   * was nowhere to read any of it back. This reopens the wizard itself on that job, locked,
+   * so what a run was set up with is inspected in the same layout it was chosen in.
+   */
+  function _openJobRowMenu(jobId, e) {
+    const job = _jobs.find(j => j.job_id === jobId)
+    if (!job) return
+    e.preventDefault()
+    const view = jobSettingsState(job)
+    createContextMenu({
+      x: e.clientX, y: e.clientY,
+      items: [
+        { type: 'header', label: `${job.design_name || 'job'} · ${_fmtJobTime(job.created_at)}` },
+        {
+          // Jobs created before their request was recorded have nothing to show, and the
+          // label says why rather than the item silently doing nothing.
+          label: view.available ? 'View settings…' : 'Settings were not recorded for this run',
+          disabled: !view.available,
+          onClick: () => { void _wizard.openReadOnly(job) },
+        },
+      ],
     })
   }
 
@@ -3602,10 +3700,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }
     }
 
-    const isAlpine = job.execution_target === 'alpine'
-    // The primary Relax control (▶ Relax ⇄ ■ Stop ⇄ ↻ Resume) covers local start/stop/
-    // resume for the selected job (the old detail Start/Stop were retired + removed).
-    // (Alpine submit/resume/ensemble keep their dedicated cluster-gated buttons below.)
+    // The primary run control covers start/stop/resume for a local job AND the whole
+    // Alpine hand-off (⟳ Preparing… → ☁ Submit to Alpine).  Resume and Ensemble keep
+    // their dedicated cluster-gated buttons below.
     _paintRunControl()
     // The live early-stop card is shown ONLY for a running local relaxation, because
     // that is the only state in which it does anything. mdEarlyStopToggleState honours
@@ -3618,11 +3715,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       earlyStopChk.disabled = pending
       if (earlyStopPending) earlyStopPending.style.display = pending ? '' : 'none'
     }
-    // Submit-to-Alpine: a prepared remote job not yet handed to SLURM.
-    if (submitAlpineBtn) {
-      const canSubmit = isAlpine && !job.slurm_job_id && ['queued', 'stopped', 'failed'].includes(job.status)
-      submitAlpineBtn.style.display = canSubmit ? '' : 'none'
-    }
+    // Submitting a prepared job is the PRIMARY control's job now (☁ Submit to Alpine),
+    // so there is no separate button here to show or hide.
     // Ensemble on Alpine: a COMPLETED relaxation (not itself a replica) can fan out N
     // production replicas.  Disabled + tooltip until a cluster session is connected.
     const ensembleWrap = document.getElementById('md-jobs-ensemble-wrap')
@@ -3647,7 +3741,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       resumeBtn.title = rs.reason
     }
     _renderResumeHistory(job)
-    _maybeOpenAlpineReview(job)
+    _maybeAnnounceAlpineReady(job)
     // Archive/Delete live in the section-level #simulate-job-actions (visibility/label
     // handled there on the selected node).
 
@@ -4210,6 +4304,24 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // Drop the selection without unloading anything (the unified Simulate list routes its own
     // click-the-selected-row-to-deselect here).
     deselectJob: _deselectJob,
+    /**
+     * Open a job's settings, locked (the right-click "View settings…" entry).
+     *
+     * Exposed because the list the user actually right-clicks is the UNIFIED Simulate list
+     * (`simulate_jobs.js`), whose nodes are a reduced cross-engine shape that does not
+     * carry `prep_params`. The full record lives here, so the lookup — and the refetch when
+     * this panel has not polled since the job appeared — belong here too.
+     */
+    openJobSettings: async (jobId) => {
+      if (!jobId) return
+      if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
+      const job = _jobs.find((j) => j.job_id === jobId)
+      if (job) return _wizard.openReadOnly(job)
+    },
+    /** Whether that entry has anything to show — the menu offers it either way, but says
+     *  why when a job predates its request being recorded. */
+    hasJobSettings: (jobId) =>
+      jobSettingsState(_jobs.find((j) => j.job_id === jobId)).available,
     // Consolidated Archive/Delete (the section-level #simulate-job-actions dispatches to the
     // selected node's engine panel; both operate on this panel's currently-selected job).
     deleteSelected, archiveSelected,

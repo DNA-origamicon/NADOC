@@ -51,7 +51,13 @@ present for Duo 2FA** to validate end-to-end. Auth cannot be fully headless
 - [x] **Phase 1** — Cluster config + SSH transport + connect UI (de-risk Duo auth)
 - [x] **Phase 2** — SLURM script generation + auto-resource decision tree (pure logic)
 - [x] **Phase 3** — Remote executor: submit / poll / fetch / cancel (wire it together)
-- [x] **Phase 4** — Frontend: run-target selector + auto-with-review card + remote monitoring
+- [x] **Phase 4** — Frontend: run-target selector + auto-with-review card + remote monitoring.
+  **Superseded in part (2026-08-07): the review card no longer auto-opens.** Its resources
+  (cores / wall time / memory / GPUs / QoS) now live in the Job Wizard's step 1, beside the
+  partition table and autopopulated from the design's estimated size; the card survives only
+  for the manual **Submit to Alpine**, Resume and Ensemble. See "The SLURM resources moved
+  INTO step 1" in [[md-job-system]] for the full shape (sparse `slurm_resources` →
+  `MdJob.requested_resources` → `_merge_requested`).
 - [x] **Phase 5** — Hardening: learned ns/day ✓, session-expiry UX ✓, live progress ✓ (increment 9);
   auto-resubmit → **user-driven one-click Resume from mid-segment checkpoint** ✓ (increment 10). See
   the "Resume model (2026-07-03 pivot)" block below before touching resume logic. Live-validation of

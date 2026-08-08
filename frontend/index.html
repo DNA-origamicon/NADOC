@@ -5745,13 +5745,10 @@
                        Rendered by initClusterAvailability; disabled until a session is live. -->
                   <div id="md-jobs-alpine-availability" style="margin-bottom:6px"></div>
 
-                  <!-- Submit a prepared job to Alpine; resume a timed-out SLURM job. -->
+                  <!-- Resume a timed-out SLURM job.  Submitting a prepared job is NOT here:
+                       it is the panel's primary run control, which becomes "☁ Submit to
+                       Alpine" once the package is built (mdRunControl). -->
                   <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
-                    <button id="md-jobs-submit-alpine-btn"
-                            title="Review resources and submit this prepared job to the Alpine cluster"
-                            style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer;display:none">
-                      ☁ Submit to Alpine
-                    </button>
                     <button id="md-jobs-resume-btn"
                             title="Resume this timed-out job from its last checkpoint (new SLURM submission)"
                             style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer;display:none">

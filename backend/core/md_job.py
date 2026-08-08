@@ -153,6 +153,25 @@ class MdJob:
     # job with one setting changed (e.g. add a water-shell carve). None for jobs
     # created before this was recorded.
     prep_params: Optional[dict] = None
+    # Which of ``prep_params`` the USER actually chose, i.e. the request's
+    # ``model_fields_set``.  ``prep_params`` is a ``model_dump()``, so every default is
+    # materialised in it and "you set this" is no longer distinguishable from "the
+    # protocol set this" — the exact distinction the wizard's provenance chips draw
+    # (they are computed from ``model_fields_set``, see routes_md_plan).  Recorded so the
+    # read-only "View settings" wizard can replay a job's plan request with the SAME
+    # explicit-key set it was created with, and so show the same chips the user saw.
+    # None on jobs created before this was recorded — the viewer then falls back to
+    # showing every stored value, and says so.
+    prep_params_set: Optional[list] = None
+    # The PRODUCTION-spawn request (``ProductionRunRequest``) and its explicit-key set, for
+    # a child created by "Production".  Deliberately NOT ``prep_params``: that field is a
+    # ``CreateJobRequest`` dump, and several call sites (refit, the plan's preset lookup,
+    # the runner's GPU-fallback policy) key off a production child having none — putting a
+    # different request shape there would silently reroute them.  Read by the read-only
+    # settings viewer so a production child shows its OWN numbers (length, timestep, seed,
+    # damping) rather than its parent's relaxation.
+    spawn_params: Optional[dict] = None
+    spawn_params_set: Optional[list] = None
     namd_pid: Optional[int] = None
     threads: int = 16
     devices: str = "0"
@@ -249,6 +268,13 @@ class MdJob:
     # times were on screen.  Kept separate from ``resources`` (which is the full
     # recommendation, written at submit time) because the choice is made long before.
     partition: Optional[str] = None
+    # SLURM resources the user ADJUSTED in the Job Wizard's first step, next to the
+    # partition and against the same live queue picture (cores/gpus/mem_gb/walltime/qos).
+    # Sparse on purpose: only the keys actually edited are here, so everything untouched
+    # is still re-derived at submit time from the built package's EXACT atom count rather
+    # than being frozen at the wizard's pre-solvation estimate.  Distinct from
+    # ``resources``, which is the full set actually submitted with.
+    requested_resources: Optional[dict] = None
     # Scalars computed ON the cluster node by nadoc_live_metrics.py and retrieved
     # each poll (ns_per_day, temperature_k, pressure_bar, step, ...).  The MD panel
     # already renders `live_metrics`; for a LOCAL run the runner fills it by tailing
@@ -364,6 +390,9 @@ class MdJob:
         data.setdefault("failure_kind", None)
         data.setdefault("decision", None)
         data.setdefault("prep_params", None)
+        data.setdefault("prep_params_set", None)
+        data.setdefault("spawn_params", None)
+        data.setdefault("spawn_params_set", None)
         data.setdefault("design_fingerprint", None)
         data.setdefault("feature_log_position", None)
         data.setdefault("archived", False)
@@ -371,6 +400,7 @@ class MdJob:
         data.setdefault("execution_target", "local")
         data.setdefault("cluster_name", None)
         data.setdefault("partition", None)
+        data.setdefault("requested_resources", None)
         data.setdefault("live_metrics", None)
         data.setdefault("live_frame", None)
         data.setdefault("slurm_job_id", None)

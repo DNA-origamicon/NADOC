@@ -26,6 +26,7 @@
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
 import { mountDirectoryButton } from './run_location.js'
 import { renderJobList } from './jobs_panel_render.js'
+import { createContextMenu } from './primitives/context_menu.js'
 import { runControlState, RUN_ACTION } from './job_run_control.js'
 import { relaxIndexMap, relaxRowLabel, runRowLabel, runChildTitle } from './oxdna_jobs_panel.js'
 import { jobDisplayName as mrdnaDisplayName } from './mrdna_jobs_panel.js'
@@ -501,11 +502,41 @@ export function initSimulateJobs({
     _listSig = sig
     renderJobList(listEl, buildJobListModel(nodes, ctx), {
       onClick: (jobId) => (jobId === _sel.id ? _deselect() : _select(jobId)),
+      onContextMenu: (jobId, e) => _openRowMenu(jobId, e),
       emptyText: _showAllTypes
         ? 'No simulation runs for this design yet — press ▶ Relax to start one.'
         : `No ${_activeEngine === 'namd' ? 'NAMD' : _activeEngine} runs for this design yet. Toggle “Show all job types” to see every engine’s runs.`,
       dimColor: _C.dim,
       legendState: _legend,
+    })
+  }
+
+  /**
+   * Right-click on a row of the unified list.
+   *
+   * NAMD only for now: the Job Wizard asks about two dozen things — protocol, ion
+   * chemistry, box padding, the integrator's three axes, the whole stage ladder — and once
+   * the job existed there was nowhere to read any of it back. Other engines have no
+   * equivalent setup surface to reopen, so their rows get no menu and keep the browser's.
+   */
+  function _openRowMenu(jobId, e) {
+    const node = _nodes.find((n) => n.job_id === jobId)
+    if (node?.engine !== 'namd' || !mdPanel?.openJobSettings) return
+    e.preventDefault()
+    createContextMenu({
+      x: e.clientX, y: e.clientY,
+      items: [
+        { type: 'header', label: `${node.design_name || 'job'} · ${formatJobTime(node.created_at)}` },
+        {
+          // A job created before its request was recorded has nothing to show, and the
+          // label says why rather than the item silently doing nothing.
+          label: mdPanel.hasJobSettings?.(jobId) === false
+            ? 'Settings were not recorded for this run'
+            : 'View settings…',
+          disabled: mdPanel.hasJobSettings?.(jobId) === false,
+          onClick: () => { void mdPanel.openJobSettings(jobId) },
+        },
+      ],
     })
   }
 

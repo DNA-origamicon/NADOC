@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { beforeEach, afterEach, vi } from 'vitest'
 import {
   solventFetchPlan, estimateShellFraction, SOLVENT_CHUNK,
-  initMdSolventControls,
+  initMdSolventControls, tallyIonSpecies, ION_SPECIES,
 } from './md_solvent_controls.js'
 
 // Measured from the two real solvated jobs (see memory/project_md_viz_tools.md):
@@ -383,5 +383,188 @@ describe('representation change → cache invalidation', () => {
     api.getMdFramesSolventBin.mockClear()
     await changeRepr('ballstick')
     expect(api.getMdFramesSolventBin).not.toHaveBeenCalled()
+  })
+})
+
+// ── the ion legend ───────────────────────────────────────────────────────────
+//
+// The legend and the render answered to two different sources of truth: the render
+// draws whatever ions MDAnalysis finds in the PSF, while the legend read the counts
+// `charge_audit.json` recorded when the package was built. A job whose audit is missing,
+// still being written, or whose counter-ion isn't one the audit tracks got a screen full
+// of ions under the words "no ions in this job". These pin the precedence that fixes it.
+
+describe('tallyIonSpecies', () => {
+  it('counts each species code against the payload\'s own table', () => {
+    expect(tallyIonSpecies(Uint8Array.from([0, 0, 2, 1, 2, 2]), ION_SPECIES))
+      .toEqual({ NA: 2, CL: 1, MG: 3, K: 0, CA: 0 })
+  })
+
+  it('falls back to the canonical table when the payload carries none', () => {
+    expect(tallyIonSpecies(Uint8Array.from([3, 4]), null))
+      .toEqual({ NA: 0, CL: 0, MG: 0, K: 1, CA: 1 })
+  })
+
+  it('reads zero of everything from an empty census', () => {
+    expect(tallyIonSpecies(Uint8Array.from([]), ION_SPECIES))
+      .toEqual({ NA: 0, CL: 0, MG: 0, K: 0, CA: 0 })
+  })
+
+  it('ignores a code the table does not cover', () => {
+    expect(tallyIonSpecies(Uint8Array.from([0, 99]), ION_SPECIES).NA).toBe(1)
+  })
+})
+
+describe('ion legend precedence', () => {
+  const MAGIC = 0x4E534C56
+  const IDS = [
+    ['md-jobs-solvent-opts', 'div'], ['md-jobs-water-toggle', 'input'],
+    ['md-jobs-water-opts', 'div'], ['md-jobs-water-scope-shell', 'input'],
+    ['md-jobs-water-scope-box', 'input'], ['md-jobs-water-shell', 'input'],
+    ['md-jobs-water-count', 'div'], ['md-jobs-ions-toggle', 'input'],
+    ['md-jobs-ions-legend', 'div'], ['md-jobs-box-toggle', 'input'],
+    ['md-jobs-solvent-status', 'div'],
+  ]
+
+  /** One sphere-mode frame carrying `codes.length` ions, in the real wire layout. */
+  function packIonFrame(codes) {
+    const h = {
+      frame_ids: [0], atomistic: false, n_waters_total: 0,
+      n_ions: codes.length, n_ions_total: codes.length, has_box: false,
+      shell_nm: null, capped: false,
+      species_table: ['NA', 'CL', 'MG', 'K', 'CA'],
+      ion_species: codes, per_frame_nw: [0], n_serials: 0,
+    }
+    const hb = new TextEncoder().encode(JSON.stringify(h))
+    const pad = (4 - (hb.length % 4)) % 4
+    const floats = codes.length * 3
+    const buf = new ArrayBuffer(20 + hb.length + pad + floats * 4)
+    const dv = new DataView(buf)
+    dv.setUint32(0, MAGIC, true); dv.setUint32(4, 2, true)
+    dv.setUint32(8, 1, true); dv.setUint32(12, 0, true)
+    dv.setUint32(16, hb.length, true)
+    new Uint8Array(buf, 20, hb.length).set(hb)
+    return buf
+  }
+
+  const settle = () => new Promise(r => setTimeout(r, 0))
+  const legend = () => document.getElementById('md-jobs-ions-legend')
+
+  let api, made, meta
+
+  /** Turn Ions on and let the (unawaited) fetch land. */
+  async function turnIonsOn() {
+    const t = document.getElementById('md-jobs-ions-toggle')
+    t.checked = true
+    t.dispatchEvent(new Event('change'))
+    await settle()
+  }
+
+  async function boot() {
+    api = {
+      getMdSolventMeta: vi.fn(async () => meta),
+      getMdFramesSolventBin: vi.fn(async () => null),
+      cancelMdAnalysis: vi.fn(),
+    }
+    made = initMdSolventControls({
+      api,
+      getSolventOverlay: () => ({ setIonSpecies: vi.fn(), setMode: vi.fn(), setFrame: vi.fn(),
+                                  setWaterVisible: vi.fn(), setIonsVisible: vi.fn(), clear: vi.fn() }),
+      getBoxOverlay: () => ({ setCorners: vi.fn(), hide: vi.fn() }),
+      getCurrentRepr: () => 'full',
+      getLiveDisplay: () => ({ setSolvent: vi.fn(() => true) }),
+    })
+    await made.setJob('job-1', { stride: 1, nFrames: 20 })
+    made.setEnabled(true, 'traj')
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+    for (const [id, tag] of IDS) {
+      const el = document.createElement(tag)
+      el.id = id
+      if (tag === 'input') el.type = id.includes('scope') ? 'radio' : 'checkbox'
+      if (id === 'md-jobs-water-shell') { el.type = 'number'; el.value = '5' }
+      document.body.appendChild(el)
+    }
+    document.getElementById('md-jobs-water-scope-shell').checked = true
+    meta = { ready: true, n_waters: 1000, n_ions: 10, species: { NA: 8, CL: 1, MG: 1 } }
+  })
+
+  afterEach(() => { document.body.innerHTML = '' })
+
+  it('shows the audit counts before any frame has landed', async () => {
+    await boot()
+    await turnIonsOn()
+    expect(legend().style.display).toBe('')
+    expect(legend().textContent).toContain('Na⁺ 8')
+    expect(legend().textContent).not.toContain('no ions')
+  })
+
+  // The regression: a package whose charge audit is missing or half-written answers
+  // `{ready:false, species:{}}`. `{}` is truthy, so the panel used to read it as a
+  // positive "this job contains nothing" and print the negative claim.
+  it('says NOTHING when the audit is not ready', async () => {
+    meta = { ready: false, n_waters: 0, n_ions: 0, species: {} }
+    await boot()
+    await turnIonsOn()
+    expect(legend().style.display).toBe('none')
+    expect(legend().textContent).not.toContain('no ions')
+  })
+
+  it('retries the audit on the next setJob while it is unready', async () => {
+    meta = { ready: false, n_waters: 0, n_ions: 0, species: {} }
+    await boot()
+    expect(api.getMdSolventMeta).toHaveBeenCalledTimes(1)
+    meta = { ready: true, n_waters: 1000, n_ions: 3, species: { NA: 0, CL: 0, MG: 3 } }
+    await made.setJob('job-1', { stride: 1, nFrames: 20 })   // same job, still fetches
+    expect(api.getMdSolventMeta).toHaveBeenCalledTimes(2)
+    await turnIonsOn()
+    expect(legend().textContent).toContain('Mg²⁺ 3')
+  })
+
+  it('stops retrying once the audit is ready', async () => {
+    await boot()
+    await made.setJob('job-1', { stride: 1, nFrames: 20 })
+    expect(api.getMdSolventMeta).toHaveBeenCalledTimes(1)
+  })
+
+  it('a landed frame overrides an audit that claims no ions', async () => {
+    meta = { ready: true, n_waters: 1000, n_ions: 0, species: { NA: 0, CL: 0, MG: 0 } }
+    await boot()
+    api.getMdFramesSolventBin.mockResolvedValue(packIonFrame([2, 2, 2]))
+    await turnIonsOn()
+    expect(legend().style.display).toBe('')
+    expect(legend().textContent).toContain('Mg²⁺ 3')
+    expect(legend().textContent).not.toContain('no ions')
+  })
+
+  // The audit only tracks Na/Cl/Mg. A K+ or Ca2+ job is invisible to it, but the frame
+  // carries the real species codes.
+  it('reports a species the audit does not track', async () => {
+    meta = { ready: true, n_waters: 1000, n_ions: 0, species: { NA: 0, CL: 0, MG: 0 } }
+    await boot()
+    api.getMdFramesSolventBin.mockResolvedValue(packIonFrame([3, 3]))
+    await turnIonsOn()
+    expect(legend().textContent).toContain('K⁺ 2')
+  })
+
+  // Measured beats estimated in BOTH directions — an audit that over-promises is
+  // corrected by the frame too.
+  it('a landed frame overrides an audit that over-counts', async () => {
+    await boot()
+    api.getMdFramesSolventBin.mockResolvedValue(packIonFrame([0, 1]))
+    await turnIonsOn()
+    expect(legend().textContent).toContain('Na⁺ 1')
+    expect(legend().textContent).toContain('Cl⁻ 1')
+    expect(legend().textContent).not.toContain('Na⁺ 8')
+  })
+
+  it('only claims "no ions" once a frame has actually measured none', async () => {
+    meta = { ready: true, n_waters: 1000, n_ions: 0, species: { NA: 0, CL: 0, MG: 0 } }
+    await boot()
+    api.getMdFramesSolventBin.mockResolvedValue(packIonFrame([]))
+    await turnIonsOn()
+    expect(legend().textContent).toContain('no ions in this job')
   })
 })

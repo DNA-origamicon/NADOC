@@ -43,6 +43,21 @@ so none of the simulated solvent ever reached the viewer.
   confirmed in the PSF. Bigger boxes are fine (10hb: 948 Na / 38 Cl / 19 Mg). **Read
   `charge_audit.json` → `ionization` before suspecting the overlay**; the panel's ion legend already
   prints the per-species counts. More chloride only comes from bulk salt above neutralisation.
+- **The ion legend and the ion RENDER answered to two different sources — fixed 2026-08-06.** The
+  render draws what MDAnalysis finds in the PSF; the legend read `charge_audit.json`. Two ways they
+  diverged, both seen live on the running **6hbx100_noT** production job: (1) not every package
+  writes a standalone `charge_audit.json` — replica packages hardlink only structure files and some
+  builders fold the audit into `manifest.json` — and `md_solvent_meta` had no manifest fallback, so
+  it answered `ready:false, species:{}`; `{}` is truthy in JS, so the panel printed **"no ions in
+  this job"** over a cell full of Mg²⁺ (and priced every fetch off `n_waters:0`). (2) the audit only
+  tracks Na/Cl/Mg, so a K⁺ or Ca²⁺ job was invisible to it. Fix, both layers: `md_solvent_meta`
+  falls back to `manifest["charge_audit"]` (same fallback `atomistic_to_nadoc._segid_chain_map`
+  already used), and the legend now takes its counts from the **landed frame** —
+  `tallyIonSpecies(parsed.ionSpecies, parsed.speciesTable)`, exact because ions are never
+  shell-bounded or capped — falling back to the audit only before a frame exists and rendering
+  NOTHING when neither can back a claim. `setJob` also retries the audit while it is `ready:false`
+  instead of caching the not-ready answer for the life of the panel. **Rule: metadata prices a
+  fetch, it never makes a negative claim about the structure.**
   Because of this, **Cl⁻ and Mg²⁺ are deliberately OFF-CPK** (CPK puts both in green and leaves
   radius as the only cue): Cl⁻ = pure green `0x00E000`, Mg²⁺ = yellow `0xFFD400`, in BOTH
   `scene/md_solvent_overlay.js::ION_STYLE` and `scene/atomistic_renderer/atom_palette.js` — change

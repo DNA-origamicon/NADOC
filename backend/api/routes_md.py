@@ -313,6 +313,14 @@ class CreateJobRequest(BaseModel):
                     "later session, long after the queue picture that motivated the choice. "
                     "None → auto-pick at submit time.",
     )
+    slurm_resources: Optional[dict] = Field(
+        None,
+        description="SLURM resources adjusted in the Job Wizard's first step alongside the "
+                    "partition (any of cores/gpus/mem_gb/walltime/qos). SPARSE: send only "
+                    "what the user actually changed. Anything omitted is re-derived at "
+                    "submit time from the built package's exact atom count, which is more "
+                    "accurate than the wizard's pre-solvation estimate.",
+    )
     run_dir: Optional[str] = Field(
         None,
         description="Directory to write this run into (archive-from-birth). A NAMD run "
@@ -2576,9 +2584,13 @@ def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
     job.execution_target = body.execution_target
     job.cluster_name = body.cluster_name or ("alpine" if body.execution_target == "alpine" else None)
     job.partition = body.partition
+    # Sparse: only what the wizard's first step actually had edited.  Kept so a submit
+    # in a later session still honours the request made against the live queue picture.
+    job.requested_resources = body.slurm_resources or None
     job.early_stop_relax = body.early_stop_relax
     job.early_stop_tier = (body.early_stop_tier or "B").upper()
     job.prep_params = body.model_dump()
+    job.prep_params_set = sorted(body.model_fields_set)
     job.status = MdStatus.draft
     _apply_run_dir(job, body.run_dir)
     job.save(_workspace())
@@ -2716,10 +2728,16 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
     job.execution_target = body.execution_target
     job.cluster_name = body.cluster_name or ("alpine" if body.execution_target == "alpine" else None)
     job.partition = body.partition
+    # Sparse: only what the wizard's first step actually had edited.  Kept so a submit
+    # in a later session still honours the request made against the live queue picture.
+    job.requested_resources = body.slurm_resources or None
     job.early_stop_relax = body.early_stop_relax
     job.early_stop_tier = (body.early_stop_tier or "B").upper()
     # Capture the request so a later refit can rebuild the job with one knob moved.
+    # The explicit-key set rides along so the read-only settings viewer can replay this
+    # exact request and reproduce the provenance chips the user saw in the wizard.
     job.prep_params = body.model_dump()
+    job.prep_params_set = sorted(body.model_fields_set)
     job.status = MdStatus.preparing
     job.save(_workspace())
     logger.info("create_md_job: job_id=%s design=%s protocol=%s seeded=%s",
@@ -3514,6 +3532,13 @@ class ProductionRunRequest(BaseModel):
         None, description="'local' or 'alpine'; defaults to the parent's target. An "
                           "'alpine' child is left queued for the submit-review card.")
     cluster_name: Optional[str] = Field(None, description="Cluster for an alpine target")
+    partition: Optional[str] = Field(
+        None, description="Preferred SLURM partition for an alpine child, chosen in the Job "
+                          "Wizard's first step against live availability. None → auto-pick.")
+    slurm_resources: Optional[dict] = Field(
+        None, description="Sparse SLURM resource edits from the Job Wizard's first step "
+                          "(cores/gpus/mem_gb/walltime/qos); omitted keys are re-derived "
+                          "from the built package at submit time.")
     dcd_freq: Optional[int] = Field(
         None, ge=100, le=1_000_000,
         description="DCD trajectory output interval (steps). Defaults to PRODUCTION_DCD_FREQ "
@@ -3823,6 +3848,16 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
     child.cluster_name = (
         body.cluster_name or (parent.cluster_name if target == "alpine" else None)
         or ("alpine" if target == "alpine" else None))
+    if target == "alpine":
+        # Same first-step answers a relaxation carries: the node picked off the live queue
+        # table, plus whatever resources were edited beside it.
+        child.partition = body.partition or parent.partition
+        child.requested_resources = body.slurm_resources or None
+    # Capture the spawn request so the read-only settings viewer can replay this child's
+    # own plan.  Kept apart from `prep_params` (a CreateJobRequest dump) on purpose — see
+    # the field comment on MdJob.spawn_params.
+    child.spawn_params = body.model_dump(mode="json")
+    child.spawn_params_set = sorted(body.model_fields_set)
     # Carry the parent's staleness provenance so a production child never spuriously
     # flags out-of-date — it derives from the parent's frozen package, not the live design.
     child.design_fingerprint = parent.design_fingerprint
@@ -3962,6 +3997,20 @@ async def stage_md_ensemble(parent_id: str, body: EnsembleProductionRequest) -> 
         )
         child.execution_target = "alpine"
         child.cluster_name = body.cluster_name
+        # What this replica was asked to run, for the read-only settings viewer. The seed
+        # and index are already columns on the job; recorded here is the rest of the fan-out
+        # request, plus the resolved length/timestep so the viewer never has to re-derive
+        # them from the segment names.
+        child.spawn_params = {
+            **body.model_dump(mode="json"),
+            "length_ns": plan["length_ns"],
+            "steps": plan["total_steps"],
+            "production_timestep_fs": plan["timestep_fs"],
+            "seed": seed,
+        }
+        child.spawn_params_set = sorted(
+            set(body.model_fields_set)
+            | {"length_ns", "steps", "production_timestep_fs", "seed"})
         # Carry the parent's staleness provenance so replica rows never spuriously flag
         # out-of-date — they derive from the parent's frozen package, not the live design.
         child.design_fingerprint = parent.design_fingerprint
@@ -4269,7 +4318,19 @@ def _remote_resources(job: MdJob, profile, body: "SubmitRemoteRequest") -> dict:
     sizing = _size_prepared_job(job, profile, body.safety_factor, partition=job.partition)
     if sizing is None:
         raise HTTPException(400, "Job is not prepared yet (no manifest.json) — cannot size resources.")
-    return sizing["resources"]
+    return _merge_requested(sizing["resources"], job)
+
+
+def _merge_requested(resources: dict, job: MdJob) -> dict:
+    """Lay the wizard's edited resources over an auto-recommendation.
+
+    The wizard sizes against an ESTIMATED atom count (the package does not exist yet), so
+    it sends only the keys the user actually changed.  Everything else is left to this
+    recommendation, which is computed from the built package's exact size — the estimate
+    informs the choice without freezing it.
+    """
+    edited = job.requested_resources or {}
+    return {**resources, **{k: v for k, v in edited.items() if v not in (None, "")}}
 
 
 @router.get("/md/jobs/{job_id}/remote-recommendation")
@@ -4307,6 +4368,11 @@ def md_job_remote_recommendation(
     # dropdown change re-sizes on that partition consistently, like the submit path).
     if current and partition is None and job.resources and sizing is not None:
         sizing = {**sizing, "resources": job.resources}
+    # Otherwise the card opens on what the WIZARD asked for, so the submit button shows the
+    # same numbers the user chose next to the partition table rather than silently
+    # re-deciding them.  Skipped when a partition is forced (that re-sizes consistently).
+    elif not current and partition is None and sizing is not None:
+        sizing = {**sizing, "resources": _merge_requested(sizing["resources"], job)}
     available = [
         {"name": p.name, "kind": p.kind, "gpu_model": p.gpu_model}
         for p in profile.partitions

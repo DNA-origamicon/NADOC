@@ -32,6 +32,7 @@ import {
   fieldScope,
   deferredNotes,
   inheritedRows,
+  jobSettingsState,
   makeDebounce,
   paramLabel,
   paramRows,
@@ -158,10 +159,16 @@ const FIELDS = [
     options: [{ value: 'ask', label: 'Pause and ask' },
               { value: 'auto_offload', label: 'Fall back automatically' }],
     help: 'Pausing means an unattended run stops and notifies instead of silently running about three times slower.' },
-  { key: 'threads', label: 'CPU threads', type: 'number', step: 1, min: 1 },
-  { key: 'devices', label: 'CUDA devices', type: 'text',
+  // Local-only. On a cluster the ALLOCATION decides both — cores come from the SLURM
+  // request sized in step 1, and the GPU is whatever the scheduler hands out — so these
+  // two controls are not just irrelevant there, they contradict what will run.
+  { key: 'threads', label: 'CPU threads', type: 'number', step: 1, min: 1, localOnly: true },
+  { key: 'devices', label: 'CUDA devices', type: 'text', localOnly: true,
     help: '"0" for the first GPU, "0,1" for two, or "cpu" for the multicore build.' },
 ]
+
+/** Settings that only mean something for a run on THIS machine. */
+const LOCAL_ONLY_KEYS = FIELDS.filter(f => f.localOnly).map(f => f.key)
 
 /**
  * Every parameter a PRODUCTION run exposes, in the same descriptor shape as `FIELDS`.
@@ -280,6 +287,27 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   let plan = null
   let busy = false
 
+  /**
+   * Read-only mode — the wizard showing a job that has ALREADY been created.
+   *
+   * Everything the wizard knows about a run is derived from the plan request, and a job
+   * records the request it was created from, so the SAME wizard replaying that request
+   * shows exactly what was set up: same three steps, same stage table, same conditions.
+   * There is no second, simpler "summary" view to drift out of step with this one.
+   *
+   * Locking is applied at the points where a control is BUILT (disabled inputs, no
+   * click handlers, no ⋯ / ⚡ / Undo) rather than by a blanket pass over the DOM
+   * afterwards, so a control added later cannot quietly become editable here.
+   *
+   * `viewJob` is the job being shown; `viewProvenanceKnown` is false for jobs created
+   * before the explicit-key set was recorded, whose chips then over-report "you set this"
+   * (see `jobSettingsState`) — the banner says so rather than the view lying quietly.
+   */
+  let readOnly = false
+  let viewJob = null
+  let viewProvenanceKnown = true
+  let viewRebuilt = false
+
   const state = {
     mode: 'relaxation',
     // Which step is showing. Not undoable — moving between tabs changes nothing about
@@ -312,6 +340,8 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     status: el('div', { className: 'wizard-status' }),
     // Only filled for a cluster target — a local run has no SLURM request to inspect.
     slurm: el('div', { className: 'wizard-slurm' }),
+    // Only filled in read-only mode; hidden the rest of the time.
+    banner: el('div', { className: 'wizard-banner', attrs: { hidden: true } }),
   }
 
   const refetch = makeDebounce(() => { void loadPlan() }, PLAN_DEBOUNCE_MS)
@@ -328,11 +358,13 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
 
   /** Call at the top of any handler that is about to change the state. */
   function record() {
+    if (readOnly) return
     undoStack = pushUndo(undoStack, snapshotState(state), UNDO_LIMIT)
     paintUndo()
   }
 
   function undo() {
+    if (readOnly) return
     const snap = undoStack[undoStack.length - 1]
     if (!snap) return
     undoStack = undoStack.slice(0, -1)
@@ -345,6 +377,8 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
 
   function paintUndo() {
     if (!undoBtn) return
+    // Nothing in a locked view can change, so there is nothing to undo.
+    undoBtn.style.display = readOnly ? 'none' : ''
     undoBtn.disabled = !undoStack.length
     undoBtn.title = undoStack.length
       ? `Undo the last change (${undoStack.length} to go back through) — Ctrl+Z`
@@ -357,6 +391,11 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
    *  first plan would fire with no parent and the table would come back empty. */
   function ensureParent() {
     if (state.mode !== 'production') return
+    // A job being VIEWED records the parent it actually continued. Re-deriving it from the
+    // panel's current list would repoint the plan at the newest relaxation — or, if that
+    // list is filtered to another part, null it out and leave the step reading "no
+    // completed relaxation for this part yet" about a run that plainly has one.
+    if (readOnly) return
     const choices = productionParents(getJobs?.() || [], getPartPath?.(),
                                       { includeJobId: state.parentJobId })
     if (!choices.length) { state.parentJobId = null; return }
@@ -389,7 +428,19 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       plan = null
       mounts.status.textContent = `Could not work out what this would run: ${err?.message || err}`
     }
+    // A child whose length was recovered by counting steps (see `jobSettingsState`) knows
+    // it only as a step count, so the run-length control would sit there reading the
+    // wizard's own DEFAULT next to totals that say something else. Adopt the length the
+    // plan derived from those steps — same number, now agreeing with itself. No re-plan:
+    // the plan already used the steps, only the control's displayed value was missing.
+    if (readOnly && state.touched.steps != null && state.touched.length_ns == null) {
+      const ns = Number(plan?.totals?.total_ns)
+      if (Number.isFinite(ns) && ns > 0) state.touched.length_ns = ns
+    }
     render()
+    // The wall time step 1 recommends is total_ns / throughput, so a plan that changed the
+    // run length invalidates it. No-ops unless the length actually moved.
+    targetStep?.refreshSizing?.()
   }
 
   /** What the plan says about a field. In production mode the production-resolved block
@@ -442,6 +493,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   }
 
   function setField(key, value) {
+    if (readOnly) return
     record()
     state.touched[key] = value
     if (key === 'gpu_fallback_policy') {
@@ -465,6 +517,30 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     // chemistry, cell and ions from the package the relaxation already built. Showing the
     // cards here would offer a choice that changes nothing.
     if (state.mode === 'production') return
+    // A locked view shows only the protocol this run actually used. The other cards would
+    // offer a choice that cannot be made about a run that already exists, and "Other
+    // protocols" would fold the answer away behind a disclosure.
+    if (readOnly) {
+      const chosen = presets.find(p => p.id === state.presetId)
+      mounts.preset.appendChild(chosen
+        ? el('div', { className: 'wizard-preset-cards', children: [presetCard(chosen)] })
+        // The catalog may not still list a protocol an old run used, and the protocol is
+        // the single most load-bearing thing on this step — name it from the plan rather
+        // than showing nothing.
+        : el('div', {
+          className: 'wizard-preset-cards',
+          children: [el('div', {
+            className: 'wizard-preset is-selected',
+            children: [
+              el('div', { className: 'wizard-preset__label',
+                          text: plan?.preset?.label || state.presetId || 'Unnamed protocol' }),
+              el('div', { className: 'wizard-preset__summary',
+                          text: 'This protocol is no longer in the catalog.' }),
+            ],
+          })],
+        }))
+      return
+    }
     const headline = presets.filter(p => HEADLINE_PRESETS.includes(p.id))
     const rest = presets.filter(p => !HEADLINE_PRESETS.includes(p.id))
 
@@ -492,11 +568,11 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     if (!summary.available) classes.push('is-unavailable')
     return el('button', {
       className: classes.join(' '),
-      attrs: { type: 'button', disabled: summary.available ? undefined : true,
+      attrs: { type: 'button', disabled: (summary.available && !readOnly) ? undefined : true,
                title: summary.unavailableReason || preset.reference || '' },
       on: {
         click: () => {
-          if (!summary.available || preset.id === state.presetId) return
+          if (readOnly || !summary.available || preset.id === state.presetId) return
           record()
           state.presetId = preset.id
           // Deliberately NOT clearing `touched`: a value you set by hand survives a
@@ -512,8 +588,15 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
         preset.reference
           ? el('div', { className: 'wizard-preset__ref', text: preset.reference })
           : null,
+        // The note counts how many settings still come from the protocol — which is a
+        // statement about provenance, so it is a LIE on a job that cannot report its own.
+        // The replay sends every stored value explicitly, so the plan reports nothing as
+        // coming from the preset and the note reads "every setting has been overridden"
+        // about a run that overrode nothing.
         summary.available
-          ? (chosen ? el('div', { className: 'wizard-preset__note', text: summary.note }) : null)
+          ? (chosen && !(readOnly && !viewProvenanceKnown)
+            ? el('div', { className: 'wizard-preset__note', text: summary.note })
+            : null)
           : el('div', { className: 'wizard-preset__note', text: summary.unavailableReason }),
       ],
     })
@@ -529,6 +612,9 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     // between two ladder settings, so nothing on screen said which run a control changed.
     const groups = new Map(SCOPE_GROUPS.map(g => [g.scope, []]))
     for (const field of FIELDS) {
+      // Hardware this machine has and a cluster node does not — hidden unless the run is
+      // actually happening here (step 1's answer).
+      if (field.localOnly && state.target !== 'local') continue
       const scope = fieldScope(field.key, plan)
       ;(groups.get(scope) || groups.get('both')).push(field)
     }
@@ -559,11 +645,22 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       // so a fallback can read a sibling control (rigid bonds and HMR both follow the
       // timestep that is selected RIGHT NOW, not the one the last plan was built with).
       if (value == null && field.fallback) value = field.fallback(plan, effectiveValue)
-      const forced = provenance === 'forced'
+      // A locked view disables every control for the same reason a forced field is
+      // disabled: the number on screen is not something this view can change.
+      const forced = provenance === 'forced' || readOnly
       // Through `planField`, not `plan.request` — in production mode the four settings
       // that exist in both blocks resolve differently, and reading the create-request one
       // captioned an inherited 4 fs with the RELAXATION preset that set the ladder's.
-      const reason = planField(field.key)?.reason || ''
+      // Note the chip still reads `provenance`, not `forced`: relabelling every field in a
+      // locked view as a server override would be false.
+      //
+      // The reason explains how the PLAN resolved this field, so it only belongs beside a
+      // value the plan resolved that way. When the two disagree it is describing a
+      // different number: a replica whose length was recovered as raw steps reads "you set
+      // this — 0.5" over the plan's "the wizard's own default run length". No-op whenever
+      // they agree, which is every ordinary field.
+      const planProvenance = planField(field.key)?.provenance
+      const reason = provenance === planProvenance ? (planField(field.key)?.reason || '') : ''
 
       let control
       if (field.type === 'checkbox') {
@@ -650,6 +747,12 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   }
 
   function renderProductionFields() {
+    // A locked view states the parent from the PLAN, which is the run the stage table was
+    // actually built against — not from a picker over the panel's current list. That list
+    // may not contain it at all (archived, filtered to another part, or since deleted), and
+    // a <select> whose value matches no option silently displays its FIRST one: an Alpine
+    // replica was captioned with a completely different run's name and time.
+    if (readOnly) { renderRecordedParent(); renderProductionSettings(); return }
     const choices = productionParents(getJobs?.() || [], getPartPath?.(),
                                       { includeJobId: state.parentJobId })
     if (!choices.length) {
@@ -657,7 +760,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
         className: 'wizard-empty',
         children: [
           el('p', { text: 'No completed relaxation for this part yet. Production starts from equilibrated coordinates, so a relaxation has to finish first.' }),
-          createButton({
+          readOnly ? null : createButton({
             label: 'Set up a relaxation instead', variant: 'primary', size: 'sm',
             onClick: () => { setMode('relaxation') },
           }),
@@ -687,7 +790,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
               el('div', {
                 className: 'wizard-field__control',
                 children: [createSelect({
-                  size: 'sm', value: state.parentJobId,
+                  size: 'sm', value: state.parentJobId, disabled: readOnly,
                   options: choices.map(c => ({
                     value: c.job.job_id,
                     label: [c.label,
@@ -695,7 +798,10 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
                             c.archived ? '(archived — needs the archive drive mounted)' : '']
                       .filter(Boolean).join(' '),
                   })),
-                  onChange: v => { record(); state.parentJobId = v; void loadPlan() },
+                  onChange: v => {
+                    if (readOnly) return
+                    record(); state.parentJobId = v; void loadPlan()
+                  },
                 })],
               }),
               el('div', {
@@ -711,6 +817,12 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       ],
     }))
 
+    renderProductionSettings()
+  }
+
+  /** The production settings themselves — identical either way, so the locked view and the
+   *  live one share them and cannot drift. */
+  function renderProductionSettings() {
     const fieldConds = conditionsByField(plan)
     for (const group of PRODUCTION_GROUPS) {
       const fields = PRODUCTION_FIELD_DEFS.filter(f => f.group === group.key)
@@ -726,6 +838,46 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       }))
       for (const field of fields) renderField(field, fieldConds, body)
     }
+  }
+
+  /** "Continue from", as a STATEMENT — the run this one was actually built against, named
+   *  by the plan that resolved it. `plan.inherited` carries the parent's own identity, so
+   *  this stays right even for a parent the panel is no longer listing. */
+  function renderRecordedParent() {
+    const inh = plan?.inherited || {}
+    const chained = !!plan?.continuation
+    const created = inh.created_at != null ? viewJobLabel({
+      design_name: inh.design_name, created_at: inh.created_at,
+    }) : (inh.design_name || state.parentJobId || 'the parent run')
+    mounts.fields.appendChild(el('section', {
+      className: 'wizard-scope wizard-scope--parent',
+      children: [
+        el('h4', { className: 'wizard-scope__title', text: 'Continued from' }),
+        el('div', {
+          className: 'wizard-scope__fields',
+          children: [el('div', {
+            className: 'wizard-field',
+            children: [
+              el('label', {
+                className: 'wizard-field__label',
+                text: (inh.parent_run_kind || 'relaxation') === 'production'
+                  ? 'Production run' : 'Relaxation',
+              }),
+              el('div', { className: 'wizard-field__control', children: [
+                el('div', { className: 'wizard-field__static', text: created }),
+              ] }),
+              el('div', {
+                className: `wizard-field__help${chained ? ' wizard-field__help--strong' : ''}`,
+                text: chained
+                  ? 'Coordinates, cell AND velocities carried over, so this EXTENDED that trajectory rather than sampling a new one — its frames are correlated with the parent’s. Treat the pair as one longer run.'
+                  : 'Coordinates and cell came from that run’s last unrestrained stage; velocities were drawn fresh, so this is an independent sample.',
+              }),
+            ],
+          })],
+        }),
+        renderInherited(),
+      ],
+    }))
   }
 
   /** What this run takes from the relaxation rather than choosing — stated, not offered.
@@ -806,7 +958,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
               document.createTextNode(row.label),
               // Editing one directive across 22 columns one cell at a time is not a
               // feature anyone would use, so every row carries a set-once affordance.
-              PROTECTED_ROWS.has(row.key) ? null : el('button', {
+              (PROTECTED_ROWS.has(row.key) || readOnly) ? null : el('button', {
                 className: 'wizard-row-all',
                 attrs: { type: 'button', title: `Set ${row.label} for EVERY stage at once` },
                 text: '⋯',
@@ -816,20 +968,24 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
           }),
           ...cols.map(col => {
             const cell = col.cells[row.key]
+            // In a locked view every cell renders as locked — the run has already been
+            // built from these directives, so none of them is still a choice.
+            const editable = cell.editable && !readOnly
             const classes = ['wizard-cell']
             if (cell.changed) classes.push('wizard-cell--changed')
             if (cell.conditional) classes.push('wizard-cell--conditional')
             if (!cell.present) classes.push('wizard-cell--absent')
             if (cell.overridden) classes.push('wizard-cell--overridden')
-            if (!cell.editable) classes.push('wizard-cell--locked')
+            if (!editable) classes.push('wizard-cell--locked')
             const title = [
               cell.changed ? `was ${cell.was} in the previous stage` : '',
               cell.overridden ? `the ${plan.preset?.label || 'protocol'} value is ${cell.protocolValue}` : '',
               cell.reason,
-              cell.editable ? 'Click to edit this stage. Blank restores the protocol; “(none)” removes the directive.' : 'Not editable: this names a file the runner addresses the stage by.',
+              editable ? 'Click to edit this stage. Blank restores the protocol; “(none)” removes the directive.'
+                : (readOnly ? '' : 'Not editable: this names a file the runner addresses the stage by.'),
             ].filter(Boolean).join(' — ')
             const td = el('td', { className: classes.join(' '), attrs: { title }, text: cell.value })
-            if (cell.editable) {
+            if (editable) {
               td.tabIndex = 0
               td.addEventListener('click', () => editCell(td, col.index, row.key, cell))
               td.addEventListener('keydown', e => {
@@ -919,7 +1075,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
               // reason, and the one thing about this table that is not self-evident.
               note ? el('span', { className: 'wizard-asym', attrs: { title: note },
                                   text: '†' }) : null,
-              PROTECTED_ROWS.has(row.key) ? null : el('button', {
+              (PROTECTED_ROWS.has(row.key) || readOnly) ? null : el('button', {
                 className: 'wizard-row-all',
                 attrs: { type: 'button', title: `Set ${row.label} for EVERY stage at once` },
                 text: '⋯',
@@ -929,28 +1085,31 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
           }),
           ...columns.map(col => {
             const cell = col.cells[row.key]
+            const editable = cell.editable && !readOnly
             const classes = ['wizard-cell']
             if (col.reference) classes.push('wizard-cell--reference')
             if (cell.changed) classes.push('wizard-cell--changed')
             if (cell.conditional) classes.push('wizard-cell--conditional')
             if (!cell.present) classes.push('wizard-cell--absent')
             if (cell.overridden) classes.push('wizard-cell--overridden')
-            if (!cell.editable) classes.push('wizard-cell--locked')
+            if (!editable) classes.push('wizard-cell--locked')
             const title = [
               cell.changed ? `differs from the relaxation, which had ${cell.was}` : '',
               cell.overridden ? `the protocol value is ${cell.protocolValue}` : '',
               cell.reason,
-              cell.editable
+              editable
                 ? 'Click to edit this stage. Blank restores the protocol; “(none)” removes the directive.'
                 : (col.reference
                   ? 'The relaxation has already run — this column is what it did.'
-                  : (col.acceptsOverrides === false
-                    ? 'Not editable: the velocity-reseed bridge is written without an overrides pass.'
-                    : 'Not editable: this names a file the runner addresses the stage by.')),
+                  : (readOnly
+                    ? ''
+                    : (col.acceptsOverrides === false
+                      ? 'Not editable: the velocity-reseed bridge is written without an overrides pass.'
+                      : 'Not editable: this names a file the runner addresses the stage by.'))),
             ].filter(Boolean).join(' — ')
             const td = el('td', { className: classes.join(' '), attrs: { title },
                                   text: cell.value })
-            if (cell.editable) {
+            if (editable) {
               td.tabIndex = 0
               td.addEventListener('click', () => editCell(td, col.index, row.key, cell))
               td.addEventListener('keydown', e => {
@@ -989,6 +1148,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
    * stages 6 and 8. Commits on Enter or blur, abandons on Escape.
    */
   function editCell(td, stageIndex, key, cell) {
+    if (readOnly) return
     if (td.querySelector('input')) return
     const before = td.textContent
     const input = el('input', {
@@ -1030,6 +1190,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
 
   /** Set one directive across every stage at once (the '*' slot). */
   function editAllStages(row) {
+    if (readOnly) return
     const current = state.stageOverrides['*']?.[row.key] ?? ''
     // eslint-disable-next-line no-alert -- a single scalar; a modal here would be heavier
     // than the decision it collects, and the table behind it is the context.
@@ -1140,11 +1301,13 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       className: 'wizard-override',
       children: [
         el('input', {
-          attrs: { type: 'checkbox',
+          attrs: { type: 'checkbox', disabled: readOnly || undefined,
                    checked: state.touched.allow_undersized_cell ? true : undefined },
           on: { change: e => setField('allow_undersized_cell', e.target.checked) },
         }),
-        document.createTextNode(' Run anyway — I accept that the structure may meet its own periodic image'),
+        document.createTextNode(readOnly
+          ? ' Run anyway — accepted that the structure may meet its own periodic image'
+          : ' Run anyway — I accept that the structure may meet its own periodic image'),
       ],
     })
   }
@@ -1179,7 +1342,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       children: [
         document.createTextNode(`⚑ ${ov.text} — ${departedFrom}. The edits are recorded `
           + `in the job's manifest and declared in its protocol-fidelity block.`),
-        createButton({
+        readOnly ? null : createButton({
           label: 'Reset every edit', variant: 'ghost', size: 'sm',
           onClick: () => {
             record()
@@ -1193,6 +1356,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
 
   // ── Actions ─────────────────────────────────────────────────────────────────
   function setMode(mode) {
+    if (readOnly) return
     // Recorded because this DISCARDS every field the user set — the one change in the
     // wizard that throws work away, and so the one undo has to cover.
     record()
@@ -1216,8 +1380,8 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   function modeButton(mode, label, help) {
     return el('button', {
       className: `wizard-mode${state.mode === mode ? ' is-selected' : ''}`,
-      attrs: { type: 'button' },
-      on: { click: () => { if (state.mode !== mode) setMode(mode) } },
+      attrs: { type: 'button', disabled: readOnly || undefined },
+      on: { click: () => { if (!readOnly && state.mode !== mode) setMode(mode) } },
       children: [
         el('div', { className: 'wizard-mode__label', text: label }),
         el('div', { className: 'wizard-mode__help', text: help }),
@@ -1234,7 +1398,8 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     // ⚡ recommends SOLVATION and ladder settings — padding, water shell, minimisation
     // steps, fast mode. A production child re-solvates nothing, so every one of those
     // would write into a run that cannot use them.
-    const prod = state.mode === 'production'
+    // ⚡ writes recommended settings, so it has nothing to do in a view that cannot write.
+    const prod = state.mode === 'production' || readOnly
     optimizeBtn.style.display = prod ? 'none' : ''
     optimizeProgress.style.display = prod ? 'none' : ''
     paintActions()
@@ -1248,6 +1413,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   let createBtn = null
   let nextBtn = null
   let prevBtn = null
+  let cancelBtn = null
   let targetStep = null
 
   // ── Tabs ────────────────────────────────────────────────────────────────────
@@ -1257,7 +1423,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   function setTab(tab) {
     if (state.tab === tab) return
     // Clicking a later tab is the same commitment as Next, so it obeys the same gate.
-    if (tab !== 'target' && targetStep && !targetStep.isReady()) return
+    if (!readOnly && tab !== 'target' && targetStep && !targetStep.isReady()) return
     state.tab = tab
     paintTabs()
   }
@@ -1314,6 +1480,20 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
    */
   async function loadSlurmPreview() {
     if (state.target !== 'alpine' || !plan || !slurmOpen) { paintSlurm(); return }
+    // A locked view must NOT re-size: `/cluster/slurm-preview` estimates from the design
+    // that is open NOW, which is not necessarily the one this job was built from — and the
+    // job already knows what SLURM actually gave it. Show that instead of a fresh guess.
+    if (readOnly) {
+      const r = viewJob?.resources
+      slurmPreview = r
+        ? { resources: r, n_atoms: r.n_atoms, n_atoms_source: 'actual', warnings: [], text: '' }
+        : { sized: false, reason: 'This job was never submitted to the cluster, so no SLURM '
+            + 'request was resolved. The node and the resources asked for are on step 1.' }
+      slurmBusy = false
+      slurmError = ''
+      paintSlurm()
+      return
+    }
     const totalNs = Number(plan.totals?.total_ns || 0)
     const key = `${state.partition || ''}|${totalNs}`
     if (key === slurmKey && (slurmPreview || slurmBusy)) return
@@ -1384,9 +1564,12 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
         : 'Prepare the job and leave it ready to run.'
     }
     // The first step must be ANSWERED before the rest of the wizard means anything:
-    // an Alpine run with no node picked would be sized against nothing.
+    // an Alpine run with no node picked would be sized against nothing. A locked view has
+    // no gate to enforce — the question was answered when the job was created, and the
+    // live readiness test (which for Alpine demands a CURRENT cluster session) would
+    // otherwise refuse to page through a finished run's own settings.
     const onTarget = state.tab === 'target'
-    const targetReady = !targetStep || targetStep.isReady()
+    const targetReady = readOnly || !targetStep || targetStep.isReady()
     if (nextBtn) {
       nextBtn.disabled = busy || (onTarget && !targetReady)
       nextBtn.title = onTarget && !targetReady
@@ -1400,7 +1583,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     const onPlan = state.tab === 'plan'
     showAction(nextBtn, idx < TABS.length - 1)
     showAction(prevBtn, idx > 0)
-    showAction(createBtn, onPlan)
+    showAction(createBtn, onPlan && !readOnly)
   }
 
   async function submit({ autostart }) {
@@ -1426,8 +1609,12 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
         // Drop anything the server would force anyway. Sending it changes nothing, but it
         // would sit in `model_fields_set` as an explicit choice the user did not make
         // under THIS protocol — and would come back to life under the next one.
+        // Local-only hardware settings go the same way on a cluster run: the control is
+        // not on screen, so a value left over from a local session must not ride along
+        // and contradict the allocation.
         const touched = Object.fromEntries(
-          Object.entries(state.touched).filter(([k]) => !isForced(k)))
+          Object.entries(state.touched).filter(([k]) =>
+            !isForced(k) && !(state.target !== 'local' && LOCAL_ONLY_KEYS.includes(k))))
         const job = await launch?.({
           ...wizardPayload({
             presetId: state.presetId, touched, autostart,
@@ -1487,7 +1674,49 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   /** The heading has to say when this is not a fresh job — a seeded draft solvates an
    *  EXISTING job rather than creating one, and "New NAMD job" would misdescribe it. */
   function modalTitle() {
+    if (readOnly) return `Settings — ${viewJobLabel(viewJob)}`
     return state.draftId ? 'Set up this seeded job' : 'New NAMD job'
+  }
+
+  /** Name a job the way the user can actually match it: the part it ran on plus when it
+   *  was created. Job ids are hex and appear nowhere they could be recognised, and part +
+   *  minute is not always unique — hence the seconds. */
+  function viewJobLabel(job) {
+    const part = job?.design_name || 'this job'
+    if (job?.created_at == null) return part
+    const d = new Date(job.created_at * 1000)
+    const p = n => String(n).padStart(2, '0')
+    return `${part} · ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} `
+      + `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  }
+
+  /** The one thing a locked view says that the live wizard does not: that it is locked,
+   *  and — for jobs created before the explicit-key set was recorded — that its "you set
+   *  this" chips cannot be trusted to distinguish a choice from a protocol default. */
+  function paintReadOnlyBanner() {
+    if (!mounts.banner) return
+    if (!readOnly) { mounts.banner.replaceChildren(); mounts.banner.hidden = true; return }
+    mounts.banner.hidden = false
+    // Three different truths, and saying the wrong one is its own kind of lie: a run
+    // rebuilt from its parent is reconstructed faithfully (it just has no request of its
+    // own), whereas a relaxation with no recorded key set shows exact values it cannot
+    // caption. Only the second case makes the chips untrustworthy.
+    const caveat = viewRebuilt
+      ? ' This run’s own request was not recorded, so everything but its length and'
+        + ' velocity seed is reconstructed from the run it continued — which is where a'
+        + ' production run’s chemistry, cell and ladder come from in any case.'
+      : (viewProvenanceKnown ? '' : ' This job predates settings-provenance recording, so'
+        + ' every value it stored is shown as “you set this” — the values are exact, but the'
+        + ' chips cannot tell a choice apart from a protocol default.')
+    mounts.banner.replaceChildren(el('div', {
+      className: 'wizard-readonly-banner',
+      children: [
+        el('strong', { text: '🔒 Read-only — these are the settings this run was created with. ' }),
+        document.createTextNode(
+          'Nothing here can be changed; a run\'s protocol is fixed once its package is built.'
+          + caveat),
+      ],
+    }))
   }
 
   // ── Modal ───────────────────────────────────────────────────────────────────
@@ -1510,6 +1739,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     prevBtn.title = 'Back to the previous step'
     undoBtn = createButton({ label: '↶ Undo', variant: 'ghost', size: 'sm', onClick: () => undo() })
     paintUndo()
+    cancelBtn = createButton({ label: 'Cancel', variant: 'ghost', onClick: () => close() })
 
     // Step 1 — where it runs.  Its own module owns the hardware probe, the cluster
     // login and the partition table; the wizard only holds the answer and re-paints
@@ -1519,15 +1749,31 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       mount: mounts.target,
       fetchHardware: api?.fetchHardware,
       fetchAvailability: api?.fetchAvailability,
+      // Step 1 sizes the SLURM request itself now — cores and wall time are answers to
+      // "which node", so they are asked for beside the node rather than by a popup after
+      // the job has already been built.
+      getSlurmPreview: api?.getSlurmPreview,
+      getTotalNs: () => Number(plan?.totals?.total_ns || 0),
       fsApi: api?.fsApi,
       initialTarget: state.target,
+      readOnly: () => readOnly,
       onChange: ({ target, partition }) => {
+        // A locked view must never write outwards: `onTargetChange` mirrors the answer
+        // onto the panel's run-target radios, so letting this through would move where the
+        // NEXT job runs just because someone looked at an old one.
+        if (readOnly) return
+        const targetMoved = state.target !== target
+        // Fires on every resource keystroke too, so only a real move invalidates things.
+        const nodeMoved = targetMoved || state.partition !== partition
         state.target = target
         state.partition = partition
         // A different node is a different SLURM request; drop the sized one.
-        slurmPreview = null
-        slurmKey = ''
+        if (nodeMoved) { slurmPreview = null; slurmKey = '' }
         onTargetChange({ target, partition })
+        // CPU threads and CUDA devices are settings for THIS machine. On a cluster the
+        // allocation decides both, so the settings tab has to be re-rendered without them
+        // (and with them again when the run comes back local).
+        if (targetMoved && modal) renderFields()
         paintActions()
       },
     })
@@ -1572,23 +1818,20 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
               undoBtn,
             ],
           }),
+          mounts.banner,
           mounts.status,
           panels.target,
           panels.setup,
           panels.plan,
         ],
       }),
-      actions: [
-        createButton({ label: 'Cancel', variant: 'ghost', onClick: () => close() }),
-        prevBtn,
-        nextBtn,
-        createBtn,
-      ],
+      actions: [cancelBtn, prevBtn, nextBtn, createBtn],
       onClose: () => { refetch.cancel() },
     })
     // Ctrl+Z anywhere in the wizard except inside a text control, where the browser's own
     // undo is the one the user means.
     modal.root.addEventListener('keydown', e => {
+      if (readOnly) return
       if (!(e.key === 'z' || e.key === 'Z') || !(e.ctrlKey || e.metaKey) || e.shiftKey) return
       const tag = e.target?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
@@ -1599,19 +1842,55 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     onOptimizeMount?.({ button: optimizeBtn, progressEl: optimizeProgress })
   }
 
+  /** The live wizard's state, parked while a read-only view borrows the same modal. The
+   *  wizard keeps ONE `state` object and one modal; without this, looking at a finished
+   *  run would leave its settings sitting in the next new job. */
+  let parkedLiveState = null
+
   async function open(mode = null, { draftId = null, prefill = null,
-    parentJobId = null } = {}) {
+    parentJobId = null, viewJob: job = null } = {}) {
     if (!modal) build()
-    if (mode) state.mode = mode
-    state.draftId = draftId
+    const wasReadOnly = readOnly
+    readOnly = !!job
+    if (readOnly && !wasReadOnly) parkedLiveState = snapshotState(state)
+    if (!readOnly && wasReadOnly && parkedLiveState) {
+      applySnapshot(state, parkedLiveState)
+      parkedLiveState = null
+      // Step 1 holds its own copy of the answer, so putting the live state back has to put
+      // its copy back too — otherwise the card would show the job just VIEWED while the
+      // payload carried the live one.
+      targetStep?.setChoice?.({ target: state.target, partition: state.partition })
+    }
+    viewJob = job
+    if (readOnly) {
+      const view = jobSettingsState(job)
+      viewProvenanceKnown = view.provenanceKnown
+      viewRebuilt = view.rebuiltFromParent
+      state.mode = view.mode
+      state.presetId = view.presetId || state.presetId
+      state.touched = { ...view.touched }
+      state.stageOverrides = view.stageOverrides
+      state.parentJobId = view.parentJobId
+      state.target = view.target
+      state.partition = view.partition
+      state.draftId = null
+      slurmPreview = null
+      slurmKey = ''
+      targetStep?.showRecorded?.({
+        target: view.target, partition: view.partition,
+        resources: job?.resources || null, requested: job?.requested_resources || null,
+      })
+    }
+    if (mode && !readOnly) state.mode = mode
+    if (!readOnly) state.draftId = draftId
     // Opening ON a job means continuing THAT run, not the newest one for this part —
     // which is what `ensureParent` would otherwise pick, silently, while the user had a
     // different relaxation selected in the list.
-    if (parentJobId) state.parentJobId = parentJobId
+    if (parentJobId && !readOnly) state.parentJobId = parentJobId
     // A production session starts clean: the previous session's settings describe a
     // different parent package, so carrying them over would present another run's
     // integrator choice as this one's.
-    if (state.mode === 'production' && !prefill) state.touched = {}
+    if (state.mode === 'production' && !prefill && !readOnly) state.touched = {}
     // A fresh session starts on the first tab with nothing to undo — the previous run's
     // history describes settings this wizard is no longer showing.
     state.tab = 'target'
@@ -1619,8 +1898,11 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     paintUndo()
     paintTabs()
     targetStep?.render()
-    restorePreferences()
-    if (prefill) {
+    paintReadOnlyBanner()
+    // The remembered GPU-fallback preference is a preference for the NEXT job. Applying it
+    // to a job that already ran would overwrite that run's own recorded answer.
+    if (!readOnly) restorePreferences()
+    if (prefill && !readOnly) {
       // A draft's recorded settings arrive as TOUCHED, because they were chosen — so
       // they survive a protocol switch and their chips read "you set this".
       state.touched = { ...prefill.touched }
@@ -1631,7 +1913,10 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       try {
         const cat = await api.getRelaxPresets?.()
         presets = cat?.presets || []
-        const preferred = presets.find(p => p.id === state.presetId && p.available !== false)
+        // Never re-pick the protocol in a locked view: a job that ran a protocol since made
+        // unavailable would silently be captioned with a different one.
+        const preferred = readOnly
+          || presets.find(p => p.id === state.presetId && p.available !== false)
         if (!preferred) {
           state.presetId = (presets.find(p => p.available !== false) || presets[0])?.id
             || state.presetId
@@ -1641,6 +1926,14 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     if (modal.header) {
       const t = modal.header.querySelector('.modal__title')
       if (t) t.textContent = modalTitle()
+    }
+    // "Cancel" implies there is something to abandon. Paging through a finished run's
+    // settings and shutting the window is not cancelling anything.
+    if (cancelBtn) {
+      // `createButton` wraps the label in a bare <span> (no class), and this button has no
+      // icon, so that span is the label.
+      const lbl = cancelBtn.querySelector('span') || cancelBtn
+      lbl.textContent = readOnly ? 'Close' : 'Cancel'
     }
     modal.open()
     render()
@@ -1652,5 +1945,14 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     modal?.close()
   }
 
-  return { open, close, isOpen: () => !!modal?.isOpen?.(), currentValues, applyRecommendation }
+  return {
+    open,
+    /** Show an EXISTING job's settings, locked. Same three steps, same stage table, same
+     *  conditions — replayed from the request the job records. */
+    openReadOnly: (job) => open(null, { viewJob: job }),
+    close,
+    isOpen: () => !!modal?.isOpen?.(),
+    currentValues,
+    applyRecommendation,
+  }
 }

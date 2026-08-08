@@ -15,7 +15,8 @@ import { statusBadge, makeSpinner, makeStatusLegend } from './job_status_symbol.
  * Render one canonical row model → a `<div>` row element. `onClick(jobId)` is
  * wired to a click on the row.
  */
-export function renderJobRow(m, { doc = document, onClick, onAction, onChevron } = {}) {
+export function renderJobRow(m, { doc = document, onClick, onAction, onChevron,
+  onContextMenu } = {}) {
   const row = doc.createElement('div')
   row.dataset.jobId = m.jobId
   row.style.cssText =
@@ -116,6 +117,10 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onChevron }
     row.append(btn)
   }
   if (onClick) row.addEventListener('click', () => onClick(m.jobId))
+  // Opt-in per-panel right-click. The HANDLER calls preventDefault, not this: the unified
+  // Simulate list mixes engines and only offers a menu on some of them, so suppressing the
+  // browser's here would leave the rest with no menu at all.
+  if (onContextMenu) row.addEventListener('contextmenu', (e) => onContextMenu(m.jobId, e))
   return row
 }
 
@@ -126,7 +131,7 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onChevron }
  * built once and not re-created every render.
  */
 export function renderJobList(listEl, model, {
-  doc = document, onClick, onAction, onChevron, emptyText = 'No jobs yet.',
+  doc = document, onClick, onAction, onChevron, onContextMenu, emptyText = 'No jobs yet.',
   dimColor = '#8a8a8a', legendState = null,
 } = {}) {
   if (!listEl) return
@@ -135,7 +140,9 @@ export function renderJobList(listEl, model, {
     return
   }
   listEl.innerHTML = ''
-  for (const rm of model.rows) listEl.appendChild(renderJobRow(rm, { doc, onClick, onAction, onChevron }))
+  for (const rm of model.rows) {
+    listEl.appendChild(renderJobRow(rm, { doc, onClick, onAction, onChevron, onContextMenu }))
+  }
   if (legendState && !legendState.el) {
     legendState.el = makeStatusLegend(doc)
     listEl.after(legendState.el)

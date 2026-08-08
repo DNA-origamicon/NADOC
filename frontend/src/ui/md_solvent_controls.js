@@ -47,6 +47,30 @@ export const SOLVENT_CHUNK = 32
 /** Bytes per molecule on the wire. */
 const BYTES_PER_WATER = { sphere: 12, atomistic: 36 }
 
+/** Wire species codes, in the order `ION_STYLE` is indexed by. Mirrors `SPECIES` in
+ *  backend/core/md_solvent.py — a payload carries its own `speciesTable`, so this is
+ *  only the fallback for one that doesn't. */
+export const ION_SPECIES = ['NA', 'CL', 'MG', 'K', 'CA']
+
+/**
+ * Census of a solvent payload's ions, keyed by species name.
+ *
+ * The frame IS the census. Ions ride every payload in full — never bounded by the
+ * hydration shell and never subject to the water cap (`extract_solvent_frame`, "Ions
+ * (never bounded)") — so tallying the species codes gives the exact ion content of the
+ * job's topology rather than an estimate of it.
+ */
+export function tallyIonSpecies(codes, speciesTable = null) {
+  const table = speciesTable?.length ? speciesTable : ION_SPECIES
+  const out = {}
+  for (const k of table) out[k] = 0
+  for (const c of codes || []) {
+    const k = table[c]
+    if (k !== undefined) out[k] += 1
+  }
+  return out
+}
+
 /**
  * Rough share of the cell's water that lands inside a shell of `shellAng`.
  *
@@ -150,6 +174,7 @@ export function initMdSolventControls({
   let _stride = null
   let _nFrames = 0
   let _meta = null              // /solvent-meta for _jobId
+  let _measuredSpecies = null   // real ion census, once a frame has landed
   let _cache = new Map()        // frame index → parsed frame
   let _sig = ''                 // request signature the cache belongs to
   let _frameIdx = 0
@@ -232,18 +257,28 @@ export function initMdSolventControls({
 
   function _renderLegend() {
     if (!legendEl) return
-    const on = !!ionsToggle?.checked && !!_meta?.species
+    // A LANDED FRAME OUTRANKS THE METADATA. The legend and the render read two different
+    // sources: the render draws the ions MDAnalysis finds in the PSF, while this reads
+    // the counts `charge_audit.json` recorded at package-build time. They disagree
+    // whenever the audit is missing/unready (`species: {}` — zero of everything) or the
+    // job's counter-ion isn't one of the three the audit tracks, and the panel then
+    // asserted "no ions in this job" over a screen full of ions. Ions are never shell-
+    // bounded and never capped, so a frame is an exact census: trust it, fall back to the
+    // audit only before one exists, and say NOTHING when neither can back a claim.
+    const species = _measuredSpecies ?? (_meta?.ready ? _meta.species : null)
+    const on = !!ionsToggle?.checked && !!species
     legendEl.style.display = on ? '' : 'none'
     if (!on) return
     // Only species this job actually contains — a legend entry for an absent ion is
     // a claim the render can't back up.
-    const rows = [['NA', 0], ['CL', 1], ['MG', 2]]
-      .filter(([k]) => (_meta.species[k] || 0) > 0)
+    const rows = ION_SPECIES
+      .map((k, i) => [k, i])
+      .filter(([k]) => (species[k] || 0) > 0)
       .map(([k, i]) => {
         const s = ION_STYLE[i]
         return `<span style="display:inline-flex;align-items:center;gap:3px;margin-right:8px">`
           + `<span style="width:8px;height:8px;border-radius:50%;background:#${s.color.toString(16).padStart(6, '0')}"></span>`
-          + `${s.name} ${_meta.species[k].toLocaleString()}</span>`
+          + `${s.name} ${species[k].toLocaleString()}</span>`
       })
     legendEl.innerHTML = rows.join('') || '<span>no ions in this job</span>'
   }
@@ -297,13 +332,14 @@ export function initMdSolventControls({
     if (!want.length) return
     const p = _plan()
     const sig = _requestSig()
+    const ionsOn = !!ionsToggle?.checked
     _inflight = true
     _setStatus(`Loading solvent (${want.length} frames)…`, '#58a6ff')
     try {
       const buf = await api.getMdFramesSolventBin(_jobId, want, {
         stride: _stride,
         water: !!waterToggle?.checked,
-        ions: !!ionsToggle?.checked,
+        ions: ionsOn,
         box: !!boxToggle?.checked,
         shellAng: _scope() === 'all' ? null : _shellAng(),
         atomistic: p.atomistic,
@@ -314,6 +350,13 @@ export function initMdSolventControls({
       const parsed = parseSolventBin(buf)
       if (!parsed) { _setStatus('No solvent for this frame', '#d29922'); return }
       getSolventOverlay?.()?.setIonSpecies(parsed.ionSpecies)
+      // Only a payload that ASKED for ions can speak to what the job contains — one
+      // fetched with the toggle off carries an empty species array for the obvious
+      // reason, and caching that as "no ions" is the bug this guard exists for.
+      if (ionsOn) {
+        _measuredSpecies = tallyIonSpecies(parsed.ionSpecies, parsed.speciesTable)
+        _renderLegend()
+      }
       for (const [id, f] of parsed.frames) _cache.set(id, f)
       const first = parsed.frames.values().next().value
       if (first) _measuredWater = first.nWater
@@ -423,10 +466,14 @@ export function initMdSolventControls({
       _nFrames = nFrames
       if (changed) {
         _meta = null
+        _measuredSpecies = null
         _measuredWater = null
         _cache = new Map()
-        if (jobId) _meta = await api.getMdSolventMeta(jobId).catch(() => null)
       }
+      // Retry while the answer is "not ready": a package still being built has no
+      // charge audit yet and reports zero water and zero ions, and caching THAT for the
+      // life of the panel is how the readouts end up contradicting the screen.
+      if (jobId && !_meta?.ready) _meta = await api.getMdSolventMeta(jobId).catch(() => null)
       _renderCount()
       _renderLegend()
       if (_enabled && _anyOn()) _refresh()
@@ -498,6 +545,10 @@ export function initMdSolventControls({
       const frame = parsed.frames.values().next().value
       if (!frame) return
       getSolventOverlay?.()?.setIonSpecies(parsed.ionSpecies)
+      if (ionsToggle?.checked) {
+        _measuredSpecies = tallyIonSpecies(parsed.ionSpecies, parsed.speciesTable)
+        _renderLegend()
+      }
       _measuredWater = frame.nWater
       _cache = new Map([[_frameIdx, frame]])
       _draw(_frameIdx)

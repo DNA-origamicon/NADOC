@@ -183,6 +183,34 @@ class TestSolventMeta:
         assert body["ready"] is False
         assert body["n_waters"] == 0 and body["n_ions"] == 0
 
+    # Replica packages hardlink only the immutable structure files, and some builders
+    # fold the audit into the manifest instead of writing a standalone file. Reading
+    # only charge_audit.json made those jobs report zero of everything, so the panel
+    # printed "no ions in this job" over a cell the renderer was filling with Mg2+
+    # straight out of the PSF. Measured from the live 6hbx100_noT production package.
+    def test_audit_falls_back_to_the_manifest(self, monkeypatch, tmp_path):
+        self._job(monkeypatch, tmp_path, manifest={
+            "box_ang": [83.121, 89.119, 436.906],
+            "charge_audit": {"ionization": {
+                "n_na": 1307, "n_cl": 48, "n_mg": 24, "n_waters": 89973,
+                "mg_hexahydrate": True}}})
+        body = client.get("/api/md/jobs/testjob/solvent-meta").json()
+        assert body["ready"] is True
+        assert body["species"] == {"NA": 1307, "CL": 48, "MG": 24}
+        assert body["n_ions"] == 1307 + 48 + 24
+        assert body["n_waters"] == 89973 + 6 * 24
+        assert body["box_nm"] == pytest.approx([8.3121, 8.9119, 43.6906])
+
+    # A standalone file and a manifest copy can both be present; the file is the one
+    # written by THIS package's solvation run, so it wins.
+    def test_the_standalone_audit_wins_over_the_manifest(self, monkeypatch, tmp_path):
+        self._job(monkeypatch, tmp_path,
+                  audit={"ionization": {"n_na": 5, "n_cl": 5, "n_mg": 0, "n_waters": 9}},
+                  manifest={"charge_audit": {"ionization": {
+                      "n_na": 999, "n_cl": 0, "n_mg": 0, "n_waters": 0}}})
+        body = client.get("/api/md/jobs/testjob/solvent-meta").json()
+        assert body["species"] == {"NA": 5, "CL": 5, "MG": 0}
+
     def test_a_corrupt_audit_does_not_raise(self, monkeypatch, tmp_path):
         pkg = tmp_path / "package"
         pkg.mkdir(parents=True)

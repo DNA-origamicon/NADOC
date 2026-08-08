@@ -860,6 +860,58 @@ def test_remote_recommendation_lists_partitions_and_honours_forced_partition(tmp
     assert {q["name"] for q in forced["available_qos"]} == {"cpu-normal", "cpu-long"}
 
 
+def test_remote_recommendation_prefills_the_wizard_request(tmp_path, monkeypatch):
+    """The wizard's first step now collects the resources, so the review card must open
+    on THOSE numbers — and only those: an untouched field still comes from the
+    recommendation sized against the package's exact atom count, not from the wizard's
+    pre-solvation estimate."""
+    from backend.api import routes_md
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    job = _make_prepared_job(tmp_path)
+    auto = routes_md.md_job_remote_recommendation(job.job_id)["resources"]
+
+    job.requested_resources = {"walltime": "48:00:00", "cores": 16}
+    job.save(tmp_path)
+    out = routes_md.md_job_remote_recommendation(job.job_id)["resources"]
+    assert out["walltime"] == "48:00:00"
+    assert out["cores"] == 16
+    # Everything else still tracks the recommendation.
+    assert out["mem_gb"] == auto["mem_gb"]
+    assert out["partition"] == auto["partition"]
+    assert out["qos"] == auto["qos"]
+
+
+def test_remote_submit_uses_the_wizard_request(tmp_path, monkeypatch):
+    """Same merge on the submit path: what step 1 asked for is what gets requested."""
+    from backend.api import routes_md
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    from backend.core import cluster_config
+    job = _make_prepared_job(tmp_path)
+    job.requested_resources = {"walltime": "48:00:00"}
+    job.save(tmp_path)
+    profile = cluster_config.load_profiles(tmp_path)["alpine"]
+
+    body = routes_md.SubmitRemoteRequest()
+    assert routes_md._remote_resources(job, profile, body)["walltime"] == "48:00:00"
+
+    # An explicit override from the review card still wins over the stored request.
+    body = routes_md.SubmitRemoteRequest(resources={"walltime": "02:00:00", "cores": 4})
+    assert routes_md._remote_resources(job, profile, body)["walltime"] == "02:00:00"
+
+
+def test_wizard_request_ignores_blank_fields(tmp_path, monkeypatch):
+    """A blanked control means "keep auto", not "request an empty wall time"."""
+    from backend.api import routes_md
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    job = _make_prepared_job(tmp_path)
+    auto = routes_md.md_job_remote_recommendation(job.job_id)["resources"]
+    job.requested_resources = {"walltime": "", "cores": None}
+    job.save(tmp_path)
+    out = routes_md.md_job_remote_recommendation(job.job_id)["resources"]
+    assert out["walltime"] == auto["walltime"]
+    assert out["cores"] == auto["cores"]
+
+
 def test_remote_recommendation_unknown_partition_400(tmp_path, monkeypatch):
     from fastapi import HTTPException
     from backend.api import routes_md

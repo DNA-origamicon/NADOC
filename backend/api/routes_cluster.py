@@ -271,6 +271,13 @@ async def cluster_slurm_preview(req: SlurmPreviewRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     header = slurm_script.preview_header(profile, resources, job_name=req.job_name)
+    # The wizard's first step now edits these resources in place, so it needs the QoS
+    # tiers valid for the resolved partition — same list, same shape, as the submit-review
+    # card's dropdown gets from ``/md/jobs/{id}/remote-recommendation``.
+    available_qos = [
+        {"name": q.name, "max_walltime_h": q.max_walltime_h}
+        for q in profile.qos_tiers_for_partition(resources.get("partition"))
+    ]
     return {
         "sized": True,
         "cluster_name": profile.name,
@@ -278,6 +285,7 @@ async def cluster_slurm_preview(req: SlurmPreviewRequest):
         "n_atoms_source": source,
         "total_ns": req.total_ns,
         "resources": resources,
+        "available_qos": available_qos,
         **header,
     }
 

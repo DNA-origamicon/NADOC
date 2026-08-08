@@ -21,6 +21,7 @@
 import { el } from './primitives/dom.js'
 import { initClusterConnection } from './cluster_connection.js'
 import { getRunDir, mountDirectoryButton, runDirLabel } from './run_location.js'
+import { initWizardResources } from './md_job_wizard_resources.js'
 import {
   TARGETS, UNWIRED_TARGETS,
   atomCapLabel, defaultPartition, localGpuSpeedFactor, localHardwareSummary,
@@ -32,17 +33,28 @@ import {
  * @param {Element}  deps.mount              the wizard panel to render into
  * @param {Function} deps.fetchHardware      () => Promise<hw>  (local probe)
  * @param {Function} deps.fetchAvailability  (opts) => Promise<resp>  (Alpine)
+ * @param {Function} deps.getSlurmPreview    (body) => Promise<preview> — sizes the request
+ * @param {Function} deps.getTotalNs         () => number — the plan's total simulated ns
  * @param {Function} deps.onChange           called whenever target/partition changes
  * @param {string}   deps.initialTarget
+ * @param {Function} [deps.readOnly]         () => boolean — showing a job that already
+ *   exists. Every probe here reads the CURRENT world (this machine's GPU, who is queued on
+ *   Alpine right now, what a run of this length would be sized at), none of which describes
+ *   a run that has already been set up — so read-only renders the recorded answer instead
+ *   of asking the world again. It also stops the step mounting the cluster login and the
+ *   shared run-directory picker, neither of which belongs behind a "view settings" click.
  */
 export function initWizardTargetStep({
   mount,
   fetchHardware,
   fetchAvailability,
+  getSlurmPreview = undefined,
+  getTotalNs = () => 0,
   fsApi = undefined,
   connect = initClusterConnection,
   onChange = () => {},
   initialTarget = 'local',
+  readOnly = () => false,
 } = {}) {
   let _target = initialTarget
   let _partition = null
@@ -54,7 +66,13 @@ export function initWizardTargetStep({
   let _clusterState = 'disconnected'
   let _conn = null
   let _chipMount = null
+  let _resources = null
+  // What an EXISTING job recorded, in read-only mode: where it ran and the SLURM request
+  // it was submitted with. Null in the ordinary live wizard.
+  let _recorded = null
   const _bodies = {}
+
+  const _ro = () => !!readOnly()
 
   const _localFactor = () => localGpuSpeedFactor(_hw?.gpu_name)
 
@@ -62,11 +80,17 @@ export function initWizardTargetStep({
     onChange({ target: _target, partition: _partition, ready: readiness().ready })
   }
 
-  const readiness = () =>
-    targetReadiness(_target, { clusterState: _clusterState, partition: _partition })
+  // Nothing to be ready FOR in a locked view: the question was answered when the job was
+  // created. The hint line stays empty because the card below already says where it ran —
+  // printing it twice was just noise.
+  const readiness = () => (_ro()
+    ? { ready: true, reason: '' }
+    : targetReadiness(_target, { clusterState: _clusterState, partition: _partition }))
 
   // ── local ────────────────────────────────────────────────────────────────
   async function _loadHardware() {
+    // The probe reports what this machine has TODAY, which is not what the job ran on.
+    if (_ro()) return
     if (_hw || _hwBusy || !fetchHardware) return
     _hwBusy = true
     _paintLocal()
@@ -83,6 +107,17 @@ export function initWizardTargetStep({
   function _paintLocal() {
     const box = _bodies.local
     if (!box) return
+    if (_ro()) {
+      // No hardware summary and no run-directory picker: the first would describe today's
+      // machine as though it were the one that ran, and the second is a shared app-wide
+      // preference that a "view settings" click must not be able to change.
+      box.innerHTML =
+        '<div style="font-size:12px;color:#c9d1d9">This job was set up to run on this '
+        + 'computer.</div><div style="font-size:10px;color:#6e7681;margin-top:6px;'
+        + 'line-height:1.5">CPU threads and CUDA devices for the run are on the next '
+        + 'step.</div>'
+      return
+    }
     const summary = localHardwareSummary(_hw)
     const cap = atomCapLabel(_hw)
     box.innerHTML = `
@@ -108,6 +143,9 @@ export function initWizardTargetStep({
 
   // ── alpine ───────────────────────────────────────────────────────────────
   async function _loadAvailability({ force = false } = {}) {
+    // Who is queued on Alpine right now says nothing about a job already set up, and the
+    // preselect below would silently move a recorded partition to today's fastest node.
+    if (_ro()) return
     if (_availBusy || _clusterState !== 'connected' || !fetchAvailability) return
     _availBusy = true
     _availError = ''
@@ -126,6 +164,9 @@ export function initWizardTargetStep({
     } finally {
       _availBusy = false
       _paintAlpine()
+      // The preselected row is a node choice like any other, so its request gets sized
+      // too — the recommended cores and wall time are on screen before the user asks.
+      void _resources?.refresh()
       _emit()
     }
   }
@@ -133,6 +174,23 @@ export function initWizardTargetStep({
   function _paintAlpine() {
     const box = _bodies.alpine
     if (!box) return
+    if (_ro()) {
+      // The recorded node, on its own. A live availability table here would show today's
+      // queue beside a choice made against a queue picture that is long gone.
+      box.querySelector('#wiz-target-alpine-rows').innerHTML = _partition
+        ? `<div class="wiz-part-row" data-partition="${_partition}" data-selectable="0"`
+          + ' style="display:grid;grid-template-columns:1.4fr .8fr .9fr 1fr;gap:10px;'
+          + 'align-items:baseline;padding:7px 9px;border-radius:4px;margin-bottom:3px;'
+          + 'background:rgba(31,111,235,.18);border:1px solid #1f6feb">'
+          + `<span style="color:#c9d1d9;font-weight:600">${_partition}</span>`
+          + '<span style="color:#6e7681;font-size:11px">—</span>'
+          + '<span style="color:#6e7681;font-size:11px">—</span>'
+          + '<span style="color:#6e7681;font-size:11px">chosen for this job</span></div>'
+        : '<div style="font-size:11px;color:#8b949e;padding:8px 0">'
+          + 'No partition was recorded for this job.</div>'
+      _resources?.render()
+      return
+    }
     const rows = partitionChoices(_avail, _localFactor())
     const connected = _clusterState === 'connected'
     box.querySelector('#wiz-target-alpine-rows').innerHTML = !connected
@@ -152,9 +210,13 @@ export function initWizardTargetStep({
       node.addEventListener('click', () => {
         _partition = node.dataset.partition
         _paintAlpine()
+        // A different node is a different request — re-size against it straight away, so
+        // the cores/wall time under the table always describe the row that is selected.
+        void _resources?.refresh()
         _emit()
       })
     })
+    _resources?.render()
   }
 
   function _rowHtml(c) {
@@ -179,6 +241,8 @@ export function initWizardTargetStep({
 
   /** Mount the existing cluster login chip on first use — one auth path, not two. */
   function _ensureConnectionChip() {
+    // Signing in to a cluster is not part of reading a finished job's settings.
+    if (_ro()) return
     if (_conn || !_chipMount) return
     _conn = connect({ mount: _chipMount })
     _clusterState = _conn?.getState?.() || _clusterState
@@ -202,6 +266,7 @@ export function initWizardTargetStep({
   }
 
   function _select(target) {
+    if (_ro()) return
     if (_target === target) return
     _target = target
     if (target !== 'alpine') _partition = null
@@ -219,19 +284,26 @@ export function initWizardTargetStep({
     if (!mount) return
     mount.innerHTML = ''
     mount.appendChild(el('p', {
-      text: 'Where should this job run? This decides how fast it goes and what it costs, '
+      text: _ro()
+        ? 'Where this job was set up to run. This decided how fast it went and what it '
+          + 'cost, and the rest of these settings were sized around it.'
+        : 'Where should this job run? This decides how fast it goes and what it costs, '
           + 'so the rest of the wizard is sized around it.',
       attrs: { style: 'font-size:12px;color:#8b949e;margin:0 0 10px' },
     }))
 
     for (const t of TARGETS) {
+      // A locked view shows the one target this job used — the other two cards would offer
+      // a choice about a job that already exists.
+      if (_ro() && t.id !== _target) continue
       const card = el('div', {
         className: 'wiz-target-card',
         dataset: { target: t.id },
         attrs: { style: 'border:1px solid #30363d;border-radius:6px;padding:10px;margin-bottom:8px;background:#0d1117' },
       })
       const head = el('div', {
-        attrs: { style: 'display:flex;align-items:baseline;gap:8px;cursor:pointer' },
+        attrs: { style: 'display:flex;align-items:baseline;gap:8px;cursor:'
+          + (_ro() ? 'default' : 'pointer') },
       })
       head.appendChild(el('span', {
         text: t.label,
@@ -257,6 +329,21 @@ export function initWizardTargetStep({
               + '<span>Partition</span><span>GPUs</span><span>Est. wait</span><span>Speed</span></div>'
               + '<div id="wiz-target-alpine-rows"></div>',
         }))
+        // Cores, wall time, memory, GPUs and QoS for the selected node — sized from this
+        // design. They used to be asked for by a popup after the job was already built.
+        const resMount = el('div', { id: 'wiz-target-resources' })
+        body.appendChild(resMount)
+        _resources = initWizardResources({
+          mount: resMount,
+          getSlurmPreview,
+          getPartition: () => _partition,
+          getTotalNs,
+          onChange: _emit,
+          readOnly,
+          // What the job actually asked for and got, so the locked block shows the run's
+          // own numbers instead of re-sizing today's design.
+          getRecorded: () => _recorded,
+        })
         // The chip is mounted LAZILY on first Alpine selection (see _select).  Mounting
         // it here would give every user a second /api/cluster/status poller alongside
         // the Clusters card's, for a target they may never choose.
@@ -279,6 +366,7 @@ export function initWizardTargetStep({
     _paintCards()
     _paintLocal()
     _paintAlpine()
+    // Every one of these reads the live world; each no-ops in read-only.
     if (_target === 'local' || _target === 'alpine') _loadHardware()
     if (_target === 'alpine') { _ensureConnectionChip(); _loadAvailability() }
   }
@@ -286,6 +374,7 @@ export function initWizardTargetStep({
   // The login chip broadcasts this; availability becomes readable the moment a
   // session exists, so refresh rather than making the user click again.
   const _onClusterState = e => {
+    if (_ro()) return
     const next = e?.detail?.state || 'disconnected'
     const became = next === 'connected' && _clusterState !== 'connected'
     _clusterState = next
@@ -296,15 +385,36 @@ export function initWizardTargetStep({
   }
   window.addEventListener('nadoc:cluster-state-change', _onClusterState)
 
+  /** Set the answer directly, without the live probes `_select` fires. Used to load a
+   *  recorded job into the read-only view, and to put the live answer back afterwards —
+   *  the step and the wizard hold this choice separately, so leaving it out of step would
+   *  show one target while the payload carried another. */
+  function setChoice({ target = 'local', partition = null } = {}) {
+    _target = target
+    _partition = partition
+  }
+
   return {
     render,
+    setChoice,
+    /** Load an existing job's recorded answer for the read-only view. */
+    showRecorded({ target = 'local', partition = null, resources = null, requested = null } = {}) {
+      setChoice({ target, partition })
+      _recorded = { resources, requested }
+      _resources?.reset?.()
+    },
     get target() { return _target },
     get partition() { return _partition },
     get hardware() { return _hw },
     isReady: () => readiness().ready,
     readiness,
-    payloadFields: () => targetPayloadFields(_target, { partition: _partition }),
+    payloadFields: () => targetPayloadFields(_target, {
+      partition: _partition,
+      resources: _resources?.overrides?.() || null,
+    }),
     refreshAvailability: () => _loadAvailability({ force: true }),
+    /** Re-size the SLURM request — the wizard calls this when the run length changes. */
+    refreshSizing: () => { if (_target === 'alpine') void _resources?.refresh() },
     dispose() {
       window.removeEventListener('nadoc:cluster-state-change', _onClusterState)
       _conn?.dispose?.()

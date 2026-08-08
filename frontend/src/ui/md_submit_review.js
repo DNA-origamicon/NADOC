@@ -63,13 +63,14 @@ export function formatResourceSummary(rec) {
 const _NUMERIC_OVERRIDE_KEYS = new Set(['gpus', 'cores', 'mem_gb'])
 
 /**
- * Pure: build the `POST /submit-remote` body from the base auto-resources plus any
- * user edits. With no edits we send just `{cluster_name}` so the backend
- * auto-recommends (single source of truth). With edits we send the full merged
- * `resources` dict — the backend uses it verbatim.
- * `overrides` values that are '' / null / undefined are treated as "not changed".
+ * Pure: drop the resource fields the user did not actually set and coerce the numeric
+ * ones. '' / null / undefined all mean "not changed", so the value stays auto.
+ *
+ * Shared with the Job Wizard's first step, which now collects the same five resources
+ * before the job exists — one definition of what counts as an edit, so a wizard-side
+ * override and a review-card override reach the backend in the same shape.
  */
-export function reviewSubmitPayload({ clusterName = 'alpine', baseResources = {}, overrides = {} } = {}) {
+export function cleanResourceOverrides(overrides = {}) {
   const cleaned = {}
   for (const [k, v] of Object.entries(overrides)) {
     if (v === '' || v == null) continue
@@ -81,6 +82,18 @@ export function reviewSubmitPayload({ clusterName = 'alpine', baseResources = {}
       cleaned[k] = v
     }
   }
+  return cleaned
+}
+
+/**
+ * Pure: build the `POST /submit-remote` body from the base auto-resources plus any
+ * user edits. With no edits we send just `{cluster_name}` so the backend
+ * auto-recommends (single source of truth). With edits we send the full merged
+ * `resources` dict — the backend uses it verbatim.
+ * `overrides` values that are '' / null / undefined are treated as "not changed".
+ */
+export function reviewSubmitPayload({ clusterName = 'alpine', baseResources = {}, overrides = {} } = {}) {
+  const cleaned = cleanResourceOverrides(overrides)
   if (Object.keys(cleaned).length === 0) return { cluster_name: clusterName }
   return { cluster_name: clusterName, resources: { ...baseResources, ...cleaned } }
 }

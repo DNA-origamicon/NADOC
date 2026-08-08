@@ -17,12 +17,16 @@
  */
 
 /**
- * `QUEUE` / `DEQUEUE` are NOT produced by `runControlState` — an engine wrapper adds them
- * when its machine is already busy (NAMD's run queue, `mdRunControl`). They live here so
- * every panel reads one action vocabulary off `dataset.runAction`.
+ * `QUEUE` / `DEQUEUE` / `SUBMIT` / `PREPARING` are NOT produced by `runControlState` — an
+ * engine wrapper adds them (NAMD's run queue and its cluster hand-off, `mdRunControl`).
+ * They live here so every panel reads one action vocabulary off `dataset.runAction`.
+ *
+ * `PREPARING` is a state, not an action: the control is disabled and spinning while the
+ * package is still being built, so nothing ever dispatches on it.
  */
 export const RUN_ACTION = Object.freeze({
   RUN: 'run', STOP: 'stop', RESUME: 'resume', QUEUE: 'queue', DEQUEUE: 'dequeue',
+  SUBMIT: 'submit', PREPARING: 'preparing',
 })
 
 const GLYPH = Object.freeze({ run: '▶', stop: '■', resume: '↻' })

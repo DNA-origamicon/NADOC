@@ -19,6 +19,8 @@ import {
   formatValue,
   inheritedRows,
   isProductionParent,
+  jobSettingsState,
+  productionSteps,
   makeDebounce,
   paramLabel,
   paramRows,
@@ -1147,5 +1149,206 @@ describe('WIZARD_FIELDS carries the separated axes', () => {
   it('passes an explicit null (auto) through as well', () => {
     expect(wizardPayload({ presetId: 'x', touched: { relax_rigid_bonds: null } }))
       .toHaveProperty('relax_rigid_bonds', null)
+  })
+})
+
+describe('jobSettingsState — a created job back into the wizard\'s own vocabulary', () => {
+  /** A relaxation job as `GET /md/jobs` returns it: `prep_params` is a model_dump, so it
+   *  is DENSE (every default materialised), and `prep_params_set` says which of those the
+   *  user actually chose. */
+  const relaxJob = (over = {}) => ({
+    job_id: 'abc', design_name: '6hb', created_at: 1_700_000_000,
+    execution_target: 'local', partition: null,
+    prep_params: {
+      relax_preset: 'literature', autostart: false,
+      fast: false, padding_nm: 1.2, minimize_steps: 4800, threads: 8,
+      salt_mode: 'screening', mg_conc_mM: 12.5, relax_hmr: null,
+    },
+    prep_params_set: ['relax_preset', 'autostart', 'fast', 'threads'],
+    ...over,
+  })
+
+  it('restores only the keys the user explicitly set', () => {
+    // The point of the whole exercise: replaying the dense dump would mark padding,
+    // minimize_steps and the ion concentrations as user choices too, and the wizard's
+    // provenance chips would then caption every protocol default as "you set this".
+    const v = jobSettingsState(relaxJob())
+    expect(v.touched).toEqual({ fast: false, threads: 8 })
+    expect(v.provenanceKnown).toBe(true)
+  })
+
+  it('keeps the protocol the job actually ran', () => {
+    expect(jobSettingsState(relaxJob()).presetId).toBe('literature')
+  })
+
+  it('drops request fields the wizard does not own', () => {
+    // `autostart` and `relax_preset` are in the explicit set but are not settings rows;
+    // letting them into `touched` would put them in the plan request as bare fields.
+    const v = jobSettingsState(relaxJob())
+    expect(v.touched).not.toHaveProperty('autostart')
+    expect(v.touched).not.toHaveProperty('relax_preset')
+  })
+
+  it('restores a false boolean — false is a choice, not an absence', () => {
+    expect(jobSettingsState(relaxJob()).touched.fast).toBe(false)
+  })
+
+  it('falls back to every stored value when no explicit set was recorded', () => {
+    const v = jobSettingsState(relaxJob({ prep_params_set: null }))
+    // Values are still exact; only the provenance is unknowable, which the flag reports so
+    // the view can say so instead of quietly captioning defaults as choices.
+    expect(v.touched).toMatchObject({ fast: false, padding_nm: 1.2, threads: 8 })
+    expect(v.provenanceKnown).toBe(false)
+  })
+
+  it('skips nulls in the fallback path — null means "auto", not a set value', () => {
+    const v = jobSettingsState(relaxJob({ prep_params_set: null }))
+    expect(v.touched).not.toHaveProperty('relax_hmr')
+  })
+
+  it('reads where the job ran off the job record, not the request', () => {
+    // A job created locally and later submitted to Alpine has moved since its request.
+    const v = jobSettingsState(relaxJob({ execution_target: 'alpine', partition: 'aa100' }))
+    expect(v).toMatchObject({ target: 'alpine', partition: 'aa100' })
+  })
+
+  it('reports unavailable for a job with no recorded request', () => {
+    expect(jobSettingsState(relaxJob({ prep_params: null })).available).toBe(false)
+    expect(jobSettingsState(undefined).available).toBe(false)
+  })
+
+  it('carries stage overrides through, so a hand-edited ladder replays as edited', () => {
+    const v = jobSettingsState(relaxJob({
+      prep_params: { ...relaxJob().prep_params, stage_overrides: { 3: { timestep: '2.0' } } },
+    }))
+    expect(v.stageOverrides).toEqual({ 3: { timestep: '2.0' } })
+  })
+
+  describe('production children', () => {
+    const prodJob = (over = {}) => ({
+      job_id: 'def', design_name: '6hb', created_at: 1_700_000_500,
+      run_kind: 'production', parent_job_id: 'abc', execution_target: 'local',
+      spawn_params: {
+        length_ns: 50, autostart: true, allow_undersized_cell: false,
+        rigid_bonds: 'all', hmr: true, seed: 12345, execution_target: 'local',
+      },
+      spawn_params_set: ['length_ns', 'autostart', 'allow_undersized_cell',
+                         'rigid_bonds', 'hmr', 'seed', 'execution_target'],
+      ...over,
+    })
+
+    it('reads spawn_params, not prep_params', () => {
+      const v = jobSettingsState(prodJob())
+      expect(v.mode).toBe('production')
+      expect(v.touched).toMatchObject({ length_ns: 50, seed: 12345 })
+    })
+
+    it('undoes the request-side rename of the two integrator axes', () => {
+      // ProductionRunRequest is already about production, so it calls them `rigid_bonds`
+      // and `hmr`; the wizard's own state prefixes both. Without the inverse mapping the
+      // two controls would render empty on a child that pinned them.
+      const v = jobSettingsState(prodJob())
+      expect(v.touched.production_rigid_bonds).toBe('all')
+      expect(v.touched.production_hmr).toBe(true)
+      expect(v.touched).not.toHaveProperty('rigid_bonds')
+    })
+
+    it('names the parent it continues, so the plan resolves against the right package', () => {
+      expect(jobSettingsState(prodJob()).parentJobId).toBe('abc')
+    })
+
+    it('stays viewable when spawn_params predates being recorded', () => {
+      // The child inherits its chemistry, cell and ladder from the parent's package, and
+      // the plan endpoint resolves all of that from the ROOT relaxation — so the parent id
+      // is enough. Treating a missing request as "nothing to show" made every Alpine
+      // fan-out report "settings were not recorded for this run".
+      const v = jobSettingsState(prodJob({ spawn_params: null }))
+      expect(v.available).toBe(true)
+      expect(v.parentJobId).toBe('abc')
+      expect(v.provenanceKnown).toBe(false)
+    })
+  })
+})
+
+describe('jobSettingsState — children created before spawn requests were recorded', () => {
+  /** An ensemble replica as it exists on disk today: fanned out onto Alpine, so it has a
+   *  parent, a velocity seed and an index — but `run_kind` is unset and there is no
+   *  recorded request of any kind. */
+  const replica = (over = {}) => ({
+    job_id: 'r0', design_name: '6hbx100_1xT', created_at: 1_785_100_000,
+    execution_target: 'alpine', partition: 'ah200',
+    parent_job_id: 'a0e54cdbf20f', ensemble_seed: 54321, ensemble_index: 0,
+    run_kind: null, prep_params: null, spawn_params: null,
+    segments: [
+      { name: '6hbx100_1xT_01_production_0p5ns_k0',
+        stage: '0.5 ns production replica (seed 54321)', steps: 500000 },
+    ],
+    ...over,
+  })
+
+  it('treats an ensemble replica as a production run — run_kind is not the only marker', () => {
+    // A replica leaves `run_kind` unset; keying only on that read every Alpine fan-out as a
+    // relaxation with no recorded request, which is what made them unviewable.
+    expect(jobSettingsState(replica()).mode).toBe('production')
+  })
+
+  it('is viewable — the parent rebuilds everything the child inherited', () => {
+    const v = jobSettingsState(replica())
+    expect(v.available).toBe(true)
+    expect(v.parentJobId).toBe('a0e54cdbf20f')
+    expect(v.provenanceKnown).toBe(false)
+  })
+
+  it('recovers the velocity seed, which IS this replica\'s own choice', () => {
+    expect(jobSettingsState(replica()).touched.seed).toBe(54321)
+  })
+
+  it('recovers the run length by counting steps, not by parsing the stage label', () => {
+    expect(jobSettingsState(replica()).touched.steps).toBe(500000)
+  })
+
+  it('a production CHILD with no spawn_params is viewable too', () => {
+    const v = jobSettingsState(replica({
+      run_kind: 'production', ensemble_index: null, ensemble_seed: null,
+    }))
+    expect(v).toMatchObject({ available: true, mode: 'production', parentJobId: 'a0e54cdbf20f' })
+  })
+
+  it('a ROOT relaxation with no request stays unviewable — nothing can rebuild it', () => {
+    expect(jobSettingsState({ job_id: 'x', prep_params: null, parent_job_id: null }).available)
+      .toBe(false)
+  })
+
+  it('sends the recovered steps in the plan request', () => {
+    // Omitting them would plan the wizard's 1 ns default over a run that did 0.5 ns — the
+    // stage table would then describe a run that never happened.
+    const v = jobSettingsState(replica())
+    const body = planPayload({ mode: v.mode, presetId: v.presetId, touched: v.touched,
+                               parentJobId: v.parentJobId })
+    expect(body).toMatchObject({ kind: 'production', parent_job_id: 'a0e54cdbf20f',
+                                 steps: 500000, seed: 54321 })
+  })
+})
+
+describe('productionSteps', () => {
+  const seg = (name, steps, stage = '') => ({ name, steps, stage })
+
+  it('sums every production segment', () => {
+    expect(productionSteps({ segments: [seg('d_01_production_a', 100), seg('d_02_production_b', 250)] }))
+      .toBe(350)
+  })
+
+  it('excludes the velocity-reseed bridge — it is not sampled time', () => {
+    expect(productionSteps({ segments: [seg('d_0R_reseed', 500), seg('d_01_production', 100)] }))
+      .toBe(100)
+  })
+
+  it('matches on the stage text too, mirroring the backend rule', () => {
+    expect(productionSteps({ segments: [seg('d_01_run', 700, '200 ns production replica')] }))
+      .toBe(700)
+  })
+
+  it('is 0 for a relaxation, so nothing is sent for one', () => {
+    expect(productionSteps({ segments: [seg('d_01_k0p5', 1000)] })).toBe(0)
   })
 })
