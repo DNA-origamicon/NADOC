@@ -311,7 +311,10 @@ def test_both_lattice_cell_types_overlay_the_atomistic_o5_prime():
     from backend.core.design_geometry import _geometry_for_helices
     from backend.core.models import Design
 
-    design = Design.model_validate_json(Path("workspace/2hbx1.nadoc").read_text())
+    fixture = Path("workspace/2hbx1.nadoc")
+    if not fixture.exists():
+        pytest.skip(f"fixture {fixture} not present on this machine")
+    design = Design.model_validate_json(fixture.read_text())
     cells = {h.id: h.direction for h in design.helices}
     atoms_by_name = {
         (a.helix_id, a.bp_index, a.direction, a.name): np.array([a.x, a.y, a.z])
