@@ -1182,9 +1182,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const alpineAvailEl   = document.getElementById('md-jobs-alpine-availability')
   const runTargetAlpineLabel = document.getElementById('md-run-target-alpine-label')
   const runTargetHint   = document.getElementById('md-run-target-hint')
-  const ensembleBtn   = document.getElementById('md-jobs-ensemble-btn')
-  const ensembleCount = document.getElementById('md-jobs-ensemble-count')
-  const ensembleNsInput = document.getElementById('md-jobs-ensemble-ns')
+  const targetPanes = {
+    local: document.getElementById('md-jobs-local-pane'),
+    alpine: document.getElementById('md-jobs-alpine-pane'),
+    runpod: document.getElementById('md-jobs-runpod-pane'),
+  }
   const resumeBtn     = document.getElementById('md-jobs-resume-btn')
   const resumeHistWrap   = document.getElementById('md-jobs-resume-history-wrap')
   const resumeHistToggle = document.getElementById('md-jobs-resume-history-toggle')
@@ -1237,8 +1239,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const healthBody    = document.getElementById('md-jobs-health-body')
   const healthArrow   = document.getElementById('md-jobs-health-arrow')
   const healthSpinner = document.getElementById('md-jobs-health-spinner')
-  // Cluster (Alpine) card — always-visible top-level card hosting the connect chip +
-  // the per-job submit/resume/ensemble/status/resume-history controls.
+  // Alpine-only status within the run-location card.
   const clusterStatusEl  = document.getElementById('md-jobs-cluster-status')
   const clusterReconnectEl = document.getElementById('md-jobs-cluster-reconnect-note')
   const _archive      = initJobArchive({ api, kind: 'md' })
@@ -1248,7 +1249,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const prodBox       = document.getElementById('md-jobs-production')
   const prodStatus    = document.getElementById('md-jobs-prod-status')
   const revertProdBtn = document.getElementById('md-jobs-revert-prod-btn')
-  const ensembleRollupEl = document.getElementById('md-jobs-ensemble-rollup')
 
   // Visualization tools (flexibility map + trajectory scrub) — mirror the oxDNA panel.
   const flexToggle   = document.getElementById('md-jobs-flex-toggle')
@@ -1396,7 +1396,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (runTargetHint) runTargetHint.textContent = disabled ? '(connect cluster)' : ''
     if (disabled && runTargetAlpine?.checked && runTargetLocal) {
       runTargetLocal.checked = true
-      _paintRunControl()   // the Relax button reverts from "Prepare for Alpine" → "Relax"
+      _syncTargetPane('alpine')
+      _visibleTarget = 'local'
     }
   }
 
@@ -1422,7 +1423,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // GPU picker: "Check RunPod GPUs" → scrollable list of available cards with live price,
   // estimated relax wall-clock, and estimated cost; the chosen card is remembered for launch.
   let _selectedRunpodGpu = null
-  initRunpodGpuPicker({
+  const _runpodPicker = initRunpodGpuPicker({
     mount: runpodPickerEl,
     onSelect: (row) => { _selectedRunpodGpu = row },
   })
@@ -1445,32 +1446,44 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
    * tested, and applied to the job the button will actually act on.
    */
   function _paintRunpodGate() {
-    const forNextJob = _currentRunTarget() === 'runpod'
-    // Also when the SELECTED job is a RunPod run. The session can be disconnected silently
-    // (no stored key, a revoked one, RunPod unreachable) — and with the box tied to the
-    // radio alone, a user looking at a stopped RunPod run saw no hint of why Resume would
-    // not work. The pre-flight rows are the explanation.
-    const forThisJob = _selectedJob()?.execution_target === 'runpod'
-    // And ALWAYS while a pod is billing, whatever the radio and the selection say. The
-    // whole point of the live-pod list is to surface a pod nobody remembers starting —
-    // which is precisely the case where the user is not looking at RunPod. A leak check
-    // you have to already suspect a leak to reach is not a leak check.
-    const forBillingPod = !!_runpod?.billing?.()
-    const show = forNextJob || forThisJob || forBillingPod
-    if (runpodStatusEl) runpodStatusEl.style.display = show ? 'block' : 'none'
-    // The GPU picker is about the NEXT job, so it stays tied to the radio.
-    if (runpodPickerEl) runpodPickerEl.style.display = forNextJob ? 'block' : 'none'
     _paintRunControl()
   }
 
-  // Selecting RunPod must refresh the connection box. Otherwise it keeps showing Alpine's
-  // "cluster: disconnected" and the user has no idea what state RunPod is in.
+  /** Keep the card mutually exclusive: Local has no details, while Alpine and RunPod
+   * each own a pane. Clear transient results when leaving a target so returning cannot
+   * reveal information fetched for an earlier choice. */
+  function _syncTargetPane(previousTarget = null) {
+    const target = _currentRunTarget()
+    Object.entries(targetPanes).forEach(([name, pane]) => {
+      if (pane) pane.hidden = name !== target
+    })
+    if (previousTarget === 'runpod' && target !== 'runpod') {
+      _selectedRunpodGpu = null
+      _runpodPicker.clear()
+    }
+    if (target !== 'alpine') {
+      if (clusterStatusEl) { clusterStatusEl.style.display = 'none'; clusterStatusEl.textContent = '' }
+      if (clusterReconnectEl) { clusterReconnectEl.style.display = 'none'; clusterReconnectEl.textContent = '' }
+      if (resumeBtn) resumeBtn.style.display = 'none'
+      if (resumeHistWrap) resumeHistWrap.style.display = 'none'
+    } else {
+      _renderReconnectPrompt()
+      const job = _selectedJob()
+      if (job?.execution_target === 'alpine') _applyJobState(job)
+    }
+    _paintRunpodGate()
+  }
+
+  let _visibleTarget = _currentRunTarget()
   for (const _el of [runTargetLocal, runTargetAlpine, runTargetRunpod]) {
     _el?.addEventListener('change', () => {
-      if (_currentRunTarget() === 'runpod') _runpod.refresh()
-      else _paintRunpodGate()
+      const next = _currentRunTarget()
+      _syncTargetPane(_visibleTarget)
+      _visibleTarget = next
+      if (next === 'runpod') _runpod.refresh()
     })
   }
+  _syncTargetPane()
 
   let _lastClusterState = null
   window.addEventListener('nadoc:cluster-state-change', (e) => {
@@ -1492,10 +1505,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
   })
   _updateRunTargetGate()
-  // Switching Local↔Alpine repaints the primary control ("▶ Relax" ⇄ "▶ Prepare for Alpine").
-  runTargetLocal?.addEventListener('change', () => _paintRunControl())
-  runTargetAlpine?.addEventListener('change', () => _paintRunControl())
-
   // Health card: simple collapse (starts open).
   healthToggle?.addEventListener('click', () => {
     const open = healthBody && healthBody.style.display !== 'none'
@@ -1825,12 +1834,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (detailEl) detailEl.style.display = 'none'
     // Nothing selected ⇒ nothing to early-stop.
     if (liveControlsCard) liveControlsCard.style.display = 'none'
-    // The Cluster card stays visible (it hosts the connect chip); just reset its per-job
-    // parts so no stale submit/resume/ensemble/status lingers with nothing selected.
+    // Clear selected-job Alpine details; connection and availability remain target-level.
     if (clusterStatusEl) { clusterStatusEl.style.display = 'none'; clusterStatusEl.textContent = '' }
     if (resumeBtn) resumeBtn.style.display = 'none'
-    const _ensWrap = document.getElementById('md-jobs-ensemble-wrap')
-    if (_ensWrap) _ensWrap.style.display = 'none'
     if (resumeHistWrap) resumeHistWrap.style.display = 'none'
     if (errorEl) {
       errorEl.style.display = 'none'
@@ -1838,7 +1844,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
     if (timelineEl) timelineEl.textContent = ''
     if (metricsEl) metricsEl.textContent = ''
-    if (ensembleRollupEl) { ensembleRollupEl.style.display = 'none'; ensembleRollupEl.innerHTML = '' }
     _setHealthSpinner(false)
     _renderProductionControls(null)
     _updateVizToggles(null)   // no job selected → only "Off" is selectable
@@ -3588,48 +3593,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
   }
 
-  function _ensembleCount() {
-    const n = parseInt(ensembleCount?.value ?? '', 10)
-    return Number.isFinite(n) && n >= 1 ? Math.min(64, n) : 4
-  }
-
-  /** Simulated nanoseconds per replica.  Staging an ensemble is one Alpine action rather
-   *  than a wizard flow, so its length control lives on the ensemble card — the wizard
-   *  sets the length of a SINGLE production child. */
-  function _ensembleNs() {
-    const ns = parseFloat(ensembleNsInput?.value ?? '')
-    return Number.isFinite(ns) && ns > 0 ? ns : 2.0
-  }
-
-  // Ensemble on Alpine: stage N production replicas (distinct seeds) from THIS completed
-  // relaxation, then open the review card (ensemble mode) to submit them all to acpu.
-  ensembleBtn?.addEventListener('click', () => runExclusive(ensembleBtn, async () => {
-    const parentId = _selectedId
-    if (!parentId) return
-    const n = _ensembleCount()
-    const lengthNs = _ensembleNs()
-    try {
-      // length_ns rather than steps: the replica's step count depends on the timestep the
-      // package resolves to, and sending a raw step count means the same request produces
-      // a different amount of simulated time on a 4 fs package than on a 1 fs one.
-      const d = await api.stageMdEnsemble(parentId, {
-        n_replicas: n, length_ns: lengthNs, cluster_name: 'alpine', partition: 'acpu',
-      })
-      if (!d) throw new Error(api.lastErrorMessage?.() ?? 'Server error')
-      showToast(`Staged ${n} production replica${n === 1 ? '' : 's'} of ${lengthNs} ns`, 'ok')
-      await _fetchJobs()
-      _renderList()
-      const firstChild = d.children?.[0]?.job_id
-      if (firstChild) {
-        _submitReview.open(firstChild, {
-          mode: 'ensemble', parentId, count: n, clusterName: 'alpine', partition: 'acpu',
-        })
-      }
-    } catch (err) {
-      showToast(`Ensemble staging failed: ${err.message}`, 'error')
-    }
-  }, { label: 'Staging…' }))
-
   let _resumeHistOpen = false
   resumeHistToggle?.addEventListener('click', () => {
     _resumeHistOpen = !_resumeHistOpen
@@ -4121,9 +4084,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (!job) return
 
     const awaitingSubmit = mdRemoteAwaitingSubmit(job)
-    // Cluster-specific status only (the generic run status lives in the master job card
-    // above — the old duplicate detail status line was removed).  Shown inside the
-    // Cluster (Alpine) card for a prepared-but-unsubmitted or SLURM-queued job.
+    // Alpine-specific status only; the generic run status lives in the master job card.
     if (clusterStatusEl) {
       // An in-flight upload outranks the record's own state: the job is still
       // "prepared, awaiting submit" on disk for the whole transfer, so reading the
@@ -4147,9 +4108,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }
     }
 
-    // The primary run control covers start/stop/resume for a local job AND the whole
-    // Alpine hand-off (⟳ Preparing… → ☁ Submit to Alpine).  Resume and Ensemble keep
-    // their dedicated cluster-gated buttons below.
+    // The primary run control covers start/stop/resume for a local job and the Alpine
+    // hand-off (⟳ Preparing… → ☁ Submit to Alpine).
     _paintRunControl()
     // The live early-stop card is shown ONLY for a running local relaxation, because
     // that is the only state in which it does anything. mdEarlyStopToggleState honours
@@ -4164,20 +4124,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
     // Submitting a prepared job is the PRIMARY control's job now (☁ Submit to Alpine),
     // so there is no separate button here to show or hide.
-    // Ensemble on Alpine: a COMPLETED relaxation (not itself a replica) can fan out N
-    // production replicas.  Disabled + tooltip until a cluster session is connected.
-    const ensembleWrap = document.getElementById('md-jobs-ensemble-wrap')
-    if (ensembleWrap) {
-      const eligible = job.status === 'completed' && !mdIsEnsembleReplica(job)
-      ensembleWrap.style.display = eligible ? '' : 'none'
-      if (eligible && ensembleBtn) {
-        const reason = alpineTargetDisabledReason(getClusterState?.() ?? 'disconnected')
-        ensembleBtn.disabled = !!reason
-        ensembleBtn.style.opacity = reason ? '0.5' : ''
-        ensembleBtn.style.cursor = reason ? 'not-allowed' : 'pointer'
-        ensembleBtn.title = reason || 'Stage N independent production replicas (distinct seeds) on the Alpine cluster'
-      }
-    }
     // Resume: a timed-out remote job, one-click continue from its last checkpoint.
     if (resumeBtn) {
       const rs = mdResumeButtonState(job, getClusterState?.() ?? 'disconnected')
@@ -4195,9 +4141,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // Show the error box for terminal failures AND for a failed Alpine submit
     // (queued-but-errored) so the rejection reason is visible with the retry button.
     _showDetailError(mdDetailErrorText(job))
-    _renderEnsembleRollup(job)
-    // The Cluster (Alpine) card is ALWAYS visible now (it hosts the connect chip, reachable
-    // before any Alpine job exists); its per-job controls above show/hide with the selection.
     _renderTimeline(job)
     _renderMetrics(job, liveMetrics)
     _renderProductionControls(job)
@@ -4206,45 +4149,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (_TERMINAL_STATUSES.has(job.status) && _displayMeta?.job_id !== job.job_id) {
       _fetchDisplayMeta(job.job_id)
     }
-  }
-
-  // Ensemble roll-up: when a parent (or one of its replicas) is selected, list every
-  // replica with its SLURM state so the parent view reads as the ensemble, and clicking
-  // a row jumps to that replica.  Hidden for non-ensemble jobs.
-  function _renderEnsembleRollup(job) {
-    if (!ensembleRollupEl) return
-    const parentId = mdIsEnsembleReplica(job) ? job.parent_job_id : job.job_id
-    const parent = _jobs.find(j => j.job_id === parentId)
-    const reps = parent ? ensembleReplicas(parent, _jobs) : []
-    if (!reps.length) {
-      ensembleRollupEl.style.display = 'none'
-      ensembleRollupEl.innerHTML = ''
-      return
-    }
-    ensembleRollupEl.style.display = ''
-    ensembleRollupEl.innerHTML = ''
-    const header = document.createElement('div')
-    header.style.cssText = `font-size:var(--text-xs);color:${_C.text};margin-bottom:3px`
-    header.textContent = ensembleChildSummary(parent, _jobs).replace(/^⧉\s*/, 'Ensemble · ')
-    ensembleRollupEl.appendChild(header)
-    const listWrap = document.createElement('div')
-    listWrap.style.cssText = `background:${_C.bg};border:1px solid ${_C.border};border-radius:3px;padding:3px;max-height:140px;overflow-y:auto`
-    reps.forEach((r, i) => {
-      const row = document.createElement('div')
-      const sel = r.job_id === _selectedId
-      row.style.cssText = `display:flex;align-items:center;gap:6px;padding:2px 4px;border-radius:3px;cursor:pointer;font-size:10px;${sel ? `background:${_C.bg2}` : ''}`
-      row.addEventListener('click', () => _selectJob(r.job_id))
-      const name = document.createElement('span')
-      name.style.cssText = `flex:1;color:${_C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap`
-      name.textContent = mdIsProductionChild(r) ? mdProductionRowLabel(r, i + 1) : mdReplicaRowLabel(r, i + 1)
-      const state = document.createElement('span')
-      state.style.cssText = `color:${_statusColor(r.status)};flex-shrink:0;font-family:var(--font-mono)`
-      state.textContent = mdReplicaStateText(r)
-      row.appendChild(name)
-      row.appendChild(state)
-      listWrap.appendChild(row)
-    })
-    ensembleRollupEl.appendChild(listWrap)
   }
 
   function _renderResumeHistory(job) {

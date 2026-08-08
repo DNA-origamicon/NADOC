@@ -5253,7 +5253,7 @@
               <!-- NAMD availability badge — HIDDEN: install state shows as a ⚠ on the NAMD tab. -->
               <div id="md-jobs-namd-status" style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
 
-              <!-- Compute-cluster (Alpine) connection chip + connect modal mount -->
+              <!-- Alpine connection UI. Moved into the Clusters card during startup. -->
               <div id="md-cluster-connection-mount" style="margin-bottom:6px"></div>
 
               <!-- Launch form.  Once the two buttons below are extracted to the
@@ -5693,22 +5693,13 @@
                 </div>
               </div>
 
-              <!-- ── Cluster (Alpine): the Alpine home — connection chip (prepended here
-                   from the panel top at init, see main.js) + every cluster-only control
-                   for the selected job (submit / resume / ensemble / SLURM status /
-                   resumption history).  Always present (not gated on a selected job) so the
-                   connect chip is reachable before any Alpine job exists; collapsible. The
-                   per-job controls inside still show/hide with the selection. ── -->
+              <!-- Run-location details. Only the pane selected below is visible. -->
               <div class="ox-card" id="md-jobs-cluster-card" style="margin-bottom:6px">
                 <div id="md-jobs-cluster-toggle" class="ox-card__header" style="color:#c9d1d9">
                   <span id="md-jobs-cluster-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Clusters</span>
                 </div>
                 <div id="md-jobs-cluster-body" class="ox-card__body">
-                  <!-- #md-cluster-connection-mount (the connect chip) is prepended here at init. -->
-
-                  <!-- Run target: local subprocess vs. Alpine cluster (moved here from Advanced
-                       so all run-location controls sit together; Alpine is gated on a live
-                       connection above). -->
+                  <!-- Run target for the next job. -->
                   <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:var(--text-xs);color:#8b949e">
                     <span>Run on:</span>
                     <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
@@ -5723,83 +5714,32 @@
                     <span id="md-run-target-hint" style="font-size:10px;color:#484f58"></span>
                   </div>
 
-                  <!-- Reconnect nudge: shown when Alpine runs are in flight but the session
-                       is down (they can't be monitored / their results fetched until you
-                       reconnect).  Populated by mdRemoteReconnectPrompt. -->
-                  <div id="md-jobs-cluster-reconnect-note"
-                       style="display:none;font-size:var(--text-xs);color:#d29922;background:#1c1400;border:1px solid #6b4e00;border-radius:3px;padding:5px;margin-bottom:6px"></div>
-
-                  <!-- First-time RunPod setup wizard entry point (API key → SSH key → volume →
-                       pre-flight). Always present so a new user has a path in; the button is
-                       rendered by initRunpodSetup. -->
-                  <div id="md-runpod-setup-mount" style="margin-bottom:6px"></div>
-
-                  <!-- RunPod status + pre-flight. Visible while the RunPod run-target is selected.
-                       Every row maps to a failure that already cost a real, billing pod; the Run
-                       button stays disabled until they are all green. -->
-                  <div id="md-jobs-runpod-status"
-                       style="display:none;border:1px solid #30363d;border-radius:3px;padding:6px;margin-bottom:6px;background:#0d1117"></div>
-
-                  <!-- RunPod GPU picker: "Check RunPod GPUs" button + scrollable list of available
-                       GPUs with price, estimated relax time, and estimated cost. Visible while the
-                       RunPod run-target is selected; rendered by initRunpodGpuPicker. -->
-                  <div id="md-jobs-runpod-picker"
-                       style="display:none;border:1px solid #30363d;border-radius:3px;padding:6px;margin-bottom:6px;background:#0d1117"></div>
-
-                  <!-- Alpine-specific status (prepared→submit / SLURM-queued wait). -->
-                  <div id="md-jobs-cluster-status" style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px"></div>
-
-                  <!-- Alpine GPU availability: button → popup with free GPUs, queue depth and
-                       estimated wait per partition (aa100/ami100/al40/ah200/artxpro6000).
-                       Rendered by initClusterAvailability; disabled until a session is live. -->
-                  <div id="md-jobs-alpine-availability" style="margin-bottom:6px"></div>
-
-                  <!-- Resume a timed-out SLURM job.  Submitting a prepared job is NOT here:
-                       it is the panel's primary run control, which becomes "☁ Submit to
-                       Alpine" once the package is built (mdRunControl). -->
-                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+                  <div id="md-jobs-local-pane" hidden></div>
+                  <div id="md-jobs-alpine-pane" hidden>
+                    <!-- #md-cluster-connection-mount is moved here at startup. -->
+                    <div id="md-jobs-cluster-reconnect-note"
+                         style="display:none;font-size:var(--text-xs);color:#d29922;background:#1c1400;border:1px solid #6b4e00;border-radius:3px;padding:5px;margin-bottom:6px"></div>
+                    <div id="md-jobs-cluster-status" style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px"></div>
+                    <div id="md-jobs-alpine-availability" style="margin-bottom:6px"></div>
                     <button id="md-jobs-resume-btn"
                             title="Resume this timed-out job from its last checkpoint (new SLURM submission)"
-                            style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer;display:none">
+                            style="font-size:var(--text-xs);padding:3px 8px;margin-bottom:6px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer;display:none">
                       ⟳ Resume
                     </button>
-                  </div>
-
-                  <!-- Ensemble roll-up: the replicas nested under this parent (or, when a
-                       replica is selected, its siblings) with their SLURM states, so the
-                       parent selection reads as the ensemble at a glance. -->
-                  <div id="md-jobs-ensemble-rollup" style="display:none;margin-bottom:6px"></div>
-
-                  <!-- Ensemble production on Alpine: stage N production replicas (distinct
-                       seeds) from THIS completed relaxation, fanned out across free CPU
-                       cores.  Shown only for a completed, non-replica job. -->
-                  <div id="md-jobs-ensemble-wrap"
-                       style="display:none;align-items:center;gap:6px;margin-bottom:6px;font-size:var(--text-xs);color:#8b949e;flex-wrap:wrap">
-                    <span title="Run several independent NAMD production copies with different random seeds to sample an ensemble, using Alpine's free CPU cores.">Ensemble replicas:</span>
-                    <input id="md-jobs-ensemble-count" type="number" min="1" max="64" value="4"
-                           style="width:48px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <!-- Each replica's length. Lives here rather than in the Job Wizard
-                         because staging an ensemble is a single Alpine action, not a
-                         wizard flow — but it must still be settable, or every replica
-                         silently takes a hardcoded default. -->
-                    <span title="How long each replica samples for.">of</span>
-                    <input id="md-jobs-ensemble-ns" type="number" min="0.1" step="1" value="2"
-                           style="width:56px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <span>ns each</span>
-                    <button id="md-jobs-ensemble-btn"
-                            title="Stage N independent production replicas (distinct seeds) on the Alpine cluster"
-                            style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer">
-                      ☁ Ensemble on Alpine
-                    </button>
-                  </div>
-
-                  <!-- Remote resumption history (timed-out → resumed chain) -->
-                  <div id="md-jobs-resume-history-wrap" style="display:none">
-                    <div id="md-jobs-resume-history-toggle" style="cursor:pointer;font-size:var(--text-xs);color:#8b949e;user-select:none">
-                      <span id="md-jobs-resume-history-arrow">▸</span> Resumptions (<span id="md-jobs-resume-history-count">0</span>)
+                    <div id="md-jobs-resume-history-wrap" style="display:none">
+                      <div id="md-jobs-resume-history-toggle" style="cursor:pointer;font-size:var(--text-xs);color:#8b949e;user-select:none">
+                        <span id="md-jobs-resume-history-arrow">▸</span> Resumptions (<span id="md-jobs-resume-history-count">0</span>)
+                      </div>
+                      <div id="md-jobs-resume-history"
+                           style="display:none;font-size:10px;font-family:var(--font-mono);background:#010409;border:1px solid #21262d;border-radius:3px;padding:5px;margin-top:3px;max-height:120px;overflow-y:auto"></div>
                     </div>
-                    <div id="md-jobs-resume-history"
-                         style="display:none;font-size:10px;font-family:var(--font-mono);background:#010409;border:1px solid #21262d;border-radius:3px;padding:5px;margin-top:3px;max-height:120px;overflow-y:auto"></div>
+                  </div>
+                  <div id="md-jobs-runpod-pane" hidden>
+                    <div id="md-runpod-setup-mount" style="margin-bottom:6px"></div>
+                    <div id="md-jobs-runpod-status"
+                         style="border:1px solid #30363d;border-radius:3px;padding:6px;margin-bottom:6px;background:#0d1117"></div>
+                    <div id="md-jobs-runpod-picker"
+                         style="border:1px solid #30363d;border-radius:3px;padding:6px;margin-bottom:6px;background:#0d1117"></div>
                   </div>
                 </div>
               </div>

@@ -2274,12 +2274,11 @@ async function main() {
   _moveStopBelowLaunch(runControlEls.mrdna, 'mrdna-jobs-stop-btn')
   _moveStopBelowLaunch(runControlEls.cando, 'cando-jobs-stop-btn')
 
-  // NAMD: the Alpine connect chip goes into the (always-visible) Cluster card, so it's
-  // reachable before any Alpine job exists — prepend so it sits at the top of that card.
+  // NAMD: keep the Alpine connect chip with the other Alpine-only controls.
   // (The launch-config move that used to be here is gone with the Advanced card: job
   // parameters live in the Job Wizard now.)
   {
-    const clusterBody = document.getElementById('md-jobs-cluster-body')
+    const clusterBody = document.getElementById('md-jobs-alpine-pane')
     const clusterMount = document.getElementById('md-cluster-connection-mount')
     if (clusterBody && clusterMount) clusterBody.prepend(clusterMount)
   }

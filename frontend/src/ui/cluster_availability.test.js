@@ -105,6 +105,19 @@ describe('polling policy', () => {
     expect(timers.clear).toHaveBeenCalled()
   })
 
+  it('the header X removes the popup and stops its timer', async () => {
+    const { api, timers } = setup()
+    await api.open()
+    const overlay = document.querySelector('.modal__overlay')
+
+    expect(overlay).not.toBeNull()
+    overlay.querySelector('.modal__close').click()
+
+    expect(document.querySelector('.modal__overlay')).toBeNull()
+    expect(timers.clear).toHaveBeenCalledWith('t1')
+    api.dispose()
+  })
+
   it('stops polling when the tab is hidden', async () => {
     const { api, timers } = setup()
     await api.open()

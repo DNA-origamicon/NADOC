@@ -121,7 +121,14 @@ export function initClusterAvailability({
       title: 'Alpine GPU availability',
       size: 'xl',
       body: _bodyEl,
-      onClose: () => { _syncPolling() },
+      // createModal invokes onClose before it detaches the overlay and changes isOpen().
+      // Drop our references first so polling stops immediately and an in-flight refresh
+      // cannot keep rendering into (or otherwise retain) the popup after its X is clicked.
+      onClose: () => {
+        _modal = null
+        _bodyEl = null
+        _syncPolling()
+      },
     })
     _renderBody()
     _modal.actions.append(
@@ -185,6 +192,8 @@ export function initClusterAvailability({
       doc.removeEventListener('visibilitychange', _onVisibility)
       if (_timer) { timers.clear(_timer); _timer = null }
       if (_modal && _modal.isOpen()) _modal.close()
+      _modal = null
+      _bodyEl = null
     },
   }
 }
