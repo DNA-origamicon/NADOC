@@ -779,7 +779,7 @@ async def fetch_outputs(job: MdJob, workspace_dir: Path, *, conn=None) -> None:
     # with a single frame on the next connect.
     from backend.core import remote_live_frame  # noqa: PLC0415 — cycle
 
-    remote_live_frame.clear_live_frame(job)
+    remote_live_frame.clear_live_frame(job, package_dir=package_dir)
 
 
 async def cancel_job(job: MdJob, *, conn=None) -> bool:
@@ -812,7 +812,9 @@ def _segment_has_trajectory(
     if job is not None:
         from backend.core import remote_live_frame  # noqa: PLC0415 — cycle
 
-        if remote_live_frame.is_live_stand_in(job, segment_name):
+        # output_dir is `<package>/output`, so its parent is the package dir the marker
+        # is keyed on.
+        if remote_live_frame.is_live_stand_in(job, segment_name, output_dir.parent):
             return False
     dcd = output_dir / f"{segment_name}.dcd"
     try:

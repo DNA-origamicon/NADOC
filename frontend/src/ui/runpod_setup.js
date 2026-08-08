@@ -16,9 +16,10 @@
  * Pure helpers (validateApiKeyFormat, balanceStatus, volumeOptions, setupStepState) are
  * exported for unit tests — no DOM, no network. The factory owns the modal + the fetches.
  *
- * The API key is NEVER persisted on the frontend — it lives in backend memory only
- * (routes_runpod._SESSION). We hold it in a closure variable for the modal's lifetime so
- * the finalize-with-volume call can re-send it, then it is dropped.
+ * The API key is NEVER persisted on the frontend. We hold it in a closure variable for the
+ * modal's lifetime so the finalize-with-volume call can re-send it, then it is dropped.
+ * The backend owns storage: it reads $RUNPOD_API_KEY / ~/.runpod_key at startup and
+ * connects itself, so this modal is usually only needed once, or to switch accounts.
  */
 
 import { createModal } from './primitives/modal.js'
@@ -275,7 +276,8 @@ export function initRunpodSetup({ mount, fetchImpl = fetch, onConnected = () => 
       ${_section(1, 'Add credit', `RunPod bills per second and destroys every pod at $0 balance.
         Add credit at ${_link(LINKS.billing, 'RunPod → Billing')}.${_balanceLine()}`)}
       ${_section(2, 'API key', `Create a key at ${_link(LINKS.settings, 'RunPod → Settings → API Keys')},
-        paste it below, and verify. The key is held in the app's memory only — never written to disk.
+        paste it below, and verify. Saving it to <code>~/.runpod_key</code> (chmod 600) lets NADOC
+        reconnect by itself on every restart — and kill a pod left billing after a crash.
         <div style="margin-top:6px;display:flex;gap:6px;align-items:center">
           <input id="rp-setup-key" type="password" placeholder="rp_..." value="${_esc(_apiKey)}"
             style="flex:1;font-size:11px;font-family:monospace;background:#0d1117;border:1px solid #30363d;

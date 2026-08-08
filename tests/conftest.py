@@ -19,6 +19,13 @@ from backend.core.models import (
     Vec3,
 )
 
+# ── No live RunPod connection from a test (module import time, before any app) ───
+# ``main.lifespan`` now auto-connects RunPod from the stored key, which would mean real
+# network calls to rest.runpod.io — and, far worse, the orphan REAPER running against the
+# real account from a test run. Any test that wants the path exercises
+# ``routes_runpod.autoconnect`` directly with a mock transport.
+os.environ.setdefault("NADOC_RUNPOD_AUTOCONNECT", "0")
+
 
 # ── Workspace isolation (autouse) ────────────────────────────────────────────────
 # The single source of truth for the on-disk design library is

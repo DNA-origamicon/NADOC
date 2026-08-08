@@ -122,6 +122,8 @@ FIELD_SCOPE: dict[str, str] = {
     "force_soft": "relaxation",
     "declash": "relaxation",
     "early_stop_relax": "relaxation",
+    "early_stop_tier": "relaxation",
+    "allow_catenated_seed": "relaxation",
     "minimize_steps": "relaxation",
     "protocol": "relaxation",
     # The production run only — recorded at prep, applied when production runs.

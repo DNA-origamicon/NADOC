@@ -104,6 +104,53 @@ def test_running_job_returns_the_first_blocker_or_none():
     assert md_queue.running_job([FakeJob("a", MdStatus.completed)]) is None
 
 
+# ── what actually holds THIS machine ─────────────────────────────────────────────
+#
+# The bug this pins: `running_job` used the target-blind `job_is_running`, so a run on
+# Alpine or a RunPod pod reported the machine busy.  The local queue then never drained
+# and ▶ Run read ＋ Queue for the whole of every remote run, with the GPU idle.
+
+
+@pytest.mark.parametrize("target", ["alpine", "runpod"])
+@pytest.mark.parametrize("status", [MdStatus.running, MdStatus.preparing])
+def test_a_remote_run_is_in_flight_but_does_not_occupy_this_machine(target, status):
+    job = FakeJob("a", status, execution_target=target)
+    assert md_queue.job_is_running(job) is True
+    assert md_queue.job_occupies_local_machine(job) is False
+
+
+def test_a_submitted_remote_job_does_not_occupy_this_machine():
+    for job in (
+        FakeJob("a", MdStatus.queued, slurm_job_id="12345", execution_target="alpine"),
+        FakeJob("b", MdStatus.queued, runpod_pod_id="pod1", execution_target="runpod"),
+    ):
+        assert md_queue.job_is_running(job) is True
+        assert md_queue.job_occupies_local_machine(job) is False
+
+
+@pytest.mark.parametrize("status", [MdStatus.running, MdStatus.preparing])
+def test_a_local_run_does_occupy_this_machine(status):
+    assert md_queue.job_occupies_local_machine(FakeJob("a", status)) is True
+
+
+def test_a_legacy_job_with_no_target_is_local():
+    job = FakeJob("a", MdStatus.running)
+    job.execution_target = None
+    assert md_queue.job_occupies_local_machine(job) is True
+
+
+def test_remote_runs_do_not_block_the_queue_but_a_local_one_does():
+    remote = [
+        FakeJob("alp", MdStatus.running, execution_target="alpine"),
+        FakeJob("pod", MdStatus.running, execution_target="runpod"),
+    ]
+    assert md_queue.running_job(remote) is None
+    assert (
+        md_queue.running_job([*remote, FakeJob("loc", MdStatus.running)]).job_id
+        == "loc"
+    )
+
+
 # ── who is startable ─────────────────────────────────────────────────────────────
 
 

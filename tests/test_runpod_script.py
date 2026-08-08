@@ -703,7 +703,7 @@ class TestLiveMetricsCollector:
         so a 60 s collector still drives a smooth 1.5 s bar. Sampling faster would only
         contend with NAMD's own writes to the same network volume — on a billing machine."""
         assert bm.LIVE_METRICS_INTERVAL_S >= 30
-        assert f'. {bm.LIVE_METRICS_INTERVAL_S}' in self._script()
+        assert f". {bm.LIVE_METRICS_INTERVAL_S}" in self._script()
 
     def test_the_interval_is_tunable(self):
         assert ". 5 " in self._script(live_metrics_s=5)

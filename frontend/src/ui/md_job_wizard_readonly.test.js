@@ -11,7 +11,7 @@
  * poller, and a stage-cell edit would re-plan a run that has already been built.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { initJobWizard } from './md_job_wizard.js'
+import { fieldAppliesToTarget, initJobWizard } from './md_job_wizard.js'
 
 /** A plan in the shape POST /md/protocol-plan returns, trimmed to what the wizard reads. */
 const PLAN = {
@@ -304,5 +304,38 @@ describe('a production child', () => {
       const body = api.fetchProtocolPlan.mock.calls[0][0]
       expect(body).toMatchObject({ kind: 'production', parent_job_id: 'parent1', length_ns: 200 })
     })
+  })
+})
+
+// ── which settings a target may see ──────────────────────────────────────────────
+
+describe('fieldAppliesToTarget', () => {
+  const local = { key: 'threads', localOnly: true }
+  const remote = { key: 'early_stop_tier', remoteOnly: true }
+  const plain = { key: 'padding_nm' }
+
+  it('local-only hardware is hidden on a cluster run', () => {
+    expect(fieldAppliesToTarget(local, 'local')).toBe(true)
+    expect(fieldAppliesToTarget(local, 'alpine')).toBe(false)
+    expect(fieldAppliesToTarget(local, 'runpod')).toBe(false)
+  })
+
+  it('remote-only settings are hidden on a local run — the mirror of the same law', () => {
+    // `early_stop_tier` picks which test a NODE uses to call a stage settled. It had no
+    // control at all, so every cluster run silently used the weaker tier B while the
+    // identical local run used both criteria.
+    expect(fieldAppliesToTarget(remote, 'local')).toBe(false)
+    expect(fieldAppliesToTarget(remote, 'alpine')).toBe(true)
+    expect(fieldAppliesToTarget(remote, 'runpod')).toBe(true)
+  })
+
+  it('an ordinary setting applies everywhere', () => {
+    for (const t of ['local', 'alpine', 'runpod']) {
+      expect(fieldAppliesToTarget(plain, t)).toBe(true)
+    }
+  })
+
+  it('copes with a missing descriptor — the submit filter looks keys up by map', () => {
+    expect(fieldAppliesToTarget(undefined, 'alpine')).toBe(true)
   })
 })

@@ -349,11 +349,15 @@ def reattach_job(
             log.exception("runpod: could not adopt pod for job %s", job.job_id)
             job.status = MdStatus.paused
             job.resumable = True
-            job.error = f"Lost the pod supervising this run ({exc}); resume to continue."
+            job.error = (
+                f"Lost the pod supervising this run ({exc}); resume to continue."
+            )
             job.runpod_pod_id = None
             job.save(workspace_dir)
         finally:
             _PODS.pop(job.job_id, None)
             _RUNNING.pop(job.job_id, None)
 
-    _RUNNING[job.job_id] = asyncio.create_task(_main(), name=f"runpod-adopt:{job.job_id}")
+    _RUNNING[job.job_id] = asyncio.create_task(
+        _main(), name=f"runpod-adopt:{job.job_id}"
+    )

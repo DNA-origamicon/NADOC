@@ -1,0 +1,143 @@
+{
+ "console": [],
+ "samples": [
+  {
+   "atMs": 0,
+   "shown": false,
+   "text": "",
+   "title": "",
+   "jobId": null
+  },
+  {
+   "atMs": 500,
+   "shown": false,
+   "text": "",
+   "title": "",
+   "jobId": null
+  },
+  {
+   "atMs": 1000,
+   "shown": true,
+   "text": "on the cluster",
+   "title": "Nothing fetched from the cluster yet. Fetch this run’s results to display it.",
+   "jobId": null
+  },
+  {
+   "atMs": 1500,
+   "shown": true,
+   "text": "on the cluster",
+   "title": "Nothing fetched from the cluster yet. Fetch this run’s results to display it.",
+   "jobId": null
+  },
+  {
+   "atMs": 2000,
+   "shown": true,
+   "text": "on the cluster",
+   "title": "Nothing fetched from the cluster yet. Fetch this run’s results to display it.",
+   "jobId": null
+  },
+  {
+   "atMs": 2500,
+   "shown": true,
+   "text": "on the cluster",
+   "title": "Nothing fetched from the cluster yet. Fetch this run’s results to display it.",
+   "jobId": null
+  },
+  {
+   "atMs": 3000,
+   "shown": true,
+   "text": "on the cluster",
+   "title": "Nothing fetched from the cluster yet. Fetch this run’s results to display it.",
+   "jobId": null
+  },
+  {
+   "atMs": 3500,
+   "shown": true,
+   "text": "on the cluster",
+   "title": "Nothing fetched from the cluster yet. Fetch this run’s results to display it.",
+   "jobId": null
+  },
+  {
+   "atMs": 4000,
+   "shown": true,
+   "text": "on the cluster",
+   "title": "Nothing fetched from the cluster yet. Fetch this run’s results to display it.",
+   "jobId": null
+  },
+  {
+   "atMs": 4500,
+   "shown": true,
+   "text": "on the cluster",
+   "title": "Nothing fetched from the cluster yet. Fetch this run’s results to display it.",
+   "jobId": null
+  },
+  {
+   "atMs": 5000,
+   "shown": true,
+   "text": "on the cluster",
+   "title": "Nothing fetched from the cluster yet. Fetch this run’s results to display it.",
+   "jobId": null
+  },
+  {
+   "atMs": 5500,
+   "shown": true,
+   "text": "on the cluster",
+   "title": "Nothing fetched from the cluster yet. Fetch this run’s results to display it.",
+   "jobId": null
+  },
+  {
+   "atMs": 6000,
+   "shown": true,
+   "text": "on the cluster",
+   "title": "Nothing fetched from the cluster yet. Fetch this run’s results to display it.",
+   "jobId": null
+  },
+  {
+   "atMs": 6500,
+   "shown": true,
+   "text": "on the cluster",
+   "title": "Nothing fetched from the cluster yet. Fetch this run’s results to display it.",
+   "jobId": null
+  }
+ ],
+ "jobs": [
+  {
+   "id": "383f7dcc4a5d",
+   "target": "runpod",
+   "status": "completed"
+  },
+  {
+   "id": "6fc87681f9de",
+   "target": "runpod",
+   "status": "completed"
+  },
+  {
+   "id": "3e9e2df26012",
+   "target": "alpine",
+   "status": "running"
+  },
+  {
+   "id": "15387f4839c8",
+   "target": "local",
+   "status": "completed"
+  }
+ ],
+ "have": {
+  "runpod": 0,
+  "alpine": 2
+ },
+ "podDot": {
+  "shown": true,
+  "text": "on the pod",
+  "title": "Nothing fetched from the pod yet. Fetch this run's results to display it.",
+  "jobId": null
+ },
+ "alpineDot": {
+  "shown": true,
+  "text": "on the cluster",
+  "title": "Nothing fetched from the cluster yet. Fetch this run’s results to display it.",
+  "jobId": null
+ },
+ "leaked": [],
+ "podStateReached": true
+}

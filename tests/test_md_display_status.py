@@ -18,9 +18,10 @@ def _r(**kw):
 
 
 def test_a_displayable_job_has_no_complaint():
-    assert display_not_ready(
-        has_manifest=True, has_trajectory=True, status="completed"
-    ) is None
+    assert (
+        display_not_ready(has_manifest=True, has_trajectory=True, status="completed")
+        is None
+    )
 
 
 def test_a_single_fetched_frame_counts_as_displayable():
@@ -41,12 +42,19 @@ def test_a_local_run_with_no_frames_yet_resolves_itself():
     assert "no frames" in v["reason"].lower()
 
 
-def test_a_runpod_run_says_the_data_is_on_the_pod():
-    """Waiting will NOT help here — that is the whole difference from 'pending'."""
+def test_a_running_runpod_job_says_the_frame_is_already_coming():
+    """A pod is key-based, so NADOC pulls snapshots on a timer without being asked.
+
+    The old wording told the user to "fetch a live frame ... or fetch the results when it
+    finishes" — instructions for work the panel now does by itself, on a job the user
+    cannot help with. Only the code still has to be 'remote' (waiting on a LOCAL
+    trajectory would never resolve).
+    """
     v = _r(execution_target="runpod")
     assert v["code"] == "remote"
     assert "pod" in v["reason"].lower()
-    assert "fetch" in v["reason"].lower()
+    assert "fetching" in v["reason"].lower()
+    assert "not on this computer" not in v["reason"].lower()
 
 
 def test_an_alpine_run_says_cluster_not_pod():
@@ -83,4 +91,8 @@ def test_every_case_carries_a_human_reason():
         {"execution_target": "local", "status": "failed"},
     ):
         v = _r(**kw)
-        assert v["reason"].strip() and v["reason"].endswith(".")
+        # A finished sentence, not a fragment. "…" counts: the RunPod case describes work
+        # already under way ("Fetching the latest frame from the pod…"), which is an
+        # ongoing action and takes an ellipsis like every other in-progress string in the
+        # app — not a full stop.
+        assert v["reason"].strip() and v["reason"].rstrip().endswith((".", "…"))

@@ -127,6 +127,18 @@ describe('initRunpodSetup factory', () => {
     w.dispose()
   })
 
+  it('the API-key step tells the user how to make the key stick', () => {
+    // It used to promise the key was "never written to disk". The backend now reads
+    // ~/.runpod_key at startup and reconnects itself, so that sentence would be a lie —
+    // and the reason to store it (killing a pod left billing after a crash) is the point.
+    const w = initRunpodSetup({ mount: document.createElement('div'), fetchImpl: vi.fn() })
+    w.open()
+    const text = document.querySelector('.modal__body').textContent
+    expect(text).toContain('~/.runpod_key')
+    expect(text).not.toContain('never written to disk')
+    w.dispose()
+  })
+
   it('verifying a key connects, then loads balance / volumes / ssh key', async () => {
     const fetchImpl = fakeFetch({
       'POST /api/runpod/connect': () => ({ json: { connected: true, network_volume_id: null } }),

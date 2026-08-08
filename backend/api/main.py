@@ -178,8 +178,9 @@ async def _terminate_runpod_pods() -> None:
     process is starting immediately, and ``POST /runpod/connect`` re-attaches to any pod a
     still-running job record claims (see ``runpod_supervisor.adoptable_pods``).
 
-    On a REAL shutdown this still fires, because the API key is memory-only: once we exit,
-    NADOC cannot terminate a pod it started.  ``under_reloader`` fails toward False — i.e.
+    On a REAL shutdown this still fires: nothing watches the pod once we exit, and the next
+    startup's reap is a crash safety net, not a reason to leave a pod billing while the app
+    is closed.  ``under_reloader`` fails toward False — i.e.
     toward terminating — so a detection failure costs a dev run, never a leaked pod.
     """
     try:
@@ -223,11 +224,21 @@ async def lifespan(app: FastAPI):
     session_cache.start(_WORKSPACE_DIR)
     # Resume any NAMD jobs interrupted by a previous shutdown, then keep watching.
     md_supervisor = asyncio.create_task(_md_supervisor_loop())
+    # Connect RunPod from the stored key ($RUNPOD_API_KEY / ~/.runpod_key). Backgrounded:
+    # it talks to RunPod over the network, and a slow or unreachable API must not hold the
+    # whole server's startup. Doing it at all is what lets the orphan reaper run without
+    # waiting for a human to open the wizard and re-paste a key.
+    from backend.api import routes_runpod
+
+    runpod_connect = asyncio.create_task(routes_runpod.autoconnect())
     yield
-    # A RunPod pod bills from creation to termination.  On a CLEAN shutdown we still
-    # hold the API key in memory, so this is the last moment we can kill anything we
-    # started.  (On an UNCLEAN death the key dies with us and we cannot — which is why
-    # POST /runpod/connect reaps orphans the instant you reconnect.)
+    runpod_connect.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await runpod_connect
+    # A RunPod pod bills from creation to termination, so a clean shutdown kills anything
+    # we started.  (An UNCLEAN death is now caught by the next startup: autoconnect resolves
+    # the stored key and reaps the orphans, which is exactly what a memory-only key made
+    # impossible.)
     await _terminate_runpod_pods()
     md_supervisor.cancel()
     try:

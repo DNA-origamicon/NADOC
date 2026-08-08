@@ -16,6 +16,7 @@ The four not-ready cases are genuinely different and only one of them is a probl
 
 Pure and separately tested; the route supplies the facts, the panel picks the wording.
 """
+
 from __future__ import annotations
 
 from typing import Optional
@@ -47,12 +48,21 @@ def display_not_ready(
     remote = execution_target in ("alpine", "runpod")
     in_flight = status in _IN_FLIGHT
     if remote and in_flight:
-        where = "the pod" if execution_target == "runpod" else "the cluster"
+        # RunPod auth is key-based, so NADOC can reach the pod whenever it likes and the
+        # panel pulls a snapshot by itself on a timer. Alpine is Duo-gated — there is no
+        # background session, so a frame only arrives when the user is signed in and asks.
+        # Saying "fetch a live frame" at a RunPod user described work already in progress.
+        if execution_target == "runpod":
+            return {
+                "code": "remote",
+                "reason": "Fetching the latest frame from the pod…",
+            }
         return {
             "code": "remote",
             "reason": (
-                f"This run's trajectory is on {where}, not on this computer. Fetch a live "
-                "frame to see where it has got to, or fetch the results when it finishes."
+                "This run's trajectory is on the cluster, not on this computer. Fetch a "
+                "live frame to see where it has got to, or fetch the results when it "
+                "finishes."
             ),
         }
     if in_flight:

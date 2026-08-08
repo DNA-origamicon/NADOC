@@ -7,6 +7,8 @@ button for exactly that reason.
 
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
@@ -34,6 +36,7 @@ def _reset_session():
     routes_runpod._SESSION.client = None  # noqa: SLF001
     routes_runpod._SESSION.network_volume_id = None  # noqa: SLF001
     routes_runpod._SESSION.api_key = None  # noqa: SLF001 — else /balance hits GraphQL for real
+    routes_runpod._SESSION.key_source = "none"  # noqa: SLF001
 
 
 def _pod(pid="p1", status="RUNNING"):
@@ -137,6 +140,134 @@ class TestConnect:
         )
         assert client.post("/api/runpod/disconnect").json()["connected"] is False
         assert client.get("/api/runpod/pods").status_code == 400
+
+
+class TestAutoconnect:
+    """Startup resolves the stored key itself.
+
+    The point is not convenience. Holding the key in memory only meant that after any
+    restart NADOC could not terminate a pod it was still being billed for — connecting
+    on boot is what lets the orphan reaper run without a human re-pasting a key.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _enable(self, monkeypatch):
+        # conftest sets this to "0" so the rest of the suite never touches the network.
+        monkeypatch.setenv("NADOC_RUNPOD_AUTOCONNECT", "1")
+        monkeypatch.delenv("RUNPOD_NETWORK_VOLUME_ID", raising=False)
+
+    def _key_file(self, monkeypatch, tmp_path, text="rpa_stored1234"):
+        p = tmp_path / ".runpod_key"
+        p.write_text(text)
+        monkeypatch.setattr(routes_runpod.runpod_api, "KEY_FILE", p)
+        monkeypatch.delenv("RUNPOD_API_KEY", raising=False)
+        return p
+
+    def test_connects_from_the_key_file_with_no_human(
+        self, client, monkeypatch, tmp_path
+    ):
+        self._key_file(monkeypatch, tmp_path)
+        _mock_runpod(monkeypatch, lambda req: httpx.Response(200, json=[_pod()]))
+
+        body = asyncio.run(routes_runpod.autoconnect())
+        assert body["connected"] is True
+        assert body["key_source"] == "file"
+        assert client.get("/api/runpod/status").json()["connected"] is True
+
+    def test_the_env_var_wins_over_the_file(self, client, monkeypatch, tmp_path):
+        self._key_file(monkeypatch, tmp_path)
+        monkeypatch.setenv("RUNPOD_API_KEY", "rpa_fromenv1234")
+        seen: list[str] = []
+
+        def handler(req):
+            seen.append(req.headers.get("authorization", ""))
+            return httpx.Response(200, json=[])
+
+        _mock_runpod(monkeypatch, handler)
+        body = asyncio.run(routes_runpod.autoconnect())
+        assert body["key_source"] == "env"
+        assert any("rpa_fromenv1234" in h for h in seen)
+
+    def test_no_stored_key_is_silence_not_a_crash(self, client, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            routes_runpod.runpod_api, "KEY_FILE", tmp_path / "nothing-here"
+        )
+        monkeypatch.delenv("RUNPOD_API_KEY", raising=False)
+
+        assert asyncio.run(routes_runpod.autoconnect()) is None
+        assert client.get("/api/runpod/status").json()["connected"] is False
+
+    def test_a_rejected_key_leaves_the_server_usable(
+        self, client, monkeypatch, tmp_path
+    ):
+        """A revoked key must not take the whole backend down on boot."""
+        self._key_file(monkeypatch, tmp_path)
+        _mock_runpod(monkeypatch, lambda req: httpx.Response(401, text="nope"))
+
+        assert asyncio.run(routes_runpod.autoconnect()) is None
+        assert client.get("/api/runpod/status").json()["connected"] is False
+
+    def test_the_opt_out_env_var_is_honoured(self, client, monkeypatch, tmp_path):
+        self._key_file(monkeypatch, tmp_path)
+        monkeypatch.setenv("NADOC_RUNPOD_AUTOCONNECT", "0")
+
+        assert asyncio.run(routes_runpod.autoconnect()) is None
+
+    def test_adopts_the_volume_when_the_account_has_exactly_one(
+        self, client, monkeypatch, tmp_path
+    ):
+        """Otherwise a self-connected session still fails the pre-flight volume gate."""
+        self._key_file(monkeypatch, tmp_path)
+
+        def handler(req):
+            if req.url.path.endswith("/networkvolumes"):
+                return httpx.Response(
+                    200, json=[{"id": VOLUME, "name": "namd", "size": 60}]
+                )
+            return httpx.Response(200, json=[])
+
+        _mock_runpod(monkeypatch, handler)
+        body = asyncio.run(routes_runpod.autoconnect())
+        assert body["network_volume_id"] == VOLUME
+
+    def test_two_volumes_are_left_for_the_user_to_pick(
+        self, client, monkeypatch, tmp_path
+    ):
+        """Guessing between disks could stage a job onto the wrong one."""
+        self._key_file(monkeypatch, tmp_path)
+
+        def handler(req):
+            if req.url.path.endswith("/networkvolumes"):
+                return httpx.Response(
+                    200,
+                    json=[
+                        {"id": VOLUME, "name": "namd", "size": 60},
+                        {"id": "other99", "name": "scratch", "size": 20},
+                    ],
+                )
+            return httpx.Response(200, json=[])
+
+        _mock_runpod(monkeypatch, handler)
+        body = asyncio.run(routes_runpod.autoconnect())
+        assert body["network_volume_id"] is None
+
+    def test_a_pinned_volume_env_var_wins(self, client, monkeypatch, tmp_path):
+        self._key_file(monkeypatch, tmp_path)
+        monkeypatch.setenv("RUNPOD_NETWORK_VOLUME_ID", "pinned42")
+        _mock_runpod(monkeypatch, lambda req: httpx.Response(200, json=[]))
+
+        body = asyncio.run(routes_runpod.autoconnect())
+        assert body["network_volume_id"] == "pinned42"
+
+    def test_a_pasted_key_overrides_the_stored_one(self, client, monkeypatch, tmp_path):
+        """Using a second account must not require editing files."""
+        self._key_file(monkeypatch, tmp_path)
+        _mock_runpod(monkeypatch, lambda req: httpx.Response(200, json=[]))
+        asyncio.run(routes_runpod.autoconnect())
+
+        r = client.post("/api/runpod/connect", json={"api_key": "rp_pasted1234"})
+        assert r.json()["key_source"] == "manual"
+        assert routes_runpod._SESSION.api_key == "rp_pasted1234"  # noqa: SLF001
 
 
 class TestSetupWizard:

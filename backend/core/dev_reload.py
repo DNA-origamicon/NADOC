@@ -2,9 +2,10 @@
 
 Exists for exactly one decision, and it is a money decision.
 
-``main.lifespan`` destroys every RunPod pod it still owns on shutdown, because the API key
-lives in memory only: once the process is gone NADOC literally cannot terminate a pod it
-started, so the shutdown hook is the last possible moment. That is right for a real
+``main.lifespan`` destroys every RunPod pod it still owns on shutdown, because once the
+process is gone nothing is watching the pod and it bills on. (Since the key moved to disk
+the NEXT startup does reap orphans — but that is a safety net for a crash, not a licence to
+leave pods up when the user has closed the app.) That is right for a real
 shutdown and **wrong for a dev-server reload** — `just dev` runs uvicorn with
 ``--reload --reload-dir backend``, so editing any backend file tears the server down and
 takes a live, paid, multi-day GPU run with it. Measured: a 200 ns production died at 0.4%
@@ -19,6 +20,7 @@ spawn) child. So we walk up ``/proc`` looking for it.
 non-Linux host, a truncated chain — returns False, which means "terminate the pods". A
 leaked pod bills forever; a killed dev run costs minutes and is resumable from the volume.
 """
+
 from __future__ import annotations
 
 import os

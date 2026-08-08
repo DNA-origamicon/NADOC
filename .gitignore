@@ -20,6 +20,8 @@ frontend/test-results/
 test-results/
 # Shared-renderer diagnostic screenshots — regenerated on every diag run.
 frontend/e2e/screenshots/shared_renderer_diag/
+# Troubleshooting captures from helpers/md_display_log.js — run artefacts, not fixtures.
+frontend/e2e/logs/
 # E2E bench screenshots — scratch output; the .json bench results stay tracked.
 frontend/e2e/bench_results/*.png
 

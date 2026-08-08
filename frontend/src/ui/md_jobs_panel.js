@@ -47,7 +47,9 @@ import { runExclusive } from './primitives/button_busy.js'
 import { RUN_ACTION, runControlState } from './job_run_control.js'
 import { initAdvancedOptimize, residentModeFromRecommendation } from './md_advanced_optimize.js'
 import * as api from '../api/client.js'
-import { initRunpodStatus, runpodBlockReason, runpodCanLaunch } from './runpod_status.js'
+import {
+  initRunpodStatus, runpodBlockReason, runpodCanLaunch, runpodConnected,
+} from './runpod_status.js'
 import { initRunpodSetup } from './runpod_setup.js'
 import { initRunpodGpuPicker } from './runpod_gpu_picker.js'
 import { initClusterAvailability } from './cluster_availability.js'
@@ -256,6 +258,36 @@ export function mdJobIsRunning(job) {
   if (['preparing', 'running'].includes(job.status)) return true
   // A submitted remote job is genuinely in flight even while SLURM has it queued.
   return job.status === 'queued' && !!(job.slurm_job_id || job.runpod_pod_id)
+}
+
+/** Pure: which RunPod card a launch should ask for.
+ *
+ *  `requested` is what the Job Wizard's step 1 put in the payload — the card the user
+ *  actually picked from the ranked table, and the one every cost / ns-day / $-per-ns
+ *  number they were shown was computed from.  `pickerKey` is the panel's older
+ *  Clusters-card picker, kept only as a fallback for a launch that carries no choice.
+ *
+ *  Both launch paths used to assign the panel's value UNCONDITIONALLY, after spreading
+ *  the wizard's payload — so the wizard's card was overwritten, invariably with `null`
+ *  (nothing but the Clusters-card picker ever sets it), and the backend rented whatever
+ *  headed its own ranked list. Cleared for every other target for the same reason the
+ *  backend clears it: a leftover card on a run re-pointed at the local GPU must not
+ *  resurface at launch. */
+export function mdRunpodGpuKeyFor({ runTarget = 'local', requested = null, pickerKey = null } = {}) {
+  if (runTarget !== 'runpod') return null
+  return requested ?? pickerKey ?? null
+}
+
+/** Pure: is this job holding THIS computer's GPU/cores/disk right now?
+ *
+ *  Strictly narrower than `mdJobIsRunning`, and the question the run queue asks: a run
+ *  on Alpine or a rented RunPod pod IS in flight, but it consumes nothing here.  Counting
+ *  it as busy turned ▶ Run into ＋ Queue on every local job — behind a server-side queue
+ *  that then never drained — for the whole duration of every remote run, with the local
+ *  GPU idle.  Mirrors `md_queue.job_occupies_local_machine`, and applies the same rule
+ *  `pickBlockingJob` (job_activity.js) already uses for the launch guard. */
+export function mdJobOccupiesLocalMachine(job) {
+  return mdIsLocalTarget(job?.execution_target) && mdJobIsRunning(job)
 }
 
 /** Pure: has this job been prepared and left waiting for the user to press Run?
@@ -480,9 +512,8 @@ export function mdRunControl(selectedJob, {
   if (base.action === RUN_ACTION.RESUME) {
     // Resuming on RunPod rents a pod, so it needs the SAME gate as starting one. It did
     // not have it, and that is the whole reason a stopped run "could not be resumed": the
-    // API key is held in backend memory only, so every dev-server reload silently
-    // disconnects the session — and the button stayed lit, offering a resume that could
-    // only ever come back as a 400.
+    // session can be disconnected (no stored key, a revoked one, RunPod unreachable) while
+    // the button stays lit, offering a resume that could only ever come back as a 400.
     if (selectedJob.execution_target === 'runpod' && !runpodReady) {
       return {
         ...base, disabled: true,
@@ -530,19 +561,38 @@ export function mdWatchdogDecision({ job = null, wsOpen = false, msSinceMsg = 0,
   return 'idle'
 }
 
-/** Pure: a nudge to reconnect when Alpine runs are in flight but the session isn't
- *  connected.  Such jobs can't be monitored and — critically — a run that FINISHES while
- *  disconnected can't have its results fetched until the user reconnects (poll_remote_jobs
- *  no-ops when down).  Returns a message, or '' when connected/connecting or nothing is in
- *  flight.  In-flight = a submitted (slurm_job_id) Alpine job still queued/running/preparing. */
-export function mdRemoteReconnectPrompt(jobs, clusterState) {
-  if (clusterState === 'connected' || clusterState === 'connecting') return ''
-  const inFlight = (jobs ?? []).filter(j =>
-    j?.execution_target === 'alpine' && j?.slurm_job_id &&
-    ['queued', 'running', 'preparing'].includes(j?.status))
-  if (!inFlight.length) return ''
-  const n = inFlight.length
-  return `⚠ ${n} Alpine run${n === 1 ? '' : 's'} in flight — reconnect to monitor and fetch results.`
+/** Pure: a nudge to reconnect when remote runs are in flight but the session isn't.
+ *  Such jobs can't be monitored and — critically — a run that FINISHES while disconnected
+ *  can't have its results fetched until the user reconnects (poll_remote_jobs no-ops when
+ *  down).  Returns a message, or '' when connected/connecting or nothing is in flight.
+ *  In-flight = a job handed to its scheduler (slurm_job_id / runpod_pod_id) and still
+ *  queued/running/preparing.
+ *
+ *  BOTH targets, not just Alpine.  RunPod is the one that matters most and was the one
+ *  missing: the API key is held in MEMORY ONLY (routes_runpod.connect), so a backend
+ *  restart silently drops the session, the poll loop dies with it, and the job record
+ *  freezes at `running` — while the pod goes on billing by the second with nothing
+ *  watching it.  Reconnecting is what reaps orphans and re-attaches the supervisor, so
+ *  the whole safety net depends on the user knowing to do it.  Hence the sharper wording:
+ *  an idle Alpine allocation wastes SU, an unwatched pod spends money. */
+export function mdRemoteReconnectPrompt(jobs, clusterState, runpodState = 'connected') {
+  const down = (s) => s !== 'connected' && s !== 'connecting'
+  const inFlight = (target, idKey, state) => down(state)
+    ? (jobs ?? []).filter(j => j?.execution_target === target && j?.[idKey] &&
+        ['queued', 'running', 'preparing'].includes(j?.status)).length
+    : 0
+  const nAlpine = inFlight('alpine', 'slurm_job_id', clusterState)
+  const nPod = inFlight('runpod', 'runpod_pod_id', runpodState)
+  const parts = []
+  if (nPod) {
+    parts.push(`${nPod} RunPod pod${nPod === 1 ? '' : 's'} still billing with no session `
+      + 'watching — reconnect to monitor, fetch results and be able to terminate.')
+  }
+  if (nAlpine) {
+    parts.push(`${nAlpine} Alpine run${nAlpine === 1 ? '' : 's'} in flight — reconnect to `
+      + 'monitor and fetch results.')
+  }
+  return parts.length ? `⚠ ${parts.join(' ')}` : ''
 }
 
 /** Pure: is this a deferred-prep DRAFT job — created by "Use as NAMD seed" but not
@@ -815,13 +865,81 @@ export function mdIsRemoteRunning(job) {
     && (job?.status === 'running' || String(job?.slurm_state ?? '').toUpperCase() === 'RUNNING')
 }
 
-/** Pure: should we pull a single display frame off the cluster for this job?
+/** Pure: is this job actually executing on a rented pod right now?
+ *  The RunPod twin of `mdIsRemoteRunning`. A job with no pod id has nothing to reach,
+ *  and a queued one has written no `.restart.coor` to fetch. */
+export function mdIsPodRunning(job) {
+  return job?.execution_target === 'runpod'
+    && !!job?.runpod_pod_id
+    && (job?.status === 'running' || job?.status === 'preparing')
+}
+
+/** Pure: should we pull a single display frame off the remote machine for this job?
  *
  *  Only when there is nothing local to show (`ready` false) — once a real
- *  trajectory has been fetched it outranks any snapshot.  Cluster auth is
- *  Duo-gated, so a live session is a hard precondition, not an optimisation. */
-export function shouldFetchLiveFrame(job, { clusterState, displayReady } = {}) {
-  return clusterState === 'connected' && !displayReady && mdIsRemoteRunning(job)
+ *  trajectory has been fetched it outranks any snapshot.
+ *
+ *  The two targets gate on different things, and that asymmetry is the feature:
+ *  Alpine auth is Duo-gated, so a live human session is a hard precondition. A pod is
+ *  key-based, so the backend can reach it whenever the RunPod session is up — which is
+ *  what lets the panel fetch snapshots on a timer instead of telling the user to. */
+export function shouldFetchLiveFrame(
+  job, { clusterState, displayReady, runpodConnected = false } = {},
+) {
+  if (displayReady) return false
+  if (job?.execution_target === 'runpod') return runpodConnected && mdIsPodRunning(job)
+  return clusterState === 'connected' && mdIsRemoteRunning(job)
+}
+
+/** How often a RunPod job re-pulls its display snapshot, unprompted.
+ *
+ *  Matched to what the pod actually produces: NAMD rewrites `output/<seg>.restart.coor`
+ *  every `restartfreq` (5,000 steps — a few minutes on a big system), so polling faster
+ *  just moves identical bytes. The backend enforces its own 60 s floor
+ *  (`remote_live_frame.MIN_REFETCH_INTERVAL_S`); this is the UI's cadence on top. */
+export const LIVE_FRAME_REFRESH_MS = 120_000
+
+/** Pure: the countdown to the next automatic snapshot.
+ *
+ *  `due` is what the caller acts on; `label` is what the user reads. Returns due=true
+ *  with an empty label when nothing has been fetched yet, so the first pull happens
+ *  immediately rather than after a full interval of silence.
+ *
+ *  @param {object} p
+ *  @param {number|null} p.lastFetchAt  ms epoch of the last completed fetch
+ *  @param {number} p.nowMs
+ *  @param {number} p.intervalMs
+ */
+export function liveFrameCountdown({
+  lastFetchAt = null, nowMs = Date.now(), intervalMs = LIVE_FRAME_REFRESH_MS,
+} = {}) {
+  if (!lastFetchAt) return { due: true, msRemaining: 0, label: '' }
+  const msRemaining = Math.max(0, lastFetchAt + intervalMs - nowMs)
+  if (msRemaining <= 0) return { due: true, msRemaining: 0, label: '' }
+  const mins = Math.ceil(msRemaining / 60_000)
+  return {
+    due: false,
+    msRemaining,
+    // "in 0 minutes" would be a lie for anything under a minute, and the exact seconds
+    // are noise at this cadence.
+    label: msRemaining < 60_000
+      ? 'next update in under a minute'
+      : `next update in ${mins} min`,
+  }
+}
+
+/** Pure: the one line under the Display MD toggle for a RunPod run with no local
+ *  trajectory yet. Every branch has to say something — a blank line here is what the
+ *  old "fetch a live frame yourself" wording was replacing. */
+export function runpodSnapshotStatus({
+  fetching = false, liveFrame = null, countdownLabel = '', connected = true,
+} = {}) {
+  if (!connected) {
+    return { text: 'Not connected to RunPod — cannot reach the pod for a snapshot.', busy: false }
+  }
+  if (fetching) return { text: 'Retrieving the latest frame from the pod…', busy: true }
+  const base = liveFrame ? liveFrameLabel(liveFrame, 'runpod') : 'No snapshot from the pod yet'
+  return { text: countdownLabel ? `${base} · ${countdownLabel}` : base, busy: false }
 }
 
 /** Pure: how to describe a fetched snapshot. It is ONE frame from a run still going
@@ -1084,6 +1202,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const earlyStopChk  = document.getElementById('md-jobs-early-stop')
   const displayToggle = document.getElementById('md-jobs-display-toggle')
   const displayStatus = document.getElementById('md-jobs-display-status')
+  const liveFrameRefreshBtn = document.getElementById('md-jobs-live-frame-refresh')
   const displayIndicator      = document.getElementById('md-jobs-display-indicator')
   const displayIndicatorDot   = document.getElementById('md-jobs-display-indicator-dot')
   const displayIndicatorLabel = document.getElementById('md-jobs-display-indicator-label')
@@ -1252,7 +1371,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // + the current job set.  Called on cluster-state changes and after every list refresh.
   function _renderReconnectPrompt() {
     if (!clusterReconnectEl) return
-    const msg = mdRemoteReconnectPrompt(_jobs, getClusterState?.() ?? 'disconnected')
+    // RunPod has its OWN session, independent of the Alpine one — a pod outliving its
+    // supervisor is invisible unless we ask the RunPod chip, not the cluster state.
+    const msg = mdRemoteReconnectPrompt(
+      _jobs,
+      getClusterState?.() ?? 'disconnected',
+      _runpod?.chip?.()?.state ?? 'unknown',
+    )
     clusterReconnectEl.textContent = msg
     clusterReconnectEl.style.display = msg ? '' : 'none'
   }
@@ -1321,12 +1446,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
    */
   function _paintRunpodGate() {
     const forNextJob = _currentRunTarget() === 'runpod'
-    // Also when the SELECTED job is a RunPod run. The key lives in backend memory only, so
-    // a dev-server reload disconnects the session silently — and with the box tied to the
+    // Also when the SELECTED job is a RunPod run. The session can be disconnected silently
+    // (no stored key, a revoked one, RunPod unreachable) — and with the box tied to the
     // radio alone, a user looking at a stopped RunPod run saw no hint of why Resume would
     // not work. The pre-flight rows are the explanation.
     const forThisJob = _selectedJob()?.execution_target === 'runpod'
-    const show = forNextJob || forThisJob
+    // And ALWAYS while a pod is billing, whatever the radio and the selection say. The
+    // whole point of the live-pod list is to surface a pod nobody remembers starting —
+    // which is precisely the case where the user is not looking at RunPod. A leak check
+    // you have to already suspect a leak to reach is not a leak check.
+    const forBillingPod = !!_runpod?.billing?.()
+    const show = forNextJob || forThisJob || forBillingPod
     if (runpodStatusEl) runpodStatusEl.style.display = show ? 'block' : 'none'
     // The GPU picker is about the NEXT job, so it stays tied to the radio.
     if (runpodPickerEl) runpodPickerEl.style.display = forNextJob ? 'block' : 'none'
@@ -1608,7 +1738,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // user can see when toggling will paint instantly vs pay the ~5 s load.
   let _displayIndicatorState = 'off'
   let _warmTimer = null
-  function _setDisplayIndicator(state, title = '') {
+  // `jobId` names the job the dot is ABOUT, which is what words the 'remote' case. It
+  // defaults to the selection; callers resolving an async answer pass the job they asked
+  // about, so the wording can never come from a different run than the state did.
+  function _setDisplayIndicator(state, title = '', jobId = _selectedId) {
     _displayIndicatorState = state
     // A background load that hangs (huge PSF, wedged WS) fires no follow-up event, so a
     // 'warming' dot could sit amber forever.  Time it out to 'error' so it stops implying
@@ -1621,7 +1754,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }, _MD_WARMING_TIMEOUT_MS)
     }
     if (!displayIndicator) return
-    const spec = mdReadinessIndicator(state)
+    // Worded for the job it is about, not for whatever ran last: 'remote' reads
+    // "on the pod" for RunPod and "on the cluster" for Alpine.
+    const target = (_jobs.find(j => j.job_id === jobId) ?? _selectedJob())?.execution_target
+    const spec = mdReadinessIndicator(state, target)
     displayIndicator.style.display = spec.show ? 'inline-flex' : 'none'
     // The dot is small and its label is two words; the WHY lives in the tooltip, which is
     // the only place a "no frames yet" can explain that the data is on a rented GPU.
@@ -1631,6 +1767,36 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (displayIndicatorLabel) displayIndicatorLabel.textContent = spec.text
     }
   }
+
+  /** Blank the dot the instant the selection moves.
+   *
+   *  The dot and its tooltip describe ONE job, and the meta that fills them is a round
+   *  trip away. Leaving the old job's answer up meanwhile is not a stale render, it is a
+   *  wrong statement: selecting an Alpine run right after a RunPod one showed
+   *  "on the pod — Nothing fetched from the pod yet" about the Alpine run, and kept
+   *  showing it until the new fetch resolved (or failed, leaving 'error' behind).
+   *  `_displayMeta` was already cleared here; the dot was not. */
+  function _resetDisplayIndicator() {
+    if (_warmTimer) { clearTimeout(_warmTimer); _warmTimer = null }
+    _displayIndicatorState = 'off'
+    if (displayIndicator) {
+      displayIndicator.style.display = 'none'
+      displayIndicator.title = ''
+    }
+    // The LABEL too, not just the tooltip and the visibility. `_setDisplayIndicator` only
+    // writes the label when the dot is shown, so hiding alone leaves the previous job's
+    // words sitting in the DOM — invisible today, but one `display:''` away from being the
+    // wrong caption, and enough to make "the dot never carries another job's words" a
+    // claim that only happens to be true rather than one that is enforced.
+    if (displayIndicatorLabel) displayIndicatorLabel.textContent = ''
+  }
+
+  /** Is a just-resolved async answer still about the job on screen?
+   *
+   *  Every display fetch is `await`ed while the user can keep clicking, and neither
+   *  `_refreshMdPrewarm` nor `_fetchDisplayMeta` re-checked the selection afterwards — so
+   *  a slow answer for the job you just left painted itself over the one you just picked. */
+  const _stillSelected = (jobId) => !!jobId && jobId === _selectedId
 
   function _setDisplayStatus(text, color = _C.dim, loading = false) {
     if (!displayStatus) return
@@ -1651,6 +1817,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   function _clearSelectedJob() {
+    _stopLiveFrameTimer()   // no selection ⇒ no pod to snapshot
     _selectedId = null
     _userDeselected = false   // a forced clear (design switch / empty list), not a user deselect
     _displayMeta = null
@@ -1746,15 +1913,27 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       !chained && meta.production_warning ? _C.warn : _C.ok)
   }
 
-  // Jobs we already pulled a frame for this session, so a failed pull (no checkpoint
-  // written yet) is not retried on every 15 s display tick for the rest of the run.
+  // ── Live snapshot from a running remote job ──────────────────────────────────
+  // ALPINE is one-shot per session: Duo means we can only pull while the user is signed
+  // in, so a failed pull (no checkpoint written yet) must not retry on every 15 s display
+  // tick for the rest of the run. RUNPOD is key-based and therefore on a timer, so it
+  // deliberately does NOT consult this set — see `_liveFrameTick`.
   const _liveFrameTried = new Set()
+  let _liveFrameFetching = false        // a pull is in flight (drives the spinner)
+  let _liveFrameAt = null               // ms epoch of the last COMPLETED pull
+  let _liveFrameJobId = null            // which job `_liveFrameAt` is about
+  let _liveFrameTimer = null
 
-  /** Pull one display frame off the cluster.  Returns true if something landed. */
+  /** Pull one display frame off the remote machine.  Returns true if something landed. */
   async function _fetchLiveFrame(jobId, { force = false } = {}) {
-    if (!force && _liveFrameTried.has(jobId)) return false
-    _liveFrameTried.add(jobId)
-    _setDisplayStatus('Fetching a snapshot from Alpine…', _C.warn, true)
+    const job = _jobs.find(j => j.job_id === jobId)
+    const isPod = job?.execution_target === 'runpod'
+    if (!isPod && !force && _liveFrameTried.has(jobId)) return false
+    if (_liveFrameFetching) return false     // never stack pulls; ~32 MB each
+    if (!isPod) _liveFrameTried.add(jobId)
+    _liveFrameFetching = true
+    if (isPod) _paintPodSnapshotStatus(job)
+    else _setDisplayStatus('Fetching a snapshot from Alpine…', _C.warn, true)
     try {
       const res = await api.fetchMdLiveFrame(jobId, force)
       if (res?.ok) return true
@@ -1763,17 +1942,99 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     } catch (err) {
       console.warn(`[${_ts()}] md-jobs: live frame fetch failed`, err)
       return false
+    } finally {
+      _liveFrameFetching = false
+      // Stamp on FAILURE too. A pod with no checkpoint written yet answers "not ok"
+      // every time, and without a stamp the countdown would sit at "due" and re-pull on
+      // every tick — the 32 MB stampede this pacing exists to prevent.
+      _liveFrameAt = Date.now()
+      _liveFrameJobId = jobId
     }
   }
+
+  /** The one status line for a RunPod job whose trajectory is still on the pod. */
+  function _paintPodSnapshotStatus(job) {
+    const connected = runpodConnected(_runpod.preflight)
+    const { label } = liveFrameCountdown({
+      lastFetchAt: _liveFrameJobId === job?.job_id ? _liveFrameAt : null,
+    })
+    const { text, busy } = runpodSnapshotStatus({
+      fetching: _liveFrameFetching,
+      liveFrame: _displayMeta?.live_frame ?? null,
+      countdownLabel: label,
+      connected,
+    })
+    _setDisplayStatus(text, busy ? _C.accent : _C.warn, busy)
+  }
+
+  /** Show the manual ⟳ only where it means something: a RunPod job we can actually
+   *  reach. On Alpine the equivalent action is "sign in", which this button cannot do. */
+  function _updateLiveFrameControls(job) {
+    if (!liveFrameRefreshBtn) return
+    const show = mdIsPodRunning(job) && !!displayToggle?.checked
+    liveFrameRefreshBtn.style.display = show ? '' : 'none'
+    liveFrameRefreshBtn.disabled = _liveFrameFetching
+    liveFrameRefreshBtn.style.opacity = _liveFrameFetching ? '0.5' : '1'
+    liveFrameRefreshBtn.style.cursor = _liveFrameFetching ? 'default' : 'pointer'
+  }
+
+  /** Countdown tick for a displayed RunPod job: repaint the "next update in…" line and
+   *  pull a fresh frame when it comes due. Runs only while such a job is on screen. */
+  async function _liveFrameTick() {
+    const job = _jobs.find(j => j.job_id === _selectedId)
+    if (!job || !mdIsPodRunning(job) || !displayToggle?.checked) {
+      _stopLiveFrameTimer()
+      return
+    }
+    if (_liveFrameFetching) return
+    if (!runpodConnected(_runpod.preflight)) { _paintPodSnapshotStatus(job); return }
+    const { due } = liveFrameCountdown({
+      lastFetchAt: _liveFrameJobId === job.job_id ? _liveFrameAt : null,
+    })
+    if (!due) { _paintPodSnapshotStatus(job); _updateLiveFrameControls(job); return }
+    const got = await _fetchLiveFrame(job.job_id, { force: true })
+    _updateLiveFrameControls(job)
+    if (got) _refreshMdDisplay()
+    else _paintPodSnapshotStatus(job)
+  }
+
+  function _startLiveFrameTimer() {
+    if (_liveFrameTimer) return
+    // 5 s: the countdown label has to move, but the FETCH cadence is the one that costs
+    // anything and that is gated by `liveFrameCountdown`, not by this interval.
+    _liveFrameTimer = setInterval(_liveFrameTick, 5000)
+  }
+
+  function _stopLiveFrameTimer() {
+    clearInterval(_liveFrameTimer)
+    _liveFrameTimer = null
+    if (liveFrameRefreshBtn) liveFrameRefreshBtn.style.display = 'none'
+  }
+
+  liveFrameRefreshBtn?.addEventListener('click', async () => {
+    const job = _jobs.find(j => j.job_id === _selectedId)
+    if (!job || _liveFrameFetching) return
+    // `force` bypasses the backend's 60 s re-fetch floor: the user asked, explicitly.
+    const got = await _fetchLiveFrame(job.job_id, { force: true })
+    _updateLiveFrameControls(job)
+    if (got) _refreshMdDisplay()
+    else _paintPodSnapshotStatus(job)
+  })
 
   async function _fetchDisplayMeta(jobId = _selectedId) {
     if (!jobId) return null
     try {
       const d = await api.getMdDisplayMeta(jobId)
       if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
-      _displayMeta = d
-      const job = _jobs.find(j => j.job_id === jobId)
-      if (job) _renderProductionControls(job, d)
+      // Only adopt this as THE meta if it is still about the selected job — otherwise it
+      // is an answer about a job the user has already left, and `_renderProductionControls`
+      // would draw that job's production controls under the current one. The value is still
+      // returned, so a caller that asked about a specific job explicitly gets its answer.
+      if (_stillSelected(jobId)) {
+        _displayMeta = d
+        const job = _jobs.find(j => j.job_id === jobId)
+        if (job) _renderProductionControls(job, d)
+      }
       return d
     } catch (err) {
       console.warn(`[${_ts()}] md-jobs: display metadata failed`, err)
@@ -1901,10 +2162,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (!displayToggle?.checked || !_isDynamicsTabVisible()) return
       _renderProductionControls(job, d)
       if (!d.ready || !d.config_path) {
-        // A job running on Alpine has its trajectory on the cluster, so `ready` stays
-        // false for the WHOLE run and this used to spin forever.  Pull one frame
-        // instead — cheap, and the only moment we can is while the user is signed in.
-        if (shouldFetchLiveFrame(job, { clusterState: getClusterState?.(), displayReady: d.ready })) {
+        // A remote job's trajectory stays on the remote machine for the WHOLE run, so
+        // `ready` is false throughout and this used to spin forever. Pull one frame
+        // instead — cheap (one `.restart.coor`), and for a POD we can do it unprompted.
+        if (shouldFetchLiveFrame(job, {
+          clusterState: getClusterState?.(),
+          displayReady: d.ready,
+          runpodConnected: runpodConnected(_runpod.preflight),
+        })) {
           const got = await _fetchLiveFrame(job.job_id)
           if (got) { _refreshMdDisplay(); return }
         }
@@ -1912,21 +2177,26 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         _displayKey = null
         // Seed placeholder already on screen (if seeded) → leave it; else say waiting.
         if (!_inheritedSeedShown) {
-          // The backend already worked out WHY (`not_ready_reason`) and it is per-target:
-          // this line used to say "Running on Alpine" for a job on a rented RunPod GPU,
-          // because `mdIsRemoteRunning` is Alpine-only.
-          //
-          // The spinner is reserved for waits that end on their own. A trajectory sitting
-          // on a pod is not one of them — it needs a fetch, and spinning at the user
-          // promises an arrival that will never come.
-          const remote = d.not_ready_code === 'remote'
-          _setDisplayStatus(
-            d.not_ready_reason
-              || (mdIsRemoteRunning(job)
-                ? 'Running on Alpine — sign in to the cluster to pull a snapshot'
-                : `Waiting for trajectory output (${job.status})`),
-            _C.warn, !remote)
+          // A RunPod job owns its own line: it is not waiting on the user for anything,
+          // it is on a snapshot timer, and the status has to show that rather than the
+          // backend's static "the trajectory is elsewhere" note.
+          if (mdIsPodRunning(job)) {
+            _paintPodSnapshotStatus(job)
+          } else {
+            // The backend already worked out WHY (`not_ready_reason`) and it is
+            // per-target. The spinner is reserved for waits that end on their own; a
+            // trajectory sitting on the Duo-gated cluster is not one of them.
+            const remote = d.not_ready_code === 'remote'
+            _setDisplayStatus(
+              d.not_ready_reason
+                || (mdIsRemoteRunning(job)
+                  ? 'Running on Alpine — sign in to the cluster to pull a snapshot'
+                  : `Waiting for trajectory output (${job.status})`),
+              _C.warn, !remote)
+          }
         }
+        _updateLiveFrameControls(job)
+        if (mdIsPodRunning(job)) _startLiveFrameTimer()
         return
       }
 
@@ -1950,10 +2220,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }
       mdDisplayController.displayLatest(d.config_path, { forceReload, live, jobId: job.job_id })
       // A fetched snapshot is ONE frame and does not advance — say so, or it reads as
-      // a live trajectory that has silently frozen.
+      // a live trajectory that has silently frozen. On a pod the same line carries the
+      // countdown, because there the answer to "so when does it move?" is "on its own,
+      // shortly" rather than "when you fetch it".
       if (d.live_frame) {
-        _setDisplayStatus(liveFrameLabel(d.live_frame, job.execution_target), _C.warn, false)
+        if (mdIsPodRunning(job)) _paintPodSnapshotStatus(job)
+        else _setDisplayStatus(liveFrameLabel(d.live_frame, job.execution_target), _C.warn, false)
       }
+      _updateLiveFrameControls(job)
+      if (mdIsPodRunning(job)) _startLiveFrameTimer()
       if (!live) {
         clearInterval(_displayTimer)
         _displayTimer = null
@@ -1989,12 +2264,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // Bail so this stale prewarm can't clobber the controller's _displayVisible
       // back to false and suppress the just-started live stream.
       if (displayToggle?.checked) return
+      // …and bail if the SELECTION moved during the await. Same class of race, and the
+      // one the user hits: click a RunPod job then an Alpine one and this answer, about
+      // the RunPod job, used to set the dot for the Alpine one.
+      if (!_stillSelected(job.job_id)) return
       if (!d?.ready || !d.config_path) {
         // NOT always 'off'. A job running on a pod, or one still writing its first frame,
         // has a real reason the display is empty — and hiding the dot made that look
         // identical to having no job at all.
         const v = mdDisplayReadinessFromMeta(d)
-        _setDisplayIndicator(v.state, v.title)
+        _setDisplayIndicator(v.state, v.title, job.job_id)
         return
       }
       const key = `${d.config_path}|${d.trajectory_path ?? ''}|${d.segment_name ?? ''}`
@@ -2098,6 +2377,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   function _stopMdDisplay(status = 'Off') {
     clearInterval(_displayTimer)
     _displayTimer = null
+    // The snapshot timer is the display's, not the job's: nothing should keep pulling
+    // ~32 MB off a pod for a view that is no longer on screen.
+    _stopLiveFrameTimer()
     solvent?.setEnabled(false)
     solvent?.clear()
     // Kill any in-flight backend trajectory/RMSF/surface analysis for this job so a
@@ -2690,7 +2972,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // Two sources, because neither alone is complete: this panel's own list is the
       // freshest signal for THIS design, and the server's flag covers a run belonging to
       // a design that isn't open (the queue is workspace-wide, the list is not).
-      machineBusy: _queueBusy || _jobs.some(mdJobIsRunning),
+      // LOCAL jobs only — see mdJobOccupiesLocalMachine for why a remote run must not
+      // count, and md_queue.job_occupies_local_machine for the server side of the same rule.
+      machineBusy: _queueBusy || _jobs.some(mdJobOccupiesLocalMachine),
       queuedIds: _queue.map((e) => e.job_id),
       // Gates ☁ Submit to Alpine — an upload with no Duo session behind it only 409s.
       clusterState: getClusterState?.() ?? 'disconnected',
@@ -2998,7 +3282,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       autostart: isLocalRun && body.autostart,
       execution_target: runTarget,
       cluster_name: runTarget === 'alpine' ? 'alpine' : null,
-      runpod_gpu_key: runTarget === 'runpod' ? (_selectedRunpodGpu?.key ?? null) : null,
+      // The WIZARD's card wins — see mdRunpodGpuKeyFor for why this used to discard it.
+      runpod_gpu_key: mdRunpodGpuKeyFor({
+        runTarget, requested: body?.runpod_gpu_key, pickerKey: _selectedRunpodGpu?.key }),
       // Anchors on the PRODUCTION request. This card used to be read only by the relax
       // launch, so picking anchors and clicking Production silently discarded them — and
       // even an anchored parent lost them, because the replica builder never passed them
@@ -3147,7 +3433,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       design_source_path: _currentPartPath() || null,
       execution_target: runTarget,
       cluster_name:   runTarget === 'alpine' ? 'alpine' : null,
-      runpod_gpu_key: runTarget === 'runpod' ? (_selectedRunpodGpu?.key ?? null) : null,
+      // The WIZARD's card wins; the Clusters-card picker is only a fallback. This used to
+      // be an unconditional assignment placed AFTER `...proto`, so it overwrote the key
+      // step 1 had just put there — see mdRunpodGpuKeyFor.
+      runpod_gpu_key: mdRunpodGpuKeyFor({
+        runTarget, requested: proto.runpod_gpu_key, pickerKey: _selectedRunpodGpu?.key }),
       anchors:        anchors.length ? anchors : null,
       // The ladder pins hard regardless of the stiffness select (its constraints channel
       // is spent on the slow-release restraint), but the ATOM filter applies to both.
@@ -3593,6 +3883,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _setTrajOff()
     _selectedId = jobId
     _displayMeta = null
+    _resetDisplayIndicator()   // the dot described the PREVIOUS job; see the function
     _closeWs()
     _renderList()
     _openDetailForJob(jobId)

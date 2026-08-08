@@ -348,6 +348,7 @@ export const WIZARD_FIELDS = [
   'threads', 'devices', 'salt_mode', 'mg_conc_mM', 'ion_conc_mM', 'padding_nm',
   'production_ns_intent', 'water_shell_nm', 'minimize_steps', 'fast',
   'gpu_fallback_policy', 'production_timestep_fs', 'gpu_resident', 'early_stop_relax',
+  'early_stop_tier', 'allow_catenated_seed',
   'allow_water_shell_carve', 'force_soft', 'declash',
   // The three integrator axes, separated (exp51). null on any of them means "auto",
   // which the backend resolves from that run's timestep.
@@ -362,6 +363,7 @@ export const DEFAULT_FIELD_SCOPES = {
   relax_preset: 'relaxation', relax_timestep_fs: 'relaxation',
   relax_rigid_bonds: 'relaxation', relax_hmr: 'relaxation', fast: 'relaxation',
   force_soft: 'relaxation', declash: 'relaxation', early_stop_relax: 'relaxation',
+  early_stop_tier: 'relaxation',
   minimize_steps: 'relaxation', protocol: 'relaxation',
   production_timestep_fs: 'production', production_rigid_bonds: 'production',
   production_hmr: 'production', production_ns_intent: 'production',

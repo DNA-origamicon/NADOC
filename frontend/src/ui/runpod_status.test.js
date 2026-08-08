@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   initRunpodStatus,
+  podBillingSummary,
+  renderPodRows,
   renderPreflightRows,
   runpodBlockReason,
   runpodCanLaunch,
@@ -122,6 +124,138 @@ describe('renderPreflightRows', () => {
 
   it('does not blow up with no pre-flight', () => {
     expect(renderPreflightRows(null)).toContain('No pre-flight')
+  })
+})
+
+// ── the leak check ───────────────────────────────────────────────────────────────
+//
+// `GET /runpod/pods` documented itself as the place a lost pod id surfaces, and said the
+// UI showed it with a terminate button. Nothing in the frontend called it, so the wizard's
+// "N pods already billing" warning pointed at a card with no list and no kill switch.
+
+describe('podBillingSummary', () => {
+  it('null when nothing is billing', () => {
+    expect(podBillingSummary([])).toBe(null)
+    expect(podBillingSummary(null)).toBe(null)
+    expect(podBillingSummary([{ cost_per_hr: 2 }])).toBe(null)   // no id → not a real pod
+  })
+  it('counts pods and totals the hourly rate', () => {
+    const s = podBillingSummary([
+      { id: 'a', cost_per_hr: 0.34 }, { id: 'b', cost_per_hr: 2.39 },
+    ])
+    expect(s).toMatchObject({ count: 2, usdPerHour: 2.73 })
+    expect(s.text).toBe('2 pods billing · $2.73/hr')
+  })
+  it('singular, and copes with an unpriced pod', () => {
+    expect(podBillingSummary([{ id: 'a' }]).text).toBe('1 pod billing')
+  })
+})
+
+describe('renderPodRows', () => {
+  it('one row per pod, each with its id and a Terminate button', () => {
+    const html = renderPodRows([{ id: 'hpp8jm3bzy9z13', status: 'RUNNING', cost_per_hr: 0.34 }])
+    expect(html).toContain('hpp8jm3bzy9z13')
+    expect(html).toContain('RUNNING')
+    expect(html).toContain('$0.34/hr')
+    expect(html).toContain('data-terminate="hpp8jm3bzy9z13"')
+  })
+  it('empty for no pods', () => {
+    expect(renderPodRows([])).toBe('')
+    expect(renderPodRows(null)).toBe('')
+  })
+})
+
+describe('initRunpodStatus — live pods and terminate', () => {
+  const mount = () => document.createElement('div')
+  const POD = { id: 'pod1', status: 'RUNNING', cost_per_hr: 0.34 }
+
+  /** Routes by URL: the pre-flight POST and the pods GET are different endpoints. */
+  const routed = (pods = [POD]) => vi.fn(async (url) => {
+    if (String(url).includes('/pods')) {
+      return { ok: true, json: async () => ({ pods }) }
+    }
+    return { ok: true, json: async () => GREEN }
+  })
+
+  it('lists a billing pod after a refresh, with its rate and a Terminate button', async () => {
+    const el = mount()
+    const panel = initRunpodStatus({ mount: el, fetchImpl: routed() })
+    await panel.refresh()
+    expect(panel.billing()).toMatchObject({ count: 1, usdPerHour: 0.34 })
+    expect(el.innerHTML).toContain('1 pod billing')
+    expect(el.innerHTML).toContain('spending money right now')
+    expect(el.querySelector('[data-terminate="pod1"]')).toBeTruthy()
+  })
+
+  it('shows nothing when no pod is up', async () => {
+    const el = mount()
+    const panel = initRunpodStatus({ mount: el, fetchImpl: routed([]) })
+    await panel.refresh()
+    expect(panel.billing()).toBe(null)
+    expect(el.innerHTML).not.toContain('billing')
+  })
+
+  it('does not ask for pods with no session — that 400s, and the commit gate is zero console errors', async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      if (String(url).includes('/pods')) return { ok: true, json: async () => ({ pods: [POD] }) }
+      return { ok: true, json: async () => DISCONNECTED }   // api_key check fails
+    })
+    const panel = initRunpodStatus({ mount: mount(), fetchImpl })
+    await panel.refresh()
+    expect(fetchImpl.mock.calls.some(c => String(c[0]).includes('/pods'))).toBe(false)
+    expect(panel.billing()).toBe(null)
+  })
+
+  it('a pods call that fails leaves the pre-flight intact — a blank leak check beats a crash', async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      if (String(url).includes('/pods')) throw new Error('not connected')
+      return { ok: true, json: async () => GREEN }
+    })
+    const panel = initRunpodStatus({ mount: mount(), fetchImpl })
+    await panel.refresh()
+    expect(panel.canLaunch()).toBe(true)
+    expect(panel.billing()).toBe(null)
+  })
+
+  it('Terminate asks first, and does nothing when declined', async () => {
+    const fetchImpl = routed()
+    const panel = initRunpodStatus({
+      mount: mount(), fetchImpl, confirmImpl: async () => false })
+    await panel.refresh()
+    await panel.terminate('pod1')
+    expect(fetchImpl.mock.calls.some(c => String(c[0]).includes('/terminate'))).toBe(false)
+  })
+
+  it('Terminate POSTs to the pod, then re-reads the list', async () => {
+    let pods = [POD]
+    const fetchImpl = vi.fn(async (url, opts) => {
+      const u = String(url)
+      if (u.includes('/terminate')) { pods = []; return { ok: true, json: async () => ({ ok: true }) } }
+      if (u.includes('/pods')) return { ok: true, json: async () => ({ pods }) }
+      return { ok: true, json: async () => GREEN }
+    })
+    const el = mount()
+    const panel = initRunpodStatus({ mount: el, fetchImpl, confirmImpl: async () => true })
+    await panel.refresh()
+    await panel.terminate('pod1')
+
+    const kill = fetchImpl.mock.calls.find(c => String(c[0]).includes('/terminate'))
+    expect(kill[0]).toBe('/api/runpod/pods/pod1/terminate')
+    expect(kill[1]).toMatchObject({ method: 'POST' })
+    expect(panel.billing()).toBe(null)          // list re-read, pod gone
+    expect(el.innerHTML).not.toContain('data-terminate')
+  })
+
+  it('the confirmation names the rate and says finished steps survive on the volume', async () => {
+    const seen = []
+    const panel = initRunpodStatus({
+      mount: mount(), fetchImpl: routed(),
+      confirmImpl: async (m) => { seen.push(m); return false } })
+    await panel.refresh()
+    await panel.terminate('pod1')
+    expect(seen[0]).toContain('pod1')
+    expect(seen[0]).toContain('$0.34/hr')
+    expect(seen[0]).toMatch(/network volume/)
   })
 })
 

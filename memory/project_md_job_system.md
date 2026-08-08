@@ -9,6 +9,80 @@ metadata:
 
 Implemented Milestone 1 of the MD integration plan (memory/md_integration_plan.md).
 
+## System audit, 2026-08-07 — five fixes
+
+A general audit for unaccounted edge cases, inaccessible features, broken UI and dead code
+(read-only Playwright surveys: `e2e/md_system_audit.spec.js`, `md_audit_targets.spec.js`,
+`md_audit_gpukey.spec.js`; verification in `md_audit_fixes.spec.js`). The app itself was
+clean — zero console errors across the panel, all three wizard steps, 12 job selections and
+the context menu — and the readiness gates, queue self-healing and `mdQueueable` ↔
+`job_is_queueable` mirror all held. Five real defects:
+
+**1. A REMOTE run held the LOCAL queue shut.** `md_queue.running_job` used the target-blind
+`job_is_running`, so an Alpine or RunPod run reported this machine busy: the drain
+(`advance_md_queue`) returned early for the whole remote run and `▶ Run` read `＋ Queue` on
+every local job, behind a queue that then never drained. Caught live — `GET /md/queue` said
+`busy: true` for an Alpine job with **zero local NAMD processes**. New
+`md_queue.job_occupies_local_machine` (+ `mdJobOccupiesLocalMachine`, its client mirror) is
+the queue's own, narrower question; `job_is_running` stays target-blind for "can I press
+Stop". **The codebase already had the right rule** — `pickBlockingJob` in `job_activity.js`
+filters `isLocalJob` with exactly this reasoning — so this was one question answered twice.
+
+**2. The wizard's RunPod GPU choice was discarded at launch.** `_launchRelax` and
+`_spawnProductionFromWizard` both assigned `runpod_gpu_key` from the panel's OLD
+Clusters-card picker (`_selectedRunpodGpu`) *after* spreading the wizard's payload — and
+nothing but that picker ever sets it, so the request went out with `null` and
+`runpod_executor` rented whatever headed its own ranked list. The wizard *forces* a card
+(`runpodReadiness` refuses Next without one) and prices the entire run on it, so every
+cost / ns-day / $-per-ns number shown was for a card that might not be rented. Both sites
+now share `mdRunpodGpuKeyFor({runTarget, requested, pickerKey})` — wizard first, picker as
+fallback, cleared for every non-RunPod target. **Two pickers for one choice is the root
+cause and is still there**; retiring the Clusters-card one is the follow-up.
+
+**3. A billing pod had no kill switch.** `GET /runpod/pods` documents itself as the leak
+check — "anything in this list is billing right now… the UI surfaces it with a terminate
+button" — and **nothing in the frontend called it**, nor `/runpod/pods/{id}/terminate`
+(also unused: `/runpod/status`, `/runpod/disconnect`, `/runpod/estimate`). A DOM sweep of
+the whole running app found 0 terminate controls, while the wizard's own "N pods already
+billing" warning said to *"check the Clusters card"* — which had no list and no button.
+`runpod_status.js` gained `podBillingSummary` / `renderPodRows` + a confirmed `terminate`,
+and `_paintRunpodGate` now shows the card **whenever a pod is billing**, whatever the radio
+and selection say (a leak check you must already suspect a leak to reach is not one).
+The pods fetch is gated on the pre-flight reporting connected — `/runpod/pods` 400s without
+a session, and calling it anyway logged a console error on every pre-flight.
+
+Also: **`mdRemoteReconnectPrompt` was Alpine-only**, which is backwards — the RunPod API key
+is held in MEMORY ONLY, so a backend restart silently drops the session, the poll loop dies
+with it, the job record freezes at `running`, and the pod bills on unwatched. Found live:
+`/runpod/status` said `connected:false, live_pods:0` while job `7d5937e569c6` was recorded
+`running` on pod `hpp8jm3bzy9z13`. Recovery was already well built (`connect` reaps orphans
+and re-attaches supervisors) — nothing *told* the user to reconnect. Now takes a third
+`runpodState`, and the two sessions are judged independently.
+
+**4. `early_stop_tier` (A/B) had no control.** Tier B is energy-only, tier A adds WC base
+pairing for full local parity; every remote run silently used B, so the same protocol
+truncated its ladder on a weaker test depending only on where it ran. Now a wizard select
+behind a new **`remoteOnly`** field flag (the mirror of `localOnly`): hidden AND stripped
+from the payload for a local run.
+
+**5. `allow_catenated_seed` had no control, and its error named a fictional escape hatch.**
+`CatenatedJunctionError` told the user to pass `allow_catenated=True` (an internal kwarg) or
+set `NADOC_ALLOW_CATENATED=1` — **an environment variable nothing in this repo has ever
+read**. So a design whose extra bases build catenated (or ring-pierced) was a dead end in
+the app. Both gate messages now name the real control, and "Build despite a linked
+crossover" is a wizard checkbox, off by default. See [[project_crossover_catenation]].
+
+**Still open from the audit** (not fixed, ranked): the duplicate RunPod GPU picker (see 2);
+`/cluster/build/namd`, `/cluster/namd-modules`, `/cluster/probe` are API-only — notable
+because step 3 *warns* about a GPU partition on a `namd/*_cpu` module and the only remedy
+has no UI; deleting an ARCHIVED job with the archive drive unmounted skips the `rmtree`,
+purges the index anyway and returns `{"ok": true}`, orphaning multi-GB folders (68 of 75
+jobs live on `/media/jojo/Archive`); `md_relax_presets.js` (139 lines + 227 of tests) has
+zero non-test importers since the wizard took over presets; `gpuResidentWarning`,
+`productionTimestepWarning` and `renderRunPath` in `md_advanced_optimize.js` are defined
+once and referenced only by tests; and the RunPod step's readiness hint stays
+"Checking whether RunPod can run this job…" after the check lands and Next has gone live.
+
 
 ## The Job Wizard: every parameter, per stage, with its provenance (2026-08-03)
 

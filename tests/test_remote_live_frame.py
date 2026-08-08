@@ -184,7 +184,12 @@ def test_stale_frame_is_refetched(tmp_path, monkeypatch):
     res = _run(rlf.fetch_live_frame(job, tmp_path, conn=conn))
     assert res["ok"] is True
     assert res["n_atoms"] == 42
-    assert conn.gets == ["/scratch/alpine/u/nadoc_jobs/abc123/output/seg0.restart.coor"]
+    # The .xsc comes too: a NAMD .coor has no unit cell, and a boxless DCD is one the
+    # display refuses to load at all (see test_xsc_gives_the_box_the_display_needs).
+    assert conn.gets == [
+        "/scratch/alpine/u/nadoc_jobs/abc123/output/seg0.restart.coor",
+        "/scratch/alpine/u/nadoc_jobs/abc123/output/seg0.restart.xsc",
+    ]
 
 
 def test_force_bypasses_the_reuse_window(tmp_path, monkeypatch):
@@ -349,3 +354,78 @@ def test_remote_projected_step_needs_both_an_anchor_and_a_rate(tmp_path):
     step, estimated = _remote_projected_step(job, 500_000)
     assert estimated is True
     assert step == pytest.approx(295_000, abs=200)
+
+
+# ── the unit cell (the reason a snapshot was unusable) ────────────────────────
+
+
+XSC = """# NAMD extended system configuration output file
+#$LABELS step a_x a_y a_z b_x b_y b_z c_x c_y c_z o_x o_y o_z
+370000 92.5 0 0 0 104.25 0 0 0 130.75 0 0 0
+"""
+
+
+def test_xsc_gives_the_box_the_display_needs():
+    """A NAMD .coor is coordinates only, so the DCD written from one has a ZEROED cell.
+    ws._try_unwrap then raises "No box information available" on the first frame access,
+    the whole load fails, and every poll answers "No trajectory loaded." forever."""
+    dims = rlf.parse_xsc_dimensions(XSC)
+    assert dims == pytest.approx([92.5, 104.25, 130.75, 90.0, 90.0, 90.0])
+
+
+def test_xsc_reads_the_LAST_step_not_the_first():
+    """Under NPT the cell is still breathing — a stale box is the wrong box."""
+    two = XSC + "375000 91.0 0 0 0 103.0 0 0 0 129.0 0 0 0\n"
+    assert rlf.parse_xsc_dimensions(two)[0] == pytest.approx(91.0)
+
+
+def test_a_triclinic_cell_becomes_real_angles():
+    tri = "#$LABELS step a_x a_y a_z b_x b_y b_z c_x c_y c_z\n100 10 0 0 0 10 0 0 5 5\n"
+    lx, ly, lz, alpha, beta, gamma = rlf.parse_xsc_dimensions(tri)
+    assert (lx, ly) == pytest.approx((10.0, 10.0))
+    assert lz == pytest.approx(7.0710678)
+    assert alpha == pytest.approx(45.0)  # b·c at 45°
+    assert (beta, gamma) == pytest.approx((90.0, 90.0))
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        "# only comments\n",
+        "370000 92.5 0 0\n",  # truncated row
+        "370000 a b c d e f g h i\n",  # non-numeric
+        "370000 0 0 0 0 0 0 0 0 0\n",  # a zero cell is not a cell
+    ],
+)
+def test_an_unusable_xsc_is_none_not_a_crash(text):
+    """Fail toward "no box" (logged, frame still written) rather than raising: a
+    snapshot with a stale box beats no snapshot at all."""
+    assert rlf.parse_xsc_dimensions(text) is None
+
+
+def test_the_written_dcd_carries_the_box(tmp_path):
+    """The round trip that actually matters — the display reads dimensions off the DCD.
+
+    Verified against the live 2hb_1xT RunPod run: without the cell the display logged
+    "No box information available", the load aborted, and the panel showed
+    "Display failed: No trajectory loaded." for the whole session.
+    """
+    mda = pytest.importorskip("MDAnalysis")
+    import numpy as np
+
+    n = 12
+    universe = mda.Universe.empty(n, trajectory=True)
+    universe.atoms.positions = np.arange(n * 3, dtype=np.float32).reshape(n, 3)
+    pdb, coor = tmp_path / "tiny.pdb", tmp_path / "tiny.coor"
+    universe.atoms.write(str(pdb))
+    with mda.Writer(str(coor), n_atoms=n, format="NAMDBIN") as writer:
+        writer.write(universe.atoms)
+
+    dest = tmp_path / "out" / "seg0.dcd"
+    rlf._write_single_frame_dcd(
+        pdb, coor, dest, [92.5, 104.25, 130.75, 90.0, 90.0, 90.0]
+    )
+
+    reread = mda.Universe(str(pdb), str(dest))
+    assert reread.dimensions[:3] == pytest.approx([92.5, 104.25, 130.75], abs=1e-2)

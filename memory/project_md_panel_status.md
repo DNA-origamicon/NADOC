@@ -4,6 +4,133 @@ description: What works, what the PBC pipeline does, known limits, and how to ex
 type: project
 originSessionId: 184cf93b-87e6-47df-98ad-3d8aa2a3bad9
 ---
+## RunPod display pulls its own snapshots (2026-08-08)
+
+The MD Display used to tell a RunPod user to do the work themselves — *"This run's
+trajectory is on the pod, not on this computer. Fetch a live frame…"* — for a fetch the
+panel was never wired to make: `shouldFetchLiveFrame` required `clusterState ===
+'connected'` **and** Alpine-only `mdIsRemoteRunning`, and `POST /md/jobs/{id}/fetch-live-frame`
+409'd anything without a Duo cluster session. So the instruction named a button that did
+not exist for that target.
+
+Now: **RunPod snapshots arrive on a timer, unprompted.**
+
+* **`runpod_executor.open_pod_connection(job, client=…)`** — a read-only SSH channel to a
+  job's live pod. ⚠️ Deliberately **not** `client.pod()` / `client.adopt()`: both DESTROY
+  the pod in their `finally`, so either would kill the paid run it was peeking at. Uses
+  `get_pod` (a plain read); the caller owns the connection and must close it. A 404 is
+  reworded as "that pod no longer exists" — it is the ordinary end of every run.
+* **The route branches on target.** Alpine keeps its Duo-gated manager; RunPod opens a
+  per-errand connection. Same `remote_live_frame.fetch_live_frame` underneath — it takes
+  any object with `sftp_get`, which is the conn duck-type paying off again.
+* **Cadence: `LIVE_FRAME_REFRESH_MS = 120_000`**, matched to what the pod actually
+  produces (NAMD rewrites `restart.coor` every `restartfreq`, minutes apart). The backend
+  keeps its own 60 s floor (`remote_live_frame.MIN_REFETCH_INTERVAL_S`). A 5 s tick moves
+  the countdown label; only `liveFrameCountdown` decides when to spend a fetch.
+* **`_liveFrameAt` is stamped on FAILURE too.** A pod with no checkpoint yet answers
+  "not ok" every time; without the stamp the countdown sits at due and re-pulls ~32 MB
+  every tick.
+* **`_liveFrameTried` is Alpine-only now.** That one-shot set exists because Duo means one
+  chance per session; a pod is key-based, so it must retry.
+* **The ⟳ button** (`#md-jobs-live-frame-refresh`) shows only for `mdIsPodRunning` + display
+  on, and passes `force: true` to bypass the 60 s floor — the user asked explicitly.
+* **`runpodConnected(preflight)`** (new, `runpod_status.js`) is narrower than
+  `runpodCanLaunch`: reaching an existing pod needs only the API session, not the volume /
+  SSH-key / stock / sizing gates that renting a NEW GPU needs.
+
+**VERIFIED against the live 2hb_1xT run** (job `7d5937e569c6`, pod `cw4i37gthl10dw`,
+2026-08-08): frame on screen 6.1 s after toggling Display MD, ⟳ re-fetched in ~5 s, the
+2-minute auto-refresh fired, zero console errors. `frontend/e2e/md_runpod_live_frame.spec.js`
++ `e2e/logs/md_runpod_live_frame.png`. Getting there took two real bugs:
+
+### Bug 1 — `job.json` has two writers, and the loser was `live_frame`
+
+The fetch route loaded its own `MdJob`, set `live_frame`, saved. `runpod_executor
+._supervise_run` holds a SEPARATE in-memory job and re-saves the whole record every 30 s
+poll, reverting the field. The next fetch then saw a DCD it no longer recognised as a
+stand-in and refused to touch it — `{"ok": true, "skipped": "real trajectory already
+local"}` **forever**, while reporting success. The display froze on its first snapshot.
+
+Fix: the marker moved to a **sidecar** `output/<seg>.dcd.live.json` — one writer, and it
+describes the FILE rather than living in a record someone else owns.
+`remote_live_frame.{marker_path,read_marker}`; `is_live_stand_in`/`clear_live_frame` take an
+optional `package_dir` and prefer the sidecar. `job.live_frame` is still written (display
+payload) but is no longer the authority.
+
+⚠️ **Generalise this.** Any field a ROUTE writes on a job that a supervisor is also running
+will be reverted within a poll. Check for this before adding another.
+
+### Bug 2 — the snapshot had no unit cell, so the display refused it
+
+A NAMD `.coor` (NAMDBIN) is coordinates only, so the one-frame DCD carried a **zeroed
+box**. `ws._try_unwrap` registers MDAnalysis' `unwrap` for anything under
+`_UNWRAP_MAX_ATOMS` (200k); it raises *"No box information available"* on the first frame
+access, which happens inside `_load_sync` — so the load aborted, `universe` stayed `None`,
+and every poll answered *"No trajectory loaded."* This affected **Alpine too**, for every
+system under 200k atoms, for as long as the live-frame feature has existed.
+
+Fix: fetch `output/<seg>.restart.xsc` alongside the `.coor` and set `universe.dimensions`
+from it (`parse_xsc_dimensions`, pure + tested incl. triclinic). The `.xsc` is rewritten
+with the `.coor`, so it is the box AT THAT STEP — which matters under NPT. Measured on
+2hb_1xT: 59.18 × 81.31 × 127.50 Å, 90/90/90.
+
+### The troubleshooting tool
+
+`frontend/e2e/helpers/md_display_log.js` — `attachMdDisplayLog(page)` records the status
+line (+ spinner), the readiness dot, the ⟳ state, `nadoc:md-display-state` events and the
+console on ONE timeline, change-triggered, to `.jsonl` + a readable `.txt`. Attach before
+`page.goto` (the event hook is an init script). **`state: 'frame'` is the only definitive
+"something reached the scene"** — the status line merely echoes it, and both bugs above
+presented as a confident-looking status line above an empty viewport. Logs are gitignored.
+
+Still unmeasured: whether a ~32 MB SFTP every 2 min competes with a much larger run
+(2hb_1xT is only 62,677 atoms), and whether `active_segment_name` resolves during the
+relax ladder rather than production.
+
+## The readiness dot described the PREVIOUS job (fixed 2026-08-08)
+
+User report: "if I last launched a RunPod, then click on an Alpine job, the MD Display will
+have a RunPod related message until it errors out." Three independent causes, all in the
+same handful of lines, and each sufficient on its own:
+
+1. **`mdReadinessIndicator` hardcoded `'on the pod'` for EVERY remote target.** The backend
+   has always worded its own `not_ready_reason` per target (`md_display_status`: "the pod"
+   vs "the cluster") — the dot, which is what you read first, did not. It now takes
+   `executionTarget` and reads `on the pod` / `on the cluster` / `not local`. That last
+   fallback is deliberate: naming a target we are not sure of is how this bug read.
+2. **`_selectJob` cleared `_displayMeta` but never reset the dot.** The state, the tooltip
+   AND the label all survived the selection change, so the previous job's answer stayed on
+   screen for the whole round trip. New `_resetDisplayIndicator()`. It clears the LABEL as
+   well as visibility+tooltip: `_setDisplayIndicator` only writes the label inside
+   `if (spec.show)`, so hiding alone leaves the old words in the DOM — invisible, but one
+   `display:''` away from being the wrong caption. The live spec caught exactly that as a
+   residual leak at t=0 after the first two fixes were in.
+3. **Both display fetches `await`ed without re-checking the selection.**
+   `_refreshMdPrewarm` captured `job` before its await and `_fetchDisplayMeta` wrote
+   `_displayMeta` (and re-rendered the production controls) unconditionally after its own —
+   so a slow answer for the job you just left painted over the one you just picked. Both now
+   go through `_stillSelected(jobId)`. `_fetchDisplayMeta` still RETURNS the value, so a
+   caller that asked about a specific job explicitly gets its answer; only the shared state
+   is guarded.
+
+`_setDisplayIndicator` gained a third `jobId` arg (defaulting to the selection) purely so the
+wording is resolved from the job the state is ABOUT — the state and the noun can never come
+from different runs.
+
+**Verified in-app** (`frontend/e2e/md_display_source_switch.spec.js`, read-only). The live
+server could not produce the failing state — every NAMD job on the fixture design is
+currently `ready` — so the spec STUBS the two display answers: the RunPod job answers
+`remote` instantly, the Alpine one answers after 3.5 s. It asserts `podStateReached` first,
+so a green run cannot mean "the leaky state never happened", then samples the dot every
+500 ms for 7 s and requires that no sample mentions the pod. Result: pod → `on the pod`,
+Alpine → `on the cluster`, 0 leaked samples, 0 console errors.
+
+Not investigated: whether the trailing "until it errors out" is fully explained by cause 3
+(the late RunPod answer resolving to `error` over the new selection) or whether the 30 s
+`_MD_WARMING_TIMEOUT_MS` also fires on large systems. Measured load for a 1.03 M-atom system
+is ~9 s (below), so the timeout is probably not implicated — but it was not measured for the
+1.32 M-atom `24hb_0xT` run this was reported against.
+
 ## What is built and working
 
 - **`backend/core/md_metrics.py`** — `scan_run_dir`, `parse_log_metrics`, `count_frames`

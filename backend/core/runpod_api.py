@@ -14,8 +14,9 @@ computing or idle. Every code path that creates one MUST destroy it — see
 ``RunpodClient.pod`` (an async context manager that terminates in a ``finally``). An
 orphaned pod costs $0.34–$2.39/hr until a human notices.
 
-The API key lives in backend memory only (never on disk), mirroring the Alpine
-credential rule in ``cluster_ssh``.
+The API key is resolved by ``resolve_api_key`` — ``$RUNPOD_API_KEY`` first, then
+``~/.runpod_key`` — which is the same order every script in
+``experiments/exp43_runpod_bench/`` already uses.
 """
 
 from __future__ import annotations
@@ -23,7 +24,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
+from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Optional
 
 import httpx
@@ -54,6 +58,7 @@ def set_handoff(on: bool) -> None:
 
 def _handing_off() -> bool:
     return _HANDOFF
+
 
 # A transient network failure must not kill a 10-hour run. Retry the network layer and
 # 5xx/429; never a 4xx (it will fail identically forever and just burns pod-time).
@@ -254,11 +259,74 @@ class RunpodError(RuntimeError):
     pass
 
 
+# ── Where the key comes from ─────────────────────────────────────────────────
+# Resolution order — env var, then key file — is IDENTICAL to every script in
+# experiments/exp43_runpod_bench/ (balance.py:43, pod_watchdog.py:104,
+# launch_voltron_compact.py:272). One source of truth: rotate the key in one place and the
+# app, the launchers and the watchdogs all pick up the new one.
+#
+# The key lives on disk deliberately. A RunPod API key is a MACHINE credential — scoped to
+# one account, revocable in one click — not a human password, and holding it in memory only
+# had a concrete cost: after any backend restart NADOC had no key and literally could not
+# terminate a pod it had left billing. What must never happen is the key entering the REPO;
+# KEY_FILE is under $HOME, never under the working tree.
+#
+# NOT to be confused with ~/.runpod_key_kill, the second key shipped INTO a pod so the
+# deadman switch can DELETE the pod from inside (the pod's auto-injected key 403s that).
+# It is separate so it can be revoked on its own — it lives on a machine we do not control.
+ENV_VAR = "RUNPOD_API_KEY"
+KEY_FILE = Path.home() / ".runpod_key"
+
+
+def resolve_api_key(
+    *,
+    env: Optional[Mapping[str, str]] = None,
+    key_file: Optional[Path] = None,
+) -> tuple[Optional[str], str]:
+    """The stored key and its origin: ``(key, "env"|"file")``, or ``(None, "none")``.
+
+    Never raises. A missing or unreadable key file is not an error — the setup wizard can
+    always ask the user to paste one, which is exactly what happened before this existed.
+    """
+    environ = os.environ if env is None else env
+    from_env = (environ.get(ENV_VAR) or "").strip()
+    if from_env:
+        return from_env, "env"
+
+    path = KEY_FILE if key_file is None else key_file
+    try:
+        if not path.exists():
+            return None, "none"
+        raw = path.read_text().strip()
+    except OSError as exc:
+        log.warning("runpod: could not read %s: %s", path, exc)
+        return None, "none"
+    if not raw:
+        return None, "none"
+    _warn_if_group_or_world_readable(path)
+    return raw, "file"
+
+
+def _warn_if_group_or_world_readable(path: Path) -> None:
+    """A key file other accounts can read is the one genuine risk of storing it at all."""
+    try:
+        mode = path.stat().st_mode & 0o777
+    except OSError:
+        return
+    if mode & 0o077:
+        log.warning(
+            "runpod: %s is readable by other users (mode %o) — run: chmod 600 %s",
+            path,
+            mode,
+            path,
+        )
+
+
 # ── Client ───────────────────────────────────────────────────────────────────
 
 
 class RunpodClient:
-    """Thin async REST client. The api_key is held in memory only."""
+    """Thin async REST client. Takes the key from ``resolve_api_key`` or the setup wizard."""
 
     def __init__(
         self,

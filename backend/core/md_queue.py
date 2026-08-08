@@ -11,9 +11,10 @@ The model is deliberately small:
 - The queue is an **ordered list of job ids**, persisted to ``<workspace>/md_queue.json``.
   It survives a page reload, a browser close and a server restart — the frontend is a
   view onto it, never its owner.
-- It is **strictly serial**: while ANY NAMD job is in flight (locally running/preparing,
-  or handed to SLURM/RunPod), nothing is started.  The moment the machine is idle the
-  head of the queue starts, driven by the MD supervisor tick.
+- It is **strictly serial**: while a LOCAL NAMD job is running or preparing, nothing is
+  started.  The moment this machine is idle the head of the queue starts, driven by the
+  MD supervisor tick.  A run on Alpine or a RunPod pod does NOT hold it — that job is in
+  flight, but it is not using this computer's GPU (see :func:`job_occupies_local_machine`).
 - It is **self-healing**: an entry whose job was deleted, started by hand, or has
   already finished is dropped on the next pass.  Nothing else has to remember to clean
   up after it.
@@ -84,11 +85,14 @@ def dedupe(job_ids: Iterable[str]) -> list[str]:
 
 
 def job_is_running(job) -> bool:
-    """Is this job occupying the machine (or a remote scheduler slot) right now?
+    """Is this job in flight right now, ANYWHERE?
 
     Mirrors ``mdJobIsRunning`` in ``md_jobs_panel.js`` — a remote job parked at
     ``queued`` with a scheduler id has been handed over and IS in flight, while the
     same status with no id is a prepared job waiting for a human.
+
+    This is the "can I press Stop on it" question, and it is target-blind on purpose.
+    It is NOT the question the queue asks — see :func:`job_occupies_local_machine`.
     """
     if job is None:
         return False
@@ -97,6 +101,27 @@ def job_is_running(job) -> bool:
     return job.status == MdStatus.queued and bool(
         getattr(job, "slurm_job_id", None) or getattr(job, "runpod_pod_id", None)
     )
+
+
+def job_occupies_local_machine(job) -> bool:
+    """Is this job holding THIS computer's GPU/cores/disk right now?
+
+    The queue's own question, and a strictly narrower one than :func:`job_is_running`:
+    a run on Alpine or a rented RunPod pod is in flight, but it consumes nothing here,
+    so it cannot contend with a local launch and must not hold the local queue shut.
+    Conflating the two stalled the queue for the whole duration of every remote run —
+    with the local GPU sitting idle — and turned ``▶ Run`` into ``＋ Queue`` on jobs
+    that could have started immediately.
+
+    Same rule ``pickBlockingJob`` in ``job_activity.js`` already applies to the launch
+    guard; this makes the queue agree with it instead of answering it a second way.
+    A missing/legacy ``execution_target`` is local (old jobs predate remote targets).
+    """
+    if job is None:
+        return False
+    if (getattr(job, "execution_target", None) or "local") != "local":
+        return False
+    return job_is_running(job)
 
 
 def remote_awaiting_submit(job) -> bool:
@@ -155,9 +180,13 @@ def job_is_queueable(job) -> bool:
 
 
 def running_job(jobs: Iterable) -> Optional[object]:
-    """The job blocking the queue, or None when the machine is idle."""
+    """The job blocking the queue, or None when THIS machine is idle.
+
+    Local jobs only (:func:`job_occupies_local_machine`): the queue is local-only, so
+    what gates it is local contention, not the existence of a run somewhere else.
+    """
     for job in jobs:
-        if job_is_running(job):
+        if job_occupies_local_machine(job):
             return job
     return None
 

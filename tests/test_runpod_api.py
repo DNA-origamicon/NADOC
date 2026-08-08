@@ -555,7 +555,7 @@ class TestHandoffAcrossAReload:
         return RunpodClient("k", transport=httpx.MockTransport(handler))
 
     def teardown_method(self):
-        runpod_api.set_handoff(False)   # never leak the flag between tests
+        runpod_api.set_handoff(False)  # never leak the flag between tests
 
     def test_a_cancelled_run_normally_destroys_the_pod(self):
         deleted: list[str] = []
@@ -580,7 +580,9 @@ class TestHandoffAcrossAReload:
 
         with pytest.raises(asyncio.CancelledError):
             asyncio.run(go())
-        assert deleted == [], "a handed-off pod must survive for the next process to adopt"
+        assert deleted == [], (
+            "a handed-off pod must survive for the next process to adopt"
+        )
 
     def test_handoff_spares_an_adopted_pod_too(self):
         deleted: list[str] = []
@@ -598,3 +600,54 @@ class TestHandoffAcrossAReload:
     def test_the_flag_is_off_by_default(self):
         """Fail toward destroying pods: the expensive mistake is the one that bills."""
         assert runpod_api._handing_off() is False  # noqa: SLF001
+
+
+class TestResolveApiKey:
+    """Where the key comes from. Same order as experiments/exp43_runpod_bench/*, so the
+    app, the launchers and the watchdogs all read ONE credential."""
+
+    def test_env_var_wins_over_the_file(self, tmp_path):
+        f = tmp_path / "key"
+        f.write_text("rpa_fromfile")
+        key, src = rp.resolve_api_key(env={"RUNPOD_API_KEY": "rpa_fromenv"}, key_file=f)
+        assert (key, src) == ("rpa_fromenv", "env")
+
+    def test_falls_back_to_the_key_file(self, tmp_path):
+        f = tmp_path / "key"
+        f.write_text("rpa_fromfile")
+        assert rp.resolve_api_key(env={}, key_file=f) == ("rpa_fromfile", "file")
+
+    def test_a_trailing_newline_is_stripped(self, tmp_path):
+        """`echo key > ~/.runpod_key` adds one; an unstripped key 401s every request."""
+        f = tmp_path / "key"
+        f.write_text("rpa_fromfile\n")
+        assert rp.resolve_api_key(env={}, key_file=f)[0] == "rpa_fromfile"
+
+    def test_an_empty_env_var_is_not_a_key(self, tmp_path):
+        f = tmp_path / "key"
+        f.write_text("rpa_fromfile")
+        assert rp.resolve_api_key(env={"RUNPOD_API_KEY": "  "}, key_file=f) == (
+            "rpa_fromfile",
+            "file",
+        )
+
+    def test_no_key_anywhere_is_none_not_an_error(self, tmp_path):
+        assert rp.resolve_api_key(env={}, key_file=tmp_path / "absent") == (
+            None,
+            "none",
+        )
+
+    def test_an_empty_key_file_is_none(self, tmp_path):
+        f = tmp_path / "key"
+        f.write_text("\n")
+        assert rp.resolve_api_key(env={}, key_file=f) == (None, "none")
+
+    def test_an_unreadable_key_file_is_none_not_a_crash(self, tmp_path):
+        """A key file we cannot read must degrade to "paste one in the wizard"."""
+        f = tmp_path / "key"
+        f.write_text("rpa_fromfile")
+        f.chmod(0o000)
+        try:
+            assert rp.resolve_api_key(env={}, key_file=f) == (None, "none")
+        finally:
+            f.chmod(0o600)

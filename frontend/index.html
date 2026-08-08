@@ -5445,7 +5445,15 @@
                       <span id="md-jobs-display-indicator-label"></span>
                     </span>
                   </label>
-                  <div id="md-jobs-display-status" style="font-size:10px;color:#484f58;margin-top:2px;min-height:12px"></div>
+                  <div style="display:flex;align-items:center;gap:5px;margin-top:2px">
+                    <div id="md-jobs-display-status" style="font-size:10px;color:#484f58;min-height:12px;flex:1"></div>
+                    <!-- RunPod only: the pod's trajectory never comes down whole, so the display
+                         is a snapshot on a timer. This asks for one NOW. -->
+                    <button id="md-jobs-live-frame-refresh" type="button"
+                            title="Fetch the pod's current frame now"
+                            style="display:none;flex-shrink:0;background:none;border:1px solid #30363d;color:#8b949e;
+                                   border-radius:3px;font-size:11px;line-height:1;padding:2px 6px;cursor:pointer">⟳</button>
+                  </div>
                   <!-- Flexibility map (avg structure over the whole run recoloured by per-base RMSF) -->
                   <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
                          title="Average structure over the whole NAMD run, recoloured rigid→flexible by per-base RMSF (all segments pooled)">

@@ -36,7 +36,10 @@ def test_finds_the_reloader_through_a_spawn_child(monkeypatch):
         monkeypatch,
         {
             100: ("python -c from multiprocessing.spawn import spawn_main; ...", 50),
-            50: ("python /venv/bin/uvicorn backend.api.main:app --reload --reload-dir backend", 20),
+            50: (
+                "python /venv/bin/uvicorn backend.api.main:app --reload --reload-dir backend",
+                20,
+            ),
             20: ("uv run uvicorn backend.api.main:app --reload", 1),
         },
     )

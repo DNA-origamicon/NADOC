@@ -67,9 +67,13 @@ class CatenatedJunctionError(RuntimeError):
             f"{n} catenated crossover junction(s) in the atomistic build: {detail}. "
             f"The two crossover backbones are wound around each other (linking number "
             f"!= 0); MD cannot undo this. Rebuild with a non-catenating extra-base "
-            f"placement, or pass allow_catenated=True / NADOC_ALLOW_CATENATED=1 to "
-            f"override deliberately."
+            f'placement, or tick "Build despite a linked crossover" in the Job Wizard '
+            f"(request field allow_catenated_seed) to override deliberately."
         )
+        # The old text named `allow_catenated=True` — this class's own internal kwarg,
+        # not anything a user can reach — and `NADOC_ALLOW_CATENATED=1`, an environment
+        # variable NOTHING in this repo has ever read.  A gate whose only stated escape
+        # hatch does not exist is a dead end: name the control that actually opens it.
 
 
 # ── Topology ──────────────────────────────────────────────────────────────────

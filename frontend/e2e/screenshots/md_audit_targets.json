@@ -1,0 +1,33 @@
+{
+ "panes": {
+  "local": {
+   "selectedText": "This computerRuns NAMD as a local subprocess. No queue, no allocation spend. 12 GB VRAM · 10 GB RAM · 16 cores fits systems up to ~2.4M atoms Write this run to 📁 Default folder A NAMD run writes multi-GB trajectories. Point this at a roomy volume to keep them off the system disk.",
+   "nextDisabled": false,
+   "hint": ""
+  },
+  "alpine": {
+   "selectedText": "This computerRuns NAMD as a local subprocess. No queue, no allocation spend. 12 GB VRAM · 10 GB RAM · 16 cores fits systems up to ~2.4M atoms Write this run to 📁 Default folder A NAMD run writes multi-GB trajectories. Point this at a roomy volume to keep them off the system disk.",
+   "nextDisabled": true,
+   "hint": "Sign in to Alpine to see availability and pick a node."
+  },
+  "runpod": {
+   "selectedText": "This computerRuns NAMD as a local subprocess. No queue, no allocation spend. 12 GB VRAM · 10 GB RAM · 16 cores fits systems up to ~2.4M atoms Write this run to 📁 Default folder A NAMD run writes multi-GB trajectories. Point this at a roomy volume to keep them off the system disk.",
+   "nextDisabled": true,
+   "hint": "Checking whether RunPod can run this job…"
+  }
+ },
+ "leak": {
+  "beforeAnyWizard": 1,
+  "afterOneWizard": 4,
+  "afterFiveWizards": 4
+ },
+ "terminateAffordance": [],
+ "cardCount": 3,
+ "cardLabels": [
+  "This computerRuns NAMD as a local subprocess. No queue, no allocation ",
+  "Alpine clusterCU Research Computing. Needs a login (Duo) and spends SU",
+  "RunPodRented cloud GPU, billed by the second. Set up RunPod…● runpod: "
+ ],
+ "billingText": null,
+ "errors": []
+}

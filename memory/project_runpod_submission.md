@@ -51,8 +51,19 @@ model block), [[md-job-system]] (the local job system), [[project_water_shell_ca
    `client.pod()` `finally`. If the backend dies, the guard fires, NAMD stops, and the
    pod keeps billing with an idle GPU. The reaper-on-connect is the backstop for that.
 
-4. **API key in backend memory only** (user decision), mirroring the Alpine credential
-   rule. No Duo, so re-entry after a server restart is cheap.
+4. **API key resolved from disk at startup** (user decision, REVERSED 2026-08-08 — it was
+   "backend memory only, mirroring the Alpine rule"). `runpod_api.resolve_api_key()` reads
+   `$RUNPOD_API_KEY` then `~/.runpod_key` — the same order every `exp43_runpod_bench` script
+   already used, so app + launchers + watchdogs share ONE credential. `main.lifespan` calls
+   `routes_runpod.autoconnect()` in the background; a pasted key still overrides it, and
+   `/runpod/status` reports `key_source: env|file|manual|none`.
+
+   The Alpine rule never applied: that credential is a human password + a Duo push, which
+   cannot be stored. A RunPod key is a machine credential meant to be stored, and holding it
+   in memory only had a real cost — **after any restart NADOC could not terminate a pod it
+   was still being billed for**, so the reaper waited on a human noticing. It now runs on
+   boot. Opt out with `NADOC_RUNPOD_AUTOCONNECT=0` (the test suite sets this).
+   `~/.runpod_key_kill` stays separate: it ships INTO a pod for the deadman switch.
 
 5. **Interruptible/spot pods** (user decision): a reclaim is a NORMAL event, not a failure.
    The chain script is idempotent (skip any step whose `output/<name>.coor` exists), so
@@ -95,7 +106,7 @@ model block), [[md-job-system]] (the local job system), [[project_water_shell_ca
       connect / status / disconnect / **`GET /runpod/pods` (the LEAK CHECK — anything it
       returns is billing right now)** / terminate / `POST /runpod/estimate` (GPU + cost
       from the measured VRAM model, creates no pod) / gpu-types.
-      `tests/test_routes_runpod.py` (12). API key in memory only.
+      `tests/test_routes_runpod.py`. API key from `resolve_api_key` (Decision 4).
 - [x] **Phase 3b — run-target radio.** "RunPod" option beside Local/Alpine.
       **Found and fixed a real trap:** ~28 sites in `md_jobs_panel.js` assumed a BINARY
       world and used `!== 'alpine'` as a synonym for "local". With a third target, four of
@@ -259,7 +270,9 @@ re-attach paths are unit-tested but NOT yet proven on a live pod.**
 ## "I cannot resume the stopped run" (fixed 2026-08-07)
 
 **Root cause: Resume was never gated on the RunPod pre-flight, only Run was.** The API key
-is backend-memory-only, so *every* dev-server reload silently disconnects the session. The
+was backend-memory-only *at the time*, so every dev-server reload silently disconnected the
+session (fixed at the source 2026-08-08 — see Decision 4 — but the gate is still right: a
+revoked key or a RunPod outage disconnects too). The
 Resume button stayed lit and fired a start that could only ever return
 `400 RunPod pre-flight failed: RunPod API key — not connected`.
 

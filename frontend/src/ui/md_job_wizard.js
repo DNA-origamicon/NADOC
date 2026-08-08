@@ -134,6 +134,20 @@ const FIELDS = [
     help: 'Move mass from each non-water hydrogen onto its bonded heavy atom (×3), slowing the X–H stretch so a 4 fs step is stable. Recommended on at 4 fs and off below: exp51 measured 4 fs on standard masses failing RATTLE after 16.8 ps, and HMR below 4 fs costing 3.5–35× in energy conservation.' },
   { key: 'early_stop_relax', label: 'Stop settled stages early', type: 'checkbox',
     help: 'Skip a stage’s remaining chunks once BOTH its energy and its base pairing are flat. Turn it off for a run whose numbers are going in a paper.' },
+  // The seed-topology gate's override. It had no control at all, and the error it raises
+  // named an environment variable nothing reads — so a design whose extra bases build
+  // catenated was simply a dead end in the app. Off by default: both defects are permanent.
+  { key: 'allow_catenated_seed', label: 'Build despite a linked crossover', type: 'checkbox',
+    help: 'Build even when the seed carries a permanent topological defect — a reciprocal crossover pair whose backbones are wound around each other (linking number ≠ 0), or a covalent bond threaded through a nucleotide ring. Every chain end is pinned into the network, so neither can relax away: the trajectory measures the artefact instead (a threaded ring becomes a permanently ~3 Å phosphodiester). Only designs with inserted bases can trip this, and it is recorded in the manifest either way. Leave off unless you are deliberately studying the defect.' },
+  // Remote runs judge "settled" on the NODE, with whatever python that node has — so the
+  // criterion is a genuine choice there and not one anywhere else. It had no control at
+  // all, which meant every cluster run silently used the weaker tier B while the identical
+  // local run used the full one: the same protocol truncating its ladder on two different
+  // tests depending only on where it happened to run.
+  { key: 'early_stop_tier', label: 'Remote early-stop test', type: 'select', remoteOnly: true,
+    options: [{ value: 'B', label: 'B — energy only (no extra packages)' },
+              { value: 'A', label: 'A — energy AND base pairing (matches local)' }],
+    help: 'Which test the CLUSTER uses to call a stage settled. A local run always uses both criteria; on a node it depends what is installed. B needs only the standard library. A ships the real health check and needs numpy/scipy/MDAnalysis on the node python — if they are missing it fails safe and simply never skips. Ignored entirely when the run is local, or when the setting above is off.' },
   { key: 'production_timestep_fs', label: 'Timestep', unit: 'fs', type: 'select',
     options: [{ value: '4', label: '4 fs (faster, risks RATTLE)' },
               { value: '2', label: '2 fs (standard)' },
@@ -168,8 +182,22 @@ const FIELDS = [
     help: '"0" for the first GPU, "0,1" for two, or "cpu" for the multicore build.' },
 ]
 
-/** Settings that only mean something for a run on THIS machine. */
-const LOCAL_ONLY_KEYS = FIELDS.filter(f => f.localOnly).map(f => f.key)
+/** Descriptor by key, so the submit filter can ask the same question the renderer asks
+ *  (`fieldAppliesToTarget`) rather than comparing against a separate list of keys. */
+const FIELD_BY_KEY = new Map(FIELDS.map(f => [f.key, f]))
+
+/** Pure: does this setting mean anything for a run on `target`?
+ *
+ *  ONE rule for both places it is applied — whether the control is drawn (step 2) and
+ *  whether the value is sent (submit). Two copies would let a hidden control's stale value
+ *  ride along in the payload, which is exactly what `localOnly` was written to prevent.
+ *  `remoteOnly` is its mirror, added for `early_stop_tier`: which test a node uses to call
+ *  a stage settled is a real choice on a cluster and meaningless on this computer. */
+export function fieldAppliesToTarget(field, target = 'local') {
+  if (field?.localOnly && target !== 'local') return false
+  if (field?.remoteOnly && target === 'local') return false
+  return true
+}
 
 /**
  * Every parameter a PRODUCTION run exposes, in the same descriptor shape as `FIELDS`.
@@ -613,9 +641,9 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     // between two ladder settings, so nothing on screen said which run a control changed.
     const groups = new Map(SCOPE_GROUPS.map(g => [g.scope, []]))
     for (const field of FIELDS) {
-      // Hardware this machine has and a cluster node does not — hidden unless the run is
-      // actually happening here (step 1's answer).
-      if (field.localOnly && state.target !== 'local') continue
+      // Hardware this machine has and a cluster node does not; and its mirror, a criterion
+      // evaluated on a cluster node. Both keyed on step 1's answer.
+      if (!fieldAppliesToTarget(field, state.target)) continue
       const scope = fieldScope(field.key, plan)
       ;(groups.get(scope) || groups.get('both')).push(field)
     }
@@ -1610,12 +1638,14 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
         // Drop anything the server would force anyway. Sending it changes nothing, but it
         // would sit in `model_fields_set` as an explicit choice the user did not make
         // under THIS protocol — and would come back to life under the next one.
-        // Local-only hardware settings go the same way on a cluster run: the control is
-        // not on screen, so a value left over from a local session must not ride along
-        // and contradict the allocation.
+        // Settings that do not apply to the chosen target go the same way, in BOTH
+        // directions (`fieldAppliesToTarget`): the control is not on screen, so a value
+        // left over from a different target must not ride along and contradict the run —
+        // local hardware on a cluster allocation, or a node-side criterion on a run that
+        // never leaves this computer.
         const touched = Object.fromEntries(
           Object.entries(state.touched).filter(([k]) =>
-            !isForced(k) && !(state.target !== 'local' && LOCAL_ONLY_KEYS.includes(k))))
+            !isForced(k) && fieldAppliesToTarget(FIELD_BY_KEY.get(k), state.target)))
         const job = await launch?.({
           ...wizardPayload({
             presetId: state.presetId, touched, autostart,

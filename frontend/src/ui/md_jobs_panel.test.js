@@ -217,7 +217,7 @@ describe('newestCompletedForPart (cross-engine compare fallback)', () => {
   })
 })
 
-import { mdJobIsActive, mdJobIsRunning, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle, mdQueueable, mdQueueRowLabel, mdRunpodStartable, mdRunpodPhase } from './md_jobs_panel.js'
+import { mdJobIsActive, mdJobIsRunning, mdJobOccupiesLocalMachine, mdRunpodGpuKeyFor, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle, mdQueueable, mdQueueRowLabel, mdRunpodStartable, mdRunpodPhase } from './md_jobs_panel.js'
 
 describe('mdJobIsDraft / mdDraftRunLabel (deferred-prep seed)', () => {
   it('mdJobIsDraft is true only for status "draft"', () => {
@@ -528,6 +528,68 @@ describe('mdRunControl + the run queue (one machine, one NAMD job at a time)', (
   })
 })
 
+describe('mdRunpodGpuKeyFor — the wizard picks the card, not the old Clusters picker', () => {
+  const H100 = 'NVIDIA H100 80GB HBM3'
+  const L40 = 'NVIDIA L40S'
+
+  it('sends the card the wizard chose', () => {
+    expect(mdRunpodGpuKeyFor({ runTarget: 'runpod', requested: H100 })).toBe(H100)
+  })
+  it('the wizard beats a stale Clusters-card selection', () => {
+    // THE BUG: the panel's value was assigned last and won, so this returned L40 — or,
+    // far more often, null, because nothing but that picker ever sets it.
+    expect(mdRunpodGpuKeyFor({ runTarget: 'runpod', requested: H100, pickerKey: L40 })).toBe(H100)
+  })
+  it('falls back to the Clusters-card picker when the launch carries no choice', () => {
+    expect(mdRunpodGpuKeyFor({ runTarget: 'runpod', pickerKey: L40 })).toBe(L40)
+  })
+  it('no choice anywhere → null, and the backend ranks for itself', () => {
+    expect(mdRunpodGpuKeyFor({ runTarget: 'runpod' })).toBe(null)
+  })
+  it('cleared for every other target, so a re-pointed run cannot resurface a card', () => {
+    for (const runTarget of ['local', 'alpine', undefined]) {
+      expect(mdRunpodGpuKeyFor({ runTarget, requested: H100, pickerKey: L40 })).toBe(null)
+    }
+  })
+})
+
+describe('mdJobOccupiesLocalMachine (mirror of backend md_queue.job_occupies_local_machine)', () => {
+  // The bug: `machineBusy` counted ANY in-flight job, so an Alpine or RunPod run made
+  // ▶ Run read ＋ Queue on every local job — and the server-side queue, gated the same
+  // way, never drained — for the whole remote run, with the local GPU idle.
+  it('a local run holds the machine', () => {
+    for (const status of ['running', 'preparing']) {
+      expect(mdJobOccupiesLocalMachine({ status, execution_target: 'local' })).toBe(true)
+    }
+  })
+  it('a legacy job with no target is local', () => {
+    expect(mdJobOccupiesLocalMachine({ status: 'running' })).toBe(true)
+  })
+  it('a remote run is in flight but holds nothing here', () => {
+    for (const execution_target of ['alpine', 'runpod']) {
+      const job = { status: 'running', execution_target }
+      expect(mdJobIsRunning(job)).toBe(true)
+      expect(mdJobOccupiesLocalMachine(job)).toBe(false)
+    }
+  })
+  it('a submitted remote job — queued WITH a scheduler id — still holds nothing here', () => {
+    const alp = { status: 'queued', execution_target: 'alpine', slurm_job_id: '12345' }
+    const pod = { status: 'queued', execution_target: 'runpod', runpod_pod_id: 'pod1' }
+    for (const job of [alp, pod]) {
+      expect(mdJobIsRunning(job)).toBe(true)
+      expect(mdJobOccupiesLocalMachine(job)).toBe(false)
+    }
+  })
+  it('an idle local job holds nothing', () => {
+    for (const status of ['queued', 'completed', 'stopped', 'failed', 'draft']) {
+      expect(mdJobOccupiesLocalMachine({ status, execution_target: 'local' })).toBe(false)
+    }
+  })
+  it('null is not busy', () => {
+    expect(mdJobOccupiesLocalMachine(null)).toBe(false)
+  })
+})
+
 describe('mdQueueable (mirror of backend md_queue.job_is_queueable)', () => {
   it('prepared and stopped/failed jobs qualify', () => {
     expect(mdQueueable({ status: 'queued', execution_target: 'local' })).toBe(true)
@@ -606,6 +668,37 @@ describe('mdRemoteReconnectPrompt (reconnect nudge for in-flight Alpine runs)', 
     expect(mdRemoteReconnectPrompt([{ execution_target: 'local', status: 'running' }], 'disconnected')).toBe('')
     expect(mdRemoteReconnectPrompt([], 'disconnected')).toBe('')
     expect(mdRemoteReconnectPrompt(null, 'disconnected')).toBe('')
+  })
+
+  // RunPod was missing entirely, and it is the target where a dropped session costs money:
+  // the API key is in memory only, so a backend restart orphans a pod that goes on billing.
+  const pod = { execution_target: 'runpod', runpod_pod_id: 'pod1', status: 'running' }
+
+  it('prompts for an orphaned RunPod pod, and says it is still billing', () => {
+    const msg = mdRemoteReconnectPrompt([pod], 'connected', 'disconnected')
+    expect(msg).toMatch(/1 RunPod pod still billing/)
+    expect(msg).toMatch(/terminate/)
+    expect(mdRemoteReconnectPrompt([pod], 'connected', 'unknown')).toMatch(/still billing/)
+    expect(mdRemoteReconnectPrompt([pod, { ...pod, runpod_pod_id: 'pod2' }], 'connected', 'disconnected'))
+      .toMatch(/2 RunPod pods/)
+  })
+  it('the two sessions are independent — a live Alpine session does not silence RunPod', () => {
+    expect(mdRemoteReconnectPrompt([pod, running], 'connected', 'disconnected'))
+      .toMatch(/RunPod pod still billing/)
+    expect(mdRemoteReconnectPrompt([pod, running], 'connected', 'disconnected'))
+      .not.toMatch(/Alpine/)
+    const both = mdRemoteReconnectPrompt([pod, running], 'disconnected', 'disconnected')
+    expect(both).toMatch(/RunPod pod still billing/)
+    expect(both).toMatch(/1 Alpine run in flight/)
+  })
+  it('silent when the RunPod session is up, or the pod was never rented', () => {
+    expect(mdRemoteReconnectPrompt([pod], 'connected', 'connected')).toBe('')
+    expect(mdRemoteReconnectPrompt([pod], 'connected', 'connecting')).toBe('')
+    expect(mdRemoteReconnectPrompt([{ ...pod, status: 'completed' }], 'connected', 'disconnected')).toBe('')
+    expect(mdRemoteReconnectPrompt([{ execution_target: 'runpod', status: 'running' }], 'connected', 'disconnected')).toBe('')
+  })
+  it('defaults to RunPod-connected, so existing two-argument callers are unchanged', () => {
+    expect(mdRemoteReconnectPrompt([pod], 'disconnected')).toBe('')
   })
 })
 
@@ -1873,6 +1966,81 @@ describe('live-frame fetch (a running Alpine job has its trajectory on the clust
     expect(liveFrameLabel({ step: 285000 }, 'runpod'))
       .toBe('Snapshot at step 285,000 — still running on the pod')
     expect(liveFrameLabel({ step: 0 }, 'runpod')).toBe('Snapshot from the running pod job')
+  })
+})
+
+// ── RunPod: snapshots arrive on a timer, not on a plea to the user ────────────
+import {
+  mdIsPodRunning, liveFrameCountdown, runpodSnapshotStatus, LIVE_FRAME_REFRESH_MS,
+} from './md_jobs_panel.js'
+
+describe('RunPod live-frame auto-refresh', () => {
+  const pod      = { execution_target: 'runpod', status: 'running', runpod_pod_id: 'p1' }
+  const noPod    = { execution_target: 'runpod', status: 'running', runpod_pod_id: null }
+  const finished = { execution_target: 'runpod', status: 'completed', runpod_pod_id: 'p1' }
+
+  it('mdIsPodRunning: needs a pod id AND a run in flight', () => {
+    expect(mdIsPodRunning(pod)).toBe(true)
+    expect(mdIsPodRunning({ ...pod, status: 'preparing' })).toBe(true)
+    expect(mdIsPodRunning(noPod)).toBe(false)      // nothing to reach
+    expect(mdIsPodRunning(finished)).toBe(false)   // results get fetched whole
+    expect(mdIsPodRunning({ execution_target: 'alpine', status: 'running' })).toBe(false)
+    expect(mdIsPodRunning(null)).toBe(false)
+  })
+
+  it('shouldFetchLiveFrame: a pod gates on the RunPod session, NOT on Duo', () => {
+    // The asymmetry is the point — a pod is key-based, so no human has to be present.
+    expect(shouldFetchLiveFrame(pod, { runpodConnected: true, displayReady: false })).toBe(true)
+    expect(shouldFetchLiveFrame(pod, { runpodConnected: false, displayReady: false })).toBe(false)
+    // A connected Alpine session says nothing about whether we can reach a pod.
+    expect(shouldFetchLiveFrame(pod, { clusterState: 'connected', displayReady: false })).toBe(false)
+    // A real fetched trajectory still outranks a snapshot.
+    expect(shouldFetchLiveFrame(pod, { runpodConnected: true, displayReady: true })).toBe(false)
+    expect(shouldFetchLiveFrame(noPod, { runpodConnected: true, displayReady: false })).toBe(false)
+    expect(shouldFetchLiveFrame(finished, { runpodConnected: true, displayReady: false })).toBe(false)
+  })
+
+  it('liveFrameCountdown: first pull is immediate, then paced', () => {
+    // Nothing fetched yet ⇒ due now. Waiting a full interval before the FIRST frame
+    // would leave the user staring at an empty viewport for two minutes.
+    expect(liveFrameCountdown({ lastFetchAt: null })).toMatchObject({ due: true, label: '' })
+
+    const t0 = 1_000_000
+    const fresh = liveFrameCountdown({ lastFetchAt: t0, nowMs: t0 + 1000 })
+    expect(fresh.due).toBe(false)
+    expect(fresh.label).toBe('next update in 2 min')
+
+    const soon = liveFrameCountdown({ lastFetchAt: t0, nowMs: t0 + LIVE_FRAME_REFRESH_MS - 30_000 })
+    expect(soon.label).toBe('next update in under a minute')
+
+    const overdue = liveFrameCountdown({ lastFetchAt: t0, nowMs: t0 + LIVE_FRAME_REFRESH_MS + 1 })
+    expect(overdue).toMatchObject({ due: true, msRemaining: 0 })
+  })
+
+  it('runpodSnapshotStatus: always says something, and never asks the user to fetch', () => {
+    const fetching = runpodSnapshotStatus({ fetching: true })
+    expect(fetching.busy).toBe(true)
+    expect(fetching.text).toContain('Retrieving')
+
+    const idle = runpodSnapshotStatus({
+      liveFrame: { step: 285000 }, countdownLabel: 'next update in 2 min',
+    })
+    expect(idle.busy).toBe(false)
+    expect(idle.text).toBe(
+      'Snapshot at step 285,000 — still running on the pod · next update in 2 min')
+
+    // Before the first frame lands there is still a line to show.
+    expect(runpodSnapshotStatus({ countdownLabel: 'next update in 1 min' }).text)
+      .toBe('No snapshot from the pod yet · next update in 1 min')
+
+    // A dropped RunPod session is the one case the user CAN act on.
+    expect(runpodSnapshotStatus({ connected: false }).text).toContain('Not connected to RunPod')
+
+    // The old wording told the user to do the work. It must not come back.
+    for (const s of [fetching, idle, runpodSnapshotStatus({})]) {
+      expect(s.text).not.toContain('not on this computer')
+      expect(s.text.toLowerCase()).not.toContain('fetch a live frame')
+    }
   })
 })
 

@@ -262,7 +262,7 @@ export function initWizardRunpod({
         ? '<div style="font-size:11px;color:#f85149;background:rgba(248,81,73,.1);'
           + 'border:1px solid rgba(248,81,73,.35);border-radius:4px;padding:6px 8px;'
           + `margin-top:6px">⚠ ${_esc(budget.billingMessage)} `
-          + 'Check the Clusters card if you did not expect that.</div>'
+          + 'The Clusters card lists them and can terminate one.</div>'
         : '')
       + '<div style="font-size:10px;color:#6e7681;margin-top:6px;line-height:1.5">'
       + 'This caps ONE pod. A pod reclaimed mid-run is relaunched with the cap afresh, so a '

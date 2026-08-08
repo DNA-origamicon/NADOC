@@ -1,0 +1,30 @@
+{
+ "console": [
+  "HTTP 400 GET /api/runpod/pods",
+  "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+  "HTTP 400 GET /api/runpod/pods",
+  "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+ ],
+ "posts": [
+  {
+   "url": "/api/md/protocol-plan",
+   "body": {
+    "relax_preset": "design_speed",
+    "kind": "relaxation"
+   }
+  }
+ ],
+ "billingText": "⚠ 1 pod already billing at $0.34/hr. The Clusters card lists them and can terminate one.",
+ "gpuRowCount": 0,
+ "step1": {
+  "nextDisabled": null,
+  "hint": ""
+ },
+ "createVisible": false,
+ "createClickError": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.md-modal, .modal, [class*=\"wizard\"]').locator('button').filter({ hasText: /^Create job$/ }).last()\u001b[22m\n",
+ "created": null,
+ "postUrls": [
+  "/api/md/protocol-plan"
+ ],
+ "verdict": "no POST /md/jobs was captured"
+}

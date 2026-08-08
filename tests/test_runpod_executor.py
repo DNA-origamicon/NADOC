@@ -930,7 +930,9 @@ class TestAdoptAlsoAlwaysTerminates:
         job.remote_scratch_dir = "/workspace/nadoc_jobs/x"
         return job
 
-    def test_destroys_the_pod_when_the_adopted_run_finishes(self, tmp_path, monkeypatch):
+    def test_destroys_the_pod_when_the_adopted_run_finishes(
+        self, tmp_path, monkeypatch
+    ):
         self._patch_conn(
             monkeypatch,
             {
@@ -943,7 +945,11 @@ class TestAdoptAlsoAlwaysTerminates:
         job = self._job_on_pod(tmp_path)
         status = _run(
             rx.reattach_job_on_pod(
-                job, tmp_path, client=_client_recording(deleted), poll_s=0, sleep=_nosleep
+                job,
+                tmp_path,
+                client=_client_recording(deleted),
+                poll_s=0,
+                sleep=_nosleep,
             )
         )
         assert status == MdStatus.completed
@@ -962,7 +968,11 @@ class TestAdoptAlsoAlwaysTerminates:
         job = self._job_on_pod(tmp_path)
         _run(
             rx.reattach_job_on_pod(
-                job, tmp_path, client=_client_recording(deleted), poll_s=0, sleep=_nosleep
+                job,
+                tmp_path,
+                client=_client_recording(deleted),
+                poll_s=0,
+                sleep=_nosleep,
             )
         )
         assert deleted == ["/v1/pods/pod1"]
@@ -1003,9 +1013,73 @@ class TestAdoptAlsoAlwaysTerminates:
         supervisor sits polling a machine that no longer exists."""
 
         def handler(req):
-            return httpx.Response(200, json={**_pod_json(), "desiredStatus": "TERMINATED"})
+            return httpx.Response(
+                200, json={**_pod_json(), "desiredStatus": "TERMINATED"}
+            )
 
         client = RunpodClient("k", transport=httpx.MockTransport(handler))
         job = self._job_on_pod(tmp_path)
         with pytest.raises(RunpodError, match="destroyed"):
             _run(rx.reattach_job_on_pod(job, tmp_path, client=client))
+
+
+class TestOpenPodConnection:
+    """The read-only side-channel used to pull a display snapshot off a LIVE pod.
+
+    The property that matters is a negative one: this must never destroy the pod. The
+    obvious implementations — ``client.pod()`` or ``client.adopt()`` — both terminate in
+    their ``finally``, so reaching for either would kill the paid run the caller was only
+    trying to look at.
+    """
+
+    def _patch_conn(self, monkeypatch, opened):
+        async def fake_connect(self, **kw):
+            opened.append((self.host, self.port, self.pod_id))
+            self._conn = FakeSSH()  # noqa: SLF001
+
+        monkeypatch.setattr(RunpodConnection, "connect", fake_connect)
+
+    def test_borrows_the_pod_without_destroying_it(self, tmp_path, monkeypatch):
+        deleted, opened = [], []
+        self._patch_conn(monkeypatch, opened)
+        job = _job(tmp_path)
+        job.runpod_pod_id = "p1"
+
+        conn = _run(rx.open_pod_connection(job, client=_client_recording(deleted)))
+        # Host/port/id all come from the API's answer, not from the job record — the
+        # job only supplies which pod to ask about.
+        assert opened == [("1.2.3.4", 10341, "pod1")]
+        assert deleted == [], "a snapshot fetch must not terminate the running pod"
+        # The caller owns it — nothing here closed it on their behalf.
+        assert conn.pod_id == "pod1"
+
+    def test_a_job_with_no_pod_is_refused(self, tmp_path):
+        job = _job(tmp_path)
+        job.runpod_pod_id = None
+        with pytest.raises(RunpodError, match="no pod"):
+            _run(rx.open_pod_connection(job, client=_client_recording([])))
+
+    def test_a_pod_that_is_not_running_is_refused(self, tmp_path, monkeypatch):
+        """Its filesystem is gone; SSH would hang rather than fail fast."""
+        job = _job(tmp_path)
+        job.runpod_pod_id = "p1"
+
+        def handler(req):
+            return httpx.Response(200, json={**_pod_json(), "desiredStatus": "EXITED"})
+
+        client = RunpodClient("k", transport=httpx.MockTransport(handler))
+        with pytest.raises(RunpodError, match="not running"):
+            _run(rx.open_pod_connection(job, client=client))
+
+    def test_a_destroyed_pod_reads_as_a_finished_run(self, tmp_path):
+        """404 is the ORDINARY end of every run — it must not surface as raw API text."""
+        job = _job(tmp_path)
+        job.runpod_pod_id = "gone"
+        client = RunpodClient(
+            "k",
+            transport=httpx.MockTransport(
+                lambda req: httpx.Response(404, json={"error": "pod not found"})
+            ),
+        )
+        with pytest.raises(RunpodError, match="no longer exists"):
+            _run(rx.open_pod_connection(job, client=client))

@@ -641,7 +641,9 @@ async def _supervise_run(
                 )
                 job.status = MdStatus.paused
                 job.resumable = True
-                job.error = "Lost SSH to the pod; resume to continue from the checkpoint."
+                job.error = (
+                    "Lost SSH to the pod; resume to continue from the checkpoint."
+                )
                 break
             log.warning(
                 "poll SSH error %d/%d — reconnecting and retrying: %s",
@@ -762,3 +764,47 @@ async def _remote_vcpus(conn: RunpodConnection) -> int:
     res = await conn.run("nproc")
     out = res.stdout.strip()
     return int(out) if out.isdigit() else 8
+
+
+async def open_pod_connection(
+    job: MdJob,
+    *,
+    client: RunpodClient,
+    client_keys: Optional[list[str]] = None,
+    timeout: float = 60.0,
+) -> RunpodConnection:
+    """An SSH connection to a job's LIVE pod, for a read-only errand beside the run.
+
+    ⚠️ **Deliberately not ``client.pod()`` or ``client.adopt()``.** Both are context
+    managers that DESTROY the pod in their ``finally`` — correct when you own the run,
+    catastrophic for a peek at one: fetching a display frame would kill the paid job it
+    was fetching from. ``get_pod`` is a plain read.
+
+    The caller owns the connection and MUST ``await conn.close()``. Runs alongside the
+    supervisor's own connection rather than sharing it: a second SSH channel to the same
+    box is free, whereas interleaving an ad-hoc SFTP with the poll loop's traffic on one
+    connection is a race for no gain.
+    """
+    if not job.runpod_pod_id:
+        raise RunpodError(f"job {job.job_id} has no pod")
+    try:
+        pod = await client.get_pod(job.runpod_pod_id)
+    except RunpodError as exc:
+        # A destroyed pod 404s here. That is the ORDINARY end of every run, so it must
+        # read as one — the raw "GET /pods/xxx failed (404)" surfaced verbatim in the UI.
+        if "404" in str(exc):
+            raise RunpodError(
+                "That pod no longer exists — it was destroyed when the run ended."
+            ) from exc
+        raise
+    if not pod.is_running:
+        raise RunpodError(f"pod {pod.id} is {pod.desired_status}, not running")
+    endpoint = ssh_endpoint(pod)
+    if endpoint is None:
+        raise RunpodError(f"pod {pod.id} exposed no SSH endpoint")
+    host, port = endpoint
+    conn = RunpodConnection(
+        host=host, port=port, pod_id=pod.id, client_keys=client_keys
+    )
+    await conn.connect(timeout=timeout, retries=1)
+    return conn

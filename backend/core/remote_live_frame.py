@@ -33,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import time
 from pathlib import Path
 
@@ -74,13 +75,55 @@ def active_segment_name(job) -> str | None:
     return segments[idx].name
 
 
-def is_live_stand_in(job, segment_name: str) -> bool:
-    """True if this segment's local DCD is a fetched single frame, not real results."""
+# ── The stand-in marker ───────────────────────────────────────────────────────
+# The marker lives BESIDE the file it describes, not only in ``job.live_frame``.
+#
+# ⚠️ Why: ``job.json`` has two writers. The supervisor loop (``runpod_executor
+# ._supervise_run`` / ``md_executor``) holds its own in-memory ``MdJob`` and re-saves the
+# WHOLE record every poll, so a field written out-of-band by a route is silently reverted
+# within ~30 s. That is exactly what happened: the fetch route set ``job.live_frame``, the
+# supervisor's next save wiped it, and the following fetch then saw a DCD it no longer
+# recognised as a stand-in and refused to refresh it —
+# ``{"ok": true, "skipped": "real trajectory already local"}`` forever. The display froze
+# on its first snapshot and reported success the whole time.
+#
+# A sidecar has one writer and describes the one thing that matters (this FILE is a single
+# fetched frame), so it cannot drift from it. ``job.live_frame`` is still written, because
+# it is the display payload the panel reads; the sidecar is the AUTHORITY.
+_MARKER_SUFFIX = ".live.json"
+
+
+def marker_path(package_dir: Path, segment_name: str) -> Path:
+    return package_dir / "output" / f"{segment_name}.dcd{_MARKER_SUFFIX}"
+
+
+def read_marker(package_dir: Path, segment_name: str) -> dict | None:
+    """The stand-in record for this segment, or ``None``. Never raises."""
+    path = marker_path(package_dir, segment_name)
+    try:
+        if not path.is_file():
+            return None
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def is_live_stand_in(job, segment_name: str, package_dir: Path | None = None) -> bool:
+    """True if this segment's local DCD is a fetched single frame, not real results.
+
+    Checks the sidecar FIRST when the caller can name the package; ``job.live_frame`` is
+    the fallback for callers that cannot, and for records written before the sidecar
+    existed.
+    """
+    if package_dir is not None and read_marker(package_dir, segment_name) is not None:
+        return True
     live = getattr(job, "live_frame", None) or {}
     return live.get("segment") == segment_name
 
 
-def clear_live_frame(job, segment_name: str | None = None) -> None:
+def clear_live_frame(
+    job, segment_name: str | None = None, package_dir: Path | None = None
+) -> None:
     """Drop the stand-in marker once real outputs land (``fetch_outputs``).
 
     Without this the marker would outlive the file it describes, and the next call
@@ -89,9 +132,64 @@ def clear_live_frame(job, segment_name: str | None = None) -> None:
     live = getattr(job, "live_frame", None) or {}
     if live and (segment_name is None or live.get("segment") == segment_name):
         job.live_frame = None
+    if package_dir is None:
+        return
+    names = [segment_name] if segment_name else [s.name for s in (job.segments or [])]
+    for name in names:
+        marker_path(package_dir, name).unlink(missing_ok=True)
 
 
-def _write_single_frame_dcd(topology: Path, coor: Path, dest: Path) -> int:
+def parse_xsc_dimensions(text: str) -> list[float] | None:
+    """MDAnalysis ``dimensions`` — ``[lx, ly, lz, alpha, beta, gamma]`` — from a NAMD
+    ``.xsc``, or ``None`` if it cannot be read.
+
+    ⚠️ **Without this the snapshot is unusable.** A NAMD ``.coor`` (NAMDBIN) is
+    coordinates and nothing else, so the DCD written from one carries a ZEROED unit
+    cell. ``ws._try_unwrap`` registers MDAnalysis' ``unwrap`` transformation for any
+    system under 200k atoms, and that transformation raises *"No box information
+    available"* on the first frame access — which happens inside the load, so the whole
+    load fails and every later poll answers *"No trajectory loaded."* A real NAMD DCD has
+    the box, which is why only the live-snapshot path was affected.
+
+    The ``.xsc`` sits beside the ``.restart.coor`` and is rewritten with it, so it is the
+    box AT THAT STEP — which matters under NPT, where the cell is still breathing.
+
+    Columns are ``step a_x a_y a_z b_x b_y b_z c_x c_y c_z o_x o_y o_z``; the last
+    non-comment line is the current one.
+    """
+    row = None
+    for line in text.splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            row = line.split()
+    if not row or len(row) < 10:
+        return None
+    try:
+        a = [float(v) for v in row[1:4]]
+        b = [float(v) for v in row[4:7]]
+        c = [float(v) for v in row[7:10]]
+    except ValueError:
+        return None
+
+    def _norm(v):
+        return math.sqrt(sum(x * x for x in v))
+
+    def _angle(u, v):
+        nu, nv = _norm(u), _norm(v)
+        if nu == 0 or nv == 0:
+            return 90.0
+        cos = sum(x * y for x, y in zip(u, v)) / (nu * nv)
+        return math.degrees(math.acos(max(-1.0, min(1.0, cos))))
+
+    la, lb, lc = _norm(a), _norm(b), _norm(c)
+    if min(la, lb, lc) <= 0:
+        return None
+    return [la, lb, lc, _angle(b, c), _angle(a, c), _angle(a, b)]
+
+
+def _write_single_frame_dcd(
+    topology: Path, coor: Path, dest: Path, dimensions: list[float] | None = None
+) -> int:
     """NAMD binary ``.coor`` + PSF -> a one-frame DCD at ``dest``.  Returns atom count.
 
     Blocking and slow (a 180 MB solvated PSF parses in ~5 s), so callers run it off
@@ -100,6 +198,9 @@ def _write_single_frame_dcd(topology: Path, coor: Path, dest: Path) -> int:
     import MDAnalysis as mda  # noqa: PLC0415 — heavy import, deferred
 
     universe = mda.Universe(str(topology), str(coor), format="NAMDBIN")
+    if dimensions is not None:
+        # See parse_xsc_dimensions: a boxless frame fails the display load outright.
+        universe.dimensions = dimensions
     dest.parent.mkdir(parents=True, exist_ok=True)
     # Write beside the target and rename: the display polls every 15 s and must
     # never open a half-written DCD.  `format` is explicit because MDAnalysis infers
@@ -134,14 +235,19 @@ async def fetch_live_frame(
     dest = package_dir / "output" / f"{segment}.dcd"
 
     # A real fetched trajectory outranks anything this module can produce.
-    if dest.is_file() and not is_live_stand_in(job, segment):
+    if dest.is_file() and not is_live_stand_in(job, segment, package_dir):
         return {
             "ok": True,
             "segment": segment,
             "skipped": "real trajectory already local",
         }
 
-    previous = getattr(job, "live_frame", None) or {}
+    # The sidecar, not job.live_frame: the supervisor's whole-record save reverts the
+    # latter within a poll, and pacing off a reverted timestamp means re-fetching ~32 MB
+    # on every single tick.
+    previous = (
+        read_marker(package_dir, segment) or getattr(job, "live_frame", None) or {}
+    )
     if (
         not force
         and dest.is_file()
@@ -171,9 +277,29 @@ async def fetch_live_frame(
             "reason": "no restart checkpoint on the node yet",
         }
 
+    # The box, from the .xsc written alongside the .coor. Best-effort: a snapshot with a
+    # stale box beats no snapshot, and an older run may not have one. But see
+    # parse_xsc_dimensions — without it the display cannot load the frame at all, so a
+    # miss is worth a warning.
+    tmp_xsc = job.job_dir(workspace_dir) / f"_live_frame_{segment}.xsc"
+    dimensions = None
+    try:
+        await conn.sftp_get(f"{scratch}/output/{segment}.restart.xsc", str(tmp_xsc))
+        dimensions = parse_xsc_dimensions(tmp_xsc.read_text(errors="replace"))
+    except Exception as exc:  # noqa: BLE001 — a missing .xsc must not lose the frame
+        logger.warning("[%s] no .xsc for %s: %s", job.job_id, segment, exc)
+    finally:
+        tmp_xsc.unlink(missing_ok=True)
+    if dimensions is None:
+        logger.warning(
+            "[%s] live frame for %s has NO unit cell — the display will refuse it",
+            job.job_id,
+            segment,
+        )
+
     try:
         n_atoms = await asyncio.to_thread(
-            _write_single_frame_dcd, topology, tmp_coor, dest
+            _write_single_frame_dcd, topology, tmp_coor, dest, dimensions
         )
     finally:
         tmp_coor.unlink(missing_ok=True)
@@ -184,6 +310,12 @@ async def fetch_live_frame(
         "n_atoms": n_atoms,
         "fetched_at": time.time(),
     }
+    # Write the sidecar BEFORE returning: it, not the job record, is what the next call
+    # consults to decide whether this DCD may be overwritten.
+    try:
+        marker_path(package_dir, segment).write_text(json.dumps(job.live_frame))
+    except OSError as exc:  # noqa: BLE001 — a frame we cannot mark is still a frame
+        logger.warning("[%s] could not write live-frame marker: %s", job.job_id, exc)
     logger.info(
         "[%s] live frame: %s step %s (%d atoms)",
         job.job_id,

@@ -252,14 +252,23 @@ export function nextLivePollAction({ pending, waitedMs, timeoutMs }) {
  *   'remote'  — the trajectory exists but is not on this computer; waiting will not
  *               help, it needs a fetch. Distinct from 'waiting' so the wording can say so.
  *   anything else (incl. 'off'/undefined) — hidden (no job selected / idle).
+ *
+ * `executionTarget` words the 'remote' case, and is the reason this takes a second
+ * argument at all: it used to read **"on the pod"** for EVERY remote job, so selecting an
+ * Alpine run showed a RunPod message about it. The backend has always worded its own
+ * `not_ready_reason` per target (`md_display_status`: "the pod" / "the cluster") — the dot
+ * was the one place that did not, and the dot is what the user reads first.
  */
-export function mdReadinessIndicator(state) {
+export function mdReadinessIndicator(state, executionTarget = null) {
+  const where = executionTarget === 'runpod' ? 'on the pod'
+    : executionTarget === 'alpine' ? 'on the cluster'
+      : 'not local'
   switch (state) {
     case 'warming': return { show: true, color: 'warn', text: 'warming…' }
     case 'ready':   return { show: true, color: 'ok',   text: 'ready' }
     case 'error':   return { show: true, color: 'err',  text: 'error' }
     case 'waiting': return { show: true, color: 'dim',  text: 'no frames yet' }
-    case 'remote':  return { show: true, color: 'warn', text: 'on the pod' }
+    case 'remote':  return { show: true, color: 'warn', text: where }
     default:        return { show: false, color: 'dim', text: '' }
   }
 }

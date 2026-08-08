@@ -240,6 +240,28 @@ describe('mdReadinessIndicator', () => {
     for (const s of ['off', 'idle', undefined, null, 'whatever'])
       expect(mdReadinessIndicator(s).show).toBe(false)
   })
+
+  // THE BUG: 'remote' read "on the pod" for every target, so clicking an Alpine job right
+  // after a RunPod one showed a RunPod message about the Alpine run. The backend has always
+  // worded its own reason per target (md_display_status: "the pod" / "the cluster") — the
+  // dot, which is what you read first, did not.
+  it('words the remote state for the target the job actually runs on', () => {
+    expect(mdReadinessIndicator('remote', 'runpod').text).toBe('on the pod')
+    expect(mdReadinessIndicator('remote', 'alpine').text).toBe('on the cluster')
+  })
+  it('falls back to a target-neutral phrase rather than naming the wrong one', () => {
+    for (const t of [null, undefined, 'local', 'something-new'])
+      expect(mdReadinessIndicator('remote', t).text).toBe('not local')
+  })
+  it('the target changes only the remote wording, never the other states', () => {
+    for (const s of ['warming', 'ready', 'error', 'waiting']) {
+      expect(mdReadinessIndicator(s, 'alpine')).toEqual(mdReadinessIndicator(s, 'runpod'))
+    }
+  })
+  it('remote is always shown and always a warning colour', () => {
+    for (const t of ['runpod', 'alpine', null])
+      expect(mdReadinessIndicator('remote', t)).toMatchObject({ show: true, color: 'warn' })
+  })
 })
 
 describe('zipAtomIdentity', () => {

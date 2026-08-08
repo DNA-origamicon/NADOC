@@ -83,7 +83,9 @@ class RingPiercedError(RuntimeError):
             f"{n} covalent bond(s) are threaded through a nucleotide ring "
             f"(e.g. {first.get('bond', '?')} through {first.get('ring', '?')}). "
             "This is a permanent topological defect — relaxation cannot undo it, it "
-            "only trades it for a stretched bond. Rebuild, or override deliberately."
+            'only trades it for a stretched bond. Rebuild, or tick "Build despite a '
+            'linked crossover" in the Job Wizard (request field allow_catenated_seed) '
+            "to override deliberately — the same switch opens both seed-topology gates."
         )
 
 

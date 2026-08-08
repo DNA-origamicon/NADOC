@@ -3776,12 +3776,27 @@ async def get_md_job_display(job_id: str) -> dict:
     # all: toggle Display MD, get nothing, no explanation.
     from backend.core.md_display_status import display_not_ready
 
+    # The sidecar beside the DCD, not job.live_frame — the supervisor's whole-record save
+    # reverts that field within a poll, so reading it here reported "no snapshot" for a
+    # snapshot that was sitting right there on disk.
+    from backend.core import remote_live_frame
+
+    live_marker = (
+        remote_live_frame.read_marker(package_dir, segment_name)
+        if segment_name
+        else None
+    ) or (
+        job.live_frame
+        if job.live_frame and job.live_frame.get("segment") == segment_name
+        else None
+    )
+
     not_ready = display_not_ready(
         has_manifest=manifest.exists(),
         has_trajectory=dcd_path is not None,
         status=job.status.value,
         execution_target=job.execution_target or "local",
-        has_live_frame=bool(job.live_frame),
+        has_live_frame=bool(live_marker),
     )
 
     return {
@@ -3797,11 +3812,7 @@ async def get_md_job_display(job_id: str) -> dict:
         # Set when what's on disk is a single fetched frame from a job still running
         # on the cluster, not a trajectory.  The panel must say so: it looks
         # identical to real results otherwise, and it does not advance on its own.
-        "live_frame": (
-            job.live_frame
-            if job.live_frame and job.live_frame.get("segment") == segment_name
-            else None
-        ),
+        "live_frame": live_marker,
         "production_ready": production_ready,
         "production_from_seed": from_seed,
         "production_checkpoint": production_checkpoint,
@@ -3823,6 +3834,20 @@ async def delete_md_job(job_id: str) -> dict:
     if is_running(job_id) or job.status == MdStatus.running:
         raise HTTPException(400, "Stop the MD job before deleting it")
     job_dir = job.job_dir(ws)
+    # An ARCHIVED job's dir is on the archive drive.  If that drive is not mounted the
+    # path simply does not exist — and the old code took that as "nothing to delete",
+    # purged the index anyway and reported success.  The job then vanished from the UI
+    # while multi-GB of trajectory stayed on the unmounted disk, untracked and
+    # unreachable.  Refuse instead: the user can mount the drive and try again, and a
+    # delete that cannot delete must not claim it did.
+    if job.archived and job.archive_path and not job_dir.exists():
+        raise HTTPException(
+            409,
+            f"This job is archived to {job_dir}, which is not reachable right now — "
+            "mount the archive drive and try again. Deleting it from the list without "
+            "removing the folder would leave the files behind with nothing pointing at "
+            "them.",
+        )
     if job_dir.exists():
         shutil.rmtree(job_dir)
     purge_index_entry(ws, "md_jobs", job_id)  # drop archived-job index entry if any
@@ -5619,19 +5644,65 @@ async def fetch_md_job_live_frame(job_id: str, force: bool = False) -> dict:
     # fetch a frame for a LOCAL job would send them somewhere that cannot help.
     if job.execution_target == "local":
         raise HTTPException(400, "This is a local job; its trajectory is already here.")
-    mgr = cluster_ssh.get_manager()
-    if not mgr.is_connected():
-        raise HTTPException(409, "not connected to a cluster")
+
+    if job.execution_target == "runpod":
+        result = await _fetch_runpod_live_frame(job, force=force)
+    else:
+        mgr = cluster_ssh.get_manager()
+        if not mgr.is_connected():
+            raise HTTPException(409, "not connected to a cluster")
+        try:
+            result = await remote_live_frame.fetch_live_frame(
+                job, _workspace(), conn=mgr, force=force
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except cluster_ssh.ClusterSSHError as exc:
+            raise HTTPException(502, f"Cluster transport error: {exc}") from exc
+    job.save(_workspace())
+    return {"job_id": job.job_id, **result}
+
+
+async def _fetch_runpod_live_frame(job, *, force: bool) -> dict:
+    """The RunPod half of ``fetch-live-frame``.
+
+    Alpine's transport is a single long-lived Duo-authenticated manager; a pod's is a
+    short SSH session opened per errand, because the pod is ephemeral and its endpoint is
+    only knowable through the RunPod API. Same ``remote_live_frame`` underneath — that
+    module takes any object with ``sftp_get``, which is the whole point of the conn
+    duck-type.
+    """
+    from backend.api import routes_runpod
+    from backend.core import remote_live_frame, runpod_executor
+    from backend.core.runpod_api import RunpodError
+    from backend.core.runpod_conn import RunpodSSHError
+
+    session = routes_runpod._SESSION  # noqa: SLF001
+    if not session.is_connected():
+        raise HTTPException(409, "Not connected to RunPod — cannot reach the pod.")
+    if not job.runpod_pod_id:
+        raise HTTPException(409, "This job has no pod running.")
+
     try:
-        result = await remote_live_frame.fetch_live_frame(
-            job, _workspace(), conn=mgr, force=force
+        conn = await runpod_executor.open_pod_connection(
+            job, client=session.require(), client_keys=_runpod_client_keys()
+        )
+    except RunpodError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except (RunpodSSHError, OSError) as exc:
+        raise HTTPException(502, f"Could not reach the pod: {exc}") from exc
+
+    try:
+        return await remote_live_frame.fetch_live_frame(
+            job, _workspace(), conn=conn, force=force
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    except cluster_ssh.ClusterSSHError as exc:
-        raise HTTPException(502, f"Cluster transport error: {exc}") from exc
-    job.save(_workspace())
-    return {"job_id": job.job_id, **result}
+    except RunpodSSHError as exc:
+        raise HTTPException(502, f"Pod transport error: {exc}") from exc
+    finally:
+        # The pod must outlive this errand — we only borrowed a channel to it.
+        await conn.close()
 
 
 @router.post("/md/jobs/{job_id}/stop")

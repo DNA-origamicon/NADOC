@@ -251,3 +251,68 @@ class TestRoutes:
         c, _ = client
         r = c.post("/api/fs/mkdir", json={"path": str(tmp_path), "name": "a/b"})
         assert r.status_code == 400
+
+
+class TestDeleteAnArchivedJob:
+    """Deleting a job whose archive drive is not mounted must REFUSE, not lie.
+
+    The route did `if job_dir.exists(): rmtree(...)` and then purged the index
+    unconditionally, so an unreachable archive path meant the job vanished from the UI
+    while its (often multi-GB) folder stayed on the unmounted disk with nothing pointing
+    at it — and the response still said `{"ok": true}`.
+    """
+
+    @pytest.fixture
+    def client(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        from fastapi.testclient import TestClient
+
+        from backend.api import routes_md
+        from backend.api import state as design_state
+        from backend.api.main import app
+        from tests.conftest import make_minimal_design
+
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+        design_state.set_design(make_minimal_design())
+        return TestClient(app), tmp_path
+
+    def _job_archived_to(self, ws: Path, dest: Path):
+        """A job whose RECORD says archived to `dest`, with the record itself still in the
+        workspace so `_load_job` can find it — which is exactly the on-disk shape after a
+        real archive (`resolve_job_json` reads the workspace copy)."""
+        job = new_md_job(
+            "A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc"
+        )
+        job.save(ws)
+        p = ws / "md_jobs" / job.job_id / "job.json"
+        p.write_text(
+            p.read_text()
+            .replace('"archived": false', '"archived": true')
+            .replace('"archive_path": null', f'"archive_path": "{dest}"')
+        )
+        return job
+
+    def test_refuses_when_the_archive_drive_is_not_mounted(
+        self, client, tmp_path
+    ) -> None:
+        c, ws = client
+        missing = tmp_path / "not-mounted" / "deadbeef"
+        job = self._job_archived_to(ws, missing)
+
+        r = c.delete(f"/api/md/jobs/{job.job_id}")
+        assert r.status_code == 409
+        assert "not reachable" in r.json()["detail"]
+        # and it is still listed — a refused delete must not half-happen
+        assert any(e["job_id"] == job.job_id for e in c.get("/api/md/jobs").json())
+
+    def test_deletes_normally_when_the_archive_is_reachable(
+        self, client, tmp_path
+    ) -> None:
+        c, ws = client
+        dest = tmp_path / "archive" / "job"
+        dest.mkdir(parents=True)
+        (dest / "traj.dcd").write_bytes(b"\0" * 16)
+        job = self._job_archived_to(ws, dest)
+
+        r = c.delete(f"/api/md/jobs/{job.job_id}")
+        assert r.status_code == 200, r.text
+        assert not dest.exists()

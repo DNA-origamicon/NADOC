@@ -1,0 +1,7891 @@
+{
+ "errors": [],
+ "phases": {
+  "panelClosed": [
+   {
+    "id": "simulate-panel",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Simulate\n              \n            \n            \n          ",
+    "kids": 2
+   },
+   {
+    "id": "simulate-heading",
+    "tag": "h2",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Simulate",
+    "kids": 2
+   },
+   {
+    "id": "simulate-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "simulate-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Fast\n                \n                Accurate\n             ",
+    "kids": 16
+   },
+   {
+    "id": "simulate-run-controls",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▶ Relax\n                ◉ Live\n                Full Sim\n    ",
+    "kids": 6
+   },
+   {
+    "id": "namd-run-controls",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "＋ New job\n                  \n                  \n            ",
+    "kids": 2
+   },
+   {
+    "id": "md-launch-row",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "＋ New job\n                  \n                  \n            ",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-new-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "＋ New job",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-run-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "▶ Run",
+    "kids": 0
+   },
+   {
+    "id": "md-queue-wrap",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Queued — starts automatically when the machine is free",
+    "kids": 2
+   },
+   {
+    "id": "md-queue-list",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "simulate-job-actions",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Archive\n                  Delete",
+    "kids": 2
+   },
+   {
+    "id": "simulate-jobs-archive-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Archive",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-delete-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Delete",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-archive-progress",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "simulate-run-dir",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "📁 Default folder",
+    "kids": 1
+   },
+   {
+    "id": "simulate-jobs",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Jobs· NAMD\n                \n                \n               ",
+    "kids": 2
+   },
+   {
+    "id": "simulate-jobs-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Jobs· NAMD",
+    "kids": 3
+   },
+   {
+    "id": "simulate-jobs-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "simulate-jobs-engine-label",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "· NAMD",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Show all job types\n                \n                [1]24hb_",
+    "kids": 8
+   },
+   {
+    "id": "simulate-jobs-show-all-types",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-list",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "[1]24hb_1xTJul 15 22:102.3 GB📦◆Production 1 · seed 54321Jul",
+    "kids": 19
+   },
+   {
+    "id": "simulate-jobs-progress",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "simulate-jobs-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Select a run above, or press ▶ Relax to start one.",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-run-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "▶ Run",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-detail",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-timeline",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Stage timeline\n                  Minimization●✓4 ns producti",
+    "kids": 2
+   },
+   {
+    "id": "simulate-jobs-timeline-host",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Minimization●✓4 ns production run●✓",
+    "kids": 6
+   },
+   {
+    "id": "md-jobs-timeline",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Minimization●✓4 ns production run●✓",
+    "kids": 2
+   },
+   {
+    "id": "namd-live-controls-host",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Early-stop settled stages (applies at the next checkpoint)\n ",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-live-controls",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Early-stop settled stages (applies at the next checkpoint)\n ",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-early-stop",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-early-stop-pending",
+    "tag": "span",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "pending…",
+    "kids": 0
+   },
+   {
+    "id": "simulate-status-line",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "GPU: free · 16 cores free · Engine: oxDNA (GPU) — fastest he",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-panel",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "NAMD3 + GROMACS found\n\n              \n              \n\n      ",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-panel-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "NAMD3 + GROMACS found\n\n              \n              \n\n      ",
+    "kids": 10
+   },
+   {
+    "id": "md-jobs-namd-status",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "NAMD3 + GROMACS found",
+    "kids": 0
+   },
+   {
+    "id": "md-launch-form",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Production runs are set up in ＋ New job → Production, which\n",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-production",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Production runs are set up in ＋ New job → Production, which\n",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-prod-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "This is a production run — Run / Stop above controls it.",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-revert-prod-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "⧉ Separate production into its own run",
+    "kids": 0
+   },
+   {
+    "id": "md-benchmark-mount",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸\n          Benchmark\n        \n        \n          \n         ",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-list-toggle",
+    "tag": "div",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Jobs",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-list-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-list-body",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Show jobs for all designs\n                  \n               ",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-show-all",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-list",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▾[1]24hb_1xT07-15 22:102.3 GB📦◆▾Production 1 · seed 5432107",
+    "kids": 19
+   },
+   {
+    "id": "md-anchors-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸Anchors",
+    "kids": 2
+   },
+   {
+    "id": "md-anchors-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Add selection as anchor\n                    Clear\n          ",
+    "kids": 9
+   },
+   {
+    "id": "md-anchors-add",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Add selection as anchor",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-clear",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Clear",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-list",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-glow",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-atoms",
+    "tag": "select",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "All heavy atoms (~20/base)\n                      C1′ only (1",
+    "kids": 4
+   },
+   {
+    "id": "md-anchors-stiffness",
+    "tag": "select",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Soft 0.02 kcal/mol/Å² — damps tumbling only\n                ",
+    "kids": 4
+   },
+   {
+    "id": "md-anchors-status",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "No anchors — runs are free unless you add fixed strands.",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-provenance",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "This run is unanchored.",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Electric field",
+    "kids": 2
+   },
+   {
+    "id": "md-efield-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-efield-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "A uniform force on every nucleotide (same per-nt force conve",
+    "kids": 7
+   },
+   {
+    "id": "md-efield-enable",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-mag",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-dir-x",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-dir-y",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-dir-z",
+    "tag": "input",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-offset-x",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-offset-y",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-offset-z",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-vpm-toggle",
+    "tag": "div",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸from field (V/m)",
+    "kids": 2
+   },
+   {
+    "id": "md-efield-vpm-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-vpm-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "E (V/m)\n                      \n                      q_eff (",
+    "kids": 6
+   },
+   {
+    "id": "md-efield-vpm",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-qeff",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-vpm-apply",
+    "tag": "button",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Compute pN",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-ready",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Off — tick \"Apply\" to add a field to the solve.",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-viz-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Visualizations",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-viz-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-viz-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Off (native positions)\n                  \n                  ",
+    "kids": 17
+   },
+   {
+    "id": "md-jobs-viz-off",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-display-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-display-indicator",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "warming…",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-display-indicator-dot",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-display-indicator-label",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "warming…",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-display-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Off",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-flex-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-flex-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-flex-bar",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-flex-legend",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-occupancy-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-occupancy-params",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "States:\n                      \n                        Auto ",
+    "kids": 5
+   },
+   {
+    "id": "md-jobs-occupancy-n",
+    "tag": "select",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Auto (best separation)\n                        23\n          ",
+    "kids": 6
+   },
+   {
+    "id": "md-jobs-occupancy-scope",
+    "tag": "select",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Whole structure\n                        Specific elements…",
+    "kids": 2
+   },
+   {
+    "id": "md-occupancy-fit-row",
+    "tag": "label",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Fit frame:\n                      \n                        On",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-occupancy-fit",
+    "tag": "select",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "On the selection\n                        On each crossover j",
+    "kids": 3
+   },
+   {
+    "id": "md-occupancy-scope-card",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Scope\n                      \n                      \n        ",
+    "kids": 2
+   },
+   {
+    "id": "md-occupancy-scope-toggle",
+    "tag": "div",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Scope",
+    "kids": 2
+   },
+   {
+    "id": "md-occupancy-scope-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-occupancy-scope-body",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Select clusters, strands or bases in the 3D view, then add t",
+    "kids": 5
+   },
+   {
+    "id": "md-occupancy-scope-add",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Add selection to scope",
+    "kids": 0
+   },
+   {
+    "id": "md-occupancy-scope-clear",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Clear",
+    "kids": 0
+   },
+   {
+    "id": "md-occupancy-scope-list",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-occupancy-scope-glow",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-occupancy-scope-status",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "No anchors — runs are free unless you add fixed strands.",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-occupancy-rerun",
+    "tag": "button",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Recompute",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-occupancy-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-occupancy-legend",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-opts",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Frame interval\n                    \n                    → 50",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-traj-interval",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-frames-hint",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "→ 50 frames of 1,000 written",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-controls",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "▶\n                      ◂\n                      \n           ",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-traj-play",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▶",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-prev",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "◂",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-slider",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-markers",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-next",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-label",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-solvent-opts",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Solvent & cell\n\n                    \n                       ",
+    "kids": 7
+   },
+   {
+    "id": "md-jobs-water-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-water-opts",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Hydration shell\n                         Å\n                 ",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-water-scope-shell",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-water-shell",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-water-scope-box",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-water-count",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-ions-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-ions-legend",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-box-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-solvent-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-opts",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Weld pair (CPD)\n                    \n                    \n  ",
+    "kids": 7
+   },
+   {
+    "id": "md-jobs-weld-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-readout",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-trace-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Trace over run",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-trace-metric",
+    "tag": "select",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "distance\n                        twist η\n                   ",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-weld-ladder-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-trace-canvas",
+    "tag": "canvas",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-trace-summary",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸Graphs and Metrics",
+    "kids": 2
+   },
+   {
+    "id": "md-metrics-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-card",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸\n                      System monitor\n                     ",
+    "kids": 6
+   },
+   {
+    "id": "md-metrics-resources-toggle",
+    "tag": "div",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸\n                      System monitor\n                     ",
+    "kids": 3
+   },
+   {
+    "id": "md-metrics-resources-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-resources-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "CPU\n                        \n                        \n      ",
+    "kids": 4
+   },
+   {
+    "id": "md-metrics-res-cpu-spark",
+    "tag": "canvas",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-res-cpu-val",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-res-gpu-spark",
+    "tag": "canvas",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-res-gpu-val",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-res-ram-spark",
+    "tag": "canvas",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-res-ram-val",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-scope-latest",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-scope-chain",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-twist-gen",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Generate",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-twist-display",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Display",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-twist-export",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Export",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-twist-bar",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-metrics-twist-fill",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-twist-status",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-curve-gen",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Generate",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-curve-display",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Display",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-curve-export",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Export",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-curve-bar",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-metrics-curve-fill",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-curve-status",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-bp-gen",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Generate",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-bp-display",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Display",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-bp-export",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Export",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-bp-bar",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-metrics-bp-fill",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-bp-status",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-cluster-card",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Clusters\n                \n                Cluster: Disconnec",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-cluster-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Clusters",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-cluster-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-cluster-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Cluster: Disconnected\n                  \n\n                  ",
+    "kids": 12
+   },
+   {
+    "id": "md-cluster-connection-mount",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Cluster: Disconnected",
+    "kids": 1
+   },
+   {
+    "id": "md-cluster-chip",
+    "tag": "button",
+    "visible": true,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Cluster: Disconnected",
+    "kids": 0
+   },
+   {
+    "id": "md-run-target-local",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-run-target-alpine-label",
+    "tag": "label",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Alpine",
+    "kids": 1
+   },
+   {
+    "id": "md-run-target-alpine",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-run-target-runpod-label",
+    "tag": "label",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "RunPod",
+    "kids": 1
+   },
+   {
+    "id": "md-run-target-runpod",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-run-target-hint",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "(connect cluster)",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-cluster-reconnect-note",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "⚠ 3 Alpine runs in flight — reconnect to monitor and fetch r",
+    "kids": 0
+   },
+   {
+    "id": "md-runpod-setup-mount",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Set up RunPod…",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-runpod-status",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "● runpod: —\n        \n        \n          Re-check\n        \n  ",
+    "kids": 2
+   },
+   {
+    "id": "runpod-refresh-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Re-check",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-runpod-picker",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Check RunPod GPUs\n      \n      \n      Click “Check RunPod GP",
+    "kids": 2
+   },
+   {
+    "id": "runpod-check-gpus-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Check RunPod GPUs",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-cluster-status",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-alpine-availability",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "GPU availability",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-resume-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "none",
+    "disabled": true,
+    "hidden": false,
+    "text": "⟳ Resume",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-ensemble-rollup",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Ensemble · 1 production run · 1 doneProduction 1 · seed 5432",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-ensemble-wrap",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Ensemble replicas:\n                    \n                    ",
+    "kids": 6
+   },
+   {
+    "id": "md-jobs-ensemble-count",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-ensemble-ns",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-ensemble-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "☁ Ensemble on Alpine",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-resume-history-wrap",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸ Resumptions (0)",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-resume-history-toggle",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸ Resumptions (0)",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-resume-history-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "inline",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-resume-history-count",
+    "tag": "span",
+    "visible": false,
+    "display": "inline",
+    "disabled": false,
+    "hidden": false,
+    "text": "0",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-resume-history",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-detail",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Health\n                    \n                  \n             ",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-health-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Health",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-health-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-health-spinner",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-health-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Temp298.2KPressure avg-1.73barBase pairs91.3%WC health76.3%\n",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-metrics",
+    "tag": "div",
+    "visible": true,
+    "display": "grid",
+    "disabled": false,
+    "hidden": false,
+    "text": "Temp298.2KPressure avg-1.73barBase pairs91.3%WC health76.3%\n",
+    "kids": 8
+   },
+   {
+    "id": "md-jobs-detail-error",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-panel",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Molecular Dynamics\n              \n            \n            \n",
+    "kids": 2
+   },
+   {
+    "id": "md-panel-heading",
+    "tag": "h2",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Molecular Dynamics",
+    "kids": 2
+   },
+   {
+    "id": "md-panel-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-panel-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Config / manifest\n                \n                  nadoc_m",
+    "kids": 6
+   },
+   {
+    "id": "md-config-name",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "nadoc_md_run.json",
+    "kids": 0
+   },
+   {
+    "id": "md-config-browse",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Browse",
+    "kids": 0
+   },
+   {
+    "id": "md-load-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Load",
+    "kids": 0
+   },
+   {
+    "id": "md-output-heading",
+    "tag": "div",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Output",
+    "kids": 2
+   },
+   {
+    "id": "md-output-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-output-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-output-log",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-block",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 4
+   },
+   {
+    "id": "md-stat-frames",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-stat-ns",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-stat-nsday",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-stat-temp",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-controls",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "◂\n                  \n                  ▸\n                \n  ",
+    "kids": 9
+   },
+   {
+    "id": "md-prev-frame-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "◂",
+    "kids": 0
+   },
+   {
+    "id": "md-scrubber",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-next-frame-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-time-cur",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "0.00 ns",
+    "kids": 0
+   },
+   {
+    "id": "md-time-tot",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "0.00 ns",
+    "kids": 0
+   },
+   {
+    "id": "md-play-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▶ Play",
+    "kids": 0
+   },
+   {
+    "id": "md-loop-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "↻",
+    "kids": 0
+   },
+   {
+    "id": "md-live-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "⚡",
+    "kids": 0
+   },
+   {
+    "id": "md-live-bar-wrap",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Next update\n                    5.0 s",
+    "kids": 2
+   },
+   {
+    "id": "md-live-countdown",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "5.0 s",
+    "kids": 0
+   },
+   {
+    "id": "md-live-bar",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-speed",
+    "tag": "select",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "0.25×\n                    0.5×\n                    1×\n      ",
+    "kids": 6
+   },
+   {
+    "id": "md-stride",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-amp-row",
+    "tag": "div",
+    "visible": false,
+    "display": "grid",
+    "disabled": false,
+    "hidden": false,
+    "text": "Displ. amp.\n                  1×",
+    "kids": 3
+   },
+   {
+    "id": "md-amp-val",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "1×",
+    "kids": 0
+   },
+   {
+    "id": "md-amp",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-show-nadoc",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-status-line",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Loading…",
+    "kids": 0
+   },
+   {
+    "id": "cluster-panel",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Movable Clusters\n            \n          \n          \n        ",
+    "kids": 2
+   },
+   {
+    "id": "cluster-panel-heading",
+    "tag": "h2",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Movable Clusters",
+    "kids": 2
+   },
+   {
+    "id": "cluster-panel-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "cluster-panel-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Cluster 1◆ 24h◉✎×\n            \n              + New Cluster f",
+    "kids": 2
+   },
+   {
+    "id": "cluster-list",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Cluster 1◆ 24h◉✎×",
+    "kids": 1
+   },
+   {
+    "id": "cluster-new-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "inline-block",
+    "disabled": true,
+    "hidden": false,
+    "text": "+ New Cluster from Selection",
+    "kids": 0
+   },
+   {
+    "id": "md-seg-legend-detail",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   }
+  ],
+  "cardsExpanded": [
+   {
+    "id": "simulate-panel",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Simulate\n              \n            \n            \n          ",
+    "kids": 2
+   },
+   {
+    "id": "simulate-heading",
+    "tag": "h2",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Simulate",
+    "kids": 2
+   },
+   {
+    "id": "simulate-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "simulate-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Fast\n                \n                Accurate\n             ",
+    "kids": 16
+   },
+   {
+    "id": "simulate-run-controls",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▶ Relax\n                ◉ Live\n                Full Sim\n    ",
+    "kids": 6
+   },
+   {
+    "id": "namd-run-controls",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "＋ New job\n                  \n                  \n            ",
+    "kids": 2
+   },
+   {
+    "id": "md-launch-row",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "＋ New job\n                  \n                  \n            ",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-new-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "＋ New job",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-run-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "▶ Run",
+    "kids": 0
+   },
+   {
+    "id": "md-queue-wrap",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Queued — starts automatically when the machine is free",
+    "kids": 2
+   },
+   {
+    "id": "md-queue-list",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "simulate-job-actions",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Archive\n                  Delete",
+    "kids": 2
+   },
+   {
+    "id": "simulate-jobs-archive-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Archive",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-delete-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Delete",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-archive-progress",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "simulate-run-dir",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "📁 Default folder",
+    "kids": 1
+   },
+   {
+    "id": "simulate-jobs",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Jobs· NAMD\n                \n                \n               ",
+    "kids": 2
+   },
+   {
+    "id": "simulate-jobs-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Jobs· NAMD",
+    "kids": 3
+   },
+   {
+    "id": "simulate-jobs-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "simulate-jobs-engine-label",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "· NAMD",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Show all job types\n                \n                [1]24hb_",
+    "kids": 8
+   },
+   {
+    "id": "simulate-jobs-show-all-types",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-list",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "[1]24hb_1xTJul 15 22:102.3 GB📦◆Production 1 · seed 54321Jul",
+    "kids": 19
+   },
+   {
+    "id": "simulate-jobs-progress",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "simulate-jobs-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Select a run above, or press ▶ Relax to start one.",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-run-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "▶ Run",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-detail",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-timeline",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Stage timeline\n                  Minimization●✓4 ns producti",
+    "kids": 2
+   },
+   {
+    "id": "simulate-jobs-timeline-host",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Minimization●✓4 ns production run●✓",
+    "kids": 6
+   },
+   {
+    "id": "md-jobs-timeline",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Minimization●✓4 ns production run●✓",
+    "kids": 2
+   },
+   {
+    "id": "namd-live-controls-host",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Early-stop settled stages (applies at the next checkpoint)\n ",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-live-controls",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Early-stop settled stages (applies at the next checkpoint)\n ",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-early-stop",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-early-stop-pending",
+    "tag": "span",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "pending…",
+    "kids": 0
+   },
+   {
+    "id": "simulate-status-line",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "GPU: free · 16 cores free · Engine: oxDNA (GPU) — fastest he",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-panel",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "NAMD3 + GROMACS found\n\n              \n              \n\n      ",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-panel-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "NAMD3 + GROMACS found\n\n              \n              \n\n      ",
+    "kids": 10
+   },
+   {
+    "id": "md-jobs-namd-status",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "NAMD3 + GROMACS found",
+    "kids": 0
+   },
+   {
+    "id": "md-launch-form",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Production runs are set up in ＋ New job → Production, which\n",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-production",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Production runs are set up in ＋ New job → Production, which\n",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-prod-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "This is a production run — Run / Stop above controls it.",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-revert-prod-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "⧉ Separate production into its own run",
+    "kids": 0
+   },
+   {
+    "id": "md-benchmark-mount",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸\n          Benchmark\n        \n        \n          \n         ",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-list-toggle",
+    "tag": "div",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Jobs",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-list-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-list-body",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Show jobs for all designs\n                  \n               ",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-show-all",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-list",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▾[1]24hb_1xT07-15 22:102.3 GB📦◆▾Production 1 · seed 5432107",
+    "kids": 19
+   },
+   {
+    "id": "md-anchors-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸Anchors",
+    "kids": 2
+   },
+   {
+    "id": "md-anchors-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Add selection as anchor\n                    Clear\n          ",
+    "kids": 9
+   },
+   {
+    "id": "md-anchors-add",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Add selection as anchor",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-clear",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Clear",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-list",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-glow",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-atoms",
+    "tag": "select",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "All heavy atoms (~20/base)\n                      C1′ only (1",
+    "kids": 4
+   },
+   {
+    "id": "md-anchors-stiffness",
+    "tag": "select",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Soft 0.02 kcal/mol/Å² — damps tumbling only\n                ",
+    "kids": 4
+   },
+   {
+    "id": "md-anchors-status",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "No anchors — runs are free unless you add fixed strands.",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-provenance",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "This run is unanchored.",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Electric field",
+    "kids": 2
+   },
+   {
+    "id": "md-efield-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-efield-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "A uniform force on every nucleotide (same per-nt force conve",
+    "kids": 7
+   },
+   {
+    "id": "md-efield-enable",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-mag",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-dir-x",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-dir-y",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-dir-z",
+    "tag": "input",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-offset-x",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-offset-y",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-offset-z",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-vpm-toggle",
+    "tag": "div",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸from field (V/m)",
+    "kids": 2
+   },
+   {
+    "id": "md-efield-vpm-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-vpm-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "E (V/m)\n                      \n                      q_eff (",
+    "kids": 6
+   },
+   {
+    "id": "md-efield-vpm",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-qeff",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-vpm-apply",
+    "tag": "button",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Compute pN",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-ready",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Off — tick \"Apply\" to add a field to the solve.",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-viz-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Visualizations",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-viz-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-viz-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Off (native positions)\n                  \n                  ",
+    "kids": 17
+   },
+   {
+    "id": "md-jobs-viz-off",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-display-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-display-indicator",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "warming…",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-display-indicator-dot",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-display-indicator-label",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "warming…",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-display-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Off",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-flex-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-flex-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-flex-bar",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-flex-legend",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-occupancy-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-occupancy-params",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "States:\n                      \n                        Auto ",
+    "kids": 5
+   },
+   {
+    "id": "md-jobs-occupancy-n",
+    "tag": "select",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Auto (best separation)\n                        23\n          ",
+    "kids": 6
+   },
+   {
+    "id": "md-jobs-occupancy-scope",
+    "tag": "select",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Whole structure\n                        Specific elements…",
+    "kids": 2
+   },
+   {
+    "id": "md-occupancy-fit-row",
+    "tag": "label",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Fit frame:\n                      \n                        On",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-occupancy-fit",
+    "tag": "select",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "On the selection\n                        On each crossover j",
+    "kids": 3
+   },
+   {
+    "id": "md-occupancy-scope-card",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Scope\n                      \n                      \n        ",
+    "kids": 2
+   },
+   {
+    "id": "md-occupancy-scope-toggle",
+    "tag": "div",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Scope",
+    "kids": 2
+   },
+   {
+    "id": "md-occupancy-scope-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-occupancy-scope-body",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Select clusters, strands or bases in the 3D view, then add t",
+    "kids": 5
+   },
+   {
+    "id": "md-occupancy-scope-add",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Add selection to scope",
+    "kids": 0
+   },
+   {
+    "id": "md-occupancy-scope-clear",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Clear",
+    "kids": 0
+   },
+   {
+    "id": "md-occupancy-scope-list",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-occupancy-scope-glow",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-occupancy-scope-status",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "No anchors — runs are free unless you add fixed strands.",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-occupancy-rerun",
+    "tag": "button",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Recompute",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-occupancy-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-occupancy-legend",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-opts",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Frame interval\n                    \n                    → 50",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-traj-interval",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-frames-hint",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "→ 50 frames of 1,000 written",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-controls",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "▶\n                      ◂\n                      \n           ",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-traj-play",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▶",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-prev",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "◂",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-slider",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-markers",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-next",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-label",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-solvent-opts",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Solvent & cell\n\n                    \n                       ",
+    "kids": 7
+   },
+   {
+    "id": "md-jobs-water-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-water-opts",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Hydration shell\n                         Å\n                 ",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-water-scope-shell",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-water-shell",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-water-scope-box",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-water-count",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-ions-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-ions-legend",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-box-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-solvent-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-opts",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Weld pair (CPD)\n                    \n                    \n  ",
+    "kids": 7
+   },
+   {
+    "id": "md-jobs-weld-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-readout",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-trace-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Trace over run",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-trace-metric",
+    "tag": "select",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "distance\n                        twist η\n                   ",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-weld-ladder-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-trace-canvas",
+    "tag": "canvas",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-trace-summary",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸Graphs and Metrics",
+    "kids": 2
+   },
+   {
+    "id": "md-metrics-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-card",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸\n                      System monitor\n                     ",
+    "kids": 6
+   },
+   {
+    "id": "md-metrics-resources-toggle",
+    "tag": "div",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸\n                      System monitor\n                     ",
+    "kids": 3
+   },
+   {
+    "id": "md-metrics-resources-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-resources-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "CPU\n                        \n                        \n      ",
+    "kids": 4
+   },
+   {
+    "id": "md-metrics-res-cpu-spark",
+    "tag": "canvas",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-res-cpu-val",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-res-gpu-spark",
+    "tag": "canvas",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-res-gpu-val",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-res-ram-spark",
+    "tag": "canvas",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-res-ram-val",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-scope-latest",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-scope-chain",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-twist-gen",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Generate",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-twist-display",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Display",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-twist-export",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Export",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-twist-bar",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-metrics-twist-fill",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-twist-status",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-curve-gen",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Generate",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-curve-display",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Display",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-curve-export",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Export",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-curve-bar",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-metrics-curve-fill",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-curve-status",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-bp-gen",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Generate",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-bp-display",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Display",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-bp-export",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Export",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-bp-bar",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-metrics-bp-fill",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-bp-status",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-cluster-card",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Clusters\n                \n                Cluster: Disconnec",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-cluster-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Clusters",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-cluster-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-cluster-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Cluster: Disconnected\n                  \n\n                  ",
+    "kids": 12
+   },
+   {
+    "id": "md-cluster-connection-mount",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Cluster: Disconnected",
+    "kids": 1
+   },
+   {
+    "id": "md-cluster-chip",
+    "tag": "button",
+    "visible": true,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Cluster: Disconnected",
+    "kids": 0
+   },
+   {
+    "id": "md-run-target-local",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-run-target-alpine-label",
+    "tag": "label",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Alpine",
+    "kids": 1
+   },
+   {
+    "id": "md-run-target-alpine",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-run-target-runpod-label",
+    "tag": "label",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "RunPod",
+    "kids": 1
+   },
+   {
+    "id": "md-run-target-runpod",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-run-target-hint",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "(connect cluster)",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-cluster-reconnect-note",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "⚠ 3 Alpine runs in flight — reconnect to monitor and fetch r",
+    "kids": 0
+   },
+   {
+    "id": "md-runpod-setup-mount",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Set up RunPod…",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-runpod-status",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "● runpod: —\n        \n        \n          Re-check\n        \n  ",
+    "kids": 2
+   },
+   {
+    "id": "runpod-refresh-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Re-check",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-runpod-picker",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Check RunPod GPUs\n      \n      \n      Click “Check RunPod GP",
+    "kids": 2
+   },
+   {
+    "id": "runpod-check-gpus-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Check RunPod GPUs",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-cluster-status",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-alpine-availability",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "GPU availability",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-resume-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "none",
+    "disabled": true,
+    "hidden": false,
+    "text": "⟳ Resume",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-ensemble-rollup",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Ensemble · 1 production run · 1 doneProduction 1 · seed 5432",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-ensemble-wrap",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Ensemble replicas:\n                    \n                    ",
+    "kids": 6
+   },
+   {
+    "id": "md-jobs-ensemble-count",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-ensemble-ns",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-ensemble-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "☁ Ensemble on Alpine",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-resume-history-wrap",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸ Resumptions (0)",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-resume-history-toggle",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸ Resumptions (0)",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-resume-history-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "inline",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-resume-history-count",
+    "tag": "span",
+    "visible": false,
+    "display": "inline",
+    "disabled": false,
+    "hidden": false,
+    "text": "0",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-resume-history",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-detail",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Health\n                    \n                  \n             ",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-health-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Health",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-health-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-health-spinner",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-health-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Temp298.2KPressure avg-1.73barBase pairs91.3%WC health76.3%\n",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-metrics",
+    "tag": "div",
+    "visible": true,
+    "display": "grid",
+    "disabled": false,
+    "hidden": false,
+    "text": "Temp298.2KPressure avg-1.73barBase pairs91.3%WC health76.3%\n",
+    "kids": 8
+   },
+   {
+    "id": "md-jobs-detail-error",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-panel",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Molecular Dynamics\n              \n            \n            \n",
+    "kids": 2
+   },
+   {
+    "id": "md-panel-heading",
+    "tag": "h2",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Molecular Dynamics",
+    "kids": 2
+   },
+   {
+    "id": "md-panel-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-panel-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Config / manifest\n                \n                  nadoc_m",
+    "kids": 6
+   },
+   {
+    "id": "md-config-name",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "nadoc_md_run.json",
+    "kids": 0
+   },
+   {
+    "id": "md-config-browse",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Browse",
+    "kids": 0
+   },
+   {
+    "id": "md-load-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Load",
+    "kids": 0
+   },
+   {
+    "id": "md-output-heading",
+    "tag": "div",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Output",
+    "kids": 2
+   },
+   {
+    "id": "md-output-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-output-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-output-log",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-block",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 4
+   },
+   {
+    "id": "md-stat-frames",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-stat-ns",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-stat-nsday",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-stat-temp",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-controls",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "◂\n                  \n                  ▸\n                \n  ",
+    "kids": 9
+   },
+   {
+    "id": "md-prev-frame-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "◂",
+    "kids": 0
+   },
+   {
+    "id": "md-scrubber",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-next-frame-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-time-cur",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "0.00 ns",
+    "kids": 0
+   },
+   {
+    "id": "md-time-tot",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "0.00 ns",
+    "kids": 0
+   },
+   {
+    "id": "md-play-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▶ Play",
+    "kids": 0
+   },
+   {
+    "id": "md-loop-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "↻",
+    "kids": 0
+   },
+   {
+    "id": "md-live-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "⚡",
+    "kids": 0
+   },
+   {
+    "id": "md-live-bar-wrap",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Next update\n                    5.0 s",
+    "kids": 2
+   },
+   {
+    "id": "md-live-countdown",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "5.0 s",
+    "kids": 0
+   },
+   {
+    "id": "md-live-bar",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-speed",
+    "tag": "select",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "0.25×\n                    0.5×\n                    1×\n      ",
+    "kids": 6
+   },
+   {
+    "id": "md-stride",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-amp-row",
+    "tag": "div",
+    "visible": false,
+    "display": "grid",
+    "disabled": false,
+    "hidden": false,
+    "text": "Displ. amp.\n                  1×",
+    "kids": 3
+   },
+   {
+    "id": "md-amp-val",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "1×",
+    "kids": 0
+   },
+   {
+    "id": "md-amp",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-show-nadoc",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-status-line",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Loading…",
+    "kids": 0
+   },
+   {
+    "id": "cluster-panel",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Movable Clusters\n            \n          \n          \n        ",
+    "kids": 2
+   },
+   {
+    "id": "cluster-panel-heading",
+    "tag": "h2",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Movable Clusters",
+    "kids": 2
+   },
+   {
+    "id": "cluster-panel-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "cluster-panel-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Cluster 1◆ 24h◉✎×\n            \n              + New Cluster f",
+    "kids": 2
+   },
+   {
+    "id": "cluster-list",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Cluster 1◆ 24h◉✎×",
+    "kids": 1
+   },
+   {
+    "id": "cluster-new-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "inline-block",
+    "disabled": true,
+    "hidden": false,
+    "text": "+ New Cluster from Selection",
+    "kids": 0
+   },
+   {
+    "id": "md-seg-legend-detail",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   }
+  ],
+  "wizard.step1.local": {
+   "tabs": [
+    "1Where it runs2Protocol & settings3What ",
+    "1Where it runs2Protocol & settings3What ",
+    "1Where it runs",
+    "1",
+    "2Protocol & settings",
+    "2",
+    "3What each stage runs",
+    "3",
+    "Where should this job run? This decides "
+   ],
+   "controls": 8,
+   "enabled": 7,
+   "buttons": [
+    "×",
+    "1Where it runs",
+    "2Protocol & settings",
+    "3What each stage runs",
+    "↶ Undo",
+    "📁 Default folder",
+    "Cancel",
+    "Next →"
+   ],
+   "warnText": []
+  },
+  "wizard.step1.alpine": {
+   "tabs": [
+    "1Where it runs2Protocol & settings3What ",
+    "1Where it runs2Protocol & settings3What ",
+    "1Where it runs",
+    "1",
+    "2Protocol & settings",
+    "2",
+    "3What each stage runs",
+    "3",
+    "Where should this job run? This decides "
+   ],
+   "controls": 8,
+   "enabled": 7,
+   "buttons": [
+    "×",
+    "1Where it runs",
+    "2Protocol & settings",
+    "3What each stage runs",
+    "↶ Undo",
+    "📁 Default folder",
+    "Cancel",
+    "Next →"
+   ],
+   "warnText": []
+  },
+  "wizard.step1.runpod": {
+   "tabs": [
+    "1Where it runs2Protocol & settings3What ",
+    "1Where it runs2Protocol & settings3What ",
+    "1Where it runs",
+    "1",
+    "2Protocol & settings",
+    "2",
+    "3What each stage runs",
+    "3",
+    "Where should this job run? This decides "
+   ],
+   "controls": 8,
+   "enabled": 7,
+   "buttons": [
+    "×",
+    "1Where it runs",
+    "2Protocol & settings",
+    "3What each stage runs",
+    "↶ Undo",
+    "📁 Default folder",
+    "Cancel",
+    "Next →"
+   ],
+   "warnText": []
+  },
+  "wizard.step2.local": {
+   "tabs": [
+    "1Where it runs2Protocol & settings3What ",
+    "1Where it runs2Protocol & settings3What ",
+    "1Where it runs",
+    "1",
+    "2Protocol & settings",
+    "2",
+    "3What each stage runs",
+    "3",
+    "RelaxationBring a freshly built design t"
+   ],
+   "controls": 20,
+   "enabled": 19,
+   "buttons": [
+    "×",
+    "1Where it runs",
+    "2Protocol & settings",
+    "3What each stage runs",
+    "↶ Undo",
+    "RelaxationBring a freshly buil",
+    "ProductionSample from a finish",
+    "Cancel",
+    "← Previous",
+    "Next →"
+   ],
+   "warnText": [
+    "⚠"
+   ]
+  },
+  "wizard.step3.local": {
+   "tabs": [
+    "1Where it runs2Protocol & settings3What ",
+    "1Where it runs2Protocol & settings3What ",
+    "1Where it runs",
+    "1",
+    "2Protocol & settings",
+    "2",
+    "3What each stage runs",
+    "3",
+    "2 stages · 25,000,000 steps · 100 ns sim"
+   ],
+   "controls": 50,
+   "enabled": 49,
+   "buttons": [
+    "×",
+    "1Where it runs",
+    "2Protocol & settings",
+    "3What each stage runs",
+    "↶ Undo",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "⋯",
+    "Cancel",
+    "← Previous",
+    "Create job"
+   ],
+   "warnText": []
+  },
+  "afterWizard": [
+   {
+    "id": "simulate-panel",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Simulate\n              \n            \n            \n          ",
+    "kids": 2
+   },
+   {
+    "id": "simulate-heading",
+    "tag": "h2",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Simulate",
+    "kids": 2
+   },
+   {
+    "id": "simulate-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "simulate-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Fast\n                \n                Accurate\n             ",
+    "kids": 16
+   },
+   {
+    "id": "simulate-run-controls",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▶ Relax\n                ◉ Live\n                Full Sim\n    ",
+    "kids": 6
+   },
+   {
+    "id": "namd-run-controls",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "＋ New job\n                  \n                  \n            ",
+    "kids": 2
+   },
+   {
+    "id": "md-launch-row",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "＋ New job\n                  \n                  \n            ",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-new-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "＋ New job",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-run-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "▶ Run",
+    "kids": 0
+   },
+   {
+    "id": "md-queue-wrap",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Queued — starts automatically when the machine is free",
+    "kids": 2
+   },
+   {
+    "id": "md-queue-list",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "simulate-job-actions",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Unarchive\n                  Delete",
+    "kids": 2
+   },
+   {
+    "id": "simulate-jobs-archive-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Unarchive",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-delete-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Delete",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-archive-progress",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "simulate-run-dir",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "📁 Default folder",
+    "kids": 1
+   },
+   {
+    "id": "simulate-jobs",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Jobs· NAMD\n                \n                \n               ",
+    "kids": 2
+   },
+   {
+    "id": "simulate-jobs-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Jobs· NAMD",
+    "kids": 3
+   },
+   {
+    "id": "simulate-jobs-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "simulate-jobs-engine-label",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "· NAMD",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Show all job types\n                \n                [1]24hb_",
+    "kids": 8
+   },
+   {
+    "id": "simulate-jobs-show-all-types",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-list",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "[1]24hb_1xTJul 15 22:102.3 GB📦◆Production 1 · seed 54321Jul",
+    "kids": 19
+   },
+   {
+    "id": "simulate-jobs-progress",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "simulate-jobs-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "NAMD · completed · 1/12 segments · 100% · 4,800,000 / 4,800,",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-run-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "▶ Run",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-detail",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "simulate-jobs-timeline",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Stage timeline\n                  300K NPT ENM k=0.5·→→300K N",
+    "kids": 2
+   },
+   {
+    "id": "simulate-jobs-timeline-host",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "300K NPT ENM k=0.5·→→300K NPT ENM k=0.1·→→300K NPT ENM k=0.0",
+    "kids": 6
+   },
+   {
+    "id": "md-jobs-timeline",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "300K NPT ENM k=0.5·→→300K NPT ENM k=0.1·→→300K NPT ENM k=0.0",
+    "kids": 4
+   },
+   {
+    "id": "namd-live-controls-host",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Early-stop settled stages (applies at the next checkpoint)\n ",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-live-controls",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Early-stop settled stages (applies at the next checkpoint)\n ",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-early-stop",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-early-stop-pending",
+    "tag": "span",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "pending…",
+    "kids": 0
+   },
+   {
+    "id": "simulate-status-line",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "GPU: free · 16 cores free · Engine: oxDNA (GPU) — fastest he",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-panel",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "NAMD3 + GROMACS found\n\n              \n              \n\n      ",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-panel-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "NAMD3 + GROMACS found\n\n              \n              \n\n      ",
+    "kids": 10
+   },
+   {
+    "id": "md-jobs-namd-status",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "NAMD3 + GROMACS found",
+    "kids": 0
+   },
+   {
+    "id": "md-launch-form",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Production runs are set up in ＋ New job → Production, which\n",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-production",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Production runs are set up in ＋ New job → Production, which\n",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-prod-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Ready to seed production from 24hb_1xT_04_300K_NPT_MGHH_only",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-revert-prod-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "⧉ Separate production into its own run",
+    "kids": 0
+   },
+   {
+    "id": "md-benchmark-mount",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸\n          Benchmark\n        \n        \n          \n         ",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-list-toggle",
+    "tag": "div",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Jobs",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-list-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-list-body",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Show jobs for all designs\n                  \n               ",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-show-all",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-list",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▾[1]24hb_1xT07-15 22:102.3 GB📦◆▾Production 1 · seed 5432107",
+    "kids": 19
+   },
+   {
+    "id": "md-anchors-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸Anchors",
+    "kids": 2
+   },
+   {
+    "id": "md-anchors-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Add selection as anchor\n                    Clear\n          ",
+    "kids": 9
+   },
+   {
+    "id": "md-anchors-add",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Add selection as anchor",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-clear",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Clear",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-list",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-glow",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-atoms",
+    "tag": "select",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "All heavy atoms (~20/base)\n                      C1′ only (1",
+    "kids": 4
+   },
+   {
+    "id": "md-anchors-stiffness",
+    "tag": "select",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Soft 0.02 kcal/mol/Å² — damps tumbling only\n                ",
+    "kids": 4
+   },
+   {
+    "id": "md-anchors-status",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "No anchors — runs are free unless you add fixed strands.",
+    "kids": 0
+   },
+   {
+    "id": "md-anchors-provenance",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Selection recorded but resolved to no residue — this run is ",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Electric field",
+    "kids": 2
+   },
+   {
+    "id": "md-efield-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-efield-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "A uniform force on every nucleotide (same per-nt force conve",
+    "kids": 7
+   },
+   {
+    "id": "md-efield-enable",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-mag",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-dir-x",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-dir-y",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-dir-z",
+    "tag": "input",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-offset-x",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-offset-y",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-offset-z",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-vpm-toggle",
+    "tag": "div",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸from field (V/m)",
+    "kids": 2
+   },
+   {
+    "id": "md-efield-vpm-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-vpm-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "E (V/m)\n                      \n                      q_eff (",
+    "kids": 6
+   },
+   {
+    "id": "md-efield-vpm",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-qeff",
+    "tag": "input",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-vpm-apply",
+    "tag": "button",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Compute pN",
+    "kids": 0
+   },
+   {
+    "id": "md-efield-ready",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Off — tick \"Apply\" to add a field to the solve.",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-viz-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Visualizations",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-viz-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-viz-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Off (native positions)\n                  \n                  ",
+    "kids": 17
+   },
+   {
+    "id": "md-jobs-viz-off",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-display-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-display-indicator",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "ready",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-display-indicator-dot",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-display-indicator-label",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "ready",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-display-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Off",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-flex-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-flex-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-flex-bar",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-flex-legend",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-occupancy-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-occupancy-params",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "States:\n                      \n                        Auto ",
+    "kids": 5
+   },
+   {
+    "id": "md-jobs-occupancy-n",
+    "tag": "select",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Auto (best separation)\n                        23\n          ",
+    "kids": 6
+   },
+   {
+    "id": "md-jobs-occupancy-scope",
+    "tag": "select",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Whole structure\n                        Specific elements…",
+    "kids": 2
+   },
+   {
+    "id": "md-occupancy-fit-row",
+    "tag": "label",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Fit frame:\n                      \n                        On",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-occupancy-fit",
+    "tag": "select",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "On the selection\n                        On each crossover j",
+    "kids": 3
+   },
+   {
+    "id": "md-occupancy-scope-card",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Scope\n                      \n                      \n        ",
+    "kids": 2
+   },
+   {
+    "id": "md-occupancy-scope-toggle",
+    "tag": "div",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Scope",
+    "kids": 2
+   },
+   {
+    "id": "md-occupancy-scope-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-occupancy-scope-body",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Select clusters, strands or bases in the 3D view, then add t",
+    "kids": 5
+   },
+   {
+    "id": "md-occupancy-scope-add",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Add selection to scope",
+    "kids": 0
+   },
+   {
+    "id": "md-occupancy-scope-clear",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Clear",
+    "kids": 0
+   },
+   {
+    "id": "md-occupancy-scope-list",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-occupancy-scope-glow",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-occupancy-scope-status",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "No anchors — runs are free unless you add fixed strands.",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-occupancy-rerun",
+    "tag": "button",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Recompute",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-occupancy-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-occupancy-legend",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-opts",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Frame interval\n                    \n                    → 2 ",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-traj-interval",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-frames-hint",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "→ 2 frames of 25 written",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-controls",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "▶\n                      ◂\n                      \n           ",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-traj-play",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▶",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-prev",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "◂",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-slider",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-markers",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-next",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-traj-label",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-solvent-opts",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Solvent & cell\n\n                    \n                       ",
+    "kids": 7
+   },
+   {
+    "id": "md-jobs-water-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-water-opts",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Hydration shell\n                         Å\n                 ",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-water-scope-shell",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-water-shell",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-water-scope-box",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-water-count",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-ions-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-ions-legend",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-box-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-solvent-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-opts",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Weld pair (CPD)\n                    \n                    \n  ",
+    "kids": 7
+   },
+   {
+    "id": "md-jobs-weld-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-readout",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-trace-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Trace over run",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-trace-metric",
+    "tag": "select",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "distance\n                        twist η\n                   ",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-weld-ladder-toggle",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-trace-canvas",
+    "tag": "canvas",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-weld-trace-summary",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸Graphs and Metrics",
+    "kids": 2
+   },
+   {
+    "id": "md-metrics-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-card",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸\n                      System monitor\n                     ",
+    "kids": 6
+   },
+   {
+    "id": "md-metrics-resources-toggle",
+    "tag": "div",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸\n                      System monitor\n                     ",
+    "kids": 3
+   },
+   {
+    "id": "md-metrics-resources-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-resources-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "CPU\n                        \n                        \n      ",
+    "kids": 4
+   },
+   {
+    "id": "md-metrics-res-cpu-spark",
+    "tag": "canvas",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-res-cpu-val",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-res-gpu-spark",
+    "tag": "canvas",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-res-gpu-val",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-res-ram-spark",
+    "tag": "canvas",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-res-ram-val",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-scope-latest",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-scope-chain",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-twist-gen",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Generate",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-twist-display",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Display",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-twist-export",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Export",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-twist-bar",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-metrics-twist-fill",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-twist-status",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-curve-gen",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Generate",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-curve-display",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Display",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-curve-export",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Export",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-curve-bar",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-metrics-curve-fill",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-curve-status",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-bp-gen",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Generate",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-bp-display",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Display",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-bp-export",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "Export",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-bp-bar",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-metrics-bp-fill",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-metrics-bp-status",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-cluster-card",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Clusters\n                \n                Cluster: Disconnec",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-cluster-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Clusters",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-cluster-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-cluster-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Cluster: Disconnected\n                  \n\n                  ",
+    "kids": 12
+   },
+   {
+    "id": "md-cluster-connection-mount",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Cluster: Disconnected",
+    "kids": 1
+   },
+   {
+    "id": "md-cluster-chip",
+    "tag": "button",
+    "visible": true,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Cluster: Disconnected",
+    "kids": 0
+   },
+   {
+    "id": "md-run-target-local",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-run-target-alpine-label",
+    "tag": "label",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Alpine",
+    "kids": 1
+   },
+   {
+    "id": "md-run-target-alpine",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-run-target-runpod-label",
+    "tag": "label",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "RunPod",
+    "kids": 1
+   },
+   {
+    "id": "md-run-target-runpod",
+    "tag": "input",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-run-target-hint",
+    "tag": "span",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "(connect cluster)",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-cluster-reconnect-note",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "⚠ 3 Alpine runs in flight — reconnect to monitor and fetch r",
+    "kids": 0
+   },
+   {
+    "id": "md-runpod-setup-mount",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Set up RunPod…",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-runpod-status",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "● runpod: disconnected\n        \n        \n          Re-check\n",
+    "kids": 3
+   },
+   {
+    "id": "runpod-refresh-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Re-check",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-runpod-picker",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Check RunPod GPUs\n      \n      \n      Click “Check RunPod GP",
+    "kids": 2
+   },
+   {
+    "id": "runpod-check-gpus-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Check RunPod GPUs",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-cluster-status",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-alpine-availability",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "GPU availability",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-resume-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "none",
+    "disabled": true,
+    "hidden": false,
+    "text": "⟳ Resume",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-ensemble-rollup",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Ensemble · 1 production run · 1 doneProduction 1 · seed 5432",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-ensemble-wrap",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Ensemble replicas:\n                    \n                    ",
+    "kids": 6
+   },
+   {
+    "id": "md-jobs-ensemble-count",
+    "tag": "input",
+    "visible": true,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-ensemble-ns",
+    "tag": "input",
+    "visible": true,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-ensemble-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "inline-block",
+    "disabled": true,
+    "hidden": false,
+    "text": "☁ Ensemble on Alpine",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-resume-history-wrap",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸ Resumptions (0)",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-resume-history-toggle",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸ Resumptions (0)",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-resume-history-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "inline",
+    "disabled": false,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-resume-history-count",
+    "tag": "span",
+    "visible": false,
+    "display": "inline",
+    "disabled": false,
+    "hidden": false,
+    "text": "0",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-resume-history",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-detail",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Health\n                    \n                  \n             ",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-health-toggle",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Health",
+    "kids": 3
+   },
+   {
+    "id": "md-jobs-health-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-health-spinner",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-jobs-health-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "On Alpine — no local readouts yet. Use Fetch results to pull",
+    "kids": 2
+   },
+   {
+    "id": "md-jobs-metrics",
+    "tag": "div",
+    "visible": true,
+    "display": "grid",
+    "disabled": false,
+    "hidden": false,
+    "text": "On Alpine — no local readouts yet. Use Fetch results to pull",
+    "kids": 1
+   },
+   {
+    "id": "md-jobs-detail-error",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Remote pod is gone (orphaned launcher) — marked terminal by ",
+    "kids": 0
+   },
+   {
+    "id": "md-panel",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Molecular Dynamics\n              \n            \n            \n",
+    "kids": 2
+   },
+   {
+    "id": "md-panel-heading",
+    "tag": "h2",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Molecular Dynamics",
+    "kids": 2
+   },
+   {
+    "id": "md-panel-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-panel-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Config / manifest\n                \n                  nadoc_m",
+    "kids": 6
+   },
+   {
+    "id": "md-config-name",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "nadoc_md_run.json",
+    "kids": 0
+   },
+   {
+    "id": "md-config-browse",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Browse",
+    "kids": 0
+   },
+   {
+    "id": "md-load-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "inline-block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Load",
+    "kids": 0
+   },
+   {
+    "id": "md-output-heading",
+    "tag": "div",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Output",
+    "kids": 2
+   },
+   {
+    "id": "md-output-arrow",
+    "tag": "span",
+    "visible": false,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "md-output-body",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "[23:07:56] Config    : nadoc_md_run.json[23:07:57] Stage    ",
+    "kids": 1
+   },
+   {
+    "id": "md-output-log",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "[23:07:56] Config    : nadoc_md_run.json[23:07:57] Stage    ",
+    "kids": 19
+   },
+   {
+    "id": "md-metrics-block",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Frames: 25  ·  P-atoms: 7058\n                Total: 0.384 ns",
+    "kids": 4
+   },
+   {
+    "id": "md-stat-frames",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Frames: 25  ·  P-atoms: 7058",
+    "kids": 0
+   },
+   {
+    "id": "md-stat-ns",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Total: 0.384 ns",
+    "kids": 0
+   },
+   {
+    "id": "md-stat-nsday",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Speed: —",
+    "kids": 0
+   },
+   {
+    "id": "md-stat-temp",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Temperature: —",
+    "kids": 0
+   },
+   {
+    "id": "md-controls",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "◂\n                  \n                  ▸\n                \n  ",
+    "kids": 9
+   },
+   {
+    "id": "md-prev-frame-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "◂",
+    "kids": 0
+   },
+   {
+    "id": "md-scrubber",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-next-frame-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": true,
+    "hidden": false,
+    "text": "▸",
+    "kids": 0
+   },
+   {
+    "id": "md-time-cur",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "0.384 ns",
+    "kids": 0
+   },
+   {
+    "id": "md-time-tot",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "0.384 ns",
+    "kids": 0
+   },
+   {
+    "id": "md-play-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "▶ Play",
+    "kids": 0
+   },
+   {
+    "id": "md-loop-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "↻",
+    "kids": 0
+   },
+   {
+    "id": "md-live-btn",
+    "tag": "button",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "⚡",
+    "kids": 0
+   },
+   {
+    "id": "md-live-bar-wrap",
+    "tag": "div",
+    "visible": false,
+    "display": "none",
+    "disabled": false,
+    "hidden": false,
+    "text": "Next update\n                    5.0 s",
+    "kids": 2
+   },
+   {
+    "id": "md-live-countdown",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "5.0 s",
+    "kids": 0
+   },
+   {
+    "id": "md-live-bar",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-speed",
+    "tag": "select",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "0.25×\n                    0.5×\n                    1×\n      ",
+    "kids": 6
+   },
+   {
+    "id": "md-stride",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-amp-row",
+    "tag": "div",
+    "visible": false,
+    "display": "grid",
+    "disabled": false,
+    "hidden": false,
+    "text": "Displ. amp.\n                  1×",
+    "kids": 3
+   },
+   {
+    "id": "md-amp-val",
+    "tag": "span",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "1×",
+    "kids": 0
+   },
+   {
+    "id": "md-amp",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-show-nadoc",
+    "tag": "input",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   },
+   {
+    "id": "md-status-line",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Ready — 25 frames",
+    "kids": 0
+   },
+   {
+    "id": "cluster-panel",
+    "tag": "div",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Movable Clusters\n            \n          \n          \n        ",
+    "kids": 2
+   },
+   {
+    "id": "cluster-panel-heading",
+    "tag": "h2",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "Movable Clusters",
+    "kids": 2
+   },
+   {
+    "id": "cluster-panel-arrow",
+    "tag": "span",
+    "visible": true,
+    "display": "flex",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 1
+   },
+   {
+    "id": "cluster-panel-body",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Cluster 1◆ 24h◉✎×\n            \n              + New Cluster f",
+    "kids": 2
+   },
+   {
+    "id": "cluster-list",
+    "tag": "div",
+    "visible": true,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "Cluster 1◆ 24h◉✎×",
+    "kids": 1
+   },
+   {
+    "id": "cluster-new-btn",
+    "tag": "button",
+    "visible": true,
+    "display": "inline-block",
+    "disabled": true,
+    "hidden": false,
+    "text": "+ New Cluster from Selection",
+    "kids": 0
+   },
+   {
+    "id": "md-seg-legend-detail",
+    "tag": "div",
+    "visible": false,
+    "display": "block",
+    "disabled": false,
+    "hidden": false,
+    "text": "",
+    "kids": 0
+   }
+  ]
+ },
+ "jobRows": 19,
+ "rowSurvey": [
+  {
+   "jobId": null,
+   "rowText": "",
+   "run": {
+    "text": "▶ Run",
+    "disabled": true,
+    "title": "This run has finished. Use ＋ New job to set up another.",
+    "visible": true
+   }
+  },
+  {
+   "jobId": null,
+   "rowText": "",
+   "run": {
+    "text": "▶ Run",
+    "disabled": true,
+    "title": "This run has finished. Use ＋ New job to set up another.",
+    "visible": true
+   }
+  },
+  {
+   "jobId": null,
+   "rowText": "",
+   "run": {
+    "text": "↻ Resume Run",
+    "disabled": true,
+    "title": "Cannot resume on RunPod yet:\nRunPod API key: not connected — enter your API key\nNetwork volume: none set — the pod would have no NAMD and no packages\nGPU availability: could not query RunPod for stock",
+    "visible": true
+   }
+  },
+  {
+   "jobId": null,
+   "rowText": "",
+   "run": {
+    "text": "↻ Resume Run",
+    "disabled": true,
+    "title": "Cannot resume on RunPod yet:\nRunPod API key: not connected — enter your API key\nNetwork volume: none set — the pod would have no NAMD and no packages\nGPU availability: could not query RunPod for stock",
+    "visible": true
+   }
+  },
+  {
+   "jobId": null,
+   "rowText": "",
+   "run": {
+    "text": "▶ Run",
+    "disabled": true,
+    "title": "This run has finished. Use ＋ New job to set up another.",
+    "visible": true
+   }
+  },
+  {
+   "jobId": null,
+   "rowText": "",
+   "run": {
+    "text": "▶ Run",
+    "disabled": true,
+    "title": "This run has finished. Use ＋ New job to set up another.",
+    "visible": true
+   }
+  },
+  {
+   "jobId": null,
+   "rowText": "",
+   "run": {
+    "text": "↻ Resume Run",
+    "disabled": true,
+    "title": "Cannot resume on RunPod yet:\nRunPod API key: not connected — enter your API key\nNetwork volume: none set — the pod would have no NAMD and no packages\nGPU availability: could not query RunPod for stock",
+    "visible": true
+   }
+  },
+  {
+   "jobId": null,
+   "rowText": "",
+   "run": {
+    "text": "↻ Resume Run",
+    "disabled": true,
+    "title": "Cannot resume on RunPod yet:\nRunPod API key: not connected — enter your API key\nNetwork volume: none set — the pod would have no NAMD and no packages\nGPU availability: could not query RunPod for stock",
+    "visible": true
+   }
+  },
+  {
+   "jobId": null,
+   "rowText": "",
+   "run": {
+    "text": "↻ Resume Run",
+    "disabled": true,
+    "title": "Cannot resume on RunPod yet:\nRunPod API key: not connected — enter your API key\nNetwork volume: none set — the pod would have no NAMD and no packages\nGPU availability: could not query RunPod for stock",
+    "visible": true
+   }
+  },
+  {
+   "jobId": null,
+   "rowText": "",
+   "run": {
+    "text": "↻ Resume Run",
+    "disabled": true,
+    "title": "Cannot resume on RunPod yet:\nRunPod API key: not connected — enter your API key\nNetwork volume: none set — the pod would have no NAMD and no packages\nGPU availability: could not query RunPod for stock",
+    "visible": true
+   }
+  },
+  {
+   "jobId": null,
+   "rowText": "",
+   "run": {
+    "text": "↻ Resume Run",
+    "disabled": true,
+    "title": "Cannot resume on RunPod yet:\nRunPod API key: not connected — enter your API key\nNetwork volume: none set — the pod would have no NAMD and no packages\nGPU availability: could not query RunPod for stock",
+    "visible": true
+   }
+  },
+  {
+   "jobId": null,
+   "rowText": "",
+   "run": {
+    "text": "↻ Resume Run",
+    "disabled": true,
+    "title": "Cannot resume on RunPod yet:\nRunPod API key: not connected — enter your API key\nNetwork volume: none set — the pod would have no NAMD and no packages\nGPU availability: could not query RunPod for stock",
+    "visible": true
+   }
+  }
+ ],
+ "contextMenu": [
+  "24hb_1xT · Jul 15 22:10",
+  "Settings were not recorded for this run"
+ ],
+ "newBtn": {
+  "visible": true,
+  "disabled": false,
+  "text": "＋ New job"
+ },
+ "stageTable": {
+  "cols": 4,
+  "rows": 50,
+  "cells": 132,
+  "headers": [
+   "Parameter",
+   "Relaxation — 04_300K_N",
+   "00_reseed0 ns",
+   "01_production_100ns_k0"
+  ]
+ },
+ "wizardClosed": true
+}

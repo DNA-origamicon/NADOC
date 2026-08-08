@@ -16,9 +16,14 @@ Routes
   POST /runpod/gpu-options    — ranked cards for a RELAXATION ladder (Clusters-card picker)
   POST /runpod/job-preview    — ranked cards + storage + budget for a WHOLE plan (Job Wizard)
 
-⚠️ **The API key is held in memory only, never written to disk** — the same rule as the
-Alpine credentials in ``cluster_ssh``. Unlike Alpine there is no Duo, so re-entering it
-after a server restart needs no human ceremony.
+**The API key is read at startup from ``$RUNPOD_API_KEY`` or ``~/.runpod_key``**
+(``runpod_api.resolve_api_key``) and the session connects itself — see ``autoconnect``.
+Pasting a key into the setup wizard still works and overrides whatever was resolved.
+
+This deliberately does NOT follow the Alpine rule in ``cluster_ssh``. Alpine takes a human
+password plus a Duo push — a credential that cannot be stored. A RunPod API key is a machine
+credential meant to be stored, and keeping it in memory only meant that after any restart
+NADOC could not terminate a pod it was still being billed for.
 
 Mounted in ``backend/api/main.py`` via ``app.include_router(..., prefix="/api")``.
 """
@@ -26,6 +31,7 @@ Mounted in ``backend/api/main.py`` via ``app.include_router(..., prefix="/api")`
 from __future__ import annotations
 
 import logging
+import os
 from functools import partial
 from pathlib import Path
 from typing import Optional
@@ -35,7 +41,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
-from backend.core import runpod_preflight
+from backend.core import runpod_api, runpod_preflight
 from backend.core.md_vram import estimate_profile_from_design
 from backend.core.runpod_api import RunpodClient, RunpodError
 from backend.core.runpod_script import (
@@ -57,14 +63,17 @@ router = APIRouter()
 
 
 class _Session:
-    """The live RunPod session. Key in memory only; never persisted."""
+    """The live RunPod session — the client, its key, and the chosen volume."""
 
     def __init__(self) -> None:
         self.client: Optional[RunpodClient] = None
         self.network_volume_id: Optional[str] = None
-        # Kept ONLY to query GPU stock over GraphQL (the REST API exposes no availability
-        # endpoint). In memory, never persisted — same rule as the Alpine credentials.
+        # Also kept to query GPU stock over GraphQL (the REST API exposes no availability
+        # endpoint) and to read the balance, neither of which the client covers.
         self.api_key: Optional[str] = None
+        # "env" | "file" | "manual" | "none" — surfaced in /runpod/status so the UI can say
+        # WHY it is already connected instead of looking like it remembered a secret.
+        self.key_source: str = "none"
 
     def is_connected(self) -> bool:
         return self.client is not None
@@ -79,6 +88,7 @@ class _Session:
             await self.client.aclose()
         self.client = None
         self.api_key = None
+        self.key_source = "none"
 
 
 _SESSION = _Session()
@@ -96,28 +106,54 @@ class ConnectRequest(BaseModel):
 
 @router.post("/runpod/connect")
 async def connect(body: ConnectRequest):
-    """Verify the key by listing pods, then hold it in memory."""
+    """Verify a pasted key by listing pods, then make it the session's key.
+
+    A key typed here always wins over the one ``autoconnect`` resolved at startup — that
+    is how you use a second account without editing files.
+    """
     client = RunpodClient(body.api_key)
     try:
         pods = await client.list_pods()
     except RunpodError as exc:
         await client.aclose()
         raise HTTPException(400, str(exc)) from exc
+    return await _adopt(
+        client,
+        body.api_key,
+        key_source="manual",
+        network_volume_id=body.network_volume_id,
+        live_pods=pods,
+    )
 
+
+async def _adopt(
+    client: RunpodClient,
+    api_key: str,
+    *,
+    key_source: str,
+    network_volume_id: Optional[str],
+    live_pods: list,
+) -> dict:
+    """Install an ALREADY-VERIFIED client as the session, then reap orphans + adopt jobs.
+
+    Shared by ``connect`` (a pasted key) and ``autoconnect`` (the stored one) so both paths
+    do the pod bookkeeping identically — a startup that connected but skipped the reap would
+    leave exactly the billing pods this whole mechanism exists to catch.
+    """
     # Don't drop a volume the user already chose on a key-only re-verify — but a fresh
     # volume in this request always wins.
-    keep_volume = body.network_volume_id or _SESSION.network_volume_id
+    keep_volume = network_volume_id or _SESSION.network_volume_id
     await _SESSION.disconnect()
     _SESSION.client = client
     _SESSION.network_volume_id = keep_volume
-    _SESSION.api_key = body.api_key
-    logger.info("runpod: connected (%d live pods)", len(pods))
+    _SESSION.api_key = api_key
+    _SESSION.key_source = key_source
+    logger.info("runpod: connected via %s (%d live pods)", key_source, len(live_pods))
 
     # ── REAP ORPHANS ─────────────────────────────────────────────────────────
-    # The API key is held in MEMORY ONLY, so after a backend crash / dev-server reload
-    # NADOC has no key and literally CANNOT terminate a pod it left running — the
-    # earliest possible moment to clean up is the instant you reconnect. A pod that
-    # outlived its NADOC process is billing with nothing watching it.
+    # A pod that outlived its NADOC process is billing with nothing watching it. Startup
+    # now resolves the key on its own, so this runs without waiting for a human to notice
+    # and reconnect — which is the entire reason the key moved to disk.
     #
     # Only pods named `nadoc-*` are touched, so a pod you started by hand is safe.
     # Lazy: routes_md imports THIS module inside its own handlers, so a module-level
@@ -145,12 +181,82 @@ async def connect(body: ConnectRequest):
         except Exception:  # noqa: BLE001 — one bad job must not block the connect
             logger.exception("runpod: could not re-attach job %s", job.job_id)
     if adopted:
-        logger.warning("runpod: re-attached %d in-flight job(s): %s", len(adopted), adopted)
+        logger.warning(
+            "runpod: re-attached %d in-flight job(s): %s", len(adopted), adopted
+        )
 
-    payload = _status_payload(live_pods=max(0, len(pods) - len(reaped)))
+    payload = _status_payload(live_pods=max(0, len(live_pods) - len(reaped)))
     payload["reaped_pods"] = reaped
     payload["adopted_jobs"] = adopted
     return payload
+
+
+async def autoconnect() -> Optional[dict]:
+    """Connect from the stored key at server startup. Returns ``None`` if there isn't one.
+
+    Called from ``main.lifespan``. Never raises and never blocks the server coming up: a
+    RunPod outage, an expired key or no key at all must all leave NADOC perfectly usable
+    for everything that is not a rented GPU.
+    """
+    if os.environ.get("NADOC_RUNPOD_AUTOCONNECT", "1") == "0":
+        return None
+    api_key, source = runpod_api.resolve_api_key()
+    if not api_key:
+        logger.info(
+            "runpod: no stored key ($%s or %s) — connect from the setup wizard",
+            runpod_api.ENV_VAR,
+            runpod_api.KEY_FILE,
+        )
+        return None
+
+    client = RunpodClient(api_key)
+    try:
+        pods = await client.list_pods()
+    except Exception as exc:  # noqa: BLE001 — startup must not fail on a RunPod outage
+        await client.aclose()
+        logger.warning("runpod: stored key did not connect (%s): %s", source, exc)
+        return None
+
+    payload = await _adopt(
+        client, api_key, key_source=source, network_volume_id=None, live_pods=pods
+    )
+    await _autopick_volume(client)
+    payload["network_volume_id"] = _SESSION.network_volume_id
+    return payload
+
+
+async def _autopick_volume(client: RunpodClient) -> None:
+    """Restore the network volume too, or a self-connected session is still unusable.
+
+    The volume carries the patched NAMD; without one the pre-flight volume gate fails and
+    the user has to open the wizard anyway — which would defeat the point of autoconnect.
+    ``$RUNPOD_NETWORK_VOLUME_ID`` wins; otherwise adopt the account's volume only when there
+    is exactly ONE, since any guess between several could stage a job onto the wrong disk.
+    """
+    if _SESSION.network_volume_id:
+        return
+    pinned = (os.environ.get("RUNPOD_NETWORK_VOLUME_ID") or "").strip()
+    if pinned:
+        _SESSION.network_volume_id = pinned
+        logger.info("runpod: network volume %s (from env)", pinned)
+        return
+    try:
+        vols = await client.list_network_volumes()
+    except Exception:  # noqa: BLE001 — no volume is a degraded session, not a failed one
+        logger.warning("runpod: volume lookup failed on autoconnect", exc_info=True)
+        return
+    if len(vols) == 1:
+        _SESSION.network_volume_id = vols[0].get("id")
+        logger.info(
+            "runpod: network volume %s (the account's only one)",
+            _SESSION.network_volume_id,
+        )
+    elif len(vols) > 1:
+        logger.info(
+            "runpod: %d network volumes — pick one in the setup wizard, or set "
+            "$RUNPOD_NETWORK_VOLUME_ID",
+            len(vols),
+        )
 
 
 @router.get("/runpod/status")
@@ -205,8 +311,8 @@ async def set_volume(body: VolumeRequest):
     """Point the live session at a network volume — **without needing the API key.**
 
     The setup modal can re-POST ``/runpod/connect`` to change the volume because it still
-    holds the key in its own closure. The Job Wizard does not and must not: the key is
-    backend-memory-only, so a wizard volume picker had no way to record its choice at all.
+    holds the key in its own closure. The Job Wizard does not and must not handle the key at
+    all, so without this it had no way to record a volume choice.
 
     Setting the session id is what makes the ``volume`` pre-flight check pass, so this has to
     take effect immediately rather than waiting for launch.
@@ -600,4 +706,7 @@ def _status_payload(live_pods: int = 0) -> dict:
         "connected": _SESSION.is_connected(),
         "network_volume_id": _SESSION.network_volume_id,
         "live_pods": live_pods,
+        # Where the live key came from, so the UI can explain an already-connected session
+        # rather than looking like it stashed a secret behind the user's back.
+        "key_source": _SESSION.key_source,
     }

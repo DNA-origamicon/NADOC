@@ -84,7 +84,23 @@ export function initWizardTargetStep({
 
   const _localFactor = () => localGpuSpeedFactor(_hw?.gpu_name)
 
+  /** The one-line "why you cannot go on yet" under the cards.
+   *
+   *  Painted from `_emit` as well as `_paintCards`, because readiness changes without the
+   *  cards changing: the RunPod block resolves its pre-flight ~26 s after the card is
+   *  picked, and the hint used to keep saying "Checking whether RunPod can run this job…"
+   *  under an already-live `Next →` — a progress message that reads as transient but was
+   *  in fact terminal until the user clicked something else. */
+  function _paintHint() {
+    const hint = mount?.querySelector('#wiz-target-hint')
+    if (!hint) return
+    const { ready, reason } = readiness()
+    hint.textContent = reason
+    hint.style.color = ready ? '#3fb950' : '#d29922'
+  }
+
   function _emit() {
+    _paintHint()
     onChange({ target: _target, partition: _partition, ready: readiness().ready })
   }
 
@@ -269,12 +285,7 @@ export function initWizardTargetStep({
       const body = _bodies[card.dataset.target]
       if (body) body.hidden = !on
     })
-    const hint = mount.querySelector('#wiz-target-hint')
-    if (hint) {
-      const { ready, reason } = readiness()
-      hint.textContent = reason
-      hint.style.color = ready ? '#3fb950' : '#d29922'
-    }
+    _paintHint()
   }
 
   function _select(target) {
