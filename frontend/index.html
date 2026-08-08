@@ -301,6 +301,7 @@
       flex-shrink: 0;
     }
     #select-filter {
+      position: relative;   /* anchor for the #select-filter-menu popup */
       display: flex;
       align-items: center;
       gap: 2px;
@@ -311,6 +312,76 @@
       opacity: 0.38;
       pointer-events: none;
     }
+    /* ── Collapsed "Selectable: <active>" trigger + its drop-down ──────────── */
+    .sf-trigger {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 96px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 3px;
+      cursor: pointer;
+      padding: 3px 6px;
+      color: #8b949e;
+      font-family: inherit;
+      line-height: 1;
+      transition: color 0.1s, border-color 0.1s, background 0.1s;
+    }
+    .sf-trigger:hover { border-color: #484f58; color: #c9d1d9; }
+    .sf-trigger.open  { border-color: #484f58; background: #161b22; }
+    .sf-trigger svg   { width: 16px; height: auto; flex-shrink: 0; }
+    .sf-trigger-text  { font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
+    .sf-trigger-note  { font-size: 9px; color: #6e7681; text-transform: none; letter-spacing: 0; }
+    .sf-trigger-caret { font-size: 8px; color: #6e7681; margin-left: auto; }
+    #select-filter-menu {
+      position: absolute;
+      top: calc(100% + 3px);
+      left: 6px;
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      padding: 4px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+      min-width: 132px;
+    }
+    #select-filter-menu[hidden] { display: none; }
+    /* Tab-flash: shown read-only while the highlight slides to the next level. */
+    #select-filter-menu.sf-flash { pointer-events: none; }
+    .sf-menu-head {
+      font-size: 9px;
+      color: #6e7681;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 3px 6px 2px;
+    }
+    .sf-menu-sep { height: 1px; background: #30363d; margin: 3px 2px; }
+    /* Rows reuse .sf-btn (same active colours) but lay out icon-then-label. */
+    #select-filter-menu .sf-btn {
+      flex-direction: row;
+      justify-content: flex-start;
+      gap: 7px;
+      width: 100%;
+      padding: 4px 7px;
+      border-color: transparent;
+      background: transparent;
+    }
+    #select-filter-menu .sf-btn .sf-label-text { font-size: 10px; }
+    /* The sliding Tab highlight — a left accent bar positioned from JS. */
+    .sf-menu-marker {
+      position: absolute;
+      left: 1px;
+      width: 2px;
+      border-radius: 1px;
+      background: #58a6ff;
+      opacity: 0;
+      pointer-events: none;
+    }
+    #select-filter-menu.sf-flash .sf-menu-marker { opacity: 1; }
     #view-tools {
       display: flex;
       align-items: center;
@@ -1371,6 +1442,17 @@
     .sf-btn.active[data-key="fxover"] { color: #3fd2c0; border-color: #1f7a70; background: rgba(63,210,192,0.08); }
     .sf-btn.active[data-key="ovhg"]   { color: #aa88ff; border-color: #664488; background: rgba(170,136,255,0.08); }
     .sf-btn.active[data-key="clust"]  { color: #ffd479; border-color: #b8860b; background: rgba(255,212,121,0.08); }
+    .sf-btn.active[data-key="default"] { color: #8b949e; border-color: #484f58; background: rgba(139,148,158,0.08); }
+    /* The collapsed trigger wears the colour of whatever it is reporting. */
+    .sf-trigger[data-key="strand"]  { color: #c9d1d9; }
+    .sf-trigger[data-key="line"]    { color: #a0b8c8; }
+    .sf-trigger[data-key="ends"]    { color: #79c0ff; }
+    .sf-trigger[data-key="xover"]   { color: #78d5f5; }
+    .sf-trigger[data-key="base"]    { color: #ff7ad9; }
+    .sf-trigger[data-key="clust"]   { color: #ffd479; }
+    .sf-trigger[data-key="skip"]    { color: #dd4444; }
+    .sf-trigger[data-key="loop"]    { color: #4488dd; }
+    .sf-trigger[data-key="ovhangs"] { color: #aa88ff; }
 
     /* ── Physics controls ─────────────────────────────────────────── */
     .force-toggle {
@@ -6420,54 +6502,75 @@
 
         <!-- Filter + view tools strip (matches cadnano-editor layout) -->
         <div id="filter-view-strip">
+          <!-- Collapsed selectable picker. The 11 buttons that used to sit inline
+               live in #select-filter-menu below; the trigger shows whichever one is
+               currently in force (an engaged skip/loop/ovhg gate outranks the level,
+               because those already take precedence for clicks + lasso). Row order in
+               the level group is TAB_CYCLE order, so the Tab flash reads top-to-bottom.
+               Buttons keep their data-key + .sf-btn markup — selection_filter.js still
+               finds them with `#select-filter .sf-btn[data-key="…"]`. -->
           <div id="select-filter">
             <span class="sf-label">Selectable:</span>
-            <button class="sf-btn active" data-key="scaf" title="Scaffold — toggle scaffold selectability">
-              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="2" y1="5" x2="14" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
-              <span class="sf-label-text">scaf</span>
+            <button id="select-filter-trigger" class="sf-trigger" title="Selection level + pick filters — click to open">
+              <span class="sf-trigger-icon"></span>
+              <span class="sf-trigger-text">default</span>
+              <span class="sf-trigger-note"></span>
+              <span class="sf-trigger-caret">▼</span>
             </button>
-            <button class="sf-btn active" data-key="stap" title="Staples — toggle staple selectability">
-              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="2" y1="5" x2="8" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="10" y1="5" x2="14" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-              <span class="sf-label-text">stap</span>
-            </button>
-            <span class="sf-divider" style="width:1px;height:16px;background:#30363d;margin:0 2px;flex-shrink:0"></span>
-            <button class="sf-btn active" data-key="strand" title="Whole-strand selection">
-              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="3" cy="5" r="2" fill="currentColor"/><circle cx="8" cy="5" r="2" fill="currentColor"/><circle cx="13" cy="5" r="2" fill="currentColor"/></svg>
-              <span class="sf-label-text">strand</span>
-            </button>
-            <button class="sf-btn" data-key="line" title="Domain body segments">
-              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="butt"/><line x1="3" y1="2" x2="3" y2="8" stroke="currentColor" stroke-width="1.5"/><line x1="13" y1="2" x2="13" y2="8" stroke="currentColor" stroke-width="1.5"/></svg>
-              <span class="sf-label-text">dom</span>
-            </button>
-            <button class="sf-btn" data-key="ends" title="5′/3′ strand ends">
-              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="1" y="2" width="6" height="6" rx="1" fill="currentColor"/><rect x="9" y="2" width="6" height="6" rx="1" fill="currentColor"/></svg>
-              <span class="sf-label-text">ends</span>
-            </button>
-            <button class="sf-btn" data-key="xover" title="Crossover arcs">
-              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><path d="M3,9 Q8,1 13,9" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/><circle cx="3" cy="9" r="1.5" fill="currentColor"/><circle cx="13" cy="9" r="1.5" fill="currentColor"/></svg>
-              <span class="sf-label-text">xover</span>
-            </button>
-            <button class="sf-btn" data-key="base" title="Single base — pick one backbone bead (incl. extensions, extra crossover bases, flexible/linker arcs)">
-              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><circle cx="3.5" cy="5" r="1" fill="currentColor" opacity="0.35"/><circle cx="8" cy="5" r="2.6" fill="currentColor"/><circle cx="12.5" cy="5" r="1" fill="currentColor" opacity="0.35"/></svg>
-              <span class="sf-label-text">base</span>
-            </button>
-            <span class="sf-divider" style="width:1px;height:16px;background:#30363d;margin:0 2px;flex-shrink:0"></span>
-            <button class="sf-btn" data-key="skip" title="Skip markers (−1 deleted base)">
-              <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><line x1="4" y1="2" x2="12" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="2" x2="4" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-              <span class="sf-label-text">skip</span>
-            </button>
-            <button class="sf-btn" data-key="loop" title="Loop markers (+1 extra base)">
-              <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><circle cx="8" cy="6" r="4" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>
-              <span class="sf-label-text">loop</span>
-            </button>
-            <button class="sf-btn" data-key="ovhangs" title="Overhangs — lasso/click overhang helices to edit orientation">
-              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="2" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9,5 L14,2 M9,5 L14,8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="5" r="1.8" fill="currentColor"/></svg>
-              <span class="sf-label-text">ovhg</span>
-            </button>
-            <button class="sf-btn" data-key="clust" title="Cluster — select whole rigid cluster (button-only; not in Tab cycle)">
-              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="2" y="2" width="12" height="6" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="5" cy="5" r="1" fill="currentColor"/><circle cx="8" cy="5" r="1" fill="currentColor"/><circle cx="11" cy="5" r="1" fill="currentColor"/></svg>
-              <span class="sf-label-text">clust</span>
-            </button>
+            <div id="select-filter-menu" hidden>
+              <div class="sf-menu-marker"></div>
+              <div class="sf-menu-head">Level</div>
+              <button class="sf-btn" data-key="strand" title="Whole-strand selection">
+                <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="3" cy="5" r="2" fill="currentColor"/><circle cx="8" cy="5" r="2" fill="currentColor"/><circle cx="13" cy="5" r="2" fill="currentColor"/></svg>
+                <span class="sf-label-text">strand</span>
+              </button>
+              <button class="sf-btn" data-key="line" title="Domain body segments">
+                <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="butt"/><line x1="3" y1="2" x2="3" y2="8" stroke="currentColor" stroke-width="1.5"/><line x1="13" y1="2" x2="13" y2="8" stroke="currentColor" stroke-width="1.5"/></svg>
+                <span class="sf-label-text">dom</span>
+              </button>
+              <button class="sf-btn" data-key="ends" title="5′/3′ strand ends">
+                <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="1" y="2" width="6" height="6" rx="1" fill="currentColor"/><rect x="9" y="2" width="6" height="6" rx="1" fill="currentColor"/></svg>
+                <span class="sf-label-text">ends</span>
+              </button>
+              <button class="sf-btn" data-key="xover" title="Crossover arcs">
+                <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><path d="M3,9 Q8,1 13,9" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/><circle cx="3" cy="9" r="1.5" fill="currentColor"/><circle cx="13" cy="9" r="1.5" fill="currentColor"/></svg>
+                <span class="sf-label-text">xover</span>
+              </button>
+              <button class="sf-btn" data-key="base" title="Single base — pick one backbone bead (incl. extensions, extra crossover bases, flexible/linker arcs)">
+                <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><circle cx="3.5" cy="5" r="1" fill="currentColor" opacity="0.35"/><circle cx="8" cy="5" r="2.6" fill="currentColor"/><circle cx="12.5" cy="5" r="1" fill="currentColor" opacity="0.35"/></svg>
+                <span class="sf-label-text">base</span>
+              </button>
+              <button class="sf-btn active" data-key="default" title="Default — drill ladder: 1st click selects the strand, 2nd click the leaf under the cursor">
+                <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><path d="M3,1 L3,9 L5.4,6.8 L7,9.6 L8.6,8.6 L7.1,6 L10,5.6 Z" fill="currentColor"/></svg>
+                <span class="sf-label-text">default</span>
+              </button>
+              <button class="sf-btn" data-key="clust" title="Cluster — select whole rigid cluster (button-only; not in Tab cycle)">
+                <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="2" y="2" width="12" height="6" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="5" cy="5" r="1" fill="currentColor"/><circle cx="8" cy="5" r="1" fill="currentColor"/><circle cx="11" cy="5" r="1" fill="currentColor"/></svg>
+                <span class="sf-label-text">clust</span>
+              </button>
+              <div class="sf-menu-sep"></div>
+              <div class="sf-menu-head">Pickable</div>
+              <button class="sf-btn active" data-key="scaf" title="Scaffold — toggle scaffold selectability">
+                <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="2" y1="5" x2="14" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+                <span class="sf-label-text">scaf</span>
+              </button>
+              <button class="sf-btn active" data-key="stap" title="Staples — toggle staple selectability">
+                <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="2" y1="5" x2="8" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="10" y1="5" x2="14" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <span class="sf-label-text">stap</span>
+              </button>
+              <button class="sf-btn" data-key="skip" title="Skip markers (−1 deleted base)">
+                <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><line x1="4" y1="2" x2="12" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="2" x2="4" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <span class="sf-label-text">skip</span>
+              </button>
+              <button class="sf-btn" data-key="loop" title="Loop markers (+1 extra base)">
+                <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><circle cx="8" cy="6" r="4" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>
+                <span class="sf-label-text">loop</span>
+              </button>
+              <button class="sf-btn" data-key="ovhangs" title="Overhangs — lasso/click overhang helices to edit orientation">
+                <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="2" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9,5 L14,2 M9,5 L14,8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="5" r="1.8" fill="currentColor"/></svg>
+                <span class="sf-label-text">ovhg</span>
+              </button>
+            </div>
           </div>
           <div id="view-tools">
             <span class="sf-divider" style="width:1px;height:16px;background:#30363d;margin:0 2px;flex-shrink:0"></span>

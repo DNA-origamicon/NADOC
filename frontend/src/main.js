@@ -4518,6 +4518,7 @@ async function main() {
     viewCube, camera, controls,
     isUnfoldActive:           _isUnfoldActive,
     isDeformActive,
+    flashSelectionLevel:      selectionFilter.flashLevelChange,
     captureCurrentCamera,
     frameSelectionOrAll:      _frameSelectionOrAll,
     setMenuToggle:            _setMenuToggle,

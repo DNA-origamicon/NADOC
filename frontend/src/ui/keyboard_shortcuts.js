@@ -56,6 +56,7 @@ export function initKeyboardShortcuts(deps) {
     showWelcome, ooClose, cancelTranslateRotateTool,
     watchDeformState, deformEscape, popGroupUndo,
     isTranslateRotateActive, getPartEditContext, getAssemblyWorkspacePath, getOoActiveIds,
+    flashSelectionLevel,
   } = deps
 
   // ── File / edit (Ctrl-modifier) ──────────────────────────────────────────
@@ -291,6 +292,8 @@ export function initKeyboardShortcuts(deps) {
       const cur  = selectionManager.getSelectionLevel?.() ?? 'default'
       const next = nextTabLevel(cur)
       selectionManager.setSelectionLevel?.(next)
+      // Flash the collapsed selectable menu open and slide its highlight cur→next.
+      flashSelectionLevel?.(cur, next)
       showToast(next === 'default' ? 'Selection level: drill (default)' : `Selection level: ${next}`)
     },
   })

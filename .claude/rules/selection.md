@@ -37,8 +37,9 @@ level persists across an empty-space click.
   `_v2HandleArc` (`:1938`).
 - **Tab cycle is `strand → domain → end → xover → base → default`** — `TAB_CYCLE`
   (`selection_level.js`). **`cluster` is NOT in the cycle** (button-only; its `#select-filter`
-  button sits in the gate group with skip/loop/ovhg). Two code comments still claim otherwise —
-  see *Traps*.
+  row sits below the cycle rows, before the divider). Two code comments still claim otherwise —
+  see *Traps*. Each Tab also calls `selectionFilter.flashLevelChange(cur, next)` — see
+  *The collapsed picker*.
 - **`base` picks ONE bead** and is the only level that spans all five bead renderers — see
   *Base level* below. It is a level, not a gate: it has **no `selectableTypes` key**.
 - Tab and Esc are bound in **`ui/keyboard_shortcuts.js`** (Tab `:285`, handler `:289`; Esc
@@ -53,16 +54,40 @@ level persists across an empty-space click.
 | `scene/selection_level.js` | ~160 | Pure model: `LEVELS`, `TAB_CYCLE`, `BTN_LEVEL`/`LEVEL_BTN`, `normalizeLevel`, `nextTabLevel`, `toggleLevel`, `lassoCaptureType`, `toggleClusterSelection`, `hoverPreviewTarget` | 36 |
 | `scene/base_ref.js` | ~125 | Pure: the base-level KEY format — `baseKey`, `xbKey`, `parseBaseKey`, `baseFamily`, `toggleBaseKey`, `dedupeBaseKeys`, `mergeBaseKeys` | 20 |
 | `scene/base_pick.js` | ~215 | Base-level candidates across all five bead renderers + the pure `nearestCandidate` / `candidatesInRect` / `isVisibleChain` | 27 |
-| `ui/selection_filter.js` | 129 | Wires the `#select-filter` buttons ↔ level; `computeFilterToggle`, `initSelectionFilter` | 15 |
+| `ui/selection_filter.js` | ~300 | Owns the whole collapsed picker: trigger label, menu open/close, Tab flash, buttons ↔ level; `computeFilterToggle`, `collapsedSelectable`, `initSelectionFilter` | 38 |
 | `scene/selection_bbox.js` | 108 | Pure geometry: `selectionBBox`, `instanceUnionBox`, `nucleotideLocalBox`, `nucleotideBoxOverflow` (used by `main.js`, assembly renderers) | 17 |
 | `scene/right_click_menu.js` | — | `deferrableContextMenu(canvas, handler)` — the shared contextmenu wrapper | yes |
 | `ui/strand_menu_items.js` | — | `buildStrandMenuItems` — shared by `selection_manager.js:42` **and** `cadnano-editor/main.js:48` | yes |
 | `ui/blunt_end_menus.js` | — | `initBluntEndMenus` (`main.js:2953`) — owns the former `_bluntInfo` panel | yes |
 | `scene/empty_space_menu.js`, `scene/representation_overrides.js`, `scene/assembly_context_menu.js`, `ui/overhang_orientation_menu.js` | — | Further menu owners split out of selection_manager | — |
 
-The `#select-filter` buttons are **static markup in `frontend/index.html:6255–6298`** — no JS
-builds them. DOM order: `scaf, stap | strand, line, ends, xover, base | skip, loop, ovhangs, clust`.
-Every button needs its own `.sf-btn.active[data-key="…"]` CSS rule or it is **invisible when lit**.
+## The collapsed picker (2026-08-08)
+
+The 11 buttons no longer sit inline in the strip. They are **static markup** inside the
+`#select-filter-menu` drop-down — no JS builds them — and the strip shows only
+`#select-filter-trigger`. Menu DOM order is
+`strand, line, ends, xover, base, default, clust | scaf, stap, skip, loop, ovhangs`:
+the level group leads in **TAB_CYCLE order** (so the Tab flash reads top-to-bottom), with
+out-of-cycle `clust` after it. Every button still needs its own `.sf-btn.active[data-key="…"]`
+CSS rule or it is **invisible when lit**, and every query is still
+`#select-filter .sf-btn[data-key="…"]`.
+
+- **`default` is now a real row** (`data-key="default"`, no `BTN_LEVEL` entry — `default` is the
+  *absence* of an engaged level, so its click calls `setSelectionLevel('default')` directly).
+  It is in `LEVEL_ONLY_BTNS` with a `null` storeKey, like `base`.
+- **Trigger label** = `collapsedSelectable({selectionLevel, selectableTypes})` (pure, tested). An
+  engaged `skips`/`loops`/`overhangs` gate **outranks the level**, because those already take
+  precedence for clicks + lasso. A scaffold/staple restriction shows as a `scaf only` / `stap only`
+  / `none` note, suppressed while an exclusive gate is up (it clears scaf+stap by design). The
+  trigger's icon is **cloned from the reported row's `<svg>`** — each icon exists once in the markup.
+- **Close policy:** picking a level closes the menu (one-shot choice); toggling a gate leaves it
+  open. Outside `pointerdown`, Escape (not swallowed — Esc still drops the level), and arming a
+  deform/translate tool also close it.
+- **Tab flash:** `flashLevelChange(prev, next)` pops the menu open with `.sf-flash`
+  (`pointer-events:none`), slides `.sf-menu-marker` from the outgoing row's `offsetTop` to the
+  incoming one over 150 ms, and closes after 250 ms. A repeat Tab **restarts** the timer, so held
+  Tab reads as one continuous scroll; a hand-opened menu is left open. It is wired from the Tab
+  shortcut, **not** from `reflectDrillLevel` — that also fires on every canvas click.
 
 ## Entry & Initialization
 
@@ -326,7 +351,7 @@ These are wrong in the *source*, not here. Don't "fix" the code to match them.
 
 `selection_manager.js` is **4179 LOC with zero unit tests**. There is no `selection_manager.test.js`.
 Everything that *is* pinned is the pure/DOM-thin periphery: `selection_level.test.js` (36),
-`selection_bbox.test.js` (17), `selection_filter.test.js` (19), `base_ref.test.js` (20),
+`selection_bbox.test.js` (17), `selection_filter.test.js` (38), `base_ref.test.js` (20),
 `base_pick.test.js` (27), plus Tab/Esc cycling inside `keyboard_shortcuts.test.js`. Assembly-side
 selection has its own (`assembly_lasso.test.js`, `assembly_pointer.test.js`,
 `assembly_multi_box.test.js`) — different stack. No pytest touches selection.

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { computeFilterToggle, initSelectionFilter } from './selection_filter.js'
+import { collapsedSelectable, computeFilterToggle, initSelectionFilter } from './selection_filter.js'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { clearDom } from '../test-helpers/factory_dom.js'
 
@@ -8,22 +8,37 @@ import { clearDom } from '../test-helpers/factory_dom.js'
 // `base` is level-only — it has no selectableTypes key, so it lives in LEVEL_ONLY_BTNS.
 const DATA_KEYS = ['scaf', 'stap', 'clust', 'strand', 'line', 'ends', 'xover', 'base', 'loop', 'skip', 'ovhangs']
 
-/** Build the #select-filter container with a .sf-btn[data-key] per key. */
+/**
+ * Build the collapsed picker: #select-filter > trigger + #select-filter-menu, with a
+ * .sf-btn[data-key] per key inside the menu (mirrors index.html, including the
+ * `default` row and each row's <svg> that the trigger clones).
+ */
 function mountSelectFilter() {
   document.body.innerHTML = ''
   const wrap = document.createElement('div')
   wrap.id = 'select-filter'
+  wrap.innerHTML = `
+    <button id="select-filter-trigger" class="sf-trigger">
+      <span class="sf-trigger-icon"></span>
+      <span class="sf-trigger-text"></span>
+      <span class="sf-trigger-note"></span>
+    </button>
+    <div id="select-filter-menu" hidden><div class="sf-menu-marker"></div></div>`
+  const menu = wrap.querySelector('#select-filter-menu')
   const btns = {}
-  for (const dk of DATA_KEYS) {
+  for (const dk of [...DATA_KEYS, 'default']) {
     const b = document.createElement('button')
     b.className = 'sf-btn'
     b.setAttribute('data-key', dk)
-    wrap.appendChild(b)
+    b.innerHTML = '<svg></svg><span class="sf-label-text"></span>'
+    menu.appendChild(b)
     btns[dk] = b
   }
   document.body.appendChild(wrap)
-  return { wrap, btns }
+  return { wrap, menu, btns, trigger: wrap.querySelector('#select-filter-trigger') }
 }
+
+const isMenuOpen = () => !document.getElementById('select-filter-menu').hidden
 
 const FULL_SELECTABLE = {
   scaffold: true, staples: true, clusters: false, strands: true, domains: false,
@@ -155,10 +170,11 @@ describe('initSelectionFilter — selectionLevel + visibility gates', () => {
     f.reflectDrillLevel('strand')
     expect(document.querySelector('.sf-btn[data-key="strand"]').classList.contains('active')).toBe(true)
     expect(document.querySelector('.sf-btn[data-key="xover"]').classList.contains('active')).toBe(false)
-    // default (no engaged level) lights NO level button
+    // default (no engaged level) lights the explicit `default` row and nothing else
     f.reflectDrillLevel('default')
     expect(document.querySelector('.sf-btn[data-key="strand"]').classList.contains('active')).toBe(false)
     expect(document.querySelector('.sf-btn[data-key="clust"]').classList.contains('active')).toBe(false)
+    expect(document.querySelector('.sf-btn[data-key="default"]').classList.contains('active')).toBe(true)
   })
 
   // The base button has NO SEL_KEY_MAP row (it gates nothing), so it only gets a click
@@ -202,4 +218,183 @@ describe('initSelectionFilter — selectionLevel + visibility gates', () => {
   })
 
   afterEach(() => clearDom())
+})
+
+describe('collapsedSelectable (pure)', () => {
+  const T = o => ({ ...FULL_SELECTABLE, ...o })
+
+  it('reports the engaged level', () => {
+    expect(collapsedSelectable({ selectionLevel: 'domain', selectableTypes: T() }))
+      .toEqual({ key: 'line', label: 'dom', note: '' })
+    expect(collapsedSelectable({ selectionLevel: 'cluster', selectableTypes: T() }).label).toBe('clust')
+  })
+
+  it('default level reports "default"', () => {
+    expect(collapsedSelectable({ selectionLevel: 'default', selectableTypes: T() }))
+      .toEqual({ key: 'default', label: 'default', note: '' })
+  })
+
+  it('an unknown level falls back to default', () => {
+    expect(collapsedSelectable({ selectionLevel: 'bogus', selectableTypes: T() }).key).toBe('default')
+  })
+
+  it('an engaged exclusive gate OUTRANKS the level (it wins clicks + lasso)', () => {
+    expect(collapsedSelectable({ selectionLevel: 'domain', selectableTypes: T({ overhangs: true }) }))
+      .toEqual({ key: 'ovhangs', label: 'ovhg', note: '' })
+    expect(collapsedSelectable({ selectionLevel: 'domain', selectableTypes: T({ loops: true }) }).label).toBe('loop')
+    expect(collapsedSelectable({ selectionLevel: 'base', selectableTypes: T({ skips: true }) }).label).toBe('skip')
+  })
+
+  it('a scaffold/staple restriction shows as a note', () => {
+    expect(collapsedSelectable({ selectionLevel: 'strand', selectableTypes: T({ staples: false }) }).note).toBe('scaf only')
+    expect(collapsedSelectable({ selectionLevel: 'strand', selectableTypes: T({ scaffold: false }) }).note).toBe('stap only')
+    expect(collapsedSelectable({ selectionLevel: 'strand', selectableTypes: T({ scaffold: false, staples: false }) }).note).toBe('none')
+  })
+
+  it('no note while an exclusive gate is up (it clears scaf+stap by design)', () => {
+    expect(collapsedSelectable({
+      selectionLevel: 'strand', selectableTypes: T({ scaffold: false, staples: false, loops: true }),
+    }).note).toBe('')
+  })
+
+  it('survives an empty argument', () => {
+    expect(collapsedSelectable()).toEqual({ key: 'default', label: 'default', note: 'none' })
+  })
+})
+
+describe('initSelectionFilter — collapsed trigger + menu', () => {
+  let store, sm, level
+  beforeEach(() => {
+    mountSelectFilter()
+    store = createMockStore({ selectableTypes: { ...FULL_SELECTABLE }, deformToolActive: false, translateRotateActive: false })
+    level = 'default'
+    sm = {
+      getSelectionLevel: vi.fn(() => level),
+      setSelectionLevel: vi.fn((l) => { level = l }),
+    }
+  })
+  const makeV2 = () => initSelectionFilter({ store, getSelectionManager: () => sm })
+  const trigger = () => document.getElementById('select-filter-trigger')
+
+  it('the trigger toggles the menu open and closed', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    expect(isMenuOpen()).toBe(false)
+    trigger().click()
+    expect(isMenuOpen()).toBe(true)
+    trigger().click()
+    expect(isMenuOpen()).toBe(false)
+  })
+
+  it('picking a LEVEL closes the menu; toggling a GATE leaves it open', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    trigger().click()
+    document.querySelector('.sf-btn[data-key="loop"]').click()
+    expect(isMenuOpen()).toBe(true)                       // gate → stay open
+    document.querySelector('.sf-btn[data-key="ends"]').click()
+    expect(sm.setSelectionLevel).toHaveBeenCalledWith('end')
+    expect(isMenuOpen()).toBe(false)                      // level → close
+  })
+
+  it('the default row sets the default level directly and closes', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    level = 'xover'
+    trigger().click()
+    document.querySelector('.sf-btn[data-key="default"]').click()
+    expect(sm.setSelectionLevel).toHaveBeenCalledWith('default')
+    expect(store.getState().selectableTypes).toEqual(FULL_SELECTABLE)  // no gate touched
+    expect(isMenuOpen()).toBe(false)
+  })
+
+  it('a pointerdown outside closes the menu; inside does not', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    trigger().click()
+    document.getElementById('select-filter-menu').dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(isMenuOpen()).toBe(true)
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(isMenuOpen()).toBe(false)
+  })
+
+  it('Escape closes the menu', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    trigger().click()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(isMenuOpen()).toBe(false)
+  })
+
+  it('activating a tool locks the row AND closes an open menu', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    trigger().click()
+    store.setState({ translateRotateActive: true })
+    expect(isMenuOpen()).toBe(false)
+    expect(document.getElementById('select-filter').classList.contains('filter-inactive')).toBe(true)
+  })
+
+  it('the trigger follows the level, and a gate overrides it', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    expect(trigger().querySelector('.sf-trigger-text').textContent).toBe('default')
+    f.reflectDrillLevel('base')
+    expect(trigger().dataset.key).toBe('base')
+    expect(trigger().querySelector('.sf-trigger-text').textContent).toBe('base')
+    store.setState({ selectableTypes: { ...store.getState().selectableTypes, overhangs: true } })
+    expect(trigger().querySelector('.sf-trigger-text').textContent).toBe('ovhg')
+  })
+
+  it('the trigger clones the reported row’s icon', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    f.reflectDrillLevel('xover')
+    expect(trigger().querySelector('.sf-trigger-icon svg')).toBeTruthy()
+  })
+})
+
+describe('initSelectionFilter — Tab flash', () => {
+  let store, sm
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mountSelectFilter()
+    store = createMockStore({ selectableTypes: { ...FULL_SELECTABLE }, deformToolActive: false, translateRotateActive: false })
+    sm = { getSelectionLevel: vi.fn(() => 'default'), setSelectionLevel: vi.fn() }
+  })
+  afterEach(() => { vi.useRealTimers(); clearDom() })
+  const makeV2 = () => initSelectionFilter({ store, getSelectionManager: () => sm })
+
+  it('pops the menu open read-only and closes it again', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    f.flashLevelChange('strand', 'domain')
+    const menu = document.getElementById('select-filter-menu')
+    expect(isMenuOpen()).toBe(true)
+    expect(menu.classList.contains('sf-flash')).toBe(true)   // click-through while flashing
+    vi.advanceTimersByTime(260)
+    expect(isMenuOpen()).toBe(false)
+    expect(menu.classList.contains('sf-flash')).toBe(false)
+  })
+
+  it('a repeat flash restarts the timer instead of closing mid-cycle', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    f.flashLevelChange('strand', 'domain')
+    vi.advanceTimersByTime(200)
+    f.flashLevelChange('domain', 'end')
+    vi.advanceTimersByTime(200)
+    expect(isMenuOpen()).toBe(true)      // would have closed at 250 without the restart
+    vi.advanceTimersByTime(100)
+    expect(isMenuOpen()).toBe(false)
+  })
+
+  it('leaves a hand-opened menu open', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    document.getElementById('select-filter-trigger').click()
+    f.flashLevelChange('strand', 'domain')
+    vi.advanceTimersByTime(500)
+    expect(isMenuOpen()).toBe(true)
+    expect(document.getElementById('select-filter-menu').classList.contains('sf-flash')).toBe(false)
+  })
+
+  it('the marker lands on the incoming level’s row', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    const marker = document.querySelector('.sf-menu-marker')
+    f.flashLevelChange('strand', 'xover')
+    // jsdom reports offsetTop 0 for everything, so assert the transition was armed
+    // toward a row rather than the pixel value.
+    expect(marker.style.transition).toContain('top')
+    expect(marker.style.top).toBe('0px')
+  })
 })
