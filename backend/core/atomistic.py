@@ -61,7 +61,11 @@ from backend.core.atomistic_minimisers import (
     _minimize_backbone_bridge,
     _set_atom_pos,
 )
-from backend.core.constants import BDNA_MINOR_GROOVE_ANGLE_RAD, BDNA_RISE_PER_BP
+from backend.core.constants import (
+    ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG,
+    BDNA_MINOR_GROOVE_ANGLE_RAD,
+    BDNA_RISE_PER_BP,
+)
 from backend.core.geometry import (
     NucleotidePosition,
     nucleotide_positions,
@@ -716,7 +720,9 @@ _ATOMISTIC_PHASE_OFFSET_RAD: float = _math.radians(-32.0)
 # layer is NOT touched, so the oxDNA / mrDNA / LAMMPS seeds and every pose fitter are
 # byte-identical; rolling the SHARED phase instead would have put half of every design's
 # crossover bonds over the FENE cliff (measured: honeycomb 114/228, square 305/610).
-_ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG: float = 14.6
+_ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG: float = (
+    ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG
+)
 
 
 def atomistic_phase_offset_rad(design: "Design") -> float:

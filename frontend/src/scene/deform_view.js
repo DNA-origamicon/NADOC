@@ -40,6 +40,8 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
   let _straightPosMap  = new Map()
   // Map<"helix_id:bp_index:direction", THREE.Vector3> — straight base normals (cross-strand).
   let _straightBnMap   = new Map()
+  // Map<"helix_id:bp_index:direction", THREE.Vector3> — straight base positions.
+  let _straightBaseMap = new Map()
   // Map<helix_id, {start: THREE.Vector3, end: THREE.Vector3}> — straight axis anchors.
   let _straightAxesMap = new Map()
 
@@ -123,6 +125,17 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     return m
   }
 
+  function _buildStraightBaseMap(straightGeometry) {
+    const m = new Map()
+    if (!straightGeometry) return m
+    for (const nuc of straightGeometry) {
+      const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+      const base = nuc.base_position
+      if (base) m.set(key, new THREE.Vector3(base[0], base[1], base[2]))
+    }
+    return m
+  }
+
   function _buildStraightAxesMap(straightHelixAxes) {
     const m = new Map()
     if (!straightHelixAxes) return m
@@ -149,7 +162,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     // activate/deactivate/snapOff/setT — during a lerp it's 'hidden',
     // at rest it's 'deformed' or 'straight'.
     designRenderer.setAxisShaftMode(_shaftMode)
-    designRenderer.applyDeformLerp(_straightPosMap, _straightAxesMap, _straightBnMap, t)
+    designRenderer.applyDeformLerp(_straightPosMap, _straightAxesMap, _straightBnMap, _straightBaseMap, t)
     getBluntEnds?.()?.applyDeformLerp(_straightAxesMap, t)
     getUnfoldView?.()?.applyDeformLerp(_straightPosMap, t)
     getLoopSkipHighlight?.()?.applyDeformLerp(_straightPosMap, _straightAxesMap, t)
@@ -236,6 +249,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     if (geoChanged)  {
       _straightPosMap = _buildStraightPosMap(newState.straightGeometry)
       _straightBnMap  = _buildStraightBnMap(newState.straightGeometry)
+      _straightBaseMap = _buildStraightBaseMap(newState.straightGeometry)
     }
     if (axesChanged) _straightAxesMap = _buildStraightAxesMap(newState.straightHelixAxes)
 
@@ -258,6 +272,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
       // Build maps directly to avoid a redundant round-trip.
       _straightPosMap  = _buildStraightPosMap(newState.currentGeometry)
       _straightBnMap   = _buildStraightBnMap(newState.currentGeometry)
+      _straightBaseMap = _buildStraightBaseMap(newState.currentGeometry)
       _straightAxesMap = _buildStraightAxesMap(newState.currentHelixAxes)
     } else if (store.getState().cadnanoActive) {
       // Cadnano is active: the fetch is not needed right now (cadnano positions

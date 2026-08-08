@@ -31,7 +31,6 @@ from backend.core.models import (
     Strand,  # noqa: F401  (string annotation in _emit_bridge_nucs)
 )
 from backend.core.geometry import (
-    groove_offset_rad,
     nucleotide_positions_arrays_extended,
     nucleotide_positions_arrays_extended_right,
 )
@@ -43,6 +42,7 @@ from backend.core.deformation import (
     effective_helix_for_geometry,
 )
 from backend.core.constants import (
+    ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG,
     FULL_REP_BALANCE_ROLL_HONEYCOMB_DEG,
     FULL_REP_BALANCE_ROLL_SQUARE_DEG,
     SSDNA_CONTOUR_PER_NT_NM,
@@ -367,6 +367,12 @@ def _geometry_for_helices(
     full_mode = helix_ids is None
     nuc_info = _strand_nucleotide_info(design, helix_ids)
     roll = full_rep_balance_roll_rad(design) if junction_balance else 0.0
+    if measured_positioning:
+        # The measured landmark sites already contain the atomistic template's base
+        # phase.  Apply the remaining template-balance roll here so the full and
+        # atomistic representations are sibling projections of the same physical
+        # duplex frame, independent of lattice-cell direction.
+        roll -= math.radians(ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG)
 
     # Suppress is_five_prime on the real-helix terminal for strands with a 5' extension.
     five_prime_ext_strands = {
@@ -406,7 +412,6 @@ def _geometry_for_helices(
         arrs: dict,
         helix_id: str,
         axis_line: "tuple | None" = None,
-        groove_line: "float | None" = None,
     ) -> None:
         """Append geometry dicts from a nucleotide arrays block."""
         M = len(arrs["bp_indices"])
@@ -414,7 +419,7 @@ def _geometry_for_helices(
             return
         if measured_positioning and axis_line is not None:
             # Display-only re-placement: the backbone bead onto the MD-measured ribose
-            # C3' and the base bead onto its base-ring centroid.  Applied here, at the
+            # O5' and the base bead onto its base-ring centroid.  Applied here, at the
             # serialiser, so the geometric layer itself is untouched and every other
             # consumer of nucleotide_positions (MD seeds, exports, crossover solving)
             # keeps the legacy placement.
@@ -426,7 +431,6 @@ def _geometry_for_helices(
                 axis_origin=axis_line[0],
                 axis_hat=axis_line[1],
                 legacy_radius=HELIX_RADIUS,
-                groove_rad=groove_line,
             )
         bp_list = arrs["bp_indices"].tolist()
         dir_arr = arrs["directions"]
@@ -505,7 +509,6 @@ def _geometry_for_helices(
             arrs,
             arrs["helix_id"],
             _measured_axes.get(helix.id),
-            groove_offset_rad(helix.direction),
         )
 
         # Render nucleotides outside the physical helix span (ss-scaffold loops).
@@ -526,7 +529,6 @@ def _geometry_for_helices(
                 extra_arrs,
                 helix.id,
                 _measured_axes.get(helix.id),
-                groove_offset_rad(helix.direction),
             )
 
         hi_bp = max_domain_bp.get(helix.id, helix.bp_start + helix.length_bp - 1)
@@ -542,7 +544,6 @@ def _geometry_for_helices(
                 extra_arrs,
                 helix.id,
                 _measured_axes.get(helix.id),
-                groove_offset_rad(helix.direction),
             )
 
     # Emit bridge nucs for ds linkers AFTER the regular helix loop so they
@@ -939,6 +940,8 @@ def _positions_for_design(
     # deform-revert / unfold / deform-lerp paths would draw unrolled beads beside rolled
     # ones — the identical trap the measured re-placement hit in TD-27 Stage 3.
     roll = full_rep_balance_roll_rad(design) if junction_balance else 0.0
+    if measured_positioning:
+        roll -= math.radians(ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG)
     # Occupancy map (real strand nucleotides) — used to suppress ghost lattice slots so
     # this fast path stays IDENTICAL to _geometry_for_helices (both emit only real bases;
     # ss-overhang regions render single-stranded, no phantom complementary base).
@@ -982,7 +985,6 @@ def _positions_for_design(
         arrs: dict,
         helix_id: str,
         axis_line: "tuple | None" = None,
-        groove_line: "float | None" = None,
     ) -> None:
         M = len(arrs["bp_indices"])
         if M == 0:
@@ -996,7 +998,6 @@ def _positions_for_design(
                 axis_origin=axis_line[0],
                 axis_hat=axis_line[1],
                 legacy_radius=HELIX_RADIUS,
-                groove_rad=groove_line,
             )
         bp_list = arrs["bp_indices"].tolist()
         dir_arr = arrs["directions"]
@@ -1032,7 +1033,6 @@ def _positions_for_design(
             arrs,
             arrs["helix_id"],
             _measured_axes.get(helix.id),
-            groove_offset_rad(helix.direction),
         )
 
         norm_helix = None
@@ -1045,7 +1045,6 @@ def _positions_for_design(
                 extra,
                 helix.id,
                 _measured_axes.get(helix.id),
-                groove_offset_rad(helix.direction),
             )
 
         hi_bp = max_domain_bp.get(helix.id, helix.bp_start + helix.length_bp - 1)
@@ -1059,7 +1058,6 @@ def _positions_for_design(
                 extra,
                 helix.id,
                 _measured_axes.get(helix.id),
-                groove_offset_rad(helix.direction),
             )
 
     # Helix axes — same pipeline as the full-geometry path.

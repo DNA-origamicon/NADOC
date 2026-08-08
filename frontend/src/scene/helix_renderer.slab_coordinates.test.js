@@ -1,0 +1,76 @@
+import { describe, expect, it } from 'vitest'
+import * as THREE from 'three'
+
+import { pairedSlabCenter, slabQuaternion } from './helix_renderer.js'
+
+describe('base slab coordinate abstraction', () => {
+  it('uses base_position verbatim instead of offsetting it again', () => {
+    const basePosition = [1.25, -2.5, 3.75]
+
+    const center = pairedSlabCenter(new THREE.Vector3(...basePosition), null, new THREE.Vector3(0, 0, 1))
+
+    expect(center.toArray()).toEqual(basePosition)
+  })
+
+  it('projects an axially staggered base_normal into the slab plane', () => {
+    const baseNormal = new THREE.Vector3(-0.992072926104839, -0.0363646294956523, -0.12028683640127244)
+    const axisTangent = new THREE.Vector3(0, 0, 1)
+    const quaternion = slabQuaternion(baseNormal, axisTangent)
+    const matrix = new THREE.Matrix4().makeRotationFromQuaternion(quaternion)
+
+    const renderedNormal = new THREE.Vector3(0, 0, 1).applyMatrix4(matrix)
+    const renderedTangent = new THREE.Vector3(0, 1, 0).applyMatrix4(matrix)
+
+    expect(renderedNormal.dot(axisTangent)).toBeCloseTo(0, 12)
+    expect(renderedTangent.distanceTo(axisTangent)).toBeLessThan(1e-12)
+  })
+
+  it('makes paired slab faces coplanar without reading bead positions', () => {
+    const tangent = new THREE.Vector3(0, 0, 1)
+    const fBase = new THREE.Vector3(-0.3, 0, -0.04)
+    const rBase = new THREE.Vector3(0.3, 0, 0.08)
+
+    const fCenter = pairedSlabCenter(fBase, rBase, tangent)
+    const rCenter = pairedSlabCenter(rBase, fBase, tangent)
+
+    expect(fCenter.dot(tangent)).toBeCloseTo(rCenter.dot(tangent), 12)
+    expect(fCenter.z).toBeCloseTo(0.02, 12)
+    expect(rCenter.z).toBeCloseTo(0.02, 12)
+    expect(fCenter.x).toBeCloseTo(fBase.x, 12)
+    expect(rCenter.x).toBeCloseTo(rBase.x, 12)
+  })
+
+  it('puts every largest-face corner of the real h_XY_0_1:0 pair on two shared planes', () => {
+    // Exact measured-positioning payload from workspace/2hbx1.nadoc.
+    const tangent = new THREE.Vector3(0, 0, 1)
+    const f = {
+      base: new THREE.Vector3(2.2440230786037487, 1.0199055183841632, 0.0326),
+      normal: new THREE.Vector3(-0.8795879001177818, 0.4643044996934617, -0.10366512205556658),
+    }
+    const r = {
+      base: new THREE.Vector3(1.6958987218200727, 1.3092417009443902, -0.032),
+      normal: new THREE.Vector3(0.8795879001177818, -0.4643044996934617, 0.10366512205556658),
+    }
+    const fCenter = pairedSlabCenter(f.base, r.base, tangent)
+    const rCenter = pairedSlabCenter(r.base, f.base, tangent)
+    const fQuat = slabQuaternion(f.normal, tangent)
+    const rQuat = slabQuaternion(r.normal, tangent)
+
+    // GEO_UNIT_BOX dimensions after scaling: x=.30, y=.06, z=.70.  y=+/-0.03
+    // are the two largest x*z faces.  Assert all four corners from BOTH slabs lie
+    // on the same world plane for each sign, rather than checking centers only.
+    for (const faceY of [-0.03, 0.03]) {
+      const axialCoordinates = []
+      for (const [center, quat] of [[fCenter, fQuat], [rCenter, rQuat]]) {
+        for (const x of [-0.15, 0.15]) {
+          for (const z of [-0.35, 0.35]) {
+            const corner = new THREE.Vector3(x, faceY, z).applyQuaternion(quat).add(center)
+            axialCoordinates.push(corner.dot(tangent))
+          }
+        }
+      }
+      expect(Math.max(...axialCoordinates) - Math.min(...axialCoordinates)).toBeLessThan(1e-12)
+      expect(axialCoordinates[0]).toBeCloseTo(0.0003 + faceY, 12)
+    }
+  })
+})

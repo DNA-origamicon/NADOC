@@ -98,7 +98,7 @@ class Site:
     azimuth_deg: float
     axial_nm: float
     """Offset along the helix axis from the base pair's own plane.  Small but real
-    (~0.1 nm for C3'), and dropping it would flatten the two strands into one plane."""
+    (landmark-dependent), and dropping it would flatten the two strands into one plane."""
 
     def azimuth_rad(self) -> float:
         return math.radians(self.azimuth_deg)
@@ -110,7 +110,7 @@ class MeasuredPositioning:
 
     Every field is DERIVED from the all-atom template in ``measured_atomistic.py`` (see
     :func:`_from_atomistic_template`) rather than measured separately.  That is the point:
-    the backbone bead is meant to BE the ribose C3' and the base bead its base-ring
+    the backbone bead is meant to BE a named sugar landmark and the base bead its base-ring
     centroid, so reading them off the same atoms the atomistic layer stamps is the only
     way the two representations can be guaranteed to agree.  A bead placed from an
     independent fit lands near the atom, not on it — the previous parameter set targeted
@@ -119,9 +119,11 @@ class MeasuredPositioning:
 
     backbone_fwd: Site
     backbone_rev: Site
-    """The ribose C3' of each strand.  MD: r = 0.804 nm at +24.5 deg on FORWARD and
-    +154.7 deg on REVERSE, i.e. a C3'-C3' separation of 130.2 deg — nothing like the
-    180 deg the phosphates take, because C3' sits a quarter-turn round from its own P."""
+    """The configured sugar landmark of each strand.  The legacy measured/seed
+    placement uses C3'; the full representation uses O5' via ``FULL_REP``."""
+
+    # Historical C3' values retained on MEASURED for non-display consumers:
+    # r = 0.804 nm at +24.5 deg on FORWARD and +154.7 deg on REVERSE.
 
     base_fwd: Site
     base_rev: Site
@@ -143,7 +145,7 @@ def _site(vals: "list[tuple[float, float, float]]") -> Site:
     return Site(radius_nm=round(r, 4), azimuth_deg=round(az, 2), axial_nm=round(z, 4))
 
 
-def _from_atomistic_template() -> "MeasuredPositioning | None":
+def _from_atomistic_template(backbone_atom: str = "C3'") -> "MeasuredPositioning | None":
     """Read the bead sites straight off the measured all-atom template.
 
     Returns ``None`` if that data file is unavailable, so the caller can fall back to
@@ -163,8 +165,8 @@ def _from_atomistic_template() -> "MeasuredPositioning | None":
         for residue in ("DA", "DT", "DG", "DC"):
             sugar, base = tmpl[(role, residue)]
             pos = {n: np.array([x, y, z]) for n, _e, x, y, z in (*sugar, *base)}
-            if which == "C3'":
-                v = pos["C3'"]
+            if which == "BACKBONE":
+                v = pos[backbone_atom]
             elif which == "RING":
                 ring = PURINE_RING if residue in ("DA", "DG") else PYRIMIDINE_RING
                 v = np.mean([pos[a] for a in ring], axis=0)
@@ -179,7 +181,8 @@ def _from_atomistic_template() -> "MeasuredPositioning | None":
             )
         return _site(vals)
 
-    bb_f, bb_r = landmark("FORWARD", "C3'"), landmark("REVERSE", "C3'")
+    bb_f = landmark("FORWARD", "BACKBONE")
+    bb_r = landmark("REVERSE", "BACKBONE")
     ba_f, ba_r = landmark("FORWARD", "RING"), landmark("REVERSE", "RING")
     wc_f = landmark("FORWARD", "WC")
 
@@ -224,6 +227,18 @@ _FALLBACK = MeasuredPositioning(
 )
 
 MEASURED = _from_atomistic_template() or _FALLBACK
+
+# Full-representation backbone beads depict O5', not the simulation-facing C3'
+# landmark retained above.  This remains a cheap projection of the measured template;
+# no atomistic model is built per geometry request.
+_FULL_REP_FALLBACK = MeasuredPositioning(
+    backbone_fwd=Site(0.8491, 8.23, -0.0152),
+    backbone_rev=Site(0.8481, 171.02, 0.0156),
+    base_fwd=_FALLBACK.base_fwd,
+    base_rev=_FALLBACK.base_rev,
+    slab_extent_nm=0.7074,
+)
+FULL_REP = _from_atomistic_template("O5'") or _FULL_REP_FALLBACK
 
 
 # ── The atomistic re-placement lives in measured_atomistic.py ─────────────────
@@ -293,7 +308,7 @@ def apply_measured_positioning(
     axis_origin: np.ndarray,
     axis_hat: np.ndarray,
     legacy_radius: float,
-    params: MeasuredPositioning = MEASURED,
+    params: MeasuredPositioning = FULL_REP,
     groove_rad: float | None = None,
 ) -> dict:
     """Re-place the backbone beads and base beads of one helix's nucleotide arrays.
@@ -305,17 +320,20 @@ def apply_measured_positioning(
 
     The frame is anchored on the FORWARD strand's EXISTING bead direction (azimuth 0),
     which is also the frame the all-atom template's coordinates are quoted in — verified
-    on a built design, where the atomistic C3' lands at exactly the tabulated
+    on a built design, where the configured atomistic sugar landmark lands at the tabulated
     (r, azimuth, z) with zero scatter.  So placing a bead at ``backbone_fwd`` puts it ON
-    the C3' atom rather than merely near it.
+    atom rather than merely near it.
 
     Both strands are placed from their own measured site.  Earlier this held FORWARD
     fixed and swung REVERSE by a single separation angle; that cannot express the
-    measurement now, because the backbone site is the C3' and the base site is the ring
+    measurement now, because the backbone and base sites are independent landmarks
     centroid, and those two land at different azimuthal separations (130.2 deg vs
     163.5 deg).  Deriving one from the other would put the base beads in the wrong place.
 
-    ``groove_rad`` — CROSS-STRAND REGISTRATION OVERRIDE, and the default for the CG layer.
+    ``groove_rad`` — optional CROSS-STRAND REGISTRATION OVERRIDE retained for callers
+    that explicitly want lattice-registered diagnostic geometry.  It is NOT used by the
+    full representation: full and atomistic views now share the cell-independent
+    measured duplex frame.
     The raw measurement puts the two strands 130.2 deg apart regardless of lattice cell
     type, which is correct for an isolated duplex but breaks the dyad symmetry of a
     Holliday junction: measured at a DX junction on ``6hbx100_noT``, the two crossovers
@@ -326,10 +344,10 @@ def apply_measured_positioning(
     its measured RADIUS, its measured AXIAL offset, and its measured base-to-backbone
     azimuth; only the angle BETWEEN the strands is taken from the lattice instead.
 
-    The cost is explicit: on a REVERSE-cell helix the reverse bead is then no longer
-    exactly on its C3' atom.  That is the trade — junction symmetry over per-atom
-    coincidence on one strand — and it is the CG display's call to make, not the
-    atomistic layer's.  ``build_atomistic_model`` does NOT go through this function.
+    The override's cost is explicit: on a REVERSE-cell helix the reverse bead is no
+    longer on its configured sugar landmark. It previously shipped in the full representation for DX
+    junction symmetry; basic duplex geometry now takes priority and crossover symmetry
+    is reviewed separately.  ``build_atomistic_model`` does NOT go through this function.
 
     ``axis_origin`` / ``axis_hat`` are the helix's own centreline, cluster transforms and
     all (``deformation.deformed_helix_axes``).
@@ -384,7 +402,7 @@ def apply_measured_positioning(
                 + site.axial_nm * t
             )
 
-        # Backbone bead = the ribose C3'; base bead = the base-ring centroid.  Each
+        # Backbone bead = the configured sugar landmark; base bead = base-ring centroid. Each
         # strand from its own measured site, neither derived from the other.
         positions[i] = at(params.backbone_fwd)
         base_positions[i] = at(params.base_fwd)

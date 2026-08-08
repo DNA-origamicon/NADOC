@@ -34,9 +34,9 @@ const STORAGE_KEY = 'nadoc.newPositioning.v2'
 // 0.45 nm inward from the bead along the cross-strand direction and is 0.70 nm long.
 //
 // With measured positioning the slab runs along its own BEAD→BASE axis instead, from
-// the backbone bead (the ribose C3') inward to just past the Watson-Crick atom, so the
+// the backbone bead (the full representation now targets O5') inward to just past the Watson-Crick atom, so the
 // plate visibly joins the base to its own sugar.  It cannot simply be lengthened along
-// the cross-strand direction: measured, the C3' sits 0.29 nm off the base's cross-strand
+// the cross-strand direction: measured, the sugar landmark sits off the base's cross-strand
 // line, so a slab extended that way reaches the right radius and still misses the bead.
 // MIRRORED from Python: `measured_positioning.MEASURED.slab_extent_nm`, which is DERIVED
 // from the measured atomistic template rather than typed.  JS cannot import it, so
@@ -105,6 +105,11 @@ export function geometryQuerySuffix(hasQuery) {
 }
 
 /**
+ * DELETE PENDING REVIEW (non-authoritative geometry).
+ * The bead/slab renderer no longer calls these slab reconstruction helpers: its
+ * 1:1 contract is backbone_position/base_position/base_normal/axis_tangent from
+ * the geometry payload.  Keep them temporarily for review and legacy tests.
+ *
  * Centre point for a nucleotide's base slab.
  *
  * With measured positioning the slab sits on the measured base-ring centroid the
@@ -132,6 +137,8 @@ export function slabCenterInto(bbPos, bnDir, legacyOffset, basePosition, out) {
 }
 
 /**
+ * DELETE PENDING REVIEW (non-authoritative geometry). See slabCenterInto.
+ *
  * Unit vector along the slab's LONG axis, written into `out`.
  *
  * Measured: from the backbone bead toward this nucleotide's own base-ring centroid.
@@ -156,7 +163,10 @@ export function slabAxisInto(bbPos, bnDir, basePosition, out) {
   return out.copy(bnDir)
 }
 
-/** Long in-plane extent of the base slab, in nm. */
+/**
+ * DELETE PENDING REVIEW (representation-side geometry). The canonical renderer
+ * now keeps one slab size and does not switch geometry from a view preference.
+ */
 export function slabExtent(legacyExtent) {
   return _on ? MEASURED_SLAB_EXTENT : legacyExtent
 }

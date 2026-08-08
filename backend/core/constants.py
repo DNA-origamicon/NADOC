@@ -169,6 +169,12 @@ FULL_REP_BALANCE_ROLL_SQUARE_DEG: float = (
     30.0 - SQUARE_TWIST_PER_BP_DEG / 2
 )  # = 13.125°
 
+# Fixed roll between the MD-measured nucleotide landmark frame used by the full
+# representation and the balanced atomistic template frame.  Shared here so the two
+# sibling projections cannot silently apply different conventions.  This is not a
+# lattice-cell correction: it applies equally to FORWARD and REVERSE cells.
+ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG: float = 14.6
+
 
 # ── oxDNA simulation units ────────────────────────────────────────────────────
 

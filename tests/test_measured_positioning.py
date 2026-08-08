@@ -20,7 +20,8 @@ from backend.core.atomistic import (
 )
 from backend.core.constants import HELIX_RADIUS
 from backend.core.measured_positioning import (
-    MEASURED,
+    FULL_REP,
+    _FULL_REP_FALLBACK,
     _FALLBACK,
     _from_atomistic_template,
     apply_measured_positioning,
@@ -147,11 +148,10 @@ def test_both_cell_types_land_on_one_separation(direction):
     """The whole point: after correction a helix's groove no longer depends on which
     lattice cell it happened to be built in.
 
-    The separation is now the C3'-C3' one (130 deg), not the phosphates' (180): the
-    backbone bead IS the ribose C3', and C3' sits a quarter turn round from its own P.
+    The full-representation separation is the O5'-O5' one, not the phosphate groove.
     """
     want = (
-        MEASURED.backbone_rev.azimuth_deg - MEASURED.backbone_fwd.azimuth_deg
+        FULL_REP.backbone_rev.azimuth_deg - FULL_REP.backbone_fwd.azimuth_deg
     ) % 360.0
     seps = _pair_separation_deg(_measured(direction), ORIGIN, T)
     assert seps == pytest.approx(want, abs=1e-6)
@@ -162,10 +162,10 @@ def test_beads_and_bases_sit_on_the_measured_cylinders(direction):
     arrs = _measured(direction)
     r_bb, _ = _cyl(np.asarray(arrs["positions"]), ORIGIN, T)
     r_base, _ = _cyl(np.asarray(arrs["base_positions"]), ORIGIN, T)
-    assert r_bb[0::2] == pytest.approx(MEASURED.backbone_fwd.radius_nm, abs=1e-9)
-    assert r_bb[1::2] == pytest.approx(MEASURED.backbone_rev.radius_nm, abs=1e-9)
-    assert r_base[0::2] == pytest.approx(MEASURED.base_fwd.radius_nm, abs=1e-9)
-    assert r_base[1::2] == pytest.approx(MEASURED.base_rev.radius_nm, abs=1e-9)
+    assert r_bb[0::2] == pytest.approx(FULL_REP.backbone_fwd.radius_nm, abs=1e-9)
+    assert r_bb[1::2] == pytest.approx(FULL_REP.backbone_rev.radius_nm, abs=1e-9)
+    assert r_base[0::2] == pytest.approx(FULL_REP.base_fwd.radius_nm, abs=1e-9)
+    assert r_base[1::2] == pytest.approx(FULL_REP.base_rev.radius_nm, abs=1e-9)
 
 
 def test_the_forward_bead_swings_round_to_its_c3_prime():
@@ -173,7 +173,7 @@ def test_the_forward_bead_swings_round_to_its_c3_prime():
 
     It used to be pinned in place so a helix would not appear to spin when the view was
     toggled.  That was only defensible while the bead was standing in for the phosphorus,
-    which sits at azimuth ~0; the ribose C3' is +24.5 deg round from it, so holding the
+    which sits at azimuth ~0; O5' is +8.23 deg round from it, so holding the
     bead still would put it somewhere no atom is.
     """
     before = np.asarray(_arrays(Direction.FORWARD)["positions"])[0::2]
@@ -186,19 +186,19 @@ def test_the_forward_bead_swings_round_to_its_c3_prime():
         swing = math.degrees(
             math.atan2(float(np.dot(np.cross(rb, ra), T)), float(np.dot(rb, ra)))
         )
-        assert swing == pytest.approx(MEASURED.backbone_fwd.azimuth_deg, abs=1e-6)
+        assert swing == pytest.approx(FULL_REP.backbone_fwd.azimuth_deg, abs=1e-6)
 
 
 def test_beads_carry_their_measured_axial_offset():
-    """C3' does not lie in its base pair's own plane — it stands ~0.1 nm along the axis,
+    """O5' carries a small but real axial offset from its base pair's own plane,
     oppositely on the two strands.  Flattening that would fuse the strands into one
     plane and lose the rise offset between a sugar and its base."""
     before = np.asarray(_arrays(Direction.FORWARD)["positions"])
     after = np.asarray(_measured(Direction.FORWARD)["positions"])
     dz = (after - before) @ T
-    assert dz[0::2] == pytest.approx(MEASURED.backbone_fwd.axial_nm, abs=1e-9)
-    assert dz[1::2] == pytest.approx(MEASURED.backbone_rev.axial_nm, abs=1e-9)
-    assert MEASURED.backbone_fwd.axial_nm * MEASURED.backbone_rev.axial_nm < 0
+    assert dz[0::2] == pytest.approx(FULL_REP.backbone_fwd.axial_nm, abs=1e-9)
+    assert dz[1::2] == pytest.approx(FULL_REP.backbone_rev.axial_nm, abs=1e-9)
+    assert FULL_REP.backbone_fwd.axial_nm * FULL_REP.backbone_rev.axial_nm < 0
 
 
 def test_base_normals_stay_cross_strand_and_antiparallel():
@@ -232,7 +232,7 @@ def test_a_bead_on_the_axis_is_left_alone():
     assert np.asarray(out["positions"])[0] == pytest.approx([0.0, 0.0, 0.0])
     # the rest of the helix still moved
     r_bb, _ = _cyl(np.asarray(out["positions"])[2:], ORIGIN, T)
-    assert r_bb[0::2] == pytest.approx(MEASURED.backbone_fwd.radius_nm, abs=1e-9)
+    assert r_bb[0::2] == pytest.approx(FULL_REP.backbone_fwd.radius_nm, abs=1e-9)
 
 
 def test_a_pair_split_across_a_domain_transform_is_left_alone():
@@ -264,15 +264,15 @@ def test_a_pair_split_across_a_domain_transform_is_left_alone():
     )
     # every other pair still moved
     r_bb, _ = _cyl(pos[2:], ORIGIN, T)
-    assert r_bb[0::2] == pytest.approx(MEASURED.backbone_fwd.radius_nm, abs=1e-9)
+    assert r_bb[0::2] == pytest.approx(FULL_REP.backbone_fwd.radius_nm, abs=1e-9)
 
 
-def test_the_bead_lands_on_the_ribose_c3_prime():
+def test_the_bead_lands_on_the_atomistic_o5_prime():
     """The point of the whole exercise, checked against the atoms rather than a table.
 
     Builds a real design, places its CG beads, and asks how far each one is from the
-    C3' the all-atom layer stamps for the same nucleotide.  The legacy bead misses by
-    0.46 nm.  The residual here is not error but sequence: the bead sites are averaged
+    O5' the all-atom layer stamps for the same nucleotide.  The residual is sequence:
+    the bead sites are averaged
     over the four bases, and this fixture is all-DT.
     """
     from pathlib import Path
@@ -282,45 +282,61 @@ def test_the_bead_lands_on_the_ribose_c3_prime():
     from backend.core.models import Design
 
     design = Design.model_validate_json(Path("Examples/6hb_test.nadoc").read_text())
-    c3 = {
+    o5 = {
         (a.helix_id, a.bp_index, a.direction): np.array([a.x, a.y, a.z])
         for a in build_atomistic_model(design).atoms
-        if a.name == "C3'"
+        if a.name == "O5'"
     }
 
     def miss(measured: bool) -> float:
         d = []
         for n in _geometry_for_helices(design, measured_positioning=measured):
-            p = c3.get((n["helix_id"], n["bp_index"], n["direction"]))
+            p = o5.get((n["helix_id"], n["bp_index"], n["direction"]))
             if p is not None:
                 d.append(float(np.linalg.norm(np.array(n["backbone_position"]) - p)))
         return float(np.median(d))
 
-    # The measured bead no longer sits exactly ON the C3', and that is deliberate.
-    # Placing it there means adopting the measurement's 130.2 deg cross-strand separation,
-    # which breaks the dyad symmetry of a Holliday junction: the two crossovers of a DX
-    # pair went to 0.70 vs 1.25 nm bead separation, against 0.6797 vs 0.6802 for the
-    # lattice convention.  The CG layer now re-registers both strands onto the lattice
-    # groove and keeps only the measurement's RADIUS and AXIAL offset (TD-27).
-    #
-    # The bead still lands closer to its C3' than legacy does — measured on
-    # workspace/6hbx100_noT.nadoc (a design with real FORWARD/REVERSE cells), every
-    # bucket improves and the overall mean goes 0.5011 -> 0.3828 nm.  This fixture is
-    # the worst case for it: 6hb_test's helices all carry direction=None, so every one
-    # is treated as a REVERSE cell, where the lattice groove and the measured C3' sit
-    # 55.3 deg apart.
-    # ⚠ Updated 2026-08-07: the ATOMISTIC junction-balance roll moved these.  Balancing
-    # the DX junction rolls every nucleotide −14.6° on honeycomb, which happens to carry the
-    # C3' TOWARD the lattice-groove azimuth the legacy bead uses and away from the measured
-    # template's own +24.5°.  On this fixture: legacy 0.4612 → 0.2887, measured 0.5589 →
-    # 0.5448.  So the balanced atoms now agree BETTER with the legacy lattice convention
-    # than with the measured one — a consistency signal for the roll (honeycomb's CG
-    # junctions are balanced under exactly that convention), and an open question for the
-    # measured CG bead, which is TD-27's business and not this test's.
-    assert 0.25 < miss(measured=False) < 0.35, "legacy bead is no longer where it was"
-    assert miss(measured=True) < 0.60, (
-        "the groove-registered bead should stay in the same neighbourhood as the C3'"
-    )
+    # The remaining ~0.025 nm is sequence specificity: the display site is averaged over
+    # all four residues while this fixture stamps one concrete residue at each site.
+    # Lattice-groove registration used to leave this at 0.545 nm on REVERSE/None cells.
+    assert 0.18 < miss(measured=False) < 0.19, "legacy bead is no longer where it was"
+    assert miss(measured=True) < 0.027
+
+
+def test_both_lattice_cell_types_overlay_the_atomistic_o5_prime():
+    """A lattice-cell label must not select a different physical duplex geometry."""
+    from pathlib import Path
+
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.design_geometry import _geometry_for_helices
+    from backend.core.models import Design
+
+    design = Design.model_validate_json(Path("workspace/2hbx1.nadoc").read_text())
+    cells = {h.id: h.direction for h in design.helices}
+    atoms_by_name = {
+        (a.helix_id, a.bp_index, a.direction, a.name): np.array([a.x, a.y, a.z])
+        for a in build_atomistic_model(design).atoms
+        if a.name in {"O5'", "C5'", "C3'"}
+    }
+    misses = {Direction.FORWARD: [], Direction.REVERSE: []}
+    wrong_landmark_misses = {"C5'": [], "C3'": []}
+    for n in _geometry_for_helices(
+        design, measured_positioning=True, junction_balance=True
+    ):
+        key = (n["helix_id"], n["bp_index"], n["direction"])
+        bead = np.asarray(n["backbone_position"])
+        misses[cells[n["helix_id"]]].append(
+            float(np.linalg.norm(bead - atoms_by_name[(*key, "O5'")]))
+        )
+        for atom_name in wrong_landmark_misses:
+            wrong_landmark_misses[atom_name].append(
+                float(np.linalg.norm(bead - atoms_by_name[(*key, atom_name)]))
+            )
+
+    assert max(misses[Direction.FORWARD]) < 0.027
+    assert max(misses[Direction.REVERSE]) < 0.027
+    assert min(wrong_landmark_misses["C5'"]) > 0.10
+    assert min(wrong_landmark_misses["C3'"]) > 0.20
 
 
 def test_the_frozen_fallback_still_matches_what_the_template_derives():
@@ -342,6 +358,17 @@ def test_the_frozen_fallback_still_matches_what_the_template_derives():
         assert got.azimuth_deg == pytest.approx(want.azimuth_deg, abs=5e-3), field
         assert got.axial_nm == pytest.approx(want.axial_nm, abs=5e-5), field
     assert _FALLBACK.slab_extent_nm == pytest.approx(derived.slab_extent_nm, abs=5e-5)
+
+    full_derived = _from_atomistic_template("O5'")
+    assert full_derived is not None
+    for field in ("backbone_fwd", "backbone_rev", "base_fwd", "base_rev"):
+        want, got = getattr(full_derived, field), getattr(_FULL_REP_FALLBACK, field)
+        assert got.radius_nm == pytest.approx(want.radius_nm, abs=5e-5), field
+        assert got.azimuth_deg == pytest.approx(want.azimuth_deg, abs=5e-3), field
+        assert got.axial_nm == pytest.approx(want.axial_nm, abs=5e-5), field
+    assert _FULL_REP_FALLBACK.slab_extent_nm == pytest.approx(
+        full_derived.slab_extent_nm, abs=5e-5
+    )
 
 
 # ── firewalls: what must NOT move when the CG placement becomes measured ──────
@@ -410,7 +437,7 @@ def test_the_periodic_seam_solver_still_gets_a_valid_axis():
 def test_the_oxdna_seed_restores_the_cm_radius_and_is_a_legacy_no_op():
     """The oxDNA conf's first three floats are the CENTRE OF MASS, and HELIX_RADIUS is
     defined as exactly that radius in oxDNA's model.  The display bead is a different
-    landmark — the measured ribose C3' at 0.804 nm — so the seed boundary converts.
+    landmark — currently O5' at 0.849 nm — so the seed boundary converts.
 
     Two properties, both load-bearing:
 
@@ -466,8 +493,8 @@ def test_the_oxdna_seed_restores_the_cm_radius_and_is_a_legacy_no_op():
     assert radii(legacy) == pytest.approx(HELIX_RADIUS, abs=1e-6)
     assert _oxdna_cm_radius_map(design, legacy) is legacy, "must be a no-op on legacy"
 
-    # (2) measured beads come in at the C3' radius and go out on the CM cylinder.
-    assert radii(measured) == pytest.approx(MEASURED.backbone_fwd.radius_nm, abs=5e-3)
+    # (2) measured full-rep beads come in at the O5' radius and go out on the CM cylinder.
+    assert radii(measured) == pytest.approx(FULL_REP.backbone_fwd.radius_nm, abs=5e-3)
     assert radii(_oxdna_cm_radius_map(design, measured)) == pytest.approx(
         HELIX_RADIUS, abs=1e-6
     )

@@ -1343,13 +1343,15 @@ def _oxdna_cm_radius_map(
     """
     from backend.core.constants import HELIX_RADIUS
     from backend.core.deformation import deformed_helix_axes
-    from backend.core.measured_positioning import MEASURED
+    from backend.core.measured_positioning import FULL_REP, MEASURED
 
-    # The two radii the measured display placement puts backbone beads at (the ribose
-    # C3' of each strand).  Only beads AT one of these are converted — see below.
+    # Recognise both the historical C3' display sites and the native full-rep O5' sites.
+    # Only beads AT one of these are converted — see below.
     _MEASURED_CM_RADII = (
         MEASURED.backbone_fwd.radius_nm,
         MEASURED.backbone_rev.radius_nm,
+        FULL_REP.backbone_fwd.radius_nm,
+        FULL_REP.backbone_rev.radius_nm,
     )
     _MEASURED_R_TOL = 1e-6
 
