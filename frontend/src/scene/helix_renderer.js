@@ -7,6 +7,7 @@
  *   iCubes    — 5′-end markers (one per strand)
  *   iCones    — strand-direction connectors
  *   iSlabs    — base-pair orientation slabs
+ *   iSlabConnectors — thin instanced rods linking beads to slab N3 corners
  *
  * Entry shapes exposed in backboneEntries / coneEntries / slabEntries:
  *   backbone  { instMesh, id, nuc, pos, defaultColor }
@@ -63,6 +64,8 @@ export const CONE_RADIUS  = 0.075
 // The slab boundary extends this far past the associated bead center. This makes
 // bead/slab contact visually unambiguous without burying the bead in the slab.
 export const SLAB_BEAD_CENTER_PENETRATION = 0.02
+export const SLAB_N3_CORNER_SIGN = 1
+export const SLAB_CONNECTOR_RADIUS = 0.025
 
 // Representation name → `setDetailLevel()` argument for the CG representations.
 // Lower = more detail (full=0 > beads=1 > cylinders=2). Lives here because
@@ -234,9 +237,15 @@ const REF_ALPHA = 0.4   // reference geometry opacity in the 3D scene
 
 function _setEntryAlpha(entry, a) {
   const attr = entry.instMesh._instanceAlpha
-  if (!attr) return
-  attr.setX(entry.id, a)
-  attr.needsUpdate = true
+  if (attr) {
+    attr.setX(entry.id, a)
+    attr.needsUpdate = true
+  }
+  const connectorAttr = entry.connectorMesh?._instanceAlpha
+  if (connectorAttr) {
+    connectorAttr.setX(entry.connectorId, a)
+    connectorAttr.needsUpdate = true
+  }
 }
 
 /**
@@ -327,6 +336,29 @@ export function translatedBasePosition(
   basePosition, equilibriumBead, liveBead, out = new THREE.Vector3(),
 ) {
   return out.copy(basePosition).add(liveBead).sub(equilibriumBead)
+}
+
+/**
+ * N3-side attachment corner for a rendered slab.
+ *
+ * In the canonical slab basis local +X is the chemically stable N3 side,
+ * while local Z runs across the base pair.  Pick the +/-Z edge facing the
+ * nucleotide's own backbone bead, yielding one corner rather than the old,
+ * visually ambiguous edge midpoint.
+ */
+export function slabConnectionCorner(
+  slabCenter,
+  slabQuat,
+  beadPos,
+  halfLength = 0.15,
+  halfThickness = 0.35,
+  out = new THREE.Vector3(),
+) {
+  _physDir.copy(beadPos).sub(slabCenter).applyQuaternion(_slabRescaleQ.copy(slabQuat).invert())
+  const zSign = _physDir.z < 0 ? -1 : 1
+  return out.set(SLAB_N3_CORNER_SIGN * halfLength, 0, zSign * halfThickness)
+    .applyQuaternion(slabQuat)
+    .add(slabCenter)
 }
 
 // ── Main builder ──────────────────────────────────────────────────────────────
@@ -1063,7 +1095,22 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   if (_skipSlabs) iSlabs.visible = false
   root.add(iSlabs)
 
+  // One thin, instanced 8-sided rod per nucleotide: still one draw call for the
+  // whole design, but unlike a one-pixel WebGL line it remains legible on HiDPI
+  // displays and against both light and dark backgrounds.
+  const iSlabConnectors = new THREE.InstancedMesh(
+    GEO_UNIT_CYL,
+    new THREE.MeshPhongMaterial({ color: 0xffffff }),
+    _slabCount,
+  )
+  iSlabConnectors.count = 0
+  iSlabConnectors.name = 'slabBackboneConnectors'
+  iSlabConnectors.frustumCulled = false
+  iSlabConnectors.visible = !_skipSlabs
+  root.add(iSlabConnectors)
+
   const slabEntries = []
+  let _slabConnectorsReady = false
   let slabId = 0
 
   if (!_skipSlabs) {
@@ -1110,12 +1157,18 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iSlabs.setMatrixAt(slabId, _tMatrix)
       iSlabs.setColorAt(slabId, _tColor.setHex(color))
 
-      slabEntries.push({ instMesh: iSlabs, id: slabId, nuc, mate, quat, bnDir, bbPos, center, defaultColor: color })
+      slabEntries.push({
+        instMesh: iSlabs, id: slabId,
+        connectorMesh: iSlabConnectors, connectorId: slabId,
+        nuc, mate, quat, bnDir, bbPos, center, defaultColor: color,
+      })
       slabId++
     }
     iSlabs.instanceMatrix.needsUpdate = true
+    _refreshSlabConnectors()
     if (iSlabs.instanceColor) iSlabs.instanceColor.needsUpdate = true
   }
+  iSlabConnectors.count = slabEntries.length
 
   /** Canonical paired slab center for build, animation, restore, and overrides. */
   function _slabCenterAt(
@@ -1750,6 +1803,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iSlabs.setMatrixAt(entry.id, _tMatrix)
     }
     iSlabs.instanceMatrix.needsUpdate = true
+    _refreshSlabConnectors()
   }
 
   // ── Validation overlay ─────────────────────────────────────────────────────
@@ -1962,6 +2016,42 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     entry._copy = ci
     _copyKeyToEntry.set(`${bk}:${ci}`, entry)
   }
+
+  const _connectorCenter = new THREE.Vector3()
+  const _connectorQuat = new THREE.Quaternion()
+  const _connectorScale = new THREE.Vector3()
+  const _connectorCorner = new THREE.Vector3()
+  const _connectorMid = new THREE.Vector3()
+  const _connectorDirection = new THREE.Vector3()
+  const _connectorRodQuat = new THREE.Quaternion()
+  function _refreshSlabConnectors() {
+    if (!_slabConnectorsReady) return
+    for (let i = 0; i < slabEntries.length; i++) {
+      const slab = slabEntries[i]
+      const bead = _nucToEntry.get(slab.nuc)?.pos ?? slab.bbPos
+      iSlabs.getMatrixAt(slab.id, _tMatrix)
+      _tMatrix.decompose(_connectorCenter, _connectorQuat, _connectorScale)
+      slabConnectionCorner(
+        _connectorCenter, _connectorQuat, bead,
+        _connectorScale.x * 0.5, _connectorScale.z * 0.5, _connectorCorner,
+      )
+      _connectorDirection.copy(_connectorCorner).sub(bead)
+      const length = Math.max(0.001, _connectorDirection.length())
+      _connectorMid.copy(bead).add(_connectorCorner).multiplyScalar(0.5)
+      _connectorRodQuat.setFromUnitVectors(Y_HAT, _connectorDirection.divideScalar(length))
+      _tMatrix.compose(
+        _connectorMid,
+        _connectorRodQuat,
+        _tScale.set(SLAB_CONNECTOR_RADIUS, length, SLAB_CONNECTOR_RADIUS),
+      )
+      iSlabConnectors.setMatrixAt(i, _tMatrix)
+      iSlabConnectors.setColorAt(i, _tColor.setHex(slab.defaultColor))
+    }
+    iSlabConnectors.instanceMatrix.needsUpdate = true
+    if (iSlabConnectors.instanceColor) iSlabConnectors.instanceColor.needsUpdate = true
+  }
+  _slabConnectorsReady = true
+  _refreshSlabConnectors()
   // Per-instance colour captured before a scalar (RMSF) recolour overlay (beads +
   // cones + slabs), so it can be restored when the overlay is cleared.  null = no
   // overlay active.
@@ -2157,6 +2247,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iSlabs.setMatrixAt(slab.id, _tMatrix)
     }
     iSlabs.instanceMatrix.needsUpdate = true
+    _refreshSlabConnectors()
 
     // 4. Axis sticks.
     for (const arrow of axisArrows) {
@@ -2379,6 +2470,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iSlabs.setMatrixAt(slab.id, _tMatrix)
     }
     iSlabs.instanceMatrix.needsUpdate = true
+    _refreshSlabConnectors()
 
     // 4. Axis sticks.
     for (const arrow of axisArrows) {
@@ -2549,6 +2641,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     _installInstanceAlpha(iFluoros)
     _installInstanceAlpha(iCones)
     _installInstanceAlpha(iSlabs)
+    _installInstanceAlpha(iSlabConnectors)
   }
   function _refAlphaFor(strandId) {
     if (!_refIdSet.has(strandId)) return 1.0
@@ -2642,6 +2735,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     _installInstanceAlpha(iFluoros)
     _installInstanceAlpha(iCones)
     _installInstanceAlpha(iSlabs)
+    _installInstanceAlpha(iSlabConnectors)
     _installInstanceAlpha(iHelixCylinders)
     // The curved proxies and the linker BINDING cylinders were the last three
     // cylinder families with no alpha channel. Their material.opacity is owned by
@@ -2663,7 +2757,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   function _reapplyDetailVisibility() {
     const coarse = _detailLevel === 2
     iSpheres.visible = !coarse; iCubes.visible = !coarse; iCones.visible = !coarse
-    iSlabs.visible = _detailLevel === 0; iFluoros.visible = !coarse
+    iSlabs.visible = _detailLevel === 0; iSlabConnectors.visible = _detailLevel === 0; iFluoros.visible = !coarse
     iHelixCylinders.visible = coarse; iOverhangCylinders.visible = coarse; iOverhangFullCylinders.visible = coarse
     iCurvedHelixCylinders.visible = coarse; _curvedCylGroup.visible = coarse
     iCurvedOverhangCylinders.visible = coarse; iCurvedOverhangFullCylinders.visible = coarse; _curvedOvhgGroup.visible = coarse
@@ -2764,7 +2858,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     // now") — so _cylRepVis contributes nothing new for them beyond the guard.
     _refreshCurvedAlpha()
     // Make every driven mesh renderable; alpha selects what actually shows.
-    iSpheres.visible = iCubes.visible = iCones.visible = iSlabs.visible = iFluoros.visible = true
+    iSpheres.visible = iCubes.visible = iCones.visible = iSlabs.visible = iSlabConnectors.visible = iFluoros.visible = true
     iHelixCylinders.visible = iOverhangCylinders.visible = iOverhangFullCylinders.visible = iLinkerBridgeCylinders.visible = true
     // Re-gate axis lines per-region: only full-rendered columns keep their axis.
     if (_axisArrowsVisible) _applyShaftModeVisibility(_currentShaftMode)
@@ -2883,6 +2977,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iSlabs.setMatrixAt(entry.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
+      _refreshSlabConnectors()
     },
 
     /** Set the domain cylinder display radius (nm).  Rebuilds all cylinder matrices. */
@@ -3358,6 +3453,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iSlabs.setMatrixAt(entry.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
+      _refreshSlabConnectors()
     },
 
     /**
@@ -3511,6 +3607,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iSlabs.setMatrixAt(slab.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
+      _refreshSlabConnectors()
     },
 
     /**
@@ -3580,7 +3677,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         }
         if (seenCones.size) iCones.instanceMatrix.needsUpdate = true
       }
-      if (touchedSlab) { iSlabs.instanceMatrix.needsUpdate = true }
+      if (touchedSlab) {
+        iSlabs.instanceMatrix.needsUpdate = true
+        _refreshSlabConnectors()
+      }
     },
 
     applyFemPositions(updates, amp = 1.0) {
@@ -3730,6 +3830,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iSlabs.setMatrixAt(slab.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
+      _refreshSlabConnectors()
     },
 
     /**
@@ -3824,6 +3925,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iCubes.visible          = !coarse
       iCones.visible          = !coarse
       iSlabs.visible          = level === 0
+      iSlabConnectors.visible = level === 0
       iFluoros.visible           = !coarse
       iHelixCylinders.visible          = coarse
       iOverhangCylinders.visible       = coarse
@@ -3994,6 +4096,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iSlabs.setMatrixAt(slab.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
+      _refreshSlabConnectors()
 
       // 4. Axis sticks — lerp from straight (sa) to deformed (arrow.aStart/aEnd).
       for (const arrow of axisArrows) {
@@ -4337,6 +4440,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iSlabs.setMatrixAt(slab.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
+      _refreshSlabConnectors()
 
       // 4. Axis sticks — lerp from "from" axes (fa) to "to" axes (ta).
       // Per-domain fade: each segment's bp range [bp_lo, bp_hi] is checked
@@ -4940,6 +5044,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iSlabs.setMatrixAt(slab.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
+      _refreshSlabConnectors()
 
       // 4. Helix-level axis aStart/aEnd + curved tube transform.
       //    Partial-coverage clusters skip this (only individual segments move; aStart/aEnd
@@ -5230,6 +5335,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         slabsUpdated = true
       }
       if (slabsUpdated) iSlabs.instanceMatrix.needsUpdate = true
+      _refreshSlabConnectors()
     },
 
     /**
@@ -5338,6 +5444,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         slabsUpdated = true
       }
       if (slabsUpdated) iSlabs.instanceMatrix.needsUpdate = true
+      _refreshSlabConnectors()
 
       // ── 5. Update axis arrows (aStart/aEnd + per-domain segments) ──────────
       // For straight helices we use _layStraightSegments to translate per-domain
@@ -5468,6 +5575,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         entry.instMesh.setMatrixAt(entry.id, _tMatrix)
       }
       if (slabEntries.length) iSlabs.instanceMatrix.needsUpdate = true
+      _refreshSlabConnectors()
     },
 
     /**

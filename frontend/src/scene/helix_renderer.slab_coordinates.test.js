@@ -4,11 +4,34 @@ import * as THREE from 'three'
 import {
   SLAB_BEAD_CENTER_PENETRATION,
   pairedSlabCenter,
+  slabConnectionCorner,
   slabQuaternion,
   translatedBasePosition,
 } from './helix_renderer.js'
 
 describe('base slab coordinate abstraction', () => {
+  it('anchors the bead connector on the N3-side slab corner, not an edge midpoint', () => {
+    const center = new THREE.Vector3(2, 3, 4)
+    const quat = new THREE.Quaternion()
+
+    expect(slabConnectionCorner(center, quat, new THREE.Vector3(2, 3, 10)).toArray())
+      .toEqual([2.15, 3, 4.35])
+    expect(slabConnectionCorner(center, quat, new THREE.Vector3(2, 3, -10)).toArray())
+      .toEqual([2.15, 3, 3.65])
+  })
+
+  it('keeps the N3 corner attached when the slab rotates', () => {
+    const center = new THREE.Vector3(1, 0, 0)
+    const quat = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0), Math.PI / 2,
+    )
+    const corner = slabConnectionCorner(center, quat, new THREE.Vector3(4, 0, 0))
+
+    expect(corner.x).toBeCloseTo(1.35, 12)
+    expect(corner.y).toBeCloseTo(0, 12)
+    expect(corner.z).toBeCloseTo(-0.15, 12)
+  })
+
   it('moves an overlay base site by exactly the live bead displacement', () => {
     const base = new THREE.Vector3(1, 2, 3)
     const equilibriumBead = new THREE.Vector3(2, 4, 6)

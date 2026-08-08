@@ -18,6 +18,7 @@ export const MESH_NAME_TO_REPR = {
   backboneCubes:             'full',
   strandCones:               'full',
   baseSlabs:                 'full',
+  slabBackboneConnectors:    'full',
   extensionFluorophores:     'full',
   helixCylinders:            'cylinders',
   overhangCylinders:         'cylinders',

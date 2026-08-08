@@ -113,7 +113,7 @@ describe('instanceAlpha coverage', () => {
     const install = fnBody(HR, '_ensureAlphaInstalled')
     expect(install).not.toBeNull()
     for (const mesh of [
-      'iSpheres', 'iCubes', 'iFluoros', 'iCones', 'iSlabs',
+      'iSpheres', 'iCubes', 'iFluoros', 'iCones', 'iSlabs', 'iSlabConnectors',
       'iHelixCylinders', 'iOverhangCylinders', 'iOverhangFullCylinders',
       'iLinkerBridgeCylinders', 'iLinkerBindingCylinders',
       'iCurvedHelixCylinders', 'iCurvedOverhangCylinders', 'iCurvedOverhangFullCylinders',
