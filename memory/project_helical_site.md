@@ -1,6 +1,6 @@
 ---
 name: helical-site
-description: "DONE, all phases 0-6: one HelicalSite abstraction — axis point + tangent + radial + labels — that every representation (CG bead, atomistic stamp, oxDNA particle, mrDNA bead, FEM node) derives from cheaply, replacing four independent re-derivations of the same helix formula."
+description: "Phases 0-6 DONE, 7-10 open (two need an owner decision):: one HelicalSite abstraction — axis point + tangent + radial + labels — that every representation (CG bead, atomistic stamp, oxDNA particle, mrDNA bead, FEM node) derives from cheaply, replacing four independent re-derivations of the same helix formula."
 metadata:
   node_type: memory
   type: project
@@ -8,8 +8,9 @@ metadata:
 
 # One helical site, many cheap representations
 
-**Status: ALL PHASES 0–6 DONE (2026-08-07).** What remains is out of this plan's scope by
-construction — the pose fitters (TD-28), the extra-base/tail placers, and the −32° constant. Owner instruction: *"why not have a unified abstraction then?
+**Status: Phases 0–6 DONE (2026-08-07); Phases 7–10 added the same day from the re-verified
+audit.** 7 and 8 each need an owner decision before code — they are decisions with code
+attached, not refactors. 9 is gated on 7. 10 has no consumer yet. Owner instruction: *"why not have a unified abstraction then?
 From which all representations and models can be built from cheaply"* — yes, and this is what
 that costs. Companion to [[project_atomistic_source_of_truth]] (whose audit table this is the
 remedy for) and TD-27 in [[project_tech_debt]].
@@ -254,16 +255,90 @@ quantisation removed — and all four buckets stay proper rotations with the tri
 requiring the calibration to be unaffected (the patch-visibility mechanism was checked, so the
 firewall is not vacuous).
 
+## Round-2 phases — what the re-verified audit left open (added 2026-08-07)
+
+Phases 0–6 closed 4 of the 11 live CG couplings.  These cover the rest.  **None of them is a
+refactor**: 7 and 8 are decisions with code attached, which is why they were out of the first
+plan's scope rather than forgotten.
+
+### Phase 7 — the extra-base and extension-tail placers (audit rows 8, 9)  ⟨needs a decision⟩
+
+More precisely than "still CG": **both placers already take their ANCHOR from atoms and their
+SHAPE from the CG layer.**
+
+- `_build_extra_base_atoms` (`atomistic.py:3046`): the interpolation line's endpoints
+  `line_p0/line_p1` are the two junction nucleotides' **CG backbone beads**, and the
+  chain-direction endpoints for a SIMULATED insert are the real C3'/C5' **atoms**.
+- `_build_extension_atoms` (`:3302`): reuses `design_geometry._strand_extension_geometry`'s
+  Bézier arc — CG — but roots it on the anchor's real C3'/C5' atom, "the trick
+  `_build_extra_base_atoms` uses to get physical O3'→P bond lengths".
+
+So the open question is narrow and answerable: **may the CG view define the PATH an insert or
+tail takes between two atomistic anchors?**  Today it does, deliberately — "the CG view is the
+single definition of where an extra base sits, and this reproduces it ... so an insert's atoms
+land on the bead the user is looking at, by construction rather than by agreement."
+
+- **Owner decision:** keep that (a display convention defines an exported atom's path — the one
+  place in the codebase where that is still true), or re-derive both paths from the atomistic
+  anchors and accept that inserts stop tracking the drawn bead.
+- **What it costs if changed:** swapping the template under these placers moved an insert
+  **0.41 nm** off the chord and stretched a tail bond to **3.5 Å** (limit 3.2) — recorded in
+  [[project_measured_atomistic]].  A re-derivation must re-fit both local origins.
+- **Acceptance:** insert and tail bond lengths no worse than today, measured the way Phase 4's
+  collateral was (`2hb_xover_atoms_test` extra-base max 0.1835 nm; `VoltronCoreScad` 0.2298 over
+  25,470 insert bonds, tails 0.5364 max over 7,348).
+- **Unblocks Phase 9.**
+
+### Phase 8 — the pose fitters (audit row 12 = TD-28)  ⟨needs a decision⟩
+
+`direct_relax` (4 sites), `linker_relax` (3), `duplex_cluster` (2) call
+`_geometry_for_design(design)` and write **persisted** `cluster_transforms`.
+
+**They are already firewalled from both display tweaks** — every call passes no flags, so
+`measured_positioning=False` and `junction_balance=False`; they read the legacy geometric layer,
+not the display.  That is better than the original audit implied and it removes the urgency.
+
+What remains is the real coupling: they fit against **beads** at the r=1.0 lattice convention and
+write the result to a field that is saved in the `.nadoc` file.  So the bead convention is
+load-bearing for every pose a user has already committed to disk.
+
+- **Owner decision (still open from the original plan):** designs carrying saved
+  `cluster_transforms` — re-fit on load, leave them, or version the field?
+- **Then:** re-target the fitters at the site (`axis_point` + `radial_hat`) rather than the bead,
+  which makes them independent of what radius the display chooses.
+- **Acceptance:** on every fixture with saved transforms, a re-fit reproduces the stored pose
+  within a stated tolerance, or the migration is explicit and tested.  Fixtures that exercise it:
+  `VoltronCore` (3 transforms), `DollarSign` (2 deformations + 3), `Ultimate Polymer Hinge` (4).
+
+### Phase 9 — retire `_ATOMISTIC_PHASE_OFFSET_RAD` (audit row 13)  ⟨gated on Phase 7⟩
+
+`atomistic.py:583`, −32°, "calibrated by overlaying the atomistic model on the NADOC bead/slab
+representation" — a constant whose stated purpose is to align atoms to the DISPLAY.  It is now
+summed with the measured junction-balance term inside `atomistic_phase_offset_rad`, so retiring it
+means re-deriving that **sum**, not just deleting a number.
+
+- **Gate:** `_FRAME_ROT_RAD` is locked and declared so at `atomistic_minimisers.py:28`; retiring
+  the pair means re-quoting ~300 1ZEW coordinates **and** moving `_extra_base_frame` in the same
+  commit — which is Phase 7's territory.
+- **Acceptance:** `test_atomistic_geometry_lock` goldens must be regenerated ONCE with the atom
+  displacement measured directly (LESSONS H19: never accept a regenerated golden as the proof).
+
+### Phase 10 — the standalone atoms→sites converter  ⟨no consumer yet; do on demand⟩
+
+Phase 5 built the measured producer with the axis as an INPUT.  A converter that also **fits** the
+axis — turning a bare PDB or a relaxed trajectory into sites with no design to lean on — was
+deliberately not built because nothing asks for one.
+
+- **Entry point when something does:** `site_from_bead`'s axis argument.
+- **Reconcile, do not add a third:** `pdb_to_design.py:521` and `pdb_import.py:843` are the two
+  existing axis fitters; `atomistic_to_nadoc.extract_from_pdb` reads P atoms → bead positions and
+  nothing else.
+
 ## Explicitly out of scope
 
-- **Pose fitters** (`direct_relax`, `linker_relax`, `duplex_cluster`) — they fit against beads
-  and write **persisted** `cluster_transforms`, so this is a migration problem for saved files,
-  not a geometry problem. TD-28.
-- **Extra-base and extension-tail placers** — `atomistic.py:3036` interpolates between the two
-  junction nucleotides' CG beads *on purpose* ("the CG view is the single definition of where an
-  extra base sits"). It is the one place a display decision reaches an exported atom, and it
-  needs its own decision, not a refactor.
-- **`_ATOMISTIC_PHASE_OFFSET_RAD = −32°`** — retiring it is gated on the placers above.
+The first three items here were promoted to **Phases 7–9** above once the round-2 audit had
+scoped them; they are out of scope for Phases 0–6, not out of scope for the plan. What stays
+permanently out:
 - Making the CG bead a literal function of atom positions. It would move the full rep by 15–46°
   (the correction chain) and cost an atom build per geometry request. The owner has ruled the
   current reps correct; siblings off one site is the design.
