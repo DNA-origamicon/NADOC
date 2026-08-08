@@ -19,6 +19,19 @@ All 3D rendering modes that display designs in the viewport:
 | Physics overlay | `physics/displayState.js` | `physicsMode` |
 | Hull Prism (extrusion) | `joint_renderer.js` | (rep `hull-prism`) |
 
+### Surface quality
+
+Surface mode starts with a fast coarse envelope suitable for interactive work. In
+**Surface Options**, enable **Figure quality (slow but beautiful)** for publication
+rendering. This computes an independent solvent-excluded surface for every DNA strand
+using a 0.5 Å target grid, a 1.4 Å water probe, and true Van der Waals radii. Separate
+strand geometry preserves visible gaps at nicks and keeps staples distinct from the
+scaffold. The probe control is locked to 0.14 nm while figure quality is enabled.
+
+Figure quality is intentionally slower and more memory-intensive. Large designs may
+adaptively coarsen the grid, but never beyond 1.2 Å. Disable it to return to the fast
+coarse surface. The previous separate **High detail** option has been removed.
+
 **Hull Prism** is a coarse, distance-readable solid: per-cluster oriented boxes
 reconstructed from the build history (`feature_log` extrusions) or, for imports
 with no history, a cross-section-vs-bp scan at major-tick resolution. It excludes

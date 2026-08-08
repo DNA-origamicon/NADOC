@@ -350,15 +350,16 @@ def _build_design_surface_mesh(
 
 
 def _build_chimerax_surface(design):
-    """EXPERIMENTAL 'ChimeraX quality' surface (``detail='chimerax'``).  Mimics ChimeraX's
-    default molecular surface on two axes: (1) a FINE ~0.5 Å grid + 1.4 Å water probe + true
-    VdW radii (vs the display path's coarse ~3 Å grid that blurs the helical grooves), and
-    (2) a SEPARATE surface PER STRAND (like ChimeraX's per-chain surfaces), so complementary
-    strands are distinct geometry with a real solvent gap between them instead of one fused
-    blob with a jagged colour seam.  See ``surface.compute_split_surfaces_from_cloud`` +
-    ``surface.CHIMERAX_*``.  EXPENSIVE (one marching-cubes pass per strand) but voxel-capped."""
+    """Publication-quality DNA SES (``detail='chimerax'``).
+
+    Uses ChimeraX's documented 0.5 Å grid, 1.4 Å probe, true VdW radii, and default
+    per-chain grouping. NADOC maps that grouping to one independent shell per DNA strand,
+    preserving real gaps at nicks and geometric separation of staples from scaffold.
+    """
     import numpy as np
-    from backend.core.surface import compute_split_surfaces_from_cloud, _nuc_key
+    from backend.core.surface import (
+        _nuc_key, compute_split_surfaces_from_cloud,
+    )
 
     if _can_use_surface_cloud(design):
         from backend.core.atomistic import surface_atom_cloud

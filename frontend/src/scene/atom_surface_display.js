@@ -75,6 +75,7 @@ export function initAtomSurfaceDisplay({
   let _surfaceProbeRadius = 0.28   // current probe radius for SES (nm)
   let _surfaceDetail      = 'coarse'  // 'coarse' = fast CG-bead envelope | 'fine' = full all-atom
   let _surfaceMode        = 'off'  // mirrors store.surfaceMode
+  let _overlayMode        = false  // full CG + global ball-and-stick together
   let _atomDataCache  = null
   let _regionSurfaceSig   = null
   let _regionSurfaceTimer = null
@@ -157,9 +158,8 @@ export function initAtomSurfaceDisplay({
       dismissToast()
     }
     const { surfaceColorMode, surfaceOpacity } = store.getState()
-    // ChimeraX-quality builds a SEPARATE surface per strand (real geometric gaps between
-    // strands), so every vertex is unambiguously one strand and per-vertex colours are
-    // already solid — the crisp-zone face-flatten (for the fused mesh) isn't needed here.
+    // Every ChimeraX-quality component belongs wholly to one strand, so ordinary smooth
+    // vertex shading gives rounded shells while nicks remain true geometric gaps.
     surfaceRenderer.setCrispZones?.(false)
     surfaceRenderer.update(_surfaceDataCache, surfaceColorMode)
     surfaceRenderer.applyStrandColors(_getAtomStrandColors())
@@ -220,25 +220,18 @@ export function initAtomSurfaceDisplay({
     _regenSurfaceForParamChange()
   })
 
-  // High-detail toggle: off = fast coarse CG-bead envelope (default), on = exact all-atom.
-  const _cbHighDetail = document.getElementById('cb-surface-highdetail')
-  _cbHighDetail?.addEventListener('change', () => {
-    // Ignored while ChimeraX quality owns the detail level (checkbox is disabled then).
-    if (_cbChimerax?.checked) return
-    _surfaceDetail = _cbHighDetail.checked ? 'fine' : 'coarse'
-    _regenSurfaceForParamChange()
-  })
-
-  // EXPERIMENTAL "ChimeraX quality" toggle: high-fidelity SES at a fine 0.5 Å grid +
-  // 1.4 Å water probe + true VdW radii (detail='chimerax'). Overrides High detail while on.
-  const _cbChimerax = document.getElementById('cb-surface-chimerax')
-  _cbChimerax?.addEventListener('change', () => {
-    if (_cbChimerax.checked) {
+  // Publication preset: per-strand SES at a 0.5 Å target grid, 1.4 Å probe, and true
+  // VdW radii. It owns the probe control while active.
+  const _cbFigureQuality = document.getElementById('cb-surface-figure-quality')
+  _cbFigureQuality?.addEventListener('change', () => {
+    if (_cbFigureQuality.checked) {
       _surfaceDetail = 'chimerax'
-      if (_cbHighDetail) _cbHighDetail.disabled = true
+      if (_slSurfaceProbe) _slSurfaceProbe.disabled = true
+      if (_svSurfaceProbe) _svSurfaceProbe.textContent = '0.14'
     } else {
-      _surfaceDetail = _cbHighDetail?.checked ? 'fine' : 'coarse'
-      if (_cbHighDetail) _cbHighDetail.disabled = false
+      _surfaceDetail = 'coarse'
+      if (_slSurfaceProbe) _slSurfaceProbe.disabled = false
+      if (_svSurfaceProbe) _svSurfaceProbe.textContent = _surfaceProbeRadius.toFixed(2)
     }
     _regenSurfaceForParamChange()
   })
@@ -392,6 +385,11 @@ export function initAtomSurfaceDisplay({
   }
 
   function _setCGVisible(visible) {
+    // Overlay mode owns CG visibility while a global atomistic representation is
+    // active. Simulation displays call this with false when their heavy frame
+    // lands; retaining the guard here keeps the full model visible through those
+    // asynchronous swaps and through ordinary design rebuilds.
+    if (_overlayMode && atomisticRenderer.getMode() !== 'off') visible = true
     // Go through setDesignVisible, NOT root.visible directly: the renderer re-applies
     // `_designVisible` after every rebuild, so poking the root left the flag stale at
     // `true` and any later rebuild (e.g. setExtraNucleotides from the oxDNA capture
@@ -406,6 +404,11 @@ export function initAtomSurfaceDisplay({
     unfoldView?.setArcsVisible(visible)
     unfoldView?.refreshArcVisibility()
     overhangLinkArcs?.setVisible?.(visible)
+  }
+
+  function _setOverlayMode(enabled) {
+    _overlayMode = !!enabled
+    if (atomisticRenderer.getMode() !== 'off') _setCGVisible(_overlayMode)
   }
 
   // MD SEED view: when set (e.g. 'auto'), the atomistic reps show the t=0,
@@ -636,6 +639,7 @@ export function initAtomSurfaceDisplay({
     applySurfaceMode: _applySurfaceMode,
     applyAtomisticMode: _applyAtomisticMode,
     setCGVisible: _setCGVisible,
+    setOverlayMode: _setOverlayMode,
     setSurfacePanelVisible: _setSurfacePanelVisible,
     setAtomisticSlidersVisible: _setAtomisticSlidersVisible,
     refetchAtomistic: _refetchAtomistic,

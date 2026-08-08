@@ -306,28 +306,25 @@ def compute_surface(
 # ~2 spheres per nucleotide (backbone + base, from the CG geometry / relaxed frame) skips
 # the rebuild entirely and lands within ~2.8 Å of the full-atom envelope (< the grid's own
 # spacing).  This is the ChimeraX-style low-resolution surface; the full-atom path stays
-# available for "high detail".
+# retained internally for exact all-atom callers.
 CG_BEAD_RADIUS_NM = (
     0.50  # per-nucleotide sphere radius (nm) ≈ a nucleotide's atomic extent
 )
 
 
-# ── EXPERIMENTAL "ChimeraX quality" SES parameters ────────────────────────────
-# Match ChimeraX's DEFAULT molecular (solvent-excluded) surface.  compute_surface's
-# dilate-by-probe → erode-by-probe morphological closing IS a valid SES, so the
-# algorithm was never the problem — the quality gap vs ChimeraX was purely voxel
-# RESOLUTION: the display path caps the grid at _ADAPTIVE_VOXEL_CAP (~0.31 nm on a
-# big design), which staircases the ~1 nm helical grooves into blobs.  These knobs
-# render at ChimeraX's true 0.5 Å grid with a 1.4 Å water probe and TRUE VdW radii
-# (no display-path 1.2× inflation).  EXPENSIVE — the voxel cap here is far higher
-# so small parts get the full grid; VoltronCore-scale designs still auto-coarsen.
+# ── ChimeraX-style publication surface parameters ───────────────────────────────────
+# ChimeraX's documented SES defaults are a 1.4 Å rolling probe and a 0.5 Å grid.
+# Use true VdW radii (the ordinary display/print surface deliberately fattens them).
+# Each DNA strand is surfaced independently, matching ChimeraX's default per-chain
+# grouping. Fine sampling is essential here: it keeps nick gaps real without making
+# the rounded strand shells read as coarse, punched-out polygons.
 CHIMERAX_GRID_SPACING = 0.05  # nm (0.5 Å — ChimeraX default gridSpacing)
 CHIMERAX_PROBE_RADIUS = 0.14  # nm (1.4 Å — ChimeraX default water probe)
 CHIMERAX_RADIUS_SCALE = 1.0  # true VdW radii (no display 1.2× inflation)
-CHIMERAX_VOXEL_CAP = 12_000_000  # ~4× the display cap; small designs stay at 0.05 nm
-CHIMERAX_MAX_SPACING = 0.25  # nm — auto-coarsen ceiling for huge designs
-CHIMERAX_SMOOTH = 8  # Taubin iters — fewer; the fine grid is already smooth
-_SPLIT_VOXEL_BUDGET = 90_000_000  # total voxel budget shared across per-strand surfaces
+CHIMERAX_VOXEL_CAP = 36_000_000  # preserve fine triangulation on useful-size assemblies
+CHIMERAX_MAX_SPACING = 0.12  # nm (1.2 Å) — never fall back to coarse display polygons
+CHIMERAX_SMOOTH = 4  # light de-faceting; retain major/minor grooves from the fine grid
+_SPLIT_VOXEL_BUDGET = 180_000_000  # sequential per-strand grids; budget controls detail
 
 
 def make_cg_bead(
@@ -478,7 +475,7 @@ def compute_split_surfaces_from_cloud(
     # global voxel budget across strands (floored) so a small design gets fine per-strand
     # grids while a 200-staple origami auto-coarsens instead of hanging for minutes.
     eff_cap = int(
-        min(cap_voxels, max(500_000, _SPLIT_VOXEL_BUDGET // max(1, len(order))))
+        min(cap_voxels, max(2_000_000, _SPLIT_VOXEL_BUDGET // max(1, len(order))))
     )
 
     parts_v: list[np.ndarray] = []

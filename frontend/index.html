@@ -3574,6 +3574,7 @@
           <button class="dropdown-item" id="menu-help-strand-anim">Strand Animations Testing…</button>
           <button class="dropdown-item" id="menu-create-seam">Create Seam</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-overlay-mode" title="Show the full representation together with the atomistic ball-and-stick representation.">Overlay Mode<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-help-new-positioning" title="Show the full and atomistic representations at their MD-measured positions instead of the legacy build geometry. Display only.">New Positioning<span class="menu-toggle-pill"></span></button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <div class="submenu-item">Debug <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
@@ -7328,12 +7329,8 @@
                 <input type="range" id="sl-surface-opacity" min="0.05" max="1.00" step="0.05" value="0.85">
               </div>
               <div class="slider-row">
-                <label title="Off: fast coarse envelope from per-nucleotide spheres. On: exact all-atom surface (slower).">High detail</label>
-                <input type="checkbox" id="cb-surface-highdetail">
-              </div>
-              <div class="slider-row">
-                <label title="EXPERIMENTAL. Solvent-excluded surface at ChimeraX's fine 0.5 Å grid + 1.4 Å water probe + true VdW radii — smooth, groove-following, like ChimeraX's default molecular surface. Slow; best on small parts (large designs auto-coarsen).">ChimeraX quality<span style="color:#8b949e;font-size:var(--text-xs)"> (exp.)</span></label>
-                <input type="checkbox" id="cb-surface-chimerax">
+                <label title="Publication-quality per-strand solvent-excluded surfaces using a 0.5 Å target grid, 1.4 Å water probe, and true VdW radii. Nicks remain real gaps and staples stay geometrically separate from scaffold.">Figure quality (slow but beautiful)</label>
+                <input type="checkbox" id="cb-surface-figure-quality">
               </div>
             </div>
           </div>

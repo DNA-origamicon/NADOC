@@ -7233,6 +7233,29 @@ async function main() {
 
   initCreateSeam({ store, api })
 
+  // ── Help > Overlay Mode ────────────────────────────────────────────────────
+  // A display-only composite: Full remains visible underneath the global
+  // ball-and-stick renderer. Selecting another representation exits the mode.
+  let _overlayMode = false
+  const _setOverlayMode = (enabled) => {
+    _overlayMode = enabled
+    _atomSurface.setOverlayMode(enabled)
+    _setMenuToggle('menu-help-overlay-mode', enabled)
+  }
+  _setMenuToggle('menu-help-overlay-mode', false)
+  document.getElementById('menu-help-overlay-mode')?.addEventListener('click', async () => {
+    if (_overlayMode) {
+      _setOverlayMode(false)
+      await _setRepresentation('full')
+      return
+    }
+    _setOverlayMode(true)
+    await _setRepresentation('ballstick')
+  })
+  window.addEventListener('nadoc:representation-change', (event) => {
+    if (_overlayMode && event.detail?.representation !== 'ballstick') _setOverlayMode(false)
+  })
+
   // ── Help > New Positioning ──────────────────────────────────────────────────
   // Display-only. OFF keeps every current position; ON re-places the full
   // representation onto the geometry measured from free NAMD trajectories

@@ -29,6 +29,7 @@ function makeSurfaceStub() {
     dispose: vi.fn(),
     highlight: vi.fn(),
     applyStrandColors: vi.fn(),
+    setCrispZones: vi.fn(),
     setOpacity: vi.fn(),
     setColorMode: vi.fn(),
     _setMode: (m) => { mode = m },
@@ -53,7 +54,7 @@ import { surfaceSegments } from './design_queries.js'
 const DOM = [
   'surface-options-panel',
   'sl-surface-opacity', 'sv-surface-opacity',
-  'sl-surface-probe', 'sv-surface-probe', 'cb-surface-highdetail',
+  'sl-surface-probe', 'sv-surface-probe', 'cb-surface-figure-quality',
   'surface-color-strand', 'surface-color-uniform',
   'sl-atom-vdw-scale', 'sv-atom-vdw-scale',
   'repr-atom-radius-row',
@@ -114,7 +115,7 @@ describe('initAtomSurfaceDisplay', () => {
     const api = initAtomSurfaceDisplay(makeDeps())
     for (const k of [
       'applySurfaceMode', 'applyAtomisticMode', 'setCGVisible', 'setSurfacePanelVisible',
-      'setAtomisticSlidersVisible', 'getSurfaceMode', 'getSurfaceProbeRadius',
+      'setAtomisticSlidersVisible', 'setOverlayMode', 'getSurfaceMode', 'getSurfaceProbeRadius',
       'invalidateAtomCache', 'invalidateSurfaceCache',
       'getRegionVdwRenderer', 'getRegionBallstickRenderer', 'getRegionSurfaceRenderer',
     ]) expect(typeof api[k]).toBe('function')
@@ -145,6 +146,23 @@ describe('initAtomSurfaceDisplay', () => {
     expect(document.getElementById('repr-atom-radius-row').style.display).toBe('')
   })
 
+  it('overlay mode keeps CG visible while atomistic mode is active', async () => {
+    mountIds(DOM)
+    const deps = makeDeps()
+    const api = initAtomSurfaceDisplay(deps)
+
+    api.setOverlayMode(true)
+    await api.applyAtomisticMode('ballstick')
+    expect(deps._root.visible).toBe(true)
+
+    // Heavy trajectory/simulation callbacks normally request CG hidden.
+    api.setCGVisible(false)
+    expect(deps._root.visible).toBe(true)
+
+    api.setOverlayMode(false)
+    expect(deps._root.visible).toBe(false)
+  })
+
   it('surface opacity slider writes store.surfaceOpacity', () => {
     mountIds(DOM)
     const deps = makeDeps()
@@ -165,6 +183,24 @@ describe('initAtomSurfaceDisplay', () => {
     sl.dispatchEvent(new Event('input'))
     expect(api.getSurfaceProbeRadius()).toBeCloseTo(0.35)
     expect(deps.surfaceRenderer.update).not.toHaveBeenCalled() // surface mode is 'off'
+  })
+
+  it('figure-quality preset owns detail and probe controls, then restores them', () => {
+    mountIds(DOM)
+    const api = initAtomSurfaceDisplay(makeDeps())
+    const preset = document.getElementById('cb-surface-figure-quality')
+    const probe = document.getElementById('sl-surface-probe')
+
+    preset.checked = true
+    preset.dispatchEvent(new Event('change'))
+    expect(api.getSurfaceParams()).toMatchObject({ detail: 'chimerax' })
+    expect(probe.disabled).toBe(true)
+    expect(document.getElementById('sv-surface-probe').textContent).toBe('0.14')
+
+    preset.checked = false
+    preset.dispatchEvent(new Event('change'))
+    expect(api.getSurfaceParams()).toMatchObject({ detail: 'coarse' })
+    expect(probe.disabled).toBe(false)
   })
 
   it('surface colour buttons set store mode + active classes', () => {
