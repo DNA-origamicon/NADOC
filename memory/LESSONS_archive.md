@@ -1631,3 +1631,42 @@ answer as universal.**
 
 Mirror the *job's* environment when you must load (`module purge` then load), and remember that
 even then the login node may refuse. See [[alpine-cluster-submission]].
+
+
+### H16. Four ways a check lied to me in one session (2026-08-07, helical-site work)
+
+All four produced a confident, wrong statement that I had to retract to the owner. They are
+one family: **the check ran, so I believed the answer, without asking whether the check
+could have failed.**
+
+**(a) Measuring the wrong artefact.** `workspace/oxdna_jobs/<id>/design_ref.dat` is an
+unconverted REFERENCE; the seed oxDNA actually runs is `conf.dat`. Measuring the former, I
+told the owner "every oxDNA/LAMMPS seed NADOC has ever written has base pairs ~0.9 nm too
+wide" — a sweeping claim about a shipping pipeline. `conf.dat` was 1.0514 nm against an
+equilibrium of 1.0222: essentially correct, because `oxdna_native_seed_map` exists and every
+production caller passes `oxdna_native_seed=True`. **Before concluding a pipeline is broken,
+find the artefact that pipeline actually consumes.**
+
+**(b) A pin that cannot fail.** Three in one session: an exact-equality assertion where the
+two producers legitimately differ by 1 ULP (the measured producer subtracts a tiny axial
+component before normalising); a test that `pytest.skip`ped when its fixture produced nothing
+to assert on; and a deformation test whose fixture — `Examples/multi_domain_test3_bend90`,
+named for a 90° bend — stores `curvature_deg_per_bp = 0.0` and therefore deforms nothing.
+**Break the thing on purpose and watch the test go red.** Two of the three survived review
+only because I did that; the cluster-transform pin fired when I reverted the helper, the
+extended-loop pin did not and had to be rebuilt around a bend the test constructs itself.
+
+**(c) "Byte-identical" as an acceptance bar that would have preserved a bug.** Phase 2's
+scope said the mrDNA refactor must produce a byte-identical seed. It could not: the code it
+replaced read `phase_offset`/`twist` straight off the stored helix while every other
+representation goes through `effective_helix_for_geometry`, so byte-identity would have
+preserved the pre-TD-29 twist ramp on every honeycomb design and a 175° phase error (19.99 Å,
+a full helix diameter) on `6hb_test`. **When the acceptance criterion is "nothing changes",
+check first that nothing SHOULD.** The tell was that the control — square lattice — moved
+0.000 Å while honeycomb moved in proportion to helix length.
+
+**(d) A pipeline whose exit code cannot reach you.** `just test | tee log | tail` reports
+`tail`'s status, so a guard refusal (`NADOC_TEST_CONFIRM=1` not set — the full-suite recipe
+asks for an explicit opt-in) surfaced as "completed, exit code 0" and I nearly reported a
+suite pass for a suite that never ran. **`set -o pipefail` on any piped command whose result
+you are going to state as fact.**

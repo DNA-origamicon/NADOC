@@ -284,4 +284,14 @@ Symptom the user reported: "can't delete the chain-simulator's completed oxDNA j
   GPU-less node, so "does it run" is untestable there and must not be asserted.
   [detail](LESSONS_archive.md#l14)
 
+- **H16** — 🔍 **Four ways a check lied, one family: the check ran, so I believed it.** (a) Measured
+  `design_ref.dat` (an unconverted REFERENCE) instead of `conf.dat` (the seed) and declared a
+  shipping pipeline broken; (b) three pins that could not fail — exact equality where 1 ULP was
+  correct, a test that `skip`ped, and `multi_domain_test3_bend90` whose stored
+  `curvature_deg_per_bp` is **0.0** so it deforms nothing; (c) "byte-identical" as an acceptance
+  bar that would have preserved the pre-TD-29 twist ramp and a 175° phase error; (d)
+  `just test | tee | tail` reported `tail`'s exit code, turning a guard refusal into a fake
+  "suite passed". Break the pin on purpose; `set -o pipefail`; find the artefact the pipeline
+  actually consumes. [detail](LESSONS_archive.md#h16)
+
 > **Detail.** Full entries live in [LESSONS_archive.md](LESSONS_archive.md). Open only the entry that matches your symptom.
