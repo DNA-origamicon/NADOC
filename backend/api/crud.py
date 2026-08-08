@@ -394,9 +394,14 @@ def _design_response_with_geometry(
         return _design_response(design, report)
     if changed_helix_ids is not None:
         # Partial path — compute only the real helices that actually changed.
-        real_ids = frozenset(hid for hid in changed_helix_ids if not hid.startswith('__'))
-        nucs = (_geometry_for_helices(design, real_ids, junction_balance=True)
-                if real_ids else [])
+        real_ids = frozenset(
+            hid for hid in changed_helix_ids if not hid.startswith("__")
+        )
+        nucs = (
+            _geometry_for_helices(design, real_ids, junction_balance=True)
+            if real_ids
+            else []
+        )
         resp = {
             **_design_response(design, report),
             "nucleotides": nucs,
@@ -452,9 +457,12 @@ def _design_response_with_geometry(
         # unfold_view only read backbone_position / base_normal / (helix_id,
         # bp_index, direction) per nuc, so the full strand metadata is wasted
         # bytes. Compact format ~3× smaller on the wire, ~3× faster to parse.
-        straight = design.model_copy(update={"deformations": [], "cluster_transforms": []})
+        straight = design.model_copy(
+            update={"deformations": [], "cluster_transforms": []}
+        )
         straight_positions, straight_axes = _positions_for_design(
-            straight, junction_balance=True)
+            straight, junction_balance=True
+        )
         out["straight_positions_by_helix"] = straight_positions
         out["straight_helix_axes"] = straight_axes
     return out
@@ -1307,8 +1315,11 @@ def get_geometry(
     if apply_deformations:
         with trace.step("nucleotides"):
             nucleotides = _geometry_for_helices(
-                design, ids, measured_positioning=measured_positioning,
-                junction_balance=True)
+                design,
+                ids,
+                measured_positioning=measured_positioning,
+                junction_balance=True,
+            )
         with trace.step("helix_axes"):
             axes = deformed_helix_axes(design)
         with trace.step("ovhg_rotations"):
@@ -1335,8 +1346,10 @@ def get_geometry(
                 )
             with trace.step("straight_positions_embed"):
                 straight_positions, straight_axes = _positions_for_design(
-                    straight_design, measured_positioning=measured_positioning,
-                    junction_balance=True)
+                    straight_design,
+                    measured_positioning=measured_positioning,
+                    junction_balance=True,
+                )
             out["straight_positions_by_helix"] = straight_positions
             out["straight_helix_axes"] = straight_axes
     else:
@@ -1346,8 +1359,11 @@ def get_geometry(
             )
         with trace.step("nucleotides_straight"):
             nucleotides = _geometry_for_helices(
-                straight, ids, measured_positioning=measured_positioning,
-                junction_balance=True)
+                straight,
+                ids,
+                measured_positioning=measured_positioning,
+                junction_balance=True,
+            )
         with trace.step("helix_axes_straight"):
             axes = _straight_helix_axes(design)
         out = {
@@ -12241,8 +12257,9 @@ def refresh_bridges(body: RefreshBridgesBody) -> dict:
         return {"bridge_nucs": []}
 
     # Run partial geometry → _emit_bridge_nucs → filter to bridge nucs only.
-    full = _geometry_for_helices(design, frozenset(needed_helix_ids),
-                                 junction_balance=True)
+    full = _geometry_for_helices(
+        design, frozenset(needed_helix_ids), junction_balance=True
+    )
     bridge_nucs = [n for n in full if (n.get("helix_id") or "").startswith("__lnk__")]
     return {"bridge_nucs": bridge_nucs}
 

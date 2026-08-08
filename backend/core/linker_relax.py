@@ -606,6 +606,7 @@ def relax_linker(
     # Resolve anchor positions + base_normals in the live geometry frame
     # (cluster transforms already applied).
     from backend.core.design_geometry import fitting_geometry as _geometry_for_design
+
     nucs = _geometry_for_design(design)
     anchor_a, normal_a = _anchor_pos_and_normal(nucs, conn, conn.overhang_a_id, True)
     anchor_b, normal_b = _anchor_pos_and_normal(nucs, conn, conn.overhang_b_id, False)
@@ -1056,6 +1057,7 @@ def relax_ss_linker(
         )
 
     from backend.core.design_geometry import fitting_geometry as _geometry_for_design
+
     nucs = _geometry_for_design(design)
     anchor_a, _normal_a = _anchor_pos_and_normal(nucs, conn, conn.overhang_a_id, True)
     anchor_b, _normal_b = _anchor_pos_and_normal(nucs, conn, conn.overhang_b_id, False)

@@ -1606,14 +1606,22 @@ def test_dedicated_overhang_phase_shared_by_cg_and_atomistic():
     axis_start = helix.axis_start.to_array()
     axis_end = helix.axis_end.to_array()
     axis_hat = (axis_end - axis_start) / np.linalg.norm(axis_end - axis_start)
-    axis_pt = axis_start + (stored_nuc.bp_index - helix.bp_start) * BDNA_RISE_PER_BP * axis_hat
+    axis_pt = (
+        axis_start
+        + (stored_nuc.bp_index - helix.bp_start) * BDNA_RISE_PER_BP * axis_hat
+    )
     # phase_rad: the build applies the DX-junction balance roll on top of the historical
     # CG-alignment offset, so the oracle has to use the same total or this measures the
     # roll (0.234 nm on honeycomb) instead of the shared PHASE it means to test.
     from backend.core.atomistic import atomistic_phase_offset_rad
-    origin, R = _atom_frame(stored_nuc, Direction.FORWARD, axis_point=axis_pt,
-                            helix_direction=helix.direction,
-                            phase_rad=atomistic_phase_offset_rad(design))
+
+    origin, R = _atom_frame(
+        stored_nuc,
+        Direction.FORWARD,
+        axis_point=axis_pt,
+        helix_direction=helix.direction,
+        phase_rad=atomistic_phase_offset_rad(design),
+    )
     # Take the P from whichever template the build is actually native on, so this
     # stays a test about the shared PHASE (the stored pose vs a re-normalised lattice
     # cell) rather than about which nucleotide template is in force.

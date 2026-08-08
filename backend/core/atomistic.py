@@ -728,14 +728,19 @@ def atomistic_phase_offset_rad(design: "Design") -> float:
     constant rather than one per lattice.
     """
     from backend.core.constants import (
-        FULL_REP_BALANCE_ROLL_HONEYCOMB_DEG, FULL_REP_BALANCE_ROLL_SQUARE_DEG,
+        FULL_REP_BALANCE_ROLL_HONEYCOMB_DEG,
+        FULL_REP_BALANCE_ROLL_SQUARE_DEG,
     )
     from backend.core.models import LatticeType
-    full_rep_deg = (FULL_REP_BALANCE_ROLL_SQUARE_DEG
-                    if design.lattice_type == LatticeType.SQUARE
-                    else FULL_REP_BALANCE_ROLL_HONEYCOMB_DEG)
+
+    full_rep_deg = (
+        FULL_REP_BALANCE_ROLL_SQUARE_DEG
+        if design.lattice_type == LatticeType.SQUARE
+        else FULL_REP_BALANCE_ROLL_HONEYCOMB_DEG
+    )
     return _ATOMISTIC_PHASE_OFFSET_RAD + _math.radians(
-        full_rep_deg - _ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG)
+        full_rep_deg - _ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG
+    )
 
 
 _PHOSPHODIESTER_LINKER_CONTOUR_NM: float = 0.606  # C3'-O3'-P-O5'-C5' contour length
@@ -802,6 +807,7 @@ def _phase_invalidated(nuc_pos: "NucleotidePosition") -> "NucleotidePosition":
     ``test_displaced_nucleotide_flags_backbone_and_hidden`` and four siblings).
     """
     import dataclasses as _dc
+
     return _dc.replace(nuc_pos, radial_hat=None, axis_point=None, azimuth_rad=None)
 
 
@@ -843,7 +849,7 @@ def _atom_frame(
     Calibrated to align the all-atom backbone groove phase with the NADOC CG model.
     """
     bb = nuc_pos.position
-    e_radial: _np.ndarray | None = None   # outward unit vector from axis to bead
+    e_radial: _np.ndarray | None = None  # outward unit vector from axis to bead
     if axis_point is not None:
         # TWO PRODUCERS, ONE SITE (project_helical_site.md).  Either the nucleotide carries
         # an ANALYTIC site — the phase geometry.py computed from the lattice — or it does
@@ -863,9 +869,14 @@ def _atom_frame(
             axial = float(_np.dot(nuc_pos.position - axis_point, nuc_pos.axis_tangent))
         else:
             e_radial, axial = _site_from_bead(
-                nuc_pos.position, axis_point, nuc_pos.axis_tangent)
+                nuc_pos.position, axis_point, nuc_pos.axis_tangent
+            )
         if e_radial is not None:
-            bb = axis_point + axial * nuc_pos.axis_tangent + _ATOMISTIC_P_RADIUS * e_radial
+            bb = (
+                axis_point
+                + axial * nuc_pos.axis_tangent
+                + _ATOMISTIC_P_RADIUS * e_radial
+            )
 
     # Correct the REVERSE strand P azimuthal angle to the real B-DNA value (1ZEW: 208.2°).
     # FORWARD helix topology places REV P at fwd+150° (CCW); target fwd+208.2° → +58.2°.
@@ -926,8 +937,12 @@ def _atom_frame(
 
 
 def _atom_frames_batch(
-    pos: _np.ndarray, axt: _np.ndarray, base_normal: _np.ndarray,
-    axis_pt: _np.ndarray, dir_fwd: _np.ndarray, helix_fwd: _np.ndarray,
+    pos: _np.ndarray,
+    axt: _np.ndarray,
+    base_normal: _np.ndarray,
+    axis_pt: _np.ndarray,
+    dir_fwd: _np.ndarray,
+    helix_fwd: _np.ndarray,
     phase_rad: float | None = None,
     radial_hat: _np.ndarray | None = None,
 ) -> tuple[_np.ndarray, _np.ndarray]:
@@ -946,14 +961,18 @@ def _atom_frames_batch(
     axt = axt.astype(float)
     has_axis = ~_np.isnan(axis_pt[:, 0])
     measured, dot_rt, radial_ok = _site_from_beads_arrays(bb, axis_pt, axt)
-    ok = has_axis & radial_ok                             # radial frame available
+    ok = has_axis & radial_ok  # radial frame available
     e_radial = _np.where(ok[:, None], measured, 0.0)
     # The two producers, as in _atom_frame: the ANALYTIC site where one was carried, the
     # MEASURED site otherwise.  NaN rows carry no analytic phase.
     if radial_hat is not None:
         carried = ~_np.isnan(radial_hat[:, 0])
         e_radial = _np.where((ok & carried)[:, None], radial_hat, e_radial)
-    bb = _np.where(ok[:, None], axis_pt + dot_rt[:, None] * axt + _ATOMISTIC_P_RADIUS * e_radial, bb)
+    bb = _np.where(
+        ok[:, None],
+        axis_pt + dot_rt[:, None] * axt + _ATOMISTIC_P_RADIUS * e_radial,
+        bb,
+    )
 
     def _rot(er, ang_mask, ang):
         # Rotate e_radial about the axis tangent by `ang` (Rodrigues, ⟂ so no parallel term).
@@ -1009,9 +1028,13 @@ def _atom_frames_batch(
                 npos,
                 Direction.FORWARD if dir_fwd[i] else Direction.REVERSE,
                 axis_point=ax_pt,
-                helix_direction=Direction.FORWARD if helix_fwd[i] else Direction.REVERSE,
-                phase_rad=phase_rad)
-            bb[i] = o_i; R[i] = R_i
+                helix_direction=Direction.FORWARD
+                if helix_fwd[i]
+                else Direction.REVERSE,
+                phase_rad=phase_rad,
+            )
+            bb[i] = o_i
+            R[i] = R_i
     return bb, R
 
 
@@ -1140,10 +1163,12 @@ def _rigid_frame_calibration() -> dict:
     for helix in design.helices:
         for n in nucleotide_positions(helix):
             a1 = n.base_normal / (_np.linalg.norm(n.base_normal) + 1e-14)
-            a3 = (n.axis_tangent if n.direction == Direction.FORWARD else -n.axis_tangent)
+            a3 = n.axis_tangent if n.direction == Direction.FORWARD else -n.axis_tangent
             a3 = a3 / (_np.linalg.norm(a3) + 1e-14)
             frames[(helix.id, n.bp_index, n.direction.value)] = {
-                "backbone_position": n.position, "a1": a1, "a3": a3,
+                "backbone_position": n.position,
+                "a1": a1,
+                "a3": a3,
             }
 
     model = build_atomistic_model(design)
@@ -1287,9 +1312,13 @@ def crossover_geometry_diagnostics(design: Design) -> dict:
             return None
         axis_start, axis_hat, bp_start = axis_info
         axis_pt = axis_start + (bp - bp_start) * BDNA_RISE_PER_BP * axis_hat
-        origin, R = _atom_frame(nuc, direction, axis_point=axis_pt,
-                                helix_direction=helix.direction,
-                                phase_rad=atomistic_phase_offset_rad(design))
+        origin, R = _atom_frame(
+            nuc,
+            direction,
+            axis_point=axis_pt,
+            helix_direction=helix.direction,
+            phase_rad=atomistic_phase_offset_rad(design),
+        )
         for name, _element, n, y, z_local in _SUGAR:
             if name == atom_name:
                 return origin + R @ _np.array([n, y, z_local])
@@ -1821,8 +1850,10 @@ def build_atomistic_model(
                             cg_pos = nuc_pos_override.get((h_id, bp, dir_str))
                         if cg_pos is not None:
                             import dataclasses as _dc
+
                             nuc_pos = _phase_invalidated(
-                                _dc.replace(nuc_pos, position=cg_pos))
+                                _dc.replace(nuc_pos, position=cg_pos)
+                            )
 
                     seq_num_in_chain += 1
                     _seq_key: tuple = (
@@ -1877,8 +1908,10 @@ def build_atomistic_model(
                                 cg_pos = nuc_pos_override.get(_frame_key)
                             if cg_pos is not None:
                                 import dataclasses as _dc
+
                                 nuc_pos = _phase_invalidated(
-                                    _dc.replace(nuc_pos, position=cg_pos))
+                                    _dc.replace(nuc_pos, position=cg_pos)
+                                )
 
                         # Compute helix axis point for radial correction.  An optional
                         # axis_override supplies a DEFORMED (curved) centerline point +
@@ -1902,7 +1935,8 @@ def build_atomistic_model(
                                 # to the local tangent, so it must be re-measured off the
                                 # bead against THIS axis (the seed-clash bug above).
                                 nuc_pos = _phase_invalidated(
-                                    _dc.replace(nuc_pos, axis_tangent=_ov[1]))
+                                    _dc.replace(nuc_pos, axis_tangent=_ov[1])
+                                )
 
                         # Reverse-strand azimuthal correction: the design geometry
                         # places the reverse strand at fwd ± minor_groove (±150°),
@@ -1915,10 +1949,18 @@ def build_atomistic_model(
                         # using the per-lattice-direction branch collapses REVERSE-helix
                         # WC pairs (C1'–C1' 0.96 → 0.72 nm).  Design/PDB/seed builds
                         # (relaxed_oxdna_phase=False) keep the real per-direction branch.
-                        _hd = Direction.FORWARD if relaxed_oxdna_phase else helix.direction
-                        origin, R = _atom_frame(nuc_pos, direction, axis_point=axis_pt,
-                                                helix_direction=_hd,
-                                                phase_rad=_phase_rad)
+                        _hd = (
+                            Direction.FORWARD
+                            if relaxed_oxdna_phase
+                            else helix.direction
+                        )
+                        origin, R = _atom_frame(
+                            nuc_pos,
+                            direction,
+                            axis_point=axis_pt,
+                            helix_direction=_hd,
+                            phase_rad=_phase_rad,
+                        )
 
                     # Measured placement swaps the TEMPLATE only — the frame is
                     # whatever this nucleotide was going to get anyway.  The measured
@@ -2361,11 +2403,16 @@ def surface_atom_cloud(
         return npc
 
     # ── Gather ordered per-nucleotide frame inputs (strand → domain → bp → copy) ──
-    positions: list = []; tangents: list = []; normals: list = []; axis_pts: list = []
-    radials: list = []          # the carried helical phase (see NucleotidePosition)
-    dir_fwd: list = []; helix_fwd: list = []
-    residues: list = []; strand_ids: list = []
-    keys_hbd: list = []                                  # (helix, bp, dir_str) for deform fold
+    positions: list = []
+    tangents: list = []
+    normals: list = []
+    axis_pts: list = []
+    radials: list = []  # the carried helical phase (see NucleotidePosition)
+    dir_fwd: list = []
+    helix_fwd: list = []
+    residues: list = []
+    strand_ids: list = []
+    keys_hbd: list = []  # (helix, bp, dir_str) for deform fold
 
     for strand in design.strands:
         for domain in strand.domains:
@@ -2442,8 +2489,11 @@ def surface_atom_cloud(
                         seq_map.get(_seq_key, "N"), "DT"
                     )
                     positions.append(nuc_pos.position)
-                    radials.append(nuc_pos.radial_hat if nuc_pos.radial_hat is not None
-                                   else _np.full(3, _np.nan))
+                    radials.append(
+                        nuc_pos.radial_hat
+                        if nuc_pos.radial_hat is not None
+                        else _np.full(3, _np.nan)
+                    )
                     tangents.append(nuc_pos.axis_tangent)
                     normals.append(nuc_pos.base_normal)
                     axis_pts.append(
@@ -2459,14 +2509,24 @@ def surface_atom_cloud(
     if n == 0:
         return (_np.empty((0, 3), _np.float32), _np.empty(0, _np.float32), [], [])
 
-    pos = _np.asarray(positions, float); axt = _np.asarray(tangents, float)
-    bn = _np.asarray(normals, float); axp = _np.asarray(axis_pts, float)
-    dfwd = _np.asarray(dir_fwd, bool); hfwd = _np.asarray(helix_fwd, bool)
-    rad = _np.asarray(radials, float)      # NaN rows = no analytic phase, bead fallback
+    pos = _np.asarray(positions, float)
+    axt = _np.asarray(tangents, float)
+    bn = _np.asarray(normals, float)
+    axp = _np.asarray(axis_pts, float)
+    dfwd = _np.asarray(dir_fwd, bool)
+    hfwd = _np.asarray(helix_fwd, bool)
+    rad = _np.asarray(radials, float)  # NaN rows = no analytic phase, bead fallback
 
-    origins, R = _atom_frames_batch(pos, axt, bn, axp, dfwd, hfwd,
-                                    phase_rad=atomistic_phase_offset_rad(design),
-                                    radial_hat=rad)
+    origins, R = _atom_frames_batch(
+        pos,
+        axt,
+        bn,
+        axp,
+        dfwd,
+        hfwd,
+        phase_rad=atomistic_phase_offset_rad(design),
+        radial_hat=rad,
+    )
 
     # Fold design geometry (deformations + cluster transforms) into the frames via 4 markers
     # per nucleotide — one rigid transform per (helix, bp, dir), the SAME apply_deformations_

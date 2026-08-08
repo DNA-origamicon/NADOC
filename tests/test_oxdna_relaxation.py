@@ -5922,18 +5922,24 @@ def test_the_native_seed_reproduces_oxdnas_own_equilibrium_pair_geometry():
     from backend.core.constants import OXDNA_LENGTH_UNIT
     from backend.core.design_geometry import _geometry_for_design
     from backend.physics.oxdna_interface import (
-        OXDNA_NATIVE_HBOND_NM, _POS_BASE_NM, oxdna_native_seed_map, resolved_nuc_map,
+        OXDNA_NATIVE_HBOND_NM,
+        _POS_BASE_NM,
+        oxdna_native_seed_map,
+        resolved_nuc_map,
     )
     from backend.core.lattice import make_bundle_design
 
     assert OXDNA_NATIVE_HBOND_NM == pytest.approx(0.4 * OXDNA_LENGTH_UNIT, abs=1e-12), (
-        "the HB separation must stay the published HYDR_R0, not a per-machine fit")
+        "the HB separation must stay the published HYDR_R0, not a per-machine fit"
+    )
 
     design = make_bundle_design(cells=[(0, 0), (0, 1)], length_bp=32, plane="XY")
     seeded = oxdna_native_seed_map(
-        design, resolved_nuc_map(design, _geometry_for_design(design, compact_skips=True)))
+        design,
+        resolved_nuc_map(design, _geometry_for_design(design, compact_skips=True)),
+    )
 
-    target_units = 2 * 0.4 + 0.4          # POS_BASE + HYDR_R0 + POS_BASE
+    target_units = 2 * 0.4 + 0.4  # POS_BASE + HYDR_R0 + POS_BASE
     seps = []
     for h in design.helices:
         for bp in range(h.bp_start, h.bp_start + h.length_bp):
@@ -5941,9 +5947,17 @@ def test_the_native_seed_reproduces_oxdnas_own_equilibrium_pair_geometry():
             r = seeded.get((h.id, bp, "REVERSE"))
             if not f or not r:
                 continue
-            seps.append(float(np.linalg.norm(
-                np.asarray(f["backbone_position"]) - np.asarray(r["backbone_position"]))))
+            seps.append(
+                float(
+                    np.linalg.norm(
+                        np.asarray(f["backbone_position"])
+                        - np.asarray(r["backbone_position"])
+                    )
+                )
+            )
     assert len(seps) > 20
     assert np.median(seps) == pytest.approx(target_units * OXDNA_LENGTH_UNIT, abs=1e-6)
     # And the base sites themselves land at HYDR_R0.
-    assert np.median(seps) - 2 * _POS_BASE_NM == pytest.approx(OXDNA_NATIVE_HBOND_NM, abs=1e-6)
+    assert np.median(seps) - 2 * _POS_BASE_NM == pytest.approx(
+        OXDNA_NATIVE_HBOND_NM, abs=1e-6
+    )

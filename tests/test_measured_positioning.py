@@ -319,7 +319,8 @@ def test_the_bead_lands_on_the_ribose_c3_prime():
     # measured CG bead, which is TD-27's business and not this test's.
     assert 0.25 < miss(measured=False) < 0.35, "legacy bead is no longer where it was"
     assert miss(measured=True) < 0.60, (
-        "the groove-registered bead should stay in the same neighbourhood as the C3'")
+        "the groove-registered bead should stay in the same neighbourhood as the C3'"
+    )
 
 
 def test_the_frozen_fallback_still_matches_what_the_template_derives():

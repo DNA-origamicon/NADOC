@@ -57,12 +57,16 @@ def _staple_slots(design: Design) -> set:
     return out
 
 
-def _junction_arc_deltas(design: Design, *, junction_balance: bool,
-                         measured_positioning: bool = False) -> list[float]:
+def _junction_arc_deltas(
+    design: Design, *, junction_balance: bool, measured_positioning: bool = False
+) -> list[float]:
     """Signed (arc at i+1) − (arc at i) for every DX junction, in nm."""
-    nucs = _geometry_for_design(design, compact_skips=True,
-                                measured_positioning=measured_positioning,
-                                junction_balance=junction_balance)
+    nucs = _geometry_for_design(
+        design,
+        compact_skips=True,
+        measured_positioning=measured_positioning,
+        junction_balance=junction_balance,
+    )
     gm = {(n["helix_id"], n["bp_index"], str(n["direction"])): n for n in nucs}
     staple = _staple_slots(design)
 
@@ -75,16 +79,21 @@ def _junction_arc_deltas(design: Design, *, junction_balance: bool,
         nb = gm.get((b.helix_id, b.index, str(b.strand.value)))
         if na is None or nb is None:
             continue
-        d = np.linalg.norm(np.asarray(nb["backbone_position"], float)
-                           - np.asarray(na["backbone_position"], float))
+        d = np.linalg.norm(
+            np.asarray(nb["backbone_position"], float)
+            - np.asarray(na["backbone_position"], float)
+        )
         arcs[(frozenset((a.helix_id, b.helix_id)), a.index)] = float(d)
 
     by_pair = defaultdict(dict)
     for (pair, idx), v in arcs.items():
         by_pair[pair][idx] = v
-    return [by_pair[pair][i + 1] - v
-            for pair, items in by_pair.items()
-            for i, v in items.items() if i + 1 in items]
+    return [
+        by_pair[pair][i + 1] - v
+        for pair, items in by_pair.items()
+        for i, v in items.items()
+        if i + 1 in items
+    ]
 
 
 def test_the_square_full_rep_draws_both_arcs_of_a_dx_junction_equally():
@@ -102,8 +111,9 @@ def test_the_roll_survives_help_new_positioning():
     azimuth from an absolute reference and silently eaten the roll.  It does not: square
     goes from 0.684–1.192 nm (Δ 0.508) to a uniform 0.874 with the flag on.
     """
-    deltas = _junction_arc_deltas(_load(SQUARE_FIXTURE), junction_balance=True,
-                                  measured_positioning=True)
+    deltas = _junction_arc_deltas(
+        _load(SQUARE_FIXTURE), junction_balance=True, measured_positioning=True
+    )
     assert max(abs(d) for d in deltas) < ARC_TOL_NM
 
 
@@ -130,16 +140,21 @@ def test_the_roll_is_absent_from_the_geometric_layer_by_default():
     """
     design = _load(SQUARE_FIXTURE)
     default = _geometry_for_design(design, compact_skips=True)
-    explicit_off = _geometry_for_design(design, compact_skips=True,
-                                        junction_balance=False)
+    explicit_off = _geometry_for_design(
+        design, compact_skips=True, junction_balance=False
+    )
     rolled = _geometry_for_design(design, compact_skips=True, junction_balance=True)
 
     for a, b in zip(default, explicit_off):
         assert a["backbone_position"] == b["backbone_position"]
 
     moved = max(
-        float(np.linalg.norm(np.asarray(a["backbone_position"], float)
-                             - np.asarray(b["backbone_position"], float)))
+        float(
+            np.linalg.norm(
+                np.asarray(a["backbone_position"], float)
+                - np.asarray(b["backbone_position"], float)
+            )
+        )
         for a, b in zip(default, rolled)
     )
     assert moved > 0.1, "the flag moved nothing — the firewall test would be vacuous"
@@ -154,7 +169,7 @@ def test_the_atomistic_build_never_sees_the_display_roll():
     """
     design = _load(SQUARE_FIXTURE)
     before = build_atomistic_model(design, fast_bridges=True)
-    _geometry_for_design(design, junction_balance=True)   # the display request
+    _geometry_for_design(design, junction_balance=True)  # the display request
     after = build_atomistic_model(design, fast_bridges=True)
     assert len(before.atoms) == len(after.atoms)
     for a, b in zip(before.atoms, after.atoms):
@@ -189,13 +204,18 @@ def _atomistic_junction_gaps(design: Design) -> list[tuple[float, float]]:
             acc = pos.get((d2.helix_id, d2.start_bp, d2.direction.value), {})
             if "C3'" in donor and "C5'" in acc:
                 per_x[(frozenset((d1.helix_id, d2.helix_id)), d1.end_bp)] = float(
-                    np.linalg.norm(np.asarray(acc["C5'"]) - np.asarray(donor["C3'"])))
+                    np.linalg.norm(np.asarray(acc["C5'"]) - np.asarray(donor["C3'"]))
+                )
 
     by_pair = defaultdict(dict)
     for (pair, idx), v in per_x.items():
         by_pair[pair][idx] = v
-    return [(v, items[i + 1]) for pair, items in by_pair.items()
-            for i, v in items.items() if i + 1 in items]
+    return [
+        (v, items[i + 1])
+        for pair, items in by_pair.items()
+        for i, v in items.items()
+        if i + 1 in items
+    ]
 
 
 @pytest.mark.parametrize("fixture", [HONEYCOMB_FIXTURE, SQUARE_FIXTURE])
@@ -211,7 +231,9 @@ def test_the_atomistic_dx_junction_linkers_are_balanced(fixture):
 
     # Mean: this is what the roll is fitted on, and it lands on zero (measured +0.0002 on
     # honeycomb, −0.0057 on square, against +0.500 / +0.485 before).
-    assert abs(sum(deltas) / len(deltas)) < 0.01, "the DX pair is not balanced on average"
+    assert abs(sum(deltas) / len(deltas)) < 0.01, (
+        "the DX pair is not balanced on average"
+    )
 
     # Per junction: a residual 0.060 nm spread survives, and it is NOT the roll — the
     # measured templates are per-residue, so a junction's two linkers see different bases.
@@ -230,8 +252,10 @@ def test_the_straight_positions_carry_the_same_roll_as_the_nucleotides():
     positions, _ = _positions_for_design(straight, junction_balance=True)
     nucs = _geometry_for_design(straight, junction_balance=True)
 
-    by_key = {(n["helix_id"], n["bp_index"], n["direction"]): n["backbone_position"]
-              for n in nucs}
+    by_key = {
+        (n["helix_id"], n["bp_index"], n["direction"]): n["backbone_position"]
+        for n in nucs
+    }
     checked = 0
     for hid, by_dir in positions.items():
         for dir_name, bucket in by_dir.items():
@@ -264,7 +288,9 @@ def test_the_cg_bead_is_a_projection_of_the_helical_site(fixture):
     for helix in design.helices:
         for n in nucleotide_positions(effective_helix_for_geometry(helix, design)):
             assert n.radial_hat is not None and n.axis_point is not None
-            assert np.array_equal(n.position, n.axis_point + HELIX_RADIUS * n.radial_hat)
+            assert np.array_equal(
+                n.position, n.axis_point + HELIX_RADIUS * n.radial_hat
+            )
             assert abs(float(np.linalg.norm(n.radial_hat)) - 1.0) < 1e-12
             checked += 1
     assert checked > 100
@@ -301,6 +327,8 @@ def test_the_stamp_ignores_the_bead_and_reads_the_phase():
         geo.nucleotide_positions = orig
 
     assert len(before.atoms) == len(after.atoms)
-    worst = max(abs(a.x - b.x) + abs(a.y - b.y) + abs(a.z - b.z)
-                for a, b in zip(before.atoms, after.atoms))
+    worst = max(
+        abs(a.x - b.x) + abs(a.y - b.y) + abs(a.z - b.z)
+        for a, b in zip(before.atoms, after.atoms)
+    )
     assert worst == 0.0, f"the stamp still reads the display bead ({worst:.3e} nm)"

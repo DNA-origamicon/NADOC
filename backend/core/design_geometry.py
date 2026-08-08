@@ -68,9 +68,12 @@ def full_rep_balance_roll_rad(design: Design) -> float:
     Never call this from a path that feeds a simulation, an export or a pose fitter.
     """
     from backend.core.models import LatticeType
-    deg = (FULL_REP_BALANCE_ROLL_SQUARE_DEG
-           if design.lattice_type == LatticeType.SQUARE
-           else FULL_REP_BALANCE_ROLL_HONEYCOMB_DEG)
+
+    deg = (
+        FULL_REP_BALANCE_ROLL_SQUARE_DEG
+        if design.lattice_type == LatticeType.SQUARE
+        else FULL_REP_BALANCE_ROLL_HONEYCOMB_DEG
+    )
     return math.radians(deg)
 
 
@@ -86,7 +89,9 @@ def _rolled(helix, roll_rad: float):
     return helix.model_copy(update={"phase_offset": helix.phase_offset + roll_rad})
 
 
-def _strand_nucleotide_info(design: Design, helix_ids: frozenset[str] | None = None) -> dict:
+def _strand_nucleotide_info(
+    design: Design, helix_ids: frozenset[str] | None = None
+) -> dict:
     """(helix_id, bp_index, Direction) → strand metadata dict.
 
     If *helix_ids* is given, only nucleotides whose domain is on one of those
@@ -360,8 +365,8 @@ def _geometry_for_helices(
     from types import SimpleNamespace
 
     full_mode = helix_ids is None
-    nuc_info  = _strand_nucleotide_info(design, helix_ids)
-    roll      = full_rep_balance_roll_rad(design) if junction_balance else 0.0
+    nuc_info = _strand_nucleotide_info(design, helix_ids)
+    roll = full_rep_balance_roll_rad(design) if junction_balance else 0.0
 
     # Suppress is_five_prime on the real-helix terminal for strands with a 5' extension.
     five_prime_ext_strands = {
@@ -490,10 +495,11 @@ def _geometry_for_helices(
         if helix_ids is not None and helix.id not in helix_ids:
             continue
         if helix.id.startswith("__lnk__") and not include_linker_helices:
-            continue   # virtual linker helices have no real geometry (per-design:
-                       # bridge nucs come from _emit_bridge_nucs below instead)
-        arrs = deformed_nucleotide_arrays(helix, design, compact_skips=compact_skips,
-                                          phase_roll_rad=roll)
+            continue  # virtual linker helices have no real geometry (per-design:
+            # bridge nucs come from _emit_bridge_nucs below instead)
+        arrs = deformed_nucleotide_arrays(
+            helix, design, compact_skips=compact_skips, phase_roll_rad=roll
+        )
         arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
         _emit_arrs(
             arrs,
@@ -743,8 +749,12 @@ def _geometry_for_design(
     fitters.  The render feeds pass it explicitly.
     """
     return _geometry_for_helices(
-        design, include_linker_helices=include_linker_helices, compact_skips=compact_skips,
-        measured_positioning=measured_positioning, junction_balance=junction_balance)
+        design,
+        include_linker_helices=include_linker_helices,
+        compact_skips=compact_skips,
+        measured_positioning=measured_positioning,
+        junction_balance=junction_balance,
+    )
 
 
 def fitting_geometry(design: Design) -> list[dict]:
@@ -764,8 +774,9 @@ def fitting_geometry(design: Design) -> list[dict]:
     ARE applied (a fitter must see the design as posed); only the display tweaks are
     excluded.  Pinned by ``test_a_display_default_flip_cannot_reach_the_pose_fitters``.
     """
-    return _geometry_for_design(design, measured_positioning=False,
-                                junction_balance=False)
+    return _geometry_for_design(
+        design, measured_positioning=False, junction_balance=False
+    )
 
 
 def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
@@ -856,15 +867,17 @@ def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
     return out
 
 
-def _compact_geometry_for_design(design: 'Design', *,
-                                 junction_balance: bool = False) -> dict:
+def _compact_geometry_for_design(
+    design: "Design", *, junction_balance: bool = False
+) -> dict:
     """Compute full deformed geometry in COMPACT per-helix-per-direction
     parallel-arrays form. Wire size is ~50% of the equivalent dict-list
     ``nucleotides`` payload because field names don't repeat per nuc;
     JSON.parse on the frontend is roughly proportionally faster.
     """
     return _compact_geometry_from_nucleotides(
-        _geometry_for_design(design, junction_balance=junction_balance))
+        _geometry_for_design(design, junction_balance=junction_balance)
+    )
 
 
 def _positions_by_helix(nucleotides: list[dict]) -> dict:
@@ -893,7 +906,9 @@ def _positions_by_helix(nucleotides: list[dict]) -> dict:
 
 
 def _positions_for_design(
-    design: 'Design', *, measured_positioning: bool = False,
+    design: "Design",
+    *,
+    measured_positioning: bool = False,
     junction_balance: bool = False,
 ) -> tuple[dict, list[dict]]:
     """Compute positions for *design* in compact per-helix-per-direction

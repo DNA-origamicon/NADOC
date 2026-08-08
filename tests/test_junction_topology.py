@@ -479,9 +479,13 @@ def test_gate_uses_the_supplied_model_not_a_fresh_build():
     # outside the bounding box keeps the linking trivial (one common point) while the two
     # long bonds leave the structure instead of crossing it.
     import numpy as _np
+
     _xyz = _np.array([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
-    _pt = (float(_xyz[:, 0].min()) - 20.0, float(_xyz[:, 1].min()) - 20.0,
-           float(_xyz[:, 2].mean()))
+    _pt = (
+        float(_xyz[:, 0].min()) - 20.0,
+        float(_xyz[:, 1].min()) - 20.0,
+        float(_xyz[:, 2].mean()),
+    )
     for atom in model.atoms:
         if atom.crossover_id is not None and atom.extra_base_k is not None:
             atom.x, atom.y, atom.z = _pt

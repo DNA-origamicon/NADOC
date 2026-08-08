@@ -130,8 +130,10 @@ def geometry_batch(body: GeometryBatchBody) -> dict:
     for position in set(body.positions):
         d = _seek_feature_log(design, position)
         result[str(position)] = {
-            "nucleotides_compact": _compact_geometry_for_design(d, junction_balance=True),
-            "helix_axes":          deformed_helix_axes(d),
+            "nucleotides_compact": _compact_geometry_for_design(
+                d, junction_balance=True
+            ),
+            "helix_axes": deformed_helix_axes(d),
         }
     return result
 

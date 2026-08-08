@@ -219,12 +219,19 @@ def _strand_beads(
     fwd_base = fwd_bb + BASE_DISPLACEMENT * bp_hats
     rev_base = rev_bb - BASE_DISPLACEMENT * bp_hats
 
-    return fwd_bb, rev_bb, bp_hats, fwd_base, rev_base, (fwd_radials, rev_radials, rev_angles)
+    return (
+        fwd_bb,
+        rev_bb,
+        bp_hats,
+        fwd_base,
+        rev_base,
+        (fwd_radials, rev_radials, rev_angles),
+    )
 
 
-
-def site_from_bead(position: np.ndarray, axis_point: np.ndarray,
-                   axis_tangent: np.ndarray) -> "tuple[np.ndarray | None, float]":
+def site_from_bead(
+    position: np.ndarray, axis_point: np.ndarray, axis_tangent: np.ndarray
+) -> "tuple[np.ndarray | None, float]":
     """MEASURE a helical site off a nucleotide's actual position.
 
     The second producer of a site (``project_helical_site.md`` P2).  The first is the
@@ -252,8 +259,9 @@ def site_from_bead(position: np.ndarray, axis_point: np.ndarray,
     return radial_perp / r_norm, axial
 
 
-def site_from_beads_arrays(positions: np.ndarray, axis_points: np.ndarray,
-                           axis_tangents: np.ndarray) -> "tuple[np.ndarray, np.ndarray, np.ndarray]":
+def site_from_beads_arrays(
+    positions: np.ndarray, axis_points: np.ndarray, axis_tangents: np.ndarray
+) -> "tuple[np.ndarray, np.ndarray, np.ndarray]":
     """Vectorised :func:`site_from_bead` — ``(radial_hats, axial_offsets, ok)``.
 
     Its scalar twin exists for the same reason ``_strand_beads``' does: the two paths use
@@ -271,8 +279,9 @@ def site_from_beads_arrays(positions: np.ndarray, axis_points: np.ndarray,
     return hats, axial, ok
 
 
-def _interleave_site(axis_pts: np.ndarray, angles: np.ndarray,
-                     site: tuple) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _interleave_site(
+    axis_pts: np.ndarray, angles: np.ndarray, site: tuple
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Interleave one run's helical site into the fwd/rev array layout.
 
     ``site`` is what :func:`_strand_beads` returns: ``(fwd_radials, rev_radials,
@@ -289,10 +298,13 @@ def _interleave_site(axis_pts: np.ndarray, angles: np.ndarray,
     M = 2 * len(angles)
     axis_points = np.empty((M, 3), dtype=np.float64)
     radial_hats = np.empty((M, 3), dtype=np.float64)
-    azimuths    = np.empty(M, dtype=np.float64)
-    axis_points[0::2] = axis_pts;    axis_points[1::2] = axis_pts
-    radial_hats[0::2] = fwd_radials; radial_hats[1::2] = rev_radials
-    azimuths[0::2]    = angles;      azimuths[1::2]    = rev_angles
+    azimuths = np.empty(M, dtype=np.float64)
+    axis_points[0::2] = axis_pts
+    axis_points[1::2] = axis_pts
+    radial_hats[0::2] = fwd_radials
+    radial_hats[1::2] = rev_radials
+    azimuths[0::2] = angles
+    azimuths[1::2] = rev_angles
     return axis_points, radial_hats, azimuths
 
 
@@ -375,30 +387,34 @@ def nucleotide_positions(
         fwd_base = fwd_backbone + BASE_DISPLACEMENT * base_pair_hat
         rev_base = rev_backbone - BASE_DISPLACEMENT * base_pair_hat
 
-        results.append(NucleotidePosition(
-            helix_id=helix.id,
-            bp_index=global_bp,
-            direction=Direction.FORWARD,
-            position=fwd_backbone,
-            base_position=fwd_base,
-            base_normal=base_pair_hat,
-            axis_tangent=axis_hat,
-            axis_point=axis_pt,
-            radial_hat=fwd_radial,
-            azimuth_rad=fwd_angle,
-        ))
-        results.append(NucleotidePosition(
-            helix_id=helix.id,
-            bp_index=global_bp,
-            direction=Direction.REVERSE,
-            position=rev_backbone,
-            base_position=rev_base,
-            base_normal=-base_pair_hat,
-            axis_tangent=axis_hat,
-            axis_point=axis_pt,
-            radial_hat=rev_radial,
-            azimuth_rad=rev_angle,
-        ))
+        results.append(
+            NucleotidePosition(
+                helix_id=helix.id,
+                bp_index=global_bp,
+                direction=Direction.FORWARD,
+                position=fwd_backbone,
+                base_position=fwd_base,
+                base_normal=base_pair_hat,
+                axis_tangent=axis_hat,
+                axis_point=axis_pt,
+                radial_hat=fwd_radial,
+                azimuth_rad=fwd_angle,
+            )
+        )
+        results.append(
+            NucleotidePosition(
+                helix_id=helix.id,
+                bp_index=global_bp,
+                direction=Direction.REVERSE,
+                position=rev_backbone,
+                base_position=rev_base,
+                base_normal=-base_pair_hat,
+                axis_tangent=axis_hat,
+                axis_point=axis_pt,
+                radial_hat=rev_radial,
+                azimuth_rad=rev_angle,
+            )
+        )
 
     eff_i = 0  # compacted axial+twist index (only consulted when compact_skips)
     for local_i in range(helix.length_bp):
@@ -482,14 +498,17 @@ def nucleotide_positions_arrays(helix: Helix, compact_skips: bool = False) -> di
     if N == 0:
         empty3 = np.empty((0, 3), dtype=np.float64)
         return {
-            'helix_id': helix.id,
-            'bp_indices': np.empty(0, dtype=np.intp),
-            'local_bps':  np.empty(0, dtype=np.intp),
-            'directions': np.empty(0, dtype=np.intp),
-            'positions':     empty3.copy(), 'base_positions': empty3.copy(),
-            'base_normals':  empty3.copy(), 'axis_tangents':  empty3.copy(),
-            'axis_points':   empty3.copy(), 'radial_hats':    empty3.copy(),
-            'azimuths':      np.empty(0, dtype=np.float64),
+            "helix_id": helix.id,
+            "bp_indices": np.empty(0, dtype=np.intp),
+            "local_bps": np.empty(0, dtype=np.intp),
+            "directions": np.empty(0, dtype=np.intp),
+            "positions": empty3.copy(),
+            "base_positions": empty3.copy(),
+            "base_normals": empty3.copy(),
+            "axis_tangents": empty3.copy(),
+            "axis_points": empty3.copy(),
+            "radial_hats": empty3.copy(),
+            "azimuths": np.empty(0, dtype=np.float64),
         }
 
     local_bps = np.arange(N, dtype=np.intp)  # (N,)
@@ -504,7 +523,8 @@ def nucleotide_positions_arrays(helix: Helix, compact_skips: bool = False) -> di
     fy = frame[:, 1]  # (3,)
 
     fwd_bb, rev_bb, bp_hats, fwd_base, rev_base, _site = _strand_beads(
-        axis_pts, angles, fx, fy, groove_offset_rad(helix.direction))
+        axis_pts, angles, fx, fy, groove_offset_rad(helix.direction)
+    )
 
     # Interleave fwd/rev → shape (2N, 3)
     # Order: fwd@bp0, rev@bp0, fwd@bp1, rev@bp1, …
@@ -524,18 +544,18 @@ def nucleotide_positions_arrays(helix: Helix, compact_skips: bool = False) -> di
     _axis_points, _radial_hats, _azimuths = _interleave_site(axis_pts, angles, _site)
 
     return {
-        'helix_id':      helix.id,
-        'bp_indices':    np.repeat(global_bps, 2),
-        'local_bps':     np.repeat(local_bps, 2),
-        'directions':    np.tile(np.array([0, 1], dtype=np.intp), N),
-        'positions':     positions,
-        'base_positions': base_positions,
-        'base_normals':  base_normals,
-        'axis_tangents': axis_tangents,
+        "helix_id": helix.id,
+        "bp_indices": np.repeat(global_bps, 2),
+        "local_bps": np.repeat(local_bps, 2),
+        "directions": np.tile(np.array([0, 1], dtype=np.intp), N),
+        "positions": positions,
+        "base_positions": base_positions,
+        "base_normals": base_normals,
+        "axis_tangents": axis_tangents,
         # The helical site — see _interleave_site.  positions is a projection of it.
-        'axis_points':   _axis_points,
-        'radial_hats':   _radial_hats,
-        'azimuths':      _azimuths,
+        "axis_points": _axis_points,
+        "radial_hats": _radial_hats,
+        "azimuths": _azimuths,
     }
 
 
@@ -553,14 +573,17 @@ def nucleotide_positions_arrays_extended(helix: Helix, lo_bp: int) -> dict:
     if lo_bp >= helix.bp_start:
         empty3 = np.empty((0, 3), dtype=np.float64)
         return {
-            'helix_id': helix.id,
-            'bp_indices': np.empty(0, dtype=np.intp),
-            'local_bps':  np.empty(0, dtype=np.intp),
-            'directions': np.empty(0, dtype=np.intp),
-            'positions':     empty3.copy(), 'base_positions': empty3.copy(),
-            'base_normals':  empty3.copy(), 'axis_tangents':  empty3.copy(),
-            'axis_points':   empty3.copy(), 'radial_hats':    empty3.copy(),
-            'azimuths':      np.empty(0, dtype=np.float64),
+            "helix_id": helix.id,
+            "bp_indices": np.empty(0, dtype=np.intp),
+            "local_bps": np.empty(0, dtype=np.intp),
+            "directions": np.empty(0, dtype=np.intp),
+            "positions": empty3.copy(),
+            "base_positions": empty3.copy(),
+            "base_normals": empty3.copy(),
+            "axis_tangents": empty3.copy(),
+            "axis_points": empty3.copy(),
+            "radial_hats": empty3.copy(),
+            "azimuths": np.empty(0, dtype=np.float64),
         }
 
     start = helix.axis_start.to_array()
@@ -586,7 +609,8 @@ def nucleotide_positions_arrays_extended(helix: Helix, lo_bp: int) -> dict:
     fy = frame[:, 1]
 
     fwd_bb, rev_bb, bp_hats, fwd_base, rev_base, _site = _strand_beads(
-        axis_pts, angles, fx, fy, groove_offset_rad(helix.direction))
+        axis_pts, angles, fx, fy, groove_offset_rad(helix.direction)
+    )
 
     M = 2 * N
     positions = np.empty((M, 3), dtype=np.float64)
@@ -604,18 +628,18 @@ def nucleotide_positions_arrays_extended(helix: Helix, lo_bp: int) -> dict:
     _axis_points, _radial_hats, _azimuths = _interleave_site(axis_pts, angles, _site)
 
     return {
-        'helix_id':      helix.id,
-        'bp_indices':    np.repeat(global_bps, 2),
-        'local_bps':     np.repeat(local_bps, 2),
-        'directions':    np.tile(np.array([0, 1], dtype=np.intp), N),
-        'positions':     positions,
-        'base_positions': base_positions,
-        'base_normals':  base_normals,
-        'axis_tangents': axis_tangents,
+        "helix_id": helix.id,
+        "bp_indices": np.repeat(global_bps, 2),
+        "local_bps": np.repeat(local_bps, 2),
+        "directions": np.tile(np.array([0, 1], dtype=np.intp), N),
+        "positions": positions,
+        "base_positions": base_positions,
+        "base_normals": base_normals,
+        "axis_tangents": axis_tangents,
         # The helical site — see _interleave_site.  positions is a projection of it.
-        'axis_points':   _axis_points,
-        'radial_hats':   _radial_hats,
-        'azimuths':      _azimuths,
+        "axis_points": _axis_points,
+        "radial_hats": _radial_hats,
+        "azimuths": _azimuths,
     }
 
 
@@ -635,14 +659,17 @@ def nucleotide_positions_arrays_extended_right(helix: Helix, hi_bp: int) -> dict
     if hi_bp < helix_hi:
         empty3 = np.empty((0, 3), dtype=np.float64)
         return {
-            'helix_id': helix.id,
-            'bp_indices': np.empty(0, dtype=np.intp),
-            'local_bps':  np.empty(0, dtype=np.intp),
-            'directions': np.empty(0, dtype=np.intp),
-            'positions':     empty3.copy(), 'base_positions': empty3.copy(),
-            'base_normals':  empty3.copy(), 'axis_tangents':  empty3.copy(),
-            'axis_points':   empty3.copy(), 'radial_hats':    empty3.copy(),
-            'azimuths':      np.empty(0, dtype=np.float64),
+            "helix_id": helix.id,
+            "bp_indices": np.empty(0, dtype=np.intp),
+            "local_bps": np.empty(0, dtype=np.intp),
+            "directions": np.empty(0, dtype=np.intp),
+            "positions": empty3.copy(),
+            "base_positions": empty3.copy(),
+            "base_normals": empty3.copy(),
+            "axis_tangents": empty3.copy(),
+            "axis_points": empty3.copy(),
+            "radial_hats": empty3.copy(),
+            "azimuths": np.empty(0, dtype=np.float64),
         }
 
     start = helix.axis_start.to_array()
@@ -668,7 +695,8 @@ def nucleotide_positions_arrays_extended_right(helix: Helix, hi_bp: int) -> dict
     fy = frame[:, 1]
 
     fwd_bb, rev_bb, bp_hats, fwd_base, rev_base, _site = _strand_beads(
-        axis_pts, angles, fx, fy, groove_offset_rad(helix.direction))
+        axis_pts, angles, fx, fy, groove_offset_rad(helix.direction)
+    )
 
     M = 2 * N
     positions = np.empty((M, 3), dtype=np.float64)
@@ -686,18 +714,18 @@ def nucleotide_positions_arrays_extended_right(helix: Helix, hi_bp: int) -> dict
     _axis_points, _radial_hats, _azimuths = _interleave_site(axis_pts, angles, _site)
 
     return {
-        'helix_id':      helix.id,
-        'bp_indices':    np.repeat(global_bps, 2),
-        'local_bps':     np.repeat(local_bps, 2),
-        'directions':    np.tile(np.array([0, 1], dtype=np.intp), N),
-        'positions':     positions,
-        'base_positions': base_positions,
-        'base_normals':  base_normals,
-        'axis_tangents': axis_tangents,
+        "helix_id": helix.id,
+        "bp_indices": np.repeat(global_bps, 2),
+        "local_bps": np.repeat(local_bps, 2),
+        "directions": np.tile(np.array([0, 1], dtype=np.intp), N),
+        "positions": positions,
+        "base_positions": base_positions,
+        "base_normals": base_normals,
+        "axis_tangents": axis_tangents,
         # The helical site — see _interleave_site.  positions is a projection of it.
-        'axis_points':   _axis_points,
-        'radial_hats':   _radial_hats,
-        'azimuths':      _azimuths,
+        "axis_points": _axis_points,
+        "radial_hats": _radial_hats,
+        "azimuths": _azimuths,
     }
 
 
@@ -711,14 +739,17 @@ def _nuc_arrays_from_list(
     if not nucs:
         empty3 = np.empty((0, 3), dtype=np.float64)
         return {
-            'helix_id': helix_id,
-            'bp_indices': np.empty(0, dtype=np.intp),
-            'local_bps':  np.empty(0, dtype=np.intp),
-            'directions': np.empty(0, dtype=np.intp),
-            'positions':     empty3.copy(), 'base_positions': empty3.copy(),
-            'base_normals':  empty3.copy(), 'axis_tangents':  empty3.copy(),
-            'axis_points':   empty3.copy(), 'radial_hats':    empty3.copy(),
-            'azimuths':      np.empty(0, dtype=np.float64),
+            "helix_id": helix_id,
+            "bp_indices": np.empty(0, dtype=np.intp),
+            "local_bps": np.empty(0, dtype=np.intp),
+            "directions": np.empty(0, dtype=np.intp),
+            "positions": empty3.copy(),
+            "base_positions": empty3.copy(),
+            "base_normals": empty3.copy(),
+            "axis_tangents": empty3.copy(),
+            "axis_points": empty3.copy(),
+            "radial_hats": empty3.copy(),
+            "azimuths": np.empty(0, dtype=np.float64),
         }
     bp_idx = np.array([n.bp_index for n in nucs], dtype=np.intp)
     return {
@@ -729,18 +760,18 @@ def _nuc_arrays_from_list(
             [0 if n.direction == Direction.FORWARD else 1 for n in nucs],
             dtype=np.intp,
         ),
-        'positions':      np.array([n.position      for n in nucs], dtype=np.float64),
-        'base_positions': np.array([n.base_position for n in nucs], dtype=np.float64),
-        'base_normals':   np.array([n.base_normal   for n in nucs], dtype=np.float64),
-        'axis_tangents':  np.array([n.axis_tangent  for n in nucs], dtype=np.float64),
+        "positions": np.array([n.position for n in nucs], dtype=np.float64),
+        "base_positions": np.array([n.base_position for n in nucs], dtype=np.float64),
+        "base_normals": np.array([n.base_normal for n in nucs], dtype=np.float64),
+        "axis_tangents": np.array([n.axis_tangent for n in nucs], dtype=np.float64),
         # The site, carried from the SCALAR path's own values rather than recomputed.
         # This is the loop/skip fallback: `nucleotide_positions_arrays` delegates here for
         # any helix with loop_skips, and the scalar path uses math.cos where the array path
         # uses np.cos.  Recomputing would put skip-bearing designs a last ULP away from
         # every other design, which the bridge solve turns into 0.1-1.3 A (LESSONS H15/H19).
-        'axis_points':    np.array([n.axis_point    for n in nucs], dtype=np.float64),
-        'radial_hats':    np.array([n.radial_hat    for n in nucs], dtype=np.float64),
-        'azimuths':       np.array([n.azimuth_rad   for n in nucs], dtype=np.float64),
+        "axis_points": np.array([n.axis_point for n in nucs], dtype=np.float64),
+        "radial_hats": np.array([n.radial_hat for n in nucs], dtype=np.float64),
+        "azimuths": np.array([n.azimuth_rad for n in nucs], dtype=np.float64),
     }
 
 

@@ -165,7 +165,9 @@ SQUARE_ROW_PITCH: float = SQUARE_HELIX_SPACING  # = 2.6 nm
 # crossover offsets, so their arcs are scattered in both lattices (honeycomb 0.30–2.00 nm
 # as shipped) and no single roll balances them.
 FULL_REP_BALANCE_ROLL_HONEYCOMB_DEG: float = 0.0
-FULL_REP_BALANCE_ROLL_SQUARE_DEG: float = 30.0 - SQUARE_TWIST_PER_BP_DEG / 2  # = 13.125°
+FULL_REP_BALANCE_ROLL_SQUARE_DEG: float = (
+    30.0 - SQUARE_TWIST_PER_BP_DEG / 2
+)  # = 13.125°
 
 
 # ── oxDNA simulation units ────────────────────────────────────────────────────

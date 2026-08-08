@@ -716,9 +716,9 @@ def _reference_nuc_mask(arrs: dict, helix: "Helix", design: "Design") -> np.ndar
 # phase instead of solving for it (periodic_polymer._section_frame_from_arrs inverts a 2x2
 # to recover exactly this).  Carrying it untransformed would be worse than not carrying it:
 # `positions` would have moved while `axis_points` still pointed at the straight lattice.
-_XF_POINT_KEYS = ('positions', 'base_positions', 'axis_points')
-_XF_DIR_KEYS   = ('base_normals', 'axis_tangents', 'radial_hats')
-_XF_ALL_KEYS   = _XF_POINT_KEYS + _XF_DIR_KEYS
+_XF_POINT_KEYS = ("positions", "base_positions", "axis_points")
+_XF_DIR_KEYS = ("base_normals", "axis_tangents", "radial_hats")
+_XF_ALL_KEYS = _XF_POINT_KEYS + _XF_DIR_KEYS
 
 
 def _xf_keys_present(arrs: dict) -> tuple:
@@ -876,19 +876,19 @@ def _apply_cluster_rigid_transform_arrays(
         return vecs @ R.T
 
     out = {
-        'helix_id':       arrs['helix_id'],
-        'bp_indices':     arrs['bp_indices'],
-        'local_bps':      arrs['local_bps'],
-        'directions':     arrs['directions'],
-        'positions':      _xf_pos(arrs['positions']),
-        'base_positions': _xf_pos(arrs['base_positions']),
-        'base_normals':   _xf_dir(arrs['base_normals']),
-        'axis_tangents':  _xf_dir(arrs['axis_tangents']),
+        "helix_id": arrs["helix_id"],
+        "bp_indices": arrs["bp_indices"],
+        "local_bps": arrs["local_bps"],
+        "directions": arrs["directions"],
+        "positions": _xf_pos(arrs["positions"]),
+        "base_positions": _xf_pos(arrs["base_positions"]),
+        "base_normals": _xf_dir(arrs["base_normals"]),
+        "axis_tangents": _xf_dir(arrs["axis_tangents"]),
     }
-    if 'axis_points' in arrs:
-        out['axis_points'] = _xf_pos(arrs['axis_points'])
-        out['radial_hats'] = _xf_dir(arrs['radial_hats'])
-        out['azimuths']    = arrs['azimuths']          # invariant — see _XF_ALL_KEYS
+    if "axis_points" in arrs:
+        out["axis_points"] = _xf_pos(arrs["axis_points"])
+        out["radial_hats"] = _xf_dir(arrs["radial_hats"])
+        out["azimuths"] = arrs["azimuths"]  # invariant — see _XF_ALL_KEYS
     return out
 
 
@@ -1606,10 +1606,11 @@ def deformed_nucleotide_arrays(
     feeds a simulation, an export or a pose fitter may set it — see
     ``constants.FULL_REP_BALANCE_ROLL_*``.
     """
-    helix    = effective_helix_for_geometry(helix, design)
+    helix = effective_helix_for_geometry(helix, design)
     if phase_roll_rad:
         helix = helix.model_copy(
-            update={"phase_offset": helix.phase_offset + phase_roll_rad})
+            update={"phase_offset": helix.phase_offset + phase_roll_rad}
+        )
     clusters = _clusters_for_helix(design, helix.id)
 
     arrs = nucleotide_positions_arrays(
@@ -1708,12 +1709,12 @@ def deformed_nucleotide_arrays(
     # parts separately keeps the axial part in the axis point where it belongs, so the
     # identity survives to rounding — it is no longer exact once a rotation is involved,
     # which is why the test asserts 1e-12 on deformed arrays and equality on straight ones.
-    if 'radial_hats' in arrs:
-        radial_d = np.einsum('mij,mj->mi', R_n, arrs['radial_hats'])
-        axial_local = nuc_locals - HELIX_RADIUS * arrs['radial_hats']
-        result['axis_points'] = axis_d + np.einsum('mij,mj->mi', R_n, axial_local)
-        result['radial_hats'] = radial_d
-        result['azimuths']    = arrs['azimuths']
+    if "radial_hats" in arrs:
+        radial_d = np.einsum("mij,mj->mi", R_n, arrs["radial_hats"])
+        axial_local = nuc_locals - HELIX_RADIUS * arrs["radial_hats"]
+        result["axis_points"] = axis_d + np.einsum("mij,mj->mi", R_n, axial_local)
+        result["radial_hats"] = radial_d
+        result["azimuths"] = arrs["azimuths"]
 
     # Reference geometry is frozen under bend/twist: restore the straight
     # (pre-deformation) values from `arrs` for reference-strand nucleotides.
@@ -1813,12 +1814,12 @@ def deform_extended_arrays(
         "base_normals": bn_d,
         "axis_tangents": at_d,
     }
-    if 'radial_hats' in extra_arrs:      # site, split as in deformed_nucleotide_arrays
-        radial_d = extra_arrs['radial_hats'] @ R_e.T
-        axial_local = offsets - HELIX_RADIUS * extra_arrs['radial_hats']
-        result['axis_points'] = axis_d_edge + axial_local @ R_e.T
-        result['radial_hats'] = radial_d
-        result['azimuths']    = extra_arrs['azimuths']
+    if "radial_hats" in extra_arrs:  # site, split as in deformed_nucleotide_arrays
+        radial_d = extra_arrs["radial_hats"] @ R_e.T
+        axial_local = offsets - HELIX_RADIUS * extra_arrs["radial_hats"]
+        result["axis_points"] = axis_d_edge + axial_local @ R_e.T
+        result["radial_hats"] = radial_d
+        result["azimuths"] = extra_arrs["azimuths"]
 
     if clusters:
         result = _apply_cluster_rigid_transform_arrays(result, clusters[0])

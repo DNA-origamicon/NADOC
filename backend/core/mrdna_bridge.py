@@ -1496,7 +1496,7 @@ def _build_nt_arrays(
     # Keyed (helix_id, bp_index, direction, copy_k) with copy_k the emission order within a
     # bp, which is the same convention `atomistic.py` uses for loop copies.
     from backend.core.deformation import effective_helix_for_geometry  # noqa: PLC0415
-    from backend.core.geometry import nucleotide_positions             # noqa: PLC0415
+    from backend.core.geometry import nucleotide_positions  # noqa: PLC0415
 
     site: Dict[Tuple[str, int, str, int], object] = {}
     helix_geom: Dict[str, tuple] = {}
@@ -1594,7 +1594,7 @@ def _build_nt_arrays(
                 for k in k_range:
                     nuc = site.get((h_id, bp_idx, direction, k))
                     if nuc is None:
-                        continue   # geometry emitted no nucleotide here (skip/short helix)
+                        continue  # geometry emitted no nucleotide here (skip/short helix)
 
                     rad = nuc.radial_hat
                     backbone_ang = nuc.position * _NM_TO_ANGSTROM

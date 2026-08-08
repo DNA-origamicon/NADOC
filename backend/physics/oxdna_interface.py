@@ -1307,7 +1307,7 @@ _POS_BASE_NM: float = 0.4 * OXDNA_LENGTH_UNIT  # ≈ 0.341 nm
 # nucleotides toward each other along the pair chord reproduces the relaxed CM-CM AND the
 # relaxed backbone-backbone, whereas projecting the centres of mass onto a 0.529 nm
 # cylinder matches the first and misses the second.
-OXDNA_NATIVE_HBOND_NM: float = 0.4 * OXDNA_LENGTH_UNIT   # HYDR_R0 = 0.34072 nm
+OXDNA_NATIVE_HBOND_NM: float = 0.4 * OXDNA_LENGTH_UNIT  # HYDR_R0 = 0.34072 nm
 
 
 def _oxdna_cm_radius_map(

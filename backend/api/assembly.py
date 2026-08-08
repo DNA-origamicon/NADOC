@@ -2837,9 +2837,10 @@ def _linker_geometry_for_assembly(assembly) -> dict:
         # whose balance roll is 0.  A ds linker on a SQUARE design therefore draws its
         # bridge unrolled beside rolled part beads — a known gap, unexercised (no
         # fixture in Examples/ or workspace/ has a ds linker).
-        "nucleotides":     _geometry_for_design(synthetic, include_linker_helices=True,
-                                                junction_balance=True),
-        "helix_axes":      deformed_helix_axes(synthetic),
+        "nucleotides": _geometry_for_design(
+            synthetic, include_linker_helices=True, junction_balance=True
+        ),
+        "helix_axes": deformed_helix_axes(synthetic),
         "aliased_helices": [h.model_dump(mode="json") for h in aliased],
     }
 

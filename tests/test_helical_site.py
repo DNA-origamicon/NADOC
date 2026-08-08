@@ -41,9 +41,11 @@ from backend.core.models import Design, LatticeType
 
 PLAIN_HC = Path("Examples/6hb_test.nadoc")
 PLAIN_SQ = Path("workspace/2x3x100_Sq_test.nadoc")
-SKIPS = Path("workspace/3x6x400_Sq_test.nadoc")      # 18 helices carrying loop_skips
-CLUSTERED = Path("workspace/VoltronCore.nadoc")      # 3 cluster transforms + 46 skip helices
-BENT = Path("Examples/multi_domain_test3_bend90.nadoc")   # a real bend deformation
+SKIPS = Path("workspace/3x6x400_Sq_test.nadoc")  # 18 helices carrying loop_skips
+CLUSTERED = Path(
+    "workspace/VoltronCore.nadoc"
+)  # 3 cluster transforms + 46 skip helices
+BENT = Path("Examples/multi_domain_test3_bend90.nadoc")  # a real bend deformation
 
 SITE_KEYS = ("axis_points", "radial_hats", "azimuths")
 
@@ -71,7 +73,8 @@ def test_every_array_producer_emits_the_site(fixture):
         "arrays_compact": nucleotide_positions_arrays(helix, compact_skips=True),
         "extended_lo": nucleotide_positions_arrays_extended(helix, helix.bp_start - 6),
         "extended_hi": nucleotide_positions_arrays_extended_right(
-            helix, helix.bp_start + helix.length_bp + 5),
+            helix, helix.bp_start + helix.length_bp + 5
+        ),
         "deformed": deformed_nucleotide_arrays(design.helices[0], design),
     }
     for name, arrs in producers.items():
@@ -87,7 +90,9 @@ def test_the_empty_helix_still_carries_the_site_keys():
     """A caller that unconditionally reads the site must not KeyError on a 0-bp helix."""
     design = _load(PLAIN_HC)
     helix = effective_helix_for_geometry(design.helices[0], design)
-    arrs = nucleotide_positions_arrays_extended(helix, helix.bp_start)   # empty by design
+    arrs = nucleotide_positions_arrays_extended(
+        helix, helix.bp_start
+    )  # empty by design
     for k in SITE_KEYS:
         assert k in arrs
         assert len(arrs[k]) == 0
@@ -105,11 +110,14 @@ def test_the_bead_is_the_site_projected_exactly(fixture):
     checked = 0
     for h in design.helices:
         helix = effective_helix_for_geometry(h, design)
-        for arrs in (nucleotide_positions_arrays(helix),
-                     nucleotide_positions_arrays(helix, compact_skips=True),
-                     nucleotide_positions_arrays_extended(helix, helix.bp_start - 4),
-                     nucleotide_positions_arrays_extended_right(
-                         helix, helix.bp_start + helix.length_bp + 4)):
+        for arrs in (
+            nucleotide_positions_arrays(helix),
+            nucleotide_positions_arrays(helix, compact_skips=True),
+            nucleotide_positions_arrays_extended(helix, helix.bp_start - 4),
+            nucleotide_positions_arrays_extended_right(
+                helix, helix.bp_start + helix.length_bp + 4
+            ),
+        ):
             if not len(arrs["positions"]):
                 continue
             rhs = arrs["axis_points"] + HELIX_RADIUS * arrs["radial_hats"]
@@ -133,8 +141,10 @@ def test_the_azimuth_reproduces_the_radial_in_the_helix_frame(fixture):
             continue
         axis_vec = helix.axis_end.to_array() - helix.axis_start.to_array()
         frame = _frame_from_helix_axis(axis_vec / np.linalg.norm(axis_vec))
-        expected = (np.cos(arrs["azimuths"])[:, None] * frame[:, 0]
-                    + np.sin(arrs["azimuths"])[:, None] * frame[:, 1])
+        expected = (
+            np.cos(arrs["azimuths"])[:, None] * frame[:, 0]
+            + np.sin(arrs["azimuths"])[:, None] * frame[:, 1]
+        )
         assert np.abs(expected - arrs["radial_hats"]).max() < 1e-12
 
 
@@ -154,12 +164,15 @@ def test_the_skip_fallback_carries_the_scalar_paths_own_values():
         arrs = nucleotide_positions_arrays(helix)
         scalar = nucleotide_positions(helix)
         assert len(scalar) == len(arrs["positions"])
-        assert np.array_equal(arrs["radial_hats"],
-                              np.array([n.radial_hat for n in scalar]))
-        assert np.array_equal(arrs["axis_points"],
-                              np.array([n.axis_point for n in scalar]))
-        assert np.array_equal(arrs["azimuths"],
-                              np.array([n.azimuth_rad for n in scalar]))
+        assert np.array_equal(
+            arrs["radial_hats"], np.array([n.radial_hat for n in scalar])
+        )
+        assert np.array_equal(
+            arrs["axis_points"], np.array([n.axis_point for n in scalar])
+        )
+        assert np.array_equal(
+            arrs["azimuths"], np.array([n.azimuth_rad for n in scalar])
+        )
         checked += len(scalar)
     assert checked > 100
 
@@ -182,9 +195,9 @@ def test_the_site_moves_with_the_beads_under_a_cluster_transform():
         # A rotation is involved, so the identity holds to rounding rather than exactly.
         assert _identity_residual(deformed) < 1e-12
         if np.abs(straight["positions"] - deformed["positions"]).max() > 1e-9:
-            assert np.abs(straight["axis_points"]
-                          - deformed["axis_points"]).max() > 1e-9, (
-                f"{h.id}: beads moved but the site did not — stale site")
+            assert (
+                np.abs(straight["axis_points"] - deformed["axis_points"]).max() > 1e-9
+            ), f"{h.id}: beads moved but the site did not — stale site"
             moved += 1
     assert moved > 0, "no helix in this fixture actually moved; test proves nothing"
 
@@ -205,14 +218,22 @@ def test_the_site_survives_the_extended_loop_deformation_path():
     # at the window's start, where the frame is still identity and nothing moves — correct
     # behaviour, but it would make this test vacuous.
     hi_edge = helix.bp_start + helix.length_bp - 1
-    bent = design.model_copy(update={"deformations": [DeformationOp(
-        type="bend",
-        plane_a_bp=helix.bp_start + 2,
-        plane_b_bp=hi_edge,
-        affected_helix_ids=[h.id for h in design.helices],
-        cluster_ids=[],
-        params=BendParams(kind="bend", curvature_deg_per_bp=1.5, direction_deg=30.0),
-    )]})
+    bent = design.model_copy(
+        update={
+            "deformations": [
+                DeformationOp(
+                    type="bend",
+                    plane_a_bp=helix.bp_start + 2,
+                    plane_b_bp=hi_edge,
+                    affected_helix_ids=[h.id for h in design.helices],
+                    cluster_ids=[],
+                    params=BendParams(
+                        kind="bend", curvature_deg_per_bp=1.5, direction_deg=30.0
+                    ),
+                )
+            ]
+        }
+    )
 
     extra = nucleotide_positions_arrays_extended_right(helix, hi_edge + 5)
     assert len(extra["positions"]), "fixture produced no extended nucleotides"
@@ -228,7 +249,7 @@ def test_the_site_survives_the_extended_loop_deformation_path():
 
 # ── Phase 2: mrDNA reads the site instead of re-deriving it ───────────────────
 
-LOOPS = Path("Examples/U6hb.nadoc")   # 36 loop insertions (delta > 0) + a bend
+LOOPS = Path("Examples/U6hb.nadoc")  # 36 loop insertions (delta > 0) + a bend
 
 
 @pytest.mark.parametrize("fixture", [PLAIN_HC, PLAIN_SQ, SKIPS, LOOPS])
@@ -243,7 +264,9 @@ def test_the_mrdna_seed_is_the_geometric_layers_site(fixture):
     from backend.core.mrdna_bridge import _NM_TO_ANGSTROM, _build_nt_arrays
 
     design = _load(fixture)
-    r, _bp, _stack, _tp, _orient, _seq, nt_key = _build_nt_arrays(design, return_nt_key=True)
+    r, _bp, _stack, _tp, _orient, _seq, nt_key = _build_nt_arrays(
+        design, return_nt_key=True
+    )
 
     site = {}
     for h in design.helices:
@@ -255,7 +278,7 @@ def test_the_mrdna_seed_is_the_geometric_layers_site(fixture):
 
     checked = 0
     for key, idx in nt_key.items():
-        if key[0].startswith("__"):          # synthetic tail beads have no lattice site
+        if key[0].startswith("__"):  # synthetic tail beads have no lattice site
             continue
         nuc = site.get(key)
         assert nuc is not None, f"mrDNA emitted {key} with no geometric site"
@@ -280,7 +303,8 @@ def test_the_mrdna_seed_uses_the_commensurate_honeycomb_twist():
     assert design.lattice_type == LatticeType.HONEYCOMB
     stored = {h.twist_per_bp_rad for h in design.helices}
     assert not any(abs(t - HONEYCOMB_TWIST_PER_BP_RAD) < 1e-12 for t in stored), (
-        "fixture no longer carries a stale stored twist — it cannot prove this")
+        "fixture no longer carries a stale stored twist — it cannot prove this"
+    )
 
     r, *_rest, nt_key = _build_nt_arrays(design, return_nt_key=True)
     helix = effective_helix_for_geometry(design.helices[0], design)
@@ -341,7 +365,7 @@ def test_the_seam_solver_survives_a_base_pair_split_across_two_clusters():
                 continue
             fi, ri = int(fwd.argmax()), int(rev.argmax())
             if np.allclose(arrs["axis_points"][fi], arrs["axis_points"][ri], atol=1e-9):
-                continue                      # both strands in one frame — not the case
+                continue  # both strands in one frame — not the case
             split_found += 1
             F = pp._section_frame_from_arrs(arrs, bp)
             assert F is not None
@@ -379,7 +403,7 @@ def test_measuring_a_site_off_the_bead_reproduces_the_analytic_one(fixture):
             hat, axial = site_from_bead(n.position, n.axis_point, n.axis_tangent)
             assert hat is not None
             assert np.abs(hat - n.radial_hat).max() < 1e-15
-            assert abs(axial) < 1e-9        # a lattice bead lies in its own axis plane
+            assert abs(axial) < 1e-9  # a lattice bead lies in its own axis plane
             checked += 1
     assert checked > 100
 
@@ -390,8 +414,11 @@ def test_the_scalar_and_array_site_producers_agree():
     from backend.core.geometry import site_from_bead, site_from_beads_arrays
 
     design = _load(PLAIN_HC)
-    nucs = [n for h in design.helices[:3]
-            for n in nucleotide_positions(effective_helix_for_geometry(h, design))]
+    nucs = [
+        n
+        for h in design.helices[:3]
+        for n in nucleotide_positions(effective_helix_for_geometry(h, design))
+    ]
     pos = np.array([n.position for n in nucs])
     axp = np.array([n.axis_point for n in nucs])
     axt = np.array([n.axis_tangent for n in nucs])
@@ -415,7 +442,8 @@ def test_a_bead_on_the_axis_has_no_site():
     assert axial == pytest.approx(0.5)
 
     hats, ax, ok = site_from_beads_arrays(
-        np.array([axis_pt + 0.5 * tangent]), np.array([axis_pt]), np.array([tangent]))
+        np.array([axis_pt + 0.5 * tangent]), np.array([axis_pt]), np.array([tangent])
+    )
     assert not ok[0]
     assert np.array_equal(hats[0], np.zeros(3))
 
@@ -441,9 +469,15 @@ def test_a_moved_nucleotide_gets_a_measured_site_not_the_lattice_one():
     def moved(helix, compact_skips=False):
         out = []
         for n in orig(helix, compact_skips=compact_skips):
-            out.append(dc.replace(
-                n, position=n.axis_point + 1.4 * n.radial_hat,
-                radial_hat=None, axis_point=None, azimuth_rad=None))
+            out.append(
+                dc.replace(
+                    n,
+                    position=n.axis_point + 1.4 * n.radial_hat,
+                    radial_hat=None,
+                    axis_point=None,
+                    azimuth_rad=None,
+                )
+            )
         return out
 
     geo.nucleotide_positions = moved
@@ -455,8 +489,10 @@ def test_a_moved_nucleotide_gets_a_measured_site_not_the_lattice_one():
     # The radius change is absorbed (the stamp re-places at its own radius), but the frame
     # must still be built — and identical, because a pure radial move does not rotate it.
     assert len(before.atoms) == len(after.atoms)
-    worst = max(abs(a.x - b.x) + abs(a.y - b.y) + abs(a.z - b.z)
-                for a, b in zip(before.atoms, after.atoms))
+    worst = max(
+        abs(a.x - b.x) + abs(a.y - b.y) + abs(a.z - b.z)
+        for a, b in zip(before.atoms, after.atoms)
+    )
     assert worst < 1e-9, "the measured producer did not reproduce the analytic frame"
 
 
@@ -469,8 +505,12 @@ def test_the_rigid_frame_calibration_is_orthonormal_and_complete():
     from backend.core.atomistic import _rigid_frame_calibration
 
     calib = _rigid_frame_calibration()
-    assert set(calib) == {("FORWARD", True), ("FORWARD", False),
-                          ("REVERSE", True), ("REVERSE", False)}
+    assert set(calib) == {
+        ("FORWARD", True),
+        ("FORWARD", False),
+        ("REVERSE", True),
+        ("REVERSE", False),
+    }
     for bucket, (Q, c) in calib.items():
         Q = np.asarray(Q, dtype=float)
         assert np.abs(Q @ Q.T - np.eye(3)).max() < 1e-12, bucket
@@ -493,7 +533,7 @@ def test_the_rigid_frame_calibration_does_not_touch_the_display_serialiser():
     _rigid_frame_calibration.cache_clear()
     orig = dg._geometry_for_design
 
-    def explode(*a, **k):                      # noqa: ANN002, ANN003
+    def explode(*a, **k):  # noqa: ANN002, ANN003
         raise AssertionError("the calibration reached the display serialiser")
 
     dg._geometry_for_design = explode
@@ -538,13 +578,21 @@ def test_a_display_default_flip_cannot_reach_the_pose_fitters():
     assert len(before) == len(after)
     for a, b in zip(before, after):
         assert a["backbone_position"] == b["backbone_position"], (
-            "fitting_geometry followed a display default")
+            "fitting_geometry followed a display default"
+        )
 
     moved = max(
-        float(np.linalg.norm(np.asarray(a["backbone_position"], float)
-                             - np.asarray(b["backbone_position"], float)))
-        for a, b in zip(before, followed))
-    assert moved > 0.01, "the simulated flip changed nothing — this pin would be vacuous"
+        float(
+            np.linalg.norm(
+                np.asarray(a["backbone_position"], float)
+                - np.asarray(b["backbone_position"], float)
+            )
+        )
+        for a, b in zip(before, followed)
+    )
+    assert moved > 0.01, (
+        "the simulated flip changed nothing — this pin would be vacuous"
+    )
 
 
 # ── Round 2: the atomistic phase answers to MD, not to the display ───────────
@@ -574,9 +622,11 @@ def test_the_atomistic_crossover_azimuth_stays_in_the_md_envelope():
 
     design = _load(MD_18HB)
     model = build_atomistic_model(design, fast_bridges=True)
-    P = {(a.helix_id, a.bp_index, a.direction): np.array([a.x, a.y, a.z])
-         for a in model.atoms
-         if a.name == "P" and a.crossover_id is None and a.extension_id is None}
+    P = {
+        (a.helix_id, a.bp_index, a.direction): np.array([a.x, a.y, a.z])
+        for a in model.atoms
+        if a.name == "P" and a.crossover_id is None and a.extension_id is None
+    }
     axes = {}
     for h in design.helices:
         eh = effective_helix_for_geometry(h, design)
@@ -592,7 +642,12 @@ def test_the_atomistic_crossover_azimuth_stays_in_the_md_envelope():
         for ha, hb in ((x.half_a, x.half_b), (x.half_b, x.half_a)):
             pa = P.get((ha.helix_id, ha.index, ha.strand.value))
             pb = P.get((hb.helix_id, hb.index, hb.strand.value))
-            if pa is None or pb is None or ha.helix_id not in axes or hb.helix_id not in axes:
+            if (
+                pa is None
+                or pb is None
+                or ha.helix_id not in axes
+                or hb.helix_id not in axes
+            ):
                 continue
             ca, ua = axes[ha.helix_id]
             cb, ub = axes[hb.helix_id]
@@ -606,7 +661,9 @@ def test_the_atomistic_crossover_azimuth_stays_in_the_md_envelope():
             d = d - float(d @ ua) * ua
             if np.linalg.norm(d) < 1e-9:
                 continue
-            phis.append(math.degrees(math.atan2(float(d @ np.cross(ua, e1)), float(d @ e1))))
+            phis.append(
+                math.degrees(math.atan2(float(d @ np.cross(ua, e1)), float(d @ e1)))
+            )
 
     assert len(phis) > 500, "fixture lost its crossovers"
     a = np.radians(np.asarray(phis))
@@ -614,6 +671,8 @@ def test_the_atomistic_crossover_azimuth_stays_in_the_md_envelope():
     R = float(np.hypot(np.cos(a).mean(), np.sin(a).mean()))
     med = float(np.median(np.abs(np.degrees(a))))
 
-    assert abs(mean - 7.3) < 20.0, f"crossover azimuth {mean:+.2f} deg is outside the MD envelope"
+    assert abs(mean - 7.3) < 20.0, (
+        f"crossover azimuth {mean:+.2f} deg is outside the MD envelope"
+    )
     assert 5.0 < med < 40.0, f"|phi| median {med:.2f} deg is outside the MD envelope"
     assert R > 0.75, f"crossover phase is disordered (R={R:.3f}); MD sits at 0.87"
