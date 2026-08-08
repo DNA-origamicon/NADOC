@@ -1,6 +1,6 @@
 ---
 name: helical-site
-description: "PLAN, Phases 0-2 DONE: one HelicalSite abstraction — axis point + tangent + radial + labels — that every representation (CG bead, atomistic stamp, oxDNA particle, mrDNA bead, FEM node) derives from cheaply, replacing four independent re-derivations of the same helix formula."
+description: "DONE, all phases 0-6: one HelicalSite abstraction — axis point + tangent + radial + labels — that every representation (CG bead, atomistic stamp, oxDNA particle, mrDNA bead, FEM node) derives from cheaply, replacing four independent re-derivations of the same helix formula."
 metadata:
   node_type: memory
   type: project
@@ -8,8 +8,8 @@ metadata:
 
 # One helical site, many cheap representations
 
-**Status: Phases 0, 1 and 2 DONE (2026-08-07). Phases 3–6 not started; Phase 3 (the periodic
-seam solver) is next and is byte-exact.** Owner instruction: *"why not have a unified abstraction then?
+**Status: ALL PHASES 0–6 DONE (2026-08-07).** What remains is out of this plan's scope by
+construction — the pose fitters (TD-28), the extra-base/tail placers, and the −32° constant. Owner instruction: *"why not have a unified abstraction then?
 From which all representations and models can be built from cheaply"* — yes, and this is what
 that costs. Companion to [[project_atomistic_source_of_truth]] (whose audit table this is the
 remedy for) and TD-27 in [[project_tech_debt]].
@@ -52,11 +52,11 @@ derivation **byte-exact** rather than ULP-close. That matters more than it sound
   `radial_hat` / `axis_point` / `azimuth_rad`, and `nucleotide_positions_arrays` (plus both
   `_extended` variants and the loop/skip fallback) carries `radial_hats` / `axis_points` /
   `azimuths`. It survives cluster transforms and bends — see Phase 1.
-- **P2 — measured (from real atoms).** Does **not** exist. `atomistic_to_nadoc.extract_from_pdb`
-  is thinner than it looks: it reads P atoms → bead positions in nm and nothing else — no axis,
-  no phase. A measured producer needs a per-helix axis fit plus a per-nucleotide radial. Two
-  axis fitters already exist to reconcile rather than duplicate (`pdb_to_design.py:521`,
-  `pdb_import.py:843`).
+- **P2 — measured (from a position + an axis).** DONE as `geometry.site_from_bead` /
+  `site_from_beads_arrays`. The AXIS is an input, not fitted: every caller has one. A
+  standalone atoms→sites converter (fitting the axis too) still does not exist —
+  `atomistic_to_nadoc.extract_from_pdb` reads P atoms → bead positions and nothing else, and
+  the two axis fitters to reconcile are `pdb_to_design.py:521` / `pdb_import.py:843`.
 
 P2 is what makes this a unification rather than a tidy-up: with it, a relaxed oxDNA frame, an
 MD trajectory frame and an imported PDB all become sites, every representation derives from a
@@ -139,33 +139,120 @@ at all, which is what says the change is the stale-pose fix and nothing else.
   parameters in the live DB were fitted on the ramped geometry. Re-checking them needs mrdna +
   the fit jobs — see [[project_crossover_parameterization]].
 
-### Phase 3 — the periodic seam solver reads the axis instead of inverting for it
-`periodic_polymer._section_frame_from_arrs` (`:149-170`) solves a 2×2 to recover the axis from
-two beads, assuming `HELIX_RADIUS` and the ±150° groove. Its own comment says it is "only
-correct for beads the geometric layer placed" and that measured positioning must never be
-pushed into `geometry.py` or it silently returns a wrong axis. With the site it just reads
-`axis_point`, and that whole fragility class is retired.
-- **Acceptance:** `test_the_periodic_seam_solver_still_gets_a_valid_axis` green; frame equal to
-  the old solve within 1e-12 on the periodic fixtures.
+### Phase 3 — the periodic seam solver reads the axis — **DONE 2026-08-07**
+`_section_frame_from_arrs` now reads the forward nucleotide's own `axis_points` /
+`radial_hats` instead of solving a 2×2 for them. The `helix_dir` parameter is gone with the
+solve, and with it the whole "only correct for beads the geometric layer placed" fragility.
 
-### Phase 4 — the oxDNA seed boundary  (**the only phase that may move numbers**)
-`nuc_conf_line` writes the CG `backbone_position` into the conf's first three floats, which are
-the **centre of mass** — different landmarks. With sites, the CM becomes a projection at its own
-radius. LAMMPS inherits it.
-- **Gate:** needs an owner decision (CM from the atomistic mass centroid, or from the inverted
-  `oxdna_backbone_site`? they differ) plus a FENE re-measure through `oxdna_health` with the
-  **site-based** metric, never a CM-based one. Keep out of Phases 1–3 so those stay byte-exact.
+**Acceptance, met — and it found a live bug.** Over 5549 sampled cross-sections on 6 fixtures:
+**5514 unchanged** (worst residual 1.4e-14) and **35 changed, all on clustered designs**.
 
-### Phase 5 — the measured producer (P2)
-Atoms → sites (axis fit + per-nucleotide radial), then retire `_phase_invalidated` and the
-bead-derived fallback branch in `_atom_frame`.
-- **Acceptance:** a relaxed-display build byte-identical to today's through the new path.
+The 35 are a fix, not a regression. Cluster transforms are applied **per DOMAIN**, so a base
+pair whose two strands belong to different domain-level clusters has one bead moved and the
+other left behind. The chord-based solve fed those two beads into one 2×2 as though they
+shared a frame — measured on `VoltronCore`, the reverse bead sits **7.5–7.9 nm** from the
+forward bead's axis instead of ~1 nm, and the recovered axis was out by up to **1.94 nm**.
+Each bead is exactly `HELIX_RADIUS` from *its own* axis point, which is how you can tell the
+sites are right and the chord was the wrong question. Same per-domain trap
+[[project_measured_atomistic]] recorded for the measured re-placement.
 
-### Phase 6 — `_rigid_frame_calibration` off sites
-`atomistic.py:964` builds a synthetic design, writes an oxDNA conf **from `_geometry_for_design`**,
-reads it back and Kabsch-fits against `build_atomistic_model` — a CG→atomistic round trip baked
-into a cached constant. Feed it sites instead. Its `assert m_res < 1e-6` is the tripwire and the
-acceptance criterion at once.
+- **Pins:** `test_the_seam_frame_is_the_forward_nucleotides_own_site` and
+  `test_the_seam_solver_survives_a_base_pair_split_across_two_clusters` (fails if no split
+  pair exists, so the fixture cannot silently stop proving it).
+- `test_the_periodic_seam_solver_still_gets_a_valid_axis` kept its assertion; its docstring
+  described the inversion and was rewritten.
+
+### Phase 4 — the oxDNA seed boundary — **DONE 2026-08-07, and the scope was wrong**
+
+**The premise was wrong and the audit table row was overstated.** `nuc_conf_line` does write the
+display bead into the CM slot, but **every production path already passes
+`oxdna_native_seed=True`** (`oxdna_runner`, `lammps_runner`, `namd_seed_sanity`,
+`build_rotated_seed`), and `oxdna_native_seed_map` slides each nucleotide along a1 so designed
+pairs start inside oxDNA's bonding range. The raw `False` is only the API default.
+
+⚠ **`design_ref.dat` in a job dir is NOT the seed** — it is an unconverted reference, and
+measuring it is what produced a wrong "every seed ever written is 0.9 nm too wide" reading. The
+seed is `conf.dat`. On job `4e37b500ad84`: `design_ref` 1.9319 nm, **`conf.dat` 1.0514 nm**,
+relaxed 1.0227 nm.
+
+**What was actually wrong: a fitted constant where the model publishes one.**
+`OXDNA_NATIVE_HBOND_NM` was `0.37` nm, "the separation a relaxed duplex settles at on this
+machine". oxDNA's published `HYDR_R0` is **0.4 length units = 0.34072 nm**, and three
+independent numbers agree on it:
+
+| | CM–CM | backbone–backbone |
+|---|---|---|
+| oxDNA relaxed output (482 pairs) | 1.0227 | 1.6056 |
+| seed, old `0.37` | 1.0514 (err **0.0287**) | 1.6307 (err 0.0251) |
+| seed, `HYDR_R0` | **1.0222** (err **0.0005**) | **1.6014** (err 0.0042) |
+
+**The a1 SLIDE is the right mechanism; a radial re-projection is not.** Projecting the CMs onto
+a 0.529 nm cylinder reproduces the relaxed CM–CM and *misses* the backbone–backbone, because it
+changes the pair's azimuthal geometry. The slide reproduces both. That settles the open question
+this phase was gated on — it was a false dichotomy: neither "atomistic mass centroid" nor
+"inverted `oxdna_backbone_site`", but the model's own HB equilibrium.
+
+**Literature.** oxDNA's stored position is the CM and the model defines it *only* through fixed
+offsets to the interaction sites — the oxDNA docs flag that the convention changed between
+Ouldridge's thesis (0.24 units from the backbone site) and oxDNA1 (0.4), so it is notional and
+cannot be derived from an atomistic centroid. tacoxDNA's PDB→oxDNA converter uses the unweighted
+mean of all heavy atoms (`get_com()`), which on our own atomistic model sits at 0.5747 nm from
+the axis — a converter's fallback for when you do *not* know where the sites belong, which here
+we do.
+
+- **FENE: neutral** (over-cliff 17→17, 2→2, 24→24, 529→530 on four designs); median bond length
+  moves slightly toward the rest length (0.7763 → 0.7692 units).
+- **Pin:** `test_the_native_seed_reproduces_oxdnas_own_equilibrium_pair_geometry`.
+- **Not changed:** `nuc_conf_line` still writes `backbone_position`; the conversion stays in the
+  seed map where it already lived. Row 5 of the audit table in [[project_atomistic_source_of_truth]]
+  should be read with this correction.
+
+### Phase 5 — the measured producer (P2) — **DONE 2026-08-07, narrower than scoped**
+`geometry.site_from_bead` / `site_from_beads_arrays` are the second producer: given a
+position and an axis they return `(radial_hat, axial_offset)`, the same pair the analytic
+producer emits. `_atom_frame` and `_atom_frames_batch` now read **two producers, one site**
+— analytic where the nucleotide carries one, measured otherwise — instead of a path and an
+unnamed fallback.
+
+- **Acceptance, met:** the two producers agree to **1 ULP** on lattice geometry, and a full
+  atomistic build is **byte-identical** either way (0.000e+00 nm over three designs, the
+  same check Phase 0 used). Not bit-exact on the hats themselves: the measured producer
+  subtracts the axial component before normalising and for a lattice bead that component is
+  tiny but not exactly zero. The pin asserts 1e-15 and says why.
+- **`_phase_invalidated` STAYS, and that is correct.** The scope said to retire it. It is
+  not a workaround — it is how a caller *selects* the measured producer, and the selection
+  is real: a moved nucleotide's lattice phase is genuinely no longer descriptive. Retiring
+  it would mean guessing which producer to use from the data, which is exactly the
+  ambiguity that caused the Phase-0 bug.
+- **The axis FIT was not built, deliberately.** Every caller of `_atom_frame` already has
+  an axis (a lattice helix, or an explicit `axis_override` for a bent centreline), so a
+  per-nucleotide fit has no consumer today. Building one now would be speculative; the
+  entry point for it, when a consumer appears, is `site_from_bead`'s axis argument, and the
+  two existing fitters to reconcile are still `pdb_to_design.py:521` / `pdb_import.py:843`.
+  **So "a relaxed oxDNA frame becomes a site" is true only where the caller supplies the
+  axis** — which is the case for every path in the codebase, and is not the same as the
+  standalone atoms→sites converter the scope implied.
+- **Pins:** 4 in `tests/test_helical_site.py` — producer agreement, scalar/array twins, the
+  on-axis degenerate case, and the override contract (move the bead, atoms follow it),
+  which is the mirror of `test_the_stamp_ignores_the_bead_and_reads_the_phase`.
+
+### Phase 6 — `_rigid_frame_calibration` off sites — **DONE 2026-08-07**
+The oxDNA particle frame (CM, a1, a3) now comes straight from `nucleotide_positions`; the
+temp-file write + read is gone. The round trip only ever converted CG geometry into a frame,
+and it cost two things:
+
+- **it quantised the fit's own inputs.** The conf is text at `%.6f` oxDNA units, so every frame
+  was rounded to 8.5e-7 nm — measured perturbation 4.3e-7 nm in position and 5.0e-7 in a1 — and
+  that noise landed inside the residual its `assert m_res < 1e-6` is meant to police;
+- **it made a cached constant depend on `_geometry_for_design`**, the DISPLAY serialiser, so a
+  display-side default (measured re-placement, the junction-balance roll) could have moved it.
+
+**Acceptance:** the constant moves by ≤ **1.1e-7 nm** (dQ ≤ 7.3e-8, dc ≤ 1.1e-7) — exactly the
+quantisation removed — and all four buckets stay proper rotations with the tripwire green.
+**Pins:** `test_the_rigid_frame_calibration_is_orthonormal_and_complete` and
+`..._does_not_touch_the_display_serialiser`, the latter breaking `_geometry_for_design` and
+requiring the calibration to be unaffected (the patch-visibility mechanism was checked, so the
+firewall is not vacuous).
 
 ## Explicitly out of scope
 
@@ -199,8 +286,8 @@ acceptance criterion at once.
    applied downstream. Do not let a consumer read a site and skip the deformation pass — that is
    how `mrdna_bridge` ended up re-deriving from the straight helix in the first place.
 
-## Open question for the owner
+## Open question for the owner — ANSWERED 2026-08-07
 
-Phase 4's CM definition (mass centroid of the atomistic nucleotide, vs the inverted
-`oxdna_backbone_site` off the phosphorus). They differ, and it is the one number in this plan
-that a simulation will feel. Everything else is a refactor with an equality test.
+Phase 4's CM definition was a false dichotomy: neither the atomistic mass centroid nor the
+inverted `oxdna_backbone_site`, but oxDNA's own published HB equilibrium (`HYDR_R0`), applied by
+the a1 slide that was already there. See Phase 4. Everything else is a refactor with an equality test.

@@ -375,16 +375,16 @@ def test_the_atomistic_build_is_immune_to_the_cg_measured_flag():
 
 
 def test_the_periodic_seam_solver_still_gets_a_valid_axis():
-    """`periodic_polymer._section_frame_from_arrs` ANALYTICALLY INVERTS `HELIX_RADIUS`
-    and the groove offset to recover a helix axis from two beads.
+    """`periodic_polymer._section_frame_from_arrs` recovers a helix's cross-section frame.
 
-    It is immune to the measured re-placement only because it consumes
-    `deformed_nucleotide_arrays` (the raw geometric layer), NOT `_geometry_for_design`
-    — the re-placement runs at the `_emit_arrs` serialiser boundary, downstream of it.
-    If measured positioning were ever pushed down into `geometry.py`, this solve would
-    silently return a wrong axis rather than fail (TD-27 Stage 3 invariant).
+    ⚠ Premise changed 2026-08-07 (helical-site Phase 3). It used to ANALYTICALLY INVERT
+    `HELIX_RADIUS` and the groove offset to recover the axis from the two strands' beads,
+    which is why it carried a TD-27 warning that pushing the measured re-placement down
+    into `geometry.py` would make it return a WRONG axis rather than fail. It now READS
+    the forward nucleotide's own carried axis point and radial, so that failure mode is
+    gone: a re-placed bead brings its own site or none.
 
-    Pinned by checking the inverter reproduces the true axis of a known helix.
+    Still pinned the same way — the recovered frame must be the known helix's true axis.
     """
     from backend.core.deformation import deformed_nucleotide_arrays
     from backend.core.models import Design
@@ -395,7 +395,7 @@ def test_the_periodic_seam_solver_still_gets_a_valid_axis():
     design = Design(name="pin", helices=[helix], strands=[])
     arrs = deformed_nucleotide_arrays(helix, design)
 
-    frame = pp._section_frame_from_arrs(arrs, 0, helix.direction)
+    frame = pp._section_frame_from_arrs(arrs, 0)
     assert frame is not None, "the seam solver could not recover an axis at all"
     origin, z = np.asarray(frame)[:3, 3], np.asarray(frame)[:3, 2]
     # The fixture helix runs along +Z from the origin.

@@ -61,12 +61,8 @@ from typing import TYPE_CHECKING, List, Tuple
 
 import numpy as np
 
-from backend.core.constants import (
-    BDNA_RISE_PER_BP,
-    HELIX_RADIUS,
-)
-from backend.core.geometry import groove_offset_rad
-from backend.core.models import Direction, Mat4x4
+from backend.core.constants import BDNA_RISE_PER_BP
+from backend.core.models import Mat4x4
 
 if TYPE_CHECKING:  # pragma: no cover
     from backend.core.models import Design
@@ -108,17 +104,16 @@ def _seam_endpoints(design: "Design") -> List[Tuple[Tuple[str, int], Tuple[str, 
 # ── Cross-section frame at a (helix, bp) ───────────────────────────────────────
 
 
-def _section_frame_from_arrs(
-    arrs: dict, bp: int, helix_dir: "Direction"
-) -> "np.ndarray | None":
+def _section_frame_from_arrs(arrs: dict, bp: int) -> "np.ndarray | None":
     """Direction-independent helix cross-section frame (4×4 local SE3) at *bp*.
 
-    ``arrs`` is the dict returned by ``deformed_nucleotide_arrays``; ``helix_dir``
-    is the helix's scaffold ``direction`` (sets the minor-groove sign).  Returns
-    ``None`` if the bp is missing from the helix geometry on either strand.
+    ``arrs`` is the dict returned by ``deformed_nucleotide_arrays``.  Returns ``None`` if
+    the bp is missing from the helix geometry on either strand — a half-populated bp has no
+    well-defined cross-section, and that guard predates the site.
 
-    origin = true helix axis point (recovered analytically), z = axis_tangent,
-    x = forward backbone radial (minor-groove offset undone), y = z×x.
+    origin = the forward nucleotide's own helix axis point, z = axis_tangent,
+    x = its outward radial, y = z×x.  All three are read from the carried helical site;
+    ``helix_dir`` used to be needed for the minor-groove sign and is gone with the solve.
     """
     bp_arr = arrs["bp_indices"]
     dir_arr = arrs["directions"]
@@ -126,47 +121,31 @@ def _section_frame_from_arrs(
     rev_mask = (bp_arr == bp) & (dir_arr == 1)
     if not fwd_mask.any() or not rev_mask.any():
         return None
+    # The FORWARD nucleotide alone defines the frame now.  ``ri`` is not read: the old
+    # solve needed the reverse bead for its chord, and on a design whose two strands sit in
+    # DIFFERENT domain-level clusters that chord spanned two frames — measured on
+    # VoltronCore, the reverse bead was 7.5-7.9 nm from the forward bead's axis instead of
+    # ~1 nm, and the recovered axis was garbage for 35 of 5549 sampled cross-sections.
     fi = int(fwd_mask.argmax())
-    ri = int(rev_mask.argmax())
-
-    fwd_bb = np.asarray(arrs["positions"][fi], dtype=float)
-    rev_bb = np.asarray(arrs["positions"][ri], dtype=float)
     z = _unit(np.asarray(arrs["axis_tangents"][fi], dtype=float))
     if z is None:
         return None
 
-    # Recover the forward backbone's radial direction analytically.  Both
-    # backbones sit at HELIX_RADIUS from the axis, separated by the signed
-    # minor-groove angle: chord = rev−fwd = HELIX_RADIUS·(Rot_z(Δ)−I)·r_fwd.
-    # Solving the in-plane 2×2 for r_fwd is direction-independent (the forward
-    # backbone position depends only on phase+twist, not on which strand is
-    # scaffold), unlike the raw base-normal.
-    chord = rev_bb - fwd_bb
-    chord = chord - np.dot(chord, z) * z
-    e1 = _unit(np.cross(z, np.array([1.0, 0.0, 0.0])))
-    if e1 is None:
-        e1 = _unit(np.cross(z, np.array([0.0, 1.0, 0.0])))
-    e2 = np.cross(z, e1)
-    c2 = np.array([float(chord @ e1), float(chord @ e2)])
-    # ⚠ This function ANALYTICALLY INVERTS the build convention — HELIX_RADIUS and this
-    # groove offset — to recover the axis from two beads.  It is therefore only correct
-    # for beads the geometric layer placed.  It consumes `deformed_nucleotide_arrays`
-    # (raw geometry), NOT `_geometry_for_design`, which is what keeps it immune to the
-    # measured CG re-placement — that runs at the `_emit_arrs` serialiser boundary.
-    # Invariant (TD-27): measured positioning must never be pushed down into geometry.py,
-    # or this solve silently returns a wrong axis.  Sourced from the shared rule so a
-    # grep for `groove_offset_rad` finds this inverter too.
-    delta_ang = groove_offset_rad(helix_dir)
-    ca, sa = np.cos(delta_ang), np.sin(delta_ang)
-    m = np.array([[ca - 1.0, -sa], [sa, ca - 1.0]]) * HELIX_RADIUS
-    try:
-        r2 = np.linalg.solve(m, c2)
-    except np.linalg.LinAlgError:
-        return None
-    x = _unit(r2[0] * e1 + r2[1] * e2)
+    # The forward backbone's radial direction and its axis point are CARRIED
+    # (geometry.NucleotidePosition / project_helical_site.md), so they are read.
+    #
+    # Until 2026-08-07 this solved a 2×2 for them instead: both backbones sit at
+    # HELIX_RADIUS from the axis separated by the signed minor-groove angle, so
+    # chord = rev−fwd = HELIX_RADIUS·(Rot_z(Δ)−I)·r_fwd could be inverted for r_fwd.
+    # That worked, and it hard-coded the build convention — HELIX_RADIUS and the groove
+    # sign — into a consumer, which is why it carried a warning that it is "only correct
+    # for beads the geometric layer placed" and would silently return a WRONG axis (not
+    # fail) if the measured re-placement ever moved down into geometry.py.  Reading the
+    # site retires that entire failure mode: a re-placed bead brings its own site or none.
+    x = _unit(np.asarray(arrs["radial_hats"][fi], dtype=float))
     if x is None:
         return None
-    origin = fwd_bb - HELIX_RADIUS * x  # forward backbone minus its radial = axis point
+    origin = np.asarray(arrs["axis_points"][fi], dtype=float)
     y = np.cross(z, x)
 
     F = np.eye(4, dtype=float)
@@ -252,7 +231,7 @@ def _iter_seam_frames(design: "Design") -> List[Tuple[np.ndarray, np.ndarray]]:
             return None
         if helix_id not in arrs_cache:
             arrs_cache[helix_id] = deformed_nucleotide_arrays(helix, design)
-        F = _section_frame_from_arrs(arrs_cache[helix_id], bp, helix.direction)
+        F = _section_frame_from_arrs(arrs_cache[helix_id], bp)
         if F is None:
             return None
         return F, float(helix.twist_per_bp_rad)

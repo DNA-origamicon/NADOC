@@ -1288,12 +1288,26 @@ def _resolve_extension_geometry(
 # POS_BASE = 0.4 oxDNA units); the .dat position IS the centre of mass.
 _POS_BASE_NM: float = 0.4 * OXDNA_LENGTH_UNIT  # ≈ 0.341 nm
 
-# Target base-site separation (nm) for the oxDNA-native seed.  oxDNA2's hydrogen-
-# bond equilibrium sits at ~0.37 nm — the separation a relaxed duplex settles at
-# on this machine (measured, §18 of project_oxdna_relaxation).  NADOC's idealised
-# B-DNA seeds the pair ~1.25 nm apart (HELIX_RADIUS = 1.0 nm), far outside oxDNA's
-# ~0.34 nm bonding range, so a free MD melts every designed pair at startup.
-OXDNA_NATIVE_HBOND_NM: float = 0.37
+# Target base-site separation (nm) for the oxDNA-native seed.  NADOC's idealised B-DNA
+# seeds the pair ~1.25 nm apart (HELIX_RADIUS = 1.0 nm), far outside oxDNA's bonding
+# range, so without this a free MD melts every designed pair at startup.
+#
+# This is oxDNA's PUBLISHED hydrogen-bond equilibrium, HYDR_R0 = 0.4 length units, not a
+# fit.  It was 0.37 nm until 2026-08-07 — "the separation a relaxed duplex settles at on
+# this machine" — which seeded every pair 0.029 nm wide.  Three independent numbers agree
+# on 0.4 units and none of them on 0.37:
+#
+#   * the model constant:      2*POS_BASE + HYDR_R0 = 1.2 units = 1.0222 nm CM-CM;
+#   * oxDNA's own relaxed output (job 4e37b500ad84, corner_miter_optimized, 482 pairs):
+#     CM-CM 1.0227 nm, i.e. an HB separation of 1.0227 - 2*0.3407 = 0.3413 nm;
+#   * the same job's backbone-backbone, 1.6056 nm, which the corrected seed reproduces
+#     (1.6307 -> 1.6057) while 0.37 does not.
+#
+# The a1 SLIDE is the right mechanism and a radial re-projection is not: sliding both
+# nucleotides toward each other along the pair chord reproduces the relaxed CM-CM AND the
+# relaxed backbone-backbone, whereas projecting the centres of mass onto a 0.529 nm
+# cylinder matches the first and misses the second.
+OXDNA_NATIVE_HBOND_NM: float = 0.4 * OXDNA_LENGTH_UNIT   # HYDR_R0 = 0.34072 nm
 
 
 def _oxdna_cm_radius_map(

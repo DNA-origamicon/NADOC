@@ -223,6 +223,54 @@ def _strand_beads(
 
 
 
+def site_from_bead(position: np.ndarray, axis_point: np.ndarray,
+                   axis_tangent: np.ndarray) -> "tuple[np.ndarray | None, float]":
+    """MEASURE a helical site off a nucleotide's actual position.
+
+    The second producer of a site (``project_helical_site.md`` P2).  The first is the
+    analytic one — :func:`nucleotide_positions` computing the phase from the lattice.  This
+    one is for nucleotides whose position came from somewhere else and has no analytic
+    phase: a relaxed oxDNA frame, an MD trajectory frame, a folded ssDNA seed, an mrDNA
+    read-back, or any nucleotide re-placed onto a DEFORMED centreline.
+
+    Returns ``(radial_hat, axial_offset)`` about the supplied axis — ``(None, 0.0)`` if the
+    bead sits on the axis, where no radial direction exists.  The caller re-places at its
+    own radius, exactly as it would with a carried site::
+
+        bb = axis_point + axial_offset * axis_tangent + R * radial_hat
+
+    The axis is an INPUT, not fitted here.  Every caller already has one (a lattice helix,
+    or an explicit deformed-axis override), and fitting one per nucleotide from a relaxed
+    structure is a different job that nothing currently asks for.
+    """
+    radial = position - axis_point
+    axial = float(np.dot(radial, axis_tangent))
+    radial_perp = radial - axial * axis_tangent
+    r_norm = float(np.linalg.norm(radial_perp))
+    if r_norm <= 1e-9:
+        return None, axial
+    return radial_perp / r_norm, axial
+
+
+def site_from_beads_arrays(positions: np.ndarray, axis_points: np.ndarray,
+                           axis_tangents: np.ndarray) -> "tuple[np.ndarray, np.ndarray, np.ndarray]":
+    """Vectorised :func:`site_from_bead` — ``(radial_hats, axial_offsets, ok)``.
+
+    Its scalar twin exists for the same reason ``_strand_beads``' does: the two paths use
+    ``np.``/``math.`` primitives that can differ at the last ULP, so a caller must use one
+    or the other consistently and never mix their outputs.  ``ok`` is False where the bead
+    lies on the axis and the radial is undefined.
+    """
+    radial = positions - axis_points
+    axial = np.einsum("ij,ij->i", radial, axis_tangents)
+    radial_perp = radial - axial[:, None] * axis_tangents
+    r_norm = np.linalg.norm(radial_perp, axis=1)
+    ok = r_norm > 1e-9
+    hats = np.zeros_like(radial_perp)
+    hats[ok] = radial_perp[ok] / r_norm[ok, None]
+    return hats, axial, ok
+
+
 def _interleave_site(axis_pts: np.ndarray, angles: np.ndarray,
                      site: tuple) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Interleave one run's helical site into the fwd/rev array layout.

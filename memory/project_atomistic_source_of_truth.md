@@ -1,6 +1,6 @@
 ---
 name: atomistic-source-of-truth
-description: "PLAN (not yet started): invert the geometry dependency so the ATOMISTIC representation is the single source of truth, the coarse-grained 'full' rep becomes purely derived + tuned for figures, and the display rep can never reach a simulation."
+description: "The dependency inversion, DONE 2026-08-07: the atomistic stamp no longer reads the display bead, the CG bead is a projection of the helical site, and 4 of the 11 live CG couplings are closed. Carries the RE-VERIFIED audit table of what is still coupled."
 metadata:
   node_type: memory
   type: project
@@ -8,7 +8,9 @@ metadata:
 
 # The atomistic rep becomes the source of truth
 
-**Status: PLAN, plus ONE piece shipped (2026-08-07) — step 7 for square, ahead of the rest.**
+**Status: the inversion is DONE (2026-08-07), together with helical-site Phases 0-6
+([[project_helical_site]]).  Suite 6865 passed, 0 failed.  Three couplings remain and each is
+out of scope by construction — read the audit table below, it is re-verified against live code.**
 Written 2026-08-06 for a fresh session.
 
 ## SHIPPED 2026-08-07 — the display CG carries its own junction-balance roll
@@ -215,30 +217,31 @@ Do not write these from scratch:
 | display→sim adapter precedent | `oxdna_interface._oxdna_cm_radius_map()` — an explicit boundary converter, already in place, no-op on legacy geometry |
 | atoms → helix axes | `pdb_to_design.py:521`, `pdb_import.py:843` — two independent fitters already exist; reconcile rather than add a third |
 
-## Audit 2026-08-07 — every CG coupling, verified against live code
+## Audit — every CG coupling, RE-VERIFIED against live code after helical-site Phases 1-6
 
-Suite state after the inversion: **6837 passed, 0 failed**.
+Suite: **6865 passed, 0 failed.**  Phase detail in [[project_helical_site]].
 
-| # | Coupling | Live evidence | State |
+| # | Coupling | State | Evidence |
 |---|---|---|---|
-| 1 | atomistic stamp phase | `atomistic.py` `_atom_frame` / `_atom_frames_batch` | **INVERTED** |
-| 2 | CG backbone bead | `geometry.py` `_emit` | **DERIVED** from the site |
-| 3 | surface point cloud | `surface_atom_cloud` passes `radial_hat=` | **INVERTED** |
-| 4 | override paths | `_phase_invalidated` | bead-derived **by design** |
-| 5 | **oxDNA seed** | `oxdna_interface.nuc_conf_line` writes the CG `backbone_position` into the conf's **centre-of-mass** slot | STILL CG — needs the atoms→(CM,a1,a3) adapter (step 3) |
-| 6 | LAMMPS | inherits the oxDNA writer | STILL CG |
-| 7 | **mrDNA** | `mrdna_bridge.py:1502` re-derives the CG formula inline ("same formula as geometry.py") | STILL CG — a THIRD copy, drifts independently |
-| 8 | **extra-base positions** | `atomistic.py:3036` interpolates between the two junction nucleotides' **CG backbone beads** | STILL CG, deliberately — a display retune moves exported insert atoms |
-| 9 | extension tails | same placer family (`atomistic.py:3322`) | STILL CG |
-| 10 | `_rigid_frame_calibration` | `atomistic.py:964` writes an oxDNA conf **from `_geometry_for_design`**, reads it back, Kabsch-fits against the atomistic build | STILL a CG→atomistic round trip baked into a cached constant |
-| 11 | `periodic_polymer._section_frame_from_arrs` | `periodic_polymer.py:149` analytically inverts `HELIX_RADIUS` + ±150° to recover the axis | STILL inverts the CG convention |
-| 12 | **pose fitters** | `direct_relax` / `linker_relax` / `duplex_cluster` read `_geometry_for_design` and write persisted `cluster_transforms` | THE blocker on tuning display CG (TD-28) |
-| 13 | `_ATOMISTIC_PHASE_OFFSET_RAD = −32°` | still "calibrated by overlaying on the bead rep", now inside `atomistic_phase_offset_rad` | unjustified constant survives |
-| 14 | FEM (CanDo/SNUPI) | places nodes on the helix axis inline | independent of both — not a coupling |
-| 15 | display junction-balance roll | `junction_balance=` on the render feeds only | display-only, firewalled |
+| 1 | atomistic stamp phase | **INVERTED** | reads `radial_hat`; corrupting the bead to r=3.7 nm moves 0 atoms |
+| 2 | CG backbone bead | **DERIVED** | `position == axis_point + HELIX_RADIUS·radial_hat`, exact |
+| 3 | surface point cloud | **INVERTED** | `surface_atom_cloud` passes `radial_hat=` |
+| 4 | override paths | **NAMED PRODUCER** | `geometry.site_from_bead`; was an unnamed fallback |
+| 5 | oxDNA seed | **CORRECT, misleadingly named** | `nuc_conf_line:1405` still writes `backbone_position` into the CM slot, but `oxdna_native_seed_map` converts it and all 3 production call sites pass `oxdna_native_seed=True`. Phase 4 replaced its fitted 0.37 nm with the published `HYDR_R0` |
+| 6 | LAMMPS | **CORRECT** | same writer + native seed |
+| 7 | mrDNA | **FIXED** | inline formula gone (0 hits); reads the site. Fixed a live bug: stale stored pose, pre-TD-29 twist, `6hb_test` 175° out of phase |
+| 8 | **extra-base positions** | **STILL CG** | `atomistic.py:3046` interpolates between the two junction nucleotides' CG beads — deliberate, and the one place a display decision reaches an exported atom |
+| 9 | extension tails | **STILL CG** | same placer family |
+| 10 | `_rigid_frame_calibration` | **FIXED** | frames from `nucleotide_positions`; no conf round trip, no display dependency (only a comment mentions `_geometry_for_design`) |
+| 11 | periodic seam solver | **FIXED** | no `np.linalg.solve` left; reads the axis. Fixed a live bug on base pairs split across two domain-level clusters |
+| 12 | **pose fitters** | **STILL CG** | `direct_relax` / `linker_relax` / `duplex_cluster`, 6 `_geometry_for_design` refs each, writing persisted `cluster_transforms`. TD-28 |
+| 13 | `_ATOMISTIC_PHASE_OFFSET_RAD = −32°` | **STILL** | `atomistic.py:583`, now summed inside `atomistic_phase_offset_rad` |
+| 14 | FEM (CanDo/SNUPI) | not a coupling | places nodes on the helix axis inline |
+| 15 | display junction-balance roll | display-only | `junction_balance=` on render feeds only |
 
-Rows 5–7 are the engine adapters (steps 3–4); 8–9 are the placers; 10–12 are the ones that
-make display CG un-tunable today.
+**Four of the eleven live couplings are closed** (7, 10, 11, and 5 corrected). **Three remain and
+they are all out of the site plan's scope by construction**: rows 8/9 are the placers (a decision,
+not a refactor) and row 12 is fitting + persisted state (TD-28). Row 13 is gated on 8/9.
 
 ## The blockers, in order of difficulty
 

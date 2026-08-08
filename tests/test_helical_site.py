@@ -294,3 +294,212 @@ def test_the_mrdna_seed_uses_the_commensurate_honeycomb_twist():
         idx = nt_key.get((helix.id, n.bp_index, n.direction.value, k))
         if idx is not None:
             assert np.array_equal(np.asarray(r[idx]), n.position * _NM_TO_ANGSTROM)
+
+
+# ── Phase 3: the periodic seam solver reads the axis instead of inverting for it ──
+
+
+def test_the_seam_frame_is_the_forward_nucleotides_own_site():
+    """The frame must be the forward strand's own axis point and radial, verbatim."""
+    from backend.core import periodic_polymer as pp
+
+    design = _load(CLUSTERED)
+    checked = 0
+    for h in design.helices[:8]:
+        arrs = deformed_nucleotide_arrays(h, design)
+        for bp in sorted({int(b) for b in arrs["bp_indices"]})[::11]:
+            F = pp._section_frame_from_arrs(arrs, bp)
+            if F is None:
+                continue
+            fi = int(((arrs["bp_indices"] == bp) & (arrs["directions"] == 0)).argmax())
+            assert np.allclose(F[:3, 3], arrs["axis_points"][fi], atol=1e-15)
+            assert np.allclose(F[:3, 0], arrs["radial_hats"][fi], atol=1e-15)
+            checked += 1
+    assert checked > 20
+
+
+def test_the_seam_solver_survives_a_base_pair_split_across_two_clusters():
+    """The bug Phase 3 fixed, on the fixture that exhibits it.
+
+    Cluster transforms are applied per DOMAIN, so a base pair whose two strands belong to
+    different domain-level clusters has one bead moved and the other left behind.  The old
+    chord-based solve fed those two beads into one 2x2 as though they shared a frame — on
+    VoltronCore the reverse bead sits 7.5-7.9 nm from the forward bead's axis instead of
+    ~1 nm, and the recovered axis was garbage (35 of 5549 sampled cross-sections, up to
+    1.94 nm out).  Reading the forward nucleotide's own site is immune by construction.
+    """
+    from backend.core import periodic_polymer as pp
+
+    design = _load(CLUSTERED)
+    split_found = 0
+    for h in design.helices:
+        arrs = deformed_nucleotide_arrays(h, design)
+        for bp in sorted({int(b) for b in arrs["bp_indices"]}):
+            fwd = (arrs["bp_indices"] == bp) & (arrs["directions"] == 0)
+            rev = (arrs["bp_indices"] == bp) & (arrs["directions"] == 1)
+            if not fwd.any() or not rev.any():
+                continue
+            fi, ri = int(fwd.argmax()), int(rev.argmax())
+            if np.allclose(arrs["axis_points"][fi], arrs["axis_points"][ri], atol=1e-9):
+                continue                      # both strands in one frame — not the case
+            split_found += 1
+            F = pp._section_frame_from_arrs(arrs, bp)
+            assert F is not None
+            # The frame is the FORWARD strand's, and its bead is exactly HELIX_RADIUS out.
+            assert np.allclose(F[:3, 3], arrs["axis_points"][fi], atol=1e-15)
+            offset = arrs["positions"][fi] - F[:3, 3]
+            assert abs(float(np.linalg.norm(offset)) - HELIX_RADIUS) < 1e-12
+            if split_found >= 5:
+                return
+    pytest.fail("no split base pair found — this fixture cannot prove the fix")
+
+
+# ── Phase 5: the measured producer ───────────────────────────────────────────
+
+
+@pytest.mark.parametrize("fixture", [PLAIN_HC, PLAIN_SQ, SKIPS])
+def test_measuring_a_site_off_the_bead_reproduces_the_analytic_one(fixture):
+    """The two producers must agree to the last bit or two on lattice geometry.
+
+    This is what lets the stamp treat them as one thing: a nucleotide carrying an analytic
+    site and one that was moved and gets a measured site go through identical arithmetic
+    afterwards.
+
+    NOT exact, and the reason is worth knowing: the measured producer subtracts the axial
+    component before normalising, and for a lattice bead that component is tiny but not
+    exactly zero, so it perturbs the last ULP.  It is small enough that a full atomistic
+    build comes out byte-identical either way (measured: 0.000e+00 nm over three designs).
+    """
+    from backend.core.geometry import site_from_bead
+
+    design = _load(fixture)
+    checked = 0
+    for h in design.helices[:6]:
+        for n in nucleotide_positions(effective_helix_for_geometry(h, design)):
+            hat, axial = site_from_bead(n.position, n.axis_point, n.axis_tangent)
+            assert hat is not None
+            assert np.abs(hat - n.radial_hat).max() < 1e-15
+            assert abs(axial) < 1e-9        # a lattice bead lies in its own axis plane
+            checked += 1
+    assert checked > 100
+
+
+def test_the_scalar_and_array_site_producers_agree():
+    """Twins, like ``_strand_beads``: a caller must use one consistently, and they must not
+    have drifted apart in what they compute."""
+    from backend.core.geometry import site_from_bead, site_from_beads_arrays
+
+    design = _load(PLAIN_HC)
+    nucs = [n for h in design.helices[:3]
+            for n in nucleotide_positions(effective_helix_for_geometry(h, design))]
+    pos = np.array([n.position for n in nucs])
+    axp = np.array([n.axis_point for n in nucs])
+    axt = np.array([n.axis_tangent for n in nucs])
+    hats, axial, ok = site_from_beads_arrays(pos, axp, axt)
+    assert ok.all()
+    for i, n in enumerate(nucs):
+        h_s, a_s = site_from_bead(n.position, n.axis_point, n.axis_tangent)
+        assert np.abs(hats[i] - h_s).max() < 1e-15
+        assert abs(axial[i] - a_s) < 1e-15
+
+
+def test_a_bead_on_the_axis_has_no_site():
+    """Degenerate case: no radial direction exists, and the caller must be told so rather
+    than handed a normalised zero."""
+    from backend.core.geometry import site_from_bead, site_from_beads_arrays
+
+    axis_pt = np.array([1.0, 2.0, 3.0])
+    tangent = np.array([0.0, 0.0, 1.0])
+    hat, axial = site_from_bead(axis_pt + 0.5 * tangent, axis_pt, tangent)
+    assert hat is None
+    assert axial == pytest.approx(0.5)
+
+    hats, ax, ok = site_from_beads_arrays(
+        np.array([axis_pt + 0.5 * tangent]), np.array([axis_pt]), np.array([tangent]))
+    assert not ok[0]
+    assert np.array_equal(hats[0], np.zeros(3))
+
+
+def test_a_moved_nucleotide_gets_a_measured_site_not_the_lattice_one():
+    """The override contract: move the bead and the atoms follow it.
+
+    This is the same corruption as ``test_the_stamp_ignores_the_bead_and_reads_the_phase``,
+    with the opposite expectation — there the phase was carried and the bead ignored, here
+    the phase is invalidated (as every override path does) and the bead is authoritative.
+    Both must hold, or an override silently applies only its axial component.
+    """
+    import dataclasses as dc
+
+    import backend.core.geometry as geo
+    from backend.core.atomistic import build_atomistic_model
+
+    design = _load(PLAIN_SQ)
+    before = build_atomistic_model(design, fast_bridges=True)
+
+    orig = geo.nucleotide_positions
+
+    def moved(helix, compact_skips=False):
+        out = []
+        for n in orig(helix, compact_skips=compact_skips):
+            out.append(dc.replace(
+                n, position=n.axis_point + 1.4 * n.radial_hat,
+                radial_hat=None, axis_point=None, azimuth_rad=None))
+        return out
+
+    geo.nucleotide_positions = moved
+    try:
+        after = build_atomistic_model(design, fast_bridges=True)
+    finally:
+        geo.nucleotide_positions = orig
+
+    # The radius change is absorbed (the stamp re-places at its own radius), but the frame
+    # must still be built — and identical, because a pure radial move does not rotate it.
+    assert len(before.atoms) == len(after.atoms)
+    worst = max(abs(a.x - b.x) + abs(a.y - b.y) + abs(a.z - b.z)
+                for a, b in zip(before.atoms, after.atoms))
+    assert worst < 1e-9, "the measured producer did not reproduce the analytic frame"
+
+
+# ── Phase 6: the rigid-frame calibration reads sites, not a conf round trip ───
+
+
+def test_the_rigid_frame_calibration_is_orthonormal_and_complete():
+    """Four buckets, each a proper rotation. The function's own ``assert m_res < 1e-6``
+    is the drift tripwire; this pins the shape of what it returns."""
+    from backend.core.atomistic import _rigid_frame_calibration
+
+    calib = _rigid_frame_calibration()
+    assert set(calib) == {("FORWARD", True), ("FORWARD", False),
+                          ("REVERSE", True), ("REVERSE", False)}
+    for bucket, (Q, c) in calib.items():
+        Q = np.asarray(Q, dtype=float)
+        assert np.abs(Q @ Q.T - np.eye(3)).max() < 1e-12, bucket
+        assert float(np.linalg.det(Q)) == pytest.approx(1.0, abs=1e-12), bucket
+        assert np.asarray(c, dtype=float).shape == (3,)
+
+
+def test_the_rigid_frame_calibration_does_not_touch_the_display_serialiser():
+    """FIREWALL: a cached constant must not depend on the DISPLAY path.
+
+    It used to write an oxDNA .dat through ``_geometry_for_design`` and read it back, so a
+    display-side default — measured re-placement, the junction-balance roll — could have
+    moved it, and the text format quantised every frame to 8.5e-7 nm (measured round-trip
+    perturbation: 4.3e-7 nm in position, 5.0e-7 in a1) with that noise landing in the fit's
+    own residual.  Breaking the serialiser must now be invisible to it.
+    """
+    import backend.core.design_geometry as dg
+    from backend.core.atomistic import _rigid_frame_calibration
+
+    _rigid_frame_calibration.cache_clear()
+    orig = dg._geometry_for_design
+
+    def explode(*a, **k):                      # noqa: ANN002, ANN003
+        raise AssertionError("the calibration reached the display serialiser")
+
+    dg._geometry_for_design = explode
+    try:
+        calib = _rigid_frame_calibration()
+    finally:
+        dg._geometry_for_design = orig
+        _rigid_frame_calibration.cache_clear()
+    assert len(calib) == 4

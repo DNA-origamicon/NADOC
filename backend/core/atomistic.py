@@ -65,6 +65,8 @@ from backend.core.constants import BDNA_MINOR_GROOVE_ANGLE_RAD, BDNA_RISE_PER_BP
 from backend.core.geometry import (
     NucleotidePosition,
     nucleotide_positions,
+    site_from_bead as _site_from_bead,
+    site_from_beads_arrays as _site_from_beads_arrays,
     nucleotide_positions_arrays_extended,
     nucleotide_positions_arrays_extended_right,
 )
@@ -808,34 +810,28 @@ def _atom_frame(
     """
     bb = nuc_pos.position
     e_radial: _np.ndarray | None = None   # outward unit vector from axis to bead
-    if axis_point is not None and nuc_pos.radial_hat is not None:
-        # THE INVERTED PATH (2026-08-07).  The helical phase is carried as a quantity
-        # (`radial_hat`, `axis_point` — see geometry.NucleotidePosition), so the stamp
-        # reads it and places the P at its OWN radius.  It no longer recovers the phase by
-        # subtracting an axis point from the coarse-grained DISPLAY bead and re-normalising,
-        # which was the concrete form of "the display rep decides where atoms go".
+    if axis_point is not None:
+        # TWO PRODUCERS, ONE SITE (project_helical_site.md).  Either the nucleotide carries
+        # an ANALYTIC site — the phase geometry.py computed from the lattice — or it does
+        # not, and the site is MEASURED off wherever the nucleotide actually is.  The stamp
+        # places the P at its own radius from that site, identically either way.
         #
-        # `axis_point` (the caller's, from the helix) and `nuc_pos.axis_point` (geometry's)
-        # are the same point for a lattice helix; the caller's wins because the deformed /
-        # axis_override paths legitimately supply a different one.
-        e_radial = nuc_pos.radial_hat
-        axial = _np.dot(nuc_pos.position - axis_point, nuc_pos.axis_tangent)
-        bb = axis_point + axial * nuc_pos.axis_tangent + _ATOMISTIC_P_RADIUS * e_radial
-    elif axis_point is not None:
-        # Fallback for nucleotides with no analytic phase: an oxDNA relaxed frame, a
-        # prepared display frame, an mrDNA read-back.  Recovers the phase from the bead.
-        radial = bb - axis_point
-        radial_perp = (
-            radial - _np.dot(radial, nuc_pos.axis_tangent) * nuc_pos.axis_tangent
-        )
-        r_norm = _np.linalg.norm(radial_perp)
-        if r_norm > 1e-9:
-            e_radial = radial_perp / r_norm
-            bb = (
-                axis_point
-                + _np.dot(radial, nuc_pos.axis_tangent) * nuc_pos.axis_tangent
-                + _ATOMISTIC_P_RADIUS * e_radial
-            )
+        # Neither branch reads the display bead as a PHASE carrier, which is what the stamp
+        # used to do.  The measured branch reads a POSITION, which is the whole point of an
+        # override: a relaxed oxDNA frame, an MD trajectory frame, a folded ssDNA seed, an
+        # mrDNA read-back, or a nucleotide re-placed onto a deformed centreline.
+        #
+        # `axis_point` (the caller's) wins over `nuc_pos.axis_point` (geometry's): they are
+        # the same for a lattice helix, and the deformed / axis_override paths legitimately
+        # supply a different one.
+        if nuc_pos.radial_hat is not None:
+            e_radial = nuc_pos.radial_hat
+            axial = float(_np.dot(nuc_pos.position - axis_point, nuc_pos.axis_tangent))
+        else:
+            e_radial, axial = _site_from_bead(
+                nuc_pos.position, axis_point, nuc_pos.axis_tangent)
+        if e_radial is not None:
+            bb = axis_point + axial * nuc_pos.axis_tangent + _ATOMISTIC_P_RADIUS * e_radial
 
     # Correct the REVERSE strand P azimuthal angle to the real B-DNA value (1ZEW: 208.2°).
     # FORWARD helix topology places REV P at fwd+150° (CCW); target fwd+208.2° → +58.2°.
@@ -915,15 +911,11 @@ def _atom_frames_batch(
     bb = pos.astype(float).copy()
     axt = axt.astype(float)
     has_axis = ~_np.isnan(axis_pt[:, 0])
-    radial = bb - axis_pt
-    dot_rt = _np.einsum("ij,ij->i", radial, axt)
-    radial_perp = radial - dot_rt[:, None] * axt
-    r_norm = _np.linalg.norm(radial_perp, axis=1)
-    ok = has_axis & (r_norm > 1e-9)  # radial frame available
-    e_radial = _np.zeros((N, 3))
-    e_radial[ok] = radial_perp[ok] / r_norm[ok, None]
-    # Carried helical phase wins where it exists — the inverted path (see _atom_frame).
-    # NaN rows are nucleotides with no analytic phase and keep the bead-derived value.
+    measured, dot_rt, radial_ok = _site_from_beads_arrays(bb, axis_pt, axt)
+    ok = has_axis & radial_ok                             # radial frame available
+    e_radial = _np.where(ok[:, None], measured, 0.0)
+    # The two producers, as in _atom_frame: the ANALYTIC site where one was carried, the
+    # MEASURED site otherwise.  NaN rows carry no analytic phase.
     if radial_hat is not None:
         carried = ~_np.isnan(radial_hat[:, 0])
         e_radial = _np.where((ok & carried)[:, None], radial_hat, e_radial)
@@ -1034,8 +1026,8 @@ def _rigid_frame_calibration() -> dict:
     the all-atom template stamping build_atomistic_model produces.
 
     Method (empirical, machine-precision):  build a clean ideal duplex (no
-    crossovers / insertions) spanning all four buckets, write + read its oxDNA
-    configuration so each nucleotide has a known (CM, a1, a3), and read its
+    crossovers / insertions) spanning all four buckets, take each nucleotide's oxDNA
+    particle frame (CM, a1, a3) straight from its HELICAL SITE, and read its
     KNOWN-GOOD atom placement from build_atomistic_model(design).  For each
     nucleotide recover (R_kg, origin_kg) by Kabsch between the template-local atom
     coordinates and the built world coordinates, then  Q = Fᵀ·R_kg,
@@ -1044,14 +1036,18 @@ def _rigid_frame_calibration() -> dict:
     + re-orthonormalise (SVD).  The 4-bucket split mirrors _atom_frame's only
     direction branches (the REVERSE-strand P azimuthal correction differs for a
     FORWARD helix vs a REVERSE/None helix).  Asserts the per-nucleotide residual is
-    negligible, so a silent calibration drift can never ship."""
+    negligible, so a silent calibration drift can never ship.
+
+    The frames used to come from writing an oxDNA .dat to a temp file and reading it back
+    (project_helical_site.md Phase 6).  That round trip served only to turn CG geometry
+    into (CM, a1, a3) — which the site gives directly — and it cost two things: the conf
+    is text at ``%.6f`` oxDNA units, so every frame was QUANTISED to 8.5e-7 nm and that
+    noise landed in the fit's own residual; and it made a cached constant depend on
+    ``_geometry_for_design``, the DISPLAY serialiser, so a display-side default (measured
+    re-placement, the junction-balance roll) could have moved the calibration.  Reading
+    ``nucleotide_positions`` instead depends on the raw geometric layer and nothing else.
+    """
     from backend.core.models import Helix, Strand, Domain, Vec3, Design, LatticeType
-    from backend.core.design_geometry import _geometry_for_design
-    from backend.physics.oxdna_interface import (
-        write_configuration,
-        read_configuration_full,
-    )
-    import tempfile as _tempfile, os as _os
 
     L = 14
     rise = BDNA_RISE_PER_BP
@@ -1103,13 +1099,18 @@ def _rigid_frame_calibration() -> dict:
         helices=helices, strands=strands, lattice_type=LatticeType.HONEYCOMB
     )
 
-    geom = _geometry_for_design(design)
-    tf = _tempfile.NamedTemporaryFile(suffix=".dat", delete=False).name
-    try:
-        write_configuration(design, geom, tf)
-        frames = read_configuration_full(tf, design)
-    finally:
-        _os.unlink(tf)
+    # The oxDNA particle frame, per nucleotide, exactly as `nuc_conf_line` defines it:
+    # the conf's first three floats are the CM (the backbone bead), a1 is the base normal
+    # and a3 runs 5'->3' (the axis tangent, negated on the REVERSE strand).
+    frames: dict[tuple, dict] = {}
+    for helix in design.helices:
+        for n in nucleotide_positions(helix):
+            a1 = n.base_normal / (_np.linalg.norm(n.base_normal) + 1e-14)
+            a3 = (n.axis_tangent if n.direction == Direction.FORWARD else -n.axis_tangent)
+            a3 = a3 / (_np.linalg.norm(a3) + 1e-14)
+            frames[(helix.id, n.bp_index, n.direction.value)] = {
+                "backbone_position": n.position, "a1": a1, "a3": a3,
+            }
 
     model = build_atomistic_model(design)
     hdir = {h.id: h.direction for h in design.helices}
