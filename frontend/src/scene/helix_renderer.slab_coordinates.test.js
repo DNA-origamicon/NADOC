@@ -8,7 +8,7 @@ import {
 } from './helix_renderer.js'
 
 describe('base slab coordinate abstraction', () => {
-  it('uses base_position verbatim instead of offsetting it again', () => {
+  it('does not invent an offset when bead and base positions coincide', () => {
     const basePosition = [1.25, -2.5, 3.75]
 
     const center = pairedSlabCenter(

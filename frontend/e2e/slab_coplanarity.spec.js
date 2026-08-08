@@ -106,6 +106,6 @@ test('live full-representation pair keeps both largest faces coplanar', async ({
   expect(result.beadInitialError).toBeLessThan(1e-6)
   expect(result.beadMoveDistance).toBeGreaterThan(5)
   // Bead-only overrides must re-run the same contact solve instead of snapping
-  // slabs back to a legacy center or leaving them disconnected.
+  // slabs to a noncanonical center or leaving them disconnected.
   expect(result.slabMatrixDelta).toBeGreaterThan(1)
 })

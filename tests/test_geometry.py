@@ -872,20 +872,6 @@ def test_frontend_bdna_constants_match_the_backend():
     )
 
 
-def test_measured_slab_extent_matches_the_frontend_twin():
-    """The slab length is DERIVED from the measured atomistic template, not typed.
-
-    `new_positioning.js` carries a literal copy because JS cannot import Python.  It was
-    already stale when this pin was written — 0.6568 against a derived 0.6569 — so the
-    slab the app drew was a tenth of a picometre short of the one the backend computes.
-    Harmless at that size, and exactly the drift this pin exists to catch before it isn't.
-    """
-    from backend.core.measured_positioning import MEASURED
-
-    js = _js_const("frontend/src/ui/new_positioning.js", "MEASURED_SLAB_EXTENT")
-    assert js == pytest.approx(MEASURED.slab_extent_nm, abs=1e-12)
-
-
 def test_the_oxdna_fallback_geometry_agrees_with_the_geometric_layer():
     """`_compute_nuc_geometry` is the fallback the oxDNA writer uses for nucleotides the
     geometry list does not carry — overhang bp past `helix.length_bp`, and loop copies.

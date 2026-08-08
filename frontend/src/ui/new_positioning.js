@@ -1,12 +1,9 @@
 /**
-/**
  * "New positioning" — the MD-measured placement, which is now NADOC's native geometry.
  *
- * ON is the default and the normal state of the app.  The coarse-grained layer draws
- * its backbone bead at the phosphorus radius rather than HELIX_RADIUS and its base bead
- * on the real base-ring centroid rather than 0.71 nm out; the atomistic layer stamps
- * nucleotide templates re-extracted from free NAMD trajectories, both strands measured
- * separately in one shared base-pair frame.
+ * ON is the default and the normal state of the app. The backend supplies measured
+ * nucleotide coordinates, with forward and reverse strands measured separately in one
+ * shared base-pair frame; the renderer consumes those coordinates without rebuilding them.
  *
  * Turning it OFF reverts to the legacy build geometry — HELIX_RADIUS beads, the +-150
  * deg groove mirrored by lattice cell type, and the 1ZEW-derived atom templates whose
@@ -16,7 +13,7 @@
  * The positions themselves come from the backend
  * (`backend/core/measured_positioning.py` for the beads, `measured_atomistic.py` for
  * the atoms — both carry the provenance and the measured numbers); this module owns
- * only the flag and the slab geometry that rides with it.
+ * only the view-preference flag and its query-string representation.
  *
  * Display-only in the sense that matters here: nothing touches topology, and the flag
  * is not part of the design — it is a per-browser view preference.  Note the backend
@@ -29,21 +26,6 @@
 // carrying the old opt-in `false` does not silently keep showing legacy geometry —
 // v1 was an opt-in flag, v2 is an opt-OUT.
 const STORAGE_KEY = 'nadoc.newPositioning.v2'
-
-// Slab geometry that goes with the measured placement.  The legacy slab is centred
-// 0.45 nm inward from the bead along the cross-strand direction and is 0.70 nm long.
-//
-// With measured positioning the slab runs along its own BEAD→BASE axis instead, from
-// the backbone bead (the full representation now targets O5') inward to just past the Watson-Crick atom, so the
-// plate visibly joins the base to its own sugar.  It cannot simply be lengthened along
-// the cross-strand direction: measured, the sugar landmark sits off the base's cross-strand
-// line, so a slab extended that way reaches the right radius and still misses the bead.
-// MIRRORED from Python: `measured_positioning.MEASURED.slab_extent_nm`, which is DERIVED
-// from the measured atomistic template rather than typed.  JS cannot import it, so
-// `tests/test_geometry.py::test_measured_slab_extent_matches_the_frontend_twin` regexes
-// this line and asserts equality — it was already stale at 0.6568 when that pin was added
-// (TD-27 Stage 1).  Update both together.
-export const MEASURED_SLAB_EXTENT = 0.6569
 
 let _on = _read()
 const _listeners = new Set()
@@ -102,73 +84,6 @@ export function geometryQuerySuffix(hasQuery) {
   // seeding, linker relax, extension tails) share the measured placement — so the app
   // states what it wants rather than relying on either default.
   return `${hasQuery ? '&' : '?'}measured_positioning=${_on ? 'true' : 'false'}`
-}
-
-/**
- * DELETE PENDING REVIEW (non-authoritative geometry).
- * The bead/slab renderer no longer calls these slab reconstruction helpers: its
- * 1:1 contract is backbone_position/base_position/base_normal/axis_tangent from
- * the geometry payload.  Keep them temporarily for review and legacy tests.
- *
- * Centre point for a nucleotide's base slab.
- *
- * With measured positioning the slab sits on the measured base-ring centroid the
- * backend ships as `base_position`.  Legacy keeps the historical construction —
- * a fixed offset inward from the backbone bead along the cross-strand direction —
- * which is why this takes both and picks.
- *
- * @param {{x:number,y:number,z:number}} bbPos      backbone bead
- * @param {{x:number,y:number,z:number}} bnDir      cross-strand unit vector
- * @param {number} legacyOffset                     HELIX_RADIUS - slabParams.distance
- * @param {number[]|null} basePosition              nuc.base_position, if available
- * @param {{x:number,y:number,z:number}} out        vector to write into
- */
-export function slabCenterInto(bbPos, bnDir, legacyOffset, basePosition, out) {
-  if (_on && basePosition) {
-    // Half a slab inward from the bead along the bead→base axis, so the plate's OUTER
-    // face lands exactly on the backbone bead — that is what makes the two connect,
-    // and it holds regardless of how the bead and base happen to be oriented.
-    slabAxisInto(bbPos, bnDir, basePosition, out)
-    out.multiplyScalar(MEASURED_SLAB_EXTENT / 2).add(bbPos)
-    return out
-  }
-  out.copy(bbPos).addScaledVector(bnDir, legacyOffset)
-  return out
-}
-
-/**
- * DELETE PENDING REVIEW (non-authoritative geometry). See slabCenterInto.
- *
- * Unit vector along the slab's LONG axis, written into `out`.
- *
- * Measured: from the backbone bead toward this nucleotide's own base-ring centroid.
- * Legacy: the cross-strand direction, unchanged.
- *
- * This is the slab's orientation as well as its direction of travel — the caller builds
- * the plate's basis from it — so the plate turns to face along the sugar→base line
- * rather than across the base pair.  It stays perpendicular to the helix axis either
- * way, because only the in-plane direction changes.
- *
- * @param {{x:number,y:number,z:number}} bbPos      backbone bead
- * @param {{x:number,y:number,z:number}} bnDir      cross-strand unit vector (legacy)
- * @param {number[]|null} basePosition              nuc.base_position, if available
- * @param {{x:number,y:number,z:number}} out        vector to write into
- */
-export function slabAxisInto(bbPos, bnDir, basePosition, out) {
-  if (_on && basePosition) {
-    out.set(basePosition[0] - bbPos.x, basePosition[1] - bbPos.y, basePosition[2] - bbPos.z)
-    const n = out.length()
-    if (n > 1e-9) return out.multiplyScalar(1 / n)
-  }
-  return out.copy(bnDir)
-}
-
-/**
- * DELETE PENDING REVIEW (representation-side geometry). The canonical renderer
- * now keeps one slab size and does not switch geometry from a view preference.
- */
-export function slabExtent(legacyExtent) {
-  return _on ? MEASURED_SLAB_EXTENT : legacyExtent
 }
 
 /**

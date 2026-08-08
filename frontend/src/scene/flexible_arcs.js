@@ -32,11 +32,13 @@ const BOW_SMOOTH = 0.6          // hysteresis: keep this fraction of the previou
 const Y_HAT = new THREE.Vector3(0, 1, 0)
 const X_HAT = new THREE.Vector3(1, 0, 0)
 const GEO_BEAD = new THREE.SphereGeometry(BEAD_RADIUS, 8, 6)
-// Base slabs — dims + offset copied from helix_renderer.js slabParams so the
-// flexible arc keeps the ball-and-slab look. Box local axes: x=length (0.30),
+// Synthetic arc slabs keep the same visual dimensions, but their placement is
+// independent of canonical duplex slabs. Box local axes: x=length (0.30),
 // y=width (0.06), z=thickness (0.70).
 const GEO_SLAB = new THREE.BoxGeometry(0.30, 0.06, 0.70)
-const SLAB_DISTANCE = 0.55      // nm — slab centre offset from the bead along the inward base-normal
+// Synthetic ssDNA-arc decoration only. Canonical duplex slabs are positioned by
+// helix_renderer.pairedSlabCenter; this fixed offset must not be reused there.
+const SLAB_DISTANCE = 0.55
 
 function _fallbackBow(dHat) {
   let b = new THREE.Vector3().crossVectors(dHat, Y_HAT)

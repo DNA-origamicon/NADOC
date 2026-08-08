@@ -27,7 +27,7 @@ import {
   reverseComplement, overhangLabel, radialOutward, perpendicular, ssdnaBackbonePoints,
 } from './conjugate_manager_logic.js'
 
-// ssDNA bead/slab/cone constants — match scene/helix_renderer.js (our standard model).
+// Synthetic ssDNA preview constants; these do not define canonical duplex placement.
 const BEAD_RADIUS = 0.10
 const CONE_RADIUS = 0.075
 const HELIX_RADIUS = 1.0
@@ -125,7 +125,7 @@ export function initConjugateManager({ api, store } = {}) {
       const bead = new THREE.Mesh(beadGeom, mat)
       bead.position.copy(pv)
       group.add(bead)
-      // base slab, offset along base-normal
+      // Synthetic handle-preview slab. This is not the canonical duplex slab solver.
       const slab = new THREE.Mesh(slabGeom, slabMat)
       slab.position.copy(pv).addScaledVector(bnV, HELIX_RADIUS - SLAB.distance)
       slab.quaternion.copy(slabQuat)

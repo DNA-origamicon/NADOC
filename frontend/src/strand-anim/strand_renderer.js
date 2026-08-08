@@ -18,7 +18,7 @@
 import * as THREE from 'three'
 import { ROLE_COLOR } from './model.js'
 
-// ── ball-and-slab constants — MUST match scene/helix_renderer.js ─────────────
+// ── synthetic animation ball-and-slab constants ──────────────────────────────
 const BEAD_RADIUS = 0.10
 const HELIX_RADIUS = 1.0
 const SLAB = { length: 0.30, width: 0.06, thickness: 0.70, distance: 0.55 }
@@ -95,6 +95,7 @@ export function createStrandRenderer(scene, { roleColor = ROLE_COLOR, lineOpacit
     iBeads.setMatrixAt(idx, _m); iBeads.setColorAt(idx, _color.setHex(colorHex))
     _tan.set(tan[o], tan[o + 1], tan[o + 2]); _bn.set(bn[o], bn[o + 1], bn[o + 2])
     slabQuaternion(_bn, _tan, _q)
+    // Animation-model convention only; canonical duplex slabs use pairedSlabCenter.
     _v.addScaledVector(_bn, HELIX_RADIUS - SLAB.distance)
     _m.compose(_v, _q, _scaleSlab)
     iSlabs.setMatrixAt(idx, _m); iSlabs.setColorAt(idx, _color.setHex(colorHex))

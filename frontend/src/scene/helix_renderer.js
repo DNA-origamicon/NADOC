@@ -278,8 +278,8 @@ export function slabQuaternion(bnDir, tanDir) {
  *
  * The two base-ring centroids can carry different measured axial offsets.  A box
  * centred independently on each therefore has two parallel but non-coplanar largest
- * faces. Put both centers on their mean axis-normal plane. No backbone/bead coordinate
- * The paired base positions determine the shared axial plane. The associated
+ * faces. Put both centers on their mean axis-normal plane. The paired base positions
+ * determine that shared axial plane. The associated
  * bead and slab orientation determine only the outward radial contact shift.
  */
 export function pairedSlabCenter(
@@ -1083,9 +1083,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const tanDir = new THREE.Vector3(...nuc.axis_tangent)
       const color  = nucSlabColor(nuc, stapleColorMap, customColors, loopSet)
       const bbPos  = new THREE.Vector3(...nuc.backbone_position)
-      // A base slab is a literal view of the coordinate abstraction.  Do not infer
-      // another orientation here: the backend owns the nucleotide frame.  Its display
-      // center gets only the explicit coplanar/outward adjustment documented above.
+      // The backend frame supplies base position, normal, and axis tangent. The display
+      // solver adds only the shared-plane and O5'-bead contact adjustment documented above.
       const quat   = slabQuaternion(bnDir, tanDir)
       const mate   = slabMate.get(nuc)
       const center = pairedSlabCenter(
@@ -2132,24 +2131,15 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           quat_   = _slabQuatS
         } else {
           slab.bbPos.set(nuc.backbone_position[0], nuc.backbone_position[1], nuc.backbone_position[2])
-          // Undeformed: bead and base come from the SAME geometry snapshot, so pass the
-          // base through and this reproduces the build-time placement exactly.  Omitting
-          // it would pair the stored (measured) orientation with a legacy centre.
-          center_ = pairedSlabCenter(
-            new THREE.Vector3(...nuc.base_position),
-            slab.mate?.base_position ? new THREE.Vector3(...slab.mate.base_position) : null,
-            new THREE.Vector3(...nuc.axis_tangent),
-          )
+          _slabAxisDir.set(...nuc.axis_tangent).normalize()
+          center_ = _slabCenterAt(slab, _slabAxisDir, null, null, _slabCenterD)
           quat_   = slab.quat
         }
       } else {
         const bp = nuc.backbone_position
         slab.bbPos.set(bp[0], bp[1], bp[2])
-        center_ = pairedSlabCenter(
-          new THREE.Vector3(...nuc.base_position),
-          slab.mate?.base_position ? new THREE.Vector3(...slab.mate.base_position) : null,
-          new THREE.Vector3(...nuc.axis_tangent),
-        )
+        _slabAxisDir.set(...nuc.axis_tangent).normalize()
+        center_ = _slabCenterAt(slab, _slabAxisDir, null, null, _slabCenterD)
         quat_   = slab.quat
       }
       _tMatrix.compose(center_, quat_,
@@ -3531,8 +3521,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      *                build-time orientation and just follows the bead.
      */
     setBeadOverrides(updates) {
-      // DELETE PENDING REVIEW (non-authoritative geometry): this display-only
-      // path synthesizes bead/slab poses outside the coordinate abstraction.
+      // Display-only bead motion still uses the canonical slab contact solver below;
+      // it does not invent a second slab offset or orientation convention.
       if (!updates?.length) return
       let touchedBead = false, touchedSlab = false
       for (let i = 0; i < updates.length; i++) {
@@ -3658,7 +3648,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       iCones.instanceMatrix.needsUpdate = true
 
-      // 3. Slabs — move centers with backbone; update orientation when base normals provided.
+      // 3. Slabs — recompute bead contact; update orientation when base normals are provided.
       // Base normals come from the P→C1' intra-residue vector computed on the backend.
       // Uses module-level scratch: _slabBnS (MD bnDir), _slabAxisDir (tanDir), _slabTanS
       // (tangential = tanDir×bnDir), _slabBasis, _slabQuatS.  No heap allocation per frame.
@@ -4892,7 +4882,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       iCones.instanceMatrix.needsUpdate = true
 
-      // 3. Slabs — rotate base bnDir/quat by R_incr, recompute center from updated bbPos
+      // 3. Slabs — rotate the frame and recompute the center from the live bead position.
       for (const slab of slabEntries) {
         if (!helixSet.has(slab.nuc.helix_id)) continue
         if (domainKeySet && !domainKeySet.has(`${slab.nuc.strand_id}:${slab.nuc.domain_index}`)) continue
@@ -5053,11 +5043,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      * round-trip) would see stale pre-cluster-transform positions even
      * though the on-screen visuals are correct.
      *
-     * Note: nuc.base_position and nuc.axis_tangent are not updated here.
-     * Consumers that need them precisely should trigger a fresh
-     * GET /design/geometry. base_position only affects slab-centre
-     * computation and a few specialised exports; updating slab.bnDir is
-     * enough for the slab orientation to look right after revertToGeometry.
+     * Note: nuc.base_position and nuc.axis_tangent are not updated here. Slab placement
+     * uses base_position for the paired plane, backbone_position for bead contact, and
+     * axis_tangent/base_normal for its frame. Consumers needing a fully authoritative
+     * post-transform frame must trigger a fresh GET /design/geometry.
      */
     commitClusterPositions(helixIds) {
       const helixSet = new Set(helixIds)
