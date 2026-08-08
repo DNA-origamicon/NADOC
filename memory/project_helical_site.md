@@ -320,9 +320,11 @@ and writing different PERSISTED poses with nothing to catch it. Pinned by
 `test_a_display_default_flip_cannot_reach_the_pose_fitters`, which simulates the flip and requires
 `fitting_geometry` to be unmoved while the plain call follows it.
 
-**Still open (needs the migration decision):** re-targeting the fitters from the bead onto the
-site, so the pose stops depending on what radius the display picks. Not urgent now that the
-default-flip hazard is closed.
+**CLOSED 2026-08-07, owner decision: leave saved `cluster_transforms` as-is.** No migration, no
+re-fit on load, no versioned field. Re-targeting the fitters from the bead onto the site is
+therefore not happening either — it would change what a saved pose means, which is precisely what
+"leave as-is" rules out. The default-flip hazard is closed and that was the real risk; the bead
+convention stays load-bearing for saved poses, deliberately.
 
 *Original framing:*
 

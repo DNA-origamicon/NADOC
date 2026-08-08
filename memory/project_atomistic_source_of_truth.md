@@ -328,8 +328,10 @@ Each step should leave the suite green and be independently shippable.
 
 ## Open questions for the owner — ask, do not guess
 
-1. **Saved `cluster_transforms` migration.** Existing designs carry poses fitted against the old CG
-   beads. Re-fit on load, leave them, or version the field?
+1. ~~**Saved `cluster_transforms` migration.**~~ **ANSWERED 2026-08-07: leave them as-is.** No
+   re-fit on load, no versioned field. This also settles the pose fitters: re-targeting them from
+   the bead onto the site would change what a saved pose means, so it is not happening. The
+   default-flip hazard is closed separately by `design_geometry.fitting_geometry`.
 2. **What "tuned for figures" is allowed to do.** Purely a projection of atoms (bead = C3′), or free
    to deviate for legibility? The 2026-08-06 groove restoration (CG beads re-registered onto the
    lattice groove so Holliday junctions render symmetrically — see [[project_measured_atomistic]])
