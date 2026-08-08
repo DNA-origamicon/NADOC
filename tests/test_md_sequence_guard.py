@@ -2,13 +2,17 @@
 scaffold sequence is silently built as thymine, wasting a full MD run on a physically
 meaningless reference. See backend/core/md_sequence_guard.py.
 """
+
 from pathlib import Path
 
 import pytest
 
 from backend.core.models import Design, StrandType
 from backend.core.md_sequence_guard import (
-    scaffold_sequence_problems, require_sequenced_scaffold, _strand_build_nt_count)
+    scaffold_sequence_problems,
+    require_sequenced_scaffold,
+    _strand_build_nt_count,
+)
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "Examples"
 
@@ -37,7 +41,9 @@ def test_assigning_the_sequence_clears_the_flag():
     assert scaffold_sequence_problems(d)  # flagged beforehand
     for s in d.strands:
         if s.strand_type == StrandType.SCAFFOLD:
-            s.sequence = "A" * _strand_build_nt_count(d, s)  # assignment (any ACGT) clears it
+            s.sequence = "A" * _strand_build_nt_count(
+                d, s
+            )  # assignment (any ACGT) clears it
     assert scaffold_sequence_problems(d) == []
 
 
@@ -69,18 +75,24 @@ def test_route_blocks_unsequenced_scaffold_up_front(monkeypatch, tmp_path):
     # scaffold guard whether or not NAMD/GROMACS are installed in the environment.
     monkeypatch.setattr(routes_md, "find_namd", lambda: "/usr/bin/namd3")
     monkeypatch.setattr(routes_md, "find_gmx", lambda: "/usr/bin/gmx")
-    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)  # a regression must not touch the real workspace
+    monkeypatch.setattr(
+        routes_md, "_WORKSPACE_DIR", tmp_path
+    )  # a regression must not touch the real workspace
 
     d = _load("6hb_test")
     for s in d.strands:
         s.sequence = None if s.strand_type == StrandType.SCAFFOLD else "ACGT" * 40
-    assert _sequenced_base_count(d) > 0, "staples sequenced → the generic zero-count guard would PASS"
+    assert _sequenced_base_count(d) > 0, (
+        "staples sequenced → the generic zero-count guard would PASS"
+    )
     assert scaffold_sequence_problems(d), "scaffold must still be flagged"
 
     doc_context.set_current_doc(None)
     try:
         design_state.set_design(d)
-        r = TestClient(app).post("/api/md/jobs", json={"protocol": "mgh_slow_release", "autostart": False})
+        r = TestClient(app).post(
+            "/api/md/jobs", json={"protocol": "mgh_slow_release", "autostart": False}
+        )
         assert r.status_code == 400, r.text
         assert "scaffold" in r.json()["detail"].lower()
     finally:

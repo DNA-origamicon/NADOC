@@ -76,15 +76,16 @@ _TERMINAL = (OxdnaStatus.completed, OxdnaStatus.failed, OxdnaStatus.stopped)
 # stay the default so GPU-free orchestration tests — whose mock cost scales with step
 # count — stay fast).
 STANDARD_RELAX_PARAMS: dict = {
-    "mc_steps": DEFAULT_MC_STEPS,              # 1_000
+    "mc_steps": DEFAULT_MC_STEPS,  # 1_000
     "md_relax_steps": DEFAULT_MD_RELAX_STEPS,  # 1_000_000 — the re-anneal needs this
-    "equil_steps": DEFAULT_EQUIL_STEPS,        # 100_000
-    "min_bp_retained": 0.5,                    # real quality gate (catches under-relax)
-    "max_relax_retries": MAX_RELAX_RETRIES,    # escalate-and-retry a stuck md_relax
+    "equil_steps": DEFAULT_EQUIL_STEPS,  # 100_000
+    "min_bp_retained": 0.5,  # real quality gate (catches under-relax)
+    "max_relax_retries": MAX_RELAX_RETRIES,  # escalate-and-retry a stuck md_relax
 }
 
 
 # ── Isolation context managers ────────────────────────────────────────────────
+
 
 @contextlib.contextmanager
 def _use_workspace(workspace):
@@ -135,6 +136,7 @@ def _scratch_job_design(job_id: str, workspace):
     try:
         from backend.core.oxdna_job import OxdnaJob
         from backend.core.oxdna_runner import _load_snapshot_design
+
         job = OxdnaJob.load(job_id, Path(workspace))
         snap = _load_snapshot_design(job.job_dir(Path(workspace)))
     except Exception:
@@ -147,6 +149,7 @@ def _scratch_job_design(job_id: str, workspace):
 
 
 # ── Route-driving wrappers ────────────────────────────────────────────────────
+
 
 def create_job(
     design: Design,
@@ -209,16 +212,33 @@ def append_production(job_id: str, workspace, *, steps: int = 1000) -> dict:
         )
 
 
-def append_field(job_id: str, workspace, *, field_pN: float, dir, anchors: list[dict],
-                 steps: int = 2000, anchor_stiff: float = DEFAULT_ANCHOR_STIFF) -> dict:
+def append_field(
+    job_id: str,
+    workspace,
+    *,
+    field_pN: float,
+    dir,
+    anchors: list[dict],
+    steps: int = 2000,
+    anchor_stiff: float = DEFAULT_ANCHOR_STIFF,
+) -> dict:
     """Append an electric-field stage to a completed job (mirrors
     ``POST /oxdna/jobs/{id}/field``).  ``anchors`` are descriptors resolved to
     pinned nucleotides (e.g. ``{'kind':'domain','strand_id':…,'domain_index':0}``
     or ``{'kind':'overhang','id':…}``)."""
     with _use_workspace(workspace), _scratch_job_design(job_id, workspace):
-        return asyncio.run(_route_append_field(job_id, FieldRequest(
-            field_pN=field_pN, dir=list(dir), anchors=anchors,
-            steps=steps, anchor_stiff=anchor_stiff)))
+        return asyncio.run(
+            _route_append_field(
+                job_id,
+                FieldRequest(
+                    field_pN=field_pN,
+                    dir=list(dir),
+                    anchors=anchors,
+                    steps=steps,
+                    anchor_stiff=anchor_stiff,
+                ),
+            )
+        )
 
 
 def roll_job_to_run_state(job_id: str, workspace) -> dict:
@@ -293,7 +313,11 @@ def read_twist_series(job_id: str, workspace, design, analytic_reference) -> dic
 
     workspace = Path(workspace)
     job = OxdnaJob.load(job_id, workspace)
-    prod = [s for s in job.stages if s.kind in ("production", "field") and s.status in ("done", "running")]
+    prod = [
+        s
+        for s in job.stages
+        if s.kind in ("production", "field") and s.status in ("done", "running")
+    ]
     if not prod:
         return {"ready": False, "reason": "no production run"}
     jd = job.job_dir(workspace)
@@ -308,8 +332,10 @@ def read_twist_series(job_id: str, workspace, design, analytic_reference) -> dic
 
 # ── Polling + one-call orchestration ──────────────────────────────────────────
 
-def wait_for_terminal(job_id: str, workspace, *, timeout: float = 30.0,
-                      poll_s: float = 0.05) -> OxdnaJob:
+
+def wait_for_terminal(
+    job_id: str, workspace, *, timeout: float = 30.0, poll_s: float = 0.05
+) -> OxdnaJob:
     """Poll the on-disk job until a terminal status (completed / failed / stopped)
     or ``timeout`` elapses.  Returns the loaded :class:`OxdnaJob` either way.
 
@@ -336,8 +362,9 @@ def wait_for_terminal(job_id: str, workspace, *, timeout: float = 30.0,
     return OxdnaJob.load(job_id, workspace)
 
 
-def run_relaxation(design: Design, workspace, *, timeout: float = 30.0,
-                   **params) -> OxdnaJob:
+def run_relaxation(
+    design: Design, workspace, *, timeout: float = 30.0, **params
+) -> OxdnaJob:
     """One-call headless relaxation: create (no autostart) → start → poll to
     terminal.  Returns the terminal :class:`OxdnaJob`.
 
@@ -352,8 +379,17 @@ def run_relaxation(design: Design, workspace, *, timeout: float = 30.0,
     return wait_for_terminal(job_id, workspace, timeout=timeout)
 
 
-def run_field(design: Design, workspace, *, field_pN: float, dir, anchors: list[dict],
-              timeout: float = 30.0, field_steps: int = 2000, **relax_params) -> OxdnaJob:
+def run_field(
+    design: Design,
+    workspace,
+    *,
+    field_pN: float,
+    dir,
+    anchors: list[dict],
+    timeout: float = 30.0,
+    field_steps: int = 2000,
+    **relax_params,
+) -> OxdnaJob:
     """One-call headless field run: relax → append a field stage → poll to terminal.
 
     Returns the terminal :class:`OxdnaJob`.  If relaxation does not complete it
@@ -363,39 +399,70 @@ def run_field(design: Design, workspace, *, field_pN: float, dir, anchors: list[
     parent = run_relaxation(design, workspace, timeout=timeout, **relax_params)
     if parent.status != OxdnaStatus.completed:
         return parent
-    child = append_field(parent.job_id, workspace, field_pN=field_pN, dir=dir,
-                         anchors=anchors, steps=field_steps)
+    child = append_field(
+        parent.job_id,
+        workspace,
+        field_pN=field_pN,
+        dir=dir,
+        anchors=anchors,
+        steps=field_steps,
+    )
     return wait_for_terminal(child["job_id"], workspace, timeout=timeout)
 
 
-def run_field_validation(design: Design, workspace, *, field_pN: float, dir,
-                         anchors: list[dict], timeout: float = 30.0,
-                         field_steps: int = 2000, **relax_params) -> dict:
+def run_field_validation(
+    design: Design,
+    workspace,
+    *,
+    field_pN: float,
+    dir,
+    anchors: list[dict],
+    timeout: float = 30.0,
+    field_steps: int = 2000,
+    **relax_params,
+) -> dict:
     """End-to-end automatable field validation: relax → field → measure the
     deflection oracle.  Returns ``{"job": OxdnaJob, "response": dict | None}``
     where ``response`` is :func:`field_response_from_confs` over the field stage's
     ``last_conf`` vs the prior (relaxed) stage's — i.e. did the anchors hold and
     the rest deflect ALONG the field.  ``response`` is None if the run did not
     complete or there is no pre-field stage to reference."""
-    job = run_field(design, workspace, field_pN=field_pN, dir=dir, anchors=anchors,
-                    timeout=timeout, field_steps=field_steps, **relax_params)
+    job = run_field(
+        design,
+        workspace,
+        field_pN=field_pN,
+        dir=dir,
+        anchors=anchors,
+        timeout=timeout,
+        field_steps=field_steps,
+        **relax_params,
+    )
     if job.status != OxdnaStatus.completed or not job.stages:
         return {"job": job, "response": None}
     from backend.core.oxdna_health import field_response_from_confs
+
     ws = Path(workspace)
     # ``job`` is the field CHILD: its field stage's last_conf vs its seed conf.dat
     # (the relaxed structure the field started from) — the field-off reference.
     field_conf = job.stage_dir(ws, job.stages[-1].name) / "last_conf.dat"
     ref_conf = job.job_dir(ws) / "conf.dat"
     response = field_response_from_confs(
-        design, field_conf, ref_conf, field_dir=list(dir), anchors=anchors)
+        design, field_conf, ref_conf, field_dir=list(dir), anchors=anchors
+    )
     return {"job": job, "response": response}
 
 
-def build_field_specimen(spec_or_design, workspace, *, anchor: dict,
-                         overhang: dict | None = None, sequence: bool = True,
-                         scaffold_name: str = "M13mp18", timeout: float = 30.0,
-                         **relax_params) -> dict:
+def build_field_specimen(
+    spec_or_design,
+    workspace,
+    *,
+    anchor: dict,
+    overhang: dict | None = None,
+    sequence: bool = True,
+    scaffold_name: str = "M13mp18",
+    timeout: float = 30.0,
+    **relax_params,
+) -> dict:
     """Compose the entire build→field-ready chain into ONE headless call (AF-18,
     Tier 6): a design → (optional overhang) → fully sequenced → relaxed → with a
     designated field **anchor** resolved to pinned nucleotides.  Returns
@@ -447,6 +514,7 @@ def build_field_specimen(spec_or_design, workspace, *, anchor: dict,
         base = spec_or_design.model_copy(deep=True)
     else:
         from backend.api import headless_spec_build as hs
+
         base = hs.build_design(spec_or_design)
 
     with hb.scratch_session(base.lattice_type):
@@ -461,7 +529,8 @@ def build_field_specimen(spec_or_design, workspace, *, anchor: dict,
     if not parts:
         raise ValueError(
             f"build_field_specimen: anchor {anchor!r} resolved to no nucleotides — "
-            "the specimen cannot be anchored for a field run")
+            "the specimen cannot be anchored for a field run"
+        )
 
     job = run_relaxation(design, workspace, timeout=timeout, **relax_params)
     return {"design": design, "job": job, "anchor_keys": anchor_keys, "anchor": anchor}
@@ -469,8 +538,10 @@ def build_field_specimen(spec_or_design, workspace, *, anchor: dict,
 
 # ── LIVE field: persistent in-process oxpy session, re-aimable mid-run (AF-21) ──
 
-def _prepare_field_rundir(design, seed_conf, rundir, *, field_pN, dir, anchors,
-                          anchor_stiff, steps):
+
+def _prepare_field_rundir(
+    design, seed_conf, rundir, *, field_pN, dir, anchors, anchor_stiff, steps
+):
     """Stage a field run dir (``topology.top`` / ``conf.dat`` / ``field_forces.txt``
     / ``input``) reusing the SAME proven writers the batch field stage uses, so a
     live oxpy session runs the identical physics setup.  ``seed_conf`` is the
@@ -480,7 +551,9 @@ def _prepare_field_rundir(design, seed_conf, rundir, *, field_pN, dir, anchors,
 
     from backend.core.oxdna_protocol import build_field_stage, render_stage_input
     from backend.physics.oxdna_interface import (
-        pn_to_oxdna_force, write_field_forces, write_topology,
+        pn_to_oxdna_force,
+        write_field_forces,
+        write_topology,
     )
 
     rundir = Path(rundir)
@@ -491,20 +564,43 @@ def _prepare_field_rundir(design, seed_conf, rundir, *, field_pN, dir, anchors,
     # Anchors are recommended but not required — a uniform field on a free body just
     # streams the COM across the box (the UI warns); write_field_forces still writes
     # the field-only forces file when the selection is empty.
-    write_field_forces(rundir / "field_forces.txt", design, rundir / "conf.dat",
-                       field_oxdna=field_oxdna, field_dir=list(dir), anchors=anchors,
-                       anchor_stiff=anchor_stiff)
-    spec = build_field_stage(name="live_field", field_oxdna=field_oxdna,
-                             field_dir=list(dir), forces_file="field_forces.txt",
-                             steps=steps, backend="CPU", device="0")
+    write_field_forces(
+        rundir / "field_forces.txt",
+        design,
+        rundir / "conf.dat",
+        field_oxdna=field_oxdna,
+        field_dir=list(dir),
+        anchors=anchors,
+        anchor_stiff=anchor_stiff,
+    )
+    spec = build_field_stage(
+        name="live_field",
+        field_oxdna=field_oxdna,
+        field_dir=list(dir),
+        forces_file="field_forces.txt",
+        steps=steps,
+        backend="CPU",
+        device="0",
+    )
     (rundir / "input").write_text(
-        render_stage_input(spec, "topology.top", "conf.dat", "field_forces.txt"))
+        render_stage_input(spec, "topology.top", "conf.dat", "field_forces.txt")
+    )
     return field_oxdna
 
 
-def run_live_field(specimen, workspace, *, field_pN: float, dir, total_steps: int = 4000,
-                   n_bursts: int = 4, mutate_dir=None, anchor_stiff=DEFAULT_ANCHOR_STIFF,
-                   session=None, rundir=None) -> dict:
+def run_live_field(
+    specimen,
+    workspace,
+    *,
+    field_pN: float,
+    dir,
+    total_steps: int = 4000,
+    n_bursts: int = 4,
+    mutate_dir=None,
+    anchor_stiff=DEFAULT_ANCHOR_STIFF,
+    session=None,
+    rundir=None,
+) -> dict:
     """Drive a PERSISTENT in-process oxpy field run over a built specimen — the
     interactive analog of :func:`run_field` (AF-21, Tier 6).  The engine loads once
     and steps in ``n_bursts`` bursts (``total_steps`` total); if ``mutate_dir`` is
@@ -537,23 +633,35 @@ def run_live_field(specimen, workspace, *, field_pN: float, dir, total_steps: in
         seed_conf = job.stage_dir(ws, job.stages[-1].name) / "last_conf.dat"
         rd = Path(rundir) if rundir else ws / f"live_field_{next(_scratch_counter)}"
         field_oxdna = _prepare_field_rundir(
-            design, seed_conf, rd, field_pN=field_pN, dir=dir,
-            anchors=[specimen["anchor"]], anchor_stiff=anchor_stiff, steps=total_steps)
-        session = LiveOxdnaSession(design, anchor_keys, stepper=_OxpyStepper(rd),
-                                   field_dir=list(dir), field_oxdna=field_oxdna)
+            design,
+            seed_conf,
+            rd,
+            field_pN=field_pN,
+            dir=dir,
+            anchors=[specimen["anchor"]],
+            anchor_stiff=anchor_stiff,
+            steps=total_steps,
+        )
+        session = LiveOxdnaSession(
+            design,
+            anchor_keys,
+            stepper=_OxpyStepper(rd),
+            field_dir=list(dir),
+            field_oxdna=field_oxdna,
+        )
 
     burst = max(1, total_steps // max(1, n_bursts))
     phase1 = (n_bursts // 2) if mutate_dir is not None else n_bursts
 
     with session:
-        session.set_field(field_dir=list(dir))   # field on, our magnitude + dir
+        session.set_field(field_dir=list(dir))  # field on, our magnitude + dir
         for _ in range(phase1):
             session.run(burst)
 
         mutation = None
         if mutate_dir is not None:
             before = session.equilibrium_observables(field_dir=list(mutate_dir))
-            session.set_field(field_dir=list(mutate_dir))   # the LIVE re-aim
+            session.set_field(field_dir=list(mutate_dir))  # the LIVE re-aim
             for _ in range(n_bursts - phase1):
                 session.run(burst)
             after = session.equilibrium_observables(field_dir=list(mutate_dir))
@@ -567,9 +675,12 @@ def run_live_field(specimen, workspace, *, field_pN: float, dir, total_steps: in
 
         observables = session.equilibrium_observables()
 
-    return {"observables": observables, "confidence": int(n_bursts),
-            "field_dir": list(mutate_dir) if mutate_dir is not None else list(dir),
-            "mutation": mutation}
+    return {
+        "observables": observables,
+        "confidence": int(n_bursts),
+        "field_dir": list(mutate_dir) if mutate_dir is not None else list(dir),
+        "mutation": mutation,
+    }
 
 
 def steer_field_session(session, waypoints, *, steps_per_waypoint: int = 1000) -> dict:
@@ -617,24 +728,35 @@ def steer_field_session(session, waypoints, *, steps_per_waypoint: int = 1000) -
             steps = int(wp.get("steps", steps_per_waypoint))
             session.run(steps)
             after = session.equilibrium_observables(field_dir=new_dir)
-            timeline.append({
-                "field_dir": new_dir,
-                "steps": steps,
-                "proj_before_nm": before["alignment_nm"],
-                "proj_after_nm": after["alignment_nm"],
-                "alignment_nm": after["alignment_nm"],
-                "bp_retention": after["bp_retention"],
-                "radius_of_gyration_nm": after["radius_of_gyration_nm"],
-                "followed": after["alignment_nm"] > before["alignment_nm"] + 1e-9,
-            })
+            timeline.append(
+                {
+                    "field_dir": new_dir,
+                    "steps": steps,
+                    "proj_before_nm": before["alignment_nm"],
+                    "proj_after_nm": after["alignment_nm"],
+                    "alignment_nm": after["alignment_nm"],
+                    "bp_retention": after["bp_retention"],
+                    "radius_of_gyration_nm": after["radius_of_gyration_nm"],
+                    "followed": after["alignment_nm"] > before["alignment_nm"] + 1e-9,
+                }
+            )
 
     return {"timeline": timeline, "n_waypoints": len(timeline)}
 
 
 # ── Field SWEEP: a (|E|, direction) response surface over one specimen (AF-20) ──
 
-def _measure_field_cell(job, workspace, design, field_dir, anchor_keys, *,
-                        melt_floor: float, min_confidence: int) -> dict | None:
+
+def _measure_field_cell(
+    job,
+    workspace,
+    design,
+    field_dir,
+    anchor_keys,
+    *,
+    melt_floor: float,
+    min_confidence: int,
+) -> dict | None:
     """Reduce ONE terminal field child job to a sweep-cell verdict via the AF-19
     time-resolved measure.  Returns ``None`` (skip) only when the job did not
     complete or wrote no field trajectory (so the caller can record a no-silent-
@@ -661,31 +783,63 @@ def _measure_field_cell(job, workspace, design, field_dir, anchor_keys, *,
     n_frames = len(frames)
     confident = n_frames >= min_confidence
     if n_frames < 2:
-        return {"tau_steps": None, "tau_frames": None, "converged": False,
-                "aligned": False, "bp_min": 0.0, "bp_final": 0.0,
-                "n_frames": n_frames, "melted": True, "confident": False,
-                "destructive": True}
+        return {
+            "tau_steps": None,
+            "tau_frames": None,
+            "converged": False,
+            "aligned": False,
+            "bp_min": 0.0,
+            "bp_final": 0.0,
+            "n_frames": n_frames,
+            "melted": True,
+            "confident": False,
+            "destructive": True,
+        }
 
     total_steps = getattr(stage, "steps", None)
     steps_per_frame = (total_steps / n_frames) if total_steps else 1.0
-    eq = measure_field_equilibration(frames, field_dir, anchor_keys, design=design,
-                                     steps_per_frame=steps_per_frame,
-                                     melt_floor=melt_floor)
-    aligned = bool(eq["converged"] and eq["tau_steps"] is not None
-                   and eq["tau_steps"] > 0 and confident)
+    eq = measure_field_equilibration(
+        frames,
+        field_dir,
+        anchor_keys,
+        design=design,
+        steps_per_frame=steps_per_frame,
+        melt_floor=melt_floor,
+    )
+    aligned = bool(
+        eq["converged"]
+        and eq["tau_steps"] is not None
+        and eq["tau_steps"] > 0
+        and confident
+    )
     bp_min = eq["bp_min"]
     destructive = not (aligned and bp_min >= melt_floor)
-    return {"tau_steps": eq["tau_steps"], "tau_frames": eq["tau_frames"],
-            "converged": bool(eq["converged"]), "aligned": aligned,
-            "bp_min": bp_min, "bp_final": eq["bp_timecourse"][-1],
-            "n_frames": n_frames, "melted": bool(eq["melted"]),
-            "confident": confident, "destructive": destructive}
+    return {
+        "tau_steps": eq["tau_steps"],
+        "tau_frames": eq["tau_frames"],
+        "converged": bool(eq["converged"]),
+        "aligned": aligned,
+        "bp_min": bp_min,
+        "bp_final": eq["bp_timecourse"][-1],
+        "n_frames": n_frames,
+        "melted": bool(eq["melted"]),
+        "confident": confident,
+        "destructive": destructive,
+    }
 
 
-def sweep_field_response(specimen: dict, intensities_pN, directions, workspace, *,
-                         field_steps: int = 2000, melt_floor: float = 0.5,
-                         min_confidence: int = 10, timeout: float = 30.0,
-                         anchor_stiff: float = DEFAULT_ANCHOR_STIFF) -> dict:
+def sweep_field_response(
+    specimen: dict,
+    intensities_pN,
+    directions,
+    workspace,
+    *,
+    field_steps: int = 2000,
+    melt_floor: float = 0.5,
+    min_confidence: int = 10,
+    timeout: float = 30.0,
+    anchor_stiff: float = DEFAULT_ANCHOR_STIFF,
+) -> dict:
     """Sweep an electric field over a grid of ``(|E|, direction)`` and assemble the
     per-cell *response surface* of a single field-ready specimen (AF-20, Tier 6).
 
@@ -714,7 +868,8 @@ def sweep_field_response(specimen: dict, intensities_pN, directions, workspace, 
     if parent.status != OxdnaStatus.completed:
         raise ValueError(
             "sweep_field_response: the specimen's relaxed parent job is not "
-            f"completed (status={parent.status}); build it with build_field_specimen")
+            f"completed (status={parent.status}); build it with build_field_specimen"
+        )
     design = specimen["design"]
     anchor = specimen["anchor"]
     anchor_keys = specimen["anchor_keys"]
@@ -725,28 +880,54 @@ def sweep_field_response(specimen: dict, intensities_pN, directions, workspace, 
     skipped: list[tuple] = []
     for pN in intensities:
         for d in dirs:
-            info = append_field(parent.job_id, workspace, field_pN=pN, dir=list(d),
-                                anchors=[anchor], steps=field_steps,
-                                anchor_stiff=anchor_stiff)
+            info = append_field(
+                parent.job_id,
+                workspace,
+                field_pN=pN,
+                dir=list(d),
+                anchors=[anchor],
+                steps=field_steps,
+                anchor_stiff=anchor_stiff,
+            )
             job = wait_for_terminal(info["job_id"], workspace, timeout=timeout)
-            cell = _measure_field_cell(job, workspace, design, list(d), anchor_keys,
-                                       melt_floor=melt_floor,
-                                       min_confidence=min_confidence)
+            cell = _measure_field_cell(
+                job,
+                workspace,
+                design,
+                list(d),
+                anchor_keys,
+                melt_floor=melt_floor,
+                min_confidence=min_confidence,
+            )
             if cell is None:
                 skipped.append((pN, d))
                 continue
             response[(pN, d)] = cell
-    return {"map": response, "skipped": skipped, "intensities_pN": intensities,
-            "directions": dirs, "melt_floor": melt_floor}
+    return {
+        "map": response,
+        "skipped": skipped,
+        "intensities_pN": intensities,
+        "directions": dirs,
+        "melt_floor": melt_floor,
+    }
 
 
 # ── CAPSTONE: cross-design automated field-response campaign (AF-23) ────────────
 
-def run_field_campaign(specimens, intensities_pN, directions, workspace, *,
-                       field_steps: int = 2000, melt_floor: float = 0.5,
-                       min_confidence: int = 10, timeout: float = 30.0,
-                       anchor_stiff: float = DEFAULT_ANCHOR_STIFF,
-                       **relax_params) -> dict:
+
+def run_field_campaign(
+    specimens,
+    intensities_pN,
+    directions,
+    workspace,
+    *,
+    field_steps: int = 2000,
+    melt_floor: float = 0.5,
+    min_confidence: int = 10,
+    timeout: float = 30.0,
+    anchor_stiff: float = DEFAULT_ANCHOR_STIFF,
+    **relax_params,
+) -> dict:
     """Run the SAME ``(|E|, direction)`` field sweep across MANY designs and assemble
     a per-design response-surface campaign (AF-23, Tier 6 capstone — the user's stated
     goal: *automatic exploration of which E-field intensities × directions align which
@@ -795,26 +976,45 @@ def run_field_campaign(specimens, intensities_pN, directions, workspace, *,
         sub.mkdir(parents=True, exist_ok=True)
         try:
             specimen = build_field_specimen(
-                entry["design"], sub, anchor=entry["anchor"],
-                overhang=entry.get("overhang"), sequence=entry.get("sequence", True),
-                timeout=timeout, **relax_params)
+                entry["design"],
+                sub,
+                anchor=entry["anchor"],
+                overhang=entry.get("overhang"),
+                sequence=entry.get("sequence", True),
+                timeout=timeout,
+                **relax_params,
+            )
             sweep = sweep_field_response(
-                specimen, intensities, dirs, sub, field_steps=field_steps,
-                melt_floor=melt_floor, min_confidence=min_confidence,
-                timeout=timeout, anchor_stiff=anchor_stiff)
+                specimen,
+                intensities,
+                dirs,
+                sub,
+                field_steps=field_steps,
+                melt_floor=melt_floor,
+                min_confidence=min_confidence,
+                timeout=timeout,
+                anchor_stiff=anchor_stiff,
+            )
         except Exception as exc:  # noqa: BLE001 — recorded, not swallowed (oracle gates)
             skipped.append((name, f"{type(exc).__name__}: {exc}"))
             continue
         sweeps[name] = sweep
-    return {"sweeps": sweeps, "skipped": skipped, "names": names,
-            "intensities_pN": intensities, "directions": dirs,
-            "melt_floor": melt_floor}
+    return {
+        "sweeps": sweeps,
+        "skipped": skipped,
+        "names": names,
+        "intensities_pN": intensities,
+        "directions": dirs,
+        "melt_floor": melt_floor,
+    }
 
 
 # ── Hardware benchmark: auto-tune the relaxation backend headlessly ────────────
 
-def run_oxdna_benchmark(design: Design, workspace, *, steps: int | None = None,
-                        configs=None, runner=None) -> dict:
+
+def run_oxdna_benchmark(
+    design: Design, workspace, *, steps: int | None = None, configs=None, runner=None
+) -> dict:
     """Headless oxDNA hardware benchmark: build a size-matched synthetic proxy, sweep
     the candidate hardware configs, and return the result dict (carries
     ``recommendation`` ``{backend, device, steps_per_s, …}``).
@@ -853,19 +1053,24 @@ def run_oxdna_benchmark(design: Design, workspace, *, steps: int | None = None,
         proxy_nucleotides=plan["proxy_nucleotides"],
         requested_nucleotides=plan["requested_nucleotides"],
         note=bench.extrapolate_note(
-            plan["proxy_nucleotides"], plan["requested_nucleotides"], capped=plan["capped"]),
+            plan["proxy_nucleotides"],
+            plan["requested_nucleotides"],
+            capped=plan["capped"],
+        ),
     )
     # A dedicated subdir — ``run_oxdna_trials`` rmtree's its workdir on exit, so it must
     # NOT be the bare workspace (that would wipe a sibling relaxation's job dir).
     workdir = Path(workspace) / "benchmark_runs" / state.benchmark_id
     kw = {} if steps is None else {"steps": steps}
-    asyncio.run(br.run_oxdna_trials(state, syn, geometry, configs, workdir,
-                                    runner=runner, **kw))
+    asyncio.run(
+        br.run_oxdna_trials(state, syn, geometry, configs, workdir, runner=runner, **kw)
+    )
     return state.to_dict()
 
 
-def apply_oxdna_benchmark(design: Design, recommendation: dict, *,
-                          hostname: str | None = None) -> Design:
+def apply_oxdna_benchmark(
+    design: Design, recommendation: dict, *, hostname: str | None = None
+) -> Design:
     """Write an oxDNA benchmark ``recommendation`` into a COPY of ``design`` under
     ``metadata.hardware_defaults[hostname]`` and return it (the original is untouched).
 
@@ -891,8 +1096,14 @@ def apply_oxdna_benchmark(design: Design, recommendation: dict, *,
     return out
 
 
-def run_relaxation_tuned(design: Design, workspace, *, hostname: str | None = None,
-                         timeout: float = 30.0, **params) -> OxdnaJob:
+def run_relaxation_tuned(
+    design: Design,
+    workspace,
+    *,
+    hostname: str | None = None,
+    timeout: float = 30.0,
+    **params,
+) -> OxdnaJob:
     """One-call headless relaxation that HONOURS the design's benchmarked hardware
     default: resolve ``metadata.hardware_defaults[hostname]`` → ``{backend, device}``
     (:func:`benchmark.resolve_oxdna_relax_config`) and feed it to :func:`run_relaxation`,
@@ -913,16 +1124,33 @@ def run_relaxation_tuned(design: Design, workspace, *, hostname: str | None = No
     for key in ("backend", "device"):
         if key in params:
             cfg[key] = params.pop(key)
-    return run_relaxation(design, workspace, timeout=timeout,
-                          backend=cfg["backend"], device=cfg["device"], **params)
+    return run_relaxation(
+        design,
+        workspace,
+        timeout=timeout,
+        backend=cfg["backend"],
+        device=cfg["device"],
+        **params,
+    )
 
 
 # ── Constraint-driven design: the iterate-until-met loop (AF-13 Phase 4) ───────
 
-def _pool_until_conclusive(job, workspace, parsed_constraint, *, production_steps,
-                           max_production_rounds, timeout, reference=None,
-                           should_stop=None, early_reject_factor=None,
-                           early_reject_min_frames=20, screen_steps=None):
+
+def _pool_until_conclusive(
+    job,
+    workspace,
+    parsed_constraint,
+    *,
+    production_steps,
+    max_production_rounds,
+    timeout,
+    reference=None,
+    should_stop=None,
+    early_reject_factor=None,
+    early_reject_min_frames=20,
+    screen_steps=None,
+):
     """Append production runs to ``job`` (pooling more frames each round) until the
     constraint verdict is conclusive (``met``/``unmet``) or the round budget is
     exhausted.  Returns ``(verdict, n_rounds)``.
@@ -951,7 +1179,7 @@ def _pool_until_conclusive(job, workspace, parsed_constraint, *, production_step
 
     verdict = None
     for r in range(1, max_production_rounds + 1):
-        if should_stop and should_stop():        # cancellation between pooling rounds
+        if should_stop and should_stop():  # cancellation between pooling rounds
             return verdict, r - 1
         steps = screen_steps if (r == 1 and screen_steps) else production_steps
         append_production(job.job_id, workspace, steps=steps)
@@ -964,28 +1192,50 @@ def _pool_until_conclusive(job, workspace, parsed_constraint, *, production_step
             # caller treats this knob as unmeasured rather than crashing the whole run.
             return verdict, r - 1
         rmsf = read_flexibility_map(job.job_id, workspace)
-        verdict = check_relaxed_constraint(parsed_constraint, rmsf,
-                                           reference_positions=reference)
+        verdict = check_relaxed_constraint(
+            parsed_constraint, rmsf, reference_positions=reference
+        )
         if verdict["status"] != "inconclusive":
             return verdict, r
         m = verdict.get("measured_nm")
-        if (early_reject_factor and m is not None
-                and verdict["n_frames"] >= early_reject_min_frames
-                and abs(m - verdict["target_nm"]) > early_reject_factor * verdict["tol_nm"]):
-            rejected = {**verdict, "status": "unmet", "met": False, "early_reject": True}
+        if (
+            early_reject_factor
+            and m is not None
+            and verdict["n_frames"] >= early_reject_min_frames
+            and abs(m - verdict["target_nm"]) > early_reject_factor * verdict["tol_nm"]
+        ):
+            rejected = {
+                **verdict,
+                "status": "unmet",
+                "met": False,
+                "early_reject": True,
+            }
             return rejected, r
     return verdict, max_production_rounds
 
 
-def iterate_to_constraint(build_fn, adjust_fn, constraint, workspace, *,
-                          initial_knob, max_iterations: int = 8,
-                          production_steps: int = 6000,
-                          max_production_rounds: int = 8, timeout: float = 30.0,
-                          tuned: bool = False, reference_fn=None, on_iteration=None,
-                          on_measure=None, should_stop=None, on_job=None,
-                          early_reject_factor=None,
-                          early_reject_min_frames=20, screen_steps=None,
-                          **relax_params) -> dict:
+def iterate_to_constraint(
+    build_fn,
+    adjust_fn,
+    constraint,
+    workspace,
+    *,
+    initial_knob,
+    max_iterations: int = 8,
+    production_steps: int = 6000,
+    max_production_rounds: int = 8,
+    timeout: float = 30.0,
+    tuned: bool = False,
+    reference_fn=None,
+    on_iteration=None,
+    on_measure=None,
+    should_stop=None,
+    on_job=None,
+    early_reject_factor=None,
+    early_reject_min_frames=20,
+    screen_steps=None,
+    **relax_params,
+) -> dict:
     """Closed **build → relax → measure → adjust** loop that drives a parametric
     design knob until a relaxed-structure constraint is met (AF-13 Phase 4 — the
     capstone of the physical-layer tier).
@@ -1038,11 +1288,16 @@ def iterate_to_constraint(build_fn, adjust_fn, constraint, workspace, *,
     job = None
 
     def _stopped():
-        return {"status": "stopped", "knob": knob, "job": job, "iterations": history,
-                "verdict": history[-1]["verdict"] if history else None}
+        return {
+            "status": "stopped",
+            "knob": knob,
+            "job": job,
+            "iterations": history,
+            "verdict": history[-1]["verdict"] if history else None,
+        }
 
     for _ in range(max_iterations):
-        if should_stop and should_stop():      # cancellation before a new build
+        if should_stop and should_stop():  # cancellation before a new build
             return _stopped()
         design = build_fn(knob)
         # Self-consistency measures (geometry_match / bundle_twist) compare the mean
@@ -1050,38 +1305,69 @@ def iterate_to_constraint(build_fn, adjust_fn, constraint, workspace, *,
         # iteration (skips remove nucleotides), so it is recomputed per build here.
         reference = reference_fn(design) if reference_fn else None
         job = relax(design, workspace, timeout=timeout, **relax_params)
-        if on_job:                             # let the caller track/stop this job
+        if on_job:  # let the caller track/stop this job
             on_job(job)
         if job.status != OxdnaStatus.completed:
             if should_stop and should_stop():  # job interrupted by a stop request
                 return _stopped()
-            history.append({"knob": knob, "verdict": None, "job_id": job.job_id,
-                            "production_rounds": 0, "error": job.error})
+            history.append(
+                {
+                    "knob": knob,
+                    "verdict": None,
+                    "job_id": job.job_id,
+                    "production_rounds": 0,
+                    "error": job.error,
+                }
+            )
             break
         verdict, rounds = _pool_until_conclusive(
-            job, workspace, parsed, production_steps=production_steps,
-            max_production_rounds=max_production_rounds, timeout=timeout,
-            reference=reference, should_stop=should_stop,
+            job,
+            workspace,
+            parsed,
+            production_steps=production_steps,
+            max_production_rounds=max_production_rounds,
+            timeout=timeout,
+            reference=reference,
+            should_stop=should_stop,
             early_reject_factor=early_reject_factor,
-            early_reject_min_frames=early_reject_min_frames, screen_steps=screen_steps)
-        history.append({"knob": knob, "verdict": verdict, "job_id": job.job_id,
-                        "production_rounds": rounds})
-        if on_measure is not None:             # post-measurement hook: harvest spatial
-            try:                               # fields (deviation/strain) for the NEXT
-                on_measure(design, reference, job, workspace)   # build (regional autorefine)
-            except Exception:                  # best-effort — never crash the loop on a
-                pass                           # field-read failure (falls back to uniform)
-        if on_iteration:                       # progress hook (e.g. live UI updates)
+            early_reject_min_frames=early_reject_min_frames,
+            screen_steps=screen_steps,
+        )
+        history.append(
+            {
+                "knob": knob,
+                "verdict": verdict,
+                "job_id": job.job_id,
+                "production_rounds": rounds,
+            }
+        )
+        if on_measure is not None:  # post-measurement hook: harvest spatial
+            try:  # fields (deviation/strain) for the NEXT
+                on_measure(
+                    design, reference, job, workspace
+                )  # build (regional autorefine)
+            except Exception:  # best-effort — never crash the loop on a
+                pass  # field-read failure (falls back to uniform)
+        if on_iteration:  # progress hook (e.g. live UI updates)
             on_iteration(history[-1])
         if should_stop and should_stop():
             return _stopped()
         status = verdict["status"] if verdict else "inconclusive"
         if status == "met":
-            return {"status": "met", "knob": knob, "job": job,
-                    "iterations": history, "verdict": verdict}
+            return {
+                "status": "met",
+                "knob": knob,
+                "job": job,
+                "iterations": history,
+                "verdict": verdict,
+            }
         if status == "inconclusive":
             break  # could not gather enough confidence — cannot steer the knob
         knob = adjust_fn(knob, verdict)  # unmet → move the knob and rebuild
-    return {"status": "exhausted", "knob": knob, "job": job,
-            "iterations": history,
-            "verdict": history[-1]["verdict"] if history else None}
+    return {
+        "status": "exhausted",
+        "knob": knob,
+        "job": job,
+        "iterations": history,
+        "verdict": history[-1]["verdict"] if history else None,
+    }

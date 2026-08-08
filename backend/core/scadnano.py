@@ -103,8 +103,8 @@ from backend.core.models import (
 # silently break many others.  Any proposed change must be approved first.
 #
 # HC phase offsets (radians) — match cadnano.py convention.
-_PHASE_FORWARD    = math.radians(322.2)
-_PHASE_REVERSE    = math.radians(252.2)
+_PHASE_FORWARD = math.radians(322.2)
+_PHASE_REVERSE = math.radians(252.2)
 # SQ phase offsets (radians).
 _SQ_PHASE_FORWARD = math.radians(337.0)
 _SQ_PHASE_REVERSE = math.radians(287.0)
@@ -123,8 +123,11 @@ def _hc_y_down(row: int, col: int) -> float:
 
 
 def _scadnano_xy(
-    row: int, col: int,
-    min_row: int, min_col: int, max_row: int,
+    row: int,
+    col: int,
+    min_row: int,
+    min_col: int,
+    max_row: int,
     max_y_cad: float,
     lattice: LatticeType,
 ) -> Tuple[float, float]:
@@ -176,7 +179,11 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
             "supported for import.  Use a square or honeycomb grid design."
         )
     lattice = LatticeType.SQUARE if grid == "square" else LatticeType.HONEYCOMB
-    twist   = SQUARE_TWIST_PER_BP_RAD if lattice == LatticeType.SQUARE else BDNA_TWIST_PER_BP_RAD
+    twist = (
+        SQUARE_TWIST_PER_BP_RAD
+        if lattice == LatticeType.SQUARE
+        else BDNA_TWIST_PER_BP_RAD
+    )
 
     sc_helices: List[dict] = data.get("helices", [])
     if not sc_helices:
@@ -184,7 +191,7 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
 
     # ── Coordinate normalisation ──────────────────────────────────────────────
     grid_positions = [h["grid_position"] for h in sc_helices]
-    cols = [gp[0] for gp in grid_positions]   # scadnano grid_position = [col, row]
+    cols = [gp[0] for gp in grid_positions]  # scadnano grid_position = [col, row]
     rows = [gp[1] for gp in grid_positions]
     min_row, min_col, max_row = min(rows), min(cols), max(rows)
     max_y_cad = (
@@ -209,7 +216,7 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
             if "loopout" in _d or "extension_num_bases" in _d:
                 continue
             _h_idx = _d["helix"]
-            _lo, _hi = _d["start"], _d["end"] - 1   # inclusive [lo, hi]
+            _lo, _hi = _d["start"], _d["end"] - 1  # inclusive [lo, hi]
             if _h_idx in _helix_bp_ranges:
                 _plo, _phi = _helix_bp_ranges[_h_idx]
                 _helix_bp_ranges[_h_idx] = (min(_plo, _lo), max(_phi, _hi))
@@ -222,23 +229,27 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
     helix_by_idx: Dict[int, Tuple[Helix, Dict[int, int]]] = {}
 
     for hi, h in enumerate(sc_helices):
-        idx        = h.get("idx", hi)
-        col, row   = h["grid_position"]   # scadnano grid_position = [col, row]
+        idx = h.get("idx", hi)
+        col, row = h["grid_position"]  # scadnano grid_position = [col, row]
 
         x, y = _scadnano_xy(row, col, min_row, min_col, max_row, max_y_cad, lattice)
 
         direction = Direction.FORWARD if idx % 2 == 0 else Direction.REVERSE
         if lattice == LatticeType.SQUARE:
-            base_phase = _SQ_PHASE_FORWARD if direction == Direction.FORWARD else _SQ_PHASE_REVERSE
+            base_phase = (
+                _SQ_PHASE_FORWARD
+                if direction == Direction.FORWARD
+                else _SQ_PHASE_REVERSE
+            )
         else:
-            base_phase = _PHASE_FORWARD if direction == Direction.FORWARD else _PHASE_REVERSE
+            base_phase = (
+                _PHASE_FORWARD if direction == Direction.FORWARD else _PHASE_REVERSE
+            )
 
         # Skip empty helices (no strand domains) — they are derelict or placeholder
         # entries that carry no topology.  Warn and continue.
         if idx not in _helix_bp_ranges:
-            warnings.append(
-                f"Helix {idx} has no strand domains and was skipped."
-            )
+            warnings.append(f"Helix {idx} has no strand domains and was skipped.")
             continue
 
         actual_min, actual_max = _helix_bp_ranges[idx]
@@ -263,16 +274,14 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
         helix_by_idx[idx] = (helix, {})
 
     # ── Process strands ───────────────────────────────────────────────────────
-    strands:         List[Strand]          = []
-    extensions:      List[StrandExtension] = []
+    strands: List[Strand] = []
+    extensions: List[StrandExtension] = []
 
     for si, sc in enumerate(data.get("strands", [])):
         is_scaffold = sc.get("is_scaffold", False)
         if sc.get("circular", False):
             if not is_scaffold:
-                warnings.append(
-                    f"Strand {si}: circular non-scaffold strand skipped."
-                )
+                warnings.append(f"Strand {si}: circular non-scaffold strand skipped.")
                 continue
             # Circular scaffold: import as linear — the wrap-around connection
             # between the last domain's 3′ end and the first domain's 5′ start
@@ -282,7 +291,7 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
                 "(nick placed before first domain)."
             )
         strand_type = StrandType.SCAFFOLD if is_scaffold else StrandType.STAPLE
-        color_hex   = sc.get("color") if not is_scaffold else None
+        color_hex = sc.get("color") if not is_scaffold else None
         sc_seq: Optional[str] = sc.get("sequence")
 
         # ── Classify subdomains ───────────────────────────────────────────────
@@ -296,15 +305,17 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
                 parsed.append(("helix", d))
 
         # Detect terminal extensions (first / last only).
-        ext5_entry = parsed[0]  if (parsed and parsed[0][0]  == "ext") else None
+        ext5_entry = parsed[0] if (parsed and parsed[0][0] == "ext") else None
         ext3_entry = parsed[-1] if (parsed and parsed[-1][0] == "ext") else None
         # Edge case: single-element list that is an extension — treat as 5′ only.
         if ext3_entry is ext5_entry:
             ext3_entry = None
 
         terminal_positions = set()
-        if ext5_entry is not None: terminal_positions.add(0)
-        if ext3_entry is not None: terminal_positions.add(len(parsed) - 1)
+        if ext5_entry is not None:
+            terminal_positions.add(0)
+        if ext3_entry is not None:
+            terminal_positions.add(len(parsed) - 1)
 
         for k, (t, _) in enumerate(parsed):
             if t == "ext" and k not in terminal_positions:
@@ -326,11 +337,11 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
                 continue
             helix, ls_map = entry
 
-            fwd     = d["forward"]
-            sc_s    = d["start"]
-            sc_e    = d["end"]
-            start_bp = sc_s     if fwd else sc_e - 1
-            end_bp   = sc_e - 1 if fwd else sc_s
+            fwd = d["forward"]
+            sc_s = d["start"]
+            sc_e = d["end"]
+            start_bp = sc_s if fwd else sc_e - 1
+            end_bp = sc_e - 1 if fwd else sc_s
             direction = Direction.FORWARD if fwd else Direction.REVERSE
 
             # Accumulate loop/skip entries for this helix.
@@ -339,12 +350,14 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
             for off, cnt in d.get("insertions", []):
                 ls_map[off] = cnt  # positive count → insertion
 
-            nadoc_domains.append(Domain(
-                helix_id=helix.id,
-                start_bp=start_bp,
-                end_bp=end_bp,
-                direction=direction,
-            ))
+            nadoc_domains.append(
+                Domain(
+                    helix_id=helix.id,
+                    start_bp=start_bp,
+                    end_bp=end_bp,
+                    direction=direction,
+                )
+            )
 
         if not nadoc_domains:
             warnings.append(f"Strand {si}: no helix domains found, skipped.")
@@ -380,11 +393,11 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
         if sc_seq is not None:
             offset = 0
             helix_parts: List[str] = []
-            ext_seqs:    List[str] = []
+            ext_seqs: List[str] = []
 
             for k, (t, d) in enumerate(parsed):
                 if t == "helix":
-                    ins  = sum(cnt for _, cnt in d.get("insertions", []))
+                    ins = sum(cnt for _, cnt in d.get("insertions", []))
                     dels = len(d.get("deletions", []))
                     n = (d["end"] - d["start"]) + ins - dels
                     helix_parts.append(sc_seq[offset : offset + n])
@@ -436,7 +449,9 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
     # scadnano can author cross-helix domain transitions that aren't valid
     # DX crossovers (mismatched bp indices, non-neighbour helices, etc.).
     # The classifier emits the former as Crossovers and the latter as ForcedLigations.
-    crossovers, forced_ligations = extract_crossovers_from_strands(strands, helices, lattice)
+    crossovers, forced_ligations = extract_crossovers_from_strands(
+        strands, helices, lattice
+    )
 
     # ── Assemble Design ───────────────────────────────────────────────────────
     design = Design(

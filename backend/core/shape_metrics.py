@@ -28,6 +28,7 @@ Descriptor set (all lengths nm, angles degrees):
     axial_span_nm          length of the fitted bundle axis
     n_nucleotides          size of the input map
 """
+
 from __future__ import annotations
 
 import math
@@ -57,7 +58,8 @@ def _bp_midpoints(positions) -> np.ndarray:
     bp_pts: dict = {}
     for p in positions:
         bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
-            np.asarray(p["backbone_position"], dtype=float))
+            np.asarray(p["backbone_position"], dtype=float)
+        )
     return np.array([np.mean(v, axis=0) for v in bp_pts.values()])
 
 
@@ -98,13 +100,17 @@ def compute_shape_descriptors(positions, *, n_slices: int = 0) -> dict:
     twist/centreline estimators (0 = auto).  Every field is present; undefined ones are
     ``None``."""
     n = len(positions)
-    twist_total = _safe(measure_bundle_twist, positions, n_slices=n_slices) if n else None
+    twist_total = (
+        _safe(measure_bundle_twist, positions, n_slices=n_slices) if n else None
+    )
     rg = _safe(measure_radius_of_gyration, positions) if n else None
     axial_span, end_to_end = _axial_span_and_end_chord(positions) if n else (None, None)
 
     bend_angle = None
     bend_radius = None
-    centreline = _safe(bundle_slab_centreline, positions, n_slices=n_slices) if n else None
+    centreline = (
+        _safe(bundle_slab_centreline, positions, n_slices=n_slices) if n else None
+    )
     if centreline is not None and len(centreline) >= 5:
         bend_angle, bend_radius = _chord_sagitta_bend(centreline)
 
@@ -134,7 +140,11 @@ def twist_profile(positions, *, n_slices: int = 0) -> list[tuple[float, float]]:
     quantity is axial DISTANCE from the bundle start, so the curves overlay).  Engine-
     agnostic like :func:`compute_shape_descriptors`; a degenerate frame (<2 helices, zero
     span) → ``[]`` rather than raising."""
-    prof = _safe(measure_bundle_twist_profile, positions, n_slices=n_slices) if positions else None
+    prof = (
+        _safe(measure_bundle_twist_profile, positions, n_slices=n_slices)
+        if positions
+        else None
+    )
     if not prof:
         return []
     x0 = prof[0][0]
@@ -164,8 +174,12 @@ def _dev_key(p) -> tuple:
     """Copy-aware key ``(helix, bp, direction, copy)`` — loop-insertion copies stay
     distinct (copy defaults 0) so each inserted base matches its own reference base
     instead of collapsing onto the last one."""
-    return (p["helix_id"], int(p["bp_index"]),
-            getattr(p["direction"], "value", p["direction"]), int(p.get("copy", 0)))
+    return (
+        p["helix_id"],
+        int(p["bp_index"]),
+        getattr(p["direction"], "value", p["direction"]),
+        int(p.get("copy", 0)),
+    )
 
 
 def deviation_profile(positions, reference_positions, *, align: bool = True) -> dict:
@@ -197,13 +211,16 @@ def deviation_profile(positions, reference_positions, *, align: bool = True) -> 
     if not reference_positions:
         raise ValueError("deviation_profile: empty reference map")
     cand = {_dev_key(p): np.asarray(p["backbone_position"], float) for p in positions}
-    ref = {_dev_key(p): np.asarray(p["backbone_position"], float)
-           for p in reference_positions}
+    ref = {
+        _dev_key(p): np.asarray(p["backbone_position"], float)
+        for p in reference_positions
+    }
     shared = sorted(set(cand) & set(ref))
     if align and len(shared) < 3:
         raise ValueError(
             f"deviation_profile: only {len(shared)} shared nucleotide(s) — need >= 3 to "
-            "superpose (align=True); pass align=False for a direct key-matched diff")
+            "superpose (align=True); pass align=False for a direct key-matched diff"
+        )
     if not shared:
         raise ValueError("deviation_profile: no shared nucleotides between the maps")
 
@@ -212,17 +229,25 @@ def deviation_profile(positions, reference_positions, *, align: bool = True) -> 
     if align:
         _R, Pa, Qc, Qmean = _kabsch_superpose(P, Q)
         dev = np.linalg.norm(Pa - Qc, axis=1)
-        aligned = Pa + Qmean                     # candidate placed in the reference frame
+        aligned = Pa + Qmean  # candidate placed in the reference frame
     else:
         dev = np.linalg.norm(P - Q, axis=1)
         aligned = P
 
-    out = [{"helix_id": k[0], "bp_index": k[1], "direction": k[2], "copy": k[3],
-            "backbone_position": aligned[i].tolist(), "deviation": float(dev[i])}
-           for i, k in enumerate(shared)]
+    out = [
+        {
+            "helix_id": k[0],
+            "bp_index": k[1],
+            "direction": k[2],
+            "copy": k[3],
+            "backbone_position": aligned[i].tolist(),
+            "deviation": float(dev[i]),
+        }
+        for i, k in enumerate(shared)
+    ]
     return {
         "positions": out,
-        "rmsd_nm": float(np.sqrt((dev ** 2).mean())),
+        "rmsd_nm": float(np.sqrt((dev**2).mean())),
         "min_deviation": float(dev.min()),
         "max_deviation": float(dev.max()),
         "mean_deviation": float(dev.mean()),
@@ -252,8 +277,10 @@ def rmsf_from_ensemble(frames, *, align: bool = True) -> dict:
     if len(frames) < 2:
         raise ValueError("rmsf_from_ensemble: need >= 2 non-empty frames")
 
-    keyed = [{_dev_key(p): np.asarray(p["backbone_position"], float) for p in fr}
-             for fr in frames]
+    keyed = [
+        {_dev_key(p): np.asarray(p["backbone_position"], float) for p in fr}
+        for fr in frames
+    ]
     shared = sorted(set.intersection(*(set(k) for k in keyed)))
     if not shared:
         raise ValueError("rmsf_from_ensemble: no nucleotide is present in every frame")
@@ -267,13 +294,21 @@ def rmsf_from_ensemble(frames, *, align: bool = True) -> dict:
             aligned.append(Pa + Qmean)
         stacks = aligned
 
-    A = np.stack(stacks, axis=0)                 # (F, N, 3)
-    mean_pos = A.mean(axis=0)                     # (N, 3)
+    A = np.stack(stacks, axis=0)  # (F, N, 3)
+    mean_pos = A.mean(axis=0)  # (N, 3)
     rmsf = np.sqrt(((A - mean_pos) ** 2).sum(axis=2).mean(axis=0))  # (N,)
 
-    out = [{"helix_id": k[0], "bp_index": k[1], "direction": k[2], "copy": k[3],
-            "backbone_position": mean_pos[i].tolist(), "rmsf_nm": float(rmsf[i])}
-           for i, k in enumerate(shared)]
+    out = [
+        {
+            "helix_id": k[0],
+            "bp_index": k[1],
+            "direction": k[2],
+            "copy": k[3],
+            "backbone_position": mean_pos[i].tolist(),
+            "rmsf_nm": float(rmsf[i]),
+        }
+        for i, k in enumerate(shared)
+    ]
     return {
         "positions": out,
         "min_rmsf": float(rmsf.min()),
@@ -321,13 +356,22 @@ def normalize_rmsf_profile(profile) -> dict:
 #: The engine-agnostic scalar descriptors compared as signed percent deltas.  (Counts
 #: like ``n_nucleotides`` are excluded — they describe the map, they aren't observables.)
 COMPARABLE_SCALARS: tuple[str, ...] = (
-    "twist_total_deg", "twist_per_turn_deg", "bend_angle_deg", "bend_radius_nm",
-    "radius_of_gyration_nm", "end_to_end_nm", "axial_span_nm",
+    "twist_total_deg",
+    "twist_per_turn_deg",
+    "bend_angle_deg",
+    "bend_radius_nm",
+    "radius_of_gyration_nm",
+    "end_to_end_nm",
+    "axial_span_nm",
 )
 
 #: Per-observable reference engine (lower-case).  NAMD (:data:`_GOLD_ENGINE`) overrides
 #: all of these when present.  ``field`` shares oxDNA with ``shape`` (both geometric).
-_REFERENCE_POLICY: dict[str, str] = {"shape": "oxdna", "field": "oxdna", "rmsf": "cando"}
+_REFERENCE_POLICY: dict[str, str] = {
+    "shape": "oxdna",
+    "field": "oxdna",
+    "rmsf": "cando",
+}
 _GOLD_ENGINE = "namd"
 
 
@@ -450,15 +494,20 @@ def compare_descriptors(candidate, reference, *, align_shape: bool = True) -> di
     for name in COMPARABLE_SCALARS:
         c, r = cd.get(name), rd.get(name)
         abs_delta, pct = _signed_pct(c, r)
-        scalars[name] = {"candidate": c, "reference": r,
-                         "abs_delta": abs_delta, "signed_pct_delta": pct}
+        scalars[name] = {
+            "candidate": c,
+            "reference": r,
+            "abs_delta": abs_delta,
+            "signed_pct_delta": pct,
+        }
     return {
         "candidate": candidate.get("engine"),
         "reference": reference.get("engine"),
         "scalars": scalars,
         "rmsf": _rmsf_agreement(candidate.get("rmsf"), reference.get("rmsf")),
         "shape_rmsd_nm": _shape_rmsd(
-            candidate.get("shape_frame"), reference.get("shape_frame"), align_shape),
+            candidate.get("shape_frame"), reference.get("shape_frame"), align_shape
+        ),
     }
 
 
@@ -479,8 +528,9 @@ def compare_descriptors(candidate, reference, *, align_shape: bool = True) -> di
 def _pos_lookup(positions) -> dict:
     """Copy-aware ``{(helix, bp, dir, copy): np.array(xyz)}`` map (same key as
     :func:`_dev_key`) so inserted-base copies stay distinct."""
-    return {_dev_key(p): np.asarray(p["backbone_position"], dtype=float)
-            for p in positions}
+    return {
+        _dev_key(p): np.asarray(p["backbone_position"], dtype=float) for p in positions
+    }
 
 
 def _anchor_key_set(anchor_keys) -> set:
@@ -544,11 +594,18 @@ def field_response_profile(
         dist = float(np.linalg.norm(disp))
         proj = float(np.dot(disp, fdir))
         is_anchor = (h, bp, direction) in anchor_set
-        per_nt.append({
-            "helix_id": h, "bp_index": bp, "direction": direction, "copy": copy,
-            "disp_vec_nm": [float(x) for x in disp],
-            "disp_nm": dist, "proj_along_field_nm": proj, "anchored": is_anchor,
-        })
+        per_nt.append(
+            {
+                "helix_id": h,
+                "bp_index": bp,
+                "direction": direction,
+                "copy": copy,
+                "disp_vec_nm": [float(x) for x in disp],
+                "disp_nm": dist,
+                "proj_along_field_nm": proj,
+                "anchored": is_anchor,
+            }
+        )
         if is_anchor:
             anchored_drifts.append(dist)
         else:
@@ -557,7 +614,9 @@ def field_response_profile(
             free_vecs.append(disp)
 
     if not free_disps:
-        raise ValueError("field_response_profile: no free (non-anchored) nucleotides to measure")
+        raise ValueError(
+            "field_response_profile: no free (non-anchored) nucleotides to measure"
+        )
 
     anchored_max = max(anchored_drifts) if anchored_drifts else 0.0
     anchored_mean = float(np.mean(anchored_drifts)) if anchored_drifts else 0.0
@@ -569,9 +628,13 @@ def field_response_profile(
     deflected = free_proj >= min_free_proj_nm
     reasons = []
     if not held:
-        reasons.append(f"anchors drifted {anchored_max:.2f} nm > {anchor_tol_nm} nm tol")
+        reasons.append(
+            f"anchors drifted {anchored_max:.2f} nm > {anchor_tol_nm} nm tol"
+        )
     if not deflected:
-        reasons.append(f"free motion along field {free_proj:.2f} nm < {min_free_proj_nm} nm min")
+        reasons.append(
+            f"free motion along field {free_proj:.2f} nm < {min_free_proj_nm} nm min"
+        )
     return {
         "field_dir": [float(x) for x in fdir],
         "per_nt": per_nt,
@@ -583,7 +646,8 @@ def field_response_profile(
         "n_anchored": len(anchored_drifts),
         "n_free": len(free_disps),
         "passed": held and deflected,
-        "reason": "; ".join(reasons) or "anchors held; structure deflected along the field",
+        "reason": "; ".join(reasons)
+        or "anchors held; structure deflected along the field",
     }
 
 
@@ -591,9 +655,13 @@ def _free_vec_map(profile) -> dict:
     """``{(helix, bp, dir, copy): np.array(disp_vec)}`` over the FREE nucleotides of a
     :func:`field_response_profile` result — the substrate the cross-engine comparison
     correlates."""
-    return {(e["helix_id"], e["bp_index"], e["direction"], e["copy"]):
-            np.asarray(e["disp_vec_nm"], dtype=float)
-            for e in profile.get("per_nt", []) if not e["anchored"]}
+    return {
+        (e["helix_id"], e["bp_index"], e["direction"], e["copy"]): np.asarray(
+            e["disp_vec_nm"], dtype=float
+        )
+        for e in profile.get("per_nt", [])
+        if not e["anchored"]
+    }
 
 
 def compare_field_response(candidate_profile, reference_profile) -> dict:
@@ -615,6 +683,14 @@ def compare_field_response(candidate_profile, reference_profile) -> dict:
     rv = np.concatenate([r[k] for k in shared])
     cn = float(np.linalg.norm(cv))
     rn = float(np.linalg.norm(rv))
-    cosine = None if cn < 1e-12 or rn < 1e-12 else _finite_or_none(float(np.dot(cv, rv)) / (cn * rn))
+    cosine = (
+        None
+        if cn < 1e-12 or rn < 1e-12
+        else _finite_or_none(float(np.dot(cv, rv)) / (cn * rn))
+    )
     ratio = None if rn < 1e-12 else _finite_or_none(cn / rn)
-    return {"cosine_similarity": cosine, "magnitude_ratio": ratio, "n_shared_free": len(shared)}
+    return {
+        "cosine_similarity": cosine,
+        "magnitude_ratio": ratio,
+        "n_shared_free": len(shared),
+    }

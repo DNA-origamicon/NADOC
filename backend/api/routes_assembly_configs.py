@@ -33,6 +33,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.api import assembly_state
+
 # _assembly_response is the shared assembly response helper (the assembly-side
 # twin of crud.py's _design_response). It stays in assembly.py — used by
 # every assembly route there — and is imported back here. Same convention as
@@ -51,6 +52,7 @@ router = APIRouter()
 
 
 # ── Request bodies ────────────────────────────────────────────────────────────
+
 
 class CreateAssemblyConfigurationBody(BaseModel):
     name: Optional[str] = None
@@ -85,7 +87,10 @@ class ReorderAssemblyCameraPosesBody(BaseModel):
 
 # ── Assembly configurations ──────────────────────────────────────────────────
 
-def _capture_assembly_configuration(assembly: Assembly, name: str) -> AssemblyConfigurationSnapshot:
+
+def _capture_assembly_configuration(
+    assembly: Assembly, name: str
+) -> AssemblyConfigurationSnapshot:
     return AssemblyConfigurationSnapshot(
         name=name,
         instance_states=[
@@ -132,7 +137,9 @@ def create_assembly_configuration(body: CreateAssemblyConfigurationBody = None) 
     """Capture current assembly instance/joint state as a named configuration."""
     assembly = assembly_state.get_or_create()
     idx = len(assembly.configurations) + 1
-    cfg = _capture_assembly_configuration(assembly, (body.name if body and body.name else f"Config {idx}"))
+    cfg = _capture_assembly_configuration(
+        assembly, (body.name if body and body.name else f"Config {idx}")
+    )
     updated = assembly.model_copy(
         update={
             "configurations": [*assembly.configurations, cfg],
@@ -164,12 +171,19 @@ def restore_assembly_configuration(config_id: str) -> dict:
         if state is None:
             new_instances.append(inst)
             continue
-        new_instances.append(inst.model_copy(update={
-            "transform": state.transform,
-            "base_transform": state.base_transform,
-            "joint_states": dict(state.joint_states),
-            "cluster_transform_overrides": list(state.cluster_transform_overrides),
-        }, deep=True))
+        new_instances.append(
+            inst.model_copy(
+                update={
+                    "transform": state.transform,
+                    "base_transform": state.base_transform,
+                    "joint_states": dict(state.joint_states),
+                    "cluster_transform_overrides": list(
+                        state.cluster_transform_overrides
+                    ),
+                },
+                deep=True,
+            )
+        )
 
     new_joints = []
     for joint in assembly.joints:
@@ -177,13 +191,18 @@ def restore_assembly_configuration(config_id: str) -> dict:
         if state is None:
             new_joints.append(joint)
             continue
-        new_joints.append(joint.model_copy(update={
-            "current_value": state.current_value,
-            "axis_origin": list(state.axis_origin),
-            "axis_direction": list(state.axis_direction),
-            "angular_velocity_rpm": state.angular_velocity_rpm,
-            "spin_paused": state.spin_paused,
-        }, deep=True))
+        new_joints.append(
+            joint.model_copy(
+                update={
+                    "current_value": state.current_value,
+                    "axis_origin": list(state.axis_origin),
+                    "axis_direction": list(state.axis_direction),
+                    "angular_velocity_rpm": state.angular_velocity_rpm,
+                    "spin_paused": state.spin_paused,
+                },
+                deep=True,
+            )
+        )
 
     gear_state_by_id = {s.relation_id: s for s in cfg.gear_relation_states}
     new_gears = []
@@ -192,29 +211,39 @@ def restore_assembly_configuration(config_id: str) -> dict:
         if gs is None:
             new_gears.append(rel)
             continue
-        new_gears.append(rel.model_copy(update={
-            "ratio": gs.ratio,
-            "invert": gs.invert,
-            "joint_a_anchor": gs.joint_a_anchor,
-            "joint_b_anchor": gs.joint_b_anchor,
-            "endpoint_a_instance_id": gs.endpoint_a_instance_id,
-            "endpoint_b_instance_id": gs.endpoint_b_instance_id,
-            "endpoint_a_side": gs.endpoint_a_side,
-            "endpoint_b_side": gs.endpoint_b_side,
-        }, deep=True))
+        new_gears.append(
+            rel.model_copy(
+                update={
+                    "ratio": gs.ratio,
+                    "invert": gs.invert,
+                    "joint_a_anchor": gs.joint_a_anchor,
+                    "joint_b_anchor": gs.joint_b_anchor,
+                    "endpoint_a_instance_id": gs.endpoint_a_instance_id,
+                    "endpoint_b_instance_id": gs.endpoint_b_instance_id,
+                    "endpoint_a_side": gs.endpoint_a_side,
+                    "endpoint_b_side": gs.endpoint_b_side,
+                },
+                deep=True,
+            )
+        )
 
-    updated = assembly.model_copy(update={
-        "instances": new_instances,
-        "joints": new_joints,
-        "gear_relations": new_gears,
-        "configuration_cursor": cfg.id,
-    }, deep=True)
+    updated = assembly.model_copy(
+        update={
+            "instances": new_instances,
+            "joints": new_joints,
+            "gear_relations": new_gears,
+            "configuration_cursor": cfg.id,
+        },
+        deep=True,
+    )
     assembly_state.set_assembly_silent(updated)
     return _assembly_response(updated)
 
 
 @router.patch("/assembly/configurations/{config_id}", status_code=200)
-def update_assembly_configuration(config_id: str, body: PatchAssemblyConfigurationBody) -> dict:
+def update_assembly_configuration(
+    config_id: str, body: PatchAssemblyConfigurationBody
+) -> dict:
     """Rename a configuration or overwrite it with the current assembly state."""
     assembly = assembly_state.get_or_404()
     configs = list(assembly.configurations)
@@ -224,7 +253,9 @@ def update_assembly_configuration(config_id: str, body: PatchAssemblyConfigurati
 
     current = configs[idx]
     if body.overwrite_current:
-        replacement = _capture_assembly_configuration(assembly, body.name or current.name)
+        replacement = _capture_assembly_configuration(
+            assembly, body.name or current.name
+        )
         replacement = replacement.model_copy(update={"id": current.id})
     else:
         patch = {}
@@ -233,10 +264,15 @@ def update_assembly_configuration(config_id: str, body: PatchAssemblyConfigurati
         replacement = current.model_copy(update=patch)
     configs[idx] = replacement
 
-    updated = assembly.model_copy(update={
-        "configurations": configs,
-        "configuration_cursor": replacement.id if body.overwrite_current else assembly.configuration_cursor,
-    }, deep=True)
+    updated = assembly.model_copy(
+        update={
+            "configurations": configs,
+            "configuration_cursor": replacement.id
+            if body.overwrite_current
+            else assembly.configuration_cursor,
+        },
+        deep=True,
+    )
     assembly_state.set_assembly_silent(updated)
     return _assembly_response(updated)
 
@@ -250,15 +286,19 @@ def delete_assembly_configuration(config_id: str) -> dict:
     cursor = assembly.configuration_cursor
     if cursor == config_id:
         cursor = configs[-1].id if configs else None
-    updated = assembly.model_copy(update={
-        "configurations": configs,
-        "configuration_cursor": cursor,
-    }, deep=True)
+    updated = assembly.model_copy(
+        update={
+            "configurations": configs,
+            "configuration_cursor": cursor,
+        },
+        deep=True,
+    )
     assembly_state.set_assembly(updated)
     return _assembly_response(updated)
 
 
 # ── Assembly camera poses ────────────────────────────────────────────────────
+
 
 @router.post("/assembly/camera-poses", status_code=200)
 def create_assembly_camera_pose(body: CreateAssemblyCameraPoseBody) -> dict:
@@ -271,13 +311,17 @@ def create_assembly_camera_pose(body: CreateAssemblyCameraPoseBody) -> dict:
         fov=body.fov,
         orbit_mode=body.orbit_mode,
     )
-    updated = assembly.model_copy(update={"camera_poses": [*assembly.camera_poses, pose]}, deep=True)
+    updated = assembly.model_copy(
+        update={"camera_poses": [*assembly.camera_poses, pose]}, deep=True
+    )
     assembly_state.set_assembly(updated)
     return _assembly_response(updated)
 
 
 @router.patch("/assembly/camera-poses/{pose_id}", status_code=200)
-def update_assembly_camera_pose(pose_id: str, body: PatchAssemblyCameraPoseBody) -> dict:
+def update_assembly_camera_pose(
+    pose_id: str, body: PatchAssemblyCameraPoseBody
+) -> dict:
     assembly = assembly_state.get_or_create()
     poses = list(assembly.camera_poses)
     idx = next((i for i, p in enumerate(poses) if p.id == pose_id), None)

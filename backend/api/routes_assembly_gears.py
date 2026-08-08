@@ -58,6 +58,7 @@ router = APIRouter()
 
 # ── Gear relations ────────────────────────────────────────────────────────────
 
+
 class CreateGearRelationRequest(BaseModel):
     name: str = "Gear"
     joint_a_id: str
@@ -98,17 +99,32 @@ def create_gear_relation(body: CreateGearRelationRequest) -> dict:
     if body.joint_a_id == body.joint_b_id:
         raise HTTPException(400, detail="joint_a_id and joint_b_id must differ.")
     if not math.isfinite(body.ratio) or abs(body.ratio) < 1e-9:
-        raise HTTPException(400, detail=f"ratio must be finite and nonzero, got {body.ratio}.")
+        raise HTTPException(
+            400, detail=f"ratio must be finite and nonzero, got {body.ratio}."
+        )
     endpoint_a_id, endpoint_a_side = _resolve_gear_endpoint(
-        joint_a, body.endpoint_a_instance_id, body.endpoint_a_side, "endpoint_a",
+        joint_a,
+        body.endpoint_a_instance_id,
+        body.endpoint_a_side,
+        "endpoint_a",
     )
     endpoint_b_id, endpoint_b_side = _resolve_gear_endpoint(
-        joint_b, body.endpoint_b_instance_id, body.endpoint_b_side, "endpoint_b",
+        joint_b,
+        body.endpoint_b_instance_id,
+        body.endpoint_b_side,
+        "endpoint_b",
     )
     inst_by_id = _build_inst_by_id(assembly)
-    explicit_a = body.endpoint_a_instance_id is not None or body.endpoint_a_side is not None
-    explicit_b = body.endpoint_b_instance_id is not None or body.endpoint_b_side is not None
-    for label, iid, explicit in (("endpoint_a", endpoint_a_id, explicit_a), ("endpoint_b", endpoint_b_id, explicit_b)):
+    explicit_a = (
+        body.endpoint_a_instance_id is not None or body.endpoint_a_side is not None
+    )
+    explicit_b = (
+        body.endpoint_b_instance_id is not None or body.endpoint_b_side is not None
+    )
+    for label, iid, explicit in (
+        ("endpoint_a", endpoint_a_id, explicit_a),
+        ("endpoint_b", endpoint_b_id, explicit_b),
+    ):
         inst = inst_by_id.get(iid) if iid else None
         if inst is None:
             raise HTTPException(400, detail=f"{label} must reference an assembly part.")
@@ -144,16 +160,22 @@ def create_gear_relation(body: CreateGearRelationRequest) -> dict:
 @router.patch("/assembly/gear-relations/{rel_id}", status_code=200)
 def patch_gear_relation(rel_id: str, body: PatchGearRelationRequest) -> dict:
     assembly = assembly_state.get_or_404()
-    rel      = _find_gear_relation(assembly, rel_id)
+    rel = _find_gear_relation(assembly, rel_id)
     updates: dict = {}
-    if body.name is not None:           updates["name"]           = body.name
+    if body.name is not None:
+        updates["name"] = body.name
     if body.ratio is not None:
         if not math.isfinite(body.ratio) or abs(body.ratio) < 1e-9:
-            raise HTTPException(400, detail=f"ratio must be finite and nonzero, got {body.ratio}.")
+            raise HTTPException(
+                400, detail=f"ratio must be finite and nonzero, got {body.ratio}."
+            )
         updates["ratio"] = float(body.ratio)
-    if body.invert is not None:         updates["invert"]         = bool(body.invert)
-    if body.joint_a_anchor is not None: updates["joint_a_anchor"] = float(body.joint_a_anchor)
-    if body.joint_b_anchor is not None: updates["joint_b_anchor"] = float(body.joint_b_anchor)
+    if body.invert is not None:
+        updates["invert"] = bool(body.invert)
+    if body.joint_a_anchor is not None:
+        updates["joint_a_anchor"] = float(body.joint_a_anchor)
+    if body.joint_b_anchor is not None:
+        updates["joint_b_anchor"] = float(body.joint_b_anchor)
 
     new_rel = rel.model_copy(update=updates)
     new_gears = [new_rel if g.id == rel_id else g for g in assembly.gear_relations]
@@ -165,9 +187,9 @@ def patch_gear_relation(rel_id: str, body: PatchGearRelationRequest) -> dict:
 @router.delete("/assembly/gear-relations/{rel_id}", status_code=200)
 def delete_gear_relation(rel_id: str) -> dict:
     assembly = assembly_state.get_or_404()
-    rel      = _find_gear_relation(assembly, rel_id)
+    rel = _find_gear_relation(assembly, rel_id)
     new_gears = [g for g in assembly.gear_relations if g.id != rel_id]
-    mutated   = assembly.model_copy(update={"gear_relations": new_gears})
+    mutated = assembly.model_copy(update={"gear_relations": new_gears})
     _apply_assembly_mutation_with_feature_log(
         mutated,
         op_kind="assembly-delete-gear",
@@ -185,16 +207,21 @@ def resolve_gear_relation(rel_id: str) -> dict:
     asks the relation to be re-satisfied at the current pose.
     """
     assembly = assembly_state.get_or_404()
-    rel      = _find_gear_relation(assembly, rel_id)
+    rel = _find_gear_relation(assembly, rel_id)
     joint_a = next((j for j in assembly.joints if j.id == rel.joint_a_id), None)
     joint_b = next((j for j in assembly.joints if j.id == rel.joint_b_id), None)
     if joint_a is None or joint_b is None:
         raise HTTPException(404, detail="Referenced joint missing.")
-    sign      = -1.0 if rel.invert else 1.0
-    new_value = rel.joint_b_anchor + sign * (joint_a.current_value - rel.joint_a_anchor) * rel.ratio
+    sign = -1.0 if rel.invert else 1.0
+    new_value = (
+        rel.joint_b_anchor
+        + sign * (joint_a.current_value - rel.joint_a_anchor) * rel.ratio
+    )
     inst_by_id = _build_inst_by_id(assembly)
     endpoint_side = _gear_endpoint_side(rel, "b", joint_b)
-    if not _apply_revolute_value_to_gear_endpoint(assembly, joint_b, endpoint_side, new_value, inst_by_id):
+    if not _apply_revolute_value_to_gear_endpoint(
+        assembly, joint_b, endpoint_side, new_value, inst_by_id
+    ):
         raise HTTPException(400, detail="Gear endpoint cannot be moved.")
     assembly_state.set_assembly_silent(assembly)
     return _assembly_response(assembly)

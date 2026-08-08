@@ -19,7 +19,15 @@ from backend.core.constants import (
     SQ_CROSSOVER_PERIOD,
     SQ_SCAFFOLD_CROSSOVER_OFFSETS,
 )
-from backend.core.models import Crossover, Design, ForcedLigation, HalfCrossover, Helix, LatticeType, StrandType
+from backend.core.models import (
+    Crossover,
+    Design,
+    ForcedLigation,
+    HalfCrossover,
+    Helix,
+    LatticeType,
+    StrandType,
+)
 
 
 def _is_forward(row: int, col: int) -> bool:
@@ -134,14 +142,18 @@ def all_valid_crossover_sites(
                     fwd = _is_forward(row, col)
                     stap_a = "REVERSE" if fwd else "FORWARD"
                     stap_b = "FORWARD" if fwd else "REVERSE"
-                    if not (slot_covered(sr, h.id, index, stap_a)
-                            and slot_covered(sr, hb.id, index, stap_b)):
+                    if not (
+                        slot_covered(sr, h.id, index, stap_a)
+                        and slot_covered(sr, hb.id, index, stap_b)
+                    ):
                         continue
-                results.append({
-                    "helix_a_id": h.id,
-                    "helix_b_id": hb.id,
-                    "index": index,
-                })
+                results.append(
+                    {
+                        "helix_a_id": h.id,
+                        "helix_b_id": hb.id,
+                        "index": index,
+                    }
+                )
     return results
 
 
@@ -257,39 +269,55 @@ def extract_crossovers_from_strands(
             d1 = strand.domains[i + 1]
             if d0.helix_id == d1.helix_id:
                 continue  # same helix — not a junction
-            same_bp = (d0.end_bp == d1.start_bp)
+            same_bp = d0.end_bp == d1.start_bp
             if same_bp and _is_lattice_neighbor(d0.helix_id, d1.helix_id, d0.end_bp):
                 idx = d0.end_bp
-                key = tuple(sorted([
-                    (d0.helix_id, idx, d0.direction.value),
-                    (d1.helix_id, d1.start_bp, d1.direction.value),
-                ]))
+                key = tuple(
+                    sorted(
+                        [
+                            (d0.helix_id, idx, d0.direction.value),
+                            (d1.helix_id, d1.start_bp, d1.direction.value),
+                        ]
+                    )
+                )
                 if key in seen_xo:
                     continue
                 seen_xo.add(key)
-                crossovers.append(Crossover(
-                    half_a=HalfCrossover(helix_id=d0.helix_id, index=idx,          strand=d0.direction),
-                    half_b=HalfCrossover(helix_id=d1.helix_id, index=d1.start_bp,  strand=d1.direction),
-                ))
+                crossovers.append(
+                    Crossover(
+                        half_a=HalfCrossover(
+                            helix_id=d0.helix_id, index=idx, strand=d0.direction
+                        ),
+                        half_b=HalfCrossover(
+                            helix_id=d1.helix_id, index=d1.start_bp, strand=d1.direction
+                        ),
+                    )
+                )
             else:
                 # Anything that fails the strict DX-neighbour test is recorded as a
                 # ForcedLigation: same-bp non-neighbours, scadnano loopouts, etc.
                 # The 3' side is d0's exit (end_bp); the 5' side is d1's entry (start_bp).
                 key_fl = (
-                    d0.helix_id, d0.end_bp, d0.direction.value,
-                    d1.helix_id, d1.start_bp, d1.direction.value,
+                    d0.helix_id,
+                    d0.end_bp,
+                    d0.direction.value,
+                    d1.helix_id,
+                    d1.start_bp,
+                    d1.direction.value,
                 )
                 if key_fl in seen_fl:
                     continue
                 seen_fl.add(key_fl)
-                forced_ligations.append(ForcedLigation(
-                    three_prime_helix_id=d0.helix_id,
-                    three_prime_bp=d0.end_bp,
-                    three_prime_direction=d0.direction,
-                    five_prime_helix_id=d1.helix_id,
-                    five_prime_bp=d1.start_bp,
-                    five_prime_direction=d1.direction,
-                ))
+                forced_ligations.append(
+                    ForcedLigation(
+                        three_prime_helix_id=d0.helix_id,
+                        three_prime_bp=d0.end_bp,
+                        three_prime_direction=d0.direction,
+                        five_prime_helix_id=d1.helix_id,
+                        five_prime_bp=d1.start_bp,
+                        five_prime_direction=d1.direction,
+                    )
+                )
     return crossovers, forced_ligations
 
 
@@ -350,14 +378,18 @@ def validate_crossover(
         return f"Helix {half_b.helix_id!r} has no grid_pos"
     if half_a.index != half_b.index:
         return f"Crossover indices must match ({half_a.index} ≠ {half_b.index})"
+
     # Check both staple and scaffold offset tables — a crossover is valid if
     # either table maps half_a's helix to half_b's cell (or vice versa).
     def _is_valid_neighbor(is_scaffold: bool) -> bool:
-        eb = crossover_neighbor(design.lattice_type, *ha.grid_pos, half_a.index, is_scaffold=is_scaffold)
-        ea = crossover_neighbor(design.lattice_type, *hb.grid_pos, half_b.index, is_scaffold=is_scaffold)
-        return (
-            (eb is not None and eb == tuple(hb.grid_pos))
-            or (ea is not None and ea == tuple(ha.grid_pos))
+        eb = crossover_neighbor(
+            design.lattice_type, *ha.grid_pos, half_a.index, is_scaffold=is_scaffold
+        )
+        ea = crossover_neighbor(
+            design.lattice_type, *hb.grid_pos, half_b.index, is_scaffold=is_scaffold
+        )
+        return (eb is not None and eb == tuple(hb.grid_pos)) or (
+            ea is not None and ea == tuple(ha.grid_pos)
         )
 
     if not (_is_valid_neighbor(False) or _is_valid_neighbor(True)):
@@ -394,23 +426,30 @@ def validate_crossover(
 
 
 # ── Bow-direction lookup sets (same as auto_crossover in crud.py) ─────────────
-_HC_BOW_RIGHT: frozenset[int] = frozenset({0, 7, 14})    # bp % 21 → bow-right
+_HC_BOW_RIGHT: frozenset[int] = frozenset({0, 7, 14})  # bp % 21 → bow-right
 _SQ_BOW_RIGHT: frozenset[int] = frozenset({0, 8, 16, 24})  # bp % 32 → bow-right
 
 
 class CrossoverRecord(TypedDict):
     """Fully enriched snapshot of a single crossover."""
+
     id: str
     bp_index: int
     from_helix_id: str
-    from_helix_label: str   # helix.label if set, else str(positional index in design.helices)
-    from_strand_direction: str  # "FORWARD" or "REVERSE" — strand direction on the from-helix
+    from_helix_label: (
+        str  # helix.label if set, else str(positional index in design.helices)
+    )
+    from_strand_direction: (
+        str  # "FORWARD" or "REVERSE" — strand direction on the from-helix
+    )
     to_helix_id: str
     to_helix_label: str
-    to_strand_direction: str    # "FORWARD" or "REVERSE" — strand direction on the to-helix
-    arc_direction: str          # "bow_right" or "bow_left"
-    crossover_type: str         # "scaffold", "staple", or "unknown"
-    process_id: str | None      # operation that placed this crossover
+    to_strand_direction: (
+        str  # "FORWARD" or "REVERSE" — strand direction on the to-helix
+    )
+    arc_direction: str  # "bow_right" or "bow_left"
+    crossover_type: str  # "scaffold", "staple", or "unknown"
+    process_id: str | None  # operation that placed this crossover
     extra_bases: str | None
 
 
@@ -439,7 +478,9 @@ def enumerate_crossovers(design: Design) -> list[CrossoverRecord]:
         for dom in strand.domains:
             lo = min(dom.start_bp, dom.end_bp)
             hi = max(dom.start_bp, dom.end_bp)
-            slot_type.setdefault((dom.helix_id, dom.direction.value), []).append((lo, hi, stype))
+            slot_type.setdefault((dom.helix_id, dom.direction.value), []).append(
+                (lo, hi, stype)
+            )
 
     def _crossover_type(helix_id: str, bp: int, direction_val: str) -> str:
         for lo, hi, stype in slot_type.get((helix_id, direction_val), []):
@@ -456,18 +497,22 @@ def enumerate_crossovers(design: Design) -> list[CrossoverRecord]:
         bp = xo.half_a.index
         arc_dir = "bow_right" if (bp % period) in bow_right_set else "bow_left"
         ctype = _crossover_type(xo.half_a.helix_id, bp, xo.half_a.strand.value)
-        records.append(CrossoverRecord(
-            id=xo.id,
-            bp_index=bp,
-            from_helix_id=xo.half_a.helix_id,
-            from_helix_label=helix_label.get(xo.half_a.helix_id, xo.half_a.helix_id),
-            from_strand_direction=xo.half_a.strand.value,
-            to_helix_id=xo.half_b.helix_id,
-            to_helix_label=helix_label.get(xo.half_b.helix_id, xo.half_b.helix_id),
-            to_strand_direction=xo.half_b.strand.value,
-            arc_direction=arc_dir,
-            crossover_type=ctype,
-            process_id=xo.process_id,
-            extra_bases=xo.extra_bases,
-        ))
+        records.append(
+            CrossoverRecord(
+                id=xo.id,
+                bp_index=bp,
+                from_helix_id=xo.half_a.helix_id,
+                from_helix_label=helix_label.get(
+                    xo.half_a.helix_id, xo.half_a.helix_id
+                ),
+                from_strand_direction=xo.half_a.strand.value,
+                to_helix_id=xo.half_b.helix_id,
+                to_helix_label=helix_label.get(xo.half_b.helix_id, xo.half_b.helix_id),
+                to_strand_direction=xo.half_b.strand.value,
+                arc_direction=arc_dir,
+                crossover_type=ctype,
+                process_id=xo.process_id,
+                extra_bases=xo.extra_bases,
+            )
+        )
     return records

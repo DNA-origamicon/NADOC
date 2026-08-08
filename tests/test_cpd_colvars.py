@@ -17,9 +17,16 @@ from backend.core import cpd_colvars as cc
 
 # The real 2hb_1xT pair, serials as resolve_weld_serials returns them (0-based).
 PAIR = {
-    "id": "xa:0~xb:0", "label": "xa[k=0]~xb[k=0]",
-    "segid_a": "D000", "resid_a": 8, "segid_b": "D001", "resid_b": 15,
-    "c5_a": 241, "c6_a": 233, "c5_b": 948, "c6_b": 940,
+    "id": "xa:0~xb:0",
+    "label": "xa[k=0]~xb[k=0]",
+    "segid_a": "D000",
+    "resid_a": 8,
+    "segid_b": "D001",
+    "resid_b": 15,
+    "c5_a": 241,
+    "c6_a": 233,
+    "c5_b": 948,
+    "c6_b": 940,
     "serials_resolved": True,
 }
 
@@ -38,8 +45,8 @@ def test_atom_numbers_are_one_based():
     """Colvars counts atoms from 1; our serials are 0-based MDAnalysis indices."""
     out = cc.colvar_blocks(PAIR)
 
-    assert _numbers(out, "group1") == [242, 234]      # 241, 233 + 1
-    assert _numbers(out, "group2") == [949, 941]      # 948, 940 + 1
+    assert _numbers(out, "group1") == [242, 234]  # 241, 233 + 1
+    assert _numbers(out, "group2") == [949, 941]  # 948, 940 + 1
 
 
 def test_reference_config_round_trips_to_its_own_serials():
@@ -61,10 +68,10 @@ def test_dihedral_atom_order_is_c5a_c6a_c6b_c5b():
     out = cc.colvar_blocks(PAIR)
     dihedral = out.split("dihedral {")[1]
 
-    assert _numbers(dihedral, "group1") == [242]      # C5_a
-    assert _numbers(dihedral, "group2") == [234]      # C6_a
-    assert _numbers(dihedral, "group3") == [941]      # C6_b  (not C5_b)
-    assert _numbers(dihedral, "group4") == [949]      # C5_b
+    assert _numbers(dihedral, "group1") == [242]  # C5_a
+    assert _numbers(dihedral, "group2") == [234]  # C6_a
+    assert _numbers(dihedral, "group3") == [941]  # C6_b  (not C5_b)
+    assert _numbers(dihedral, "group4") == [949]  # C5_b
 
 
 # ── structure ─────────────────────────────────────────────────────────────────
@@ -114,13 +121,18 @@ def _colvar_blocks(text: str) -> dict[str, str]:
 def test_every_emitted_colvar_has_a_component():
     """A colvar with no component is not valid Colvars. The first eabf version emitted a
     phantom `d_mid_ext` block carrying only keywords — NAMD would have refused it."""
-    for mode, kw in (("metrics", {}), ("umbrella", {"center_ang": 5.5}),
-                     ("eabf", {}), ("smd", {"center_ang": 11.4, "target_ang": 3.4})):
+    for mode, kw in (
+        ("metrics", {}),
+        ("umbrella", {"center_ang": 5.5}),
+        ("eabf", {}),
+        ("smd", {"center_ang": 11.4, "target_ang": 3.4}),
+    ):
         blocks = _colvar_blocks(cc.emit_colvars([PAIR], mode=mode, **kw))
         assert blocks, mode
         for name, body in blocks.items():
-            assert any(c in body for c in ("distance {", "dihedral {")), \
+            assert any(c in body for c in ("distance {", "dihedral {")), (
                 f"{mode}/{name} has no component"
+            )
 
 
 def test_eabf_emits_exactly_the_two_real_colvars_no_phantom():
@@ -198,8 +210,15 @@ def test_no_resolved_pair_is_refused_rather_than_emitting_an_empty_config():
 def test_several_pairs_are_suffixed_and_only_the_first_is_biased():
     """Biasing several distances at once couples them into one landscape nobody asked
     for; the rest ride along as observers."""
-    second = {**PAIR, "id": "b", "label": "b", "c5_a": 300, "c6_a": 301,
-              "c5_b": 400, "c6_b": 401}
+    second = {
+        **PAIR,
+        "id": "b",
+        "label": "b",
+        "c5_a": 300,
+        "c6_a": 301,
+        "c5_b": 400,
+        "c6_b": 401,
+    }
 
     out = cc.emit_colvars([PAIR, second], mode="umbrella", center_ang=6.0)
 
@@ -232,15 +251,18 @@ def test_ladder_spans_the_requested_range_ascending():
 def test_ladder_is_dense_and_stiff_where_the_rings_interact():
     """The free energy varies fastest at short range, so those windows are closer
     together and held by a stiffer spring."""
-    w = cc.umbrella_windows(3.5, 12.0, spacing_ang=0.5, wide_spacing_ang=1.0,
-                            dense_below_ang=7.0)
+    w = cc.umbrella_windows(
+        3.5, 12.0, spacing_ang=0.5, wide_spacing_ang=1.0, dense_below_ang=7.0
+    )
 
     near = [x for x in w if x["center_ang"] < 7.0]
     far = [x for x in w if x["center_ang"] >= 7.0]
-    near_gaps = [round(b["center_ang"] - a["center_ang"], 3)
-                 for a, b in zip(near, near[1:])]
-    far_gaps = [round(b["center_ang"] - a["center_ang"], 3)
-                for a, b in zip(far, far[1:])]
+    near_gaps = [
+        round(b["center_ang"] - a["center_ang"], 3) for a, b in zip(near, near[1:])
+    ]
+    far_gaps = [
+        round(b["center_ang"] - a["center_ang"], 3) for a, b in zip(far, far[1:])
+    ]
 
     assert set(near_gaps) == {0.5}
     assert set(far_gaps) == {1.0}
@@ -255,14 +277,21 @@ def test_ladder_refuses_an_inverted_range():
 def test_ladder_windows_emit_one_config_each():
     windows = cc.umbrella_windows(3.5, 5.0, spacing_ang=0.5)
 
-    configs = [cc.emit_colvars([PAIR], mode="umbrella", **{
-        "center_ang": w["center_ang"], "force_constant": w["force_constant"]})
-        for w in windows]
+    configs = [
+        cc.emit_colvars(
+            [PAIR],
+            mode="umbrella",
+            **{"center_ang": w["center_ang"], "force_constant": w["force_constant"]},
+        )
+        for w in windows
+    ]
 
     assert len(configs) == len(windows)
     assert all("harmonic {" in c for c in configs)
     # each window restrains a different centre — otherwise the ladder samples one point
-    assert len({re.search(r"centers\s+(\S+)", c).group(1) for c in configs}) == len(windows)
+    assert len({re.search(r"centers\s+(\S+)", c).group(1) for c in configs}) == len(
+        windows
+    )
 
 
 # ── the production conf carries the bias ─────────────────────────────────────
@@ -275,16 +304,27 @@ def test_ladder_windows_emit_one_config_each():
 def _spec(name="prod"):
     from backend.core.md_protocols import SegmentSpec
 
-    return SegmentSpec(name=name, stage="md", percent=100, steps=1000, temp=300,
-                       damping=5, scale=0.0, npt=True, previous="prev", reinit=False,
-                       dcd_freq=25000)
+    return SegmentSpec(
+        name=name,
+        stage="md",
+        percent=100,
+        steps=1000,
+        temp=300,
+        damping=5,
+        scale=0.0,
+        npt=True,
+        previous="prev",
+        reinit=False,
+        dcd_freq=25000,
+    )
 
 
 def test_production_conf_attaches_a_colvars_file():
     from backend.core.md_protocols import build_production_conf
 
-    conf = build_production_conf(_spec(), "stem", (100.0, 100.0, 100.0), False,
-                                 colvars_file="weld_eabf.in")
+    conf = build_production_conf(
+        _spec(), "stem", (100.0, 100.0, 100.0), False, colvars_file="weld_eabf.in"
+    )
 
     assert "colvars            on" in conf
     assert "colvarsConfig      weld_eabf.in" in conf
@@ -305,7 +345,10 @@ def test_colvars_and_external_forces_coexist():
     from backend.core.md_protocols import build_production_conf
 
     conf = build_production_conf(
-        _spec(), "stem", (100.0, 100.0, 100.0), False,
+        _spec(),
+        "stem",
+        (100.0, 100.0, 100.0),
+        False,
         colvars_file="weld_eabf.in",
         field={"e_field": [0.0, 0.0, 1.0]},
     )

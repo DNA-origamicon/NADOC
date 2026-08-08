@@ -29,6 +29,7 @@ Deferred motifs (raise :class:`NotImplementedError` with a pointer):
     * ``bend`` / ``twist`` — controlled global deformation via the build-spec
       grammar; a follow-up once the core duplex→sim→dataset loop is proven.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -44,7 +45,7 @@ from backend.core.models import Design, Direction, LatticeType, StrandType
 # ── Fixed conditions for the MVP (spec: a single FF/water model, one T, small
 #    set of ionic conditions).  These are metadata only — the actual water box +
 #    ion placement happen in the solvation step (1c) from these numbers. ────────
-FORCEFIELD_VERSION = "charmm36_na+cufix"   # backend/data/forcefield/*
+FORCEFIELD_VERSION = "charmm36_na+cufix"  # backend/data/forcefield/*
 WATER_MODEL = "TIP3P"
 DEFAULT_TEMPERATURE_K = 300.0
 DEFAULT_NACL_MM = 150.0
@@ -60,22 +61,23 @@ class GeneratedSystem:
     ``design`` is the in-memory NADOC design; :meth:`write` serialises it to
     ``<dir>/design.nadoc`` and the metadata to ``<dir>/system.json``.
     """
+
     system_id: str
     design: Design
     sequence: str
-    motif_type: str            # "canonical" | "nick" | "mismatch" | "bulge" | ...
-    motif_location: Optional[int]   # 0-based bp index of the motif; None if canonical
+    motif_type: str  # "canonical" | "nick" | "mismatch" | "bulge" | ...
+    motif_location: Optional[int]  # 0-based bp index of the motif; None if canonical
     length_bp: int
     nacl_mM: float
     mgcl2_mM: float
     temperature_K: float
     seed: int
-    split: str                 # "train" | "val" | "test"
+    split: str  # "train" | "val" | "test"
     forcefield_version: str = FORCEFIELD_VERSION
     water_model: str = WATER_MODEL
-    box_ang: Optional[list] = None      # filled by the solvation step (1c)
+    box_ang: Optional[list] = None  # filled by the solvation step (1c)
     lattice: str = LatticeType.SQUARE.value
-    topology_stats: Optional[dict] = None   # helices/strands/crossovers/nt (origami)
+    topology_stats: Optional[dict] = None  # helices/strands/crossovers/nt (origami)
 
     def metadata(self) -> dict:
         """The ``system.json`` record (everything except the design object)."""
@@ -93,9 +95,15 @@ class GeneratedSystem:
 
 
 # ── ID helper ────────────────────────────────────────────────────────────────
-def _system_id(motif: str, sequence: str, seed: int,
-               nacl_mM: float, mgcl2_mM: float, temperature_K: float,
-               motif_location: Optional[int]) -> str:
+def _system_id(
+    motif: str,
+    sequence: str,
+    seed: int,
+    nacl_mM: float,
+    mgcl2_mM: float,
+    temperature_K: float,
+    motif_location: Optional[int],
+) -> str:
     """Deterministic short id from the full spec — reproducible across machines
     (no wall-clock / RNG), and identical inputs collapse to one directory."""
     payload = f"{motif}|{sequence}|{seed}|{nacl_mM}|{mgcl2_mM}|{temperature_K}|{motif_location}"
@@ -112,8 +120,11 @@ def _validate_sequence(sequence: str) -> str:
 
 def _staple_strand(design: Design) -> Optional[object]:
     """The single staple strand of a plain duplex (None if not found)."""
-    staples = [s for s in design.strands
-               if s.strand_type == StrandType.STAPLE and not s.is_reference]
+    staples = [
+        s
+        for s in design.strands
+        if s.strand_type == StrandType.STAPLE and not s.is_reference
+    ]
     return staples[0] if len(staples) == 1 else None
 
 
@@ -140,11 +151,21 @@ def canonical_duplex(
         hb.assign_staple_sequences()
         design = design_state.get_or_404().model_copy(deep=True)
     return GeneratedSystem(
-        system_id=_system_id("canonical", seq, seed, nacl_mM, mgcl2_mM,
-                             temperature_K, None),
-        design=design, sequence=seq, motif_type="canonical", motif_location=None,
-        length_bp=len(seq), nacl_mM=nacl_mM, mgcl2_mM=mgcl2_mM,
-        temperature_K=temperature_K, seed=seed, split=split, lattice=lattice.value)
+        system_id=_system_id(
+            "canonical", seq, seed, nacl_mM, mgcl2_mM, temperature_K, None
+        ),
+        design=design,
+        sequence=seq,
+        motif_type="canonical",
+        motif_location=None,
+        length_bp=len(seq),
+        nacl_mM=nacl_mM,
+        mgcl2_mM=mgcl2_mM,
+        temperature_K=temperature_K,
+        seed=seed,
+        split=split,
+        lattice=lattice.value,
+    )
 
 
 def nicked_duplex(
@@ -178,11 +199,19 @@ def nicked_duplex(
         hb.assign_staple_sequences()
         design = design_state.get_or_404().model_copy(deep=True)
     return GeneratedSystem(
-        system_id=_system_id("nick", seq, seed, nacl_mM, mgcl2_mM,
-                             temperature_K, bp),
-        design=design, sequence=seq, motif_type="nick", motif_location=bp,
-        length_bp=len(seq), nacl_mM=nacl_mM, mgcl2_mM=mgcl2_mM,
-        temperature_K=temperature_K, seed=seed, split=split, lattice=lattice.value)
+        system_id=_system_id("nick", seq, seed, nacl_mM, mgcl2_mM, temperature_K, bp),
+        design=design,
+        sequence=seq,
+        motif_type="nick",
+        motif_location=bp,
+        length_bp=len(seq),
+        nacl_mM=nacl_mM,
+        mgcl2_mM=mgcl2_mM,
+        temperature_K=temperature_K,
+        seed=seed,
+        split=split,
+        lattice=lattice.value,
+    )
 
 
 def mismatch_duplex(
@@ -206,8 +235,14 @@ def mismatch_duplex(
     if not (0 <= bp < len(seq)):
         raise ValueError(f"mismatch_bp {bp} out of range for length {len(seq)}")
     canonical = canonical_duplex(
-        seq, seed=seed, split=split, nacl_mM=nacl_mM, mgcl2_mM=mgcl2_mM,
-        temperature_K=temperature_K, lattice=lattice)
+        seq,
+        seed=seed,
+        split=split,
+        nacl_mM=nacl_mM,
+        mgcl2_mM=mgcl2_mM,
+        temperature_K=temperature_K,
+        lattice=lattice,
+    )
     design = canonical.design
     staple = _staple_strand(design)
     if staple is None or not staple.sequence:
@@ -217,13 +252,23 @@ def mismatch_duplex(
     idx = min(bp, len(staple.sequence) - 1)
     correct = staple.sequence[idx]
     mispaired = next(b for b in "ACGT" if b != correct)
-    staple.sequence = staple.sequence[:idx] + mispaired + staple.sequence[idx + 1:]
+    staple.sequence = staple.sequence[:idx] + mispaired + staple.sequence[idx + 1 :]
     return GeneratedSystem(
-        system_id=_system_id("mismatch", seq, seed, nacl_mM, mgcl2_mM,
-                             temperature_K, bp),
-        design=design, sequence=seq, motif_type="mismatch", motif_location=bp,
-        length_bp=len(seq), nacl_mM=nacl_mM, mgcl2_mM=mgcl2_mM,
-        temperature_K=temperature_K, seed=seed, split=split, lattice=lattice.value)
+        system_id=_system_id(
+            "mismatch", seq, seed, nacl_mM, mgcl2_mM, temperature_K, bp
+        ),
+        design=design,
+        sequence=seq,
+        motif_type="mismatch",
+        motif_location=bp,
+        length_bp=len(seq),
+        nacl_mM=nacl_mM,
+        mgcl2_mM=mgcl2_mM,
+        temperature_K=temperature_K,
+        seed=seed,
+        split=split,
+        lattice=lattice.value,
+    )
 
 
 # ── 6-helix-bundle origami (the first multi-helix / crossover rung) ───────────
@@ -287,6 +332,7 @@ def origami_6hb(
         assign_scaffold_sequence,
         assign_staple_sequences,
     )
+
     lattice = LatticeType.HONEYCOMB
     with hb.scratch_session(lattice):
         hb.create_bundle(SIX_HB_CELLS, length_bp, lattice=lattice, name="6hb")
@@ -294,8 +340,7 @@ def origami_6hb(
         hb.auto_crossover()
         hb.auto_break()
         design = design_state.get_or_404().model_copy(deep=True)
-    for sid in [s.id for s in design.strands
-                if s.strand_type == StrandType.SCAFFOLD]:
+    for sid in [s.id for s in design.strands if s.strand_type == StrandType.SCAFFOLD]:
         design, _, _ = assign_scaffold_sequence(design, scaffold_source, strand_id=sid)
     design = assign_staple_sequences(design)
     stats = _topology_stats(design)
@@ -303,10 +348,19 @@ def origami_6hb(
     digest = hashlib.sha1(payload.encode()).hexdigest()[:8]
     return GeneratedSystem(
         system_id=f"origami6hb_{length_bp}bp_{digest}",
-        design=design, sequence=scaffold_source, motif_type="origami_6hb",
-        motif_location=None, length_bp=length_bp, nacl_mM=nacl_mM, mgcl2_mM=mgcl2_mM,
-        temperature_K=temperature_K, seed=seed, split=split,
-        lattice=lattice.value, topology_stats=stats)
+        design=design,
+        sequence=scaffold_source,
+        motif_type="origami_6hb",
+        motif_location=None,
+        length_bp=length_bp,
+        nacl_mM=nacl_mM,
+        mgcl2_mM=mgcl2_mM,
+        temperature_K=temperature_K,
+        seed=seed,
+        split=split,
+        lattice=lattice.value,
+        topology_stats=stats,
+    )
 
 
 def bulge_duplex(*_args, **_kwargs) -> GeneratedSystem:
@@ -322,7 +376,8 @@ def bulge_duplex(*_args, **_kwargs) -> GeneratedSystem:
     """
     raise NotImplementedError(
         "bulge motif deferred pending representation decision + atomistic spike "
-        "(see backend/ml/propagator/systems.py docstring and the plan's ⚠)")
+        "(see backend/ml/propagator/systems.py docstring and the plan's ⚠)"
+    )
 
 
 # ── Catalog: the default MVP training + test set ─────────────────────────────
@@ -335,7 +390,7 @@ _TRAIN_SEQUENCES = {
     20: ["GCGCATATGCGCATATGCGC", "ACGTACGTACGTACGTACGT"],
     24: ["GCGCATATGCGCATATGCGCATAT"],
 }
-_HELDOUT_SEQUENCE = "GCTAGCTAGCTAGCTAGCTA"   # 20 bp, absent from training
+_HELDOUT_SEQUENCE = "GCTAGCTAGCTAGCTAGCTA"  # 20 bp, absent from training
 
 
 def default_catalog() -> list[GeneratedSystem]:
@@ -356,8 +411,9 @@ def default_catalog() -> list[GeneratedSystem]:
     return systems
 
 
-def write_catalog(out_dir: str | Path,
-                  systems: Optional[list[GeneratedSystem]] = None) -> list[Path]:
+def write_catalog(
+    out_dir: str | Path, systems: Optional[list[GeneratedSystem]] = None
+) -> list[Path]:
     """Write each system to ``out_dir/<system_id>/`` and return the paths."""
     systems = default_catalog() if systems is None else systems
     root = Path(out_dir)

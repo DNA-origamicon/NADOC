@@ -22,11 +22,12 @@ from backend.core.models import ClusterRigidTransform
 
 client = TestClient(app)
 
-_AXIS_ORIGIN    = [1.0, 2.0, 3.0]
-_AXIS_DIRECTION = [0.0, 1.0, 0.0]   # already normalised
+_AXIS_ORIGIN = [1.0, 2.0, 3.0]
+_AXIS_DIRECTION = [0.0, 1.0, 0.0]  # already normalised
 
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture(autouse=True)
 def reset_state():
@@ -46,6 +47,7 @@ def cluster_id():
 
 
 # ── POST /design/cluster/{cluster_id}/joint ────────────────────────────────────
+
 
 def test_create_joint_returns_200(cluster_id):
     r = client.post(
@@ -78,7 +80,7 @@ def test_create_joint_normalises_direction(cluster_id):
         f"/api/design/cluster/{cluster_id}/joint",
         json={
             "axis_origin": [0, 0, 0],
-            "axis_direction": [0.0, 3.0, 0.0],   # length 3, not unit
+            "axis_direction": [0.0, 3.0, 0.0],  # length 3, not unit
         },
     )
     assert r.status_code == 200
@@ -127,13 +129,13 @@ def test_create_joint_logs_joint_place_minor_op(cluster_id):
     assert log, "feature_log must contain at least one entry after joint create"
     last = log[-1]
     assert isinstance(last, RoutingClusterLogEntry)
-    assert last.children[-1].op_subtype == 'joint-place'
+    assert last.children[-1].op_subtype == "joint-place"
     # Params capture the deterministic joint_id + cluster_id + local-frame axis
     p = last.children[-1].params
-    assert p['cluster_id'] == cluster_id
-    assert 'joint_id' in p
-    assert p['local_axis_origin']    == pytest.approx(_AXIS_ORIGIN)
-    assert p['local_axis_direction'] == pytest.approx(_AXIS_DIRECTION)
+    assert p["cluster_id"] == cluster_id
+    assert "joint_id" in p
+    assert p["local_axis_origin"] == pytest.approx(_AXIS_ORIGIN)
+    assert p["local_axis_direction"] == pytest.approx(_AXIS_DIRECTION)
 
 
 def test_seek_before_joint_placement_drops_the_joint(cluster_id):
@@ -178,10 +180,15 @@ def test_create_joint_pushes_undo(cluster_id):
 
 # ── PATCH /design/joint/{joint_id} ────────────────────────────────────────────
 
+
 def _make_joint(cluster_id):
     r = client.post(
         f"/api/design/cluster/{cluster_id}/joint",
-        json={"axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION, "name": "J1"},
+        json={
+            "axis_origin": _AXIS_ORIGIN,
+            "axis_direction": _AXIS_DIRECTION,
+            "name": "J1",
+        },
     )
     return r.json()["design"]["cluster_joints"][0]["id"]
 
@@ -219,7 +226,9 @@ def test_patch_joint_unknown_returns_404():
 
 def test_patch_joint_normalises_direction(cluster_id):
     jid = _make_joint(cluster_id)
-    r = client.patch(f"/api/design/joint/{jid}", json={"axis_direction": [2.0, 0.0, 0.0]})
+    r = client.patch(
+        f"/api/design/joint/{jid}", json={"axis_direction": [2.0, 0.0, 0.0]}
+    )
     assert r.status_code == 200
     j = next(j for j in r.json()["design"]["cluster_joints"] if j["id"] == jid)
     # Identity-transform cluster, so local == world.
@@ -228,11 +237,14 @@ def test_patch_joint_normalises_direction(cluster_id):
 
 def test_patch_joint_zero_direction_returns_400(cluster_id):
     jid = _make_joint(cluster_id)
-    r = client.patch(f"/api/design/joint/{jid}", json={"axis_direction": [0.0, 0.0, 0.0]})
+    r = client.patch(
+        f"/api/design/joint/{jid}", json={"axis_direction": [0.0, 0.0, 0.0]}
+    )
     assert r.status_code == 400
 
 
 # ── Mechanical angle limits (min_angle_deg / max_angle_deg) ───────────────────
+
 
 def test_create_joint_default_angle_range_is_full_circle(cluster_id):
     """New joints default to [-180°, +180°] — equivalent to unbounded for a
@@ -243,7 +255,7 @@ def test_create_joint_default_angle_range_is_full_circle(cluster_id):
     )
     j = design_state.get_or_404().cluster_joints[0]
     assert j.min_angle_deg == pytest.approx(-180.0)
-    assert j.max_angle_deg == pytest.approx( 180.0)
+    assert j.max_angle_deg == pytest.approx(180.0)
 
 
 def test_create_joint_with_angle_range(cluster_id):
@@ -251,22 +263,26 @@ def test_create_joint_with_angle_range(cluster_id):
     r = client.post(
         f"/api/design/cluster/{cluster_id}/joint",
         json={
-            "axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION,
-            "min_angle_deg": -45.0, "max_angle_deg": 60.0,
+            "axis_origin": _AXIS_ORIGIN,
+            "axis_direction": _AXIS_DIRECTION,
+            "min_angle_deg": -45.0,
+            "max_angle_deg": 60.0,
         },
     )
     assert r.status_code == 200
     j = r.json()["design"]["cluster_joints"][0]
     assert j["min_angle_deg"] == pytest.approx(-45.0)
-    assert j["max_angle_deg"] == pytest.approx( 60.0)
+    assert j["max_angle_deg"] == pytest.approx(60.0)
 
 
 def test_create_joint_inverted_range_returns_400(cluster_id):
     r = client.post(
         f"/api/design/cluster/{cluster_id}/joint",
         json={
-            "axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION,
-            "min_angle_deg": 30.0, "max_angle_deg": -30.0,
+            "axis_origin": _AXIS_ORIGIN,
+            "axis_direction": _AXIS_DIRECTION,
+            "min_angle_deg": 30.0,
+            "max_angle_deg": -30.0,
         },
     )
     assert r.status_code == 400
@@ -281,7 +297,7 @@ def test_patch_joint_angle_range(cluster_id):
     assert r.status_code == 200
     j = next(j for j in r.json()["design"]["cluster_joints"] if j["id"] == jid)
     assert j["min_angle_deg"] == pytest.approx(-10.0)
-    assert j["max_angle_deg"] == pytest.approx( 10.0)
+    assert j["max_angle_deg"] == pytest.approx(10.0)
 
 
 def test_patch_joint_partial_range_uses_existing_bound(cluster_id):
@@ -299,7 +315,7 @@ def test_patch_joint_partial_range_uses_existing_bound(cluster_id):
     assert r.status_code == 200
     j = next(j for j in r.json()["design"]["cluster_joints"] if j["id"] == jid)
     assert j["min_angle_deg"] == pytest.approx(-10.0)
-    assert j["max_angle_deg"] == pytest.approx(  5.0)
+    assert j["max_angle_deg"] == pytest.approx(5.0)
 
 
 def test_patch_joint_inverting_range_returns_400(cluster_id):
@@ -318,15 +334,17 @@ def test_joint_angle_range_survives_dict_roundtrip(cluster_id):
     client.post(
         f"/api/design/cluster/{cluster_id}/joint",
         json={
-            "axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION,
-            "min_angle_deg": -22.0, "max_angle_deg": 33.0,
+            "axis_origin": _AXIS_ORIGIN,
+            "axis_direction": _AXIS_DIRECTION,
+            "min_angle_deg": -22.0,
+            "max_angle_deg": 33.0,
         },
     )
-    design   = design_state.get_or_404()
+    design = design_state.get_or_404()
     reloaded = Design.from_dict(design.to_dict())
     j = reloaded.cluster_joints[0]
     assert j.min_angle_deg == pytest.approx(-22.0)
-    assert j.max_angle_deg == pytest.approx( 33.0)
+    assert j.max_angle_deg == pytest.approx(33.0)
 
 
 def test_legacy_joint_without_range_loads_with_full_range():
@@ -339,16 +357,17 @@ def test_legacy_joint_without_range_loads_with_full_range():
         "cluster_id": "c1",
         "name": "Old joint",
         "joint_type": "revolute",
-        "local_axis_origin":    [0.0, 0.0, 0.0],
+        "local_axis_origin": [0.0, 0.0, 0.0],
         "local_axis_direction": [0.0, 1.0, 0.0],
         "surface_detail": 6,
     }
     j = ClusterJoint(**legacy_dict)
     assert j.min_angle_deg == pytest.approx(-180.0)
-    assert j.max_angle_deg == pytest.approx( 180.0)
+    assert j.max_angle_deg == pytest.approx(180.0)
 
 
 # ── DELETE /design/joint/{joint_id} ───────────────────────────────────────────
+
 
 def test_delete_joint(cluster_id):
     jid = _make_joint(cluster_id)
@@ -376,6 +395,7 @@ def test_delete_joint_pushes_undo(cluster_id):
 
 # ── One joint per cluster (second POST replaces first) ────────────────────────
 
+
 def test_multiple_joints_on_same_cluster(cluster_id):
     """Each cluster supports at most one joint; a second POST replaces the first."""
     client.post(
@@ -394,13 +414,18 @@ def test_multiple_joints_on_same_cluster(cluster_id):
 
 # ── Serialisation round-trip ──────────────────────────────────────────────────
 
+
 def test_joint_survives_design_dict_roundtrip(cluster_id):
     """ClusterJoint must survive to_dict → from_dict without loss."""
     from backend.core.models import Design
 
     client.post(
         f"/api/design/cluster/{cluster_id}/joint",
-        json={"axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION, "surface_detail": 8},
+        json={
+            "axis_origin": _AXIS_ORIGIN,
+            "axis_direction": _AXIS_DIRECTION,
+            "surface_detail": 8,
+        },
     )
     design = design_state.get_or_404()
     reloaded = Design.from_dict(design.to_dict())
@@ -427,14 +452,12 @@ import numpy as np
 from backend.core.lattice import make_bundle_design
 
 _R90Z_QUAT = [0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]  # 90° about +Z
-_R180Z_QUAT = [0.0, 0.0, 1.0, 0.0]                                      # 180° about +Z
+_R180Z_QUAT = [0.0, 0.0, 1.0, 0.0]  # 180° about +Z
 
 
 def _r90z() -> np.ndarray:
     """3×3 rotation matrix for 90° CCW about +Z."""
-    return np.array([[0., -1., 0.],
-                     [1.,  0., 0.],
-                     [0.,  0., 1.]])
+    return np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
 
 
 def _setup_6hb_with_joint():
@@ -452,9 +475,15 @@ def _setup_6hb_with_joint():
 
     # Approximate centroid as mean of helix axis midpoints.
     helix_ids = [h.id for h in design.helices]
-    cx = sum((h.axis_start.x + h.axis_end.x) / 2 for h in design.helices) / len(design.helices)
-    cy = sum((h.axis_start.y + h.axis_end.y) / 2 for h in design.helices) / len(design.helices)
-    cz = sum((h.axis_start.z + h.axis_end.z) / 2 for h in design.helices) / len(design.helices)
+    cx = sum((h.axis_start.x + h.axis_end.x) / 2 for h in design.helices) / len(
+        design.helices
+    )
+    cy = sum((h.axis_start.y + h.axis_end.y) / 2 for h in design.helices) / len(
+        design.helices
+    )
+    cz = sum((h.axis_start.z + h.axis_end.z) / 2 for h in design.helices) / len(
+        design.helices
+    )
 
     ct = ClusterRigidTransform(
         name="6HB",
@@ -473,9 +502,9 @@ def _setup_6hb_with_joint():
     r = client.post(
         f"/api/design/cluster/{ct.id}/joint",
         json={
-            "axis_origin":    j_origin,
+            "axis_origin": j_origin,
             "axis_direction": [0.0, 0.0, 1.0],
-            "name":           "CornerHinge",
+            "name": "CornerHinge",
         },
     )
     assert r.status_code == 200
@@ -502,22 +531,22 @@ def test_6hb_rotate_about_joint_matches_formula():
 
     orig = _backbone_positions()
 
-    r = client.patch(f"/api/design/cluster/{cluster_id}", json={
-        "rotation":    _R90Z_QUAT,
-        "translation": [0.0, 0.0, 0.0],
-        "pivot":       J.tolist(),
-        "commit":      True,
-    })
+    r = client.patch(
+        f"/api/design/cluster/{cluster_id}",
+        json={
+            "rotation": _R90Z_QUAT,
+            "translation": [0.0, 0.0, 0.0],
+            "pivot": J.tolist(),
+            "commit": True,
+        },
+    )
     assert r.status_code == 200
 
     after = _backbone_positions()
     assert after.keys() == orig.keys()
 
     R = _r90z()
-    max_err = max(
-        np.linalg.norm((R @ (p - J) + J) - after[k])
-        for k, p in orig.items()
-    )
+    max_err = max(np.linalg.norm((R @ (p - J) + J) - after[k]) for k, p in orig.items())
     assert max_err < 1e-8, f"Max deviation from R@(p−J)+J formula: {max_err:.3e} nm"
 
 
@@ -529,18 +558,20 @@ def test_6hb_rotate_about_joint_preserves_distances():
 
     orig = _backbone_positions()
 
-    client.patch(f"/api/design/cluster/{cluster_id}", json={
-        "rotation":    _R90Z_QUAT,
-        "translation": [0.0, 0.0, 0.0],
-        "pivot":       J.tolist(),
-        "commit":      True,
-    })
+    client.patch(
+        f"/api/design/cluster/{cluster_id}",
+        json={
+            "rotation": _R90Z_QUAT,
+            "translation": [0.0, 0.0, 0.0],
+            "pivot": J.tolist(),
+            "commit": True,
+        },
+    )
 
     after = _backbone_positions()
 
     max_delta = max(
-        abs(np.linalg.norm(after[k] - J) - np.linalg.norm(orig[k] - J))
-        for k in orig
+        abs(np.linalg.norm(after[k] - J) - np.linalg.norm(orig[k] - J)) for k in orig
     )
     assert max_delta < 1e-8, f"Max |distance| change from J: {max_delta:.3e} nm"
 
@@ -551,12 +582,15 @@ def test_6hb_rotate_about_joint_z_unchanged():
 
     orig = _backbone_positions()
 
-    client.patch(f"/api/design/cluster/{cluster_id}", json={
-        "rotation":    _R90Z_QUAT,
-        "translation": [0.0, 0.0, 0.0],
-        "pivot":       J.tolist(),
-        "commit":      True,
-    })
+    client.patch(
+        f"/api/design/cluster/{cluster_id}",
+        json={
+            "rotation": _R90Z_QUAT,
+            "translation": [0.0, 0.0, 0.0],
+            "pivot": J.tolist(),
+            "commit": True,
+        },
+    )
 
     after = _backbone_positions()
 
@@ -576,27 +610,32 @@ def test_6hb_second_rotation_about_joint_accumulates():
     orig = _backbone_positions()
 
     # First 90°
-    client.patch(f"/api/design/cluster/{cluster_id}", json={
-        "rotation":    _R90Z_QUAT,
-        "translation": [0.0, 0.0, 0.0],
-        "pivot":       J.tolist(),
-        "commit":      True,
-    })
+    client.patch(
+        f"/api/design/cluster/{cluster_id}",
+        json={
+            "rotation": _R90Z_QUAT,
+            "translation": [0.0, 0.0, 0.0],
+            "pivot": J.tolist(),
+            "commit": True,
+        },
+    )
 
     # Second 90° — absolute rotation is now 180°
-    client.patch(f"/api/design/cluster/{cluster_id}", json={
-        "rotation":    _R180Z_QUAT,
-        "translation": [0.0, 0.0, 0.0],
-        "pivot":       J.tolist(),
-        "commit":      True,
-    })
+    client.patch(
+        f"/api/design/cluster/{cluster_id}",
+        json={
+            "rotation": _R180Z_QUAT,
+            "translation": [0.0, 0.0, 0.0],
+            "pivot": J.tolist(),
+            "commit": True,
+        },
+    )
 
     after = _backbone_positions()
 
     R180 = _r90z() @ _r90z()  # [[−1,0,0],[0,−1,0],[0,0,1]]
     max_err = max(
-        np.linalg.norm((R180 @ (p - J) + J) - after[k])
-        for k, p in orig.items()
+        np.linalg.norm((R180 @ (p - J) + J) - after[k]) for k, p in orig.items()
     )
     assert max_err < 1e-8, f"Max 180° rotation error: {max_err:.3e} nm"
 
@@ -619,12 +658,15 @@ def test_6hb_three_successive_rotations():
         # Quaternion for absolute_turns × 90° about +Z
         angle = absolute_turns * math.pi / 2
         quat = [0.0, 0.0, math.sin(angle / 2), math.cos(angle / 2)]
-        r = client.patch(f"/api/design/cluster/{cluster_id}", json={
-            "rotation":    quat,
-            "translation": [0.0, 0.0, 0.0],
-            "pivot":       J.tolist(),
-            "commit":      True,
-        })
+        r = client.patch(
+            f"/api/design/cluster/{cluster_id}",
+            json={
+                "rotation": quat,
+                "translation": [0.0, 0.0, 0.0],
+                "pivot": J.tolist(),
+                "commit": True,
+            },
+        )
         assert r.status_code == 200
 
     after = _backbone_positions()
@@ -632,8 +674,7 @@ def test_6hb_three_successive_rotations():
     # R270 = R90^3 = R90 applied three times
     R270 = _r90z() @ _r90z() @ _r90z()
     max_err = max(
-        np.linalg.norm((R270 @ (p - J) + J) - after[k])
-        for k, p in orig.items()
+        np.linalg.norm((R270 @ (p - J) + J) - after[k]) for k, p in orig.items()
     )
     assert max_err < 1e-8, f"Max 270° accumulation error: {max_err:.3e} nm"
 
@@ -650,12 +691,15 @@ def test_6hb_joint_at_centroid_no_translation():
     ct = next(c for c in design.cluster_transforms if c.id == cluster_id)
     J_centroid = ct.pivot  # [cx, cy, cz]
 
-    client.patch(f"/api/design/cluster/{cluster_id}", json={
-        "rotation":    _R90Z_QUAT,
-        "translation": [0.0, 0.0, 0.0],
-        "pivot":       J_centroid,
-        "commit":      True,
-    })
+    client.patch(
+        f"/api/design/cluster/{cluster_id}",
+        json={
+            "rotation": _R90Z_QUAT,
+            "translation": [0.0, 0.0, 0.0],
+            "pivot": J_centroid,
+            "commit": True,
+        },
+    )
 
     updated = design_state.get_or_404()
     ct2 = next(c for c in updated.cluster_transforms if c.id == cluster_id)
@@ -691,10 +735,12 @@ def _grouped_by_strand(geometry: list[dict]) -> dict[str, list[dict]]:
             continue
         groups.setdefault(sid, []).append(nuc)
     for nucs in groups.values():
-        nucs.sort(key=lambda n: (
-            n.get("domain_index", 0),
-            n["bp_index"] if n["direction"] == "FORWARD" else -n["bp_index"],
-        ))
+        nucs.sort(
+            key=lambda n: (
+                n.get("domain_index", 0),
+                n["bp_index"] if n["direction"] == "FORWARD" else -n["bp_index"],
+            )
+        )
     return groups
 
 
@@ -719,16 +765,18 @@ def _cone_pairs(geometry: list[dict]) -> list[dict]:
     for strand_id, nucs in groups.items():
         for i in range(len(nucs) - 1):
             a, b = nucs[i], nucs[i + 1]
-            pairs.append({
-                "from_pos":       np.array(a["backbone_position"]),
-                "to_pos":         np.array(b["backbone_position"]),
-                "is_cross_helix": a["helix_id"] != b["helix_id"],
-                "from_helix":     a["helix_id"],
-                "to_helix":       b["helix_id"],
-                "from_key":       (a["helix_id"], a["bp_index"], a["direction"]),
-                "to_key":         (b["helix_id"], b["bp_index"], b["direction"]),
-                "strand_id":      strand_id,
-            })
+            pairs.append(
+                {
+                    "from_pos": np.array(a["backbone_position"]),
+                    "to_pos": np.array(b["backbone_position"]),
+                    "is_cross_helix": a["helix_id"] != b["helix_id"],
+                    "from_helix": a["helix_id"],
+                    "to_helix": b["helix_id"],
+                    "from_key": (a["helix_id"], a["bp_index"], a["direction"]),
+                    "to_key": (b["helix_id"], b["bp_index"], b["direction"]),
+                    "strand_id": strand_id,
+                }
+            )
     return pairs
 
 
@@ -750,12 +798,15 @@ def test_6hb_cone_endpoints_match_bead_positions_after_rotation():
     pairs_before = _cone_pairs(geo_before)
     assert pairs_before, "No cone pairs found — design may have no strands"
 
-    client.patch(f"/api/design/cluster/{cluster_id}", json={
-        "rotation":    _R90Z_QUAT,
-        "translation": [0.0, 0.0, 0.0],
-        "pivot":       J.tolist(),
-        "commit":      True,
-    })
+    client.patch(
+        f"/api/design/cluster/{cluster_id}",
+        json={
+            "rotation": _R90Z_QUAT,
+            "translation": [0.0, 0.0, 0.0],
+            "pivot": J.tolist(),
+            "commit": True,
+        },
+    )
 
     geo_after = client.get("/api/design/geometry").json()["nucleotides"]
     pairs_after = _cone_pairs(geo_after)
@@ -767,42 +818,42 @@ def test_6hb_cone_endpoints_match_bead_positions_after_rotation():
     R = _r90z()
 
     max_from_err = 0.0
-    max_to_err   = 0.0
-    worst_from   = None
-    worst_to     = None
+    max_to_err = 0.0
+    worst_from = None
+    worst_to = None
 
     for pb, pa in zip(pairs_before, pairs_after):
         from_expected = _apply_rotation(pb["from_pos"], R, J)
-        to_expected   = _apply_rotation(pb["to_pos"],   R, J)
+        to_expected = _apply_rotation(pb["to_pos"], R, J)
 
         from_err = np.linalg.norm(pa["from_pos"] - from_expected)
-        to_err   = np.linalg.norm(pa["to_pos"]   - to_expected)
+        to_err = np.linalg.norm(pa["to_pos"] - to_expected)
 
         if from_err > max_from_err:
             max_from_err = from_err
             worst_from = {
-                "strand_id":    pb["strand_id"],
-                "from_helix":   pb["from_helix"],
-                "to_helix":     pb["to_helix"],
-                "is_cross":     pb["is_cross_helix"],
-                "from_key":     pb["from_key"],
-                "orig":         pb["from_pos"].round(6).tolist(),
-                "expected":     from_expected.round(6).tolist(),
-                "actual":       pa["from_pos"].round(6).tolist(),
-                "err_nm":       round(from_err, 9),
+                "strand_id": pb["strand_id"],
+                "from_helix": pb["from_helix"],
+                "to_helix": pb["to_helix"],
+                "is_cross": pb["is_cross_helix"],
+                "from_key": pb["from_key"],
+                "orig": pb["from_pos"].round(6).tolist(),
+                "expected": from_expected.round(6).tolist(),
+                "actual": pa["from_pos"].round(6).tolist(),
+                "err_nm": round(from_err, 9),
             }
         if to_err > max_to_err:
             max_to_err = to_err
             worst_to = {
-                "strand_id":    pb["strand_id"],
-                "from_helix":   pb["from_helix"],
-                "to_helix":     pb["to_helix"],
-                "is_cross":     pb["is_cross_helix"],
-                "to_key":       pb["to_key"],
-                "orig":         pb["to_pos"].round(6).tolist(),
-                "expected":     to_expected.round(6).tolist(),
-                "actual":       pa["to_pos"].round(6).tolist(),
-                "err_nm":       round(to_err, 9),
+                "strand_id": pb["strand_id"],
+                "from_helix": pb["from_helix"],
+                "to_helix": pb["to_helix"],
+                "is_cross": pb["is_cross_helix"],
+                "to_key": pb["to_key"],
+                "orig": pb["to_pos"].round(6).tolist(),
+                "expected": to_expected.round(6).tolist(),
+                "actual": pa["to_pos"].round(6).tolist(),
+                "err_nm": round(to_err, 9),
             }
 
     assert max_from_err < 1e-8, (
@@ -840,12 +891,15 @@ def test_6hb_cone_direction_vectors_after_rotation():
     geo_before = client.get("/api/design/geometry").json()["nucleotides"]
     pairs_before = _cone_pairs(geo_before)
 
-    client.patch(f"/api/design/cluster/{cluster_id}", json={
-        "rotation":    _R90Z_QUAT,
-        "translation": [0.0, 0.0, 0.0],
-        "pivot":       J.tolist(),
-        "commit":      True,
-    })
+    client.patch(
+        f"/api/design/cluster/{cluster_id}",
+        json={
+            "rotation": _R90Z_QUAT,
+            "translation": [0.0, 0.0, 0.0],
+            "pivot": J.tolist(),
+            "commit": True,
+        },
+    )
 
     geo_after = client.get("/api/design/geometry").json()["nucleotides"]
     pairs_after = _cone_pairs(geo_after)
@@ -853,29 +907,29 @@ def test_6hb_cone_direction_vectors_after_rotation():
     R = _r90z()
 
     max_dir_err = 0.0
-    worst       = None
+    worst = None
 
     for pb, pa in zip(pairs_before, pairs_after):
-        orig_dir     = pb["to_pos"] - pb["from_pos"]
+        orig_dir = pb["to_pos"] - pb["from_pos"]
         if np.linalg.norm(orig_dir) < 1e-8:
-            continue                              # degenerate zero-length cone
+            continue  # degenerate zero-length cone
         expected_dir = R @ orig_dir
-        actual_dir   = pa["to_pos"] - pa["from_pos"]
+        actual_dir = pa["to_pos"] - pa["from_pos"]
 
         err = np.linalg.norm(actual_dir - expected_dir)
         if err > max_dir_err:
             max_dir_err = err
             worst = {
-                "strand_id":    pb["strand_id"],
-                "from_helix":   pb["from_helix"],
-                "to_helix":     pb["to_helix"],
-                "is_cross":     pb["is_cross_helix"],
-                "from_key":     pb["from_key"],
-                "to_key":       pb["to_key"],
-                "orig_dir":     orig_dir.round(6).tolist(),
+                "strand_id": pb["strand_id"],
+                "from_helix": pb["from_helix"],
+                "to_helix": pb["to_helix"],
+                "is_cross": pb["is_cross_helix"],
+                "from_key": pb["from_key"],
+                "to_key": pb["to_key"],
+                "orig_dir": orig_dir.round(6).tolist(),
                 "expected_dir": expected_dir.round(6).tolist(),
-                "actual_dir":   actual_dir.round(6).tolist(),
-                "err_nm":       round(err, 9),
+                "actual_dir": actual_dir.round(6).tolist(),
+                "err_nm": round(err, 9),
             }
 
     assert max_dir_err < 1e-8, (
@@ -901,6 +955,7 @@ def test_6hb_cone_direction_vectors_after_rotation():
 #   3. Legacy world-space designs (axis_origin / axis_direction) migrate
 #      cleanly via the Design pre-validator.
 
+
 def test_local_axis_is_invariant_under_repeated_cluster_transforms(cluster_id):
     """Place a joint, then PATCH the cluster many times. The stored
     local_axis_origin / local_axis_direction must NOT drift."""
@@ -911,26 +966,33 @@ def test_local_axis_is_invariant_under_repeated_cluster_transforms(cluster_id):
     assert r.status_code == 200
     j0 = r.json()["design"]["cluster_joints"][0]
     initial_local_origin = list(j0["local_axis_origin"])
-    initial_local_dir    = list(j0["local_axis_direction"])
+    initial_local_dir = list(j0["local_axis_direction"])
 
     # Apply 30 different cluster transforms in succession.
     for k in range(30):
         theta = (k + 1) * 0.137
         qz = math.sin(theta / 2)
         qw = math.cos(theta / 2)
-        r = client.patch(f"/api/design/cluster/{cluster_id}", json={
-            "translation": [0.3 * k, -0.2 * k, 0.1 * k],
-            "rotation":    [0.0, 0.0, qz, qw],
-            "pivot":       [0.5, 0.5, 0.5],
-            "commit":      True,
-        })
+        r = client.patch(
+            f"/api/design/cluster/{cluster_id}",
+            json={
+                "translation": [0.3 * k, -0.2 * k, 0.1 * k],
+                "rotation": [0.0, 0.0, qz, qw],
+                "pivot": [0.5, 0.5, 0.5],
+                "commit": True,
+            },
+        )
         assert r.status_code == 200
 
     # Read back the joint; local-frame fields must be unchanged.
     design = client.get("/api/design").json()["design"]
     j_final = design["cluster_joints"][0]
-    assert j_final["local_axis_origin"]    == pytest.approx(initial_local_origin, abs=1e-12)
-    assert j_final["local_axis_direction"] == pytest.approx(initial_local_dir,    abs=1e-12)
+    assert j_final["local_axis_origin"] == pytest.approx(
+        initial_local_origin, abs=1e-12
+    )
+    assert j_final["local_axis_direction"] == pytest.approx(
+        initial_local_dir, abs=1e-12
+    )
 
 
 def test_world_axes_injected_match_local_to_world(cluster_id):
@@ -945,23 +1007,28 @@ def test_world_axes_injected_match_local_to_world(cluster_id):
     # Rotate the cluster 90° about +Y around pivot (0,0,0), then translate.
     qy = math.sin(math.pi / 4)
     qw = math.cos(math.pi / 4)
-    r = client.patch(f"/api/design/cluster/{cluster_id}", json={
-        "translation": [10.0, 0.0, 0.0],
-        "rotation":    [0.0, qy, 0.0, qw],
-        "pivot":       [0.0, 0.0, 0.0],
-        "commit":      True,
-    })
+    r = client.patch(
+        f"/api/design/cluster/{cluster_id}",
+        json={
+            "translation": [10.0, 0.0, 0.0],
+            "rotation": [0.0, qy, 0.0, qw],
+            "pivot": [0.0, 0.0, 0.0],
+            "commit": True,
+        },
+    )
     assert r.status_code == 200
 
     design = r.json()["design"]
     ct = next(c for c in design["cluster_transforms"] if c["id"] == cluster_id)
-    j  = design["cluster_joints"][0]
+    j = design["cluster_joints"][0]
 
     expected_origin, expected_dir = _local_to_world_joint(
-        j["local_axis_origin"], j["local_axis_direction"], ct,
+        j["local_axis_origin"],
+        j["local_axis_direction"],
+        ct,
     )
-    assert j["axis_origin"]    == pytest.approx(expected_origin, abs=1e-9)
-    assert j["axis_direction"] == pytest.approx(expected_dir,    abs=1e-9)
+    assert j["axis_origin"] == pytest.approx(expected_origin, abs=1e-9)
+    assert j["axis_direction"] == pytest.approx(expected_dir, abs=1e-9)
 
 
 def test_migrate_legacy_world_space_joint(cluster_id):
@@ -975,26 +1042,30 @@ def test_migrate_legacy_world_space_joint(cluster_id):
     # Move the cluster off-identity so the migration math is non-trivial.
     qz = math.sin(math.pi / 6)
     qw = math.cos(math.pi / 6)
-    ct = design.cluster_transforms[0].model_copy(update={
-        "translation": [3.0, -2.0, 1.0],
-        "rotation":    [0.0, 0.0, qz, qw],
-        "pivot":       [1.0, 1.0, 1.0],
-    })
+    ct = design.cluster_transforms[0].model_copy(
+        update={
+            "translation": [3.0, -2.0, 1.0],
+            "rotation": [0.0, 0.0, qz, qw],
+            "pivot": [1.0, 1.0, 1.0],
+        }
+    )
     moved = design.copy_with(cluster_transforms=[ct])
 
     # Synthesise a legacy joint dict (old schema) and inject it.
     legacy_world_origin = [4.5, 1.5, 0.0]
-    legacy_world_dir    = [0.0, 0.0, 1.0]
+    legacy_world_dir = [0.0, 0.0, 1.0]
     raw = moved.to_dict()
-    raw["cluster_joints"] = [{
-        "id":             "legacy-j-1",
-        "cluster_id":     cluster_id,
-        "name":           "Legacy",
-        "joint_type":     "revolute",
-        "axis_origin":    legacy_world_origin,
-        "axis_direction": legacy_world_dir,
-        "surface_detail": 6,
-    }]
+    raw["cluster_joints"] = [
+        {
+            "id": "legacy-j-1",
+            "cluster_id": cluster_id,
+            "name": "Legacy",
+            "joint_type": "revolute",
+            "axis_origin": legacy_world_origin,
+            "axis_direction": legacy_world_dir,
+            "surface_detail": 6,
+        }
+    ]
     # Round-trip through the validator. Expect migration to fire.
     migrated = Design.from_dict(raw)
     assert len(migrated.cluster_joints) == 1
@@ -1002,17 +1073,19 @@ def test_migrate_legacy_world_space_joint(cluster_id):
 
     # The legacy fields must be gone.
     j_dict = j.model_dump()
-    assert "axis_origin"    not in j_dict
+    assert "axis_origin" not in j_dict
     assert "axis_direction" not in j_dict
 
     # And re-deriving world coords from the new local frame must reproduce
     # the original world axes (within floating-point tolerance).
     ct_dict = migrated.cluster_transforms[0].model_dump()
     world_origin, world_dir = _local_to_world_joint(
-        j.local_axis_origin, j.local_axis_direction, ct_dict,
+        j.local_axis_origin,
+        j.local_axis_direction,
+        ct_dict,
     )
     assert world_origin == pytest.approx(legacy_world_origin, abs=1e-9)
-    assert world_dir    == pytest.approx(legacy_world_dir,    abs=1e-9)
+    assert world_dir == pytest.approx(legacy_world_dir, abs=1e-9)
 
 
 def test_migrate_legacy_world_space_joint_is_idempotent(cluster_id):
@@ -1025,16 +1098,17 @@ def test_migrate_legacy_world_space_joint_is_idempotent(cluster_id):
     )
     design = design_state.get_or_404()
     # First round-trip.
-    once  = Design.from_dict(design.to_dict())
+    once = Design.from_dict(design.to_dict())
     # Second round-trip — must not change anything.
     twice = Design.from_dict(once.to_dict())
     j1 = once.cluster_joints[0]
     j2 = twice.cluster_joints[0]
-    assert j1.local_axis_origin    == j2.local_axis_origin
+    assert j1.local_axis_origin == j2.local_axis_origin
     assert j1.local_axis_direction == j2.local_axis_direction
 
 
 # ── Phase 3: joint-place / joint-update / joint-delete in feature_log ─────────
+
 
 def test_patch_joint_logs_minor_op(cluster_id):
     """PATCH /design/joint/{id} appends a 'joint-update' minor op."""
@@ -1045,9 +1119,9 @@ def test_patch_joint_logs_minor_op(cluster_id):
     log = design_state.get_or_404().feature_log
     assert isinstance(log[-1], RoutingClusterLogEntry)
     last_child = log[-1].children[-1]
-    assert last_child.op_subtype == 'joint-update'
-    assert last_child.params['joint_id'] == jid
-    assert last_child.params['name'] == 'Renamed'
+    assert last_child.op_subtype == "joint-update"
+    assert last_child.params["joint_id"] == jid
+    assert last_child.params["name"] == "Renamed"
 
 
 def test_delete_joint_logs_minor_op(cluster_id):
@@ -1059,8 +1133,8 @@ def test_delete_joint_logs_minor_op(cluster_id):
     log = design_state.get_or_404().feature_log
     assert isinstance(log[-1], RoutingClusterLogEntry)
     last_child = log[-1].children[-1]
-    assert last_child.op_subtype == 'joint-delete'
-    assert last_child.params['joint_id'] == jid
+    assert last_child.op_subtype == "joint-delete"
+    assert last_child.params["joint_id"] == jid
 
 
 def test_joint_place_replays_deterministically(cluster_id):
@@ -1071,24 +1145,31 @@ def test_joint_place_replays_deterministically(cluster_id):
 
     r = client.post(
         f"/api/design/cluster/{cluster_id}/joint",
-        json={"axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION, "name": "Seek"},
+        json={
+            "axis_origin": _AXIS_ORIGIN,
+            "axis_direction": _AXIS_DIRECTION,
+            "name": "Seek",
+        },
     )
     expected_joint = r.json()["design"]["cluster_joints"][0]
     log = design_state.get_or_404().feature_log
     cluster_entry = log[-1]
     minor = cluster_entry.children[-1]
-    assert minor.op_subtype == 'joint-place'
+    assert minor.op_subtype == "joint-place"
 
     # Hydrate the cluster's pre-state and replay the op.
     from backend.api.state import decode_design_snapshot
+
     pre_design = decode_design_snapshot(cluster_entry.pre_state_gz_b64)
     replayed = _replay_minor_op(pre_design, minor.op_subtype, minor.params)
     assert len(replayed.cluster_joints) == 1
     j = replayed.cluster_joints[0]
-    assert j.id == expected_joint['id']
-    assert j.local_axis_origin    == pytest.approx(expected_joint['local_axis_origin'])
-    assert j.local_axis_direction == pytest.approx(expected_joint['local_axis_direction'])
-    assert j.name == 'Seek'
+    assert j.id == expected_joint["id"]
+    assert j.local_axis_origin == pytest.approx(expected_joint["local_axis_origin"])
+    assert j.local_axis_direction == pytest.approx(
+        expected_joint["local_axis_direction"]
+    )
+    assert j.name == "Seek"
 
 
 def test_joint_op_appends_to_open_routing_cluster(cluster_id):
@@ -1109,7 +1190,7 @@ def test_joint_op_appends_to_open_routing_cluster(cluster_id):
     cluster_entries = [e for e in log if isinstance(e, RoutingClusterLogEntry)]
     assert len(cluster_entries) == 1
     subtypes = [c.op_subtype for c in cluster_entries[0].children]
-    assert subtypes == ['joint-place', 'joint-update', 'joint-update', 'joint-delete']
+    assert subtypes == ["joint-place", "joint-update", "joint-update", "joint-delete"]
 
 
 def test_delete_routing_cluster_removes_joints_it_placed(cluster_id):
@@ -1122,7 +1203,8 @@ def test_delete_routing_cluster_removes_joints_it_placed(cluster_id):
     design = design_state.get_or_404()
     assert len(design.cluster_joints) == 1
     rc_index = next(
-        i for i, e in enumerate(design.feature_log)
+        i
+        for i, e in enumerate(design.feature_log)
         if isinstance(e, RoutingClusterLogEntry)
     )
 
@@ -1152,12 +1234,13 @@ def test_delete_routing_cluster_preserves_unrelated_joints(cluster_id):
     # Easiest: manually append a new RoutingClusterLogEntry by patching state.
     from backend.api.state import encode_design_snapshot
     import datetime as _dt
+
     d = design_state.get_or_404()
     # Inject an empty placeholder snapshot-bearing entry so the next joint
     # op opens a fresh routing cluster.
     pre_b64, _ = encode_design_snapshot(d)
     placeholder = RoutingClusterLogEntry(
-        label='Fine Routing',
+        label="Fine Routing",
         timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
         children=[],
         pre_state_gz_b64=pre_b64,
@@ -1172,24 +1255,36 @@ def test_delete_routing_cluster_preserves_unrelated_joints(cluster_id):
     # Now place joint B — opens a new routing cluster.
     r = client.post(
         f"/api/design/cluster/{cluster_id}/joint",
-        json={"axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION, "name": "B"},
+        json={
+            "axis_origin": _AXIS_ORIGIN,
+            "axis_direction": _AXIS_DIRECTION,
+            "name": "B",
+        },
     )
     # Same cluster_id replaces the joint (add_joint policy: one joint per
     # cluster), so we need a second cluster to keep both around.
     from backend.core.models import ClusterRigidTransform
+
     d = design_state.get_or_404()
     helix_id = d.helices[0].id
     cluster2 = ClusterRigidTransform(name="C2", helix_ids=[helix_id])
-    design_state.set_design(d.copy_with(cluster_transforms=list(d.cluster_transforms) + [cluster2]))
+    design_state.set_design(
+        d.copy_with(cluster_transforms=list(d.cluster_transforms) + [cluster2])
+    )
 
     client.post(
         f"/api/design/cluster/{cluster2.id}/joint",
-        json={"axis_origin": [4.0, 5.0, 6.0], "axis_direction": _AXIS_DIRECTION, "name": "B"},
+        json={
+            "axis_origin": [4.0, 5.0, 6.0],
+            "axis_direction": _AXIS_DIRECTION,
+            "name": "B",
+        },
     )
 
     design = design_state.get_or_404()
     rc_indices = [
-        i for i, e in enumerate(design.feature_log)
+        i
+        for i, e in enumerate(design.feature_log)
         if isinstance(e, RoutingClusterLogEntry) and not e.evicted
     ]
     assert len(rc_indices) >= 2
@@ -1202,4 +1297,3 @@ def test_delete_routing_cluster_preserves_unrelated_joints(cluster_id):
     remaining_ids = {j.id for j in after.cluster_joints}
     assert jid_a in remaining_ids
     assert len(after.cluster_joints) == 1
-

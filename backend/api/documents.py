@@ -30,7 +30,9 @@ class CreateDocumentRequest(BaseModel):
 
 def _name_of(obj) -> str | None:
     meta = getattr(obj, "metadata", None)
-    return getattr(meta, "name", None) if meta is not None else getattr(obj, "name", None)
+    return (
+        getattr(meta, "name", None) if meta is not None else getattr(obj, "name", None)
+    )
 
 
 def _doc_meta(doc_id: str) -> dict:
@@ -39,9 +41,14 @@ def _doc_meta(doc_id: str) -> dict:
     return {
         "doc_id": doc_id,
         "is_default": doc_id == DEFAULT_DOC_ID,
-        "design": ({"id": design.id, "name": _name_of(design)} if design is not None else None),
-        "assembly": ({"id": getattr(assembly, "id", None), "name": _name_of(assembly)}
-                     if assembly is not None else None),
+        "design": (
+            {"id": design.id, "name": _name_of(design)} if design is not None else None
+        ),
+        "assembly": (
+            {"id": getattr(assembly, "id", None), "name": _name_of(assembly)}
+            if assembly is not None
+            else None
+        ),
     }
 
 
@@ -71,4 +78,7 @@ def close_document(doc_id: str) -> dict:
     """
     dropped_design = design_state.drop_doc(doc_id)
     dropped_assembly = assembly_state.drop_doc(doc_id)
-    return {"ok": True, "dropped": {"design": dropped_design, "assembly": dropped_assembly}}
+    return {
+        "ok": True,
+        "dropped": {"design": dropped_design, "assembly": dropped_assembly},
+    }

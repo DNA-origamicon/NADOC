@@ -120,7 +120,9 @@ def field_force_vector(field, bead_mass: float, dalton_per_nt: float) -> np.ndar
     return mag_pn * PN_TO_KCAL_MOL_A * n_nt * dhat
 
 
-def _write_ramp_grid(path: Path, fvec: np.ndarray, lo: np.ndarray, hi: np.ndarray) -> None:
+def _write_ramp_grid(
+    path: Path, fvec: np.ndarray, lo: np.ndarray, hi: np.ndarray
+) -> None:
     """A linear ramp potential ``U = -(F·r)`` over the ``lo``→``hi`` box, so ``-∇U = F``
     (constant force) everywhere inside — ARBD's ``gridFile`` idiom for a uniform force."""
     from mrdna.arbdmodel.grid import writeDx  # noqa: PLC0415
@@ -185,12 +187,17 @@ def install_field_force(design: "Design", model, field, *, out_dir: Path) -> int
     def _wrapped(*args, **kwargs):
         orig(*args, **kwargs)
         names = apply_field_force(design, model, field, out_dir=out_dir)
-        logger.info("mrdna field: re-applied force grids to %d bead type(s) after regen",
-                    len(names))
+        logger.info(
+            "mrdna field: re-applied force grids to %d bead type(s) after regen",
+            len(names),
+        )
 
     model.generate_bead_model = _wrapped
 
     names = apply_field_force(design, model, field, out_dir=out_dir)
-    logger.info("mrdna field: applied force grids to %d bead type(s) (%s)",
-                len(names), ", ".join(names) or "none")
+    logger.info(
+        "mrdna field: applied force grids to %d bead type(s) (%s)",
+        len(names),
+        ", ".join(names) or "none",
+    )
     return len(names)

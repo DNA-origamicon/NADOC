@@ -66,8 +66,8 @@ def get_instance_design(instance_id: str) -> dict:
     /geometry endpoint which applies overrides and includes "design" in the response.
     """
     assembly = assembly_state.get_or_404()
-    inst     = _find_instance(assembly, instance_id)
-    design   = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+    inst = _find_instance(assembly, instance_id)
+    design = _load_design_from_source(inst.source, _assembly_source_path(assembly))
     return {"design": design.to_dict(), "instance_name": inst.name}
 
 
@@ -89,23 +89,33 @@ def get_instance_geometry(instance_id: str) -> dict:
     Response includes "design" (with cluster_transform_overrides applied) so
     callers do not need a separate /design request.
     """
-    from backend.api.crud import _geometry_for_design, _compact_geometry_from_nucleotides, _inject_joint_world_axes
-    from backend.core.deformation import deformed_helix_axes, _apply_ovhg_rotations_to_axes
-    assembly = assembly_state.get_or_404()
-    inst     = _find_instance(assembly, instance_id)
+    from backend.api.crud import (
+        _geometry_for_design,
+        _compact_geometry_from_nucleotides,
+        _inject_joint_world_axes,
+    )
+    from backend.core.deformation import (
+        deformed_helix_axes,
+        _apply_ovhg_rotations_to_axes,
+    )
 
-    key    = _geo_cache_key(inst)
+    assembly = assembly_state.get_or_404()
+    inst = _find_instance(assembly, instance_id)
+
+    key = _geo_cache_key(inst)
     cached = _geo_cache_get(key) if key else None
     if cached:
         return {
-            "nucleotides_compact": _compact_geometry_from_nucleotides(cached["nucleotides"]),
-            "helix_axes":          cached["helix_axes"],
-            "design":              cached.get("design"),
+            "nucleotides_compact": _compact_geometry_from_nucleotides(
+                cached["nucleotides"]
+            ),
+            "helix_axes": cached["helix_axes"],
+            "design": cached.get("design"),
         }
 
-    design      = _display_design(_design_with_instance_overrides(inst))
+    design = _display_design(_design_with_instance_overrides(inst))
     nucleotides = _geometry_for_design(design)
-    axes        = deformed_helix_axes(design)
+    axes = deformed_helix_axes(design)
     _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
     design_dict = design.to_dict()
     # Derive world-space cluster-joint axes (axis_origin / axis_direction) from the
@@ -113,12 +123,13 @@ def get_instance_geometry(instance_id: str) -> dict:
     # part-joint drag reads undefined joint.axis_origin and throws.
     _inject_joint_world_axes(design_dict)
     if key:
-        _geo_cache_set(key, {"nucleotides": nucleotides, "helix_axes": axes,
-                             "design": design_dict})
+        _geo_cache_set(
+            key, {"nucleotides": nucleotides, "helix_axes": axes, "design": design_dict}
+        )
     return {
         "nucleotides_compact": _compact_geometry_from_nucleotides(nucleotides),
-        "helix_axes":          axes,
-        "design":              design_dict,
+        "helix_axes": axes,
+        "design": design_dict,
     }
 
 
@@ -137,9 +148,12 @@ def get_instance_bend_centers(instance_id: str) -> dict:
     Response: ``{ bend_centers: [{label, position, normal, cluster_id, bend_index, radius_nm}] }``
     """
     from backend.core.deformation import compute_bend_centers
+
     assembly = assembly_state.get_or_404()
-    inst     = _find_instance(assembly, instance_id)
-    design   = _display_design(_design_with_instance_overrides(inst, _assembly_source_path(assembly)))
+    inst = _find_instance(assembly, instance_id)
+    design = _display_design(
+        _design_with_instance_overrides(inst, _assembly_source_path(assembly))
+    )
     return {"bend_centers": compute_bend_centers(design)}
 
 
@@ -156,20 +170,21 @@ def get_instance_atomistic_geometry(instance_id: str) -> dict:
     Same schema as GET /api/design/atomistic.
     """
     from backend.core.atomistic import build_atomistic_model, atomistic_to_json
+
     assembly = assembly_state.get_or_404()
-    inst     = _find_instance(assembly, instance_id)
-    design   = _display_design(_load_design_from_source(inst.source))
+    inst = _find_instance(assembly, instance_id)
+    design = _display_design(_load_design_from_source(inst.source))
     return atomistic_to_json(build_atomistic_model(design))
 
 
 @router.get("/assembly/instances/{instance_id}/surface-geometry", status_code=200)
 def get_instance_surface_geometry(
-    instance_id:    str,
-    color_mode:     str   = "strand",
-    grid_spacing:   float = 0.20,
-    probe_radius:   float = 0.28,
+    instance_id: str,
+    color_mode: str = "strand",
+    grid_spacing: float = 0.20,
+    probe_radius: float = 0.28,
     radius_inflate: float = 1.30,
-    smooth:         int   = 15,
+    smooth: int = 15,
 ) -> dict:
     """
     Compute and return a triangulated molecular surface for a PartInstance's design.
@@ -186,11 +201,12 @@ def get_instance_surface_geometry(
     import time
     from backend.core.atomistic import build_atomistic_model
     from backend.core.surface import compute_surface, smooth_mesh, surface_to_json
+
     assembly = assembly_state.get_or_404()
-    inst     = _find_instance(assembly, instance_id)
-    design   = _display_design(_load_design_from_source(inst.source))
-    model    = build_atomistic_model(design)
-    t0   = time.perf_counter()
+    inst = _find_instance(assembly, instance_id)
+    design = _display_design(_load_design_from_source(inst.source))
+    model = build_atomistic_model(design)
+    t0 = time.perf_counter()
     mesh = compute_surface(
         model.atoms,
         grid_spacing=grid_spacing,
@@ -224,12 +240,19 @@ def get_assembly_geometry() -> dict:
     ``/assembly/instances/{id}/geometry`` is unchanged in shape (it returns
     one ``nucleotides_compact`` directly).
     """
-    from backend.api.crud import _geometry_for_design, _compact_geometry_from_nucleotides
-    from backend.core.deformation import deformed_helix_axes, _apply_ovhg_rotations_to_axes
+    from backend.api.crud import (
+        _geometry_for_design,
+        _compact_geometry_from_nucleotides,
+    )
+    from backend.core.deformation import (
+        deformed_helix_axes,
+        _apply_ovhg_rotations_to_axes,
+    )
+
     assembly = assembly_state.get_or_404()
-    sources:        dict[str, dict] = {}
+    sources: dict[str, dict] = {}
     instance_to_src: dict[str, str] = {}
-    errors:         dict[str, str]  = {}
+    errors: dict[str, str] = {}
 
     def _source_key_for(inst) -> str:
         # Reuse the geometry-cache key (file path + mtime suffix, or
@@ -246,31 +269,36 @@ def get_assembly_geometry() -> dict:
             if src_key in sources:
                 continue  # already computed for an earlier identical-source instance
 
-            key    = _geo_cache_key(inst)
+            key = _geo_cache_key(inst)
             cached = _geo_cache_get(key) if key else None
             if cached:
                 sources[src_key] = {
-                    "nucleotides_compact": _compact_geometry_from_nucleotides(cached["nucleotides"]),
-                    "helix_axes":          cached["helix_axes"],
-                    "design":              cached.get("design"),
+                    "nucleotides_compact": _compact_geometry_from_nucleotides(
+                        cached["nucleotides"]
+                    ),
+                    "helix_axes": cached["helix_axes"],
+                    "design": cached.get("design"),
                 }
                 continue
 
-            design      = _display_design(_design_with_instance_overrides(inst))
+            design = _display_design(_design_with_instance_overrides(inst))
             nucleotides = _geometry_for_design(design)
-            axes        = deformed_helix_axes(design)
+            axes = deformed_helix_axes(design)
             _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
             design_dict = design.to_dict()
             if key:
-                _geo_cache_set(key, {
-                    "nucleotides": nucleotides,
-                    "helix_axes":  axes,
-                    "design":      design_dict,
-                })
+                _geo_cache_set(
+                    key,
+                    {
+                        "nucleotides": nucleotides,
+                        "helix_axes": axes,
+                        "design": design_dict,
+                    },
+                )
             sources[src_key] = {
                 "nucleotides_compact": _compact_geometry_from_nucleotides(nucleotides),
-                "helix_axes":          axes,
-                "design":              design_dict,
+                "helix_axes": axes,
+                "design": design_dict,
             }
         except Exception as exc:
             errors[inst.id] = str(exc)

@@ -59,6 +59,7 @@ router = APIRouter(tags=["mrdna"])
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _workspace() -> Path:
     return _WORKSPACE_DIR
 
@@ -75,6 +76,7 @@ def _load_job(job_id: str) -> MrdnaJob:
 
 def _current_fingerprint() -> "str | None":
     from backend.core.oxdna_staleness import oxdna_design_fingerprint
+
     design = design_state.get_design()
     if design is None:
         return None
@@ -86,50 +88,62 @@ def _current_fingerprint() -> "str | None":
 
 def _is_out_of_date(job: MrdnaJob, current_fp: "str | None") -> bool:
     from backend.core.oxdna_staleness import job_out_of_date
+
     return job_out_of_date(job.design_fingerprint, current_fp)
 
 
 # ── Request models ────────────────────────────────────────────────────────────
 
+
 class CreateMrdnaJobRequest(BaseModel):
-    coarse_steps:  int = Field(100_000, ge=1_000, le=50_000_000,
-                               description="Coarse ARBD relaxation steps (mrDNA default 1e5)")
-    fine_steps:    int = Field(0, ge=0, le=50_000_000,
-                               description="Fine-stage steps (2 bp/bead + twist). >0 develops "
-                                           "loop/skip CURVATURE; 0 = coarse-only (fast, no bend).")
-    output_period: int = Field(10_000, ge=100,
-                               description="Steps between DCD frames")
-    device:        str = Field("0", description="CUDA device index")
-    autostart:     bool = Field(True)
-    design_source_path: Optional[str] = Field(None, description="Workspace path of the active design")
-    anchors:       Optional[list] = Field(
+    coarse_steps: int = Field(
+        100_000,
+        ge=1_000,
+        le=50_000_000,
+        description="Coarse ARBD relaxation steps (mrDNA default 1e5)",
+    )
+    fine_steps: int = Field(
+        0,
+        ge=0,
+        le=50_000_000,
+        description="Fine-stage steps (2 bp/bead + twist). >0 develops "
+        "loop/skip CURVATURE; 0 = coarse-only (fast, no bend).",
+    )
+    output_period: int = Field(10_000, ge=100, description="Steps between DCD frames")
+    device: str = Field("0", description="CUDA device index")
+    autostart: bool = Field(True)
+    design_source_path: Optional[str] = Field(
+        None, description="Workspace path of the active design"
+    )
+    anchors: Optional[list] = Field(
         None,
         description="Anchor scopes (shared oxDNA/CanDo/NAMD picker format: overhang / "
-                    "cluster / domain / strand / base) held immobile via ARBD harmonic "
-                    "RESTRAINTs on the covering CG beads. A JOB-REQUEST annotation, never "
-                    "a Design edit; a selection resolving to nothing leaves the run "
-                    "unanchored (needed under a uniform field to stop COM drift).",
+        "cluster / domain / strand / base) held immobile via ARBD harmonic "
+        "RESTRAINTs on the covering CG beads. A JOB-REQUEST annotation, never "
+        "a Design edit; a selection resolving to nothing leaves the run "
+        "unanchored (needed under a uniform field to stop COM drift).",
     )
-    field:         Optional[dict] = Field(
+    field: Optional[dict] = Field(
         None,
         description="Uniform E-field descriptor (shared oxDNA/NAMD/CanDo form: "
-                    "{\"field_pN\": <force per NUCLEOTIDE, pN>, \"dir\": [x,y,z]}) applied "
-                    "as a constant per-bead force via ARBD force grids, scaled by each "
-                    "bead's nucleotide content. A JOB-REQUEST annotation, never a Design "
-                    "edit. Requires >=1 anchor (or an opposing surface) to hold against "
-                    "COM drift.",
+        '{"field_pN": <force per NUCLEOTIDE, pN>, "dir": [x,y,z]}) applied '
+        "as a constant per-bead force via ARBD force grids, scaled by each "
+        "bead's nucleotide content. A JOB-REQUEST annotation, never a Design "
+        "edit. Requires >=1 anchor (or an opposing surface) to hold against "
+        "COM drift.",
     )
-    surface:       Optional[dict] = Field(
+    surface: Optional[dict] = Field(
         None,
         description="Hard-surface (repulsion-plane) descriptor (shared oxDNA/LAMMPS form: "
-                    "{\"dir\": [x,y,z], \"offset_nm\": d, \"stiff\": s}) realised as a "
-                    "one-sided harmonic wall via an ARBD grid potential. A JOB-REQUEST "
-                    "annotation, never a Design edit. A field pressing straight into the "
-                    "surface is held by its reaction, so it needs no strand anchor.",
+        '{"dir": [x,y,z], "offset_nm": d, "stiff": s}) realised as a '
+        "one-sided harmonic wall via an ARBD grid potential. A JOB-REQUEST "
+        "annotation, never a Design edit. A field pressing straight into the "
+        "surface is held by its reaction, so it needs no strand anchor.",
     )
 
 
 # ── Create / list / status ────────────────────────────────────────────────────
+
 
 @router.post("/mrdna/jobs")
 async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
@@ -149,6 +163,7 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
 
     if body.surface:
         from backend.core.mrdna_surface import parse_surface
+
         try:
             parsed_surface = parse_surface(body.surface)
         except (ValueError, TypeError):
@@ -156,12 +171,13 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
         if parsed_surface is None:
             raise HTTPException(
                 400,
-                "Malformed surface: expected {\"dir\": [x,y,z], \"offset_nm\": d, "
-                "\"stiff\": <non-zero>} with a non-zero direction.",
+                'Malformed surface: expected {"dir": [x,y,z], "offset_nm": d, '
+                '"stiff": <non-zero>} with a non-zero direction.',
             )
 
     if body.field:
         from backend.core.mrdna_field import parse_field
+
         try:
             parsed_field = parse_field(body.field)
         except (ValueError, TypeError):
@@ -169,8 +185,8 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
         if parsed_field is None:
             raise HTTPException(
                 400,
-                "Malformed E-field: expected {\"field_pN\": <non-zero pN>, "
-                "\"dir\": [x,y,z]} with a non-zero direction.",
+                'Malformed E-field: expected {"field_pN": <non-zero pN>, '
+                '"dir": [x,y,z]} with a non-zero direction.',
             )
         # An unanchored uniform field streams the whole structure down-field (COM
         # drift); anchors are recommended but no longer required — the UI warns.
@@ -187,28 +203,37 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
     from backend.physics.oxdna_interface import _strand_nucleotide_order
 
     job = new_mrdna_job(
-        design_name        = name,
-        coarse_steps       = body.coarse_steps,
-        fine_steps         = body.fine_steps,
-        output_period      = body.output_period,
-        n_nucleotides      = len(_strand_nucleotide_order(design)),
-        device             = body.device,
-        anchors            = body.anchors,
-        e_field            = body.field,
-        surface            = body.surface,
-        design_source_path = body.design_source_path,
-        design_fingerprint = oxdna_design_fingerprint(design),
-        feature_log_position = effective_feature_log_position(design),
+        design_name=name,
+        coarse_steps=body.coarse_steps,
+        fine_steps=body.fine_steps,
+        output_period=body.output_period,
+        n_nucleotides=len(_strand_nucleotide_order(design)),
+        device=body.device,
+        anchors=body.anchors,
+        e_field=body.field,
+        surface=body.surface,
+        design_source_path=body.design_source_path,
+        design_fingerprint=oxdna_design_fingerprint(design),
+        feature_log_position=effective_feature_log_position(design),
     )
     job.status = MrdnaStatus.preparing
     job.save(_workspace())
-    logger.info("create_mrdna_job: job_id=%s design=%s steps=%d",
-                job.job_id, name, body.coarse_steps)
+    logger.info(
+        "create_mrdna_job: job_id=%s design=%s steps=%d",
+        job.job_id,
+        name,
+        body.coarse_steps,
+    )
 
     try:
         await run_in_threadpool(prepare_mrdna_job, design, job, _workspace())
     except Exception as exc:  # noqa: BLE001
-        logger.error("create_mrdna_job: prepare FAILED for %s: %s", job.job_id, exc, exc_info=True)
+        logger.error(
+            "create_mrdna_job: prepare FAILED for %s: %s",
+            job.job_id,
+            exc,
+            exc_info=True,
+        )
         job.status = MrdnaStatus.failed
         job.error = f"Preparation failed: {exc}"
         job.save(_workspace())
@@ -224,6 +249,7 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
 @router.get("/mrdna/jobs")
 async def list_mrdna_jobs() -> list[dict]:
     from backend.core.design_disk_usage import dir_size_bytes_cached
+
     ws = _workspace()
     jobs = [reconcile_mrdna_status(j, ws) for j in MrdnaJob.list_jobs(ws)]
     current_fp = _current_fingerprint()
@@ -268,6 +294,7 @@ async def get_mrdna_error_log(job_id: str) -> dict:
 
 # ── Control ───────────────────────────────────────────────────────────────────
 
+
 @router.post("/mrdna/jobs/{job_id}/start")
 async def start_mrdna_job(job_id: str) -> dict:
     job = _load_job(job_id)
@@ -307,6 +334,7 @@ async def delete_mrdna_job(job_id: str) -> dict:
     if is_running(job_id) or job.status == MrdnaStatus.running:
         raise HTTPException(400, "Stop the mrDNA job before deleting it")
     from backend.core.job_archive import purge_index_entry
+
     jd = job.job_dir(ws)
     if jd.exists():
         shutil.rmtree(jd)
@@ -315,6 +343,7 @@ async def delete_mrdna_job(job_id: str) -> dict:
 
 
 # ── Display ───────────────────────────────────────────────────────────────────
+
 
 @router.get("/mrdna/jobs/{job_id}/display")
 async def get_mrdna_display(job_id: str) -> dict:
@@ -368,9 +397,13 @@ async def get_mrdna_curvature(job_id: str) -> dict:
     if report is None:
         # No snapshot to compute from (or job not prepared) — analytic-only fallback.
         from backend.core.mrdna_curvature import curvature_report
+
         design = design_state.get_design()
-        report = curvature_report(design, None) if design is not None else {
-            "analytic": None, "measured": None, "ratio": None}
+        report = (
+            curvature_report(design, None)
+            if design is not None
+            else {"analytic": None, "measured": None, "ratio": None}
+        )
     return {
         "job_id": job.job_id,
         "ready": job.status == MrdnaStatus.completed,
@@ -402,15 +435,24 @@ async def get_mrdna_shape_source(job_id: str) -> dict:
         return {"job_id": job.job_id, "ready": False}
     design = _load_snapshot_design(jd)
     if design is None:
-        raise HTTPException(500, f"mrDNA job {job_id!r} has no design snapshot to compare against")
+        raise HTTPException(
+            500, f"mrDNA job {job_id!r} has no design snapshot to compare against"
+        )
 
     rmsf = await run_in_threadpool(mrdna_trajectory_rmsf, design, jd)
     reference = await run_in_threadpool(core_reference_geometry, design)
     bundle = await run_in_threadpool(
-        build_mrdna_shape_source, cached["positions"], reference,
-        rmsf=(rmsf["positions"] if rmsf else None))
-    return {"job_id": job.job_id, "ready": bundle["descriptors"] is not None,
-            "n_frames": (rmsf["n_frames"] if rmsf else None), **bundle}
+        build_mrdna_shape_source,
+        cached["positions"],
+        reference,
+        rmsf=(rmsf["positions"] if rmsf else None),
+    )
+    return {
+        "job_id": job.job_id,
+        "ready": bundle["descriptors"] is not None,
+        "n_frames": (rmsf["n_frames"] if rmsf else None),
+        **bundle,
+    }
 
 
 @router.get("/mrdna/curvature/analytic")
@@ -418,6 +460,7 @@ async def get_mrdna_analytic_curvature() -> dict:
     """Analytic Dietz curvature of the ACTIVE design's loop/skip pattern — available
     with no run (instant), so the panel can show the designed curvature up front."""
     from backend.core.mrdna_curvature import analytic_curvature
+
     design = design_state.get_design()
     if design is None:
         return {"analytic": None}

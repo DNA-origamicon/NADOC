@@ -66,7 +66,9 @@ class InstanceLoadoutRenameRequest(BaseModel):
 
 
 @router.post("/assembly/instances/{instance_id}/loadouts", status_code=200)
-def create_instance_loadout(instance_id: str, body: InstanceLoadoutCreateRequest) -> dict:
+def create_instance_loadout(
+    instance_id: str, body: InstanceLoadoutCreateRequest
+) -> dict:
     from backend.api import crud as crud_api
     from backend.core.models import DesignLoadout
 
@@ -78,18 +80,25 @@ def create_instance_loadout(instance_id: str, body: InstanceLoadoutCreateRequest
     name = (body.name or "").strip() or crud_api._auto_loadout_name(loadouts)
     new_id = str(_uuid.uuid4())
     payload, size = crud_api._encode_loadout_design_snapshot(current)
-    loadouts.append(DesignLoadout(
-        id=new_id,
-        name=name,
-        design_snapshot_gz_b64=payload,
-        snapshot_size_bytes=size,
-    ))
+    loadouts.append(
+        DesignLoadout(
+            id=new_id,
+            name=name,
+            design_snapshot_gz_b64=payload,
+            snapshot_size_bytes=size,
+        )
+    )
     updated_design = current.copy_with(loadouts=loadouts, active_loadout_id=new_id)
     updated_assembly, _ = _replace_instance_design(assembly, inst, updated_design)
-    return {**_assembly_response(updated_assembly), "design": updated_design.model_dump(mode="json")}
+    return {
+        **_assembly_response(updated_assembly),
+        "design": updated_design.model_dump(mode="json"),
+    }
 
 
-@router.post("/assembly/instances/{instance_id}/loadouts/{loadout_id}/select", status_code=200)
+@router.post(
+    "/assembly/instances/{instance_id}/loadouts/{loadout_id}/select", status_code=200
+)
 def select_instance_loadout(instance_id: str, loadout_id: str) -> dict:
     from backend.api import crud as crud_api
 
@@ -102,16 +111,25 @@ def select_instance_loadout(instance_id: str, loadout_id: str) -> dict:
     if selected is None:
         raise HTTPException(404, detail=f"Loadout {loadout_id!r} not found.")
     try:
-        restored = crud_api._decode_loadout_design_snapshot(selected.design_snapshot_gz_b64)
+        restored = crud_api._decode_loadout_design_snapshot(
+            selected.design_snapshot_gz_b64
+        )
     except Exception as exc:
         raise HTTPException(500, detail=f"Failed to restore loadout: {exc}") from exc
     updated_design = restored.copy_with(loadouts=loadouts, active_loadout_id=loadout_id)
     updated_assembly, _ = _replace_instance_design(assembly, inst, updated_design)
-    return {**_assembly_response(updated_assembly), "design": updated_design.model_dump(mode="json")}
+    return {
+        **_assembly_response(updated_assembly),
+        "design": updated_design.model_dump(mode="json"),
+    }
 
 
-@router.patch("/assembly/instances/{instance_id}/loadouts/{loadout_id}", status_code=200)
-def rename_instance_loadout(instance_id: str, loadout_id: str, body: InstanceLoadoutRenameRequest) -> dict:
+@router.patch(
+    "/assembly/instances/{instance_id}/loadouts/{loadout_id}", status_code=200
+)
+def rename_instance_loadout(
+    instance_id: str, loadout_id: str, body: InstanceLoadoutRenameRequest
+) -> dict:
     from backend.api import crud as crud_api
 
     assembly = assembly_state.get_or_404()
@@ -131,10 +149,15 @@ def rename_instance_loadout(instance_id: str, loadout_id: str, body: InstanceLoa
     ]
     updated_design = design.copy_with(loadouts=loadouts, active_loadout_id=active_id)
     updated_assembly, _ = _replace_instance_design(assembly, inst, updated_design)
-    return {**_assembly_response(updated_assembly), "design": updated_design.model_dump(mode="json")}
+    return {
+        **_assembly_response(updated_assembly),
+        "design": updated_design.model_dump(mode="json"),
+    }
 
 
-@router.delete("/assembly/instances/{instance_id}/loadouts/{loadout_id}", status_code=200)
+@router.delete(
+    "/assembly/instances/{instance_id}/loadouts/{loadout_id}", status_code=200
+)
 def delete_instance_loadout(instance_id: str, loadout_id: str) -> dict:
     from backend.api import crud as crud_api
 
@@ -150,12 +173,23 @@ def delete_instance_loadout(instance_id: str, loadout_id: str) -> dict:
     remaining = [l for l in loadouts if l.id != loadout_id]
     next_id = active_id if active_id != loadout_id else remaining[0].id
     if next_id == active_id:
-        updated_design = current.copy_with(loadouts=remaining, active_loadout_id=next_id)
+        updated_design = current.copy_with(
+            loadouts=remaining, active_loadout_id=next_id
+        )
     else:
         try:
-            restored = crud_api._decode_loadout_design_snapshot(remaining[0].design_snapshot_gz_b64)
+            restored = crud_api._decode_loadout_design_snapshot(
+                remaining[0].design_snapshot_gz_b64
+            )
         except Exception as exc:
-            raise HTTPException(500, detail=f"Failed to restore next loadout: {exc}") from exc
-        updated_design = restored.copy_with(loadouts=remaining, active_loadout_id=next_id)
+            raise HTTPException(
+                500, detail=f"Failed to restore next loadout: {exc}"
+            ) from exc
+        updated_design = restored.copy_with(
+            loadouts=remaining, active_loadout_id=next_id
+        )
     updated_assembly, _ = _replace_instance_design(assembly, inst, updated_design)
-    return {**_assembly_response(updated_assembly), "design": updated_design.model_dump(mode="json")}
+    return {
+        **_assembly_response(updated_assembly),
+        "design": updated_design.model_dump(mode="json"),
+    }

@@ -3,6 +3,7 @@
 Exercises the handlers directly (no HTTP client) with the workspace monkeypatched to a
 tmp dir, matching the rest of the MD route tests.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -69,7 +70,9 @@ def test_dequeue_removes_the_entry(ws):
 def test_reorder_replaces_the_order(ws):
     a, b = _job(ws), _job(ws)
     md_queue.save_queue(ws, [a.job_id, b.job_id])
-    res = asyncio.run(rq.reorder_md_queue(rq.ReorderRequest(job_ids=[b.job_id, a.job_id])))
+    res = asyncio.run(
+        rq.reorder_md_queue(rq.ReorderRequest(job_ids=[b.job_id, a.job_id]))
+    )
     assert [e["job_id"] for e in res["queue"]] == [b.job_id, a.job_id]
 
 
@@ -81,10 +84,12 @@ def test_get_prunes_entries_whose_job_was_deleted(ws):
 
 # ── the drain pass ───────────────────────────────────────────────────────────────
 
+
 def _spy(sink):
     async def _start(job_id):
         sink.append(job_id)
         return {"ok": True}
+
     return _start
 
 

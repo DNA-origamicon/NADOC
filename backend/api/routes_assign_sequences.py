@@ -33,6 +33,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.api import state as design_state
+
 # Shared response helpers (100+ crud.py callers) + the cross-region crossover
 # placer stay in crud.py and are imported back here (L13 / shared-kernel convention).
 from backend.api.crud import (
@@ -41,7 +42,13 @@ from backend.api.crud import (
     _place_auto_crossovers,
 )
 from backend.core.models import (
-    Design, Direction, Domain, HalfCrossover, Strand, StrandType, _backfill_dropped_junctions,
+    Design,
+    Direction,
+    Domain,
+    HalfCrossover,
+    Strand,
+    StrandType,
+    _backfill_dropped_junctions,
 )
 
 router = APIRouter()
@@ -50,7 +57,7 @@ router = APIRouter()
 class _ScaffoldSeqBody(BaseModel):
     scaffold_name: str = "M13mp18"
     custom_sequence: Optional[str] = None  # if set, overrides scaffold_name
-    strand_id: Optional[str] = None        # target strand (multi-scaffold support)
+    strand_id: Optional[str] = None  # target strand (multi-scaffold support)
 
 
 class _FullAutostapleBody(BaseModel):
@@ -60,7 +67,9 @@ class _FullAutostapleBody(BaseModel):
 
 
 @router.post("/design/assign-scaffold-sequence", status_code=200)
-def assign_scaffold_sequence_endpoint(body: _ScaffoldSeqBody = _ScaffoldSeqBody()) -> dict:
+def assign_scaffold_sequence_endpoint(
+    body: _ScaffoldSeqBody = _ScaffoldSeqBody(),
+) -> dict:
     """Assign a scaffold sequence to a scaffold strand.
 
     Body fields:
@@ -84,20 +93,37 @@ def assign_scaffold_sequence_endpoint(body: _ScaffoldSeqBody = _ScaffoldSeqBody(
         use_custom = bool(body.custom_sequence and body.custom_sequence.strip())
         if use_custom:
             updated, total_nt, padded_nt = assign_custom_scaffold_sequence(
-                design, body.custom_sequence, strand_id=body.strand_id)
-            scaffold_len = len(body.custom_sequence.strip().upper().replace(" ", "").replace("\n", "").replace("\r", ""))
+                design, body.custom_sequence, strand_id=body.strand_id
+            )
+            scaffold_len = len(
+                body.custom_sequence.strip()
+                .upper()
+                .replace(" ", "")
+                .replace("\n", "")
+                .replace("\r", "")
+            )
         else:
             updated, total_nt, padded_nt = assign_scaffold_sequence(
-                design, body.scaffold_name, strand_id=body.strand_id)
+                design, body.scaffold_name, strand_id=body.strand_id
+            )
             scaffold_len = next(
-                (ln for name, ln, _ in SCAFFOLD_LIBRARY if name == body.scaffold_name), 0)
-        _run.info = {"total_nt": total_nt, "scaffold_len": scaffold_len, "padded_nt": padded_nt}
+                (ln for name, ln, _ in SCAFFOLD_LIBRARY if name == body.scaffold_name),
+                0,
+            )
+        _run.info = {
+            "total_nt": total_nt,
+            "scaffold_len": scaffold_len,
+            "padded_nt": padded_nt,
+        }
         return updated
 
     try:
         updated, report, _entry = design_state.mutate_with_feature_log(
-            op_kind='assign-scaffold-sequence', label='Assign scaffold sequence',
-            params=body.model_dump(), fn=_run)
+            op_kind="assign-scaffold-sequence",
+            label="Assign scaffold sequence",
+            params=body.model_dump(),
+            fn=_run,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     resp = _design_response(updated, report)
@@ -129,7 +155,9 @@ def strand_sequence_context(strand_id: str) -> dict:
     Read-only; never mutates the design.
     """
     from backend.core.sequences import (
-        assign_staple_sequences, strand_partner_bases, strand_sequence_length,
+        assign_staple_sequences,
+        strand_partner_bases,
+        strand_sequence_length,
         strand_sequence_segments,
     )
 
@@ -141,21 +169,25 @@ def strand_sequence_context(strand_id: str) -> dict:
     partners = strand_partner_bases(design, strand)
     try:
         derived = next(
-            (s.sequence for s in assign_staple_sequences(design).strands if s.id == strand_id),
+            (
+                s.sequence
+                for s in assign_staple_sequences(design).strands
+                if s.id == strand_id
+            ),
             None,
         )
     except ValueError:
-        derived = None      # scaffold not sequenced yet — nothing to derive from
+        derived = None  # scaffold not sequenced yet — nothing to derive from
 
     return {
-        "strand_id":   strand.id,
+        "strand_id": strand.id,
         "strand_type": strand.strand_type.value,
         "is_scaffold": strand.is_scaffold,
-        "length":      strand_sequence_length(design, strand),
-        "sequence":    strand.sequence,
-        "derived":     derived,
-        "partner":     "".join(p if p else "-" for p in partners),
-        "segments":    strand_sequence_segments(design, strand),
+        "length": strand_sequence_length(design, strand),
+        "sequence": strand.sequence,
+        "derived": derived,
+        "partner": "".join(p if p else "-" for p in partners),
+        "segments": strand_sequence_segments(design, strand),
     }
 
 
@@ -178,8 +210,12 @@ def _manual_connection_positions(design: Design) -> set[tuple[str, int, Directio
     """
     positions: set[tuple[str, int, Direction]] = set()
     for fl in getattr(design, "forced_ligations", None) or []:
-        positions.add((fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction))
-        positions.add((fl.five_prime_helix_id, fl.five_prime_bp, fl.five_prime_direction))
+        positions.add(
+            (fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction)
+        )
+        positions.add(
+            (fl.five_prime_helix_id, fl.five_prime_bp, fl.five_prime_direction)
+        )
     return positions
 
 
@@ -203,11 +239,17 @@ def _locked_and_overhang_staple_ids(design: Design) -> tuple[set[str], set[str]]
     for s in design.strands:
         if s.strand_type != StrandType.STAPLE or s.is_reference:
             continue
-        if any(d.overhang_id is not None or d.binds_overhang_id is not None for d in s.domains):
+        if any(
+            d.overhang_id is not None or d.binds_overhang_id is not None
+            for d in s.domains
+        ):
             overhang.add(s.id)
         for d in s.domains:
-            if ((d.helix_id, d.start_bp, d.direction) in manual_pos
-                    or (d.helix_id, d.end_bp, d.direction) in manual_pos):
+            if (d.helix_id, d.start_bp, d.direction) in manual_pos or (
+                d.helix_id,
+                d.end_bp,
+                d.direction,
+            ) in manual_pos:
                 locked.add(s.id)
                 break
     return locked, overhang
@@ -233,9 +275,11 @@ def _linearize_staple_precursors(design: Design) -> tuple[Design, dict]:
         return half.strand == expected
 
     kept_crossovers = [
-        xo for xo in design.crossovers
+        xo
+        for xo in design.crossovers
         if xo.process_id == "manual"
-        or _is_scaffold_half(xo.half_a) or _is_scaffold_half(xo.half_b)
+        or _is_scaffold_half(xo.half_a)
+        or _is_scaffold_half(xo.half_b)
     ]
 
     locked_ids, overhang_ids = _locked_and_overhang_staple_ids(design)
@@ -252,14 +296,18 @@ def _linearize_staple_precursors(design: Design) -> tuple[Design, dict]:
             preserved_strands.append(strand)
             continue
         for domain in strand.domains:
-            staple_domains.setdefault((domain.helix_id, domain.direction), []).append(domain)
+            staple_domains.setdefault((domain.helix_id, domain.direction), []).append(
+                domain
+            )
 
     rebuilt_staples: list[Strand] = []
     for (helix_id, direction), domains in sorted(
         staple_domains.items(),
         key=lambda item: (item[0][0], item[0][1].value),
     ):
-        intervals = sorted((min(d.start_bp, d.end_bp), max(d.start_bp, d.end_bp)) for d in domains)
+        intervals = sorted(
+            (min(d.start_bp, d.end_bp), max(d.start_bp, d.end_bp)) for d in domains
+        )
         merged: list[tuple[int, int]] = []
         for lo, hi in intervals:
             if not merged or lo > merged[-1][1] + 1:
@@ -335,8 +383,11 @@ def assign_staple_sequences_endpoint() -> dict:
     # removed deliberately.)
     try:
         updated, report, _entry = design_state.mutate_with_feature_log(
-            op_kind='assign-staple-sequences', label='Assign staple sequences',
-            params={}, fn=assign_staple_sequences)
+            op_kind="assign-staple-sequences",
+            label="Assign staple sequences",
+            params={},
+            fn=assign_staple_sequences,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return _design_response(updated, report)
@@ -418,7 +469,8 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
         for _ in range(12):  # safety bound; placement is monotonic so it converges fast
             locked_i, overhang_i = _locked_and_overhang_staple_ids(crossed)
             crossed, crossover_report = _place_auto_crossovers(
-                crossed, protected_strand_ids=locked_i, tip_only_strand_ids=overhang_i)
+                crossed, protected_strand_ids=locked_i, tip_only_strand_ids=overhang_i
+            )
             total_placed += crossover_report["placed"]
             if crossover_report["placed"] == 0:
                 break
@@ -445,8 +497,8 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
 
     try:
         updated, report, _entry = design_state.mutate_with_feature_log(
-            op_kind='full-autostaple',
-            label='Full autostaple',
+            op_kind="full-autostaple",
+            label="Full autostaple",
             params=params,
             fn=_run,
         )

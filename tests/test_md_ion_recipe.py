@@ -23,20 +23,21 @@ from backend.core.namd_solvate import (
 
 # A box big enough that the bulk term never dominates the neutralisation term.
 _SMALL_BOX = (10.0, 10.0, 10.0)
-_FEW_WATERS = 4_000          # ~120 nm³ of solvent → sub-unit bulk Mg at 12.5 mM
+_FEW_WATERS = 4_000  # ~120 nm³ of solvent → sub-unit bulk Mg at 12.5 mM
 
 
 def _counts(q, *, waters=_FEW_WATERS, nacl=0.0, mgcl2=12.5, mgh=True, box=_SMALL_BOX):
-    return ion_counts(waters, q, nacl_mM=nacl, mgcl2_mM=mgcl2, box_nm=box,
-                      mg_hexahydrate=mgh)
+    return ion_counts(
+        waters, q, nacl_mM=nacl, mgcl2_mM=mgcl2, box_nm=box, mg_hexahydrate=mgh
+    )
 
 
 def test_magnesium_is_the_counterion_and_there_is_no_sodium():
     ions = _counts(-500.0)
     assert ions.counterion == "mg"
     assert ions.n_na == 0
-    assert ions.n_mg == 250          # ceil(500/2)
-    assert ions.n_cl == 0            # exactly neutralising, nothing left to balance
+    assert ions.n_mg == 250  # ceil(500/2)
+    assert ions.n_cl == 0  # exactly neutralising, nothing left to balance
 
 
 def test_system_is_electrically_neutral():
@@ -48,15 +49,16 @@ def test_system_is_electrically_neutral():
 
 def test_odd_backbone_charge_leaves_exactly_one_chloride():
     ions = _counts(-501.0)
-    assert ions.n_mg == 251          # ceil(501/2)
-    assert ions.n_cl == 1            # 2*251 - 501
+    assert ions.n_mg == 251  # ceil(501/2)
+    assert ions.n_cl == 1  # 2*251 - 501
     assert ions.n_na == 0
 
 
 def test_bulk_magnesium_in_excess_is_balanced_by_chloride():
     """The tutorial's own case: they add Cl- *because* Mg exceeds the DNA charge."""
-    ions = ion_counts(2_000_000, -100.0, nacl_mM=0.0, mgcl2_mM=12.5,
-                      box_nm=(40.0, 40.0, 40.0))
+    ions = ion_counts(
+        2_000_000, -100.0, nacl_mM=0.0, mgcl2_mM=12.5, box_nm=(40.0, 40.0, 40.0)
+    )
     assert ions.n_mg_bulk > ions.n_mg_neutralising
     assert ions.n_mg == ions.n_mg_bulk
     assert ions.n_cl == 2 * ions.n_mg - 100
@@ -76,7 +78,7 @@ def test_explicit_zero_magnesium_falls_back_to_sodium():
     ions = _counts(-500.0, mgcl2=0.0, nacl=150.0)
     assert ions.counterion == "na"
     assert ions.n_mg == 0
-    assert ions.n_na == 500 + ions.n_cl - 0   # neutralising Na+ plus the NaCl bath
+    assert ions.n_na == 500 + ions.n_cl - 0  # neutralising Na+ plus the NaCl bath
     assert 2 * ions.n_mg + ions.n_na - ions.n_cl == 500
 
 
@@ -92,7 +94,7 @@ def test_requested_nacl_bath_rides_on_top_of_magnesium_neutralisation():
     ions = _counts(-500.0, nacl=150.0)
     assert ions.counterion == "mg"
     assert ions.n_mg == 250
-    assert ions.n_na == ions.n_cl > 0        # a pure NaCl bath, added in pairs
+    assert ions.n_na == ions.n_cl > 0  # a pure NaCl bath, added in pairs
     assert 2 * ions.n_mg + ions.n_na - ions.n_cl == 500
 
 
@@ -100,7 +102,7 @@ def test_bulk_terms_use_solvent_volume_by_default():
     """A rotation-sized cell is mostly empty corner; charging bulk salt for the box
     volume over-salts it."""
     waters = 1_000_000
-    box = (60.0, 20.0, 76.0)                 # 91,200 nm³ vs ~29,940 nm³ of water
+    box = (60.0, 20.0, 76.0)  # 91,200 nm³ vs ~29,940 nm³ of water
     ions = ion_counts(waters, 0.0, nacl_mM=150.0, mgcl2_mM=0.0, box_nm=box)
     expected_vol = waters / _WATER_NUMBER_DENSITY_NM3
     assert math.isclose(ions.volume_nm3, expected_vol)

@@ -27,6 +27,7 @@ The ``design`` passed in is the BARE routed bundle (no loop/skip marks) so
 :func:`core_candidates` enumerates the full dsDNA core; each strategy tracks its own skip
 positions and excludes them explicitly.
 """
+
 from __future__ import annotations
 
 from backend.core.loop_skip_calculator import (
@@ -38,7 +39,9 @@ from backend.core.regional_skip_placer import core_candidates
 STRATEGIES = ("uniform", "incremental", "deviation")
 
 
-def baseline_skips(design, *, skip_period: int = SQ_SKIP_PERIOD_DEFAULT) -> dict[str, list[int]]:
+def baseline_skips(
+    design, *, skip_period: int = SQ_SKIP_PERIOD_DEFAULT
+) -> dict[str, list[int]]:
     """The analytical period-``skip_period`` staggered pattern as ``{helix_id: [bp, ...]}``
     (the Δ=0 anchor shared by all strategies)."""
     mods = sq_lattice_periodic_skips(design, skip_period)
@@ -64,7 +67,9 @@ def _pick_even(cands: list[int], m: int, offset_frac: float) -> list[int]:
     return sorted(cands[i] for i in used)
 
 
-def place_uniform(design, base_skips: dict[str, list[int]], delta: int) -> dict[str, list[int]]:
+def place_uniform(
+    design, base_skips: dict[str, list[int]], delta: int
+) -> dict[str, list[int]]:
     """Strategy A — re-place ``len(base_skips[h]) + delta`` deletions evenly + staggered on
     every helix.  Independent of any prior simulation.  At ``delta == 0`` returns the baseline
     verbatim (the shared anchor)."""
@@ -114,7 +119,9 @@ def _remove_at_smallest_gap(cur: list[int]) -> list[int]:
     return pts[: idx + 1] + pts[idx + 2 :]
 
 
-def place_incremental(design, base_skips: dict[str, list[int]], delta: int) -> dict[str, list[int]]:
+def place_incremental(
+    design, base_skips: dict[str, list[int]], delta: int
+) -> dict[str, list[int]]:
     """Strategy B — keep the baseline marks, then per helix apply ``|delta|`` rounds of
     add-at-largest-gap (``delta > 0``) or remove-at-smallest-gap (``delta < 0``).  Cumulative
     and deterministic; baseline marks stay put so the register is minimally disturbed."""
@@ -123,14 +130,22 @@ def place_incremental(design, base_skips: dict[str, list[int]], delta: int) -> d
         cur = sorted(base_skips.get(h.id, []))
         free = core_candidates(design, h)
         for _ in range(abs(delta)):
-            cur = _add_at_largest_gap(cur, free) if delta > 0 else _remove_at_smallest_gap(cur)
+            cur = (
+                _add_at_largest_gap(cur, free)
+                if delta > 0
+                else _remove_at_smallest_gap(cur)
+            )
         if cur:
             out[h.id] = cur
     return out
 
 
-def place_deviation_step(design, prev_skips: dict[str, list[int]], delta_sign: int,
-                         deviation_by_bp: dict[tuple, float]) -> dict[str, list[int]]:
+def place_deviation_step(
+    design,
+    prev_skips: dict[str, list[int]],
+    delta_sign: int,
+    deviation_by_bp: dict[tuple, float],
+) -> dict[str, list[int]]:
     """Strategy C — ONE outward round from ``prev_skips``: add (``delta_sign > 0``) or remove
     (``delta_sign < 0``) exactly one deletion per helix, located at that helix's local
     deviation hotspot from the prior simulation's per-(helix, bp) field.  With no field
@@ -148,13 +163,19 @@ def place_deviation_step(design, prev_skips: dict[str, list[int]], delta_sign: i
             avail = [c for c in core_candidates(design, h) if c not in cur]
             if not avail:
                 continue
-            new = (min(avail, key=lambda c: abs(c - hotspot)) if hotspot is not None
-                   else avail[len(avail) // 2])
+            new = (
+                min(avail, key=lambda c: abs(c - hotspot))
+                if hotspot is not None
+                else avail[len(avail) // 2]
+            )
             out[hid] = sorted(cur + [new])
         else:
             if not cur:
                 continue
-            rem = (min(cur, key=lambda c: abs(c - hotspot)) if hotspot is not None
-                   else cur[len(cur) // 2])
+            rem = (
+                min(cur, key=lambda c: abs(c - hotspot))
+                if hotspot is not None
+                else cur[len(cur) // 2]
+            )
             out[hid] = [c for c in cur if c != rem]
     return {hid: bps for hid, bps in out.items() if bps}

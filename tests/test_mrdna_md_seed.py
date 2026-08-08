@@ -14,6 +14,7 @@ package from a COMPLETED fine-stage mrDNA job (sibling of the oxDNA
 The heavy end-to-end (real ARBD fine run → override → GROMACS EM step reduction)
 is hardware/GPU-bound and tracked as manual-validation debt, not asserted here.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,7 +26,9 @@ from backend.core.mrdna_job import MrdnaStatus, new_mrdna_job
 from backend.core.mrdna_runner import resolve_md_seed_inputs
 from tests.conftest import make_minimal_design
 
-_CG_PSF_BYTES = b"PSF\n\n       2 !NATOM\n"  # not parsed here; _psf_is_cg only greps b"DNA"
+_CG_PSF_BYTES = (
+    b"PSF\n\n       2 !NATOM\n"  # not parsed here; _psf_is_cg only greps b"DNA"
+)
 
 
 def _completed_fine_job(ws: Path, *, fine_steps: int = 1000):
@@ -107,24 +110,29 @@ def test_passes_and_returns_fine_inputs(tmp_path):
 def _client():
     from fastapi.testclient import TestClient
     from backend.api.main import app
+
     return TestClient(app)
 
 
 def test_route_unknown_job_404():
-    r = _client().post("/api/design/export/gromacs-mrdna-start",
-                       params={"mrdna_job_id": "does-not-exist"})
+    r = _client().post(
+        "/api/design/export/gromacs-mrdna-start",
+        params={"mrdna_job_id": "does-not-exist"},
+    )
     assert r.status_code == 404
 
 
 def test_route_coarse_only_409(tmp_path, monkeypatch):
     # Point the route's workspace at a temp dir holding one coarse-only job.
     import backend.api.assembly as assembly
+
     monkeypatch.setattr(assembly, "_WORKSPACE_DIR", tmp_path)
     job = _completed_fine_job(tmp_path, fine_steps=0)
     _write_snapshot(job, tmp_path)
 
-    r = _client().post("/api/design/export/gromacs-mrdna-start",
-                       params={"mrdna_job_id": job.job_id})
+    r = _client().post(
+        "/api/design/export/gromacs-mrdna-start", params={"mrdna_job_id": job.job_id}
+    )
     assert r.status_code == 409
     assert "coarse-only" in r.json()["detail"]
 
@@ -134,12 +142,14 @@ def test_route_coarse_only_409(tmp_path, monkeypatch):
 
 def test_namd_seed_precheck_rejects_unknown_job(tmp_path):
     from backend.core.mrdna_runner import assert_mrdna_namd_seed_available
+
     with pytest.raises(FileNotFoundError):
         assert_mrdna_namd_seed_available("nope", tmp_path)
 
 
 def test_namd_seed_precheck_rejects_coarse_only(tmp_path):
     from backend.core.mrdna_runner import assert_mrdna_namd_seed_available
+
     job = _completed_fine_job(tmp_path, fine_steps=0)
     _write_snapshot(job, tmp_path)
     with pytest.raises(FileNotFoundError, match="coarse-only"):
@@ -148,6 +158,7 @@ def test_namd_seed_precheck_rejects_coarse_only(tmp_path):
 
 def test_namd_seed_precheck_passes_with_fine_fixture(tmp_path):
     from backend.core.mrdna_runner import assert_mrdna_namd_seed_available
+
     job = _completed_fine_job(tmp_path)
     _write_snapshot(job, tmp_path)
     _write_fine_stage(job, tmp_path)
@@ -165,6 +176,7 @@ def _load_oh_design():
         pytest.skip("workspace/OH6hb_test.nadoc (overhang fixture) not present")
     raw = json.loads(_OH_DESIGN.read_text())
     from backend.core.models import Design
+
     return Design.model_validate(raw.get("design", raw))
 
 
@@ -201,6 +213,7 @@ def _find_completed_fine_job() -> "tuple | None":
     if not jobs_dir.exists():
         return None
     from backend.core.mrdna_job import MrdnaJob
+
     for jdir in sorted(jobs_dir.iterdir()):
         if not (jdir / "job.json").exists():
             continue
@@ -221,6 +234,7 @@ def _find_completed_fine_job() -> "tuple | None":
 def test_build_md_seed_override_on_real_job():
     pytest.importorskip("MDAnalysis")
     from backend.core.mrdna_bridge import find_mrdna
+
     if not find_mrdna():
         pytest.skip("mrdna not installed")
     inputs = _find_completed_fine_job()
@@ -229,28 +243,38 @@ def test_build_md_seed_override_on_real_job():
 
     from backend.core.mrdna_runner import build_md_seed_override
     from backend.core.mrdna_bridge import _crossover_junction_keys, _ssdna_runs
+
     design, psf, dcd = inputs
     override = build_md_seed_override(design, psf, dcd)
 
     assert override, "override should be non-empty"
     import numpy as np
     from collections import Counter
+
     vals = np.array(list(override.values()))
     assert not np.isnan(vals).any() and not np.isinf(vals).any()
     # Crossover keys are INCLUDED (the whole point vs the coarse/display override).
     xkeys = _crossover_junction_keys(design)
     if xkeys:
-        assert xkeys & set(override), "crossover nucleotides must be in the seed override"
+        assert xkeys & set(override), (
+            "crossover nucleotides must be in the seed override"
+        )
     # No two nucleotides share a position — coincident atoms are the LJ=2e37 failure
     # (this is what the ss junction re-anchor guards against; regression pin).
-    dups = [c for _, c in Counter(tuple(np.round(v, 4)) for v in override.values()).items() if c > 1]
+    dups = [
+        c
+        for _, c in Counter(tuple(np.round(v, 4)) for v in override.values()).items()
+        if c > 1
+    ]
     assert not dups, f"{len(dups)} coincident override positions (LJ=2e37 risk)"
     # ss/overhang nts are either re-seeded OR deliberately left at ideal by the
     # do-no-harm selector; the ones that ARE re-seeded must carry their run's root.
     ss_keys = {k for run in _ssdna_runs(design) for k in run["keys"] if k is not None}
     assert set(override) & ss_keys or all(
-        r["root_key"] is None for r in _ssdna_runs(design)), \
+        r["root_key"] is None for r in _ssdna_runs(design)
+    ), (
         "no ss nt re-seeded despite anchored runs (selector never chose spline/translate)"
+    )
 
 
 def _junction_gap_and_clash(design, override):
@@ -267,8 +291,11 @@ def _junction_gap_and_clash(design, override):
     root_keys = {run["root_key"] for run in runs if run["root_key"]}
 
     def _key(a):
-        return (a.helix_id, a.bp_index,
-                a.direction if isinstance(a.direction, str) else a.direction.value)
+        return (
+            a.helix_id,
+            a.bp_index,
+            a.direction if isinstance(a.direction, str) else a.direction.value,
+        )
 
     m = build_atomistic_model(design, nuc_pos_override=override)
     ss_xyz, far_xyz, root_p, adj_p = [], [], {}, []
@@ -296,7 +323,9 @@ def _junction_gap_and_clash(design, override):
             adj = run["keys"][-1] if run["root_side"] == "3p" else run["keys"][0]
             for k, p in adj_p:
                 if k == adj:
-                    gaps.append(float(np.linalg.norm(np.array(p) - np.array(root_p[rk]))))
+                    gaps.append(
+                        float(np.linalg.norm(np.array(p) - np.array(root_p[rk])))
+                    )
     return (min(gaps) if gaps else float("nan")), clash
 
 
@@ -341,6 +370,7 @@ def test_seed_reconstruction_has_bdna_twist():
     around the relaxed axis; the reconstructed duplex must rotate ~34 deg/bp again."""
     pytest.importorskip("MDAnalysis")
     from backend.core.mrdna_bridge import find_mrdna, nuc_pos_override_from_arbd_strands
+
     if not find_mrdna():
         pytest.skip("mrdna not installed")
     inputs = _find_completed_fine_job()
@@ -357,7 +387,8 @@ def test_seed_reconstruction_has_bdna_twist():
     for h_id, deg in twist.items():
         assert 28.0 <= deg <= 40.0, (
             f"helix {h_id} reconstructed with {deg:.1f} deg/bp twist "
-            f"(B-DNA ~34.3; near-zero = the untwisted-ladder regression)")
+            f"(B-DNA ~34.3; near-zero = the untwisted-ladder regression)"
+        )
 
 
 @pytest.mark.slow
@@ -371,9 +402,12 @@ def test_ssdna_seed_restores_junction_and_does_no_harm():
     pytest.importorskip("MDAnalysis")
     pytest.importorskip("scipy")
     from backend.core.mrdna_bridge import (
-        find_mrdna, _ssdna_runs,
-        nuc_pos_override_from_arbd_strands, nuc_pos_override_ssdna_from_arbd,
+        find_mrdna,
+        _ssdna_runs,
+        nuc_pos_override_from_arbd_strands,
+        nuc_pos_override_ssdna_from_arbd,
     )
+
     if not find_mrdna():
         pytest.skip("mrdna not installed")
     inputs = _find_completed_fine_job()
@@ -386,14 +420,15 @@ def test_ssdna_seed_restores_junction_and_does_no_harm():
     ds = nuc_pos_override_from_arbd_strands(design, str(psf), str(dcd))
     ss = nuc_pos_override_ssdna_from_arbd(design, str(psf), str(dcd), ds)
 
-    gap_ds, clash_ds  = _junction_gap_and_clash(design, ds)             # ss detached
+    gap_ds, clash_ds = _junction_gap_and_clash(design, ds)  # ss detached
     gap_all, clash_all = _junction_gap_and_clash(design, {**ds, **ss})  # ss handled
 
     # (a) a broken junction (gap ≫ a backbone bond) must be restored.
     if gap_ds > 1.0:
         assert gap_all < gap_ds and gap_all < 1.1, (
             f"broken ss/ds junction not restored (ds-only {gap_ds:.2f} → "
-            f"ds+ss {gap_all:.2f} nm)")
+            f"ds+ss {gap_all:.2f} nm)"
+        )
     # (b) do no harm: never push ss meaningfully closer to the body than ideal
     # (0.03 nm tolerance for the coarse ds-backbone clash proxy vs full atomistic).
     # Skip when the ds-only baseline ALREADY clashes below VDW contact: that is the
@@ -404,7 +439,8 @@ def test_ssdna_seed_restores_junction_and_does_no_harm():
     if clash_ds >= _VDW_CONTACT_NM:
         assert clash_all >= clash_ds - 0.03, (
             f"ss handling worsened the body clearance (ds-only {clash_ds:.3f} → "
-            f"ds+ss {clash_all:.3f} nm)")
+            f"ds+ss {clash_all:.3f} nm)"
+        )
 
 
 @pytest.mark.slow
@@ -413,6 +449,7 @@ def test_build_namd_seed_from_mrdna_on_real_job():
     fine-stage mrDNA job (the sibling of oxDNA's build_namd_seed)."""
     pytest.importorskip("MDAnalysis")
     from backend.core.mrdna_bridge import find_mrdna
+
     if not find_mrdna():
         pytest.skip("mrdna not installed")
     jobs_dir = _WS / "mrdna_jobs"

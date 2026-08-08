@@ -14,6 +14,7 @@ Usage:
     python tests/smoke/run.py [--keep]   # --keep preserves the tmp run dir
     make smoketest
 """
+
 from __future__ import annotations
 
 import argparse
@@ -42,9 +43,9 @@ logging.basicConfig(
 )
 log = logging.getLogger("smoketest")
 
-_SMOKE_DIR   = Path(__file__).parent
+_SMOKE_DIR = Path(__file__).parent
 _DESIGN_FILE = ROOT / "Examples" / "2hb_xover_val.nadoc"
-_REFERENCE   = _SMOKE_DIR / "reference_params.json"
+_REFERENCE = _SMOKE_DIR / "reference_params.json"
 
 # Measurement region — same as production (local 0-based indices, helix bp_start=7)
 # Crossovers at bp 14 and 34; central 20-bp measurement region local idx 8-26.
@@ -86,7 +87,7 @@ def _run_simulation(run_dir: Path, design: Design) -> None:
     r = subprocess.run(
         ["bash", "run.sh"],
         cwd=run_dir,
-        capture_output=False,   # stream to terminal so user can see progress
+        capture_output=False,  # stream to terminal so user can see progress
     )
     elapsed = time.time() - t0
     if r.returncode != 0:
@@ -98,9 +99,9 @@ def _extract(run_dir: Path) -> dict:
     """Extract parameters and return mrdna_params dict."""
     import json as _json
 
-    restraint_k = _json.loads(
-        (run_dir / "restraint_log.json").read_text()
-    )["restraint_k_kcal_per_mol_per_A2"]
+    restraint_k = _json.loads((run_dir / "restraint_log.json").read_text())[
+        "restraint_k_kcal_per_mol_per_A2"
+    ]
 
     params = extract_parameters(
         str(run_dir / "prod.tpr"),
@@ -129,10 +130,14 @@ def _update_reference(result: dict) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--keep", action="store_true",
-                        help="Keep temporary run directory on success")
-    parser.add_argument("--update-reference", action="store_true",
-                        help="Overwrite reference_params.json with current output")
+    parser.add_argument(
+        "--keep", action="store_true", help="Keep temporary run directory on success"
+    )
+    parser.add_argument(
+        "--update-reference",
+        action="store_true",
+        help="Overwrite reference_params.json with current output",
+    )
     args = parser.parse_args()
 
     log.info("=== NADOC pipeline smoke test ===")
@@ -157,14 +162,18 @@ def main() -> int:
         p = result["mrdna_params"]
         log.info(
             "  r0=%.2f Å  k_bond=%.4f  hj_angle=%.1f°  k_dihedral=%.4f",
-            p["r0_ang"], p["k_bond_kJ_mol_ang2"],
-            p["hj_equilibrium_angle_deg"], p["k_dihedral_kJ_mol_rad2"],
+            p["r0_ang"],
+            p["k_bond_kJ_mol_ang2"],
+            p["hj_equilibrium_angle_deg"],
+            p["k_dihedral_kJ_mol_rad2"],
         )
 
         # 4. Reference comparison
         if args.update_reference:
             _update_reference(result)
-            log.info("Reference updated — re-run without --update-reference to validate.")
+            log.info(
+                "Reference updated — re-run without --update-reference to validate."
+            )
             return 0
 
         if not _REFERENCE.exists():

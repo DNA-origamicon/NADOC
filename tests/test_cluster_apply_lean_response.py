@@ -54,10 +54,10 @@ def test_commit_returns_design_without_geometry(cluster_id):
         f"/api/design/cluster/{cluster_id}",
         json={
             "translation": [1.0, 0.0, 0.0],
-            "rotation":    [0.0, 0.0, 0.0, 1.0],
-            "pivot":       [0.0, 0.0, 0.0],
+            "rotation": [0.0, 0.0, 0.0, 1.0],
+            "pivot": [0.0, 0.0, 0.0],
             "commit": True,
-            "log":    True,
+            "log": True,
         },
     )
     assert r.status_code == 200, r.text
@@ -81,8 +81,8 @@ def test_live_drag_returns_design_without_geometry(cluster_id):
         f"/api/design/cluster/{cluster_id}",
         json={
             "translation": [0.5, 0.0, 0.0],
-            "rotation":    [0.0, 0.0, 0.0, 1.0],
-            "pivot":       [0.0, 0.0, 0.0],
+            "rotation": [0.0, 0.0, 0.0, 1.0],
+            "pivot": [0.0, 0.0, 0.0],
         },
     )
     assert r.status_code == 200, r.text
@@ -99,10 +99,10 @@ def test_commit_persists_cluster_transform(cluster_id):
         f"/api/design/cluster/{cluster_id}",
         json={
             "translation": [3.5, -1.0, 2.0],
-            "rotation":    [0.0, 0.0, 0.0, 1.0],
-            "pivot":       [0.0, 0.0, 0.0],
+            "rotation": [0.0, 0.0, 0.0, 1.0],
+            "pivot": [0.0, 0.0, 0.0],
             "commit": True,
-            "log":    True,
+            "log": True,
         },
     )
     assert r.status_code == 200, r.text
@@ -133,9 +133,10 @@ def test_undo_of_cluster_commit_returns_lean_diff(cluster_id):
         f"/api/design/cluster/{cluster_id}",
         json={
             "translation": [2.0, 0.0, 0.0],
-            "rotation":    [0.0, 0.0, 0.0, 1.0],
-            "pivot":       [0.0, 0.0, 0.0],
-            "commit": True, "log": True,
+            "rotation": [0.0, 0.0, 0.0, 1.0],
+            "pivot": [0.0, 0.0, 0.0],
+            "commit": True,
+            "log": True,
         },
     )
     assert r.status_code == 200, r.text
@@ -149,7 +150,7 @@ def test_undo_of_cluster_commit_returns_lean_diff(cluster_id):
         f"backend regression — undo of cluster_op must take the lean path"
     )
     assert "nucleotides" not in body
-    assert "helix_axes"  not in body
+    assert "helix_axes" not in body
     diffs = body["cluster_diffs"]
     assert len(diffs) >= 1
     d = next(x for x in diffs if x["cluster_id"] == cluster_id)
@@ -163,9 +164,10 @@ def test_redo_of_cluster_commit_returns_lean_diff(cluster_id):
         f"/api/design/cluster/{cluster_id}",
         json={
             "translation": [3.0, -1.0, 0.5],
-            "rotation":    [0.0, 0.0, 0.0, 1.0],
-            "pivot":       [0.0, 0.0, 0.0],
-            "commit": True, "log": True,
+            "rotation": [0.0, 0.0, 0.0, 1.0],
+            "pivot": [0.0, 0.0, 0.0],
+            "commit": True,
+            "log": True,
         },
     )
     assert r.status_code == 200, r.text
@@ -187,9 +189,14 @@ def test_undo_of_topology_change_returns_full_geometry(cluster_id):
     response so the renderer rebuilds correctly."""
     design = design_state.get_or_404()
     h_id = design.helices[0].id
-    r = client.post("/api/design/nick", json={
-        "helix_id": h_id, "bp_index": 7, "direction": "FORWARD",
-    })
+    r = client.post(
+        "/api/design/nick",
+        json={
+            "helix_id": h_id,
+            "bp_index": 7,
+            "direction": "FORWARD",
+        },
+    )
     assert r.status_code in (200, 201), r.text
     r = client.post("/api/design/undo")
     assert r.status_code == 200, r.text
@@ -213,10 +220,10 @@ def test_commit_appends_cluster_op_to_feature_log(cluster_id):
         f"/api/design/cluster/{cluster_id}",
         json={
             "translation": [1.0, 2.0, 3.0],
-            "rotation":    [0.0, 0.0, 0.0, 1.0],
-            "pivot":       [0.0, 0.0, 0.0],
+            "rotation": [0.0, 0.0, 0.0, 1.0],
+            "pivot": [0.0, 0.0, 0.0],
             "commit": True,
-            "log":    True,
+            "log": True,
         },
     )
     assert r.status_code == 200, r.text
@@ -236,6 +243,7 @@ def test_commit_appends_cluster_op_to_feature_log(cluster_id):
 # wall-clock as Apply / Ctrl+Z. Seeks that change topology embed full geometry
 # in the response, eliminating the legacy second round-trip via getGeometry().
 
+
 def test_seek_through_cluster_op_returns_lean_diff(cluster_id):
     """Scrubbing the slider across a cluster_op log entry must take the
     cluster-only fast path. Backend signals diff_kind='cluster_only' with
@@ -246,9 +254,10 @@ def test_seek_through_cluster_op_returns_lean_diff(cluster_id):
         f"/api/design/cluster/{cluster_id}",
         json={
             "translation": [2.0, 0.0, 0.0],
-            "rotation":    [0.0, 0.0, 0.0, 1.0],
-            "pivot":       [0.0, 0.0, 0.0],
-            "commit": True, "log": True,
+            "rotation": [0.0, 0.0, 0.0, 1.0],
+            "pivot": [0.0, 0.0, 0.0],
+            "commit": True,
+            "log": True,
         },
     )
     # Seek back to pre-F0 (no features active) — should be cluster-only diff.
@@ -260,7 +269,7 @@ def test_seek_through_cluster_op_returns_lean_diff(cluster_id):
         f"{body.get('diff_kind')!r}"
     )
     assert "nucleotides" not in body
-    assert "helix_axes"  not in body
+    assert "helix_axes" not in body
     diffs = body["cluster_diffs"]
     assert len(diffs) >= 1
     d = next(x for x in diffs if x["cluster_id"] == cluster_id)
@@ -287,13 +296,13 @@ def test_seek_no_op_takes_positions_only_path(cluster_id):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body.get("diff_kind") == "positions_only"
-    assert "nucleotides" not in body          # NOT the embedded full path
+    assert "nucleotides" not in body  # NOT the embedded full path
     assert "positions_by_helix" in body
     pbh = body["positions_by_helix"]
     # Should have at least one helix with FORWARD/REVERSE positions arrays.
     assert pbh, "expected at least one helix in positions_by_helix"
     any_helix = next(iter(pbh.values()))
-    any_dir   = next(iter(any_helix.values()))
+    any_dir = next(iter(any_helix.values()))
     assert "bp" in any_dir and "bb" in any_dir
     assert len(any_dir["bp"]) == len(any_dir["bb"])
     assert "helix_axes" in body
@@ -305,15 +314,24 @@ def test_seek_topology_change_embeds_full_geometry(cluster_id):
     don't apply because nuc inventory changed."""
     design = design_state.get_or_404()
     helix_id = design.helices[0].id
-    fwd = next((s for s in design.strands
-                if s.domains and s.domains[0].direction.value == "FORWARD"), None)
+    fwd = next(
+        (
+            s
+            for s in design.strands
+            if s.domains and s.domains[0].direction.value == "FORWARD"
+        ),
+        None,
+    )
     assert fwd is not None
     bp = (fwd.domains[0].start_bp + fwd.domains[0].end_bp) // 2
-    r = client.post("/api/design/nick", json={
-        "helix_id":  helix_id,
-        "bp_index":  bp,
-        "direction": "FORWARD",
-    })
+    r = client.post(
+        "/api/design/nick",
+        json={
+            "helix_id": helix_id,
+            "bp_index": bp,
+            "direction": "FORWARD",
+        },
+    )
     assert r.status_code in (200, 201)
 
     # Seek back to before the nick — full embedded geometry, shipped in
@@ -322,13 +340,17 @@ def test_seek_topology_change_embeds_full_geometry(cluster_id):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body.get("diff_kind") not in ("cluster_only", "positions_only")
-    assert "nucleotides_compact" in body and isinstance(body["nucleotides_compact"], dict)
-    assert any(body["nucleotides_compact"].values()), "expected at least one helix bucket"
+    assert "nucleotides_compact" in body and isinstance(
+        body["nucleotides_compact"], dict
+    )
+    assert any(body["nucleotides_compact"].values()), (
+        "expected at least one helix bucket"
+    )
     assert "helix_axes" in body
     # Sanity-check the inner shape: at least one helix has FORWARD or REVERSE
     # parallel arrays with bp / bb values.
     any_helix = next(iter(body["nucleotides_compact"].values()))
-    any_dir   = next(iter(any_helix.values()))
+    any_dir = next(iter(any_helix.values()))
     assert "bp" in any_dir and "bb" in any_dir
     assert len(any_dir["bp"]) == len(any_dir["bb"])
 
@@ -340,14 +362,16 @@ def test_seek_topology_change_embeds_full_geometry(cluster_id):
 # (B1) exists must rewrite ONLY op0's stored pose — the final pose stays B1.
 # The old endpoint refused this with a 409; the guard was removed.
 
+
 def _commit_cluster(cid, translation):
     r = client.patch(
         f"/api/design/cluster/{cid}",
         json={
             "translation": translation,
-            "rotation":    [0.0, 0.0, 0.0, 1.0],
-            "pivot":       [0.0, 0.0, 0.0],
-            "commit": True, "log": True,
+            "rotation": [0.0, 0.0, 0.0, 1.0],
+            "pivot": [0.0, 0.0, 0.0],
+            "commit": True,
+            "log": True,
         },
     )
     assert r.status_code == 200, r.text
@@ -355,15 +379,20 @@ def _commit_cluster(cid, translation):
 
 
 def test_edit_earlier_cluster_op_preserves_latest_pose(cluster_id):
-    _commit_cluster(cluster_id, [1.0, 0.0, 0.0])   # op0 = A1
-    _commit_cluster(cluster_id, [5.0, 0.0, 0.0])   # op1 = B1 (latest)
+    _commit_cluster(cluster_id, [1.0, 0.0, 0.0])  # op0 = A1
+    _commit_cluster(cluster_id, [5.0, 0.0, 0.0])  # op1 = B1 (latest)
 
     # Edit the EARLIER op (index 0) A1 -> A2. No 409.
-    r = client.post("/api/design/features/0/edit", json={"params": {
-        "translation": [9.0, 0.0, 0.0],
-        "rotation":    [0.0, 0.0, 0.0, 1.0],
-        "pivot":       [0.0, 0.0, 0.0],
-    }})
+    r = client.post(
+        "/api/design/features/0/edit",
+        json={
+            "params": {
+                "translation": [9.0, 0.0, 0.0],
+                "rotation": [0.0, 0.0, 0.0, 1.0],
+                "pivot": [0.0, 0.0, 0.0],
+            }
+        },
+    )
     assert r.status_code == 200, r.text
 
     design = design_state.get_or_404()
@@ -384,15 +413,20 @@ def test_edit_earlier_cluster_op_preserves_latest_pose(cluster_id):
 
 
 def test_edit_latest_cluster_op_still_updates_live_pose(cluster_id):
-    _commit_cluster(cluster_id, [1.0, 0.0, 0.0])   # op0
-    _commit_cluster(cluster_id, [5.0, 0.0, 0.0])   # op1 (latest)
+    _commit_cluster(cluster_id, [1.0, 0.0, 0.0])  # op0
+    _commit_cluster(cluster_id, [5.0, 0.0, 0.0])  # op1 (latest)
 
     # Editing the LATEST op updates the live pose (unchanged behavior).
-    r = client.post("/api/design/features/1/edit", json={"params": {
-        "translation": [7.0, 0.0, 0.0],
-        "rotation":    [0.0, 0.0, 0.0, 1.0],
-        "pivot":       [0.0, 0.0, 0.0],
-    }})
+    r = client.post(
+        "/api/design/features/1/edit",
+        json={
+            "params": {
+                "translation": [7.0, 0.0, 0.0],
+                "rotation": [0.0, 0.0, 0.0, 1.0],
+                "pivot": [0.0, 0.0, 0.0],
+            }
+        },
+    )
     assert r.status_code == 200, r.text
     design = design_state.get_or_404()
     ct = next(c for c in design.cluster_transforms if c.id == cluster_id)

@@ -30,15 +30,15 @@ from typing import List, Sequence, Tuple
 import numpy as np
 
 # ── Physical constants (SI base) ───────────────────────────────────────────────
-_KB = 1.380649e-23        # J/K
-_E = 1.602176634e-19      # C
+_KB = 1.380649e-23  # J/K
+_E = 1.602176634e-19  # C
 _EPS0 = 8.8541878128e-12  # F/m
-_NA = 6.02214076e23       # 1/mol
-_EPS_WATER = 78.0         # relative permittivity of water
+_NA = 6.02214076e23  # 1/mol
+_EPS_WATER = 78.0  # relative permittivity of water
 
-KBT_PN_NM_300 = _KB * 300.0 / 1e-21   # kBT at 300 K in pN·nm ≈ 4.142
-R_CUT_NM = 2.5                         # SI S7 electrostatic cutoff
-Q_EFF_20MM = 0.7                       # SI S7 effective charge at 20 mM MgCl₂ (1.5 at 100 mM)
+KBT_PN_NM_300 = _KB * 300.0 / 1e-21  # kBT at 300 K in pN·nm ≈ 4.142
+R_CUT_NM = 2.5  # SI S7 electrostatic cutoff
+Q_EFF_20MM = 0.7  # SI S7 effective charge at 20 mM MgCl₂ (1.5 at 100 mM)
 
 
 def bjerrum_length_nm(T_K: float = 300.0, eps_r: float = _EPS_WATER) -> float:
@@ -47,10 +47,11 @@ def bjerrum_length_nm(T_K: float = 300.0, eps_r: float = _EPS_WATER) -> float:
     return l_b_m * 1e9
 
 
-def debye_length_nm(ionic_strength_M: float, T_K: float = 300.0,
-                    eps_r: float = _EPS_WATER) -> float:
+def debye_length_nm(
+    ionic_strength_M: float, T_K: float = 300.0, eps_r: float = _EPS_WATER
+) -> float:
     """λ_D = sqrt(ε₀ε_r kBT / (2 N_A e² I)) in nm (SI eq 6.2).  ``ionic_strength_M`` in mol/L."""
-    I = max(ionic_strength_M, 1e-9) * 1000.0   # mol/L → mol/m³
+    I = max(ionic_strength_M, 1e-9) * 1000.0  # mol/L → mol/m³
     lam_m = math.sqrt(_EPS0 * eps_r * _KB * T_K / (2.0 * _NA * _E * _E * I))
     return lam_m * 1e9
 
@@ -63,13 +64,20 @@ def ionic_strength_mgcl2_M(mgcl2_M: float) -> float:
 @dataclass(frozen=True)
 class ESParams:
     """Resolved Debye–Hückel parameters in the solver's pN·nm units."""
-    prefactor: float   # A = q² · l_B · kBT   (pN·nm², so Π = A/r·exp(−r/λ))
-    lambda_d: float    # Debye length (nm)
-    r_cut: float       # cutoff (nm)
+
+    prefactor: float  # A = q² · l_B · kBT   (pN·nm², so Π = A/r·exp(−r/λ))
+    lambda_d: float  # Debye length (nm)
+    r_cut: float  # cutoff (nm)
 
     @classmethod
-    def for_conditions(cls, *, mgcl2_M: float = 0.02, q_eff: float = Q_EFF_20MM,
-                       T_K: float = 300.0, r_cut: float = R_CUT_NM) -> "ESParams":
+    def for_conditions(
+        cls,
+        *,
+        mgcl2_M: float = 0.02,
+        q_eff: float = Q_EFF_20MM,
+        T_K: float = 300.0,
+        r_cut: float = R_CUT_NM,
+    ) -> "ESParams":
         l_b = bjerrum_length_nm(T_K)
         kbt = _KB * T_K / 1e-21
         lam = debye_length_nm(ionic_strength_mgcl2_M(mgcl2_M), T_K)
@@ -77,6 +85,7 @@ class ESParams:
 
 
 # ── Per-pair energy / force / stiffness ────────────────────────────────────────
+
 
 def pair_energy(r: float, prm: ESParams) -> float:
     """Debye–Hückel pair energy Π(r) (pN·nm)."""
@@ -94,11 +103,14 @@ def _d2Pi_dr2(r: float, prm: ESParams) -> float:
     lam = prm.lambda_d
     e = math.exp(-r / lam)
     # Π = A r⁻¹ e^{−r/λ}; Π'' = A e^{−r/λ} (2/r³ + 2/(r²λ) + 1/(r λ²))
-    return prm.prefactor * e * (2.0 / r**3 + 2.0 / (r * r * lam) + 1.0 / (r * lam * lam))
+    return (
+        prm.prefactor * e * (2.0 / r**3 + 2.0 / (r * r * lam) + 1.0 / (r * lam * lam))
+    )
 
 
-def pair_force_stiffness(rvec: np.ndarray, prm: ESParams, *, axial_only: bool = False
-                         ) -> Tuple[np.ndarray, np.ndarray]:
+def pair_force_stiffness(
+    rvec: np.ndarray, prm: ESParams, *, axial_only: bool = False
+) -> Tuple[np.ndarray, np.ndarray]:
     """Repulsive force on node j + the 3×3 consistent stiffness block for a pair (i, j),
     where ``rvec = x_j − x_i``.
 
@@ -119,7 +131,7 @@ def pair_force_stiffness(rvec: np.ndarray, prm: ESParams, *, axial_only: bool = 
     n = rvec / r
     dpi = _dPi_dr(r, prm)
     d2pi = _d2Pi_dr2(r, prm)
-    f_j = -dpi * n                       # −dΠ/dr > 0 along +n → repulsion pushes j outward
+    f_j = -dpi * n  # −dΠ/dr > 0 along +n → repulsion pushes j outward
     nn = np.outer(n, n)
     K = d2pi * nn
     if not axial_only:
@@ -129,8 +141,10 @@ def pair_force_stiffness(rvec: np.ndarray, prm: ESParams, *, axial_only: bool = 
 
 # ── Pair generation (inter-helix, within cutoff) ───────────────────────────────
 
-def inter_helix_pairs(helix_ids: Sequence, positions: np.ndarray, r_cut: float
-                      ) -> List[Tuple[int, int]]:
+
+def inter_helix_pairs(
+    helix_ids: Sequence, positions: np.ndarray, r_cut: float
+) -> List[Tuple[int, int]]:
     """Indices (i, j) of node pairs on DIFFERENT helices within ``r_cut`` (nm).
 
     Uses a scipy cKDTree when available (O(N log N)); falls back to a plain O(N²) scan.
@@ -143,6 +157,7 @@ def inter_helix_pairs(helix_ids: Sequence, positions: np.ndarray, r_cut: float
     pairs: List[Tuple[int, int]] = []
     try:
         from scipy.spatial import cKDTree
+
         tree = cKDTree(positions)
         for i, j in tree.query_pairs(r_cut, output_type="ndarray"):
             if hid[i] != hid[j]:
@@ -160,8 +175,14 @@ def inter_helix_pairs(helix_ids: Sequence, positions: np.ndarray, r_cut: float
     return pairs
 
 
-def assemble_electrostatics(helix_ids: Sequence, positions: np.ndarray, prm: ESParams,
-                            *, scale: float = 1.0, axial_only: bool = False):
+def assemble_electrostatics(
+    helix_ids: Sequence,
+    positions: np.ndarray,
+    prm: ESParams,
+    *,
+    scale: float = 1.0,
+    axial_only: bool = False,
+):
     """Assemble the electrostatic repulsion into (triplet stiffness contributions, force).
 
     Returns ``(rows, cols, vals, f)`` where (rows, cols, vals) are COO entries to add to the
@@ -180,12 +201,14 @@ def assemble_electrostatics(helix_ids: Sequence, positions: np.ndarray, prm: ESP
     if scale == 0.0:
         return rows, cols, vals, f
     for i, j in inter_helix_pairs(helix_ids, positions, prm.r_cut):
-        f_j, K = pair_force_stiffness(positions[j] - positions[i], prm, axial_only=axial_only)
+        f_j, K = pair_force_stiffness(
+            positions[j] - positions[i], prm, axial_only=axial_only
+        )
         f_j = f_j * scale
         K = K * scale
-        di, dj = 6 * i, 6 * j          # translational DOF base (first 3 of each node)
-        f[dj:dj + 3] += f_j
-        f[di:di + 3] -= f_j
+        di, dj = 6 * i, 6 * j  # translational DOF base (first 3 of each node)
+        f[dj : dj + 3] += f_j
+        f[di : di + 3] -= f_j
         for a in range(3):
             for b in range(3):
                 v = K[a, b]

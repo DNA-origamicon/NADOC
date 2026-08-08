@@ -108,7 +108,9 @@ def _seam_endpoints(design: "Design") -> List[Tuple[Tuple[str, int], Tuple[str, 
 # ── Cross-section frame at a (helix, bp) ───────────────────────────────────────
 
 
-def _section_frame_from_arrs(arrs: dict, bp: int, helix_dir: "Direction") -> "np.ndarray | None":
+def _section_frame_from_arrs(
+    arrs: dict, bp: int, helix_dir: "Direction"
+) -> "np.ndarray | None":
     """Direction-independent helix cross-section frame (4×4 local SE3) at *bp*.
 
     ``arrs`` is the dict returned by ``deformed_nucleotide_arrays``; ``helix_dir``
@@ -164,7 +166,7 @@ def _section_frame_from_arrs(arrs: dict, bp: int, helix_dir: "Direction") -> "np
     x = _unit(r2[0] * e1 + r2[1] * e2)
     if x is None:
         return None
-    origin = fwd_bb - HELIX_RADIUS * x       # forward backbone minus its radial = axis point
+    origin = fwd_bb - HELIX_RADIUS * x  # forward backbone minus its radial = axis point
     y = np.cross(z, x)
 
     F = np.eye(4, dtype=float)
@@ -183,7 +185,7 @@ def _axis_points(F: np.ndarray, lever: float) -> List[np.ndarray]:
     parts into a spiral).  Position + tangent direction capture translation and
     genuine curvature; twist is left to the topology."""
     o = F[:3, 3]
-    return [o.copy(), o + lever * F[:3, 2]]   # origin, +z (axis tangent) tip
+    return [o.copy(), o + lever * F[:3, 2]]  # origin, +z (axis tangent) tip
 
 
 def _bp_step_screw(twist_per_bp_rad: float, rise: float) -> np.ndarray:
@@ -321,8 +323,10 @@ def solve_closing_curvature(design: "Design", count: int) -> "float | None":
     Raises :class:`PeriodicSeamError` when no periodic seam resolves.
     """
     import math as _math
-    bend_ops = [op for op in design.deformations
-                if getattr(op.params, "kind", None) == "bend"]
+
+    bend_ops = [
+        op for op in design.deformations if getattr(op.params, "kind", None) == "bend"
+    ]
     if not bend_ops:
         return 0.0
     if len(bend_ops) != 1:
@@ -371,7 +375,9 @@ def closure_residual(design: "Design", count: int) -> "Tuple[float, float]":
     return angle_deg, trans_nm
 
 
-def principal_seam_connectors(design: "Design") -> "Tuple[Tuple[list, list], Tuple[list, list]] | None":
+def principal_seam_connectors(
+    design: "Design",
+) -> "Tuple[Tuple[list, list], Tuple[list, list]] | None":
     """Local connector anchors for the FIRST resolvable periodic seam.
 
     Returns ``((p_5p, n_5p), (p_3p, n_3p))`` where each is ``(position, normal)``

@@ -28,16 +28,20 @@ from backend.api import assembly_state
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _minimal_design_dict() -> dict:
     """Return the smallest valid Design dict (no helices, no strands)."""
     from backend.core.models import Design
+
     return Design().to_dict()
 
 
 # ── PartSource discriminated union ────────────────────────────────────────────
 
+
 def test_part_source_inline_type():
     from backend.core.models import Design
+
     src = PartSourceInline(design=Design())
     assert src.type == "inline"
     d = src.model_dump()
@@ -61,10 +65,12 @@ def test_part_source_file_with_hash():
 
 def test_part_source_inline_roundtrip():
     from backend.core.models import Design
+
     src = PartSourceInline(design=Design())
     raw = src.model_dump()
     from backend.core.models import PartSource
     from pydantic import TypeAdapter
+
     ta = TypeAdapter(PartSource)
     restored = ta.validate_python(raw)
     assert restored.type == "inline"
@@ -75,6 +81,7 @@ def test_part_source_file_roundtrip():
     raw = src.model_dump()
     from backend.core.models import PartSource
     from pydantic import TypeAdapter
+
     ta = TypeAdapter(PartSource)
     restored = ta.validate_python(raw)
     assert restored.type == "file"
@@ -84,8 +91,10 @@ def test_part_source_file_roundtrip():
 
 # ── PartInstance ──────────────────────────────────────────────────────────────
 
+
 def test_part_instance_defaults():
     from backend.core.models import Design
+
     inst = PartInstance(source=PartSourceInline(design=Design()))
     assert inst.name == "Part"
     assert inst.mode == "flexible"
@@ -94,10 +103,22 @@ def test_part_instance_defaults():
     assert inst.base_transform is None
     # Default transform is identity
     assert inst.transform.values == [
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
     ]
 
 
@@ -120,16 +141,18 @@ def test_part_instance_json_roundtrip():
 
 def test_part_instance_base_transform():
     from backend.core.models import Design
-    t = Mat4x4(values=[1,0,0,5, 0,1,0,3, 0,0,1,0, 0,0,0,1])
+
+    t = Mat4x4(values=[1, 0, 0, 5, 0, 1, 0, 3, 0, 0, 1, 0, 0, 0, 0, 1])
     inst = PartInstance(
         source=PartSourceInline(design=Design()),
         base_transform=t,
     )
     assert inst.base_transform is not None
-    assert inst.base_transform.values[3] == 5.0   # tx in row-major
+    assert inst.base_transform.values[3] == 5.0  # tx in row-major
 
 
 # ── AssemblyJoint ─────────────────────────────────────────────────────────────
+
 
 def test_assembly_joint_defaults():
     joint = AssemblyJoint(instance_b_id="inst-2")
@@ -163,6 +186,7 @@ def test_assembly_joint_roundtrip():
 
 # ── PartLibrary ───────────────────────────────────────────────────────────────
 
+
 def test_part_library_entry_roundtrip():
     entry = PartLibraryEntry(
         name="Base origami",
@@ -183,6 +207,7 @@ def test_part_library_empty():
 
 
 # ── Assembly ──────────────────────────────────────────────────────────────────
+
 
 def test_assembly_defaults():
     a = Assembly()
@@ -210,6 +235,7 @@ def test_assembly_dict_roundtrip():
 
 def test_assembly_with_inline_instance():
     from backend.core.models import Design
+
     inst = PartInstance(
         name="Part A",
         source=PartSourceInline(design=Design()),
@@ -248,6 +274,7 @@ def test_assembly_with_joint():
 
 # ── AssemblyState ─────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(autouse=True)
 def _reset_assembly_state():
     """Ensure a clean AssemblyState before and after each test."""
@@ -267,6 +294,7 @@ def test_assembly_state_get_or_create():
 
 def test_assembly_state_get_or_404_raises_when_empty():
     from fastapi import HTTPException
+
     with pytest.raises(HTTPException) as exc_info:
         assembly_state.get_or_404()
     assert exc_info.value.status_code == 404
@@ -301,6 +329,7 @@ def test_assembly_state_undo_redo():
 
     # Undo from initial → 404
     from fastapi import HTTPException
+
     with pytest.raises(HTTPException):
         assembly_state.undo()
 
@@ -362,9 +391,11 @@ def test_design_state_unaffected_by_assembly():
 
 # ── Adaptive undo cap (Phase 1d: project_path_to_thousands.md) ────────────────
 
+
 def _make_assembly_with_n_instances(n: int, name: str = "v") -> Assembly:
     """Build an Assembly with ``n`` cheap PartInstances for cap tests."""
     from backend.core.models import Design
+
     src = PartSourceInline(design=Design())
     instances = [PartInstance(source=src) for _ in range(n)]
     return Assembly(
@@ -375,10 +406,10 @@ def _make_assembly_with_n_instances(n: int, name: str = "v") -> Assembly:
 
 def test_undo_cap_formula_small_assembly_keeps_baseline():
     """≤100 instances → full MAX_UNDO_STEPS history."""
-    cap_empty   = assembly_state._undo_cap_for(_make_assembly_with_n_instances(0))
-    cap_small   = assembly_state._undo_cap_for(_make_assembly_with_n_instances(100))
-    assert cap_empty   == assembly_state.MAX_UNDO_STEPS
-    assert cap_small   == assembly_state.MAX_UNDO_STEPS
+    cap_empty = assembly_state._undo_cap_for(_make_assembly_with_n_instances(0))
+    cap_small = assembly_state._undo_cap_for(_make_assembly_with_n_instances(100))
+    assert cap_empty == assembly_state.MAX_UNDO_STEPS
+    assert cap_small == assembly_state.MAX_UNDO_STEPS
 
 
 def test_undo_cap_formula_shrinks_with_size():
@@ -406,7 +437,7 @@ def test_undo_cap_enforced_for_large_assembly():
     # Push (expected_cap + 5) more mutations.
     for i in range(expected_cap + 5):
         assembly_state.set_assembly(
-            _make_assembly_with_n_instances(2000, name=f"big_v{i+1}")
+            _make_assembly_with_n_instances(2000, name=f"big_v{i + 1}")
         )
 
     # Depth must be capped, not the baseline 50.
@@ -430,12 +461,26 @@ def test_undo_cap_default_for_small_assembly_unchanged():
 
 def _shift_transform(dx: float, dy: float, dz: float) -> Mat4x4:
     """Return a Mat4x4 representing a pure translation."""
-    return Mat4x4(values=[
-        1, 0, 0, dx,
-        0, 1, 0, dy,
-        0, 0, 1, dz,
-        0, 0, 0, 1,
-    ])
+    return Mat4x4(
+        values=[
+            1,
+            0,
+            0,
+            dx,
+            0,
+            1,
+            0,
+            dy,
+            0,
+            0,
+            1,
+            dz,
+            0,
+            0,
+            0,
+            1,
+        ]
+    )
 
 
 def test_part_instance_compact_dict_round_trip_minimal():
@@ -451,9 +496,18 @@ def test_part_instance_compact_dict_round_trip_minimal():
     assert len(d["t12"]) == 12
     # Identity transform's top 3 rows in row-major order.
     assert d["t12"] == [
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
     ]
     restored = PartInstance.from_compact_dict(d)
     assert restored.id == inst.id
@@ -486,8 +540,13 @@ def test_part_instance_compact_dict_round_trip_full_override():
     assert d["t12"][11] == 0.5
     # All non-default fields present.
     for key in (
-        "name", "mode", "visible", "representation", "fixed",
-        "allow_part_joints", "joint_states",
+        "name",
+        "mode",
+        "visible",
+        "representation",
+        "fixed",
+        "allow_part_joints",
+        "joint_states",
     ):
         assert key in d, f"expected {key!r} in compact dict"
 
@@ -524,23 +583,30 @@ def test_assembly_to_json_writes_v1_and_v2_co_present():
     """``Assembly.to_json`` includes both the legacy and the v2 sections so old
     readers keep working alongside new readers (Phase 5 expand step)."""
     a = Assembly(metadata=DesignMetadata(name="Dual"))
-    a.instances.append(PartInstance(
-        id="i1",
-        source=PartSourceFile(path="arm.nadoc"),
-        transform=_shift_transform(1, 2, 3),
-    ))
-    a.instances.append(PartInstance(
-        id="i2",
-        source=PartSourceFile(path="arm.nadoc"),  # same key as i1 → dedup
-        transform=_shift_transform(4, 5, 6),
-    ))
-    a.instances.append(PartInstance(
-        id="i3",
-        source=PartSourceFile(path="leg.nadoc"),
-        transform=_shift_transform(7, 8, 9),
-    ))
+    a.instances.append(
+        PartInstance(
+            id="i1",
+            source=PartSourceFile(path="arm.nadoc"),
+            transform=_shift_transform(1, 2, 3),
+        )
+    )
+    a.instances.append(
+        PartInstance(
+            id="i2",
+            source=PartSourceFile(path="arm.nadoc"),  # same key as i1 → dedup
+            transform=_shift_transform(4, 5, 6),
+        )
+    )
+    a.instances.append(
+        PartInstance(
+            id="i3",
+            source=PartSourceFile(path="leg.nadoc"),
+            transform=_shift_transform(7, 8, 9),
+        )
+    )
     text = a.to_json()
     import json as _json
+
     payload = _json.loads(text)
     # Phase 5 contract: v1 ``instances`` field dropped on write.  Only v2
     # fields land in new saves.  v1 read path is preserved for legacy
@@ -571,21 +637,28 @@ def test_assembly_from_json_prefers_v2_when_both_present():
     must prefer v2 over any stale v1 if both are present in input data.
     """
     a = Assembly(metadata=DesignMetadata(name="V2Pref"))
-    a.instances.append(PartInstance(
-        id="i1",
-        source=PartSourceFile(path="arm.nadoc"),
-        transform=_shift_transform(11, 12, 13),
-    ))
+    a.instances.append(
+        PartInstance(
+            id="i1",
+            source=PartSourceFile(path="arm.nadoc"),
+            transform=_shift_transform(11, 12, 13),
+        )
+    )
     import json as _json
+
     payload = _json.loads(a.to_json())
     # Inject a fake v1 ``instances`` block with WRONG transform data, to
     # confirm the reader prefers v2 over v1 when both are present.
-    payload["instances"] = [{
-        "id": "i1",
-        "name": "Part",
-        "source": {"type": "file", "path": "arm.nadoc"},
-        "transform": {"values": [1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 1, -1, 0, 0, 0, 1]},
-    }]
+    payload["instances"] = [
+        {
+            "id": "i1",
+            "name": "Part",
+            "source": {"type": "file", "path": "arm.nadoc"},
+            "transform": {
+                "values": [1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 1, -1, 0, 0, 0, 1]
+            },
+        }
+    ]
     restored = Assembly.from_json(_json.dumps(payload))
     # v2 path won → transform comes from instances_v2, not the injected v1.
     assert restored.instances[0].transform.values[3] == pytest.approx(11.0)
@@ -597,12 +670,15 @@ def test_assembly_from_json_falls_back_to_v1_for_legacy_payloads():
     """A payload without ``format_version`` / ``instances_v2`` still loads via the
     legacy v1 path."""
     import json as _json
+
     a = Assembly(metadata=DesignMetadata(name="Legacy"))
-    a.instances.append(PartInstance(
-        id="legacy-i1",
-        source=PartSourceFile(path="arm.nadoc"),
-        transform=_shift_transform(2, 4, 6),
-    ))
+    a.instances.append(
+        PartInstance(
+            id="legacy-i1",
+            source=PartSourceFile(path="arm.nadoc"),
+            transform=_shift_transform(2, 4, 6),
+        )
+    )
     # Build a v1-only payload by hand: strip v2 keys.
     legacy_dict = a.model_dump()  # pure v1 — no format_version, no sources
     assert "format_version" not in legacy_dict
@@ -617,20 +693,27 @@ def test_assembly_v2_save_load_round_trips_through_disk(tmp_path):
     field through the dual-format wire shape (full round-trip)."""
     a = Assembly(metadata=DesignMetadata(name="DiskRT"))
     for i, dz in enumerate([0.0, 1.5, -2.7]):
-        a.instances.append(PartInstance(
-            id=f"i{i}",
-            name=f"Part {i}",
-            source=PartSourceFile(path="arm.nadoc"),
-            transform=_shift_transform(0, 0, dz),
-            mode="rigid" if i == 1 else "flexible",
-            visible=(i != 2),
-        ))
-    a.joints.append(AssemblyJoint(
-        id="j1", joint_type="revolute",
-        instance_a_id="i0", instance_b_id="i1",
-        axis_origin=[0, 0, 0], axis_direction=[0, 0, 1],
-        current_value=0.5,
-    ))
+        a.instances.append(
+            PartInstance(
+                id=f"i{i}",
+                name=f"Part {i}",
+                source=PartSourceFile(path="arm.nadoc"),
+                transform=_shift_transform(0, 0, dz),
+                mode="rigid" if i == 1 else "flexible",
+                visible=(i != 2),
+            )
+        )
+    a.joints.append(
+        AssemblyJoint(
+            id="j1",
+            joint_type="revolute",
+            instance_a_id="i0",
+            instance_b_id="i1",
+            axis_origin=[0, 0, 0],
+            axis_direction=[0, 0, 1],
+            current_value=0.5,
+        )
+    )
 
     path = tmp_path / "rt.nass"
     path.write_text(a.to_json(), encoding="utf-8")
@@ -649,15 +732,19 @@ def test_decode_assembly_snapshot_round_trips_v2():
     """encode_assembly_snapshot / decode_assembly_snapshot uses the dual-format
     payload (v2 round-trips losslessly)."""
     from backend.api.assembly_state import (
-        encode_assembly_snapshot, decode_assembly_snapshot,
+        encode_assembly_snapshot,
+        decode_assembly_snapshot,
     )
+
     a = Assembly(metadata=DesignMetadata(name="Snap"))
-    a.instances.append(PartInstance(
-        id="snap-i1",
-        source=PartSourceFile(path="arm.nadoc"),
-        transform=_shift_transform(0.1, 0.2, 0.3),
-        mode="rigid",
-    ))
+    a.instances.append(
+        PartInstance(
+            id="snap-i1",
+            source=PartSourceFile(path="arm.nadoc"),
+            transform=_shift_transform(0.1, 0.2, 0.3),
+            mode="rigid",
+        )
+    )
     payload, raw_len = encode_assembly_snapshot(a)
     assert payload != ""
     assert raw_len > 0

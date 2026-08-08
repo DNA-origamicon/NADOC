@@ -113,8 +113,9 @@ def test_a_grazing_segment_outside_the_polygon_edge_misses():
     ring = _pentagon()
     edge_mid = 0.5 * (ring[0] + ring[1])
     outside = edge_mid * 1.15
-    hit, _ = segment_pierces_ring([outside[0], outside[1], -0.2],
-                                  [outside[0], outside[1], 0.2], ring)
+    hit, _ = segment_pierces_ring(
+        [outside[0], outside[1], -0.2], [outside[0], outside[1], 0.2], ring
+    )
     assert not hit
 
 
@@ -192,7 +193,9 @@ def test_a_bond_sharing_an_atom_with_the_ring_is_never_a_piercing():
     Those must never be reported, however the ring is oriented."""
     model = _ring_plus_bond(1.0)
     c1 = next(a for a in model.atoms if a.name == "C1'")
-    n1 = _FakeAtom(len(model.atoms), "N1", -c1.x, -c1.y, 0.0)   # straight across the ring
+    n1 = _FakeAtom(
+        len(model.atoms), "N1", -c1.x, -c1.y, 0.0
+    )  # straight across the ring
     model.atoms.append(n1)
     model.bonds.append((c1.serial, n1.serial))
     assert model_piercings(model) == []
@@ -233,7 +236,7 @@ def test_scope_still_finds_a_real_phosphodiester():
     from backend.core.ring_piercing import _synthesise_bonds
 
     o3 = _FakeAtom(0, "O3'", 0.0, 0.0, 0.0, seq_num=1)
-    p = _FakeAtom(1, "P", 0.16, 0.0, 0.0, seq_num=2)      # canonical 1.6 A
+    p = _FakeAtom(1, "P", 0.16, 0.0, 0.0, seq_num=2)  # canonical 1.6 A
     bonds = _synthesise_bonds([o3, p], {("r1",): {"O3'": 0}, ("r2",): {"P": 1}})
     assert (0, 1) in bonds
 
@@ -343,5 +346,3 @@ def test_designs_without_inserts_skip_the_gate_entirely():
 
 
 # ── The ladder's scoped check agrees with the model-level one ─────────────────
-
-

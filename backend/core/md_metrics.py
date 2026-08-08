@@ -16,22 +16,22 @@ from pathlib import Path
 
 @dataclass
 class RunDirInfo:
-    run_dir:      Path
-    input_pdb:    Path          # input_nadoc.pdb
-    topology_gro: Path          # em.gro preferred; defines atom order for MDAnalysis
-    xtc_path:     Path          # best trajectory found
-    log_path:     Path | None   # most recent *.log for metrics
+    run_dir: Path
+    input_pdb: Path  # input_nadoc.pdb
+    topology_gro: Path  # em.gro preferred; defines atom order for MDAnalysis
+    xtc_path: Path  # best trajectory found
+    log_path: Path | None  # most recent *.log for metrics
 
 
 @dataclass
 class LogMetrics:
-    ns_per_day:    float | None = None
+    ns_per_day: float | None = None
     temperature_k: float | None = None
-    dt_ps:         float | None = None
-    nstxout_comp:  int   | None = None   # frame output stride in steps
-    n_frames:      int   | None = None   # filled by count_frames()
-    total_ns:      float | None = None   # derived: n_frames * frame_interval_ps / 1000
-    warnings:      list[str] = field(default_factory=list)
+    dt_ps: float | None = None
+    nstxout_comp: int | None = None  # frame output stride in steps
+    n_frames: int | None = None  # filled by count_frames()
+    total_ns: float | None = None  # derived: n_frames * frame_interval_ps / 1000
+    warnings: list[str] = field(default_factory=list)
 
 
 # ── Directory scanner ─────────────────────────────────────────────────────────
@@ -105,11 +105,11 @@ def scan_run_dir(run_dir: Path) -> RunDirInfo:
         log_path = all_logs[-1] if all_logs else None
 
     return RunDirInfo(
-        run_dir      = run_dir,
-        input_pdb    = input_pdb,
-        topology_gro = topology_gro,
-        xtc_path     = xtc_path,
-        log_path     = log_path,
+        run_dir=run_dir,
+        input_pdb=input_pdb,
+        topology_gro=topology_gro,
+        xtc_path=xtc_path,
+        log_path=log_path,
     )
 
 
@@ -138,7 +138,7 @@ _RE_TEMP_HEADER = re.compile(
 )
 
 # MDP settings echoed at the top of every log
-_RE_DT   = re.compile(r"^\s*dt\s*=\s*([\d.e+\-]+)", re.MULTILINE)
+_RE_DT = re.compile(r"^\s*dt\s*=\s*([\d.e+\-]+)", re.MULTILINE)
 _RE_NSTXOUT_COMP = re.compile(r"^\s*nstxout-compressed\s*=\s*(\d+)", re.MULTILINE)
 
 
@@ -204,6 +204,7 @@ def count_frames(xtc_path: Path, topology_gro: Path) -> int:
     """
     try:
         import MDAnalysis as mda
+
         u = mda.Universe(str(topology_gro), str(xtc_path))
         return len(u.trajectory)
     except ImportError:

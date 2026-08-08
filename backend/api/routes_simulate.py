@@ -57,12 +57,17 @@ async def get_recommendation(devices: str = "0") -> dict:
         from backend.api.routes_jobs import _collect_active  # noqa: PLC0415
 
         own_gpu_job = next(
-            (j for j in _collect_active()
-             if j.get("resource_class") == "gpu" and j.get("status") == "running"
-             # A remote (runpod/alpine) job runs on a pod/cluster and holds NO local GPU —
-             # it must never gate a LOCAL run. Only local jobs contend for this machine.
-             and j.get("execution_target", "local") == "local"),
-            None)
+            (
+                j
+                for j in _collect_active()
+                if j.get("resource_class") == "gpu"
+                and j.get("status") == "running"
+                # A remote (runpod/alpine) job runs on a pod/cluster and holds NO local GPU —
+                # it must never gate a LOCAL run. Only local jobs contend for this machine.
+                and j.get("execution_target", "local") == "local"
+            ),
+            None,
+        )
     except Exception:  # noqa: BLE001
         pass
 
@@ -81,7 +86,7 @@ async def get_recommendation(devices: str = "0") -> dict:
         procs = external.get("processes") or [{}]
         hog = procs[0].get("name") or "another process"
         holder_kind = "external"
-        gpu_eta = None                        # external processes can't be timed
+        gpu_eta = None  # external processes can't be timed
     else:
         hog, holder_kind, gpu_eta = None, None, None
     gpu_busy = own_gpu_job is not None or bool(external.get("busy"))
@@ -97,16 +102,28 @@ async def get_recommendation(devices: str = "0") -> dict:
     }
 
     rec = recommend_engine(
-        has_proteins=proteins, gpu_busy=gpu_busy, gpu_hog_name=hog,
-        gpu_eta_seconds=gpu_eta, n_nucleotides=n_nt, free_cores=free)
+        has_proteins=proteins,
+        gpu_busy=gpu_busy,
+        gpu_hog_name=hog,
+        gpu_eta_seconds=gpu_eta,
+        n_nucleotides=n_nt,
+        free_cores=free,
+    )
 
-    return {"recommendation": rec, "gpu": gpu, "free_cores": free,
-            "has_proteins": proteins, "n_nucleotides": n_nt, "gpu_eta_seconds": gpu_eta}
+    return {
+        "recommendation": rec,
+        "gpu": gpu,
+        "free_cores": free,
+        "has_proteins": proteins,
+        "n_nucleotides": n_nt,
+        "gpu_eta_seconds": gpu_eta,
+    }
 
 
 @router.get("/simulate/jobs")
-async def list_simulate_jobs(design_source_path: str | None = None,
-                             show_all: bool = False) -> list[dict]:
+async def list_simulate_jobs(
+    design_source_path: str | None = None, show_all: bool = False
+) -> list[dict]:
     """The UNIFIED simulation job list — every oxDNA + LAMMPS run for the active design,
     normalized into one common node shape (see :mod:`backend.core.sim_jobs`) so the
     Simulate panel renders GPU-oxDNA and CPU-LAMMPS runs in the SAME hierarchical list.
@@ -117,7 +134,10 @@ async def list_simulate_jobs(design_source_path: str | None = None,
     ``filterJobsForPart``).  Never raises — a failed engine list degrades to no nodes.
     """
     from backend.api.assembly import _WORKSPACE_DIR
-    from backend.api.routes_oxdna import _current_design_fingerprint, _job_is_out_of_date
+    from backend.api.routes_oxdna import (
+        _current_design_fingerprint,
+        _job_is_out_of_date,
+    )
     from backend.core import sim_jobs
     from backend.core.design_disk_usage import dir_size_bytes_cached
     from backend.core.lammps_job import LammpsJob
@@ -132,7 +152,7 @@ async def list_simulate_jobs(design_source_path: str | None = None,
     ws = _WORKSPACE_DIR  # noqa: F821 — imported lazily just above
     nodes: list[dict] = []
     try:
-        current_fp = _current_design_fingerprint()   # computed once for the whole list
+        current_fp = _current_design_fingerprint()  # computed once for the whole list
         for j in OxdnaJob.list_jobs(ws):
             j = reconcile_oxdna_status(j, ws)
             d = j.to_dict()
@@ -144,7 +164,9 @@ async def list_simulate_jobs(design_source_path: str | None = None,
             if d.get("status") == "running":
                 try:
                     specs = load_stage_specs(j.job_dir(ws))
-                    d["progress_fraction"] = round(job_overall_fraction(j, ws, specs), 4)
+                    d["progress_fraction"] = round(
+                        job_overall_fraction(j, ws, specs), 4
+                    )
                 except Exception:  # noqa: BLE001 — progress is advisory, never sink the list
                     pass
             nodes.append(sim_jobs.normalize_oxdna_job(d))
@@ -163,30 +185,35 @@ async def list_simulate_jobs(design_source_path: str | None = None,
     # Each is isolated in its own try so one broken engine list can't sink the others.
     try:
         from backend.api.routes_mrdna import list_mrdna_jobs
+
         for d in await list_mrdna_jobs():
             nodes.append(sim_jobs.normalize_mrdna_job(d))
     except Exception:  # noqa: BLE001
         pass
     try:
         from backend.api.routes_cando import list_cando_jobs
+
         for d in await list_cando_jobs():
             nodes.append(sim_jobs.normalize_cando_job(d))
     except Exception:  # noqa: BLE001
         pass
     try:
         from backend.api.routes_snupi import list_snupi_jobs
+
         for d in await list_snupi_jobs():
             nodes.append(sim_jobs.normalize_snupi_job(d))
     except Exception:  # noqa: BLE001
         pass
     try:
         from backend.api.routes_blade import list_blade_jobs
+
         for d in await list_blade_jobs():
             nodes.append(sim_jobs.normalize_blade_job(d))
     except Exception:  # noqa: BLE001
         pass
     try:
         from backend.api.routes_md import list_md_jobs
+
         for d in await list_md_jobs():
             nodes.append(sim_jobs.normalize_md_job(d))
     except Exception:  # noqa: BLE001

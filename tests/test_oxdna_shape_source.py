@@ -14,6 +14,7 @@ Pure Physical-layer assembly (Three-Layer Law): synthetic display frames only, n
 run.  Frame fixtures mirror ``tests/test_shape_metrics.py`` (a display map is a list of
 ``{helix_id, bp_index, direction, backbone_position}`` dicts).
 """
+
 import math
 
 import pytest
@@ -24,8 +25,12 @@ from backend.core.shape_compare import build_comparison_report
 
 
 def _pos(hid, bp, direction, xyz):
-    return {"helix_id": hid, "bp_index": bp, "direction": direction,
-            "backbone_position": list(xyz)}
+    return {
+        "helix_id": hid,
+        "bp_index": bp,
+        "direction": direction,
+        "backbone_position": list(xyz),
+    }
 
 
 def _twist_bundle(total_deg, n_helix=4, n_axial=24, radius=1.2, rise=0.34):
@@ -40,19 +45,27 @@ def _twist_bundle(total_deg, n_helix=4, n_axial=24, radius=1.2, rise=0.34):
             z = rise * i
             phi = math.radians(total_deg) * (z / zmax if zmax else 0.0)
             a = ang0 + phi
-            out.append(_pos(h, i, "forward",
-                            (radius * math.cos(a), radius * math.sin(a), z)))
+            out.append(
+                _pos(h, i, "forward", (radius * math.cos(a), radius * math.sin(a), z))
+            )
     return out
 
 
 def _core_reference(frame):
     """A core mask (list of dicts carrying (helix_id, bp_index, direction)) covering
     every column of ``frame`` — stands in for ``core_reference_geometry(design)``."""
-    return [{"helix_id": p["helix_id"], "bp_index": p["bp_index"],
-             "direction": p["direction"]} for p in frame]
+    return [
+        {
+            "helix_id": p["helix_id"],
+            "bp_index": p["bp_index"],
+            "direction": p["direction"],
+        }
+        for p in frame
+    ]
 
 
 # ── descriptors match the locked oxdna_health estimator on the core frame ─────────
+
 
 def test_descriptors_match_oxdna_health_on_core_frame():
     frame = _twist_bundle(60.0)
@@ -64,18 +77,22 @@ def test_descriptors_match_oxdna_health_on_core_frame():
     # not a second, divergent estimate.
     core = _filter_to_reference_core(frame, ref)
     assert src["descriptors"]["twist_total_deg"] == pytest.approx(
-        measure_bundle_twist(core))
+        measure_bundle_twist(core)
+    )
     assert src["descriptors"]["twist_total_deg"] == pytest.approx(60.0, abs=10.0)
 
 
 # ── the core mask drops ssDNA ends absent from the reference ──────────────────────
 
+
 def test_core_mask_drops_ssdna_ends():
     frame = _twist_bundle(60.0, n_axial=24)
     ref = _core_reference(frame)
     # Append two floppy ssDNA-end nucleotides on a NEW column absent from the reference.
-    frame = frame + [_pos(0, 999, "forward", (5.0, 5.0, 5.0)),
-                     _pos(1, 999, "forward", (5.0, 5.0, 6.0))]
+    frame = frame + [
+        _pos(0, 999, "forward", (5.0, 5.0, 5.0)),
+        _pos(1, 999, "forward", (5.0, 5.0, 6.0)),
+    ]
     src = build_oxdna_shape_source(frame, ref)
     # The two end bases are excluded from the emitted frame + descriptor count.
     assert src["descriptors"]["n_nucleotides"] == 4 * 24
@@ -84,6 +101,7 @@ def test_core_mask_drops_ssdna_ends():
 
 
 # ── production RMSF map → the card's rmsf_nm profile shape ────────────────────────
+
 
 def test_rmsf_positions_mapped_to_profile():
     frame = _twist_bundle(0.0, n_axial=6)
@@ -98,7 +116,9 @@ def test_rmsf_positions_mapped_to_profile():
     assert prof is not None
     # None-rmsf entries are dropped; the rest carry rmsf_nm.
     assert len(prof) == 2
-    by_key = {(e["helix_id"], e["bp_index"], e["direction"]): e["rmsf_nm"] for e in prof}
+    by_key = {
+        (e["helix_id"], e["bp_index"], e["direction"]): e["rmsf_nm"] for e in prof
+    }
     assert by_key[(0, 0, "forward")] == pytest.approx(0.15)
     assert by_key[(0, 1, "reverse")] == pytest.approx(0.42)
     assert all("rmsf_nm" in e for e in prof)
@@ -120,27 +140,38 @@ def test_rmsf_profile_drops_extra_base_inserts_without_crashing():
     ref = _core_reference(frame)
     rmsf_positions = [
         {"helix_id": 0, "bp_index": 0, "direction": "forward", "copy": 0, "rmsf": 0.15},
-        {"helix_id": "__xb__", "bp_index": "d8565ee9-9f77-48dc-bde6-a4e9fa24e02c",
-         "direction": 0, "copy": 0, "rmsf": 0.42},   # string bp_index → would crash int()
+        {
+            "helix_id": "__xb__",
+            "bp_index": "d8565ee9-9f77-48dc-bde6-a4e9fa24e02c",
+            "direction": 0,
+            "copy": 0,
+            "rmsf": 0.42,
+        },  # string bp_index → would crash int()
     ]
     src = build_oxdna_shape_source(frame, ref, rmsf_positions=rmsf_positions)
     prof = src["rmsf"]
     assert prof is not None
-    assert len(prof) == 1                       # the __xb__ insert is dropped
+    assert len(prof) == 1  # the __xb__ insert is dropped
     assert prof[0]["helix_id"] == 0 and prof[0]["bp_index"] == 0
 
 
 # ── field profile passes through untouched ───────────────────────────────────────
 
+
 def test_field_profile_passes_through():
     frame = _twist_bundle(0.0, n_axial=6)
     ref = _core_reference(frame)
-    field = {"passed": True, "anchored_max_drift_nm": 0.2, "free_proj_along_field_nm": 3.1}
+    field = {
+        "passed": True,
+        "anchored_max_drift_nm": 0.2,
+        "free_proj_along_field_nm": 3.1,
+    }
     src = build_oxdna_shape_source(frame, ref, field=field)
     assert src["field"] is field
 
 
 # ── the bundle becomes a live oxDNA column + the SHAPE reference in the card ──────
+
 
 def test_source_drops_into_comparison_report_as_shape_reference():
     frame = _twist_bundle(60.0)
@@ -153,11 +184,13 @@ def test_source_drops_into_comparison_report_as_shape_reference():
     # The scalar table carries oxDNA's real descriptor value (no delta — it's the ref).
     twist_row = next(r for r in report["scalars"] if r["name"] == "twist_total_deg")
     assert twist_row["cells"]["oxdna"]["value"] == pytest.approx(
-        src["descriptors"]["twist_total_deg"])
+        src["descriptors"]["twist_total_deg"]
+    )
     assert twist_row["cells"]["oxdna"]["signed_pct_delta"] is None
 
 
 # ── RED: an empty core reference leaves no comparable frame ───────────────────────
+
 
 def test_empty_core_reference_yields_no_descriptors():
     frame = _twist_bundle(60.0)

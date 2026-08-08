@@ -62,8 +62,15 @@ class _OxpyStepper:
             fmap = st.configuration(design)
     """
 
-    def __init__(self, rundir, *, input_name: str = "input", backend: str = "CPU",
-                 fallback_input: str = "input_cpu", _open_fn=None):
+    def __init__(
+        self,
+        rundir,
+        *,
+        input_name: str = "input",
+        backend: str = "CPU",
+        fallback_input: str = "input_cpu",
+        _open_fn=None,
+    ):
         self.rundir = Path(rundir)
         self.input_name = input_name
         # ``backend`` is the backend the primary ``input`` was staged with. When it
@@ -143,7 +150,7 @@ class _OxpyStepper:
 
     def set_field(self, F0: float, direction) -> None:
         if self._field is None:
-            return   # no uniform field in this run → nothing to steer
+            return  # no uniform field in this run → nothing to steer
         v = _unit(direction)
         self._field.F0 = float(F0)
         self._field.dir = [float(v[0]), float(v[1]), float(v[2])]
@@ -176,7 +183,10 @@ class _OxpyStepper:
         unit) — the per-frame minimum-image basis the display unwrap needs."""
         from backend.physics.oxdna_interface import OXDNA_LENGTH_UNIT
 
-        return np.asarray(self._mgr.config_info().box_sides, dtype=float) * OXDNA_LENGTH_UNIT
+        return (
+            np.asarray(self._mgr.config_info().box_sides, dtype=float)
+            * OXDNA_LENGTH_UNIT
+        )
 
     def snapshot_seed(self) -> Path:
         """Dump the current engine configuration to ``reconfig_seed.dat`` so a live
@@ -184,7 +194,7 @@ class _OxpyStepper:
         Returns the seed path."""
         import shutil
 
-        self._mgr.print_configuration()   # writes rundir/last_conf.dat
+        self._mgr.print_configuration()  # writes rundir/last_conf.dat
         seed = self.rundir / "reconfig_seed.dat"
         shutil.copy(self.rundir / "last_conf.dat", seed)
         return seed
@@ -199,8 +209,9 @@ class LiveOxdnaSession:
     the field-off configuration as the reference (alignment is measured against it).
     """
 
-    def __init__(self, design: Design, anchor_keys, *, stepper,
-                 field_dir, field_oxdna: float):
+    def __init__(
+        self, design: Design, anchor_keys, *, stepper, field_dir, field_oxdna: float
+    ):
         self.design = design
         self.anchor_keys = list(anchor_keys)
         self.stepper = stepper
@@ -239,5 +250,9 @@ class LiveOxdnaSession:
         projection axis (e.g. to measure deflection along a *re-aimed* field)."""
         fmap = self.stepper.configuration(self.design)
         return field_equilibrium_observables(
-            fmap, self._ref_map, field_dir or self.field_dir,
-            self.anchor_keys, design=self.design)
+            fmap,
+            self._ref_map,
+            field_dir or self.field_dir,
+            self.anchor_keys,
+            design=self.design,
+        )

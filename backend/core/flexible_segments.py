@@ -11,6 +11,7 @@ display overlay, excluded from rigid rendering and drawn on an arc instead).
 
 This replaces the earlier auto-cut "ball joint" approach.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -44,7 +45,7 @@ def unpaired_bead_keys(design: Design) -> set[tuple[str, int, Direction]]:
             for bp in _domain_bead_bps(d):
                 occupied.add((d.helix_id, bp, d.direction))
     unpaired = set()
-    for (h, bp, dr) in occupied:
+    for h, bp, dr in occupied:
         other = Direction.REVERSE if dr == Direction.FORWARD else Direction.FORWARD
         if (h, bp, other) not in occupied:
             unpaired.add((h, bp, dr))
@@ -110,7 +111,8 @@ def _owning_cluster_id(design: Design, bead_key, sd) -> str | None:
         score = -1
         if c.domain_ids:
             if sd is not None and any(
-                dr.strand_id == sd[0] and dr.domain_index == sd[1] for dr in c.domain_ids
+                dr.strand_id == sd[0] and dr.domain_index == sd[1]
+                for dr in c.domain_ids
             ):
                 score = 2
         elif helix in c.helix_ids:
@@ -160,8 +162,9 @@ def _marked_bead_keys(design: Design, bead_domain) -> set[tuple]:
 
 def _anchor(key, bead_domain) -> FlexibleAnchor:
     sd = bead_domain[key]
-    return FlexibleAnchor(strand_id=sd[0], domain_index=sd[1],
-                          bp_index=key[1], direction=key[2])
+    return FlexibleAnchor(
+        strand_id=sd[0], domain_index=sd[1], bp_index=key[1], direction=key[2]
+    )
 
 
 def _order_component(comp: list, adj: dict, start) -> list:
@@ -224,14 +227,18 @@ def derive_flexible_connections(design: Design) -> list[FlexibleConnection]:
         (ca, ba), (cb, bb) = list(rigid_nb.items())[:2]
         ordered = _order_component(comp, adj, ba)
         sig = ";".join(sorted(f"{k[0]}:{k[1]}:{k[2].value}" for k in comp))
-        conns.append(FlexibleConnection(
-            id="flx_" + hashlib.sha1(sig.encode()).hexdigest()[:12],
-            cluster_a_id=ca, cluster_b_id=cb,
-            anchor_a=_anchor(ba, bead_domain), anchor_b=_anchor(bb, bead_domain),
-            n_ss_bases=len(comp),
-            contour_length_nm=len(comp) * SSDNA_RISE_PER_BASE_NM,
-            segment_bead_keys=[_anchor(k, bead_domain) for k in ordered],
-        ))
+        conns.append(
+            FlexibleConnection(
+                id="flx_" + hashlib.sha1(sig.encode()).hexdigest()[:12],
+                cluster_a_id=ca,
+                cluster_b_id=cb,
+                anchor_a=_anchor(ba, bead_domain),
+                anchor_b=_anchor(bb, bead_domain),
+                n_ss_bases=len(comp),
+                contour_length_nm=len(comp) * SSDNA_RISE_PER_BASE_NM,
+                segment_bead_keys=[_anchor(k, bead_domain) for k in ordered],
+            )
+        )
     return conns
 
 
@@ -261,10 +268,12 @@ def _gate(cluster_id, adj, bead_domain, marked, owner, duplex_ids=frozenset()) -
             crossings += 1
             if not (u in marked or v in marked):
                 # Direct rigid bond between the two clusters — blocks free motion.
-                rigid_blocking.append({
-                    "a": _anchor(u, bead_domain).model_dump(),
-                    "b": _anchor(v, bead_domain).model_dump(),
-                })
+                rigid_blocking.append(
+                    {
+                        "a": _anchor(u, bead_domain).model_dump(),
+                        "b": _anchor(v, bead_domain).model_dump(),
+                    }
+                )
     return {
         "cluster_id": cluster_id,
         "gate": crossings > 0 and not rigid_blocking,
@@ -275,7 +284,9 @@ def _gate(cluster_id, adj, bead_domain, marked, owner, duplex_ids=frozenset()) -
 
 def _duplex_cluster_ids(design: Design) -> frozenset:
     """Cluster ids that are overhang-duplex children (movable connectors, not rigid pins)."""
-    return frozenset(c.id for c in design.cluster_transforms if c.overhang_duplex_driver_id)
+    return frozenset(
+        c.id for c in design.cluster_transforms if c.overhang_duplex_driver_id
+    )
 
 
 def cluster_flexible_gate(design: Design, cluster_id: str) -> dict:
@@ -288,7 +299,9 @@ def cluster_flexible_gate(design: Design, cluster_id: str) -> dict:
     adj, bead_domain = _build_bead_graph(design)
     marked = _marked_bead_keys(design, bead_domain)
     owner = _owner_fn(design, bead_domain)
-    return _gate(cluster_id, adj, bead_domain, marked, owner, _duplex_cluster_ids(design))
+    return _gate(
+        cluster_id, adj, bead_domain, marked, owner, _duplex_cluster_ids(design)
+    )
 
 
 def all_cluster_gates(design: Design) -> dict[str, dict]:
@@ -297,8 +310,10 @@ def all_cluster_gates(design: Design) -> dict[str, dict]:
     marked = _marked_bead_keys(design, bead_domain)
     owner = _owner_fn(design, bead_domain)
     duplex_ids = _duplex_cluster_ids(design)
-    return {c.id: _gate(c.id, adj, bead_domain, marked, owner, duplex_ids)
-            for c in design.cluster_transforms}
+    return {
+        c.id: _gate(c.id, adj, bead_domain, marked, owner, duplex_ids)
+        for c in design.cluster_transforms
+    }
 
 
 def apply_marks(design: Design) -> Design:

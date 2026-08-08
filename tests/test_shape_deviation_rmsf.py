@@ -14,6 +14,7 @@ consumes, so each is pinned to a KNOWN synthetic input:
 A display frame is a list of {helix_id, bp_index, direction, backbone_position} dicts —
 the same substrate every engine's overlay already emits (mirrors test_shape_metrics).
 """
+
 import math
 
 import numpy as np
@@ -26,8 +27,12 @@ from backend.core.shape_metrics import (
 
 
 def _pos(hid, bp, direction, xyz, **extra):
-    d = {"helix_id": hid, "bp_index": bp, "direction": direction,
-         "backbone_position": list(xyz)}
+    d = {
+        "helix_id": hid,
+        "bp_index": bp,
+        "direction": direction,
+        "backbone_position": list(xyz),
+    }
     d.update(extra)
     return d
 
@@ -46,6 +51,7 @@ def _grid_frame(n_helix=3, n_axial=20, radius=1.2, rise=0.34):
 
 # ── deviation_profile ────────────────────────────────────────────────────────────
 
+
 def test_identical_frame_has_zero_deviation():
     ref = _grid_frame()
     d = deviation_profile(ref, ref, align=True)
@@ -61,7 +67,7 @@ def test_known_displacement_recovered_exactly_unaligned():
     frame) — displace a known subset by a known vector, the rest stay put."""
     ref = _grid_frame(n_helix=3, n_axial=20)
     shift = np.array([0.0, 0.0, 0.7])
-    moved_keys = {(0, i) for i in range(5)}          # 5 nucleotides on helix 0
+    moved_keys = {(0, i) for i in range(5)}  # 5 nucleotides on helix 0
     cand = []
     for p in ref:
         xyz = np.array(p["backbone_position"], float)
@@ -71,12 +77,12 @@ def test_known_displacement_recovered_exactly_unaligned():
     d = deviation_profile(cand, ref, align=False)
     per = {(o["helix_id"], o["bp_index"]): o["deviation"] for o in d["positions"]}
     for k in moved_keys:
-        assert abs(per[k] - 0.7) < 1e-9             # exactly the shift magnitude
+        assert abs(per[k] - 0.7) < 1e-9  # exactly the shift magnitude
     n_moved = len(moved_keys)
     for (h, bp), dev in per.items():
         if (h, bp) not in moved_keys:
             assert dev < 1e-9
-    expected_rmsd = math.sqrt(n_moved * 0.7 ** 2 / len(ref))
+    expected_rmsd = math.sqrt(n_moved * 0.7**2 / len(ref))
     assert abs(d["rmsd_nm"] - expected_rmsd) < 1e-9
 
 
@@ -87,16 +93,22 @@ def test_rigid_pose_difference_is_removed_by_kabsch():
     ref = _grid_frame(n_helix=3, n_axial=20)
     P = np.array([p["backbone_position"] for p in ref], float)
     th = math.radians(37.0)
-    R = np.array([[math.cos(th), -math.sin(th), 0.0],
-                  [math.sin(th), math.cos(th), 0.0],
-                  [0.0, 0.0, 1.0]])
+    R = np.array(
+        [
+            [math.cos(th), -math.sin(th), 0.0],
+            [math.sin(th), math.cos(th), 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
     Pr = P @ R.T + np.array([5.0, -3.0, 2.0])
-    cand = [_pos(p["helix_id"], p["bp_index"], p["direction"], Pr[i])
-            for i, p in enumerate(ref)]
+    cand = [
+        _pos(p["helix_id"], p["bp_index"], p["direction"], Pr[i])
+        for i, p in enumerate(ref)
+    ]
     d_aligned = deviation_profile(cand, ref, align=True)
     d_raw = deviation_profile(cand, ref, align=False)
-    assert d_aligned["rmsd_nm"] < 1e-6              # pure pose → nothing survives Kabsch
-    assert d_raw["rmsd_nm"] > 1.0                   # the raw offset is large
+    assert d_aligned["rmsd_nm"] < 1e-6  # pure pose → nothing survives Kabsch
+    assert d_raw["rmsd_nm"] > 1.0  # the raw offset is large
 
 
 def test_deviation_goes_red_on_nonrigid_shear():
@@ -106,13 +118,15 @@ def test_deviation_goes_red_on_nonrigid_shear():
     cand = []
     for p in ref:
         x, y, z = p["backbone_position"]
-        cand.append(_pos(p["helix_id"], p["bp_index"], p["direction"],
-                         (x + 0.15 * z, y, z)))     # shear grows along the axis
+        cand.append(
+            _pos(p["helix_id"], p["bp_index"], p["direction"], (x + 0.15 * z, y, z))
+        )  # shear grows along the axis
     d = deviation_profile(cand, ref, align=True)
-    assert d["rmsd_nm"] > 0.1                        # would violate the identical-frame null
+    assert d["rmsd_nm"] > 0.1  # would violate the identical-frame null
 
 
 # ── rmsf_from_ensemble ───────────────────────────────────────────────────────────
+
 
 def test_static_ensemble_has_zero_rmsf():
     ref = _grid_frame()
@@ -142,10 +156,12 @@ def test_known_amplitude_oscillation_round_trips():
     # align=False: the ensemble is already in a common frame; Kabsch would fold the
     # per-site motion into a spurious global rotation for this tiny bundle.
     d = rmsf_from_ensemble(frames, align=False)
-    per = {(o["helix_id"], o["bp_index"], o["direction"]): o["rmsf_nm"]
-           for o in d["positions"]}
+    per = {
+        (o["helix_id"], o["bp_index"], o["direction"]): o["rmsf_nm"]
+        for o in d["positions"]
+    }
     for k, a in amps.items():
-        assert abs(per[k] - a / math.sqrt(2)) < 0.01     # A/sqrt(2) within tol
+        assert abs(per[k] - a / math.sqrt(2)) < 0.01  # A/sqrt(2) within tol
 
 
 def test_more_flexible_site_reads_larger_rmsf():
@@ -163,8 +179,10 @@ def test_more_flexible_site_reads_larger_rmsf():
             fr.append(_pos(*k, (x + amp * math.sin(phase), y, z)))
         frames.append(fr)
     d = rmsf_from_ensemble(frames, align=False)
-    per = {(o["helix_id"], o["bp_index"], o["direction"]): o["rmsf_nm"]
-           for o in d["positions"]}
+    per = {
+        (o["helix_id"], o["bp_index"], o["direction"]): o["rmsf_nm"]
+        for o in d["positions"]
+    }
     assert per[flex_key] == max(per.values())
     assert per[flex_key] > 5 * min(per.values())
 
@@ -181,7 +199,9 @@ def test_align_removes_bulk_drift_but_keeps_site_fluctuation():
     frames = []
     for f in range(F):
         phase = 2 * math.pi * f / F
-        drift = np.array([3.0 * math.sin(phase), 0.0, 2.0 * math.cos(phase)])  # bulk pose
+        drift = np.array(
+            [3.0 * math.sin(phase), 0.0, 2.0 * math.cos(phase)]
+        )  # bulk pose
         fr = []
         for p in base:
             k = (p["helix_id"], p["bp_index"], p["direction"])
@@ -191,17 +211,20 @@ def test_align_removes_bulk_drift_but_keeps_site_fluctuation():
             fr.append(_pos(*k, xyz))
         frames.append(fr)
     d = rmsf_from_ensemble(frames, align=True)
-    per = {(o["helix_id"], o["bp_index"], o["direction"]): o["rmsf_nm"]
-           for o in d["positions"]}
-    assert per[flex_key] == max(per.values())        # the fluctuating site stands out
+    per = {
+        (o["helix_id"], o["bp_index"], o["direction"]): o["rmsf_nm"]
+        for o in d["positions"]
+    }
+    assert per[flex_key] == max(per.values())  # the fluctuating site stands out
     # bulk drift (amplitude ~3.6 nm) removed → the rigid sites read near-zero, far below
     # the site's own ~A/sqrt(2); the site itself recovers within a loose Kabsch-bleed tol.
     rigid = [v for k, v in per.items() if k != flex_key]
-    assert max(rigid) < 0.15                          # pose stripped, not leaking in
+    assert max(rigid) < 0.15  # pose stripped, not leaking in
     assert abs(per[flex_key] - amp / math.sqrt(2)) < 0.12
 
 
 # ── normalize_rmsf_profile ─────────────────────────────────────────────────────────
+
 
 def test_normalize_maps_max_to_one_and_rescales_back():
     prof = [
@@ -221,4 +244,4 @@ def test_normalize_maps_max_to_one_and_rescales_back():
 def test_normalize_all_zero_is_safe():
     prof = [{"helix_id": 0, "bp_index": 0, "direction": "forward", "rmsf_nm": 0.0}]
     norm = normalize_rmsf_profile(prof)
-    assert norm["0:0:forward"] == 0.0               # no divide-by-zero blow-up
+    assert norm["0:0:forward"] == 0.0  # no divide-by-zero blow-up

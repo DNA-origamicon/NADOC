@@ -224,9 +224,7 @@ def _refuse_unsupported(design: Design, copied: set[str]) -> None:
             "extensions and linkers is not supported yet"
         )
     strand_ids = {
-        s.id
-        for s in design.strands
-        if any(dm.helix_id in copied for dm in s.domains)
+        s.id for s in design.strands if any(dm.helix_id in copied for dm in s.domains)
     }
     exts = [e.id for e in design.extensions if e.strand_id in strand_ids]
     if exts:
@@ -298,9 +296,9 @@ def _scoped_deformations(
     out: list[DeformationOp] = []
     for op in design.deformations:
         scoped_by_cluster = bool(set(op.cluster_ids) & closure_ids)
-        scoped_by_helix = bool(op.affected_helix_ids) and set(
-            op.affected_helix_ids
-        ) <= copied
+        scoped_by_helix = (
+            bool(op.affected_helix_ids) and set(op.affected_helix_ids) <= copied
+        )
         if not (scoped_by_cluster or scoped_by_helix):
             continue
         helix_ids = [h for h in op.affected_helix_ids if h in copied]

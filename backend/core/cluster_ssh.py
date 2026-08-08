@@ -26,7 +26,7 @@ from typing import Awaitable, Callable, Optional
 # One connector coroutine signature: (host, user, password, duo_method) -> conn
 Connector = Callable[[str, str, str, str], Awaitable[object]]
 
-_SFTP_CHUNK = 256 * 1024        # 256 KB — flush per chunk (Appendix)
+_SFTP_CHUNK = 256 * 1024  # 256 KB — flush per chunk (Appendix)
 _CHUNK_TIMEOUT_S = 300
 
 
@@ -48,22 +48,52 @@ class RunResult:
 # ``classify_ssh_error`` (more specific keywords are tested first).
 _ERROR_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     ("timeout", ("timed out", "timeout")),
-    ("auth", (
-        "permission denied (", "authentication failed", "auth failed",
-        "password", "duo", "2fa", "kbdint", "keyboard-interactive",
-        "no matching", "identikey", "too many authentication",
-    )),
-    ("network", (
-        "connection refused", "connection reset", "connection lost",
-        "connection closed", "broken pipe", "not connected", "unreachable",
-        "name or service not known", "could not resolve", "host key",
-        "channel", "econnrefused", "disconnected",
-    )),
+    (
+        "auth",
+        (
+            "permission denied (",
+            "authentication failed",
+            "auth failed",
+            "password",
+            "duo",
+            "2fa",
+            "kbdint",
+            "keyboard-interactive",
+            "no matching",
+            "identikey",
+            "too many authentication",
+        ),
+    ),
+    (
+        "network",
+        (
+            "connection refused",
+            "connection reset",
+            "connection lost",
+            "connection closed",
+            "broken pipe",
+            "not connected",
+            "unreachable",
+            "name or service not known",
+            "could not resolve",
+            "host key",
+            "channel",
+            "econnrefused",
+            "disconnected",
+        ),
+    ),
     ("permission", ("operation not permitted", "eacces", "not permitted")),
-    ("filesystem", (
-        "no such file", "not a directory", "disk quota", "no space",
-        "enoent", "sftp",
-    )),
+    (
+        "filesystem",
+        (
+            "no such file",
+            "not a directory",
+            "disk quota",
+            "no space",
+            "enoent",
+            "sftp",
+        ),
+    ),
 ]
 
 
@@ -129,19 +159,19 @@ async def _asyncssh_connect(host: str, user: str, password: str, duo_method: str
 
     class _DuoClient(asyncssh.SSHClient):
         def kbdint_auth_requested(self):
-            return ""   # let the server choose the kbd-interactive submethod
+            return ""  # let the server choose the kbd-interactive submethod
 
         def kbdint_challenge_received(self, name, instructions, lang, prompts):
             if not prompts:
-                return []   # info-only challenge (instructions) — no response
+                return []  # info-only challenge (instructions) — no response
             return _kbdint_answers(password, duo_method, prompts)
 
     conn = await asyncssh.connect(
         host,
         username=user,
-        password=password,             # also enables plain password_auth fallback
+        password=password,  # also enables plain password_auth fallback
         client_factory=_DuoClient,
-        known_hosts=None,              # CURC login nodes rotate host keys; TOFU-off
+        known_hosts=None,  # CURC login nodes rotate host keys; TOFU-off
     )
     return conn
 
@@ -192,7 +222,7 @@ class ClusterConnection:
                 # Drop the password reference regardless of outcome.
                 password = ""  # noqa: F841
             self.state = ConnState.CONNECTED
-            self.last_error = self.last_error_kind = ""   # clear on success
+            self.last_error = self.last_error_kind = ""  # clear on success
 
     async def disconnect(self) -> None:
         async with self._lock:
@@ -249,11 +279,15 @@ class ClusterConnection:
         try:
             result = await asyncio.wait_for(conn.run(cmd, check=False), timeout=timeout)
         except asyncio.TimeoutError as exc:
-            raise self._fail_transport(f"command timed out after {timeout}s: {cmd}") from exc
+            raise self._fail_transport(
+                f"command timed out after {timeout}s: {cmd}"
+            ) from exc
         except Exception as exc:  # noqa: BLE001 — broken pipe / channel loss
             raise self._fail_transport(f"command failed on transport: {exc}") from exc
         rc = getattr(result, "exit_status", getattr(result, "returncode", 0)) or 0
-        return RunResult(rc=int(rc), stdout=_as_str(result.stdout), stderr=_as_str(result.stderr))
+        return RunResult(
+            rc=int(rc), stdout=_as_str(result.stdout), stderr=_as_str(result.stderr)
+        )
 
     async def mkdir_p(self, remote_dir: str) -> None:
         """Recursive remote mkdir (Appendix: recursive mkdir for job dirs)."""
@@ -295,6 +329,7 @@ class ClusterConnection:
 
 # ── helpers ───────────────────────────────────────────────────────────────────────
 
+
 def _as_str(v) -> str:
     if v is None:
         return ""
@@ -321,11 +356,14 @@ async def _stream_put(sftp, local_path: str, remote_path: str) -> None:
 
 async def _stream_get(sftp, remote_path: str, local_path: str) -> None:
     import os
+
     os.makedirs(os.path.dirname(local_path) or ".", exist_ok=True)
     async with sftp.open(remote_path, "rb") as rf:
         with open(local_path, "wb") as fh:
             while True:
-                chunk = await asyncio.wait_for(rf.read(_SFTP_CHUNK), timeout=_CHUNK_TIMEOUT_S)
+                chunk = await asyncio.wait_for(
+                    rf.read(_SFTP_CHUNK), timeout=_CHUNK_TIMEOUT_S
+                )
                 if not chunk:
                     break
                 fh.write(chunk)

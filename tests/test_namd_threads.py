@@ -22,9 +22,9 @@ from backend.core import namd_runner
 @pytest.mark.parametrize(
     "cpu_count, expected",
     [
-        (12, 6),   # Ryzen 5 3600: 6 physical / 12 logical → 6
+        (12, 6),  # Ryzen 5 3600: 6 physical / 12 logical → 6
         (8, 4),
-        (1, 1),    # floor: never return 0
+        (1, 1),  # floor: never return 0
         (2, 1),
         (None, 1),  # os.cpu_count() can return None
     ],
@@ -47,7 +47,11 @@ def test_taskset_prefix_honors_explicit_env(monkeypatch):
     """An explicit core spec is passed straight through to taskset -c."""
     monkeypatch.setenv("NADOC_NAMD_CORES", "0,2,4,6,8,10")
     monkeypatch.setattr(namd_runner.shutil, "which", lambda c: "/usr/bin/taskset")
-    assert namd_runner._core_binding_prefix(6) == ["/usr/bin/taskset", "-c", "0,2,4,6,8,10"]
+    assert namd_runner._core_binding_prefix(6) == [
+        "/usr/bin/taskset",
+        "-c",
+        "0,2,4,6,8,10",
+    ]
 
 
 def test_no_prefix_when_taskset_missing_even_with_env(monkeypatch):

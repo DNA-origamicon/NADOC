@@ -37,6 +37,7 @@ rounding change.  Regenerate both with::
 
     python -m tests.test_atomistic_geometry_lock --update
 """
+
 import hashlib
 import json
 from pathlib import Path
@@ -65,14 +66,14 @@ _BRIDGE_LINK = {"P", "OP1", "OP2", "O5'"}
 # bond at any wavelength — and an unconstrained span floats with numerical noise, up to
 # 0.213 A.  One tolerance for both bands would either be too loose to catch anything on
 # the closed band or red on every cross-machine run on the open one.
-_BRIDGE_BAND_A = 3.3          # in the measured empty gap
-_BRIDGE_TOL_CLOSED_A = 0.01   # measured 0.00017 -> ~60x headroom
-_BRIDGE_TOL_OPEN_A = 0.40     # measured 0.21321 -> ~1.9x headroom
+_BRIDGE_BAND_A = 3.3  # in the measured empty gap
+_BRIDGE_TOL_CLOSED_A = 0.01  # measured 0.00017 -> ~60x headroom
+_BRIDGE_TOL_OPEN_A = 0.40  # measured 0.21321 -> ~1.9x headroom
 #
 # Mean over ALL junctions: kernel noise is unbiased and cancels, so the mean is far tighter
 # than the per-junction tail (measured 0.0044 A).  A systematic shift in where the solve
 # converges moves it; noise does not.  This is the sensitive half of channel 2.
-_BRIDGE_MEAN_TOL_A = 0.02     # measured 0.00441 -> ~4.5x headroom
+_BRIDGE_MEAN_TOL_A = 0.02  # measured 0.00441 -> ~4.5x headroom
 
 # Positions are nanometres (C1'-C2' reads 0.151, a 21 bp helix spans 7.35).
 
@@ -114,7 +115,7 @@ def _split(model) -> tuple[str, dict[str, float]]:
     ``atomistic_positions_flat`` is indexed by atom SERIAL, which is not required to equal
     list order, so every index here is a serial.
     """
-    flat = atomistic_positions_flat(model)          # 5 dp, nm — the display wire format
+    flat = atomistic_positions_flat(model)  # 5 dp, nm — the display wire format
     xyz = np.asarray(flat, float).reshape(-1, 3)
 
     residues: dict[tuple[str, int], dict[str, int]] = {}
@@ -122,7 +123,7 @@ def _split(model) -> tuple[str, dict[str, float]]:
     for atom in model.atoms:
         key = (atom.strand_id, atom.seq_num)
         residues.setdefault(key, {})[atom.name] = atom.serial
-        lead.setdefault(key, atom)                  # all atoms of a residue share helix/bp
+        lead.setdefault(key, atom)  # all atoms of a residue share helix/bp
 
     bridge: set[int] = set()
     lengths: dict[str, float] = {}
@@ -131,8 +132,11 @@ def _split(model) -> tuple[str, dict[str, float]]:
         in_res = lead.get((strand_id, seq_num + 1))
         if in_res is None:
             continue
-        if out_res.helix_id == in_res.helix_id and abs(in_res.bp_index - out_res.bp_index) == 1:
-            continue                                # ordinary intra-helix step: stamped
+        if (
+            out_res.helix_id == in_res.helix_id
+            and abs(in_res.bp_index - out_res.bp_index) == 1
+        ):
+            continue  # ordinary intra-helix step: stamped
         o3 = residues[key].get("O3'")
         if o3 is None:
             continue
@@ -146,10 +150,15 @@ def _split(model) -> tuple[str, dict[str, float]]:
                 float(np.linalg.norm(xyz[o3] - xyz[p])) * _NM_TO_A, 5
             )
 
-    stamp = [flat[3 * s + axis]
-             for s in range(len(xyz)) if s not in bridge
-             for axis in range(3)]
-    return hashlib.blake2b(json.dumps(stamp).encode(), digest_size=16).hexdigest(), lengths
+    stamp = [
+        flat[3 * s + axis]
+        for s in range(len(xyz))
+        if s not in bridge
+        for axis in range(3)
+    ]
+    return hashlib.blake2b(
+        json.dumps(stamp).encode(), digest_size=16
+    ).hexdigest(), lengths
 
 
 def _reference() -> dict:
@@ -165,8 +174,7 @@ def _assert_bridges(stem: str, lengths: dict[str, float]) -> None:
     )
     deltas = {k: abs(lengths[k] - ref[k]) for k in ref}
     for closed in (True, False):
-        band = {k: d for k, d in deltas.items()
-                if (ref[k] <= _BRIDGE_BAND_A) is closed}
+        band = {k: d for k, d in deltas.items() if (ref[k] <= _BRIDGE_BAND_A) is closed}
         if not band:
             continue
         tol = _BRIDGE_TOL_CLOSED_A if closed else _BRIDGE_TOL_OPEN_A
@@ -250,16 +258,23 @@ if __name__ == "__main__":  # python -m tests.test_atomistic_geometry_lock --upd
         designs[_stem] = dict(sorted(_lengths.items()))
         print(f"{_stem:28s} stamp={_hash}  junctions={len(_lengths)}")
     _BRIDGE_REF.parent.mkdir(parents=True, exist_ok=True)
-    _BRIDGE_REF.write_text(json.dumps({
-        "__note__": (
-            "Per-junction O3'-P phosphodiester bond lengths in ANGSTROM, keyed by the "
-            "outgoing residue (helix_id:bp_index:direction). Channel 2 of "
-            "tests/test_atomistic_geometry_lock.py — see that file's docstring for why "
-            "the bridge atoms cannot be hashed byte-exactly across machines. "
-            "Regenerate with: python -m tests.test_atomistic_geometry_lock --update"
-        ),
-        "designs": designs,
-    }, indent=1, sort_keys=False) + "\n")
+    _BRIDGE_REF.write_text(
+        json.dumps(
+            {
+                "__note__": (
+                    "Per-junction O3'-P phosphodiester bond lengths in ANGSTROM, keyed by the "
+                    "outgoing residue (helix_id:bp_index:direction). Channel 2 of "
+                    "tests/test_atomistic_geometry_lock.py — see that file's docstring for why "
+                    "the bridge atoms cannot be hashed byte-exactly across machines. "
+                    "Regenerate with: python -m tests.test_atomistic_geometry_lock --update"
+                ),
+                "designs": designs,
+            },
+            indent=1,
+            sort_keys=False,
+        )
+        + "\n"
+    )
     print(f"\nwrote {_BRIDGE_REF}")
     print("\nPaste these into _FAST_GOLDEN / _SLOW_GOLDEN:")
     for _stem, _hash in hashes.items():

@@ -43,6 +43,7 @@ def _connector_returning(conn, *, captured=None):
         if captured is not None:
             captured.update(host=host, user=user, password=password, duo=duo_method)
         return conn
+
     return _connect
 
 
@@ -55,8 +56,11 @@ def test_initial_state_disconnected():
     assert c.state == ConnState.DISCONNECTED
     assert not c.is_connected()
     assert c.status() == {
-        "state": "disconnected", "who": None, "host": None,
-        "last_error": None, "error_kind": None,
+        "state": "disconnected",
+        "who": None,
+        "host": None,
+        "last_error": None,
+        "error_kind": None,
     }
 
 
@@ -64,8 +68,15 @@ def test_connect_success_sets_state_and_identity():
     c = ClusterConnection()
     fake = _FakeConn()
     captured = {}
-    _run(c.connect("login.rc.colorado.edu", "jojo", "secret", "push",
-                   connector=_connector_returning(fake, captured=captured)))
+    _run(
+        c.connect(
+            "login.rc.colorado.edu",
+            "jojo",
+            "secret",
+            "push",
+            connector=_connector_returning(fake, captured=captured),
+        )
+    )
     assert c.is_connected()
     assert c.state == ConnState.CONNECTED
     assert c.status()["who"] == "jojo@login.rc.colorado.edu"
@@ -269,6 +280,7 @@ def test_asyncssh_connect_kwargs_are_valid():
     our connect kwargs must construct without error (no network is attempted)."""
 
     import asyncssh
+
     asyncssh.SSHClientConnectionOptions(
         username="u",
         password="pw",

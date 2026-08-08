@@ -29,6 +29,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.api import state as design_state
+
 # _design_response is the shared response helper used by 100+ crud.py routes;
 # it stays in crud.py and is imported back here. Same convention as
 # routes_camera_poses.py (13-B) / routes_animations.py.
@@ -44,19 +45,19 @@ router = APIRouter()
 
 
 class AddDeformationBody(BaseModel):
-    type: str           # 'twist' | 'bend'
+    type: str  # 'twist' | 'bend'
     plane_a_bp: int
     plane_b_bp: int
     affected_helix_ids: list[str] = []
     # When non-empty, restrict affected helices to the union of these clusters' helix_ids.
     # Empty list = unscoped (apply to all helices crossing the planes).
     cluster_ids: list[str] = []
-    params: dict        # raw dict; validated into TwistParams | BendParams below
+    params: dict  # raw dict; validated into TwistParams | BendParams below
     preview: bool = False  # when True, use silent update (no undo push)
 
 
 class UpdateDeformationBody(BaseModel):
-    params: dict        # updated params only
+    params: dict  # updated params only
 
 
 def _attach_deformation_warning(
@@ -131,7 +132,7 @@ def add_deformation(body: AddDeformationBody) -> dict:
         if design.feature_log_cursor == -2:
             log = []
         elif design.feature_log_cursor >= 0:
-            log = log[:design.feature_log_cursor + 1]
+            log = log[: design.feature_log_cursor + 1]
         log_entry = DeformationLogEntry(deformation_id=op.id, op_snapshot=op)
         updated = design.copy_with(
             deformations=new_deformations,
@@ -141,7 +142,15 @@ def add_deformation(body: AddDeformationBody) -> dict:
         design_state.set_design(updated)
     report = validate_design(updated)
     response = _design_response(updated, report)
-    _attach_deformation_warning(response, updated, body.type, helix_ids, body.plane_a_bp, body.plane_b_bp, params)
+    _attach_deformation_warning(
+        response,
+        updated,
+        body.type,
+        helix_ids,
+        body.plane_a_bp,
+        body.plane_b_bp,
+        params,
+    )
     return response
 
 
@@ -168,8 +177,13 @@ def update_deformation(op_id: str, body: UpdateDeformationBody) -> dict:
     report = validate_design(updated)
     response = _design_response(updated, report)
     _attach_deformation_warning(
-        response, updated, old_op.type, old_op.affected_helix_ids,
-        old_op.plane_a_bp, old_op.plane_b_bp, new_params,
+        response,
+        updated,
+        old_op.type,
+        old_op.affected_helix_ids,
+        old_op.plane_a_bp,
+        old_op.plane_b_bp,
+        new_params,
     )
     return response
 
@@ -232,8 +246,10 @@ def deformation_debug() -> dict:
     """
     import numpy as np
     from backend.core.deformation import (
-        _arm_helices_for, _bundle_centroid_and_tangent,
-        _cluster_for_helix, _frame_at_bp,
+        _arm_helices_for,
+        _bundle_centroid_and_tangent,
+        _cluster_for_helix,
+        _frame_at_bp,
     )
 
     design = design_state.get_or_404()
@@ -244,28 +260,32 @@ def deformation_debug() -> dict:
     # ── ops summary ──────────────────────────────────────────────────────────
     ops_out = []
     for op in design.deformations:
-        ops_out.append({
-            "id":                op.id,
-            "type":              op.type,
-            "plane_a_bp":        op.plane_a_bp,
-            "plane_b_bp":        op.plane_b_bp,
-            "cluster_ids":       list(op.cluster_ids),
-            "affected_helix_ids": list(op.affected_helix_ids),
-            "params":            op.params.model_dump(),
-        })
+        ops_out.append(
+            {
+                "id": op.id,
+                "type": op.type,
+                "plane_a_bp": op.plane_a_bp,
+                "plane_b_bp": op.plane_b_bp,
+                "cluster_ids": list(op.cluster_ids),
+                "affected_helix_ids": list(op.affected_helix_ids),
+                "params": op.params.model_dump(),
+            }
+        )
 
     # ── cluster_transforms summary ───────────────────────────────────────────
     cts_out = []
     for ct in design.cluster_transforms:
-        cts_out.append({
-            "id":          ct.id,
-            "name":        ct.name,
-            "is_default":  ct.is_default,
-            "helix_ids":   list(ct.helix_ids),
-            "translation": _v(ct.translation),
-            "rotation":    _v(ct.rotation),
-            "pivot":       _v(ct.pivot),
-        })
+        cts_out.append(
+            {
+                "id": ct.id,
+                "name": ct.name,
+                "is_default": ct.is_default,
+                "helix_ids": list(ct.helix_ids),
+                "translation": _v(ct.translation),
+                "rotation": _v(ct.rotation),
+                "pivot": _v(ct.pivot),
+            }
+        )
 
     # ── per-helix breakdown ──────────────────────────────────────────────────
     helices_out = []
@@ -281,8 +301,8 @@ def deformation_debug() -> dict:
                 arm_helices = filtered
 
         centroid_0, tangent_0 = _bundle_centroid_and_tangent(arm_helices)
-        h_start   = h.axis_start.to_array()
-        cs_raw    = h_start - centroid_0
+        h_start = h.axis_start.to_array()
+        cs_raw = h_start - centroid_0
         cs_offset = cs_raw - float(np.dot(cs_raw, tangent_0)) * tangent_0
 
         arm_min_bp_start = min((ah.bp_start for ah in arm_helices), default=0)
@@ -294,7 +314,11 @@ def deformation_debug() -> dict:
             arm_ids = {ah.id for ah in arm_helices}
             if op.affected_helix_ids and not (arm_ids & set(op.affected_helix_ids)):
                 continue
-            for bp_global in (op.plane_a_bp, (op.plane_a_bp + op.plane_b_bp) // 2, op.plane_b_bp):
+            for bp_global in (
+                op.plane_a_bp,
+                (op.plane_a_bp + op.plane_b_bp) // 2,
+                op.plane_b_bp,
+            ):
                 local = bp_global - arm_min_bp_start
                 if 0 <= local < h.length_bp:
                     sample_local_bps.append(local)
@@ -310,33 +334,37 @@ def deformation_debug() -> dict:
         for local_bp in sample_local_bps:
             spine_p, R_p, tang = _frame_at_bp(design, local_bp, arm_helices)
             axis_d = spine_p + R_p @ cs_offset
-            frames_out.append({
-                "bp_local":     local_bp,
-                "bp_global":    local_bp + arm_min_bp_start,
-                "spine":        _v(spine_p),
-                "axis_deformed": _v(axis_d),
-                "tangent":      _v(tang),
-                "R":            [_v(R_p[0]), _v(R_p[1]), _v(R_p[2])],
-            })
+            frames_out.append(
+                {
+                    "bp_local": local_bp,
+                    "bp_global": local_bp + arm_min_bp_start,
+                    "spine": _v(spine_p),
+                    "axis_deformed": _v(axis_d),
+                    "tangent": _v(tang),
+                    "R": [_v(R_p[0]), _v(R_p[1]), _v(R_p[2])],
+                }
+            )
 
-        helices_out.append({
-            "helix_id":         h.id,
-            "bp_start":         h.bp_start,
-            "length_bp":        h.length_bp,
-            "axis_start":       _v(h.axis_start.to_array()),
-            "axis_end":         _v(h.axis_end.to_array()),
-            "cluster_id":       cluster.id if cluster else None,
-            "arm_helix_ids":    [ah.id for ah in arm_helices],
-            "arm_all_ids":      [ah.id for ah in arm_all],
-            "centroid_0":       _v(centroid_0),
-            "tangent_0":        _v(tangent_0),
-            "cs_offset":        _v(cs_offset),
-            "arm_min_bp_start": arm_min_bp_start,
-            "frames":           frames_out,
-        })
+        helices_out.append(
+            {
+                "helix_id": h.id,
+                "bp_start": h.bp_start,
+                "length_bp": h.length_bp,
+                "axis_start": _v(h.axis_start.to_array()),
+                "axis_end": _v(h.axis_end.to_array()),
+                "cluster_id": cluster.id if cluster else None,
+                "arm_helix_ids": [ah.id for ah in arm_helices],
+                "arm_all_ids": [ah.id for ah in arm_all],
+                "centroid_0": _v(centroid_0),
+                "tangent_0": _v(tangent_0),
+                "cs_offset": _v(cs_offset),
+                "arm_min_bp_start": arm_min_bp_start,
+                "frames": frames_out,
+            }
+        )
 
     return {
-        "ops":               ops_out,
+        "ops": ops_out,
         "cluster_transforms": cts_out,
-        "helices":           helices_out,
+        "helices": helices_out,
     }

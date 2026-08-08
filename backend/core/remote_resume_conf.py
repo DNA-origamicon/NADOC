@@ -46,10 +46,19 @@ import sys
 
 # VENDORED from backend.core.md_protocols._RESUME_DROP (kept in lockstep by
 # tests/test_remote_resume_conf.py). Directives the resume conf must re-emit itself.
-_RESUME_DROP = frozenset([
-    "binCoordinates", "binVelocities", "extendedSystem", "temperature",
-    "reinitvels", "firsttimestep", "dcdFile", "xstFile", "run",
-])
+_RESUME_DROP = frozenset(
+    [
+        "binCoordinates",
+        "binVelocities",
+        "extendedSystem",
+        "temperature",
+        "reinitvels",
+        "firsttimestep",
+        "dcdFile",
+        "xstFile",
+        "run",
+    ]
+)
 
 # ...and these, which the resume must RE-DERIVE rather than inherit. See _output_freq.
 _RESUME_RECOMPUTE = frozenset(["outputEnergies", "dcdFreq", "xstFreq", "restartfreq"])
@@ -97,11 +106,13 @@ def build_resume_conf(conf_text, segment_name, restart_step, total_steps):
     remaining = int(total_steps) - int(restart_step)
     if remaining <= 0:
         raise ValueError(
-            "resume step %d is at/past the segment total %d" % (restart_step, total_steps)
+            "resume step %d is at/past the segment total %d"
+            % (restart_step, total_steps)
         )
     drop = _RESUME_DROP | _RESUME_RECOMPUTE
     kept = [
-        line for line in conf_text.splitlines()
+        line
+        for line in conf_text.splitlines()
         if (line.split()[0] if line.split() else "") not in drop
     ]
     freq = _output_freq(remaining)
@@ -129,7 +140,9 @@ def build_resume_conf(conf_text, segment_name, restart_step, total_steps):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="write <seg>.resume.conf from a checkpoint")
+    ap = argparse.ArgumentParser(
+        description="write <seg>.resume.conf from a checkpoint"
+    )
     ap.add_argument("--seg", required=True)
     ap.add_argument("--total-steps", required=True, type=int)
     args = ap.parse_args(argv)

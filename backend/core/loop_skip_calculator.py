@@ -87,8 +87,8 @@ if TYPE_CHECKING:
 # 240° per 7-bp array cell. Mixing the two values would shift cell twist by 0.1°
 # per cell and compound across long segments. Module-private to prevent reuse.
 _LOOP_SKIP_BP_PER_TURN: float = 10.5
-_LOOP_SKIP_TWIST_PER_BP_DEG: float = 360.0 / _LOOP_SKIP_BP_PER_TURN   # ≈ 34.286 °/bp
-CELL_BP_DEFAULT: int = 7                                    # default cell size
+_LOOP_SKIP_TWIST_PER_BP_DEG: float = 360.0 / _LOOP_SKIP_BP_PER_TURN  # ≈ 34.286 °/bp
+CELL_BP_DEFAULT: int = 7  # default cell size
 CELL_TWIST_DEG: float = CELL_BP_DEFAULT * _LOOP_SKIP_TWIST_PER_BP_DEG  # ≈ 240°
 
 # Per-cell modification limits (from Dietz et al. — 6≤T≤15 bp/turn constraint)
@@ -124,9 +124,10 @@ _BP_PER_TURN_EPS: float = 1e-9
 class DeformationFeasibility(str, Enum):
     """Verdict for a requested bend/twist's local loop/skip density."""
 
-    OK = "ok"        # inside the 9–12 bp/turn high-yield window
-    WARN = "warn"    # outside 9–12 but inside 6–15 → low folding yield expected
+    OK = "ok"  # inside the 9–12 bp/turn high-yield window
+    WARN = "warn"  # outside 9–12 but inside 6–15 → low folding yield expected
     BLOCK = "block"  # outside 6–15 bp/turn → physically unachievable
+
 
 # ── Geometry helpers ──────────────────────────────────────────────────────────
 
@@ -448,7 +449,9 @@ def classify_deformation(
     }
 
     if n_cells == 0 or not segment_helices:
-        result["message"] = "Segment too short for any 7-bp array cell — no marks placed."
+        result["message"] = (
+            "Segment too short for any 7-bp array cell — no marks placed."
+        )
         return result
 
     if op_type == "twist":
@@ -488,11 +491,11 @@ def classify_deformation(
         return result
 
     # ── bend ──
-    radius_nm = _bend_params_to_radius_nm(
-        getattr(params, "curvature_deg_per_bp", 0.0)
-    )
+    radius_nm = _bend_params_to_radius_nm(getattr(params, "curvature_deg_per_bp", 0.0))
     direction_deg = getattr(params, "direction_deg", 0.0)
-    min_radius = min_bend_radius_nm(segment_helices, plane_a_bp, plane_b_bp, direction_deg)
+    min_radius = min_bend_radius_nm(
+        segment_helices, plane_a_bp, plane_b_bp, direction_deg
+    )
     result["requested_radius_nm"] = None if math.isinf(radius_nm) else radius_nm
     result["min_bend_radius_nm"] = None if math.isinf(min_radius) else min_radius
 
@@ -681,12 +684,15 @@ def _bend_per_cell_deltas(
         h_cells_map: dict[str, list[tuple[int, int]]] | None = {
             h.id: _cells_from_active_intervals(
                 _active_intervals_for_helices(design, {h.id}),
-                plane_a_bp, plane_b_bp,
+                plane_a_bp,
+                plane_b_bp,
             )
             for h in segment_helices
         }
         active_for_centroid = [h for h in segment_helices if h_cells_map[h.id]]
-        centroid_helices = active_for_centroid if active_for_centroid else segment_helices
+        centroid_helices = (
+            active_for_centroid if active_for_centroid else segment_helices
+        )
     else:
         h_cells_map = None
         centroid_helices = segment_helices
@@ -821,7 +827,7 @@ def predict_global_twist_deg(
     net_per_helix: list[float] = []
     for ls_list in modifications.values():
         net = sum(ls.delta for ls in ls_list)
-        net_per_helix.append(float(-net))   # delta=-1 → del → +twist
+        net_per_helix.append(float(-net))  # delta=-1 → del → +twist
     avg_net = float(np.mean(net_per_helix))
     return avg_net * _LOOP_SKIP_TWIST_PER_BP_DEG
 
@@ -868,7 +874,7 @@ def predict_radius_nm(
     for h in segment_helices:
         cs_offset = _helix_cross_section_offset(h, centroid, tangent)
         r_i = float(np.dot(cs_offset, bend_hat))
-        denominator += r_i ** 2
+        denominator += r_i**2
 
         ls_list = modifications.get(h.id, [])
         delta_bp = sum(ls.delta for ls in ls_list)
@@ -924,7 +930,8 @@ and validates/adjusts it against the simulated mean structure."""
 
 
 def sq_lattice_periodic_skips(
-    design: "Design", skip_period: int = SQ_SKIP_PERIOD_DEFAULT,
+    design: "Design",
+    skip_period: int = SQ_SKIP_PERIOD_DEFAULT,
 ) -> dict[str, list[LoopSkip]]:
     """Return one skip per ``skip_period`` bp on every helix of a square-lattice design.
 
@@ -996,8 +1003,7 @@ def clear_loop_skips(
             new_helices.append(h)
             continue
         kept = [
-            ls for ls in h.loop_skips
-            if not (plane_a_bp <= ls.bp_index < plane_b_bp)
+            ls for ls in h.loop_skips if not (plane_a_bp <= ls.bp_index < plane_b_bp)
         ]
         new_helices.append(h.model_copy(update={"loop_skips": kept}))
 
@@ -1017,8 +1023,9 @@ FORBIDDEN_END_MARGIN = 6
 """bp kept clear of each helix's duplex ends for AUTO loop/skip placement."""
 
 
-def forbidden_loop_skip_bps(design: "Design", *, end_margin: int = FORBIDDEN_END_MARGIN
-                            ) -> dict[str, set[int]]:
+def forbidden_loop_skip_bps(
+    design: "Design", *, end_margin: int = FORBIDDEN_END_MARGIN
+) -> dict[str, set[int]]:
     """Per-helix bp indices where an AUTO-placed loop/skip must NOT land — crossover bps + strand
     domain endpoints (nicks / 5′-3′ termini / u-turns) + a duplex-end margin.  A deletion on a
     crossover removes the base the strand-jump depends on and a mark on a terminus is non-physical;
@@ -1032,7 +1039,8 @@ def forbidden_loop_skip_bps(design: "Design", *, end_margin: int = FORBIDDEN_END
     forb: dict[str, set[int]] = {h.id: set() for h in design.helices}
     try:
         xos, _ = extract_crossovers_from_strands(
-            design.strands, design.helices, design.lattice_type)
+            design.strands, design.helices, design.lattice_type
+        )
     except Exception:  # noqa: BLE001 — fall back to any recorded crossovers
         xos = list(getattr(design, "crossovers", []) or [])
     for xo in xos:
@@ -1048,8 +1056,9 @@ def forbidden_loop_skip_bps(design: "Design", *, end_margin: int = FORBIDDEN_END
                 continue
             forb[dm.helix_id].add(dm.start_bp)
             forb[dm.helix_id].add(dm.end_bp)
-            cov[dm.helix_id].update(range(min(dm.start_bp, dm.end_bp),
-                                          max(dm.start_bp, dm.end_bp) + 1))
+            cov[dm.helix_id].update(
+                range(min(dm.start_bp, dm.end_bp), max(dm.start_bp, dm.end_bp) + 1)
+            )
     for hid, bps in cov.items():
         if not bps:
             continue
@@ -1061,9 +1070,12 @@ def forbidden_loop_skip_bps(design: "Design", *, end_margin: int = FORBIDDEN_END
     return forb
 
 
-def relocate_marks_off_forbidden(mods: dict[str, list[LoopSkip]], design: "Design", *,
-                                 end_margin: int = FORBIDDEN_END_MARGIN
-                                 ) -> dict[str, list[LoopSkip]]:
+def relocate_marks_off_forbidden(
+    mods: dict[str, list[LoopSkip]],
+    design: "Design",
+    *,
+    end_margin: int = FORBIDDEN_END_MARGIN,
+) -> dict[str, list[LoopSkip]]:
     """Move every AUTO loop/skip in ``mods`` that lands on a forbidden bp (crossover / strand end /
     margin) to the nearest FREE INTERIOR bp on the SAME helix, preserving its delta — so each
     helix's net insertion/deletion COUNT (which sets the programmed twist/bend magnitude) is
@@ -1085,7 +1097,7 @@ def relocate_marks_off_forbidden(mods: dict[str, list[LoopSkip]], design: "Desig
         is_core = lambda bp: any(lo <= bp < hi for lo, hi in ivls)  # noqa: E731
         marks: dict[int, int] = {}
         for ls in ls_list:
-            marks[ls.bp_index] = ls.delta                # collapse duplicates (last wins)
+            marks[ls.bp_index] = ls.delta  # collapse duplicates (last wins)
         occupied = set(marks)
         placed: dict[int, int] = {}
         for bp, delta in marks.items():
@@ -1103,11 +1115,13 @@ def relocate_marks_off_forbidden(mods: dict[str, list[LoopSkip]], design: "Desig
                 if target is not None:
                     break
             if target is None:
-                continue                                 # no safe interior slot → drop the mark
+                continue  # no safe interior slot → drop the mark
             occupied.add(target)
             placed[target] = delta
         if placed:
-            out[hid] = [LoopSkip(bp_index=bp, delta=dl) for bp, dl in sorted(placed.items())]
+            out[hid] = [
+                LoopSkip(bp_index=bp, delta=dl) for bp, dl in sorted(placed.items())
+            ]
     return out
 
 
@@ -1147,7 +1161,8 @@ def clear_orphaned_loop_skips(design: "Design") -> "Design":
             continue
         kept = [ls for ls in h.loop_skips if _is_covered(h.id, ls.bp_index)]
         new_helices.append(
-            h if len(kept) == len(h.loop_skips)
+            h
+            if len(kept) == len(h.loop_skips)
             else h.model_copy(update={"loop_skips": kept})
         )
     return design.copy_with(helices=new_helices)

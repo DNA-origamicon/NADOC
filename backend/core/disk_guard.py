@@ -30,7 +30,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # ── Thresholds ─────────────────────────────────────────────────────────────────
-GiB = 1024 ** 3
+GiB = 1024**3
 
 #: Warn (Continue/Cancel popup) when a run's forecast would leave less than this
 #: much free disk.
@@ -152,6 +152,7 @@ def _steps_and_freq(seg) -> tuple[int, int]:
 
 # ── Forecast (before a run) ──────────────────────────────────────────────────────
 
+
 def forecast(target_dir: Path, predicted_bytes: int) -> dict:
     """Compare a run's predicted output against free space on its target volume.
 
@@ -178,8 +179,11 @@ def forecast(target_dir: Path, predicted_bytes: int) -> dict:
         "volume": str(volume_root(target_dir)),
         # When the run won't comfortably fit, point the user at a roomier volume so the UI
         # can offer "archive & run there" instead of just Continue/Cancel.
-        "suggested_archive": (suggest_archive_dir(target_dir, predicted)
-                              if after < WARN_MIN_FREE_BYTES else None),
+        "suggested_archive": (
+            suggest_archive_dir(target_dir, predicted)
+            if after < WARN_MIN_FREE_BYTES
+            else None
+        ),
     }
 
 
@@ -209,10 +213,10 @@ def _candidate_volumes() -> list[Path]:
         b = Path(base)
         if not _is_dir_safe(b):
             continue
-        for lvl1 in _safe_iterdir(b):        # /media/<user>  or  /mnt/<drive>
+        for lvl1 in _safe_iterdir(b):  # /media/<user>  or  /mnt/<drive>
             if _is_dir_safe(lvl1):
                 out.append(lvl1)
-                for lvl2 in _safe_iterdir(lvl1):   # /media/<user>/<drive>
+                for lvl2 in _safe_iterdir(lvl1):  # /media/<user>/<drive>
                     if _is_dir_safe(lvl2):
                         out.append(lvl2)
     out.append(Path.home())
@@ -238,7 +242,7 @@ def suggest_archive_dir(target_dir: Path, predicted_bytes: int) -> "dict | None"
             if not r.is_dir() or not os.access(r, os.W_OK):
                 continue
             if target_dev is not None and os.stat(r).st_dev == target_dev:
-                continue                     # same disk → no help
+                continue  # same disk → no help
             fb = shutil.disk_usage(r).free
             if fb >= need and (best is None or fb > best["free_bytes"]):
                 best = {"path": str(r), "free_bytes": fb}
@@ -248,6 +252,7 @@ def suggest_archive_dir(target_dir: Path, predicted_bytes: int) -> "dict | None"
 
 
 # ── Guard (during a run) ─────────────────────────────────────────────────────────
+
 
 async def _guard_interval(guard_dir: Path, min_free_bytes: int, on_tick) -> bool:
     """One between-polls pass, shared by the spawned and adopted wait loops.

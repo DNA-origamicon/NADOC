@@ -33,7 +33,11 @@ def _bundle():
 
 
 def test_is_reference_defaults_false_and_round_trips():
-    s = Strand(domains=[Domain(helix_id="h", start_bp=0, end_bp=9, direction=Direction.FORWARD)])
+    s = Strand(
+        domains=[
+            Domain(helix_id="h", start_bp=0, end_bp=9, direction=Direction.FORWARD)
+        ]
+    )
     assert s.is_reference is False
 
     d = _bundle()
@@ -69,16 +73,23 @@ def test_assign_staple_sequences_preserves_reference_strand():
     staple = next(s for s in d.strands if s.strand_type == StrandType.STAPLE)
     # Give the reference staple a deliberately wrong, frozen sequence.
     frozen_seq = "A" * sum(abs(dm.end_bp - dm.start_bp) + 1 for dm in staple.domains)
-    d = d.copy_with(strands=[
-        s.model_copy(update={"is_reference": True, "sequence": frozen_seq}) if s.id == staple.id else s
-        for s in d.strands
-    ])
+    d = d.copy_with(
+        strands=[
+            s.model_copy(update={"is_reference": True, "sequence": frozen_seq})
+            if s.id == staple.id
+            else s
+            for s in d.strands
+        ]
+    )
     out = assign_staple_sequences(d)
     ref_out = next(s for s in out.strands if s.id == staple.id)
-    assert ref_out.sequence == frozen_seq   # untouched
+    assert ref_out.sequence == frozen_seq  # untouched
     # A different (active) staple did get a Watson-Crick complement.
-    other = next(s for s in out.strands
-                 if s.strand_type == StrandType.STAPLE and not s.is_reference and s.sequence)
+    other = next(
+        s
+        for s in out.strands
+        if s.strand_type == StrandType.STAPLE and not s.is_reference and s.sequence
+    )
     assert set(other.sequence) <= set("ATGCN")
 
 
@@ -88,10 +99,12 @@ def test_assign_staple_sequences_preserves_reference_strand():
 def test_validator_excludes_reference_scaffold_from_count():
     d = _bundle()
     # Mark the only scaffold reference → validator reports "no scaffold".
-    d = d.copy_with(strands=[
-        s.model_copy(update={"is_reference": True}) if s.is_scaffold else s
-        for s in d.strands
-    ])
+    d = d.copy_with(
+        strands=[
+            s.model_copy(update={"is_reference": True}) if s.is_scaffold else s
+            for s in d.strands
+        ]
+    )
     report = validate_design(d)
     msgs = [r.message for r in report.results]
     assert any("No scaffold strand defined." == m for m in msgs)
@@ -101,10 +114,14 @@ def test_validator_skips_reference_sequence_length_check():
     d = _bundle()
     staple = next(s for s in d.strands if s.strand_type == StrandType.STAPLE)
     # A wrong-length sequence on a reference staple must NOT produce a failure.
-    d = d.copy_with(strands=[
-        s.model_copy(update={"is_reference": True, "sequence": "ACGT"}) if s.id == staple.id else s
-        for s in d.strands
-    ])
+    d = d.copy_with(
+        strands=[
+            s.model_copy(update={"is_reference": True, "sequence": "ACGT"})
+            if s.id == staple.id
+            else s
+            for s in d.strands
+        ]
+    )
     report = validate_design(d)
     assert not any(staple.id in r.message and not r.passed for r in report.results)
 
@@ -116,38 +133,52 @@ def test_reference_nucleotides_frozen_under_bend():
     d = _bundle()
     staple = next(s for s in d.strands if s.strand_type == StrandType.STAPLE)
     helix_id = staple.domains[0].helix_id
-    d = d.copy_with(strands=[
-        s.model_copy(update={"is_reference": True}) if s.id == staple.id else s
-        for s in d.strands
-    ])
+    d = d.copy_with(
+        strands=[
+            s.model_copy(update={"is_reference": True}) if s.id == staple.id else s
+            for s in d.strands
+        ]
+    )
     design_state.set_design(d)
     # Wide bend so the staple's nucleotides fall in the bent region.
-    r = client.post("/api/design/deformation", json={
-        "type": "bend", "plane_a_bp": 10, "plane_b_bp": 410,
-        "params": {"curvature_deg_per_bp": 45.0 / 400, "direction_deg": 0.0},
-        "cluster_ids": [],
-    })
+    r = client.post(
+        "/api/design/deformation",
+        json={
+            "type": "bend",
+            "plane_a_bp": 10,
+            "plane_b_bp": 410,
+            "params": {"curvature_deg_per_bp": 45.0 / 400, "direction_deg": 0.0},
+            "cluster_ids": [],
+        },
+    )
     assert r.status_code == 200, r.text
     d = design_state.get_or_404()
     helix = d.find_helix(helix_id)
 
-    straight  = nucleotide_positions_arrays(helix)
-    deformed  = deformed_nucleotide_arrays(helix, d)
+    straight = nucleotide_positions_arrays(helix)
+    deformed = deformed_nucleotide_arrays(helix, d)
 
     # mask = nucleotides belonging to the (reference) staple on this helix
     from backend.core.deformation import _reference_nuc_mask
+
     mask = _reference_nuc_mask(straight, helix, d)
     assert mask.any(), "reference staple should cover some nucleotides on its helix"
 
     # Without reference, the SAME nucleotides move under the bend.
-    d_noref = d.copy_with(strands=[s.model_copy(update={"is_reference": False}) for s in d.strands])
+    d_noref = d.copy_with(
+        strands=[s.model_copy(update={"is_reference": False}) for s in d.strands]
+    )
     deformed_noref = deformed_nucleotide_arrays(helix, d_noref)
     moved = ~np.isclose(deformed_noref["positions"], straight["positions"]).all(axis=1)
-    assert (mask & moved).any(), "bend should move some of the reference nucleotides when not frozen"
+    assert (mask & moved).any(), (
+        "bend should move some of the reference nucleotides when not frozen"
+    )
 
     # With reference, those nucleotides keep their straight positions.
     np.testing.assert_allclose(
-        deformed["positions"][mask], straight["positions"][mask], atol=1e-9,
+        deformed["positions"][mask],
+        straight["positions"][mask],
+        atol=1e-9,
     )
 
 
@@ -158,8 +189,10 @@ def test_patch_strands_reference_route_round_trips_with_geometry():
     d = _bundle()
     staple = next(s for s in d.strands if s.strand_type == StrandType.STAPLE)
     design_state.set_design(d)
-    r = client.patch("/api/design/strands/reference",
-                     json={"strand_ids": [staple.id], "is_reference": True})
+    r = client.patch(
+        "/api/design/strands/reference",
+        json={"strand_ids": [staple.id], "is_reference": True},
+    )
     assert r.status_code == 200, r.text
     body = r.json()
     out_strand = next(s for s in body["design"]["strands"] if s["id"] == staple.id)
@@ -167,16 +200,25 @@ def test_patch_strands_reference_route_round_trips_with_geometry():
     # Route returns geometry (the freeze can move positions) — not a metadata-only response.
     assert body.get("nucleotides"), "reference route must return geometry"
     # Clearing it works too.
-    r2 = client.patch("/api/design/strands/reference",
-                      json={"strand_ids": [staple.id], "is_reference": False})
+    r2 = client.patch(
+        "/api/design/strands/reference",
+        json={"strand_ids": [staple.id], "is_reference": False},
+    )
     assert r2.status_code == 200, r2.text
-    assert next(s for s in r2.json()["design"]["strands"] if s["id"] == staple.id)["is_reference"] is False
+    assert (
+        next(s for s in r2.json()["design"]["strands"] if s["id"] == staple.id)[
+            "is_reference"
+        ]
+        is False
+    )
 
 
 def test_patch_strands_reference_route_404_on_unknown_id():
     design_state.set_design(_bundle())
-    r = client.patch("/api/design/strands/reference",
-                     json={"strand_ids": ["does-not-exist"], "is_reference": True})
+    r = client.patch(
+        "/api/design/strands/reference",
+        json={"strand_ids": ["does-not-exist"], "is_reference": True},
+    )
     assert r.status_code == 404
 
 
@@ -187,11 +229,23 @@ def test_patch_strands_reference_route_404_on_unknown_id():
 
 
 def test_reference_helix_ids_only_when_all_strands_reference():
-    sA = Strand(domains=[Domain(helix_id="h1", start_bp=0, end_bp=9, direction=Direction.FORWARD)],
-                is_reference=True)
-    sB = Strand(domains=[Domain(helix_id="h2", start_bp=0, end_bp=9, direction=Direction.FORWARD)])
-    sC = Strand(domains=[Domain(helix_id="h2", start_bp=0, end_bp=9, direction=Direction.REVERSE)],
-                is_reference=True)
+    sA = Strand(
+        domains=[
+            Domain(helix_id="h1", start_bp=0, end_bp=9, direction=Direction.FORWARD)
+        ],
+        is_reference=True,
+    )
+    sB = Strand(
+        domains=[
+            Domain(helix_id="h2", start_bp=0, end_bp=9, direction=Direction.FORWARD)
+        ]
+    )
+    sC = Strand(
+        domains=[
+            Domain(helix_id="h2", start_bp=0, end_bp=9, direction=Direction.REVERSE)
+        ],
+        is_reference=True,
+    )
     d = Design(strands=[sA, sB, sC])
     # h1: only reference → reference-only. h2: has active sB → NOT reference-only.
     assert d.reference_helix_ids() == {"h1"}
@@ -199,26 +253,38 @@ def test_reference_helix_ids_only_when_all_strands_reference():
 
 def _with_full_cluster(d):
     from backend.core.models import ClusterRigidTransform
-    return d.copy_with(cluster_transforms=[
-        ClusterRigidTransform(name="C1", is_default=True, helix_ids=[h.id for h in d.helices])
-    ])
+
+    return d.copy_with(
+        cluster_transforms=[
+            ClusterRigidTransform(
+                name="C1", is_default=True, helix_ids=[h.id for h in d.helices]
+            )
+        ]
+    )
 
 
 def test_marking_all_strands_reference_prunes_clusters():
     d = _with_full_cluster(_bundle())
     design_state.set_design(d)
     ids = [s.id for s in d.strands]
-    r = client.patch("/api/design/strands/reference", json={"strand_ids": ids, "is_reference": True})
+    r = client.patch(
+        "/api/design/strands/reference", json={"strand_ids": ids, "is_reference": True}
+    )
     assert r.status_code == 200, r.text
     for c in r.json()["design"]["cluster_transforms"]:
-        assert c["helix_ids"] == [], "every helix became reference-only → pruned from clusters"
+        assert c["helix_ids"] == [], (
+            "every helix became reference-only → pruned from clusters"
+        )
 
 
 def test_partial_reference_keeps_shared_helices_in_clusters():
     d = _with_full_cluster(_bundle())
     design_state.set_design(d)
     staple = next(s for s in d.strands if s.strand_type == StrandType.STAPLE)
-    r = client.patch("/api/design/strands/reference", json={"strand_ids": [staple.id], "is_reference": True})
+    r = client.patch(
+        "/api/design/strands/reference",
+        json={"strand_ids": [staple.id], "is_reference": True},
+    )
     assert r.status_code == 200, r.text
     # The scaffold still covers those helices → none is reference-only → cluster intact.
     assert r.json()["design"]["cluster_transforms"][0]["helix_ids"]
@@ -226,8 +292,11 @@ def test_partial_reference_keeps_shared_helices_in_clusters():
 
 def test_reconcile_drops_reference_only_helices():
     from backend.core.cluster_reconcile import reconcile_cluster_membership
+
     before = _with_full_cluster(_bundle())
-    after = before.copy_with(strands=[s.model_copy(update={"is_reference": True}) for s in before.strands])
+    after = before.copy_with(
+        strands=[s.model_copy(update={"is_reference": True}) for s in before.strands]
+    )
     out = reconcile_cluster_membership(before, after, None)
     assert out.cluster_transforms[0].helix_ids == []
 
@@ -237,15 +306,18 @@ def test_sequence_csv_export_omits_reference_strand():
     d, *_ = assign_scaffold_sequence(d, "M13mp18")
     d = assign_staple_sequences(d)
     staple = next(s for s in d.strands if s.strand_type == StrandType.STAPLE)
-    d = d.copy_with(strands=[
-        s.model_copy(update={"is_reference": True}) if s.id == staple.id else s
-        for s in d.strands
-    ])
+    d = d.copy_with(
+        strands=[
+            s.model_copy(update={"is_reference": True}) if s.id == staple.id else s
+            for s in d.strands
+        ]
+    )
     design_state.set_design(d)
     r = client.get("/api/design/export/sequence-csv")
     assert r.status_code == 200, r.text
     expected_rows = sum(
-        1 for s in d.strands
+        1
+        for s in d.strands
         if s.strand_type != StrandType.SCAFFOLD and not s.is_reference and s.domains
     )
     assert len(r.text.splitlines()) == expected_rows + 1
@@ -281,14 +353,18 @@ def test_assembly_geometry_excludes_reference_strands():
     d = _bundle()
     assert len(d.strands) >= 2
     ref = d.strands[0]
-    d = d.copy_with(strands=[
-        s.model_copy(update={"is_reference": True}) if s.id == ref.id else s
-        for s in d.strands
-    ])
+    d = d.copy_with(
+        strands=[
+            s.model_copy(update={"is_reference": True}) if s.id == ref.id else s
+            for s in d.strands
+        ]
+    )
 
     client.post("/api/assembly")
-    add = client.post("/api/assembly/instances",
-                      json={"name": "Part", "source": {"type": "inline", "design": d.to_dict()}})
+    add = client.post(
+        "/api/assembly/instances",
+        json={"name": "Part", "source": {"type": "inline", "design": d.to_dict()}},
+    )
     assert add.status_code == 201, add.text
 
     geo = client.get("/api/assembly/geometry").json()

@@ -36,6 +36,7 @@ ring atom stays 2.2-2.6 A away.  That is above ``extra_base_repair._CLASH_NM``
 Layer note (CLAUDE.md Three-Layer Law): this module READS the geometric layer only.
 It never writes topology or geometry.
 """
+
 from __future__ import annotations
 
 import numpy as _np
@@ -59,8 +60,15 @@ SEARCH_NM = 0.6
 # tails (extension_id/ext_k) all share the anchor nucleotide's helix/bp key, so they
 # have to be part of the grouping or their atoms merge into one pseudo-residue.
 _RESIDUE_KEY_FIELDS = (
-    "strand_id", "helix_id", "bp_index", "direction",
-    "crossover_id", "extra_base_k", "copy_k", "extension_id", "ext_k",
+    "strand_id",
+    "helix_id",
+    "bp_index",
+    "direction",
+    "crossover_id",
+    "extra_base_k",
+    "copy_k",
+    "extension_id",
+    "ext_k",
 )
 
 
@@ -90,12 +98,12 @@ def ring_names_for(names) -> list[tuple[str, tuple[str, ...]]]:
     out: list[tuple[str, tuple[str, ...]]] = []
     if have.issuperset(SUGAR_RING):
         out.append(("sugar", SUGAR_RING))
-    if "N9" in have:                                   # purine
+    if "N9" in have:  # purine
         if have.issuperset(PURINE_RING_5):
             out.append(("purine5", PURINE_RING_5))
         if have.issuperset(PURINE_RING_6):
             out.append(("purine6", PURINE_RING_6))
-    elif have.issuperset(PYRIMIDINE_RING):             # pyrimidine
+    elif have.issuperset(PYRIMIDINE_RING):  # pyrimidine
         out.append(("pyrimidine", PYRIMIDINE_RING))
     return out
 
@@ -152,11 +160,12 @@ def _scan(positions, bonds, rings, *, max_report: int, search_nm: float = SEARCH
     bond_arr = _np.asarray(bonds, dtype=int)
     mids = 0.5 * (positions[bond_arr[:, 0]] + positions[bond_arr[:, 1]])
 
-    try:                                              # O(n log n) when scipy is there
-        from scipy.spatial import cKDTree             # noqa: PLC0415
+    try:  # O(n log n) when scipy is there
+        from scipy.spatial import cKDTree  # noqa: PLC0415
+
         tree = cKDTree(ring_centres)
         neighbours = tree.query_ball_point(mids, r=search_nm)
-    except Exception:                                 # pragma: no cover - fallback
+    except Exception:  # pragma: no cover - fallback
         neighbours = [
             _np.where(_np.linalg.norm(ring_centres - m, axis=1) < search_nm)[0]
             for m in mids
@@ -169,20 +178,25 @@ def _scan(positions, bonds, rings, *, max_report: int, search_nm: float = SEARCH
             if i in ring_serials[ri] or j in ring_serials[ri]:
                 continue
             label, kind, serials = rings[ri]
-            hit, t = segment_pierces_ring(positions[i], positions[j], positions[list(serials)])
+            hit, t = segment_pierces_ring(
+                positions[i], positions[j], positions[list(serials)]
+            )
             if not hit:
                 continue
             if len(hits) >= max_report:
                 return hits
-            hits.append({
-                "bond_serials": [i, j],
-                "ring_serials": list(serials),
-                "ring_kind": kind,
-                "ring": label,
-                "t": round(t, 3),
-                "bond_len_nm": round(
-                    float(_np.linalg.norm(positions[i] - positions[j])), 4),
-            })
+            hits.append(
+                {
+                    "bond_serials": [i, j],
+                    "ring_serials": list(serials),
+                    "ring_kind": kind,
+                    "ring": label,
+                    "t": round(t, 3),
+                    "bond_len_nm": round(
+                        float(_np.linalg.norm(positions[i] - positions[j])), 4
+                    ),
+                }
+            )
     return hits
 
 
@@ -193,8 +207,11 @@ def model_piercings(model, *, positions=None, max_report: int = 200) -> list[dic
     the model's coordinates, so a trajectory frame can be measured without rebuilding.
     """
     atoms = model.atoms
-    pos = (_np.asarray(positions, dtype=float) if positions is not None
-           else _np.array([[a.x, a.y, a.z] for a in atoms], dtype=float))
+    pos = (
+        _np.asarray(positions, dtype=float)
+        if positions is not None
+        else _np.array([[a.x, a.y, a.z] for a in atoms], dtype=float)
+    )
 
     by_res: dict[tuple, dict[str, int]] = {}
     for i, a in enumerate(atoms):
@@ -203,23 +220,40 @@ def model_piercings(model, *, positions=None, max_report: int = 200) -> list[dic
     rings: list[tuple[str, str, list[int]]] = []
     for key, name_to_serial in by_res.items():
         for kind, names in ring_names_for(name_to_serial):
-            rings.append((_label(atoms, name_to_serial), kind,
-                          [name_to_serial[n] for n in names]))
+            rings.append(
+                (
+                    _label(atoms, name_to_serial),
+                    kind,
+                    [name_to_serial[n] for n in names],
+                )
+            )
 
     # Hydrogens cannot thread a ring without their heavy partner doing so first, and
     # the seed builder emits heavy atoms only — skip them so a solvated model is cheap.
-    bonds = [(i, j) for i, j in model.bonds
-             if not atoms[i].name.startswith("H") and not atoms[j].name.startswith("H")]
+    bonds = [
+        (i, j)
+        for i, j in model.bonds
+        if not atoms[i].name.startswith("H") and not atoms[j].name.startswith("H")
+    ]
 
     hits = _scan(pos, bonds, rings, max_report=max_report)
     for h in hits:
         i, j = h["bond_serials"]
-        h["bond"] = f"{_label(atoms, {atoms[i].name: i})}:{atoms[i].name}" \
-                    f"-{_label(atoms, {atoms[j].name: j})}:{atoms[j].name}"
-        h["crossover_ids"] = sorted({c for c in (atoms[i].crossover_id,
-                                                 atoms[j].crossover_id,
-                                                 atoms[h['ring_serials'][0]].crossover_id)
-                                     if c})
+        h["bond"] = (
+            f"{_label(atoms, {atoms[i].name: i})}:{atoms[i].name}"
+            f"-{_label(atoms, {atoms[j].name: j})}:{atoms[j].name}"
+        )
+        h["crossover_ids"] = sorted(
+            {
+                c
+                for c in (
+                    atoms[i].crossover_id,
+                    atoms[j].crossover_id,
+                    atoms[h["ring_serials"][0]].crossover_id,
+                )
+                if c
+            }
+        )
     return hits
 
 
@@ -234,10 +268,13 @@ def _label(atoms, name_to_serial: dict[str, int]) -> str:
     return f"{a.chain_id}{a.seq_num}{a.residue}{tag}"
 
 
-def piercing_report(design, *, model=None, positions=None, max_report: int = 200) -> dict:
+def piercing_report(
+    design, *, model=None, positions=None, max_report: int = 200
+) -> dict:
     """Audit a design's atomistic seed for ring piercings."""
     if model is None:
-        from backend.core.atomistic import build_atomistic_model   # noqa: PLC0415
+        from backend.core.atomistic import build_atomistic_model  # noqa: PLC0415
+
         model = build_atomistic_model(design)
     pierced = model_piercings(model, positions=positions, max_report=max_report)
     return {
@@ -248,7 +285,9 @@ def piercing_report(design, *, model=None, positions=None, max_report: int = 200
     }
 
 
-def assert_not_pierced(design, *, model=None, positions=None, allow: bool = False) -> dict:
+def assert_not_pierced(
+    design, *, model=None, positions=None, allow: bool = False
+) -> dict:
     """Build gate: raise :class:`RingPiercedError` unless ``allow``."""
     report = piercing_report(design, model=model, positions=positions)
     report["override_used"] = bool(allow and not report["ok"])
@@ -278,7 +317,9 @@ _SCOPE_RADIUS_NM = 1.2
 _MAX_PHOSPHODIESTER_NM = 0.40
 
 
-def _synthesise_bonds(atoms, residues: dict[tuple, dict[str, int]]) -> list[tuple[int, int]]:
+def _synthesise_bonds(
+    atoms, residues: dict[tuple, dict[str, int]]
+) -> list[tuple[int, int]]:
     """Covalent bonds among ``residues``, derived from atom names and geometry.
 
     Mid-build there is no bond list yet, so intra-residue connectivity comes from the
@@ -294,9 +335,13 @@ def _synthesise_bonds(atoms, residues: dict[tuple, dict[str, int]]) -> list[tupl
     2hb_2xT, where it made three sound rungs (including the best one) look defective.
     """
     bonds, o3_serials, p_serials = _intra_residue_bonds(atoms, residues)
-    pos = {s: _np.array([atoms[s].x, atoms[s].y, atoms[s].z])
-           for s in set(o3_serials) | set(p_serials)}
-    o3_pos = _np.array([pos[s] for s in o3_serials]) if o3_serials else _np.empty((0, 3))
+    pos = {
+        s: _np.array([atoms[s].x, atoms[s].y, atoms[s].z])
+        for s in set(o3_serials) | set(p_serials)
+    }
+    o3_pos = (
+        _np.array([pos[s] for s in o3_serials]) if o3_serials else _np.empty((0, 3))
+    )
     p_pos = _np.array([pos[s] for s in p_serials]) if p_serials else _np.empty((0, 3))
     for a, b in _phosphodiester_links(o3_pos, p_pos):
         bonds.append((o3_serials[a], p_serials[b]))
@@ -305,8 +350,9 @@ def _synthesise_bonds(atoms, residues: dict[tuple, dict[str, int]]) -> list[tupl
 
 def _intra_residue_bonds(atoms, residues: dict[tuple, dict[str, int]]):
     """Geometry-independent half: the bonds inside each residue, plus its O3' and P."""
-    from backend.core.atomistic import (                           # noqa: PLC0415
-        BASE_TEMPLATES, _SUGAR_BONDS,
+    from backend.core.atomistic import (  # noqa: PLC0415
+        BASE_TEMPLATES,
+        _SUGAR_BONDS,
     )
 
     bonds: list[tuple[int, int]] = []
@@ -356,13 +402,16 @@ class PierceScope:
     coordinates and re-measures, which is what the ladder calls per rung.
     """
 
-    def __init__(self, atoms, focus_serials, radius_nm: float = _SCOPE_RADIUS_NM,
-                 all_pos=None):
+    def __init__(
+        self, atoms, focus_serials, radius_nm: float = _SCOPE_RADIUS_NM, all_pos=None
+    ):
         focus = {int(s) for s in focus_serials}
         if not focus:
             self._serials: list[int] = []
             return
-        centre = _np.array([[atoms[s].x, atoms[s].y, atoms[s].z] for s in sorted(focus)])
+        centre = _np.array(
+            [[atoms[s].x, atoms[s].y, atoms[s].z] for s in sorted(focus)]
+        )
         # Caller-supplied for a design with many junctions: rebuilding the whole-model
         # position array per pair costs more than every rung of the ladder.
         if all_pos is None:
@@ -375,8 +424,10 @@ class PierceScope:
         for i in near:
             residues.setdefault(residue_key(atoms[i]), {})[atoms[i].name] = int(i)
         # Drop hydrogens: they cannot thread a ring without their heavy partner first.
-        residues = {k: {n: s for n, s in sd.items() if not n.startswith("H")}
-                    for k, sd in residues.items()}
+        residues = {
+            k: {n: s for n, s in sd.items() if not n.startswith("H")}
+            for k, sd in residues.items()
+        }
 
         focus_res = {k for k, sd in residues.items() if focus & set(sd.values())}
         self._focus_res = focus_res
@@ -387,8 +438,12 @@ class PierceScope:
                 rings.append((key, kind, [sd[n] for n in names]))
         intra, o3, p = _intra_residue_bonds(atoms, residues)
 
-        self._serials = sorted({s for _, _, ser in rings for s in ser}
-                               | {s for b in intra for s in b} | set(o3) | set(p))
+        self._serials = sorted(
+            {s for _, _, ser in rings for s in ser}
+            | {s for b in intra for s in b}
+            | set(o3)
+            | set(p)
+        )
         order = {s: k for k, s in enumerate(self._serials)}
         self._rings = [(key, kind, [order[s] for s in ser]) for key, kind, ser in rings]
         self._intra = [(order[i], order[j]) for i, j in intra]
@@ -397,8 +452,9 @@ class PierceScope:
         self._res_of = {order[s]: residue_key(atoms[s]) for s in self._serials}
 
     def _positions(self, atoms):
-        return _np.array([[atoms[s].x, atoms[s].y, atoms[s].z] for s in self._serials],
-                         dtype=float)
+        return _np.array(
+            [[atoms[s].x, atoms[s].y, atoms[s].z] for s in self._serials], dtype=float
+        )
 
     def hits(self, atoms) -> list[dict]:
         """Piercings that involve at least one residue the solve moves."""
@@ -411,20 +467,25 @@ class PierceScope:
             (self._o3[a], self._p[b])
             for a, b in _phosphodiester_links(pos[self._o3], pos[self._p])
         ]
-        raw = _scan(pos, bonds, [(k, kind, s) for k, kind, s in self._rings],
-                    max_report=50)
+        raw = _scan(
+            pos, bonds, [(k, kind, s) for k, kind, s in self._rings], max_report=50
+        )
         out = []
         for h in raw:
             i, j = h["bond_serials"]
             ring_key = h["ring"]
             bond_keys = (self._res_of.get(i), self._res_of.get(j))
-            if ring_key not in self._focus_res and not (set(bond_keys) & self._focus_res):
-                continue                       # pre-existing, not this rung's doing
+            if ring_key not in self._focus_res and not (
+                set(bond_keys) & self._focus_res
+            ):
+                continue  # pre-existing, not this rung's doing
             h["bond_serials"] = [self._serials[i], self._serials[j]]
             h["ring_serials"] = [self._serials[k] for k in h["ring_serials"]]
             a1, a2 = atoms[h["bond_serials"][0]], atoms[h["bond_serials"][1]]
-            h["bond"] = (f"{a1.chain_id}{a1.seq_num}{a1.residue}:{a1.name}"
-                         f"-{a2.chain_id}{a2.seq_num}{a2.residue}:{a2.name}")
+            h["bond"] = (
+                f"{a1.chain_id}{a1.seq_num}{a1.residue}:{a1.name}"
+                f"-{a2.chain_id}{a2.seq_num}{a2.residue}:{a2.name}"
+            )
             r0 = atoms[h["ring_serials"][0]]
             h["ring"] = f"{r0.chain_id}{r0.seq_num}{r0.residue}"
             out.append(h)

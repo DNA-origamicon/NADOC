@@ -7,6 +7,7 @@ Usage:
 
 If run_dir is omitted, auto-detects the newest /tmp/nadoc_smoke_* directory.
 """
+
 from __future__ import annotations
 import sys
 import glob
@@ -17,7 +18,8 @@ from pathlib import Path
 def _frame_count(xtc: Path) -> int:
     r = subprocess.run(
         ["gmx", "check", "-f", str(xtc)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     for line in (r.stdout + r.stderr).splitlines():
         if "Last frame" in line:
@@ -41,7 +43,11 @@ def main() -> None:
     if len(sys.argv) > 1:
         run_dir = Path(sys.argv[1])
     else:
-        candidates = sorted(glob.glob("/tmp/nadoc_smoke_*"), key=lambda p: Path(p).stat().st_mtime, reverse=True)
+        candidates = sorted(
+            glob.glob("/tmp/nadoc_smoke_*"),
+            key=lambda p: Path(p).stat().st_mtime,
+            reverse=True,
+        )
         if not candidates:
             print("No nadoc_smoke_* directories found in /tmp.")
             return
@@ -51,9 +57,9 @@ def main() -> None:
     print()
 
     stages = [
-        ("EM",         run_dir / "em.log",   None),
-        ("NVT",        run_dir / "nvt.log",  None),
-        ("NPT",        run_dir / "npt.log",  None),
+        ("EM", run_dir / "em.log", None),
+        ("NVT", run_dir / "nvt.log", None),
+        ("NPT", run_dir / "npt.log", None),
         ("Production", run_dir / "prod.log", run_dir / "prod.xtc"),
     ]
 
@@ -71,11 +77,15 @@ def main() -> None:
             if mdp.exists():
                 for line in mdp.read_text().splitlines():
                     if line.strip().startswith("nsteps"):
-                        try: nsteps = int(line.split("=")[1].split(";")[0])
-                        except Exception: pass
+                        try:
+                            nsteps = int(line.split("=")[1].split(";")[0])
+                        except Exception:
+                            pass
                     if line.strip().startswith("nstxout-compressed"):
-                        try: nstxout = int(line.split("=")[1].split(";")[0])
-                        except Exception: pass
+                        try:
+                            nstxout = int(line.split("=")[1].split(";")[0])
+                        except Exception:
+                            pass
             total_frames = nsteps // nstxout
             pct = 100 * frames / total_frames if total_frames else 0
             status = f"RUNNING — {frames}/{total_frames} frames ({pct:.0f}%)"
@@ -85,11 +95,14 @@ def main() -> None:
     print()
     if (run_dir / "smoke_params.json").exists():
         import json
+
         d = json.loads((run_dir / "smoke_params.json").read_text())
         p = d.get("mrdna_params", {})
-        print(f"  COMPLETE — r0={p.get('r0_ang', '?'):.2f} Å  "
-              f"hj={p.get('hj_equilibrium_angle_deg', '?'):.1f}°  "
-              f"k_bond={p.get('k_bond_kJ_mol_ang2', '?'):.4f}")
+        print(
+            f"  COMPLETE — r0={p.get('r0_ang', '?'):.2f} Å  "
+            f"hj={p.get('hj_equilibrium_angle_deg', '?'):.1f}°  "
+            f"k_bond={p.get('k_bond_kJ_mol_ang2', '?'):.4f}"
+        )
     else:
         print("  Still running…")
 

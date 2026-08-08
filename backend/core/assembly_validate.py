@@ -28,11 +28,13 @@ def validate_assembly_report(assembly: Assembly) -> dict:
                 _load_design(inst.source)
                 results.append({"check": "file_sources_exist", "ok": True})
             except FileNotFoundError:
-                results.append({
-                    "check": "file_sources_exist",
-                    "ok": False,
-                    "message": f"{inst.source.path!r} not found",
-                })
+                results.append(
+                    {
+                        "check": "file_sources_exist",
+                        "ok": False,
+                        "message": f"{inst.source.path!r} not found",
+                    }
+                )
         else:
             results.append({"check": "file_sources_exist", "ok": True})
 
@@ -42,7 +44,9 @@ def validate_assembly_report(assembly: Assembly) -> dict:
         ok = joint.instance_b_id in inst_ids
         entry: dict = {"check": "joint_instance_refs_valid", "ok": ok}
         if not ok:
-            entry["message"] = f"Joint {joint.name!r}: instance_b_id {joint.instance_b_id!r} not found"
+            entry["message"] = (
+                f"Joint {joint.name!r}: instance_b_id {joint.instance_b_id!r} not found"
+            )
         results.append(entry)
 
     # 3. Joint limits not exceeded
@@ -70,7 +74,9 @@ def validate_assembly_report(assembly: Assembly) -> dict:
         flatten_assembly(assembly)
         results.append({"check": "flattened_ids_unique", "ok": True})
     except ValueError as exc:
-        results.append({"check": "flattened_ids_unique", "ok": False, "message": str(exc)})
+        results.append(
+            {"check": "flattened_ids_unique", "ok": False, "message": str(exc)}
+        )
     except FileNotFoundError:
         # Missing file already caught above
         results.append({"check": "flattened_ids_unique", "ok": True})

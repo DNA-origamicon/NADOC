@@ -125,8 +125,22 @@ _HINGE_SPECS: dict[str, _HingeSpec] = {
     ),
     "2x4_double_hinge_link": _HingeSpec(
         cells=[
-            (0, 0), (0, 1), (0, 2), (0, 3), (1, 3), (1, 2), (1, 1), (1, 0),
-            (4, 0), (4, 1), (4, 2), (4, 3), (5, 3), (5, 2), (5, 1), (5, 0),
+            (0, 0),
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (1, 3),
+            (1, 2),
+            (1, 1),
+            (1, 0),
+            (4, 0),
+            (4, 1),
+            (4, 2),
+            (4, 3),
+            (5, 3),
+            (5, 2),
+            (5, 1),
+            (5, 0),
         ],
         bridges=[
             _Bridge(
@@ -153,10 +167,30 @@ _HINGE_SPECS: dict[str, _HingeSpec] = {
     ),
     "2x6_triple_hinge_link": _HingeSpec(
         cells=[
-            (0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5),
-            (1, 5), (1, 4), (1, 3), (1, 2), (1, 1), (1, 0),
-            (4, 0), (4, 1), (4, 2), (4, 3), (4, 4), (4, 5),
-            (5, 5), (5, 4), (5, 3), (5, 2), (5, 1), (5, 0),
+            (0, 0),
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (0, 4),
+            (0, 5),
+            (1, 5),
+            (1, 4),
+            (1, 3),
+            (1, 2),
+            (1, 1),
+            (1, 0),
+            (4, 0),
+            (4, 1),
+            (4, 2),
+            (4, 3),
+            (4, 4),
+            (4, 5),
+            (5, 5),
+            (5, 4),
+            (5, 3),
+            (5, 2),
+            (5, 1),
+            (5, 0),
         ],
         bridges=[
             _Bridge(three="scaf_XY_1_0", five="scaf_XY_4_0"),
@@ -222,7 +256,11 @@ def build_hinge_primitive(
 
     with hb.scratch_session(lattice):
         hb.create_bundle(
-            spec.cells, _BASE_LENGTH_BP, lattice=lattice, name=name, ligate_adjacent=True,
+            spec.cells,
+            _BASE_LENGTH_BP,
+            lattice=lattice,
+            name=name,
+            ligate_adjacent=True,
         )
         _shift_duplexes(_DUPLEX_SHIFT_BP)
         for bridge in spec.bridges:
@@ -243,7 +281,9 @@ def _scaffold_on_helix(design: Design, helix_id: str):
     return None, None, None
 
 
-def _rail_faces_toward(design: Design, rail_a_hid: str, rail_b_hid: str, bp: int) -> bool:
+def _rail_faces_toward(
+    design: Design, rail_a_hid: str, rail_b_hid: str, bp: int
+) -> bool:
     """True iff rail-A's scaffold backbone at ``bp`` points TOWARD rail-B (the far leaf).
 
     The phase test validated against the 2x2/2x4 goldens: take the scaffold backbone's
@@ -340,8 +380,11 @@ def build_hinge(
 
     with hb.scratch_session(lattice):
         hb.create_bundle(
-            cells, length_bp, lattice=lattice,
-            name=f"{k}x{n_cols}_hinge", ligate_adjacent=True,
+            cells,
+            length_bp,
+            lattice=lattice,
+            name=f"{k}x{n_cols}_hinge",
+            ligate_adjacent=True,
         )
         _shift_duplexes(_DUPLEX_SHIFT_BP)
         design = design_state.get_or_404()
@@ -359,7 +402,9 @@ def build_hinge(
         for c in range(n_cols):
             rail_a_hid, rail_b_hid = pos2hid[(rail_a, c)], pos2hid[(rail_b, c)]
             a, b = scaf_id[(rail_a, c)], scaf_id[(rail_b, c)]
-            toward = _rail_faces_toward(design, rail_a_hid, rail_b_hid, _DUPLEX_SHIFT_BP)
+            toward = _rail_faces_toward(
+                design, rail_a_hid, rail_b_hid, _DUPLEX_SHIFT_BP
+            )
             ext = short_ssdna_bp if toward else long_ssdna_bp
             # Extend the leaf-A rail scaffold into the gap (its LO terminus toward
             # lower bp) by `ext` unpaired bases; leaf B stays blunt at the duplex edge.
@@ -406,8 +451,9 @@ def _staple_termini(design: Design):
     return out
 
 
-def _extrude_overhang_from_rail(design: Design, src_helix: str, gap_row: int, gap_col: int,
-                                length_bp: int = 16):
+def _extrude_overhang_from_rail(
+    design: Design, src_helix: str, gap_row: int, gap_col: int, length_bp: int = 16
+):
     """Extrude a staple overhang from a terminus on ``src_helix`` into the gap cell
     (``gap_row``, ``gap_col``); returns ``(design, overhang_id)`` for the first that takes."""
     from fastapi import HTTPException
@@ -417,9 +463,15 @@ def _extrude_overhang_from_rail(design: Design, src_helix: str, gap_row: int, ga
         if hid != src_helix:
             continue
         try:
-            d2 = hb.overhang_extrude(hid, bp, direction=dirn, is_five_prime=is5,
-                                     neighbor_row=gap_row, neighbor_col=gap_col,
-                                     length_bp=length_bp)
+            d2 = hb.overhang_extrude(
+                hid,
+                bp,
+                direction=dirn,
+                is_five_prime=is5,
+                neighbor_row=gap_row,
+                neighbor_col=gap_col,
+                length_bp=length_bp,
+            )
         except HTTPException:
             continue
         new = [o for o in d2.overhangs if o.id not in before]
@@ -428,8 +480,9 @@ def _extrude_overhang_from_rail(design: Design, src_helix: str, gap_row: int, ga
     return design, None
 
 
-def build_applied_2x2_binding(*, lattice: LatticeType = LatticeType.SQUARE,
-                              close_bond: bool = False) -> Design:
+def build_applied_2x2_binding(
+    *, lattice: LatticeType = LatticeType.SQUARE, close_bond: bool = False
+) -> Design:
     """Build the ``relax_2x2`` fixture from scratch: a two-leaf 2x2 hinge with an APPLIED
     end-to-root overhang binding (driver on leaf A, driven on leaf B, duplex on the shared
     gap helix), a revolute hinge joint on the driven leaf, and the derived Duplex graph.
@@ -460,10 +513,13 @@ def build_applied_2x2_binding(*, lattice: LatticeType = LatticeType.SQUARE,
         d, drv = _extrude_overhang_from_rail(d, "h_XY_1_0", 2, 0)
         d, dvn = _extrude_overhang_from_rail(d, "h_XY_4_0", 3, 0)
         if not (drv and dvn):
-            raise RuntimeError("could not place both 2x2 overhangs for the applied binding")
+            raise RuntimeError(
+                "could not place both 2x2 overhangs for the applied binding"
+            )
 
-        hb.create_connection_version(drv, dvn, connection_type="end-to-root",
-                                     overhang_a_seq=_OVERHANG_A_SEQ)
+        hb.create_connection_version(
+            drv, dvn, connection_type="end-to-root", overhang_a_seq=_OVERHANG_A_SEQ
+        )
         vid = design_state.get_or_404().connection_versions[-1].id
         d = hb.apply_connection_version(vid)
 
@@ -477,13 +533,21 @@ def build_applied_2x2_binding(*, lattice: LatticeType = LatticeType.SQUARE,
         cl2 = next(c for c in d.cluster_transforms if c.name == "Cluster 2")
         cls = list(d.cluster_transforms)
         if "h_XY_2_0" not in cl1.helix_ids:
-            cls = [c.model_copy(update={"helix_ids": [*c.helix_ids, "h_XY_2_0"]})
-                   if c.id == cl1.id else c for c in cls]
+            cls = [
+                c.model_copy(update={"helix_ids": [*c.helix_ids, "h_XY_2_0"]})
+                if c.id == cl1.id
+                else c
+                for c in cls
+            ]
         joint = ClusterJoint(
-            cluster_id=cl2.id, name="Joint", joint_type="revolute",
+            cluster_id=cl2.id,
+            name="Joint",
+            joint_type="revolute",
             local_axis_origin=list(_HINGE_JOINT_AXIS_ORIGIN),
             local_axis_direction=list(_HINGE_JOINT_AXIS_DIR),
-            surface_detail=6, min_angle_deg=-180.0, max_angle_deg=180.0,
+            surface_detail=6,
+            min_angle_deg=-180.0,
+            max_angle_deg=180.0,
         )
         d = d.model_copy(update={"cluster_transforms": cls, "cluster_joints": [joint]})
 
@@ -492,7 +556,9 @@ def build_applied_2x2_binding(*, lattice: LatticeType = LatticeType.SQUARE,
         return d.model_copy(deep=True)
 
 
-def _over_compress_driven_leaf(design: Design, driver_oh: str, driven_oh: str) -> Design:
+def _over_compress_driven_leaf(
+    design: Design, driver_oh: str, driven_oh: str
+) -> Design:
     """Seat the driven leaf in an OVER-COMPRESSED pose (tip↔root bond ~0.37 nm, well under one
     backbone bond) for the relax-opens test: relax to the natural target first (the joint-arc
     minimum IS the target), then translate the driven leaf ``_CLOSEBOND_COMPRESS_NM`` further
@@ -511,5 +577,10 @@ def _over_compress_driven_leaf(design: Design, driver_oh: str, driven_oh: str) -
     d_dir = d_dir / max(1e-9, np.linalg.norm(d_dir))
     t2 = np.asarray(cl2.translation, float) + d_dir * _CLOSEBOND_COMPRESS_NM
     c2 = cl2.model_copy(update={"translation": [float(x) for x in t2]})
-    return relaxed.model_copy(update={"cluster_transforms": [
-        c2 if c.id == cl2.id else c for c in relaxed.cluster_transforms]})
+    return relaxed.model_copy(
+        update={
+            "cluster_transforms": [
+                c2 if c.id == cl2.id else c for c in relaxed.cluster_transforms
+            ]
+        }
+    )

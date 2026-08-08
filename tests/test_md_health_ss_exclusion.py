@@ -11,6 +11,7 @@ declash protocol already excludes from the ENM). `run_health_check` fills it in
 only for declashed / extra-base designs (detected by the `{stem}_build.pdb`
 backup), so fully-duplex designs are byte-identical to before.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -98,7 +99,9 @@ def mini_ref(tmp_path: Path) -> tuple[Path, Path]:
 def test_build_wc_pairs_without_exclusion_forms_the_spurious_ss_pair(mini_ref):
     psf, pdb = mini_ref
     pairs = H.build_wc_pairs(psf, pdb)
-    segs = {p.res_a.split(":")[0] for p in pairs} | {p.res_b.split(":")[0] for p in pairs}
+    segs = {p.res_a.split(":")[0] for p in pairs} | {
+        p.res_b.split(":")[0] for p in pairs
+    }
     # The shortest candidate B–C wins, so the ssDNA residue C is (wrongly) paired.
     assert "C" in segs
 
@@ -106,9 +109,11 @@ def test_build_wc_pairs_without_exclusion_forms_the_spurious_ss_pair(mini_ref):
 def test_build_wc_pairs_excludes_ssdna_and_restores_real_pair(mini_ref):
     psf, pdb = mini_ref
     pairs = H.build_wc_pairs(psf, pdb, exclude_residues={("C", "1")})
-    segs = {p.res_a.split(":")[0] for p in pairs} | {p.res_b.split(":")[0] for p in pairs}
-    assert "C" not in segs          # ssDNA no longer contributes a pair
-    assert {"A", "B"} <= segs       # and the genuine A–B duplex pair is scored
+    segs = {p.res_a.split(":")[0] for p in pairs} | {
+        p.res_b.split(":")[0] for p in pairs
+    }
+    assert "C" not in segs  # ssDNA no longer contributes a pair
+    assert {"A", "B"} <= segs  # and the genuine A–B duplex pair is scored
 
 
 def test_build_c1_pairs_exclusion_drops_the_ss_residue(mini_ref):

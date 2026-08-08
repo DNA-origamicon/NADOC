@@ -4,6 +4,7 @@ Na+ (resname/atomname "SOD") was exported as z=16 (sulfur) because atom-name gue
 took the leading "S"; the fix resolves monatomic ions by resname first.  This pins that
 so an ion-atmosphere-aware (Mg2+) origami export can't silently mistype ions again.
 """
+
 from types import SimpleNamespace
 
 from backend.ml.propagator.windows import _ELEMENT_Z, _element_of
@@ -15,11 +16,11 @@ def _atom(resname, name, element=""):
 
 def test_charmm_ions_typed_by_resname_not_name():
     cases = {  # (resname, atomname) -> expected element / z
-        ("SOD", "SOD"): ("NA", 11),   # was mis-typed S(16) before the fix
+        ("SOD", "SOD"): ("NA", 11),  # was mis-typed S(16) before the fix
         ("CLA", "CLA"): ("CL", 17),
-        ("POT", "POT"): ("K", 19),    # was mis-typed P(15)
-        ("MG", "MG"):   ("MG", 12),
-        ("CAL", "CAL"): ("CA", 20),   # was mis-typed C(6)
+        ("POT", "POT"): ("K", 19),  # was mis-typed P(15)
+        ("MG", "MG"): ("MG", 12),
+        ("CAL", "CAL"): ("CA", 20),  # was mis-typed C(6)
     }
     for (rn, nm), (el, z) in cases.items():
         got = _element_of(_atom(rn, nm))

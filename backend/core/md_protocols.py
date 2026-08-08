@@ -49,8 +49,13 @@ PROPAGATOR_REFERENCE_PROTOCOL = "propagator_reference"
 # In-vacuo ENRG-MD shape relaxation — step §3.2 of the Aksimentiev tutorial, which runs
 # BEFORE solvation.  Builder lives in backend.core.namd_vacuum.
 VACUUM_ENRGMD_PROTOCOL = "vacuum_enrgmd_namd"
-SUPPORTED_PROTOCOLS = {LEGACY_PROTOCOL, EQUILIBRIUM_AWARE_PROTOCOL, IMPLICIT_GBIS_PROTOCOL,
-                       PROPAGATOR_REFERENCE_PROTOCOL, VACUUM_ENRGMD_PROTOCOL}
+SUPPORTED_PROTOCOLS = {
+    LEGACY_PROTOCOL,
+    EQUILIBRIUM_AWARE_PROTOCOL,
+    IMPLICIT_GBIS_PROTOCOL,
+    PROPAGATOR_REFERENCE_PROTOCOL,
+    VACUUM_ENRGMD_PROTOCOL,
+}
 # MUST match _common_header's "stepspercycle" — NAMD FATALs at startup if a
 # minimize/run count is not a multiple of it.  (benchmark_runner.NAMD_STEPS_PER_CYCLE too.)
 AKSIMENTIEV_STEPS_PER_CYCLE = 20
@@ -68,7 +73,7 @@ AKSIMENTIEV_STEPS_PER_CYCLE = 20
 #     chunks are what make "how much ladder do we actually need" answerable from an
 #     ordinary relax rather than a bespoke experiment.
 LADDER_CHUNK_PCTS = (10.0, 25.0, 50.0, 75.0, 100.0)
-LADDER_CHUNK_PCTS_COARSE = (10.0, 50.0, 100.0)   # the historical split, kept for A/B
+LADDER_CHUNK_PCTS_COARSE = (10.0, 50.0, 100.0)  # the historical split, kept for A/B
 
 # Length of the fixed-DNA NPT settle stage that opens the ladder — Note 4's sanctioned
 # remedy for an under-filled box (see mgh_slow_release_segments).  Their own criterion is
@@ -99,6 +104,7 @@ def _chunk_fractions(pcts) -> list[tuple[float, float]]:
     if out and out[-1][0] != 100.0:
         raise ValueError(f"chunk percents must end at 100: {pcts}")
     return out
+
 
 # NAMD sizes its patch grid from the cell at startup and FATALs with "Periodic cell has
 # become too small for original patch grid!" once the cell shrinks past it.  ``margin``
@@ -149,19 +155,34 @@ XST_MAX_INTERVAL_PS = 10.0
 #: rewriting one does not change what is simulated, it detaches the stage from the job.
 #: Everything else is fair game, because everything else IS the physics and the whole
 #: point of exposing it is that a user can disagree with the protocol.
-PROTECTED_DIRECTIVES = frozenset({
-    "structure", "coordinates", "outputname", "dcdfile", "xstfile",
-    "veldcdfile", "forcedcdfile", "bincoordinates", "binvelocities", "extendedsystem",
-    "parameters", "paratypecharmm",
-    # Anchors.  Same rule as the rest of this set: these name a file the PACKAGE stages
-    # (the marker PDB) and the column its weights live in.  Repointing or deleting one
-    # does not change the physics, it detaches the restraint from the file that defines
-    # it — leaving a conf that still says `constraints on` but restrains nothing, or one
-    # whose reference coordinates are no longer the equilibrated pose the child started
-    # from.  `extraBondsFile` is deliberately NOT here: overriding it means "these ENM
-    # files instead of those", which is a real physics choice.
-    "consref", "conskfile", "conskcol", "fixedatomsfile", "fixedatomscol",
-})
+PROTECTED_DIRECTIVES = frozenset(
+    {
+        "structure",
+        "coordinates",
+        "outputname",
+        "dcdfile",
+        "xstfile",
+        "veldcdfile",
+        "forcedcdfile",
+        "bincoordinates",
+        "binvelocities",
+        "extendedsystem",
+        "parameters",
+        "paratypecharmm",
+        # Anchors.  Same rule as the rest of this set: these name a file the PACKAGE stages
+        # (the marker PDB) and the column its weights live in.  Repointing or deleting one
+        # does not change the physics, it detaches the restraint from the file that defines
+        # it — leaving a conf that still says `constraints on` but restrains nothing, or one
+        # whose reference coordinates are no longer the equilibrated pose the child started
+        # from.  `extraBondsFile` is deliberately NOT here: overriding it means "these ENM
+        # files instead of those", which is a real physics choice.
+        "consref",
+        "conskfile",
+        "conskcol",
+        "fixedatomsfile",
+        "fixedatomscol",
+    }
+)
 
 
 def apply_conf_overrides(conf_text: str, overrides: "dict | None") -> str:
@@ -185,7 +206,7 @@ def apply_conf_overrides(conf_text: str, overrides: "dict | None") -> str:
         return conf_text
 
     clean: dict[str, "str | None"] = {}
-    spelling: dict[str, str] = {}          # lowercase key -> the caller's own casing
+    spelling: dict[str, str] = {}  # lowercase key -> the caller's own casing
     for key, value in overrides.items():
         low = str(key).strip().lower()
         if not low:
@@ -195,7 +216,8 @@ def apply_conf_overrides(conf_text: str, overrides: "dict | None") -> str:
             raise ValueError(
                 f"{key!r} cannot be overridden: it names a file or output the runner and "
                 f"the restart chain address this stage by. Changing it would detach the "
-                f"stage from its job rather than change the physics.")
+                f"stage from its job rather than change the physics."
+            )
         clean[low] = None if value is None else str(value).strip()
     if not clean:
         return conf_text
@@ -208,7 +230,7 @@ def apply_conf_overrides(conf_text: str, overrides: "dict | None") -> str:
         if key not in clean:
             out.append(raw)
             continue
-        if key in seen:          # a repeat of an overridden directive — the override wins
+        if key in seen:  # a repeat of an overridden directive — the override wins
             continue
         seen.add(key)
         value = clean[key]
@@ -218,7 +240,9 @@ def apply_conf_overrides(conf_text: str, overrides: "dict | None") -> str:
             out.append(f"{body.split(None, 1)[0]:<18} {value}\n")
     missing = [(k, v) for k, v in clean.items() if k not in seen and v is not None]
     if missing:
-        out.append("\n# ── Per-stage overrides (set by hand; not from the protocol) ──\n")
+        out.append(
+            "\n# ── Per-stage overrides (set by hand; not from the protocol) ──\n"
+        )
         out.extend(f"{spelling[k]:<18} {v}\n" for k, v in missing)
     return "".join(out)
 
@@ -238,8 +262,14 @@ def overrides_for_stage(stage_overrides: "dict | None", index: int) -> dict:
     return out
 
 
-def _pressure_block(npt: bool, *, period: float, decay: float, temp: float = 300.0,
-                    margin_ang: float = NPT_MARGIN_ANG) -> str:
+def _pressure_block(
+    npt: bool,
+    *,
+    period: float,
+    decay: float,
+    temp: float = 300.0,
+    margin_ang: float = NPT_MARGIN_ANG,
+) -> str:
     """The barostat + patch-grid-margin lines for a conf.
 
     ``npt=False`` emits a constant-volume block.  That is REQUIRED, not merely allowed,
@@ -314,11 +344,17 @@ PRODUCTION_LANGEVIN_DAMPING = 1.0
 PRODUCTION_RECIPE_VERSION = 2
 
 
-def protocol_fidelity(*, fast: bool, carved: bool, padding_nm: float,
-                      charge_audit: dict, early_stop: bool = False,
-                      chunk_pcts: tuple = LADDER_CHUNK_PCTS,
-                      production_enm: "bool | None" = None,
-                      stage_overrides: "dict | None" = None) -> dict:
+def protocol_fidelity(
+    *,
+    fast: bool,
+    carved: bool,
+    padding_nm: float,
+    charge_audit: dict,
+    early_stop: bool = False,
+    chunk_pcts: tuple = LADDER_CHUNK_PCTS,
+    production_enm: "bool | None" = None,
+    stage_overrides: "dict | None" = None,
+) -> dict:
     """What this package does and does not reproduce of the published protocol (pure).
 
     Yoo, Li, Slone, Maffeo & Aksimentiev, Methods Mol Biol 1811 (2018).  Every remaining
@@ -328,160 +364,190 @@ def protocol_fidelity(*, fast: bool, carved: bool, padding_nm: float,
     ion = _ionization(charge_audit)
     deviations = []
     if fast:
-        deviations.append({
-            "item": "timestep",
-            "ours": "4 fs + hydrogen-mass repartitioning",
-            "theirs": "2 fs, rigidBonds all",
-            "why": "measured structurally indistinguishable at ~2x throughput "
-                   "(experiments/exp47_protocol_delta)",
-        })
-    deviations.append({
-        "item": "in-vacuo pre-relaxation (§3.2)",
-        "ours": "not run",
-        "theirs": "mandatory, before solvation",
-        "why": "it unfolds caDNAno's abstract parallel-helix lattice. NADOC derives "
-               "geometry from topology + B-DNA constants + deformations, so the build is "
-               "already physical; and the step's interhelical repulsion surrogate scores "
-               "zero bonds on a dense honeycomb, letting bundles swell 5.6-10% away from "
-               "the Mg-screened equilibrium (experiments/exp50_vacuum_on_curved)",
-    })
-    deviations.append({
-        "item": "fullElectFrequency",
-        "ours": 1,
-        "theirs": 2,
-        "why": "dt-dependent, not a constant: at their 2 fs it means PME every 4 fs, "
-               "which the 4 fs path already does with fullElect 1. Copying the literal "
-               "2 would put PME on an 8 fs interval, past the r-RESPA resonance limit. "
-               "The PME INTERVAL matches; the number does not.",
-    })
+        deviations.append(
+            {
+                "item": "timestep",
+                "ours": "4 fs + hydrogen-mass repartitioning",
+                "theirs": "2 fs, rigidBonds all",
+                "why": "measured structurally indistinguishable at ~2x throughput "
+                "(experiments/exp47_protocol_delta)",
+            }
+        )
+    deviations.append(
+        {
+            "item": "in-vacuo pre-relaxation (§3.2)",
+            "ours": "not run",
+            "theirs": "mandatory, before solvation",
+            "why": "it unfolds caDNAno's abstract parallel-helix lattice. NADOC derives "
+            "geometry from topology + B-DNA constants + deformations, so the build is "
+            "already physical; and the step's interhelical repulsion surrogate scores "
+            "zero bonds on a dense honeycomb, letting bundles swell 5.6-10% away from "
+            "the Mg-screened equilibrium (experiments/exp50_vacuum_on_curved)",
+        }
+    )
+    deviations.append(
+        {
+            "item": "fullElectFrequency",
+            "ours": 1,
+            "theirs": 2,
+            "why": "dt-dependent, not a constant: at their 2 fs it means PME every 4 fs, "
+            "which the 4 fs path already does with fullElect 1. Copying the literal "
+            "2 would put PME on an 8 fs interval, past the r-RESPA resonance limit. "
+            "The PME INTERVAL matches; the number does not.",
+        }
+    )
     # ── Always-on deviations.  These used to be absent from this list even though every
     # package has them, which made the manifest read as a SHORTER delta than it is —
     # exactly the failure this block exists to prevent.
-    deviations.append({
-        "item": "langevinDamping (production)",
-        "ours": f"{PRODUCTION_LANGEVIN_DAMPING:g} ps^-1",
-        "theirs": f"{LADDER_LANGEVIN_DAMPING:g} ps^-1 is the tutorial's EQUILIBRATION "
-                  f"value; the group's production papers use ~1",
-        "why": "the ladder keeps 5 (strong coupling while a template-built structure "
-               "dumps strain), but production runs weak: at 5 ps^-1 the dynamics are "
-               "overdamped and every time-dependent observable — diffusion, relaxation "
-               "and correlation times, ion residence, breathing kinetics — is scaled by "
-               "something unrelated to the system. Equilibrium averages are unaffected.",
-    })
-    deviations.append({
-        "item": "stepspercycle / pairlistdist",
-        "ours": f"{AKSIMENTIEV_STEPS_PER_CYCLE} (ladder) / 10 (production), "
-                f"pairlistdist {LADDER_PAIRLISTDIST_ANG:g} (ladder) / "
-                f"{PAIRLISTDIST_ANG:g} (production)",
-        "theirs": "12, pairlistdist 12",
-        "why": "a longer pairlist-rebuild cycle with a wider buffer to match. The "
-               "constant is named AKSIMENTIEV_STEPS_PER_CYCLE for historical reasons; it "
-               "is NOT the tutorial's number. No physical effect while the buffer covers "
-               "the cycle, but a methods table copied from the reference will not match.",
-    })
-    deviations.append({
-        "item": "production barostat",
-        "ours": "period 200 fs / decay 100 fs",
-        "theirs": "1000 / 500 (which the LADDER does match)",
-        "why": "a NADOC choice, not the reference. A stiffer piston changes the "
-               "volume-fluctuation spectrum and hence the apparent compressibility; it "
-               "does not move the structure.",
-    })
-    deviations.append({
-        "item": "stage chunking",
-        "ours": f"each k split into {len(chunk_pcts)} chunks ({', '.join(f'{p:g}%' for p in chunk_pcts)})",
-        "theirs": "each k run flat for 4.8 ns",
-        "why": "restart checkpoints + per-chunk health sampling. Velocities carry across "
-               "each boundary (binVelocities), so it is thermodynamically neutral, but "
-               "each boundary re-seeds the Langevin RNG stream.",
-    })
+    deviations.append(
+        {
+            "item": "langevinDamping (production)",
+            "ours": f"{PRODUCTION_LANGEVIN_DAMPING:g} ps^-1",
+            "theirs": f"{LADDER_LANGEVIN_DAMPING:g} ps^-1 is the tutorial's EQUILIBRATION "
+            f"value; the group's production papers use ~1",
+            "why": "the ladder keeps 5 (strong coupling while a template-built structure "
+            "dumps strain), but production runs weak: at 5 ps^-1 the dynamics are "
+            "overdamped and every time-dependent observable — diffusion, relaxation "
+            "and correlation times, ion residence, breathing kinetics — is scaled by "
+            "something unrelated to the system. Equilibrium averages are unaffected.",
+        }
+    )
+    deviations.append(
+        {
+            "item": "stepspercycle / pairlistdist",
+            "ours": f"{AKSIMENTIEV_STEPS_PER_CYCLE} (ladder) / 10 (production), "
+            f"pairlistdist {LADDER_PAIRLISTDIST_ANG:g} (ladder) / "
+            f"{PAIRLISTDIST_ANG:g} (production)",
+            "theirs": "12, pairlistdist 12",
+            "why": "a longer pairlist-rebuild cycle with a wider buffer to match. The "
+            "constant is named AKSIMENTIEV_STEPS_PER_CYCLE for historical reasons; it "
+            "is NOT the tutorial's number. No physical effect while the buffer covers "
+            "the cycle, but a methods table copied from the reference will not match.",
+        }
+    )
+    deviations.append(
+        {
+            "item": "production barostat",
+            "ours": "period 200 fs / decay 100 fs",
+            "theirs": "1000 / 500 (which the LADDER does match)",
+            "why": "a NADOC choice, not the reference. A stiffer piston changes the "
+            "volume-fluctuation spectrum and hence the apparent compressibility; it "
+            "does not move the structure.",
+        }
+    )
+    deviations.append(
+        {
+            "item": "stage chunking",
+            "ours": f"each k split into {len(chunk_pcts)} chunks ({', '.join(f'{p:g}%' for p in chunk_pcts)})",
+            "theirs": "each k run flat for 4.8 ns",
+            "why": "restart checkpoints + per-chunk health sampling. Velocities carry across "
+            "each boundary (binVelocities), so it is thermodynamically neutral, but "
+            "each boundary re-seeds the Langevin RNG stream.",
+        }
+    )
     if early_stop:
-        deviations.append({
-            "item": "stage length",
-            "ours": "TRUNCATED — a stage stops at a chunk boundary once its energy and "
-                    "base pairing are both flat (md_cutoff)",
-            "theirs": "every stage runs its full 4.8 ns",
-            "why": "an unpublished accelerator. A stage can end at 10% of its nominal "
-                   "length, so the ladder this package ran is SHORTER than 19.2 ns and "
-                   "the per-segment record is the only place the real number exists. "
-                   "Turn it off (the 'literature' or 'full_physics' protocol) for any run "
-                   "whose stage lengths you intend to quote.",
-        })
+        deviations.append(
+            {
+                "item": "stage length",
+                "ours": "TRUNCATED — a stage stops at a chunk boundary once its energy and "
+                "base pairing are both flat (md_cutoff)",
+                "theirs": "every stage runs its full 4.8 ns",
+                "why": "an unpublished accelerator. A stage can end at 10% of its nominal "
+                "length, so the ladder this package ran is SHORTER than 19.2 ns and "
+                "the per-segment record is the only place the real number exists. "
+                "Turn it off (the 'literature' or 'full_physics' protocol) for any run "
+                "whose stage lengths you intend to quote.",
+            }
+        )
     # Restraints in production.  ``None`` = a relaxation package, where production has
     # not been configured yet; the production CHILD records its own answer.
     if production_enm is False:
-        deviations.append({
-            "item": "production restraints",
-            "ours": "none — genuinely unrestrained",
-            "theirs": "an elastic network at k = 0.1 kcal/mol/A^2 retained THROUGHOUT "
-                      "production (Yoo & Aksimentiev PNAS 110:20099; Maffeo, Yoo & "
-                      "Aksimentiev NAR 44:3013; Shi et al. ACS Nano 13:12443)",
-            "why": "their 'unrestrained' 200+ ns origami productions are not unrestrained. "
-                   "A template-built structure sampled with no network is a measurably "
-                   "SOFTER ensemble — more breathing, more terminal fraying, larger RMSD "
-                   "drift, lower apparent bending and torsional moduli. Any global-shape "
-                   "or fluctuation observable compared against those papers is affected. "
-                   "Set enm_restraints='on' (or relax with the 'literature' protocol, "
-                   "which turns it on) to keep one.",
-        })
+        deviations.append(
+            {
+                "item": "production restraints",
+                "ours": "none — genuinely unrestrained",
+                "theirs": "an elastic network at k = 0.1 kcal/mol/A^2 retained THROUGHOUT "
+                "production (Yoo & Aksimentiev PNAS 110:20099; Maffeo, Yoo & "
+                "Aksimentiev NAR 44:3013; Shi et al. ACS Nano 13:12443)",
+                "why": "their 'unrestrained' 200+ ns origami productions are not unrestrained. "
+                "A template-built structure sampled with no network is a measurably "
+                "SOFTER ensemble — more breathing, more terminal fraying, larger RMSD "
+                "drift, lower apparent bending and torsional moduli. Any global-shape "
+                "or fluctuation observable compared against those papers is affected. "
+                "Set enm_restraints='on' (or relax with the 'literature' protocol, "
+                "which turns it on) to keep one.",
+            }
+        )
     elif production_enm is True:
-        deviations.append({
-            "item": "production elastic network",
-            "ours": "base-ring atoms, inter-residue, 8 A cutoff, k = 0.1, rebuilt from "
-                    "the equilibrated checkpoint",
-            "theirs": "ALL non-hydrogen DNA atom pairs within 5 A, PSF bonds filtered",
-            "why": "same restraint constant, sparser network, so the effective framework "
-                   "stiffness is lower than the published setup. NADOC has no dense-ENM "
-                   "writer yet; this reuses the tutorial's base-ring network from §3.3.",
-        })
+        deviations.append(
+            {
+                "item": "production elastic network",
+                "ours": "base-ring atoms, inter-residue, 8 A cutoff, k = 0.1, rebuilt from "
+                "the equilibrated checkpoint",
+                "theirs": "ALL non-hydrogen DNA atom pairs within 5 A, PSF bonds filtered",
+                "why": "same restraint constant, sparser network, so the effective framework "
+                "stiffness is lower than the published setup. NADOC has no dense-ENM "
+                "writer yet; this reuses the tutorial's base-ring network from §3.3.",
+            }
+        )
     if stage_overrides:
         edited = sorted(stage_overrides, key=lambda k: (k != "*", k))
         n_keys = len({k for v in stage_overrides.values() for k in (v or {})})
-        deviations.append({
-            "item": "hand-edited stages",
-            "ours": f"{n_keys} directive(s) overridden on stage(s) {', '.join(edited)}",
-            "theirs": "the protocol's own value everywhere",
-            "why": "set by hand in the Job Wizard, which is a deliberate departure from "
-                   "EVERY protocol — the exact edits are in the manifest's "
-                   "`stage_overrides` block, and the confs on disk are the final word.",
-            "overrides": {k: dict(v or {}) for k, v in stage_overrides.items()},
-        })
-    deviations.append({
-        "item": "wrapWater",
-        "ours": "on",
-        "theirs": "off",
-        "why": "solute-neutral: wrapAll is off so the multi-molecule origami is never "
-               "split, and bounding the solvent keeps coordinates inside [0, L) for the "
-               "periodic charge-shell query",
-    })
+        deviations.append(
+            {
+                "item": "hand-edited stages",
+                "ours": f"{n_keys} directive(s) overridden on stage(s) {', '.join(edited)}",
+                "theirs": "the protocol's own value everywhere",
+                "why": "set by hand in the Job Wizard, which is a deliberate departure from "
+                "EVERY protocol — the exact edits are in the manifest's "
+                "`stage_overrides` block, and the confs on disk are the final word.",
+                "overrides": {k: dict(v or {}) for k, v in stage_overrides.items()},
+            }
+        )
+    deviations.append(
+        {
+            "item": "wrapWater",
+            "ours": "on",
+            "theirs": "off",
+            "why": "solute-neutral: wrapAll is off so the multi-molecule origami is never "
+            "split, and bounding the solvent keeps coordinates inside [0, L) for the "
+            "periodic charge-shell query",
+        }
+    )
     if carved:
-        deviations.append({
-            "item": "solvation",
-            "ours": "hydration-shell carve, NVT throughout",
-            "theirs": "full periodic water box, NPT",
-            "why": "the full box exceeded this hardware's atom budget. NOTE: a carved "
-                   "cell runs no barostat, so the Note-4 settle stage and the box-trace "
-                   "criterion do not apply to this run.",
-        })
+        deviations.append(
+            {
+                "item": "solvation",
+                "ours": "hydration-shell carve, NVT throughout",
+                "theirs": "full periodic water box, NPT",
+                "why": "the full box exceeded this hardware's atom budget. NOTE: a carved "
+                "cell runs no barostat, so the Note-4 settle stage and the box-trace "
+                "criterion do not apply to this run.",
+            }
+        )
     if padding_nm < 2.0:
-        deviations.append({
-            "item": "solvent padding",
-            "ours": f"{padding_nm:g} nm",
-            "theirs": "2.0 nm (bbox ± 20 Å)",
-            "why": "trimmed to keep the cell inside the hardware's atom budget; see "
-                   "box_sizing.padding_note in the charge audit",
-        })
+        deviations.append(
+            {
+                "item": "solvent padding",
+                "ours": f"{padding_nm:g} nm",
+                "theirs": "2.0 nm (bbox ± 20 Å)",
+                "why": "trimmed to keep the cell inside the hardware's atom budget; see "
+                "box_sizing.padding_note in the charge audit",
+            }
+        )
     if ion.get("counterion") == "na":
-        deviations.append({
-            "item": "counterion",
-            "ours": "Na+",
-            "theirs": "Mg(H2O)6(2+)",
-            "why": "no magnesium was requested (mgcl2_mM = 0), so this is a deliberate "
-                   "monovalent-screening run and NOT the published origami protocol",
-        })
+        deviations.append(
+            {
+                "item": "counterion",
+                "ours": "Na+",
+                "theirs": "Mg(H2O)6(2+)",
+                "why": "no magnesium was requested (mgcl2_mM = 0), so this is a deliberate "
+                "monovalent-screening run and NOT the published origami protocol",
+            }
+        )
     return {
         "reference": "Yoo, Li, Slone, Maffeo & Aksimentiev, "
-                     "Methods Mol Biol 1811 (2018), doi:10.1007/978-1-4939-8582-1_15",
+        "Methods Mol Biol 1811 (2018), doi:10.1007/978-1-4939-8582-1_15",
         "recipe_version": RELAX_RECIPE_VERSION,
         "reproduces": [
             "Mg(H2O)6(2+) neutralisation with Cl- balancing the excess, no Na+ (§3.3)",
@@ -517,21 +583,29 @@ def _salt_note(charge_audit: dict) -> str:
         return "ion recipe unavailable (no charge audit)"
     n_mg, n_na, n_cl = ion.get("n_mg", 0), ion.get("n_na", 0), ion.get("n_cl", 0)
     if ion.get("counterion") == "mg":
-        head = (f"Aksimentiev recipe: {n_mg:,} Mg(H2O)6(2+) neutralise the "
-                f"{ion.get('dna_charge_used_e', 0):.0f} e backbone")
+        head = (
+            f"Aksimentiev recipe: {n_mg:,} Mg(H2O)6(2+) neutralise the "
+            f"{ion.get('dna_charge_used_e', 0):.0f} e backbone"
+        )
         if ion.get("n_mg_bulk", 0) > ion.get("n_mg_neutralising", 0):
             head += f" ({ion['n_mg_bulk']:,} of them set by the bulk concentration)"
         tail = f", balanced by {n_cl:,} Cl-"
         if n_na:
             tail += f" with {n_na:,} Na+ from an explicitly requested NaCl bath"
         return head + tail + "; no Na+ counterions."
-    return (f"Monovalent neutralisation: {n_na:,} Na+ / {n_cl:,} Cl- "
-            f"with {n_mg:,} bulk Mg2+ — NOT the published origami recipe "
-            f"(no magnesium was requested).")
+    return (
+        f"Monovalent neutralisation: {n_na:,} Na+ / {n_cl:,} Cl- "
+        f"with {n_mg:,} bulk Mg2+ — NOT the published origami recipe "
+        f"(no magnesium was requested)."
+    )
 
 
-def _box_check(package_dir: Path, name_stem: str,
-               box: tuple[float, float, float], padding_nm: float) -> dict:
+def _box_check(
+    package_dir: Path,
+    name_stem: str,
+    box: tuple[float, float, float],
+    padding_nm: float,
+) -> dict:
     """Measure the built solute against the cell it was given.
 
     Best-effort: a package must never fail to build because a diagnostic could not be
@@ -552,8 +626,9 @@ def _box_check(package_dir: Path, name_stem: str,
         import numpy as _np  # noqa: PLC0415
 
         env = _cell.solute_envelope([_np.asarray(xyz, dtype=float)])
-        rep = _cell.box_adequacy([b / 10.0 for b in box], env,
-                                 padding_nm=padding_nm, percentile="max")
+        rep = _cell.box_adequacy(
+            [b / 10.0 for b in box], env, padding_nm=padding_nm, percentile="max"
+        )
         rep["measured"] = True
         if not rep["fits_rotated"]:
             logger.warning(
@@ -562,7 +637,9 @@ def _box_check(package_dir: Path, name_stem: str,
                 "unrestrained run will bring the DNA within %.1f A of its own periodic "
                 "image. Rebuild with box_mode='rotation' or more padding if this run "
                 "includes a free stage.",
-                name_stem, [round(b, 1) for b in box], rep["radius_ang"],
+                name_stem,
+                [round(b, 1) for b in box],
+                rep["radius_ang"],
                 2 * rep["radius_ang"] + 2 * padding_nm * 10.0,
                 max(rep["image_gap_rotated_ang"], 0.0),
             )
@@ -631,8 +708,8 @@ def package_npt_allowed(package_dir: "str | Path") -> bool:
 # ``q_eff ≈ 0.25 e``): in explicit solvent the condensed counterions are actual particles
 # that screen the field themselves.  Applying the bare −1 e is the physically correct
 # driving force AND the cross-engine-comparable one.
-_KCAL_J = 4184.0                     # J per kcal (thermochemical)
-_AVOGADRO = 6.02214076e23            # mol⁻¹ (SI exact)
+_KCAL_J = 4184.0  # J per kcal (thermochemical)
+_AVOGADRO = 6.02214076e23  # mol⁻¹ (SI exact)
 #: 1 kcal·mol⁻¹·Å⁻¹ expressed in pN (≈ 69.4769).
 KCAL_MOL_A_IN_PN: float = _KCAL_J / _AVOGADRO / 1e-10 * 1e12
 #: CHARMM net charge of an INTERNAL DNA nucleotide (its one phosphate), in units of e.
@@ -681,8 +758,12 @@ def _efield_lines(field: Optional[dict]) -> list[str]:
     ]
 
 
-def external_forces_block(anchors_file: Optional[str], field: Optional[dict],
-                          *, anchor_k: Optional[float] = None) -> str:
+def external_forces_block(
+    anchors_file: Optional[str],
+    field: Optional[dict],
+    *,
+    anchor_k: Optional[float] = None,
+) -> str:
     """The anchor + ``eField`` directives — the ONE emitter every conf writer uses.
 
     Two anchor mechanisms, chosen by ``anchor_k``:
@@ -739,9 +820,15 @@ def external_forces_block(anchors_file: Optional[str], field: Optional[dict],
 #: ``consref`` / ``conskfile``: in a relax ladder those are the slow-release ENM
 #: restraint, nothing to do with anchors, and stripping them would silently unrestrain
 #: the ladder.
-_EXTERNAL_FORCE_DIRECTIVES = frozenset({
-    "fixedatoms", "fixedatomsfile", "fixedatomscol", "efieldon", "efield",
-})
+_EXTERNAL_FORCE_DIRECTIVES = frozenset(
+    {
+        "fixedatoms",
+        "fixedatomsfile",
+        "fixedatomscol",
+        "efieldon",
+        "efield",
+    }
+)
 
 
 #: The marker PDB filename the anchor machinery owns end-to-end.
@@ -755,9 +842,13 @@ def _reinsert_resident(lines: list, _key) -> list:
     return lines[:i] + ["GPUresident        on\n"] + lines[i:]
 
 
-def inject_external_forces(conf_text: str, anchors_file: Optional[str],
-                           field: Optional[dict], *,
-                           restore_resident: bool = False) -> str:
+def inject_external_forces(
+    conf_text: str,
+    anchors_file: Optional[str],
+    field: Optional[dict],
+    *,
+    restore_resident: bool = False,
+) -> str:
     """Add (or replace) the anchors + E-field block in an ALREADY-EMITTED conf (pure).
 
     Lets forces be attached to a job whose package is already prepared, without
@@ -823,19 +914,20 @@ def inject_external_forces(conf_text: str, anchors_file: Optional[str],
 
 # ── Segment spec ──────────────────────────────────────────────────────────────
 
+
 @dataclass
 class SegmentSpec:
-    name:     str              # output name prefix, e.g. "B_tube_01_050K_NVT_k5_p10"
-    stage:    str              # human stage label, e.g. "50K NVT k=5.0"
-    percent:  float            # 10, 50, or 100
-    steps:    int              # MD steps in this segment
-    temp:     float            # target temperature (K)
-    damping:  float            # Langevin damping (ps^-1)
-    scale:    Optional[float]  # restraint k (kcal/mol/Å²); None = unrestrained
-    npt:      bool             # True if barostat is on
-    previous: str              # output name of the preceding segment (or min)
-    reinit:   bool = False     # True → reinitvels + temperature instead of vel continuation
-    dcd_freq: int  = 20000     # DCD frame output interval (steps)
+    name: str  # output name prefix, e.g. "B_tube_01_050K_NVT_k5_p10"
+    stage: str  # human stage label, e.g. "50K NVT k=5.0"
+    percent: float  # 10, 50, or 100
+    steps: int  # MD steps in this segment
+    temp: float  # target temperature (K)
+    damping: float  # Langevin damping (ps^-1)
+    scale: Optional[float]  # restraint k (kcal/mol/Å²); None = unrestrained
+    npt: bool  # True if barostat is on
+    previous: str  # output name of the preceding segment (or min)
+    reinit: bool = False  # True → reinitvels + temperature instead of vel continuation
+    dcd_freq: int = 20000  # DCD frame output interval (steps)
     min_c1_paired: float = 0.90
     min_wc_ref_relative: float = 0.85
     extra_bonds_file: Optional[str] = None
@@ -906,10 +998,14 @@ def strip_gpu_resident(conf_text: str) -> str:
 # Step-count / output-cadence keys that must be rescaled when the timestep changes, so
 # the segment covers the SAME simulated time and writes the same frames-per-ns.
 _STEP_SCALED_KEYS = ("run", "outputEnergies", "xstFreq", "restartfreq", "dcdFreq")
-_TIMESTEP_RE = re.compile(r"^([ \t]*timestep[ \t]+)([0-9.]+)", re.IGNORECASE | re.MULTILINE)
+_TIMESTEP_RE = re.compile(
+    r"^([ \t]*timestep[ \t]+)([0-9.]+)", re.IGNORECASE | re.MULTILINE
+)
 # A `rigidBonds all` directive (the fast ladder's rigid-H constraint that a RATTLE
 # blow-up fails on).  Softening flips it to `none`.
-_RIGID_BONDS_ALL_RE = re.compile(r"^([ \t]*rigidBonds[ \t]+)all\b", re.IGNORECASE | re.MULTILINE)
+_RIGID_BONDS_ALL_RE = re.compile(
+    r"^([ \t]*rigidBonds[ \t]+)all\b", re.IGNORECASE | re.MULTILINE
+)
 
 
 def soften_conf_for_stability(conf_text: str) -> str:
@@ -937,9 +1033,9 @@ def soften_conf_for_stability(conf_text: str) -> str:
     caller uses "unchanged" as the signal to stop retrying)."""
     if not _RIGID_BONDS_ALL_RE.search(conf_text):
         return conf_text
-    text = strip_gpu_resident(conf_text)                                  # soft ≠ GPU-resident
+    text = strip_gpu_resident(conf_text)  # soft ≠ GPU-resident
     text = _RIGID_BONDS_ALL_RE.sub(lambda m: f"{m.group(1)}none", text)
-    text = _TIMESTEP_RE.sub(lambda m: f"{m.group(1)}1", text, count=1)    # 4 → 1 fs
+    text = _TIMESTEP_RE.sub(lambda m: f"{m.group(1)}1", text, count=1)  # 4 → 1 fs
     return text
 
 
@@ -1008,10 +1104,19 @@ def downgrade_gpu_resident(conf_text: str, factor: Optional[int] = None) -> str:
 # Directives a resume conf must re-specify (dropped from the original, re-emitted to
 # point at the checkpoint + run only the remaining steps).  Mirrors the local
 # runner's `_RESUME_DROP` (namd_runner) so remote resume matches local behaviour.
-_RESUME_DROP = frozenset({
-    "binCoordinates", "binVelocities", "extendedSystem", "temperature",
-    "reinitvels", "firsttimestep", "dcdFile", "xstFile", "run",
-})
+_RESUME_DROP = frozenset(
+    {
+        "binCoordinates",
+        "binVelocities",
+        "extendedSystem",
+        "temperature",
+        "reinitvels",
+        "firsttimestep",
+        "dcdFile",
+        "xstFile",
+        "run",
+    }
+)
 
 
 def build_remote_resume_conf(
@@ -1043,7 +1148,8 @@ def build_remote_resume_conf(
             f"resume step {restart_step} is at/past the segment total {total_steps}"
         )
     kept = [
-        line for line in conf_text.splitlines()
+        line
+        for line in conf_text.splitlines()
         if (line.split()[0] if line.split() else "") not in _RESUME_DROP
     ]
     kept += [
@@ -1077,7 +1183,9 @@ _CONSERVATIVE_REFERENCE_DT_FS = 1.0
 _MANUAL_MEDIUM_DT_FS = 2.0
 
 
-def require_sanctioned_production_timestep(dt_fs: float, *, allow_manual_2fs: bool = False) -> float:
+def require_sanctioned_production_timestep(
+    dt_fs: float, *, allow_manual_2fs: bool = False
+) -> float:
     """Enforce the sanctioned-production-timestep rule; return ``dt_fs`` if it is allowed.
 
     Allowed: the 4.0 fs fast path and the explicit 1.0 fs conservative-reference path always;
@@ -1178,7 +1286,11 @@ def build_production_conf(
     """
     bx, by, bz = box
     cx, cy, cz = bx / 2, by / 2, bz / 2
-    extras = "extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n" if mgh_extrabonds else ""
+    extras = (
+        "extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n"
+        if mgh_extrabonds
+        else ""
+    )
     if enm_file:
         # extraBonds may already be on for the Mg hydration shell; NAMD accepts the
         # directive once and any number of files, so only add what is missing.
@@ -1208,10 +1320,13 @@ def build_production_conf(
     # ONE resolver, shared with _segment_conf: hard incompatibility → the user's explicit
     # choice → the measured size crossover.  The timestep is deliberately not an input.
     _res = resident_decision(
-        n_atoms=n_atoms, force_resident=force_resident, min_atoms=_RESIDENT_MIN_ATOMS,
+        n_atoms=n_atoms,
+        force_resident=force_resident,
+        min_atoms=_RESIDENT_MIN_ATOMS,
         # A HARD anchor rides fixedAtoms, which NAMD 3 refuses under resident.  SOFT
         # anchors are harmonic restraints and are unaffected.
-        fixed_atoms=bool(anchors_file and anchor_k is None))
+        fixed_atoms=bool(anchors_file and anchor_k is None),
+    )
     resident_ok = _res.on
     # HARD anchors (anchor_k None) ride ``fixedAtoms``, which NAMD 3 refuses to run under
     # GPU-resident — "GPUresident is incompatible with the following options: ... fixed
@@ -1230,7 +1345,9 @@ def build_production_conf(
     # to the _hmr name (rather than the plain PSF, as this did before) closes the hole where
     # a caller asking for 4 fs without supplying structure_psf silently got a 4 fs conf
     # against unrepartitioned masses — the exact combination exp51 measured failing RATTLE.
-    psf = (structure_psf or f"{name_stem}_hmr.psf") if choice.hmr else f"{name_stem}.psf"
+    psf = (
+        (structure_psf or f"{name_stem}_hmr.psf") if choice.hmr else f"{name_stem}.psf"
+    )
     # NO timestep coupling.  This used to be `"" if ts == 1.0 else _res_line`, which
     # silently discarded the user's GPU-resident choice at 1 fs on the grounds that
     # resident is a loss at small sizes.  exp52 measured the pair on one system: resident
@@ -1252,7 +1369,9 @@ def build_production_conf(
     # Soft anchors OWN the constraints channel; the unconditional "constraints off"
     # below would switch them straight back off.  Emit it only when they are not in use,
     # so an unanchored (or hard-anchored) production conf stays byte-identical.
-    constraints_line = "" if (anchors_file and anchor_k is not None) else "constraints        off\n"
+    constraints_line = (
+        "" if (anchors_file and anchor_k is not None) else "constraints        off\n"
+    )
     # Colvars rides alongside the external-forces block: both are optional NAMD stanzas
     # and neither knows about the other.
     if colvars_file:
@@ -1267,7 +1386,8 @@ def build_production_conf(
     prod_x = _xst_freq(spec.steps, ts, prod_e)
     # A cell with vacuum in it MUST run at constant volume — see _pressure_block.
     pressure = _pressure_block(npt, period=200.0, decay=100.0)
-    return apply_conf_overrides(f"""\
+    return apply_conf_overrides(
+        f"""\
 structure          {psf}
 coordinates        {name_stem}.pdb
 
@@ -1322,7 +1442,9 @@ binCoordinates     output/{prev}.coor
 binVelocities      output/{prev}.vel
 extendedSystem     output/{prev}.xsc
 run                {spec.steps}
-""", overrides)
+""",
+        overrides,
+    )
 
 
 def build_reseed_conf(
@@ -1356,7 +1478,11 @@ def build_reseed_conf(
     """
     bx, by, bz = box
     cx, cy, cz = bx / 2, by / 2, bz / 2
-    extras = "extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n" if mgh_extrabonds else ""
+    extras = (
+        "extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n"
+        if mgh_extrabonds
+        else ""
+    )
     psf = structure_psf or f"{name_stem}.psf"
     vel_block = (
         f"binVelocities      {equil_base}.vel\n"
@@ -1574,15 +1700,16 @@ def psf_atom_count(psf_path: Path) -> Optional[int]:
                     m = _PSF_NATOM_RE.search(line)
                     if m:
                         return int(m.group(1))
-                if i > 2_000_000:      # far past any real !NTITLE block
+                if i > 2_000_000:  # far past any real !NTITLE block
                     break
     except OSError:
         pass
     return None
 
 
-def effective_timestep_fs(spec: "SegmentSpec", fast: bool,
-                          base_timestep_fs: Optional[float] = None) -> float:
+def effective_timestep_fs(
+    spec: "SegmentSpec", fast: bool, base_timestep_fs: Optional[float] = None
+) -> float:
     """The timestep a segment will ACTUALLY run at (pure).
 
     Three tiers, and each is a CEILING rather than a fixed value: ``soft`` (flexible bonds)
@@ -1639,6 +1766,7 @@ def _segment_conf(
     overrides: Optional[dict] = None,
 ) -> str:
     from backend.core.namd_helpers import vel_force_dcd_block  # noqa: PLC0415
+
     # Soft integrator: flexible H bonds + 1 fs timestep.  Needed for declashed
     # designs whose residual single-stranded contacts crash rigid-bond RATTLE.
     # Fast mode (HMR + 4 fs) applies only to hard segments — it is incompatible
@@ -1656,7 +1784,9 @@ def _segment_conf(
     # unreachable.  GBIS and vacuum have no HMR PSF to point at, whatever was asked.
     choice = resolve_integrator(
         timestep,
-        rigid_bonds=rigid_bonds if rigid_bonds is not None else ("none" if spec.soft else "all"),
+        rigid_bonds=rigid_bonds
+        if rigid_bonds is not None
+        else ("none" if spec.soft else "all"),
         hmr=hmr if hmr is not None else (fast and not gbis and not vacuum),
     )
     rigid_bonds = choice.rigid_bonds
@@ -1725,15 +1855,27 @@ def _segment_conf(
     # two hard incompatibilities below still win, because they are cases where resident
     # cannot run at all rather than cases where it is merely slower.
     _res = resident_decision(
-        n_atoms=n_atoms, force_resident=force_resident, min_atoms=_RESIDENT_MIN_ATOMS,
-        gbis=gbis, vacuum=vacuum,
+        n_atoms=n_atoms,
+        force_resident=force_resident,
+        min_atoms=_RESIDENT_MIN_ATOMS,
+        gbis=gbis,
+        vacuum=vacuum,
         fixed_atoms=bool(spec.fixed_atoms_file or anchors_file),
-        carved_fill=fill_fraction if carved else None, min_fill=_RESIDENT_MIN_FILL)
+        carved_fill=fill_fraction if carved else None,
+        min_fill=_RESIDENT_MIN_FILL,
+    )
     gpu_resident = _res.on
     lines = [
         _common_header(
-            name_stem, box, mgh_extrabonds, rigid_bonds=rigid_bonds, timestep=timestep,
-            gpu_resident=gpu_resident, structure_psf=eff_psf, gbis=gbis, vacuum=vacuum,
+            name_stem,
+            box,
+            mgh_extrabonds,
+            rigid_bonds=rigid_bonds,
+            timestep=timestep,
+            gpu_resident=gpu_resident,
+            structure_psf=eff_psf,
+            gbis=gbis,
+            vacuum=vacuum,
             # From THIS chunk's length, so the frame count survives a timestep change.
             output_freq=_output_freq(spec.steps),
             # ...but the RESTART cadence is a DIFFERENT question. It is crash insurance,
@@ -1749,8 +1891,11 @@ def _segment_conf(
     lines.append(f"dcdFreq            {spec.dcd_freq}\n")
     # velDCD/forceDCD sampled at the SAME cadence as the position DCD so training
     # frames line up 1:1.  Empty string (no-op) unless capture_vel_force is set.
-    lines.append(vel_force_dcd_block(f"output/{spec.name}", spec.dcd_freq,
-                                     capture=capture_vel_force))
+    lines.append(
+        vel_force_dcd_block(
+            f"output/{spec.name}", spec.dcd_freq, capture=capture_vel_force
+        )
+    )
     lines.append(f"xstFile            output/{spec.name}.xst\n")
 
     if spec.reinit or not spec.previous:
@@ -1758,8 +1903,14 @@ def _segment_conf(
     lines.append(f"langevinTemp       {spec.temp:g}\n")
     lines.append(f"langevinDamping    {spec.damping:g}\n")
 
-    lines.append(_pressure_block(bool(spec.npt) and not gbis and not vacuum,
-                                 period=1000.0, decay=500.0, temp=spec.temp))
+    lines.append(
+        _pressure_block(
+            bool(spec.npt) and not gbis and not vacuum,
+            period=1000.0,
+            decay=500.0,
+            temp=spec.temp,
+        )
+    )
 
     if mgh_extrabonds or spec.extra_bonds_file or push_bonds_file:
         lines.append("extraBonds         on\n")
@@ -1843,8 +1994,11 @@ def _min_conf(
     # ENM from the declashed coords (rebuild_declashed_references) so it never
     # encodes the clash again.  See PIPELINE_4FS_EXTRA_BASES.md.
     enm = enm_file or f"{name_stem}_k{scale:g}.enm.extra"
-    lines = [_common_header(name_stem, box, mgh_extrabonds, rigid_bonds="none",
-                            gbis=gbis, vacuum=vacuum)]
+    lines = [
+        _common_header(
+            name_stem, box, mgh_extrabonds, rigid_bonds="none", gbis=gbis, vacuum=vacuum
+        )
+    ]
     lines.append(f"outputName         output/{min_name}\n")
     lines.append(f"dcdFile            output/{min_name}.dcd\n")
     lines.append("dcdFreq            0\n")
@@ -1867,6 +2021,7 @@ def _min_conf(
 
 
 # ── Restraints PDB ────────────────────────────────────────────────────────────
+
 
 def write_restraints_pdb(pdb_path: Path, dst_path: Path) -> None:
     """Write restraints_dna_heavy.pdb with B=1.0 for DNA heavy atoms, B=0 for rest.
@@ -1904,9 +2059,12 @@ SETTLE_RESTRAINT_K = 1.0
 
 
 def write_anchor_restraints_pdb(
-    pdb_path: Path, dst_path: Path,
+    pdb_path: Path,
+    dst_path: Path,
     anchored_indices: "set[int] | Mapping[int, set[str] | None]",
-    *, atom_names: "set[str] | None" = None, k: Optional[float] = None,
+    *,
+    atom_names: "set[str] | None" = None,
+    k: Optional[float] = None,
 ) -> int:
     """Write an anchor marker PDB: column B carries the anchor weight for the selected
     atoms of the anchored DNA residues and 0 for everything else (hydrogens, solvent, and
@@ -1991,7 +2149,11 @@ def _set_xyz(line: str, xyz) -> str:
 
 
 def retarget_anchor_pdb(
-    src_path: Path, dst_path: Path, *, coords=None, k: Optional[float] = None,
+    src_path: Path,
+    dst_path: Path,
+    *,
+    coords=None,
+    k: Optional[float] = None,
 ) -> int:
     """Re-point an existing anchor PDB at new reference coordinates and/or a new column-B
     weight.  Returns the number of anchored (B > 0) atoms.
@@ -2024,7 +2186,8 @@ def retarget_anchor_pdb(
                 if row >= len(coords):
                     raise ValueError(
                         f"{src_path.name} has more atom records than the {len(coords)} "
-                        f"coordinates supplied — the .coor does not match this package")
+                        f"coordinates supplied — the .coor does not match this package"
+                    )
                 raw = _set_xyz(raw, coords[row])
             try:
                 b = float(raw[60:66])
@@ -2038,7 +2201,8 @@ def retarget_anchor_pdb(
     if coords is not None and row + 1 != len(coords):
         raise ValueError(
             f"{src_path.name} has {row + 1} atom records but {len(coords)} coordinates "
-            f"were supplied — the .coor does not match this package")
+            f"were supplied — the .coor does not match this package"
+        )
     dst_path.write_text("".join(out))
     return n_anchored
 
@@ -2101,11 +2265,14 @@ def _parse_base_ring_residues(pdb_path: Path) -> list[_BaseResidue]:
         if atom not in BASE_RING_ATOMS or resn not in DNA_RESNAMES:
             continue
         try:
-            pos = np.array([
-                float(line[30:38]),
-                float(line[38:46]),
-                float(line[46:54]),
-            ], dtype=float)
+            pos = np.array(
+                [
+                    float(line[30:38]),
+                    float(line[38:46]),
+                    float(line[46:54]),
+                ],
+                dtype=float,
+            )
         except ValueError:
             continue
         assert current is not None  # set on first ATOM after every boundary
@@ -2143,7 +2310,9 @@ def write_aksimentiev_enm_files(
     if exclude_residues:
         residues = [r for r in residues if (r.key[0], r.key[1]) not in exclude_residues]
     if not residues:
-        raise RuntimeError(f"No DNA base-ring atoms found for ENM generation in {pdb_path}")
+        raise RuntimeError(
+            f"No DNA base-ring atoms found for ENM generation in {pdb_path}"
+        )
 
     # Flatten every base-ring atom into parallel arrays (position, global 0-based
     # atom index, owning-residue index).  One atom-level KD-tree query then finds
@@ -2159,7 +2328,7 @@ def write_aksimentiev_enm_files(
             rid_list.append(ri)
     positions = np.asarray(pos_list, dtype=float)
     gidx = np.asarray(gidx_list, dtype=np.int64)
-    rid  = np.asarray(rid_list, dtype=np.int64)
+    rid = np.asarray(rid_list, dtype=np.int64)
 
     pairs = cKDTree(positions).query_pairs(cut_ang, output_type="ndarray")
     if len(pairs):
@@ -2185,7 +2354,7 @@ def write_aksimentiev_enm_files(
     if len(pairs):
         ga = gidx[pairs[:, 0]]
         gb = gidx[pairs[:, 1]]
-        lo = np.minimum(ga, gb)               # canonical (a ≤ b) bond ordering
+        lo = np.minimum(ga, gb)  # canonical (a ≤ b) bond ordering
         hi = np.maximum(ga, gb)
         dists = _pd
     else:
@@ -2201,8 +2370,11 @@ def write_aksimentiev_enm_files(
     files: dict[str, int] = {}
     for ki, k in enumerate(scales):
         if progress is not None:
-            progress("enm", 0.5 + 0.5 * (ki / max(1, len(scales))),
-                     "Writing elastic-network restraint files…")
+            progress(
+                "enm",
+                0.5 + 0.5 * (ki / max(1, len(scales))),
+                "Writing elastic-network restraint files…",
+            )
         filename = f"{name_stem}_k{k:g}.enm.extra"
         path = package_dir / filename
         k_col = f"{f'{k:.6g}':>10s}"
@@ -2211,9 +2383,11 @@ def write_aksimentiev_enm_files(
             # string nor pay a syscall per restraint.
             for start in range(0, n_bonds, 200_000):
                 end = min(start + 200_000, n_bonds)
-                handle.write("".join(
-                    f"bond{a_str[i]}{k_col}{d_str[i]}" for i in range(start, end)
-                ))
+                handle.write(
+                    "".join(
+                        f"bond{a_str[i]}{k_col}{d_str[i]}" for i in range(start, end)
+                    )
+                )
         files[filename] = n_bonds
 
     report = {
@@ -2358,7 +2532,11 @@ def _iter_packed_psf_pairs(lines: list[str], start_i: int, n_pairs: int, width: 
     read, li = 0, start_i
     while read < n_pairs:
         row = lines[li].rstrip()
-        nums = [int(row[c:c + width]) for c in range(0, len(row), width) if row[c:c + width].strip()]
+        nums = [
+            int(row[c : c + width])
+            for c in range(0, len(row), width)
+            if row[c : c + width].strip()
+        ]
         for j in range(0, len(nums) - 1, 2):
             yield nums[j], nums[j + 1]
             read += 1
@@ -2417,15 +2595,15 @@ def write_hmr_psf(
     nbond_i = _find("!NBOND")
     n_bonds = int(lines[nbond_i].split()[0])
 
-    mass = [0.0] * (n_atoms + 1)            # 1-based
+    mass = [0.0] * (n_atoms + 1)  # 1-based
     resname = [""] * (n_atoms + 1)
-    heavy = [False] * (n_atoms + 1)         # dangling extra bases: mass scaled UP, no HMR
+    heavy = [False] * (n_atoms + 1)  # dangling extra bases: mass scaled UP, no HMR
     span: list[Optional[tuple[int, int, int, int]]] = [None] * (n_atoms + 1)
     for k in range(n_atoms):
         li = natom_i + 1 + k
         toks = list(re.finditer(r"\S+", lines[li]))
         aid = int(toks[0].group())
-        resname[aid] = toks[3].group()       # atomid seg resid resname name type charge MASS
+        resname[aid] = toks[3].group()  # atomid seg resid resname name type charge MASS
         if heavy_residues and (toks[1].group(), toks[2].group()) in heavy_residues:
             heavy[aid] = True
         m = toks[7]
@@ -2443,7 +2621,11 @@ def write_hmr_psf(
     # digits merge with no separator, which fixed-width slicing at the flagged width handles.
     _first = lines[nbond_i + 1].rstrip() if nbond_i + 1 < len(lines) else ""
     _ends = [m.end() for m in re.finditer(r"\d+", _first)]
-    bond_w = (_ends[1] - _ends[0]) if len(_ends) >= 2 else (10 if "EXT" in lines[0].upper() else 8)
+    bond_w = (
+        (_ends[1] - _ends[0])
+        if len(_ends) >= 2
+        else (10 if "EXT" in lines[0].upper() else 8)
+    )
     neigh: list[list[int]] = [[] for _ in range(n_atoms + 1)]
     for a, b in _iter_packed_psf_pairs(lines, nbond_i + 1, n_bonds, bond_w):
         neigh[a].append(b)
@@ -2458,7 +2640,7 @@ def write_hmr_psf(
         if not _is_h(aid) or resname[aid] in _HMR_WATER_RESNAMES or heavy[aid]:
             continue
         parents = [p for p in neigh[aid] if not _is_h(p)]
-        if len(parents) != 1:                # ion-model H bonded to >1 heavy: skip
+        if len(parents) != 1:  # ion-model H bonded to >1 heavy: skip
             continue
         new_h = mass[aid] * factor
         heavy_delta[parents[0]] = heavy_delta.get(parents[0], 0.0) + (new_h - mass[aid])
@@ -2498,9 +2680,14 @@ _ENM_DECLASH_MIN_REF_ANG = 2.8
 PRODUCTION_ENM_K = 0.1
 
 
-def write_production_enm(package_dir: Path, name_stem: str, coor_path: Path, *,
-                         scale: float = PRODUCTION_ENM_K,
-                         cut_ang: float = 8.0) -> str:
+def write_production_enm(
+    package_dir: Path,
+    name_stem: str,
+    coor_path: Path,
+    *,
+    scale: float = PRODUCTION_ENM_K,
+    cut_ang: float = 8.0,
+) -> str:
     """Build a production elastic network from the EQUILIBRATED coordinates.
 
     Returns the extraBonds filename, relative to ``package_dir``.
@@ -2522,8 +2709,12 @@ def write_production_enm(package_dir: Path, name_stem: str, coor_path: Path, *,
     ref_pdb = package_dir / f"{name_stem}_prod_ref.pdb"
     write_declashed_pdb(coor_path, package_dir / f"{name_stem}.pdb", ref_pdb)
     write_aksimentiev_enm_files(
-        ref_pdb, package_dir, f"{name_stem}_prod",
-        base_k=scale, scales=(scale,), cut_ang=cut_ang,
+        ref_pdb,
+        package_dir,
+        f"{name_stem}_prod",
+        base_k=scale,
+        scales=(scale,),
+        cut_ang=cut_ang,
     )
     return f"{name_stem}_prod_k{scale:g}.enm.extra"
 
@@ -2611,6 +2802,7 @@ def design_has_extensions(design: "Design") -> bool:
 
 # ── Box extraction ────────────────────────────────────────────────────────────
 
+
 def parse_box_from_namd_conf(conf_text: str) -> tuple[float, float, float]:
     """Extract cellBasisVector diagonal as (bx, by, bz) in Å.
 
@@ -2637,6 +2829,7 @@ def parse_box_from_namd_conf(conf_text: str) -> tuple[float, float, float]:
 
 
 # ── mgh_slow_release segment sequence ────────────────────────────────────────
+
 
 def _scale_label(scale: Optional[float]) -> str:
     if scale is None:
@@ -2724,7 +2917,7 @@ def _output_freq(steps: int, cycle: int = AKSIMENTIEV_STEPS_PER_CYCLE) -> int:
     under timestep, which is what the evaluator actually cares about.
     """
     f = max(cycle, steps // _ENERGY_FRAMES_PER_CHUNK)
-    return max(cycle, f - (f % cycle))      # NAMD wants a multiple of stepspercycle
+    return max(cycle, f - (f % cycle))  # NAMD wants a multiple of stepspercycle
 
 
 def _display_dcd_freq(steps: int) -> int:
@@ -2756,8 +2949,7 @@ MIN_STEPS_FLOOR = 4_800
 MIN_STEPS_PER_ATOMS = 10
 
 
-def minimize_steps_for_atoms(n_atoms: int,
-                             floor: int = MIN_STEPS_FLOOR) -> int:
+def minimize_steps_for_atoms(n_atoms: int, floor: int = MIN_STEPS_FLOOR) -> int:
     """Minimisation steps that scale with system size (pure).
 
     A flat step count is safe on a hextube and catastrophic on a 224k-atom origami —
@@ -2814,8 +3006,8 @@ def mgh_slow_release_segments(
     sizing_dt = 1.0 if soft else float(timestep_fs)
     stage_steps = int(round(2_400_000 * (2.0 / sizing_dt)))
     npt_ladder = [
-        (0.5,  stage_steps, "300K_NPT_ENM_k0p5"),
-        (0.1,  stage_steps, "300K_NPT_ENM_k0p1"),
+        (0.5, stage_steps, "300K_NPT_ENM_k0p5"),
+        (0.1, stage_steps, "300K_NPT_ENM_k0p1"),
         (0.01, stage_steps, "300K_NPT_ENM_k0p01"),
         (None, stage_steps, "300K_NPT_MGHH_only"),
     ]
@@ -2860,7 +3052,8 @@ def mgh_slow_release_segments(
         # Same sizing rule as the ladder stages: the timestep this stage will REALLY run
         # at, so 500 ps of settling is 500 ps whatever the integrator tier caps it to.
         settle_steps = _round_up_to_cycle(
-            max(100, int(round(settle_ps * 1000.0 / sizing_dt))))
+            max(100, int(round(settle_ps * 1000.0 / sizing_dt)))
+        )
         # Deliberately NOT a numbered stage: the ENM ladder's 01..04 must mean the same
         # thing whether or not this stage exists, so a carved (NVT, no settle) package
         # and a full-box one stay comparable segment-for-segment.
@@ -2870,33 +3063,31 @@ def mgh_slow_release_segments(
         # before this change resumes by recomputing these specs and matching them against
         # the confs already written.  Renaming would strand every in-flight package.
         seg_name = f"{name_stem}_0S_300K_NPT_settle_fixed_dna_p100"
-        segments.append(SegmentSpec(
-            name=seg_name,
-            stage="300K NPT settle (DNA restrained)",
-            percent=100.0,
-            steps=settle_steps,
-            temp=300.0,
-            damping=5.0,
-            # Not the ENM: this is the position restraint that holds the solute still.
-            # `extra_bonds_file=None` leaves the constraints channel free for it.
-            scale=SETTLE_RESTRAINT_K,
-            npt=True,
-            previous=previous,
-            reinit=False,
-            dcd_freq=_display_dcd_freq(settle_steps),
-            extra_bonds_file=None,
-            restraint_ref_file=SOLUTE_RESTRAINT_PDB,
-            soft=soft,
-            gentle=gentle,
-        ))
+        segments.append(
+            SegmentSpec(
+                name=seg_name,
+                stage="300K NPT settle (DNA restrained)",
+                percent=100.0,
+                steps=settle_steps,
+                temp=300.0,
+                damping=5.0,
+                # Not the ENM: this is the position restraint that holds the solute still.
+                # `extra_bonds_file=None` leaves the constraints channel free for it.
+                scale=SETTLE_RESTRAINT_K,
+                npt=True,
+                previous=previous,
+                reinit=False,
+                dcd_freq=_display_dcd_freq(settle_steps),
+                extra_bonds_file=None,
+                restraint_ref_file=SOLUTE_RESTRAINT_PDB,
+                soft=soft,
+                gentle=gentle,
+            )
+        )
         previous = seg_name
 
     for scale, total_steps, label in npt_ladder:
-        stage_str = (
-            "300K NPT k=0"
-            if scale is None
-            else f"300K NPT ENM k={scale}"
-        )
+        stage_str = "300K NPT k=0" if scale is None else f"300K NPT ENM k={scale}"
         for i, (pct, frac) in enumerate(pcts):
             seg_steps = _round_up_to_cycle(max(100, int(total_steps * frac)))
             seg_name = f"{name_stem}_{stage_idx:02d}_{label}_p{int(pct)}"
@@ -2942,7 +3133,9 @@ def mgh_slow_release_segments(
     # using fixedAtoms when it moved to restraints, and keying on the old field silently
     # moved the soft start onto the settle stage itself.
     first_free = next(
-        (s for s in segments if not s.restraint_ref_file and not s.fixed_atoms_file), None)
+        (s for s in segments if not s.restraint_ref_file and not s.fixed_atoms_file),
+        None,
+    )
     if first_free is not None and not soft and not gentle:
         first_free.gentle = True
 
@@ -2951,7 +3144,10 @@ def mgh_slow_release_segments(
 
 # ── Full job preparation ──────────────────────────────────────────────────────
 
-def _resolve_seed_lattice_nm(design: Design, requested: "float | str | None") -> "float | None":
+
+def _resolve_seed_lattice_nm(
+    design: Design, requested: "float | str | None"
+) -> "float | None":
     """Target seed spacing in nm, or None to build the design as-is.
 
     ``"auto"`` expands ONLY a design that actually inserts extra bases, and this
@@ -2975,10 +3171,14 @@ def _resolve_seed_lattice_nm(design: Design, requested: "float | str | None") ->
         return None
     if isinstance(requested, str):
         if requested != "auto":
-            raise ValueError(f"seed_lattice_nm must be a float, 'auto' or None (got {requested!r})")
+            raise ValueError(
+                f"seed_lattice_nm must be a float, 'auto' or None (got {requested!r})"
+            )
         from backend.core.lattice import (  # noqa: PLC0415
-            max_extra_base_count, relaxed_spacing_for_design,
+            max_extra_base_count,
+            relaxed_spacing_for_design,
         )
+
         if max_extra_base_count(design) == 0:
             return None
         return relaxed_spacing_for_design(design)
@@ -3075,6 +3275,7 @@ def prepare_mgh_slow_release(
     # / coarse paths legitimately render poly-T as a placeholder.
     if require_full_topology:
         from backend.core.md_sequence_guard import require_sequenced_scaffold  # noqa: PLC0415
+
         require_sequenced_scaffold(design)
 
     # Pre-expand the lattice BEFORE anything reads geometry — the topology gate, the
@@ -3085,12 +3286,16 @@ def prepare_mgh_slow_release(
     _seed_lattice_nm = _resolve_seed_lattice_nm(design, seed_lattice_nm)
     if _seed_lattice_nm is not None:
         from backend.core.lattice import scale_helix_spacing  # noqa: PLC0415
+
         design = scale_helix_spacing(design, _seed_lattice_nm)
         # A prebuilt model was built at the ORIGINAL spacing, so it now contradicts the
         # design we are about to package.  Drop it and let the seed rebuild.
         if atomistic_model is not None:
-            logger.warning("seed_lattice_nm=%.3f discards the supplied atomistic_model "
-                        "(built at the original spacing)", _seed_lattice_nm)
+            logger.warning(
+                "seed_lattice_nm=%.3f discards the supplied atomistic_model "
+                "(built at the original spacing)",
+                _seed_lattice_nm,
+            )
             atomistic_model = None
 
     # Refuse to build a package whose reciprocal crossover connectors are topologically
@@ -3101,8 +3306,10 @@ def prepare_mgh_slow_release(
     # catenated 2hb run reported c1_paired_fraction = 1.0), which is why it needs its own
     # gate.  Shared choke point for local + RunPod + every experiment script.
     from backend.core.junction_topology import gate_seed_topology  # noqa: PLC0415
+
     topology_check = gate_seed_topology(
-        design, model=atomistic_model, allow=allow_catenated_seed)
+        design, model=atomistic_model, allow=allow_catenated_seed
+    )
 
     # Minimisation must scale with the structure.  Tutorial Note 2 attributes RATTLE
     # "Constraint failure" to a system that "has not gone through enough steps of energy
@@ -3117,34 +3324,39 @@ def prepare_mgh_slow_release(
     # Carved-cell fill fraction — a well-filled carve (tight box) can still run GPU-resident
     # (see _segment_conf's gpu_resident gate). Uses the memoised dry profile (already built
     # by the pre-flight sizing), so this adds no real cost. Best-effort → 1.0 on any miss.
-    resident_fill = 1.0                 # non-carved: irrelevant (gate uses `not carved`)
+    resident_fill = 1.0  # non-carved: irrelevant (gate uses `not carved`)
     if carve_shell:
-        resident_fill = 0.0             # carved default = OLD behaviour (offload) unless
-        try:                            # we can positively prove the cell is well-filled
+        resident_fill = 0.0  # carved default = OLD behaviour (offload) unless
+        try:  # we can positively prove the cell is well-filled
             from backend.core.md_vram import (  # noqa: PLC0415
-                carve_fill_fraction, estimate_profile_from_design)
+                carve_fill_fraction,
+                estimate_profile_from_design,
+            )
+
             _prof = estimate_profile_from_design(
-                design, padding_nm=padding_nm, atomistic_model=atomistic_model)
+                design, padding_nm=padding_nm, atomistic_model=atomistic_model
+            )
             if _prof:
                 resident_fill = carve_fill_fraction(
-                    _prof["dna_xyz_nm"], _prof["box_nm"], water_shell_nm)
+                    _prof["dna_xyz_nm"], _prof["box_nm"], water_shell_nm
+                )
         except Exception:  # noqa: BLE001 — never fail prep on a fill estimate
             resident_fill = 0.0
 
     zip_bytes = build_namd_solvated_package(
         design,
-        padding_nm      = padding_nm,
-        ion_conc_mM     = ion_conc_mM,
-        mg_conc_mM      = mg_conc_mM,
-        mg_hexahydrate  = True,
-        require_full_topology = require_full_topology,
-        seed            = seed,
-        atomistic_model = atomistic_model,
-        solute_coords   = solute_coords,
-        water_shell_nm  = water_shell_nm if carve_shell else None,
+        padding_nm=padding_nm,
+        ion_conc_mM=ion_conc_mM,
+        mg_conc_mM=mg_conc_mM,
+        mg_hexahydrate=True,
+        require_full_topology=require_full_topology,
+        seed=seed,
+        atomistic_model=atomistic_model,
+        solute_coords=solute_coords,
+        water_shell_nm=water_shell_nm if carve_shell else None,
         # Without this the box sizer's atom cap always resolved against device "0",
         # so a CPU-targeted job was sized against VRAM on any host that has a GPU.
-        devices         = devices,
+        devices=devices,
         # A relaxation package runs exactly ONE unrestrained stage (k=0).  Telling the
         # sizer so lets it use a bbox cell — the solute cannot turn far enough in a few
         # nanoseconds to meet its own image, and a rotation-sized cell costs several
@@ -3155,8 +3367,8 @@ def prepare_mgh_slow_release(
         # A caller that already knows it wants a long free run passes that length and
         # gets a rotation-sized cell up front — the only point where it is cheap to
         # choose, since no later step re-solvates.
-        free_ns         = _LADDER_FREE_NS if free_ns is None else max(free_ns, _LADDER_FREE_NS),
-        progress        = progress,
+        free_ns=_LADDER_FREE_NS if free_ns is None else max(free_ns, _LADDER_FREE_NS),
+        progress=progress,
     )
 
     # Extract ZIP — inner folder is "{name}_namd_solvated/"
@@ -3211,10 +3423,15 @@ def prepare_mgh_slow_release(
     _ladder_enm_exclude: "set[tuple[str, str]]" = set()
     if design_has_extra_bases(design) or declash:
         _ladder_enm_exclude = identify_unpaired_residues(
-            package_dir / f"{name_stem}.psf", pdb_path)
+            package_dir / f"{name_stem}.psf", pdb_path
+        )
     enm_report = write_aksimentiev_enm_files(
-        pdb_path, package_dir, name_stem,
-        exclude_residues=_ladder_enm_exclude or None, progress=progress)
+        pdb_path,
+        package_dir,
+        name_stem,
+        exclude_residues=_ladder_enm_exclude or None,
+        progress=progress,
+    )
 
     # Anchors (optional): resolve the shared anchor scopes to DNA residues and write a
     # fixedAtoms marker PDB the whole ladder reads.  A JOB-REQUEST annotation resolved
@@ -3225,18 +3442,25 @@ def prepare_mgh_slow_release(
     n_anchored_atoms = 0
     if anchors:
         from backend.core.namd_topology import (  # noqa: PLC0415
-            requested_atom_names, resolve_anchor_atom_map,
+            requested_atom_names,
+            resolve_anchor_atom_map,
         )
+
         # full_topology must match how the package {stem}.pdb was built (psfgen when
         # require_full_topology, else export_pdb) so the residue ordinals line up.
         # Each anchor may name its own atoms; anchor_atoms is the fallback for those
         # that don't.
         anchor_indices = resolve_anchor_atom_map(
-            design, anchors, model=atomistic_model, full_topology=require_full_topology,
-            default_atoms=set(anchor_atoms) if anchor_atoms else None)
+            design,
+            anchors,
+            model=atomistic_model,
+            full_topology=require_full_topology,
+            default_atoms=set(anchor_atoms) if anchor_atoms else None,
+        )
         if anchor_indices:
             n_anchored_atoms = write_anchor_restraints_pdb(
-                pdb_path, package_dir / "restraints_anchors.pdb", anchor_indices)
+                pdb_path, package_dir / "restraints_anchors.pdb", anchor_indices
+            )
             anchors_file = "restraints_anchors.pdb"
             if not n_anchored_atoms:
                 # An atom filter that matches nothing (a typo, or a name that does not
@@ -3245,7 +3469,8 @@ def prepare_mgh_slow_release(
                 raise ValueError(
                     f"anchor atoms {requested_atom_names(anchor_indices)} matched no heavy "
                     f"atom in the {len(anchor_indices)} anchored residue(s). Check the atom "
-                    f"names (CHARMM36 nucleic acids use e.g. P, O5', C5', C4', C3', C1').")
+                    f"names (CHARMM36 nucleic acids use e.g. P, O5', C5', C4', C3', C1')."
+                )
 
     # E-field (optional): a uniform native NAMD q·E body force, also a JOB-REQUEST
     # annotation.  A field with no anchor just streams the whole box (COM drift).
@@ -3255,7 +3480,9 @@ def prepare_mgh_slow_release(
         # Anchors are recommended but no longer required — the UI warns; the run proceeds.
         logger.warning(
             "NAMD E-field prepared with no anchor (requested scopes %r resolved to no DNA "
-            "residues) — the structure will drift down-field (COM drift).", anchors)
+            "residues) — the structure will drift down-field (COM drift).",
+            anchors,
+        )
 
     # Declash: minimise against an ss-excluded ENM so inserted single-stranded
     # bases relax out of clash.  References are rebuilt from the declashed coords
@@ -3293,9 +3520,11 @@ def prepare_mgh_slow_release(
     # the gentle tier, full ladder, compared on C1' pairing and RMSD-vs-design — not
     # another short probe.  Until then the trigger stays as-is; it is conservative, and
     # the cost is wall-clock rather than correctness.
-    declash = (declash
-               or (design_has_extra_bases(design) and not pre_declashed)
-               or design_has_extensions(design))
+    declash = (
+        declash
+        or (design_has_extra_bases(design) and not pre_declashed)
+        or design_has_extensions(design)
+    )
     declash_enm_file: Optional[str] = None
     n_unpaired = 0
     if declash:
@@ -3350,14 +3579,21 @@ def prepare_mgh_slow_release(
     # to hold each stage at its 4.8 ns relaxation target.
     # The ladder's base timestep: explicit if the user chose one, else the historical
     # fast-derived 4/2 fs.  Per-stage tiers (soft 1 fs, gentle 2 fs) still apply on top.
-    ladder_dt = float(relax_timestep_fs) if relax_timestep_fs is not None else (4.0 if fast else 2.0)
+    ladder_dt = (
+        float(relax_timestep_fs)
+        if relax_timestep_fs is not None
+        else (4.0 if fast else 2.0)
+    )
     # `fast` is now only "the ladder's base timestep is 4 fs".  Keeping it in sync means the
     # manifest, the segment tiers and effective_timestep_fs all agree with the confs.
     fast = fast or ladder_dt >= 4.0
     if ladder_dt < 4.0:
         fast = False
     min_name, segments = mgh_slow_release_segments(
-        name_stem, soft=force_soft, gentle=gentle_ladder, nvt_only=carve_shell,
+        name_stem,
+        soft=force_soft,
+        gentle=gentle_ladder,
+        nvt_only=carve_shell,
         timestep_fs=ladder_dt,
     )
 
@@ -3368,7 +3604,9 @@ def prepare_mgh_slow_release(
     # HMR is its own axis now: `relax_hmr` wins, and only falls back to "on iff the ladder
     # runs 4 fs" when the user expressed no preference.  exp51 measured it load-bearing at
     # 4 fs and a loss below it, so the auto rule is the measurement, not a habit.
-    ladder_choice = resolve_integrator(ladder_dt, rigid_bonds=relax_rigid_bonds, hmr=relax_hmr)
+    ladder_choice = resolve_integrator(
+        ladder_dt, rigid_bonds=relax_rigid_bonds, hmr=relax_hmr
+    )
     if ladder_choice.hmr:
         hmr_psf = package_dir / f"{name_stem}_hmr.psf"
         n_hmr = write_hmr_psf(package_dir / f"{name_stem}.psf", hmr_psf)
@@ -3387,18 +3625,21 @@ def prepare_mgh_slow_release(
     resident_by_size = solvated_atoms is None or solvated_atoms >= _RESIDENT_MIN_ATOMS
     if _resident_override is not None:
         resident_by_size = _resident_override
-    resident_on = (
-        resident_by_size
-        and (not carve_shell or resident_fill >= _RESIDENT_MIN_FILL)
+    resident_on = resident_by_size and (
+        not carve_shell or resident_fill >= _RESIDENT_MIN_FILL
     )
 
     # Scale minimisation to the system now that the real atom count is known.
     if solvated_atoms:
         scaled_min = minimize_steps_for_atoms(solvated_atoms, floor=minimize_steps)
         if scaled_min != minimize_steps:
-            logger.info("minimize %d -> %d steps for %d atoms (Note 2: under-minimisation "
-                        "is what trips RATTLE later)",
-                        minimize_steps, scaled_min, solvated_atoms)
+            logger.info(
+                "minimize %d -> %d steps for %d atoms (Note 2: under-minimisation "
+                "is what trips RATTLE later)",
+                minimize_steps,
+                scaled_min,
+                solvated_atoms,
+            )
             minimize_steps = scaled_min
 
     # Write minimization conf
@@ -3426,16 +3667,25 @@ def prepare_mgh_slow_release(
         spec.timestep_fs = effective_timestep_fs(spec, fast, ladder_dt)
     for idx, spec in enumerate(segments, start=1):
         (package_dir / f"{spec.name}.conf").write_text(
-            _segment_conf(spec, name_stem, box, mgh_extrabonds,
-                          fast=fast, carved=carve_shell, fill_fraction=resident_fill,
-                          structure_psf=structure_psf,
-                          rigid_bonds=relax_rigid_bonds, hmr=relax_hmr,
-                          base_timestep_fs=ladder_dt,
-                          anchors_file=anchors_file, field=field,
-                          capture_vel_force=capture_vel_force,
-                          n_atoms=solvated_atoms,
-                          force_resident=_resident_override,
-                          overrides=overrides_for_stage(stage_overrides, idx))
+            _segment_conf(
+                spec,
+                name_stem,
+                box,
+                mgh_extrabonds,
+                fast=fast,
+                carved=carve_shell,
+                fill_fraction=resident_fill,
+                structure_psf=structure_psf,
+                rigid_bonds=relax_rigid_bonds,
+                hmr=relax_hmr,
+                base_timestep_fs=ladder_dt,
+                anchors_file=anchors_file,
+                field=field,
+                capture_vel_force=capture_vel_force,
+                n_atoms=solvated_atoms,
+                force_resident=_resident_override,
+                overrides=overrides_for_stage(stage_overrides, idx),
+            )
         )
 
     charge_audit = {}
@@ -3445,16 +3695,16 @@ def prepare_mgh_slow_release(
 
     segment_dicts = [
         {
-            "name":     s.name,
-            "stage":    s.stage,
-            "percent":  s.percent,
-            "steps":    s.steps,
-            "temp":     s.temp,
-            "damping":  s.damping,
-            "scale":    s.scale,
-            "npt":      s.npt,
+            "name": s.name,
+            "stage": s.stage,
+            "percent": s.percent,
+            "steps": s.steps,
+            "temp": s.temp,
+            "damping": s.damping,
+            "scale": s.scale,
+            "npt": s.npt,
             "previous": s.previous,
-            "reinit":   s.reinit,
+            "reinit": s.reinit,
             "dcd_freq": s.dcd_freq,
             "min_c1_paired": s.min_c1_paired,
             "min_wc_ref_relative": s.min_wc_ref_relative,
@@ -3471,9 +3721,9 @@ def prepare_mgh_slow_release(
     # Write manifest for human inspection and NADOC trajectory reload.
     manifest = {
         "nadoc_md_run_manifest_version": 1,
-        "protocol":    protocol,
+        "protocol": protocol,
         "package_dir": str(package_dir.resolve()),
-        "name_stem":   name_stem,
+        "name_stem": name_stem,
         "files": {
             "topology": f"{name_stem}.psf",
             "coordinates": f"{name_stem}.pdb",
@@ -3486,8 +3736,11 @@ def prepare_mgh_slow_release(
             # ML-propagator training data: per-frame velocity/force DCDs written
             # per production segment when capture is on (glob hints; discovered by
             # backend/ml/propagator/windows.py).  Absent when capture is off.
-            **({"velocities": "output/*.veldcd", "forces": "output/*.forcedcd"}
-               if capture_vel_force else {}),
+            **(
+                {"velocities": "output/*.veldcd", "forces": "output/*.forcedcd"}
+                if capture_vel_force
+                else {}
+            ),
         },
         "capture_vel_force": capture_vel_force,
         # How the cell was solvated.  Production and reseed confs READ this back: a
@@ -3504,13 +3757,14 @@ def prepare_mgh_slow_release(
             # inherits — without it, a package that cannot host a long free run is
             # indistinguishable from one that can.
             "sized_for_free_ns": (
-                _LADDER_FREE_NS if free_ns is None else max(free_ns, _LADDER_FREE_NS)),
+                _LADDER_FREE_NS if free_ns is None else max(free_ns, _LADDER_FREE_NS)
+            ),
             # Is the cell big enough for the solute once it turns?  Always measured,
             # even when the box was sized the historical way, so the answer is on the
             # record instead of being discovered 200 ns later.
             "box_check": _box_check(package_dir, name_stem, box, padding_nm),
         },
-        "box_ang":     list(box),
+        "box_ang": list(box),
         "mgh_extrabonds": mgh_extrabonds,
         "anchors": {
             "requested": anchors or [],
@@ -3529,7 +3783,9 @@ def prepare_mgh_slow_release(
         # an extended run keeps the same field (and the same anchors) as the ladder.
         "field": (
             {
-                "field_pN": float(field.get("field_pN", field.get("force_pN", 0.0)) or 0.0),
+                "field_pN": float(
+                    field.get("field_pN", field.get("force_pN", 0.0)) or 0.0
+                ),
                 "dir": [float(c) for c in field["dir"]],
                 "efield_vector": list(efield_vec),
                 "efield_units": "kcal/mol/A/e",
@@ -3551,7 +3807,8 @@ def prepare_mgh_slow_release(
         # and nothing else in the package records which it was.
         "seed_lattice_nm": _seed_lattice_nm,
         "declash_min_coor": (
-            f"output/{min_name}.coor" if (declash or rebuild_enm_from_min) else None),
+            f"output/{min_name}.coor" if (declash or rebuild_enm_from_min) else None
+        ),
         "n_unpaired_excluded": n_unpaired if declash else 0,
         # Seed strand topology at the reciprocal crossover junctions: "passed",
         # "overridden" (built anyway via allow_catenated_seed) or
@@ -3580,12 +3837,13 @@ def prepare_mgh_slow_release(
             "requires_neutral_final_psf": require_full_topology,
             "current_package_passed": bool(
                 charge_audit.get("production_ready")
-                if charge_audit else not require_full_topology
+                if charge_audit
+                else not require_full_topology
             ),
         },
         "charge_audit": charge_audit,
         "minimization": {
-            "name":  min_name,
+            "name": min_name,
             "steps": minimize_steps,
             "scale": min_scale,
             # Display label for the job timeline.  Named per-manifest rather than assumed
@@ -3595,10 +3853,15 @@ def prepare_mgh_slow_release(
             # Seeded extra-base path minimises with NO base-ring ENM so the seed
             # backmap's duplex clashes can open (the ENM is rebuilt from these coords).
             "restraint": (
-                "mgh_only_no_enm" if rebuild_enm_from_min else "aksimentiev_base_ring_enm"),
+                "mgh_only_no_enm"
+                if rebuild_enm_from_min
+                else "aksimentiev_base_ring_enm"
+            ),
             "extra_bonds_file": (
-                None if rebuild_enm_from_min
-                else declash_enm_file or f"{name_stem}_k{min_scale:g}.enm.extra"),
+                None
+                if rebuild_enm_from_min
+                else declash_enm_file or f"{name_stem}_k{min_scale:g}.enm.extra"
+            ),
         },
         "aksimentiev_enm": enm_report,
         # User-selected PRODUCTION integrator timestep (Advanced card, 1/2/4 fs).  The
@@ -3623,9 +3886,9 @@ def prepare_mgh_slow_release(
             "gpu_resident": resident_on,
             "timestep_fs": 4.0 if fast else 2.0,
             "note": "HMR (non-water H x3) + 4 fs on the hard ladder; capped box only, "
-                    "~4x NPT throughput vs standard CUDA 2 fs.  GPUresident is a SEPARATE "
-                    "axis (see gpu_resident): it is on for soft/declash ladders too, and "
-                    "off only for GBIS or a sparsely-filled carved cell.",
+            "~4x NPT throughput vs standard CUDA 2 fs.  GPUresident is a SEPARATE "
+            "axis (see gpu_resident): it is on for soft/declash ladders too, and "
+            "off only for GBIS or a sparsely-filled carved cell.",
         },
         # DERIVED from the constants actually emitted into the confs, never restated.
         # The hand-maintained version of this block had drifted: it declared a 12 Å
@@ -3639,7 +3902,11 @@ def prepare_mgh_slow_release(
             "temperature_k": 300.0,
             "langevin_damping_ps_inv": 5.0,
             "pme_grid_spacing_ang": PME_GRID_SPACING,
-            "switch_cut_pairlist_ang": [SWITCHDIST_ANG, CUTOFF_ANG, LADDER_PAIRLISTDIST_ANG],
+            "switch_cut_pairlist_ang": [
+                SWITCHDIST_ANG,
+                CUTOFF_ANG,
+                LADDER_PAIRLISTDIST_ANG,
+            ],
             "ladder_piston_period_decay_fs": [1000.0, 500.0],
             "production_piston_period_decay_fs": [200.0, 100.0],
             "settle_stage_ps": SETTLE_STAGE_PS if not carve_shell else 0.0,
@@ -3648,9 +3915,14 @@ def prepare_mgh_slow_release(
         # package that no amount of protocol knowledge can reconstruct.
         "stage_overrides": stage_overrides or {},
         "protocol_fidelity": protocol_fidelity(
-            fast=fast, carved=carve_shell, padding_nm=padding_nm,
-            charge_audit=charge_audit, early_stop=early_stop_relax,
-            chunk_pcts=LADDER_CHUNK_PCTS, stage_overrides=stage_overrides),
+            fast=fast,
+            carved=carve_shell,
+            padding_nm=padding_nm,
+            charge_audit=charge_audit,
+            early_stop=early_stop_relax,
+            chunk_pcts=LADDER_CHUNK_PCTS,
+            stage_overrides=stage_overrides,
+        ),
         "segments": segment_dicts,
         "health_checks": "After every segment: 10%, 50%, and 100% of each stage.",
     }
@@ -3738,11 +4010,11 @@ def minimization_status(manifest: dict):
     if not name:
         return None
     return MdSegmentStatus(
-        name    = str(name),
-        stage   = str(slot.get("stage") or DEFAULT_MINIMIZATION_STAGE),
-        percent = 100.0,
-        steps   = int(slot.get("steps") or 0),
-        status  = "pending",
+        name=str(name),
+        stage=str(slot.get("stage") or DEFAULT_MINIMIZATION_STAGE),
+        percent=100.0,
+        steps=int(slot.get("steps") or 0),
+        status="pending",
     )
 
 

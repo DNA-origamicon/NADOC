@@ -61,8 +61,8 @@ def fs_listdir(path: Optional[str] = None) -> dict:
 
 
 class MkdirRequest(BaseModel):
-    path: str          # parent directory
-    name: str          # new folder name (no path separators)
+    path: str  # parent directory
+    name: str  # new folder name (no path separators)
 
 
 @router.post("/fs/mkdir", status_code=201)

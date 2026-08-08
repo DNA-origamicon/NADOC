@@ -32,9 +32,18 @@ client = TestClient(app)
 
 # The palette the export used to carry. Nothing in the app uses these any more.
 RETIRED_SYNTAX_THEME = {
-    "#e06c75", "#98c379", "#d19a66", "#61afef",
-    "#c678dd", "#56b6c2", "#e5c07b", "#abb2bf",
-    "#be5046", "#7dab6e", "#b07e45", "#4e8cc4",
+    "#e06c75",
+    "#98c379",
+    "#d19a66",
+    "#61afef",
+    "#c678dd",
+    "#56b6c2",
+    "#e5c07b",
+    "#abb2bf",
+    "#be5046",
+    "#7dab6e",
+    "#b07e45",
+    "#4e8cc4",
 }
 
 
@@ -60,7 +69,10 @@ def _colour_column(response) -> list[str]:
 
 
 def test_xlsx_fallback_uses_the_canonical_staple_palette(staples_without_colour):
-    r = client.post("/api/design/export/sequence-xlsx", json={"strand_colors": {}, "strand_order": []})
+    r = client.post(
+        "/api/design/export/sequence-xlsx",
+        json={"strand_colors": {}, "strand_order": []},
+    )
     assert r.status_code == 200
 
     colours = _colour_column(r)
@@ -91,7 +103,9 @@ def test_xlsx_fallback_indexes_by_design_strands_position(staples_without_colour
 
 def test_explicit_strand_colours_still_win(staples_without_colour):
     design = staples_without_colour
-    first = next(s for s in design.strands if s.strand_type != StrandType.SCAFFOLD and s.domains)
+    first = next(
+        s for s in design.strands if s.strand_type != StrandType.SCAFFOLD and s.domains
+    )
     r = client.post(
         "/api/design/export/sequence-xlsx",
         json={"strand_colors": {first.id: "#123456"}, "strand_order": [first.id]},

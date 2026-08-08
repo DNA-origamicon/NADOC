@@ -41,19 +41,65 @@ _SS_RISE_NM = 0.63
 # Residue names to discard.  Extends the DNA importer's water/ion sets with
 # CHARMM solvent/ion names (SOD, CLA, POT, …) and 3-char truncations, since
 # protein PDBs are frequently CHARMM-formatted.
-_DROP_RESIDUES = _WATER | _IONS | {
-    "TIP", "TIP3", "TIP4", "TIP5", "SPCE", "SWM4",
-    "SOD", "CLA", "POT", "CAL", "CES", "MG2", "ZN2", "CAL2",
-}
+_DROP_RESIDUES = (
+    _WATER
+    | _IONS
+    | {
+        "TIP",
+        "TIP3",
+        "TIP4",
+        "TIP5",
+        "SPCE",
+        "SWM4",
+        "SOD",
+        "CLA",
+        "POT",
+        "CAL",
+        "CES",
+        "MG2",
+        "ZN2",
+        "CAL2",
+    }
+)
 
 # Amino-acid residue names (standard 20 + selenomethionine/-cysteine and common
 # CHARMM/protonation variants).  Used to classify a PDB as containing protein.
 _AMINO_ACIDS = {
-    "ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "ILE",
-    "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL",
-    "SEC", "PYL", "MSE",                              # Se-Cys, pyrrolysine, Se-Met
-    "HSD", "HSE", "HSP", "HID", "HIE", "HIP",         # histidine protonation states
-    "CYX", "CYM", "ASH", "GLH", "LYN", "ARN",         # protonation variants
+    "ALA",
+    "ARG",
+    "ASN",
+    "ASP",
+    "CYS",
+    "GLN",
+    "GLU",
+    "GLY",
+    "HIS",
+    "ILE",
+    "LEU",
+    "LYS",
+    "MET",
+    "PHE",
+    "PRO",
+    "SER",
+    "THR",
+    "TRP",
+    "TYR",
+    "VAL",
+    "SEC",
+    "PYL",
+    "MSE",  # Se-Cys, pyrrolysine, Se-Met
+    "HSD",
+    "HSE",
+    "HSP",
+    "HID",
+    "HIE",
+    "HIP",  # histidine protonation states
+    "CYX",
+    "CYM",
+    "ASH",
+    "GLH",
+    "LYN",
+    "ARN",  # protonation variants
 }
 
 
@@ -100,7 +146,10 @@ def _element_from_atom(name: str, element_col: str) -> str:
 
 
 def parse_protein_pdb(
-    text: str, name: str = "", source_filename: str = "", exclude_dna: bool = False,
+    text: str,
+    name: str = "",
+    source_filename: str = "",
+    exclude_dna: bool = False,
 ) -> ProteinAsset:
     """Parse PDB text into a :class:`ProteinAsset`, keeping protein/HETATM atoms.
 
@@ -142,7 +191,9 @@ def parse_protein_pdb(
 
         atom_name = line[12:16].strip()
         # chainID (col 22); fall back to the CHARMM segid (cols 73-76).
-        chain_id = line[21].strip() or (line[72:76].strip() if len(line) >= 76 else "") or "A"
+        chain_id = (
+            line[21].strip() or (line[72:76].strip() if len(line) >= 76 else "") or "A"
+        )
         try:
             res_seq = int(line[22:26])
         except ValueError:
@@ -158,17 +209,19 @@ def parse_protein_pdb(
         serial += 1
         chain_ids.add(chain_id)
         res_keys.add((chain_id, res_seq))
-        atoms.append(ProteinAtom(
-            serial=serial,
-            name=atom_name,
-            element=element,
-            res_name=res_name,
-            chain_id=chain_id,
-            res_seq=res_seq,
-            x=round(x, 5),
-            y=round(y, 5),
-            z=round(z, 5),
-        ))
+        atoms.append(
+            ProteinAtom(
+                serial=serial,
+                name=atom_name,
+                element=element,
+                res_name=res_name,
+                chain_id=chain_id,
+                res_seq=res_seq,
+                x=round(x, 5),
+                y=round(y, 5),
+                z=round(z, 5),
+            )
+        )
 
     com = [0.0, 0.0, 0.0]
     if atoms:
@@ -181,7 +234,10 @@ def parse_protein_pdb(
     candidates = [a for a in atoms if a.element.upper() != "H"] or atoms
     if candidates:
         c = np.array(com)
-        farthest = max(candidates, key=lambda a: float(np.linalg.norm(np.array([a.x, a.y, a.z]) - c)))
+        farthest = max(
+            candidates,
+            key=lambda a: float(np.linalg.norm(np.array([a.x, a.y, a.z]) - c)),
+        )
         default_conj = farthest.serial
 
     return ProteinAsset(
@@ -231,32 +287,41 @@ def protein_asset_to_atomistic(
         if pose_matrix is not None:
             p = pose_matrix @ np.array([x, y, z, 1.0])
             x, y, z = float(p[0]), float(p[1]), float(p[2])
-        out.append(Atom(
-            serial=i,
-            name=a.name,
-            element=a.element,
-            residue=a.res_name,
-            chain_id=a.chain_id,
-            seq_num=a.res_seq,
-            x=x, y=y, z=z,
-            strand_id=sentinel,
-            helix_id=sentinel,
-            bp_index=0,
-            direction="FORWARD",
-        ))
+        out.append(
+            Atom(
+                serial=i,
+                name=a.name,
+                element=a.element,
+                residue=a.res_name,
+                chain_id=a.chain_id,
+                seq_num=a.res_seq,
+                x=x,
+                y=y,
+                z=z,
+                strand_id=sentinel,
+                helix_id=sentinel,
+                bp_index=0,
+                direction="FORWARD",
+            )
+        )
     bonds = [(int(i), int(j)) for i, j in asset.bonds]
     return AtomisticModel(atoms=out, bonds=bonds)
 
 
-def infer_bonds_by_distance(asset: ProteinAsset, cutoff_nm: float = 0.20) -> list[tuple[int, int]]:
+def infer_bonds_by_distance(
+    asset: ProteinAsset, cutoff_nm: float = 0.20
+) -> list[tuple[int, int]]:
     """Infer covalent bonds by inter-atom distance (0-based atom-index pairs).
 
     Coarse heuristic for ball-and-stick rendering: any two heavy atoms within
     ``cutoff_nm`` are bonded (hydrogens excluded).  Uses a uniform grid so it
     stays roughly O(N) for large proteins.  Not used for vdw rendering.
     """
-    heavy = [(i, np.array([a.x, a.y, a.z])) for i, a in enumerate(asset.atoms)
-             if a.element.upper() != "H"]
+    heavy = [
+        (i, np.array([a.x, a.y, a.z]))
+        for i, a in enumerate(asset.atoms)
+        if a.element.upper() != "H"
+    ]
     if len(heavy) < 2:
         return []
     cell = cutoff_nm
@@ -305,14 +370,20 @@ def _conjugation_local_pos(asset: ProteinAsset, attachment) -> np.ndarray:
     serial = attachment.conjugation_atom_serial
     if serial is None:
         serial = asset.default_conjugation_atom_serial
-    atom = next((a for a in asset.atoms if a.serial == serial), None) if serial is not None else None
+    atom = (
+        next((a for a in asset.atoms if a.serial == serial), None)
+        if serial is not None
+        else None
+    )
     if atom is None:
         return np.asarray(asset.center_of_mass, dtype=float)
     return np.array([atom.x, atom.y, atom.z], dtype=float)
 
 
 def resolve_overhang_anchor(
-    nucs: list[dict], overhang_id: str, attach_end: str = "free_end",
+    nucs: list[dict],
+    overhang_id: str,
+    attach_end: str = "free_end",
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
     """Resolve ``(tip_pos, outward)`` for an overhang's attach end (world nm).
 
@@ -332,7 +403,9 @@ def resolve_overhang_anchor(
     attach_nuc = _oh_attach_nuc(oh_nucs, attach_end)
     if attach_nuc is None:
         return None, None
-    other_nuc = _oh_attach_nuc(oh_nucs, "root" if attach_end == "free_end" else "free_end")
+    other_nuc = _oh_attach_nuc(
+        oh_nucs, "root" if attach_end == "free_end" else "free_end"
+    )
 
     def _pos(n: dict | None) -> np.ndarray | None:
         if n is None:
@@ -348,13 +421,19 @@ def resolve_overhang_anchor(
         outward = _norm(tip - other)
     else:
         at = attach_nuc.get("axis_tangent")
-        outward = _norm(np.asarray(at, dtype=float)) if at is not None else np.array([0.0, 0.0, 1.0])
+        outward = (
+            _norm(np.asarray(at, dtype=float))
+            if at is not None
+            else np.array([0.0, 0.0, 1.0])
+        )
     return tip, outward
 
 
 def protein_base_world(
-    asset: ProteinAsset, attachment,
-    tip: np.ndarray | None = None, outward: np.ndarray | None = None,
+    asset: ProteinAsset,
+    attachment,
+    tip: np.ndarray | None = None,
+    outward: np.ndarray | None = None,
 ) -> np.ndarray:
     """Row-major 4×4 *base* placement of the asset (BEFORE the user pose).
 
@@ -368,7 +447,11 @@ def protein_base_world(
       (``_frame_from_axis(outward)``) maps +Z onto the world outward direction,
       and ``tip_out`` adds the optional ssDNA-spacer offset along outward.
     """
-    if getattr(attachment.target, "kind", "free") == "free" or tip is None or outward is None:
+    if (
+        getattr(attachment.target, "kind", "free") == "free"
+        or tip is None
+        or outward is None
+    ):
         return np.eye(4)
 
     outward = _norm(np.asarray(outward, dtype=float))
@@ -376,9 +459,12 @@ def protein_base_world(
     com = np.asarray(asset.center_of_mass, dtype=float)
 
     body = com - conj
-    r_canon = (_rotation_between(body, np.array([0.0, 0.0, 1.0]))
-               if np.linalg.norm(body) > 1e-6 else np.eye(3))
-    anchor_rot = _frame_from_axis(outward)   # 3×3 [x | y | z = outward]
+    r_canon = (
+        _rotation_between(body, np.array([0.0, 0.0, 1.0]))
+        if np.linalg.norm(body) > 1e-6
+        else np.eye(3)
+    )
+    anchor_rot = _frame_from_axis(outward)  # 3×3 [x | y | z = outward]
 
     offset = max(getattr(attachment, "handle_spacer_nt", 0), 0) * _SS_RISE_NM
     tip_out = tip + outward * offset
@@ -386,8 +472,10 @@ def protein_base_world(
 
 
 def compose_protein_world_transform(
-    asset: ProteinAsset, attachment,
-    tip: np.ndarray | None = None, outward: np.ndarray | None = None,
+    asset: ProteinAsset,
+    attachment,
+    tip: np.ndarray | None = None,
+    outward: np.ndarray | None = None,
 ) -> np.ndarray:
     """Full world transform = ``pose · base`` (row-major 4×4).
 
@@ -400,7 +488,10 @@ def compose_protein_world_transform(
 
 
 def gizmo_move_to_pose(
-    pose_old: np.ndarray, pivot, translation, rotation,
+    pose_old: np.ndarray,
+    pivot,
+    translation,
+    rotation,
 ) -> np.ndarray:
     """Left-multiply a world-space gizmo delta into ``pose``.
 
@@ -414,11 +505,25 @@ def gizmo_move_to_pose(
     trans = np.asarray(translation, dtype=float)
     qx, qy, qz, qw = (float(v) for v in rotation)
     # quaternion → 3×3 rotation matrix
-    r = np.array([
-        [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw)],
-        [2 * (qx * qy + qz * qw), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qx * qw)],
-        [2 * (qx * qz - qy * qw), 2 * (qy * qz + qx * qw), 1 - 2 * (qx * qx + qy * qy)],
-    ])
+    r = np.array(
+        [
+            [
+                1 - 2 * (qy * qy + qz * qz),
+                2 * (qx * qy - qz * qw),
+                2 * (qx * qz + qy * qw),
+            ],
+            [
+                2 * (qx * qy + qz * qw),
+                1 - 2 * (qx * qx + qz * qz),
+                2 * (qy * qz - qx * qw),
+            ],
+            [
+                2 * (qx * qz - qy * qw),
+                2 * (qy * qz + qx * qw),
+                1 - 2 * (qx * qx + qy * qy),
+            ],
+        ]
+    )
     d = _mat_T(trans) @ _mat_T(piv) @ _mat_R(r) @ _mat_T(-piv)
     return d @ np.asarray(pose_old, dtype=float)
 
@@ -426,6 +531,7 @@ def gizmo_move_to_pose(
 def reverse_complement(seq: str) -> str:
     """Reverse-complement a DNA sequence (display-only handle sequence)."""
     from backend.core.sequences import complement_base
+
     return "".join(complement_base(b) for b in reversed(seq))
 
 
@@ -466,7 +572,8 @@ def build_protein_attachment_atoms(
     from backend.core.atomistic import Atom
 
     attachments = [
-        a for a in getattr(design, "protein_attachments", [])
+        a
+        for a in getattr(design, "protein_attachments", [])
         if getattr(a, "visible", True)
     ]
     if not attachments:
@@ -478,6 +585,7 @@ def build_protein_attachment_atoms(
     )
     if geometry is None and needs_geometry:
         from backend.core.design_geometry import _geometry_for_design
+
         geometry = _geometry_for_design(design)
 
     atoms: list = []
@@ -491,7 +599,8 @@ def build_protein_attachment_atoms(
         overhang_id = getattr(att.target, "overhang_id", None)
         if overhang_id is not None and geometry is not None:
             tip, outward = resolve_overhang_anchor(
-                geometry, overhang_id, getattr(att.target, "attach_end", "free_end"))
+                geometry, overhang_id, getattr(att.target, "attach_end", "free_end")
+            )
             world = compose_protein_world_transform(asset, att, tip, outward)
         else:
             world = compose_protein_world_transform(asset, att)
@@ -506,19 +615,23 @@ def build_protein_attachment_atoms(
                 chain_tag[a.chain_id] = tag
                 chain_idx += 1
             p = world @ np.array([a.x, a.y, a.z, 1.0])
-            atoms.append(Atom(
-                serial=serial,
-                name=a.name,
-                element=a.element,
-                residue=a.res_name,
-                chain_id=tag,
-                seq_num=a.res_seq,
-                x=float(p[0]), y=float(p[1]), z=float(p[2]),
-                strand_id=sentinel,
-                helix_id=sentinel,
-                bp_index=0,
-                direction="FORWARD",
-            ))
+            atoms.append(
+                Atom(
+                    serial=serial,
+                    name=a.name,
+                    element=a.element,
+                    residue=a.res_name,
+                    chain_id=tag,
+                    seq_num=a.res_seq,
+                    x=float(p[0]),
+                    y=float(p[1]),
+                    z=float(p[2]),
+                    strand_id=sentinel,
+                    helix_id=sentinel,
+                    bp_index=0,
+                    direction="FORWARD",
+                )
+            )
             serial += 1
         for i, j in infer_bonds_by_distance(asset):
             bonds.append((base_serial + int(i), base_serial + int(j)))
@@ -526,7 +639,10 @@ def build_protein_attachment_atoms(
 
 
 def azide_attach_end(
-    nucs: list[dict], overhang_id: str, binder_strand_id: str, azide_end: str = "5p",
+    nucs: list[dict],
+    overhang_id: str,
+    binder_strand_id: str,
+    azide_end: str = "5p",
 ) -> str:
     """Which overhang end (``"free_end"`` | ``"root"``) the protein should anchor
     to so its conjugation atom coincides with the binder's azide terminus.
@@ -544,7 +660,9 @@ def azide_attach_end(
     for n in nucs:
         if n.get("strand_id") != binder_strand_id:
             continue
-        if (want_5p and n.get("is_five_prime")) or (not want_5p and n.get("is_three_prime")):
+        if (want_5p and n.get("is_five_prime")) or (
+            not want_5p and n.get("is_three_prime")
+        ):
             term = n
             break
     free_tip, _ = resolve_overhang_anchor(nucs, overhang_id, "free_end")

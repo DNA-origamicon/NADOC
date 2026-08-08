@@ -41,21 +41,23 @@ def crossover_extrabase_records(design: Design) -> list[dict]:
     records: list[dict] = []
     for xo in design.crossovers:
         if xo.extra_bases:
-            records.append({
-                "crossover_id": xo.id,
-                "extra_bases": xo.extra_bases,
-                "extra_base_count": len(xo.extra_bases),
-                "half_a": {
-                    "helix_id": xo.half_a.helix_id,
-                    "bp_index": xo.half_a.index,
-                    "direction": xo.half_a.strand.value,
-                },
-                "half_b": {
-                    "helix_id": xo.half_b.helix_id,
-                    "bp_index": xo.half_b.index,
-                    "direction": xo.half_b.strand.value,
-                },
-            })
+            records.append(
+                {
+                    "crossover_id": xo.id,
+                    "extra_bases": xo.extra_bases,
+                    "extra_base_count": len(xo.extra_bases),
+                    "half_a": {
+                        "helix_id": xo.half_a.helix_id,
+                        "bp_index": xo.half_a.index,
+                        "direction": xo.half_a.strand.value,
+                    },
+                    "half_b": {
+                        "helix_id": xo.half_b.helix_id,
+                        "bp_index": xo.half_b.index,
+                        "direction": xo.half_b.strand.value,
+                    },
+                }
+            )
     return records
 
 
@@ -71,8 +73,7 @@ def assert_no_crossover_extrabases(design: Design) -> None:
     if not records:
         return
     ids = ", ".join(
-        f"{row['crossover_id']}({row['extra_base_count']})"
-        for row in records
+        f"{row['crossover_id']}({row['extra_base_count']})" for row in records
     )
     raise ValueError(
         "mrDNA coarse preconditioning is flagged for designs with no crossover "
@@ -120,7 +121,9 @@ def build_precondition_report(
         "override": {
             "entries": len(override),
             "expected_domain_nucleotides": n_expected_keys,
-            "coverage_fraction": (len(override) / n_expected_keys) if n_expected_keys else 0.0,
+            "coverage_fraction": (len(override) / n_expected_keys)
+            if n_expected_keys
+            else 0.0,
         },
         "atomistic_model": {
             "atoms": len(model.atoms),
@@ -162,13 +165,17 @@ def write_preconditioned_namd_inputs(
     _write(f"{safe_name}.stub.psf", psf_stub)
     _write(f"{safe_name}.identity.json", export_identity_json(design, model=model))
     _write(f"{safe_name}.identity.tsv", export_identity_tsv(design, model=model))
-    _write(f"{safe_name}.design_maps.json", export_design_maps_json(design, model=model))
+    _write(
+        f"{safe_name}.design_maps.json", export_design_maps_json(design, model=model)
+    )
     _write(f"{safe_name}.basepairs.json", export_basepair_map_json(design, model=model))
     _write(f"{safe_name}.basepairs.tsv", export_basepair_map_tsv(design, model=model))
     _write(f"{safe_name}.stacking.json", export_stacking_map_json(design, model=model))
     _write(f"{safe_name}.stacking.tsv", export_stacking_map_tsv(design, model=model))
     _write("namd_gbis_smoke.conf", _render_namd_conf(safe_name))
-    _write("precondition_report.json", json.dumps(report, indent=2, sort_keys=False) + "\n")
+    _write(
+        "precondition_report.json", json.dumps(report, indent=2, sort_keys=False) + "\n"
+    )
 
     for rel, text in restraints.items():
         _write(f"restraints/{rel}", text)
@@ -177,7 +184,11 @@ def write_preconditioned_namd_inputs(
         ff_src = Path(__file__).parent.parent / "data" / "forcefield"
         ff_dst = out_dir / "forcefield"
         ff_dst.mkdir(parents=True, exist_ok=True)
-        for filename in ("top_all36_na.rtf", "par_all36_na.prm", "toppar_water_ions_cufix.str"):
+        for filename in (
+            "top_all36_na.rtf",
+            "par_all36_na.prm",
+            "toppar_water_ions_cufix.str",
+        ):
             src = ff_src / filename
             if src.exists():
                 shutil.copy2(src, ff_dst / filename)
@@ -192,4 +203,3 @@ def build_model_from_override(
 ) -> AtomisticModel:
     """Small named wrapper for scripts using CG-derived position overrides."""
     return build_atomistic_model(design, nuc_pos_override=dict(override))
-

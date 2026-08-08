@@ -10,6 +10,7 @@ v1-shape list of dicts on demand.
 Migrate tests away from this shim as opportunity arises — long-term the
 right move is to assert against v2 directly.
 """
+
 from __future__ import annotations
 
 from backend.core.models import PartInstance
@@ -25,7 +26,11 @@ def v1_instances(body_or_response):
     expand ``instances_v2`` + ``sources`` via ``PartInstance.from_compact_dict``
     and dump back to dict form.
     """
-    body = body_or_response.json() if hasattr(body_or_response, "json") else body_or_response
+    body = (
+        body_or_response.json()
+        if hasattr(body_or_response, "json")
+        else body_or_response
+    )
     asm = body["assembly"] if "assembly" in body else body
     if "instances" in asm and asm["instances"]:
         return asm["instances"]

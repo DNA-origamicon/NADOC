@@ -1,8 +1,21 @@
 from backend.api import state as design_state
 from backend.api.main import app
-from backend.api.crud import StrandEndResizeEntry, StrandEndResizeRequest, strand_end_resize
+from backend.api.crud import (
+    StrandEndResizeEntry,
+    StrandEndResizeRequest,
+    strand_end_resize,
+)
 from backend.core.constants import BDNA_RISE_PER_BP
-from backend.core.models import Design, Direction, Domain, Helix, LatticeType, Strand, StrandType, Vec3
+from backend.core.models import (
+    Design,
+    Direction,
+    Domain,
+    Helix,
+    LatticeType,
+    Strand,
+    StrandType,
+    Vec3,
+)
 
 
 def setup_function():
@@ -24,14 +37,20 @@ def _single_helix_design() -> Design:
     scaffold = Strand(
         id="scaf",
         strand_type=StrandType.SCAFFOLD,
-        domains=[Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)
+        ],
     )
     staple = Strand(
         id="stap",
         strand_type=StrandType.STAPLE,
-        domains=[Domain(helix_id="h0", start_bp=5, end_bp=35, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=5, end_bp=35, direction=Direction.FORWARD)
+        ],
     )
-    return Design(helices=[helix], strands=[scaffold, staple], lattice_type=LatticeType.HONEYCOMB)
+    return Design(
+        helices=[helix], strands=[scaffold, staple], lattice_type=LatticeType.HONEYCOMB
+    )
 
 
 def test_strand_end_resize_route_returns_geometry_and_axes():
@@ -45,9 +64,15 @@ def test_strand_end_resize_route_returns_geometry_and_axes():
     }
     assert "POST" in registered_methods
 
-    body = strand_end_resize(StrandEndResizeRequest(entries=[
-        StrandEndResizeEntry(strand_id="stap", helix_id="h0", end="3p", delta_bp=10),
-    ]))
+    body = strand_end_resize(
+        StrandEndResizeRequest(
+            entries=[
+                StrandEndResizeEntry(
+                    strand_id="stap", helix_id="h0", end="3p", delta_bp=10
+                ),
+            ]
+        )
+    )
     assert body["design"]["strands"]
     assert body["nucleotides"]
     assert body["helix_axes"]
@@ -61,9 +86,15 @@ def test_strand_end_resize_returns_partial_geometry_for_changed_helix_only():
     designs. Regressing to the full path would drop these flags."""
     design_state.set_design(_single_helix_design())
 
-    body = strand_end_resize(StrandEndResizeRequest(entries=[
-        StrandEndResizeEntry(strand_id="stap", helix_id="h0", end="3p", delta_bp=4),
-    ]))
+    body = strand_end_resize(
+        StrandEndResizeRequest(
+            entries=[
+                StrandEndResizeEntry(
+                    strand_id="stap", helix_id="h0", end="3p", delta_bp=4
+                ),
+            ]
+        )
+    )
 
     # Partial-geometry contract.
     assert body["partial_geometry"] is True

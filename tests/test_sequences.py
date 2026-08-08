@@ -51,10 +51,13 @@ def _design_with_loop_skips(modifications: list[tuple[int, int]]) -> Design:
     """
     d = make_minimal_design()
     h = d.helices[0]
-    new_h = h.model_copy(update={
-        "loop_skips": [LoopSkip(bp_index=bp, delta=delta)
-                       for bp, delta in modifications]
-    })
+    new_h = h.model_copy(
+        update={
+            "loop_skips": [
+                LoopSkip(bp_index=bp, delta=delta) for bp, delta in modifications
+            ]
+        }
+    )
     return d.model_copy(update={"helices": [new_h] + list(d.helices[1:])})
 
 
@@ -93,18 +96,15 @@ class TestComplementBase:
 
 class TestDomainBpRange:
     def test_forward_yields_ascending_inclusive(self):
-        d = Domain(helix_id="h0", start_bp=0, end_bp=4,
-                   direction=Direction.FORWARD)
+        d = Domain(helix_id="h0", start_bp=0, end_bp=4, direction=Direction.FORWARD)
         assert list(domain_bp_range(d)) == [0, 1, 2, 3, 4]
 
     def test_reverse_yields_descending_inclusive(self):
-        d = Domain(helix_id="h0", start_bp=4, end_bp=0,
-                   direction=Direction.REVERSE)
+        d = Domain(helix_id="h0", start_bp=4, end_bp=0, direction=Direction.REVERSE)
         assert list(domain_bp_range(d)) == [4, 3, 2, 1, 0]
 
     def test_single_bp_domain(self):
-        d = Domain(helix_id="h0", start_bp=3, end_bp=3,
-                   direction=Direction.FORWARD)
+        d = Domain(helix_id="h0", start_bp=3, end_bp=3, direction=Direction.FORWARD)
         assert list(domain_bp_range(d)) == [3]
 
 
@@ -207,7 +207,7 @@ class TestBuildScaffoldBaseMap:
     def test_loop_yields_two_bases_at_position(self):
         d = _design_with_loop_skips([(5, +1)])
         # 42-bp helix + 1 loop → 43 nt; pad with our own letters.
-        seq = "A" * 5 + "GG" + "A" * 36   # 43 chars total
+        seq = "A" * 5 + "GG" + "A" * 36  # 43 chars total
         d2, _, _ = assign_custom_scaffold_sequence(d, seq)
         bmap = build_scaffold_base_map(d2)
         # Loop position emits 2 bases.
@@ -215,7 +215,7 @@ class TestBuildScaffoldBaseMap:
 
     def test_skip_position_absent(self):
         d = _design_with_loop_skips([(5, -1)])
-        seq = "A" * 41   # 42 - 1 nt
+        seq = "A" * 41  # 42 - 1 nt
         d2, _, _ = assign_custom_scaffold_sequence(d, seq)
         bmap = build_scaffold_base_map(d2)
         assert ("h0", 5, Direction.FORWARD.value) not in bmap
@@ -256,7 +256,7 @@ class TestAssignScaffoldSequence:
         scaf = d2.scaffold()
         assert scaf is not None
         assert scaf.sequence is not None
-        assert len(scaf.sequence) == 42      # matches scaffold nt count
+        assert len(scaf.sequence) == 42  # matches scaffold nt count
         assert total_nt == 42
         assert padded == 0
         # First 42 bases match the M13 sequence prefix.
@@ -280,9 +280,7 @@ class TestAssignScaffoldSequence:
             Helix(
                 id="h0",
                 axis_start=Vec3(x=0.0, y=0.0, z=0.0),
-                axis_end=Vec3(
-                    x=0.0, y=0.0, z=big_len * BDNA_RISE_PER_BP
-                ),
+                axis_end=Vec3(x=0.0, y=0.0, z=big_len * BDNA_RISE_PER_BP),
                 length_bp=big_len,
                 bp_start=0,
             )
@@ -291,16 +289,17 @@ class TestAssignScaffoldSequence:
             Strand(
                 id="scaf",
                 strand_type=StrandType.SCAFFOLD,
-                domains=[Domain(
-                    helix_id="h0",
-                    start_bp=0,
-                    end_bp=big_len - 1,
-                    direction=Direction.FORWARD,
-                )],
+                domains=[
+                    Domain(
+                        helix_id="h0",
+                        start_bp=0,
+                        end_bp=big_len - 1,
+                        direction=Direction.FORWARD,
+                    )
+                ],
             )
         ]
-        d = Design(helices=helices, strands=strands,
-                   lattice_type=LatticeType.HONEYCOMB)
+        d = Design(helices=helices, strands=strands, lattice_type=LatticeType.HONEYCOMB)
         d2, total_nt, padded = assign_scaffold_sequence(d, "M13mp18")
         assert total_nt == big_len
         assert padded == big_len - len(M13MP18_SEQUENCE)
@@ -393,24 +392,28 @@ class TestAssignStapleSequences:
             id="ov_test",
             helix_id="h0",
             strand_id="stap",
-            sequence="GGGGG",   # 5 nt, but domain is 10 bp
+            sequence="GGGGG",  # 5 nt, but domain is 10 bp
         )
         new_stap = Strand(
             id="stap",
             strand_type=StrandType.STAPLE,
-            domains=[Domain(
-                helix_id="h0",
-                start_bp=0,
-                end_bp=9,
-                direction=Direction.REVERSE,
-                overhang_id="ov_test",
-            )],
+            domains=[
+                Domain(
+                    helix_id="h0",
+                    start_bp=0,
+                    end_bp=9,
+                    direction=Direction.REVERSE,
+                    overhang_id="ov_test",
+                )
+            ],
         )
         scaf = next(s for s in d2.strands if s.is_scaffold)
-        d3 = d2.model_copy(update={
-            "strands": [scaf, new_stap],
-            "overhangs": [ov],
-        })
+        d3 = d2.model_copy(
+            update={
+                "strands": [scaf, new_stap],
+                "overhangs": [ov],
+            }
+        )
         d4 = assign_staple_sequences(d3)
         stap = next(s for s in d4.strands if s.id == "stap")
         # Pad with N to domain length.
@@ -428,19 +431,23 @@ class TestAssignStapleSequences:
         new_stap = Strand(
             id="stap",
             strand_type=StrandType.STAPLE,
-            domains=[Domain(
-                helix_id="h0",
-                start_bp=0,
-                end_bp=9,
-                direction=Direction.REVERSE,
-                overhang_id="ov_blank",
-            )],
+            domains=[
+                Domain(
+                    helix_id="h0",
+                    start_bp=0,
+                    end_bp=9,
+                    direction=Direction.REVERSE,
+                    overhang_id="ov_blank",
+                )
+            ],
         )
         scaf = next(s for s in d2.strands if s.is_scaffold)
-        d3 = d2.model_copy(update={
-            "strands": [scaf, new_stap],
-            "overhangs": [ov],
-        })
+        d3 = d2.model_copy(
+            update={
+                "strands": [scaf, new_stap],
+                "overhangs": [ov],
+            }
+        )
         d4 = assign_staple_sequences(d3)
         stap = next(s for s in d4.strands if s.id == "stap")
         assert stap.sequence == "N" * 10

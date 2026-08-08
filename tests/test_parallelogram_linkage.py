@@ -52,7 +52,9 @@ def build_parallelogram(
     # rejected by cluster_obb — the bars must be non-square so the u/v frame is stable).
     hb.create_bundle(
         [(r, c) for r in range(2) for c in range(12)],
-        length_bp, lattice=LatticeType.SQUARE, name="grid",
+        length_bp,
+        lattice=LatticeType.SQUARE,
+        name="grid",
     )
     d = design_state.get_or_404()
     bar_ids = []
@@ -74,7 +76,9 @@ def build_parallelogram(
         mid = (p + q) / 2.0
         direction = (q - p) / np.linalg.norm(q - p)
         hb.align_cluster_edge(
-            bid, _SIDE_EDGE, target_line=(mid.tolist(), direction.tolist()),
+            bid,
+            _SIDE_EDGE,
+            target_line=(mid.tolist(), direction.tolist()),
         )
 
     joint_ids = []
@@ -118,13 +122,19 @@ def test_adjacent_bars_share_exact_corners():
         obbs = [cluster_obb(design, b) for b in bar_ids]
 
         def corners(o):
-            return [o.corner(su, sv, sw)
-                    for su in (-1, 1) for sv in (-1, 1) for sw in (-1, 1)]
+            return [
+                o.corner(su, sv, sw)
+                for su in (-1, 1)
+                for sv in (-1, 1)
+                for sw in (-1, 1)
+            ]
 
         for k in range(4):
             ci, cj = corners(obbs[k]), corners(obbs[(k + 1) % 4])
             dmin = min(np.linalg.norm(x - y) for x in ci for y in cj)
-            assert dmin < 1e-3, f"bars {k},{(k + 1) % 4} don't share a corner ({dmin:.3f})"
+            assert dmin < 1e-3, (
+                f"bars {k},{(k + 1) % 4} don't share a corner ({dmin:.3f})"
+            )
 
         for k in (0, 1):
             w1, w2 = obbs[k].axes[2], obbs[k + 2].axes[2]

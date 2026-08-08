@@ -71,7 +71,9 @@ def effective_feature_log_position(design: Design) -> int | None:
     return n - 1
 
 
-def job_out_of_date(job_fingerprint: str | None, current_fingerprint: str | None) -> bool:
+def job_out_of_date(
+    job_fingerprint: str | None, current_fingerprint: str | None
+) -> bool:
     """True iff the job's creation fingerprint differs from the current design's.
     Unknown on either side (old job without a stored fingerprint, or no active
     design) → not flagged (we never block on a guess)."""
@@ -82,9 +84,11 @@ def job_out_of_date(job_fingerprint: str | None, current_fingerprint: str | None
     # cosmetic colour, or there may be no difference at all after an upgrade.
     # Callers with a frozen job snapshot derive a v2 hash before reaching here;
     # callers without one degrade to "unknown" instead of showing a false alert.
-    if current_fingerprint.startswith(f"{_FINGERPRINT_VERSION}:") \
-            and len(job_fingerprint) == 64 \
-            and not job_fingerprint.startswith(f"{_FINGERPRINT_VERSION}:"):
+    if (
+        current_fingerprint.startswith(f"{_FINGERPRINT_VERSION}:")
+        and len(job_fingerprint) == 64
+        and not job_fingerprint.startswith(f"{_FINGERPRINT_VERSION}:")
+    ):
         return False
     return job_fingerprint != current_fingerprint
 
@@ -99,8 +103,12 @@ def _design_identity(design: "Design | None"):
     return (name or "untitled", lattice, len(design.helices), len(design.strands))
 
 
-def describe_staleness(job_design: "Design | None", current_design: "Design | None",
-                       *, stage: str = "prepared") -> str:
+def describe_staleness(
+    job_design: "Design | None",
+    current_design: "Design | None",
+    *,
+    stage: str = "prepared",
+) -> str:
     """Human-readable reason a job is out of date, DISTINGUISHING the two cases the
     old single message conflated:
 
@@ -110,21 +118,27 @@ def describe_staleness(job_design: "Design | None", current_design: "Design | No
       feature log back or prepare a new run.
 
     Falls back to the generic message when either design is unavailable."""
-    generic = (f"The design has changed since this job was {stage}. Roll the design "
-               "back to the job's run state, or prepare a new run, first.")
+    generic = (
+        f"The design has changed since this job was {stage}. Roll the design "
+        "back to the job's run state, or prepare a new run, first."
+    )
     ji, ci = _design_identity(job_design), _design_identity(current_design)
     if ji is None or ci is None:
         return generic
     jn, jl, jh, js = ji
     cn, cl, ch, cs = ci
     if ji != ci:
-        return (f"A different design is loaded: the app currently has '{cn}' "
-                f"({cl} lattice, {ch} helices, {cs} strands), but this job was "
-                f"{stage} from '{jn}' ({jl} lattice, {jh} helices, {js} strands). "
-                f"Open '{jn}' to continue this run.")
-    return (f"'{jn}' has been edited since this job was {stage} (same name and size, "
-            "but its topology / sequence / geometry changed). Roll the feature log "
-            "back to the run state, or prepare a new run.")
+        return (
+            f"A different design is loaded: the app currently has '{cn}' "
+            f"({cl} lattice, {ch} helices, {cs} strands), but this job was "
+            f"{stage} from '{jn}' ({jl} lattice, {jh} helices, {js} strands). "
+            f"Open '{jn}' to continue this run."
+        )
+    return (
+        f"'{jn}' has been edited since this job was {stage} (same name and size, "
+        "but its topology / sequence / geometry changed). Roll the feature log "
+        "back to the run state, or prepare a new run."
+    )
 
 
 # The fingerprint is generic over DNA designs — both oxDNA and NAMD/MD jobs build
@@ -139,6 +153,7 @@ def current_active_design_fingerprint() -> str | None:
     (no active design, or a design that won't serialize) degrades to None rather
     than 500-ing the job list."""
     from backend.api import state as design_state
+
     try:
         return design_build_fingerprint(design_state.get_or_404())
     except Exception:  # noqa: BLE001

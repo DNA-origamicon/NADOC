@@ -47,9 +47,14 @@ def _build_inst_by_id(assembly) -> dict:
     return {i.id: i for i in assembly.instances}
 
 
-def _fk_expand_rigid_group(assembly, instance_id: str, delta: np.ndarray,
-                            visited: set, queue: list,
-                            inst_by_id: dict | None = None) -> None:
+def _fk_expand_rigid_group(
+    assembly,
+    instance_id: str,
+    delta: np.ndarray,
+    visited: set,
+    queue: list,
+    inst_by_id: dict | None = None,
+) -> None:
     """BFS over rigid joints (bidirectional); apply delta to each new member."""
     if inst_by_id is None:
         inst_by_id = _build_inst_by_id(assembly)
@@ -57,7 +62,7 @@ def _fk_expand_rigid_group(assembly, instance_id: str, delta: np.ndarray,
     while bfs:
         cur = bfs.pop(0)
         for j in assembly.joints:
-            if j.joint_type != 'rigid' or not j.instance_a_id or not j.instance_b_id:
+            if j.joint_type != "rigid" or not j.instance_a_id or not j.instance_b_id:
                 continue
             if j.instance_a_id == cur:
                 nxt = j.instance_b_id
@@ -72,14 +77,21 @@ def _fk_expand_rigid_group(assembly, instance_id: str, delta: np.ndarray,
                 continue
             m.transform = Mat4x4.from_array(delta @ m.transform.to_array())
             if m.base_transform:
-                m.base_transform = Mat4x4.from_array(delta @ m.base_transform.to_array())
+                m.base_transform = Mat4x4.from_array(
+                    delta @ m.base_transform.to_array()
+                )
             visited.add(nxt)
             queue.append(nxt)
             bfs.append(nxt)
 
 
-def _fk_propagate(assembly, parent_ids: set, delta: np.ndarray, visited: set,
-                   inst_by_id: dict | None = None) -> None:
+def _fk_propagate(
+    assembly,
+    parent_ids: set,
+    delta: np.ndarray,
+    visited: set,
+    inst_by_id: dict | None = None,
+) -> None:
     """BFS FK propagation from parent_ids through all non-rigid kinematic children."""
     if inst_by_id is None:
         inst_by_id = _build_inst_by_id(assembly)
@@ -87,7 +99,7 @@ def _fk_propagate(assembly, parent_ids: set, delta: np.ndarray, visited: set,
     while queue:
         pid = queue.pop(0)
         for j in assembly.joints:
-            if j.instance_a_id != pid or j.joint_type == 'rigid':
+            if j.instance_a_id != pid or j.joint_type == "rigid":
                 continue
             cid = j.instance_b_id
             if not cid or cid in visited:
@@ -100,14 +112,21 @@ def _fk_propagate(assembly, parent_ids: set, delta: np.ndarray, visited: set,
             _fk_apply_to_joint(j, delta)
             child.transform = Mat4x4.from_array(delta @ child.transform.to_array())
             if child.base_transform:
-                child.base_transform = Mat4x4.from_array(delta @ child.base_transform.to_array())
+                child.base_transform = Mat4x4.from_array(
+                    delta @ child.base_transform.to_array()
+                )
             visited.add(cid)
             _fk_expand_rigid_group(assembly, cid, delta, visited, queue, inst_by_id)
             queue.append(cid)
 
 
-def _move_instance_with_fk_delta(assembly, instance_id: str, delta: np.ndarray, visited: set,
-                                   inst_by_id: dict | None = None) -> bool:
+def _move_instance_with_fk_delta(
+    assembly,
+    instance_id: str,
+    delta: np.ndarray,
+    visited: set,
+    inst_by_id: dict | None = None,
+) -> bool:
     if inst_by_id is None:
         inst_by_id = _build_inst_by_id(assembly)
     inst = inst_by_id.get(instance_id)

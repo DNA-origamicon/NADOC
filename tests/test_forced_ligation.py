@@ -30,9 +30,14 @@ def _reset():
 
 
 def _make_bundle(cells, length_bp=42):
-    r = client.post("/api/design/bundle", json={
-        "cells": cells, "length_bp": length_bp, "plane": "XY",
-    })
+    r = client.post(
+        "/api/design/bundle",
+        json={
+            "cells": cells,
+            "length_bp": length_bp,
+            "plane": "XY",
+        },
+    )
     assert r.status_code == 201
     return r.json()["design"]
 
@@ -42,9 +47,14 @@ def _hid_at(design, row, col):
 
 
 def _nick(helix_id, bp_index, direction):
-    r = client.post("/api/design/nick", json={
-        "helix_id": helix_id, "bp_index": bp_index, "direction": direction,
-    })
+    r = client.post(
+        "/api/design/nick",
+        json={
+            "helix_id": helix_id,
+            "bp_index": bp_index,
+            "direction": direction,
+        },
+    )
     assert r.status_code == 201
     return r.json()["design"]
 
@@ -53,9 +63,11 @@ def _find_strand_with_3prime(design, helix_id, end_bp, direction):
     """Find strand whose last domain ends at (helix_id, end_bp, direction)."""
     for s in design["strands"]:
         last = s["domains"][-1]
-        if (last["helix_id"] == helix_id
-                and last["end_bp"] == end_bp
-                and last["direction"] == direction):
+        if (
+            last["helix_id"] == helix_id
+            and last["end_bp"] == end_bp
+            and last["direction"] == direction
+        ):
             return s
     return None
 
@@ -64,9 +76,11 @@ def _find_strand_with_5prime(design, helix_id, start_bp, direction):
     """Find strand whose first domain starts at (helix_id, start_bp, direction)."""
     for s in design["strands"]:
         first = s["domains"][0]
-        if (first["helix_id"] == helix_id
-                and first["start_bp"] == start_bp
-                and first["direction"] == direction):
+        if (
+            first["helix_id"] == helix_id
+            and first["start_bp"] == start_bp
+            and first["direction"] == direction
+        ):
             return s
     return None
 
@@ -90,16 +104,20 @@ class TestForcedLigation:
         assert strand_a["id"] != strand_b["id"]
 
         # Forced-ligate them
-        r = client.post("/api/design/forced-ligation", json={
-            "three_prime_strand_id": strand_a["id"],
-            "five_prime_strand_id": strand_b["id"],
-        })
+        r = client.post(
+            "/api/design/forced-ligation",
+            json={
+                "three_prime_strand_id": strand_a["id"],
+                "five_prime_strand_id": strand_b["id"],
+            },
+        )
         assert r.status_code == 201
         result = r.json()["design"]
 
         # Should have one fewer strand now (two merged into one)
         staples_on_hid = [
-            s for s in result["strands"]
+            s
+            for s in result["strands"]
             if s["strand_type"] == "staple"
             and any(d["helix_id"] == hid for d in s["domains"])
         ]
@@ -118,10 +136,13 @@ class TestForcedLigation:
         assert staple_a is not None, "3' staple on helix A not found"
         assert staple_b is not None, "5' staple on helix B not found"
 
-        r = client.post("/api/design/forced-ligation", json={
-            "three_prime_strand_id": staple_a["id"],
-            "five_prime_strand_id": staple_b["id"],
-        })
+        r = client.post(
+            "/api/design/forced-ligation",
+            json={
+                "three_prime_strand_id": staple_a["id"],
+                "five_prime_strand_id": staple_b["id"],
+            },
+        )
         assert r.status_code == 201
         result = r.json()["design"]
 
@@ -135,7 +156,9 @@ class TestForcedLigation:
         assert merged is not None, "Expected one strand spanning both helices"
 
         # No crossover record should be created
-        assert len(result["crossovers"]) == 0, "Forced ligation must not create crossover records"
+        assert len(result["crossovers"]) == 0, (
+            "Forced ligation must not create crossover records"
+        )
 
     def test_self_ligation_rejected(self):
         """Cannot ligate a strand to itself."""
@@ -145,10 +168,13 @@ class TestForcedLigation:
         staple = _find_strand_with_3prime(design, hid, 0, "REVERSE")
         assert staple is not None
 
-        r = client.post("/api/design/forced-ligation", json={
-            "three_prime_strand_id": staple["id"],
-            "five_prime_strand_id": staple["id"],
-        })
+        r = client.post(
+            "/api/design/forced-ligation",
+            json={
+                "three_prime_strand_id": staple["id"],
+                "five_prime_strand_id": staple["id"],
+            },
+        )
         assert r.status_code == 409
 
     def test_missing_strand_404(self):
@@ -157,10 +183,13 @@ class TestForcedLigation:
         hid = _hid_at(design, 0, 0)
         staple = _find_strand_with_3prime(design, hid, 0, "REVERSE")
 
-        r = client.post("/api/design/forced-ligation", json={
-            "three_prime_strand_id": staple["id"],
-            "five_prime_strand_id": "nonexistent-id",
-        })
+        r = client.post(
+            "/api/design/forced-ligation",
+            json={
+                "three_prime_strand_id": staple["id"],
+                "five_prime_strand_id": "nonexistent-id",
+            },
+        )
         assert r.status_code == 404
 
     def test_undo_after_forced_ligation(self):
@@ -173,10 +202,13 @@ class TestForcedLigation:
         strand_b = _find_strand_with_5prime(design, hid, 9, "REVERSE")
         strand_count_before = len(design["strands"])
 
-        r = client.post("/api/design/forced-ligation", json={
-            "three_prime_strand_id": strand_a["id"],
-            "five_prime_strand_id": strand_b["id"],
-        })
+        r = client.post(
+            "/api/design/forced-ligation",
+            json={
+                "three_prime_strand_id": strand_a["id"],
+                "five_prime_strand_id": strand_b["id"],
+            },
+        )
         assert r.status_code == 201
         ligated_count = len(r.json()["design"]["strands"])
         assert ligated_count == strand_count_before - 1
@@ -210,10 +242,13 @@ class TestForcedLigation:
 
         # The 3' end is at bp 10 on helix A, the 5' end is at bp 21 on helix B
         # — different bp indices.  Regular crossovers would reject this.
-        r = client.post("/api/design/forced-ligation", json={
-            "three_prime_strand_id": strand_3p["id"],
-            "five_prime_strand_id": strand_5p["id"],
-        })
+        r = client.post(
+            "/api/design/forced-ligation",
+            json={
+                "three_prime_strand_id": strand_3p["id"],
+                "five_prime_strand_id": strand_5p["id"],
+            },
+        )
         assert r.status_code == 201
         result = r.json()["design"]
 
@@ -224,9 +259,10 @@ class TestForcedLigation:
             if ha in hids and hb in hids:
                 merged = s
                 break
-        assert merged is not None, "Expected one strand spanning both helices at different bp indices"
+        assert merged is not None, (
+            "Expected one strand spanning both helices at different bp indices"
+        )
         assert len(result["crossovers"]) == 0, "No crossover record for forced ligation"
-
 
     def test_forced_ligation_record_stored(self):
         """forced_ligation endpoint stores a ForcedLigation record on the design."""
@@ -244,10 +280,13 @@ class TestForcedLigation:
             if hb in hids:
                 scaf_b = s
 
-        r = client.post("/api/design/forced-ligation", json={
-            "three_prime_strand_id": scaf_a["id"],
-            "five_prime_strand_id": scaf_b["id"],
-        })
+        r = client.post(
+            "/api/design/forced-ligation",
+            json={
+                "three_prime_strand_id": scaf_a["id"],
+                "five_prime_strand_id": scaf_b["id"],
+            },
+        )
         assert r.status_code == 201
         fl_list = r.json()["design"]["forced_ligations"]
         assert len(fl_list) == 1
@@ -263,8 +302,9 @@ class TestForcedLigationPeriodicSeam:
     editor's periodic-boundary mirror)."""
 
     def _assign_scaffold(self):
-        r = client.post("/api/design/assign-scaffold-sequence",
-                        json={"scaffold_name": "M13mp18"})
+        r = client.post(
+            "/api/design/assign-scaffold-sequence", json={"scaffold_name": "M13mp18"}
+        )
         assert r.status_code == 200
         return r.json()["design"]
 
@@ -284,25 +324,31 @@ class TestForcedLigationPeriodicSeam:
         # Sequence the design first, then capture the two staples we'll ligate.
         self._assign_scaffold()
         design = self._assign_staples()
-        staple_a = _find_strand_with_3prime(design, ha, 0, "REVERSE")   # 3' donor
-        staple_b = _find_strand_with_5prime(design, hb, 0, "FORWARD")   # 5' acceptor
+        staple_a = _find_strand_with_3prime(design, ha, 0, "REVERSE")  # 3' donor
+        staple_b = _find_strand_with_5prime(design, hb, 0, "FORWARD")  # 5' acceptor
         assert staple_a and staple_b and staple_a["id"] != staple_b["id"]
         a_seq, b_seq = staple_a["sequence"], staple_b["sequence"]
         assert a_seq and b_seq, "staples must have sequences before the test"
 
         # Close the seam (this is what the periodic-boundary view does).
-        r = client.post("/api/design/forced-ligation", json={
-            "three_prime_strand_id": staple_a["id"],
-            "five_prime_strand_id": staple_b["id"],
-            "is_periodic_seam": True,
-        })
+        r = client.post(
+            "/api/design/forced-ligation",
+            json={
+                "three_prime_strand_id": staple_a["id"],
+                "five_prime_strand_id": staple_b["id"],
+                "is_periodic_seam": True,
+            },
+        )
         assert r.status_code == 201
 
         # Re-assign staple sequences and check the merged strand traversal.
         result = self._assign_staples()
         merged = next(
-            (s for s in result["strands"]
-             if {d["helix_id"] for d in s["domains"]} >= {ha, hb}),
+            (
+                s
+                for s in result["strands"]
+                if {d["helix_id"] for d in s["domains"]} >= {ha, hb}
+            ),
             None,
         )
         assert merged is not None, "merged seam strand not found"
@@ -317,26 +363,38 @@ class TestForcedLigationPeriodicSeam:
         ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
 
         def _scaf_on(d, hid):
-            return next((s for s in d["strands"]
-                         if s["strand_type"] == "scaffold"
-                         and any(dom["helix_id"] == hid for dom in s["domains"])), None)
+            return next(
+                (
+                    s
+                    for s in d["strands"]
+                    if s["strand_type"] == "scaffold"
+                    and any(dom["helix_id"] == hid for dom in s["domains"])
+                ),
+                None,
+            )
 
         # Default: flag absent → False.
-        r = client.post("/api/design/forced-ligation", json={
-            "three_prime_strand_id": _scaf_on(design, ha)["id"],
-            "five_prime_strand_id":  _scaf_on(design, hb)["id"],
-        })
+        r = client.post(
+            "/api/design/forced-ligation",
+            json={
+                "three_prime_strand_id": _scaf_on(design, ha)["id"],
+                "five_prime_strand_id": _scaf_on(design, hb)["id"],
+            },
+        )
         assert r.status_code == 201
         assert r.json()["design"]["forced_ligations"][0]["is_periodic_seam"] is False
 
         # Reset + request the flag explicitly.
         design = _make_bundle([[0, 0], [0, 1]])
         ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
-        r = client.post("/api/design/forced-ligation", json={
-            "three_prime_strand_id": _scaf_on(design, ha)["id"],
-            "five_prime_strand_id":  _scaf_on(design, hb)["id"],
-            "is_periodic_seam": True,
-        })
+        r = client.post(
+            "/api/design/forced-ligation",
+            json={
+                "three_prime_strand_id": _scaf_on(design, ha)["id"],
+                "five_prime_strand_id": _scaf_on(design, hb)["id"],
+                "is_periodic_seam": True,
+            },
+        )
         assert r.status_code == 201
         assert r.json()["design"]["forced_ligations"][0]["is_periodic_seam"] is True
 
@@ -362,10 +420,13 @@ class TestDeleteForcedLigation:
             if hb in hids:
                 scaf_b = s
 
-        r = client.post("/api/design/forced-ligation", json={
-            "three_prime_strand_id": scaf_a["id"],
-            "five_prime_strand_id": scaf_b["id"],
-        })
+        r = client.post(
+            "/api/design/forced-ligation",
+            json={
+                "three_prime_strand_id": scaf_a["id"],
+                "five_prime_strand_id": scaf_b["id"],
+            },
+        )
         assert r.status_code == 201
         design = r.json()["design"]
         fl = design["forced_ligations"][0]
@@ -426,29 +487,38 @@ class TestDeleteForcedLigation:
         # First forced ligation: A → B
         scaf_a = _scaf_on(design, ha)
         scaf_b = _scaf_on(design, hb)
-        r = client.post("/api/design/forced-ligation", json={
-            "three_prime_strand_id": scaf_a["id"],
-            "five_prime_strand_id": scaf_b["id"],
-        })
+        r = client.post(
+            "/api/design/forced-ligation",
+            json={
+                "three_prime_strand_id": scaf_a["id"],
+                "five_prime_strand_id": scaf_b["id"],
+            },
+        )
         assert r.status_code == 201
         design = r.json()["design"]
 
         # Second forced ligation: C → D
         scaf_c = _scaf_on(design, hc)
         scaf_d = _scaf_on(design, hd)
-        r = client.post("/api/design/forced-ligation", json={
-            "three_prime_strand_id": scaf_c["id"],
-            "five_prime_strand_id": scaf_d["id"],
-        })
+        r = client.post(
+            "/api/design/forced-ligation",
+            json={
+                "three_prime_strand_id": scaf_c["id"],
+                "five_prime_strand_id": scaf_d["id"],
+            },
+        )
         assert r.status_code == 201
         design = r.json()["design"]
         assert len(design["forced_ligations"]) == 2
         strand_count_before = len(design["strands"])
 
         fl_ids = [fl["id"] for fl in design["forced_ligations"]]
-        r = client.post("/api/design/forced-ligations/batch-delete", json={
-            "forced_ligation_ids": fl_ids,
-        })
+        r = client.post(
+            "/api/design/forced-ligations/batch-delete",
+            json={
+                "forced_ligation_ids": fl_ids,
+            },
+        )
         assert r.status_code == 200
         result = r.json()["design"]
         # Both FLs removed, each split adds one strand
@@ -458,9 +528,12 @@ class TestDeleteForcedLigation:
     def test_batch_delete_missing_id_returns_404(self):
         """Batch-delete with a nonexistent ID returns 404."""
         design, fl, _, _ = self._create_forced_ligation()
-        r = client.post("/api/design/forced-ligations/batch-delete", json={
-            "forced_ligation_ids": [fl["id"], "nonexistent-id"],
-        })
+        r = client.post(
+            "/api/design/forced-ligations/batch-delete",
+            json={
+                "forced_ligation_ids": [fl["id"], "nonexistent-id"],
+            },
+        )
         assert r.status_code == 404
 
 
@@ -480,6 +553,7 @@ class TestLigateSameStrandDomainMerge:
         where bp_index is the 3′-end convention for the ligate call.
         """
         from backend.core.models import Domain, Direction
+
         design = design_state.get_or_404()
         dir_enum = Direction(direction)
 
@@ -500,11 +574,15 @@ class TestLigateSameStrandDomainMerge:
         mid = (lo + hi) // 2
         if dir_enum == Direction.FORWARD:
             d1 = Domain(helix_id=helix_id, start_bp=lo, end_bp=mid, direction=dir_enum)
-            d2 = Domain(helix_id=helix_id, start_bp=mid + 1, end_bp=hi, direction=dir_enum)
+            d2 = Domain(
+                helix_id=helix_id, start_bp=mid + 1, end_bp=hi, direction=dir_enum
+            )
             bp_index = mid  # 3′ end of d1
         else:
             d1 = Domain(helix_id=helix_id, start_bp=hi, end_bp=mid, direction=dir_enum)
-            d2 = Domain(helix_id=helix_id, start_bp=mid - 1, end_bp=lo, direction=dir_enum)
+            d2 = Domain(
+                helix_id=helix_id, start_bp=mid - 1, end_bp=lo, direction=dir_enum
+            )
             bp_index = mid  # 3′ end of d1
 
         new_domains = [d1, d2] + list(target.domains[1:])
@@ -521,9 +599,14 @@ class TestLigateSameStrandDomainMerge:
         hid = _hid_at(design, 0, 0)
         strand_id, dom_count, bp_index = self._inject_multi_domain_strand(hid)
 
-        r = client.post("/api/design/ligate", json={
-            "helix_id": hid, "bp_index": bp_index, "direction": "REVERSE",
-        })
+        r = client.post(
+            "/api/design/ligate",
+            json={
+                "helix_id": hid,
+                "bp_index": bp_index,
+                "direction": "REVERSE",
+            },
+        )
         assert r.status_code == 200
         updated = next(s for s in r.json()["design"]["strands"] if s["id"] == strand_id)
         assert len(updated["domains"]) == dom_count - 1
@@ -534,14 +617,21 @@ class TestLigateSameStrandDomainMerge:
         hid = _hid_at(design, 0, 0)
         strand_id, dom_count, bp_index = self._inject_multi_domain_strand(hid)
 
-        r = client.post("/api/design/ligate", json={
-            "helix_id": hid, "bp_index": bp_index, "direction": "REVERSE",
-        })
+        r = client.post(
+            "/api/design/ligate",
+            json={
+                "helix_id": hid,
+                "bp_index": bp_index,
+                "direction": "REVERSE",
+            },
+        )
         assert r.status_code == 200
         updated = next(s for s in r.json()["design"]["strands"] if s["id"] == strand_id)
         assert len(updated["domains"]) == dom_count - 1
 
         r = client.post("/api/design/undo")
         assert r.status_code == 200
-        reverted = next(s for s in r.json()["design"]["strands"] if s["id"] == strand_id)
+        reverted = next(
+            s for s in r.json()["design"]["strands"] if s["id"] == strand_id
+        )
         assert len(reverted["domains"]) == dom_count

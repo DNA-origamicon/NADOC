@@ -72,16 +72,22 @@ def _anchor_nt_positions(design: "Design", anchors) -> np.ndarray:
     from backend.physics.oxdna_interface import resolve_anchor_particles  # noqa: PLC0415
 
     _parts, keys = resolve_anchor_particles(design, anchors)
-    hbd = {(k[0], k[1], k[2]) for k in keys
-           if len(k) >= 3 and not (isinstance(k[0], str) and k[0].startswith(_EXT_PREFIX))}
+    hbd = {
+        (k[0], k[1], k[2])
+        for k in keys
+        if len(k) >= 3 and not (isinstance(k[0], str) and k[0].startswith(_EXT_PREFIX))
+    }
     if not hbd:
         return np.empty((0, 3))
 
     from backend.core.mrdna_bridge import _build_nt_arrays  # noqa: PLC0415
 
     r, _bp, _stk, _tp, _ori, _seq, nt_key = _build_nt_arrays(design, return_nt_key=True)
-    idxs = [idx for (h_id, bp_idx, direction, _k), idx in nt_key.items()
-            if not h_id.startswith(_EXT_PREFIX) and (h_id, bp_idx, direction) in hbd]
+    idxs = [
+        idx
+        for (h_id, bp_idx, direction, _k), idx in nt_key.items()
+        if not h_id.startswith(_EXT_PREFIX) and (h_id, bp_idx, direction) in hbd
+    ]
     if not idxs:
         return np.empty((0, 3))
     return np.asarray(r)[idxs]
@@ -139,13 +145,17 @@ def install_anchor_restraints(
     def _wrapped(*args, **kwargs):
         orig(*args, **kwargs)
         n = len(apply_anchor_restraints(design, model, anchors, k=k))
-        logger.info("mrdna anchors: re-applied %d bead restraint(s) after bead regen", n)
+        logger.info(
+            "mrdna anchors: re-applied %d bead restraint(s) after bead regen", n
+        )
 
     model.generate_bead_model = _wrapped
 
     if any(getattr(s, "beads", None) for s in model.segments):
         n = len(apply_anchor_restraints(design, model, anchors, k=k))
-        logger.info("mrdna anchors: applied %d bead restraint(s) to current bead cloud", n)
+        logger.info(
+            "mrdna anchors: applied %d bead restraint(s) to current bead cloud", n
+        )
         return n
     return 0
 

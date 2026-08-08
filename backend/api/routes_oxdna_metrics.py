@@ -11,6 +11,7 @@ Reading trajectory frames is the expensive part, so the work runs in a backgroun
 thread with a pollable progress + ETA (mirrors ``routes_autorefine``'s registry pattern);
 the panel drives a per-metric loading bar off it.  Registered in ``backend/api/main.py``.
 """
+
 from __future__ import annotations
 
 import threading
@@ -36,8 +37,10 @@ _LOCK = threading.Lock()
 
 
 class MetricsStartRequest(BaseModel):
-    scope: str = "latest"      # "latest" (this job only) | "chain" (whole parent/child lineage)
-    n_slices: int = 0          # 0 => auto (~1-turn slabs), matching the measure defaults
+    scope: str = (
+        "latest"  # "latest" (this job only) | "chain" (whole parent/child lineage)
+    )
+    n_slices: int = 0  # 0 => auto (~1-turn slabs), matching the measure defaults
 
 
 def _set(run_id: str, **fields) -> None:
@@ -50,8 +53,11 @@ def _job_inputs(job, ws: Path):
     job has no usable frames yet.  Mirrors the deviation/rmsf route's loading."""
     from backend.core.models import Design
 
-    prod = [s for s in job.stages if s.kind in ("production", "field")
-            and s.status in ("done", "running")]
+    prod = [
+        s
+        for s in job.stages
+        if s.kind in ("production", "field") and s.status in ("done", "running")
+    ]
     if not prod:
         return None
     jd = job.job_dir(ws)
@@ -79,21 +85,32 @@ def _resolve_jobs(job_id: str, scope: str, ws: Path):
 
 def _compute(run_id: str, job_id: str, req: MetricsStartRequest, ws: Path) -> None:
     from backend.api.skip_twist_tuning import core_reference_geometry
-    from backend.core.oxdna_health import count_trajectory_frames, production_metric_series
+    from backend.core.oxdna_health import (
+        count_trajectory_frames,
+        production_metric_series,
+    )
 
     try:
         jobs = _resolve_jobs(job_id, req.scope, ws)
         inputs = [(j, _job_inputs(j, ws)) for j in jobs]
         inputs = [(j, io) for j, io in inputs if io is not None]
         if not inputs:
-            _set(run_id, state="done", result={"ready": False,
-                 "reason": "no production frames yet for the selected job(s)"})
+            _set(
+                run_id,
+                state="done",
+                result={
+                    "ready": False,
+                    "reason": "no production frames yet for the selected job(s)",
+                },
+            )
             return
 
         total = 0
         for _j, (_d, _r, trajs) in inputs:
             total += sum(count_trajectory_frames(p) for p in trajs)
-        _set(run_id, frames_total=max(1, total), frames_done=0, progress=0.0, eta_s=None)
+        _set(
+            run_id, frames_total=max(1, total), frames_done=0, progress=0.0, eta_s=None
+        )
 
         started = time.time()
         done = {"n": 0}
@@ -103,8 +120,12 @@ def _compute(run_id: str, job_id: str, req: MetricsStartRequest, ws: Path) -> No
             elapsed = time.time() - started
             frac = done["n"] / max(1, total)
             eta = (elapsed / done["n"]) * (total - done["n"]) if done["n"] else None
-            _set(run_id, frames_done=done["n"], progress=round(min(1.0, frac), 4),
-                 eta_s=round(eta, 1) if eta is not None else None)
+            _set(
+                run_id,
+                frames_done=done["n"],
+                progress=round(min(1.0, frac), 4),
+                eta_s=round(eta, 1) if eta is not None else None,
+            )
 
         # temporal series concatenate end-to-end; spatial profiles overlay one per job.
         twist_pf: list[float] = []
@@ -115,45 +136,74 @@ def _compute(run_id: str, job_id: str, req: MetricsStartRequest, ws: Path) -> No
         n_designed = 0
         for j, (design, ref_conf, trajs) in inputs:
             analytic = core_reference_geometry(design)
-            res = production_metric_series(design, trajs, ref_conf, analytic,
-                                           n_slices=req.n_slices, on_frame=_tick)
+            res = production_metric_series(
+                design, trajs, ref_conf, analytic, n_slices=req.n_slices, on_frame=_tick
+            )
             if not res.get("ready"):
                 continue
-            boundaries.append({"job_id": j.job_id, "start_frame": len(twist_pf),
-                               "n_frames": res["n_frames"]})
+            boundaries.append(
+                {
+                    "job_id": j.job_id,
+                    "start_frame": len(twist_pf),
+                    "n_frames": res["n_frames"],
+                }
+            )
             twist_pf.extend(res["twist"]["temporal"]["per_frame"])
             curv_pf.extend(res["curvature"]["temporal"]["per_frame"])
             bp_pf.extend(res["base_pairing"]["temporal"]["per_frame"])
             n_designed = max(n_designed, res["base_pairing"]["temporal"]["n_designed"])
-            per_job.append({
-                "job_id": j.job_id,
-                "twist_spatial": res["twist"]["spatial"],
-                "curvature_spatial": res["curvature"]["spatial"],
-                "base_pairing_spatial": res["base_pairing"]["spatial"],
-            })
+            per_job.append(
+                {
+                    "job_id": j.job_id,
+                    "twist_spatial": res["twist"]["spatial"],
+                    "curvature_spatial": res["curvature"]["spatial"],
+                    "base_pairing_spatial": res["base_pairing"]["spatial"],
+                }
+            )
 
         if not per_job:
-            _set(run_id, state="done", result={"ready": False,
-                 "reason": "trajectory has too few helices/frames to measure"})
+            _set(
+                run_id,
+                state="done",
+                result={
+                    "ready": False,
+                    "reason": "trajectory has too few helices/frames to measure",
+                },
+            )
             return
 
         result = {
             "ready": True,
             "scope": req.scope,
             "jobs": [j.job_id for j, _ in inputs],
-            "twist": {"temporal": {"per_frame": twist_pf, "boundaries": boundaries},
-                      "spatial": [{"job_id": p["job_id"], "points": p["twist_spatial"]}
-                                  for p in per_job]},
-            "curvature": {"temporal": {"per_frame": curv_pf, "boundaries": boundaries},
-                          "spatial": [{"job_id": p["job_id"], "points": p["curvature_spatial"]}
-                                      for p in per_job]},
-            "base_pairing": {"temporal": {"per_frame": bp_pf, "boundaries": boundaries,
-                                          "n_designed": n_designed},
-                             "spatial": [{"job_id": p["job_id"], "points": p["base_pairing_spatial"]}
-                                         for p in per_job]},
+            "twist": {
+                "temporal": {"per_frame": twist_pf, "boundaries": boundaries},
+                "spatial": [
+                    {"job_id": p["job_id"], "points": p["twist_spatial"]}
+                    for p in per_job
+                ],
+            },
+            "curvature": {
+                "temporal": {"per_frame": curv_pf, "boundaries": boundaries},
+                "spatial": [
+                    {"job_id": p["job_id"], "points": p["curvature_spatial"]}
+                    for p in per_job
+                ],
+            },
+            "base_pairing": {
+                "temporal": {
+                    "per_frame": bp_pf,
+                    "boundaries": boundaries,
+                    "n_designed": n_designed,
+                },
+                "spatial": [
+                    {"job_id": p["job_id"], "points": p["base_pairing_spatial"]}
+                    for p in per_job
+                ],
+            },
         }
         _set(run_id, state="done", progress=1.0, eta_s=0.0, result=result)
-    except Exception as exc:                   # surface any failure to the poller
+    except Exception as exc:  # surface any failure to the poller
         _set(run_id, state="error", error=str(exc))
 
 
@@ -162,12 +212,21 @@ def start_metrics(job_id: str, req: MetricsStartRequest) -> dict:
     """Launch a background twist/curvature/base-pairing compute for a job (``scope=latest``)
     or its whole parent/child lineage (``scope=chain``).  Returns ``{metrics_id}``; poll
     ``GET /oxdna/metrics/{id}`` for progress + the result."""
-    _load_job(job_id)                          # 404 early if the job is unknown
+    _load_job(job_id)  # 404 early if the job is unknown
     run_id = uuid.uuid4().hex[:12]
-    _set(run_id, state="running", progress=0.0, eta_s=None, frames_done=0,
-         frames_total=None, result=None, error=None)
-    threading.Thread(target=_compute, args=(run_id, job_id, req, _workspace()),
-                     daemon=True).start()
+    _set(
+        run_id,
+        state="running",
+        progress=0.0,
+        eta_s=None,
+        frames_done=0,
+        frames_total=None,
+        result=None,
+        error=None,
+    )
+    threading.Thread(
+        target=_compute, args=(run_id, job_id, req, _workspace()), daemon=True
+    ).start()
     return {"metrics_id": run_id, "state": "running"}
 
 

@@ -198,7 +198,9 @@ def place_primitive_into(
                 "grafts helices/strands/forced_ligations/cluster_transforms verbatim"
             )
     if primitive.plate_layout is not None or primitive.atomistic_reference is not None:
-        raise ValueError("primitive carries plate/atomistic data the graft cannot place")
+        raise ValueError(
+            "primitive carries plate/atomistic data the graft cannot place"
+        )
     if any(h.loop_skips for h in primitive.helices):
         raise ValueError("primitive carries loop/skip marks the graft cannot place")
 
@@ -227,7 +229,10 @@ def place_primitive_into(
             raise ValueError("primitive helix lacks grid_pos; cannot place")
         new_gp = (gp[0] + grid_delta[0], gp[1] + grid_delta[1])
         per_cell = _world_delta(gp, new_gp, lattice)
-        if abs(per_cell[0] - world_delta[0]) > _EPS or abs(per_cell[1] - world_delta[1]) > _EPS:
+        if (
+            abs(per_cell[0] - world_delta[0]) > _EPS
+            or abs(per_cell[1] - world_delta[1]) > _EPS
+        ):
             raise ValueError(
                 "placement would distort the footprint (a non-rigid lattice shift — "
                 "e.g. a honeycomb odd-parity move); choose a shape-preserving anchor cell"
@@ -260,8 +265,12 @@ def place_primitive_into(
     ]
     placed_strands = []
     for s in primitive.strands:
-        new_domains = [dm.model_copy(update={"helix_id": hmap[dm.helix_id]}) for dm in s.domains]
-        placed_strands.append(s.model_copy(update={"id": smap[s.id], "domains": new_domains}))
+        new_domains = [
+            dm.model_copy(update={"helix_id": hmap[dm.helix_id]}) for dm in s.domains
+        ]
+        placed_strands.append(
+            s.model_copy(update={"id": smap[s.id], "domains": new_domains})
+        )
     placed_fls = [
         fl.model_copy(
             update={
@@ -279,12 +288,18 @@ def place_primitive_into(
         for ref in c.domain_ids:
             if ref.strand_id not in smap:
                 raise ValueError("cluster names a strand the graft did not place")
-            new_domain_ids.append(ref.model_copy(update={"strand_id": smap[ref.strand_id]}))
+            new_domain_ids.append(
+                ref.model_copy(update={"strand_id": smap[ref.strand_id]})
+            )
         nid = _fresh_id(c.id, used_c)
         used_c.add(nid)
         placed_clusters.append(
             c.model_copy(
-                update={"id": nid, "helix_ids": new_helix_ids, "domain_ids": new_domain_ids}
+                update={
+                    "id": nid,
+                    "helix_ids": new_helix_ids,
+                    "domain_ids": new_domain_ids,
+                }
             )
         )
 

@@ -25,6 +25,7 @@ Units (as stored, a valid mixed-unit sectional stiffness):
   * g(rot,rot) ............... pN*nm^2
   * g(trans,rot) ............. pN*nm
 """
+
 from __future__ import annotations
 
 import json
@@ -36,27 +37,51 @@ import numpy as np
 
 from backend.core.constants import SSDNA_CONTOUR_PER_NT_NM
 
-_PARAMS_PATH = Path(__file__).resolve().parents[1] / "data" / "parameters" / "snupi_params.json"
+_PARAMS_PATH = (
+    Path(__file__).resolve().parents[1] / "data" / "parameters" / "snupi_params.json"
+)
 
 # SNUPI beam DOF order (dx = axial).
 DOF_ORDER: List[str] = ["dx", "dy", "dz", "theta_x", "theta_y", "theta_z"]
 _DOF_IDX = {d: i for i, d in enumerate(DOF_ORDER)}
 
 # Diagonal rigidity -> DOF.
-_DIAG_MAP = {"dx": "EA", "dy": "GAy", "dz": "GAz",
-             "theta_x": "GJ", "theta_y": "EIy", "theta_z": "EIz"}
+_DIAG_MAP = {
+    "dx": "EA",
+    "dy": "GAy",
+    "dz": "GAz",
+    "theta_x": "GJ",
+    "theta_y": "EIy",
+    "theta_z": "EIz",
+}
 
 # 15 coupling keys -> the (dof_a, dof_b) pair they populate off the diagonal.
 _COUPLING_MAP = {
-    "g_Tx_Ty": ("theta_x", "theta_y"), "g_Tx_Tz": ("theta_x", "theta_z"),
+    "g_Tx_Ty": ("theta_x", "theta_y"),
+    "g_Tx_Tz": ("theta_x", "theta_z"),
     "g_Ty_Tz": ("theta_y", "theta_z"),
-    "g_Dx_Dy": ("dx", "dy"), "g_Dx_Dz": ("dx", "dz"), "g_Dy_Dz": ("dy", "dz"),
-    "g_Dx_Tx": ("dx", "theta_x"), "g_Dx_Ty": ("dx", "theta_y"), "g_Dx_Tz": ("dx", "theta_z"),
-    "g_Dy_Tx": ("dy", "theta_x"), "g_Dy_Ty": ("dy", "theta_y"), "g_Dy_Tz": ("dy", "theta_z"),
-    "g_Dz_Tx": ("dz", "theta_x"), "g_Dz_Ty": ("dz", "theta_y"), "g_Dz_Tz": ("dz", "theta_z"),
+    "g_Dx_Dy": ("dx", "dy"),
+    "g_Dx_Dz": ("dx", "dz"),
+    "g_Dy_Dz": ("dy", "dz"),
+    "g_Dx_Tx": ("dx", "theta_x"),
+    "g_Dx_Ty": ("dx", "theta_y"),
+    "g_Dx_Tz": ("dx", "theta_z"),
+    "g_Dy_Tx": ("dy", "theta_x"),
+    "g_Dy_Ty": ("dy", "theta_y"),
+    "g_Dy_Tz": ("dy", "theta_z"),
+    "g_Dz_Tx": ("dz", "theta_x"),
+    "g_Dz_Ty": ("dz", "theta_y"),
+    "g_Dz_Tz": ("dz", "theta_z"),
 }
 
-MOTIF_FAMILIES = ("regular_bp", "nicked_bp", "co_nick", "double_co", "single_co", "extra_base_co")
+MOTIF_FAMILIES = (
+    "regular_bp",
+    "nicked_bp",
+    "co_nick",
+    "double_co",
+    "single_co",
+    "extra_base_co",
+)
 
 
 @lru_cache(maxsize=1)
@@ -194,30 +219,30 @@ def temperature_K() -> float:
 # designs (no staple nick had the capacity) and are filled from the asymptotic laws below,
 # which reproduce the measured n >= 14 points to 0.11 % (L), 0.10 % (GJ) and 1.5 % (EI).
 _SS_TABLE: Dict[int, tuple] = {
-    1:  (0.6881, 15.0000, 10.6225),
-    2:  (1.0931, 13.0453, 19.7840),
-    3:  (1.4686, 11.1914, 27.6540),
-    4:  (1.7897,  9.5377, 33.7518),
-    5:  (2.0526,  8.1202, 38.0118),
-    6:  (2.2667,  6.9368, 40.6013),
-    7:  (2.4454,  5.9662, 41.7915),
-    8:  (2.6000,  5.1794, 41.8763),
-    9:  (2.7381,  4.5463, 41.1300),
-    10: (2.8647,  4.0393, 39.7882),
-    11: (2.9826,  3.6341, 38.0428),
-    12: (3.0938,  3.3107, 36.0443),
-    13: (3.1994,  3.0526, 33.9078),
-    14: (3.3004,  2.8464, 31.7187),
-    15: (3.3974,  2.6815, 29.5388),
-    16: (3.4908,  2.5494, 27.4119),
-    17: (3.5811,  2.4435, 25.3678),
-    18: (3.6686,  2.3584, 23.4259),
-    19: (3.7535,  2.2900, 21.5975),
-    20: (3.8361,  2.2349, 19.8885),
-    21: (3.9159,  2.1892, 18.3445),   # interpolated (see above)
-    22: (3.9952,  2.1544, 16.8322),
-    23: (4.0739,  2.1234, 15.6505),   # interpolated (see above)
-    24: (4.1470,  2.1018, 14.2396),
+    1: (0.6881, 15.0000, 10.6225),
+    2: (1.0931, 13.0453, 19.7840),
+    3: (1.4686, 11.1914, 27.6540),
+    4: (1.7897, 9.5377, 33.7518),
+    5: (2.0526, 8.1202, 38.0118),
+    6: (2.2667, 6.9368, 40.6013),
+    7: (2.4454, 5.9662, 41.7915),
+    8: (2.6000, 5.1794, 41.8763),
+    9: (2.7381, 4.5463, 41.1300),
+    10: (2.8647, 4.0393, 39.7882),
+    11: (2.9826, 3.6341, 38.0428),
+    12: (3.0938, 3.3107, 36.0443),
+    13: (3.1994, 3.0526, 33.9078),
+    14: (3.3004, 2.8464, 31.7187),
+    15: (3.3974, 2.6815, 29.5388),
+    16: (3.4908, 2.5494, 27.4119),
+    17: (3.5811, 2.4435, 25.3678),
+    18: (3.6686, 2.3584, 23.4259),
+    19: (3.7535, 2.2900, 21.5975),
+    20: (3.8361, 2.2349, 19.8885),
+    21: (3.9159, 2.1892, 18.3445),  # interpolated (see above)
+    22: (3.9952, 2.1544, 16.8322),
+    23: (4.0739, 2.1234, 15.6505),  # interpolated (see above)
+    24: (4.1470, 2.1018, 14.2396),
 }
 SS_TABLE_MAX_NT = 24
 
@@ -226,9 +251,9 @@ SS_TABLE_MAX_NT = 24
 # SS_GJ_L = 2 pN*nm^2; EI decays toward zero (a long collapsed ssDNA beam has almost no
 # bending stiffness left).  Real bridging runs are short — VoltronCore's longest is 16 nt —
 # so this branch is a safety net, not the hot path.
-_SS_L_A, _SS_L_B = 0.631009, 3.301714      # L  = sqrt(A * (n + B))
-_SS_GJ_L, _SS_GJ_C, _SS_GJ_K = 2.0, 16.837197, 0.213745   # GJ = GJ_L + C*exp(-K n)
-_SS_EI_C, _SS_EI_K = 97.222944, 0.079413                  # EI = C*exp(-K n)
+_SS_L_A, _SS_L_B = 0.631009, 3.301714  # L  = sqrt(A * (n + B))
+_SS_GJ_L, _SS_GJ_C, _SS_GJ_K = 2.0, 16.837197, 0.213745  # GJ = GJ_L + C*exp(-K n)
+_SS_EI_C, _SS_EI_K = 97.222944, 0.079413  # EI = C*exp(-K n)
 
 # Stretch rigidity, relaxed (`SS_EA_L` in Default.snp).  SNUPI additionally has a nonlinear
 # extension-dependent EA that stiffens toward SS_EA_H = 710 pN as the run pulls taut; at the
@@ -258,7 +283,12 @@ def ssdna_element(n_nt: int) -> Dict[str, float]:
         l_rest = float(np.sqrt(_SS_L_A * (n + _SS_L_B)))
         gj = _SS_GJ_L + _SS_GJ_C * float(np.exp(-_SS_GJ_K * n))
         ei = _SS_EI_C * float(np.exp(-_SS_EI_K * n))
-    return {"l_rest": float(l_rest), "ea": SS_EA_RELAXED, "ei": float(ei), "gj": float(gj)}
+    return {
+        "l_rest": float(l_rest),
+        "ea": SS_EA_RELAXED,
+        "ei": float(ei),
+        "gj": float(gj),
+    }
 
 
 # ── Per-nucleotide ssDNA link (SS-2: the EXPLICIT free-tail chain) ──────────────
@@ -287,10 +317,12 @@ def ssdna_element(n_nt: int) -> Dict[str, float]:
 # Sourced from ~/SNUPI/Default.snp lines 88-153.  The resulting chain is validated against the
 # WLC end-to-end oracle, NOT against SNUPI (which has no such element to compare to) — see
 # `tests/test_snupi_ssdna.py::test_free_tail_reproduces_the_wlc_end_to_end_distribution`.
-SS_CONTOUR_PER_NT = SSDNA_CONTOUR_PER_NT_NM   # nm — SS_LCT1_L (shared with the oxDNA tail seed)
-SS_PERSISTENCE_NM = 0.67     # nm  — SS_LPB_L
-SS_EA_TAUT = 710.0           # pN  — SS_EA_H
-SS_GJ_SHORT = 15.0           # pN·nm^2 — SS_GJ_H
+SS_CONTOUR_PER_NT = (
+    SSDNA_CONTOUR_PER_NT_NM  # nm — SS_LCT1_L (shared with the oxDNA tail seed)
+)
+SS_PERSISTENCE_NM = 0.67  # nm  — SS_LPB_L
+SS_EA_TAUT = 710.0  # pN  — SS_EA_H
+SS_GJ_SHORT = 15.0  # pN·nm^2 — SS_GJ_H
 
 # k_B T at SNUPI's simulation temperature (300 K), pN·nm.  Local to the EI = k_BT·L_p identity;
 # snupi_dynamics.KBT_300 is the same number and fem_solver.KBT (4.11) is the 298 K NMA value.

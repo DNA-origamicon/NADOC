@@ -181,7 +181,9 @@ class TestFitHelixAxis:
         # Random points along an axis with small jitter
         ax = np.array([0.0, 0.0, 1.0])
         base = np.array([1.0, 2.0, 3.0])
-        midpoints = np.array([base + i * ax + rng.standard_normal(3) * 0.01 for i in range(10)])
+        midpoints = np.array(
+            [base + i * ax + rng.standard_normal(3) * 0.01 for i in range(10)]
+        )
         centroid, _ = fit_helix_axis(midpoints)
         assert np.allclose(centroid, midpoints.mean(axis=0))
 
@@ -276,7 +278,12 @@ class TestSugarPuckerPhase:
         return the same pucker label & phase (sugar atoms are identical)."""
         labels = set()
         phases = []
-        for resname, base in [("DT", _DT_BASE), ("DA", _DA_BASE), ("DC", _DC_BASE), ("DG", _DG_BASE)]:
+        for resname, base in [
+            ("DT", _DT_BASE),
+            ("DA", _DA_BASE),
+            ("DC", _DC_BASE),
+            ("DG", _DG_BASE),
+        ]:
             res = _residue_from_template(resName=resname, base=base)
             P_deg, _tau, label = sugar_pucker_phase(res)
             labels.add(label)
@@ -397,12 +404,14 @@ def _write_synthetic_duplex_pdb(path: str, n_bp: int = 4) -> None:
             f"{resName:<3s} "
             f"{chainID}"
             f"{resSeq:>4d}    "
-            f"{x*10:>8.3f}{y*10:>8.3f}{z*10:>8.3f}"
+            f"{x * 10:>8.3f}{y * 10:>8.3f}{z * 10:>8.3f}"
             f"  1.00  0.00           {elem:<2s}\n"
         )
         f.write(line)
 
-    def write_residue(f, atoms_template, resName, chainID, resSeq, twist, dz, mirror, serial):
+    def write_residue(
+        f, atoms_template, resName, chainID, resSeq, twist, dz, mirror, serial
+    ):
         c, s = math.cos(twist), math.sin(twist)
         for name, elem, n, y, z in atoms_template:
             if mirror:
@@ -419,19 +428,37 @@ def _write_synthetic_duplex_pdb(path: str, n_bp: int = 4) -> None:
         # Chain A: TTTT (resSeq 1..N) along +z
         for i in range(n_bp):
             seq = i + 1
-            serial = write_residue(f, _SUGAR, "DT", "A", seq, i * twist_rad, i * rise_nm, False, serial)
-            serial = write_residue(f, _DT_BASE, "DT", "A", seq, i * twist_rad, i * rise_nm, False, serial)
+            serial = write_residue(
+                f, _SUGAR, "DT", "A", seq, i * twist_rad, i * rise_nm, False, serial
+            )
+            serial = write_residue(
+                f, _DT_BASE, "DT", "A", seq, i * twist_rad, i * rise_nm, False, serial
+            )
         # Chain B: AAAA (resSeq 1..N), antiparallel: B:1 ↔ A:N
         for i in range(n_bp):
             seq = i + 1
             a_seq = n_bp - i  # B:1 pairs with A:N
             serial = write_residue(
-                f, _SUGAR, "DA", "B", seq,
-                (a_seq - 1) * twist_rad, (a_seq - 1) * rise_nm, True, serial,
+                f,
+                _SUGAR,
+                "DA",
+                "B",
+                seq,
+                (a_seq - 1) * twist_rad,
+                (a_seq - 1) * rise_nm,
+                True,
+                serial,
             )
             serial = write_residue(
-                f, _DA_BASE, "DA", "B", seq,
-                (a_seq - 1) * twist_rad, (a_seq - 1) * rise_nm, True, serial,
+                f,
+                _DA_BASE,
+                "DA",
+                "B",
+                seq,
+                (a_seq - 1) * twist_rad,
+                (a_seq - 1) * rise_nm,
+                True,
+                serial,
             )
         f.write("END\n")
 
@@ -451,7 +478,9 @@ class TestAnalyzeDuplex:
         assert pdb_path.exists()
         assert pdb_path.stat().st_size < 20_000  # < 20 KB sanity guard
 
-        analysis = analyze_duplex(str(pdb_path), chain_a="A", chain_b="B", exclude_terminal=1)
+        analysis = analyze_duplex(
+            str(pdb_path), chain_a="A", chain_b="B", exclude_terminal=1
+        )
 
         # Backbone step: one inner→inner step on chain A
         assert len(analysis.backbone_steps) == 1

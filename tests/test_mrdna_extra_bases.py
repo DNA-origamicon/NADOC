@@ -60,6 +60,7 @@ def _extra_base_indices(design):
 
 # ── no-regression: extra-base-free designs are untouched ──────────────────────
 
+
 def test_no_extra_bases_no_inserts(routed_6hb):
     assert ox.crossover_extra_base_junctions(routed_6hb) == {}
     *_, eb = _extra_base_indices(routed_6hb)
@@ -68,16 +69,20 @@ def test_no_extra_bases_no_inserts(routed_6hb):
 
 # ── pin #1: nt count grows by exactly the extra-base total ────────────────────
 
+
 def test_nt_count_grows_by_extra_base_total(routed_6hb):
     base_r, *_ = _build_nt_arrays(routed_6hb)
     d = _with_extra(routed_6hb, "TT", all_crossovers=True)
-    n_extra = sum(len(extra) for _xo, extra in ox.crossover_extra_base_junctions(d).values())
+    n_extra = sum(
+        len(extra) for _xo, extra in ox.crossover_extra_base_junctions(d).values()
+    )
     assert n_extra > 1, "bulk case should insert at several junctions"
     r, *_ = _build_nt_arrays(d)
     assert len(r) - len(base_r) == n_extra
 
 
 # ── pin #2: inserts are single-stranded (unpaired) ────────────────────────────
+
 
 def test_inserts_are_unpaired(routed_6hb):
     d = _with_extra(routed_6hb, "TT")
@@ -89,6 +94,7 @@ def test_inserts_are_unpaired(routed_6hb):
 # ── pin #3: inserts thread 3' + stack in-chain: prev_real → eb… → next_real ────
 #   Can-go-red: without the strand-chain splice / stacking pass these are −1.
 
+
 def test_inserts_threaded_in_chain(routed_6hb):
     d = _with_extra(routed_6hb, "TT")
     _r, _bp, stack, tp, _seq, eb = _extra_base_indices(d)
@@ -96,14 +102,15 @@ def test_inserts_threaded_in_chain(routed_6hb):
     eb0, eb1 = eb
     # A real predecessor threads into eb0; eb0 → eb1 → a real successor.
     prev = [j for j in range(len(tp)) if tp[j] == eb0]
-    assert len(prev) == 1 and prev[0] not in eb          # flanked by a real nt
-    assert tp[eb0] == eb1                                 # 3' chain through inserts
-    assert tp[eb1] not in eb and tp[eb1] >= 0             # exits to a real nt
+    assert len(prev) == 1 and prev[0] not in eb  # flanked by a real nt
+    assert tp[eb0] == eb1  # 3' chain through inserts
+    assert tp[eb1] not in eb and tp[eb1] >= 0  # exits to a real nt
     # Stacking mirrors the 3' chain (the domain walk skips inserts otherwise).
     assert stack[prev[0]] == eb0 and stack[eb0] == eb1 and stack[eb1] == tp[eb1]
 
 
 # ── pin #4: bond geometry along the insert is even + FENE-safe (no coincidence) ─
+
 
 def test_insert_geometry_even_and_noncoincident(routed_6hb):
     d = _with_extra(routed_6hb, "TT")
@@ -112,11 +119,12 @@ def test_insert_geometry_even_and_noncoincident(routed_6hb):
     prev = next(j for j in range(len(tp)) if tp[j] == eb0)
     chain = [prev, eb0, eb1, tp[eb1]]
     seglens = [np.linalg.norm(r[a] - r[b]) for a, b in zip(chain, chain[1:])]
-    assert min(seglens) > 0.1                              # no coincident beads (LJ guard)
-    assert max(seglens) - min(seglens) < 0.5              # evenly spaced along the chord
+    assert min(seglens) > 0.1  # no coincident beads (LJ guard)
+    assert max(seglens) - min(seglens) < 0.5  # evenly spaced along the chord
 
 
 # ── pin #5: base identity from extra_bases, not from strand.sequence ──────────
+
 
 def test_insert_base_identity(routed_6hb):
     d = _with_extra(routed_6hb, "GC")
@@ -126,6 +134,7 @@ def test_insert_base_identity(routed_6hb):
 
 
 # ── display: flank keys for positioning the native extra-base beads/slabs ─────
+
 
 def test_flank_keys_absent_without_extra_bases(routed_6hb):
     assert extra_base_flank_keys(routed_6hb) == []
@@ -143,12 +152,13 @@ def test_flank_keys_name_real_flanking_nucleotides(routed_6hb):
 
     real_keys = {
         (n.helix_id, n.bp_index, n.direction.value)
-        for h in d.helices for n in nucleotide_positions(h)
+        for h in d.helices
+        for n in nucleotide_positions(h)
     }
     for xo_id, extra, prev_key, next_key in flanks:
         assert extra == "TT"
-        assert prev_key in real_keys and next_key in real_keys   # real nucleotides
-        assert prev_key[0] != next_key[0]                        # spans two helices
+        assert prev_key in real_keys and next_key in real_keys  # real nucleotides
+        assert prev_key[0] != next_key[0]  # spans two helices
 
 
 # ── pin #6: builds a valid mrDNA model with the inserts as ssDNA segments ──────
@@ -157,8 +167,10 @@ _has_mrdna = False
 try:
     import sys
     from backend.core.mrdna_bridge import mrdna_tool_path
+
     sys.path.insert(0, mrdna_tool_path())
     import mrdna  # noqa: F401
+
     _has_mrdna = True
 except Exception:
     pass
@@ -173,7 +185,9 @@ def test_model_builds_with_ssdna_segments(routed_6hb):
 
     def ss_count(design):
         r, bp, stack, tp, orient, seq, _ = _build_nt_arrays(design, return_nt_key=True)
-        m = model_from_basepair_stack_3prime(r, bp, stack, tp, sequence=seq, orientation=orient)
+        m = model_from_basepair_stack_3prime(
+            r, bp, stack, tp, sequence=seq, orientation=orient
+        )
         return sum(isinstance(s, SingleStrandedSegment) for s in m.segments)
 
     base_ss = ss_count(routed_6hb)
@@ -191,6 +205,7 @@ def test_model_builds_with_ssdna_segments(routed_6hb):
 #   content is invariant.  A PRESENCE + FLEXIBILITY property — never a bend/twist
 #   direction (crossover-geometry reasoning forbidden).
 
+
 def _model_seg_stats(design):
     """(tot_nt, ss_nt, ds_nt, n_beads) of the built mrDNA SegmentModel.
 
@@ -200,7 +215,9 @@ def _model_seg_stats(design):
     from mrdna.readers.segmentmodel_from_lists import model_from_basepair_stack_3prime
 
     r, bp, stack, tp, orient, seq, _ = _build_nt_arrays(design, return_nt_key=True)
-    m = model_from_basepair_stack_3prime(r, bp, stack, tp, sequence=seq, orientation=orient)
+    m = model_from_basepair_stack_3prime(
+        r, bp, stack, tp, sequence=seq, orientation=orient
+    )
     ss_nt = sum(s.num_nt for s in m.segments if isinstance(s, SingleStrandedSegment))
     ds_nt = sum(s.num_nt for s in m.segments if isinstance(s, DoubleStrandedSegment))
     n_beads = sum(len(s.children) for s in m.segments)
@@ -232,8 +249,8 @@ def test_inserts_are_flexible_ssdna_in_the_model(routed_6hb, all_crossovers):
     d = _with_extra(routed_6hb, "TT", all_crossovers=all_crossovers)
     n_extra = sum(len(e) for _xo, e in ox.crossover_extra_base_junctions(d).values())
     _wt, with_ss, with_ds, _wb = _model_seg_stats(d)
-    assert with_ds == base_ds                    # rigid ds content untouched
-    assert with_ss - base_ss == n_extra          # every added nt is single-stranded
+    assert with_ds == base_ds  # rigid ds content untouched
+    assert with_ss - base_ss == n_extra  # every added nt is single-stranded
 
 
 @skip_no_mrdna
@@ -247,6 +264,7 @@ def test_bead_cloud_grows_with_bulk_inserts(routed_6hb):
 
 
 # ── pin #7 (slow, opt-in): a real ARBD sim runs end-to-end with inserts ───────
+
 
 @pytest.mark.slow
 @skip_no_mrdna
@@ -268,8 +286,13 @@ def test_real_arbd_runs_with_extra_bases(tmp_path, routed_6hb):
     def _run(design, out):
         out.mkdir(parents=True, exist_ok=True)
         mrdna_model_from_nadoc(design).simulate(
-            output_name=_SIM_STEM, directory=str(out),
-            num_steps=500, timestep=200e-6, gpu=0, output_period=250)
+            output_name=_SIM_STEM,
+            directory=str(out),
+            num_steps=500,
+            timestep=200e-6,
+            gpu=0,
+            output_period=250,
+        )
         return extract_mrdna_results(design, out)
 
     d = _with_extra(routed_6hb, "TT", all_crossovers=True)
@@ -283,7 +306,9 @@ def test_real_arbd_runs_with_extra_bases(tmp_path, routed_6hb):
     # Deform toggle: one __xb__ display entry per inserted base, keyed (crossover_id, k).
     xb = [p for p in res_with["positions"] if p["helix_id"] == "__xb__"]
     assert len(xb) == n_extra
-    assert all(isinstance(p["bp_index"], str) and isinstance(p["direction"], int) for p in xb)
+    assert all(
+        isinstance(p["bp_index"], str) and isinstance(p["direction"], int) for p in xb
+    )
     assert not any(p["helix_id"] == "__xb__" for p in res_base["positions"])
 
     # CG-bead toggle: the insert beads join the cloud (more DNA beads than baseline).

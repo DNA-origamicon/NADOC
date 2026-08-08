@@ -16,6 +16,7 @@ Property assertions, not smoke runs:
 
 Fast: no real engine binary. The routed-6HB fixture is a headless bundle build.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -41,6 +42,7 @@ from backend.physics.fem_solver import (
 
 # ── Synthetic straight beam chain (no design needed) ─────────────────────────
 
+
 def _straight_chain_mesh(n: int = 6, rise: float = 0.34) -> FEMMesh:
     """A single straight DNA beam of ``n`` axis nodes along +z (one helix, no
     crossovers). Node 0 pinned makes it a well-posed cantilever."""
@@ -50,8 +52,9 @@ def _straight_chain_mesh(n: int = 6, rise: float = 0.34) -> FEMMesh:
         for i in range(n)
     ]
     elems = [
-        FEMElement(node_i=i, node_j=i + 1, length=rise, R=axis,
-                   ea=EA_DS, ei=EI_DS, gj=GJ_DS)
+        FEMElement(
+            node_i=i, node_j=i + 1, length=rise, R=axis, ea=EA_DS, ei=EI_DS, gj=GJ_DS
+        )
         for i in range(n - 1)
     ]
     return FEMMesh(nodes=nodes, elements=elems)
@@ -63,7 +66,7 @@ def test_bc_no_anchors_pins_single_centroid_node():
     K, _ = assemble_global_stiffness(mesh)
     f = np.zeros(K.shape[0])
     _Kf, _ff, free = apply_boundary_conditions(K, f, mesh)
-    assert len(free) == K.shape[0] - 6          # one node (6 DOF) pinned
+    assert len(free) == K.shape[0] - 6  # one node (6 DOF) pinned
 
 
 def test_bc_pins_exactly_the_requested_nodes():
@@ -95,14 +98,15 @@ def test_pinned_node_held_free_node_moves_under_load():
     K, _ = assemble_global_stiffness(mesh)
     f = np.zeros(K.shape[0])
     last = len(mesh.nodes) - 1
-    f[6 * last + 0] = 50.0                       # transverse (x) point load, pN
+    f[6 * last + 0] = 50.0  # transverse (x) point load, pN
     Kf, ff, free = apply_boundary_conditions(K, f, mesh, fixed_nodes=[0])
     u = solve_equilibrium(Kf, ff, K.shape[0], free)
-    assert np.allclose(u[0:6], 0.0)              # pinned node held
-    assert abs(u[6 * last + 0]) > 1e-6           # free tip deflected along the load
+    assert np.allclose(u[0:6], 0.0)  # pinned node held
+    assert abs(u[6 * last + 0]) > 1e-6  # free tip deflected along the load
 
 
 # ── Anchor-scope resolver ────────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="module")
 def routed_6hb():
@@ -120,13 +124,20 @@ def routed_6hb():
 
 def test_resolve_anchor_nodes_base_scope_hits_one_node(routed_6hb):
     mesh = build_fem_mesh(routed_6hb)
-    n0 = mesh.nodes[len(mesh.nodes) // 2]        # some interior duplex node
-    anchor = {"kind": "base", "helix_id": n0.helix_id,
-              "bp": n0.global_bp, "direction": Direction.FORWARD.value}
+    n0 = mesh.nodes[len(mesh.nodes) // 2]  # some interior duplex node
+    anchor = {
+        "kind": "base",
+        "helix_id": n0.helix_id,
+        "bp": n0.global_bp,
+        "direction": Direction.FORWARD.value,
+    }
     nodes, keys = resolve_anchor_nodes(routed_6hb, mesh, [anchor])
     # FORWARD + REVERSE nucleotides of one bp collapse to the SINGLE axis node.
-    assert nodes == [i for i, n in enumerate(mesh.nodes)
-                     if n.helix_id == n0.helix_id and n.global_bp == n0.global_bp]
+    assert nodes == [
+        i
+        for i, n in enumerate(mesh.nodes)
+        if n.helix_id == n0.helix_id and n.global_bp == n0.global_bp
+    ]
     assert len(nodes) == 1
     assert keys == [(n0.helix_id, n0.global_bp)]
 
@@ -138,12 +149,14 @@ def test_resolve_anchor_nodes_cluster_scope_covers_helix_set(routed_6hb):
     hid = routed_6hb.helices[0].id
     design = routed_6hb.model_copy(deep=True)
     from backend.core.models import ClusterRigidTransform
+
     design.cluster_transforms.append(
         ClusterRigidTransform(id="c-test", helix_ids=[hid])
     )
     mesh = build_fem_mesh(design)
     nodes, _keys = resolve_anchor_nodes(
-        design, mesh, [{"kind": "cluster", "id": "c-test"}])
+        design, mesh, [{"kind": "cluster", "id": "c-test"}]
+    )
     expected = {i for i, n in enumerate(mesh.nodes) if n.helix_id == hid}
     assert set(nodes) == expected
     assert len(nodes) == len(_duplex_bp_per_helix(design)[hid])
@@ -152,12 +165,22 @@ def test_resolve_anchor_nodes_cluster_scope_covers_helix_set(routed_6hb):
 def test_resolve_anchor_nodes_stale_selection_drops(routed_6hb):
     mesh = build_fem_mesh(routed_6hb)
     nodes, keys = resolve_anchor_nodes(
-        routed_6hb, mesh, [{"kind": "base", "helix_id": "nope", "bp": 9999,
-                            "direction": Direction.FORWARD.value}])
+        routed_6hb,
+        mesh,
+        [
+            {
+                "kind": "base",
+                "helix_id": "nope",
+                "bp": 9999,
+                "direction": Direction.FORWARD.value,
+            }
+        ],
+    )
     assert nodes == [] and keys == []
 
 
 # ── End-to-end: predict_shape holds the anchor ───────────────────────────────
+
 
 @pytest.fixture(scope="module")
 def skipped_6hb():
@@ -190,11 +213,11 @@ def test_prestress_solve_holds_anchored_node_at_rest(skipped_6hb):
 
     free = solve_prestress_shape(d, build_fem_mesh(d), n_steps=6)
     i_moved = int(np.argmax(np.linalg.norm(free - ref, axis=1)))
-    assert np.linalg.norm(free[i_moved] - ref[i_moved]) > 1e-3     # moves when free
+    assert np.linalg.norm(free[i_moved] - ref[i_moved]) > 1e-3  # moves when free
 
     anc = solve_prestress_shape(d, build_fem_mesh(d), n_steps=6, fixed_nodes=[i_moved])
-    assert np.linalg.norm(anc[i_moved] - ref[i_moved]) < 1e-9      # held exactly
-    assert np.linalg.norm(anc - ref, axis=1).max() > 1e-3          # rest still deflects
+    assert np.linalg.norm(anc[i_moved] - ref[i_moved]) < 1e-9  # held exactly
+    assert np.linalg.norm(anc - ref, axis=1).max() > 1e-3  # rest still deflects
 
 
 def test_predict_shape_anchor_changes_output_and_reports_keys(skipped_6hb):
@@ -206,11 +229,21 @@ def test_predict_shape_anchor_changes_output_and_reports_keys(skipped_6hb):
     hid = d.helices[0].id
 
     free = predict_shape(d, nonlinear=True, n_steps=6, with_rmsf=False)
-    got = predict_shape(d, nonlinear=True, n_steps=6, with_rmsf=False,
-                        anchors=[{"kind": "cluster", "id": "no-such"},
-                                 {"kind": "base", "helix_id": hid,
-                                  "bp": mesh.nodes[0].global_bp,
-                                  "direction": Direction.FORWARD.value}])
+    got = predict_shape(
+        d,
+        nonlinear=True,
+        n_steps=6,
+        with_rmsf=False,
+        anchors=[
+            {"kind": "cluster", "id": "no-such"},
+            {
+                "kind": "base",
+                "helix_id": hid,
+                "bp": mesh.nodes[0].global_bp,
+                "direction": Direction.FORWARD.value,
+            },
+        ],
+    )
     assert free["anchor_keys"] == []
     assert [hid, mesh.nodes[0].global_bp] in got["anchor_keys"]
 
@@ -226,13 +259,24 @@ def test_predict_shape_unresolved_anchor_is_a_noop(skipped_6hb):
     free-free NMA RMSF identical to the unanchored solve."""
     d = skipped_6hb
     plain = predict_shape(d, nonlinear=True, n_steps=6, with_rmsf=True)
-    stale = predict_shape(d, nonlinear=True, n_steps=6, with_rmsf=True,
-                          anchors=[{"kind": "base", "helix_id": "nope",
-                                    "bp": 9999, "direction": Direction.FORWARD.value}])
+    stale = predict_shape(
+        d,
+        nonlinear=True,
+        n_steps=6,
+        with_rmsf=True,
+        anchors=[
+            {
+                "kind": "base",
+                "helix_id": "nope",
+                "bp": 9999,
+                "direction": Direction.FORWARD.value,
+            }
+        ],
+    )
     assert stale["anchor_keys"] == []
     p0 = np.array([p["backbone_position"] for p in plain["positions"]])
     p1 = np.array([p["backbone_position"] for p in stale["positions"]])
-    assert np.allclose(p0, p1)               # deterministic spsolve shape identical
+    assert np.allclose(p0, p1)  # deterministic spsolve shape identical
     r0 = np.array([r["rmsf_nm"] for r in plain["rmsf"]])
     r1 = np.array([r["rmsf_nm"] for r in stale["rmsf"]])
     # Free-free NMA preserved: identical positions above prove the shape solve is

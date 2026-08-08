@@ -1,6 +1,7 @@
 """Connection tethers for a regular cluster's move (direct duplex + ss/ds linker) —
 `backend.core.connection_tethers`. Verifies moving/fixed assignment + contour per type on
 the reference fixtures used elsewhere for the overhang-duplex / linker work."""
+
 from __future__ import annotations
 
 import json
@@ -39,16 +40,20 @@ def test_direct_duplex_static_tether_only_for_the_parent_part():
     by_id = {c.id: c for c in d.cluster_transforms}
     dup = next(c for c in d.cluster_transforms if c.overhang_duplex_driver_id)
     parent = by_id[dup.parent_cluster_id]
-    other = next(c for c in d.cluster_transforms
-                 if not c.overhang_duplex_driver_id and c.id != parent.id)
+    other = next(
+        c
+        for c in d.cluster_transforms
+        if not c.overhang_duplex_driver_id and c.id != parent.id
+    )
 
     tp = cluster_connection_tethers(d, parent)
     assert len(tp) == 1, "the duplex's parent gets a static tether to the other part"
     assert tp[0]["contour_nm"] == pytest.approx(0.67, abs=1e-6)
     assert tp[0]["rigid"] is False
 
-    assert cluster_connection_tethers(d, other) == [], \
+    assert cluster_connection_tethers(d, other) == [], (
         "the non-parent part uses a MOVABLE LINK, not a static duplex tether"
+    )
     assert cluster_connection_tethers(d, dup) == []
 
 
@@ -59,8 +64,11 @@ def test_direct_duplex_movable_link_for_non_parent_part():
     by_id = {c.id: c for c in d.cluster_transforms}
     dup = next(c for c in d.cluster_transforms if c.overhang_duplex_driver_id)
     parent = by_id[dup.parent_cluster_id]
-    other = next(c for c in d.cluster_transforms
-                 if not c.overhang_duplex_driver_id and c.id != parent.id)
+    other = next(
+        c
+        for c in d.cluster_transforms
+        if not c.overhang_duplex_driver_id and c.id != parent.id
+    )
 
     links = cluster_movable_links(d, other)
     assert len(links) == 1

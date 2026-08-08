@@ -62,8 +62,13 @@ def _translate(cells, anchor, dst):
 def _rel_shape(cells):
     """Relative XY geometry of a footprint, anchored at its first cell (rounded)."""
     x0, y0 = honeycomb_position(*cells[0])
-    return [(round(honeycomb_position(r, c)[0] - x0, 4),
-             round(honeycomb_position(r, c)[1] - y0, 4)) for r, c in cells]
+    return [
+        (
+            round(honeycomb_position(r, c)[0] - x0, 4),
+            round(honeycomb_position(r, c)[1] - y0, 4),
+        )
+        for r, c in cells
+    ]
 
 
 def _directions(cells):
@@ -71,6 +76,7 @@ def _directions(cells):
 
 
 # ── 1. General primitive-addition validation ──────────────────────────────────
+
 
 @_skip_if_no_6hb
 def test_derive_placement_spec_matches_real_6hb_primitive():
@@ -85,12 +91,18 @@ def test_derive_placement_spec_matches_real_6hb_primitive():
 def test_place_primitive_into_empty_builds_footprint_and_is_revertable():
     """Placing the 6hb primitive onto an empty design via the segment route builds
     all 6 helices at the (translated) footprint and leaves a revertable log entry."""
-    design_state.set_design(Design())   # empty workspace
-    cells = _translate(SIX_HB, SIX_HB_ANCHOR, (2, 3))   # even shift (allowed)
-    r = client.post("/api/design/bundle-segment", json={
-        "cells": [list(c) for c in cells], "length_bp": 42, "plane": "XY",
-        "strand_filter": "both", "ligate_adjacent": True,
-    })
+    design_state.set_design(Design())  # empty workspace
+    cells = _translate(SIX_HB, SIX_HB_ANCHOR, (2, 3))  # even shift (allowed)
+    r = client.post(
+        "/api/design/bundle-segment",
+        json={
+            "cells": [list(c) for c in cells],
+            "length_bp": 42,
+            "plane": "XY",
+            "strand_filter": "both",
+            "ligate_adjacent": True,
+        },
+    )
     assert r.status_code == 201
     d = design_state.get_or_404()
     assert {tuple(h.grid_pos) for h in d.helices} == set(cells)
@@ -107,31 +119,45 @@ def test_place_primitive_is_additive_over_existing_dna():
     """A primitive dropped onto a populated design adds to it (existing helix kept)."""
     base = make_bundle_design([(0, 0)], length_bp=42)
     design_state.set_design(base)
-    cells = _translate(SIX_HB, SIX_HB_ANCHOR, (4, 5))   # away from (0,0), even shift
-    r = client.post("/api/design/bundle-segment", json={
-        "cells": [list(c) for c in cells], "length_bp": 42, "plane": "XY",
-    })
+    cells = _translate(SIX_HB, SIX_HB_ANCHOR, (4, 5))  # away from (0,0), even shift
+    r = client.post(
+        "/api/design/bundle-segment",
+        json={
+            "cells": [list(c) for c in cells],
+            "length_bp": 42,
+            "plane": "XY",
+        },
+    )
     assert r.status_code == 201
     grid = {tuple(h.grid_pos) for h in design_state.get_or_404().helices}
-    assert (0, 0) in grid                       # original untouched
-    assert set(cells).issubset(grid)            # primitive added
+    assert (0, 0) in grid  # original untouched
+    assert set(cells).issubset(grid)  # primitive added
     assert len(grid) == 1 + len(cells)
 
 
 # ── 2. Shape preservation under allowed (even) snaps ───────────────────────────
 
-@pytest.mark.parametrize("dst", [(0, 1), (2, 1), (0, 3), (2, 3), (1, 2)])  # all even shifts
+
+@pytest.mark.parametrize(
+    "dst", [(0, 1), (2, 1), (0, 3), (2, 3), (1, 2)]
+)  # all even shifts
 def test_allowed_even_shift_preserves_cross_section_and_polarity(dst):
     placed = _translate(SIX_HB, SIX_HB_ANCHOR, dst)
-    assert _rel_shape(placed) == _rel_shape(SIX_HB)          # congruent geometry
-    assert _directions(placed) == _directions(SIX_HB)        # per-helix scaffold polarity preserved
+    assert _rel_shape(placed) == _rel_shape(SIX_HB)  # congruent geometry
+    assert _directions(placed) == _directions(
+        SIX_HB
+    )  # per-helix scaffold polarity preserved
 
 
-@pytest.mark.parametrize("dst", [(0, 2), (1, 1), (0, 0), (2, 0)])  # odd shifts (hover parity ≠ anchor)
+@pytest.mark.parametrize(
+    "dst", [(0, 2), (1, 1), (0, 0), (2, 0)]
+)  # odd shifts (hover parity ≠ anchor)
 def test_forbidden_odd_shift_distorts_shape_and_flips_polarity(dst):
     placed = _translate(SIX_HB, SIX_HB_ANCHOR, dst)
-    assert _rel_shape(placed) != _rel_shape(SIX_HB)          # geometry distorted (the "I")
-    assert _directions(placed) == [_flip(d) for d in _directions(SIX_HB)]   # every polarity flipped
+    assert _rel_shape(placed) != _rel_shape(SIX_HB)  # geometry distorted (the "I")
+    assert _directions(placed) == [
+        _flip(d) for d in _directions(SIX_HB)
+    ]  # every polarity flipped
 
 
 def _flip(direction: str) -> str:
@@ -146,5 +172,7 @@ def test_built_segment_geometry_matches_predicted_shape_for_allowed_shift():
     by_cell = {tuple(h.grid_pos): h for h in design.helices}
     built = [(by_cell[c].axis_start.x, by_cell[c].axis_start.y) for c in placed]
     x0, y0 = built[0]
-    built_rel = [(round(x - x0, 4), round(y - y0, 4)) for x, y in built]   # subtract raw, round once
+    built_rel = [
+        (round(x - x0, 4), round(y - y0, 4)) for x, y in built
+    ]  # subtract raw, round once
     assert built_rel == _rel_shape(SIX_HB)

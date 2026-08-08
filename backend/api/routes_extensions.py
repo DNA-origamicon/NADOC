@@ -31,6 +31,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.api import state as design_state
+
 # _design_response is a response helper shared with the rest of crud.py's
 # route handlers. It stays in crud.py (used by 100+ routes there) and is
 # imported here. Same convention as routes_animations.py / routes_camera_poses.py.
@@ -89,11 +90,20 @@ def upsert_strand_extensions_batch(body: StrandExtensionBatchRequest) -> dict:
         if strand is None:
             raise HTTPException(404, detail=f"Strand {item.strand_id!r} not found.")
         if item.sequence is None and item.modification is None:
-            raise HTTPException(400, detail=f"Strand {item.strand_id!r}: at least one of sequence or modification must be provided.")
+            raise HTTPException(
+                400,
+                detail=f"Strand {item.strand_id!r}: at least one of sequence or modification must be provided.",
+            )
         if item.sequence and not _re.match(r"^[ACGTNacgtn]+$", item.sequence):
-            raise HTTPException(400, detail=f"Strand {item.strand_id!r}: sequence must contain only ACGTN characters.")
+            raise HTTPException(
+                400,
+                detail=f"Strand {item.strand_id!r}: sequence must contain only ACGTN characters.",
+            )
         if item.modification and item.modification not in VALID_MODIFICATIONS:
-            raise HTTPException(400, detail=f"Unknown modification {item.modification!r}. Valid: {sorted(VALID_MODIFICATIONS)}")
+            raise HTTPException(
+                400,
+                detail=f"Unknown modification {item.modification!r}. Valid: {sorted(VALID_MODIFICATIONS)}",
+            )
 
     def _apply(d: Design) -> None:
         # Build a mutable index: (strand_id, end) → list position
@@ -105,11 +115,13 @@ def upsert_strand_extensions_batch(body: StrandExtensionBatchRequest) -> dict:
             key = (item.strand_id, item.end)
             if key in ext_index:
                 i = ext_index[key]
-                d.extensions[i] = d.extensions[i].model_copy(update={
-                    "sequence":     seq,
-                    "modification": item.modification,
-                    "label":        item.label,
-                })
+                d.extensions[i] = d.extensions[i].model_copy(
+                    update={
+                        "sequence": seq,
+                        "modification": item.modification,
+                        "label": item.label,
+                    }
+                )
             else:
                 new_ext = StrandExtension(
                     strand_id=item.strand_id,
@@ -152,21 +164,27 @@ def add_strand_extension(body: StrandExtensionRequest) -> dict:
     if strand is None:
         raise HTTPException(404, detail=f"Strand {body.strand_id!r} not found.")
     if body.sequence is None and body.modification is None:
-        raise HTTPException(400, detail="At least one of sequence or modification must be provided.")
+        raise HTTPException(
+            400, detail="At least one of sequence or modification must be provided."
+        )
 
     if body.sequence is not None:
         if not body.sequence or not re.match(r"^[ACGTNacgtn]+$", body.sequence):
-            raise HTTPException(400, detail="sequence must contain only ACGTN characters.")
+            raise HTTPException(
+                400, detail="sequence must contain only ACGTN characters."
+            )
 
     if body.modification is not None:
         if body.modification not in VALID_MODIFICATIONS:
             raise HTTPException(
                 400,
                 detail=f"Unknown modification {body.modification!r}. "
-                       f"Valid values: {sorted(VALID_MODIFICATIONS)}",
+                f"Valid values: {sorted(VALID_MODIFICATIONS)}",
             )
 
-    if any(x.strand_id == body.strand_id and x.end == body.end for x in design.extensions):
+    if any(
+        x.strand_id == body.strand_id and x.end == body.end for x in design.extensions
+    ):
         raise HTTPException(
             400,
             detail=f"Strand {body.strand_id!r} already has a {body.end} extension.",
@@ -207,18 +225,22 @@ def update_strand_extension(ext_id: str, body: StrandExtensionUpdateRequest) -> 
         new_mod = None
 
     if new_seq is None and new_mod is None:
-        raise HTTPException(400, detail="At least one of sequence or modification must be set.")
+        raise HTTPException(
+            400, detail="At least one of sequence or modification must be set."
+        )
 
     if new_seq is not None:
         if not re.match(r"^[ACGTNacgtn]+$", new_seq):
-            raise HTTPException(400, detail="sequence must contain only ACGTN characters.")
+            raise HTTPException(
+                400, detail="sequence must contain only ACGTN characters."
+            )
         new_seq = new_seq.upper()
 
     if new_mod is not None and new_mod not in VALID_MODIFICATIONS:
         raise HTTPException(
             400,
             detail=f"Unknown modification {new_mod!r}. "
-                   f"Valid values: {sorted(VALID_MODIFICATIONS)}",
+            f"Valid values: {sorted(VALID_MODIFICATIONS)}",
         )
 
     def _apply(d: Design) -> None:

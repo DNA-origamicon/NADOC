@@ -20,6 +20,7 @@ Contours (user decision 2026-07-01):
 
 Display/pose layer only — never mutates topology.
 """
+
 from __future__ import annotations
 
 from backend.core.constants import SSDNA_RISE_PER_BASE_NM
@@ -39,16 +40,26 @@ def _bead_owner_resolver(design: Design, remap_duplex: bool = True):
     from backend.core.flexible_segments import _build_bead_graph, _owning_cluster_id
 
     _adj, bead_domain = _build_bead_graph(design)
-    parent_of = ({c.id: c.parent_cluster_id
-                  for c in design.cluster_transforms if c.overhang_duplex_driver_id}
-                 if remap_duplex else {})
+    parent_of = (
+        {
+            c.id: c.parent_cluster_id
+            for c in design.cluster_transforms
+            if c.overhang_duplex_driver_id
+        }
+        if remap_duplex
+        else {}
+    )
 
     def resolve(helix_id, bp, direction):
         # bead_domain keys are (helix, bp, Direction-enum); match on value to accept strings.
         sd = None
         key = None
         for k, v in bead_domain.items():
-            if k[0] == helix_id and k[1] == bp and _dir_value(k[2]) == _dir_value(direction):
+            if (
+                k[0] == helix_id
+                and k[1] == bp
+                and _dir_value(k[2]) == _dir_value(direction)
+            ):
                 sd, key = v, k
                 break
         if key is None:
@@ -114,14 +125,27 @@ def cluster_connection_tethers(design: Design, cluster) -> list[dict]:
             moving, fixed = b, a
         else:
             return  # both/neither on this cluster → no relative constraint
-        sig = (moving["helix_id"], moving["bp"], _dir_value(moving["direction"]),
-               fixed["helix_id"], fixed["bp"], _dir_value(fixed["direction"]))
+        sig = (
+            moving["helix_id"],
+            moving["bp"],
+            _dir_value(moving["direction"]),
+            fixed["helix_id"],
+            fixed["bp"],
+            _dir_value(fixed["direction"]),
+        )
         if sig in seen:
             return
         seen.add(sig)
         # `rigid` = bilateral distance (resists compression AND extension) — a ds-linker rod
         # acting as a fixed-length strut with ball joints at both ends. Non-rigid = free-until-taut.
-        out.append({"moving": moving, "fixed": fixed, "contour_nm": float(contour), "rigid": bool(rigid)})
+        out.append(
+            {
+                "moving": moving,
+                "fixed": fixed,
+                "contour_nm": float(contour),
+                "rigid": bool(rigid),
+            }
+        )
 
     # 1. Directly-connected duplexes. When the dragged cluster is the duplex's PARENT, the duplex
     #    rides it rigidly, so it's a STATIC tether to the OTHER part (handled here). When the dragged
@@ -138,10 +162,19 @@ def cluster_connection_tethers(design: Design, cluster) -> list[dict]:
     # 2. ss/ds linker bridges (OverhangConnection metadata). A ds linker is a rigid rod
     #    (bilateral strut); an ss linker is a flexible free-until-taut tether.
     for conn in getattr(design, "overhang_connections", []) or []:
-        a_bead = _overhang_attach_bead(design, conn.overhang_a_id, conn.overhang_a_attach)
-        b_bead = _overhang_attach_bead(design, conn.overhang_b_id, conn.overhang_b_attach)
+        a_bead = _overhang_attach_bead(
+            design, conn.overhang_a_id, conn.overhang_a_attach
+        )
+        b_bead = _overhang_attach_bead(
+            design, conn.overhang_b_id, conn.overhang_b_attach
+        )
         if a_bead and b_bead:
-            _emit(a_bead, b_bead, _linker_contour_nm(conn), rigid=(conn.linker_type == "ds"))
+            _emit(
+                a_bead,
+                b_bead,
+                _linker_contour_nm(conn),
+                rigid=(conn.linker_type == "ds"),
+            )
 
     return out
 
@@ -175,25 +208,31 @@ def cluster_movable_links(design: Design, cluster) -> list[dict]:
         tethers: list[dict] = []
         touches_a = False
         for t in duplex_cluster_tethers(design, dcl):
-            l_bead = t["moving"]   # on the duplex link (its tip/connecting bead)
-            p_bead = t["fixed"]    # root bead on a part
+            l_bead = t["moving"]  # on the duplex link (its tip/connecting bead)
+            p_bead = t["fixed"]  # root bead on a part
             p_owner = raw_owner(p_bead["helix_id"], p_bead["bp"], p_bead["direction"])
-            part_dragged = (p_owner == cid)
+            part_dragged = p_owner == cid
             if part_dragged:
                 touches_a = True
-            tethers.append({
-                "l": l_bead, "part": p_bead,
-                "contour_nm": t["contour_nm"], "part_dragged": part_dragged,
-            })
+            tethers.append(
+                {
+                    "l": l_bead,
+                    "part": p_bead,
+                    "contour_nm": t["contour_nm"],
+                    "part_dragged": part_dragged,
+                }
+            )
         # Only a link that actually bonds to the dragged part is relevant to its drag.
         if touches_a and len(tethers) >= 2:
-            links.append({
-                "kind": "duplex",
-                "link_cluster_id": dcl.id,
-                "helix_ids": list(dcl.helix_ids or []),
-                "domain_ids": [dr.model_dump() for dr in (dcl.domain_ids or [])],
-                "tethers": tethers,
-            })
+            links.append(
+                {
+                    "kind": "duplex",
+                    "link_cluster_id": dcl.id,
+                    "helix_ids": list(dcl.helix_ids or []),
+                    "domain_ids": [dr.model_dump() for dr in (dcl.domain_ids or [])],
+                    "tethers": tethers,
+                }
+            )
     return links
 
 

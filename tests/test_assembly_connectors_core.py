@@ -12,6 +12,7 @@ manual-connector fallback math (T_inst @ ip.position), which is the adapted
 surface (the only edit in the lift was _mat4_from_model(x) -> x.to_array(),
 provably identical: both compute np.array(values, dtype=float).reshape(4, 4)).
 """
+
 import numpy as np
 import pytest
 
@@ -112,7 +113,7 @@ def test_resolve_seam_label_local_rejects_non_seam_and_bad_side():
     d = Design()
     assert _resolve_seam_label_local(d, "C1") is None
     assert _resolve_seam_label_local(d, "seam0:nope") is None  # side not 5p/3p
-    assert _resolve_seam_label_local(d, "seam1:5p") is None    # only seam0 synthesized
+    assert _resolve_seam_label_local(d, "seam1:5p") is None  # only seam0 synthesized
 
 
 def test_resolve_live_connector_local_none_for_manual_label():
@@ -124,7 +125,9 @@ def test_resolve_live_connector_local_none_for_manual_label():
 
 
 def test_get_connector_world_applies_instance_translation():
-    inst = _instance([_ip("C1", (1.0, 0.0, 0.0))], transform=_translation(10.0, 20.0, 30.0))
+    inst = _instance(
+        [_ip("C1", (1.0, 0.0, 0.0))], transform=_translation(10.0, 20.0, 30.0)
+    )
     world = _get_connector_world(inst, "C1", design=None)
     np.testing.assert_allclose(world, [11.0, 20.0, 30.0], atol=1e-9)
 
@@ -138,7 +141,9 @@ def test_get_connector_world_unknown_label_returns_none():
 
 
 def test_get_connector_world_frame_translation_matches_world_position():
-    inst = _instance([_ip("C1", (1.0, 2.0, 3.0))], transform=_translation(5.0, 0.0, 0.0))
+    inst = _instance(
+        [_ip("C1", (1.0, 2.0, 3.0))], transform=_translation(5.0, 0.0, 0.0)
+    )
     F = _get_connector_world_frame(inst, "C1", design=None)
     assert F is not None and F.shape == (4, 4)
     pos = _get_connector_world(inst, "C1", design=None)
@@ -156,7 +161,9 @@ def test_get_connector_world_frame_unknown_label_returns_none():
 
 
 def test_local_frame_for_label_is_instance_local():
-    inst = _instance([_ip("C1", (1.0, 2.0, 3.0))], transform=_translation(99.0, 99.0, 99.0))
+    inst = _instance(
+        [_ip("C1", (1.0, 2.0, 3.0))], transform=_translation(99.0, 99.0, 99.0)
+    )
     F = _local_frame_for_label(inst, "C1", None)
     assert F is not None
     # local frame ignores the instance world transform: translation == local pos
@@ -172,22 +179,24 @@ def test_local_frame_for_label_unknown_returns_none():
 
 
 def test_build_world_connector_frames_keys_and_positions():
-    inst = _instance([_ip("C1", (1.0, 0.0, 0.0))], transform=_translation(0.0, 7.0, 0.0))
+    inst = _instance(
+        [_ip("C1", (1.0, 0.0, 0.0))], transform=_translation(0.0, 7.0, 0.0)
+    )
     inst_by_id = {inst.id: inst}
     labels_by_inst = {inst.id: {"C1"}}
     frames, local_cache = _build_world_connector_frames(
         inst_by_id, labels_by_inst, lambda i: None
     )
     assert (inst.id, "C1") in frames
-    np.testing.assert_allclose(frames[(inst.id, "C1")][:3, 3], [1.0, 7.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(
+        frames[(inst.id, "C1")][:3, 3], [1.0, 7.0, 0.0], atol=1e-9
+    )
     # local frames cached by (design_key, label); design_for returned None -> key 0
     assert (0, "C1") in local_cache
 
 
 def test_build_world_connector_frames_skips_missing_instance():
-    frames, _ = _build_world_connector_frames(
-        {}, {"ghost": {"C1"}}, lambda i: None
-    )
+    frames, _ = _build_world_connector_frames({}, {"ghost": {"C1"}}, lambda i: None)
     assert frames == {}
 
 
@@ -221,20 +230,26 @@ def test_build_connector_frames_collects_both_joint_sides():
 
 
 def test_refresh_updates_world_frame_after_move():
-    inst = _instance([_ip("C1", (1.0, 0.0, 0.0))], transform=_translation(0.0, 0.0, 0.0))
+    inst = _instance(
+        [_ip("C1", (1.0, 0.0, 0.0))], transform=_translation(0.0, 0.0, 0.0)
+    )
     inst_by_id = {inst.id: inst}
     labels_by_inst = {inst.id: {"C1"}}
     frames, local_cache = _build_world_connector_frames(
         inst_by_id, labels_by_inst, lambda i: None
     )
-    np.testing.assert_allclose(frames[(inst.id, "C1")][:3, 3], [1.0, 0.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(
+        frames[(inst.id, "C1")][:3, 3], [1.0, 0.0, 0.0], atol=1e-9
+    )
 
     # move the instance, then refresh -> world frame tracks the new transform
     inst.transform = _translation(100.0, 0.0, 0.0)
     _refresh_connector_frames_for_instance(
         frames, labels_by_inst, inst_by_id, inst.id, lambda i: None, local_cache
     )
-    np.testing.assert_allclose(frames[(inst.id, "C1")][:3, 3], [101.0, 0.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(
+        frames[(inst.id, "C1")][:3, 3], [101.0, 0.0, 0.0], atol=1e-9
+    )
 
 
 def test_refresh_drops_entries_for_vanished_instance():
@@ -286,7 +301,9 @@ def test_enforce_snaps_drifted_child_onto_parent_connector():
     # child snapped so CB now coincides with CA at the origin
     cb = _get_connector_world(b, "CB")
     np.testing.assert_allclose(cb, [0.0, 0.0, 0.0], atol=1e-9)
-    np.testing.assert_allclose(b.transform.to_array()[:3, 3], [0.0, 0.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(
+        b.transform.to_array()[:3, 3], [0.0, 0.0, 0.0], atol=1e-9
+    )
     # axis_origin synced to the parent connector world position
     np.testing.assert_allclose(joint.axis_origin, [0.0, 0.0, 0.0], atol=1e-9)
 
@@ -301,7 +318,9 @@ def test_enforce_noop_when_already_coincident():
     _enforce_connector_coincidence(asm, visited={b.id})
 
     # transform untouched; axis_origin NOT reassigned (would be [3,0,0] if it were)
-    np.testing.assert_allclose(b.transform.to_array()[:3, 3], [3.0, 0.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(
+        b.transform.to_array()[:3, 3], [3.0, 0.0, 0.0], atol=1e-9
+    )
     assert joint.axis_origin == [0.0, 0.0, 0.0]  # model default, never reassigned
 
 
@@ -315,7 +334,9 @@ def test_enforce_skips_when_parent_also_moved():
     _enforce_connector_coincidence(asm, visited={a.id, b.id})
 
     # child NOT snapped: parent moved too
-    np.testing.assert_allclose(b.transform.to_array()[:3, 3], [5.0, 0.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(
+        b.transform.to_array()[:3, 3], [5.0, 0.0, 0.0], atol=1e-9
+    )
 
 
 def test_enforce_skips_non_rigid_revolute_joint():
@@ -326,7 +347,9 @@ def test_enforce_skips_non_rigid_revolute_joint():
 
     _enforce_connector_coincidence(asm, visited={b.id})
 
-    np.testing.assert_allclose(b.transform.to_array()[:3, 3], [5.0, 0.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(
+        b.transform.to_array()[:3, 3], [5.0, 0.0, 0.0], atol=1e-9
+    )
 
 
 def test_enforce_skips_world_anchored_joint():
@@ -343,7 +366,9 @@ def test_enforce_skips_world_anchored_joint():
 
     _enforce_connector_coincidence(asm, visited={b.id})
 
-    np.testing.assert_allclose(b.transform.to_array()[:3, 3], [5.0, 0.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(
+        b.transform.to_array()[:3, 3], [5.0, 0.0, 0.0], atol=1e-9
+    )
 
 
 def test_enforce_also_snaps_base_transform_when_present():
@@ -356,14 +381,18 @@ def test_enforce_also_snaps_base_transform_when_present():
     _enforce_connector_coincidence(asm, visited={b.id})
 
     # the same -5 x snap is applied to base_transform too
-    np.testing.assert_allclose(b.base_transform.to_array()[:3, 3], [0.0, 0.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(
+        b.base_transform.to_array()[:3, 3], [0.0, 0.0, 0.0], atol=1e-9
+    )
 
 
 def test_enforce_propagates_snap_to_rigid_subtree_child():
     # b drifted (+5 x); c is rigidly attached to b and must ride the snap.
     a = _instance([_ip("CA", (0.0, 0.0, 0.0))], transform=_translation(0.0, 0.0, 0.0))
-    b = _instance([_ip("CB", (0.0, 0.0, 0.0)), _ip("CB2", (0.0, 0.0, 0.0))],
-                  transform=_translation(5.0, 0.0, 0.0))
+    b = _instance(
+        [_ip("CB", (0.0, 0.0, 0.0)), _ip("CB2", (0.0, 0.0, 0.0))],
+        transform=_translation(5.0, 0.0, 0.0),
+    )
     c = _instance([_ip("CC", (0.0, 0.0, 0.0))], transform=_translation(9.0, 0.0, 0.0))
     parent_joint = _mate(a, "CA", b, "CB")
     rigid_child = _mate(b, "CB2", c, "CC", joint_type="rigid")
@@ -372,5 +401,9 @@ def test_enforce_propagates_snap_to_rigid_subtree_child():
     _enforce_connector_coincidence(asm, visited={b.id})
 
     # b snapped -5 -> at origin; c rode the same -5 snap -> 9 - 5 = 4
-    np.testing.assert_allclose(b.transform.to_array()[:3, 3], [0.0, 0.0, 0.0], atol=1e-9)
-    np.testing.assert_allclose(c.transform.to_array()[:3, 3], [4.0, 0.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(
+        b.transform.to_array()[:3, 3], [0.0, 0.0, 0.0], atol=1e-9
+    )
+    np.testing.assert_allclose(
+        c.transform.to_array()[:3, 3], [4.0, 0.0, 0.0], atol=1e-9
+    )

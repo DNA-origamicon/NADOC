@@ -20,6 +20,7 @@ Pure functions over ``Assembly`` (no FastAPI / I/O). Two responsibilities:
 3. **collect_group_instance_ids** / **collect_group_member_ids** — transitive
    id collection helpers used by the routes above and by cascade-delete.
 """
+
 from __future__ import annotations
 
 from typing import Iterable
@@ -40,7 +41,9 @@ from backend.core.models import (
 # ── Group membership traversal ─────────────────────────────────────────────────
 
 
-def collect_group_member_ids(assembly: Assembly, group_id: str) -> tuple[set[str], set[str]]:
+def collect_group_member_ids(
+    assembly: Assembly, group_id: str
+) -> tuple[set[str], set[str]]:
     """Return ``(instance_ids, group_ids)`` reachable from ``group_id``.
 
     ``group_ids`` includes the seed itself. Cycles can't happen because the
@@ -119,11 +122,13 @@ def transitive_rigidly_attached(
     # Build an adjacency multimap once — assemblies with thousands of
     # instances should still be cheap to walk.
     adj: dict[str, set[str]] = {}
+
     def _add_edge(a: str | None, b: str | None) -> None:
         if not a or not b or a == b:
             return
         adj.setdefault(a, set()).add(b)
         adj.setdefault(b, set()).add(a)
+
     for j in assembly.joints:
         if _joint_is_rigid(j):
             _add_edge(j.instance_a_id, j.instance_b_id)
@@ -150,11 +155,11 @@ def clone_group_subtree(
     offset: tuple[float, float, float] = (5.0, 0.0, 0.0),
     name_suffix: str = " (copy)",
 ) -> tuple[
-    list[PartInstance],          # new instances
-    list[AssemblyJoint],          # new joints (internal only)
+    list[PartInstance],  # new instances
+    list[AssemblyJoint],  # new joints (internal only)
     list[AssemblyOverhangBinding],  # new bindings (internal only)
-    list[PartGroup],              # new groups (root first)
-    str,                          # id of the cloned root group
+    list[PartGroup],  # new groups (root first)
+    str,  # id of the cloned root group
 ]:
     """Deep-copy a group: every transitive instance + nested subgroup gets a
     fresh id; every *internal* joint / overhang binding (both endpoints inside
@@ -171,7 +176,9 @@ def clone_group_subtree(
 
     # Build id_map first so internal joint/binding cloning can resolve.
     id_map: dict[str, str] = {old: str(_uuid.uuid4()) for old in inst_ids_to_clone}
-    group_id_map: dict[str, str] = {old: str(_uuid.uuid4()) for old in group_ids_to_clone}
+    group_id_map: dict[str, str] = {
+        old: str(_uuid.uuid4()) for old in group_ids_to_clone
+    }
 
     # ── Instances ──
     new_instances: list[PartInstance] = []
@@ -182,12 +189,15 @@ def clone_group_subtree(
         T[0, 3] += dx
         T[1, 3] += dy
         T[2, 3] += dz
-        new_inst = src.model_copy(deep=True, update={
-            "id":             id_map[old_id],
-            "name":           f"{src.name}{name_suffix}",
-            "transform":      Mat4x4.from_array(T),
-            "base_transform": None,
-        })
+        new_inst = src.model_copy(
+            deep=True,
+            update={
+                "id": id_map[old_id],
+                "name": f"{src.name}{name_suffix}",
+                "transform": Mat4x4.from_array(T),
+                "base_transform": None,
+            },
+        )
         new_instances.append(new_inst)
 
     # ── Internal joints (both endpoints inside the group) ──
@@ -196,11 +206,14 @@ def clone_group_subtree(
         a = j.instance_a_id
         b = j.instance_b_id
         if a in inst_ids_to_clone and b in inst_ids_to_clone:
-            new_j = j.model_copy(deep=True, update={
-                "id":             str(_uuid.uuid4()),
-                "instance_a_id":  id_map[a],
-                "instance_b_id":  id_map[b],
-            })
+            new_j = j.model_copy(
+                deep=True,
+                update={
+                    "id": str(_uuid.uuid4()),
+                    "instance_a_id": id_map[a],
+                    "instance_b_id": id_map[b],
+                },
+            )
             new_joints.append(new_j)
 
     # ── Internal overhang bindings ──
@@ -209,23 +222,35 @@ def clone_group_subtree(
         a = binding.instance_a_id
         b = binding.instance_b_id
         if a in inst_ids_to_clone and b in inst_ids_to_clone:
-            new_b = binding.model_copy(deep=True, update={
-                "id":             str(_uuid.uuid4()),
-                "instance_a_id":  id_map[a],
-                "instance_b_id":  id_map[b],
-            })
+            new_b = binding.model_copy(
+                deep=True,
+                update={
+                    "id": str(_uuid.uuid4()),
+                    "instance_a_id": id_map[a],
+                    "instance_b_id": id_map[b],
+                },
+            )
             new_bindings.append(new_b)
 
     # ── Groups (preserve nesting) ──
     new_groups: list[PartGroup] = []
     for old_gid in group_ids_to_clone:
         src_g = by_group[old_gid]
-        new_groups.append(src_g.model_copy(deep=True, update={
-            "id":            group_id_map[old_gid],
-            "name":          f"{src_g.name}{name_suffix}" if src_g.name else "",
-            "instance_ids":  [id_map[i] for i in src_g.instance_ids if i in id_map],
-            "subgroup_ids":  [group_id_map[s] for s in src_g.subgroup_ids if s in group_id_map],
-        }))
+        new_groups.append(
+            src_g.model_copy(
+                deep=True,
+                update={
+                    "id": group_id_map[old_gid],
+                    "name": f"{src_g.name}{name_suffix}" if src_g.name else "",
+                    "instance_ids": [
+                        id_map[i] for i in src_g.instance_ids if i in id_map
+                    ],
+                    "subgroup_ids": [
+                        group_id_map[s] for s in src_g.subgroup_ids if s in group_id_map
+                    ],
+                },
+            )
+        )
 
     return new_instances, new_joints, new_bindings, new_groups, group_id_map[group_id]
 
@@ -257,10 +282,14 @@ def apply_group_translation(
             T[0, 3] += dx
             T[1, 3] += dy
             T[2, 3] += dz
-            new_instances.append(inst.model_copy(update={
-                "transform":      Mat4x4.from_array(T),
-                "base_transform": None,
-            }))
+            new_instances.append(
+                inst.model_copy(
+                    update={
+                        "transform": Mat4x4.from_array(T),
+                        "base_transform": None,
+                    }
+                )
+            )
         else:
             new_instances.append(inst)
     return assembly.model_copy(update={"instances": new_instances})
@@ -283,10 +312,14 @@ def apply_group_transform(
         if inst.id in reached:
             T = inst.transform.to_array()
             T_new = M @ T
-            new_instances.append(inst.model_copy(update={
-                "transform":      Mat4x4.from_array(T_new),
-                "base_transform": None,
-            }))
+            new_instances.append(
+                inst.model_copy(
+                    update={
+                        "transform": Mat4x4.from_array(T_new),
+                        "base_transform": None,
+                    }
+                )
+            )
         else:
             new_instances.append(inst)
     return assembly.model_copy(update={"instances": new_instances})
@@ -305,9 +338,13 @@ def filter_groups_after_instance_removal(
     if not removed_instance_ids:
         return list(groups)
     return [
-        g.model_copy(update={
-            "instance_ids": [i for i in g.instance_ids if i not in removed_instance_ids],
-        })
+        g.model_copy(
+            update={
+                "instance_ids": [
+                    i for i in g.instance_ids if i not in removed_instance_ids
+                ],
+            }
+        )
         for g in groups
     ]
 
@@ -323,7 +360,13 @@ def filter_groups_after_group_removal(
     for g in groups:
         if g.id in removed_group_ids:
             continue
-        survivors.append(g.model_copy(update={
-            "subgroup_ids": [s for s in g.subgroup_ids if s not in removed_group_ids],
-        }))
+        survivors.append(
+            g.model_copy(
+                update={
+                    "subgroup_ids": [
+                        s for s in g.subgroup_ids if s not in removed_group_ids
+                    ],
+                }
+            )
+        )
     return survivors

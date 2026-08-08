@@ -9,6 +9,7 @@ itself is trustworthy:
     and assert it's caught; and
   - the coverage report matches the live wrappers and lists real backlog routes.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,6 +30,7 @@ from tests.conftest import make_6hb_design, make_teeth_design
 
 
 # ── The oracle passes on good builds ──────────────────────────────────────────
+
 
 @pytest.mark.parametrize("build_fn", [make_6hb_design, make_teeth_design])
 def test_roundtrip_stable_on_clean_builds(build_fn):
@@ -52,10 +54,12 @@ def test_roundtrip_does_not_disturb_active_session():
     before = canonical_topology(sentinel)
     roundtrip_nadoc(make_teeth_design())
     from backend.api import state as design_state
+
     assert canonical_topology(design_state.get_or_404()) == before
 
 
 # ── The oracle FIRES on corruption (the load-bearing meta-test) ───────────────
+
 
 def _drop_a_strand_roundtrip(design):
     """A deliberately buggy round-trip: faithfully reloads, then loses one strand.
@@ -78,6 +82,7 @@ def test_oracle_catches_corrupted_roundtrip():
 
 def test_oracle_catches_invalid_build():
     """If the build itself doesn't validate, the oracle raises before round-tripping."""
+
     def _build_no_scaffold():
         d = make_6hb_design()
         for s in d.strands:
@@ -89,6 +94,7 @@ def test_oracle_catches_invalid_build():
 
 
 # ── The coverage audit reflects reality ───────────────────────────────────────
+
 
 def test_coverage_report_shape_and_known_wrappers():
     report = headless_coverage_report()
@@ -177,13 +183,16 @@ def test_coverage_report_marks_af32_forced_ligation_routes_covered():
 
 # ── The forced-ligation oracle PASSES on a real ligation and FIRES otherwise (AF-32) ──
 
+
 def _force_ligated_two_helix():
     """Active scratch session: a 2-helix HC bundle whose two scaffold strands are
     forced-ligated.  Returns (before, after, fl_id, scaf_a_id, scaf_b_id)."""
     from backend.api import headless_build as hb
     from backend.core.models import StrandType
 
-    before = hb.create_bundle([[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb")
+    before = hb.create_bundle(
+        [[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb"
+    )
     ha = next(h.id for h in before.helices if h.grid_pos == (0, 0))
     hb_id = next(h.id for h in before.helices if h.grid_pos == (0, 1))
     scaf_a = scaf_b = None
@@ -206,8 +215,9 @@ def test_assert_forced_ligation_passes_on_real_ligation():
 
     with hb.scratch_session(LatticeType.HONEYCOMB):
         before, after, fl_id, sa, sb = _force_ligated_two_helix()
-        assert_forced_ligation(before, after, fl_id,
-                               three_prime_strand_id=sa, five_prime_strand_id=sb)
+        assert_forced_ligation(
+            before, after, fl_id, three_prime_strand_id=sa, five_prime_strand_id=sb
+        )
 
 
 def test_assert_forced_ligation_fires_on_missing_record():
@@ -218,8 +228,9 @@ def test_assert_forced_ligation_fires_on_missing_record():
     with hb.scratch_session(LatticeType.HONEYCOMB):
         before, after, _fl_id, sa, sb = _force_ligated_two_helix()
         with pytest.raises(AssertionError):
-            assert_forced_ligation(before, after, "nope",
-                                   three_prime_strand_id=sa, five_prime_strand_id=sb)
+            assert_forced_ligation(
+                before, after, "nope", three_prime_strand_id=sa, five_prime_strand_id=sb
+            )
 
 
 def test_assert_forced_ligation_fires_on_swapped_endpoints():
@@ -231,8 +242,9 @@ def test_assert_forced_ligation_fires_on_swapped_endpoints():
     with hb.scratch_session(LatticeType.HONEYCOMB):
         before, after, fl_id, sa, sb = _force_ligated_two_helix()
         with pytest.raises(AssertionError):
-            assert_forced_ligation(before, after, fl_id,
-                                   three_prime_strand_id=sb, five_prime_strand_id=sa)
+            assert_forced_ligation(
+                before, after, fl_id, three_prime_strand_id=sb, five_prime_strand_id=sa
+            )
 
 
 def test_assert_forced_ligation_fires_when_not_merged():
@@ -249,8 +261,9 @@ def test_assert_forced_ligation_fires_when_not_merged():
         fl = after.forced_ligations[-1]
         faux = before.model_copy(update={"forced_ligations": [fl]})
         with pytest.raises(AssertionError):
-            assert_forced_ligation(before, faux, fl_id,
-                                   three_prime_strand_id=sa, five_prime_strand_id=sb)
+            assert_forced_ligation(
+                before, faux, fl_id, three_prime_strand_id=sa, five_prime_strand_id=sb
+            )
 
 
 # ── The hinge golden-equality oracle PASSES on the built primitive + FIRES (AF-33) ──
@@ -284,7 +297,9 @@ def test_assert_matches_primitive_fires_on_dropped_link():
     d = build_hinge_primitive("2x2_single_hinge_link")
     maimed = d.model_copy(update={"forced_ligations": d.forced_ligations[:1]})
     with pytest.raises(AssertionError, match="forced-ligation set"):
-        assert_matches_primitive(maimed, "2x2_single_hinge_link", primitives_dir=_PRIMITIVES_DIR)
+        assert_matches_primitive(
+            maimed, "2x2_single_hinge_link", primitives_dir=_PRIMITIVES_DIR
+        )
 
 
 @pytest.mark.skipif(
@@ -299,11 +314,15 @@ def test_assert_matches_primitive_fires_on_wrong_topology():
 
     with hb.scratch_session(LatticeType.SQUARE):
         wrong = hb.create_bundle(
-            [[0, 0], [0, 1]], 32, lattice=LatticeType.SQUARE, name="not-a-hinge",
+            [[0, 0], [0, 1]],
+            32,
+            lattice=LatticeType.SQUARE,
+            name="not-a-hinge",
         )
         with pytest.raises(AssertionError, match="topology"):
             assert_matches_primitive(
-                wrong, "2x2_single_hinge_link", primitives_dir=_PRIMITIVES_DIR)
+                wrong, "2x2_single_hinge_link", primitives_dir=_PRIMITIVES_DIR
+            )
 
 
 def test_assert_matches_primitive_fires_on_unknown_name():
@@ -317,6 +336,7 @@ def test_assert_matches_primitive_fires_on_unknown_name():
 
 
 # ── The scaffold-routing-compliance oracle PASSES on a real route, FIRES otherwise (AF-34) ──
+
 
 def test_scaffold_compliant_oracle_passes_on_seamless_route():
     """A genuine seamless autoscaffold output (end crossovers in extended ssDNA) is
@@ -359,21 +379,36 @@ def test_scaffold_compliant_oracle_fires_on_no_scaffold():
 
 # ── The crossover-join oracle PASSES on a real place and FIRES otherwise (AF-31) ──
 
+
 def _cycle_unligated_design():
     """A linear scaffold + one crossover whose two halves point at that strand's 3'
     end and 5' start — ligation would close a circle, so it stays RECORDED but
     UNLIGATED (mirrors tests/test_crud._cycle_design, a tested route behavior)."""
     from backend.core.constants import BDNA_RISE_PER_BP
     from backend.core.models import (
-        Crossover, DesignMetadata, Design, Direction, Domain, HalfCrossover,
-        Helix, Strand, StrandType, Vec3,
+        Crossover,
+        DesignMetadata,
+        Design,
+        Direction,
+        Domain,
+        HalfCrossover,
+        Helix,
+        Strand,
+        StrandType,
+        Vec3,
     )
 
-    helix = Helix(id="h0", axis_start=Vec3(x=0.0, y=0.0, z=0.0),
-                  axis_end=Vec3(x=0.0, y=0.0, z=42 * BDNA_RISE_PER_BP), length_bp=42)
+    helix = Helix(
+        id="h0",
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=42 * BDNA_RISE_PER_BP),
+        length_bp=42,
+    )
     scaffold = Strand(
         id="s0",
-        domains=[Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)
+        ],
         strand_type=StrandType.SCAFFOLD,
     )
     xover = Crossover(
@@ -381,8 +416,14 @@ def _cycle_unligated_design():
         half_a=HalfCrossover(helix_id="h0", index=41, strand=Direction.FORWARD),
         half_b=HalfCrossover(helix_id="h0", index=0, strand=Direction.FORWARD),
     )
-    return Design(id="d_cycle", helices=[helix], strands=[scaffold], crossovers=[xover],
-                  lattice_type=LatticeType.HONEYCOMB, metadata=DesignMetadata(name="cycle"))
+    return Design(
+        id="d_cycle",
+        helices=[helix],
+        strands=[scaffold],
+        crossovers=[xover],
+        lattice_type=LatticeType.HONEYCOMB,
+        metadata=DesignMetadata(name="cycle"),
+    )
 
 
 def _place_ligated_crossover():
@@ -392,11 +433,15 @@ def _place_ligated_crossover():
     from backend.api import headless_build as hb
     from backend.core.models import Direction
 
-    d = hb.create_bundle([[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb")
+    d = hb.create_bundle(
+        [[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb"
+    )
     ha = next(h.id for h in d.helices if h.grid_pos == (0, 0))
     hb_id = next(h.id for h in d.helices if h.grid_pos == (0, 1))
     # bp 7 ∈ HC staple bow-right {0,7,14} → lower_bp = 6; A REVERSE → 7, B FORWARD → 6.
-    d = hb.place_crossover((ha, 7, Direction.REVERSE), (hb_id, 7, Direction.FORWARD), 7, 6)
+    d = hb.place_crossover(
+        (ha, 7, Direction.REVERSE), (hb_id, 7, Direction.FORWARD), 7, 6
+    )
     return d, d.crossovers[-1].id, (ha, 7), (hb_id, 7)
 
 
@@ -407,7 +452,9 @@ def test_assert_crossover_joins_passes_on_ligated_place():
 
     with hb.scratch_session(LatticeType.HONEYCOMB):
         d, xid, half_a, half_b = _place_ligated_crossover()
-        assert_crossover_joins(d, xid, half_a=half_a, half_b=half_b, expect_ligated=True)
+        assert_crossover_joins(
+            d, xid, half_a=half_a, half_b=half_b, expect_ligated=True
+        )
 
 
 def test_assert_crossover_joins_handles_unligated_outcome():
@@ -417,12 +464,14 @@ def test_assert_crossover_joins_handles_unligated_outcome():
 
     d = _cycle_unligated_design()
     # expect_ligated=False is the correct outcome here.
-    assert_crossover_joins(d, "x_cycle", half_a=("h0", 41), half_b=("h0", 0),
-                           expect_ligated=False)
+    assert_crossover_joins(
+        d, "x_cycle", half_a=("h0", 41), half_b=("h0", 0), expect_ligated=False
+    )
     # asserting it ligated must go red.
     with pytest.raises(AssertionError):
-        assert_crossover_joins(d, "x_cycle", half_a=("h0", 41), half_b=("h0", 0),
-                               expect_ligated=True)
+        assert_crossover_joins(
+            d, "x_cycle", half_a=("h0", 41), half_b=("h0", 0), expect_ligated=True
+        )
 
 
 def test_assert_crossover_joins_fires_on_missing_record():
@@ -431,8 +480,9 @@ def test_assert_crossover_joins_fires_on_missing_record():
 
     d = _cycle_unligated_design()
     with pytest.raises(AssertionError):
-        assert_crossover_joins(d, "nope", half_a=("h0", 41), half_b=("h0", 0),
-                               expect_ligated=False)
+        assert_crossover_joins(
+            d, "nope", half_a=("h0", 41), half_b=("h0", 0), expect_ligated=False
+        )
 
 
 def test_assert_crossover_joins_fires_on_wrong_half_site():
@@ -443,8 +493,9 @@ def test_assert_crossover_joins_fires_on_wrong_half_site():
     with hb.scratch_session(LatticeType.HONEYCOMB):
         d, xid, half_a, half_b = _place_ligated_crossover()
         with pytest.raises(AssertionError):
-            assert_crossover_joins(d, xid, half_a=half_a, half_b=(half_b[0], 99),
-                                   expect_ligated=True)
+            assert_crossover_joins(
+                d, xid, half_a=half_a, half_b=(half_b[0], 99), expect_ligated=True
+            )
 
 
 def test_oxdna_coverage_report_separate_from_design_assembly():
@@ -472,11 +523,16 @@ def test_oxdna_coverage_report_separate_from_design_assembly():
     assert ox["total"] == ox["covered"] + ox["uncovered"]
     covered = {r["endpoint"] for r in ox["covered_routes"]}
     # AF-26 added roll_oxdna_job_design (roll_job_to_run_state wraps it).
-    assert {"create_oxdna_job", "start_oxdna_job", "append_oxdna_production",
-            "roll_oxdna_job_design"} <= covered
+    assert {
+        "create_oxdna_job",
+        "start_oxdna_job",
+        "append_oxdna_production",
+        "roll_oxdna_job_design",
+    } <= covered
 
 
 # ── The gear-ratio oracle PASSES on a real gear and FIRES otherwise ────────────
+
 
 def _geared_build(*, ratio: float = 2.0):
     """Active scratch assembly: two wheels revolute-mated to a base about +Z and
@@ -487,19 +543,35 @@ def _geared_build(*, ratio: float = 2.0):
     hab.new_assembly("G")
     hab.add_inline_instance(make_6hb_design(), name="base")
     hab.add_inline_instance(
-        make_6hb_design(), name="wheelA", transform=hab.translation(20.0, 0.0, 0.0))
+        make_6hb_design(), name="wheelA", transform=hab.translation(20.0, 0.0, 0.0)
+    )
     hab.add_inline_instance(
-        make_6hb_design(), name="wheelB", transform=hab.translation(40.0, 0.0, 0.0))
+        make_6hb_design(), name="wheelB", transform=hab.translation(40.0, 0.0, 0.0)
+    )
     a = assembly_state.get_or_404()
     base_id, wa_id, wb_id = a.instances[0].id, a.instances[1].id, a.instances[2].id
     for label in ("hub_a", "hub_b"):
-        hab.add_connector(base_id, label, position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
+        hab.add_connector(
+            base_id, label, position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0]
+        )
     hab.add_connector(wa_id, "axleA", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
     hab.add_connector(wb_id, "axleB", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
-    hab.define_mate(wa_id, base_id, child_label="axleA", parent_label="hub_a",
-                    joint_type="revolute", axis_direction=[0.0, 0.0, 1.0])
-    hab.define_mate(wb_id, base_id, child_label="axleB", parent_label="hub_b",
-                    joint_type="revolute", axis_direction=[0.0, 0.0, 1.0])
+    hab.define_mate(
+        wa_id,
+        base_id,
+        child_label="axleA",
+        parent_label="hub_a",
+        joint_type="revolute",
+        axis_direction=[0.0, 0.0, 1.0],
+    )
+    hab.define_mate(
+        wb_id,
+        base_id,
+        child_label="axleB",
+        parent_label="hub_b",
+        joint_type="revolute",
+        axis_direction=[0.0, 0.0, 1.0],
+    )
     a = assembly_state.get_or_404()
     ja, jb = a.joints[0].id, a.joints[1].id
     hab.define_gear(ja, jb, ratio=ratio)
@@ -519,7 +591,10 @@ def test_gear_ratio_oracle_passes_on_real_gear():
         before, rel_id, ja, _jb = _geared_build(ratio=2.0)
         hab.drive_joint(ja, math.radians(25.0))
         after = assembly_state.get_or_404()
-        assert abs(assert_gear_ratio(before, after, rel_id, expected_ratio=2.0) - 2.0) <= 0.02
+        assert (
+            abs(assert_gear_ratio(before, after, rel_id, expected_ratio=2.0) - 2.0)
+            <= 0.02
+        )
 
 
 def test_gear_ratio_oracle_fires_when_uncoupled():
@@ -560,6 +635,7 @@ def test_gear_ratio_oracle_fires_on_undriven():
 
 # ── The gear-ratio oracle GENERALISES to belt-derived relations (AF-9 belts) ────
 
+
 def test_coverage_report_marks_af9_belt_route_covered():
     """AF-9 belts flipped create_belt_path → covered."""
     report = headless_coverage_report()
@@ -577,19 +653,35 @@ def _belted_build(*, radius_a: float = 2.0, radius_b: float = 1.0):
     hab.new_assembly("Belt")
     hab.add_inline_instance(make_6hb_design(), name="base")
     hab.add_inline_instance(
-        make_6hb_design(), name="pulleyA", transform=hab.translation(20.0, 0.0, 0.0))
+        make_6hb_design(), name="pulleyA", transform=hab.translation(20.0, 0.0, 0.0)
+    )
     hab.add_inline_instance(
-        make_6hb_design(), name="pulleyB", transform=hab.translation(40.0, 0.0, 0.0))
+        make_6hb_design(), name="pulleyB", transform=hab.translation(40.0, 0.0, 0.0)
+    )
     a = assembly_state.get_or_404()
     base_id, wa_id, wb_id = a.instances[0].id, a.instances[1].id, a.instances[2].id
     for label in ("hub_a", "hub_b"):
-        hab.add_connector(base_id, label, position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
+        hab.add_connector(
+            base_id, label, position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0]
+        )
     hab.add_connector(wa_id, "axleA", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
     hab.add_connector(wb_id, "axleB", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
-    hab.define_mate(wa_id, base_id, child_label="axleA", parent_label="hub_a",
-                    joint_type="revolute", axis_direction=[0.0, 0.0, 1.0])
-    hab.define_mate(wb_id, base_id, child_label="axleB", parent_label="hub_b",
-                    joint_type="revolute", axis_direction=[0.0, 0.0, 1.0])
+    hab.define_mate(
+        wa_id,
+        base_id,
+        child_label="axleA",
+        parent_label="hub_a",
+        joint_type="revolute",
+        axis_direction=[0.0, 0.0, 1.0],
+    )
+    hab.define_mate(
+        wb_id,
+        base_id,
+        child_label="axleB",
+        parent_label="hub_b",
+        joint_type="revolute",
+        axis_direction=[0.0, 0.0, 1.0],
+    )
     a = assembly_state.get_or_404()
     ja, jb = a.joints[0].id, a.joints[1].id
     hab.define_belt(ja, jb, radius_a=radius_a, radius_b=radius_b)
@@ -610,7 +702,10 @@ def test_gear_ratio_oracle_passes_on_a_real_belt():
         before, rel_id, ja, _jb = _belted_build(radius_a=2.0, radius_b=1.0)
         hab.drive_joint(ja, math.radians(25.0))
         after = assembly_state.get_or_404()
-        assert abs(assert_gear_ratio(before, after, rel_id, expected_ratio=2.0) - 2.0) <= 0.02
+        assert (
+            abs(assert_gear_ratio(before, after, rel_id, expected_ratio=2.0) - 2.0)
+            <= 0.02
+        )
 
 
 def test_belt_ratio_oracle_fires_when_uncoupled():
@@ -636,6 +731,7 @@ def test_belt_ratio_oracle_fires_when_uncoupled():
 
 # ── The polymer-chain oracle PASSES on a real chain and FIRES otherwise ────────
 
+
 def test_coverage_report_marks_af9_polymerize_route_covered():
     """AF-9 polymerize flipped polymerize_assembly → covered."""
     report = headless_coverage_report()
@@ -657,7 +753,9 @@ def _polymer_build():
     a = assembly_state.get_or_404()
     id_a, id_b = a.instances[0].id, a.instances[1].id
     hab.add_connector(id_a, "mate_a", position=[5.0, 0.0, 0.0], normal=[1.0, 0.0, 0.0])
-    hab.add_connector(id_b, "mate_b", position=[-5.0, 0.0, 0.0], normal=[-1.0, 0.0, 0.0])
+    hab.add_connector(
+        id_b, "mate_b", position=[-5.0, 0.0, 0.0], normal=[-1.0, 0.0, 0.0]
+    )
     hab.define_mate(id_b, id_a, child_label="mate_b", parent_label="mate_a")
     before = assembly_state.get_or_404().model_copy(deep=True)
     seed_jid = before.joints[0].id
@@ -682,12 +780,15 @@ def test_polymer_chain_oracle_fires_on_off_lattice_copy():
 
     with hab.assembly_scratch_session():
         before, seed_jid, after = _polymer_build()
-        new = next(i for i in after.instances
-                   if i.id not in {b.id for b in before.instances})
+        new = next(
+            i for i in after.instances if i.id not in {b.id for b in before.instances}
+        )
         moved = new.model_copy(update={"transform": hab.translation(999.0, 0.0, 0.0)})
-        broken = after.model_copy(update={
-            "instances": [moved if i.id == new.id else i for i in after.instances]
-        })
+        broken = after.model_copy(
+            update={
+                "instances": [moved if i.id == new.id else i for i in after.instances]
+            }
+        )
         with pytest.raises(AssertionError, match="repeat"):
             assert_polymer_chain(before, broken, seed_jid, count=4)
 
@@ -703,7 +804,9 @@ def test_polymer_chain_oracle_fires_vacuously_on_stacked_seed():
         design = make_6hb_design()
         hab.new_assembly("Stacked")
         hab.add_inline_instance(design, name="A")
-        hab.add_inline_instance(design, name="B", transform=hab.translation(20.0, 0.0, 0.0))
+        hab.add_inline_instance(
+            design, name="B", transform=hab.translation(20.0, 0.0, 0.0)
+        )
         a = assembly_state.get_or_404()
         id_a, id_b = a.instances[0].id, a.instances[1].id
         # both connectors at the part origin → the rigid snap stacks B onto A (delta ≈ I)
@@ -719,6 +822,7 @@ def test_polymer_chain_oracle_fires_vacuously_on_stacked_seed():
 
 
 # ── The periodic-chain oracle PASSES on a real chain and FIRES otherwise ───────
+
 
 def test_coverage_report_marks_periodic_polymerize_route_covered():
     """The periodic straggler flipped polymerize_periodic_assembly → covered."""
@@ -759,10 +863,16 @@ def test_periodic_chain_oracle_fires_on_open_seam():
     with hab.assembly_scratch_session():
         after = _periodic_chain_after()
         victim = after.instances[-1]
-        moved = victim.model_copy(update={"transform": hab.translation(999.0, 0.0, 0.0)})
-        broken = after.model_copy(update={
-            "instances": [moved if i.id == victim.id else i for i in after.instances]
-        })
+        moved = victim.model_copy(
+            update={"transform": hab.translation(999.0, 0.0, 0.0)}
+        )
+        broken = after.model_copy(
+            update={
+                "instances": [
+                    moved if i.id == victim.id else i for i in after.instances
+                ]
+            }
+        )
         with pytest.raises(AssertionError, match="open|repeating unit"):
             assert_periodic_chain_tiles(broken)
 
@@ -785,6 +895,7 @@ def test_periodic_chain_oracle_fires_on_no_chain():
 
 # ── The binding-resolves oracle PASSES on a real binding and FIRES otherwise ───
 
+
 def test_coverage_report_marks_af9_overhang_binding_routes_covered():
     """AF-9 overhang-bindings flipped create/patch/delete → covered."""
     report = headless_coverage_report()
@@ -801,26 +912,43 @@ def _binding_design(oh_id: str, sequence: str):
     canonical_topology works."""
     from backend.core.constants import BDNA_RISE_PER_BP
     from backend.core.models import (
-        Design, Direction, Domain, Helix, OverhangSpec, Strand, StrandType, Vec3,
+        Design,
+        Direction,
+        Domain,
+        Helix,
+        OverhangSpec,
+        Strand,
+        StrandType,
+        Vec3,
     )
 
     length_bp = 8
     helix_id, strand_id = f"hx_{oh_id}", f"str_{oh_id}"
     helix = Helix(
-        id=helix_id, grid_pos=(0, 0),
+        id=helix_id,
+        grid_pos=(0, 0),
         axis_start=Vec3(x=0.0, y=0.0, z=0.0),
         axis_end=Vec3(x=0.0, y=0.0, z=length_bp * BDNA_RISE_PER_BP),
-        phase_offset=0.0, length_bp=length_bp,
+        phase_offset=0.0,
+        length_bp=length_bp,
     )
     direction = Direction.FORWARD if oh_id.endswith("_5p") else Direction.REVERSE
     strand = Strand(
         id=strand_id,
-        domains=[Domain(helix_id=helix_id, start_bp=0, end_bp=length_bp - 1,
-                        direction=direction, overhang_id=oh_id)],
+        domains=[
+            Domain(
+                helix_id=helix_id,
+                start_bp=0,
+                end_bp=length_bp - 1,
+                direction=direction,
+                overhang_id=oh_id,
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
-    ovhg = OverhangSpec(id=oh_id, helix_id=helix_id, strand_id=strand_id,
-                        sequence=sequence, label=oh_id)
+    ovhg = OverhangSpec(
+        id=oh_id, helix_id=helix_id, strand_id=strand_id, sequence=sequence, label=oh_id
+    )
     return Design(helices=[helix], strands=[strand], overhangs=[ovhg])
 
 
@@ -832,16 +960,22 @@ def _bound_build():
 
     hab.new_assembly("Bind")
     hab.add_inline_instance(_binding_design("oh-A_5p", "ACGTACGT"), name="PartA")
-    hab.add_inline_instance(_binding_design("oh-B_3p", "GGGGCCCC"), name="PartB",
-                            transform=hab.translation(10.0, 0.0, 0.0))
+    hab.add_inline_instance(
+        _binding_design("oh-B_3p", "GGGGCCCC"),
+        name="PartB",
+        transform=hab.translation(10.0, 0.0, 0.0),
+    )
     a = assembly_state.get_or_404()
     ia, ib = a.instances[0], a.instances[1]
     sub_a = ia.source.design.overhangs[0].sub_domains[0].id
     sub_b = ib.source.design.overhangs[0].sub_domains[0].id
     hab.bind_overhangs(
-        ia.id, ib.id,
-        overhang_a_id="oh-A_5p", sub_domain_a_id=sub_a,
-        overhang_b_id="oh-B_3p", sub_domain_b_id=sub_b,
+        ia.id,
+        ib.id,
+        overhang_a_id="oh-A_5p",
+        sub_domain_a_id=sub_a,
+        overhang_b_id="oh-B_3p",
+        sub_domain_b_id=sub_b,
     )
     a = assembly_state.get_or_404()
     return a.model_copy(deep=True), a.overhang_bindings[0].id
@@ -883,17 +1017,20 @@ def test_binding_resolves_oracle_fires_on_degenerate_self_pair():
         a, bid = _bound_build()
         # rewire side B to be identical to side A (still resolves, but degenerate)
         b = a.overhang_bindings[0]
-        same = b.model_copy(update={
-            "instance_b_id": b.instance_a_id,
-            "overhang_b_id": b.overhang_a_id,
-            "sub_domain_b_id": b.sub_domain_a_id,
-        })
+        same = b.model_copy(
+            update={
+                "instance_b_id": b.instance_a_id,
+                "overhang_b_id": b.overhang_a_id,
+                "sub_domain_b_id": b.sub_domain_a_id,
+            }
+        )
         broken = a.model_copy(update={"overhang_bindings": [same]})
         with pytest.raises(AssertionError, match="sub-domain with itself"):
             assert_binding_resolves(broken, bid)
 
 
 # ── The linker-connection oracle PASSES on a real tie and FIRES otherwise (AF-27) ──
+
 
 def _build_linked_leaves():
     """Two overhang leaves tied by a ds linker (length 6 bp), captured as a
@@ -905,9 +1042,13 @@ def _build_linked_leaves():
     with hb.scratch_session(LatticeType.HONEYCOMB):
         design_state.set_design(_seed_two_overhang_leaves())
         d = hb.connect_overhangs(
-            "oh_a_5p", "oh_b_5p",
-            overhang_a_attach="free_end", overhang_b_attach="free_end",
-            linker_type="ds", length_value=6, length_unit="bp",
+            "oh_a_5p",
+            "oh_b_5p",
+            overhang_a_attach="free_end",
+            overhang_b_attach="free_end",
+            linker_type="ds",
+            length_value=6,
+            length_unit="bp",
         )
         return d.model_copy(deep=True), d.overhang_connections[-1].id
 
@@ -919,7 +1060,11 @@ def test_linker_connects_oracle_passes_on_real_connection():
 
     d, cid = _build_linked_leaves()
     reimported = assert_linker_connects(
-        d, cid, overhang_a="oh_a_5p", overhang_b="oh_b_5p", bridge_bp=6,
+        d,
+        cid,
+        overhang_a="oh_a_5p",
+        overhang_b="oh_b_5p",
+        bridge_bp=6,
     )
     assert any(c.id == cid for c in reimported.overhang_connections)
 
@@ -933,7 +1078,10 @@ def test_linker_connects_oracle_fires_when_no_connection():
     bare = _seed_two_overhang_leaves()
     with pytest.raises(AssertionError, match="no overhang connection"):
         assert_linker_connects(
-            bare, "ghost-conn", overhang_a="oh_a_5p", overhang_b="oh_b_5p",
+            bare,
+            "ghost-conn",
+            overhang_a="oh_a_5p",
+            overhang_b="oh_b_5p",
         )
 
 
@@ -945,7 +1093,11 @@ def test_linker_connects_oracle_fires_on_wrong_overhang():
     d, cid = _build_linked_leaves()
     with pytest.raises(AssertionError, match="joins"):
         assert_linker_connects(
-            d, cid, overhang_a="oh_a_5p", overhang_b="ghost-partner", bridge_bp=6,
+            d,
+            cid,
+            overhang_a="oh_a_5p",
+            overhang_b="ghost-partner",
+            bridge_bp=6,
         )
 
 
@@ -957,11 +1109,16 @@ def test_linker_connects_oracle_fires_on_wrong_bridge_bp():
     d, cid = _build_linked_leaves()
     with pytest.raises(AssertionError, match="bridge length"):
         assert_linker_connects(
-            d, cid, overhang_a="oh_a_5p", overhang_b="oh_b_5p", bridge_bp=99,
+            d,
+            cid,
+            overhang_a="oh_a_5p",
+            overhang_b="oh_b_5p",
+            bridge_bp=99,
         )
 
 
 # ── The flexible-segment relax oracle PASSES on a real relax and FIRES otherwise ──
+
 
 def _relaxed_flex_pair():
     """(before, after): an overstretched hinge and its headless-relaxed result."""
@@ -995,6 +1152,7 @@ def test_flexible_relax_oracle_fires_when_still_overstretched():
 
 
 # ── The linker/bond relax-POSE oracles PASS on a real relax and FIRE otherwise ──
+
 
 def _relaxed_linker_pair(*, joint_origin):
     """(before, after, conn_id): a joint-connected ds-linker design and its
@@ -1041,13 +1199,25 @@ def test_linker_relaxed_pose_oracle_fires_on_topology_mutation():
     from tests.automation_harness import assert_linker_relaxed_pose
 
     before, after, cid = _relaxed_linker_pair(joint_origin=[0.0, 0.0, 0.0])
-    tampered = after.model_copy(update={"strands": [
-        *after.strands,
-        Strand(id="intruder",
-               domains=[Domain(helix_id="oh_helix_a", start_bp=0, end_bp=3,
-                               direction=Direction.FORWARD)],
-               strand_type=StrandType.STAPLE),
-    ]})
+    tampered = after.model_copy(
+        update={
+            "strands": [
+                *after.strands,
+                Strand(
+                    id="intruder",
+                    domains=[
+                        Domain(
+                            helix_id="oh_helix_a",
+                            start_bp=0,
+                            end_bp=3,
+                            direction=Direction.FORWARD,
+                        )
+                    ],
+                    strand_type=StrandType.STAPLE,
+                ),
+            ]
+        }
+    )
     with pytest.raises(AssertionError, match="topology"):
         assert_linker_relaxed_pose(before, tampered, cid, require_reduced=False)
 
@@ -1074,7 +1244,9 @@ def test_bond_relaxed_pose_oracle_passes_on_real_relax():
     from tests.automation_harness import assert_bond_relaxed_pose
 
     before, after, side_a, side_b = _relaxed_bond_pair(with_joint=False)
-    assert_bond_relaxed_pose(before, after, side_a=side_a, side_b=side_b, target_nm=0.13)
+    assert_bond_relaxed_pose(
+        before, after, side_a=side_a, side_b=side_b, target_nm=0.13
+    )
 
 
 def test_bond_relaxed_pose_oracle_fires_on_noop():
@@ -1084,7 +1256,9 @@ def test_bond_relaxed_pose_oracle_fires_on_noop():
 
     before, _after, side_a, side_b = _relaxed_bond_pair(with_joint=False)
     with pytest.raises(AssertionError, match="reduce strain"):
-        assert_bond_relaxed_pose(before, before, side_a=side_a, side_b=side_b, target_nm=0.13)
+        assert_bond_relaxed_pose(
+            before, before, side_a=side_a, side_b=side_b, target_nm=0.13
+        )
 
 
 # The legacy `assert_binding_relaxed_pose` oracle (sub-domain junction chord target)
@@ -1093,8 +1267,9 @@ def test_bond_relaxed_pose_oracle_fires_on_noop():
 # test_direct_binding_relaxed_pose_oracle_* below.
 
 
-def _relaxed_direct_binding_pair(*, same_body=False,
-                                 cluster_b_translation=(8.0, 0.0, 0.0)):
+def _relaxed_direct_binding_pair(
+    *, same_body=False, cluster_b_translation=(8.0, 0.0, 0.0)
+):
     """(before, after, driver_oh_id, driven_oh_id): an applied DIRECT binding and
     its relaxed result via hb.relax_overhang_binding (the unified solve).
 
@@ -1139,8 +1314,10 @@ def test_direct_binding_relaxed_pose_oracle_accepts_same_body_swing():
     # Apply's oriented placement already minimized the same-body bond.
     s, _i, td, rd, cb, cr = _find_driven_tip_and_root(before, dvn)
     nucs = _geometry_for_design(before)
-    chord = math.dist(_bead_pos(nucs, strand_id=s.id, helix_id=td.helix_id, bp=cb),
-                      _bead_pos(nucs, strand_id=s.id, helix_id=rd.helix_id, bp=cr))
+    chord = math.dist(
+        _bead_pos(nucs, strand_id=s.id, helix_id=td.helix_id, bp=cb),
+        _bead_pos(nucs, strand_id=s.id, helix_id=rd.helix_id, bp=cr),
+    )
     assert chord < 1.5, chord
 
 
@@ -1178,6 +1355,7 @@ def test_flexible_relax_oracle_fires_on_no_move():
 
 # ── The mate-coincidence oracle PASSES on a real mate and FIRES otherwise ──────
 
+
 def _mate_build():
     """Active scratch assembly with one rigid mate between ±5 nm-offset connectors."""
     from backend.api import assembly_state
@@ -1186,12 +1364,16 @@ def _mate_build():
     hab.new_assembly("M")
     hab.add_inline_instance(make_6hb_design(), name="A")
     hab.add_inline_instance(
-        make_6hb_design(), name="B", transform=hab.translation(20.0, 0.0, 0.0),
+        make_6hb_design(),
+        name="B",
+        transform=hab.translation(20.0, 0.0, 0.0),
     )
     a = assembly_state.get_or_404()
     id_a, id_b = a.instances[0].id, a.instances[1].id
     hab.add_connector(id_a, "mate_a", position=[5.0, 0.0, 0.0], normal=[1.0, 0.0, 0.0])
-    hab.add_connector(id_b, "mate_b", position=[-5.0, 0.0, 0.0], normal=[-1.0, 0.0, 0.0])
+    hab.add_connector(
+        id_b, "mate_b", position=[-5.0, 0.0, 0.0], normal=[-1.0, 0.0, 0.0]
+    )
     hab.define_mate(id_b, id_a, child_label="mate_b", parent_label="mate_a")
     return assembly_state.get_or_404().model_copy(deep=True)
 
@@ -1241,6 +1423,7 @@ def test_mate_oracle_vacuity_guard_fires_on_stacked_parts():
 
 # ── The assembly round-trip oracle PASSES on a real build and FIRES otherwise ──
 
+
 def _inline_assembly():
     """Active scratch assembly: two inline 6hb parts (2nd offset +20 nm in X)."""
     from backend.api import assembly_state
@@ -1249,7 +1432,9 @@ def _inline_assembly():
     hab.new_assembly("T")
     hab.add_inline_instance(make_6hb_design(), name="A")
     hab.add_inline_instance(
-        make_6hb_design(), name="B", transform=hab.translation(20.0, 0.0, 0.0),
+        make_6hb_design(),
+        name="B",
+        transform=hab.translation(20.0, 0.0, 0.0),
     )
     return assembly_state.get_or_404().model_copy(deep=True)
 
@@ -1285,7 +1470,8 @@ def test_assembly_oracle_catches_corrupted_roundtrip():
     with hab.assembly_scratch_session():
         with pytest.raises(AssertionError, match="changed the assembly structure"):
             assert_assembly_roundtrip_stable(
-                _inline_assembly, roundtrip=_drop_an_instance_roundtrip,
+                _inline_assembly,
+                roundtrip=_drop_an_instance_roundtrip,
             )
 
 
@@ -1307,6 +1493,7 @@ def test_assembly_oracle_catches_invalid_build():
 
 
 # ── The deformation-angle oracle PASSES on a real bend and FIRES otherwise ─────
+
 
 def _bent_bundle(kappa=2.0, plane_a=20, plane_b=60):
     """Fresh 84-bp bundle bent by κ over [plane_a, plane_b]; returns (design, ref)."""
@@ -1354,12 +1541,18 @@ def test_deformation_angle_fires_vacuously_on_an_undeformed_design():
 
 # ── The inverse-pair oracle PASSES on a real inverse and FIRES otherwise ───────
 
+
 def _nick_site(d):
     """A clean FORWARD nick site (helix_id, bp) in a single-domain strand."""
     from backend.core.models import Direction
+
     for s in d.strands:
         dm = s.domains[0]
-        if len(s.domains) == 1 and dm.direction == Direction.FORWARD and dm.end_bp - dm.start_bp >= 4:
+        if (
+            len(s.domains) == 1
+            and dm.direction == Direction.FORWARD
+            and dm.end_bp - dm.start_bp >= 4
+        ):
             return dm.helix_id, dm.start_bp + (dm.end_bp - dm.start_bp) // 2
     raise AssertionError("no nick site")
 
@@ -1373,7 +1566,9 @@ def test_inverse_pair_passes_on_nick_then_ligate():
 
     with hb.scratch_session(LatticeType.HONEYCOMB):
         start = hb.create_bundle(
-            SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB,
+            SIX_HB_CELLS,
+            42,
+            lattice=LatticeType.HONEYCOMB,
         ).model_copy(deep=True)
         h, bp = _nick_site(start)
         assert_inverse_pair(
@@ -1393,7 +1588,9 @@ def test_inverse_pair_fires_when_inverse_does_not_restore():
 
     with hb.scratch_session(LatticeType.HONEYCOMB):
         start = hb.create_bundle(
-            SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB,
+            SIX_HB_CELLS,
+            42,
+            lattice=LatticeType.HONEYCOMB,
         ).model_copy(deep=True)
         h, bp = _nick_site(start)
         with pytest.raises(AssertionError, match="not inverses"):
@@ -1414,17 +1611,20 @@ def test_inverse_pair_fires_on_vacuous_noop_forward():
 
     with hb.scratch_session(LatticeType.HONEYCOMB):
         start = hb.create_bundle(
-            SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB,
+            SIX_HB_CELLS,
+            42,
+            lattice=LatticeType.HONEYCOMB,
         ).model_copy(deep=True)
         with pytest.raises(AssertionError, match="did not change the topology"):
             assert_inverse_pair(
                 start,
-                forward=lambda: design_state.get_or_404(),   # no-op
+                forward=lambda: design_state.get_or_404(),  # no-op
                 inverse=lambda: design_state.get_or_404(),
             )
 
 
 # ── The geometric-length oracle PASSES on a real change and FIRES otherwise ────
+
 
 def test_geometric_length_delta_passes_on_a_loop():
     """A loop (+1) is +1 bp of geometry on its helix — the oracle returns normally."""
@@ -1438,7 +1638,10 @@ def test_geometric_length_delta_passes_on_a_loop():
         h = d.helices[0]
         start = d.model_copy(deep=True)
         assert_geometric_length_delta(
-            start, lambda: hb.loop_skip(h.id, h.bp_start + 14, +1), +1, helix_id=h.id,
+            start,
+            lambda: hb.loop_skip(h.id, h.bp_start + 14, +1),
+            +1,
+            helix_id=h.id,
         )
 
 
@@ -1459,21 +1662,33 @@ def test_geometric_length_delta_fires_on_wrong_expectation():
         start = d.model_copy(deep=True)
         with pytest.raises(AssertionError, match="geometric length changed"):
             assert_geometric_length_delta(
-                start, lambda: hb.loop_skip(h.id, h.bp_start + 14, +1), +2, helix_id=h.id,
+                start,
+                lambda: hb.loop_skip(h.id, h.bp_start + 14, +1),
+                +2,
+                helix_id=h.id,
             )
 
 
 # ── The deformed-frame oracle PASSES on a bent continuation and FIRES otherwise ─
 
+
 def _apply_bend(curvature_deg_per_bp: float = 2.0):
     """Bend the active design's middle (planes at bp 20–60). Test scaffolding —
     bend construction has no headless wrapper yet (AF-6)."""
     from backend.api.routes_deformation import AddDeformationBody, add_deformation
-    add_deformation(AddDeformationBody(
-        type="bend", plane_a_bp=20, plane_b_bp=60,
-        params={"kind": "bend", "curvature_deg_per_bp": curvature_deg_per_bp,
-                "direction_deg": 0.0},
-    ))
+
+    add_deformation(
+        AddDeformationBody(
+            type="bend",
+            plane_a_bp=20,
+            plane_b_bp=60,
+            params={
+                "kind": "bend",
+                "curvature_deg_per_bp": curvature_deg_per_bp,
+                "direction_deg": 0.0,
+            },
+        )
+    )
 
 
 def test_on_deformed_frame_passes_on_a_real_deformed_continuation():
@@ -1489,8 +1704,12 @@ def test_on_deformed_frame_passes_on_a_real_deformed_continuation():
         ref = design_state.get_or_404().helices[0].id
         _apply_bend()
         before = design_state.get_or_404().model_copy(deep=True)
-        after = hb.bundle_deformed_continuation([(0, 0)], 21, source_bp=84, ref_helix_id=ref)
-        deflection = assert_on_deformed_frame(before, after, 84, [(0, 0)], ref_helix_id=ref)
+        after = hb.bundle_deformed_continuation(
+            [(0, 0)], 21, source_bp=84, ref_helix_id=ref
+        )
+        deflection = assert_on_deformed_frame(
+            before, after, 84, [(0, 0)], ref_helix_id=ref
+        )
         assert deflection > 0.5
 
 
@@ -1508,9 +1727,13 @@ def test_on_deformed_frame_fires_when_a_helix_is_off_frame():
         ref = design_state.get_or_404().helices[0].id
         _apply_bend()
         before = design_state.get_or_404().model_copy(deep=True)
-        after = hb.bundle_deformed_continuation([(0, 0)], 21, source_bp=84, ref_helix_id=ref)
+        after = hb.bundle_deformed_continuation(
+            [(0, 0)], 21, source_bp=84, ref_helix_id=ref
+        )
         # Drag the appended helix's start far off the frame.
-        new = [h for h in after.helices if h.id not in {x.id for x in before.helices}][0]
+        new = [h for h in after.helices if h.id not in {x.id for x in before.helices}][
+            0
+        ]
         new.axis_start.x += 5.0
         with pytest.raises(AssertionError, match="did not land on the deformed"):
             assert_on_deformed_frame(before, after, 84, [(0, 0)], ref_helix_id=ref)
@@ -1529,12 +1752,15 @@ def test_on_deformed_frame_fires_on_a_straight_continuation():
         ref = design_state.get_or_404().helices[0].id
         # No bend applied — frame at source_bp is straight.
         before = design_state.get_or_404().model_copy(deep=True)
-        after = hb.bundle_deformed_continuation([(0, 0)], 21, source_bp=84, ref_helix_id=ref)
+        after = hb.bundle_deformed_continuation(
+            [(0, 0)], 21, source_bp=84, ref_helix_id=ref
+        )
         with pytest.raises(AssertionError, match="had no"):
             assert_on_deformed_frame(before, after, 84, [(0, 0)], ref_helix_id=ref)
 
 
 # ── AF-10: instance-layout oracles (grid / ring) ──────────────────────────────
+
 
 def _grid_assembly(rows, cols, *, pitch, row_pitch=None):
     """Active scratch assembly: rows×cols inline 6hb parts on a grid."""
@@ -1632,6 +1858,7 @@ def test_instances_on_ring_vacuity_guard():
         for _ in range(6):
             hab.add_inline_instance(part)  # all at origin
         from backend.api import assembly_state
+
         a = assembly_state.get_or_404().model_copy(deep=True)
         with pytest.raises(AssertionError, match="non-degeneracy"):
             assert_instances_on_ring(a, 6, radius=0.0)
@@ -1639,16 +1866,27 @@ def test_instances_on_ring_vacuity_guard():
 
 # ── AF-11: build-spec faithfulness oracle (assert_spec_matches_calls) ──────────
 
+
 def test_spec_matches_calls_passes_on_a_faithful_build():
     """A 6hb spec build matches the hand-call make_6hb_design()."""
     from backend.api import headless_spec_build as hs
     from tests.automation_harness import assert_spec_matches_calls
     from tests.conftest import SIX_HB_CELLS, make_6hb_design
 
-    spec = {"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": [list(c) for c in SIX_HB_CELLS], "length_bp": 42, "name": "6hb"}]}
+    spec = {
+        "lattice": "honeycomb",
+        "ops": [
+            {
+                "op": "bundle",
+                "cells": [list(c) for c in SIX_HB_CELLS],
+                "length_bp": 42,
+                "name": "6hb",
+            }
+        ],
+    }
     built = assert_spec_matches_calls(
-        lambda: hs.build_design(spec), make_6hb_design, kind="design")
+        lambda: hs.build_design(spec), make_6hb_design, kind="design"
+    )
     assert len(built.helices) == 6
 
 
@@ -1658,11 +1896,16 @@ def test_spec_matches_calls_fires_on_a_divergent_build():
     from tests.automation_harness import assert_spec_matches_calls
     from tests.conftest import SIX_HB_CELLS, make_18hb_design
 
-    spec = {"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": [list(c) for c in SIX_HB_CELLS], "length_bp": 42}]}
+    spec = {
+        "lattice": "honeycomb",
+        "ops": [
+            {"op": "bundle", "cells": [list(c) for c in SIX_HB_CELLS], "length_bp": 42}
+        ],
+    }
     with pytest.raises(AssertionError, match="did not produce the same canonical"):
         assert_spec_matches_calls(
-            lambda: hs.build_design(spec), make_18hb_design, kind="design")
+            lambda: hs.build_design(spec), make_18hb_design, kind="design"
+        )
 
 
 def test_spec_matches_calls_vacuity_guard():
@@ -1682,10 +1925,25 @@ def test_spec_matches_calls_assembly_kind():
     from tests.automation_harness import assert_spec_matches_calls
     from tests.conftest import SIX_HB_CELLS, make_6hb_design
 
-    beam = {"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": [list(c) for c in SIX_HB_CELLS], "length_bp": 42, "name": "6hb"}]}
-    spec = {"kind": "assembly", "name": "G", "parts": {"beam": beam},
-            "ops": [{"op": "place_grid", "part": "beam", "rows": 2, "cols": 2, "pitch": 10.0}]}
+    beam = {
+        "lattice": "honeycomb",
+        "ops": [
+            {
+                "op": "bundle",
+                "cells": [list(c) for c in SIX_HB_CELLS],
+                "length_bp": 42,
+                "name": "6hb",
+            }
+        ],
+    }
+    spec = {
+        "kind": "assembly",
+        "name": "G",
+        "parts": {"beam": beam},
+        "ops": [
+            {"op": "place_grid", "part": "beam", "rows": 2, "cols": 2, "pitch": 10.0}
+        ],
+    }
 
     def hand():
         with hab.assembly_scratch_session():
@@ -1697,6 +1955,7 @@ def test_spec_matches_calls_assembly_kind():
 
 
 # ── The cluster-pose oracle PASSES on a real translation and FIRES otherwise ───
+
 
 def _clustered_posed_design(translation):
     """Active scratch: a 6hb with a 2-helix cluster posed by `translation`.
@@ -1720,7 +1979,10 @@ def test_cluster_translated_passes_on_a_real_translation():
 
     with hb.scratch_session(LatticeType.HONEYCOMB):
         before, after, cid = _clustered_posed_design([10.0, 0.0, 0.0])
-        assert assert_cluster_translated(before, after, cid, translation=[10.0, 0.0, 0.0]) == 2
+        assert (
+            assert_cluster_translated(before, after, cid, translation=[10.0, 0.0, 0.0])
+            == 2
+        )
 
 
 def test_cluster_translated_fires_when_geometry_did_not_move():
@@ -1749,6 +2011,7 @@ def test_cluster_translated_vacuity_guard_on_zero_translation():
 
 # ── AF-16: the cluster-create feature-log oracle PASSES on a logged creation, FIRES
 #    on an unlogged one and on a mismatched helix set ──────────────────────────────
+
 
 def _logged_cluster_design():
     """Active scratch: a 6hb with a 2-helix cluster created with log=True.
@@ -1787,7 +2050,9 @@ def test_cluster_in_feature_log_fires_when_creation_unlogged():
     with hb.scratch_session(LatticeType.HONEYCOMB):
         hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
         design = design_state.get_or_404()
-        hb.add_cluster("armA", [design.helices[0].id, design.helices[1].id])  # log=False
+        hb.add_cluster(
+            "armA", [design.helices[0].id, design.helices[1].id]
+        )  # log=False
         after = design_state.get_or_404()
         cid = after.cluster_transforms[-1].id
         with pytest.raises(AssertionError, match="created without logging"):
@@ -1809,6 +2074,7 @@ def test_cluster_in_feature_log_fires_on_wrong_helix_set():
 # ── AF-15 Phase 2: the edge-collinearity oracle PASSES on a real alignment, FIRES
 #    when the edges are left skew / on different lines ───────────────────────────
 
+
 def _two_bars_aligned():
     """Active scratch SQUARE: two 2×3 clusters; align A's axial edge onto B's, then
     return (design, a_id, b_id, src_edge, target_edge)."""
@@ -1817,7 +2083,9 @@ def _two_bars_aligned():
 
     hb.create_bundle(
         [(r, c) for r in range(2) for c in range(6)],
-        32, lattice=LatticeType.SQUARE, name="grid",
+        32,
+        lattice=LatticeType.SQUARE,
+        name="grid",
     )
     d = design_state.get_or_404()
     cols = {h.id: h.grid_pos[1] for h in d.helices if h.grid_pos}
@@ -1850,7 +2118,9 @@ def test_edges_collinear_fires_when_edges_left_skew():
     with hb.scratch_session(LatticeType.SQUARE):
         hb.create_bundle(
             [(r, c) for r in range(2) for c in range(6)],
-            32, lattice=LatticeType.SQUARE, name="grid",
+            32,
+            lattice=LatticeType.SQUARE,
+            name="grid",
         )
         d = design_state.get_or_404()
         cols = {h.id: h.grid_pos[1] for h in d.helices if h.grid_pos}
@@ -1860,8 +2130,9 @@ def test_edges_collinear_fires_when_edges_left_skew():
         b = design_state.get_or_404().cluster_transforms[-1].id
         # no align_cluster_edge → A and B sit apart in X
         with pytest.raises(AssertionError, match="off the target line"):
-            assert_edges_collinear(design_state.get_or_404(), a, ("w", 1, 1),
-                                   target_edge=(b, ("w", -1, 1)))
+            assert_edges_collinear(
+                design_state.get_or_404(), a, ("w", 1, 1), target_edge=(b, ("w", -1, 1))
+            )
 
 
 def test_edges_collinear_fires_on_wrong_direction():
@@ -1874,7 +2145,9 @@ def test_edges_collinear_fires_on_wrong_direction():
     with hb.scratch_session(LatticeType.SQUARE):
         hb.create_bundle(
             [(r, c) for r in range(2) for c in range(6)],
-            32, lattice=LatticeType.SQUARE, name="grid",
+            32,
+            lattice=LatticeType.SQUARE,
+            name="grid",
         )
         d = design_state.get_or_404()
         hb.add_cluster("bar", [h.id for h in d.helices])
@@ -1883,11 +2156,16 @@ def test_edges_collinear_fires_on_wrong_direction():
         # align onto a Z-ish line, then check against a 45° line → not collinear
         hb.align_cluster_edge(cid, src, target_line=([4.0, 0.0, 0.0], [0.0, 0.0, 1.0]))
         with pytest.raises(AssertionError, match="not collinear"):
-            assert_edges_collinear(design_state.get_or_404(), cid, src,
-                                   target_line=([4.0, 0.0, 0.0], [1.0, 0.0, 1.0]))
+            assert_edges_collinear(
+                design_state.get_or_404(),
+                cid,
+                src,
+                target_line=([4.0, 0.0, 0.0], [1.0, 0.0, 1.0]),
+            )
 
 
 # ── assert_joint_on_hull_corner (AF-14 Phase 1) ───────────────────────────────
+
 
 def _bar_with_joint(*, edge=None, corner=None, face=None):
     """Active scratch SQUARE: a 2×6 bar clustered whole, with one joint placed on the
@@ -1897,7 +2175,9 @@ def _bar_with_joint(*, edge=None, corner=None, face=None):
 
     hb.create_bundle(
         [(r, c) for r in range(2) for c in range(6)],
-        32, lattice=LatticeType.SQUARE, name="grid",
+        32,
+        lattice=LatticeType.SQUARE,
+        name="grid",
     )
     d = design_state.get_or_404()
     hb.add_cluster("bar", [h.id for h in d.helices])
@@ -1952,6 +2232,7 @@ def test_joint_on_hull_corner_fires_on_a_different_corner():
 
 # ── assert_range_of_motion (AF-14 Phase 2) ────────────────────────────────────
 
+
 def _lone_bar():
     """Active scratch SQUARE: a 2×6 bar clustered whole; return (design, cluster_id)."""
     from backend.api import headless_build as hb
@@ -1959,11 +2240,15 @@ def _lone_bar():
 
     hb.create_bundle(
         [(r, c) for r in range(2) for c in range(6)],
-        32, lattice=LatticeType.SQUARE, name="grid",
+        32,
+        lattice=LatticeType.SQUARE,
+        name="grid",
     )
     d = design_state.get_or_404()
     hb.add_cluster("bar", [h.id for h in d.helices])
-    return design_state.get_or_404(), design_state.get_or_404().cluster_transforms[-1].id
+    return design_state.get_or_404(), design_state.get_or_404().cluster_transforms[
+        -1
+    ].id
 
 
 def test_range_of_motion_passes_on_lone_cluster_full_swing():
@@ -2008,19 +2293,26 @@ def test_range_of_motion_obstacle_reduces_swing():
     with hb.scratch_session(LatticeType.SQUARE):
         hb.create_bundle(
             [(r, c) for r in range(2) for c in range(6)],
-            32, lattice=LatticeType.SQUARE, name="grid",
+            32,
+            lattice=LatticeType.SQUARE,
+            name="grid",
         )
         d = design_state.get_or_404()
-        hb.add_cluster("A", [h.id for h in d.helices if h.grid_pos and h.grid_pos[1] <= 2])
+        hb.add_cluster(
+            "A", [h.id for h in d.helices if h.grid_pos and h.grid_pos[1] <= 2]
+        )
         a = design_state.get_or_404().cluster_transforms[-1].id
-        hb.add_cluster("B", [h.id for h in d.helices if h.grid_pos and h.grid_pos[1] >= 3])
+        hb.add_cluster(
+            "B", [h.id for h in d.helices if h.grid_pos and h.grid_pos[1] >= 3]
+        )
         b = design_state.get_or_404().cluster_transforms[-1].id
 
         d = design_state.get_or_404()
         sep = cluster_obb(d, b).center - cluster_obb(d, a).center
         sep_u = sep / np.linalg.norm(sep)
-        hb.transform_cluster(b, translation=(sep_u * 2).tolist(),
-                             rotation=[0, 0, 0, 1], pivot=[0, 0, 0])
+        hb.transform_cluster(
+            b, translation=(sep_u * 2).tolist(), rotation=[0, 0, 0, 1], pivot=[0, 0, 0]
+        )
         d = design_state.get_or_404()
 
         obb_a = cluster_obb(d, a)
@@ -2049,6 +2341,7 @@ def test_coverage_report_marks_af14_route_covered():
 
 # ── assert_parallelogram_linkage (the 4-bar capstone oracle) ──────────────────
 
+
 def test_parallelogram_oracle_passes_on_a_real_mechanism():
     """The oracle accepts a genuinely-built headless 4-bar parallelogram."""
     from backend.api import headless_build as hb
@@ -2073,7 +2366,10 @@ def test_parallelogram_oracle_red_on_wrong_joint_count():
         design, bar_ids, joint_ids = build_parallelogram()
         with pytest.raises(AssertionError, match="mobility"):
             assert_parallelogram_linkage(
-                design, bar_ids, joint_ids=joint_ids[:3], require_movable=False,
+                design,
+                bar_ids,
+                joint_ids=joint_ids[:3],
+                require_movable=False,
             )
 
 
@@ -2088,16 +2384,24 @@ def test_parallelogram_oracle_red_on_unarranged_bars():
     with hb.scratch_session(LatticeType.SQUARE):
         # build a full parallelogram, then shove one bar far away → loop no longer closes
         design, bar_ids, joint_ids = build_parallelogram()
-        hb.transform_cluster(bar_ids[2], translation=[100.0, 100.0, 100.0],
-                             rotation=[0, 0, 0, 1], pivot=[0, 0, 0])
+        hb.transform_cluster(
+            bar_ids[2],
+            translation=[100.0, 100.0, 100.0],
+            rotation=[0, 0, 0, 1],
+            pivot=[0, 0, 0],
+        )
         design = design_state.get_or_404()
         with pytest.raises(AssertionError, match="shared corner|parallel|degenerate"):
             assert_parallelogram_linkage(
-                design, bar_ids, joint_ids=joint_ids, require_movable=False,
+                design,
+                bar_ids,
+                joint_ids=joint_ids,
+                require_movable=False,
             )
 
 
 # ── assert_recommended_hinge (AF-14 Phase 3) ──────────────────────────────────
+
 
 def _recommend_bar():
     """Active scratch SQUARE: a 2×6 bar clustered whole; return (design, cluster_id)."""
@@ -2106,11 +2410,15 @@ def _recommend_bar():
 
     hb.create_bundle(
         [(r, c) for r in range(2) for c in range(6)],
-        32, lattice=LatticeType.SQUARE, name="grid",
+        32,
+        lattice=LatticeType.SQUARE,
+        name="grid",
     )
     d = design_state.get_or_404()
     hb.add_cluster("bar", [h.id for h in d.helices])
-    return design_state.get_or_404(), design_state.get_or_404().cluster_transforms[-1].id
+    return design_state.get_or_404(), design_state.get_or_404().cluster_transforms[
+        -1
+    ].id
 
 
 def test_recommended_hinge_passes_on_a_real_bar():
@@ -2155,14 +2463,18 @@ def test_recommended_hinge_red_on_midpoint_anchor():
 
 # ── The full-sequencing oracle PASSES on a sequenced design and FIRES otherwise ─
 
+
 def _routed_sequenced_6hb():
     """Active scratch design: a 6hb auto-scaffolded to one strand and fully
     sequenced (scaffold + WC staples).  Returns the sequenced design copy."""
     from backend.api import headless_build as hb
 
     hb.create_bundle(
-        [(0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)], 42,
-        lattice=LatticeType.HONEYCOMB, name="6hb")
+        [(0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)],
+        42,
+        lattice=LatticeType.HONEYCOMB,
+        name="6hb",
+    )
     hb.auto_scaffold()
     return hb.full_sequence()
 
@@ -2184,8 +2496,11 @@ def test_fully_sequenced_oracle_fires_on_unsequenced_design():
 
     with hb.scratch_session(LatticeType.HONEYCOMB):
         hb.create_bundle(
-            [(0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)], 42,
-            lattice=LatticeType.HONEYCOMB, name="6hb")
+            [(0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)],
+            42,
+            lattice=LatticeType.HONEYCOMB,
+            name="6hb",
+        )
         hb.auto_scaffold()
         unsequenced = design_state.get_or_404()
         with pytest.raises(AssertionError, match="undefined"):
@@ -2204,8 +2519,10 @@ def test_fully_sequenced_oracle_fires_on_wrong_complement():
         staples = [s for s in sequenced.strands if s.strand_type == StrandType.STAPLE]
         target = staples[0]
         bad = "A" * len(target.sequence or "")
-        patched = [s.model_copy(update={"sequence": bad}) if s.id == target.id else s
-                   for s in sequenced.strands]
+        patched = [
+            s.model_copy(update={"sequence": bad}) if s.id == target.id else s
+            for s in sequenced.strands
+        ]
         broken = sequenced.model_copy(update={"strands": patched})
         with pytest.raises(AssertionError, match="WC complement"):
             assert_fully_sequenced(broken)
@@ -2215,22 +2532,38 @@ def test_fully_sequenced_oracle_fires_on_wrong_complement():
 # Pure oracle tests: the verdict dicts are fabricated (the shape check_relaxed_constraint
 # returns), so these pin the comparison logic without an oxDNA run.
 
+
 def _verdict(status="met", met=True, measured=4.2):
-    return {"met": met, "status": status, "measured_nm": measured, "target_nm": 4.0,
-            "tol_nm": 1.0, "n_frames": 60, "min_confidence": 50, "confidence": {}}
+    return {
+        "met": met,
+        "status": status,
+        "measured_nm": measured,
+        "target_nm": 4.0,
+        "tol_nm": 1.0,
+        "n_frames": 60,
+        "min_confidence": 50,
+        "confidence": {},
+    }
 
 
 def test_spec_constraints_reported_passes_on_matching_verdicts():
     from tests.automation_harness import assert_spec_constraints_reported
-    spec_result = {"design": object(), "verdicts": [_verdict(), _verdict("unmet", False, 9.0)]}
+
+    spec_result = {
+        "design": object(),
+        "verdicts": [_verdict(), _verdict("unmet", False, 9.0)],
+    }
     hand = [_verdict(), _verdict("unmet", False, 9.0)]
-    assert assert_spec_constraints_reported(spec_result, hand) == spec_result["verdicts"]
+    assert (
+        assert_spec_constraints_reported(spec_result, hand) == spec_result["verdicts"]
+    )
 
 
 def test_spec_constraints_reported_fires_on_status_mismatch():
     """Red-test: the grammar reporting a different status than the hand check raises
     (e.g. a landmark resolved to the wrong helix flipping met→unmet)."""
     from tests.automation_harness import assert_spec_constraints_reported
+
     spec_result = {"verdicts": [_verdict("met", True, 4.2)]}
     with pytest.raises(AssertionError, match="different verdict"):
         assert_spec_constraints_reported(spec_result, [_verdict("unmet", False, 9.0)])
@@ -2240,6 +2573,7 @@ def test_spec_constraints_reported_fires_on_measured_divergence():
     """Red-test: same status but a divergent measured value (a landmark resolved to
     the wrong helix) raises."""
     from tests.automation_harness import assert_spec_constraints_reported
+
     spec_result = {"verdicts": [_verdict("met", True, 4.2)]}
     with pytest.raises(AssertionError, match="wrong helix"):
         assert_spec_constraints_reported(spec_result, [_verdict("met", True, 6.8)])
@@ -2248,6 +2582,7 @@ def test_spec_constraints_reported_fires_on_measured_divergence():
 def test_spec_constraints_reported_fires_on_count_mismatch():
     """Red-test: a dropped constraint (fewer verdicts than the hand build) raises."""
     from tests.automation_harness import assert_spec_constraints_reported
+
     spec_result = {"verdicts": [_verdict()]}
     with pytest.raises(AssertionError, match="count mismatch"):
         assert_spec_constraints_reported(spec_result, [_verdict(), _verdict()])
@@ -2257,20 +2592,26 @@ def test_spec_constraints_reported_vacuity_guard():
     """Red-test: an empty verdict list (a spec with no constraints block) would pass
     vacuously — the non-vacuity guard fires instead."""
     from tests.automation_harness import assert_spec_constraints_reported
+
     with pytest.raises(AssertionError, match="no constraint verdicts"):
         assert_spec_constraints_reported({"verdicts": []}, [])
 
 
 # ── AF-21: assert_oxpy_equilibrium_parity (GPU-free, hand-built result dicts) ─────
 
+
 def _parity_result(*, align=14.0, rg=5.0, bp=0.5, conf=4, mut_followed=True):
     """A run_live_field-shaped result dict for oracle unit tests."""
     return {
-        "observables": {"alignment_nm": align, "radius_of_gyration_nm": rg,
-                        "bp_retention": bp},
+        "observables": {
+            "alignment_nm": align,
+            "radius_of_gyration_nm": rg,
+            "bp_retention": bp,
+        },
         "confidence": conf,
         "mutation": {
-            "from_dir": [0, 0, 1], "to_dir": [1, 0, 0],
+            "from_dir": [0, 0, 1],
+            "to_dir": [1, 0, 0],
             "proj_on_to_before_nm": 0.0,
             "proj_on_to_after_nm": align if mut_followed else 0.0,
             "followed": mut_followed,
@@ -2282,8 +2623,10 @@ def test_oxpy_parity_oracle_passes():
     """Matching equilibria + a steering re-aim → the oracle passes and reports the
     deltas + followed flag."""
     from tests.automation_harness import assert_oxpy_equilibrium_parity
+
     live = _parity_result()
-    batch = _parity_result(); batch["mutation"] = None
+    batch = _parity_result()
+    batch["mutation"] = None
     r = assert_oxpy_equilibrium_parity(live, batch, tol_nm=0.5, bp_tol=0.02)
     assert r["followed"] is True
     assert r["alignment_delta_nm"] == 0.0
@@ -2292,8 +2635,10 @@ def test_oxpy_parity_oracle_passes():
 def test_oxpy_parity_oracle_fires_on_divergence():
     """Red-test: a live equilibrium far from batch raises the divergence clause."""
     from tests.automation_harness import assert_oxpy_equilibrium_parity
+
     live = _parity_result(align=14.0)
-    batch = _parity_result(align=20.0); batch["mutation"] = None
+    batch = _parity_result(align=20.0)
+    batch["mutation"] = None
     with pytest.raises(AssertionError, match="DIVERGED"):
         assert_oxpy_equilibrium_parity(live, batch, tol_nm=0.5)
 
@@ -2302,8 +2647,10 @@ def test_oxpy_parity_oracle_fires_on_dead_field():
     """Red-test: a field re-aim that does not move the body raises the steering
     clause (the 'dead field vector mutation' guard)."""
     from tests.automation_harness import assert_oxpy_equilibrium_parity
+
     live = _parity_result(mut_followed=False)
-    batch = _parity_result(); batch["mutation"] = None
+    batch = _parity_result()
+    batch["mutation"] = None
     with pytest.raises(AssertionError, match="did NOT steer"):
         assert_oxpy_equilibrium_parity(live, batch)
 
@@ -2311,13 +2658,16 @@ def test_oxpy_parity_oracle_fires_on_dead_field():
 def test_oxpy_parity_oracle_fires_on_low_confidence():
     """Red-test: too few bursts/frames is inconclusive (the confidence gate)."""
     from tests.automation_harness import assert_oxpy_equilibrium_parity
+
     live = _parity_result(conf=1)
-    batch = _parity_result(conf=1); batch["mutation"] = None
+    batch = _parity_result(conf=1)
+    batch["mutation"] = None
     with pytest.raises(AssertionError, match="INCONCLUSIVE"):
         assert_oxpy_equilibrium_parity(live, batch, min_confidence=2)
 
 
 # ── AF-35: assert_primitive_placed (multi-op primitive placement) ─────────────────
+
 
 def _place_hinge_into_empty(anchor=(10, 5)):
     """Build a 2x2 hinge, place it into an empty SQUARE design, return
@@ -2376,7 +2726,9 @@ def test_assert_primitive_placed_fires_on_lost_cluster():
     from tests.automation_harness import assert_primitive_placed
 
     before, after, primitive, anchor = _place_hinge_into_empty()
-    maimed = after.model_copy(update={"cluster_transforms": after.cluster_transforms[:1]})
+    maimed = after.model_copy(
+        update={"cluster_transforms": after.cluster_transforms[:1]}
+    )
     with pytest.raises(AssertionError, match="cluster"):
         assert_primitive_placed(before, maimed, primitive, anchor_cell=anchor)
 
@@ -2388,8 +2740,13 @@ def test_assert_primitive_placed_fires_on_distorted_geometry():
 
     before, after, primitive, anchor = _place_hinge_into_empty()
     h0 = after.helices[-1]
-    bent = h0.model_copy(update={"axis_start": Vec3(x=h0.axis_start.x + 5.0,
-                                                    y=h0.axis_start.y, z=h0.axis_start.z)})
+    bent = h0.model_copy(
+        update={
+            "axis_start": Vec3(
+                x=h0.axis_start.x + 5.0, y=h0.axis_start.y, z=h0.axis_start.z
+            )
+        }
+    )
     maimed = after.model_copy(update={"helices": after.helices[:-1] + [bent]})
     with pytest.raises(AssertionError, match="verbatim"):
         assert_primitive_placed(before, maimed, primitive, anchor_cell=anchor)
@@ -2413,7 +2770,9 @@ def test_assert_primitive_placed_fires_on_mutated_host():
     host_h = next(h for h in after.helices if h.grid_pos == (0, 0))
     tampered = host_h.model_copy(update={"length_bp": host_h.length_bp - 5})
     maimed = after.model_copy(
-        update={"helices": [tampered if h.id == host_h.id else h for h in after.helices]}
+        update={
+            "helices": [tampered if h.id == host_h.id else h for h in after.helices]
+        }
     )
     with pytest.raises(AssertionError, match="additive|mutated"):
         assert_primitive_placed(host_before, maimed, primitive, anchor_cell=anchor)

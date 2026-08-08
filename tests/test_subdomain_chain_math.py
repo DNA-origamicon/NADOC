@@ -171,10 +171,12 @@ def test_theta_phi_combined_matches_explicit_compose():
     q_phi = _quat_from_axis_angle(phi_axis.tolist(), math.radians(phi_deg))
 
     expected = _quat_mul(q_phi, q_theta)
+
     # Normalise both before comparing (helper may emit either sign).
     def _norm(q):
         n = math.sqrt(sum(x * x for x in q))
         return [x / n for x in q]
+
     qn = _norm(q)
     en = _norm(expected)
     # Quaternions q and -q encode the same rotation. Compare both.

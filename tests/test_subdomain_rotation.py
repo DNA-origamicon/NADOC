@@ -62,6 +62,7 @@ def _fresh_design_with_overhang(length_bp: int = 12) -> tuple[Design, str, str]:
     ``(design, overhang_id, sub_domain_id)`` and installs it in
     ``design_state``."""
     from tests.test_sub_domains import _extrude_overhang, _make_6hb
+
     design, ovhg_id = _extrude_overhang(_make_6hb(), length_bp=length_bp)
     design_state.set_design(design)
     spec = next(o for o in design_state.get_or_404().overhangs if o.id == ovhg_id)
@@ -80,15 +81,16 @@ def _overhang_nuc_positions(design: Design, overhang_id: str) -> np.ndarray:
     strand = next(s for s in design.strands if s.id == spec.strand_id)
     domain = next(d for d in strand.domains if d.overhang_id == overhang_id)
     from backend.core.models import Direction
+
     dir_int = 0 if domain.direction == Direction.FORWARD else 1
     lo = min(domain.start_bp, domain.end_bp)
     hi = max(domain.start_bp, domain.end_bp)
     mask = (
-        (arrs['bp_indices'] >= lo) &
-        (arrs['bp_indices'] <= hi) &
-        (arrs['directions'] == dir_int)
+        (arrs["bp_indices"] >= lo)
+        & (arrs["bp_indices"] <= hi)
+        & (arrs["directions"] == dir_int)
     )
-    return arrs['positions'][mask].astype(float).copy()
+    return arrs["positions"][mask].astype(float).copy()
 
 
 # ── 1. Single sub-domain rotation visible in geometry ─────────────────────────
@@ -181,7 +183,10 @@ def test_linker_complement_corotates_with_subdomain() -> None:
     domain via direct design mutation (no need to exercise the full
     overhang-connection pipeline)."""
     from backend.core.models import (
-        Direction, Domain, Strand, StrandType,
+        Direction,
+        Domain,
+        Strand,
+        StrandType,
     )
 
     design, ovhg_id, sd_id = _fresh_design_with_overhang(length_bp=10)
@@ -189,7 +194,11 @@ def test_linker_complement_corotates_with_subdomain() -> None:
     strand = next(s for s in design.strands if s.id == spec.strand_id)
     oh_dom = next(d for d in strand.domains if d.overhang_id == ovhg_id)
 
-    opp_dir = Direction.REVERSE if oh_dom.direction == Direction.FORWARD else Direction.FORWARD
+    opp_dir = (
+        Direction.REVERSE
+        if oh_dom.direction == Direction.FORWARD
+        else Direction.FORWARD
+    )
     linker_dom = Domain(
         helix_id=oh_dom.helix_id,
         start_bp=min(oh_dom.start_bp, oh_dom.end_bp),
@@ -197,10 +206,12 @@ def test_linker_complement_corotates_with_subdomain() -> None:
         direction=opp_dir,
     )
     if opp_dir == Direction.REVERSE:
-        linker_dom = linker_dom.model_copy(update={
-            "start_bp": max(oh_dom.start_bp, oh_dom.end_bp),
-            "end_bp":   min(oh_dom.start_bp, oh_dom.end_bp),
-        })
+        linker_dom = linker_dom.model_copy(
+            update={
+                "start_bp": max(oh_dom.start_bp, oh_dom.end_bp),
+                "end_bp": min(oh_dom.start_bp, oh_dom.end_bp),
+            }
+        )
     linker = Strand(
         id="__test_linker__",
         strand_type=StrandType.LINKER,
@@ -236,7 +247,7 @@ def test_log_entry_shape_and_round_trip() -> None:
     log = design_state.get_or_404().feature_log
     assert len(log) >= 1
     entry = log[-1]
-    assert entry.feature_type == 'overhang_rotation'
+    assert entry.feature_type == "overhang_rotation"
     assert entry.overhang_ids == [ovhg_id]
     assert entry.rotations == [[0.0, 0.0, 0.0, 1.0]]
     assert entry.sub_domain_ids == [sd_id]
@@ -269,8 +280,9 @@ def test_undo_restores_prior_subdomain_angles() -> None:
     # a distinct entry. We force-bump the previous entry's timestamp
     # backwards to avoid actually sleeping in tests.
     import datetime as _dt
+
     log = design_state.get_or_404().feature_log
-    log[-1].__dict__['timestamp'] = (
+    log[-1].__dict__["timestamp"] = (
         _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=10)
     ).isoformat()
 
@@ -289,7 +301,7 @@ def test_undo_restores_prior_subdomain_angles() -> None:
     spec = next(o for o in design_state.get_or_404().overhangs if o.id == ovhg_id)
     sd = next(s for s in spec.sub_domains if s.id == sd_id)
     assert sd.rotation_theta_deg == pytest.approx(10.0)
-    assert sd.rotation_phi_deg   == pytest.approx(20.0)
+    assert sd.rotation_phi_deg == pytest.approx(20.0)
 
 
 # ── 6. Frame endpoint correctness ──────────────────────────────────────────────
@@ -424,9 +436,9 @@ def test_legacy_overhang_rotation_entry_load() -> None:
         labels=[None],
     )
     payload = entry.model_dump()
-    assert payload['sub_domain_ids'] == []
-    assert payload['sub_domain_thetas_deg'] == []
-    assert payload['sub_domain_phis_deg'] == []
+    assert payload["sub_domain_ids"] == []
+    assert payload["sub_domain_thetas_deg"] == []
+    assert payload["sub_domain_phis_deg"] == []
     rebuilt = OverhangRotationLogEntry.model_validate(payload)
     assert rebuilt.sub_domain_ids == []
 
@@ -436,7 +448,7 @@ def test_log_entry_validator_rejects_mismatched_lengths() -> None:
         OverhangRotationLogEntry(
             overhang_ids=["a", "b"],
             rotations=[[0, 0, 0, 1], [0, 0, 0, 1]],
-            sub_domain_ids=["sd1"],   # length 1 != 2
+            sub_domain_ids=["sd1"],  # length 1 != 2
         )
 
 
@@ -446,6 +458,6 @@ def test_log_entry_validator_rejects_invalid_subdomain_slot() -> None:
             overhang_ids=["a"],
             rotations=[[0, 0, 0, 1]],
             sub_domain_ids=["sd1"],
-            sub_domain_thetas_deg=[None],   # missing
+            sub_domain_thetas_deg=[None],  # missing
             sub_domain_phis_deg=[10.0],
         )

@@ -48,7 +48,10 @@ def _live_remote_pod_names() -> "set[str] | None":
     RunPod unreachable) — callers MUST fail-open and leave the job's status untouched then,
     never hide a job we simply couldn't verify."""
     now = _time.monotonic()
-    if _REMOTE_POD_CACHE["names"] is not None and now - _REMOTE_POD_CACHE["t"] < _REMOTE_POD_TTL_S:
+    if (
+        _REMOTE_POD_CACHE["names"] is not None
+        and now - _REMOTE_POD_CACHE["t"] < _REMOTE_POD_TTL_S
+    ):
         return _REMOTE_POD_CACHE["names"]
     key = os.environ.get("RUNPOD_API_KEY")
     if not key:
@@ -91,13 +94,17 @@ def _md_eta_seconds(job, ws: Path) -> Optional[float]:
         if not (0 <= job.current_segment_idx < len(job.segments)):
             return None
         from backend.core.namd_metrics import (
-            benchmark_s_per_step, eta_seconds, live_segment_step,
+            benchmark_s_per_step,
+            eta_seconds,
+            live_segment_step,
         )
 
         pkg = job.package_dir(ws)
         seg = job.segments[job.current_segment_idx]
         remaining = max(0, int(seg.steps) - int(live_segment_step(pkg, seg.name) or 0))
-        remaining += sum(int(s.steps or 0) for s in job.segments[job.current_segment_idx + 1:])
+        remaining += sum(
+            int(s.steps or 0) for s in job.segments[job.current_segment_idx + 1 :]
+        )
         return eta_seconds(remaining, benchmark_s_per_step(pkg / f"{seg.name}.log"))
     except Exception:  # noqa: BLE001 — ETA is advisory; never fail the listing
         return None
@@ -137,41 +144,51 @@ def _collect_active() -> list[dict]:
             # mark terminal so the detector stops claiming a phantom job.  (Alpine untouched.)
             if getattr(j, "execution_target", "local") == "runpod":
                 pod_names = _live_remote_pod_names()
-                if pod_names is not None:                       # None => can't verify → keep
+                if pod_names is not None:  # None => can't verify → keep
                     try:
-                        from backend.core.runpod_supervisor import is_running as _rp_running
+                        from backend.core.runpod_supervisor import (
+                            is_running as _rp_running,
+                        )
+
                         supervised = _rp_running(j.job_id)
                     except Exception:  # noqa: BLE001
                         supervised = False
                     if not supervised and not any(j.job_id in nm for nm in pod_names):
                         try:
                             from backend.core.md_job import MdStatus
+
                             j.status = MdStatus.failed
-                            j.error = ("Remote pod is gone (orphaned launcher) — marked "
-                                       "terminal by the job reconciler.")
+                            j.error = (
+                                "Remote pod is gone (orphaned launcher) — marked "
+                                "terminal by the job reconciler."
+                            )
                             j.save(ws)
                         except Exception:  # noqa: BLE001
                             pass
                         continue
-            out.append({
-                "engine": "md",
-                "job_id": j.job_id,
-                "design_name": j.design_name,
-                "design_source_path": j.design_source_path,
-                "status": j.status.value,
-                # Epoch seconds — lets the frontend break ties by most-recent job
-                # (e.g. defaulting the Simulate engine dropdown to the newest run).
-                "created_at": getattr(j, "created_at", None),
-                # "local" runs on this machine's GPU/CPU; "alpine" runs on the remote
-                # cluster and consumes no local resources — the concurrent-launch guard
-                # ignores remote jobs (they can't contend for the local GPU/disk).
-                "execution_target": getattr(j, "execution_target", "local"),
-                # NAMD always runs GPU-resident here, so a local MD job holds the GPU.
-                # The frontend guard only makes two GPU jobs block each other; a CPU-only
-                # run (a CPU-backend oxDNA job) may launch alongside it.
-                "resource_class": "gpu",
-                "eta_seconds": _md_eta_seconds(j, ws) if j.status.value == "running" else None,
-            })
+            out.append(
+                {
+                    "engine": "md",
+                    "job_id": j.job_id,
+                    "design_name": j.design_name,
+                    "design_source_path": j.design_source_path,
+                    "status": j.status.value,
+                    # Epoch seconds — lets the frontend break ties by most-recent job
+                    # (e.g. defaulting the Simulate engine dropdown to the newest run).
+                    "created_at": getattr(j, "created_at", None),
+                    # "local" runs on this machine's GPU/CPU; "alpine" runs on the remote
+                    # cluster and consumes no local resources — the concurrent-launch guard
+                    # ignores remote jobs (they can't contend for the local GPU/disk).
+                    "execution_target": getattr(j, "execution_target", "local"),
+                    # NAMD always runs GPU-resident here, so a local MD job holds the GPU.
+                    # The frontend guard only makes two GPU jobs block each other; a CPU-only
+                    # run (a CPU-backend oxDNA job) may launch alongside it.
+                    "resource_class": "gpu",
+                    "eta_seconds": _md_eta_seconds(j, ws)
+                    if j.status.value == "running"
+                    else None,
+                }
+            )
     except Exception:  # noqa: BLE001
         logger.exception("active-jobs: failed to scan MD jobs")
 
@@ -187,21 +204,27 @@ def _collect_active() -> list[dict]:
                 pass
             if j.status.value not in _BUSY:
                 continue
-            out.append({
-                "engine": "oxdna",
-                "job_id": j.job_id,
-                "design_name": j.design_name,
-                "design_source_path": j.design_source_path,
-                "status": j.status.value,
-                "created_at": getattr(j, "created_at", None),
-                # oxDNA has no remote backend — every oxDNA job runs locally.
-                "execution_target": "local",
-                # A CUDA-backend oxDNA run holds the GPU; a CPU-backend run (e.g. an
-                # E-field study) uses only spare cores and can share the machine with a
-                # GPU job. The guard keys off this to decide what actually contends.
-                "resource_class": "gpu" if getattr(j, "backend", "CUDA") == "CUDA" else "cpu",
-                "eta_seconds": _oxdna_eta_seconds(j, ws) if j.status.value == "running" else None,
-            })
+            out.append(
+                {
+                    "engine": "oxdna",
+                    "job_id": j.job_id,
+                    "design_name": j.design_name,
+                    "design_source_path": j.design_source_path,
+                    "status": j.status.value,
+                    "created_at": getattr(j, "created_at", None),
+                    # oxDNA has no remote backend — every oxDNA job runs locally.
+                    "execution_target": "local",
+                    # A CUDA-backend oxDNA run holds the GPU; a CPU-backend run (e.g. an
+                    # E-field study) uses only spare cores and can share the machine with a
+                    # GPU job. The guard keys off this to decide what actually contends.
+                    "resource_class": "gpu"
+                    if getattr(j, "backend", "CUDA") == "CUDA"
+                    else "cpu",
+                    "eta_seconds": _oxdna_eta_seconds(j, ws)
+                    if j.status.value == "running"
+                    else None,
+                }
+            )
     except Exception:  # noqa: BLE001
         logger.exception("active-jobs: failed to scan oxDNA jobs")
 
@@ -212,14 +235,46 @@ def _collect_active() -> list[dict]:
     # None has a remote backend (all local) and none reports a live ETA yet, so the
     # welcome spinner shows a bare "running…" for these.
     for engine, mod_job, mod_runner, cls_name, recon_name, res in (
-        ("lammps", "lammps_job", "lammps_runner", "LammpsJob", "reconcile_lammps_status", "cpu"),
-        ("mrdna",  "mrdna_job",  "mrdna_runner",  "MrdnaJob",  "reconcile_mrdna_status",  "gpu"),
-        ("cando",  "cando_job",  "cando_runner",  "CandoJob",  "reconcile_cando_status",  "cpu"),
-        ("snupi",  "snupi_job",  "snupi_runner",  "SnupiJob",  "reconcile_snupi_status",  "cpu"),
+        (
+            "lammps",
+            "lammps_job",
+            "lammps_runner",
+            "LammpsJob",
+            "reconcile_lammps_status",
+            "cpu",
+        ),
+        (
+            "mrdna",
+            "mrdna_job",
+            "mrdna_runner",
+            "MrdnaJob",
+            "reconcile_mrdna_status",
+            "gpu",
+        ),
+        (
+            "cando",
+            "cando_job",
+            "cando_runner",
+            "CandoJob",
+            "reconcile_cando_status",
+            "cpu",
+        ),
+        (
+            "snupi",
+            "snupi_job",
+            "snupi_runner",
+            "SnupiJob",
+            "reconcile_snupi_status",
+            "cpu",
+        ),
     ):
         try:
-            JobCls = getattr(importlib.import_module(f"backend.core.{mod_job}"), cls_name)
-            reconcile = getattr(importlib.import_module(f"backend.core.{mod_runner}"), recon_name)
+            JobCls = getattr(
+                importlib.import_module(f"backend.core.{mod_job}"), cls_name
+            )
+            reconcile = getattr(
+                importlib.import_module(f"backend.core.{mod_runner}"), recon_name
+            )
             for j in JobCls.list_jobs(ws):
                 try:
                     j = reconcile(j, ws)
@@ -227,17 +282,19 @@ def _collect_active() -> list[dict]:
                     pass
                 if j.status.value not in _BUSY:
                     continue
-                out.append({
-                    "engine": engine,
-                    "job_id": j.job_id,
-                    "design_name": j.design_name,
-                    "design_source_path": j.design_source_path,
-                    "status": j.status.value,
-                    "created_at": getattr(j, "created_at", None),
-                    "execution_target": "local",
-                    "resource_class": res,
-                    "eta_seconds": None,
-                })
+                out.append(
+                    {
+                        "engine": engine,
+                        "job_id": j.job_id,
+                        "design_name": j.design_name,
+                        "design_source_path": j.design_source_path,
+                        "status": j.status.value,
+                        "created_at": getattr(j, "created_at", None),
+                        "execution_target": "local",
+                        "resource_class": res,
+                        "eta_seconds": None,
+                    }
+                )
         except Exception:  # noqa: BLE001
             logger.exception("active-jobs: failed to scan %s jobs", engine)
 

@@ -165,7 +165,8 @@ def validate_pipeline(pipeline: MdPipeline) -> None:
             raise ValueError(f"stage {i} has no protocol")
         if st.run_target not in _VALID_RUN_TARGETS:
             raise ValueError(
-                f"stage {i} run_target {st.run_target!r} not in {_VALID_RUN_TARGETS}")
+                f"stage {i} run_target {st.run_target!r} not in {_VALID_RUN_TARGETS}"
+            )
 
 
 def build_pipeline_plan(
@@ -203,25 +204,27 @@ def build_pipeline_plan(
             parent_engine = prev.engine
             start_checkpoint = stage_output_ref(stage_id_for(i - 1))
         cross_engine = parent_engine is not None and parent_engine != st.engine
-        plans.append(StagePlan(
-            index=i,
-            stage_id=stage_id,
-            engine=st.engine,
-            protocol=st.protocol,
-            parent_job_id=parent_job_id,
-            parent_engine=parent_engine,
-            run_kind="production",
-            seed=seeds[i],
-            start_checkpoint=start_checkpoint,
-            forces=st.forces(),
-            run_target=st.run_target,
-            cluster_name=st.cluster_name,
-            length_ns=st.length_ns,
-            steps=st.steps,
-            label=st.label,
-            cross_engine=cross_engine,
-            design_source_path=pipeline.design_source_path,
-        ))
+        plans.append(
+            StagePlan(
+                index=i,
+                stage_id=stage_id,
+                engine=st.engine,
+                protocol=st.protocol,
+                parent_job_id=parent_job_id,
+                parent_engine=parent_engine,
+                run_kind="production",
+                seed=seeds[i],
+                start_checkpoint=start_checkpoint,
+                forces=st.forces(),
+                run_target=st.run_target,
+                cluster_name=st.cluster_name,
+                length_ns=st.length_ns,
+                steps=st.steps,
+                label=st.label,
+                cross_engine=cross_engine,
+                design_source_path=pipeline.design_source_path,
+            )
+        )
     return plans
 
 
@@ -288,14 +291,17 @@ def cross_engine_seed(
     if parent_engine not in CROSS_ENGINE_SEED_FIELD:
         raise ValueError(
             f"cannot seed a chain stage from engine {parent_engine!r}: only "
-            f"{sorted(CROSS_ENGINE_SEED_FIELD)} can hand relaxed coordinates to another engine")
+            f"{sorted(CROSS_ENGINE_SEED_FIELD)} can hand relaxed coordinates to another engine"
+        )
     if plan.engine != CROSS_ENGINE_SINK:
         raise ValueError(
             f"cross-engine seeding into {plan.engine!r} is not supported (only "
-            f"{CROSS_ENGINE_SINK!r} can rebuild an atomistic model from coarse coordinates)")
+            f"{CROSS_ENGINE_SINK!r} can rebuild an atomistic model from coarse coordinates)"
+        )
     if not parent_job_id:
         raise ValueError(
-            f"cross-engine stage {plan.index} has no resolved parent job to seed from")
+            f"cross-engine stage {plan.index} has no resolved parent job to seed from"
+        )
     return CrossEngineSeed(
         seed_engine=parent_engine,
         seed_job_id=parent_job_id,

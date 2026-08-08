@@ -19,6 +19,7 @@ Designed so failures point at exactly which path is broken — if (1) passes
 but (2) and (3) fail, ``_sync_revolute_values_for_instances`` isn't running;
 if (1) fails too, ``_propagate_gear_relations_from`` itself is broken.
 """
+
 from __future__ import annotations
 
 import math
@@ -43,6 +44,7 @@ client = TestClient(app)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture(autouse=True)
 def _reset():
@@ -105,26 +107,46 @@ def _two_revolute_two_instance_assembly() -> tuple[dict, str]:
     group-transform path can be exercised. Each group has exactly one member
     so the group's rigid transform == the instance's transform delta.
     """
-    inst_a = PartInstance(name="FixedA", source=PartSourceInline(design=Design()),
-                          transform=_identity_mat4(), fixed=True)
-    inst_b = PartInstance(name="WheelB", source=PartSourceInline(design=Design()),
-                          transform=_translation_mat4(5.0),
-                          base_transform=_translation_mat4(5.0))
-    inst_c = PartInstance(name="FixedC", source=PartSourceInline(design=Design()),
-                          transform=_translation_mat4(20.0), fixed=True)
-    inst_d = PartInstance(name="WheelD", source=PartSourceInline(design=Design()),
-                          transform=_translation_mat4(25.0),
-                          base_transform=_translation_mat4(25.0))
+    inst_a = PartInstance(
+        name="FixedA",
+        source=PartSourceInline(design=Design()),
+        transform=_identity_mat4(),
+        fixed=True,
+    )
+    inst_b = PartInstance(
+        name="WheelB",
+        source=PartSourceInline(design=Design()),
+        transform=_translation_mat4(5.0),
+        base_transform=_translation_mat4(5.0),
+    )
+    inst_c = PartInstance(
+        name="FixedC",
+        source=PartSourceInline(design=Design()),
+        transform=_translation_mat4(20.0),
+        fixed=True,
+    )
+    inst_d = PartInstance(
+        name="WheelD",
+        source=PartSourceInline(design=Design()),
+        transform=_translation_mat4(25.0),
+        base_transform=_translation_mat4(25.0),
+    )
     joint_ab = AssemblyJoint(
-        name="Hinge_AB", joint_type="revolute",
-        instance_a_id=inst_a.id, instance_b_id=inst_b.id,
-        axis_origin=[5.0, 0.0, 0.0], axis_direction=[0.0, 0.0, 1.0],
+        name="Hinge_AB",
+        joint_type="revolute",
+        instance_a_id=inst_a.id,
+        instance_b_id=inst_b.id,
+        axis_origin=[5.0, 0.0, 0.0],
+        axis_direction=[0.0, 0.0, 1.0],
         current_value=0.0,
     )
     joint_cd = AssemblyJoint(
-        name="Hinge_CD", joint_type="revolute",
-        instance_a_id=inst_c.id, instance_b_id=inst_d.id,
-        axis_origin=[25.0, 0.0, 0.0], axis_direction=[0.0, 0.0, 1.0],
+        name="Hinge_CD",
+        joint_type="revolute",
+        instance_a_id=inst_c.id,
+        instance_b_id=inst_d.id,
+        axis_origin=[25.0, 0.0, 0.0],
+        axis_direction=[0.0, 0.0, 1.0],
         current_value=0.0,
     )
     group_b = PartGroup(name="GroupB", instance_ids=[inst_b.id])
@@ -136,22 +158,30 @@ def _two_revolute_two_instance_assembly() -> tuple[dict, str]:
     )
     assembly_state.set_assembly(a)
     return {
-        "inst_a": inst_a.id, "inst_b": inst_b.id,
-        "inst_c": inst_c.id, "inst_d": inst_d.id,
-        "joint_ab": joint_ab.id, "joint_cd": joint_cd.id,
-        "group_b": group_b.id, "group_d": group_d.id,
+        "inst_a": inst_a.id,
+        "inst_b": inst_b.id,
+        "inst_c": inst_c.id,
+        "inst_d": inst_d.id,
+        "joint_ab": joint_ab.id,
+        "joint_cd": joint_cd.id,
+        "group_b": group_b.id,
+        "group_d": group_d.id,
     }, a.id
 
 
-def _create_gear_relation(joint_a_id: str, joint_b_id: str, *, ratio: float = 1.0,
-                          invert: bool = False) -> str:
-    r = client.post("/api/assembly/gear-relations", json={
-        "joint_a_id": joint_a_id,
-        "joint_b_id": joint_b_id,
-        "ratio": ratio,
-        "invert": invert,
-        "capture_anchors_from_current": True,
-    })
+def _create_gear_relation(
+    joint_a_id: str, joint_b_id: str, *, ratio: float = 1.0, invert: bool = False
+) -> str:
+    r = client.post(
+        "/api/assembly/gear-relations",
+        json={
+            "joint_a_id": joint_a_id,
+            "joint_b_id": joint_b_id,
+            "ratio": ratio,
+            "invert": invert,
+            "capture_anchors_from_current": True,
+        },
+    )
     assert r.status_code == 201, r.text
     body = r.json()
     return body["assembly"]["gear_relations"][-1]["id"]
@@ -161,7 +191,8 @@ def _read_joint(joint_id: str) -> dict:
     a = assembly_state.get_or_404()
     j = next(j for j in a.joints if j.id == joint_id)
     return {
-        "id": j.id, "current_value": j.current_value,
+        "id": j.id,
+        "current_value": j.current_value,
         "axis_origin": list(j.axis_origin),
         "axis_direction": list(j.axis_direction),
     }
@@ -176,15 +207,18 @@ def _instance_transform(instance_id: str) -> np.ndarray:
 def _rotate_about_z(angle: float, ox: float = 0.0, oy: float = 0.0) -> np.ndarray:
     c, s = math.cos(angle), math.sin(angle)
     # World rotation about Z through (ox, oy, 0): T(o) @ Rz @ T(-o)
-    return np.array([
-        [c, -s, 0, ox - c * ox + s * oy],
-        [s,  c, 0, oy - s * ox - c * oy],
-        [0,  0, 1, 0],
-        [0,  0, 0, 1],
-    ])
+    return np.array(
+        [
+            [c, -s, 0, ox - c * ox + s * oy],
+            [s, c, 0, oy - s * ox - c * oy],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+        ]
+    )
 
 
 # ── Path 1: ring-drag (PATCH /assembly/joints/{id}) ──────────────────────────
+
 
 class TestGearViaPatchJoint:
     """Driving the driver joint's current_value directly should always drive
@@ -192,21 +226,28 @@ class TestGearViaPatchJoint:
     uses for silent patches as well.
     """
 
-    @pytest.mark.parametrize("ratio,invert,angle", [
-        (1.0, False, math.pi / 4),
-        (2.0, False, math.pi / 3),
-        (0.5, False, math.pi / 6),
-        (1.0, True,  math.pi / 4),
-        (3.0, True,  math.pi / 5),
-    ])
+    @pytest.mark.parametrize(
+        "ratio,invert,angle",
+        [
+            (1.0, False, math.pi / 4),
+            (2.0, False, math.pi / 3),
+            (0.5, False, math.pi / 6),
+            (1.0, True, math.pi / 4),
+            (3.0, True, math.pi / 5),
+        ],
+    )
     def test_driven_follows_via_patch_joint(self, ratio, invert, angle):
         meta, _aid = _two_revolute_two_instance_assembly()
-        _create_gear_relation(meta["joint_ab"], meta["joint_cd"],
-                              ratio=ratio, invert=invert)
+        _create_gear_relation(
+            meta["joint_ab"], meta["joint_cd"], ratio=ratio, invert=invert
+        )
 
-        r = client.patch(f"/api/assembly/joints/{meta['joint_ab']}", json={
-            "current_value": angle,
-        })
+        r = client.patch(
+            f"/api/assembly/joints/{meta['joint_ab']}",
+            json={
+                "current_value": angle,
+            },
+        )
         assert r.status_code == 200, r.text
 
         sign = -1.0 if invert else 1.0
@@ -223,15 +264,23 @@ class TestGearViaPatchJoint:
         meta, _aid = _two_revolute_two_instance_assembly()
         _create_gear_relation(meta["joint_ab"], meta["joint_cd"], ratio=1.0)
 
-        client.patch(f"/api/assembly/joints/{meta['joint_ab']}", json={
-            "current_value": math.pi / 4,
-        })
+        client.patch(
+            f"/api/assembly/joints/{meta['joint_ab']}",
+            json={
+                "current_value": math.pi / 4,
+            },
+        )
         T = _instance_transform(meta["inst_d"])
         # Driven joint's axis runs through (25, 0, 0). Apply Rz(π/4) about
         # that point to the original transform T(25, 0, 0).
-        expected = _rotate_about_z(math.pi / 4, ox=25.0, oy=0.0) @ np.array([
-            [1, 0, 0, 25], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1],
-        ])
+        expected = _rotate_about_z(math.pi / 4, ox=25.0, oy=0.0) @ np.array(
+            [
+                [1, 0, 0, 25],
+                [0, 1, 0, 0],
+                [0, 0, 1, 0],
+                [0, 0, 0, 1],
+            ]
+        )
         assert np.allclose(T, expected, atol=1e-6), (
             f"driven instance transform mismatch:\n{T}\nexpected:\n{expected}"
         )
@@ -240,9 +289,12 @@ class TestGearViaPatchJoint:
         meta, _aid = _two_revolute_two_instance_assembly()
         _create_gear_relation(meta["joint_ab"], meta["joint_cd"], ratio=5.0)
 
-        r = client.patch(f"/api/assembly/joints/{meta['joint_ab']}", json={
-            "current_value": math.pi,
-        })
+        r = client.patch(
+            f"/api/assembly/joints/{meta['joint_ab']}",
+            json={
+                "current_value": math.pi,
+            },
+        )
         assert r.status_code == 200, r.text
 
         got_driven = _read_joint(meta["joint_cd"])["current_value"]
@@ -252,15 +304,21 @@ class TestGearViaPatchJoint:
         meta, _aid = _two_revolute_two_instance_assembly()
         _create_gear_relation(meta["joint_ab"], meta["joint_cd"], ratio=5.0)
 
-        r = client.patch(f"/api/assembly/joints/{meta['joint_cd']}", json={
-            "min_limit": -1.0,
-            "max_limit": 1.0,
-        })
+        r = client.patch(
+            f"/api/assembly/joints/{meta['joint_cd']}",
+            json={
+                "min_limit": -1.0,
+                "max_limit": 1.0,
+            },
+        )
         assert r.status_code == 200, r.text
 
-        r = client.patch(f"/api/assembly/joints/{meta['joint_ab']}", json={
-            "current_value": math.pi,
-        })
+        r = client.patch(
+            f"/api/assembly/joints/{meta['joint_ab']}",
+            json={
+                "current_value": math.pi,
+            },
+        )
         assert r.status_code == 200, r.text
 
         got_driver = _read_joint(meta["joint_ab"])["current_value"]
@@ -270,6 +328,7 @@ class TestGearViaPatchJoint:
 
 
 # ── Path 2: instance gizmo (PATCH /assembly/instances/{id}) ──────────────────
+
 
 class TestGearViaPatchInstance:
     """Driving the driver-side instance via a direct transform PATCH (which
@@ -289,9 +348,12 @@ class TestGearViaPatchInstance:
         base = np.array([[1, 0, 0, 5], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
         new_T = R @ base
 
-        r = client.patch(f"/api/assembly/instances/{meta['inst_b']}", json={
-            "transform": {"values": [float(v) for v in new_T.flatten()]},
-        })
+        r = client.patch(
+            f"/api/assembly/instances/{meta['inst_b']}",
+            json={
+                "transform": {"values": [float(v) for v in new_T.flatten()]},
+            },
+        )
         assert r.status_code == 200, r.text
 
         got_driver = _read_joint(meta["joint_ab"])["current_value"]
@@ -310,6 +372,7 @@ class TestGearViaPatchInstance:
 
 # ── Path 3: group gizmo (POST /assembly/groups/{id}/transform) ───────────────
 
+
 class TestGearViaGroupTransform:
     """Rotating the driver-side group via the group-transform endpoint must
     drive the gear-coupled side — backend has to detect that the moved group
@@ -324,9 +387,12 @@ class TestGearViaGroupTransform:
         angle = math.pi / 4
         delta = _rotate_about_z(angle, ox=5.0, oy=0.0)
 
-        r = client.post(f"/api/assembly/groups/{meta['group_b']}/transform", json={
-            "matrix": [float(v) for v in delta.flatten()],
-        })
+        r = client.post(
+            f"/api/assembly/groups/{meta['group_b']}/transform",
+            json={
+                "matrix": [float(v) for v in delta.flatten()],
+            },
+        )
         assert r.status_code == 200, r.text
 
         got_driver = _read_joint(meta["joint_ab"])["current_value"]
@@ -344,14 +410,18 @@ class TestGearViaGroupTransform:
         """Same as above but with a non-unity ratio and the inverted flag,
         so we know the gear math runs (not just an accidental identity)."""
         meta, _aid = _two_revolute_two_instance_assembly()
-        _create_gear_relation(meta["joint_ab"], meta["joint_cd"],
-                              ratio=1.5, invert=True)
+        _create_gear_relation(
+            meta["joint_ab"], meta["joint_cd"], ratio=1.5, invert=True
+        )
 
         angle = math.pi / 5
         delta = _rotate_about_z(angle, ox=5.0, oy=0.0)
-        client.post(f"/api/assembly/groups/{meta['group_b']}/transform", json={
-            "matrix": [float(v) for v in delta.flatten()],
-        })
+        client.post(
+            f"/api/assembly/groups/{meta['group_b']}/transform",
+            json={
+                "matrix": [float(v) for v in delta.flatten()],
+            },
+        )
 
         got_driver = _read_joint(meta["joint_ab"])["current_value"]
         got_driven = _read_joint(meta["joint_cd"])["current_value"]
@@ -364,6 +434,7 @@ class TestGearViaGroupTransform:
 
 # ── Symmetry / direction comparison: part vs group rotation ─────────────────
 
+
 class TestPartVsGroupRotationParity:
     """Rotating a part directly (via instance PATCH) and rotating its
     one-member group (via group transform) should produce identical gear
@@ -375,24 +446,32 @@ class TestPartVsGroupRotationParity:
     def test_instance_path_and_group_path_agree(self, ratio, invert):
         # Path A: instance PATCH
         meta_inst, _ = _two_revolute_two_instance_assembly()
-        _create_gear_relation(meta_inst["joint_ab"], meta_inst["joint_cd"],
-                              ratio=ratio, invert=invert)
+        _create_gear_relation(
+            meta_inst["joint_ab"], meta_inst["joint_cd"], ratio=ratio, invert=invert
+        )
         angle = math.pi / 6
         R = _rotate_about_z(angle, ox=5.0, oy=0.0)
         base = np.array([[1, 0, 0, 5], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
         new_T = R @ base
-        client.patch(f"/api/assembly/instances/{meta_inst['inst_b']}", json={
-            "transform": {"values": [float(v) for v in new_T.flatten()]},
-        })
+        client.patch(
+            f"/api/assembly/instances/{meta_inst['inst_b']}",
+            json={
+                "transform": {"values": [float(v) for v in new_T.flatten()]},
+            },
+        )
         driven_via_instance = _read_joint(meta_inst["joint_cd"])["current_value"]
 
         # Path B: group PATCH
         meta_grp, _ = _two_revolute_two_instance_assembly()
-        _create_gear_relation(meta_grp["joint_ab"], meta_grp["joint_cd"],
-                              ratio=ratio, invert=invert)
-        client.post(f"/api/assembly/groups/{meta_grp['group_b']}/transform", json={
-            "matrix": [float(v) for v in R.flatten()],
-        })
+        _create_gear_relation(
+            meta_grp["joint_ab"], meta_grp["joint_cd"], ratio=ratio, invert=invert
+        )
+        client.post(
+            f"/api/assembly/groups/{meta_grp['group_b']}/transform",
+            json={
+                "matrix": [float(v) for v in R.flatten()],
+            },
+        )
         driven_via_group = _read_joint(meta_grp["joint_cd"])["current_value"]
 
         assert driven_via_instance == pytest.approx(driven_via_group, abs=1e-4), (
@@ -403,6 +482,7 @@ class TestPartVsGroupRotationParity:
 
 # ── Bidirectional propagation ───────────────────────────────────────────────
 
+
 class TestGearBidirectional:
     """Spinning the DRIVEN side of a gear pair (joint_b) must drive the
     DRIVER side (joint_a) via the inverse formula
@@ -411,22 +491,29 @@ class TestGearBidirectional:
     gold ring on either coupled wheel.
     """
 
-    @pytest.mark.parametrize("ratio,invert,angle", [
-        (1.0, False, math.pi / 4),
-        (2.0, False, math.pi / 3),
-        (0.5, False, math.pi / 6),
-        (1.0, True,  math.pi / 4),
-        (3.0, True,  math.pi / 5),
-    ])
+    @pytest.mark.parametrize(
+        "ratio,invert,angle",
+        [
+            (1.0, False, math.pi / 4),
+            (2.0, False, math.pi / 3),
+            (0.5, False, math.pi / 6),
+            (1.0, True, math.pi / 4),
+            (3.0, True, math.pi / 5),
+        ],
+    )
     def test_driver_follows_when_driven_patched(self, ratio, invert, angle):
         meta, _aid = _two_revolute_two_instance_assembly()
-        _create_gear_relation(meta["joint_ab"], meta["joint_cd"],
-                              ratio=ratio, invert=invert)
+        _create_gear_relation(
+            meta["joint_ab"], meta["joint_cd"], ratio=ratio, invert=invert
+        )
 
         # Drive the DRIVEN side (joint_cd, since joint_a=joint_ab in the relation).
-        r = client.patch(f"/api/assembly/joints/{meta['joint_cd']}", json={
-            "current_value": angle,
-        })
+        r = client.patch(
+            f"/api/assembly/joints/{meta['joint_cd']}",
+            json={
+                "current_value": angle,
+            },
+        )
         assert r.status_code == 200, r.text
 
         sign = -1.0 if invert else 1.0
@@ -448,14 +535,18 @@ class TestGearBidirectional:
         """
         meta, _aid = _two_revolute_two_instance_assembly()
         # joint_ab = DRIVER, joint_cd = DRIVEN, ratio 3.0
-        _create_gear_relation(meta["joint_ab"], meta["joint_cd"],
-                              ratio=3.0, invert=False)
+        _create_gear_relation(
+            meta["joint_ab"], meta["joint_cd"], ratio=3.0, invert=False
+        )
 
         # Drive DRIVEN side by 90°
         angle_driven = math.pi / 2
-        client.patch(f"/api/assembly/joints/{meta['joint_cd']}", json={
-            "current_value": angle_driven,
-        })
+        client.patch(
+            f"/api/assembly/joints/{meta['joint_cd']}",
+            json={
+                "current_value": angle_driven,
+            },
+        )
         got_driven = _read_joint(meta["joint_cd"])["current_value"]
         got_driver = _read_joint(meta["joint_ab"])["current_value"]
         expected_driver = angle_driven / 3.0  # ~0.5236 rad ≈ 30°
@@ -472,32 +563,70 @@ class TestGearBidirectional:
         inverse(ratio_1) = 0.5x, joint_ef follows at ratio_2 = 0.5x.
         """
         # Build three-joint assembly: A→B, C→D, E→F.
-        inst_a = PartInstance(name="A", source=PartSourceInline(design=Design()),
-                              transform=_identity_mat4(), fixed=True)
-        inst_b = PartInstance(name="B", source=PartSourceInline(design=Design()),
-                              transform=_translation_mat4(5.0),
-                              base_transform=_translation_mat4(5.0))
-        inst_c = PartInstance(name="C", source=PartSourceInline(design=Design()),
-                              transform=_translation_mat4(20.0), fixed=True)
-        inst_d = PartInstance(name="D", source=PartSourceInline(design=Design()),
-                              transform=_translation_mat4(25.0),
-                              base_transform=_translation_mat4(25.0))
-        inst_e = PartInstance(name="E", source=PartSourceInline(design=Design()),
-                              transform=_translation_mat4(40.0), fixed=True)
-        inst_f = PartInstance(name="F", source=PartSourceInline(design=Design()),
-                              transform=_translation_mat4(45.0),
-                              base_transform=_translation_mat4(45.0))
-        j_ab = AssemblyJoint(name="J_AB", joint_type="revolute",
-                              instance_a_id=inst_a.id, instance_b_id=inst_b.id,
-                              axis_origin=[5.0, 0.0, 0.0], axis_direction=[0, 0, 1])
-        j_cd = AssemblyJoint(name="J_CD", joint_type="revolute",
-                              instance_a_id=inst_c.id, instance_b_id=inst_d.id,
-                              axis_origin=[25.0, 0.0, 0.0], axis_direction=[0, 0, 1])
-        j_ef = AssemblyJoint(name="J_EF", joint_type="revolute",
-                              instance_a_id=inst_e.id, instance_b_id=inst_f.id,
-                              axis_origin=[45.0, 0.0, 0.0], axis_direction=[0, 0, 1])
-        a = Assembly(instances=[inst_a, inst_b, inst_c, inst_d, inst_e, inst_f],
-                     joints=[j_ab, j_cd, j_ef])
+        inst_a = PartInstance(
+            name="A",
+            source=PartSourceInline(design=Design()),
+            transform=_identity_mat4(),
+            fixed=True,
+        )
+        inst_b = PartInstance(
+            name="B",
+            source=PartSourceInline(design=Design()),
+            transform=_translation_mat4(5.0),
+            base_transform=_translation_mat4(5.0),
+        )
+        inst_c = PartInstance(
+            name="C",
+            source=PartSourceInline(design=Design()),
+            transform=_translation_mat4(20.0),
+            fixed=True,
+        )
+        inst_d = PartInstance(
+            name="D",
+            source=PartSourceInline(design=Design()),
+            transform=_translation_mat4(25.0),
+            base_transform=_translation_mat4(25.0),
+        )
+        inst_e = PartInstance(
+            name="E",
+            source=PartSourceInline(design=Design()),
+            transform=_translation_mat4(40.0),
+            fixed=True,
+        )
+        inst_f = PartInstance(
+            name="F",
+            source=PartSourceInline(design=Design()),
+            transform=_translation_mat4(45.0),
+            base_transform=_translation_mat4(45.0),
+        )
+        j_ab = AssemblyJoint(
+            name="J_AB",
+            joint_type="revolute",
+            instance_a_id=inst_a.id,
+            instance_b_id=inst_b.id,
+            axis_origin=[5.0, 0.0, 0.0],
+            axis_direction=[0, 0, 1],
+        )
+        j_cd = AssemblyJoint(
+            name="J_CD",
+            joint_type="revolute",
+            instance_a_id=inst_c.id,
+            instance_b_id=inst_d.id,
+            axis_origin=[25.0, 0.0, 0.0],
+            axis_direction=[0, 0, 1],
+        )
+        j_ef = AssemblyJoint(
+            name="J_EF",
+            joint_type="revolute",
+            instance_a_id=inst_e.id,
+            instance_b_id=inst_f.id,
+            axis_origin=[45.0, 0.0, 0.0],
+            axis_direction=[0, 0, 1],
+        )
+        a = Assembly(
+            instances=[inst_a, inst_b, inst_c, inst_d, inst_e, inst_f],
+            joints=[j_ab, j_cd, j_ef],
+        )
         assembly_state.set_assembly(a)
 
         # Relations: AB -2.0-> CD, CD -0.5-> EF
@@ -506,9 +635,12 @@ class TestGearBidirectional:
 
         # Drive the middle joint by π/4
         angle = math.pi / 4
-        client.patch(f"/api/assembly/joints/{j_cd.id}", json={
-            "current_value": angle,
-        })
+        client.patch(
+            f"/api/assembly/joints/{j_cd.id}",
+            json={
+                "current_value": angle,
+            },
+        )
 
         got_ab = _read_joint(j_ab.id)["current_value"]
         got_cd = _read_joint(j_cd.id)["current_value"]
@@ -528,6 +660,7 @@ class TestGearBidirectional:
 
 # ── Parent-moved (axle-as-child) regression ─────────────────────────────────
 
+
 class TestGearParentMovedTopology:
     """Regression for ``Big_wheel_base.nass``: revolute joint is authored
     "backwards" — the wheel base is ``instance_a`` (the moving parent) and a
@@ -540,34 +673,52 @@ class TestGearParentMovedTopology:
     def _build_big_wheel_assembly(self):
         # Big wheel = 4 wheel_base segments, all rigid-joined → Group 1.
         big_wheel_members = [
-            PartInstance(name=f"wheel_base +{i}", source=PartSourceInline(design=Design()),
-                         transform=_translation_mat4(i * 1.0))
+            PartInstance(
+                name=f"wheel_base +{i}",
+                source=PartSourceInline(design=Design()),
+                transform=_translation_mat4(i * 1.0),
+            )
             for i in range(4)
         ]
         # Axle: fixed, at the centre of the big wheel.
-        axle = PartInstance(name="Axle", source=PartSourceInline(design=Design()),
-                            transform=_translation_mat4(0.0), fixed=True,
-                            base_transform=_translation_mat4(0.0))
+        axle = PartInstance(
+            name="Axle",
+            source=PartSourceInline(design=Design()),
+            transform=_translation_mat4(0.0),
+            fixed=True,
+            base_transform=_translation_mat4(0.0),
+        )
         # Small gear: floats next to the axle, will follow the gear.
-        small_gear = PartInstance(name="small gear", source=PartSourceInline(design=Design()),
-                                  transform=_translation_mat4(3.0),
-                                  base_transform=_translation_mat4(3.0))
+        small_gear = PartInstance(
+            name="small gear",
+            source=PartSourceInline(design=Design()),
+            transform=_translation_mat4(3.0),
+            base_transform=_translation_mat4(3.0),
+        )
         # Joint 1 (BACKWARD authoring): big_wheel → axle (axle is the child!)
         joint_big = AssemblyJoint(
-            name="Big_wheel_to_axle", joint_type="revolute",
-            instance_a_id=big_wheel_members[0].id, instance_b_id=axle.id,
-            axis_origin=[0.0, 0.0, 0.0], axis_direction=[0.0, 0.0, 1.0],
+            name="Big_wheel_to_axle",
+            joint_type="revolute",
+            instance_a_id=big_wheel_members[0].id,
+            instance_b_id=axle.id,
+            axis_origin=[0.0, 0.0, 0.0],
+            axis_direction=[0.0, 0.0, 1.0],
             current_value=0.0,
         )
         # Joint 2: axle → small_gear (normal authoring)
         joint_small = AssemblyJoint(
-            name="Axle_to_small_gear", joint_type="revolute",
-            instance_a_id=axle.id, instance_b_id=small_gear.id,
-            axis_origin=[3.0, 0.0, 0.0], axis_direction=[0.0, 0.0, 1.0],
+            name="Axle_to_small_gear",
+            joint_type="revolute",
+            instance_a_id=axle.id,
+            instance_b_id=small_gear.id,
+            axis_origin=[3.0, 0.0, 0.0],
+            axis_direction=[0.0, 0.0, 1.0],
             current_value=0.0,
         )
         # Group 1 wraps the big wheel.
-        group_1 = PartGroup(name="Group 1", instance_ids=[m.id for m in big_wheel_members])
+        group_1 = PartGroup(
+            name="Group 1", instance_ids=[m.id for m in big_wheel_members]
+        )
         a = Assembly(
             instances=[*big_wheel_members, axle, small_gear],
             joints=[joint_big, joint_small],
@@ -588,15 +739,19 @@ class TestGearParentMovedTopology:
         # Gear: driver = joint_small, driven = joint_big, ratio = 3.0
         # ⇒ inverse direction (driven joint_big moves → driver joint_small follows
         # at θ_small = θ_big / 3)
-        _create_gear_relation(meta["joint_small_id"], meta["joint_big_id"],
-                              ratio=3.0, invert=False)
+        _create_gear_relation(
+            meta["joint_small_id"], meta["joint_big_id"], ratio=3.0, invert=False
+        )
 
         # Rotate Group 1 by π/2 about Z (the joint axis).
         angle = math.pi / 2
         delta = _rotate_about_z(angle, ox=0.0, oy=0.0)
-        r = client.post(f"/api/assembly/groups/{meta['group_1_id']}/transform", json={
-            "matrix": [float(v) for v in delta.flatten()],
-        })
+        r = client.post(
+            f"/api/assembly/groups/{meta['group_1_id']}/transform",
+            json={
+                "matrix": [float(v) for v in delta.flatten()],
+            },
+        )
         assert r.status_code == 200, r.text
 
         # joint_big (driven side): current_value should be -π/2 (child angle
@@ -618,35 +773,44 @@ class TestGearParentMovedTopology:
 
     def test_rotating_small_gear_drives_big_wheel_endpoint_not_fixed_axle(self):
         meta = self._build_big_wheel_assembly()
-        r = client.post("/api/assembly/gear-relations", json={
-            "joint_a_id": meta["joint_small_id"],
-            "joint_b_id": meta["joint_big_id"],
-            "endpoint_a_instance_id": meta["small_gear_id"],
-            "endpoint_a_side": "b",
-            "endpoint_b_instance_id": meta["members"][0],
-            "endpoint_b_side": "a",
-            "ratio": 3.0,
-            "invert": False,
-            "capture_anchors_from_current": True,
-        })
+        r = client.post(
+            "/api/assembly/gear-relations",
+            json={
+                "joint_a_id": meta["joint_small_id"],
+                "joint_b_id": meta["joint_big_id"],
+                "endpoint_a_instance_id": meta["small_gear_id"],
+                "endpoint_a_side": "b",
+                "endpoint_b_instance_id": meta["members"][0],
+                "endpoint_b_side": "a",
+                "ratio": 3.0,
+                "invert": False,
+                "capture_anchors_from_current": True,
+            },
+        )
         assert r.status_code == 201, r.text
 
         axle_before = _instance_transform(meta["axle_id"])
         wheel_before = _instance_transform(meta["members"][0])
         angle = math.pi / 8
-        r = client.patch(f"/api/assembly/joints/{meta['joint_small_id']}", json={
-            "current_value": angle,
-        })
+        r = client.patch(
+            f"/api/assembly/joints/{meta['joint_small_id']}",
+            json={
+                "current_value": angle,
+            },
+        )
         assert r.status_code == 200, r.text
 
         axle_after = _instance_transform(meta["axle_id"])
         wheel_after = _instance_transform(meta["members"][0])
         assert axle_after == pytest.approx(axle_before, abs=1e-8)
         assert not np.allclose(wheel_after, wheel_before)
-        assert _read_joint(meta["joint_big_id"])["current_value"] == pytest.approx(3.0 * angle, abs=1e-6)
+        assert _read_joint(meta["joint_big_id"])["current_value"] == pytest.approx(
+            3.0 * angle, abs=1e-6
+        )
 
 
 # ── Deferred-commit / stale base_transform diagnostic ───────────────────────
+
 
 class TestStaleBaseTransformAffectsGearMath:
     """If the user creates a gear relation BEFORE setting base_transform on
@@ -673,9 +837,12 @@ class TestStaleBaseTransformAffectsGearMath:
         R = _rotate_about_z(angle, ox=5.0, oy=0.0)
         base = np.array([[1, 0, 0, 5], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
         new_T = R @ base
-        client.patch(f"/api/assembly/instances/{meta['inst_b']}", json={
-            "transform": {"values": [float(v) for v in new_T.flatten()]},
-        })
+        client.patch(
+            f"/api/assembly/instances/{meta['inst_b']}",
+            json={
+                "transform": {"values": [float(v) for v in new_T.flatten()]},
+            },
+        )
 
         got_driven = _read_joint(meta["joint_cd"])["current_value"]
         # With no base_transform, the sync helper bails — driven stays at 0.

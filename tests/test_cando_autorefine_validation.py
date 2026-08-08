@@ -19,6 +19,7 @@ off crossovers/ends) — the "0 edits" regression can NOT pass it.
 Slow (~2-3 min: the density sweep runs ~20 FEM solves on an 18-helix bundle); registered in the
 conftest slow registry so ``just test-fast`` skips it.
 """
+
 from __future__ import annotations
 
 from backend.api import headless_build as hb
@@ -53,16 +54,19 @@ def test_fem_autorefine_relieves_square_strut_twist_headless():
     Asserted loosely so a slightly different build still passes while the "0 edits" regression fails
     hard."""
     design = _routed_sq_strut(160)
-    assert not any(h.loop_skips for h in design.helices)   # bare strut — nothing to greedily fix
+    assert not any(
+        h.loop_skips for h in design.helices
+    )  # bare strut — nothing to greedily fix
     assert not design.deformations
 
     res = assert_fem_autorefine_relieves_twist(
-        design, max_drop_ratio=0.6, min_before_rmsd=0.4, max_hotspots=2)
+        design, max_drop_ratio=0.6, min_before_rmsd=0.4, max_hotspots=2
+    )
 
     # The objective was twist, the density sweep ran (a real period), a per-helix authority map was
     # measured, and the marks are a substantial uniform-ish skip program — the shape of the fix.
     assert res["objective"] == "twist"
     assert res["density"] is not None and res["density"]["best_period"] is not None
-    assert res["authority"]                             # per-helix ∂twist/∂skip measured
+    assert res["authority"]  # per-helix ∂twist/∂skip measured
     n_skips = sum(len(v) for v in res["converged_marks"].values())
-    assert n_skips >= len(design.helices)   # at least ~one deletion per helix
+    assert n_skips >= len(design.helices)  # at least ~one deletion per helix

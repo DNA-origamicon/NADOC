@@ -31,6 +31,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from backend.api import state as design_state
+
 # Shared response helper used by 100+ crud.py routes; it stays in crud.py and is
 # imported back here (same convention as routes_clusters.py / routes_camera_poses.py).
 from backend.api.crud import _design_response_with_geometry
@@ -59,15 +60,18 @@ def _run_auto_scaffold_with_feature_log(
             raise
         except Exception as exc:
             raise HTTPException(status_code=422, detail=str(exc))
-        if hasattr(result, 'valid') and not result.valid:
+        if hasattr(result, "valid") and not result.valid:
             raise HTTPException(status_code=422, detail="; ".join(result.errors))
-        holder['result'] = result
+        holder["result"] = result
         return updated
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind=op_kind, label=label, params=params, fn=_fn,
+        op_kind=op_kind,
+        label=label,
+        params=params,
+        fn=_fn,
     )
-    return updated, report, holder['result']
+    return updated, report, holder["result"]
 
 
 def _guard_seamed_routable(errors_fn) -> None:
@@ -91,21 +95,24 @@ def auto_scaffold_seamed_endpoint() -> dict:
     seam crossovers at interior pairs, extends and connects the near (-lo) face, then
     extends and connects the far (+hi) face.  All three phases share one snapshot.
     """
-    from backend.core.seamed_router import auto_scaffold_seamed, seamed_routability_errors
+    from backend.core.seamed_router import (
+        auto_scaffold_seamed,
+        seamed_routability_errors,
+    )
 
     _guard_seamed_routable(seamed_routability_errors)
 
     updated, report, result = _run_auto_scaffold_with_feature_log(
-        op_kind='auto-scaffold-seamed',
-        label='Auto-scaffold (seamed)',
+        op_kind="auto-scaffold-seamed",
+        label="Auto-scaffold (seamed)",
         params={},
         runner=lambda d: auto_scaffold_seamed(d),
     )
     resp = _design_response_with_geometry(updated, report)
-    resp["warnings"]         = result.warnings
-    resp["seam_xovers"]      = result.seam_xovers
-    resp["near_end_xovers"]  = result.near_end_xovers
-    resp["far_end_xovers"]   = result.far_end_xovers
+    resp["warnings"] = result.warnings
+    resp["seam_xovers"] = result.seam_xovers
+    resp["near_end_xovers"] = result.near_end_xovers
+    resp["far_end_xovers"] = result.far_end_xovers
     return resp
 
 
@@ -119,21 +126,24 @@ def auto_scaffold_matched_endpoint() -> dict:
     cap lands on the next copy's near cap.  Seam marking + sequence assignment
     stay with the existing periodic tools.
     """
-    from backend.core.seamed_router import auto_scaffold_matched, seamed_routability_errors
+    from backend.core.seamed_router import (
+        auto_scaffold_matched,
+        seamed_routability_errors,
+    )
 
     _guard_seamed_routable(seamed_routability_errors)
 
     updated, report, result = _run_auto_scaffold_with_feature_log(
-        op_kind='auto-scaffold-matched',
-        label='Auto-scaffold (matched ends)',
+        op_kind="auto-scaffold-matched",
+        label="Auto-scaffold (matched ends)",
         params={},
         runner=lambda d: auto_scaffold_matched(d),
     )
     resp = _design_response_with_geometry(updated, report)
-    resp["warnings"]         = result.warnings
-    resp["seam_xovers"]      = result.seam_xovers
-    resp["near_end_xovers"]  = result.near_end_xovers
-    resp["far_end_xovers"]   = result.far_end_xovers
+    resp["warnings"] = result.warnings
+    resp["seam_xovers"] = result.seam_xovers
+    resp["near_end_xovers"] = result.near_end_xovers
+    resp["far_end_xovers"] = result.far_end_xovers
     return resp
 
 
@@ -149,14 +159,14 @@ def auto_scaffold_seamless_endpoint() -> dict:
     from backend.core.seamless_router import auto_scaffold_seamless
 
     updated, report, result = _run_auto_scaffold_with_feature_log(
-        op_kind='auto-scaffold-seamless',
-        label='Auto-scaffold (seamless)',
+        op_kind="auto-scaffold-seamless",
+        label="Auto-scaffold (seamless)",
         params={},
         runner=lambda d: auto_scaffold_seamless(d),
     )
     resp = _design_response_with_geometry(updated, report)
-    resp["warnings"]      = result.warnings
-    resp["end_xovers"]    = result.end_xovers
+    resp["warnings"] = result.warnings
+    resp["end_xovers"] = result.end_xovers
     resp["bridge_xovers"] = result.bridge_xovers
     return resp
 
@@ -178,8 +188,8 @@ def route_for_polymerization_endpoint() -> dict:
     from backend.core.polymer_router import route_for_polymerization
 
     updated, report, result = _run_auto_scaffold_with_feature_log(
-        op_kind='route-for-polymerization',
-        label='Route for polymerization',
+        op_kind="route-for-polymerization",
+        label="Route for polymerization",
         params={},
         runner=lambda d: route_for_polymerization(d),
     )

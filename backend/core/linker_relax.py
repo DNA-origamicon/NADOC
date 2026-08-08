@@ -76,7 +76,9 @@ def _overhang_owning_cluster_id(design: Design, ovhg_id: str) -> str | None:
     helix_id = _overhang_helix_id(design, ovhg_id)
     if helix_id is None:
         return None
-    candidates: list[tuple[int, int, str]] = []  # (helix_count, neg_index_for_tiebreak, id)
+    candidates: list[
+        tuple[int, int, str]
+    ] = []  # (helix_count, neg_index_for_tiebreak, id)
     for idx, cluster in enumerate(design.cluster_transforms):
         if helix_id not in (cluster.helix_ids or []):
             continue
@@ -119,28 +121,58 @@ def dof_topology(design: Design, conn) -> dict[str, Any]:
     ca = _overhang_owning_cluster_id(design, conn.overhang_a_id)
     cb = _overhang_owning_cluster_id(design, conn.overhang_b_id)
     if ca is None and cb is None:
-        return _topology_dict(ca, cb, [], [], 0, "no_cluster",
-                              "Neither overhang's helix is in a cluster.")
+        return _topology_dict(
+            ca, cb, [], [], 0, "no_cluster", "Neither overhang's helix is in a cluster."
+        )
     if ca == cb and ca is not None:
-        return _topology_dict(ca, cb, [], [], 0, "shared_cluster",
-                              "Both overhangs are on the same cluster — no joint separates them.")
-    joints_a = [j.id for j in design.cluster_joints if ca is not None and j.cluster_id == ca]
-    joints_b = [j.id for j in design.cluster_joints if cb is not None and j.cluster_id == cb]
+        return _topology_dict(
+            ca,
+            cb,
+            [],
+            [],
+            0,
+            "shared_cluster",
+            "Both overhangs are on the same cluster — no joint separates them.",
+        )
+    joints_a = [
+        j.id for j in design.cluster_joints if ca is not None and j.cluster_id == ca
+    ]
+    joints_b = [
+        j.id for j in design.cluster_joints if cb is not None and j.cluster_id == cb
+    ]
     n = len(joints_a) + len(joints_b)
     if n == 0:
-        return _topology_dict(ca, cb, joints_a, joints_b, 0, "no_joints",
-                              "No joints on either overhang's cluster.")
+        return _topology_dict(
+            ca,
+            cb,
+            joints_a,
+            joints_b,
+            0,
+            "no_joints",
+            "No joints on either overhang's cluster.",
+        )
     if n == 1:
         return _topology_dict(ca, cb, joints_a, joints_b, 1, "ok", "")
-    return _topology_dict(ca, cb, joints_a, joints_b, n, "multi_dof",
-                          f"Relax requires exactly 1 DOF; this linker has {n}.")
+    return _topology_dict(
+        ca,
+        cb,
+        joints_a,
+        joints_b,
+        n,
+        "multi_dof",
+        f"Relax requires exactly 1 DOF; this linker has {n}.",
+    )
 
 
 def _topology_dict(ca, cb, ja, jb, n, status, reason):
     return {
-        "cluster_a": ca, "cluster_b": cb,
-        "joints_a": ja, "joints_b": jb,
-        "n_dof": n, "status": status, "reason": reason,
+        "cluster_a": ca,
+        "cluster_b": cb,
+        "joints_a": ja,
+        "joints_b": jb,
+        "n_dof": n,
+        "status": status,
+        "reason": reason,
     }
 
 
@@ -156,12 +188,14 @@ def _quat_mul(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
     """Hamilton product q1 ⊗ q2 with [x,y,z,w] convention."""
     x1, y1, z1, w1 = q1
     x2, y2, z2, w2 = q2
-    return np.array([
-        w1*x2 + x1*w2 + y1*z2 - z1*y2,
-        w1*y2 - x1*z2 + y1*w2 + z1*x2,
-        w1*z2 + x1*y2 - y1*x2 + z1*w2,
-        w1*w2 - x1*x2 - y1*y2 - z1*z2,
-    ])
+    return np.array(
+        [
+            w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+            w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+            w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+            w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+        ]
+    )
 
 
 def _rot_axis_angle(axis: np.ndarray, angle_rad: float) -> np.ndarray:
@@ -172,8 +206,9 @@ def _rot_axis_angle(axis: np.ndarray, angle_rad: float) -> np.ndarray:
 
 
 # ── Optimization ─────────────────────────────────────────────────────────────
-def _moving_anchor_at(theta: float, base_anchor: np.ndarray,
-                       axis_origin: np.ndarray, axis_dir: np.ndarray) -> np.ndarray:
+def _moving_anchor_at(
+    theta: float, base_anchor: np.ndarray, axis_origin: np.ndarray, axis_dir: np.ndarray
+) -> np.ndarray:
     """Where the moving anchor lands when its cluster is rotated by *theta*
     around (axis_origin, axis_dir). The base_anchor is the anchor's CURRENT
     world position (already includes any prior cluster transform); we pivot
@@ -185,9 +220,9 @@ def _moving_anchor_at(theta: float, base_anchor: np.ndarray,
 # Constants — must match the bridge geometry emitted by `_emit_bridge_nucs`
 # in backend/api/crud.py so the relax loss minimizes the same gap that the
 # renderer shows the user.
-_BDNA_TWIST_RAD   = 34.3 * np.pi / 180.0
+_BDNA_TWIST_RAD = 34.3 * np.pi / 180.0
 _MINOR_GROOVE_RAD = 150.0 * np.pi / 180.0
-_HELIX_RADIUS_NM  = 1.0
+_HELIX_RADIUS_NM = 1.0
 # Target = 0: the bridge boundary bead must land EXACTLY on its anchor
 # (= complement nuc at OH-attach-bp). Boundary is at native B-DNA radius
 # (HELIX_RADIUS_NM); the bridge axis is offset off the chord so the
@@ -227,16 +262,24 @@ def _comp_first(ovhg_id: str, attach: str) -> bool:
     comp-first iff (5p + free_end) OR (3p + root)."""
     is_5p = ovhg_id.endswith("_5p")
     is_3p = ovhg_id.endswith("_3p")
-    if is_5p and attach == "free_end": return True
-    if is_3p and attach == "root":     return True
-    if is_5p and attach == "root":     return False
-    if is_3p and attach == "free_end": return False
-    return True   # untagged synthetic fixtures — legacy behaviour
+    if is_5p and attach == "free_end":
+        return True
+    if is_3p and attach == "root":
+        return True
+    if is_5p and attach == "root":
+        return False
+    if is_3p and attach == "free_end":
+        return False
+    return True  # untagged synthetic fixtures — legacy behaviour
 
 
-def _bridge_boundary_radials(fx: np.ndarray, fy: np.ndarray, base_count: int,
-                             comp_first_a: bool, comp_first_b: bool
-                             ) -> tuple[np.ndarray, np.ndarray]:
+def _bridge_boundary_radials(
+    fx: np.ndarray,
+    fy: np.ndarray,
+    base_count: int,
+    comp_first_a: bool,
+    comp_first_b: bool,
+) -> tuple[np.ndarray, np.ndarray]:
     """Unit radial directions at the two bridge boundary beads:
        side A's strand at bp 0, side B's strand at bp L−1.
 
@@ -253,15 +296,21 @@ def _bridge_boundary_radials(fx: np.ndarray, fy: np.ndarray, base_count: int,
     radial_a = fx * np.cos(ang_a) + fy * np.sin(ang_a)
     # side B boundary at bp L−1
     base = (base_count - 1) * _BDNA_TWIST_RAD
-    ang_b = ((base + _MINOR_GROOVE_RAD) if comp_first_b else base) + _BRIDGE_PHASE_OFFSET
+    ang_b = (
+        (base + _MINOR_GROOVE_RAD) if comp_first_b else base
+    ) + _BRIDGE_PHASE_OFFSET
     radial_b = fx * np.cos(ang_b) + fy * np.sin(ang_b)
     return radial_a, radial_b
 
 
-def bridge_axis_geometry(p_a: np.ndarray, n_a: np.ndarray | None,
-                         p_b: np.ndarray, base_count: int,
-                         comp_first_a: bool, comp_first_b: bool
-                         ) -> dict:
+def bridge_axis_geometry(
+    p_a: np.ndarray,
+    n_a: np.ndarray | None,
+    p_b: np.ndarray,
+    base_count: int,
+    comp_first_a: bool,
+    comp_first_b: bool,
+) -> dict:
     """Compute bridge axis + boundary radials for a ds linker.
 
     Symmetric placement: axis_start chosen so that side-A and side-B
@@ -276,20 +325,30 @@ def bridge_axis_geometry(p_a: np.ndarray, n_a: np.ndarray | None,
     axis_dir = chord / cl if cl > 1e-9 else np.array([0.0, 0.0, 1.0])
     fx, fy, fz = _frame_from_axis(axis_dir, n_a)
     visual_length = max(base_count - 1, 1) * BDNA_RISE_PER_BP
-    radial_a, radial_b = _bridge_boundary_radials(fx, fy, base_count,
-                                                  comp_first_a, comp_first_b)
+    radial_a, radial_b = _bridge_boundary_radials(
+        fx, fy, base_count, comp_first_a, comp_first_b
+    )
     R = _HELIX_RADIUS_NM
-    axis_start = (p_a + p_b) / 2 - (radial_a + radial_b) / 2 * R - fz * (visual_length / 2)
-    axis_end   = axis_start + fz * visual_length
+    axis_start = (
+        (p_a + p_b) / 2 - (radial_a + radial_b) / 2 * R - fz * (visual_length / 2)
+    )
+    axis_end = axis_start + fz * visual_length
     return {
-        "fx": fx, "fy": fy, "fz": fz,
-        "axis_start": axis_start, "axis_end": axis_end,
-        "radial_a_boundary": radial_a, "radial_b_boundary": radial_b,
-        "visual_length": visual_length, "helix_radius": R,
+        "fx": fx,
+        "fy": fy,
+        "fz": fz,
+        "axis_start": axis_start,
+        "axis_end": axis_end,
+        "radial_a_boundary": radial_a,
+        "radial_b_boundary": radial_b,
+        "visual_length": visual_length,
+        "helix_radius": R,
     }
 
 
-def _frame_from_axis(axis_dir: np.ndarray, preferred_normal: np.ndarray | None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _frame_from_axis(
+    axis_dir: np.ndarray, preferred_normal: np.ndarray | None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Build an orthonormal frame (fx, fy, fz) around *axis_dir*.
 
     Mirrors the JS `_frameFromAxis` so backend-computed aStart/bStart match
@@ -298,7 +357,11 @@ def _frame_from_axis(axis_dir: np.ndarray, preferred_normal: np.ndarray | None) 
     axis if not provided or degenerate."""
     n = float(np.linalg.norm(axis_dir))
     z = axis_dir / n if n > 1e-9 else np.array([0.0, 0.0, 1.0])
-    x = preferred_normal.astype(float) if preferred_normal is not None else np.array([0.0, 0.0, 1.0])
+    x = (
+        preferred_normal.astype(float)
+        if preferred_normal is not None
+        else np.array([0.0, 0.0, 1.0])
+    )
     x = x - z * float(np.dot(x, z))
     if float(np.dot(x, x)) < 1e-6:
         x = np.array([0.0, 0.0, 1.0]) if abs(z[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
@@ -309,9 +372,14 @@ def _frame_from_axis(axis_dir: np.ndarray, preferred_normal: np.ndarray | None) 
     return x, y, z
 
 
-def _arc_chord_lengths(p_a: np.ndarray, n_a: np.ndarray | None,
-                        p_b: np.ndarray, base_count: int,
-                        comp_first_a: bool, comp_first_b: bool) -> tuple[float, float]:
+def _arc_chord_lengths(
+    p_a: np.ndarray,
+    n_a: np.ndarray | None,
+    p_b: np.ndarray,
+    base_count: int,
+    comp_first_a: bool,
+    comp_first_b: bool,
+) -> tuple[float, float]:
     """Half-residuals driving the relax — each equals |visualLength − |chord||/2.
 
     Why this form (not the full anchor-to-bridge-boundary distance):
@@ -336,14 +404,20 @@ def _arc_chord_lengths(p_a: np.ndarray, n_a: np.ndarray | None,
     return half_residual, half_residual
 
 
-def _optimize_angle(moving_anchor: np.ndarray, moving_normal: np.ndarray | None,
-                    fixed_anchor: np.ndarray, fixed_normal: np.ndarray | None,
-                    moving_is_a: bool,
-                    axis_origin: np.ndarray, axis_dir: np.ndarray,
-                    base_count: int,
-                    comp_first_a: bool, comp_first_b: bool,
-                    theta_min: float = -np.pi,
-                    theta_max: float = +np.pi) -> float:
+def _optimize_angle(
+    moving_anchor: np.ndarray,
+    moving_normal: np.ndarray | None,
+    fixed_anchor: np.ndarray,
+    fixed_normal: np.ndarray | None,
+    moving_is_a: bool,
+    axis_origin: np.ndarray,
+    axis_dir: np.ndarray,
+    base_count: int,
+    comp_first_a: bool,
+    comp_first_b: bool,
+    theta_min: float = -np.pi,
+    theta_max: float = +np.pi,
+) -> float:
     """Brent-bounded search for θ ∈ [theta_min, theta_max] minimizing the
     sum-of-squares boundary-gap residuals (gap_A)² + (gap_B)² (target = 0).
 
@@ -356,6 +430,7 @@ def _optimize_angle(moving_anchor: np.ndarray, moving_normal: np.ndarray | None,
     frame's preferred-normal seed is rotated too — otherwise the linker
     tube would shift its rotational alignment in a way the renderer doesn't.
     """
+
     def chord_loss(theta: float) -> float:
         """Pure chord-magnitude loss (NO θ regularizer) — used inside each
         local-minimum bracket so refinement converges on the actual chord
@@ -367,8 +442,9 @@ def _optimize_angle(moving_anchor: np.ndarray, moving_normal: np.ndarray | None,
             p_a, n_a, p_b = p_moving, n_moving, fixed_anchor
         else:
             p_a, n_a, p_b = fixed_anchor, fixed_normal, p_moving
-        chord_a, chord_b = _arc_chord_lengths(p_a, n_a, p_b, base_count,
-                                              comp_first_a, comp_first_b)
+        chord_a, chord_b = _arc_chord_lengths(
+            p_a, n_a, p_b, base_count, comp_first_a, comp_first_b
+        )
         return (chord_a - _ARC_TARGET_NM) ** 2 + (chord_b - _ARC_TARGET_NM) ** 2
 
     # Periodic, multimodal: a 1-DOF cluster rotation can put chord at the
@@ -387,7 +463,7 @@ def _optimize_angle(moving_anchor: np.ndarray, moving_normal: np.ndarray | None,
     # Sample at 5° resolution within the allowed window; always include the
     # window endpoints so the boundary loss is considered alongside
     # interior local minima.
-    step = (5.0 * np.pi / 180.0)
+    step = 5.0 * np.pi / 180.0
     n_grid = max(3, int(np.ceil((theta_max - theta_min) / step)) + 1)
     grid = np.linspace(theta_min, theta_max, n_grid)
     losses = [chord_loss(t) for t in grid]
@@ -408,7 +484,7 @@ def _optimize_angle(moving_anchor: np.ndarray, moving_normal: np.ndarray | None,
         else:
             if losses[i] < losses[i - 1] and losses[i] < losses[i + 1]:
                 candidate_idxs.append(i)
-    if not candidate_idxs:                  # flat/degenerate — fall back
+    if not candidate_idxs:  # flat/degenerate — fall back
         candidate_idxs = [int(np.argmin(losses))]
 
     # Refine each candidate in a small bracket around it, clipped to the
@@ -420,22 +496,24 @@ def _optimize_angle(moving_anchor: np.ndarray, moving_normal: np.ndarray | None,
         if hi <= lo + 1e-9:
             refined.append((float(grid[i]), float(losses[i])))
             continue
-        res = minimize_scalar(chord_loss, bounds=(lo, hi), method="bounded",
-                              options={"xatol": 1e-5})
+        res = minimize_scalar(
+            chord_loss, bounds=(lo, hi), method="bounded", options={"xatol": 1e-5}
+        )
         refined.append((float(res.x), float(res.fun)))
 
     # Among the refined minima, keep those whose chord residual is within
     # a small tolerance of the best-found minimum. Then break ties by |θ|.
     best_chord = min(c for _, c in refined)
-    tol = 1e-6                              # nm² — generous; both real minima sit at ~0
+    tol = 1e-6  # nm² — generous; both real minima sit at ~0
     near_best = [(t, c) for t, c in refined if c <= best_chord + tol]
     near_best.sort(key=lambda tc: abs(tc[0]))
     return near_best[0][0]
 
 
 # ── Cluster transform composition ────────────────────────────────────────────
-def _composed_transform(cluster, axis_origin: np.ndarray, axis_dir: np.ndarray,
-                        theta: float) -> tuple[list[float], list[float]]:
+def _composed_transform(
+    cluster, axis_origin: np.ndarray, axis_dir: np.ndarray, theta: float
+) -> tuple[list[float], list[float]]:
     """Return (rotation_quat, translation) for the cluster after composing an
     additional rotation by *theta* around (axis_origin, axis_dir).
 
@@ -458,7 +536,9 @@ def _composed_transform(cluster, axis_origin: np.ndarray, axis_dir: np.ndarray,
 
 # ── Public entry point ───────────────────────────────────────────────────────
 def relax_linker(
-    design: Design, conn, joint_ids: list[str] | None = None,
+    design: Design,
+    conn,
+    joint_ids: list[str] | None = None,
 ) -> tuple[Design, dict[str, Any]]:
     """Apply the relax operation to *design* for *conn*.
 
@@ -487,8 +567,9 @@ def relax_linker(
     # Joint storage is cluster-local; compose with the cluster's transform
     # to get the world-space axis used by the relaxation kinematics.
     from backend.core.models import _local_to_world_joint
+
     joints_by_id = {j.id: j for j in design.cluster_joints}
-    cts_by_id    = {c.id: c for c in design.cluster_transforms}
+    cts_by_id = {c.id: c for c in design.cluster_transforms}
     # Per-joint tuple: (joint_id, origin, axis, cluster_id, theta_min, theta_max)
     # Bounds are converted from the joint's stored degrees to radians here so
     # downstream optimizer code stays in radians end-to-end.
@@ -499,25 +580,40 @@ def relax_linker(
             raise ValueError(f"relax_linker: joint id {jid!r} not found.")
         ct = cts_by_id.get(j.cluster_id)
         world_origin, world_dir = _local_to_world_joint(
-            j.local_axis_origin, j.local_axis_direction, ct,
+            j.local_axis_origin,
+            j.local_axis_direction,
+            ct,
         )
         axis = np.asarray(world_dir, dtype=float)
         n = np.linalg.norm(axis)
         if n < 1e-9:
-            raise ValueError(f"relax_linker: joint {jid!r} axis_direction is degenerate.")
+            raise ValueError(
+                f"relax_linker: joint {jid!r} axis_direction is degenerate."
+            )
         theta_min = float(j.min_angle_deg) * np.pi / 180.0
         theta_max = float(j.max_angle_deg) * np.pi / 180.0
-        selected.append((j.id, np.asarray(world_origin, dtype=float), axis / n,
-                         j.cluster_id, theta_min, theta_max))
+        selected.append(
+            (
+                j.id,
+                np.asarray(world_origin, dtype=float),
+                axis / n,
+                j.cluster_id,
+                theta_min,
+                theta_max,
+            )
+        )
 
     # Resolve anchor positions + base_normals in the live geometry frame
     # (cluster transforms already applied).
-    from backend.api.crud import _geometry_for_design   # local import to avoid cycles
+    from backend.api.crud import _geometry_for_design  # local import to avoid cycles
+
     nucs = _geometry_for_design(design)
     anchor_a, normal_a = _anchor_pos_and_normal(nucs, conn, conn.overhang_a_id, True)
     anchor_b, normal_b = _anchor_pos_and_normal(nucs, conn, conn.overhang_b_id, False)
     if anchor_a is None or anchor_b is None:
-        raise ValueError("relax_linker: could not resolve anchor positions from geometry.")
+        raise ValueError(
+            "relax_linker: could not resolve anchor positions from geometry."
+        )
 
     # Map anchor → cluster ownership so we know whether each joint rotates
     # anchor_a, anchor_b, both, or neither.
@@ -527,20 +623,28 @@ def relax_linker(
     cfa = _comp_first(conn.overhang_a_id, conn.overhang_a_attach)
     cfb = _comp_first(conn.overhang_b_id, conn.overhang_b_attach)
 
-    def _apply(thetas: np.ndarray,
-               p_a: np.ndarray, n_a: np.ndarray | None,
-               p_b: np.ndarray, n_b: np.ndarray | None):
+    def _apply(
+        thetas: np.ndarray,
+        p_a: np.ndarray,
+        n_a: np.ndarray | None,
+        p_b: np.ndarray,
+        n_b: np.ndarray | None,
+    ):
         """Apply the proposed joint angles to both anchor positions AND their
         base_normals (directions rotate too — needed for the linker frame).
         Each joint rotates only the side whose cluster matches its cluster_id."""
-        for (_jid, origin, axis, cluster_id, _tmin, _tmax), theta in zip(selected, thetas):
+        for (_jid, origin, axis, cluster_id, _tmin, _tmax), theta in zip(
+            selected, thetas
+        ):
             R = _rot_axis_angle(axis, theta)
             if cluster_id == cluster_of_a:
                 p_a = R @ (p_a - origin) + origin
-                if n_a is not None: n_a = R @ n_a
+                if n_a is not None:
+                    n_a = R @ n_a
             if cluster_id == cluster_of_b:
                 p_b = R @ (p_b - origin) + origin
-                if n_b is not None: n_b = R @ n_b
+                if n_b is not None:
+                    n_b = R @ n_b
         return p_a, n_a, p_b, n_b
 
     # ── Optimize ─────────────────────────────────────────────────────────────
@@ -549,36 +653,59 @@ def relax_linker(
     # standard backbone-to-backbone bonds at the target length.
     if len(selected) == 1:
         _jid, origin, axis, cluster_id, theta_min, theta_max = selected[0]
-        moving_is_a = (cluster_id == cluster_of_a)
+        moving_is_a = cluster_id == cluster_of_a
         moving_anchor = anchor_a if moving_is_a else anchor_b
         moving_normal = normal_a if moving_is_a else normal_b
-        fixed_anchor  = anchor_b if moving_is_a else anchor_a
-        fixed_normal  = normal_b if moving_is_a else normal_a
-        theta = _optimize_angle(moving_anchor, moving_normal,
-                                fixed_anchor, fixed_normal,
-                                moving_is_a, origin, axis, base_count,
-                                cfa, cfb,
-                                theta_min=theta_min, theta_max=theta_max)
+        fixed_anchor = anchor_b if moving_is_a else anchor_a
+        fixed_normal = normal_b if moving_is_a else normal_a
+        theta = _optimize_angle(
+            moving_anchor,
+            moving_normal,
+            fixed_anchor,
+            fixed_normal,
+            moving_is_a,
+            origin,
+            axis,
+            base_count,
+            cfa,
+            cfb,
+            theta_min=theta_min,
+            theta_max=theta_max,
+        )
         thetas = np.array([theta])
     else:
+
         def loss(thetas: np.ndarray) -> float:
-            p_a, n_a, p_b, _n_b = _apply(thetas, anchor_a.copy(),
-                                          normal_a.copy() if normal_a is not None else None,
-                                          anchor_b.copy(),
-                                          normal_b.copy() if normal_b is not None else None)
+            p_a, n_a, p_b, _n_b = _apply(
+                thetas,
+                anchor_a.copy(),
+                normal_a.copy() if normal_a is not None else None,
+                anchor_b.copy(),
+                normal_b.copy() if normal_b is not None else None,
+            )
             chord_a, chord_b = _arc_chord_lengths(p_a, n_a, p_b, base_count, cfa, cfb)
-            return ((chord_a - _ARC_TARGET_NM) ** 2 + (chord_b - _ARC_TARGET_NM) ** 2
-                    + _THETA_REG_LAMBDA * float(np.sum(thetas * thetas)))
+            return (
+                (chord_a - _ARC_TARGET_NM) ** 2
+                + (chord_b - _ARC_TARGET_NM) ** 2
+                + _THETA_REG_LAMBDA * float(np.sum(thetas * thetas))
+            )
+
         # Per-joint bounds from the joint records — Powell honours bounds
         # in scipy ≥ 1.5 and clips x to lie inside them. The seed is
         # clipped explicitly so it starts inside the feasible region (a
         # legacy joint with bounds excluding 0 would otherwise begin out
         # of bounds).
         bounds = [(tmin, tmax) for (*_rest, tmin, tmax) in selected]
-        x0 = np.array([min(max(0.0, tmin), tmax) for (tmin, tmax) in bounds],
-                      dtype=float)
-        res = minimize(loss, x0, method="Powell", bounds=bounds,
-                       options={"xtol": 1e-5, "ftol": 1e-8, "maxiter": 500})
+        x0 = np.array(
+            [min(max(0.0, tmin), tmax) for (tmin, tmax) in bounds], dtype=float
+        )
+        res = minimize(
+            loss,
+            x0,
+            method="Powell",
+            bounds=bounds,
+            options={"xtol": 1e-5, "ftol": 1e-8, "maxiter": 500},
+        )
         thetas = np.asarray(res.x, dtype=float)
         # Powell can drift epsilon-outside bounds in some scipy versions;
         # clip defensively so downstream cluster transforms never carry an
@@ -587,35 +714,48 @@ def relax_linker(
             thetas[i] = float(min(max(thetas[i], tmin), tmax))
 
     final_a, final_n_a, final_b, _final_n_b = _apply(
-        thetas, anchor_a.copy(),
+        thetas,
+        anchor_a.copy(),
         normal_a.copy() if normal_a is not None else None,
         anchor_b.copy(),
         normal_b.copy() if normal_b is not None else None,
     )
-    final_arc_a, final_arc_b = _arc_chord_lengths(final_a, final_n_a, final_b, base_count, cfa, cfb)
+    final_arc_a, final_arc_b = _arc_chord_lengths(
+        final_a, final_n_a, final_b, base_count, cfa, cfb
+    )
     final_chord = float(np.linalg.norm(final_a - final_b))
 
     # Apply each joint's rotation to its owning cluster transform. Multiple
     # joints can share a cluster (rare but supported); compose them in order.
-    cluster_updates: dict[str, tuple[list[float], list[float]]] = {}   # cluster_id → (rot, trans)
+    cluster_updates: dict[
+        str, tuple[list[float], list[float]]
+    ] = {}  # cluster_id → (rot, trans)
     for (_jid, origin, axis, cluster_id, _tmin, _tmax), theta in zip(selected, thetas):
-        cluster = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
+        cluster = next(
+            (c for c in design.cluster_transforms if c.id == cluster_id), None
+        )
         if cluster is None:
             continue
         # Use the latest pending update if this cluster has already been touched;
         # otherwise start from the cluster's stored transform.
         if cluster_id in cluster_updates:
             q_prev, t_prev = cluster_updates[cluster_id]
-            staged = cluster.model_copy(update={"rotation": q_prev, "translation": t_prev})
+            staged = cluster.model_copy(
+                update={"rotation": q_prev, "translation": t_prev}
+            )
         else:
             staged = cluster
-        cluster_updates[cluster_id] = _composed_transform(staged, origin, axis, float(theta))
+        cluster_updates[cluster_id] = _composed_transform(
+            staged, origin, axis, float(theta)
+        )
 
     new_clusters = []
     for c in design.cluster_transforms:
         if c.id in cluster_updates:
             q_new, t_new = cluster_updates[c.id]
-            new_clusters.append(c.model_copy(update={"rotation": q_new, "translation": t_new}))
+            new_clusters.append(
+                c.model_copy(update={"rotation": q_new, "translation": t_new})
+            )
         else:
             new_clusters.append(c)
 
@@ -624,16 +764,18 @@ def relax_linker(
     if design.feature_log_cursor == -2:
         log = []
     elif design.feature_log_cursor >= 0:
-        log = log[:design.feature_log_cursor + 1]
+        log = log[: design.feature_log_cursor + 1]
     for c in new_clusters:
         if c.id in cluster_updates:
-            log.append(ClusterOpLogEntry(
-                cluster_id=c.id,
-                translation=list(c.translation),
-                rotation=list(c.rotation),
-                pivot=list(c.pivot),
-                source="relax",
-            ))
+            log.append(
+                ClusterOpLogEntry(
+                    cluster_id=c.id,
+                    translation=list(c.translation),
+                    rotation=list(c.rotation),
+                    pivot=list(c.pivot),
+                    source="relax",
+                )
+            )
 
     updated = design.copy_with(
         cluster_transforms=new_clusters,
@@ -664,7 +806,10 @@ def _oh_attach_nuc(oh_nucs: list[dict], attach: str) -> dict | None:
     Returns None when the OH has no nucs in geometry yet."""
     if not oh_nucs:
         return None
-    tip = next((n for n in oh_nucs if n.get("is_five_prime") or n.get("is_three_prime")), oh_nucs[0])
+    tip = next(
+        (n for n in oh_nucs if n.get("is_five_prime") or n.get("is_three_prime")),
+        oh_nucs[0],
+    )
     if attach != "root" or len(oh_nucs) < 2:
         return tip
     tip_bp = tip.get("bp_index") or 0
@@ -689,25 +834,33 @@ def _anchor_pos_and_normal(nucs: list[dict], conn, ovhg_id: str, is_a_side: bool
             complements on real OH helices + the bridge nucs on the
             virtual helix; the helix-id filter below drops the bridge nucs).
     """
-    side   = "a" if is_a_side else "b"
+    side = "a" if is_a_side else "b"
     attach = conn.overhang_a_attach if is_a_side else conn.overhang_b_attach
     if getattr(conn, "linker_type", "ds") == "ss":
         candidate_strand_ids = [f"__lnk__{conn.id}__s"]
     else:
         candidate_strand_ids = [f"__lnk__{conn.id}__{side}"]
-    linker_nucs = [n for n in nucs
-                   if n.get("strand_id") in candidate_strand_ids
-                   and not (n.get("helix_id") or "").startswith("__lnk__")]
+    linker_nucs = [
+        n
+        for n in nucs
+        if n.get("strand_id") in candidate_strand_ids
+        and not (n.get("helix_id") or "").startswith("__lnk__")
+    ]
     oh_nucs = [n for n in nucs if n.get("overhang_id") == ovhg_id]
     attach_nuc = _oh_attach_nuc(oh_nucs, attach)
 
     chosen = None
     if linker_nucs and attach_nuc is not None:
         target_helix = attach_nuc.get("helix_id")
-        target_bp    = attach_nuc.get("bp_index")
-        chosen = next((n for n in linker_nucs
-                       if n.get("helix_id") == target_helix
-                       and n.get("bp_index") == target_bp), None)
+        target_bp = attach_nuc.get("bp_index")
+        chosen = next(
+            (
+                n
+                for n in linker_nucs
+                if n.get("helix_id") == target_helix and n.get("bp_index") == target_bp
+            ),
+            None,
+        )
 
     if chosen is None:
         # Fallback for synthetic fixtures: attach to the OH attach-end nuc
@@ -718,9 +871,11 @@ def _anchor_pos_and_normal(nucs: list[dict], conn, ovhg_id: str, is_a_side: bool
         return None, None
 
     pos = chosen.get("backbone_position") or chosen.get("base_position")
-    bn  = chosen.get("base_normal")
-    return (np.asarray(pos, dtype=float) if pos is not None else None,
-            np.asarray(bn,  dtype=float) if bn  is not None else None)
+    bn = chosen.get("base_normal")
+    return (
+        np.asarray(pos, dtype=float) if pos is not None else None,
+        np.asarray(bn, dtype=float) if bn is not None else None,
+    )
 
 
 def _anchor_position(nucs, conn, ovhg_id, is_a_side):
@@ -733,18 +888,24 @@ def _anchor_position(nucs, conn, ovhg_id, is_a_side):
 def _ss_target_chord_nm(conn, bin_index: int = 0) -> float:
     """Target chord magnitude for an ss-linker relax (chosen bin's R_ee)."""
     from backend.core import ssdna_fjc
+
     return float(ssdna_fjc.bin_r_ee(_linker_bp(conn), bin_index))
 
 
-def _optimize_chord_angle(moving_anchor: np.ndarray,
-                          fixed_anchor: np.ndarray,
-                          axis_origin: np.ndarray, axis_dir: np.ndarray,
-                          target_nm: float,
-                          theta_min: float, theta_max: float) -> float:
+def _optimize_chord_angle(
+    moving_anchor: np.ndarray,
+    fixed_anchor: np.ndarray,
+    axis_origin: np.ndarray,
+    axis_dir: np.ndarray,
+    target_nm: float,
+    theta_min: float,
+    theta_max: float,
+) -> float:
     """Brent-bounded search for θ minimising (|R(θ)·p_m - p_f| - target_nm)².
 
     Simpler analog of the ds-linker ``_optimize_angle`` — no
     bridge-boundary radials, just a scalar chord-magnitude target."""
+
     def loss(theta: float) -> float:
         R = _rot_axis_angle(axis_dir, theta)
         p_m = R @ (moving_anchor - axis_origin) + axis_origin
@@ -781,8 +942,9 @@ def _optimize_chord_angle(moving_anchor: np.ndarray,
         if hi <= lo + 1e-9:
             refined.append((float(grid[i]), float(losses[i])))
             continue
-        res = minimize_scalar(loss, bounds=(lo, hi), method="bounded",
-                              options={"xatol": 1e-5})
+        res = minimize_scalar(
+            loss, bounds=(lo, hi), method="bounded", options={"xatol": 1e-5}
+        )
         refined.append((float(res.x), float(res.fun)))
 
     best = min(c for _, c in refined)
@@ -817,7 +979,9 @@ def fjc_positions_in_design_frame(design: Design, conn) -> list[list[float]]:
 
 
 def relax_ss_linker(
-    design: Design, conn, joint_ids: list[str] | None = None,
+    design: Design,
+    conn,
+    joint_ids: list[str] | None = None,
     bin_index: int | None = None,
     r_ee_min_nm: float | None = None,
     r_ee_max_nm: float | None = None,
@@ -839,13 +1003,16 @@ def relax_ss_linker(
     from backend.core import ssdna_fjc
 
     if getattr(conn, "linker_type", "ds") != "ss":
-        raise ValueError("relax_ss_linker only handles ss linkers; got "
-                         f"{conn.linker_type!r}")
+        raise ValueError(
+            f"relax_ss_linker only handles ss linkers; got {conn.linker_type!r}"
+        )
     n_bp = _linker_bp(conn)
     if not ssdna_fjc.has_entry(n_bp):
         lo, hi = ssdna_fjc.supported_range()
-        raise ValueError(f"relax_ss_linker: bp length {n_bp} outside lookup "
-                         f"range {lo}..{hi}. Regenerate the table to extend.")
+        raise ValueError(
+            f"relax_ss_linker: bp length {n_bp} outside lookup "
+            f"range {lo}..{hi}. Regenerate the table to extend."
+        )
 
     topo = dof_topology(design, conn)
     if joint_ids is None:
@@ -856,8 +1023,9 @@ def relax_ss_linker(
         raise ValueError("relax_ss_linker: no joints to relax over.")
 
     from backend.core.models import _local_to_world_joint
+
     joints_by_id = {j.id: j for j in design.cluster_joints}
-    cts_by_id    = {c.id: c for c in design.cluster_transforms}
+    cts_by_id = {c.id: c for c in design.cluster_transforms}
     selected: list[tuple[str, np.ndarray, np.ndarray, str, float, float]] = []
     for jid in joint_ids:
         j = joints_by_id.get(jid)
@@ -865,23 +1033,38 @@ def relax_ss_linker(
             raise ValueError(f"relax_ss_linker: joint id {jid!r} not found.")
         ct = cts_by_id.get(j.cluster_id)
         world_origin, world_dir = _local_to_world_joint(
-            j.local_axis_origin, j.local_axis_direction, ct,
+            j.local_axis_origin,
+            j.local_axis_direction,
+            ct,
         )
         axis = np.asarray(world_dir, dtype=float)
         n = float(np.linalg.norm(axis))
         if n < 1e-9:
-            raise ValueError(f"relax_ss_linker: joint {jid!r} axis_direction is degenerate.")
+            raise ValueError(
+                f"relax_ss_linker: joint {jid!r} axis_direction is degenerate."
+            )
         theta_min = float(j.min_angle_deg) * np.pi / 180.0
         theta_max = float(j.max_angle_deg) * np.pi / 180.0
-        selected.append((j.id, np.asarray(world_origin, dtype=float), axis / n,
-                         j.cluster_id, theta_min, theta_max))
+        selected.append(
+            (
+                j.id,
+                np.asarray(world_origin, dtype=float),
+                axis / n,
+                j.cluster_id,
+                theta_min,
+                theta_max,
+            )
+        )
 
     from backend.api.crud import _geometry_for_design
+
     nucs = _geometry_for_design(design)
     anchor_a, _normal_a = _anchor_pos_and_normal(nucs, conn, conn.overhang_a_id, True)
     anchor_b, _normal_b = _anchor_pos_and_normal(nucs, conn, conn.overhang_b_id, False)
     if anchor_a is None or anchor_b is None:
-        raise ValueError("relax_ss_linker: could not resolve anchor positions from geometry.")
+        raise ValueError(
+            "relax_ss_linker: could not resolve anchor positions from geometry."
+        )
 
     cluster_of_a = topo["cluster_a"]
     cluster_of_b = topo["cluster_b"]
@@ -902,7 +1085,9 @@ def relax_ss_linker(
     target_nm = float(ssdna_fjc.bin_r_ee(n_bp, next_bin_index))
 
     def _apply(thetas: np.ndarray, p_a: np.ndarray, p_b: np.ndarray):
-        for (_jid, origin, axis, cluster_id, _tmin, _tmax), theta in zip(selected, thetas):
+        for (_jid, origin, axis, cluster_id, _tmin, _tmax), theta in zip(
+            selected, thetas
+        ):
             R = _rot_axis_angle(axis, theta)
             if cluster_id == cluster_of_a:
                 p_a = R @ (p_a - origin) + origin
@@ -912,22 +1097,31 @@ def relax_ss_linker(
 
     if len(selected) == 1:
         _jid, origin, axis, cluster_id, theta_min, theta_max = selected[0]
-        moving_is_a = (cluster_id == cluster_of_a)
+        moving_is_a = cluster_id == cluster_of_a
         moving = anchor_a if moving_is_a else anchor_b
-        fixed  = anchor_b if moving_is_a else anchor_a
-        theta = _optimize_chord_angle(moving, fixed, origin, axis,
-                                      target_nm, theta_min, theta_max)
+        fixed = anchor_b if moving_is_a else anchor_a
+        theta = _optimize_chord_angle(
+            moving, fixed, origin, axis, target_nm, theta_min, theta_max
+        )
         thetas = np.array([theta])
     else:
+
         def loss(thetas: np.ndarray) -> float:
             p_a, p_b = _apply(thetas, anchor_a.copy(), anchor_b.copy())
             diff = float(np.linalg.norm(p_b - p_a) - target_nm)
             return diff * diff + _THETA_REG_LAMBDA * float(np.sum(thetas * thetas))
 
         bounds = [(tmin, tmax) for (*_rest, tmin, tmax) in selected]
-        x0 = np.array([min(max(0.0, tmin), tmax) for (tmin, tmax) in bounds], dtype=float)
-        res = minimize(loss, x0, method="Powell", bounds=bounds,
-                       options={"xtol": 1e-5, "ftol": 1e-8, "maxiter": 500})
+        x0 = np.array(
+            [min(max(0.0, tmin), tmax) for (tmin, tmax) in bounds], dtype=float
+        )
+        res = minimize(
+            loss,
+            x0,
+            method="Powell",
+            bounds=bounds,
+            options={"xtol": 1e-5, "ftol": 1e-8, "maxiter": 500},
+        )
         thetas = np.asarray(res.x, dtype=float)
         for i, (tmin, tmax) in enumerate(bounds):
             thetas[i] = float(min(max(thetas[i], tmin), tmax))
@@ -938,21 +1132,29 @@ def relax_ss_linker(
     # Compose new cluster transforms. Identical logic to the ds path.
     cluster_updates: dict[str, tuple[list[float], list[float]]] = {}
     for (_jid, origin, axis, cluster_id, _tmin, _tmax), theta in zip(selected, thetas):
-        cluster = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
+        cluster = next(
+            (c for c in design.cluster_transforms if c.id == cluster_id), None
+        )
         if cluster is None:
             continue
         if cluster_id in cluster_updates:
             q_prev, t_prev = cluster_updates[cluster_id]
-            staged = cluster.model_copy(update={"rotation": q_prev, "translation": t_prev})
+            staged = cluster.model_copy(
+                update={"rotation": q_prev, "translation": t_prev}
+            )
         else:
             staged = cluster
-        cluster_updates[cluster_id] = _composed_transform(staged, origin, axis, float(theta))
+        cluster_updates[cluster_id] = _composed_transform(
+            staged, origin, axis, float(theta)
+        )
 
     new_clusters = []
     for c in design.cluster_transforms:
         if c.id in cluster_updates:
             q_new, t_new = cluster_updates[c.id]
-            new_clusters.append(c.model_copy(update={"rotation": q_new, "translation": t_new}))
+            new_clusters.append(
+                c.model_copy(update={"rotation": q_new, "translation": t_new})
+            )
         else:
             new_clusters.append(c)
 
@@ -960,16 +1162,18 @@ def relax_ss_linker(
     if design.feature_log_cursor == -2:
         log = []
     elif design.feature_log_cursor >= 0:
-        log = log[:design.feature_log_cursor + 1]
+        log = log[: design.feature_log_cursor + 1]
     for c in new_clusters:
         if c.id in cluster_updates:
-            log.append(ClusterOpLogEntry(
-                cluster_id=c.id,
-                translation=list(c.translation),
-                rotation=list(c.rotation),
-                pivot=list(c.pivot),
-                source="relax",
-            ))
+            log.append(
+                ClusterOpLogEntry(
+                    cluster_id=c.id,
+                    translation=list(c.translation),
+                    rotation=list(c.rotation),
+                    pivot=list(c.pivot),
+                    source="relax",
+                )
+            )
 
     # Flip `bridge_relaxed=True` and persist the chosen bin index + any
     # kinematic R_ee limits set by the user in the modal.
@@ -994,7 +1198,9 @@ def relax_ss_linker(
     )
 
     # Compute world-frame FJC bead positions on the (now relaxed) design.
-    relaxed_conn = next((c for c in updated.overhang_connections if c.id == conn.id), conn)
+    relaxed_conn = next(
+        (c for c in updated.overhang_connections if c.id == conn.id), conn
+    )
     fjc_positions = fjc_positions_in_design_frame(updated, relaxed_conn)
     entry = ssdna_fjc.entry(n_bp)
     return updated, {

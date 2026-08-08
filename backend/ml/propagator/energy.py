@@ -17,13 +17,14 @@ implicit-solvent DNA force field — the theoretically-correct A2 solute engine.
 torch is the optional dep (see gnn.py).  DNA-only solute first (fixed atom set); ion
 shell + hydration shell (which exchange) come in M2.
 """
+
 from __future__ import annotations
 
 import numpy as np
 import torch
 import torch.nn as nn
 
-KB_KCAL = 0.0019872041   # Boltzmann constant, kcal/mol/K
+KB_KCAL = 0.0019872041  # Boltzmann constant, kcal/mol/K
 
 
 class EnergyNet(nn.Module):
@@ -33,28 +34,53 @@ class EnergyNet(nn.Module):
     feeds the energy readout, so E is rotation/translation invariant and F = -dE/dx is
     equivariant.  A radius cutoff → local, transferable, no PME (composes onto origami)."""
 
-    def __init__(self, hidden: int = 64, n_layers: int = 3, n_rbf: int = 20,
-                 cutoff: float = 6.0, n_elem: int = 20):
+    def __init__(
+        self,
+        hidden: int = 64,
+        n_layers: int = 3,
+        n_rbf: int = 20,
+        cutoff: float = 6.0,
+        n_elem: int = 20,
+    ):
         super().__init__()
         self.hidden, self.cutoff, self.n_rbf = hidden, cutoff, n_rbf
         self.embed = nn.Embedding(n_elem, hidden)
         self.msg, self.upd = nn.ModuleList(), nn.ModuleList()
         for _ in range(n_layers):
-            self.msg.append(nn.ModuleDict({
-                "phi": nn.Sequential(nn.Linear(hidden, hidden), nn.SiLU(),
-                                     nn.Linear(hidden, 3 * hidden)),
-                "rbf": nn.Linear(n_rbf, 3 * hidden)}))
-            self.upd.append(nn.ModuleDict({
-                "U": nn.Linear(hidden, hidden, bias=False),
-                "V": nn.Linear(hidden, hidden, bias=False),
-                "mlp": nn.Sequential(nn.Linear(2 * hidden, hidden), nn.SiLU(),
-                                     nn.Linear(hidden, 3 * hidden))}))
-        self.readout = nn.Sequential(nn.Linear(hidden, hidden), nn.SiLU(),
-                                     nn.Linear(hidden, 1))
+            self.msg.append(
+                nn.ModuleDict(
+                    {
+                        "phi": nn.Sequential(
+                            nn.Linear(hidden, hidden),
+                            nn.SiLU(),
+                            nn.Linear(hidden, 3 * hidden),
+                        ),
+                        "rbf": nn.Linear(n_rbf, 3 * hidden),
+                    }
+                )
+            )
+            self.upd.append(
+                nn.ModuleDict(
+                    {
+                        "U": nn.Linear(hidden, hidden, bias=False),
+                        "V": nn.Linear(hidden, hidden, bias=False),
+                        "mlp": nn.Sequential(
+                            nn.Linear(2 * hidden, hidden),
+                            nn.SiLU(),
+                            nn.Linear(hidden, 3 * hidden),
+                        ),
+                    }
+                )
+            )
+        self.readout = nn.Sequential(
+            nn.Linear(hidden, hidden), nn.SiLU(), nn.Linear(hidden, 1)
+        )
 
     def _rbf(self, d):
         c = torch.linspace(0, self.cutoff, self.n_rbf, device=d.device)
-        return torch.exp(-((d[:, None] - c[None, :]) ** 2) / (self.cutoff / self.n_rbf) ** 2)
+        return torch.exp(
+            -((d[:, None] - c[None, :]) ** 2) / (self.cutoff / self.n_rbf) ** 2
+        )
 
     def energy(self, z, pos, edge_index):
         i, j = edge_index[0], edge_index[1]
@@ -77,7 +103,7 @@ class EnergyNet(nn.Module):
             a_ss, a_sv, a_vv = a.chunk(3, dim=-1)
             s = s + a_ss + a_sv * vv
             V = V + a_vv[:, None, :] * Vv
-        return self.readout(s).sum()   # total scalar energy (sum of per-atom)
+        return self.readout(s).sum()  # total scalar energy (sum of per-atom)
 
     def forces(self, z, pos, edge_index):
         """F = -dE/dx.  Equivariant because E is invariant.  Returns (E, F)."""
@@ -98,27 +124,53 @@ class ForceNet(nn.Module):
     Same PaiNN message passing as EnergyNet with an equivariant vector readout instead of the
     scalar energy readout."""
 
-    def __init__(self, hidden: int = 48, n_layers: int = 3, n_rbf: int = 20,
-                 cutoff: float = 5.0, n_elem: int = 20):
+    def __init__(
+        self,
+        hidden: int = 48,
+        n_layers: int = 3,
+        n_rbf: int = 20,
+        cutoff: float = 5.0,
+        n_elem: int = 20,
+    ):
         super().__init__()
         self.hidden, self.cutoff, self.n_rbf = hidden, cutoff, n_rbf
         self.embed = nn.Embedding(n_elem, hidden)
         self.msg, self.upd = nn.ModuleList(), nn.ModuleList()
         for _ in range(n_layers):
-            self.msg.append(nn.ModuleDict({
-                "phi": nn.Sequential(nn.Linear(hidden, hidden), nn.SiLU(),
-                                     nn.Linear(hidden, 3 * hidden)),
-                "rbf": nn.Linear(n_rbf, 3 * hidden)}))
-            self.upd.append(nn.ModuleDict({
-                "U": nn.Linear(hidden, hidden, bias=False),
-                "V": nn.Linear(hidden, hidden, bias=False),
-                "mlp": nn.Sequential(nn.Linear(2 * hidden, hidden), nn.SiLU(),
-                                     nn.Linear(hidden, 3 * hidden))}))
-        self.out = nn.Linear(hidden, 1, bias=False)   # contracts V's H channels → 3-vector
+            self.msg.append(
+                nn.ModuleDict(
+                    {
+                        "phi": nn.Sequential(
+                            nn.Linear(hidden, hidden),
+                            nn.SiLU(),
+                            nn.Linear(hidden, 3 * hidden),
+                        ),
+                        "rbf": nn.Linear(n_rbf, 3 * hidden),
+                    }
+                )
+            )
+            self.upd.append(
+                nn.ModuleDict(
+                    {
+                        "U": nn.Linear(hidden, hidden, bias=False),
+                        "V": nn.Linear(hidden, hidden, bias=False),
+                        "mlp": nn.Sequential(
+                            nn.Linear(2 * hidden, hidden),
+                            nn.SiLU(),
+                            nn.Linear(hidden, 3 * hidden),
+                        ),
+                    }
+                )
+            )
+        self.out = nn.Linear(
+            hidden, 1, bias=False
+        )  # contracts V's H channels → 3-vector
 
     def _rbf(self, d):
         c = torch.linspace(0, self.cutoff, self.n_rbf, device=d.device)
-        return torch.exp(-((d[:, None] - c[None, :]) ** 2) / (self.cutoff / self.n_rbf) ** 2)
+        return torch.exp(
+            -((d[:, None] - c[None, :]) ** 2) / (self.cutoff / self.n_rbf) ** 2
+        )
 
     def forward(self, z, pos, edge_index):
         i, j = edge_index[0], edge_index[1]
@@ -141,7 +193,9 @@ class ForceNet(nn.Module):
             a_ss, a_sv, a_vv = a.chunk(3, dim=-1)
             s = s + a_ss + a_sv * vv
             V = V + a_vv[:, None, :] * Vv
-        return torch.einsum("nch,h->nc", V, self.out.weight.squeeze(0))   # equivariant force
+        return torch.einsum(
+            "nch,h->nc", V, self.out.weight.squeeze(0)
+        )  # equivariant force
 
 
 def force_match_loss(model, z, pos, edge_index, f_true):
@@ -149,8 +203,19 @@ def force_match_loss(model, z, pos, edge_index, f_true):
     return ((f_pred - f_true) ** 2).mean()
 
 
-def langevin_rollout(force_fn, x, v, mass, *, dt_fs, steps, gamma_ps=147.0,
-                     temp_K=300.0, callback=None, callback_every=100):
+def langevin_rollout(
+    force_fn,
+    x,
+    v,
+    mass,
+    *,
+    dt_fs,
+    steps,
+    gamma_ps=147.0,
+    temp_K=300.0,
+    callback=None,
+    callback_every=100,
+):
     """Force-CACHED BAOAB Langevin rollout — the fast inner loop for validation.
 
     ``force_fn(x, step) -> F`` returns the total force (kcal/mol/Å) at ``x``; the caller
@@ -164,6 +229,7 @@ def langevin_rollout(force_fn, x, v, mass, *, dt_fs, steps, gamma_ps=147.0,
         the invariant measure preserved (Rg drift unchanged). ``force_fn`` owns that policy.
     x, v, mass are torch [N,3]/[N] tensors on the model device. Returns final (x, v)."""
     import torch  # noqa: PLC0415
+
     ACC = 4.184e-4
     m = mass[:, None] if mass.dim() == 1 else mass
     g = gamma_ps * 1e-3
@@ -174,10 +240,10 @@ def langevin_rollout(force_fn, x, v, mass, *, dt_fs, steps, gamma_ps=147.0,
     for k in range(steps):
         a = f * ACC / m
         v = v + 0.5 * dt_fs * a
-        x = x + 0.5 * dt_fs * v                          # A
-        v = c1 * v + c2 * sig * torch.randn_like(v)      # O (thermostat)
-        x = x + 0.5 * dt_fs * v                          # A
-        f = force_fn(x, k + 1)                           # ONE eval → next step's opening B
+        x = x + 0.5 * dt_fs * v  # A
+        v = c1 * v + c2 * sig * torch.randn_like(v)  # O (thermostat)
+        x = x + 0.5 * dt_fs * v  # A
+        f = force_fn(x, k + 1)  # ONE eval → next step's opening B
         a = f * ACC / m
         v = v + 0.5 * dt_fs * a
         if callback is not None and k % callback_every == 0:
@@ -185,25 +251,28 @@ def langevin_rollout(force_fn, x, v, mass, *, dt_fs, steps, gamma_ps=147.0,
     return x, v
 
 
-def langevin_step(model, z, x, v, edge_index, mass, *, dt_fs, gamma_ps=5.0,
-                  temp_K=300.0):
+def langevin_step(
+    model, z, x, v, edge_index, mass, *, dt_fs, gamma_ps=5.0, temp_K=300.0
+):
     """One BAOAB Langevin step with learned forces.  dt in fs, gamma in 1/ps.
     Units: pos Å, force kcal/mol/Å, mass amu → accel in Å/fs² via the 418.4 factor
     (1 kcal/mol/Å/amu = 418.4 Å/ps² = 4.184e-4 Å/fs²)."""
-    ACC = 4.184e-4                      # (kcal/mol/Å)/amu → Å/fs²
+    ACC = 4.184e-4  # (kcal/mol/Å)/amu → Å/fs²
     dt = dt_fs
-    g = gamma_ps * 1e-3                 # 1/ps → 1/fs
+    g = gamma_ps * 1e-3  # 1/ps → 1/fs
     m = mass[:, None]
     _E, f = model.forces(z, x, edge_index)
     a = f * ACC / m
-    v = v + 0.5 * dt * a                                    # B
-    x = x + 0.5 * dt * v                                    # A
+    v = v + 0.5 * dt * a  # B
+    x = x + 0.5 * dt * v  # A
     c1 = np.exp(-g * dt)
     c2 = np.sqrt(max(0.0, 1 - c1 * c1))
-    sigma = torch.sqrt(torch.as_tensor(KB_KCAL * temp_K * ACC) / m)  # Å/fs thermal speed
-    v = c1 * v + c2 * sigma * torch.randn_like(v)           # O
-    x = x + 0.5 * dt * v                                    # A
+    sigma = torch.sqrt(
+        torch.as_tensor(KB_KCAL * temp_K * ACC) / m
+    )  # Å/fs thermal speed
+    v = c1 * v + c2 * sigma * torch.randn_like(v)  # O
+    x = x + 0.5 * dt * v  # A
     _E, f = model.forces(z, x, edge_index)
     a = f * ACC / m
-    v = v + 0.5 * dt * a                                    # B
+    v = v + 0.5 * dt * a  # B
     return x, v

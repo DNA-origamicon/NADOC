@@ -43,11 +43,11 @@ router = APIRouter()
 
 @router.get("/design/export/stl")
 def export_surface_stl(
-    grid_spacing:    float = 0.20,
-    probe_radius:    float = 0.28,
-    target_mm:       float = 200.0,
-    radius_inflate:  float = 1.30,
-    smooth:          int   = 15,
+    grid_spacing: float = 0.20,
+    probe_radius: float = 0.28,
+    target_mm: float = 200.0,
+    radius_inflate: float = 1.30,
+    smooth: int = 15,
 ) -> Response:
     """Export the molecular surface as a binary STL for 3D printing.
 
@@ -71,8 +71,8 @@ def export_surface_stl(
     from backend.core.surface import compute_surface, smooth_mesh
 
     design = _design_for_export()
-    model  = build_atomistic_model(design)
-    mesh   = compute_surface(
+    model = build_atomistic_model(design)
+    mesh = compute_surface(
         model.atoms,
         grid_spacing=grid_spacing,
         probe_radius=probe_radius,
@@ -84,22 +84,22 @@ def export_surface_stl(
     mesh = smooth_mesh(mesh, iterations=smooth)
 
     name = (design.metadata.name or "design").replace(" ", "_")
-    stl  = export_stl(mesh, scale=auto_scale(mesh, target_mm=target_mm), name=name)
+    stl = export_stl(mesh, scale=auto_scale(mesh, target_mm=target_mm), name=name)
     return Response(
-        content     = stl,
-        media_type  = "model/stl",
-        headers     = {"Content-Disposition": f'attachment; filename="{name}.stl"'},
+        content=stl,
+        media_type="model/stl",
+        headers={"Content-Disposition": f'attachment; filename="{name}.stl"'},
     )
 
 
 @router.get("/design/export/3mf")
 def export_surface_3mf(
-    grid_spacing:    float = 0.20,
-    probe_radius:    float = 0.28,
-    target_mm:       float = 200.0,
-    radius_inflate:  float = 1.30,
-    smooth:          int   = 15,
-    staple_colors:   int   = 3,
+    grid_spacing: float = 0.20,
+    probe_radius: float = 0.28,
+    target_mm: float = 200.0,
+    radius_inflate: float = 1.30,
+    smooth: int = 15,
+    staple_colors: int = 3,
 ) -> Response:
     """Export the molecular surface as a manifold multi-colour 3MF for 3D printing.
 
@@ -119,7 +119,11 @@ def export_surface_3mf(
     Query params mirror ``/design/export/stl`` plus ``staple_colors`` (1-3).
     """
     from backend.core.atomistic import build_atomistic_model
-    from backend.core.surface import compute_colored_surfaces, compute_surface, smooth_mesh
+    from backend.core.surface import (
+        compute_colored_surfaces,
+        compute_surface,
+        smooth_mesh,
+    )
     from backend.core.threemf_export import (
         auto_scale,
         compute_staple_coloring,
@@ -127,7 +131,7 @@ def export_surface_3mf(
     )
 
     design = _design_for_export()
-    model  = build_atomistic_model(design)
+    model = build_atomistic_model(design)
     radius_scale = 1.2 * radius_inflate
 
     # 1. One smoothed surface drives the staple map-colouring (which staples
@@ -168,9 +172,9 @@ def export_surface_3mf(
     name = (design.metadata.name or "design").replace(" ", "_")
     data = export_3mf_parts(part_specs, scale=scale, name=name)
     return Response(
-        content     = data,
-        media_type  = "model/3mf",
-        headers     = {
+        content=data,
+        media_type="model/3mf",
+        headers={
             "Content-Disposition": f'attachment; filename="{name}.3mf"',
             "X-NADOC-Coloring": (
                 f"{len(colors) - 1} staple colors, {stats['n_staples']} staples, "

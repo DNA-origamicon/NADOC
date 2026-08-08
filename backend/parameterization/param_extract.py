@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 
 # ── Physical constants ────────────────────────────────────────────────────────
 
-_kT_kJ_MOL_310K = 2.5788   # kJ/mol at 310 K (kB × 310 K × NA)
+_kT_kJ_MOL_310K = 2.5788  # kJ/mol at 310 K (kB × 310 K × NA)
 _kT_KCAL_MOL_310K = 0.6162  # kcal/mol at 310 K
 
 # LOCAL 0-based residue indices for the inter-crossover measurement arm.
@@ -68,6 +68,7 @@ _MEASUREMENT_BP_LO = 8
 _MEASUREMENT_BP_HI = 26
 
 # ── Output dataclass ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class CrossoverParameters:
@@ -101,6 +102,7 @@ class CrossoverParameters:
     convergence_warnings : list[str]
         Any convergence issues found.
     """
+
     variant_label: str
     restraint_k_kcal: float
     q_mean: np.ndarray
@@ -148,6 +150,7 @@ class CrossoverParameters:
 
 # ── Reference frame helpers ───────────────────────────────────────────────────
 
+
 def _helix_axis_from_c1prime(
     positions: np.ndarray,
     reference_axis: np.ndarray | None = None,
@@ -166,7 +169,7 @@ def _helix_axis_from_c1prime(
     origin = positions.mean(axis=0)
     centred = positions - origin
     _, _, vt = np.linalg.svd(centred, full_matrices=False)
-    axis = vt[0]   # first right singular vector = direction of max variance
+    axis = vt[0]  # first right singular vector = direction of max variance
     axis = axis / np.linalg.norm(axis)
     if reference_axis is not None and np.dot(axis, reference_axis) < 0:
         axis = -axis
@@ -193,7 +196,11 @@ def _rotation_to_euler_zyz(R: np.ndarray) -> tuple[float, float, float]:
     beta = np.arccos(np.clip(R[2, 2], -1, 1))
     if np.abs(np.sin(beta)) < 1e-8:
         alpha = 0.0
-        gamma = np.arctan2(-R[0, 1], R[0, 0]) if R[2, 2] > 0 else np.arctan2(R[0, 1], -R[0, 0])
+        gamma = (
+            np.arctan2(-R[0, 1], R[0, 0])
+            if R[2, 2] > 0
+            else np.arctan2(R[0, 1], -R[0, 0])
+        )
     else:
         alpha = np.arctan2(R[1, 2], R[0, 2])
         gamma = np.arctan2(R[2, 1], -R[2, 0])
@@ -202,9 +209,10 @@ def _rotation_to_euler_zyz(R: np.ndarray) -> tuple[float, float, float]:
 
 # ── Per-frame coordinate computation ─────────────────────────────────────────
 
+
 def _compute_interarm_q(
-    c1prime_arm1: np.ndarray,    # (n_bp_arm1, 3) C1' positions for arm 1
-    c1prime_arm2: np.ndarray,    # (n_bp_arm2, 3) C1' positions for arm 2
+    c1prime_arm1: np.ndarray,  # (n_bp_arm1, 3) C1' positions for arm 1
+    c1prime_arm2: np.ndarray,  # (n_bp_arm2, 3) C1' positions for arm 2
     ref_ax1: np.ndarray | None = None,
     ref_ax2: np.ndarray | None = None,
 ) -> np.ndarray:
@@ -246,6 +254,7 @@ def _compute_interarm_q(
 
 # ── Trajectory loading ────────────────────────────────────────────────────────
 
+
 def _select_c1prime_atoms(universe, bp_lo: int, bp_hi: int, helix_idx: int):
     """
     Select C1' atoms for the specified bp range on a given chain (helix_idx).
@@ -258,9 +267,9 @@ def _select_c1prime_atoms(universe, bp_lo: int, bp_hi: int, helix_idx: int):
     """
 
     dna_chains = [
-        s for s in universe.segments
-        if any(r.resname in ("DA", "DT", "DG", "DC")
-               for r in s.residues[:1])
+        s
+        for s in universe.segments
+        if any(r.resname in ("DA", "DT", "DG", "DC") for r in s.residues[:1])
     ]
 
     # Select the two scaffold helices — the two longest chains that share the
@@ -268,6 +277,7 @@ def _select_c1prime_atoms(universe, bp_lo: int, bp_hi: int, helix_idx: int):
     # scaffold (e.g. 42 vs 35 residues in the 2hb design) so we cannot simply
     # take the two largest chains.
     from collections import Counter as _Counter
+
     length_counts = _Counter(len(s.residues) for s in dna_chains)
     # Target: the longest chain length that appears at least twice (a pair).
     paired_lengths = {l for l, n in length_counts.items() if n >= 2}
@@ -286,7 +296,7 @@ def _select_c1prime_atoms(universe, bp_lo: int, bp_hi: int, helix_idx: int):
     dna_chains_sorted = scaffold_chains
 
     chain = dna_chains_sorted[helix_idx]
-    residues = chain.residues[bp_lo:bp_hi + 1]
+    residues = chain.residues[bp_lo : bp_hi + 1]
     c1p = residues.atoms.select_atoms("name C1'")
     if len(c1p) == 0:
         raise ValueError(
@@ -346,7 +356,8 @@ def extract_parameters(
     u = mda.Universe(str(tpr_or_gro), str(xtc_path))
     logger.info(
         "Loaded trajectory: %d atoms, %d frames",
-        u.atoms.n_atoms, u.trajectory.n_frames,
+        u.atoms.n_atoms,
+        u.trajectory.n_frames,
     )
 
     # Select C1' atoms in the measurement arm on each helix
@@ -355,7 +366,8 @@ def extract_parameters(
     arm2_c1p = _select_c1prime_atoms(u, bp_lo, bp_hi, helix_idx=1)
     logger.info(
         "C1' selection: arm1=%d atoms, arm2=%d atoms",
-        len(arm1_c1p), len(arm2_c1p),
+        len(arm1_c1p),
+        len(arm2_c1p),
     )
 
     # Anchor helix axis signs using first frame — prevents PCA sign flips
@@ -382,10 +394,10 @@ def extract_parameters(
             "covariance estimation.  Extend the production run."
         )
 
-    Q = np.array(q_frames)   # (n_frames, 6)
+    Q = np.array(q_frames)  # (n_frames, 6)
     q_mean = Q.mean(axis=0)
     q_std = Q.std(axis=0, ddof=1)
-    cov = np.cov(Q.T)         # (6, 6)
+    cov = np.cov(Q.T)  # (6, 6)
 
     # Boltzmann inversion: K = kT × Cov⁻¹
     try:
@@ -446,12 +458,12 @@ def _map_to_mrdna(q_mean: np.ndarray, stiffness: np.ndarray) -> dict:
     # separation is mostly perpendicular to the helix axis (q[1] or q[2]),
     # not axial (q[0]≈0).  Use the Euclidean distance of the mean separation
     # vector as r0, and the stiffness in the dominant lateral direction as k_bond.
-    r0_ang = float(np.linalg.norm(q_mean[:3]))           # Euclidean |sep_vec| in Å
+    r0_ang = float(np.linalg.norm(q_mean[:3]))  # Euclidean |sep_vec| in Å
     lateral_idx = int(np.argmax(np.abs(q_mean[1:3]))) + 1  # 1 or 2, dominant perp
     k_stretch = float(stiffness[lateral_idx, lateral_idx])  # kJ/mol/Å²
 
-    hj_angle_rad = float(q_mean[3])                     # q[3] = α (dihedral-like)
-    k_dihedral = float(stiffness[3, 3])                 # kJ/mol/rad²
+    hj_angle_rad = float(q_mean[3])  # q[3] = α (dihedral-like)
+    k_dihedral = float(stiffness[3, 3])  # kJ/mol/rad²
 
     k_bend = float(0.5 * (stiffness[4, 4] + stiffness[5, 5]))  # average tilt+twist
 
@@ -460,7 +472,9 @@ def _map_to_mrdna(q_mean: np.ndarray, stiffness: np.ndarray) -> dict:
     for i in range(6):
         for j in range(6):
             if i != j:
-                frac = abs(stiffness[i, j]) / (np.sqrt(stiffness[i, i] * stiffness[j, j]) + 1e-10)
+                frac = abs(stiffness[i, j]) / (
+                    np.sqrt(stiffness[i, i] * stiffness[j, j]) + 1e-10
+                )
                 max_off_diag = max(max_off_diag, frac)
     if max_off_diag > 0.3:
         logger.warning(
@@ -486,6 +500,7 @@ def _map_to_mrdna(q_mean: np.ndarray, stiffness: np.ndarray) -> dict:
 
 
 # ── Restraint sensitivity check ───────────────────────────────────────────────
+
 
 def check_restraint_sensitivity(
     params_by_k: dict[float, CrossoverParameters],
@@ -542,7 +557,7 @@ def check_restraint_sensitivity(
     if not passed:
         recommendation = (
             f"RESTRAINT BIAS DETECTED: DOFs {[dof_names[i] for i in flagged]} vary "
-            f"by >{threshold*100:.0f}% across the k sweep.  The outer arm stubs are "
+            f"by >{threshold * 100:.0f}% across the k sweep.  The outer arm stubs are "
             f"too short for soft position restraints to give unbiased results.  "
             f"Consider: (a) position restraints with much softer k < 0.1 kcal/mol/Å², "
             f"(b) switching to orientational restraints at the helix termini, or "
@@ -551,8 +566,8 @@ def check_restraint_sensitivity(
         logger.error(recommendation)
     else:
         recommendation = (
-            f"Restraint sensitivity check passed: max variation = {max_variation*100:.1f}% "
-            f"< {threshold*100:.0f}% threshold.  Outer-arm restraints are not biasing results."
+            f"Restraint sensitivity check passed: max variation = {max_variation * 100:.1f}% "
+            f"< {threshold * 100:.0f}% threshold.  Outer-arm restraints are not biasing results."
         )
         logger.info(recommendation)
 

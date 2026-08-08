@@ -9,13 +9,18 @@ Physics doesn't need to be identical across runs (stochastic MD), but:
   - Stiffness matrix structure must be present
   - mrdna_params keys must all be present
 """
+
 from __future__ import annotations
 
-REL_TOL = 0.10   # 10% relative tolerance — applied only to stable geometric params
+REL_TOL = 0.10  # 10% relative tolerance — applied only to stable geometric params
 # hj_equilibrium_angle_deg is excluded: at 1 ns the DX junction samples both
 # stacking isomers (isoI/isoII) so the sign is not deterministic at this timescale.
-SIGN_KEYS = ("r0_ang", "k_bond_kJ_mol_ang2",
-             "k_dihedral_kJ_mol_rad2", "k_bend_kJ_mol_rad2")
+SIGN_KEYS = (
+    "r0_ang",
+    "k_bond_kJ_mol_ang2",
+    "k_dihedral_kJ_mol_rad2",
+    "k_bend_kJ_mol_rad2",
+)
 # Only r0 is stable enough for magnitude comparison at 1 ns.
 # k_* have ESS≈9 → order-of-magnitude variation; caught by sign check only.
 SCALAR_KEYS = ("r0_ang",)
@@ -30,7 +35,7 @@ def params_match(current: dict, reference: dict) -> tuple[bool, str]:
     failures: list[str] = []
 
     curr_p = current.get("mrdna_params", {})
-    ref_p  = reference.get("mrdna_params", {})
+    ref_p = reference.get("mrdna_params", {})
 
     # All expected keys present
     for k in SIGN_KEYS:
@@ -45,9 +50,7 @@ def params_match(current: dict, reference: dict) -> tuple[bool, str]:
         if r == 0:
             continue
         if (c > 0) != (r > 0):
-            failures.append(
-                f"Sign mismatch on {k}: current={c:.4g}, reference={r:.4g}"
-            )
+            failures.append(f"Sign mismatch on {k}: current={c:.4g}, reference={r:.4g}")
 
     # Magnitude checks (relative tolerance)
     for k in SCALAR_KEYS:
@@ -76,5 +79,9 @@ def params_match(current: dict, reference: dict) -> tuple[bool, str]:
         failures.append(f"Too few frames: {current.get('n_frames')}")
 
     ok = len(failures) == 0
-    report = "\n".join(f"  FAIL: {f}" for f in failures) if failures else "  All checks passed."
+    report = (
+        "\n".join(f"  FAIL: {f}" for f in failures)
+        if failures
+        else "  All checks passed."
+    )
     return ok, report

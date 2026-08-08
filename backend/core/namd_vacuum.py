@@ -101,8 +101,9 @@ _FF_FILES = [
 
 def vacuum_steps(ns: float = VACUUM_NS, timestep_fs: float = VACUUM_TIMESTEP_FS) -> int:
     """MD steps for ``ns`` nanoseconds, rounded to NAMD's stepspercycle."""
-    return _round_up_to_cycle(int(round(ns * 1e6 / timestep_fs)),
-                              AKSIMENTIEV_STEPS_PER_CYCLE)
+    return _round_up_to_cycle(
+        int(round(ns * 1e6 / timestep_fs)), AKSIMENTIEV_STEPS_PER_CYCLE
+    )
 
 
 def design_helix_count(design: Design) -> int:
@@ -135,7 +136,9 @@ def build_namd_vacuum_package(
     #    solvation directly (see build_namd_seed_from_vacuum).
     if progress is not None:
         progress("topology", None, "Building DNA topology (PSF/PDB)…")
-    topology_build = build_charmm_psfgen_topology(design, atomistic_model=atomistic_model)
+    topology_build = build_charmm_psfgen_topology(
+        design, atomistic_model=atomistic_model
+    )
     dna_pdb = topology_build.pdb_text
     dna_psf = topology_build.psf_text
 
@@ -171,8 +174,13 @@ def build_namd_vacuum_package(
     if design_has_extra_bases(design) or design_has_extensions(design):
         exclude = identify_unpaired_residues(package_dir / f"{name_stem}.psf", pdb_path)
     enm_report = write_aksimentiev_enm_files(
-        pdb_path, package_dir, name_stem, scales=(min_scale,),
-        exclude_residues=exclude or None, progress=progress)
+        pdb_path,
+        package_dir,
+        name_stem,
+        scales=(min_scale,),
+        exclude_residues=exclude or None,
+        progress=progress,
+    )
 
     # 4. Push bonds — the interhelical repulsion surrogate.  Zero of them is a normal,
     #    expected outcome for a 2-helix or densely crossed-over design (see the module
@@ -184,7 +192,9 @@ def build_namd_vacuum_package(
     if push.n_bonds:
         push_file = f"{name_stem}_push.exb"
         (package_dir / push_file).write_text(push.text)
-    logger.info("vacuum push bonds for %s: %d (%s)", name_stem, push.n_bonds, push.reason)
+    logger.info(
+        "vacuum push bonds for %s: %d (%s)", name_stem, push.n_bonds, push.reason
+    )
 
     # 5. One relaxation segment.  No barostat (nothing to pressurise), no NPT, and the
     #    tutorial's low-friction thermostat.
@@ -215,13 +225,23 @@ def build_namd_vacuum_package(
 
     if progress is not None:
         progress("finalize", None, "Writing simulation configs…")
-    box = (0.0, 0.0, 0.0)          # unused: no periodic cell in vacuum
+    box = (0.0, 0.0, 0.0)  # unused: no periodic cell in vacuum
     (package_dir / f"{min_name}.conf").write_text(
-        _min_conf(min_name, name_stem, box, False, minimize_steps, min_scale,
-                  vacuum=True, push_bonds_file=push_file)
+        _min_conf(
+            min_name,
+            name_stem,
+            box,
+            False,
+            minimize_steps,
+            min_scale,
+            vacuum=True,
+            push_bonds_file=push_file,
+        )
     )
     (package_dir / f"{seg.name}.conf").write_text(
-        _segment_conf(seg, name_stem, box, False, vacuum=True, push_bonds_file=push_file)
+        _segment_conf(
+            seg, name_stem, box, False, vacuum=True, push_bonds_file=push_file
+        )
     )
 
     segments = [seg]
@@ -287,6 +307,7 @@ def build_namd_vacuum_package(
 # psfgen atom order and hand it to ``build_namd_solvated_package(solute_coords=...)``,
 # which overwrites the freshly built PDB's coordinates before placing any water.
 
+
 class VacuumNamdSeed:
     """A vacuum-relaxed structure ready to seed the solvated ladder.
 
@@ -303,7 +324,7 @@ class VacuumNamdSeed:
         self.solute_coords = solute_coords
         self.n_atoms = len(solute_coords)
         self.source_job_id = source_job_id
-        self.source = source          # which file the coordinates came from
+        self.source = source  # which file the coordinates came from
 
 
 def _pdb_atom_count(pdb_path: Path) -> int:
@@ -327,13 +348,14 @@ def build_namd_seed_from_vacuum(job_id: str, workspace_dir: Path) -> VacuumNamdS
 
     from backend.core.md_job import MdJob  # noqa: PLC0415
 
-    job = MdJob.load(job_id, workspace_dir)          # FileNotFoundError if unknown
+    job = MdJob.load(job_id, workspace_dir)  # FileNotFoundError if unknown
     package_dir = job.package_dir(workspace_dir)
     psf = package_dir / f"{job.name_stem}.psf"
     pdb = package_dir / f"{job.name_stem}.pdb"
     if not psf.exists() or not pdb.exists():
         raise FileNotFoundError(
-            f"Vacuum job {job_id} has no topology in {package_dir}; cannot seed.")
+            f"Vacuum job {job_id} has no topology in {package_dir}; cannot seed."
+        )
 
     manifest = json.loads((package_dir / "manifest.json").read_text())
     seg_names = [s["name"] for s in manifest.get("segments", [])]
@@ -353,7 +375,8 @@ def build_namd_seed_from_vacuum(job_id: str, workspace_dir: Path) -> VacuumNamdS
         if not dcd.exists():
             raise FileNotFoundError(
                 f"Vacuum job {job_id} produced no coordinates yet "
-                f"(looked for {last}.coor / .restart.coor / .dcd in {out}).")
+                f"(looked for {last}.coor / .restart.coor / .dcd in {out})."
+            )
         u = mda.Universe(str(psf), str(dcd))
         u.trajectory[-1]
         coords, source = u.atoms.positions.copy(), dcd.name
@@ -363,21 +386,34 @@ def build_namd_seed_from_vacuum(job_id: str, workspace_dir: Path) -> VacuumNamdS
         raise RuntimeError(
             f"Vacuum seed atom-count mismatch for job {job_id}: {source} has "
             f"{len(coords):,} atoms but {pdb.name} has {expected:,}. Refusing to seed "
-            f"— the coordinates would be assigned to the wrong atoms.")
+            f"— the coordinates would be assigned to the wrong atoms."
+        )
     if not np.all(np.isfinite(coords)):
         raise RuntimeError(
             f"Vacuum seed from job {job_id} contains non-finite coordinates ({source}); "
-            f"the relaxation likely blew up.")
+            f"the relaxation likely blew up."
+        )
     return VacuumNamdSeed(coords, job_id, source)
 
 
 def _segment_dict(s: SegmentSpec) -> dict:
     return {
-        "name": s.name, "stage": s.stage, "percent": s.percent, "steps": s.steps,
-        "temp": s.temp, "damping": s.damping, "scale": s.scale, "npt": s.npt,
-        "previous": s.previous, "reinit": s.reinit, "dcd_freq": s.dcd_freq,
-        "min_c1_paired": s.min_c1_paired, "min_wc_ref_relative": s.min_wc_ref_relative,
-        "extra_bonds_file": s.extra_bonds_file, "soft": s.soft, "gentle": s.gentle,
+        "name": s.name,
+        "stage": s.stage,
+        "percent": s.percent,
+        "steps": s.steps,
+        "temp": s.temp,
+        "damping": s.damping,
+        "scale": s.scale,
+        "npt": s.npt,
+        "previous": s.previous,
+        "reinit": s.reinit,
+        "dcd_freq": s.dcd_freq,
+        "min_c1_paired": s.min_c1_paired,
+        "min_wc_ref_relative": s.min_wc_ref_relative,
+        "extra_bonds_file": s.extra_bonds_file,
+        "soft": s.soft,
+        "gentle": s.gentle,
         "timestep_fs": s.timestep_fs,
     }
 
@@ -395,20 +431,20 @@ def prepare_vacuum_enrgmd_namd(
     # Accept-and-ignore the explicit-solvent kwargs so the shared prep call site
     # (routes_md) can pass ONE uniform kwarg set regardless of protocol.  See
     # tests/test_prepare_signatures.py, which pins this against the real call site.
-    ion_conc_mM: float = 0.0,      # noqa: ARG001 — no solvent
-    mg_conc_mM: float = 0.0,       # noqa: ARG001
-    salt_mode: str = "custom",     # noqa: ARG001
-    padding_nm: float = 1.2,       # noqa: ARG001 — no box
-    water_shell_nm: float = 0.0,   # noqa: ARG001
-    fast: bool = False,            # noqa: ARG001 — standard CUDA, no GPUresident
-    seed: int = 42,                # noqa: ARG001 — nothing random to place
-    declash: bool = False,         # noqa: ARG001 — the ladder is soft throughout
-    gpu_resident_mode: str = "auto",       # noqa: ARG001
-    production_timestep_fs: float = 4.0,   # noqa: ARG001
-    devices: str = "0",            # noqa: ARG001
-    anchors: Optional[list] = None,        # noqa: ARG001
-    field: Optional[dict] = None,          # noqa: ARG001
-    solute_coords=None,            # noqa: ARG001 — this stage PRODUCES the seed
+    ion_conc_mM: float = 0.0,  # noqa: ARG001 — no solvent
+    mg_conc_mM: float = 0.0,  # noqa: ARG001
+    salt_mode: str = "custom",  # noqa: ARG001
+    padding_nm: float = 1.2,  # noqa: ARG001 — no box
+    water_shell_nm: float = 0.0,  # noqa: ARG001
+    fast: bool = False,  # noqa: ARG001 — standard CUDA, no GPUresident
+    seed: int = 42,  # noqa: ARG001 — nothing random to place
+    declash: bool = False,  # noqa: ARG001 — the ladder is soft throughout
+    gpu_resident_mode: str = "auto",  # noqa: ARG001
+    production_timestep_fs: float = 4.0,  # noqa: ARG001
+    devices: str = "0",  # noqa: ARG001
+    anchors: Optional[list] = None,  # noqa: ARG001
+    field: Optional[dict] = None,  # noqa: ARG001
+    solute_coords=None,  # noqa: ARG001 — this stage PRODUCES the seed
 ) -> tuple[str, str, list[SegmentSpec]]:
     """Protocol entry point: prepare an in-vacuo ENRG-MD shape relaxation.
 
@@ -419,13 +455,16 @@ def prepare_vacuum_enrgmd_namd(
     """
     if require_full_topology:
         from backend.core.md_sequence_guard import require_sequenced_scaffold  # noqa: PLC0415
+
         require_sequenced_scaffold(design)
 
     from backend.core.junction_topology import gate_seed_topology  # noqa: PLC0415
+
     gate_seed_topology(design, model=atomistic_model, allow=allow_catenated_seed)
 
     return build_namd_vacuum_package(
-        design, job_dir,
+        design,
+        job_dir,
         minimize_steps=minimize_steps,
         atomistic_model=atomistic_model,
         progress=progress,

@@ -32,6 +32,7 @@ Three-Layer Law: this module reads topology and predicts a Physical-layer shape;
 proposed loop/skip mark set but NEVER mutates the active design.  The REST ``apply`` route lands
 the converged marks as a reversible feature-log entry.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -73,6 +74,7 @@ def _twist_error(measure: Optional[dict], target_twist_deg: float) -> float:
 
 # ── Deviation field + hotspot ranking (mechanical: highest positional error) ────────────────
 
+
 def aggregate_deviation_by_bp(positions: list[dict]) -> dict[tuple[str, int], float]:
     """Collapse a :func:`compute_deviation` per-nucleotide list to a per-(helix, bp) field by
     averaging the deviation across the two strand directions and any loop copies at each station."""
@@ -82,9 +84,13 @@ def aggregate_deviation_by_bp(positions: list[dict]) -> dict[tuple[str, int], fl
     return {k: sum(v) / len(v) for k, v in acc.items()}
 
 
-def rank_hotspots(deviation_by_bp: dict[tuple[str, int], float], *,
-                  sigma: float = 1.0, max_hotspots: int = 8,
-                  min_spacing: int = 8) -> list[tuple[str, int]]:
+def rank_hotspots(
+    deviation_by_bp: dict[tuple[str, int], float],
+    *,
+    sigma: float = 1.0,
+    max_hotspots: int = 8,
+    min_spacing: int = 8,
+) -> list[tuple[str, int]]:
     """The up-to-``max_hotspots`` worst deviation stations, most-severe first.
 
     A hotspot must exceed ``mean + sigma·std`` of the whole field, so a uniform / already-good
@@ -98,8 +104,11 @@ def rank_hotspots(deviation_by_bp: dict[tuple[str, int], float], *,
     mean = sum(vals) / len(vals)
     std = (sum((v - mean) ** 2 for v in vals) / len(vals)) ** 0.5
     threshold = mean + sigma * std
-    ranked = sorted((kv for kv in deviation_by_bp.items() if kv[1] > threshold),
-                    key=lambda kv: kv[1], reverse=True)
+    ranked = sorted(
+        (kv for kv in deviation_by_bp.items() if kv[1] > threshold),
+        key=lambda kv: kv[1],
+        reverse=True,
+    )
     chosen: list[tuple[str, int]] = []
     for (hid, bp), _dev in ranked:
         if len(chosen) >= max_hotspots:
@@ -112,7 +121,10 @@ def rank_hotspots(deviation_by_bp: dict[tuple[str, int], float], *,
 
 # ── Off-crossover / off-end candidate placement ([[feedback_loopskip_no_crossover_ends]]) ───
 
-def _forbidden_bps(design: Design) -> tuple[dict[str, set[int]], dict[str, tuple[int, int]]]:
+
+def _forbidden_bps(
+    design: Design,
+) -> tuple[dict[str, set[int]], dict[str, tuple[int, int]]]:
     """Per helix: the bp an auto mark must NOT land on (crossover bp + strand domain endpoints
     + a duplex-end margin) and the ``(lo, hi)`` interior range.  Mirrors the exp36 generator's
     ``_forbidden_bps`` so the live refiner enforces the same rule the battery does."""
@@ -123,7 +135,8 @@ def _forbidden_bps(design: Design) -> tuple[dict[str, set[int]], dict[str, tuple
     # Crossovers from strand TOPOLOGY (design.crossovers is often empty on loaded designs).
     try:
         xos, _ = extract_crossovers_from_strands(
-            design.strands, design.helices, design.lattice_type)
+            design.strands, design.helices, design.lattice_type
+        )
     except Exception:  # noqa: BLE001
         xos = list(getattr(design, "crossovers", []) or [])
     for xo in xos:
@@ -139,8 +152,9 @@ def _forbidden_bps(design: Design) -> tuple[dict[str, set[int]], dict[str, tuple
                 continue
             forb[dm.helix_id].add(dm.start_bp)
             forb[dm.helix_id].add(dm.end_bp)
-            cov[dm.helix_id].update(range(min(dm.start_bp, dm.end_bp),
-                                          max(dm.start_bp, dm.end_bp) + 1))
+            cov[dm.helix_id].update(
+                range(min(dm.start_bp, dm.end_bp), max(dm.start_bp, dm.end_bp) + 1)
+            )
     for hid, bps in cov.items():
         if bps:
             lo, hi = min(bps), max(bps)
@@ -159,18 +173,25 @@ def free_interior_candidates(design: Design, helix, forbidden: set[int]) -> list
     (both tracks present, not already marked) minus the ``forbidden`` set (crossovers / endpoints /
     end margin).  ``forbidden`` is precomputed once per design via :func:`_forbidden_bps`."""
     from backend.core.regional_skip_placer import core_candidates
+
     return [bp for bp in core_candidates(design, helix) if bp not in forbidden]
 
 
 # ── Mark bookkeeping + trial builds (pure / topological) ────────────────────────────────────
 
+
 def current_marks_by_helix(design: Design) -> dict[str, dict[int, int]]:
     """``{helix_id: {bp_index: delta}}`` for the design's existing loop/skips (delta −1 skip, +1 loop)."""
-    return {h.id: {ls.bp_index: ls.delta for ls in h.loop_skips}
-            for h in design.helices if h.loop_skips}
+    return {
+        h.id: {ls.bp_index: ls.delta for ls in h.loop_skips}
+        for h in design.helices
+        if h.loop_skips
+    }
 
 
-def build_refined_design(base_design: Design, marks_by_helix: dict[str, dict[int, int]]) -> Design:
+def build_refined_design(
+    base_design: Design, marks_by_helix: dict[str, dict[int, int]]
+) -> Design:
     """Lay the converged ``{helix_id: {bp_index: delta}}`` mark set on ``base_design`` and
     RE-SEQUENCE (delta-aware, any lattice) — the APPLY path (unlike the fast inner-loop
     :func:`apply_marks`, which skips re-sequencing).  Changing the mark set shifts every downstream
@@ -190,8 +211,14 @@ def build_refined_design(base_design: Design, marks_by_helix: dict[str, dict[int
     with hb.scratch_session(base_design.lattice_type):
         ds.set_design(base_design.model_copy(deep=True))
         d = clear_all_loop_skips(ds.get_or_404())
-        mods = {hid: [LoopSkip(bp_index=int(bp), delta=int(dl)) for bp, dl in sorted(bps.items())]
-                for hid, bps in (marks_by_helix or {}).items() if bps}
+        mods = {
+            hid: [
+                LoopSkip(bp_index=int(bp), delta=int(dl))
+                for bp, dl in sorted(bps.items())
+            ]
+            for hid, bps in (marks_by_helix or {}).items()
+            if bps
+        }
         if mods:
             d = apply_loop_skips(d, mods)
         ds.set_design(d)
@@ -199,7 +226,9 @@ def build_refined_design(base_design: Design, marks_by_helix: dict[str, dict[int
         return ds.get_or_404().model_copy(deep=True)
 
 
-def apply_marks(base_design: Design, marks_by_helix: dict[str, dict[int, int]]) -> Design:
+def apply_marks(
+    base_design: Design, marks_by_helix: dict[str, dict[int, int]]
+) -> Design:
     """Return a copy of ``base_design`` whose loop/skips are EXACTLY ``marks_by_helix``
     (clear-then-apply).  Pure/topological and — deliberately — does NOT re-sequence: the FEM
     oracle reads duplex-coverage geometry, not base letters, so skipping the (slow) full-sequence
@@ -209,8 +238,13 @@ def apply_marks(base_design: Design, marks_by_helix: dict[str, dict[int, int]]) 
     from backend.core.models import LoopSkip
 
     d = clear_all_loop_skips(base_design)
-    mods = {hid: [LoopSkip(bp_index=int(bp), delta=int(dl)) for bp, dl in sorted(bps.items())]
-            for hid, bps in marks_by_helix.items() if bps}
+    mods = {
+        hid: [
+            LoopSkip(bp_index=int(bp), delta=int(dl)) for bp, dl in sorted(bps.items())
+        ]
+        for hid, bps in marks_by_helix.items()
+        if bps
+    }
     if mods:
         d = apply_loop_skips(d, mods)
     return d
@@ -230,8 +264,11 @@ def periodic_skip_marks(design: Design, period: int) -> dict[str, dict[int, int]
     the (slow) re-sequence — the FEM oracle reads geometry, not base letters (see :func:`apply_marks`).
     """
     from backend.core.loop_skip_calculator import (
-        clear_all_loop_skips, relocate_marks_off_forbidden, sq_lattice_periodic_skips,
+        clear_all_loop_skips,
+        relocate_marks_off_forbidden,
+        sq_lattice_periodic_skips,
     )
+
     if design.lattice_type != LatticeType.SQUARE or period < 1:
         return {}
     base = clear_all_loop_skips(design.model_copy(deep=True))
@@ -240,11 +277,15 @@ def periodic_skip_marks(design: Design, period: int) -> dict[str, dict[int, int]
         mods = relocate_marks_off_forbidden(mods, base)
     except Exception:  # noqa: BLE001 — relocation is best-effort; a bad bp is simply dropped
         pass
-    return {hid: {int(ls.bp_index): int(ls.delta) for ls in lss}
-            for hid, lss in mods.items() if lss}
+    return {
+        hid: {int(ls.bp_index): int(ls.delta) for ls in lss}
+        for hid, lss in mods.items()
+        if lss
+    }
 
 
 # ── The FEM oracle: one linear/nonlinear solve → deviation RMSD + field ──────────────────────
+
 
 def fem_measure(design: Design, *, nonlinear: bool = False) -> Optional[dict]:
     """Run the CanDo FEM shape oracle once on ``design`` and return
@@ -268,18 +309,19 @@ def fem_measure(design: Design, *, nonlinear: bool = False) -> Optional[dict]:
     # every trial carries a twist number — the primary objective for the SQUARE register over-twist.
     tb = _measure_twist_bend(shape["positions"], _core_keys(shape))
     return {
-        "rmsd":            dev["rmsd_nm"],
-        "dev_max":         dev["max_deviation"],
-        "dev_mean":        dev["mean_deviation"],
-        "n":               dev["n"],
+        "rmsd": dev["rmsd_nm"],
+        "dev_max": dev["max_deviation"],
+        "dev_mean": dev["mean_deviation"],
+        "n": dev["n"],
         "deviation_by_bp": aggregate_deviation_by_bp(dev["positions"]),
-        "twist_deg":       tb["twist_deg"],
-        "bend_deg":        tb["bend_deg"],
-        "shape":           shape,
+        "twist_deg": tb["twist_deg"],
+        "bend_deg": tb["bend_deg"],
+        "shape": shape,
     }
 
 
 # ── Twist / bend readout for the live status (no extra solve; measured off the cached shape) ────
+
 
 def _core_keys(shape: dict) -> set[tuple[str, int]]:
     """The duplex-core (helix, bp) stations of a ``predict_shape`` result (its axis nodes) —
@@ -298,11 +340,13 @@ def _measure_twist_bend(positions: list[dict], core_keys: set[tuple[str, int]]) 
     out: dict = {"twist_deg": None, "bend_deg": None}
     try:
         out["twist_deg"] = float(measure_bundle_twist(core))
-    except Exception:      # noqa: BLE001 — degenerate geometry → leave None
+    except Exception:  # noqa: BLE001 — degenerate geometry → leave None
         pass
     try:
-        out["bend_deg"] = float(measure_bundle_arc_bend(core))   # chord-sagitta: true arc angle
-    except Exception:      # noqa: BLE001
+        out["bend_deg"] = float(
+            measure_bundle_arc_bend(core)
+        )  # chord-sagitta: true arc angle
+    except Exception:  # noqa: BLE001
         pass
     return out
 
@@ -317,8 +361,13 @@ def _intended_positions(design: Design) -> list[dict]:
     for h in design.helices:
         for nuc in deformed_nucleotide_positions(h, design):
             pos = nuc.position
-            out.append({"helix_id": nuc.helix_id, "bp_index": nuc.bp_index,
-                        "backbone_position": [float(pos[0]), float(pos[1]), float(pos[2])]})
+            out.append(
+                {
+                    "helix_id": nuc.helix_id,
+                    "bp_index": nuc.bp_index,
+                    "backbone_position": [float(pos[0]), float(pos[1]), float(pos[2])],
+                }
+            )
     return out
 
 
@@ -334,13 +383,23 @@ def current_metrics(measure: dict, core_keys: set[tuple[str, int]]) -> dict:
     """The current prediction's ``{deviation, twist_deg, bend_deg}`` from a :func:`fem_measure`
     result (reuses its cached ``shape`` — no extra solve)."""
     tb = _measure_twist_bend(measure["shape"]["positions"], core_keys)
-    return {"deviation": measure["rmsd"], "twist_deg": tb["twist_deg"], "bend_deg": tb["bend_deg"]}
+    return {
+        "deviation": measure["rmsd"],
+        "twist_deg": tb["twist_deg"],
+        "bend_deg": tb["bend_deg"],
+    }
 
 
 # ── Candidate edit enumeration (try-both; direction chosen empirically by the oracle) ────────
 
-def candidate_edits(hotspot: tuple[str, int], marks_by_helix: dict[str, dict[int, int]],
-                    free_by_helix: dict[str, list[int]], *, allow_loops: bool) -> list[dict]:
+
+def candidate_edits(
+    hotspot: tuple[str, int],
+    marks_by_helix: dict[str, dict[int, int]],
+    free_by_helix: dict[str, list[int]],
+    *,
+    allow_loops: bool,
+) -> list[dict]:
     """The edits to TRY at one ``(helix, bp)`` hotspot.  Never decides direction — enumerates the
     whole applicable set and lets :func:`fem_refine` keep whichever the oracle says helps.
 
@@ -363,7 +422,9 @@ def candidate_edits(hotspot: tuple[str, int], marks_by_helix: dict[str, dict[int
     return edits
 
 
-def _with_edit(marks_by_helix: dict[str, dict[int, int]], edit: dict) -> dict[str, dict[int, int]]:
+def _with_edit(
+    marks_by_helix: dict[str, dict[int, int]], edit: dict
+) -> dict[str, dict[int, int]]:
     """Return a deep-ish copy of ``marks_by_helix`` with one ``candidate_edits`` edit applied."""
     out = {hid: dict(bps) for hid, bps in marks_by_helix.items()}
     hid, op, bp = edit["helix_id"], edit["op"], int(edit["bp_index"])
@@ -405,11 +466,17 @@ def _search_min_period(fn: Callable[[int], float], lo: int, hi: int) -> int:
     return min(range(lo, hi + 1), key=fn)
 
 
-def sweep_skip_period(base_design: Design, *, nonlinear: bool = False,
-                      p_min: int = 8, p_max: int = 400, coarse_ratio: float = 1.4,
-                      cost_fn: Optional[Callable[[Optional[dict]], float]] = None,
-                      on_progress: Optional[Callable[[dict], None]] = None,
-                      should_stop: Optional[Callable[[], bool]] = None) -> dict:
+def sweep_skip_period(
+    base_design: Design,
+    *,
+    nonlinear: bool = False,
+    p_min: int = 8,
+    p_max: int = 400,
+    coarse_ratio: float = 1.4,
+    cost_fn: Optional[Callable[[Optional[dict]], float]] = None,
+    on_progress: Optional[Callable[[dict], None]] = None,
+    should_stop: Optional[Callable[[], bool]] = None,
+) -> dict:
     """Find the uniform skip PERIOD that minimises ``cost_fn`` of the FEM shape.
 
     ``cost_fn`` maps a :func:`fem_measure` result (or ``None`` on a failed/stopped solve) to a
@@ -431,7 +498,7 @@ def sweep_skip_period(base_design: Design, *, nonlinear: bool = False,
     its :func:`fem_measure` dict, and ``curve`` is the sampled ``[{period, n_skips, rmsd, twist,
     cost}]`` (for the panel / log).  ``status`` ∈ {done, stopped}.  Non-square designs get an empty
     knob → the 0-skip point is the only sample (``best_period=None``)."""
-    cost = cost_fn or (lambda m: (m["rmsd"] if m else float("inf")))
+    cost = cost_fn or (lambda m: m["rmsd"] if m else float("inf"))
 
     def emit(ev: dict) -> None:
         if on_progress:
@@ -439,10 +506,12 @@ def sweep_skip_period(base_design: Design, *, nonlinear: bool = False,
 
     lens = [max(1, h.length_bp) for h in base_design.helices]
     avg_len = (sum(lens) / len(lens)) if lens else float(p_max)
-    p_hi = max(p_min + 1, min(p_max, int(avg_len)))   # a period > helix length lands no skips
+    p_hi = max(
+        p_min + 1, min(p_max, int(avg_len))
+    )  # a period > helix length lands no skips
 
     curve: list[dict] = []
-    cache: dict = {}   # period (int) or None → fem_measure dict (or None on stop/failure)
+    cache: dict = {}  # period (int) or None → fem_measure dict (or None on stop/failure)
 
     def measure(period) -> Optional[dict]:
         if period in cache:
@@ -454,9 +523,13 @@ def sweep_skip_period(base_design: Design, *, nonlinear: bool = False,
         m = fem_measure(apply_marks(base_design, marks), nonlinear=nonlinear)
         cache[period] = m
         n = sum(len(v) for v in marks.values())
-        rec = {"period": period, "n_skips": n, "rmsd": (m["rmsd"] if m else None),
-               "twist": (m["twist_deg"] if m else None),
-               "cost": (cost(m) if m else None)}
+        rec = {
+            "period": period,
+            "n_skips": n,
+            "rmsd": (m["rmsd"] if m else None),
+            "twist": (m["twist_deg"] if m else None),
+            "cost": (cost(m) if m else None),
+        }
         curve.append(rec)
         emit({"phase": "density_trial", **rec})
         return m
@@ -474,7 +547,7 @@ def sweep_skip_period(base_design: Design, *, nonlinear: bool = False,
         p /= coarse_ratio
     coarse = sorted(set(coarse))
 
-    measure(None)                                     # 0-skip point (design with marks cleared)
+    measure(None)  # 0-skip point (design with marks cleared)
     for ip in coarse:
         if should_stop and should_stop():
             break
@@ -483,23 +556,36 @@ def sweep_skip_period(base_design: Design, *, nonlinear: bool = False,
     stopped = bool(should_stop and should_stop())
     finite = [ip for ip in coarse if cache.get(ip)]
     if finite and not stopped:
-        p_star = min(finite, key=cost_at)             # best coarse period (by cost_fn)
+        p_star = min(finite, key=cost_at)  # best coarse period (by cost_fn)
         idx = coarse.index(p_star)
         a = coarse[idx - 1] if idx > 0 else max(p_min, p_star - 1)
         b = coarse[idx + 1] if idx < len(coarse) - 1 else min(p_hi, p_star + 1)
-        _search_min_period(cost_at, a, b)             # fine refine (results land in cache/curve)
+        _search_min_period(cost_at, a, b)  # fine refine (results land in cache/curve)
 
     measured = [k for k, v in cache.items() if v is not None]
     best_period = min(measured, key=lambda k: cost(cache[k])) if measured else None
-    best_marks = periodic_skip_marks(base_design, best_period) if best_period is not None else {}
+    best_marks = (
+        periodic_skip_marks(base_design, best_period) if best_period is not None else {}
+    )
     best_measure = cache.get(best_period)
-    out = {"status": "stopped" if stopped else "done",
-           "best_period": best_period, "best_marks": best_marks,
-           "best_measure": best_measure, "baseline_measure": cache.get(None),
-           "curve": sorted(curve, key=lambda r: (r["period"] is not None, r["period"] or 0))}
-    emit({"phase": "density_best", "period": best_period,
-          "rmsd": (best_measure or {}).get("rmsd"),
-          "baseline_rmsd": (cache.get(None) or {}).get("rmsd")})
+    out = {
+        "status": "stopped" if stopped else "done",
+        "best_period": best_period,
+        "best_marks": best_marks,
+        "best_measure": best_measure,
+        "baseline_measure": cache.get(None),
+        "curve": sorted(
+            curve, key=lambda r: (r["period"] is not None, r["period"] or 0)
+        ),
+    }
+    emit(
+        {
+            "phase": "density_best",
+            "period": best_period,
+            "rmsd": (best_measure or {}).get("rmsd"),
+            "baseline_rmsd": (cache.get(None) or {}).get("rmsd"),
+        }
+    )
     return out
 
 
@@ -510,6 +596,7 @@ def sweep_skip_period(base_design: Design, *, nonlinear: bool = False,
 # 3×6 middle row), reached WITHOUT any geometric reasoning: authority is MEASURED per helix and every
 # bump is empirically kept only if it lowers the twist error ([[feedback_crossover_no_reasoning]]).
 
+
 def _even_place(free: list[int], n: int) -> list[int]:
     """``n`` evenly-spaced bp from the sorted free-interior candidate list.  Placement is
     twist-irrelevant on the FEM oracle (exp37 probe: <0.2° across placements at fixed count), so an
@@ -519,15 +606,25 @@ def _even_place(free: list[int], n: int) -> list[int]:
         return []
     if n >= len(free):
         return list(free)
-    idx = [round(i * (len(free) - 1) / (n - 1)) if n > 1 else (len(free) // 2) for i in range(n)]
+    idx = [
+        round(i * (len(free) - 1) / (n - 1)) if n > 1 else (len(free) // 2)
+        for i in range(n)
+    ]
     return sorted({free[i] for i in idx})
 
 
-def _fractional_twist_bump(base_design: Design, *, base_count: int, target_twist_deg: float,
-                           nonlinear: bool, twist_tol: float, forbidden: dict[str, set[int]],
-                           free_base: dict[str, list[int]],
-                           on_progress: Optional[Callable[[dict], None]] = None,
-                           should_stop: Optional[Callable[[], bool]] = None) -> dict:
+def _fractional_twist_bump(
+    base_design: Design,
+    *,
+    base_count: int,
+    target_twist_deg: float,
+    nonlinear: bool,
+    twist_tol: float,
+    forbidden: dict[str, set[int]],
+    free_base: dict[str, list[int]],
+    on_progress: Optional[Callable[[dict], None]] = None,
+    should_stop: Optional[Callable[[], bool]] = None,
+) -> dict:
     """From the swept UNIFORM density (``base_count`` skips/helix), bump individual helices by one
     skip toward ``target_twist_deg`` — highest MEASURED twist-authority first — until the end-to-end
     twist is within ``twist_tol`` of the intended twist, using the FEWEST added skips (least
@@ -538,23 +635,36 @@ def _fractional_twist_bump(base_design: Design, *, base_count: int, target_twist
         if on_progress:
             on_progress(ev)
 
-    cache: dict[tuple, tuple] = {}   # counts-signature → (measure, marks)
+    cache: dict[tuple, tuple] = {}  # counts-signature → (measure, marks)
 
     def measure(counts: dict[str, int]):
         key = tuple(counts[h] for h in helix_ids)
         if key not in cache:
-            mk = {h: {bp: -1 for bp in _even_place(free_base[h], counts[h])} for h in helix_ids}
+            mk = {
+                h: {bp: -1 for bp in _even_place(free_base[h], counts[h])}
+                for h in helix_ids
+            }
             mk = {h: v for h, v in mk.items() if v}
-            cache[key] = (fem_measure(apply_marks(base_design, mk), nonlinear=nonlinear), mk)
+            cache[key] = (
+                fem_measure(apply_marks(base_design, mk), nonlinear=nonlinear),
+                mk,
+            )
         return cache[key]
 
     counts0 = {h: base_count for h in helix_ids}
     m0, mk0 = measure(counts0)
     if m0 is None:
-        return {"marks": mk0, "measure": None, "authority": {}, "n_bumped": 0,
-                "base_count": base_count}
+        return {
+            "marks": mk0,
+            "measure": None,
+            "authority": {},
+            "n_bumped": 0,
+            "base_count": base_count,
+        }
     err0 = _twist_error(m0, target_twist_deg)
-    over = (m0.get("twist_deg") or 0.0) > target_twist_deg    # over-wound → ADD a skip (+1)
+    over = (
+        m0.get("twist_deg") or 0.0
+    ) > target_twist_deg  # over-wound → ADD a skip (+1)
     step = 1 if over else -1
 
     # Authority probe: one single-helix bump each, from the uniform base (cached → reused below).
@@ -569,11 +679,17 @@ def _fractional_twist_bump(base_design: Design, *, base_count: int, target_twist
         if m is None or m.get("twist_deg") is None:
             continue
         authority[h] = float(m["twist_deg"]) - float(m0["twist_deg"] or 0.0)
-        emit({"phase": "twist_authority", "helix_id": h, "dtwist": round(authority[h], 3)})
+        emit(
+            {
+                "phase": "twist_authority",
+                "helix_id": h,
+                "dtwist": round(authority[h], 3),
+            }
+        )
 
     # Rank helices by how hard they steer twist in the HELPFUL direction (over → most-negative
     # dtwist first), then greedily COMMIT real bumps until within tol or a bump stops helping.
-    ranked = sorted(authority, key=lambda h: (authority[h] if over else -authority[h]))
+    ranked = sorted(authority, key=lambda h: authority[h] if over else -authority[h])
     cur_counts = dict(counts0)
     cur_m, cur_err, nb = m0, err0, 0
     for h in ranked:
@@ -590,12 +706,24 @@ def _fractional_twist_bump(base_design: Design, *, base_count: int, target_twist
         e = _twist_error(m, target_twist_deg)
         if e < cur_err - 1e-9:
             cur_counts[h], cur_m, cur_err, nb = nc, m, e, nb + 1
-            emit({"phase": "twist_bump", "helix_id": h, "count": nc, "twist_err": round(e, 3)})
+            emit(
+                {
+                    "phase": "twist_bump",
+                    "helix_id": h,
+                    "count": nc,
+                    "twist_err": round(e, 3),
+                }
+            )
         else:
-            break                                     # overshoot: further same-direction bumps worsen
+            break  # overshoot: further same-direction bumps worsen
     _, final_mk = measure(cur_counts)
-    return {"marks": final_mk, "measure": cur_m, "authority": authority, "n_bumped": nb,
-            "base_count": base_count}
+    return {
+        "marks": final_mk,
+        "measure": cur_m,
+        "authority": authority,
+        "n_bumped": nb,
+        "base_count": base_count,
+    }
 
 
 # ── Coupled (twist, bend) shape solve (HONEYCOMB / programmed-shape designs) ──────────────────
@@ -607,6 +735,7 @@ def _fractional_twist_bump(base_design: Design, *, base_count: int, target_twist
 # edit is TRIED and kept only if it lowers the combined shape error (no geometric reasoning about
 # direction — [[feedback_crossover_no_reasoning]]).
 
+
 def _shape_error(tw, bd, tw_star, bd_star, use_bend):
     """Combined |twist−target| (+ |bend−target| when the bend row is engaged), in degrees."""
     e = abs((tw if tw is not None else 0.0) - tw_star)
@@ -615,13 +744,22 @@ def _shape_error(tw, bd, tw_star, bd_star, use_bend):
     return e
 
 
-def _solve_shape_targets(base_design: Design, *, target_twist_deg: float,
-                         target_bend_deg: Optional[float], nonlinear: bool,
-                         forbidden: dict[str, set[int]], free_base: dict[str, list[int]],
-                         allow_loops: bool, probe_skips: int = 4, max_iters: int = 4,
-                         twist_tol: float = TWIST_TOL_DEG, bend_tol: float = BEND_TOL_DEG,
-                         on_progress: Optional[Callable[[dict], None]] = None,
-                         should_stop: Optional[Callable[[], bool]] = None) -> dict:
+def _solve_shape_targets(
+    base_design: Design,
+    *,
+    target_twist_deg: float,
+    target_bend_deg: Optional[float],
+    nonlinear: bool,
+    forbidden: dict[str, set[int]],
+    free_base: dict[str, list[int]],
+    allow_loops: bool,
+    probe_skips: int = 4,
+    max_iters: int = 4,
+    twist_tol: float = TWIST_TOL_DEG,
+    bend_tol: float = BEND_TOL_DEG,
+    on_progress: Optional[Callable[[dict], None]] = None,
+    should_stop: Optional[Callable[[], bool]] = None,
+) -> dict:
     """Drive the FEM-predicted (twist, bend) to (``target_twist_deg``, ``target_bend_deg``) with a
     ridge least-squares solve on the MEASURED 2×H authority Jacobian, iterated.  Starts from the
     design's existing marks; each iteration re-probes the Jacobian (``probe_skips`` per helix ÷ count,
@@ -646,8 +784,14 @@ def _solve_shape_targets(base_design: Design, *, target_twist_deg: float,
     cur = current_marks_by_helix(base_design)
     cur_m = measure(cur)
     if cur_m is None:
-        return {"marks": cur, "measure": None, "authority": {}, "twist": None, "bend": None,
-                "n_iters": 0}
+        return {
+            "marks": cur,
+            "measure": None,
+            "authority": {},
+            "twist": None,
+            "bend": None,
+            "n_iters": 0,
+        }
     cur_tw, cur_bd = cur_m.get("twist_deg"), cur_m.get("bend_deg")
     cur_err = _shape_error(cur_tw, cur_bd, target_twist_deg, target_bend_deg, use_bend)
     authority: dict[str, list[float]] = {}
@@ -657,8 +801,9 @@ def _solve_shape_targets(base_design: Design, *, target_twist_deg: float,
         if should_stop and should_stop():
             break
         tw_ok = abs((cur_tw or 0.0) - target_twist_deg) <= twist_tol
-        bd_ok = (not use_bend) or (cur_bd is not None
-                                   and abs(cur_bd - target_bend_deg) <= bend_tol)
+        bd_ok = (not use_bend) or (
+            cur_bd is not None and abs(cur_bd - target_bend_deg) <= bend_tol
+        )
         if tw_ok and bd_ok:
             break
         n_iters = it + 1
@@ -684,52 +829,95 @@ def _solve_shape_targets(base_design: Design, *, target_twist_deg: float,
                 authority[h.id] = [round(dtw, 4), round(dbd, 4)]
             else:
                 authority[h.id] = [round(dtw, 4), 0.0]
-        r = np.array([target_twist_deg - (cur_tw or 0.0)]
-                     + ([target_bend_deg - (cur_bd or 0.0)] if use_bend else []))
+        r = np.array(
+            [target_twist_deg - (cur_tw or 0.0)]
+            + ([target_bend_deg - (cur_bd or 0.0)] if use_bend else [])
+        )
         try:
             x = J.T @ np.linalg.solve(J @ J.T + 0.5 * np.eye(rows), r)
         except np.linalg.LinAlgError:
             break
-        deltas = {h.id: int(round(x[j])) for j, h in enumerate(helices) if round(x[j]) != 0}
+        deltas = {
+            h.id: int(round(x[j])) for j, h in enumerate(helices) if round(x[j]) != 0
+        }
         if not deltas:
             break
         trial = {k: dict(v) for k, v in cur.items()}
         for hid, n in deltas.items():
             avail = [bp for bp in free_base[hid] if bp not in trial.get(hid, {})]
             for bp in _even_place(avail, abs(n)):
-                trial.setdefault(hid, {})[bp] = -1 if n > 0 else (+1 if allow_loops else -1)
+                trial.setdefault(hid, {})[bp] = (
+                    -1 if n > 0 else (+1 if allow_loops else -1)
+                )
             if not trial.get(hid):
                 trial.pop(hid, None)
         m = measure(trial)
         if m is None:
             break
-        e = _shape_error(m.get("twist_deg"), m.get("bend_deg"),
-                         target_twist_deg, target_bend_deg, use_bend)
+        e = _shape_error(
+            m.get("twist_deg"),
+            m.get("bend_deg"),
+            target_twist_deg,
+            target_bend_deg,
+            use_bend,
+        )
         # Carry the same {current, target} metric dicts the "iteration" events do so the live
         # status line renders the coupled twist+bend objective per Jacobian iteration (deviation +
         # curvature + twist current→target + the combined shape error).
-        emit({"phase": "shape_iter", "iter": it,
-              "current": {"deviation": m["rmsd"], "twist_deg": m.get("twist_deg"),
-                          "bend_deg": m.get("bend_deg")},
-              "target": {"deviation": 0.0, "twist_deg": target_twist_deg,
-                         "bend_deg": target_bend_deg},
-              "twist": m.get("twist_deg"), "bend": m.get("bend_deg"),
-              "shape_err": round(e, 3)})
+        emit(
+            {
+                "phase": "shape_iter",
+                "iter": it,
+                "current": {
+                    "deviation": m["rmsd"],
+                    "twist_deg": m.get("twist_deg"),
+                    "bend_deg": m.get("bend_deg"),
+                },
+                "target": {
+                    "deviation": 0.0,
+                    "twist_deg": target_twist_deg,
+                    "bend_deg": target_bend_deg,
+                },
+                "twist": m.get("twist_deg"),
+                "bend": m.get("bend_deg"),
+                "shape_err": round(e, 3),
+            }
+        )
         if e < cur_err - 1e-6:
-            cur, cur_m, cur_tw, cur_bd, cur_err = trial, m, m.get("twist_deg"), m.get("bend_deg"), e
+            cur, cur_m, cur_tw, cur_bd, cur_err = (
+                trial,
+                m,
+                m.get("twist_deg"),
+                m.get("bend_deg"),
+                e,
+            )
         else:
-            break                                     # step did not help → stop (no regression)
-    return {"marks": cur, "measure": cur_m, "authority": authority,
-            "twist": cur_tw, "bend": cur_bd, "n_iters": n_iters}
+            break  # step did not help → stop (no regression)
+    return {
+        "marks": cur,
+        "measure": cur_m,
+        "authority": authority,
+        "twist": cur_tw,
+        "bend": cur_bd,
+        "n_iters": n_iters,
+    }
 
 
 # ── The greedy refinement loop ───────────────────────────────────────────────────────────────
 
-def fem_refine(base_design: Design, *, nonlinear: bool = False, sigma: float = 1.0,
-               max_hotspots: int = 8, min_spacing: int = 8, rmsd_improve_nm: float = 0.05,
-               allow_loops: Optional[bool] = None,
-               on_progress: Optional[Callable[[dict], None]] = None,
-               should_stop: Optional[Callable[[], bool]] = None) -> dict:
+
+def fem_refine(
+    base_design: Design,
+    *,
+    nonlinear: bool = False,
+    sigma: float = 1.0,
+    max_hotspots: int = 8,
+    min_spacing: int = 8,
+    rmsd_improve_nm: float = 0.05,
+    allow_loops: Optional[bool] = None,
+    on_progress: Optional[Callable[[dict], None]] = None,
+    should_stop: Optional[Callable[[], bool]] = None,
+) -> dict:
     """Refine loop/skip marks so the FEM-predicted shape matches the design's INTENDED shape.
 
     The objective is LATTICE-SPECIFIC (exp37 — ``experiments/exp37_cando_skip_twist_map``):
@@ -768,7 +956,9 @@ def fem_refine(base_design: Design, *, nonlinear: bool = False, sigma: float = 1
         allow_loops = base_design.lattice_type != LatticeType.SQUARE
     is_square = base_design.lattice_type == LatticeType.SQUARE
     mode = "loops_and_skips" if allow_loops else "skips_only"
-    objective = "twist" if is_square else "deviation"    # honeycomb may switch to "shape" below
+    objective = (
+        "twist" if is_square else "deviation"
+    )  # honeycomb may switch to "shape" below
 
     def emit(ev: dict) -> None:
         if on_progress:
@@ -777,9 +967,14 @@ def fem_refine(base_design: Design, *, nonlinear: bool = False, sigma: float = 1
     emit({"phase": "baseline", "mode": mode})
     baseline = fem_measure(base_design, nonlinear=nonlinear)
     if baseline is None:
-        return {"status": "error", "mode": mode,
-                "error": "design has no double-helical core to predict a shape for",
-                "edits_kept": [], "n_hotspots": 0, "n_evaluated": 0}
+        return {
+            "status": "error",
+            "mode": mode,
+            "error": "design has no double-helical core to predict a shape for",
+            "edits_kept": [],
+            "n_hotspots": 0,
+            "n_evaluated": 0,
+        }
 
     # Twist/bend/deviation readout for the live status: the target (intended geometry, measured
     # once) and the current best (reuses each fem_measure's cached shape — no extra solves).  The
@@ -790,13 +985,22 @@ def fem_refine(base_design: Design, *, nonlinear: bool = False, sigma: float = 1
     target_twist = target["twist_deg"] if target["twist_deg"] is not None else 0.0
     target_bend = target["bend_deg"]
     before_metrics = current_metrics(baseline, core_keys)
-    emit({"phase": "iteration", "iteration": 0, "n_hotspots": None,
-          "current": before_metrics, "target": target})
+    emit(
+        {
+            "phase": "iteration",
+            "iteration": 0,
+            "n_hotspots": None,
+            "current": before_metrics,
+            "target": target,
+        }
+    )
 
     forbidden, _interior = _forbidden_bps(base_design)
     helix_by_id = {h.id: h for h in base_design.helices}
-    free_base = {h.id: free_interior_candidates(base_design, h, forbidden[h.id])
-                 for h in base_design.helices}
+    free_base = {
+        h.id: free_interior_candidates(base_design, h, forbidden[h.id])
+        for h in base_design.helices
+    }
     cur_marks = current_marks_by_helix(base_design)
     best = baseline
     stopped = False
@@ -811,74 +1015,142 @@ def fem_refine(base_design: Design, *, nonlinear: bool = False, sigma: float = 1
         # exp37: deviation-min ≠ twist-min (RMSD bottoms at ~10 skips/helix / +14°, twist at
         # ~12.6), so the objective is the TWIST error, not RMSD.  A uniform density sweep drives
         # to the twist-nulling density, then fractional per-helix bumps resolve inside ±1°.
-        cost = lambda m: _twist_error(m, target_twist)     # noqa: E731
-        sweep = sweep_skip_period(base_design, nonlinear=nonlinear, cost_fn=cost,
-                                  on_progress=emit, should_stop=should_stop)
+        cost = lambda m: _twist_error(m, target_twist)  # noqa: E731
+        sweep = sweep_skip_period(
+            base_design,
+            nonlinear=nonlinear,
+            cost_fn=cost,
+            on_progress=emit,
+            should_stop=should_stop,
+        )
         stopped = sweep["status"] == "stopped"
-        density = {"best_period": sweep["best_period"],
-                   "baseline_rmsd": (sweep["baseline_measure"] or {}).get("rmsd"),
-                   "best_rmsd": (sweep["best_measure"] or {}).get("rmsd"),
-                   "curve": sweep["curve"]}
+        density = {
+            "best_period": sweep["best_period"],
+            "baseline_rmsd": (sweep["baseline_measure"] or {}).get("rmsd"),
+            "best_rmsd": (sweep["best_measure"] or {}).get("rmsd"),
+            "curve": sweep["curve"],
+        }
         bm_marks = sweep["best_marks"]
         if not stopped and bm_marks:
             per = [len(v) for v in bm_marks.values()]
             n_uniform = round(sum(per) / len(per)) if per else 0
             frac = _fractional_twist_bump(
-                base_design, base_count=n_uniform, target_twist_deg=target_twist,
-                nonlinear=nonlinear, twist_tol=TWIST_TOL_DEG, forbidden=forbidden,
-                free_base=free_base, on_progress=emit, should_stop=should_stop)
+                base_design,
+                base_count=n_uniform,
+                target_twist_deg=target_twist,
+                nonlinear=nonlinear,
+                twist_tol=TWIST_TOL_DEG,
+                forbidden=forbidden,
+                free_base=free_base,
+                on_progress=emit,
+                should_stop=should_stop,
+            )
             cand = frac["measure"]
             # Adopt the twist-nulled program only if it beats the design as loaded on the TWIST
             # error (never a twist regression); deviation is allowed to rise modestly — that is the
             # intrinsic twist↔deviation tradeoff (exp37 rmsd 0.44→0.54 at twist→0), not a failure.
-            if cand is not None and (_twist_error(cand, target_twist)
-                                     < _twist_error(best, target_twist) - 1e-9):
+            if cand is not None and (
+                _twist_error(cand, target_twist)
+                < _twist_error(best, target_twist) - 1e-9
+            ):
                 cur_marks = {hid: dict(bps) for hid, bps in frac["marks"].items()}
                 best = cand
                 authority = {h: round(v, 4) for h, v in frac["authority"].items()}
-                emit({"phase": "iteration", "iteration": 0, "n_hotspots": None,
-                      "density_period": sweep["best_period"],
-                      "current": current_metrics(best, core_keys), "target": target})
+                emit(
+                    {
+                        "phase": "iteration",
+                        "iteration": 0,
+                        "n_hotspots": None,
+                        "density_period": sweep["best_period"],
+                        "current": current_metrics(best, core_keys),
+                        "target": target,
+                    }
+                )
     # Does this (non-square) design carry a real SHAPE target to hit — a programmed bend above the
     # arc-bend noise floor (exp40 G3), or a twist error beyond tol?  If so, use the coupled
     # (twist,bend) Jacobian solve (exp38 G1); else fall back to the deviation greedy (straight /
     # weak-target designs, where the bend row would be noise and the greedy does no harm).
-    use_bend_target = (not is_square and target_bend is not None
-                       and abs(target_bend) > BEND_TARGET_FLOOR_DEG)
+    use_bend_target = (
+        not is_square
+        and target_bend is not None
+        and abs(target_bend) > BEND_TARGET_FLOOR_DEG
+    )
     base_bd = before_metrics["bend_deg"]
     twist_off = abs((before_metrics["twist_deg"] or 0.0) - target_twist) > TWIST_TOL_DEG
-    bend_off = use_bend_target and base_bd is not None and abs(base_bd - target_bend) > BEND_TOL_DEG
-    use_shape = (not is_square) and (use_bend_target or twist_off) and (twist_off or bend_off)
+    bend_off = (
+        use_bend_target
+        and base_bd is not None
+        and abs(base_bd - target_bend) > BEND_TOL_DEG
+    )
+    use_shape = (
+        (not is_square) and (use_bend_target or twist_off) and (twist_off or bend_off)
+    )
 
     if is_square:
-        pass                                            # handled above
+        pass  # handled above
     elif use_shape:
         # ── HONEYCOMB coupled (twist, bend) SHAPE solve (exp38 G1) ───────────────────────────
         objective = "shape"
-        emit({"phase": "shape_target", "twist": target_twist,
-              "bend": (target_bend if use_bend_target else None)})
+        emit(
+            {
+                "phase": "shape_target",
+                "twist": target_twist,
+                "bend": (target_bend if use_bend_target else None),
+            }
+        )
         sol = _solve_shape_targets(
-            base_design, target_twist_deg=target_twist,
+            base_design,
+            target_twist_deg=target_twist,
             target_bend_deg=(target_bend if use_bend_target else None),
-            nonlinear=nonlinear, forbidden=forbidden, free_base=free_base,
-            allow_loops=allow_loops, on_progress=emit, should_stop=should_stop)
+            nonlinear=nonlinear,
+            forbidden=forbidden,
+            free_base=free_base,
+            allow_loops=allow_loops,
+            on_progress=emit,
+            should_stop=should_stop,
+        )
         cand = sol["measure"]
         use_bd = use_bend_target
         # Adopt only if it lowers the combined shape error over the design as loaded (no regression).
-        base_err = _shape_error(before_metrics["twist_deg"], base_bd,
-                                target_twist, target_bend, use_bd)
-        cand_err = (_shape_error(cand.get("twist_deg"), cand.get("bend_deg"),
-                                 target_twist, target_bend, use_bd) if cand else float("inf"))
+        base_err = _shape_error(
+            before_metrics["twist_deg"], base_bd, target_twist, target_bend, use_bd
+        )
+        cand_err = (
+            _shape_error(
+                cand.get("twist_deg"),
+                cand.get("bend_deg"),
+                target_twist,
+                target_bend,
+                use_bd,
+            )
+            if cand
+            else float("inf")
+        )
         if cand is not None and cand_err < base_err - 1e-6:
             cur_marks = {hid: dict(bps) for hid, bps in sol["marks"].items()}
             best = cand
             authority = sol["authority"]
-        emit({"phase": "iteration", "iteration": sol.get("n_iters", 0), "n_hotspots": None,
-              "current": current_metrics(best, core_keys), "target": target})
+        emit(
+            {
+                "phase": "iteration",
+                "iteration": sol.get("n_iters", 0),
+                "n_hotspots": None,
+                "current": current_metrics(best, core_keys),
+                "target": target,
+            }
+        )
     else:
         # ── HONEYCOMB / other: local greedy on the DEVIATION field (straight / weak-target) ──
-        hotspots = [] if stopped else rank_hotspots(
-            best["deviation_by_bp"], sigma=sigma, max_hotspots=max_hotspots, min_spacing=min_spacing)
+        hotspots = (
+            []
+            if stopped
+            else rank_hotspots(
+                best["deviation_by_bp"],
+                sigma=sigma,
+                max_hotspots=max_hotspots,
+                min_spacing=min_spacing,
+            )
+        )
         emit({"phase": "hotspots", "n": len(hotspots)})
         n_hotspots = len(hotspots)
         iteration = 0
@@ -892,68 +1164,106 @@ def fem_refine(base_design: Design, *, nonlinear: bool = False, sigma: float = 1
             # Re-derive free candidates for THIS helix from the accumulated pattern so a bp used by
             # an earlier accepted edit is not offered again (core_candidates already drops marked bp).
             helix = helix_by_id[hs[0]]
-            live_free = free_interior_candidates(apply_marks(base_design, cur_marks), helix,
-                                                 forbidden[hs[0]])
+            live_free = free_interior_candidates(
+                apply_marks(base_design, cur_marks), helix, forbidden[hs[0]]
+            )
             free_now = {hs[0]: live_free}
             best_edit = None
             best_measure = best
-            for edit in candidate_edits(hs, cur_marks, free_now, allow_loops=allow_loops):
+            for edit in candidate_edits(
+                hs, cur_marks, free_now, allow_loops=allow_loops
+            ):
                 if should_stop and should_stop():
                     stopped = True
                     break
                 trial_marks = _with_edit(cur_marks, edit)
-                m = fem_measure(apply_marks(base_design, trial_marks), nonlinear=nonlinear)
+                m = fem_measure(
+                    apply_marks(base_design, trial_marks), nonlinear=nonlinear
+                )
                 evaluated += 1
                 if m is None:
                     continue
-                emit({"phase": "trial", "helix_id": hs[0], "bp": hs[1], "op": edit["op"],
-                      "rmsd": m["rmsd"]})
+                emit(
+                    {
+                        "phase": "trial",
+                        "helix_id": hs[0],
+                        "bp": hs[1],
+                        "op": edit["op"],
+                        "rmsd": m["rmsd"],
+                    }
+                )
                 if m["rmsd"] < best_measure["rmsd"]:
                     best_edit, best_measure = edit, m
             if stopped:
                 break
-            accepted = best_edit is not None and best_measure["rmsd"] <= best["rmsd"] - rmsd_improve_nm
+            accepted = (
+                best_edit is not None
+                and best_measure["rmsd"] <= best["rmsd"] - rmsd_improve_nm
+            )
             if accepted:
                 cur_marks = _with_edit(cur_marks, best_edit)
                 best = best_measure
-                kept.append({**best_edit, "rmsd": best["rmsd"], "dev_max": best["dev_max"]})
-            emit({"phase": "iteration", "iteration": iteration, "n_hotspots": len(hotspots),
-                  "helix_id": hs[0], "bp": hs[1],
-                  "op": best_edit["op"] if accepted else None, "accepted": accepted,
-                  "current": current_metrics(best, core_keys), "target": target})
+                kept.append(
+                    {**best_edit, "rmsd": best["rmsd"], "dev_max": best["dev_max"]}
+                )
+            emit(
+                {
+                    "phase": "iteration",
+                    "iteration": iteration,
+                    "n_hotspots": len(hotspots),
+                    "helix_id": hs[0],
+                    "bp": hs[1],
+                    "op": best_edit["op"] if accepted else None,
+                    "accepted": accepted,
+                    "current": current_metrics(best, core_keys),
+                    "target": target,
+                }
+            )
 
     after_metrics = current_metrics(best, core_keys)
     out = {
-        "status":          "stopped" if stopped else "done",
-        "mode":            mode,
+        "status": "stopped" if stopped else "done",
+        "mode": mode,
         # "twist" (square) | "shape" (honeycomb coupled twist+bend) | "deviation" (greedy fallback).
-        "objective":       objective,
-        "n_hotspots":      n_hotspots,
-        "n_evaluated":     evaluated,
-        "edits_kept":      kept,
-        "before":          {k: baseline[k] for k in ("rmsd", "dev_max", "dev_mean")},
-        "after":           {k: best[k] for k in ("rmsd", "dev_max", "dev_mean")},
+        "objective": objective,
+        "n_hotspots": n_hotspots,
+        "n_evaluated": evaluated,
+        "edits_kept": kept,
+        "before": {k: baseline[k] for k in ("rmsd", "dev_max", "dev_mean")},
+        "after": {k: best[k] for k in ("rmsd", "dev_max", "dev_mean")},
         # End-to-end twist + bend vs the intended shape — the objective (the runner's apply gate).
-        "twist_target":    target_twist,
-        "twist_before":    before_metrics["twist_deg"],
-        "twist_after":     after_metrics["twist_deg"],
-        "twist_tol":       TWIST_TOL_DEG,
-        "bend_target":     target_bend,
-        "bend_before":     before_metrics["bend_deg"],
-        "bend_after":      after_metrics["bend_deg"],
-        "bend_tol":        BEND_TOL_DEG,
+        "twist_target": target_twist,
+        "twist_before": before_metrics["twist_deg"],
+        "twist_after": after_metrics["twist_deg"],
+        "twist_tol": TWIST_TOL_DEG,
+        "bend_target": target_bend,
+        "bend_before": before_metrics["bend_deg"],
+        "bend_after": after_metrics["bend_deg"],
+        "bend_tol": BEND_TOL_DEG,
         # Final twist/bend/deviation of the best prediction vs the target (for the result readout).
-        "metrics":         {"before": before_metrics, "after": after_metrics, "target": target},
-        "converged_marks": {hid: {int(bp): int(dl) for bp, dl in bps.items()}
-                            for hid, bps in cur_marks.items() if bps},
+        "metrics": {"before": before_metrics, "after": after_metrics, "target": target},
+        "converged_marks": {
+            hid: {int(bp): int(dl) for bp, dl in bps.items()}
+            for hid, bps in cur_marks.items()
+            if bps
+        },
         # Square-lattice density sweep report (None for honeycomb / non-square).
-        "density":         density,
+        "density": density,
         # Per-helix measured authority: square → {helix: ∂twist/∂skip}; shape → {helix:
         # [∂twist/∂skip, ∂bend/∂skip]}; deviation → None.
-        "authority":       authority,
+        "authority": authority,
     }
-    emit({"phase": "done", "status": out["status"], "kept": len(kept),
-          "before_rmsd": out["before"]["rmsd"], "after_rmsd": out["after"]["rmsd"],
-          "twist_before": out["twist_before"], "twist_after": out["twist_after"],
-          "current": after_metrics, "target": target})
+    emit(
+        {
+            "phase": "done",
+            "status": out["status"],
+            "kept": len(kept),
+            "before_rmsd": out["before"]["rmsd"],
+            "after_rmsd": out["after"]["rmsd"],
+            "twist_before": out["twist_before"],
+            "twist_after": out["twist_after"],
+            "current": after_metrics,
+            "target": target,
+        }
+    )
     return out

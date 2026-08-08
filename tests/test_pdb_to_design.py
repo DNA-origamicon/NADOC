@@ -62,12 +62,14 @@ def _write_synthetic_duplex_pdb(path: str, n_bp: int = 4) -> None:
             f"{resName:<3s} "
             f"{chainID}"
             f"{resSeq:>4d}    "
-            f"{x*10:>8.3f}{y*10:>8.3f}{z*10:>8.3f}"
+            f"{x * 10:>8.3f}{y * 10:>8.3f}{z * 10:>8.3f}"
             f"  1.00  0.00           {elem:<2s}\n"
         )
         f.write(line)
 
-    def write_residue(f, atoms_template, resName, chainID, resSeq, twist, dz, mirror, serial):
+    def write_residue(
+        f, atoms_template, resName, chainID, resSeq, twist, dz, mirror, serial
+    ):
         c, s = math.cos(twist), math.sin(twist)
         for name, elem, n, y, z in atoms_template:
             if mirror:
@@ -85,22 +87,52 @@ def _write_synthetic_duplex_pdb(path: str, n_bp: int = 4) -> None:
         for i in range(n_bp):
             seq = i + 1
             serial = write_residue(
-                f, _SUGAR, "DT", "A", seq, i * twist_rad, i * rise_nm, False, serial,
+                f,
+                _SUGAR,
+                "DT",
+                "A",
+                seq,
+                i * twist_rad,
+                i * rise_nm,
+                False,
+                serial,
             )
             serial = write_residue(
-                f, _DT_BASE, "DT", "A", seq, i * twist_rad, i * rise_nm, False, serial,
+                f,
+                _DT_BASE,
+                "DT",
+                "A",
+                seq,
+                i * twist_rad,
+                i * rise_nm,
+                False,
+                serial,
             )
         # Chain B: AAAA (resSeq 1..N), antiparallel: B:1 ↔ A:N.
         for i in range(n_bp):
             seq = i + 1
             a_seq = n_bp - i  # B:1 pairs with A:N
             serial = write_residue(
-                f, _SUGAR, "DA", "B", seq,
-                (a_seq - 1) * twist_rad, (a_seq - 1) * rise_nm, True, serial,
+                f,
+                _SUGAR,
+                "DA",
+                "B",
+                seq,
+                (a_seq - 1) * twist_rad,
+                (a_seq - 1) * rise_nm,
+                True,
+                serial,
             )
             serial = write_residue(
-                f, _DA_BASE, "DA", "B", seq,
-                (a_seq - 1) * twist_rad, (a_seq - 1) * rise_nm, True, serial,
+                f,
+                _DA_BASE,
+                "DA",
+                "B",
+                seq,
+                (a_seq - 1) * twist_rad,
+                (a_seq - 1) * rise_nm,
+                True,
+                serial,
             )
         f.write("END\n")
 
@@ -220,7 +252,9 @@ class TestMergePdbIntoDesign:
         n_bp_imported = 4
         content = _synthetic_pdb_text(tmp_path, n_bp=n_bp_imported)
         merged, atomistic, warnings = merge_pdb_into_design(
-            existing, content, cluster_name="Merged PDB",
+            existing,
+            content,
+            cluster_name="Merged PDB",
         )
 
         # Helix list grew by exactly one (single duplex).
@@ -273,7 +307,7 @@ class TestMergePdbIntoDesign:
         assert merged_helix_ids[: len(original_helix_ids)] == original_helix_ids
         # New helix IDs follow the ``pdb_<uid>_h<idx>`` convention emitted by
         # ``import_pdb``.
-        new_helix_ids = merged_helix_ids[len(original_helix_ids):]
+        new_helix_ids = merged_helix_ids[len(original_helix_ids) :]
         assert all(hid.startswith("pdb_") for hid in new_helix_ids)
 
 

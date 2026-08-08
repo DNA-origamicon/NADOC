@@ -31,6 +31,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
+
 # _design_response is the shared response helper used by 100+ crud.py routes;
 # _ensure_default_cluster is the shared cluster-bootstrap helper (also called by
 # crud.py's auto-clustering path). Both stay in crud.py and are imported back
@@ -47,7 +48,7 @@ class AddClusterBody(BaseModel):
     name: str = "Cluster"
     helix_ids: List[str]
     domain_ids: List[dict] = Field(default_factory=list)  # [{strand_id, domain_index}]
-    log: bool = False                                       # when True: append a cluster_create feature_log entry
+    log: bool = False  # when True: append a cluster_create feature_log entry
 
 
 class PatchClusterBody(BaseModel):
@@ -59,16 +60,17 @@ class PatchClusterBody(BaseModel):
     the empty string ``""`` is what CLEARS the color back to the auto palette. That
     is what the sidebar's Reset button sends.
     """
+
     name: Optional[str] = None
     helix_ids: Optional[List[str]] = None
-    domain_ids: Optional[List[dict]] = None     # [{strand_id, domain_index}]
-    translation: Optional[List[float]] = None   # [x, y, z] nm
-    rotation: Optional[List[float]] = None      # [x, y, z, w] quaternion
-    pivot: Optional[List[float]] = None         # [x, y, z] nm
-    color: Optional[str] = None                 # "#rrggbb"; "" clears to the auto palette
-    opacity: Optional[float] = None             # 0..1, clamped
-    commit: bool = False                         # when True: push to undo stack
-    log: bool = False                            # when True (with commit): append to feature_log
+    domain_ids: Optional[List[dict]] = None  # [{strand_id, domain_index}]
+    translation: Optional[List[float]] = None  # [x, y, z] nm
+    rotation: Optional[List[float]] = None  # [x, y, z, w] quaternion
+    pivot: Optional[List[float]] = None  # [x, y, z] nm
+    color: Optional[str] = None  # "#rrggbb"; "" clears to the auto palette
+    opacity: Optional[float] = None  # 0..1, clamped
+    commit: bool = False  # when True: push to undo stack
+    log: bool = False  # when True (with commit): append to feature_log
 
 
 @router.post("/design/cluster", status_code=200)
@@ -106,7 +108,9 @@ def add_cluster(body: AddClusterBody) -> dict:
             surviving.append(c)
 
     domain_ids = [DomainRef(**d) for d in (body.domain_ids or [])]
-    ct = ClusterRigidTransform(name=body.name, helix_ids=body.helix_ids, domain_ids=domain_ids)
+    ct = ClusterRigidTransform(
+        name=body.name, helix_ids=body.helix_ids, domain_ids=domain_ids
+    )
 
     if body.log:
         # Record the cluster-creation step in the feature log so a design's
@@ -114,7 +118,7 @@ def add_cluster(body: AddClusterBody) -> dict:
         # (mirrors the commit+log cursor discipline update_cluster uses).
         log = list(design.feature_log)
         if design.feature_log_cursor >= 0:
-            log = log[:design.feature_log_cursor + 1]
+            log = log[: design.feature_log_cursor + 1]
         log_entry = ClusterCreateLogEntry(
             cluster_id=ct.id,
             name=ct.name,
@@ -145,19 +149,28 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
         raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
 
     from backend.core.models import DomainRef
+
     fields: dict = {}
-    if body.name        is not None: fields["name"]        = body.name
-    if body.helix_ids   is not None: fields["helix_ids"]   = body.helix_ids
-    if body.domain_ids  is not None: fields["domain_ids"]  = [DomainRef(**d) for d in body.domain_ids]
-    if body.translation is not None: fields["translation"] = body.translation
-    if body.rotation    is not None: fields["rotation"]    = body.rotation
-    if body.pivot       is not None: fields["pivot"]       = body.pivot
+    if body.name is not None:
+        fields["name"] = body.name
+    if body.helix_ids is not None:
+        fields["helix_ids"] = body.helix_ids
+    if body.domain_ids is not None:
+        fields["domain_ids"] = [DomainRef(**d) for d in body.domain_ids]
+    if body.translation is not None:
+        fields["translation"] = body.translation
+    if body.rotation is not None:
+        fields["rotation"] = body.rotation
+    if body.pivot is not None:
+        fields["pivot"] = body.pivot
     # Display-only fields. "" clears the color back to the auto palette (see the
     # PatchClusterBody docstring); anything else must be a #rrggbb hex.
     if body.color is not None:
         c = body.color.strip()
         if c and not re.fullmatch(r"#[0-9a-fA-F]{6}", c):
-            raise HTTPException(400, detail=f"color must be #rrggbb, got {body.color!r}")
+            raise HTTPException(
+                400, detail=f"color must be #rrggbb, got {body.color!r}"
+            )
         fields["color"] = c or None
     if body.opacity is not None:
         fields["opacity"] = max(0.0, min(1.0, float(body.opacity)))
@@ -177,7 +190,7 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
         # Truncate suppressed future entries if cursor is not at end.
         log = list(design.feature_log)
         if design.feature_log_cursor >= 0:
-            log = log[:design.feature_log_cursor + 1]
+            log = log[: design.feature_log_cursor + 1]
         log_entry = ClusterOpLogEntry(
             cluster_id=cluster_id,
             translation=list(updated_ct.translation),
@@ -193,7 +206,9 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
         design_state.set_design(updated)
     elif body.commit:
         # Drag-end commit — push to undo stack only (no feature_log entry).
-        updated = design.copy_with(cluster_transforms=cts, cluster_joints=updated_joints)
+        updated = design.copy_with(
+            cluster_transforms=cts, cluster_joints=updated_joints
+        )
         design_state.set_design(updated)
     else:
         updated = design.copy_with(cluster_transforms=cts)
@@ -220,7 +235,7 @@ def delete_cluster(cluster_id: str) -> dict:
 
 # ── Overhang-duplex cluster rotation point ([[overhang-duplex-cluster]] P2) ────
 class RotationPointBody(BaseModel):
-    kind: str                       # 'overhang_root' | 'centroid'
+    kind: str  # 'overhang_root' | 'centroid'
     overhang_id: Optional[str] = None
 
 
@@ -233,7 +248,9 @@ def get_cluster_rotation_points(cluster_id: str) -> dict:
     design = design_state.get_or_404()
     cl = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
     if cl is None or cl.overhang_duplex_driver_id is None:
-        raise HTTPException(404, detail=f"Cluster {cluster_id!r} is not an overhang-duplex cluster.")
+        raise HTTPException(
+            404, detail=f"Cluster {cluster_id!r} is not an overhang-duplex cluster."
+        )
     return {"rotation_points": duplex_cluster_rotation_points(design, cl)}
 
 
@@ -247,7 +264,9 @@ def get_cluster_duplex_tethers(cluster_id: str) -> dict:
     design = design_state.get_or_404()
     cl = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
     if cl is None or cl.overhang_duplex_driver_id is None:
-        raise HTTPException(404, detail=f"Cluster {cluster_id!r} is not an overhang-duplex cluster.")
+        raise HTTPException(
+            404, detail=f"Cluster {cluster_id!r} is not an overhang-duplex cluster."
+        )
     return {"tethers": duplex_cluster_tethers(design, cl)}
 
 
@@ -286,20 +305,34 @@ def set_cluster_rotation_point(cluster_id: str, body: RotationPointBody) -> dict
     root bead or the centroid), rebasing the translation so the geometry doesn't jump.
     Pushes to the undo stack."""
     from backend.core.duplex_cluster import (
-        duplex_cluster_rotation_points, set_duplex_cluster_pivot,
+        duplex_cluster_rotation_points,
+        set_duplex_cluster_pivot,
     )
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     cl = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
     if cl is None or cl.overhang_duplex_driver_id is None:
-        raise HTTPException(404, detail=f"Cluster {cluster_id!r} is not an overhang-duplex cluster.")
+        raise HTTPException(
+            404, detail=f"Cluster {cluster_id!r} is not an overhang-duplex cluster."
+        )
     pts = duplex_cluster_rotation_points(design, cl)
-    match = next((p for p in pts if p["kind"] == body.kind
-                  and (body.kind != "overhang_root" or p["overhang_id"] == body.overhang_id)), None)
+    match = next(
+        (
+            p
+            for p in pts
+            if p["kind"] == body.kind
+            and (body.kind != "overhang_root" or p["overhang_id"] == body.overhang_id)
+        ),
+        None,
+    )
     if match is None:
-        raise HTTPException(422, detail=f"No rotation point {body.kind!r}"
-                            + (f" for overhang {body.overhang_id!r}" if body.overhang_id else "") + ".")
+        raise HTTPException(
+            422,
+            detail=f"No rotation point {body.kind!r}"
+            + (f" for overhang {body.overhang_id!r}" if body.overhang_id else "")
+            + ".",
+        )
     updated = set_duplex_cluster_pivot(design, cluster_id, match["point"])
     design_state.set_design(updated)
     report = validate_design(updated)
@@ -314,6 +347,7 @@ class ClusterPasteBody(BaseModel):
     FORWARD/REVERSE polarity and moves every crossover off its allowed bp phase.
     The core layer enforces this and 400s.
     """
+
     cluster_ids: List[str]
     delta_row: int
     delta_col: int
@@ -347,7 +381,7 @@ def cluster_paste(body: ClusterPasteBody) -> dict:
     updated, report, _entry = design_state.mutate_with_feature_log(
         op_kind="cluster-paste",
         label=f"Paste {n} cluster{'s' if n != 1 else ''} "
-              f"(Δrow {body.delta_row:+d}, Δcol {body.delta_col:+d})",
+        f"(Δrow {body.delta_row:+d}, Δcol {body.delta_col:+d})",
         params=body.model_dump(mode="json"),
         fn=_fn,
     )

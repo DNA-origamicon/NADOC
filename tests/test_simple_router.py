@@ -40,7 +40,10 @@ def _route(cells, length, lattice, *, seamless=False):
 
 
 def _scaffold_half(design, half):
-    helix = next((h for h in design.helices if h.id == half.helix_id and h.grid_pos is not None), None)
+    helix = next(
+        (h for h in design.helices if h.id == half.helix_id and h.grid_pos is not None),
+        None,
+    )
     if helix is None:
         return False
     row, col = helix.grid_pos
@@ -51,7 +54,8 @@ def _staple_lengths(design):
     return sorted(
         len(_strand_nucleotide_positions(s))
         for s in design.strands
-        if s.strand_type not in (StrandType.SCAFFOLD, StrandType.LINKER) and not s.is_reference
+        if s.strand_type not in (StrandType.SCAFFOLD, StrandType.LINKER)
+        and not s.is_reference
     )
 
 
@@ -81,10 +85,14 @@ def test_seam_detection_ignores_non_consecutive_end_caps():
     # never consecutive, so they must NOT be flagged as a seam.
     by_pair: dict[tuple[str, str], list[int]] = {}
     for xo in crossed.crossovers:
-        if not (_scaffold_half(crossed, xo.half_a) and _scaffold_half(crossed, xo.half_b)):
+        if not (
+            _scaffold_half(crossed, xo.half_a) and _scaffold_half(crossed, xo.half_b)
+        ):
             continue
-        key = (min(xo.half_a.helix_id, xo.half_b.helix_id),
-               max(xo.half_a.helix_id, xo.half_b.helix_id))
+        key = (
+            min(xo.half_a.helix_id, xo.half_b.helix_id),
+            max(xo.half_a.helix_id, xo.half_b.helix_id),
+        )
         by_pair.setdefault(key, []).append(xo.half_a.index)
 
     non_consecutive_bps = [
@@ -116,8 +124,12 @@ def test_auto_crossover_clears_seam_band_on_both_lattices():
         crossed, _ = _route(cells, length, lattice)
         seams = scaffold_seam_positions(crossed)
         staple_xovers = [
-            xo for xo in crossed.crossovers
-            if not (_scaffold_half(crossed, xo.half_a) and _scaffold_half(crossed, xo.half_b))
+            xo
+            for xo in crossed.crossovers
+            if not (
+                _scaffold_half(crossed, xo.half_a)
+                and _scaffold_half(crossed, xo.half_b)
+            )
         ]
         assert staple_xovers, "auto-crossover must place staple crossovers"
         for xo in staple_xovers:
@@ -136,7 +148,9 @@ def test_auto_crossover_places_edge_crossovers_at_staple_termini():
     staple_bps = {
         half.index
         for xo in crossed.crossovers
-        if not (_scaffold_half(crossed, xo.half_a) and _scaffold_half(crossed, xo.half_b))
+        if not (
+            _scaffold_half(crossed, xo.half_a) and _scaffold_half(crossed, xo.half_b)
+        )
         for half in (xo.half_a, xo.half_b)
     }
     covered = [
@@ -162,15 +176,20 @@ def test_auto_crossover_places_full_density_away_from_seams():
     placed = {
         half.index
         for xo in crossed.crossovers
-        if not (_scaffold_half(crossed, xo.half_a) and _scaffold_half(crossed, xo.half_b))
+        if not (
+            _scaffold_half(crossed, xo.half_a) and _scaffold_half(crossed, xo.half_b)
+        )
         for half in (xo.half_a, xo.half_b)
     }
     valid_bps = {s["index"] for s in all_valid_crossover_sites(crossed)}
     all_seam_bps = {sp for sps in seams.values() for sp in sps}
 
     far_from_seams = {
-        bp for bp in valid_bps
-        if all(abs(bp - sp) > 8 for sp in all_seam_bps)  # >8 so neither bp nor bp-1 is in any seam band
+        bp
+        for bp in valid_bps
+        if all(
+            abs(bp - sp) > 8 for sp in all_seam_bps
+        )  # >8 so neither bp nor bp-1 is in any seam band
     }
     assert far_from_seams, "expected some valid sites well clear of every seam"
     assert far_from_seams <= placed, (
@@ -198,10 +217,15 @@ def test_autobreak_nicks_only_on_major_ticks():
         # 3' terminus of the staple: a nick unless it ends at a crossover.
         if (last.helix_id, last.end_bp) in xover_bps:
             continue
-        tick_bp = (last.end_bp + 1) if last.direction == Direction.FORWARD else last.end_bp
+        tick_bp = (
+            (last.end_bp + 1) if last.direction == Direction.FORWARD else last.end_bp
+        )
         # Strand ends at a helix terminus are exempt (no nick was placed there).
         helix = next((h for h in broken.helices if h.id == last.helix_id), None)
-        if helix is not None and last.end_bp in (helix.bp_start, helix.bp_start + helix.length_bp - 1):
+        if helix is not None and last.end_bp in (
+            helix.bp_start,
+            helix.bp_start + helix.length_bp - 1,
+        ):
             continue
         assert tick_bp % period in ticks, (
             f"staple 3' nick at bp {last.end_bp} (tick {tick_bp % period}) is off-grid"
@@ -216,7 +240,9 @@ def test_autobreak_caps_all_staples_at_56_both_lattices():
         _, broken = _route(cells, length, lattice)
         lengths = _staple_lengths(broken)
         assert lengths, "broken design must have staples"
-        assert max(lengths) <= 56, f"{lattice}: staple longer than 56 nt — {max(lengths)}"
+        assert max(lengths) <= 56, (
+            f"{lattice}: staple longer than 56 nt — {max(lengths)}"
+        )
 
 
 def test_merge_combines_short_colinear_pairs_up_to_56():
@@ -236,11 +262,33 @@ def test_merge_combines_short_colinear_pairs_up_to_56():
         )
         # REVERSE: start_bp > end_bp.  5'→3' runs high→low, so the first (5') fragment
         # occupies the high bps and the second occupies the low bps; they abut at the nick.
-        left = Strand(id="s_left", strand_type=StrandType.STAPLE, domains=[
-            Domain(helix_id="h0", start_bp=total - 1, end_bp=right_len, direction=Direction.REVERSE)])
-        right = Strand(id="s_right", strand_type=StrandType.STAPLE, domains=[
-            Domain(helix_id="h0", start_bp=right_len - 1, end_bp=0, direction=Direction.REVERSE)])
-        return Design(helices=[helix], strands=[left, right], lattice_type=LatticeType.HONEYCOMB)
+        left = Strand(
+            id="s_left",
+            strand_type=StrandType.STAPLE,
+            domains=[
+                Domain(
+                    helix_id="h0",
+                    start_bp=total - 1,
+                    end_bp=right_len,
+                    direction=Direction.REVERSE,
+                )
+            ],
+        )
+        right = Strand(
+            id="s_right",
+            strand_type=StrandType.STAPLE,
+            domains=[
+                Domain(
+                    helix_id="h0",
+                    start_bp=right_len - 1,
+                    end_bp=0,
+                    direction=Direction.REVERSE,
+                )
+            ],
+        )
+        return Design(
+            helices=[helix], strands=[left, right], lattice_type=LatticeType.HONEYCOMB
+        )
 
     # 21 + 21 = 42 ≤ 56 → merges into a single staple.
     merged = make_merge_short_staples(_design(21, 21), max_merged_length=56)
@@ -264,14 +312,26 @@ def _two_helix_design_with_crossover(*, nicked: bool):
     nicked=False → a single strand traverses the crossover (valid).
     nicked=True  → two strands meet at the crossover with free termini on it.
     """
-    from backend.core.models import Crossover, Design, Domain, Helix, HalfCrossover, Strand, Vec3
+    from backend.core.models import (
+        Crossover,
+        Design,
+        Domain,
+        Helix,
+        HalfCrossover,
+        Strand,
+        Vec3,
+    )
     from backend.core.constants import BDNA_RISE_PER_BP
 
     helices = [
-        Helix(id=f"h{i}", grid_pos=(0, i),
-              axis_start=Vec3(x=i * 2.5, y=0.0, z=0.0),
-              axis_end=Vec3(x=i * 2.5, y=0.0, z=21 * BDNA_RISE_PER_BP),
-              length_bp=21, bp_start=0)
+        Helix(
+            id=f"h{i}",
+            grid_pos=(0, i),
+            axis_start=Vec3(x=i * 2.5, y=0.0, z=0.0),
+            axis_end=Vec3(x=i * 2.5, y=0.0, z=21 * BDNA_RISE_PER_BP),
+            length_bp=21,
+            bp_start=0,
+        )
         for i in range(2)
     ]
     xo = Crossover(
@@ -281,27 +341,68 @@ def _two_helix_design_with_crossover(*, nicked: bool):
     if nicked:
         # Two staples: one ends its 3' at (h0,10,FWD), the other starts 5' at (h1,10,REV).
         strands = [
-            Strand(id="s_a", strand_type=StrandType.STAPLE, domains=[
-                Domain(helix_id="h0", start_bp=0, end_bp=10, direction=Direction.FORWARD)]),
-            Strand(id="s_b", strand_type=StrandType.STAPLE, domains=[
-                Domain(helix_id="h1", start_bp=10, end_bp=0, direction=Direction.REVERSE)]),
+            Strand(
+                id="s_a",
+                strand_type=StrandType.STAPLE,
+                domains=[
+                    Domain(
+                        helix_id="h0",
+                        start_bp=0,
+                        end_bp=10,
+                        direction=Direction.FORWARD,
+                    )
+                ],
+            ),
+            Strand(
+                id="s_b",
+                strand_type=StrandType.STAPLE,
+                domains=[
+                    Domain(
+                        helix_id="h1",
+                        start_bp=10,
+                        end_bp=0,
+                        direction=Direction.REVERSE,
+                    )
+                ],
+            ),
         ]
     else:
         # One staple traverses: domain on h0 ends at 10, continues on h1 from 10.
         strands = [
-            Strand(id="s", strand_type=StrandType.STAPLE, domains=[
-                Domain(helix_id="h0", start_bp=0, end_bp=10, direction=Direction.FORWARD),
-                Domain(helix_id="h1", start_bp=10, end_bp=0, direction=Direction.REVERSE)]),
+            Strand(
+                id="s",
+                strand_type=StrandType.STAPLE,
+                domains=[
+                    Domain(
+                        helix_id="h0",
+                        start_bp=0,
+                        end_bp=10,
+                        direction=Direction.FORWARD,
+                    ),
+                    Domain(
+                        helix_id="h1",
+                        start_bp=10,
+                        end_bp=0,
+                        direction=Direction.REVERSE,
+                    ),
+                ],
+            ),
         ]
-    return Design(helices=helices, strands=strands, crossovers=[xo],
-                  lattice_type=LatticeType.HONEYCOMB)
+    return Design(
+        helices=helices,
+        strands=strands,
+        crossovers=[xo],
+        lattice_type=LatticeType.HONEYCOMB,
+    )
 
 
 def test_strand_nicked_at_crossover_is_a_validation_failure():
     from backend.core.validator import validate_design
 
     report = validate_design(_two_helix_design_with_crossover(nicked=True))
-    nick_fails = [r for r in report.results if not r.ok and "nicked at crossover" in r.message]
+    nick_fails = [
+        r for r in report.results if not r.ok and "nicked at crossover" in r.message
+    ]
     assert nick_fails, "a strand terminus on a crossover half must be a hard failure"
     assert not report.passed
 
@@ -310,7 +411,9 @@ def test_strand_traversing_crossover_passes_validation():
     from backend.core.validator import validate_design
 
     report = validate_design(_two_helix_design_with_crossover(nicked=False))
-    nick_fails = [r for r in report.results if not r.ok and "nicked at crossover" in r.message]
+    nick_fails = [
+        r for r in report.results if not r.ok and "nicked at crossover" in r.message
+    ]
     assert not nick_fails, "a continuous strand crossing the junction is valid"
 
 
@@ -327,7 +430,9 @@ def _full_autostaple(cells, length, lattice):
 def _staple_crossover_count(design):
     n = 0
     for xo in design.crossovers:
-        if not (_scaffold_half(design, xo.half_a) and _scaffold_half(design, xo.half_b)):
+        if not (
+            _scaffold_half(design, xo.half_a) and _scaffold_half(design, xo.half_b)
+        ):
             n += 1
     return n
 
@@ -341,8 +446,14 @@ def test_full_autostaple_is_valid_with_no_nick_on_crossover():
     ):
         d = _full_autostaple(cells, length, lattice)
         report = validate_design(d)
-        nick_fail = [r.message for r in report.results if not r.ok and "nicked at crossover" in r.message]
-        assert not nick_fail, f"{lattice}: full-autostaple left a nick on a crossover: {nick_fail}"
+        nick_fail = [
+            r.message
+            for r in report.results
+            if not r.ok and "nicked at crossover" in r.message
+        ]
+        assert not nick_fail, (
+            f"{lattice}: full-autostaple left a nick on a crossover: {nick_fail}"
+        )
         assert report.passed, [r.message for r in report.results if not r.ok]
 
 
@@ -387,8 +498,10 @@ def _run_full_autostaple_pipeline(design):
     from backend.core.lattice import grow_staples, nick_all_major_ticks
     from backend.api.crud import _place_auto_crossovers
     from backend.api.routes_assign_sequences import (
-        _linearize_staple_precursors, _locked_and_overhang_staple_ids,
+        _linearize_staple_precursors,
+        _locked_and_overhang_staple_ids,
     )
+
     seq, _, _ = assign_scaffold_sequence(design, "M13mp18")
     locked, overhang = _locked_and_overhang_staple_ids(seq)
     protected = locked | overhang
@@ -397,7 +510,8 @@ def _run_full_autostaple_pipeline(design):
     # Mirrors the real full-autostaple call: overhang staples get TIP-only protection
     # (their duplex body is woven in), locked staples are protected whole.
     crossed, _ = _place_auto_crossovers(
-        nicked, protected_strand_ids=locked, tip_only_strand_ids=overhang)
+        nicked, protected_strand_ids=locked, tip_only_strand_ids=overhang
+    )
     clean = grow_staples(crossed, max_merged_length=56, locked_ids=locked)
     return assign_staple_sequences(clean), locked, overhang
 
@@ -405,13 +519,24 @@ def _run_full_autostaple_pipeline(design):
 def _load_example():
     from pathlib import Path
     from backend.core.models import Design
-    p = Path(__file__).resolve().parent.parent / "workspace" / "3x6_hinge_bound_end_to_root.nadoc"
+
+    p = (
+        Path(__file__).resolve().parent.parent
+        / "workspace"
+        / "3x6_hinge_bound_end_to_root.nadoc"
+    )
     return Design.model_validate_json(p.read_text())
 
 
 def _manual_xo_key(xo):
-    return (xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand.value,
-            xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value)
+    return (
+        xo.half_a.helix_id,
+        xo.half_a.index,
+        xo.half_a.strand.value,
+        xo.half_b.helix_id,
+        xo.half_b.index,
+        xo.half_b.strand.value,
+    )
 
 
 def test_full_autostaple_preserves_manual_connections_and_overhangs():
@@ -429,28 +554,46 @@ def test_full_autostaple_preserves_manual_connections_and_overhangs():
     # The hand-built fixture is not git-tracked and no longer present in this
     # checkout (the headless regenerator was reverted; the desired manual ops now
     # live in workspace/3x6_autogen_hinge.nadoc — see AF-37, blocked).
-    fixture = Path(__file__).resolve().parent.parent / "workspace" / "3x6_hinge_bound_end_to_root.nadoc"
+    fixture = (
+        Path(__file__).resolve().parent.parent
+        / "workspace"
+        / "3x6_hinge_bound_end_to_root.nadoc"
+    )
     if not fixture.exists():
-        pytest.skip(f"{fixture.name} absent (hand-built fixture; see 3x6_autogen_hinge.nadoc)")
+        pytest.skip(
+            f"{fixture.name} absent (hand-built fixture; see 3x6_autogen_hinge.nadoc)"
+        )
 
     d = _load_example()
-    manual_before = {_manual_xo_key(x) for x in d.crossovers if x.process_id == "manual"}
+    manual_before = {
+        _manual_xo_key(x) for x in d.crossovers if x.process_id == "manual"
+    }
     forced_before = len(d.forced_ligations or [])
     assert manual_before and forced_before  # guard: fixture still has them
 
     clean, locked, overhang = _run_full_autostaple_pipeline(d)
 
-    manual_after = {_manual_xo_key(x) for x in clean.crossovers if x.process_id == "manual"}
+    manual_after = {
+        _manual_xo_key(x) for x in clean.crossovers if x.process_id == "manual"
+    }
     assert manual_before <= manual_after, "full-autostaple dropped a manual crossover"
-    assert len(clean.forced_ligations or []) == forced_before, "a forced ligation was lost"
+    assert len(clean.forced_ligations or []) == forced_before, (
+        "a forced ligation was lost"
+    )
 
     # The 2 overhang staples are detected on input; their duplex bodies are now woven
     # in (so the original strand id may be split/merged away), but every overhang TIP
     # survives — pinned by overhang_id, not strand id.
     assert overhang == {"stpl_XY_2_0", "stpl_XY_5_0"}
-    oh_ids_before = {dm.overhang_id for s in d.strands for dm in s.domains if dm.overhang_id}
-    oh_ids_after = {dm.overhang_id for s in clean.strands for dm in s.domains if dm.overhang_id}
-    assert oh_ids_before and oh_ids_before <= oh_ids_after, "an overhang tip (overhang_id) was lost"
+    oh_ids_before = {
+        dm.overhang_id for s in d.strands for dm in s.domains if dm.overhang_id
+    }
+    oh_ids_after = {
+        dm.overhang_id for s in clean.strands for dm in s.domains if dm.overhang_id
+    }
+    assert oh_ids_before and oh_ids_before <= oh_ids_after, (
+        "an overhang tip (overhang_id) was lost"
+    )
 
     report = validate_design(clean)
     assert report.passed, [r.message for r in report.results if not r.ok]
@@ -466,29 +609,77 @@ def _minimal_overhang_design():
 
     L = 48
     helices = [
-        Helix(id="h0", grid_pos=(0, 0), axis_start=Vec3(x=0, y=0, z=0),
-              axis_end=Vec3(x=0, y=0, z=L * BDNA_RISE_PER_BP), length_bp=L, bp_start=0),
-        Helix(id="h1", grid_pos=(1, 0), axis_start=Vec3(x=2.5, y=0, z=0),
-              axis_end=Vec3(x=2.5, y=0, z=L * BDNA_RISE_PER_BP), length_bp=L, bp_start=0),
-        Helix(id="hoh", grid_pos=(0, 1), axis_start=Vec3(x=0, y=2.5, z=0),
-              axis_end=Vec3(x=0, y=2.5, z=12 * BDNA_RISE_PER_BP), length_bp=12, bp_start=0),
+        Helix(
+            id="h0",
+            grid_pos=(0, 0),
+            axis_start=Vec3(x=0, y=0, z=0),
+            axis_end=Vec3(x=0, y=0, z=L * BDNA_RISE_PER_BP),
+            length_bp=L,
+            bp_start=0,
+        ),
+        Helix(
+            id="h1",
+            grid_pos=(1, 0),
+            axis_start=Vec3(x=2.5, y=0, z=0),
+            axis_end=Vec3(x=2.5, y=0, z=L * BDNA_RISE_PER_BP),
+            length_bp=L,
+            bp_start=0,
+        ),
+        Helix(
+            id="hoh",
+            grid_pos=(0, 1),
+            axis_start=Vec3(x=0, y=2.5, z=0),
+            axis_end=Vec3(x=0, y=2.5, z=12 * BDNA_RISE_PER_BP),
+            length_bp=12,
+            bp_start=0,
+        ),
     ]
-    ohstap = Strand(id="ohstap", strand_type=StrandType.STAPLE, domains=[
-        Domain(helix_id="h0", start_bp=L - 1, end_bp=0, direction=Direction.REVERSE),
-        Domain(helix_id="hoh", start_bp=0, end_bp=11, direction=Direction.FORWARD, overhang_id="oh1"),
-    ])
-    nstap = Strand(id="nstap", strand_type=StrandType.STAPLE, domains=[
-        Domain(helix_id="h1", start_bp=0, end_bp=L - 1, direction=Direction.FORWARD),
-    ])
-    scaf = Strand(id="scaf", strand_type=StrandType.SCAFFOLD, domains=[
-        Domain(helix_id="h0", start_bp=0, end_bp=L - 1, direction=Direction.FORWARD),
-    ])
-    return Design(helices=helices, strands=[scaf, ohstap, nstap], lattice_type=LatticeType.SQUARE)
+    ohstap = Strand(
+        id="ohstap",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(
+                helix_id="h0", start_bp=L - 1, end_bp=0, direction=Direction.REVERSE
+            ),
+            Domain(
+                helix_id="hoh",
+                start_bp=0,
+                end_bp=11,
+                direction=Direction.FORWARD,
+                overhang_id="oh1",
+            ),
+        ],
+    )
+    nstap = Strand(
+        id="nstap",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(
+                helix_id="h1", start_bp=0, end_bp=L - 1, direction=Direction.FORWARD
+            ),
+        ],
+    )
+    scaf = Strand(
+        id="scaf",
+        strand_type=StrandType.SCAFFOLD,
+        domains=[
+            Domain(
+                helix_id="h0", start_bp=0, end_bp=L - 1, direction=Direction.FORWARD
+            ),
+        ],
+    )
+    return Design(
+        helices=helices, strands=[scaf, ohstap, nstap], lattice_type=LatticeType.SQUARE
+    )
 
 
 def _h0_body_xovers(res):
-    return sum(1 for x in res.crossovers for h in (x.half_a, x.half_b)
-               if h.helix_id == "h0" and h.strand.value == "REVERSE")
+    return sum(
+        1
+        for x in res.crossovers
+        for h in (x.half_a, x.half_b)
+        if h.helix_id == "h0" and h.strand.value == "REVERSE"
+    )
 
 
 def test_overhang_staple_body_woven_tip_protected():
@@ -502,16 +693,21 @@ def test_overhang_staple_body_woven_tip_protected():
 
     # OLD whole-staple protection (overhang in protected_strand_ids only) → body NOT woven.
     full_only, _ = _place_auto_crossovers(
-        _minimal_overhang_design(), protected_strand_ids=frozenset({"ohstap"}))
+        _minimal_overhang_design(), protected_strand_ids=frozenset({"ohstap"})
+    )
     assert _h0_body_xovers(full_only) == 0
 
     # NEW: overhang in BOTH sets (locked + overhang). Tip-only WINS → the body IS woven.
     woven, _ = _place_auto_crossovers(
         _minimal_overhang_design(),
-        protected_strand_ids=frozenset({"ohstap"}), tip_only_strand_ids=frozenset({"ohstap"}))
+        protected_strand_ids=frozenset({"ohstap"}),
+        tip_only_strand_ids=frozenset({"ohstap"}),
+    )
     assert _h0_body_xovers(woven) > 0, "overhang body was not woven in"
     # The free tip (on hoh) is never crossed.
-    assert not any(h.helix_id == "hoh" for x in woven.crossovers for h in (x.half_a, x.half_b))
+    assert not any(
+        h.helix_id == "hoh" for x in woven.crossovers for h in (x.half_a, x.half_b)
+    )
 
 
 def test_overhang_crossover_placement_iterates_to_fixpoint():
@@ -522,7 +718,10 @@ def test_overhang_crossover_placement_iterates_to_fixpoint():
     converges — the regression guard for the starvation fix."""
     from backend.api.crud import _place_auto_crossovers
 
-    kw = dict(protected_strand_ids=frozenset({"ohstap"}), tip_only_strand_ids=frozenset({"ohstap"}))
+    kw = dict(
+        protected_strand_ids=frozenset({"ohstap"}),
+        tip_only_strand_ids=frozenset({"ohstap"}),
+    )
     cur = _minimal_overhang_design()
     placed = []
     for _ in range(12):
@@ -531,7 +730,9 @@ def test_overhang_crossover_placement_iterates_to_fixpoint():
         if s["placed"] == 0:
             break
     assert placed[0] > 0
-    assert sum(placed[1:]) > 0, "single pass already full — starvation not reproduced (vacuous)"
+    assert sum(placed[1:]) > 0, (
+        "single pass already full — starvation not reproduced (vacuous)"
+    )
     assert placed[-1] == 0, "crossover placement did not converge to a fixpoint"
 
 
@@ -561,11 +762,15 @@ def test_full_autostaple_records_overhang_attachment_crossover():
             return False
         return any(
             crossover_neighbor(res.lattice_type, a[0], a[1], idx, is_scaffold=sc) == b
-            or crossover_neighbor(res.lattice_type, b[0], b[1], idx, is_scaffold=sc) == a
-            for sc in (False, True))
+            or crossover_neighbor(res.lattice_type, b[0], b[1], idx, is_scaffold=sc)
+            == a
+            for sc in (False, True)
+        )
 
     xo_junctions = {
-        frozenset({(x.half_a.helix_id, x.half_a.index), (x.half_b.helix_id, x.half_b.index)})
+        frozenset(
+            {(x.half_a.helix_id, x.half_a.index), (x.half_b.helix_id, x.half_b.index)}
+        )
         for x in res.crossovers
     }
 
@@ -579,7 +784,8 @@ def test_full_autostaple_records_overhang_attachment_crossover():
                 key = frozenset({(a.helix_id, a.end_bp), (b.helix_id, b.start_bp)})
                 assert key in xo_junctions, (
                     f"overhang attachment {a.helix_id}@{a.end_bp}-{b.helix_id}@{b.start_bp} "
-                    "left bare (no crossover record)")
+                    "left bare (no crossover record)"
+                )
                 checked += 1
     assert checked > 0, "no same-bp overhang attachment present — test is vacuous"
 
@@ -587,20 +793,48 @@ def test_full_autostaple_records_overhang_attachment_crossover():
 def _manual_crossover_design():
     """Two helices; one staple crosses A→B at bp 20 via a process_id='manual' crossover."""
     from backend.core.models import (
-        Crossover, Design, Direction, Domain, HalfCrossover, Helix, Strand, StrandType, Vec3,
+        Crossover,
+        Design,
+        Direction,
+        Domain,
+        HalfCrossover,
+        Helix,
+        Strand,
+        StrandType,
+        Vec3,
     )
 
-    hA = Helix(id="hA", grid_pos=(0, 0), axis_start=Vec3(x=0, y=0, z=0),
-               axis_end=Vec3(x=0, y=0, z=10), length_bp=64, bp_start=0)
-    hB = Helix(id="hB", grid_pos=(0, 1), axis_start=Vec3(x=0, y=2, z=0),
-               axis_end=Vec3(x=0, y=2, z=10), length_bp=64, bp_start=0)
-    crosser = Strand(id="crosser", strand_type=StrandType.STAPLE, domains=[
-        Domain(helix_id="hA", start_bp=40, end_bp=20, direction=Direction.REVERSE),
-        Domain(helix_id="hB", start_bp=20, end_bp=40, direction=Direction.FORWARD),
-    ])
-    free = Strand(id="free", strand_type=StrandType.STAPLE, domains=[
-        Domain(helix_id="hA", start_bp=0, end_bp=19, direction=Direction.FORWARD),
-    ])
+    hA = Helix(
+        id="hA",
+        grid_pos=(0, 0),
+        axis_start=Vec3(x=0, y=0, z=0),
+        axis_end=Vec3(x=0, y=0, z=10),
+        length_bp=64,
+        bp_start=0,
+    )
+    hB = Helix(
+        id="hB",
+        grid_pos=(0, 1),
+        axis_start=Vec3(x=0, y=2, z=0),
+        axis_end=Vec3(x=0, y=2, z=10),
+        length_bp=64,
+        bp_start=0,
+    )
+    crosser = Strand(
+        id="crosser",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="hA", start_bp=40, end_bp=20, direction=Direction.REVERSE),
+            Domain(helix_id="hB", start_bp=20, end_bp=40, direction=Direction.FORWARD),
+        ],
+    )
+    free = Strand(
+        id="free",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="hA", start_bp=0, end_bp=19, direction=Direction.FORWARD),
+        ],
+    )
     xo = Crossover(
         half_a=HalfCrossover(helix_id="hA", index=20, strand=Direction.REVERSE),
         half_b=HalfCrossover(helix_id="hB", index=20, strand=Direction.FORWARD),
@@ -617,7 +851,8 @@ def test_manual_crossover_does_not_lock_the_staple_carrying_it():
     itself survives linearization, so autostaple can neither undo nor duplicate it.
     """
     from backend.api.routes_assign_sequences import (
-        _locked_and_overhang_staple_ids, _linearize_staple_precursors,
+        _locked_and_overhang_staple_ids,
+        _linearize_staple_precursors,
     )
 
     d = _manual_crossover_design()
@@ -629,15 +864,20 @@ def test_manual_crossover_does_not_lock_the_staple_carrying_it():
     assert rep["locked_strand_count"] == 0
     # The manual crossover RECORD is kept — the junction can be re-ligated.
     assert any(x.process_id == "manual" for x in prec.crossovers)
+
     # The staple is linearized (its connectivity is autostaple's business) but every
     # bp it covered is still covered — its LOCATION is the user's intent.
     def coverage(dd):
         return {
             (dom.helix_id, dom.direction.value, bp)
-            for s in dd.strands if s.strand_type.value == "staple"
+            for s in dd.strands
+            if s.strand_type.value == "staple"
             for dom in s.domains
-            for bp in range(min(dom.start_bp, dom.end_bp), max(dom.start_bp, dom.end_bp) + 1)
+            for bp in range(
+                min(dom.start_bp, dom.end_bp), max(dom.start_bp, dom.end_bp) + 1
+            )
         }
+
     assert coverage(prec) == coverage(d)
 
 
@@ -645,13 +885,18 @@ def test_forced_ligation_still_locks_its_staple():
     """A forced ligation is a join autostaple CANNOT re-derive — that strand stays whole."""
     from backend.core.models import Direction, ForcedLigation
     from backend.api.routes_assign_sequences import (
-        _locked_and_overhang_staple_ids, _linearize_staple_precursors,
+        _locked_and_overhang_staple_ids,
+        _linearize_staple_precursors,
     )
 
     d = _manual_crossover_design()
     fl = ForcedLigation(
-        three_prime_helix_id="hA", three_prime_bp=20, three_prime_direction=Direction.REVERSE,
-        five_prime_helix_id="hB", five_prime_bp=20, five_prime_direction=Direction.FORWARD,
+        three_prime_helix_id="hA",
+        three_prime_bp=20,
+        three_prime_direction=Direction.REVERSE,
+        five_prime_helix_id="hB",
+        five_prime_bp=20,
+        five_prime_direction=Direction.FORWARD,
     )
     d = d.model_copy(update={"forced_ligations": [fl]})
 
@@ -660,7 +905,7 @@ def test_forced_ligation_still_locks_its_staple():
 
     prec, rep = _linearize_staple_precursors(d)
     kept = next((s for s in prec.strands if s.id == "crosser"), None)
-    assert kept is not None and len(kept.domains) == 2   # preserved whole
+    assert kept is not None and len(kept.domains) == 2  # preserved whole
     assert rep["locked_strand_count"] == 1
 
 
@@ -668,17 +913,32 @@ def test_merge_cap_overhang_strand_is_48_plus_overhang_length():
     from backend.core.lattice import _merge_cap
     from backend.core.models import Direction, Domain, Strand, StrandType
 
-    plain = Strand(id="p", strand_type=StrandType.STAPLE, domains=[
-        Domain(helix_id="h", start_bp=0, end_bp=20, direction=Direction.FORWARD)])
+    plain = Strand(
+        id="p",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h", start_bp=0, end_bp=20, direction=Direction.FORWARD)
+        ],
+    )
     # Binding domain + a 7-nt overhang domain.
-    ovh = Strand(id="o", strand_type=StrandType.STAPLE, domains=[
-        Domain(helix_id="h", start_bp=0, end_bp=20, direction=Direction.FORWARD),
-        Domain(helix_id="h", start_bp=21, end_bp=27, direction=Direction.FORWARD,
-               overhang_id="ov1")])
+    ovh = Strand(
+        id="o",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h", start_bp=0, end_bp=20, direction=Direction.FORWARD),
+            Domain(
+                helix_id="h",
+                start_bp=21,
+                end_bp=27,
+                direction=Direction.FORWARD,
+                overhang_id="ov1",
+            ),
+        ],
+    )
 
-    assert _merge_cap(plain, plain, 56) == 56          # plain pair: lattice cap
-    assert _merge_cap(plain, ovh, 56) == 48 + 7        # overhang pair: 48 + 7 nt
-    assert _merge_cap(ovh, ovh, 56) == 48 + 7 + 7      # both overhangs sum
+    assert _merge_cap(plain, plain, 56) == 56  # plain pair: lattice cap
+    assert _merge_cap(plain, ovh, 56) == 48 + 7  # overhang pair: 48 + 7 nt
+    assert _merge_cap(ovh, ovh, 56) == 48 + 7 + 7  # both overhangs sum
 
 
 def test_grow_staples_rebalances_instead_of_exceeding_the_cap():
@@ -691,21 +951,47 @@ def test_grow_staples_rebalances_instead_of_exceeding_the_cap():
     from backend.core.constants import BDNA_RISE_PER_BP
 
     total = 63
-    helix = Helix(id="h0", axis_start=Vec3(x=0.0, y=0.0, z=0.0),
-                  axis_end=Vec3(x=0.0, y=0.0, z=total * BDNA_RISE_PER_BP),
-                  length_bp=total, bp_start=0)
+    helix = Helix(
+        id="h0",
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=total * BDNA_RISE_PER_BP),
+        length_bp=total,
+        bp_start=0,
+    )
     # REVERSE staples abut at the nick: 5' fragment (49 nt) high bps, 3' fragment (14 nt) low bps.
-    big = Strand(id="s_big", strand_type=StrandType.STAPLE, domains=[
-        Domain(helix_id="h0", start_bp=total - 1, end_bp=14, direction=Direction.REVERSE)])
-    small = Strand(id="s_small", strand_type=StrandType.STAPLE, domains=[
-        Domain(helix_id="h0", start_bp=13, end_bp=0, direction=Direction.REVERSE)])
-    design = Design(helices=[helix], strands=[big, small], lattice_type=LatticeType.HONEYCOMB)
+    big = Strand(
+        id="s_big",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(
+                helix_id="h0",
+                start_bp=total - 1,
+                end_bp=14,
+                direction=Direction.REVERSE,
+            )
+        ],
+    )
+    small = Strand(
+        id="s_small",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h0", start_bp=13, end_bp=0, direction=Direction.REVERSE)
+        ],
+    )
+    design = Design(
+        helices=[helix], strands=[big, small], lattice_type=LatticeType.HONEYCOMB
+    )
 
     grown = grow_staples(design, max_merged_length=56)  # lattice default min → 21
-    lengths = sorted(len(_strand_nucleotide_positions(s))
-                     for s in grown.strands if s.strand_type == StrandType.STAPLE)
+    lengths = sorted(
+        len(_strand_nucleotide_positions(s))
+        for s in grown.strands
+        if s.strand_type == StrandType.STAPLE
+    )
     assert len(lengths) == 2, "rebalance must split, not build one over-cap staple"
-    assert all(21 <= n <= 56 for n in lengths), f"both pieces must be in [21,56]: {lengths}"
+    assert all(21 <= n <= 56 for n in lengths), (
+        f"both pieces must be in [21,56]: {lengths}"
+    )
     assert sum(lengths) == 63, "no nucleotides lost in the rebalance"
 
 
@@ -715,8 +1001,26 @@ def test_full_autostaple_splits_oversize_seam_bridge():
     # staples (the nick the user had to add by hand).
     from backend.core.validator import validate_design
 
-    CELLS = [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [1, 5], [1, 4], [1, 3],
-             [1, 2], [1, 1], [1, 0], [2, 0], [2, 1], [2, 2], [2, 3], [2, 4], [2, 5]]
+    CELLS = [
+        [0, 0],
+        [0, 1],
+        [0, 2],
+        [0, 3],
+        [0, 4],
+        [0, 5],
+        [1, 5],
+        [1, 4],
+        [1, 3],
+        [1, 2],
+        [1, 1],
+        [1, 0],
+        [2, 0],
+        [2, 1],
+        [2, 2],
+        [2, 3],
+        [2, 4],
+        [2, 5],
+    ]
     with hb.scratch_session(LatticeType.SQUARE):
         hb.create_bundle(CELLS, 256, lattice=LatticeType.SQUARE, name="t")
         hb.auto_scaffold(seamless=False)
@@ -733,57 +1037,86 @@ def test_full_autostaple_splits_oversize_seam_bridge():
 
 def test_has_sandwich_detects_runs_not_just_single_domains():
     from backend.core.lattice import _has_sandwich
+
     # Single short domain flanked by longer.
     assert _has_sandwich([14, 7, 14])
     # A *run* of short domains flanked by longer (the cases the old rule missed).
     assert _has_sandwich([14, 7, 7, 14])
     assert _has_sandwich([14, 7, 7, 7, 14])
-    assert _has_sandwich([14, 7, 7, 21])      # flanks need not be equal
+    assert _has_sandwich([14, 7, 7, 21])  # flanks need not be equal
     # Not sandwiches: terminal shorts, uniform, peak-in-the-middle.
-    assert not _has_sandwich([14, 7, 7])      # run is terminal
-    assert not _has_sandwich([7, 14, 7])      # the 14 sticks up
+    assert not _has_sandwich([14, 7, 7])  # run is terminal
+    assert not _has_sandwich([7, 14, 7])  # the 14 sticks up
     assert not _has_sandwich([7, 7, 7])
     assert not _has_sandwich([14, 14, 14])
 
 
 def _reverse_staple(sid, hi, lo):
     from backend.core.models import Domain, Strand
-    return Strand(id=sid, strand_type=StrandType.STAPLE,
-                  domains=[Domain(helix_id="h0", start_bp=hi, end_bp=lo, direction=Direction.REVERSE)])
+
+    return Strand(
+        id=sid,
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h0", start_bp=hi, end_bp=lo, direction=Direction.REVERSE)
+        ],
+    )
 
 
 def _single_helix_design(strands, length_bp, lattice=LatticeType.HONEYCOMB):
     from backend.core.models import Design, Helix, Vec3
     from backend.core.constants import BDNA_RISE_PER_BP
-    helix = Helix(id="h0", axis_start=Vec3(x=0.0, y=0.0, z=0.0),
-                  axis_end=Vec3(x=0.0, y=0.0, z=length_bp * BDNA_RISE_PER_BP),
-                  length_bp=length_bp, bp_start=0)
+
+    helix = Helix(
+        id="h0",
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=length_bp * BDNA_RISE_PER_BP),
+        length_bp=length_bp,
+        bp_start=0,
+    )
     return Design(helices=[helix], strands=strands, lattice_type=lattice)
 
 
 def test_merge_favours_growing_the_shorter_segment():
     # Co-linear chain 21 · 7 · 49.  The 7 can top the 49 up to 56 OR grow the 21
     # to 28 — favour the shorter neighbour → {28, 49}, not {21, 56}.
-    from backend.core.lattice import make_merge_short_staples, _strand_nucleotide_positions
-    design = _single_helix_design([
-        _reverse_staple("s21", 76, 56),   # 21 nt
-        _reverse_staple("s7", 55, 49),    # 7 nt
-        _reverse_staple("s49", 48, 0),    # 49 nt
-    ], length_bp=77)
+    from backend.core.lattice import (
+        make_merge_short_staples,
+        _strand_nucleotide_positions,
+    )
+
+    design = _single_helix_design(
+        [
+            _reverse_staple("s21", 76, 56),  # 21 nt
+            _reverse_staple("s7", 55, 49),  # 7 nt
+            _reverse_staple("s49", 48, 0),  # 49 nt
+        ],
+        length_bp=77,
+    )
     merged = make_merge_short_staples(design, max_merged_length=56)
-    lengths = sorted(len(_strand_nucleotide_positions(s))
-                     for s in merged.strands if s.strand_type == StrandType.STAPLE)
-    assert lengths == [28, 49], f"expected the 7 to grow the 21 → {{28,49}}, got {lengths}"
+    lengths = sorted(
+        len(_strand_nucleotide_positions(s))
+        for s in merged.strands
+        if s.strand_type == StrandType.STAPLE
+    )
+    assert lengths == [28, 49], (
+        f"expected the 7 to grow the 21 → {{28,49}}, got {lengths}"
+    )
 
 
 def test_full_autostaple_output_is_sandwich_free():
     from backend.core.lattice import _strand_domain_lens, _has_sandwich
+
     for cells, length, lattice in (
         (_HC6_CELLS, 168, LatticeType.HONEYCOMB),
         (_SQ6_CELLS, 96, LatticeType.SQUARE),
     ):
         d = _full_autostaple(cells, length, lattice)
-        bad = [s.id for s in d.strands
-               if s.strand_type == StrandType.STAPLE and not s.is_reference
-               and _has_sandwich(_strand_domain_lens(_strand_nucleotide_positions(s)))]
+        bad = [
+            s.id
+            for s in d.strands
+            if s.strand_type == StrandType.STAPLE
+            and not s.is_reference
+            and _has_sandwich(_strand_domain_lens(_strand_nucleotide_positions(s)))
+        ]
         assert not bad, f"{lattice}: sandwiched staples present: {bad}"

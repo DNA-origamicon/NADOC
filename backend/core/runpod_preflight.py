@@ -155,59 +155,94 @@ def evaluate(
     """Pure. Turn the raw facts into pass/fail rows. No I/O, fully unit-tested."""
     checks: list[Check] = []
 
-    checks.append(Check(
-        "api_key", connected, "RunPod API key",
-        "connected" if connected else "not connected — enter your API key",
-    ))
-    checks.append(Check(
-        "volume", bool(network_volume_id), "Network volume",
-        network_volume_id or "none set — the pod would have no NAMD and no packages",
-    ))
-    checks.append(Check(
-        "ssh_key", ssh_key_present, "SSH key",
-        "~/.ssh/id_ed25519 found" if ssh_key_present
-        else "no private key — the pod would boot and refuse every connection",
-    ))
+    checks.append(
+        Check(
+            "api_key",
+            connected,
+            "RunPod API key",
+            "connected" if connected else "not connected — enter your API key",
+        )
+    )
+    checks.append(
+        Check(
+            "volume",
+            bool(network_volume_id),
+            "Network volume",
+            network_volume_id
+            or "none set — the pod would have no NAMD and no packages",
+        )
+    )
+    checks.append(
+        Check(
+            "ssh_key",
+            ssh_key_present,
+            "SSH key",
+            "~/.ssh/id_ed25519 found"
+            if ssh_key_present
+            else "no private key — the pod would boot and refuse every connection",
+        )
+    )
 
     # Architecture: the shipped table must never contain a card the binary can't run.
     bad = [g.label for g in allowed if g.sm not in NAMD_BUILD_ARCHS]
-    checks.append(Check(
-        "namd_arch", not bad, "NAMD build matches GPUs",
-        f"binary is {'/'.join(NAMD_BUILD_ARCHS)}; all offered cards match"
-        if not bad else f"{', '.join(bad)} cannot run the {'/'.join(NAMD_BUILD_ARCHS)} build",
-    ))
+    checks.append(
+        Check(
+            "namd_arch",
+            not bad,
+            "NAMD build matches GPUs",
+            f"binary is {'/'.join(NAMD_BUILD_ARCHS)}; all offered cards match"
+            if not bad
+            else f"{', '.join(bad)} cannot run the {'/'.join(NAMD_BUILD_ARCHS)} build",
+        )
+    )
 
     gpus: list[dict] = []
     if stock is None:
-        checks.append(Check("gpu_stock", False, "GPU availability",
-                            "could not query RunPod for stock"))
+        checks.append(
+            Check(
+                "gpu_stock",
+                False,
+                "GPU availability",
+                "could not query RunPod for stock",
+            )
+        )
     else:
         any_stock = False
         for gpu in allowed:
             entry = stock.get(gpu.key)
             ok = in_stock(entry)
             any_stock |= ok
-            gpus.append({
-                "key": gpu.key,
-                "label": gpu.label,
-                "vram_mb": gpu.vram_mb,
-                "sm": gpu.sm,
-                "stock": (entry or {}).get("stock"),
-                "usd_per_hour": (entry or {}).get("on_demand") or gpu.usd_per_hour,
-                "available": ok,
-            })
+            gpus.append(
+                {
+                    "key": gpu.key,
+                    "label": gpu.label,
+                    "vram_mb": gpu.vram_mb,
+                    "sm": gpu.sm,
+                    "stock": (entry or {}).get("stock"),
+                    "usd_per_hour": (entry or {}).get("on_demand") or gpu.usd_per_hour,
+                    "available": ok,
+                }
+            )
         names = ", ".join(f"{g['label']} ({g['stock'] or 'none'})" for g in gpus)
-        checks.append(Check(
-            "gpu_stock", any_stock, "GPU availability",
-            names if any_stock else f"no allowed card in stock — {names}",
-        ))
+        checks.append(
+            Check(
+                "gpu_stock",
+                any_stock,
+                "GPU availability",
+                names if any_stock else f"no allowed card in stock — {names}",
+            )
+        )
 
     if n_atoms:
         plan = plan_execution(n_atoms)
-        checks.append(Check(
-            "sizing", plan["gpu"] is not None, "System fits a GPU",
-            plan["reason"],
-        ))
+        checks.append(
+            Check(
+                "sizing",
+                plan["gpu"] is not None,
+                "System fits a GPU",
+                plan["reason"],
+            )
+        )
 
     return Preflight(
         ok=all(c.ok for c in checks),
@@ -230,4 +265,6 @@ def blocking_reason(pre: Preflight) -> str:
     bad = failed_checks(pre)
     if not bad:
         return ""
-    return "RunPod pre-flight failed: " + "; ".join(f"{c.label} — {c.detail}" for c in bad)
+    return "RunPod pre-flight failed: " + "; ".join(
+        f"{c.label} — {c.detail}" for c in bad
+    )

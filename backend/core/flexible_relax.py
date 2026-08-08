@@ -25,6 +25,7 @@ translate-only for a lone tether → Gauss-Seidel sweep) mirrors
 pinned for JS↔Python parity in ``tests/test_flexible_relax.py`` against the
 golden the vitest ``flexible_relax_solver.test.js`` produces from the same fixture.
 """
+
 from __future__ import annotations
 
 from typing import Optional
@@ -40,11 +41,12 @@ from backend.core.models import Design, FlexibleAnchor
 _SS_GAIN = 0.6
 _SS_ITERS = 6
 _SS_RELAX_OUTER = 80
-_SS_RELAX_EPS = 1e-3      # nm — converged when max violation below this
-_SS_RELAX_TOL = 0.05      # nm — overstretch beyond contour that counts as "needs relax"
+_SS_RELAX_EPS = 1e-3  # nm — converged when max violation below this
+_SS_RELAX_TOL = 0.05  # nm — overstretch beyond contour that counts as "needs relax"
 
 
 # ── Pure PBD solver (port of relaxSsdna + _projectSsdnaConstraints) ─────────────
+
 
 def relax_cluster_pose(
     pivot,
@@ -126,7 +128,7 @@ def relax_cluster_pose(
                     axis = rv / float(np.linalg.norm(rv))
                     q = Rotation.from_rotvec(axis * angle)
                     dummy_pos = q.apply(dummy_pos - pivot) + pivot
-                    dummy_rot = q * dummy_rot               # premultiply
+                    dummy_rot = q * dummy_rot  # premultiply
                     incr_rot = dummy_rot * start_rot.inv()
             # Translation pass: residual after rotation.
             d_t = np.zeros(3)
@@ -149,6 +151,7 @@ def relax_cluster_pose(
 
 
 # ── Orchestration (port of flex_relax.js relaxFlexible) ─────────────────────────
+
 
 def _geom_index(design: Design) -> dict:
     """(helix_id, bp_index, direction-string) → posed backbone position (np)."""
@@ -223,7 +226,8 @@ def compute_relax_transforms(
         progressed = False
         for pk in pairs:
             conns = [
-                c for c in (work.flexible_connections or [])
+                c
+                for c in (work.flexible_connections or [])
                 if pair_key(c.cluster_a_id, c.cluster_b_id) == pk
             ]
             if not conns:
@@ -257,13 +261,19 @@ def compute_relax_transforms(
 
             ct = next(c for c in work.cluster_transforms if c.id == moving)
             new_tr, new_rot, residual, did_move = relax_cluster_pose(
-                ct.pivot, ct.translation, ct.rotation, tethers,
+                ct.pivot,
+                ct.translation,
+                ct.rotation,
+                tethers,
                 translate_only=translate_only,
             )
             if did_move:
                 new_cts = [
-                    c.model_copy(update={"translation": list(new_tr), "rotation": list(new_rot)})
-                    if c.id == moving else c
+                    c.model_copy(
+                        update={"translation": list(new_tr), "rotation": list(new_rot)}
+                    )
+                    if c.id == moving
+                    else c
                     for c in work.cluster_transforms
                 ]
                 work = work.copy_with(cluster_transforms=new_cts)

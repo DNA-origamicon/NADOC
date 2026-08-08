@@ -47,7 +47,9 @@ def _teeth_like_design() -> Design:
                 s.model_copy(
                     update={
                         "id": f"{s.id}_frag{idx}",
-                        "domains": [dom.model_copy(update={"start_bp": start, "end_bp": end})],
+                        "domains": [
+                            dom.model_copy(update={"start_bp": start, "end_bp": end})
+                        ],
                     }
                 )
             )
@@ -61,7 +63,9 @@ def _staple_coverage(d: Design) -> set[tuple[str, str, int]]:
             continue
         for dom in s.domains:
             lo, hi = min(dom.start_bp, dom.end_bp), max(dom.start_bp, dom.end_bp)
-            cov.update((dom.helix_id, dom.direction.value, bp) for bp in range(lo, hi + 1))
+            cov.update(
+                (dom.helix_id, dom.direction.value, bp) for bp in range(lo, hi + 1)
+            )
     return cov
 
 

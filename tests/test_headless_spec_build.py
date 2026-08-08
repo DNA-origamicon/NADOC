@@ -8,6 +8,7 @@ equivalent hand-call wrapper sequence (the interpreter is a faithful façade, no
 re-implementation).  The faithfulness pin is the new reusable oracle
 ``assert_spec_matches_calls``.
 """
+
 from __future__ import annotations
 
 import json
@@ -50,6 +51,7 @@ from tests.automation_harness import (
     roundtrip_nadoc,
 )
 from tests.conftest import SIX_HB_CELLS, TEETH_CELLS, TEETH_PASSES, make_6hb_design
+
 # The multi-frame mock oxDNA binary source (a constant, not a fixture — a cross-module
 # fixture import trips ruff F811; the same pattern test_headless_oxdna_build uses to
 # borrow _MOCK_OXDNA from test_oxdna_relaxation).
@@ -60,9 +62,12 @@ _CELLS = [list(c) for c in SIX_HB_CELLS]
 
 # ── design interpreter ────────────────────────────────────────────────────────
 
+
 def test_design_spec_builds_6hb():
-    spec = {"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": _CELLS, "length_bp": 42, "name": "6hb"}]}
+    spec = {
+        "lattice": "honeycomb",
+        "ops": [{"op": "bundle", "cells": _CELLS, "length_bp": 42, "name": "6hb"}],
+    }
     d = hs.build_design(spec)
     assert len(d.helices) == 6
     # the build carries a real, replayable feature log (drove the real wrapper)
@@ -71,59 +76,102 @@ def test_design_spec_builds_6hb():
 
 def test_design_spec_matches_hand_calls():
     """A bundle spec builds the SAME canonical topology as make_6hb_design()."""
-    spec = {"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": _CELLS, "length_bp": 42, "name": "6hb"}]}
-    assert_spec_matches_calls(lambda: hs.build_design(spec), make_6hb_design, kind="design")
+    spec = {
+        "lattice": "honeycomb",
+        "ops": [{"op": "bundle", "cells": _CELLS, "length_bp": 42, "name": "6hb"}],
+    }
+    assert_spec_matches_calls(
+        lambda: hs.build_design(spec), make_6hb_design, kind="design"
+    )
 
 
 def test_teeth_spec_matches_hand_calls():
     """A bundle + extrude-passes spec reproduces the teeth fixture's hand build."""
     rise = hb.BDNA_RISE_PER_BP
-    ops = [{"op": "bundle", "cells": [list(c) for c in TEETH_CELLS], "length_bp": 42, "name": "teeth"}]
+    ops = [
+        {
+            "op": "bundle",
+            "cells": [list(c) for c in TEETH_CELLS],
+            "length_bp": 42,
+            "name": "teeth",
+        }
+    ]
     for i, n in enumerate(TEETH_PASSES, start=1):
-        ops.append({"op": "extrude", "cells": [list(c) for c in TEETH_CELLS[:n]],
-                    "length_bp": 42, "offset_nm": round(i * 42 * rise, 3)})
+        ops.append(
+            {
+                "op": "extrude",
+                "cells": [list(c) for c in TEETH_CELLS[:n]],
+                "length_bp": 42,
+                "offset_nm": round(i * 42 * rise, 3),
+            }
+        )
     spec = {"lattice": "square", "ops": ops}
 
     def hand():
-        return hb.build_bundle(TEETH_CELLS, 42, lattice=LatticeType.SQUARE,
-                               name="teeth", passes=TEETH_PASSES)
+        return hb.build_bundle(
+            TEETH_CELLS,
+            42,
+            lattice=LatticeType.SQUARE,
+            name="teeth",
+            passes=TEETH_PASSES,
+        )
 
     assert_spec_matches_calls(lambda: hs.build_design(spec), hand, kind="design")
 
 
 def test_design_spec_roundtrips_stable():
-    spec = {"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": _CELLS, "length_bp": 42}]}
+    spec = {
+        "lattice": "honeycomb",
+        "ops": [{"op": "bundle", "cells": _CELLS, "length_bp": 42}],
+    }
     assert_roundtrip_stable(lambda: hs.build_design(spec))
 
 
 def test_design_spec_nick_ligate_is_identity():
     """nick then ligate (declarative, by grid_pos) restores the base topology."""
-    base = {"lattice": "honeycomb", "ops": [{"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42}]}
-    nicked = {"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42},
-        {"op": "nick", "helix": [0, 1], "bp_index": 20, "direction": "forward"},
-        {"op": "ligate", "helix": [0, 1], "bp_index": 20, "direction": "forward"},
-    ]}
-    assert canonical_topology(hs.build_design(nicked)) == canonical_topology(hs.build_design(base))
+    base = {
+        "lattice": "honeycomb",
+        "ops": [{"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42}],
+    }
+    nicked = {
+        "lattice": "honeycomb",
+        "ops": [
+            {"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42},
+            {"op": "nick", "helix": [0, 1], "bp_index": 20, "direction": "forward"},
+            {"op": "ligate", "helix": [0, 1], "bp_index": 20, "direction": "forward"},
+        ],
+    }
+    assert canonical_topology(hs.build_design(nicked)) == canonical_topology(
+        hs.build_design(base)
+    )
 
 
 def test_design_spec_nick_alone_changes_topology():
     """A nick (without the ligate) really mutates — proves the inverse test isn't vacuous."""
-    base = {"lattice": "honeycomb", "ops": [{"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42}]}
-    nicked = {"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42},
-        {"op": "nick", "helix": [0, 1], "bp_index": 20, "direction": "forward"},
-    ]}
-    assert canonical_topology(hs.build_design(nicked)) != canonical_topology(hs.build_design(base))
+    base = {
+        "lattice": "honeycomb",
+        "ops": [{"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42}],
+    }
+    nicked = {
+        "lattice": "honeycomb",
+        "ops": [
+            {"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42},
+            {"op": "nick", "helix": [0, 1], "bp_index": 20, "direction": "forward"},
+        ],
+    }
+    assert canonical_topology(hs.build_design(nicked)) != canonical_topology(
+        hs.build_design(base)
+    )
 
 
 def test_nick_unknown_grid_pos_raises():
-    spec = {"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": [[0, 1]], "length_bp": 42},
-        {"op": "nick", "helix": [9, 9], "bp_index": 5, "direction": "forward"},
-    ]}
+    spec = {
+        "lattice": "honeycomb",
+        "ops": [
+            {"op": "bundle", "cells": [[0, 1]], "length_bp": 42},
+            {"op": "nick", "helix": [9, 9], "bp_index": 5, "direction": "forward"},
+        ],
+    }
     with pytest.raises(BuildSpecError, match="no helix at grid position"):
         hs.build_design(spec)
 
@@ -132,8 +180,12 @@ def test_build_design_is_isolated():
     """A spec build runs in a scratch session — the default doc is untouched."""
     hb.new_design(LatticeType.HONEYCOMB)
     before = len(design_state.get_or_404().helices)
-    hs.build_design({"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": _CELLS, "length_bp": 42}]})
+    hs.build_design(
+        {
+            "lattice": "honeycomb",
+            "ops": [{"op": "bundle", "cells": _CELLS, "length_bp": 42}],
+        }
+    )
     assert len(design_state.get_or_404().helices) == before
 
 
@@ -144,23 +196,36 @@ def test_build_design_is_isolated():
 # pin that the bend/twist op actually flowed through to the geometry is the
 # geometric assert_deformation_angle below.
 
+
 def _bend_spec(kappa=2.0):
-    return {"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": [[0, 0]], "length_bp": 84, "name": "B"},
-        {"op": "bend", "plane_a_bp": 20, "plane_b_bp": 60, "curvature_deg_per_bp": kappa}]}
+    return {
+        "lattice": "honeycomb",
+        "ops": [
+            {"op": "bundle", "cells": [[0, 0]], "length_bp": 84, "name": "B"},
+            {
+                "op": "bend",
+                "plane_a_bp": 20,
+                "plane_b_bp": 60,
+                "curvature_deg_per_bp": kappa,
+            },
+        ],
+    }
 
 
 def test_bend_spec_matches_hand_calls():
     """A bend spec builds the same bundle topology as the equivalent hand calls.
     (Weak by itself for the bend — canonical_topology can't see the deformation —
     but it pins the bundle plumbing; the angle is pinned separately below.)"""
+
     def hand():
         with hb.scratch_session(LatticeType.HONEYCOMB):
             hb.create_bundle([(0, 0)], 84, lattice=LatticeType.HONEYCOMB, name="B")
             hb.add_bend(20, 60, curvature_deg_per_bp=2.0)
             return design_state.get_or_404().model_copy(deep=True)
 
-    assert_spec_matches_calls(lambda: hs.build_design(_bend_spec()), hand, kind="design")
+    assert_spec_matches_calls(
+        lambda: hs.build_design(_bend_spec()), hand, kind="design"
+    )
 
 
 def test_bend_spec_realises_requested_curvature():
@@ -173,9 +238,13 @@ def test_bend_spec_realises_requested_curvature():
 
 def test_twist_spec_total_degrees_realises_angle():
     """A twist spec (total_degrees) rotates the frame about its axis by θ°."""
-    spec = {"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": [[0, 0]], "length_bp": 84, "name": "B"},
-        {"op": "twist", "plane_a_bp": 20, "plane_b_bp": 60, "total_degrees": 90}]}
+    spec = {
+        "lattice": "honeycomb",
+        "ops": [
+            {"op": "bundle", "cells": [[0, 0]], "length_bp": 84, "name": "B"},
+            {"op": "twist", "plane_a_bp": 20, "plane_b_bp": 60, "total_degrees": 90},
+        ],
+    }
     d = hs.build_design(spec)
     assert_deformation_angle(d, 20, 60, 90.0, ref_helix_id=d.helices[0].id)
 
@@ -185,9 +254,13 @@ def test_twist_spec_degrees_per_nm_realises_rate():
     from backend.core.constants import BDNA_RISE_PER_BP
 
     rate = 30.0
-    spec = {"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": [[0, 0]], "length_bp": 84, "name": "B"},
-        {"op": "twist", "plane_a_bp": 20, "plane_b_bp": 60, "degrees_per_nm": rate}]}
+    spec = {
+        "lattice": "honeycomb",
+        "ops": [
+            {"op": "bundle", "cells": [[0, 0]], "length_bp": 84, "name": "B"},
+            {"op": "twist", "plane_a_bp": 20, "plane_b_bp": 60, "degrees_per_nm": rate},
+        ],
+    }
     d = hs.build_design(spec)
     expected = rate * (60 - 20) * BDNA_RISE_PER_BP
     assert_deformation_angle(d, 20, 60, expected, ref_helix_id=d.helices[0].id)
@@ -201,14 +274,19 @@ def test_twist_spec_degrees_per_nm_realises_rate():
 # fingerprint. The first test below documents that assert_spec_matches_calls
 # passes (bundle plumbing faithful) while being unable to see the loop on its own.
 
+
 def _base_loop_spec():
-    return {"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": [[0, 0]], "length_bp": 42, "name": "L"}]}
+    return {
+        "lattice": "honeycomb",
+        "ops": [{"op": "bundle", "cells": [[0, 0]], "length_bp": 42, "name": "L"}],
+    }
 
 
 def _loop_spec(bp, delta):
     spec = _base_loop_spec()
-    spec["ops"].append({"op": "loop_skip", "helix": [0, 0], "bp_index": bp, "delta": delta})
+    spec["ops"].append(
+        {"op": "loop_skip", "helix": [0, 0], "bp_index": bp, "delta": delta}
+    )
     return spec
 
 
@@ -225,7 +303,9 @@ def test_loop_skip_spec_matches_bundle_topology():
             hb.loop_skip(d.helices[0].id, d.helices[0].bp_start + 14, +1)
             return design_state.get_or_404().model_copy(deep=True)
 
-    assert_spec_matches_calls(lambda: hs.build_design(_loop_spec(bp, +1)), hand, kind="design")
+    assert_spec_matches_calls(
+        lambda: hs.build_design(_loop_spec(bp, +1)), hand, kind="design"
+    )
 
 
 def test_loop_spec_adds_one_bp_of_geometry():
@@ -234,9 +314,12 @@ def test_loop_spec_adds_one_bp_of_geometry():
     base = hs.build_design(_base_loop_spec())
     h = base.helices[0]
     looped = hs.build_design(_loop_spec(h.bp_start + 14, +1))
-    hid = next(hh.id for hh in looped.helices if tuple(hh.grid_pos) == tuple(h.grid_pos))
-    assert (geometric_nucleotide_count(looped, hid)
-            - geometric_nucleotide_count(base, h.id)) == 2
+    hid = next(
+        hh.id for hh in looped.helices if tuple(hh.grid_pos) == tuple(h.grid_pos)
+    )
+    assert (
+        geometric_nucleotide_count(looped, hid) - geometric_nucleotide_count(base, h.id)
+    ) == 2
     # the mark really landed in the spec-built design
     assert any(ls.delta for hh in looped.helices for ls in hh.loop_skips)
 
@@ -246,9 +329,13 @@ def test_skip_spec_removes_one_bp_of_geometry():
     base = hs.build_design(_base_loop_spec())
     h = base.helices[0]
     skipped = hs.build_design(_loop_spec(h.bp_start + 14, -1))
-    hid = next(hh.id for hh in skipped.helices if tuple(hh.grid_pos) == tuple(h.grid_pos))
-    assert (geometric_nucleotide_count(skipped, hid)
-            - geometric_nucleotide_count(base, h.id)) == -2
+    hid = next(
+        hh.id for hh in skipped.helices if tuple(hh.grid_pos) == tuple(h.grid_pos)
+    )
+    assert (
+        geometric_nucleotide_count(skipped, hid)
+        - geometric_nucleotide_count(base, h.id)
+    ) == -2
 
 
 def test_loop_skip_spec_survives_roundtrip():
@@ -271,6 +358,7 @@ def test_loop_skip_spec_survives_roundtrip():
 # built design.  The op needs crossovers placed first → every spec routes (auto_scaffold
 # + auto_crossover) before annotating.
 
+
 def _xover_base_spec():
     """A routed square bundle with real (staple) crossovers placed."""
     return _routed_spec()
@@ -280,7 +368,9 @@ def test_crossover_extra_bases_spec_is_non_vacuous():
     """Before any extra-bases op, the routed design carries crossovers but none has
     extra bases — so the pins below are can-go-red, not vacuous."""
     base = hs.build_design(_xover_base_spec())
-    assert base.crossovers, "fixture must place crossovers for these pins to mean anything"
+    assert base.crossovers, (
+        "fixture must place crossovers for these pins to mean anything"
+    )
     assert all(x.extra_bases is None for x in base.crossovers)
 
 
@@ -288,7 +378,9 @@ def test_crossover_extra_bases_bulk_all_spec():
     """A bulk crossover_extra_bases (filter=all) sets the sequence on every crossover —
     pinned by reading extra_bases back (canonical_topology is blind to it)."""
     spec = _xover_base_spec()
-    spec["ops"].append({"op": "crossover_extra_bases", "sequence": "TT", "filter": "all"})
+    spec["ops"].append(
+        {"op": "crossover_extra_bases", "sequence": "TT", "filter": "all"}
+    )
     built = hs.build_design(spec)
     assert_crossover_extra_bases(built, "TT", crossover_filter="all")
 
@@ -297,7 +389,9 @@ def test_crossover_extra_bases_bulk_staple_spec():
     """A bulk set filtered to staple crossovers annotates exactly those and leaves any
     other junction type untouched (the bled-onto-wrong-type can-go-red guard)."""
     spec = _xover_base_spec()
-    spec["ops"].append({"op": "crossover_extra_bases", "sequence": "TTT", "filter": "staple"})
+    spec["ops"].append(
+        {"op": "crossover_extra_bases", "sequence": "TTT", "filter": "staple"}
+    )
     built = hs.build_design(spec)
     assert_crossover_extra_bases(built, "TTT", crossover_filter="staple")
 
@@ -309,11 +403,15 @@ def test_crossover_extra_bases_precise_spec():
     xo = routed.crossovers[0]
     gp = {h.id: list(h.grid_pos) for h in routed.helices}
     spec = _xover_base_spec()
-    spec["ops"].append({
-        "op": "crossover_extra_bases",
-        "helix_a": gp[xo.half_a.helix_id], "helix_b": gp[xo.half_b.helix_id],
-        "bp_index": xo.half_a.index, "sequence": "AT",
-    })
+    spec["ops"].append(
+        {
+            "op": "crossover_extra_bases",
+            "helix_a": gp[xo.half_a.helix_id],
+            "helix_b": gp[xo.half_b.helix_id],
+            "bp_index": xo.half_a.index,
+            "sequence": "AT",
+        }
+    )
     built = hs.build_design(spec)
     assert_crossover_extra_bases(built, "AT", expected_count=1)
 
@@ -322,6 +420,7 @@ def test_crossover_extra_bases_matches_hand_calls():
     """The spec drives the SAME wrappers as the hand sequence — topology is identical
     (assert_spec_matches_calls is blind to extra_bases, so this pins the façade is
     faithful for everything BUT the metadata; the value itself is pinned above)."""
+
     def hand():
         with hb.scratch_session(LatticeType.SQUARE):
             hb.create_bundle(TEETH_CELLS, 96, lattice=LatticeType.SQUARE, name="sq")
@@ -331,9 +430,12 @@ def test_crossover_extra_bases_matches_hand_calls():
             return design_state.get_or_404().model_copy(deep=True)
 
     spec = _xover_base_spec()
-    spec["ops"].append({"op": "crossover_extra_bases", "sequence": "GC", "filter": "all"})
+    spec["ops"].append(
+        {"op": "crossover_extra_bases", "sequence": "GC", "filter": "all"}
+    )
     spec_built = assert_spec_matches_calls(
-        lambda: hs.build_design(spec), hand, kind="design")
+        lambda: hs.build_design(spec), hand, kind="design"
+    )
     # and the metadata the fingerprint can't see really landed
     assert_crossover_extra_bases(spec_built, "GC", crossover_filter="all")
 
@@ -341,7 +443,9 @@ def test_crossover_extra_bases_matches_hand_calls():
 def test_crossover_extra_bases_clear_is_inverse():
     """Setting then clearing ("") extra bases restores the no-extra-bases baseline."""
     spec = _xover_base_spec()
-    spec["ops"].append({"op": "crossover_extra_bases", "sequence": "TT", "filter": "all"})
+    spec["ops"].append(
+        {"op": "crossover_extra_bases", "sequence": "TT", "filter": "all"}
+    )
     spec["ops"].append({"op": "crossover_extra_bases", "sequence": "", "filter": "all"})
     built = hs.build_design(spec)
     assert all(x.extra_bases is None for x in built.crossovers)
@@ -350,10 +454,13 @@ def test_crossover_extra_bases_clear_is_inverse():
 def test_crossover_extra_bases_requires_crossovers():
     """Targeting a junction that doesn't exist (no crossovers placed) raises — the op
     annotates placed junctions, it does not create them."""
-    spec = {"lattice": "square", "ops": [
-        {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
-        {"op": "crossover_extra_bases", "sequence": "TT", "filter": "all"},
-    ]}
+    spec = {
+        "lattice": "square",
+        "ops": [
+            {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
+            {"op": "crossover_extra_bases", "sequence": "TT", "filter": "all"},
+        ],
+    }
     with pytest.raises(HTTPException):
         hs.build_design(spec)
 
@@ -361,24 +468,47 @@ def test_crossover_extra_bases_requires_crossovers():
 def test_crossover_extra_bases_both_modes_rejected():
     """A spec giving BOTH a filter and a location is a parse error (ambiguous addressing)."""
     with pytest.raises(BuildSpecError):
-        hs.build_design({"lattice": "square", "ops": [
-            {"op": "crossover_extra_bases", "sequence": "TT", "filter": "all",
-             "helix_a": [0, 0], "helix_b": [1, 0], "bp_index": 8},
-        ]})
+        hs.build_design(
+            {
+                "lattice": "square",
+                "ops": [
+                    {
+                        "op": "crossover_extra_bases",
+                        "sequence": "TT",
+                        "filter": "all",
+                        "helix_a": [0, 0],
+                        "helix_b": [1, 0],
+                        "bp_index": 8,
+                    },
+                ],
+            }
+        )
 
 
 def test_crossover_extra_bases_bad_sequence_rejected():
     """A sequence with a non-ACGTN base is a parse error."""
     with pytest.raises(BuildSpecError):
-        hs.build_design({"lattice": "square", "ops": [
-            {"op": "crossover_extra_bases", "sequence": "TX", "filter": "all"}]})
+        hs.build_design(
+            {
+                "lattice": "square",
+                "ops": [
+                    {"op": "crossover_extra_bases", "sequence": "TX", "filter": "all"}
+                ],
+            }
+        )
 
 
 def test_crossover_extra_bases_bad_filter_rejected():
     """An unknown filter is a parse error."""
     with pytest.raises(BuildSpecError):
-        hs.build_design({"lattice": "square", "ops": [
-            {"op": "crossover_extra_bases", "sequence": "TT", "filter": "loops"}]})
+        hs.build_design(
+            {
+                "lattice": "square",
+                "ops": [
+                    {"op": "crossover_extra_bases", "sequence": "TT", "filter": "loops"}
+                ],
+            }
+        )
 
 
 # ── circle_segment op (AF-11 Phase 2) ─────────────────────────────────────────
@@ -388,6 +518,7 @@ def test_crossover_extra_bases_bad_filter_rejected():
 # assert_circular_disc (AF-4) additionally pins that the radius→geometry path is
 # faithful end-to-end.
 
+
 def _circle_spec(radius=10.6):
     return {"lattice": "square", "ops": [{"op": "circle_segment", "radius_nm": radius}]}
 
@@ -395,12 +526,15 @@ def _circle_spec(radius=10.6):
 def test_circle_segment_spec_matches_hand_calls():
     """A circle_segment spec builds the SAME canonical topology as the hand call
     (it adds real strands, so the faithful-façade pin is load-bearing here)."""
+
     def hand():
         with hb.scratch_session(LatticeType.SQUARE):
             hb.circle_segment(10.6)
             return design_state.get_or_404().model_copy(deep=True)
 
-    assert_spec_matches_calls(lambda: hs.build_design(_circle_spec()), hand, kind="design")
+    assert_spec_matches_calls(
+        lambda: hs.build_design(_circle_spec()), hand, kind="design"
+    )
 
 
 @pytest.mark.parametrize("radius", [8.0, 10.6, 14.0])
@@ -427,17 +561,21 @@ _TEETH = [list(c) for c in TEETH_CELLS]
 
 
 def _routed_spec(*, seamless=False):
-    return {"lattice": "square", "ops": [
-        {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
-        {"op": "auto_scaffold", "seamless": seamless},
-        {"op": "auto_crossover"},
-    ]}
+    return {
+        "lattice": "square",
+        "ops": [
+            {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
+            {"op": "auto_scaffold", "seamless": seamless},
+            {"op": "auto_crossover"},
+        ],
+    }
 
 
 def test_auto_scaffold_crossover_spec_matches_hand_calls():
     """A bundle → auto_scaffold → auto_crossover spec builds the SAME canonical
     topology as the equivalent hand calls — load-bearing, since the auto ops add
     real strands the fingerprint sees (a dropped op would diverge from the hand build)."""
+
     def hand():
         with hb.scratch_session(LatticeType.SQUARE):
             hb.create_bundle(TEETH_CELLS, 96, lattice=LatticeType.SQUARE, name="sq")
@@ -445,14 +583,20 @@ def test_auto_scaffold_crossover_spec_matches_hand_calls():
             hb.auto_crossover()
             return design_state.get_or_404().model_copy(deep=True)
 
-    assert_spec_matches_calls(lambda: hs.build_design(_routed_spec()), hand, kind="design")
+    assert_spec_matches_calls(
+        lambda: hs.build_design(_routed_spec()), hand, kind="design"
+    )
 
 
 def test_auto_scaffold_crossover_spec_changes_topology_vs_bundle():
     """The routing ops visibly change the strand graph vs a bare bundle — so the
     faithfulness pin above is non-vacuous (it's not comparing two bare bundles)."""
-    bare = hs.build_design({"lattice": "square", "ops": [
-        {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"}]})
+    bare = hs.build_design(
+        {
+            "lattice": "square",
+            "ops": [{"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"}],
+        }
+    )
     routed = hs.build_design(_routed_spec())
     assert canonical_topology(routed) != canonical_topology(bare)
     # the routing ran end-to-end and left a replayable log
@@ -464,6 +608,7 @@ def test_full_autostaple_spec_matches_hand_calls():
     """A bundle → auto_scaffold → full_autostaple spec builds the SAME canonical
     topology as the equivalent hand calls (full_autostaple assigns sequence, places
     crossovers, breaks+merges staples — all visible to the fingerprint)."""
+
     def hand():
         with hb.scratch_session(LatticeType.SQUARE):
             hb.create_bundle(TEETH_CELLS, 96, lattice=LatticeType.SQUARE, name="sq")
@@ -471,11 +616,14 @@ def test_full_autostaple_spec_matches_hand_calls():
             hb.full_autostaple()
             return design_state.get_or_404().model_copy(deep=True)
 
-    spec = {"lattice": "square", "ops": [
-        {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
-        {"op": "auto_scaffold"},
-        {"op": "full_autostaple"},
-    ]}
+    spec = {
+        "lattice": "square",
+        "ops": [
+            {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
+            {"op": "auto_scaffold"},
+            {"op": "full_autostaple"},
+        ],
+    }
     assert_spec_matches_calls(lambda: hs.build_design(spec), hand, kind="design")
 
 
@@ -484,11 +632,14 @@ def test_full_autostaple_spec_roundtrips_stable():
     survives a .nadoc round-trip. (auto_crossover alone leaves staples nicked at
     crossovers — non-physical until broken/merged — so the complete autostaple is the
     valid round-trip target.)"""
-    spec = {"lattice": "square", "ops": [
-        {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
-        {"op": "auto_scaffold"},
-        {"op": "full_autostaple"},
-    ]}
+    spec = {
+        "lattice": "square",
+        "ops": [
+            {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
+            {"op": "auto_scaffold"},
+            {"op": "full_autostaple"},
+        ],
+    }
     assert_roundtrip_stable(lambda: hs.build_design(spec))
 
 
@@ -500,13 +651,17 @@ def test_full_autostaple_spec_roundtrips_stable():
 # load-bearing pin is the AF-3 per-helix geometric conservation law (each helix's
 # nucleotide count changes by exactly twice its net loop/skip delta).
 
+
 def _pre_apply_spec():
     """The routed SQUARE substrate apply_loop_skips runs on (no apply op yet)."""
-    return {"lattice": "square", "ops": [
-        {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
-        {"op": "auto_scaffold"},
-        {"op": "auto_crossover"},
-    ]}
+    return {
+        "lattice": "square",
+        "ops": [
+            {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
+            {"op": "auto_scaffold"},
+            {"op": "auto_crossover"},
+        ],
+    }
 
 
 def _apply_loop_skips_spec():
@@ -530,8 +685,9 @@ def test_apply_loop_skips_spec_honors_marks_per_helix():
     for h in after.helices:
         net = sum(ls.delta for ls in h.loop_skips)
         bhid = before_by_grid[tuple(h.grid_pos)]
-        diff = (geometric_nucleotide_count(after, h.id)
-                - geometric_nucleotide_count(before, bhid))
+        diff = geometric_nucleotide_count(after, h.id) - geometric_nucleotide_count(
+            before, bhid
+        )
         assert diff == 2 * net, (
             f"helix {h.id}: geometry changed by {diff}, marks net {net} (×2 expected)"
         )
@@ -540,23 +696,34 @@ def test_apply_loop_skips_spec_honors_marks_per_helix():
 def test_apply_loop_skips_spec_requires_crossovers():
     """Without crossovers, apply_loop_skips' route 400s — so a spec that applies on a
     bare bundle fails at build time (proves the op runs the real route, not a no-op)."""
-    spec = {"lattice": "square", "ops": [
-        {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
-        {"op": "apply_loop_skips"},
-    ]}
+    spec = {
+        "lattice": "square",
+        "ops": [
+            {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
+            {"op": "apply_loop_skips"},
+        ],
+    }
     with pytest.raises(HTTPException):
         hs.build_design(spec)
 
 
 # ── assembly interpreter ──────────────────────────────────────────────────────
 
-_BEAM_SPEC = {"lattice": "honeycomb", "ops": [
-    {"op": "bundle", "cells": _CELLS, "length_bp": 42, "name": "6hb"}]}
+_BEAM_SPEC = {
+    "lattice": "honeycomb",
+    "ops": [{"op": "bundle", "cells": _CELLS, "length_bp": 42, "name": "6hb"}],
+}
 
 
 def test_assembly_spec_grid_matches_hand_calls():
-    spec = {"kind": "assembly", "name": "G", "parts": {"beam": _BEAM_SPEC},
-            "ops": [{"op": "place_grid", "part": "beam", "rows": 2, "cols": 3, "pitch": 10.0}]}
+    spec = {
+        "kind": "assembly",
+        "name": "G",
+        "parts": {"beam": _BEAM_SPEC},
+        "ops": [
+            {"op": "place_grid", "part": "beam", "rows": 2, "cols": 3, "pitch": 10.0}
+        ],
+    }
 
     def hand():
         with hab.assembly_scratch_session():
@@ -568,27 +735,61 @@ def test_assembly_spec_grid_matches_hand_calls():
 
 
 def test_assembly_spec_grid_roundtrips_stable():
-    spec = {"kind": "assembly", "name": "G", "parts": {"beam": _BEAM_SPEC},
-            "ops": [{"op": "place_grid", "part": "beam", "rows": 2, "cols": 3, "pitch": 10.0}]}
+    spec = {
+        "kind": "assembly",
+        "name": "G",
+        "parts": {"beam": _BEAM_SPEC},
+        "ops": [
+            {"op": "place_grid", "part": "beam", "rows": 2, "cols": 3, "pitch": 10.0}
+        ],
+    }
     with hab.assembly_scratch_session():
         assert_assembly_roundtrip_stable(lambda: hs.build_assembly(spec))
 
 
 def test_assembly_spec_ring_roundtrips_stable():
-    spec = {"kind": "assembly", "name": "R", "parts": {"beam": _BEAM_SPEC},
-            "ops": [{"op": "place_ring", "part": "beam", "n": 5, "radius": 15.0}]}
+    spec = {
+        "kind": "assembly",
+        "name": "R",
+        "parts": {"beam": _BEAM_SPEC},
+        "ops": [{"op": "place_ring", "part": "beam", "n": 5, "radius": 15.0}],
+    }
     with hab.assembly_scratch_session():
         assert_assembly_roundtrip_stable(lambda: hs.build_assembly(spec))
 
 
 def _mate_spec():
-    return {"kind": "assembly", "name": "M", "parts": {"beam": _BEAM_SPEC}, "ops": [
-        {"op": "add_part", "part": "beam", "ref": "A",
-         "connectors": [{"label": "mate_a", "position": [5, 0, 0], "normal": [1, 0, 0]}]},
-        {"op": "add_part", "part": "beam", "ref": "B", "transform": [20, 0, 0],
-         "connectors": [{"label": "mate_b", "position": [-5, 0, 0], "normal": [-1, 0, 0]}]},
-        {"op": "mate", "child": "B", "parent": "A", "child_label": "mate_b", "parent_label": "mate_a"},
-    ]}
+    return {
+        "kind": "assembly",
+        "name": "M",
+        "parts": {"beam": _BEAM_SPEC},
+        "ops": [
+            {
+                "op": "add_part",
+                "part": "beam",
+                "ref": "A",
+                "connectors": [
+                    {"label": "mate_a", "position": [5, 0, 0], "normal": [1, 0, 0]}
+                ],
+            },
+            {
+                "op": "add_part",
+                "part": "beam",
+                "ref": "B",
+                "transform": [20, 0, 0],
+                "connectors": [
+                    {"label": "mate_b", "position": [-5, 0, 0], "normal": [-1, 0, 0]}
+                ],
+            },
+            {
+                "op": "mate",
+                "child": "B",
+                "parent": "A",
+                "child_label": "mate_b",
+                "parent_label": "mate_a",
+            },
+        ],
+    }
 
 
 def test_assembly_spec_mate_matches_hand_calls():
@@ -596,7 +797,9 @@ def test_assembly_spec_mate_matches_hand_calls():
         with hab.assembly_scratch_session():
             hab.new_assembly("M")
             hab.add_inline_instance(make_6hb_design(), name="A")
-            hab.add_inline_instance(make_6hb_design(), name="B", transform=hab.translation(20, 0, 0))
+            hab.add_inline_instance(
+                make_6hb_design(), name="B", transform=hab.translation(20, 0, 0)
+            )
             a = assembly_state.get_or_404()
             id_a, id_b = a.instances[0].id, a.instances[1].id
             hab.add_connector(id_a, "mate_a", position=[5, 0, 0], normal=[1, 0, 0])
@@ -604,7 +807,9 @@ def test_assembly_spec_mate_matches_hand_calls():
             hab.define_mate(id_b, id_a, child_label="mate_b", parent_label="mate_a")
             return assembly_state.get_or_404().model_copy(deep=True)
 
-    assert_spec_matches_calls(lambda: hs.build_assembly(_mate_spec()), hand, kind="assembly")
+    assert_spec_matches_calls(
+        lambda: hs.build_assembly(_mate_spec()), hand, kind="assembly"
+    )
 
 
 def test_assembly_spec_mate_is_coincident():
@@ -631,18 +836,44 @@ def test_assembly_spec_mate_roundtrips_stable():
 # the load-bearing pin: it loads the design the instance actually references and compares
 # its canonical_topology to the saved primitive's.
 
+
 def _file_part_spec(path):
     """A saved primitive (by file path) mated to an inline beam — instance + articulate a
     validated part exactly as the motivating use case describes."""
-    return {"kind": "assembly", "name": "F", "parts": {
-        "saved": {"from_file": path}, "beam": _BEAM_SPEC,
-    }, "ops": [
-        {"op": "add_part", "part": "saved", "ref": "S",
-         "connectors": [{"label": "s", "position": [5, 0, 0], "normal": [1, 0, 0]}]},
-        {"op": "add_part", "part": "beam", "ref": "B", "transform": [20, 0, 0],
-         "connectors": [{"label": "b", "position": [-5, 0, 0], "normal": [-1, 0, 0]}]},
-        {"op": "mate", "child": "B", "parent": "S", "child_label": "b", "parent_label": "s"},
-    ]}
+    return {
+        "kind": "assembly",
+        "name": "F",
+        "parts": {
+            "saved": {"from_file": path},
+            "beam": _BEAM_SPEC,
+        },
+        "ops": [
+            {
+                "op": "add_part",
+                "part": "saved",
+                "ref": "S",
+                "connectors": [
+                    {"label": "s", "position": [5, 0, 0], "normal": [1, 0, 0]}
+                ],
+            },
+            {
+                "op": "add_part",
+                "part": "beam",
+                "ref": "B",
+                "transform": [20, 0, 0],
+                "connectors": [
+                    {"label": "b", "position": [-5, 0, 0], "normal": [-1, 0, 0]}
+                ],
+            },
+            {
+                "op": "mate",
+                "child": "B",
+                "parent": "S",
+                "child_label": "b",
+                "parent_label": "s",
+            },
+        ],
+    }
 
 
 def _save_primitive(tmp_path, design):
@@ -661,7 +892,7 @@ def test_assembly_spec_from_file_uses_validated_topology(tmp_path):
     path = _save_primitive(tmp_path, saved)
     a = hs.build_assembly(_file_part_spec(path))
     file_inst = next(i for i in a.instances if i.source.type == "file")
-    assert file_inst.source.path == path                       # the wired reference
+    assert file_inst.source.path == path  # the wired reference
     resolved = assert_part_from_file(a, file_inst.id, canonical_topology(saved))
     assert canonical_topology(resolved) == canonical_topology(saved)
 
@@ -674,8 +905,11 @@ def test_assembly_spec_from_file_oracle_fires_on_wrong_topology(tmp_path):
     a = hs.build_assembly(_file_part_spec(path))
     file_inst = next(i for i in a.instances if i.source.type == "file")
     other = hs.build_design(  # a 2-helix bundle — a genuinely different topology
-        {"lattice": "honeycomb", "ops": [
-            {"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42}]})
+        {
+            "lattice": "honeycomb",
+            "ops": [{"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42}],
+        }
+    )
     with pytest.raises(AssertionError, match="DIFFERENT topology"):
         assert_part_from_file(a, file_inst.id, canonical_topology(other))
 
@@ -696,7 +930,9 @@ def test_assembly_spec_from_file_roundtrips_stable(tmp_path):
     the from_file reference is durable, not a build-time-only convenience."""
     path = _save_primitive(tmp_path, make_6hb_design())
     with hab.assembly_scratch_session():
-        assert_assembly_roundtrip_stable(lambda: hs.build_assembly(_file_part_spec(path)))
+        assert_assembly_roundtrip_stable(
+            lambda: hs.build_assembly(_file_part_spec(path))
+        )
 
 
 # ── file-backed parametric layout (AF-12 follow-up — place_grid/place_ring by ref) ──
@@ -707,13 +943,20 @@ def test_assembly_spec_from_file_roundtrips_stable(tmp_path):
 # every slot resolves to the saved primitive's topology (catches a slot that embedded an
 # inline copy or substituted a wrong path).
 
+
 def test_assembly_spec_file_grid_places_and_references(tmp_path):
     """A file-backed place_grid lands rows×cols copies on the lattice, each a genuine
     reference to the saved primitive."""
     saved = make_6hb_design()
     path = _save_primitive(tmp_path, saved)
-    spec = {"kind": "assembly", "name": "FG", "parts": {"saved": {"from_file": path}},
-            "ops": [{"op": "place_grid", "part": "saved", "rows": 2, "cols": 3, "pitch": 11.0}]}
+    spec = {
+        "kind": "assembly",
+        "name": "FG",
+        "parts": {"saved": {"from_file": path}},
+        "ops": [
+            {"op": "place_grid", "part": "saved", "rows": 2, "cols": 3, "pitch": 11.0}
+        ],
+    }
     a = hs.build_assembly(spec)
     assert len(a.instances) == 6
     assert all(i.source.type == "file" for i in a.instances)
@@ -725,8 +968,12 @@ def test_assembly_spec_file_ring_places_and_references(tmp_path):
     """A file-backed place_ring lands n copies on the ring, each a file reference."""
     saved = make_6hb_design()
     path = _save_primitive(tmp_path, saved)
-    spec = {"kind": "assembly", "name": "FR", "parts": {"saved": {"from_file": path}},
-            "ops": [{"op": "place_ring", "part": "saved", "n": 5, "radius": 16.0}]}
+    spec = {
+        "kind": "assembly",
+        "name": "FR",
+        "parts": {"saved": {"from_file": path}},
+        "ops": [{"op": "place_ring", "part": "saved", "n": 5, "radius": 16.0}],
+    }
     a = hs.build_assembly(spec)
     assert len(a.instances) == 5
     assert_instances_on_ring(a, 5, radius=16.0)
@@ -738,8 +985,14 @@ def test_assembly_spec_file_grid_roundtrips_stable(tmp_path):
     the primitive."""
     saved = make_6hb_design()
     path = _save_primitive(tmp_path, saved)
-    spec = {"kind": "assembly", "name": "FGRT", "parts": {"saved": {"from_file": path}},
-            "ops": [{"op": "place_grid", "part": "saved", "rows": 2, "cols": 2, "pitch": 10.0}]}
+    spec = {
+        "kind": "assembly",
+        "name": "FGRT",
+        "parts": {"saved": {"from_file": path}},
+        "ops": [
+            {"op": "place_grid", "part": "saved", "rows": 2, "cols": 2, "pitch": 10.0}
+        ],
+    }
     with hab.assembly_scratch_session():
         reloaded = assert_assembly_roundtrip_stable(lambda: hs.build_assembly(spec))
     assert_instances_from_file(reloaded, canonical_topology(saved))
@@ -755,6 +1008,7 @@ def test_assembly_spec_file_grid_roundtrips_stable(tmp_path):
 # catalog and proves the instance is that exact primitive's validated topology — a name
 # silently mapped to the wrong/renamed primitive is invisible to canonical_assembly.
 
+
 def _save_catalog_primitive(primitives_dir, name, design):
     """Drop a posed .nadoc into a tmp catalog dir under the catalog NAME (stem)."""
     p = primitives_dir / f"{name}.nadoc"
@@ -765,21 +1019,50 @@ def _save_catalog_primitive(primitives_dir, name, design):
 def _primitive_part_spec(name):
     """A catalog primitive (by name) mated to an inline beam — instance + articulate a
     curated validated part exactly as the text-to-design use case describes."""
-    return {"kind": "assembly", "name": "P", "parts": {
-        "saved": {"from_primitive": name}, "beam": _BEAM_SPEC,
-    }, "ops": [
-        {"op": "add_part", "part": "saved", "ref": "S",
-         "connectors": [{"label": "s", "position": [5, 0, 0], "normal": [1, 0, 0]}]},
-        {"op": "add_part", "part": "beam", "ref": "B", "transform": [20, 0, 0],
-         "connectors": [{"label": "b", "position": [-5, 0, 0], "normal": [-1, 0, 0]}]},
-        {"op": "mate", "child": "B", "parent": "S", "child_label": "b", "parent_label": "s"},
-    ]}
+    return {
+        "kind": "assembly",
+        "name": "P",
+        "parts": {
+            "saved": {"from_primitive": name},
+            "beam": _BEAM_SPEC,
+        },
+        "ops": [
+            {
+                "op": "add_part",
+                "part": "saved",
+                "ref": "S",
+                "connectors": [
+                    {"label": "s", "position": [5, 0, 0], "normal": [1, 0, 0]}
+                ],
+            },
+            {
+                "op": "add_part",
+                "part": "beam",
+                "ref": "B",
+                "transform": [20, 0, 0],
+                "connectors": [
+                    {"label": "b", "position": [-5, 0, 0], "normal": [-1, 0, 0]}
+                ],
+            },
+            {
+                "op": "mate",
+                "child": "B",
+                "parent": "S",
+                "child_label": "b",
+                "parent_label": "s",
+            },
+        ],
+    }
 
 
 def _two_helix_design():
     """A genuinely different topology from the 6hb (for the wrong-name red-test)."""
-    return hs.build_design({"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42}]})
+    return hs.build_design(
+        {
+            "lattice": "honeycomb",
+            "ops": [{"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42}],
+        }
+    )
 
 
 def test_assembly_spec_from_primitive_uses_catalog_topology(tmp_path):
@@ -832,7 +1115,10 @@ def test_assembly_spec_from_primitive_roundtrips_stable(tmp_path):
     _save_catalog_primitive(tmp_path, "beam_six", make_6hb_design())
     with hab.assembly_scratch_session():
         assert_assembly_roundtrip_stable(
-            lambda: hs.build_assembly(_primitive_part_spec("beam_six"), primitives_dir=tmp_path))
+            lambda: hs.build_assembly(
+                _primitive_part_spec("beam_six"), primitives_dir=tmp_path
+            )
+        )
 
 
 def test_assembly_spec_primitive_grid_places_and_references(tmp_path):
@@ -840,9 +1126,14 @@ def test_assembly_spec_primitive_grid_places_and_references(tmp_path):
     so per-slot references), each slot resolving to the named primitive's topology."""
     saved = make_6hb_design()
     _save_catalog_primitive(tmp_path, "beam_six", saved)
-    spec = {"kind": "assembly", "name": "PG",
-            "parts": {"saved": {"from_primitive": "beam_six"}},
-            "ops": [{"op": "place_grid", "part": "saved", "rows": 2, "cols": 3, "pitch": 11.0}]}
+    spec = {
+        "kind": "assembly",
+        "name": "PG",
+        "parts": {"saved": {"from_primitive": "beam_six"}},
+        "ops": [
+            {"op": "place_grid", "part": "saved", "rows": 2, "cols": 3, "pitch": 11.0}
+        ],
+    }
     a = hs.build_assembly(spec, primitives_dir=tmp_path)
     assert len(a.instances) == 6
     assert all(i.source.type == "file" for i in a.instances)
@@ -859,13 +1150,20 @@ def test_assembly_spec_primitive_grid_places_and_references(tmp_path):
 # radius — the params.radius_nm → footprint → build → placed-geometry path through the
 # assembly layer, which canonical_assembly (blind to circularity) cannot see.
 
-def _save_circle_primitive(primitives_dir, name="disc_primitive", default_radius_nm=10.0):
+
+def _save_circle_primitive(
+    primitives_dir, name="disc_primitive", default_radius_nm=10.0
+):
     """Drop a parametric circle catalog primitive (metadata.primitive_kind='circle', SQUARE)
     into a tmp catalog dir. Its saved geometry is just the default-radius disc; the spec's
     requested radius re-derives a fresh disc generatively, so only the metadata + placement
     (plane / min_chord_bp) of this saved file are load-bearing."""
-    design = hs.build_design({"lattice": "square", "ops": [
-        {"op": "circle_segment", "radius_nm": default_radius_nm}]})
+    design = hs.build_design(
+        {
+            "lattice": "square",
+            "ops": [{"op": "circle_segment", "radius_nm": default_radius_nm}],
+        }
+    )
     raw = json.loads(design.to_json())
     raw.setdefault("metadata", {})["primitive_kind"] = "circle"
     p = primitives_dir / f"{name}.nadoc"
@@ -876,16 +1174,40 @@ def _save_circle_primitive(primitives_dir, name="disc_primitive", default_radius
 def _circle_part_spec(name, radius_nm):
     """A parametric circle primitive (by name + radius) mated to an inline beam — instance a
     generatively-built disc exactly as the text-to-design use case describes."""
-    return {"kind": "assembly", "name": "C", "parts": {
-        "disc": {"from_primitive": name, "params": {"radius_nm": radius_nm}},
-        "beam": _BEAM_SPEC,
-    }, "ops": [
-        {"op": "add_part", "part": "disc", "ref": "D",
-         "connectors": [{"label": "d", "position": [5, 0, 0], "normal": [1, 0, 0]}]},
-        {"op": "add_part", "part": "beam", "ref": "B", "transform": [40, 0, 0],
-         "connectors": [{"label": "b", "position": [-5, 0, 0], "normal": [-1, 0, 0]}]},
-        {"op": "mate", "child": "B", "parent": "D", "child_label": "b", "parent_label": "d"},
-    ]}
+    return {
+        "kind": "assembly",
+        "name": "C",
+        "parts": {
+            "disc": {"from_primitive": name, "params": {"radius_nm": radius_nm}},
+            "beam": _BEAM_SPEC,
+        },
+        "ops": [
+            {
+                "op": "add_part",
+                "part": "disc",
+                "ref": "D",
+                "connectors": [
+                    {"label": "d", "position": [5, 0, 0], "normal": [1, 0, 0]}
+                ],
+            },
+            {
+                "op": "add_part",
+                "part": "beam",
+                "ref": "B",
+                "transform": [40, 0, 0],
+                "connectors": [
+                    {"label": "b", "position": [-5, 0, 0], "normal": [-1, 0, 0]}
+                ],
+            },
+            {
+                "op": "mate",
+                "child": "B",
+                "parent": "D",
+                "child_label": "b",
+                "parent_label": "d",
+            },
+        ],
+    }
 
 
 def test_assembly_spec_parametric_circle_builds_disc(tmp_path):
@@ -894,9 +1216,13 @@ def test_assembly_spec_parametric_circle_builds_disc(tmp_path):
     radius ≈ R. Load-bearing because canonical_assembly keys the inline source by its embedded
     topology fingerprint, blind to whether that geometry is actually circular of radius R."""
     _save_circle_primitive(tmp_path, "disc_primitive", default_radius_nm=10.0)
-    a = hs.build_assembly(_circle_part_spec("disc_primitive", 14.0), primitives_dir=tmp_path)
+    a = hs.build_assembly(
+        _circle_part_spec("disc_primitive", 14.0), primitives_dir=tmp_path
+    )
     disc = next(i for i in a.instances if i.name == "disc")
-    assert disc.source.type == "inline", "a parametric circle must be embedded inline, not file-backed"
+    assert disc.source.type == "inline", (
+        "a parametric circle must be embedded inline, not file-backed"
+    )
     assert_part_is_circular_disc(a, disc.id, 14.0)
 
 
@@ -905,7 +1231,9 @@ def test_assembly_spec_parametric_circle_honors_requested_radius(tmp_path):
     disc instanced with radius_nm=20 yields a ~20 nm disc (catches a driver that ignored
     params and re-used the saved default radius)."""
     _save_circle_primitive(tmp_path, "disc_primitive", default_radius_nm=10.0)
-    a = hs.build_assembly(_circle_part_spec("disc_primitive", 20.0), primitives_dir=tmp_path)
+    a = hs.build_assembly(
+        _circle_part_spec("disc_primitive", 20.0), primitives_dir=tmp_path
+    )
     disc = next(i for i in a.instances if i.name == "disc")
     assert_part_is_circular_disc(a, disc.id, 20.0)
 
@@ -914,7 +1242,9 @@ def test_parametric_circle_oracle_fires_on_wrong_radius(tmp_path):
     """can-go-red: asserting the wrong radius → the geometric circularity/radius oracle fails
     (the property check canonical_assembly is blind to)."""
     _save_circle_primitive(tmp_path, "disc_primitive", default_radius_nm=10.0)
-    a = hs.build_assembly(_circle_part_spec("disc_primitive", 14.0), primitives_dir=tmp_path)
+    a = hs.build_assembly(
+        _circle_part_spec("disc_primitive", 14.0), primitives_dir=tmp_path
+    )
     disc = next(i for i in a.instances if i.name == "disc")
     with pytest.raises(AssertionError, match="radius"):
         assert_part_is_circular_disc(a, disc.id, 30.0)
@@ -935,8 +1265,12 @@ def test_parametric_circle_requires_radius(tmp_path):
     """A circle-kind primitive with no radius_nm param fails the BUILD (the spec must declare
     its parametric intent — no silent fallback to the catalog default)."""
     _save_circle_primitive(tmp_path, "disc_primitive", default_radius_nm=10.0)
-    spec = {"kind": "assembly", "name": "C", "parts": {"disc": {"from_primitive": "disc_primitive"}},
-            "ops": [{"op": "add_part", "part": "disc"}]}
+    spec = {
+        "kind": "assembly",
+        "name": "C",
+        "parts": {"disc": {"from_primitive": "disc_primitive"}},
+        "ops": [{"op": "add_part", "part": "disc"}],
+    }
     with pytest.raises(BuildSpecError, match="requires a 'radius_nm' param"):
         hs.build_assembly(spec, primitives_dir=tmp_path)
 
@@ -945,9 +1279,12 @@ def test_static_primitive_rejects_params(tmp_path):
     """Handing params to a STATIC (non-parametric) catalog primitive is meaningless and fails
     the build — params are only for parametric kinds."""
     _save_catalog_primitive(tmp_path, "beam_six", make_6hb_design())
-    spec = {"kind": "assembly", "name": "C",
-            "parts": {"saved": {"from_primitive": "beam_six", "params": {"radius_nm": 12}}},
-            "ops": [{"op": "add_part", "part": "saved"}]}
+    spec = {
+        "kind": "assembly",
+        "name": "C",
+        "parts": {"saved": {"from_primitive": "beam_six", "params": {"radius_nm": 12}}},
+        "ops": [{"op": "add_part", "part": "saved"}],
+    }
     with pytest.raises(BuildSpecError, match="takes no params"):
         hs.build_assembly(spec, primitives_dir=tmp_path)
 
@@ -958,13 +1295,21 @@ def test_assembly_spec_parametric_circle_roundtrips_stable(tmp_path):
     _save_circle_primitive(tmp_path, "disc_primitive", default_radius_nm=10.0)
     with hab.assembly_scratch_session():
         assert_assembly_roundtrip_stable(
-            lambda: hs.build_assembly(_circle_part_spec("disc_primitive", 14.0),
-                                      primitives_dir=tmp_path))
+            lambda: hs.build_assembly(
+                _circle_part_spec("disc_primitive", 14.0), primitives_dir=tmp_path
+            )
+        )
 
 
 def _file_grid_spec(path):
-    return {"kind": "assembly", "name": "FG", "parts": {"saved": {"from_file": path}},
-            "ops": [{"op": "place_grid", "part": "saved", "rows": 1, "cols": 2, "pitch": 10.0}]}
+    return {
+        "kind": "assembly",
+        "name": "FG",
+        "parts": {"saved": {"from_file": path}},
+        "ops": [
+            {"op": "place_grid", "part": "saved", "rows": 1, "cols": 2, "pitch": 10.0}
+        ],
+    }
 
 
 def test_instances_from_file_oracle_fires_on_wrong_topology(tmp_path):
@@ -972,8 +1317,12 @@ def test_instances_from_file_oracle_fires_on_wrong_topology(tmp_path):
     caught — the source pin every lattice oracle is blind to."""
     saved = make_6hb_design()
     a = hs.build_assembly(_file_grid_spec(_save_primitive(tmp_path, saved)))
-    other = hs.build_design({"lattice": "honeycomb", "ops": [
-        {"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42}]})
+    other = hs.build_design(
+        {
+            "lattice": "honeycomb",
+            "ops": [{"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42}],
+        }
+    )
     with pytest.raises(AssertionError, match="DIFFERENT topology"):
         assert_instances_from_file(a, canonical_topology(other))
 
@@ -985,8 +1334,8 @@ def test_instances_from_file_oracle_rejects_inline_slot(tmp_path):
     path = _save_primitive(tmp_path, saved)
     with hab.assembly_scratch_session():
         hab.new_assembly("Mixed")
-        hab.place_file_grid(path, 1, 2, pitch=10.0)                 # two file slots
-        hab.add_inline_instance(make_6hb_design(), name="rogue")    # one embedded copy
+        hab.place_file_grid(path, 1, 2, pitch=10.0)  # two file slots
+        hab.add_inline_instance(make_6hb_design(), name="rogue")  # one embedded copy
         a = assembly_state.get_or_404().model_copy(deep=True)
     with pytest.raises(AssertionError, match="not file-backed"):
         assert_instances_from_file(a, canonical_topology(saved))
@@ -1007,54 +1356,115 @@ def test_instances_from_file_oracle_rejects_empty_selection(tmp_path):
 # pin that the gear actually DRIVES its coupled body is assert_gear_ratio: drive
 # one side via the spec-built assembly and measure the other wheel's rotation.
 
+
 def _geared_spec(*, ratio=2.0, invert=False):
     """A base + two wheels, each revolute-mated to the base about +Z, gear-coupled.
     Mirrors the AF-9 ``_geared_assembly`` hand fixture, declaratively."""
     gear = {"op": "gear", "joint_a": "ja", "joint_b": "jb", "ratio": ratio}
     if invert:
         gear["invert"] = True
-    return {"kind": "assembly", "name": "G", "parts": {"beam": _BEAM_SPEC}, "ops": [
-        {"op": "add_part", "part": "beam", "ref": "base", "connectors": [
-            {"label": "hub_a", "position": [0, 0, 0], "normal": [0, 0, 1]},
-            {"label": "hub_b", "position": [0, 0, 0], "normal": [0, 0, 1]}]},
-        {"op": "add_part", "part": "beam", "ref": "wa", "transform": [20, 0, 0],
-         "connectors": [{"label": "axleA", "position": [0, 0, 0], "normal": [0, 0, 1]}]},
-        {"op": "add_part", "part": "beam", "ref": "wb", "transform": [40, 0, 0],
-         "connectors": [{"label": "axleB", "position": [0, 0, 0], "normal": [0, 0, 1]}]},
-        {"op": "mate", "child": "wa", "parent": "base", "child_label": "axleA",
-         "parent_label": "hub_a", "joint_type": "revolute", "axis_direction": [0, 0, 1], "ref": "ja"},
-        {"op": "mate", "child": "wb", "parent": "base", "child_label": "axleB",
-         "parent_label": "hub_b", "joint_type": "revolute", "axis_direction": [0, 0, 1], "ref": "jb"},
-        gear,
-    ]}
+    return {
+        "kind": "assembly",
+        "name": "G",
+        "parts": {"beam": _BEAM_SPEC},
+        "ops": [
+            {
+                "op": "add_part",
+                "part": "beam",
+                "ref": "base",
+                "connectors": [
+                    {"label": "hub_a", "position": [0, 0, 0], "normal": [0, 0, 1]},
+                    {"label": "hub_b", "position": [0, 0, 0], "normal": [0, 0, 1]},
+                ],
+            },
+            {
+                "op": "add_part",
+                "part": "beam",
+                "ref": "wa",
+                "transform": [20, 0, 0],
+                "connectors": [
+                    {"label": "axleA", "position": [0, 0, 0], "normal": [0, 0, 1]}
+                ],
+            },
+            {
+                "op": "add_part",
+                "part": "beam",
+                "ref": "wb",
+                "transform": [40, 0, 0],
+                "connectors": [
+                    {"label": "axleB", "position": [0, 0, 0], "normal": [0, 0, 1]}
+                ],
+            },
+            {
+                "op": "mate",
+                "child": "wa",
+                "parent": "base",
+                "child_label": "axleA",
+                "parent_label": "hub_a",
+                "joint_type": "revolute",
+                "axis_direction": [0, 0, 1],
+                "ref": "ja",
+            },
+            {
+                "op": "mate",
+                "child": "wb",
+                "parent": "base",
+                "child_label": "axleB",
+                "parent_label": "hub_b",
+                "joint_type": "revolute",
+                "axis_direction": [0, 0, 1],
+                "ref": "jb",
+            },
+            gear,
+        ],
+    }
 
 
 def test_gear_spec_matches_hand_calls():
     """A gear spec builds the SAME canonical assembly as the equivalent hand calls.
     Load-bearing for a gear (unlike bend/twist/loop_skip) — canonical_assembly
     fingerprints gear_relations, so a dropped/rewired gear would fail this."""
+
     def hand():
         with hab.assembly_scratch_session():
             hab.new_assembly("G")
             base = make_6hb_design()
             hab.add_inline_instance(base, name="base")
-            hab.add_inline_instance(base, name="wa", transform=hab.translation(20, 0, 0))
-            hab.add_inline_instance(base, name="wb", transform=hab.translation(40, 0, 0))
+            hab.add_inline_instance(
+                base, name="wa", transform=hab.translation(20, 0, 0)
+            )
+            hab.add_inline_instance(
+                base, name="wb", transform=hab.translation(40, 0, 0)
+            )
             a = assembly_state.get_or_404()
             base_id, wa_id, wb_id = (i.id for i in a.instances)
             hab.add_connector(base_id, "hub_a", position=[0, 0, 0], normal=[0, 0, 1])
             hab.add_connector(base_id, "hub_b", position=[0, 0, 0], normal=[0, 0, 1])
             hab.add_connector(wa_id, "axleA", position=[0, 0, 0], normal=[0, 0, 1])
             hab.add_connector(wb_id, "axleB", position=[0, 0, 0], normal=[0, 0, 1])
-            hab.define_mate(wa_id, base_id, child_label="axleA", parent_label="hub_a",
-                            joint_type="revolute", axis_direction=[0, 0, 1])
-            hab.define_mate(wb_id, base_id, child_label="axleB", parent_label="hub_b",
-                            joint_type="revolute", axis_direction=[0, 0, 1])
+            hab.define_mate(
+                wa_id,
+                base_id,
+                child_label="axleA",
+                parent_label="hub_a",
+                joint_type="revolute",
+                axis_direction=[0, 0, 1],
+            )
+            hab.define_mate(
+                wb_id,
+                base_id,
+                child_label="axleB",
+                parent_label="hub_b",
+                joint_type="revolute",
+                axis_direction=[0, 0, 1],
+            )
             ja, jb = (j.id for j in assembly_state.get_or_404().joints)
             hab.define_gear(ja, jb, ratio=2.0)
             return assembly_state.get_or_404().model_copy(deep=True)
 
-    assert_spec_matches_calls(lambda: hs.build_assembly(_geared_spec()), hand, kind="assembly")
+    assert_spec_matches_calls(
+        lambda: hs.build_assembly(_geared_spec()), hand, kind="assembly"
+    )
 
 
 @pytest.mark.parametrize("ratio", [2.0, 0.5])
@@ -1075,7 +1485,9 @@ def test_gear_spec_drives_coupled_wheel_at_ratio(ratio):
 def test_geared_spec_roundtrips_stable():
     """A spec-built geared assembly survives a .nass round-trip WITH its gear."""
     with hab.assembly_scratch_session():
-        reloaded = assert_assembly_roundtrip_stable(lambda: hs.build_assembly(_geared_spec()))
+        reloaded = assert_assembly_roundtrip_stable(
+            lambda: hs.build_assembly(_geared_spec())
+        )
     assert len(reloaded.gear_relations) == 1
     assert reloaded.gear_relations[0].ratio == 2.0
 
@@ -1088,52 +1500,118 @@ def test_geared_spec_roundtrips_stable():
 # coupling-relation id (f"__belt__{belt.id}") and expected_ratio = radius_a/radius_b —
 # proving the belt→relation radius→ratio synthesis works (NOT a hand-passed ratio).
 
+
 def _belted_spec(*, radius_a=2.0, radius_b=1.0):
     """A base + two pulleys, each revolute-mated to the base about +Z, belt-coupled.
     Mirrors the AF-9 ``_belted_assembly`` hand fixture, declaratively."""
-    return {"kind": "assembly", "name": "B", "parts": {"beam": _BEAM_SPEC}, "ops": [
-        {"op": "add_part", "part": "beam", "ref": "base", "connectors": [
-            {"label": "hub_a", "position": [0, 0, 0], "normal": [0, 0, 1]},
-            {"label": "hub_b", "position": [0, 0, 0], "normal": [0, 0, 1]}]},
-        {"op": "add_part", "part": "beam", "ref": "pa", "transform": [20, 0, 0],
-         "connectors": [{"label": "axleA", "position": [0, 0, 0], "normal": [0, 0, 1]}]},
-        {"op": "add_part", "part": "beam", "ref": "pb", "transform": [40, 0, 0],
-         "connectors": [{"label": "axleB", "position": [0, 0, 0], "normal": [0, 0, 1]}]},
-        {"op": "mate", "child": "pa", "parent": "base", "child_label": "axleA",
-         "parent_label": "hub_a", "joint_type": "revolute", "axis_direction": [0, 0, 1], "ref": "ja"},
-        {"op": "mate", "child": "pb", "parent": "base", "child_label": "axleB",
-         "parent_label": "hub_b", "joint_type": "revolute", "axis_direction": [0, 0, 1], "ref": "jb"},
-        {"op": "belt", "joint_a": "ja", "joint_b": "jb",
-         "radius_a": radius_a, "radius_b": radius_b},
-    ]}
+    return {
+        "kind": "assembly",
+        "name": "B",
+        "parts": {"beam": _BEAM_SPEC},
+        "ops": [
+            {
+                "op": "add_part",
+                "part": "beam",
+                "ref": "base",
+                "connectors": [
+                    {"label": "hub_a", "position": [0, 0, 0], "normal": [0, 0, 1]},
+                    {"label": "hub_b", "position": [0, 0, 0], "normal": [0, 0, 1]},
+                ],
+            },
+            {
+                "op": "add_part",
+                "part": "beam",
+                "ref": "pa",
+                "transform": [20, 0, 0],
+                "connectors": [
+                    {"label": "axleA", "position": [0, 0, 0], "normal": [0, 0, 1]}
+                ],
+            },
+            {
+                "op": "add_part",
+                "part": "beam",
+                "ref": "pb",
+                "transform": [40, 0, 0],
+                "connectors": [
+                    {"label": "axleB", "position": [0, 0, 0], "normal": [0, 0, 1]}
+                ],
+            },
+            {
+                "op": "mate",
+                "child": "pa",
+                "parent": "base",
+                "child_label": "axleA",
+                "parent_label": "hub_a",
+                "joint_type": "revolute",
+                "axis_direction": [0, 0, 1],
+                "ref": "ja",
+            },
+            {
+                "op": "mate",
+                "child": "pb",
+                "parent": "base",
+                "child_label": "axleB",
+                "parent_label": "hub_b",
+                "joint_type": "revolute",
+                "axis_direction": [0, 0, 1],
+                "ref": "jb",
+            },
+            {
+                "op": "belt",
+                "joint_a": "ja",
+                "joint_b": "jb",
+                "radius_a": radius_a,
+                "radius_b": radius_b,
+            },
+        ],
+    }
 
 
 def test_belt_spec_matches_hand_calls():
     """A belt spec builds the SAME canonical assembly as the equivalent hand calls.
     Load-bearing for a belt (like a gear) — canonical_assembly fingerprints
     belt_paths, so a dropped/rewired belt would fail this."""
+
     def hand():
         with hab.assembly_scratch_session():
             hab.new_assembly("B")
             base = make_6hb_design()
             hab.add_inline_instance(base, name="base")
-            hab.add_inline_instance(base, name="pa", transform=hab.translation(20, 0, 0))
-            hab.add_inline_instance(base, name="pb", transform=hab.translation(40, 0, 0))
+            hab.add_inline_instance(
+                base, name="pa", transform=hab.translation(20, 0, 0)
+            )
+            hab.add_inline_instance(
+                base, name="pb", transform=hab.translation(40, 0, 0)
+            )
             a = assembly_state.get_or_404()
             base_id, pa_id, pb_id = (i.id for i in a.instances)
             hab.add_connector(base_id, "hub_a", position=[0, 0, 0], normal=[0, 0, 1])
             hab.add_connector(base_id, "hub_b", position=[0, 0, 0], normal=[0, 0, 1])
             hab.add_connector(pa_id, "axleA", position=[0, 0, 0], normal=[0, 0, 1])
             hab.add_connector(pb_id, "axleB", position=[0, 0, 0], normal=[0, 0, 1])
-            hab.define_mate(pa_id, base_id, child_label="axleA", parent_label="hub_a",
-                            joint_type="revolute", axis_direction=[0, 0, 1])
-            hab.define_mate(pb_id, base_id, child_label="axleB", parent_label="hub_b",
-                            joint_type="revolute", axis_direction=[0, 0, 1])
+            hab.define_mate(
+                pa_id,
+                base_id,
+                child_label="axleA",
+                parent_label="hub_a",
+                joint_type="revolute",
+                axis_direction=[0, 0, 1],
+            )
+            hab.define_mate(
+                pb_id,
+                base_id,
+                child_label="axleB",
+                parent_label="hub_b",
+                joint_type="revolute",
+                axis_direction=[0, 0, 1],
+            )
             ja, jb = (j.id for j in assembly_state.get_or_404().joints)
             hab.define_belt(ja, jb, radius_a=2.0, radius_b=1.0)
             return assembly_state.get_or_404().model_copy(deep=True)
 
-    assert_spec_matches_calls(lambda: hs.build_assembly(_belted_spec()), hand, kind="assembly")
+    assert_spec_matches_calls(
+        lambda: hs.build_assembly(_belted_spec()), hand, kind="assembly"
+    )
 
 
 @pytest.mark.parametrize("radius_a,radius_b", [(2.0, 1.0), (3.0, 1.0)])
@@ -1156,7 +1634,9 @@ def test_belt_spec_drives_coupled_pulley_at_radius_ratio(radius_a, radius_b):
 def test_belted_spec_roundtrips_stable():
     """A spec-built belted assembly survives a .nass round-trip WITH its belt."""
     with hab.assembly_scratch_session():
-        reloaded = assert_assembly_roundtrip_stable(lambda: hs.build_assembly(_belted_spec()))
+        reloaded = assert_assembly_roundtrip_stable(
+            lambda: hs.build_assembly(_belted_spec())
+        )
     assert len(reloaded.belt_paths) == 1
     assert reloaded.belt_paths[0].pulley_a.radius == 2.0
 
@@ -1168,19 +1648,49 @@ def test_belted_spec_roundtrips_stable():
 # chain joint fails it). The geometric progression — that the copies actually march
 # along the seed mate's repeat delta — is the orthogonal pin assert_polymer_chain adds.
 
+
 def _polymerize_spec(*, count=4, direction="forward"):
     """A seed pair of identical parts, rigidly mated (B snapped so the seed repeat
     delta is a +10 nm X translation), then polymerized into a chain of ``count``.
     Mirrors the AF-9 ``_polymer_seed_assembly`` hand fixture, declaratively."""
-    return {"kind": "assembly", "name": "P", "parts": {"beam": _BEAM_SPEC}, "ops": [
-        {"op": "add_part", "part": "beam", "ref": "A",
-         "connectors": [{"label": "t", "position": [5, 0, 0], "normal": [1, 0, 0]}]},
-        {"op": "add_part", "part": "beam", "ref": "B", "transform": [20, 0, 0],
-         "connectors": [{"label": "t", "position": [-5, 0, 0], "normal": [-1, 0, 0]}]},
-        {"op": "mate", "child": "B", "parent": "A", "child_label": "t",
-         "parent_label": "t", "ref": "seed"},
-        {"op": "polymerize", "joint": "seed", "count": count, "direction": direction},
-    ]}
+    return {
+        "kind": "assembly",
+        "name": "P",
+        "parts": {"beam": _BEAM_SPEC},
+        "ops": [
+            {
+                "op": "add_part",
+                "part": "beam",
+                "ref": "A",
+                "connectors": [
+                    {"label": "t", "position": [5, 0, 0], "normal": [1, 0, 0]}
+                ],
+            },
+            {
+                "op": "add_part",
+                "part": "beam",
+                "ref": "B",
+                "transform": [20, 0, 0],
+                "connectors": [
+                    {"label": "t", "position": [-5, 0, 0], "normal": [-1, 0, 0]}
+                ],
+            },
+            {
+                "op": "mate",
+                "child": "B",
+                "parent": "A",
+                "child_label": "t",
+                "parent_label": "t",
+                "ref": "seed",
+            },
+            {
+                "op": "polymerize",
+                "joint": "seed",
+                "count": count,
+                "direction": direction,
+            },
+        ],
+    }
 
 
 def test_polymerize_spec_matches_hand_calls():
@@ -1188,6 +1698,7 @@ def test_polymerize_spec_matches_hand_calls():
     calls. Load-bearing here (like gear/belt, unlike loop_skip/bend/twist) —
     canonical_assembly fingerprints instances + joints, so a dropped copy or replicated
     chain joint would fail this."""
+
     def hand():
         with hab.assembly_scratch_session():
             hab.new_assembly("P")
@@ -1203,7 +1714,9 @@ def test_polymerize_spec_matches_hand_calls():
             hab.polymerize(seed, count=4, direction="forward")
             return assembly_state.get_or_404().model_copy(deep=True)
 
-    assert_spec_matches_calls(lambda: hs.build_assembly(_polymerize_spec()), hand, kind="assembly")
+    assert_spec_matches_calls(
+        lambda: hs.build_assembly(_polymerize_spec()), hand, kind="assembly"
+    )
 
 
 @pytest.mark.parametrize("count", [4, 6])
@@ -1216,10 +1729,12 @@ def test_polymerize_spec_lays_chain_on_repeat_lattice(count):
     assert len(a.instances) == count
     seed = a.joints[0]  # the seed mate; polymerize appends the chain joints after it
     seed_pair = {seed.instance_a_id, seed.instance_b_id}
-    before = a.model_copy(update={
-        "instances": [i for i in a.instances if i.id in seed_pair],
-        "joints": [seed],
-    })
+    before = a.model_copy(
+        update={
+            "instances": [i for i in a.instances if i.id in seed_pair],
+            "joints": [seed],
+        }
+    )
     delta = assert_polymer_chain(before, a, seed.id, count=count)
     # the repeat is the +10 nm X translation the seed mate's connector snap produced
     assert abs(float(delta[0, 3]) - 10.0) <= 0.01
@@ -1231,7 +1746,8 @@ def test_polymerized_spec_roundtrips_stable():
     would fail the round-trip oracle."""
     with hab.assembly_scratch_session():
         reloaded = assert_assembly_roundtrip_stable(
-            lambda: hs.build_assembly(_polymerize_spec(count=4)))
+            lambda: hs.build_assembly(_polymerize_spec(count=4))
+        )
     assert len(reloaded.instances) == 4
     assert len(reloaded.joints) == 3  # seed mate + 2 replicated chain joints
 
@@ -1243,6 +1759,7 @@ def test_polymerized_spec_roundtrips_stable():
 # verdicts are deterministic, so the spec path's verdict must equal a hand-driven
 # check_relaxed_constraint — the load-bearing pin, because assert_spec_matches_calls
 # (the canonical fingerprint) is blind to a physical-layer verdict.
+
 
 @pytest.fixture
 def mock_oxdna_traj(tmp_path, monkeypatch):
@@ -1279,7 +1796,8 @@ def test_build_and_check_no_constraints_skips_relaxation():
     """A spec with no `constraints` block reports no verdicts and runs no oxDNA (the
     workspace is never touched), so it needs no mock binary."""
     result = hs.build_and_check_design(
-        {"lattice": "honeycomb", "ops": _SEQUENCED_OPS}, "/no/such/workspace")
+        {"lattice": "honeycomb", "ops": _SEQUENCED_OPS}, "/no/such/workspace"
+    )
     assert result["verdicts"] == []
     assert len(result["design"].helices) == 6
 
@@ -1291,11 +1809,14 @@ def test_build_and_check_reports_radius_of_gyration(tmp_path, mock_oxdna_traj):
     constraint = {"measure": "radius_of_gyration", "target_nm": 100.0, "tol_nm": 200.0}
     spec = {"lattice": "honeycomb", "ops": _SEQUENCED_OPS, "constraints": [constraint]}
     spec_result = hs.build_and_check_design(
-        spec, tmp_path, steps=6000, min_bp_retained=0.0)
+        spec, tmp_path, steps=6000, min_bp_retained=0.0
+    )
     # hand reference: same build, relax by hand, report the same (landmark-free) constraint
     hand = _hand_verdict(
         hs.build_design({"lattice": "honeycomb", "ops": _SEQUENCED_OPS}),
-        constraint, tmp_path)
+        constraint,
+        tmp_path,
+    )
     assert_spec_constraints_reported(spec_result, [hand])
     # the wide tolerance certifies a met verdict at full confidence (6000 // 100 frames)
     assert spec_result["verdicts"][0]["status"] == "met"
@@ -1306,18 +1827,29 @@ def test_build_and_check_resolves_end_to_end_landmarks(tmp_path, mock_oxdna_traj
     """end_to_end landmarks name a helix by grid_pos; the driver resolves them to the
     built design's runtime helix ids and reports the same verdict a hand check (with
     runtime-id landmarks) does — proving landmark resolution, not just attach+report."""
-    spec_lm = [{"helix": [0, 1], "bp_index": 0, "direction": "forward"},
-               {"helix": [0, 1], "bp_index": 40, "direction": "forward"}]
-    constraint = {"measure": "end_to_end", "landmarks": spec_lm,
-                  "target_nm": 100.0, "tol_nm": 200.0}
+    spec_lm = [
+        {"helix": [0, 1], "bp_index": 0, "direction": "forward"},
+        {"helix": [0, 1], "bp_index": 40, "direction": "forward"},
+    ]
+    constraint = {
+        "measure": "end_to_end",
+        "landmarks": spec_lm,
+        "target_nm": 100.0,
+        "tol_nm": 200.0,
+    }
     spec = {"lattice": "honeycomb", "ops": _SEQUENCED_OPS, "constraints": [constraint]}
     spec_result = hs.build_and_check_design(
-        spec, tmp_path, steps=6000, min_bp_retained=0.0)
+        spec, tmp_path, steps=6000, min_bp_retained=0.0
+    )
     # hand reference: resolve grid (0,1) → runtime id on a hand build, same bp landmarks
     hand_design = hs.build_design({"lattice": "honeycomb", "ops": _SEQUENCED_OPS})
     hid = next(h.id for h in hand_design.helices if tuple(h.grid_pos) == (0, 1))
-    hand_constraint = {"measure": "end_to_end", "target_nm": 100.0, "tol_nm": 200.0,
-                       "landmarks": [(hid, 0, "FORWARD"), (hid, 40, "FORWARD")]}
+    hand_constraint = {
+        "measure": "end_to_end",
+        "target_nm": 100.0,
+        "tol_nm": 200.0,
+        "landmarks": [(hid, 0, "FORWARD"), (hid, 40, "FORWARD")],
+    }
     hand = _hand_verdict(hand_design, hand_constraint, tmp_path)
     assert_spec_constraints_reported(spec_result, [hand])
     # the spec landmark resolved to a real, non-degenerate measurement
@@ -1328,9 +1860,15 @@ def test_build_and_check_unknown_grid_pos_raises(tmp_path):
     """A constraint landmark naming a grid cell no op created fails FAST (before any
     oxDNA run, so no mock binary is needed) — the analog of nick/ligate's
     unknown-grid_pos guard."""
-    constraint = {"measure": "end_to_end", "target_nm": 1.0, "tol_nm": 1.0,
-                  "landmarks": [{"helix": [9, 9], "bp_index": 0, "direction": "forward"},
-                                {"helix": [9, 9], "bp_index": 5, "direction": "forward"}]}
+    constraint = {
+        "measure": "end_to_end",
+        "target_nm": 1.0,
+        "tol_nm": 1.0,
+        "landmarks": [
+            {"helix": [9, 9], "bp_index": 0, "direction": "forward"},
+            {"helix": [9, 9], "bp_index": 5, "direction": "forward"},
+        ],
+    }
     spec = {"lattice": "honeycomb", "ops": _SEQUENCED_OPS, "constraints": [constraint]}
     with pytest.raises(BuildSpecError, match="no helix is there"):
         hs.build_and_check_design(spec, tmp_path, min_bp_retained=0.0)
@@ -1354,8 +1892,10 @@ _OPT_BEND_OPS = [
     {"op": "auto_scaffold"},
     {"op": "full_autostaple", "scaffold_name": "M13mp18"},
 ]
-_OPT_LANDMARKS = [{"helix": [1, 2], "bp_index": 0, "direction": "forward"},
-                  {"helix": [1, 2], "bp_index": 41, "direction": "reverse"}]
+_OPT_LANDMARKS = [
+    {"helix": [1, 2], "bp_index": 0, "direction": "forward"},
+    {"helix": [1, 2], "bp_index": 41, "direction": "reverse"},
+]
 
 
 def _optimize_spec(*, target=12.0, tol=0.5, initial=2.0, min_confidence=50):
@@ -1363,11 +1903,21 @@ def _optimize_spec(*, target=12.0, tol=0.5, initial=2.0, min_confidence=50):
         "lattice": "honeycomb",
         "ops": _OPT_BEND_OPS,
         "optimize": {
-            "knob": {"op": 1, "param": "curvature_deg_per_bp",
-                     "lo": 0.0, "hi": 4.0, "initial": initial, "response": "decreasing"},
-            "constraint": {"measure": "end_to_end", "landmarks": _OPT_LANDMARKS,
-                           "target_nm": target, "tol_nm": tol,
-                           "min_confidence": min_confidence},
+            "knob": {
+                "op": 1,
+                "param": "curvature_deg_per_bp",
+                "lo": 0.0,
+                "hi": 4.0,
+                "initial": initial,
+                "response": "decreasing",
+            },
+            "constraint": {
+                "measure": "end_to_end",
+                "landmarks": _OPT_LANDMARKS,
+                "target_nm": target,
+                "tol_nm": tol,
+                "min_confidence": min_confidence,
+            },
         },
     }
 
@@ -1380,9 +1930,14 @@ def test_build_and_optimize_converges(tmp_path, mock_oxdna_traj):
     bend overlay and to a physical-layer convergence — only this proves the grammar
     lowered the knob + constraint to a real, converging loop."""
     result = hs.build_and_optimize_design(
-        _optimize_spec(target=12.0, tol=0.5, initial=2.0), tmp_path,
-        production_steps=6000, min_bp_retained=0.0)
-    assert_converges_to_constraint(result, target_nm=12.0, tol_nm=0.5, min_confidence=50)
+        _optimize_spec(target=12.0, tol=0.5, initial=2.0),
+        tmp_path,
+        production_steps=6000,
+        min_bp_retained=0.0,
+    )
+    assert_converges_to_constraint(
+        result, target_nm=12.0, tol_nm=0.5, min_confidence=50
+    )
     assert result["status"] == "met"
     # the declared 'decreasing' sense → deterministic bisection: 2.0 (12.68, too high)
     # → 3.0 (11.32, too low) → 2.5 (12.06, met).  Proves the grammar lowered the
@@ -1396,22 +1951,33 @@ def test_build_and_optimize_oracle_fires_on_unreachable(tmp_path, mock_oxdna_tra
     """can-go-red: a target below any reachable end-to-end (the profile bottoms at
     ~9.58 nm) → the loop exhausts its budget and the convergence oracle raises."""
     result = hs.build_and_optimize_design(
-        _optimize_spec(target=2.0, tol=0.3, initial=2.0), tmp_path,
-        max_iterations=5, production_steps=6000, min_bp_retained=0.0)
+        _optimize_spec(target=2.0, tol=0.3, initial=2.0),
+        tmp_path,
+        max_iterations=5,
+        production_steps=6000,
+        min_bp_retained=0.0,
+    )
     assert result["status"] == "exhausted"
     with pytest.raises(AssertionError, match="did not converge"):
-        assert_converges_to_constraint(result, target_nm=2.0, tol_nm=0.3, min_confidence=50)
+        assert_converges_to_constraint(
+            result, target_nm=2.0, tol_nm=0.3, min_confidence=50
+        )
 
 
 def test_build_and_optimize_oracle_fires_on_vacuous(tmp_path, mock_oxdna_traj):
     """can-go-red: an initial knob that already meets the constraint → the loop
     'converges' on attempt 0 with no adjustment, and the non-vacuity guard fires."""
     result = hs.build_and_optimize_design(
-        _optimize_spec(target=12.06, tol=0.5, initial=2.5), tmp_path,
-        production_steps=6000, min_bp_retained=0.0)
+        _optimize_spec(target=12.06, tol=0.5, initial=2.5),
+        tmp_path,
+        production_steps=6000,
+        min_bp_retained=0.0,
+    )
     assert result["status"] == "met"
     with pytest.raises(AssertionError, match="vacuous|FIRST attempt"):
-        assert_converges_to_constraint(result, target_nm=12.06, tol_nm=0.5, min_confidence=50)
+        assert_converges_to_constraint(
+            result, target_nm=12.06, tol_nm=0.5, min_confidence=50
+        )
 
 
 def test_build_and_optimize_requires_optimize_block(tmp_path):
@@ -1419,15 +1985,20 @@ def test_build_and_optimize_requires_optimize_block(tmp_path):
     build_and_check_design is the attach+report path, this is the knob path."""
     with pytest.raises(BuildSpecError, match="requires an 'optimize' block"):
         hs.build_and_optimize_design(
-            {"lattice": "honeycomb", "ops": _OPT_BEND_OPS}, tmp_path, min_bp_retained=0.0)
+            {"lattice": "honeycomb", "ops": _OPT_BEND_OPS},
+            tmp_path,
+            min_bp_retained=0.0,
+        )
 
 
 # ── coverage: this driver wraps no new route (composition-sugar item) ──────────
+
 
 def test_spec_build_adds_no_coverage():
     """AF-11 composes already-covered wrappers — like AF-10, it moves the oracle
     count, not the route-coverage count."""
     from tests.automation_harness import headless_coverage_report
+
     # crossover_extra_bases added the single + batch extra-bases PATCH routes: 39 -> 41.
     # AF-14 Phase 1's place_cluster_joint added one route (add_joint): 34 → 35;
     # the full_sequence feature added assign_staple_sequences: 35 → 36;

@@ -62,9 +62,14 @@ def _helix_fingerprint(helix) -> tuple:
     recycled id would serve one helix's beads for another's.
     """
     return (
-        helix.id, helix.bp_start, helix.length_bp, helix.phase_offset,
-        helix.twist_per_bp_rad, helix.direction,
-        tuple(helix.axis_start.to_array()), tuple(helix.axis_end.to_array()),
+        helix.id,
+        helix.bp_start,
+        helix.length_bp,
+        helix.phase_offset,
+        helix.twist_per_bp_rad,
+        helix.direction,
+        tuple(helix.axis_start.to_array()),
+        tuple(helix.axis_end.to_array()),
         tuple(sorted((ls.bp_index, ls.delta) for ls in helix.loop_skips)),
     )
 
@@ -119,16 +124,29 @@ def _straight_nuc_rows(helix, bp_index: int, direction: str):
     if len(arrs.get("bp_indices", ())) == 0:
         return None
     want_dir = 0 if direction == "FORWARD" else 1
-    idx = np.nonzero((arrs["bp_indices"] == bp_index) & (arrs["directions"] == want_dir))[0]
+    idx = np.nonzero(
+        (arrs["bp_indices"] == bp_index) & (arrs["directions"] == want_dir)
+    )[0]
     return [
-        (arrs["positions"][i], arrs["base_positions"][i],
-         arrs["base_normals"][i], arrs["axis_tangents"][i])
+        (
+            arrs["positions"][i],
+            arrs["base_positions"][i],
+            arrs["base_normals"][i],
+            arrs["axis_tangents"][i],
+        )
         for i in idx
     ] or None
 
 
-def _nuc_dict(helix_id: str, bp_index: int, direction: str,
-              backbone, base, base_normal, axis_tangent) -> dict:
+def _nuc_dict(
+    helix_id: str,
+    bp_index: int,
+    direction: str,
+    backbone,
+    base,
+    base_normal,
+    axis_tangent,
+) -> dict:
     """The geometry-API-shaped dict this module hands to the writer."""
     return {
         "helix_id": helix_id,
@@ -175,14 +193,16 @@ def _compute_nuc_geometry_copy(
     if nuc is None or n_copies <= 1:
         return nuc
     start = np.array([helix.axis_start.x, helix.axis_start.y, helix.axis_start.z])
-    end   = np.array([helix.axis_end.x,   helix.axis_end.y,   helix.axis_end.z])
+    end = np.array([helix.axis_end.x, helix.axis_end.y, helix.axis_end.z])
     axis_hat = end - start
     axis_len = np.linalg.norm(axis_hat)
     if axis_len == 0:
         return nuc
     axis_hat /= axis_len
-    copy_frac = (copy_k - (n_copies - 1) / 2.0)
-    pos_shifted = np.array(nuc["backbone_position"]) + copy_frac * BDNA_RISE_PER_BP * axis_hat
+    copy_frac = copy_k - (n_copies - 1) / 2.0
+    pos_shifted = (
+        np.array(nuc["backbone_position"]) + copy_frac * BDNA_RISE_PER_BP * axis_hat
+    )
     return {**nuc, "backbone_position": pos_shifted.tolist()}
 
 
@@ -219,7 +239,7 @@ def _compute_nuc_geometry(
         return None
 
     start = np.array([helix.axis_start.x, helix.axis_start.y, helix.axis_start.z])
-    end   = np.array([helix.axis_end.x,   helix.axis_end.y,   helix.axis_end.z])
+    end = np.array([helix.axis_end.x, helix.axis_end.y, helix.axis_end.z])
     axis_vec = end - start
     axis_len = np.linalg.norm(axis_vec)
     if axis_len == 0:
@@ -278,7 +298,9 @@ def is_synthetic_nuc_key(key: tuple) -> bool:
     return key[0] == _XB_SENTINEL or is_extension_key(key)
 
 
-def _drop_synthetic(key: tuple, include_extra_bases: bool, include_extensions: bool) -> bool:
+def _drop_synthetic(
+    key: tuple, include_extra_bases: bool, include_extensions: bool
+) -> bool:
     """Whether a read-back should skip *key*: synthetic particles occupy a slot (so
     real-nucleotide indices stay aligned) but are absent from the design-keyed map
     unless the caller opts in."""
@@ -306,7 +328,9 @@ def strand_extension_tails(design: Design) -> dict[str, dict[str, object]]:
     return out
 
 
-def crossover_extra_base_junctions(design: Design) -> dict[tuple[str, int], tuple[str, str]]:
+def crossover_extra_base_junctions(
+    design: Design,
+) -> dict[tuple[str, int], tuple[str, str]]:
     """Map each strand-domain junction that carries crossover extra bases to
     ``(crossover_id, extra_bases_string)``.
 
@@ -365,25 +389,28 @@ class _NucStep(NamedTuple):
     """One emitted nucleotide in the canonical oxDNA order.  Real nucleotides,
     crossover extra-base inserts and strand-extension tail bases all flow through
     here so every walk site agrees."""
-    key:            tuple
-    strand:         object        # the owning Strand
-    strand_idx:     int           # 1-based, oxDNA convention
-    domain_index:   Optional[int] # None for extra-base inserts / extension beads
-    helix_id:       Optional[str] # None for inserts / extension beads
-    bp:             Optional[int]
-    direction:      Optional[str] # Direction.value; None for inserts / extension beads
-    overhang_id:    Optional[str]
-    base_override:  Optional[str] # set for extra bases AND extension beads (own base char)
-    is_extra_base:  bool
-    eb_k:           Optional[int] # 0-based position within the insert run
-    eb_n:           Optional[int] # run length
+
+    key: tuple
+    strand: object  # the owning Strand
+    strand_idx: int  # 1-based, oxDNA convention
+    domain_index: Optional[int]  # None for extra-base inserts / extension beads
+    helix_id: Optional[str]  # None for inserts / extension beads
+    bp: Optional[int]
+    direction: Optional[str]  # Direction.value; None for inserts / extension beads
+    overhang_id: Optional[str]
+    base_override: Optional[
+        str
+    ]  # set for extra bases AND extension beads (own base char)
+    is_extra_base: bool
+    eb_k: Optional[int]  # 0-based position within the insert run
+    eb_n: Optional[int]  # run length
     flank_prev_key: Optional[tuple]  # extra-base only: preceding real nt key
     flank_next_key: Optional[tuple]  # extra-base only: following real nt key
     # ── strand-extension tail bases ──────────────────────────────────────────
-    is_extension:   bool = False
-    ext_id:         Optional[str] = None
-    ext_end:        Optional[str] = None    # "five_prime" | "three_prime"
-    ext_k:          Optional[int] = None    # bead index i (== the geometry bp_index)
+    is_extension: bool = False
+    ext_id: Optional[str] = None
+    ext_end: Optional[str] = None  # "five_prime" | "three_prime"
+    ext_k: Optional[int] = None  # bead index i (== the geometry bp_index)
     ext_anchor_key: Optional[tuple] = None  # the real terminal nt the tail hangs off
 
 
@@ -416,8 +443,11 @@ def _walk_strand_nucleotides(design: Design) -> Iterator[_NucStep]:
             keys: list[tuple] = []
             lo = min(domain.start_bp, domain.end_bp)
             hi = max(domain.start_bp, domain.end_bp)
-            bp_range = (range(lo, hi + 1) if domain.direction == Direction.FORWARD
-                        else range(hi, lo - 1, -1))
+            bp_range = (
+                range(lo, hi + 1)
+                if domain.direction == Direction.FORWARD
+                else range(hi, lo - 1, -1)
+            )
             for bp in bp_range:
                 delta = ls_lookup.get((domain.helix_id, bp), 0)
                 if delta <= -1:
@@ -430,12 +460,17 @@ def _walk_strand_nucleotides(design: Design) -> Iterator[_NucStep]:
                 # zig-zags through the bulge (bp_hi → k0[low] → … → bp_lo, an
                 # over-stretched out-of-order bond).  The key still carries the true k
                 # so WC pairing (copy k ↔ copy k) and per-copy geometry are unchanged.
-                copy_order = (range(n_copies) if domain.direction == Direction.FORWARD
-                              else range(n_copies - 1, -1, -1))
+                copy_order = (
+                    range(n_copies)
+                    if domain.direction == Direction.FORWARD
+                    else range(n_copies - 1, -1, -1)
+                )
                 for k in copy_order:
-                    keys.append((domain.helix_id, bp, domain.direction.value)
-                                if n_copies == 1
-                                else (domain.helix_id, bp, domain.direction.value, k))
+                    keys.append(
+                        (domain.helix_id, bp, domain.direction.value)
+                        if n_copies == 1
+                        else (domain.helix_id, bp, domain.direction.value, k)
+                    )
             dom_keys.append(keys)
 
         strand_tails = tails.get(strand.id, {})
@@ -449,12 +484,23 @@ def _walk_strand_nucleotides(design: Design) -> Iterator[_NucStep]:
             for ordinal, i in enumerate(beads):
                 yield _NucStep(
                     key=(f"{_EXT_PREFIX}{ext.id}", i, dom.direction.value),
-                    strand=strand, strand_idx=si,
-                    domain_index=None, helix_id=None, bp=None, direction=None,
-                    overhang_id=None, base_override=ext.sequence[ordinal],
-                    is_extra_base=False, eb_k=None, eb_n=None,
-                    flank_prev_key=None, flank_next_key=None,
-                    is_extension=True, ext_id=ext.id, ext_end=ext.end, ext_k=i,
+                    strand=strand,
+                    strand_idx=si,
+                    domain_index=None,
+                    helix_id=None,
+                    bp=None,
+                    direction=None,
+                    overhang_id=None,
+                    base_override=ext.sequence[ordinal],
+                    is_extra_base=False,
+                    eb_k=None,
+                    eb_n=None,
+                    flank_prev_key=None,
+                    flank_next_key=None,
+                    is_extension=True,
+                    ext_id=ext.id,
+                    ext_end=ext.end,
+                    ext_k=i,
                     ext_anchor_key=anchor_key,
                 )
 
@@ -465,11 +511,20 @@ def _walk_strand_nucleotides(design: Design) -> Iterator[_NucStep]:
         for di, domain in enumerate(strand.domains):
             for key in dom_keys[di]:
                 yield _NucStep(
-                    key=key, strand=strand, strand_idx=si, domain_index=di,
-                    helix_id=domain.helix_id, bp=key[1], direction=domain.direction.value,
-                    overhang_id=domain.overhang_id, base_override=None,
-                    is_extra_base=False, eb_k=None, eb_n=None,
-                    flank_prev_key=None, flank_next_key=None,
+                    key=key,
+                    strand=strand,
+                    strand_idx=si,
+                    domain_index=di,
+                    helix_id=domain.helix_id,
+                    bp=key[1],
+                    direction=domain.direction.value,
+                    overhang_id=domain.overhang_id,
+                    base_override=None,
+                    is_extra_base=False,
+                    eb_k=None,
+                    eb_n=None,
+                    flank_prev_key=None,
+                    flank_next_key=None,
                 )
             hit = junctions.get((strand.id, di))
             if hit is None or di + 1 >= len(strand.domains):
@@ -482,10 +537,20 @@ def _walk_strand_nucleotides(design: Design) -> Iterator[_NucStep]:
             n = len(extra)
             for k, ch in enumerate(extra):
                 yield _NucStep(
-                    key=(_XB_SENTINEL, xo_id, k), strand=strand, strand_idx=si,
-                    domain_index=None, helix_id=None, bp=None, direction=None,
-                    overhang_id=None, base_override=ch, is_extra_base=True,
-                    eb_k=k, eb_n=n, flank_prev_key=prev_key, flank_next_key=next_key,
+                    key=(_XB_SENTINEL, xo_id, k),
+                    strand=strand,
+                    strand_idx=si,
+                    domain_index=None,
+                    helix_id=None,
+                    bp=None,
+                    direction=None,
+                    overhang_id=None,
+                    base_override=ch,
+                    is_extra_base=True,
+                    eb_k=k,
+                    eb_n=n,
+                    flank_prev_key=prev_key,
+                    flank_next_key=next_key,
                 )
 
         ext3 = strand_tails.get("three_prime")
@@ -500,11 +565,18 @@ def _extra_base_inserts(design: Design) -> dict[tuple, tuple]:
     out: dict[tuple, tuple] = {}
     for step in _walk_strand_nucleotides(design):
         if step.is_extra_base:
-            out[step.key] = (step.flank_prev_key, step.flank_next_key, step.eb_k, step.eb_n)
+            out[step.key] = (
+                step.flank_prev_key,
+                step.flank_next_key,
+                step.eb_k,
+                step.eb_n,
+            )
     return out
 
 
-def _resolve_extra_base_geometry(prev_nuc: dict, next_nuc: dict, k: int, n: int) -> dict:
+def _resolve_extra_base_geometry(
+    prev_nuc: dict, next_nuc: dict, k: int, n: int
+) -> dict:
     """Geometry for the k-th of n single-stranded extra bases bridging two real
     nucleotides: evenly spaced along the chord prev→next (5′→3′ along the strand),
     base normal taken perpendicular to that chord.  Even spacing keeps consecutive
@@ -517,19 +589,20 @@ def _resolve_extra_base_geometry(prev_nuc: dict, next_nuc: dict, k: int, n: int)
     chord = p1 - p0
     nrm = float(np.linalg.norm(chord))
     if nrm > 1e-9:
-        a3 = chord / nrm                      # 5′→3′ along the insert
+        a3 = chord / nrm  # 5′→3′ along the insert
     else:
         a3 = np.asarray(prev_nuc["axis_tangent"], dtype=float)
         a3 = a3 / (np.linalg.norm(a3) + 1e-14)
     bn = np.asarray(prev_nuc["base_normal"], dtype=float)
-    a1 = bn - np.dot(bn, a3) * a3             # project base normal ⟂ a3
-    if float(np.linalg.norm(a1)) < 1e-9:      # degenerate: pick any ⟂ vector
+    a1 = bn - np.dot(bn, a3) * a3  # project base normal ⟂ a3
+    if float(np.linalg.norm(a1)) < 1e-9:  # degenerate: pick any ⟂ vector
         a1 = np.cross(a3, np.array([1.0, 0.0, 0.0]))
         if float(np.linalg.norm(a1)) < 1e-9:
             a1 = np.cross(a3, np.array([0.0, 1.0, 0.0]))
     a1 = a1 / (np.linalg.norm(a1) + 1e-14)
     return {
-        "helix_id": None, "bp_index": None,
+        "helix_id": None,
+        "bp_index": None,
         # direction "FORWARD" so nuc_conf_line uses a3 as-is (chord is already 5′→3′).
         "direction": "FORWARD",
         "backbone_position": pos.tolist(),
@@ -550,8 +623,9 @@ def _perp_bow(chord: np.ndarray) -> np.ndarray:
     return b / (np.linalg.norm(b) + 1e-14)
 
 
-def _flexible_arc_points(a: np.ndarray, b: np.ndarray, contour_nm: float,
-                         n: int, bow: np.ndarray) -> list[np.ndarray]:
+def _flexible_arc_points(
+    a: np.ndarray, b: np.ndarray, contour_nm: float, n: int, bow: np.ndarray
+) -> list[np.ndarray]:
     """``n`` interior points along a circular arc of arc-length ``contour_nm`` from
     ``a`` to ``b``, bowing toward unit ``bow`` (⟂ chord).  Straight (evenly-spaced
     chord lerp) when the chord is taut (``|b-a| >= contour_nm``) or coincident.
@@ -564,7 +638,7 @@ def _flexible_arc_points(a: np.ndarray, b: np.ndarray, contour_nm: float,
         return []
     d = b - a
     c = float(np.linalg.norm(d))
-    if c < 1e-6 or c >= contour_nm:                      # taut / coincident → straight
+    if c < 1e-6 or c >= contour_nm:  # taut / coincident → straight
         return [a + d * (i / (n + 1)) for i in range(1, n + 1)]
     # Solve θ ∈ (0,π): sin(θ)/θ = chord/contour  (half-angle of the circular arc).
     ratio = c / contour_nm
@@ -575,7 +649,7 @@ def _flexible_arc_points(a: np.ndarray, b: np.ndarray, contour_nm: float,
             lo = mid
         else:
             hi = mid
-    theta = (lo + hi) / 2.0                              # half arc-angle (may exceed π/2)
+    theta = (lo + hi) / 2.0  # half arc-angle (may exceed π/2)
     radius = contour_nm / (2.0 * theta)
     chord_hat = d / c
     # Re-orthogonalise bow against the chord and build the in-plane basis.  The arc
@@ -590,7 +664,9 @@ def _flexible_arc_points(a: np.ndarray, b: np.ndarray, contour_nm: float,
     pts: list[np.ndarray] = []
     for i in range(1, n + 1):
         psi = -theta + 2.0 * theta * (i / (n + 1))
-        pts.append(center + radius * (math.cos(psi) * bow_hat + math.sin(psi) * chord_hat))
+        pts.append(
+            center + radius * (math.cos(psi) * bow_hat + math.sin(psi) * chord_hat)
+        )
     return pts
 
 
@@ -620,8 +696,9 @@ def flexible_segment_geo_keys(design: Design):
     return out
 
 
-def _apply_flexible_segment_arc(design: Design,
-                                resolved_map: dict[tuple, dict]) -> dict[tuple, dict]:
+def _apply_flexible_segment_arc(
+    design: Design, resolved_map: dict[tuple, dict]
+) -> dict[tuple, dict]:
     """Re-seat every flexible ssDNA run onto a contour-length arc between its two
     (already posed) rigid anchors, replacing the default per-bead helix-axis
     placement.
@@ -647,15 +724,15 @@ def _apply_flexible_segment_arc(design: Design,
         n = len(bead_keys)
         bow = _perp_bow(p_b - p_a)
         pts = _flexible_arc_points(p_a, p_b, contour_nm, n, bow)
-        chain = [p_a, *pts, p_b]                 # anchors flank the run for tangents
+        chain = [p_a, *pts, p_b]  # anchors flank the run for tangents
         for i, bk in enumerate(bead_keys):
             base = resolved_map[bk]
-            tan = chain[i + 2] - chain[i]        # local 5′→3′ arc tangent
+            tan = chain[i + 2] - chain[i]  # local 5′→3′ arc tangent
             nrm = float(np.linalg.norm(tan))
             a3 = tan / nrm if nrm > 1e-9 else np.asarray(base["axis_tangent"], float)
             a3 = a3 / (np.linalg.norm(a3) + 1e-14)
             bn = np.asarray(base["base_normal"], dtype=float)
-            a1 = bn - float(np.dot(bn, a3)) * a3     # keep a1 ⟂ a3
+            a1 = bn - float(np.dot(bn, a3)) * a3  # keep a1 ⟂ a3
             if float(np.linalg.norm(a1)) < 1e-9:
                 a1 = np.cross(a3, np.array([1.0, 0.0, 0.0]))
                 if float(np.linalg.norm(a1)) < 1e-9:
@@ -731,7 +808,7 @@ def count_undefined_bases(
         if step.base_override is not None:
             base = step.base_override.upper()
         else:
-            base = seq[seq_idx] if seq_idx < len(seq) else 'N'
+            base = seq[seq_idx] if seq_idx < len(seq) else "N"
             seq_idx += 1
         total += 1
         if base not in "ACGT":
@@ -813,7 +890,7 @@ def topology_rows(design: Design) -> tuple[list[tuple[int, str, int, int]], int]
         if step.base_override is not None:
             seq_lookup[step.key] = step.base_override
         else:
-            seq_lookup[step.key] = seq[seq_idx] if seq_idx < len(seq) else 'N'
+            seq_lookup[step.key] = seq[seq_idx] if seq_idx < len(seq) else "N"
             seq_idx += 1
 
     index_map: dict[tuple, int] = {k: i for i, k in enumerate(order)}
@@ -822,7 +899,7 @@ def topology_rows(design: Design) -> tuple[list[tuple[int, str, int, int]], int]
     # so loop copies AND extra-base inserts bond in-chain automatically.
     #   3p_nbr: the nucleotide bonded on the 3′ side; 5p_nbr: on the 5′ side.
     three_prime_nbr: dict[int, int] = {}
-    five_prime_nbr:  dict[int, int] = {}
+    five_prime_nbr: dict[int, int] = {}
     cur_strand = None
     strand_nuc_indices: list[int] = []
 
@@ -846,12 +923,14 @@ def topology_rows(design: Design) -> tuple[list[tuple[int, str, int, int]], int]
 
     rows: list[tuple[int, str, int, int]] = []
     for i, key in enumerate(order):
-        rows.append((
-            strand_idx_map.get(key, 1),
-            seq_lookup.get(key, 'N'),
-            three_prime_nbr.get(i, -1),
-            five_prime_nbr.get(i, -1),
-        ))
+        rows.append(
+            (
+                strand_idx_map.get(key, 1),
+                seq_lookup.get(key, "N"),
+                three_prime_nbr.get(i, -1),
+                five_prime_nbr.get(i, -1),
+            )
+        )
     return rows, n_strands
 
 
@@ -875,8 +954,9 @@ class StaleJobTopologyError(RuntimeError):
     design's CURRENT nucleotide order — the job was run by an older build."""
 
 
-def assert_topology_matches_design(top_path: str | Path, design: Design,
-                                   *, extra_trailing: int = 0) -> None:
+def assert_topology_matches_design(
+    top_path: str | Path, design: Design, *, extra_trailing: int = 0
+) -> None:
     """Raise :class:`StaleJobTopologyError` if *top_path* was written by a build
     whose nucleotide walk differs from today's.
 
@@ -961,7 +1041,9 @@ def write_configuration(
     ]
     for key in order:
         nuc = resolved_map.get(key)
-        lines.append(nuc_conf_line(nuc) if nuc is not None else _conf_center_fallback(box))
+        lines.append(
+            nuc_conf_line(nuc) if nuc is not None else _conf_center_fallback(box)
+        )
 
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -991,7 +1073,9 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
     # deliberately does not.  Prefer it wherever it has the copy (TD-27 Stage 2).
     geo_copies: dict[tuple[str, int, str], list[dict]] = {}
     for n in geometry:
-        geo_copies.setdefault((n["helix_id"], n["bp_index"], n["direction"]), []).append(n)
+        geo_copies.setdefault(
+            (n["helix_id"], n["bp_index"], n["direction"]), []
+        ).append(n)
     order = _strand_nucleotide_order(design)
     ls_lookup_conf = _build_ls_lookup(design)
     resolved_map: dict[tuple, dict] = {}
@@ -1006,11 +1090,12 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
         if len(key) == 4:
             copies = geo_copies.get(key[:3])
             if copies is not None and key[3] < len(copies):
-                nuc = copies[key[3]]                 # geometry.py copy (correct groove)
-            else:                                    # geometry list lacked the copy
+                nuc = copies[key[3]]  # geometry.py copy (correct groove)
+            else:  # geometry list lacked the copy
                 _delta = ls_lookup_conf.get((key[0], key[1]), 0)
                 nuc = _compute_nuc_geometry_copy(
-                    design, key[0], key[1], key[2], key[3], max(1, _delta + 1))
+                    design, key[0], key[1], key[2], key[3], max(1, _delta + 1)
+                )
         else:
             nuc = geo_map.get(key)
             if nuc is None:
@@ -1041,7 +1126,7 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
         tails.setdefault(key[0], []).append((key[1], key, anchor_key, end))
 
     for ext_id, beads in tails.items():
-        beads.sort()                              # by bead index = distance from anchor
+        beads.sort()  # by bead index = distance from anchor
         prev = None
         for bi, (_k, key, anchor_key, end) in enumerate(beads):
             bead = geo_map.get(key)
@@ -1050,11 +1135,11 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
             if prev is None:
                 prev = resolved_map.get(anchor_key)
                 if prev is None:
-                    break                         # anchor unresolved: skip the whole tail
+                    break  # anchor unresolved: skip the whole tail
             # The next bead outward, so the solve can pick the root that keeps the
             # following bond reachable.  None at the free tip.
             next_geo = geo_map.get(beads[bi + 1][1]) if bi + 1 < len(beads) else None
-            next_cm  = next_geo["backbone_position"] if next_geo else None
+            next_cm = next_geo["backbone_position"] if next_geo else None
 
             nuc = _resolve_extension_geometry(prev, bead, end, next_cm=next_cm)
             resolved_map[key] = nuc
@@ -1067,8 +1152,11 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
 def extension_beads(design: Design) -> list[tuple[tuple, tuple, str]]:
     """``[(bead_key, anchor_key, end)]`` for every strand-extension tail bead, from
     the same walk that defines the particle order."""
-    return [(s.key, s.ext_anchor_key, s.ext_end)
-            for s in _walk_strand_nucleotides(design) if s.is_extension]
+    return [
+        (s.key, s.ext_anchor_key, s.ext_end)
+        for s in _walk_strand_nucleotides(design)
+        if s.is_extension
+    ]
 
 
 def effective_a3(nuc: dict) -> np.ndarray:
@@ -1086,8 +1174,9 @@ def effective_a3(nuc: dict) -> np.ndarray:
     return a3 / (np.linalg.norm(a3) + 1e-14)
 
 
-def _resolve_extension_geometry(prev_nuc: dict, bead_nuc: dict, end: str,
-                                next_cm=None) -> dict:
+def _resolve_extension_geometry(
+    prev_nuc: dict, bead_nuc: dict, end: str, next_cm=None
+) -> dict:
     """oxDNA geometry for one strand-extension tail bead, oriented against its chain
     predecessor (*prev_nuc* — the real anchor nucleotide for the first bead of a tail,
     the previous bead after that).
@@ -1137,7 +1226,7 @@ def _resolve_extension_geometry(prev_nuc: dict, bead_nuc: dict, end: str,
     u = u / (np.linalg.norm(u) + 1e-14)
     v = np.cross(a3, u)
 
-    R   = float(np.hypot(_POS_MM_BACK1, _POS_MM_BACK2)) * OXDNA_LENGTH_UNIT   # nm
+    R = float(np.hypot(_POS_MM_BACK1, _POS_MM_BACK2)) * OXDNA_LENGTH_UNIT  # nm
     phi = float(np.arctan2(_POS_MM_BACK2, _POS_MM_BACK1))
 
     prev_site = oxdna_backbone_site(
@@ -1145,20 +1234,20 @@ def _resolve_extension_geometry(prev_nuc: dict, bead_nuc: dict, end: str,
         np.asarray(prev_nuc["base_normal"], dtype=float),
         effective_a3(prev_nuc),
     )
-    d  = cm - prev_site                 # predecessor's site → this bead's CM
+    d = cm - prev_site  # predecessor's site → this bead's CM
     P, Q = float(np.dot(d, u)), float(np.dot(d, v))
 
     # |d + R·(u cosψ + v sinψ)|² = target²  ⇒  P cosψ + Q sinψ = c
-    target = FENE_R0_OXDNA2 * OXDNA_LENGTH_UNIT      # the FENE rest length, in nm
-    hyp    = float(np.hypot(P, Q))
+    target = FENE_R0_OXDNA2 * OXDNA_LENGTH_UNIT  # the FENE rest length, in nm
+    hyp = float(np.hypot(P, Q))
     if hyp < 1e-12:
         psis = [0.0]
     else:
-        c = (target ** 2 - float(np.dot(d, d)) - R ** 2) / (2.0 * R * hyp)
+        c = (target**2 - float(np.dot(d, d)) - R**2) / (2.0 * R * hyp)
         base = float(np.arctan2(Q, P))
         # |c| > 1 ⇒ r0 is out of the lever arm's reach; ±1 clamps to the closest
         # achievable site distance (acos(±1) = 0 or π — the extremes of the sinusoid).
-        off  = float(np.arccos(float(np.clip(c, -1.0, 1.0))))
+        off = float(np.arccos(float(np.clip(c, -1.0, 1.0))))
         # BOTH roots give this bond the same length but put the site on opposite sides
         # of the chain.  That choice is not free: this bead's site is the NEXT bead's
         # anchor, so the wrong root can push the next bond out of reach of its own lever
@@ -1176,12 +1265,17 @@ def _resolve_extension_geometry(prev_nuc: dict, bead_nuc: dict, end: str,
         best_psi = psis[0]
     else:
         nxt = np.asarray(next_cm, dtype=float)
-        best_psi = min(psis, key=lambda p: float(np.linalg.norm(
-            oxdna_backbone_site(cm, _a1_of(p), a3) - nxt)))
+        best_psi = min(
+            psis,
+            key=lambda p: float(
+                np.linalg.norm(oxdna_backbone_site(cm, _a1_of(p), a3) - nxt)
+            ),
+        )
     a1 = _a1_of(best_psi)
 
     return {
-        "helix_id": bead_nuc["helix_id"], "bp_index": bead_nuc["bp_index"],
+        "helix_id": bead_nuc["helix_id"],
+        "bp_index": bead_nuc["bp_index"],
         # "FORWARD" so nuc_conf_line uses a3 as-is (it is already 5′→3′).
         "direction": "FORWARD",
         "backbone_position": bead_nuc["backbone_position"],
@@ -1192,7 +1286,7 @@ def _resolve_extension_geometry(prev_nuc: dict, bead_nuc: dict, end: str,
 
 # oxDNA's base (H-bond) interaction site sits at CM + POS_BASE·a1 (model.h
 # POS_BASE = 0.4 oxDNA units); the .dat position IS the centre of mass.
-_POS_BASE_NM: float = 0.4 * OXDNA_LENGTH_UNIT   # ≈ 0.341 nm
+_POS_BASE_NM: float = 0.4 * OXDNA_LENGTH_UNIT  # ≈ 0.341 nm
 
 # Target base-site separation (nm) for the oxDNA-native seed.  oxDNA2's hydrogen-
 # bond equilibrium sits at ~0.37 nm — the separation a relaxed duplex settles at
@@ -1239,7 +1333,10 @@ def _oxdna_cm_radius_map(
 
     # The two radii the measured display placement puts backbone beads at (the ribose
     # C3' of each strand).  Only beads AT one of these are converted — see below.
-    _MEASURED_CM_RADII = (MEASURED.backbone_fwd.radius_nm, MEASURED.backbone_rev.radius_nm)
+    _MEASURED_CM_RADII = (
+        MEASURED.backbone_fwd.radius_nm,
+        MEASURED.backbone_rev.radius_nm,
+    )
     _MEASURED_R_TOL = 1e-6
 
     axes: dict[str, tuple] = {}
@@ -1256,7 +1353,7 @@ def _oxdna_cm_radius_map(
     out: dict[tuple, dict] = {}
     for key, nuc in resolved_map.items():
         entry = axes.get(key[0]) if isinstance(key, tuple) and key else None
-        if entry is None:                    # inserts, tails, __lnk__ bridges
+        if entry is None:  # inserts, tails, __lnk__ bridges
             continue
         origin, tangent = entry
         pos = np.asarray(nuc["backbone_position"], dtype=float)
@@ -1271,7 +1368,9 @@ def _oxdna_cm_radius_map(
         # the very fold the caller built (caught by
         # tests/test_cg_seed_ssdna_collapse.py, whose collapse fixture stopped
         # reproducing because its folded beads were being straightened).
-        if r < 1e-9 or not any(abs(r - m) < _MEASURED_R_TOL for m in _MEASURED_CM_RADII):
+        if r < 1e-9 or not any(
+            abs(r - m) < _MEASURED_R_TOL for m in _MEASURED_CM_RADII
+        ):
             continue
         shift_of[key] = (origin + axial * tangent + (radial / r) * HELIX_RADIUS) - pos
     if not shift_of:
@@ -1287,10 +1386,15 @@ def _oxdna_cm_radius_map(
 
     for key, nuc in resolved_map.items():
         shift = shift_of.get(key)
-        out[key] = nuc if shift is None else {
-            **nuc,
-            "backbone_position": np.asarray(nuc["backbone_position"], dtype=float) + shift,
-        }
+        out[key] = (
+            nuc
+            if shift is None
+            else {
+                **nuc,
+                "backbone_position": np.asarray(nuc["backbone_position"], dtype=float)
+                + shift,
+            }
+        )
     return out
 
 
@@ -1347,16 +1451,28 @@ def oxdna_native_seed_map(
     # shifted below (a1_of covers every key) so backbone bonds stay intact.
     # Extension keys are ALSO 3-tuples, so they must be excluded explicitly — they are
     # unpaired ssDNA and have no business setting the duplex width.
-    fwd = {(k[0], k[1]) for k in resolved_map
-           if len(k) == 3 and k[2] == "FORWARD" and not is_synthetic_nuc_key(k)}
-    rev = {(k[0], k[1]) for k in resolved_map
-           if len(k) == 3 and k[2] == "REVERSE" and not is_synthetic_nuc_key(k)}
+    fwd = {
+        (k[0], k[1])
+        for k in resolved_map
+        if len(k) == 3 and k[2] == "FORWARD" and not is_synthetic_nuc_key(k)
+    }
+    rev = {
+        (k[0], k[1])
+        for k in resolved_map
+        if len(k) == 3 and k[2] == "REVERSE" and not is_synthetic_nuc_key(k)
+    }
     seps: list[float] = []
     for hid, bp in fwd & rev:
         f = resolved_map[(hid, bp, "FORWARD")]
         r = resolved_map[(hid, bp, "REVERSE")]
-        f_base = np.asarray(f["backbone_position"], float) + _POS_BASE_NM * a1_of[(hid, bp, "FORWARD")]
-        r_base = np.asarray(r["backbone_position"], float) + _POS_BASE_NM * a1_of[(hid, bp, "REVERSE")]
+        f_base = (
+            np.asarray(f["backbone_position"], float)
+            + _POS_BASE_NM * a1_of[(hid, bp, "FORWARD")]
+        )
+        r_base = (
+            np.asarray(r["backbone_position"], float)
+            + _POS_BASE_NM * a1_of[(hid, bp, "REVERSE")]
+        )
         seps.append(float(np.linalg.norm(f_base - r_base)))
     if not seps:
         return resolved_map
@@ -1412,7 +1528,9 @@ def _conf_center_fallback(box: float) -> str:
 # ── Configuration reader ──────────────────────────────────────────────────────
 
 
-def _protein_lead_offset(data_lines: list, order: list, n_trailing_extra: int = 0) -> int:
+def _protein_lead_offset(
+    data_lines: list, order: list, n_trailing_extra: int = 0
+) -> int:
     """Number of leading non-DNA particle lines in a configuration.
 
     A hybrid ANM-oxDNA (DNANM) conf writes the protein beads FIRST, then the DNA
@@ -1434,20 +1552,22 @@ def read_protein_bead_positions(conf_path: str | Path, n_dna: int) -> list:
     the ANM-oxDNA convention).  Empty for a DNA-only conf.  ``n_dna`` =
     ``len(_strand_nucleotide_order(design))``."""
     lines = Path(conf_path).read_text(encoding="utf-8").splitlines()
-    data = [l for l in lines if l.strip() and not l.startswith(('t ', 'b ', 'E '))]
+    data = [l for l in lines if l.strip() and not l.startswith(("t ", "b ", "E "))]
     n_prot = max(0, len(data) - n_dna)
     out = []
     for ln in data[:n_prot]:
         parts = ln.split()
         if len(parts) >= 3:
-            out.append(np.array([float(parts[0]), float(parts[1]), float(parts[2])])
-                       * OXDNA_LENGTH_UNIT)
+            out.append(
+                np.array([float(parts[0]), float(parts[1]), float(parts[2])])
+                * OXDNA_LENGTH_UNIT
+            )
     return out
 
 
 def read_configuration(
-    conf_path:  str | Path,
-    design:     Design,
+    conf_path: str | Path,
+    design: Design,
 ) -> dict[tuple[str, int, str], np.ndarray]:
     """
     Read an oxDNA configuration (.dat) file and return a position map.
@@ -1466,7 +1586,9 @@ def read_configuration(
     lines = Path(conf_path).read_text(encoding="utf-8").splitlines()
 
     # Skip the 3-line header.
-    data_lines = [l for l in lines if l.strip() and not l.startswith(('t ', 'b ', 'E '))]
+    data_lines = [
+        l for l in lines if l.strip() and not l.startswith(("t ", "b ", "E "))
+    ]
 
     # Hybrid (DNANM) confs carry protein beads in the LEADING particle indices; the
     # DNA nucleotides follow.  Skip the leading protein lines so DNA keys line up.
@@ -1478,7 +1600,7 @@ def read_configuration(
             break
         if is_synthetic_nuc_key(key):
             continue  # extra-base insert / extension bead: occupies a particle slot
-                      # but is not a design key
+            # but is not a design key
         parts = data_lines[offset + i].split()
         if len(parts) < 3:
             continue
@@ -1494,12 +1616,12 @@ def read_configuration(
 
 def read_configuration_full(
     conf_path: str | Path,
-    design:    Design,
+    design: Design,
     *,
-    copies:    bool = False,
+    copies: bool = False,
     include_extra_bases: bool = False,
-    include_extensions:  bool = False,
-    n_trailing_extra:    int = 0,
+    include_extensions: bool = False,
+    n_trailing_extra: int = 0,
     trailing_extra_strand_length: int = 0,
 ) -> dict[tuple, dict]:
     """
@@ -1536,7 +1658,9 @@ def read_configuration_full(
     """
     order = _strand_nucleotide_order(design)
     lines = Path(conf_path).read_text(encoding="utf-8").splitlines()
-    data_lines = [l for l in lines if l.strip() and not l.startswith(('t ', 'b ', 'E '))]
+    data_lines = [
+        l for l in lines if l.strip() and not l.startswith(("t ", "b ", "E "))
+    ]
     # skip leading protein beads (hybrid); n_trailing_extra excludes appended capture beads
     offset = _protein_lead_offset(data_lines, order, n_trailing_extra)
 
@@ -1568,7 +1692,8 @@ def read_configuration_full(
             if len(parts) < 9:
                 continue
             vals = [float(x) for x in parts[:9]]
-            a1 = np.array(vals[3:6]); a3 = np.array(vals[6:9])
+            a1 = np.array(vals[3:6])
+            a3 = np.array(vals[6:9])
             result[_capture_particle_key(i, trailing_extra_strand_length)] = {
                 "backbone_position": np.array(vals[0:3]) * OXDNA_LENGTH_UNIT,
                 "a1": a1 / (np.linalg.norm(a1) + 1e-14),
@@ -1583,7 +1708,7 @@ def configuration_full_from_particles(
     *,
     copies: bool = False,
     include_extra_bases: bool = False,
-    include_extensions:  bool = False,
+    include_extensions: bool = False,
 ) -> dict[tuple, dict]:
     """In-memory twin of :func:`read_configuration_full`: build the SAME
     ``(helix_id, bp_index, direction) -> {backbone_position(nm), a1, a3}`` map
@@ -1601,7 +1726,7 @@ def configuration_full_from_particles(
     equivalent to feeding ``read_configuration_full``'s result downstream (verified
     end-to-end through the display unwrap to <1e-12 nm)."""
     order = _strand_nucleotide_order(design)
-    offset = max(0, len(particles) - len(order))   # leading protein beads (hybrid)
+    offset = max(0, len(particles) - len(order))  # leading protein beads (hybrid)
     result: dict[tuple, dict] = {}
     for i, key in enumerate(order):
         j = offset + i
@@ -1629,7 +1754,9 @@ _POS_MM_BACK1: float = -0.34
 _POS_MM_BACK2: float = 0.3408
 
 
-def oxdna_backbone_site(cm_nm: np.ndarray, a1: np.ndarray, a3: np.ndarray) -> np.ndarray:
+def oxdna_backbone_site(
+    cm_nm: np.ndarray, a1: np.ndarray, a3: np.ndarray
+) -> np.ndarray:
     """Reconstruct a nucleotide's true backbone position (nm) from its centre of
     mass + orientation, for display.  oxDNA stores the CM (which sits inward of the
     backbone), so rendering the raw CM collapses the apparent helical diameter
@@ -1639,12 +1766,14 @@ def oxdna_backbone_site(cm_nm: np.ndarray, a1: np.ndarray, a3: np.ndarray) -> np
     return cm_nm + (_POS_MM_BACK1 * a1 + _POS_MM_BACK2 * a2) * OXDNA_LENGTH_UNIT
 
 
-def oxdna_backbone_sites(cm_nm: np.ndarray, a1: np.ndarray, a3: np.ndarray) -> np.ndarray:
+def oxdna_backbone_sites(
+    cm_nm: np.ndarray, a1: np.ndarray, a3: np.ndarray
+) -> np.ndarray:
     """Vectorized :func:`oxdna_backbone_site` over stacked ``(N, 3)`` arrays — one
     ``np.cross`` for the whole frame instead of one per nucleotide.  Per-call numpy
     dispatch on 3-vectors dominates the composite-trajectory build (hundreds of frames ×
     tens of thousands of nucleotides), so the batched form is ~20× faster there."""
-    a2 = np.cross(a3, a1)                              # (N,3) × (N,3) → (N,3), single call
+    a2 = np.cross(a3, a1)  # (N,3) × (N,3) → (N,3), single call
     return cm_nm + (_POS_MM_BACK1 * a1 + _POS_MM_BACK2 * a2) * OXDNA_LENGTH_UNIT
 
 
@@ -1655,6 +1784,7 @@ def _parse_box_nm(conf_path: str | Path) -> Optional[np.ndarray]:
     of the file — slurping a multi-hundred-MB trajectory just to reach line 2 was a
     measurable slice of the composite-trajectory load."""
     from itertools import islice
+
     try:
         with Path(conf_path).open("r", encoding="utf-8") as fh:
             head = list(islice(fh, 8))
@@ -1665,24 +1795,27 @@ def _parse_box_nm(conf_path: str | Path) -> Optional[np.ndarray]:
         if s.startswith("b"):
             parts = s.replace("=", " ").split()
             try:
-                return np.array([float(parts[1]), float(parts[2]), float(parts[3])]) * OXDNA_LENGTH_UNIT
+                return (
+                    np.array([float(parts[1]), float(parts[2]), float(parts[3])])
+                    * OXDNA_LENGTH_UNIT
+                )
             except (IndexError, ValueError):
                 return None
     return None
 
 
 def read_configuration_unwrapped(
-    conf_path:      str | Path,
-    design:         Design,
+    conf_path: str | Path,
+    design: Design,
     reference_path: str | Path,
     *,
     align_keys: Optional[list] = None,
-    rotate:     bool = True,
-    align:      bool = True,
-    copies:     bool = False,
+    rotate: bool = True,
+    align: bool = True,
+    copies: bool = False,
     include_extra_bases: bool = False,
-    include_extensions:  bool = False,
-    n_trailing_extra:    int = 0,
+    include_extensions: bool = False,
+    n_trailing_extra: int = 0,
 ) -> dict[tuple, dict]:
     """Read a relaxed oxDNA config and undo periodic-boundary wrapping for display.
 
@@ -1709,10 +1842,14 @@ def read_configuration_unwrapped(
     Returns the same shape as ``read_configuration_full`` (positions nm + a1 + a3);
     the a1/a3 orientation vectors are rotated by the same alignment.
     """
-    relax = read_configuration_full(conf_path, design, copies=copies,
-                                    include_extra_bases=include_extra_bases,
-                                    include_extensions=include_extensions,
-                                    n_trailing_extra=n_trailing_extra)
+    relax = read_configuration_full(
+        conf_path,
+        design,
+        copies=copies,
+        include_extra_bases=include_extra_bases,
+        include_extensions=include_extensions,
+        n_trailing_extra=n_trailing_extra,
+    )
     # Reference stays design-keyed (no extra bases, no extension tails) so the Kabsch
     # fit aligns on the rigid duplex, not the floppy single-stranded inserts/tails;
     # those are still carried through the transform via their backbone-bond connection
@@ -1721,17 +1858,18 @@ def read_configuration_unwrapped(
     box = _parse_box_nm(conf_path)
     if box is None or not np.all(box > 0):
         return relax
-    return unwrap_align_to_reference(relax, ref, design, box,
-                                     align_keys=align_keys, rotate=rotate, align=align)
+    return unwrap_align_to_reference(
+        relax, ref, design, box, align_keys=align_keys, rotate=rotate, align=align
+    )
 
 
 def read_configuration_full_unwrapped(
     conf_path: str | Path,
-    design:    Design,
+    design: Design,
     *,
     copies: bool = False,
     include_extra_bases: bool = False,
-    include_extensions:  bool = False,
+    include_extensions: bool = False,
 ) -> dict[tuple, dict]:
     """``read_configuration_full`` + PBC make-whole, WITHOUT any reference alignment.
 
@@ -1747,9 +1885,13 @@ def read_configuration_full_unwrapped(
     is already whole passes through unchanged (min-image no-op).  Returns the same
     shape as :func:`read_configuration_full`.  Used by the NAMD-seed reconstruction.
     """
-    relax = read_configuration_full(conf_path, design, copies=copies,
-                                    include_extra_bases=include_extra_bases,
-                                    include_extensions=include_extensions)
+    relax = read_configuration_full(
+        conf_path,
+        design,
+        copies=copies,
+        include_extra_bases=include_extra_bases,
+        include_extensions=include_extensions,
+    )
     box = _parse_box_nm(conf_path)
     if box is None or not np.all(box > 0):
         return relax
@@ -1776,7 +1918,9 @@ def _backbone_adjacency_pairs(design: Design):
         prev_key = step.key
 
 
-def _build_unwrap_adjacency(relax: dict[tuple, dict], design: Design) -> dict[tuple, list[tuple]]:
+def _build_unwrap_adjacency(
+    relax: dict[tuple, dict], design: Design
+) -> dict[tuple, list[tuple]]:
     """Bond-adjacency for the unwrap BFS: backbone bonds (loop copies threaded) +
     designed WC pairs, over the keys present in *relax*.  Depends only on topology +
     the key SET (constant for a given design/frame-shape), so a live session can build
@@ -1810,8 +1954,9 @@ def _build_unwrap_adjacency(relax: dict[tuple, dict], design: Design) -> dict[tu
     return adj
 
 
-def _build_unwrap_plan(relax: dict[tuple, dict], design: Design,
-                       adj: Optional[dict] = None) -> dict:
+def _build_unwrap_plan(
+    relax: dict[tuple, dict], design: Design, adj: Optional[dict] = None
+) -> dict:
     """Precompute the constant traversal structure the unwrap BFS needs so a whole
     trajectory can be unwrapped with vectorized numpy instead of a per-nucleotide
     Python graph walk on every frame.
@@ -1833,24 +1978,32 @@ def _build_unwrap_plan(relax: dict[tuple, dict], design: Design,
         if seed in idx_of:
             continue
         cid += 1
-        idx_of[seed] = len(order); order.append(seed); parent.append(-1); comp.append(cid)
+        idx_of[seed] = len(order)
+        order.append(seed)
+        parent.append(-1)
+        comp.append(cid)
         stack = [seed]
         while stack:
             u = stack.pop()
             for v in adj[u]:
                 if v in idx_of:
                     continue
-                idx_of[v] = len(order); order.append(v)
-                parent.append(idx_of[u]); comp.append(cid)
+                idx_of[v] = len(order)
+                order.append(v)
+                parent.append(idx_of[u])
+                comp.append(cid)
                 stack.append(v)
-    return {"order": order,
-            "parent": np.array(parent, dtype=np.int64),
-            "comp": np.array(comp, dtype=np.int64),
-            "n_comp": cid + 1}
+    return {
+        "order": order,
+        "parent": np.array(parent, dtype=np.int64),
+        "comp": np.array(comp, dtype=np.int64),
+        "n_comp": cid + 1,
+    }
 
 
-def _apply_unwrap_plan(relax: dict[tuple, dict], ref: dict[tuple, dict],
-                       box: np.ndarray, plan: dict) -> dict[tuple, np.ndarray]:
+def _apply_unwrap_plan(
+    relax: dict[tuple, dict], ref: dict[tuple, dict], box: np.ndarray, plan: dict
+) -> dict[tuple, np.ndarray]:
     """Vectorized equivalent of ``unwrap_align_to_reference``'s BFS + per-component
     box-shift, using a precomputed :func:`_build_unwrap_plan`.  Returns ``{key: placed
     position}`` identical (to float precision) to the graph-walk version.
@@ -1860,7 +2013,10 @@ def _apply_unwrap_plan(relax: dict[tuple, dict], ref: dict[tuple, dict],
     shift ``K[v] = K[parent] − round((raw[v] − raw[parent])/box)`` — a tree prefix-sum
     of a fully vectorized local term.  When nothing wraps (the common case for a
     compact relaxed structure) every local term is 0 and the prefix-sum is skipped."""
-    order = plan["order"]; parent = plan["parent"]; comp = plan["comp"]; ncomp = plan["n_comp"]
+    order = plan["order"]
+    parent = plan["parent"]
+    comp = plan["comp"]
+    ncomp = plan["n_comp"]
     n = len(order)
     raw = np.empty((n, 3))
     for i, k in enumerate(order):
@@ -1870,8 +2026,8 @@ def _apply_unwrap_plan(relax: dict[tuple, dict], ref: dict[tuple, dict],
     has_parent = parent >= 0
     if has_parent.any():
         K[has_parent] = -np.round((raw[has_parent] - raw[parent[has_parent]]) / box)
-        if K.any():                                   # something wraps → prefix-sum along the tree
-            for i in range(n):                        # parents precede children in discovery order
+        if K.any():  # something wraps → prefix-sum along the tree
+            for i in range(n):  # parents precede children in discovery order
                 p = parent[i]
                 if p >= 0:
                     K[i] += K[p]
@@ -1879,9 +2035,11 @@ def _apply_unwrap_plan(relax: dict[tuple, dict], ref: dict[tuple, dict],
 
     # Box-shift each component toward its reference image (mean over comp nodes present
     # in ref).  Vectorized via segment sums over the component ids.
-    psum = np.zeros((ncomp, 3)); pcnt = np.zeros(ncomp)
-    np.add.at(psum, comp, placed); np.add.at(pcnt, comp, 1.0)
-    pc = psum / pcnt[:, None]                          # placed centroid per component
+    psum = np.zeros((ncomp, 3))
+    pcnt = np.zeros(ncomp)
+    np.add.at(psum, comp, placed)
+    np.add.at(pcnt, comp, 1.0)
+    pc = psum / pcnt[:, None]  # placed centroid per component
     in_ref = np.fromiter((k in ref for k in order), dtype=bool, count=n)
     shift = np.zeros((ncomp, 3))
     if in_ref.any():
@@ -1889,10 +2047,13 @@ def _apply_unwrap_plan(relax: dict[tuple, dict], ref: dict[tuple, dict],
         for i, k in enumerate(order):
             if in_ref[i]:
                 rpos[i] = ref[k]["backbone_position"]
-        rsum = np.zeros((ncomp, 3)); rcnt = np.zeros(ncomp)
-        np.add.at(rsum, comp[in_ref], rpos[in_ref]); np.add.at(rcnt, comp[in_ref], 1.0)
+        rsum = np.zeros((ncomp, 3))
+        rcnt = np.zeros(ncomp)
+        np.add.at(rsum, comp[in_ref], rpos[in_ref])
+        np.add.at(rcnt, comp[in_ref], 1.0)
         has = rcnt > 0
-        oc = np.zeros((ncomp, 3)); oc[has] = rsum[has] / rcnt[has, None]
+        oc = np.zeros((ncomp, 3))
+        oc[has] = rsum[has] / rcnt[has, None]
         shift[has] = box * np.round((oc[has] - pc[has]) / box)
     placed = placed + shift[comp]
     return {k: placed[i] for i, k in enumerate(order)}
@@ -1900,16 +2061,16 @@ def _apply_unwrap_plan(relax: dict[tuple, dict], ref: dict[tuple, dict],
 
 def unwrap_align_to_reference(
     relax: dict[tuple, dict],
-    ref:   dict[tuple, dict],
+    ref: dict[tuple, dict],
     design: Design,
-    box:   np.ndarray,
+    box: np.ndarray,
     *,
     align_keys: Optional[list] = None,
-    rotate:     bool = True,
-    align:      bool = True,
+    rotate: bool = True,
+    align: bool = True,
     extra_points: Optional[list] = None,
-    adj:        Optional[dict] = None,
-    plan:       Optional[dict] = None,
+    adj: Optional[dict] = None,
+    plan: Optional[dict] = None,
 ):
     """In-memory core of read_configuration_unwrapped: BFS-unwrap each bonded
     component to whole, box-shift it toward its reference image, then superpose
@@ -1973,8 +2134,11 @@ def unwrap_align_to_reference(
     placed_extra: list[np.ndarray] = []
     if extra_points:
         p0 = np.asarray(extra_points[0], dtype=float)
-        placed_extra = [np.asarray(p, dtype=float) - box * np.round(
-            (np.asarray(p, dtype=float) - p0) / box) for p in extra_points]
+        placed_extra = [
+            np.asarray(p, dtype=float)
+            - box * np.round((np.asarray(p, dtype=float) - p0) / box)
+            for p in extra_points
+        ]
         if placed:
             dna_c = np.mean(list(placed.values()), axis=0)
             prot_c = np.mean(placed_extra, axis=0)
@@ -1990,7 +2154,9 @@ def unwrap_align_to_reference(
     # No-align mode: structure is whole + on-screen, but left in its own frame
     # (don't re-pose onto the design — show where it actually settled).
     if not align:
-        return _ret({k: {**relax[k], "backbone_position": placed[k]} for k in list(placed)})
+        return _ret(
+            {k: {**relax[k], "backbone_position": placed[k]} for k in list(placed)}
+        )
 
     # Superpose onto the reference frame over the chosen subset (the anchored
     # beads for a field run, else the whole assembly).
@@ -2002,21 +2168,31 @@ def unwrap_align_to_reference(
         # Translation-only: match the subset centroid to its reference (anchored
         # region = fixed POSITION) without rotating — the rest's field-induced
         # reorientation stays visible.  Orientation vectors are left untouched.
-        T = (np.mean([ref[k]["backbone_position"] for k in subset], axis=0)
-             - np.mean([placed[k] for k in subset], axis=0)) if subset else np.zeros(3)
-        return _ret({k: {**relax[k], "backbone_position": placed[k] + T} for k in keys},
-                    xform=lambda p: p + T)
+        T = (
+            (
+                np.mean([ref[k]["backbone_position"] for k in subset], axis=0)
+                - np.mean([placed[k] for k in subset], axis=0)
+            )
+            if subset
+            else np.zeros(3)
+        )
+        return _ret(
+            {k: {**relax[k], "backbone_position": placed[k] + T} for k in keys},
+            xform=lambda p: p + T,
+        )
 
     # Rigid-body superpose (Kabsch) so diffusion + tumbling are removed and only
     # the internal relaxation shows.
     if len(subset) >= 3:
-        P = np.array([placed[k] for k in subset])               # relaxed (mobile)
-        Q = np.array([ref[k]["backbone_position"] for k in subset])  # reference (target)
+        P = np.array([placed[k] for k in subset])  # relaxed (mobile)
+        Q = np.array(
+            [ref[k]["backbone_position"] for k in subset]
+        )  # reference (target)
         Pc, Qc = P.mean(0), Q.mean(0)
         H = (P - Pc).T @ (Q - Qc)
         U, _, Vt = np.linalg.svd(H)
         d = np.sign(np.linalg.det(Vt.T @ U.T))
-        R = Vt.T @ np.diag([1.0, 1.0, d]) @ U.T                  # rotation: relaxed → reference
+        R = Vt.T @ np.diag([1.0, 1.0, d]) @ U.T  # rotation: relaxed → reference
         # Apply the rotation to EVERY nucleotide's position + a1 + a3 in three batched
         # matmuls (``R @ v ≡ v @ R.T``) instead of one 3×3 matvec per nucleotide — the
         # dominant cost of the composite build on large structures.
@@ -2026,8 +2202,10 @@ def unwrap_align_to_reference(
         posR = (pos - Pc) @ R.T + Qc
         a1R = a1 @ R.T
         a3R = a3 @ R.T
-        out = {k: {"backbone_position": posR[i], "a1": a1R[i], "a3": a3R[i]}
-               for i, k in enumerate(keys)}
+        out = {
+            k: {"backbone_position": posR[i], "a1": a1R[i], "a3": a3R[i]}
+            for i, k in enumerate(keys)
+        }
         return _ret(out, xform=lambda p: R @ (p - Pc) + Qc)
 
     return _ret({k: {**relax[k], "backbone_position": placed[k]} for k in keys})
@@ -2048,10 +2226,9 @@ def _parse_trajectory_frame_lines(
     to the nucleotide order length.
     """
     offset = _protein_lead_offset(data, order, n_trailing_extra)
-    rows = data[offset:offset + len(order)]
-    extra_count = (int(n_trailing_extra)
-                   if trailing_extra_strand_length > 0 else 0)
-    parse_rows = data[offset:offset + len(order) + extra_count]
+    rows = data[offset : offset + len(order)]
+    extra_count = int(n_trailing_extra) if trailing_extra_strand_length > 0 else 0
+    parse_rows = data[offset : offset + len(order) + extra_count]
 
     # FAST PATH: a complete, well-formed frame parses in one vectorized shot — split
     # every row into a single (N, 9+) float array, then normalize a1/a3 for the whole
@@ -2066,20 +2243,28 @@ def _parse_trajectory_frame_lines(
             if ncol >= 9 and flat.size == len(parse_rows) * ncol:
                 arr = flat.reshape(len(parse_rows), ncol)
                 pos = arr[:, 0:3] * OXDNA_LENGTH_UNIT
-                a1 = arr[:, 3:6]; a3 = arr[:, 6:9]
+                a1 = arr[:, 3:6]
+                a3 = arr[:, 6:9]
                 a1n = a1 / (np.linalg.norm(a1, axis=1, keepdims=True) + 1e-14)
                 a3n = a3 / (np.linalg.norm(a3, axis=1, keepdims=True) + 1e-14)
-                parsed = {(key if copies else key[:3]):
-                          {"backbone_position": pos[i], "a1": a1n[i], "a3": a3n[i]}
-                          for i, key in enumerate(order)}
+                parsed = {
+                    (key if copies else key[:3]): {
+                        "backbone_position": pos[i],
+                        "a1": a1n[i],
+                        "a3": a3n[i],
+                    }
+                    for i, key in enumerate(order)
+                }
                 for i in range(extra_count):
                     j = len(order) + i
                     parsed[_capture_particle_key(i, trailing_extra_strand_length)] = {
-                        "backbone_position": pos[j], "a1": a1n[j], "a3": a3n[j],
+                        "backbone_position": pos[j],
+                        "a1": a1n[j],
+                        "a3": a3n[j],
                     }
                 return parsed
         except (ValueError, TypeError):
-            pass   # ragged / half-written row → fall through to the tolerant per-row path
+            pass  # ragged / half-written row → fall through to the tolerant per-row path
 
     # SLOW PATH (tolerant): a frame still being written by a live oxDNA run can leave a
     # half-flushed numeric token on the final line; parse row by row and skip any bad one.
@@ -2094,7 +2279,8 @@ def _parse_trajectory_frame_lines(
             vals = [float(x) for x in parts[:9]]
         except ValueError:
             continue
-        a1 = np.array(vals[3:6]); a3 = np.array(vals[6:9])
+        a1 = np.array(vals[3:6])
+        a3 = np.array(vals[6:9])
         m[key if copies else key[:3]] = {
             "backbone_position": np.array(vals[0:3]) * OXDNA_LENGTH_UNIT,
             "a1": a1 / (np.linalg.norm(a1) + 1e-14),
@@ -2112,7 +2298,8 @@ def _parse_trajectory_frame_lines(
                 vals = [float(x) for x in parts[:9]]
             except ValueError:
                 continue
-            a1 = np.array(vals[3:6]); a3 = np.array(vals[6:9])
+            a1 = np.array(vals[3:6])
+            a3 = np.array(vals[6:9])
             m[_capture_particle_key(i, trailing_extra_strand_length)] = {
                 "backbone_position": np.array(vals[0:3]) * OXDNA_LENGTH_UNIT,
                 "a1": a1 / (np.linalg.norm(a1) + 1e-14),
@@ -2123,9 +2310,9 @@ def _parse_trajectory_frame_lines(
 
 def read_trajectory_frames_full(
     traj_path: str | Path,
-    design:    Design,
+    design: Design,
     *,
-    copies:    bool = False,
+    copies: bool = False,
     n_trailing_extra: int = 0,
     trailing_extra_strand_length: int = 0,
 ) -> list[dict[tuple, dict]]:
@@ -2139,10 +2326,16 @@ def read_trajectory_frames_full(
     frames: list[dict] = []
     for fi, s in enumerate(starts):
         e = starts[fi + 1] if fi + 1 < len(starts) else len(lines)
-        data = [l for l in lines[s:e] if l.strip() and not l.startswith(("t ", "b ", "E "))]
+        data = [
+            l for l in lines[s:e] if l.strip() and not l.startswith(("t ", "b ", "E "))
+        ]
         m = _parse_trajectory_frame_lines(
-            data, order, copies=copies, n_trailing_extra=n_trailing_extra,
-            trailing_extra_strand_length=trailing_extra_strand_length)
+            data,
+            order,
+            copies=copies,
+            n_trailing_extra=n_trailing_extra,
+            trailing_extra_strand_length=trailing_extra_strand_length,
+        )
         if m:
             frames.append(m)
     return frames
@@ -2150,10 +2343,10 @@ def read_trajectory_frames_full(
 
 def read_trajectory_frames_at(
     traj_path: str | Path,
-    design:    Design,
+    design: Design,
     indices,
     *,
-    copies:    bool = False,
+    copies: bool = False,
     n_trailing_extra: int = 0,
     trailing_extra_strand_length: int = 0,
 ) -> dict[int, dict[tuple, dict]]:
@@ -2175,14 +2368,18 @@ def read_trajectory_frames_at(
         return out
     header_idx = -1
     cur_idx = -1
-    buf: Optional[list[str]] = None      # accumulating a wanted frame's lines, else None
+    buf: Optional[list[str]] = None  # accumulating a wanted frame's lines, else None
     with Path(traj_path).open("r", encoding="utf-8") as fh:
         for line in fh:
             if line.startswith("t "):
                 if buf is not None:
                     m = _parse_trajectory_frame_lines(
-                        buf, order, copies=copies, n_trailing_extra=n_trailing_extra,
-                        trailing_extra_strand_length=trailing_extra_strand_length)
+                        buf,
+                        order,
+                        copies=copies,
+                        n_trailing_extra=n_trailing_extra,
+                        trailing_extra_strand_length=trailing_extra_strand_length,
+                    )
                     if m:
                         out[cur_idx] = m
                     buf = None
@@ -2192,10 +2389,14 @@ def read_trajectory_frames_at(
                 continue
             if buf is not None and line.strip() and not line.startswith(("b ", "E ")):
                 buf.append(line)
-        if buf is not None:              # flush the final wanted frame (no trailing header)
+        if buf is not None:  # flush the final wanted frame (no trailing header)
             m = _parse_trajectory_frame_lines(
-                buf, order, copies=copies, n_trailing_extra=n_trailing_extra,
-                trailing_extra_strand_length=trailing_extra_strand_length)
+                buf,
+                order,
+                copies=copies,
+                n_trailing_extra=n_trailing_extra,
+                trailing_extra_strand_length=trailing_extra_strand_length,
+            )
             if m:
                 out[cur_idx] = m
     return out
@@ -2203,11 +2404,11 @@ def read_trajectory_frames_at(
 
 def read_latest_trajectory_frame_full(
     traj_path: str | Path,
-    design:    Design,
+    design: Design,
     *,
-    copies:    bool = False,
+    copies: bool = False,
     initial_tail_bytes: int = 8 * 1024 * 1024,
-    max_tail_bytes:     int = 128 * 1024 * 1024,
+    max_tail_bytes: int = 128 * 1024 * 1024,
 ) -> Optional[dict[tuple, dict]]:
     """Parse the latest complete frame of an oxDNA trajectory.
 
@@ -2230,7 +2431,8 @@ def read_latest_trajectory_frame_full(
         for idx in reversed(starts):
             e = next((j for j in starts if j > idx), len(lines))
             data = [
-                line for line in lines[idx:e]
+                line
+                for line in lines[idx:e]
                 if line.strip() and not line.startswith(("t ", "b ", "E "))
             ]
             m = _parse_trajectory_frame_lines(data, order, copies=copies)
@@ -2242,13 +2444,13 @@ def read_latest_trajectory_frame_full(
 
 
 def count_hbonds(
-    conf_path:         str | Path,
-    topology_path:     str | Path,
-    dnanalysis_bin:    str,
+    conf_path: str | Path,
+    topology_path: str | Path,
+    dnanalysis_bin: str,
     *,
     salt_concentration: float = 0.5,
-    temperature:       str = "296K",
-    timeout:           int = 60,
+    temperature: str = "296K",
+    timeout: int = 60,
 ) -> Optional[int]:
     """Count the actual Watson-Crick hydrogen bonds in *conf_path* using oxDNA's
     own ``HBList`` observable (via the ``DNAnalysis`` binary built alongside oxDNA).
@@ -2292,7 +2494,8 @@ def count_hbonds(
         # would crash text mode (and the health check).  Decode leniently.
         result = subprocess.run(
             [dnanalysis_bin, inp_path],
-            capture_output=True, timeout=timeout,
+            capture_output=True,
+            timeout=timeout,
         )
         Path(inp_path).unlink(missing_ok=True)
         stdout = result.stdout.decode("utf-8", errors="replace")
@@ -2306,10 +2509,10 @@ def count_hbonds(
 
 def write_mutual_traps(
     design: Design,
-    path:   str | Path,
+    path: str | Path,
     *,
-    stiff:  float = 1.0,
-    r0:     float = 1.2,
+    stiff: float = 1.0,
+    r0: float = 1.2,
     extra_text: str = "",
     particle_offset: int = 0,
 ) -> int:
@@ -2341,7 +2544,7 @@ def write_mutual_traps(
         # particle_offset shifts DNA indices in a hybrid topology where protein
         # beads occupy the leading particle indices (0..N_prot-1).
         i, j = fwd[key] + particle_offset, rev[key] + particle_offset
-        for a, b in ((i, j), (j, i)):   # symmetric: trap each toward the other
+        for a, b in ((i, j), (j, i)):  # symmetric: trap each toward the other
             blocks.append(
                 "{\n"
                 "type = mutual_trap\n"
@@ -2399,7 +2602,7 @@ def backbone_bond_pairs(design: Design) -> list[tuple[tuple, tuple]]:
             seq_keys = []
         key = step.key[:3]
         if seq_keys and seq_keys[-1] == key:
-            continue        # loop copy of the bp already recorded
+            continue  # loop copy of the bp already recorded
         seq_keys.append(key)
     _flush()
     return pairs
@@ -2421,12 +2624,14 @@ def max_crossover_backbone_stretch(design: Design, geometry: list[dict]) -> floa
     rmap = resolved_nuc_map(design, geometry)
     worst = 0.0
     for k1, k2 in backbone_bond_pairs(design):
-        if k1[0] == k2[0]:                       # same helix — not a crossover
+        if k1[0] == k2[0]:  # same helix — not a crossover
             continue
         g1, g2 = rmap.get(k1), rmap.get(k2)
         if g1 is None or g2 is None:
             continue
-        d = np.asarray(g1["backbone_position"], float) - np.asarray(g2["backbone_position"], float)
+        d = np.asarray(g1["backbone_position"], float) - np.asarray(
+            g2["backbone_position"], float
+        )
         worst = max(worst, float(np.linalg.norm(d)) * NM_TO_OXDNA)
     return worst
 
@@ -2467,16 +2672,18 @@ def _strand_nucleotide_provenance(design: Design) -> list[dict]:
         # strand_id, so `kind:'strand'` sweeps them in, and the `extra_base`/`extension`
         # kinds address them by their `key`. (An earlier comment here claimed no anchor
         # kind could select them; that was never true of the strand scope.)
-        prov.append({
-            "particle":     len(prov),
-            "strand_id":    step.strand.id,
-            "domain_index": step.domain_index,
-            "helix_id":     step.helix_id,
-            "bp":           step.bp,
-            "direction":    step.direction,
-            "overhang_id":  step.overhang_id,
-            "key":          step.key,
-        })
+        prov.append(
+            {
+                "particle": len(prov),
+                "strand_id": step.strand.id,
+                "domain_index": step.domain_index,
+                "helix_id": step.helix_id,
+                "bp": step.bp,
+                "direction": step.direction,
+                "overhang_id": step.overhang_id,
+                "key": step.key,
+            }
+        )
     return prov
 
 
@@ -2561,8 +2768,11 @@ def resolve_anchor_particles(
             if hid is None or bp is None or direction is None:
                 continue
             for p in prov:
-                if (p["helix_id"] == hid and p["bp"] == bp
-                        and p["direction"] == direction):
+                if (
+                    p["helix_id"] == hid
+                    and p["bp"] == bp
+                    and p["direction"] == direction
+                ):
                     selected[p["particle"]] = p["key"]
         elif kind == "extra_base":
             xo_id = a.get("crossover_id", a.get("crossoverId"))
@@ -2571,8 +2781,12 @@ def resolve_anchor_particles(
                 continue
             for p in prov:
                 key = p["key"]
-                if (len(key) >= 3 and key[0] == _XB_SENTINEL and key[1] == xo_id
-                        and (k is None or key[2] == k)):
+                if (
+                    len(key) >= 3
+                    and key[0] == _XB_SENTINEL
+                    and key[1] == xo_id
+                    and (k is None or key[2] == k)
+                ):
                     selected[p["particle"]] = key
         elif kind == "extension":
             ext_id = a.get("extension_id", a.get("extensionId"))
@@ -2584,8 +2798,7 @@ def resolve_anchor_particles(
                 key = p["key"]
                 # Direction is part of the key but is fixed per extension, so it is not
                 # required of the caller — id + bead index already name the bead.
-                if (len(key) >= 2 and key[0] == want
-                        and (k is None or key[1] == k)):
+                if len(key) >= 2 and key[0] == want and (k is None or key[1] == k):
                     selected[p["particle"]] = key
     parts = sorted(selected)
     return parts, [selected[i] for i in parts]
@@ -2606,7 +2819,9 @@ def read_cm_positions_oxdna(conf_path: str | Path) -> list[list[float]]:
     return out
 
 
-def field_string_block(field_oxdna: float, field_dir, *, n_particles: int | None = None) -> str:
+def field_string_block(
+    field_oxdna: float, field_dir, *, n_particles: int | None = None
+) -> str:
     """An oxDNA ``string`` force (constant ``field_oxdna`` along ``field_dir``).
     A uniform electric field acts equally on each (uniformly-charged) backbone bead.
 
@@ -2628,27 +2843,31 @@ def field_string_block(field_oxdna: float, field_dir, *, n_particles: int | None
         particle = "-1"
     else:
         particle = ",".join(str(i) for i in range(int(n_particles)))
-    return ("{\n"
-            "type = string\n"
-            f"particle = {particle}\n"
-            f"F0 = {field_oxdna:.6g}\n"
-            "rate = 0\n"
-            f"dir = {dx:.6g},{dy:.6g},{dz:.6g}\n"
-            "}\n")
+    return (
+        "{\n"
+        "type = string\n"
+        f"particle = {particle}\n"
+        f"F0 = {field_oxdna:.6g}\n"
+        "rate = 0\n"
+        f"dir = {dx:.6g},{dy:.6g},{dz:.6g}\n"
+        "}\n"
+    )
 
 
 def anchor_trap_block(particle: int, pos0, stiff: float) -> str:
     """A static harmonic ``trap`` pinning ``particle`` to ``pos0`` (oxDNA units).
     ``rate = 0`` → the trap does not move; ``dir`` is the (unused) move direction."""
     x, y, z = float(pos0[0]), float(pos0[1]), float(pos0[2])
-    return ("{\n"
-            "type = trap\n"
-            f"particle = {particle}\n"
-            f"pos0 = {x:.6g},{y:.6g},{z:.6g}\n"
-            f"stiff = {stiff:.6g}\n"
-            "rate = 0\n"
-            "dir = 1,0,0\n"
-            "}\n")
+    return (
+        "{\n"
+        "type = trap\n"
+        f"particle = {particle}\n"
+        f"pos0 = {x:.6g},{y:.6g},{z:.6g}\n"
+        f"stiff = {stiff:.6g}\n"
+        "rate = 0\n"
+        "dir = 1,0,0\n"
+        "}\n"
+    )
 
 
 def write_field_forces(
@@ -2673,7 +2892,9 @@ def write_field_forces(
     still written (just the ``string`` block, no traps).
 
     Returns ``{n_anchored, n_total, field_oxdna, dir, anchor_particles}``."""
-    particles, anchor_keys = resolve_anchor_particles(design, anchors) if anchors else ([], [])
+    particles, anchor_keys = (
+        resolve_anchor_particles(design, anchors) if anchors else ([], [])
+    )
     cm = read_cm_positions_oxdna(conf_path)
     n_total = len(cm)
     blocks: list[str] = [field_string_block(field_oxdna, field_dir)]
@@ -2702,13 +2923,15 @@ def repulsion_plane_block(stiff: float, plane_dir, position: float) -> str:
     it back; zero force on the allowed side.  ``particle = -1`` applies it to every
     nucleotide, so the whole structure rests on the surface."""
     dx, dy, dz = _normalize3(plane_dir)
-    return ("{\n"
-            "type = repulsion_plane\n"
-            "particle = -1\n"
-            f"stiff = {float(stiff):.6g}\n"
-            f"dir = {dx:.6g},{dy:.6g},{dz:.6g}\n"
-            f"position = {float(position):.6g}\n"
-            "}\n")
+    return (
+        "{\n"
+        "type = repulsion_plane\n"
+        "particle = -1\n"
+        f"stiff = {float(stiff):.6g}\n"
+        f"dir = {dx:.6g},{dy:.6g},{dz:.6g}\n"
+        f"position = {float(position):.6g}\n"
+        "}\n"
+    )
 
 
 def wall_position_from_extent(cm_positions, wall_dir, offset_oxdna: float = 0.0):
@@ -2770,7 +2993,8 @@ def write_run_forces(
     Returns ``{n_anchored, n_total, anchor_particles, anchor_keys, field, wall,
     has_forces}`` (``field``/``wall`` are the resolved meta dicts, or None)."""
     sa_text, info = surface_anchor_forces_text(
-        design, conf_path, wall=wall, anchors=anchors, anchor_stiff=anchor_stiff)
+        design, conf_path, wall=wall, anchors=anchors, anchor_stiff=anchor_stiff
+    )
 
     field_text = ""
     field_meta = None
@@ -2783,11 +3007,16 @@ def write_run_forces(
             exclude = int(field_exclude_trailing or 0)
             if 0 < exclude < info["n_total"]:
                 n_field = info["n_total"] - exclude
-            field_text = field_string_block(f_oxdna, field.get("dir"), n_particles=n_field)
-            field_meta = {"force_oxdna": f_oxdna, "dir": _normalize3(field.get("dir")),
-                          "particle_count": n_field}
+            field_text = field_string_block(
+                f_oxdna, field.get("dir"), n_particles=n_field
+            )
+            field_meta = {
+                "force_oxdna": f_oxdna,
+                "dir": _normalize3(field.get("dir")),
+                "particle_count": n_field,
+            }
 
-    parts = [t for t in (field_text, sa_text) if t]   # field first, then wall + anchors
+    parts = [t for t in (field_text, sa_text) if t]  # field first, then wall + anchors
     Path(path).write_text("\n".join(parts), encoding="utf-8")
     return {**info, "field": field_meta, "has_forces": bool(parts)}
 
@@ -2825,15 +3054,24 @@ def surface_anchor_forces_text(
             absolute_nm = wall.get("position_nm")
             if absolute_nm is not None:
                 position = wall_position_from_absolute(wall.get("dir"), absolute_nm)
-                min_proj = min((sum(p[i] * _normalize3(wall.get("dir"))[i]
-                                    for i in range(3)) for p in cm), default=0.0)
+                min_proj = min(
+                    (
+                        sum(p[i] * _normalize3(wall.get("dir"))[i] for i in range(3))
+                        for p in cm
+                    ),
+                    default=0.0,
+                )
             else:
                 position, min_proj = wall_position_from_extent(
-                    cm, wall.get("dir"), offset_nm * NM_TO_OXDNA)
+                    cm, wall.get("dir"), offset_nm * NM_TO_OXDNA
+                )
             blocks.append(repulsion_plane_block(stiff, wall.get("dir"), position))
             wall_meta = {
-                "dir": _normalize3(wall.get("dir")), "stiff": stiff,
-                "offset_nm": offset_nm, "position": position, "min_proj": min_proj,
+                "dir": _normalize3(wall.get("dir")),
+                "stiff": stiff,
+                "offset_nm": offset_nm,
+                "position": position,
+                "min_proj": min_proj,
                 "position_nm": float(absolute_nm) if absolute_nm is not None else None,
             }
 
@@ -2855,8 +3093,8 @@ def surface_anchor_forces_text(
 
 def run_oxdna(
     input_path: str | Path,
-    oxdna_bin:  str = "oxDNA",
-    timeout:    int = 300,
+    oxdna_bin: str = "oxDNA",
+    timeout: int = 300,
 ) -> Optional[int]:
     """
     Run oxDNA minimisation/simulation.
@@ -2889,10 +3127,10 @@ def run_oxdna(
 
 
 def write_oxdna_input(
-    topology_path:    str | Path,
+    topology_path: str | Path,
     configuration_path: str | Path,
-    output_path:      str | Path,
-    steps:            int = 10_000,
+    output_path: str | Path,
+    steps: int = 10_000,
     relaxation_steps: int = 1000,  # kept for API compatibility, unused by MIN
 ) -> None:
     """

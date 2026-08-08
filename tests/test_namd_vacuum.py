@@ -42,6 +42,7 @@ from tests.conftest import make_6hb_design
 
 # ── The vacuum conf shape ─────────────────────────────────────────────────────
 
+
 def test_vacuum_header_has_no_pme_and_no_periodic_cell():
     h = _common_header("x", (0.0, 0.0, 0.0), False, vacuum=True)
     assert "PME                no" in h
@@ -53,8 +54,17 @@ def test_vacuum_header_has_no_pme_and_no_periodic_cell():
 def test_vacuum_segment_has_no_barostat_even_when_npt_is_requested():
     """A piston on an empty cell compresses it onto the solute — the carved-box
     failure mode.  Vacuum must override npt unconditionally."""
-    spec = SegmentSpec(name="s", stage="v", percent=100.0, steps=100, temp=295.0,
-                       damping=0.1, scale=0.5, npt=True, previous="m")
+    spec = SegmentSpec(
+        name="s",
+        stage="v",
+        percent=100.0,
+        steps=100,
+        temp=295.0,
+        damping=0.1,
+        scale=0.5,
+        npt=True,
+        previous="m",
+    )
     conf = _segment_conf(spec, "x", (0.0, 0.0, 0.0), False, vacuum=True)
     assert "langevinPiston     off" in conf
     assert "langevinPistonPeriod" not in conf
@@ -62,23 +72,44 @@ def test_vacuum_segment_has_no_barostat_even_when_npt_is_requested():
 
 def test_vacuum_never_runs_gpu_resident():
     """GPUresident sizes its tile buffers from cell-average density; there is no cell."""
-    spec = SegmentSpec(name="s", stage="v", percent=100.0, steps=100, temp=295.0,
-                       damping=0.1, scale=0.5, npt=False, previous="m")
-    conf = _segment_conf(spec, "x", (0.0, 0.0, 0.0), False, vacuum=True,
-                         fast=True, n_atoms=10_000_000)
+    spec = SegmentSpec(
+        name="s",
+        stage="v",
+        percent=100.0,
+        steps=100,
+        temp=295.0,
+        damping=0.1,
+        scale=0.5,
+        npt=False,
+        previous="m",
+    )
+    conf = _segment_conf(
+        spec, "x", (0.0, 0.0, 0.0), False, vacuum=True, fast=True, n_atoms=10_000_000
+    )
     assert "GPUresident" not in conf
 
 
 def test_push_bonds_file_is_wired_as_an_extra_bonds_file():
-    spec = SegmentSpec(name="s", stage="v", percent=100.0, steps=100, temp=295.0,
-                       damping=0.1, scale=0.5, npt=False, previous="m")
-    conf = _segment_conf(spec, "x", (0.0, 0.0, 0.0), False, vacuum=True,
-                         push_bonds_file="x_push.exb")
+    spec = SegmentSpec(
+        name="s",
+        stage="v",
+        percent=100.0,
+        steps=100,
+        temp=295.0,
+        damping=0.1,
+        scale=0.5,
+        npt=False,
+        previous="m",
+    )
+    conf = _segment_conf(
+        spec, "x", (0.0, 0.0, 0.0), False, vacuum=True, push_bonds_file="x_push.exb"
+    )
     assert "extraBonds         on" in conf
     assert "extraBondsFile     x_push.exb" in conf
 
 
 # ── Step counts ───────────────────────────────────────────────────────────────
+
 
 def test_vacuum_steps_are_half_a_nanosecond_and_cycle_aligned():
     """exp48: plateau at 0.03-0.64 ns across 2hb/6hb/24hb, so 0.5 ns is ample.  The
@@ -91,22 +122,43 @@ def test_vacuum_steps_are_half_a_nanosecond_and_cycle_aligned():
 def test_minimisation_scales_with_atom_count():
     """Tutorial Note 2 blames RATTLE failures on under-minimisation; exp48 measured a
     224k-atom build detonating ~130k steps in after a fixed 4800."""
-    assert minimize_steps_for_atoms(3_043) == MIN_STEPS_FLOOR      # floor holds
-    assert minimize_steps_for_atoms(224_261) > 22_000              # ~1 step per 10 atoms
+    assert minimize_steps_for_atoms(3_043) == MIN_STEPS_FLOOR  # floor holds
+    assert minimize_steps_for_atoms(224_261) > 22_000  # ~1 step per 10 atoms
     assert minimize_steps_for_atoms(224_261) % AKSIMENTIEV_STEPS_PER_CYCLE == 0
 
 
 def test_effective_timestep_matches_what_the_conf_will_use():
-    soft = SegmentSpec(name="s", stage="v", percent=100.0, steps=1, temp=300.0,
-                       damping=5.0, scale=None, npt=False, previous="", soft=True)
-    hard = SegmentSpec(name="s", stage="v", percent=100.0, steps=1, temp=300.0,
-                       damping=5.0, scale=None, npt=False, previous="", soft=False)
+    soft = SegmentSpec(
+        name="s",
+        stage="v",
+        percent=100.0,
+        steps=1,
+        temp=300.0,
+        damping=5.0,
+        scale=None,
+        npt=False,
+        previous="",
+        soft=True,
+    )
+    hard = SegmentSpec(
+        name="s",
+        stage="v",
+        percent=100.0,
+        steps=1,
+        temp=300.0,
+        damping=5.0,
+        scale=None,
+        npt=False,
+        previous="",
+        soft=False,
+    )
     assert effective_timestep_fs(soft, fast=True) == 1.0
     assert effective_timestep_fs(hard, fast=True) == 4.0
     assert effective_timestep_fs(hard, fast=False) == 2.0
 
 
 # ── A real package ────────────────────────────────────────────────────────────
+
 
 def test_builds_a_dry_package_for_a_6hb(tmp_path: Path):
     design = make_6hb_design(length_bp=42)
@@ -164,6 +216,7 @@ def test_helix_count_drives_the_skip_prompt_threshold():
 
 # ── The hand-off to solvation ─────────────────────────────────────────────────
 
+
 def test_the_prestage_never_runs():
     """RETIRED 2026-07-30.  NADOC geometry is derived from topology + B-DNA constants +
     deformations, so a design never arrives as an abstract parallel-helix lattice the way
@@ -180,10 +233,16 @@ def test_the_prestage_never_runs():
 
     design = object()
     assert _wants_vacuum_prestage(CreateJobRequest(), design) is False
-    for update in ({"skip_vacuum_prestage": False}, {"relax_preset": "standard"},
-                   {"relax_preset": "fast_shape"}, {"protocol": "equilibrium_aware_namd"}):
-        assert _wants_vacuum_prestage(
-            CreateJobRequest().model_copy(update=update), design) is False
+    for update in (
+        {"skip_vacuum_prestage": False},
+        {"relax_preset": "standard"},
+        {"relax_preset": "fast_shape"},
+        {"protocol": "equilibrium_aware_namd"},
+    ):
+        assert (
+            _wants_vacuum_prestage(CreateJobRequest().model_copy(update=update), design)
+            is False
+        )
 
 
 def test_the_retired_preset_is_not_offered():
@@ -206,7 +265,8 @@ def test_seed_refuses_an_atom_count_mismatch(tmp_path: Path, monkeypatch):
     (pkg / "output").mkdir(parents=True)
     (pkg / "x.psf").write_text("PSF\n")
     (pkg / "x.pdb").write_text(
-        "ATOM      1  P   DA  A   1       0.000   0.000   0.000\n" * 5)
+        "ATOM      1  P   DA  A   1       0.000   0.000   0.000\n" * 5
+    )
     (pkg / "manifest.json").write_text(json.dumps({"segments": [{"name": "seg"}]}))
     (pkg / "output" / "seg.coor").write_bytes(b"\x00")
 
@@ -217,7 +277,7 @@ def test_seed_refuses_an_atom_count_mismatch(tmp_path: Path, monkeypatch):
             return pkg
 
     class _Atoms:
-        positions = np.zeros((3, 3))       # 3 atoms vs the PDB's 5
+        positions = np.zeros((3, 3))  # 3 atoms vs the PDB's 5
 
     class _U:
         atoms = _Atoms()
@@ -226,8 +286,10 @@ def test_seed_refuses_an_atom_count_mismatch(tmp_path: Path, monkeypatch):
             pass
 
     import backend.core.md_job as md_job
+
     monkeypatch.setattr(md_job.MdJob, "load", classmethod(lambda cls, j, w: _Job()))
     import MDAnalysis
+
     monkeypatch.setattr(MDAnalysis, "Universe", _U)
 
     with pytest.raises(RuntimeError, match="atom-count mismatch"):

@@ -27,6 +27,7 @@ def _clear_cache():
 
 # ── LRU get/set/clear ─────────────────────────────────────────────────────────
 
+
 def test_get_miss_returns_none():
     assert ageo.geo_cache_get("nope") is None
 
@@ -47,7 +48,9 @@ def test_lru_evicts_oldest_past_max():
     for i in range(ageo._GEO_CACHE_MAX + 3):
         ageo.geo_cache_set(f"k{i}", {"i": i})
     assert ageo.geo_cache_get("k0") is None
-    assert ageo.geo_cache_get(f"k{ageo._GEO_CACHE_MAX + 2}") == {"i": ageo._GEO_CACHE_MAX + 2}
+    assert ageo.geo_cache_get(f"k{ageo._GEO_CACHE_MAX + 2}") == {
+        "i": ageo._GEO_CACHE_MAX + 2
+    }
     # exactly _GEO_CACHE_MAX entries retained
     assert len(ageo._GEO_CACHE) == ageo._GEO_CACHE_MAX
 
@@ -57,8 +60,10 @@ def test_get_refreshes_recency_so_it_survives_eviction():
     # Touch "keep" via get, then flood the rest of capacity with fresh keys.
     for i in range(ageo._GEO_CACHE_MAX - 1):
         ageo.geo_cache_set(f"f{i}", {"i": i})
-    ageo.geo_cache_get("keep")               # move "keep" to most-recent
-    ageo.geo_cache_set("overflow", {"o": 1})  # evicts the oldest, which is now f0 not keep
+    ageo.geo_cache_get("keep")  # move "keep" to most-recent
+    ageo.geo_cache_set(
+        "overflow", {"o": 1}
+    )  # evicts the oldest, which is now f0 not keep
     assert ageo.geo_cache_get("keep") == {"x": 0}
     assert ageo.geo_cache_get("f0") is None
 
@@ -71,6 +76,7 @@ def test_set_existing_key_updates_value_not_size():
 
 
 # ── cache-key compute ─────────────────────────────────────────────────────────
+
 
 def _inst(source, overrides=None):
     return PartInstance(source=source, cluster_transform_overrides=overrides or [])
@@ -92,8 +98,8 @@ def test_key_inline_changes_with_overrides():
         _inst(PartSourceInline(design=d), [ClusterRigidTransform(id="c1")]), None
     )
     assert bare != with_ov
-    assert bare.endswith(":")          # empty override hash
-    assert not with_ov.endswith(":")   # non-empty override hash
+    assert bare.endswith(":")  # empty override hash
+    assert not with_ov.endswith(":")  # non-empty override hash
 
 
 def test_key_file_source_resolves_against_workspace(tmp_path):
@@ -127,6 +133,7 @@ def test_key_file_mtime_changes_invalidate(tmp_path):
     k1 = ageo.geo_cache_key(inst, tmp_path)
     # bump mtime explicitly (st_mtime_ns is the cache's freshness signal)
     import os
+
     st = part.stat()
     os.utime(part, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000))
     k2 = ageo.geo_cache_key(inst, tmp_path)
@@ -134,6 +141,7 @@ def test_key_file_mtime_changes_invalidate(tmp_path):
 
 
 # ── override merge ────────────────────────────────────────────────────────────
+
 
 def test_merge_no_overrides_returns_same_object():
     d = Design(id="d", cluster_transforms=[ClusterRigidTransform(id="c1")])

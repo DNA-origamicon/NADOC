@@ -32,7 +32,12 @@ from backend.core.junction_topology import (
 )
 from backend.core.lattice import make_bundle_design
 from backend.core.models import (
-    Crossover, Direction, Domain, HalfCrossover, Strand, StrandType,
+    Crossover,
+    Direction,
+    Domain,
+    HalfCrossover,
+    Strand,
+    StrandType,
 )
 
 
@@ -49,7 +54,9 @@ _CATENATING_BP = 16
 _PHASE_SWEEP = range(8, 19)
 
 
-def _reciprocal_design(extra_bases: str | None, bp: int = _CATENATING_BP, length_bp: int = 28):
+def _reciprocal_design(
+    extra_bases: str | None, bp: int = _CATENATING_BP, length_bp: int = 28
+):
     """Two helices joined by a reciprocal (antiparallel) crossover pair.
 
     Mirrors the real ``2hb_1xT`` topology that exposed the bug: two staples crossing at
@@ -64,8 +71,12 @@ def _reciprocal_design(extra_bases: str | None, bp: int = _CATENATING_BP, length
         id="stpl_a",
         strand_type=StrandType.STAPLE,
         domains=[
-            Domain(helix_id=h0, start_bp=bp - 7, end_bp=bp, direction=Direction.FORWARD),
-            Domain(helix_id=h1, start_bp=bp, end_bp=bp - 7, direction=Direction.REVERSE),
+            Domain(
+                helix_id=h0, start_bp=bp - 7, end_bp=bp, direction=Direction.FORWARD
+            ),
+            Domain(
+                helix_id=h1, start_bp=bp, end_bp=bp - 7, direction=Direction.REVERSE
+            ),
         ],
     )
     # 3' exit on h1 at `bp + 1` — the reciprocal partner
@@ -73,8 +84,12 @@ def _reciprocal_design(extra_bases: str | None, bp: int = _CATENATING_BP, length
         id="stpl_b",
         strand_type=StrandType.STAPLE,
         domains=[
-            Domain(helix_id=h1, start_bp=bp + 8, end_bp=bp + 1, direction=Direction.REVERSE),
-            Domain(helix_id=h0, start_bp=bp + 1, end_bp=bp + 8, direction=Direction.FORWARD),
+            Domain(
+                helix_id=h1, start_bp=bp + 8, end_bp=bp + 1, direction=Direction.REVERSE
+            ),
+            Domain(
+                helix_id=h0, start_bp=bp + 1, end_bp=bp + 8, direction=Direction.FORWARD
+            ),
         ],
     )
     xo_a = Crossover(
@@ -89,8 +104,9 @@ def _reciprocal_design(extra_bases: str | None, bp: int = _CATENATING_BP, length
         half_b=HalfCrossover(helix_id=h1, index=bp + 1, strand=Direction.REVERSE),
         extra_bases=extra_bases,
     )
-    return base.model_copy(update={"strands": [stpl_a, stpl_b],
-                                   "crossovers": [xo_a, xo_b]})
+    return base.model_copy(
+        update={"strands": [stpl_a, stpl_b], "crossovers": [xo_a, xo_b]}
+    )
 
 
 @contextlib.contextmanager
@@ -131,20 +147,22 @@ def _circle(n=60, radius=1.0, centre=(0.0, 0.0, 0.0), plane="xy"):
 
 def test_hopf_link_has_unit_linking_number():
     a = _circle(plane="xy")
-    b = _circle(centre=(1.0, 0.0, 0.0), plane="xz")   # threaded through a
+    b = _circle(centre=(1.0, 0.0, 0.0), plane="xz")  # threaded through a
     assert abs(abs(gauss_linking_number(a, b)) - 1.0) < 1e-3
 
 
 def test_separated_circles_are_unlinked():
     a = _circle(plane="xy")
-    b = _circle(centre=(5.0, 0.0, 0.0), plane="xz")   # far away
+    b = _circle(centre=(5.0, 0.0, 0.0), plane="xz")  # far away
     assert abs(gauss_linking_number(a, b)) < 1e-3
 
 
 def test_linking_number_is_symmetric():
     a = _circle(plane="xy")
     b = _circle(centre=(1.0, 0.0, 0.0), plane="xz")
-    assert gauss_linking_number(a, b) == pytest.approx(gauss_linking_number(b, a), abs=1e-6)
+    assert gauss_linking_number(a, b) == pytest.approx(
+        gauss_linking_number(b, a), abs=1e-6
+    )
 
 
 def test_coplanar_nested_circles_are_unlinked():
@@ -176,12 +194,26 @@ def test_parallel_crossovers_are_not_reciprocal():
     base = make_bundle_design(cells=[(0, 0), (0, 1)], length_bp=21, plane="XY")
     h0, h1 = base.helices[0].id, base.helices[1].id
     strands = [
-        Strand(id="s1", strand_type=StrandType.STAPLE, domains=[
-            Domain(helix_id=h0, start_bp=3, end_bp=10, direction=Direction.FORWARD),
-            Domain(helix_id=h1, start_bp=10, end_bp=17, direction=Direction.FORWARD)]),
-        Strand(id="s2", strand_type=StrandType.STAPLE, domains=[
-            Domain(helix_id=h0, start_bp=0, end_bp=11, direction=Direction.FORWARD),
-            Domain(helix_id=h1, start_bp=11, end_bp=18, direction=Direction.FORWARD)]),
+        Strand(
+            id="s1",
+            strand_type=StrandType.STAPLE,
+            domains=[
+                Domain(helix_id=h0, start_bp=3, end_bp=10, direction=Direction.FORWARD),
+                Domain(
+                    helix_id=h1, start_bp=10, end_bp=17, direction=Direction.FORWARD
+                ),
+            ],
+        ),
+        Strand(
+            id="s2",
+            strand_type=StrandType.STAPLE,
+            domains=[
+                Domain(helix_id=h0, start_bp=0, end_bp=11, direction=Direction.FORWARD),
+                Domain(
+                    helix_id=h1, start_bp=11, end_bp=18, direction=Direction.FORWARD
+                ),
+            ],
+        ),
     ]
     conns = crossover_connectors(base.model_copy(update={"strands": strands}))
     assert len(conns) == 2
@@ -221,7 +253,7 @@ def test_junction_without_inserts_is_clean():
     report = catenation_report(_reciprocal_design(None))
     assert report["ok"] is True
     assert report["n_catenated"] == 0
-    assert report["n_reciprocal_pairs"] == 1   # the pair exists, it is just not linked
+    assert report["n_reciprocal_pairs"] == 1  # the pair exists, it is just not linked
 
 
 @pytest.mark.slow
@@ -235,8 +267,11 @@ def test_no_inserts_is_clean_at_every_helical_phase():
     This is the baseline the extra-base placement has to match: the plain
     phosphate bridge never catenates, at any phase.
     """
-    linked = [bp for bp in _PHASE_SWEEP
-              if catenation_report(_reciprocal_design(None, bp=bp))["n_catenated"]]
+    linked = [
+        bp
+        for bp in _PHASE_SWEEP
+        if catenation_report(_reciprocal_design(None, bp=bp))["n_catenated"]
+    ]
     assert linked == []
 
 
@@ -255,11 +290,10 @@ def test_a_catenating_phase_cannot_reach_a_seed(extra, bp):
     design = _reciprocal_design(extra, bp=bp)
     report = catenation_report(design)
     if report["n_catenated"] == 0:
-        gate_seed_topology(design)          # clean → builds without raising
+        gate_seed_topology(design)  # clean → builds without raising
     else:
         with pytest.raises(CatenatedJunctionError):
             gate_seed_topology(design)
-
 
 
 def test_positions_override_matches_model_coordinates():
@@ -273,7 +307,8 @@ def test_positions_override_matches_model_coordinates():
     from_positions = catenation_report(design, model=model, positions=pos)
     assert from_model["n_catenated"] == from_positions["n_catenated"]
     assert from_model["catenated"][0]["lk"] == pytest.approx(
-        from_positions["catenated"][0]["lk"], abs=1e-9)
+        from_positions["catenated"][0]["lk"], abs=1e-9
+    )
 
 
 def test_positions_with_wrong_atom_count_is_rejected():
@@ -291,8 +326,12 @@ def test_translating_the_whole_design_does_not_change_linking():
     pos = np.array([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
 
     base = catenation_report(design, model=model, positions=pos)
-    moved = catenation_report(design, model=model, positions=pos + np.array([13.0, -7.0, 2.5]))
-    assert base["catenated"][0]["lk"] == pytest.approx(moved["catenated"][0]["lk"], abs=1e-6)
+    moved = catenation_report(
+        design, model=model, positions=pos + np.array([13.0, -7.0, 2.5])
+    )
+    assert base["catenated"][0]["lk"] == pytest.approx(
+        moved["catenated"][0]["lk"], abs=1e-6
+    )
 
 
 # ── Trajectory frames: the closed Lk is not trustworthy, the open integral is ──
@@ -301,17 +340,31 @@ def test_translating_the_whole_design_does_not_change_linking():
 def _threaded_arcs(sep=1.0, noise=0.0, seed=0):
     """Two open arcs threaded through one another, as PDB-row connectors + coords."""
     rng = np.random.default_rng(seed)
-    t = np.linspace(0.0, 2.0 * np.pi * 0.85, 24)      # open, not closed
+    t = np.linspace(0.0, 2.0 * np.pi * 0.85, 24)  # open, not closed
     a = np.stack([np.cos(t), np.sin(t), 0.05 * t], axis=1)
     b = np.stack([sep + np.cos(t), 0.05 * t, np.sin(t)], axis=1)
     coords = np.vstack([a, b])
     if noise:
         coords = coords + rng.normal(0.0, noise, coords.shape)
     connectors = [
-        {"segid": "D000", "from_helix": "h0", "to_helix": "h1", "from_bp": 13,
-         "to_bp": 13, "n_inserts": 1, "rows": list(range(len(a)))},
-        {"segid": "D001", "from_helix": "h1", "to_helix": "h0", "from_bp": 14,
-         "to_bp": 14, "n_inserts": 1, "rows": list(range(len(a), len(coords)))},
+        {
+            "segid": "D000",
+            "from_helix": "h0",
+            "to_helix": "h1",
+            "from_bp": 13,
+            "to_bp": 13,
+            "n_inserts": 1,
+            "rows": list(range(len(a))),
+        },
+        {
+            "segid": "D001",
+            "from_helix": "h1",
+            "to_helix": "h0",
+            "from_bp": 14,
+            "to_bp": 14,
+            "n_inserts": 1,
+            "rows": list(range(len(a), len(coords))),
+        },
     ]
     return connectors, coords
 
@@ -322,7 +375,7 @@ def test_frame_report_exposes_the_open_gauss_integral():
     conns, xyz = _threaded_arcs()
     rep = catenation_in_frame(conns, xyz, proximity_ang=25.0)
     assert rep["gauss_open"], "the frame report must expose g_open per pair"
-    assert rep["n_changed"] == 0            # no reference supplied yet
+    assert rep["n_changed"] == 0  # no reference supplied yet
 
 
 def test_thermal_noise_does_not_register_as_a_topology_change():
@@ -352,7 +405,7 @@ def test_pulling_the_arcs_apart_does_register_as_a_change():
     conns, linked = _threaded_arcs(sep=1.0)
     reference = catenation_in_frame(conns, linked)["gauss_open"]
 
-    _, unlinked = _threaded_arcs(sep=6.0)      # no longer threaded
+    _, unlinked = _threaded_arcs(sep=6.0)  # no longer threaded
     rep = catenation_in_frame(conns, unlinked, reference=reference)
     key = next(iter(reference))
     assert abs(rep["gauss_open"][key] - reference[key]) >= 0.5
@@ -386,7 +439,7 @@ def test_catenated_rows_carry_integer_lk_and_residual():
     with _repair_disabled():
         hit = catenation_report(_reciprocal_design("T"))["catenated"][0]
     assert hit["lk_int"] in (-1, 1)
-    assert hit["lk_residual"] < 0.15   # a well-conditioned closure
+    assert hit["lk_residual"] < 0.15  # a well-conditioned closure
 
 
 def test_gate_skips_the_build_for_a_design_with_no_inserts():
@@ -440,4 +493,5 @@ def _positions(design):
 def _audit(design):
     """The project's calibrated geometry oracle (excludes bonded pairs)."""
     from backend.core.atomistic_validation import audit_bonds
+
     return audit_bonds(design)

@@ -21,6 +21,7 @@ os.environ["NADOC_GEAR_DEBUG"] = "0"
 def pytest_approx(expected, abs_tol=1e-6):
     return pytest.approx(expected, abs=abs_tol)
 
+
 from backend.core.assembly_kinematics import (  # noqa: E402
     _apply_revolute_joint,
     _derive_revolute_angle,
@@ -49,7 +50,10 @@ from backend.core.models import (  # noqa: E402
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
-def _inst(iid: str, *, fixed: bool = False, tx: float = 0.0, base: bool = True) -> PartInstance:
+
+def _inst(
+    iid: str, *, fixed: bool = False, tx: float = 0.0, base: bool = True
+) -> PartInstance:
     """A minimal PartInstance translated to (tx,0,0); base_transform = transform."""
     t = np.eye(4)
     t[0, 3] = tx
@@ -72,6 +76,7 @@ def _zrot(angle: float) -> np.ndarray:
 
 
 # ── _apply_revolute_joint ──────────────────────────────────────────────────────
+
 
 def test_apply_revolute_joint_moves_offset_body_about_axis():
     base = np.eye(4)
@@ -96,6 +101,7 @@ def test_apply_revolute_joint_degenerate_axis_returns_base_unchanged():
 
 # ── _derive_revolute_angle (inverse of _apply_revolute_joint) ──────────────────
 
+
 def test_derive_revolute_angle_recovers_applied_angle():
     base = np.eye(4)
     base[:3, 3] = [1.0, 0.0, 0.0]
@@ -119,13 +125,18 @@ def test_derive_revolute_angle_zero_for_no_motion():
 
 # ── _sync_revolute_values_for_instances ────────────────────────────────────────
 
+
 def test_sync_revolute_values_derives_current_value_from_transform():
     inst = _inst("ib", tx=1.0)
     # Pose the instance as if rotated +60° about Z from its base.
     inst.transform = Mat4x4.from_array(
-        _apply_revolute_joint(inst.base_transform.to_array(), [0, 0, 0], [0, 0, 1], math.pi / 3)
+        _apply_revolute_joint(
+            inst.base_transform.to_array(), [0, 0, 0], [0, 0, 1], math.pi / 3
+        )
     )
-    j = AssemblyJoint(id="j", instance_b_id="ib", axis_origin=[0, 0, 0], axis_direction=[0, 0, 1])
+    j = AssemblyJoint(
+        id="j", instance_b_id="ib", axis_origin=[0, 0, 0], axis_direction=[0, 0, 1]
+    )
     asm = Assembly(instances=[inst], joints=[j])
     changed = _sync_revolute_values_for_instances(asm, {"ib"})
     assert changed == ["j"]
@@ -146,7 +157,8 @@ def test_sync_revolute_values_ignores_unlisted_and_nonrevolute():
 
 def test_sync_revolute_values_uses_base_transform_override():
     inst = _inst("ib", tx=1.0, base=False)  # base_transform cleared (group-move case)
-    base = np.eye(4); base[:3, 3] = [1.0, 0.0, 0.0]
+    base = np.eye(4)
+    base[:3, 3] = [1.0, 0.0, 0.0]
     inst.transform = Mat4x4.from_array(
         _apply_revolute_joint(base, [0, 0, 0], [0, 0, 1], 0.25)
     )
@@ -163,12 +175,20 @@ def test_sync_revolute_values_uses_base_transform_override():
 
 # ── _sync_revolute_values_for_parent_moves ─────────────────────────────────────
 
+
 def test_sync_parent_move_decrements_child_value_by_delta():
     parent, child = _inst("parent"), _inst("child")
-    j = AssemblyJoint(id="j", instance_a_id="parent", instance_b_id="child",
-                      axis_direction=[0, 0, 1], current_value=0.0)
+    j = AssemblyJoint(
+        id="j",
+        instance_a_id="parent",
+        instance_b_id="child",
+        axis_direction=[0, 0, 1],
+        current_value=0.0,
+    )
     asm = Assembly(instances=[parent, child], joints=[j])
-    changed = _sync_revolute_values_for_parent_moves(asm, {"parent"}, _zrot(math.pi / 4))
+    changed = _sync_revolute_values_for_parent_moves(
+        asm, {"parent"}, _zrot(math.pi / 4)
+    )
     assert changed == ["j"]
     # Parent rotated +45° about Z while child stayed → child-relative angle −45°.
     assert j.current_value == pytest_approx(-math.pi / 4)
@@ -176,15 +196,20 @@ def test_sync_parent_move_decrements_child_value_by_delta():
 
 def test_sync_parent_move_skips_when_both_moved():
     parent, child = _inst("parent"), _inst("child")
-    j = AssemblyJoint(id="j", instance_a_id="parent", instance_b_id="child",
-                      axis_direction=[0, 0, 1])
+    j = AssemblyJoint(
+        id="j", instance_a_id="parent", instance_b_id="child", axis_direction=[0, 0, 1]
+    )
     asm = Assembly(instances=[parent, child], joints=[j])
     # Both endpoints moved → standard FK handles it; this helper must not fire.
-    assert _sync_revolute_values_for_parent_moves(asm, {"parent", "child"}, _zrot(0.3)) == []
+    assert (
+        _sync_revolute_values_for_parent_moves(asm, {"parent", "child"}, _zrot(0.3))
+        == []
+    )
     assert j.current_value == pytest_approx(0.0)
 
 
 # ── _gear_endpoint_side ────────────────────────────────────────────────────────
+
 
 def test_gear_endpoint_side_none_joint_defaults_b():
     rel = GearRelation(joint_a_id="ja", joint_b_id="jb")
@@ -211,6 +236,7 @@ def test_gear_endpoint_side_default_b_when_no_hint():
 
 # ── _axis_angle_rotation_matrix ────────────────────────────────────────────────
 
+
 def test_axis_angle_rotation_matrix_matches_zrot():
     R = _axis_angle_rotation_matrix([0, 0, 1], math.pi / 2)
     v = R @ np.array([1.0, 0.0, 0.0])
@@ -219,10 +245,16 @@ def test_axis_angle_rotation_matrix_matches_zrot():
 
 # ── _apply_revolute_value_to_gear_endpoint ─────────────────────────────────────
 
+
 def test_apply_revolute_value_moves_child_seed_and_sets_value():
     inst = _inst("ib", tx=1.0)
-    j = AssemblyJoint(id="j", instance_b_id="ib", axis_origin=[0, 0, 0],
-                      axis_direction=[0, 0, 1], current_value=0.0)
+    j = AssemblyJoint(
+        id="j",
+        instance_b_id="ib",
+        axis_origin=[0, 0, 0],
+        axis_direction=[0, 0, 1],
+        current_value=0.0,
+    )
     asm = Assembly(instances=[inst], joints=[j])
     inst_by_id = _build_inst_by_id(asm)
     ok = _apply_revolute_value_to_gear_endpoint(asm, j, "b", math.pi / 2, inst_by_id)
@@ -247,12 +279,15 @@ def test_apply_revolute_value_returns_false_for_missing_seed():
 
 # ── _belt_to_relation ──────────────────────────────────────────────────────────
 
-def _belt(ra: float, rb: float, *, side_a="b", side_b="b",
-          axis_a=(0, 0, 1), axis_b=(0, 0, 1)) -> tuple[BeltPath, dict]:
+
+def _belt(
+    ra: float, rb: float, *, side_a="b", side_b="b", axis_a=(0, 0, 1), axis_b=(0, 0, 1)
+) -> tuple[BeltPath, dict]:
     ja = AssemblyJoint(id="ja", instance_b_id="ia", axis_direction=list(axis_a))
     jb = AssemblyJoint(id="jb", instance_b_id="ib", axis_direction=list(axis_b))
     belt = BeltPath(
-        id="belt1", name="B",
+        id="belt1",
+        name="B",
         pulley_a=BeltPulley(joint_id="ja", side=side_a, radius=ra),
         pulley_b=BeltPulley(joint_id="jb", side=side_b, radius=rb),
     )
@@ -275,12 +310,13 @@ def test_belt_to_relation_inverts_for_opposed_axes():
 
 def test_belt_to_relation_none_when_joint_missing_or_zero_radius():
     belt, jbi = _belt(1.0, 1.0)
-    assert _belt_to_relation(belt, {}) is None             # joints absent
+    assert _belt_to_relation(belt, {}) is None  # joints absent
     belt0, jbi0 = _belt(1.0, 0.0)
-    assert _belt_to_relation(belt0, jbi0) is None           # non-positive radius
+    assert _belt_to_relation(belt0, jbi0) is None  # non-positive radius
 
 
 # ── _coupling_relations ────────────────────────────────────────────────────────
+
 
 def test_coupling_relations_includes_gears_and_belts():
     ja = AssemblyJoint(id="ja", instance_b_id="ia", axis_direction=[0, 0, 1])
@@ -300,14 +336,26 @@ def test_coupling_relations_includes_gears_and_belts():
 
 # ── _propagate_gear_relations_from ─────────────────────────────────────────────
 
+
 def _gear_pair(ratio: float, invert: bool = False) -> Assembly:
     ia, ib = _inst("ia", tx=1.0), _inst("ib", tx=1.0)
-    ja = AssemblyJoint(id="ja", instance_b_id="ia", axis_origin=[0, 0, 0],
-                       axis_direction=[0, 0, 1], current_value=0.0)
-    jb = AssemblyJoint(id="jb", instance_b_id="ib", axis_origin=[0, 0, 0],
-                       axis_direction=[0, 0, 1], current_value=0.0)
-    rel = GearRelation(id="g", joint_a_id="ja", joint_b_id="jb",
-                       ratio=ratio, invert=invert)
+    ja = AssemblyJoint(
+        id="ja",
+        instance_b_id="ia",
+        axis_origin=[0, 0, 0],
+        axis_direction=[0, 0, 1],
+        current_value=0.0,
+    )
+    jb = AssemblyJoint(
+        id="jb",
+        instance_b_id="ib",
+        axis_origin=[0, 0, 0],
+        axis_direction=[0, 0, 1],
+        current_value=0.0,
+    )
+    rel = GearRelation(
+        id="g", joint_a_id="ja", joint_b_id="jb", ratio=ratio, invert=invert
+    )
     return Assembly(instances=[ia, ib], joints=[ja, jb], gear_relations=[rel])
 
 
@@ -342,7 +390,9 @@ def test_propagate_invert_flips_sign():
 
 def test_propagate_noop_without_relations():
     ib = _inst("ib", tx=1.0)
-    jb = AssemblyJoint(id="jb", instance_b_id="ib", axis_direction=[0, 0, 1], current_value=3.0)
+    jb = AssemblyJoint(
+        id="jb", instance_b_id="ib", axis_direction=[0, 0, 1], current_value=3.0
+    )
     asm = Assembly(instances=[ib], joints=[jb])
     _propagate_gear_relations_from(asm, "jb")  # no gears/belts → early return
     assert jb.current_value == pytest_approx(3.0)

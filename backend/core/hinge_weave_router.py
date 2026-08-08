@@ -75,7 +75,8 @@ def _scaffold_fls(forced_ligations, coverage):
     by scaffold routing and left untouched.  See ``memory/project_hinge_autoscaffold.md``.
     """
     return [
-        fl for fl in forced_ligations
+        fl
+        for fl in forced_ligations
         if fl.three_prime_helix_id in coverage and fl.five_prime_helix_id in coverage
     ]
 
@@ -106,7 +107,7 @@ def _analyze_leaves(design: Design, scaffold_hids):
     if len(gaps) != 1:
         return None  # not a single clean gap → not a hinge this realizer handles
     gi = gaps[0]
-    leaf_a, leaf_b = rows[: gi + 1], rows[gi + 1:]
+    leaf_a, leaf_b = rows[: gi + 1], rows[gi + 1 :]
     # rectangular bundle expected (every row × every col present)
     if len(gp) != len(rows) * len(cols):
         return None
@@ -220,8 +221,7 @@ def realize_hinge_weave(design: Design) -> tuple[Design, SeamedResult] | None:
     seam_pairs = {frozenset(edge) for edge in matching}
 
     folds = [
-        occ for key, occs in pair_faces.items() if key not in seam_pairs
-        for occ in occs
+        occ for key, occs in pair_faces.items() if key not in seam_pairs for occ in occs
     ]
 
     cur = design
@@ -243,7 +243,9 @@ def realize_hinge_weave(design: Design) -> tuple[Design, SeamedResult] | None:
         lo = max(duplex[hx][0], duplex[hy][0])
         hi = min(duplex[hx][1], duplex[hy][1])
         mid = (lo + hi) // 2
-        valid = [bp for bp in range(lo, hi + 1) if _scaf_nb(cur, gx[0], gx[1], bp) == gy]
+        valid = [
+            bp for bp in range(lo, hi + 1) if _scaf_nb(cur, gx[0], gx[1], bp) == gy
+        ]
         best, adj = 1e9, None
         for j in range(len(valid) - 1):
             if valid[j + 1] == valid[j] + 1:
@@ -256,8 +258,13 @@ def realize_hinge_weave(design: Design) -> tuple[Design, SeamedResult] | None:
             ha = HalfCrossover(helix_id=hx, index=bp, strand=sa)
             hb = HalfCrossover(helix_id=hy, index=bp, strand=sb)
             cur, _xo = _place_xover(
-                cur, ha, hb, _nick_bp(bp, sa, period, bow),
-                _nick_bp(bp, sb, period, bow), "manual", result.warnings,
+                cur,
+                ha,
+                hb,
+                _nick_bp(bp, sa, period, bow),
+                _nick_bp(bp, sb, period, bow),
+                "manual",
+                result.warnings,
             )
         result.seam_xovers += 1
 
@@ -291,8 +298,13 @@ def realize_hinge_weave(design: Design) -> tuple[Design, SeamedResult] | None:
         ha = HalfCrossover(helix_id=hx, index=bp, strand=sa)
         hb = HalfCrossover(helix_id=hy, index=bp, strand=sb)
         cur, _xo = _place_xover(
-            cur, ha, hb, _nick_bp(bp, sa, period, bow),
-            _nick_bp(bp, sb, period, bow), "manual", result.warnings,
+            cur,
+            ha,
+            hb,
+            _nick_bp(bp, sa, period, bow),
+            _nick_bp(bp, sb, period, bow),
+            "manual",
+            result.warnings,
         )
         if face == "near":
             result.near_end_xovers += 1
@@ -309,11 +321,21 @@ def realize_hinge_weave(design: Design) -> tuple[Design, SeamedResult] | None:
     if len(scaf) != 1:
         return None
     orig_fls = {
-        (f.three_prime_helix_id, f.three_prime_bp, f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in design.forced_ligations
     }
     new_fls = {
-        (f.three_prime_helix_id, f.three_prime_bp, f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in cur.forced_ligations
     }
     if new_fls != orig_fls:
@@ -397,7 +419,7 @@ def realize_hinge_weave_seamless(
     # boustrophedon over the remaining rows that crosses every gap rung.
     rows_all = leaf_a + leaf_b
     if k % 2 == 0:
-        spine_row, inner = rows_all[0], rows_all[1:]          # col 0 sweeps down
+        spine_row, inner = rows_all[0], rows_all[1:]  # col 0 sweeps down
     else:
         spine_row, inner = rows_all[-1], list(reversed(rows_all[:-1]))  # col 0 up
     trail: list[tuple[int, int]] = [(spine_row, 0)]
@@ -454,8 +476,13 @@ def realize_hinge_weave_seamless(
         ha = HalfCrossover(helix_id=hx, index=bp, strand=sa)
         hb = HalfCrossover(helix_id=hy, index=bp, strand=sb)
         cur, _xo = _place_xover(
-            cur, ha, hb, _nick_bp(bp, sa, period, bow),
-            _nick_bp(bp, sb, period, bow), "manual", result.warnings,
+            cur,
+            ha,
+            hb,
+            _nick_bp(bp, sa, period, bow),
+            _nick_bp(bp, sb, period, bow),
+            "manual",
+            result.warnings,
         )
         result.end_xovers += 1
 
@@ -467,11 +494,21 @@ def realize_hinge_weave_seamless(
     if len(scaf) != 1:
         return None
     orig = {
-        (f.three_prime_helix_id, f.three_prime_bp, f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in design.forced_ligations
     }
     new = {
-        (f.three_prime_helix_id, f.three_prime_bp, f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in cur.forced_ligations
     }
     if new != orig:

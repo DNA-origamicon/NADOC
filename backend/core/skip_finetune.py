@@ -11,6 +11,7 @@ CONSTRUCTION (unlike wholesale redistribution, which rewrites the global registe
 Pure candidate identification + edit application live here; the greedy re-sim / accept-if-improves
 loop is :func:`backend.api.skip_twist_tuning.greedy_finetune_skips`.  Topological only.
 """
+
 from __future__ import annotations
 
 from backend.core.models import Design, LatticeType
@@ -19,8 +20,11 @@ from backend.core.regional_skip_placer import core_candidates
 
 def current_skips_by_helix(design: Design) -> dict[str, list[int]]:
     """``{helix_id: [bp_index of each deletion]}`` for the design's current loop/skips."""
-    return {h.id: sorted(ls.bp_index for ls in h.loop_skips if ls.delta == -1)
-            for h in design.helices if any(ls.delta == -1 for ls in h.loop_skips)}
+    return {
+        h.id: sorted(ls.bp_index for ls in h.loop_skips if ls.delta == -1)
+        for h in design.helices
+        if any(ls.delta == -1 for ls in h.loop_skips)
+    }
 
 
 def _signed_overtwist_slope(shape_profile, frac: float) -> float:
@@ -64,13 +68,16 @@ def identify_finetune_edits(
     vals = list(deviation_by_bp.values())
     mean = sum(vals) / len(vals)
     var = sum((v - mean) ** 2 for v in vals) / len(vals)
-    std = var ** 0.5
+    std = var**0.5
     threshold = mean + sigma * std
 
     helix_by_id = {h.id: h for h in design.helices}
     skips = current_skips_by_helix(design)
-    ranked = sorted((kv for kv in deviation_by_bp.items() if kv[1] > threshold),
-                    key=lambda kv: kv[1], reverse=True)
+    ranked = sorted(
+        (kv for kv in deviation_by_bp.items() if kv[1] > threshold),
+        key=lambda kv: kv[1],
+        reverse=True,
+    )
 
     edits: list[dict] = []
     chosen: list[tuple[str, int]] = []
@@ -81,27 +88,29 @@ def identify_finetune_edits(
         if helix is None or helix.length_bp <= 0:
             continue
         if any(h2 == hid and abs(bp - b2) < min_spacing for h2, b2 in chosen):
-            continue                                   # keep edits spread out
+            continue  # keep edits spread out
         frac = (bp - helix.bp_start) / helix.length_bp
         over_wound = _signed_overtwist_slope(shape_profile, frac) >= 0.0
-        if over_wound:                                 # ADD a deletion at a free core bp here
-            cands = core_candidates(design, helix)     # excludes existing skips
+        if over_wound:  # ADD a deletion at a free core bp here
+            cands = core_candidates(design, helix)  # excludes existing skips
             if not cands:
                 continue
             target = min(cands, key=lambda c: abs(c - bp))
             edits.append({"helix_id": hid, "bp_index": int(target), "op": "add"})
             chosen.append((hid, int(target)))
-        else:                                          # REMOVE the nearest existing deletion
+        else:  # REMOVE the nearest existing deletion
             existing = skips.get(hid, [])
             if not existing:
-                continue                               # nothing to remove (deletion-only)
+                continue  # nothing to remove (deletion-only)
             target = min(existing, key=lambda c: abs(c - bp))
             edits.append({"helix_id": hid, "bp_index": int(target), "op": "remove"})
             chosen.append((hid, int(target)))
     return edits
 
 
-def apply_finetune_edit(skips_by_helix: dict[str, list[int]], edit: dict) -> dict[str, list[int]]:
+def apply_finetune_edit(
+    skips_by_helix: dict[str, list[int]], edit: dict
+) -> dict[str, list[int]]:
     """Return a copy of ``skips_by_helix`` with one edit applied: ``add`` inserts the bp (no-op if
     present); ``remove`` deletes the skip nearest the bp on that helix (no-op if none)."""
     out = {h: sorted(bps) for h, bps in skips_by_helix.items()}

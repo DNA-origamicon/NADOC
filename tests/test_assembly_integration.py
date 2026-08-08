@@ -35,6 +35,7 @@ client = TestClient(app)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(autouse=True)
 def _reset():
     """Reset assembly and design state before/after every test."""
@@ -49,11 +50,13 @@ def _make_design(n_helices: int = 2, lattice: str = "honeycomb") -> Design:
     """Return a minimal Design with n_helices of 10 bp each."""
     helices = []
     for i in range(n_helices):
-        helices.append(Helix(
-            axis_start=Vec3(x=float(i * 3), y=0.0, z=0.0),
-            axis_end=Vec3(x=float(i * 3), y=0.0, z=3.4),
-            length_bp=10,
-        ))
+        helices.append(
+            Helix(
+                axis_start=Vec3(x=float(i * 3), y=0.0, z=0.0),
+                axis_end=Vec3(x=float(i * 3), y=0.0, z=3.4),
+                length_bp=10,
+            )
+        )
     return Design(
         helices=helices,
         lattice_type=LatticeType(lattice.upper()),
@@ -66,19 +69,23 @@ def _inline_source(design: Design) -> dict:
 
 
 def _add_instance(design: Design, name: str = "Part") -> dict:
-    r = client.post("/api/assembly/instances", json={
-        "source": _inline_source(design),
-        "name": name,
-    })
+    r = client.post(
+        "/api/assembly/instances",
+        json={
+            "source": _inline_source(design),
+            "name": name,
+        },
+    )
     assert r.status_code == 201, r.text
     return r.json()
 
 
 def _identity_values() -> list[float]:
-    return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]
+    return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
 
 
 # ── Joint transform verification ──────────────────────────────────────────────
+
 
 class TestJointTransform:
     def test_revolute_joint_cos_sin(self):
@@ -91,21 +98,27 @@ class TestJointTransform:
         inst_b_id = v1_instances(body_b)[1]["id"]
 
         # Add revolute joint
-        r = client.post("/api/assembly/joints", json={
-            "instance_a_id": inst_a_id,
-            "instance_b_id": inst_b_id,
-            "axis_origin": [0.0, 0.0, 0.0],
-            "axis_direction": [0.0, 0.0, 1.0],
-            "joint_type": "revolute",
-        })
+        r = client.post(
+            "/api/assembly/joints",
+            json={
+                "instance_a_id": inst_a_id,
+                "instance_b_id": inst_b_id,
+                "axis_origin": [0.0, 0.0, 0.0],
+                "axis_direction": [0.0, 0.0, 1.0],
+                "joint_type": "revolute",
+            },
+        )
         assert r.status_code == 201, r.text
         joint_id = r.json()["assembly"]["joints"][0]["id"]
 
         # Drive to 45°
         angle = math.pi / 4
-        r = client.patch(f"/api/assembly/joints/{joint_id}", json={
-            "current_value": angle,
-        })
+        r = client.patch(
+            f"/api/assembly/joints/{joint_id}",
+            json={
+                "current_value": angle,
+            },
+        )
         assert r.status_code == 200, r.text
 
         # Use debug preview endpoint to read the transform matrix
@@ -116,8 +129,12 @@ class TestJointTransform:
         # For a Z-axis revolute at 45°: m[0,0]≈cos, m[0,1]≈-sin (or +sin depending on convention)
         cos45 = math.cos(angle)
         sin45 = math.sin(angle)
-        assert abs(abs(m[0, 0]) - cos45) < 1e-6, f"m[0,0]={m[0,0]} expected ±{cos45:.4f}"
-        assert abs(abs(m[1, 0]) - sin45) < 1e-6, f"m[1,0]={m[1,0]} expected ±{sin45:.4f}"
+        assert abs(abs(m[0, 0]) - cos45) < 1e-6, (
+            f"m[0,0]={m[0, 0]} expected ±{cos45:.4f}"
+        )
+        assert abs(abs(m[1, 0]) - sin45) < 1e-6, (
+            f"m[1,0]={m[1, 0]} expected ±{sin45:.4f}"
+        )
 
     def test_joint_limits_respected(self):
         """Adding a joint with limits and driving past them is caught by validate."""
@@ -128,16 +145,19 @@ class TestJointTransform:
         inst_ids = v1_instances(body_b)
         inst_a_id, inst_b_id = inst_ids[0]["id"], inst_ids[1]["id"]
 
-        r = client.post("/api/assembly/joints", json={
-            "instance_a_id": inst_a_id,
-            "instance_b_id": inst_b_id,
-            "axis_origin": [0.0, 0.0, 0.0],
-            "axis_direction": [0.0, 0.0, 1.0],
-            "joint_type": "revolute",
-            "min_limit": -1.0,
-            "max_limit":  1.0,
-            "current_value": 1.5,
-        })
+        r = client.post(
+            "/api/assembly/joints",
+            json={
+                "instance_a_id": inst_a_id,
+                "instance_b_id": inst_b_id,
+                "axis_origin": [0.0, 0.0, 0.0],
+                "axis_direction": [0.0, 0.0, 1.0],
+                "joint_type": "revolute",
+                "min_limit": -1.0,
+                "max_limit": 1.0,
+                "current_value": 1.5,
+            },
+        )
         assert r.status_code == 201, r.text
 
         # Validate should flag the limit exceeded
@@ -146,13 +166,18 @@ class TestJointTransform:
         report = rv.json()
         assert not report["passed"]
         limit_check = next(
-            (c for c in report["results"] if c["check"] == "joint_limits_not_exceeded" and not c["ok"]),
+            (
+                c
+                for c in report["results"]
+                if c["check"] == "joint_limits_not_exceeded" and not c["ok"]
+            ),
             None,
         )
         assert limit_check is not None, "Expected joint_limits_not_exceeded failure"
 
 
 # ── Flatten ───────────────────────────────────────────────────────────────────
+
 
 class TestFlatten:
     def test_flatten_two_instances(self):
@@ -178,11 +203,14 @@ class TestFlatten:
         _add_instance(d, "A")
 
         # Add a linker helix
-        r = client.post("/api/assembly/linker-helices", json={
-            "axis_start": [10.0, 0.0, 0.0],
-            "axis_end":   [10.0, 0.0, 3.4],
-            "length_bp":  10,
-        })
+        r = client.post(
+            "/api/assembly/linker-helices",
+            json={
+                "axis_start": [10.0, 0.0, 0.0],
+                "axis_end": [10.0, 0.0, 3.4],
+                "length_bp": 10,
+            },
+        )
         assert r.status_code == 201, r.text
 
         r = client.get("/api/assembly/flatten")
@@ -220,6 +248,7 @@ class TestFlatten:
 
 # ── Undo ─────────────────────────────────────────────────────────────────────
 
+
 class TestUndo:
     def test_undo_three_ops(self):
         """Add instance, patch instance, add joint — undo 3× — verify state at each step."""
@@ -231,13 +260,16 @@ class TestUndo:
         inst_a_id, inst_b_id = instances[0]["id"], instances[1]["id"]
 
         # Op 3: add joint
-        client.post("/api/assembly/joints", json={
-            "instance_a_id": inst_a_id,
-            "instance_b_id": inst_b_id,
-            "axis_origin": [0.0, 0.0, 0.0],
-            "axis_direction": [0.0, 0.0, 1.0],
-            "joint_type": "revolute",
-        })
+        client.post(
+            "/api/assembly/joints",
+            json={
+                "instance_a_id": inst_a_id,
+                "instance_b_id": inst_b_id,
+                "axis_origin": [0.0, 0.0, 0.0],
+                "axis_direction": [0.0, 0.0, 1.0],
+                "joint_type": "revolute",
+            },
+        )
 
         # Undo joint
         r = client.post("/api/assembly/undo")
@@ -270,6 +302,7 @@ class TestUndo:
 
 
 # ── Validation ────────────────────────────────────────────────────────────────
+
 
 class TestValidation:
     def test_validate_passes_clean_assembly(self):

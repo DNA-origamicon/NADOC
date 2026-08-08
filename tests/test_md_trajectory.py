@@ -4,6 +4,7 @@ These exercise the real DCD→NADOC bead extraction, so they need MDAnalysis AND
 real NAMD job on disk (a stopped/failed run with ≥1 written DCD is fine). Guarded
 with skipif so they no-op in environments without the fixture.
 """
+
 from __future__ import annotations
 
 import json
@@ -23,9 +24,14 @@ _PSF = _JOB / "2hb.psf"
 _REF = _JOB / "2hb.pdb"
 _DESIGN = _WS / "2hb.nadoc"
 
-_HAVE_FIXTURE = _PSF.exists() and _REF.exists() and _DESIGN.exists() and any(
-    (_JOB / "output").glob("*.dcd")
-) if _JOB.exists() else False
+_HAVE_FIXTURE = (
+    _PSF.exists()
+    and _REF.exists()
+    and _DESIGN.exists()
+    and any((_JOB / "output").glob("*.dcd"))
+    if _JOB.exists()
+    else False
+)
 
 skip_no_fixture = pytest.mark.skipif(
     not _HAVE_FIXTURE, reason="real 2hb NAMD job fixture not present"
@@ -38,9 +44,14 @@ _PSF_3X6 = _JOB_3X6 / "3x6x200_test.psf"
 _REF_3X6 = _JOB_3X6 / "3x6x200_test.pdb"
 _DESIGN_3X6 = _WS / "md_jobs" / "c89a67841933" / "design.json"
 
-_HAVE_3X6 = _PSF_3X6.exists() and _REF_3X6.exists() and _DESIGN_3X6.exists() and any(
-    _JOB_3X6.glob("output/*.dcd")
-) if _JOB_3X6.exists() else False
+_HAVE_3X6 = (
+    _PSF_3X6.exists()
+    and _REF_3X6.exists()
+    and _DESIGN_3X6.exists()
+    and any(_JOB_3X6.glob("output/*.dcd"))
+    if _JOB_3X6.exists()
+    else False
+)
 
 # The always-on collision regression lives in test_md_p_order_mapping.py; these real
 # tests need the multi-GB package, so they're fixture-gated (skipped where absent).
@@ -70,8 +81,11 @@ def test_md_composite_trajectory_shape_and_alignment():
     """Composite NAMD trajectory matches the oxDNA payload shape (6 floats/nuc) and
     frame 0 sits ON the design geometry (rigid RMSD < 1 nm → alignment correct)."""
     from backend.core.md_trajectory import (
-        md_composite_trajectory, _build_md_nadoc_ctx, _extract_md_nadoc_frame,
+        md_composite_trajectory,
+        _build_md_nadoc_ctx,
+        _extract_md_nadoc_frame,
     )
+
     design = _load_2hb()
     dcds = sorted((_JOB / "output").glob("*.dcd"))
     segments = [(d.stem, "md", d) for d in dcds]
@@ -80,11 +94,11 @@ def test_md_composite_trajectory_shape_and_alignment():
     assert r["n_frames"] > 0
     M = r["n_nucleotides"]
     assert M > 0 and len(r["keys"]) == M
-    assert all(len(f) == 6 * M for f in r["frames"])    # backbone xyz + a1 per nuc
+    assert all(len(f) == 6 * M for f in r["frames"])  # backbone xyz + a1 per nuc
 
     ctx = _build_md_nadoc_ctx(_PSF, [d for _, _, d in segments], _REF, design)
     p0, normals = _extract_md_nadoc_frame(ctx, 0)
-    assert normals is not None                          # NAMD has C1' → real normals
+    assert normals is not None  # NAMD has C1' → real normals
     rm = ctx["rigid_mask"]
     eq = ctx["eq_positions"]
     rmsd = float(np.sqrt(((p0[rm] - eq[rm]) ** 2).sum(axis=1).mean()))
@@ -96,18 +110,23 @@ def test_md_composite_meta_matches_full():
     """The lightweight NAMD meta (DCD frame count only) reports the SAME n_frames +
     markers as the full composite, so the trajectory slider sizes itself instantly."""
     from backend.core.md_trajectory import md_composite_trajectory, md_composite_meta
+
     design = _load_2hb()
     dcds = sorted((_JOB / "output").glob("*.dcd"))
     segments = [(d.stem, "md", d) for d in dcds]
     full = md_composite_trajectory(_PSF, segments, _REF, design)
     meta = md_composite_meta(segments)
     assert meta["n_frames"] == full["n_frames"]
-    assert [m["frame"] for m in meta["markers"]] == [m["frame"] for m in full["markers"]]
+    assert [m["frame"] for m in meta["markers"]] == [
+        m["frame"] for m in full["markers"]
+    ]
     # …and for a user-set frame interval, which is what the panel's readout promises.
     full7 = md_composite_trajectory(_PSF, segments, _REF, design, stride=7)
     meta7 = md_composite_meta(segments, stride=7)
     assert meta7["n_frames"] == full7["n_frames"]
-    assert [m["frame"] for m in meta7["markers"]] == [m["frame"] for m in full7["markers"]]
+    assert [m["frame"] for m in meta7["markers"]] == [
+        m["frame"] for m in full7["markers"]
+    ]
     # Raw counts are what the panel prices other intervals against — they must describe
     # what is ON DISK, not what this response downsampled to.
     assert meta7["total_raw"] == sum(s["n_raw"] for s in meta7["stages"])
@@ -119,12 +138,13 @@ def test_md_frames_atomistic_and_surface():
     """Phase 2b: per-frame NAMD heavy atoms + surface for trajectory frame indices,
     in the same wire shapes the player's atomistic/surface paths consume."""
     from backend.core.md_trajectory import md_frames_atomistic, md_frames_surface
+
     design = _load_2hb()
     dcds = sorted((_JOB / "output").glob("*.dcd"))
     segments = [(d.stem, "md", d) for d in dcds]
 
     atom = md_frames_atomistic(_PSF, segments, _REF, design, [0, 5, 999, -1])
-    assert sorted(atom.keys()) == ["0", "5"]            # out-of-range dropped
+    assert sorted(atom.keys()) == ["0", "5"]  # out-of-range dropped
     frame = atom["0"]
     assert frame["bonds"] == []
     assert len(frame["atoms"]) > 0
@@ -146,6 +166,7 @@ def test_md_rmsf_shape_and_values():
     """Per-nucleotide flexibility map (RMSF) over the NAMD run mirrors the oxDNA
     /rmsf payload shape, with finite non-negative fluctuations and unit base normals."""
     from backend.core.md_trajectory import md_rmsf
+
     design = _load_2hb()
     dcds = sorted((_JOB / "output").glob("*.dcd"))
     segments = [(d.stem, "md", d) for d in dcds]
@@ -155,8 +176,16 @@ def test_md_rmsf_shape_and_values():
     pos = r["positions"]
     assert len(pos) > 0
     p0 = pos[0]
-    assert set(p0) >= {"helix_id", "bp_index", "direction",
-                       "backbone_position", "nx", "ny", "nz", "rmsf"}
+    assert set(p0) >= {
+        "helix_id",
+        "bp_index",
+        "direction",
+        "backbone_position",
+        "nx",
+        "ny",
+        "nz",
+        "rmsf",
+    }
     rms = np.array([p["rmsf"] for p in pos])
     assert np.all(np.isfinite(rms)) and np.all(rms >= 0.0)
     assert r["min_rmsf"] <= r["mean_rmsf"] <= r["max_rmsf"]
@@ -181,7 +210,9 @@ def test_md_rmsf_many_strand_uses_segid_order():
         design = Design.model_validate(obj.get("design", obj))
 
     # One small (p10) DCD keeps the Kabsch/model cost bounded for the test.
-    dcds = sorted(_JOB_3X6.glob("output/*p10.dcd")) or sorted(_JOB_3X6.glob("output/*.dcd"))
+    dcds = sorted(_JOB_3X6.glob("output/*p10.dcd")) or sorted(
+        _JOB_3X6.glob("output/*.dcd")
+    )
     seg = dcds[:1]
     segments = [(seg[0].stem, "md", seg[0])]
 
@@ -215,7 +246,10 @@ def test_md_extraction_matches_unwrap_reference():
     from backend.core.md_trajectory import _build_md_nadoc_ctx, _extract_md_nadoc_frame
 
     design = _load_3x6_design()
-    dcd = (sorted(_JOB_3X6.glob("output/*p10.dcd")) or sorted(_JOB_3X6.glob("output/*.dcd")))[0]
+    dcd = (
+        sorted(_JOB_3X6.glob("output/*p10.dcd"))
+        or sorted(_JOB_3X6.glob("output/*.dcd"))
+    )[0]
 
     # Fast ctx: no unwrap transformation (production path).
     ctx_fast = _build_md_nadoc_ctx(_PSF_3X6, [dcd], _REF_3X6, design)

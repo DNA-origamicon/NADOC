@@ -77,15 +77,28 @@ def test_seamed_with_staples_keeps_ssdna_margin():
 
 # ── Checker unit tests (deterministic, synthetic) ─────────────────────────────
 
+
 def _two_helix_scaffold(staple_lo: int, staple_hi: int) -> Design:
     """A minimal 2-helix SQUARE design with one staple domain per helix."""
-    d = make_bundle_design([(0, 0), (0, 1)], length_bp=64,
-                           lattice_type=LatticeType.SQUARE, strand_filter="scaffold")
+    d = make_bundle_design(
+        [(0, 0), (0, 1)],
+        length_bp=64,
+        lattice_type=LatticeType.SQUARE,
+        strand_filter="scaffold",
+    )
     staples = [
-        Strand(id=f"st_{h.id}",
-               domains=[Domain(helix_id=h.id, start_bp=staple_lo, end_bp=staple_hi,
-                               direction=Direction.FORWARD)],
-               strand_type=StrandType.STAPLE)
+        Strand(
+            id=f"st_{h.id}",
+            domains=[
+                Domain(
+                    helix_id=h.id,
+                    start_bp=staple_lo,
+                    end_bp=staple_hi,
+                    direction=Direction.FORWARD,
+                )
+            ],
+            strand_type=StrandType.STAPLE,
+        )
         for h in d.helices
     ]
     return d.copy_with(strands=list(d.strands) + staples)

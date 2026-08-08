@@ -39,67 +39,67 @@ from typing import Optional
 
 
 class BladeStatus(str, Enum):
-    queued    = "queued"
-    preparing = "preparing"   # writing the design snapshot + building solute PDB/PSF
-    running   = "running"     # OpenMM minimize + Langevin
-    failed    = "failed"
-    stopped   = "stopped"     # manually stopped
-    completed = "completed"   # relax done + trajectory cached
+    queued = "queued"
+    preparing = "preparing"  # writing the design snapshot + building solute PDB/PSF
+    running = "running"  # OpenMM minimize + Langevin
+    failed = "failed"
+    stopped = "stopped"  # manually stopped
+    completed = "completed"  # relax done + trajectory cached
 
 
 @dataclass
 class BladeStageStatus:
-    name:       str          # "build" | "relax"
-    status:     str = "pending"   # pending / running / done / failed
-    started_at: Optional[float] = None   # wall time the stage began (for the ETA bar)
+    name: str  # "build" | "relax"
+    status: str = "pending"  # pending / running / done / failed
+    started_at: Optional[float] = None  # wall time the stage began (for the ETA bar)
 
 
 @dataclass
 class BladeJob:
-    job_id:              str
-    design_name:         str
-    status:              BladeStatus
-    created_at:          float
-    n_nucleotides:       int = 0
+    job_id: str
+    design_name: str
+    status: BladeStatus
+    created_at: float
+    n_nucleotides: int = 0
     # ── Mode ───────────────────────────────────────────────────────────────────
     # "relax" = the shipped MVP (implicit-solvent relax + trajectory).  "seed_namd" is
     # reserved for the relax→solvate→NAMD equilibration leg (not yet implemented).
-    mode:                str = "relax"
+    mode: str = "relax"
     # Force model: "baseline" = pure CHARMM36+OBC2 (training-free); "unified" = baseline +
     # the learned unified duplex+ssDNA ForceNet solvent correction.
-    correction:          str = "baseline"
+    correction: str = "baseline"
     # ── Relax knobs (mode="relax") ─────────────────────────────────────────────
-    minimize_iters:      int   = 400     # OpenMM L-BFGS minimization cap
-    langevin_ps:         float = 3.0     # Langevin settling time (picoseconds)
-    nb_cutoff_A:         float = 18.0    # CutoffNonPeriodic radius — keeps GBSA ~O(N)
-    temp_K:              float = 300.0
-    traj_frames:         int   = 60      # DCD frames captured across the Langevin leg
+    minimize_iters: int = 400  # OpenMM L-BFGS minimization cap
+    langevin_ps: float = 3.0  # Langevin settling time (picoseconds)
+    nb_cutoff_A: float = 18.0  # CutoffNonPeriodic radius — keeps GBSA ~O(N)
+    temp_K: float = 300.0
+    traj_frames: int = 60  # DCD frames captured across the Langevin leg
     # Compute platform requested of OpenMM.  "CUDA" ties up the local card; the worker
     # falls back to CPU (and records it in platform_used) if CUDA is unavailable.
-    platform:            str = "CUDA"
+    platform: str = "CUDA"
     # Per-atom uncertainty overlay: run the EnsembleForceNet over the captured frames and
     # cache a per-atom scalar for the display's uncertainty colouring.  Display-only.
-    uncertainty:         bool = False
-    stages:              list[BladeStageStatus] = dc_field(default_factory=list)
-    error:               Optional[str] = None
+    uncertainty: bool = False
+    stages: list[BladeStageStatus] = dc_field(default_factory=list)
+    error: Optional[str] = None
     # PID of the detached worker (backend.core.blade_worker) — see module docstring.
-    pid:                 Optional[int] = None
-    design_source_path:  Optional[str] = None
-    doc_id:              Optional[str] = None
+    pid: Optional[int] = None
+    design_source_path: Optional[str] = None
+    doc_id: Optional[str] = None
     # Populated on completion — surfaced in the panel detail block.
-    sim_seconds:         Optional[float] = None   # wall time inside the relax
-    n_atoms:             Optional[int]   = None   # solute atom count
-    platform_used:       Optional[str]   = None   # "CUDA" or "CPU" (fallback tell)
-    rmsd_moved_A:        Optional[float] = None   # how far the structure travelled
-    rg_before_A:         Optional[float] = None
-    rg_after_A:          Optional[float] = None
+    sim_seconds: Optional[float] = None  # wall time inside the relax
+    n_atoms: Optional[int] = None  # solute atom count
+    platform_used: Optional[str] = None  # "CUDA" or "CPU" (fallback tell)
+    rmsd_moved_A: Optional[float] = None  # how far the structure travelled
+    rg_before_A: Optional[float] = None
+    rg_after_A: Optional[float] = None
     # Out-of-date detection (design edited after the run); shares the oxDNA staleness
     # fingerprint so an edit invalidates the displayed trajectory.
-    design_fingerprint:  Optional[str] = None
+    design_fingerprint: Optional[str] = None
     feature_log_position: Optional[int] = None
     # Archival parity with oxDNA/mrDNA/CanDo/SNUPI jobs (job_archive is kind-generic).
-    archived:            bool = False
-    archive_path:        Optional[str] = None
+    archived: bool = False
+    archive_path: Optional[str] = None
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -122,6 +122,7 @@ class BladeJob:
     @classmethod
     def load(cls, job_id: str, workspace_dir: Path) -> "BladeJob":
         from backend.core.job_archive import resolve_job_json
+
         path = resolve_job_json(workspace_dir, "blade_jobs", job_id)
         data = json.loads(path.read_text())
         data["status"] = BladeStatus(data["status"])
@@ -153,6 +154,7 @@ class BladeJob:
     @classmethod
     def list_jobs(cls, workspace_dir: Path) -> list["BladeJob"]:
         from backend.core.job_archive import archived_job_ids
+
         result: list[BladeJob] = []
         seen: set[str] = set()
         jobs_dir = workspace_dir / "blade_jobs"
@@ -198,24 +200,24 @@ def new_blade_job(
     doc_id: Optional[str] = None,
 ) -> BladeJob:
     return BladeJob(
-        job_id             = uuid.uuid4().hex[:12],
-        design_name        = design_name,
-        status             = BladeStatus.queued,
-        created_at         = time.time(),
-        n_nucleotides      = n_nucleotides,
-        mode               = mode if mode in ("relax", "seed_namd") else "relax",
-        correction         = correction if correction in ("baseline", "unified") else "baseline",
-        minimize_iters     = minimize_iters,
-        langevin_ps        = langevin_ps,
-        nb_cutoff_A        = nb_cutoff_A,
-        temp_K             = temp_K,
-        traj_frames        = traj_frames,
-        platform           = platform if platform in ("CUDA", "CPU") else "CUDA",
-        uncertainty        = uncertainty,
+        job_id=uuid.uuid4().hex[:12],
+        design_name=design_name,
+        status=BladeStatus.queued,
+        created_at=time.time(),
+        n_nucleotides=n_nucleotides,
+        mode=mode if mode in ("relax", "seed_namd") else "relax",
+        correction=correction if correction in ("baseline", "unified") else "baseline",
+        minimize_iters=minimize_iters,
+        langevin_ps=langevin_ps,
+        nb_cutoff_A=nb_cutoff_A,
+        temp_K=temp_K,
+        traj_frames=traj_frames,
+        platform=platform if platform in ("CUDA", "CPU") else "CUDA",
+        uncertainty=uncertainty,
         # Two stages: build the solute PDB/PSF in the uv env, then relax in the gpu env.
-        stages             = [BladeStageStatus(name="build"), BladeStageStatus(name="relax")],
-        design_source_path = design_source_path,
-        design_fingerprint = design_fingerprint,
-        feature_log_position = feature_log_position,
-        doc_id             = doc_id,
+        stages=[BladeStageStatus(name="build"), BladeStageStatus(name="relax")],
+        design_source_path=design_source_path,
+        design_fingerprint=design_fingerprint,
+        feature_log_position=feature_log_position,
+        doc_id=doc_id,
     )

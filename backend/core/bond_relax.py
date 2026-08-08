@@ -81,20 +81,24 @@ def relax_bond(
     "1dof" / "ndof"), final ``chord_nm``, and any joint angles applied.
     """
     if cluster_a_id == cluster_b_id:
-        raise HTTPException(422, detail=(
-            "relax_bond: both bond endpoints share a cluster — no relaxation "
-            "is possible (the bond moves rigidly with the cluster)."
-        ))
+        raise HTTPException(
+            422,
+            detail=(
+                "relax_bond: both bond endpoints share a cluster — no relaxation "
+                "is possible (the bond moves rigidly with the cluster)."
+            ),
+        )
 
     cts_by_id = {c.id: c for c in design.cluster_transforms}
     if cluster_a_id not in cts_by_id or cluster_b_id not in cts_by_id:
-        raise HTTPException(422, detail=(
-            "relax_bond: one or both endpoint clusters not found."
-        ))
+        raise HTTPException(
+            422, detail=("relax_bond: one or both endpoint clusters not found.")
+        )
 
     # Joints connecting the two clusters.
     candidate_joints = [
-        j for j in design.cluster_joints
+        j
+        for j in design.cluster_joints
         if j.cluster_id == cluster_a_id or j.cluster_id == cluster_b_id
     ]
     if joint_ids is not None:
@@ -103,10 +107,13 @@ def relax_bond(
         candidate_joints = [j for j in candidate_joints if j.id in wanted]
         missing = wanted - {j.id for j in candidate_joints}
         if missing:
-            raise HTTPException(422, detail=(
-                f"relax_bond: joint ids {sorted(missing)!r} not on either "
-                f"endpoint's cluster."
-            ))
+            raise HTTPException(
+                422,
+                detail=(
+                    f"relax_bond: joint ids {sorted(missing)!r} not on either "
+                    f"endpoint's cluster."
+                ),
+            )
 
     if not candidate_joints:
         return _relax_translate(
@@ -146,6 +153,7 @@ def relax_bond(
 
 # ── 0-DOF: rigid translate ───────────────────────────────────────────────────
 
+
 def _relax_translate(
     design: Design,
     *,
@@ -158,16 +166,22 @@ def _relax_translate(
     source_tag: str,
 ) -> tuple[Design, dict[str, Any]]:
     if side_to_move not in ("a", "b"):
-        raise HTTPException(422, detail=(
-            "relax_bond: no joints between the two clusters; "
-            "side_to_move (\"a\" or \"b\") must be specified to choose "
-            "which cluster translates."
-        ))
-    chord = anchor_b - anchor_a   # vector from A to B
+        raise HTTPException(
+            422,
+            detail=(
+                "relax_bond: no joints between the two clusters; "
+                'side_to_move ("a" or "b") must be specified to choose '
+                "which cluster translates."
+            ),
+        )
+    chord = anchor_b - anchor_a  # vector from A to B
     chord_mag = float(np.linalg.norm(chord))
     if chord_mag < 1e-9:
-        return design, {"mode": "translate", "chord_nm": chord_mag,
-                        "moved_cluster": cluster_b_id if side_to_move == "b" else cluster_a_id}
+        return design, {
+            "mode": "translate",
+            "chord_nm": chord_mag,
+            "moved_cluster": cluster_b_id if side_to_move == "b" else cluster_a_id,
+        }
 
     # Shrink the chord to `target_nm`. The moving anchor slides along the
     # chord toward the fixed anchor by ``chord_mag − target_nm``.
@@ -186,11 +200,13 @@ def _relax_translate(
     moved_ct = None
     for c in design.cluster_transforms:
         if c.id == moved_cluster_id:
-            moved_ct = c.model_copy(update={
-                "translation": (
-                    np.asarray(c.translation, dtype=float) + delta
-                ).tolist(),
-            })
+            moved_ct = c.model_copy(
+                update={
+                    "translation": (
+                        np.asarray(c.translation, dtype=float) + delta
+                    ).tolist(),
+                }
+            )
             new_clusters.append(moved_ct)
         else:
             new_clusters.append(c)
@@ -207,6 +223,7 @@ def _relax_translate(
 
 # ── 1-DOF: one-joint rotate ─────────────────────────────────────────────────
 
+
 def _relax_one_joint(
     design: Design,
     *,
@@ -221,18 +238,18 @@ def _relax_one_joint(
     cts_by_id = {c.id: c for c in design.cluster_transforms}
     ct = cts_by_id.get(joint.cluster_id)
     world_origin, world_dir = _local_to_world_joint(
-        joint.local_axis_origin, joint.local_axis_direction, ct,
+        joint.local_axis_origin,
+        joint.local_axis_direction,
+        ct,
     )
     axis = np.asarray(world_dir, dtype=float)
     nrm = float(np.linalg.norm(axis))
     if nrm < 1e-9:
-        raise HTTPException(422, detail=(
-            f"Joint {joint.id} axis is degenerate."
-        ))
+        raise HTTPException(422, detail=(f"Joint {joint.id} axis is degenerate."))
     axis = axis / nrm
     origin = np.asarray(world_origin, dtype=float)
 
-    moving_is_a = (joint.cluster_id == cluster_a_id)
+    moving_is_a = joint.cluster_id == cluster_a_id
     moving_anchor = anchor_a if moving_is_a else anchor_b
     fixed_anchor = anchor_b if moving_is_a else anchor_a
 
@@ -254,10 +271,14 @@ def _relax_one_joint(
     new_clusters = []
     for c in design.cluster_transforms:
         if c.id == joint.cluster_id:
-            new_clusters.append(c.model_copy(update={
-                "rotation": list(q_new),
-                "translation": list(t_new),
-            }))
+            new_clusters.append(
+                c.model_copy(
+                    update={
+                        "rotation": list(q_new),
+                        "translation": list(t_new),
+                    }
+                )
+            )
         else:
             new_clusters.append(c)
 
@@ -271,6 +292,7 @@ def _relax_one_joint(
 
 
 # ── N-DOF: Powell over all joints ───────────────────────────────────────────
+
 
 def _relax_n_joints(
     design: Design,
@@ -289,23 +311,25 @@ def _relax_n_joints(
     for j in joints:
         ct = cts_by_id.get(j.cluster_id)
         wo, wd = _local_to_world_joint(
-            j.local_axis_origin, j.local_axis_direction, ct,
+            j.local_axis_origin,
+            j.local_axis_direction,
+            ct,
         )
         axis = np.asarray(wd, dtype=float)
         nrm = float(np.linalg.norm(axis))
         if nrm < 1e-9:
-            raise HTTPException(422, detail=(
-                f"Joint {j.id} axis is degenerate."
-            ))
+            raise HTTPException(422, detail=(f"Joint {j.id} axis is degenerate."))
         axis = axis / nrm
-        selected.append((
-            j,
-            np.asarray(wo, dtype=float),
-            axis,
-            j.cluster_id,
-            float(j.min_angle_deg) * np.pi / 180.0,
-            float(j.max_angle_deg) * np.pi / 180.0,
-        ))
+        selected.append(
+            (
+                j,
+                np.asarray(wo, dtype=float),
+                axis,
+                j.cluster_id,
+                float(j.min_angle_deg) * np.pi / 180.0,
+                float(j.max_angle_deg) * np.pi / 180.0,
+            )
+        )
 
     def _apply(thetas: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         pa = anchor_a.copy()
@@ -322,7 +346,9 @@ def _relax_n_joints(
         pa, pb = _apply(thetas)
         chord = float(np.linalg.norm(pa - pb))
         residual = chord - target_nm
-        return (residual * residual) + _THETA_REG_LAMBDA * float(np.sum(thetas * thetas))
+        return (residual * residual) + _THETA_REG_LAMBDA * float(
+            np.sum(thetas * thetas)
+        )
 
     bounds = [(tmin, tmax) for (*_rest, tmin, tmax) in selected]
     x0 = np.array(
@@ -330,7 +356,10 @@ def _relax_n_joints(
         dtype=float,
     )
     res = minimize(
-        loss, x0, method="Powell", bounds=bounds,
+        loss,
+        x0,
+        method="Powell",
+        bounds=bounds,
         options={"xtol": 1e-5, "ftol": 1e-8, "maxiter": 500},
     )
     thetas = np.asarray(res.x, dtype=float)
@@ -343,9 +372,12 @@ def _relax_n_joints(
         cluster = cts_by_id[cid]
         if cid in staged:
             q_prev, t_prev, _pivot = staged[cid]
-            stub = cluster.model_copy(update={
-                'rotation': q_prev, 'translation': t_prev,
-            })
+            stub = cluster.model_copy(
+                update={
+                    "rotation": q_prev,
+                    "translation": t_prev,
+                }
+            )
         else:
             stub = cluster
         q_new, t_new = _composed_transform(stub, origin, axis, float(theta))
@@ -355,9 +387,14 @@ def _relax_n_joints(
     for c in design.cluster_transforms:
         if c.id in staged:
             q_new, t_new, _pv = staged[c.id]
-            new_clusters.append(c.model_copy(update={
-                "rotation": q_new, "translation": t_new,
-            }))
+            new_clusters.append(
+                c.model_copy(
+                    update={
+                        "rotation": q_new,
+                        "translation": t_new,
+                    }
+                )
+            )
         else:
             new_clusters.append(c)
 
@@ -375,6 +412,7 @@ def _relax_n_joints(
 
 
 # ── Shared helpers ──────────────────────────────────────────────────────────
+
 
 def _optimize_angle_chord_target(
     *,
@@ -421,6 +459,7 @@ def _optimize_angle_chord_target(
         candidate_idxs = [int(np.argmin(losses))]
 
     from scipy.optimize import minimize_scalar
+
     refined: list[tuple[float, float]] = []
     for i in candidate_idxs:
         lo = grid[max(0, i - 2)]
@@ -429,7 +468,9 @@ def _optimize_angle_chord_target(
             refined.append((float(grid[i]), float(losses[i])))
             continue
         res = minimize_scalar(
-            chord_loss, bounds=(lo, hi), method="bounded",
+            chord_loss,
+            bounds=(lo, hi),
+            method="bounded",
             options={"xatol": 1e-5},
         )
         refined.append((float(res.x), float(res.fun)))
@@ -455,18 +496,22 @@ def _commit_clusters(
     if design.feature_log_cursor == -2:
         log = []
     elif design.feature_log_cursor >= 0:
-        log = log[:design.feature_log_cursor + 1]
+        log = log[: design.feature_log_cursor + 1]
     for c in new_clusters:
         if c.id in moved_set:
-            log.append(ClusterOpLogEntry(
-                cluster_id=c.id,
-                translation=list(c.translation),
-                rotation=list(c.rotation),
-                pivot=list(c.pivot),
-                source=source_tag,
-            ))
-    return design.model_copy(update={
-        "cluster_transforms": new_clusters,
-        "feature_log": log,
-        "feature_log_cursor": -1,
-    })
+            log.append(
+                ClusterOpLogEntry(
+                    cluster_id=c.id,
+                    translation=list(c.translation),
+                    rotation=list(c.rotation),
+                    pivot=list(c.pivot),
+                    source=source_tag,
+                )
+            )
+    return design.model_copy(
+        update={
+            "cluster_transforms": new_clusters,
+            "feature_log": log,
+            "feature_log_cursor": -1,
+        }
+    )

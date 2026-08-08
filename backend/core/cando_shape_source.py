@@ -29,6 +29,7 @@ added, it MUST be built from the RAW ``solve_prestress_shape(field=)`` axis-node
 ``predict_shape``'s ``positions``, which are per-frame Kabsch-reposed onto the design so a
 genuinely-held anchor spuriously drifts ~5 nm (the C2 lesson).
 """
+
 from __future__ import annotations
 
 from backend.core.oxdna_health import _filter_to_reference_core
@@ -46,17 +47,21 @@ def _rmsf_profile(rmsf) -> list[dict]:
         v = r.get("rmsf_nm")
         if v is None:
             continue
-        out.append({
-            "helix_id": r["helix_id"],
-            "bp_index": int(r["bp_index"]),
-            "direction": None,
-            "copy": int(r.get("copy", 0)),
-            "rmsf_nm": float(v),
-        })
+        out.append(
+            {
+                "helix_id": r["helix_id"],
+                "bp_index": int(r["bp_index"]),
+                "direction": None,
+                "copy": int(r.get("copy", 0)),
+                "rmsf_nm": float(v),
+            }
+        )
     return out
 
 
-def build_cando_shape_source(shape_frame, core_reference, *, rmsf=None, field=None) -> dict:
+def build_cando_shape_source(
+    shape_frame, core_reference, *, rmsf=None, field=None
+) -> dict:
     """The CanDo source bundle for the cross-engine comparison card.
 
     ``shape_frame`` — the CanDo ``predict_shape`` display frame (``predict_shape(...)

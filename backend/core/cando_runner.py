@@ -41,9 +41,10 @@ logger = logging.getLogger(__name__)
 
 # ── Global task registry ──────────────────────────────────────────────────────
 
+
 @dataclass
 class _RunningHandle:
-    thread:    threading.Thread
+    thread: threading.Thread
     cancelled: bool = False
 
 
@@ -56,6 +57,7 @@ def is_running(job_id: str) -> bool:
 
 
 # ── Prepare: write the self-contained job dir ─────────────────────────────────
+
 
 def prepare_cando_job(design: Design, job: CandoJob, workspace_dir: Path) -> None:
     """Write a self-contained ``design.json`` snapshot into the job dir, so the
@@ -76,6 +78,7 @@ def _load_snapshot_design(job_dir: Path) -> Optional[Design]:
 
 
 # ── Cache accessors ───────────────────────────────────────────────────────────
+
 
 def load_cached(job_dir: Path, name: str) -> Optional[dict]:
     """Load a cached ``display.json`` / ``rmsf.json`` payload, or None."""
@@ -100,6 +103,7 @@ def load_rmsf(job_dir: Path) -> Optional[dict]:
 
 # ── Progress (time-based estimate; the true completion signal is the thread) ──
 
+
 def _estimate_seconds(job: CandoJob) -> float:
     """Rough wall-clock estimate for the solve, scaled by system size + mode.
 
@@ -107,14 +111,14 @@ def _estimate_seconds(job: CandoJob) -> float:
     completion signal is the runner thread finishing.  Reference: a 6HB/210
     (~1260 duplex nodes) nonlinear solve ≈ 60 s; the linear preview ≈ a few s.
     """
-    nodes = max(1.0, job.n_nucleotides / 2.0)          # ≈ base pairs ≈ FEM nodes
+    nodes = max(1.0, job.n_nucleotides / 2.0)  # ≈ base pairs ≈ FEM nodes
     if job.nonlinear:
         # Corotational solve: one sparse factorisation + eigensolve per load step.
         est = 3.0 + (nodes / 1260.0) * (job.n_steps / 20.0) * 55.0
     else:
         est = 1.0 + (nodes / 1260.0) * 4.0
     if job.with_rmsf:
-        est += (nodes / 1260.0) * 8.0                  # the 200-mode NMA eigensolve
+        est += (nodes / 1260.0) * 8.0  # the 200-mode NMA eigensolve
     return max(2.0, est)
 
 
@@ -133,15 +137,16 @@ def job_progress(job: CandoJob, workspace_dir: Path) -> dict:
         overall = min(0.97, elapsed / est)
         eta_seconds = max(0.0, est - elapsed)
     return {
-        "overall":      overall,
-        "status":       job.status.value,
+        "overall": overall,
+        "status": job.status.value,
         "stage_status": stage.status if stage else None,
-        "eta_seconds":  eta_seconds,
-        "sim_seconds":  job.sim_seconds,
+        "eta_seconds": eta_seconds,
+        "sim_seconds": job.sim_seconds,
     }
 
 
 # ── Execution ─────────────────────────────────────────────────────────────────
+
 
 class _Cancelled(Exception):
     pass
@@ -153,11 +158,17 @@ def _cache_fem_analysis(job: CandoJob, jd: Path, result: dict) -> None:
     plain predict job and the autorefine job (which caches the analysis of its REFINED design), so
     both end as a first-class completed job whose deform/flex/deviation/cylinder toggles all work."""
     positions = result.get("positions", [])
-    (jd / "display.json").write_text(json.dumps({
-        "solver":    result.get("solver"),
-        "positions": positions,
-        "axis":      result.get("axis", []),   # per-bp helix-centre nodes (cylinder rep)
-    }))
+    (jd / "display.json").write_text(
+        json.dumps(
+            {
+                "solver": result.get("solver"),
+                "positions": positions,
+                "axis": result.get(
+                    "axis", []
+                ),  # per-bp helix-centre nodes (cylinder rep)
+            }
+        )
+    )
     rmsf = result.get("rmsf")
     rmsf_min = rmsf_max = None
     if rmsf:
@@ -201,14 +212,14 @@ def _run_job(job: CandoJob, workspace_dir: Path) -> None:
         t0 = time.monotonic()
         result = predict_shape(
             design,
-            nonlinear = job.nonlinear,
-            n_steps   = job.n_steps,
-            with_rmsf = job.with_rmsf,
+            nonlinear=job.nonlinear,
+            n_steps=job.n_steps,
+            with_rmsf=job.with_rmsf,
             # Anchors (Dirichlet BC) + uniform E-field body load — job-request annotations, never a
             # topology edit (C1/C2). A field needs ≥1 anchor to hold against (COM drift); predict_shape
             # falls back to the free centroid-pinned solve if a selection resolves to nothing.
-            anchors   = getattr(job, "anchors", None),
-            field     = getattr(job, "field", None),
+            anchors=getattr(job, "anchors", None),
+            field=getattr(job, "field", None),
         )
         sim_seconds = time.monotonic() - t0
 
@@ -222,8 +233,13 @@ def _run_job(job: CandoJob, workspace_dir: Path) -> None:
         job.status = CandoStatus.completed
         job.error = None
         job.save(workspace_dir)
-        logger.info("cando job %s completed in %.1fs (%s solve, %s nodes)",
-                    job.job_id, sim_seconds, result.get("solver"), job.n_nodes)
+        logger.info(
+            "cando job %s completed in %.1fs (%s solve, %s nodes)",
+            job.job_id,
+            sim_seconds,
+            result.get("solver"),
+            job.n_nodes,
+        )
 
     except _Cancelled:
         job.status = CandoStatus.stopped
@@ -248,6 +264,7 @@ def _run_job(job: CandoJob, workspace_dir: Path) -> None:
 
 # ── Autorefine job ────────────────────────────────────────────────────────────
 
+
 def _fmt_deg(v) -> str:
     return f"{v:.1f}°" if isinstance(v, (int, float)) else "—"
 
@@ -264,11 +281,17 @@ def _metric_tail(cur: Optional[dict], tgt: Optional[dict]) -> str:
     cur, tgt = cur or {}, tgt or {}
     bits = []
     if cur.get("deviation") is not None or tgt.get("deviation") is not None:
-        bits.append(f"dev {_fmt_nm(cur.get('deviation'))}→{_fmt_nm(tgt.get('deviation'))}")
+        bits.append(
+            f"dev {_fmt_nm(cur.get('deviation'))}→{_fmt_nm(tgt.get('deviation'))}"
+        )
     if cur.get("bend_deg") is not None or tgt.get("bend_deg") is not None:
-        bits.append(f"curve {_fmt_deg(cur.get('bend_deg'))}→{_fmt_deg(tgt.get('bend_deg'))}")
+        bits.append(
+            f"curve {_fmt_deg(cur.get('bend_deg'))}→{_fmt_deg(tgt.get('bend_deg'))}"
+        )
     if cur.get("twist_deg") is not None or tgt.get("twist_deg") is not None:
-        bits.append(f"twist {_fmt_deg(cur.get('twist_deg'))}→{_fmt_deg(tgt.get('twist_deg'))}")
+        bits.append(
+            f"twist {_fmt_deg(cur.get('twist_deg'))}→{_fmt_deg(tgt.get('twist_deg'))}"
+        )
     return (" · " + " · ".join(bits)) if bits else ""
 
 
@@ -279,7 +302,12 @@ def _format_refine_note(ev: dict) -> Optional[str]:
     reports its full metric set (deviation, curvature, twist, combined shape error)."""
     phase = ev.get("phase")
     if phase == "density_trial":
-        p, n, r, tw = ev.get("period"), ev.get("n_skips"), ev.get("rmsd"), ev.get("twist")
+        p, n, r, tw = (
+            ev.get("period"),
+            ev.get("n_skips"),
+            ev.get("rmsd"),
+            ev.get("twist"),
+        )
         tail = []
         if isinstance(tw, (int, float)):
             tail.append(f"twist {tw:.1f}°")
@@ -291,14 +319,20 @@ def _format_refine_note(ev: dict) -> Optional[str]:
         return f"Best skip density: period {ev.get('period')} (dev {ev.get('rmsd', 0):.2f} nm)"
     if phase == "shape_target":
         tw, bd = ev.get("twist"), ev.get("bend")
-        tgt = f"twist {_fmt_deg(tw)}" + (f", curve {_fmt_deg(bd)}" if bd is not None else "")
+        tgt = f"twist {_fmt_deg(tw)}" + (
+            f", curve {_fmt_deg(bd)}" if bd is not None else ""
+        )
         return f"Solving coupled shape → {tgt}…"
     if phase == "twist_authority":
-        return (f"Probing twist authority: helix {ev.get('helix_id')} "
-                f"(Δtwist {_fmt_deg(ev.get('dtwist'))}/skip)…")
+        return (
+            f"Probing twist authority: helix {ev.get('helix_id')} "
+            f"(Δtwist {_fmt_deg(ev.get('dtwist'))}/skip)…"
+        )
     if phase == "twist_bump":
-        return (f"Twist tuning: helix {ev.get('helix_id')} → "
-                f"twist err {_fmt_deg(ev.get('twist_err'))}…")
+        return (
+            f"Twist tuning: helix {ev.get('helix_id')} → "
+            f"twist err {_fmt_deg(ev.get('twist_err'))}…"
+        )
     if phase == "shape_iter":
         it = ev.get("iter", ev.get("iteration", 0))
         se = ev.get("shape_err")
@@ -325,7 +359,7 @@ def _run_autorefine_job(job: CandoJob, workspace_dir: Path) -> None:
     def _cancelled() -> bool:
         return handle is not None and handle.cancelled
 
-    token = doc_context.set_current_doc(job.doc_id)   # apply lands on the right document
+    token = doc_context.set_current_doc(job.doc_id)  # apply lands on the right document
     try:
         snapshot = _load_snapshot_design(jd)
         if snapshot is None:
@@ -351,8 +385,12 @@ def _run_autorefine_job(job: CandoJob, workspace_dir: Path) -> None:
                     pass
 
         t0 = time.monotonic()
-        res = car.fem_refine(snapshot, nonlinear=job.nonlinear,
-                             on_progress=_on_progress, should_stop=_cancelled)
+        res = car.fem_refine(
+            snapshot,
+            nonlinear=job.nonlinear,
+            on_progress=_on_progress,
+            should_stop=_cancelled,
+        )
         if _cancelled():
             raise _Cancelled()
 
@@ -365,7 +403,11 @@ def _run_autorefine_job(job: CandoJob, workspace_dir: Path) -> None:
         # reject the correct program.  Gate those on the shape error; honeycomb-weak still gates on RMSD.
         tw_b, tw_a = res.get("twist_before"), res.get("twist_after")
         tw_t = res.get("twist_target") or 0.0
-        bd_b, bd_a, bd_t = res.get("bend_before"), res.get("bend_after"), res.get("bend_target")
+        bd_b, bd_a, bd_t = (
+            res.get("bend_before"),
+            res.get("bend_after"),
+            res.get("bend_target"),
+        )
         if objective in ("twist", "shape"):
             err_b = abs((tw_b if tw_b is not None else 0.0) - tw_t)
             err_a = abs((tw_a if tw_a is not None else 0.0) - tw_t)
@@ -389,8 +431,10 @@ def _run_autorefine_job(job: CandoJob, workspace_dir: Path) -> None:
         if improved:
             from backend.api import state as ds
             from backend.core.oxdna_staleness import (
-                effective_feature_log_position, oxdna_design_fingerprint,
+                effective_feature_log_position,
+                oxdna_design_fingerprint,
             )
+
             n_skip = sum(1 for bps in marks.values() for dl in bps.values() if dl == -1)
             n_loop = sum(1 for bps in marks.values() for dl in bps.values() if dl == +1)
             # Build the applied (re-sequenced) design in an isolated scratch doc, then land it on
@@ -398,13 +442,21 @@ def _run_autorefine_job(job: CandoJob, workspace_dir: Path) -> None:
             # avoid the state-lock self-deadlock — same pattern as the REST apply route).
             refined_built = car.build_refined_design(snapshot, marks)
             label = f"CanDo autorefine ({n_skip} skips, {n_loop} loops)"
-            params = {"source": "cando-autorefine-job", "job_id": job.job_id,
-                      "mode": res.get("mode"), "edits_kept": len(res.get("edits_kept") or []),
-                      "before_rmsd": round(before, 4), "after_rmsd": round(after, 4),
-                      "resequenced": True}
+            params = {
+                "source": "cando-autorefine-job",
+                "job_id": job.job_id,
+                "mode": res.get("mode"),
+                "edits_kept": len(res.get("edits_kept") or []),
+                "before_rmsd": round(before, 4),
+                "after_rmsd": round(after, 4),
+                "resequenced": True,
+            }
             updated, _report, _entry = ds.mutate_with_feature_log(
-                op_kind="cando-autorefine-marks", label=label, params=params,
-                fn=lambda _d: refined_built)
+                op_kind="cando-autorefine-marks",
+                label=label,
+                params=params,
+                fn=lambda _d: refined_built,
+            )
             refined = updated
             job.refine_applied = True
             job.refine_n_marks = n_skip + n_loop
@@ -419,37 +471,60 @@ def _run_autorefine_job(job: CandoJob, workspace_dir: Path) -> None:
         # Re-snapshot the refined (or unchanged) design and cache its FEM analysis → the job now
         # behaves like a completed predict job: every display mode reads its display/rmsf/snapshot.
         (jd / "design.json").write_text(refined.model_dump_json())
-        result = predict_shape(refined, nonlinear=job.nonlinear,
-                               n_steps=job.n_steps, with_rmsf=job.with_rmsf)
+        result = predict_shape(
+            refined,
+            nonlinear=job.nonlinear,
+            n_steps=job.n_steps,
+            with_rmsf=job.with_rmsf,
+        )
         _cache_fem_analysis(job, jd, result)
 
         job.sim_seconds = round(time.monotonic() - t0, 2)
         per = f" (period {job.refine_period})" if job.refine_period else ""
         if improved and objective == "shape":
-            bstr = (f", bend {bd_b:.1f}°→{bd_a:.1f}° (target {bd_t:.1f}°)"
-                    if bd_t is not None and bd_b is not None and bd_a is not None else "")
-            job.refine_note = (f"Applied {job.refine_n_marks} marks · twist "
-                               f"{tw_b:.1f}°→{tw_a:.1f}° (target {tw_t:.1f}°){bstr}")
+            bstr = (
+                f", bend {bd_b:.1f}°→{bd_a:.1f}° (target {bd_t:.1f}°)"
+                if bd_t is not None and bd_b is not None and bd_a is not None
+                else ""
+            )
+            job.refine_note = (
+                f"Applied {job.refine_n_marks} marks · twist "
+                f"{tw_b:.1f}°→{tw_a:.1f}° (target {tw_t:.1f}°){bstr}"
+            )
         elif improved and objective == "twist":
-            job.refine_note = (f"Applied {job.refine_n_marks} marks{per} · twist "
-                               f"{tw_b:.1f}°→{tw_a:.1f}° (target {tw_t:.1f}°, "
-                               f"dev {before:.2f}→{after:.2f} nm)")
+            job.refine_note = (
+                f"Applied {job.refine_n_marks} marks{per} · twist "
+                f"{tw_b:.1f}°→{tw_a:.1f}° (target {tw_t:.1f}°, "
+                f"dev {before:.2f}→{after:.2f} nm)"
+            )
         elif improved:
-            job.refine_note = (f"Applied {job.refine_n_marks} marks{per} · "
-                               f"deviation {before:.2f}→{after:.2f} nm")
+            job.refine_note = (
+                f"Applied {job.refine_n_marks} marks{per} · "
+                f"deviation {before:.2f}→{after:.2f} nm"
+            )
         elif objective in ("twist", "shape"):
             cur = f"{tw_b:.1f}°" if tw_b is not None else "—"
-            job.refine_note = (f"No shape improvement (twist {cur}, target {tw_t:.1f}°) "
-                               f"— nothing applied.")
+            job.refine_note = (
+                f"No shape improvement (twist {cur}, target {tw_t:.1f}°) "
+                f"— nothing applied."
+            )
         else:
-            job.refine_note = f"No improvement (deviation {before:.2f} nm) — nothing applied."
+            job.refine_note = (
+                f"No improvement (deviation {before:.2f} nm) — nothing applied."
+            )
         for st in job.stages:
             st.status = "done"
         job.status = CandoStatus.completed
         job.error = None
         job.save(workspace_dir)
-        logger.info("cando autorefine job %s: applied=%s marks=%s rmsd %.2f→%.2f",
-                    job.job_id, job.refine_applied, job.refine_n_marks, before, after)
+        logger.info(
+            "cando autorefine job %s: applied=%s marks=%s rmsd %.2f→%.2f",
+            job.job_id,
+            job.refine_applied,
+            job.refine_n_marks,
+            before,
+            after,
+        )
 
     except _Cancelled:
         job.status = CandoStatus.stopped
@@ -459,7 +534,9 @@ def _run_autorefine_job(job: CandoJob, workspace_dir: Path) -> None:
                 st.status = "failed"
         job.save(workspace_dir)
     except Exception as exc:  # noqa: BLE001
-        logger.error("cando autorefine job %s failed: %s", job.job_id, exc, exc_info=True)
+        logger.error(
+            "cando autorefine job %s failed: %s", job.job_id, exc, exc_info=True
+        )
         job.status = CandoStatus.stopped if _cancelled() else CandoStatus.failed
         if job.status == CandoStatus.failed:
             job.error = str(exc)
@@ -478,9 +555,14 @@ def start_job(job: CandoJob, workspace_dir: Path) -> None:
     if is_running(job.job_id):
         return
     target = _run_autorefine_job if job.kind == "autorefine" else _run_job
-    handle = _RunningHandle(thread=threading.Thread(
-        target=target, args=(job, workspace_dir),
-        name=f"cando-runner-{job.job_id}", daemon=True))
+    handle = _RunningHandle(
+        thread=threading.Thread(
+            target=target,
+            args=(job, workspace_dir),
+            name=f"cando-runner-{job.job_id}",
+            daemon=True,
+        )
+    )
     _RUNNING[job.job_id] = handle
     handle.thread.start()
 

@@ -22,6 +22,7 @@ two distant-index nucleotides come into spatial contact — exactly what a relax
 floppy loop does — and asserts the axis path piles their atoms together while the
 rigid-frame fix keeps them apart.  No oxDNA/NAMD binary, no GPU: fast + deterministic.
 """
+
 from __future__ import annotations
 
 import tempfile
@@ -52,26 +53,43 @@ def _overhang_design():
     fix targets, unlike marked-flexible runs (their own display override)."""
     n = 32
     helix = Helix(
-        id="h0", axis_start=Vec3(x=0, y=0, z=0),
+        id="h0",
+        axis_start=Vec3(x=0, y=0, z=0),
         axis_end=Vec3(x=0, y=0, z=n * BDNA_RISE_PER_BP),
-        phase_offset=0.0, length_bp=n, grid_pos=(0, 0),
+        phase_offset=0.0,
+        length_bp=n,
+        grid_pos=(0, 0),
     )
     scaffold = Strand(
-        id="scaf", strand_type=StrandType.SCAFFOLD,
+        id="scaf",
+        strand_type=StrandType.SCAFFOLD,
         domains=[
             Domain(helix_id="h0", start_bp=0, end_bp=11, direction=Direction.FORWARD),
-            Domain(helix_id="h0", start_bp=12, end_bp=31,
-                   direction=Direction.FORWARD, overhang_id="oh"),
+            Domain(
+                helix_id="h0",
+                start_bp=12,
+                end_bp=31,
+                direction=Direction.FORWARD,
+                overhang_id="oh",
+            ),
         ],
     )
     staple = Strand(
-        id="stap", strand_type=StrandType.STAPLE,
-        domains=[Domain(helix_id="h0", start_bp=0, end_bp=11, direction=Direction.REVERSE)],
+        id="stap",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h0", start_bp=0, end_bp=11, direction=Direction.REVERSE)
+        ],
     )
-    return _demo_design().model_copy(update={
-        "helices": [helix], "strands": [scaffold, staple],
-        "crossovers": [], "forced_ligations": [], "cluster_transforms": [],
-    })
+    return _demo_design().model_copy(
+        update={
+            "helices": [helix],
+            "strands": [scaffold, staple],
+            "crossovers": [],
+            "forced_ligations": [],
+            "cluster_transforms": [],
+        }
+    )
 
 
 def _unpaired_keys(full_map) -> set[tuple]:
@@ -106,7 +124,8 @@ def _write_folded_conf(path: Path):
         i = ss_index[key]
         t = i / (m - 1)
         nuc["backbone_position"] = (
-            anchor + np.array([0.8 * np.sin(np.pi * t), 0.15 * i - 0.15 * (m - 1) / 2, 0.0])
+            anchor
+            + np.array([0.8 * np.sin(np.pi * t), 0.15 * i - 0.15 * (m - 1) / 2, 0.0])
         ).tolist()
     write_configuration(design, geometry, path, oxdna_native_seed=True)
     return design, ss
@@ -114,6 +133,7 @@ def _write_folded_conf(path: Path):
 
 def _near_coincident(model, r_nm=_NEAR_NM) -> int:
     from scipy.spatial import cKDTree
+
     xyz = np.asarray([[a.x, a.y, a.z] for a in model.atoms])
     return len(cKDTree(xyz).query_pairs(r=r_nm, output_type="ndarray"))
 
@@ -122,11 +142,14 @@ def _build_no_fix(design, conf):
     """The ORIGINAL pre-fix seed build (legacy design_axis tangent, no ssDNA rigid
     override) — the fully-broken baseline that piled folded ssDNA into coincidence."""
     full = read_configuration_full_unwrapped(conf, design)
-    pos = {k: oxdna_backbone_site(r["backbone_position"], r["a1"], r["a3"])
-           for k, r in full.items()}
+    pos = {
+        k: oxdna_backbone_site(r["backbone_position"], r["a1"], r["a3"])
+        for k, r in full.items()
+    }
     axis = deformed_helix_axes(design, full, sigma=2.0)
-    return build_atomistic_model(design, nuc_pos_override=pos, axis_override=axis,
-                                 apply_design_geometry=False)
+    return build_atomistic_model(
+        design, nuc_pos_override=pos, axis_override=axis, apply_design_geometry=False
+    )
 
 
 def _build_a3_no_ssdna(design, conf):
@@ -134,11 +157,18 @@ def _build_a3_no_ssdna(design, conf):
     orientation + relaxed phase.  Used to isolate the ssDNA fix's scope: base
     orientation moves duplex atoms too, so it must be held identical to production."""
     full = read_configuration_full_unwrapped(conf, design)
-    pos = {k: oxdna_backbone_site(r["backbone_position"], r["a1"], r["a3"])
-           for k, r in full.items()}
+    pos = {
+        k: oxdna_backbone_site(r["backbone_position"], r["a1"], r["a3"])
+        for k, r in full.items()
+    }
     axis = deformed_helix_axes(design, full, sigma=2.0, base_orient="oxdna_a3")
-    return build_atomistic_model(design, nuc_pos_override=pos, axis_override=axis,
-                                 apply_design_geometry=False, relaxed_oxdna_phase=True)
+    return build_atomistic_model(
+        design,
+        nuc_pos_override=pos,
+        axis_override=axis,
+        apply_design_geometry=False,
+        relaxed_oxdna_phase=True,
+    )
 
 
 def test_ssdna_fold_does_not_collapse_seed_atoms():
@@ -148,16 +178,20 @@ def test_ssdna_fold_does_not_collapse_seed_atoms():
         conf = Path(td) / "folded.dat"
         design, _ = _write_folded_conf(conf)
 
-        prod = build_atomistic_model_from_cg_spline(design, conf)   # WITH fix
-        nofix = _build_no_fix(design, conf)                          # pre-fix path
+        prod = build_atomistic_model_from_cg_spline(design, conf)  # WITH fix
+        nofix = _build_no_fix(design, conf)  # pre-fix path
 
         near_prod = _near_coincident(prod)
         near_nofix = _near_coincident(nofix)
 
     # can-go-red: without the ssDNA rigid frame the axis path collapses the folded
     # loop (measured ~115 near-coincident pairs); the fix cuts it to ~18.
-    assert near_nofix > 60, f"fixture no longer reproduces the collapse (nofix={near_nofix})"
-    assert near_prod < 40, f"production seed still collapses folded ssDNA (near={near_prod})"
+    assert near_nofix > 60, (
+        f"fixture no longer reproduces the collapse (nofix={near_nofix})"
+    )
+    assert near_prod < 40, (
+        f"production seed still collapses folded ssDNA (near={near_prod})"
+    )
     assert near_prod < near_nofix / 2
 
 
@@ -171,13 +205,15 @@ def test_fix_is_scoped_to_ssdna_duplex_atoms_unchanged():
         nofix = _build_a3_no_ssdna(design, conf)
 
     def amap(m):
-        return {(a.helix_id, a.bp_index, a.direction, a.name): np.array([a.x, a.y, a.z])
-                for a in m.atoms}
+        return {
+            (a.helix_id, a.bp_index, a.direction, a.name): np.array([a.x, a.y, a.z])
+            for a in m.atoms
+        }
 
     a_fix, a_no = amap(prod), amap(nofix)
     common = a_fix.keys() & a_no.keys()
     dup_disp = [np.linalg.norm(a_fix[k] - a_no[k]) for k in common if k[:3] not in ss]
     ss_disp = [np.linalg.norm(a_fix[k] - a_no[k]) for k in common if k[:3] in ss]
 
-    assert dup_disp and max(dup_disp) < 1e-6      # duplex untouched
-    assert ss_disp and np.median(ss_disp) > 0.3   # ssDNA re-placed onto its rigid frame
+    assert dup_disp and max(dup_disp) < 1e-6  # duplex untouched
+    assert ss_disp and np.median(ss_disp) > 0.3  # ssDNA re-placed onto its rigid frame

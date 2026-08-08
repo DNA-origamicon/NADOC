@@ -160,7 +160,9 @@ def surface_grid_path(out_dir: Path) -> Path:
     return Path(out_dir) / "surface.dx"
 
 
-def apply_surface_force(design: "Design", model, surface, *, out_dir: Path) -> list[str]:
+def apply_surface_force(
+    design: "Design", model, surface, *, out_dir: Path
+) -> list[str]:
     """Write the wall grid from the CURRENT bead cloud and attach it to every DNA bead
     type.  The plane is placed ``offset_nm`` below the structure's lowest bead along
     ``dir̂`` at this moment; :func:`install_surface_force` calls this ONCE (the plane is
@@ -209,10 +211,15 @@ def install_surface_force(design: "Design", model, surface, *, out_dir: Path) ->
     def _wrapped(*args, **kwargs):
         orig(*args, **kwargs)
         n = len(_attach_wall_grid(model, grid))
-        logger.info("mrdna surface: re-attached wall grid to %d bead type(s) after regen", n)
+        logger.info(
+            "mrdna surface: re-attached wall grid to %d bead type(s) after regen", n
+        )
 
     model.generate_bead_model = _wrapped
 
-    logger.info("mrdna surface: applied wall grid to %d bead type(s) (%s)",
-                len(names), ", ".join(names) or "none")
+    logger.info(
+        "mrdna surface: applied wall grid to %d bead type(s) (%s)",
+        len(names),
+        ", ".join(names) or "none",
+    )
     return len(names)

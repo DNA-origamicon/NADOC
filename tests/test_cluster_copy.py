@@ -56,12 +56,16 @@ def _helix(hid: str, row: int, col: int, length_bp: int = 100) -> Helix:
     )
 
 
-def _dom(hid: str, lo: int, hi: int, direction: Direction = Direction.FORWARD) -> Domain:
+def _dom(
+    hid: str, lo: int, hi: int, direction: Direction = Direction.FORWARD
+) -> Domain:
     return Domain(helix_id=hid, start_bp=lo, end_bp=hi, direction=direction)
 
 
 def _cluster(cid: str, helix_ids: list[str], **kw) -> ClusterRigidTransform:
-    return ClusterRigidTransform(id=cid, name=f"Cluster {cid}", helix_ids=helix_ids, **kw)
+    return ClusterRigidTransform(
+        id=cid, name=f"Cluster {cid}", helix_ids=helix_ids, **kw
+    )
 
 
 def _load(stem: str) -> Design:
@@ -127,14 +131,20 @@ def two_cluster_design() -> Design:
 
 
 def test_closure_pulls_in_parent_when_child_selected():
-    clusters = [_cluster("parent", ["h1"]), _cluster("child", ["h1"], parent_cluster_id="parent")]
+    clusters = [
+        _cluster("parent", ["h1"]),
+        _cluster("child", ["h1"], parent_cluster_id="parent"),
+    ]
     closure, added = cluster_closure(["child"], clusters)
     assert set(closure) == {"parent", "child"}
     assert added == ["parent"]
 
 
 def test_closure_pulls_in_child_when_parent_selected():
-    clusters = [_cluster("parent", ["h1"]), _cluster("child", ["h1"], parent_cluster_id="parent")]
+    clusters = [
+        _cluster("parent", ["h1"]),
+        _cluster("child", ["h1"], parent_cluster_id="parent"),
+    ]
     closure, added = cluster_closure(["parent"], clusters)
     assert set(closure) == {"parent", "child"}
     assert added == ["child"]
@@ -184,7 +194,9 @@ def test_truncation_renumbers_domain_index_for_domain_level_clusters():
             )
         ],
         cluster_transforms=[
-            _cluster("cA", ["hA"], domain_ids=[DomainRef(strand_id="s1", domain_index=2)]),
+            _cluster(
+                "cA", ["hA"], domain_ids=[DomainRef(strand_id="s1", domain_index=2)]
+            ),
         ],
     )
     sub, _ = extract_cluster_subdesign(design, ["cA"])
@@ -193,8 +205,8 @@ def test_truncation_renumbers_domain_index_for_domain_level_clusters():
     frag = sub.strands[0]
     assert len(frag.domains) == 1
     ref = sub.cluster_transforms[0].domain_ids[0]
-    assert ref.strand_id == frag.id      # points at the fragment, not the original
-    assert ref.domain_index == 0         # renumbered from 2 -> 0
+    assert ref.strand_id == frag.id  # points at the fragment, not the original
+    assert ref.domain_index == 0  # renumbered from 2 -> 0
 
 
 def test_domain_refs_to_dropped_domains_are_dropped():
@@ -245,7 +257,9 @@ def test_extract_refuses_empty_selection(two_cluster_design):
 def test_extract_refuses_overhangs_rather_than_dropping_them():
     """Silently dropping an OverhangSpec would leave a dangling Domain.overhang_id."""
     design = _load("hingeV4")
-    assert design.overhangs, "fixture must carry overhangs for this test to mean anything"
+    assert design.overhangs, (
+        "fixture must carry overhangs for this test to mean anything"
+    )
     cid = design.cluster_transforms[0].id
     with pytest.raises(ValueError, match="overhang"):
         extract_cluster_subdesign(design, [cid])
@@ -348,7 +362,13 @@ def test_posed_cluster_copies_pose_and_shifts_pivot(two_cluster_design):
 def test_paste_is_additive_and_ids_are_unique(two_cluster_design):
     out, pasted, _ = paste_clusters(two_cluster_design, ["cA"], (0, 4))
 
-    for attr in ("helices", "strands", "crossovers", "forced_ligations", "cluster_transforms"):
+    for attr in (
+        "helices",
+        "strands",
+        "crossovers",
+        "forced_ligations",
+        "cluster_transforms",
+    ):
         ids = [o.id for o in getattr(out, attr)]
         assert len(ids) == len(set(ids)), f"duplicate ids in {attr}"
 
@@ -417,7 +437,9 @@ def test_every_pasted_crossover_stays_legal():
     cid = design.cluster_transforms[0].id
 
     src_flags = [_crossover_legal_flags(design, x) for x in design.crossovers]
-    assert all(f for f in src_flags), "fixture's own crossovers must be legal to begin with"
+    assert all(f for f in src_flags), (
+        "fixture's own crossovers must be legal to begin with"
+    )
 
     out, pasted, _ = paste_clusters(design, [cid], (0, 4))
     pasted_set = set(pasted)

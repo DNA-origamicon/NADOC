@@ -42,6 +42,7 @@ def _tracker(phases=None, clock=None):
 
 # ── Phase list construction ──────────────────────────────────────────────────
 
+
 def test_build_prep_phases_seeded_prepends_seed():
     seeded = build_prep_phases(seeded=True)
     unseeded = build_prep_phases(seeded=False)
@@ -61,10 +62,12 @@ def test_build_prep_phases_scales_with_size():
 def test_design_size_factor_handles_missing_strands():
     class _D:
         strands = []
+
     assert design_size_factor(_D()) == 1.0
 
 
 # ── Fraction monotonicity + weighting ────────────────────────────────────────
+
 
 def test_fraction_starts_low_and_reaches_one_on_finish():
     tr, clock = _tracker()
@@ -97,6 +100,7 @@ def test_fraction_never_decreases_within_phase():
 
 # ── Time-fill of opaque phases ───────────────────────────────────────────────
 
+
 def test_opaque_phase_time_fills_without_reports():
     phases = [PrepPhase("solo", "Opaque", nominal_s=10.0, fill_cap=0.9)]
     clock = FakeClock()
@@ -109,6 +113,7 @@ def test_opaque_phase_time_fills_without_reports():
 
 
 # ── ETA ──────────────────────────────────────────────────────────────────────
+
 
 def test_eta_present_and_decreases():
     tr, clock = _tracker()
@@ -141,6 +146,7 @@ def test_eta_zero_when_done():
 
 # ── Stall warning ────────────────────────────────────────────────────────────
 
+
 def test_no_elapsed_vs_expected_warning():
     """Removed: the elapsed-vs-expected "may be stalled" warning was a poor signal
     (per-phase nominal times vary too much by design size). A real stall is
@@ -165,6 +171,7 @@ def test_no_warning_once_done():
 
 # ── Failure ──────────────────────────────────────────────────────────────────
 
+
 def test_fail_sets_failed_flags_and_blocks_further_reports():
     tr, _ = _tracker()
     tr.report("a", 0.5)
@@ -180,6 +187,7 @@ def test_fail_sets_failed_flags_and_blocks_further_reports():
 
 
 # ── Sidecar persistence ──────────────────────────────────────────────────────
+
 
 def test_write_read_clear_prep_progress(tmp_path):
     tr, _ = _tracker()

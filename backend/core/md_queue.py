@@ -39,6 +39,7 @@ QUEUE_FILENAME = "md_queue.json"
 
 # ── persistence ──────────────────────────────────────────────────────────────────
 
+
 def queue_path(workspace) -> Path:
     return Path(workspace) / QUEUE_FILENAME
 
@@ -69,6 +70,7 @@ def save_queue(workspace, job_ids: Sequence[str]) -> list[str]:
 
 
 # ── pure helpers ─────────────────────────────────────────────────────────────────
+
 
 def dedupe(job_ids: Iterable[str]) -> list[str]:
     """First occurrence wins.  A job can hold exactly one place in the queue."""
@@ -107,9 +109,12 @@ def remote_awaiting_submit(job) -> bool:
     if job is None:
         return False
     remote = getattr(job, "execution_target", "local") in ("alpine", "runpod")
-    return remote and job.status == MdStatus.queued \
-        and not getattr(job, "slurm_job_id", None) \
+    return (
+        remote
+        and job.status == MdStatus.queued
+        and not getattr(job, "slurm_job_id", None)
         and not getattr(job, "runpod_pod_id", None)
+    )
 
 
 def job_is_startable(job) -> bool:
@@ -121,8 +126,12 @@ def job_is_startable(job) -> bool:
     """
     if job is None:
         return False
-    return job.status == MdStatus.queued and not getattr(job, "slurm_job_id", None) \
-        and not getattr(job, "runpod_pod_id", None) and not remote_awaiting_submit(job)
+    return (
+        job.status == MdStatus.queued
+        and not getattr(job, "slurm_job_id", None)
+        and not getattr(job, "runpod_pod_id", None)
+        and not remote_awaiting_submit(job)
+    )
 
 
 def job_is_queueable(job) -> bool:
@@ -153,7 +162,9 @@ def running_job(jobs: Iterable) -> Optional[object]:
     return None
 
 
-def next_startable(job_ids: Sequence[str], jobs: Iterable) -> tuple[Optional[str], list[str]]:
+def next_startable(
+    job_ids: Sequence[str], jobs: Iterable
+) -> tuple[Optional[str], list[str]]:
     """Decide the next launch from the queue order and the current job set.
 
     Returns ``(job_id_to_start, stale_ids)``:
@@ -179,6 +190,7 @@ def next_startable(job_ids: Sequence[str], jobs: Iterable) -> tuple[Optional[str
 
 
 # ── mutations (persisted) ────────────────────────────────────────────────────────
+
 
 def enqueue(workspace, job_id: str) -> list[str]:
     """Append to the end.  Idempotent — re-queueing a job keeps its existing place."""
@@ -213,12 +225,14 @@ def queue_view(workspace, jobs: Optional[Iterable] = None) -> list[dict]:
     out: list[dict] = []
     for i, jid in enumerate(load_queue(workspace)):
         job = by_id.get(jid)
-        out.append({
-            "job_id": jid,
-            "position": i + 1,
-            "design_name": getattr(job, "design_name", None),
-            "status": job.status.value if job is not None else None,
-        })
+        out.append(
+            {
+                "job_id": jid,
+                "position": i + 1,
+                "design_name": getattr(job, "design_name", None),
+                "status": job.status.value if job is not None else None,
+            }
+        )
     return out
 
 

@@ -21,8 +21,10 @@ from tests.conftest import make_6hb_design
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+
 def _built_model(design):
     from backend.core.mrdna_bridge import mrdna_model_from_nadoc
+
     return mrdna_model_from_nadoc(design)
 
 
@@ -32,21 +34,29 @@ def _flat_beads(model):
 
 # ── FAST: descriptor parsing (no-op cases mirror mrdna_field.parse_field) ──────
 
+
 def test_parse_surface_and_noop():
     from backend.core.mrdna_surface import parse_surface
 
     dhat, offset_nm, stiff = parse_surface(
-        {"dir": [0.0, 0.0, 2.0], "offset_nm": 3.0, "stiff": 5.0})
-    assert np.allclose(dhat, [0.0, 0.0, 1.0])              # unit-normalised
+        {"dir": [0.0, 0.0, 2.0], "offset_nm": 3.0, "stiff": 5.0}
+    )
+    assert np.allclose(dhat, [0.0, 0.0, 1.0])  # unit-normalised
     assert offset_nm == 3.0 and stiff == 5.0
     # No-op: missing / empty / zero-stiff / zero-direction → None (a floor that does
     # nothing), just like a zero-magnitude field.
-    for bad in (None, {}, {"dir": [0, 0, 1], "stiff": 0.0},
-                {"dir": [0, 0, 0], "stiff": 5.0}, {"stiff": 5.0}):
+    for bad in (
+        None,
+        {},
+        {"dir": [0, 0, 1], "stiff": 0.0},
+        {"dir": [0, 0, 0], "stiff": 5.0},
+        {"stiff": 5.0},
+    ):
         assert parse_surface(bad) is None, bad
 
 
 # ── FAST: the wall potential — a one-sided repulsion (−∇U away from the plane) ──
+
 
 def test_wall_grid_is_one_sided_repulsion():
     """The written .dx is a harmonic wall: −∇U pushes a bead on the forbidden side
@@ -57,14 +67,16 @@ def test_wall_grid_is_one_sided_repulsion():
     from backend.core.mrdna_surface import _write_wall_grid
 
     # A deliberately off-axis normal so nothing is axis-locked.
-    dhat = np.array([0.3, -0.4, 0.5]); dhat /= np.linalg.norm(dhat)
+    dhat = np.array([0.3, -0.4, 0.5])
+    dhat /= np.linalg.norm(dhat)
     stiff = 2.0
-    plane_c = 0.0                                          # plane through the origin
+    plane_c = 0.0  # plane through the origin
     lo = np.array([-100.0, -100.0, -100.0])
     hi = np.array([100.0, 100.0, 100.0])
-    n = 41                                                 # 5 Å spacing (cubic)
+    n = 41  # 5 Å spacing (cubic)
     import tempfile
     from pathlib import Path
+
     p = Path(tempfile.mkdtemp()) / "wall.dx"
     _write_wall_grid(p, dhat, plane_c, stiff, lo, hi, (n, n, n))
     U, origin, delta = loadGrid(str(p))
@@ -89,11 +101,20 @@ def test_wall_grid_is_one_sided_repulsion():
     for i in range(2, n - 2):
         for j in range(2, n - 2):
             for k in range(2, n - 2):
-                nb = [_s(i + di, j + dj, k + dk)
-                      for di, dj, dk in ((1, 0, 0), (-1, 0, 0), (0, 1, 0),
-                                         (0, -1, 0), (0, 0, 1), (0, 0, -1))]
+                nb = [
+                    _s(i + di, j + dj, k + dk)
+                    for di, dj, dk in (
+                        (1, 0, 0),
+                        (-1, 0, 0),
+                        (0, 1, 0),
+                        (0, -1, 0),
+                        (0, 0, 1),
+                        (0, 0, -1),
+                    )
+                ]
                 if _s(i, j, k) < -10.0 and all(v < 0 for v in nb):
-                    below = (i, j, k); break
+                    below = (i, j, k)
+                    break
             if below:
                 break
         if below:
@@ -101,7 +122,7 @@ def test_wall_grid_is_one_sided_repulsion():
     assert below is not None
     s_below = _s(*below)
     f_below = _force(*below)
-    expected = -stiff * s_below * dhat                     # = stiff·|s|·dir̂
+    expected = -stiff * s_below * dhat  # = stiff·|s|·dir̂
     assert np.allclose(f_below, expected, rtol=1e-6, atol=1e-9), (f_below, expected)
     # Repulsion points AWAY from the plane (component along +dir̂ is positive).
     assert float(f_below @ dhat) > 0
@@ -111,11 +132,20 @@ def test_wall_grid_is_one_sided_repulsion():
     for i in range(2, n - 2):
         for j in range(2, n - 2):
             for k in range(2, n - 2):
-                nb = [_s(i + di, j + dj, k + dk)
-                      for di, dj, dk in ((1, 0, 0), (-1, 0, 0), (0, 1, 0),
-                                         (0, -1, 0), (0, 0, 1), (0, 0, -1))]
+                nb = [
+                    _s(i + di, j + dj, k + dk)
+                    for di, dj, dk in (
+                        (1, 0, 0),
+                        (-1, 0, 0),
+                        (0, 1, 0),
+                        (0, -1, 0),
+                        (0, 0, 1),
+                        (0, 0, -1),
+                    )
+                ]
                 if _s(i, j, k) > 10.0 and all(v > 0 for v in nb):
-                    above = (i, j, k); break
+                    above = (i, j, k)
+                    break
             if above:
                 break
         if above:
@@ -139,12 +169,13 @@ def test_wall_plane_sits_below_structure_by_offset():
     beads = _model_beads(m)
     proj = np.array([b.get_collapsed_position() for b in beads]) @ dhat
     s = proj - plane_c
-    assert s.min() >= 0.0                                  # all beads on the allowed side
+    assert s.min() >= 0.0  # all beads on the allowed side
     # The lowest bead sits exactly ``offset`` (Å) above the plane.
     assert np.isclose(s.min(), offset_nm * 10.0, atol=1e-6), (s.min(), offset_nm * 10.0)
 
 
 # ── FAST: model wiring (real mrDNA model, no ARBD run) ─────────────────────────
+
 
 def test_apply_attaches_wall_grid_to_every_type(tmp_path):
     from backend.core.mrdna_surface import apply_surface_force
@@ -172,12 +203,15 @@ def test_surface_composes_with_field_grid(tmp_path):
 
     d = make_6hb_design(length_bp=42)
     m = _built_model(d)
-    apply_field_force(d, m, {"field_pN": 0.4, "dir": [0.0, 0.0, -1.0]}, out_dir=tmp_path)
-    apply_surface_force(d, m, {"dir": [0, 0, 1], "offset_nm": 1.0, "stiff": 3.0},
-                        out_dir=tmp_path)
+    apply_field_force(
+        d, m, {"field_pN": 0.4, "dir": [0.0, 0.0, -1.0]}, out_dir=tmp_path
+    )
+    apply_surface_force(
+        d, m, {"dir": [0, 0, 1], "offset_nm": 1.0, "stiff": 3.0}, out_dir=tmp_path
+    )
     for b in _flat_beads(m):
         grids = [str(g) for (g, _s, _bc) in getattr(b.type_, "grid_potentials", [])]
-        assert any("field_" in g for g in grids), grids     # field grid survived
+        assert any("field_" in g for g in grids), grids  # field grid survived
         assert any("surface.dx" in g for g in grids), grids  # surface grid appended
 
 
@@ -200,11 +234,19 @@ def test_surface_block_in_arbd_input(tmp_path):
 
     d = make_6hb_design(length_bp=42)
     m = _built_model(d)
-    n = install_surface_force(d, m, {"dir": [0, 0, 1], "offset_nm": 1.0, "stiff": 3.0},
-                              out_dir=tmp_path)
+    n = install_surface_force(
+        d, m, {"dir": [0, 0, 1], "offset_nm": 1.0, "stiff": 3.0}, out_dir=tmp_path
+    )
     assert n >= 1
-    m.simulate(output_name="surf", directory=str(tmp_path),
-               num_steps=0.0, timestep=200e-6, output_period=1.0, gpu=0, dry_run=True)
+    m.simulate(
+        output_name="surf",
+        directory=str(tmp_path),
+        num_steps=0.0,
+        timestep=200e-6,
+        output_period=1.0,
+        gpu=0,
+        dry_run=True,
+    )
     conf = (tmp_path / "surf.bd").read_text()
     grid_lines = [ln for ln in conf.splitlines() if ln.startswith("gridFile ")]
     assert any("surface.dx" in ln for ln in grid_lines), grid_lines
@@ -222,14 +264,17 @@ def test_field_and_surface_both_survive_regeneration(tmp_path):
     d = make_6hb_design(length_bp=42)
     m = _built_model(d)
     # Same order the runner uses: field first, surface second.
-    install_field_force(d, m, {"field_pN": 0.4, "dir": [0.0, 0.0, -1.0]}, out_dir=tmp_path)
-    install_surface_force(d, m, {"dir": [0, 0, 1], "offset_nm": 1.0, "stiff": 3.0},
-                          out_dir=tmp_path)
+    install_field_force(
+        d, m, {"field_pN": 0.4, "dir": [0.0, 0.0, -1.0]}, out_dir=tmp_path
+    )
+    install_surface_force(
+        d, m, {"dir": [0, 0, 1], "offset_nm": 1.0, "stiff": 3.0}, out_dir=tmp_path
+    )
     m.clear_beads()
     m.generate_bead_model()
     for b in _flat_beads(m):
         grids = [str(g) for (g, _s, _bc) in getattr(b.type_, "grid_potentials", [])]
-        assert any("field_" in g for g in grids), grids     # field survived regen
+        assert any("field_" in g for g in grids), grids  # field survived regen
         assert any("surface.dx" in g for g in grids), grids  # surface survived regen
 
 
@@ -240,17 +285,24 @@ def test_install_survives_bead_regeneration(tmp_path):
 
     d = make_6hb_design(length_bp=42)
     m = _built_model(d)
-    install_surface_force(d, m, {"dir": [0, 0, 1], "offset_nm": 1.0, "stiff": 3.0},
-                          out_dir=tmp_path)
+    install_surface_force(
+        d, m, {"dir": [0, 0, 1], "offset_nm": 1.0, "stiff": 3.0}, out_dir=tmp_path
+    )
     m.clear_beads()
     m.generate_bead_model()
-    have_grid = [b for b in _flat_beads(m)
-                 if any("surface.dx" in str(g)
-                        for (g, _s, _bc) in getattr(b.type_, "grid_potentials", []))]
+    have_grid = [
+        b
+        for b in _flat_beads(m)
+        if any(
+            "surface.dx" in str(g)
+            for (g, _s, _bc) in getattr(b.type_, "grid_potentials", [])
+        )
+    ]
     assert have_grid, "surface grid was wiped by bead regeneration"
 
 
 # ── FAST: REST guards + the deposition rule (surface opposes field → no anchor) ──
+
 
 def _mrdna_client(monkeypatch, tmp_path):
     from fastapi.testclient import TestClient
@@ -260,8 +312,11 @@ def _mrdna_client(monkeypatch, tmp_path):
     from backend.api.main import app
 
     monkeypatch.setattr(routes_mrdna, "_WORKSPACE_DIR", tmp_path)
-    monkeypatch.setattr(routes_mrdna, "mrdna_available",
-                        lambda: {"available": True, "mrdna": "/x", "arbd": "/y"})
+    monkeypatch.setattr(
+        routes_mrdna,
+        "mrdna_available",
+        lambda: {"available": True, "mrdna": "/x", "arbd": "/y"},
+    )
     monkeypatch.setattr(routes_mrdna, "start_job", lambda job, ws: None)
     design_state.set_design_silent(make_6hb_design(length_bp=42))
     return TestClient(app)
@@ -269,8 +324,10 @@ def _mrdna_client(monkeypatch, tmp_path):
 
 def test_malformed_surface_rejected(monkeypatch, tmp_path):
     client = _mrdna_client(monkeypatch, tmp_path)
-    for bad in ({"dir": [0, 0, 1], "offset_nm": 1.0, "stiff": 0.0},   # zero stiffness
-                {"dir": [0, 0, 0], "offset_nm": 1.0, "stiff": 3.0}):  # zero direction
+    for bad in (
+        {"dir": [0, 0, 1], "offset_nm": 1.0, "stiff": 0.0},  # zero stiffness
+        {"dir": [0, 0, 0], "offset_nm": 1.0, "stiff": 3.0},
+    ):  # zero direction
         r = client.post("/api/mrdna/jobs", json={"coarse_steps": 1000, "surface": bad})
         assert r.status_code == 400, (bad, r.text)
         assert "surface" in r.json()["detail"].lower()
@@ -288,12 +345,14 @@ def test_field_into_surface_prepares_without_a_strand_anchor(monkeypatch, tmp_pa
     the bundle) is still verified by the SLOW real-ARBD deposition test below; this
     test now just pins that a field+surface deposition run is accepted anchor-free."""
     client = _mrdna_client(monkeypatch, tmp_path)
-    field = {"field_pN": 1.0, "dir": [0, 0, -1]}           # points into the plane
+    field = {"field_pN": 1.0, "dir": [0, 0, -1]}  # points into the plane
     surface = {"dir": [0, 0, 1], "offset_nm": 1.0, "stiff": 3.0}
 
     # Field into the opposing surface, no anchor → accepted (deposition run prepares).
-    r = client.post("/api/mrdna/jobs",
-                    json={"coarse_steps": 1000, "field": field, "surface": surface})
+    r = client.post(
+        "/api/mrdna/jobs",
+        json={"coarse_steps": 1000, "field": field, "surface": surface},
+    )
     assert r.status_code == 200, r.text
 
     # Same field, NO surface, no anchor → accepted under warn-only (was 400 pre-19d2be8).
@@ -301,14 +360,19 @@ def test_field_into_surface_prepares_without_a_strand_anchor(monkeypatch, tmp_pa
     assert r.status_code == 200, r.text
 
     # Field NOT opposed by the surface (points along +dir̂) → also accepted (warn-only).
-    r = client.post("/api/mrdna/jobs",
-                    json={"coarse_steps": 1000,
-                          "field": {"field_pN": 1.0, "dir": [0, 0, 1]},
-                          "surface": surface})
+    r = client.post(
+        "/api/mrdna/jobs",
+        json={
+            "coarse_steps": 1000,
+            "field": {"field_pN": 1.0, "dir": [0, 0, 1]},
+            "surface": surface,
+        },
+    )
     assert r.status_code == 200, r.text
 
 
 # ── SLOW: a real ARBD run deposits the bundle on the surface (no strand anchor) ──
+
 
 @pytest.mark.slow
 def test_real_arbd_field_deposits_on_surface(tmp_path):
@@ -318,6 +382,7 @@ def test_real_arbd_field_deposits_on_surface(tmp_path):
     deposition prediction, not a smoke run.  RED baseline: the SAME field with no
     surface streams the COM far down-field."""
     from backend.core.mrdna_bridge import find_arbd
+
     if not find_arbd():
         pytest.skip("arbd binary not installed")
 
@@ -333,8 +398,8 @@ def test_real_arbd_field_deposits_on_surface(tmp_path):
     # plane placed just below it (OFFSET 0.5 nm), so the surface's holding effect is
     # genuinely exercised (not a plane the field never reaches).
     FIELD_PN = 0.8
-    DIR_INTO = np.array([0.0, 0.0, -1.0])                  # field pushes toward −z
-    SURF_DIR = np.array([0.0, 0.0, 1.0])                   # structure sits on +z side
+    DIR_INTO = np.array([0.0, 0.0, -1.0])  # field pushes toward −z
+    SURF_DIR = np.array([0.0, 0.0, 1.0])  # structure sits on +z side
     OFFSET_NM, STIFF = 0.5, 4.0
     NSTEPS, TIMESTEP = 30000.0, 200e-6
 
@@ -348,22 +413,35 @@ def test_real_arbd_field_deposits_on_surface(tmp_path):
         # Field FIRST, surface SECOND — the exact order the runner uses, so the surface's
         # grid APPENDS to (superposes with) the field's rather than being clobbered by the
         # field's overwrite.
-        install_field_force(d, m, {"field_pN": FIELD_PN, "dir": DIR_INTO.tolist()},
-                            out_dir=run_dir)
+        install_field_force(
+            d, m, {"field_pN": FIELD_PN, "dir": DIR_INTO.tolist()}, out_dir=run_dir
+        )
         if with_surface:
             install_surface_force(
-                d, m, {"dir": SURF_DIR.tolist(), "offset_nm": OFFSET_NM, "stiff": STIFF},
-                out_dir=run_dir)
-        m.simulate(output_name="dep", directory=str(run_dir), num_steps=NSTEPS,
-                   timestep=TIMESTEP, output_period=1000.0, gpu=0)
+                d,
+                m,
+                {"dir": SURF_DIR.tolist(), "offset_nm": OFFSET_NM, "stiff": STIFF},
+                out_dir=run_dir,
+            )
+        m.simulate(
+            output_name="dep",
+            directory=str(run_dir),
+            num_steps=NSTEPS,
+            timestep=TIMESTEP,
+            output_period=1000.0,
+            gpu=0,
+        )
         import MDAnalysis as mda  # noqa: PLC0415
+
         u = mda.Universe(str(run_dir / "dep.psf"), str(run_dir / "output" / "dep.dcd"))
         u.trajectory[-1]
         end = u.atoms.positions[: len(beads)]
         return start, end, plane_c
 
-    on_dir = tmp_path / "surf"; on_dir.mkdir()
-    off_dir = tmp_path / "free"; off_dir.mkdir()
+    on_dir = tmp_path / "surf"
+    on_dir.mkdir()
+    off_dir = tmp_path / "free"
+    off_dir.mkdir()
     _, end_surf, plane_c = _run(True, on_dir)
     _, end_free, _ = _run(False, off_dir)
 

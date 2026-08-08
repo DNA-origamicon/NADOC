@@ -22,6 +22,7 @@ Two failures motivated this module, both measured on the 2hb_1xT 200 ns run
 
 Everything here is pure and unit-testable; nothing reads NADOC state.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -117,7 +118,11 @@ def settle_report(
     """
     v = volumes(rows)
     if v.size < 2:
-        return {"ok": None, "reason": "not enough box samples", "n_samples": int(v.size)}
+        return {
+            "ok": None,
+            "reason": "not enough box samples",
+            "n_samples": int(v.size),
+        }
 
     ps = rows[:, 0] * timestep_fs / 1000.0
     ps = ps - ps[0]
@@ -134,7 +139,7 @@ def settle_report(
         # 100 % base pairs intact and -0.19 % energy drift was scored "not settled" by
         # the raw-sample form.  Block means kill that false positive while a genuine
         # march still moves every block.
-        ref = float(v[max(1, int(0.75 * len(v))):].mean())
+        ref = float(v[max(1, int(0.75 * len(v))) :].mean())
         tail = ps >= settle_ps
         blocks = [b for b in np.array_split(v[tail], 4) if b.size]
         flat = bool(max(abs(b.mean() / ref - 1.0) for b in blocks) <= flat_tol_frac)
@@ -143,8 +148,12 @@ def settle_report(
             rest = v[i:]
             if rest.size < 4:
                 break
-            if max(abs(b.mean() / ref - 1.0)
-                   for b in np.array_split(rest, 4) if b.size) <= flat_tol_frac:
+            if (
+                max(
+                    abs(b.mean() / ref - 1.0) for b in np.array_split(rest, 4) if b.size
+                )
+                <= flat_tol_frac
+            ):
                 settled_from_ps = float(ps[i])
                 break
 
@@ -155,12 +164,15 @@ def settle_report(
             f"cell length moved {linear_drift * 100:+.1f}% "
             f"({drift * 100:+.1f}% by volume; limit "
             f"+/-{max_linear_drift_frac * 100:.0f}% linear) — the box does not contain "
-            "the right amount of water")
+            "the right amount of water"
+        )
     if flat is False:
         reasons.append(f"cell was still moving after {settle_ps:.0f} ps")
     if flat is None:
         ok = None
-        reasons.append(f"trace is only {ps[-1]:.0f} ps, needs {settle_ps:.0f} ps to judge")
+        reasons.append(
+            f"trace is only {ps[-1]:.0f} ps, needs {settle_ps:.0f} ps to judge"
+        )
     else:
         ok = not reasons
 
@@ -217,8 +229,11 @@ def solute_envelope(frames: Iterable[np.ndarray]) -> dict:
         raise ValueError("no frames given")
     E = np.asarray(ext)
     R = np.asarray(rad)
-    pick = lambda arr, q: (np.percentile(arr, q, axis=0)  # noqa: E731
-                           if arr.shape[0] > 1 else arr[0])
+    pick = lambda arr, q: (
+        np.percentile(arr, q, axis=0)  # noqa: E731
+        if arr.shape[0] > 1
+        else arr[0]
+    )
     return {
         "n_frames": n,
         "extent_ang": {

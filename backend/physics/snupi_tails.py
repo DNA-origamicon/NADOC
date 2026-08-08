@@ -32,6 +32,7 @@ Three-Layer Law: tail bead positions are Physical-layer / display state only.  T
 from Layer-1 topology (the strand path, via :func:`snupi_ssdna.classify_ssdna_runs`) and are never
 written back to it.
 """
+
 from __future__ import annotations
 
 import math
@@ -67,10 +68,10 @@ SS_NT_GYRATION_NM2 = 0.125
 # re-used by the coarse-blob hydrodynamics in SS-3 — keep it defined in ONE place.
 SS_HYDRO_RADIUS_NM = 0.5
 
-_ETA_WATER = 8.9e-4                                    # Pa·s (matches snupi_dynamics.ETA_WATER)
+_ETA_WATER = 8.9e-4  # Pa·s (matches snupi_dynamics.ETA_WATER)
 _sigma_m = SS_HYDRO_RADIUS_NM * 1e-9
-SS_STOKES_TRANS = 6.0 * math.pi * _ETA_WATER * _sigma_m * 1e12        # pN·ns/nm
-SS_STOKES_ROT = 8.0 * math.pi * _ETA_WATER * _sigma_m**3 * 1e30       # pN·nm·ns
+SS_STOKES_TRANS = 6.0 * math.pi * _ETA_WATER * _sigma_m * 1e12  # pN·ns/nm
+SS_STOKES_ROT = 8.0 * math.pi * _ETA_WATER * _sigma_m**3 * 1e30  # pN·nm·ns
 
 # Mass of one nucleotide bead in the dynamics unit system (pN·ns²/nm = 1e-21 kg), matching
 # snupi_dynamics.MASS_G6_TO_DYN applied to the core's SI mass matrix.
@@ -79,14 +80,16 @@ SS_NT_MASS_DYN = SS_NT_MOLAR_MASS_G * 1e-3 / _N_AVOGADRO * 1e21
 
 # ── Data ────────────────────────────────────────────────────────────────────────
 
+
 @dataclass(frozen=True)
 class TailNode:
     """One ssDNA nucleotide bead. ``(helix_id, bp, direction)`` is the render-bead key, so SS-4 can
     map a simulated bead straight back onto the nucleotide the renderer draws."""
+
     helix_id: str
     bp: int
     direction: str
-    run: int              # index of the tail run this bead belongs to
+    run: int  # index of the tail run this bead belongs to
     # 0-based position along the chain measured FROM THE ANCHOR OUTWARD (0 = the nucleotide
     # covalently continuous with the anchor, n-1 = the free tip).  This is NOT 5'→3': a tail
     # anchored on its 3' side runs 3'→5' outward, and conflating the two bonded the anchor to
@@ -103,11 +106,14 @@ class TailBlock:
     ``[core bp nodes | tail beads]`` array — the same tuple shape
     :func:`fem_solver.build_corotational_elements` produces, so the same force kernel drives them.
     """
-    n_bp: int                          # core node count (tail bead g gets global index n_bp + g)
+
+    n_bp: int  # core node count (tail bead g gets global index n_bp + g)
     nodes: List[TailNode] = field(default_factory=list)
-    positions: np.ndarray = field(default_factory=lambda: np.zeros((0, 3)))   # (T,3) initial, nm
+    positions: np.ndarray = field(
+        default_factory=lambda: np.zeros((0, 3))
+    )  # (T,3) initial, nm
     elements: List[tuple] = field(default_factory=list)
-    anchors: List[int] = field(default_factory=list)   # core node index per run
+    anchors: List[int] = field(default_factory=list)  # core node index per run
     # (6T,) initial generalized coordinate of the tail beads. TRANSLATIONS ARE ZERO — `positions` is
     # already the initial (coiled) configuration — and the ROTATIONS carry the bead triads that go with
     # it. Both are needed: the element's rest state is the STRAIGHT chain, so a coiled chain whose
@@ -173,7 +179,7 @@ class TailBlock:
             # assuming Rref1 == Rref2 — they only coincide because the rest triads are identity.
             "RR1T": np.array([e[2][2].T for e in self.elements], dtype=float),
             "RR2T": np.array([e[2][3].T for e in self.elements], dtype=float),
-            "K12": self.elements[0][3],       # every ssDNA link is the same element
+            "K12": self.elements[0][3],  # every ssDNA link is the same element
         }
         return self._cache
 
@@ -227,15 +233,15 @@ def _coil_run(pos: np.ndarray, x_conc: float, rng: np.random.Generator):
     """
     T = len(pos)
     triads = np.tile(np.eye(3), (max(T, 1), 1, 1))
-    for k in range(T - 1):                       # pivot about bead k → bends element (k, k+1) only
+    for k in range(T - 1):  # pivot about bead k → bends element (k, k+1) only
         d = pos[k + 1] - pos[k]
         d /= np.linalg.norm(d)
-        axis = np.cross(d, rng.standard_normal(3))       # any axis ⟂ the bond tilts it by θ,
-        na = np.linalg.norm(axis)                        # and the random ⟂ choice makes φ uniform
+        axis = np.cross(d, rng.standard_normal(3))  # any axis ⟂ the bond tilts it by θ,
+        na = np.linalg.norm(axis)  # and the random ⟂ choice makes φ uniform
         if na < 1e-9:
             continue
         axis /= na
-        u = rng.random()                                 # inverse-CDF draw of cos θ from e^{x·cos θ}
+        u = rng.random()  # inverse-CDF draw of cos θ from e^{x·cos θ}
         c = 1.0 + math.log(u + (1.0 - u) * math.exp(-2.0 * x_conc)) / x_conc
         theta = math.acos(max(-1.0, min(1.0, c)))
         Rp = _exp_so3_batch(np.array([axis * theta]))[0]
@@ -247,8 +253,15 @@ def _coil_run(pos: np.ndarray, x_conc: float, rng: np.random.Generator):
 
 # ── Builder ─────────────────────────────────────────────────────────────────────
 
-def build_tail_block(design: Design, mesh, *, max_nt: Optional[int] = None,
-                     coil: bool = True, seed: int = 0) -> TailBlock:
+
+def build_tail_block(
+    design: Design,
+    mesh,
+    *,
+    max_nt: Optional[int] = None,
+    coil: bool = True,
+    seed: int = 0,
+) -> TailBlock:
     """Build the explicit-chain tail sub-system for ``design`` against an already-built ``mesh``.
 
     ``mesh`` supplies the core node ordering and the anchors' positions; it is READ ONLY and is not
@@ -276,8 +289,9 @@ def build_tail_block(design: Design, mesh, *, max_nt: Optional[int] = None,
     block = TailBlock(n_bp=n_bp)
 
     link = ssdna_link_element()
-    K12 = cr.local_beam_stiffness_12(link["l_rest"], link["ea"], link["gj"],
-                                     link["ei"], link["ei"])
+    K12 = cr.local_beam_stiffness_12(
+        link["l_rest"], link["ea"], link["gj"], link["ei"], link["ei"]
+    )
 
     helix_by_id = {h.id: h for h in design.helices}
     rng = np.random.default_rng(seed)
@@ -290,7 +304,7 @@ def build_tail_block(design: Design, mesh, *, max_nt: Optional[int] = None,
             continue
         anchor = run.anchor
         a_idx = node_map.get((anchor.helix_id, anchor.bp))
-        if a_idx is None:                      # anchor bp is not actually meshed — nothing to hang from
+        if a_idx is None:  # anchor bp is not actually meshed — nothing to hang from
             continue
         # ORDER THE RUN ANCHOR-OUTWARD, which is NOT the same as 5'→3'.  `run.nts` is the strand
         # path order, and the anchor is whichever end crosses back into the embedded staple (the
@@ -319,18 +333,29 @@ def build_tail_block(design: Design, mesh, *, max_nt: Optional[int] = None,
         # spurious axial stress. `_coil_run` then bends this rod into a thermal coil by rigid pivots,
         # which preserves every bond length exactly — so the rest state, and the zero stretch energy,
         # survive the coiling.
-        run_pos = np.array([a_pos + u * (SS_CONTOUR_PER_NT * (k + 1)) for k in range(len(nts))])
+        run_pos = np.array(
+            [a_pos + u * (SS_CONTOUR_PER_NT * (k + 1)) for k in range(len(nts))]
+        )
 
         prev_global = a_idx
         for k, (hid, bp, direction) in enumerate(nts):
             g = n_bp + len(block.nodes)
-            block.nodes.append(TailNode(
-                helix_id=hid, bp=bp, direction=direction,
-                run=run_i, index_in_run=k, overhang_ids=run.overhang_ids,
-            ))
+            block.nodes.append(
+                TailNode(
+                    helix_id=hid,
+                    bp=bp,
+                    direction=direction,
+                    run=run_i,
+                    index_in_run=k,
+                    overhang_ids=run.overhang_ids,
+                )
+            )
             ref = cr.element_reference(
-                run_pos[k] - u * SS_CONTOUR_PER_NT, run_pos[k],
-                np.eye(3), np.eye(3), rest_length=link["l_rest"],
+                run_pos[k] - u * SS_CONTOUR_PER_NT,
+                run_pos[k],
+                np.eye(3),
+                np.eye(3),
+                rest_length=link["l_rest"],
             )
             block.elements.append((prev_global, g, ref, K12))
             prev_global = g
@@ -343,8 +368,9 @@ def build_tail_block(design: Design, mesh, *, max_nt: Optional[int] = None,
         positions.extend(run_pos)
         rotations.extend(_log_so3_batch(triads))
 
-    block.positions = (np.array(positions, dtype=float) if positions
-                       else np.zeros((0, 3), dtype=float))
+    block.positions = (
+        np.array(positions, dtype=float) if positions else np.zeros((0, 3), dtype=float)
+    )
     block.q0 = np.zeros(6 * block.n_tail, dtype=float)
     if rotations:
         # translations stay 0 (X0 IS the coil); the rotations are the triads the coil came with
@@ -369,9 +395,14 @@ def _tail_direction(design, helix_by_id, anchor, nts, a_pos: np.ndarray) -> np.n
             return d / n
     h = helix_by_id.get(anchor.helix_id)
     if h is not None:
-        d = np.array([h.axis_end.x - h.axis_start.x,
-                      h.axis_end.y - h.axis_start.y,
-                      h.axis_end.z - h.axis_start.z], dtype=float)
+        d = np.array(
+            [
+                h.axis_end.x - h.axis_start.x,
+                h.axis_end.y - h.axis_start.y,
+                h.axis_end.z - h.axis_start.z,
+            ],
+            dtype=float,
+        )
         n = float(np.linalg.norm(d))
         if n > 1e-9:
             return d / n
@@ -414,7 +445,7 @@ def _ideal_position(helix_by_id, helix_id: str, bp: int) -> Optional[np.ndarray]
 def _exp_so3_batch(phi: np.ndarray) -> np.ndarray:
     """Rodrigues over a stack of rotation vectors ``(M,3)`` → ``(M,3,3)``. Matches
     :func:`snupi_corotational.exp_so3` including its small-angle branch."""
-    a = np.linalg.norm(phi, axis=1)                      # (M,)
+    a = np.linalg.norm(phi, axis=1)  # (M,)
     small = a < 1e-12
     safe = np.where(small, 1.0, a)
     k = phi / safe[:, None]
@@ -424,7 +455,7 @@ def _exp_so3_batch(phi: np.ndarray) -> np.ndarray:
     K[:, 2, 0], K[:, 2, 1] = -k[:, 1], k[:, 0]
     s, c = np.sin(a)[:, None, None], (1.0 - np.cos(a))[:, None, None]
     R = np.eye(3)[None] + s * K + c * (K @ K)
-    if small.any():                                      # I + skew(phi), as the scalar version does
+    if small.any():  # I + skew(phi), as the scalar version does
         Ks = np.zeros((int(small.sum()), 3, 3))
         p = phi[small]
         Ks[:, 0, 1], Ks[:, 0, 2] = -p[:, 2], p[:, 1]
@@ -447,20 +478,25 @@ def _log_so3_batch(R: np.ndarray) -> np.ndarray:
     tr = np.trace(R, axis1=1, axis2=2)
     c = np.clip((tr - 1.0) / 2.0, -1.0, 1.0)
     a = np.arccos(c)
-    w = np.stack([R[:, 2, 1] - R[:, 1, 2],
-                  R[:, 0, 2] - R[:, 2, 0],
-                  R[:, 1, 0] - R[:, 0, 1]], axis=1)
+    w = np.stack(
+        [R[:, 2, 1] - R[:, 1, 2], R[:, 0, 2] - R[:, 2, 0], R[:, 1, 0] - R[:, 0, 1]],
+        axis=1,
+    )
     sa = np.sin(a)
     degenerate = (a < 1e-10) | (np.abs(a - np.pi) < 1e-6)
     scale = np.where(degenerate, 0.0, a / (2.0 * np.where(degenerate, 1.0, sa)))
     phi = scale[:, None] * w
-    for m in np.flatnonzero(degenerate):                 # exact, and essentially never taken
+    for m in np.flatnonzero(degenerate):  # exact, and essentially never taken
         phi[m] = log_so3(R[m])
     return phi
 
 
-def tail_internal_force(q: np.ndarray, X0: np.ndarray, block: TailBlock,
-                        touched: Optional[np.ndarray] = None) -> np.ndarray:
+def tail_internal_force(
+    q: np.ndarray,
+    X0: np.ndarray,
+    block: TailBlock,
+    touched: Optional[np.ndarray] = None,
+) -> np.ndarray:
     """Corotational internal elastic force of the tail chains → a flat ``(6·n_total,)`` vector.
 
     Vectorised over elements (see the block comment above). Nodal rotations are exponentiated only
@@ -479,8 +515,8 @@ def tail_internal_force(q: np.ndarray, X0: np.ndarray, block: TailBlock,
     ei, ej, L0, K12 = cache["ei"], cache["ej"], cache["L0"], cache["K12"]
     RR1T, RR2T = cache["RR1T"], cache["RR2T"]
 
-    loc_x = X0[touched] + qn[touched, :3]                        # (T,3) current positions
-    loc_R = _exp_so3_batch(qn[touched, 3:6])                     # (T,3,3) current triads
+    loc_x = X0[touched] + qn[touched, :3]  # (T,3) current positions
+    loc_R = _exp_so3_batch(qn[touched, 3:6])  # (T,3,3) current triads
 
     x1, x2 = loc_x[ei], loc_x[ej]
     R1, R2 = loc_R[ei], loc_R[ej]
@@ -489,17 +525,17 @@ def tail_internal_force(q: np.ndarray, X0: np.ndarray, block: TailBlock,
     d = x2 - x1
     Lf = np.linalg.norm(d, axis=1)
     e3 = d / Lf[:, None]
-    aux = 0.5 * (R1[:, :, 0] + R2[:, :, 0])                      # Battini auxiliary vector
+    aux = 0.5 * (R1[:, :, 0] + R2[:, :, 0])  # Battini auxiliary vector
     e2 = np.cross(e3, aux)
     n2 = np.linalg.norm(e2, axis=1)
-    bad = n2 < 1e-8                                              # chord ∥ aux → use the y-axis
+    bad = n2 < 1e-8  # chord ∥ aux → use the y-axis
     if bad.any():
         aux2 = 0.5 * (R1[bad, :, 1] + R2[bad, :, 1])
         e2[bad] = np.cross(e3[bad], aux2)
         n2[bad] = np.linalg.norm(e2[bad], axis=1)
     e2 = e2 / n2[:, None]
     e1 = np.cross(e2, e3)
-    E = np.stack([e1, e2, e3], axis=2)                           # (M,3,3), columns
+    E = np.stack([e1, e2, e3], axis=2)  # (M,3,3), columns
     ET = np.transpose(E, (0, 2, 1))
 
     # local deformational displacement: nodal rotations relative to the rest frame + axial stretch
@@ -510,10 +546,10 @@ def tail_internal_force(q: np.ndarray, X0: np.ndarray, block: TailBlock,
     dl[:, 8] = Lf - L0
     dl[:, 9:12] = phi2
 
-    fl = dl @ K12                                                # K12 symmetric
+    fl = dl @ K12  # K12 symmetric
     fg = np.empty_like(fl)
-    for b in range(4):                                           # f_g = T12 · f_l, T12 = diag(E×4)
-        fg[:, 3 * b:3 * b + 3] = np.einsum("mab,mb->ma", E, fl[:, 3 * b:3 * b + 3])
+    for b in range(4):  # f_g = T12 · f_l, T12 = diag(E×4)
+        fg[:, 3 * b : 3 * b + 3] = np.einsum("mab,mb->ma", E, fl[:, 3 * b : 3 * b + 3])
 
     f = np.zeros((N, 6))
     np.add.at(f, block._idx_i, fg[:, :6])
@@ -521,8 +557,12 @@ def tail_internal_force(q: np.ndarray, X0: np.ndarray, block: TailBlock,
     return f.reshape(-1)
 
 
-def _tail_internal_force_scalar(q: np.ndarray, X0: np.ndarray, block: TailBlock,
-                                touched: Optional[np.ndarray] = None) -> np.ndarray:
+def _tail_internal_force_scalar(
+    q: np.ndarray,
+    X0: np.ndarray,
+    block: TailBlock,
+    touched: Optional[np.ndarray] = None,
+) -> np.ndarray:
     """Reference implementation of :func:`tail_internal_force`, one element at a time through the
     validated :func:`snupi_corotational._internal_force`. Kept as the correctness ORACLE for the
     vectorised path — it is ~68x slower and is not used in a job."""
@@ -538,10 +578,10 @@ def _tail_internal_force_scalar(q: np.ndarray, X0: np.ndarray, block: TailBlock,
     R: Dict[int, np.ndarray] = {int(n): exp_so3(qn[n, 3:6]) for n in touched}
 
     f = np.zeros(6 * N, dtype=float)
-    for (i, j, ref, K12) in block.elements:
+    for i, j, ref, K12 in block.elements:
         fg = _internal_force(X[i], X[j], R[i], R[j], ref, K12)
-        f[6 * i:6 * i + 6] += fg[:6]
-        f[6 * j:6 * j + 6] += fg[6:]
+        f[6 * i : 6 * i + 6] += fg[:6]
+        f[6 * j : 6 * j + 6] += fg[6:]
     return f
 
 
@@ -564,8 +604,10 @@ def tail_omega_max(block: TailBlock) -> float:
 
 # ── Trajectory observable: the WLC oracle ───────────────────────────────────────
 
-def wlc_mean_square_end_to_end(n_nt: int, *, l_p: float = 0.67,
-                               b: float = SS_CONTOUR_PER_NT) -> float:
+
+def wlc_mean_square_end_to_end(
+    n_nt: int, *, l_p: float = 0.67, b: float = SS_CONTOUR_PER_NT
+) -> float:
     """Worm-like-chain ⟨R_ee²⟩ (nm²) for a free ``n_nt``-mer:
 
         ⟨R²⟩ = 2·L_p·L_c·[1 − (L_p/L_c)(1 − e^{−L_c/L_p})],   L_c = n·b
@@ -580,8 +622,15 @@ def wlc_mean_square_end_to_end(n_nt: int, *, l_p: float = 0.67,
     return float(2.0 * l_p * l_c * (1.0 - (l_p / l_c) * (1.0 - math.exp(-l_c / l_p))))
 
 
-def pivot_sample_chain(n_nt: int, ei: float, *, ea: float = None, gj: float = None,
-                       n_sweep: int = 15000, seed: int = 0) -> dict:
+def pivot_sample_chain(
+    n_nt: int,
+    ei: float,
+    *,
+    ea: float = None,
+    gj: float = None,
+    n_sweep: int = 15000,
+    seed: int = 0,
+) -> dict:
     """Equilibrium sampler for an isolated ssDNA chain — **validation only, never used in a job.**
 
     This exists because sampling a polymer's END-TO-END distance by molecular dynamics is a trap,
@@ -616,8 +665,10 @@ def pivot_sample_chain(n_nt: int, ei: float, *, ea: float = None, gj: float = No
     Xr = np.zeros((N, 3))
     Xr[:, 2] = np.arange(N) * b
     K12 = cr.local_beam_stiffness_12(b, ea, gj, ei, ei)
-    refs = [cr.element_reference(Xr[i], Xr[i + 1], np.eye(3), np.eye(3), rest_length=b)
-            for i in range(N - 1)]
+    refs = [
+        cr.element_reference(Xr[i], Xr[i + 1], np.eye(3), np.eye(3), rest_length=b)
+        for i in range(N - 1)
+    ]
 
     def e_el(i, X, R):
         E, _ = cr._cr_frame(X[i], X[i + 1], R[i], R[i + 1])
@@ -634,7 +685,7 @@ def pivot_sample_chain(n_nt: int, ei: float, *, ea: float = None, gj: float = No
     blens: List[float] = []
 
     for s in range(n_sweep):
-        for _ in range(N):                                   # local moves
+        for _ in range(N):  # local moves
             i = int(rng.integers(N))
             Xo, Ro = X[i].copy(), R[i].copy()
             els = [e for e in (i - 1, i) if 0 <= e < N - 1]
@@ -649,7 +700,7 @@ def pivot_sample_chain(n_nt: int, ei: float, *, ea: float = None, gj: float = No
                     Ue[e] = v
             else:
                 X[i], R[i] = Xo, Ro
-        for _ in range(4):                                   # PIVOT moves
+        for _ in range(4):  # PIVOT moves
             i = int(rng.integers(0, N - 1))
             ax = rng.standard_normal(3)
             ax /= np.linalg.norm(ax)
@@ -659,10 +710,10 @@ def pivot_sample_chain(n_nt: int, ei: float, *, ea: float = None, gj: float = No
             for j in range(i + 1, N):
                 Xn[j] = X[i] + Rp @ (X[j] - X[i])
                 Rn[j] = Rp @ R[j]
-            new_e = e_el(i, Xn, Rn)                          # only element i changes energy
+            new_e = e_el(i, Xn, Rn)  # only element i changes energy
             if new_e - Ue[i] < 0 or rng.random() < math.exp(-(new_e - Ue[i]) / kT):
                 X, R, Ue[i] = Xn, Rn, new_e
-        if s >= n_sweep // 4 and s % 2 == 0:                 # sample after burn-in
+        if s >= n_sweep // 4 and s % 2 == 0:  # sample after burn-in
             bv = X[1:] - X[:-1]
             bl = np.linalg.norm(bv, axis=1)
             u = bv / bl[:, None]

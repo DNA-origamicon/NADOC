@@ -11,6 +11,7 @@ Covers:
 - ``.nass`` round-trip preserves groups
 - ``transitive_rigidly_attached`` helper semantics
 """
+
 from __future__ import annotations
 
 import pytest
@@ -37,6 +38,7 @@ client = TestClient(app)
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(autouse=True)
 def _reset():
     assembly_state.close_session()
@@ -54,12 +56,26 @@ def _make_assembly_with_instances(n: int) -> Assembly:
         PartInstance(
             name=f"Part {i}",
             source=PartSourceInline(design=Design()),
-            transform=Mat4x4(values=[
-                1, 0, 0, float(i * 10),
-                0, 1, 0, 0,
-                0, 0, 1, 0,
-                0, 0, 0, 1,
-            ]),
+            transform=Mat4x4(
+                values=[
+                    1,
+                    0,
+                    0,
+                    float(i * 10),
+                    0,
+                    1,
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                ]
+            ),
         )
         for i in range(n)
     ]
@@ -76,6 +92,7 @@ def _get_assembly_dict() -> dict:
 
 
 # ── Model invariants ─────────────────────────────────────────────────────────
+
 
 def test_group_field_default_empty():
     a = Assembly()
@@ -136,6 +153,7 @@ def test_group_duplicate_ids_rejected():
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+
 def test_collect_group_member_ids_resolves_nested():
     a = _make_assembly_with_instances(4)
     iids = [i.id for i in a.instances]
@@ -152,11 +170,21 @@ def test_collect_group_member_ids_resolves_nested():
 def test_transitive_rigidly_attached_follows_rigid_joints_only():
     a = _make_assembly_with_instances(4)
     iids = [i.id for i in a.instances]
-    a = a.model_copy(update={"joints": [
-        AssemblyJoint(joint_type="rigid",     instance_a_id=iids[0], instance_b_id=iids[1]),
-        AssemblyJoint(joint_type="revolute",  instance_a_id=iids[1], instance_b_id=iids[2]),
-        AssemblyJoint(joint_type="rigid",     instance_a_id=iids[2], instance_b_id=iids[3]),
-    ]})
+    a = a.model_copy(
+        update={
+            "joints": [
+                AssemblyJoint(
+                    joint_type="rigid", instance_a_id=iids[0], instance_b_id=iids[1]
+                ),
+                AssemblyJoint(
+                    joint_type="revolute", instance_a_id=iids[1], instance_b_id=iids[2]
+                ),
+                AssemblyJoint(
+                    joint_type="rigid", instance_a_id=iids[2], instance_b_id=iids[3]
+                ),
+            ]
+        }
+    )
     reached = transitive_rigidly_attached(a, {iids[0]})
     assert reached == {iids[0], iids[1]}, (
         "rigid joint pulls in iids[1], revolute joint blocks iids[2] and beyond"
@@ -164,6 +192,7 @@ def test_transitive_rigidly_attached_follows_rigid_joints_only():
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
+
 
 def test_create_group_basic():
     a = _make_assembly_with_instances(3)
@@ -180,7 +209,9 @@ def test_create_group_basic():
 
 def test_create_group_empty_rejected():
     _make_assembly_with_instances(1)
-    r = client.post("/api/assembly/groups", json={"instance_ids": [], "subgroup_ids": []})
+    r = client.post(
+        "/api/assembly/groups", json={"instance_ids": [], "subgroup_ids": []}
+    )
     assert r.status_code == 400
 
 
@@ -204,8 +235,10 @@ def test_create_group_nested():
     iids = [i.id for i in a.instances]
     r1 = client.post("/api/assembly/groups", json={"instance_ids": iids[:2]})
     inner_id = r1.json()["assembly"]["groups"][0]["id"]
-    r2 = client.post("/api/assembly/groups",
-                     json={"instance_ids": [iids[2]], "subgroup_ids": [inner_id]})
+    r2 = client.post(
+        "/api/assembly/groups",
+        json={"instance_ids": [iids[2]], "subgroup_ids": [inner_id]},
+    )
     assert r2.status_code == 200
     body = r2.json()["assembly"]
     assert len(body["groups"]) == 2
@@ -232,8 +265,10 @@ def test_patch_group_rename_and_visible():
     iids = [i.id for i in a.instances]
     r = client.post("/api/assembly/groups", json={"instance_ids": iids})
     gid = r.json()["assembly"]["groups"][0]["id"]
-    r2 = client.patch(f"/api/assembly/groups/{gid}",
-                      json={"name": "Arm", "visible": False, "representation": "beads"})
+    r2 = client.patch(
+        f"/api/assembly/groups/{gid}",
+        json={"name": "Arm", "visible": False, "representation": "beads"},
+    )
     assert r2.status_code == 200
     g = r2.json()["assembly"]["groups"][0]
     assert g["name"] == "Arm"
@@ -251,7 +286,9 @@ def test_patch_group_clear_representation():
     r = client.post("/api/assembly/groups", json={"instance_ids": iids})
     gid = r.json()["assembly"]["groups"][0]["id"]
     client.patch(f"/api/assembly/groups/{gid}", json={"representation": "cylinders"})
-    r3 = client.patch(f"/api/assembly/groups/{gid}", json={"clear_representation": True})
+    r3 = client.patch(
+        f"/api/assembly/groups/{gid}", json={"clear_representation": True}
+    )
     g = r3.json()["assembly"]["groups"][0]
     assert g["representation"] is None
 
@@ -261,16 +298,25 @@ def test_duplicate_group_drops_external_joints_keeps_internal():
     iids = [i.id for i in a.instances]
     # Joint INSIDE the group (iids[0] ↔ iids[1])
     # Joint CROSSING the group (iids[1] ↔ iids[2])
-    a = a.model_copy(update={"joints": [
-        AssemblyJoint(joint_type="rigid",    instance_a_id=iids[0], instance_b_id=iids[1]),
-        AssemblyJoint(joint_type="revolute", instance_a_id=iids[1], instance_b_id=iids[2]),
-    ]})
+    a = a.model_copy(
+        update={
+            "joints": [
+                AssemblyJoint(
+                    joint_type="rigid", instance_a_id=iids[0], instance_b_id=iids[1]
+                ),
+                AssemblyJoint(
+                    joint_type="revolute", instance_a_id=iids[1], instance_b_id=iids[2]
+                ),
+            ]
+        }
+    )
     assembly_state.set_assembly(a)
     r = client.post("/api/assembly/groups", json={"instance_ids": [iids[0], iids[1]]})
     gid = r.json()["assembly"]["groups"][0]["id"]
 
-    r2 = client.post(f"/api/assembly/groups/{gid}/duplicate",
-                     json={"offset": [20.0, 0.0, 0.0]})
+    r2 = client.post(
+        f"/api/assembly/groups/{gid}/duplicate", json={"offset": [20.0, 0.0, 0.0]}
+    )
     assert r2.status_code == 200
     body = r2.json()["assembly"]
 
@@ -281,18 +327,26 @@ def test_duplicate_group_drops_external_joints_keeps_internal():
     # External (revolute) NOT cloned.
     assert len(body["joints"]) == 3
     rigid_count = sum(1 for j in body["joints"] if j["joint_type"] == "rigid")
-    revo_count  = sum(1 for j in body["joints"] if j["joint_type"] == "revolute")
-    assert rigid_count == 2          # original internal + cloned internal
-    assert revo_count  == 1          # original external NOT cloned
+    revo_count = sum(1 for j in body["joints"] if j["joint_type"] == "revolute")
+    assert rigid_count == 2  # original internal + cloned internal
+    assert revo_count == 1  # original external NOT cloned
 
 
 def test_cascade_delete_group_removes_members_and_joints():
     a = _make_assembly_with_instances(3)
     iids = [i.id for i in a.instances]
-    a = a.model_copy(update={"joints": [
-        AssemblyJoint(joint_type="rigid",    instance_a_id=iids[0], instance_b_id=iids[1]),
-        AssemblyJoint(joint_type="revolute", instance_a_id=iids[1], instance_b_id=iids[2]),
-    ]})
+    a = a.model_copy(
+        update={
+            "joints": [
+                AssemblyJoint(
+                    joint_type="rigid", instance_a_id=iids[0], instance_b_id=iids[1]
+                ),
+                AssemblyJoint(
+                    joint_type="revolute", instance_a_id=iids[1], instance_b_id=iids[2]
+                ),
+            ]
+        }
+    )
     assembly_state.set_assembly(a)
     r = client.post("/api/assembly/groups", json={"instance_ids": [iids[0], iids[1]]})
     gid = r.json()["assembly"]["groups"][0]["id"]
@@ -312,15 +366,22 @@ def test_transform_group_translation_via_rigid_joint():
     iids[1] from outside the group, so it should follow."""
     a = _make_assembly_with_instances(3)
     iids = [i.id for i in a.instances]
-    a = a.model_copy(update={"joints": [
-        AssemblyJoint(joint_type="rigid", instance_a_id=iids[1], instance_b_id=iids[2]),
-    ]})
+    a = a.model_copy(
+        update={
+            "joints": [
+                AssemblyJoint(
+                    joint_type="rigid", instance_a_id=iids[1], instance_b_id=iids[2]
+                ),
+            ]
+        }
+    )
     assembly_state.set_assembly(a)
     r = client.post("/api/assembly/groups", json={"instance_ids": [iids[0], iids[1]]})
     gid = r.json()["assembly"]["groups"][0]["id"]
 
-    r2 = client.post(f"/api/assembly/groups/{gid}/transform",
-                     json={"translation": [100.0, 0.0, 0.0]})
+    r2 = client.post(
+        f"/api/assembly/groups/{gid}/transform", json={"translation": [100.0, 0.0, 0.0]}
+    )
     assert r2.status_code == 200
 
     a_after = assembly_state.get_or_404()
@@ -336,14 +397,22 @@ def test_transform_group_revolute_external_stays_put():
     """Revolute joint to outside the group does NOT pull the external partner."""
     a = _make_assembly_with_instances(3)
     iids = [i.id for i in a.instances]
-    a = a.model_copy(update={"joints": [
-        AssemblyJoint(joint_type="revolute", instance_a_id=iids[1], instance_b_id=iids[2]),
-    ]})
+    a = a.model_copy(
+        update={
+            "joints": [
+                AssemblyJoint(
+                    joint_type="revolute", instance_a_id=iids[1], instance_b_id=iids[2]
+                ),
+            ]
+        }
+    )
     assembly_state.set_assembly(a)
     r = client.post("/api/assembly/groups", json={"instance_ids": [iids[0], iids[1]]})
     gid = r.json()["assembly"]["groups"][0]["id"]
 
-    client.post(f"/api/assembly/groups/{gid}/transform", json={"translation": [50.0, 0.0, 0.0]})
+    client.post(
+        f"/api/assembly/groups/{gid}/transform", json={"translation": [50.0, 0.0, 0.0]}
+    )
 
     a_after = assembly_state.get_or_404()
     by_id = {i.id: i for i in a_after.instances}
@@ -361,16 +430,28 @@ def test_transform_group_matrix_input():
     gid = r.json()["assembly"]["groups"][0]["id"]
     # Pure translation (1,2,3) as a 4×4 row-major matrix
     M = [
-        1, 0, 0, 1,
-        0, 1, 0, 2,
-        0, 0, 1, 3,
-        0, 0, 0, 1,
+        1,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        2,
+        0,
+        0,
+        1,
+        3,
+        0,
+        0,
+        0,
+        1,
     ]
     r2 = client.post(f"/api/assembly/groups/{gid}/transform", json={"matrix": M})
     assert r2.status_code == 200
     inst = assembly_state.get_or_404().instances[0]
-    assert inst.transform.values[3]  == pytest.approx(1.0)   # original x=0, +1
-    assert inst.transform.values[7]  == pytest.approx(2.0)
+    assert inst.transform.values[3] == pytest.approx(1.0)  # original x=0, +1
+    assert inst.transform.values[7] == pytest.approx(2.0)
     assert inst.transform.values[11] == pytest.approx(3.0)
 
 
@@ -389,6 +470,7 @@ def test_delete_instance_strips_from_group():
 
 
 # ── Persistence (.nass round-trip) ───────────────────────────────────────────
+
 
 def test_groups_round_trip_through_nass():
     a = _make_assembly_with_instances(3)

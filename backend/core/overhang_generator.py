@@ -4,6 +4,7 @@ Rare-sequence overhang generator.
 Finds short DNA sequences that are rare in the scaffold + staple corpus,
 have acceptable GC content, and avoid hairpin / self-dimer formation.
 """
+
 from __future__ import annotations
 
 import itertools
@@ -112,15 +113,15 @@ def _resolve_sub_domain_seq(ovhg, sd) -> str | None:
     scanner. Returns None when neither the override nor the parent slice is
     available (e.g. an unassigned overhang).
     """
-    override = getattr(sd, 'sequence_override', None)
+    override = getattr(sd, "sequence_override", None)
     if override:
         return override.upper()
-    parent_seq = getattr(ovhg, 'sequence', None)
+    parent_seq = getattr(ovhg, "sequence", None)
     if not parent_seq:
         return None
-    start = int(getattr(sd, 'start_bp_offset', 0))
-    length = int(getattr(sd, 'length_bp', 0))
-    slice_ = parent_seq[start:start + length]
+    start = int(getattr(sd, "start_bp_offset", 0))
+    length = int(getattr(sd, "length_bp", 0))
+    slice_ = parent_seq[start : start + length]
     if len(slice_) != length:
         return None
     return slice_.upper()
@@ -147,10 +148,10 @@ def detect_boundary_hairpins(ovhg) -> list[dict]:
     detector intentionally does NOT report on unresolved overhangs (yields
     no false positives during partial assignment).
     """
-    sub_doms = list(getattr(ovhg, 'sub_domains', None) or [])
+    sub_doms = list(getattr(ovhg, "sub_domains", None) or [])
     if len(sub_doms) < 2:
         return []
-    ordered = sorted(sub_doms, key=lambda s: int(getattr(s, 'start_bp_offset', 0)))
+    ordered = sorted(sub_doms, key=lambda s: int(getattr(s, "start_bp_offset", 0)))
     out: list[dict] = []
     for i, (a, b) in enumerate(zip(ordered[:-1], ordered[1:])):
         seq_a = _resolve_sub_domain_seq(ovhg, a)
@@ -159,20 +160,23 @@ def detect_boundary_hairpins(ovhg) -> list[dict]:
             continue
         junction = seq_a[-_BOUNDARY_HAIRPIN_WINDOW:] + seq_b[:_BOUNDARY_HAIRPIN_WINDOW]
         if has_hairpin(junction):
-            out.append({
-                "boundary_index":  i,
-                "sub_domain_a_id": a.id,
-                "sub_domain_b_id": b.id,
-                "sequence":        junction,
-                "position":        int(getattr(a, 'start_bp_offset', 0))
-                                   + int(getattr(a, 'length_bp', 0)),
-            })
+            out.append(
+                {
+                    "boundary_index": i,
+                    "sub_domain_a_id": a.id,
+                    "sub_domain_b_id": b.id,
+                    "sequence": junction,
+                    "position": int(getattr(a, "start_bp_offset", 0))
+                    + int(getattr(a, "length_bp", 0)),
+                }
+            )
     return out
 
 
 # ---------------------------------------------------------------------------
 # Core algorithm
 # ---------------------------------------------------------------------------
+
 
 def _build_score_map(corpus: list[str], k: int) -> dict[str, int]:
     """Count overlapping k-mer occurrences across all corpus strings."""
@@ -218,7 +222,9 @@ def _extend_seeds(
 
     for seed in working:
         seq = seed
-        local_map = dict(score_map)  # per-seed copy so mutations don't cross-contaminate
+        local_map = dict(
+            score_map
+        )  # per-seed copy so mutations don't cross-contaminate
         while len(seq) < target_length:
             best_append_score = None
             best_append_bases: list[str] = []
@@ -265,7 +271,9 @@ def _filter_structure(seqs: list[str]) -> list[str]:
     return [s for s in seqs if not _has_hairpin(s) and not _has_dimer(s)]
 
 
-def _filter_corpus_score(seqs: list[str], score_map: dict[str, int], k: int) -> list[str]:
+def _filter_corpus_score(
+    seqs: list[str], score_map: dict[str, int], k: int
+) -> list[str]:
     """Keep sequences at or below the 45th percentile of summed k-mer scores."""
     if len(seqs) < 2:
         return seqs
@@ -284,6 +292,7 @@ def _random_fallback(length: int) -> str:
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
+
 
 def generate_overhang_sequences(
     scaffold_seq: str,
@@ -381,6 +390,7 @@ def generate_overhang_sequences(
 # Sub-domain–aware variant
 # ---------------------------------------------------------------------------
 
+
 def generate_overhang_sequence_with_overrides(
     scaffold_seq: str,
     staple_seqs: list[str],
@@ -408,22 +418,22 @@ def generate_overhang_sequence_with_overrides(
         return ""
 
     # Sort defensively — callers should pass them ordered already.
-    ordered = sorted(sub_domains, key=lambda sd: getattr(sd, 'start_bp_offset', 0))
+    ordered = sorted(sub_domains, key=lambda sd: getattr(sd, "start_bp_offset", 0))
 
     # Build the corpus of locked override slices to bias the rare-seq algorithm
     # against repeating user-specified bases. Mirrors the diversity-corpus
     # convention from generate_all_overhang_sequences (×10 weight + RC).
     locked_extras: list[str] = []
     for sd in ordered:
-        override = getattr(sd, 'sequence_override', None)
+        override = getattr(sd, "sequence_override", None)
         if override:
             locked_extras.append(override.upper() * 10)
             locked_extras.append(reverse_complement(override.upper()) * 10)
 
     pieces: list[str] = []
     for sd in ordered:
-        override = getattr(sd, 'sequence_override', None)
-        length = int(getattr(sd, 'length_bp', 0))
+        override = getattr(sd, "sequence_override", None)
+        length = int(getattr(sd, "length_bp", 0))
         if override:
             pieces.append(override.upper())
             continue

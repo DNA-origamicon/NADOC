@@ -51,7 +51,9 @@ def _seed() -> Design:
     )
     s = Strand(
         id="s0",
-        domains=[Domain(helix_id=h.id, start_bp=0, end_bp=99, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id=h.id, start_bp=0, end_bp=99, direction=Direction.FORWARD)
+        ],
         strand_type=StrandType.STAPLE,
     )
     return Design(
@@ -65,7 +67,9 @@ def _seed() -> Design:
 
 
 def _cluster(resp, cluster_id="cA") -> dict:
-    return next(c for c in resp.json()["design"]["cluster_transforms"] if c["id"] == cluster_id)
+    return next(
+        c for c in resp.json()["design"]["cluster_transforms"] if c["id"] == cluster_id
+    )
 
 
 # ── defaults ──────────────────────────────────────────────────────────────────
@@ -92,7 +96,9 @@ def test_old_designs_load_without_the_display_fields():
 
 def test_patch_persists_color_and_opacity(client):
     design_state.set_design(_seed())
-    r = client.patch("/api/design/cluster/cA", json={"color": "#ff8800", "opacity": 0.4})
+    r = client.patch(
+        "/api/design/cluster/cA", json={"color": "#ff8800", "opacity": 0.4}
+    )
     assert r.status_code == 200, r.text
     c = _cluster(r)
     assert c["color"] == "#ff8800"
@@ -102,7 +108,9 @@ def test_patch_persists_color_and_opacity(client):
 def test_patch_leaves_the_pose_alone(client):
     """Styling is not a pose edit — translation/rotation/pivot must not move."""
     design_state.set_design(_seed())
-    before = _cluster(client.patch("/api/design/cluster/cA", json={"translation": [1.0, 2.0, 3.0]}))
+    before = _cluster(
+        client.patch("/api/design/cluster/cA", json={"translation": [1.0, 2.0, 3.0]})
+    )
     r = client.patch("/api/design/cluster/cA", json={"color": "#123456"})
     after = _cluster(r)
     assert after["translation"] == before["translation"]
@@ -119,7 +127,9 @@ def test_empty_color_clears_back_to_the_auto_palette(client):
     assert r.status_code == 200, r.text
     c = _cluster(r)
     assert c["color"] is None
-    assert c["opacity"] == pytest.approx(0.4), "clearing the color must not reset opacity"
+    assert c["opacity"] == pytest.approx(0.4), (
+        "clearing the color must not reset opacity"
+    )
 
 
 def test_omitting_a_field_leaves_it_untouched(client):
@@ -132,7 +142,9 @@ def test_omitting_a_field_leaves_it_untouched(client):
     assert c["opacity"] == pytest.approx(0.4)
 
 
-@pytest.mark.parametrize("bad", ["notahex", "#fff", "red", "ff8800", "#gg0000", "#ff88000"])
+@pytest.mark.parametrize(
+    "bad", ["notahex", "#fff", "red", "ff8800", "#gg0000", "#ff88000"]
+)
 def test_malformed_color_is_rejected(client, bad):
     design_state.set_design(_seed())
     r = client.patch("/api/design/cluster/cA", json={"color": bad})
@@ -146,7 +158,9 @@ def test_uppercase_hex_is_accepted(client):
     assert _cluster(r)["color"] == "#FF8800"
 
 
-@pytest.mark.parametrize("sent,expect", [(5, 1.0), (-2, 0.0), (0, 0.0), (1, 1.0), (0.35, 0.35)])
+@pytest.mark.parametrize(
+    "sent,expect", [(5, 1.0), (-2, 0.0), (0, 0.0), (1, 1.0), (0.35, 0.35)]
+)
 def test_opacity_is_clamped(client, sent, expect):
     design_state.set_design(_seed())
     r = client.patch("/api/design/cluster/cA", json={"opacity": sent})
@@ -214,10 +228,13 @@ def test_display_fields_survive_a_design_round_trip(client):
 def test_user_created_clusters_are_not_auto(client):
     """POST /design/cluster is the only manual path — it must leave auto_created False."""
     design_state.set_design(_seed())
-    r = client.post("/api/design/cluster",
-                    json={"name": "My bar", "helix_ids": ["h_XY_0_0"]})
+    r = client.post(
+        "/api/design/cluster", json={"name": "My bar", "helix_ids": ["h_XY_0_0"]}
+    )
     assert r.status_code == 200, r.text
-    made = next(c for c in r.json()["design"]["cluster_transforms"] if c["name"] == "My bar")
+    made = next(
+        c for c in r.json()["design"]["cluster_transforms"] if c["name"] == "My bar"
+    )
     assert made["auto_created"] is False
 
 
@@ -227,27 +244,32 @@ def test_every_autodetect_creation_site_marks_itself_auto():
     because the alternative is running four different autodetect passes."""
     import re
     from pathlib import Path
+
     src = Path("backend/core/cluster_autodetect.py").read_text()
     sites = [m.start() for m in re.finditer(r"ClusterRigidTransform\(", src)]
     assert sites, "no creation sites found — did the module move?"
     for pos in sites:
         # The call spans a few lines; look at the balanced-ish window after it.
-        window = src[pos:pos + 400]
+        window = src[pos : pos + 400]
         assert "auto_created=True" in window, (
-            f"cluster_autodetect creation site at offset {pos} does not set auto_created")
+            f"cluster_autodetect creation site at offset {pos} does not set auto_created"
+        )
 
 
-@pytest.mark.parametrize("payload,expected", [
-    ({"name": "Scaffold Cluster 1"}, True),
-    ({"name": "Geometry Cluster 2"}, True),
-    ({"name": "Cluster 1", "is_default": True}, True),
-    ({"name": "Duplex 1", "overhang_duplex_driver_id": "oh1"}, True),
-    # The load-bearing limit: cluster_autodetect also emits a plain "Cluster N", so the
-    # name cannot separate it from a user-created one. Guessing auto here would demote
-    # real user clusters, so the inference deliberately does not.
-    ({"name": "Cluster 3"}, False),
-    ({"name": "My bar"}, False),
-])
+@pytest.mark.parametrize(
+    "payload,expected",
+    [
+        ({"name": "Scaffold Cluster 1"}, True),
+        ({"name": "Geometry Cluster 2"}, True),
+        ({"name": "Cluster 1", "is_default": True}, True),
+        ({"name": "Duplex 1", "overhang_duplex_driver_id": "oh1"}, True),
+        # The load-bearing limit: cluster_autodetect also emits a plain "Cluster N", so the
+        # name cannot separate it from a user-created one. Guessing auto here would demote
+        # real user clusters, so the inference deliberately does not.
+        ({"name": "Cluster 3"}, False),
+        ({"name": "My bar"}, False),
+    ],
+)
 def test_legacy_designs_backfill_provenance_on_load(payload, expected):
     """A design saved before auto_created existed infers it once, on load, so the
     inference is persisted on the next save rather than re-guessed forever."""
@@ -257,7 +279,8 @@ def test_legacy_designs_backfill_provenance_on_load(payload, expected):
 
 def test_an_explicit_flag_always_beats_the_name_inference():
     ct = ClusterRigidTransform.model_validate(
-        {"name": "Scaffold Cluster 1", "helix_ids": ["h0"], "auto_created": False})
+        {"name": "Scaffold Cluster 1", "helix_ids": ["h0"], "auto_created": False}
+    )
     assert ct.auto_created is False
 
 
@@ -265,8 +288,10 @@ def test_provenance_survives_paste(client):
     """cluster_copy uses model_copy, so a pasted cluster keeps the provenance of the one
     it came from — a copy of a user cluster must not silently become auto."""
     design_state.set_design(_seed())
-    r = client.post("/api/design/cluster-paste",
-                    json={"cluster_ids": ["cA"], "delta_row": 0, "delta_col": 2})
+    r = client.post(
+        "/api/design/cluster-paste",
+        json={"cluster_ids": ["cA"], "delta_row": 0, "delta_col": 2},
+    )
     assert r.status_code == 200, r.text
     cts = {c["id"]: c for c in r.json()["design"]["cluster_transforms"]}
     new = next(c for cid, c in cts.items() if cid != "cA")

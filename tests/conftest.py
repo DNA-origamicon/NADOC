@@ -71,30 +71,38 @@ def make_minimal_design(
 
     strands = []
     if with_scaffold:
-        strands.append(Strand(
-            id="scaf",
-            strand_type=StrandType.SCAFFOLD,
-            domains=[Domain(
-                helix_id="h0",
-                start_bp=0,
-                end_bp=helix_length_bp - 1,
-                direction=Direction.FORWARD,
-            )],
-        ))
+        strands.append(
+            Strand(
+                id="scaf",
+                strand_type=StrandType.SCAFFOLD,
+                domains=[
+                    Domain(
+                        helix_id="h0",
+                        start_bp=0,
+                        end_bp=helix_length_bp - 1,
+                        direction=Direction.FORWARD,
+                    )
+                ],
+            )
+        )
     if with_staple:
         # Per backend/core/sequences.py:84-95 convention: REVERSE direction
         # requires start_bp > end_bp so domain_bp_range traverses high→low.
         # (Pass 8-C fix; previously start_bp=0 silently yielded empty range.)
-        strands.append(Strand(
-            id="stap",
-            strand_type=StrandType.STAPLE,
-            domains=[Domain(
-                helix_id="h0",
-                start_bp=helix_length_bp - 1,
-                end_bp=0,
-                direction=Direction.REVERSE,
-            )],
-        ))
+        strands.append(
+            Strand(
+                id="stap",
+                strand_type=StrandType.STAPLE,
+                domains=[
+                    Domain(
+                        helix_id="h0",
+                        start_bp=helix_length_bp - 1,
+                        end_bp=0,
+                        direction=Direction.REVERSE,
+                    )
+                ],
+            )
+        )
 
     return Design(helices=helices, strands=strands, lattice_type=lattice)
 
@@ -112,8 +120,22 @@ def make_minimal_design(
 # 4×4 SQUARE teeth bundle — tests/fixtures/teeth.nadoc.  First 8 cells are the
 # columns extruded on every pass (long teeth); all 16 appear on the wide passes.
 TEETH_CELLS = [
-    (0, 0), (0, 1), (0, 2), (0, 3), (1, 3), (1, 2), (1, 1), (1, 0),
-    (2, 0), (2, 1), (2, 2), (2, 3), (3, 3), (3, 2), (3, 1), (3, 0),
+    (0, 0),
+    (0, 1),
+    (0, 2),
+    (0, 3),
+    (1, 3),
+    (1, 2),
+    (1, 1),
+    (1, 0),
+    (2, 0),
+    (2, 1),
+    (2, 2),
+    (2, 3),
+    (3, 3),
+    (3, 2),
+    (3, 1),
+    (3, 0),
 ]
 # Pass widths after the initial 16-cell create — alternating narrow/wide is the
 # tooth profile (see teeth.nadoc feature_log).
@@ -125,8 +147,24 @@ SIX_HB_CELLS = [(0, 1), (1, 1), (1, 2), (1, 3), (0, 3), (0, 2)]
 
 # 18-helix honeycomb bundle — tests/fixtures/18hb_fixture.nadoc.
 EIGHTEEN_HB_CELLS = [
-    (1, 3), (0, 3), (0, 2), (0, 1), (1, 1), (1, 2), (2, 2), (2, 1), (3, 1),
-    (3, 2), (3, 3), (2, 3), (2, 4), (2, 5), (2, 6), (1, 6), (1, 5), (1, 4),
+    (1, 3),
+    (0, 3),
+    (0, 2),
+    (0, 1),
+    (1, 1),
+    (1, 2),
+    (2, 2),
+    (2, 1),
+    (3, 1),
+    (3, 2),
+    (3, 3),
+    (2, 3),
+    (2, 4),
+    (2, 5),
+    (2, 6),
+    (1, 6),
+    (1, 5),
+    (1, 4),
 ]
 
 # mini_hinge base — workspace/mini_hinge.nadoc bundle-create: two 4×2 SQUARE
@@ -134,8 +172,22 @@ EIGHTEEN_HB_CELLS = [
 # the initial extrusion; the file's later routing/flexible/overhang ops are NOT
 # reproduced here.
 MINI_HINGE_CELLS = [
-    (0, 0), (0, 1), (0, 2), (0, 3), (1, 3), (1, 2), (1, 1), (1, 0),
-    (4, 0), (4, 1), (4, 2), (4, 3), (5, 3), (5, 2), (5, 1), (5, 0),
+    (0, 0),
+    (0, 1),
+    (0, 2),
+    (0, 3),
+    (1, 3),
+    (1, 2),
+    (1, 1),
+    (1, 0),
+    (4, 0),
+    (4, 1),
+    (4, 2),
+    (4, 3),
+    (5, 3),
+    (5, 2),
+    (5, 1),
+    (5, 0),
 ]
 
 
@@ -170,8 +222,13 @@ def build_extruded_bundle(
     from backend.api.headless_build import build_bundle
 
     return build_bundle(
-        cells, length_bp, lattice=lattice, name=name,
-        plane=plane, strand_filter=strand_filter, passes=passes,
+        cells,
+        length_bp,
+        lattice=lattice,
+        name=name,
+        plane=plane,
+        strand_filter=strand_filter,
+        passes=passes,
     )
 
 
@@ -182,14 +239,21 @@ def make_teeth_design() -> Design:
     canonical topology equality + identical seamed/seamless routed output.
     """
     return build_extruded_bundle(
-        TEETH_CELLS, 42, lattice=LatticeType.SQUARE, name="teeth", passes=TEETH_PASSES,
+        TEETH_CELLS,
+        42,
+        lattice=LatticeType.SQUARE,
+        name="teeth",
+        passes=TEETH_PASSES,
     )
 
 
 def make_6hb_design(length_bp: int = 42) -> Design:
     """6-helix honeycomb bundle (single create).  Default 42 bp."""
     return build_extruded_bundle(
-        SIX_HB_CELLS, length_bp, lattice=LatticeType.HONEYCOMB, name="6hb",
+        SIX_HB_CELLS,
+        length_bp,
+        lattice=LatticeType.HONEYCOMB,
+        name="6hb",
     )
 
 
@@ -231,18 +295,28 @@ def make_deposition_chain_design() -> Design:
     d = assign_staple_sequences(d)
     d.metadata.name = "6hbx100_1xT"
     field = {"field_pN": 5.0, "dir": [0.0, 0.0, -1.0]}
-    surface = {"dir": [0.0, 0.0, 1.0]}   # normal opposes the field → holds the structure
+    surface = {"dir": [0.0, 0.0, 1.0]}  # normal opposes the field → holds the structure
     anchor_strand = next(
         (s.id for s in d.strands if s.strand_type == StrandType.STAPLE),
         d.strands[0].id if d.strands else "s1",
     )
     stages = [
         ChainSimStage(engine="oxdna", protocol="relax", label="relax"),
-        ChainSimStage(engine="oxdna", protocol="production", label="deposition",
-                      field=field, surface=surface),
-        ChainSimStage(engine="oxdna", protocol="production", label="deposition+anchor",
-                      field=field, surface=surface,
-                      anchors=[{"kind": "domain", "strand_id": anchor_strand, "domain_index": 0}]),
+        ChainSimStage(
+            engine="oxdna",
+            protocol="production",
+            label="deposition",
+            field=field,
+            surface=surface,
+        ),
+        ChainSimStage(
+            engine="oxdna",
+            protocol="production",
+            label="deposition+anchor",
+            field=field,
+            surface=surface,
+            anchors=[{"kind": "domain", "strand_id": anchor_strand, "domain_index": 0}],
+        ),
     ]
     d.chain_sim_projects = [ChainSimProject(name="Deposition", stages=stages)]
     return d
@@ -270,7 +344,10 @@ def make_6hb_curved_design(length_bp: int = 192) -> Design:
 def make_18hb_design(length_bp: int = 388) -> Design:
     """18-helix honeycomb bundle — matches tests/fixtures/18hb_fixture.nadoc at 388 bp."""
     return build_extruded_bundle(
-        EIGHTEEN_HB_CELLS, length_bp, lattice=LatticeType.HONEYCOMB, name="18hb",
+        EIGHTEEN_HB_CELLS,
+        length_bp,
+        lattice=LatticeType.HONEYCOMB,
+        name="18hb",
     )
 
 
@@ -287,7 +364,10 @@ def make_18hb_routed_design(length_bp: int = 388) -> Design:
 
     with hb.scratch_session(LatticeType.HONEYCOMB):
         hb.create_bundle(
-            EIGHTEEN_HB_CELLS, length_bp, lattice=LatticeType.HONEYCOMB, name="18hb",
+            EIGHTEEN_HB_CELLS,
+            length_bp,
+            lattice=LatticeType.HONEYCOMB,
+            name="18hb",
         )
         hb.auto_scaffold(seamless=False)
         hb.auto_crossover()
@@ -301,7 +381,10 @@ def make_mini_hinge_base_design(length_bp: int = 84) -> Design:
     Only the base geometry — the file's routing/flexible/overhang ops are not replayed.
     """
     return build_extruded_bundle(
-        MINI_HINGE_CELLS, length_bp, lattice=LatticeType.SQUARE, name="mini_hinge",
+        MINI_HINGE_CELLS,
+        length_bp,
+        lattice=LatticeType.SQUARE,
+        name="mini_hinge",
     )
 
 
@@ -347,11 +430,20 @@ def valid_overhang_sites(design: Design) -> list[dict]:
                     if key in seen:
                         continue
                     seen.add(key)
-                    if overhang_candidate_error(design, helix, bp, direc, nr, nc) is None:
-                        sites.append(dict(
-                            helix_id=hid, bp_index=bp, direction=direc,
-                            is_five_prime=is5, neighbor_row=nr, neighbor_col=nc,
-                        ))
+                    if (
+                        overhang_candidate_error(design, helix, bp, direc, nr, nc)
+                        is None
+                    ):
+                        sites.append(
+                            dict(
+                                helix_id=hid,
+                                bp_index=bp,
+                                direction=direc,
+                                is_five_prime=is5,
+                                neighbor_row=nr,
+                                neighbor_col=nc,
+                            )
+                        )
     return sites
 
 
@@ -364,8 +456,14 @@ def extrude_valid_overhang(design: Design, length_bp: int = 12) -> tuple[Design,
 
     for site in valid_overhang_sites(design):
         out = make_overhang_extrude(
-            design, site["helix_id"], site["bp_index"], site["direction"],
-            site["is_five_prime"], site["neighbor_row"], site["neighbor_col"], length_bp,
+            design,
+            site["helix_id"],
+            site["bp_index"],
+            site["direction"],
+            site["is_five_prime"],
+            site["neighbor_row"],
+            site["neighbor_col"],
+            length_bp,
         )
         new_helix_ids = {h.id for h in out.helices} - {h.id for h in design.helices}
         new_helix_id = next(iter(new_helix_ids))
@@ -394,7 +492,7 @@ def extrude_valid_overhang(design: Design, length_bp: int = 12) -> tuple[Design,
 # Whole modules where every test is a heavy real-sim / trajectory test.
 _SLOW_MODULES = {
     "test_md_trajectory",
-    "test_md_display_ready_live",   # real-job load: parses 143 MB PSF + builds model
+    "test_md_display_ready_live",  # real-job load: parses 143 MB PSF + builds model
     # Setup-dominated: a ~16 s module/class-scoped fixture that EVERY test pays,
     # so per-test marking wouldn't help — the whole file is slow.
     "test_md_pipeline",
@@ -403,9 +501,9 @@ _SLOW_MODULES = {
     # pins a file to ONE worker, so any of them alone would blow the 60 s fast budget.
     # Relegated whole-file (area "cando"): the fast tests they still contain are a
     # small minority of the file's cost and marking them individually saves nothing.
-    "test_snupi_element",        # ~127 s: assembles + solves the SNUPI stiffness matrix
-    "test_snupi_dynamics",       # ~85 s: GJF Langevin sampling runs (kT K^-1 covariance)
-    "test_snupi_corotational",   # ~47 s: nonlinear co-rotational Newton iterations
+    "test_snupi_element",  # ~127 s: assembles + solves the SNUPI stiffness matrix
+    "test_snupi_dynamics",  # ~85 s: GJF Langevin sampling runs (kT K^-1 covariance)
+    "test_snupi_corotational",  # ~47 s: nonlinear co-rotational Newton iterations
     # Golden CG→atomistic display-split parity: each parametrized builder does a routed
     # 6hb build (auto_scaffold/crossover/break) + multiple all-atom atomistic
     # reconstructions (~3.7–3.9 s standalone; the first case trips past the per-test
@@ -459,11 +557,10 @@ _SLOW_TESTS = {
     "test_real_namd_trajectory_builds_ready_source",
     "test_oxdna_http_lifecycle",
     "test_runner_real_binary_status_lifecycle",
-    "test_lammps_real_run_end_to_end",   # real lmp CG-DNA run
-    "test_lammps_field_holds_anchor_and_deflects_free",   # real lmp field+anchor run
-    "test_create_runs_to_completion_and_lists",   # real lmp CG-DNA run via REST
-    "test_create_with_field_and_anchor_records_forces",   # real lmp steered run via REST
-
+    "test_lammps_real_run_end_to_end",  # real lmp CG-DNA run
+    "test_lammps_field_holds_anchor_and_deflects_free",  # real lmp field+anchor run
+    "test_create_runs_to_completion_and_lists",  # real lmp CG-DNA run via REST
+    "test_create_with_field_and_anchor_records_forces",  # real lmp steered run via REST
     # headless build+optimize (real router/oxdna passes)
     "test_build_and_optimize_oracle_fires_on_unreachable",
     "test_build_and_optimize_converges",
@@ -597,7 +694,6 @@ _SLOW_TESTS = {
     # test_cando_extra_bases.py (C3 extra-base compliant connectors: the mesh/compliance
     # tests are fast pure-math; this one runs several real predict_shape + NMA RMSF solves)
     "test_extra_bases_raise_local_flexibility_rmsf",
-
     # ---------------------------------------------------------------------------
     # Refreshed 2026-07-10: heavy (>=~2 s) sim/FEM/routing/trajectory tests that had
     # slipped past the registry and were dominating the "fast" suite (`just test-fast`
@@ -673,7 +769,6 @@ _SLOW_TESTS = {
     "test_subprocess_self_timeout_via_alarm",
     # test_exp28_hierarchical_tube_cg.py (window-expansion CG design + atomistic model build)
     "test_window_expansion_produces_unique_design_and_atomistic_model",
-
     # ---------------------------------------------------------------------------
     # Refreshed 2026-07-13: the three tests that blew the per-test budget (>5 s) in a
     # `-n auto` fast run.  Each is only ~0.5-4 s in isolation but 7-24 s under a fully
@@ -696,7 +791,6 @@ _SLOW_TESTS = {
     # relegated `test_make_18hb_routed_design_is_deterministic`.  The file's three other
     # cluster tests (6hb / no-op paths) stay fast.
     "test_autodetect_produces_scaffold_and_geometry_clusters",
-
     # ---------------------------------------------------------------------------
     # 2026-07-31 — test_ring_piercing.py (the ring-threading gate from the
     # crossover-catenation work).  These two build a real atomistic model at the
@@ -861,9 +955,13 @@ def _slow_area_for(module: str) -> str:
     # catenation), so an atomistic-placement change is what should re-run it.
     # junction_winding is the same stack (it builds a model per phase sample to find the
     # wound/clean boundary), so it shares the group.
-    if ("atomistic" in module or "pdb_export" in module
-            or "junction_topology" in module or "junction_winding" in module
-            or "ring_piercing" in module):
+    if (
+        "atomistic" in module
+        or "pdb_export" in module
+        or "junction_topology" in module
+        or "junction_winding" in module
+        or "ring_piercing" in module
+    ):
         return "atomistic"
     if module.startswith("test_md") or "openmm" in module or "benchmark" in module:
         return "md"
@@ -892,8 +990,12 @@ def pytest_collection_modifyitems(config, items):
         cls = item.cls.__name__ if getattr(item, "cls", None) else None
         # item.name carries the param id (``test_foo[TT]``) — that is what _SLOW_PARAMS
         # matches, so a single heavy parametrisation can be relegated on its own.
-        if (module in _SLOW_MODULES or name in _SLOW_TESTS or cls in _SLOW_CLASSES
-                or item.name in _SLOW_PARAMS):
+        if (
+            module in _SLOW_MODULES
+            or name in _SLOW_TESTS
+            or cls in _SLOW_CLASSES
+            or item.name in _SLOW_PARAMS
+        ):
             item.add_marker(pytest.mark.slow)
             item.add_marker(getattr(pytest.mark, _slow_area_for(module)))
             continue
@@ -906,7 +1008,8 @@ def pytest_collection_modifyitems(config, items):
         # from the same filename mapping so an area group means "every heavy test in
         # this area", however it was relegated.
         if item.get_closest_marker("slow") and not any(
-                item.get_closest_marker(a) for a in AREA_MARKERS):
+            item.get_closest_marker(a) for a in AREA_MARKERS
+        ):
             item.add_marker(getattr(pytest.mark, _slow_area_for(module)))
 
 
@@ -1008,8 +1111,9 @@ def pytest_sessionfinish(session, exitstatus):
     # wall clock no matter how many cores we throw at it.
     by_file: dict[str, dict] = {}
     for nid, d in _DURATIONS.items():
-        f = by_file.setdefault(nid.split("::", 1)[0],
-                               {"seconds": 0.0, "n": 0, "n_slow_marked": 0})
+        f = by_file.setdefault(
+            nid.split("::", 1)[0], {"seconds": 0.0, "n": 0, "n_slow_marked": 0}
+        )
         f["seconds"] += d["seconds"]
         f["n"] += 1
         f["n_slow_marked"] += int(d["slow"])
@@ -1030,8 +1134,12 @@ def pytest_sessionfinish(session, exitstatus):
         "sim_running": sim_running,
         "sim_reason": sim_reason,
         "slowest_files_15": [
-            {"file": f, "seconds": round(v["seconds"], 1), "n_tests": v["n"],
-             "n_slow_marked": v["n_slow_marked"]}
+            {
+                "file": f,
+                "seconds": round(v["seconds"], 1),
+                "n_tests": v["n"],
+                "n_slow_marked": v["n_slow_marked"],
+            }
             for f, v in sorted(by_file.items(), key=lambda kv: -kv[1]["seconds"])[:15]
         ],
         "violators": violators,
@@ -1065,5 +1173,7 @@ def pytest_sessionfinish(session, exitstatus):
                 )
             for v in violators[:10]:
                 tr.write_line(f"  {v['seconds']:6.1f}s  {v['nodeid']}")
-            tr.write_line(f"full report: {_SLOW_CANDIDATES_FILE}  "
-                          f"(triage: .claude/skills/triage-slow-tests)")
+            tr.write_line(
+                f"full report: {_SLOW_CANDIDATES_FILE}  "
+                f"(triage: .claude/skills/triage-slow-tests)"
+            )

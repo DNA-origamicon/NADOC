@@ -30,6 +30,7 @@ def reset_state():
 
 # ── Design endpoints ──────────────────────────────────────────────────────────
 
+
 def test_get_design_returns_200():
     r = client.get("/api/design")
     assert r.status_code == 200
@@ -46,7 +47,9 @@ def test_get_design_404_when_no_active():
 
 
 def test_create_design_returns_201():
-    r = client.post("/api/design", json={"name": "My Design", "lattice_type": "HONEYCOMB"})
+    r = client.post(
+        "/api/design", json={"name": "My Design", "lattice_type": "HONEYCOMB"}
+    )
     assert r.status_code == 201
     body = r.json()
     assert body["design"]["metadata"]["name"] == "My Design"
@@ -62,23 +65,37 @@ def test_export_cadnano_uses_design_name_for_download_filename():
     r = client.get("/api/design/export/cadnano")
 
     assert r.status_code == 200
-    assert r.headers["Content-Disposition"] == 'attachment; filename="Left Arm _ Rev A.json"'
+    assert (
+        r.headers["Content-Disposition"]
+        == 'attachment; filename="Left Arm _ Rev A.json"'
+    )
 
 
 def test_get_geometry_returns_list():
     r = client.get("/api/design/geometry")
     assert r.status_code == 200
     data = r.json()
-    assert isinstance(data, dict), "geometry endpoint must return { nucleotides, helix_axes }"
+    assert isinstance(data, dict), (
+        "geometry endpoint must return { nucleotides, helix_axes }"
+    )
     assert "nucleotides" in data
     assert "helix_axes" in data
     nucs = data["nucleotides"]
     # Demo design: 42 bp × 2 strands = 84 nucleotides
     assert len(nucs) == 84
     nuc = nucs[0]
-    for field in ("helix_id", "bp_index", "direction", "backbone_position",
-                  "base_position", "base_normal", "axis_tangent", "strand_id",
-                  "is_five_prime", "is_three_prime"):
+    for field in (
+        "helix_id",
+        "bp_index",
+        "direction",
+        "backbone_position",
+        "base_position",
+        "base_normal",
+        "axis_tangent",
+        "strand_id",
+        "is_five_prime",
+        "is_three_prime",
+    ):
         assert field in nuc, f"Missing field {field!r} in geometry response"
     # helix_axes: one entry per helix, each with helix_id, start, end
     axes = data["helix_axes"]
@@ -99,7 +116,14 @@ def test_geometry_five_prime_placement():
     at bp=N-1, not at bp=0 (the former bug).
     """
     from backend.api.crud import _strand_nucleotide_info
-    from backend.core.models import Design, Strand, Domain, Helix, DesignMetadata, LatticeType
+    from backend.core.models import (
+        Design,
+        Strand,
+        Domain,
+        Helix,
+        DesignMetadata,
+        LatticeType,
+    )
     from backend.core.models import Direction, StrandType
     from backend.core.constants import BDNA_RISE_PER_BP
 
@@ -114,8 +138,14 @@ def test_geometry_five_prime_placement():
     # REVERSE scaffold: convention start_bp=N-1 (5′), end_bp=0 (3′)
     rev_scaffold = Strand(
         id="rev_scaf",
-        domains=[Domain(helix_id="h0", start_bp=length_bp - 1, end_bp=0,
-                        direction=Direction.REVERSE)],
+        domains=[
+            Domain(
+                helix_id="h0",
+                start_bp=length_bp - 1,
+                end_bp=0,
+                direction=Direction.REVERSE,
+            )
+        ],
         strand_type=StrandType.SCAFFOLD,
     )
     design = Design(
@@ -137,9 +167,17 @@ def test_geometry_five_prime_placement():
 def _make_design_with_five_prime_extension():
     """Minimal design: one FORWARD helix, one FORWARD staple strand, one 5' TT extension."""
     from backend.core.models import (
-        Design, Helix, Strand, Domain, StrandExtension, DesignMetadata,
-        Direction, StrandType, LatticeType,
+        Design,
+        Helix,
+        Strand,
+        Domain,
+        StrandExtension,
+        DesignMetadata,
+        Direction,
+        StrandType,
+        LatticeType,
     )
+
     helix_id = "h_test"
     strand_id = "s_test"
     h = Helix(
@@ -150,7 +188,9 @@ def _make_design_with_five_prime_extension():
         axis_end={"x": 0, "y": 0, "z": 3.34},
         phase_offset=0.0,
     )
-    domain = Domain(helix_id=helix_id, direction=Direction.FORWARD, start_bp=0, end_bp=9)
+    domain = Domain(
+        helix_id=helix_id, direction=Direction.FORWARD, start_bp=0, end_bp=9
+    )
     strand = Strand(id=strand_id, domains=[domain], strand_type=StrandType.STAPLE)
     ext = StrandExtension(strand_id=strand_id, end="five_prime", sequence="TT")
     design = Design(
@@ -166,9 +206,14 @@ def _make_design_with_five_prime_extension():
 def test_five_prime_extension_tip_is_cube():
     """Outermost bead of a 5' extension must have is_five_prime=True (cube marker)."""
     from backend.api.crud import _geometry_for_design
+
     design, ext = _make_design_with_five_prime_extension()
     nucs = _geometry_for_design(design)
-    ext_nucs = [n for n in nucs if n.get("extension_id") == ext.id and not n.get("is_modification")]
+    ext_nucs = [
+        n
+        for n in nucs
+        if n.get("extension_id") == ext.id and not n.get("is_modification")
+    ]
     assert ext_nucs, "No extension nucleotides found in geometry"
     ext_nucs.sort(key=lambda n: n["bp_index"])
     outermost = ext_nucs[-1]
@@ -182,14 +227,18 @@ def test_five_prime_extension_old_terminal_loses_cube():
     """Original 5' terminal on the real helix must lose is_five_prime when a 5' extension exists."""
     from backend.api.crud import _geometry_for_design
     from backend.core.models import Direction
+
     design, _ = _make_design_with_five_prime_extension()
     nucs = _geometry_for_design(design)
     real_terminal = next(
-        (n for n in nucs
-         if n["helix_id"] == "h_test"
-         and n["bp_index"] == 0
-         and n["direction"] == Direction.FORWARD.value
-         and not n["helix_id"].startswith("__")),
+        (
+            n
+            for n in nucs
+            if n["helix_id"] == "h_test"
+            and n["bp_index"] == 0
+            and n["direction"] == Direction.FORWARD.value
+            and not n["helix_id"].startswith("__")
+        ),
         None,
     )
     assert real_terminal is not None, "Original 5' terminal nuc not found"
@@ -199,6 +248,7 @@ def test_five_prime_extension_old_terminal_loses_cube():
 
 
 # ── Extension bead coordinate helpers ────────────────────────────────────────
+
 
 def _get_extension_bead_coords(nucs):
     """Return {extension_id: {bp_index: [x, y, z]}} for all extension sequence beads."""
@@ -214,16 +264,18 @@ def _get_extension_bead_coords(nucs):
 def _measure_terminal_ext_xy_distances(design, nucs):
     """For each extension return {ext_id: {bp_index: xy_distance_from_terminal}} (XY only)."""
     import math
+
     nuc_by_key = {
         (n["helix_id"], n["bp_index"], n["direction"]): n
-        for n in nucs if not n["helix_id"].startswith("__")
+        for n in nucs
+        if not n["helix_id"].startswith("__")
     }
     strand_by_id = {s.id: s for s in design.strands}
-    ext_by_id    = {e.id: e for e in design.extensions}
-    ext_coords   = _get_extension_bead_coords(nucs)
+    ext_by_id = {e.id: e for e in design.extensions}
+    ext_coords = _get_extension_bead_coords(nucs)
     distances = {}
     for ext_id, bead_map in ext_coords.items():
-        ext    = ext_by_id.get(ext_id)
+        ext = ext_by_id.get(ext_id)
         strand = strand_by_id.get(ext.strand_id) if ext else None
         if not strand or not strand.domains:
             continue
@@ -281,6 +333,7 @@ def test_update_metadata():
 
 # ── Helix endpoints ───────────────────────────────────────────────────────────
 
+
 def test_list_helices():
     r = client.get("/api/design/helices")
     assert r.status_code == 200
@@ -292,7 +345,7 @@ def test_list_helices():
 def test_add_helix():
     payload = {
         "axis_start": {"x": 2.6, "y": 0.0, "z": 0.0},
-        "axis_end":   {"x": 2.6, "y": 0.0, "z": 14.028},
+        "axis_end": {"x": 2.6, "y": 0.0, "z": 14.028},
         "length_bp": 42,
         "phase_offset": 0.0,
     }
@@ -323,7 +376,7 @@ def test_get_helix_not_found():
 def test_update_helix():
     payload = {
         "axis_start": {"x": 0.0, "y": 0.0, "z": 0.0},
-        "axis_end":   {"x": 0.0, "y": 0.0, "z": 7.014},
+        "axis_end": {"x": 0.0, "y": 0.0, "z": 7.014},
         "length_bp": 21,
         "phase_offset": 0.0,
     }
@@ -344,7 +397,7 @@ def test_delete_helix_success():
     # Add a new helix with no strands referencing it
     payload = {
         "axis_start": {"x": 2.6, "y": 0.0, "z": 0.0},
-        "axis_end":   {"x": 2.6, "y": 0.0, "z": 14.028},
+        "axis_end": {"x": 2.6, "y": 0.0, "z": 14.028},
         "length_bp": 42,
     }
     r = client.post("/api/design/helices", json=payload)
@@ -358,11 +411,14 @@ def test_delete_helix_success():
 
 def _add_second_helix() -> str:
     """Add a strandless helix to the demo design; return its id."""
-    r = client.post("/api/design/helices", json={
-        "axis_start": {"x": 2.6, "y": 0.0, "z": 0.0},
-        "axis_end":   {"x": 2.6, "y": 0.0, "z": 14.028},
-        "length_bp": 42,
-    })
+    r = client.post(
+        "/api/design/helices",
+        json={
+            "axis_start": {"x": 2.6, "y": 0.0, "z": 0.0},
+            "axis_end": {"x": 2.6, "y": 0.0, "z": 14.028},
+            "length_bp": 42,
+        },
+    )
     assert r.status_code == 201
     return r.json()["helix"]["id"]
 
@@ -372,8 +428,9 @@ def test_reorder_helices_permutes_array():
     before = [h["id"] for h in client.get("/api/design").json()["design"]["helices"]]
     assert before == ["demo_helix", new_id]
 
-    r = client.put("/api/design/helices/reorder",
-                   json={"ordered_ids": list(reversed(before))})
+    r = client.put(
+        "/api/design/helices/reorder", json={"ordered_ids": list(reversed(before))}
+    )
     assert r.status_code == 200
     after = [h["id"] for h in r.json()["design"]["helices"]]
     assert after == [new_id, "demo_helix"]
@@ -384,8 +441,9 @@ def test_reorder_helices_freezes_labels_to_identity():
     the pre-reorder array position and follows the helix, not the new row."""
     new_id = _add_second_helix()  # design: [demo_helix(idx0), new_id(idx1)]
 
-    r = client.put("/api/design/helices/reorder",
-                   json={"ordered_ids": [new_id, "demo_helix"]})
+    r = client.put(
+        "/api/design/helices/reorder", json={"ordered_ids": [new_id, "demo_helix"]}
+    )
     assert r.status_code == 200
     helices = r.json()["design"]["helices"]
     by_id = {h["id"]: h for h in helices}
@@ -402,11 +460,12 @@ def test_reorder_helices_preserves_existing_label():
     new_id = _add_second_helix()
     # No API assigns an arbitrary label, so set one on the live design directly.
     design_state.get_or_404().helices[1].label = "scaf-A"
-    r = client.put("/api/design/helices/reorder",
-                   json={"ordered_ids": [new_id, "demo_helix"]})
+    r = client.put(
+        "/api/design/helices/reorder", json={"ordered_ids": [new_id, "demo_helix"]}
+    )
     assert r.status_code == 200
     by_id = {h["id"]: h for h in r.json()["design"]["helices"]}
-    assert by_id[new_id]["label"] == "scaf-A"   # untouched
+    assert by_id[new_id]["label"] == "scaf-A"  # untouched
     assert by_id["demo_helix"]["label"] == "0"  # label-less → frozen to old index 0
 
 
@@ -417,14 +476,17 @@ def test_reorder_helices_rejects_missing_id():
 
 
 def test_reorder_helices_rejects_unknown_id():
-    r = client.put("/api/design/helices/reorder",
-                   json={"ordered_ids": ["demo_helix", "ghost"]})
+    r = client.put(
+        "/api/design/helices/reorder", json={"ordered_ids": ["demo_helix", "ghost"]}
+    )
     assert r.status_code == 400
 
 
 def test_reorder_helices_rejects_duplicate_id():
-    r = client.put("/api/design/helices/reorder",
-                   json={"ordered_ids": ["demo_helix", "demo_helix"]})
+    r = client.put(
+        "/api/design/helices/reorder",
+        json={"ordered_ids": ["demo_helix", "demo_helix"]},
+    )
     assert r.status_code == 400
 
 
@@ -434,8 +496,9 @@ def test_reorder_helices_preserves_topology():
     before = client.get("/api/design").json()["design"]
     ids = [h["id"] for h in before["helices"]]
 
-    r = client.put("/api/design/helices/reorder",
-                   json={"ordered_ids": list(reversed(ids))})
+    r = client.put(
+        "/api/design/helices/reorder", json={"ordered_ids": list(reversed(ids))}
+    )
     assert r.status_code == 200
     after = r.json()["design"]
     assert after["strands"] == before["strands"]
@@ -444,10 +507,17 @@ def test_reorder_helices_preserves_topology():
 
 # ── Strand endpoints ──────────────────────────────────────────────────────────
 
+
 def test_add_strand():
     payload = {
-        "domains": [{"helix_id": "demo_helix", "start_bp": 0, "end_bp": 10,
-                     "direction": "FORWARD"}],
+        "domains": [
+            {
+                "helix_id": "demo_helix",
+                "start_bp": 0,
+                "end_bp": 10,
+                "direction": "FORWARD",
+            }
+        ],
         "strand_type": "staple",
     }
     r = client.post("/api/design/strands", json=payload)
@@ -458,18 +528,30 @@ def test_add_strand():
 def test_delete_strand_cascades_crossovers():
     """Deleting a strand should also remove any crossovers that reference it."""
     # Add a second helix so we can add a crossover
-    client.post("/api/design/helices", json={
-        "axis_start": {"x": 2.6, "y": 0.0, "z": 0.0},
-        "axis_end":   {"x": 2.6, "y": 0.0, "z": 14.028},
-        "length_bp": 42,
-    })
+    client.post(
+        "/api/design/helices",
+        json={
+            "axis_start": {"x": 2.6, "y": 0.0, "z": 0.0},
+            "axis_end": {"x": 2.6, "y": 0.0, "z": 14.028},
+            "length_bp": 42,
+        },
+    )
 
     # Add a strand on the new helix
-    r = client.post("/api/design/strands", json={
-        "domains": [{"helix_id": "demo_helix", "start_bp": 0, "end_bp": 41,
-                     "direction": "FORWARD"}],
-        "strand_type": "staple",
-    })
+    r = client.post(
+        "/api/design/strands",
+        json={
+            "domains": [
+                {
+                    "helix_id": "demo_helix",
+                    "start_bp": 0,
+                    "end_bp": 41,
+                    "direction": "FORWARD",
+                }
+            ],
+            "strand_type": "staple",
+        },
+    )
     new_strand_id = r.json()["strand"]["id"]
 
     # Delete that strand and check response
@@ -484,15 +566,20 @@ def test_delete_strand_not_found():
 
 def test_add_domain_to_strand():
     # Add a fresh strand (no domains)
-    r = client.post("/api/design/strands", json={"domains": [], "strand_type": "staple"})
+    r = client.post(
+        "/api/design/strands", json={"domains": [], "strand_type": "staple"}
+    )
     strand_id = r.json()["strand"]["id"]
 
-    r = client.post(f"/api/design/strands/{strand_id}/domains", json={
-        "helix_id": "demo_helix",
-        "start_bp": 0,
-        "end_bp": 5,
-        "direction": "FORWARD",
-    })
+    r = client.post(
+        f"/api/design/strands/{strand_id}/domains",
+        json={
+            "helix_id": "demo_helix",
+            "start_bp": 0,
+            "end_bp": 5,
+            "direction": "FORWARD",
+        },
+    )
     assert r.status_code == 201
     assert len(r.json()["strand"]["domains"]) == 1
 
@@ -502,7 +589,6 @@ def test_delete_domain_out_of_range():
     assert r.status_code == 400
 
 
-
 def test_delete_crossover_not_found():
     r = client.delete("/api/design/crossovers/no_such_crossover")
     assert r.status_code == 404
@@ -510,15 +596,26 @@ def test_delete_crossover_not_found():
 
 # ── Unligated crossover marker (would-circularize cycle detection) ────────────
 
+
 def _cycle_design():
     """Build a design with one linear scaffold + one crossover whose two halves
     point at the scaffold's 3' end and 5' start (i.e. ligation would close a
     circle, so _ligate_crossover skips and the marker fires)."""
     from backend.core.models import (
-        Design, Strand, Domain, Helix, Crossover, HalfCrossover,
-        Direction, StrandType, LatticeType, DesignMetadata, Vec3,
+        Design,
+        Strand,
+        Domain,
+        Helix,
+        Crossover,
+        HalfCrossover,
+        Direction,
+        StrandType,
+        LatticeType,
+        DesignMetadata,
+        Vec3,
     )
     from backend.core.constants import BDNA_RISE_PER_BP
+
     helix = Helix(
         id="h0",
         axis_start=Vec3(x=0.0, y=0.0, z=0.0),
@@ -527,14 +624,15 @@ def _cycle_design():
     )
     scaffold = Strand(
         id="s0",
-        domains=[Domain(helix_id="h0", start_bp=0, end_bp=41,
-                        direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)
+        ],
         strand_type=StrandType.SCAFFOLD,
     )
     xover = Crossover(
         id="x_cycle",
         half_a=HalfCrossover(helix_id="h0", index=41, strand=Direction.FORWARD),
-        half_b=HalfCrossover(helix_id="h0", index=0,  strand=Direction.FORWARD),
+        half_b=HalfCrossover(helix_id="h0", index=0, strand=Direction.FORWARD),
     )
     return Design(
         id="d_cycle",
@@ -550,6 +648,7 @@ def test_ligate_crossover_returns_false_on_cycle():
     """Both halves resolve to the same strand → _ligate_crossover returns
     (design, False) without merging."""
     from backend.api.crud import _ligate_crossover
+
     design = _cycle_design()
     new_design, ligated = _ligate_crossover(design, design.crossovers[0])
     assert ligated is False
@@ -560,6 +659,7 @@ def test_ligate_crossover_returns_false_on_cycle():
 def test_unligated_crossover_ids_lists_cycle_xover():
     """The cycle crossover appears in unligated_crossover_ids."""
     from backend.api.crud import unligated_crossover_ids
+
     design = _cycle_design()
     assert unligated_crossover_ids(design) == ["x_cycle"]
 
@@ -571,7 +671,7 @@ def test_design_response_always_includes_unligated_crossover_ids():
     assert r.status_code == 200
     body = r.json()
     assert "unligated_crossover_ids" in body
-    assert body["unligated_crossover_ids"] == []   # demo design has no crossovers
+    assert body["unligated_crossover_ids"] == []  # demo design has no crossovers
 
 
 def test_unligated_marker_clears_after_nick():
@@ -585,9 +685,14 @@ def test_unligated_marker_clears_after_nick():
 
     # Nick the scaffold mid-strand → splits it into two strands. The crossover's
     # two halves now resolve to different strands → marker clears.
-    r = client.post("/api/design/nick", json={
-        "helix_id": "h0", "bp_index": 20, "direction": "FORWARD",
-    })
+    r = client.post(
+        "/api/design/nick",
+        json={
+            "helix_id": "h0",
+            "bp_index": 20,
+            "direction": "FORWARD",
+        },
+    )
     assert r.status_code == 201, r.text
     assert r.json()["unligated_crossover_ids"] == []
 
@@ -603,9 +708,14 @@ def test_nick_breaking_cycle_actually_ligates_crossover():
     assert n_strands_before == 1
     assert pre["unligated_crossover_ids"] == ["x_cycle"]
 
-    r = client.post("/api/design/nick", json={
-        "helix_id": "h0", "bp_index": 20, "direction": "FORWARD",
-    })
+    r = client.post(
+        "/api/design/nick",
+        json={
+            "helix_id": "h0",
+            "bp_index": 20,
+            "direction": "FORWARD",
+        },
+    )
     assert r.status_code == 201, r.text
     body = r.json()
     n_strands_after = len(body["design"]["strands"])
@@ -626,10 +736,20 @@ def test_ligate_crossover_returns_true_on_normal_merge():
     succeeds and the bool is True (drives placement_warnings = empty)."""
     from backend.api.crud import _ligate_crossover, unligated_crossover_ids
     from backend.core.models import (
-        Design, Strand, Domain, Helix, Crossover, HalfCrossover,
-        Direction, StrandType, LatticeType, DesignMetadata, Vec3,
+        Design,
+        Strand,
+        Domain,
+        Helix,
+        Crossover,
+        HalfCrossover,
+        Direction,
+        StrandType,
+        LatticeType,
+        DesignMetadata,
+        Vec3,
     )
     from backend.core.constants import BDNA_RISE_PER_BP
+
     helix = Helix(
         id="h0",
         axis_start=Vec3(x=0.0, y=0.0, z=0.0),
@@ -638,12 +758,16 @@ def test_ligate_crossover_returns_true_on_normal_merge():
     )
     s_left = Strand(
         id="s_left",
-        domains=[Domain(helix_id="h0", start_bp=0,  end_bp=20, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=0, end_bp=20, direction=Direction.FORWARD)
+        ],
         strand_type=StrandType.SCAFFOLD,
     )
     s_right = Strand(
         id="s_right",
-        domains=[Domain(helix_id="h0", start_bp=21, end_bp=41, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=21, end_bp=41, direction=Direction.FORWARD)
+        ],
         strand_type=StrandType.SCAFFOLD,
     )
     # Crossover linking 3' of s_left (bp 20 FWD) → 5' of s_right (bp 21 FWD).
@@ -667,6 +791,7 @@ def test_ligate_crossover_returns_true_on_normal_merge():
 
 
 # ── File persistence ──────────────────────────────────────────────────────────
+
 
 def test_save_and_load_roundtrip(tmp_path):
     save_path = str(tmp_path / "test_design.nadoc")
@@ -703,14 +828,17 @@ def test_load_preserves_native_absolute_positions(tmp_path):
 
     # Build a design whose XY centre is far from the origin so any incidental
     # recentering would visibly shift the axes.
-    off_centre = Design(helices=[
-        Helix(
-            id="off",
-            axis_start=Vec3(x=100.0, y=50.0, z=0.0),
-            axis_end=Vec3(x=100.0, y=50.0, z=14.07),
-            phase_offset=0.0, length_bp=42,
-        ),
-    ])
+    off_centre = Design(
+        helices=[
+            Helix(
+                id="off",
+                axis_start=Vec3(x=100.0, y=50.0, z=0.0),
+                axis_end=Vec3(x=100.0, y=50.0, z=14.07),
+                phase_offset=0.0,
+                length_bp=42,
+            ),
+        ]
+    )
     design_state.set_design(off_centre)
 
     save_path = str(tmp_path / "off_centre.nadoc")
@@ -726,10 +854,14 @@ def test_load_preserves_native_absolute_positions(tmp_path):
         assert r.status_code == 200, f"{label}: {r.text}"
         loaded = r.json()["design"]
         h = loaded["helices"][0]
-        assert h["axis_start"]["x"] == 100.0, f"{label}: x recentered to {h['axis_start']['x']}"
-        assert h["axis_start"]["y"] == 50.0,  f"{label}: y recentered to {h['axis_start']['y']}"
-        assert h["axis_end"]["x"]   == 100.0
-        assert h["axis_end"]["y"]   == 50.0
+        assert h["axis_start"]["x"] == 100.0, (
+            f"{label}: x recentered to {h['axis_start']['x']}"
+        )
+        assert h["axis_start"]["y"] == 50.0, (
+            f"{label}: y recentered to {h['axis_start']['y']}"
+        )
+        assert h["axis_end"]["x"] == 100.0
+        assert h["axis_end"]["y"] == 50.0
 
 
 def test_mutation_response_always_has_validation():
@@ -785,7 +917,7 @@ def test_mutation_clears_redo_stack():
     # New mutation → redo stack cleared
     client.put("/api/design/metadata", json={"name": "Second"})
     r = client.post("/api/design/redo")
-    assert r.status_code == 404   # redo stack was cleared
+    assert r.status_code == 404  # redo stack was cleared
 
 
 def test_snapshot_undo_not_corrupted_by_later_mutation():
@@ -800,15 +932,25 @@ def test_snapshot_undo_not_corrupted_by_later_mutation():
     design_state.snapshot()
     # set_design_silent with a copy_with — shallow copy shares helices list
     d = design_state.get_or_404()
-    new_d = d.copy_with(strands=list(d.strands))  # only strands overridden, helices shared
+    new_d = d.copy_with(
+        strands=list(d.strands)
+    )  # only strands overridden, helices shared
     design_state.set_design_silent(new_d)
 
     # Now a second mutation via mutate_and_validate that appends a helix in-place
     from backend.core.models import Helix, Vec3
-    design_state.mutate_and_validate(lambda d: d.helices.append(
-        Helix(id="test_hx", bp_start=0, length_bp=10,
-              axis_start=Vec3(x=0, y=0, z=0), axis_end=Vec3(x=0, y=0, z=3.4))
-    ))
+
+    design_state.mutate_and_validate(
+        lambda d: d.helices.append(
+            Helix(
+                id="test_hx",
+                bp_start=0,
+                length_bp=10,
+                axis_start=Vec3(x=0, y=0, z=0),
+                axis_end=Vec3(x=0, y=0, z=3.4),
+            )
+        )
+    )
 
     # After the in-place mutation, the active design should have one more helix
     current = client.get("/api/design").json()["design"]
@@ -831,9 +973,14 @@ def test_snapshot_undo_not_corrupted_by_later_mutation():
 def test_undo_after_crossover_placement():
     """Undo after cadnano editor crossover placement restores the prior state."""
     # Build a 2-helix honeycomb bundle to get crossover-eligible helices
-    r = client.post("/api/design/bundle", json={
-        "cells": [[0, 0], [0, 1]], "length_bp": 42, "plane": "XY",
-    })
+    r = client.post(
+        "/api/design/bundle",
+        json={
+            "cells": [[0, 0], [0, 1]],
+            "length_bp": 42,
+            "plane": "XY",
+        },
+    )
     assert r.status_code == 201
     body = r.json()
     n_strands_before = len(body["design"]["strands"])
@@ -857,14 +1004,23 @@ def test_undo_after_crossover_placement():
 def test_bundle_continuation_extends_existing_strands():
     """POST /design/bundle-continuation extends strand domains for occupied cells."""
     from backend.core.constants import BDNA_RISE_PER_BP
+
     # Create a single-cell bundle
-    r = client.post("/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "plane": "XY"})
+    r = client.post(
+        "/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "plane": "XY"}
+    )
     assert r.status_code == 201
     offset = round(42 * BDNA_RISE_PER_BP, 6)
     # Continuation extrude from the free end (default extend_inplace=True → single helix grows)
-    r2 = client.post("/api/design/bundle-continuation", json={
-        "cells": [[0, 0]], "length_bp": 21, "plane": "XY", "offset_nm": offset,
-    })
+    r2 = client.post(
+        "/api/design/bundle-continuation",
+        json={
+            "cells": [[0, 0]],
+            "length_bp": 21,
+            "plane": "XY",
+            "offset_nm": offset,
+        },
+    )
     assert r2.status_code == 201
     body = r2.json()
     # In-place extension: same helix ID, length grows from 42 to 63
@@ -876,10 +1032,16 @@ def test_bundle_continuation_extends_existing_strands():
         assert len(strand["domains"]) == 1
 
     # extend_inplace=False creates a new helix (legacy behaviour)
-    r3 = client.post("/api/design/bundle-continuation", json={
-        "cells": [[0, 0]], "length_bp": 21, "plane": "XY",
-        "offset_nm": round(63 * BDNA_RISE_PER_BP, 6), "extend_inplace": False,
-    })
+    r3 = client.post(
+        "/api/design/bundle-continuation",
+        json={
+            "cells": [[0, 0]],
+            "length_bp": 21,
+            "plane": "XY",
+            "offset_nm": round(63 * BDNA_RISE_PER_BP, 6),
+            "extend_inplace": False,
+        },
+    )
     assert r3.status_code == 201
     body3 = r3.json()
     assert len(body3["design"]["helices"]) == 2
@@ -887,11 +1049,17 @@ def test_bundle_continuation_extends_existing_strands():
 
 # ── Phase 4: staple crossover endpoints ───────────────────────────────────────
 
+
 def _make_two_helix_design():
     """Create a 2-helix bundle via the API and return its design body."""
-    r = client.post("/api/design/bundle", json={
-        "cells": [[0, 0], [0, 1]], "length_bp": 42, "plane": "XY",
-    })
+    r = client.post(
+        "/api/design/bundle",
+        json={
+            "cells": [[0, 0], [0, 1]],
+            "length_bp": 42,
+            "plane": "XY",
+        },
+    )
     assert r.status_code == 201
     return r.json()["design"]
 
@@ -899,10 +1067,16 @@ def _make_two_helix_design():
 def _make_single_helix_scaffold_only():
     """Create an empty design with one 42-bp scaffold-only helix via the API."""
     client.post("/api/design", json={"name": "trim_test", "lattice_type": "HONEYCOMB"})
-    r = client.post("/api/design/bundle-segment", json={
-        "cells": [[0, 0]], "length_bp": 42, "plane": "XY",
-        "offset_nm": 0.0, "strand_filter": "scaffold",
-    })
+    r = client.post(
+        "/api/design/bundle-segment",
+        json={
+            "cells": [[0, 0]],
+            "length_bp": 42,
+            "plane": "XY",
+            "offset_nm": 0.0,
+            "strand_filter": "scaffold",
+        },
+    )
     assert r.status_code == 201
     return r.json()["design"]
 
@@ -917,7 +1091,9 @@ def test_delete_sole_strand_removes_helix():
     r = client.delete(f"/api/design/strands/{strand_id}")
     assert r.status_code == 200
     result = r.json()["design"]
-    assert result["helices"] == [], "helix should be removed when its only strand is deleted"
+    assert result["helices"] == [], (
+        "helix should be removed when its only strand is deleted"
+    )
 
 
 def test_delete_half_nicked_strand_preserves_helix():
@@ -933,14 +1109,21 @@ def test_delete_half_nicked_strand_preserves_helix():
            axis_start/axis_end unchanged.
     """
     design = _make_single_helix_scaffold_only()
-    helix    = design["helices"][0]
+    helix = design["helices"][0]
     helix_id = helix["id"]
-    strand_id = design["strands"][0]["id"]  # original scaffold id (becomes left after nick)
+    strand_id = design["strands"][0][
+        "id"
+    ]  # original scaffold id (becomes left after nick)
 
     # Nick at bp 20 — creates left (keeps strand_id) and right (new id)
-    r = client.post("/api/design/nick", json={
-        "helix_id": helix_id, "bp_index": 20, "direction": "FORWARD",
-    })
+    r = client.post(
+        "/api/design/nick",
+        json={
+            "helix_id": helix_id,
+            "bp_index": 20,
+            "direction": "FORWARD",
+        },
+    )
     assert r.status_code == 201
 
     # Delete the left half (bp 0–20, original strand id)
@@ -949,17 +1132,28 @@ def test_delete_half_nicked_strand_preserves_helix():
     result = r.json()["design"]
 
     # Helix still exists (right half remains)
-    assert len(result["helices"]) == 1, "helix should persist because right half is still present"
+    assert len(result["helices"]) == 1, (
+        "helix should persist because right half is still present"
+    )
     h = result["helices"][0]
 
     # Helix geometry must not be trimmed — axis is fixed at creation.
-    assert h["bp_start"]  == helix["bp_start"],  "bp_start must not change on strand deletion"
-    assert h["length_bp"] == helix["length_bp"], "length_bp must not change on strand deletion"
-    assert abs(h["axis_start"]["z"] - helix["axis_start"]["z"]) < 1e-6, "axis_start must not change"
-    assert abs(h["axis_end"]["z"]   - helix["axis_end"]["z"])   < 1e-6, "axis_end must not change"
+    assert h["bp_start"] == helix["bp_start"], (
+        "bp_start must not change on strand deletion"
+    )
+    assert h["length_bp"] == helix["length_bp"], (
+        "length_bp must not change on strand deletion"
+    )
+    assert abs(h["axis_start"]["z"] - helix["axis_start"]["z"]) < 1e-6, (
+        "axis_start must not change"
+    )
+    assert abs(h["axis_end"]["z"] - helix["axis_end"]["z"]) < 1e-6, (
+        "axis_end must not change"
+    )
 
 
 # ── Multiselect crossover deletion (no cascade) ─────────────────────────────
+
 
 def test_delete_subset_of_crossovers_no_cascade():
     """Deleting N crossovers sequentially should remove exactly those N — no cascade.
@@ -974,9 +1168,14 @@ def test_delete_subset_of_crossovers_no_cascade():
     """
     # Create a 6HB honeycomb bundle
     cells = [[0, 1], [0, 2], [0, 3], [1, 1], [1, 2], [1, 3]]
-    r = client.post("/api/design/bundle", json={
-        "cells": cells, "length_bp": 42, "name": "6hb_test",
-    })
+    r = client.post(
+        "/api/design/bundle",
+        json={
+            "cells": cells,
+            "length_bp": 42,
+            "name": "6hb_test",
+        },
+    )
     assert r.status_code == 201
     design = r.json()["design"]
     assert len(design["helices"]) == 6
@@ -991,7 +1190,7 @@ def test_delete_subset_of_crossovers_no_cascade():
 
     # Pick a subset to delete (first 3)
     to_delete = [xo["id"] for xo in all_xovers[:3]]
-    to_keep   = {xo["id"] for xo in all_xovers[3:]}
+    to_keep = {xo["id"] for xo in all_xovers[3:]}
 
     # Delete them one by one (same as the frontend loop)
     for xo_id in to_delete:

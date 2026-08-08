@@ -80,6 +80,7 @@ from backend.core.oxdna_job import OxdnaStatus
 
 # ── design interpreter ────────────────────────────────────────────────────────
 
+
 def _resolve_helix_id(grid_pos: tuple[int, int]) -> str:
     """Look up the active design's helix at ``grid_pos`` → its runtime id."""
     design = design_state.get_or_404()
@@ -97,14 +98,22 @@ def _run_design_op(op: BuildOp, lattice: LatticeType) -> None:
     p = op.params
     if op.op == "bundle":
         hb.create_bundle(
-            p["cells"], p["length_bp"], lattice=lattice, name=p.get("name", "Bundle"),
-            plane=p["plane"], strand_filter=p["strand_filter"],
+            p["cells"],
+            p["length_bp"],
+            lattice=lattice,
+            name=p.get("name", "Bundle"),
+            plane=p["plane"],
+            strand_filter=p["strand_filter"],
             ligate_adjacent=p["ligate_adjacent"],
         )
     elif op.op == "extrude":
         hb.extrude(
-            p["cells"], p["length_bp"], p["offset_nm"], plane=p["plane"],
-            strand_filter=p["strand_filter"], extend_inplace=p["extend_inplace"],
+            p["cells"],
+            p["length_bp"],
+            p["offset_nm"],
+            plane=p["plane"],
+            strand_filter=p["strand_filter"],
+            extend_inplace=p["extend_inplace"],
             ligate_adjacent=p["ligate_adjacent"],
         )
     elif op.op == "nick":
@@ -116,28 +125,41 @@ def _run_design_op(op: BuildOp, lattice: LatticeType) -> None:
     elif op.op == "crossover_extra_bases":
         if p["mode"] == "precise":
             hb.set_crossover_extra_bases(
-                _resolve_helix_id(p["helix_a"]), _resolve_helix_id(p["helix_b"]),
-                p["bp_index"], p["sequence"],
+                _resolve_helix_id(p["helix_a"]),
+                _resolve_helix_id(p["helix_b"]),
+                p["bp_index"],
+                p["sequence"],
             )
         else:
-            hb.set_crossover_extra_bases_bulk(p["sequence"], crossover_filter=p["filter"])
+            hb.set_crossover_extra_bases_bulk(
+                p["sequence"], crossover_filter=p["filter"]
+            )
     elif op.op == "circle_segment":
-        kwargs = {"plane": p["plane"], "offset_nm": p["offset_nm"],
-                  "strand_filter": p["strand_filter"], "ligate_adjacent": p["ligate_adjacent"]}
+        kwargs = {
+            "plane": p["plane"],
+            "offset_nm": p["offset_nm"],
+            "strand_filter": p["strand_filter"],
+            "ligate_adjacent": p["ligate_adjacent"],
+        }
         if "min_chord_bp" in p:
             kwargs["min_chord_bp"] = p["min_chord_bp"]
         hb.circle_segment(p["radius_nm"], **kwargs)
     elif op.op == "bend":
         hb.add_bend(
-            p["plane_a_bp"], p["plane_b_bp"],
+            p["plane_a_bp"],
+            p["plane_b_bp"],
             curvature_deg_per_bp=p["curvature_deg_per_bp"],
             direction_deg=p["direction_deg"],
         )
     elif op.op == "twist":
         if "total_degrees" in p:
-            hb.add_twist(p["plane_a_bp"], p["plane_b_bp"], total_degrees=p["total_degrees"])
+            hb.add_twist(
+                p["plane_a_bp"], p["plane_b_bp"], total_degrees=p["total_degrees"]
+            )
         else:
-            hb.add_twist(p["plane_a_bp"], p["plane_b_bp"], degrees_per_nm=p["degrees_per_nm"])
+            hb.add_twist(
+                p["plane_a_bp"], p["plane_b_bp"], degrees_per_nm=p["degrees_per_nm"]
+            )
     elif op.op == "auto_scaffold":
         hb.auto_scaffold(seamless=p["seamless"])
     elif op.op == "auto_crossover":
@@ -183,6 +205,7 @@ def build_design(spec) -> Design:
 
 # ── declarative relaxed-structure constraints (AF-13 P3 → grammar) ─────────────
 
+
 def _resolve_helix_in(design: Design, grid_pos) -> str:
     """``design``'s helix at ``grid_pos`` → its runtime id (the constraint-landmark
     analog of :func:`_resolve_helix_id`, but against a *given* design, not the active
@@ -198,8 +221,10 @@ def _resolve_helix_in(design: Design, grid_pos) -> str:
 def _resolve_constraint(constraint: dict, design: Design) -> dict:
     """Resolve a parsed constraint's grid_pos landmark hids → runtime helix ids of
     ``design`` → a constraint dict ready for :func:`check_relaxed_constraint`."""
-    landmarks = [(_resolve_helix_in(design, cell), bp, direction)
-                 for (cell, bp, direction) in constraint["landmarks"]]
+    landmarks = [
+        (_resolve_helix_in(design, cell), bp, direction)
+        for (cell, bp, direction) in constraint["landmarks"]
+    ]
     return {**constraint, "landmarks": landmarks}
 
 
@@ -263,11 +288,13 @@ def build_and_check_design(
     parsed = parse_design_spec(spec)
     design = _build_design_from_parsed(parsed)
     verdicts = check_design_constraints(
-        design, parsed.constraints, workspace, steps=steps, tuned=tuned, **relax_params)
+        design, parsed.constraints, workspace, steps=steps, tuned=tuned, **relax_params
+    )
     return {"design": design, "verdicts": verdicts}
 
 
 # ── declarative optimize block (AF-13 P5 — knob → iterate_to_constraint) ────────
+
 
 def _ops_with_knob(ops: list[BuildOp], op_idx: int, param: str, value) -> list[BuildOp]:
     """Clone the parsed op list, overriding ``ops[op_idx].params[param]`` with the
@@ -360,14 +387,20 @@ def build_and_optimize_design(
 
     adjust_fn = _synth_bisection(constraint["target_nm"], knob["response"])
     return hox.iterate_to_constraint(
-        build_fn, adjust_fn, resolved, workspace,
+        build_fn,
+        adjust_fn,
+        resolved,
+        workspace,
         initial_knob={"value": knob["initial"], "lo": knob["lo"], "hi": knob["hi"]},
-        max_iterations=max_iterations, production_steps=production_steps,
-        tuned=tuned, **relax_params,
+        max_iterations=max_iterations,
+        production_steps=production_steps,
+        tuned=tuned,
+        **relax_params,
     )
 
 
 # ── assembly interpreter ──────────────────────────────────────────────────────
+
 
 def _materialize_transform(t):
     """Normalised transform dict (from the parser) → the wrapper's transform arg."""
@@ -395,12 +428,14 @@ def _run_assembly_op(
         key = p["part"]
         if key in file_paths:
             hab.add_file_instance(
-                file_paths[key], name=p.get("name", key),
+                file_paths[key],
+                name=p.get("name", key),
                 transform=_materialize_transform(p["transform"]),
             )
         else:
             hab.add_inline_instance(
-                part_designs[key], name=p.get("name", key),
+                part_designs[key],
+                name=p.get("name", key),
                 transform=_materialize_transform(p["transform"]),
             )
         new_id = assembly_state.get_or_404().instances[-1].id
@@ -412,8 +447,12 @@ def _run_assembly_op(
         # A file-backed part loops add_file_instance per slot (the saved .nadoc travels as
         # a path reference per copy, AF-12); an inline part embeds the design per slot.
         key = p["part"]
-        kwargs = {"pitch": p["pitch"], "plane": p["plane"], "center": p["center"],
-                  "name": p.get("name", key)}
+        kwargs = {
+            "pitch": p["pitch"],
+            "plane": p["plane"],
+            "center": p["center"],
+            "name": p.get("name", key),
+        }
         if "row_pitch" in p:
             kwargs["row_pitch"] = p["row_pitch"]
         if key in file_paths:
@@ -422,17 +461,23 @@ def _run_assembly_op(
             hab.place_grid(part_designs[key], p["rows"], p["cols"], **kwargs)
     elif op.op == "place_ring":
         key = p["part"]
-        kwargs = {"radius": p["radius"], "plane": p["plane"],
-                  "start_angle_deg": p["start_angle_deg"], "center": p["center"],
-                  "name": p.get("name", key)}
+        kwargs = {
+            "radius": p["radius"],
+            "plane": p["plane"],
+            "start_angle_deg": p["start_angle_deg"],
+            "center": p["center"],
+            "name": p.get("name", key),
+        }
         if key in file_paths:
             hab.place_file_ring(file_paths[key], p["n"], **kwargs)
         else:
             hab.place_ring(part_designs[key], p["n"], **kwargs)
     elif op.op == "mate":
         kwargs = {
-            "child_label": p["child_label"], "parent_label": p["parent_label"],
-            "joint_type": p["joint_type"], "name": p.get("name", "Mate"),
+            "child_label": p["child_label"],
+            "parent_label": p["parent_label"],
+            "joint_type": p["joint_type"],
+            "name": p.get("name", "Mate"),
         }
         for key in ("axis_origin", "axis_direction", "min_limit", "max_limit"):
             if key in p:
@@ -442,13 +487,19 @@ def _run_assembly_op(
             joint_refs[p["ref"]] = assembly_state.get_or_404().joints[-1].id
     elif op.op == "gear":
         hab.define_gear(
-            joint_refs[p["joint_a"]], joint_refs[p["joint_b"]],
-            ratio=p["ratio"], invert=p["invert"], name=p.get("name", "Gear"),
+            joint_refs[p["joint_a"]],
+            joint_refs[p["joint_b"]],
+            ratio=p["ratio"],
+            invert=p["invert"],
+            name=p.get("name", "Gear"),
         )
     elif op.op == "belt":
         hab.define_belt(
-            joint_refs[p["joint_a"]], joint_refs[p["joint_b"]],
-            radius_a=p["radius_a"], radius_b=p["radius_b"], name=p.get("name", "Belt"),
+            joint_refs[p["joint_a"]],
+            joint_refs[p["joint_b"]],
+            radius_a=p["radius_a"],
+            radius_b=p["radius_b"],
+            name=p.get("name", "Belt"),
         )
     elif op.op == "polymerize":
         hab.polymerize(joint_refs[p["joint"]], p["count"], direction=p["direction"])
@@ -501,8 +552,11 @@ def _build_circle_primitive(catalog: dict, part: PrimitivePart) -> Design:
             f"'radius_nm' param (got params {sorted(part.params)})"
         )
     placement = _pc.derive_placement_spec(catalog) or {}
-    op: dict = {"op": "circle_segment", "radius_nm": part.params["radius_nm"],
-                "plane": placement.get("plane", "XY")}
+    op: dict = {
+        "op": "circle_segment",
+        "radius_nm": part.params["radius_nm"],
+        "plane": placement.get("plane", "XY"),
+    }
     if placement.get("min_chord_bp") is not None:
         op["min_chord_bp"] = int(placement["min_chord_bp"])
     # build_design parses + drives circle_segment (enforces SQUARE lattice + radius_nm > 0)
@@ -553,8 +607,11 @@ def _build_assembly_from_parsed(
     # primitive (AF-12 P2b, primitive_kind=circle) is instead built generatively from its
     # params and embedded inline (joins part_designs), so it is NOT file-referenced.
     pdir = primitives_dir if primitives_dir is not None else _default_primitives_dir()
-    part_designs = {key: _build_design_from_parsed(ds)
-                    for key, ds in parsed.parts.items() if isinstance(ds, DesignSpec)}
+    part_designs = {
+        key: _build_design_from_parsed(ds)
+        for key, ds in parsed.parts.items()
+        if isinstance(ds, DesignSpec)
+    }
     file_paths: dict[str, str] = {}
     for key, ds in parsed.parts.items():
         if isinstance(ds, FilePart):

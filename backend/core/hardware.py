@@ -122,7 +122,10 @@ def assess_heavy_sim(
         return True, f"simulation process(es) running: {', '.join(sim_procs)}"
     busy = [u for u in gpu_utils if u >= gpu_threshold]
     if busy:
-        return True, f"GPU utilization {max(busy)}% >= {gpu_threshold}% (likely a GPU sim)"
+        return (
+            True,
+            f"GPU utilization {max(busy)}% >= {gpu_threshold}% (likely a GPU sim)",
+        )
     return False, ""
 
 

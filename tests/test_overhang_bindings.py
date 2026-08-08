@@ -21,9 +21,17 @@ from backend.api.main import app
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (
-    ClusterJoint, ClusterRigidTransform,
-    Design, Direction, Domain, Helix,
-    OverhangBinding, OverhangSpec, Strand, StrandType, SubDomain,
+    ClusterJoint,
+    ClusterRigidTransform,
+    Design,
+    Direction,
+    Domain,
+    Helix,
+    OverhangBinding,
+    OverhangSpec,
+    Strand,
+    StrandType,
+    SubDomain,
     Vec3,
 )
 from backend.core.sequences import is_watson_crick_complement
@@ -34,13 +42,16 @@ client = TestClient(app)
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(autouse=True)
 def _reset_state():
     yield
     design_state.set_design(_demo_design())
 
 
-def _seed_two_clusters_with_overhangs(seq_a: str = "ACGT", seq_b: str = "ACGT") -> Design:
+def _seed_two_clusters_with_overhangs(
+    seq_a: str = "ACGT", seq_b: str = "ACGT"
+) -> Design:
     """Two real overhang helices, each in its own cluster, connected by a
     single revolute joint. Each overhang gets a sub-domain with the given
     sequence override so binding can be validated end-to-end.
@@ -65,47 +76,75 @@ def _seed_two_clusters_with_overhangs(seq_a: str = "ACGT", seq_b: str = "ACGT") 
     )
     oh_strand_a = Strand(
         id="oh_strand_a",
-        domains=[Domain(
-            helix_id="oh_helix_a", start_bp=0, end_bp=L - 1,
-            direction=Direction.FORWARD, overhang_id="oh_a_5p",
-        )],
+        domains=[
+            Domain(
+                helix_id="oh_helix_a",
+                start_bp=0,
+                end_bp=L - 1,
+                direction=Direction.FORWARD,
+                overhang_id="oh_a_5p",
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     oh_strand_b = Strand(
         id="oh_strand_b",
-        domains=[Domain(
-            helix_id="oh_helix_b", start_bp=0, end_bp=L - 1,
-            direction=Direction.REVERSE, overhang_id="oh_b_5p",
-        )],
+        domains=[
+            Domain(
+                helix_id="oh_helix_b",
+                start_bp=0,
+                end_bp=L - 1,
+                direction=Direction.REVERSE,
+                overhang_id="oh_b_5p",
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     overhangs = [
         OverhangSpec(
-            id="oh_a_5p", helix_id="oh_helix_a", strand_id="oh_strand_a",
-            label="OHA", sequence=seq_a,
+            id="oh_a_5p",
+            helix_id="oh_helix_a",
+            strand_id="oh_strand_a",
+            label="OHA",
+            sequence=seq_a,
             sub_domains=[
-                SubDomain(id="sd_a", name="a", start_bp_offset=0, length_bp=L,
-                          sequence_override=seq_a),
+                SubDomain(
+                    id="sd_a",
+                    name="a",
+                    start_bp_offset=0,
+                    length_bp=L,
+                    sequence_override=seq_a,
+                ),
             ],
         ),
         OverhangSpec(
-            id="oh_b_5p", helix_id="oh_helix_b", strand_id="oh_strand_b",
-            label="OHB", sequence=seq_b,
+            id="oh_b_5p",
+            helix_id="oh_helix_b",
+            strand_id="oh_strand_b",
+            label="OHB",
+            sequence=seq_b,
             sub_domains=[
-                SubDomain(id="sd_b", name="b", start_bp_offset=0, length_bp=L,
-                          sequence_override=seq_b),
+                SubDomain(
+                    id="sd_b",
+                    name="b",
+                    start_bp_offset=0,
+                    length_bp=L,
+                    sequence_override=seq_b,
+                ),
             ],
         ),
     ]
     cluster_a = ClusterRigidTransform(
-        id="cluster_a", name="A",
+        id="cluster_a",
+        name="A",
         helix_ids=["oh_helix_a"],
         translation=[0.0, 0.0, 0.0],
         rotation=[0.0, 0.0, 0.0, 1.0],
         pivot=[0.0, 0.0, 0.0],
     )
     cluster_b = ClusterRigidTransform(
-        id="cluster_b", name="B",
+        id="cluster_b",
+        name="B",
         helix_ids=["oh_helix_b"],
         translation=[0.0, 0.0, 0.0],
         rotation=[0.0, 0.0, 0.0, 1.0],
@@ -120,16 +159,19 @@ def _seed_two_clusters_with_overhangs(seq_a: str = "ACGT", seq_b: str = "ACGT") 
         min_angle_deg=-90.0,
         max_angle_deg=90.0,
     )
-    return base.model_copy(update={
-        "helices": [*base.helices, oh_helix_a, oh_helix_b],
-        "strands": [*base.strands, oh_strand_a, oh_strand_b],
-        "overhangs": overhangs,
-        "cluster_transforms": [cluster_a, cluster_b],
-        "cluster_joints": [joint],
-    })
+    return base.model_copy(
+        update={
+            "helices": [*base.helices, oh_helix_a, oh_helix_b],
+            "strands": [*base.strands, oh_strand_a, oh_strand_b],
+            "overhangs": overhangs,
+            "cluster_transforms": [cluster_a, cluster_b],
+            "cluster_joints": [joint],
+        }
+    )
 
 
 # ── 1-4. WC helper ──────────────────────────────────────────────────────────
+
 
 def test_wc_helper_basic_non_palindrome_self():
     # Deviation from plan: the planning doc asserts
@@ -137,7 +179,7 @@ def test_wc_helper_basic_non_palindrome_self():
     # but "ACGT" IS its own antiparallel reverse complement (it's a
     # canonical 4-mer palindrome). Switch to a clearly non-WC pair so the
     # basic-rejection contract still holds.
-    assert is_watson_crick_complement("AAAA", "TTTT") is True   # antiparallel WC
+    assert is_watson_crick_complement("AAAA", "TTTT") is True  # antiparallel WC
     assert is_watson_crick_complement("AAAA", "AAAA") is False  # not WC
 
 
@@ -165,15 +207,22 @@ def test_wc_helper_length_mismatch():
 
 # ── 5-8. POST endpoint ──────────────────────────────────────────────────────
 
+
 def test_post_happy_path_auto_named_b1():
     # "AAGG" and "CCTT" are antiparallel-complementary.
-    design_state.set_design(_seed_two_clusters_with_overhangs(
-        seq_a="AAGG", seq_b="CCTT",
-    ))
-    resp = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a",
-        "sub_domain_b_id": "sd_b",
-    })
+    design_state.set_design(
+        _seed_two_clusters_with_overhangs(
+            seq_a="AAGG",
+            seq_b="CCTT",
+        )
+    )
+    resp = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+        },
+    )
     assert resp.status_code == 201, resp.text
     body = resp.json()
     bindings = body["design"]["overhang_bindings"]
@@ -184,45 +233,67 @@ def test_post_happy_path_auto_named_b1():
 
 
 def test_post_length_mismatch_422():
-    design_state.set_design(_seed_two_clusters_with_overhangs(
-        seq_a="AAGG", seq_b="CCTTAA",
-    ))
-    resp = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a",
-        "sub_domain_b_id": "sd_b",
-    })
+    design_state.set_design(
+        _seed_two_clusters_with_overhangs(
+            seq_a="AAGG",
+            seq_b="CCTTAA",
+        )
+    )
+    resp = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+        },
+    )
     assert resp.status_code == 422, resp.text
 
 
 def test_post_non_wc_rejected_422():
-    design_state.set_design(_seed_two_clusters_with_overhangs(
-        seq_a="AAGG", seq_b="AAGG",  # not antiparallel-complementary
-    ))
-    resp = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a",
-        "sub_domain_b_id": "sd_b",
-    })
+    design_state.set_design(
+        _seed_two_clusters_with_overhangs(
+            seq_a="AAGG",
+            seq_b="AAGG",  # not antiparallel-complementary
+        )
+    )
+    resp = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+        },
+    )
     assert resp.status_code == 422, resp.text
 
 
 def test_post_mutex_with_existing_binding_409():
-    design_state.set_design(_seed_two_clusters_with_overhangs(
-        seq_a="AAGG", seq_b="CCTT",
-    ))
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a",
-        "sub_domain_b_id": "sd_b",
-    })
+    design_state.set_design(
+        _seed_two_clusters_with_overhangs(
+            seq_a="AAGG",
+            seq_b="CCTT",
+        )
+    )
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+        },
+    )
     assert r1.status_code == 201
     # Second create with same pair → 409.
-    r2 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a",
-        "sub_domain_b_id": "sd_b",
-    })
+    r2 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+        },
+    )
     assert r2.status_code == 409, r2.text
 
 
 # ── 9-11. PATCH driver semantics ────────────────────────────────────────────
+
 
 def test_patch_bound_true_relocates_and_snapshots_prior():
     """Phase-6 (no auto-relax): bind=True triggers topology relocation
@@ -231,21 +302,29 @@ def test_patch_bound_true_relocates_and_snapshots_prior():
     the user chooses when to relax via the right-click Relax bond menu.
     locked_angle_deg stays None unless an explicit caller sets it.
     """
-    design_state.set_design(_seed_two_clusters_with_overhangs(
-        seq_a="AAGG", seq_b="CCTT",
-    ))
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a",
-        "sub_domain_b_id": "sd_b",
-        "target_joint_id": "joint_a",
-    })
+    design_state.set_design(
+        _seed_two_clusters_with_overhangs(
+            seq_a="AAGG",
+            seq_b="CCTT",
+        )
+    )
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+            "target_joint_id": "joint_a",
+        },
+    )
     binding_id = r1.json()["design"]["overhang_bindings"][0]["id"]
     pre = design_state.get_or_404()
     joint_pre = next(j for j in pre.cluster_joints if j.id == "joint_a")
     assert joint_pre.min_angle_deg == -90.0
     assert joint_pre.max_angle_deg == +90.0
 
-    r2 = client.patch(f"/api/design/overhang-bindings/{binding_id}", json={"bound": True})
+    r2 = client.patch(
+        f"/api/design/overhang-bindings/{binding_id}", json={"bound": True}
+    )
     assert r2.status_code == 200, r2.text
 
     post = design_state.get_or_404()
@@ -264,13 +343,20 @@ def test_patch_bound_true_relocates_and_snapshots_prior():
 
 
 def test_patch_bound_false_restores_joint():
-    design_state.set_design(_seed_two_clusters_with_overhangs(
-        seq_a="AAGG", seq_b="CCTT",
-    ))
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
-        "target_joint_id": "joint_a",
-    })
+    design_state.set_design(
+        _seed_two_clusters_with_overhangs(
+            seq_a="AAGG",
+            seq_b="CCTT",
+        )
+    )
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+            "target_joint_id": "joint_a",
+        },
+    )
     bid = r1.json()["design"]["overhang_bindings"][0]["id"]
     client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
     r2 = client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": False})
@@ -286,13 +372,20 @@ def test_patch_bound_false_restores_joint():
 def test_driver_semantics_latest_wins_then_revert():
     """X binds locked=θx; Y newer binds locked=θy → joint locks at θy;
     unbind Y → reverts to θx; unbind X → restores window."""
-    design_state.set_design(_seed_two_clusters_with_overhangs(
-        seq_a="AAGG", seq_b="CCTT",
-    ))
-    rx = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
-        "target_joint_id": "joint_a",
-    })
+    design_state.set_design(
+        _seed_two_clusters_with_overhangs(
+            seq_a="AAGG",
+            seq_b="CCTT",
+        )
+    )
+    rx = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+            "target_joint_id": "joint_a",
+        },
+    )
     bx = rx.json()["design"]["overhang_bindings"][0]["id"]
     client.patch(f"/api/design/overhang-bindings/{bx}", json={"bound": True})
 
@@ -311,6 +404,7 @@ def test_driver_semantics_latest_wins_then_revert():
     # Easiest path: directly stage two bindings in-memory and confirm the
     # driver selector picks the later one.
     from backend.api.crud import _select_driver_for_joint as _sel
+
     # Patch in-memory (cross-validator forbids duplicate pair — skip cross-model
     # checks by bypassing Design construction). For test purposes, mutate
     # the existing binding's locked_angle_deg directly to simulate the later
@@ -329,6 +423,7 @@ def test_driver_semantics_latest_wins_then_revert():
 
 # ── 12. Multi-DOF rejection ─────────────────────────────────────────────────
 
+
 def test_bound_relocates_driven_domain_to_driver_helix():
     """Phase-6: on bind, the driven OH's strand domain relocates onto the
     driver's helix at the driver's bp range, antiparallel. The driven helix
@@ -339,9 +434,13 @@ def test_bound_relocates_driven_domain_to_driver_helix():
     base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
     seeded = base.model_copy(update={"cluster_joints": []})
     design_state.set_design(seeded)
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
-    })
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+        },
+    )
     bid = r1.json()["design"]["overhang_bindings"][0]["id"]
     r2 = client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
     assert r2.status_code == 200, r2.text
@@ -357,8 +456,7 @@ def test_bound_relocates_driven_domain_to_driver_helix():
     # Driven OverhangSpec now points at the driver's helix.
     oh_b_post = next(o for o in post.overhangs if o.id == "oh_b_5p")
     assert oh_b_post.helix_id == "oh_helix_a", (
-        f"driven OH should now live on the driver's helix; "
-        f"got {oh_b_post.helix_id!r}"
+        f"driven OH should now live on the driver's helix; got {oh_b_post.helix_id!r}"
     )
     # Driven strand's domain has been rewritten to the driver's helix
     # spanning the SAME bp range but in the OPPOSITE 5'→3' traversal
@@ -375,8 +473,7 @@ def test_bound_relocates_driven_domain_to_driver_helix():
     assert dvn_dom.start_bp == drv_dom.end_bp
     assert dvn_dom.end_bp == drv_dom.start_bp
     assert dvn_dom.direction != drv_dom.direction, (
-        f"driven domain must be antiparallel to driver; "
-        f"got both {dvn_dom.direction}"
+        f"driven domain must be antiparallel to driver; got both {dvn_dom.direction}"
     )
     # Consistency invariant: FORWARD ⇒ start<end, REVERSE ⇒ start>end
     # (NADOC's Domain layout rule for unambiguous 5'→3' traversal).
@@ -398,9 +495,13 @@ def test_bound_then_unbound_restores_driven_topology():
     base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
     seeded = base.model_copy(update={"cluster_joints": []})
     design_state.set_design(seeded)
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
-    })
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+        },
+    )
     bid = r1.json()["design"]["overhang_bindings"][0]["id"]
     client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
     client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": False})
@@ -426,10 +527,14 @@ def test_bound_true_leaves_joint_window_for_user_to_relax():
     on the cross-cluster arc afterwards if they want the chord closed."""
     base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
     design_state.set_design(base)
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
-        "target_joint_id": "joint_a",
-    })
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+            "target_joint_id": "joint_a",
+        },
+    )
     bid = r1.json()["design"]["overhang_bindings"][0]["id"]
     r2 = client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
     assert r2.status_code == 200, r2.text
@@ -454,6 +559,7 @@ def test_bind_rewrites_crossovers_on_driven_helix_to_driver_helix():
     because `arcHit.crossover_id` was null.
     """
     from backend.core.models import HalfCrossover, Crossover, Direction
+
     base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
     # Add a crossover with one half on the driven OH helix (oh_helix_b).
     # Use index = end_bp of sd_b's parent OH domain so the rewrite maps
@@ -463,14 +569,20 @@ def test_bind_rewrites_crossovers_on_driven_helix_to_driver_helix():
         half_a=HalfCrossover(helix_id="oh_helix_a", index=3, strand=Direction.FORWARD),
         half_b=HalfCrossover(helix_id="oh_helix_b", index=3, strand=Direction.REVERSE),
     )
-    seeded = base.model_copy(update={
-        "crossovers": [*base.crossovers, oh_to_parent_xover],
-        "cluster_joints": [],
-    })
+    seeded = base.model_copy(
+        update={
+            "crossovers": [*base.crossovers, oh_to_parent_xover],
+            "cluster_joints": [],
+        }
+    )
     design_state.set_design(seeded)
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
-    })
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+        },
+    )
     bid = r1.json()["design"]["overhang_bindings"][0]["id"]
     client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
 
@@ -486,8 +598,7 @@ def test_bind_rewrites_crossovers_on_driven_helix_to_driver_helix():
     # Its driven-side half now points at the driver helix.
     # (oh_helix_a is the driver since side A is default driver.)
     assert rewritten.half_b.helix_id == "oh_helix_a", (
-        f"half_b should be rewritten to driver helix; got "
-        f"{rewritten.half_b.helix_id!r}"
+        f"half_b should be rewritten to driver helix; got {rewritten.half_b.helix_id!r}"
     )
     # Direction is flipped (target_direction is antiparallel to driver's
     # OH domain direction).
@@ -519,6 +630,7 @@ def test_bind_does_not_relocate_neighbouring_oh_crossover_on_same_helix():
     the binding partner's root.
     """
     from backend.core.models import HalfCrossover, Crossover, Direction
+
     base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
     # OH4 (driven) sits at bp [0, 3] on oh_helix_b in the fixture. Add a
     # NEIGHBOUR crossover at bp 7 (outside the OH's bp range) — simulating
@@ -536,14 +648,20 @@ def test_bind_does_not_relocate_neighbouring_oh_crossover_on_same_helix():
         half_a=HalfCrossover(helix_id="oh_helix_a", index=3, strand=Direction.FORWARD),
         half_b=HalfCrossover(helix_id="oh_helix_b", index=3, strand=Direction.REVERSE),
     )
-    seeded = base.model_copy(update={
-        "crossovers": [*base.crossovers, neighbour_xover, own_xover],
-        "cluster_joints": [],
-    })
+    seeded = base.model_copy(
+        update={
+            "crossovers": [*base.crossovers, neighbour_xover, own_xover],
+            "cluster_joints": [],
+        }
+    )
     design_state.set_design(seeded)
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
-    })
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+        },
+    )
     bid = r1.json()["design"]["overhang_bindings"][0]["id"]
     client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
 
@@ -573,7 +691,15 @@ def test_bind_preserves_driven_helix_when_other_overhang_shares_it():
     deleted helix — which made the neighbour render as if it were ALSO
     bound to the driver.
     """
-    from backend.core.models import Domain, Direction, OverhangSpec, SubDomain, Strand, StrandType
+    from backend.core.models import (
+        Domain,
+        Direction,
+        OverhangSpec,
+        SubDomain,
+        Strand,
+        StrandType,
+    )
+
     base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
     # Add a SECOND overhang sharing oh_helix_b at a different bp range.
     # oh_b_5p (the existing OH on oh_helix_b) occupies bp [0, 3]. Add
@@ -586,30 +712,51 @@ def test_bind_preserves_driven_helix_when_other_overhang_shares_it():
     # Neighbour strand on oh_helix_b at bp [4, 7].
     neighbour_strand = Strand(
         id="neighbour_strand",
-        domains=[Domain(
-            helix_id="oh_helix_b", start_bp=4, end_bp=7,
-            direction=Direction.FORWARD, overhang_id="neighbour_oh",
-        )],
+        domains=[
+            Domain(
+                helix_id="oh_helix_b",
+                start_bp=4,
+                end_bp=7,
+                direction=Direction.FORWARD,
+                overhang_id="neighbour_oh",
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     neighbour_spec = OverhangSpec(
-        id="neighbour_oh", helix_id="oh_helix_b", strand_id="neighbour_strand",
-        label="N", sequence="ACGT",
-        sub_domains=[SubDomain(
-            id="neighbour_sd", name="n", start_bp_offset=0,
-            length_bp=L_neighbour, sequence_override="ACGT",
-        )],
+        id="neighbour_oh",
+        helix_id="oh_helix_b",
+        strand_id="neighbour_strand",
+        label="N",
+        sequence="ACGT",
+        sub_domains=[
+            SubDomain(
+                id="neighbour_sd",
+                name="n",
+                start_bp_offset=0,
+                length_bp=L_neighbour,
+                sequence_override="ACGT",
+            )
+        ],
     )
-    seeded = base.model_copy(update={
-        "helices": [h if h.id != "oh_helix_b" else new_helix_b for h in base.helices],
-        "strands": [*base.strands, neighbour_strand],
-        "overhangs": [*base.overhangs, neighbour_spec],
-        "cluster_joints": [],
-    })
+    seeded = base.model_copy(
+        update={
+            "helices": [
+                h if h.id != "oh_helix_b" else new_helix_b for h in base.helices
+            ],
+            "strands": [*base.strands, neighbour_strand],
+            "overhangs": [*base.overhangs, neighbour_spec],
+            "cluster_joints": [],
+        }
+    )
     design_state.set_design(seeded)
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
-    })
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+        },
+    )
     bid = r1.json()["design"]["overhang_bindings"][0]["id"]
     client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
 
@@ -642,17 +789,24 @@ def test_bound_true_multi_dof_skips_joint_lock_but_relocates_topology():
     locked_angle_deg stays None. The topology relocation still happens."""
     base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
     extra_joint = ClusterJoint(
-        id="joint_b", cluster_id="cluster_b",
+        id="joint_b",
+        cluster_id="cluster_b",
         local_axis_origin=[5.0, 0.0, 0.0],
         local_axis_direction=[0.0, 1.0, 0.0],
     )
-    seeded = base.model_copy(update={
-        "cluster_joints": [*base.cluster_joints, extra_joint],
-    })
+    seeded = base.model_copy(
+        update={
+            "cluster_joints": [*base.cluster_joints, extra_joint],
+        }
+    )
     design_state.set_design(seeded)
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
-    })
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+        },
+    )
     bid = r1.json()["design"]["overhang_bindings"][0]["id"]
     r2 = client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
     assert r2.status_code == 200, r2.text
@@ -667,21 +821,29 @@ def test_bound_true_multi_dof_skips_joint_lock_but_relocates_topology():
 
 # ── 13. Split rejection ─────────────────────────────────────────────────────
 
+
 def test_split_rejected_when_sub_domain_referenced_by_binding():
     # Use a 6-bp sub-domain so we can split.
     base = _seed_two_clusters_with_overhangs(seq_a="AAGGCC", seq_b="GGCCTT")
     design_state.set_design(base)
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
-    })
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+        },
+    )
     assert r1.status_code == 201, r1.text
     bid = r1.json()["design"]["overhang_bindings"][0]["id"]
 
     # Try to split sd_a — should fail 409 with binding_ids in detail.
-    r2 = client.post("/api/design/overhang/oh_a_5p/sub-domains/split", json={
-        "sub_domain_id": "sd_a",
-        "split_at_offset": 3,
-    })
+    r2 = client.post(
+        "/api/design/overhang/oh_a_5p/sub-domains/split",
+        json={
+            "sub_domain_id": "sd_a",
+            "split_at_offset": 3,
+        },
+    )
     assert r2.status_code == 409, r2.text
     detail = r2.json().get("detail", {})
     assert isinstance(detail, dict)
@@ -691,14 +853,22 @@ def test_split_rejected_when_sub_domain_referenced_by_binding():
 
 # ── 14. DELETE — driver shrink ──────────────────────────────────────────────
 
+
 def test_delete_binding_restores_joint_when_last_bound():
-    design_state.set_design(_seed_two_clusters_with_overhangs(
-        seq_a="AAGG", seq_b="CCTT",
-    ))
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
-        "target_joint_id": "joint_a",
-    })
+    design_state.set_design(
+        _seed_two_clusters_with_overhangs(
+            seq_a="AAGG",
+            seq_b="CCTT",
+        )
+    )
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+            "target_joint_id": "joint_a",
+        },
+    )
     bid = r1.json()["design"]["overhang_bindings"][0]["id"]
     client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
     r2 = client.delete(f"/api/design/overhang-bindings/{bid}")
@@ -713,14 +883,22 @@ def test_delete_binding_restores_joint_when_last_bound():
 
 # ── 15. Round-trip persistence ──────────────────────────────────────────────
 
+
 def test_round_trip_preserves_binding_fields():
-    design_state.set_design(_seed_two_clusters_with_overhangs(
-        seq_a="AAGG", seq_b="CCTT",
-    ))
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
-        "target_joint_id": "joint_a",
-    })
+    design_state.set_design(
+        _seed_two_clusters_with_overhangs(
+            seq_a="AAGG",
+            seq_b="CCTT",
+        )
+    )
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+            "target_joint_id": "joint_a",
+        },
+    )
     bid = r1.json()["design"]["overhang_bindings"][0]["id"]
     client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
 
@@ -749,9 +927,13 @@ def test_round_trip_preserves_zero_dof_bound_binding():
     base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
     seeded = base.model_copy(update={"cluster_joints": []})
     design_state.set_design(seeded)
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
-    })
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+        },
+    )
     bid = r1.json()["design"]["overhang_bindings"][0]["id"]
     client.patch(f"/api/design/overhang-bindings/{bid}", json={"bound": True})
 
@@ -774,17 +956,25 @@ def test_round_trip_preserves_zero_dof_bound_binding():
 
 # ── Display-pose endpoint (animation-layer annotation, additive) ─────────────
 
+
 def test_display_pose_sets_authored_angles_without_touching_bind_state():
     """PATCH …/display-pose writes only unbound/bound_angle_deg and never
     mutates bound / target_joint_id / locked_angle_deg / joint window /
     prior_driven_topology (it is a pure display annotation)."""
-    design_state.set_design(_seed_two_clusters_with_overhangs(
-        seq_a="AAGG", seq_b="CCTT",
-    ))
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
-        "target_joint_id": "joint_a",
-    })
+    design_state.set_design(
+        _seed_two_clusters_with_overhangs(
+            seq_a="AAGG",
+            seq_b="CCTT",
+        )
+    )
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+            "target_joint_id": "joint_a",
+        },
+    )
     bid = r1.json()["design"]["overhang_bindings"][0]["id"]
 
     pre = design_state.get_or_404()
@@ -815,17 +1005,28 @@ def test_display_pose_sets_authored_angles_without_touching_bind_state():
 
 
 def test_display_pose_partial_patch_keeps_other_angle():
-    design_state.set_design(_seed_two_clusters_with_overhangs(
-        seq_a="AAGG", seq_b="CCTT",
-    ))
-    r1 = client.post("/api/design/overhang-bindings", json={
-        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
-    })
+    design_state.set_design(
+        _seed_two_clusters_with_overhangs(
+            seq_a="AAGG",
+            seq_b="CCTT",
+        )
+    )
+    r1 = client.post(
+        "/api/design/overhang-bindings",
+        json={
+            "sub_domain_a_id": "sd_a",
+            "sub_domain_b_id": "sd_b",
+        },
+    )
     bid = r1.json()["design"]["overhang_bindings"][0]["id"]
-    client.patch(f"/api/design/overhang-bindings/{bid}/display-pose",
-                 json={"bound_angle_deg": 3.0})
-    client.patch(f"/api/design/overhang-bindings/{bid}/display-pose",
-                 json={"unbound_angle_deg": 30.0})
+    client.patch(
+        f"/api/design/overhang-bindings/{bid}/display-pose",
+        json={"bound_angle_deg": 3.0},
+    )
+    client.patch(
+        f"/api/design/overhang-bindings/{bid}/display-pose",
+        json={"unbound_angle_deg": 30.0},
+    )
     b = next(b for b in design_state.get_or_404().overhang_bindings if b.id == bid)
     assert b.bound_angle_deg == 3.0
     assert b.unbound_angle_deg == 30.0
@@ -833,16 +1034,21 @@ def test_display_pose_partial_patch_keeps_other_angle():
 
 def test_display_pose_404_unknown_binding():
     design_state.set_design(_seed_two_clusters_with_overhangs())
-    r = client.patch("/api/design/overhang-bindings/nope/display-pose",
-                     json={"unbound_angle_deg": 1.0})
+    r = client.patch(
+        "/api/design/overhang-bindings/nope/display-pose",
+        json={"unbound_angle_deg": 1.0},
+    )
     assert r.status_code == 404
 
 
 def test_binding_display_fields_roundtrip_and_default_none():
     """New fields default to None (old .nadoc compat) and survive JSON round-trip."""
     b = OverhangBinding(
-        name="B1", sub_domain_a_id="sd_a", sub_domain_b_id="sd_b",
-        overhang_a_id="oh_a_5p", overhang_b_id="oh_b_5p",
+        name="B1",
+        sub_domain_a_id="sd_a",
+        sub_domain_b_id="sd_b",
+        overhang_a_id="oh_a_5p",
+        overhang_b_id="oh_b_5p",
     )
     assert b.unbound_angle_deg is None and b.bound_angle_deg is None
     b2 = b.model_copy(update={"unbound_angle_deg": 15.0, "bound_angle_deg": -2.0})
@@ -861,6 +1067,7 @@ def test_binding_display_fields_roundtrip_and_default_none():
 # and tests/test_automation_harness.py (the assert_direct_binding_relaxed_pose oracle).
 # The old single-domain, cluster-move-only / rotation-identity pins were removed when
 # the relax target changed (2026-06-30).
+
 
 def test_relax_overhang_binding_404():
     design_state.set_design(_seed_two_clusters_with_overhangs())

@@ -10,7 +10,13 @@ import json
 
 import pytest
 
-from backend.core.models import Assembly, Design, PartInstance, PartSourceFile, PartSourceInline
+from backend.core.models import (
+    Assembly,
+    Design,
+    PartInstance,
+    PartSourceFile,
+    PartSourceInline,
+)
 from backend.core.workspace import (
     dedup_filename,
     patch_assembly_instances,
@@ -21,6 +27,7 @@ from backend.core.workspace import (
 
 
 # ── safe_workspace_path ─────────────────────────────────────────────────────
+
 
 def test_safe_workspace_path_resolves_inside(tmp_path):
     p = safe_workspace_path("parts/2hb.nadoc", tmp_path)
@@ -46,6 +53,7 @@ def test_safe_workspace_path_creates_workspace(tmp_path):
 
 # ── dedup_filename ──────────────────────────────────────────────────────────
 
+
 def test_dedup_filename_no_collision(tmp_path):
     assert dedup_filename("part", ".nadoc", tmp_path) == "part.nadoc"
 
@@ -64,12 +72,18 @@ def test_dedup_filename_multiple_collisions(tmp_path):
 
 # ── remap_source_path ───────────────────────────────────────────────────────
 
+
 def test_remap_file_exact_match():
-    assert remap_source_path("parts/a.nadoc", "parts/a.nadoc", "parts/b.nadoc") == "parts/b.nadoc"
+    assert (
+        remap_source_path("parts/a.nadoc", "parts/a.nadoc", "parts/b.nadoc")
+        == "parts/b.nadoc"
+    )
 
 
 def test_remap_file_no_match_returns_none():
-    assert remap_source_path("parts/other.nadoc", "parts/a.nadoc", "parts/b.nadoc") is None
+    assert (
+        remap_source_path("parts/other.nadoc", "parts/a.nadoc", "parts/b.nadoc") is None
+    )
 
 
 def test_remap_folder_prefix():
@@ -82,13 +96,16 @@ def test_remap_folder_non_prefix_returns_none():
 
 # ── patch_nass_files ────────────────────────────────────────────────────────
 
+
 def _write_nass(path, data):
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def test_patch_nass_files_v1_instances_shape(tmp_path):
     nass = tmp_path / "asm.nass"
-    _write_nass(nass, {"instances": [{"source": {"type": "file", "path": "old/a.nadoc"}}]})
+    _write_nass(
+        nass, {"instances": [{"source": {"type": "file", "path": "old/a.nadoc"}}]}
+    )
     patched = patch_nass_files(tmp_path, "old/a.nadoc", "new/a.nadoc")
     assert patched == ["asm.nass"]
     data = json.loads(nass.read_text())
@@ -125,6 +142,7 @@ def test_patch_nass_files_ignores_inline_sources(tmp_path):
 
 
 # ── patch_assembly_instances ────────────────────────────────────────────────
+
 
 def test_patch_assembly_instances_remaps_file_source():
     inst = PartInstance(id="i1", name="P", source=PartSourceFile(path="old/a.nadoc"))

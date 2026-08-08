@@ -38,14 +38,28 @@ class TestOnePodBillsOnceHoweverManyProcessesWatchedIt:
 
     def test_a_reopened_pod_keeps_accruing(self, root):
         now = time.time()
-        _write(root, "jobA", [
-            # launcher: opened, then closed by its dying `finally` after 30 min
-            {"pod_id": "P1", "usd_per_hour": 1.0, "started": now - 7200,
-             "ended": now - 5400, "note": "launcher"},
-            # supervisor: re-adopted the SAME pod, still open
-            {"pod_id": "P1", "usd_per_hour": 1.0, "started": now - 5000,
-             "ended": None, "note": "adopted"},
-        ])
+        _write(
+            root,
+            "jobA",
+            [
+                # launcher: opened, then closed by its dying `finally` after 30 min
+                {
+                    "pod_id": "P1",
+                    "usd_per_hour": 1.0,
+                    "started": now - 7200,
+                    "ended": now - 5400,
+                    "note": "launcher",
+                },
+                # supervisor: re-adopted the SAME pod, still open
+                {
+                    "pod_id": "P1",
+                    "usd_per_hour": 1.0,
+                    "started": now - 5000,
+                    "ended": None,
+                    "note": "adopted",
+                },
+            ],
+        )
         led = SpendLedger(root / "jobA" / "spend.json")
 
         # One pod, billing from its EARLIEST sighting until now: ~2 h at $1/hr.
@@ -56,12 +70,26 @@ class TestOnePodBillsOnceHoweverManyProcessesWatchedIt:
         """Regression: the old dedupe-by-first would have reported only the closed row
         (0.5 h = $0.50) and stayed there forever."""
         now = time.time()
-        _write(root, "jobA", [
-            {"pod_id": "P1", "usd_per_hour": 1.0, "started": now - 7200,
-             "ended": now - 5400, "note": "launcher"},
-            {"pod_id": "P1", "usd_per_hour": 1.0, "started": now - 5000,
-             "ended": None, "note": "adopted"},
-        ])
+        _write(
+            root,
+            "jobA",
+            [
+                {
+                    "pod_id": "P1",
+                    "usd_per_hour": 1.0,
+                    "started": now - 7200,
+                    "ended": now - 5400,
+                    "note": "launcher",
+                },
+                {
+                    "pod_id": "P1",
+                    "usd_per_hour": 1.0,
+                    "started": now - 5000,
+                    "ended": None,
+                    "note": "adopted",
+                },
+            ],
+        )
         led = SpendLedger(root / "jobA" / "spend.json")
         assert led.spent() > 0.5, "a live pod must not be invisible"
 
@@ -70,10 +98,32 @@ class TestOnePodBillsOnceHoweverManyProcessesWatchedIt:
         own file would leave another file's row open forever, and spent() would grow
         without bound after the pod had already been destroyed."""
         now = time.time()
-        _write(root, "jobA", [{"pod_id": "P1", "usd_per_hour": 1.0,
-                               "started": now - 3600, "ended": None, "note": "a"}])
-        _write(root, "jobB", [{"pod_id": "P1", "usd_per_hour": 1.0,
-                               "started": now - 3600, "ended": None, "note": "b"}])
+        _write(
+            root,
+            "jobA",
+            [
+                {
+                    "pod_id": "P1",
+                    "usd_per_hour": 1.0,
+                    "started": now - 3600,
+                    "ended": None,
+                    "note": "a",
+                }
+            ],
+        )
+        _write(
+            root,
+            "jobB",
+            [
+                {
+                    "pod_id": "P1",
+                    "usd_per_hour": 1.0,
+                    "started": now - 3600,
+                    "ended": None,
+                    "note": "b",
+                }
+            ],
+        )
 
         led = SpendLedger(root / "jobB" / "spend.json")
         led.close_pod("P1")
@@ -81,17 +131,40 @@ class TestOnePodBillsOnceHoweverManyProcessesWatchedIt:
 
         after = led.spent()
         time.sleep(0.05)
-        assert led.spent() == pytest.approx(after, abs=1e-6), \
+        assert led.spent() == pytest.approx(after, abs=1e-6), (
             "a destroyed pod must stop accruing"
+        )
 
 
 class TestTheCapIsForTheWholeSession:
     def test_spend_sums_every_job_not_just_this_one(self, root):
         now = time.time()
-        _write(root, "jobA", [{"pod_id": "P1", "usd_per_hour": 1.0,
-                               "started": now - 3600, "ended": now, "note": "a"}])
-        _write(root, "jobB", [{"pod_id": "P2", "usd_per_hour": 2.0,
-                               "started": now - 3600, "ended": now, "note": "b"}])
+        _write(
+            root,
+            "jobA",
+            [
+                {
+                    "pod_id": "P1",
+                    "usd_per_hour": 1.0,
+                    "started": now - 3600,
+                    "ended": now,
+                    "note": "a",
+                }
+            ],
+        )
+        _write(
+            root,
+            "jobB",
+            [
+                {
+                    "pod_id": "P2",
+                    "usd_per_hour": 2.0,
+                    "started": now - 3600,
+                    "ended": now,
+                    "note": "b",
+                }
+            ],
+        )
         # A per-JOB ledger would hand a re-prepped job a fresh, full $15.
         led = SpendLedger(root / "jobB" / "spend.json")
         assert led.spent() == pytest.approx(3.0, abs=0.05)
@@ -104,4 +177,4 @@ class TestTheCapIsForTheWholeSession:
     def test_a_corrupt_file_never_authorises_spending(self, root):
         (root / "jobA" / "spend.json").write_text("{ not json")
         led = SpendLedger(root / "jobA" / "spend.json")
-        assert led.spent() == 0.0        # and does not explode
+        assert led.spent() == 0.0  # and does not explode

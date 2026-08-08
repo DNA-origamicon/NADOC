@@ -29,6 +29,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.api import state as design_state
+
 # Shared kernel/infra helpers that stay in crud.py and are imported back:
 #   _design_response       — response helper used by 100+ routes (kernel)
 #   _geometry_for_helices  — geometry kernel (10 cross-region callers)
@@ -45,8 +46,8 @@ router = APIRouter()
 
 
 class ProteinImportRequest(BaseModel):
-    content: str             # raw PDB file text sent by the browser
-    name: str = ""           # display name (defaults to filename)
+    content: str  # raw PDB file text sent by the browser
+    name: str = ""  # display name (defaults to filename)
     source_filename: str = ""
 
 
@@ -63,12 +64,16 @@ def import_protein(body: ProteinImportRequest) -> dict:
 
     try:
         asset = parse_protein_pdb(
-            body.content, name=body.name, source_filename=body.source_filename,
+            body.content,
+            name=body.name,
+            source_filename=body.source_filename,
         )
     except Exception as exc:
         raise HTTPException(400, detail=f"Protein PDB import failed: {exc}") from exc
     if not asset.atoms:
-        raise HTTPException(400, detail="No protein atoms found in PDB (only water/ions/DNA?).")
+        raise HTTPException(
+            400, detail="No protein atoms found in PDB (only water/ions/DNA?)."
+        )
     design_state.add_protein_asset(asset)
     return protein_asset_meta(asset)
 
@@ -76,7 +81,9 @@ def import_protein(body: ProteinImportRequest) -> dict:
 @router.get("/design/protein/library")
 def list_protein_library() -> dict:
     """List all protein assets in the session library (metadata only)."""
-    return {"assets": [protein_asset_meta(a) for a in design_state.list_protein_assets()]}
+    return {
+        "assets": [protein_asset_meta(a) for a in design_state.list_protein_assets()]
+    }
 
 
 @router.delete("/design/protein/{asset_id}")
@@ -126,11 +133,11 @@ def get_protein_atomistic(asset_id: str | None = Query(None)) -> dict:
         assets_by_id.setdefault(a.id, a)
 
     models = []
-    nucs = None   # geometry lazily computed only if an overhang target needs it
+    nucs = None  # geometry lazily computed only if an overhang target needs it
     for att in design.protein_attachments:
         kind = getattr(att.target, "kind", None)
         if kind not in ("free", "overhang") or not att.visible:
-            continue   # assembly-scope (Phase 3) / hidden
+            continue  # assembly-scope (Phase 3) / hidden
         asset = assets_by_id.get(att.asset_id)
         if asset is None:
             continue
@@ -138,11 +145,15 @@ def get_protein_atomistic(asset_id: str | None = Query(None)) -> dict:
         if kind == "overhang":
             if nucs is None:
                 nucs = _geometry_for_helices(design)
-            tip, outward = resolve_overhang_anchor(nucs, att.target.overhang_id, att.target.attach_end)
+            tip, outward = resolve_overhang_anchor(
+                nucs, att.target.overhang_id, att.target.attach_end
+            )
             if tip is None:
-                continue   # overhang has no geometry yet
+                continue  # overhang has no geometry yet
         m = compose_protein_world_transform(asset, att, tip, outward)
-        models.append(protein_asset_to_atomistic(asset, pose_matrix=m, sentinel_id=att.id))
+        models.append(
+            protein_asset_to_atomistic(asset, pose_matrix=m, sentinel_id=att.id)
+        )
 
     merged = merge_models(*models) if models else merge_models()
     return atomistic_to_json(merged)
@@ -213,7 +224,9 @@ def create_protein_attachment(body: ProteinAttachRequest) -> dict:
 
     attachment = ProteinAttachment(
         asset_id=asset.id,
-        target=ProteinTargetDesign(overhang_id=body.overhang_id, attach_end=body.attach_end),
+        target=ProteinTargetDesign(
+            overhang_id=body.overhang_id, attach_end=body.attach_end
+        ),
         conjugation_atom_serial=conj,
         handle_complement_bp=body.handle_complement_bp,
         handle_spacer_nt=body.handle_spacer_nt,
@@ -289,8 +302,11 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
     )
 
     def _fn(d: Design) -> Design:
-        assets = d.protein_assets if any(a.id == asset.id for a in d.protein_assets) \
+        assets = (
+            d.protein_assets
+            if any(a.id == asset.id for a in d.protein_assets)
             else [*d.protein_assets, asset]
+        )
         return d.copy_with(
             strands=[*d.strands, binder],
             protein_assets=assets,
@@ -300,10 +316,15 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
     updated, report, _entry = design_state.mutate_with_feature_log(
         "protein-conjugate",
         f"Conjugate {asset.name} to {spec.label or body.overhang_id}",
-        {"asset_id": asset.id, "overhang_id": body.overhang_id, "azide_end": body.azide_end},
+        {
+            "asset_id": asset.id,
+            "overhang_id": body.overhang_id,
+            "azide_end": body.azide_end,
+        },
         _fn,
     )
     from backend.api.crud import _design_response_with_geometry
+
     resp = _design_response_with_geometry(updated, report)
     resp["attachment_id"] = attachment.id
     resp["binder_strand_id"] = binder.id
@@ -312,14 +333,15 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
 
 class ProteinGizmoMove(BaseModel):
     """A world-space gizmo delta (cluster-gizmo convention)."""
-    pivot: List[float]          # rotation centre (world nm)
-    translation: List[float]    # additional world offset
-    rotation: List[float]       # quaternion [x, y, z, w] about pivot
+
+    pivot: List[float]  # rotation centre (world nm)
+    translation: List[float]  # additional world offset
+    rotation: List[float]  # quaternion [x, y, z, w] about pivot
 
 
 class ProteinAttachPatchRequest(BaseModel):
-    pose: Optional[List[float]] = None        # 16-float row-major 4×4 (absolute)
-    gizmo_move: Optional[ProteinGizmoMove] = None   # incremental world-space move
+    pose: Optional[List[float]] = None  # 16-float row-major 4×4 (absolute)
+    gizmo_move: Optional[ProteinGizmoMove] = None  # incremental world-space move
     conjugation_atom_serial: Optional[int] = None
     handle_complement_bp: Optional[int] = None
     handle_spacer_nt: Optional[int] = None
@@ -327,7 +349,9 @@ class ProteinAttachPatchRequest(BaseModel):
 
 
 @router.patch("/design/protein/attachments/{attachment_id}")
-def patch_protein_attachment(attachment_id: str, body: ProteinAttachPatchRequest) -> dict:
+def patch_protein_attachment(
+    attachment_id: str, body: ProteinAttachPatchRequest
+) -> dict:
     """Update a protein attachment's pose / conjugation atom / handle / visibility.
 
     A move is expressed either as an absolute ``pose`` (16-float row-major 4×4)
@@ -339,7 +363,9 @@ def patch_protein_attachment(attachment_id: str, body: ProteinAttachPatchRequest
 
     design = design_state.get_or_404()
     if not any(a.id == attachment_id for a in design.protein_attachments):
-        raise HTTPException(404, detail=f"Protein attachment {attachment_id} not found.")
+        raise HTTPException(
+            404, detail=f"Protein attachment {attachment_id} not found."
+        )
     if body.pose is not None and len(body.pose) != 16:
         raise HTTPException(400, detail="pose must be 16 floats (row-major 4×4).")
 
@@ -354,8 +380,10 @@ def patch_protein_attachment(attachment_id: str, body: ProteinAttachPatchRequest
                 upd["pose"] = Mat4x4(values=body.pose)
             if body.gizmo_move is not None:
                 new_pose = gizmo_move_to_pose(
-                    att.pose.to_array(), body.gizmo_move.pivot,
-                    body.gizmo_move.translation, body.gizmo_move.rotation,
+                    att.pose.to_array(),
+                    body.gizmo_move.pivot,
+                    body.gizmo_move.translation,
+                    body.gizmo_move.rotation,
                 )
                 upd["pose"] = Mat4x4.from_array(new_pose)
             if body.conjugation_atom_serial is not None:
@@ -369,10 +397,16 @@ def patch_protein_attachment(attachment_id: str, body: ProteinAttachPatchRequest
             out.append(att.model_copy(update=upd))
         d.protein_attachments = out
 
-    label = "Move protein" if (body.pose is not None or body.gizmo_move is not None) else "Edit protein attachment"
+    label = (
+        "Move protein"
+        if (body.pose is not None or body.gizmo_move is not None)
+        else "Edit protein attachment"
+    )
     updated, report, _entry = design_state.mutate_with_feature_log(
-        "protein-attach-patch", label,
-        {"attachment_id": attachment_id}, _fn,
+        "protein-attach-patch",
+        label,
+        {"attachment_id": attachment_id},
+        _fn,
     )
     return _design_response(updated, report)
 
@@ -382,13 +416,19 @@ def delete_protein_attachment(attachment_id: str) -> dict:
     """Remove a protein attachment (leaves the asset embedded in the design)."""
     design = design_state.get_or_404()
     if not any(a.id == attachment_id for a in design.protein_attachments):
-        raise HTTPException(404, detail=f"Protein attachment {attachment_id} not found.")
+        raise HTTPException(
+            404, detail=f"Protein attachment {attachment_id} not found."
+        )
 
     def _fn(d: Design) -> None:
-        d.protein_attachments = [a for a in d.protein_attachments if a.id != attachment_id]
+        d.protein_attachments = [
+            a for a in d.protein_attachments if a.id != attachment_id
+        ]
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        "protein-attach-delete", "Detach protein",
-        {"attachment_id": attachment_id}, _fn,
+        "protein-attach-delete",
+        "Detach protein",
+        {"attachment_id": attachment_id},
+        _fn,
     )
     return _design_response(updated, report)

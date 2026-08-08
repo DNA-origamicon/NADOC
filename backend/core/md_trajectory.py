@@ -16,6 +16,7 @@ CG only (per-nucleotide backbone + normal). NAMD heavy reps (atomistic/surface) 
 a later phase — MD all-atom topology does not match the design's atomistic serial
 order, so it needs its own mapping.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -42,6 +43,7 @@ def _select_p_order(u, chain_map, run_dir, coordinate_path):
         build_p_pdb_order,
         load_segid_chain_map,
     )
+
     seg2chain = load_segid_chain_map(Path(run_dir))
     if seg2chain:
         cand, n_unmapped = build_p_order_from_universe(u, chain_map, seg2chain)
@@ -51,8 +53,14 @@ def _select_p_order(u, chain_map, run_dir, coordinate_path):
     return build_p_pdb_order(pdb_text, chain_map), "reference-pdb"
 
 
-def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design,
-                        with_atoms: bool = False, with_termini: bool = False) -> dict:
+def _build_md_nadoc_ctx(
+    topology_path,
+    trajectory_paths,
+    coordinate_path,
+    design,
+    with_atoms: bool = False,
+    with_termini: bool = False,
+) -> dict:
     """Open the PSF + DCD(s), build the P-atom → (helix,bp,dir) order, design
     equilibrium positions, Kabsch reference, and C1' index map. Mirrors the
     ``nadoc``-relevant setup of ws.py ``_load_sync`` (NAMD branch).
@@ -94,7 +102,8 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
     # P-order = the design (helix, bp, dir) key per trajectory DNA P atom.
     n_dna_p = len(u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES)))
     p_order, p_order_source = _select_p_order(
-        u, cm, Path(topology_path).parent, coordinate_path)
+        u, cm, Path(topology_path).parent, coordinate_path
+    )
 
     # Equilibrium P-atom reference + rigid mask for the Kabsch alignment (shared with
     # the live-display ws handler; handles crossover extra-base "__xb__" inserts).
@@ -135,7 +144,8 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
             dna_heavy = u.select_atoms(f"not element H and resname {resnames}")
         except Exception:
             dna_heavy = u.select_atoms(
-                f"(not name H* and not name [0-9]H*) and resname {resnames}")
+                f"(not name H* and not name [0-9]H*) and resname {resnames}"
+            )
 
         def _element(a) -> str:
             try:
@@ -153,14 +163,26 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
         # atoms do; without it they are stuck on CPK.  Cosmetic — never fail a frame
         # extraction over it.
         from backend.core.atomistic_to_nadoc import build_atom_design_meta
+
         try:
             ident = build_atom_design_meta(
-                u, dna_heavy, p_order, model, cm, load_segid_chain_map(Path(topology_path).parent))
+                u,
+                dna_heavy,
+                p_order,
+                model,
+                cm,
+                load_segid_chain_map(Path(topology_path).parent),
+            )
         except Exception:  # noqa: BLE001
             ident = None
-        atom_meta = [{"serial": int(a.index), "element": _element(a),
-                      **(ident[i] if ident else {})}
-                     for i, a in enumerate(dna_heavy)]
+        atom_meta = [
+            {
+                "serial": int(a.index),
+                "element": _element(a),
+                **(ident[i] if ident else {}),
+            }
+            for i, a in enumerate(dna_heavy)
+        ]
 
     # 5'-terminal nucleotides (one per strand) have NO phosphate — pdb2gmx strips the
     # 5' P — so they are absent from the P-indexed p_order and go un-positioned/un-coloured
@@ -174,23 +196,35 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
             build_termini_specs,
             load_segid_chain_map,
         )
+
         seg2chain = load_segid_chain_map(Path(topology_path).parent)
         term_specs = build_termini_specs(u, cm, seg2chain, p_order)
 
     return {
-        "universe": u, "p_order": p_order, "n_frames": n_frames,
-        "centroid_T": T, "eq_positions": eq_positions, "eq_valid": eq_valid,
-        "rigid_mask": rigid_mask, "snap_mask": snap_mask,
-        "eq_centroid": eq_centroid, "eq_centered": eq_centered,
-        "c1p_idx": c1p_idx, "heavy_idx": heavy_idx, "atom_meta": atom_meta,
-        "R_prev": None, "prev_frame_idx": -999,
-        "n_dna_p": n_dna_p, "p_order_source": p_order_source,
+        "universe": u,
+        "p_order": p_order,
+        "n_frames": n_frames,
+        "centroid_T": T,
+        "eq_positions": eq_positions,
+        "eq_valid": eq_valid,
+        "rigid_mask": rigid_mask,
+        "snap_mask": snap_mask,
+        "eq_centroid": eq_centroid,
+        "eq_centered": eq_centered,
+        "c1p_idx": c1p_idx,
+        "heavy_idx": heavy_idx,
+        "atom_meta": atom_meta,
+        "R_prev": None,
+        "prev_frame_idx": -999,
+        "n_dna_p": n_dna_p,
+        "p_order_source": p_order_source,
         "term_specs": term_specs,
     }
 
 
-def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False,
-                            with_termini: bool = False):
+def _extract_md_nadoc_frame(
+    ctx: dict, frame_idx: int, with_c1p: bool = False, with_termini: bool = False
+):
     """Per-frame DNA P-atom positions (nm, NADOC frame) + base normals for one DCD
     frame. Ported from ws.py ``_seek_sync`` (nadoc path). Returns ``(p_nm, normals)``
     where ``p_nm`` is (N,3) and ``normals`` is (N,3) or ``None``.
@@ -201,7 +235,10 @@ def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False,
     :func:`md_metric_series`.  It is the P position plus the (min-imaged, Kabsch-rotated)
     P→C1' vector already computed for the base normal, so it costs nothing extra."""
     from backend.core.atomistic_to_nadoc import (
-        _GRO_DNA_RESNAMES, _unwrap_min_image, reassemble_to_posed_reference)
+        _GRO_DNA_RESNAMES,
+        _unwrap_min_image,
+        reassemble_to_posed_reference,
+    )
 
     u = ctx["universe"]
     p_order = ctx["p_order"]
@@ -210,7 +247,7 @@ def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False,
     eq_valid = ctx["eq_valid"]
     rigid_mask = ctx["rigid_mask"]
     snap_mask = ctx.get("snap_mask")
-    if snap_mask is None:      # older ctx (pre-snap-mask) → fall back to rigid-only restore
+    if snap_mask is None:  # older ctx (pre-snap-mask) → fall back to rigid-only restore
         snap_mask = rigid_mask
     eq_centered = ctx["eq_centered"]
     eq_centroid = ctx["eq_centroid"]
@@ -232,10 +269,15 @@ def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False,
         # the viewer.  reassemble_to_posed_reference estimates the rigid pose FIRST, poses the
         # design reference into the box frame, then snaps — so every bead's reference sits
         # beside its true position.  Free ssDNA (~snap_mask) keeps its sequential-unwrap spot.
-        if (eq_pos is not None and eq_centroid is not None
-                and snap_mask is not None and len(eq_pos) == len(p_box)):
+        if (
+            eq_pos is not None
+            and eq_centroid is not None
+            and snap_mask is not None
+            and len(eq_pos) == len(p_box)
+        ):
             p_box_corr, _c_box = reassemble_to_posed_reference(
-                p_box, box_nm, eq_pos, eq_centroid, rigid_mask, snap_mask)
+                p_box, box_nm, eq_pos, eq_centroid, rigid_mask, snap_mask
+            )
             _T_dyn = eq_centroid - _c_box
             p_nm = p_box_corr + _T_dyn
         else:
@@ -254,10 +296,16 @@ def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False,
     R_prev = ctx.get("R_prev")
     prev_frame = ctx.get("prev_frame_idx", -999)
     _is_sequential = abs(frame_idx - prev_frame) <= 3
-    if (eq_centered is not None and eq_centroid is not None
-            and len(eq_centered) == len(p_nm)):
-        _rm = rigid_mask if (rigid_mask is not None and rigid_mask.any()) else (
-            eq_valid if (eq_valid is not None and eq_valid.any()) else None)
+    if (
+        eq_centered is not None
+        and eq_centroid is not None
+        and len(eq_centered) == len(p_nm)
+    ):
+        _rm = (
+            rigid_mask
+            if (rigid_mask is not None and rigid_mask.any())
+            else (eq_valid if (eq_valid is not None and eq_valid.any()) else None)
+        )
         _mob_c = p_nm[_rm].mean(axis=0) if _rm is not None else p_nm.mean(axis=0)
         _mc = p_nm - _mob_c
         _H = _mc.T @ eq_centered
@@ -272,8 +320,14 @@ def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False,
             if _angle_deg > 60.0:
                 _p_nm_raw = _mc @ R_align.T + eq_centroid
                 _pre_d = np.linalg.norm(_p_nm_raw - eq_pos, axis=1)
-                _med_d = np.median(_pre_d[_rm]) if _rm is not None else np.median(_pre_d)
-                _inlier = _rm & (_pre_d < _med_d * 3.0) if _rm is not None else (_pre_d < _med_d * 3.0)
+                _med_d = (
+                    np.median(_pre_d[_rm]) if _rm is not None else np.median(_pre_d)
+                )
+                _inlier = (
+                    _rm & (_pre_d < _med_d * 3.0)
+                    if _rm is not None
+                    else (_pre_d < _med_d * 3.0)
+                )
                 if _inlier.sum() >= 10:
                     _mob_c2 = p_nm[_inlier].mean(axis=0)
                     _mc2 = p_nm - _mob_c2
@@ -320,9 +374,11 @@ def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False,
     # 5'-terminal nucleotides via their O5' atom, placed off the aligned 3'-neighbour P.
     if with_termini:
         from backend.core.atomistic_to_nadoc import recover_termini
+
         _box = (dims[:3] / 10.0) if (dims is not None and dims[0] > 0) else None
         term_pos, term_norm = recover_termini(
-            u, ctx.get("term_specs") or [], p_raw, p_nm, R_align, _box)
+            u, ctx.get("term_specs") or [], p_raw, p_nm, R_align, _box
+        )
         if with_c1p:
             return p_nm, normals, c1p_nm, term_pos, term_norm
         return p_nm, normals, term_pos, term_norm
@@ -374,12 +430,14 @@ def _build_heavy_anchor_rows(heavy_ag, dna_p) -> "np.ndarray":
                 return near
         return -1
 
-    return np.fromiter((_row_for(a) for a in heavy_ag), dtype=np.int64,
-                       count=len(heavy_ag))
+    return np.fromiter(
+        (_row_for(a) for a in heavy_ag), dtype=np.int64, count=len(heavy_ag)
+    )
 
 
-def _extract_md_atoms_frame(ctx: dict, frame_idx: int,
-                            frame_out: dict | None = None) -> list[dict]:
+def _extract_md_atoms_frame(
+    ctx: dict, frame_idx: int, frame_out: dict | None = None
+) -> list[dict]:
     """DNA heavy-atom coordinates (nm, NADOC frame) for one DCD frame, as
     ``[{serial, element, strand_id, helix_id, bp_index, direction, x, y, z}, …]``.
     Ported from ws.py ``_seek_sync`` (ballstick
@@ -396,7 +454,10 @@ def _extract_md_atoms_frame(ctx: dict, frame_idx: int,
     on screen (see memory/project_md_viz_tools.md).
     """
     from backend.core.atomistic_to_nadoc import (
-        _GRO_DNA_RESNAMES, _unwrap_min_image, reassemble_to_posed_reference)
+        _GRO_DNA_RESNAMES,
+        _unwrap_min_image,
+        reassemble_to_posed_reference,
+    )
 
     u = ctx["universe"]
     p_order = ctx["p_order"]
@@ -406,7 +467,7 @@ def _extract_md_atoms_frame(ctx: dict, frame_idx: int,
     eq_pos = ctx["eq_positions"]
     rigid_mask = ctx["rigid_mask"]
     snap_mask = ctx.get("snap_mask")
-    if snap_mask is None:      # older ctx (pre-snap-mask) → fall back to rigid-only restore
+    if snap_mask is None:  # older ctx (pre-snap-mask) → fall back to rigid-only restore
         snap_mask = rigid_mask
     eq_centroid = ctx["eq_centroid"]
     eq_centered = ctx["eq_centered"]
@@ -427,10 +488,15 @@ def _extract_md_atoms_frame(ctx: dict, frame_idx: int,
             # the design reference into the (possibly ~180°-rotated) box frame BEFORE the
             # nearest-image snap, else a large rotated bundle's rod ends get mis-imaged a full
             # box away.  Free ssDNA (~snap_mask) keeps its sequential-unwrap position.
-            if (eq_pos is not None and eq_centroid is not None
-                    and snap_mask is not None and len(eq_pos) == len(p_box)):
+            if (
+                eq_pos is not None
+                and eq_centroid is not None
+                and snap_mask is not None
+                and len(eq_pos) == len(p_box)
+            ):
                 p_box_corr, c_box = reassemble_to_posed_reference(
-                    p_box, box_nm, eq_pos, eq_centroid, rigid_mask, snap_mask)
+                    p_box, box_nm, eq_pos, eq_centroid, rigid_mask, snap_mask
+                )
                 T_dyn = eq_centroid - c_box
                 p_pre = p_box_corr + T_dyn
             else:
@@ -468,9 +534,16 @@ def _extract_md_atoms_frame(ctx: dict, frame_idx: int,
 
             mob_c = None
             R_align = None
-            if (eq_centered is not None and eq_centroid is not None
-                    and len(eq_centered) == len(p_pre)):
-                rm = rigid_mask if (rigid_mask is not None and rigid_mask.any()) else None
+            if (
+                eq_centered is not None
+                and eq_centroid is not None
+                and len(eq_centered) == len(p_pre)
+            ):
+                rm = (
+                    rigid_mask
+                    if (rigid_mask is not None and rigid_mask.any())
+                    else None
+                )
                 mob_c = p_pre[rm].mean(axis=0) if rm is not None else p_pre.mean(axis=0)
                 mc = p_pre - mob_c
                 H = mc.T @ eq_centered
@@ -487,8 +560,13 @@ def _extract_md_atoms_frame(ctx: dict, frame_idx: int,
                 # the display frame IS the pre frame, so mob_c/eq_centroid/R are
                 # left at the identity.
                 frame_out.update(
-                    pos_raw=pos_raw, pos_pre=pos_pre, box_nm=box_nm,
-                    T_dyn=T_dyn, c_box=c_box, mob_c=mob_c, R_align=R_align,
+                    pos_raw=pos_raw,
+                    pos_pre=pos_pre,
+                    box_nm=box_nm,
+                    T_dyn=T_dyn,
+                    c_box=c_box,
+                    mob_c=mob_c,
+                    R_align=R_align,
                     eq_centroid=eq_centroid if R_align is not None else None,
                 )
     except Exception:
@@ -497,10 +575,17 @@ def _extract_md_atoms_frame(ctx: dict, frame_idx: int,
     # strand_id/helix_id/bp_index/direction come from the ctx's atom_meta (static across
     # frames) — the frontend colours by them exactly as it does the design's own atoms.
     return [
-        {"serial": m["serial"], "element": m["element"],
-         "strand_id": m.get("strand_id", ""), "helix_id": m.get("helix_id", ""),
-         "bp_index": m.get("bp_index", -1), "direction": m.get("direction", ""),
-         "x": float(pos_nm[i, 0]), "y": float(pos_nm[i, 1]), "z": float(pos_nm[i, 2])}
+        {
+            "serial": m["serial"],
+            "element": m["element"],
+            "strand_id": m.get("strand_id", ""),
+            "helix_id": m.get("helix_id", ""),
+            "bp_index": m.get("bp_index", -1),
+            "direction": m.get("direction", ""),
+            "x": float(pos_nm[i, 0]),
+            "y": float(pos_nm[i, 1]),
+            "z": float(pos_nm[i, 2]),
+        }
         for i, m in enumerate(atom_meta)
     ]
 
@@ -514,17 +599,42 @@ class _SurfAtom:
     id alone collapses the scaffold onto one cluster (LESSONS D15) — and
     ``_extract_md_atoms_frame`` already yields all three.
     """
-    __slots__ = ("x", "y", "z", "element", "strand_id", "helix_id", "bp_index", "direction")
 
-    def __init__(self, x, y, z, element, strand_id="",
-                 helix_id="", bp_index=0, direction="FORWARD"):
-        self.x = x; self.y = y; self.z = z; self.element = element
+    __slots__ = (
+        "x",
+        "y",
+        "z",
+        "element",
+        "strand_id",
+        "helix_id",
+        "bp_index",
+        "direction",
+    )
+
+    def __init__(
+        self,
+        x,
+        y,
+        z,
+        element,
+        strand_id="",
+        helix_id="",
+        bp_index=0,
+        direction="FORWARD",
+    ):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.element = element
         self.strand_id = strand_id
-        self.helix_id = helix_id; self.bp_index = bp_index; self.direction = direction
+        self.helix_id = helix_id
+        self.bp_index = bp_index
+        self.direction = direction
 
 
-def composite_raw_frame_map(segments, max_frames: int = 200,
-                            stride: int | None = None) -> list[int]:
+def composite_raw_frame_map(
+    segments, max_frames: int = 200, stride: int | None = None
+) -> list[int]:
     """Composite frame index → RAW (concatenated-universe) frame index.
 
     The bead trajectory the user scrubs is DOWNSAMPLED, so its frame 12 is not the
@@ -570,7 +680,7 @@ def heavy_bond_pairs(u, heavy_indices, *, nested: bool = False):
     has to match ``atom_meta`` exactly, and two copies of that rule drift.
     """
     try:
-        idx = u.bonds.to_indices()      # raises NoDataError when there is no bond data
+        idx = u.bonds.to_indices()  # raises NoDataError when there is no bond data
     except Exception:  # noqa: BLE001
         return None
     if idx is None or len(idx) == 0:
@@ -601,10 +711,11 @@ def md_atomistic_model(topology_path, segments, coordinate_path, design) -> dict
 
     Positions are frame 0's, so the model alone renders a valid structure."""
     seg_paths = [s[2] for s in segments]
-    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
-                              with_atoms=True)
+    ctx = _build_md_nadoc_ctx(
+        topology_path, seg_paths, coordinate_path, design, with_atoms=True
+    )
     atoms = _extract_md_atoms_frame(ctx, 0) if ctx["n_frames"] > 0 else []
-    n_serials = (max((int(a["serial"]) for a in atoms), default=-1) + 1)
+    n_serials = max((int(a["serial"]) for a in atoms), default=-1) + 1
     # Bonds, NESTED — see heavy_bond_pairs: this payload is handed straight to
     # atomistic_renderer._rebuild, which reads a plain array as [[i, j], …] and only a
     # TYPED array as flat, so flat-plain would silently render as no sticks at all.
@@ -623,14 +734,25 @@ def md_atomistic_model(topology_path, segments, coordinate_path, design) -> dict
     # re-run this ~30 s reconstruction hunting for bonds that were never going to arrive.
     # A topology with no bond records at all (GRO) still declares False and renders as
     # spheres, which is the honest answer rather than a spinner.
-    return {"atoms": atoms, "bonds": bonds or [], "bonds_available": bool(bonds),
-            "n_serials": n_serials, "n_atoms": len(atoms)}
+    return {
+        "atoms": atoms,
+        "bonds": bonds or [],
+        "bonds_available": bool(bonds),
+        "n_serials": n_serials,
+        "n_atoms": len(atoms),
+    }
 
 
-def md_frames_atomistic(topology_path, segments, coordinate_path, design,
-                        frame_indices, max_frames: int = 200,
-                        stride: int | None = None,
-                        positions_only: bool = False) -> dict:
+def md_frames_atomistic(
+    topology_path,
+    segments,
+    coordinate_path,
+    design,
+    frame_indices,
+    max_frames: int = 200,
+    stride: int | None = None,
+    positions_only: bool = False,
+) -> dict:
     """Per-frame DNA heavy atoms for the given COMPOSITE-trajectory frame indices →
     ``{ "<idx>": {atoms:[{serial,element,strand_id,helix_id,bp_index,direction,x,y,z}],
     bonds:[]} }``. The atom set is the
@@ -650,14 +772,17 @@ def md_frames_atomistic(topology_path, segments, coordinate_path, design,
     costs ~32 s on a 300 k-atom system against ~2.8 s per additional frame, and it is
     paid once per CALL, not once per frame."""
     seg_paths = [s[2] for s in segments]
-    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
-                              with_atoms=True)
+    ctx = _build_md_nadoc_ctx(
+        topology_path, seg_paths, coordinate_path, design, with_atoms=True
+    )
     n = ctx["n_frames"]
     raw_of = composite_raw_frame_map(segments, max_frames, stride)
     n_serials = 0
     if positions_only:
-        n_serials = max((int(m["serial"]) for m in (ctx.get("atom_meta") or [])),
-                        default=-1) + 1
+        n_serials = (
+            max((int(m["serial"]) for m in (ctx.get("atom_meta") or [])), default=-1)
+            + 1
+        )
     out: dict[str, object] = {}
     for idx in sorted(set(int(i) for i in frame_indices)):
         if idx < 0 or idx >= len(raw_of):
@@ -679,9 +804,16 @@ def md_frames_atomistic(topology_path, segments, coordinate_path, design,
     return out
 
 
-def md_frames_solvent(topology_path, segments, coordinate_path, design,
-                      frame_indices, max_frames: int = 200,
-                      stride: int | None = None, opts: dict | None = None) -> bytes:
+def md_frames_solvent(
+    topology_path,
+    segments,
+    coordinate_path,
+    design,
+    frame_indices,
+    max_frames: int = 200,
+    stride: int | None = None,
+    opts: dict | None = None,
+) -> bytes:
     """Per-frame explicit solvent + periodic cell for COMPOSITE frame indices, as one
     binary blob (see :func:`backend.core.md_solvent.pack_solvent_bin`).
 
@@ -699,7 +831,10 @@ def md_frames_solvent(topology_path, segments, coordinate_path, design,
     The display affine comes from :func:`_extract_md_atoms_frame`'s ``frame_out``;
     it is never recomputed here."""
     from backend.core.md_solvent import (
-        DisplayXform, build_solvent_ctx, empty_solvent_bin, pack_solvent_bin,
+        DisplayXform,
+        build_solvent_ctx,
+        empty_solvent_bin,
+        pack_solvent_bin,
     )
 
     o = dict(opts or {})
@@ -707,8 +842,9 @@ def md_frames_solvent(topology_path, segments, coordinate_path, design,
     include_dna = bool(o.get("include_dna"))
 
     seg_paths = [s[2] for s in segments]
-    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
-                              with_atoms=True)
+    ctx = _build_md_nadoc_ctx(
+        topology_path, seg_paths, coordinate_path, design, with_atoms=True
+    )
     u = ctx["universe"]
     sctx = build_solvent_ctx(u)
     n = ctx["n_frames"]
@@ -716,8 +852,10 @@ def md_frames_solvent(topology_path, segments, coordinate_path, design,
 
     n_serials = 0
     if include_dna:
-        n_serials = max((int(m["serial"]) for m in (ctx.get("atom_meta") or [])),
-                        default=-1) + 1
+        n_serials = (
+            max((int(m["serial"]) for m in (ctx.get("atom_meta") or [])), default=-1)
+            + 1
+        )
 
     frames: dict[int, dict] = {}
     for idx in sorted(set(int(i) for i in frame_indices)):
@@ -729,27 +867,41 @@ def md_frames_solvent(topology_path, segments, coordinate_path, design,
         fo: dict = {}
         atoms = _extract_md_atoms_frame(ctx, gidx, frame_out=fo)
         if not fo:
-            continue                    # no periodic box on this frame → nothing to draw
+            continue  # no periodic box on this frame → nothing to draw
         xf = DisplayXform.build(
-            T_dyn=fo["T_dyn"], c_box=fo["c_box"], box_nm=fo["box_nm"],
-            mob_c=fo["mob_c"], eq_centroid=fo["eq_centroid"], R=fo["R_align"])
+            T_dyn=fo["T_dyn"],
+            c_box=fo["c_box"],
+            box_nm=fo["box_nm"],
+            mob_c=fo["mob_c"],
+            eq_centroid=fo["eq_centroid"],
+            R=fo["R_align"],
+        )
         frames[idx] = extract_solvent_frame_for(
-            u, sctx, fo, xf,
-            water=bool(o.get("water", True)), ions=bool(o.get("ions", True)),
+            u,
+            sctx,
+            fo,
+            xf,
+            water=bool(o.get("water", True)),
+            ions=bool(o.get("ions", True)),
             box=bool(o.get("box", True)),
             shell_nm=None if shell_ang is None else float(shell_ang) / 10.0,
             atomistic=bool(o.get("atomistic")),
-            max_waters=o.get("max_waters"))
+            max_waters=o.get("max_waters"),
+        )
         if include_dna:
             flat = np.zeros(n_serials * 3, dtype=np.float32)
             for a in atoms:
                 s = int(a["serial"]) * 3
-                flat[s] = a["x"]; flat[s + 1] = a["y"]; flat[s + 2] = a["z"]
+                flat[s] = a["x"]
+                flat[s + 1] = a["y"]
+                flat[s + 2] = a["z"]
             frames[idx]["dna"] = flat
 
     if not frames:
         return empty_solvent_bin()
-    return pack_solvent_bin(frames, meta={"n_serials": n_serials} if include_dna else None)
+    return pack_solvent_bin(
+        frames, meta={"n_serials": n_serials} if include_dna else None
+    )
 
 
 def extract_solvent_frame_for(u, sctx, frame_out: dict, xf, **kw) -> dict:
@@ -758,22 +910,33 @@ def extract_solvent_frame_for(u, sctx, frame_out: dict, xf, **kw) -> dict:
     from backend.core.md_solvent import extract_solvent_frame
 
     return extract_solvent_frame(
-        u, sctx, frame_out["pos_raw"], frame_out["pos_pre"], xf, **kw)
+        u, sctx, frame_out["pos_raw"], frame_out["pos_pre"], xf, **kw
+    )
 
 
-def md_frames_surface(topology_path, segments, coordinate_path, design, frame_indices,
-                      probe_radius: float = 0.28, grid_spacing: float = 0.20,
-                      radius_inflate: float = 1.30, smooth: int = 15,
-                      max_frames: int = 200, stride: int | None = None,
-                      **_ignore) -> dict:
+def md_frames_surface(
+    topology_path,
+    segments,
+    coordinate_path,
+    design,
+    frame_indices,
+    probe_radius: float = 0.28,
+    grid_spacing: float = 0.20,
+    radius_inflate: float = 1.30,
+    smooth: int = 15,
+    max_frames: int = 200,
+    stride: int | None = None,
+    **_ignore,
+) -> dict:
     """Per-frame molecular surface from the NAMD DNA heavy atoms → surface-batch
     shape ``{ "<idx>": {vertices, faces} }`` (uniform colour for v1).  Indices are
     COMPOSITE, translated like md_frames_atomistic's."""
     from backend.core.surface import compute_surface, smooth_mesh, vertex_index_tables
 
     seg_paths = [s[2] for s in segments]
-    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
-                              with_atoms=True)
+    ctx = _build_md_nadoc_ctx(
+        topology_path, seg_paths, coordinate_path, design, with_atoms=True
+    )
     n = ctx["n_frames"]
     raw_of = composite_raw_frame_map(segments, max_frames, stride)
     out: dict[str, dict] = {}
@@ -783,15 +946,30 @@ def md_frames_surface(topology_path, segments, coordinate_path, design, frame_in
         gidx = raw_of[idx]
         if gidx >= n:
             continue
-        atoms = [_SurfAtom(a["x"], a["y"], a["z"], a["element"], a.get("strand_id", ""),
-                           a.get("helix_id", ""), a.get("bp_index", 0),
-                           a.get("direction", "FORWARD"))
-                 for a in _extract_md_atoms_frame(ctx, gidx)]
-        mesh = compute_surface(atoms, grid_spacing=grid_spacing,
-                               probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
+        atoms = [
+            _SurfAtom(
+                a["x"],
+                a["y"],
+                a["z"],
+                a["element"],
+                a.get("strand_id", ""),
+                a.get("helix_id", ""),
+                a.get("bp_index", 0),
+                a.get("direction", "FORWARD"),
+            )
+            for a in _extract_md_atoms_frame(ctx, gidx)
+        ]
+        mesh = compute_surface(
+            atoms,
+            grid_spacing=grid_spacing,
+            probe_radius=probe_radius,
+            radius_scale=1.2 * radius_inflate,
+        )
         mesh = smooth_mesh(mesh, iterations=smooth)
-        entry = {"vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
-                 "faces": [int(f) for f in mesh.faces.ravel()]}
+        entry = {
+            "vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
+            "faces": [int(f) for f in mesh.faces.ravel()],
+        }
         # Per-vertex identity, so the NAMD surface honours per-cluster colour + opacity
         # like every other surface. Without it the client has nothing to resolve against.
         entry.update(vertex_index_tables(mesh))
@@ -799,8 +977,9 @@ def md_frames_surface(topology_path, segments, coordinate_path, design, frame_in
     return out
 
 
-def md_rmsf(topology_path, segments, coordinate_path, design,
-            max_frames: int = 150) -> dict:
+def md_rmsf(
+    topology_path, segments, coordinate_path, design, max_frames: int = 150
+) -> dict:
     """Per-nucleotide average backbone position + RMSF over the NAMD run.
 
     The MD analogue of ``oxdna_health.production_rmsf``: pools frames from EVERY
@@ -822,24 +1001,31 @@ def md_rmsf(topology_path, segments, coordinate_path, design,
     # with_termini: also recover each strand's 5'-terminal base (no P atom → absent from
     # p_order) so the flexibility map positions + colours every nucleotide, not only the
     # P-bearing ones.  Only md_rmsf opts in — the metrics / live-display P path is unchanged.
-    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
-                              with_termini=True)
+    ctx = _build_md_nadoc_ctx(
+        topology_path, seg_paths, coordinate_path, design, with_termini=True
+    )
     p_order = ctx["p_order"]
     n = ctx["n_frames"]
     n_keys = len(p_order)
     n_dna_p = ctx.get("n_dna_p", n_keys)
     if n <= 0 or n_keys == 0:
-        return {"ready": False, "n_frames": 0, "positions": [],
-                "reason": "no trajectory frames or no mapped nucleotides"}
+        return {
+            "ready": False,
+            "n_frames": 0,
+            "positions": [],
+            "reason": "no trajectory frames or no mapped nucleotides",
+        }
 
-    idxs = list(range(n)) if n <= max_frames else _stride_pick(list(range(n)), max_frames)
+    idxs = (
+        list(range(n)) if n <= max_frames else _stride_pick(list(range(n)), max_frames)
+    )
 
     term_specs = ctx.get("term_specs") or []
     n_term = len(term_specs)
 
     # One-pass accumulation: RMSF^2 = mean_f|p_f|^2 - |mean_f p_f|^2 (per nucleotide).
     sum_pos = np.zeros((n_keys, 3))
-    sum_sq = np.zeros(n_keys)        # Σ_f |p_f|^2
+    sum_sq = np.zeros(n_keys)  # Σ_f |p_f|^2
     sum_norm = np.zeros((n_keys, 3))
     sum_tpos = np.zeros((n_term, 3))
     sum_tsq = np.zeros(n_term)
@@ -847,7 +1033,9 @@ def md_rmsf(topology_path, segments, coordinate_path, design,
     have_norm = False
     used = 0
     for gidx in idxs:
-        p_nm, normals, tpos, tnorm = _extract_md_nadoc_frame(ctx, gidx, with_termini=True)
+        p_nm, normals, tpos, tnorm = _extract_md_nadoc_frame(
+            ctx, gidx, with_termini=True
+        )
         if p_nm is None or len(p_nm) != n_keys:
             continue
         sum_pos += p_nm
@@ -884,40 +1072,54 @@ def md_rmsf(topology_path, segments, coordinate_path, design,
     positions = []
     for i, key in enumerate(p_order):
         hid, bp, direction = key[0], key[1], key[2]
-        copy = key[3] if len(key) > 3 else 0   # loop-insertion copy index (0 = base)
-        positions.append({
-            "helix_id": hid,
-            "bp_index": bp,
-            "direction": direction,
-            "copy": copy,
-            "backbone_position": [float(mean_pos[i, 0]), float(mean_pos[i, 1]),
-                                  float(mean_pos[i, 2])],
-            "nx": float(mean_norm[i, 0]),
-            "ny": float(mean_norm[i, 1]),
-            "nz": float(mean_norm[i, 2]),
-            "rmsf": float(rmsf[i]),
-        })
+        copy = key[3] if len(key) > 3 else 0  # loop-insertion copy index (0 = base)
+        positions.append(
+            {
+                "helix_id": hid,
+                "bp_index": bp,
+                "direction": direction,
+                "copy": copy,
+                "backbone_position": [
+                    float(mean_pos[i, 0]),
+                    float(mean_pos[i, 1]),
+                    float(mean_pos[i, 2]),
+                ],
+                "nx": float(mean_norm[i, 0]),
+                "ny": float(mean_norm[i, 1]),
+                "nz": float(mean_norm[i, 2]),
+                "rmsf": float(rmsf[i]),
+            }
+        )
 
     # Append the recovered 5'-terminal nucleotides (same payload shape, real keys).
     rmsf_all = rmsf
     if n_term:
         mean_t = sum_tpos / used
-        rmsf_t = np.sqrt(np.maximum(sum_tsq / used - np.einsum("ij,ij->i", mean_t, mean_t), 0.0))
+        rmsf_t = np.sqrt(
+            np.maximum(sum_tsq / used - np.einsum("ij,ij->i", mean_t, mean_t), 0.0)
+        )
         tn = np.linalg.norm(sum_tnorm, axis=1, keepdims=True)
         mean_tnorm = sum_tnorm / np.where(tn > 1e-6, tn, 1.0)
         for j, (key, *_rest) in enumerate(term_specs):
-            positions.append({
-                "helix_id": key[0],
-                "bp_index": key[1],
-                "direction": key[2],
-                "copy": key[3] if len(key) > 3 else 0,   # 5'-termini are base copies (0)
-                "backbone_position": [float(mean_t[j, 0]), float(mean_t[j, 1]),
-                                      float(mean_t[j, 2])],
-                "nx": float(mean_tnorm[j, 0]),
-                "ny": float(mean_tnorm[j, 1]),
-                "nz": float(mean_tnorm[j, 2]),
-                "rmsf": float(rmsf_t[j]),
-            })
+            positions.append(
+                {
+                    "helix_id": key[0],
+                    "bp_index": key[1],
+                    "direction": key[2],
+                    "copy": key[3]
+                    if len(key) > 3
+                    else 0,  # 5'-termini are base copies (0)
+                    "backbone_position": [
+                        float(mean_t[j, 0]),
+                        float(mean_t[j, 1]),
+                        float(mean_t[j, 2]),
+                    ],
+                    "nx": float(mean_tnorm[j, 0]),
+                    "ny": float(mean_tnorm[j, 1]),
+                    "nz": float(mean_tnorm[j, 2]),
+                    "rmsf": float(rmsf_t[j]),
+                }
+            )
         rmsf_all = np.concatenate([rmsf, rmsf_t]) if len(rmsf_t) else rmsf
 
     return {
@@ -937,6 +1139,7 @@ def md_rmsf(topology_path, segments, coordinate_path, design,
 # the MD "Graphs and Metrics" base-pairing series is a C1'…C1' fraction, not the oxDNA
 # base-site fraction.  ``C1_PAIRED_MAX_DEFAULT`` is 12.0 Å; here in nm.
 from backend.core.md_health import C1_PAIRED_MAX_DEFAULT as _C1_PAIRED_MAX_ANG  # noqa: E402
+
 MD_BP_CUTOFF_NM = _C1_PAIRED_MAX_ANG / 10.0
 
 
@@ -957,8 +1160,16 @@ def count_md_frames(segments) -> int:
     return total
 
 
-def md_metric_series(topology_path, segments, coordinate_path, design,
-                     analytic_reference, *, n_slices: int = 0, on_frame=None) -> dict:
+def md_metric_series(
+    topology_path,
+    segments,
+    coordinate_path,
+    design,
+    analytic_reference,
+    *,
+    n_slices: int = 0,
+    on_frame=None,
+) -> dict:
     """SINGLE-PASS per-frame twist, curvature AND base-pairing over a NAMD run — the
     MD analogue of :func:`oxdna_health.production_metric_series`, and the compute behind
     the MD "Graphs and Metrics" card.
@@ -1011,9 +1222,9 @@ def md_metric_series(topology_path, segments, coordinate_path, design,
     twist_pf: list[float] = []
     curv_pf: list[float] = []
     bp_pf: list[float] = []
-    acc: dict[tuple, list] = {}                 # key → [bb xyz, …] for the mean structure
-    formed: dict[tuple, int] = {}               # (helix,bp) → frames the pair was within cutoff
-    total_pair: dict[tuple, int] = {}           # (helix,bp) → frames the pair was measured
+    acc: dict[tuple, list] = {}  # key → [bb xyz, …] for the mean structure
+    formed: dict[tuple, int] = {}  # (helix,bp) → frames the pair was within cutoff
+    total_pair: dict[tuple, int] = {}  # (helix,bp) → frames the pair was measured
     n_frames = 0
     for idx in range(n):
         p_nm, _normals, c1p_nm = _extract_md_nadoc_frame(ctx, idx, with_c1p=True)
@@ -1022,15 +1233,25 @@ def md_metric_series(topology_path, segments, coordinate_path, design,
         frame_positions = []
         for i, key in enumerate(keys):
             bb = p_nm[i]
-            frame_positions.append({"helix_id": key[0], "bp_index": key[1],
-                                    "direction": key[2], "backbone_position": bb})
+            frame_positions.append(
+                {
+                    "helix_id": key[0],
+                    "bp_index": key[1],
+                    "direction": key[2],
+                    "backbone_position": bb,
+                }
+            )
             acc.setdefault(key, []).append(bb)
         core = _filter_to_reference_core(frame_positions, analytic_reference)
         try:
-            twist_pf.append(measure_bundle_twist(core, n_slices=n_slices) - analytic_twist)
-            curv_pf.append(measure_bundle_curvature(core, n_slices=n_slices) - analytic_curv)
+            twist_pf.append(
+                measure_bundle_twist(core, n_slices=n_slices) - analytic_twist
+            )
+            curv_pf.append(
+                measure_bundle_curvature(core, n_slices=n_slices) - analytic_curv
+            )
         except ValueError:
-            continue                            # degenerate frame (too few helices) — skip
+            continue  # degenerate frame (too few helices) — skip
         if c1p_nm is not None and designed:
             n_formed = 0
             for hb in designed:
@@ -1049,33 +1270,59 @@ def md_metric_series(topology_path, segments, coordinate_path, design,
     if n_frames == 0 or not twist_pf:
         return {"ready": False, "n_frames": 0}
 
-    mean_positions = [{"helix_id": k[0], "bp_index": k[1], "direction": k[2],
-                       "backbone_position": np.mean(v, axis=0)} for k, v in acc.items()]
+    mean_positions = [
+        {
+            "helix_id": k[0],
+            "bp_index": k[1],
+            "direction": k[2],
+            "backbone_position": np.mean(v, axis=0),
+        }
+        for k, v in acc.items()
+    ]
     mean_core = _filter_to_reference_core(mean_positions, analytic_reference)
-    twist_sp = differential_profile(measure_bundle_twist_profile(mean_core, n_slices=n_slices),
-                                    measure_bundle_twist_profile(analytic_reference, n_slices=n_slices))
-    curv_sp = differential_profile(measure_bundle_curvature_profile(mean_core, n_slices=n_slices),
-                                   measure_bundle_curvature_profile(analytic_reference, n_slices=n_slices))
+    twist_sp = differential_profile(
+        measure_bundle_twist_profile(mean_core, n_slices=n_slices),
+        measure_bundle_twist_profile(analytic_reference, n_slices=n_slices),
+    )
+    curv_sp = differential_profile(
+        measure_bundle_curvature_profile(mean_core, n_slices=n_slices),
+        measure_bundle_curvature_profile(analytic_reference, n_slices=n_slices),
+    )
     pair_frac = {k: formed.get(k, 0) / total_pair[k] for k in total_pair}
     bp_sp = base_pairing_spatial_profile(pair_frac, mean_positions, n_slices=n_slices)
 
     return {
-        "ready": True, "n_frames": n_frames,
-        "twist": {"temporal": {"per_frame": [round(x, 3) for x in twist_pf],
-                               "stats": twist_series_stats(twist_pf),
-                               "analytic": round(analytic_twist, 3)},
-                  "spatial": twist_sp},
-        "curvature": {"temporal": {"per_frame": [round(x, 4) for x in curv_pf],
-                                   "stats": twist_series_stats(curv_pf),
-                                   "analytic": round(analytic_curv, 4)},
-                      "spatial": curv_sp},
-        "base_pairing": {"temporal": {"per_frame": [round(x, 4) for x in bp_pf],
-                                      "n_designed": n_designed},
-                         "spatial": bp_sp},
+        "ready": True,
+        "n_frames": n_frames,
+        "twist": {
+            "temporal": {
+                "per_frame": [round(x, 3) for x in twist_pf],
+                "stats": twist_series_stats(twist_pf),
+                "analytic": round(analytic_twist, 3),
+            },
+            "spatial": twist_sp,
+        },
+        "curvature": {
+            "temporal": {
+                "per_frame": [round(x, 4) for x in curv_pf],
+                "stats": twist_series_stats(curv_pf),
+                "analytic": round(analytic_curv, 4),
+            },
+            "spatial": curv_sp,
+        },
+        "base_pairing": {
+            "temporal": {
+                "per_frame": [round(x, 4) for x in bp_pf],
+                "n_designed": n_designed,
+            },
+            "spatial": bp_sp,
+        },
     }
 
 
-def md_composite_meta(segments, max_frames: int = 200, stride: int | None = None) -> dict:
+def md_composite_meta(
+    segments, max_frames: int = 200, stride: int | None = None
+) -> dict:
     """Lightweight metadata for the NAMD composite — ``{n_frames, markers, stages}``
     — from DCD frame counts only (DCD header, no PSF parse, no coordinate read), so
     the trajectory-keyframe slider sizes itself in milliseconds. Shares
@@ -1105,24 +1352,39 @@ def md_composite_meta(segments, max_frames: int = 200, stride: int | None = None
         if c <= 0:
             continue
         if out_n:
-            markers.append({"frame": out_n, "label": f"→ {name}",
-                            "kind": kind or "md", "stage_name": name})
-        out_stages.append({"name": name, "kind": kind or "md",
-                           "n_frames": len(keep_idxs), "n_raw": c})
+            markers.append(
+                {
+                    "frame": out_n,
+                    "label": f"→ {name}",
+                    "kind": kind or "md",
+                    "stage_name": name,
+                }
+            )
+        out_stages.append(
+            {"name": name, "kind": kind or "md", "n_frames": len(keep_idxs), "n_raw": c}
+        )
         out_n += len(keep_idxs)
-    return {"n_frames": out_n, "stages": out_stages, "markers": markers,
-            "total_raw": total}
+    return {
+        "n_frames": out_n,
+        "stages": out_stages,
+        "markers": markers,
+        "total_raw": total,
+    }
 
 
 def _stride_pick(items: list, keep: int) -> list:
     if keep >= len(items) or keep <= 0:
         return items
-    return [items[round(i * (len(items) - 1) / (keep - 1))] for i in range(keep)] \
-        if keep > 1 else [items[0]]
+    return (
+        [items[round(i * (len(items) - 1) / (keep - 1))] for i in range(keep)]
+        if keep > 1
+        else [items[0]]
+    )
 
 
-def _composite_indices(seg_counts, max_frames: int = 200,
-                       stride: int | None = None) -> list[list[int]]:
+def _composite_indices(
+    seg_counts, max_frames: int = 200, stride: int | None = None
+) -> list[list[int]]:
     """Which GLOBAL (concatenated-universe) frame indices the composite keeps, per
     segment.  The single source of truth for both md_composite_meta and
     md_composite_trajectory — they used to carry separate copies of this arithmetic,
@@ -1148,16 +1410,26 @@ def _composite_indices(seg_counts, max_frames: int = 200,
             continue
         global_idxs = list(range(offset, offset + count))
         if stride is not None and stride >= 1:
-            out.append(global_idxs[::int(stride)])
+            out.append(global_idxs[:: int(stride)])
         else:
-            keep = max(1, round(count * max_frames / total)) if total > max_frames else count
+            keep = (
+                max(1, round(count * max_frames / total))
+                if total > max_frames
+                else count
+            )
             out.append(_stride_pick(global_idxs, keep))
         offset += count
     return out
 
 
-def md_composite_trajectory(topology_path, segments, coordinate_path, design,
-                            max_frames: int = 200, stride: int | None = None) -> dict:
+def md_composite_trajectory(
+    topology_path,
+    segments,
+    coordinate_path,
+    design,
+    max_frames: int = 200,
+    stride: int | None = None,
+) -> dict:
     """Composite scrub-able NAMD trajectory for a trajectory keyframe.
 
     ``segments`` = ordered ``[(name, stage, dcd_path), …]`` (every segment that has
@@ -1172,8 +1444,9 @@ def md_composite_trajectory(topology_path, segments, coordinate_path, design,
     # with_termini: recover each strand's 5'-terminal base (no P atom) so the scrubbable
     # trajectory positions + colours every nucleotide, matching the flexibility map + the
     # ghost-free render (single-stranded regions no longer draw phantom bases).
-    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
-                              with_termini=True)
+    ctx = _build_md_nadoc_ctx(
+        topology_path, seg_paths, coordinate_path, design, with_termini=True
+    )
     p_order = ctx["p_order"]
     term_specs = ctx.get("term_specs") or []
     # keys = P-order nucleotides THEN the recovered 5' termini (frame floats follow the
@@ -1187,8 +1460,14 @@ def md_composite_trajectory(topology_path, segments, coordinate_path, design,
         seg_counts.append(len(su.trajectory))
     total = sum(seg_counts)
     if total == 0:
-        return {"n_frames": 0, "n_nucleotides": len(key_list),
-                "keys": key_list, "frames": [], "stages": [], "markers": []}
+        return {
+            "n_frames": 0,
+            "n_nucleotides": len(key_list),
+            "keys": key_list,
+            "frames": [],
+            "stages": [],
+            "markers": [],
+        }
 
     seg_picked = _composite_indices(seg_counts, max_frames, stride)
     out_frames: list[list[float]] = []
@@ -1200,29 +1479,54 @@ def md_composite_trajectory(topology_path, segments, coordinate_path, design,
             continue
         if out_frames:
             run_no += 1
-            markers.append({"frame": len(out_frames), "label": f"→ {name}",
-                            "kind": stage or "md", "stage_name": name})
-        out_stages.append({"name": name, "kind": stage or "md", "n_frames": len(picked)})
+            markers.append(
+                {
+                    "frame": len(out_frames),
+                    "label": f"→ {name}",
+                    "kind": stage or "md",
+                    "stage_name": name,
+                }
+            )
+        out_stages.append(
+            {"name": name, "kind": stage or "md", "n_frames": len(picked)}
+        )
         for gidx in picked:
-            p_nm, normals, tpos, tnorm = _extract_md_nadoc_frame(ctx, gidx, with_termini=True)
+            p_nm, normals, tpos, tnorm = _extract_md_nadoc_frame(
+                ctx, gidx, with_termini=True
+            )
             flat: list[float] = []
             for i in range(len(p_order)):
                 flat.extend((float(p_nm[i, 0]), float(p_nm[i, 1]), float(p_nm[i, 2])))
                 if normals is not None:
-                    flat.extend((float(normals[i, 0]), float(normals[i, 1]), float(normals[i, 2])))
+                    flat.extend(
+                        (
+                            float(normals[i, 0]),
+                            float(normals[i, 1]),
+                            float(normals[i, 2]),
+                        )
+                    )
                 else:
                     flat.extend((0.0, 0.0, 1.0))
             for j in range(len(term_specs)):
                 if j < len(tpos):
-                    flat.extend((float(tpos[j, 0]), float(tpos[j, 1]), float(tpos[j, 2])))
-                    flat.extend((float(tnorm[j, 0]), float(tnorm[j, 1]), float(tnorm[j, 2])))
+                    flat.extend(
+                        (float(tpos[j, 0]), float(tpos[j, 1]), float(tpos[j, 2]))
+                    )
+                    flat.extend(
+                        (float(tnorm[j, 0]), float(tnorm[j, 1]), float(tnorm[j, 2]))
+                    )
                 else:
                     flat.extend((0.0, 0.0, 0.0, 0.0, 0.0, 1.0))
             out_frames.append(flat)
 
-    return {"n_frames": len(out_frames), "n_nucleotides": len(key_list),
-            "keys": key_list, "frames": out_frames,
-            "stages": out_stages, "markers": markers}
+    return {
+        "n_frames": len(out_frames),
+        "n_nucleotides": len(key_list),
+        "keys": key_list,
+        "frames": out_frames,
+        "stages": out_stages,
+        "markers": markers,
+    }
 
 
 # ── Occupancy clouds ─────────────────────────────────────────────────────────────
@@ -1256,13 +1560,24 @@ def md_production_segments(segments) -> list[int]:
     silently clustering its restraint ladder would answer a different question than the
     one asked.
     """
-    return [i for i, seg in enumerate(segments)
-            if _MD_PRODUCTION_MARKER in str(seg[1]).lower()]
+    return [
+        i
+        for i, seg in enumerate(segments)
+        if _MD_PRODUCTION_MARKER in str(seg[1]).lower()
+    ]
 
 
-def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: int = 200,
-                 n_clusters: int = 0, basis: str = "nt", selection=None,
-                 fit: str = "selection") -> dict:
+def md_occupancy(
+    topology_path,
+    segments,
+    coordinate_path,
+    design,
+    max_frames: int = 200,
+    n_clusters: int = 0,
+    basis: str = "nt",
+    selection=None,
+    fit: str = "selection",
+) -> dict:
     """Top-N most likely CONFIGURATIONS of a NAMD ensemble.
 
     The NAMD counterpart of :func:`backend.core.oxdna_occupancy.production_occupancy`.
@@ -1294,11 +1609,16 @@ def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: i
     import MDAnalysis as mda  # type: ignore  # noqa: PLC0415  (heavy; lazy like its siblings)
 
     from backend.core.occupancy_core import (
-        apply_fit_plan, occupancy_clusters, occupancy_fit_plan, resolve_selection_keys)
+        apply_fit_plan,
+        occupancy_clusters,
+        occupancy_fit_plan,
+        resolve_selection_keys,
+    )
 
     seg_paths = [s[2] for s in segments]
-    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
-                              with_termini=True)
+    ctx = _build_md_nadoc_ctx(
+        topology_path, seg_paths, coordinate_path, design, with_termini=True
+    )
     p_order = ctx["p_order"]
     term_specs = ctx.get("term_specs") or []
     key_list = [tuple(k) for k in p_order] + [tuple(s[0]) for s in term_specs]
@@ -1315,9 +1635,11 @@ def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: i
     # Production dynamics only, and no fallback: see md_production_segments.
     free_idx = md_production_segments(segments)
     if not free_idx:
-        return {"ready": False,
-                "reason": "no production run yet — occupancy needs free dynamics, and this "
-                          "job has only equilibration/relaxation segments"}
+        return {
+            "ready": False,
+            "reason": "no production run yet — occupancy needs free dynamics, and this "
+            "job has only equilibration/relaxation segments",
+        }
 
     # Global frame indices belonging to the sampling segments only.
     starts, at = [], 0
@@ -1351,13 +1673,23 @@ def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: i
     kept: list[int] = []
     frames_out: dict[int, list[float]] = {}
     for gidx in picked:
-        p_nm, normals, tpos, tnorm = _extract_md_nadoc_frame(ctx, gidx, with_termini=True)
+        p_nm, normals, tpos, tnorm = _extract_md_nadoc_frame(
+            ctx, gidx, with_termini=True
+        )
         if p_nm is None or len(p_nm) != n_p:
             continue
-        pos = np.vstack([p_nm, tpos]) if term_specs and tpos is not None and len(tpos) else p_nm
+        pos = (
+            np.vstack([p_nm, tpos])
+            if term_specs and tpos is not None and len(tpos)
+            else p_nm
+        )
         if len(pos) != len(key_list):
             continue
-        nrm = normals if normals is not None and len(normals) == n_p else np.tile([0.0, 0.0, 1.0], (n_p, 1))
+        nrm = (
+            normals
+            if normals is not None and len(normals) == n_p
+            else np.tile([0.0, 0.0, 1.0], (n_p, 1))
+        )
         if term_specs and tnorm is not None and len(tnorm) == len(term_specs):
             nrm = np.vstack([nrm, tnorm])
         elif term_specs:
@@ -1375,17 +1707,20 @@ def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: i
         frames_out[gidx] = flat
 
     if len(rows) < 20:
-        return {"ready": False,
-                "reason": f"need at least 20 frames to cluster (have {len(rows)})",
-                "n_frames": len(rows)}
+        return {
+            "ready": False,
+            "reason": f"need at least 20 frames to cluster (have {len(rows)})",
+            "n_frames": len(rows),
+        }
 
-    res = occupancy_clusters(apply_fit_plan(np.array(rows, dtype=float), plan),
-                             n_clusters=n_clusters)
+    res = occupancy_clusters(
+        apply_fit_plan(np.array(rows, dtype=float), plan), n_clusters=n_clusters
+    )
     if not res.get("ready"):
         return res
 
     res["method"] = "pca"
-    res["basis"] = "nt"          # MD has one site per nucleotide; no bp-midpoint basis yet
+    res["basis"] = "nt"  # MD has one site per nucleotide; no bp-midpoint basis yet
     res["basis_requested"] = basis
     res["scoped"] = bool(is_scoped)
     res["fit"] = plan["fit"]

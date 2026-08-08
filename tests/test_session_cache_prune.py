@@ -29,8 +29,8 @@ def _prune_in(tmp_path, monkeypatch, **kw):
 def test_drops_docs_older_than_max_age(tmp_path, monkeypatch):
     _prune_in(tmp_path, monkeypatch, _MAX_AGE_DAYS=7, _MAX_DOCS=1000)
     now = 1_000_000.0
-    _make_doc(tmp_path, "fresh", now - 1 * 86400)      # 1 day old — keep
-    _make_doc(tmp_path, "stale", now - 30 * 86400)     # 30 days old — drop
+    _make_doc(tmp_path, "fresh", now - 1 * 86400)  # 1 day old — keep
+    _make_doc(tmp_path, "stale", now - 30 * 86400)  # 30 days old — drop
 
     removed = session_cache._prune(now=now)
 
@@ -58,8 +58,8 @@ def test_count_cap_keeps_freshest(tmp_path, monkeypatch):
 def test_age_and_count_compose(tmp_path, monkeypatch):
     _prune_in(tmp_path, monkeypatch, _MAX_AGE_DAYS=7, _MAX_DOCS=1)
     now = 1_000_000.0
-    _make_doc(tmp_path, "a", now - 1 * 3600)    # fresh, freshest
-    _make_doc(tmp_path, "b", now - 2 * 3600)    # fresh, but over count cap
+    _make_doc(tmp_path, "a", now - 1 * 3600)  # fresh, freshest
+    _make_doc(tmp_path, "b", now - 2 * 3600)  # fresh, but over count cap
     _make_doc(tmp_path, "c", now - 99 * 86400)  # stale → age-dropped first
 
     removed = session_cache._prune(now=now)
@@ -94,7 +94,7 @@ def test_disable_env_skips_start_and_stop(tmp_path, monkeypatch):
 
     session_cache.start(tmp_path)
 
-    assert session_cache._session_dir is None      # never bound → nothing persists
-    assert session_cache._thread is None           # no flush thread spawned
+    assert session_cache._session_dir is None  # never bound → nothing persists
+    assert session_cache._thread is None  # no flush thread spawned
     assert not (tmp_path / ".session").exists()
-    session_cache.stop()                            # must not raise (guards on None dir)
+    session_cache.stop()  # must not raise (guards on None dir)

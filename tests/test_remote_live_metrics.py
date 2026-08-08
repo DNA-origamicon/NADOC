@@ -17,12 +17,25 @@ BENCH = "Info: Benchmark time: 8 CPUs 0.0112177 s/step 0.0324585 days/ns 0 MB me
 
 # NAMD ENERGY row, built column-by-column so the indices under test are explicit.
 _COLS = [
-    ("TS", 1000), ("BOND", 926.7192), ("ANGLE", 2418.8493), ("DIHED", 3229.9065),
-    ("IMPRP", 46.1629), ("ELECT", -267647.4928), ("VDW", 23796.9782),
-    ("BOUNDARY", 0.0), ("MISC", 0.0), ("KINETIC", 56166.6602),
-    ("TOTAL", -199108.1187), ("TEMP", 300.6518), ("POTENTIAL", -255274.7789),
-    ("TOTAL3", -199085.9257), ("TEMPAVG", 299.1), ("PRESSURE", -14.0723),
-    ("GPRESSURE", -13.5), ("VOLUME", 614380.7687), ("PRESSAVG", 1.1687),
+    ("TS", 1000),
+    ("BOND", 926.7192),
+    ("ANGLE", 2418.8493),
+    ("DIHED", 3229.9065),
+    ("IMPRP", 46.1629),
+    ("ELECT", -267647.4928),
+    ("VDW", 23796.9782),
+    ("BOUNDARY", 0.0),
+    ("MISC", 0.0),
+    ("KINETIC", 56166.6602),
+    ("TOTAL", -199108.1187),
+    ("TEMP", 300.6518),
+    ("POTENTIAL", -255274.7789),
+    ("TOTAL3", -199085.9257),
+    ("TEMPAVG", 299.1),
+    ("PRESSURE", -14.0723),
+    ("GPRESSURE", -13.5),
+    ("VOLUME", 614380.7687),
+    ("PRESSAVG", 1.1687),
     ("GPRESSAVG", 1.5),
 ]
 ENERGY = "ENERGY: " + " ".join(str(v) for _, v in _COLS)
@@ -83,15 +96,18 @@ def test_step_from_restart_xsc(tmp_path):
 
 def test_collect_picks_the_newest_log_and_writes_atomically(tmp_path):
     import os, time
+
     (tmp_path / "output").mkdir()
-    old = tmp_path / "00_reseed.log"; old.write_text(ENERGY)
-    new = tmp_path / "01_production.log"; new.write_text(BENCH + "\n" + ENERGY)
+    old = tmp_path / "00_reseed.log"
+    old.write_text(ENERGY)
+    new = tmp_path / "01_production.log"
+    new.write_text(BENCH + "\n" + ENERGY)
     os.utime(old, (time.time() - 500, time.time() - 500))
     data = rlm.collect(str(tmp_path))
     assert data["segment"] == "01_production"
     assert "ns_per_day" in data
 
-    rlm.main(["prog", str(tmp_path)])          # interval 0 -> one pass
+    rlm.main(["prog", str(tmp_path)])  # interval 0 -> one pass
     out = json.loads((tmp_path / "output" / "live_metrics.json").read_text())
     assert out["segment"] == "01_production"
     assert not (tmp_path / "output" / "live_metrics.json.tmp").exists()
@@ -101,8 +117,12 @@ def test_module_is_python36_safe():
     # Check CODE lines only — the module docstring names these very constructs in
     # order to warn about them.
     code = [ln.strip() for ln in Path(rlm.__file__).read_text().splitlines()]
-    assert not any(ln.startswith("from __future__") for ln in code)   # SyntaxError on 3.6
-    assert not any(ln.startswith(("from dataclasses", "import dataclasses")) for ln in code)
+    assert not any(
+        ln.startswith("from __future__") for ln in code
+    )  # SyntaxError on 3.6
+    assert not any(
+        ln.startswith(("from dataclasses", "import dataclasses")) for ln in code
+    )
     assert not any(ln.startswith("@dataclass") for ln in code)
     for banned in ("import numpy", "import scipy", "import MDAnalysis"):
-        assert not any(ln.startswith(banned) for ln in code)          # stdlib only
+        assert not any(ln.startswith(banned) for ln in code)  # stdlib only

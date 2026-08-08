@@ -24,8 +24,8 @@ import pytest
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
 EXAMPLES = pathlib.Path(__file__).parent.parent / "Examples" / "cadnano"
-HB6_CN   = EXAMPLES / "Honeycomb_6hb_test1.json"
-HB18_CN  = EXAMPLES / "18hb_symm_p7249_21_even_spacing_sequential_coloring.json"
+HB6_CN = EXAMPLES / "Honeycomb_6hb_test1.json"
+HB18_CN = EXAMPLES / "18hb_symm_p7249_21_even_spacing_sequential_coloring.json"
 HB6_NADOC = (
     pathlib.Path(__file__).parent.parent
     / "Examples"
@@ -39,6 +39,7 @@ from tests.test_helix_neighbors import _assert_neighbour_geometry  # noqa: E402
 
 # ── Load helpers ──────────────────────────────────────────────────────────────
 
+
 def _load_cn(path: pathlib.Path) -> dict:
     with open(path) as f:
         return json.load(f)
@@ -46,6 +47,7 @@ def _load_cn(path: pathlib.Path) -> dict:
 
 def _import(path: pathlib.Path):
     from backend.core.cadnano import import_cadnano
+
     design, _ = import_cadnano(_load_cn(path))
     return design
 
@@ -62,13 +64,13 @@ def _import(path: pathlib.Path):
 # Expected: pass.  If the importer skips or duplicates vstrands this fails.
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_6hb_helix_count():
     """6HB import produces 6 helices."""
     from backend.core.models import LatticeType
+
     design = _import(HB6_CN)
-    assert len(design.helices) == 6, (
-        f"Expected 6 helices, got {len(design.helices)}"
-    )
+    assert len(design.helices) == 6, f"Expected 6 helices, got {len(design.helices)}"
     assert design.lattice_type == LatticeType.HONEYCOMB
 
 
@@ -79,6 +81,7 @@ def test_6hb_helix_count():
 # Hypothesis: Each helix ID is "h_XY_{row}_{col}" using the raw caDNAno
 # row/col values, preserving the coordinate for roundtrip export.
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_6hb_helix_ids():
     """Helix IDs use NADOC h_XY_{nr}_{nc} format (0-based, normalised coords)."""
@@ -98,6 +101,7 @@ def test_6hb_helix_ids():
 # Hypothesis: All imported helices should have bp_start=0 and length_bp equal
 # to the number of entries in the caDNAno scaf array (42 for the 6HB).
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_6hb_helix_bp_start_and_length():
     """bp_start=0 and length_bp matches caDNAno array length."""
@@ -120,9 +124,11 @@ def test_6hb_helix_bp_start_and_length():
 # (2.25 nm) and at uniform angular gaps (120° for interior helices).
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_6hb_neighbour_geometry():
     """6HB imported design passes nearest-neighbour geometry check."""
     from backend.core.constants import HONEYCOMB_HELIX_SPACING
+
     design = _import(HB6_CN)
     _assert_neighbour_geometry(
         design,
@@ -141,9 +147,11 @@ def test_6hb_neighbour_geometry():
 # crossovers), so there should be 6 scaffold strands (one per helix).
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_6hb_scaffold_strand_count():
     """6HB with no crossovers produces 6 scaffold strands."""
     from backend.core.models import StrandType
+
     design = _import(HB6_CN)
     scaf_strands = [s for s in design.strands if s.strand_type == StrandType.SCAFFOLD]
     assert len(scaf_strands) == 6, (
@@ -158,14 +166,14 @@ def test_6hb_scaffold_strand_count():
 # Hypothesis: 6HB test has 6 staple strands (one per helix, antiparallel).
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_6hb_staple_strand_count():
     """6HB produces 6 staple strands."""
     from backend.core.models import StrandType
+
     design = _import(HB6_CN)
     stap_strands = [s for s in design.strands if s.strand_type == StrandType.STAPLE]
-    assert len(stap_strands) == 6, (
-        f"Expected 6 staple strands, got {len(stap_strands)}"
-    )
+    assert len(stap_strands) == 6, f"Expected 6 staple strands, got {len(stap_strands)}"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -176,9 +184,11 @@ def test_6hb_staple_strand_count():
 # vstrands produce REVERSE scaffold domains.
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_6hb_scaffold_directions():
     """Scaffold domain directions are consistent (all strands have single direction)."""
     from backend.core.models import StrandType
+
     design = _import(HB6_CN)
     # Each single-domain strand has exactly one direction; just check no domain
     # has a zero-length range (start_bp == end_bp).
@@ -198,6 +208,7 @@ def test_6hb_scaffold_directions():
 # Hypothesis: In the 6HB test (no crossovers), each strand has exactly one
 # domain spanning the full 42-bp array (bp 0..41).
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_6hb_domain_spans_full_helix():
     """Each strand has one domain spanning the full bp array."""
@@ -221,6 +232,7 @@ def test_6hb_domain_spans_full_helix():
 # design.crossovers should be empty.
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_6hb_no_crossovers():
     """6HB test (no inter-helix links) produces zero Crossover objects."""
     design = _import(HB6_CN)
@@ -237,14 +249,17 @@ def test_6hb_no_crossovers():
 # a non-None color field formatted as "#RRGGBB".
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_6hb_stap_colors_imported():
     """Staple colors from stap_colors are imported as #RRGGBB strings."""
     from backend.core.models import StrandType
+
     design = _import(HB6_CN)
 
     # 6HB has one stap_color entry per vstrand; each has color > 0
     colored = [
-        s for s in design.strands
+        s
+        for s in design.strands
         if s.strand_type == StrandType.STAPLE and s.color is not None
     ]
     assert len(colored) > 0, "No staple strands have a color assigned"
@@ -261,6 +276,7 @@ def test_6hb_stap_colors_imported():
 # Purpose: Produce a human-readable ASCII figure of the 6HB helix positions
 # to confirm spatial layout is correct (run with -s to see output).
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_6hb_geometry_figure(capsys):
     """Print ASCII figure of 6HB helix XY positions for visual inspection."""
@@ -282,9 +298,11 @@ def test_6hb_geometry_figure(capsys):
 # EXPERIMENT 12 — Strand figure: domain summary (diagnostic)
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 def test_6hb_strand_figure(capsys):
     """Print strand and domain summary for visual inspection."""
     from backend.core.models import StrandType
+
     design = _import(HB6_CN)
 
     print("\n" + "═" * 60)
@@ -312,6 +330,7 @@ def test_6hb_strand_figure(capsys):
 # pairwise distances between neighbours should match.
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_6hb_matches_nadoc_reference_geometry():
     """Imported 6HB has same pairwise neighbour distances as NADOC reference."""
     from backend.core.models import Design as D
@@ -323,14 +342,11 @@ def test_6hb_matches_nadoc_reference_geometry():
 
     def _neighbour_pairs(design, spacing, tol=0.02):
         """Return set of neighbour pairs by sorted distance ≤ spacing+tol."""
-        xy = {
-            h.id: (h.axis_start.x, h.axis_start.y)
-            for h in design.helices
-        }
+        xy = {h.id: (h.axis_start.x, h.axis_start.y) for h in design.helices}
         pairs = set()
         ids = list(xy)
         for i, a in enumerate(ids):
-            for b in ids[i + 1:]:
+            for b in ids[i + 1 :]:
                 ax, ay = xy[a]
                 bx, by = xy[b]
                 dist = math.hypot(bx - ax, by - ay)
@@ -364,12 +380,14 @@ def test_6hb_matches_nadoc_reference_geometry():
 # appear as helices.  The single scaffold strand should be 7249 nt long.
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.skipif(not HB18_CN.exists(), reason="18HB file not present")
 def test_18hb_helix_count():
     """18HB import: 18 helices (empty placeholder vstrands are skipped)."""
     data = _load_cn(HB18_CN)
     active = sum(
-        1 for v in data["vstrands"]
+        1
+        for v in data["vstrands"]
         if any(nh != -1 or ph != -1 for ph, pp, nh, np_ in v["scaf"])
     )
     design = _import(HB18_CN)
@@ -382,6 +400,7 @@ def test_18hb_helix_count():
 def test_18hb_scaffold_length():
     """18HB scaffold strand totals 7249 nucleotides (M13 length)."""
     from backend.core.models import StrandType
+
     design = _import(HB18_CN)
 
     scaffolds = [s for s in design.strands if s.strand_type == StrandType.SCAFFOLD]
@@ -396,6 +415,7 @@ def test_18hb_scaffold_length():
 def test_18hb_neighbour_geometry():
     """18HB imported design passes nearest-neighbour geometry check."""
     from backend.core.constants import HONEYCOMB_HELIX_SPACING
+
     design = _import(HB18_CN)
     _assert_neighbour_geometry(
         design,
@@ -421,9 +441,11 @@ def test_18hb_neighbour_geometry():
 # are silently skipped but a warning is returned listing the count.
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _make_circular_cadnano():
     """Build a minimal caDNAno JSON with one linear staple and one circular staple."""
     from backend.core.cadnano import import_cadnano
+
     N = 42
     # Two vstrands: one pair. num=0 FORWARD, num=1 REVERSE.
     scaf0 = [[-1, -1, -1, -1]] * N
@@ -446,12 +468,26 @@ def _make_circular_cadnano():
     data = {
         "name": "circular_test",
         "vstrands": [
-            {"num": 0, "row": 0, "col": 0,
-             "scaf": scaf0, "stap": stap0,
-             "loop": [0] * N, "skip": [0] * N, "stap_colors": []},
-            {"num": 1, "row": 0, "col": 1,
-             "scaf": scaf1, "stap": stap1,
-             "loop": [0] * N, "skip": [0] * N, "stap_colors": []},
+            {
+                "num": 0,
+                "row": 0,
+                "col": 0,
+                "scaf": scaf0,
+                "stap": stap0,
+                "loop": [0] * N,
+                "skip": [0] * N,
+                "stap_colors": [],
+            },
+            {
+                "num": 1,
+                "row": 0,
+                "col": 1,
+                "scaf": scaf1,
+                "stap": stap1,
+                "loop": [0] * N,
+                "skip": [0] * N,
+                "stap_colors": [],
+            },
         ],
     }
     return import_cadnano(data)
@@ -467,6 +503,7 @@ def test_circular_strand_warning_issued():
 def test_circular_strand_not_imported():
     """A circular strand is not imported as a NADOC strand."""
     from backend.core.models import StrandType
+
     design, warnings = _make_circular_cadnano()
     # Only the linear scaffold should be imported; circular staple is dropped.
     assert len(design.strands) == 1
@@ -499,7 +536,9 @@ def test_circular_strand_count_in_warning():
 
 _STAP_ONLY_HINGE_PATH = (
     pathlib.Path(__file__).parent.parent
-    / "Examples" / "cadnano" / "Ultimate Polymer Hinge 191016.json"
+    / "Examples"
+    / "cadnano"
+    / "Ultimate Polymer Hinge 191016.json"
 )
 
 
@@ -520,7 +559,7 @@ def _make_stap_only_cadnano():
     # staple: vstrand 0 bp 15 → vstrand 2 bp 15 (cross-helix)
     for bp in range(16):
         stap0[bp] = [-1, -1, 0, bp + 1]
-    stap0[0] = [-1, -1, 0, 1]   # 5' end
+    stap0[0] = [-1, -1, 0, 1]  # 5' end
     stap0[15] = [-1, -1, 2, 15]  # crosses to vstrand 2
 
     # vstrand 2: FORWARD at row=0, col=2.  NO scaffold, only staple.
@@ -538,12 +577,36 @@ def _make_stap_only_cadnano():
 
     data = {
         "vstrands": [
-            {"num": 0, "row": 0, "col": 0, "scaf": scaf0, "stap": stap0,
-             "loop": [0] * N, "skip": [0] * N, "stap_colors": []},
-            {"num": 2, "row": 0, "col": 2, "scaf": scaf2, "stap": stap2,
-             "loop": [0] * N, "skip": [0] * N, "stap_colors": []},
-            {"num": 3, "row": 0, "col": 3, "scaf": scaf3, "stap": stap3,
-             "loop": [0] * N, "skip": [0] * N, "stap_colors": []},
+            {
+                "num": 0,
+                "row": 0,
+                "col": 0,
+                "scaf": scaf0,
+                "stap": stap0,
+                "loop": [0] * N,
+                "skip": [0] * N,
+                "stap_colors": [],
+            },
+            {
+                "num": 2,
+                "row": 0,
+                "col": 2,
+                "scaf": scaf2,
+                "stap": stap2,
+                "loop": [0] * N,
+                "skip": [0] * N,
+                "stap_colors": [],
+            },
+            {
+                "num": 3,
+                "row": 0,
+                "col": 3,
+                "scaf": scaf3,
+                "stap": stap3,
+                "loop": [0] * N,
+                "skip": [0] * N,
+                "stap_colors": [],
+            },
         ],
     }
     return import_cadnano(data)
@@ -559,12 +622,15 @@ def test_stap_only_vstrand_not_dropped():
 def test_stap_only_vstrand_helix_has_no_scaffold():
     """The imported stap-only helix has no scaffold strand covering it."""
     from backend.core.models import StrandType
+
     design, _ = _make_stap_only_cadnano()
     stap_only_helices = [
-        h for h in design.helices
+        h
+        for h in design.helices
         if not any(
             d.helix_id == h.id
-            for s in design.strands if s.strand_type == StrandType.SCAFFOLD
+            for s in design.strands
+            if s.strand_type == StrandType.SCAFFOLD
             for d in s.domains
         )
     ]
@@ -594,9 +660,11 @@ def test_ultimate_polymer_hinge_imports_without_error():
 
     # At least 12 arm helices have no scaffold coverage
     from backend.core.models import StrandType
+
     scaf_helix_ids = {
         d.helix_id
-        for s in design.strands if s.strand_type == StrandType.SCAFFOLD
+        for s in design.strands
+        if s.strand_type == StrandType.SCAFFOLD
         for d in s.domains
     }
     stap_only = [h for h in design.helices if h.id not in scaf_helix_ids]

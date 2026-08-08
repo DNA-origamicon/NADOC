@@ -124,8 +124,16 @@ def _install_fakes(
     )
 
     async def fake_namd(
-        namd_bin, conf_name, package_dir, log_path, threads, devices, job_id=None,
-        on_spawn=None, on_tick=None, **_kw
+        namd_bin,
+        conf_name,
+        package_dir,
+        log_path,
+        threads,
+        devices,
+        job_id=None,
+        on_spawn=None,
+        on_tick=None,
+        **_kw,
     ):
         if recorder is not None:
             recorder.append(conf_name)
@@ -179,9 +187,11 @@ def test_wc_only_breach_warns_and_continues(
         nr,
         "run_health_check",
         lambda *a, **k: HealthCheckResult(
-            passed=False, blocking=False,
+            passed=False,
+            blocking=False,
             reason="WC ref-relative 78.4% < 80.0%",
-            c1_paired_fraction=0.99, wc_ref_relative_fraction=0.784,
+            c1_paired_fraction=0.99,
+            wc_ref_relative_fraction=0.784,
         ),
     )
 
@@ -208,9 +218,11 @@ def test_c1_breach_warns_and_continues(
         nr,
         "run_health_check",
         lambda *a, **k: HealthCheckResult(
-            passed=False, blocking=True,
+            passed=False,
+            blocking=True,
             reason="C1' paired 80.0% < 90.0%",
-            c1_paired_fraction=0.80, wc_ref_relative_fraction=0.99,
+            c1_paired_fraction=0.80,
+            wc_ref_relative_fraction=0.99,
         ),
     )
 
@@ -272,8 +284,16 @@ def _install_cell_shrink_fake(
     monkeypatch.setattr(nr, "find_namd", lambda: "/fake/namd3")
 
     async def fake_namd(
-        namd_bin, conf_name, package_dir, log_path, threads, devices, job_id=None,
-        on_spawn=None, on_tick=None, **_kw
+        namd_bin,
+        conf_name,
+        package_dir,
+        log_path,
+        threads,
+        devices,
+        job_id=None,
+        on_spawn=None,
+        on_tick=None,
+        **_kw,
     ):
         if recorder is not None:
             recorder.append(conf_name)
@@ -349,8 +369,16 @@ def _install_host_oom_fake(
     monkeypatch.setattr(nr, "find_namd", lambda: "/fake/namd3")
 
     async def fake_namd(
-        namd_bin, conf_name, package_dir, log_path, threads, devices, job_id=None,
-        on_spawn=None, on_tick=None, **_kw
+        namd_bin,
+        conf_name,
+        package_dir,
+        log_path,
+        threads,
+        devices,
+        job_id=None,
+        on_spawn=None,
+        on_tick=None,
+        **_kw,
     ):
         if recorder is not None:
             recorder.append(conf_name)
@@ -412,13 +440,16 @@ def test_host_oom_gives_up_after_resume_cap(
 
 # ── instability (RATTLE) auto-soften-and-resume ────────────────────────────────
 
+
 def _make_confs_hard(job: MdJob, tmp_path: Path) -> None:
     """Give every segment conf the fast ladder's rigidBonds all + 4 fs, so the softener
     has something to flip (the base _seg_conf_text has neither)."""
     pkg = job.package_dir(tmp_path)
     for seg in job.segments:
         conf = pkg / f"{seg.name}.conf"
-        conf.write_text(conf.read_text() + "rigidBonds         all\ntimestep           4\n")
+        conf.write_text(
+            conf.read_text() + "rigidBonds         all\ntimestep           4\n"
+        )
 
 
 def _install_instability_fake(
@@ -429,8 +460,16 @@ def _install_instability_fake(
     monkeypatch.setattr(nr, "find_namd", lambda: "/fake/namd3")
 
     async def fake_namd(
-        namd_bin, conf_name, package_dir, log_path, threads, devices, job_id=None,
-        on_spawn=None, on_tick=None, **_kw
+        namd_bin,
+        conf_name,
+        package_dir,
+        log_path,
+        threads,
+        devices,
+        job_id=None,
+        on_spawn=None,
+        on_tick=None,
+        **_kw,
     ):
         if recorder is not None:
             recorder.append(conf_name)
@@ -470,7 +509,7 @@ def test_instability_softens_ladder_and_resumes(
     assert "soft" in (final.error or "").lower()
 
     pkg = job.package_dir(tmp_path)
-    for seg in job.segments:               # failing + every later segment softened
+    for seg in job.segments:  # failing + every later segment softened
         text = (pkg / f"{seg.name}.conf").read_text()
         assert "rigidBonds         none" in text
         assert "timestep           1" in text
@@ -503,7 +542,7 @@ def test_instability_on_an_already_soft_segment_fails_without_looping(
     """If a conf is ALREADY soft (no rigidBonds all) and STILL blows up, there is nothing
     to soften → the job fails (seed genuinely un-relaxable) rather than resuming forever.
     The resume counter is never bumped (softening rewrote nothing)."""
-    job = _setup_package(tmp_path)          # base confs have no rigidBonds all
+    job = _setup_package(tmp_path)  # base confs have no rigidBonds all
     _mark_min_done(job, tmp_path)
     job.save(tmp_path)
     _install_instability_fake(monkeypatch)
@@ -542,16 +581,29 @@ def test_rerun_on_completed_job_is_idempotent(
 # (patch-grid x atom-density) geometries.  run_job probes for it and reroutes a
 # genuinely-unsafe package to the CPU build instead of crashing.  See LESSONS K2.
 
+
 def _install_gpu_fakes(monkeypatch, gpu_safe: bool, launched: list[tuple[str, str]]):
     """CUDA build resolved for the job; probe returns *gpu_safe*; record what ran."""
     _install_fakes(monkeypatch)
-    monkeypatch.setattr(nr, "resolve_namd_launch", lambda *a, **k: ("/fake/cuda-namd3", "0"))
+    monkeypatch.setattr(
+        nr, "resolve_namd_launch", lambda *a, **k: ("/fake/cuda-namd3", "0")
+    )
     monkeypatch.setattr(nr, "namd_is_cuda_build", lambda b: "cuda" in b)
     monkeypatch.setattr(nr, "find_namd", lambda **k: "/fake/cpu-namd3")
     monkeypatch.setattr(nr, "gpu_tilelist_probe", lambda *a, **k: gpu_safe)
 
-    async def fake_namd(namd_bin, conf_name, package_dir, log_path, threads, devices,
-                        job_id=None, on_spawn=None, on_tick=None, **_kw):
+    async def fake_namd(
+        namd_bin,
+        conf_name,
+        package_dir,
+        log_path,
+        threads,
+        devices,
+        job_id=None,
+        on_spawn=None,
+        on_tick=None,
+        **_kw,
+    ):
         launched.append((namd_bin, devices))
         if on_spawn is not None:
             on_spawn(4242)
@@ -634,14 +686,27 @@ def test_cpu_job_never_pays_for_the_probe(
     job.save(tmp_path)
     launched: list[tuple[str, str]] = []
     _install_fakes(monkeypatch)
-    monkeypatch.setattr(nr, "resolve_namd_launch", lambda *a, **k: ("/fake/cpu-namd3", ""))
+    monkeypatch.setattr(
+        nr, "resolve_namd_launch", lambda *a, **k: ("/fake/cpu-namd3", "")
+    )
 
     probed: list[int] = []
-    monkeypatch.setattr(nr, "gpu_tilelist_probe",
-                        lambda *a, **k: probed.append(1) or True)
+    monkeypatch.setattr(
+        nr, "gpu_tilelist_probe", lambda *a, **k: probed.append(1) or True
+    )
 
-    async def fake_namd(namd_bin, conf_name, package_dir, log_path, threads, devices,
-                        job_id=None, on_spawn=None, on_tick=None, **_kw):
+    async def fake_namd(
+        namd_bin,
+        conf_name,
+        package_dir,
+        log_path,
+        threads,
+        devices,
+        job_id=None,
+        on_spawn=None,
+        on_tick=None,
+        **_kw,
+    ):
         launched.append((namd_bin, devices))
         out = package_dir / "output"
         out.mkdir(exist_ok=True)

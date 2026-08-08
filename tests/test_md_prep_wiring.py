@@ -19,11 +19,20 @@ from backend.core.namd_solvate import _Water, _run_watched
 from tests.conftest import make_6hb_design, make_minimal_design
 
 
-def _fake_solvate(_pdb_text, _padding_nm, _tmpdir, progress=None, *,
-                  water_shell_nm=None, box_mode=None):
+def _fake_solvate(
+    _pdb_text,
+    _padding_nm,
+    _tmpdir,
+    progress=None,
+    *,
+    water_shell_nm=None,
+    box_mode=None,
+):
     """Stand-in for gmx solvation: emit the solvate phase, return dummy waters."""
     ns._emit(progress, "solvate", None, "fake solvate")
-    waters = [_Water(i * 0.31, 0, 0, i * 0.31, 0.1, 0, i * 0.31, -0.1, 0) for i in range(8000)]
+    waters = [
+        _Water(i * 0.31, 0, 0, i * 0.31, 0.1, 0, i * 0.31, -0.1, 0) for i in range(8000)
+    ]
     return waters, (12.0, 12.0, 12.0), _pdb_text
 
 
@@ -33,8 +42,10 @@ def test_progress_threads_through_solvation(monkeypatch):
 
     seen: list[str] = []
     ns.build_namd_solvated_package(
-        design, progress=lambda k, f, m="": seen.append(k),
-        ion_conc_mM=0.0, mg_conc_mM=0.0,
+        design,
+        progress=lambda k, f, m="": seen.append(k),
+        ion_conc_mM=0.0,
+        mg_conc_mM=0.0,
     )
 
     # Every solvation phase the package builder owns must report at least once,
@@ -92,10 +103,14 @@ def test_progress_feeds_tracker_monotonic(monkeypatch):
         tracker.report(key, frac, msg)
         fractions.append(tracker.snapshot()["fraction"])
 
-    ns.build_namd_solvated_package(design, progress=report, ion_conc_mM=0.0, mg_conc_mM=0.0)
+    ns.build_namd_solvated_package(
+        design, progress=report, ion_conc_mM=0.0, mg_conc_mM=0.0
+    )
 
     assert fractions, "expected at least one progress report"
-    assert all(b >= a - 1e-9 for a, b in zip(fractions, fractions[1:])), "fraction regressed"
+    assert all(b >= a - 1e-9 for a, b in zip(fractions, fractions[1:])), (
+        "fraction regressed"
+    )
     assert fractions[-1] <= 1.0
 
 
@@ -118,7 +133,9 @@ def test_run_watched_returns_on_success():
 
 def test_run_watched_raises_on_failure():
     with pytest.raises(RuntimeError, match="Command failed"):
-        _run_watched([sys.executable, "-c", "import sys; sys.exit(3)"], hard_timeout_s=30.0)
+        _run_watched(
+            [sys.executable, "-c", "import sys; sys.exit(3)"], hard_timeout_s=30.0
+        )
 
 
 # ── Seed lattice pre-expansion ────────────────────────────────────────────────
@@ -153,7 +170,7 @@ def test_seed_lattice_auto_declines_a_design_without_inserts():
 def test_seed_lattice_auto_picks_the_measured_target_by_insert_count():
     d1 = _design_with_inserts("T")
     d2 = _design_with_inserts("TT")
-    if d1.crossovers:                       # fixture must actually carry inserts
+    if d1.crossovers:  # fixture must actually carry inserts
         assert _resolve_seed_lattice_nm(d1, "auto") == RELAXED_HELIX_SPACING_NM[1]
         assert _resolve_seed_lattice_nm(d2, "auto") == RELAXED_HELIX_SPACING_NM[2]
 

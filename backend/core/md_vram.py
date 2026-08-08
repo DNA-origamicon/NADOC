@@ -63,7 +63,9 @@ _INSTABILITY_PAT = re.compile(
     re.IGNORECASE,
 )
 # A GPU/driver/kernel error that is not an out-of-memory condition.
-_GPU_ERR_PAT = re.compile(r"buildTileLists|cudaStreamSynchronize|CUDA error", re.IGNORECASE)
+_GPU_ERR_PAT = re.compile(
+    r"buildTileLists|cudaStreamSynchronize|CUDA error", re.IGNORECASE
+)
 # NPT equilibration shrank the box past the patch grid built at startup. This is
 # NOT a blow-up (energies stay healthy) — restarting from the last checkpoint
 # rebuilds the grid for the smaller box and continues, so it is auto-resumable.
@@ -87,6 +89,7 @@ FAILURE_OTHER = "other"
 # ══════════════════════════════════════════════════════════════════════════════
 # §1  FAILURE DETECTION
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def log_indicates_oom(text: str) -> bool:
     """True if a NAMD log contains a CUDA out-of-memory abort."""
@@ -137,9 +140,13 @@ def classify_failure_log_file(path: Path) -> str:
 # unbound-variable abort in the job header).
 _CAUSE_LINE_PATS = (
     re.compile(r"^.*FATAL ERROR:.*$", re.IGNORECASE | re.MULTILINE),
-    re.compile(r"^.*DUE TO (?:TIME LIMIT|NODE FAILURE|PREEMPTION|JOB REQUEUE).*$",
-               re.IGNORECASE | re.MULTILINE),
-    re.compile(r"^.*(?:oom-kill|out of memory|outofmemory).*$", re.IGNORECASE | re.MULTILINE),
+    re.compile(
+        r"^.*DUE TO (?:TIME LIMIT|NODE FAILURE|PREEMPTION|JOB REQUEUE).*$",
+        re.IGNORECASE | re.MULTILINE,
+    ),
+    re.compile(
+        r"^.*(?:oom-kill|out of memory|outofmemory).*$", re.IGNORECASE | re.MULTILINE
+    ),
     re.compile(r"^.*slurmstepd:\s*error:.*$", re.IGNORECASE | re.MULTILINE),
     re.compile(r"^.*srun:\s*error:.*$", re.IGNORECASE | re.MULTILINE),
     re.compile(r"^.*unbound variable.*$", re.IGNORECASE | re.MULTILINE),
@@ -172,6 +179,7 @@ def extract_error_line_from_file(path: Path) -> Optional[str]:
 
 # ── Failure → UX description (drives the Relax decision gates) ─────────────────
 
+
 @dataclass(frozen=True)
 class FailureUX:
     """UX-layer description of a NAMD failure: what to tell the user, and how to act.
@@ -188,6 +196,7 @@ class FailureUX:
     ``"cpu"``. ``message`` is jargon-free and safe to show; the raw NAMD cause line is
     kept in ``technical_reason`` for logs/tooltips only — never as the headline.
     """
+
     kind: str
     severity: str
     title: str
@@ -201,37 +210,55 @@ class FailureUX:
 # sensible backend default; the frontend may enrich it (e.g. exact time estimates).
 _FAILURE_UX: dict[str, dict] = {
     FAILURE_VRAM_OOM: dict(
-        severity="hard_stop", retry_other_binary=False, degrade_target=None,
+        severity="hard_stop",
+        retry_other_binary=False,
+        degrade_target=None,
         title="Too large for this GPU",
         message="This structure needs more GPU memory than your card has. Reduce the "
-                "design, or run it on a GPU with more memory."),
+        "design, or run it on a GPU with more memory.",
+    ),
     FAILURE_HOST_OOM: dict(
-        severity="decision", retry_other_binary=False, degrade_target="offload",
+        severity="decision",
+        retry_other_binary=False,
+        degrade_target="offload",
         title="Couldn't use the fastest GPU mode",
         message="Your system can't hold the extra memory the fastest GPU mode needs. "
-                "The run can still finish in a slower GPU mode — same result, about "
-                "3× longer."),
+        "The run can still finish in a slower GPU mode — same result, about "
+        "3× longer.",
+    ),
     FAILURE_GPU_ERROR: dict(
-        severity="decision", retry_other_binary=True, degrade_target="offload",
+        severity="decision",
+        retry_other_binary=True,
+        degrade_target="offload",
         title="Couldn't use the fastest GPU mode",
         message="The fastest GPU mode didn't start on this structure. A newer NAMD build "
-                "usually fixes this; otherwise the run can finish in a slower GPU mode "
-                "— same result, about 3× longer."),
+        "usually fixes this; otherwise the run can finish in a slower GPU mode "
+        "— same result, about 3× longer.",
+    ),
     FAILURE_INSTABILITY: dict(
-        severity="auto", retry_other_binary=False, degrade_target=None,
+        severity="auto",
+        retry_other_binary=False,
+        degrade_target=None,
         title="Restarting more gently",
         message="The start was too strained. NADOC is retrying with a gentler warm-up "
-                "— no action needed."),
+        "— no action needed.",
+    ),
     FAILURE_CELL_SHRINK: dict(
-        severity="auto", retry_other_binary=False, degrade_target=None,
+        severity="auto",
+        retry_other_binary=False,
+        degrade_target=None,
         title="Continuing from the last checkpoint",
         message="The simulation box settled to a smaller size. NADOC is continuing from "
-                "the last checkpoint — no action needed."),
+        "the last checkpoint — no action needed.",
+    ),
     FAILURE_OTHER: dict(
-        severity="decision", retry_other_binary=False, degrade_target=None,
+        severity="decision",
+        retry_other_binary=False,
+        degrade_target=None,
         title="The run hit an unexpected error",
         message="The run stopped with an error NADOC doesn't recognize. See the run log "
-                "for details."),
+        "for details.",
+    ),
 }
 
 
@@ -256,6 +283,7 @@ def describe_failure_file(path: Path) -> FailureUX:
 # §2  VRAM DETECTION + MODEL
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _first_device_id(devices: str) -> int:
     """First CUDA device id from a NAMD ``devices`` string (e.g. '0' or '0,1')."""
     try:
@@ -272,9 +300,15 @@ def detect_vram_mb(devices: str = "0") -> Optional[int]:
     dev = _first_device_id(devices)
     try:
         out = subprocess.run(
-            [exe, f"--id={dev}", "--query-gpu=memory.total",
-             "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=10,
+            [
+                exe,
+                f"--id={dev}",
+                "--query-gpu=memory.total",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if out.returncode != 0 or not out.stdout.strip():
             return None
@@ -303,14 +337,25 @@ def detect_gpu_activity(devices: str = "0") -> Optional[dict]:
     dev = _first_device_id(devices)
     try:
         mem = subprocess.run(
-            [exe, f"--id={dev}", "--query-gpu=memory.used,memory.total,utilization.gpu",
-             "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=10,
+            [
+                exe,
+                f"--id={dev}",
+                "--query-gpu=memory.used,memory.total,utilization.gpu",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         apps = subprocess.run(
-            [exe, "--query-compute-apps=pid,process_name,used_memory",
-             "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=10,
+            [
+                exe,
+                "--query-compute-apps=pid,process_name,used_memory",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
     except (subprocess.SubprocessError, OSError):
         return None
@@ -318,7 +363,9 @@ def detect_gpu_activity(devices: str = "0") -> Optional[dict]:
         return None
 
     try:
-        used_s, total_s, util_s = (c.strip() for c in mem.stdout.strip().splitlines()[0].split(","))
+        used_s, total_s, util_s = (
+            c.strip() for c in mem.stdout.strip().splitlines()[0].split(",")
+        )
         used_mb, total_mb = int(used_s), int(total_s)
         util_pct = int(util_s)
     except (ValueError, IndexError):
@@ -336,8 +383,10 @@ def detect_gpu_activity(devices: str = "0") -> Optional[dict]:
         procs.append({"pid": pid, "name": parts[1].split("/")[-1], "mem_mb": mem_mb})
 
     return {
-        "used_mb": used_mb, "total_mb": total_mb,
-        "free_mb": max(0, total_mb - used_mb), "util_pct": util_pct,
+        "used_mb": used_mb,
+        "total_mb": total_mb,
+        "free_mb": max(0, total_mb - used_mb),
+        "util_pct": util_pct,
         "processes": procs,
     }
 
@@ -355,7 +404,8 @@ def gpu_contention_summary(activity: Optional[dict], own_pids=()) -> dict:
         return {"available": False, "busy": False, "processes": [], "message": ""}
     own = set(own_pids or ())
     heavy = [
-        p for p in activity["processes"]
+        p
+        for p in activity["processes"]
         if p["mem_mb"] >= _GPU_BUSY_PROC_MB and p["pid"] not in own
     ]
     busy = bool(heavy)
@@ -369,9 +419,13 @@ def gpu_contention_summary(activity: Optional[dict], own_pids=()) -> dict:
     else:
         message = ""
     return {
-        "available": True, "busy": busy, "processes": heavy,
-        "used_mb": activity["used_mb"], "total_mb": activity["total_mb"],
-        "free_mb": activity["free_mb"], "util_pct": activity["util_pct"],
+        "available": True,
+        "busy": busy,
+        "processes": heavy,
+        "used_mb": activity["used_mb"],
+        "total_mb": activity["total_mb"],
+        "free_mb": activity["free_mb"],
+        "util_pct": activity["util_pct"],
         "message": message,
     }
 
@@ -433,6 +487,7 @@ def required_vram_mb(n_atoms: int) -> int:
 # §3  DOWNSIZE ESTIMATE
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _grid_nearest_dna_dist(dna_xyz_nm, shell_max_nm: float, grid_nm: float = 0.6):
     """Return (distances, cell_volume_nm3) for a regular grid over the DNA + shell.
 
@@ -449,7 +504,7 @@ def _grid_nearest_dna_dist(dna_xyz_nm, shell_max_nm: float, grid_nm: float = 0.6
     gx, gy, gz = np.meshgrid(*axes, indexing="ij")
     grid = np.column_stack([gx.ravel(), gy.ravel(), gz.ravel()])
     dist, _ = cKDTree(P).query(grid, k=1, workers=-1)
-    return dist, grid_nm ** 3
+    return dist, grid_nm**3
 
 
 def estimate_total_atoms(
@@ -474,8 +529,10 @@ def estimate_total_atoms(
     """
     bx, by, bz = box_nm
     box_vol = bx * by * bz
-    dist, cell_vol = _grid_cache if _grid_cache is not None else _grid_nearest_dna_dist(
-        dna_xyz_nm, max(CANDIDATE_SHELLS_NM)
+    dist, cell_vol = (
+        _grid_cache
+        if _grid_cache is not None
+        else _grid_nearest_dna_dist(dna_xyz_nm, max(CANDIDATE_SHELLS_NM))
     )
     shell_vol = float((dist <= shell_nm).sum()) * cell_vol
     frac = min(1.0, shell_vol / box_vol) if box_vol > 0 else 1.0
@@ -483,8 +540,9 @@ def estimate_total_atoms(
     return dna_atoms + carved_water * 3 + ion_atoms
 
 
-def carve_fill_fraction(dna_xyz_nm, box_nm: tuple[float, float, float],
-                        shell_nm: float) -> float:
+def carve_fill_fraction(
+    dna_xyz_nm, box_nm: tuple[float, float, float], shell_nm: float
+) -> float:
     """Fraction of the periodic cell volume filled by a ``shell_nm`` water carve around
     the DNA (0..1). GPU-resident needs a well-filled cell — a *tight* box the structure
     fills runs resident, a *big* box with a concave water-shell carve leaves vacuum
@@ -531,8 +589,12 @@ def recommend_downsize(
     estimates = []
     for shell in CANDIDATE_SHELLS_NM:
         est = estimate_total_atoms(
-            dna_xyz_nm=dna_xyz_nm, box_nm=box_nm, full_water=full_water,
-            dna_atoms=dna_atoms, ion_atoms=ion_atoms, shell_nm=shell,
+            dna_xyz_nm=dna_xyz_nm,
+            box_nm=box_nm,
+            full_water=full_water,
+            dna_atoms=dna_atoms,
+            ion_atoms=ion_atoms,
+            shell_nm=shell,
             _grid_cache=grid,
         )
         estimates.append((shell, est))
@@ -545,7 +607,7 @@ def recommend_downsize(
         "candidates": [{"shell_nm": s, "atoms": a} for s, a in estimates],
     }
 
-    for shell, est in estimates:                      # largest shell first
+    for shell, est in estimates:  # largest shell first
         if est <= max_atoms:
             return {
                 **base,
@@ -555,7 +617,7 @@ def recommend_downsize(
                 "estimated_vram_mb": estimate_vram_mb(est),
             }
 
-    tight_shell, tight_atoms = estimates[-1]          # smallest shell
+    tight_shell, tight_atoms = estimates[-1]  # smallest shell
     return {
         **base,
         "feasible": False,
@@ -570,6 +632,7 @@ def recommend_downsize(
 # §4  PACKAGE PROFILE
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _read_dna_atoms_from_pdb(pdb_path: Path) -> "list[tuple[float, float, float]]":
     """DNA heavy-atom (x, y, z) in nm — the leading ATOM records of a solvated PDB.
 
@@ -581,11 +644,13 @@ def _read_dna_atoms_from_pdb(pdb_path: Path) -> "list[tuple[float, float, float]
         for line in fh:
             if line.startswith("ATOM"):
                 try:
-                    pts.append((
-                        float(line[30:38]) / 10.0,
-                        float(line[38:46]) / 10.0,
-                        float(line[46:54]) / 10.0,
-                    ))
+                    pts.append(
+                        (
+                            float(line[30:38]) / 10.0,
+                            float(line[38:46]) / 10.0,
+                            float(line[46:54]) / 10.0,
+                        )
+                    )
                 except ValueError:
                     pass
             elif line.startswith("HETATM") and pts:
@@ -653,8 +718,11 @@ def _profile_cache_key(design, padding_nm: float, atomistic_model) -> Optional[t
     try:
         from backend.core.oxdna_staleness import design_build_fingerprint  # noqa: PLC0415
 
-        return (design_build_fingerprint(design), round(float(padding_nm), 4),
-                id(atomistic_model) if atomistic_model is not None else None)
+        return (
+            design_build_fingerprint(design),
+            round(float(padding_nm), 4),
+            id(atomistic_model) if atomistic_model is not None else None,
+        )
     except Exception:  # noqa: BLE001
         return None
 
@@ -664,10 +732,14 @@ def clear_profile_cache() -> None:
     _PROFILE_CACHE.clear()
 
 
-def estimate_profile_from_design(design, *, padding_nm: float = 1.2,
-                                 atomistic_model=None,
-                                 nacl_mM: float = 0.0,
-                                 mgcl2_mM: float = 12.5) -> Optional[dict]:
+def estimate_profile_from_design(
+    design,
+    *,
+    padding_nm: float = 1.2,
+    atomistic_model=None,
+    nacl_mM: float = 0.0,
+    mgcl2_mM: float = 12.5,
+) -> Optional[dict]:
     """Estimate a solvation profile from the *dry* design — no GROMACS run.
 
     Builds the heavy-atom PDB, takes the bounding box + padding as the solvation
@@ -704,8 +776,13 @@ def estimate_profile_from_design(design, *, padding_nm: float = 1.2,
         if not ln.startswith("ATOM"):
             continue
         try:
-            dna.append((float(ln[30:38]) / 10.0, float(ln[38:46]) / 10.0,
-                        float(ln[46:54]) / 10.0))
+            dna.append(
+                (
+                    float(ln[30:38]) / 10.0,
+                    float(ln[38:46]) / 10.0,
+                    float(ln[46:54]) / 10.0,
+                )
+            )
         except ValueError:
             continue
         if ln[12:16].strip() == "P":
@@ -714,7 +791,10 @@ def estimate_profile_from_design(design, *, padding_nm: float = 1.2,
         return None
 
     from backend.core.namd_solvate import (  # noqa: PLC0415
-        MGH_ATOMS, MGH_WATERS_CONSUMED, ion_counts)
+        MGH_ATOMS,
+        MGH_WATERS_CONSUMED,
+        ion_counts,
+    )
 
     P = np.asarray(dna, dtype=float)
     ext = P.max(0) - P.min(0)
@@ -722,8 +802,14 @@ def estimate_profile_from_design(design, *, padding_nm: float = 1.2,
     box_vol = box_nm[0] * box_nm[1] * box_nm[2]
 
     water_before = int(box_vol * _FULL_BOX_WATER_DENSITY_NM3)
-    ions = ion_counts(water_before, -float(n_p), nacl_mM=nacl_mM, mgcl2_mM=mgcl2_mM,
-                      box_nm=box_nm, mg_hexahydrate=True)
+    ions = ion_counts(
+        water_before,
+        -float(n_p),
+        nacl_mM=nacl_mM,
+        mgcl2_mM=mgcl2_mM,
+        box_nm=box_nm,
+        mg_hexahydrate=True,
+    )
     # Each MGH cluster is 19 atoms and vacates 6 waters; each monatomic ion takes
     # one water site.
     water_displaced = (ions.n_mg * MGH_WATERS_CONSUMED) + ions.n_na + ions.n_cl
@@ -741,13 +827,14 @@ def estimate_profile_from_design(design, *, padding_nm: float = 1.2,
     }
     if key is not None:
         if len(_PROFILE_CACHE) >= _PROFILE_CACHE_MAX:
-            _PROFILE_CACHE.pop(next(iter(_PROFILE_CACHE)))   # evict oldest
+            _PROFILE_CACHE.pop(next(iter(_PROFILE_CACHE)))  # evict oldest
         _PROFILE_CACHE[key] = profile
     return profile
 
 
-def auto_water_shell(design, *, padding_nm: float = 1.2, devices: str = "0",
-                     atomistic_model=None) -> dict:
+def auto_water_shell(
+    design, *, padding_nm: float = 1.2, devices: str = "0", atomistic_model=None
+) -> dict:
     """Pre-flight: pick a water-shell (nm) that fits the GPU, or 0 for full box.
 
     Returns ``{shell_nm, note, fits, vram_mb}``.  ``shell_nm == 0`` means either no
@@ -779,12 +866,15 @@ def auto_water_shell(design, *, padding_nm: float = 1.2, devices: str = "0",
     # fall back to the full box (the prior behaviour).
     try:
         profile = estimate_profile_from_design(
-            design, padding_nm=padding_nm, atomistic_model=atomistic_model)
+            design, padding_nm=padding_nm, atomistic_model=atomistic_model
+        )
         if profile is None:
             return {**none, "vram_mb": vram_mb}
         rec = recommend_downsize(
-            dna_xyz_nm=profile["dna_xyz_nm"], box_nm=profile["box_nm"],
-            full_water=profile["full_water"], dna_atoms=profile["dna_atoms"],
+            dna_xyz_nm=profile["dna_xyz_nm"],
+            box_nm=profile["box_nm"],
+            full_water=profile["full_water"],
+            dna_atoms=profile["dna_atoms"],
             ion_atoms=profile["ion_atoms"],
             # No VRAM bound on CPU — pass a huge sentinel so only max_atoms (host) binds.
             vram_mb=vram_mb if vram_mb is not None else 10**9,
@@ -792,33 +882,42 @@ def auto_water_shell(design, *, padding_nm: float = 1.2, devices: str = "0",
         )
     except Exception:
         return {**none, "vram_mb": vram_mb}
-    limit = (f"{round(host_mb / 1024)} GB free host RAM" if bound == "host RAM"
-             else f"{round(vram_mb / 1024)} GB GPU")
+    limit = (
+        f"{round(host_mb / 1024)} GB free host RAM"
+        if bound == "host RAM"
+        else f"{round(vram_mb / 1024)} GB GPU"
+    )
     if rec["current_atoms"] <= rec["max_atoms"]:
         return {"shell_nm": 0.0, "note": None, "fits": True, "vram_mb": vram_mb}
     if rec.get("feasible"):
         s = rec["recommended_shell_nm"]
-        note = (f"Auto-sized for {limit}: full system ≈{rec['current_atoms']:,} "
-                f"atoms won’t fit, so enabled a {round(s * 10)} Å water shell "
-                f"(≈{rec['estimated_atoms']:,} atoms, NVT).")
+        note = (
+            f"Auto-sized for {limit}: full system ≈{rec['current_atoms']:,} "
+            f"atoms won’t fit, so enabled a {round(s * 10)} Å water shell "
+            f"(≈{rec['estimated_atoms']:,} atoms, NVT)."
+        )
         return {"shell_nm": s, "note": note, "fits": True, "vram_mb": vram_mb}
     s = rec["tightest_shell_nm"]
-    note = (f"Warning: even a {round(s * 10)} Å shell (≈{rec['tightest_atoms']:,} atoms) "
-            f"may exceed this {limit} — running anyway; consider a larger GPU or more RAM.")
+    note = (
+        f"Warning: even a {round(s * 10)} Å shell (≈{rec['tightest_atoms']:,} atoms) "
+        f"may exceed this {limit} — running anyway; consider a larger GPU or more RAM."
+    )
     return {"shell_nm": s, "note": note, "fits": False, "vram_mb": vram_mb}
 
 
 # ── Pre-flight size gate (Gate A: A1 auto-notice / A2 tight-shell / A3 too-large) ──
 
-_SAFE_SHELL_NM = 1.5   # a ≥15 Å water shell is "comfortable" (A1); tighter is a trade-off (A2)
+_SAFE_SHELL_NM = (
+    1.5  # a ≥15 Å water shell is "comfortable" (A1); tighter is a trade-off (A2)
+)
 
 
 def classify_vram_fit(rec: Optional[dict]) -> str:
     """Pre-flight size-gate tier from a :func:`recommend_downsize` advice:
-      ``"ok"`` full box fits (or data missing — never gate on the unknown);
-      ``"a1"`` a comfortable thinner shell (≥15 Å) fits → auto-apply + a friendly notice;
-      ``"a2"`` only a TIGHT shell (<15 Å) fits → an accuracy trade-off, so ask;
-      ``"a3"`` won't fit even at the tightest shell → hard stop.
+    ``"ok"`` full box fits (or data missing — never gate on the unknown);
+    ``"a1"`` a comfortable thinner shell (≥15 Å) fits → auto-apply + a friendly notice;
+    ``"a2"`` only a TIGHT shell (<15 Å) fits → an accuracy trade-off, so ask;
+    ``"a3"`` won't fit even at the tightest shell → hard stop.
     """
     if not rec:
         return "ok"
@@ -830,8 +929,9 @@ def classify_vram_fit(rec: Optional[dict]) -> str:
     return "a1" if (rec.get("recommended_shell_nm") or 0) >= _SAFE_SHELL_NM else "a2"
 
 
-def preflight_vram_advice(design, *, padding_nm: float = 1.2, devices: str = "0",
-                          atomistic_model=None) -> dict:
+def preflight_vram_advice(
+    design, *, padding_nm: float = 1.2, devices: str = "0", atomistic_model=None
+) -> dict:
     """Pre-flight size verdict for the Relax launch gate — computed from the DRY design
     (no build). Returns the :func:`recommend_downsize` advice enriched with ``tier``
     (ok/a1/a2/a3), ``bound`` ("GPU"/"host RAM") and ``host_mb``; or ``{"skipped": True,
@@ -845,7 +945,11 @@ def preflight_vram_advice(design, *, padding_nm: float = 1.2, devices: str = "0"
     if cpu:
         if not host_mb:
             return skipped
-        vram_mb, effective_cap, bound = None, max_atoms_for_host_ram(host_mb), "host RAM"
+        vram_mb, effective_cap, bound = (
+            None,
+            max_atoms_for_host_ram(host_mb),
+            "host RAM",
+        )
     else:
         vram_mb = detect_vram_mb(devices)
         if vram_mb is None:
@@ -856,12 +960,15 @@ def preflight_vram_advice(design, *, padding_nm: float = 1.2, devices: str = "0"
         bound = "host RAM" if host_cap is not None and host_cap < vram_cap else "GPU"
     try:
         profile = estimate_profile_from_design(
-            design, padding_nm=padding_nm, atomistic_model=atomistic_model)
+            design, padding_nm=padding_nm, atomistic_model=atomistic_model
+        )
         if profile is None:
             return skipped
         rec = recommend_downsize(
-            dna_xyz_nm=profile["dna_xyz_nm"], box_nm=profile["box_nm"],
-            full_water=profile["full_water"], dna_atoms=profile["dna_atoms"],
+            dna_xyz_nm=profile["dna_xyz_nm"],
+            box_nm=profile["box_nm"],
+            full_water=profile["full_water"],
+            dna_atoms=profile["dna_atoms"],
             ion_atoms=profile["ion_atoms"],
             vram_mb=vram_mb if vram_mb is not None else 10**9,
             max_atoms=effective_cap,
@@ -871,9 +978,15 @@ def preflight_vram_advice(design, *, padding_nm: float = 1.2, devices: str = "0"
     water_floor = _water_floor_check(profile, rec)
     tier = classify_vram_fit(rec)
     if water_floor and not water_floor["ok"]:
-        tier = "a3"          # a cell that cannot hold its own ions will not build
-    return {**rec, "skipped": False, "tier": tier,
-            "water_floor": water_floor, "bound": bound, "host_mb": host_mb}
+        tier = "a3"  # a cell that cannot hold its own ions will not build
+    return {
+        **rec,
+        "skipped": False,
+        "tier": tier,
+        "water_floor": water_floor,
+        "bound": bound,
+        "host_mb": host_mb,
+    }
 
 
 def _water_floor_check(profile: dict, rec: dict) -> Optional[dict]:
@@ -886,7 +999,9 @@ def _water_floor_check(profile: dict, rec: dict) -> Optional[dict]:
     """
     try:
         from backend.core.namd_solvate import (  # noqa: PLC0415
-            ion_counts, waters_needed_for_ions)
+            ion_counts,
+            waters_needed_for_ions,
+        )
 
         n_p = profile.get("n_phosphates") or 0
         if n_p <= 0:
@@ -899,16 +1014,25 @@ def _water_floor_check(profile: dict, rec: dict) -> Optional[dict]:
         else:
             atoms = rec.get("current_atoms", 0)
         have = max(0, (atoms - profile["dna_atoms"] - profile["ion_atoms"]) // 3)
-        ions = ion_counts(have, -float(n_p), nacl_mM=0.0, mgcl2_mM=12.5,
-                          box_nm=profile["box_nm"], mg_hexahydrate=True)
+        ions = ion_counts(
+            have,
+            -float(n_p),
+            nacl_mM=0.0,
+            mgcl2_mM=12.5,
+            box_nm=profile["box_nm"],
+            mg_hexahydrate=True,
+        )
         need = waters_needed_for_ions(ions)
         return {
             "ok": need <= have,
             "waters_available": int(have),
             "waters_needed": int(need),
-            "reason": None if need <= have else (
+            "reason": None
+            if need <= have
+            else (
                 f"the cell holds ~{have:,} waters but neutralising "
-                f"{n_p:,} phosphates with Mg(H2O)6 consumes ~{need:,}"),
+                f"{n_p:,} phosphates with Mg(H2O)6 consumes ~{need:,}"
+            ),
         }
     except Exception:  # noqa: BLE001 — advisory only
         return None

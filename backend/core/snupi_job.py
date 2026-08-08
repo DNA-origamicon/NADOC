@@ -40,39 +40,39 @@ from typing import Optional
 
 
 class SnupiStatus(str, Enum):
-    queued    = "queued"
-    preparing = "preparing"   # writing the design snapshot
-    running   = "running"     # FEM solving
-    failed    = "failed"
-    stopped   = "stopped"     # manually stopped
-    completed = "completed"   # solve done + positions/RMSF extracted
+    queued = "queued"
+    preparing = "preparing"  # writing the design snapshot
+    running = "running"  # FEM solving
+    failed = "failed"
+    stopped = "stopped"  # manually stopped
+    completed = "completed"  # solve done + positions/RMSF extracted
 
 
 @dataclass
 class SnupiStageStatus:
-    name:       str          # "linear" (coarse) or "nonlinear" (fine)
-    status:     str = "pending"   # pending / running / done / failed
-    started_at: Optional[float] = None   # wall time the stage began (for the ETA bar)
+    name: str  # "linear" (coarse) or "nonlinear" (fine)
+    status: str = "pending"  # pending / running / done / failed
+    started_at: Optional[float] = None  # wall time the stage began (for the ETA bar)
 
 
 @dataclass
 class SnupiJob:
-    job_id:              str
-    design_name:         str
-    status:              SnupiStatus
-    created_at:          float
-    n_nucleotides:       int = 0
+    job_id: str
+    design_name: str
+    status: SnupiStatus
+    created_at: float
+    n_nucleotides: int = 0
     # Solver mode: nonlinear=True is the "Fine" corotational solve (default); nonlinear=False
     # is the fast "Coarse" linear preview.
-    nonlinear:           bool = True
-    n_steps:             int = 20     # corotational load-step count (nonlinear only)
-    with_rmsf:           bool = True  # also compute the free-free NMA per-bp RMSF
+    nonlinear: bool = True
+    n_steps: int = 20  # corotational load-step count (nonlinear only)
+    with_rmsf: bool = True  # also compute the free-free NMA per-bp RMSF
     # Intra-helix beam material threaded into predict_shape: "snupi" (default) or "cando"
     # (isotropic baseline for an in-tab comparison).  Never a topology edit.
-    material:            str = "snupi"
+    material: str = "snupi"
     # MgCl₂ molarity (mol/L) setting the Debye length of the inter-helix electrostatics (G12).
     # Default 0.02 = SNUPI's 20 mM buffer; raise to match a run's actual salt.  snupi-only.
-    mgcl2_M:             float = 0.02
+    mgcl2_M: float = 0.02
     # Langevin structural DYNAMICS (project_snupi_dynamics): instead of the static equilibrium
     # solve, run a thermal trajectory and report its time-MEAN shape + TRAJECTORY RMSF (same
     # display payload).  hydrodynamics=True uses the coupled Rotne–Prager–Yamakawa friction matrix
@@ -80,43 +80,43 @@ class SnupiJob:
     # hydro_coarse_bp=k → the COARSE blob hydrodynamics (1 bead per k bp, snupi_hydro_coarse): the
     # exact per-bp friction is a dense O(N²) matrix (≈83 GB on a full M13 origami — it OOMs the
     # machine), so anything past a few thousand nodes MUST coarse-grain.  None = exact.
-    dynamics:            bool = False
-    hydrodynamics:       bool = False
-    hydro_coarse_bp:     Optional[int] = None
+    dynamics: bool = False
+    hydrodynamics: bool = False
+    hydro_coarse_bp: Optional[int] = None
     # Free ssDNA TAILS (SS-4, dynamics + snupi only): simulate the overhangs / toeholds / dangling
     # scaffold ends as explicit one-bead-per-nucleotide Langevin chains and DISPLAY them at their
     # simulated positions (they otherwise stand frozen at their rendered pose).  A documented NADOC
     # extension — published SNUPI cannot represent a free tail at all (no distal bp node).
     # tail_max_nt optionally truncates each tail.  Never a topology edit.
-    tails:               bool = False
-    tail_max_nt:         Optional[int] = None
+    tails: bool = False
+    tail_max_nt: Optional[int] = None
     # ── Job-request annotations (C1/C2): anchors + uniform E-field, NEVER a topology edit ──
     # anchors: shared oxDNA scope descriptors (overhang/cluster/domain/strand/base) held fixed
     # (Dirichlet BC) during the FEM solve.  field: {"field_pN": <force/nt, pN>, "dir": [x,y,z]} —
     # the same per-nucleotide force oxDNA applies.  A field needs ≥1 anchor (COM drift).  Both are
     # threaded into predict_shape(...) (Three-Layer Law: display-only, read-only over the design).
-    anchors:             Optional[list] = None
-    field:               Optional[dict] = None
-    stages:              list[SnupiStageStatus] = dc_field(default_factory=list)
-    error:               Optional[str] = None
+    anchors: Optional[list] = None
+    field: Optional[dict] = None
+    stages: list[SnupiStageStatus] = dc_field(default_factory=list)
+    error: Optional[str] = None
     # PID of the detached solve worker (backend.core.snupi_worker).  The solve runs in its
     # OWN session subprocess so it survives a ``uvicorn --reload`` restart; liveness is this
     # persisted pid (``os.kill(pid, 0)``), not an in-process thread handle.
-    pid:                 Optional[int] = None
-    design_source_path:  Optional[str] = None
-    doc_id:              Optional[str] = None
+    pid: Optional[int] = None
+    design_source_path: Optional[str] = None
+    doc_id: Optional[str] = None
     # Populated on completion — surfaced in the panel detail block.
-    sim_seconds:         Optional[float] = None   # wall time inside predict_shape()
-    n_nodes:             Optional[int]   = None   # duplex-core FEM nodes (= base pairs)
-    rmsf_min_nm:         Optional[float] = None
-    rmsf_max_nm:         Optional[float] = None
+    sim_seconds: Optional[float] = None  # wall time inside predict_shape()
+    n_nodes: Optional[int] = None  # duplex-core FEM nodes (= base pairs)
+    rmsf_min_nm: Optional[float] = None
+    rmsf_max_nm: Optional[float] = None
     # Out-of-date detection (design edited after the solve ran); shares the oxDNA
     # staleness fingerprint so an edit invalidates the predicted display.
-    design_fingerprint:  Optional[str] = None
+    design_fingerprint: Optional[str] = None
     feature_log_position: Optional[int] = None
     # Archival parity with oxDNA/mrDNA/CanDo jobs (job_archive is kind-generic).
-    archived:            bool = False
-    archive_path:        Optional[str] = None
+    archived: bool = False
+    archive_path: Optional[str] = None
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -139,6 +139,7 @@ class SnupiJob:
     @classmethod
     def load(cls, job_id: str, workspace_dir: Path) -> "SnupiJob":
         from backend.core.job_archive import resolve_job_json
+
         path = resolve_job_json(workspace_dir, "snupi_jobs", job_id)
         data = json.loads(path.read_text())
         data["status"] = SnupiStatus(data["status"])
@@ -171,6 +172,7 @@ class SnupiJob:
     @classmethod
     def list_jobs(cls, workspace_dir: Path) -> list["SnupiJob"]:
         from backend.core.job_archive import archived_job_ids
+
         result: list[SnupiJob] = []
         seen: set[str] = set()
         jobs_dir = workspace_dir / "snupi_jobs"
@@ -222,7 +224,11 @@ def new_snupi_job(
     # panel an honest stage label so the ~minutes-long run doesn't read as a "nonlinear" solve.
     if dynamics:
         if hydrodynamics:
-            stage_name = f"dynamics-rpy-coarse{hydro_coarse_bp}" if hydro_coarse_bp else "dynamics-rpy"
+            stage_name = (
+                f"dynamics-rpy-coarse{hydro_coarse_bp}"
+                if hydro_coarse_bp
+                else "dynamics-rpy"
+            )
         else:
             stage_name = "dynamics"
         if tails:
@@ -230,26 +236,26 @@ def new_snupi_job(
     else:
         stage_name = "nonlinear" if nonlinear else "linear"
     return SnupiJob(
-        job_id             = uuid.uuid4().hex[:12],
-        design_name        = design_name,
-        status             = SnupiStatus.queued,
-        created_at         = time.time(),
-        n_nucleotides      = n_nucleotides,
-        nonlinear          = nonlinear,
-        n_steps            = n_steps,
-        with_rmsf          = with_rmsf,
-        material           = material if material in ("snupi", "cando") else "snupi",
-        mgcl2_M            = mgcl2_M,
-        dynamics           = dynamics,
-        hydrodynamics      = hydrodynamics,
-        hydro_coarse_bp    = hydro_coarse_bp,
-        tails              = tails,
-        tail_max_nt        = tail_max_nt,
-        anchors            = anchors,
-        field              = field,
-        stages             = [SnupiStageStatus(name=stage_name)],
-        design_source_path = design_source_path,
-        design_fingerprint = design_fingerprint,
-        feature_log_position = feature_log_position,
-        doc_id             = doc_id,
+        job_id=uuid.uuid4().hex[:12],
+        design_name=design_name,
+        status=SnupiStatus.queued,
+        created_at=time.time(),
+        n_nucleotides=n_nucleotides,
+        nonlinear=nonlinear,
+        n_steps=n_steps,
+        with_rmsf=with_rmsf,
+        material=material if material in ("snupi", "cando") else "snupi",
+        mgcl2_M=mgcl2_M,
+        dynamics=dynamics,
+        hydrodynamics=hydrodynamics,
+        hydro_coarse_bp=hydro_coarse_bp,
+        tails=tails,
+        tail_max_nt=tail_max_nt,
+        anchors=anchors,
+        field=field,
+        stages=[SnupiStageStatus(name=stage_name)],
+        design_source_path=design_source_path,
+        design_fingerprint=design_fingerprint,
+        feature_log_position=feature_log_position,
+        doc_id=doc_id,
     )

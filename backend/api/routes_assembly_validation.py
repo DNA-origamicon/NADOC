@@ -29,15 +29,18 @@ router = APIRouter()
 
 # ── Assembly validation ───────────────────────────────────────────────────────
 
+
 @router.get("/assembly/validate", status_code=200)
 def validate_assembly() -> dict:
     """Validate the active assembly and return a structured report."""
     from backend.core.assembly_validate import validate_assembly_report
+
     assembly = assembly_state.get_or_create()
     return validate_assembly_report(assembly)
 
 
 # ── Flatten to Design ────────────────────────────────────────────────────────
+
 
 @router.get("/assembly/flatten", status_code=200)
 def get_assembly_flatten() -> dict:
@@ -46,6 +49,7 @@ def get_assembly_flatten() -> dict:
     Does not alter any state — preview only.
     """
     from backend.core.assembly_flatten import flatten_assembly
+
     assembly = assembly_state.get_or_create()
     try:
         design = flatten_assembly(assembly)
@@ -62,6 +66,7 @@ def flatten_load_as_design() -> dict:
     """
     from backend.core.assembly_flatten import flatten_assembly
     from backend.core.validator import validate_design
+
     assembly = assembly_state.get_or_create()
     try:
         design = flatten_assembly(assembly)
@@ -70,4 +75,5 @@ def flatten_load_as_design() -> dict:
     design_state.set_design(design)
     report = validate_design(design)
     from backend.api.crud import _design_response
+
     return _design_response(design, report)

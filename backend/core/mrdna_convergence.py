@@ -41,20 +41,22 @@ import numpy as np
 
 # ── Target geometry ────────────────────────────────────────────────────────────
 
+
 def _target_axis_points_nm(design) -> Optional[np.ndarray]:
     """
     Return (M, 3) array of sampled points along all deformed helix axes in nm.
     Returns None if the design has no deformations.
     """
     from backend.core.deformation import deformed_helix_axes
+
     if not design.deformations and not design.cluster_transforms:
         return None
 
     axes = deformed_helix_axes(design)
-    pts  = []
+    pts = []
     for ax in axes:
-        pts.append(np.array(ax['samples'], dtype=float))
-    return np.concatenate(pts, axis=0)   # (M, 3) in nm
+        pts.append(np.array(ax["samples"], dtype=float))
+    return np.concatenate(pts, axis=0)  # (M, 3) in nm
 
 
 def _target_helix_centroids_nm(design) -> Optional[np.ndarray]:
@@ -63,12 +65,12 @@ def _target_helix_centroids_nm(design) -> Optional[np.ndarray]:
     Kept for backward-compat / diagnostics; not used in FTT computation.
     """
     from backend.core.deformation import deformed_helix_axes
+
     if not design.deformations and not design.cluster_transforms:
         return None
 
     axes = deformed_helix_axes(design)
-    return np.array([np.array(ax['samples'], dtype=float).mean(axis=0)
-                     for ax in axes])
+    return np.array([np.array(ax["samples"], dtype=float).mean(axis=0) for ax in axes])
 
 
 def _initial_helix_centroids_nm(design) -> np.ndarray:
@@ -86,6 +88,7 @@ def _initial_helix_centroids_nm(design) -> np.ndarray:
 
 # ── Chamfer (mean nearest-neighbour) distance ──────────────────────────────────
 
+
 def _chamfer_dist_nm(bead_pos_ang: np.ndarray, target_nm: np.ndarray) -> float:
     """
     Mean distance (nm) from each CG bead to its nearest target axis point.
@@ -94,17 +97,17 @@ def _chamfer_dist_nm(bead_pos_ang: np.ndarray, target_nm: np.ndarray) -> float:
     target_nm    : (M, 3) in nm
     Returns      : scalar mean distance in nm
     """
-    bead_nm  = bead_pos_ang / 10.0                              # Å → nm
-    diff     = bead_nm[:, None, :] - target_nm[None, :, :]     # (N, M, 3)
-    dists    = np.linalg.norm(diff, axis=2)                     # (N, M)
-    min_dist = dists.min(axis=1)                                # (N,)
+    bead_nm = bead_pos_ang / 10.0  # Å → nm
+    diff = bead_nm[:, None, :] - target_nm[None, :, :]  # (N, M, 3)
+    dists = np.linalg.norm(diff, axis=2)  # (N, M)
+    min_dist = dists.min(axis=1)  # (N,)
     return float(min_dist.mean())
 
 
 def fraction_to_target_chamfer(
     current_ang: np.ndarray,
     initial_ang: np.ndarray,
-    target_nm:   np.ndarray,
+    target_nm: np.ndarray,
 ) -> float:
     """
     FTT ∈ [0, 1] via Chamfer distance.
@@ -121,28 +124,29 @@ def fraction_to_target_chamfer(
 
 # ── Legacy helpers (kept for external callers / diagnostics) ──────────────────
 
+
 def _bead_helix_assignments(bead_pos_ang: np.ndarray, design) -> np.ndarray:
     """
     Assign each CG bead to the nearest helix by 3-D axis-line distance.
     Not used in FTT computation; kept for diagnostics and backward compat.
     """
-    origins  = np.array([h.axis_start.to_array() * 10.0 for h in design.helices])
-    ends     = np.array([h.axis_end.to_array()   * 10.0 for h in design.helices])
-    dirs     = ends - origins
-    len2     = (dirs ** 2).sum(axis=1, keepdims=True)
+    origins = np.array([h.axis_start.to_array() * 10.0 for h in design.helices])
+    ends = np.array([h.axis_end.to_array() * 10.0 for h in design.helices])
+    dirs = ends - origins
+    len2 = (dirs**2).sum(axis=1, keepdims=True)
     dirs_hat = dirs / np.maximum(len2, 1e-12)
 
-    diff  = bead_pos_ang[:, None, :] - origins[None, :, :]
-    proj  = (diff * dirs_hat[None, :, :]).sum(axis=2, keepdims=True)
-    perp  = diff - proj * dirs_hat[None, :, :]
+    diff = bead_pos_ang[:, None, :] - origins[None, :, :]
+    proj = (diff * dirs_hat[None, :, :]).sum(axis=2, keepdims=True)
+    perp = diff - proj * dirs_hat[None, :, :]
     dists = np.linalg.norm(perp, axis=2)
     return dists.argmin(axis=1)
 
 
 def _helix_centroids_from_beads(
     bead_pos_ang: np.ndarray,
-    assignments:  np.ndarray,
-    n_helices:    int,
+    assignments: np.ndarray,
+    n_helices: int,
 ) -> np.ndarray:
     """Return (N_helices, 3) centroid positions in nm. Kept for diagnostics."""
     centroids = np.zeros((n_helices, 3), dtype=float)
@@ -158,9 +162,9 @@ def _rmsd(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def fraction_to_target(
-    current:  np.ndarray,
-    initial:  np.ndarray,
-    target:   np.ndarray,
+    current: np.ndarray,
+    initial: np.ndarray,
+    target: np.ndarray,
 ) -> float:
     """Legacy centroid-RMSD FTT. Prefer fraction_to_target_chamfer for folding designs."""
     d_init = _rmsd(initial, target)
@@ -172,13 +176,14 @@ def fraction_to_target(
 
 # ── Exponential fit ────────────────────────────────────────────────────────────
 
+
 @dataclass
 class FTTFit:
-    ftt_max:        float
-    tau:            float
+    ftt_max: float
+    tau: float
     crossing_steps: Optional[float]
-    plateau:        bool
-    threshold:      float
+    plateau: bool
+    threshold: float
 
 
 def _ftt_model(t, ftt_max, tau):
@@ -186,8 +191,8 @@ def _ftt_model(t, ftt_max, tau):
 
 
 def fit_ftt(
-    steps:     list[int],
-    ftts:      list[float],
+    steps: list[int],
+    ftts: list[float],
     threshold: float = 0.85,
 ) -> Optional[FTTFit]:
     """
@@ -200,13 +205,15 @@ def fit_ftt(
         return None
 
     t = np.array(steps, dtype=float)
-    f = np.array(ftts,  dtype=float)
+    f = np.array(ftts, dtype=float)
 
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             popt, _ = curve_fit(
-                _ftt_model, t, f,
+                _ftt_model,
+                t,
+                f,
                 p0=[min(1.0, f[-1] * 1.5), t[-1] * 2.0],
                 bounds=([0.1, t[1] if len(t) > 1 else 1.0], [2.0, 1e11]),
                 maxfev=20_000,
@@ -220,7 +227,7 @@ def fit_ftt(
                 crossing = -tau * math.log(arg)
 
         slope_now = ftt_max / tau * math.exp(-t[-1] / tau)
-        plateau   = slope_now < 1e-8
+        plateau = slope_now < 1e-8
 
         return FTTFit(
             ftt_max=float(ftt_max),
@@ -234,6 +241,7 @@ def fit_ftt(
 
 
 # ── ConvergenceTracker ────────────────────────────────────────────────────────
+
 
 class ConvergenceTracker:
     """
@@ -255,20 +263,20 @@ class ConvergenceTracker:
     def __init__(
         self,
         design,
-        psf_path:     str,
-        pdb_path:     str,
-        output_every: int   = 200_000,
-        threshold:    float = 0.90,
+        psf_path: str,
+        pdb_path: str,
+        output_every: int = 200_000,
+        threshold: float = 0.90,
     ):
-        self.design       = design
-        self.psf_path     = psf_path
+        self.design = design
+        self.psf_path = psf_path
         self.output_every = output_every
-        self.threshold    = threshold
+        self.threshold = threshold
 
         import MDAnalysis as mda
 
-        ref      = mda.Universe(psf_path, pdb_path)
-        init_pos = ref.atoms.positions     # Å
+        ref = mda.Universe(psf_path, pdb_path)
+        init_pos = ref.atoms.positions  # Å
 
         self.target_pts = _target_axis_points_nm(design)  # (M, 3) nm or None
         if self.target_pts is None:
@@ -298,13 +306,13 @@ class ConvergenceTracker:
         import MDAnalysis as mda
 
         try:
-            u     = mda.Universe(self.psf_path, dcd_path)
-            atoms = u.select_atoms('all')
+            u = mda.Universe(self.psf_path, dcd_path)
+            atoms = u.select_atoms("all")
             steps, ftts = [], []
             for ts in u.trajectory:
                 pos = atoms.positions
                 d_curr = _chamfer_dist_nm(pos, self.target_pts)
-                ftt    = float(np.clip(1.0 - d_curr / self.d_init, 0.0, 1.0))
+                ftt = float(np.clip(1.0 - d_curr / self.d_init, 0.0, 1.0))
                 steps.append(step_offset + ts.frame * self.output_every)
                 ftts.append(ftt)
             return steps, ftts
@@ -314,14 +322,14 @@ class ConvergenceTracker:
     def fit(
         self,
         steps: list[int],
-        ftts:  list[float],
+        ftts: list[float],
     ) -> Optional[FTTFit]:
         return fit_ftt(steps, ftts, self.threshold)
 
     def projected_steps(
         self,
         steps: list[int],
-        ftts:  list[float],
+        ftts: list[float],
     ) -> Optional[float]:
         """Convenience: return projected crossing step count, or None."""
         result = self.fit(steps, ftts)

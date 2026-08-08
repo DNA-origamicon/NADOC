@@ -15,7 +15,7 @@ def test_alpine_profile_shape():
     assert p.name == "alpine"
     assert p.host == "login.rc.colorado.edu"
     assert p.scheduler == "slurm"
-    assert p.default_partition == "ah200"        # GPU-first; H200 since 2026-08-06
+    assert p.default_partition == "ah200"  # GPU-first; H200 since 2026-08-06
     assert "$USER" in p.project_base and "$USER" in p.scratch_base
     assert p.su_per_gpu_hour == pytest.approx(108.2)
     assert p.su_per_core_hour == pytest.approx(1.0)
@@ -50,14 +50,14 @@ def test_qos_tiers_for_kind_splits_gpu_and_cpu():
     cpu = {q.name for q in p.qos_tiers_for_kind("cpu")}
     assert gpu == {"gpu-normal", "gpu-long", "gpu-testing"}
     assert "cpu-normal" in cpu and "cpu-long" in cpu and "testing" in cpu
-    assert not any(n.startswith("gpu-") for n in cpu)   # no gpu-* leaks into CPU
+    assert not any(n.startswith("gpu-") for n in cpu)  # no gpu-* leaks into CPU
 
 
 def test_qos_tiers_for_partition_respects_allow_list():
     # acpu is live-confirmed to accept ONLY cpu-normal/cpu-long.
     p = cc.alpine_profile()
     acpu = {q.name for q in p.qos_tiers_for_partition("acpu")}
-    assert acpu == {"cpu-normal", "cpu-long"}    # no testing/mem/compile offered
+    assert acpu == {"cpu-normal", "cpu-long"}  # no testing/mem/compile offered
     aa100 = {q.name for q in p.qos_tiers_for_partition("aa100")}
     assert aa100 == {"gpu-normal", "gpu-long", "gpu-testing"}
     assert p.qos_tiers_for_partition("nope") == []
@@ -80,21 +80,25 @@ def test_resolve_paths_requires_user_and_job():
 
 
 def test_load_profiles_defaults_to_alpine(tmp_path):
-    profiles = cc.load_profiles(tmp_path)          # no clusters.json present
+    profiles = cc.load_profiles(tmp_path)  # no clusters.json present
     assert set(profiles) == {"alpine"}
 
 
 def test_load_profiles_reads_custom_file_and_keeps_alpine(tmp_path):
-    (tmp_path / "clusters.json").write_text(json.dumps([
-        {
-            "name": "summit",
-            "host": "summit.example.edu",
-            "project_base": "/proj/$USER",
-            "scratch_base": "/scratch/$USER",
-            "default_partition": "gpu",
-            "default_qos": "normal",
-        }
-    ]))
+    (tmp_path / "clusters.json").write_text(
+        json.dumps(
+            [
+                {
+                    "name": "summit",
+                    "host": "summit.example.edu",
+                    "project_base": "/proj/$USER",
+                    "scratch_base": "/scratch/$USER",
+                    "default_partition": "gpu",
+                    "default_qos": "normal",
+                }
+            ]
+        )
+    )
     profiles = cc.load_profiles(tmp_path)
     assert set(profiles) == {"alpine", "summit"}
     assert profiles["summit"].host == "summit.example.edu"
@@ -106,7 +110,9 @@ def test_load_profiles_ignores_malformed_json(tmp_path):
 
 
 def test_load_profiles_skips_bad_entries(tmp_path):
-    (tmp_path / "clusters.json").write_text(json.dumps([{"name": "broken"}]))  # missing keys
+    (tmp_path / "clusters.json").write_text(
+        json.dumps([{"name": "broken"}])
+    )  # missing keys
     profiles = cc.load_profiles(tmp_path)
     assert set(profiles) == {"alpine"}
 
@@ -130,11 +136,22 @@ def test_modules_for_falls_back_when_no_gpu_set():
 
 
 def test_gpu_module_loads_roundtrips_through_json(tmp_path):
-    (tmp_path / "clusters.json").write_text(json.dumps([{
-        "name": "myclust", "host": "h", "project_base": "/p/$USER",
-        "scratch_base": "/s/$USER", "default_partition": "g", "default_qos": "n",
-        "module_loads": ["namd/x_cpu"], "gpu_module_loads": ["cuda/12.4", "namd/x_gpu"],
-    }]))
+    (tmp_path / "clusters.json").write_text(
+        json.dumps(
+            [
+                {
+                    "name": "myclust",
+                    "host": "h",
+                    "project_base": "/p/$USER",
+                    "scratch_base": "/s/$USER",
+                    "default_partition": "g",
+                    "default_qos": "n",
+                    "module_loads": ["namd/x_cpu"],
+                    "gpu_module_loads": ["cuda/12.4", "namd/x_gpu"],
+                }
+            ]
+        )
+    )
     prof = cc.load_profiles(tmp_path)["myclust"]
     assert prof.gpu_module_loads == ["cuda/12.4", "namd/x_gpu"]
     assert prof.modules_for(gpu=True) == ["cuda/12.4", "namd/x_gpu"]
@@ -144,17 +161,18 @@ def test_profile_with_gpu_modules_is_nonmutating():
     p = cc.alpine_profile()
     gpu = cc.profile_with_gpu_modules(p, ["gcc/14.2.0", "cuda/12.4", "namd/3.0.1_gpu"])
     assert gpu.module_loads[-1] == "namd/3.0.1_gpu"
-    assert p.module_loads[-1] == "namd/3.0.1_cpu"    # original untouched
+    assert p.module_loads[-1] == "namd/3.0.1_cpu"  # original untouched
 
 
 # ── 2026 GPU expansion (ah200 / artxpro6000) ──────────────────────────────────
+
 
 def test_new_gpu_partitions_present_with_correct_gres():
     p = cc.alpine_profile()
     ah200 = p.partition("ah200")
     assert ah200 is not None
     assert ah200.kind == "gpu" and ah200.gpus == 4
-    assert ah200.gres_type == "h200"             # sbatch --gres=gpu:h200:N
+    assert ah200.gres_type == "h200"  # sbatch --gres=gpu:h200:N
     assert ah200.max_cores == 128 and ah200.mem_per_core_gb == pytest.approx(12.0)
 
     rtx = p.partition("artxpro6000")
@@ -182,12 +200,29 @@ def test_new_gpu_partitions_carry_their_own_billing_rate():
 
 
 def test_partition_su_rate_roundtrips_through_json(tmp_path):
-    (tmp_path / "clusters.json").write_text(json.dumps([{
-        "name": "myclust", "host": "h", "project_base": "/p/$USER",
-        "scratch_base": "/s/$USER", "default_partition": "g", "default_qos": "n",
-        "partitions": [{"name": "g", "kind": "gpu", "max_cores": 128,
-                        "gres_type": "h200", "su_per_gpu_hour": 334.0}],
-    }]))
+    (tmp_path / "clusters.json").write_text(
+        json.dumps(
+            [
+                {
+                    "name": "myclust",
+                    "host": "h",
+                    "project_base": "/p/$USER",
+                    "scratch_base": "/s/$USER",
+                    "default_partition": "g",
+                    "default_qos": "n",
+                    "partitions": [
+                        {
+                            "name": "g",
+                            "kind": "gpu",
+                            "max_cores": 128,
+                            "gres_type": "h200",
+                            "su_per_gpu_hour": 334.0,
+                        }
+                    ],
+                }
+            ]
+        )
+    )
     prof = cc.load_profiles(tmp_path)["myclust"]
     assert prof.partition("g").su_per_gpu_hour == pytest.approx(334.0)
 
@@ -198,6 +233,7 @@ def test_workspace_clusters_json_has_not_drifted_from_the_embedded_profile():
     app.  Guard the trap: shared partitions must agree, and the GPU submission
     targets must all be present."""
     from pathlib import Path
+
     path = Path(__file__).resolve().parents[1] / "workspace" / "clusters.json"
     if not path.is_file():
         pytest.skip("no workspace/clusters.json in this checkout")
@@ -217,7 +253,9 @@ def test_workspace_clusters_json_has_not_drifted_from_the_embedded_profile():
     for name, entry in on_disk.items():
         ref = embedded.partition(name)
         if ref is None:
-            continue                       # a deliberate local-only partition is fine
+            continue  # a deliberate local-only partition is fine
         assert entry.get("kind") == ref.kind, f"{name}: kind drifted"
         assert entry.get("gres_type", "") == ref.gres_type, f"{name}: gres_type drifted"
-        assert entry.get("allowed_qos", []) == ref.allowed_qos, f"{name}: allowed_qos drifted"
+        assert entry.get("allowed_qos", []) == ref.allowed_qos, (
+            f"{name}: allowed_qos drifted"
+        )

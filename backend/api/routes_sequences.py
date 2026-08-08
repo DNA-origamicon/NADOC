@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 from backend.core.constants import STAPLE_PALETTE
 from backend.core.models import StrandType
 from backend.core.sequences import domain_bp_range, strand_nucleotide_count
+
 # Shared export resolver used by many routes across crud.py + assembly.py + core;
 # it stays in crud.py and is imported back here (same convention as
 # routes_export_structure.py / routes_camera_poses.py).
@@ -116,7 +117,8 @@ def export_sequence_csv() -> Response:
 
     strands_sorted = sorted(
         (
-            s for s in design.strands
+            s
+            for s in design.strands
             if s.strand_type != StrandType.SCAFFOLD and not s.is_reference
         ),
         key=lambda s: (
@@ -130,7 +132,10 @@ def export_sequence_csv() -> Response:
             continue
         first_d = strand.domains[0]
         last_d = strand.domains[-1]
-        if first_d.helix_id not in helix_num_map or last_d.helix_id not in helix_num_map:
+        if (
+            first_d.helix_id not in helix_num_map
+            or last_d.helix_id not in helix_num_map
+        ):
             continue
         # Loop/skip-adjusted nt count (NOT the raw bp-range span): deletions remove
         # bases, so the bp-range over-counts and pads the shorter real sequence with
@@ -138,13 +143,15 @@ def export_sequence_csv() -> Response:
         total_nt = strand_nucleotide_count(strand, design)
         seq = _sequence_for_export(strand, total_nt)
         color = (strand.color or "#f7931e").lower()
-        writer.writerow([
-            _endpoint(first_d.helix_id, first_d.start_bp),
-            _endpoint(last_d.helix_id, last_d.end_bp),
-            seq,
-            len(seq),
-            color,
-        ])
+        writer.writerow(
+            [
+                _endpoint(first_d.helix_id, first_d.start_bp),
+                _endpoint(last_d.helix_id, last_d.end_bp),
+                seq,
+                len(seq),
+                color,
+            ]
+        )
 
     csv_bytes = output.getvalue().encode("utf-8")
     design_name = design.metadata.name or "design"
@@ -158,11 +165,13 @@ def export_sequence_csv() -> Response:
 
 class _SequenceXlsxRequest(BaseModel):
     strand_colors: dict[str, str] = Field(default_factory=dict)
-    strand_order:  list[str]      = Field(default_factory=list)
+    strand_order: list[str] = Field(default_factory=list)
 
 
 @router.post("/design/export/sequence-xlsx")
-def export_sequence_xlsx(req: _SequenceXlsxRequest | None = Body(default=None)) -> Response:
+def export_sequence_xlsx(
+    req: _SequenceXlsxRequest | None = Body(default=None),
+) -> Response:
     """Export staple sequences as XLSX with overhang regions bolded.
 
     Each Sequence cell is rich-text: 5′/3′ overhang bases are bold, the body
@@ -179,7 +188,7 @@ def export_sequence_xlsx(req: _SequenceXlsxRequest | None = Body(default=None)) 
 
     design = _design_for_export()
     color_overrides = (req.strand_colors if req else {}) or {}
-    order           = (req.strand_order  if req else []) or []
+    order = (req.strand_order if req else []) or []
 
     def _hex_to_argb(hexstr: str) -> str:
         h = (hexstr or "").lstrip("#")
@@ -218,11 +227,15 @@ def export_sequence_xlsx(req: _SequenceXlsxRequest | None = Body(default=None)) 
         d0, dn = strand.domains[0], strand.domains[-1]
         ovhg5_len = (abs(d0.end_bp - d0.start_bp) + 1) if d0.overhang_id else 0
         ovhg3_len = (abs(dn.end_bp - dn.start_bp) + 1) if dn.overhang_id else 0
-        total_len = strand_nucleotide_count(strand, design)  # loop/skip-adjusted (see CSV export)
+        total_len = strand_nucleotide_count(
+            strand, design
+        )  # loop/skip-adjusted (see CSV export)
 
-        color_hex = color_overrides.get(strand.id) \
-                    or strand.color \
-                    or STAPLE_PALETTE[strand_pos.get(strand.id, 0) % len(STAPLE_PALETTE)]
+        color_hex = (
+            color_overrides.get(strand.id)
+            or strand.color
+            or STAPLE_PALETTE[strand_pos.get(strand.id, 0) % len(STAPLE_PALETTE)]
+        )
         argb = _hex_to_argb(color_hex)
 
         ws.cell(row=row_idx + 1, column=1, value=row_idx)
@@ -230,26 +243,51 @@ def export_sequence_xlsx(req: _SequenceXlsxRequest | None = Body(default=None)) 
         seq = strand.sequence or ""
         if seq:
             ov5 = seq[:ovhg5_len] if ovhg5_len else ""
-            ov3 = seq[len(seq) - ovhg3_len:] if ovhg3_len else ""
-            body_seq = seq[ovhg5_len: len(seq) - ovhg3_len] if (ovhg5_len + ovhg3_len) < len(seq) else ""
-            bold_font  = InlineFont(rFont="Courier New", b=True, color=argb)
-            plain_font = InlineFont(rFont="Courier New",          color=argb)
+            ov3 = seq[len(seq) - ovhg3_len :] if ovhg3_len else ""
+            body_seq = (
+                seq[ovhg5_len : len(seq) - ovhg3_len]
+                if (ovhg5_len + ovhg3_len) < len(seq)
+                else ""
+            )
+            bold_font = InlineFont(rFont="Courier New", b=True, color=argb)
+            plain_font = InlineFont(rFont="Courier New", color=argb)
             blocks: list[TextBlock] = []
-            if ov5: blocks.append(TextBlock(bold_font,  ov5))
-            if body_seq: blocks.append(TextBlock(plain_font, body_seq))
-            if ov3: blocks.append(TextBlock(bold_font,  ov3))
-            ws.cell(row=row_idx + 1, column=2, value=CellRichText(blocks) if blocks else "")
+            if ov5:
+                blocks.append(TextBlock(bold_font, ov5))
+            if body_seq:
+                blocks.append(TextBlock(plain_font, body_seq))
+            if ov3:
+                blocks.append(TextBlock(bold_font, ov3))
+            ws.cell(
+                row=row_idx + 1, column=2, value=CellRichText(blocks) if blocks else ""
+            )
         else:
             # No sequence assigned — show N×length unbolded so the column isn't empty
             ws.cell(row=row_idx + 1, column=2, value=f"N×{total_len}")
 
         ws.cell(row=row_idx + 1, column=3, value=total_len)
         ws.cell(row=row_idx + 1, column=4, value=color_hex)
-        ws.cell(row=row_idx + 1, column=5, value=f"{helix_label_by_id.get(d0.helix_id, d0.helix_id)}[{d0.start_bp}]")
-        ws.cell(row=row_idx + 1, column=6, value=f"{helix_label_by_id.get(dn.helix_id, dn.helix_id)}[{dn.end_bp}]")
+        ws.cell(
+            row=row_idx + 1,
+            column=5,
+            value=f"{helix_label_by_id.get(d0.helix_id, d0.helix_id)}[{d0.start_bp}]",
+        )
+        ws.cell(
+            row=row_idx + 1,
+            column=6,
+            value=f"{helix_label_by_id.get(dn.helix_id, dn.helix_id)}[{dn.end_bp}]",
+        )
         ws.cell(row=row_idx + 1, column=7, value=strand.notes or "")
 
-    for col_letter, w in (("A", 6), ("B", 80), ("C", 8), ("D", 10), ("E", 12), ("F", 12), ("G", 30)):
+    for col_letter, w in (
+        ("A", 6),
+        ("B", 80),
+        ("C", 8),
+        ("D", 10),
+        ("E", 12),
+        ("F", 12),
+        ("G", 30),
+    ):
         ws.column_dimensions[col_letter].width = w
     ws.freeze_panes = "A2"
     ws.cell(row=1, column=2).alignment = Alignment(horizontal="left")

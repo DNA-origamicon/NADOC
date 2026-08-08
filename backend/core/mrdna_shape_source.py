@@ -34,6 +34,7 @@ Field-response emission is deferred (``field`` defaults to ``None``; a caller ma
 pre-built :func:`field_response_profile` result through) — a natural follow-up once an anchored
 mrDNA field run's relaxed frame is on hand, built the way M2 applies the field.
 """
+
 from __future__ import annotations
 
 from backend.core.oxdna_health import _filter_to_reference_core
@@ -58,23 +59,27 @@ def _rmsf_profile(rmsf) -> list[dict]:
         if v is None:
             continue
         h = p.get("helix_id")
-        if isinstance(h, str) and h.startswith("__ext_"):   # tails have an INT bp_index
+        if isinstance(h, str) and h.startswith("__ext_"):  # tails have an INT bp_index
             continue
         bp = p.get("bp_index")
-        if not isinstance(bp, int):   # __xb__ inserts (string crossover id) drop out
+        if not isinstance(bp, int):  # __xb__ inserts (string crossover id) drop out
             continue
         direction = p.get("direction")
-        out.append({
-            "helix_id": p["helix_id"],
-            "bp_index": bp,
-            "direction": getattr(direction, "value", direction),
-            "copy": int(p.get("copy", 0)),
-            "rmsf_nm": float(v),
-        })
+        out.append(
+            {
+                "helix_id": p["helix_id"],
+                "bp_index": bp,
+                "direction": getattr(direction, "value", direction),
+                "copy": int(p.get("copy", 0)),
+                "rmsf_nm": float(v),
+            }
+        )
     return out
 
 
-def build_mrdna_shape_source(shape_frame, core_reference, *, rmsf=None, field=None) -> dict:
+def build_mrdna_shape_source(
+    shape_frame, core_reference, *, rmsf=None, field=None
+) -> dict:
     """The mrDNA source bundle for the cross-engine comparison card.
 
     ``shape_frame`` — the mrDNA relaxed display-position list (``_display_positions`` output:

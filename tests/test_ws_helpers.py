@@ -35,6 +35,7 @@ exercised end-to-end on the demo design — both happy paths and "no design
 loaded" error paths. These were the cheapest route to additional ws.py
 coverage without further fixtures.
 """
+
 from __future__ import annotations
 
 import os
@@ -55,6 +56,7 @@ from backend.api.routes import _demo_design
 def client():
     """Fresh TestClient per test (websocket sessions don't share state)."""
     from fastapi.testclient import TestClient
+
     return TestClient(app)
 
 
@@ -96,9 +98,9 @@ def md_fixture_dir(demo_design_loaded):
 
     design = demo_design_loaded
     pdb_text = export_pdb(design)
-    model    = build_atomistic_model(design)
-    cm       = build_chain_map(model)
-    p_order  = build_p_gro_order(pdb_text, cm)
+    model = build_atomistic_model(design)
+    cm = build_chain_map(model)
+    p_order = build_p_gro_order(pdb_text, cm)
 
     # First len(p_order) P atoms — same residues build_p_gro_order kept.
     p_atoms = [a for a in model.atoms if a.name == "P"][: len(p_order)]
@@ -106,37 +108,45 @@ def md_fixture_dir(demo_design_loaded):
 
     # Two atoms per residue: P + C1'.  C1' is required for the base-normal
     # (P→C1') step inside _seek_sync.
-    n_atoms       = n * 2
+    n_atoms = n * 2
     atom_resindex = [r for i in range(n) for r in (i, i)]
-    names         = [name for _ in range(n) for name in ("P", "C1'")]
+    names = [name for _ in range(n) for name in ("P", "C1'")]
     u = mda.Universe.empty(
-        n_atoms=n_atoms, n_residues=n, n_segments=1,
-        atom_resindex=atom_resindex, residue_segindex=[0] * n,
+        n_atoms=n_atoms,
+        n_residues=n,
+        n_segments=1,
+        atom_resindex=atom_resindex,
+        residue_segindex=[0] * n,
         trajectory=True,
     )
-    u.add_TopologyAttr("name",    names)
+    u.add_TopologyAttr("name", names)
     u.add_TopologyAttr("resname", ["DA"] * n)
-    u.add_TopologyAttr("resid",   list(range(1, n + 1)))
-    u.add_TopologyAttr("segid",   ["A"])
+    u.add_TopologyAttr("resid", list(range(1, n + 1)))
+    u.add_TopologyAttr("segid", ["A"])
 
     pos = []
     for a in p_atoms:
         pos.append([a.x, a.y, a.z])
         pos.append([a.x + 0.5, a.y, a.z])  # C1' offset 0.5 Å along x
     u.atoms.positions = np.array(pos, dtype=np.float32)
-    u.dimensions      = [200.0, 200.0, 200.0, 90.0, 90.0, 90.0]
+    u.dimensions = [200.0, 200.0, 200.0, 90.0, 90.0, 90.0]
 
     with tempfile.TemporaryDirectory() as td:
-        (open(os.path.join(td, "input_nadoc.pdb"), "w")
-            .write(pdb_text))
+        (open(os.path.join(td, "input_nadoc.pdb"), "w").write(pdb_text))
         gro = os.path.join(td, "t.gro")
         xtc = os.path.join(td, "t.xtc")
         u.atoms.write(gro)
         with mda.Writer(xtc, n_atoms=n_atoms) as w:
             for _ in range(3):
                 w.write(u.atoms)
-        yield {"dir": td, "gro": gro, "xtc": xtc, "n_frames": 3,
-               "n_p_atoms": len(cm), "n_p_order": n}
+        yield {
+            "dir": td,
+            "gro": gro,
+            "xtc": xtc,
+            "n_frames": 3,
+            "n_p_atoms": len(cm),
+            "n_p_order": n,
+        }
 
 
 @pytest.fixture
@@ -168,9 +178,9 @@ def namd_dcd_fixture(demo_design_loaded):
 
     design = demo_design_loaded
     pdb_text = export_pdb(design)
-    model    = build_atomistic_model(design)
-    cm       = build_chain_map(model)
-    p_order  = build_p_pdb_order(pdb_text, cm)
+    model = build_atomistic_model(design)
+    cm = build_chain_map(model)
+    p_order = build_p_pdb_order(pdb_text, cm)
     eq_positions, _eq_valid, rigid_mask = md_rigid_reference(model, p_order)
 
     # P-atom coords (Å, PDB frame) in build_p_pdb_order's exact walk order.
@@ -188,21 +198,24 @@ def namd_dcd_fixture(demo_design_loaded):
     assert len(p_xyz) == n, (len(p_xyz), n)
 
     # Two atoms per residue: P + C1' (C1' feeds the P→C1' base-normal step).
-    n_atoms       = n * 2
+    n_atoms = n * 2
     atom_resindex = [r for i in range(n) for r in (i, i)]
-    names         = [nm for _ in range(n) for nm in ("P", "C1'")]
+    names = [nm for _ in range(n) for nm in ("P", "C1'")]
     u = mda.Universe.empty(
-        n_atoms=n_atoms, n_residues=n, n_segments=1,
-        atom_resindex=atom_resindex, residue_segindex=[0] * n,
+        n_atoms=n_atoms,
+        n_residues=n,
+        n_segments=1,
+        atom_resindex=atom_resindex,
+        residue_segindex=[0] * n,
         trajectory=True,
     )
-    u.add_TopologyAttr("name",    names)
+    u.add_TopologyAttr("name", names)
     u.add_TopologyAttr("resname", ["DA"] * n)
-    u.add_TopologyAttr("resid",   list(range(1, n + 1)))
-    u.add_TopologyAttr("segid",   ["A"])
+    u.add_TopologyAttr("resid", list(range(1, n + 1)))
+    u.add_TopologyAttr("segid", ["A"])
 
     base = np.empty((n_atoms, 3), dtype=np.float32)
-    base[0::2] = p_xyz                       # P atoms = design positions (Å)
+    base[0::2] = p_xyz  # P atoms = design positions (Å)
     base[1::2] = p_xyz + np.array([0.5, 0.0, 0.0], dtype=np.float32)  # C1' offset
 
     with tempfile.TemporaryDirectory() as td:
@@ -212,7 +225,7 @@ def namd_dcd_fixture(demo_design_loaded):
         gro = os.path.join(td, "t.gro")
         dcd = os.path.join(td, "t.dcd")
         u.atoms.positions = base
-        u.dimensions      = [200.0, 200.0, 200.0, 90.0, 90.0, 90.0]
+        u.dimensions = [200.0, 200.0, 200.0, 90.0, 90.0, 90.0]
         u.atoms.write(gro)
 
         def write(k, shift=0.05):
@@ -221,13 +234,20 @@ def namd_dcd_fixture(demo_design_loaded):
                     pos = base.copy()
                     pos[:, 0] += fr * shift
                     u.atoms.positions = pos
-                    u.dimensions      = [200.0, 200.0, 200.0, 90.0, 90.0, 90.0]
+                    u.dimensions = [200.0, 200.0, 200.0, 90.0, 90.0, 90.0]
                     w.write(u.atoms)
 
         write(3)
-        yield {"dir": td, "gro": gro, "dcd": dcd, "pdb": pdb_path,
-               "n_p_order": n, "eq_positions": eq_positions,
-               "rigid_mask": rigid_mask, "write": write}
+        yield {
+            "dir": td,
+            "gro": gro,
+            "dcd": dcd,
+            "pdb": pdb_path,
+            "n_p_order": n,
+            "eq_positions": eq_positions,
+            "rigid_mask": rigid_mask,
+            "write": write,
+        }
 
 
 def _await_md_ready(ws, expect_frames=None):
@@ -243,9 +263,15 @@ def _await_md_ready(ws, expect_frames=None):
 
 
 def _load_namd(ws, fix, mode="nadoc"):
-    ws.send_json({"action": "load", "topology_path": fix["gro"],
-                  "xtc_path": fix["dcd"], "coordinate_path": fix["pdb"],
-                  "mode": mode})
+    ws.send_json(
+        {
+            "action": "load",
+            "topology_path": fix["gro"],
+            "xtc_path": fix["dcd"],
+            "coordinate_path": fix["pdb"],
+            "mode": mode,
+        }
+    )
 
 
 # ── /ws/md-run — GROMACS trajectory streaming ────────────────────────────────
@@ -253,8 +279,14 @@ def _load_namd(ws, fix, mode="nadoc"):
 
 def test_md_run_ws_no_design(client, no_design_loaded):
     with client.websocket_connect("/ws/md-run") as ws:
-        ws.send_json({"action": "load", "topology_path": "/tmp/x.gro",
-                      "xtc_path": "/tmp/x.xtc", "mode": "nadoc"})
+        ws.send_json(
+            {
+                "action": "load",
+                "topology_path": "/tmp/x.gro",
+                "xtc_path": "/tmp/x.xtc",
+                "mode": "nadoc",
+            }
+        )
         msg = ws.receive_json()
         assert msg["type"] == "error"
         assert "No design" in msg["message"]
@@ -263,8 +295,9 @@ def test_md_run_ws_no_design(client, no_design_loaded):
 def test_md_run_ws_missing_paths(client, demo_design_loaded):
     """load with empty topology/xtc paths → 'paths required' error."""
     with client.websocket_connect("/ws/md-run") as ws:
-        ws.send_json({"action": "load", "topology_path": "",
-                      "xtc_path": "", "mode": "nadoc"})
+        ws.send_json(
+            {"action": "load", "topology_path": "", "xtc_path": "", "mode": "nadoc"}
+        )
         msg = ws.receive_json()
         assert msg["type"] == "error"
         assert "required" in msg["message"].lower()
@@ -297,12 +330,20 @@ def test_md_run_ws_load_missing_input_pdb(client, demo_design_loaded, tmp_path):
     """
     gro = tmp_path / "t.gro"
     xtc = tmp_path / "t.xtc"
-    gro.write_text("dummy gro contents (will not be opened — _load_sync raises before mda.Universe call)")
+    gro.write_text(
+        "dummy gro contents (will not be opened — _load_sync raises before mda.Universe call)"
+    )
     xtc.write_bytes(b"")  # not opened either
 
     with client.websocket_connect("/ws/md-run") as ws:
-        ws.send_json({"action": "load", "topology_path": str(gro),
-                      "xtc_path": str(xtc), "mode": "nadoc"})
+        ws.send_json(
+            {
+                "action": "load",
+                "topology_path": str(gro),
+                "xtc_path": str(xtc),
+                "mode": "nadoc",
+            }
+        )
         msg = ws.receive_json()
         assert msg["type"] == "error"
         assert "input_nadoc.pdb" in msg["message"]
@@ -321,8 +362,14 @@ def test_md_run_ws_load_seek_get_latest(client, md_fixture_dir):
     """
     fix = md_fixture_dir
     with client.websocket_connect("/ws/md-run") as ws:
-        ws.send_json({"action": "load", "topology_path": fix["gro"],
-                      "xtc_path": fix["xtc"], "mode": "nadoc"})
+        ws.send_json(
+            {
+                "action": "load",
+                "topology_path": fix["gro"],
+                "xtc_path": fix["xtc"],
+                "mode": "nadoc",
+            }
+        )
         ready = None
         for _ in range(60):
             m = ws.receive_json()
@@ -343,8 +390,7 @@ def test_md_run_ws_load_seek_get_latest(client, md_fixture_dir):
         # Each entry has helix_id, bp_index, direction, x/y/z and (because
         # C1' map is valid) the n[xyz] base-normal triplet.
         e0 = f0["positions"][0]
-        for k in ("helix_id", "bp_index", "direction", "x", "y", "z",
-                  "nx", "ny", "nz"):
+        for k in ("helix_id", "bp_index", "direction", "x", "y", "z", "nx", "ny", "nz"):
             assert k in e0
 
         # Frame 1 — sequential seek; exercises the R_prev sequential branch.
@@ -488,7 +534,7 @@ def test_md_run_ws_dcd_get_latest_follows_growing(client, namd_dcd_fixture):
         _await_md_ready(ws, expect_frames=2)
         ws.send_json({"action": "get_latest"})
         assert ws.receive_json()["frame_idx"] == 1
-        fix["write"](6)   # NAMD flushes more frames to the same DCD
+        fix["write"](6)  # NAMD flushes more frames to the same DCD
         ws.send_json({"action": "get_latest"})
         gl = ws.receive_json()
         assert gl["type"] == "frame", gl
@@ -514,7 +560,9 @@ def test_md_run_ws_dcd_tolerates_torn_final_frame(client, namd_dcd_fixture):
         assert gl["frame_idx"] < 4
 
 
-def test_md_run_ws_dcd_seek_discovers_frames_appended_after_load(client, namd_dcd_fixture):
+def test_md_run_ws_dcd_seek_discovers_frames_appended_after_load(
+    client, namd_dcd_fixture
+):
     """Fix 3: scrubbing to a frame appended after load must not raise IndexError.
 
     The MDAnalysis Universe indexes frame offsets at open time; the live dcd_fast
@@ -527,7 +575,7 @@ def test_md_run_ws_dcd_seek_discovers_frames_appended_after_load(client, namd_dc
     with client.websocket_connect("/ws/md-run") as ws:
         _load_namd(ws, fix)
         _await_md_ready(ws, expect_frames=2)
-        fix["write"](6)   # NAMD appends AFTER the Universe indexed only 2 frames
+        fix["write"](6)  # NAMD appends AFTER the Universe indexed only 2 frames
         ws.send_json({"action": "seek", "frame_idx": 5})
         got = ws.receive_json()
         assert got["type"] == "frame", f"seek beyond stale Universe errored: {got}"
@@ -553,10 +601,10 @@ def test_md_run_ws_dcd_alignment_matches_design_eq(client, namd_dcd_fixture):
         assert got["type"] == "frame", got
         pos = np.array([[p["x"], p["y"], p["z"]] for p in got["positions"]])
         assert np.all(np.isfinite(pos))
-        rm  = fix["rigid_mask"]
-        eq  = fix["eq_positions"]
-        d   = np.linalg.norm(pos[rm] - eq[rm], axis=1)
-        rmsd_A = float(np.sqrt((d ** 2).mean()) * 10.0)
+        rm = fix["rigid_mask"]
+        eq = fix["eq_positions"]
+        d = np.linalg.norm(pos[rm] - eq[rm], axis=1)
+        rmsd_A = float(np.sqrt((d**2).mean()) * 10.0)
         assert rmsd_A < 0.5, f"rigid RMSD to design eq = {rmsd_A:.2f} Å"
 
 
@@ -569,8 +617,14 @@ def test_md_run_ws_load_seek_ballstick(client, md_fixture_dir):
     """
     fix = md_fixture_dir
     with client.websocket_connect("/ws/md-run") as ws:
-        ws.send_json({"action": "load", "topology_path": fix["gro"],
-                      "xtc_path": fix["xtc"], "mode": "ballstick"})
+        ws.send_json(
+            {
+                "action": "load",
+                "topology_path": fix["gro"],
+                "xtc_path": fix["xtc"],
+                "mode": "ballstick",
+            }
+        )
         ready = None
         for _ in range(60):
             m = ws.receive_json()
@@ -600,6 +654,7 @@ def test_md_run_ws_load_seek_ballstick(client, md_fixture_dir):
 class TestUniverseCacheHelpers:
     def _reset_cache(self):
         from backend.api import ws
+
         with ws._UNIVERSE_CACHE_LOCK:
             ws._UNIVERSE_CACHE.clear()
 
@@ -613,13 +668,15 @@ class TestUniverseCacheHelpers:
         id2 = ws._file_identity(p)
         assert id1 != id2
         # A growing DCD (live job) therefore misses the cache → fresh parse.
-        assert ws._file_identity(tmp_path / "missing") .endswith(":missing")
+        assert ws._file_identity(tmp_path / "missing").endswith(":missing")
 
     def test_cache_key_combines_both_files(self, tmp_path):
         from backend.api import ws
 
-        psf = tmp_path / "t.psf"; psf.write_text("x")
-        dcd = tmp_path / "t.dcd"; dcd.write_text("y")
+        psf = tmp_path / "t.psf"
+        psf.write_text("x")
+        dcd = tmp_path / "t.dcd"
+        dcd.write_text("y")
         key = ws._universe_cache_key(psf, dcd)
         assert str(psf) in key and str(dcd) in key and "||" in key
 
@@ -639,10 +696,10 @@ class TestUniverseCacheHelpers:
         us = [_FakeUniverse(i) for i in range(3)]
         ws._cache_put_universe("k0", us[0])
         ws._cache_put_universe("k1", us[1])
-        assert ws._cache_get_universe("k0") is us[0]   # also LRU-touches k0
-        ws._cache_put_universe("k2", us[2])            # cap=2 → evict LRU (k1)
+        assert ws._cache_get_universe("k0") is us[0]  # also LRU-touches k0
+        ws._cache_put_universe("k2", us[2])  # cap=2 → evict LRU (k1)
         assert ws._cache_get_universe("k1") is None
-        assert us[1].closed is True                    # evicted handle was closed
+        assert us[1].closed is True  # evicted handle was closed
         assert ws._cache_get_universe("k0") is us[0]
         assert ws._cache_get_universe("k2") is us[2]
         self._reset_cache()
@@ -651,7 +708,9 @@ class TestUniverseCacheHelpers:
         from backend.api import ws
 
         psf = tmp_path / "t.psf"
-        psf.write_text("PSF EXT CMAP\n\n       2 !NTITLE\n\n 1320174 !NATOM\n...rest...\n")
+        psf.write_text(
+            "PSF EXT CMAP\n\n       2 !NTITLE\n\n 1320174 !NATOM\n...rest...\n"
+        )
         assert ws._psf_natom(psf) == 1320174
         assert ws._psf_natom(tmp_path / "nope.psf") is None
 

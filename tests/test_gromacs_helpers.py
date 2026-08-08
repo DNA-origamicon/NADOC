@@ -55,19 +55,19 @@ def _atom_line(
     assert len(name) == 4, f"atom name field must be 4 chars, got {name!r}"
     assert len(element) == 2, f"element must be 2 chars, got {element!r}"
     return (
-        f"ATOM  "                     # 1-6
-        f"{serial:5d} "                # 7-11 + col 12 blank
-        f"{name}"                      # 13-16
-        f" "                           # 17 altLoc
-        f"{res:<3s}"                   # 18-20
-        f" "                           # 21 blank
-        f"{chain}"                     # 22
-        f"{resnum:4d}"                 # 23-26
-        f"    "                        # 27-30 (insertion + 3 blanks)
-        f"{x:8.3f}{y:8.3f}{z:8.3f}"    # 31-54
-        f"  1.00  0.00"                # 55-66 occ + B
-        f"          "                  # 67-76 blanks
-        f"{element}"                   # 77-78
+        f"ATOM  "  # 1-6
+        f"{serial:5d} "  # 7-11 + col 12 blank
+        f"{name}"  # 13-16
+        f" "  # 17 altLoc
+        f"{res:<3s}"  # 18-20
+        f" "  # 21 blank
+        f"{chain}"  # 22
+        f"{resnum:4d}"  # 23-26
+        f"    "  # 27-30 (insertion + 3 blanks)
+        f"{x:8.3f}{y:8.3f}{z:8.3f}"  # 31-54
+        f"  1.00  0.00"  # 55-66 occ + B
+        f"          "  # 67-76 blanks
+        f"{element}"  # 77-78
     )
 
 
@@ -127,15 +127,33 @@ class TestAdaptPdbForFf:
     def _four_residue_pdb(self) -> str:
         """Synthetic 4-residue PDB: DA/DT/DG/DC each with OP1 + OP2 + (DT) C7."""
         lines = [
-            _atom_line(serial=1, name=" OP1", res="DA", chain="A", resnum=1, element=" O"),
-            _atom_line(serial=2, name=" OP2", res="DA", chain="A", resnum=1, element=" O"),
-            _atom_line(serial=3, name=" OP1", res="DT", chain="A", resnum=2, element=" O"),
-            _atom_line(serial=4, name=" OP2", res="DT", chain="A", resnum=2, element=" O"),
-            _atom_line(serial=5, name=" C7 ", res="DT", chain="A", resnum=2, element=" C"),
-            _atom_line(serial=6, name=" OP1", res="DG", chain="A", resnum=3, element=" O"),
-            _atom_line(serial=7, name=" OP2", res="DG", chain="A", resnum=3, element=" O"),
-            _atom_line(serial=8, name=" OP1", res="DC", chain="A", resnum=4, element=" O"),
-            _atom_line(serial=9, name=" OP2", res="DC", chain="A", resnum=4, element=" O"),
+            _atom_line(
+                serial=1, name=" OP1", res="DA", chain="A", resnum=1, element=" O"
+            ),
+            _atom_line(
+                serial=2, name=" OP2", res="DA", chain="A", resnum=1, element=" O"
+            ),
+            _atom_line(
+                serial=3, name=" OP1", res="DT", chain="A", resnum=2, element=" O"
+            ),
+            _atom_line(
+                serial=4, name=" OP2", res="DT", chain="A", resnum=2, element=" O"
+            ),
+            _atom_line(
+                serial=5, name=" C7 ", res="DT", chain="A", resnum=2, element=" C"
+            ),
+            _atom_line(
+                serial=6, name=" OP1", res="DG", chain="A", resnum=3, element=" O"
+            ),
+            _atom_line(
+                serial=7, name=" OP2", res="DG", chain="A", resnum=3, element=" O"
+            ),
+            _atom_line(
+                serial=8, name=" OP1", res="DC", chain="A", resnum=4, element=" O"
+            ),
+            _atom_line(
+                serial=9, name=" OP2", res="DC", chain="A", resnum=4, element=" O"
+            ),
         ]
         return "\n".join(lines) + "\n"
 
@@ -148,7 +166,7 @@ class TestAdaptPdbForFf:
         op1_count = sum(1 for ln in out_lines if ln[12:16].strip() == "OP1")
         assert op1_count == 0
         o1p_count = sum(1 for ln in out_lines if ln[12:16].strip() == "O1P")
-        assert o1p_count == 4   # one per residue
+        assert o1p_count == 4  # one per residue
         # All OP2 should now be O2P.
         op2_count = sum(1 for ln in out_lines if ln[12:16].strip() == "OP2")
         assert op2_count == 0
@@ -188,7 +206,8 @@ class TestAdaptPdbForFf:
         pdb = (
             "REMARK   1 NADOC test\n"
             "CRYST1  100.000  100.000  100.000  90.00  90.00  90.00 P 1           1\n"
-            + _atom_line(name=" OP1", res="DA", element=" O") + "\n"
+            + _atom_line(name=" OP1", res="DA", element=" O")
+            + "\n"
             "TER\nEND\n"
         )
         out = adapt_pdb_for_ff(pdb, "amber99sb-ildn")
@@ -207,16 +226,36 @@ class TestStrip5primePhosphate:
         Second residue (resnum 2) has the same — only residue 1 should be
         stripped of phosphate atoms."""
         return [
-            _atom_line(serial=1, name=" P  ", res="DA", chain=chain, resnum=1, element=" P"),
-            _atom_line(serial=2, name=" OP1", res="DA", chain=chain, resnum=1, element=" O"),
-            _atom_line(serial=3, name=" OP2", res="DA", chain=chain, resnum=1, element=" O"),
-            _atom_line(serial=4, name=" O5'", res="DA", chain=chain, resnum=1, element=" O"),
-            _atom_line(serial=5, name=" C5'", res="DA", chain=chain, resnum=1, element=" C"),
-            _atom_line(serial=6, name=" P  ", res="DT", chain=chain, resnum=2, element=" P"),
-            _atom_line(serial=7, name=" OP1", res="DT", chain=chain, resnum=2, element=" O"),
-            _atom_line(serial=8, name=" OP2", res="DT", chain=chain, resnum=2, element=" O"),
-            _atom_line(serial=9, name=" O5'", res="DT", chain=chain, resnum=2, element=" O"),
-            _atom_line(serial=10, name=" C5'", res="DT", chain=chain, resnum=2, element=" C"),
+            _atom_line(
+                serial=1, name=" P  ", res="DA", chain=chain, resnum=1, element=" P"
+            ),
+            _atom_line(
+                serial=2, name=" OP1", res="DA", chain=chain, resnum=1, element=" O"
+            ),
+            _atom_line(
+                serial=3, name=" OP2", res="DA", chain=chain, resnum=1, element=" O"
+            ),
+            _atom_line(
+                serial=4, name=" O5'", res="DA", chain=chain, resnum=1, element=" O"
+            ),
+            _atom_line(
+                serial=5, name=" C5'", res="DA", chain=chain, resnum=1, element=" C"
+            ),
+            _atom_line(
+                serial=6, name=" P  ", res="DT", chain=chain, resnum=2, element=" P"
+            ),
+            _atom_line(
+                serial=7, name=" OP1", res="DT", chain=chain, resnum=2, element=" O"
+            ),
+            _atom_line(
+                serial=8, name=" OP2", res="DT", chain=chain, resnum=2, element=" O"
+            ),
+            _atom_line(
+                serial=9, name=" O5'", res="DT", chain=chain, resnum=2, element=" O"
+            ),
+            _atom_line(
+                serial=10, name=" C5'", res="DT", chain=chain, resnum=2, element=" C"
+            ),
         ]
 
     def test_strips_phosphate_from_first_residue_only(self) -> None:
@@ -237,10 +276,18 @@ class TestStrip5primePhosphate:
     def test_no_phosphate_atoms_unchanged(self) -> None:
         """Input with no 5'-phosphate atoms → identical output (modulo trailing newline)."""
         pdb_lines = [
-            _atom_line(serial=1, name=" O5'", res="DA", chain="A", resnum=1, element=" O"),
-            _atom_line(serial=2, name=" C5'", res="DA", chain="A", resnum=1, element=" C"),
-            _atom_line(serial=3, name=" O5'", res="DT", chain="A", resnum=2, element=" O"),
-            _atom_line(serial=4, name=" C5'", res="DT", chain="A", resnum=2, element=" C"),
+            _atom_line(
+                serial=1, name=" O5'", res="DA", chain="A", resnum=1, element=" O"
+            ),
+            _atom_line(
+                serial=2, name=" C5'", res="DA", chain="A", resnum=1, element=" C"
+            ),
+            _atom_line(
+                serial=3, name=" O5'", res="DT", chain="A", resnum=2, element=" O"
+            ),
+            _atom_line(
+                serial=4, name=" C5'", res="DT", chain="A", resnum=2, element=" C"
+            ),
         ]
         pdb = "\n".join(pdb_lines) + "\n"
         out = strip_5prime_phosphate(pdb)
@@ -257,11 +304,9 @@ class TestStrip5primePhosphate:
         # Two blocks → 2 first-residue strips of 3 atoms each → 20 - 6 = 14.
         assert len(out_lines) == 14
         # Both residue-1's of A and B should be stripped.
-        res1_a = [ln for ln in out_lines
-                  if ln[21] == "A" and ln[22:26].strip() == "1"]
-        res1_b = [ln for ln in out_lines
-                  if ln[21] == "B" and ln[22:26].strip() == "1"]
-        assert len(res1_a) == 2   # O5', C5' only
+        res1_a = [ln for ln in out_lines if ln[21] == "A" and ln[22:26].strip() == "1"]
+        res1_b = [ln for ln in out_lines if ln[21] == "B" and ln[22:26].strip() == "1"]
+        assert len(res1_a) == 2  # O5', C5' only
         assert len(res1_b) == 2
 
     def test_strips_at_repeated_chain_letter_block(self) -> None:
@@ -271,7 +316,7 @@ class TestStrip5primePhosphate:
         # A...A (block 1) → B...B (block 2) → A...A (block 3, same letter as block 1)
         block1 = self._two_residue_chain(chain="A")
         block2 = self._two_residue_chain(chain="B")
-        block3 = self._two_residue_chain(chain="A")   # reused chain letter
+        block3 = self._two_residue_chain(chain="A")  # reused chain letter
         pdb = "\n".join(block1 + block2 + block3) + "\n"
         out = strip_5prime_phosphate(pdb)
         out_lines = [ln for ln in out.splitlines() if ln.startswith("ATOM")]
@@ -280,8 +325,7 @@ class TestStrip5primePhosphate:
         assert len(out_lines) == 21
         # Phosphate (P, OP1, OP2) atoms remaining = 3 (interior residues only:
         # residue 2 of each of the 3 blocks → 3 P + 3 OP1 + 3 OP2 = 9).
-        n_phos = sum(1 for ln in out_lines
-                     if ln[12:16].strip() in {"P", "OP1", "OP2"})
+        n_phos = sum(1 for ln in out_lines if ln[12:16].strip() in {"P", "OP1", "OP2"})
         assert n_phos == 9
 
     def test_post_rename_o1p_o2p_also_stripped(self) -> None:
@@ -289,11 +333,21 @@ class TestStrip5primePhosphate:
         (O1P/O2P) phosphate atom names — so calling strip after adapt_pdb_for_ff
         for AMBER still works."""
         pdb_lines = [
-            _atom_line(serial=1, name=" P  ", res="DA", chain="A", resnum=1, element=" P"),
-            _atom_line(serial=2, name=" O1P", res="DA", chain="A", resnum=1, element=" O"),
-            _atom_line(serial=3, name=" O2P", res="DA", chain="A", resnum=1, element=" O"),
-            _atom_line(serial=4, name=" O5'", res="DA", chain="A", resnum=1, element=" O"),
-            _atom_line(serial=5, name=" C5'", res="DA", chain="A", resnum=1, element=" C"),
+            _atom_line(
+                serial=1, name=" P  ", res="DA", chain="A", resnum=1, element=" P"
+            ),
+            _atom_line(
+                serial=2, name=" O1P", res="DA", chain="A", resnum=1, element=" O"
+            ),
+            _atom_line(
+                serial=3, name=" O2P", res="DA", chain="A", resnum=1, element=" O"
+            ),
+            _atom_line(
+                serial=4, name=" O5'", res="DA", chain="A", resnum=1, element=" O"
+            ),
+            _atom_line(
+                serial=5, name=" C5'", res="DA", chain="A", resnum=1, element=" C"
+            ),
         ]
         pdb = "\n".join(pdb_lines) + "\n"
         out = strip_5prime_phosphate(pdb)

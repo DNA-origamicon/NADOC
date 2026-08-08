@@ -37,9 +37,11 @@ def _make_parent(ws: Path, *, fast: bool = False, mgh: bool = False):
         (pkg / "mgh_extrabonds.txt").write_text("bonds")
     (pkg / "output" / f"{READY}.coor").write_text("coor")
     (pkg / "output" / f"{READY}.xsc").write_text("xsc")
-    (pkg / "charge_audit.json").write_text(json.dumps({
-        "topology_metadata": {"segments": [{"segid": "D000", "chain_id": "A"}]}
-    }))
+    (pkg / "charge_audit.json").write_text(
+        json.dumps(
+            {"topology_metadata": {"segments": [{"segid": "D000", "chain_id": "A"}]}}
+        )
+    )
     manifest = {
         "name_stem": "demo",
         "protocol": "mgh_slow_release",
@@ -56,26 +58,51 @@ def _make_parent(ws: Path, *, fast: bool = False, mgh: bool = False):
     return job
 
 
-def _build_replica(ws: Path, parent, *, seed=54321, index=0, fast=False,
-                   timestep_fs=None, total_steps=500_000,
-                   rigid_bonds=None, hmr=None):
-    child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
-                    parent_job_id=parent.job_id, ensemble_seed=seed, ensemble_index=index)
+def _build_replica(
+    ws: Path,
+    parent,
+    *,
+    seed=54321,
+    index=0,
+    fast=False,
+    timestep_fs=None,
+    total_steps=500_000,
+    rigid_bonds=None,
+    hmr=None,
+):
+    child = new_job(
+        "demo",
+        "mgh_slow_release",
+        name_stem="",
+        package_subdir="",
+        parent_job_id=parent.job_id,
+        ensemble_seed=seed,
+        ensemble_index=index,
+    )
     child.execution_target = "alpine"
     child.cluster_name = "alpine"
     if timestep_fs is None:
         timestep_fs = 4.0 if fast else 1.0
     length_ns = total_steps * timestep_fs / 1_000_000.0
     me.build_replica_package(
-        parent, child, seed=seed, index=index,
-        total_steps=total_steps, length_ns=length_ns, timestep_fs=timestep_fs,
-        fast=fast, rigid_bonds=rigid_bonds, hmr=hmr,
-        ready_checkpoint=READY, workspace=ws,
+        parent,
+        child,
+        seed=seed,
+        index=index,
+        total_steps=total_steps,
+        length_ns=length_ns,
+        timestep_fs=timestep_fs,
+        fast=fast,
+        rigid_bonds=rigid_bonds,
+        hmr=hmr,
+        ready_checkpoint=READY,
+        workspace=ws,
     )
     return child
 
 
 # ── generate_seeds ──────────────────────────────────────────────────────────────
+
 
 def test_generate_seeds_distinct_and_reproducible():
     seeds = me.generate_seeds(54321, 5)
@@ -90,6 +117,7 @@ def test_generate_seeds_rejects_zero():
 
 
 # ── random_seed ─────────────────────────────────────────────────────────────────
+
 
 def test_random_seed_in_namd_range_and_varies():
     draws = [me.random_seed() for _ in range(64)]
@@ -119,6 +147,7 @@ def test_replica_label():
 
 
 # ── build_replica_package ────────────────────────────────────────────────────────
+
 
 def test_replica_package_layout(tmp_path):
     parent = _make_parent(tmp_path)
@@ -195,10 +224,12 @@ def test_replica_2fs_conf_runs_at_2fs(tmp_path):
     # REGRESSION: the ensemble path used to pass only ``fast`` to build_production_conf,
     # so a manual 2 fs replica silently emitted a 1 fs conf and ran HALF its labelled time.
     parent = _make_parent(tmp_path)
-    child = _build_replica(tmp_path, parent, fast=False, timestep_fs=2.0, total_steps=500_000)
+    child = _build_replica(
+        tmp_path, parent, fast=False, timestep_fs=2.0, total_steps=500_000
+    )
     conf = _prod_conf(child, tmp_path)
     assert "timestep           2" in conf
-    assert "rigidBonds         all" in conf          # 2 fs medium path, not the 1 fs ref
+    assert "rigidBonds         all" in conf  # 2 fs medium path, not the 1 fs ref
     manifest = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())
     # 500k steps × 2 fs = 1 ns — label + manifest reflect the ACTUAL integrated time.
     assert cr.total_ns_from_manifest(manifest) == pytest.approx(1.0)
@@ -219,27 +250,36 @@ def _write_minimal_psf(path, n_atoms=2):
     rows = []
     for i in range(1, n_atoms + 1):
         # atomid seg resid resname name type charge MASS ...
-        name, typ, mass = ("H1", "HN", "1.008000") if i % 2 == 0 else ("N1", "NH", "14.007000")
-        rows.append(f"{i:10d} D000 {i:<4d} ADE  {name:<5s}{typ:<5s}  -0.300000     {mass}           0")
+        name, typ, mass = (
+            ("H1", "HN", "1.008000") if i % 2 == 0 else ("N1", "NH", "14.007000")
+        )
+        rows.append(
+            f"{i:10d} D000 {i:<4d} ADE  {name:<5s}{typ:<5s}  -0.300000     {mass}           0"
+        )
     body = "\n".join(rows)
     path.write_text(
         "PSF EXT\n\n       1 !NTITLE\n\n"
         f"{n_atoms:10d} !NATOM\n{body}\n\n"
-        f"{1:10d} !NBOND: bonds\n{1:10d}{2:10d}\n")
+        f"{1:10d} !NBOND: bonds\n{1:10d}{2:10d}\n"
+    )
 
 
 def test_replica_4fs_builds_the_hmr_psf_when_the_parent_has_none(tmp_path):
     # The relaxation's mode must not cap production's timestep.  HMR is a pure mass edit
     # of the PSF, so a 4 fs production builds one from the structure it already has
     # instead of silently downgrading to 1 fs because the ladder ran non-fast.
-    parent = _make_parent(tmp_path)          # no demo_hmr.psf
+    parent = _make_parent(tmp_path)  # no demo_hmr.psf
     _write_minimal_psf(parent.package_dir(tmp_path) / "demo.psf")
-    child = _build_replica(tmp_path, parent, fast=True, timestep_fs=4.0, total_steps=500_000)
+    child = _build_replica(
+        tmp_path, parent, fast=True, timestep_fs=4.0, total_steps=500_000
+    )
     conf = _prod_conf(child, tmp_path)
     assert "timestep           4" in conf
     assert "rigidBonds         all" in conf
     assert "structure          demo_hmr.psf" in conf
-    assert (child.package_dir(tmp_path) / "demo_hmr.psf").exists()   # built here, not inherited
+    assert (
+        child.package_dir(tmp_path) / "demo_hmr.psf"
+    ).exists()  # built here, not inherited
     manifest = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())
     assert manifest["ensemble"]["timestep_fs"] == 4.0
     assert cr.total_ns_from_manifest(manifest) == pytest.approx(2.0)  # 500k x 4 fs
@@ -248,11 +288,15 @@ def test_replica_4fs_builds_the_hmr_psf_when_the_parent_has_none(tmp_path):
 def test_replica_4fs_falls_back_safely_when_the_psf_cannot_be_repartitioned(tmp_path):
     """write_hmr_psf raises on an unparseable PSF — that must cost the timestep, not the
     whole production launch."""
-    parent = _make_parent(tmp_path)          # fixture PSF is literally "psf" — no !NATOM
-    child = _build_replica(tmp_path, parent, fast=True, timestep_fs=4.0, total_steps=500_000)
+    parent = _make_parent(tmp_path)  # fixture PSF is literally "psf" — no !NATOM
+    child = _build_replica(
+        tmp_path, parent, fast=True, timestep_fs=4.0, total_steps=500_000
+    )
     conf = _prod_conf(child, tmp_path)
     assert "timestep           1" in conf
-    assert not (child.package_dir(tmp_path) / "demo_hmr.psf").exists()  # no half-written file
+    assert not (
+        child.package_dir(tmp_path) / "demo_hmr.psf"
+    ).exists()  # no half-written file
 
 
 # ── The three integrator axes, on the SPAWN path (exp51) ─────────────────────
@@ -262,6 +306,7 @@ def test_replica_4fs_falls_back_safely_when_the_psf_cannot_be_repartitioned(tmp_
 # Job Wizard could pick a timestep and had no way to say anything about the other two —
 # every off-diagonal combination exp51 measured was unreachable from the one route the
 # wizard uses.
+
 
 def test_a_child_can_run_flexible_bonds_at_2fs(tmp_path):
     """exp51 measured this combination; the spawn path could not emit it."""
@@ -279,11 +324,11 @@ def test_a_child_can_run_4fs_on_standard_masses(tmp_path):
     left it False dropped the timestep to 1 fs — so a deliberate hmr=False silently ran a
     quarter of the requested simulated time.
     """
-    parent = _make_parent(tmp_path, fast=True)      # an HMR PSF exists and is buildable
+    parent = _make_parent(tmp_path, fast=True)  # an HMR PSF exists and is buildable
     child = _build_replica(tmp_path, parent, fast=True, timestep_fs=4.0, hmr=False)
     conf = _prod_conf(child, tmp_path)
-    assert "timestep           4" in conf                    # NOT downgraded
-    assert "structure          demo_hmr.psf" not in conf     # plain masses, as asked
+    assert "timestep           4" in conf  # NOT downgraded
+    assert "structure          demo_hmr.psf" not in conf  # plain masses, as asked
     manifest = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())
     assert manifest["ensemble"]["timestep_fs"] == 4.0
     assert manifest["ensemble"]["timestep_downgrade_reason"] is None
@@ -301,7 +346,7 @@ def test_a_child_records_its_resolved_axes_for_the_next_hop(tmp_path):
 
 def test_an_unbuildable_hmr_psf_still_costs_the_timestep_and_the_constraint(tmp_path):
     """The one case that IS a failure keeps its downgrade — and says so."""
-    parent = _make_parent(tmp_path)          # fixture PSF is literally "psf" — no !NATOM
+    parent = _make_parent(tmp_path)  # fixture PSF is literally "psf" — no !NATOM
     child = _build_replica(tmp_path, parent, fast=True, timestep_fs=4.0, hmr=True)
     conf = _prod_conf(child, tmp_path)
     assert "timestep           1" in conf
@@ -314,8 +359,12 @@ def test_untouched_axes_are_byte_identical_to_the_pre_exp51_emission(tmp_path):
     """None on both must change nothing: `fast` keeps deciding, exactly as before."""
     parent = _make_parent(tmp_path, fast=True)
     a = _prod_conf(_build_replica(tmp_path, parent, fast=True, index=0), tmp_path)
-    b = _prod_conf(_build_replica(tmp_path, parent, fast=True, index=1,
-                                  rigid_bonds=None, hmr=None), tmp_path)
+    b = _prod_conf(
+        _build_replica(
+            tmp_path, parent, fast=True, index=1, rigid_bonds=None, hmr=None
+        ),
+        tmp_path,
+    )
     assert a == b
 
 
@@ -326,7 +375,7 @@ def test_fast_replica_uses_hmr_psf(tmp_path):
     assert (pkg / "demo_hmr.psf").exists()
     prod = next(pkg.glob("demo_01_production_*.conf")).read_text()
     assert "structure          demo_hmr.psf" in prod
-    assert "GPUresident        on" in prod          # stripped later for a CPU target
+    assert "GPUresident        on" in prod  # stripped later for a CPU target
 
 
 def test_replica_generates_valid_acpu_sbatch(tmp_path):
@@ -335,11 +384,13 @@ def test_replica_generates_valid_acpu_sbatch(tmp_path):
     manifest = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())
     profile = cc.alpine_profile()
     resources = cr.recommend(profile, n_atoms=120_000, total_ns=2.0, partition="acpu")
-    sbatch = generate_sbatch(manifest, profile, resources, "/scratch/x", job_name="demo")
+    sbatch = generate_sbatch(
+        manifest, profile, resources, "/scratch/x", job_name="demo"
+    )
     # Two-step chain: reseed (min slot) then production, each idempotent-guarded.
     assert "demo_00_reseed" in sbatch
     assert "demo_01_production" in sbatch
-    assert "mpirun" in sbatch                       # CPU exec line
+    assert "mpirun" in sbatch  # CPU exec line
     assert 'if [ -f "output/demo_00_reseed.coor" ]' in sbatch
 
 
@@ -378,12 +429,21 @@ def test_missing_checkpoint_raises(tmp_path):
     child = new_job("demo", "p", name_stem="", package_subdir="")
     with pytest.raises(FileNotFoundError):
         me.build_replica_package(
-            parent, child, seed=1, index=0, total_steps=1000, length_ns=1.0,
-            timestep_fs=1.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
+            parent,
+            child,
+            seed=1,
+            index=0,
+            total_steps=1000,
+            length_ns=1.0,
+            timestep_fs=1.0,
+            fast=False,
+            ready_checkpoint=READY,
+            workspace=tmp_path,
         )
 
 
 # ── conf-builder parity (the delegate refactor preserves the local path) ─────────
+
 
 def test_conservative_production_conf_delegates_verbatim():
     """routes_md._conservative_production_conf must be byte-identical to the shared
@@ -392,28 +452,58 @@ def test_conservative_production_conf_delegates_verbatim():
     from backend.api.routes_md import _conservative_production_conf
 
     spec = SegmentSpec(
-        name="d_01_production_2ns_k0_p100", stage="2 ns conservative production run",
-        percent=100.0, steps=500_000, temp=300.0, damping=5.0, scale=None, npt=True,
-        previous="d_00_min", dcd_freq=1000,
+        name="d_01_production_2ns_k0_p100",
+        stage="2 ns conservative production run",
+        percent=100.0,
+        steps=500_000,
+        temp=300.0,
+        damping=5.0,
+        scale=None,
+        npt=True,
+        previous="d_00_min",
+        dcd_freq=1000,
     )
     box = (100.0, 110.0, 120.0)
     for fast in (False, True):
-        legacy = _conservative_production_conf(spec, "d", box, False, fast=fast,
-                                               structure_psf="d_hmr.psf" if fast else None)
-        shared = build_production_conf(spec, "d", box, False, fast=fast,
-                                       structure_psf="d_hmr.psf" if fast else None)
+        legacy = _conservative_production_conf(
+            spec,
+            "d",
+            box,
+            False,
+            fast=fast,
+            structure_psf="d_hmr.psf" if fast else None,
+        )
+        shared = build_production_conf(
+            spec,
+            "d",
+            box,
+            False,
+            fast=fast,
+            structure_psf="d_hmr.psf" if fast else None,
+        )
         assert legacy == shared
         assert "seed               54321" in legacy
 
 
 def test_production_conf_seed_and_start_overrides():
-    spec = SegmentSpec(name="p", stage="s", percent=100.0, steps=100, temp=300.0,
-                       damping=5.0, scale=None, npt=True, previous="orig", dcd_freq=1000)
-    conf = build_production_conf(spec, "d", (10.0, 10.0, 10.0), False,
-                                 seed=42, start_checkpoint="reseed")
+    spec = SegmentSpec(
+        name="p",
+        stage="s",
+        percent=100.0,
+        steps=100,
+        temp=300.0,
+        damping=5.0,
+        scale=None,
+        npt=True,
+        previous="orig",
+        dcd_freq=1000,
+    )
+    conf = build_production_conf(
+        spec, "d", (10.0, 10.0, 10.0), False, seed=42, start_checkpoint="reseed"
+    )
     assert "seed               42" in conf
     assert "binCoordinates     output/reseed.coor" in conf
-    assert "output/orig" not in conf                # start_checkpoint overrode previous
+    assert "output/orig" not in conf  # start_checkpoint overrode previous
 
 
 # ── GPU-resident: the path the panel's Start-Production actually takes ───────────
@@ -425,11 +515,13 @@ def test_production_conf_seed_and_start_overrides():
 # dropdown said or what ⚡ Optimize reported.  Unit tests on build_production_conf all
 # passed while the route the UI uses never reached the new arguments.
 
+
 def _parent_with_sized_psf(ws: Path, n_atoms: int, *, fast=False):
     parent = _make_parent(ws, fast=fast)
     # A real !NATOM header so psf_atom_count() sees a size (the base fixture writes "psf").
     (parent.package_dir(ws) / "demo.psf").write_text(
-        "PSF\n\n       2 !NTITLE\n\n" + f"{n_atoms:8d} !NATOM\n")
+        "PSF\n\n       2 !NTITLE\n\n" + f"{n_atoms:8d} !NATOM\n"
+    )
     return parent
 
 
@@ -452,23 +544,55 @@ def test_replica_large_system_keeps_gpu_resident(tmp_path):
 
 def test_replica_force_resident_off_overrides_a_large_system(tmp_path):
     parent = _parent_with_sized_psf(tmp_path, 3_139_238)
-    child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
-                    parent_job_id=parent.job_id, ensemble_seed=54321, ensemble_index=0)
+    child = new_job(
+        "demo",
+        "mgh_slow_release",
+        name_stem="",
+        package_subdir="",
+        parent_job_id=parent.job_id,
+        ensemble_seed=54321,
+        ensemble_index=0,
+    )
     me.build_replica_package(
-        parent, child, seed=54321, index=0, total_steps=500_000, length_ns=1.0,
-        timestep_fs=2.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
-        force_resident=False)
+        parent,
+        child,
+        seed=54321,
+        index=0,
+        total_steps=500_000,
+        length_ns=1.0,
+        timestep_fs=2.0,
+        fast=False,
+        ready_checkpoint=READY,
+        workspace=tmp_path,
+        force_resident=False,
+    )
     assert "GPUresident" not in _prod_conf(child, tmp_path)
 
 
 def test_replica_force_resident_on_overrides_a_small_system(tmp_path):
     parent = _parent_with_sized_psf(tmp_path, 32_566)
-    child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
-                    parent_job_id=parent.job_id, ensemble_seed=54321, ensemble_index=0)
+    child = new_job(
+        "demo",
+        "mgh_slow_release",
+        name_stem="",
+        package_subdir="",
+        parent_job_id=parent.job_id,
+        ensemble_seed=54321,
+        ensemble_index=0,
+    )
     me.build_replica_package(
-        parent, child, seed=54321, index=0, total_steps=500_000, length_ns=1.0,
-        timestep_fs=2.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
-        force_resident=True)
+        parent,
+        child,
+        seed=54321,
+        index=0,
+        total_steps=500_000,
+        length_ns=1.0,
+        timestep_fs=2.0,
+        fast=False,
+        ready_checkpoint=READY,
+        workspace=tmp_path,
+        force_resident=True,
+    )
     assert "GPUresident        on" in _prod_conf(child, tmp_path)
 
 
@@ -486,9 +610,13 @@ def test_replica_downgrade_records_a_visible_reason(tmp_path):
     The 4 fs → 1 fs fallback (unparseable PSF) must say so in the manifest, not just
     quietly produce a slower run.
     """
-    parent = _make_parent(tmp_path)          # fixture PSF has no !NATOM → HMR build fails
-    child = _build_replica(tmp_path, parent, fast=True, timestep_fs=4.0, total_steps=500_000)
-    ens = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())["ensemble"]
+    parent = _make_parent(tmp_path)  # fixture PSF has no !NATOM → HMR build fails
+    child = _build_replica(
+        tmp_path, parent, fast=True, timestep_fs=4.0, total_steps=500_000
+    )
+    ens = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())[
+        "ensemble"
+    ]
     assert ens["timestep_fs"] == 1.0
     assert ens["timestep_downgrade_reason"]
     assert "NOT running at 4 fs" in ens["timestep_downgrade_reason"]
@@ -497,8 +625,12 @@ def test_replica_downgrade_records_a_visible_reason(tmp_path):
 def test_replica_no_downgrade_reason_when_4fs_actually_runs(tmp_path):
     parent = _make_parent(tmp_path)
     _write_minimal_psf(parent.package_dir(tmp_path) / "demo.psf")
-    child = _build_replica(tmp_path, parent, fast=True, timestep_fs=4.0, total_steps=500_000)
-    ens = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())["ensemble"]
+    child = _build_replica(
+        tmp_path, parent, fast=True, timestep_fs=4.0, total_steps=500_000
+    )
+    ens = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())[
+        "ensemble"
+    ]
     assert ens["timestep_fs"] == 4.0
     assert ens["timestep_downgrade_reason"] is None
 
@@ -510,10 +642,12 @@ def test_replica_no_downgrade_reason_when_4fs_actually_runs(tmp_path):
 # production child, and an E-field job's child ran FIELD-FREE while its record still
 # claimed the field.  The sibling append route never had this hole.
 
+
 def _write_namd_coor(path: Path, coords) -> None:
     """A real NAMD binary .coor: int32 atom count + 3N little-endian float64."""
     import struct
     import numpy as np
+
     a = np.asarray(coords, dtype="<f8")
     path.write_bytes(struct.pack("<i", a.shape[0]) + a.tobytes())
 
@@ -525,38 +659,60 @@ def _anchor_pdb_lines(n_atoms: int, anchored: set[int]) -> str:
         b = 1.0 if i in anchored else 0.0
         out.append(
             f"ATOM  {i + 1:5d}  C1' DT  A{i + 1:4d}    "
-            f"{0.0:8.3f}{0.0:8.3f}{0.0:8.3f}  1.00{b:6.2f}\n")
+            f"{0.0:8.3f}{0.0:8.3f}{0.0:8.3f}  1.00{b:6.2f}\n"
+        )
     return "".join(out)
 
 
 def _parent_with_anchors(ws: Path, *, n_atoms: int = 6, anchored=(1, 4)):
     parent = _make_parent(ws)
     pkg = parent.package_dir(ws)
-    (pkg / "restraints_anchors.pdb").write_text(_anchor_pdb_lines(n_atoms, set(anchored)))
+    (pkg / "restraints_anchors.pdb").write_text(
+        _anchor_pdb_lines(n_atoms, set(anchored))
+    )
     manifest = json.loads((pkg / "manifest.json").read_text())
     manifest["files"]["anchors"] = "restraints_anchors.pdb"
-    manifest["anchors"] = {"requested": [{"kind": "base", "helix_id": "h0",
-                                          "bp": 3, "direction": "FORWARD"}]}
+    manifest["anchors"] = {
+        "requested": [
+            {"kind": "base", "helix_id": "h0", "bp": 3, "direction": "FORWARD"}
+        ]
+    }
     (pkg / "manifest.json").write_text(json.dumps(manifest))
     return parent
 
 
 def test_replica_carries_hard_anchors_and_field_into_production(tmp_path: Path):
     parent = _parent_with_anchors(tmp_path)
-    child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
-                    parent_job_id=parent.job_id, ensemble_seed=7, ensemble_index=0)
+    child = new_job(
+        "demo",
+        "mgh_slow_release",
+        name_stem="",
+        package_subdir="",
+        parent_job_id=parent.job_id,
+        ensemble_seed=7,
+        ensemble_index=0,
+    )
     field = {"field_pN": 5.0, "dir": [0.0, 0.0, 1.0]}
     me.build_replica_package(
-        parent, child, seed=7, index=0, total_steps=1000, length_ns=1.0,
-        timestep_fs=1.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
-        anchors_file="restraints_anchors.pdb", field=field,
+        parent,
+        child,
+        seed=7,
+        index=0,
+        total_steps=1000,
+        length_ns=1.0,
+        timestep_fs=1.0,
+        fast=False,
+        ready_checkpoint=READY,
+        workspace=tmp_path,
+        anchors_file="restraints_anchors.pdb",
+        field=field,
         anchors_requested=[{"kind": "base"}],
     )
     pkg = child.package_dir(tmp_path)
     conf = next(pkg.glob("demo_01_production_*.conf")).read_text()
     assert "fixedAtoms         on" in conf
     assert "fixedAtomsFile     restraints_anchors.pdb" in conf
-    assert "eFieldOn" in conf                      # the field survives the hop too
+    assert "eFieldOn" in conf  # the field survives the hop too
     # The marker PDB is STAGED, not just referenced — a conf pointing at a missing file
     # is a NAMD startup failure, not a silent un-anchoring, but both are bugs.
     assert (pkg / "restraints_anchors.pdb").exists()
@@ -578,12 +734,28 @@ def test_replica_soft_anchor_references_its_own_equilibrated_coords(tmp_path: Pa
     equil = np.arange(18, dtype=float).reshape(6, 3) / 10.0
     _write_namd_coor(parent.package_dir(tmp_path) / "output" / f"{READY}.coor", equil)
 
-    child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
-                    parent_job_id=parent.job_id, ensemble_seed=7, ensemble_index=0)
+    child = new_job(
+        "demo",
+        "mgh_slow_release",
+        name_stem="",
+        package_subdir="",
+        parent_job_id=parent.job_id,
+        ensemble_seed=7,
+        ensemble_index=0,
+    )
     me.build_replica_package(
-        parent, child, seed=7, index=0, total_steps=1000, length_ns=1.0,
-        timestep_fs=1.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
-        anchors_file="restraints_anchors.pdb", anchor_k=0.02,
+        parent,
+        child,
+        seed=7,
+        index=0,
+        total_steps=1000,
+        length_ns=1.0,
+        timestep_fs=1.0,
+        fast=False,
+        ready_checkpoint=READY,
+        workspace=tmp_path,
+        anchors_file="restraints_anchors.pdb",
+        anchor_k=0.02,
     )
     pkg = child.package_dir(tmp_path)
     conf = next(pkg.glob("demo_01_production_*.conf")).read_text()
@@ -593,8 +765,11 @@ def test_replica_soft_anchor_references_its_own_equilibrated_coords(tmp_path: Pa
     assert "fixedAtoms" not in conf
     assert "constraints        off" not in conf
 
-    rows = [ln for ln in (pkg / "restraints_anchors.pdb").read_text().splitlines()
-            if ln.startswith("ATOM")]
+    rows = [
+        ln
+        for ln in (pkg / "restraints_anchors.pdb").read_text().splitlines()
+        if ln.startswith("ATOM")
+    ]
     assert len(rows) == 6
     for i, ln in enumerate(rows):
         assert float(ln[30:38]) == pytest.approx(equil[i][0], abs=5e-4)
@@ -610,7 +785,9 @@ def test_replica_without_anchors_stays_unanchored_and_unchanged(tmp_path: Path):
     to what it was before external forces were threaded through."""
     parent = _make_parent(tmp_path)
     child = _build_replica(tmp_path, parent)
-    conf = next(child.package_dir(tmp_path).glob("demo_01_production_*.conf")).read_text()
+    conf = next(
+        child.package_dir(tmp_path).glob("demo_01_production_*.conf")
+    ).read_text()
     assert "fixedAtoms" not in conf
     assert "constraints        off" in conf
     assert "eField" not in conf
@@ -624,17 +801,34 @@ def test_replica_missing_anchor_file_fails_loudly(tmp_path: Path):
     """A named-but-absent anchor file must raise here rather than produce a conf that
     NAMD dies on minutes into a queued cluster job."""
     parent = _make_parent(tmp_path)
-    child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
-                    parent_job_id=parent.job_id, ensemble_seed=7, ensemble_index=0)
+    child = new_job(
+        "demo",
+        "mgh_slow_release",
+        name_stem="",
+        package_subdir="",
+        parent_job_id=parent.job_id,
+        ensemble_seed=7,
+        ensemble_index=0,
+    )
     with pytest.raises(FileNotFoundError, match="anchor file missing"):
         me.build_replica_package(
-            parent, child, seed=7, index=0, total_steps=1000, length_ns=1.0,
-            timestep_fs=1.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
+            parent,
+            child,
+            seed=7,
+            index=0,
+            total_steps=1000,
+            length_ns=1.0,
+            timestep_fs=1.0,
+            fast=False,
+            ready_checkpoint=READY,
+            workspace=tmp_path,
             anchors_file="restraints_anchors.pdb",
         )
 
 
-def test_replica_anchor_file_survives_a_later_launch_rewriting_the_source(tmp_path: Path):
+def test_replica_anchor_file_survives_a_later_launch_rewriting_the_source(
+    tmp_path: Path,
+):
     """A completed run's marker PDB must not change when the NEXT anchored launch writes
     its own.  The child used to HARDLINK the parent's file, so rewriting the parent
     mutated every child that had ever linked it — a finished run's anchor file then
@@ -643,12 +837,27 @@ def test_replica_anchor_file_survives_a_later_launch_rewriting_the_source(tmp_pa
     parent = _parent_with_anchors(tmp_path, n_atoms=6, anchored=(1, 4))
     src = parent.package_dir(tmp_path) / "restraints_anchors.pdb"
 
-    child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
-                    parent_job_id=parent.job_id, ensemble_seed=7, ensemble_index=0)
+    child = new_job(
+        "demo",
+        "mgh_slow_release",
+        name_stem="",
+        package_subdir="",
+        parent_job_id=parent.job_id,
+        ensemble_seed=7,
+        ensemble_index=0,
+    )
     me.build_replica_package(
-        parent, child, seed=7, index=0, total_steps=1000, length_ns=1.0,
-        timestep_fs=1.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
-        anchors_file="restraints_anchors.pdb",          # hard path: the one that linked
+        parent,
+        child,
+        seed=7,
+        index=0,
+        total_steps=1000,
+        length_ns=1.0,
+        timestep_fs=1.0,
+        fast=False,
+        ready_checkpoint=READY,
+        workspace=tmp_path,
+        anchors_file="restraints_anchors.pdb",  # hard path: the one that linked
     )
     staged = child.package_dir(tmp_path) / "restraints_anchors.pdb"
     before = staged.read_text()
@@ -666,12 +875,28 @@ def test_replica_reads_a_child_local_anchor_source(tmp_path: Path):
     external = tmp_path / "staged_elsewhere.pdb"
     external.write_text(_anchor_pdb_lines(6, {2, 5}))
 
-    child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
-                    parent_job_id=parent.job_id, ensemble_seed=7, ensemble_index=0)
+    child = new_job(
+        "demo",
+        "mgh_slow_release",
+        name_stem="",
+        package_subdir="",
+        parent_job_id=parent.job_id,
+        ensemble_seed=7,
+        ensemble_index=0,
+    )
     me.build_replica_package(
-        parent, child, seed=7, index=0, total_steps=1000, length_ns=1.0,
-        timestep_fs=1.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
-        anchors_file="restraints_anchors.pdb", anchors_src=external,
+        parent,
+        child,
+        seed=7,
+        index=0,
+        total_steps=1000,
+        length_ns=1.0,
+        timestep_fs=1.0,
+        fast=False,
+        ready_checkpoint=READY,
+        workspace=tmp_path,
+        anchors_file="restraints_anchors.pdb",
+        anchors_src=external,
     )
     pkg = child.package_dir(tmp_path)
     assert (pkg / "restraints_anchors.pdb").exists()

@@ -43,6 +43,7 @@ def _directives(conf: str) -> dict[str, str]:
 
 # ── the segment spec ──────────────────────────────────────────────────────────
 
+
 def test_settle_stage_restrains_rather_than_fixes():
     settle, _ = _settle_and_ladder()
     assert settle.fixed_atoms_file is None
@@ -62,10 +63,14 @@ def test_settle_keeps_its_own_reference_file_separate_from_the_ladder():
 
 # ── the emitted conf ──────────────────────────────────────────────────────────
 
+
 def test_settle_conf_emits_restraints_and_no_fixed_atoms():
     settle, _ = _settle_and_ladder()
-    d = _directives(P._segment_conf(settle, "X", (100.0, 90.0, 80.0), mgh_extrabonds=True,
-                                    n_atoms=250_000))
+    d = _directives(
+        P._segment_conf(
+            settle, "X", (100.0, 90.0, 80.0), mgh_extrabonds=True, n_atoms=250_000
+        )
+    )
     assert "fixedatoms" not in d
     assert d["constraints"] == "on"
     assert d["consref"] == P.SOLUTE_RESTRAINT_PDB
@@ -77,24 +82,29 @@ def test_settle_conf_emits_restraints_and_no_fixed_atoms():
 def test_settle_conf_keeps_gpu_resident_on_a_large_system():
     """The whole point: the stage no longer forfeits the fast GPU mode."""
     settle, _ = _settle_and_ladder()
-    conf = P._segment_conf(settle, "X", (100.0, 90.0, 80.0), mgh_extrabonds=True,
-                           n_atoms=250_000)
+    conf = P._segment_conf(
+        settle, "X", (100.0, 90.0, 80.0), mgh_extrabonds=True, n_atoms=250_000
+    )
     assert "GPUresident        on" in conf
 
 
 def test_settle_conf_still_runs_under_the_barostat():
     """Restraining must not quietly turn the settle stage into NVT — the box HAS to move."""
     settle, _ = _settle_and_ladder()
-    d = _directives(P._segment_conf(settle, "X", (100.0, 90.0, 80.0), mgh_extrabonds=True,
-                                    n_atoms=250_000))
+    d = _directives(
+        P._segment_conf(
+            settle, "X", (100.0, 90.0, 80.0), mgh_extrabonds=True, n_atoms=250_000
+        )
+    )
     assert d["langevinpiston"] == "on"
 
 
 def test_settle_conf_carries_no_enm():
     """The ENM ladder starts AFTER the box has settled; this stage has only the restraint."""
     settle, _ = _settle_and_ladder()
-    conf = P._segment_conf(settle, "X", (100.0, 90.0, 80.0), mgh_extrabonds=True,
-                           n_atoms=250_000)
+    conf = P._segment_conf(
+        settle, "X", (100.0, 90.0, 80.0), mgh_extrabonds=True, n_atoms=250_000
+    )
     assert settle.extra_bonds_file is None
     assert ".enm.extra" not in conf
 
@@ -104,13 +114,15 @@ def test_settle_conf_carries_no_enm():
 # The backstop that makes the whole failure class impossible: anything that emits
 # fixedAtoms must not also ask for GPUresident.
 
+
 def test_a_segment_with_a_fixed_atoms_marker_gives_up_gpu_resident():
     import dataclasses
 
     _, ladder = _settle_and_ladder()
     pinned = dataclasses.replace(ladder, fixed_atoms_file="anything.pdb")
-    conf = P._segment_conf(pinned, "X", (100.0, 90.0, 80.0), mgh_extrabonds=True,
-                           n_atoms=250_000)
+    conf = P._segment_conf(
+        pinned, "X", (100.0, 90.0, 80.0), mgh_extrabonds=True, n_atoms=250_000
+    )
     assert "fixedAtoms         on" in conf
     assert "GPUresident" not in conf
 
@@ -118,8 +130,14 @@ def test_a_segment_with_a_fixed_atoms_marker_gives_up_gpu_resident():
 def test_hard_anchors_give_up_gpu_resident():
     """Job-level anchors ride ``fixedAtoms`` too — they must not be paired with resident."""
     _, ladder = _settle_and_ladder()
-    conf = P._segment_conf(ladder, "X", (100.0, 90.0, 80.0), mgh_extrabonds=True,
-                           n_atoms=250_000, anchors_file="anchors.pdb")
+    conf = P._segment_conf(
+        ladder,
+        "X",
+        (100.0, 90.0, 80.0),
+        mgh_extrabonds=True,
+        n_atoms=250_000,
+        anchors_file="anchors.pdb",
+    )
     assert "fixedAtoms         on" in conf
     assert "GPUresident" not in conf
 
@@ -127,8 +145,9 @@ def test_hard_anchors_give_up_gpu_resident():
 def test_an_unanchored_large_segment_still_gets_gpu_resident():
     """The gate must not have taken resident away from the ordinary ladder."""
     _, ladder = _settle_and_ladder()
-    conf = P._segment_conf(ladder, "X", (100.0, 90.0, 80.0), mgh_extrabonds=True,
-                           n_atoms=250_000)
+    conf = P._segment_conf(
+        ladder, "X", (100.0, 90.0, 80.0), mgh_extrabonds=True, n_atoms=250_000
+    )
     assert "GPUresident        on" in conf
 
 
@@ -137,45 +156,81 @@ def test_an_unanchored_large_segment_still_gets_gpu_resident():
 # one of them leaves the other still emitting the fatal pair (LESSONS H16: "fixed the leaf,
 # not the path in use", whose own example was this very gate).
 
+
 def _prod_spec():
-    return P.SegmentSpec(name="demo_production", stage="production", percent=100.0,
-                         steps=1000, temp=300.0, damping=1.0, scale=None, npt=True,
-                         previous="prev")
+    return P.SegmentSpec(
+        name="demo_production",
+        stage="production",
+        percent=100.0,
+        steps=1000,
+        temp=300.0,
+        damping=1.0,
+        scale=None,
+        npt=True,
+        previous="prev",
+    )
 
 
 def test_hard_anchored_production_gives_up_gpu_resident():
-    conf = P.build_production_conf(_prod_spec(), "demo", (100.0, 100.0, 100.0), False,
-                                   timestep_fs=2.0, anchors_file="a.pdb",
-                                   n_atoms=250_000)
+    conf = P.build_production_conf(
+        _prod_spec(),
+        "demo",
+        (100.0, 100.0, 100.0),
+        False,
+        timestep_fs=2.0,
+        anchors_file="a.pdb",
+        n_atoms=250_000,
+    )
     assert "fixedAtoms         on" in conf
     assert "GPUresident" not in conf
 
 
 def test_hard_anchored_production_gives_up_resident_even_when_forced():
     """The Advanced-card "on" is a size override, not a licence to emit an illegal conf."""
-    conf = P.build_production_conf(_prod_spec(), "demo", (100.0, 100.0, 100.0), False,
-                                   timestep_fs=2.0, anchors_file="a.pdb",
-                                   n_atoms=250_000, force_resident=True)
+    conf = P.build_production_conf(
+        _prod_spec(),
+        "demo",
+        (100.0, 100.0, 100.0),
+        False,
+        timestep_fs=2.0,
+        anchors_file="a.pdb",
+        n_atoms=250_000,
+        force_resident=True,
+    )
     assert "GPUresident" not in conf
 
 
 def test_soft_anchored_production_keeps_gpu_resident():
     """Harmonic restraints are resident-compatible — the gate must not overreach."""
-    conf = P.build_production_conf(_prod_spec(), "demo", (100.0, 100.0, 100.0), False,
-                                   timestep_fs=2.0, anchors_file="a.pdb", anchor_k=0.02,
-                                   n_atoms=250_000)
+    conf = P.build_production_conf(
+        _prod_spec(),
+        "demo",
+        (100.0, 100.0, 100.0),
+        False,
+        timestep_fs=2.0,
+        anchors_file="a.pdb",
+        anchor_k=0.02,
+        n_atoms=250_000,
+    )
     assert "constraints        on" in conf
     assert "fixedAtoms" not in conf
     assert "GPUresident        on" in conf
 
 
 def test_unanchored_production_keeps_gpu_resident():
-    conf = P.build_production_conf(_prod_spec(), "demo", (100.0, 100.0, 100.0), False,
-                                   timestep_fs=2.0, n_atoms=250_000)
+    conf = P.build_production_conf(
+        _prod_spec(),
+        "demo",
+        (100.0, 100.0, 100.0),
+        False,
+        timestep_fs=2.0,
+        n_atoms=250_000,
+    )
     assert "GPUresident        on" in conf
 
 
 # ── manifest round-trip ───────────────────────────────────────────────────────
+
 
 def test_restraint_reference_survives_a_manifest_round_trip(tmp_path):
     """A resumed job must rebuild the same settle stage, not fall back to the ladder's."""
@@ -183,16 +238,28 @@ def test_restraint_reference_survives_a_manifest_round_trip(tmp_path):
 
     settle, _ = _settle_and_ladder()
     manifest = tmp_path / "manifest.json"
-    manifest.write_text(json.dumps({
-        "minimization": {"name": "X_00_min"},
-        "segments": [{
-            "name": settle.name, "stage": settle.stage, "percent": settle.percent,
-            "steps": settle.steps, "temp": settle.temp, "damping": settle.damping,
-            "scale": settle.scale, "npt": settle.npt, "previous": settle.previous,
-            "restraint_ref_file": settle.restraint_ref_file,
-            "fixed_atoms_file": settle.fixed_atoms_file,
-        }],
-    }))
+    manifest.write_text(
+        json.dumps(
+            {
+                "minimization": {"name": "X_00_min"},
+                "segments": [
+                    {
+                        "name": settle.name,
+                        "stage": settle.stage,
+                        "percent": settle.percent,
+                        "steps": settle.steps,
+                        "temp": settle.temp,
+                        "damping": settle.damping,
+                        "scale": settle.scale,
+                        "npt": settle.npt,
+                        "previous": settle.previous,
+                        "restraint_ref_file": settle.restraint_ref_file,
+                        "fixed_atoms_file": settle.fixed_atoms_file,
+                    }
+                ],
+            }
+        )
+    )
     _, rebuilt = P.segments_from_manifest(manifest)
     assert rebuilt[0].restraint_ref_file == P.SOLUTE_RESTRAINT_PDB
     assert rebuilt[0].scale == P.SETTLE_RESTRAINT_K
@@ -203,15 +270,27 @@ def test_a_pre_change_manifest_still_resumes_on_its_own_confs(tmp_path):
     import json
 
     manifest = tmp_path / "manifest.json"
-    manifest.write_text(json.dumps({
-        "minimization": {"name": "X_00_min"},
-        "segments": [{
-            "name": "X_0S_300K_NPT_settle_fixed_dna_p100", "stage": "300K NPT settle",
-            "percent": 100.0, "steps": 1000, "temp": 300.0, "damping": 5.0,
-            "scale": None, "npt": True, "previous": "X_00_min",
-            "fixed_atoms_file": "fixed_dna_all.pdb",     # no restraint_ref_file key
-        }],
-    }))
+    manifest.write_text(
+        json.dumps(
+            {
+                "minimization": {"name": "X_00_min"},
+                "segments": [
+                    {
+                        "name": "X_0S_300K_NPT_settle_fixed_dna_p100",
+                        "stage": "300K NPT settle",
+                        "percent": 100.0,
+                        "steps": 1000,
+                        "temp": 300.0,
+                        "damping": 5.0,
+                        "scale": None,
+                        "npt": True,
+                        "previous": "X_00_min",
+                        "fixed_atoms_file": "fixed_dna_all.pdb",  # no restraint_ref_file key
+                    }
+                ],
+            }
+        )
+    )
     _, rebuilt = P.segments_from_manifest(manifest)
     assert rebuilt[0].restraint_ref_file is None
     assert rebuilt[0].fixed_atoms_file == "fixed_dna_all.pdb"
@@ -219,7 +298,10 @@ def test_a_pre_change_manifest_still_resumes_on_its_own_confs(tmp_path):
 
 # ── the runner's re-referencing step ──────────────────────────────────────────
 
-def test_retarget_settle_restraints_moves_the_reference_to_the_minimised_coords(tmp_path):
+
+def test_retarget_settle_restraints_moves_the_reference_to_the_minimised_coords(
+    tmp_path,
+):
     """Restraining to the BUILD pose would stand against the minimiser all stage long."""
     import struct
 
@@ -249,7 +331,8 @@ def test_retarget_settle_restraints_is_idempotent(tmp_path):
 
     ref = tmp_path / P.SOLUTE_RESTRAINT_PDB
     ref.write_text(
-        "ATOM      1  P   THY A   1       1.000   2.000   3.000  0.00  1.00      D000 P\n")
+        "ATOM      1  P   THY A   1       1.000   2.000   3.000  0.00  1.00      D000 P\n"
+    )
     coor = tmp_path / "min.coor"
     coor.write_bytes(struct.pack("<i", 1) + struct.pack("<3d", 4.5, 5.5, 6.5))
 
@@ -260,7 +343,9 @@ def test_retarget_settle_restraints_is_idempotent(tmp_path):
 
 
 @pytest.mark.parametrize("missing", ["ref", "coor"])
-def test_retarget_settle_restraints_is_a_no_op_when_there_is_nothing_to_do(tmp_path, missing):
+def test_retarget_settle_restraints_is_a_no_op_when_there_is_nothing_to_do(
+    tmp_path, missing
+):
     """A carved/NVT package has no settle stage; that must not fail a job."""
     import struct
 

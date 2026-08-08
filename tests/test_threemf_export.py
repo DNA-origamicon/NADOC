@@ -144,6 +144,7 @@ def test_single_group_design_emits_one_part():
 
 # ── Staple map-colouring ─────────────────────────────────────────────────────
 
+
 def test_staple_adjacency_from_mesh_edges():
     """Touching staple regions become adjacency pairs; non-touching do not."""
     # Vertices 0,1 → staple 0; 2,3 → staple 1; 4,5 → staple 2.
@@ -155,7 +156,9 @@ def test_staple_adjacency_from_mesh_edges():
 
 
 def test_staple_adjacency_ignores_scaffold_and_self():
-    vert_code = np.array([0, 0, -1, 1, -2], dtype=np.int64)  # -1 scaffold, -2 unassigned
+    vert_code = np.array(
+        [0, 0, -1, 1, -2], dtype=np.int64
+    )  # -1 scaffold, -2 unassigned
     # Edges: 0-0 (self, skip), 0-scaffold (skip), staple0-staple1 only via [1,3,*].
     faces = np.array([[0, 1, 3], [0, 2, 4]], dtype=np.int64)
     pairs = _staple_adjacency(faces, vert_code)
@@ -192,7 +195,9 @@ def test_color_staples_balances_isolated_nodes():
 
 def test_colored_groups_four_groups_on_real_design():
     design, mesh = _design_and_surface()
-    fg, names, colors, stats = scaffold_staple_colored_groups(mesh, design, n_staple_colors=3)
+    fg, names, colors, stats = scaffold_staple_colored_groups(
+        mesh, design, n_staple_colors=3
+    )
     assert names == ["scaffold", "staples A", "staples B", "staples C"]
     assert colors == ["#29B6F6", "#FF6B6B", "#6BCB77", "#FFD93D"]
     assert fg.shape[0] == mesh.faces.shape[0]
@@ -209,15 +214,20 @@ def test_colored_groups_four_groups_on_real_design():
 
 def test_colored_groups_clamps_staple_colors():
     design, mesh = _design_and_surface()
-    fg1, names1, colors1, _ = scaffold_staple_colored_groups(mesh, design, n_staple_colors=1)
+    fg1, names1, colors1, _ = scaffold_staple_colored_groups(
+        mesh, design, n_staple_colors=1
+    )
     assert names1 == ["scaffold", "staples A"]
     assert int(fg1.max()) <= 1
     # Out-of-range clamps to the 3-colour palette, not beyond.
-    _, names9, colors9, _ = scaffold_staple_colored_groups(mesh, design, n_staple_colors=9)
+    _, names9, colors9, _ = scaffold_staple_colored_groups(
+        mesh, design, n_staple_colors=9
+    )
     assert len(colors9) == 4
 
 
 # ── Closed per-colour sub-solids (manifold export) ───────────────────────────
+
 
 def _odd_edges(faces) -> int:
     """Number of edges shared by an odd number of triangles (i.e. holes)."""
@@ -235,8 +245,13 @@ def _colored_parts():
     mesh = smooth_mesh(compute_surface(atoms, grid_spacing=0.30, probe_radius=0.28), 15)
     s2g, names, colors, stats = compute_staple_coloring(mesh, design, 3)
     parts = compute_colored_surfaces(
-        atoms, s2g, len(names),
-        grid_spacing=0.30, probe_radius=0.28, radius_scale=1.2, smooth=15,
+        atoms,
+        s2g,
+        len(names),
+        grid_spacing=0.30,
+        probe_radius=0.28,
+        radius_scale=1.2,
+        smooth=15,
     )
     return parts, names, colors, stats
 
@@ -271,7 +286,11 @@ def test_colored_surfaces_walls_coincide():
 def test_export_3mf_parts_manifold_objects():
     """export_3mf_parts writes one closed object per colour + an assembly."""
     parts, names, colors, _ = _colored_parts()
-    specs = [(parts[g], names[g], colors[g]) for g in range(len(names)) if parts[g] is not None]
+    specs = [
+        (parts[g], names[g], colors[g])
+        for g in range(len(names))
+        if parts[g] is not None
+    ]
     root = _model_root(export_3mf_parts(specs, scale=1.0, name="t"))
 
     part_objs = [o for o in root.findall(f".//{_ns('object')}") if o.get("pid") == "1"]

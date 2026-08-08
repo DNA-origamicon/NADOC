@@ -6,6 +6,7 @@ prove a scripted assembly (create → place inline/file parts → resolve) build
 right structure and survives a ``.nass`` round-trip, via the new reusable oracle
 ``assert_assembly_roundtrip_stable``.
 """
+
 from __future__ import annotations
 
 import math
@@ -36,7 +37,9 @@ def _two_part_assembly():
     hab.new_assembly("T")
     hab.add_inline_instance(make_6hb_design(), name="A")
     hab.add_inline_instance(
-        make_6hb_design(), name="B", transform=hab.translation(20.0, 0.0, 0.0),
+        make_6hb_design(),
+        name="B",
+        transform=hab.translation(20.0, 0.0, 0.0),
     )
     return assembly_state.get_or_404().model_copy(deep=True)
 
@@ -48,17 +51,22 @@ def _mated_assembly():
     hab.new_assembly("M")
     hab.add_inline_instance(make_6hb_design(), name="A")
     hab.add_inline_instance(
-        make_6hb_design(), name="B", transform=hab.translation(20.0, 0.0, 0.0),
+        make_6hb_design(),
+        name="B",
+        transform=hab.translation(20.0, 0.0, 0.0),
     )
     a = assembly_state.get_or_404()
     id_a, id_b = a.instances[0].id, a.instances[1].id
     hab.add_connector(id_a, "mate_a", position=[5.0, 0.0, 0.0], normal=[1.0, 0.0, 0.0])
-    hab.add_connector(id_b, "mate_b", position=[-5.0, 0.0, 0.0], normal=[-1.0, 0.0, 0.0])
+    hab.add_connector(
+        id_b, "mate_b", position=[-5.0, 0.0, 0.0], normal=[-1.0, 0.0, 0.0]
+    )
     hab.define_mate(id_b, id_a, child_label="mate_b", parent_label="mate_a")
     return assembly_state.get_or_404().model_copy(deep=True)
 
 
 # ── Construction + the round-trip oracle ──────────────────────────────────────
+
 
 def test_inline_assembly_roundtrips_stable():
     """A two-part inline assembly validates and survives a .nass round-trip."""
@@ -78,6 +86,7 @@ def test_placement_transform_survives_roundtrip():
         offset = next(i for i in a.instances if i.name == "B")
         assert offset.transform.values[3] == 20.0
         from tests.automation_harness import roundtrip_nass
+
         rt = roundtrip_nass(a)
         rt_offset = next(i for i in rt.instances if i.name == "B")
         assert rt_offset.transform.values[3] == 20.0
@@ -105,6 +114,7 @@ def test_canonical_assembly_distinguishes_placement():
 
 # ── resolve() is a clean no-op on a jointless assembly ─────────────────────────
 
+
 def test_resolve_is_noop_without_joints():
     """resolve() on a Phase-1 (jointless) assembly leaves the structure unchanged."""
     with hab.assembly_scratch_session():
@@ -115,6 +125,7 @@ def test_resolve_is_noop_without_joints():
 
 
 # ── File-source placement (structural) ────────────────────────────────────────
+
 
 def test_add_file_instance_records_a_file_source():
     """add_file_instance places a PartSourceFile referencing the given path."""
@@ -127,6 +138,7 @@ def test_add_file_instance_records_a_file_source():
 
 
 # ── Mates (AF-8): define_mate snaps connectors coincident ─────────────────────
+
 
 def test_mate_makes_connectors_coincident():
     """define_mate snaps the child so its connector meets the parent's."""
@@ -183,6 +195,7 @@ def test_assert_mate_coincident_fires_on_unmated_parts():
 
 # ── Gears (AF-9): a gear couples two revolute mates by a ratio ─────────────────
 
+
 def _geared_assembly(*, ratio: float = 2.0, invert: bool = False):
     """Active scratch assembly: a base part + two wheels, each revolute-mated to the
     base about +Z through the world origin, then gear-coupled at ``ratio``.
@@ -193,22 +206,40 @@ def _geared_assembly(*, ratio: float = 2.0, invert: bool = False):
     hab.new_assembly("G")
     hab.add_inline_instance(make_6hb_design(), name="base")
     hab.add_inline_instance(
-        make_6hb_design(), name="wheelA", transform=hab.translation(20.0, 0.0, 0.0))
+        make_6hb_design(), name="wheelA", transform=hab.translation(20.0, 0.0, 0.0)
+    )
     hab.add_inline_instance(
-        make_6hb_design(), name="wheelB", transform=hab.translation(40.0, 0.0, 0.0))
+        make_6hb_design(), name="wheelB", transform=hab.translation(40.0, 0.0, 0.0)
+    )
     a = assembly_state.get_or_404()
     base_id, wa_id, wb_id = a.instances[0].id, a.instances[1].id, a.instances[2].id
     # Each wheel's hub (its local origin) mates to a hub point on the base (also the
     # base's local origin) → the snap stacks both wheels on the world origin and the
     # revolute axis passes through it along +Z.
-    hab.add_connector(base_id, "hub_a", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
-    hab.add_connector(base_id, "hub_b", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
+    hab.add_connector(
+        base_id, "hub_a", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0]
+    )
+    hab.add_connector(
+        base_id, "hub_b", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0]
+    )
     hab.add_connector(wa_id, "axleA", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
     hab.add_connector(wb_id, "axleB", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
-    hab.define_mate(wa_id, base_id, child_label="axleA", parent_label="hub_a",
-                    joint_type="revolute", axis_direction=[0.0, 0.0, 1.0])
-    hab.define_mate(wb_id, base_id, child_label="axleB", parent_label="hub_b",
-                    joint_type="revolute", axis_direction=[0.0, 0.0, 1.0])
+    hab.define_mate(
+        wa_id,
+        base_id,
+        child_label="axleA",
+        parent_label="hub_a",
+        joint_type="revolute",
+        axis_direction=[0.0, 0.0, 1.0],
+    )
+    hab.define_mate(
+        wb_id,
+        base_id,
+        child_label="axleB",
+        parent_label="hub_b",
+        joint_type="revolute",
+        axis_direction=[0.0, 0.0, 1.0],
+    )
     a = assembly_state.get_or_404()
     joint_a_id, joint_b_id = a.joints[0].id, a.joints[1].id
     hab.define_gear(joint_a_id, joint_b_id, ratio=ratio, invert=invert)
@@ -259,13 +290,19 @@ def test_gear_requires_revolute_joints():
         hab.new_assembly("R")
         hab.add_inline_instance(make_6hb_design(), name="base")
         hab.add_inline_instance(
-            make_6hb_design(), name="A", transform=hab.translation(20.0, 0.0, 0.0))
+            make_6hb_design(), name="A", transform=hab.translation(20.0, 0.0, 0.0)
+        )
         hab.add_inline_instance(
-            make_6hb_design(), name="B", transform=hab.translation(40.0, 0.0, 0.0))
+            make_6hb_design(), name="B", transform=hab.translation(40.0, 0.0, 0.0)
+        )
         a = assembly_state.get_or_404()
         base_id, a_id, b_id = (i.id for i in a.instances)
-        hab.add_connector(base_id, "h1", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
-        hab.add_connector(base_id, "h2", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
+        hab.add_connector(
+            base_id, "h1", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0]
+        )
+        hab.add_connector(
+            base_id, "h2", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0]
+        )
         hab.add_connector(a_id, "c", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
         hab.add_connector(b_id, "c", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
         hab.define_mate(a_id, base_id, child_label="c", parent_label="h1")  # rigid
@@ -299,6 +336,7 @@ def test_canonical_assembly_distinguishes_a_gear():
 
 # ── Belts (AF-9): a belt couples two revolute pulleys by their rim-radius ratio ─
 
+
 def _belted_assembly(*, radius_a: float = 2.0, radius_b: float = 1.0):
     """Active scratch assembly: a base part + two wheels, each revolute-mated to the
     base about +Z through the world origin, then belt-coupled with rim radii
@@ -311,19 +349,37 @@ def _belted_assembly(*, radius_a: float = 2.0, radius_b: float = 1.0):
     hab.new_assembly("Belt")
     hab.add_inline_instance(make_6hb_design(), name="base")
     hab.add_inline_instance(
-        make_6hb_design(), name="pulleyA", transform=hab.translation(20.0, 0.0, 0.0))
+        make_6hb_design(), name="pulleyA", transform=hab.translation(20.0, 0.0, 0.0)
+    )
     hab.add_inline_instance(
-        make_6hb_design(), name="pulleyB", transform=hab.translation(40.0, 0.0, 0.0))
+        make_6hb_design(), name="pulleyB", transform=hab.translation(40.0, 0.0, 0.0)
+    )
     a = assembly_state.get_or_404()
     base_id, wa_id, wb_id = a.instances[0].id, a.instances[1].id, a.instances[2].id
-    hab.add_connector(base_id, "hub_a", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
-    hab.add_connector(base_id, "hub_b", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
+    hab.add_connector(
+        base_id, "hub_a", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0]
+    )
+    hab.add_connector(
+        base_id, "hub_b", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0]
+    )
     hab.add_connector(wa_id, "axleA", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
     hab.add_connector(wb_id, "axleB", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
-    hab.define_mate(wa_id, base_id, child_label="axleA", parent_label="hub_a",
-                    joint_type="revolute", axis_direction=[0.0, 0.0, 1.0])
-    hab.define_mate(wb_id, base_id, child_label="axleB", parent_label="hub_b",
-                    joint_type="revolute", axis_direction=[0.0, 0.0, 1.0])
+    hab.define_mate(
+        wa_id,
+        base_id,
+        child_label="axleA",
+        parent_label="hub_a",
+        joint_type="revolute",
+        axis_direction=[0.0, 0.0, 1.0],
+    )
+    hab.define_mate(
+        wb_id,
+        base_id,
+        child_label="axleB",
+        parent_label="hub_b",
+        joint_type="revolute",
+        axis_direction=[0.0, 0.0, 1.0],
+    )
     a = assembly_state.get_or_404()
     joint_a_id, joint_b_id = a.joints[0].id, a.joints[1].id
     hab.define_belt(joint_a_id, joint_b_id, radius_a=radius_a, radius_b=radius_b)
@@ -361,13 +417,19 @@ def test_belt_requires_revolute_joints():
         hab.new_assembly("R")
         hab.add_inline_instance(make_6hb_design(), name="base")
         hab.add_inline_instance(
-            make_6hb_design(), name="A", transform=hab.translation(20.0, 0.0, 0.0))
+            make_6hb_design(), name="A", transform=hab.translation(20.0, 0.0, 0.0)
+        )
         hab.add_inline_instance(
-            make_6hb_design(), name="B", transform=hab.translation(40.0, 0.0, 0.0))
+            make_6hb_design(), name="B", transform=hab.translation(40.0, 0.0, 0.0)
+        )
         a = assembly_state.get_or_404()
         base_id, a_id, b_id = (i.id for i in a.instances)
-        hab.add_connector(base_id, "h1", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
-        hab.add_connector(base_id, "h2", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
+        hab.add_connector(
+            base_id, "h1", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0]
+        )
+        hab.add_connector(
+            base_id, "h2", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0]
+        )
         hab.add_connector(a_id, "c", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
         hab.add_connector(b_id, "c", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
         hab.define_mate(a_id, base_id, child_label="c", parent_label="h1")  # rigid
@@ -401,6 +463,7 @@ def test_canonical_assembly_distinguishes_a_belt():
 
 # ── Polymerize (AF-9): replicate a seed mate into a chain of identical parts ───
 
+
 def _polymer_seed_assembly():
     """Active scratch: two *identical* inline parts mated rigidly, B snapped to
     (10,0,0).  Both instances embed the SAME design (so ``_sources_match`` is true and
@@ -415,7 +478,9 @@ def _polymer_seed_assembly():
     a = assembly_state.get_or_404()
     id_a, id_b = a.instances[0].id, a.instances[1].id
     hab.add_connector(id_a, "mate_a", position=[5.0, 0.0, 0.0], normal=[1.0, 0.0, 0.0])
-    hab.add_connector(id_b, "mate_b", position=[-5.0, 0.0, 0.0], normal=[-1.0, 0.0, 0.0])
+    hab.add_connector(
+        id_b, "mate_b", position=[-5.0, 0.0, 0.0], normal=[-1.0, 0.0, 0.0]
+    )
     hab.define_mate(id_b, id_a, child_label="mate_b", parent_label="mate_a")
     a = assembly_state.get_or_404()
     return a.model_copy(deep=True), a.joints[0].id
@@ -462,11 +527,16 @@ def test_polymerize_requires_identical_parts():
         hab.new_assembly("Mixed")
         hab.add_inline_instance(make_6hb_design(), name="A")
         hab.add_inline_instance(
-            make_18hb_design(), name="B", transform=hab.translation(20.0, 0.0, 0.0))
+            make_18hb_design(), name="B", transform=hab.translation(20.0, 0.0, 0.0)
+        )
         a = assembly_state.get_or_404()
         id_a, id_b = a.instances[0].id, a.instances[1].id
-        hab.add_connector(id_a, "mate_a", position=[5.0, 0.0, 0.0], normal=[1.0, 0.0, 0.0])
-        hab.add_connector(id_b, "mate_b", position=[-5.0, 0.0, 0.0], normal=[-1.0, 0.0, 0.0])
+        hab.add_connector(
+            id_a, "mate_a", position=[5.0, 0.0, 0.0], normal=[1.0, 0.0, 0.0]
+        )
+        hab.add_connector(
+            id_b, "mate_b", position=[-5.0, 0.0, 0.0], normal=[-1.0, 0.0, 0.0]
+        )
         hab.define_mate(id_b, id_a, child_label="mate_b", parent_label="mate_a")
         a = assembly_state.get_or_404()
         with pytest.raises(HTTPException) as exc:
@@ -478,6 +548,7 @@ def test_polymerized_assembly_roundtrips_stable():
     """A polymerized chain validates and survives a .nass round-trip with all its new
     instances + seam joints — canonical_assembly fingerprints them, so a dropped copy
     would fail the round-trip oracle."""
+
     def _build():
         _before, seed_jid = _polymer_seed_assembly()
         hab.polymerize(seed_jid, count=4, direction="forward")
@@ -491,6 +562,7 @@ def test_polymerized_assembly_roundtrips_stable():
 
 # ── Overhang bindings (AF-9, cross-part WC metadata) ──────────────────────────
 
+
 def _design_with_overhang(oh_id: str, sequence: str):
     """A part design carrying a real Helix + Strand whose domain tags ``oh_id``,
     plus the matching OverhangSpec (which auto-populates one sub-domain).
@@ -500,26 +572,43 @@ def _design_with_overhang(oh_id: str, sequence: str):
     the strand direction, so the two parts get distinct canonical topologies."""
     from backend.core.constants import BDNA_RISE_PER_BP
     from backend.core.models import (
-        Design, Direction, Domain, Helix, OverhangSpec, Strand, StrandType, Vec3,
+        Design,
+        Direction,
+        Domain,
+        Helix,
+        OverhangSpec,
+        Strand,
+        StrandType,
+        Vec3,
     )
 
     length_bp = 8
     helix_id, strand_id = f"hx_{oh_id}", f"str_{oh_id}"
     helix = Helix(
-        id=helix_id, grid_pos=(0, 0),
+        id=helix_id,
+        grid_pos=(0, 0),
         axis_start=Vec3(x=0.0, y=0.0, z=0.0),
         axis_end=Vec3(x=0.0, y=0.0, z=length_bp * BDNA_RISE_PER_BP),
-        phase_offset=0.0, length_bp=length_bp,
+        phase_offset=0.0,
+        length_bp=length_bp,
     )
     direction = Direction.FORWARD if oh_id.endswith("_5p") else Direction.REVERSE
     strand = Strand(
         id=strand_id,
-        domains=[Domain(helix_id=helix_id, start_bp=0, end_bp=length_bp - 1,
-                        direction=direction, overhang_id=oh_id)],
+        domains=[
+            Domain(
+                helix_id=helix_id,
+                start_bp=0,
+                end_bp=length_bp - 1,
+                direction=direction,
+                overhang_id=oh_id,
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
-    ovhg = OverhangSpec(id=oh_id, helix_id=helix_id, strand_id=strand_id,
-                        sequence=sequence, label=oh_id)
+    ovhg = OverhangSpec(
+        id=oh_id, helix_id=helix_id, strand_id=strand_id, sequence=sequence, label=oh_id
+    )
     return Design(helices=[helix], strands=[strand], overhangs=[ovhg])
 
 
@@ -538,9 +627,12 @@ def _bound_assembly():
     sub_b = ib.source.design.overhangs[0].sub_domains[0].id
     before = a.model_copy(deep=True)
     hab.bind_overhangs(
-        ia.id, ib.id,
-        overhang_a_id="oh-A_5p", sub_domain_a_id=sub_a,
-        overhang_b_id="oh-B_3p", sub_domain_b_id=sub_b,
+        ia.id,
+        ib.id,
+        overhang_a_id="oh-A_5p",
+        sub_domain_a_id=sub_a,
+        overhang_b_id="oh-B_3p",
+        sub_domain_b_id=sub_b,
     )
     after = assembly_state.get_or_404().model_copy(deep=True)
     return before, after, after.overhang_bindings[0].id, sub_a, sub_b
@@ -616,19 +708,25 @@ def test_bind_overhangs_unknown_subdomain_404():
         da = _design_with_overhang("oh-A_5p", "ACGTACGT")
         db = _design_with_overhang("oh-B_3p", "GGGGCCCC")
         hab.add_inline_instance(da, name="PartA")
-        hab.add_inline_instance(db, name="PartB", transform=hab.translation(10.0, 0.0, 0.0))
+        hab.add_inline_instance(
+            db, name="PartB", transform=hab.translation(10.0, 0.0, 0.0)
+        )
         a = assembly_state.get_or_404()
         sub_a = a.instances[0].source.design.overhangs[0].sub_domains[0].id
         with pytest.raises(HTTPException) as exc:
             hab.bind_overhangs(
-                a.instances[0].id, a.instances[1].id,
-                overhang_a_id="oh-A_5p", sub_domain_a_id=sub_a,
-                overhang_b_id="oh-B_3p", sub_domain_b_id="not-a-real-subdomain",
+                a.instances[0].id,
+                a.instances[1].id,
+                overhang_a_id="oh-A_5p",
+                sub_domain_a_id=sub_a,
+                overhang_b_id="oh-B_3p",
+                sub_domain_b_id="not-a-real-subdomain",
             )
         assert exc.value.status_code == 404
 
 
 # ── AF-10: parametric layout helpers (grid / ring) ───────────────────────────
+
 
 def test_place_grid_lands_on_lattice():
     """place_grid drops rows×cols copies on the exact regular grid."""
@@ -645,6 +743,7 @@ def test_place_grid_distinct_row_pitch_and_roundtrips():
     """A rectangular grid (distinct row/col pitch) lands on the lattice AND
     survives a .nass round-trip with its 6 instances intact."""
     with hab.assembly_scratch_session():
+
         def build():
             hab.new_assembly("GridRT")
             hab.place_grid(make_6hb_design(), 2, 3, pitch=12.0, row_pitch=8.0)
@@ -669,10 +768,14 @@ def test_place_ring_offset_center_plane_and_roundtrips():
     """A ring in the XZ plane about an offset centre lands correctly AND survives a
     .nass round-trip."""
     with hab.assembly_scratch_session():
+
         def build():
             hab.new_assembly("RingRT")
             hab.place_ring(
-                make_6hb_design(), 5, radius=14.0, plane="XZ",
+                make_6hb_design(),
+                5,
+                radius=14.0,
+                plane="XZ",
                 center=(0.0, 30.0, 0.0),
             )
             return assembly_state.get_or_404().model_copy(deep=True)
@@ -680,11 +783,16 @@ def test_place_ring_offset_center_plane_and_roundtrips():
         reloaded = assert_assembly_roundtrip_stable(build)
         assert len(reloaded.instances) == 5
         assert_instances_on_ring(
-            reloaded, 5, radius=14.0, plane="XZ", center=(0.0, 30.0, 0.0),
+            reloaded,
+            5,
+            radius=14.0,
+            plane="XZ",
+            center=(0.0, 30.0, 0.0),
         )
 
 
 # ── AF-12 follow-up: file-backed parametric layout (grid / ring by reference) ──
+
 
 def _save_6hb(tmp_path):
     """Save a validated 6hb primitive as an absolute-path .nadoc (absolute so it
@@ -705,7 +813,7 @@ def test_place_file_grid_lands_on_lattice_and_references_file(tmp_path):
         a = assembly_state.get_or_404()
         assert len(a.instances) == 6
         assert all(i.source.type == "file" for i in a.instances)
-        assert_instances_on_grid(a, 2, 3, pitch=15.0)            # lattice
+        assert_instances_on_grid(a, 2, 3, pitch=15.0)  # lattice
         assert assert_instances_from_file(a, canonical_topology(saved)) == 6  # source
 
 
@@ -714,6 +822,7 @@ def test_place_file_grid_roundtrips_stable(tmp_path):
     primitive, AND the whole thing survives a .nass round-trip."""
     path, saved = _save_6hb(tmp_path)
     with hab.assembly_scratch_session():
+
         def build():
             hab.new_assembly("FileGridRT")
             hab.place_file_grid(path, 2, 3, pitch=12.0, row_pitch=8.0)
@@ -739,6 +848,7 @@ def test_place_file_ring_lands_on_ring_and_references_file(tmp_path):
 
 # ── Periodic polymerize (single-part, derived repeat) ─────────────────────────
 
+
 def _seam_for(h, L: int):
     """A periodic seam wrapping helix *h*'s far end onto its near end (low↔high bp).
 
@@ -749,13 +859,21 @@ def _seam_for(h, L: int):
 
     if h.direction == Direction.FORWARD:
         return ForcedLigation(
-            three_prime_helix_id=h.id, three_prime_bp=L - 1, three_prime_direction=Direction.FORWARD,
-            five_prime_helix_id=h.id, five_prime_bp=0, five_prime_direction=Direction.FORWARD,
+            three_prime_helix_id=h.id,
+            three_prime_bp=L - 1,
+            three_prime_direction=Direction.FORWARD,
+            five_prime_helix_id=h.id,
+            five_prime_bp=0,
+            five_prime_direction=Direction.FORWARD,
             is_periodic_seam=True,
         )
     return ForcedLigation(
-        three_prime_helix_id=h.id, three_prime_bp=0, three_prime_direction=Direction.REVERSE,
-        five_prime_helix_id=h.id, five_prime_bp=L - 1, five_prime_direction=Direction.REVERSE,
+        three_prime_helix_id=h.id,
+        three_prime_bp=0,
+        three_prime_direction=Direction.REVERSE,
+        five_prime_helix_id=h.id,
+        five_prime_bp=L - 1,
+        five_prime_direction=Direction.REVERSE,
         is_periodic_seam=True,
     )
 
@@ -766,8 +884,9 @@ def _periodic_seed_design(L: int = 42, *, periodic: bool = True):
     from backend.core.lattice import make_bundle_design
     from backend.core.models import LatticeType
 
-    d = make_bundle_design([(0, 0), (0, 1)], L,
-                           lattice_type=LatticeType.HONEYCOMB, strand_filter="both")
+    d = make_bundle_design(
+        [(0, 0), (0, 1)], L, lattice_type=LatticeType.HONEYCOMB, strand_filter="both"
+    )
     if periodic:
         d.forced_ligations = [_seam_for(d.helices[0], L), _seam_for(d.helices[1], L)]
     return d
@@ -824,6 +943,7 @@ def test_periodic_polymerize_requires_a_seam():
 
 # ── Coverage flip ─────────────────────────────────────────────────────────────
 
+
 def test_assembly_routes_now_covered():
     """AF-7 flipped create/add-instance/resolve/import; AF-8 adds connector + mate;
     AF-9 adds gear-relations + the joint-drive PATCH + belt-paths + polymerize +
@@ -831,9 +951,18 @@ def test_assembly_routes_now_covered():
     report = headless_coverage_report()
     covered = {r["endpoint"] for r in report["covered_routes"]}
     assert {
-        "create_assembly", "add_instance", "resolve_assembly", "import_assembly",
-        "add_connector", "create_mate", "create_gear_relation", "patch_joint",
-        "create_belt_path", "polymerize_assembly", "polymerize_periodic_assembly",
-        "create_assembly_overhang_binding", "patch_assembly_overhang_binding",
+        "create_assembly",
+        "add_instance",
+        "resolve_assembly",
+        "import_assembly",
+        "add_connector",
+        "create_mate",
+        "create_gear_relation",
+        "patch_joint",
+        "create_belt_path",
+        "polymerize_assembly",
+        "polymerize_periodic_assembly",
+        "create_assembly_overhang_binding",
+        "patch_assembly_overhang_binding",
         "delete_assembly_overhang_binding",
     } <= covered

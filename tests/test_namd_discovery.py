@@ -76,15 +76,18 @@ def test_prefer_cpu_raises_when_only_cuda_available(tmp_path, monkeypatch):
 IMPLICIT = "implicit_gbis_namd"
 
 
-@pytest.mark.parametrize("protocol,devices,expected", [
-    (IMPLICIT, "0", True),      # GBIS always CPU, even with a GPU device
-    (IMPLICIT, "cpu", True),
-    ("equilibrium_aware_namd", "cpu", True),
-    ("equilibrium_aware_namd", "none", True),
-    ("equilibrium_aware_namd", "0", False),
-    ("equilibrium_aware_namd", "", False),   # empty = GPU auto, NOT cpu
-    ("equilibrium_aware_namd", "0,1", False),
-])
+@pytest.mark.parametrize(
+    "protocol,devices,expected",
+    [
+        (IMPLICIT, "0", True),  # GBIS always CPU, even with a GPU device
+        (IMPLICIT, "cpu", True),
+        ("equilibrium_aware_namd", "cpu", True),
+        ("equilibrium_aware_namd", "none", True),
+        ("equilibrium_aware_namd", "0", False),
+        ("equilibrium_aware_namd", "", False),  # empty = GPU auto, NOT cpu
+        ("equilibrium_aware_namd", "0,1", False),
+    ],
+)
 def test_job_wants_cpu(protocol, devices, expected):
     assert namd_runner.job_wants_cpu(protocol, devices) is expected
 
@@ -131,13 +134,18 @@ def test_resolve_launch_gbis_raises_on_cuda_only_machine(tmp_path, monkeypatch):
         namd_runner.resolve_namd_launch(IMPLICIT, "0")
 
 
-def test_resolve_launch_explicit_cpu_request_degrades_when_only_cuda(tmp_path, monkeypatch):
+def test_resolve_launch_explicit_cpu_request_degrades_when_only_cuda(
+    tmp_path, monkeypatch
+):
     cuda = _make_exe(tmp_path / "cuda_namd3")
     monkeypatch.delenv("NADOC_NAMD_BIN", raising=False)
     monkeypatch.setattr(namd_runner, "_namd_candidates", lambda: [cuda])
     monkeypatch.setattr(namd_runner, "namd_is_cuda_build", lambda b: True)
     # Explicit CPU request with no CPU build → best-effort GPU ("0"), does not raise.
-    assert namd_runner.resolve_namd_launch("equilibrium_aware_namd", "cpu") == (cuda, "0")
+    assert namd_runner.resolve_namd_launch("equilibrium_aware_namd", "cpu") == (
+        cuda,
+        "0",
+    )
 
 
 # ── psfgen discovery (mirrors NAMD; psfgen ships inside the NAMD tarball) ──────

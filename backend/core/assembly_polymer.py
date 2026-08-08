@@ -55,8 +55,15 @@ def _design_dump_for_identity(design) -> dict:
     crossovers, lattice_type, etc. — determine whether two designs represent
     the same Part.
     """
-    excluded = {"id", "metadata", "feature_log", "feature_log_cursor",
-                "feature_log_sub_cursor", "camera_poses", "animations"}
+    excluded = {
+        "id",
+        "metadata",
+        "feature_log",
+        "feature_log_cursor",
+        "feature_log_sub_cursor",
+        "camera_poses",
+        "animations",
+    }
     return {k: v for k, v in design.model_dump().items() if k not in excluded}
 
 
@@ -76,7 +83,9 @@ def _sources_match(a: PartSource, b: PartSource) -> bool:
         if a.design is b.design:
             return True
         try:
-            return _design_dump_for_identity(a.design) == _design_dump_for_identity(b.design)
+            return _design_dump_for_identity(a.design) == _design_dump_for_identity(
+                b.design
+            )
         except Exception:
             return False
     return False
@@ -111,7 +120,7 @@ def _split_count(count: int, direction: Direction) -> Tuple[int, int]:
         return new_total, 0
     if direction == "backward":
         return 0, new_total
-    forward = (new_total + 1) // 2   # extra-on-forward when odd
+    forward = (new_total + 1) // 2  # extra-on-forward when odd
     backward = new_total - forward
     return forward, backward
 
@@ -265,7 +274,9 @@ def compute_chain_joint_axes(
     t_b: Mat4x4,
     n_forward: int,
     n_backward: int,
-) -> Tuple[list[Tuple[list[float], list[float]]], list[Tuple[list[float], list[float]]]]:
+) -> Tuple[
+    list[Tuple[list[float], list[float]]], list[Tuple[list[float], list[float]]]
+]:
     """Per-step transformed (axis_origin, axis_direction) for new joints.
 
     Each new joint replaces the original mate's axis with one mapped by
@@ -281,17 +292,23 @@ def compute_chain_joint_axes(
 
     forward_axes: list[Tuple[list[float], list[float]]] = []
     for i in range(1, n_forward + 1):
-        forward_axes.append(transform_joint_axis(
-            orig_joint.axis_origin, orig_joint.axis_direction,
-            _matrix_power(delta, i),
-        ))
+        forward_axes.append(
+            transform_joint_axis(
+                orig_joint.axis_origin,
+                orig_joint.axis_direction,
+                _matrix_power(delta, i),
+            )
+        )
 
     backward_axes: list[Tuple[list[float], list[float]]] = []
     for i in range(1, n_backward + 1):
-        backward_axes.append(transform_joint_axis(
-            orig_joint.axis_origin, orig_joint.axis_direction,
-            _matrix_power(delta_inv, i),
-        ))
+        backward_axes.append(
+            transform_joint_axis(
+                orig_joint.axis_origin,
+                orig_joint.axis_direction,
+                _matrix_power(delta_inv, i),
+            )
+        )
 
     return forward_axes, backward_axes
 
@@ -327,18 +344,27 @@ def build_polymer_chain(
     seed_pair_ids: set[str] = {joint.instance_a_id, joint.instance_b_id}
 
     forward_T, backward_T = compute_chain_transforms(
-        inst_a.transform, inst_b.transform, count, direction,
+        inst_a.transform,
+        inst_b.transform,
+        count,
+        direction,
     )
     n_forward, n_backward = _split_count(count, direction)
     forward_axes, backward_axes = compute_chain_joint_axes(
-        joint, inst_a.transform, inst_b.transform, n_forward, n_backward,
+        joint,
+        inst_a.transform,
+        inst_b.transform,
+        n_forward,
+        n_backward,
     )
     # Compute delta powers to cover ALL iteration counts — the extended
     # additional-clone chain may need one more matrix than the primary
     # chain (see add_n_forward / add_n_backward below).
     forward_delta_pow, backward_delta_pow = compute_delta_powers(
-        inst_a.transform, inst_b.transform,
-        n_forward + 1, n_backward + 1,
+        inst_a.transform,
+        inst_b.transform,
+        n_forward + 1,
+        n_backward + 1,
     )
 
     # Mates in the pattern unit (excluding the seed mate itself). Each will
@@ -346,7 +372,8 @@ def build_polymer_chain(
     # the model — a None side never participates in pattern replication.
     unit_ids: set[str] = seed_pair_ids | {i.id for i in additional_instances}
     pattern_mates = [
-        j for j in all_joints
+        j
+        for j in all_joints
         if j.id != joint.id
         and j.instance_a_id is not None
         and j.instance_a_id in unit_ids
@@ -375,8 +402,11 @@ def build_polymer_chain(
     # Stitch the originals back into the assembly's instance list at their
     # original indexes so positional ordering is preserved.
     existing_instances = [
-        inst_a_updated if i.id == inst_a.id else
-        inst_b_updated if i.id == inst_b.id else i
+        inst_a_updated
+        if i.id == inst_a.id
+        else inst_b_updated
+        if i.id == inst_b.id
+        else i
         for i in all_instances
     ]
 
@@ -391,7 +421,7 @@ def build_polymer_chain(
     #
     # Net effect at N=500 polymerize_64: ~150 ms → ~10 ms inside the loop.
     new_instances: list[PartInstance] = []
-    new_joints:    list[AssemblyJoint] = []
+    new_joints: list[AssemblyJoint] = []
 
     base_name_b = inst_b.name
     base_name_a = inst_a.name
@@ -404,22 +434,25 @@ def build_polymer_chain(
     # clone is needed.  The extra clone is placed in the dominant
     # direction (forward for 'forward' and 'both', backward for
     # 'backward').
-    add_n_forward  = n_forward  + (1 if direction != "backward" else 0)
+    add_n_forward = n_forward + (1 if direction != "backward" else 0)
     add_n_backward = n_backward + (1 if direction == "backward" else 0)
-    add_forward_transforms:  dict[str, list[np.ndarray]] = {}
+    add_forward_transforms: dict[str, list[np.ndarray]] = {}
     add_backward_transforms: dict[str, list[np.ndarray]] = {}
     for add_inst in additional_instances:
         f, b = compute_additional_chain_transforms(
-            inst_a.transform, inst_b.transform, add_inst.transform,
-            add_n_forward, add_n_backward,
+            inst_a.transform,
+            inst_b.transform,
+            add_inst.transform,
+            add_n_forward,
+            add_n_backward,
         )
-        add_forward_transforms[add_inst.id]  = f
+        add_forward_transforms[add_inst.id] = f
         add_backward_transforms[add_inst.id] = b
 
-    forward_primary_ids:  list[str]                = []
-    forward_add_ids:      dict[str, list[str]]     = {a.id: [] for a in additional_instances}
-    backward_primary_ids: list[str]                = []
-    backward_add_ids:     dict[str, list[str]]     = {a.id: [] for a in additional_instances}
+    forward_primary_ids: list[str] = []
+    forward_add_ids: dict[str, list[str]] = {a.id: [] for a in additional_instances}
+    backward_primary_ids: list[str] = []
+    backward_add_ids: dict[str, list[str]] = {a.id: [] for a in additional_instances}
 
     # ``_make_clone`` constructs a PartInstance for a polymerize clone with
     # the heavy ``source`` field shared by reference from the seed.  We use
@@ -434,14 +467,20 @@ def build_polymer_chain(
     # uses ``model_copy(update=...)`` rather than in-place mutation; if a
     # future code path mutates an IP in place, switch the call sites to
     # ``[ip.model_copy(deep=True) for ip in union_ips]``.
-    def _make_clone(seed: PartInstance, *, new_id: str, name: str,
-                    transform: Mat4x4, base_transform: Optional[Mat4x4],
-                    interface_points: list,
-                    representation: str = "cylinders") -> PartInstance:
+    def _make_clone(
+        seed: PartInstance,
+        *,
+        new_id: str,
+        name: str,
+        transform: Mat4x4,
+        base_transform: Optional[Mat4x4],
+        interface_points: list,
+        representation: str = "cylinders",
+    ) -> PartInstance:
         return PartInstance.model_construct(
             id=new_id,
             name=name,
-            source=seed.source,                 # shared by reference (read-only downstream)
+            source=seed.source,  # shared by reference (read-only downstream)
             transform=transform,
             base_transform=base_transform,
             mode=seed.mode,
@@ -466,7 +505,7 @@ def build_polymer_chain(
             new_id=new_id,
             name=f"{base_name_b} {i + 1}",
             transform=T_mat,
-            base_transform=T_mat,   # base_transform = transform at value=0
+            base_transform=T_mat,  # base_transform = transform at value=0
             interface_points=list(union_ips),
         )
         forward_primary_ids.append(new_id)
@@ -604,10 +643,18 @@ def build_polymer_chain(
             if step1 == 1:
                 return joint.instance_b_id
             idx = step1 - 2
-            return forward_primary_ids[idx] if 0 <= idx < len(forward_primary_ids) else None
+            return (
+                forward_primary_ids[idx]
+                if 0 <= idx < len(forward_primary_ids)
+                else None
+            )
         if orig_id == joint.instance_b_id:
             idx = step1 - 1
-            return forward_primary_ids[idx] if 0 <= idx < len(forward_primary_ids) else None
+            return (
+                forward_primary_ids[idx]
+                if 0 <= idx < len(forward_primary_ids)
+                else None
+            )
         ids = forward_add_ids.get(orig_id)
         if not ids:
             return None
@@ -620,10 +667,18 @@ def build_polymer_chain(
             if step1 == 1:
                 return joint.instance_a_id
             idx = step1 - 2
-            return backward_primary_ids[idx] if 0 <= idx < len(backward_primary_ids) else None
+            return (
+                backward_primary_ids[idx]
+                if 0 <= idx < len(backward_primary_ids)
+                else None
+            )
         if orig_id == joint.instance_a_id:
             idx = step1 - 1
-            return backward_primary_ids[idx] if 0 <= idx < len(backward_primary_ids) else None
+            return (
+                backward_primary_ids[idx]
+                if 0 <= idx < len(backward_primary_ids)
+                else None
+            )
         ids = backward_add_ids.get(orig_id)
         if not ids:
             return None
@@ -635,7 +690,7 @@ def build_polymer_chain(
     # returns None when the primary chain has been exhausted at this step
     # (e.g. mate involves seed_b which only goes up to n_forward), in
     # which case we silently skip that step for that mate.
-    fwd_max  = max(n_forward,  add_n_forward)
+    fwd_max = max(n_forward, add_n_forward)
     back_max = max(n_backward, add_n_backward)
     for pm in pattern_mates:
         for step_idx in range(1, fwd_max + 1):
@@ -644,52 +699,60 @@ def build_polymer_chain(
             if new_a_id is None or new_b_id is None:
                 continue
             d = forward_delta_pow[step_idx - 1]
-            ao, ad = transform_joint_axis(list(pm.axis_origin), list(pm.axis_direction), d)
-            new_joints.append(AssemblyJoint(
-                name=f"{pm.name} +{step_idx}",
-                joint_type=pm.joint_type,
-                instance_a_id=new_a_id,
-                instance_b_id=new_b_id,
-                cluster_id_a=pm.cluster_id_a,
-                cluster_id_b=pm.cluster_id_b,
-                axis_origin=ao,
-                axis_direction=ad,
-                current_value=0.0,
-                min_limit=pm.min_limit,
-                max_limit=pm.max_limit,
-                connector_a_label=pm.connector_a_label,
-                connector_b_label=pm.connector_b_label,
-                # Replicate the intra-unit mate's full SE3 relative frame so
-                # resolve snaps orientation, not just position (see primary
-                # chain joints above).
-                mate_relative_transform=pm.mate_relative_transform,
-            ))
+            ao, ad = transform_joint_axis(
+                list(pm.axis_origin), list(pm.axis_direction), d
+            )
+            new_joints.append(
+                AssemblyJoint(
+                    name=f"{pm.name} +{step_idx}",
+                    joint_type=pm.joint_type,
+                    instance_a_id=new_a_id,
+                    instance_b_id=new_b_id,
+                    cluster_id_a=pm.cluster_id_a,
+                    cluster_id_b=pm.cluster_id_b,
+                    axis_origin=ao,
+                    axis_direction=ad,
+                    current_value=0.0,
+                    min_limit=pm.min_limit,
+                    max_limit=pm.max_limit,
+                    connector_a_label=pm.connector_a_label,
+                    connector_b_label=pm.connector_b_label,
+                    # Replicate the intra-unit mate's full SE3 relative frame so
+                    # resolve snaps orientation, not just position (see primary
+                    # chain joints above).
+                    mate_relative_transform=pm.mate_relative_transform,
+                )
+            )
         for step_idx in range(1, back_max + 1):
             new_a_id = _clone_id_backward(pm.instance_a_id, step_idx)
             new_b_id = _clone_id_backward(pm.instance_b_id, step_idx)
             if new_a_id is None or new_b_id is None:
                 continue
             d = backward_delta_pow[step_idx - 1]
-            ao, ad = transform_joint_axis(list(pm.axis_origin), list(pm.axis_direction), d)
-            new_joints.append(AssemblyJoint(
-                name=f"{pm.name} -{step_idx}",
-                joint_type=pm.joint_type,
-                instance_a_id=new_a_id,
-                instance_b_id=new_b_id,
-                cluster_id_a=pm.cluster_id_a,
-                cluster_id_b=pm.cluster_id_b,
-                axis_origin=ao,
-                axis_direction=ad,
-                current_value=0.0,
-                min_limit=pm.min_limit,
-                max_limit=pm.max_limit,
-                connector_a_label=pm.connector_a_label,
-                connector_b_label=pm.connector_b_label,
-                # Replicate the intra-unit mate's full SE3 relative frame so
-                # resolve snaps orientation, not just position (see primary
-                # chain joints above).
-                mate_relative_transform=pm.mate_relative_transform,
-            ))
+            ao, ad = transform_joint_axis(
+                list(pm.axis_origin), list(pm.axis_direction), d
+            )
+            new_joints.append(
+                AssemblyJoint(
+                    name=f"{pm.name} -{step_idx}",
+                    joint_type=pm.joint_type,
+                    instance_a_id=new_a_id,
+                    instance_b_id=new_b_id,
+                    cluster_id_a=pm.cluster_id_a,
+                    cluster_id_b=pm.cluster_id_b,
+                    axis_origin=ao,
+                    axis_direction=ad,
+                    current_value=0.0,
+                    min_limit=pm.min_limit,
+                    max_limit=pm.max_limit,
+                    connector_a_label=pm.connector_a_label,
+                    connector_b_label=pm.connector_b_label,
+                    # Replicate the intra-unit mate's full SE3 relative frame so
+                    # resolve snaps orientation, not just position (see primary
+                    # chain joints above).
+                    mate_relative_transform=pm.mate_relative_transform,
+                )
+            )
 
     return existing_instances, new_instances, new_joints
 
@@ -739,23 +802,32 @@ def build_periodic_chain(
         n_backward = new_total - n_forward
 
     T_seed = seed.transform.to_array()
-    forward_T  = [T_seed @ _matrix_power(delta, k)     for k in range(1, n_forward + 1)]
-    backward_T = [T_seed @ _matrix_power(delta_inv, k) for k in range(1, n_backward + 1)]
+    forward_T = [T_seed @ _matrix_power(delta, k) for k in range(1, n_forward + 1)]
+    backward_T = [
+        T_seed @ _matrix_power(delta_inv, k) for k in range(1, n_backward + 1)
+    ]
 
     # ── Seam connectors (part-local; identical on seed + every clone) ─────────
     seam_ips = [
-        InterfacePoint(label="seam0:5p",
-                       position=Vec3(x=p5[0], y=p5[1], z=p5[2]),
-                       normal=Vec3(x=n5[0], y=n5[1], z=n5[2]),
-                       connection_type=ConnectionType.COVALENT),
-        InterfacePoint(label="seam0:3p",
-                       position=Vec3(x=p3[0], y=p3[1], z=p3[2]),
-                       normal=Vec3(x=n3[0], y=n3[1], z=n3[2]),
-                       connection_type=ConnectionType.COVALENT),
+        InterfacePoint(
+            label="seam0:5p",
+            position=Vec3(x=p5[0], y=p5[1], z=p5[2]),
+            normal=Vec3(x=n5[0], y=n5[1], z=n5[2]),
+            connection_type=ConnectionType.COVALENT,
+        ),
+        InterfacePoint(
+            label="seam0:3p",
+            position=Vec3(x=p3[0], y=p3[1], z=p3[2]),
+            normal=Vec3(x=n3[0], y=n3[1], z=n3[2]),
+            connection_type=ConnectionType.COVALENT,
+        ),
     ]
     # Fresh seam IPs win over any stale ones from a prior polymerize.
-    base_ips  = [ip.model_copy(deep=True) for ip in seed.interface_points
-                 if not ip.label.startswith("seam0:")]
+    base_ips = [
+        ip.model_copy(deep=True)
+        for ip in seed.interface_points
+        if not ip.label.startswith("seam0:")
+    ]
     union_ips = base_ips + seam_ips
 
     seed_updated = seed.model_copy(update={"interface_points": list(union_ips)})
@@ -766,7 +838,7 @@ def build_periodic_chain(
         return PartInstance.model_construct(
             id=new_id,
             name=name,
-            source=seed.source,                 # shared by reference (read-only downstream)
+            source=seed.source,  # shared by reference (read-only downstream)
             transform=T_mat,
             base_transform=T_mat,
             mode=seed.mode,
@@ -780,7 +852,7 @@ def build_periodic_chain(
         )
 
     new_instances: list[PartInstance] = []
-    forward_ids:  list[str] = []
+    forward_ids: list[str] = []
     backward_ids: list[str] = []
     for k, T_arr in enumerate(forward_T, start=1):
         nid = str(_uuid.uuid4())
@@ -802,7 +874,7 @@ def build_periodic_chain(
         low_inst, high_inst = inst_lookup[backward_ids[0]], seed_updated
     F_a = _get_connector_world_frame(low_inst, "seam0:3p", None)
     F_b = _get_connector_world_frame(high_inst, "seam0:5p", None)
-    mate_M: 'list | None' = None
+    mate_M: "list | None" = None
     if F_a is not None and F_b is not None:
         try:
             mate_M = (np.linalg.inv(F_a) @ F_b).flatten().tolist()

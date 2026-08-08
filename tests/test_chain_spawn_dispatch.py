@@ -54,7 +54,9 @@ def spies(monkeypatch):
 
 
 def test_rootless_stage0_routes_to_fresh_relax(spies):
-    pipe = MdPipeline(stages=[PipelineStage(engine="oxdna", protocol="relax")], root_job_id=None)
+    pipe = MdPipeline(
+        stages=[PipelineStage(engine="oxdna", protocol="relax")], root_job_id=None
+    )
     jid = asyncio.run(routes_md._chain_spawn(_ctx(pipe, 0, None)))
     assert jid == "fresh-job"
     assert "fresh_relax" in spies and "oxdna_child" not in spies
@@ -63,7 +65,8 @@ def test_rootless_stage0_routes_to_fresh_relax(spies):
 def test_oxdna_stage_with_parent_routes_to_oxdna_child(spies):
     pipe = MdPipeline(
         stages=[PipelineStage(engine="oxdna", protocol="production", steps=1_000_000)],
-        root_job_id="ox-root", root_engine="oxdna",
+        root_job_id="ox-root",
+        root_engine="oxdna",
     )
     jid = asyncio.run(routes_md._chain_spawn(_ctx(pipe, 0, "ox-root")))
     assert jid == "oxdna-child-job"
@@ -73,7 +76,8 @@ def test_oxdna_stage_with_parent_routes_to_oxdna_child(spies):
 def test_same_engine_namd_routes_to_spawn_production(spies):
     pipe = MdPipeline(
         stages=[PipelineStage(engine="namd", protocol="production")],
-        root_job_id="namd-root", root_engine="namd",
+        root_job_id="namd-root",
+        root_engine="namd",
     )
     jid = asyncio.run(routes_md._chain_spawn(_ctx(pipe, 0, "namd-root")))
     assert jid == "namd-prod-job"
@@ -84,7 +88,8 @@ def test_cross_engine_oxdna_to_namd_routes_to_create_md_job(spies):
     # A NAMD stage seeded from an oxDNA parent → cross-engine atomistic rebuild.
     pipe = MdPipeline(
         stages=[PipelineStage(engine="namd", protocol="production")],
-        root_job_id="ox-root", root_engine="oxdna",
+        root_job_id="ox-root",
+        root_engine="oxdna",
     )
     jid = asyncio.run(routes_md._chain_spawn(_ctx(pipe, 0, "ox-root")))
     assert jid == "namd-cross-job"
@@ -100,9 +105,12 @@ def test_is_relax_protocol():
 
 def test_pipeline_propagates_design_source_path_into_every_stage_plan():
     pipe = MdPipeline(
-        stages=[PipelineStage(engine="oxdna", protocol="relax"),
-                PipelineStage(engine="oxdna", protocol="production")],
-        root_job_id=None, design_source_path="/ws/26hb.nadoc",
+        stages=[
+            PipelineStage(engine="oxdna", protocol="relax"),
+            PipelineStage(engine="oxdna", protocol="production"),
+        ],
+        root_job_id=None,
+        design_source_path="/ws/26hb.nadoc",
     )
     plans = build_pipeline_plan(pipe)
     assert [p.design_source_path for p in plans] == ["/ws/26hb.nadoc", "/ws/26hb.nadoc"]
@@ -123,15 +131,22 @@ def test_fresh_relax_stamps_design_source_path_onto_the_create_body(monkeypatch)
 
     # Patch the create endpoints the spawner imports lazily.
     import backend.api.routes_oxdna as routes_oxdna
+
     monkeypatch.setattr(routes_oxdna, "create_oxdna_job", create_ox)
     monkeypatch.setattr(routes_md, "create_md_job", create_md)
 
-    ox_plan = build_pipeline_plan(MdPipeline(
-        stages=[PipelineStage(engine="oxdna", protocol="relax")],
-        design_source_path="/ws/d.nadoc"))[0]
-    namd_plan = build_pipeline_plan(MdPipeline(
-        stages=[PipelineStage(engine="namd", protocol="relax")],
-        design_source_path="/ws/d.nadoc"))[0]
+    ox_plan = build_pipeline_plan(
+        MdPipeline(
+            stages=[PipelineStage(engine="oxdna", protocol="relax")],
+            design_source_path="/ws/d.nadoc",
+        )
+    )[0]
+    namd_plan = build_pipeline_plan(
+        MdPipeline(
+            stages=[PipelineStage(engine="namd", protocol="relax")],
+            design_source_path="/ws/d.nadoc",
+        )
+    )[0]
 
     asyncio.run(routes_md._spawn_fresh_relax(ox_plan))
     asyncio.run(routes_md._spawn_fresh_relax(namd_plan))

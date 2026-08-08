@@ -80,6 +80,7 @@ def _doc_dir(doc_id: str) -> Path:
 
 # ── Public lifecycle ─────────────────────────────────────────────────────────
 
+
 def start(workspace_dir: Path) -> None:
     """Restore any cached documents, then start the background flush thread.
 
@@ -119,7 +120,7 @@ def stop() -> None:
     """Stop the flush thread and write one final snapshot."""
     global _thread
     if _session_dir is None:
-        return   # never started (test suite, or NADOC_DISABLE_SESSION_CACHE)
+        return  # never started (test suite, or NADOC_DISABLE_SESSION_CACHE)
     _stop.set()
     if _thread is not None:
         _thread.join(timeout=5.0)
@@ -131,6 +132,7 @@ def stop() -> None:
 
 
 # ── Prune (startup) ──────────────────────────────────────────────────────────
+
 
 def _doc_mtime(sub: Path) -> float:
     """Freshness of a cached doc — newest mtime among its files (0.0 if empty)."""
@@ -181,6 +183,7 @@ def _prune(now: float | None = None) -> int:
 
 # ── Restore (startup) ────────────────────────────────────────────────────────
 
+
 def restore() -> int:
     """Load every cached document into its session.  Returns the count restored.
 
@@ -199,14 +202,16 @@ def restore() -> int:
         if d_path.is_file():
             try:
                 design_state.restore_doc_design(
-                    doc_id, Design.from_json(d_path.read_text(encoding="utf-8")))
+                    doc_id, Design.from_json(d_path.read_text(encoding="utf-8"))
+                )
                 restored += 1
             except Exception:
                 traceback.print_exc()
         if a_path.is_file():
             try:
                 assembly_state.restore_doc_assembly(
-                    doc_id, Assembly.from_json(a_path.read_text(encoding="utf-8")))
+                    doc_id, Assembly.from_json(a_path.read_text(encoding="utf-8"))
+                )
                 restored += 1
             except Exception:
                 traceback.print_exc()
@@ -214,6 +219,7 @@ def restore() -> int:
 
 
 # ── Flush (background) ─────────────────────────────────────────────────────────
+
 
 def _combined_revisions() -> dict[str, tuple[int, int]]:
     """``{doc_id: (design_rev, assembly_rev)}`` across both registries."""
@@ -248,7 +254,10 @@ def _flush(force: bool) -> None:
     if current == _last_flushed:
         return  # nothing pending
     if not force:
-        if _stable_since is None or (time.monotonic() - _stable_since) < _FLUSH_DEBOUNCE_S:
+        if (
+            _stable_since is None
+            or (time.monotonic() - _stable_since) < _FLUSH_DEBOUNCE_S
+        ):
             return  # still settling
 
     # Docs that vanished (closed) → remove their cache dirs.
@@ -274,7 +283,9 @@ def _write_doc(doc_id: str) -> None:
     d = _doc_dir(doc_id)
     d.mkdir(parents=True, exist_ok=True)
     _write_or_unlink(d / _DESIGN_FILE, design.to_json() if design is not None else None)
-    _write_or_unlink(d / _ASSEMBLY_FILE, assembly.to_json() if assembly is not None else None)
+    _write_or_unlink(
+        d / _ASSEMBLY_FILE, assembly.to_json() if assembly is not None else None
+    )
 
 
 def _remove_doc_dir(doc_id: str) -> None:
@@ -295,12 +306,14 @@ def _write_registry(current: dict[str, tuple[int, int]]) -> None:
         assembly = assembly_state.peek_assembly(doc_id)
         if design is None and assembly is None:
             continue
-        docs.append({
-            "doc_id": doc_id,
-            "is_default": doc_id == DEFAULT_DOC_ID,
-            "design": _meta(design),
-            "assembly": _meta(assembly),
-        })
+        docs.append(
+            {
+                "doc_id": doc_id,
+                "is_default": doc_id == DEFAULT_DOC_ID,
+                "design": _meta(design),
+                "assembly": _meta(assembly),
+            }
+        )
     payload = {
         "server_instance_id": server_info.SERVER_INSTANCE_ID,
         "saved_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
@@ -313,7 +326,9 @@ def _meta(doc) -> dict | None:
     if doc is None:
         return None
     meta = getattr(doc, "metadata", None)
-    name = getattr(meta, "name", None) if meta is not None else getattr(doc, "name", None)
+    name = (
+        getattr(meta, "name", None) if meta is not None else getattr(doc, "name", None)
+    )
     return {"id": getattr(doc, "id", None), "name": name}
 
 

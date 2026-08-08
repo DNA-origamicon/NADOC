@@ -100,7 +100,8 @@ def reconcile_cluster_membership(
 
     coverage = _build_coverage_map(design_before)
     domain_level_cluster_ids = {
-        cid for cid, helix_map in coverage.items()
+        cid
+        for cid, helix_map in coverage.items()
         if any(claim != "whole" for claim in helix_map.values())
     }
 
@@ -134,10 +135,12 @@ def reconcile_cluster_membership(
             domain_ids = []
 
         updated_clusters.append(
-            cluster.model_copy(update={
-                "helix_ids": helix_ids,
-                "domain_ids": domain_ids,
-            })
+            cluster.model_copy(
+                update={
+                    "helix_ids": helix_ids,
+                    "domain_ids": domain_ids,
+                }
+            )
         )
 
     return design_after.model_copy(update={"cluster_transforms": updated_clusters})
@@ -172,13 +175,19 @@ def _build_coverage_map(design: Design) -> dict[str, dict[str, _HelixClaim]]:
     coverage: dict[str, dict[str, _HelixClaim]] = {}
 
     for cluster in design.cluster_transforms:
-        cluster_cov: dict[str, _HelixClaim] = {hid: "whole" for hid in cluster.helix_ids}
+        cluster_cov: dict[str, _HelixClaim] = {
+            hid: "whole" for hid in cluster.helix_ids
+        }
 
         if cluster.domain_ids:
             ranges_by_helix: dict[str, list[tuple[int, int]]] = {}
             for dr in cluster.domain_ids:
                 strand = strand_by_id.get(dr.strand_id)
-                if strand is None or dr.domain_index < 0 or dr.domain_index >= len(strand.domains):
+                if (
+                    strand is None
+                    or dr.domain_index < 0
+                    or dr.domain_index >= len(strand.domains)
+                ):
                     continue
                 dom = strand.domains[dr.domain_index]
                 lo = min(dom.start_bp, dom.end_bp)
@@ -230,7 +239,9 @@ def _compute_helix_membership(
             # Explicit None means the route wants this helix orphaned
             # regardless of lattice neighbours.
         else:
-            origin = _infer_origin_via_lattice_neighbors(new_hid, design_after, before_helix_ids)
+            origin = _infer_origin_via_lattice_neighbors(
+                new_hid, design_after, before_helix_ids
+            )
         if origin is not None and origin in helix_membership_before:
             new_helix_targets[new_hid] = helix_membership_before[origin]
         else:
@@ -238,10 +249,17 @@ def _compute_helix_membership(
 
     result: dict[str, list[str]] = {}
     for cluster in design_before.cluster_transforms:
-        kept = [hid for hid in cluster.helix_ids
-                if hid in after_helix_ids and hid not in ref_helix_ids]
+        kept = [
+            hid
+            for hid in cluster.helix_ids
+            if hid in after_helix_ids and hid not in ref_helix_ids
+        ]
         for new_hid, target_cids in new_helix_targets.items():
-            if cluster.id in target_cids and new_hid not in kept and new_hid not in ref_helix_ids:
+            if (
+                cluster.id in target_cids
+                and new_hid not in kept
+                and new_hid not in ref_helix_ids
+            ):
                 kept.append(new_hid)
         result[cluster.id] = kept
 
@@ -346,11 +364,11 @@ def _compute_domain_membership(
                 if claim is None or claim == "whole":
                     continue
                 total = 0
-                for (clo, chi) in claim:
+                for clo, chi in claim:
                     ov_lo = max(lo, clo)
                     ov_hi = min(hi, chi)
                     if ov_hi >= ov_lo:
-                        total += (ov_hi - ov_lo + 1)
+                        total += ov_hi - ov_lo + 1
                 if total > 0:
                     candidates.append((total, cid))
 

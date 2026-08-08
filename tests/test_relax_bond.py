@@ -21,9 +21,17 @@ from backend.api.main import app
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (
-    ClusterJoint, ClusterRigidTransform,
-    Crossover, Direction, Domain, ForcedLigation,
-    HalfCrossover, Helix, Strand, StrandType, Vec3,
+    ClusterJoint,
+    ClusterRigidTransform,
+    Crossover,
+    Direction,
+    Domain,
+    ForcedLigation,
+    HalfCrossover,
+    Helix,
+    Strand,
+    StrandType,
+    Vec3,
 )
 
 
@@ -37,7 +45,9 @@ def _reset_state():
 
 
 def _seed_two_helices_separate_clusters(
-    *, with_joint: bool = False, with_crossover: bool = True,
+    *,
+    with_joint: bool = False,
+    with_crossover: bool = True,
 ) -> object:
     """Two parallel helices, each in its own cluster, optionally joined.
     Returns the seeded Design.
@@ -48,39 +58,53 @@ def _seed_two_helices_separate_clusters(
         id="bond_h_a",
         axis_start=Vec3(x=0.0, y=0.0, z=0.0),
         axis_end=Vec3(x=0.0, y=0.0, z=L * BDNA_RISE_PER_BP),
-        phase_offset=0.0, length_bp=L, grid_pos=(0, 0),
+        phase_offset=0.0,
+        length_bp=L,
+        grid_pos=(0, 0),
     )
     h_b = Helix(
         id="bond_h_b",
         axis_start=Vec3(x=2.5, y=0.0, z=0.0),
         axis_end=Vec3(x=2.5, y=0.0, z=L * BDNA_RISE_PER_BP),
-        phase_offset=0.0, length_bp=L, grid_pos=(0, 1),
+        phase_offset=0.0,
+        length_bp=L,
+        grid_pos=(0, 1),
     )
     strand_a = Strand(
         id="bond_strand_a",
-        domains=[Domain(
-            helix_id="bond_h_a", start_bp=0, end_bp=L - 1,
-            direction=Direction.FORWARD,
-        )],
+        domains=[
+            Domain(
+                helix_id="bond_h_a",
+                start_bp=0,
+                end_bp=L - 1,
+                direction=Direction.FORWARD,
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     strand_b = Strand(
         id="bond_strand_b",
-        domains=[Domain(
-            helix_id="bond_h_b", start_bp=0, end_bp=L - 1,
-            direction=Direction.REVERSE,
-        )],
+        domains=[
+            Domain(
+                helix_id="bond_h_b",
+                start_bp=0,
+                end_bp=L - 1,
+                direction=Direction.REVERSE,
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     cluster_a = ClusterRigidTransform(
-        id="bond_cluster_a", name="A",
+        id="bond_cluster_a",
+        name="A",
         helix_ids=["bond_h_a"],
         translation=[0.0, 0.0, 0.0],
         rotation=[0.0, 0.0, 0.0, 1.0],
         pivot=[0.0, 0.0, 0.0],
     )
     cluster_b = ClusterRigidTransform(
-        id="bond_cluster_b", name="B",
+        id="bond_cluster_b",
+        name="B",
         helix_ids=["bond_h_b"],
         translation=[0.0, 0.0, 0.0],
         rotation=[0.0, 0.0, 0.0, 1.0],
@@ -88,32 +112,43 @@ def _seed_two_helices_separate_clusters(
     )
     joints = []
     if with_joint:
-        joints.append(ClusterJoint(
-            id="bond_joint",
-            cluster_id="bond_cluster_a",
-            name="Hinge",
-            local_axis_origin=[1.25, 0.0, L * BDNA_RISE_PER_BP / 2],
-            local_axis_direction=[0.0, 1.0, 0.0],
-            min_angle_deg=-90.0,
-            max_angle_deg=+90.0,
-        ))
+        joints.append(
+            ClusterJoint(
+                id="bond_joint",
+                cluster_id="bond_cluster_a",
+                name="Hinge",
+                local_axis_origin=[1.25, 0.0, L * BDNA_RISE_PER_BP / 2],
+                local_axis_direction=[0.0, 1.0, 0.0],
+                min_angle_deg=-90.0,
+                max_angle_deg=+90.0,
+            )
+        )
     crossovers = list(base.crossovers)
     if with_crossover:
-        crossovers.append(Crossover(
-            id="bond_xover_01",
-            half_a=HalfCrossover(helix_id="bond_h_a", index=6, strand=Direction.FORWARD),
-            half_b=HalfCrossover(helix_id="bond_h_b", index=6, strand=Direction.REVERSE),
-        ))
-    return base.model_copy(update={
-        "helices": [*base.helices, h_a, h_b],
-        "strands": [*base.strands, strand_a, strand_b],
-        "cluster_transforms": [cluster_a, cluster_b],
-        "cluster_joints": joints,
-        "crossovers": crossovers,
-    })
+        crossovers.append(
+            Crossover(
+                id="bond_xover_01",
+                half_a=HalfCrossover(
+                    helix_id="bond_h_a", index=6, strand=Direction.FORWARD
+                ),
+                half_b=HalfCrossover(
+                    helix_id="bond_h_b", index=6, strand=Direction.REVERSE
+                ),
+            )
+        )
+    return base.model_copy(
+        update={
+            "helices": [*base.helices, h_a, h_b],
+            "strands": [*base.strands, strand_a, strand_b],
+            "cluster_transforms": [cluster_a, cluster_b],
+            "cluster_joints": joints,
+            "crossovers": crossovers,
+        }
+    )
 
 
 # ── 0-DOF: rigid translate ──────────────────────────────────────────────────
+
 
 def test_relax_bond_crossover_0_dof_translates_chosen_side():
     """No joints between clusters → side_to_move picks which cluster
@@ -121,21 +156,30 @@ def test_relax_bond_crossover_0_dof_translates_chosen_side():
     seeded = _seed_two_helices_separate_clusters(with_joint=False)
     design_state.set_design(seeded)
     pre = design_state.get_or_404()
-    ct_b_pre = next(c for c in pre.cluster_transforms if c.id == "bond_cluster_b").translation
+    ct_b_pre = next(
+        c for c in pre.cluster_transforms if c.id == "bond_cluster_b"
+    ).translation
 
-    r = client.post("/api/design/relax-bond", json={
-        "bond_type": "crossover",
-        "bond_id": "bond_xover_01",
-        "side_to_move": "b",
-    })
+    r = client.post(
+        "/api/design/relax-bond",
+        json={
+            "bond_type": "crossover",
+            "bond_id": "bond_xover_01",
+            "side_to_move": "b",
+        },
+    )
     assert r.status_code == 200, r.text
     info = r.json()["relax_info"]
     assert info["mode"] == "translate"
     assert info["moved_cluster"] == "bond_cluster_b"
 
     post = design_state.get_or_404()
-    ct_b_post = next(c for c in post.cluster_transforms if c.id == "bond_cluster_b").translation
-    ct_a_post = next(c for c in post.cluster_transforms if c.id == "bond_cluster_a").translation
+    ct_b_post = next(
+        c for c in post.cluster_transforms if c.id == "bond_cluster_b"
+    ).translation
+    ct_a_post = next(
+        c for c in post.cluster_transforms if c.id == "bond_cluster_a"
+    ).translation
     # Side A unchanged.
     assert ct_a_post == [0.0, 0.0, 0.0]
     # Side B moved.
@@ -146,25 +190,32 @@ def test_relax_bond_0_dof_requires_side_to_move():
     """0-DOF case without side_to_move → 422 (the optimizer can't pick)."""
     seeded = _seed_two_helices_separate_clusters(with_joint=False)
     design_state.set_design(seeded)
-    r = client.post("/api/design/relax-bond", json={
-        "bond_type": "crossover",
-        "bond_id": "bond_xover_01",
-    })
+    r = client.post(
+        "/api/design/relax-bond",
+        json={
+            "bond_type": "crossover",
+            "bond_id": "bond_xover_01",
+        },
+    )
     assert r.status_code == 422, r.text
     assert "side_to_move" in r.json()["detail"].lower()
 
 
 # ── 1-DOF: joint rotate ────────────────────────────────────────────────────
 
+
 def test_relax_bond_1_dof_rotates_joint_cluster():
     """One joint between the two clusters → side_to_move ignored, joint
     optimisation rotates the joint's owning cluster to close the chord."""
     seeded = _seed_two_helices_separate_clusters(with_joint=True)
     design_state.set_design(seeded)
-    r = client.post("/api/design/relax-bond", json={
-        "bond_type": "crossover",
-        "bond_id": "bond_xover_01",
-    })
+    r = client.post(
+        "/api/design/relax-bond",
+        json={
+            "bond_type": "crossover",
+            "bond_id": "bond_xover_01",
+        },
+    )
     assert r.status_code == 200, r.text
     info = r.json()["relax_info"]
     assert info["mode"] == "1dof"
@@ -174,11 +225,13 @@ def test_relax_bond_1_dof_rotates_joint_cluster():
 
 # ── Forced ligation path ───────────────────────────────────────────────────
 
+
 def test_relax_bond_ligation_record_path():
     """Forced ligation: bond_id resolves to a ForcedLigation. Default
     chord target is 0 (endpoints should coincide)."""
     seeded = _seed_two_helices_separate_clusters(
-        with_joint=False, with_crossover=False,
+        with_joint=False,
+        with_crossover=False,
     )
     fl = ForcedLigation(
         id="bond_fl_01",
@@ -191,11 +244,14 @@ def test_relax_bond_ligation_record_path():
     )
     seeded = seeded.model_copy(update={"forced_ligations": [fl]})
     design_state.set_design(seeded)
-    r = client.post("/api/design/relax-bond", json={
-        "bond_type": "ligation",
-        "bond_id": "bond_fl_01",
-        "side_to_move": "b",
-    })
+    r = client.post(
+        "/api/design/relax-bond",
+        json={
+            "bond_type": "ligation",
+            "bond_id": "bond_fl_01",
+            "side_to_move": "b",
+        },
+    )
     assert r.status_code == 200, r.text
     info = r.json()["relax_info"]
     assert info["mode"] == "translate"
@@ -205,20 +261,22 @@ def test_relax_bond_ligation_record_path():
 
 # ── Half-edge addressing ───────────────────────────────────────────────────
 
+
 def test_relax_bond_half_edge_addressing():
     """When bond_id isn't provided, side_a + side_b half-edge endpoints
     resolve to the two nuc positions directly. Useful for strand-arc
     bonds that don't have a record id."""
     seeded = _seed_two_helices_separate_clusters(with_joint=False)
     design_state.set_design(seeded)
-    r = client.post("/api/design/relax-bond", json={
-        "bond_type": "strand_arc",
-        "side_a": {"helix_id": "bond_h_a", "bp_index": 5,
-                   "direction": "FORWARD"},
-        "side_b": {"helix_id": "bond_h_b", "bp_index": 5,
-                   "direction": "REVERSE"},
-        "side_to_move": "a",
-    })
+    r = client.post(
+        "/api/design/relax-bond",
+        json={
+            "bond_type": "strand_arc",
+            "side_a": {"helix_id": "bond_h_a", "bp_index": 5, "direction": "FORWARD"},
+            "side_b": {"helix_id": "bond_h_b", "bp_index": 5, "direction": "REVERSE"},
+            "side_to_move": "a",
+        },
+    )
     assert r.status_code == 200, r.text
     info = r.json()["relax_info"]
     assert info["mode"] == "translate"
@@ -227,34 +285,42 @@ def test_relax_bond_half_edge_addressing():
 
 # ── Same-cluster refusal ───────────────────────────────────────────────────
 
+
 def test_relax_bond_same_cluster_refused():
     """When both endpoints are owned by the same cluster, no relaxation
     is possible — 422 with an explanatory message."""
     base = _seed_two_helices_separate_clusters(with_joint=False)
     # Merge the two clusters → single cluster covering both helices.
-    merged = base.model_copy(update={
-        "cluster_transforms": [
-            ClusterRigidTransform(
-                id="bond_cluster_a", name="A+B",
-                helix_ids=["bond_h_a", "bond_h_b"],
-                translation=[0.0, 0.0, 0.0],
-                rotation=[0.0, 0.0, 0.0, 1.0],
-                pivot=[0.0, 0.0, 0.0],
-            ),
-        ],
-    })
+    merged = base.model_copy(
+        update={
+            "cluster_transforms": [
+                ClusterRigidTransform(
+                    id="bond_cluster_a",
+                    name="A+B",
+                    helix_ids=["bond_h_a", "bond_h_b"],
+                    translation=[0.0, 0.0, 0.0],
+                    rotation=[0.0, 0.0, 0.0, 1.0],
+                    pivot=[0.0, 0.0, 0.0],
+                ),
+            ],
+        }
+    )
     design_state.set_design(merged)
-    r = client.post("/api/design/relax-bond", json={
-        "bond_type": "crossover",
-        "bond_id": "bond_xover_01",
-        "side_to_move": "b",
-    })
+    r = client.post(
+        "/api/design/relax-bond",
+        json={
+            "bond_type": "crossover",
+            "bond_id": "bond_xover_01",
+            "side_to_move": "b",
+        },
+    )
     assert r.status_code == 422, r.text
     detail = r.json()["detail"].lower()
     assert "share a cluster" in detail or "single" in detail
 
 
 # ── Dual-cluster (scaffold + geometry) pair picker ─────────────────────────
+
 
 def test_relax_bond_overlapping_scaffold_cluster_picks_geometry_pair():
     """`_autodetect_clusters` produces overlapping cluster sets: one
@@ -270,15 +336,18 @@ def test_relax_bond_overlapping_scaffold_cluster_picks_geometry_pair():
     # Prepend a scaffold cluster that covers BOTH helices, so first-match
     # returns the same scaffold-cluster id for either endpoint.
     scaffold_cluster = ClusterRigidTransform(
-        id="bond_scaffold_cluster", name="Scaffold Cluster 1",
+        id="bond_scaffold_cluster",
+        name="Scaffold Cluster 1",
         helix_ids=["bond_h_a", "bond_h_b"],
         translation=[0.0, 0.0, 0.0],
         rotation=[0.0, 0.0, 0.0, 1.0],
         pivot=[0.0, 0.0, 0.0],
     )
-    seeded = base.model_copy(update={
-        "cluster_transforms": [scaffold_cluster, *base.cluster_transforms],
-    })
+    seeded = base.model_copy(
+        update={
+            "cluster_transforms": [scaffold_cluster, *base.cluster_transforms],
+        }
+    )
     design_state.set_design(seeded)
     pre = design_state.get_or_404()
     # Sanity: first-match would pick the scaffold cluster for both halves.
@@ -290,11 +359,14 @@ def test_relax_bond_overlapping_scaffold_cluster_picks_geometry_pair():
     )
     assert first_match_a == first_match_b == "bond_scaffold_cluster"
 
-    r = client.post("/api/design/relax-bond", json={
-        "bond_type": "crossover",
-        "bond_id": "bond_xover_01",
-        "side_to_move": "b",
-    })
+    r = client.post(
+        "/api/design/relax-bond",
+        json={
+            "bond_type": "crossover",
+            "bond_id": "bond_xover_01",
+            "side_to_move": "b",
+        },
+    )
     assert r.status_code == 200, r.text
     info = r.json()["relax_info"]
     assert info["mode"] == "translate"
@@ -304,16 +376,20 @@ def test_relax_bond_overlapping_scaffold_cluster_picks_geometry_pair():
 
 # ── Target override ────────────────────────────────────────────────────────
 
+
 def test_relax_bond_target_nm_override():
     """target_nm in the request body overrides the type-default."""
     seeded = _seed_two_helices_separate_clusters(with_joint=False)
     design_state.set_design(seeded)
-    r = client.post("/api/design/relax-bond", json={
-        "bond_type": "crossover",
-        "bond_id": "bond_xover_01",
-        "side_to_move": "b",
-        "target_nm": 1.5,
-    })
+    r = client.post(
+        "/api/design/relax-bond",
+        json={
+            "bond_type": "crossover",
+            "bond_id": "bond_xover_01",
+            "side_to_move": "b",
+            "target_nm": 1.5,
+        },
+    )
     assert r.status_code == 200, r.text
     info = r.json()["relax_info"]
     assert info["chord_nm_after"] == 1.5

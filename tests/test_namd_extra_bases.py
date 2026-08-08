@@ -43,8 +43,12 @@ def _design(extra_bases):
     d = make_bundle_design([(0, 0), (0, 1)], length_bp=21, plane="XY")
     xo = Crossover(
         id="xo_extra",
-        half_a=HalfCrossover(helix_id=d.helices[0].id, index=6, strand=Direction.FORWARD),
-        half_b=HalfCrossover(helix_id=d.helices[1].id, index=6, strand=Direction.REVERSE),
+        half_a=HalfCrossover(
+            helix_id=d.helices[0].id, index=6, strand=Direction.FORWARD
+        ),
+        half_b=HalfCrossover(
+            helix_id=d.helices[1].id, index=6, strand=Direction.REVERSE
+        ),
         extra_bases=extra_bases,
     )
     return d.model_copy(update={"crossovers": [xo]})
@@ -55,6 +59,7 @@ def _residues(model):
 
 
 # ── Part A: the atomistic model includes the insert + linker atoms ────────────
+
 
 def test_model_grows_by_exactly_the_insert_count():
     """extra_bases="TT" adds exactly two residues vs the direct-crossover model."""
@@ -96,7 +101,9 @@ def test_inserts_are_threaded_inline_in_the_owning_chain():
     assert len(chain) == 1, "both inserts should ride one owning chain"
     (ch,) = chain
     seqs = sorted({a.seq_num for a in model.atoms if a.chain_id == ch})
-    assert seqs == list(range(seqs[0], seqs[-1] + 1)), "chain residue numbering has a gap"
+    assert seqs == list(range(seqs[0], seqs[-1] + 1)), (
+        "chain residue numbering has a gap"
+    )
     insert_seqs = sorted({a.seq_num for a in xb})
     assert len(insert_seqs) == 2 and insert_seqs[1] - insert_seqs[0] == 1
 
@@ -113,10 +120,15 @@ def test_seeded_insert_keeps_canonical_backbone_bonds():
     with its own sugar for an overridden insert.  See NAMD_4FS_RATTLE_RESEARCH.md."""
     import numpy as np
 
-    ov = {("xo_extra", 0): np.array([2.0, 1.0, 3.0])}   # arbitrary relaxed backbone pos (nm)
+    ov = {
+        ("xo_extra", 0): np.array([2.0, 1.0, 3.0])
+    }  # arbitrary relaxed backbone pos (nm)
     model = build_atomistic_model(_design("T"), xb_pos_override=ov)
-    pos = {a.name: np.array([a.x, a.y, a.z])
-           for a in model.atoms if a.crossover_id == "xo_extra" and a.extra_base_k == 0}
+    pos = {
+        a.name: np.array([a.x, a.y, a.z])
+        for a in model.atoms
+        if a.crossover_id == "xo_extra" and a.extra_base_k == 0
+    }
     assert {"P", "O5'", "C5'", "C4'"} <= set(pos), "insert missing backbone atoms"
 
     def blen(n1, n2):
@@ -127,28 +139,41 @@ def test_seeded_insert_keeps_canonical_backbone_bonds():
     o5_c5 = blen("O5'", "C5'")
     p_o5 = blen("P", "O5'")
     c5_c4 = blen("C5'", "C4'")
-    assert o5_c5 < 0.20, f"O5'-C5' = {o5_c5:.3f} nm — phosphate stranded (should be ~0.144)"
+    assert o5_c5 < 0.20, (
+        f"O5'-C5' = {o5_c5:.3f} nm — phosphate stranded (should be ~0.144)"
+    )
     assert p_o5 < 0.20, f"P-O5' = {p_o5:.3f} nm"
     assert c5_c4 < 0.20, f"C5'-C4' = {c5_c4:.3f} nm"
 
 
 # ── Part B: descriptors emit from an MD frame that CONTAINS the inserts ────────
 
+
 def _md_frame(core, *, with_inserts):
     """An md_rmsf-shaped positions list: the dsDNA-core columns (int bp_index) plus,
     optionally, the two ssDNA inserts md_rmsf emits as ("__xb__", crossover_id, k)
     with a *string* bp_index and a large fluctuation."""
     frame = [
-        {"helix_id": p["helix_id"], "bp_index": p["bp_index"], "direction": p["direction"],
-         "backbone_position": list(p["backbone_position"]), "rmsf": 0.12}
+        {
+            "helix_id": p["helix_id"],
+            "bp_index": p["bp_index"],
+            "direction": p["direction"],
+            "backbone_position": list(p["backbone_position"]),
+            "rmsf": 0.12,
+        }
         for p in core
     ]
     if with_inserts:
         for k, direction in ((0, "FORWARD"), (1, "FORWARD")):
-            frame.append({
-                "helix_id": _XB_SENTINEL, "bp_index": "xo_extra", "direction": direction,
-                "backbone_position": [88.0 + k, 88.0, 88.0], "rmsf": 9.0,
-            })
+            frame.append(
+                {
+                    "helix_id": _XB_SENTINEL,
+                    "bp_index": "xo_extra",
+                    "direction": direction,
+                    "backbone_position": [88.0 + k, 88.0, 88.0],
+                    "rmsf": 9.0,
+                }
+            )
     return frame
 
 

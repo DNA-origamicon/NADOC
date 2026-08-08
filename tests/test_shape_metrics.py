@@ -10,6 +10,7 @@ Descriptors are composed from the locked oxdna_health estimators, so these fixtu
 mirror that module's synthetic-bundle builders (bp-midpoint columns; a display map is
 a list of {helix_id, bp_index, direction, backbone_position} dicts).
 """
+
 import math
 
 import pytest
@@ -18,8 +19,12 @@ from backend.core.shape_metrics import compute_shape_descriptors, twist_profile
 
 
 def _pos(hid, bp, direction, xyz):
-    return {"helix_id": hid, "bp_index": bp, "direction": direction,
-            "backbone_position": list(xyz)}
+    return {
+        "helix_id": hid,
+        "bp_index": bp,
+        "direction": direction,
+        "backbone_position": list(xyz),
+    }
 
 
 def _straight_bundle(n_helix=4, n_axial=40, radius=1.2, rise=0.34):
@@ -45,8 +50,9 @@ def _twist_bundle(total_deg, n_helix=4, n_axial=24, radius=1.2, rise=0.34):
             z = rise * i
             phi = math.radians(total_deg) * (z / zmax if zmax else 0.0)
             a = ang0 + phi
-            out.append(_pos(h, i, "forward",
-                            (radius * math.cos(a), radius * math.sin(a), z)))
+            out.append(
+                _pos(h, i, "forward", (radius * math.cos(a), radius * math.sin(a), z))
+            )
     return out
 
 
@@ -66,12 +72,13 @@ def _arc_bundle(radius_nm, sweep_deg, *, n_helix=4, n_axial=80, sep=0.4):
 
 # ── straight bundle: the null fixture ────────────────────────────────────────────
 
+
 def test_straight_bundle_is_untwisted_and_unbent():
     d = compute_shape_descriptors(_straight_bundle(n_axial=40))
-    assert abs(d["twist_total_deg"]) < 2.0          # no cross-section rotation
+    assert abs(d["twist_total_deg"]) < 2.0  # no cross-section rotation
     assert abs(d["twist_per_turn_deg"]) < 1.0
-    assert abs(d["bend_angle_deg"]) < 3.0           # collinear centreline
-    assert d["bend_radius_nm"] > 100.0              # ~straight → huge radius
+    assert abs(d["bend_angle_deg"]) < 3.0  # collinear centreline
+    assert d["bend_radius_nm"] > 100.0  # ~straight → huge radius
     assert d["radius_of_gyration_nm"] > 0.0
     assert d["n_nucleotides"] == 4 * 40
 
@@ -85,13 +92,14 @@ def test_straight_bundle_end_to_end_matches_axial_span():
 
 # ── known twist: recovered, signed, monotone ─────────────────────────────────────
 
+
 def test_known_twist_recovered_and_scaled_per_turn():
     d = compute_shape_descriptors(_twist_bundle(60.0, n_axial=24))
-    assert abs(d["twist_total_deg"] - 60.0) < 10.0          # recovers programmed twist
+    assert abs(d["twist_total_deg"] - 60.0) < 10.0  # recovers programmed twist
     # twist_per_turn = total / (axial_contour / B-DNA pitch), same sign as total.
     assert d["twist_per_turn_deg"] > 0.0
     n_turns = d["twist_total_deg"] / d["twist_per_turn_deg"]
-    assert 1.0 < n_turns < 4.0                              # ~7.8 nm / ~3.5 nm/turn
+    assert 1.0 < n_turns < 4.0  # ~7.8 nm / ~3.5 nm/turn
 
 
 def test_twist_profile_endpoint_matches_scalar_and_starts_at_zero():
@@ -99,10 +107,10 @@ def test_twist_profile_endpoint_matches_scalar_and_starts_at_zero():
     prof = twist_profile(frame)
     scalar = compute_shape_descriptors(frame)["twist_total_deg"]
     assert len(prof) >= 3
-    assert prof[0][0] == 0.0                       # x normalised to the bundle start
+    assert prof[0][0] == 0.0  # x normalised to the bundle start
     xs = [x for x, _ in prof]
-    assert xs == sorted(xs)                        # monotone axial coordinate
-    assert prof[-1][1] == pytest.approx(scalar)    # last cumulative twist == scalar total
+    assert xs == sorted(xs)  # monotone axial coordinate
+    assert prof[-1][1] == pytest.approx(scalar)  # last cumulative twist == scalar total
 
 
 def test_twist_profile_empty_on_single_helix():
@@ -116,49 +124,66 @@ def test_twist_is_monotone_and_signed():
     t30 = compute_shape_descriptors(_twist_bundle(30.0, n_axial=24))["twist_total_deg"]
     t60 = compute_shape_descriptors(_twist_bundle(60.0, n_axial=24))["twist_total_deg"]
     t90 = compute_shape_descriptors(_twist_bundle(90.0, n_axial=24))["twist_total_deg"]
-    tneg = compute_shape_descriptors(_twist_bundle(-60.0, n_axial=24))["twist_total_deg"]
+    tneg = compute_shape_descriptors(_twist_bundle(-60.0, n_axial=24))[
+        "twist_total_deg"
+    ]
     assert 0.0 < t30 < t60 < t90
-    assert tneg < 0.0                                       # left-handed → negative
+    assert tneg < 0.0  # left-handed → negative
 
 
 # ── known bend: arc-span angle + radius recovered ────────────────────────────────
 
+
 def test_known_arc_recovers_sweep_angle_and_radius():
     R, sweep = 30.0, 90.0
     d = compute_shape_descriptors(_arc_bundle(R, sweep, n_axial=80))
-    assert abs(d["bend_angle_deg"] - sweep) < 12.0          # arc-span, not tangent angle
-    assert abs(d["bend_radius_nm"] - R) < 0.25 * R          # recovers curvature radius
+    assert abs(d["bend_angle_deg"] - sweep) < 12.0  # arc-span, not tangent angle
+    assert abs(d["bend_radius_nm"] - R) < 0.25 * R  # recovers curvature radius
 
 
 def test_tighter_arc_bends_more():
-    b_wide = compute_shape_descriptors(_arc_bundle(60.0, 60.0, n_axial=80))["bend_angle_deg"]
-    b_tight = compute_shape_descriptors(_arc_bundle(20.0, 60.0, n_axial=80))["bend_angle_deg"]
+    b_wide = compute_shape_descriptors(_arc_bundle(60.0, 60.0, n_axial=80))[
+        "bend_angle_deg"
+    ]
+    b_tight = compute_shape_descriptors(_arc_bundle(20.0, 60.0, n_axial=80))[
+        "bend_angle_deg"
+    ]
     # same sweep programmed, but the estimator reads the realised arc-span; both ~60°.
     assert b_wide > 30.0 and b_tight > 30.0
-    r_wide = compute_shape_descriptors(_arc_bundle(60.0, 60.0, n_axial=80))["bend_radius_nm"]
-    r_tight = compute_shape_descriptors(_arc_bundle(20.0, 60.0, n_axial=80))["bend_radius_nm"]
-    assert r_wide > r_tight                                 # radius tracks 1/curvature
+    r_wide = compute_shape_descriptors(_arc_bundle(60.0, 60.0, n_axial=80))[
+        "bend_radius_nm"
+    ]
+    r_tight = compute_shape_descriptors(_arc_bundle(20.0, 60.0, n_axial=80))[
+        "bend_radius_nm"
+    ]
+    assert r_wide > r_tight  # radius tracks 1/curvature
 
 
 # ── the descriptor discriminates (can go red) ────────────────────────────────────
+
 
 def test_descriptor_goes_red_on_twisted_frame():
     """The straight-bundle assertions above must FAIL on a twisted frame — proving the
     descriptor measures the property, not a constant."""
     d = compute_shape_descriptors(_twist_bundle(90.0, n_axial=24))
-    assert abs(d["twist_total_deg"]) > 20.0                 # would violate the <2.0 null
+    assert abs(d["twist_total_deg"]) > 20.0  # would violate the <2.0 null
 
 
 def test_radius_of_gyration_grows_with_bundle_radius():
-    thin = compute_shape_descriptors(_straight_bundle(radius=1.0))["radius_of_gyration_nm"]
-    fat = compute_shape_descriptors(_straight_bundle(radius=3.0))["radius_of_gyration_nm"]
+    thin = compute_shape_descriptors(_straight_bundle(radius=1.0))[
+        "radius_of_gyration_nm"
+    ]
+    fat = compute_shape_descriptors(_straight_bundle(radius=3.0))[
+        "radius_of_gyration_nm"
+    ]
     assert fat > thin
 
 
 # ── degenerate inputs return None per-descriptor, never crash ─────────────────────
 
+
 def test_single_helix_leaves_twist_undefined_but_returns_lengths():
     single = [_pos(0, i, "forward", (0.0, 0.0, 0.34 * i)) for i in range(40)]
     d = compute_shape_descriptors(single)
-    assert d["twist_total_deg"] is None                     # <2 helices → no cross-section
-    assert d["radius_of_gyration_nm"] > 0.0                 # length descriptors still defined
+    assert d["twist_total_deg"] is None  # <2 helices → no cross-section
+    assert d["radius_of_gyration_nm"] > 0.0  # length descriptors still defined

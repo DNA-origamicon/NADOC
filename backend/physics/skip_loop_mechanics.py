@@ -51,10 +51,11 @@ class LoopJointSpec:
     The joint sits between segment[seg_before_idx] and segment[seg_before_idx+1].
     The joint particle has ssDNA bending stiffness (large alpha = very flexible).
     """
+
     helix_id: str
-    seg_before_idx: int    # joint between segment[i] and segment[i+1]
-    loop_bp_count: int     # sum of positive delta values in this segment's bp range
-    alpha_bend: float      # XPBD compliance for bending (ALPHA_BEND_SSDNA)
+    seg_before_idx: int  # joint between segment[i] and segment[i+1]
+    loop_bp_count: int  # sum of positive delta values in this segment's bp range
+    alpha_bend: float  # XPBD compliance for bending (ALPHA_BEND_SSDNA)
     rest_length_nm: float  # preferred distance to flanking segments (n_bases × 0.59 nm)
 
 
@@ -120,7 +121,9 @@ def compute_preferred_segment_twist_rad(
     """
     segment_bp_count = seg_bp_end - seg_bp_start
     nominal_twist_rad = segment_bp_count * helix.twist_per_bp_rad
-    deficit_rad = math.radians(compute_segment_twist_deficit(helix, seg_bp_start, seg_bp_end))
+    deficit_rad = math.radians(
+        compute_segment_twist_deficit(helix, seg_bp_start, seg_bp_end)
+    )
     return nominal_twist_rad + deficit_rad
 
 
@@ -148,11 +151,13 @@ def compute_loop_joints(
             if bp_s <= ls.bp_index < bp_e and ls.delta > 0
         )
         if loop_count > 0:
-            joints.append(LoopJointSpec(
-                helix_id=helix.id,
-                seg_before_idx=seg_idx,
-                loop_bp_count=loop_count,
-                alpha_bend=ALPHA_BEND_SSDNA,
-                rest_length_nm=loop_count * SSDNA_RISE_PER_BASE_NM,
-            ))
+            joints.append(
+                LoopJointSpec(
+                    helix_id=helix.id,
+                    seg_before_idx=seg_idx,
+                    loop_bp_count=loop_count,
+                    alpha_bend=ALPHA_BEND_SSDNA,
+                    rest_length_nm=loop_count * SSDNA_RISE_PER_BASE_NM,
+                )
+            )
     return joints

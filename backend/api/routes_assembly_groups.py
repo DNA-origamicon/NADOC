@@ -81,6 +81,7 @@ class CreateGroupRequest(BaseModel):
     PartGroups; the partition invariant (a member can only belong to one
     parent group) is enforced.
     """
+
     instance_ids: list[str] = Field(default_factory=list)
     subgroup_ids: list[str] = Field(default_factory=list)
     name: Optional[str] = None
@@ -93,7 +94,7 @@ def create_group(body: CreateGroupRequest) -> dict:
         raise HTTPException(400, detail="Group needs at least one member.")
     # Validate referenced ids exist + no double-parenting.
     instance_ids_set = {i.id for i in assembly.instances}
-    group_ids_set    = {g.id for g in assembly.groups}
+    group_ids_set = {g.id for g in assembly.groups}
     for iid in body.instance_ids:
         if iid not in instance_ids_set:
             raise HTTPException(404, detail=f"Instance {iid!r} not found.")
@@ -126,8 +127,8 @@ def create_group(body: CreateGroupRequest) -> dict:
         op_kind="assembly-create-group",
         label=f"Group: {new_group.name}",
         params={
-            "group_id":     new_group.id,
-            "name":         new_group.name,
+            "group_id": new_group.id,
+            "name": new_group.name,
             "instance_ids": list(body.instance_ids),
             "subgroup_ids": list(body.subgroup_ids),
         },
@@ -159,14 +160,16 @@ def ungroup(group_id: str) -> dict:
 
 
 class PatchGroupRequest(BaseModel):
-    name:           Optional[str] = None
-    visible:        Optional[bool] = None
-    representation: Optional[Literal[
-        "full", "beads", "cylinders", "vdw", "ballstick", "hull-prism", "surface"
-    ]] = None
+    name: Optional[str] = None
+    visible: Optional[bool] = None
+    representation: Optional[
+        Literal[
+            "full", "beads", "cylinders", "vdw", "ballstick", "hull-prism", "surface"
+        ]
+    ] = None
     # null/empty string is treated as "clear the override → respect member reps"
     clear_representation: bool = False
-    expanded:       Optional[bool] = None
+    expanded: Optional[bool] = None
 
 
 @router.patch("/assembly/groups/{group_id}", status_code=200)
@@ -201,23 +204,27 @@ def patch_group(group_id: str, body: PatchGroupRequest) -> dict:
 
 class DuplicateGroupRequest(BaseModel):
     offset: list[float] = [5.0, 0.0, 0.0]
-    name:   Optional[str] = None
+    name: Optional[str] = None
 
 
 @router.post("/assembly/groups/{group_id}/duplicate", status_code=200)
-def duplicate_group(group_id: str, body: DuplicateGroupRequest = DuplicateGroupRequest()) -> dict:
+def duplicate_group(
+    group_id: str, body: DuplicateGroupRequest = DuplicateGroupRequest()
+) -> dict:
     """Deep-copy a group: clone all transitive members + nested subgroups +
     internal joints + internal bindings. External joints/bindings are dropped.
     """
     assembly = assembly_state.get_or_404()
-    _find_group(assembly, group_id)   # 404 if missing
+    _find_group(assembly, group_id)  # 404 if missing
     offset = (
         float(body.offset[0]) if len(body.offset) > 0 else 5.0,
         float(body.offset[1]) if len(body.offset) > 1 else 0.0,
         float(body.offset[2]) if len(body.offset) > 2 else 0.0,
     )
     new_insts, new_joints, new_bindings, new_groups, root_id = _ag.clone_group_subtree(
-        assembly, group_id, offset=offset,
+        assembly,
+        group_id,
+        offset=offset,
     )
     if body.name is not None:
         new_groups = [
@@ -225,21 +232,23 @@ def duplicate_group(group_id: str, body: DuplicateGroupRequest = DuplicateGroupR
             for g in new_groups
         ]
 
-    mutated = assembly.model_copy(update={
-        "instances":         list(assembly.instances) + new_insts,
-        "joints":            list(assembly.joints) + new_joints,
-        "overhang_bindings": list(assembly.overhang_bindings) + new_bindings,
-        "groups":            list(assembly.groups) + new_groups,
-    })
+    mutated = assembly.model_copy(
+        update={
+            "instances": list(assembly.instances) + new_insts,
+            "joints": list(assembly.joints) + new_joints,
+            "overhang_bindings": list(assembly.overhang_bindings) + new_bindings,
+            "groups": list(assembly.groups) + new_groups,
+        }
+    )
     _apply_assembly_mutation_with_feature_log(
         mutated,
         op_kind="assembly-duplicate-group",
         label="Duplicate group",
         params={
             "source_group_id": group_id,
-            "new_group_id":    root_id,
-            "offset":          list(body.offset),
-            "n_instances":     len(new_insts),
+            "new_group_id": root_id,
+            "offset": list(body.offset),
+            "n_instances": len(new_insts),
         },
     )
     return _assembly_response(assembly_state.get_or_404())
@@ -255,27 +264,35 @@ def cascade_delete_group(group_id: str) -> dict:
     inst_ids, group_ids = _ag.collect_group_member_ids(assembly, group_id)
 
     new_instances = [i for i in assembly.instances if i.id not in inst_ids]
-    new_joints    = [j for j in assembly.joints
-                     if j.instance_a_id not in inst_ids and j.instance_b_id not in inst_ids]
-    new_bindings  = [b for b in assembly.overhang_bindings
-                     if b.instance_a_id not in inst_ids and b.instance_b_id not in inst_ids]
-    new_groups    = _ag.filter_groups_after_group_removal(list(assembly.groups), group_ids)
+    new_joints = [
+        j
+        for j in assembly.joints
+        if j.instance_a_id not in inst_ids and j.instance_b_id not in inst_ids
+    ]
+    new_bindings = [
+        b
+        for b in assembly.overhang_bindings
+        if b.instance_a_id not in inst_ids and b.instance_b_id not in inst_ids
+    ]
+    new_groups = _ag.filter_groups_after_group_removal(list(assembly.groups), group_ids)
 
-    mutated = assembly.model_copy(update={
-        "instances":         new_instances,
-        "joints":            new_joints,
-        "overhang_bindings": new_bindings,
-        "groups":            new_groups,
-    })
+    mutated = assembly.model_copy(
+        update={
+            "instances": new_instances,
+            "joints": new_joints,
+            "overhang_bindings": new_bindings,
+            "groups": new_groups,
+        }
+    )
     _apply_assembly_mutation_with_feature_log(
         mutated,
         op_kind="assembly-delete-group",
         label=f"Delete group: {target.name or group_id}",
         params={
-            "group_id":         group_id,
-            "name":             target.name,
+            "group_id": group_id,
+            "name": target.name,
             "deleted_instance_ids": sorted(inst_ids),
-            "deleted_group_ids":    sorted(group_ids),
+            "deleted_group_ids": sorted(group_ids),
         },
     )
     for iid in inst_ids:
@@ -291,8 +308,9 @@ class TransformGroupRequest(BaseModel):
     transform). Translation is the common case for the drag-handle gizmo;
     matrix covers translate+rotate group moves.
     """
+
     translation: Optional[list[float]] = None
-    matrix:      Optional[list[float]] = None
+    matrix: Optional[list[float]] = None
 
 
 @router.post("/assembly/groups/{group_id}/transform", status_code=200)
@@ -305,19 +323,28 @@ def transform_group(group_id: str, body: TransformGroupRequest) -> dict:
     # on every moved instance, and gear-sync below needs the originals to
     # derive each revolute joint's implied new angle.
     pre_move_bases = {
-        i.id: i.base_transform for i in assembly.instances if i.base_transform is not None
+        i.id: i.base_transform
+        for i in assembly.instances
+        if i.base_transform is not None
     }
     if body.translation is not None:
         if len(body.translation) != 3:
             raise HTTPException(400, detail="translation must have 3 floats.")
         mutated = _ag.apply_group_translation(
-            assembly, group_id,
-            (float(body.translation[0]), float(body.translation[1]), float(body.translation[2])),
+            assembly,
+            group_id,
+            (
+                float(body.translation[0]),
+                float(body.translation[1]),
+                float(body.translation[2]),
+            ),
         )
         op_params = {"group_id": group_id, "translation": list(body.translation)}
     elif body.matrix is not None:
         if len(body.matrix) != 16:
-            raise HTTPException(400, detail="matrix must have 16 floats (row-major 4×4).")
+            raise HTTPException(
+                400, detail="matrix must have 16 floats (row-major 4×4)."
+            )
         M = np.asarray(body.matrix, dtype=float).reshape(4, 4)
         mutated = _ag.apply_group_transform(assembly, group_id, M)
         op_params = {"group_id": group_id, "matrix": list(body.matrix)}
@@ -352,7 +379,9 @@ def transform_group(group_id: str, body: TransformGroupRequest) -> dict:
     latest = assembly_state.get_or_404()
     member_instance_ids, _gids = _ag.collect_group_member_ids(latest, group_id)
     updated_joint_ids = _sync_revolute_values_for_instances(
-        latest, member_instance_ids, base_transforms_override=pre_move_bases,
+        latest,
+        member_instance_ids,
+        base_transforms_override=pre_move_bases,
     )
     # Parent-side sync: joints where the moved group is the PARENT (instance_a)
     # and the child (instance_b) stayed put (e.g. fixed axle). The child's
@@ -361,7 +390,9 @@ def transform_group(group_id: str, body: TransformGroupRequest) -> dict:
     if body.matrix is not None:
         M = np.asarray(body.matrix, dtype=float).reshape(4, 4)
         parent_updates = _sync_revolute_values_for_parent_moves(
-            latest, member_instance_ids, M,
+            latest,
+            member_instance_ids,
+            M,
         )
         updated_joint_ids = [*updated_joint_ids, *parent_updates]
     for jid in updated_joint_ids:

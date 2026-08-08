@@ -36,15 +36,15 @@ def _synthetic_origami(tmp_path):
     top = tmp_path / "topology.top"
     conf = tmp_path / "conf.dat"
     top.write_text(
-        "4 1\n"
-        "1 A 1 -1\n"
-        "1 C 2 0\n"
-        "1 G 3 1\n"
-        "1 T -1 2\n",
+        "4 1\n1 A 1 -1\n1 C 2 0\n1 G 3 1\n1 T -1 2\n",
         encoding="utf-8",
     )
     ys = [5.0, 6.0, 7.0, 8.0]
-    lines = ["t = 0", "b = 40.000000 40.000000 40.000000", "E = 0.000000 0.000000 0.000000"]
+    lines = [
+        "t = 0",
+        "b = 40.000000 40.000000 40.000000",
+        "E = 0.000000 0.000000 0.000000",
+    ]
     for y in ys:
         lines.append(f"0.000000 {y:.6f} 0.000000  1 0 0  0 0 1  0 0 0  0 0 0")
     conf.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -65,7 +65,7 @@ def test_placement_deterministic_and_count():
     p1 = placement_points_nm("square", 20.0, 1, **kw)
     p2 = placement_points_nm("square", 20.0, 1, **kw)
     assert p1 == p2
-    assert strand_count("square", 20.0, 10000.0) == 4   # 400 nm² × 1e4/µm² = 4
+    assert strand_count("square", 20.0, 10000.0) == 4  # 400 nm² × 1e4/µm² = 4
     assert len(p1) == 4
 
 
@@ -94,11 +94,22 @@ def test_plane_basis_orthonormal():
 
 # ── The build ────────────────────────────────────────────────────────────────────
 def test_build_shapes_and_threading():
-    spec = CaptureSpec(sequence="ACGTACGT", attach_end="5'", shape="square",
-                       size_nm=20.0, density_per_um2=10000.0, seed=1)
+    spec = CaptureSpec(
+        sequence="ACGTACGT",
+        attach_end="5'",
+        shape="square",
+        size_nm=20.0,
+        density_per_um2=10000.0,
+        seed=1,
+    )
     cm = [[0.0, y, 0.0] for y in (5.0, 6.0, 7.0, 8.0)]
-    b = build_capture_strands(spec, origami_cm_oxdna=cm, n_particles_origami=4,
-                              n_strands_origami=1, surface=SURFACE)
+    b = build_capture_strands(
+        spec,
+        origami_cm_oxdna=cm,
+        n_particles_origami=4,
+        n_strands_origami=1,
+        surface=SURFACE,
+    )
     L = 8
     assert b.n_strands == 4
     assert b.n_beads == 4 * L
@@ -108,51 +119,72 @@ def test_build_shapes_and_threading():
     assert {r[0] for r in b.topology_rows} == {2, 3, 4, 5}
     # per-strand threading: first bead has no 5′ neighbour, last has no 3′ neighbour
     for s in range(4):
-        rows = b.topology_rows[s * L:(s + 1) * L]
+        rows = b.topology_rows[s * L : (s + 1) * L]
         base = 4 + s * L
-        assert rows[0][3] == -1 and rows[0][2] == base + 1          # n5=-1, n3=next
-        assert rows[-1][2] == -1 and rows[-1][3] == base + L - 2     # n3=-1, n5=prev
+        assert rows[0][3] == -1 and rows[0][2] == base + 1  # n5=-1, n3=next
+        assert rows[-1][2] == -1 and rows[-1][3] == base + L - 2  # n3=-1, n5=prev
         for k in range(1, L - 1):
-            assert rows[k][2] == base + k + 1                        # n3 = next
-            assert rows[k][3] == base + k - 1                        # n5 = prev
+            assert rows[k][2] == base + k + 1  # n3 = next
+            assert rows[k][3] == base + k - 1  # n5 = prev
 
 
 def test_build_fene_safe_backbone_bonds():
     """The real FENE bond is between consecutive backbone SITES (CM + a1/a2 offset).
     A B-form seed must keep every such bond inside the FENE window, or the run blows up
     on step 0 (a too-SHORT bond is as fatal as a too-long one)."""
-    spec = CaptureSpec(sequence="ACGTACGTAC", attach_end="5'", shape="square",
-                       size_nm=20.0, density_per_um2=10000.0, seed=1)
+    spec = CaptureSpec(
+        sequence="ACGTACGTAC",
+        attach_end="5'",
+        shape="square",
+        size_nm=20.0,
+        density_per_um2=10000.0,
+        seed=1,
+    )
     cm = [[0.0, y, 0.0] for y in (5.0, 6.0, 7.0, 8.0)]
-    b = build_capture_strands(spec, origami_cm_oxdna=cm, n_particles_origami=4,
-                              n_strands_origami=1, surface=SURFACE)
+    b = build_capture_strands(
+        spec,
+        origami_cm_oxdna=cm,
+        n_particles_origami=4,
+        n_strands_origami=1,
+        surface=SURFACE,
+    )
     L = 10
     for s in range(b.n_strands):
         sites = []
-        for ln in b.conf_lines[s * L:(s + 1) * L]:
+        for ln in b.conf_lines[s * L : (s + 1) * L]:
             f = [float(x) for x in ln.split()]
-            cm_nm = np.array(f[:3]) / NM_TO_OXDNA          # conf is oxDNA units → nm
+            cm_nm = np.array(f[:3]) / NM_TO_OXDNA  # conf is oxDNA units → nm
             a1, a3 = np.array(f[3:6]), np.array(f[6:9])
             sites.append(oxdna_backbone_site(cm_nm, a1, a3))
         for k in range(1, L):
             d = float(np.linalg.norm(sites[k] - sites[k - 1]))  # nm
-            assert FENE_MIN_NM < d < FENE_MAX_NM, f"backbone bond {d:.3f} nm out of FENE window"
+            assert FENE_MIN_NM < d < FENE_MAX_NM, (
+                f"backbone bond {d:.3f} nm out of FENE window"
+            )
 
 
 def test_trap_at_attach_end_5prime_vs_3prime():
     cm = [[0.0, y, 0.0] for y in (5.0, 6.0, 7.0, 8.0)]
     L = 6
     kw = dict(shape="square", size_nm=20.0, density_per_um2=10000.0, seed=1)
-    b5 = build_capture_strands(CaptureSpec(sequence="ACGTAC", attach_end="5'", **kw),
-                               origami_cm_oxdna=cm, n_particles_origami=4,
-                               n_strands_origami=1, surface=SURFACE)
-    b3 = build_capture_strands(CaptureSpec(sequence="ACGTAC", attach_end="3'", **kw),
-                               origami_cm_oxdna=cm, n_particles_origami=4,
-                               n_strands_origami=1, surface=SURFACE)
+    b5 = build_capture_strands(
+        CaptureSpec(sequence="ACGTAC", attach_end="5'", **kw),
+        origami_cm_oxdna=cm,
+        n_particles_origami=4,
+        n_strands_origami=1,
+        surface=SURFACE,
+    )
+    b3 = build_capture_strands(
+        CaptureSpec(sequence="ACGTAC", attach_end="3'", **kw),
+        origami_cm_oxdna=cm,
+        n_particles_origami=4,
+        n_strands_origami=1,
+        surface=SURFACE,
+    )
     # one trap per strand
     assert len(b5.trap_anchors) == b5.n_strands
     # 5′ tether → attach is the strand's FIRST bead; 3′ tether → its LAST bead
-    assert b5.trap_anchors[0][0] == 4          # first strand, bead 0
+    assert b5.trap_anchors[0][0] == 4  # first strand, bead 0
     assert b3.trap_anchors[0][0] == 4 + L - 1  # first strand, last bead
     # a3 (5′→3′) flips sign between the two attach ends
     a3_5 = np.array([float(x) for x in b5.conf_lines[0].split()[6:9]])
@@ -162,12 +194,29 @@ def test_trap_at_attach_end_5prime_vs_3prime():
 
 def test_empty_when_no_sequence_or_no_strands():
     cm = [[0.0, y, 0.0] for y in (5.0, 6.0)]
-    assert build_capture_strands(CaptureSpec(sequence=""), origami_cm_oxdna=cm,
-                                 n_particles_origami=2, n_strands_origami=1,
-                                 surface=SURFACE).n_beads == 0
-    spec = CaptureSpec(sequence="ACGT", density_per_um2=0.0)   # zero density → no strands
-    assert build_capture_strands(spec, origami_cm_oxdna=cm, n_particles_origami=2,
-                                 n_strands_origami=1, surface=SURFACE).n_beads == 0
+    assert (
+        build_capture_strands(
+            CaptureSpec(sequence=""),
+            origami_cm_oxdna=cm,
+            n_particles_origami=2,
+            n_strands_origami=1,
+            surface=SURFACE,
+        ).n_beads
+        == 0
+    )
+    spec = CaptureSpec(
+        sequence="ACGT", density_per_um2=0.0
+    )  # zero density → no strands
+    assert (
+        build_capture_strands(
+            spec,
+            origami_cm_oxdna=cm,
+            n_particles_origami=2,
+            n_strands_origami=1,
+            surface=SURFACE,
+        ).n_beads
+        == 0
+    )
 
 
 # ── File-level append: origami must be preserved byte-for-byte ─────────────────────
@@ -176,8 +225,14 @@ def test_append_preserves_origami_and_bumps_headers(tmp_path):
     top_before = top.read_text().splitlines()
     conf_before = conf.read_text().splitlines()
 
-    spec = CaptureSpec(sequence="ACGTACGT", attach_end="5'", shape="square",
-                       size_nm=20.0, density_per_um2=10000.0, seed=1)
+    spec = CaptureSpec(
+        sequence="ACGTACGT",
+        attach_end="5'",
+        shape="square",
+        size_nm=20.0,
+        density_per_um2=10000.0,
+        seed=1,
+    )
     info = append_capture_strands(top, conf, spec, SURFACE)
 
     top_after = top.read_text().splitlines()
@@ -205,10 +260,10 @@ def test_append_preserves_origami_and_bumps_headers(tmp_path):
 def test_append_noop_when_disabled(tmp_path):
     top, conf, _cm = _synthetic_origami(tmp_path)
     top_before, conf_before = top.read_text(), conf.read_text()
-    spec = CaptureSpec(sequence="ACGT", density_per_um2=0.0)   # builds nothing
+    spec = CaptureSpec(sequence="ACGT", density_per_um2=0.0)  # builds nothing
     info = append_capture_strands(top, conf, spec, SURFACE)
     assert info["n_beads"] == 0
-    assert top.read_text() == top_before      # files untouched
+    assert top.read_text() == top_before  # files untouched
     assert conf.read_text() == conf_before
 
 
@@ -228,17 +283,42 @@ def test_prepare_oxdna_job_builds_capture_strands(tmp_path):
     geometry = _geometry_for_design(design)
     n_origami = len(_strand_nucleotide_order(design))
 
-    specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100,
-                                    backend="CPU", device="0", salt_concentration=0.5,
-                                    min_bp_retained=0.5, surface_present=True, protein=False)
-    job = new_oxdna_job(design_name="6hb", stages=[s.to_status() for s in specs],
-                        device="0", backend="CPU", salt_concentration=0.5)
-    surface = {"dir": [0, -1, 0], "offset_nm": 20.0, "stiff": 5.0}   # generous offset → no clash
-    strands = {"enabled": True, "sequence": "ACGTACGT", "attachEnd": "5'",
-               "shape": "circle", "sizeNm": 60.0, "densityPerUm2": 4000.0, "seed": 7}
+    specs = build_relaxation_stages(
+        mc_steps=100,
+        md_relax_steps=100,
+        equil_steps=100,
+        backend="CPU",
+        device="0",
+        salt_concentration=0.5,
+        min_bp_retained=0.5,
+        surface_present=True,
+        protein=False,
+    )
+    job = new_oxdna_job(
+        design_name="6hb",
+        stages=[s.to_status() for s in specs],
+        device="0",
+        backend="CPU",
+        salt_concentration=0.5,
+    )
+    surface = {
+        "dir": [0, -1, 0],
+        "offset_nm": 20.0,
+        "stiff": 5.0,
+    }  # generous offset → no clash
+    strands = {
+        "enabled": True,
+        "sequence": "ACGTACGT",
+        "attachEnd": "5'",
+        "shape": "circle",
+        "sizeNm": 60.0,
+        "densityPerUm2": 4000.0,
+        "seed": 7,
+    }
 
-    info = prepare_oxdna_job(design, geometry, job, tmp_path, specs,
-                             surface=surface, surface_strands=strands)
+    info = prepare_oxdna_job(
+        design, geometry, job, tmp_path, specs, surface=surface, surface_strands=strands
+    )
 
     jd = job.job_dir(tmp_path)
     cap = info["capture"]
@@ -249,7 +329,7 @@ def test_prepare_oxdna_job_builds_capture_strands(tmp_path):
     n_top, n_str = (int(x) for x in top_lines[0].split())
     assert n_top == n_origami + cap["n_beads"]
     # every appended row's 3′/5′ neighbour index is within the new particle range or -1
-    for ln in top_lines[1 + n_origami:]:
+    for ln in top_lines[1 + n_origami :]:
         _si, _base, n3, n5 = ln.split()
         for nb in (int(n3), int(n5)):
             assert nb == -1 or 0 <= nb < n_top
@@ -281,24 +361,47 @@ def test_headless_setup_build_validate():
     geometry = _geometry_for_design(design)
     n_origami_strands = len(design.strands)
 
-    specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100,
-                                    backend="CPU", device="0", salt_concentration=0.5,
-                                    min_bp_retained=0.5, surface_present=True, protein=False)
+    specs = build_relaxation_stages(
+        mc_steps=100,
+        md_relax_steps=100,
+        equil_steps=100,
+        backend="CPU",
+        device="0",
+        salt_concentration=0.5,
+        min_bp_retained=0.5,
+        surface_present=True,
+        protein=False,
+    )
     surface = {"dir": [0, -1, 0], "offset_nm": 20.0, "stiff": 5.0}
-    strands = {"enabled": True, "sequence": "ACGTACGT", "attachEnd": "5'", "shape": "square",
-               "sizeNm": 80.0, "densityPerUm2": 5000.0, "seed": 3}
+    strands = {
+        "enabled": True,
+        "sequence": "ACGTACGT",
+        "attachEnd": "5'",
+        "shape": "square",
+        "sizeNm": 80.0,
+        "densityPerUm2": 5000.0,
+        "seed": 3,
+    }
 
     with tempfile.TemporaryDirectory() as tmp:
         ws = _P(tmp)
-        job = new_oxdna_job(design_name="6hb", stages=[s.to_status() for s in specs],
-                            device="0", backend="CPU", salt_concentration=0.5)
-        info = prepare_oxdna_job(design, geometry, job, ws, specs,
-                                 surface=surface, surface_strands=strands)
+        job = new_oxdna_job(
+            design_name="6hb",
+            stages=[s.to_status() for s in specs],
+            device="0",
+            backend="CPU",
+            salt_concentration=0.5,
+        )
+        info = prepare_oxdna_job(
+            design, geometry, job, ws, specs, surface=surface, surface_strands=strands
+        )
         jd = job.job_dir(ws)
         report = validate_capture_build(
-            jd / "topology.top", jd / "conf.dat",
+            jd / "topology.top",
+            jd / "conf.dat",
             n_origami_strands=n_origami_strands,
-            trap_particles=info["capture"]["trap_particles"])
+            trap_particles=info["capture"]["trap_particles"],
+        )
 
     assert report["ok"], report["failures"]
     assert report["n_capture_strands"] >= 1
@@ -316,7 +419,9 @@ def test_display_reader_skips_trailing_capture_beads(tmp_path):
     from backend.core.oxdna_runner import prepare_oxdna_job
     from backend.api.crud import _geometry_for_design
     from backend.physics.oxdna_interface import (
-        read_configuration_full, assert_topology_matches_design, StaleJobTopologyError,
+        read_configuration_full,
+        assert_topology_matches_design,
+        StaleJobTopologyError,
         _strand_nucleotide_order,
     )
     from tests.conftest import make_6hb_design
@@ -324,16 +429,37 @@ def test_display_reader_skips_trailing_capture_beads(tmp_path):
     design = make_6hb_design()
     geometry = _geometry_for_design(design)
     order = _strand_nucleotide_order(design)
-    specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100,
-                                    backend="CPU", device="0", salt_concentration=0.5,
-                                    min_bp_retained=0.5, surface_present=True, protein=False)
-    job = new_oxdna_job(design_name="6hb", stages=[s.to_status() for s in specs],
-                        device="0", backend="CPU", salt_concentration=0.5)
+    specs = build_relaxation_stages(
+        mc_steps=100,
+        md_relax_steps=100,
+        equil_steps=100,
+        backend="CPU",
+        device="0",
+        salt_concentration=0.5,
+        min_bp_retained=0.5,
+        surface_present=True,
+        protein=False,
+    )
+    job = new_oxdna_job(
+        design_name="6hb",
+        stages=[s.to_status() for s in specs],
+        device="0",
+        backend="CPU",
+        salt_concentration=0.5,
+    )
     surface = {"dir": [0, -1, 0], "offset_nm": 20.0, "stiff": 5.0}
-    strands = {"enabled": True, "sequence": "ACGTACGT", "attachEnd": "5'", "shape": "square",
-               "sizeNm": 80.0, "densityPerUm2": 5000.0, "seed": 3}
-    info = prepare_oxdna_job(design, geometry, job, tmp_path, specs,
-                             surface=surface, surface_strands=strands)
+    strands = {
+        "enabled": True,
+        "sequence": "ACGTACGT",
+        "attachEnd": "5'",
+        "shape": "square",
+        "sizeNm": 80.0,
+        "densityPerUm2": 5000.0,
+        "seed": 3,
+    }
+    info = prepare_oxdna_job(
+        design, geometry, job, tmp_path, specs, surface=surface, surface_strands=strands
+    )
     jd = job.job_dir(tmp_path)
     n_cap = info["capture"]["n_beads"]
 
@@ -348,7 +474,9 @@ def test_display_reader_skips_trailing_capture_beads(tmp_path):
     shifted = read_configuration_full(jd / "conf.dat", design, n_trailing_extra=0)
     assert len(fixed) == len(order)
     k0 = order[0][:3]
-    assert not np.allclose(fixed[k0]["backbone_position"], shifted[k0]["backbone_position"])
+    assert not np.allclose(
+        fixed[k0]["backbone_position"], shifted[k0]["backbone_position"]
+    )
 
 
 def test_surface_jobs_disallow_alignment():
@@ -358,7 +486,8 @@ def test_surface_jobs_disallow_alignment():
     from backend.api.routes_oxdna import _job_has_surface
 
     class _J:
-        def __init__(self, rc): self.run_config = rc
+        def __init__(self, rc):
+            self.run_config = rc
 
     assert _job_has_surface(_J({"surface": {"dir": [0, -1, 0], "stiff": 5}}))
     assert _job_has_surface(_J({"surface_strands": {"enabled": True}}))
@@ -371,8 +500,14 @@ def test_oracle_catches_a_broken_bond(tmp_path):
     """The oracle must FAIL on a corrupted build — proves it actually validates (a green
     oracle that can't go red is worthless)."""
     top, conf, _cm = _synthetic_origami(tmp_path)
-    spec = CaptureSpec(sequence="ACGTACGT", attach_end="5'", shape="square",
-                       size_nm=40.0, density_per_um2=20000.0, seed=1)
+    spec = CaptureSpec(
+        sequence="ACGTACGT",
+        attach_end="5'",
+        shape="square",
+        size_nm=40.0,
+        density_per_um2=20000.0,
+        seed=1,
+    )
     info = append_capture_strands(top, conf, spec, SURFACE)
     traps = [p for p, _pos in info["trap_anchors"]]
 
@@ -382,7 +517,7 @@ def test_oracle_catches_a_broken_bond(tmp_path):
     # Move one capture bead far away → its backbone bond leaves the FENE window.
     lines = conf.read_text().splitlines()
     last = lines[-1].split()
-    last[0] = str(float(last[0]) + 50.0)   # +50 oxDNA units along x
+    last[0] = str(float(last[0]) + 50.0)  # +50 oxDNA units along x
     lines[-1] = " ".join(last)
     conf.write_text("\n".join(lines) + "\n")
 

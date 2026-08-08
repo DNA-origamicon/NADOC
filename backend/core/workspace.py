@@ -56,7 +56,7 @@ def remap_source_path(sp: str, old_ref: str, new_ref: str) -> str | None:
     Returns the new path, or None if `sp` is not affected.
     """
     if old_ref.endswith("/"):
-        return (new_ref + sp[len(old_ref):]) if sp.startswith(old_ref) else None
+        return (new_ref + sp[len(old_ref) :]) if sp.startswith(old_ref) else None
     return new_ref if sp == old_ref else None
 
 
@@ -88,7 +88,9 @@ def patch_nass_files(workspace_dir: Path, old_ref: str, new_ref: str) -> list[st
             if isinstance(sources_map, dict):
                 for src in sources_map.values():
                     if isinstance(src, dict) and src.get("type") == "file":
-                        new_sp = remap_source_path(src.get("path", ""), old_ref, new_ref)
+                        new_sp = remap_source_path(
+                            src.get("path", ""), old_ref, new_ref
+                        )
                         if new_sp is not None:
                             src["path"] = new_sp
                             changed = True

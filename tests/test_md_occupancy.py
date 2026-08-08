@@ -21,10 +21,12 @@ def _segs(*labels):
 # ── Which stages are the ensemble ─────────────────────────────────────────────────
 def test_only_production_segments_are_clustered():
     """Every production builder puts the word in its stage label."""
-    for label in ("50 ns fast production run",
-                  "2 ns production replica (seed 54321)",
-                  "310K NPT conservative production 0.5 ns unrestrained",
-                  "shell NVT production (COM-restrained, HMR 4 fs)"):
+    for label in (
+        "50 ns fast production run",
+        "2 ns production replica (seed 54321)",
+        "310K NPT conservative production 0.5 ns unrestrained",
+        "shell NVT production (COM-restrained, HMR 4 fs)",
+    ):
         assert md_production_segments(_segs("300K NPT ENM k=0.5", label)) == [1], label
 
 
@@ -33,18 +35,28 @@ def test_a_restraint_ramp_that_encodes_k_in_the_label_is_excluded():
     excluding by keyword admitted the ENTIRE relaxation schedule. Measured against the 85
     MD jobs on this machine — 50K/100K/200K/300K NVT k=5.0 and the 11-step
     310K NPT k=5.0 → 0.01 ramp were all being clustered as if they were production."""
-    for label in ("50K NVT k=5.0", "100K NVT k=5.0", "300K NVT k=5.0",
-                  "310K NPT k=5.0", "310K NPT k=0.5", "310K NPT k=0.01",
-                  "Vacuum ENRG-MD shape relaxation",
-                  "solvent equilibration (DNA position-restrained, NVT)"):
+    for label in (
+        "50K NVT k=5.0",
+        "100K NVT k=5.0",
+        "300K NVT k=5.0",
+        "310K NPT k=5.0",
+        "310K NPT k=0.5",
+        "310K NPT k=0.01",
+        "Vacuum ENRG-MD shape relaxation",
+        "solvent equilibration (DNA position-restrained, NVT)",
+    ):
         assert md_production_segments(_segs(label)) == [], label
 
 
 def test_the_enm_ladder_and_its_terminal_unrestrained_stage_are_both_excluded():
-    """"300K NPT k=0" ends the ENM ladder unrestrained, but it is still equilibration —
+    """ "300K NPT k=0" ends the ENM ladder unrestrained, but it is still equilibration —
     not a production run."""
-    segs = _segs("300K NPT ENM k=0.5", "300K NPT ENM k=0.1",
-                 "300K NPT ENM k=0.01", "300K NPT k=0")
+    segs = _segs(
+        "300K NPT ENM k=0.5",
+        "300K NPT ENM k=0.1",
+        "300K NPT ENM k=0.01",
+        "300K NPT k=0",
+    )
     assert md_production_segments(segs) == []
 
 
@@ -99,7 +111,7 @@ def test_md_does_not_route_through_oxdna_feature_assembly():
     # Body only — the docstring names occupancy_features precisely to explain why MD
     # does NOT use it, so checking the whole source would match its own rationale.
     src = inspect.getsource(md_trajectory.md_occupancy)
-    body = src[src.index('"""', src.index('"""') + 3) + 3:]
+    body = src[src.index('"""', src.index('"""') + 3) + 3 :]
     assert "occupancy_features" not in body
     assert "oxdna_backbone_sites" not in body
     # …but the CLUSTERING is shared, not reimplemented.
@@ -121,8 +133,12 @@ def test_md_scoped_run_is_refitted_and_reports_which_frame():
     from backend.core import md_trajectory
 
     src = inspect.getsource(md_trajectory.md_occupancy)
-    for field in ('res["fit"]', 'res["fit_requested"]', 'res["fit_note"]',
-                  'res["n_fit_points"]'):
+    for field in (
+        'res["fit"]',
+        'res["fit_requested"]',
+        'res["fit_note"]',
+        'res["n_fit_points"]',
+    ):
         assert field in src, f"{field} missing — a degraded fit would go unreported"
 
 
@@ -148,9 +164,18 @@ def test_md_occupancy_body_rejects_an_unknown_fit_mode():
 
     with pytest.raises(HTTPException) as e:
         import asyncio
-        asyncio.run(routes_md._md_occupancy_impl(
-            "nope", None, max_frames=200, n_clusters=0, basis="nt", refetch=False,
-            fit="whatever"))
+
+        asyncio.run(
+            routes_md._md_occupancy_impl(
+                "nope",
+                None,
+                max_frames=200,
+                n_clusters=0,
+                basis="nt",
+                refetch=False,
+                fit="whatever",
+            )
+        )
     assert e.value.status_code == 400
 
 
@@ -182,7 +207,7 @@ def test_md_occupancy_body_rejects_an_undeclared_field():
     from backend.api.routes_md import MdOccupancyBody
 
     with pytest.raises(ValidationError):
-        MdOccupancyBody(align=True)      # oxDNA-only knob; MD frames are already aligned
+        MdOccupancyBody(align=True)  # oxDNA-only knob; MD frames are already aligned
 
 
 def test_md_occupancy_cache_key_self_invalidates_on_growth(tmp_path):
@@ -207,10 +232,22 @@ def test_md_occupancy_cache_key_separates_scopes():
     from backend.api.routes_oxdna import OccupancySelection
 
     segs = [("s", "300K NPT k=0", "/tmp/none.dcd")]
-    a = _md_occ_cache_key(segs, "/tmp/none.psf", 200, 0, "nt",
-                          OccupancySelection(helix_ids=["h0"]).model_dump())
-    b = _md_occ_cache_key(segs, "/tmp/none.psf", 200, 0, "nt",
-                          OccupancySelection(helix_ids=["h1"]).model_dump())
+    a = _md_occ_cache_key(
+        segs,
+        "/tmp/none.psf",
+        200,
+        0,
+        "nt",
+        OccupancySelection(helix_ids=["h0"]).model_dump(),
+    )
+    b = _md_occ_cache_key(
+        segs,
+        "/tmp/none.psf",
+        200,
+        0,
+        "nt",
+        OccupancySelection(helix_ids=["h1"]).model_dump(),
+    )
     assert a != b
 
 

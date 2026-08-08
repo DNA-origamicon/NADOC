@@ -126,29 +126,52 @@ def _build_synthetic_model() -> AtomisticModel:
 
     # Chain A: FORWARD nucleotides at bp 0..2.
     for i in range(3):
-        atoms.append(_make_atom(
-            serial=serial, name="P", chain_id="A", seq_num=i + 1,
-            helix_id="h0", bp_index=i, direction="FORWARD",
-            pos_nm=(0.0, 0.0, i * 0.34),
-        ))
+        atoms.append(
+            _make_atom(
+                serial=serial,
+                name="P",
+                chain_id="A",
+                seq_num=i + 1,
+                helix_id="h0",
+                bp_index=i,
+                direction="FORWARD",
+                pos_nm=(0.0, 0.0, i * 0.34),
+            )
+        )
         serial += 1
     # Filler C1' on bp 0 — must NOT appear in chain_map.
-    atoms.append(_make_atom(
-        serial=serial, name="C1'", chain_id="A", seq_num=1,
-        helix_id="h0", bp_index=0, direction="FORWARD",
-        pos_nm=(0.1, 0.0, 0.0), element="C",
-    ))
+    atoms.append(
+        _make_atom(
+            serial=serial,
+            name="C1'",
+            chain_id="A",
+            seq_num=1,
+            helix_id="h0",
+            bp_index=0,
+            direction="FORWARD",
+            pos_nm=(0.1, 0.0, 0.0),
+            element="C",
+        )
+    )
     serial += 1
 
     # Chain B: REVERSE nucleotides; B:1 pairs with A:bp2, B:2 with A:bp1, B:3 with A:bp0.
     for i in range(3):
         bp_partner = 2 - i  # B:seq=1 → bp 2; B:seq=2 → bp 1; B:seq=3 → bp 0
-        atoms.append(_make_atom(
-            serial=serial, name="P", chain_id="B", seq_num=i + 1,
-            helix_id="h0", bp_index=bp_partner, direction="REVERSE",
-            pos_nm=(1.0, 0.0, i * 0.34),
-            residue="DT", strand_id="sB",
-        ))
+        atoms.append(
+            _make_atom(
+                serial=serial,
+                name="P",
+                chain_id="B",
+                seq_num=i + 1,
+                helix_id="h0",
+                bp_index=bp_partner,
+                direction="REVERSE",
+                pos_nm=(1.0, 0.0, i * 0.34),
+                residue="DT",
+                strand_id="sB",
+            )
+        )
         serial += 1
 
     return AtomisticModel(atoms=atoms, bonds=[])
@@ -204,26 +227,42 @@ def _build_synthetic_pdb_text() -> str:
     serial = 1
     # Chain A
     for i in range(3):
-        lines.append(_format_pdb_atom(
-            serial=serial, name="P", res_name="DA", chain_id="A",
-            res_seq=i + 1, pos_nm=(0.0, 0.0, i * 0.34),
-        ))
+        lines.append(
+            _format_pdb_atom(
+                serial=serial,
+                name="P",
+                res_name="DA",
+                chain_id="A",
+                res_seq=i + 1,
+                pos_nm=(0.0, 0.0, i * 0.34),
+            )
+        )
         serial += 1
     lines.append("TER")
     # Chain B
     for i in range(3):
-        lines.append(_format_pdb_atom(
-            serial=serial, name="P", res_name="DT", chain_id="B",
-            res_seq=i + 1, pos_nm=(1.0, 0.0, i * 0.34),
-        ))
+        lines.append(
+            _format_pdb_atom(
+                serial=serial,
+                name="P",
+                res_name="DT",
+                chain_id="B",
+                res_seq=i + 1,
+                pos_nm=(1.0, 0.0, i * 0.34),
+            )
+        )
         serial += 1
     lines.append("END")
     return "\n".join(lines) + "\n"
 
 
 def _format_gro_line(
-    *, res_id: int, res_name: str, atom_name: str,
-    atom_index: int, pos_nm: tuple[float, float, float],
+    *,
+    res_id: int,
+    res_name: str,
+    atom_name: str,
+    atom_index: int,
+    pos_nm: tuple[float, float, float],
 ) -> str:
     """Format one GRO atom line (column-anchored)."""
     return (
@@ -244,10 +283,15 @@ def _write_synthetic_gro(
         res_names = ["DA"] * len(p_positions_nm)
     lines: list[str] = ["Synthetic NADOC test", f" {len(p_positions_nm):>4d}"]
     for i, (pos, res_name) in enumerate(zip(p_positions_nm, res_names)):
-        lines.append(_format_gro_line(
-            res_id=i + 1, res_name=res_name,
-            atom_name="P", atom_index=i + 1, pos_nm=pos,
-        ))
+        lines.append(
+            _format_gro_line(
+                res_id=i + 1,
+                res_name=res_name,
+                atom_name="P",
+                atom_index=i + 1,
+                pos_nm=pos,
+            )
+        )
     bx, by, bz = box_nm
     lines.append(f"{bx:>10.5f}{by:>10.5f}{bz:>10.5f}")
     path.write_text("\n".join(lines) + "\n")
@@ -326,13 +370,21 @@ class TestExtractFromPdb:
         # Two records: A:1 (mapped) + Z:99 (unmapped).
         pdb_text = (
             _format_pdb_atom(
-                serial=1, name="P", res_name="DA", chain_id="A",
-                res_seq=1, pos_nm=(0.0, 0.0, 0.0),
+                serial=1,
+                name="P",
+                res_name="DA",
+                chain_id="A",
+                res_seq=1,
+                pos_nm=(0.0, 0.0, 0.0),
             )
             + "\n"
             + _format_pdb_atom(
-                serial=2, name="P", res_name="DA", chain_id="Z",
-                res_seq=99, pos_nm=(5.0, 5.0, 5.0),
+                serial=2,
+                name="P",
+                res_name="DA",
+                chain_id="Z",
+                res_seq=99,
+                pos_nm=(5.0, 5.0, 5.0),
             )
             + "\nEND\n"
         )
@@ -347,8 +399,12 @@ class TestExtractFromPdb:
             "HEADER    short header\n"
             "TER\n"
             + _format_pdb_atom(
-                serial=1, name="P", res_name="DA", chain_id="A",
-                res_seq=1, pos_nm=(0.5, 0.0, 0.5),
+                serial=1,
+                name="P",
+                res_name="DA",
+                chain_id="A",
+                res_seq=1,
+                pos_nm=(0.5, 0.0, 0.5),
             )
             + "\nEND\n"
         )
@@ -364,8 +420,12 @@ class TestExtractFromPdb:
         short = "ATOM      1  P    DA  A   1   "
         assert len(short) < 54
         full = _format_pdb_atom(
-            serial=2, name="P", res_name="DA", chain_id="A",
-            res_seq=1, pos_nm=(0.0, 0.0, 0.0),
+            serial=2,
+            name="P",
+            res_name="DA",
+            chain_id="A",
+            res_seq=1,
+            pos_nm=(0.0, 0.0, 0.0),
         )
         pdb_text = short + "\n" + full + "\nEND\n"
         beads = extract_from_pdb(pdb_text, chain_map)
@@ -378,13 +438,22 @@ class TestExtractFromPdb:
         chain_map = {("A", 1): ("h0", 0, "FORWARD")}
         pdb_text = (
             _format_pdb_atom(
-                serial=1, name="C1'", res_name="DA", chain_id="A",
-                res_seq=1, pos_nm=(0.0, 0.0, 0.0), element=" C",
+                serial=1,
+                name="C1'",
+                res_name="DA",
+                chain_id="A",
+                res_seq=1,
+                pos_nm=(0.0, 0.0, 0.0),
+                element=" C",
             )
             + "\n"
             + _format_pdb_atom(
-                serial=2, name="P", res_name="DA", chain_id="A",
-                res_seq=1, pos_nm=(1.0, 0.0, 0.0),
+                serial=2,
+                name="P",
+                res_name="DA",
+                chain_id="A",
+                res_seq=1,
+                pos_nm=(1.0, 0.0, 0.0),
             )
             + "\nEND\n"
         )
@@ -441,19 +510,26 @@ class TestBuildPGroOrder:
         }
         atoms = [
             _format_pdb_atom(
-                serial=i + 1, name="P", res_name="DA", chain_id="A",
-                res_seq=i + 1, pos_nm=(0.0, 0.0, i * 0.34),
+                serial=i + 1,
+                name="P",
+                res_name="DA",
+                chain_id="A",
+                res_seq=i + 1,
+                pos_nm=(0.0, 0.0, i * 0.34),
             )
             for i in range(3)
         ]
         # Mix non-ATOM lines between ATOM records.
         pdb_text = (
             "REMARK   filler\n"
-            + atoms[0] + "\n"
+            + atoms[0]
+            + "\n"
             + "TER\n"
-            + atoms[1] + "\n"
+            + atoms[1]
+            + "\n"
             + "\n"  # blank line
-            + atoms[2] + "\n"
+            + atoms[2]
+            + "\n"
             + "END\n"
         )
         order = build_p_gro_order(pdb_text, chain_map)
@@ -471,8 +547,12 @@ class TestBuildPGroOrder:
         }
         good_atoms = [
             _format_pdb_atom(
-                serial=i + 1, name="P", res_name="DA", chain_id="A",
-                res_seq=i + 1, pos_nm=(0.0, 0.0, i * 0.34),
+                serial=i + 1,
+                name="P",
+                res_name="DA",
+                chain_id="A",
+                res_seq=i + 1,
+                pos_nm=(0.0, 0.0, i * 0.34),
             )
             for i in range(2)
         ]
@@ -481,11 +561,7 @@ class TestBuildPGroOrder:
         # detection).  Post-fix both loops skip it.
         short_atom = "ATOM      1  P"  # 14 chars, prefix matches but line[22:26] is OOB
         assert len(short_atom) < 26
-        pdb_text = (
-            good_atoms[0] + "\n"
-            + short_atom + "\n"
-            + good_atoms[1] + "\n"
-        )
+        pdb_text = good_atoms[0] + "\n" + short_atom + "\n" + good_atoms[1] + "\n"
         # Must not raise (pre-fix: ValueError from int("") in first loop).
         order = build_p_gro_order(pdb_text, chain_map)
         # Short line skipped; A:1 is 5' terminal (stripped); A:2 remains.
@@ -502,8 +578,12 @@ class TestBuildPGroOrder:
         }
         atoms = [
             _format_pdb_atom(
-                serial=i + 1, name="P", res_name="DA", chain_id="A",
-                res_seq=i + 1, pos_nm=(0.0, 0.0, i * 0.34),
+                serial=i + 1,
+                name="P",
+                res_name="DA",
+                chain_id="A",
+                res_seq=i + 1,
+                pos_nm=(0.0, 0.0, i * 0.34),
             )
             for i in range(3)
         ]
@@ -512,10 +592,7 @@ class TestBuildPGroOrder:
         assert short_hetatm.startswith("HETATM")
         assert len(short_hetatm) < 26
         pdb_text = (
-            atoms[0] + "\n"
-            + short_hetatm + "\n"
-            + atoms[1] + "\n"
-            + atoms[2] + "\n"
+            atoms[0] + "\n" + short_hetatm + "\n" + atoms[1] + "\n" + atoms[2] + "\n"
         )
         order = build_p_gro_order(pdb_text, chain_map)
         # A:1 stripped as 5' terminal; A:2 and A:3 remain; short line absent.
@@ -543,8 +620,11 @@ class TestParseGroPositionsHelper:
         """A P-atom line with a non-numeric coord is silently skipped (try/except)."""
         gro_path = tmp_path / "corrupt.gro"
         good = _format_gro_line(
-            res_id=1, res_name="DA", atom_name="P",
-            atom_index=1, pos_nm=(0.5, 0.5, 0.5),
+            res_id=1,
+            res_name="DA",
+            atom_name="P",
+            atom_index=1,
+            pos_nm=(0.5, 0.5, 0.5),
         )
         # Build a corrupt P-atom line: same column layout but the x-field is
         # "  XXXXXX" (8 chars, non-numeric). _parse_gro_p_positions reads the
@@ -553,11 +633,7 @@ class TestParseGroPositionsHelper:
         bad = head + " XXXXXXX" + f"{0.5:>8.3f}{0.5:>8.3f}"  # 44 chars total
         assert len(bad) >= 44
         gro_text = (
-            "Corrupt test\n"
-            "    2\n"
-            f"{good}\n"
-            f"{bad}\n"
-            "   3.00000   3.00000   3.00000\n"
+            f"Corrupt test\n    2\n{good}\n{bad}\n   3.00000   3.00000   3.00000\n"
         )
         gro_path.write_text(gro_text)
 
@@ -572,7 +648,7 @@ class TestParseGroPositionsHelper:
         _write_synthetic_gro(
             gro_path,
             [(0.5, 0.5, 0.5), (1.5, 1.5, 1.5)],
-            res_names=["DA", "SOL"],   # second is solvent → must be skipped
+            res_names=["DA", "SOL"],  # second is solvent → must be skipped
         )
         out = _parse_gro_p_positions(gro_path)
         assert len(out) == 1
@@ -660,6 +736,7 @@ class TestExtractFromGro:
 def _backbone_cutoff_nm() -> float:
     """Mirror of atomistic_to_nadoc._P_BACKBONE_MAX_NM (kept private)."""
     from backend.core.atomistic_to_nadoc import _P_BACKBONE_MAX_NM
+
     return _P_BACKBONE_MAX_NM
 
 
@@ -669,11 +746,13 @@ def _backbone_cutoff_nm() -> float:
 class TestUnwrapMinImage:
     def test_no_op_when_within_cutoff(self):
         """Already-contiguous positions pass through unchanged."""
-        positions = np.array([
-            [0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.34],
-            [0.0, 0.0, 0.68],
-        ])
+        positions = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.34],
+                [0.0, 0.0, 0.68],
+            ]
+        )
         out = _unwrap_min_image(positions, np.array([3.0, 3.0, 3.0]))
         assert np.allclose(out, positions)
 
@@ -683,20 +762,24 @@ class TestUnwrapMinImage:
         # Two atoms 1.5 nm apart in a 3 nm box: nearest image after correction
         # is exactly 1.5 nm (np.round(0.5)=0 in numpy banker's rounding) — well
         # above _P_BACKBONE_MAX_NM (1.0 nm), so the second atom stays put.
-        positions = np.array([
-            [0.0, 0.0, 0.0],
-            [0.0, 0.0, 1.5],
-        ])
+        positions = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 1.5],
+            ]
+        )
         out = _unwrap_min_image(positions, np.array([3.0, 3.0, 3.0]))
         assert np.allclose(out[0], positions[0])
         assert np.allclose(out[1], positions[1])  # unchanged
 
     def test_box_zero_skips_dimension(self):
         """When box[d]==0, no min-image correction is applied along that axis."""
-        positions = np.array([
-            [0.0, 0.0, 0.0],
-            [10.0, 0.0, 0.34],
-        ])
+        positions = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [10.0, 0.0, 0.34],
+            ]
+        )
         # Box x=0 → x-axis correction skipped → magnitude > 1 nm → no shift.
         out = _unwrap_min_image(positions, np.array([0.0, 3.0, 3.0]))
         assert np.allclose(out, positions)
@@ -723,11 +806,11 @@ class TestUnwrapMinImage:
         # wraps injected, plus a strand boundary (big jump) every ~250 atoms.
         pos = np.zeros((2000, 3))
         for i in range(1, 2000):
-            if i % 250 == 0:                    # strand boundary — large displacement
+            if i % 250 == 0:  # strand boundary — large displacement
                 pos[i] = pos[i - 1] + rng.uniform(-1, 1, 3) * box
             else:
                 pos[i] = pos[i - 1] + rng.normal(scale=0.06, size=3)
-        wrapped = pos - np.round(pos / box) * box   # wrap every atom into the box
+        wrapped = pos - np.round(pos / box) * box  # wrap every atom into the box
         ref = self._loop_reference(wrapped, box)
         got = _unwrap_min_image(wrapped, box)
         assert np.allclose(got, ref, atol=1e-9), np.abs(got - ref).max()
@@ -741,12 +824,17 @@ class TestUnwrapMinImage:
         for d in (1, 2):
             wrapped[:, d] -= np.round(wrapped[:, d] / box[d]) * box[d]
         assert np.allclose(
-            _unwrap_min_image(wrapped, box), self._loop_reference(wrapped, box), atol=1e-9
+            _unwrap_min_image(wrapped, box),
+            self._loop_reference(wrapped, box),
+            atol=1e-9,
         )
 
     def test_short_arrays_pass_through(self):
         """0- and 1-atom inputs are returned unchanged (no consecutive pairs)."""
-        assert _unwrap_min_image(np.zeros((0, 3)), np.array([3.0, 3.0, 3.0])).shape == (0, 3)
+        assert _unwrap_min_image(np.zeros((0, 3)), np.array([3.0, 3.0, 3.0])).shape == (
+            0,
+            3,
+        )
         one = np.array([[1.0, 2.0, 3.0]])
         assert np.allclose(_unwrap_min_image(one, np.array([3.0, 3.0, 3.0])), one)
 
@@ -757,55 +845,86 @@ class TestUnwrapMinImage:
 class TestSegidChainMap:
     def test_load_from_charge_audit(self, tmp_path):
         import json
-        (tmp_path / "charge_audit.json").write_text(json.dumps({
-            "topology_metadata": {"segments": [
-                {"segid": "D000", "chain_id": "A"},
-                {"segid": "D001", "chain_id": "AA"},
-                {"segid": "D002", "chain_id": "AB"},
-            ]}
-        }))
-        assert load_segid_chain_map(tmp_path) == {"D000": "A", "D001": "AA", "D002": "AB"}
+
+        (tmp_path / "charge_audit.json").write_text(
+            json.dumps(
+                {
+                    "topology_metadata": {
+                        "segments": [
+                            {"segid": "D000", "chain_id": "A"},
+                            {"segid": "D001", "chain_id": "AA"},
+                            {"segid": "D002", "chain_id": "AB"},
+                        ]
+                    }
+                }
+            )
+        )
+        assert load_segid_chain_map(tmp_path) == {
+            "D000": "A",
+            "D001": "AA",
+            "D002": "AB",
+        }
 
     def test_load_alt_top_level_segments(self, tmp_path):
         import json
+
         (tmp_path / "charge_audit.json").write_text(
             json.dumps({"segments": [{"segid": "S1", "chain_id": "C1"}]})
         )
         assert load_segid_chain_map(tmp_path) == {"S1": "C1"}
 
     def test_load_missing_or_bad(self, tmp_path):
-        assert load_segid_chain_map(tmp_path) is None            # no file
+        assert load_segid_chain_map(tmp_path) is None  # no file
         (tmp_path / "charge_audit.json").write_text("{ not json")
-        assert load_segid_chain_map(tmp_path) is None            # unparseable
+        assert load_segid_chain_map(tmp_path) is None  # unparseable
         (tmp_path / "charge_audit.json").write_text("{}")
-        assert load_segid_chain_map(tmp_path) is None            # no segments
+        assert load_segid_chain_map(tmp_path) is None  # no segments
 
     def test_fallback_to_manifest_charge_audit(self, tmp_path):
         # Ensemble-replica production packages carry no standalone charge_audit.json,
         # but their manifest.json embeds the same segment map under "charge_audit".
         # Without this fallback the replica flexibility map drops the 5' termini.
         import json
-        (tmp_path / "manifest.json").write_text(json.dumps({
-            "name_stem": "x",
-            "charge_audit": {"topology_metadata": {"segments": [
-                {"segid": "D000", "chain_id": "A"},
-                {"segid": "D001", "chain_id": "AA"},
-            ]}},
-        }))
+
+        (tmp_path / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "name_stem": "x",
+                    "charge_audit": {
+                        "topology_metadata": {
+                            "segments": [
+                                {"segid": "D000", "chain_id": "A"},
+                                {"segid": "D001", "chain_id": "AA"},
+                            ]
+                        }
+                    },
+                }
+            )
+        )
         assert load_segid_chain_map(tmp_path) == {"D000": "A", "D001": "AA"}
 
     def test_standalone_charge_audit_wins_over_manifest(self, tmp_path):
         import json
-        (tmp_path / "charge_audit.json").write_text(json.dumps({
-            "topology_metadata": {"segments": [{"segid": "D000", "chain_id": "A"}]}
-        }))
-        (tmp_path / "manifest.json").write_text(json.dumps({
-            "charge_audit": {"segments": [{"segid": "Z999", "chain_id": "ZZ"}]}
-        }))
+
+        (tmp_path / "charge_audit.json").write_text(
+            json.dumps(
+                {
+                    "topology_metadata": {
+                        "segments": [{"segid": "D000", "chain_id": "A"}]
+                    }
+                }
+            )
+        )
+        (tmp_path / "manifest.json").write_text(
+            json.dumps(
+                {"charge_audit": {"segments": [{"segid": "Z999", "chain_id": "ZZ"}]}}
+            )
+        )
         assert load_segid_chain_map(tmp_path) == {"D000": "A"}
 
     def test_manifest_without_charge_audit_returns_none(self, tmp_path):
         import json
+
         (tmp_path / "manifest.json").write_text(json.dumps({"name_stem": "x"}))
         assert load_segid_chain_map(tmp_path) is None
 
@@ -818,7 +937,9 @@ class TestBuildPOrderFromUniverse:
         map exists to disambiguate."""
         mda = pytest.importorskip("MDAnalysis")
         u = mda.Universe.empty(
-            n_atoms=6, n_residues=6, n_segments=2,
+            n_atoms=6,
+            n_residues=6,
+            n_segments=2,
             atom_resindex=[0, 1, 2, 3, 4, 5],
             residue_segindex=[0, 0, 0, 1, 1, 1],
             trajectory=True,
@@ -833,14 +954,25 @@ class TestBuildPOrderFromUniverse:
         u = self._universe()
         seg2chain = {"D000": "X", "D001": "Y"}
         cm = {
-            ("X", 1): (0, 0, 1), ("X", 2): (0, 1, 1), ("X", 3): (0, 2, 1),
-            ("Y", 1): (1, 0, 1), ("Y", 2): (1, 1, 1), ("Y", 3): (1, 2, 1),
+            ("X", 1): (0, 0, 1),
+            ("X", 2): (0, 1, 1),
+            ("X", 3): (0, 2, 1),
+            ("Y", 1): (1, 0, 1),
+            ("Y", 2): (1, 1, 1),
+            ("Y", 3): (1, 2, 1),
         }
         order, n_unmapped = build_p_order_from_universe(u, cm, seg2chain)
         assert n_unmapped == 0
         # Trajectory atom order, correctly split across the two colliding-resid segments.
-        assert order == [(0, 0, 1), (0, 1, 1), (0, 2, 1), (1, 0, 1), (1, 1, 1), (1, 2, 1)]
-        assert len(set(order)) == 6   # no collision collapsed two atoms onto one key
+        assert order == [
+            (0, 0, 1),
+            (0, 1, 1),
+            (0, 2, 1),
+            (1, 0, 1),
+            (1, 1, 1),
+            (1, 2, 1),
+        ]
+        assert len(set(order)) == 6  # no collision collapsed two atoms onto one key
 
     def test_counts_unmapped_atoms(self):
         u = self._universe()
@@ -852,8 +984,10 @@ class TestBuildPOrderFromUniverse:
 
     def test_unknown_segid_is_unmapped(self):
         u = self._universe()
-        order, n_unmapped = build_p_order_from_universe(u, {}, {"D000": "X"})  # D001 unknown
-        assert n_unmapped == 6   # X has no cm entries + D001 has no chain
+        order, n_unmapped = build_p_order_from_universe(
+            u, {}, {"D000": "X"}
+        )  # D001 unknown
+        assert n_unmapped == 6  # X has no cm entries + D001 has no chain
 
 
 # ── compare_to_design / centroid_offset / _compute_comparison ────────────────
@@ -869,12 +1003,14 @@ class TestCompareToDesign:
         beads: list[BeadPosition] = []
         for helix in design.helices:
             for nuc in nucleotide_positions(helix):
-                beads.append(BeadPosition(
-                    helix_id=nuc.helix_id,
-                    bp_index=nuc.bp_index,
-                    direction=nuc.direction.value,
-                    pos=nuc.position.copy(),
-                ))
+                beads.append(
+                    BeadPosition(
+                        helix_id=nuc.helix_id,
+                        bp_index=nuc.bp_index,
+                        direction=nuc.direction.value,
+                        pos=nuc.position.copy(),
+                    )
+                )
 
         result = compare_to_design(beads, design, use_geometry_layer=True)
 
@@ -896,11 +1032,13 @@ class TestCompareToDesign:
         shift = np.array([0.0, 0.0, 0.5])
         beads = [
             BeadPosition(
-                helix_id=nuc.helix_id, bp_index=nuc.bp_index,
+                helix_id=nuc.helix_id,
+                bp_index=nuc.bp_index,
                 direction=nuc.direction.value,
                 pos=nuc.position + shift,
             )
-            for h in design.helices for nuc in nucleotide_positions(h)
+            for h in design.helices
+            for nuc in nucleotide_positions(h)
         ]
         result = compare_to_design(beads, design, use_geometry_layer=True)
         assert result.global_rmsd_nm == pytest.approx(0.5, abs=1e-9)
@@ -914,14 +1052,19 @@ class TestCompareToDesign:
         shift = np.array([5.0, 6.0, 7.0])
         beads = [
             BeadPosition(
-                helix_id=nuc.helix_id, bp_index=nuc.bp_index,
+                helix_id=nuc.helix_id,
+                bp_index=nuc.bp_index,
                 direction=nuc.direction.value,
                 pos=nuc.position + shift,
             )
-            for h in design.helices for nuc in nucleotide_positions(h)
+            for h in design.helices
+            for nuc in nucleotide_positions(h)
         ]
         result = compare_to_design(
-            beads, design, use_geometry_layer=True, align_translation=True,
+            beads,
+            design,
+            use_geometry_layer=True,
+            align_translation=True,
         )
         assert result.global_rmsd_nm == pytest.approx(0.0, abs=1e-9)
         assert result.max_deviation_nm == pytest.approx(0.0, abs=1e-9)
@@ -932,17 +1075,23 @@ class TestCompareToDesign:
         design = make_minimal_design(n_helices=1, helix_length_bp=4)
         beads = [
             BeadPosition(
-                helix_id=nuc.helix_id, bp_index=nuc.bp_index,
+                helix_id=nuc.helix_id,
+                bp_index=nuc.bp_index,
                 direction=nuc.direction.value,
                 pos=nuc.position.copy(),
             )
-            for h in design.helices for nuc in nucleotide_positions(h)
+            for h in design.helices
+            for nuc in nucleotide_positions(h)
         ]
         # Inject one bogus bead whose key is absent from the reference.
-        beads.append(BeadPosition(
-            helix_id="ghost", bp_index=999, direction="FORWARD",
-            pos=np.zeros(3),
-        ))
+        beads.append(
+            BeadPosition(
+                helix_id="ghost",
+                bp_index=999,
+                direction="FORWARD",
+                pos=np.zeros(3),
+            )
+        )
         result = compare_to_design(beads, design, use_geometry_layer=True)
         assert result.n_missing == 1
         assert result.n_matched == len(beads) - 1
@@ -957,11 +1106,13 @@ class TestCentroidOffset:
         shift = np.array([2.0, -3.0, 4.0])
         beads = [
             BeadPosition(
-                helix_id=nuc.helix_id, bp_index=nuc.bp_index,
+                helix_id=nuc.helix_id,
+                bp_index=nuc.bp_index,
                 direction=nuc.direction.value,
                 pos=nuc.position + shift,
             )
-            for h in design.helices for nuc in nucleotide_positions(h)
+            for h in design.helices
+            for nuc in nucleotide_positions(h)
         ]
         T = centroid_offset(beads, design, use_geometry_layer=True)
         assert np.allclose(T, -shift, atol=1e-9)
@@ -969,10 +1120,14 @@ class TestCentroidOffset:
     def test_centroid_offset_no_overlap_returns_zero(self):
         """When beads share no keys with the reference, centroid_offset = 0."""
         design = make_minimal_design(n_helices=1, helix_length_bp=4)
-        beads = [BeadPosition(
-            helix_id="ghost", bp_index=0, direction="FORWARD",
-            pos=np.array([7.0, 8.0, 9.0]),
-        )]
+        beads = [
+            BeadPosition(
+                helix_id="ghost",
+                bp_index=0,
+                direction="FORWARD",
+                pos=np.array([7.0, 8.0, 9.0]),
+            )
+        ]
         T = centroid_offset(beads, design, use_geometry_layer=True)
         assert np.allclose(T, np.zeros(3))
 
@@ -1027,8 +1182,8 @@ class TestBuildReferenceMapAndCompute:
 
 @pytest.mark.skip(
     reason="extract_from_xtc requires a real binary XTC trajectory; "
-           "covered by tests/test_atomistic_round_trip.py when 10hb fixtures "
-           "are present (env-bound, Pass 11-B prompt §Stop conditions).",
+    "covered by tests/test_atomistic_round_trip.py when 10hb fixtures "
+    "are present (env-bound, Pass 11-B prompt §Stop conditions).",
 )
 def test_extract_from_xtc_requires_binary_fixture():
     """Marker test — body intentionally empty."""
@@ -1047,26 +1202,47 @@ def test_extract_from_xtc_requires_binary_fixture():
 
 
 class TestMdSnapMask:
-    def _atom(self, serial, chain, seq, xyz, helix, bp, direction,
-              crossover_id=None, extra_base_k=None):
+    def _atom(
+        self,
+        serial,
+        chain,
+        seq,
+        xyz,
+        helix,
+        bp,
+        direction,
+        crossover_id=None,
+        extra_base_k=None,
+    ):
         x, y, z = xyz
         return Atom(
-            serial=serial, name="P", element="P", residue="DA",
-            chain_id=chain, seq_num=seq, x=x, y=y, z=z, strand_id="s",
-            helix_id=helix, bp_index=bp, direction=direction,
-            crossover_id=crossover_id, extra_base_k=extra_base_k,
+            serial=serial,
+            name="P",
+            element="P",
+            residue="DA",
+            chain_id=chain,
+            seq_num=seq,
+            x=x,
+            y=y,
+            z=z,
+            strand_id="s",
+            helix_id=helix,
+            bp_index=bp,
+            direction=direction,
+            crossover_id=crossover_id,
+            extra_base_k=extra_base_k,
         )
 
     def test_includes_extra_bases_excludes_free_ssdna(self):
         """rigid dsDNA + extra base snapped; free ssDNA and invalid entries not."""
         p_order = [
-            ("hA", 0, "FORWARD"),                 # rigid dsDNA
-            ("hA", 1, "FORWARD"),                 # rigid dsDNA
-            ("hA", -3, "FORWARD"),                # free ssDNA (bp<0)
-            (_XB_SENTINEL, "xoverA", 0),          # crossover extra base
-            ("hB", 5, "REVERSE"),                 # rigid but no eq (invalid)
+            ("hA", 0, "FORWARD"),  # rigid dsDNA
+            ("hA", 1, "FORWARD"),  # rigid dsDNA
+            ("hA", -3, "FORWARD"),  # free ssDNA (bp<0)
+            (_XB_SENTINEL, "xoverA", 0),  # crossover extra base
+            ("hB", 5, "REVERSE"),  # rigid but no eq (invalid)
         ]
-        eq_valid   = np.array([True, True, True, True, False])
+        eq_valid = np.array([True, True, True, True, False])
         rigid_mask = np.array([True, True, False, False, False])
 
         mask = md_snap_mask(p_order, eq_valid, rigid_mask)
@@ -1080,7 +1256,7 @@ class TestMdSnapMask:
 
     def test_snap_mask_is_superset_of_rigid(self):
         p_order = [("hA", 0, "FORWARD"), (_XB_SENTINEL, "x", 0), ("hA", -1, "F")]
-        eq_valid   = np.array([True, True, True])
+        eq_valid = np.array([True, True, True])
         rigid_mask = np.array([True, False, False])
         mask = md_snap_mask(p_order, eq_valid, rigid_mask)
         assert bool((mask | rigid_mask == mask).all()), "snap must cover all rigid"
@@ -1097,8 +1273,17 @@ class TestMdSnapMask:
             self._atom(1, "A", 1, (0.0, 0.0, 0.0), "hA", 0, "FORWARD"),
             self._atom(2, "A", 2, (7.0, 0.0, 0.0), "hA", 1, "FORWARD"),
             # crossover extra base — md_pkey → (_XB_SENTINEL, "xoverA", 0)
-            self._atom(3, "A", 3, (3.5, 1.0, 0.0), "hA", 0, "FORWARD",
-                       crossover_id="xoverA", extra_base_k=0),
+            self._atom(
+                3,
+                "A",
+                3,
+                (3.5, 1.0, 0.0),
+                "hA",
+                0,
+                "FORWARD",
+                crossover_id="xoverA",
+                extra_base_k=0,
+            ),
         ]
         model = AtomisticModel(atoms=atoms, bonds=[])
         p_order = [
@@ -1125,11 +1310,12 @@ class TestMdSnapMask:
 
 def _rot_axis_angle(axis, deg):
     """Rodrigues rotation matrix (no scipy)."""
-    axis = np.asarray(axis, float); axis = axis / np.linalg.norm(axis)
+    axis = np.asarray(axis, float)
+    axis = axis / np.linalg.norm(axis)
     th = np.radians(deg)
-    K = np.array([[0, -axis[2], axis[1]],
-                  [axis[2], 0, -axis[0]],
-                  [-axis[1], axis[0], 0]])
+    K = np.array(
+        [[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]]
+    )
     return np.eye(3) + np.sin(th) * K + (1 - np.cos(th)) * (K @ K)
 
 
@@ -1139,12 +1325,14 @@ class TestPbcCircularCentroid:
         # far side (z≈9.x).  Plain mean lands in the empty middle (~5); circular mean
         # recovers the true centre near 1.0.
         box = np.array([10.0, 10.0, 10.0])
-        z = np.concatenate([np.full(50, 0.5), np.full(50, 9.5)])  # ±0.5 around wrap point 0
+        z = np.concatenate(
+            [np.full(50, 0.5), np.full(50, 9.5)]
+        )  # ±0.5 around wrap point 0
         pts = np.column_stack([np.zeros(100), np.zeros(100), z])
         c = _pbc_circular_centroid(pts, box)
         # true centre is the wrap boundary (0 ≡ 10); circular mean → ~0 (mod 10)
         assert min(c[2], box[2] - c[2]) < 0.1
-        assert abs(np.mean(z) - 5.0) < 0.1   # plain mean is the WRONG (gap) answer
+        assert abs(np.mean(z) - 5.0) < 0.1  # plain mean is the WRONG (gap) answer
 
     def test_box_zero_dim_uses_plain_mean(self):
         pts = np.array([[1.0, 0, 0], [3.0, 0, 0]])
@@ -1155,7 +1343,7 @@ class TestPbcCircularCentroid:
 class TestNearestImageAndKabsch:
     def test_nearest_image_pulls_across_boundary(self):
         box = np.array([10.0, 10.0, 10.0])
-        pts = np.array([[9.5, 0.0, 0.0]])          # really at -0.5, wrapped to 9.5
+        pts = np.array([[9.5, 0.0, 0.0]])  # really at -0.5, wrapped to 9.5
         out = _nearest_image_to(pts, np.array([0.0, 0.0, 0.0]), box)
         assert np.allclose(out, [[-0.5, 0.0, 0.0]])
 
@@ -1164,7 +1352,7 @@ class TestNearestImageAndKabsch:
         pts = rng.normal(size=(50, 3))
         pts -= pts.mean(0)
         R_true = _rot_axis_angle([0.3, 1.0, 0.2], 37.0)
-        rotated = pts @ R_true.T          # rotated = R_true @ ptsᵀ, so maps pts→rotated
+        rotated = pts @ R_true.T  # rotated = R_true @ ptsᵀ, so maps pts→rotated
         R = _kabsch_rotation(pts, rotated)  # mobile=pts, target=rotated
         assert np.allclose(R, R_true, atol=1e-9)
 
@@ -1179,7 +1367,8 @@ class TestReassembleToPosedReference:
         eq = self._rod()
         eq_c = eq.mean(0)
         N = len(eq)
-        rigid = np.ones(N, bool); snap = np.ones(N, bool)
+        rigid = np.ones(N, bool)
+        snap = np.ones(N, bool)
         # box only slightly bigger than the 40 nm structure → structure > half-box (the
         # real 24hb-in-tight-water regime): half-box-z = 21 nm vs ~20 nm radius.
         box = np.array([15.0, 15.0, 42.0])
@@ -1188,10 +1377,15 @@ class TestReassembleToPosedReference:
         md_true = (eq - eq_c) @ R_true.T + box / 2.0
         # Simulate NAMD wrapping HALF the atoms a full box away in z (split cluster).
         p_box = md_true.copy()
-        p_box[N // 2:, 2] += box[2]
-        eq_box = eq - eq_c + box / 2.0   # design expressed with centroid at box centre
+        p_box[N // 2 :, 2] += box[2]
+        eq_box = eq - eq_c + box / 2.0  # design expressed with centroid at box centre
         p_corr, c_box = reassemble_to_posed_reference(
-            p_box, box, eq_box, (eq_box).mean(0), rigid, snap,
+            p_box,
+            box,
+            eq_box,
+            (eq_box).mean(0),
+            rigid,
+            snap,
         )
         # Reassembled to a SINGLE image matching the true MD structure (up to a global
         # box offset, which the display's downstream centroid/T handles).
@@ -1205,25 +1399,39 @@ class TestReassembleToPosedReference:
         # equals the old translation-only snap (design + nearest-imaged displacement).
         eq = self._rod(120)
         eq_c = eq.mean(0)
-        N = len(eq); rigid = np.ones(N, bool); snap = np.ones(N, bool)
+        N = len(eq)
+        rigid = np.ones(N, bool)
+        snap = np.ones(N, bool)
         box = np.array([15.0, 15.0, 42.0])
         rng = np.random.default_rng(2)
-        md_true = eq - eq_c + box / 2.0 + rng.normal(scale=0.05, size=(N, 3))  # thermal jitter
+        md_true = (
+            eq - eq_c + box / 2.0 + rng.normal(scale=0.05, size=(N, 3))
+        )  # thermal jitter
         p_box = md_true.copy()
         eq_box = eq - eq_c + box / 2.0
-        p_corr, _ = reassemble_to_posed_reference(p_box, box, eq_box, eq_box.mean(0), rigid, snap)
+        p_corr, _ = reassemble_to_posed_reference(
+            p_box, box, eq_box, eq_box.mean(0), rigid, snap
+        )
         assert np.allclose(p_corr, md_true, atol=1e-6)
 
     def test_free_ssdna_keeps_sequential_unwrap_position(self):
         eq = self._rod(60)
         eq_c = eq.mean(0)
-        N = len(eq); box = np.array([15.0, 15.0, 42.0])
+        N = len(eq)
+        box = np.array([15.0, 15.0, 42.0])
         rigid = np.ones(N, bool)
-        snap = np.ones(N, bool); snap[-10:] = False   # last 10 are free ssDNA
+        snap = np.ones(N, bool)
+        snap[-10:] = False  # last 10 are free ssDNA
         md_true = eq - eq_c + box / 2.0
         p_box = md_true.copy()
-        p_corr, _ = reassemble_to_posed_reference(p_box, box, eq - eq_c + box / 2.0,
-                                                  (eq - eq_c + box / 2.0).mean(0), rigid, snap)
+        p_corr, _ = reassemble_to_posed_reference(
+            p_box,
+            box,
+            eq - eq_c + box / 2.0,
+            (eq - eq_c + box / 2.0).mean(0),
+            rigid,
+            snap,
+        )
         # free-ssDNA rows are returned verbatim from p_box (no design snap)
         assert np.allclose(p_corr[~snap], p_box[~snap])
 
@@ -1242,8 +1450,10 @@ class TestReassembleToPosedReference:
 # arbitrary); the unwrap already made each strand internally contiguous.  Resolving one
 # integer shift per strand run therefore keeps contiguity by construction.
 
+
 def _straight_strand(n, spacing=0.6, origin=(1.0, 1.0, 1.0)):
     import numpy as np
+
     p = np.tile(np.asarray(origin, float), (n, 1))
     p[:, 2] += np.arange(n) * spacing
     return p
@@ -1263,7 +1473,8 @@ def test_reassembly_keeps_a_strand_contiguous_when_one_atom_drifts_past_half_a_b
 
     rigid = np.ones(len(p), bool)
     out, _c = reassemble_to_posed_reference(
-        p, box, eq, eq.mean(axis=0), rigid, np.ones(len(p), bool))
+        p, box, eq, eq.mean(axis=0), rigid, np.ones(len(p), bool)
+    )
 
     steps = np.linalg.norm(np.diff(out, axis=0), axis=1)
     assert steps.max() < 1.0, f"backbone torn: longest step {steps.max():.2f} nm"
@@ -1287,8 +1498,11 @@ def test_reassembly_still_places_separate_strands_independently():
 
     rigid = np.ones(len(p), bool)
     out, _c = reassemble_to_posed_reference(
-        p, box, eq, eq.mean(axis=0), rigid, np.ones(len(p), bool))
-    assert np.linalg.norm(out[8:] - b, axis=1).max() < 1e-6, "strand b was not re-imaged"
+        p, box, eq, eq.mean(axis=0), rigid, np.ones(len(p), bool)
+    )
+    assert np.linalg.norm(out[8:] - b, axis=1).max() < 1e-6, (
+        "strand b was not re-imaged"
+    )
     assert np.linalg.norm(out[:8] - a, axis=1).max() < 1e-6, "strand a moved"
 
 
@@ -1329,7 +1543,8 @@ def test_no_display_path_reimplements_the_pbc_snap():
         if pat.search(py.read_text()):
             offenders.append(str(py.relative_to(root)))
     assert not offenders, (
-        "PBC snap re-implemented outside atomistic_to_nadoc.py: " + ", ".join(offenders)
+        "PBC snap re-implemented outside atomistic_to_nadoc.py: "
+        + ", ".join(offenders)
         + " — call reassemble_to_posed_reference instead."
     )
 
@@ -1352,8 +1567,11 @@ def test_no_path_reimplements_the_solvent_display_transform():
 
     root = Path(__file__).resolve().parent.parent
     owner = root / "backend" / "core" / "md_solvent.py"
-    pat = re.compile(r"^\s*(?:def\s+(?:box_corners|apply_xform)\b"
-                     r"|class\s+DisplayXform\b)", re.M)
+    pat = re.compile(
+        r"^\s*(?:def\s+(?:box_corners|apply_xform)\b"
+        r"|class\s+DisplayXform\b)",
+        re.M,
+    )
     offenders = [
         str(py.relative_to(root))
         for py in sorted((root / "backend").rglob("*.py"))

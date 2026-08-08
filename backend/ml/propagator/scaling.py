@@ -36,6 +36,7 @@ IMPORTANT — honesty about inputs:
   than classical FF).  The model does not assume a win; it reports where, if anywhere,
   one exists under stated levers.  numpy-only; the live GNN benchmark is optional.
 """
+
 from __future__ import annotations
 
 import json
@@ -57,11 +58,11 @@ MEASURED_NAMD_N = 17_827
 # Kept as {tier: measured ms/step at N=5000} so the linear coefficient is explicit
 # and refreshable by ``refresh_gnn_tiers`` when the GPU is free.
 MEASURED_GNN_MS_AT_5000 = {
-    "h128_L3": 47.0,   # accuracy-capable reference (26x NAMD-per-4fs @ N=17827)
-    "h64_L2": 17.6,    # 4.8x NAMD-per-4fs @ N=5000
-    "h32_L2": 9.9,     # 2.7x
-    "h32_L1": 5.1,     # 1.4x
-    "h16_L1": 3.3,     # 0.9x — break-even-sized, too small to be accurate
+    "h128_L3": 47.0,  # accuracy-capable reference (26x NAMD-per-4fs @ N=17827)
+    "h64_L2": 17.6,  # 4.8x NAMD-per-4fs @ N=5000
+    "h32_L2": 9.9,  # 2.7x
+    "h32_L1": 5.1,  # 1.4x
+    "h16_L1": 3.3,  # 0.9x — break-even-sized, too small to be accurate
 }
 GNN_BENCH_N = 5000
 
@@ -103,18 +104,21 @@ class NamdModel:
     b*N*log2(N) (PME).  ``c0`` matters in the MEASURED single-GPU regime, where the
     card is below saturation and per-step time is overhead-dominated + sub-linear;
     the b term matters only in the asymptotic saturated / multi-node regime."""
-    a: float   # ms per atom (O(N) part)
-    b: float   # ms per atom-log2N (PME part)
+
+    a: float  # ms per atom (O(N) part)
+    b: float  # ms per atom-log2N (PME part)
     provenance: str = ""
-    c0: float = 0.0   # fixed per-step overhead (ms), independent of N
+    c0: float = 0.0  # fixed per-step overhead (ms), independent of N
 
     def cost_ms(self, n):
         n = np.asarray(n, dtype=float)
         return self.c0 + self.a * n + self.b * n * np.log2(np.maximum(n, 2.0))
 
 
-def fit_namd(namd_points: list[tuple[int, float]] | None = None,
-             pme_fraction: float = DEFAULT_PME_FRACTION) -> NamdModel:
+def fit_namd(
+    namd_points: list[tuple[int, float]] | None = None,
+    pme_fraction: float = DEFAULT_PME_FRACTION,
+) -> NamdModel:
     """Fit the two-term NAMD cost law.
 
     - >=2 measured (N, ms) points → least-squares fit of (a, b) exactly (this is the
@@ -128,21 +132,25 @@ def fit_namd(namd_points: list[tuple[int, float]] | None = None,
         y = np.array([p[1] for p in pts], float)
         X = np.stack([N, N * np.log2(np.maximum(N, 2.0))], axis=1)
         (a, b), *_ = np.linalg.lstsq(X, y, rcond=None)
-        return NamdModel(float(a), float(b),
-                         f"fit of {len(pts)} measured points: {pts}")
+        return NamdModel(
+            float(a), float(b), f"fit of {len(pts)} measured points: {pts}"
+        )
     n0, y0 = pts[0]
     l0 = np.log2(max(n0, 2))
-    b = pme_fraction * y0 / (n0 * l0)          # PME share → b*N*log2N
-    a = (1 - pme_fraction) * y0 / n0           # rest → a*N
-    return NamdModel(float(a), float(b),
-                     f"single point {pts[0]} split by pme_fraction={pme_fraction} "
-                     f"(ASSUMED, not fitted — add a 2nd point for a real fit)")
+    b = pme_fraction * y0 / (n0 * l0)  # PME share → b*N*log2N
+    a = (1 - pme_fraction) * y0 / n0  # rest → a*N
+    return NamdModel(
+        float(a),
+        float(b),
+        f"single point {pts[0]} split by pme_fraction={pme_fraction} "
+        f"(ASSUMED, not fitted — add a 2nd point for a real fit)",
+    )
 
 
 # Controlled scaling series on THIS machine (16 CPU, standard CUDA offload, propagator-
 # reference protocol — SAME config across sizes, so a clean fit).  Grown as new runs land.
 CONTROLLED_NAMD_POINTS = [
-    (17_827, 6.5),    # solvated 20 bp duplex (dbd8ad3b7d4f; f6b191b31c33 gave 7.5)
+    (17_827, 6.5),  # solvated 20 bp duplex (dbd8ad3b7d4f; f6b191b31c33 gave 7.5)
     (136_413, 13.5),  # solvated 21 bp 6hb, job f716e1f42b9b (this session)
 ]
 
@@ -156,10 +164,13 @@ def fit_namd_overhead(points: list[tuple[int, float]] | None = None) -> NamdMode
     y = np.array([p[1] for p in pts], float)
     X = np.stack([np.ones_like(N), N], axis=1)
     (c0, a), *_ = np.linalg.lstsq(X, y, rcond=None)
-    return NamdModel(float(a), 0.0,
-                     f"overhead+linear fit of {len(pts)} controlled points {pts}: "
-                     f"c0={c0:.2f} ms fixed + a={a:.3e} ms/atom (single-GPU regime)",
-                     c0=float(c0))
+    return NamdModel(
+        float(a),
+        0.0,
+        f"overhead+linear fit of {len(pts)} controlled points {pts}: "
+        f"c0={c0:.2f} ms fixed + a={a:.3e} ms/atom (single-GPU regime)",
+        c0=float(c0),
+    )
 
 
 def gnn_coeff(tier: str, ms_at_bench: dict | None = None) -> float:
@@ -169,8 +180,15 @@ def gnn_coeff(tier: str, ms_at_bench: dict | None = None) -> float:
     return ms_at_bench[tier] / GNN_BENCH_N
 
 
-def speedup(n, namd: NamdModel, tier: str, *, step_mult: float = 1.0,
-            hybrid_frac: float = 0.0, ms_at_bench: dict | None = None):
+def speedup(
+    n,
+    namd: NamdModel,
+    tier: str,
+    *,
+    step_mult: float = 1.0,
+    hybrid_frac: float = 0.0,
+    ms_at_bench: dict | None = None,
+):
     """Effective wall-clock speedup of the propagator vs pure MD at size ``n``.
 
     step_mult k: one predicted step replaces k native MD steps (larger stride).
@@ -183,20 +201,38 @@ def speedup(n, namd: NamdModel, tier: str, *, step_mult: float = 1.0,
     return md * step_mult / (gnn + hybrid_frac * md)
 
 
-def crossover_n(namd: NamdModel, tier: str, *, step_mult: float = 1.0,
-                hybrid_frac: float = 0.0, ms_at_bench: dict | None = None,
-                lo: float = 1e3, hi: float = 1e9) -> float | None:
+def crossover_n(
+    namd: NamdModel,
+    tier: str,
+    *,
+    step_mult: float = 1.0,
+    hybrid_frac: float = 0.0,
+    ms_at_bench: dict | None = None,
+    lo: float = 1e3,
+    hi: float = 1e9,
+) -> float | None:
     """Smallest N where speedup>=1 (the propagator starts winning), or None if it
     never wins below ``hi``.  Monotone in N when PME>0, so bisect."""
+
     def f(n):
-        return speedup(n, namd, tier, step_mult=step_mult,
-                       hybrid_frac=hybrid_frac, ms_at_bench=ms_at_bench) - 1.0
+        return (
+            speedup(
+                n,
+                namd,
+                tier,
+                step_mult=step_mult,
+                hybrid_frac=hybrid_frac,
+                ms_at_bench=ms_at_bench,
+            )
+            - 1.0
+        )
+
     if f(hi) < 0:
-        return None                # never catches up in the searched range
+        return None  # never catches up in the searched range
     if f(lo) >= 0:
-        return lo                  # already winning at the low end
+        return lo  # already winning at the low end
     for _ in range(80):
-        mid = np.sqrt(lo * hi)     # geometric bisection (log-scale search)
+        mid = np.sqrt(lo * hi)  # geometric bisection (log-scale search)
         if f(mid) >= 0:
             hi = mid
         else:
@@ -209,8 +245,14 @@ def refresh_gnn_tiers(sizes=(2000, 5000, 10000), device="cuda") -> dict:
     free GPU).  Returns {tier: ms at GNN_BENCH_N} by fitting the measured points to
     c*N and evaluating at GNN_BENCH_N — refreshes MEASURED_GNN_MS_AT_5000."""
     from backend.ml.propagator.gnn import speed_benchmark  # noqa: PLC0415
-    tiers = {"h128_L3": (128, 3), "h64_L2": (64, 2), "h32_L2": (32, 2),
-             "h32_L1": (32, 1), "h16_L1": (16, 1)}
+
+    tiers = {
+        "h128_L3": (128, 3),
+        "h64_L2": (64, 2),
+        "h32_L2": (32, 2),
+        "h32_L1": (32, 1),
+        "h16_L1": (16, 1),
+    }
     out = {}
     for tier, (h, L) in tiers.items():
         rows = speed_benchmark(sizes=sizes, hidden=h, n_layers=L, device=device)
@@ -218,14 +260,17 @@ def refresh_gnn_tiers(sizes=(2000, 5000, 10000), device="cuda") -> dict:
             continue
         N = np.array([r["n"] for r in rows], float)
         ms = np.array([r["gnn_ms"] for r in rows], float)
-        c = float((ms * N).sum() / (N * N).sum())     # least-squares slope through 0
+        c = float((ms * N).sum() / (N * N).sum())  # least-squares slope through 0
         out[tier] = c * GNN_BENCH_N
     return out
 
 
-def report(namd_points: list[tuple[int, float]] | None = None,
-           levers=None, ms_at_bench: dict | None = None,
-           namd: NamdModel | None = None) -> dict:
+def report(
+    namd_points: list[tuple[int, float]] | None = None,
+    levers=None,
+    ms_at_bench: dict | None = None,
+    namd: NamdModel | None = None,
+) -> dict:
     """Print + return the full crossover analysis across accuracy tiers and lever
     settings.  ``levers`` = list of (label, step_mult, hybrid_frac).  Pass ``namd`` to
     use a specific NAMD model (e.g. ``fit_namd_overhead()`` — the correct single-GPU
@@ -243,35 +288,55 @@ def report(namd_points: list[tuple[int, float]] | None = None,
     print(f"NAMD model: {namd.provenance}")
     print(f"  a={namd.a:.3e} ms/atom (O(N))  b={namd.b:.3e} ms/atom-log2N (PME)")
     mb = ms_at_bench or MEASURED_GNN_MS_AT_5000
-    print(f"GNN tiers (ms/step @ N={GNN_BENCH_N}): "
-          + ", ".join(f"{k}={v:.1f}" for k, v in mb.items()))
-    print(f"  accuracy note: h16_L1 is break-even-sized but too small to be a stable/"
-          f"accurate propagator; accuracy-capable ~ h64_L2..h128_L3.")
+    print(
+        f"GNN tiers (ms/step @ N={GNN_BENCH_N}): "
+        + ", ".join(f"{k}={v:.1f}" for k, v in mb.items())
+    )
+    print(
+        f"  accuracy note: h16_L1 is break-even-sized but too small to be a stable/"
+        f"accurate propagator; accuracy-capable ~ h64_L2..h128_L3."
+    )
     out = {"namd": namd.provenance, "tiers": {}}
     for label, k, f in levers:
         print(f"\n--- lever: {label} ---")
-        print(f"{'tier':>9} {'crossover N*':>14} {'within origami?':>18} "
-              f"{'speedup@1e6':>12}")
+        print(
+            f"{'tier':>9} {'crossover N*':>14} {'within origami?':>18} "
+            f"{'speedup@1e6':>12}"
+        )
         out["tiers"][label] = {}
         for tier in mb:
-            nstar = crossover_n(namd, tier, step_mult=k, hybrid_frac=f,
-                                ms_at_bench=ms_at_bench)
-            s1e6 = float(speedup(1e6, namd, tier, step_mult=k, hybrid_frac=f,
-                                 ms_at_bench=ms_at_bench))
-            within = ("never <1e9" if nstar is None
-                      else ("YES <=1e5" if nstar <= 1e5
-                            else ("at ~%.0e" % nstar if nstar <= 1e7 else "only >1e7")))
+            nstar = crossover_n(
+                namd, tier, step_mult=k, hybrid_frac=f, ms_at_bench=ms_at_bench
+            )
+            s1e6 = float(
+                speedup(
+                    1e6, namd, tier, step_mult=k, hybrid_frac=f, ms_at_bench=ms_at_bench
+                )
+            )
+            within = (
+                "never <1e9"
+                if nstar is None
+                else (
+                    "YES <=1e5"
+                    if nstar <= 1e5
+                    else ("at ~%.0e" % nstar if nstar <= 1e7 else "only >1e7")
+                )
+            )
             ns = "never" if nstar is None else f"{nstar:.2e}"
             print(f"{tier:>9} {ns:>14} {within:>18} {s1e6:>12.2f}")
             out["tiers"][label][tier] = {"crossover_n": nstar, "speedup_1e6": s1e6}
     # origami-scale speedup table for the accuracy-capable tier
     print(f"\n--- speedup by origami scale (tier h64_L2, accuracy-capable-ish) ---")
-    print(f"{'scale':>28} {'N':>10} " + " ".join(f"{lab.split(' ')[0]:>10}"
-          for lab, _, _ in levers))
+    print(
+        f"{'scale':>28} {'N':>10} "
+        + " ".join(f"{lab.split(' ')[0]:>10}" for lab, _, _ in levers)
+    )
     for scale, n in ORIGAMI_SCALES.items():
         row = [f"{scale:>28} {n:>10}"]
         for _, k, f in levers:
-            row.append(f"{speedup(n, namd, 'h64_L2', step_mult=k, hybrid_frac=f, ms_at_bench=ms_at_bench):>10.2f}")
+            row.append(
+                f"{speedup(n, namd, 'h64_L2', step_mult=k, hybrid_frac=f, ms_at_bench=ms_at_bench):>10.2f}"
+            )
         print(" ".join(row))
     return out
 

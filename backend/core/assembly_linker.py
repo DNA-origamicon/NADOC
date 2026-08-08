@@ -68,10 +68,18 @@ def parse_namespaced_helix_id(helix_id: str) -> Optional[Tuple[str, str]]:
 
 
 _COMPLEMENT = {
-    "A": "T", "T": "A", "C": "G", "G": "C",
-    "a": "t", "t": "a", "c": "g", "g": "c",
-    "N": "N", "n": "n",
-    "U": "A", "u": "a",
+    "A": "T",
+    "T": "A",
+    "C": "G",
+    "G": "C",
+    "a": "t",
+    "t": "a",
+    "c": "g",
+    "g": "c",
+    "N": "N",
+    "n": "n",
+    "U": "A",
+    "u": "a",
 }
 
 
@@ -110,7 +118,7 @@ def _oh_sequence_for_domain(design, ovhg_id: str, oh_dom: Optional[Domain]) -> s
         return ""
     length = abs(oh_dom.end_bp - oh_dom.start_bp) + 1
     seq: Optional[str] = None
-    for o in (design.overhangs or []):
+    for o in design.overhangs or []:
         if o.id == ovhg_id:
             seq = o.sequence
             break
@@ -122,7 +130,9 @@ def _oh_sequence_for_domain(design, ovhg_id: str, oh_dom: Optional[Domain]) -> s
     return seq[:length]
 
 
-def _world_axes_for_helix(helix: Helix, transform: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def _world_axes_for_helix(
+    helix: Helix, transform: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
     """Apply a row-major 4x4 instance transform to a helix's axis endpoints."""
     s = np.array([helix.axis_start.x, helix.axis_start.y, helix.axis_start.z, 1.0])
     e = np.array([helix.axis_end.x, helix.axis_end.y, helix.axis_end.z, 1.0])
@@ -131,7 +141,9 @@ def _world_axes_for_helix(helix: Helix, transform: np.ndarray) -> Tuple[np.ndarr
     return ws[:3], we[:3]
 
 
-def _world_anchor(design, instance, ovhg_id: str, attach: str, oh_dom: Optional[Domain]) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+def _world_anchor(
+    design, instance, ovhg_id: str, attach: str, oh_dom: Optional[Domain]
+) -> Optional[Tuple[np.ndarray, np.ndarray]]:
     """World-space (position, base_normal) at the overhang's attach end.
 
     ``attach='free_end'`` → overhang free-tip bp; ``attach='root'`` →
@@ -147,19 +159,19 @@ def _world_anchor(design, instance, ovhg_id: str, attach: str, oh_dom: Optional[
 
     from backend.core.deformation import deformed_nucleotide_arrays
 
-    tip_bp  = oh_dom.end_bp if ovhg_id.endswith("_3p") else oh_dom.start_bp
+    tip_bp = oh_dom.end_bp if ovhg_id.endswith("_3p") else oh_dom.start_bp
     root_bp = oh_dom.start_bp if tip_bp == oh_dom.end_bp else oh_dom.end_bp
-    bp      = tip_bp if attach == "free_end" else root_bp
+    bp = tip_bp if attach == "free_end" else root_bp
     direction = _opposite_direction(oh_dom.direction)
     arrs = deformed_nucleotide_arrays(helix, design)
-    bp_arr  = arrs["bp_indices"]
+    bp_arr = arrs["bp_indices"]
     dir_arr = arrs["directions"]
     dir_int = 0 if direction == Direction.FORWARD else 1
     matches = (bp_arr == bp) & (dir_arr == dir_int)
     if not matches.any():
         return None
     i = int(matches.argmax())
-    pos_local    = np.asarray(arrs["positions"][i], dtype=float)
+    pos_local = np.asarray(arrs["positions"][i], dtype=float)
     normal_local = np.asarray(arrs["base_normals"][i], dtype=float)
 
     T = instance.transform.to_array()
@@ -180,7 +192,9 @@ def _build_complement_namespaced(oh_dom: Domain, instance_id: str) -> Domain:
     )
 
 
-def _make_bridge_domain(bridge_helix_id: str, side: str, comp_first: bool, linker_bp: int) -> Domain:
+def _make_bridge_domain(
+    bridge_helix_id: str, side: str, comp_first: bool, linker_bp: int
+) -> Domain:
     """Bridge half whose complement-side end lands at the side's __lnk__ bp.
 
     Mirrors :func:`backend.core.lattice.generate_linker_topology`'s inner
@@ -190,11 +204,28 @@ def _make_bridge_domain(bridge_helix_id: str, side: str, comp_first: bool, linke
     L = linker_bp
     if side == "a":
         if comp_first:
-            return Domain(helix_id=bridge_helix_id, start_bp=0, end_bp=L - 1, direction=Direction.FORWARD)
-        return Domain(helix_id=bridge_helix_id, start_bp=L - 1, end_bp=0, direction=Direction.REVERSE)
+            return Domain(
+                helix_id=bridge_helix_id,
+                start_bp=0,
+                end_bp=L - 1,
+                direction=Direction.FORWARD,
+            )
+        return Domain(
+            helix_id=bridge_helix_id,
+            start_bp=L - 1,
+            end_bp=0,
+            direction=Direction.REVERSE,
+        )
     if comp_first:
-        return Domain(helix_id=bridge_helix_id, start_bp=L - 1, end_bp=0, direction=Direction.REVERSE)
-    return Domain(helix_id=bridge_helix_id, start_bp=0, end_bp=L - 1, direction=Direction.FORWARD)
+        return Domain(
+            helix_id=bridge_helix_id,
+            start_bp=L - 1,
+            end_bp=0,
+            direction=Direction.REVERSE,
+        )
+    return Domain(
+        helix_id=bridge_helix_id, start_bp=0, end_bp=L - 1, direction=Direction.FORWARD
+    )
 
 
 def _make_world_virtual_linker_helix(
@@ -208,23 +239,27 @@ def _make_world_virtual_linker_helix(
 ) -> Helix:
     """Virtual ``__lnk__`` helix placed in world space between the two anchors."""
     axis_start: Optional[np.ndarray]
-    axis_end:   Optional[np.ndarray]
+    axis_end: Optional[np.ndarray]
     try:
-        g = bridge_axis_geometry(pos_a, normal_a, pos_b, linker_bp, comp_first_a, comp_first_b)
+        g = bridge_axis_geometry(
+            pos_a, normal_a, pos_b, linker_bp, comp_first_a, comp_first_b
+        )
         axis_start = g["axis_start"]
-        axis_end   = g["axis_end"]
+        axis_end = g["axis_end"]
     except Exception:
         chord = pos_b - pos_a
         cl = float(np.linalg.norm(chord))
         if cl < 1e-9:
             axis_start = pos_a.copy()
-            axis_end   = pos_a + np.array([0.0, 0.0, max(linker_bp - 1, 1) * BDNA_RISE_PER_BP])
+            axis_end = pos_a + np.array(
+                [0.0, 0.0, max(linker_bp - 1, 1) * BDNA_RISE_PER_BP]
+            )
         else:
             visual = max(linker_bp - 1, 1) * BDNA_RISE_PER_BP
             mid = (pos_a + pos_b) * 0.5
             dirn = chord / cl
             axis_start = mid - dirn * (visual * 0.5)
-            axis_end   = mid + dirn * (visual * 0.5)
+            axis_end = mid + dirn * (visual * 0.5)
     return Helix(
         id=helix_id,
         axis_start=Vec3.from_array(axis_start),
@@ -270,7 +305,11 @@ def _compose_ss_strand_sequence(
     The ss linker has one strand traversing the two complements with the
     bridge between them (see ``_build_ss_linker_strand`` in
     :mod:`backend.core.lattice`)."""
-    return reverse_complement(oh_a_seq, len(oh_a_seq)) + bridge_seq + reverse_complement(oh_b_seq, len(oh_b_seq))
+    return (
+        reverse_complement(oh_a_seq, len(oh_a_seq))
+        + bridge_seq
+        + reverse_complement(oh_b_seq, len(oh_b_seq))
+    )
 
 
 def generate_assembly_linker_topology(
@@ -298,14 +337,24 @@ def generate_assembly_linker_topology(
     if conn.length_value == 0:
         oh_a_dom = _find_overhang_domain(design_a, conn.overhang_a_id)
         oh_b_dom = _find_overhang_domain(design_b, conn.overhang_b_id)
-        comp_a = _build_complement_namespaced(oh_a_dom, inst_a.id) if oh_a_dom is not None else None
-        comp_b = _build_complement_namespaced(oh_b_dom, inst_b.id) if oh_b_dom is not None else None
+        comp_a = (
+            _build_complement_namespaced(oh_a_dom, inst_a.id)
+            if oh_a_dom is not None
+            else None
+        )
+        comp_b = (
+            _build_complement_namespaced(oh_b_dom, inst_b.id)
+            if oh_b_dom is not None
+            else None
+        )
         domains = [d for d in (comp_a, comp_b) if d is not None]
         if not domains:
             return [], []
         oh_a_seq = _oh_sequence_for_domain(design_a, conn.overhang_a_id, oh_a_dom)
         oh_b_seq = _oh_sequence_for_domain(design_b, conn.overhang_b_id, oh_b_dom)
-        seq = _compose_ss_strand_sequence(oh_a_seq=oh_a_seq, oh_b_seq=oh_b_seq, bridge_seq="")
+        seq = _compose_ss_strand_sequence(
+            oh_a_seq=oh_a_seq, oh_b_seq=oh_b_seq, bridge_seq=""
+        )
         strand = Strand(
             id=f"{_LINKER_HELIX_PREFIX}{conn.id}__s",
             domains=domains,
@@ -321,37 +370,73 @@ def generate_assembly_linker_topology(
     oh_a_dom = _find_overhang_domain(design_a, conn.overhang_a_id)
     oh_b_dom = _find_overhang_domain(design_b, conn.overhang_b_id)
 
-    anchor_a = _world_anchor(design_a, inst_a, conn.overhang_a_id, conn.overhang_a_attach, oh_a_dom)
-    anchor_b = _world_anchor(design_b, inst_b, conn.overhang_b_id, conn.overhang_b_attach, oh_b_dom)
+    anchor_a = _world_anchor(
+        design_a, inst_a, conn.overhang_a_id, conn.overhang_a_attach, oh_a_dom
+    )
+    anchor_b = _world_anchor(
+        design_b, inst_b, conn.overhang_b_id, conn.overhang_b_attach, oh_b_dom
+    )
     if anchor_a is not None and anchor_b is not None:
         pos_a, n_a = anchor_a
-        pos_b, _   = anchor_b
+        pos_b, _ = anchor_b
     else:
         pos_a = np.array([0.0, 0.0, 0.0])
-        n_a   = np.array([1.0, 0.0, 0.0])
+        n_a = np.array([1.0, 0.0, 0.0])
         pos_b = np.array([0.0, 0.0, max(linker_bp - 1, 1) * BDNA_RISE_PER_BP])
 
-    comp_first_a = _is_comp_first(conn.overhang_a_id, conn.overhang_a_attach) if oh_a_dom is not None else True
-    comp_first_b = _is_comp_first(conn.overhang_b_id, conn.overhang_b_attach) if oh_b_dom is not None else True
+    comp_first_a = (
+        _is_comp_first(conn.overhang_a_id, conn.overhang_a_attach)
+        if oh_a_dom is not None
+        else True
+    )
+    comp_first_b = (
+        _is_comp_first(conn.overhang_b_id, conn.overhang_b_attach)
+        if oh_b_dom is not None
+        else True
+    )
 
     bridge_helix = _make_world_virtual_linker_helix(
-        bridge_helix_id, linker_bp,
-        pos_a, n_a, pos_b,
-        comp_first_a, comp_first_b,
+        bridge_helix_id,
+        linker_bp,
+        pos_a,
+        n_a,
+        pos_b,
+        comp_first_a,
+        comp_first_b,
     )
 
     bridge_seq = _bridge_sequence_padded(conn.bridge_sequence, linker_bp)
-    oh_a_seq   = _oh_sequence_for_domain(design_a, conn.overhang_a_id, oh_a_dom)
-    oh_b_seq   = _oh_sequence_for_domain(design_b, conn.overhang_b_id, oh_b_dom)
+    oh_a_seq = _oh_sequence_for_domain(design_a, conn.overhang_a_id, oh_a_dom)
+    oh_b_seq = _oh_sequence_for_domain(design_b, conn.overhang_b_id, oh_b_dom)
 
     new_strands: list[Strand] = []
 
     if conn.linker_type == "ds":
         for side, oh_id, attach, oh_dom, inst, comp_first, oh_seq in (
-            ("a", conn.overhang_a_id, conn.overhang_a_attach, oh_a_dom, inst_a, comp_first_a, oh_a_seq),
-            ("b", conn.overhang_b_id, conn.overhang_b_attach, oh_b_dom, inst_b, comp_first_b, oh_b_seq),
+            (
+                "a",
+                conn.overhang_a_id,
+                conn.overhang_a_attach,
+                oh_a_dom,
+                inst_a,
+                comp_first_a,
+                oh_a_seq,
+            ),
+            (
+                "b",
+                conn.overhang_b_id,
+                conn.overhang_b_attach,
+                oh_b_dom,
+                inst_b,
+                comp_first_b,
+                oh_b_seq,
+            ),
         ):
-            comp = _build_complement_namespaced(oh_dom, inst.id) if oh_dom is not None else None
+            comp = (
+                _build_complement_namespaced(oh_dom, inst.id)
+                if oh_dom is not None
+                else None
+            )
             bridge = _make_bridge_domain(bridge_helix_id, side, comp_first, linker_bp)
             if comp is None:
                 domains = [bridge]
@@ -360,18 +445,31 @@ def generate_assembly_linker_topology(
             else:
                 domains = [bridge, comp]
             seq = _compose_ds_strand_sequence(
-                side=side, comp_first=comp_first, oh_seq=oh_seq, bridge_seq=bridge_seq,
+                side=side,
+                comp_first=comp_first,
+                oh_seq=oh_seq,
+                bridge_seq=bridge_seq,
             )
-            new_strands.append(Strand(
-                id=f"{_LINKER_HELIX_PREFIX}{conn.id}__{side}",
-                domains=domains,
-                strand_type=StrandType.LINKER,
-                color=_LINKER_DEFAULT_COLOR,
-                sequence=seq,
-            ))
+            new_strands.append(
+                Strand(
+                    id=f"{_LINKER_HELIX_PREFIX}{conn.id}__{side}",
+                    domains=domains,
+                    strand_type=StrandType.LINKER,
+                    color=_LINKER_DEFAULT_COLOR,
+                    sequence=seq,
+                )
+            )
     else:
-        comp_a = _build_complement_namespaced(oh_a_dom, inst_a.id) if oh_a_dom is not None else None
-        comp_b = _build_complement_namespaced(oh_b_dom, inst_b.id) if oh_b_dom is not None else None
+        comp_a = (
+            _build_complement_namespaced(oh_a_dom, inst_a.id)
+            if oh_a_dom is not None
+            else None
+        )
+        comp_b = (
+            _build_complement_namespaced(oh_b_dom, inst_b.id)
+            if oh_b_dom is not None
+            else None
+        )
         bridge = Domain(
             helix_id=bridge_helix_id,
             start_bp=0,
@@ -379,19 +477,25 @@ def generate_assembly_linker_topology(
             direction=Direction.FORWARD,
         )
         domains = []
-        if comp_a is not None: domains.append(comp_a)
+        if comp_a is not None:
+            domains.append(comp_a)
         domains.append(bridge)
-        if comp_b is not None: domains.append(comp_b)
+        if comp_b is not None:
+            domains.append(comp_b)
         seq = _compose_ss_strand_sequence(
-            oh_a_seq=oh_a_seq, oh_b_seq=oh_b_seq, bridge_seq=bridge_seq,
+            oh_a_seq=oh_a_seq,
+            oh_b_seq=oh_b_seq,
+            bridge_seq=bridge_seq,
         )
-        new_strands.append(Strand(
-            id=f"{_LINKER_HELIX_PREFIX}{conn.id}__s",
-            domains=domains,
-            strand_type=StrandType.LINKER,
-            color=_LINKER_DEFAULT_COLOR,
-            sequence=seq,
-        ))
+        new_strands.append(
+            Strand(
+                id=f"{_LINKER_HELIX_PREFIX}{conn.id}__s",
+                domains=domains,
+                strand_type=StrandType.LINKER,
+                color=_LINKER_DEFAULT_COLOR,
+                sequence=seq,
+            )
+        )
 
     return [bridge_helix], new_strands
 
@@ -428,14 +532,26 @@ def recompose_strand_sequences_for_connection(
     if not any(s.id.startswith(prefix) for s in existing_strands):
         return existing_strands
 
-    linker_bp = _length_value_to_bp(conn.length_value, conn.length_unit) if conn.length_value > 0 else 0
+    linker_bp = (
+        _length_value_to_bp(conn.length_value, conn.length_unit)
+        if conn.length_value > 0
+        else 0
+    )
     oh_a_dom = _find_overhang_domain(design_a, conn.overhang_a_id)
     oh_b_dom = _find_overhang_domain(design_b, conn.overhang_b_id)
     bridge_seq = _bridge_sequence_padded(conn.bridge_sequence, linker_bp)
-    oh_a_seq   = _oh_sequence_for_domain(design_a, conn.overhang_a_id, oh_a_dom)
-    oh_b_seq   = _oh_sequence_for_domain(design_b, conn.overhang_b_id, oh_b_dom)
-    comp_first_a = _is_comp_first(conn.overhang_a_id, conn.overhang_a_attach) if oh_a_dom is not None else True
-    comp_first_b = _is_comp_first(conn.overhang_b_id, conn.overhang_b_attach) if oh_b_dom is not None else True
+    oh_a_seq = _oh_sequence_for_domain(design_a, conn.overhang_a_id, oh_a_dom)
+    oh_b_seq = _oh_sequence_for_domain(design_b, conn.overhang_b_id, oh_b_dom)
+    comp_first_a = (
+        _is_comp_first(conn.overhang_a_id, conn.overhang_a_attach)
+        if oh_a_dom is not None
+        else True
+    )
+    comp_first_b = (
+        _is_comp_first(conn.overhang_b_id, conn.overhang_b_attach)
+        if oh_b_dom is not None
+        else True
+    )
 
     updated: list[Strand] = []
     for s in existing_strands:
@@ -444,15 +560,23 @@ def recompose_strand_sequences_for_connection(
             continue
         if s.id.endswith("__a"):
             seq = _compose_ds_strand_sequence(
-                side="a", comp_first=comp_first_a, oh_seq=oh_a_seq, bridge_seq=bridge_seq,
+                side="a",
+                comp_first=comp_first_a,
+                oh_seq=oh_a_seq,
+                bridge_seq=bridge_seq,
             )
         elif s.id.endswith("__b"):
             seq = _compose_ds_strand_sequence(
-                side="b", comp_first=comp_first_b, oh_seq=oh_b_seq, bridge_seq=bridge_seq,
+                side="b",
+                comp_first=comp_first_b,
+                oh_seq=oh_b_seq,
+                bridge_seq=bridge_seq,
             )
         elif s.id.endswith("__s"):
             seq = _compose_ss_strand_sequence(
-                oh_a_seq=oh_a_seq, oh_b_seq=oh_b_seq, bridge_seq=bridge_seq,
+                oh_a_seq=oh_a_seq,
+                oh_b_seq=oh_b_seq,
+                bridge_seq=bridge_seq,
             )
         else:
             updated.append(s)

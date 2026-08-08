@@ -29,15 +29,42 @@ DEPOSITION_SWEEP_PAYLOAD = {
     "root_job_id": "oxdna-relax-1",
     "root_engine": "oxdna",
     "stages": [
-        {"engine": "namd", "protocol": "production", "field": {"field_pN": 5, "dir": [0, 0, 1]},
-         "anchors": None, "surface": None, "run_target": "local", "cluster_name": None,
-         "length_ns": None, "steps": None, "label": "deposit"},
-        {"engine": "namd", "protocol": "production", "field": None,
-         "anchors": [{"scope": "strand", "id": 0}], "surface": None, "run_target": "local",
-         "cluster_name": None, "length_ns": None, "steps": None, "label": "immobilize"},
-        {"engine": "namd", "protocol": "production", "field": {"field_pN": 5, "dir": [1, 0, 0]},
-         "anchors": [{"scope": "strand", "id": 0}], "surface": None, "run_target": "local",
-         "cluster_name": None, "length_ns": None, "steps": None, "label": "sweep-x"},
+        {
+            "engine": "namd",
+            "protocol": "production",
+            "field": {"field_pN": 5, "dir": [0, 0, 1]},
+            "anchors": None,
+            "surface": None,
+            "run_target": "local",
+            "cluster_name": None,
+            "length_ns": None,
+            "steps": None,
+            "label": "deposit",
+        },
+        {
+            "engine": "namd",
+            "protocol": "production",
+            "field": None,
+            "anchors": [{"scope": "strand", "id": 0}],
+            "surface": None,
+            "run_target": "local",
+            "cluster_name": None,
+            "length_ns": None,
+            "steps": None,
+            "label": "immobilize",
+        },
+        {
+            "engine": "namd",
+            "protocol": "production",
+            "field": {"field_pN": 5, "dir": [1, 0, 0]},
+            "anchors": [{"scope": "strand", "id": 0}],
+            "surface": None,
+            "run_target": "local",
+            "cluster_name": None,
+            "length_ns": None,
+            "steps": None,
+            "label": "sweep-x",
+        },
     ],
 }
 
@@ -103,10 +130,22 @@ def test_ui_payload_builds_a_linear_chain_stage_N_from_N_minus_1():
 def test_single_stage_payload_still_valid():
     """The minimal case the UI can queue (a root + one stage)."""
     payload = {
-        "root_job_id": "namd-eq-9", "root_engine": "namd",
-        "stages": [{"engine": "namd", "protocol": "production", "field": None,
-                    "anchors": None, "surface": None, "run_target": "local",
-                    "cluster_name": None, "length_ns": None, "steps": None, "label": None}],
+        "root_job_id": "namd-eq-9",
+        "root_engine": "namd",
+        "stages": [
+            {
+                "engine": "namd",
+                "protocol": "production",
+                "field": None,
+                "anchors": None,
+                "surface": None,
+                "run_target": "local",
+                "cluster_name": None,
+                "length_ns": None,
+                "steps": None,
+                "label": None,
+            }
+        ],
     }
     pipeline = _pipeline_from_payload(payload)
     validate_pipeline(pipeline)

@@ -44,7 +44,10 @@ def _strands_signature(d: Design) -> list:
     """Compact stable representation of the strand topology, modulo ordering."""
     out = []
     for s in sorted(d.strands, key=lambda x: x.id):
-        doms = [(dm.helix_id, dm.start_bp, dm.end_bp, dm.direction.value) for dm in s.domains]
+        doms = [
+            (dm.helix_id, dm.start_bp, dm.end_bp, dm.direction.value)
+            for dm in s.domains
+        ]
         out.append((s.id, s.strand_type.value, doms))
     return out
 
@@ -58,9 +61,9 @@ def test_autobreak_appends_snapshot_entry():
     design = design_state.get_or_404()
     assert len(design.feature_log) == 1
     entry = design.feature_log[-1]
-    assert entry.feature_type == 'snapshot'
-    assert entry.op_kind == 'auto-break'
-    assert entry.label == 'Autobreak'
+    assert entry.feature_type == "snapshot"
+    assert entry.op_kind == "auto-break"
+    assert entry.label == "Autobreak"
     assert entry.snapshot_size_bytes > 0
     assert entry.design_snapshot_gz_b64 != ""
     assert entry.evicted is False
@@ -76,7 +79,9 @@ def test_revert_restores_pre_state_byte_exact():
 
     client.post("/api/design/auto-break")
     post = design_state.get_or_404()
-    assert _strands_signature(post) != pre_sig, "autobreak must actually change strands for this test to be meaningful"
+    assert _strands_signature(post) != pre_sig, (
+        "autobreak must actually change strands for this test to be meaningful"
+    )
 
     r = client.post("/api/design/features/0/revert")
     assert r.status_code == 200, r.text
@@ -100,7 +105,7 @@ def test_revert_after_simulated_refresh():
 
     pre_post_autobreak = design_state.get_or_404().model_copy(deep=True)
     assert len(pre_post_autobreak.feature_log) == 1
-    assert pre_post_autobreak.feature_log[0].feature_type == 'snapshot'
+    assert pre_post_autobreak.feature_log[0].feature_type == "snapshot"
 
     r = client.post("/api/design/features/0/revert")
     assert r.status_code == 200, r.text
@@ -146,8 +151,13 @@ def test_delete_bundle_create_entry_clears_geometry():
     design_state.close_session()
     r = client.post(
         "/api/design/bundle",
-        json={"cells": [[0, 0]], "length_bp": 42, "name": "root", "plane": "XY",
-              "lattice_type": "HONEYCOMB"},
+        json={
+            "cells": [[0, 0]],
+            "length_bp": 42,
+            "name": "root",
+            "plane": "XY",
+            "lattice_type": "HONEYCOMB",
+        },
     )
     assert r.status_code == 201, r.text
     created = design_state.get_or_404()
@@ -170,23 +180,36 @@ def _fresh_bundle():
     design_state.close_session()
     r = client.post(
         "/api/design/bundle",
-        json={"cells": [[0, 0]], "length_bp": 42, "name": "B", "plane": "XY",
-              "lattice_type": "HONEYCOMB"},
+        json={
+            "cells": [[0, 0]],
+            "length_bp": 42,
+            "name": "B",
+            "plane": "XY",
+            "lattice_type": "HONEYCOMB",
+        },
     )
     assert r.status_code == 201, r.text
 
 
 def _seg(col):
-    r = client.post("/api/design/bundle-segment", json={
-        "cells": [[0, col]], "length_bp": 21, "plane": "XY", "offset_nm": 14.0,
-    })
+    r = client.post(
+        "/api/design/bundle-segment",
+        json={
+            "cells": [[0, col]],
+            "length_bp": 21,
+            "plane": "XY",
+            "offset_nm": 14.0,
+        },
+    )
     assert r.status_code == 201, r.text
 
 
 def test_delete_independent_parallel_extrusion_survives():
     # Two parallel segments on different cells; deleting the first keeps the
     # second (independent + replayable → surgical delete, not a cascade).
-    _fresh_bundle(); _seg(1); _seg(2)
+    _fresh_bundle()
+    _seg(1)
+    _seg(2)
     assert len(design_state.get_or_404().helices) == 3
     r = client.delete("/api/design/features/1")
     assert r.status_code == 200, r.text
@@ -211,11 +234,20 @@ def test_delete_workspace_independent_strutted_corner_extrude_scrubs_survivors()
     # on the stale pins — the same scrub-on-delete behaviour is covered
     # fixture-free by test_delete_independent_parallel_extrusion_survives above.
     removed_hids = {"h_XY_0_4", "h_XY_0_5"}
-    entry1_kind = getattr(before.feature_log[1], "op_kind", None) if len(before.feature_log) > 1 else None
-    if entry1_kind != "extrude-segment" or not (removed_hids & {h.id for h in before.helices}):
-        pytest.skip("2x2_strutted_corner.nadoc does not match this test's pinned structure")
+    entry1_kind = (
+        getattr(before.feature_log[1], "op_kind", None)
+        if len(before.feature_log) > 1
+        else None
+    )
+    if entry1_kind != "extrude-segment" or not (
+        removed_hids & {h.id for h in before.helices}
+    ):
+        pytest.skip(
+            "2x2_strutted_corner.nadoc does not match this test's pinned structure"
+        )
     removed_strands = {
-        s.id for s in before.strands
+        s.id
+        for s in before.strands
         if any(dom.helix_id in removed_hids for dom in s.domains)
     }
     assert removed_strands
@@ -228,9 +260,13 @@ def test_delete_workspace_independent_strutted_corner_extrude_scrubs_survivors()
     after = design_state.get_or_404()
     assert removed_hids.isdisjoint({h.id for h in after.helices})
     assert removed_strands.isdisjoint({s.id for s in after.strands})
-    assert {"h_XY_4_0", "h_XY_4_1", "h_XY_5_0", "h_XY_5_1"} <= {h.id for h in after.helices}
+    assert {"h_XY_4_0", "h_XY_4_1", "h_XY_5_0", "h_XY_5_1"} <= {
+        h.id for h in after.helices
+    }
     assert len(after.feature_log) == len(before.feature_log) - 1
-    assert not any(removed_hids & set(ct.helix_ids or []) for ct in after.cluster_transforms)
+    assert not any(
+        removed_hids & set(ct.helix_ids or []) for ct in after.cluster_transforms
+    )
 
     # Snapshot rewrite consistency: every surviving seek position remains free
     # of the deleted extrusion's ids.
@@ -248,13 +284,17 @@ def test_delete_extrusion_with_dependent_continuation_lists_then_cascades():
     # dependent and should still force the cascade decision.
     from backend.core.constants import BDNA_RISE_PER_BP
 
-    _fresh_bundle(); _seg(1)
-    r = client.post("/api/design/bundle-continuation", json={
-        "cells": [[0, 1]],
-        "length_bp": 21,
-        "plane": "XY",
-        "offset_nm": round(21 * BDNA_RISE_PER_BP, 6),
-    })
+    _fresh_bundle()
+    _seg(1)
+    r = client.post(
+        "/api/design/bundle-continuation",
+        json={
+            "cells": [[0, 1]],
+            "length_bp": 21,
+            "plane": "XY",
+            "offset_nm": round(21 * BDNA_RISE_PER_BP, 6),
+        },
+    )
     assert r.status_code == 201, r.text
     helices_before = len(design_state.get_or_404().helices)
 
@@ -271,12 +311,15 @@ def test_delete_extrusion_with_dependent_continuation_lists_then_cascades():
     r = client.delete("/api/design/features/1?cascade=true")
     assert r.status_code == 200, r.text
     after = design_state.get_or_404()
-    assert [getattr(e, "op_kind", e.feature_type) for e in after.feature_log] == ["bundle-create"]
+    assert [getattr(e, "op_kind", e.feature_type) for e in after.feature_log] == [
+        "bundle-create"
+    ]
     assert len(after.helices) == 1
 
 
 def test_delete_last_extrusion_rolls_back_and_undo_restores():
-    _fresh_bundle(); _seg(1)
+    _fresh_bundle()
+    _seg(1)
     assert len(design_state.get_or_404().helices) == 2
     r = client.delete("/api/design/features/1")
     assert r.status_code == 200, r.text
@@ -303,7 +346,7 @@ def test_revert_truncates_log_and_undo_restores():
     restored = design_state.get_or_404()
     assert _strands_signature(restored) == _strands_signature(post_autobreak)
     assert len(restored.feature_log) == 1
-    assert restored.feature_log[0].feature_type == 'snapshot'
+    assert restored.feature_log[0].feature_type == "snapshot"
 
 
 # ── Test 6: existing .nadoc files load without snapshot entries ───────────────
@@ -317,7 +360,7 @@ def test_old_nadoc_loads_without_snapshot_entries():
     design = Design.from_json(fixture.read_text())
     # No snapshot entries in old files; either empty log or only legacy delta types.
     for entry in design.feature_log:
-        assert entry.feature_type in ('deformation', 'cluster_op', 'overhang_rotation')
+        assert entry.feature_type in ("deformation", "cluster_op", "overhang_rotation")
 
 
 # ── Test 7: budget-driven eviction ────────────────────────────────────────────
@@ -328,7 +371,7 @@ def test_chained_auto_ops_evict_under_budget(monkeypatch):
     OLDEST snapshot bodies get evicted (set ``evicted=True``, payload cleared);
     log entries themselves remain so historical labels are still visible."""
     # Force a tiny budget so 2 sequential autobreaks trigger eviction.
-    monkeypatch.setattr(design_state, 'MAX_SNAPSHOT_BUDGET_BYTES', 100)
+    monkeypatch.setattr(design_state, "MAX_SNAPSHOT_BUDGET_BYTES", 100)
 
     client.post("/api/design/auto-break")
     client.post("/api/design/auto-merge")
@@ -336,7 +379,9 @@ def test_chained_auto_ops_evict_under_budget(monkeypatch):
 
     log = design_state.get_or_404().feature_log
     snap_entries = [e for e in log if isinstance(e, SnapshotLogEntry)]
-    assert len(snap_entries) == 3, f"expected 3 snapshot entries, got {len(snap_entries)}"
+    assert len(snap_entries) == 3, (
+        f"expected 3 snapshot entries, got {len(snap_entries)}"
+    )
 
     # Oldest must be evicted; newest must NOT be.
     assert snap_entries[0].evicted is True
@@ -355,7 +400,7 @@ def test_chained_auto_ops_evict_under_budget(monkeypatch):
 
 def test_snapshot_does_not_recurse():
     d = design_state.get_or_404()
-    d.feature_log.append(DeformationLogEntry(deformation_id='preexisting'))
+    d.feature_log.append(DeformationLogEntry(deformation_id="preexisting"))
     design_state.set_design_silent(d)
 
     client.post("/api/design/auto-break")
@@ -412,10 +457,10 @@ def test_seek_through_snapshot_rolls_back_topology():
 def test_seek_between_two_snapshots():
     """With two consecutive auto-ops, seeking to the position between them
     must show the strands as they were AFTER op 1 but BEFORE op 2."""
-    _post("/api/design/auto-break")        # snapshot at index 0
+    _post("/api/design/auto-break")  # snapshot at index 0
     after_break_sig = _strands_signature(design_state.get_or_404())
 
-    _post("/api/design/auto-merge")        # snapshot at index 1
+    _post("/api/design/auto-merge")  # snapshot at index 1
     after_merge_sig = _strands_signature(design_state.get_or_404())
 
     # Seek to position 0: only auto-break active, auto-merge NOT yet applied.
@@ -428,7 +473,9 @@ def test_seek_between_two_snapshots():
 
     # Seek to F0: pristine pre-autobreak.
     _post("/api/design/features/seek", {"position": -2})
-    assert _strands_signature(design_state.get_or_404()) == _strands_signature(_make_autobreak_target())
+    assert _strands_signature(design_state.get_or_404()) == _strands_signature(
+        _make_autobreak_target()
+    )
 
 
 def test_seek_skips_evicted_snapshots(monkeypatch):
@@ -436,11 +483,11 @@ def test_seek_skips_evicted_snapshots(monkeypatch):
     through it must fall back to the next non-evicted snapshot's pre-state.
     Topology won't match the original F0 byte-for-byte (eviction is lossy), but
     the seek must not crash and must produce a coherent design."""
-    monkeypatch.setattr(design_state, 'MAX_SNAPSHOT_BUDGET_BYTES', 100)
+    monkeypatch.setattr(design_state, "MAX_SNAPSHOT_BUDGET_BYTES", 100)
 
-    _post("/api/design/auto-break")        # will be evicted
-    _post("/api/design/auto-merge")        # will be evicted
-    _post("/api/design/auto-break")        # newest — kept
+    _post("/api/design/auto-break")  # will be evicted
+    _post("/api/design/auto-merge")  # will be evicted
+    _post("/api/design/auto-break")  # newest — kept
 
     log = design_state.get_or_404().feature_log
     assert log[0].evicted and log[1].evicted and not log[2].evicted
@@ -450,7 +497,7 @@ def test_seek_skips_evicted_snapshots(monkeypatch):
     _post("/api/design/features/seek", {"position": 0})
     d = design_state.get_or_404()
     # Coherent state: at least scaffold + staples present, no exception.
-    assert any(s.strand_type.value == 'scaffold' for s in d.strands)
+    assert any(s.strand_type.value == "scaffold" for s in d.strands)
 
 
 # ── Extrusion logging + F0 = empty workspace + editability ──────────────────
@@ -463,20 +510,23 @@ def test_create_bundle_logs_snapshot_with_empty_pre_state():
     # Pre-state design has helices (autobreak target was set by reset_state).
     assert len(design_state.get_or_404().helices) > 0
 
-    r = client.post("/api/design/bundle", json={
-        "cells": [[0, 0], [0, 1]],
-        "length_bp": 42,
-        "name": "TestBundle",
-    })
+    r = client.post(
+        "/api/design/bundle",
+        json={
+            "cells": [[0, 0], [0, 1]],
+            "length_bp": 42,
+            "name": "TestBundle",
+        },
+    )
     assert r.status_code == 201, r.text
 
     after = design_state.get_or_404()
     assert len(after.feature_log) == 1
     snap = after.feature_log[0]
-    assert snap.feature_type == 'snapshot'
-    assert snap.op_kind == 'bundle-create'
-    assert snap.params['cells'] == [[0, 0], [0, 1]]
-    assert snap.params['length_bp'] == 42
+    assert snap.feature_type == "snapshot"
+    assert snap.op_kind == "bundle-create"
+    assert snap.params["cells"] == [[0, 0], [0, 1]]
+    assert snap.params["length_bp"] == 42
 
     # Seek to F0: must return an empty workspace.
     _post("/api/design/features/seek", {"position": -2})
@@ -488,38 +538,48 @@ def test_create_bundle_logs_snapshot_with_empty_pre_state():
 def test_extrude_segment_logs_snapshot():
     """Slice-plane extrude appends a snapshot entry with full params."""
     # Start with a fresh bundle so we have something to extrude into.
-    client.post("/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"})
+    client.post(
+        "/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"}
+    )
 
-    r = client.post("/api/design/bundle-segment", json={
-        "cells": [[0, 1]],
-        "length_bp": 21,
-        "plane": "XY",
-        "offset_nm": 14.0,
-    })
+    r = client.post(
+        "/api/design/bundle-segment",
+        json={
+            "cells": [[0, 1]],
+            "length_bp": 21,
+            "plane": "XY",
+            "offset_nm": 14.0,
+        },
+    )
     assert r.status_code == 201, r.text
 
     log = design_state.get_or_404().feature_log
-    assert log[-1].feature_type == 'snapshot'
-    assert log[-1].op_kind == 'extrude-segment'
-    assert log[-1].params['length_bp'] == 21
-    assert log[-1].params['cells'] == [[0, 1]]
+    assert log[-1].feature_type == "snapshot"
+    assert log[-1].op_kind == "extrude-segment"
+    assert log[-1].params["length_bp"] == 21
+    assert log[-1].params["cells"] == [[0, 1]]
 
 
 def test_overhang_extrude_logs_snapshot():
     """Overhang extrude appends a snapshot entry."""
-    client.post("/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"})
+    client.post(
+        "/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"}
+    )
     design = design_state.get_or_404()
     helix_id = design.helices[0].id
 
-    r = client.post("/api/design/overhang/extrude", json={
-        "helix_id": helix_id,
-        "bp_index": 21,
-        "direction": "FORWARD",
-        "is_five_prime": False,
-        "neighbor_row": 0,
-        "neighbor_col": 1,
-        "length_bp": 8,
-    })
+    r = client.post(
+        "/api/design/overhang/extrude",
+        json={
+            "helix_id": helix_id,
+            "bp_index": 21,
+            "direction": "FORWARD",
+            "is_five_prime": False,
+            "neighbor_row": 0,
+            "neighbor_col": 1,
+            "length_bp": 8,
+        },
+    )
     # Skip if the geometry constraints don't allow this particular extrude on the
     # 1-cell test bundle; the point of this test is just the snapshot bookkeeping.
     if r.status_code in (400, 422):
@@ -527,8 +587,8 @@ def test_overhang_extrude_logs_snapshot():
     assert r.status_code == 200, r.text
 
     log = design_state.get_or_404().feature_log
-    assert log[-1].op_kind == 'overhang-extrude'
-    assert log[-1].params['length_bp'] == 8
+    assert log[-1].op_kind == "overhang-extrude"
+    assert log[-1].params["length_bp"] == 8
 
 
 def test_overhang_extrude_new_helix_inherits_parent_cluster_not_lex_neighbor():
@@ -547,9 +607,16 @@ def test_overhang_extrude_new_helix_inherits_parent_cluster_not_lex_neighbor():
     cluster's position when the parent cluster had been translated.
     """
     from backend.core.models import (
-        ClusterRigidTransform, Direction, Domain, Helix, Strand, StrandType, Vec3,
+        ClusterRigidTransform,
+        Direction,
+        Domain,
+        Helix,
+        Strand,
+        StrandType,
+        Vec3,
     )
     from backend.core.constants import BDNA_RISE_PER_BP
+
     base = design_state.get_or_404()
     # Build two helices on the same row/col layout so the new extruded
     # helix at (row, col)=(0,1) (or equivalent) sits equidistant from both
@@ -563,76 +630,98 @@ def test_overhang_extrude_new_helix_inherits_parent_cluster_not_lex_neighbor():
         # overhang placement gate accepts it.  This test is about cluster inheritance,
         # not the bead angle; phase_offset doesn't affect axis position, so the
         # equidistance setup that triggers the lex tiebreak is unchanged.
-        phase_offset=0.5236, length_bp=L, grid_pos=(1, 0),  # π/6
+        phase_offset=0.5236,
+        length_bp=L,
+        grid_pos=(1, 0),  # π/6
     )
     h_lex_neighbour = Helix(
         id="h_XY_0_1",  # LEX-SMALLER than h_XY_1_0
         axis_start=Vec3(x=2.5, y=2.5, z=0.0),
         axis_end=Vec3(x=2.5, y=2.5, z=L * BDNA_RISE_PER_BP),
-        phase_offset=0.0, length_bp=L, grid_pos=(0, 1),
+        phase_offset=0.0,
+        length_bp=L,
+        grid_pos=(0, 1),
     )
     parent_strand = Strand(
         id="stpl_parent",
-        domains=[Domain(
-            helix_id="h_XY_1_0", start_bp=0, end_bp=L - 1,
-            direction=Direction.FORWARD,
-        )],
+        domains=[
+            Domain(
+                helix_id="h_XY_1_0",
+                start_bp=0,
+                end_bp=L - 1,
+                direction=Direction.FORWARD,
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     other_strand = Strand(
         id="stpl_other",
-        domains=[Domain(
-            helix_id="h_XY_0_1", start_bp=0, end_bp=L - 1,
-            direction=Direction.FORWARD,
-        )],
+        domains=[
+            Domain(
+                helix_id="h_XY_0_1",
+                start_bp=0,
+                end_bp=L - 1,
+                direction=Direction.FORWARD,
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     cluster_parent = ClusterRigidTransform(
-        id="cluster_parent", name="parent",
+        id="cluster_parent",
+        name="parent",
         helix_ids=["h_XY_1_0"],
-        translation=[0.0, 5.0, 0.0],   # MOVED — what the user wants to inherit
+        translation=[0.0, 5.0, 0.0],  # MOVED — what the user wants to inherit
         rotation=[0.0, 0.0, 0.0, 1.0],
         pivot=[0.0, 0.0, 0.0],
     )
     cluster_neighbour = ClusterRigidTransform(
-        id="cluster_neighbour", name="neighbour",
+        id="cluster_neighbour",
+        name="neighbour",
         helix_ids=["h_XY_0_1"],
         translation=[0.0, 0.0, 0.0],
         rotation=[0.0, 0.0, 0.0, 1.0],
         pivot=[0.0, 0.0, 0.0],
     )
-    seeded = base.model_copy(update={
-        "helices": [h_parent, h_lex_neighbour],
-        "strands": [parent_strand, other_strand],
-        "overhangs": [],
-        "cluster_transforms": [cluster_parent, cluster_neighbour],
-        "cluster_joints": [],
-    })
+    seeded = base.model_copy(
+        update={
+            "helices": [h_parent, h_lex_neighbour],
+            "strands": [parent_strand, other_strand],
+            "overhangs": [],
+            "cluster_transforms": [cluster_parent, cluster_neighbour],
+            "cluster_joints": [],
+        }
+    )
     design_state.set_design(seeded)
 
     # Extrude an overhang from h_XY_1_0 into neighbour cell (1, 1) — the
     # resulting helix is "h_XY_1_1", equidistant (Manhattan dist=1) from
     # both h_XY_1_0 (parent) AND h_XY_0_1 (lex-smaller neighbour). Without
     # the origin hint, lex tiebreak picks "h_XY_0_1" → wrong cluster.
-    r = client.post("/api/design/overhang/extrude", json={
-        "helix_id": "h_XY_1_0",
-        "bp_index": 0,
-        "direction": "FORWARD",
-        "is_five_prime": True,
-        "neighbor_row": 1,
-        "neighbor_col": 1,
-        "length_bp": 6,
-    })
+    r = client.post(
+        "/api/design/overhang/extrude",
+        json={
+            "helix_id": "h_XY_1_0",
+            "bp_index": 0,
+            "direction": "FORWARD",
+            "is_five_prime": True,
+            "neighbor_row": 1,
+            "neighbor_col": 1,
+            "length_bp": 6,
+        },
+    )
     assert r.status_code == 200, r.text
 
     post = design_state.get_or_404()
     # Find the new overhang helix.
     new_helix_id = next(
-        h.id for h in post.helices
-        if h.id not in ("h_XY_1_0", "h_XY_0_1")
+        h.id for h in post.helices if h.id not in ("h_XY_1_0", "h_XY_0_1")
     )
-    parent_cluster = next(c for c in post.cluster_transforms if c.id == "cluster_parent")
-    neighbour_cluster = next(c for c in post.cluster_transforms if c.id == "cluster_neighbour")
+    parent_cluster = next(
+        c for c in post.cluster_transforms if c.id == "cluster_parent"
+    )
+    neighbour_cluster = next(
+        c for c in post.cluster_transforms if c.id == "cluster_neighbour"
+    )
     assert new_helix_id in parent_cluster.helix_ids, (
         f"new helix {new_helix_id!r} should inherit cluster_parent (the "
         f"extruded-from helix's cluster) but is missing from "
@@ -647,43 +736,69 @@ def test_overhang_extrude_new_helix_inherits_parent_cluster_not_lex_neighbor():
 
 def test_edit_extrusion_replays_with_new_length():
     """Editing the most-recent extrusion replays it with new params."""
-    client.post("/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"})
-    client.post("/api/design/bundle-segment", json={
-        "cells": [[0, 1]], "length_bp": 21, "plane": "XY", "offset_nm": 14.0,
-    })
+    client.post(
+        "/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"}
+    )
+    client.post(
+        "/api/design/bundle-segment",
+        json={
+            "cells": [[0, 1]],
+            "length_bp": 21,
+            "plane": "XY",
+            "offset_nm": 14.0,
+        },
+    )
 
     log = design_state.get_or_404().feature_log
-    seg_idx = next(i for i, e in enumerate(log) if isinstance(e, SnapshotLogEntry) and e.op_kind == 'extrude-segment')
+    seg_idx = next(
+        i
+        for i, e in enumerate(log)
+        if isinstance(e, SnapshotLogEntry) and e.op_kind == "extrude-segment"
+    )
     new_params = dict(log[seg_idx].params)
-    new_params['length_bp'] = 35
+    new_params["length_bp"] = 35
 
     r = client.post(f"/api/design/features/{seg_idx}/edit", json={"params": new_params})
     assert r.status_code == 200, r.text
 
     after = design_state.get_or_404()
-    assert after.feature_log[seg_idx].params['length_bp'] == 35
+    assert after.feature_log[seg_idx].params["length_bp"] == 35
     # The segment helix should now reflect the new length.
     new_helices = [h for h in after.helices if (h.grid_pos or [None, None])[1] == 1]
-    assert any(h.length_bp == 35 for h in new_helices), "new length must be present in extruded helix"
+    assert any(h.length_bp == 35 for h in new_helices), (
+        "new length must be present in extruded helix"
+    )
 
 
 def test_edit_refused_when_later_snapshots_exist():
     """If a later snapshot exists, editing returns 409 with a useful message."""
-    client.post("/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"})
-    client.post("/api/design/bundle-segment", json={
-        "cells": [[0, 1]], "length_bp": 21, "plane": "XY", "offset_nm": 14.0,
-    })
+    client.post(
+        "/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"}
+    )
+    client.post(
+        "/api/design/bundle-segment",
+        json={
+            "cells": [[0, 1]],
+            "length_bp": 21,
+            "plane": "XY",
+            "offset_nm": 14.0,
+        },
+    )
     # Now add a SECOND snapshot — autobreak — so the segment is no longer the latest.
     client.post("/api/design/auto-break")
 
     log = design_state.get_or_404().feature_log
-    seg_idx = next(i for i, e in enumerate(log) if isinstance(e, SnapshotLogEntry) and e.op_kind == 'extrude-segment')
+    seg_idx = next(
+        i
+        for i, e in enumerate(log)
+        if isinstance(e, SnapshotLogEntry) and e.op_kind == "extrude-segment"
+    )
     new_params = dict(log[seg_idx].params)
-    new_params['length_bp'] = 7
+    new_params["length_bp"] = 7
 
     r = client.post(f"/api/design/features/{seg_idx}/edit", json={"params": new_params})
     assert r.status_code == 409, r.text
-    assert 'later snapshot' in r.text.lower()
+    assert "later snapshot" in r.text.lower()
 
 
 def test_edit_deformation_after_seek_back_saves_and_keeps_later_ops():
@@ -698,40 +813,77 @@ def test_edit_deformation_after_seek_back_saves_and_keeps_later_ops():
     # Create via the endpoint so the log has a bundle-create SNAPSHOT before the
     # deformations — only then does seek to (twist_idx - 1) actually roll back
     # (position -1 means "seek to end", so the twist must not be at log index 0).
-    client.post("/api/design/bundle", json={
-        "cells": [[0, 0], [0, 1]], "length_bp": 84, "name": "B"})
+    client.post(
+        "/api/design/bundle",
+        json={"cells": [[0, 0], [0, 1]], "length_bp": 84, "name": "B"},
+    )
     d = design_state.get_or_404()
     max_bp = max(h.bp_start + h.length_bp for h in d.helices) - 1
 
     # Twist then bend over the same span (the teeth.nadoc combined case).
-    r = client.post("/api/design/deformation", json={
-        "type": "twist", "plane_a_bp": 0, "plane_b_bp": max_bp,
-        "params": {"kind": "twist", "total_degrees": 45.0}})
+    r = client.post(
+        "/api/design/deformation",
+        json={
+            "type": "twist",
+            "plane_a_bp": 0,
+            "plane_b_bp": max_bp,
+            "params": {"kind": "twist", "total_degrees": 45.0},
+        },
+    )
     assert r.status_code == 200, r.text
-    r = client.post("/api/design/deformation", json={
-        "type": "bend", "plane_a_bp": 0, "plane_b_bp": max_bp,
-        "params": {"kind": "bend", "curvature_deg_per_bp": 90.0 / max_bp, "direction_deg": 0.0}})
+    r = client.post(
+        "/api/design/deformation",
+        json={
+            "type": "bend",
+            "plane_a_bp": 0,
+            "plane_b_bp": max_bp,
+            "params": {
+                "kind": "bend",
+                "curvature_deg_per_bp": 90.0 / max_bp,
+                "direction_deg": 0.0,
+            },
+        },
+    )
     assert r.status_code == 200, r.text
 
     log = design_state.get_or_404().feature_log
-    twist_idx = next(i for i, e in enumerate(log)
-                     if isinstance(e, DeformationLogEntry)
-                     and e.op_snapshot and e.op_snapshot.type == 'twist')
+    twist_idx = next(
+        i
+        for i, e in enumerate(log)
+        if isinstance(e, DeformationLogEntry)
+        and e.op_snapshot
+        and e.op_snapshot.type == "twist"
+    )
     twist_id = log[twist_idx].deformation_id
 
     # Frontend pre-edit seek: roll the design back to before the twist. This
     # removes BOTH deformations from the live design and (in the real flow) adds
     # a transient preview op. Simulate the preview op too.
     client.post("/api/design/features/seek", json={"position": twist_idx - 1})
-    client.post("/api/design/deformation", json={
-        "type": "twist", "plane_a_bp": 0, "plane_b_bp": max_bp,
-        "params": {"kind": "twist", "total_degrees": 60.0}, "preview": True})
+    client.post(
+        "/api/design/deformation",
+        json={
+            "type": "twist",
+            "plane_a_bp": 0,
+            "plane_b_bp": max_bp,
+            "params": {"kind": "twist", "total_degrees": 60.0},
+            "preview": True,
+        },
+    )
     assert len(design_state.get_or_404().deformations) == 1  # only the preview op
 
     # Apply the edit: change the twist to 90°.
-    r = client.post(f"/api/design/features/{twist_idx}/edit", json={"params": {
-        "type": "twist", "plane_a_bp": 0, "plane_b_bp": max_bp,
-        "params": {"kind": "twist", "total_degrees": 90.0}}})
+    r = client.post(
+        f"/api/design/features/{twist_idx}/edit",
+        json={
+            "params": {
+                "type": "twist",
+                "plane_a_bp": 0,
+                "plane_b_bp": max_bp,
+                "params": {"kind": "twist", "total_degrees": 90.0},
+            }
+        },
+    )
     assert r.status_code == 200, r.text
 
     after = design_state.get_or_404()
@@ -749,10 +901,12 @@ def test_edit_deformation_after_seek_back_saves_and_keeps_later_ops():
 
 def test_edit_refused_for_non_snapshot_entry():
     """Edit endpoint returns 400 if asked to edit a delta entry (deformation/cluster/overhang)."""
-    client.post("/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"})
+    client.post(
+        "/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"}
+    )
     # Inject a synthetic deformation log entry — bypassing the API for test simplicity.
     d = design_state.get_or_404()
-    d.feature_log.append(DeformationLogEntry(deformation_id='nonexistent'))
+    d.feature_log.append(DeformationLogEntry(deformation_id="nonexistent"))
     design_state.set_design_silent(d)
 
     delta_idx = len(design_state.get_or_404().feature_log) - 1

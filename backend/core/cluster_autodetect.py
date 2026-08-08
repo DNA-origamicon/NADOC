@@ -49,8 +49,9 @@ def _cluster_bundle_regions(design: Design) -> Design:
     from backend.core.constants import HC_CROSSOVER_PERIOD, SQ_CROSSOVER_PERIOD
 
     ref_ids = design.reference_helix_ids()
-    gridded = [h for h in design.helices
-               if h.grid_pos is not None and h.id not in ref_ids]
+    gridded = [
+        h for h in design.helices if h.grid_pos is not None and h.id not in ref_ids
+    ]
     if not gridded:
         return design  # nothing clusterable; _ensure_default_cluster handles it
 
@@ -58,15 +59,20 @@ def _cluster_bundle_regions(design: Design) -> Design:
         (h.grid_pos[0], h.grid_pos[1]): h.id for h in gridded
     }
     helix_ids = {h.id for h in gridded}
-    period = (HC_CROSSOVER_PERIOD if design.lattice_type == LatticeType.HONEYCOMB
-              else SQ_CROSSOVER_PERIOD)
+    period = (
+        HC_CROSSOVER_PERIOD
+        if design.lattice_type == LatticeType.HONEYCOMB
+        else SQ_CROSSOVER_PERIOD
+    )
 
     adj: dict[str, set[str]] = {hid: set() for hid in helix_ids}
     for h in gridded:
         row, col = h.grid_pos
         for is_scaf in (False, True):
             for idx in range(period):
-                nb = crossover_neighbor(design.lattice_type, row, col, idx, is_scaffold=is_scaf)
+                nb = crossover_neighbor(
+                    design.lattice_type, row, col, idx, is_scaffold=is_scaf
+                )
                 if nb is not None and nb in cell_to_id:
                     nb_id = cell_to_id[nb]
                     if nb_id != h.id:
@@ -98,7 +104,9 @@ def _cluster_bundle_regions(design: Design) -> Design:
 
     components.sort(key=lambda c: c[0])
     clusters = [
-        ClusterRigidTransform(name=f"Cluster {n}", is_default=False, auto_created=True, helix_ids=hids)
+        ClusterRigidTransform(
+            name=f"Cluster {n}", is_default=False, auto_created=True, helix_ids=hids
+        )
         for n, hids in enumerate(components, start=1)
     ]
     return design.copy_with(cluster_transforms=clusters)
@@ -145,11 +153,14 @@ def _cluster_by_lattice_neighbors(design: Design) -> Design:
     cell_to_id: dict[tuple[int, int], str] = {
         (h.grid_pos[0], h.grid_pos[1]): h.id for h in gridded
     }
-    period = HC_CROSSOVER_PERIOD if design.lattice_type == LatticeType.HONEYCOMB else SQ_CROSSOVER_PERIOD
+    period = (
+        HC_CROSSOVER_PERIOD
+        if design.lattice_type == LatticeType.HONEYCOMB
+        else SQ_CROSSOVER_PERIOD
+    )
 
     crossover_pairs: set[frozenset] = {
-        frozenset({xo.half_a.helix_id, xo.half_b.helix_id})
-        for xo in design.crossovers
+        frozenset({xo.half_a.helix_id, xo.half_b.helix_id}) for xo in design.crossovers
     }
     fl_pairs: set[frozenset] = {
         frozenset({fl.three_prime_helix_id, fl.five_prime_helix_id})
@@ -165,7 +176,9 @@ def _cluster_by_lattice_neighbors(design: Design) -> Design:
             row, col = h.grid_pos
             for is_scaf in (False, True):
                 for idx in range(period):
-                    nb = crossover_neighbor(design.lattice_type, row, col, idx, is_scaffold=is_scaf)
+                    nb = crossover_neighbor(
+                        design.lattice_type, row, col, idx, is_scaffold=is_scaf
+                    )
                     if nb is not None and nb in cell_to_id:
                         nb_id = cell_to_id[nb]
                         if nb_id in helix_ids and nb_id != h.id:
@@ -175,7 +188,9 @@ def _cluster_by_lattice_neighbors(design: Design) -> Design:
                                 adj[nb_id].add(h.id)
         return adj
 
-    def _connected_components(helix_ids: set[str], adj: dict[str, set[str]]) -> list[list[str]]:
+    def _connected_components(
+        helix_ids: set[str], adj: dict[str, set[str]]
+    ) -> list[list[str]]:
         visited: set[str] = set()
         comps: list[list[str]] = []
         for hid in helix_ids:
@@ -220,7 +235,9 @@ def _cluster_by_lattice_neighbors(design: Design) -> Design:
             if len(scafs) == 1
         }
         phase1_ids: set[str] = set(exclusive.keys())
-        bridge_ids: set[str] = {hid for hid, scafs in h_to_scaf.items() if len(scafs) > 1}
+        bridge_ids: set[str] = {
+            hid for hid, scafs in h_to_scaf.items() if len(scafs) > 1
+        }
     else:
         # No module scaffold strands: treat all gridded helices as one pseudo-scaffold.
         exclusive = {h.id: 0 for h in gridded}
@@ -329,8 +346,9 @@ def _cluster_by_lattice_neighbors(design: Design) -> Design:
                     if partner in helix_to_comp and helix_to_comp[partner] in ci_list:
                         cxo = helix_to_comp[partner]
                         comp_xo[cxo] = comp_xo.get(cxo, 0) + 1
-                best_ci = (max(comp_xo, key=lambda c: comp_xo[c])
-                           if comp_xo else ci_list[0])
+                best_ci = (
+                    max(comp_xo, key=lambda c: comp_xo[c]) if comp_xo else ci_list[0]
+                )
 
             comp_domain_ids[best_ci].append(_DR(strand_id=strand.id, domain_index=di))
             bridge_ci_map.setdefault(bridge_h.id, set()).add(best_ci)
@@ -339,7 +357,9 @@ def _cluster_by_lattice_neighbors(design: Design) -> Design:
     # Only crossovers to Phase-1 exclusive helices are used; orphan helices with
     # no Phase-1 crossover partners are grouped by lattice adjacency.
 
-    orphan_helices = [h for h in gridded if h.id not in phase1_ids and h.id not in bridge_ids]
+    orphan_helices = [
+        h for h in gridded if h.id not in phase1_ids and h.id not in bridge_ids
+    ]
     absorbed: dict[str, int] = {}
     unconnected: list = []
 
@@ -369,7 +389,9 @@ def _cluster_by_lattice_neighbors(design: Design) -> Design:
 
     # ── Rebuild final components ───────────────────────────────────────────────
 
-    comp_helices: dict[int, list[str]] = {i: list(comp) for i, comp in enumerate(components)}
+    comp_helices: dict[int, list[str]] = {
+        i: list(comp) for i, comp in enumerate(components)
+    }
     # Add bridge helix IDs to every cluster that has domain refs on them.
     for bridge_hid, ci_set in bridge_ci_map.items():
         for ci in ci_set:
@@ -383,7 +405,7 @@ def _cluster_by_lattice_neighbors(design: Design) -> Design:
 
     # Sort clusters by minimum helix id, preserving domain_ids pairing.
     indexed = [(ci, sorted(comp_helices[ci])) for ci in comp_helices]
-    indexed.sort(key=lambda x: x[1][0] if x[1] else '')
+    indexed.sort(key=lambda x: x[1][0] if x[1] else "")
     clusters = [
         ClusterRigidTransform(
             name=f"Cluster {n}",
@@ -431,7 +453,9 @@ def _cluster_by_scaffold_routing(design: Design) -> Design:
         return design.copy_with(cluster_transforms=[])
 
     # ── Build bp coverage per scaffold per helix ──────────────────────────────
-    scaf_cov: dict[int, dict[str, tuple[int, int]]] = {si: {} for si in module_scaffolds}
+    scaf_cov: dict[int, dict[str, tuple[int, int]]] = {
+        si: {} for si in module_scaffolds
+    }
     scaf_helix_ids: dict[int, set[str]] = {si: set() for si in module_scaffolds}
 
     for si in module_scaffolds:
@@ -455,7 +479,9 @@ def _cluster_by_scaffold_routing(design: Design) -> Design:
     bridge_ids: set[str] = {hid for hid, scafs in h_to_scaf.items() if len(scafs) > 1}
 
     # ── Initialize cluster structures ─────────────────────────────────────────
-    cluster_helix_ids: dict[int, set[str]] = {si: set(scaf_helix_ids[si]) for si in module_scaffolds}
+    cluster_helix_ids: dict[int, set[str]] = {
+        si: set(scaf_helix_ids[si]) for si in module_scaffolds
+    }
     cluster_domain_ids: dict[int, list] = {si: [] for si in module_scaffolds}
 
     # Scaffold's own domains on bridge helices need explicit DomainRef entries.
@@ -492,7 +518,9 @@ def _cluster_by_scaffold_routing(design: Design) -> Design:
 
             if hid in bridge_ids:
                 # Bridge helix: domain ref needed to disambiguate between clusters.
-                cluster_domain_ids[best_si].append(_DR(strand_id=strand.id, domain_index=di))
+                cluster_domain_ids[best_si].append(
+                    _DR(strand_id=strand.id, domain_index=di)
+                )
             # Exclusive helix: implicitly covered by helix_ids — no DomainRef needed.
 
     # ── Absorb orphan helices (no scaffold) by crossover majority ─────────────
@@ -518,7 +546,9 @@ def _cluster_by_scaffold_routing(design: Design) -> Design:
     # ── Build ClusterRigidTransform objects ───────────────────────────────────
     scaffolds_sorted = sorted(
         module_scaffolds,
-        key=lambda si: sorted(cluster_helix_ids[si])[0] if cluster_helix_ids[si] else '',
+        key=lambda si: (
+            sorted(cluster_helix_ids[si])[0] if cluster_helix_ids[si] else ""
+        ),
     )
     clusters = [
         ClusterRigidTransform(
@@ -547,12 +577,14 @@ def _geometry_clusters_multi_scaffold(design: Design) -> Design:
     gridded = [h for h in design.helices if h.grid_pos is not None]
 
     module_scaffolds: list[int] = [
-        i for i, s in enumerate(design.strands)
-        if s.is_scaffold
-        and len({d.helix_id for d in s.domains}) >= _MIN_MODULE_HELICES
+        i
+        for i, s in enumerate(design.strands)
+        if s.is_scaffold and len({d.helix_id for d in s.domains}) >= _MIN_MODULE_HELICES
     ]
 
-    scaf_cov: dict[int, dict[str, tuple[int, int]]] = {si: {} for si in module_scaffolds}
+    scaf_cov: dict[int, dict[str, tuple[int, int]]] = {
+        si: {} for si in module_scaffolds
+    }
     scaf_helix_ids: dict[int, set[str]] = {si: set() for si in module_scaffolds}
     for si in module_scaffolds:
         for d in design.strands[si].domains:
@@ -613,7 +645,9 @@ def _geometry_clusters_multi_scaffold(design: Design) -> Design:
 
     scaffolds_sorted = sorted(
         module_scaffolds,
-        key=lambda si: sorted(cluster_helix_ids[si])[0] if cluster_helix_ids[si] else '',
+        key=lambda si: (
+            sorted(cluster_helix_ids[si])[0] if cluster_helix_ids[si] else ""
+        ),
     )
     clusters = [
         ClusterRigidTransform(
@@ -645,9 +679,9 @@ def _autodetect_clusters(design: Design) -> Design:
     """
     _MIN_MODULE_HELICES = 3
     n_module_scaffolds = sum(
-        1 for s in design.strands
-        if s.is_scaffold
-        and len({d.helix_id for d in s.domains}) >= _MIN_MODULE_HELICES
+        1
+        for s in design.strands
+        if s.is_scaffold and len({d.helix_id for d in s.domains}) >= _MIN_MODULE_HELICES
     )
 
     scaf_design = _cluster_by_scaffold_routing(design)

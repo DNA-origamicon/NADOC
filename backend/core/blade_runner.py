@@ -86,26 +86,33 @@ def blade_available() -> tuple[bool, str]:
     """
     py = find_blade_python()
     if not py:
-        return False, ("No OpenMM environment found. Expected a micromamba/conda env with "
-                       "openmm+parmed (e.g. ~/micromamba/envs/gpu), or set $BLADE_OPENMM_ENV "
-                       "to its prefix.")
+        return False, (
+            "No OpenMM environment found. Expected a micromamba/conda env with "
+            "openmm+parmed (e.g. ~/micromamba/envs/gpu), or set $BLADE_OPENMM_ENV "
+            "to its prefix."
+        )
     try:
         proc = subprocess.run(
             [py, "-c", "import openmm, parmed; print(openmm.version.version)"],
-            capture_output=True, text=True, timeout=120,
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
     except Exception as exc:  # noqa: BLE001
         return False, f"Could not run the OpenMM interpreter ({py}): {exc}"
     if proc.returncode != 0:
         return False, f"{py} cannot import openmm/parmed: {proc.stderr.strip()[:300]}"
     from backend.core.namd_topology import find_psfgen
+
     try:
         psfgen = find_psfgen()
     except Exception:  # noqa: BLE001
         psfgen = None
     if not psfgen:
-        return False, ("psfgen not found — BLADE builds its CHARMM topology with it. "
-                       "Set $NADOC_PSFGEN_BIN or install NAMD.")
+        return False, (
+            "psfgen not found — BLADE builds its CHARMM topology with it. "
+            "Set $NADOC_PSFGEN_BIN or install NAMD."
+        )
     return True, f"OpenMM {proc.stdout.strip()} via {py}"
 
 
@@ -125,7 +132,7 @@ def _pid_alive(pid: Optional[int]) -> bool:
     except ProcessLookupError:
         return False
     except PermissionError:
-        return True   # exists but owned by another user — shouldn't happen here
+        return True  # exists but owned by another user — shouldn't happen here
     return True
 
 
@@ -162,13 +169,14 @@ def _kill_pid(pid: int) -> None:
             os.killpg(pgid, sig) if group else os.kill(pid, sig)
         except OSError:
             return
-        for _ in range(20):            # ≤1 s grace before escalating to SIGKILL
+        for _ in range(20):  # ≤1 s grace before escalating to SIGKILL
             if not _pid_alive(pid):
                 return
             time.sleep(0.05)
 
 
 # ── Prepare: write the self-contained job dir ─────────────────────────────────
+
 
 def prepare_blade_job(design: Design, job: BladeJob, workspace_dir: Path) -> None:
     """Write a self-contained ``design.json`` snapshot into the job dir, so the run
@@ -189,6 +197,7 @@ def _load_snapshot_design(job_dir: Path) -> Optional[Design]:
 
 
 # ── Cache accessors ───────────────────────────────────────────────────────────
+
 
 def load_cached(job_dir: Path, name: str) -> Optional[dict]:
     """Load a cached JSON payload from the job dir, or None."""
@@ -224,6 +233,7 @@ def load_result(job_dir: Path) -> Optional[dict]:
 # NAMD's solvation the raw (N,3) coords via ``build_namd_solvated_package(solute_coords=)``.
 # Output is a NAMD INPUT artifact — Physical-layer only, never written back into topology.
 
+
 class BladeNamdSeed:
     """A BLADE-relaxed structure ready to seed a NAMD run.
 
@@ -251,6 +261,7 @@ def _parse_pdb_xyz(pdb_text: str):
     from ``relaxed.pdb`` matches the order that code overwrites.
     """
     import numpy as np
+
     rows = []
     for ln in pdb_text.splitlines():
         if ln.startswith(("ATOM", "HETATM")):
@@ -263,18 +274,21 @@ def assert_blade_namd_seed_available(job_id: str, workspace_dir: Path) -> None:
     the (large) relaxed PDB.  Lets the create-job route reject a bad ``blade_job_id`` with a
     fast 400 before any work is queued.  Raises FileNotFoundError with a user-facing message.
     """
-    job = BladeJob.load(job_id, workspace_dir)   # FileNotFoundError if unknown
+    job = BladeJob.load(job_id, workspace_dir)  # FileNotFoundError if unknown
     jd = job.job_dir(workspace_dir)
     if job.status != BladeStatus.completed:
         raise FileNotFoundError(
             f"BLADE job {job_id} is {job.status.value}, not completed — run a relax first "
-            f"before seeding NAMD from it.")
+            f"before seeding NAMD from it."
+        )
     if not (jd / "relaxed.pdb").exists():
         raise FileNotFoundError(
-            f"BLADE job {job_id} has no relaxed.pdb; cannot build a NAMD seed.")
+            f"BLADE job {job_id} has no relaxed.pdb; cannot build a NAMD seed."
+        )
     if not (jd / "design.json").exists():
         raise FileNotFoundError(
-            f"BLADE job {job_id} has no design.json snapshot; cannot build a NAMD seed.")
+            f"BLADE job {job_id} has no design.json snapshot; cannot build a NAMD seed."
+        )
 
 
 def build_namd_seed_from_blade(job_id: str, workspace_dir: Path) -> BladeNamdSeed:
@@ -289,23 +303,26 @@ def build_namd_seed_from_blade(job_id: str, workspace_dir: Path) -> BladeNamdSee
     jd = job.job_dir(workspace_dir)
     if job.status != BladeStatus.completed:
         raise FileNotFoundError(
-            f"BLADE job {job_id} is {job.status.value}, not completed.")
+            f"BLADE job {job_id} is {job.status.value}, not completed."
+        )
     design = _load_snapshot_design(jd)
     if design is None:
         raise FileNotFoundError(
-            f"BLADE job {job_id} has no design.json snapshot; cannot build a NAMD seed.")
+            f"BLADE job {job_id} has no design.json snapshot; cannot build a NAMD seed."
+        )
     pdb = jd / "relaxed.pdb"
     if not pdb.exists():
         raise FileNotFoundError(
-            f"BLADE job {job_id} has no relaxed.pdb; run a relax first.")
+            f"BLADE job {job_id} has no relaxed.pdb; run a relax first."
+        )
     coords = _parse_pdb_xyz(pdb.read_text())
     if not len(coords):
-        raise FileNotFoundError(
-            f"BLADE job {job_id} relaxed.pdb has no ATOM records.")
+        raise FileNotFoundError(f"BLADE job {job_id} relaxed.pdb has no ATOM records.")
     return BladeNamdSeed(design=design, solute_coords=coords, source_job_id=job_id)
 
 
 # ── Progress ──────────────────────────────────────────────────────────────────
+
 
 def _estimate_seconds(job: BladeJob) -> float:
     """Fallback wall-clock estimate, used only until the gpu script reports its first real
@@ -316,11 +333,10 @@ def _estimate_seconds(job: BladeJob) -> float:
     CPU has no cutoff-driven O(N) win in practice and measures ~20× slower — a bad estimate
     there just means the bar crawls to its cap, which is honest for a run that IS slow.
     """
-    atoms = max(1.0, job.n_nucleotides * 20.0)     # ≈ 20 heavy+H atoms per nucleotide
+    atoms = max(1.0, job.n_nucleotides * 20.0)  # ≈ 20 heavy+H atoms per nucleotide
     scale = atoms / 2600.0
     est = 8.0 + scale * (
-        (job.minimize_iters / 400.0) * 20.0 +
-        (job.langevin_ps / 3.0) * 45.0
+        (job.minimize_iters / 400.0) * 20.0 + (job.langevin_ps / 3.0) * 45.0
     )
     if (job.platform or "CUDA").upper() == "CPU":
         est *= 20.0
@@ -330,7 +346,9 @@ def _estimate_seconds(job: BladeJob) -> float:
 PROGRESS_FILE = "progress.json"
 
 
-def write_progress(job_dir: Path, fraction: float, phase: str, info: dict | None = None) -> None:
+def write_progress(
+    job_dir: Path, fraction: float, phase: str, info: dict | None = None
+) -> None:
     """Publish REAL progress from the (detached) worker to the job dir.
 
     Written atomically — the server polls this file while the worker runs, and a torn read
@@ -338,14 +356,18 @@ def write_progress(job_dir: Path, fraction: float, phase: str, info: dict | None
     run that has already burned minutes of GPU."""
     try:
         tmp = job_dir / (PROGRESS_FILE + ".tmp")
-        tmp.write_text(json.dumps({
-            "fraction": max(0.0, min(1.0, float(fraction))),
-            "phase":    phase,
-            "at":       time.time(),
-            **(info or {}),
-        }))
+        tmp.write_text(
+            json.dumps(
+                {
+                    "fraction": max(0.0, min(1.0, float(fraction))),
+                    "phase": phase,
+                    "at": time.time(),
+                    **(info or {}),
+                }
+            )
+        )
         tmp.replace(job_dir / PROGRESS_FILE)
-    except Exception:                                  # pragma: no cover — best-effort
+    except Exception:  # pragma: no cover — best-effort
         pass
 
 
@@ -355,7 +377,7 @@ def log_worker(job_dir: Path, message: str) -> None:
     try:
         with (job_dir / "worker.log").open("a") as fh:
             fh.write(f"[{time.strftime('%H:%M:%S')}] {message}\n")
-    except Exception:                                  # pragma: no cover — best-effort
+    except Exception:  # pragma: no cover — best-effort
         pass
 
 
@@ -392,25 +414,28 @@ def job_progress(job: BladeJob, workspace_dir: Path) -> dict:
             phase = prog.get("phase")
             overall = min(0.99, float(frac))
             eta_seconds = max(0.0, elapsed / max(frac, 1e-3) - elapsed)
-            detail = {k: prog.get(k) for k in
-                      ("step", "n_steps", "steps_per_s", "n_atoms", "platform_used")
-                      if prog.get(k) is not None}
+            detail = {
+                k: prog.get(k)
+                for k in ("step", "n_steps", "steps_per_s", "n_atoms", "platform_used")
+                if prog.get(k) is not None
+            }
         else:
             est = _estimate_seconds(job)
             overall = min(0.97, elapsed / est)
             eta_seconds = max(0.0, est - elapsed)
     return {
-        "overall":      overall,
-        "status":       job.status.value,
+        "overall": overall,
+        "status": job.status.value,
         "stage_status": stage.status if stage else None,
-        "eta_seconds":  eta_seconds,
-        "phase":        phase,
-        "sim_seconds":  job.sim_seconds,
+        "eta_seconds": eta_seconds,
+        "phase": phase,
+        "sim_seconds": job.sim_seconds,
         **detail,
     }
 
 
 # ── Execution ─────────────────────────────────────────────────────────────────
+
 
 def build_solute_inputs(design: Design, jd: Path) -> dict:
     """Build the OpenMM inputs for ``design`` in the job dir → the gpu-script config dict.
@@ -434,13 +459,14 @@ def build_solute_inputs(design: Design, jd: Path) -> dict:
     solute_psf.write_text(tb.psf_text)
     # Atom count straight off the coordinate file — CharmmTopologyBuild.metadata carries no
     # count, and this is the number the gpu script slices the PSF with.
-    n_atoms = sum(1 for ln in tb.pdb_text.splitlines()
-                  if ln.startswith(("ATOM", "HETATM")))
+    n_atoms = sum(
+        1 for ln in tb.pdb_text.splitlines() if ln.startswith(("ATOM", "HETATM"))
+    )
     return {
         "solute_pdb": str(ideal_pdb),
-        "psf_path":   str(solute_psf),
-        "ff_dir":     str(_FF_DIR),
-        "n_solute":   n_atoms,
+        "psf_path": str(solute_psf),
+        "ff_dir": str(_FF_DIR),
+        "n_solute": n_atoms,
     }
 
 
@@ -477,18 +503,21 @@ def relax_and_cache(job: BladeJob, workspace_dir: Path) -> None:
         if not py:
             raise RuntimeError(
                 "No OpenMM environment found (openmm/parmed are not in the backend env). "
-                "Set $BLADE_OPENMM_ENV to a micromamba/conda prefix that has them.")
-        cfg.update({
-            "out_pdb":        str(jd / "relaxed.pdb"),
-            "traj_dcd":       str(jd / "relax.dcd"),
-            "result_json":    str(jd / "result.json"),
-            "minimize_iters": job.minimize_iters,
-            "langevin_ps":    job.langevin_ps,
-            "nb_cutoff_A":    job.nb_cutoff_A,
-            "temp_K":         job.temp_K,
-            "traj_frames":    job.traj_frames,
-            "platform":       job.platform,
-        })
+                "Set $BLADE_OPENMM_ENV to a micromamba/conda prefix that has them."
+            )
+        cfg.update(
+            {
+                "out_pdb": str(jd / "relaxed.pdb"),
+                "traj_dcd": str(jd / "relax.dcd"),
+                "result_json": str(jd / "result.json"),
+                "minimize_iters": job.minimize_iters,
+                "langevin_ps": job.langevin_ps,
+                "nb_cutoff_A": job.nb_cutoff_A,
+                "temp_K": job.temp_K,
+                "traj_frames": job.traj_frames,
+                "platform": job.platform,
+            }
+        )
         (jd / "relax_config.json").write_text(json.dumps(cfg, indent=2))
         if len(job.stages) > 1:
             job.stages[1].status = "running"
@@ -508,15 +537,22 @@ def relax_and_cache(job: BladeJob, workspace_dir: Path) -> None:
         if summary.get("n_atoms"):
             job.n_atoms = summary["n_atoms"]
         if not summary.get("finite", True):
-            raise RuntimeError("relax produced non-finite coordinates (the run blew up)")
+            raise RuntimeError(
+                "relax produced non-finite coordinates (the run blew up)"
+            )
         for st in job.stages:
             st.status = "done"
         job.status = BladeStatus.completed
         job.error = None
         job.save(workspace_dir)
-        logger.info("blade job %s completed in %.1fs (%s, %s atoms, rmsd %.2f Å)",
-                    job.job_id, job.sim_seconds, job.platform_used, job.n_atoms,
-                    job.rmsd_moved_A or 0.0)
+        logger.info(
+            "blade job %s completed in %.1fs (%s, %s atoms, rmsd %.2f Å)",
+            job.job_id,
+            job.sim_seconds,
+            job.platform_used,
+            job.n_atoms,
+            job.rmsd_moved_A or 0.0,
+        )
 
     except Exception as exc:  # noqa: BLE001
         logger.error("blade job %s failed: %s", job.job_id, exc, exc_info=True)
@@ -537,7 +573,12 @@ def _run_gpu_relax(py: str, jd: Path) -> dict:
     panel guessing for the whole run.  Raises on a non-zero exit or an ``error`` event.
     """
     proc = subprocess.Popen(
-        [py, "-m", "backend.ml.propagator.blade_relax_gpu", str(jd / "relax_config.json")],
+        [
+            py,
+            "-m",
+            "backend.ml.propagator.blade_relax_gpu",
+            str(jd / "relax_config.json"),
+        ],
         cwd=str(_REPO_ROOT),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -561,27 +602,46 @@ def _run_gpu_relax(py: str, jd: Path) -> dict:
         kind = ev.get("event")
         if kind == "progress":
             frac = float(ev.get("fraction", 0.0))
-            write_progress(jd, frac, ev.get("phase", "relax"), {
-                k: ev.get(k) for k in ("step", "n_steps") if ev.get(k) is not None})
+            write_progress(
+                jd,
+                frac,
+                ev.get("phase", "relax"),
+                {k: ev.get(k) for k in ("step", "n_steps") if ev.get(k) is not None},
+            )
             # ~every 10 % so a long run writes ~10 lines, not hundreds.
             if frac - last_logged >= 0.1 or frac >= 1.0:
                 last_logged = frac
-                log_worker(jd, f"{frac * 100:.0f}%  {ev.get('phase', '')}"
-                               + (f"  step {ev.get('step')}/{ev.get('n_steps')}"
-                                  if ev.get("step") is not None else ""))
+                log_worker(
+                    jd,
+                    f"{frac * 100:.0f}%  {ev.get('phase', '')}"
+                    + (
+                        f"  step {ev.get('step')}/{ev.get('n_steps')}"
+                        if ev.get("step") is not None
+                        else ""
+                    ),
+                )
         elif kind == "platform":
-            log_worker(jd, f"platform={ev.get('using')} atoms={ev.get('n')} "
-                           f"cutoff={ev.get('cutoff_A')} Å")
+            log_worker(
+                jd,
+                f"platform={ev.get('using')} atoms={ev.get('n')} "
+                f"cutoff={ev.get('cutoff_A')} Å",
+            )
         elif kind == "platform_fallback":
             # The CUDA→CPU fall-back is a ~20× slowdown, not a detail — say so loudly.
-            log_worker(jd, f"WARNING: {ev.get('requested')} unavailable, falling back to CPU "
-                           f"({ev.get('error', '')[:200]})")
+            log_worker(
+                jd,
+                f"WARNING: {ev.get('requested')} unavailable, falling back to CPU "
+                f"({ev.get('error', '')[:200]})",
+            )
         elif kind == "minimize_retry":
             # The relax hit a non-finite coordinate (a clashed dense bundle) and is retrying with
             # more minimization — a recovery, not yet a failure.
-            log_worker(jd, f"minimization retry {ev.get('attempt')}: escalating to "
-                           f"minimize_iters={ev.get('minimize_iters')} "
-                           f"({ev.get('reason', 'non-finite')})")
+            log_worker(
+                jd,
+                f"minimization retry {ev.get('attempt')}: escalating to "
+                f"minimize_iters={ev.get('minimize_iters')} "
+                f"({ev.get('reason', 'non-finite')})",
+            )
         elif kind == "result":
             summary = {k: v for k, v in ev.items() if k != "event"}
         elif kind == "error":
@@ -608,16 +668,19 @@ def _cache_relax_output(job: BladeJob, jd: Path, summary: dict) -> None:
     """
     display = {
         "relaxed_pdb": str(jd / "relaxed.pdb"),
-        "n_atoms":     summary.get("n_atoms"),
-        "summary":     summary,
+        "n_atoms": summary.get("n_atoms"),
+        "summary": summary,
     }
     (jd / "display.json").write_text(json.dumps(display))
     try:
         traj = _build_trajectory(job, jd)
         if traj and traj.get("n_frames"):
             (jd / "trajectory.json").write_text(json.dumps(traj))
-            log_worker(jd, f"trajectory cached: {traj['n_frames']} frames, "
-                           f"{traj['n_nucleotides']} nucleotides")
+            log_worker(
+                jd,
+                f"trajectory cached: {traj['n_frames']} frames, "
+                f"{traj['n_nucleotides']} nucleotides",
+            )
     except Exception as exc:  # noqa: BLE001 — a missing trajectory must not fail a good relax
         log_worker(jd, f"trajectory cache skipped: {exc}")
 
@@ -645,6 +708,7 @@ def _build_trajectory(job: BladeJob, jd: Path) -> Optional[dict]:
     if design is None:
         return None
     from backend.core.md_trajectory import md_composite_trajectory
+
     return md_composite_trajectory(
         str(psf),
         [("relax", "relax", str(dcd))],
@@ -666,13 +730,19 @@ def start_job(job: BladeJob, workspace_dir: Path) -> None:
     _check_sim_guard(job)
     jd = job.job_dir(workspace_dir)
     jd.mkdir(parents=True, exist_ok=True)
-    log_fh = open(jd / "worker.log", "w")   # noqa: SIM115 — closed by the reaper thread
+    log_fh = open(jd / "worker.log", "w")  # noqa: SIM115 — closed by the reaper thread
     proc = subprocess.Popen(
-        [sys.executable, "-m", "backend.core.blade_worker", str(workspace_dir), job.job_id],
+        [
+            sys.executable,
+            "-m",
+            "backend.core.blade_worker",
+            str(workspace_dir),
+            job.job_id,
+        ],
         cwd=str(_REPO_ROOT),
         stdout=log_fh,
         stderr=subprocess.STDOUT,
-        start_new_session=True,   # own session → outlives a uvicorn --reload of the parent
+        start_new_session=True,  # own session → outlives a uvicorn --reload of the parent
     )
     job.pid = proc.pid
     # Flip the JOB status to running (not just the stage) so the panel's progress bar + ETA —
@@ -686,7 +756,7 @@ def start_job(job: BladeJob, workspace_dir: Path) -> None:
 
     def _reap() -> None:
         try:
-            proc.wait()   # reap the child so a finished worker isn't left a zombie
+            proc.wait()  # reap the child so a finished worker isn't left a zombie
         except Exception:  # noqa: BLE001
             pass
         finally:
@@ -712,6 +782,7 @@ def _check_sim_guard(job: BladeJob) -> None:
         return
     try:
         from backend.core.hardware import heavy_sim_running
+
         running, reason = heavy_sim_running()
     except Exception:  # noqa: BLE001 — fail open
         return
@@ -719,7 +790,8 @@ def _check_sim_guard(job: BladeJob) -> None:
         raise RuntimeError(
             f"A heavy simulation is running on this machine — {reason}. A BLADE relax would "
             f"contend with it for the GPU. Wait for it to finish, choose the CPU platform, or "
-            f"set NADOC_IGNORE_SIM_GUARD=1.")
+            f"set NADOC_IGNORE_SIM_GUARD=1."
+        )
 
 
 def stop_job(job_id: str, workspace_dir: Path) -> bool:

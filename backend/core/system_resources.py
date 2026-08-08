@@ -15,6 +15,7 @@ The shaping is split into a pure core (:func:`build_resource_sample`, no I/O —
 tested) and a thin gatherer (:func:`sample_system_resources`) that reads psutil +
 ``nvidia-smi`` and hands the raw numbers to the core.
 """
+
 from __future__ import annotations
 
 from typing import Optional

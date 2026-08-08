@@ -43,8 +43,9 @@ def _closest_on_seg(p: np.ndarray, p0: np.ndarray, p1: np.ndarray) -> np.ndarray
     return p0 + t * ab
 
 
-def _arc_points(a: np.ndarray, b: np.ndarray, contour_nm: float,
-                n: int, bow_dir: np.ndarray) -> list[np.ndarray]:
+def _arc_points(
+    a: np.ndarray, b: np.ndarray, contour_nm: float, n: int, bow_dir: np.ndarray
+) -> list[np.ndarray]:
     """Port of flexible_arcs.js _arcPoints for display parity."""
     if n <= 0:
         return []
@@ -104,8 +105,9 @@ def _obstacle_segments(design: Design) -> list[tuple[np.ndarray, np.ndarray]]:
     return segs
 
 
-def _bow_dir(a: np.ndarray, b: np.ndarray,
-             obstacles: list[tuple[np.ndarray, np.ndarray]]) -> np.ndarray:
+def _bow_dir(
+    a: np.ndarray, b: np.ndarray, obstacles: list[tuple[np.ndarray, np.ndarray]]
+) -> np.ndarray:
     d = b - a
     d_hat = _normalise(d)
     mid = (a + b) * 0.5
@@ -132,12 +134,13 @@ def flexible_segment_atomistic_frame_overrides(
 
     geometry = _geometry_for_design(design)
     pos_by_key = {
-        (n["helix_id"], int(n["bp_index"]), n["direction"]): np.asarray(n["backbone_position"], dtype=float)
+        (n["helix_id"], int(n["bp_index"]), n["direction"]): np.asarray(
+            n["backbone_position"], dtype=float
+        )
         for n in geometry
     }
     raw_by_key = {
-        (n["helix_id"], int(n["bp_index"]), n["direction"]): n
-        for n in geometry
+        (n["helix_id"], int(n["bp_index"]), n["direction"]): n for n in geometry
     }
     strands_by_id = {s.id: s for s in design.strands}
     obstacles = _obstacle_segments(design)

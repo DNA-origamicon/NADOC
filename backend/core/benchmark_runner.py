@@ -56,6 +56,7 @@ def _round_to_cycle(steps: int) -> int:
     n = round(steps / NAMD_STEPS_PER_CYCLE) * NAMD_STEPS_PER_CYCLE
     return max(NAMD_STEPS_PER_CYCLE, n)
 
+
 # How much of each trial's log to surface in the in-card details view.
 _LOG_TAIL_BYTES = 6_000
 
@@ -330,18 +331,33 @@ async def run_oxdna_trials(
         prerelax_dir = workdir / "prerelax"
         prerelax_dir.mkdir(parents=True, exist_ok=True)
         pre_spec = OxdnaStageSpec(
-            name="bench_prerelax", kind="mc", sim_type="MC", steps=1000,
-            backend="CPU", device="0", max_backbone_force=5.0,
-            max_backbone_force_far=10.0, external_forces=False,
+            name="bench_prerelax",
+            kind="mc",
+            sim_type="MC",
+            steps=1000,
+            backend="CPU",
+            device="0",
+            max_backbone_force=5.0,
+            max_backbone_force_far=10.0,
+            external_forces=False,
             print_conf_interval_override=10_000,  # only the final settled conf
         )
         pre_input = (prerelax_dir / "input.txt").resolve()
-        pre_input.write_text(render_stage_input(pre_spec, f"../{topo.name}", f"../{conf.name}"))
+        pre_input.write_text(
+            render_stage_input(pre_spec, f"../{topo.name}", f"../{conf.name}")
+        )
         pre_log = prerelax_dir / "oxdna.log"
-        state.start_block("settle proxy (MC pre-relax)", f"{oxdna_bin} {pre_input}", pre_log)
+        state.start_block(
+            "settle proxy (MC pre-relax)", f"{oxdna_bin} {pre_input}", pre_log
+        )
         try:
-            rc, _ = await runner(oxdna_bin, pre_input, prerelax_dir, pre_log,
-                                 f"bench-{state.benchmark_id}-prerelax")
+            rc, _ = await runner(
+                oxdna_bin,
+                pre_input,
+                prerelax_dir,
+                pre_log,
+                f"bench-{state.benchmark_id}-prerelax",
+            )
             settled = prerelax_dir / "last_conf.dat"
             if rc == 0 and settled.exists():
                 trial_conf = settled
@@ -381,9 +397,7 @@ async def run_oxdna_trials(
             # be absolute — a repo-relative path wouldn't resolve from inside stage_dir.
             conf_rel = f"../{trial_conf.relative_to(workdir).as_posix()}"
             input_path = (stage_dir / "input.txt").resolve()
-            input_path.write_text(
-                render_stage_input(spec, f"../{topo.name}", conf_rel)
-            )
+            input_path.write_text(render_stage_input(spec, f"../{topo.name}", conf_rel))
             steps_per_s = None
             error = None
             trial_log = stage_dir / "oxdna.log"
@@ -486,8 +500,12 @@ def _write_namd_bench_confs(
         # 4 fs + GPUresident on + HMR PSF == production fast mode (the rest of the
         # header — rigidBonds all, PME, capped box — already matches).
         _common_header(
-            name_stem, box, False,
-            timestep=4.0, gpu_resident=True, structure_psf=hmr_psf.name,
+            name_stem,
+            box,
+            False,
+            timestep=4.0,
+            gpu_resident=True,
+            structure_psf=hmr_psf.name,
         )
         + "outputName         output/bench\n"
         + "dcdFreq            0\n"
@@ -542,7 +560,9 @@ async def run_namd_trials(
             _namd_cmd_str(namd_bin, "bench_min", cpu_count(), ""),
             min_log,
         )
-        min_rc = await runner(namd_bin, "bench_min", package_dir, min_log, cpu_count(), "")
+        min_rc = await runner(
+            namd_bin, "bench_min", package_dir, min_log, cpu_count(), ""
+        )
         state.finish_block()
         # The minimize produces the restart EVERY trial reads.  If it fails, all trials
         # would die the same way (missing bench_min.coor) — fail fast with the real
@@ -562,7 +582,9 @@ async def run_namd_trials(
             ns_per_day = None
             error = None
             state.start_block(
-                cfg.label, _namd_cmd_str(namd_bin, "bench", cfg.threads, cfg.devices), log
+                cfg.label,
+                _namd_cmd_str(namd_bin, "bench", cfg.threads, cfg.devices),
+                log,
             )
             t0 = time.time()
             try:
@@ -612,6 +634,7 @@ def _solvate_once(design: Design, workdir: Path):
     # Use the BASE {stem}.psf, not the derived {stem}_hmr.psf (fast-mode topology);
     # an unfiltered glob is filesystem-order-dependent and can pick _hmr first.
     from backend.core.md_protocols import _base_name_stem  # noqa: PLC0415
+
     name_stem = _base_name_stem(package_dir)
     box = parse_box_from_namd_conf((package_dir / "namd.conf").read_text())
     (package_dir / "output").mkdir(exist_ok=True)
@@ -627,7 +650,9 @@ def _finalize_namd(state: BenchmarkState) -> None:
     state.recommendation = {
         "threads": best["threads"],
         "devices": best["devices"],
-        "label": best.get("label"),  # honest human label (e.g. "+p16 GPU:0" / "GPU:all")
+        "label": best.get(
+            "label"
+        ),  # honest human label (e.g. "+p16 GPU:0" / "GPU:all")
         "ns_per_day": best["ns_per_day"],
         "proxy_nucleotides": state.proxy_nucleotides,
     }

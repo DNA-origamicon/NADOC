@@ -42,7 +42,7 @@ from backend.core.models import (
 
 # Project root — two levels above this file: core/ → backend/ → root
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_LIBRARY_DIR  = _PROJECT_ROOT / "parts-library"
+_LIBRARY_DIR = _PROJECT_ROOT / "parts-library"
 
 
 def _load_design(source) -> Design:
@@ -53,7 +53,7 @@ def _load_design(source) -> Design:
         # Resolve relative to project root then parts-library
         candidates = [
             _PROJECT_ROOT / source.path,
-            _LIBRARY_DIR  / source.path,
+            _LIBRARY_DIR / source.path,
         ]
         for p in candidates:
             if p.exists():
@@ -72,17 +72,19 @@ def _mat4_from_values(values: list[float]) -> np.ndarray:
 def _transform_vec3(mat4: np.ndarray, v: Vec3) -> Vec3:
     """Apply a 4×4 row-major transform to a Vec3 and return a new Vec3."""
     pt = np.array([v.x, v.y, v.z, 1.0])
-    result = mat4 @ pt   # row-major: M × p
+    result = mat4 @ pt  # row-major: M × p
     return Vec3(x=float(result[0]), y=float(result[1]), z=float(result[2]))
 
 
 def _prefix_helix(helix: Helix, prefix: str, mat4: np.ndarray) -> Helix:
     """Return a copy of helix with prefixed ID and transformed axis."""
-    return helix.model_copy(update={
-        "id":         f"{prefix}{helix.id}",
-        "axis_start": _transform_vec3(mat4, helix.axis_start),
-        "axis_end":   _transform_vec3(mat4, helix.axis_end),
-    })
+    return helix.model_copy(
+        update={
+            "id": f"{prefix}{helix.id}",
+            "axis_start": _transform_vec3(mat4, helix.axis_start),
+            "axis_end": _transform_vec3(mat4, helix.axis_end),
+        }
+    )
 
 
 def _prefix_domain(domain: Domain, prefix: str) -> Domain:
@@ -101,11 +103,13 @@ def _prefix_domain(domain: Domain, prefix: str) -> Domain:
 def _prefix_overhang(overhang, prefix: str):
     """Namespace an :class:`OverhangSpec`'s id + helix_id + strand_id so it stays
     unique across parts in the flattened Design (its ``sub_domains`` are kept)."""
-    return overhang.model_copy(update={
-        "id":        f"{prefix}{overhang.id}",
-        "helix_id":  f"{prefix}{overhang.helix_id}",
-        "strand_id": f"{prefix}{overhang.strand_id}",
-    })
+    return overhang.model_copy(
+        update={
+            "id": f"{prefix}{overhang.id}",
+            "helix_id": f"{prefix}{overhang.helix_id}",
+            "strand_id": f"{prefix}{overhang.strand_id}",
+        }
+    )
 
 
 def _remap_assembly_domain(domain: Domain, real_instance_ids: set[str]) -> Domain:
@@ -134,20 +138,26 @@ def _remap_assembly_domain(domain: Domain, real_instance_ids: set[str]) -> Domai
 
 def _prefix_strand(strand: Strand, strand_prefix: str, helix_prefix: str) -> Strand:
     """Return a copy of strand with prefixed strand ID and all domain helix_ids."""
-    return strand.model_copy(update={
-        "id":      f"{strand_prefix}{strand.id}",
-        "domains": [_prefix_domain(d, helix_prefix) for d in strand.domains],
-    })
+    return strand.model_copy(
+        update={
+            "id": f"{strand_prefix}{strand.id}",
+            "domains": [_prefix_domain(d, helix_prefix) for d in strand.domains],
+        }
+    )
 
 
 def _prefix_assembly_strand(strand: Strand, real_instance_ids: set[str]) -> Strand:
     """``asm::``-prefix an assembly-level strand, but remap any namespaced
     part-helix domain references onto their flattened part helix (see
     :func:`_remap_assembly_domain`)."""
-    return strand.model_copy(update={
-        "id":      f"asm::{strand.id}",
-        "domains": [_remap_assembly_domain(d, real_instance_ids) for d in strand.domains],
-    })
+    return strand.model_copy(
+        update={
+            "id": f"asm::{strand.id}",
+            "domains": [
+                _remap_assembly_domain(d, real_instance_ids) for d in strand.domains
+            ],
+        }
+    )
 
 
 def _materialize_direct_duplexes(assembly: Assembly, flat: Design) -> Design:
@@ -180,21 +190,26 @@ def _materialize_direct_duplexes(assembly: Assembly, flat: Design) -> Design:
     for dx in effective.duplexes:
         if dx.connection_id is not None:
             continue
-        driver_end = dx.left if dx.driver == 'left' else dx.right
-        driven_end = dx.right if dx.driver == 'left' else dx.left
+        driver_end = dx.left if dx.driver == "left" else dx.right
+        driven_end = dx.right if dx.driver == "left" else dx.left
         driver_ns = f"inst-{driver_end.instance_id}::{driver_end.overhang_id}"
         driven_ns = f"inst-{driven_end.instance_id}::{driven_end.overhang_id}"
         if driver_ns not in flat_overhang_ids or driven_ns not in flat_overhang_ids:
             continue
         transient = OverhangBinding(
-            name='__asm_duplex_reloc__',
-            sub_domain_a_id='a', sub_domain_b_id='b',
-            overhang_a_id=driver_ns, overhang_b_id=driven_ns,
-            driver_oh_id=driver_ns, driven_oh_id=driven_ns,
+            name="__asm_duplex_reloc__",
+            sub_domain_a_id="a",
+            sub_domain_b_id="b",
+            overhang_a_id=driver_ns,
+            overhang_b_id=driven_ns,
+            driver_oh_id=driver_ns,
+            driven_oh_id=driven_ns,
         )
         try:
             topo = compute_bind_topology(
-                out, transient, driver_side='a',
+                out,
+                transient,
+                driver_side="a",
                 # Antiparallel onto the driver's paired window (mirror the full-
                 # domain swap: target_start = window 3' bp, target_end = 5' bp).
                 target_start_override=driver_end.end_bp,
@@ -218,7 +233,7 @@ def flatten_assembly(assembly: Assembly) -> Design:
       - lattice_type = HONEYCOMB
     Raises ValueError if any flattened helix ID appears more than once.
     """
-    all_helices: list[Helix]  = []
+    all_helices: list[Helix] = []
     all_strands: list[Strand] = []
     all_overhangs: list = []
 
@@ -235,8 +250,8 @@ def flatten_assembly(assembly: Assembly) -> Design:
         except FileNotFoundError:
             continue  # skip missing file sources
 
-        hp = f"inst-{inst.id}::"          # helix/domain prefix
-        sp = f"inst-{inst.id}::"          # strand prefix
+        hp = f"inst-{inst.id}::"  # helix/domain prefix
+        sp = f"inst-{inst.id}::"  # strand prefix
         mat4 = _mat4_from_values(inst.transform.values)
 
         for helix in design.helices:
@@ -260,12 +275,14 @@ def flatten_assembly(assembly: Assembly) -> Design:
     helix_ids = [h.id for h in all_helices]
     if len(helix_ids) != len(set(helix_ids)):
         from collections import Counter
+
         dupes = [hid for hid, cnt in Counter(helix_ids).items() if cnt > 1]
         raise ValueError(f"Flattened design has duplicate helix IDs: {dupes}")
 
     strand_ids = [s.id for s in all_strands]
     if len(strand_ids) != len(set(strand_ids)):
         from collections import Counter
+
         dupes = [sid for sid, cnt in Counter(strand_ids).items() if cnt > 1]
         raise ValueError(f"Flattened design has duplicate strand IDs: {dupes}")
 

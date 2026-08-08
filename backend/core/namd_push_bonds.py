@@ -29,6 +29,7 @@ on the 6hb (0 of 252 base pairs broken) even though it stretches those sites ~50
 their built 20.6 Å separation — consistent with the term being a genuine repulsion
 surrogate rather than a mis-transferred constant.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -38,7 +39,7 @@ from scipy.spatial import cKDTree
 
 #: mrdna: `if i < 11 or j < 11: continue` and the mirrored test at the far crossover.
 CROSSOVER_EXCLUSION_NT = 11
-PUSH_K = 1.0        # kcal/mol/Å²
+PUSH_K = 1.0  # kcal/mol/Å²
 PUSH_R0_ANG = 31.0
 
 #: A psfgen heavy atom keeps the coordinate it was handed, so a model P atom and its
@@ -90,7 +91,7 @@ def qualifying_positions(design) -> list:
             nts_i = i2 - i1 + 1
             nts_j = j2 - j1 + 1
             if nts_i <= 0 or nts_j <= 0:
-                continue        # antiparallel run: mrdna's explicit `continue`
+                continue  # antiparallel run: mrdna's explicit `continue`
             for ijmin in range(min(nts_i, nts_j)):
                 i = j = ijmin
                 if nts_i < nts_j:
@@ -157,7 +158,9 @@ def atom_resolver(design, pdb_text: str, names) -> dict:
     if not len(pdb_pos):
         return {}
     dist, idx = cKDTree(pdb_pos).query(np.asarray(wanted, dtype=float))
-    return {k: int(pdb_ord[i]) for k, i, d in zip(keys, idx, dist) if d <= _COORD_TOL_ANG}
+    return {
+        k: int(pdb_ord[i]) for k, i, d in zip(keys, idx, dist) if d <= _COORD_TOL_ANG
+    }
 
 
 def _pdb_resnames_by_ordinal(pdb_text: str) -> dict:
@@ -226,11 +229,14 @@ def _p_atom_resolver(design, pdb_text: str) -> dict:
     if not len(pdb_pos):
         return {}
     dist, idx = cKDTree(pdb_pos).query(np.asarray(wanted, dtype=float))
-    return {k: int(pdb_ord[i]) for k, i, d in zip(keys, idx, dist) if d <= _COORD_TOL_ANG}
+    return {
+        k: int(pdb_ord[i]) for k, i, d in zip(keys, idx, dist) if d <= _COORD_TOL_ANG
+    }
 
 
-def interhelical_push_bonds(design, pdb_text: str, *,
-                            r0_ang: "float | None" = PUSH_R0_ANG) -> PushBondResult:
+def interhelical_push_bonds(
+    design, pdb_text: str, *, r0_ang: "float | None" = PUSH_R0_ANG
+) -> PushBondResult:
     """Push-bond extraBonds text for ``design`` against ``pdb_text``'s atom order.
 
     ``r0_ang`` is the target P-P separation.  mrdna hard-codes 31 Å as a REPULSION
@@ -255,12 +261,14 @@ def interhelical_push_bonds(design, pdb_text: str, *,
             spans += [b - a + 1 for a, b in zip(idxs[:-1], idxs[1:])]
         widest = max(spans) if spans else 0
         return PushBondResult(
-            0, "",
+            0,
+            "",
             f"none qualify: widest crossover-free span is {widest} nt, and the rule "
             f"needs > {2 * CROSSOVER_EXCLUSION_NT} nt to place even one bond. This is "
             f"the expected result for a densely crossed-over or 2-helix design, not a "
             f"failure.",
-            positions)
+            positions,
+        )
 
     p_of = _p_atom_resolver(design, pdb_text)
 
@@ -276,23 +284,35 @@ def interhelical_push_bonds(design, pdb_text: str, *,
                 continue
             bonds.add((min(a, b), max(a, b)))
 
-    xyz = np.asarray([(float(ln[30:38]), float(ln[38:46]), float(ln[46:54]))
-                      for ln in pdb_text.splitlines() if ln.startswith("ATOM  ")])
+    xyz = np.asarray(
+        [
+            (float(ln[30:38]), float(ln[38:46]), float(ln[46:54]))
+            for ln in pdb_text.splitlines()
+            if ln.startswith("ATOM  ")
+        ]
+    )
     lines, measured = [], []
     for a, b in sorted(bonds):
         d = float(np.linalg.norm(xyz[a] - xyz[b]))
         measured.append(d)
         lines.append(f"bond {a} {b} {PUSH_K:f} {(r0_ang if r0_ang else d):.2f}")
 
-    reason = (f"{len(positions)} qualifying positions over "
-              f"{len({(h, k) for h, _, k, _ in positions})} helix pairs")
+    reason = (
+        f"{len(positions)} qualifying positions over "
+        f"{len({(h, k) for h, _, k, _ in positions})} helix pairs"
+    )
     if missing:
         reason += f"; {missing} skipped for a missing P atom (5' termini)"
     if measured:
         med = float(np.median(measured))
-        reason += (f"; built P-P {min(measured):.1f}-{max(measured):.1f} A (median "
-                   f"{med:.1f})")
-        reason += (f", r0={r0_ang:.1f} A -> {100 * (r0_ang / med - 1):+.0f}% at the median"
-                   if r0_ang else ", r0=measured (shape-preserving)")
-    return PushBondResult(len(bonds), "# PUSHBONDS\n" + "\n".join(lines) + "\n",
-                          reason, positions)
+        reason += (
+            f"; built P-P {min(measured):.1f}-{max(measured):.1f} A (median {med:.1f})"
+        )
+        reason += (
+            f", r0={r0_ang:.1f} A -> {100 * (r0_ang / med - 1):+.0f}% at the median"
+            if r0_ang
+            else ", r0=measured (shape-preserving)"
+        )
+    return PushBondResult(
+        len(bonds), "# PUSHBONDS\n" + "\n".join(lines) + "\n", reason, positions
+    )

@@ -66,11 +66,12 @@ logger = logging.getLogger(__name__)
 
 # ── Global task registry ──────────────────────────────────────────────────────
 
+
 @dataclass
 class _RunningHandle:
     thread: threading.Thread
-    loop:   Optional[asyncio.AbstractEventLoop] = None
-    task:   Optional[asyncio.Task] = None
+    loop: Optional[asyncio.AbstractEventLoop] = None
+    task: Optional[asyncio.Task] = None
 
 
 _RUNNING: dict[str, _RunningHandle] = {}
@@ -163,9 +164,14 @@ def oxdna_supports_cuda(path: str) -> bool:
     ldd = shutil.which("ldd")
     if ldd:
         import subprocess
+
         try:
             out = subprocess.run(
-                [ldd, path], capture_output=True, text=True, timeout=15, check=False,
+                [ldd, path],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
             )
             for line in out.stdout.splitlines():
                 if "libcudart" in line and "not found" not in line:
@@ -180,7 +186,9 @@ def oxdna_supports_cuda(path: str) -> bool:
 def _usable_path(candidate: str) -> Optional[str]:
     """Resolve a candidate (PATH name or absolute path) to a runnable file."""
     return shutil.which(candidate) or (
-        candidate if os.path.isfile(candidate) and os.access(candidate, os.X_OK) else None
+        candidate
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK)
+        else None
     )
 
 
@@ -213,9 +221,8 @@ def _wsl_gpu_driver_dir() -> Optional[str]:
     result: Optional[str] = None
     try:
         import glob
-        matches = glob.glob(
-            "/usr/lib/wsl/drivers/*/libnvidia-ptxjitcompiler.so.1"
-        )
+
+        matches = glob.glob("/usr/lib/wsl/drivers/*/libnvidia-ptxjitcompiler.so.1")
         if matches:
             newest = max(matches, key=lambda p: os.path.getmtime(p))
             result = os.path.dirname(newest)
@@ -240,7 +247,9 @@ def oxdna_subprocess_env() -> Optional[dict]:
     existing = env.get("LD_LIBRARY_PATH", "")
     parts = existing.split(os.pathsep) if existing else []
     if driver_dir not in parts:
-        env["LD_LIBRARY_PATH"] = os.pathsep.join([driver_dir, *parts]) if parts else driver_dir
+        env["LD_LIBRARY_PATH"] = (
+            os.pathsep.join([driver_dir, *parts]) if parts else driver_dir
+        )
     return env
 
 
@@ -281,8 +290,8 @@ def find_oxdna(*, prefer_cuda: bool = True) -> Optional[str]:
 
 
 _OXDNA_ANM_CANDIDATES = [
-    os.path.expanduser("~/anm-oxdna/oxDNA/build_cuda/bin/oxDNA"),   # CUDA (preferred)
-    os.path.expanduser("~/anm-oxdna/oxDNA/build/bin/oxDNA"),        # CPU fallback
+    os.path.expanduser("~/anm-oxdna/oxDNA/build_cuda/bin/oxDNA"),  # CUDA (preferred)
+    os.path.expanduser("~/anm-oxdna/oxDNA/build/bin/oxDNA"),  # CPU fallback
 ]
 
 
@@ -297,7 +306,9 @@ def find_oxdna_anm() -> Optional[str]:
     override = os.environ.get("OXDNA_ANM_BIN", "").strip()
     for candidate in ([override] if override else []) + _OXDNA_ANM_CANDIDATES:
         found = shutil.which(candidate) or (
-            candidate if os.path.isfile(candidate) and os.access(candidate, os.X_OK) else None
+            candidate
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK)
+            else None
         )
         if found:
             return found
@@ -317,7 +328,9 @@ def find_dnanalysis() -> Optional[str]:
         candidates.append(str(Path(ox).resolve().parent / "DNAnalysis"))
     candidates.append("DNAnalysis")
     for c in candidates:
-        found = shutil.which(c) or (c if os.path.isfile(c) and os.access(c, os.X_OK) else None)
+        found = shutil.which(c) or (
+            c if os.path.isfile(c) and os.access(c, os.X_OK) else None
+        )
         if found:
             return found
     return None
@@ -333,10 +346,10 @@ def find_dnanalysis() -> Optional[str]:
 # oxdna_supports_cuda).  The runner that uses it is a later phase.
 
 _LAMMPS_CANDIDATES = [
-    "lmp",                                                        # modern default name
+    "lmp",  # modern default name
     "lmp_mpi",
     "lmp_serial",
-    os.path.expanduser("~/lammps/build/lmp"),                    # conventional source build
+    os.path.expanduser("~/lammps/build/lmp"),  # conventional source build
     os.path.expanduser("~/Applications/lammps/build/lmp"),
 ]
 
@@ -383,9 +396,14 @@ def lammps_supports_cgdna(path: str) -> bool:
         return _CGDNA_CAP_CACHE[key]
     result = False
     import subprocess
+
     try:
         out = subprocess.run(
-            [path, "-h"], capture_output=True, text=True, timeout=20, check=False,
+            [path, "-h"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
         )
         blob = (out.stdout + out.stderr).lower()
         # "oxdna2/fene" etc. appear in the style lists; "cg-dna" in the installed-
@@ -420,16 +438,17 @@ def oxdna_available() -> dict:
 
 # ── Prepare: write the self-contained job dir ─────────────────────────────────
 
+
 def prepare_oxdna_job(
-    design:          Design,
-    geometry:        list[dict],
-    job:             OxdnaJob,
-    workspace_dir:   Path,
-    specs:           list[OxdnaStageSpec],
+    design: Design,
+    geometry: list[dict],
+    job: OxdnaJob,
+    workspace_dir: Path,
+    specs: list[OxdnaStageSpec],
     *,
-    surface:         dict | None = None,
-    anchors:         list[dict] | None = None,
-    anchor_stiff:    float = 1000.0,
+    surface: dict | None = None,
+    anchors: list[dict] | None = None,
+    anchor_stiff: float = 1000.0,
     surface_strands: dict | None = None,
 ) -> dict:
     """Write topology.top, conf.dat, design.json, and stages_spec.json into job dir.
@@ -468,10 +487,13 @@ def prepare_oxdna_job(
     if protein:
         atts, blocks = build_protein_blocks(design, geometry)
         prot_offset = protein_bead_count(blocks)
-        (jd / "topology.top").write_text(hybrid_topology_text(design, blocks), encoding="utf-8")
+        (jd / "topology.top").write_text(
+            hybrid_topology_text(design, blocks), encoding="utf-8"
+        )
         (jd / "conf.dat").write_text(
             hybrid_configuration_text(design, geometry, blocks, oxdna_native_seed=True),
-            encoding="utf-8")
+            encoding="utf-8",
+        )
         (jd / "anm.par").write_text(anm_par_text(blocks), encoding="utf-8")
         prot_traps = protein_forces_text(design, atts, blocks, geometry)
     else:
@@ -485,7 +507,12 @@ def prepare_oxdna_job(
     sa_text, info = "", {}
     if surface or anchors:
         sa_text, info = surface_anchor_forces_text(
-            design, jd / "conf.dat", wall=surface, anchors=anchors, anchor_stiff=anchor_stiff)
+            design,
+            jd / "conf.dat",
+            wall=surface,
+            anchors=anchors,
+            anchor_stiff=anchor_stiff,
+        )
 
     # Surface capture strands: sim-only ssDNA strands (complementary to the overhangs)
     # standing as a B-form helix on the hard surface, held throughout the relax by stiff
@@ -495,20 +522,33 @@ def prepare_oxdna_job(
     # backend/physics/oxdna_surface_strands.py.
     cap_text, cap_info = "", {}
     if surface_strands and surface and not protein:
-        from backend.physics.oxdna_surface_strands import CaptureSpec, append_capture_strands
-        cspec = (surface_strands if isinstance(surface_strands, CaptureSpec)
-                 else CaptureSpec.from_payload(surface_strands))
+        from backend.physics.oxdna_surface_strands import (
+            CaptureSpec,
+            append_capture_strands,
+        )
+
+        cspec = (
+            surface_strands
+            if isinstance(surface_strands, CaptureSpec)
+            else CaptureSpec.from_payload(surface_strands)
+        )
         if cspec:
             cap_info = append_capture_strands(
-                jd / "topology.top", jd / "conf.dat", cspec, surface)
+                jd / "topology.top", jd / "conf.dat", cspec, surface
+            )
             cap_text = cap_info.get("trap_text", "")
-            info = {**info, "capture": {
-                "n_strands": cap_info.get("n_strands", 0),
-                "n_beads": cap_info.get("n_beads", 0),
-                "min_dist_to_origami_nm": cap_info.get("min_dist_to_origami_nm"),
-                "box_nm_grown": cap_info.get("box_nm_grown"),
-                "trap_particles": [p for p, _pos in cap_info.get("trap_anchors", [])],
-            }}
+            info = {
+                **info,
+                "capture": {
+                    "n_strands": cap_info.get("n_strands", 0),
+                    "n_beads": cap_info.get("n_beads", 0),
+                    "min_dist_to_origami_nm": cap_info.get("min_dist_to_origami_nm"),
+                    "box_nm_grown": cap_info.get("box_nm_grown"),
+                    "trap_particles": [
+                        p for p, _pos in cap_info.get("trap_anchors", [])
+                    ],
+                },
+            }
 
     # The equil stage drops the DNA mutual traps but keeps surface/anchors/capture-strand
     # traps AND the protein tethers (so nothing drifts during the unbiased settle).
@@ -518,8 +558,9 @@ def prepare_oxdna_job(
     # Mutual-trap external forces (hold designed WC pairs during the relax stages —
     # NADOC geometry starts the pairs outside oxDNA's H-bond range, so without this
     # a free MD melts the structure) + the surface/anchor + protein-tether blocks.
-    write_mutual_traps(design, jd / "forces.txt",
-                       extra_text=equil_extra, particle_offset=prot_offset)
+    write_mutual_traps(
+        design, jd / "forces.txt", extra_text=equil_extra, particle_offset=prot_offset
+    )
     # Self-contained design snapshot for health checks (decoupled from live state).
     (jd / "design.json").write_text(design.model_dump_json())
     (jd / "stages_spec.json").write_text(
@@ -548,18 +589,24 @@ def _load_snapshot_design(job_dir: Path) -> Optional[Design]:
 
 # ── Phase 2: NAMD seed handoff ──────────────────────────────────────────────────
 
+
 @dataclass
 class NamdSeed:
     """An oxDNA-relaxed structure ready to seed a NAMD run (Physical-layer only —
     a NAMD INPUT artifact, never written back into Design topology)."""
-    design:          Design
-    atomistic_model: object         # AtomisticModel (imported lazily to avoid a heavy import here)
-    stage_name:      str            # oxDNA stage the coords came from (e.g. "3_equil")
-    conf_path:       Path           # the last_conf.dat used
-    source_job_id:   str
+
+    design: Design
+    atomistic_model: (
+        object  # AtomisticModel (imported lazily to avoid a heavy import here)
+    )
+    stage_name: str  # oxDNA stage the coords came from (e.g. "3_equil")
+    conf_path: Path  # the last_conf.dat used
+    source_job_id: str
 
 
-def _latest_relaxed_conf(job: OxdnaJob, workspace_dir: Path) -> tuple[Optional[Path], Optional[str]]:
+def _latest_relaxed_conf(
+    job: OxdnaJob, workspace_dir: Path
+) -> tuple[Optional[Path], Optional[str]]:
     """Return (conf_path, stage_name) of the most-advanced stage that has a
     ``last_conf.dat`` — the relaxed (or production) coordinates."""
     for st in reversed(job.stages):
@@ -582,7 +629,7 @@ def build_namd_seed(job_id: str, workspace_dir: Path) -> NamdSeed:
     Raises FileNotFoundError if the snapshot or a relaxed conf is missing.
     """
     job = OxdnaJob.load(job_id, workspace_dir)
-    jd  = job.job_dir(workspace_dir)
+    jd = job.job_dir(workspace_dir)
     design = _load_snapshot_design(jd)
     if design is None:
         raise FileNotFoundError(
@@ -608,6 +655,7 @@ def build_namd_seed(job_id: str, workspace_dir: Path) -> NamdSeed:
     # ENM base-ring scan finds no atoms.  Translate every atom by the model centroid.
     if model.atoms:
         import numpy as _np
+
         coords = _np.asarray([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
         coords -= coords.mean(axis=0)
         for a, (x, y, z) in zip(model.atoms, coords):
@@ -617,11 +665,11 @@ def build_namd_seed(job_id: str, workspace_dir: Path) -> NamdSeed:
         # we get here if the all-atom placer exploded a heavily-deformed seed.)
 
     return NamdSeed(
-        design          = design,
-        atomistic_model = model,
-        stage_name      = stage_name,
-        conf_path       = conf_path,
-        source_job_id   = job_id,
+        design=design,
+        atomistic_model=model,
+        stage_name=stage_name,
+        conf_path=conf_path,
+        source_job_id=job_id,
     )
 
 
@@ -634,7 +682,7 @@ def assert_namd_seed_available(job_id: str, workspace_dir: Path) -> None:
     is queued, while the real (slow) :func:`build_namd_seed` runs in the
     background.  Raises FileNotFoundError with a user-facing message otherwise.
     """
-    job = OxdnaJob.load(job_id, workspace_dir)   # FileNotFoundError if unknown
+    job = OxdnaJob.load(job_id, workspace_dir)  # FileNotFoundError if unknown
     if _load_snapshot_design(job.job_dir(workspace_dir)) is None:
         raise FileNotFoundError(
             f"oxDNA job {job_id} has no design.json snapshot; cannot build a NAMD seed."
@@ -647,6 +695,7 @@ def assert_namd_seed_available(job_id: str, workspace_dir: Path) -> None:
 
 
 # ── Progress ──────────────────────────────────────────────────────────────────
+
 
 def _stage_energy_lines(stage_dir: Path) -> int:
     p = stage_dir / "energy.dat"
@@ -712,8 +761,10 @@ def _live_health_snapshot(design, stage_dir: Path, steps_per_s: float | None) ->
     from backend.physics.oxdna_interface import read_latest_trajectory_frame_full
 
     out: dict = {
-        "bp_retained_fraction": None, "potential_energy": None,
-        "max_backbone_clash": None, "steps_per_s": steps_per_s,
+        "bp_retained_fraction": None,
+        "potential_energy": None,
+        "max_backbone_clash": None,
+        "steps_per_s": steps_per_s,
     }
     try:
         samples = parse_energy_dat(stage_dir / "energy.dat")
@@ -745,11 +796,13 @@ def _rate_class(kind: str) -> str:
 # the moment a stage of that class runs, so the seed only governs the first stage's view.
 def _default_stage_rate(spec: OxdnaStageSpec, backend: str) -> float:
     if _rate_class(spec.kind) == "mc":
-        return 5.0                                   # CPU Monte-Carlo sweeps/s
-    return 1000.0 if (backend or "").upper() == "CUDA" else 400.0   # MD steps/s
+        return 5.0  # CPU Monte-Carlo sweeps/s
+    return 1000.0 if (backend or "").upper() == "CUDA" else 400.0  # MD steps/s
 
 
-def job_overall_fraction(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -> float:
+def job_overall_fraction(
+    job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]
+) -> float:
     """Lightweight overall progress fraction (0..1) for the unified job list: completed
     stages plus the running stage's live energy-line fraction, WITHOUT the ETA / health
     work :func:`job_progress` does.  Mirrors ``job_progress()['overall']`` so the master
@@ -776,11 +829,15 @@ def job_overall_fraction(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaSt
         elif st.status in ("failed", "stopped"):
             # A crashed/stopped stage still did real work. Reading it off disk (rather
             # than reporting 0 %) is what tells you a run is worth resuming.
-            stage_frac = stage_fraction(job.stage_dir(workspace_dir, st.name), specs[idx])
+            stage_frac = stage_fraction(
+                job.stage_dir(workspace_dir, st.name), specs[idx]
+            )
     return (done + stage_frac) / n
 
 
-def job_progress(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -> dict:
+def job_progress(
+    job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]
+) -> dict:
     """Return overall + current-stage progress fractions + an ETA + a live health
     snapshot for the panel."""
     n = len(job.stages)
@@ -806,7 +863,9 @@ def job_progress(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]
             # Mixing the slow MC rate with the (1e6-step) MD stages is the bug that
             # showed ">100 h" during MC — estimate per class (MC vs MD-family) instead.
             steps_done = stage_frac * specs[idx].steps
-            attempt_steps = attempt_frac * (specs[idx].steps - (st.completed_steps or 0))
+            attempt_steps = attempt_frac * (
+                specs[idx].steps - (st.completed_steps or 0)
+            )
             live_rate = None
             if st.started_at and attempt_steps > 0:
                 live_rate = attempt_steps / max(1e-6, time.time() - st.started_at)
@@ -828,9 +887,11 @@ def job_progress(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]
                 r = rate_by_class.get(cls) or _default_stage_rate(specs[j], job.backend)
                 return steps_remaining / r if r > 0 else 0.0
 
-            eta_seconds = max(0.0, _seconds(idx, specs[idx].steps - steps_done) + sum(
-                _seconds(j, specs[j].steps) for j in range(idx + 1, len(specs))
-            ))
+            eta_seconds = max(
+                0.0,
+                _seconds(idx, specs[idx].steps - steps_done)
+                + sum(_seconds(j, specs[j].steps) for j in range(idx + 1, len(specs))),
+            )
 
             # ── Time to the next DISPLAY frame (last_conf/trajectory write) ───────
             # The relaxed display follows the run live; a new frame lands every
@@ -840,9 +901,12 @@ def job_progress(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]
             frame_index = int(steps_done // interval)
             steps_to_next = (frame_index + 1) * interval - steps_done
             steps_to_next = min(steps_to_next, specs[idx].steps - steps_done)
-            cur_rate = (live_rate if live_rate and live_rate > 0
-                        else rate_by_class.get(_rate_class(specs[idx].kind))
-                        or _default_stage_rate(specs[idx], job.backend))
+            cur_rate = (
+                live_rate
+                if live_rate and live_rate > 0
+                else rate_by_class.get(_rate_class(specs[idx].kind))
+                or _default_stage_rate(specs[idx], job.backend)
+            )
             if cur_rate and cur_rate > 0:
                 next_frame_eta_seconds = max(0.0, steps_to_next / cur_rate)
 
@@ -850,12 +914,17 @@ def job_progress(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]
             design = _load_snapshot_design(job.job_dir(workspace_dir))
             if design is not None:
                 live_health = _live_health_snapshot(
-                    design, stage_dir, live_rate or rate_by_class.get(_rate_class(specs[idx].kind)))
+                    design,
+                    stage_dir,
+                    live_rate or rate_by_class.get(_rate_class(specs[idx].kind)),
+                )
         elif st.status in ("failed", "stopped"):
             # A crashed/stopped stage still banked real simulated time. Report it (read
             # off disk, across every attempt) instead of 0 % — that number is what tells
             # you whether the run is worth resuming rather than restarting.
-            stage_frac = stage_fraction(job.stage_dir(workspace_dir, st.name), specs[idx])
+            stage_frac = stage_fraction(
+                job.stage_dir(workspace_dir, st.name), specs[idx]
+            )
     overall = (done + stage_frac) / n if n else 0.0
     return {
         "overall": overall,
@@ -872,12 +941,13 @@ def job_progress(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]
 
 # ── Low-level subprocess ──────────────────────────────────────────────────────
 
+
 async def _run_oxdna_async(
     oxdna_bin: str,
     input_path: Path,
     stage_dir: Path,
-    log_path:  Path,
-    job_id:    str,
+    log_path: Path,
+    job_id: str,
     on_spawn=None,
 ) -> tuple[int, Optional[int]]:
     """Run oxDNA on *input_path* with cwd=stage_dir; return (returncode, pid).
@@ -888,7 +958,8 @@ async def _run_oxdna_async(
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("w") as log_fh:
         proc = await asyncio.create_subprocess_exec(
-            oxdna_bin, str(input_path),
+            oxdna_bin,
+            str(input_path),
             cwd=str(stage_dir),
             stdout=log_fh,
             stderr=asyncio.subprocess.STDOUT,
@@ -898,18 +969,24 @@ async def _run_oxdna_async(
         pid = proc.pid
         _ACTIVE_PIDS[job_id] = pid
         if on_spawn:
-            try: on_spawn(pid)
-            except Exception: pass  # noqa: E722,S110 — persistence must never break the run
+            try:
+                on_spawn(pid)
+            except Exception:
+                pass  # noqa: E722,S110 — persistence must never break the run
         try:
-            rc = await wait_proc_with_disk_guard(proc, stage_dir, kill=_kill_process_group)
+            rc = await wait_proc_with_disk_guard(
+                proc, stage_dir, kill=_kill_process_group
+            )
         except asyncio.CancelledError:
             _kill_process_group(pid)
             raise
         finally:
             _ACTIVE_PIDS.pop(job_id, None)
             if on_spawn:
-                try: on_spawn(None)
-                except Exception: pass  # noqa: E722,S110
+                try:
+                    on_spawn(None)
+                except Exception:
+                    pass  # noqa: E722,S110
     return rc, pid
 
 
@@ -933,24 +1010,26 @@ def _kill_process_group(pid: int, timeout: float = 10.0) -> None:
 
 # ── jsonl helpers ─────────────────────────────────────────────────────────────
 
+
 def _append_jsonl(path: Path, record: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a") as fh:
         fh.write(json.dumps(record) + "\n")
 
 
-def _health_sample(stage_name: str, kind: str, res: OxdnaHealthResult,
-                   steps_per_s: Optional[float]) -> OxdnaHealthSample:
+def _health_sample(
+    stage_name: str, kind: str, res: OxdnaHealthResult, steps_per_s: Optional[float]
+) -> OxdnaHealthSample:
     return OxdnaHealthSample(
-        wall_time            = time.time(),
-        stage                = stage_name,
-        bp_retained_fraction = res.bp_retained_fraction,
-        potential_energy     = res.potential_energy,
-        max_backbone_clash   = res.max_backbone_stretch,
-        max_backbone_fene    = res.max_backbone_fene_units,
-        steps_per_s          = steps_per_s,
-        passed               = res.passed,
-        reason               = res.reason or (res.error or ""),
+        wall_time=time.time(),
+        stage=stage_name,
+        bp_retained_fraction=res.bp_retained_fraction,
+        potential_energy=res.potential_energy,
+        max_backbone_clash=res.max_backbone_stretch,
+        max_backbone_fene=res.max_backbone_fene_units,
+        steps_per_s=steps_per_s,
+        passed=res.passed,
+        reason=res.reason or (res.error or ""),
     )
 
 
@@ -971,12 +1050,16 @@ def _starting_conf(
     resume behaviour).  oxDNA writes ``last_conf.dat`` periodically, so a non-empty
     one means the kill happened after at least one checkpoint flush.
     """
-    own_last = (job.stage_dir(workspace_dir, specs[idx].name) / "last_conf.dat").resolve()
+    own_last = (
+        job.stage_dir(workspace_dir, specs[idx].name) / "last_conf.dat"
+    ).resolve()
     if idx == start_idx and own_last.exists() and own_last.stat().st_size > 0:
         return own_last
     if idx == 0:
         return (job.job_dir(workspace_dir) / "conf.dat").resolve()
-    return (job.stage_dir(workspace_dir, specs[idx - 1].name) / "last_conf.dat").resolve()
+    return (
+        job.stage_dir(workspace_dir, specs[idx - 1].name) / "last_conf.dat"
+    ).resolve()
 
 
 # ── Crash recovery ────────────────────────────────────────────────────────────
@@ -991,8 +1074,8 @@ def _starting_conf(
 # The trajectory file is append-only, so its frames are individually trustworthy:
 # a crash can only truncate the LAST one.  It is therefore the reliable fallback.
 
-_CONF_HEADER_LINES = 3          # t = … / b = … / E = …
-_CONF_MIN_COLUMNS = 15          # r[3] b[3] n[3] v[3] L[3]
+_CONF_HEADER_LINES = 3  # t = … / b = … / E = …
+_CONF_MIN_COLUMNS = 15  # r[3] b[3] n[3] v[3] L[3]
 
 
 def _conf_body_is_valid(lines: list[str], n_particles: int) -> bool:
@@ -1026,7 +1109,9 @@ def conf_is_restartable(path: Path, n_particles: int) -> bool:
     return _conf_body_is_valid(lines[_CONF_HEADER_LINES:], n_particles)
 
 
-def last_complete_trajectory_frame(path: Path, n_particles: int) -> tuple[str, int] | None:
+def last_complete_trajectory_frame(
+    path: Path, n_particles: int
+) -> tuple[str, int] | None:
     """Last COMPLETE frame of an append-only oxDNA trajectory, as ``(text, step)``.
 
     Reads backwards from the end rather than parsing the whole file — these are
@@ -1049,8 +1134,11 @@ def last_complete_trajectory_frame(path: Path, n_particles: int) -> tuple[str, i
                 fh.seek(size - window)
                 blob = fh.read(window).decode(errors="replace")
                 # Drop a partial leading frame — we only trust headers we found whole.
-                starts = [i for i in range(len(blob)) if blob.startswith("t =", i)
-                          and (i == 0 or blob[i - 1] == "\n")]
+                starts = [
+                    i
+                    for i in range(len(blob))
+                    if blob.startswith("t =", i) and (i == 0 or blob[i - 1] == "\n")
+                ]
                 if starts and (len(starts) >= 2 or window >= size):
                     break
                 if window >= size:
@@ -1069,7 +1157,7 @@ def last_complete_trajectory_frame(path: Path, n_particles: int) -> tuple[str, i
             step = int(float(lines[0].split("=", 1)[1]))
         except (ValueError, IndexError):
             continue
-        body = "\n".join(lines[:_CONF_HEADER_LINES + n_particles])
+        body = "\n".join(lines[: _CONF_HEADER_LINES + n_particles])
         return body + "\n", step
     return None
 
@@ -1077,8 +1165,9 @@ def last_complete_trajectory_frame(path: Path, n_particles: int) -> tuple[str, i
 def _attempt_energy_files(stage_dir: Path) -> list[Path]:
     """Every attempt's energy file for this stage, OLDEST first — the archived
     ``energy.rN.dat`` from interrupted runs plus the current ``energy.dat``."""
-    return sorted(stage_dir.glob("energy.r*.dat"), key=lambda p: p.name) + \
-        [stage_dir / "energy.dat"]
+    return sorted(stage_dir.glob("energy.r*.dat"), key=lambda p: p.name) + [
+        stage_dir / "energy.dat"
+    ]
 
 
 def _attempt_steps(path: Path, every: int) -> int:
@@ -1087,7 +1176,9 @@ def _attempt_steps(path: Path, every: int) -> int:
     if not path.exists():
         return 0
     try:
-        lines = sum(1 for ln in path.read_text(errors="replace").splitlines() if ln.strip())
+        lines = sum(
+            1 for ln in path.read_text(errors="replace").splitlines() if ln.strip()
+        )
     except OSError:
         return 0
     return max(0, lines - 1) * every
@@ -1105,8 +1196,9 @@ def _exploded(stage_dir: Path) -> bool:
         return False
 
 
-def resume_point(stage_dir: Path, spec: OxdnaStageSpec,
-                 n_particles: int) -> tuple[Path | None, int, str]:
+def resume_point(
+    stage_dir: Path, spec: OxdnaStageSpec, n_particles: int
+) -> tuple[Path | None, int, str]:
     """Resolve where to resume this stage from, and how much of its step budget that
     point has already consumed.  Returns ``(conf_path, consumed_steps, note)``.
 
@@ -1130,12 +1222,16 @@ def resume_point(stage_dir: Path, spec: OxdnaStageSpec,
     prior = [0]
     for p in energies:
         prior.append(prior[-1] + _attempt_steps(p, every))
-    n_attempts = len(energies)                      # last entry is the current attempt
+    n_attempts = len(energies)  # last entry is the current attempt
     diverged = _exploded(stage_dir)
 
     last_conf = stage_dir / "last_conf.dat"
     if not diverged and conf_is_restartable(last_conf, n_particles):
-        return last_conf.resolve(), prior[n_attempts], "last_conf.dat (checkpoint intact)"
+        return (
+            last_conf.resolve(),
+            prior[n_attempts],
+            "last_conf.dat (checkpoint intact)",
+        )
 
     if diverged:
         reason = "the attempt DIVERGED (error_conf.dat present)"
@@ -1146,7 +1242,9 @@ def resume_point(stage_dir: Path, spec: OxdnaStageSpec,
 
     # Walk attempts newest-first: current trajectory.dat, then trajectory.rN.dat.
     trajectories = [(stage_dir / "trajectory.dat", n_attempts - 1)]
-    archived = sorted(stage_dir.glob("trajectory.r*.dat"), key=lambda p: p.name, reverse=True)
+    archived = sorted(
+        stage_dir.glob("trajectory.r*.dat"), key=lambda p: p.name, reverse=True
+    )
     for k, traj in enumerate(archived):
         trajectories.append((traj, n_attempts - 2 - k))
     for traj, attempt_idx in trajectories:
@@ -1166,9 +1264,14 @@ def resume_point(stage_dir: Path, spec: OxdnaStageSpec,
             out.write_text(text)
         except OSError:
             return None, 0, f"{reason}; recovered frame could not be written"
-        return out.resolve(), consumed, (
-            f"{reason} — restarting from step {step:,} of {traj.name} "
-            f"({consumed:,} steps of the stage budget banked)")
+        return (
+            out.resolve(),
+            consumed,
+            (
+                f"{reason} — restarting from step {step:,} of {traj.name} "
+                f"({consumed:,} steps of the stage budget banked)"
+            ),
+        )
     return None, 0, f"{reason} and no complete trajectory frame to fall back on"
 
 
@@ -1184,7 +1287,7 @@ def stage_completed_steps(stage_dir: Path, spec: OxdnaStageSpec) -> int:
     every = spec.print_energy_every_override or max(1, spec.steps // 100)
     files = _attempt_energy_files(stage_dir)
     if _exploded(stage_dir) and files:
-        files = files[:-1]          # the current (diverged) attempt is thrown away
+        files = files[:-1]  # the current (diverged) attempt is thrown away
     return sum(_attempt_steps(p, every) for p in files)
 
 
@@ -1221,7 +1324,10 @@ def _archive_partial_outputs(stage_dir: Path) -> list[str]:
 
 # ── Escalate-and-retry a stuck relax ──────────────────────────────────────────
 
-def _persist_specs(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -> None:
+
+def _persist_specs(
+    job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]
+) -> None:
     """Re-write stages_spec.json so a server restart resumes with the (escalated) specs."""
     (job.job_dir(workspace_dir) / "stages_spec.json").write_text(
         json.dumps([asdict(s) for s in specs], indent=2)
@@ -1259,19 +1365,25 @@ def _escalate_relax_and_rewind(
     # Reset the relax stage's status object to the escalated step count + clear it and
     # every downstream stage so nothing stale is mistaken for "done"/resumable.
     for i in range(relax_idx, len(specs)):
-        job.stages[i].status     = "pending"
+        job.stages[i].status = "pending"
         job.stages[i].started_at = None
-        job.stages[i].resumed    = False
-        job.stages[i].steps      = specs[i].steps
+        job.stages[i].resumed = False
+        job.stages[i].steps = specs[i].steps
         _reset_stage_outputs(job.stage_dir(workspace_dir, specs[i].name))
     job.current_stage_idx = relax_idx
     _persist_specs(job, workspace_dir, specs)
     job.save(workspace_dir)
-    logger.info("[%s] relax not equil-ready → escalating md_relax (attempt %d/%d): "
-                "steps=%d dt=%s cap=%s; rewinding to %s",
-                job.job_id, job.relax_retries, job.max_relax_retries,
-                specs[relax_idx].steps, specs[relax_idx].dt,
-                specs[relax_idx].max_backbone_force, specs[relax_idx].name)
+    logger.info(
+        "[%s] relax not equil-ready → escalating md_relax (attempt %d/%d): "
+        "steps=%d dt=%s cap=%s; rewinding to %s",
+        job.job_id,
+        job.relax_retries,
+        job.max_relax_retries,
+        specs[relax_idx].steps,
+        specs[relax_idx].dt,
+        specs[relax_idx].max_backbone_force,
+        specs[relax_idx].name,
+    )
 
 
 # ── Unbiased-MD explosion recovery (production / field / run) ──────────────────
@@ -1288,9 +1400,9 @@ _BLOWUP_EXTENT_KINDS = frozenset({"production", "run"})
 # diverged — usually too-large a timestep for a transiently stiff/strained contact,
 # amplified by mixed-precision CUDA).  Matched case-insensitively in the stage log.
 _EXPLOSION_MARKERS = (
-    "_max_n_per_cell",                      # cell list overflow from huge coordinates
+    "_max_n_per_cell",  # cell list overflow from huge coordinates
     "particles with very large coordinates",
-    "nan",                                  # NaN energy/coordinate
+    "nan",  # NaN energy/coordinate
 )
 
 
@@ -1323,7 +1435,7 @@ def _conf_max_extent(conf_path: Path) -> "float | None":
     lo = [float("inf")] * 3
     hi = [float("-inf")] * 3
     seen = False
-    for ln in lines[3:]:                       # skip the t= / b= / E= header lines
+    for ln in lines[3:]:  # skip the t= / b= / E= header lines
         p = ln.split()
         if len(p) < 3:
             continue
@@ -1332,10 +1444,11 @@ def _conf_max_extent(conf_path: Path) -> "float | None":
         except ValueError:
             continue
         if not all(math.isfinite(v) for v in xyz):
-            return float("inf")                # NaN/inf coordinate = definitely blown up
+            return float("inf")  # NaN/inf coordinate = definitely blown up
         seen = True
         for i in range(3):
-            lo[i] = min(lo[i], xyz[i]); hi[i] = max(hi[i], xyz[i])
+            lo[i] = min(lo[i], xyz[i])
+            hi[i] = max(hi[i], xyz[i])
     return max(hi[i] - lo[i] for i in range(3)) if seen else None
 
 
@@ -1364,9 +1477,9 @@ def _halve_dt_and_restart(
     the re-run integrates the well-relaxed structure at the stabler, finer timestep."""
     job.production_retries += 1
     specs[idx] = replace(specs[idx], dt=specs[idx].dt / 2.0)
-    job.stages[idx].status     = "pending"
+    job.stages[idx].status = "pending"
     job.stages[idx].started_at = None
-    job.stages[idx].resumed    = False
+    job.stages[idx].resumed = False
     # This restarts the stage FROM SCRATCH at the relaxed seed, so nothing is banked.
     # Leaving a resume's completed_steps behind would add phantom progress on top of a
     # run that begins at step 0 (a 53 %-banked value made a 20 %-done rerun read 63 %).
@@ -1375,15 +1488,23 @@ def _halve_dt_and_restart(
     job.current_stage_idx = idx
     _persist_specs(job, workspace_dir, specs)
     job.save(workspace_dir)
-    logger.info("[%s] %s went unstable (coordinate blow-up) → halving dt and "
-                "restarting from the relaxed seed (attempt %d/%d): dt=%s",
-                job.job_id, specs[idx].name, job.production_retries,
-                job.max_production_retries, specs[idx].dt)
+    logger.info(
+        "[%s] %s went unstable (coordinate blow-up) → halving dt and "
+        "restarting from the relaxed seed (attempt %d/%d): dt=%s",
+        job.job_id,
+        specs[idx].name,
+        job.production_retries,
+        job.max_production_retries,
+        specs[idx].dt,
+    )
 
 
 # ── Main runner coroutine ─────────────────────────────────────────────────────
 
-async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -> None:
+
+async def run_job(
+    job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]
+) -> None:
     """Async coroutine — runs all stages until completion, failure, or cancel."""
     jd = job.job_dir(workspace_dir)
     logger.info("[%s] oxdna run_job starting; job_dir=%s", job.job_id, jd)
@@ -1395,9 +1516,13 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
     if oxdna_bin is None:
         job.status = OxdnaStatus.failed
         job.error = (
-            ("ANM-oxDNA (protein) binary not found. Set $OXDNA_ANM_BIN or run "
-             "scripts/build-anm-oxdna.sh.") if is_hybrid else
-            "oxDNA binary not found. Set $OXDNA_BIN or install to ~/oxDNA/build/bin/oxDNA.")
+            (
+                "ANM-oxDNA (protein) binary not found. Set $OXDNA_ANM_BIN or run "
+                "scripts/build-anm-oxdna.sh."
+            )
+            if is_hybrid
+            else "oxDNA binary not found. Set $OXDNA_BIN or install to ~/oxDNA/build/bin/oxDNA."
+        )
         job.save(workspace_dir)
         return
 
@@ -1409,6 +1534,7 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
         return
 
     topo = (jd / "topology.top").resolve()
+
     # Persist the live oxDNA PID to job.json on every spawn, so a server restart can
     # still signal the orphaned process (see stop_job's restart fallback).
     def _persist_pid(p: Optional[int]) -> None:
@@ -1441,7 +1567,9 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
             # the newest COMPLETE trajectory frame if it fails. Resuming from a torn
             # checkpoint loads without complaint and then explodes a few million steps
             # later with "Invalid cell … (pos: inf)", which reads as a sim instability.
-            recovered, already, note = resume_point(stage_dir, spec, job.n_nucleotides or 0)
+            recovered, already, note = resume_point(
+                stage_dir, spec, job.n_nucleotides or 0
+            )
             if recovered is None:
                 job.status = OxdnaStatus.failed
                 job.error = f"cannot resume {spec.name}: {note}"
@@ -1460,17 +1588,28 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
                 # which a shortened remaining budget would otherwise change mid-stage
                 # and desynchronise the cross-attempt progress accounting).
                 spec = replace(
-                    spec, steps=remaining,
-                    print_energy_every_override=(spec.print_energy_every_override
-                                                 or max(1, specs[idx].steps // 100)),
-                    print_conf_interval_override=(spec.print_conf_interval_override
-                                                  or print_conf_interval(specs[idx])),
+                    spec,
+                    steps=remaining,
+                    print_energy_every_override=(
+                        spec.print_energy_every_override
+                        or max(1, specs[idx].steps // 100)
+                    ),
+                    print_conf_interval_override=(
+                        spec.print_conf_interval_override
+                        or print_conf_interval(specs[idx])
+                    ),
                 )
             job.stages[idx].completed_steps = already
-            logger.info("[%s] resuming stage %s from %s; %s steps already done, "
-                        "%s remaining (archived partial outputs: %s)",
-                        job.job_id, spec.name, note, f"{already:,}", f"{remaining:,}",
-                        ", ".join(archived) or "none")
+            logger.info(
+                "[%s] resuming stage %s from %s; %s steps already done, "
+                "%s remaining (archived partial outputs: %s)",
+                job.job_id,
+                spec.name,
+                note,
+                f"{already:,}",
+                f"{remaining:,}",
+                ", ".join(archived) or "none",
+            )
         else:
             # Not a resume — this stage starts at step 0, so nothing is banked. Clearing
             # is load-bearing, not hygiene: a retry (or a re-run after an escalation) of a
@@ -1480,18 +1619,33 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
         input_path = stage_dir / "input.txt"
         # Relax stages use the default mutual-trap forces.txt; a field stage points
         # spec.forces_file at its own field_forces_N.txt (uniform force + anchors).
-        forces = (jd / (spec.forces_file or "forces.txt")).resolve() if spec.external_forces else None
+        forces = (
+            (jd / (spec.forces_file or "forces.txt")).resolve()
+            if spec.external_forces
+            else None
+        )
         # The ANM parameter file (hybrid stages) is resolved to an absolute path in
         # the job dir, like topology/conf/forces (oxDNA runs with cwd=stage_dir).
         parfile = str((jd / spec.parfile).resolve()) if spec.parfile else None
         input_path.write_text(
-            render_stage_input(spec, str(topo), str(conf),
-                               forces_name=str(forces) if forces else None,
-                               parfile_name=parfile)
+            render_stage_input(
+                spec,
+                str(topo),
+                str(conf),
+                forces_name=str(forces) if forces else None,
+                parfile_name=parfile,
+            )
         )
 
-        logger.info("[%s] stage %d/%d: %s (%s, %d steps)",
-                    job.job_id, idx + 1, len(specs), spec.name, spec.kind, spec.steps)
+        logger.info(
+            "[%s] stage %d/%d: %s (%s, %d steps)",
+            job.job_id,
+            idx + 1,
+            len(specs),
+            spec.name,
+            spec.kind,
+            spec.steps,
+        )
         job.current_stage_idx = idx
         job.stages[idx].status = "running"
         job.stages[idx].started_at = time.time()
@@ -1499,8 +1653,13 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
 
         _fb = free_bytes(stage_dir)
         if _fb < ABORT_MIN_FREE_BYTES:
-            logger.error("[%s] Refusing to start %s: only %.1f GB free (floor %.0f GB)",
-                         job.job_id, spec.name, _fb / GiB, ABORT_MIN_FREE_BYTES / GiB)
+            logger.error(
+                "[%s] Refusing to start %s: only %.1f GB free (floor %.0f GB)",
+                job.job_id,
+                spec.name,
+                _fb / GiB,
+                ABORT_MIN_FREE_BYTES / GiB,
+            )
             job.stages[idx].status = "failed"
             job.status = OxdnaStatus.failed
             job.error = (
@@ -1513,8 +1672,14 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
 
         t0 = time.time()
         log_path = stage_dir / "oxdna.log"
-        rc, pid = await _run_oxdna_async(oxdna_bin, input_path, stage_dir, log_path, job.job_id,
-                                         on_spawn=_persist_pid)
+        rc, pid = await _run_oxdna_async(
+            oxdna_bin,
+            input_path,
+            stage_dir,
+            log_path,
+            job.job_id,
+            on_spawn=_persist_pid,
+        )
         elapsed = max(1e-6, time.time() - t0)
 
         if asyncio.current_task().cancelled():
@@ -1524,8 +1689,12 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
 
         if rc == DISK_ABORT_RC:
             fb = free_bytes(stage_dir)
-            logger.error("[%s] Disk guard aborted %s: %.1f GB free",
-                         job.job_id, spec.name, fb / GiB)
+            logger.error(
+                "[%s] Disk guard aborted %s: %.1f GB free",
+                job.job_id,
+                spec.name,
+                fb / GiB,
+            )
             job.stages[idx].status = "failed"
             job.status = OxdnaStatus.failed
             job.error = (
@@ -1544,22 +1713,38 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
             # lever; instead re-run THIS stage at half the timestep from the clean
             # relaxed seed.  Keeps the fast dt the default, auto-stabilises designs
             # that need it (large / floppy structures), no user intervention.
-            if (spec.kind in _DT_HALVE_KINDS
-                    and job.production_retries < job.max_production_retries
-                    and _log_indicates_explosion(log_path)):
-                logger.info("[%s] %s crashed (rc=%d) with a blow-up signature → "
-                            "halve dt and restart", job.job_id, spec.name, rc)
+            if (
+                spec.kind in _DT_HALVE_KINDS
+                and job.production_retries < job.max_production_retries
+                and _log_indicates_explosion(log_path)
+            ):
+                logger.info(
+                    "[%s] %s crashed (rc=%d) with a blow-up signature → "
+                    "halve dt and restart",
+                    job.job_id,
+                    spec.name,
+                    rc,
+                )
                 _halve_dt_and_restart(job, workspace_dir, specs, idx)
                 continue
             # Otherwise: if it's at/after the relax stage and retry budget
             # remains, escalate the relax and retry the hand-off (the canonical case:
             # a standard-potential stage aborting at config load on a residual
             # over-stretched backbone bond).
-            if (relax_idx is not None and idx >= relax_idx
-                    and job.relax_retries < job.max_relax_retries):
-                logger.info("[%s] %s crashed (rc=%d) → retry via escalated relax",
-                            job.job_id, spec.name, rc)
-                _escalate_relax_and_rewind(job, workspace_dir, specs, relax_idx, base_relax_spec)
+            if (
+                relax_idx is not None
+                and idx >= relax_idx
+                and job.relax_retries < job.max_relax_retries
+            ):
+                logger.info(
+                    "[%s] %s crashed (rc=%d) → retry via escalated relax",
+                    job.job_id,
+                    spec.name,
+                    rc,
+                )
+                _escalate_relax_and_rewind(
+                    job, workspace_dir, specs, relax_idx, base_relax_spec
+                )
                 idx = relax_idx
                 continue
             job.stages[idx].status = "failed"
@@ -1574,7 +1759,9 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
                     f"extra bases at crossovers), is the likely fix."
                 )
             else:
-                job.error = f"oxDNA failed for {spec.name} (rc={rc}). See {spec.name}/oxdna.log"
+                job.error = (
+                    f"oxDNA failed for {spec.name} (rc={rc}). See {spec.name}/oxdna.log"
+                )
             job.save(workspace_dir)
             return
 
@@ -1583,7 +1770,10 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
         # use the geometric base-pair-retention metric (now hybrid-index-aware via
         # read_configuration_full's protein-lead offset).
         res = run_oxdna_health_check(
-            design, stage_dir, kind=spec.kind, min_bp_retained=spec.min_bp_retained,
+            design,
+            stage_dir,
+            kind=spec.kind,
+            min_bp_retained=spec.min_bp_retained,
             topology_path=topo,
             dnanalysis_bin=None if is_hybrid else find_dnanalysis(),
             salt_concentration=spec.salt_concentration,
@@ -1592,17 +1782,30 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
         sample = _health_sample(spec.name, spec.kind, res, steps_per_s)
         job.health_samples.append(sample)
         _append_jsonl(jd / "health.jsonl", asdict(sample))
-        _append_jsonl(jd / "metrics.jsonl", {
-            "wall_time": time.time(), "stage": spec.name, "kind": spec.kind,
-            "steps": spec.steps, "elapsed_s": elapsed, "steps_per_s": steps_per_s,
-            "potential_energy": res.potential_energy,
-            "energy_converged": res.energy_converged,
-        })
+        _append_jsonl(
+            jd / "metrics.jsonl",
+            {
+                "wall_time": time.time(),
+                "stage": spec.name,
+                "kind": spec.kind,
+                "steps": spec.steps,
+                "elapsed_s": elapsed,
+                "steps_per_s": steps_per_s,
+                "potential_energy": res.potential_energy,
+                "energy_converged": res.energy_converged,
+            },
+        )
 
-        logger.info("[%s] %s health: bp=%s clash=%s passed=%s",
-                    job.job_id, spec.name,
-                    f"{res.bp_retained_fraction:.2f}" if res.bp_retained_fraction is not None else "—",
-                    res.n_clashes, res.passed)
+        logger.info(
+            "[%s] %s health: bp=%s clash=%s passed=%s",
+            job.job_id,
+            spec.name,
+            f"{res.bp_retained_fraction:.2f}"
+            if res.bp_retained_fraction is not None
+            else "—",
+            res.n_clashes,
+            res.passed,
+        )
 
         if not res.passed:
             # A base-pair melt (or a numerical blow-up) at md_relax is RECOVERABLE, not
@@ -1613,11 +1816,20 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
             # uses — rather than giving up.  This keeps oxDNA fast: the quick default
             # relax still runs first, and only a failed melt pays for the longer,
             # gentler escalated pass.
-            if (spec.kind == "md_relax" and relax_idx is not None
-                    and job.relax_retries < job.max_relax_retries):
-                logger.info("[%s] %s health gate failed (%s) → retry via escalated relax",
-                            job.job_id, spec.name, res.reason)
-                _escalate_relax_and_rewind(job, workspace_dir, specs, relax_idx, base_relax_spec)
+            if (
+                spec.kind == "md_relax"
+                and relax_idx is not None
+                and job.relax_retries < job.max_relax_retries
+            ):
+                logger.info(
+                    "[%s] %s health gate failed (%s) → retry via escalated relax",
+                    job.job_id,
+                    spec.name,
+                    res.reason,
+                )
+                _escalate_relax_and_rewind(
+                    job, workspace_dir, specs, relax_idx, base_relax_spec
+                )
                 idx = relax_idx
                 continue
             job.stages[idx].status = "failed"
@@ -1630,7 +1842,9 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
                     f"lowering dt, or simplifying the geometry is the likely fix."
                 )
             else:
-                job.error = f"Health gate failed after {spec.name}: {res.reason or res.error}"
+                job.error = (
+                    f"Health gate failed after {spec.name}: {res.reason or res.error}"
+                )
             job.save(workspace_dir)
             return
 
@@ -1642,7 +1856,8 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
         if spec.kind == "md_relax" and not res.fene_safe:
             if job.relax_retries < job.max_relax_retries:
                 _escalate_relax_and_rewind(
-                    job, workspace_dir, specs, relax_idx, base_relax_spec)
+                    job, workspace_dir, specs, relax_idx, base_relax_spec
+                )
                 idx = relax_idx
                 continue
             if job.max_relax_retries > 0:
@@ -1661,9 +1876,13 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
                 return
             # max_relax_retries == 0 → legacy behaviour: proceed to the (capped) equil,
             # which tolerates the residual over-stretch rather than crashing.
-            logger.info("[%s] %s not equil-ready (%d over-stretched) but retries "
-                        "disabled → proceeding to capped equil",
-                        job.job_id, spec.name, res.n_fene_over)
+            logger.info(
+                "[%s] %s not equil-ready (%d over-stretched) but retries "
+                "disabled → proceeding to capped equil",
+                job.job_id,
+                spec.name,
+                res.n_fene_over,
+            )
 
         # ── Non-aborting blow-up gate (extend dt-halving to silent explosions) ──
         # An unbiased sampling stage can go numerically unstable and BALLOON the
@@ -1674,9 +1893,13 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
         # halve dt and re-run from the relaxed seed; fail clearly once the budget is out.
         if spec.kind in _BLOWUP_EXTENT_KINDS and _structure_blew_up(stage_dir, conf):
             if job.production_retries < job.max_production_retries:
-                logger.info("[%s] %s completed but the structure blew up (extent > %.1f× "
-                            "the relaxed seed) → halve dt and restart",
-                            job.job_id, spec.name, _EXPLOSION_EXTENT_FACTOR)
+                logger.info(
+                    "[%s] %s completed but the structure blew up (extent > %.1f× "
+                    "the relaxed seed) → halve dt and restart",
+                    job.job_id,
+                    spec.name,
+                    _EXPLOSION_EXTENT_FACTOR,
+                )
                 _halve_dt_and_restart(job, workspace_dir, specs, idx)
                 continue
             job.stages[idx].status = "failed"
@@ -1703,6 +1926,7 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
 
 def start_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -> None:
     """Launch run_job in a background thread. Idempotent if already running."""
@@ -1735,7 +1959,9 @@ def start_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -
                     pass
             loop.close()
 
-    thread = threading.Thread(target=_thread_main, name=f"oxdna-runner-{job.job_id}", daemon=True)
+    thread = threading.Thread(
+        target=_thread_main, name=f"oxdna-runner-{job.job_id}", daemon=True
+    )
     _RUNNING[job.job_id] = _RunningHandle(thread=thread)
     thread.start()
 
@@ -1819,10 +2045,9 @@ def reconcile_oxdna_status(
             continue
         sdir = job.stage_dir(workspace_dir, st.name)
         expected = expected_energy_lines(specs[idx])
-        complete = (
-            (sdir / "last_conf.dat").exists()
-            and _stage_energy_lines(sdir) >= expected
-        )
+        complete = (sdir / "last_conf.dat").exists() and _stage_energy_lines(
+            sdir
+        ) >= expected
         if complete and st.status != "failed":
             st.status = "done"
         else:

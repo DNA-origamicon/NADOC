@@ -11,12 +11,17 @@ addition, and the original 10/50/100 split was arbitrary.  It sets two things:
 Total simulated time must NOT change with the split — that would be a science change
 smuggled in as a scheduling one.
 """
+
 from __future__ import annotations
 
 import pytest
 
-from backend.core.md_protocols import (LADDER_CHUNK_PCTS, LADDER_CHUNK_PCTS_COARSE,
-                                       _chunk_fractions, mgh_slow_release_segments)
+from backend.core.md_protocols import (
+    LADDER_CHUNK_PCTS,
+    LADDER_CHUNK_PCTS_COARSE,
+    _chunk_fractions,
+    mgh_slow_release_segments,
+)
 
 
 def _total_ns(segments, timestep_fs=2.0):
@@ -37,21 +42,31 @@ def _is_settle(spec):
 # ── the fraction derivation ───────────────────────────────────────────────────
 def test_fractions_are_increments_of_the_cumulative_percents():
     assert _chunk_fractions((10.0, 50.0, 100.0)) == [
-        (10.0, 0.10), (50.0, 0.40), (100.0, 0.50)]
+        (10.0, 0.10),
+        (50.0, 0.40),
+        (100.0, 0.50),
+    ]
 
 
 def test_fractions_sum_to_one_for_any_valid_split():
-    for pcts in ((100.0,), (10.0, 50.0, 100.0), LADDER_CHUNK_PCTS,
-                 (5.0, 10.0, 20.0, 40.0, 80.0, 100.0)):
+    for pcts in (
+        (100.0,),
+        (10.0, 50.0, 100.0),
+        LADDER_CHUNK_PCTS,
+        (5.0, 10.0, 20.0, 40.0, 80.0, 100.0),
+    ):
         assert sum(f for _p, f in _chunk_fractions(pcts)) == pytest.approx(1.0)
 
 
-@pytest.mark.parametrize("bad", [
-    (10.0, 10.0, 100.0),      # not ascending
-    (10.0, 50.0),             # does not reach 100
-    (0.0, 100.0),             # zero-length first chunk
-    (10.0, 120.0),            # past 100
-])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        (10.0, 10.0, 100.0),  # not ascending
+        (10.0, 50.0),  # does not reach 100
+        (0.0, 100.0),  # zero-length first chunk
+        (10.0, 120.0),  # past 100
+    ],
+)
 def test_invalid_splits_are_rejected(bad):
     with pytest.raises(ValueError):
         _chunk_fractions(bad)
@@ -90,7 +105,7 @@ def test_every_stage_gets_the_same_chunk_labels_ending_at_p100():
         if _is_settle(s):
             continue
         by_stage.setdefault(s.stage, []).append(s.percent)
-    assert len(by_stage) == 4                     # k=0.5, 0.1, 0.01, and k=0
+    assert len(by_stage) == 4  # k=0.5, 0.1, 0.01, and k=0
     for pcts in by_stage.values():
         assert pcts == list(LADDER_CHUNK_PCTS)
 
@@ -123,4 +138,5 @@ def test_a_single_chunk_per_stage_is_legal():
     _, segs = mgh_slow_release_segments("X", chunk_pcts=(100.0,))
     assert len([s for s in segs if not _is_settle(s)]) == 4
     assert _total_ns(segs) == pytest.approx(
-        _total_ns(mgh_slow_release_segments("X")[1]), rel=1e-3)
+        _total_ns(mgh_slow_release_segments("X")[1]), rel=1e-3
+    )

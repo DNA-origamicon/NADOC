@@ -1616,9 +1616,7 @@ def _overhang_placement_set(design: Design):
     topology-equality check across a bind/unbind cycle, the same role
     :func:`_fl_endpoint_set` plays for forced ligations.
     """
-    return frozenset(
-        (o.id, o.helix_id, o.strand_id) for o in design.overhangs
-    )
+    return frozenset((o.id, o.helix_id, o.strand_id) for o in design.overhangs)
 
 
 def assert_bind_unbind_inverse(

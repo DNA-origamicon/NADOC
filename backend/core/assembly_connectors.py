@@ -20,6 +20,7 @@ the api layer (``_design_with_instance_overrides`` -> file-IO design loading;
 ``_propagate_cluster_delta_to_mates`` -> uses that loader) stay in
 ``backend/api/assembly.py`` and call these functions back.
 """
+
 from __future__ import annotations
 
 from typing import Optional  # noqa: F401  (used in quoted annotations)
@@ -34,7 +35,9 @@ from backend.core.assembly_fk import (
 )
 
 
-def _build_frame_from_normal(position: np.ndarray, normal: np.ndarray) -> 'np.ndarray | None':
+def _build_frame_from_normal(
+    position: np.ndarray, normal: np.ndarray
+) -> "np.ndarray | None":
     """Build a 4x4 SE3 frame from a position + normal pair.
 
     The Z axis is the unit normal. The X axis is chosen deterministically as
@@ -65,9 +68,9 @@ def _build_frame_from_normal(position: np.ndarray, normal: np.ndarray) -> 'np.nd
 
 
 def _resolve_blunt_label_local(
-    design: 'Design',
+    design: "Design",
     label: str,
-) -> 'tuple[np.ndarray, np.ndarray] | None':
+) -> "tuple[np.ndarray, np.ndarray] | None":
     """For a ``blunt:<helix_id>:<bp_spec>`` label, return the bp's CURRENT
     cluster-aware position + outward normal in instance-local coordinates.
 
@@ -95,6 +98,7 @@ def _resolve_blunt_label_local(
     if bp_spec in ("start", "end"):
         try:
             from backend.core.deformation import deformed_helix_axes
+
             axes_list = deformed_helix_axes(design)
         except Exception:
             return None
@@ -121,6 +125,7 @@ def _resolve_blunt_label_local(
             return None
         try:
             from backend.core.deformation import deformed_nucleotide_positions
+
             positions = deformed_nucleotide_positions(helix, design)
         except Exception:
             return None
@@ -148,9 +153,9 @@ def _resolve_blunt_label_local(
 
 
 def _resolve_seam_label_local(
-    design: 'Design',
+    design: "Design",
     label: str,
-) -> 'tuple[np.ndarray, np.ndarray] | None':
+) -> "tuple[np.ndarray, np.ndarray] | None":
     """For a synthesized periodic-seam connector label (``seam0:5p`` /
     ``seam0:3p``), return the seam cross-section anchor's CURRENT position +
     axis-tangent normal in instance-local coordinates, recomputed live from the
@@ -174,6 +179,7 @@ def _resolve_seam_label_local(
         return None
     try:
         from backend.core.periodic_polymer import principal_seam_connectors
+
         specs = principal_seam_connectors(design)
     except Exception:
         return None
@@ -185,9 +191,9 @@ def _resolve_seam_label_local(
 
 
 def _resolve_live_connector_local(
-    design: 'Design',
+    design: "Design",
     label: str,
-) -> 'tuple[np.ndarray, np.ndarray] | None':
+) -> "tuple[np.ndarray, np.ndarray] | None":
     """Live (geometry-derived) local anchor + normal for connector labels that
     must track the part's current geometry: ``blunt:helix:bp`` ends and
     synthesized periodic ``seam0:*`` connectors. Returns ``(pos, normal)`` or
@@ -199,10 +205,10 @@ def _resolve_live_connector_local(
 
 
 def _get_connector_world_frame(
-    instance: 'PartInstance',
+    instance: "PartInstance",
     label: str,
-    design: 'Optional[Design]' = None,
-) -> 'np.ndarray | None':
+    design: "Optional[Design]" = None,
+) -> "np.ndarray | None":
     """Full SE3 world frame of a named InterfacePoint on an instance.
 
     For a ``blunt:helix:bp`` label with the design available, the bp's
@@ -216,8 +222,8 @@ def _get_connector_world_frame(
     ip.position is itself cluster-baked at registration time, so Ct is NOT
     re-applied in the fallback path.
     """
-    p_local: 'np.ndarray | None' = None
-    n_local: 'np.ndarray | None' = None
+    p_local: "np.ndarray | None" = None
+    n_local: "np.ndarray | None" = None
     if design is not None:
         live = _resolve_live_connector_local(design, label)
         if live is not None:
@@ -236,10 +242,10 @@ def _get_connector_world_frame(
 
 
 def _get_connector_world(
-    instance: 'PartInstance',
+    instance: "PartInstance",
     label: str,
-    design: 'Optional[Design]' = None,
-) -> 'np.ndarray | None':
+    design: "Optional[Design]" = None,
+) -> "np.ndarray | None":
     """World-space position of a named InterfacePoint on an instance.
 
     For a ``blunt:helix:bp`` label with the design available, pulls the
@@ -250,7 +256,7 @@ def _get_connector_world(
 
     Returns ``None`` when no resolution path matches.
     """
-    p_local: 'np.ndarray | None' = None
+    p_local: "np.ndarray | None" = None
     if design is not None:
         live = _resolve_live_connector_local(design, label)
         if live is not None:
@@ -266,10 +272,10 @@ def _get_connector_world(
 
 
 def _local_frame_for_label(
-    inst: 'PartInstance',
+    inst: "PartInstance",
     label: str,
-    design: 'Optional[Design]',
-) -> 'np.ndarray | None':
+    design: "Optional[Design]",
+) -> "np.ndarray | None":
     """Compute a connector's frame in the instance's LOCAL space.
 
     Mirrors the local-frame portion of :func:`_get_connector_world_frame`
@@ -283,8 +289,8 @@ def _local_frame_for_label(
     Returns ``None`` when no resolution path matches (matches the upstream
     contract).
     """
-    p_local: 'np.ndarray | None' = None
-    n_local: 'np.ndarray | None' = None
+    p_local: "np.ndarray | None" = None
+    n_local: "np.ndarray | None" = None
     if design is not None:
         live = _resolve_live_connector_local(design, label)
         if live is not None:
@@ -325,11 +331,17 @@ def _build_connector_frames(
     labels_by_inst: dict[str, set[str]] = {}
     for joint in assembly.joints:
         if joint.instance_a_id and joint.connector_a_label:
-            labels_by_inst.setdefault(joint.instance_a_id, set()).add(joint.connector_a_label)
+            labels_by_inst.setdefault(joint.instance_a_id, set()).add(
+                joint.connector_a_label
+            )
         if joint.instance_b_id and joint.connector_b_label:
-            labels_by_inst.setdefault(joint.instance_b_id, set()).add(joint.connector_b_label)
+            labels_by_inst.setdefault(joint.instance_b_id, set()).add(
+                joint.connector_b_label
+            )
 
-    frames_by_conn, local_cache = _build_world_connector_frames(inst_by_id, labels_by_inst, design_for)
+    frames_by_conn, local_cache = _build_world_connector_frames(
+        inst_by_id, labels_by_inst, design_for
+    )
     return frames_by_conn, labels_by_inst, local_cache
 
 
@@ -355,7 +367,7 @@ def _build_world_connector_frames(
     # the design (cluster transforms, helix geometry), not on the
     # instance's world transform, so we can share them across instances
     # whose ``design_for(inst)`` returns the same Design object.
-    local_cache: dict[tuple[int, str], 'np.ndarray | None'] = {}
+    local_cache: dict[tuple[int, str], "np.ndarray | None"] = {}
 
     frames_by_conn: dict[tuple[str, str], np.ndarray] = {}
     for inst_id, labels in labels_by_inst.items():
@@ -443,8 +455,9 @@ def _refresh_connector_frames_for_instance(
         frames_by_conn[(inst_id, label)] = frame
 
 
-def _enforce_connector_coincidence(assembly, visited: set,
-                                      inst_by_id: dict | None = None) -> None:
+def _enforce_connector_coincidence(
+    assembly, visited: set, inst_by_id: dict | None = None
+) -> None:
     """
     Post-pass: for every rigid/revolute joint where instance_b moved but instance_a
     did not, translate instance_b so connector_b coincides with connector_a.
@@ -458,7 +471,7 @@ def _enforce_connector_coincidence(assembly, visited: set,
         for j in assembly.joints:
             if j.instance_b_id != cid:
                 continue
-            if j.joint_type not in ('rigid', 'revolute'):
+            if j.joint_type not in ("rigid", "revolute"):
                 continue
             if not j.connector_a_label or not j.connector_b_label:
                 continue
@@ -483,7 +496,8 @@ def _enforce_connector_coincidence(assembly, visited: set,
             inst_b.transform = Mat4x4.from_array(snap_d @ T_b)
             if inst_b.base_transform:
                 inst_b.base_transform = Mat4x4.from_array(
-                    snap_d @ inst_b.base_transform.to_array())
+                    snap_d @ inst_b.base_transform.to_array()
+                )
             j.axis_origin = ca.tolist()
             # Propagate snap down inst_b's kinematic subtree
             snap_vis: set = {cid}

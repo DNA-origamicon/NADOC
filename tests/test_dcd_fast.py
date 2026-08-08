@@ -1,4 +1,5 @@
 """O(1) direct DCD last-frame reader — verified against MDAnalysis."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -42,7 +43,7 @@ def test_layout_and_frames_match_mdanalysis(tmp_path):
     for idx in (0, n_frames // 2, n_frames - 1):
         coords, cell = F.read_frame(dcd, layout, idx)
         u.trajectory[idx]
-        assert np.abs(coords - u.atoms.positions).max() < 1e-3   # byte-exact coords
+        assert np.abs(coords - u.atoms.positions).max() < 1e-3  # byte-exact coords
         assert np.allclose(F.cell_to_dimensions(cell), u.dimensions, atol=1e-2)
 
 
@@ -63,7 +64,7 @@ def test_out_of_range_frame_raises(tmp_path):
     dcd = _write_dcd(tmp_path, 20, 3)
     layout = F.read_layout(dcd)
     with pytest.raises(IndexError):
-        F.read_frame(dcd, layout, 3)        # only 0..2 exist
+        F.read_frame(dcd, layout, 3)  # only 0..2 exist
 
 
 def test_growing_file_frame_count_is_arithmetic(tmp_path):

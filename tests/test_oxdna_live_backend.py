@@ -1,6 +1,5 @@
 """CPU/CUDA backend selection + GPU→CPU fallback for live oxpy sessions."""
 
-
 import pytest
 
 from backend.core import oxdna_live_backend as lb
@@ -15,6 +14,7 @@ def _clear_cache():
 
 
 # ── preferred_backend / gpu_present ──────────────────────────────────────────
+
 
 def test_preferred_backend_cuda_when_gpu_present():
     assert lb.preferred_backend(probe=lambda: True) == "CUDA"
@@ -32,11 +32,12 @@ def test_gpu_probe_is_cached_after_first_call():
         return True
 
     assert lb.gpu_present(probe=probe) is True
-    assert lb.gpu_present(probe=probe) is True   # cached → probe not re-run
+    assert lb.gpu_present(probe=probe) is True  # cached → probe not re-run
     assert len(calls) == 1
 
 
 # ── _OxpyStepper CUDA→CPU fallback ───────────────────────────────────────────
+
 
 class _FakeStack:
     def __init__(self):
@@ -49,15 +50,17 @@ class _FakeStack:
 def _opener(fail_on):
     """Return an ``_open_fn(input_name)`` that raises for ``fail_on`` (simulating a
     GPU out-of-memory) and otherwise returns a (stack, mgr, field) triple."""
+
     def open_fn(input_name):
         if input_name == fail_on:
             raise RuntimeError("CUDA: out of memory")
         return _FakeStack(), object(), None
+
     return open_fn
 
 
 def test_cuda_open_failure_falls_back_to_cpu(tmp_path):
-    (tmp_path / "input_cpu").write_text("backend = CPU\n")   # CPU fallback staged
+    (tmp_path / "input_cpu").write_text("backend = CPU\n")  # CPU fallback staged
     st = _OxpyStepper(tmp_path, backend="CUDA", _open_fn=_opener(fail_on="input"))
     with st:
         assert st.active_backend == "CPU"

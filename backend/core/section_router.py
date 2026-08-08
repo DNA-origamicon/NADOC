@@ -81,7 +81,10 @@ def has_multisection_helix(coverage: dict[str, list[dict]]) -> bool:
 
 # ── Decomposition ──────────────────────────────────────────────────────────────
 
-def _decompose(design: Design) -> tuple[dict[str, dict], list[dict[str, tuple[int, int]]]]:
+
+def _decompose(
+    design: Design,
+) -> tuple[dict[str, dict], list[dict[str, tuple[int, int]]]]:
     """Split scaffold coverage into the continuous TRUNK and segmented WINDOWS.
 
     Returns ``(trunk_sections, windows)`` where ``trunk_sections`` is
@@ -90,8 +93,11 @@ def _decompose(design: Design) -> tuple[dict[str, dict], list[dict[str, tuple[in
     Iteration is sorted for PYTHONHASHSEED-independence.
     """
     coverage = _scaffold_coverage(design)
-    trunk = {h: (coverage[h][0]["lo"], coverage[h][0]["hi"])
-             for h in coverage if len(coverage[h]) == 1}
+    trunk = {
+        h: (coverage[h][0]["lo"], coverage[h][0]["hi"])
+        for h in coverage
+        if len(coverage[h]) == 1
+    }
 
     seg: list[tuple[str, int, int]] = []
     for h in coverage:
@@ -129,17 +135,28 @@ def _sub_seed(design: Design, sections: dict[str, tuple[int, int]]) -> Design:
     for hid, (lo, hi) in sorted(sections.items()):
         r, c = hb[hid].grid_pos
         if _is_forward(r, c):
-            dom = Domain(helix_id=hid, start_bp=lo, end_bp=hi, direction=Direction.FORWARD)
+            dom = Domain(
+                helix_id=hid, start_bp=lo, end_bp=hi, direction=Direction.FORWARD
+            )
         else:
-            dom = Domain(helix_id=hid, start_bp=hi, end_bp=lo, direction=Direction.REVERSE)
-        strands.append(Strand(id=f"section_seed_{hid}", domains=[dom],
-                              strand_type=StrandType.SCAFFOLD))
+            dom = Domain(
+                helix_id=hid, start_bp=hi, end_bp=lo, direction=Direction.REVERSE
+            )
+        strands.append(
+            Strand(
+                id=f"section_seed_{hid}", domains=[dom], strand_type=StrandType.SCAFFOLD
+            )
+        )
     return design.copy_with(helices=helices, strands=strands, crossovers=[])
 
 
 def _route_subbundle(
-    design: Design, sections: dict[str, tuple[int, int]], *,
-    matched: bool = False, seamless: bool = False, close_cycle: bool = False,
+    design: Design,
+    sections: dict[str, tuple[int, int]],
+    *,
+    matched: bool = False,
+    seamless: bool = False,
+    close_cycle: bool = False,
 ):
     """Route a sub-bundle seed; return (strand, crossovers).
 
@@ -160,10 +177,13 @@ def _route_subbundle(
     seed = _sub_seed(design, sections)
     if seamless:
         from backend.core.seamless_router import auto_scaffold_seamless
+
         # reset=False: `seed` is a sub-design this router just built, and the
         # top-level entry point already reset the design (ISSUE-9).  Resetting here
         # would retract the seed we are mid-way through constructing.
-        routed, _res = auto_scaffold_seamless(seed, close_cycle=close_cycle, reset=False)
+        routed, _res = auto_scaffold_seamless(
+            seed, close_cycle=close_cycle, reset=False
+        )
     elif matched:
         routed, _res = auto_scaffold_seamed(seed)
     else:
@@ -180,6 +200,7 @@ def _route_subbundle(
 
 # ── Domain-surgery helpers ──────────────────────────────────────────────────────
 
+
 def _covers(dom: Domain, X: int) -> bool:
     return min(dom.start_bp, dom.end_bp) <= X and max(dom.start_bp, dom.end_bp) >= X + 1
 
@@ -188,22 +209,42 @@ def _split_dom(dom: Domain, X: int) -> tuple[Domain, Domain]:
     """Split ``dom`` at the X|X+1 gap → (part covering ≤X, part covering ≥X+1)."""
     lo, hi = min(dom.start_bp, dom.end_bp), max(dom.start_bp, dom.end_bp)
     if dom.direction == Direction.FORWARD:
-        a = Domain(helix_id=dom.helix_id, start_bp=lo, end_bp=X, direction=Direction.FORWARD)
-        b = Domain(helix_id=dom.helix_id, start_bp=X + 1, end_bp=hi, direction=Direction.FORWARD)
+        a = Domain(
+            helix_id=dom.helix_id, start_bp=lo, end_bp=X, direction=Direction.FORWARD
+        )
+        b = Domain(
+            helix_id=dom.helix_id,
+            start_bp=X + 1,
+            end_bp=hi,
+            direction=Direction.FORWARD,
+        )
     else:
-        a = Domain(helix_id=dom.helix_id, start_bp=X, end_bp=lo, direction=Direction.REVERSE)
-        b = Domain(helix_id=dom.helix_id, start_bp=hi, end_bp=X + 1, direction=Direction.REVERSE)
+        a = Domain(
+            helix_id=dom.helix_id, start_bp=X, end_bp=lo, direction=Direction.REVERSE
+        )
+        b = Domain(
+            helix_id=dom.helix_id,
+            start_bp=hi,
+            end_bp=X + 1,
+            direction=Direction.REVERSE,
+        )
     return a, b
 
 
 def _revd(dm: Domain) -> Domain:
     return Domain(
-        helix_id=dm.helix_id, start_bp=dm.end_bp, end_bp=dm.start_bp,
-        direction=Direction.FORWARD if dm.direction == Direction.REVERSE else Direction.REVERSE,
+        helix_id=dm.helix_id,
+        start_bp=dm.end_bp,
+        end_bp=dm.start_bp,
+        direction=Direction.FORWARD
+        if dm.direction == Direction.REVERSE
+        else Direction.REVERSE,
     )
 
 
-def _cut_window_cycle(wdoms: list[Domain], helix_id: str, X: int) -> list[Domain] | None:
+def _cut_window_cycle(
+    wdoms: list[Domain], helix_id: str, X: int
+) -> list[Domain] | None:
     """Linearise the window loop so the chain starts at ``helix_id[X+1]`` and ends at ``helix_id[X]``.
 
     ``wdoms`` is the router's window strand in 5'→3' order; its 5'/3' sit on one
@@ -217,19 +258,29 @@ def _cut_window_cycle(wdoms: list[Domain], helix_id: str, X: int) -> list[Domain
             a, b = _split_dom(dm, X)  # a=[..X], b=[X+1..]
             # which half is traversed first in 5'->3' order
             first, second = (a, b) if dm.direction == Direction.FORWARD else (b, a)
-            rest = wdoms[i + 1:] + wdoms[:i]
+            rest = wdoms[i + 1 :] + wdoms[:i]
             chain = [second] + rest + [first]  # cut between first/second; wrap
             # ensure chain starts at the X+1 side
             head = chain[0]
-            if not (head.helix_id == helix_id and (head.start_bp == X + 1 or head.end_bp == X + 1)):
+            if not (
+                head.helix_id == helix_id
+                and (head.start_bp == X + 1 or head.end_bp == X + 1)
+            ):
                 chain = [_revd(d) for d in reversed(chain)]
             return chain
     return None
 
 
 def _adj_pair_in_domain(
-    design: Design, hb: dict, hT: str, hW_grid: tuple[int, int],
-    whid: str, lo: int, hi: int, tdoms: list[Domain], wdoms: list[Domain],
+    design: Design,
+    hb: dict,
+    hT: str,
+    hW_grid: tuple[int, int],
+    whid: str,
+    lo: int,
+    hi: int,
+    tdoms: list[Domain],
+    wdoms: list[Domain],
 ) -> int | None:
     """Valid double-pair (X, X+1) nearest the tooth MIDPOINT, inside ONE trunk domain
     on ``hT`` and ONE window domain on ``whid``.
@@ -242,7 +293,8 @@ def _adj_pair_in_domain(
     vb = [b for b in range(lo, hi + 1) if _scaf_nb(design, r, c, b) == hW_grid]
     mid = (lo + hi) / 2.0
     candidates = [
-        vb[i] for i in range(len(vb) - 1)
+        vb[i]
+        for i in range(len(vb) - 1)
         if vb[i + 1] == vb[i] + 1
         and any(d.helix_id == hT and _covers(d, vb[i]) for d in tdoms)
         and any(d.helix_id == whid and _covers(d, vb[i]) for d in wdoms)
@@ -287,8 +339,9 @@ def _pull_window_turns(
     def _valid(hid_a: str, hid_b: str, t: int) -> bool:
         ra, ca = hb[hid_a].grid_pos
         rb, cb = hb[hid_b].grid_pos
-        return (_scaf_nb(design, ra, ca, t) == (rb, cb)
-                and _scaf_nb(design, rb, cb, t) == (ra, ca))
+        return _scaf_nb(design, ra, ca, t) == (rb, cb) and _scaf_nb(
+            design, rb, cb, t
+        ) == (ra, ca)
 
     def _retarget(hid: str, old_term: int, new_term: int, far: bool) -> None:
         for idx, d in enumerate(doms):
@@ -307,9 +360,11 @@ def _pull_window_turns(
 
     new_x: list[Crossover] = []
     for xo in all_x:
-        if (xo.process_id not in ("create_near_ends", "create_far_ends")
-                or xo.half_a.helix_id not in window_secs
-                or xo.half_b.helix_id not in window_secs):
+        if (
+            xo.process_id not in ("create_near_ends", "create_far_ends")
+            or xo.half_a.helix_id not in window_secs
+            or xo.half_b.helix_id not in window_secs
+        ):
             new_x.append(xo)
             continue
         a, b = xo.half_a, xo.half_b
@@ -321,21 +376,31 @@ def _pull_window_turns(
         rng = range(face, i + 1) if far else range(face, i - 1, -1)
         t = next((bp for bp in rng if _valid(a.helix_id, b.helix_id, bp)), i)
         if t != i:
-            _retarget(a.helix_id, _nick_bp(i, a.strand, period, bow),
-                      _nick_bp(t, a.strand, period, bow), far)
-            _retarget(b.helix_id, _nick_bp(i, b.strand, period, bow),
-                      _nick_bp(t, b.strand, period, bow), far)
-        new_x.append(Crossover(
-            half_a=HalfCrossover(helix_id=a.helix_id, index=t, strand=a.strand),
-            half_b=HalfCrossover(helix_id=b.helix_id, index=t, strand=b.strand),
-            process_id=xo.process_id,
-        ))
+            _retarget(
+                a.helix_id,
+                _nick_bp(i, a.strand, period, bow),
+                _nick_bp(t, a.strand, period, bow),
+                far,
+            )
+            _retarget(
+                b.helix_id,
+                _nick_bp(i, b.strand, period, bow),
+                _nick_bp(t, b.strand, period, bow),
+                far,
+            )
+        new_x.append(
+            Crossover(
+                half_a=HalfCrossover(helix_id=a.helix_id, index=t, strand=a.strand),
+                half_b=HalfCrossover(helix_id=b.helix_id, index=t, strand=b.strand),
+                process_id=xo.process_id,
+            )
+        )
     return doms, new_x
 
 
 def _recompute_helices(design: Design, domains: list[Domain]):
     """Extend each helix geometry to cover the final strand's domain bp-range (never shrink)."""
-    rng: dict[str, list[int]] = defaultdict(lambda: [10 ** 9, -10 ** 9])
+    rng: dict[str, list[int]] = defaultdict(lambda: [10**9, -(10**9)])
     for dm in domains:
         lo, hi = min(dm.start_bp, dm.end_bp), max(dm.start_bp, dm.end_bp)
         rng[dm.helix_id][0] = min(rng[dm.helix_id][0], lo)
@@ -350,6 +415,7 @@ def _recompute_helices(design: Design, domains: list[Domain]):
 
 
 # ── Entry point ─────────────────────────────────────────────────────────────────
+
 
 def route_sections(design: Design, *, seamless: bool = False):
     """Route an irregular multi-section design to a single scaffold strand.
@@ -373,6 +439,7 @@ def route_sections(design: Design, *, seamless: bool = False):
 
     if seamless:
         from backend.core.seamless_router import SeamlessResult
+
         result = SeamlessResult()
     else:
         result = SeamedResult()
@@ -409,9 +476,14 @@ def route_sections(design: Design, *, seamless: bool = False):
         wh = sorted(w, key=lambda h: tuple(hb[h].grid_pos))[0]
         rW, cW = hb[wh].grid_pos
         Tid = next(
-            (ch for ch in sorted(trunk_sec)
-             if any(_scaf_nb(design, *hb[ch].grid_pos, b) == (rW, cW)
-                    for b in range(lo, hi + 1))),
+            (
+                ch
+                for ch in sorted(trunk_sec)
+                if any(
+                    _scaf_nb(design, *hb[ch].grid_pos, b) == (rW, cW)
+                    for b in range(lo, hi + 1)
+                )
+            ),
             None,
         )
         if Tid is None:
@@ -420,7 +492,9 @@ def route_sections(design: Design, *, seamless: bool = False):
         if X is None:
             return None  # no valid in-domain double-pair — fall back
 
-        ti = next(i for i, dm in enumerate(main_doms) if dm.helix_id == Tid and _covers(dm, X))
+        ti = next(
+            i for i, dm in enumerate(main_doms) if dm.helix_id == Tid and _covers(dm, X)
+        )
         Tdom = main_doms[ti]
         Ta, Tb = _split_dom(Tdom, X)  # Ta=[..X], Tb=[X+1..]
         wchain = _cut_window_cycle(wdoms, wh, X)
@@ -430,18 +504,20 @@ def route_sections(design: Design, *, seamless: bool = False):
             newseg = [Tb] + wchain + [Ta]
         else:
             newseg = [Ta] + wchain + [Tb]
-        main_doms = main_doms[:ti] + newseg + main_doms[ti + 1:]
+        main_doms = main_doms[:ti] + newseg + main_doms[ti + 1 :]
         all_x += w_x
 
         rT, cT = hb[Tid].grid_pos
         sT = Direction.FORWARD if _is_forward(rT, cT) else Direction.REVERSE
         sW = Direction.FORWARD if _is_forward(rW, cW) else Direction.REVERSE
         for bp in (X, X + 1):
-            all_x.append(Crossover(
-                half_a=HalfCrossover(helix_id=Tid, index=bp, strand=sT),
-                half_b=HalfCrossover(helix_id=wh, index=bp, strand=sW),
-                process_id=_SECTION_PROCESS_ID,
-            ))
+            all_x.append(
+                Crossover(
+                    half_a=HalfCrossover(helix_id=Tid, index=bp, strand=sT),
+                    half_b=HalfCrossover(helix_id=wh, index=bp, strand=sW),
+                    process_id=_SECTION_PROCESS_ID,
+                )
+            )
         # The trunk↔tooth dip is a reciprocal double crossover — count it as the
         # bridge it is in seamless mode, or a seam in seamed mode.
         if seamless:
@@ -452,9 +528,13 @@ def route_sections(design: Design, *, seamless: bool = False):
     # Assemble the final design: the single section strand replaces every active
     # scaffold strand; reference + non-scaffold strands and non-routing crossovers
     # are preserved.
-    keep_strands = [s for s in design.strands if not (s.is_scaffold and not s.is_reference)]
+    keep_strands = [
+        s for s in design.strands if not (s.is_scaffold and not s.is_reference)
+    ]
     keep_xovers = [xo for xo in design.crossovers if not _is_scaffold_route_xover(xo)]
-    strand = Strand(id="scaffold_section_route", domains=main_doms, strand_type=StrandType.SCAFFOLD)
+    strand = Strand(
+        id="scaffold_section_route", domains=main_doms, strand_type=StrandType.SCAFFOLD
+    )
     helices = _recompute_helices(design, main_doms)
     out = design.copy_with(
         helices=helices,
@@ -467,4 +547,8 @@ def route_sections(design: Design, *, seamless: bool = False):
 
 def _is_scaffold_route_xover(xo: Crossover) -> bool:
     pid = xo.process_id or ""
-    return pid.startswith(_SCAF_ROUTE_PREFIXES) or pid in _SCAF_ROUTE_IDS or pid == _SECTION_PROCESS_ID
+    return (
+        pid.startswith(_SCAF_ROUTE_PREFIXES)
+        or pid in _SCAF_ROUTE_IDS
+        or pid == _SECTION_PROCESS_ID
+    )

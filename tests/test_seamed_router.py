@@ -1,4 +1,5 @@
 """Tests for backend/core/seamed_router.py."""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -21,7 +22,9 @@ from backend.core.validator import validate_design
 from tests.conftest import EIGHTEEN_HB_CELLS
 
 
-def _scaffold_forced_ligation_edges(design: Design) -> dict[str, list[tuple[str, int, int]]]:
+def _scaffold_forced_ligation_edges(
+    design: Design,
+) -> dict[str, list[tuple[str, int, int]]]:
     matches: dict[str, list[tuple[str, int, int]]] = {}
     for fl in design.forced_ligations:
         found: list[tuple[str, int, int]] = []
@@ -70,7 +73,9 @@ def test_matched_ends_far_is_left_side_translate_of_near():
     # bonds whose legal xover sites straddle the near floor.  A plain 3×6 block did
     # NOT reproduce it (its near faces fall elsewhere relative to the bows), so the
     # regression must run on this layout to exercise the fix.
-    design = make_bundle_design(EIGHTEEN_HB_CELLS, 388, lattice_type=LatticeType.HONEYCOMB)
+    design = make_bundle_design(
+        EIGHTEEN_HB_CELLS, 388, lattice_type=LatticeType.HONEYCOMB
+    )
 
     updated, result = auto_scaffold_matched(design)
 
@@ -200,12 +205,15 @@ def test_circular_scaffold_is_linearized_at_buried_noncrossover_nick():
     )
 
     base = make_bundle_design(
-        [(0, 0), (0, 1)], length_bp=60,
-        lattice_type=LatticeType.SQUARE, strand_filter="scaffold",
+        [(0, 0), (0, 1)],
+        length_bp=60,
+        lattice_type=LatticeType.SQUARE,
+        strand_filter="scaffold",
     )
     h0, h1 = [h.id for h in base.helices]
     scaf = Strand(
-        id="scaf_loop", strand_type=StrandType.SCAFFOLD,
+        id="scaf_loop",
+        strand_type=StrandType.SCAFFOLD,
         domains=[
             Domain(helix_id=h0, start_bp=0, end_bp=50, direction=Direction.FORWARD),
             Domain(helix_id=h1, start_bp=50, end_bp=0, direction=Direction.REVERSE),
@@ -222,16 +230,18 @@ def test_circular_scaffold_is_linearized_at_buried_noncrossover_nick():
     design = base.copy_with(strands=[scaf], crossovers=[xo_turn, xo_close])
 
     circ = [s for s in design.strands if s.is_scaffold and not s.is_reference]
-    assert _scaffold_end_join_xover(design, circ[0]) is not None  # confirm it starts circular
+    assert (
+        _scaffold_end_join_xover(design, circ[0]) is not None
+    )  # confirm it starts circular
 
     result = SeamedResult()
     out = _linearize_circular_scaffolds(design, result)
 
     out_scaf = [s for s in out.strands if s.is_scaffold and not s.is_reference]
-    assert len(out_scaf) == 1                                    # still a single strand
-    assert _scaffold_end_join_xover(out, out_scaf[0]) is None    # no longer circular
+    assert len(out_scaf) == 1  # still a single strand
+    assert _scaffold_end_join_xover(out, out_scaf[0]) is None  # no longer circular
     s = out_scaf[0]
-    assert s.domains[0].start_bp not in (0, 50)                  # nick is interior, not a crossover bp
+    assert s.domains[0].start_bp not in (0, 50)  # nick is interior, not a crossover bp
     assert s.domains[-1].end_bp not in (0, 50)
     assert not result.warnings
 
@@ -262,10 +272,13 @@ def test_guard_passes_even_hamiltonian_bundles():
         assert seamed_routability_errors(_sq_bundle(cells)) == []
 
 
-@pytest.mark.parametrize("cells,n", [
-    ([(r, c) for r in range(3) for c in range(3)], 9),                       # 3×3
-    ([(r, 0) for r in range(4)] + [(3, c) for c in range(1, 4)], 7),         # L
-])
+@pytest.mark.parametrize(
+    "cells,n",
+    [
+        ([(r, c) for r in range(3) for c in range(3)], 9),  # 3×3
+        ([(r, 0) for r in range(4)] + [(3, c) for c in range(1, 4)], 7),  # L
+    ],
+)
 def test_guard_flags_odd_helix_group(cells, n):
     """An odd-helix group would orphan the trailing helix — flagged as 'even'."""
     errs = seamed_routability_errors(_sq_bundle(cells))
@@ -284,14 +297,19 @@ def test_guard_is_out_of_scope_for_forced_ligation_designs():
     """Forced-ligation (hinge) designs route through their own router — not guarded."""
     d = _sq_bundle([(r, c) for r in range(3) for c in range(3)])  # odd, would flag
     from backend.core.models import Direction, ForcedLigation
-    d = d.copy_with(forced_ligations=[
-        ForcedLigation(
-            three_prime_helix_id=d.helices[0].id, three_prime_bp=10,
-            three_prime_direction=Direction.FORWARD,
-            five_prime_helix_id=d.helices[1].id, five_prime_bp=10,
-            five_prime_direction=Direction.REVERSE,
-        )
-    ])
+
+    d = d.copy_with(
+        forced_ligations=[
+            ForcedLigation(
+                three_prime_helix_id=d.helices[0].id,
+                three_prime_bp=10,
+                three_prime_direction=Direction.FORWARD,
+                five_prime_helix_id=d.helices[1].id,
+                five_prime_bp=10,
+                five_prime_direction=Direction.REVERSE,
+            )
+        ]
+    )
     assert seamed_routability_errors(d) == []
 
 

@@ -88,7 +88,10 @@ def test_carve_gpuresident_conflict_is_its_own_kind():
 
 
 def test_clean_log_classifies_as_nothing():
-    assert bm.classify_failure("Info: Benchmark time: 32 CPUs 0.01 s/step 0.5 days/ns") is None
+    assert (
+        bm.classify_failure("Info: Benchmark time: 32 CPUs 0.01 s/step 0.5 days/ns")
+        is None
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -115,8 +118,12 @@ def test_gpu_resident_reports_ns_per_day_directly_not_days_per_ns():
     """NAMD switches units by execution mode. Offload prints `days/ns`; GPU-resident
     prints `ns/day`. Parsing only one silently drops every cell of the other mode —
     the resident cell came back rc=0 with no throughput and read as a failure."""
-    resident = "Info: Benchmark time: 16 CPUs 0.0516647 s/step 6.68928 ns/day 0 MB memory"
-    offload = "Info: Benchmark time: 16 CPUs 0.0483142 s/step 0.139798 days/ns 0 MB memory"
+    resident = (
+        "Info: Benchmark time: 16 CPUs 0.0516647 s/step 6.68928 ns/day 0 MB memory"
+    )
+    offload = (
+        "Info: Benchmark time: 16 CPUs 0.0483142 s/step 0.139798 days/ns 0 MB memory"
+    )
     assert bm.ns_per_day(resident) == pytest.approx(6.68928)
     assert bm.ns_per_day(offload) == pytest.approx(1 / 0.139798, rel=1e-4)
 
@@ -194,8 +201,13 @@ def test_run_is_the_last_directive_and_gpu_resident_precedes_it():
     whole segment in offload mode, so the cell reports a plain-offload speed under a
     GPU-resident label. This exact bug produced a bogus 6hb result."""
     out = bm.make_bench_conf(
-        SRC_CONF, psf="p.psf", timestep_fs=4.0, gpu_resident=True,
-        run_steps=2400, out_stem="o", seed_stem="s",
+        SRC_CONF,
+        psf="p.psf",
+        timestep_fs=4.0,
+        gpu_resident=True,
+        run_steps=2400,
+        out_stem="o",
+        seed_stem="s",
     )
     lines = [l for l in out.splitlines() if l.strip()]
     assert lines[-1].split()[0] == "run", lines[-1]
@@ -206,12 +218,22 @@ def test_run_is_the_last_directive_and_gpu_resident_precedes_it():
 
 def test_bench_conf_adds_and_removes_gpu_resident():
     on = bm.make_bench_conf(
-        SRC_CONF, psf="p.psf", timestep_fs=4.0, gpu_resident=True,
-        run_steps=2400, out_stem="o", seed_stem="s",
+        SRC_CONF,
+        psf="p.psf",
+        timestep_fs=4.0,
+        gpu_resident=True,
+        run_steps=2400,
+        out_stem="o",
+        seed_stem="s",
     )
     off = bm.make_bench_conf(
-        SRC_CONF, psf="p.psf", timestep_fs=4.0, gpu_resident=False,
-        run_steps=2400, out_stem="o", seed_stem="s",
+        SRC_CONF,
+        psf="p.psf",
+        timestep_fs=4.0,
+        gpu_resident=False,
+        run_steps=2400,
+        out_stem="o",
+        seed_stem="s",
     )
     assert "GPUresident" in on
     assert "GPUresident" not in off
@@ -220,8 +242,13 @@ def test_bench_conf_adds_and_removes_gpu_resident():
 def test_bench_conf_drops_temperature_when_seeding_velocities():
     """NAMD refuses `temperature` and `binVelocities` together."""
     out = bm.make_bench_conf(
-        SRC_CONF, psf="p.psf", timestep_fs=2.0, gpu_resident=False,
-        run_steps=2400, out_stem="o", seed_stem="s",
+        SRC_CONF,
+        psf="p.psf",
+        timestep_fs=2.0,
+        gpu_resident=False,
+        run_steps=2400,
+        out_stem="o",
+        seed_stem="s",
     )
     assert "binVelocities" in out
     assert not any(l.startswith("temperature") for l in out.splitlines())
@@ -231,8 +258,13 @@ def test_bench_conf_preserves_the_physics():
     """Electrostatics, cutoffs, barostat and the ENM restraints must NOT move —
     otherwise we are benchmarking a simulation nobody would ever run."""
     out = bm.make_bench_conf(
-        SRC_CONF, psf="p.psf", timestep_fs=4.0, gpu_resident=True,
-        run_steps=2400, out_stem="o", seed_stem="s",
+        SRC_CONF,
+        psf="p.psf",
+        timestep_fs=4.0,
+        gpu_resident=True,
+        run_steps=2400,
+        out_stem="o",
+        seed_stem="s",
     )
     assert "PME                yes" in out
     assert "cutoff             10.0" in out
@@ -265,7 +297,9 @@ def test_gpu_resident_is_only_ever_attempted_on_cuda_cells():
 def test_unrunnable_designs_are_excluded_but_still_named():
     """An unrunnable package must not burn GPU minutes — but it must still be NAMED
     in the report, so the exclusion is a stated result, not a silent omission."""
-    blocked = bm.Package(key="x", label="X", why="", runnable=False, blocked_reason="because")
+    blocked = bm.Package(
+        key="x", label="X", why="", runnable=False, blocked_reason="because"
+    )
     assert not blocked.runnable
     for cell in bm.MATRIX:
         assert bm.PACKAGES[cell.package].runnable, cell.cid

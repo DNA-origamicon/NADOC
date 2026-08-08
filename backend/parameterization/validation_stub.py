@@ -163,8 +163,8 @@ def compare_covariance_matrices(
         "tolerance": tolerance,
         "recommendation": (
             "CG fluctuation spectrum matches atomistic within tolerance."
-            if passed else
-            f"CG fluctuation spectrum deviates by up to {max_ratio:.1f}× "
+            if passed
+            else f"CG fluctuation spectrum deviates by up to {max_ratio:.1f}× "
             f"(tolerance {tolerance:.1f}×).  Re-parameterize or increase "
             f"tolerance if CG coarse-graining is expected to smooth fluctuations."
         ),

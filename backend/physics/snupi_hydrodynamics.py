@@ -32,6 +32,7 @@ Everything is built in the module's **nm · pN · ns** unit system (see :mod:`sn
 Stokes self mobility is ``1/STOKES_TRANS`` (translational) / ``1/STOKES_ROT`` (rotational), and all
 RPY pair terms are dimensionless ratios of ``a/r`` times that self mobility — so units are automatic.
 """
+
 from __future__ import annotations
 
 import math
@@ -56,8 +57,9 @@ _I3 = np.eye(3)
 _DENSE_PEAK_FACTOR = 5.5
 
 
-def estimate_friction_memory_gb(n_nodes: int, coarse_bp: int | None = None,
-                                n_blobs: int | None = None) -> float:
+def estimate_friction_memory_gb(
+    n_nodes: int, coarse_bp: int | None = None, n_blobs: int | None = None
+) -> float:
     """Predicted PEAK process memory (GB) of building + using the RPY friction for ``n_nodes`` FE nodes.
 
     ``coarse_bp=None`` → the exact path (dense 6N×6N). ``coarse_bp=k`` → the coarse-grained blob model
@@ -77,13 +79,13 @@ def estimate_friction_memory_gb(n_nodes: int, coarse_bp: int | None = None,
         dim = 6 * int(n_blobs)
     else:
         dim = 6 * math.ceil(n / max(int(coarse_bp), 1))
-    return _DENSE_PEAK_FACTOR * (dim ** 2) * 8 / 1e9
+    return _DENSE_PEAK_FACTOR * (dim**2) * 8 / 1e9
 
 
 def _total_ram_gb() -> float:
     try:
         return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 1e9
-    except (ValueError, OSError, AttributeError):   # pragma: no cover — non-POSIX
+    except (ValueError, OSError, AttributeError):  # pragma: no cover — non-POSIX
         return 8.0
 
 
@@ -105,20 +107,25 @@ class HydroMemoryError(MemoryError):
     """Raised (before allocating anything) when an RPY solve would not fit in the memory budget."""
 
 
-def check_friction_memory(n_nodes: int, coarse_bp: int | None = None,
-                          n_blobs: int | None = None) -> None:
+def check_friction_memory(
+    n_nodes: int, coarse_bp: int | None = None, n_blobs: int | None = None
+) -> None:
     """Preflight the RPY memory cost; raise :class:`HydroMemoryError` with an actionable message rather
     than let the allocation OOM the machine. Call BEFORE building any matrix."""
     need = estimate_friction_memory_gb(n_nodes, coarse_bp, n_blobs)
     budget = hydro_memory_budget_gb()
     if need <= budget:
         return
-    mode = f"coarse-grained (1 bead / {coarse_bp} bp)" if coarse_bp else "exact (1 bead / bp)"
+    mode = (
+        f"coarse-grained (1 bead / {coarse_bp} bp)"
+        if coarse_bp
+        else "exact (1 bead / bp)"
+    )
     hint = (
         f"Coarse-graining to 1 bead per 8 bp would need only "
         f"{estimate_friction_memory_gb(n_nodes, 8):.2f} GB."
-        if not coarse_bp else
-        "Increase the coarse-graining factor, or run without hydrodynamics."
+        if not coarse_bp
+        else "Increase the coarse-graining factor, or run without hydrodynamics."
     )
     raise HydroMemoryError(
         f"SNUPI hydrodynamics (RPY) on {n_nodes} nodes needs ≈{need:.1f} GB of RAM in {mode} mode, "
@@ -143,9 +150,7 @@ def mu_self_rot(a: float = HYDRO_RADIUS_NM) -> float:
 
 def _skew(v: np.ndarray) -> np.ndarray:
     """Cross-product matrix E(v) with ``E(v)·w = v × w`` (the ε·v of the RPY rt coupling)."""
-    return np.array([[0.0, -v[2], v[1]],
-                     [v[2], 0.0, -v[0]],
-                     [-v[1], v[0], 0.0]])
+    return np.array([[0.0, -v[2], v[1]], [v[2], 0.0, -v[0]], [-v[1], v[0], 0.0]])
 
 
 def _rpy_pair_tt(rvec: np.ndarray, a: float, mu_self: float) -> np.ndarray:
@@ -159,14 +164,17 @@ def _rpy_pair_tt(rvec: np.ndarray, a: float, mu_self: float) -> np.ndarray:
     P = np.outer(rh, rh)
     if r >= 2.0 * a:
         pref = mu_self * (3.0 * a / (4.0 * r))
-        return pref * ((1.0 + 2.0 * a * a / (3.0 * r * r)) * _I3
-                       + (1.0 - 2.0 * a * a / (r * r)) * P)
+        return pref * (
+            (1.0 + 2.0 * a * a / (3.0 * r * r)) * _I3
+            + (1.0 - 2.0 * a * a / (r * r)) * P
+        )
     # overlapping spheres (r < 2a) — the RPY regularization
-    return mu_self * ((1.0 - 9.0 * r / (32.0 * a)) * _I3
-                      + (3.0 * r / (32.0 * a)) * P)
+    return mu_self * ((1.0 - 9.0 * r / (32.0 * a)) * _I3 + (3.0 * r / (32.0 * a)) * P)
 
 
-def rpy_mobility_translational(positions: np.ndarray, a: float = HYDRO_RADIUS_NM) -> np.ndarray:
+def rpy_mobility_translational(
+    positions: np.ndarray, a: float = HYDRO_RADIUS_NM
+) -> np.ndarray:
     """Full translational RPY mobility Ξ_tt (3N×3N, SPD) for beads at ``positions`` (N,3 in nm).
     Self blocks = Stokes ``1/STOKES_TRANS·I``; pair blocks = :func:`_rpy_pair_tt`."""
     pos = np.asarray(positions, dtype=float)
@@ -174,11 +182,11 @@ def rpy_mobility_translational(positions: np.ndarray, a: float = HYDRO_RADIUS_NM
     mu_self = mu_self_trans(a)
     Xi = np.zeros((3 * n, 3 * n), dtype=float)
     for i in range(n):
-        Xi[3 * i:3 * i + 3, 3 * i:3 * i + 3] = mu_self * _I3
+        Xi[3 * i : 3 * i + 3, 3 * i : 3 * i + 3] = mu_self * _I3
         for j in range(i + 1, n):
             blk = _rpy_pair_tt(pos[j] - pos[i], a, mu_self)
-            Xi[3 * i:3 * i + 3, 3 * j:3 * j + 3] = blk
-            Xi[3 * j:3 * j + 3, 3 * i:3 * i + 3] = blk.T
+            Xi[3 * i : 3 * i + 3, 3 * j : 3 * j + 3] = blk
+            Xi[3 * j : 3 * j + 3, 3 * i : 3 * i + 3] = blk.T
     return Xi
 
 
@@ -187,17 +195,17 @@ def _rpy_pair_rr(rvec: np.ndarray, a: float) -> np.ndarray:
     eq 3.13; ζ_rr = STOKES_ROT). Non-overlap (r ≥ 2a) = the rotlet-dipole ``∝1/r³``; overlap (r < 2a)
     the paper's regularization (continuous at r = 2a; keeps the grand mobility SPD)."""
     r = float(np.linalg.norm(rvec))
-    mu_r = mu_self_rot(a)                             # 1/(8πηa³)
+    mu_r = mu_self_rot(a)  # 1/(8πηa³)
     if r < 1e-9:
         return mu_r * _I3
     rh = rvec / r
     P = np.outer(rh, rh)
     if r >= 2.0 * a:
         # 1/(16πηr³) = mu_r · a³/(2r³)
-        return (mu_r * a ** 3 / (2.0 * r ** 3)) * (3.0 * P - _I3)
+        return (mu_r * a**3 / (2.0 * r**3)) * (3.0 * P - _I3)
     x = r / a
-    A = 1.0 - (27.0 / 32.0) * x + (5.0 / 64.0) * x ** 3
-    B = (9.0 / 32.0) * x - (3.0 / 64.0) * x ** 3
+    A = 1.0 - (27.0 / 32.0) * x + (5.0 / 64.0) * x**3
+    B = (9.0 / 32.0) * x - (3.0 / 64.0) * x**3
     return mu_r * (A * _I3 + B * P)
 
 
@@ -211,16 +219,18 @@ def _rpy_pair_rt(rvec: np.ndarray, a: float) -> np.ndarray:
     if r < 1e-9:
         return np.zeros((3, 3))
     rh = rvec / r
-    mu_r = mu_self_rot(a)                             # 1/(8πηa³)
+    mu_r = mu_self_rot(a)  # 1/(8πηa³)
     if r >= 2.0 * a:
-        s = mu_r * (a ** 3) / (r * r)                 # 1/(8πηr²)
+        s = mu_r * (a**3) / (r * r)  # 1/(8πηr²)
     else:
         x = r / a
-        s = mu_r * (a / 2.0) * (x - (3.0 / 8.0) * x * x)          # 1/(16πηa²) at x→…
+        s = mu_r * (a / 2.0) * (x - (3.0 / 8.0) * x * x)  # 1/(16πηa²) at x→…
     return s * _skew(rh)
 
 
-def rpy_mobility_generalized(positions: np.ndarray, a: float = HYDRO_RADIUS_NM) -> np.ndarray:
+def rpy_mobility_generalized(
+    positions: np.ndarray, a: float = HYDRO_RADIUS_NM
+) -> np.ndarray:
     """The FULL generalized 6N×6N RPY mobility Ξ (Wajnryb 2013; SNUPI dynamics SI Note 3.2): all four
     coupling blocks — translation–translation (∝1/r), rotation–translation (∝1/r²) and rotation–rotation
     (∝1/r³) — with the r < 2a overlap regularizations that keep Ξ SPD for every configuration (essential
@@ -248,21 +258,25 @@ def rpy_mobility_generalized(positions: np.ndarray, a: float = HYDRO_RADIUS_NM) 
     Xi = np.zeros((6 * n, 6 * n), dtype=float)
     for i in range(n):
         bi = 6 * i
-        Xi[bi:bi + 3, bi:bi + 3] = mu_t * _I3          # tt self (Stokes translational)
-        Xi[bi + 3:bi + 6, bi + 3:bi + 6] = mu_r * _I3  # rr self (Stokes rotational)
+        Xi[bi : bi + 3, bi : bi + 3] = mu_t * _I3  # tt self (Stokes translational)
+        Xi[bi + 3 : bi + 6, bi + 3 : bi + 6] = mu_r * _I3  # rr self (Stokes rotational)
         for j in range(i + 1, n):
             bj = 6 * j
-            rvec = pos[j] - pos[i]                      # r_ij = u_j − u_i  (SI eq 3.8)
+            rvec = pos[j] - pos[i]  # r_ij = u_j − u_i  (SI eq 3.8)
             tr = _rpy_pair_rt(rvec, a)
-            Xi[bi:bi + 3, bj:bj + 3] = _rpy_pair_tt(rvec, a, mu_t)
-            Xi[bi + 3:bi + 6, bj + 3:bj + 6] = _rpy_pair_rr(rvec, a)
-            Xi[bi:bi + 3, bj + 3:bj + 6] = tr          # μ^tr_ij  (trans_i ← rot_j)
-            Xi[bi + 3:bi + 6, bj:bj + 3] = tr          # μ^rt_ij  = μ^tr_ij  (see docstring)
-            Xi[bj:bj + 6, bi:bi + 6] = Xi[bi:bi + 6, bj:bj + 6].T   # reciprocity → symmetric
+            Xi[bi : bi + 3, bj : bj + 3] = _rpy_pair_tt(rvec, a, mu_t)
+            Xi[bi + 3 : bi + 6, bj + 3 : bj + 6] = _rpy_pair_rr(rvec, a)
+            Xi[bi : bi + 3, bj + 3 : bj + 6] = tr  # μ^tr_ij  (trans_i ← rot_j)
+            Xi[bi + 3 : bi + 6, bj : bj + 3] = tr  # μ^rt_ij  = μ^tr_ij  (see docstring)
+            Xi[bj : bj + 6, bi : bi + 6] = Xi[
+                bi : bi + 6, bj : bj + 6
+            ].T  # reciprocity → symmetric
     return Xi
 
 
-def mobility_translational_6n(positions: np.ndarray, a: float = HYDRO_RADIUS_NM) -> np.ndarray:
+def mobility_translational_6n(
+    positions: np.ndarray, a: float = HYDRO_RADIUS_NM
+) -> np.ndarray:
     """The 6N×6N mobility of the TRANSLATIONAL-ONLY model: the full RPY Ξ_tt on the translational DOF,
     the Stokes self rotational mobility (no coupling) on the rotational ones. The mobility counterpart
     of ``friction_matrix(generalized=False)``, and the cheap ``C`` for the coarse blob model."""
@@ -273,13 +287,16 @@ def mobility_translational_6n(positions: np.ndarray, a: float = HYDRO_RADIUS_NM)
     mu_r = mu_self_rot(a)
     for i in range(n):
         for j in range(n):
-            Xi[6 * i:6 * i + 3, 6 * j:6 * j + 3] = Xi_tt[3 * i:3 * i + 3, 3 * j:3 * j + 3]
-        Xi[6 * i + 3:6 * i + 6, 6 * i + 3:6 * i + 6] = mu_r * _I3
+            Xi[6 * i : 6 * i + 3, 6 * j : 6 * j + 3] = Xi_tt[
+                3 * i : 3 * i + 3, 3 * j : 3 * j + 3
+            ]
+        Xi[6 * i + 3 : 6 * i + 6, 6 * i + 3 : 6 * i + 6] = mu_r * _I3
     return Xi
 
 
-def friction_matrix(positions: np.ndarray, a: float = HYDRO_RADIUS_NM,
-                    generalized: bool = False) -> np.ndarray:
+def friction_matrix(
+    positions: np.ndarray, a: float = HYDRO_RADIUS_NM, generalized: bool = False
+) -> np.ndarray:
     """The 6N×6N SNUPI friction matrix ``Z = Ξ⁻¹`` (pN·ns/nm on translational DOF, pN·nm·ns on
     rotational), ordered per node ``[tx,ty,tz, rx,ry,rz]``. SPD.
 
@@ -301,22 +318,26 @@ def friction_matrix(positions: np.ndarray, a: float = HYDRO_RADIUS_NM,
     if generalized:
         Xi = rpy_mobility_generalized(pos, a)
         try:
-            np.linalg.cholesky(Xi)                     # PD probe (cheap, exact)
-        except np.linalg.LinAlgError as exc:           # pragma: no cover — parity fix keeps Ξ SPD
+            np.linalg.cholesky(Xi)  # PD probe (cheap, exact)
+        except (
+            np.linalg.LinAlgError
+        ) as exc:  # pragma: no cover — parity fix keeps Ξ SPD
             raise ValueError(
                 "Generalized RPY mobility is not positive-definite for this configuration. This should "
                 "not happen (RPY is PD by construction, incl. overlaps) — suspect the μ^tr/μ^rt "
                 "cross-block parity in rpy_mobility_generalized."
             ) from exc
         Z = np.linalg.inv(Xi)
-        return 0.5 * (Z + Z.T)                         # symmetrize (guard tiny asymmetry)
+        return 0.5 * (Z + Z.T)  # symmetrize (guard tiny asymmetry)
     Xi_tt = rpy_mobility_translational(pos, a)
     Z_tt = np.linalg.inv(Xi_tt)
     Z_tt = 0.5 * (Z_tt + Z_tt.T)
     Z = np.zeros((6 * n, 6 * n), dtype=float)
-    zeta_rot = 1.0 / mu_self_rot(a)                     # rotational Stokes DRAG at radius a (= 8πηa³)
+    zeta_rot = 1.0 / mu_self_rot(a)  # rotational Stokes DRAG at radius a (= 8πηa³)
     for i in range(n):
         for j in range(n):
-            Z[6 * i:6 * i + 3, 6 * j:6 * j + 3] = Z_tt[3 * i:3 * i + 3, 3 * j:3 * j + 3]
-        Z[6 * i + 3:6 * i + 6, 6 * i + 3:6 * i + 6] = zeta_rot * _I3
+            Z[6 * i : 6 * i + 3, 6 * j : 6 * j + 3] = Z_tt[
+                3 * i : 3 * i + 3, 3 * j : 3 * j + 3
+            ]
+        Z[6 * i + 3 : 6 * i + 6, 6 * i + 3 : 6 * i + 6] = zeta_rot * _I3
     return Z

@@ -34,78 +34,84 @@ from typing import Optional
 
 
 class CandoStatus(str, Enum):
-    queued    = "queued"
-    preparing = "preparing"   # writing the design snapshot
-    running   = "running"     # FEM solving
-    failed    = "failed"
-    stopped   = "stopped"     # manually stopped
-    completed = "completed"   # solve done + positions/RMSF extracted
+    queued = "queued"
+    preparing = "preparing"  # writing the design snapshot
+    running = "running"  # FEM solving
+    failed = "failed"
+    stopped = "stopped"  # manually stopped
+    completed = "completed"  # solve done + positions/RMSF extracted
 
 
 @dataclass
 class CandoStageStatus:
-    name:       str          # "linear" (coarse) or "nonlinear" (fine)
-    status:     str = "pending"   # pending / running / done / failed
-    started_at: Optional[float] = None   # wall time the stage began (for the ETA bar)
+    name: str  # "linear" (coarse) or "nonlinear" (fine)
+    status: str = "pending"  # pending / running / done / failed
+    started_at: Optional[float] = None  # wall time the stage began (for the ETA bar)
 
 
 @dataclass
 class CandoJob:
-    job_id:              str
-    design_name:         str
-    status:              CandoStatus
-    created_at:          float
-    n_nucleotides:       int = 0
+    job_id: str
+    design_name: str
+    status: CandoStatus
+    created_at: float
+    n_nucleotides: int = 0
     # Job kind: "predict" (default) = plain FEM shape prediction; "autorefine" = tune the loop/skip
     # program (density sweep + greedy), auto-apply it to the design (reversible feature-log entry),
     # THEN cache the FEM analysis of the refined design so all the display modes work on it.
-    kind:                str = "predict"
+    kind: str = "predict"
     # Solver mode: nonlinear=True is the "Fine" corotational solve (default, ~0.95·CanDo);
     # nonlinear=False is the fast "Coarse" linear preview.  For an autorefine job it is the
     # per-trial ORACLE mode (Coarse/linear is the sensible fast inner loop).
-    nonlinear:           bool = True
-    n_steps:             int = 20     # corotational load-step count (nonlinear only)
-    with_rmsf:           bool = True  # also compute the free-free NMA per-bp RMSF
+    nonlinear: bool = True
+    n_steps: int = 20  # corotational load-step count (nonlinear only)
+    with_rmsf: bool = True  # also compute the free-free NMA per-bp RMSF
     # ── Job-request annotations (C1/C2): anchors + uniform E-field, NEVER a topology edit ──
     # anchors: shared oxDNA scope descriptors (overhang/cluster/domain/strand/base) held fixed
     # (Dirichlet BC) during the FEM solve.  field: {"field_pN": <force/nt, pN>, "dir": [x,y,z]} —
     # the same per-nucleotide force oxDNA applies.  A field needs ≥1 anchor (COM drift).  Both are
     # threaded into predict_shape(...) (Three-Layer Law: display-only, read-only over the design).
-    anchors:             Optional[list] = None
-    field:               Optional[dict] = None
-    stages:              list[CandoStageStatus] = dc_field(default_factory=list)
-    error:               Optional[str] = None
-    design_source_path:  Optional[str] = None
+    anchors: Optional[list] = None
+    field: Optional[dict] = None
+    stages: list[CandoStageStatus] = dc_field(default_factory=list)
+    error: Optional[str] = None
+    design_source_path: Optional[str] = None
     # Document the job's design lives in (multi-doc): the autorefine runner sets this so its
     # auto-apply lands on the right document's active design + feature log from its worker thread.
-    doc_id:              Optional[str] = None
+    doc_id: Optional[str] = None
     # ── Autorefine (kind == "autorefine") result summary ────────────────────────
-    refine_applied:      bool = False           # did the refine improve + apply marks?
-    refine_before_rmsd:  Optional[float] = None # FEM deviation RMSD (nm) before refining
-    refine_after_rmsd:   Optional[float] = None # …and after (the applied result)
-    refine_n_marks:      Optional[int] = None   # total loop/skip marks in the applied program
-    refine_period:       Optional[int] = None   # SQUARE density-sweep winning period (None = n/a)
+    refine_applied: bool = False  # did the refine improve + apply marks?
+    refine_before_rmsd: Optional[float] = (
+        None  # FEM deviation RMSD (nm) before refining
+    )
+    refine_after_rmsd: Optional[float] = None  # …and after (the applied result)
+    refine_n_marks: Optional[int] = None  # total loop/skip marks in the applied program
+    refine_period: Optional[int] = (
+        None  # SQUARE density-sweep winning period (None = n/a)
+    )
     # SQUARE twist objective (exp37) + HONEYCOMB coupled (twist,bend) SHAPE objective (exp38):
     # end-to-end twist/bend before/after vs the design's intended twist/bend.
     refine_twist_before: Optional[float] = None
-    refine_twist_after:  Optional[float] = None
+    refine_twist_after: Optional[float] = None
     refine_twist_target: Optional[float] = None
-    refine_bend_before:  Optional[float] = None
-    refine_bend_after:   Optional[float] = None
-    refine_bend_target:  Optional[float] = None
-    refine_note:         Optional[str] = None    # live status line while running / summary on done
+    refine_bend_before: Optional[float] = None
+    refine_bend_after: Optional[float] = None
+    refine_bend_target: Optional[float] = None
+    refine_note: Optional[str] = (
+        None  # live status line while running / summary on done
+    )
     # Populated on completion — surfaced in the panel detail block.
-    sim_seconds:         Optional[float] = None   # wall time inside predict_shape()
-    n_nodes:             Optional[int]   = None   # duplex-core FEM nodes (= base pairs)
-    rmsf_min_nm:         Optional[float] = None
-    rmsf_max_nm:         Optional[float] = None
+    sim_seconds: Optional[float] = None  # wall time inside predict_shape()
+    n_nodes: Optional[int] = None  # duplex-core FEM nodes (= base pairs)
+    rmsf_min_nm: Optional[float] = None
+    rmsf_max_nm: Optional[float] = None
     # Out-of-date detection (design edited after the solve ran); shares the oxDNA
     # staleness fingerprint so an edit invalidates the predicted display.
-    design_fingerprint:  Optional[str] = None
+    design_fingerprint: Optional[str] = None
     feature_log_position: Optional[int] = None
     # Archival parity with oxDNA/mrDNA jobs (job_archive is kind-generic).
-    archived:            bool = False
-    archive_path:        Optional[str] = None
+    archived: bool = False
+    archive_path: Optional[str] = None
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -128,6 +134,7 @@ class CandoJob:
     @classmethod
     def load(cls, job_id: str, workspace_dir: Path) -> "CandoJob":
         from backend.core.job_archive import resolve_job_json
+
         path = resolve_job_json(workspace_dir, "cando_jobs", job_id)
         data = json.loads(path.read_text())
         data["status"] = CandoStatus(data["status"])
@@ -165,6 +172,7 @@ class CandoJob:
     @classmethod
     def list_jobs(cls, workspace_dir: Path) -> list["CandoJob"]:
         from backend.core.job_archive import archived_job_ids
+
         result: list[CandoJob] = []
         seen: set[str] = set()
         jobs_dir = workspace_dir / "cando_jobs"
@@ -207,22 +215,26 @@ def new_cando_job(
     doc_id: Optional[str] = None,
 ) -> CandoJob:
     # An autorefine job's single "stage" is the refine loop; a predict job's is the solve mode.
-    stage_name = "autorefine" if kind == "autorefine" else ("nonlinear" if nonlinear else "linear")
+    stage_name = (
+        "autorefine"
+        if kind == "autorefine"
+        else ("nonlinear" if nonlinear else "linear")
+    )
     return CandoJob(
-        job_id             = uuid.uuid4().hex[:12],
-        design_name        = design_name,
-        status             = CandoStatus.queued,
-        created_at         = time.time(),
-        n_nucleotides      = n_nucleotides,
-        kind               = kind,
-        nonlinear          = nonlinear,
-        n_steps            = n_steps,
-        with_rmsf          = with_rmsf,
-        anchors            = anchors,
-        field              = field,
-        stages             = [CandoStageStatus(name=stage_name)],
-        design_source_path = design_source_path,
-        design_fingerprint = design_fingerprint,
-        feature_log_position = feature_log_position,
-        doc_id             = doc_id,
+        job_id=uuid.uuid4().hex[:12],
+        design_name=design_name,
+        status=CandoStatus.queued,
+        created_at=time.time(),
+        n_nucleotides=n_nucleotides,
+        kind=kind,
+        nonlinear=nonlinear,
+        n_steps=n_steps,
+        with_rmsf=with_rmsf,
+        anchors=anchors,
+        field=field,
+        stages=[CandoStageStatus(name=stage_name)],
+        design_source_path=design_source_path,
+        design_fingerprint=design_fingerprint,
+        feature_log_position=feature_log_position,
+        doc_id=doc_id,
     )

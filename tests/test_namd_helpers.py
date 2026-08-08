@@ -32,7 +32,9 @@ from backend.core.namd_helpers import (
 # ── PSF stub builders ─────────────────────────────────────────────────────────
 
 
-def _stub_psf(n_atoms: int, atom_lines: list[str], bond_pairs: list[tuple[int, int]]) -> str:
+def _stub_psf(
+    n_atoms: int, atom_lines: list[str], bond_pairs: list[tuple[int, int]]
+) -> str:
     """Build a minimal stub PSF.
 
     PSF header: a `!NATOM` line is required; bonds section opened by `!NBOND`.
@@ -58,13 +60,15 @@ def _stub_psf(n_atoms: int, atom_lines: list[str], bond_pairs: list[tuple[int, i
     lines.append(f"{n_bonds:8d} !NBOND: bonds")
     # Pack bonds 4 per line per CHARMM PSF convention; parser handles any width.
     for i in range(0, n_bonds, 4):
-        chunk = bond_pairs[i:i + 4]
+        chunk = bond_pairs[i : i + 4]
         lines.append("".join(f"{a:8d}{b:8d}" for a, b in chunk))
     lines.append("")
     return "\n".join(lines) + "\n"
 
 
-def _atom_line(serial: int, resname: str = "ADE", name: str = "P", typ: str = "P") -> str:
+def _atom_line(
+    serial: int, resname: str = "ADE", name: str = "P", typ: str = "P"
+) -> str:
     """Build one PSF atom line matching the parser's expected layout."""
     # serial seg resid resname name type charge mass moveable
     return f"{serial:8d} A    {serial:>4d} {resname:<4s} {name:<4s} {typ:<4s}  0.000000   12.0110   0"
@@ -202,7 +206,7 @@ class TestCompletePsfFromStub:
 
     def test_bonds_count_preserved_from_stub(self) -> None:
         """Output `!NBOND` count equals the number of input bond pairs."""
-        atoms = [_atom_line(i) for i in range(1, 6)]   # 5 atoms
+        atoms = [_atom_line(i) for i in range(1, 6)]  # 5 atoms
         bonds = [(1, 2), (2, 3), (3, 4), (4, 5)]
         stub = _stub_psf(5, atoms, bonds)
         out = _complete_psf_from_stub(stub)
@@ -268,7 +272,7 @@ class TestCompletePsfIntegration:
         orig = _mod.export_psf
         _mod.export_psf = _fake_export_psf
         try:
-            out = _mod.complete_psf("dummy_design_obj")   # arg passed through
+            out = _mod.complete_psf("dummy_design_obj")  # arg passed through
         finally:
             _mod.export_psf = orig
 

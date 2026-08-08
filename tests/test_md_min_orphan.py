@@ -28,7 +28,7 @@ def _fake_namd(pkg: Path, tmp_path: Path) -> subprocess.Popen:
     if not exe.exists():
         shutil.copy(shutil.which("sleep"), exe)
     p = subprocess.Popen([str(exe), "30"], cwd=str(pkg))
-    for _ in range(100):                      # wait for /proc to be populated
+    for _ in range(100):  # wait for /proc to be populated
         if (Path("/proc") / str(p.pid) / "cmdline").exists():
             break
         time.sleep(0.02)
@@ -43,11 +43,16 @@ def _job(tmp_path: Path):
     job.status = MdStatus.running
     job.current_segment_idx = 0
     job.segments = [
-        MdSegmentStatus(name="D_01_300K_NPT_ENM_k0p5_p10", stage="s", percent=10.0,
-                        steps=100, status="running"),
+        MdSegmentStatus(
+            name="D_01_300K_NPT_ENM_k0p5_p10",
+            stage="s",
+            percent=10.0,
+            steps=100,
+            status="running",
+        ),
     ]
     job.save(tmp_path)
-    pkg = job.package_dir(tmp_path)          # workspace/md_jobs/<id>/package/...
+    pkg = job.package_dir(tmp_path)  # workspace/md_jobs/<id>/package/...
     (pkg / "output").mkdir(parents=True, exist_ok=True)
     return job, pkg
 
@@ -67,7 +72,8 @@ def test_package_process_running_sees_a_minimisation(pkg: Path, tmp_path: Path) 
     try:
         assert _package_process_running(pkg) is True
     finally:
-        proc.kill(); proc.wait()
+        proc.kill()
+        proc.wait()
     assert _package_process_running(pkg) is False
 
 
@@ -79,10 +85,11 @@ def test_package_process_running_ignores_another_job(pkg: Path, tmp_path: Path) 
     other.mkdir(parents=True)
     proc = _fake_namd(other, tmp_path)
     try:
-        assert _package_process_running(pkg) is False       # not ours
+        assert _package_process_running(pkg) is False  # not ours
         assert _package_process_running(other) is True
     finally:
-        proc.kill(); proc.wait()
+        proc.kill()
+        proc.wait()
 
 
 def test_reconcile_does_not_fail_a_job_whose_minimisation_is_still_running(
@@ -101,7 +108,8 @@ def test_reconcile_does_not_fail_a_job_whose_minimisation_is_still_running(
             f"a job whose minimisation is still running was marked {out.status}: {out.error}"
         )
     finally:
-        proc.kill(); proc.wait()
+        proc.kill()
+        proc.wait()
 
 
 def test_reconcile_still_fails_a_job_with_no_process_and_no_checkpoint(
@@ -117,8 +125,9 @@ def test_reconcile_still_fails_a_job_with_no_process_and_no_checkpoint(
     # without it this fixture describes a segment that never spawned, which IS
     # resumable (see test_md_resume.TestReconcileDuringMinimisation).
     (pkg / "D_01_300K_NPT_ENM_k0p5_p10.log").write_text(
-        "Info: NAMD 3.0.2\nFATAL ERROR: died at startup\n")
-    (pkg / "output" / "D_00_min.coor").write_text("minimised")   # minimisation finished
-    out = runner.reconcile_job_status(job, tmp_path)     # nothing running at all
+        "Info: NAMD 3.0.2\nFATAL ERROR: died at startup\n"
+    )
+    (pkg / "output" / "D_00_min.coor").write_text("minimised")  # minimisation finished
+    out = runner.reconcile_job_status(job, tmp_path)  # nothing running at all
     assert out.status == MdStatus.failed
     assert "no usable checkpoint" in (out.error or "")

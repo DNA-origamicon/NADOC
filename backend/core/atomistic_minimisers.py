@@ -102,13 +102,13 @@ def _interpolate_backbone_bridge(
     c3_src = _atom_pos(atoms, src_s["C3'"])
     c5_dst = _atom_pos(atoms, dst_s["C5'"])
 
-    orig_P    = _atom_pos(atoms, dst_s["P"])
+    orig_P = _atom_pos(atoms, dst_s["P"])
     new_P_pos = _lerp(c3_src, c5_dst, 2.0 / 4.0)
-    delta_P   = new_P_pos - orig_P
+    delta_P = new_P_pos - orig_P
 
     for serials_dict, aname, t in (
         (src_s, "O3'", 1.0 / 4.0),
-        (dst_s, "P",   2.0 / 4.0),
+        (dst_s, "P", 2.0 / 4.0),
         (dst_s, "O5'", 3.0 / 4.0),
     ):
         s = serials_dict.get(aname)
@@ -163,40 +163,50 @@ def _minimize_backbone_bridge(
 
     def _cos_angle(a: _np.ndarray, b: _np.ndarray, c: _np.ndarray) -> float:
         """Cosine of angle A–B–C."""
-        ba = a - b; bc = c - b
-        n1 = float(_np.linalg.norm(ba)); n2 = float(_np.linalg.norm(bc))
+        ba = a - b
+        bc = c - b
+        n1 = float(_np.linalg.norm(ba))
+        n2 = float(_np.linalg.norm(bc))
         if n1 < 1e-12 or n2 < 1e-12:
             return 1.0
         return float(_np.dot(ba, bc) / (n1 * n2))
 
     def objective(x: _np.ndarray) -> float:
-        o3 = x[0:3]; p = x[3:6]; o5 = x[6:9]
+        o3 = x[0:3]
+        p = x[3:6]
+        o5 = x[6:9]
         bl = (
-            (_np.linalg.norm(o3 - c3) - _CANON_C3O3) ** 2 +
-            (_np.linalg.norm(p  - o3) - _CANON_O3P)  ** 2 +
-            (_np.linalg.norm(o5 - p)  - _CANON_PO5)  ** 2 +
-            (_np.linalg.norm(c5 - o5) - _CANON_O5C5) ** 2
+            (_np.linalg.norm(o3 - c3) - _CANON_C3O3) ** 2
+            + (_np.linalg.norm(p - o3) - _CANON_O3P) ** 2
+            + (_np.linalg.norm(o5 - p) - _CANON_PO5) ** 2
+            + (_np.linalg.norm(c5 - o5) - _CANON_O5C5) ** 2
         )
         ba = (
-            (_cos_angle(c3, o3, p)  - cos_c3o3p) ** 2 +
-            (_cos_angle(o3, p,  o5) - cos_o3po5) ** 2 +
-            (_cos_angle(p,  o5, c5) - cos_po5c5) ** 2
+            (_cos_angle(c3, o3, p) - cos_c3o3p) ** 2
+            + (_cos_angle(o3, p, o5) - cos_o3po5) ** 2
+            + (_cos_angle(p, o5, c5) - cos_po5c5) ** 2
         )
         return float(bl + 0.1 * ba)
 
-    x0 = _np.concatenate([
-        _lerp(c3, c5, 1.0 / 4.0),
-        _lerp(c3, c5, 2.0 / 4.0),
-        _lerp(c3, c5, 3.0 / 4.0),
-    ])
+    x0 = _np.concatenate(
+        [
+            _lerp(c3, c5, 1.0 / 4.0),
+            _lerp(c3, c5, 2.0 / 4.0),
+            _lerp(c3, c5, 3.0 / 4.0),
+        ]
+    )
 
     res = _scipy_minimize(
-        objective, x0, method="L-BFGS-B",
+        objective,
+        x0,
+        method="L-BFGS-B",
         options={"ftol": 1e-14, "gtol": 1e-9, "maxiter": 200},
     )
-    o3_new = res.x[0:3]; p_new = res.x[3:6]; o5_new = res.x[6:9]
+    o3_new = res.x[0:3]
+    p_new = res.x[3:6]
+    o5_new = res.x[6:9]
 
-    orig_P  = _atom_pos(atoms, dst_s["P"])
+    orig_P = _atom_pos(atoms, dst_s["P"])
     delta_P = p_new - orig_P
 
     s = src_s.get("O3'")

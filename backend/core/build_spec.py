@@ -134,6 +134,7 @@ class AssemblySpec:
 
 # ── primitive field validators ────────────────────────────────────────────────
 
+
 def _require_keys(d: dict, allowed: set, *, where: str) -> None:
     """Reject any key not in ``allowed`` (catches typo'd field names)."""
     extra = set(d) - allowed
@@ -176,18 +177,25 @@ def _as_str(v, *, key: str, where: str) -> str:
 def _as_cell(v, *, where: str) -> tuple[int, int]:
     if not isinstance(v, (list, tuple)) or len(v) != 2:
         raise BuildSpecError(f"{where}: a cell must be a [row, col] pair, got {v!r}")
-    return (_as_int(v[0], key="cell.row", where=where), _as_int(v[1], key="cell.col", where=where))
+    return (
+        _as_int(v[0], key="cell.row", where=where),
+        _as_int(v[1], key="cell.col", where=where),
+    )
 
 
 def _as_cells(v, *, where: str) -> list[tuple[int, int]]:
     if not isinstance(v, (list, tuple)) or not v:
-        raise BuildSpecError(f"{where}: 'cells' must be a non-empty list of [row, col] pairs")
+        raise BuildSpecError(
+            f"{where}: 'cells' must be a non-empty list of [row, col] pairs"
+        )
     return [_as_cell(c, where=where) for c in v]
 
 
 def _as_vec3(v, *, key: str, where: str) -> tuple[float, float, float]:
     if not isinstance(v, (list, tuple)) or len(v) != 3:
-        raise BuildSpecError(f"{where}: field {key!r} must be a 3-number vector, got {v!r}")
+        raise BuildSpecError(
+            f"{where}: field {key!r} must be a 3-number vector, got {v!r}"
+        )
     return tuple(_as_num(x, key=key, where=where) for x in v)  # type: ignore[return-value]
 
 
@@ -230,10 +238,15 @@ def _as_transform(v, *, where: str):
             f"{where}: 'transform' must be null, a [x,y,z] translation, or 16 floats"
         )
     if len(v) == 3:
-        return {"kind": "translation", "values": _as_vec3(v, key="transform", where=where)}
+        return {
+            "kind": "translation",
+            "values": _as_vec3(v, key="transform", where=where),
+        }
     if len(v) == 16:
-        return {"kind": "matrix",
-                "values": [_as_num(x, key="transform", where=where) for x in v]}
+        return {
+            "kind": "matrix",
+            "values": [_as_num(x, key="transform", where=where) for x in v],
+        }
     raise BuildSpecError(
         f"{where}: 'transform' must have 3 (translation) or 16 (matrix) entries, "
         f"got {len(v)}"
@@ -243,21 +256,50 @@ def _as_transform(v, *, where: str):
 # ── design grammar ────────────────────────────────────────────────────────────
 
 _DESIGN_OP_KEYS = {
-    "bundle": {"op", "cells", "length_bp", "plane", "name", "strand_filter", "ligate_adjacent"},
-    "extrude": {"op", "cells", "length_bp", "offset_nm", "plane", "strand_filter",
-                "extend_inplace", "ligate_adjacent"},
+    "bundle": {
+        "op",
+        "cells",
+        "length_bp",
+        "plane",
+        "name",
+        "strand_filter",
+        "ligate_adjacent",
+    },
+    "extrude": {
+        "op",
+        "cells",
+        "length_bp",
+        "offset_nm",
+        "plane",
+        "strand_filter",
+        "extend_inplace",
+        "ligate_adjacent",
+    },
     "nick": {"op", "helix", "bp_index", "direction"},
     "ligate": {"op", "helix", "bp_index", "direction"},
     "loop_skip": {"op", "helix", "bp_index", "delta"},
     # Two addressing modes (mutually exclusive, validated in _parse_design_op):
     #   bulk     → {op, sequence, filter}                  (filter ∈ all|scaffold|staple)
     #   precise  → {op, sequence, helix_a, helix_b, bp_index}
-    "crossover_extra_bases": {"op", "sequence", "filter",
-                              "helix_a", "helix_b", "bp_index"},
+    "crossover_extra_bases": {
+        "op",
+        "sequence",
+        "filter",
+        "helix_a",
+        "helix_b",
+        "bp_index",
+    },
     "bend": {"op", "plane_a_bp", "plane_b_bp", "curvature_deg_per_bp", "direction_deg"},
     "twist": {"op", "plane_a_bp", "plane_b_bp", "total_degrees", "degrees_per_nm"},
-    "circle_segment": {"op", "radius_nm", "plane", "offset_nm", "strand_filter",
-                       "ligate_adjacent", "min_chord_bp"},
+    "circle_segment": {
+        "op",
+        "radius_nm",
+        "plane",
+        "offset_nm",
+        "strand_filter",
+        "ligate_adjacent",
+        "min_chord_bp",
+    },
     "auto_scaffold": {"op", "seamless"},
     "auto_crossover": {"op"},
     "full_autostaple": {"op", "scaffold_name", "custom_sequence", "strand_id"},
@@ -287,18 +329,30 @@ def _parse_design_op(raw, *, where: str) -> BuildOp:
 
     if op in ("bundle", "extrude"):
         p["cells"] = _as_cells(_get(raw, "cells", where=here), where=here)
-        p["length_bp"] = _as_int(_get(raw, "length_bp", where=here), key="length_bp", where=here)
+        p["length_bp"] = _as_int(
+            _get(raw, "length_bp", where=here), key="length_bp", where=here
+        )
         if p["length_bp"] == 0:
             raise BuildSpecError(f"{here}: 'length_bp' must be non-zero")
         p["plane"] = _as_str(raw.get("plane", "XY"), key="plane", where=here)
-        p["strand_filter"] = _as_str(raw.get("strand_filter", "both"), key="strand_filter", where=here)
-        p["ligate_adjacent"] = _as_bool(raw.get("ligate_adjacent", True), key="ligate_adjacent", where=here)
+        p["strand_filter"] = _as_str(
+            raw.get("strand_filter", "both"), key="strand_filter", where=here
+        )
+        p["ligate_adjacent"] = _as_bool(
+            raw.get("ligate_adjacent", True), key="ligate_adjacent", where=here
+        )
         if op == "extrude":
-            p["offset_nm"] = _as_num(_get(raw, "offset_nm", where=here), key="offset_nm", where=here)
-            p["extend_inplace"] = _as_bool(raw.get("extend_inplace", True), key="extend_inplace", where=here)
+            p["offset_nm"] = _as_num(
+                _get(raw, "offset_nm", where=here), key="offset_nm", where=here
+            )
+            p["extend_inplace"] = _as_bool(
+                raw.get("extend_inplace", True), key="extend_inplace", where=here
+            )
     elif op in ("nick", "ligate"):
         p["helix"] = _as_cell(_get(raw, "helix", where=here), where=here)
-        p["bp_index"] = _as_int(_get(raw, "bp_index", where=here), key="bp_index", where=here)
+        p["bp_index"] = _as_int(
+            _get(raw, "bp_index", where=here), key="bp_index", where=here
+        )
         if p["bp_index"] < 0:
             raise BuildSpecError(f"{here}: 'bp_index' must be ≥ 0")
         p["direction"] = _as_direction(_get(raw, "direction", where=here), where=here)
@@ -307,7 +361,9 @@ def _parse_design_op(raw, *, where: str) -> BuildOp:
         # one helix at one bp — a length-changing mark on Helix.loop_skips (outside
         # the strand graph).  delta is route-constrained to {-1, 0, +1}.
         p["helix"] = _as_cell(_get(raw, "helix", where=here), where=here)
-        p["bp_index"] = _as_int(_get(raw, "bp_index", where=here), key="bp_index", where=here)
+        p["bp_index"] = _as_int(
+            _get(raw, "bp_index", where=here), key="bp_index", where=here
+        )
         if p["bp_index"] < 0:
             raise BuildSpecError(f"{here}: 'bp_index' must be ≥ 0")
         p["delta"] = _as_int(_get(raw, "delta", where=here), key="delta", where=here)
@@ -340,7 +396,9 @@ def _parse_design_op(raw, *, where: str) -> BuildOp:
             p["mode"] = "precise"
             p["helix_a"] = _as_cell(_get(raw, "helix_a", where=here), where=here)
             p["helix_b"] = _as_cell(_get(raw, "helix_b", where=here), where=here)
-            p["bp_index"] = _as_int(_get(raw, "bp_index", where=here), key="bp_index", where=here)
+            p["bp_index"] = _as_int(
+                _get(raw, "bp_index", where=here), key="bp_index", where=here
+            )
             if p["bp_index"] < 0:
                 raise BuildSpecError(f"{here}: 'bp_index' must be ≥ 0")
         else:
@@ -356,15 +414,23 @@ def _parse_design_op(raw, *, where: str) -> BuildOp:
         # lengths trace a circle of radius_nm (the chord profile assumes the SQUARE
         # column pitch — enforced at the spec level in parse_design_spec).  Builds
         # its own helices, so it may be the first op.
-        p["radius_nm"] = _as_num(_get(raw, "radius_nm", where=here), key="radius_nm", where=here)
+        p["radius_nm"] = _as_num(
+            _get(raw, "radius_nm", where=here), key="radius_nm", where=here
+        )
         if p["radius_nm"] <= 0:
             raise BuildSpecError(f"{here}: 'radius_nm' must be > 0")
         p["plane"] = _as_str(raw.get("plane", "XY"), key="plane", where=here)
         p["offset_nm"] = _as_num(raw.get("offset_nm", 0.0), key="offset_nm", where=here)
-        p["strand_filter"] = _as_str(raw.get("strand_filter", "both"), key="strand_filter", where=here)
-        p["ligate_adjacent"] = _as_bool(raw.get("ligate_adjacent", True), key="ligate_adjacent", where=here)
+        p["strand_filter"] = _as_str(
+            raw.get("strand_filter", "both"), key="strand_filter", where=here
+        )
+        p["ligate_adjacent"] = _as_bool(
+            raw.get("ligate_adjacent", True), key="ligate_adjacent", where=here
+        )
         if "min_chord_bp" in raw:
-            p["min_chord_bp"] = _as_int(raw["min_chord_bp"], key="min_chord_bp", where=here)
+            p["min_chord_bp"] = _as_int(
+                raw["min_chord_bp"], key="min_chord_bp", where=here
+            )
     elif op == "auto_scaffold":
         # Route the scaffold onto the existing helices as a single strand (seamed
         # Hamiltonian path by default; seamless = one end-crossover per helix pair).
@@ -375,10 +441,13 @@ def _parse_design_op(raw, *, where: str) -> BuildOp:
     elif op == "full_autostaple":
         # One-click routing: assign the scaffold sequence + place crossovers +
         # tick-break/merge staples.  custom_sequence (when set) overrides scaffold_name.
-        p["scaffold_name"] = _as_str(raw.get("scaffold_name", "M13mp18"),
-                                     key="scaffold_name", where=here)
+        p["scaffold_name"] = _as_str(
+            raw.get("scaffold_name", "M13mp18"), key="scaffold_name", where=here
+        )
         if raw.get("custom_sequence") is not None:
-            p["custom_sequence"] = _as_str(raw["custom_sequence"], key="custom_sequence", where=here)
+            p["custom_sequence"] = _as_str(
+                raw["custom_sequence"], key="custom_sequence", where=here
+            )
         if raw.get("strand_id") is not None:
             p["strand_id"] = _as_str(raw["strand_id"], key="strand_id", where=here)
     elif op == "apply_loop_skips":
@@ -386,18 +455,27 @@ def _parse_design_op(raw, *, where: str) -> BuildOp:
         # loop/skip marks — no parameters.  Requires crossovers already placed.
         pass
     else:  # bend / twist — a geometric DeformationOp between two bp planes
-        p["plane_a_bp"] = _as_int(_get(raw, "plane_a_bp", where=here), key="plane_a_bp", where=here)
-        p["plane_b_bp"] = _as_int(_get(raw, "plane_b_bp", where=here), key="plane_b_bp", where=here)
+        p["plane_a_bp"] = _as_int(
+            _get(raw, "plane_a_bp", where=here), key="plane_a_bp", where=here
+        )
+        p["plane_b_bp"] = _as_int(
+            _get(raw, "plane_b_bp", where=here), key="plane_b_bp", where=here
+        )
         if p["plane_a_bp"] < 0 or p["plane_b_bp"] < 0:
             raise BuildSpecError(f"{here}: plane bp indices must be ≥ 0")
         if p["plane_b_bp"] <= p["plane_a_bp"]:
-            raise BuildSpecError(f"{here}: 'plane_b_bp' must be greater than 'plane_a_bp'")
+            raise BuildSpecError(
+                f"{here}: 'plane_b_bp' must be greater than 'plane_a_bp'"
+            )
         if op == "bend":
             p["curvature_deg_per_bp"] = _as_num(
                 _get(raw, "curvature_deg_per_bp", where=here),
-                key="curvature_deg_per_bp", where=here,
+                key="curvature_deg_per_bp",
+                where=here,
             )
-            p["direction_deg"] = _as_num(raw.get("direction_deg", 0.0), key="direction_deg", where=here)
+            p["direction_deg"] = _as_num(
+                raw.get("direction_deg", 0.0), key="direction_deg", where=here
+            )
         else:  # twist — exactly one of total_degrees / degrees_per_nm (mirrors add_twist's XOR)
             has_total = raw.get("total_degrees") is not None
             has_rate = raw.get("degrees_per_nm") is not None
@@ -406,16 +484,26 @@ def _parse_design_op(raw, *, where: str) -> BuildOp:
                     f"{here}: pass exactly one of 'total_degrees' / 'degrees_per_nm'"
                 )
             if has_total:
-                p["total_degrees"] = _as_num(raw["total_degrees"], key="total_degrees", where=here)
+                p["total_degrees"] = _as_num(
+                    raw["total_degrees"], key="total_degrees", where=here
+                )
             else:
-                p["degrees_per_nm"] = _as_num(raw["degrees_per_nm"], key="degrees_per_nm", where=here)
+                p["degrees_per_nm"] = _as_num(
+                    raw["degrees_per_nm"], key="degrees_per_nm", where=here
+                )
 
     return BuildOp(op=op, params=p)
 
 
 # ── declarative relaxed-structure constraints (AF-13 P3 → grammar) ─────────────
 
-_CONSTRAINT_FIELD_KEYS = {"measure", "landmarks", "target_nm", "tol_nm", "min_confidence"}
+_CONSTRAINT_FIELD_KEYS = {
+    "measure",
+    "landmarks",
+    "target_nm",
+    "tol_nm",
+    "min_confidence",
+}
 _LANDMARK_KEYS = {"helix", "bp_index", "direction"}
 
 
@@ -513,8 +601,11 @@ def _parse_knob(raw, ops: list[BuildOp], *, where: str) -> dict:
     hi = _as_num(_get(raw, "hi", where=where), key="hi", where=where)
     if lo >= hi:
         raise BuildSpecError(f"{where}: 'lo' ({lo}) must be < 'hi' ({hi})")
-    initial = (_as_num(raw["initial"], key="initial", where=where)
-               if "initial" in raw else (lo + hi) / 2)
+    initial = (
+        _as_num(raw["initial"], key="initial", where=where)
+        if "initial" in raw
+        else (lo + hi) / 2
+    )
     if not lo <= initial <= hi:
         raise BuildSpecError(
             f"{where}: 'initial' ({initial}) must be within [lo, hi] = [{lo}, {hi}]"
@@ -525,8 +616,14 @@ def _parse_knob(raw, ops: list[BuildOp], *, where: str) -> dict:
             f"{where}: 'response' must be one of {sorted(_KNOB_RESPONSES)}, "
             f"got {response!r}"
         )
-    return {"op": op_idx, "param": param, "lo": lo, "hi": hi,
-            "initial": initial, "response": response}
+    return {
+        "op": op_idx,
+        "param": param,
+        "lo": lo,
+        "hi": hi,
+        "initial": initial,
+        "response": response,
+    }
 
 
 def _parse_optimize(raw, ops: list[BuildOp], *, where: str) -> dict:
@@ -545,7 +642,8 @@ def _parse_optimize(raw, ops: list[BuildOp], *, where: str) -> dict:
     _require_keys(raw, _OPTIMIZE_KEYS, where=where)
     knob = _parse_knob(_get(raw, "knob", where=where), ops, where=f"{where}.knob")
     constraint = _parse_design_constraint(
-        _get(raw, "constraint", where=where), where=f"{where}.constraint")
+        _get(raw, "constraint", where=where), where=f"{where}.constraint"
+    )
     return {"knob": knob, "constraint": constraint}
 
 
@@ -627,8 +725,12 @@ def parse_design_spec(spec, *, where: str = "design") -> DesignSpec:
     block fails at parse time.  Raises :class:`BuildSpecError` on any grammar violation.
     """
     if not isinstance(spec, dict):
-        raise BuildSpecError(f"{where}: spec must be an object, got {type(spec).__name__}")
-    _require_keys(spec, {"kind", "lattice", "ops", "constraints", "optimize"}, where=where)
+        raise BuildSpecError(
+            f"{where}: spec must be an object, got {type(spec).__name__}"
+        )
+    _require_keys(
+        spec, {"kind", "lattice", "ops", "constraints", "optimize"}, where=where
+    )
     kind = spec.get("kind", "design")
     if kind != "design":
         raise BuildSpecError(f"{where}: 'kind' must be 'design', got {kind!r}")
@@ -638,7 +740,9 @@ def parse_design_spec(spec, *, where: str = "design") -> DesignSpec:
     if not isinstance(raw_ops, list) or not raw_ops:
         raise BuildSpecError(f"{where}: 'ops' must be a non-empty list")
 
-    ops = [_parse_design_op(r, where=f"{where}.ops[{i}]") for i, r in enumerate(raw_ops)]
+    ops = [
+        _parse_design_op(r, where=f"{where}.ops[{i}]") for i, r in enumerate(raw_ops)
+    ]
     if ops[0].op not in _PRIMORDIAL_DESIGN_OPS:
         raise BuildSpecError(
             f"{where}: the first op must be 'bundle' or 'circle_segment' "
@@ -646,8 +750,7 @@ def parse_design_spec(spec, *, where: str = "design") -> DesignSpec:
             "auto_scaffold/auto_crossover/full_autostaple/apply_loop_skips need "
             "existing helices"
         )
-    if (any(o.op == "circle_segment" for o in ops)
-            and lattice is not LatticeType.SQUARE):
+    if any(o.op == "circle_segment" for o in ops) and lattice is not LatticeType.SQUARE:
         raise BuildSpecError(
             f"{where}: 'circle_segment' requires a 'square' lattice (the chord "
             f"profile assumes the SQUARE column pitch), got {lattice.value.lower()!r}"
@@ -659,20 +762,55 @@ def parse_design_spec(spec, *, where: str = "design") -> DesignSpec:
         _parse_design_constraint(c, where=f"{where}.constraints[{i}]")
         for i, c in enumerate(raw_constraints)
     ]
-    optimize = (None if spec.get("optimize") is None
-                else _parse_optimize(spec["optimize"], ops, where=f"{where}.optimize"))
-    return DesignSpec(lattice=lattice, ops=ops, constraints=constraints,
-                      optimize=optimize)
+    optimize = (
+        None
+        if spec.get("optimize") is None
+        else _parse_optimize(spec["optimize"], ops, where=f"{where}.optimize")
+    )
+    return DesignSpec(
+        lattice=lattice, ops=ops, constraints=constraints, optimize=optimize
+    )
 
 
 # ── assembly grammar ──────────────────────────────────────────────────────────
 
 _ASSEMBLY_OP_KEYS = {
     "add_part": {"op", "part", "ref", "transform", "name", "connectors"},
-    "place_grid": {"op", "part", "rows", "cols", "pitch", "row_pitch", "plane", "center", "name"},
-    "place_ring": {"op", "part", "n", "radius", "plane", "start_angle_deg", "center", "name"},
-    "mate": {"op", "child", "parent", "child_label", "parent_label", "joint_type",
-             "ref", "name", "axis_origin", "axis_direction", "min_limit", "max_limit"},
+    "place_grid": {
+        "op",
+        "part",
+        "rows",
+        "cols",
+        "pitch",
+        "row_pitch",
+        "plane",
+        "center",
+        "name",
+    },
+    "place_ring": {
+        "op",
+        "part",
+        "n",
+        "radius",
+        "plane",
+        "start_angle_deg",
+        "center",
+        "name",
+    },
+    "mate": {
+        "op",
+        "child",
+        "parent",
+        "child_label",
+        "parent_label",
+        "joint_type",
+        "ref",
+        "name",
+        "axis_origin",
+        "axis_direction",
+        "min_limit",
+        "max_limit",
+    },
     "gear": {"op", "joint_a", "joint_b", "ratio", "invert", "name"},
     "belt": {"op", "joint_a", "joint_b", "radius_a", "radius_b", "name"},
     "polymerize": {"op", "joint", "count", "direction"},
@@ -689,11 +827,17 @@ def _parse_connectors(raw, *, where: str) -> list[dict]:
         if not isinstance(c, dict):
             raise BuildSpecError(f"{here}: a connector must be an object")
         _require_keys(c, _CONNECTOR_KEYS, where=here)
-        out.append({
-            "label": _as_str(_get(c, "label", where=here), key="label", where=here),
-            "position": _as_vec3(_get(c, "position", where=here), key="position", where=here),
-            "normal": _as_vec3(_get(c, "normal", where=here), key="normal", where=here),
-        })
+        out.append(
+            {
+                "label": _as_str(_get(c, "label", where=here), key="label", where=here),
+                "position": _as_vec3(
+                    _get(c, "position", where=here), key="position", where=here
+                ),
+                "normal": _as_vec3(
+                    _get(c, "normal", where=here), key="normal", where=here
+                ),
+            }
+        )
     return out
 
 
@@ -716,7 +860,11 @@ def _parse_assembly_op(raw, *, where: str) -> BuildOp:
             p["ref"] = _as_str(raw["ref"], key="ref", where=here)
         if "name" in raw:
             p["name"] = _as_str(raw["name"], key="name", where=here)
-        p["connectors"] = _parse_connectors(raw["connectors"], where=here) if "connectors" in raw else []
+        p["connectors"] = (
+            _parse_connectors(raw["connectors"], where=here)
+            if "connectors" in raw
+            else []
+        )
     elif op == "place_grid":
         p["part"] = _as_str(_get(raw, "part", where=here), key="part", where=here)
         p["rows"] = _as_int(_get(raw, "rows", where=here), key="rows", where=here)
@@ -741,16 +889,26 @@ def _parse_assembly_op(raw, *, where: str) -> BuildOp:
         if p["radius"] <= 0:
             raise BuildSpecError(f"{here}: 'radius' must be > 0")
         p["plane"] = _as_str(raw.get("plane", "XY"), key="plane", where=here)
-        p["start_angle_deg"] = _as_num(raw.get("start_angle_deg", 0.0), key="start_angle_deg", where=here)
-        p["center"] = _as_vec3(raw["center"], key="center", where=here) if "center" in raw else (0.0, 0.0, 0.0)
+        p["start_angle_deg"] = _as_num(
+            raw.get("start_angle_deg", 0.0), key="start_angle_deg", where=here
+        )
+        p["center"] = (
+            _as_vec3(raw["center"], key="center", where=here)
+            if "center" in raw
+            else (0.0, 0.0, 0.0)
+        )
         if "name" in raw:
             p["name"] = _as_str(raw["name"], key="name", where=here)
     elif op == "gear":
         # Couple two revolute mate-joints (referenced by their mate's ``ref`` key) at
         # a constant ratio — a display-layer kinematic relation, NOT a topology edit.
         # Both referenced mates must be 'revolute' (checked in parse_assembly_spec).
-        p["joint_a"] = _as_str(_get(raw, "joint_a", where=here), key="joint_a", where=here)
-        p["joint_b"] = _as_str(_get(raw, "joint_b", where=here), key="joint_b", where=here)
+        p["joint_a"] = _as_str(
+            _get(raw, "joint_a", where=here), key="joint_a", where=here
+        )
+        p["joint_b"] = _as_str(
+            _get(raw, "joint_b", where=here), key="joint_b", where=here
+        )
         p["ratio"] = _as_num(raw.get("ratio", 1.0), key="ratio", where=here)
         if p["ratio"] == 0:
             raise BuildSpecError(f"{here}: 'ratio' must be non-zero")
@@ -762,10 +920,18 @@ def _parse_assembly_op(raw, *, where: str) -> BuildOp:
         # an open belt — a display-layer kinematic coupling at angular ratio
         # ``radius_a / radius_b``, NOT a topology edit.  Both referenced mates must be
         # 'revolute' (checked in parse_assembly_spec).
-        p["joint_a"] = _as_str(_get(raw, "joint_a", where=here), key="joint_a", where=here)
-        p["joint_b"] = _as_str(_get(raw, "joint_b", where=here), key="joint_b", where=here)
-        p["radius_a"] = _as_num(_get(raw, "radius_a", where=here), key="radius_a", where=here)
-        p["radius_b"] = _as_num(_get(raw, "radius_b", where=here), key="radius_b", where=here)
+        p["joint_a"] = _as_str(
+            _get(raw, "joint_a", where=here), key="joint_a", where=here
+        )
+        p["joint_b"] = _as_str(
+            _get(raw, "joint_b", where=here), key="joint_b", where=here
+        )
+        p["radius_a"] = _as_num(
+            _get(raw, "radius_a", where=here), key="radius_a", where=here
+        )
+        p["radius_b"] = _as_num(
+            _get(raw, "radius_b", where=here), key="radius_b", where=here
+        )
         if p["radius_a"] <= 0 or p["radius_b"] <= 0:
             raise BuildSpecError(f"{here}: 'radius_a'/'radius_b' must be > 0")
         if "name" in raw:
@@ -784,7 +950,9 @@ def _parse_assembly_op(raw, *, where: str) -> BuildOp:
                 f"{here}: 'count' must be ≥ 2 (the seed pair is already 2 parts), "
                 f"got {p['count']}"
             )
-        p["direction"] = _as_str(raw.get("direction", "forward"), key="direction", where=here)
+        p["direction"] = _as_str(
+            raw.get("direction", "forward"), key="direction", where=here
+        )
         if p["direction"] not in ("forward", "backward", "both"):
             raise BuildSpecError(
                 f"{here}: 'direction' must be 'forward', 'backward', or 'both', "
@@ -793,17 +961,27 @@ def _parse_assembly_op(raw, *, where: str) -> BuildOp:
     else:  # mate
         p["child"] = _as_str(_get(raw, "child", where=here), key="child", where=here)
         p["parent"] = _as_str(_get(raw, "parent", where=here), key="parent", where=here)
-        p["child_label"] = _as_str(_get(raw, "child_label", where=here), key="child_label", where=here)
-        p["parent_label"] = _as_str(_get(raw, "parent_label", where=here), key="parent_label", where=here)
-        p["joint_type"] = _as_str(raw.get("joint_type", "rigid"), key="joint_type", where=here)
+        p["child_label"] = _as_str(
+            _get(raw, "child_label", where=here), key="child_label", where=here
+        )
+        p["parent_label"] = _as_str(
+            _get(raw, "parent_label", where=here), key="parent_label", where=here
+        )
+        p["joint_type"] = _as_str(
+            raw.get("joint_type", "rigid"), key="joint_type", where=here
+        )
         if "ref" in raw:
             p["ref"] = _as_str(raw["ref"], key="ref", where=here)
         if "name" in raw:
             p["name"] = _as_str(raw["name"], key="name", where=here)
         if "axis_origin" in raw:
-            p["axis_origin"] = _as_vec3(raw["axis_origin"], key="axis_origin", where=here)
+            p["axis_origin"] = _as_vec3(
+                raw["axis_origin"], key="axis_origin", where=here
+            )
         if "axis_direction" in raw:
-            p["axis_direction"] = _as_vec3(raw["axis_direction"], key="axis_direction", where=here)
+            p["axis_direction"] = _as_vec3(
+                raw["axis_direction"], key="axis_direction", where=here
+            )
         if "min_limit" in raw and raw["min_limit"] is not None:
             p["min_limit"] = _as_num(raw["min_limit"], key="min_limit", where=here)
         if "max_limit" in raw and raw["max_limit"] is not None:
@@ -829,9 +1007,13 @@ def _parse_part(raw, *, where: str) -> DesignSpec | FilePart | PrimitivePart:
     time (the parser is catalog-agnostic), so an unknown name is a build-time error."""
     if isinstance(raw, dict) and "from_file" in raw:
         _require_keys(raw, _FILE_PART_KEYS, where=where)
-        path = _as_str(_get(raw, "from_file", where=where), key="from_file", where=where)
+        path = _as_str(
+            _get(raw, "from_file", where=where), key="from_file", where=where
+        )
         if not path.strip():
-            raise BuildSpecError(f"{where}: 'from_file' must be a non-empty path string")
+            raise BuildSpecError(
+                f"{where}: 'from_file' must be a non-empty path string"
+            )
         return FilePart(path=path)
     if isinstance(raw, dict) and "from_primitive" in raw:
         _require_keys(raw, _PRIMITIVE_PART_KEYS, where=where)
@@ -898,7 +1080,9 @@ def parse_assembly_spec(spec, *, where: str = "assembly") -> AssemblySpec:
     any build runs.  Raises :class:`BuildSpecError` on any violation.
     """
     if not isinstance(spec, dict):
-        raise BuildSpecError(f"{where}: spec must be an object, got {type(spec).__name__}")
+        raise BuildSpecError(
+            f"{where}: spec must be an object, got {type(spec).__name__}"
+        )
     _require_keys(spec, {"kind", "name", "parts", "ops"}, where=where)
     kind = spec.get("kind", "assembly")
     if kind != "assembly":
@@ -907,7 +1091,9 @@ def parse_assembly_spec(spec, *, where: str = "assembly") -> AssemblySpec:
     name = _as_str(spec.get("name", "Untitled"), key="name", where=where)
     raw_parts = _get(spec, "parts", where=where)
     if not isinstance(raw_parts, dict) or not raw_parts:
-        raise BuildSpecError(f"{where}: 'parts' must be a non-empty object of part specs")
+        raise BuildSpecError(
+            f"{where}: 'parts' must be a non-empty object of part specs"
+        )
     parts = {
         key: _parse_part(ds, where=f"{where}.parts[{key!r}]")
         for key, ds in raw_parts.items()
@@ -916,7 +1102,9 @@ def parse_assembly_spec(spec, *, where: str = "assembly") -> AssemblySpec:
     raw_ops = _get(spec, "ops", where=where)
     if not isinstance(raw_ops, list) or not raw_ops:
         raise BuildSpecError(f"{where}: 'ops' must be a non-empty list")
-    ops = [_parse_assembly_op(r, where=f"{where}.ops[{i}]") for i, r in enumerate(raw_ops)]
+    ops = [
+        _parse_assembly_op(r, where=f"{where}.ops[{i}]") for i, r in enumerate(raw_ops)
+    ]
 
     # referential integrity: part refs resolve, mate endpoints + labels resolve,
     # gear joints resolve to prior revolute mates.

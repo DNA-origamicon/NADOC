@@ -80,7 +80,9 @@ def test_surface_is_closed():
             edge_count[key] = edge_count.get(key, 0) + 1
 
     boundary = [e for e, n in edge_count.items() if n % 2 == 1]
-    assert not boundary, f"{len(boundary)} boundary edges → mesh has holes (not watertight)"
+    assert not boundary, (
+        f"{len(boundary)} boundary edges → mesh has holes (not watertight)"
+    )
 
     # Non-manifold junctions are tolerated but should stay vanishingly rare; a
     # regression that shatters the mesh would blow past this bound.

@@ -53,7 +53,9 @@ def read_namd_coor(path: str | Path) -> np.ndarray:
     for endian in ("<", ">"):
         n = struct.unpack(endian + "i", data[:4])[0]
         if n > 0 and len(data) == 4 + n * 24:
-            arr = np.frombuffer(data, dtype=np.dtype(endian + "f8"), count=3 * n, offset=4)
+            arr = np.frombuffer(
+                data, dtype=np.dtype(endian + "f8"), count=3 * n, offset=4
+            )
             return arr.reshape(n, 3).astype(np.float64)
     raise ValueError(
         f"{path}: not a NAMD binary .coor (size {len(data)} inconsistent with any atom count)"
@@ -101,10 +103,13 @@ def stamp_relaxed_dna_model(
             )
     dna_nm = coor_ang[:n] / 10.0  # Å → nm
     atoms = [
-        dataclasses.replace(a, x=float(dna_nm[i, 0]), y=float(dna_nm[i, 1]), z=float(dna_nm[i, 2]))
+        dataclasses.replace(
+            a, x=float(dna_nm[i, 0]), y=float(dna_nm[i, 1]), z=float(dna_nm[i, 2])
+        )
         for i, a in enumerate(model.atoms)
     ]
     from backend.core.atomistic import AtomisticModel  # noqa: PLC0415
+
     return AtomisticModel(atoms=atoms, bonds=list(model.bonds))
 
 
@@ -120,7 +125,9 @@ def _dna_com_ang(pdb_path: Path) -> tuple[tuple[float, float, float], int]:
     for line in pdb_path.read_text().splitlines():
         if not line.startswith("ATOM"):
             continue
-        xs += float(line[30:38]); ys += float(line[38:46]); zs += float(line[46:54])
+        xs += float(line[30:38])
+        ys += float(line[38:46])
+        zs += float(line[46:54])
         k += 1
     if k == 0:
         raise ValueError(f"{pdb_path}: no ATOM records for DNA COM")
@@ -225,20 +232,40 @@ def prepare_shell_nvt_production(
     equil = P.SegmentSpec(
         name=f"{name_stem}_seq01_solvent_equil",
         stage="solvent equilibration (DNA position-restrained, NVT)",
-        percent=100.0, steps=equil_steps, temp=300.0, damping=5.0,
-        scale=1.0, npt=False, previous=min_name, reinit=True,
-        dcd_freq=dcd_freq, min_c1_paired=0.0, min_wc_ref_relative=0.0, soft=True,
+        percent=100.0,
+        steps=equil_steps,
+        temp=300.0,
+        damping=5.0,
+        scale=1.0,
+        npt=False,
+        previous=min_name,
+        reinit=True,
+        dcd_freq=dcd_freq,
+        min_c1_paired=0.0,
+        min_wc_ref_relative=0.0,
+        soft=True,
     )
     prod: list = []
     prev = equil.name
     for pct, frac in ((10.0, 0.10), (50.0, 0.40), (100.0, 0.50)):
-        prod.append(P.SegmentSpec(
-            name=f"{name_stem}_seq02_production_k0_p{int(pct)}",
-            stage="shell NVT production (COM-restrained, HMR 4 fs)",
-            percent=pct, steps=max(100, int(round(prod_steps * frac))), temp=300.0,
-            damping=5.0, scale=None, npt=False, previous=prev, reinit=False,
-            dcd_freq=dcd_freq, min_c1_paired=0.90, min_wc_ref_relative=0.25, soft=False,
-        ))
+        prod.append(
+            P.SegmentSpec(
+                name=f"{name_stem}_seq02_production_k0_p{int(pct)}",
+                stage="shell NVT production (COM-restrained, HMR 4 fs)",
+                percent=pct,
+                steps=max(100, int(round(prod_steps * frac))),
+                temp=300.0,
+                damping=5.0,
+                scale=None,
+                npt=False,
+                previous=prev,
+                reinit=False,
+                dcd_freq=dcd_freq,
+                min_c1_paired=0.90,
+                min_wc_ref_relative=0.25,
+                soft=False,
+            )
+        )
         prev = prod[-1].name
 
     # Anchors + E-field, as prepare_mgh_slow_release just resolved them for the CARVED
@@ -250,14 +277,29 @@ def prepare_shell_nvt_production(
     field = manifest.get("field") or None
 
     (package_dir / f"{equil.name}.conf").write_text(
-        P._segment_conf(equil, name_stem, box, mgh_extrabonds, fast=False,
-                        anchors_file=anchors_file, field=field)
+        P._segment_conf(
+            equil,
+            name_stem,
+            box,
+            mgh_extrabonds,
+            fast=False,
+            anchors_file=anchors_file,
+            field=field,
+        )
     )
     for p in prod:
         (package_dir / f"{p.name}.conf").write_text(
-            P._segment_conf(p, name_stem, box, mgh_extrabonds, fast=True,
-                            structure_psf=hmr_psf, colvars_file=colvars_name,
-                            anchors_file=anchors_file, field=field)
+            P._segment_conf(
+                p,
+                name_stem,
+                box,
+                mgh_extrabonds,
+                fast=True,
+                structure_psf=hmr_psf,
+                colvars_file=colvars_name,
+                anchors_file=anchors_file,
+                field=field,
+            )
         )
 
     # 5. Rewrite the manifest segment list to the short protocol (keep minimisation,

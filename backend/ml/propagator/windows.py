@@ -20,6 +20,7 @@ Training pairs are built WITHIN each captured segment only (a clean, fixed dt be
 consecutive frames); ``segment_starts`` marks segment boundaries so the consumer never
 forms a cross-boundary pair (where the restart makes dt ill-defined).
 """
+
 from __future__ import annotations
 
 import json
@@ -34,8 +35,17 @@ NAMD_VEL_TO_A_PER_PS = 20.45482706
 PROPAGATOR_TIMESTEP_FS = 2.0  # prepare_propagator_reference pins 2 fs, no HMR
 
 _ELEMENT_Z = {
-    "H": 1, "C": 6, "N": 7, "O": 8, "P": 15, "S": 16,
-    "NA": 11, "MG": 12, "CL": 17, "K": 19, "CA": 20,
+    "H": 1,
+    "C": 6,
+    "N": 7,
+    "O": 8,
+    "P": 15,
+    "S": 16,
+    "NA": 11,
+    "MG": 12,
+    "CL": 17,
+    "K": 19,
+    "CA": 20,
 }
 
 # CHARMM monatomic-ion RESIDUE names → element.  These MUST be resolved by resname:
@@ -43,13 +53,19 @@ _ELEMENT_Z = {
 # letters collide with real elements.  (Verified: NaCl ions are resname/atomname "SOD"
 # / "CLA" in our solvated PSFs; Mg is "MG".)  Bug this fixes: Na+ was exported as z=16.
 _ION_RESNAME_EL = {
-    "SOD": "NA", "CLA": "CL", "POT": "K", "MG": "MG",
-    "MGH": "MG", "CAL": "CA", "CES": "K",
+    "SOD": "NA",
+    "CLA": "CL",
+    "POT": "K",
+    "MG": "MG",
+    "MGH": "MG",
+    "CAL": "CA",
+    "CES": "K",
 }
 
 
 def _dna_resnames() -> list[str]:
     from backend.core.atomistic_to_nadoc import _GRO_DNA_RESNAMES  # noqa: PLC0415
+
     return sorted(_GRO_DNA_RESNAMES)
 
 
@@ -79,8 +95,10 @@ def _read_values(psf: str, dcd_paths: list[str], sel: str) -> np.ndarray:
     ``.veldcd`` / ``.forcedcd`` are DCD-format but MDAnalysis can't guess that from
     the extension, so force ``format="DCD"``."""
     import MDAnalysis as mda  # noqa: PLC0415
-    u = mda.Universe(psf, dcd_paths if len(dcd_paths) > 1 else dcd_paths[0],
-                     format="DCD")
+
+    u = mda.Universe(
+        psf, dcd_paths if len(dcd_paths) > 1 else dcd_paths[0], format="DCD"
+    )
     ag = u.select_atoms(sel)
     frames = np.empty((len(u.trajectory), len(ag), 3), dtype=np.float32)
     for i, _ts in enumerate(u.trajectory):
@@ -126,34 +144,57 @@ def export_rollout_data(
         p = _read_values(psf, [cap[nm]["dcd"]], sel)[::frame_stride]
         v = _read_values(psf, [cap[nm]["veldcd"]], sel)[::frame_stride]
         k = min(len(p), len(v))
-        pos_chunks.append(p[:k]); vel_chunks.append(v[:k])
+        pos_chunks.append(p[:k])
+        vel_chunks.append(v[:k])
     pos = np.concatenate(pos_chunks).astype(np.float32)
     vel = np.concatenate(vel_chunks).astype(np.float32)
     n = len(pos)
 
     import MDAnalysis as mda  # noqa: PLC0415
+
     u = mda.Universe(psf)
     ag = u.select_atoms(sel)
     z = np.array([_ELEMENT_Z.get(_element_of(a), 0) for a in ag], dtype=np.int16)
     mass = np.array(ag.masses, dtype=np.float32)
     is_dna = np.array(
-        [1 if a.resname.strip() in set(_dna_resnames()) else 0 for a in ag], dtype=np.int8)
+        [1 if a.resname.strip() in set(_dna_resnames()) else 0 for a in ag],
+        dtype=np.int8,
+    )
     manifest_in = json.loads((pkg / "manifest.json").read_text())
     box = np.array(manifest_in.get("box_ang", [0.0, 0.0, 0.0]), dtype=np.float32)
     seg_by = {m["name"]: m for m in manifest_in.get("segments", [])}
-    dt_fs = float(seg_by.get(name, {}).get("dcd_freq", 10)) * PROPAGATOR_TIMESTEP_FS * frame_stride
+    dt_fs = (
+        float(seg_by.get(name, {}).get("dcd_freq", 10))
+        * PROPAGATOR_TIMESTEP_FS
+        * frame_stride
+    )
 
-    np.savez_compressed(out_path, positions=pos, velocities=vel, z=z, mass=mass,
-                        is_dna=is_dna, box_ang=box)
+    np.savez_compressed(
+        out_path,
+        positions=pos,
+        velocities=vel,
+        z=z,
+        mass=mass,
+        is_dna=is_dna,
+        box_ang=box,
+    )
     manifest = {
-        "propagator_rollout_version": 1, "job_id": job.job_id, "segment": name,
-        "npz": out_path.name, "n_frames": int(pos.shape[0]), "n_atoms": int(pos.shape[1]),
-        "n_dna_atoms": int(is_dna.sum()), "dna_only": dna_only, "dt_fs": dt_fs,
+        "propagator_rollout_version": 1,
+        "job_id": job.job_id,
+        "segment": name,
+        "npz": out_path.name,
+        "n_frames": int(pos.shape[0]),
+        "n_atoms": int(pos.shape[1]),
+        "n_dna_atoms": int(is_dna.sum()),
+        "dna_only": dna_only,
+        "dt_fs": dt_fs,
         "frame_stride": frame_stride,
         "units": {"positions": "angstrom", "velocities": "namd_veldcd"},
         "system": system_meta or {},
     }
-    (out_path.parent / (out_path.stem + "_manifest.json")).write_text(json.dumps(manifest, indent=2))
+    (out_path.parent / (out_path.stem + "_manifest.json")).write_text(
+        json.dumps(manifest, indent=2)
+    )
     return manifest
 
 
@@ -190,18 +231,22 @@ def export_windows(
     cursor = 0
     for name in seg_order:
         files = cap[name]
-        dcd = files["dcd"]; vel = files["veldcd"]; frc = files["forcedcd"]
+        dcd = files["dcd"]
+        vel = files["veldcd"]
+        frc = files["forcedcd"]
         if not (dcd and vel and frc):
             # partial capture (e.g. a segment that died mid-write) — skip it
             continue
         p = _read_values(psf, [dcd], sel)
         v = _read_values(psf, [vel], sel)
         f = _read_values(psf, [frc], sel)
-        n = min(len(p), len(v), len(f))   # guard a torn final frame
+        n = min(len(p), len(v), len(f))  # guard a torn final frame
         if n < 2:
             continue
         seg_starts.append(cursor)
-        pos_chunks.append(p[:n]); vel_chunks.append(v[:n]); frc_chunks.append(f[:n])
+        pos_chunks.append(p[:n])
+        vel_chunks.append(v[:n])
+        frc_chunks.append(f[:n])
         cursor += n
 
     if not pos_chunks:
@@ -213,6 +258,7 @@ def export_windows(
 
     # Per-atom static features + bonds from the PSF (over the selected atoms).
     import MDAnalysis as mda  # noqa: PLC0415
+
     u = mda.Universe(psf)
     ag = u.select_atoms(sel)
     z = np.array([_ELEMENT_Z.get(_element_of(a), 0) for a in ag], dtype=np.int16)
@@ -225,7 +271,11 @@ def export_windows(
         i0, i1 = int(b.atoms[0].index), int(b.atoms[1].index)
         if i0 in global_ix and i1 in global_ix:
             bonds.append((global_ix[i0], global_ix[i1]))
-    bonds_arr = np.array(sorted(set(bonds)), dtype=np.int32) if bonds else np.zeros((0, 2), np.int32)
+    bonds_arr = (
+        np.array(sorted(set(bonds)), dtype=np.int32)
+        if bonds
+        else np.zeros((0, 2), np.int32)
+    )
 
     manifest_in = json.loads((pkg / "manifest.json").read_text())
     # dt between captured frames = dcd_freq × timestep.  MdSegmentStatus doesn't
@@ -240,9 +290,15 @@ def export_windows(
 
     np.savez_compressed(
         out_path,
-        positions=positions, velocities=velocities, forces=forces,
-        z=z, mass=mass, charge=charge, resid=resid,
-        bonds=bonds_arr, segment_starts=np.array(seg_starts, dtype=np.int32),
+        positions=positions,
+        velocities=velocities,
+        forces=forces,
+        z=z,
+        mass=mass,
+        charge=charge,
+        resid=resid,
+        bonds=bonds_arr,
+        segment_starts=np.array(seg_starts, dtype=np.int32),
         box_ang=box_ang,
     )
 
@@ -278,5 +334,7 @@ def export_windows(
         },
         "system": system_meta or {},
     }
-    (out_path.parent / "dataset_manifest.json").write_text(json.dumps(manifest, indent=2))
+    (out_path.parent / "dataset_manifest.json").write_text(
+        json.dumps(manifest, indent=2)
+    )
     return manifest

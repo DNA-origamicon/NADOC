@@ -11,6 +11,7 @@ Output (stdout, last line): JSON ``{job_id, nadoc_path, run_position, overhang:{
 
 Run: ``uv run python tests/e2e_seed_af26.py [workspace_dir]``
 """
+
 from __future__ import annotations
 
 import json
@@ -42,10 +43,13 @@ def _find_overhang(design):
                 continue
             if overhang_candidate_error(design, hobj[hid], bp, dirn, nr, nc) is None:
                 return {
-                    "helixId": hid, "bpIndex": bp,
+                    "helixId": hid,
+                    "bpIndex": bp,
                     "direction": str(dirn.value if hasattr(dirn, "value") else dirn),
                     "isFivePrime": bool(is5),
-                    "neighborRow": nr, "neighborCol": nc, "lengthBp": 8,
+                    "neighborRow": nr,
+                    "neighborCol": nc,
+                    "lengthBp": 8,
                 }
     raise SystemExit("no valid overhang candidate on the seeded 6hb")
 
@@ -58,6 +62,7 @@ _SEED_NAME = "af26-e2e-seed"
 def _purge_old_seeds(workspace: Path) -> None:
     import json as _json
     import shutil
+
     jobs_dir = workspace / "oxdna_jobs"
     if not jobs_dir.exists():
         return
@@ -111,17 +116,22 @@ def main() -> None:
 
     # A completed mock job relaxed at the run state.
     job = new_oxdna_job(
-        _SEED_NAME, [], design_fingerprint=run_fp, feature_log_position=run_pos)
+        _SEED_NAME, [], design_fingerprint=run_fp, feature_log_position=run_pos
+    )
     job.status = OxdnaStatus.completed
     job.save(workspace)
     (job.job_dir(workspace) / "design.json").write_text(reimported.model_dump_json())
 
-    print(json.dumps({
-        "job_id": job.job_id,
-        "nadoc_path": str(nadoc_path),
-        "run_position": run_pos,
-        "overhang": overhang,
-    }))
+    print(
+        json.dumps(
+            {
+                "job_id": job.job_id,
+                "nadoc_path": str(nadoc_path),
+                "run_position": run_pos,
+                "overhang": overhang,
+            }
+        )
+    )
 
 
 if __name__ == "__main__":

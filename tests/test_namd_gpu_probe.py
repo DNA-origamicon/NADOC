@@ -48,14 +48,17 @@ def _package(tmp_path):
 
 def _stub_namd(monkeypatch, log: str, seen: list | None = None):
     """Replace the NAMD subprocess with one that just emits *log*."""
+
     def fake_run(cmd, **kw):
         if seen is not None:
             seen.append((cmd, kw))
         return subprocess.CompletedProcess(cmd, 0, stdout=log, stderr="")
+
     monkeypatch.setattr(namd_runner.subprocess, "run", fake_run)
 
 
 # ── conf rewriting ────────────────────────────────────────────────────────────
+
 
 def test_probe_conf_runs_one_cycle_and_diverts_output(tmp_path):
     """The probe must shorten the run to one stepspercycle (NAMD rejects step counts
@@ -66,10 +69,10 @@ def test_probe_conf_runs_one_cycle_and_diverts_output(tmp_path):
     namd_runner._write_probe_conf(src, dst, "_probe_out")
     text = dst.read_text()
 
-    assert "minimize           12" in text        # one cycle, not 60
+    assert "minimize           12" in text  # one cycle, not 60
     assert "outputName         _probe_out" in text
-    assert "output/p_00_min" not in text          # real output untouched
-    assert "structure          p.psf" in text     # inputs preserved
+    assert "output/p_00_min" not in text  # real output untouched
+    assert "structure          p.psf" in text  # inputs preserved
 
 
 def test_probe_conf_defaults_cycle_when_stepspercycle_absent(tmp_path):
@@ -82,16 +85,22 @@ def test_probe_conf_defaults_cycle_when_stepspercycle_absent(tmp_path):
 
 # ── verdict ───────────────────────────────────────────────────────────────────
 
+
 def test_probe_reports_unsafe_on_tilelist_crash(tmp_path, monkeypatch):
     pkg = _package(tmp_path)
     _stub_namd(monkeypatch, CRASH_LOG)
-    assert namd_runner.gpu_tilelist_probe(pkg, "p_00_min", "namd3", "0", threads=2) is False
+    assert (
+        namd_runner.gpu_tilelist_probe(pkg, "p_00_min", "namd3", "0", threads=2)
+        is False
+    )
 
 
 def test_probe_reports_safe_on_clean_run(tmp_path, monkeypatch):
     pkg = _package(tmp_path)
     _stub_namd(monkeypatch, OK_LOG)
-    assert namd_runner.gpu_tilelist_probe(pkg, "p_00_min", "namd3", "0", threads=2) is True
+    assert (
+        namd_runner.gpu_tilelist_probe(pkg, "p_00_min", "namd3", "0", threads=2) is True
+    )
 
 
 def test_probe_leaves_no_scratch_files_behind(tmp_path, monkeypatch):
@@ -112,18 +121,27 @@ def test_probe_leaves_no_scratch_files_behind(tmp_path, monkeypatch):
 
 # ── caching ───────────────────────────────────────────────────────────────────
 
+
 def test_probe_verdict_is_cached_and_not_re_run(tmp_path, monkeypatch):
     """A prepared package's geometry can't change, so a resume must not re-pay."""
     pkg = _package(tmp_path)
     seen: list = []
     _stub_namd(monkeypatch, CRASH_LOG, seen)
 
-    assert namd_runner.gpu_tilelist_probe(pkg, "p_00_min", "namd3", "0", threads=2) is False
+    assert (
+        namd_runner.gpu_tilelist_probe(pkg, "p_00_min", "namd3", "0", threads=2)
+        is False
+    )
     assert len(seen) == 1
-    assert json.loads((pkg / namd_runner.GPU_PROBE_CACHE).read_text())["gpu_safe"] is False
+    assert (
+        json.loads((pkg / namd_runner.GPU_PROBE_CACHE).read_text())["gpu_safe"] is False
+    )
 
     # second call: cached, NAMD not invoked again
-    assert namd_runner.gpu_tilelist_probe(pkg, "p_00_min", "namd3", "0", threads=2) is False
+    assert (
+        namd_runner.gpu_tilelist_probe(pkg, "p_00_min", "namd3", "0", threads=2)
+        is False
+    )
     assert len(seen) == 1
 
 
@@ -131,12 +149,17 @@ def test_probe_reprobes_when_cache_is_corrupt(tmp_path, monkeypatch):
     pkg = _package(tmp_path)
     (pkg / namd_runner.GPU_PROBE_CACHE).write_text("{not json")
     _stub_namd(monkeypatch, OK_LOG)
-    assert namd_runner.gpu_tilelist_probe(pkg, "p_00_min", "namd3", "0", threads=2) is True
+    assert (
+        namd_runner.gpu_tilelist_probe(pkg, "p_00_min", "namd3", "0", threads=2) is True
+    )
 
 
 # ── fail-open ─────────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("boom", [OSError("no binary"), subprocess.TimeoutExpired("namd3", 1)])
+
+@pytest.mark.parametrize(
+    "boom", [OSError("no binary"), subprocess.TimeoutExpired("namd3", 1)]
+)
 def test_probe_fails_open_when_it_cannot_run(tmp_path, monkeypatch, boom):
     """A broken probe must never be the thing that stops a job from launching."""
     pkg = _package(tmp_path)
@@ -145,16 +168,21 @@ def test_probe_fails_open_when_it_cannot_run(tmp_path, monkeypatch, boom):
         raise boom
 
     monkeypatch.setattr(namd_runner.subprocess, "run", fake_run)
-    assert namd_runner.gpu_tilelist_probe(pkg, "p_00_min", "namd3", "0", threads=2) is True
+    assert (
+        namd_runner.gpu_tilelist_probe(pkg, "p_00_min", "namd3", "0", threads=2) is True
+    )
 
 
 def test_probe_safe_when_min_conf_missing(tmp_path):
     pkg = tmp_path / "pkg"
     pkg.mkdir()
-    assert namd_runner.gpu_tilelist_probe(pkg, "p_00_min", "namd3", "0", threads=2) is True
+    assert (
+        namd_runner.gpu_tilelist_probe(pkg, "p_00_min", "namd3", "0", threads=2) is True
+    )
 
 
 # ── devices wiring ────────────────────────────────────────────────────────────
+
 
 def test_probe_passes_devices_through(tmp_path, monkeypatch):
     pkg = _package(tmp_path)

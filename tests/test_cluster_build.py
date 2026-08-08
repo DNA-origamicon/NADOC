@@ -20,6 +20,7 @@ def alpine():
 
 # ── validation: no caller string reaches a command line ──────────────────────
 
+
 def test_module_names_are_validated():
     for bad in ("gcc; rm -rf /", "$(id)", "a b", "`whoami`", "", "x" * 80):
         with pytest.raises(ValueError, match="invalid module name"):
@@ -30,7 +31,9 @@ def test_gencodes_must_be_literal_arch_code_pairs():
     for bad in ("arch=compute_90,code=sm_90; rm -rf /", "-O3", "arch=x,code=y", ""):
         with pytest.raises(ValueError, match="invalid cuda gencode"):
             cb.validated_gencodes([bad])
-    assert cb.validated_gencodes(["arch=compute_90,code=sm_90"]) == ["arch=compute_90,code=sm_90"]
+    assert cb.validated_gencodes(["arch=compute_90,code=sm_90"]) == [
+        "arch=compute_90,code=sm_90"
+    ]
 
 
 def test_build_name_is_confined_to_a_safe_token(alpine):
@@ -41,16 +44,20 @@ def test_build_name_is_confined_to_a_safe_token(alpine):
 
 def test_build_dir_stays_under_project_nadoc_builds(alpine):
     d = cb.build_dir_for(alpine, "me", "namd-git")
-    assert d.startswith("/projects/me/")        # $USER bound, never someone else's tree
+    assert d.startswith("/projects/me/")  # $USER bound, never someone else's tree
     assert d.endswith("/nadoc_builds/namd-git")
     assert ".." not in d
 
 
 # ── the generated script ─────────────────────────────────────────────────────
 
+
 def _script(**over):
-    kw = dict(build_dir="/projects/me/nadoc_builds/namd-git",
-              src_dir_name="NAMD_Git-2025-12-04_Source", tar_name="namd-git")
+    kw = dict(
+        build_dir="/projects/me/nadoc_builds/namd-git",
+        src_dir_name="NAMD_Git-2025-12-04_Source",
+        tar_name="namd-git",
+    )
     kw.update(over)
     return cb.build_sbatch(**kw)
 
@@ -117,6 +124,7 @@ def test_namd_bin_path_is_what_goes_into_the_profile():
 
 # ── tarball ──────────────────────────────────────────────────────────────────
 
+
 def test_tarball_rejects_a_non_namd_tree(tmp_path):
     with pytest.raises(ValueError, match="does not look like a NAMD source"):
         cb.make_source_tarball(tmp_path, tmp_path / "out.tar")
@@ -126,6 +134,7 @@ def test_tarball_drops_the_local_build_and_git(tmp_path):
     """The desktop Linux-x86_64-g++ tree is the glibc-2.38 binary that cannot run on
     Alpine; shipping it would be a large upload of something we delete on arrival."""
     import tarfile
+
     src = tmp_path / "NAMD_Src"
     (src / "Linux-x86_64-g++").mkdir(parents=True)
     (src / ".git").mkdir()
@@ -151,6 +160,7 @@ def test_charm_arch_DEFINITION_survives_while_build_output_is_dropped(tmp_path):
     because a by-name filter stripped charm-*/src/arch/<triplet> along with the
     identically-named build output. They are different things; depth tells them apart."""
     import tarfile
+
     src = tmp_path / "NAMD_Src"
     src.mkdir()
     (src / "config").write_text("#!/bin/sh\n")
@@ -162,17 +172,21 @@ def test_charm_arch_DEFINITION_survives_while_build_output_is_dropped(tmp_path):
     (charm / "build").write_text("#!/bin/sh\n")
 
     names = tarfile.open(cb.make_source_tarball(src, tmp_path / "o.tar")).getnames()
-    assert any("src/arch/multicore-linux-x86_64/conv-mach.h" in n for n in names), \
+    assert any("src/arch/multicore-linux-x86_64/conv-mach.h" in n for n in names), (
         "the arch DEFINITION must ship or charm cannot build that triplet"
-    assert not any(n.endswith("multicore-linux-x86_64/CMakeCache.txt") for n in names), \
-        "the local build output must NOT ship (absolute Ubuntu paths)"
+    )
+    assert not any(
+        n.endswith("multicore-linux-x86_64/CMakeCache.txt") for n in names
+    ), "the local build output must NOT ship (absolute Ubuntu paths)"
     assert any(n.endswith("charm-8.0.0/build") for n in names)
 
 
 def test_cmake_is_a_default_module():
     """Without cmake, charm falls back to ./buildold and rejects the version string."""
     assert any(m.startswith("cmake/") for m in cb.DEFAULT_MODULES)
-    assert not any(m.startswith("cmake/4") for m in cb.DEFAULT_MODULES)   # 4.x breaks charm 8
+    assert not any(
+        m.startswith("cmake/4") for m in cb.DEFAULT_MODULES
+    )  # 4.x breaks charm 8
 
 
 def test_config_enables_the_gpu_resident_integrator():
@@ -199,14 +213,14 @@ def test_cuda_prefix_is_derived_not_assumed():
     s = _script()
     assert '--cuda-prefix "$CUDA_PREFIX"' in s
     assert '--cuda-prefix "$CUDA_HOME"' not in s
-    assert "command -v nvcc" in s                      # the fallback derivation
-    assert 'CUDA_ROOT' in s and 'CUDAROOT' in s        # the common alternatives first
+    assert "command -v nvcc" in s  # the fallback derivation
+    assert "CUDA_ROOT" in s and "CUDAROOT" in s  # the common alternatives first
 
 
 def test_build_fails_loudly_if_cuda_cannot_be_located():
     s = _script()
-    assert 'cannot locate the CUDA toolkit' in s
-    assert s.index("CUDA_PREFIX=") < s.index("./config")   # checked before configuring
+    assert "cannot locate the CUDA toolkit" in s
+    assert s.index("CUDA_PREFIX=") < s.index("./config")  # checked before configuring
 
 
 def test_uses_the_fftw3_api_not_namds_fftw2_default():
@@ -251,8 +265,8 @@ def test_build_validates_the_artifact_without_running_it():
     s = _script()
     assert '[ -x "$BIN" ]' in s
     assert "|| true" not in s
-    assert "+idlepoll --version" not in s          # never RUN it on a CPU node
-    assert 'grep "Linux-x86_64-multicore-CUDA"' in s      # prove it IS the CUDA build
+    assert "+idlepoll --version" not in s  # never RUN it on a CPU node
+    assert 'grep "Linux-x86_64-multicore-CUDA"' in s  # prove it IS the CUDA build
     assert s.index('[ -x "$BIN" ]') < s.index("BUILD OK")
 
 
@@ -262,7 +276,7 @@ def test_links_zlib_for_static_tcl():
     Without -lz every Tcl-linking target dies on undefined adler32 (SLURM 30954671)."""
     s = _script()
     assert "-ltcl8.6 -lz -ldl -lpthread" in s
-    assert s.index("TCLLIB =") < s.index("make -j")     # appended before make runs
+    assert s.index("TCLLIB =") < s.index("make -j")  # appended before make runs
 
 
 def test_builds_only_the_namd3_target():

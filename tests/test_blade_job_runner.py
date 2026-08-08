@@ -20,6 +20,7 @@ from backend.core import blade_runner
 
 # ── Job model ─────────────────────────────────────────────────────────────────
 
+
 def test_new_blade_job_defaults_to_relax_with_two_stages():
     job = new_blade_job("mydesign")
     assert job.mode == "relax"
@@ -30,11 +31,14 @@ def test_new_blade_job_defaults_to_relax_with_two_stages():
     assert all(s.status == "pending" for s in job.stages)
 
 
-@pytest.mark.parametrize("field,bad,expected", [
-    ("mode", "rollout", "relax"),
-    ("correction", "magic", "baseline"),
-    ("platform", "OPENCL", "CUDA"),
-])
+@pytest.mark.parametrize(
+    "field,bad,expected",
+    [
+        ("mode", "rollout", "relax"),
+        ("correction", "magic", "baseline"),
+        ("platform", "OPENCL", "CUDA"),
+    ],
+)
 def test_new_blade_job_clamps_unknown_enums(field, bad, expected):
     """An unrecognised value falls back to the safe default rather than reaching the worker,
     where it would fail minutes later inside OpenMM."""
@@ -81,9 +85,11 @@ def test_job_dir_is_under_blade_jobs(tmp_path: Path):
 
 # ── Unified job list ──────────────────────────────────────────────────────────
 
+
 def test_normalize_blade_job_is_a_flat_viewable_root():
     node = sim_jobs.normalize_blade_job(
-        {"job_id": "x", "status": "completed", "n_nucleotides": 400})
+        {"job_id": "x", "status": "completed", "n_nucleotides": 400}
+    )
     assert node["engine"] == "blade"
     assert node["kind"] == "relax"
     assert node["is_child"] is False
@@ -97,6 +103,7 @@ def test_normalize_blade_job_not_viewable_until_completed():
 
 
 # ── Progress estimate ─────────────────────────────────────────────────────────
+
 
 def test_estimate_scales_with_system_size_and_langevin_time():
     small = new_blade_job("d", n_nucleotides=100)
@@ -113,7 +120,9 @@ def test_cpu_platform_estimate_is_much_larger_than_cuda():
     at its cap in seconds and tell the user nothing for the rest of a long run."""
     cuda = new_blade_job("d", n_nucleotides=1000, platform="CUDA")
     cpu = new_blade_job("d", n_nucleotides=1000, platform="CPU")
-    assert blade_runner._estimate_seconds(cpu) > 10 * blade_runner._estimate_seconds(cuda)
+    assert blade_runner._estimate_seconds(cpu) > 10 * blade_runner._estimate_seconds(
+        cuda
+    )
 
 
 def test_job_progress_reports_one_for_completed_and_zero_for_failed(tmp_path: Path):
@@ -129,6 +138,7 @@ def test_job_progress_reports_one_for_completed_and_zero_for_failed(tmp_path: Pa
 def test_job_progress_prefers_the_workers_real_fraction(tmp_path: Path):
     """Once the gpu script reports, the bar must follow IT, not the wall-clock guess."""
     import time
+
     job = new_blade_job("d", n_nucleotides=1000)
     job.status = BladeStatus.running
     job.stages[0].started_at = time.time() - 5.0
@@ -151,10 +161,13 @@ def test_write_progress_clamps_to_unit_interval(tmp_path: Path):
 
 # ── Sim guard ─────────────────────────────────────────────────────────────────
 
+
 def test_sim_guard_blocks_a_cuda_run_while_a_heavy_sim_owns_the_machine(monkeypatch):
     monkeypatch.delenv("NADOC_IGNORE_SIM_GUARD", raising=False)
-    monkeypatch.setattr("backend.core.hardware.heavy_sim_running",
-                        lambda: (True, "NAMD production job 1234"))
+    monkeypatch.setattr(
+        "backend.core.hardware.heavy_sim_running",
+        lambda: (True, "NAMD production job 1234"),
+    )
     with pytest.raises(RuntimeError, match="heavy simulation"):
         blade_runner._check_sim_guard(new_blade_job("d", platform="CUDA"))
 
@@ -162,16 +175,20 @@ def test_sim_guard_blocks_a_cuda_run_while_a_heavy_sim_owns_the_machine(monkeypa
 def test_sim_guard_exempts_a_cpu_run(monkeypatch):
     """Choosing CPU is exactly the escape hatch for a busy GPU — the guard must not block it."""
     monkeypatch.delenv("NADOC_IGNORE_SIM_GUARD", raising=False)
-    monkeypatch.setattr("backend.core.hardware.heavy_sim_running",
-                        lambda: (True, "NAMD production job 1234"))
-    blade_runner._check_sim_guard(new_blade_job("d", platform="CPU"))   # no raise
+    monkeypatch.setattr(
+        "backend.core.hardware.heavy_sim_running",
+        lambda: (True, "NAMD production job 1234"),
+    )
+    blade_runner._check_sim_guard(new_blade_job("d", platform="CPU"))  # no raise
 
 
 def test_sim_guard_respects_the_override(monkeypatch):
     monkeypatch.setenv("NADOC_IGNORE_SIM_GUARD", "1")
-    monkeypatch.setattr("backend.core.hardware.heavy_sim_running",
-                        lambda: (True, "NAMD production job 1234"))
-    blade_runner._check_sim_guard(new_blade_job("d", platform="CUDA"))   # no raise
+    monkeypatch.setattr(
+        "backend.core.hardware.heavy_sim_running",
+        lambda: (True, "NAMD production job 1234"),
+    )
+    blade_runner._check_sim_guard(new_blade_job("d", platform="CUDA"))  # no raise
 
 
 def test_sim_guard_fails_open_when_the_probe_raises(monkeypatch):
@@ -180,16 +197,18 @@ def test_sim_guard_fails_open_when_the_probe_raises(monkeypatch):
 
     def _boom():
         raise OSError("procfs unreadable")
+
     monkeypatch.setattr("backend.core.hardware.heavy_sim_running", _boom)
-    blade_runner._check_sim_guard(new_blade_job("d", platform="CUDA"))   # no raise
+    blade_runner._check_sim_guard(new_blade_job("d", platform="CUDA"))  # no raise
 
 
 # ── Reconcile (orphan recovery) ───────────────────────────────────────────────
 
+
 def test_reconcile_marks_a_dead_worker_with_a_cache_completed(tmp_path: Path):
     job = new_blade_job("d")
     job.status = BladeStatus.running
-    job.pid = 999_999_999          # certainly dead
+    job.pid = 999_999_999  # certainly dead
     job.save(tmp_path)
     (job.job_dir(tmp_path) / "display.json").write_text("{}")
 
@@ -212,22 +231,29 @@ def test_reconcile_leaves_a_live_worker_running(tmp_path: Path):
     """The whole point of the detached worker: it survives a uvicorn --reload, and reconcile
     must not then declare it dead."""
     import os
+
     job = new_blade_job("d")
     job.status = BladeStatus.running
-    job.pid = os.getpid()          # alive by construction
+    job.pid = os.getpid()  # alive by construction
     job.save(tmp_path)
 
-    assert blade_runner.reconcile_blade_status(job, tmp_path).status == BladeStatus.running
+    assert (
+        blade_runner.reconcile_blade_status(job, tmp_path).status == BladeStatus.running
+    )
 
 
 def test_reconcile_is_a_noop_for_a_terminal_job(tmp_path: Path):
     job = new_blade_job("d")
     job.status = BladeStatus.completed
     job.save(tmp_path)
-    assert blade_runner.reconcile_blade_status(job, tmp_path).status == BladeStatus.completed
+    assert (
+        blade_runner.reconcile_blade_status(job, tmp_path).status
+        == BladeStatus.completed
+    )
 
 
 # ── Environment resolution ────────────────────────────────────────────────────
+
 
 def test_find_blade_python_honours_the_env_override(tmp_path: Path, monkeypatch):
     prefix = tmp_path / "myenv"
@@ -237,7 +263,9 @@ def test_find_blade_python_honours_the_env_override(tmp_path: Path, monkeypatch)
     assert blade_runner.find_blade_python() == str(prefix / "bin" / "python")
 
 
-def test_find_blade_python_returns_none_when_the_override_is_empty(tmp_path, monkeypatch):
+def test_find_blade_python_returns_none_when_the_override_is_empty(
+    tmp_path, monkeypatch
+):
     monkeypatch.setenv("BLADE_OPENMM_ENV", str(tmp_path / "nope"))
     assert blade_runner.find_blade_python() is None
 
@@ -251,24 +279,28 @@ def test_blade_available_reports_the_missing_interpreter(monkeypatch):
 
 # ── Relax failure path ────────────────────────────────────────────────────────
 
+
 def test_relax_and_cache_marks_failed_when_the_snapshot_is_missing(tmp_path: Path):
     """relax_and_cache must never raise — the worker's only job is to call it, so an
     exception would leave the job stranded 'running' until reconcile guessed."""
     job = new_blade_job("d")
     job.save(tmp_path)
-    blade_runner.relax_and_cache(job, tmp_path)      # no design.json written
+    blade_runner.relax_and_cache(job, tmp_path)  # no design.json written
     assert job.status == BladeStatus.failed
     assert "design snapshot" in (job.error or "")
 
 
-def test_relax_and_cache_marks_failed_when_no_openmm_env_exists(tmp_path: Path, monkeypatch):
+def test_relax_and_cache_marks_failed_when_no_openmm_env_exists(
+    tmp_path: Path, monkeypatch
+):
     job = new_blade_job("d")
     job.save(tmp_path)
     jd = job.job_dir(tmp_path)
     (jd / "design.json").write_text("{}")
     monkeypatch.setattr(blade_runner, "_load_snapshot_design", lambda _jd: object())
-    monkeypatch.setattr(blade_runner, "build_solute_inputs",
-                        lambda _d, _jd: {"n_solute": 10})
+    monkeypatch.setattr(
+        blade_runner, "build_solute_inputs", lambda _d, _jd: {"n_solute": 10}
+    )
     monkeypatch.setattr(blade_runner, "find_blade_python", lambda: None)
 
     blade_runner.relax_and_cache(job, tmp_path)

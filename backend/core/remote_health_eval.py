@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 
 _EXIT_OK = 0
-_EXIT_NO_WC = 3   # no usable WC series -> caller holds (fail safe)
+_EXIT_NO_WC = 3  # no usable WC series -> caller holds (fail safe)
 
 
 def _load_md_health():
@@ -37,9 +37,11 @@ def _load_md_health():
     package when running inside the repo (unit tests, local dev)."""
     try:
         import md_health  # staged copy sits next to this file on the node
+
         return md_health
     except ImportError:
         from backend.core import md_health  # type: ignore
+
         return md_health
 
 
@@ -47,21 +49,30 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         description="Tier-A node WC health step for relaxation early-stop."
     )
-    ap.add_argument("--package-dir", default=".", help="run cwd holding {stem}.psf/.pdb + output/")
-    ap.add_argument("--seg", required=True, help="chunk output name (expects output/<seg>.dcd)")
+    ap.add_argument(
+        "--package-dir", default=".", help="run cwd holding {stem}.psf/.pdb + output/"
+    )
+    ap.add_argument(
+        "--seg", required=True, help="chunk output name (expects output/<seg>.dcd)"
+    )
     ap.add_argument("--stem", required=True, help="structure name stem")
-    ap.add_argument("--out", required=True, help="where to write the wc_per_frame JSON list")
+    ap.add_argument(
+        "--out", required=True, help="where to write the wc_per_frame JSON list"
+    )
     args = ap.parse_args(argv)
 
     try:
         md_health = _load_md_health()
         res = md_health.run_health_check(Path(args.package_dir), args.seg, args.stem)
         wc = [float(x) for x in (res.wc_per_frame or [])]
-    except Exception as exc:                       # noqa: BLE001 — fail safe to HOLD
+    except Exception as exc:  # noqa: BLE001 — fail safe to HOLD
         print(f"[nadoc-health] {type(exc).__name__}: {exc}", file=sys.stderr)
         return _EXIT_NO_WC
     if not wc:
-        print("[nadoc-health] no wc_per_frame (no frames yet / read error)", file=sys.stderr)
+        print(
+            "[nadoc-health] no wc_per_frame (no frames yet / read error)",
+            file=sys.stderr,
+        )
         return _EXIT_NO_WC
     Path(args.out).write_text(json.dumps(wc))
     print(f"[nadoc-health] wrote {len(wc)} wc frames -> {args.out}", file=sys.stderr)

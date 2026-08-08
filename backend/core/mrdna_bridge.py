@@ -45,6 +45,7 @@ def _rodrigues(v: np.ndarray, axis: np.ndarray, angle: float) -> np.ndarray:
     c, s = math.cos(angle), math.sin(angle)
     return v * c + np.cross(axis, v) * s + axis * np.dot(axis, v) * (1.0 - c)
 
+
 # Synthetic helix_id prefix of a strand-extension tail bead — the key the geometry layer,
 # oxDNA and the atomistic model already share (``("__ext_<ext_id>", bead_index, dir)``).
 # Kept in sync with ``oxdna_interface._EXT_PREFIX``.
@@ -103,7 +104,9 @@ def ensure_wsl_cuda_libs() -> None:
     parts = cur.split(os.pathsep) if cur else []
     if _WSL_LIB_DIR in parts:
         return
-    os.environ["LD_LIBRARY_PATH"] = os.pathsep.join([_WSL_LIB_DIR, *parts]) if parts else _WSL_LIB_DIR
+    os.environ["LD_LIBRARY_PATH"] = (
+        os.pathsep.join([_WSL_LIB_DIR, *parts]) if parts else _WSL_LIB_DIR
+    )
 
 
 # Apply immediately on import so any ARBD launch from the NADOC backend, the
@@ -115,6 +118,7 @@ ensure_wsl_cuda_libs()
 def _ensure_mrdna() -> None:
     """Add mrdna's install path to sys.path if not already importable."""
     import sys
+
     try:
         import mrdna  # noqa: F401
     except ImportError:
@@ -131,6 +135,7 @@ def find_mrdna() -> Optional[str]:
     human-meaningful path (the package dir) in both cases; never raises.
     """
     import importlib.util
+
     try:
         spec = importlib.util.find_spec("mrdna")
         if spec is not None:
@@ -168,6 +173,7 @@ def find_arbd() -> Optional[str]:
     Never raises.
     """
     import shutil
+
     found = shutil.which("arbd")
     if found:
         return found
@@ -191,7 +197,9 @@ def find_arbd_build() -> Optional[str]:
     return None
 
 
-def mrdna_model_from_nadoc(design: Design, *, return_nt_key: bool = False, **model_params):
+def mrdna_model_from_nadoc(
+    design: Design, *, return_nt_key: bool = False, **model_params
+):
     """
     Convert a NADOC Design to an mrdna SegmentModel.
 
@@ -212,7 +220,10 @@ def mrdna_model_from_nadoc(design: Design, *, return_nt_key: bool = False, **mod
         design, return_nt_key=True
     )
     model = model_from_basepair_stack_3prime(
-        r, bp, stack, three_prime,
+        r,
+        bp,
+        stack,
+        three_prime,
         sequence=seq,
         orientation=orientation,
         **model_params,
@@ -268,46 +279,47 @@ def nuc_pos_override_from_mrdna(
     dict mapping (helix_id, bp_index, direction_str) → position in nm
     """
     import sys
+
     sys.path.insert(0, _MRDNA_TOOL_PATH)
     import MDAnalysis as mda
     from collections import defaultdict
     from scipy.ndimage import gaussian_filter1d
 
     # ── Step 1: helix axis geometry ────────────────────────────────────────
-    helix_info: dict = {}   # h_id → (ax_s_ang, axis_hat, bp_start, groove)
+    helix_info: dict = {}  # h_id → (ax_s_ang, axis_hat, bp_start, groove)
     for h in design.helices:
-        ax_s = h.axis_start.to_array() * 10.0   # nm → Å
-        ax_e = h.axis_end.to_array()   * 10.0
+        ax_s = h.axis_start.to_array() * 10.0  # nm → Å
+        ax_e = h.axis_end.to_array() * 10.0
         v = ax_e - ax_s
         axis_hat = v / np.linalg.norm(v)
         helix_info[h.id] = (ax_s, axis_hat, h.bp_start, groove_offset_rad(h.direction))
 
-    h_ids     = list(helix_info.keys())
-    ax_s_arr  = np.array([helix_info[h][0] for h in h_ids])   # (H, 3)
-    axhat_arr = np.array([helix_info[h][1] for h in h_ids])   # (H, 3)
+    h_ids = list(helix_info.keys())
+    ax_s_arr = np.array([helix_info[h][0] for h in h_ids])  # (H, 3)
+    axhat_arr = np.array([helix_info[h][1] for h in h_ids])  # (H, 3)
 
     # ── Step 2: build axis-line assignment from initial fine PDB ──────────
     # The initial PDB must be in NADOC coordinate frame.
     init_pdb = psf_path.replace(".psf", ".pdb")
-    u_init   = mda.Universe(psf_path, init_pdb)
-    init_pos = u_init.atoms.positions                           # (N_beads, 3) Å
+    u_init = mda.Universe(psf_path, init_pdb)
+    init_pos = u_init.atoms.positions  # (N_beads, 3) Å
     init_names = np.array([a.name for a in u_init.atoms])
-    dna_init_idx = np.where(init_names == 'DNA')[0]
-    dna_init_pos = init_pos[dna_init_idx]                       # (N_dna, 3)
+    dna_init_idx = np.where(init_names == "DNA")[0]
+    dna_init_pos = init_pos[dna_init_idx]  # (N_dna, 3)
 
     # Perpendicular distance from each DNA bead to each helix axis-line
-    n_dna     = len(dna_init_pos)
+    n_dna = len(dna_init_pos)
     n_helices = len(h_ids)
     perp = np.zeros((n_dna, n_helices), dtype=float)
     proj = np.zeros((n_dna, n_helices), dtype=float)
     for j in range(n_helices):
-        diff = dna_init_pos - ax_s_arr[j]           # (N, 3)
-        axial = (diff * axhat_arr[j]).sum(axis=1)   # (N,)
+        diff = dna_init_pos - ax_s_arr[j]  # (N, 3)
+        axial = (diff * axhat_arr[j]).sum(axis=1)  # (N,)
         perp_vec = diff - axial[:, None] * axhat_arr[j]
         perp[:, j] = np.linalg.norm(perp_vec, axis=1)
         proj[:, j] = axial
 
-    best_j    = perp.argmin(axis=1)                 # (N_dna,) best helix index
+    best_j = perp.argmin(axis=1)  # (N_dna,) best helix index
     best_perp = perp[np.arange(n_dna), best_j]
     best_proj = proj[np.arange(n_dna), best_j]
 
@@ -319,29 +331,29 @@ def nuc_pos_override_from_mrdna(
         bp_idx_arr[i] = int(round(bp_start + best_proj[i] / (BDNA_RISE_PER_BP * 10.0)))
 
     # Build mapping: (h_id, bp_idx) → pair_i with smallest perp distance
-    bp_to_pair: dict = {}   # (h_id, bp_idx) → (pair_i, perp)
+    bp_to_pair: dict = {}  # (h_id, bp_idx) → (pair_i, perp)
     for pair_i in range(n_dna):
-        h_id   = h_ids[best_j[pair_i]]
+        h_id = h_ids[best_j[pair_i]]
         bp_idx = bp_idx_arr[pair_i]
         perp_d = best_perp[pair_i]
-        key    = (h_id, bp_idx)
+        key = (h_id, bp_idx)
         if key not in bp_to_pair or perp_d < bp_to_pair[key][1]:
             bp_to_pair[key] = (pair_i, perp_d)
 
     # ── Step 3: read DCD simulation frame ─────────────────────────────────
-    u     = mda.Universe(psf_path, dcd_path)
-    atoms = u.select_atoms('all')
+    u = mda.Universe(psf_path, dcd_path)
+    atoms = u.select_atoms("all")
     if frame == -1:
         u.trajectory[-1]
     else:
         u.trajectory[frame]
-    positions  = atoms.positions.copy()              # (N_beads, 3) Å
+    positions = atoms.positions.copy()  # (N_beads, 3) Å
     atom_names = np.array([a.name for a in atoms])
-    dna_sim_idx = np.where(atom_names == 'DNA')[0]
-    dna_sim_pos = positions[dna_sim_idx]             # (N_dna, 3) Å
+    dna_sim_idx = np.where(atom_names == "DNA")[0]
+    dna_sim_pos = positions[dna_sim_idx]  # (N_dna, 3) Å
 
     # ── Step 4: group by helix, smooth, compute overrides ─────────────────
-    helix_entries: dict = defaultdict(list)   # h_id → [(bp_idx, pair_i)]
+    helix_entries: dict = defaultdict(list)  # h_id → [(bp_idx, pair_i)]
     for (h_id, bp_idx), (pair_i, _) in bp_to_pair.items():
         helix_entries[h_id].append((bp_idx, pair_i))
     for entries in helix_entries.values():
@@ -360,19 +372,19 @@ def nuc_pos_override_from_mrdna(
         dna_raw = np.array([dna_sim_pos[pi] for pi in pair_is], dtype=float)
 
         if len(dna_raw) >= 3 and sigma_nt > 0:
-            dna_sm = gaussian_filter1d(dna_raw, sigma=sigma_nt, axis=0, mode='nearest')
+            dna_sm = gaussian_filter1d(dna_raw, sigma=sigma_nt, axis=0, mode="nearest")
         else:
             dna_sm = dna_raw
 
         for bp_idx, dna_p in zip(bp_idxs, dna_sm):
-            local_i  = bp_idx - bp_start
+            local_i = bp_idx - bp_start
             # Ideal helix axis point at this bp (Å) — axial position is fixed to
             # ideal B-DNA spacing; only the radial direction comes from mrdna.
-            axis_pt  = ax_s + local_i * (BDNA_RISE_PER_BP * 10.0) * axis_hat
-            radial   = dna_p - axis_pt
+            axis_pt = ax_s + local_i * (BDNA_RISE_PER_BP * 10.0) * axis_hat
+            radial = dna_p - axis_pt
             radial_ax = np.dot(radial, axis_hat)
             radial_perp = radial - radial_ax * axis_hat
-            rp_norm  = np.linalg.norm(radial_perp)
+            rp_norm = np.linalg.norm(radial_perp)
             if rp_norm < 1e-6:
                 continue
             fwd_radial_hat = radial_perp / rp_norm
@@ -382,7 +394,7 @@ def nuc_pos_override_from_mrdna(
             # Axial displacement is stripped so thermal fluctuations of CG beads
             # do not propagate into backbone bond lengths.
             fwd_ang = axis_pt + helix_radius_ang * fwd_radial_hat
-            override[(h_id, bp_idx, 'FORWARD')] = fwd_ang / 10.0   # Å → nm
+            override[(h_id, bp_idx, "FORWARD")] = fwd_ang / 10.0  # Å → nm
 
             # REVERSE: rotate fwd_radial by the minor groove angle about the ideal axis.
             #
@@ -395,7 +407,7 @@ def nuc_pos_override_from_mrdna(
             # the forward radial was obtained, so the same rule applies.
             rev_radial_hat = _rodrigues(fwd_radial_hat, axis_hat, groove)
             rev_ang = axis_pt + helix_radius_ang * rev_radial_hat
-            override[(h_id, bp_idx, 'REVERSE')] = rev_ang / 10.0  # Å → nm
+            override[(h_id, bp_idx, "REVERSE")] = rev_ang / 10.0  # Å → nm
 
     xover_keys = _crossover_junction_keys(design)
     override = {k: v for k, v in override.items() if k not in xover_keys}
@@ -438,6 +450,7 @@ def nuc_pos_override_from_mrdna_coarse(
     dict mapping (helix_id, bp_index, direction_str) → position in nm
     """
     import sys
+
     sys.path.insert(0, _MRDNA_TOOL_PATH)
     import MDAnalysis as mda
     from collections import defaultdict
@@ -445,39 +458,46 @@ def nuc_pos_override_from_mrdna_coarse(
     from scipy.ndimage import gaussian_filter1d
 
     # ── Step 1: helix axis geometry ────────────────────────────────────────
-    helix_info: dict = {}   # h_id → (ax_s_ang, axis_hat, bp_start, length_bp)
+    helix_info: dict = {}  # h_id → (ax_s_ang, axis_hat, bp_start, length_bp)
     for h in design.helices:
         ax_s = h.axis_start.to_array() * 10.0
-        ax_e = h.axis_end.to_array()   * 10.0
+        ax_e = h.axis_end.to_array() * 10.0
         v = ax_e - ax_s
         axis_hat = v / np.linalg.norm(v)
-        helix_info[h.id] = (ax_s, axis_hat, h.bp_start, h.length_bp,
-                             h.phase_offset, h.twist_per_bp_rad, h.direction)
+        helix_info[h.id] = (
+            ax_s,
+            axis_hat,
+            h.bp_start,
+            h.length_bp,
+            h.phase_offset,
+            h.twist_per_bp_rad,
+            h.direction,
+        )
 
-    h_ids     = list(helix_info.keys())
-    ax_s_arr  = np.array([helix_info[h][0] for h in h_ids])
+    h_ids = list(helix_info.keys())
+    ax_s_arr = np.array([helix_info[h][0] for h in h_ids])
     axhat_arr = np.array([helix_info[h][1] for h in h_ids])
 
     # ── Step 2: axis-line assignment from initial coarse PDB ──────────────
-    init_pdb  = psf_path.replace(".psf", ".pdb")
-    u_init    = mda.Universe(psf_path, init_pdb)
-    init_pos  = u_init.atoms.positions
+    init_pdb = psf_path.replace(".psf", ".pdb")
+    u_init = mda.Universe(psf_path, init_pdb)
+    init_pos = u_init.atoms.positions
     init_names = np.array([a.name for a in u_init.atoms])
-    dna_init_idx = np.where(init_names == 'DNA')[0]
-    dna_init_pos = init_pos[dna_init_idx]   # (N_dna, 3) Å
+    dna_init_idx = np.where(init_names == "DNA")[0]
+    dna_init_pos = init_pos[dna_init_idx]  # (N_dna, 3) Å
 
-    n_dna     = len(dna_init_pos)
+    n_dna = len(dna_init_pos)
     n_helices = len(h_ids)
     perp = np.zeros((n_dna, n_helices))
     proj = np.zeros((n_dna, n_helices))
     for j in range(n_helices):
-        diff  = dna_init_pos - ax_s_arr[j]
+        diff = dna_init_pos - ax_s_arr[j]
         axial = (diff * axhat_arr[j]).sum(axis=1)
         perp_vec = diff - axial[:, None] * axhat_arr[j]
         perp[:, j] = np.linalg.norm(perp_vec, axis=1)
         proj[:, j] = axial
 
-    best_j    = perp.argmin(axis=1)
+    best_j = perp.argmin(axis=1)
     best_perp = perp[np.arange(n_dna), best_j]
     best_proj = proj[np.arange(n_dna), best_j]
 
@@ -486,36 +506,34 @@ def nuc_pos_override_from_mrdna_coarse(
     for i in range(n_dna):
         j = best_j[i]
         bp_start = helix_info[h_ids[j]][2]
-        bp_idx_arr[i] = int(round(
-            bp_start + best_proj[i] / (BDNA_RISE_PER_BP * 10.0)
-        ))
+        bp_idx_arr[i] = int(round(bp_start + best_proj[i] / (BDNA_RISE_PER_BP * 10.0)))
 
     # Deduplicate: for same (h_id, bp_idx), keep smallest perp distance
     # Skip out-of-range junction beads (mrdna places 1 bead at contour=1.0 → bp=length_bp)
     bp_to_pair: dict = {}
     for pair_i in range(n_dna):
-        h_id      = h_ids[best_j[pair_i]]
-        bp_idx    = bp_idx_arr[pair_i]
-        bp_start  = helix_info[h_id][2]
+        h_id = h_ids[best_j[pair_i]]
+        bp_idx = bp_idx_arr[pair_i]
+        bp_start = helix_info[h_id][2]
         length_bp = helix_info[h_id][3]
         if bp_idx < bp_start or bp_idx >= bp_start + length_bp:
             continue
-        pd  = best_perp[pair_i]
+        pd = best_perp[pair_i]
         key = (h_id, bp_idx)
         if key not in bp_to_pair or pd < bp_to_pair[key][1]:
             bp_to_pair[key] = (pair_i, pd)
 
     # ── Step 3: read DCD frame ─────────────────────────────────────────────
-    u     = mda.Universe(psf_path, dcd_path)
-    atoms = u.select_atoms('all')
+    u = mda.Universe(psf_path, dcd_path)
+    atoms = u.select_atoms("all")
     if frame == -1:
         u.trajectory[-1]
     else:
         u.trajectory[frame]
-    sim_pos    = atoms.positions.copy()
+    sim_pos = atoms.positions.copy()
     atom_names = np.array([a.name for a in atoms])
-    dna_sim_idx = np.where(atom_names == 'DNA')[0]
-    dna_sim_pos = sim_pos[dna_sim_idx]   # (N_dna, 3) Å
+    dna_sim_idx = np.where(atom_names == "DNA")[0]
+    dna_sim_pos = sim_pos[dna_sim_idx]  # (N_dna, 3) Å
 
     # ── Step 4: per-helix spline fit and override computation ─────────────
     helix_entries: dict = defaultdict(list)
@@ -528,8 +546,9 @@ def nuc_pos_override_from_mrdna_coarse(
     override: dict[tuple, np.ndarray] = {}
 
     for h_id, entries in helix_entries.items():
-        ax_s, ideal_axis_hat, bp_start, length_bp, phase_offset, twist, h_dir = \
+        ax_s, ideal_axis_hat, bp_start, length_bp, phase_offset, twist, h_dir = (
             helix_info[h_id]
+        )
         x_hat, y_hat = _xy_frame(ideal_axis_hat)
 
         bp_idxs = np.array([e[0] for e in entries])
@@ -540,19 +559,19 @@ def nuc_pos_override_from_mrdna_coarse(
 
         # Light smoothing in bead space before spline fitting
         if len(raw_pos) >= 3 and sigma_nt > 0:
-            raw_pos = gaussian_filter1d(raw_pos, sigma=sigma_nt, axis=0, mode='nearest')
+            raw_pos = gaussian_filter1d(raw_pos, sigma=sigma_nt, axis=0, mode="nearest")
 
         # Project bead positions onto the ideal axis (removes the ~2.59 Å off-axis
         # helix component that otherwise pollutes the spline tangent direction).
         # For straight helices this gives colinear points → tangent = ideal_axis_hat.
         # For globally bent helices the projected feet trace the deformed axis.
-        axial_dots = (raw_pos - ax_s).dot(ideal_axis_hat)   # (N,) scalar projections
+        axial_dots = (raw_pos - ax_s).dot(ideal_axis_hat)  # (N,) scalar projections
         raw_pos_on_axis = ax_s + np.outer(axial_dots, ideal_axis_hat)  # (N, 3) feet
 
         # Cubic spline parameterised by bp_idx through axis-projected positions
         if len(bp_idxs) < 2:
             continue
-        cs = CubicSpline(bp_idxs.astype(float), raw_pos_on_axis, bc_type='not-a-knot')
+        cs = CubicSpline(bp_idxs.astype(float), raw_pos_on_axis, bc_type="not-a-knot")
 
         # Evaluate at every bp position in this helix
         bp_lo = bp_start
@@ -564,11 +583,11 @@ def nuc_pos_override_from_mrdna_coarse(
         for bp_idx in range(bp_lo, bp_hi + 1):
             t = float(np.clip(bp_idx, t_lo, t_hi))
 
-            local_i  = bp_idx - bp_start
+            local_i = bp_idx - bp_start
 
             # Axis direction from projected spline (free of off-axis oscillation).
-            tangent  = cs(t, 1)
-            tang_n   = np.linalg.norm(tangent)
+            tangent = cs(t, 1)
+            tang_n = np.linalg.norm(tangent)
             axis_hat = tangent / tang_n if tang_n > 1e-6 else ideal_axis_hat
 
             # IDEAL axis point at this bp (Å) — position is fixed to ideal spacing.
@@ -588,8 +607,8 @@ def nuc_pos_override_from_mrdna_coarse(
             rev_rad = _rodrigues(fwd_rad, axis_hat, groove)
             rev_ang = ideal_axis_pt + helix_radius_ang * rev_rad
 
-            override[(h_id, bp_idx, 'FORWARD')] = fwd_ang / 10.0
-            override[(h_id, bp_idx, 'REVERSE')] = rev_ang / 10.0
+            override[(h_id, bp_idx, "FORWARD")] = fwd_ang / 10.0
+            override[(h_id, bp_idx, "REVERSE")] = rev_ang / 10.0
 
     xover_keys = _crossover_junction_keys(design)
     override = {k: v for k, v in override.items() if k not in xover_keys}
@@ -625,10 +644,12 @@ def extra_base_flank_keys(design: Design) -> "list[tuple[str, str, tuple, tuple]
         if strand is None or di + 1 >= len(strand.domains):
             continue
         prev, nxt = strand.domains[di], strand.domains[di + 1]
-        prev_bps = [b for b in domain_bp_range(prev)
-                    if ls_map.get((prev.helix_id, b), 0) > -1]
-        next_bps = [b for b in domain_bp_range(nxt)
-                    if ls_map.get((nxt.helix_id, b), 0) > -1]
+        prev_bps = [
+            b for b in domain_bp_range(prev) if ls_map.get((prev.helix_id, b), 0) > -1
+        ]
+        next_bps = [
+            b for b in domain_bp_range(nxt) if ls_map.get((nxt.helix_id, b), 0) > -1
+        ]
         if not prev_bps or not next_bps:
             continue
         prev_key = (prev.helix_id, prev_bps[-1], prev.direction.value)
@@ -688,6 +709,7 @@ def nuc_pos_override_display_from_coarse(
     Returns dict mapping (helix_id, bp_index, direction_str) → position in nm.
     """
     import sys
+
     sys.path.insert(0, _MRDNA_TOOL_PATH)
     import MDAnalysis as mda
     from collections import defaultdict
@@ -698,34 +720,41 @@ def nuc_pos_override_display_from_coarse(
     helix_info: dict = {}
     for h in design.helices:
         ax_s = h.axis_start.to_array() * 10.0
-        ax_e = h.axis_end.to_array()   * 10.0
+        ax_e = h.axis_end.to_array() * 10.0
         v = ax_e - ax_s
         axis_hat = v / np.linalg.norm(v)
-        helix_info[h.id] = (ax_s, axis_hat, h.bp_start, h.length_bp,
-                             h.phase_offset, h.twist_per_bp_rad, h.direction)
+        helix_info[h.id] = (
+            ax_s,
+            axis_hat,
+            h.bp_start,
+            h.length_bp,
+            h.phase_offset,
+            h.twist_per_bp_rad,
+            h.direction,
+        )
 
-    h_ids     = list(helix_info.keys())
-    ax_s_arr  = np.array([helix_info[h][0] for h in h_ids])
+    h_ids = list(helix_info.keys())
+    ax_s_arr = np.array([helix_info[h][0] for h in h_ids])
     axhat_arr = np.array([helix_info[h][1] for h in h_ids])
 
     # ── Step 2: bead → (h_id, bp_idx) assignment from the initial coarse PDB ─
-    init_pdb   = psf_path.replace(".psf", ".pdb")
-    u_init     = mda.Universe(psf_path, init_pdb)
+    init_pdb = psf_path.replace(".psf", ".pdb")
+    u_init = mda.Universe(psf_path, init_pdb)
     init_names = np.array([a.name for a in u_init.atoms])
-    dna_init_idx = np.where(init_names == 'DNA')[0]
-    dna_init_pos = u_init.atoms.positions[dna_init_idx].astype(float)   # NADOC frame, Å
+    dna_init_idx = np.where(init_names == "DNA")[0]
+    dna_init_pos = u_init.atoms.positions[dna_init_idx].astype(float)  # NADOC frame, Å
 
-    n_dna     = len(dna_init_pos)
+    n_dna = len(dna_init_pos)
     n_helices = len(h_ids)
     perp = np.zeros((n_dna, n_helices))
     proj = np.zeros((n_dna, n_helices))
     for j in range(n_helices):
-        diff  = dna_init_pos - ax_s_arr[j]
+        diff = dna_init_pos - ax_s_arr[j]
         axial = (diff * axhat_arr[j]).sum(axis=1)
         perp_vec = diff - axial[:, None] * axhat_arr[j]
         perp[:, j] = np.linalg.norm(perp_vec, axis=1)
         proj[:, j] = axial
-    best_j    = perp.argmin(axis=1)
+    best_j = perp.argmin(axis=1)
     best_perp = perp[np.arange(n_dna), best_j]
     best_proj = proj[np.arange(n_dna), best_j]
 
@@ -736,13 +765,13 @@ def nuc_pos_override_display_from_coarse(
 
     bp_to_pair: dict = {}
     for pair_i in range(n_dna):
-        h_id      = h_ids[best_j[pair_i]]
-        bp_idx    = bp_idx_arr[pair_i]
-        bp_start  = helix_info[h_id][2]
+        h_id = h_ids[best_j[pair_i]]
+        bp_idx = bp_idx_arr[pair_i]
+        bp_start = helix_info[h_id][2]
         length_bp = helix_info[h_id][3]
         if bp_idx < bp_start or bp_idx >= bp_start + length_bp:
             continue
-        pd  = best_perp[pair_i]
+        pd = best_perp[pair_i]
         key = (h_id, bp_idx)
         if key not in bp_to_pair or pd < bp_to_pair[key][1]:
             bp_to_pair[key] = (pair_i, pd)
@@ -753,9 +782,9 @@ def nuc_pos_override_display_from_coarse(
         u.trajectory[-1]
     else:
         u.trajectory[frame]
-    atom_names  = np.array([a.name for a in u.atoms])
-    dna_sim_idx = np.where(atom_names == 'DNA')[0]
-    dna_sim_pos = u.atoms.positions[dna_sim_idx].astype(float)     # drifted, Å
+    atom_names = np.array([a.name for a in u.atoms])
+    dna_sim_idx = np.where(atom_names == "DNA")[0]
+    dna_sim_pos = u.atoms.positions[dna_sim_idx].astype(float)  # drifted, Å
 
     if len(dna_sim_pos) == n_dna and n_dna >= 3:
         mc = dna_sim_pos.mean(axis=0)
@@ -764,7 +793,7 @@ def nuc_pos_override_display_from_coarse(
         U, _, Vt = np.linalg.svd(H)
         d = np.sign(np.linalg.det(Vt.T @ U.T))
         R = Vt.T @ np.diag([1.0, 1.0, d]) @ U.T
-        dna_sim_pos = (dna_sim_pos - mc) @ R.T + tc               # aligned, Å
+        dna_sim_pos = (dna_sim_pos - mc) @ R.T + tc  # aligned, Å
 
     # ── Step 4: per-helix spline through ACTUAL positions; duplex reconstruction ─
     helix_entries: dict = defaultdict(list)
@@ -777,18 +806,19 @@ def nuc_pos_override_display_from_coarse(
     override: dict[tuple, np.ndarray] = {}
 
     for h_id, entries in helix_entries.items():
-        ax_s, ideal_axis_hat, bp_start, length_bp, phase_offset, twist, h_dir = \
+        ax_s, ideal_axis_hat, bp_start, length_bp, phase_offset, twist, h_dir = (
             helix_info[h_id]
+        )
         x_hat, y_hat = _xy_frame(ideal_axis_hat)
 
         bp_idxs = np.array([e[0] for e in entries])
         raw_pos = np.array([dna_sim_pos[e[1]] for e in entries], dtype=float)  # ACTUAL
         if len(raw_pos) >= 3 and sigma_nt > 0:
-            raw_pos = gaussian_filter1d(raw_pos, sigma=sigma_nt, axis=0, mode='nearest')
+            raw_pos = gaussian_filter1d(raw_pos, sigma=sigma_nt, axis=0, mode="nearest")
         if len(bp_idxs) < 2:
             continue
 
-        cs = CubicSpline(bp_idxs.astype(float), raw_pos, bc_type='not-a-knot')
+        cs = CubicSpline(bp_idxs.astype(float), raw_pos, bc_type="not-a-knot")
         t_lo, t_hi = float(bp_idxs[0]), float(bp_idxs[-1])
 
         for bp_idx in range(bp_start, bp_start + length_bp):
@@ -799,7 +829,8 @@ def nuc_pos_override_display_from_coarse(
             # to the spline endpoint — that pins the tail into a flat ring, see
             # _relaxed_axis_at_bp).
             axis_pt, axis_hat = _relaxed_axis_at_bp(
-                cs, bp_idx, t_lo, t_hi, ideal_axis_hat, BDNA_RISE_PER_BP * 10.0)
+                cs, bp_idx, t_lo, t_hi, ideal_axis_hat, BDNA_RISE_PER_BP * 10.0
+            )
 
             fwd_angle = phase_offset + local_i * twist
             ideal_fwd_rad = math.cos(fwd_angle) * x_hat + math.sin(fwd_angle) * y_hat
@@ -808,9 +839,13 @@ def nuc_pos_override_display_from_coarse(
             fwd_rad = perp_comp / pn if pn > 1e-6 else ideal_fwd_rad
 
             groove = groove_offset_rad(h_dir)
-            override[(h_id, bp_idx, 'FORWARD')] = (axis_pt + helix_radius_ang * fwd_rad) / 10.0
+            override[(h_id, bp_idx, "FORWARD")] = (
+                axis_pt + helix_radius_ang * fwd_rad
+            ) / 10.0
             rev_rad = _rodrigues(fwd_rad, axis_hat, groove)
-            override[(h_id, bp_idx, 'REVERSE')] = (axis_pt + helix_radius_ang * rev_rad) / 10.0
+            override[(h_id, bp_idx, "REVERSE")] = (
+                axis_pt + helix_radius_ang * rev_rad
+            ) / 10.0
 
     print(
         f"[mrdna coarse DISPLAY] {len(helix_entries)}/{len(h_ids)} helices | "
@@ -853,6 +888,7 @@ def nuc_pos_override_from_arbd_strands(
     dict mapping (helix_id, bp_index, direction_str) → position in nm
     """
     import sys
+
     sys.path.insert(0, _MRDNA_TOOL_PATH)
     import MDAnalysis as mda
     from collections import defaultdict
@@ -863,40 +899,48 @@ def nuc_pos_override_from_arbd_strands(
     # ── Step 1: helix axis geometry ────────────────────────────────────────
     helix_info: dict = {}
     for h in design.helices:
-        ax_s     = h.axis_start.to_array() * 10.0   # nm → Å
-        ax_e     = h.axis_end.to_array()   * 10.0
-        v        = ax_e - ax_s
+        ax_s = h.axis_start.to_array() * 10.0  # nm → Å
+        ax_e = h.axis_end.to_array() * 10.0
+        v = ax_e - ax_s
         axis_hat = v / np.linalg.norm(v)
         x_hat, y_hat = _xy_frame(axis_hat)
-        helix_info[h.id] = (ax_s, axis_hat, h.bp_start, h.length_bp,
-                             h.phase_offset, h.twist_per_bp_rad, x_hat, y_hat,
-                             h.direction)
+        helix_info[h.id] = (
+            ax_s,
+            axis_hat,
+            h.bp_start,
+            h.length_bp,
+            h.phase_offset,
+            h.twist_per_bp_rad,
+            x_hat,
+            y_hat,
+            h.direction,
+        )
 
-    h_ids     = list(helix_info.keys())
-    ax_s_arr  = np.array([helix_info[h][0] for h in h_ids])
+    h_ids = list(helix_info.keys())
+    ax_s_arr = np.array([helix_info[h][0] for h in h_ids])
     axhat_arr = np.array([helix_info[h][1] for h in h_ids])
 
     # ── Step 2: initial PDB → bead assignment in NADOC frame ─────────────
     # The initial fine PDB is written in NADOC coordinates; use it (not the
     # DCD) for helix/bp assignment so that PBC drift in ARBD doesn't matter.
-    init_pdb  = psf_path.replace(".psf", ".pdb")
-    u_init    = mda.Universe(psf_path, init_pdb)
+    init_pdb = psf_path.replace(".psf", ".pdb")
+    u_init = mda.Universe(psf_path, init_pdb)
     init_names = np.array([a.name for a in u_init.atoms])
-    dna_init_idx = np.where(init_names == 'DNA')[0]
-    dna_init_pos = u_init.atoms.positions[dna_init_idx].copy()   # (N_dna, 3) Å
+    dna_init_idx = np.where(init_names == "DNA")[0]
+    dna_init_pos = u_init.atoms.positions[dna_init_idx].copy()  # (N_dna, 3) Å
 
-    n_dna     = len(dna_init_pos)
+    n_dna = len(dna_init_pos)
     n_helices = len(h_ids)
-    perp_mat  = np.zeros((n_dna, n_helices), dtype=float)
-    proj_mat  = np.zeros((n_dna, n_helices), dtype=float)
+    perp_mat = np.zeros((n_dna, n_helices), dtype=float)
+    proj_mat = np.zeros((n_dna, n_helices), dtype=float)
     for j in range(n_helices):
-        diff     = dna_init_pos - ax_s_arr[j]
-        axial    = (diff * axhat_arr[j]).sum(axis=1)
+        diff = dna_init_pos - ax_s_arr[j]
+        axial = (diff * axhat_arr[j]).sum(axis=1)
         perp_vec = diff - axial[:, None] * axhat_arr[j]
         perp_mat[:, j] = np.linalg.norm(perp_vec, axis=1)
         proj_mat[:, j] = axial
 
-    best_j    = perp_mat.argmin(axis=1)
+    best_j = perp_mat.argmin(axis=1)
     best_proj = proj_mat[np.arange(n_dna), best_j]
     best_perp = perp_mat[np.arange(n_dna), best_j]
 
@@ -907,22 +951,22 @@ def nuc_pos_override_from_arbd_strands(
 
     # ── Step 3: read DCD frame and align to NADOC frame ───────────────────
     # ARBD may drift the COM; rigid-body fit removes translation + rotation.
-    u  = mda.Universe(psf_path, dcd_path)
+    u = mda.Universe(psf_path, dcd_path)
     if frame == -1:
         u.trajectory[-1]
     else:
         u.trajectory[frame]
-    all_pos    = u.atoms.positions.copy()
-    all_names  = np.array([a.name for a in u.atoms])
-    dna_sim_idx = np.where(all_names == 'DNA')[0]
-    dna_sim_pos = all_pos[dna_sim_idx].copy()   # (N_dna, 3) Å, ARBD frame
+    all_pos = u.atoms.positions.copy()
+    all_names = np.array([a.name for a in u.atoms])
+    dna_sim_idx = np.where(all_names == "DNA")[0]
+    dna_sim_pos = all_pos[dna_sim_idx].copy()  # (N_dna, 3) Å, ARBD frame
 
     # Rigid-body alignment: rotate/translate dna_sim_pos → NADOC frame
     center_init = dna_init_pos.mean(0)
-    center_sim  = dna_sim_pos.mean(0)
+    center_sim = dna_sim_pos.mean(0)
     rot, _rmsd = Rotation.align_vectors(
         dna_init_pos - center_init,
-        dna_sim_pos  - center_sim,
+        dna_sim_pos - center_sim,
     )
     dna_aligned = rot.apply(dna_sim_pos - center_sim) + center_init  # (N_dna, 3) Å
 
@@ -930,12 +974,12 @@ def nuc_pos_override_from_arbd_strands(
     # Each DNA bead in the fine stage represents the FORWARD backbone of 1 bp.
     # No direction assignment is needed; REVERSE positions are reconstructed
     # below from the helix axis + minor-groove rotation.
-    bp_to_bead: dict[tuple, tuple] = {}   # (h_id, bp_idx) → (aligned_pos, perp_dist)
+    bp_to_bead: dict[tuple, tuple] = {}  # (h_id, bp_idx) → (aligned_pos, perp_dist)
     for i in range(n_dna):
-        h_id  = h_ids[int(best_j[i])]
+        h_id = h_ids[int(best_j[i])]
         bp_idx = bp_idx_arr[i]
-        pd    = float(best_perp[i])
-        key   = (h_id, bp_idx)
+        pd = float(best_perp[i])
+        key = (h_id, bp_idx)
         if key not in bp_to_bead or pd < bp_to_bead[key][1]:
             bp_to_bead[key] = (dna_aligned[i].copy(), pd)
 
@@ -950,20 +994,29 @@ def nuc_pos_override_from_arbd_strands(
     override: dict[tuple, np.ndarray] = {}
 
     for h_id, entries in helix_entries.items():
-        ax_s, ideal_axis_hat, bp_start, length_bp, phase_offset, twist, x_hat, y_hat, h_dir = \
-            helix_info[h_id]
+        (
+            ax_s,
+            ideal_axis_hat,
+            bp_start,
+            length_bp,
+            phase_offset,
+            twist,
+            x_hat,
+            y_hat,
+            h_dir,
+        ) = helix_info[h_id]
 
         bp_idxs = np.array([e[0] for e in entries])
-        raw_pos = np.array([e[1] for e in entries], dtype=float)   # (K, 3) Å
+        raw_pos = np.array([e[1] for e in entries], dtype=float)  # (K, 3) Å
 
         # Gaussian smoothing in bead space
         if len(raw_pos) >= 3 and sigma_nt > 0:
-            raw_pos = gaussian_filter1d(raw_pos, sigma=sigma_nt, axis=0, mode='nearest')
+            raw_pos = gaussian_filter1d(raw_pos, sigma=sigma_nt, axis=0, mode="nearest")
 
         if len(bp_idxs) < 2:
             continue
 
-        cs   = CubicSpline(bp_idxs.astype(float), raw_pos, bc_type='not-a-knot')
+        cs = CubicSpline(bp_idxs.astype(float), raw_pos, bc_type="not-a-knot")
         t_lo = float(bp_idxs[0])
         t_hi = float(bp_idxs[-1])
 
@@ -982,21 +1035,22 @@ def nuc_pos_override_from_arbd_strands(
             # mirrors the display path (nuc_pos_override_display_from_coarse); straight
             # tangent extrapolation past a beadless end (see _relaxed_axis_at_bp).
             axis_pt, axis_hat = _relaxed_axis_at_bp(
-                cs, bp_idx, t_lo, t_hi, ideal_axis_hat, BDNA_RISE_PER_BP * 10.0)
+                cs, bp_idx, t_lo, t_hi, ideal_axis_hat, BDNA_RISE_PER_BP * 10.0
+            )
 
-            fwd_angle     = phase_offset + local_i * twist
+            fwd_angle = phase_offset + local_i * twist
             ideal_fwd_rad = math.cos(fwd_angle) * x_hat + math.sin(fwd_angle) * y_hat
-            perp_comp     = ideal_fwd_rad - np.dot(ideal_fwd_rad, axis_hat) * axis_hat
-            pn            = np.linalg.norm(perp_comp)
-            fwd_rad       = perp_comp / pn if pn > 1e-6 else ideal_fwd_rad
+            perp_comp = ideal_fwd_rad - np.dot(ideal_fwd_rad, axis_hat) * axis_hat
+            pn = np.linalg.norm(perp_comp)
+            fwd_rad = perp_comp / pn if pn > 1e-6 else ideal_fwd_rad
 
             groove = groove_offset_rad(h_dir)
             fwd_ang = axis_pt + helix_radius_ang * fwd_rad
             rev_rad = _rodrigues(fwd_rad, axis_hat, groove)
             rev_ang = axis_pt + helix_radius_ang * rev_rad
 
-            override[(h_id, bp_idx, 'FORWARD')] = fwd_ang / 10.0   # Å → nm
-            override[(h_id, bp_idx, 'REVERSE')] = rev_ang / 10.0
+            override[(h_id, bp_idx, "FORWARD")] = fwd_ang / 10.0  # Å → nm
+            override[(h_id, bp_idx, "REVERSE")] = rev_ang / 10.0
 
     n_helices_covered = len(helix_entries)
     print(
@@ -1065,19 +1119,23 @@ def _ssdna_runs(design: Design) -> list:
             # A crossover-spanning run (ds…ss→crossover→ss…ds) has BOTH — kept so the
             # DISPLAY can anchor both ends (single-anchor floats the far junction).
             root5 = chain[p - 1] if (p - 1 >= 0 and bp[chain[p - 1]] >= 0) else None
-            root3 = chain[q]     if (q < n and bp[chain[q]] >= 0)         else None
+            root3 = chain[q] if (q < n and bp[chain[q]] >= 0) else None
             root_idx, root_side = (root5, "5p") if root5 is not None else (root3, "3p")
-            runs.append({
-                "keys":          [idx_to_key[j] for j in run_idxs],
-                "ideal_nm":      [r[j] / 10.0 for j in run_idxs],
-                "root_key":      idx_to_key[root_idx] if root_idx is not None else None,
-                "root_ideal_nm": (r[root_idx] / 10.0) if root_idx is not None else None,
-                "root_side":     root_side,
-                "root5_key":      idx_to_key[root5] if root5 is not None else None,
-                "root5_ideal_nm": (r[root5] / 10.0) if root5 is not None else None,
-                "root3_key":      idx_to_key[root3] if root3 is not None else None,
-                "root3_ideal_nm": (r[root3] / 10.0) if root3 is not None else None,
-            })
+            runs.append(
+                {
+                    "keys": [idx_to_key[j] for j in run_idxs],
+                    "ideal_nm": [r[j] / 10.0 for j in run_idxs],
+                    "root_key": idx_to_key[root_idx] if root_idx is not None else None,
+                    "root_ideal_nm": (r[root_idx] / 10.0)
+                    if root_idx is not None
+                    else None,
+                    "root_side": root_side,
+                    "root5_key": idx_to_key[root5] if root5 is not None else None,
+                    "root5_ideal_nm": (r[root5] / 10.0) if root5 is not None else None,
+                    "root3_key": idx_to_key[root3] if root3 is not None else None,
+                    "root3_ideal_nm": (r[root3] / 10.0) if root3 is not None else None,
+                }
+            )
             p = q
     return runs
 
@@ -1095,9 +1153,11 @@ def _blend_run_both_ends(ideal, d5, d3):
     out = []
     for i in range(n):
         f = 0.5 if n == 1 else i / (n - 1)
-        out.append(np.asarray(ideal[i], dtype=float)
-                   + (1.0 - f) * np.asarray(d5, dtype=float)
-                   + f * np.asarray(d3, dtype=float))
+        out.append(
+            np.asarray(ideal[i], dtype=float)
+            + (1.0 - f) * np.asarray(d5, dtype=float)
+            + f * np.asarray(d3, dtype=float)
+        )
     return out
 
 
@@ -1131,6 +1191,7 @@ def nuc_pos_override_ssdna_from_arbd(
     Physical-layer only.
     """
     import sys
+
     sys.path.insert(0, _MRDNA_TOOL_PATH)
     import numpy as np
     import MDAnalysis as mda
@@ -1143,10 +1204,10 @@ def nuc_pos_override_ssdna_from_arbd(
 
     init_pdb = psf_path.replace(".psf", ".pdb")
     u_init = mda.Universe(psf_path, init_pdb)
-    names  = np.array([a.name for a in u_init.atoms])
-    dna_i  = np.where(names == "DNA")[0]
-    nas_i  = np.where(names == "NAS")[0]
-    dna_init = u_init.atoms.positions[dna_i].astype(float)   # Å, NADOC frame
+    names = np.array([a.name for a in u_init.atoms])
+    dna_i = np.where(names == "DNA")[0]
+    nas_i = np.where(names == "NAS")[0]
+    dna_init = u_init.atoms.positions[dna_i].astype(float)  # Å, NADOC frame
     nas_init = u_init.atoms.positions[nas_i].astype(float)
 
     u = mda.Universe(psf_path, dcd_path)
@@ -1185,6 +1246,7 @@ def nuc_pos_override_ssdna_from_arbd(
     # relaxed ds backbone cloud (ds_override, ss keys removed); coarse but sufficient
     # for a RELATIVE choice (the atomistic clash is checked by the seed oracle).
     from scipy.spatial import cKDTree
+
     ss_keys = {k for run in runs for k in run["keys"] if k is not None}
     body_pts = np.array([v for k, v in ds_override.items() if k not in ss_keys])
     body_tree = cKDTree(body_pts) if len(body_pts) else None
@@ -1202,13 +1264,13 @@ def nuc_pos_override_ssdna_from_arbd(
         root_relaxed = ds_override.get(run["root_key"]) if run["root_key"] else None
         anchor_idx = 0 if run["root_side"] != "3p" else n - 1
 
-        candidates: list = [("ideal", ideal)]   # detached ideal = today's behavior
+        candidates: list = [("ideal", ideal)]  # detached ideal = today's behavior
 
         # B: translate the ideal run rigidly onto the relaxed root — PRESERVES the
         # junction backbone bond (root-adjacent nt lands one bond-length from the
         # root, NOT on top of it, which would make atoms coincident → LJ=2e37).
         if root_relaxed is not None and run["root_ideal_nm"] is not None:
-            disp  = np.asarray(root_relaxed) - np.asarray(run["root_ideal_nm"])
+            disp = np.asarray(root_relaxed) - np.asarray(run["root_ideal_nm"])
             pos_b = [ideal[i] + disp for i in range(n)]
             candidates.append(("translate", pos_b))
         else:
@@ -1243,8 +1305,13 @@ def nuc_pos_override_ssdna_from_arbd(
         # last so prefer_continuity picks it when both roots exist.
         r5r = ds_override.get(run.get("root5_key")) if run.get("root5_key") else None
         r3r = ds_override.get(run.get("root3_key")) if run.get("root3_key") else None
-        if prefer_continuity and r5r is not None and r3r is not None \
-                and run.get("root5_ideal_nm") is not None and run.get("root3_ideal_nm") is not None:
+        if (
+            prefer_continuity
+            and r5r is not None
+            and r3r is not None
+            and run.get("root5_ideal_nm") is not None
+            and run.get("root3_ideal_nm") is not None
+        ):
             d5 = np.asarray(r5r) - np.asarray(run["root5_ideal_nm"])
             d3 = np.asarray(r3r) - np.asarray(run["root3_ideal_nm"])
             candidates.append(("blend", _blend_run_both_ends(ideal, d5, d3)))
@@ -1262,10 +1329,10 @@ def nuc_pos_override_ssdna_from_arbd(
             label, chosen = candidates[-1]
         else:
             label, chosen = max(candidates, key=lambda c: _clearance(c[1]))
-        n_spline    += label == "spline"
+        n_spline += label == "spline"
         n_translate += label == "translate"
-        n_blend     += label == "blend"
-        n_ideal     += label == "ideal"
+        n_blend += label == "blend"
+        n_ideal += label == "ideal"
         # 'ideal' == leaving the nt at its detached design position; emit NO override
         # for it so build_atomistic uses exactly the current path (no change).
         if label != "ideal":
@@ -1296,8 +1363,8 @@ def _crossover_junction_keys(design: Design) -> set:
             d0, d1 = strand.domains[k], strand.domains[k + 1]
             if d0.helix_id == d1.helix_id:
                 continue
-            excluded.add((d0.helix_id, d0.end_bp,   d0.direction.value))
-            excluded.add((d1.helix_id, d1.start_bp,  d1.direction.value))
+            excluded.add((d0.helix_id, d0.end_bp, d0.direction.value))
+            excluded.add((d1.helix_id, d1.start_bp, d1.direction.value))
     return excluded
 
 
@@ -1325,9 +1392,7 @@ def _radial(angle: float, x_hat: np.ndarray, y_hat: np.ndarray) -> np.ndarray:
     return math.cos(angle) * x_hat + math.sin(angle) * y_hat
 
 
-def _orientation_matrix(
-    radial: np.ndarray, axis_hat: np.ndarray
-) -> np.ndarray:
+def _orientation_matrix(radial: np.ndarray, axis_hat: np.ndarray) -> np.ndarray:
     """3×3 orientation matrix with columns [radial, azimuthal, axis_hat]."""
     azimuthal = np.cross(axis_hat, radial)
     return np.column_stack([radial, azimuthal, axis_hat])
@@ -1368,11 +1433,11 @@ def _extension_bead_positions(
     p0 = np.asarray(anchor_pos, dtype=float)
     p2 = p0 + radial * arc_len
 
-    chain_tan = axis_hat if direction == 'FORWARD' else -axis_hat
+    chain_tan = axis_hat if direction == "FORWARD" else -axis_hat
     bow_dir = chain_tan if ext.end == "three_prime" else -chain_tan
-    bow_dir = bow_dir - float(np.dot(bow_dir, radial)) * radial     # ⟂ radial
+    bow_dir = bow_dir - float(np.dot(bow_dir, radial)) * radial  # ⟂ radial
     bow_len = float(np.linalg.norm(bow_dir))
-    if bow_len < 1e-6:      # degenerate frame (tangent ∥ radial): any ⟂ direction
+    if bow_len < 1e-6:  # degenerate frame (tangent ∥ radial): any ⟂ direction
         bow_dir = np.cross(radial, np.array([0.0, 0.0, 1.0]))
         if float(np.linalg.norm(bow_dir)) < 1e-6:
             bow_dir = np.cross(radial, np.array([0.0, 1.0, 0.0]))
@@ -1384,7 +1449,7 @@ def _extension_bead_positions(
     out: List[np.ndarray] = []
     for i in range(n_seq):
         t = (i + 1) / n_total
-        out.append((1 - t) ** 2 * p0 + 2 * (1 - t) * t * p1 + t ** 2 * p2)
+        out.append((1 - t) ** 2 * p0 + 2 * (1 - t) * t * p1 + t**2 * p2)
     return out
 
 
@@ -1421,7 +1486,14 @@ def _build_nt_arrays(
         axis_hat = ax_e - ax_s
         axis_hat /= np.linalg.norm(axis_hat)
         groove = groove_offset_rad(h.direction)
-        helix_geom[h.id] = (ax_s, axis_hat, h.phase_offset, h.twist_per_bp_rad, h.bp_start, groove)
+        helix_geom[h.id] = (
+            ax_s,
+            axis_hat,
+            h.phase_offset,
+            h.twist_per_bp_rad,
+            h.bp_start,
+            groove,
+        )
 
     # ── Pass 1: enumerate nucleotides and assign indices ──────────────────────
     # Index map: (helix_id, bp_index, 'FORWARD'|'REVERSE') → global nt index
@@ -1445,6 +1517,7 @@ def _build_nt_arrays(
         crossover_extra_base_junctions,
         strand_extension_tails,
     )
+
     xb_junctions = crossover_extra_base_junctions(design)
 
     # Strand extensions (5′/3′ terminal ssDNA tails).  ONE anchor instead of the
@@ -1496,24 +1569,32 @@ def _build_nt_arrays(
 
                 # REVERSE strand moves in −axis direction; loop copies must be
                 # encountered k=1 (higher axial) first, then k=0 (lower axial).
-                k_range = (range(n_copies - 1, -1, -1)
-                           if direction == 'REVERSE' else range(n_copies))
+                k_range = (
+                    range(n_copies - 1, -1, -1)
+                    if direction == "REVERSE"
+                    else range(n_copies)
+                )
                 for k in k_range:
                     # Axial offset: same formula as geometry.py nucleotide_positions().
                     copy_frac = (k - (n_copies - 1) / 2.0) if n_copies > 1 else 0.0
-                    axis_pt = ax_s + (local_i * BDNA_RISE_PER_BP
-                                      + copy_frac * BDNA_RISE_PER_BP) * axis_hat
+                    axis_pt = (
+                        ax_s
+                        + (local_i * BDNA_RISE_PER_BP + copy_frac * BDNA_RISE_PER_BP)
+                        * axis_hat
+                    )
 
                     # Twist angle: use integer local_i (same as geometry.py).
                     fwd_angle = phase_offset + local_i * twist
-                    angle = fwd_angle if direction == 'FORWARD' else fwd_angle + groove
+                    angle = fwd_angle if direction == "FORWARD" else fwd_angle + groove
 
                     rad = _radial(angle, x_hat, y_hat)
                     backbone_ang = (axis_pt + HELIX_RADIUS * rad) * _NM_TO_ANGSTROM
                     orient = _orientation_matrix(rad, axis_hat)
 
-                    char = 'N'
-                    if strand.sequence is not None and seq_offset < len(strand.sequence):
+                    char = "N"
+                    if strand.sequence is not None and seq_offset < len(
+                        strand.sequence
+                    ):
                         char = strand.sequence[seq_offset]
                     seq_offset += 1  # one sequence character per copy
 
@@ -1553,8 +1634,12 @@ def _build_nt_arrays(
             # Arm an insert if this domain owns an extra-base crossover AND the next
             # domain will emit a flank nucleotide to bridge to.
             hit = xb_junctions.get((strand.id, di))
-            if (hit is not None and di + 1 < len(strand.domains)
-                    and domain_emits[di + 1] and strand_indices):
+            if (
+                hit is not None
+                and di + 1 < len(strand.domains)
+                and domain_emits[di + 1]
+                and strand_indices
+            ):
                 pending_xb = (hit[0], hit[1], strand_indices[-1])
 
         # ── Strand-extension tails ────────────────────────────────────────────
@@ -1583,14 +1668,14 @@ def _build_nt_arrays(
         if ext5 is not None and first_anchor is not None:
             tail = _emit_tail(ext5, first_anchor)
             if tail:
-                strand_indices[0:0] = tail                    # tip … bead0 → anchor …
+                strand_indices[0:0] = tail  # tip … bead0 → anchor …
                 extension_chains.append([*tail, first_anchor[0]])
 
         ext3 = strand_tails.get("three_prime")
         if ext3 is not None and last_anchor is not None:
             tail = _emit_tail(ext3, last_anchor)
             if tail:
-                strand_indices.extend(tail)                   # … anchor → bead0 … tip
+                strand_indices.extend(tail)  # … anchor → bead0 … tip
                 extension_chains.append([last_anchor[0], *tail])
 
         strand_seqs.append(strand_indices)
@@ -1613,7 +1698,7 @@ def _build_nt_arrays(
         # WC-paired duplex, and must keep pairing normally.
         if h_id.startswith(_EXT_PREFIX):
             continue
-        partner_dir = 'REVERSE' if direction == 'FORWARD' else 'FORWARD'
+        partner_dir = "REVERSE" if direction == "FORWARD" else "FORWARD"
         partner_idx = nt_key.get((h_id, bp_idx, partner_dir, k), -1)
         bp_arr[idx] = partner_idx
 
@@ -1641,8 +1726,11 @@ def _build_nt_arrays(
                     continue
 
                 n_copies = max(1, delta + 1)
-                k_range = (range(n_copies - 1, -1, -1)
-                           if direction == 'REVERSE' else range(n_copies))
+                k_range = (
+                    range(n_copies - 1, -1, -1)
+                    if direction == "REVERSE"
+                    else range(n_copies)
+                )
                 for k in k_range:
                     idx = nt_key.get((h_id, bp_idx, direction, k))
                     if idx is None:
@@ -1653,13 +1741,13 @@ def _build_nt_arrays(
 
             # Check for intrahelical continuation past the domain end.
             if prev_idx is not None:
-                next_bp = (domain.end_bp + 1
-                           if direction == 'FORWARD'
-                           else domain.end_bp - 1)
+                next_bp = (
+                    domain.end_bp + 1 if direction == "FORWARD" else domain.end_bp - 1
+                )
                 # For REVERSE direction, the first copy encountered is k=n_copies-1.
                 next_delta = ls_map.get((h_id, next_bp), 0)
                 next_n_copies = max(1, next_delta + 1) if next_delta > -1 else 0
-                next_k = 0 if direction == 'FORWARD' else next_n_copies - 1
+                next_k = 0 if direction == "FORWARD" else next_n_copies - 1
                 next_idx = nt_key.get((h_id, next_bp, direction, next_k))
                 if next_idx is not None:
                     stack_arr[prev_idx] = next_idx

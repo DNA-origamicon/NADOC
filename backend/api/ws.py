@@ -76,7 +76,7 @@ def _cache_get_universe(key: str):
     with _UNIVERSE_CACHE_LOCK:
         u = _UNIVERSE_CACHE.get(key)
         if u is not None:
-            _UNIVERSE_CACHE.move_to_end(key)   # LRU touch
+            _UNIVERSE_CACHE.move_to_end(key)  # LRU touch
         return u
 
 
@@ -145,15 +145,21 @@ def _preload_size_note(config_str: str, topology_str: str) -> "str | None":
 
         from backend.core.md_import import resolve_md_config
 
-        top = resolve_md_config(config_str).topology_path if config_str else Path(topology_str)
+        top = (
+            resolve_md_config(config_str).topology_path
+            if config_str
+            else Path(topology_str)
+        )
         if not top or top.suffix.lower() != ".psf" or not top.exists():
             return None
         natom = _psf_natom(top)
         if not natom or natom <= _UNWRAP_MAX_ATOMS:
             return None
         size_mb = top.stat().st_size / (1024 * 1024)
-        return (f"Parsing {natom:,}-atom solvated topology ({size_mb:.0f} MB) — "
-                "first open of a large run takes ~10–60 s; re-opens are cached and instant.")
+        return (
+            f"Parsing {natom:,}-atom solvated topology ({size_mb:.0f} MB) — "
+            "first open of a large run takes ~10–60 s; re-opens are cached and instant."
+        )
     except Exception:  # noqa: BLE001
         return None
 
@@ -212,15 +218,15 @@ async def md_run_ws(websocket: WebSocket) -> None:
     await websocket.accept()
 
     _ctx: dict = {
-        "universe":     None,
-        "p_order":      None,
-        "centroid_T":   None,
-        "n_frames":     0,
-        "mode":         "nadoc",
-        "atom_meta":    None,
-        "heavy_idx":    None,
-        "c1p_idx":      None,   # numpy int64 array: C1' MDAnalysis index per p_order entry
-        "dt_ps":        None,
+        "universe": None,
+        "p_order": None,
+        "centroid_T": None,
+        "n_frames": 0,
+        "mode": "nadoc",
+        "atom_meta": None,
+        "heavy_idx": None,
+        "c1p_idx": None,  # numpy int64 array: C1' MDAnalysis index per p_order entry
+        "dt_ps": None,
         "nstxout_comp": None,
         "coordinate_path": None,
         "latest_frame_cache": None,
@@ -268,8 +274,9 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 return
 
             from MDAnalysis.transformations import unwrap as mda_unwrap  # type: ignore
+
             try:
-                _ = u.bonds   # raises NoDataError when topology has no bonds
+                _ = u.bonds  # raises NoDataError when topology has no bonds
                 has_bonds = True
             except Exception:
                 has_bonds = False
@@ -326,10 +333,16 @@ async def md_run_ws(websocket: WebSocket) -> None:
 
         resolved = resolve_md_config(config_str) if config_str else None
         topology_path = resolved.topology_path if resolved else Path(topology_str)
-        xtc_path      = resolved.trajectory_path if resolved else Path(xtc_str)
-        coordinate_path = resolved.coordinate_path if resolved else (Path(coordinate_str) if coordinate_str else None)
-        run_dir       = topology_path.parent
-        is_namd       = topology_path.suffix.lower() == ".psf" or xtc_path.suffix.lower() == ".dcd"
+        xtc_path = resolved.trajectory_path if resolved else Path(xtc_str)
+        coordinate_path = (
+            resolved.coordinate_path
+            if resolved
+            else (Path(coordinate_str) if coordinate_str else None)
+        )
+        run_dir = topology_path.parent
+        is_namd = (
+            topology_path.suffix.lower() == ".psf" or xtc_path.suffix.lower() == ".dcd"
+        )
 
         if resolved:
             logs.append(f"Config    : {resolved.config_path.name}")
@@ -364,8 +377,8 @@ async def md_run_ws(websocket: WebSocket) -> None:
         # re-opens (repr changes, reconnects) for the same design collapse to one
         # build instead of piling up N concurrent multi-GB models (see
         # backend/core/atomistic_cache.py).
-        model    = build_atomistic_model_cached(design)
-        cm       = build_chain_map(model)
+        model = build_atomistic_model_cached(design)
+        cm = build_chain_map(model)
 
         # Open the Universe up front — for NAMD we build p_order from the PSF's own
         # segids (below), which needs the topology.  Reuse a cached parse when the
@@ -377,7 +390,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
         if u is not None:
             logs.append("Opening MDAnalysis Universe… (cached — re-parse skipped)")
             try:
-                u.trajectory[0]   # shared object may be mid-scrub → reset to frame 0
+                u.trajectory[0]  # shared object may be mid-scrub → reset to frame 0
             except Exception:  # noqa: BLE001
                 pass
         else:
@@ -390,8 +403,8 @@ async def md_run_ws(websocket: WebSocket) -> None:
 
         # Build p_order: the design (helix,bp,dir) key per trajectory DNA P atom, in
         # trajectory atom order (the index-based frame extraction relies on this).
-        term_specs: list = []   # 5'-terminal bases (no P) recovered via O5' — NAMD only
-        seg2chain: dict = {}    # segid→chain_id (NAMD/PSF only; also feeds atom identity)
+        term_specs: list = []  # 5'-terminal bases (no P) recovered via O5' — NAMD only
+        seg2chain: dict = {}  # segid→chain_id (NAMD/PSF only; also feeds atom identity)
         if is_namd:
             # Prefer mapping via the PSF segids + the package's charge_audit
             # segid→chain_id table.  psfgen collapses NADOC's multi-char chain ids
@@ -405,7 +418,9 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 cand, n_unmapped = build_p_order_from_universe(u, cm, seg2chain)
                 if n_unmapped == 0 and cand:
                     p_order = cand
-                    logs.append(f"P-order   : segid-mapped ({len(p_order)} DNA P atoms)")
+                    logs.append(
+                        f"P-order   : segid-mapped ({len(p_order)} DNA P atoms)"
+                    )
                 else:
                     # MISMATCH GUARD.  The segid map is design-INDEPENDENT, so a large
                     # unmapped fraction means the design driving this display isn't the
@@ -413,10 +428,17 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     # wrong (helix,bp) slots and streak lines across the structure.  Refuse
                     # with a clear message instead of drawing garbage.  (A SMALL unmapped
                     # count still falls back to the reference-PDB path, as before.)
-                    n_dna_p = len(u.select_atoms(
-                        "name P and resname " + " ".join(_GRO_DNA_RESNAMES)))
+                    n_dna_p = len(
+                        u.select_atoms(
+                            "name P and resname " + " ".join(_GRO_DNA_RESNAMES)
+                        )
+                    )
                     if n_unmapped > 0.25 * max(n_dna_p, 1):
-                        _which = f" It was built from '{expected_design_name}'." if expected_design_name else ""
+                        _which = (
+                            f" It was built from '{expected_design_name}'."
+                            if expected_design_name
+                            else ""
+                        )
                         raise ValueError(
                             f"This trajectory doesn't match the design being displayed "
                             f"({n_unmapped} of {n_dna_p} atoms couldn't be mapped)."
@@ -435,6 +457,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             # O5', so the live display covers every nucleotide — matching the ghost-free
             # geometry + the flexibility map (returns [] when the segid map is unavailable).
             from backend.core.atomistic_to_nadoc import build_termini_specs
+
             term_specs = build_termini_specs(u, cm, seg2chain, p_order)
             if term_specs:
                 logs.append(f"5' termini: recovered {len(term_specs)} (O5'-anchored)")
@@ -464,15 +487,17 @@ async def md_run_ws(websocket: WebSocket) -> None:
         # rigid-body fit — but the whole-box design-eq snap DOES cover them, else a
         # sequential-unwrap reset can strand one a full box away (see md_snap_mask).
         snap_mask = md_snap_mask(p_order, eq_valid, rigid_mask)
-        logs.append(f"Snap P    : {int(snap_mask.sum())}/{len(p_order)} (rigid+extra-base for PBC snap)")
+        logs.append(
+            f"Snap P    : {int(snap_mask.sum())}/{len(p_order)} (rigid+extra-base for PBC snap)"
+        )
 
         if n_rigid < 3:
             eq_centroid = np.zeros(3)
             eq_centered = None
         else:
-            eq_centroid  = eq_positions[rigid_mask].mean(axis=0)
-            eq_centered  = eq_positions - eq_centroid
-            eq_centered[~rigid_mask] = 0.0   # only rigid atoms contribute to H
+            eq_centroid = eq_positions[rigid_mask].mean(axis=0)
+            eq_centered = eq_positions - eq_centroid
+            eq_centered[~rigid_mask] = 0.0  # only rigid atoms contribute to H
 
         # PBC unwrapping (make molecules whole).
         _try_unwrap(u, logs)
@@ -506,7 +531,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 _box_chk = _dims_chk[:3] / 10.0
                 _p_uw_chk = _unwrap_min_image(_p_chk, _box_chk)
                 _shift = np.linalg.norm(_p_uw_chk - _p_chk, axis=1)
-                _n_moved = int((_shift > 0.3).sum())   # atoms relocated > 3 Å
+                _n_moved = int((_shift > 0.3).sum())  # atoms relocated > 3 Å
                 logs.append(
                     f"PBC check (frame {_mid}): "
                     f"{_n_moved}/{len(_p_chk)} P-atoms relocated by sequential unwrap"
@@ -527,9 +552,9 @@ async def md_run_ws(websocket: WebSocket) -> None:
 
         # Centroid offset — computed on the (possibly unwrapped) frame 0.
         beads_0 = _extract_universe(u, 0, p_order)
-        T       = centroid_offset(beads_0, design)
+        T = centroid_offset(beads_0, design)
         logs.append(
-            f"Centroid shift: ({T[0]*10:.1f}, {T[1]*10:.1f}, {T[2]*10:.1f}) Å"
+            f"Centroid shift: ({T[0] * 10:.1f}, {T[1] * 10:.1f}, {T[2] * 10:.1f}) Å"
         )
 
         # Metrics from log files in the run directory.
@@ -555,7 +580,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             if resolved.log_path:
                 logs.append(f"Log       : {resolved.log_path.name}")
         else:
-            metrics  = parse_log_metrics(log_path) if log_path else None
+            metrics = parse_log_metrics(log_path) if log_path else None
             total_ns = derive_total_ns(metrics, n_frames) if metrics else None
         if metrics:
             logs.append(
@@ -574,42 +599,51 @@ async def md_run_ws(websocket: WebSocket) -> None:
             c1p_atoms = p_atom.residue.atoms.select_atoms("name C1'")
             c1p_list.append(int(c1p_atoms[0].index) if len(c1p_atoms) > 0 else -1)
         import numpy as _np
+
         c1p_idx = _np.array(c1p_list, dtype=_np.int64)
         logs.append(
             f"C1' map: {int((c1p_idx >= 0).sum())}/{len(c1p_idx)} entries valid"
         )
 
         result: dict = {
-            "universe":      u,
+            "universe": u,
             "topology_path": str(topology_path),
-            "xtc_path":      str(xtc_path),
+            "xtc_path": str(xtc_path),
             "coordinate_path": str(coordinate_path) if coordinate_path else None,
-            "p_order":       p_order,
-            "eq_positions":  eq_positions,
-            "eq_valid":      eq_valid,
-            "rigid_mask":    rigid_mask,
-            "snap_mask":     snap_mask,
-            "eq_centroid":   eq_centroid,
-            "eq_centered":   eq_centered,
-            "centroid_T":    T,
-            "n_frames":      n_frames,
-            "n_p_atoms":     len(cm),
-            "dt_ps":         resolved.dt_ps if resolved else (metrics.dt_ps if metrics else None),
-            "nstxout_comp":  resolved.nstxout_comp if resolved else (metrics.nstxout_comp if metrics else None),
-            "ns_per_day":    resolved.ns_per_day if resolved else (metrics.ns_per_day if metrics else None),
-            "temperature_k": resolved.temperature_k if resolved else (metrics.temperature_k if metrics else None),
-            "total_ns":      total_ns,
-            "atom_meta":     None,
-            "atom_ident":    None,
-            "atom_bonds":    None,
-            "heavy_idx":     None,
-            "c1p_idx":       c1p_idx,
-            "term_specs":    term_specs,          # 5'-terminal bases recovered via O5'
-            "dna_p_idx":     dna_p_sel.indices,   # cached for the O(1) last-frame fast path
-            "logs":          logs,
-            "warnings":      load_warnings,
+            "p_order": p_order,
+            "eq_positions": eq_positions,
+            "eq_valid": eq_valid,
+            "rigid_mask": rigid_mask,
+            "snap_mask": snap_mask,
+            "eq_centroid": eq_centroid,
+            "eq_centered": eq_centered,
+            "centroid_T": T,
+            "n_frames": n_frames,
+            "n_p_atoms": len(cm),
+            "dt_ps": resolved.dt_ps
+            if resolved
+            else (metrics.dt_ps if metrics else None),
+            "nstxout_comp": resolved.nstxout_comp
+            if resolved
+            else (metrics.nstxout_comp if metrics else None),
+            "ns_per_day": resolved.ns_per_day
+            if resolved
+            else (metrics.ns_per_day if metrics else None),
+            "temperature_k": resolved.temperature_k
+            if resolved
+            else (metrics.temperature_k if metrics else None),
+            "total_ns": total_ns,
+            "atom_meta": None,
+            "atom_ident": None,
+            "atom_bonds": None,
+            "heavy_idx": None,
+            "c1p_idx": c1p_idx,
+            "term_specs": term_specs,  # 5'-terminal bases recovered via O5'
+            "dna_p_idx": dna_p_sel.indices,  # cached for the O(1) last-frame fast path
+            "logs": logs,
+            "warnings": load_warnings,
             # Sequential rotation tracking: reset on load.
-            "R_prev":        None,
+            "R_prev": None,
             "prev_frame_idx": -999,
         }
 
@@ -649,8 +683,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 return name[0].upper() if name else "C"
 
             result["atom_meta"] = [
-                {"serial": int(a.index), "element": _element(a)}
-                for a in dna_heavy
+                {"serial": int(a.index), "element": _element(a)} for a in dna_heavy
             ]
             # The STICK half of ball-and-stick.  Connectivity is static across
             # frames, so it rides the 'ready' message once rather than every frame
@@ -660,11 +693,15 @@ async def md_run_ws(websocket: WebSocket) -> None:
             # from the DESIGN topology instead of from the simulation's own.
             result["atom_bonds"] = _heavy_bond_pairs(u, dna_heavy.indices)
             if result["atom_bonds"]:
-                logs.append(f"Bond topology: {len(result['atom_bonds']) // 2} bonds "
-                            f"over {len(dna_heavy)} heavy atoms")
+                logs.append(
+                    f"Bond topology: {len(result['atom_bonds']) // 2} bonds "
+                    f"over {len(dna_heavy)} heavy atoms"
+                )
             else:
-                logs.append("Bond topology: unavailable (topology carries no bonds) "
-                            "— atoms will render without sticks")
+                logs.append(
+                    "Bond topology: unavailable (topology carries no bonds) "
+                    "— atoms will render without sticks"
+                )
             # Per-atom design identity (strand/helix/bp/direction), sent ONCE in the
             # 'ready' message rather than per frame — it is static across frames and a
             # ball-and-stick frame is hundreds of thousands of atoms.  Without it the
@@ -674,16 +711,22 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 build_atom_design_meta,
                 intern_atom_design_meta,
             )
+
             try:
                 result["atom_ident"] = intern_atom_design_meta(
-                    build_atom_design_meta(u, dna_heavy, p_order, model, cm, seg2chain))
-                logs.append(f"Atom ident: {len(result['atom_ident']['strands'])} strands "
-                            f"over {len(dna_heavy)} heavy atoms")
+                    build_atom_design_meta(u, dna_heavy, p_order, model, cm, seg2chain)
+                )
+                logs.append(
+                    f"Atom ident: {len(result['atom_ident']['strands'])} strands "
+                    f"over {len(dna_heavy)} heavy atoms"
+                )
             except Exception as exc:  # noqa: BLE001
                 # Colouring is cosmetic — never fail a display over it.
                 result["atom_ident"] = None
-                logs.append(f"Atom ident: unavailable ({type(exc).__name__}: {exc}) "
-                            "— atoms will render CPK")
+                logs.append(
+                    f"Atom ident: unavailable ({type(exc).__name__}: {exc}) "
+                    "— atoms will render CPK"
+                )
 
         return result
 
@@ -702,10 +745,10 @@ async def md_run_ws(websocket: WebSocket) -> None:
             reassemble_to_posed_reference,
         )
 
-        u        = _ctx["universe"]
-        p_order  = _ctx["p_order"]
-        T        = _ctx["centroid_T"]
-        mode     = _ctx["mode"]
+        u = _ctx["universe"]
+        p_order = _ctx["p_order"]
+        T = _ctx["centroid_T"]
+        mode = _ctx["mode"]
         n_frames = _ctx["n_frames"]
 
         # Per-frame solvent inputs start empty, so a frame that fails to build a
@@ -715,23 +758,25 @@ async def md_run_ws(websocket: WebSocket) -> None:
         _ctx["heavy_pre"] = None
 
         if _injected is None:
-            ts      = u.trajectory[frame_idx]
+            ts = u.trajectory[frame_idx]
             time_ps = float(ts.time)
         else:
             _all_pos, _dims_inj, time_ps = _injected
 
         if mode in ("nadoc", "beads"):
             if _injected is None:
-                dna_p   = u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES))
-                p_raw   = dna_p.positions / 10.0                   # Å → nm, box coords
-                dims    = u.dimensions
+                dna_p = u.select_atoms(
+                    "name P and resname " + " ".join(_GRO_DNA_RESNAMES)
+                )
+                p_raw = dna_p.positions / 10.0  # Å → nm, box coords
+                dims = u.dimensions
             else:
-                p_raw   = _all_pos[_ctx["dna_p_idx"]] / 10.0       # Å → nm, box coords
-                dims    = _dims_inj
-            eq_pos      = _ctx.get("eq_positions")
-            eq_valid    = _ctx.get("eq_valid")
-            rigid_mask  = _ctx.get("rigid_mask")
-            snap_mask   = _ctx.get("snap_mask")
+                p_raw = _all_pos[_ctx["dna_p_idx"]] / 10.0  # Å → nm, box coords
+                dims = _dims_inj
+            eq_pos = _ctx.get("eq_positions")
+            eq_valid = _ctx.get("eq_valid")
+            rigid_mask = _ctx.get("rigid_mask")
+            snap_mask = _ctx.get("snap_mask")
             eq_centered = _ctx.get("eq_centered")
             eq_centroid = _ctx.get("eq_centroid")
             # Atoms snapped to design-eq: rigid dsDNA + crossover extra bases.
@@ -757,13 +802,22 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 #   atom's reference sits beside its true position.  Free ssDNA
                 #   (~snap_mask) keeps its raw sequential-unwrap position, as before.
                 #   c_box is the PBC-robust (circular-mean) centroid, used for T_dyn.
-                if (eq_pos is not None and eq_centroid is not None
-                        and snap_mask is not None and len(eq_pos) == len(p_box)):
+                if (
+                    eq_pos is not None
+                    and eq_centroid is not None
+                    and snap_mask is not None
+                    and len(eq_pos) == len(p_box)
+                ):
                     p_box_corr, _c_box = reassemble_to_posed_reference(
-                        p_box, box_nm, eq_pos, eq_centroid, rigid_mask, snap_mask,
+                        p_box,
+                        box_nm,
+                        eq_pos,
+                        eq_centroid,
+                        rigid_mask,
+                        snap_mask,
                     )
-                    _T_dyn = eq_centroid - _c_box       # current box → NADOC frame
-                    p_nm   = p_box_corr + _T_dyn        # NADOC frame
+                    _T_dyn = eq_centroid - _c_box  # current box → NADOC frame
+                    p_nm = p_box_corr + _T_dyn  # NADOC frame
                 else:
                     # No design reference — median-centroid translation only (median is
                     # robust to a minority of strand-boundary unwrap errors).
@@ -776,7 +830,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 # The solvent/box overlay rides the SAME affine as the DNA; stash
                 # what this frame used rather than letting it re-derive anything.
                 _ctx["xf_parts"] = {"T_dyn": _T_dyn, "c_box": _c_box, "box_nm": box_nm}
-                _ctx["p_pre"] = p_nm.copy()      # before the Kabsch below
+                _ctx["p_pre"] = p_nm.copy()  # before the Kabsch below
                 _ctx["p_raw"] = p_raw
             else:
                 p_nm = p_raw + T
@@ -791,93 +845,127 @@ async def md_run_ws(websocket: WebSocket) -> None:
             # near 90° rotation).  In that case, re-run Kabsch using only inlier atoms
             # (pre-Kabsch delta < median_delta * 3) to get a more robust estimate.
             R_align = None
-            R_prev     = _ctx.get("R_prev")
+            R_prev = _ctx.get("R_prev")
             prev_frame = _ctx.get("prev_frame_idx", -999)
             _is_sequential = abs(frame_idx - prev_frame) <= 3
-            if (eq_centered is not None and eq_centroid is not None
-                    and len(eq_centered) == len(p_nm)):
-                _rm = rigid_mask if (rigid_mask is not None and rigid_mask.any()) else (
-                      eq_valid  if (eq_valid   is not None and eq_valid.any())   else None)
-                _mob_c  = p_nm[_rm].mean(axis=0) if _rm is not None else p_nm.mean(axis=0)
-                _mc     = p_nm - _mob_c
-                _H      = _mc.T @ eq_centered
+            if (
+                eq_centered is not None
+                and eq_centroid is not None
+                and len(eq_centered) == len(p_nm)
+            ):
+                _rm = (
+                    rigid_mask
+                    if (rigid_mask is not None and rigid_mask.any())
+                    else (
+                        eq_valid if (eq_valid is not None and eq_valid.any()) else None
+                    )
+                )
+                _mob_c = (
+                    p_nm[_rm].mean(axis=0) if _rm is not None else p_nm.mean(axis=0)
+                )
+                _mc = p_nm - _mob_c
+                _H = _mc.T @ eq_centered
                 _U2, _, _Vt2 = _np.linalg.svd(_H)
-                _d2     = _np.linalg.det(_Vt2.T @ _U2.T)
+                _d2 = _np.linalg.det(_Vt2.T @ _U2.T)
                 R_align = _Vt2.T @ _np.diag([1.0, 1.0, _d2]) @ _U2.T
 
                 # Sequential consistency: detect sudden rotation jumps.
                 if R_prev is not None and _is_sequential:
-                    _dR    = R_align @ R_prev.T
+                    _dR = R_align @ R_prev.T
                     _trace = float(_np.trace(_dR))
                     # angle = arccos((trace-1)/2); if > 60° → suspicious flip
-                    _cos   = max(-1.0, min(1.0, (_trace - 1.0) / 2.0))
+                    _cos = max(-1.0, min(1.0, (_trace - 1.0) / 2.0))
                     _angle_deg = _np.degrees(_np.arccos(_cos))
                     if _angle_deg > 60.0:
                         # Re-run Kabsch using inlier atoms only (robust to gimbal lock).
                         _p_nm_raw = _mc @ R_align.T + eq_centroid
-                        _pre_d    = _np.linalg.norm(_p_nm_raw - eq_pos, axis=1)
-                        _med_d    = _np.median(_pre_d[_rm]) if _rm is not None else _np.median(_pre_d)
-                        _inlier   = _rm & (_pre_d < _med_d * 3.0) if _rm is not None else (_pre_d < _med_d * 3.0)
+                        _pre_d = _np.linalg.norm(_p_nm_raw - eq_pos, axis=1)
+                        _med_d = (
+                            _np.median(_pre_d[_rm])
+                            if _rm is not None
+                            else _np.median(_pre_d)
+                        )
+                        _inlier = (
+                            _rm & (_pre_d < _med_d * 3.0)
+                            if _rm is not None
+                            else (_pre_d < _med_d * 3.0)
+                        )
                         if _inlier.sum() >= 10:
                             _mob_c2 = p_nm[_inlier].mean(axis=0)
-                            _mc2    = p_nm - _mob_c2
-                            _eq_c2  = eq_pos - eq_centroid
+                            _mc2 = p_nm - _mob_c2
+                            _eq_c2 = eq_pos - eq_centroid
                             _eq_c2[~_inlier] = 0.0
-                            _H2     = _mc2.T @ _eq_c2
+                            _H2 = _mc2.T @ _eq_c2
                             _U3, _, _Vt3 = _np.linalg.svd(_H2)
-                            _d3     = _np.linalg.det(_Vt3.T @ _U3.T)
+                            _d3 = _np.linalg.det(_Vt3.T @ _U3.T)
                             R_inlier = _Vt3.T @ _np.diag([1.0, 1.0, _d3]) @ _U3.T
                             # Accept inlier rotation only if it's more consistent with R_prev.
-                            _dR2   = R_inlier @ R_prev.T
-                            _cos2  = max(-1.0, min(1.0, (float(_np.trace(_dR2)) - 1.0) / 2.0))
+                            _dR2 = R_inlier @ R_prev.T
+                            _cos2 = max(
+                                -1.0, min(1.0, (float(_np.trace(_dR2)) - 1.0) / 2.0)
+                            )
                             if _np.arccos(_cos2) < _np.arccos(_cos):
                                 R_align = R_inlier
-                                _mob_c  = _mob_c2
-                                _mc     = _mc2
+                                _mob_c = _mob_c2
+                                _mc = _mc2
                         if _MD_SEEK_DIAG:
-                            print(f"[ws seek] frame={frame_idx} rotation jump {_angle_deg:.1f}° "
-                                  f"→ inlier Kabsch applied", flush=True)
+                            print(
+                                f"[ws seek] frame={frame_idx} rotation jump {_angle_deg:.1f}° "
+                                f"→ inlier Kabsch applied",
+                                flush=True,
+                            )
 
                 p_nm = _mc @ R_align.T + eq_centroid
-                _ctx["R_prev"]         = R_align
+                _ctx["R_prev"] = R_align
                 _ctx["prev_frame_idx"] = frame_idx
                 if _ctx.get("xf_parts") is not None:
                     _ctx["xf_parts"].update(
-                        mob_c=_mob_c, eq_centroid=eq_centroid, R=R_align)
+                        mob_c=_mob_c, eq_centroid=eq_centroid, R=R_align
+                    )
 
                 # Server-side diagnostic (one line per frame).
                 if _MD_SEEK_DIAG:
                     _delta = _np.linalg.norm(p_nm - eq_pos, axis=1)
                     _nr = int(_rm.sum()) if _rm is not None else len(p_nm)
                     _rd = _delta[_rm] if _rm is not None else _delta
-                    print(f"[ws seek] frame={frame_idx} n_rigid={_nr} "
-                          f"RMSD_all={_np.sqrt((_delta**2).mean())*10:.2f}Å "
-                          f"RMSD_rigid={_np.sqrt((_rd**2).mean())*10:.2f}Å "
-                          f"max={_delta.max()*10:.2f}Å "
-                          f"n>2Å={int((_delta>0.2).sum())} "
-                          f"n>5Å={int((_delta>0.5).sum())}", flush=True)
+                    print(
+                        f"[ws seek] frame={frame_idx} n_rigid={_nr} "
+                        f"RMSD_all={_np.sqrt((_delta**2).mean()) * 10:.2f}Å "
+                        f"RMSD_rigid={_np.sqrt((_rd**2).mean()) * 10:.2f}Å "
+                        f"max={_delta.max() * 10:.2f}Å "
+                        f"n>2Å={int((_delta > 0.2).sum())} "
+                        f"n>5Å={int((_delta > 0.5).sum())}",
+                        flush=True,
+                    )
 
             # Step 4 — Base normals (P→C1') rotated into the aligned frame.
             c1p_idx = _ctx.get("c1p_idx")
             normals = None
-            if c1p_idx is not None and _np.all(c1p_idx >= 0) and len(c1p_idx) == len(p_order):
-                c1p_raw = (u.atoms[c1p_idx].positions if _injected is None
-                           else _all_pos[c1p_idx]) / 10.0          # Å → nm
-                dn      = c1p_raw - p_raw                          # intra-residue vector (no PBC issue)
+            if (
+                c1p_idx is not None
+                and _np.all(c1p_idx >= 0)
+                and len(c1p_idx) == len(p_order)
+            ):
+                c1p_raw = (
+                    u.atoms[c1p_idx].positions
+                    if _injected is None
+                    else _all_pos[c1p_idx]
+                ) / 10.0  # Å → nm
+                dn = c1p_raw - p_raw  # intra-residue vector (no PBC issue)
                 if R_align is not None:
-                    dn = dn @ R_align.T                            # rotate into aligned frame
-                norms   = _np.linalg.norm(dn, axis=1, keepdims=True)
-                norms   = _np.where(norms > 1e-6, norms, 1.0)
-                normals = dn / norms                               # unit vectors
+                    dn = dn @ R_align.T  # rotate into aligned frame
+                norms = _np.linalg.norm(dn, axis=1, keepdims=True)
+                norms = _np.where(norms > 1e-6, norms, 1.0)
+                normals = dn / norms  # unit vectors
 
             positions = []
             for i, key in enumerate(p_order):
                 hid, bpi, d = key[0], key[1], key[2]
                 entry: dict = {
-                    "helix_id":  hid,
-                    "bp_index":  bpi,
+                    "helix_id": hid,
+                    "bp_index": bpi,
                     "direction": d,
-                    "copy": key[3] if len(key) > 3 else 0,   # loop-copy index (0 = base)
+                    "copy": key[3] if len(key) > 3 else 0,  # loop-copy index (0 = base)
                     "x": float(p_nm[i, 0]),
                     "y": float(p_nm[i, 1]),
                     "z": float(p_nm[i, 2]),
@@ -893,17 +981,28 @@ async def md_run_ws(websocket: WebSocket) -> None:
             term_specs = _ctx.get("term_specs") or []
             if term_specs and R_align is not None:
                 from backend.core.atomistic_to_nadoc import recover_termini
+
                 _box = (dims[:3] / 10.0) if (dims is not None and dims[0] > 0) else None
                 tpos, tnorm = recover_termini(
-                    u, term_specs, p_raw, p_nm, R_align, _box,
-                    all_pos_A=(_all_pos if _injected is not None else None))
+                    u,
+                    term_specs,
+                    p_raw,
+                    p_nm,
+                    R_align,
+                    _box,
+                    all_pos_A=(_all_pos if _injected is not None else None),
+                )
                 for j, spec in enumerate(term_specs):
                     if j >= len(tpos):
                         break
                     key = spec[0]
                     tentry: dict = {
-                        "helix_id": key[0], "bp_index": key[1], "direction": key[2],
-                        "x": float(tpos[j, 0]), "y": float(tpos[j, 1]), "z": float(tpos[j, 2]),
+                        "helix_id": key[0],
+                        "bp_index": key[1],
+                        "direction": key[2],
+                        "x": float(tpos[j, 0]),
+                        "y": float(tpos[j, 1]),
+                        "z": float(tpos[j, 2]),
                     }
                     if len(tnorm):
                         tentry["nx"] = float(tnorm[j, 0])
@@ -911,18 +1010,18 @@ async def md_run_ws(websocket: WebSocket) -> None:
                         tentry["nz"] = float(tnorm[j, 2])
                     positions.append(tentry)
             return {
-                "type":      "frame",
+                "type": "frame",
                 "frame_idx": frame_idx,
-                "n_frames":  n_frames,
-                "time_ps":   time_ps,
+                "n_frames": n_frames,
+                "time_ps": time_ps,
                 "positions": positions,
             }
         else:  # ballstick
             heavy_idx = _ctx["heavy_idx"]
             atom_meta = _ctx["atom_meta"]
-            ag        = u.atoms[heavy_idx]
-            pos_raw   = ag.positions / 10.0
-            pos_nm    = pos_raw + T
+            ag = u.atoms[heavy_idx]
+            pos_raw = ag.positions / 10.0
+            pos_nm = pos_raw + T
 
             # Keep atomistic MD display in one coherent periodic image.  The CG
             # NADOC/bead path above corrects P atoms against the design reference;
@@ -932,7 +1031,9 @@ async def md_run_ws(websocket: WebSocket) -> None:
             # one periodic box away while preserving actual intra-residue MD
             # coordinates.
             try:
-                dna_p = u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES))
+                dna_p = u.select_atoms(
+                    "name P and resname " + " ".join(_GRO_DNA_RESNAMES)
+                )
                 p_raw = dna_p.positions / 10.0
                 dims = u.dimensions
                 eq_pos = _ctx.get("eq_positions")
@@ -951,8 +1052,12 @@ async def md_run_ws(websocket: WebSocket) -> None:
                         c_box = p_box.mean(axis=0)
 
                     T_dyn = eq_centroid - c_box if eq_centroid is not None else T
-                    if (eq_pos is not None and eq_centroid is not None
-                            and snap_mask is not None and len(eq_pos) == len(p_box)):
+                    if (
+                        eq_pos is not None
+                        and eq_centroid is not None
+                        and snap_mask is not None
+                        and len(eq_pos) == len(p_box)
+                    ):
                         # Use the SHARED reassembly, not a local copy.  This branch used
                         # to inline its own translation-only, PER-ATOM nearest-image snap
                         # — which both (a) predated the pose-first fix the bead path above
@@ -965,7 +1070,12 @@ async def md_run_ws(websocket: WebSocket) -> None:
                         # the reference first and snaps per STRAND RUN, so contiguity
                         # holds by construction.
                         p_box_corr, c_box = reassemble_to_posed_reference(
-                            p_box, box_nm, eq_pos, eq_centroid, rigid_mask, snap_mask,
+                            p_box,
+                            box_nm,
+                            eq_pos,
+                            eq_centroid,
+                            rigid_mask,
+                            snap_mask,
                         )
                         T_dyn = eq_centroid - c_box
                         p_pre = p_box_corr + T_dyn
@@ -975,12 +1085,18 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     # Residue-local reconstruction: heavy atom = corrected P +
                     # minimum-image(raw atom - raw P).  Use residue ix because it
                     # is stable inside this MDAnalysis Universe.
-                    p_raw_by_res = {int(a.residue.ix): p_raw[i] for i, a in enumerate(dna_p)}
-                    p_pre_by_res = {int(a.residue.ix): p_pre[i] for i, a in enumerate(dna_p)}
+                    p_raw_by_res = {
+                        int(a.residue.ix): p_raw[i] for i, a in enumerate(dna_p)
+                    }
+                    p_pre_by_res = {
+                        int(a.residue.ix): p_pre[i] for i, a in enumerate(dna_p)
+                    }
                     p_res_by_key: dict[tuple[str, int], int] = {}
                     p_resids_by_seg: dict[str, list[int]] = {}
                     for a in dna_p:
-                        segid = str(getattr(a.residue, "segid", "") or getattr(a, "segid", ""))
+                        segid = str(
+                            getattr(a.residue, "segid", "") or getattr(a, "segid", "")
+                        )
                         resid = int(a.residue.resid)
                         p_res_by_key[(segid, resid)] = int(a.residue.ix)
                         p_resids_by_seg.setdefault(segid, []).append(resid)
@@ -991,7 +1107,10 @@ async def md_run_ws(websocket: WebSocket) -> None:
                         res_ix = int(atom.residue.ix)
                         if res_ix in p_raw_by_res:
                             return res_ix
-                        segid = str(getattr(atom.residue, "segid", "") or getattr(atom, "segid", ""))
+                        segid = str(
+                            getattr(atom.residue, "segid", "")
+                            or getattr(atom, "segid", "")
+                        )
                         resid = int(atom.residue.resid)
                         # Terminal residues may not have a P atom.  Anchor them
                         # to the nearest residue with a P in the same segment.
@@ -1001,7 +1120,9 @@ async def md_run_ws(websocket: WebSocket) -> None:
                                 return near
                         candidates = p_resids_by_seg.get(segid)
                         if candidates:
-                            nearest_resid = min(candidates, key=lambda r: abs(r - resid))
+                            nearest_resid = min(
+                                candidates, key=lambda r: abs(r - resid)
+                            )
                             return p_res_by_key.get((segid, nearest_resid))
                         return None
 
@@ -1022,10 +1143,21 @@ async def md_run_ws(websocket: WebSocket) -> None:
 
                     # Use the same rigid-body Kabsch alignment as the P-bead path
                     # so atomistic and NADOC representations occupy the same view.
-                    if (eq_centered is not None and eq_centroid is not None
-                            and len(eq_centered) == len(p_pre)):
-                        rm = rigid_mask if (rigid_mask is not None and rigid_mask.any()) else None
-                        mob_c = p_pre[rm].mean(axis=0) if rm is not None else p_pre.mean(axis=0)
+                    if (
+                        eq_centered is not None
+                        and eq_centroid is not None
+                        and len(eq_centered) == len(p_pre)
+                    ):
+                        rm = (
+                            rigid_mask
+                            if (rigid_mask is not None and rigid_mask.any())
+                            else None
+                        )
+                        mob_c = (
+                            p_pre[rm].mean(axis=0)
+                            if rm is not None
+                            else p_pre.mean(axis=0)
+                        )
                         mc = p_pre - mob_c
                         H = mc.T @ eq_centered
                         U2, _, Vt2 = _np.linalg.svd(H)
@@ -1038,8 +1170,11 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     # Hand the solvent/box overlay this frame's affine and the DNA
                     # anchor arrays it already built — never re-derive them.
                     _ctx["xf_parts"] = {
-                        "T_dyn": T_dyn, "c_box": c_box, "box_nm": box_nm,
-                        "mob_c": mob_c, "R": R_align,
+                        "T_dyn": T_dyn,
+                        "c_box": c_box,
+                        "box_nm": box_nm,
+                        "mob_c": mob_c,
+                        "R": R_align,
                         "eq_centroid": eq_centroid if R_align is not None else None,
                     }
                     _ctx["heavy_raw"] = pos_raw
@@ -1054,7 +1189,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 )
             atoms = [
                 {
-                    "serial":  m["serial"],
+                    "serial": m["serial"],
                     "element": m["element"],
                     "x": float(pos_nm[i, 0]),
                     "y": float(pos_nm[i, 1]),
@@ -1063,11 +1198,11 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 for i, m in enumerate(atom_meta)
             ]
             return {
-                "type":      "frame",
+                "type": "frame",
                 "frame_idx": frame_idx,
-                "n_frames":  n_frames,
-                "time_ps":   time_ps,
-                "atoms":     atoms,
+                "n_frames": n_frames,
+                "time_ps": time_ps,
+                "atoms": atoms,
             }
 
     def _trajectory_signature() -> tuple[int, int] | None:
@@ -1115,11 +1250,16 @@ async def md_run_ws(websocket: WebSocket) -> None:
         # fixed-record DCD fall through to the MDAnalysis path below.
         if _ctx.get("mode") in ("nadoc", "beads"):
             from backend.core import dcd_fast  # noqa: PLC0415
+
             try:
                 layout = dcd_fast.read_layout(_ctx["xtc_path"])
             except Exception:  # noqa: BLE001 — unsupported layout → MDAnalysis fallback
                 layout = None
-            if layout is not None and layout.n_atoms == len(u.atoms) and layout.n_frames > 0:
+            if (
+                layout is not None
+                and layout.n_atoms == len(u.atoms)
+                and layout.n_frames > 0
+            ):
                 _ctx["n_frames"] = layout.n_frames
                 _ctx["R_prev"] = None
                 _ctx["prev_frame_idx"] = -999
@@ -1127,10 +1267,17 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     if idx < 0:
                         break
                     try:
-                        coords, cell = dcd_fast.read_frame(_ctx["xtc_path"], layout, idx)
-                        frame_msg = _seek_sync(idx, _injected=(
-                            coords, dcd_fast.cell_to_dimensions(cell),
-                            layout.first_ps + idx * layout.delta_ps))
+                        coords, cell = dcd_fast.read_frame(
+                            _ctx["xtc_path"], layout, idx
+                        )
+                        frame_msg = _seek_sync(
+                            idx,
+                            _injected=(
+                                coords,
+                                dcd_fast.cell_to_dimensions(cell),
+                                layout.first_ps + idx * layout.delta_ps,
+                            ),
+                        )
                         _ctx["latest_frame_cache"] = frame_msg
                         _ctx["latest_frame_sig"] = sig
                         return frame_msg
@@ -1216,32 +1363,45 @@ async def md_run_ws(websocket: WebSocket) -> None:
             sctx = _ctx["solvent_ctx"] = _MS.build_solvent_ctx(u)
 
         xf = _MS.DisplayXform.build(
-            T_dyn=parts.get("T_dyn"), c_box=parts.get("c_box"),
-            box_nm=parts.get("box_nm"), mob_c=parts.get("mob_c"),
-            eq_centroid=parts.get("eq_centroid"), R=parts.get("R"))
+            T_dyn=parts.get("T_dyn"),
+            c_box=parts.get("c_box"),
+            box_nm=parts.get("box_nm"),
+            mob_c=parts.get("mob_c"),
+            eq_centroid=parts.get("eq_centroid"),
+            R=parts.get("R"),
+        )
 
         heavy_raw = _ctx.get("heavy_raw")
         heavy_pre = _ctx.get("heavy_pre")
-        if heavy_raw is None:                       # coarse branch → rebuild anchors
+        if heavy_raw is None:  # coarse branch → rebuild anchors
             heavy_idx = _ctx.get("heavy_idx")
             p_raw, p_pre = _ctx.get("p_raw"), _ctx.get("p_pre")
             if heavy_idx is None or p_raw is None or p_pre is None:
                 return None
             heavy_ag = u.atoms[heavy_idx]
             heavy_raw = heavy_ag.positions / 10.0
-            dna_p = u.select_atoms(
-                "name P and resname " + " ".join(_GRO_DNA_RESNAMES))
+            dna_p = u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES))
             heavy_pre = _MS.reconstruct_heavy_pre(
-                heavy_ag, dna_p, heavy_raw, p_raw, p_pre, xf.box_nm, rows_cache=_ctx)
+                heavy_ag, dna_p, heavy_raw, p_raw, p_pre, xf.box_nm, rows_cache=_ctx
+            )
 
         frame = _MS.extract_solvent_frame(
-            u, sctx, heavy_raw, heavy_pre, xf,
-            water=bool(opts.get("water")), ions=bool(opts.get("ions")),
+            u,
+            sctx,
+            heavy_raw,
+            heavy_pre,
+            xf,
+            water=bool(opts.get("water")),
+            ions=bool(opts.get("ions")),
             box=bool(opts.get("box")),
-            shell_nm=(None if opts.get("shell_ang") is None
-                      else float(opts["shell_ang"]) / 10.0),
+            shell_nm=(
+                None
+                if opts.get("shell_ang") is None
+                else float(opts["shell_ang"]) / 10.0
+            ),
             atomistic=bool(opts.get("atomistic")),
-            max_waters=opts.get("max_waters"))
+            max_waters=opts.get("max_waters"),
+        )
         return _MS.pack_solvent_bin({int(_ctx.get("last_frame_idx") or 0): frame})
 
     async def _send_frame(frame_msg: dict) -> None:
@@ -1255,7 +1415,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
         _ctx["last_frame_idx"] = frame_msg.get("frame_idx", 0)
         try:
             buf = await asyncio.to_thread(_solvent_bytes_sync)
-        except Exception as exc:                                    # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             print(f"[ws solvent] skipped ({type(exc).__name__}: {exc})", flush=True)
             return
         if buf:
@@ -1263,16 +1423,16 @@ async def md_run_ws(websocket: WebSocket) -> None:
 
     try:
         while True:
-            msg    = await websocket.receive_json()
+            msg = await websocket.receive_json()
             action = msg.get("action")
 
             if action == "load":
-                config_str   = msg.get("config_path") or ""
+                config_str = msg.get("config_path") or ""
                 topology_str = msg.get("topology_path", "")
-                xtc_str      = msg.get("xtc_path", "")
+                xtc_str = msg.get("xtc_path", "")
                 coordinate_str = msg.get("coordinate_path") or None
-                mode         = msg.get("mode", "nadoc")
-                job_id_msg   = msg.get("job_id") or None
+                mode = msg.get("mode", "nadoc")
+                job_id_msg = msg.get("job_id") or None
                 design_payload = msg.get("design")
                 # Prefer the RUN's OWN design (resolved from job_id) over whatever design
                 # is open in the editor.  Mapping a trajectory onto a mismatched design
@@ -1283,22 +1443,40 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 if job_id_msg:
                     try:
                         from backend.api.routes_md import md_display_design_for_job
-                        design, expected_design_name = md_display_design_for_job(job_id_msg)
+
+                        design, expected_design_name = md_display_design_for_job(
+                            job_id_msg
+                        )
                     except Exception:  # noqa: BLE001 — fall back to the payload design
                         design = None
                 if design is None and design_payload:
                     try:
                         design = Design.model_validate(design_payload)
                     except Exception as exc:
-                        await websocket.send_json({"type": "error", "message": f"Invalid design payload: {exc}"})
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "message": f"Invalid design payload: {exc}",
+                            }
+                        )
                         continue
                 if design is None:
                     design = design_state.get_design()
                 if design is None:
-                    await websocket.send_json({"type": "error", "message": "No design loaded. Reload the design or reopen this MD run from NADOC."})
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": "No design loaded. Reload the design or reopen this MD run from NADOC.",
+                        }
+                    )
                     continue
                 if not config_str and (not topology_str or not xtc_str):
-                    await websocket.send_json({"type": "error", "message": "config_path or topology_path and xtc_path are required."})
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": "config_path or topology_path and xtc_path are required.",
+                        }
+                    )
                     continue
                 # Progress: a large first-open re-parse is ~tens of seconds — surface the
                 # system size up front so the spinner reads as "working", not "hung".
@@ -1320,15 +1498,17 @@ async def md_run_ws(websocket: WebSocket) -> None:
                         timeout=_LOAD_TIMEOUT_S,
                     )
                 except asyncio.TimeoutError:
-                    await websocket.send_json({
-                        "type": "error",
-                        "message": (
-                            f"Loading timed out after {int(_LOAD_TIMEOUT_S)}s — this is "
-                            "usually a very large solvated system still parsing. The parse "
-                            "continues in the background, so try again in a moment (re-opens "
-                            "are cached and load fast)."
-                        ),
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": (
+                                f"Loading timed out after {int(_LOAD_TIMEOUT_S)}s — this is "
+                                "usually a very large solvated system still parsing. The parse "
+                                "continues in the background, so try again in a moment (re-opens "
+                                "are cached and load fast)."
+                            ),
+                        }
+                    )
                     continue
                 except Exception as exc:
                     await websocket.send_json({"type": "error", "message": str(exc)})
@@ -1342,32 +1522,36 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 for log_line in loaded.get("logs", []):
                     await websocket.send_json({"type": "log", "message": log_line})
 
-                await websocket.send_json({
-                    "type":          "ready",
-                    "n_frames":      loaded["n_frames"],
-                    "n_p_atoms":     loaded["n_p_atoms"],
-                    "ns_per_day":    loaded["ns_per_day"],
-                    "temperature_k": loaded["temperature_k"],
-                    "total_ns":      loaded["total_ns"],
-                    "dt_ps":         loaded["dt_ps"],
-                    "nstxout_comp":  loaded["nstxout_comp"],
-                    "topology_path":  loaded["topology_path"],
-                    "trajectory_path": loaded["xtc_path"],
-                    "coordinate_path": loaded.get("coordinate_path"),
-                    "warnings":      loaded.get("warnings", []),
-                    # Ball-and-stick only: static per-atom design identity so the
-                    # frontend can colour MD atoms by strand/base/cluster (null in
-                    # bead modes, and when the mapping was unavailable).
-                    "atom_ident":    loaded.get("atom_ident"),
-                    # Ball-and-stick only: flat serial pairs for the bond cylinders,
-                    # also static across frames (null in bead modes / bond-less
-                    # topologies).
-                    "atom_bonds":    loaded.get("atom_bonds"),
-                })
+                await websocket.send_json(
+                    {
+                        "type": "ready",
+                        "n_frames": loaded["n_frames"],
+                        "n_p_atoms": loaded["n_p_atoms"],
+                        "ns_per_day": loaded["ns_per_day"],
+                        "temperature_k": loaded["temperature_k"],
+                        "total_ns": loaded["total_ns"],
+                        "dt_ps": loaded["dt_ps"],
+                        "nstxout_comp": loaded["nstxout_comp"],
+                        "topology_path": loaded["topology_path"],
+                        "trajectory_path": loaded["xtc_path"],
+                        "coordinate_path": loaded.get("coordinate_path"),
+                        "warnings": loaded.get("warnings", []),
+                        # Ball-and-stick only: static per-atom design identity so the
+                        # frontend can colour MD atoms by strand/base/cluster (null in
+                        # bead modes, and when the mapping was unavailable).
+                        "atom_ident": loaded.get("atom_ident"),
+                        # Ball-and-stick only: flat serial pairs for the bond cylinders,
+                        # also static across frames (null in bead modes / bond-less
+                        # topologies).
+                        "atom_bonds": loaded.get("atom_bonds"),
+                    }
+                )
 
             elif action == "seek":
                 if _ctx["universe"] is None:
-                    await websocket.send_json({"type": "error", "message": "No trajectory loaded."})
+                    await websocket.send_json(
+                        {"type": "error", "message": "No trajectory loaded."}
+                    )
                     continue
                 frame_idx = max(0, int(msg.get("frame_idx", 0)))
                 try:
@@ -1385,28 +1569,35 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 # stream, and re-emit the frame already on screen so the change is
                 # immediate rather than waiting for the next poll.
                 on = bool(msg.get("water") or msg.get("ions") or msg.get("box"))
-                _ctx["solvent_opts"] = {
-                    "water": bool(msg.get("water")),
-                    "ions": bool(msg.get("ions")),
-                    "box": bool(msg.get("box")),
-                    "shell_ang": msg.get("shell_ang", 5.0),
-                    "atomistic": bool(msg.get("atomistic")),
-                    "max_waters": msg.get("max_waters"),
-                } if on else None
+                _ctx["solvent_opts"] = (
+                    {
+                        "water": bool(msg.get("water")),
+                        "ions": bool(msg.get("ions")),
+                        "box": bool(msg.get("box")),
+                        "shell_ang": msg.get("shell_ang", 5.0),
+                        "atomistic": bool(msg.get("atomistic")),
+                        "max_waters": msg.get("max_waters"),
+                    }
+                    if on
+                    else None
+                )
                 await websocket.send_json({"type": "solvent_ack", "active": on})
                 if on and _ctx["universe"] is not None and _ctx.get("xf_parts"):
                     try:
                         buf = await asyncio.to_thread(_solvent_bytes_sync)
-                    except Exception as exc:                        # noqa: BLE001
+                    except Exception as exc:  # noqa: BLE001
                         await websocket.send_json(
-                            {"type": "error", "message": f"Solvent: {exc}"})
+                            {"type": "error", "message": f"Solvent: {exc}"}
+                        )
                         continue
                     if buf:
                         await websocket.send_bytes(buf)
 
             elif action == "get_latest":
                 if _ctx["universe"] is None:
-                    await websocket.send_json({"type": "error", "message": "No trajectory loaded."})
+                    await websocket.send_json(
+                        {"type": "error", "message": "No trajectory loaded."}
+                    )
                     continue
                 try:
                     frame_msg = await _refresh_latest()
@@ -1422,6 +1613,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
 
 
 # ── mrdna CG relaxation WebSocket ─────────────────────────────────────────────
+
 
 @router.websocket("/ws/mrdna-relax")
 async def mrdna_relax_ws(websocket: WebSocket) -> None:
@@ -1447,15 +1639,20 @@ async def mrdna_relax_ws(websocket: WebSocket) -> None:
     await websocket.accept()
     design = design_state.get_design()
     if design is None:
-        await websocket.send_json({"type": "mrdna_error", "message": "No design loaded."})
+        await websocket.send_json(
+            {"type": "mrdna_error", "message": "No design loaded."}
+        )
         await websocket.close()
         return
 
     async def _prog(stage: str, pct: float) -> None:
-        await websocket.send_json({"type": "mrdna_progress", "stage": stage, "pct": pct})
+        await websocket.send_json(
+            {"type": "mrdna_progress", "stage": stage, "pct": pct}
+        )
 
-    async def _heartbeat(coro, stage: str, start_pct: float, end_pct: float,
-                         interval: float = 1.0):
+    async def _heartbeat(
+        coro, stage: str, start_pct: float, end_pct: float, interval: float = 1.0
+    ):
         task = asyncio.create_task(coro)
         pct = start_pct
         step = (end_pct - start_pct) * interval / 120.0  # assume ≤120 s
@@ -1464,7 +1661,9 @@ async def mrdna_relax_ws(websocket: WebSocket) -> None:
             if task.done():
                 break
             pct = min(pct + step, end_pct - 1.0)
-            await websocket.send_json({"type": "mrdna_progress", "stage": stage, "pct": pct})
+            await websocket.send_json(
+                {"type": "mrdna_progress", "stage": stage, "pct": pct}
+            )
         return await task
 
     try:
@@ -1475,20 +1674,28 @@ async def mrdna_relax_ws(websocket: WebSocket) -> None:
             import subprocess
             import sys
             from backend.core.mrdna_bridge import mrdna_tool_path
+
             _MRDNA_PATH = mrdna_tool_path()
             _MRDNA_REPO = "https://gitlab.engr.illinois.edu/tbgl/tools/mrdna"
             _PATCHES = [
                 ("mrdna/readers/segmentmodel_from_lists.py", "s/np\\.in1d(/np.isin(/g"),
-                ("mrdna/readers/segmentmodel_from_pdb.py",   "s/np\\.in1d(/np.isin(/g"),
-                ("mrdna/readers/libs/base.py",               "s/np\\.finfo(np\\.float)/np.finfo(float)/g"),
-                ("mrdna/arbdmodel/submodule/engine.py",      "s/integers(1,99999,1)/integers(1,99999)/g"),
-                ("mrdna/model/spring_from_lp.py",            "s/np\\.trapz(/np.trapezoid(/g"),
-                ("mrdna/simulate.py",                        "s/rmsdThreshold=1/rmsd_threshold=1/g"),
+                ("mrdna/readers/segmentmodel_from_pdb.py", "s/np\\.in1d(/np.isin(/g"),
+                (
+                    "mrdna/readers/libs/base.py",
+                    "s/np\\.finfo(np\\.float)/np.finfo(float)/g",
+                ),
+                (
+                    "mrdna/arbdmodel/submodule/engine.py",
+                    "s/integers(1,99999,1)/integers(1,99999)/g",
+                ),
+                ("mrdna/model/spring_from_lp.py", "s/np\\.trapz(/np.trapezoid(/g"),
+                ("mrdna/simulate.py", "s/rmsdThreshold=1/rmsd_threshold=1/g"),
             ]
             if not os.path.isdir(_MRDNA_PATH):
                 subprocess.run(
                     ["git", "clone", "--depth=1", _MRDNA_REPO, _MRDNA_PATH],
-                    check=True, capture_output=True,
+                    check=True,
+                    capture_output=True,
                 )
                 for rel_path, expr in _PATCHES:
                     subprocess.run(
@@ -1498,7 +1705,8 @@ async def mrdna_relax_ws(websocket: WebSocket) -> None:
                 uv = shutil.which("uv") or os.path.expanduser("~/.local/bin/uv")
                 subprocess.run(
                     [uv, "pip", "install", "-e", _MRDNA_PATH, "--no-deps", "-q"],
-                    check=True, capture_output=True,
+                    check=True,
+                    capture_output=True,
                 )
 
             sys.path.insert(0, _MRDNA_PATH)
@@ -1506,6 +1714,7 @@ async def mrdna_relax_ws(websocket: WebSocket) -> None:
                 CrossoverPotentialOverride,
                 mrdna_model_from_nadoc_parameterized,
             )
+
             override = CrossoverPotentialOverride.from_database("T0")
             return mrdna_model_from_nadoc_parameterized(design, override)
 
@@ -1527,7 +1736,9 @@ async def mrdna_relax_ws(websocket: WebSocket) -> None:
 
             await _heartbeat(
                 asyncio.to_thread(_simulate),
-                stage="simulating", start_pct=10, end_pct=80,
+                stage="simulating",
+                start_pct=10,
+                end_pct=80,
             )
             sim_elapsed = time.monotonic() - t0
 
@@ -1536,6 +1747,7 @@ async def mrdna_relax_ws(websocket: WebSocket) -> None:
             def _extract():
                 import sys
                 from backend.core.mrdna_bridge import mrdna_tool_path
+
                 sys.path.insert(0, mrdna_tool_path())
                 from backend.core.mrdna_bridge import nuc_pos_override_from_mrdna_coarse
                 from backend.core.geometry import nucleotide_positions
@@ -1553,7 +1765,8 @@ async def mrdna_relax_ws(websocket: WebSocket) -> None:
 
                     # Per-direction sorted (bp_idx → displacement) for this helix
                     dir_disps: dict[str, dict[int, np.ndarray]] = {
-                        'FORWARD': {}, 'REVERSE': {}
+                        "FORWARD": {},
+                        "REVERSE": {},
                     }
                     for nuc in nuc_list:
                         key = (nuc.helix_id, nuc.bp_index, nuc.direction.value)
@@ -1568,33 +1781,40 @@ async def mrdna_relax_ws(websocket: WebSocket) -> None:
                         else:
                             d_map = dir_disps[nuc.direction.value]
                             if d_map:
-                                nearest = min(d_map, key=lambda b: abs(b - nuc.bp_index))
+                                nearest = min(
+                                    d_map, key=lambda b: abs(b - nuc.bp_index)
+                                )
                                 pos = nuc.position + d_map[nearest]
                             else:
                                 pos = nuc.position
-                        result.append({
-                            "helix_id":          nuc.helix_id,
-                            "bp_index":          nuc.bp_index,
-                            "direction":         nuc.direction.value,
-                            "backbone_position": pos.tolist(),
-                        })
+                        result.append(
+                            {
+                                "helix_id": nuc.helix_id,
+                                "bp_index": nuc.bp_index,
+                                "direction": nuc.direction.value,
+                                "backbone_position": pos.tolist(),
+                            }
+                        )
                 return result, len(override_dict)
 
             positions, n_override = await asyncio.to_thread(_extract)
 
             await _prog("done", 100)
-            await websocket.send_json({
-                "type":      "mrdna_result",
-                "positions": positions,
-                "stats": {
-                    "n_nucleotides": len(positions),
-                    "sim_seconds":   round(sim_elapsed, 2),
-                    "n_override":    n_override,
-                },
-            })
+            await websocket.send_json(
+                {
+                    "type": "mrdna_result",
+                    "positions": positions,
+                    "stats": {
+                        "n_nucleotides": len(positions),
+                        "sim_seconds": round(sim_elapsed, 2),
+                        "n_override": n_override,
+                    },
+                }
+            )
 
         finally:
             import shutil
+
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
     except Exception as exc:
@@ -1632,9 +1852,13 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
     try:
         while True:
             try:
-                job = reconcile_job_status(MdJob.load(job_id, _WORKSPACE_DIR), _WORKSPACE_DIR)
+                job = reconcile_job_status(
+                    MdJob.load(job_id, _WORKSPACE_DIR), _WORKSPACE_DIR
+                )
             except FileNotFoundError:
-                await websocket.send_json({"type": "error", "message": f"Job {job_id!r} not found"})
+                await websocket.send_json(
+                    {"type": "error", "message": f"Job {job_id!r} not found"}
+                )
                 break
             except Exception as exc:
                 await websocket.send_json({"type": "error", "message": str(exc)})
@@ -1654,26 +1878,32 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
                     payload["prep_progress"] = prep
 
             # Attach live NAMD log metrics for the current segment when running
-            if job.status == MdStatus.running and 0 <= job.current_segment_idx < len(job.segments):
+            if job.status == MdStatus.running and 0 <= job.current_segment_idx < len(
+                job.segments
+            ):
                 seg = job.segments[job.current_segment_idx]
                 log_path = job.package_dir(_WORKSPACE_DIR) / f"{seg.name}.log"
                 if log_path.exists():
                     try:
                         m = parse_namd_log(log_path)
                         payload["live_metrics"] = {
-                            "temperature_k":  m.temperature_k,
-                            "pressure_bar":   m.pressure_bar,
+                            "temperature_k": m.temperature_k,
+                            "pressure_bar": m.pressure_bar,
                             "pressure_avg_bar": m.pressure_avg_bar,
-                            "gpressure_bar":  m.gpressure_bar,
+                            "gpressure_bar": m.gpressure_bar,
                             "gpressure_avg_bar": m.gpressure_avg_bar,
-                            "volume_ang3":    m.volume_ang3,
-                            "ns_per_day":     m.ns_per_day,
+                            "volume_ang3": m.volume_ang3,
+                            "ns_per_day": m.ns_per_day,
                             "n_energy_lines": m.n_energy_lines,
-                            "timestep":       m.timestep,
-                            "segment_steps":  seg.steps,
+                            "timestep": m.timestep,
+                            "segment_steps": seg.steps,
                             "segment_progress": (
-                                min(1.0, max(0.0, float(m.timestep or 0) / float(seg.steps)))
-                                if seg.steps else None
+                                min(
+                                    1.0,
+                                    max(0.0, float(m.timestep or 0) / float(seg.steps)),
+                                )
+                                if seg.steps
+                                else None
                             ),
                         }
                     except Exception:
@@ -1686,7 +1916,10 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
             # so the master never adopted it as its active node) shows a frozen / "hung"
             # bar even though the detail timeline advances.  Same helper the REST list
             # uses, so the two channels never disagree.
-            from backend.api.routes_md import _namd_live_progress  # lazy: avoids a router import cycle
+            from backend.api.routes_md import (
+                _namd_live_progress,
+            )  # lazy: avoids a router import cycle
+
             try:
                 # Both numbers, from the same helper the REST list uses: the bar's text
                 # would otherwise gain and lose its time-remaining estimate depending on
@@ -1744,8 +1977,11 @@ async def engines_install_ws(websocket: WebSocket) -> None:
     """
     from backend.core.engine_install import InstallError, run_install
     from backend.core.engine_artifact import (
-        ArtifactError, install_arbd_archive, install_arbd_binary,
-        install_arbd_sudo, install_namd_archive,
+        ArtifactError,
+        install_arbd_archive,
+        install_arbd_binary,
+        install_arbd_sudo,
+        install_namd_archive,
     )
     from backend.core.engines import installable_engine_keys
 
@@ -1768,24 +2004,30 @@ async def engines_install_ws(websocket: WebSocket) -> None:
                 elif engine == "arbd":
                     await install_arbd_archive(archive_path, websocket.send_json)
                 else:
-                    await websocket.send_json({
-                        "type": "error",
-                        "message": f"No downloaded-package install for {engine!r}.",
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": f"No downloaded-package install for {engine!r}.",
+                        }
+                    )
                     return
             elif engine in installable_engine_keys():
                 await run_install(engine, websocket.send_json)
             else:
-                await websocket.send_json({
-                    "type": "error",
-                    "message": f"{engine!r} cannot be auto-installed here.",
-                })
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": f"{engine!r} cannot be auto-installed here.",
+                    }
+                )
         except (InstallError, ArtifactError) as exc:
             await websocket.send_json({"type": "error", "message": str(exc)})
         except Exception as exc:  # toolchain missing, OSError, bad tar, …
-            await websocket.send_json({
-                "type": "error",
-                "message": f"Install could not run: {exc}",
-            })
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "message": f"Install could not run: {exc}",
+                }
+            )
     except WebSocketDisconnect:
         pass

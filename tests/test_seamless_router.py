@@ -1,4 +1,5 @@
 """Tests for backend/core/seamless_router.py"""
+
 from __future__ import annotations
 
 
@@ -42,6 +43,7 @@ def _make_two_group_design() -> Design:
 
 # ── Single-section crossover count tests ──────────────────────────────────────
 
+
 def test_seamless_2hb_hc():
     design = make_bundle_design(CELLS_2HB, length_bp=42)
     updated, result = auto_scaffold_seamless(design)
@@ -67,7 +69,9 @@ def test_seamless_6hb_hc():
 
 
 def test_seamless_4hb_sq():
-    design = make_bundle_design(CELLS_4SQ, length_bp=32, lattice_type=LatticeType.SQUARE)
+    design = make_bundle_design(
+        CELLS_4SQ, length_bp=32, lattice_type=LatticeType.SQUARE
+    )
     updated, result = auto_scaffold_seamless(design)
     assert not result.warnings, result.warnings
     assert result.end_xovers == 3
@@ -75,6 +79,7 @@ def test_seamless_4hb_sq():
 
 
 # ── Structural invariant tests ────────────────────────────────────────────────
+
 
 def test_scaffold_visits_each_helix_at_most_twice():
     """Each helix should have at most 2 seamless crossovers (in + out).
@@ -113,8 +118,7 @@ def test_total_crossover_count_2hb():
     design = make_bundle_design(CELLS_2HB, length_bp=42)
     updated, _ = auto_scaffold_seamless(design)
     scaf_xovers = [
-        xo for xo in updated.crossovers
-        if xo.process_id and "seamless" in xo.process_id
+        xo for xo in updated.crossovers if xo.process_id and "seamless" in xo.process_id
     ]
     assert len(scaf_xovers) == 1
 
@@ -124,13 +128,13 @@ def test_total_crossover_count_6hb():
     design = make_bundle_design(CELLS_6HB, length_bp=84)
     updated, _ = auto_scaffold_seamless(design)
     scaf_xovers = [
-        xo for xo in updated.crossovers
-        if xo.process_id and "seamless" in xo.process_id
+        xo for xo in updated.crossovers if xo.process_id and "seamless" in xo.process_id
     ]
     assert len(scaf_xovers) == 5
 
 
 # ── Multi-section test ────────────────────────────────────────────────────────
+
 
 def test_two_group_design_has_bridge_xovers():
     """2-group design: bridge HJ placed, all helices touched by a crossover."""
@@ -144,9 +148,7 @@ def test_two_group_design_has_bridge_xovers():
     for xo in updated.crossovers:
         touched.add(xo.half_a.helix_id)
         touched.add(xo.half_b.helix_id)
-    assert touched == all_hids, (
-        f"These helices had no crossovers: {all_hids - touched}"
-    )
+    assert touched == all_hids, f"These helices had no crossovers: {all_hids - touched}"
 
 
 def test_teeth_closing_zig():
@@ -170,30 +172,45 @@ def test_teeth_closing_zig():
     # Clean teeth is one connected cluster and routes to a single strand — no
     # fragmentation warning.
     assert result.warnings == [], result.warnings
-    assert result.bridge_xovers == 6, f"Expected 6 bridge xovers, got {result.bridge_xovers}"
+    assert result.bridge_xovers == 6, (
+        f"Expected 6 bridge xovers, got {result.bridge_xovers}"
+    )
 
     # The closing zig across the tooth tips must be placed.
     closing_zig = [
-        xo for xo in updated.crossovers
+        xo
+        for xo in updated.crossovers
         if {xo.half_a.helix_id, xo.half_b.helix_id} == {"h_XY_2_2", "h_XY_2_3"}
     ]
-    assert closing_zig, "Expected a closing-zig crossover across tooth tips h_XY_2_2 ↔ h_XY_2_3"
+    assert closing_zig, (
+        "Expected a closing-zig crossover across tooth tips h_XY_2_2 ↔ h_XY_2_3"
+    )
 
     # Determinism guard: the tiebroken Hamiltonian path (seamed_router `(len(adj[n]), n)`
     # key) makes the route — and thus the single-strand result and crossover set —
     # identical run-to-run.  Any reintroduced set-iteration nondeterminism fails this
     # across CI hash seeds.
     scaffold = [s for s in updated.strands if s.strand_type == StrandType.SCAFFOLD]
-    assert len(scaffold) == 1, f"Expected 1 scaffold strand (deterministic), got {len(scaffold)}"
+    assert len(scaffold) == 1, (
+        f"Expected 1 scaffold strand (deterministic), got {len(scaffold)}"
+    )
 
     def _xover_sig(d):
         return sorted(
-            tuple(sorted([(x.half_a.helix_id, x.half_a.index),
-                          (x.half_b.helix_id, x.half_b.index)]))
+            tuple(
+                sorted(
+                    [
+                        (x.half_a.helix_id, x.half_a.index),
+                        (x.half_b.helix_id, x.half_b.index),
+                    ]
+                )
+            )
             for x in d.crossovers
         )
 
     rerun_design = make_teeth_design()
     rerun_design = rerun_design.copy_with(crossovers=[])
     rerun_updated, _ = auto_scaffold_seamless(rerun_design)
-    assert _xover_sig(updated) == _xover_sig(rerun_updated), "seamless route is not deterministic"
+    assert _xover_sig(updated) == _xover_sig(rerun_updated), (
+        "seamless route is not deterministic"
+    )

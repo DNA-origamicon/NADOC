@@ -28,6 +28,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.api import assembly_state
+
 # _assembly_response is the shared assembly response helper (the assembly-side
 # twin of crud.py's _design_response). It stays in assembly.py — used by
 # every assembly route there — and is imported back here. Same convention as
@@ -104,9 +105,10 @@ def _find_animation(assembly: Assembly, anim_id: str) -> DesignAnimation:
 def create_assembly_animation(body: CreateAssemblyAnimationBody) -> dict:
     """Create a new named animation on the assembly."""
     assembly = assembly_state.get_or_create()
-    anim     = DesignAnimation(name=body.name, fps=body.fps, loop=body.loop)
-    updated  = assembly.model_copy(
-        update={"animations": list(assembly.animations) + [anim]}, deep=True,
+    anim = DesignAnimation(name=body.name, fps=body.fps, loop=body.loop)
+    updated = assembly.model_copy(
+        update={"animations": list(assembly.animations) + [anim]},
+        deep=True,
     )
     assembly_state.set_assembly(updated)
     return _assembly_response(updated)
@@ -116,13 +118,13 @@ def create_assembly_animation(body: CreateAssemblyAnimationBody) -> dict:
 def update_assembly_animation(anim_id: str, body: PatchAssemblyAnimationBody) -> dict:
     """Update animation metadata (name / fps / loop)."""
     assembly = assembly_state.get_or_create()
-    anims    = list(assembly.animations)
-    idx      = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
+    anims = list(assembly.animations)
+    idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
     if idx is None:
         raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-    patch    = body.model_dump(include=body.model_fields_set)
+    patch = body.model_dump(include=body.model_fields_set)
     anims[idx] = anims[idx].model_copy(update=patch)
-    updated  = assembly.model_copy(update={"animations": anims}, deep=True)
+    updated = assembly.model_copy(update={"animations": anims}, deep=True)
     assembly_state.set_assembly(updated)
     return _assembly_response(updated)
 
@@ -131,10 +133,10 @@ def update_assembly_animation(anim_id: str, body: PatchAssemblyAnimationBody) ->
 def delete_assembly_animation(anim_id: str) -> dict:
     """Remove an animation from the assembly."""
     assembly = assembly_state.get_or_create()
-    anims    = [a for a in assembly.animations if a.id != anim_id]
+    anims = [a for a in assembly.animations if a.id != anim_id]
     if len(anims) == len(assembly.animations):
         raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-    updated  = assembly.model_copy(update={"animations": anims}, deep=True)
+    updated = assembly.model_copy(update={"animations": anims}, deep=True)
     assembly_state.set_assembly(updated)
     return _assembly_response(updated)
 
@@ -146,8 +148,8 @@ def create_assembly_keyframe(anim_id: str, body: CreateAssemblyKeyframeBody) -> 
     Automatically captures all assembly joint current_values into joint_values.
     """
     assembly = assembly_state.get_or_create()
-    anims    = list(assembly.animations)
-    idx      = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
+    anims = list(assembly.animations)
+    idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
     if idx is None:
         raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
 
@@ -174,7 +176,8 @@ def create_assembly_keyframe(anim_id: str, body: CreateAssemblyKeyframeBody) -> 
         text_align=body.text_align,
     )
     anims[idx] = anims[idx].model_copy(
-        update={"keyframes": list(anims[idx].keyframes) + [kf]}, deep=True,
+        update={"keyframes": list(anims[idx].keyframes) + [kf]},
+        deep=True,
     )
     updated = assembly.model_copy(update={"animations": anims}, deep=True)
     assembly_state.set_assembly(updated)
@@ -182,21 +185,23 @@ def create_assembly_keyframe(anim_id: str, body: CreateAssemblyKeyframeBody) -> 
 
 
 @router.patch("/assembly/animations/{anim_id}/keyframes/{kf_id}", status_code=200)
-def update_assembly_keyframe(anim_id: str, kf_id: str, body: PatchAssemblyKeyframeBody) -> dict:
+def update_assembly_keyframe(
+    anim_id: str, kf_id: str, body: PatchAssemblyKeyframeBody
+) -> dict:
     """Update a keyframe's properties (silent — no undo push for playback frames)."""
     assembly = assembly_state.get_or_create()
-    anims    = list(assembly.animations)
+    anims = list(assembly.animations)
     anim_idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
     if anim_idx is None:
         raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-    kfs      = list(anims[anim_idx].keyframes)
-    kf_idx   = next((i for i, k in enumerate(kfs) if k.id == kf_id), None)
+    kfs = list(anims[anim_idx].keyframes)
+    kf_idx = next((i for i, k in enumerate(kfs) if k.id == kf_id), None)
     if kf_idx is None:
         raise HTTPException(404, detail=f"Keyframe {kf_id!r} not found.")
-    patch    = body.model_dump(include=body.model_fields_set)
+    patch = body.model_dump(include=body.model_fields_set)
     kfs[kf_idx] = kfs[kf_idx].model_copy(update=patch)
     anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": kfs}, deep=True)
-    updated  = assembly.model_copy(update={"animations": anims}, deep=True)
+    updated = assembly.model_copy(update={"animations": anims}, deep=True)
     assembly_state.set_assembly_silent(updated)
     return _assembly_response(updated)
 
@@ -205,7 +210,7 @@ def update_assembly_keyframe(anim_id: str, kf_id: str, body: PatchAssemblyKeyfra
 def delete_assembly_keyframe(anim_id: str, kf_id: str) -> dict:
     """Remove a keyframe from an assembly animation."""
     assembly = assembly_state.get_or_create()
-    anims    = list(assembly.animations)
+    anims = list(assembly.animations)
     anim_idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
     if anim_idx is None:
         raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
@@ -213,22 +218,26 @@ def delete_assembly_keyframe(anim_id: str, kf_id: str) -> dict:
     if len(kfs) == len(anims[anim_idx].keyframes):
         raise HTTPException(404, detail=f"Keyframe {kf_id!r} not found.")
     anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": kfs}, deep=True)
-    updated  = assembly.model_copy(update={"animations": anims}, deep=True)
+    updated = assembly.model_copy(update={"animations": anims}, deep=True)
     assembly_state.set_assembly(updated)
     return _assembly_response(updated)
 
 
 @router.put("/assembly/animations/{anim_id}/keyframes/reorder", status_code=200)
-def reorder_assembly_keyframes(anim_id: str, body: ReorderAssemblyKeyframesBody) -> dict:
+def reorder_assembly_keyframes(
+    anim_id: str, body: ReorderAssemblyKeyframesBody
+) -> dict:
     """Reorder keyframes by supplying a new ordered list of IDs."""
     assembly = assembly_state.get_or_create()
-    anims    = list(assembly.animations)
+    anims = list(assembly.animations)
     anim_idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
     if anim_idx is None:
         raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-    kf_map   = {k.id: k for k in anims[anim_idx].keyframes}
+    kf_map = {k.id: k for k in anims[anim_idx].keyframes}
     reordered = [kf_map[id] for id in body.ordered_ids if id in kf_map]
-    anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": reordered}, deep=True)
-    updated  = assembly.model_copy(update={"animations": anims}, deep=True)
+    anims[anim_idx] = anims[anim_idx].model_copy(
+        update={"keyframes": reordered}, deep=True
+    )
+    updated = assembly.model_copy(update={"animations": anims}, deep=True)
     assembly_state.set_assembly(updated)
     return _assembly_response(updated)

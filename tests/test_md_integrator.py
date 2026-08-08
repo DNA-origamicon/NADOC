@@ -4,6 +4,7 @@ These pin exp51's findings (experiments/exp51_integrator_factorial/RESULTS.md) i
 code that emits confs, because the whole point of separating the axes was that nothing was
 checking them against a measurement.
 """
+
 from backend.core.md_integrator import (
     RIGID_ALL,
     RIGID_NONE,
@@ -40,7 +41,7 @@ class TestResolve:
         # rigidBonds none at 1 fs unconditionally.
         c = resolve_integrator(1.0, rigid_bonds="all")
         assert c.rigid_bonds == RIGID_ALL
-        assert c.hmr is False          # still auto-off at 1 fs
+        assert c.hmr is False  # still auto-off at 1 fs
 
     def test_none_means_auto_and_is_marked_as_such(self):
         c = resolve_integrator(4.0)
@@ -119,6 +120,7 @@ class TestResidentDecision:
 
     def test_the_timestep_is_not_an_input(self):
         from inspect import signature
+
         assert "timestep_fs" not in signature(resident_decision).parameters
 
     def test_size_gate_decides_when_nobody_chose(self):
@@ -130,11 +132,17 @@ class TestResidentDecision:
     def test_an_explicit_choice_beats_the_size_gate_both_ways(self):
         assert resident_decision(n_atoms=1_000, force_resident=True).on is True
         assert resident_decision(n_atoms=3_139_238, force_resident=False).on is False
-        assert resident_decision(n_atoms=1_000, force_resident=True).decided_by == "user"
+        assert (
+            resident_decision(n_atoms=1_000, force_resident=True).decided_by == "user"
+        )
 
     def test_hard_incompatibilities_beat_the_user(self):
-        for kw in ({"gbis": True}, {"vacuum": True}, {"fixed_atoms": True},
-                   {"carved_fill": 0.5}):
+        for kw in (
+            {"gbis": True},
+            {"vacuum": True},
+            {"fixed_atoms": True},
+            {"carved_fill": 0.5},
+        ):
             d = resident_decision(force_resident=True, **kw)
             assert d.on is False, kw
             assert d.overridden is True, kw

@@ -14,15 +14,16 @@ Smoke layout (bp_start=0, length=15, bp range 0-14):
 Scale function: smoke_bp = round((prod_bp - 7) * 15 / 35)
   7  → 0,  13 → 3,  14 → 3,  27 → 9,  28 → 9,  34 → 11,  35 → 12,  41 → 15→14
 """
+
 from __future__ import annotations
 import copy, json, pathlib
 
 _PROD = pathlib.Path(__file__).parent.parent.parent / "Examples" / "2hb_xover_val.nadoc"
-_OUT  = pathlib.Path(__file__).parent / "smoke_design.nadoc"
+_OUT = pathlib.Path(__file__).parent / "smoke_design.nadoc"
 
 _OLD_START = 7
-_OLD_LEN   = 35
-_NEW_LEN   = 15
+_OLD_LEN = 35
+_NEW_LEN = 15
 _NM_PER_BP = 0.334
 
 
@@ -51,7 +52,7 @@ def main() -> None:
     for s in d["strands"]:
         for dom in s["domains"]:
             dom["start_bp"] = _scale(dom["start_bp"])
-            dom["end_bp"]   = _scale(dom["end_bp"])
+            dom["end_bp"] = _scale(dom["end_bp"])
 
     # ── crossovers: rescale index ─────────────────────────────────────────────
     for c in d["crossovers"]:
@@ -59,21 +60,27 @@ def main() -> None:
         c["half_b"]["index"] = _scale(c["half_b"]["index"])
 
     # ── drop overhangs / extensions (not needed for smoke) ───────────────────
-    d["overhangs"]   = []
-    d["extensions"]  = []
+    d["overhangs"] = []
+    d["extensions"] = []
 
     _OUT.write_text(json.dumps(d, indent=2))
     print(f"Wrote {_OUT}")
 
     # Sanity print
     for s in d["strands"]:
-        print(f"  {s['id']}: " +
-              " | ".join(f"{dom['helix_id']} {dom['start_bp']}→{dom['end_bp']} {dom['direction']}"
-                         for dom in s["domains"]))
+        print(
+            f"  {s['id']}: "
+            + " | ".join(
+                f"{dom['helix_id']} {dom['start_bp']}→{dom['end_bp']} {dom['direction']}"
+                for dom in s["domains"]
+            )
+        )
     print("crossovers:")
     for c in d["crossovers"]:
-        print(f"  {c['half_a']['helix_id']}[{c['half_a']['index']}] ↔ "
-              f"{c['half_b']['helix_id']}[{c['half_b']['index']}]")
+        print(
+            f"  {c['half_a']['helix_id']}[{c['half_a']['index']}] ↔ "
+            f"{c['half_b']['helix_id']}[{c['half_b']['index']}]"
+        )
 
 
 if __name__ == "__main__":

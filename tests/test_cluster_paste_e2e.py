@@ -49,7 +49,9 @@ def _seed() -> Design:
     )
     s = Strand(
         id="s0",
-        domains=[Domain(helix_id=h.id, start_bp=0, end_bp=99, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id=h.id, start_bp=0, end_bp=99, direction=Direction.FORWARD)
+        ],
         strand_type=StrandType.STAPLE,
     )
     return Design(

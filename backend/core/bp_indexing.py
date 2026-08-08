@@ -55,11 +55,14 @@ def get_helix_bp_count(helix: Helix) -> int:
     rounding its length gives the correct count regardless of storage
     convention.
     """
-    ax = np.array([
-        helix.axis_end.x - helix.axis_start.x,
-        helix.axis_end.y - helix.axis_start.y,
-        helix.axis_end.z - helix.axis_start.z,
-    ], dtype=float)
+    ax = np.array(
+        [
+            helix.axis_end.x - helix.axis_start.x,
+            helix.axis_end.y - helix.axis_start.y,
+            helix.axis_end.z - helix.axis_start.z,
+        ],
+        dtype=float,
+    )
     return round(float(np.linalg.norm(ax)) / BDNA_RISE_PER_BP)
 
 
@@ -75,20 +78,27 @@ def get_helix_geo_bp_start(helix: Helix) -> int:
     direction vector, so two helices with different physical starting positions
     get different effective bp starts even when both store ``bp_start=0``.
     """
-    ax = np.array([
-        helix.axis_end.x - helix.axis_start.x,
-        helix.axis_end.y - helix.axis_start.y,
-        helix.axis_end.z - helix.axis_start.z,
-    ], dtype=float)
+    ax = np.array(
+        [
+            helix.axis_end.x - helix.axis_start.x,
+            helix.axis_end.y - helix.axis_start.y,
+            helix.axis_end.z - helix.axis_start.z,
+        ],
+        dtype=float,
+    )
     length = float(np.linalg.norm(ax))
     if length < 1e-12:
         return helix.bp_start
     hat = ax / length
-    start = np.array([helix.axis_start.x, helix.axis_start.y, helix.axis_start.z], dtype=float)
+    start = np.array(
+        [helix.axis_start.x, helix.axis_start.y, helix.axis_start.z], dtype=float
+    )
     return round(float(np.dot(start, hat)) / BDNA_RISE_PER_BP)
 
 
-def global_to_stored_bp(helix: Helix, global_bp: int, geo_start: int | None = None) -> int:
+def global_to_stored_bp(
+    helix: Helix, global_bp: int, geo_start: int | None = None
+) -> int:
     """Convert a physical global bp index to the helix's stored bp index.
 
     ``stored = global − geo_start + helix.bp_start``
@@ -101,7 +111,9 @@ def global_to_stored_bp(helix: Helix, global_bp: int, geo_start: int | None = No
     return global_bp - geo_start + helix.bp_start
 
 
-def stored_to_global_bp(helix: Helix, stored_bp: int, geo_start: int | None = None) -> int:
+def stored_to_global_bp(
+    helix: Helix, stored_bp: int, geo_start: int | None = None
+) -> int:
     """Convert a helix's stored bp index to a physical global bp index.
 
     ``global = stored − helix.bp_start + geo_start``

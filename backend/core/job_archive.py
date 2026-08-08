@@ -37,6 +37,7 @@ _INDEX_NAME = ".archive_index.json"
 
 # ── Index ─────────────────────────────────────────────────────────────────────
 
+
 def _index_path(workspace_dir: Path, kind: str) -> Path:
     return workspace_dir / kind / _INDEX_NAME
 
@@ -82,6 +83,7 @@ def purge_index_entry(workspace_dir: Path, kind: str, job_id: str) -> None:
 
 
 # ── Move with progress ────────────────────────────────────────────────────────
+
 
 def _tree_bytes(path: Path) -> int:
     total = 0
@@ -157,8 +159,16 @@ def _run_archive(job, workspace_dir: Path, kind: str, dest_root: Path) -> None:
     src = job.job_dir(workspace_dir)
     dest = dest_root / job.job_id
     progress = {"moved_bytes": 0, "total_bytes": 0}
-    _set_task(kind, job.job_id, action="archive", state="running",
-              dest=str(dest), moved_bytes=0, total_bytes=0, error=None)
+    _set_task(
+        kind,
+        job.job_id,
+        action="archive",
+        state="running",
+        dest=str(dest),
+        moved_bytes=0,
+        total_bytes=0,
+        error=None,
+    )
     try:
         dest_root.mkdir(parents=True, exist_ok=True)
         # Point the task at the same dict the copy loop mutates so task_status()
@@ -167,7 +177,7 @@ def _run_archive(job, workspace_dir: Path, kind: str, dest_root: Path) -> None:
         _copy_tree_with_progress(src, dest, progress)
         job.archived = True
         job.archive_path = str(dest)
-        job.save(workspace_dir)                 # writes job.json into dest
+        job.save(workspace_dir)  # writes job.json into dest
         idx = read_index(workspace_dir, kind)
         idx[job.job_id] = str(dest)
         _write_index(workspace_dir, kind, idx)
@@ -178,8 +188,13 @@ def _run_archive(job, workspace_dir: Path, kind: str, dest_root: Path) -> None:
             src.unlink()
         else:
             shutil.rmtree(src, ignore_errors=True)
-        _set_task(kind, job.job_id, state="done",
-                  moved_bytes=progress["total_bytes"], total_bytes=progress["total_bytes"])
+        _set_task(
+            kind,
+            job.job_id,
+            state="done",
+            moved_bytes=progress["total_bytes"],
+            total_bytes=progress["total_bytes"],
+        )
     except Exception as e:  # noqa: BLE001
         shutil.rmtree(dest, ignore_errors=True)  # roll back the partial copy
         _set_task(kind, job.job_id, state="error", error=str(e))
@@ -189,25 +204,40 @@ def _run_unarchive(job, workspace_dir: Path, kind: str) -> None:
     src = Path(job.archive_path)
     dest = workspace_dir / kind / job.job_id
     progress = {"moved_bytes": 0, "total_bytes": 0}
-    _set_task(kind, job.job_id, action="unarchive", state="running",
-              dest=str(dest), moved_bytes=0, total_bytes=0, error=None)
+    _set_task(
+        kind,
+        job.job_id,
+        action="unarchive",
+        state="running",
+        dest=str(dest),
+        moved_bytes=0,
+        total_bytes=0,
+        error=None,
+    )
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
         _set_task(kind, job.job_id, _progress=progress)
         _copy_tree_with_progress(src, dest, progress)
         job.archived = False
         job.archive_path = None
-        job.save(workspace_dir)                 # writes job.json into workspace dest
+        job.save(workspace_dir)  # writes job.json into workspace dest
         purge_index_entry(workspace_dir, kind, job.job_id)
         shutil.rmtree(src, ignore_errors=True)
-        _set_task(kind, job.job_id, state="done",
-                  moved_bytes=progress["total_bytes"], total_bytes=progress["total_bytes"])
+        _set_task(
+            kind,
+            job.job_id,
+            state="done",
+            moved_bytes=progress["total_bytes"],
+            total_bytes=progress["total_bytes"],
+        )
     except Exception as e:  # noqa: BLE001
         shutil.rmtree(dest, ignore_errors=True)
         _set_task(kind, job.job_id, state="error", error=str(e))
 
 
-def _check_archive_preconditions(job, workspace_dir: Path, kind: str, dest_root: Path) -> None:
+def _check_archive_preconditions(
+    job, workspace_dir: Path, kind: str, dest_root: Path
+) -> None:
     """Shared validation for archiving a job (async or sync).  Raises on any problem."""
     if job.archived:
         raise ValueError("job is already archived")
@@ -228,8 +258,9 @@ def _check_archive_preconditions(job, workspace_dir: Path, kind: str, dest_root:
     dest = dest_root / job.job_id
     if dest.exists():
         raise FileExistsError(f"destination already exists: {dest}")
-    if dest_root.resolve() == (workspace_dir / kind).resolve() or \
-       _within(dest_root.resolve(), src.resolve()):
+    if dest_root.resolve() == (workspace_dir / kind).resolve() or _within(
+        dest_root.resolve(), src.resolve()
+    ):
         raise ValueError("invalid archive destination")
 
 
@@ -237,7 +268,9 @@ def start_archive(job, workspace_dir: Path, kind: str, dest_root: Path) -> None:
     """Spawn the background archive move. Raises if it can't be started."""
     dest_root = Path(dest_root).expanduser()
     _check_archive_preconditions(job, workspace_dir, kind, dest_root)
-    t = threading.Thread(target=_run_archive, args=(job, workspace_dir, kind, dest_root), daemon=True)
+    t = threading.Thread(
+        target=_run_archive, args=(job, workspace_dir, kind, dest_root), daemon=True
+    )
     t.start()
 
 
@@ -269,7 +302,9 @@ def start_unarchive(job, workspace_dir: Path, kind: str) -> None:
     dest = workspace_dir / kind / job.job_id
     if dest.exists():
         raise FileExistsError(f"workspace folder already exists: {dest}")
-    t = threading.Thread(target=_run_unarchive, args=(job, workspace_dir, kind), daemon=True)
+    t = threading.Thread(
+        target=_run_unarchive, args=(job, workspace_dir, kind), daemon=True
+    )
     t.start()
 
 

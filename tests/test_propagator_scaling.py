@@ -3,22 +3,23 @@
 Pure-numpy math tests — no torch, no GPU.  Pins the crossover model's structure and
 the load-bearing qualitative conclusions so a future edit can't silently flip them.
 """
+
 import numpy as np
 
 from backend.ml.propagator import scaling as sc
 
 
 def test_single_point_split_reconstructs_the_point():
-    m = sc.fit_namd()   # default single measured point, split by pme_fraction
+    m = sc.fit_namd()  # default single measured point, split by pme_fraction
     got = m.cost_ms(sc.MEASURED_NAMD_N)
-    assert abs(got - sc.MEASURED_NAMD_MS_PER_STEP) < 1e-6   # split conserves total
+    assert abs(got - sc.MEASURED_NAMD_MS_PER_STEP) < 1e-6  # split conserves total
 
 
 def test_two_points_fit_exactly():
-    pts = [(17_827, 6.1), (225_504, 22.0)]   # contrived clean pair
+    pts = [(17_827, 6.1), (225_504, 22.0)]  # contrived clean pair
     m = sc.fit_namd(pts)
     for n, y in pts:
-        assert abs(m.cost_ms(n) - y) < 1e-3   # exact 2-param fit through 2 points
+        assert abs(m.cost_ms(n) - y) < 1e-3  # exact 2-param fit through 2 points
     assert "fit of 2" in m.provenance
 
 
@@ -46,7 +47,7 @@ def test_levers_move_crossover_the_right_way():
     m = sc.fit_namd()
     s_base = sc.speedup(1e6, m, "h64_L2", step_mult=1.0)
     s_stride = sc.speedup(1e6, m, "h64_L2", step_mult=4.0)
-    assert s_stride > s_base                                   # larger step -> faster
+    assert s_stride > s_base  # larger step -> faster
     # a tiny model is cheaper per step than an accurate one
     assert sc.gnn_coeff("h16_L1") < sc.gnn_coeff("h128_L3")
 
@@ -58,16 +59,16 @@ def test_overhead_fit_reproduces_controlled_points_and_extrapolates_sanely():
     m = sc.fit_namd_overhead()
     for n, y in sc.CONTROLLED_NAMD_POINTS:
         assert abs(m.cost_ms(n) - y) < 1e-6
-    assert m.c0 > 0 and m.a > 0                      # real overhead + positive slope
-    assert m.cost_ms(1e6) > m.cost_ms(1.4e5) > 0     # monotone, sane extrapolation
+    assert m.c0 > 0 and m.a > 0  # real overhead + positive slope
+    assert m.cost_ms(1e6) > m.cost_ms(1.4e5) > 0  # monotone, sane extrapolation
 
 
 def test_two_term_pme_fit_is_degenerate_on_sublinear_data():
     """Documents WHY the overhead model is needed: the measured points are sub-linear
     in N, so the a*N + b*N*log2N fit yields a spurious negative b (nonsense at scale)."""
     m = sc.fit_namd(sc.CONTROLLED_NAMD_POINTS)
-    assert m.b < 0                                   # degenerate — do not extrapolate this
-    assert m.cost_ms(1e6) < 0                         # the nonsense the overhead fit avoids
+    assert m.b < 0  # degenerate — do not extrapolate this
+    assert m.cost_ms(1e6) < 0  # the nonsense the overhead fit avoids
 
 
 def test_accuracy_capable_gnn_is_much_costlier_per_atom_than_namd():
@@ -75,7 +76,7 @@ def test_accuracy_capable_gnn_is_much_costlier_per_atom_than_namd():
     is ~60x that — the reason atomistic-only cannot win at any single-GPU scale."""
     m = sc.fit_namd_overhead()
     ratio = sc.gnn_coeff("h64_L2") / m.a
-    assert ratio > 30                                # order ~60x, robustly >>1
+    assert ratio > 30  # order ~60x, robustly >>1
 
 
 def test_report_runs_and_returns_structure():

@@ -93,12 +93,12 @@ VDW_RADIUS: dict[str, float] = {
 # ── CPK colours (hex int) ─────────────────────────────────────────────────────
 
 CPK_COLOR: dict[str, int] = {
-    "P": 0xFF8C00,   # orange
-    "C": 0x505050,   # dark grey
-    "N": 0x3050F8,   # blue
-    "O": 0xFF0D0D,   # red
-    "S": 0xFFFF30,   # yellow
-    "H": 0xFFFFFF,   # white
+    "P": 0xFF8C00,  # orange
+    "C": 0x505050,  # dark grey
+    "N": 0x3050F8,  # blue
+    "O": 0xFF0D0D,  # red
+    "S": 0xFFFF30,  # yellow
+    "H": 0xFFFFFF,  # white
     "Se": 0xFFA100,
     "Fe": 0xE06633,
     "Zn": 0x7D80B0,
@@ -130,17 +130,17 @@ _SUGAR: tuple[_AtomDef, ...] = (
     #   O3′ re-derived on the intersection circle (r_C3O3=1.52Å, r_O3P=1.61Å), biased to crystal.
     # OP1/OP2 shifted by the same ΔP to restore crystal geometry relative to corrected P:
     #   P→OP1 = 1.474 Å, P→OP2 = 1.494 Å, OP1–P–OP2 = 119.7°.
-    ("P",   "P", -0.1020,  0.1588,  0.2560),
-    ("OP1", "O", -0.2263,  0.1547,  0.3352),
-    ("OP2", "O", -0.0584,  0.0376,  0.1803),
-    ("O5'", "O", -0.0629,  0.2645,  0.1684),
-    ("C5'", "C", -0.0543,  0.4005,  0.2139),
-    ("C4'", "C",  0.0331,  0.4838,  0.1220),
-    ("O4'", "O",  0.1733,  0.4481,  0.1316),
-    ("C3'", "C", -0.0013,  0.4772, -0.0269),
-    ("O3'", "O", -0.0605,  0.5756, -0.1253),
-    ("C2'", "C",  0.1079,  0.3896, -0.0850),
-    ("C1'", "C",  0.2248,  0.4334,  0.0000),
+    ("P", "P", -0.1020, 0.1588, 0.2560),
+    ("OP1", "O", -0.2263, 0.1547, 0.3352),
+    ("OP2", "O", -0.0584, 0.0376, 0.1803),
+    ("O5'", "O", -0.0629, 0.2645, 0.1684),
+    ("C5'", "C", -0.0543, 0.4005, 0.2139),
+    ("C4'", "C", 0.0331, 0.4838, 0.1220),
+    ("O4'", "O", 0.1733, 0.4481, 0.1316),
+    ("C3'", "C", -0.0013, 0.4772, -0.0269),
+    ("O3'", "O", -0.0605, 0.5756, -0.1253),
+    ("C2'", "C", 0.1079, 0.3896, -0.0850),
+    ("C1'", "C", 0.2248, 0.4334, 0.0000),
 )
 
 # ── Intra-residue bond table (by atom name pairs) ─────────────────────────────
@@ -148,10 +148,16 @@ _SUGAR: tuple[_AtomDef, ...] = (
 # (O3′ → next P) are added during build_atomistic_model().
 
 _SUGAR_BONDS: tuple[tuple[str, str], ...] = (
-    ("P",   "OP1"), ("P",   "OP2"),
-    ("P",   "O5'"), ("O5'", "C5'"),
-    ("C5'", "C4'"), ("C4'", "O4'"), ("C4'", "C3'"),
-    ("O4'", "C1'"), ("C3'", "O3'"), ("C3'", "C2'"),
+    ("P", "OP1"),
+    ("P", "OP2"),
+    ("P", "O5'"),
+    ("O5'", "C5'"),
+    ("C5'", "C4'"),
+    ("C4'", "O4'"),
+    ("C4'", "C3'"),
+    ("O4'", "C1'"),
+    ("C3'", "O3'"),
+    ("C3'", "C2'"),
     ("C2'", "C1'"),
 )
 
@@ -167,21 +173,28 @@ _DT_BASE: tuple[_AtomDef, ...] = (
     # C1′-referenced. 1ZEW chain A inner DT residues A:3, A:5.
     # NADOC synthetic frame (34.3°/bp, 0.334 nm/bp).  C1′ z = 0 convention.
     # Rigid-body rotation −9.393° around C1′ (z-axis) from Entry 4 (equidistant WC).
-    ("N1", "N",  0.3323,  0.3376, -0.0216),
-    ("C2", "C",  0.4595,  0.3874, -0.0278),
-    ("O2", "O",  0.4844,  0.5044, -0.0154),
-    ("N3", "N",  0.5569,  0.2956, -0.0491),
-    ("C4", "C",  0.5402,  0.1621, -0.0638),
-    ("O4", "O",  0.6374,  0.0912, -0.0824),
-    ("C5", "C",  0.4043,  0.1167, -0.0557),
-    ("C6", "C",  0.3080,  0.2053, -0.0356),
-    ("C7", "C",  0.3775, -0.0261, -0.0697),
+    ("N1", "N", 0.3323, 0.3376, -0.0216),
+    ("C2", "C", 0.4595, 0.3874, -0.0278),
+    ("O2", "O", 0.4844, 0.5044, -0.0154),
+    ("N3", "N", 0.5569, 0.2956, -0.0491),
+    ("C4", "C", 0.5402, 0.1621, -0.0638),
+    ("O4", "O", 0.6374, 0.0912, -0.0824),
+    ("C5", "C", 0.4043, 0.1167, -0.0557),
+    ("C6", "C", 0.3080, 0.2053, -0.0356),
+    ("C7", "C", 0.3775, -0.0261, -0.0697),
 )
 
 _DT_BONDS: tuple[tuple[str, str], ...] = (
-    ("C1'", "N1"), ("N1", "C2"), ("C2", "N3"), ("N3", "C4"),
-    ("C4",  "C5"), ("C5", "C6"), ("C6", "N1"),
-    ("C2",  "O2"), ("C4", "O4"), ("C5", "C7"),
+    ("C1'", "N1"),
+    ("N1", "C2"),
+    ("C2", "N3"),
+    ("N3", "C4"),
+    ("C4", "C5"),
+    ("C5", "C6"),
+    ("C6", "N1"),
+    ("C2", "O2"),
+    ("C4", "O4"),
+    ("C5", "C7"),
 )
 
 # ── Cytosine (DC) ─────────────────────────────────────────────────────────────
@@ -190,20 +203,26 @@ _DC_BASE: tuple[_AtomDef, ...] = (
     # C1′-referenced. 1ZEW chain A DC residue A:4 (single residue, only DC available).
     # NADOC synthetic frame (34.3°/bp, 0.334 nm/bp).  C1′ z = 0 convention.
     # Rigid-body rotation −13.031° around C1′ (z-axis) from Entry 4 (equidistant WC).
-    ("N1", "N",  0.3036,  0.3102, -0.0184),
-    ("C2", "C",  0.4417,  0.3222, -0.0336),
-    ("O2", "O",  0.4927,  0.4348, -0.0267),
-    ("N3", "N",  0.5162,  0.2113, -0.0550),
-    ("C4", "C",  0.4574,  0.0919, -0.0605),
-    ("N4", "N",  0.5344, -0.0146, -0.0837),
-    ("C5", "C",  0.3168,  0.0765, -0.0426),
-    ("C6", "C",  0.2444,  0.1874, -0.0220),
+    ("N1", "N", 0.3036, 0.3102, -0.0184),
+    ("C2", "C", 0.4417, 0.3222, -0.0336),
+    ("O2", "O", 0.4927, 0.4348, -0.0267),
+    ("N3", "N", 0.5162, 0.2113, -0.0550),
+    ("C4", "C", 0.4574, 0.0919, -0.0605),
+    ("N4", "N", 0.5344, -0.0146, -0.0837),
+    ("C5", "C", 0.3168, 0.0765, -0.0426),
+    ("C6", "C", 0.2444, 0.1874, -0.0220),
 )
 
 _DC_BONDS: tuple[tuple[str, str], ...] = (
-    ("C1'", "N1"), ("N1", "C2"), ("C2", "N3"), ("N3", "C4"),
-    ("C4",  "C5"), ("C5", "C6"), ("C6", "N1"),
-    ("C2",  "O2"), ("C4", "N4"),
+    ("C1'", "N1"),
+    ("N1", "C2"),
+    ("C2", "N3"),
+    ("N3", "C4"),
+    ("C4", "C5"),
+    ("C5", "C6"),
+    ("C6", "N1"),
+    ("C2", "O2"),
+    ("C4", "N4"),
 )
 
 # ── Adenine (DA) ──────────────────────────────────────────────────────────────
@@ -212,23 +231,31 @@ _DA_BASE: tuple[_AtomDef, ...] = (
     # C1′-referenced. 1ZEW chain A inner DA residues A:6, A:8.
     # NADOC synthetic frame (34.3°/bp, 0.334 nm/bp).  C1′ z = 0 convention.
     # Rigid-body rotation +2.255° around C1′ (z-axis) from Entry 4 (equidistant WC).
-    ("N9", "N",  0.3294,  0.3340, -0.0197),
-    ("C8", "C",  0.3150,  0.1998, -0.0436),
-    ("N7", "N",  0.4280,  0.1362, -0.0562),
-    ("C5", "C",  0.5236,  0.2354, -0.0393),
-    ("C4", "C",  0.4641,  0.3576, -0.0173),
-    ("N3", "N",  0.5259,  0.4751,  0.0026),
-    ("C2", "C",  0.6577,  0.4597, -0.0013),
-    ("N1", "N",  0.7290,  0.3488, -0.0211),
-    ("C6", "C",  0.6635,  0.2325, -0.0405),
-    ("N6", "N",  0.7341,  0.1216, -0.0589),
+    ("N9", "N", 0.3294, 0.3340, -0.0197),
+    ("C8", "C", 0.3150, 0.1998, -0.0436),
+    ("N7", "N", 0.4280, 0.1362, -0.0562),
+    ("C5", "C", 0.5236, 0.2354, -0.0393),
+    ("C4", "C", 0.4641, 0.3576, -0.0173),
+    ("N3", "N", 0.5259, 0.4751, 0.0026),
+    ("C2", "C", 0.6577, 0.4597, -0.0013),
+    ("N1", "N", 0.7290, 0.3488, -0.0211),
+    ("C6", "C", 0.6635, 0.2325, -0.0405),
+    ("N6", "N", 0.7341, 0.1216, -0.0589),
 )
 
 _DA_BONDS: tuple[tuple[str, str], ...] = (
     ("C1'", "N9"),
-    ("N9",  "C8"), ("C8", "N7"), ("N7", "C5"), ("C5", "C4"), ("C4", "N9"),  # 5-ring
-    ("C4",  "N3"), ("N3", "C2"), ("C2", "N1"), ("N1", "C6"), ("C6", "C5"),  # 6-ring
-    ("C6",  "N6"),
+    ("N9", "C8"),
+    ("C8", "N7"),
+    ("N7", "C5"),
+    ("C5", "C4"),
+    ("C4", "N9"),  # 5-ring
+    ("C4", "N3"),
+    ("N3", "C2"),
+    ("C2", "N1"),
+    ("N1", "C6"),
+    ("C6", "C5"),  # 6-ring
+    ("C6", "N6"),
 )
 
 # ── Guanine (DG) ──────────────────────────────────────────────────────────────
@@ -237,24 +264,33 @@ _DG_BASE: tuple[_AtomDef, ...] = (
     # C1′-referenced. 1ZEW chain A DG residue A:7 (single residue, only DG available).
     # NADOC synthetic frame (34.3°/bp, 0.334 nm/bp).  C1′ z = 0 convention.
     # Rigid-body rotation +16.962° around C1′ (z-axis) from Entry 4 (equidistant WC).
-    ("N9", "N",  0.3499,  0.3595,  0.0046),
-    ("C8", "C",  0.3675,  0.2235,  0.0094),
-    ("N7", "N",  0.4934,  0.1882,  0.0109),
-    ("C5", "C",  0.5625,  0.3088,  0.0071),
-    ("C4", "C",  0.4750,  0.4149,  0.0034),
-    ("N3", "N",  0.5027,  0.5468, -0.0009),
-    ("C2", "C",  0.6323,  0.5701, -0.0006),
-    ("N2", "N",  0.6768,  0.6966, -0.0027),
-    ("N1", "N",  0.7279,  0.4717,  0.0024),
-    ("C6", "C",  0.7020,  0.3352,  0.0063),
-    ("O6", "O",  0.7954,  0.2550,  0.0088),
+    ("N9", "N", 0.3499, 0.3595, 0.0046),
+    ("C8", "C", 0.3675, 0.2235, 0.0094),
+    ("N7", "N", 0.4934, 0.1882, 0.0109),
+    ("C5", "C", 0.5625, 0.3088, 0.0071),
+    ("C4", "C", 0.4750, 0.4149, 0.0034),
+    ("N3", "N", 0.5027, 0.5468, -0.0009),
+    ("C2", "C", 0.6323, 0.5701, -0.0006),
+    ("N2", "N", 0.6768, 0.6966, -0.0027),
+    ("N1", "N", 0.7279, 0.4717, 0.0024),
+    ("C6", "C", 0.7020, 0.3352, 0.0063),
+    ("O6", "O", 0.7954, 0.2550, 0.0088),
 )
 
 _DG_BONDS: tuple[tuple[str, str], ...] = (
     ("C1'", "N9"),
-    ("N9",  "C8"), ("C8", "N7"), ("N7", "C5"), ("C5", "C4"), ("C4", "N9"),  # 5-ring
-    ("C4",  "N3"), ("N3", "C2"), ("C2", "N1"), ("N1", "C6"), ("C6", "C5"),  # 6-ring
-    ("C6",  "O6"), ("C2", "N2"),
+    ("N9", "C8"),
+    ("C8", "N7"),
+    ("N7", "C5"),
+    ("C5", "C4"),
+    ("C4", "N9"),  # 5-ring
+    ("C4", "N3"),
+    ("N3", "C2"),
+    ("C2", "N1"),
+    ("N1", "C6"),
+    ("C6", "C5"),  # 6-ring
+    ("C6", "O6"),
+    ("C2", "N2"),
 )
 
 # ── REVERSE strand base templates (chain B, 1ZEW inner residues 13–18) ──────────
@@ -270,62 +306,62 @@ _DT_BASE_REV: tuple[_AtomDef, ...] = (
     # C1′-referenced. 1ZEW chain B inner DT residues B:13, B:15.
     # NADOC synthetic REV frame (_atom_frame +58.2° P-P correction).  C1′ z = 0.
     # Rigid-body rotation −13.591° around C1′ (z-axis) from Entry 4 (equidistant WC).
-    ("N1", "N",  0.3496,  0.3665, -0.0261),
-    ("C2", "C",  0.4634,  0.4436, -0.0334),
-    ("O2", "O",  0.4649,  0.5642, -0.0229),
-    ("N3", "N",  0.5762,  0.3735, -0.0534),
-    ("C4", "C",  0.5866,  0.2378, -0.0667),
-    ("O4", "O",  0.6958,  0.1884, -0.0818),
-    ("C5", "C",  0.4633,  0.1636, -0.0602),
-    ("C6", "C",  0.3525,  0.2311, -0.0410),
-    ("C7", "C",  0.4647,  0.0158, -0.0747),
+    ("N1", "N", 0.3496, 0.3665, -0.0261),
+    ("C2", "C", 0.4634, 0.4436, -0.0334),
+    ("O2", "O", 0.4649, 0.5642, -0.0229),
+    ("N3", "N", 0.5762, 0.3735, -0.0534),
+    ("C4", "C", 0.5866, 0.2378, -0.0667),
+    ("O4", "O", 0.6958, 0.1884, -0.0818),
+    ("C5", "C", 0.4633, 0.1636, -0.0602),
+    ("C6", "C", 0.3525, 0.2311, -0.0410),
+    ("C7", "C", 0.4647, 0.0158, -0.0747),
 )
 
 _DC_BASE_REV: tuple[_AtomDef, ...] = (
     # C1′-referenced. 1ZEW chain B DC residue B:14 (single residue, only DC available).
     # NADOC synthetic REV frame (_atom_frame +58.2° P-P correction).  C1′ z = 0.
     # Rigid-body rotation −36.459° around C1′ (z-axis) from Entry 4 (equidistant WC).
-    ("N1", "N",  0.3085,  0.3159, -0.0303),
-    ("C2", "C",  0.4427,  0.3362, -0.0634),
-    ("O2", "O",  0.4866,  0.4517, -0.0667),
-    ("N3", "N",  0.5210,  0.2297, -0.0911),
-    ("C4", "C",  0.4700,  0.1062, -0.0866),
-    ("N4", "N",  0.5510,  0.0041, -0.1146),
-    ("C5", "C",  0.3335,  0.0825, -0.0536),
-    ("C6", "C",  0.2568,  0.1893, -0.0265),
+    ("N1", "N", 0.3085, 0.3159, -0.0303),
+    ("C2", "C", 0.4427, 0.3362, -0.0634),
+    ("O2", "O", 0.4866, 0.4517, -0.0667),
+    ("N3", "N", 0.5210, 0.2297, -0.0911),
+    ("C4", "C", 0.4700, 0.1062, -0.0866),
+    ("N4", "N", 0.5510, 0.0041, -0.1146),
+    ("C5", "C", 0.3335, 0.0825, -0.0536),
+    ("C6", "C", 0.2568, 0.1893, -0.0265),
 )
 
 _DA_BASE_REV: tuple[_AtomDef, ...] = (
     # C1′-referenced. 1ZEW chain B inner DA residues B:16, B:18.
     # NADOC synthetic REV frame (_atom_frame +58.2° P-P correction).  C1′ z = 0.
     # Rigid-body rotation +0.997° around C1′ (z-axis) from Entry 4 (equidistant WC).
-    ("N9", "N",  0.3501,  0.3637, -0.0302),
-    ("C8", "C",  0.3649,  0.2310, -0.0607),
-    ("N7", "N",  0.4892,  0.1941, -0.0782),
-    ("C5", "C",  0.5614,  0.3104, -0.0588),
-    ("C4", "C",  0.4769,  0.4161, -0.0309),
-    ("N3", "N",  0.5126,  0.5431, -0.0078),
-    ("C2", "C",  0.6452,  0.5565, -0.0150),
-    ("N1", "N",  0.7387,  0.4644, -0.0400),
-    ("C6", "C",  0.6995,  0.3375, -0.0624),
-    ("N6", "N",  0.7927,  0.2449, -0.0861),
+    ("N9", "N", 0.3501, 0.3637, -0.0302),
+    ("C8", "C", 0.3649, 0.2310, -0.0607),
+    ("N7", "N", 0.4892, 0.1941, -0.0782),
+    ("C5", "C", 0.5614, 0.3104, -0.0588),
+    ("C4", "C", 0.4769, 0.4161, -0.0309),
+    ("N3", "N", 0.5126, 0.5431, -0.0078),
+    ("C2", "C", 0.6452, 0.5565, -0.0150),
+    ("N1", "N", 0.7387, 0.4644, -0.0400),
+    ("C6", "C", 0.6995, 0.3375, -0.0624),
+    ("N6", "N", 0.7927, 0.2449, -0.0861),
 )
 
 _DG_BASE_REV: tuple[_AtomDef, ...] = (
     # C1′-referenced. 1ZEW chain B DG residue B:17 (single residue, only DG available).
     # NADOC synthetic REV frame (_atom_frame +58.2° P-P correction).  C1′ z = 0.
     # Rigid-body rotation −10.173° around C1′ (z-axis) from Entry 4 (equidistant WC).
-    ("N9", "N",  0.3494,  0.3590,  0.0079),
-    ("C8", "C",  0.3648,  0.2232, -0.0015),
-    ("N7", "N",  0.4886,  0.1847,  0.0126),
-    ("C5", "C",  0.5591,  0.3026,  0.0319),
-    ("C4", "C",  0.4744,  0.4109,  0.0288),
-    ("N3", "N",  0.5044,  0.5416,  0.0434),
-    ("C2", "C",  0.6339,  0.5607,  0.0621),
-    ("N2", "N",  0.6814,  0.6847,  0.0781),
-    ("N1", "N",  0.7261,  0.4595,  0.0666),
-    ("C6", "C",  0.6973,  0.3244,  0.0523),
-    ("O6", "O",  0.7880,  0.2414,  0.0588),
+    ("N9", "N", 0.3494, 0.3590, 0.0079),
+    ("C8", "C", 0.3648, 0.2232, -0.0015),
+    ("N7", "N", 0.4886, 0.1847, 0.0126),
+    ("C5", "C", 0.5591, 0.3026, 0.0319),
+    ("C4", "C", 0.4744, 0.4109, 0.0288),
+    ("N3", "N", 0.5044, 0.5416, 0.0434),
+    ("C2", "C", 0.6339, 0.5607, 0.0621),
+    ("N2", "N", 0.6814, 0.6847, 0.0781),
+    ("N1", "N", 0.7261, 0.4595, 0.0666),
+    ("C6", "C", 0.6973, 0.3244, 0.0523),
+    ("O6", "O", 0.7880, 0.2414, 0.0588),
 )
 
 # ── Assemble template dicts ────────────────────────────────────────────────────
@@ -340,7 +376,9 @@ BASE_TEMPLATES: dict[str, tuple[tuple[_AtomDef, ...], tuple[tuple[str, str], ...
 
 # BASE_TEMPLATES_REV[residue] = (atom_defs, bond_pairs) — REVERSE strand
 # Extracted from 1ZEW chain B; use when direction == Direction.REVERSE.
-BASE_TEMPLATES_REV: dict[str, tuple[tuple[_AtomDef, ...], tuple[tuple[str, str], ...]]] = {
+BASE_TEMPLATES_REV: dict[
+    str, tuple[tuple[_AtomDef, ...], tuple[tuple[str, str], ...]]
+] = {
     "DA": (_DA_BASE_REV, _DA_BONDS),
     "DT": (_DT_BASE_REV, _DT_BONDS),
     "DG": (_DG_BASE_REV, _DG_BONDS),
@@ -348,8 +386,14 @@ BASE_TEMPLATES_REV: dict[str, tuple[tuple[_AtomDef, ...], tuple[tuple[str, str],
 }
 
 _BASE_CHAR_TO_RESIDUE: dict[str, str] = {
-    "A": "DA", "T": "DT", "G": "DG", "C": "DC",
-    "a": "DA", "t": "DT", "g": "DG", "c": "DC",
+    "A": "DA",
+    "T": "DT",
+    "G": "DG",
+    "C": "DC",
+    "a": "DA",
+    "t": "DT",
+    "g": "DG",
+    "c": "DC",
 }
 
 # ── Output dataclass ──────────────────────────────────────────────────────────
@@ -357,23 +401,23 @@ _BASE_CHAR_TO_RESIDUE: dict[str, str] = {
 
 @dataclass(slots=True)
 class Atom:
-    serial:     int
-    name:       str
-    element:    str
-    residue:    str        # DA / DT / DG / DC
-    chain_id:   str        # A / B / C … (one per strand, wrapping at Z)
-    seq_num:    int        # 1-based residue number within chain
-    x:          float      # nm, world frame
-    y:          float
-    z:          float
-    strand_id:    str
-    helix_id:     str
-    bp_index:     int
-    direction:    str        # "FORWARD" | "REVERSE"
-    is_modified:  bool  = False
+    serial: int
+    name: str
+    element: str
+    residue: str  # DA / DT / DG / DC
+    chain_id: str  # A / B / C … (one per strand, wrapping at Z)
+    seq_num: int  # 1-based residue number within chain
+    x: float  # nm, world frame
+    y: float
+    z: float
+    strand_id: str
+    helix_id: str
+    bp_index: int
+    direction: str  # "FORWARD" | "REVERSE"
+    is_modified: bool = False
     # Extra-crossover-base interpolation (empty / 0.0 for regular nucleotides)
-    aux_helix_id: str   = ""   # destination helix for extra-base lerp during Q expansion
-    aux_t:        float = 0.0  # lerp weight 0→1 (src helix → aux_helix_id)
+    aux_helix_id: str = ""  # destination helix for extra-base lerp during Q expansion
+    aux_t: float = 0.0  # lerp weight 0→1 (src helix → aux_helix_id)
     # Extra-crossover-base identity (None for regular nucleotides).  The stored
     # helix_id/bp_index/direction stay the SOURCE nucleotide's key (so the topology
     # writers are unchanged); these let the relaxed-display reconstruction and the MD
@@ -385,20 +429,20 @@ class Atom:
     # ``copy_k`` (geometry emission order, 0 = base) disambiguates the copies so the MD
     # P-atom mapping can address each via ``(helix_id, bp_index, direction, copy_k)``
     # instead of collapsing them (the analogue of ``extra_base_k`` for crossover inserts).
-    copy_k:       Optional[int] = None
+    copy_k: Optional[int] = None
     # Strand-extension tail identity (None for regular nucleotides).  Like the
     # extra-base fields above, the stored helix_id/bp_index/direction remain the
     # ANCHOR nucleotide's key so the existing topology writers are unchanged; these
     # let the display + MD P-atom mapping address each tail base as
     # ``("__ext_<id>", ext_k, direction)`` — the same key the oxDNA walk emits.
     extension_id: Optional[str] = None
-    ext_k:        Optional[int] = None
+    ext_k: Optional[int] = None
 
 
 @dataclass
 class AtomisticModel:
-    atoms:  list[Atom]
-    bonds:  list[tuple[int, int]]  # 0-based serial pairs
+    atoms: list[Atom]
+    bonds: list[tuple[int, int]]  # 0-based serial pairs
 
 
 def merge_models(*models: AtomisticModel) -> AtomisticModel:
@@ -410,22 +454,31 @@ def merge_models(*models: AtomisticModel) -> AtomisticModel:
         if not model.atoms:
             continue
         for a in model.atoms:
-            atoms.append(Atom(
-                serial=a.serial + offset,
-                name=a.name, element=a.element, residue=a.residue,
-                chain_id=a.chain_id, seq_num=a.seq_num,
-                x=a.x, y=a.y, z=a.z,
-                strand_id=a.strand_id, helix_id=a.helix_id,
-                bp_index=a.bp_index, direction=a.direction,
-                is_modified=a.is_modified,
-                aux_helix_id=a.aux_helix_id,
-                aux_t=a.aux_t,
-                crossover_id=a.crossover_id,
-                extra_base_k=a.extra_base_k,
-                copy_k=getattr(a, "copy_k", None),
-                extension_id=getattr(a, "extension_id", None),
-                ext_k=getattr(a, "ext_k", None),
-            ))
+            atoms.append(
+                Atom(
+                    serial=a.serial + offset,
+                    name=a.name,
+                    element=a.element,
+                    residue=a.residue,
+                    chain_id=a.chain_id,
+                    seq_num=a.seq_num,
+                    x=a.x,
+                    y=a.y,
+                    z=a.z,
+                    strand_id=a.strand_id,
+                    helix_id=a.helix_id,
+                    bp_index=a.bp_index,
+                    direction=a.direction,
+                    is_modified=a.is_modified,
+                    aux_helix_id=a.aux_helix_id,
+                    aux_t=a.aux_t,
+                    crossover_id=a.crossover_id,
+                    extra_base_k=a.extra_base_k,
+                    copy_k=getattr(a, "copy_k", None),
+                    extension_id=getattr(a, "extension_id", None),
+                    ext_k=getattr(a, "ext_k", None),
+                )
+            )
         for i, j in model.bonds:
             bonds.append((i + offset, j + offset))
         offset += len(model.atoms)
@@ -465,7 +518,9 @@ def atomistic_model_from_reference(
     ref = getattr(design, "atomistic_reference", None)
     if ref is None or not ref.atoms:
         return None
-    if ref.topology_hash and ref.topology_hash != atomistic_reference_topology_hash(design):
+    if ref.topology_hash and ref.topology_hash != atomistic_reference_topology_hash(
+        design
+    ):
         return None
 
     atoms: list[Atom] = []
@@ -475,29 +530,31 @@ def atomistic_model_from_reference(
             continue
         new_serial = len(atoms)
         old_to_new[int(ref_atom.serial)] = new_serial
-        atoms.append(Atom(
-            serial=new_serial,
-            name=ref_atom.name,
-            element=ref_atom.element,
-            residue=ref_atom.residue,
-            chain_id=ref_atom.chain_id,
-            seq_num=ref_atom.seq_num,
-            x=ref_atom.x,
-            y=ref_atom.y,
-            z=ref_atom.z,
-            strand_id=ref_atom.strand_id,
-            helix_id=ref_atom.helix_id,
-            bp_index=ref_atom.bp_index,
-            direction=ref_atom.direction,
-            is_modified=ref_atom.is_modified,
-            aux_helix_id=ref_atom.aux_helix_id,
-            aux_t=ref_atom.aux_t,
-            crossover_id=getattr(ref_atom, "crossover_id", None),
-            extra_base_k=getattr(ref_atom, "extra_base_k", None),
-            copy_k=getattr(ref_atom, "copy_k", None),
-            extension_id=getattr(ref_atom, "extension_id", None),
-            ext_k=getattr(ref_atom, "ext_k", None),
-        ))
+        atoms.append(
+            Atom(
+                serial=new_serial,
+                name=ref_atom.name,
+                element=ref_atom.element,
+                residue=ref_atom.residue,
+                chain_id=ref_atom.chain_id,
+                seq_num=ref_atom.seq_num,
+                x=ref_atom.x,
+                y=ref_atom.y,
+                z=ref_atom.z,
+                strand_id=ref_atom.strand_id,
+                helix_id=ref_atom.helix_id,
+                bp_index=ref_atom.bp_index,
+                direction=ref_atom.direction,
+                is_modified=ref_atom.is_modified,
+                aux_helix_id=ref_atom.aux_helix_id,
+                aux_t=ref_atom.aux_t,
+                crossover_id=getattr(ref_atom, "crossover_id", None),
+                extra_base_k=getattr(ref_atom, "extra_base_k", None),
+                copy_k=getattr(ref_atom, "copy_k", None),
+                extension_id=getattr(ref_atom, "extension_id", None),
+                ext_k=getattr(ref_atom, "ext_k", None),
+            )
+        )
 
     bonds: list[tuple[int, int]] = []
     for i, j in ref.bonds:
@@ -526,22 +583,26 @@ def atomistic_model_from_reference(
 # is blocked on the extra-base and strand-extension tail placers, which are calibrated
 # against these templates' local origin.  Tracked as TD-27; listed as locked alongside
 # the _PHASE_* constants in atomistic_minimisers.py.
-_FRAME_ROT_RAD: float = -0.646577   # −37.05° (template pre-compensation cancel)
+_FRAME_ROT_RAD: float = -0.646577  # −37.05° (template pre-compensation cancel)
 
 # Built once instead of at each of the three application sites (_atom_frame,
 # _atom_frames_batch, _extra_base_frame), so they cannot drift apart.  Read-only: it is
 # only ever the right operand of `R @ _FRAME_ROT_M`.
-_FRAME_ROT_M: "_np.ndarray" = _np.array([
-    [_math.cos(_FRAME_ROT_RAD), -_math.sin(_FRAME_ROT_RAD), 0.0],
-    [_math.sin(_FRAME_ROT_RAD),  _math.cos(_FRAME_ROT_RAD), 0.0],
-    [0.0,                        0.0,                       1.0],
-])
+_FRAME_ROT_M: "_np.ndarray" = _np.array(
+    [
+        [_math.cos(_FRAME_ROT_RAD), -_math.sin(_FRAME_ROT_RAD), 0.0],
+        [_math.sin(_FRAME_ROT_RAD), _math.cos(_FRAME_ROT_RAD), 0.0],
+        [0.0, 0.0, 1.0],
+    ]
+)
 _FRAME_ROT_M.setflags(write=False)
 
 # The geometric layer places backbone beads at HELIX_RADIUS (1.0 nm).
 # Correcting to _ATOMISTIC_P_RADIUS places the radial frame origin at the
 # real P-to-axis distance measured from 1ZEW inner residues.
-_ATOMISTIC_P_RADIUS: float = 0.886  # nm  (measured mean P-to-axis from 1ZEW inner residues)
+_ATOMISTIC_P_RADIUS: float = (
+    0.886  # nm  (measured mean P-to-axis from 1ZEW inner residues)
+)
 
 # Real B-DNA P-P azimuthal separation (measured from 1ZEW inner residues): 208.2°.
 # This is the angle going counterclockwise (CCW) from the FORWARD strand P to the
@@ -556,7 +617,7 @@ _ATOMISTIC_P_RADIUS: float = 0.886  # nm  (measured mean P-to-axis from 1ZEW inn
 # For the ATOMISTIC layer only, REVERSE strand P is rotated to the correct angle:
 #   FORWARD helix: e_radial rotated +58.2° CCW → REV P lands at fwd+208.2°
 #   REVERSE helix: e_radial rotated  −1.8° (CW) → REV P lands at fwd+208.2°
-_ATOMISTIC_PP_SEP_RAD: float = _math.radians(208.2)          # 1ZEW empirical mean
+_ATOMISTIC_PP_SEP_RAD: float = _math.radians(208.2)  # 1ZEW empirical mean
 # The topology-layer groove constant, imported rather than re-declared: a local
 # `radians(150.0)` would silently keep 150° if constants.py ever moved, rotating every
 # REVERSE nucleotide by the difference.
@@ -567,7 +628,9 @@ _ATOMISTIC_TOPOLOGY_GROOVE_RAD: float = BDNA_MINOR_GROOVE_ANGLE_RAD
 # what keeps the two implementations of the correction chain from drifting apart.
 _REV_P_DELTA_FWD_CELL: float = _ATOMISTIC_PP_SEP_RAD - _ATOMISTIC_TOPOLOGY_GROOVE_RAD
 """+58.2° — FORWARD-cell helices place REV P at fwd+150°; target is fwd+208.2°."""
-_REV_P_DELTA_REV_CELL: float = _ATOMISTIC_PP_SEP_RAD - (2 * _math.pi - _ATOMISTIC_TOPOLOGY_GROOVE_RAD)
+_REV_P_DELTA_REV_CELL: float = _ATOMISTIC_PP_SEP_RAD - (
+    2 * _math.pi - _ATOMISTIC_TOPOLOGY_GROOVE_RAD
+)
 """−1.8° — REVERSE-cell (and direction-unknown) helices place REV P at fwd+210°."""
 
 # ── Atomistic phase offset ────────────────────────────────────────────────────
@@ -626,9 +689,7 @@ def _cross3(a, b):
     """
     a0, a1, a2 = a[0], a[1], a[2]
     b0, b1, b2 = b[0], b[1], b[2]
-    return _np.array((a1 * b2 - a2 * b1,
-                      a2 * b0 - a0 * b2,
-                      a0 * b1 - a1 * b0))
+    return _np.array((a1 * b2 - a2 * b1, a2 * b0 - a0 * b2, a0 * b1 - a1 * b0))
 
 
 # ── Frame builder ─────────────────────────────────────────────────────────────
@@ -671,21 +732,30 @@ def _atom_frame(
     Calibrated to align the all-atom backbone groove phase with the NADOC CG model.
     """
     bb = nuc_pos.position
-    e_radial: _np.ndarray | None = None   # outward unit vector from axis to bead
+    e_radial: _np.ndarray | None = None  # outward unit vector from axis to bead
     if axis_point is not None:
         radial = bb - axis_point
-        radial_perp = radial - _np.dot(radial, nuc_pos.axis_tangent) * nuc_pos.axis_tangent
+        radial_perp = (
+            radial - _np.dot(radial, nuc_pos.axis_tangent) * nuc_pos.axis_tangent
+        )
         r_norm = _np.linalg.norm(radial_perp)
         if r_norm > 1e-9:
             e_radial = radial_perp / r_norm
-            bb = axis_point + _np.dot(radial, nuc_pos.axis_tangent) * nuc_pos.axis_tangent + _ATOMISTIC_P_RADIUS * e_radial
+            bb = (
+                axis_point
+                + _np.dot(radial, nuc_pos.axis_tangent) * nuc_pos.axis_tangent
+                + _ATOMISTIC_P_RADIUS * e_radial
+            )
 
     # Correct the REVERSE strand P azimuthal angle to the real B-DNA value (1ZEW: 208.2°).
     # FORWARD helix topology places REV P at fwd+150° (CCW); target fwd+208.2° → +58.2°.
     # REVERSE helix topology places REV P at fwd−150° (= fwd+210° CCW); target fwd+208.2° → −1.8°.
     if direction == Direction.REVERSE and e_radial is not None:
-        delta = (_REV_P_DELTA_FWD_CELL if helix_direction == Direction.FORWARD
-                 else _REV_P_DELTA_REV_CELL)
+        delta = (
+            _REV_P_DELTA_FWD_CELL
+            if helix_direction == Direction.FORWARD
+            else _REV_P_DELTA_REV_CELL
+        )
         if abs(delta) > 1e-9:
             ax = nuc_pos.axis_tangent
             cd, sd = _math.cos(delta), _math.sin(delta)
@@ -698,7 +768,10 @@ def _atom_frame(
     # e_n/e_y so the entire nucleotide orbits the axis as a rigid body.
     if e_radial is not None and abs(_ATOMISTIC_PHASE_OFFSET_RAD) > 1e-9:
         ax = nuc_pos.axis_tangent
-        cc, ss = _math.cos(_ATOMISTIC_PHASE_OFFSET_RAD), _math.sin(_ATOMISTIC_PHASE_OFFSET_RAD)
+        cc, ss = (
+            _math.cos(_ATOMISTIC_PHASE_OFFSET_RAD),
+            _math.sin(_ATOMISTIC_PHASE_OFFSET_RAD),
+        )
         bb_axial = bb - _ATOMISTIC_P_RADIUS * e_radial
         e_radial = cc * e_radial + ss * _cross3(ax, e_radial)
         bb = bb_axial + _ATOMISTIC_P_RADIUS * e_radial
@@ -709,7 +782,11 @@ def _atom_frame(
     # e_z: 3′→5′ direction so O5′ is at +z and O3′ at −z in the template, which
     # preserves D-deoxyribose chirality when the same template is used for both
     # strand directions.
-    e_z = -nuc_pos.axis_tangent if direction == Direction.FORWARD else nuc_pos.axis_tangent
+    e_z = (
+        -nuc_pos.axis_tangent
+        if direction == Direction.FORWARD
+        else nuc_pos.axis_tangent
+    )
     e_y = _cross3(e_z, e_n)
     norm = _np.linalg.norm(e_y)
     if norm < 1e-9:
@@ -731,8 +808,12 @@ def _atom_frame(
 
 
 def _atom_frames_batch(
-    pos: _np.ndarray, axt: _np.ndarray, base_normal: _np.ndarray,
-    axis_pt: _np.ndarray, dir_fwd: _np.ndarray, helix_fwd: _np.ndarray,
+    pos: _np.ndarray,
+    axt: _np.ndarray,
+    base_normal: _np.ndarray,
+    axis_pt: _np.ndarray,
+    dir_fwd: _np.ndarray,
+    helix_fwd: _np.ndarray,
 ) -> tuple[_np.ndarray, _np.ndarray]:
     """Vectorised :func:`_atom_frame` over N nucleotides at once — the SAME arithmetic on
     ``(N,3)`` stacks, so 37k tiny ``numpy.cross`` / ``normalize_axis_tuple`` calls collapse
@@ -752,14 +833,19 @@ def _atom_frames_batch(
     dot_rt = _np.einsum("ij,ij->i", radial, axt)
     radial_perp = radial - dot_rt[:, None] * axt
     r_norm = _np.linalg.norm(radial_perp, axis=1)
-    ok = has_axis & (r_norm > 1e-9)                       # radial frame available
+    ok = has_axis & (r_norm > 1e-9)  # radial frame available
     e_radial = _np.zeros((N, 3))
     e_radial[ok] = radial_perp[ok] / r_norm[ok, None]
-    bb = _np.where(ok[:, None], axis_pt + dot_rt[:, None] * axt + _ATOMISTIC_P_RADIUS * e_radial, bb)
+    bb = _np.where(
+        ok[:, None],
+        axis_pt + dot_rt[:, None] * axt + _ATOMISTIC_P_RADIUS * e_radial,
+        bb,
+    )
 
     def _rot(er, ang_mask, ang):
         # Rotate e_radial about the axis tangent by `ang` (Rodrigues, ⟂ so no parallel term).
-        c = _np.cos(ang); s = _np.sin(ang)
+        c = _np.cos(ang)
+        s = _np.sin(ang)
         rotated = c[:, None] * er + s[:, None] * _np.cross(axt, er)
         return _np.where(ang_mask[:, None], rotated, er)
 
@@ -781,11 +867,11 @@ def _atom_frames_batch(
     e_z = _np.where(dir_fwd[:, None], -axt, axt)
     e_y = _np.cross(e_z, e_n)
     y_norm = _np.linalg.norm(e_y, axis=1)
-    degen = y_norm < 1e-9                                 # collinear e_z/e_n (rare)
+    degen = y_norm < 1e-9  # collinear e_z/e_n (rare)
     y_norm_safe = _np.where(degen, 1.0, y_norm)
     e_y = e_y / y_norm_safe[:, None]
 
-    R = _np.stack([e_n, e_y, e_z], axis=2)                # per-row column_stack → (N,3,3)
+    R = _np.stack([e_n, e_y, e_z], axis=2)  # per-row column_stack → (N,3,3)
     R = R @ _FRAME_ROT_M
 
     # Repair the rare rows the vectorised path can't express (no radial frame or a
@@ -793,18 +879,28 @@ def _atom_frames_batch(
     bad = (~ok) | degen
     if bad.any():
         from backend.core.geometry import NucleotidePosition
+
         for i in _np.nonzero(bad)[0]:
             ax_pt = None if _np.isnan(axis_pt[i, 0]) else axis_pt[i]
             npos = NucleotidePosition(
-                helix_id="", bp_index=0,
+                helix_id="",
+                bp_index=0,
                 direction=Direction.FORWARD if dir_fwd[i] else Direction.REVERSE,
-                position=pos[i], base_position=pos[i], base_normal=base_normal[i],
-                axis_tangent=axt[i])
+                position=pos[i],
+                base_position=pos[i],
+                base_normal=base_normal[i],
+                axis_tangent=axt[i],
+            )
             o_i, R_i = _atom_frame(
-                npos, Direction.FORWARD if dir_fwd[i] else Direction.REVERSE,
+                npos,
+                Direction.FORWARD if dir_fwd[i] else Direction.REVERSE,
                 axis_point=ax_pt,
-                helix_direction=Direction.FORWARD if helix_fwd[i] else Direction.REVERSE)
-            bb[i] = o_i; R[i] = R_i
+                helix_direction=Direction.FORWARD
+                if helix_fwd[i]
+                else Direction.REVERSE,
+            )
+            bb[i] = o_i
+            R[i] = R_i
     return bb, R
 
 
@@ -824,8 +920,11 @@ def _atom_frames_batch(
 # known, the constant that makes this placer reproduce build_atomistic_model's own
 # (validated) atom placement to machine precision.  See _rigid_frame_calibration.
 
+
 def _oxdna_frame_basis(
-    cm_nm: _np.ndarray, a1: _np.ndarray, a3: _np.ndarray,
+    cm_nm: _np.ndarray,
+    a1: _np.ndarray,
+    a3: _np.ndarray,
 ) -> tuple[_np.ndarray, _np.ndarray]:
     """Return (F, backbone_site) for an oxDNA nucleotide given its centre-of-mass
     (the .dat position) and the a1/a3 unit vectors.  a1 is orthonormalised against
@@ -834,6 +933,7 @@ def _oxdna_frame_basis(
     is oxDNA's true phosphate position (CM is inward of it).  Used identically by
     the calibration fit and the runtime placer so the two stay self-consistent."""
     from backend.physics.oxdna_interface import oxdna_backbone_site
+
     a3 = a3 / (_np.linalg.norm(a3) + 1e-14)
     a1 = a1 - _np.dot(a1, a3) * a3
     a1 = a1 / (_np.linalg.norm(a1) + 1e-14)
@@ -862,29 +962,61 @@ def _rigid_frame_calibration() -> dict:
     negligible, so a silent calibration drift can never ship."""
     from backend.core.models import Helix, Strand, Domain, Vec3, Design, LatticeType
     from backend.core.design_geometry import _geometry_for_design
-    from backend.physics.oxdna_interface import write_configuration, read_configuration_full
+    from backend.physics.oxdna_interface import (
+        write_configuration,
+        read_configuration_full,
+    )
     import tempfile as _tempfile, os as _os
 
     L = 14
     rise = BDNA_RISE_PER_BP
 
     def _helix(idx: str, direction: Direction) -> Helix:
-        return Helix(id=idx, direction=direction, length_bp=L, bp_start=0,
-                     axis_start=Vec3(x=float(idx_x[idx]), y=0.0, z=0.0),
-                     axis_end=Vec3(x=float(idx_x[idx]), y=0.0, z=L * rise))
+        return Helix(
+            id=idx,
+            direction=direction,
+            length_bp=L,
+            bp_start=0,
+            axis_start=Vec3(x=float(idx_x[idx]), y=0.0, z=0.0),
+            axis_end=Vec3(x=float(idx_x[idx]), y=0.0, z=L * rise),
+        )
 
     idx_x = {"h0": 0.0, "h1": 3.0}
     helices = [_helix("h0", Direction.FORWARD), _helix("h1", Direction.REVERSE)]
     strands: list[Strand] = []
     # One forward + one reverse single-domain strand on each helix → all 4 buckets.
     for hid in ("h0", "h1"):
-        strands.append(Strand(id=f"{hid}_f", strand_type=StrandType.SCAFFOLD,
-                              domains=[Domain(helix_id=hid, start_bp=0, end_bp=L - 1,
-                                              direction=Direction.FORWARD)]))
-        strands.append(Strand(id=f"{hid}_r", strand_type=StrandType.STAPLE,
-                              domains=[Domain(helix_id=hid, start_bp=L - 1, end_bp=0,
-                                              direction=Direction.REVERSE)]))
-    design = Design(helices=helices, strands=strands, lattice_type=LatticeType.HONEYCOMB)
+        strands.append(
+            Strand(
+                id=f"{hid}_f",
+                strand_type=StrandType.SCAFFOLD,
+                domains=[
+                    Domain(
+                        helix_id=hid,
+                        start_bp=0,
+                        end_bp=L - 1,
+                        direction=Direction.FORWARD,
+                    )
+                ],
+            )
+        )
+        strands.append(
+            Strand(
+                id=f"{hid}_r",
+                strand_type=StrandType.STAPLE,
+                domains=[
+                    Domain(
+                        helix_id=hid,
+                        start_bp=L - 1,
+                        end_bp=0,
+                        direction=Direction.REVERSE,
+                    )
+                ],
+            )
+        )
+    design = Design(
+        helices=helices, strands=strands, lattice_type=LatticeType.HONEYCOMB
+    )
 
     geom = _geometry_for_design(design)
     tf = _tempfile.NamedTemporaryFile(suffix=".dat", delete=False).name
@@ -940,8 +1072,9 @@ def _rigid_frame_calibration() -> dict:
         P = _np.array([tl[n] for n in names])
         W = _np.array([wmap[n] for n in names])
         R_kg, t_kg = _kabsch(P, W)
-        F, bb = _oxdna_frame_basis(frames[key]["backbone_position"],
-                                   frames[key]["a1"], frames[key]["a3"])
+        F, bb = _oxdna_frame_basis(
+            frames[key]["backbone_position"], frames[key]["a1"], frames[key]["a3"]
+        )
         bucket = (dstr, hdir[h_id] == Direction.FORWARD)
         slot = acc.setdefault(bucket, {"M": [], "c": []})
         slot["M"].append(F.T @ R_kg)
@@ -957,22 +1090,28 @@ def _rigid_frame_calibration() -> dict:
         c_res = max(float(_np.linalg.norm(c - cmean)) for c in slot["c"])
         assert m_res < 1e-6 and c_res < 1e-6, (
             f"rigid-frame calibration drift in bucket {bucket}: "
-            f"rotation residual {m_res:.2e}, offset residual {c_res:.2e} nm")
+            f"rotation residual {m_res:.2e}, offset residual {c_res:.2e} nm"
+        )
         calib[bucket] = (Q, cmean)
     return calib
 
 
 def _oxdna_rigid_frame(
-    cm_nm: _np.ndarray, a1: _np.ndarray, a3: _np.ndarray,
-    direction: Direction, helix_direction: "Direction | None",
+    cm_nm: _np.ndarray,
+    a1: _np.ndarray,
+    a3: _np.ndarray,
+    direction: Direction,
+    helix_direction: "Direction | None",
 ) -> tuple[_np.ndarray, _np.ndarray]:
     """Stamp position: return (origin, R) placing the nucleotide's template so its
     atoms land at the oxDNA-relaxed rigid pose (CM + a1/a3).  origin = backbone_site
     + F·c, R = F·Q with (Q, c) the calibrated per-bucket constant."""
-    F, bb = _oxdna_frame_basis(_np.asarray(cm_nm, float),
-                               _np.asarray(a1, float), _np.asarray(a3, float))
-    Q, c = _rigid_frame_calibration()[(direction.value,
-                                       helix_direction == Direction.FORWARD)]
+    F, bb = _oxdna_frame_basis(
+        _np.asarray(cm_nm, float), _np.asarray(a1, float), _np.asarray(a3, float)
+    )
+    Q, c = _rigid_frame_calibration()[
+        (direction.value, helix_direction == Direction.FORWARD)
+    ]
     return bb + F @ c, F @ Q
 
 
@@ -992,10 +1131,12 @@ def crossover_geometry_diagnostics(design: Design) -> dict:
     helix_map = {h.id: effective_helix_for_geometry(h, design) for h in design.helices}
     crossover_by_site: dict[frozenset[tuple[str, int, str]], object] = {}
     for xo in design.crossovers:
-        key = frozenset({
-            (xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand.value),
-            (xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value),
-        })
+        key = frozenset(
+            {
+                (xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand.value),
+                (xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value),
+            }
+        )
         crossover_by_site[key] = xo
 
     pos_cache: dict[str, dict[tuple[int, Direction, int], NucleotidePosition]] = {}
@@ -1016,7 +1157,9 @@ def crossover_geometry_diagnostics(design: Design) -> dict:
         norm = float(_np.linalg.norm(axis))
         axis_cache[h.id] = (start, axis / norm if norm > 1e-9 else axis, h.bp_start)
 
-    def _sugar_atom_world(helix_id: str, bp: int, direction: Direction, atom_name: str) -> _np.ndarray | None:
+    def _sugar_atom_world(
+        helix_id: str, bp: int, direction: Direction, atom_name: str
+    ) -> _np.ndarray | None:
         helix = helix_map.get(helix_id)
         nuc = pos_cache.get(helix_id, {}).get((bp, direction, 0))
         axis_info = axis_cache.get(helix_id)
@@ -1024,7 +1167,9 @@ def crossover_geometry_diagnostics(design: Design) -> dict:
             return None
         axis_start, axis_hat, bp_start = axis_info
         axis_pt = axis_start + (bp - bp_start) * BDNA_RISE_PER_BP * axis_hat
-        origin, R = _atom_frame(nuc, direction, axis_point=axis_pt, helix_direction=helix.direction)
+        origin, R = _atom_frame(
+            nuc, direction, axis_point=axis_pt, helix_direction=helix.direction
+        )
         for name, _element, n, y, z_local in _SUGAR:
             if name == atom_name:
                 return origin + R @ _np.array([n, y, z_local])
@@ -1039,26 +1184,40 @@ def crossover_geometry_diagnostics(design: Design) -> dict:
                 and prev_domain.helix_id != domain.helix_id
                 and prev_domain.end_bp == domain.start_bp
             ):
-                site_key = frozenset({
-                    (prev_domain.helix_id, prev_domain.end_bp, prev_domain.direction.value),
-                    (domain.helix_id, domain.start_bp, domain.direction.value),
-                })
+                site_key = frozenset(
+                    {
+                        (
+                            prev_domain.helix_id,
+                            prev_domain.end_bp,
+                            prev_domain.direction.value,
+                        ),
+                        (domain.helix_id, domain.start_bp, domain.direction.value),
+                    }
+                )
                 xo = crossover_by_site.get(site_key)
                 if xo is None:
                     prev_domain = domain
                     continue
                 c3_src = _sugar_atom_world(
-                    prev_domain.helix_id, prev_domain.end_bp, prev_domain.direction, "C3'",
+                    prev_domain.helix_id,
+                    prev_domain.end_bp,
+                    prev_domain.direction,
+                    "C3'",
                 )
                 c5_dst = _sugar_atom_world(
-                    domain.helix_id, domain.start_bp, domain.direction, "C5'",
+                    domain.helix_id,
+                    domain.start_bp,
+                    domain.direction,
+                    "C5'",
                 )
                 if c3_src is None or c5_dst is None:
-                    rows.append({
-                        "crossover_id": xo.id,
-                        "strand_id": strand.id,
-                        "status": "missing_endpoint_geometry",
-                    })
+                    rows.append(
+                        {
+                            "crossover_id": xo.id,
+                            "strand_id": strand.id,
+                            "status": "missing_endpoint_geometry",
+                        }
+                    )
                     prev_domain = domain
                     continue
 
@@ -1067,26 +1226,28 @@ def crossover_geometry_diagnostics(design: Design) -> dict:
                 contour_nm = linker_segments * _PHOSPHODIESTER_LINKER_CONTOUR_NM
                 span_nm = float(_np.linalg.norm(c5_dst - c3_src))
                 stretch_ratio = span_nm / contour_nm if contour_nm > 0 else float("inf")
-                rows.append({
-                    "crossover_id": xo.id,
-                    "strand_id": strand.id,
-                    "source": {
-                        "helix_id": prev_domain.helix_id,
-                        "bp_index": prev_domain.end_bp,
-                        "direction": prev_domain.direction.value,
-                    },
-                    "destination": {
-                        "helix_id": domain.helix_id,
-                        "bp_index": domain.start_bp,
-                        "direction": domain.direction.value,
-                    },
-                    "explicit_extra_bases": xo.extra_bases or "",
-                    "explicit_extra_base_count": explicit_extra_bases,
-                    "anchor_span_nm": span_nm,
-                    "available_contour_nm": contour_nm,
-                    "stretch_ratio": stretch_ratio,
-                    "status": "strained" if stretch_ratio > 1.05 else "ok",
-                })
+                rows.append(
+                    {
+                        "crossover_id": xo.id,
+                        "strand_id": strand.id,
+                        "source": {
+                            "helix_id": prev_domain.helix_id,
+                            "bp_index": prev_domain.end_bp,
+                            "direction": prev_domain.direction.value,
+                        },
+                        "destination": {
+                            "helix_id": domain.helix_id,
+                            "bp_index": domain.start_bp,
+                            "direction": domain.direction.value,
+                        },
+                        "explicit_extra_bases": xo.extra_bases or "",
+                        "explicit_extra_base_count": explicit_extra_bases,
+                        "anchor_span_nm": span_nm,
+                        "available_contour_nm": contour_nm,
+                        "stretch_ratio": stretch_ratio,
+                        "status": "strained" if stretch_ratio > 1.05 else "ok",
+                    }
+                )
             prev_domain = domain
 
     strained = [row for row in rows if row.get("status") == "strained"]
@@ -1126,33 +1287,43 @@ def _apply_backbone_torsions(
     pos = {name: _np.array([n, y, z], dtype=float) for name, _, n, y, z in _SUGAR}
     elem_map = {name: el for name, el, *_ in _SUGAR}
 
-    def _rot(pivot: _np.ndarray, axis_vec: _np.ndarray, names: list[str], angle: float) -> None:
+    def _rot(
+        pivot: _np.ndarray, axis_vec: _np.ndarray, names: list[str], angle: float
+    ) -> None:
         ax = axis_vec / _np.linalg.norm(axis_vec)
         c, s = _np.cos(angle), _np.sin(angle)
         for nm in names:
             v = pos[nm] - pivot
-            pos[nm] = pivot + v * c + _np.cross(ax, v) * s + ax * _np.dot(ax, v) * (1.0 - c)
+            pos[nm] = (
+                pivot + v * c + _np.cross(ax, v) * s + ax * _np.dot(ax, v) * (1.0 - c)
+            )
 
     if delta_rad:
         # Rotate C5′/O5′/P/OP1/OP2 around C3′→C4′ axis, pivot at C4′
         pivot = pos["C4'"].copy()
-        axis  = pos["C4'"] - pos["C3'"]
+        axis = pos["C4'"] - pos["C3'"]
         _rot(pivot, axis, ["C5'", "O5'", "P", "OP1", "OP2"], delta_rad)
 
     if gamma_rad:
         # Rotate O5′/P/OP1/OP2 around C4′→C5′ axis, pivot at C5′ (post-δ position)
         pivot = pos["C5'"].copy()
-        axis  = pos["C5'"] - pos["C4'"]
+        axis = pos["C5'"] - pos["C4'"]
         _rot(pivot, axis, ["O5'", "P", "OP1", "OP2"], gamma_rad)
 
     if beta_rad:
         # Rotate P/OP1/OP2 around C5′→O5′ axis, pivot at O5′ (post-γ position)
         pivot = pos["O5'"].copy()
-        axis  = pos["O5'"] - pos["C5'"]
+        axis = pos["O5'"] - pos["C5'"]
         _rot(pivot, axis, ["P", "OP1", "OP2"], beta_rad)
 
     return tuple(
-        (name, elem_map[name], float(pos[name][0]), float(pos[name][1]), float(pos[name][2]))
+        (
+            name,
+            elem_map[name],
+            float(pos[name][0]),
+            float(pos[name][1]),
+            float(pos[name][2]),
+        )
         for name, *_ in _SUGAR
     )
 
@@ -1170,7 +1341,11 @@ def _loop_copy_order(direction: Direction, n_copies: int):
     bulge and back out (an out-of-order O3′→P bond).  The copy INDEX (identity/key) is
     unchanged — only the traversal order flips — so sequence, atom placement, and
     backbone bonds stay mutually consistent when every loop uses this helper."""
-    return range(n_copies) if direction == Direction.FORWARD else range(n_copies - 1, -1, -1)
+    return (
+        range(n_copies)
+        if direction == Direction.FORWARD
+        else range(n_copies - 1, -1, -1)
+    )
 
 
 def _build_sequence_map(design: Design) -> dict[tuple[str, int, str], str]:
@@ -1214,7 +1389,11 @@ def _build_sequence_map(design: Design) -> dict[tuple[str, int, str], str]:
                         break
                     # k=0 uses the plain 3-tuple key for backward compat;
                     # k≥1 uses a 4-tuple key to distinguish loop copies.
-                    key: tuple = (h_id, bp, dir_str) if copy_k == 0 else (h_id, bp, dir_str, copy_k)
+                    key: tuple = (
+                        (h_id, bp, dir_str)
+                        if copy_k == 0
+                        else (h_id, bp, dir_str, copy_k)
+                    )
                     seq_map[key] = seq[idx]
                     idx += 1
     return seq_map
@@ -1248,7 +1427,10 @@ def _append_protein_atoms(model: AtomisticModel, design: Design) -> AtomisticMod
     serial space.  No-op when the design has no visible protein attachment.
     """
     from backend.core.protein import build_protein_attachment_atoms
-    p_atoms, p_bonds, _ = build_protein_attachment_atoms(design, serial_start=len(model.atoms))
+
+    p_atoms, p_bonds, _ = build_protein_attachment_atoms(
+        design, serial_start=len(model.atoms)
+    )
     if not p_atoms:
         return model
     model.atoms.extend(p_atoms)
@@ -1328,10 +1510,15 @@ def build_atomistic_model(
     if frame_sink is None and nuc_pos_override is None and nuc_frame_override is None:
         ref_model = atomistic_model_from_reference(design, exclude_helix_ids)
         if ref_model is not None:
-            return _append_protein_atoms(ref_model, design) if include_proteins else ref_model
+            return (
+                _append_protein_atoms(ref_model, design)
+                if include_proteins
+                else ref_model
+            )
 
     from backend.core.deformation import effective_helix_for_geometry
     from backend.core.lattice import position_linker_virtual_helices
+
     design = position_linker_virtual_helices(design)
 
     helix_map = {h.id: effective_helix_for_geometry(h, design) for h in design.helices}
@@ -1358,10 +1545,12 @@ def build_atomistic_model(
     for _s in design.strands:
         _prev_d = None
         for _d in _s.domains:
-            if (_prev_d is not None
-                    and _prev_d.helix_id != _d.helix_id
-                    and _prev_d.end_bp == _d.start_bp
-                    and (_prev_d.helix_id, _prev_d.end_bp) in _eb_junction_pos):
+            if (
+                _prev_d is not None
+                and _prev_d.helix_id != _d.helix_id
+                and _prev_d.end_bp == _d.start_bp
+                and (_prev_d.helix_id, _prev_d.end_bp) in _eb_junction_pos
+            ):
                 extra_base_xover_src.add(
                     (_prev_d.helix_id, _prev_d.end_bp, _prev_d.direction.value)
                 )
@@ -1394,9 +1583,9 @@ def build_atomistic_model(
         ln = _np.linalg.norm(ax)
         _helix_axis_cache[h.id] = (s, ax / ln if ln > 1e-9 else ax, h.bp_start)
 
-    atoms:  list[Atom]            = []
-    bonds:  list[tuple[int, int]] = []
-    serial  = 0
+    atoms: list[Atom] = []
+    bonds: list[tuple[int, int]] = []
+    serial = 0
 
     # DISPLAY speed: the crossover/skip/insert phosphate bridges are placed by an
     # L-BFGS-B minimiser for MD-SEED-quality bond angles — that dominates the build on
@@ -1405,15 +1594,17 @@ def build_atomistic_model(
     # interpolation that is ALREADY the minimiser's initial guess: 6× faster, only the
     # ~1.5% phosphate-linker atoms move (≤2.4 Å at junctions).  Default False keeps the
     # exact geometry for MD seeds / PDB export / NAMD / periodic-cell.
-    _bridge_fn = _interpolate_backbone_bridge if fast_bridges else _minimize_backbone_bridge
+    _bridge_fn = (
+        _interpolate_backbone_bridge if fast_bridges else _minimize_backbone_bridge
+    )
 
     for strand in design.strands:
         chain_id = strand_to_chain[strand.id]
         seq_num_in_chain = 0
 
         for domain in strand.domains:
-            h_id      = domain.helix_id
-            dir_str   = domain.direction.value
+            h_id = domain.helix_id
+            dir_str = domain.direction.value
             direction = domain.direction
 
             if exclude_helix_ids and h_id in exclude_helix_ids:
@@ -1441,7 +1632,7 @@ def build_atomistic_model(
             # bp_start+length_bp (right-side crossover).  Without this extension
             # those nucleotides are silently skipped as "skip/loop positions".
             _helix_lo = helix.bp_start
-            _helix_hi = helix.bp_start + helix.length_bp   # exclusive upper bound
+            _helix_hi = helix.bp_start + helix.length_bp  # exclusive upper bound
             if direction == Direction.FORWARD:
                 _dom_lo, _dom_hi = domain.start_bp, domain.end_bp
             else:
@@ -1449,35 +1640,43 @@ def build_atomistic_model(
 
             if _dom_lo < _helix_lo:
                 _ea = nucleotide_positions_arrays_extended(helix, _dom_lo)
-                for _i in range(len(_ea['bp_indices'])):
-                    _bp = int(_ea['bp_indices'][_i])
-                    _d  = Direction.FORWARD if _ea['directions'][_i] == 0 else Direction.REVERSE
-                    _k  = (_bp, _d, 0)  # overhang extensions are always copy 0
+                for _i in range(len(_ea["bp_indices"])):
+                    _bp = int(_ea["bp_indices"][_i])
+                    _d = (
+                        Direction.FORWARD
+                        if _ea["directions"][_i] == 0
+                        else Direction.REVERSE
+                    )
+                    _k = (_bp, _d, 0)  # overhang extensions are always copy 0
                     if _k not in nuc_positions:
                         nuc_positions[_k] = NucleotidePosition(
-                            helix_id      = helix.id,
-                            bp_index      = _bp,
-                            direction     = _d,
-                            position      = _ea['positions'][_i].copy(),
-                            base_position = _ea['base_positions'][_i].copy(),
-                            base_normal   = _ea['base_normals'][_i].copy(),
-                            axis_tangent  = _ea['axis_tangents'][_i].copy(),
+                            helix_id=helix.id,
+                            bp_index=_bp,
+                            direction=_d,
+                            position=_ea["positions"][_i].copy(),
+                            base_position=_ea["base_positions"][_i].copy(),
+                            base_normal=_ea["base_normals"][_i].copy(),
+                            axis_tangent=_ea["axis_tangents"][_i].copy(),
                         )
             if _dom_hi >= _helix_hi:
                 _ea = nucleotide_positions_arrays_extended_right(helix, _dom_hi)
-                for _i in range(len(_ea['bp_indices'])):
-                    _bp = int(_ea['bp_indices'][_i])
-                    _d  = Direction.FORWARD if _ea['directions'][_i] == 0 else Direction.REVERSE
-                    _k  = (_bp, _d, 0)  # overhang extensions are always copy 0
+                for _i in range(len(_ea["bp_indices"])):
+                    _bp = int(_ea["bp_indices"][_i])
+                    _d = (
+                        Direction.FORWARD
+                        if _ea["directions"][_i] == 0
+                        else Direction.REVERSE
+                    )
+                    _k = (_bp, _d, 0)  # overhang extensions are always copy 0
                     if _k not in nuc_positions:
                         nuc_positions[_k] = NucleotidePosition(
-                            helix_id      = helix.id,
-                            bp_index      = _bp,
-                            direction     = _d,
-                            position      = _ea['positions'][_i].copy(),
-                            base_position = _ea['base_positions'][_i].copy(),
-                            base_normal   = _ea['base_normals'][_i].copy(),
-                            axis_tangent  = _ea['axis_tangents'][_i].copy(),
+                            helix_id=helix.id,
+                            bp_index=_bp,
+                            direction=_d,
+                            position=_ea["positions"][_i].copy(),
+                            base_position=_ea["base_positions"][_i].copy(),
+                            base_normal=_ea["base_normals"][_i].copy(),
+                            axis_tangent=_ea["axis_tangents"][_i].copy(),
                         )
 
             for bp in _atomistic_domain_bp_range(domain, strand):
@@ -1499,12 +1698,17 @@ def build_atomistic_model(
                             cg_pos = nuc_pos_override.get((h_id, bp, dir_str))
                         if cg_pos is not None:
                             import dataclasses as _dc
+
                             nuc_pos = _dc.replace(nuc_pos, position=cg_pos)
 
                     seq_num_in_chain += 1
-                    _seq_key: tuple = (h_id, bp, dir_str) if copy_k == 0 else (h_id, bp, dir_str, copy_k)
+                    _seq_key: tuple = (
+                        (h_id, bp, dir_str)
+                        if copy_k == 0
+                        else (h_id, bp, dir_str, copy_k)
+                    )
                     base_char = seq_map.get(_seq_key, "N")
-                    residue   = _BASE_CHAR_TO_RESIDUE.get(base_char, "DT")
+                    residue = _BASE_CHAR_TO_RESIDUE.get(base_char, "DT")
 
                     # frame_override: stamp the template by an oxDNA rigid frame
                     # (CM, a1, a3) directly, instead of deriving orientation from the
@@ -1532,7 +1736,8 @@ def build_atomistic_model(
                             origin, R = _fo
                         else:
                             origin, R = _oxdna_rigid_frame(
-                                _fo[0], _fo[1], _fo[2], direction, helix.direction)
+                                _fo[0], _fo[1], _fo[2], direction, helix.direction
+                            )
                     else:
                         _frame_key = (h_id, bp, dir_str)
                         _use_prepared_frame = False
@@ -1549,6 +1754,7 @@ def build_atomistic_model(
                                 cg_pos = nuc_pos_override.get(_frame_key)
                             if cg_pos is not None:
                                 import dataclasses as _dc
+
                                 nuc_pos = _dc.replace(nuc_pos, position=cg_pos)
 
                         # Compute helix axis point for radial correction.  An optional
@@ -1567,6 +1773,7 @@ def build_atomistic_model(
                             _ov = axis_override.get((h_id, bp))
                             if _ov is not None:
                                 import dataclasses as _dc
+
                                 axis_pt = _ov[0]
                                 nuc_pos = _dc.replace(nuc_pos, axis_tangent=_ov[1])
 
@@ -1581,9 +1788,14 @@ def build_atomistic_model(
                         # using the per-lattice-direction branch collapses REVERSE-helix
                         # WC pairs (C1'–C1' 0.96 → 0.72 nm).  Design/PDB/seed builds
                         # (relaxed_oxdna_phase=False) keep the real per-direction branch.
-                        _hd = Direction.FORWARD if relaxed_oxdna_phase else helix.direction
-                        origin, R = _atom_frame(nuc_pos, direction, axis_point=axis_pt,
-                                                helix_direction=_hd)
+                        _hd = (
+                            Direction.FORWARD
+                            if relaxed_oxdna_phase
+                            else helix.direction
+                        )
+                        origin, R = _atom_frame(
+                            nuc_pos, direction, axis_point=axis_pt, helix_direction=_hd
+                        )
 
                     # Measured placement swaps the TEMPLATE only — the frame is
                     # whatever this nucleotide was going to get anyway.  The measured
@@ -1622,27 +1834,33 @@ def build_atomistic_model(
                     for atom_name, element, n, y, z_local in _sugar_defs:
                         local = _np.array([n, y, z_local])
                         world = origin + R @ local
-                        atoms.append(Atom(
-                            serial    = serial,
-                            name      = atom_name,
-                            element   = element,
-                            residue   = residue,
-                            chain_id  = chain_id,
-                            seq_num   = seq_num_in_chain,
-                            x         = float(world[0]),
-                            y         = float(world[1]),
-                            z         = float(world[2]),
-                            strand_id = strand.id,
-                            helix_id  = h_id,
-                            bp_index  = bp,
-                            direction = dir_str,
-                            copy_k    = copy_k or None,   # 0 → None (plain 3-tuple key)
-                        ))
+                        atoms.append(
+                            Atom(
+                                serial=serial,
+                                name=atom_name,
+                                element=element,
+                                residue=residue,
+                                chain_id=chain_id,
+                                seq_num=seq_num_in_chain,
+                                x=float(world[0]),
+                                y=float(world[1]),
+                                z=float(world[2]),
+                                strand_id=strand.id,
+                                helix_id=h_id,
+                                bp_index=bp,
+                                direction=dir_str,
+                                copy_k=copy_k or None,  # 0 → None (plain 3-tuple key)
+                            )
+                        )
                         sugar_name_to_serial[atom_name] = serial
                         serial += 1
 
                     # ── Base atoms ────────────────────────────────────────────
-                    tmpl_dict = BASE_TEMPLATES if direction == Direction.FORWARD else BASE_TEMPLATES_REV
+                    tmpl_dict = (
+                        BASE_TEMPLATES
+                        if direction == Direction.FORWARD
+                        else BASE_TEMPLATES_REV
+                    )
                     base_atoms_def, base_bond_defs = tmpl_dict[residue]
                     if _base_defs is not None:
                         # Bond table is unchanged — the measured template carries the
@@ -1652,22 +1870,24 @@ def build_atomistic_model(
                     for atom_name, element, n, y, z_local in base_atoms_def:
                         local = _np.array([n, y, z_local])
                         world = origin + R @ local
-                        atoms.append(Atom(
-                            serial    = serial,
-                            name      = atom_name,
-                            element   = element,
-                            residue   = residue,
-                            chain_id  = chain_id,
-                            seq_num   = seq_num_in_chain,
-                            x         = float(world[0]),
-                            y         = float(world[1]),
-                            z         = float(world[2]),
-                            strand_id = strand.id,
-                            helix_id  = h_id,
-                            bp_index  = bp,
-                            direction = dir_str,
-                            copy_k    = copy_k or None,   # 0 → None (plain 3-tuple key)
-                        ))
+                        atoms.append(
+                            Atom(
+                                serial=serial,
+                                name=atom_name,
+                                element=element,
+                                residue=residue,
+                                chain_id=chain_id,
+                                seq_num=seq_num_in_chain,
+                                x=float(world[0]),
+                                y=float(world[1]),
+                                z=float(world[2]),
+                                strand_id=strand.id,
+                                helix_id=h_id,
+                                bp_index=bp,
+                                direction=dir_str,
+                                copy_k=copy_k or None,  # 0 → None (plain 3-tuple key)
+                            )
+                        )
                         base_name_to_serial[atom_name] = serial
                         serial += 1
 
@@ -1695,7 +1915,9 @@ def build_atomistic_model(
                     # matches the previous ascending "last-copy-wins" — crossover/skip src
                     # lookups are unaffected by the reversed loop-copy traversal order.
                     if copy_k == _n_copies - 1:
-                        bp_to_sugar_serials[(h_id, bp, dir_str)] = dict(sugar_name_to_serial)
+                        bp_to_sugar_serials[(h_id, bp, dir_str)] = dict(
+                            sugar_name_to_serial
+                        )
 
     # ── Inter-residue backbone bonds (O3′ → P of next residue) ───────────────
     # Walk each strand's domains in 5′→3′ order; connect consecutive bp.
@@ -1704,10 +1926,10 @@ def build_atomistic_model(
     for strand in design.strands:
         direction = None
         prev_o3_serial: Optional[int] = None
-        prev_nuc_key:   Optional[tuple[str, int, str]] = None
+        prev_nuc_key: Optional[tuple[str, int, str]] = None
         for domain in strand.domains:
-            h_id      = domain.helix_id
-            dir_str   = domain.direction.value
+            h_id = domain.helix_id
+            dir_str = domain.direction.value
             direction = domain.direction
             for bp in _atomistic_domain_bp_range(domain, strand):
                 _n_copies = 0
@@ -1715,7 +1937,7 @@ def build_atomistic_model(
                     _n_copies += 1
                 if _n_copies == 0:
                     prev_o3_serial = None
-                    prev_nuc_key   = None
+                    prev_nuc_key = None
                     continue
                 # Connect loop copies in the SAME 5′→3′ traversal order as placement.
                 for copy_k2 in _loop_copy_order(direction, _n_copies):
@@ -1726,7 +1948,7 @@ def build_atomistic_model(
                         if prev_nuc_key not in extra_base_xover_src:
                             bonds.append((prev_o3_serial, p_serial))
                     prev_o3_serial = o3_serial
-                    prev_nuc_key   = (h_id, bp, dir_str)
+                    prev_nuc_key = (h_id, bp, dir_str)
 
     # ── Crossover phosphate bridge relaxation ────────────────────────────────
     # At each crossover (consecutive domains on different helices sharing the
@@ -1739,10 +1961,16 @@ def build_atomistic_model(
     for strand in design.strands:
         prev_domain = None
         for domain in strand.domains:
-            if (prev_domain is not None
-                    and prev_domain.helix_id != domain.helix_id
-                    and prev_domain.end_bp == domain.start_bp):
-                src_key = (prev_domain.helix_id, prev_domain.end_bp, prev_domain.direction.value)
+            if (
+                prev_domain is not None
+                and prev_domain.helix_id != domain.helix_id
+                and prev_domain.end_bp == domain.start_bp
+            ):
+                src_key = (
+                    prev_domain.helix_id,
+                    prev_domain.end_bp,
+                    prev_domain.direction.value,
+                )
                 if src_key in extra_base_xover_src:
                     prev_domain = domain
                     continue
@@ -1772,9 +2000,9 @@ def build_atomistic_model(
         prev_key_bb: Optional[tuple[str, int, str]] = None
 
         for domain in strand.domains:
-            h_id    = domain.helix_id
+            h_id = domain.helix_id
             dir_str = domain.direction.value
-            helix   = helix_map.get(h_id)
+            helix = helix_map.get(h_id)
             if helix is None:
                 prev_key_bb = None
                 continue
@@ -1818,31 +2046,31 @@ def build_atomistic_model(
 
     # ── Extra crossover base atoms ────────────────────────────────────────────
     serial = _build_extra_base_atoms(
-        design             = design,
-        atoms              = atoms,
-        bonds              = bonds,
-        serial             = serial,
-        strand_to_chain    = strand_to_chain,
-        nuc_pos_cache      = nuc_pos_cache,
-        helix_map          = helix_map,
-        bp_to_sugar_serials = bp_to_sugar_serials,
-        exclude_helix_ids  = exclude_helix_ids,
-        xb_pos_override    = xb_pos_override,
-        bridge_fn          = _bridge_fn,
-        fast_bridges       = fast_bridges,
+        design=design,
+        atoms=atoms,
+        bonds=bonds,
+        serial=serial,
+        strand_to_chain=strand_to_chain,
+        nuc_pos_cache=nuc_pos_cache,
+        helix_map=helix_map,
+        bp_to_sugar_serials=bp_to_sugar_serials,
+        exclude_helix_ids=exclude_helix_ids,
+        xb_pos_override=xb_pos_override,
+        bridge_fn=_bridge_fn,
+        fast_bridges=fast_bridges,
     )
 
     # ── Strand-extension tail atoms (5′/3′ terminal tails) ────────────────────
     serial = _build_extension_atoms(
-        design              = design,
-        atoms               = atoms,
-        bonds               = bonds,
-        serial              = serial,
-        strand_to_chain     = strand_to_chain,
-        nuc_pos_cache       = nuc_pos_cache,
-        bp_to_sugar_serials = bp_to_sugar_serials,
-        ext_pos_override    = ext_pos_override,
-        bridge_fn           = _bridge_fn,
+        design=design,
+        atoms=atoms,
+        bonds=bonds,
+        serial=serial,
+        strand_to_chain=strand_to_chain,
+        nuc_pos_cache=nuc_pos_cache,
+        bp_to_sugar_serials=bp_to_sugar_serials,
+        ext_pos_override=ext_pos_override,
+        bridge_fn=_bridge_fn,
     )
 
     # ── Thread inserts + tails into the per-chain residue numbering ───────────
@@ -1882,6 +2110,7 @@ def build_atomistic_model(
     # no place here.
     if apply_design_geometry:
         from backend.core.deformation import apply_deformations_to_atoms
+
         apply_deformations_to_atoms(atoms, design)
 
     model = AtomisticModel(atoms=atoms, bonds=bonds)
@@ -1904,11 +2133,11 @@ def build_atomistic_model(
 
 @dataclass(slots=True)
 class StampDescriptor:
-    nuc_keys:         list                 # [(helix_id, bp_index, dir_str, copy_k)] in emission order
-    atom_nuc:         list                 # per serial: index into nuc_keys, or -1 (non-rigid)
-    atom_local:      list                  # per serial: (n, y, z) template-local; (0,0,0) if non-rigid
-    nonrigid_serials: list                 # sorted serials where atom_nuc == -1
-    topology_hash:    str
+    nuc_keys: list  # [(helix_id, bp_index, dir_str, copy_k)] in emission order
+    atom_nuc: list  # per serial: index into nuc_keys, or -1 (non-rigid)
+    atom_local: list  # per serial: (n, y, z) template-local; (0,0,0) if non-rigid
+    nonrigid_serials: list  # sorted serials where atom_nuc == -1
+    topology_hash: str
 
 
 from collections import OrderedDict as _OrderedDict
@@ -1941,12 +2170,18 @@ def _surface_stamp_templates() -> dict:
     template."""
     out: dict = {}
     for residue in BASE_TEMPLATES:
-        for dir_str, base_tmpl in (("FORWARD", BASE_TEMPLATES), ("REVERSE", BASE_TEMPLATES_REV)):
+        for dir_str, base_tmpl in (
+            ("FORWARD", BASE_TEMPLATES),
+            ("REVERSE", BASE_TEMPLATES_REV),
+        ):
             defs = _native_local_defs(residue, dir_str)
             if defs is None:
                 defs = list(_SUGAR) + list(base_tmpl[residue][0])
             local = _np.array([[n, y, z] for _name, _e, n, y, z in defs], dtype=float)
-            radii = _np.array([VDW_RADIUS.get(e, VDW_RADIUS["C"]) for _name, e, *_ in defs], dtype=float)
+            radii = _np.array(
+                [VDW_RADIUS.get(e, VDW_RADIUS["C"]) for _name, e, *_ in defs],
+                dtype=float,
+            )
             out[(residue, dir_str)] = (local, radii)
     return out
 
@@ -2003,10 +2238,15 @@ def surface_atom_cloud(
         return npc
 
     # ── Gather ordered per-nucleotide frame inputs (strand → domain → bp → copy) ──
-    positions: list = []; tangents: list = []; normals: list = []; axis_pts: list = []
-    dir_fwd: list = []; helix_fwd: list = []
-    residues: list = []; strand_ids: list = []
-    keys_hbd: list = []                                  # (helix, bp, dir_str) for deform fold
+    positions: list = []
+    tangents: list = []
+    normals: list = []
+    axis_pts: list = []
+    dir_fwd: list = []
+    helix_fwd: list = []
+    residues: list = []
+    strand_ids: list = []
+    keys_hbd: list = []  # (helix, bp, dir_str) for deform fold
 
     for strand in design.strands:
         for domain in strand.domains:
@@ -2028,28 +2268,42 @@ def surface_atom_cloud(
                 _ea = nucleotide_positions_arrays_extended(helix, _dom_lo)
                 for _i in range(len(_ea["bp_indices"])):
                     _bp = int(_ea["bp_indices"][_i])
-                    _d = Direction.FORWARD if _ea["directions"][_i] == 0 else Direction.REVERSE
+                    _d = (
+                        Direction.FORWARD
+                        if _ea["directions"][_i] == 0
+                        else Direction.REVERSE
+                    )
                     _k = (_bp, _d, 0)
                     if _k not in nuc_positions:
                         nuc_positions[_k] = NucleotidePosition(
-                            helix_id=helix.id, bp_index=_bp, direction=_d,
+                            helix_id=helix.id,
+                            bp_index=_bp,
+                            direction=_d,
                             position=_ea["positions"][_i].copy(),
                             base_position=_ea["base_positions"][_i].copy(),
                             base_normal=_ea["base_normals"][_i].copy(),
-                            axis_tangent=_ea["axis_tangents"][_i].copy())
+                            axis_tangent=_ea["axis_tangents"][_i].copy(),
+                        )
             if _dom_hi >= helix.bp_start + helix.length_bp:
                 _ea = nucleotide_positions_arrays_extended_right(helix, _dom_hi)
                 for _i in range(len(_ea["bp_indices"])):
                     _bp = int(_ea["bp_indices"][_i])
-                    _d = Direction.FORWARD if _ea["directions"][_i] == 0 else Direction.REVERSE
+                    _d = (
+                        Direction.FORWARD
+                        if _ea["directions"][_i] == 0
+                        else Direction.REVERSE
+                    )
                     _k = (_bp, _d, 0)
                     if _k not in nuc_positions:
                         nuc_positions[_k] = NucleotidePosition(
-                            helix_id=helix.id, bp_index=_bp, direction=_d,
+                            helix_id=helix.id,
+                            bp_index=_bp,
+                            direction=_d,
                             position=_ea["positions"][_i].copy(),
                             base_position=_ea["base_positions"][_i].copy(),
                             base_normal=_ea["base_normals"][_i].copy(),
-                            axis_tangent=_ea["axis_tangents"][_i].copy())
+                            axis_tangent=_ea["axis_tangents"][_i].copy(),
+                        )
 
             ax_start, ax_hat, bp_start0 = axis_cache[h_id]
             for bp in _atomistic_domain_bp_range(domain, strand):
@@ -2060,12 +2314,20 @@ def surface_atom_cloud(
                     nuc_pos = nuc_positions.get((bp, direction, copy_k))
                     if nuc_pos is None:
                         continue
-                    _seq_key = (h_id, bp, dir_str) if copy_k == 0 else (h_id, bp, dir_str, copy_k)
-                    residue = _BASE_CHAR_TO_RESIDUE.get(seq_map.get(_seq_key, "N"), "DT")
+                    _seq_key = (
+                        (h_id, bp, dir_str)
+                        if copy_k == 0
+                        else (h_id, bp, dir_str, copy_k)
+                    )
+                    residue = _BASE_CHAR_TO_RESIDUE.get(
+                        seq_map.get(_seq_key, "N"), "DT"
+                    )
                     positions.append(nuc_pos.position)
                     tangents.append(nuc_pos.axis_tangent)
                     normals.append(nuc_pos.base_normal)
-                    axis_pts.append(ax_start + (bp - bp_start0) * BDNA_RISE_PER_BP * ax_hat)
+                    axis_pts.append(
+                        ax_start + (bp - bp_start0) * BDNA_RISE_PER_BP * ax_hat
+                    )
                     dir_fwd.append(direction == Direction.FORWARD)
                     helix_fwd.append(helix.direction == Direction.FORWARD)
                     residues.append(residue)
@@ -2076,9 +2338,12 @@ def surface_atom_cloud(
     if n == 0:
         return (_np.empty((0, 3), _np.float32), _np.empty(0, _np.float32), [], [])
 
-    pos = _np.asarray(positions, float); axt = _np.asarray(tangents, float)
-    bn = _np.asarray(normals, float); axp = _np.asarray(axis_pts, float)
-    dfwd = _np.asarray(dir_fwd, bool); hfwd = _np.asarray(helix_fwd, bool)
+    pos = _np.asarray(positions, float)
+    axt = _np.asarray(tangents, float)
+    bn = _np.asarray(normals, float)
+    axp = _np.asarray(axis_pts, float)
+    dfwd = _np.asarray(dir_fwd, bool)
+    hfwd = _np.asarray(helix_fwd, bool)
 
     origins, R = _atom_frames_batch(pos, axt, bn, axp, dfwd, hfwd)
 
@@ -2089,7 +2354,8 @@ def surface_atom_cloud(
 
     # ── Per-nucleotide atom counts + global row offsets (nucleotide atoms stay contiguous,
     # sugar first, so the crossover/skip bridge can address O3'/P/… by a fixed local index) ──
-    residues_arr = _np.asarray(residues); dfwd_str = _np.where(dfwd, "FORWARD", "REVERSE")
+    residues_arr = _np.asarray(residues)
+    dfwd_str = _np.where(dfwd, "FORWARD", "REVERSE")
     k_per = _np.array([len(templates[(residues[i], dfwd_str[i])][0]) for i in range(n)])
     offsets = _np.zeros(n, dtype=_np.int64)
     offsets[1:] = _np.cumsum(k_per)[:-1]
@@ -2111,8 +2377,10 @@ def surface_atom_cloud(
         if sel.size == 0:
             continue
         K = len(local)
-        world = origins[sel][:, None, :] + _np.einsum("aij,kj->aki", R[sel], local)  # (m,K,3)
-        rows = (offsets[sel][:, None] + _np.arange(K)[None, :]).ravel()               # (m*K,)
+        world = origins[sel][:, None, :] + _np.einsum(
+            "aij,kj->aki", R[sel], local
+        )  # (m,K,3)
+        rows = (offsets[sel][:, None] + _np.arange(K)[None, :]).ravel()  # (m*K,)
         positions_out[rows] = world.reshape(-1, 3)
         radii_out[rows] = _np.tile(radii, sel.size)
         sids_out[rows] = _np.repeat(strand_ids_arr[sel], K)
@@ -2126,8 +2394,12 @@ def surface_atom_cloud(
     key3_to_off: dict[tuple, int] = {keys_hbd[i]: int(offsets[i]) for i in range(n)}
     _apply_cloud_bridges(design, helix_map, positions_out, key3_to_off)
 
-    return (positions_out.astype(_np.float32), radii_out.astype(_np.float32),
-            list(sids_out), list(nkeys_out))
+    return (
+        positions_out.astype(_np.float32),
+        radii_out.astype(_np.float32),
+        list(sids_out),
+        list(nkeys_out),
+    )
 
 
 # Sugar-template local atom indices (order fixed by _SUGAR) — the bridge atoms.
@@ -2139,12 +2411,19 @@ def _apply_cloud_bridges(design, helix_map, P, key3_to_off) -> None:
     and skip gap to the surface point cloud ``P`` — the array analogue of
     ``_interpolate_backbone_bridge`` + the crossover/skip passes in ``build_atomistic_model``.
     O3'(src)→¼, P(dst)→½, O5'(dst)→¾ along C3'(src)→C5'(dst); OP1/OP2(dst) ride P's delta."""
-    iC3, iO3, iC5, iP, iO5, iOP1, iOP2 = (_SUGAR_IDX["C3'"], _SUGAR_IDX["O3'"], _SUGAR_IDX["C5'"],
-                                          _SUGAR_IDX["P"], _SUGAR_IDX["O5'"],
-                                          _SUGAR_IDX["OP1"], _SUGAR_IDX["OP2"])
+    iC3, iO3, iC5, iP, iO5, iOP1, iOP2 = (
+        _SUGAR_IDX["C3'"],
+        _SUGAR_IDX["O3'"],
+        _SUGAR_IDX["C5'"],
+        _SUGAR_IDX["P"],
+        _SUGAR_IDX["O5'"],
+        _SUGAR_IDX["OP1"],
+        _SUGAR_IDX["OP2"],
+    )
 
     def _bridge(src_off, dst_off):
-        c3 = P[src_off + iC3]; c5 = P[dst_off + iC5]
+        c3 = P[src_off + iC3]
+        c5 = P[dst_off + iC5]
         new_p = c3 + (c5 - c3) * 0.5
         delta = new_p - P[dst_off + iP]
         P[src_off + iO3] = c3 + (c5 - c3) * 0.25
@@ -2160,14 +2439,23 @@ def _apply_cloud_bridges(design, helix_map, P, key3_to_off) -> None:
     for _s in design.strands:
         prev = None
         for dom in _s.domains:
-            if (prev is not None and prev.helix_id != dom.helix_id
-                    and prev.end_bp == dom.start_bp):
+            if (
+                prev is not None
+                and prev.helix_id != dom.helix_id
+                and prev.end_bp == dom.start_bp
+            ):
                 sk = (prev.helix_id, prev.end_bp, prev.direction.value)
                 dk = (dom.helix_id, dom.start_bp, dom.direction.value)
-                is_eb = any(xo.extra_bases and (
-                    (xo.half_a.helix_id, xo.half_a.index) == (prev.helix_id, prev.end_bp)
-                    or (xo.half_b.helix_id, xo.half_b.index) == (prev.helix_id, prev.end_bp))
-                    for xo in design.crossovers)
+                is_eb = any(
+                    xo.extra_bases
+                    and (
+                        (xo.half_a.helix_id, xo.half_a.index)
+                        == (prev.helix_id, prev.end_bp)
+                        or (xo.half_b.helix_id, xo.half_b.index)
+                        == (prev.helix_id, prev.end_bp)
+                    )
+                    for xo in design.crossovers
+                )
                 if is_eb:
                     eb_src.add(sk)
                 elif sk in key3_to_off and dk in key3_to_off:
@@ -2179,10 +2467,12 @@ def _apply_cloud_bridges(design, helix_map, P, key3_to_off) -> None:
         skip_cache: dict[str, set] = {}
         prev_key = None
         for dom in _s.domains:
-            h_id = dom.helix_id; dir_str = dom.direction.value
+            h_id = dom.helix_id
+            dir_str = dom.direction.value
             helix = helix_map.get(h_id)
             if helix is None:
-                prev_key = None; continue
+                prev_key = None
+                continue
             if h_id not in skip_cache:
                 acc: dict[int, int] = {}
                 for ls in helix.loop_skips:
@@ -2190,13 +2480,15 @@ def _apply_cloud_bridges(design, helix_map, P, key3_to_off) -> None:
                 skip_cache[h_id] = {bp for bp, dd in acc.items() if dd <= -1}
             skips = skip_cache[h_id]
             if not skips:
-                prev_key = None; continue
+                prev_key = None
+                continue
             for bp in _atomistic_domain_bp_range(dom, _s):
                 if bp in skips:
                     continue
                 cur_key = (h_id, bp, dir_str)
                 if cur_key not in key3_to_off:
-                    prev_key = None; continue
+                    prev_key = None
+                    continue
                 if prev_key is not None:
                     pv_h, pv_bp, pv_dir = prev_key
                     if pv_h == h_id and pv_dir == dir_str and abs(bp - pv_bp) > 1:
@@ -2224,7 +2516,9 @@ def _fold_design_geometry_into_frames(design, origins, R, keys_hbd):
 
         def __init__(self, p, h, bp, d):
             self.x, self.y, self.z = float(p[0]), float(p[1]), float(p[2])
-            self.helix_id = h; self.bp_index = bp; self.direction = d
+            self.helix_id = h
+            self.bp_index = bp
+            self.direction = d
 
     markers = []
     for i in range(n):
@@ -2236,7 +2530,8 @@ def _fold_design_geometry_into_frames(design, origins, R, keys_hbd):
         markers.append(_M(o + R[i, :, 2], h, bp, dstr))
     apply_deformations_to_atoms(markers, design)
 
-    new_o = _np.empty((n, 3)); new_R = _np.empty((n, 3, 3))
+    new_o = _np.empty((n, 3))
+    new_R = _np.empty((n, 3, 3))
     for i in range(n):
         m0 = markers[4 * i]
         o = _np.array([m0.x, m0.y, m0.z])
@@ -2263,8 +2558,14 @@ def atomistic_stamp_descriptor(design: Design) -> StampDescriptor:
         return cached
 
     sink: dict = {}
-    m = build_atomistic_model(design, close_backbone=True, relaxed_oxdna_phase=True,
-                              apply_design_geometry=False, frame_sink=sink, fast_bridges=True)
+    m = build_atomistic_model(
+        design,
+        close_backbone=True,
+        relaxed_oxdna_phase=True,
+        apply_design_geometry=False,
+        frame_sink=sink,
+        fast_bridges=True,
+    )
     desc = _classify_stamp(m, sink, thash)
     _STAMP_DESC_CACHE[thash] = desc
     while len(_STAMP_DESC_CACHE) > _STAMP_DESC_CACHE_MAX:
@@ -2305,9 +2606,11 @@ def _classify_stamp(model, sink: dict, thash: str) -> StampDescriptor:
             continue
         origin, R = fr
         exp = origin + R @ _np.asarray(local, dtype=float)
-        d_stamp = ((a.x - exp[0]) ** 2 + (a.y - exp[1]) ** 2 + (a.z - exp[2]) ** 2) ** 0.5
+        d_stamp = (
+            (a.x - exp[0]) ** 2 + (a.y - exp[1]) ** 2 + (a.z - exp[2]) ** 2
+        ) ** 0.5
         if d_stamp > TOL:
-            nonrigid.append(s)      # moved by a bridge minimiser or by sequential closure
+            nonrigid.append(s)  # moved by a bridge minimiser or by sequential closure
             continue
         idx = key_to_idx.get(key)
         if idx is None:
@@ -2317,8 +2620,13 @@ def _classify_stamp(model, sink: dict, thash: str) -> StampDescriptor:
         atom_nuc[s] = idx
         atom_local[s] = (float(local[0]), float(local[1]), float(local[2]))
 
-    return StampDescriptor(nuc_keys=nuc_keys, atom_nuc=atom_nuc, atom_local=atom_local,
-                           nonrigid_serials=nonrigid, topology_hash=thash)
+    return StampDescriptor(
+        nuc_keys=nuc_keys,
+        atom_nuc=atom_nuc,
+        atom_local=atom_local,
+        nonrigid_serials=nonrigid,
+        topology_hash=thash,
+    )
 
 
 def atomistic_display_bundle(design: Design) -> dict:
@@ -2328,29 +2636,37 @@ def atomistic_display_bundle(design: Design) -> dict:
     Route-level disk caching makes it a one-time-per-job cost."""
     thash = atomistic_reference_topology_hash(design)
     sink: dict = {}
-    m = build_atomistic_model(design, close_backbone=True, relaxed_oxdna_phase=True,
-                              apply_design_geometry=False, frame_sink=sink, fast_bridges=True)
+    m = build_atomistic_model(
+        design,
+        close_backbone=True,
+        relaxed_oxdna_phase=True,
+        apply_design_geometry=False,
+        frame_sink=sink,
+        fast_bridges=True,
+    )
     desc = _classify_stamp(m, sink, thash)
-    _STAMP_DESC_CACHE[thash] = desc          # warm the in-proc descriptor cache too
+    _STAMP_DESC_CACHE[thash] = desc  # warm the in-proc descriptor cache too
     while len(_STAMP_DESC_CACHE) > _STAMP_DESC_CACHE_MAX:
         _STAMP_DESC_CACHE.popitem(last=False)
     out = atomistic_to_json(m)
     atom_local_flat: list = []
-    for (nx, ny, nz) in desc.atom_local:
+    for nx, ny, nz in desc.atom_local:
         atom_local_flat.extend((nx, ny, nz))
-    out.update({
-        "topology_hash": thash,
-        "n_nuc": len(desc.nuc_keys),
-        "n_atoms": len(desc.atom_nuc),
-        "nuc_keys": [list(k) for k in desc.nuc_keys],
-        "atom_nuc": desc.atom_nuc,
-        "atom_local": atom_local_flat,
-        "nonrigid_serials": desc.nonrigid_serials,
-    })
+    out.update(
+        {
+            "topology_hash": thash,
+            "n_nuc": len(desc.nuc_keys),
+            "n_atoms": len(desc.atom_nuc),
+            "nuc_keys": [list(k) for k in desc.nuc_keys],
+            "atom_nuc": desc.atom_nuc,
+            "atom_local": atom_local_flat,
+            "nonrigid_serials": desc.nonrigid_serials,
+        }
+    )
     return out
 
 
-_BUNDLE_BIN_MAGIC = 0x4E414231      # "NAB1"
+_BUNDLE_BIN_MAGIC = 0x4E414231  # "NAB1"
 _BUNDLE_BIN_VERSION = 1
 
 # Fields the FRONTEND actually reads off an atom.  The other seven the JSON bundle
@@ -2391,16 +2707,29 @@ def pack_bundle_bin(bundle: dict) -> bytes:
         raise BundleNotPackable("empty bundle")
     # A bundle missing any column the format carries is a fallback case, not a crash:
     # the route turns BundleNotPackable into a 409 and the client re-fetches the JSON.
-    required = ("serial", "element", "x", "y", "z", "strand_id", "helix_id",
-                "bp_index", "direction")
+    required = (
+        "serial",
+        "element",
+        "x",
+        "y",
+        "z",
+        "strand_id",
+        "helix_id",
+        "bp_index",
+        "direction",
+    )
     missing = [k for k in required if k not in atoms[0]]
     if missing:
-        raise BundleNotPackable(f"atoms are missing required field(s): {', '.join(missing)}")
+        raise BundleNotPackable(
+            f"atoms are missing required field(s): {', '.join(missing)}"
+        )
     # serial IS the row index in this format (that is what lets us drop the column
     # entirely AND index the serial-keyed relaxed-frame arrays directly).
     for i, a in enumerate(atoms):
         if a["serial"] != i:
-            raise BundleNotPackable(f"atom serials are not dense 0..n-1 (row {i} has serial {a['serial']})")
+            raise BundleNotPackable(
+                f"atom serials are not dense 0..n-1 (row {i} has serial {a['serial']})"
+            )
 
     def _intern(field: str, width: int) -> tuple[list[str], np.ndarray]:
         table: list[str] = []
@@ -2416,7 +2745,9 @@ def pack_bundle_bin(bundle: dict) -> bytes:
             out[i] = k
         limit = 65536 if width == 16 else 256
         if len(table) > limit:
-            raise BundleNotPackable(f"{field} has {len(table)} distinct values, exceeds u{width}")
+            raise BundleNotPackable(
+                f"{field} has {len(table)} distinct values, exceeds u{width}"
+            )
         return table, out
 
     strand_table, strand_idx = _intern("strand_id", 16)
@@ -2429,30 +2760,41 @@ def pack_bundle_bin(bundle: dict) -> bytes:
     y = np.fromiter((a["y"] for a in atoms), dtype=np.float32, count=n)
     z = np.fromiter((a["z"] for a in atoms), dtype=np.float32, count=n)
     bp = np.fromiter((a["bp_index"] for a in atoms), dtype=np.int32, count=n)
-    aux_t = np.fromiter((a.get("aux_t") or 0.0 for a in atoms), dtype=np.float32, count=n)
+    aux_t = np.fromiter(
+        (a.get("aux_t") or 0.0 for a in atoms), dtype=np.float32, count=n
+    )
 
     bonds = bundle.get("bonds") or []
-    bonds_arr = np.asarray(bonds, dtype=np.uint32).reshape(-1) if bonds else np.empty(0, np.uint32)
+    bonds_arr = (
+        np.asarray(bonds, dtype=np.uint32).reshape(-1)
+        if bonds
+        else np.empty(0, np.uint32)
+    )
 
-    atom_nuc = np.asarray(bundle.get("atom_nuc") or [], dtype=np.int32)     # -1 = non-rigid
+    atom_nuc = np.asarray(
+        bundle.get("atom_nuc") or [], dtype=np.int32
+    )  # -1 = non-rigid
     atom_local = np.asarray(bundle.get("atom_local") or [], dtype=np.float32)
     nonrigid = np.asarray(bundle.get("nonrigid_serials") or [], dtype=np.uint32)
     if atom_nuc.size != n or atom_local.size != n * 3:
         raise BundleNotPackable("stamp descriptor length does not match the atom count")
 
-    header = json.dumps({
-        "strand_table": strand_table,
-        "helix_table": helix_table,
-        "aux_helix_table": aux_table,
-        "element_table": element_table,
-        "dir_table": dir_table,
-        "element_meta": bundle.get("element_meta") or {},
-        "topology_hash": bundle.get("topology_hash"),
-    }).encode()
+    header = json.dumps(
+        {
+            "strand_table": strand_table,
+            "helix_table": helix_table,
+            "aux_helix_table": aux_table,
+            "element_table": element_table,
+            "dir_table": dir_table,
+            "element_meta": bundle.get("element_meta") or {},
+            "topology_hash": bundle.get("topology_hash"),
+        }
+    ).encode()
 
     parts: list[bytes] = [
-        struct.pack("<IIIII", _BUNDLE_BIN_MAGIC, _BUNDLE_BIN_VERSION,
-                    n, len(bonds), len(header)),
+        struct.pack(
+            "<IIIII", _BUNDLE_BIN_MAGIC, _BUNDLE_BIN_VERSION, n, len(bonds), len(header)
+        ),
         header,
     ]
     written = 20 + len(header)
@@ -2478,7 +2820,7 @@ def pack_bundle_bin(bundle: dict) -> bytes:
         _put(col)
     for col in (element_idx, dir_idx):
         _put(col)
-    _pad()                                   # the two u8 columns can leave an odd offset
+    _pad()  # the two u8 columns can leave an odd offset
     _put(bonds_arr)
     parts.append(struct.pack("<II", int(bundle.get("n_nuc") or 0), nonrigid.size))
     written += 8
@@ -2536,8 +2878,11 @@ def _thread_inserts_inline(atoms: list[Atom], design: "Design") -> None:
             return ("x", a.crossover_id, a.extra_base_k)
         eid = getattr(a, "extension_id", None)
         if eid is not None:
-            return ("e5" if ext_end_by_id.get(eid) == "five_prime" else "e3",
-                    eid, a.ext_k)
+            return (
+                "e5" if ext_end_by_id.get(eid) == "five_prime" else "e3",
+                eid,
+                a.ext_k,
+            )
         return ("r", a.seq_num)
 
     by_chain: dict[str, list[Atom]] = defaultdict(list)
@@ -2550,10 +2895,10 @@ def _thread_inserts_inline(atoms: list[Atom], design: "Design") -> None:
         for a in chain_atoms:
             residues[_rkey(a)].append(a)
 
-        real_rkeys   = [k for k in residues if k[0] == "r"]
+        real_rkeys = [k for k in residues if k[0] == "r"]
         insert_rkeys = [k for k in residues if k[0] == "x"]
-        e5_rkeys     = [k for k in residues if k[0] == "e5"]
-        e3_rkeys     = [k for k in residues if k[0] == "e3"]
+        e5_rkeys = [k for k in residues if k[0] == "e5"]
+        e3_rkeys = [k for k in residues if k[0] == "e3"]
         if not insert_rkeys and not e5_rkeys and not e3_rkeys:
             continue  # nothing to thread on this chain
 
@@ -2635,7 +2980,7 @@ def _close_sequential_backbone(atoms: list[Atom], bonds: list[tuple[int, int]]) 
             or getattr(dst, "extension_id", None) is not None
         )
         if not (regular_run or extension_junction):
-            continue   # crossover / skip / extra-base bridge — already handled
+            continue  # crossover / skip / extra-base bridge — already handled
         key = ((src.strand_id, src.seq_num), (dst.strand_id, dst.seq_num))
         if key in seen:
             continue
@@ -2655,12 +3000,10 @@ def _close_sequential_backbone(atoms: list[Atom], bonds: list[tuple[int, int]]) 
 # _normalise and _lerp moved to atomistic_helpers (Pass 11-A).
 
 
-
 # ── Atom-mutation primitives, backbone bridges, rigid-body, joint extra-base
 # minimisers + scipy result cache moved to atomistic_minimisers (Pass 13-A);
 # imported above for use within this module and re-exported for external
 # callers (notably backend.core.periodic_cell).
-
 
 
 # ── Extra-base arc geometry helpers ──────────────────────────────────────────
@@ -2669,12 +3012,12 @@ def _close_sequential_backbone(atoms: list[Atom], bonds: list[tuple[int, int]]) 
 
 
 def _align_glycosidic(
-    atoms:                list[Atom],
-    residue:              str,
+    atoms: list[Atom],
+    residue: str,
     sugar_name_to_serial: dict[str, int],
-    base_name_to_serial:  dict[str, int],
-    target_c1n:           _np.ndarray,
-    rotate_phosphate:     bool = False,
+    base_name_to_serial: dict[str, int],
+    target_c1n: _np.ndarray,
+    rotate_phosphate: bool = False,
 ) -> str:
     """Rotate a single-stranded residue's ribose + base as a rigid body about C2′ so
     its C1′→N glycosidic bond points along *target_c1n*, in place.  Returns the
@@ -2692,36 +3035,38 @@ def _align_glycosidic(
     (the 24hb 4 fs blocker; see NAMD_4FS_RATTLE_RESEARCH.md).
     """
     _glycosidic_n = "N9" if residue in ("DA", "DG") else "N1"
-    _n_serial  = base_name_to_serial.get(_glycosidic_n)
+    _n_serial = base_name_to_serial.get(_glycosidic_n)
     _c1_serial = sugar_name_to_serial.get("C1'")
     _c2_serial = sugar_name_to_serial.get("C2'")
     if _n_serial is None or _c1_serial is None or _c2_serial is None:
         return _glycosidic_n
 
-    _c1_pos  = _atom_pos(atoms, _c1_serial)
-    _n_pos   = _atom_pos(atoms, _n_serial)
-    _c2_pos  = _atom_pos(atoms, _c2_serial)
+    _c1_pos = _atom_pos(atoms, _c1_serial)
+    _n_pos = _atom_pos(atoms, _n_serial)
+    _c2_pos = _atom_pos(atoms, _c2_serial)
     _c1n_dir = _normalise(_n_pos - _c1_pos)
-    _rot_ax  = _np.cross(_c1n_dir, target_c1n)
-    _sin_t   = float(_np.linalg.norm(_rot_ax))
-    _cos_t   = float(_np.dot(_c1n_dir, target_c1n))
+    _rot_ax = _np.cross(_c1n_dir, target_c1n)
+    _sin_t = float(_np.linalg.norm(_rot_ax))
+    _cos_t = float(_np.dot(_c1n_dir, target_c1n))
     if _sin_t < 1e-9:
         if _cos_t < 0.0:
             # 180° rotation — pick an arbitrary perpendicular axis
             _perp = _np.array([0.0, 0.0, 1.0])
             if abs(float(_np.dot(_c1n_dir, _perp))) > 0.9:
                 _perp = _np.array([1.0, 0.0, 0.0])
-            _rot_ax  = _normalise(_np.cross(_c1n_dir, _perp))
+            _rot_ax = _normalise(_np.cross(_c1n_dir, _perp))
             _R_align = 2.0 * _np.outer(_rot_ax, _rot_ax) - _np.eye(3)
         else:
             _R_align = _np.eye(3)
     else:
         _k = _rot_ax / _sin_t
-        _K = _np.array([
-            [ 0.0,   -_k[2],  _k[1]],
-            [ _k[2],  0.0,   -_k[0]],
-            [-_k[1],  _k[0],  0.0  ],
-        ])
+        _K = _np.array(
+            [
+                [0.0, -_k[2], _k[1]],
+                [_k[2], 0.0, -_k[0]],
+                [-_k[1], _k[0], 0.0],
+            ]
+        )
         _R_align = _np.eye(3) + _sin_t * _K + (1.0 - _cos_t) * (_K @ _K)
 
     _phosphate = set() if rotate_phosphate else {"P", "OP1", "OP2", "O5'"}
@@ -2738,9 +3083,9 @@ def _align_glycosidic(
 
 
 def _extra_base_frame(
-    origin:   _np.ndarray,
+    origin: _np.ndarray,
     line_dir: _np.ndarray,
-    bow_dir:  _np.ndarray,
+    bow_dir: _np.ndarray,
 ) -> tuple[_np.ndarray, _np.ndarray]:
     """
     Build atom frame for an extra crossover base oriented along the
@@ -2786,7 +3131,9 @@ def _extra_base_frame(
     return origin.copy(), R
 
 
-def _sim_override_parts(value) -> tuple[_np.ndarray, "tuple[_np.ndarray, _np.ndarray] | None"]:
+def _sim_override_parts(
+    value,
+) -> tuple[_np.ndarray, "tuple[_np.ndarray, _np.ndarray] | None"]:
     """Normalise a synthetic-nucleotide override.
 
     Historical callers pass only a backbone-site ``ndarray``.  oxDNA display/export
@@ -2797,8 +3144,10 @@ def _sim_override_parts(value) -> tuple[_np.ndarray, "tuple[_np.ndarray, _np.nda
     if isinstance(value, dict):
         pos = _np.asarray(value["position"], dtype=float)
         if value.get("a1") is not None and value.get("a3") is not None:
-            return pos, (_np.asarray(value["a1"], dtype=float),
-                         _np.asarray(value["a3"], dtype=float))
+            return pos, (
+                _np.asarray(value["a1"], dtype=float),
+                _np.asarray(value["a3"], dtype=float),
+            )
         return pos, None
     return _np.asarray(value, dtype=float), None
 
@@ -2807,16 +3156,16 @@ def _sim_override_parts(value) -> tuple[_np.ndarray, "tuple[_np.ndarray, _np.nda
 
 
 def _build_extra_base_atoms(
-    design:             "Design",
-    atoms:              list[Atom],
-    bonds:              list[tuple[int, int]],
-    serial:             int,
-    strand_to_chain:    dict[str, str],
-    nuc_pos_cache:      dict[str, dict[tuple[int, "Direction"], "NucleotidePosition"]],
-    helix_map:          dict[str, object],
+    design: "Design",
+    atoms: list[Atom],
+    bonds: list[tuple[int, int]],
+    serial: int,
+    strand_to_chain: dict[str, str],
+    nuc_pos_cache: dict[str, dict[tuple[int, "Direction"], "NucleotidePosition"]],
+    helix_map: dict[str, object],
     bp_to_sugar_serials: dict[tuple[str, int, str], dict[str, int]],
-    exclude_helix_ids:  "set[str] | None",
-    xb_pos_override:    "dict[tuple[str, int], _np.ndarray] | None" = None,
+    exclude_helix_ids: "set[str] | None",
+    xb_pos_override: "dict[tuple[str, int], _np.ndarray] | None" = None,
     bridge_fn=_minimize_backbone_bridge,
     fast_bridges: bool = False,
 ) -> int:
@@ -2834,6 +3183,7 @@ def _build_extra_base_atoms(
     Returns the updated serial number (next available 0-based index).
     """
     from types import SimpleNamespace as _NS
+
     xovers_with_extra = [xo for xo in design.crossovers if xo.extra_bases]
 
     # Append forced ligations with extra bases as crossover-compatible objects.
@@ -2841,9 +3191,19 @@ def _build_extra_base_atoms(
     for fl in design.forced_ligations:
         if not fl.extra_bases:
             continue
-        ha = _NS(helix_id=fl.three_prime_helix_id, index=fl.three_prime_bp, strand=fl.three_prime_direction)
-        hb = _NS(helix_id=fl.five_prime_helix_id,  index=fl.five_prime_bp,  strand=fl.five_prime_direction)
-        xovers_with_extra.append(_NS(id=fl.id, extra_bases=fl.extra_bases, half_a=ha, half_b=hb))
+        ha = _NS(
+            helix_id=fl.three_prime_helix_id,
+            index=fl.three_prime_bp,
+            strand=fl.three_prime_direction,
+        )
+        hb = _NS(
+            helix_id=fl.five_prime_helix_id,
+            index=fl.five_prime_bp,
+            strand=fl.five_prime_direction,
+        )
+        xovers_with_extra.append(
+            _NS(id=fl.id, extra_bases=fl.extra_bases, half_a=ha, half_b=hb)
+        )
 
     if not xovers_with_extra:
         return serial
@@ -2891,8 +3251,8 @@ def _build_extra_base_atoms(
         if nucA is None or nucB is None:
             continue
 
-        posA    = nucA.position
-        posB    = nucB.position
+        posA = nucA.position
+        posB = nucB.position
         bow_dir = _arc_bow_dir(posA, posB, nucA.axis_tangent, nucB.axis_tangent)
 
         # Determine which half is the domain-end (3′ terminal = src) and which is
@@ -2909,7 +3269,7 @@ def _build_extra_base_atoms(
             pos_src, pos_dst = posB, posA
 
         strand_id = domain_end_to_strand.get(src_key)
-        chain_id  = strand_to_chain.get(strand_id, "A") if strand_id else "A"
+        chain_id = strand_to_chain.get(strand_id, "A") if strand_id else "A"
 
         # Sugar serial dicts for junction nucleotides (may be None if excluded)
         src_s = bp_to_sugar_serials.get(src_key)
@@ -2931,14 +3291,20 @@ def _build_extra_base_atoms(
         # ATOMS.  That path orients a nucleotide from measured a1 against the
         # direction of its bonded neighbours, which is a fact about the atoms, not
         # about where the CG view draws the bead.
-        chain_p0 = (_atom_pos(atoms, src_s["C3'"])
-                    if src_s is not None and "C3'" in src_s else line_p0)
-        chain_p1 = (_atom_pos(atoms, dst_s["C5'"])
-                    if dst_s is not None and "C5'" in dst_s else line_p1)
+        chain_p0 = (
+            _atom_pos(atoms, src_s["C3'"])
+            if src_s is not None and "C3'" in src_s
+            else line_p0
+        )
+        chain_p1 = (
+            _atom_pos(atoms, dst_s["C5'"])
+            if dst_s is not None and "C5'" in dst_s
+            else line_p1
+        )
 
         n = len(xo.extra_bases)
-        eb_sugar_serials:  list[dict[str, int]] = []
-        eb_glycosidic_ns:  list[str]            = []
+        eb_sugar_serials: list[dict[str, int]] = []
+        eb_glycosidic_ns: list[str] = []
 
         simulated_insert_sites = {
             k: _sim_override_parts(xb_pos_override[(xo.id, k)])[0]
@@ -2957,8 +3323,11 @@ def _build_extra_base_atoms(
             # Relaxed/trajectory display: place this insert at its REAL simulated
             # backbone position (keeping the arc-derived orientation), so the heavy
             # rep shows the true ssDNA conformation instead of the geometric arc.
-            _xb_sim = (xb_pos_override.get((xo.id, i - 1))
-                       if xb_pos_override is not None else None)
+            _xb_sim = (
+                xb_pos_override.get((xo.id, i - 1))
+                if xb_pos_override is not None
+                else None
+            )
             _xb_frame = None
             if _xb_sim is not None:
                 origin_pos, _xb_frame = _sim_override_parts(_xb_sim)
@@ -2973,8 +3342,7 @@ def _build_extra_base_atoms(
                 # neighbours.  a1 contributes only the base-facing axis, projected
                 # perpendicular to that chain.  Raw a3 is a nucleotide body axis,
                 # not a guarantee that C5'/C3' point at the bonded neighbours.
-                origin, R = _extra_base_frame(
-                    origin_pos, arc_dir, _normalise(sim_a1))
+                origin, R = _extra_base_frame(origin_pos, arc_dir, _normalise(sim_a1))
             else:
                 origin, R = _extra_base_frame(origin_pos, arc_dir, bow_dir)
 
@@ -2995,25 +3363,27 @@ def _build_extra_base_atoms(
             for atom_name, element, n_c, y_c, z_c in _SUGAR:
                 local = _np.array([n_c, y_c, z_c])
                 world = origin + R @ local
-                atoms.append(Atom(
-                    serial       = serial,
-                    name         = atom_name,
-                    element      = element,
-                    residue      = residue,
-                    chain_id     = chain_id,
-                    seq_num      = seq_num,
-                    x            = float(world[0]),
-                    y            = float(world[1]),
-                    z            = float(world[2]),
-                    strand_id    = strand_id or "",
-                    helix_id     = src_key[0],
-                    bp_index     = src_key[1],
-                    direction    = src_key[2],
-                    aux_helix_id = dst_key[0],
-                    aux_t        = _aux_t,
-                    crossover_id = xo.id,
-                    extra_base_k = i - 1,
-                ))
+                atoms.append(
+                    Atom(
+                        serial=serial,
+                        name=atom_name,
+                        element=element,
+                        residue=residue,
+                        chain_id=chain_id,
+                        seq_num=seq_num,
+                        x=float(world[0]),
+                        y=float(world[1]),
+                        z=float(world[2]),
+                        strand_id=strand_id or "",
+                        helix_id=src_key[0],
+                        bp_index=src_key[1],
+                        direction=src_key[2],
+                        aux_helix_id=dst_key[0],
+                        aux_t=_aux_t,
+                        crossover_id=xo.id,
+                        extra_base_k=i - 1,
+                    )
+                )
                 sugar_name_to_serial[atom_name] = serial
                 serial += 1
 
@@ -3023,25 +3393,27 @@ def _build_extra_base_atoms(
             for atom_name, element, n_c, y_c, z_c in base_atoms_def:
                 local = _np.array([n_c, y_c, z_c])
                 world = origin + R @ local
-                atoms.append(Atom(
-                    serial       = serial,
-                    name         = atom_name,
-                    element      = element,
-                    residue      = residue,
-                    chain_id     = chain_id,
-                    seq_num      = seq_num,
-                    x            = float(world[0]),
-                    y            = float(world[1]),
-                    z            = float(world[2]),
-                    strand_id    = strand_id or "",
-                    helix_id     = src_key[0],
-                    bp_index     = src_key[1],
-                    direction    = src_key[2],
-                    aux_helix_id = dst_key[0],
-                    aux_t        = _aux_t,
-                    crossover_id = xo.id,
-                    extra_base_k = i - 1,
-                ))
+                atoms.append(
+                    Atom(
+                        serial=serial,
+                        name=atom_name,
+                        element=element,
+                        residue=residue,
+                        chain_id=chain_id,
+                        seq_num=seq_num,
+                        x=float(world[0]),
+                        y=float(world[1]),
+                        z=float(world[2]),
+                        strand_id=strand_id or "",
+                        helix_id=src_key[0],
+                        bp_index=src_key[1],
+                        direction=src_key[2],
+                        aux_helix_id=dst_key[0],
+                        aux_t=_aux_t,
+                        crossover_id=xo.id,
+                        extra_base_k=i - 1,
+                    )
+                )
                 base_name_to_serial[atom_name] = serial
                 serial += 1
 
@@ -3076,7 +3448,7 @@ def _build_extra_base_atoms(
 
         for prev_s_item, next_s_item in zip(all_s, all_s[1:]):
             o3 = prev_s_item.get("O3'")
-            p  = next_s_item.get("P")
+            p = next_s_item.get("P")
             if o3 is not None and p is not None:
                 bonds.append((o3, p))
 
@@ -3084,12 +3456,13 @@ def _build_extra_base_atoms(
         # contain explicit phosphodiester atoms.  Close only the linker atoms after
         # the chain-aware rigid placement above; never translate the ribose/base off
         # its oxDNA site and never reuse a native-junction minimiser cache.
-        _xb_overridden = (xb_pos_override is not None
-                          and (xo.id, 0) in xb_pos_override)
-        first_override = ((xb_pos_override or {}).get((xo.id, 0))
-                          if _xb_overridden else None)
-        _xb_constrained = (isinstance(first_override, dict)
-                           and first_override.get("cm") is not None)
+        _xb_overridden = xb_pos_override is not None and (xo.id, 0) in xb_pos_override
+        first_override = (
+            (xb_pos_override or {}).get((xo.id, 0)) if _xb_overridden else None
+        )
+        _xb_constrained = (
+            isinstance(first_override, dict) and first_override.get("cm") is not None
+        )
         if _xb_constrained:
             # Coarse oxDNA sites are particle centres, not atomistic sugar anchors.
             # After orienting every rigid nucleotide, make a small tethered
@@ -3108,8 +3481,9 @@ def _build_extra_base_atoms(
                 for prev_s_item, next_s_item in zip(all_s, all_s[1:]):
                     if "C3'" not in prev_s_item or "C5'" not in next_s_item:
                         continue
-                    gap = (_atom_pos(atoms, next_s_item["C5'"])
-                           - _atom_pos(atoms, prev_s_item["C3'"]))
+                    gap = _atom_pos(atoms, next_s_item["C5'"]) - _atom_pos(
+                        atoms, prev_s_item["C3'"]
+                    )
                     gl = float(_np.linalg.norm(gap))
                     if gl <= target_span or gl < 1e-12:
                         continue
@@ -3140,7 +3514,9 @@ def _build_extra_base_atoms(
                     shifts[bi] = proposed
                     for serial_i in set(sdict.values()):
                         a = atoms[serial_i]
-                        a.x += float(delta[0]); a.y += float(delta[1]); a.z += float(delta[2])
+                        a.x += float(delta[0])
+                        a.y += float(delta[1])
+                        a.z += float(delta[2])
                     moved = True
                 if not moved:
                     break
@@ -3160,8 +3536,10 @@ def _build_extra_base_atoms(
 def _reciprocal_crossover_id_pairs(design) -> list:
     """(crossover_id_a, crossover_id_b) for every antiparallel reciprocal pair."""
     from backend.core.junction_topology import (  # noqa: PLC0415
-        crossover_connectors, reciprocal_pairs,
+        crossover_connectors,
+        reciprocal_pairs,
     )
+
     conns = crossover_connectors(design)
     out = []
     for i, j in reciprocal_pairs(conns):
@@ -3172,14 +3550,14 @@ def _reciprocal_crossover_id_pairs(design) -> list:
 
 
 def _build_extension_atoms(
-    design:              "Design",
-    atoms:               list[Atom],
-    bonds:               list[tuple[int, int]],
-    serial:              int,
-    strand_to_chain:     dict[str, str],
-    nuc_pos_cache:       dict[str, dict[tuple[int, "Direction"], "NucleotidePosition"]],
+    design: "Design",
+    atoms: list[Atom],
+    bonds: list[tuple[int, int]],
+    serial: int,
+    strand_to_chain: dict[str, str],
+    nuc_pos_cache: dict[str, dict[tuple[int, "Direction"], "NucleotidePosition"]],
     bp_to_sugar_serials: dict[tuple[str, int, str], dict[str, int]],
-    ext_pos_override:    "dict[tuple[str, int], _np.ndarray] | None" = None,
+    ext_pos_override: "dict[tuple[str, int], _np.ndarray] | None" = None,
     bridge_fn=_minimize_backbone_bridge,
 ) -> int:
     """Place all-atom residues for every strand extension (5′/3′ terminal tail).
@@ -3224,13 +3602,13 @@ def _build_extension_atoms(
             continue
 
         five = ext.end == "five_prime"
-        dom  = strand.domains[0] if five else strand.domains[-1]
-        bp   = dom.start_bp if five else dom.end_bp
+        dom = strand.domains[0] if five else strand.domains[-1]
+        bp = dom.start_bp if five else dom.end_bp
         anchor_key = (dom.helix_id, bp, dom.direction.value)
 
         anchor_s = bp_to_sugar_serials.get(anchor_key)
         if anchor_s is None:
-            continue     # anchor is on an excluded helix — nothing to hang from
+            continue  # anchor is on an excluded helix — nothing to hang from
 
         # nuc_pos_cache is keyed (bp, Direction, copy_k); copy 0 is the base nucleotide
         # (a loop insertion adds copies 1…n, which a terminal anchor never is).
@@ -3262,7 +3640,7 @@ def _build_extension_atoms(
 
         n = len(ext.sequence)
         arc_len = n * SSDNA_CONTOUR_PER_NT_NM
-        p2   = p0 + radial * arc_len
+        p2 = p0 + radial * arc_len
         ctrl = (p0 + p2) * 0.5 + bow_dir * (arc_len * 0.30)
 
         simulated_sites = {
@@ -3271,19 +3649,19 @@ def _build_extension_atoms(
             if ext_pos_override and (ext.id, i) in ext_pos_override
         }
 
-        chain_id  = strand_to_chain.get(strand.id, "A")
+        chain_id = strand_to_chain.get(strand.id, "A")
         strand_id = strand.id
 
         # Base orientation target, mirroring the extra-base rule.
-        avg_axis   = _normalise(_np.asarray(nuc.axis_tangent, dtype=float))
+        avg_axis = _normalise(_np.asarray(nuc.axis_tangent, dtype=float))
         tail_sugars: list[dict[str, int]] = []
 
-        for i in range(n):                       # i = distance rank from the anchor
+        for i in range(n):  # i = distance rank from the anchor
             t = (i + 1) / n
             origin_pos = _bezier_pt(p0, ctrl, p2, t)
-            arc_tan    = _bezier_tan(p0, ctrl, p2, t)
+            arc_tan = _bezier_tan(p0, ctrl, p2, t)
             # 5′→3′ runs OUTWARD along the arc for a 3′ tail, INWARD for a 5′ tail.
-            chain_dir  = arc_tan if not five else -arc_tan
+            chain_dir = arc_tan if not five else -arc_tan
 
             sim = (ext_pos_override or {}).get((ext.id, i))
             sim_frame = None
@@ -3298,20 +3676,25 @@ def _build_extension_atoms(
                 if five:
                     three_side = simulated_sites.get(i - 1, p0)
                     five_side = simulated_sites.get(i + 1)
-                    relaxed_dir = (three_side - origin_pos if five_side is None
-                                   else three_side - five_side)
+                    relaxed_dir = (
+                        three_side - origin_pos
+                        if five_side is None
+                        else three_side - five_side
+                    )
                 else:
                     five_side = simulated_sites.get(i - 1, p0)
                     three_side = simulated_sites.get(i + 1)
-                    relaxed_dir = (origin_pos - five_side if three_side is None
-                                   else three_side - five_side)
+                    relaxed_dir = (
+                        origin_pos - five_side
+                        if three_side is None
+                        else three_side - five_side
+                    )
                 if float(_np.linalg.norm(relaxed_dir)) > 1e-9:
                     chain_dir = _normalise(relaxed_dir)
 
             if sim_frame is not None:
                 sim_a1, _sim_a3 = sim_frame
-                origin, R = _extra_base_frame(
-                    origin_pos, chain_dir, _normalise(sim_a1))
+                origin, R = _extra_base_frame(origin_pos, chain_dir, _normalise(sim_a1))
             else:
                 origin, R = _extra_base_frame(origin_pos, chain_dir, bow_dir)
 
@@ -3321,7 +3704,7 @@ def _build_extension_atoms(
             base_char = ext.sequence[i] if not five else ext.sequence[n - 1 - i]
             residue = _BASE_CHAR_TO_RESIDUE.get(base_char.upper(), "DT")
 
-            z_sign     = float(_np.dot(_np.cross(bow_dir, chain_dir), avg_axis))
+            z_sign = float(_np.dot(_np.cross(bow_dir, chain_dir), avg_axis))
             target_c1n = avg_axis if z_sign > 0.0 else -avg_axis
 
             tail_seq_num[chain_id] = tail_seq_num.get(chain_id, 0) + 1
@@ -3330,17 +3713,27 @@ def _build_extension_atoms(
             def _emit(atom_name, element, local) -> int:
                 nonlocal serial
                 world = origin + R @ local
-                atoms.append(Atom(
-                    serial=serial, name=atom_name, element=element, residue=residue,
-                    chain_id=chain_id, seq_num=seq_num,
-                    x=float(world[0]), y=float(world[1]), z=float(world[2]),
-                    strand_id=strand_id or "",
-                    # Anchor's key (like extra bases): the topology writers are
-                    # unchanged; extension_id/ext_k give the tail its own identity.
-                    helix_id=anchor_key[0], bp_index=anchor_key[1],
-                    direction=anchor_key[2],
-                    extension_id=ext.id, ext_k=i,
-                ))
+                atoms.append(
+                    Atom(
+                        serial=serial,
+                        name=atom_name,
+                        element=element,
+                        residue=residue,
+                        chain_id=chain_id,
+                        seq_num=seq_num,
+                        x=float(world[0]),
+                        y=float(world[1]),
+                        z=float(world[2]),
+                        strand_id=strand_id or "",
+                        # Anchor's key (like extra bases): the topology writers are
+                        # unchanged; extension_id/ext_k give the tail its own identity.
+                        helix_id=anchor_key[0],
+                        bp_index=anchor_key[1],
+                        direction=anchor_key[2],
+                        extension_id=ext.id,
+                        ext_k=i,
+                    )
+                )
                 s = serial
                 serial += 1
                 return s
@@ -3351,29 +3744,42 @@ def _build_extension_atoms(
             # stretched a tail backbone bond to 3.5 A (physical limit 3.2).
             for atom_name, element, n_c, y_c, z_c in _SUGAR:
                 sugar_name_to_serial[atom_name] = _emit(
-                    atom_name, element, _np.array([n_c, y_c, z_c]))
+                    atom_name, element, _np.array([n_c, y_c, z_c])
+                )
 
             base_atoms_def, base_bond_defs = BASE_TEMPLATES[residue]
             base_name_to_serial: dict[str, int] = {**sugar_name_to_serial}
             for atom_name, element, n_c, y_c, z_c in base_atoms_def:
                 base_name_to_serial[atom_name] = _emit(
-                    atom_name, element, _np.array([n_c, y_c, z_c]))
+                    atom_name, element, _np.array([n_c, y_c, z_c])
+                )
 
             if sim_frame is None:
                 # Same phosphate-stranding guard as the crossover placer: a position-only
                 # override tail (sim set, no frame) skips the bridge minimiser, so rotate the
                 # phosphate rigidly with its sugar; a geometric tail (sim is None) keeps it
                 # fixed (byte-unchanged) for the minimiser to place.
-                _align_glycosidic(atoms, residue, sugar_name_to_serial,
-                                  base_name_to_serial, target_c1n,
-                                  rotate_phosphate=sim is not None)
+                _align_glycosidic(
+                    atoms,
+                    residue,
+                    sugar_name_to_serial,
+                    base_name_to_serial,
+                    target_c1n,
+                    rotate_phosphate=sim is not None,
+                )
 
             for a_name, b_name in _SUGAR_BONDS:
-                sa, sb = sugar_name_to_serial.get(a_name), sugar_name_to_serial.get(b_name)
+                sa, sb = (
+                    sugar_name_to_serial.get(a_name),
+                    sugar_name_to_serial.get(b_name),
+                )
                 if sa is not None and sb is not None:
                     bonds.append((sa, sb))
             for a_name, b_name in base_bond_defs:
-                sa, sb = base_name_to_serial.get(a_name), base_name_to_serial.get(b_name)
+                sa, sb = (
+                    base_name_to_serial.get(a_name),
+                    base_name_to_serial.get(b_name),
+                )
                 if sa is not None and sb is not None:
                     bonds.append((sa, sb))
 
@@ -3383,7 +3789,9 @@ def _build_extension_atoms(
         #   3′ tail: anchor → bead0 → … → bead(n-1)   (free O3′ at the tip)
         #   5′ tail: bead(n-1) → … → bead0 → anchor   (free P/O5′ at the tip; the
         #            ANCHOR's phosphate is now an internal linkage, not the 5′ end)
-        chain_s = ([anchor_s] + tail_sugars) if not five else (tail_sugars[::-1] + [anchor_s])
+        chain_s = (
+            ([anchor_s] + tail_sugars) if not five else (tail_sugars[::-1] + [anchor_s])
+        )
         for prev_s, next_s in zip(chain_s, chain_s[1:]):
             o3, p = prev_s.get("O3'"), next_s.get("P")
             if o3 is not None and p is not None:
@@ -3405,22 +3813,22 @@ def atomistic_to_json(model: AtomisticModel) -> dict:
     return {
         "atoms": [
             {
-                "serial":      a.serial,
-                "name":        a.name,
-                "element":     a.element,
-                "residue":     a.residue,
-                "chain_id":    a.chain_id,
-                "seq_num":     a.seq_num,
-                "x":           round(a.x, 5),
-                "y":           round(a.y, 5),
-                "z":           round(a.z, 5),
-                "strand_id":   a.strand_id,
-                "helix_id":     a.helix_id,
-                "bp_index":     a.bp_index,
-                "direction":    a.direction,
-                "is_modified":  a.is_modified,
+                "serial": a.serial,
+                "name": a.name,
+                "element": a.element,
+                "residue": a.residue,
+                "chain_id": a.chain_id,
+                "seq_num": a.seq_num,
+                "x": round(a.x, 5),
+                "y": round(a.y, 5),
+                "z": round(a.z, 5),
+                "strand_id": a.strand_id,
+                "helix_id": a.helix_id,
+                "bp_index": a.bp_index,
+                "direction": a.direction,
+                "is_modified": a.is_modified,
                 "aux_helix_id": a.aux_helix_id,
-                "aux_t":        a.aux_t,
+                "aux_t": a.aux_t,
                 "crossover_id": a.crossover_id,
                 "extra_base_k": a.extra_base_k,
             }

@@ -5,15 +5,22 @@ equivariant (so the basin is real), force-matching trains, and Langevin integrat
 is stable + thermostats to the target temperature.  CPU-only, small synthetic system.
 torch is optional — skip cleanly if it isn't installed.
 """
+
 import numpy as np
 import pytest
 
 torch = pytest.importorskip("torch")
 
-pytestmark = pytest.mark.slow  # torch+CUDA init > per-test budget → test-dedicated session
+pytestmark = (
+    pytest.mark.slow
+)  # torch+CUDA init > per-test budget → test-dedicated session
 
 from backend.ml.propagator.energy import (  # noqa: E402
-    EnergyNet, ForceNet, force_match_loss, langevin_rollout, langevin_step,
+    EnergyNet,
+    ForceNet,
+    force_match_loss,
+    langevin_rollout,
+    langevin_step,
 )
 from backend.ml.propagator.gnn import radius_edges  # noqa: E402
 
@@ -33,7 +40,7 @@ def test_energy_invariant_and_forces_equivariant():
     z, x, edges = _system()
     m = EnergyNet(hidden=24, n_layers=2, cutoff=6.0)
     E, F = m.forces(z, x, edges)
-    assert E.dim() == 0                               # scalar total energy
+    assert E.dim() == 0  # scalar total energy
     # translation invariance of energy
     E_shift = m.energy(z, x + 5.0, edges)
     assert abs(E.item() - E_shift.item()) < 1e-3
@@ -41,8 +48,8 @@ def test_energy_invariant_and_forces_equivariant():
     R, _ = torch.linalg.qr(torch.randn(3, 3))
     R = R * torch.sign(torch.det(R))
     E2, F2 = m.forces(z, x @ R.T, edges)
-    assert abs(E.item() - E2.item()) < 1e-3           # invariant energy
-    assert (F @ R.T - F2).abs().max().item() < 1e-4   # equivariant force
+    assert abs(E.item() - E2.item()) < 1e-3  # invariant energy
+    assert (F @ R.T - F2).abs().max().item() < 1e-4  # equivariant force
 
 
 def test_forcenet_is_equivariant_and_single_pass():
@@ -56,7 +63,7 @@ def test_forcenet_is_equivariant_and_single_pass():
     R, _ = torch.linalg.qr(torch.randn(3, 3))
     R = R * torch.sign(torch.det(R))
     F2 = m(z, x @ R.T, edges)
-    assert (F @ R.T - F2).abs().max().item() < 1e-4     # equivariant force
+    assert (F @ R.T - F2).abs().max().item() < 1e-4  # equivariant force
     # translation invariance of the force
     assert (m(z, x + 3.0, edges) - F).abs().max().item() < 1e-4
 
@@ -73,7 +80,7 @@ def test_force_matching_reduces_loss():
         loss = force_match_loss(m, z, x, edges, f_true)
         loss.backward()
         opt.step()
-    assert loss.item() < l0                            # the energy head can fit forces
+    assert loss.item() < l0  # the energy head can fit forces
 
 
 def test_langevin_rollout_caches_force_and_thermostats():
@@ -89,13 +96,14 @@ def test_langevin_rollout_caches_force_and_thermostats():
 
     def force_fn(xx, step):
         calls["n"] += 1
-        return -20.0 * (xx - x0)          # harmonic well toward x0 (kcal/mol/Å)
+        return -20.0 * (xx - x0)  # harmonic well toward x0 (kcal/mol/Å)
 
-    xf, vf = langevin_rollout(force_fn, x, v, mass, dt_fs=1.0, steps=100,
-                              gamma_ps=147.0, temp_K=300.0)
-    assert calls["n"] == 101              # once per step + the initial eval (cached, not 2×)
+    xf, vf = langevin_rollout(
+        force_fn, x, v, mass, dt_fs=1.0, steps=100, gamma_ps=147.0, temp_K=300.0
+    )
+    assert calls["n"] == 101  # once per step + the initial eval (cached, not 2×)
     assert torch.isfinite(xf).all() and torch.isfinite(vf).all()
-    assert (xf - x0).norm(dim=-1).max().item() < 5.0   # stays bounded in the well
+    assert (xf - x0).norm(dim=-1).max().item() < 5.0  # stays bounded in the well
 
 
 def test_langevin_rollout_is_stable_and_finite():

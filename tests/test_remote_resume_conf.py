@@ -108,6 +108,7 @@ class TestResumeConf:
         cell shrink instead of by `fast`.
         """
         from backend.core.md_cutoff import CutoffParams
+
         min_frames = CutoffParams().min_frames
 
         for restart_step in (4_000, 44_000, 90_000, 119_000):
@@ -141,7 +142,7 @@ class TestChainScriptActuallyResumes:
             "#!/bin/bash\n"
             'conf="${!#}"\n'
             'name=$(basename "$conf" .conf)\n'
-            'name=${name%.resume}\n'
+            "name=${name%.resume}\n"
             'echo "$conf" >> confs_used.txt\n'
             "mkdir -p output\n"
             # First invocation: write a restart checkpoint, then die exactly as NAMD does.
@@ -176,15 +177,22 @@ class TestChainScriptActuallyResumes:
         (tmp_path / "s_01_p10.conf").write_text(CONF)
 
         script = tmp_path / "chain.sh"
-        script.write_text(render_chain_script(
-            steps=[ChainStep("s_01_p10", steps=120_000)],
-            remote_dir=str(tmp_path),
-            namd_bin=str(self._fake_namd_that_shrinks_once(tmp_path)),
-            threads=2,
-        ))
+        script.write_text(
+            render_chain_script(
+                steps=[ChainStep("s_01_p10", steps=120_000)],
+                remote_dir=str(tmp_path),
+                namd_bin=str(self._fake_namd_that_shrinks_once(tmp_path)),
+                threads=2,
+            )
+        )
         script.chmod(0o755)
-        proc = subprocess.run(["bash", str(script)], cwd=tmp_path,
-                              capture_output=True, text=True, timeout=120)
+        proc = subprocess.run(
+            ["bash", str(script)],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
 
         assert proc.returncode == 0, proc.stdout + proc.stderr
         assert (tmp_path / "nadoc_status").read_text().strip() == "completed"
@@ -216,7 +224,7 @@ class TestAPodThatDiesMidSegmentRESUMES:
             "#!/bin/bash\n"
             'conf="${!#}"\n'
             'name=$(basename "$conf" .conf)\n'
-            'name=${name%.resume}\n'
+            "name=${name%.resume}\n"
             'echo "$conf" >> confs_used.txt\n'
             "mkdir -p output\n"
             'echo coords > "output/${name}.coor"\n'
@@ -244,26 +252,35 @@ class TestAPodThatDiesMidSegmentRESUMES:
 
         shutil.copy(remote_resume_conf.__file__, tmp_path / RESUME_CONF_NAME)
         (tmp_path / "s_01_p10.conf").write_text(
-            CONF.replace("run                120000", "run                800000"))
+            CONF.replace("run                120000", "run                800000")
+        )
 
         # What the dead pod left behind on the network volume.
         out = tmp_path / "output"
         out.mkdir()
         (out / "s_01_p10.restart.xsc").write_text(
-            "#$LABELS step a_x\n500000 151.97 0 0 0 86.48 0 0 0 1393.4 0 0 0\n")
+            "#$LABELS step a_x\n500000 151.97 0 0 0 86.48 0 0 0 1393.4 0 0 0\n"
+        )
         (out / "s_01_p10.restart.coor").write_text("r")
         (out / "s_01_p10.restart.vel").write_text("r")
 
         script = tmp_path / "chain.sh"
-        script.write_text(render_chain_script(
-            steps=[ChainStep("s_01_p10", steps=800_000)],
-            remote_dir=str(tmp_path),
-            namd_bin=str(self._fake_namd(tmp_path)),
-            threads=2,
-        ))
+        script.write_text(
+            render_chain_script(
+                steps=[ChainStep("s_01_p10", steps=800_000)],
+                remote_dir=str(tmp_path),
+                namd_bin=str(self._fake_namd(tmp_path)),
+                threads=2,
+            )
+        )
         script.chmod(0o755)
-        proc = subprocess.run(["bash", str(script)], cwd=tmp_path, capture_output=True,
-                              text=True, timeout=120)
+        proc = subprocess.run(
+            ["bash", str(script)],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
         assert proc.returncode == 0, proc.stdout + proc.stderr
 
         used = (tmp_path / "confs_used.txt").read_text().split()

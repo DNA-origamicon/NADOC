@@ -42,7 +42,9 @@ def _strand(
     return Strand(id=sid, domains=domains, strand_type=strand_type)
 
 
-def _dom(hid: str, lo: int, hi: int, direction: Direction = Direction.FORWARD) -> Domain:
+def _dom(
+    hid: str, lo: int, hi: int, direction: Direction = Direction.FORWARD
+) -> Domain:
     return Domain(helix_id=hid, start_bp=lo, end_bp=hi, direction=direction)
 
 
@@ -109,7 +111,9 @@ def test_new_domain_on_existing_helix_inherits_helix_level_cluster():
     h0 = _helix("h0", length_bp=100)
     s0 = _strand("s0", [_dom("h0", 0, 49)])
     cluster_before = _cluster("c0", ["h0"])
-    design_before = Design(helices=[h0], strands=[s0], cluster_transforms=[cluster_before])
+    design_before = Design(
+        helices=[h0], strands=[s0], cluster_transforms=[cluster_before]
+    )
 
     s1 = _strand("s1", [_dom("h0", 50, 99, Direction.REVERSE)])
     design_after = Design(
@@ -134,7 +138,9 @@ def test_new_domain_on_existing_helix_added_to_domain_level_cluster():
         ["h0"],
         domain_refs=[DomainRef(strand_id="s0", domain_index=0)],
     )
-    design_before = Design(helices=[h0], strands=[s0], cluster_transforms=[cluster_before])
+    design_before = Design(
+        helices=[h0], strands=[s0], cluster_transforms=[cluster_before]
+    )
 
     s1 = _strand("s1", [_dom("h0", 0, 99, Direction.REVERSE)])
     design_after = Design(
@@ -159,8 +165,12 @@ def test_bp_range_majority_wins_for_two_domain_clusters_on_one_helix():
     h0 = _helix("h0", length_bp=100)
     s_a = _strand("s_a", [_dom("h0", 0, 49)])
     s_b = _strand("s_b", [_dom("h0", 50, 99)])
-    cluster_a = _cluster("c_a", ["h0"], domain_refs=[DomainRef(strand_id="s_a", domain_index=0)])
-    cluster_b = _cluster("c_b", ["h0"], domain_refs=[DomainRef(strand_id="s_b", domain_index=0)])
+    cluster_a = _cluster(
+        "c_a", ["h0"], domain_refs=[DomainRef(strand_id="s_a", domain_index=0)]
+    )
+    cluster_b = _cluster(
+        "c_b", ["h0"], domain_refs=[DomainRef(strand_id="s_b", domain_index=0)]
+    )
     design_before = Design(
         helices=[h0],
         strands=[s_a, s_b],
@@ -294,7 +304,9 @@ def test_strand_split_distributes_domain_refs_by_bp_range():
         ["h0"],
         domain_refs=[DomainRef(strand_id="s_a", domain_index=0)],
     )
-    design_before = Design(helices=[h0], strands=[s_a_before], cluster_transforms=[cluster_before])
+    design_before = Design(
+        helices=[h0], strands=[s_a_before], cluster_transforms=[cluster_before]
+    )
 
     s_a_after = _strand("s_a", [_dom("h0", 0, 49)])
     s_a_r = _strand("s_a_r", [_dom("h0", 50, 99)])
@@ -305,7 +317,9 @@ def test_strand_split_distributes_domain_refs_by_bp_range():
     )
 
     result = reconcile_cluster_membership(design_before, design_after)
-    refs = {(r.strand_id, r.domain_index) for r in result.cluster_transforms[0].domain_ids}
+    refs = {
+        (r.strand_id, r.domain_index) for r in result.cluster_transforms[0].domain_ids
+    }
     assert ("s_a", 0) in refs
     assert ("s_a_r", 0) in refs
 
@@ -322,7 +336,9 @@ def test_stale_domain_ref_dropped_when_strand_gone():
             DomainRef(strand_id="s1", domain_index=0),
         ],
     )
-    design_before = Design(helices=[h0], strands=[s0, s1], cluster_transforms=[cluster_before])
+    design_before = Design(
+        helices=[h0], strands=[s0, s1], cluster_transforms=[cluster_before]
+    )
 
     design_after = Design(
         helices=[h0],
@@ -331,13 +347,17 @@ def test_stale_domain_ref_dropped_when_strand_gone():
     )
 
     result = reconcile_cluster_membership(design_before, design_after)
-    refs = {(r.strand_id, r.domain_index) for r in result.cluster_transforms[0].domain_ids}
+    refs = {
+        (r.strand_id, r.domain_index) for r in result.cluster_transforms[0].domain_ids
+    }
     assert refs == {("s0", 0)}
 
 
 def test_stale_domain_ref_dropped_when_index_out_of_range():
     h0 = _helix("h0", 0, 0)
-    s0_before = _strand("s0", [_dom("h0", 0, 49), _dom("h0", 50, 99, Direction.REVERSE)])
+    s0_before = _strand(
+        "s0", [_dom("h0", 0, 49), _dom("h0", 50, 99, Direction.REVERSE)]
+    )
     cluster_before = _cluster(
         "c0",
         ["h0"],
@@ -346,13 +366,19 @@ def test_stale_domain_ref_dropped_when_index_out_of_range():
             DomainRef(strand_id="s0", domain_index=1),
         ],
     )
-    design_before = Design(helices=[h0], strands=[s0_before], cluster_transforms=[cluster_before])
+    design_before = Design(
+        helices=[h0], strands=[s0_before], cluster_transforms=[cluster_before]
+    )
 
     s0_after = _strand("s0", [_dom("h0", 0, 49)])  # second domain merged/removed
-    design_after = Design(helices=[h0], strands=[s0_after], cluster_transforms=[cluster_before])
+    design_after = Design(
+        helices=[h0], strands=[s0_after], cluster_transforms=[cluster_before]
+    )
 
     result = reconcile_cluster_membership(design_before, design_after)
-    refs = {(r.strand_id, r.domain_index) for r in result.cluster_transforms[0].domain_ids}
+    refs = {
+        (r.strand_id, r.domain_index) for r in result.cluster_transforms[0].domain_ids
+    }
     assert refs == {("s0", 0)}
 
 
@@ -445,11 +471,16 @@ def test_loop_skip_change_does_not_disturb_membership():
         ["h0"],
         domain_refs=[DomainRef(strand_id="s0", domain_index=0)],
     )
-    design_before = Design(helices=[h0], strands=[s0], cluster_transforms=[cluster_before])
+    design_before = Design(
+        helices=[h0], strands=[s0], cluster_transforms=[cluster_before]
+    )
 
     from backend.core.models import LoopSkip
+
     h0_after = h0.model_copy(update={"loop_skips": [LoopSkip(bp_index=10, delta=1)]})
-    design_after = Design(helices=[h0_after], strands=[s0], cluster_transforms=[cluster_before])
+    design_after = Design(
+        helices=[h0_after], strands=[s0], cluster_transforms=[cluster_before]
+    )
 
     result = reconcile_cluster_membership(design_before, design_after)
     c = result.cluster_transforms[0]

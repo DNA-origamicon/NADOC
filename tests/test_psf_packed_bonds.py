@@ -6,6 +6,7 @@ atoms an 8-digit index fills an I8 field and adjacent bonds merge into one token
 split() parser dropped half the numbers and IndexErrored. This blocked the ~11.8M-atom
 VoltronCore full-box HMR PSF (the 2.85M shell, 7-digit indices, was fine).
 """
+
 from __future__ import annotations
 
 from backend.core.md_protocols import _iter_packed_psf_pairs
@@ -36,7 +37,7 @@ def test_pairs_span_multiple_rows_and_stop_at_count():
 
 
 def test_ext_width_10_columns():
-    a1, a2 = 1000000001, 1000000002       # 10-digit, fill an I10 column (EXT)
+    a1, a2 = 1000000001, 1000000002  # 10-digit, fill an I10 column (EXT)
     line = f"{a1:10d}{a2:10d}"
     assert " " not in line
     assert list(_iter_packed_psf_pairs([line], 0, 1, width=10)) == [(a1, a2)]

@@ -119,7 +119,9 @@ def _seg(name):
 class TestLaunchDetached:
     def test_returns_the_pid_it_spawned(self):
         conn = _conn({"setsid": (0, "48213\n", "")})
-        pid = _run(conn.launch_detached("/workspace/jobs/a/chain.sh", "/workspace/jobs/a"))
+        pid = _run(
+            conn.launch_detached("/workspace/jobs/a/chain.sh", "/workspace/jobs/a")
+        )
         assert pid == 48213
 
     def test_uses_setsid_and_detaches_all_stdio(self):
@@ -144,7 +146,9 @@ class TestLaunchDetached:
         conn = _conn({"setsid": (0, "1\n", "")})
         _run(conn.launch_detached("/w/chain.sh", "/w"))
         cmd = conn._conn.commands[-1]  # noqa: SLF001
-        assert "&&" not in cmd, "an && before the & re-subshells the launch and hangs it"
+        assert "&&" not in cmd, (
+            "an && before the & re-subshells the launch and hangs it"
+        )
         assert "|| exit 90;" in cmd
 
     def test_raises_a_clear_error_when_no_pid_comes_back(self):
@@ -183,5 +187,9 @@ class TestNotConnected:
     def test_status_is_reportable_without_a_connection(self):
         c = RunpodConnection(host="h", port=22, pod_id="p9")
         assert c.status() == {
-            "connected": False, "pod_id": "p9", "host": "h", "port": 22, "user": "root",
+            "connected": False,
+            "pod_id": "p9",
+            "host": "h",
+            "port": 22,
+            "user": "root",
         }

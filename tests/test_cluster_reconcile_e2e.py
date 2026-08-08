@@ -60,8 +60,14 @@ def _seed_design_with_cluster(domain_level: bool = False) -> Design:
     if domain_level:
         seed = Strand(
             id="s_seed",
-            domains=[Domain(helix_id="h_XY_0_0", start_bp=0, end_bp=99,
-                             direction=Direction.REVERSE)],
+            domains=[
+                Domain(
+                    helix_id="h_XY_0_0",
+                    start_bp=0,
+                    end_bp=99,
+                    direction=Direction.REVERSE,
+                )
+            ],
             strand_type=StrandType.STAPLE,
         )
         strands.append(seed)

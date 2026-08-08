@@ -44,6 +44,7 @@ from backend.core.atomistic_minimisers import (
 @dataclass
 class AtomLike:
     """Lightweight x/y/z holder — enough for the minimisers' attribute access."""
+
     x: float
     y: float
     z: float
@@ -53,7 +54,9 @@ def _make_atoms(positions: list[tuple[float, float, float]]) -> list[AtomLike]:
     return [AtomLike(x, y, z) for x, y, z in positions]
 
 
-def _build_ribose(origin: np.ndarray, scale: float = 0.15) -> tuple[list[AtomLike], dict[str, int]]:
+def _build_ribose(
+    origin: np.ndarray, scale: float = 0.15
+) -> tuple[list[AtomLike], dict[str, int]]:
     """
     Build a minimal sugar-phosphate ribose ring around `origin` with the
     serial-name pattern expected by the minimisers.  Atom positions are
@@ -61,18 +64,18 @@ def _build_ribose(origin: np.ndarray, scale: float = 0.15) -> tuple[list[AtomLik
     """
     # Synthetic but plausible ribose layout.  Origin = C2'.
     layout = {
-        "C2'":  origin + np.array([ 0.00,  0.00, 0.00]),
-        "C1'":  origin + np.array([ 0.15,  0.00, 0.00]),
-        "C3'":  origin + np.array([-0.10,  0.10, 0.00]),
-        "O3'":  origin + np.array([-0.20,  0.20, 0.00]),
-        "C4'":  origin + np.array([ 0.05,  0.15, 0.00]),
-        "O4'":  origin + np.array([ 0.18,  0.10, 0.00]),
-        "C5'":  origin + np.array([ 0.10,  0.30, 0.00]),
-        "O5'":  origin + np.array([ 0.20,  0.40, 0.00]),
-        "P":    origin + np.array([ 0.30,  0.55, 0.00]),
-        "OP1":  origin + np.array([ 0.35,  0.60, 0.10]),
-        "OP2":  origin + np.array([ 0.25,  0.60,-0.10]),
-        "N1":   origin + np.array([ 0.30, -0.05, 0.00]),  # base attachment for DT/DC
+        "C2'": origin + np.array([0.00, 0.00, 0.00]),
+        "C1'": origin + np.array([0.15, 0.00, 0.00]),
+        "C3'": origin + np.array([-0.10, 0.10, 0.00]),
+        "O3'": origin + np.array([-0.20, 0.20, 0.00]),
+        "C4'": origin + np.array([0.05, 0.15, 0.00]),
+        "O4'": origin + np.array([0.18, 0.10, 0.00]),
+        "C5'": origin + np.array([0.10, 0.30, 0.00]),
+        "O5'": origin + np.array([0.20, 0.40, 0.00]),
+        "P": origin + np.array([0.30, 0.55, 0.00]),
+        "OP1": origin + np.array([0.35, 0.60, 0.10]),
+        "OP2": origin + np.array([0.25, 0.60, -0.10]),
+        "N1": origin + np.array([0.30, -0.05, 0.00]),  # base attachment for DT/DC
     }
     atoms_list = []
     serials: dict[str, int] = {}
@@ -122,7 +125,9 @@ class TestTranslateAtom:
     def test_zero_delta_no_change(self):
         atoms = _make_atoms([(0.7, 0.8, 0.9)])
         _translate_atom(atoms, 0, np.zeros(3))
-        np.testing.assert_array_equal([atoms[0].x, atoms[0].y, atoms[0].z], [0.7, 0.8, 0.9])
+        np.testing.assert_array_equal(
+            [atoms[0].x, atoms[0].y, atoms[0].z], [0.7, 0.8, 0.9]
+        )
 
 
 # ── Bridge interpolation (linear) ─────────────────────────────────────────────
@@ -140,9 +145,15 @@ class TestInterpolateBackboneBridge:
         c5 = _atom_pos(atoms, dst["C5'"])
         _interpolate_backbone_bridge(atoms, src, dst)
         # O3'(src) should be at c3 + 0.25*(c5 - c3)
-        np.testing.assert_allclose(_atom_pos(atoms, src["O3'"]), c3 + 0.25 * (c5 - c3), atol=1e-9)
-        np.testing.assert_allclose(_atom_pos(atoms, dst["P"]),   c3 + 0.50 * (c5 - c3), atol=1e-9)
-        np.testing.assert_allclose(_atom_pos(atoms, dst["O5'"]), c3 + 0.75 * (c5 - c3), atol=1e-9)
+        np.testing.assert_allclose(
+            _atom_pos(atoms, src["O3'"]), c3 + 0.25 * (c5 - c3), atol=1e-9
+        )
+        np.testing.assert_allclose(
+            _atom_pos(atoms, dst["P"]), c3 + 0.50 * (c5 - c3), atol=1e-9
+        )
+        np.testing.assert_allclose(
+            _atom_pos(atoms, dst["O5'"]), c3 + 0.75 * (c5 - c3), atol=1e-9
+        )
 
     def test_op1_op2_translated_with_p(self):
         atoms, src = _build_ribose(np.zeros(3))
@@ -153,12 +164,16 @@ class TestInterpolateBackboneBridge:
 
         op1_before = _atom_pos(atoms, dst["OP1"])
         op2_before = _atom_pos(atoms, dst["OP2"])
-        p_before   = _atom_pos(atoms, dst["P"])
+        p_before = _atom_pos(atoms, dst["P"])
         _interpolate_backbone_bridge(atoms, src, dst)
-        p_after    = _atom_pos(atoms, dst["P"])
-        delta_p    = p_after - p_before
-        np.testing.assert_allclose(_atom_pos(atoms, dst["OP1"]), op1_before + delta_p, atol=1e-9)
-        np.testing.assert_allclose(_atom_pos(atoms, dst["OP2"]), op2_before + delta_p, atol=1e-9)
+        p_after = _atom_pos(atoms, dst["P"])
+        delta_p = p_after - p_before
+        np.testing.assert_allclose(
+            _atom_pos(atoms, dst["OP1"]), op1_before + delta_p, atol=1e-9
+        )
+        np.testing.assert_allclose(
+            _atom_pos(atoms, dst["OP2"]), op2_before + delta_p, atol=1e-9
+        )
 
     def test_missing_keys_returns_silently(self):
         atoms = []
@@ -188,7 +203,7 @@ class TestMinimizeBackboneBridge:
 
         c5 = _atom_pos(atoms, dst["C5'"])
         o3 = _atom_pos(atoms, src["O3'"])
-        p  = _atom_pos(atoms, dst["P"])
+        p = _atom_pos(atoms, dst["P"])
         o5 = _atom_pos(atoms, dst["O5'"])
 
         # Bond lengths should be near canonical (loose tol — angle terms compete
@@ -206,12 +221,14 @@ class TestMinimizeBackboneBridge:
         atoms.extend(atoms2)
         dst = {k: v + offset for k, v in dst.items()}
 
-        p_before   = _atom_pos(atoms, dst["P"])
+        p_before = _atom_pos(atoms, dst["P"])
         op1_before = _atom_pos(atoms, dst["OP1"])
         _minimize_backbone_bridge(atoms, src, dst)
-        p_after    = _atom_pos(atoms, dst["P"])
-        op1_after  = _atom_pos(atoms, dst["OP1"])
-        np.testing.assert_allclose(op1_after - op1_before, p_after - p_before, atol=1e-9)
+        p_after = _atom_pos(atoms, dst["P"])
+        op1_after = _atom_pos(atoms, dst["OP1"])
+        np.testing.assert_allclose(
+            op1_after - op1_before, p_after - p_before, atol=1e-9
+        )
 
     def test_missing_keys_returns_silently(self):
         _minimize_backbone_bridge([], {}, {})
@@ -240,5 +257,3 @@ def _build_eb_scenario(n_eb: int) -> tuple[list[AtomLike], dict, dict, list[dict
     dst = {k: v + offset for k, v in dst.items()}
 
     return atoms, src, dst, eb_dicts
-
-

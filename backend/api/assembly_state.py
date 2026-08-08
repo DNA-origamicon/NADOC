@@ -54,6 +54,7 @@ MAX_UNDO_STEPS = 50
 @dataclass
 class _AssemblySession:
     """Per-document assembly state: active assembly + undo/redo + display state."""
+
     assembly: Assembly | None = None
     # maxlen is the baseline; ``_trim_to`` enforces the adaptive cap on every
     # push so the deque never holds more than the instance-count-aware limit.
@@ -86,6 +87,7 @@ def _session() -> _AssemblySession:
 
 
 # ── Document registry helpers (multi-document) ───────────────────────────────
+
 
 def list_doc_ids() -> list[str]:
     """Doc ids that currently hold an assembly."""
@@ -164,6 +166,7 @@ def _trim_to(dq: deque[Assembly], cap: int) -> None:
     """Drop oldest entries until ``len(dq) <= cap``."""
     while len(dq) > cap:
         dq.popleft()
+
 
 def get_assembly() -> Assembly | None:
     with _lock:
@@ -265,9 +268,9 @@ def close_session() -> None:
         s.revision += 1
 
 
-def remember_instance_display(instance_id: str, *,
-                                representation: str | None = None,
-                                visible:        bool | None = None) -> None:
+def remember_instance_display(
+    instance_id: str, *, representation: str | None = None, visible: bool | None = None
+) -> None:
     """Record a per-instance display preference that survives seek scrubbing.
 
     Called from any route that mutates ``representation`` or ``visible`` on
@@ -344,6 +347,7 @@ def redo_depth() -> int:
 # the log entry can only carry params, not enough state to surgically remove
 # or edit mid-history.
 
+
 def encode_assembly_snapshot(assembly: Assembly) -> tuple[str, int]:
     """Serialize an Assembly to a gzip+base64 payload for a SnapshotLogEntry.
 
@@ -362,10 +366,13 @@ def encode_assembly_snapshot(assembly: Assembly) -> tuple[str, int]:
     actually defined — every polymerize / mutation crashed master.
     """
     import json as _json
-    stripped = assembly.model_copy(update={
-        "feature_log": [],
-        "feature_log_cursor": -1,
-    })
+
+    stripped = assembly.model_copy(
+        update={
+            "feature_log": [],
+            "feature_log_cursor": -1,
+        }
+    )
     # v2-only dump (matches the wire-format _assembly_response now emits).
     raw = _json.dumps(stripped.to_dict_v2()).encode("utf-8")
     gz = gzip.compress(raw, compresslevel=6)
@@ -395,6 +402,7 @@ def decode_assembly_snapshot(payload_b64: str) -> Assembly:
 # ``_apply_assembly_mutation_with_feature_log`` for bulk ops like polymerize
 # that touch a small fraction of total state; the navigation routes
 # (seek/revert/delete) handle both formats transparently.
+
 
 def _gzip_b64(raw: bytes) -> str:
     return base64.b64encode(gzip.compress(raw, compresslevel=6)).decode("ascii")
@@ -432,73 +440,77 @@ def encode_diff_snapshot(pre: Assembly, post: Assembly) -> dict:
     """
     import json as _json
 
-    pre_inst_by_id  = {i.id: i for i in pre.instances}
+    pre_inst_by_id = {i.id: i for i in pre.instances}
     post_inst_by_id = {i.id: i for i in post.instances}
-    pre_joint_by_id  = {j.id: j for j in pre.joints}
+    pre_joint_by_id = {j.id: j for j in pre.joints}
     post_joint_by_id = {j.id: j for j in post.joints}
 
     # Pre-index maps so inverse-apply can restore removed items at their
     # original positions in the list (otherwise undo-delete shifts items).
-    pre_inst_idx_by_id  = {i.id: k for k, i in enumerate(pre.instances)}
+    pre_inst_idx_by_id = {i.id: k for k, i in enumerate(pre.instances)}
     pre_joint_idx_by_id = {j.id: k for k, j in enumerate(pre.joints)}
 
-    pre_inst_ids,  post_inst_ids  = set(pre_inst_by_id),  set(post_inst_by_id)
+    pre_inst_ids, post_inst_ids = set(pre_inst_by_id), set(post_inst_by_id)
     pre_joint_ids, post_joint_ids = set(pre_joint_by_id), set(post_joint_by_id)
 
-    added_inst_ids   = post_inst_ids  - pre_inst_ids
-    removed_inst_ids = pre_inst_ids   - post_inst_ids
-    added_joint_ids   = post_joint_ids - pre_joint_ids
-    removed_joint_ids = pre_joint_ids  - post_joint_ids
+    added_inst_ids = post_inst_ids - pre_inst_ids
+    removed_inst_ids = pre_inst_ids - post_inst_ids
+    added_joint_ids = post_joint_ids - pre_joint_ids
+    removed_joint_ids = pre_joint_ids - post_joint_ids
 
     # Modified = present in both, but content differs.
-    modified_inst_pre:  list = []
+    modified_inst_pre: list = []
     modified_inst_post: list = []
     for iid in pre_inst_ids & post_inst_ids:
-        pre_i  = pre_inst_by_id[iid]
+        pre_i = pre_inst_by_id[iid]
         post_i = post_inst_by_id[iid]
         if pre_i != post_i:
             modified_inst_pre.append(_instance_dict(pre_i))
             modified_inst_post.append(_instance_dict(post_i))
 
-    modified_joint_pre:  list = []
+    modified_joint_pre: list = []
     modified_joint_post: list = []
     for jid in pre_joint_ids & post_joint_ids:
-        pre_j  = pre_joint_by_id[jid]
+        pre_j = pre_joint_by_id[jid]
         post_j = post_joint_by_id[jid]
         if pre_j != post_j:
             modified_joint_pre.append(_joint_dict(pre_j))
             modified_joint_post.append(_joint_dict(post_j))
 
     added_payload = {
-        "instances": [_instance_dict(post_inst_by_id[i])  for i in added_inst_ids],
-        "joints":    [_joint_dict(post_joint_by_id[j])    for j in added_joint_ids],
+        "instances": [_instance_dict(post_inst_by_id[i]) for i in added_inst_ids],
+        "joints": [_joint_dict(post_joint_by_id[j]) for j in added_joint_ids],
     }
     # Sort removed items by their pre-index so inverse-apply can insert them
     # back at the original positions (ascending insertion is order-stable).
-    removed_inst_sorted  = sorted(removed_inst_ids,  key=lambda i: pre_inst_idx_by_id[i])
-    removed_joint_sorted = sorted(removed_joint_ids, key=lambda j: pre_joint_idx_by_id[j])
+    removed_inst_sorted = sorted(removed_inst_ids, key=lambda i: pre_inst_idx_by_id[i])
+    removed_joint_sorted = sorted(
+        removed_joint_ids, key=lambda j: pre_joint_idx_by_id[j]
+    )
     modified_payload = {
         "pre": {
             "instances": modified_inst_pre,
-            "joints":    modified_joint_pre,
+            "joints": modified_joint_pre,
         },
         "post": {
             "instances": modified_inst_post,
-            "joints":    modified_joint_post,
+            "joints": modified_joint_post,
         },
         "removed": {
-            "instances":     [_instance_dict(pre_inst_by_id[i])  for i in removed_inst_sorted],
-            "joints":        [_joint_dict(pre_joint_by_id[j])    for j in removed_joint_sorted],
-            "inst_pre_idx":  [pre_inst_idx_by_id[i]  for i in removed_inst_sorted],
+            "instances": [
+                _instance_dict(pre_inst_by_id[i]) for i in removed_inst_sorted
+            ],
+            "joints": [_joint_dict(pre_joint_by_id[j]) for j in removed_joint_sorted],
+            "inst_pre_idx": [pre_inst_idx_by_id[i] for i in removed_inst_sorted],
             "joint_pre_idx": [pre_joint_idx_by_id[j] for j in removed_joint_sorted],
         },
     }
 
-    diff_added_b64    = _gzip_b64(_json.dumps(added_payload).encode("utf-8"))
+    diff_added_b64 = _gzip_b64(_json.dumps(added_payload).encode("utf-8"))
     diff_modified_b64 = _gzip_b64(_json.dumps(modified_payload).encode("utf-8"))
     return {
-        "diff_added_b64":    diff_added_b64,
-        "diff_removed_ids":  sorted(removed_inst_ids | removed_joint_ids),
+        "diff_added_b64": diff_added_b64,
+        "diff_removed_ids": sorted(removed_inst_ids | removed_joint_ids),
         "diff_modified_b64": diff_modified_b64,
     }
 
@@ -512,12 +524,13 @@ def _decode_diff_payloads(entry) -> tuple[dict, list[str], dict]:
     ``{"pre": {...}, "post": {...}, "removed": {...}}``.
     """
     import json as _json
+
     added: dict = {"instances": [], "joints": []}
     if entry.diff_added_b64:
         added = _json.loads(_ungzip_b64(entry.diff_added_b64).decode("utf-8"))
     modified: dict = {
-        "pre":     {"instances": [], "joints": []},
-        "post":    {"instances": [], "joints": []},
+        "pre": {"instances": [], "joints": []},
+        "post": {"instances": [], "joints": []},
         "removed": {"instances": [], "joints": []},
     }
     if entry.diff_modified_b64:
@@ -575,10 +588,12 @@ def apply_diff_forward(anchor: Assembly, entry) -> Assembly:
     for d in added.get("joints", []):
         new_joints.append(AssemblyJoint.model_validate(d))
 
-    return anchor.model_copy(update={
-        "instances": new_instances,
-        "joints":    new_joints,
-    })
+    return anchor.model_copy(
+        update={
+            "instances": new_instances,
+            "joints": new_joints,
+        }
+    )
 
 
 def is_skip_pre_entry(entry) -> bool:
@@ -621,7 +636,9 @@ def lookup_pre_state(feature_log, index: int) -> Assembly:
         try:
             return decode_assembly_snapshot(entry.design_snapshot_gz_b64)
         except Exception as exc:
-            raise HTTPException(500, detail=f"Failed to decode snapshot: {exc}") from exc
+            raise HTTPException(
+                500, detail=f"Failed to decode snapshot: {exc}"
+            ) from exc
 
     # Case 2: diff-format entry → reconstruct pre from full post + inverse diff.
     if is_diff_entry(entry):
@@ -633,7 +650,9 @@ def lookup_pre_state(feature_log, index: int) -> Assembly:
         try:
             post_state = decode_assembly_snapshot(entry.post_state_gz_b64)
         except Exception as exc:
-            raise HTTPException(500, detail=f"Failed to decode snapshot: {exc}") from exc
+            raise HTTPException(
+                500, detail=f"Failed to decode snapshot: {exc}"
+            ) from exc
         return apply_diff_inverse(post_state, entry)
 
     # Case 3: skip-pre → walk back to previous entry's post.  Chain-walk
@@ -647,21 +666,23 @@ def lookup_pre_state(feature_log, index: int) -> Assembly:
                 try:
                     return decode_assembly_snapshot(prev.post_state_gz_b64)
                 except Exception as exc:
-                    raise HTTPException(500, detail=f"Failed to decode snapshot: {exc}") from exc
+                    raise HTTPException(
+                        500, detail=f"Failed to decode snapshot: {exc}"
+                    ) from exc
             j -= 1
         # Walked off the front of the log with no usable post anywhere.
         raise HTTPException(
             422,
             detail="Skip-pre entry has no anchor: previous feature_log entries lack "
-                   "decodable post-state payloads.  Use Ctrl-Z to navigate around it.",
+            "decodable post-state payloads.  Use Ctrl-Z to navigate around it.",
         )
 
     # Case 4: nothing usable.
     raise HTTPException(
         422,
         detail="This entry has no embedded pre-state snapshot — it was "
-               "created before per-entry actions were supported. Use the "
-               "slider / Ctrl-Z to navigate around it.",
+        "created before per-entry actions were supported. Use the "
+        "slider / Ctrl-Z to navigate around it.",
     )
 
 
@@ -675,16 +696,16 @@ def apply_diff_inverse(anchor: Assembly, entry) -> Assembly:
     from backend.core.models import AssemblyJoint, PartInstance
 
     added, _removed_ids, modified = _decode_diff_payloads(entry)
-    added_inst_ids  = {d["id"] for d in added.get("instances", [])}
+    added_inst_ids = {d["id"] for d in added.get("instances", [])}
     added_joint_ids = {d["id"] for d in added.get("joints", [])}
-    mod_pre_inst   = {d["id"]: d for d in modified.get("pre", {}).get("instances", [])}
-    mod_pre_joint  = {d["id"]: d for d in modified.get("pre", {}).get("joints", [])}
+    mod_pre_inst = {d["id"]: d for d in modified.get("pre", {}).get("instances", [])}
+    mod_pre_joint = {d["id"]: d for d in modified.get("pre", {}).get("joints", [])}
 
-    removed_block      = modified.get("removed", {})
-    removed_inst_data  = removed_block.get("instances", [])
+    removed_block = modified.get("removed", {})
+    removed_inst_data = removed_block.get("instances", [])
     removed_joint_data = removed_block.get("joints", [])
-    removed_inst_idx   = removed_block.get("inst_pre_idx",  None)
-    removed_joint_idx  = removed_block.get("joint_pre_idx", None)
+    removed_inst_idx = removed_block.get("inst_pre_idx", None)
+    removed_joint_idx = removed_block.get("joint_pre_idx", None)
 
     new_instances: list[PartInstance] = []
     for inst in anchor.instances:
@@ -699,8 +720,12 @@ def apply_diff_inverse(anchor: Assembly, entry) -> Assembly:
     # undo-delete preserves list order.  Legacy payloads (no pre-idx)
     # fall back to append; they shipped before this format extension.
     if removed_inst_idx is not None and len(removed_inst_idx) == len(removed_inst_data):
-        for idx, d in sorted(zip(removed_inst_idx, removed_inst_data), key=lambda t: t[0]):
-            new_instances.insert(min(idx, len(new_instances)), PartInstance.model_validate(d))
+        for idx, d in sorted(
+            zip(removed_inst_idx, removed_inst_data), key=lambda t: t[0]
+        ):
+            new_instances.insert(
+                min(idx, len(new_instances)), PartInstance.model_validate(d)
+            )
     else:
         for d in removed_inst_data:
             new_instances.append(PartInstance.model_validate(d))
@@ -713,14 +738,22 @@ def apply_diff_inverse(anchor: Assembly, entry) -> Assembly:
             new_joints.append(AssemblyJoint.model_validate(mod_pre_joint[jt.id]))
         else:
             new_joints.append(jt)
-    if removed_joint_idx is not None and len(removed_joint_idx) == len(removed_joint_data):
-        for idx, d in sorted(zip(removed_joint_idx, removed_joint_data), key=lambda t: t[0]):
-            new_joints.insert(min(idx, len(new_joints)), AssemblyJoint.model_validate(d))
+    if removed_joint_idx is not None and len(removed_joint_idx) == len(
+        removed_joint_data
+    ):
+        for idx, d in sorted(
+            zip(removed_joint_idx, removed_joint_data), key=lambda t: t[0]
+        ):
+            new_joints.insert(
+                min(idx, len(new_joints)), AssemblyJoint.model_validate(d)
+            )
     else:
         for d in removed_joint_data:
             new_joints.append(AssemblyJoint.model_validate(d))
 
-    return anchor.model_copy(update={
-        "instances": new_instances,
-        "joints":    new_joints,
-    })
+    return anchor.model_copy(
+        update={
+            "instances": new_instances,
+            "joints": new_joints,
+        }
+    )

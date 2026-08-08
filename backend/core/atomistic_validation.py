@@ -29,12 +29,20 @@ import numpy as np
 # Heavy-atom covalent bonds in DNA are ~0.13–0.16 nm.  These defaults are
 # documented + overridable; the skill / route surface them so a DNA-origami user
 # can recalibrate without code changes.
-INTRA_RIGID_TOL_NM:     float = 5e-3   # a PURE-rigid intra bond must equal the design template (stamp invariant)
-COVALENT_MAX_NM:        float = 0.20   # any covalent bond longer than this is over-stretched (real ones ≤ ~0.16)
-BACKBONE_STRETCH_NM:    float = 0.30   # an inter-residue O3'→P stick longer than this is over-stretched
-RENDER_HIDE_NM:         float = 1.0    # mirrors atomistic_renderer._MAX_BOND_NM — renderer HIDES longer bonds
-CLASH_NM:               float = 0.08   # two non-bonded heavy atoms closer than this clash
-WC_COLLAPSE_NM:         float = 0.70   # median WC-pair C1'-C1' below this = bases crushed onto partners (B-DNA ~1.05)
+INTRA_RIGID_TOL_NM: float = (
+    5e-3  # a PURE-rigid intra bond must equal the design template (stamp invariant)
+)
+COVALENT_MAX_NM: float = (
+    0.20  # any covalent bond longer than this is over-stretched (real ones ≤ ~0.16)
+)
+BACKBONE_STRETCH_NM: float = (
+    0.30  # an inter-residue O3'→P stick longer than this is over-stretched
+)
+RENDER_HIDE_NM: float = (
+    1.0  # mirrors atomistic_renderer._MAX_BOND_NM — renderer HIDES longer bonds
+)
+CLASH_NM: float = 0.08  # two non-bonded heavy atoms closer than this clash
+WC_COLLAPSE_NM: float = 0.70  # median WC-pair C1'-C1' below this = bases crushed onto partners (B-DNA ~1.05)
 
 # Atoms the crossover / nick / skip / extra-base bridge MINIMISERS relocate
 # (atomistic_minimisers: place O3'(src), P/O5'(dst), translate OP1/OP2 with P).  An
@@ -55,9 +63,16 @@ def _bond_class(a, b) -> str:
       ``bridge``   — inter-residue O3'→P that reaches across helices (crossover/nick).
     """
     if a.strand_id == b.strand_id and a.seq_num == b.seq_num:
-        return "linker" if (a.name in _MINIMISER_ATOMS or b.name in _MINIMISER_ATOMS) else "rigid"
-    if (a.helix_id == b.helix_id and a.direction == b.direction
-            and abs(a.bp_index - b.bp_index) == 1):
+        return (
+            "linker"
+            if (a.name in _MINIMISER_ATOMS or b.name in _MINIMISER_ATOMS)
+            else "rigid"
+        )
+    if (
+        a.helix_id == b.helix_id
+        and a.direction == b.direction
+        and abs(a.bp_index - b.bp_index) == 1
+    ):
         return "backbone"
     return "bridge"
 
@@ -66,8 +81,12 @@ def _stats(vals: list[float]) -> dict:
     if not vals:
         return {"count": 0, "min": None, "max": None, "mean": None}
     arr = np.asarray(vals, float)
-    return {"count": len(vals), "min": float(arr.min()),
-            "max": float(arr.max()), "mean": float(arr.mean())}
+    return {
+        "count": len(vals),
+        "min": float(arr.min()),
+        "max": float(arr.max()),
+        "mean": float(arr.mean()),
+    }
 
 
 def audit_bonds(
@@ -116,7 +135,9 @@ def audit_bonds(
 
     # Build EXACTLY what the display draws (build_display_model = the shared sink the
     # atomistic/surface routes use), so the audit measures the rendered geometry.
-    model = build_display_model(design, frame) if frame else build_atomistic_model(design)
+    model = (
+        build_display_model(design, frame) if frame else build_atomistic_model(design)
+    )
     # Design build = the template-integrity reference: identical serial/bond ordering,
     # so a per-index length comparison is exact (overrides change only positions).
     ref = build_atomistic_model(design)
@@ -130,7 +151,12 @@ def audit_bonds(
     def _len(p, i, j):
         return float(np.linalg.norm(p[i] - p[j]))
 
-    by_class: dict[str, list[float]] = {"rigid": [], "linker": [], "backbone": [], "bridge": []}
+    by_class: dict[str, list[float]] = {
+        "rigid": [],
+        "linker": [],
+        "backbone": [],
+        "bridge": [],
+    }
     invalid: list[dict] = []
     hidden: list[dict] = []
     rigid_dev_max = 0.0
@@ -150,14 +176,28 @@ def audit_bonds(
             rigid_dev_max = max(rigid_dev_max, dev)
             if dev > intra_tol_nm:
                 n_stamp_viol += 1
-                invalid.append(_bond_row(a, b, cls, L,
-                               f"RIGID-STAMP VIOLATION (Δ={dev*10:.3f} Å vs template — placer bug)"))
+                invalid.append(
+                    _bond_row(
+                        a,
+                        b,
+                        cls,
+                        L,
+                        f"RIGID-STAMP VIOLATION (Δ={dev * 10:.3f} Å vs template — placer bug)",
+                    )
+                )
                 continue
         is_inter = cls in ("backbone", "bridge")
         limit = backbone_stretch_nm if is_inter else covalent_max_nm
         if L > limit:
-            invalid.append(_bond_row(a, b, cls, L,
-                           f"{cls} bond over-stretched ({L*10:.2f} Å > {limit*10:.1f} Å)"))
+            invalid.append(
+                _bond_row(
+                    a,
+                    b,
+                    cls,
+                    L,
+                    f"{cls} bond over-stretched ({L * 10:.2f} Å > {limit * 10:.1f} Å)",
+                )
+            )
         if L > render_hide_nm:
             hidden.append(_bond_row(a, b, cls, L, "hidden by renderer (> cutoff)"))
 
@@ -172,9 +212,15 @@ def audit_bonds(
     # not fail for something the display did not cause.  Callers that want both read
     # ``ok_including_topology``.
     from backend.core.junction_topology import catenation_report  # noqa: PLC0415
+
     catenation = catenation_report(design, model=model, max_report=max_report)
-    ok = (not invalid and not clashes and not bad_atoms
-          and not base_geom["wc_collapsed"] and not base_geom["wc_helix_imbalanced"])
+    ok = (
+        not invalid
+        and not clashes
+        and not bad_atoms
+        and not base_geom["wc_collapsed"]
+        and not base_geom["wc_helix_imbalanced"]
+    )
 
     return {
         "ok": ok,
@@ -203,8 +249,13 @@ def audit_bonds(
     }
 
 
-def _base_geometry(model, *, wc_collapse_nm: float, helix_dir: dict | None = None,
-                   imbalance_nm: float = 0.12) -> dict:
+def _base_geometry(
+    model,
+    *,
+    wc_collapse_nm: float,
+    helix_dir: dict | None = None,
+    imbalance_nm: float = 0.12,
+) -> dict:
     """INTER-nucleotide geometry — whether bases are correctly POSITIONED relative to
     each other (a nucleotide can be internally rigid + backbone-connected yet
     mis-placed; bond-length checks alone are blind to it).  Measures, on the C1'
@@ -215,31 +266,37 @@ def _base_geometry(model, *, wc_collapse_nm: float, helix_dir: dict | None = Non
     > ``imbalance_nm`` between FORWARD-lattice and REVERSE-lattice helices — the
     forward/reverse phase-mapping bug (oxDNA relaxes both helix types identically, so
     a per-lattice-direction split means the reconstruction mis-phased half of them)."""
-    c1 = {(a.helix_id, a.bp_index, a.direction): np.array([a.x, a.y, a.z])
-          for a in model.atoms if a.name == "C1'"}
+    c1 = {
+        (a.helix_id, a.bp_index, a.direction): np.array([a.x, a.y, a.z])
+        for a in model.atoms
+        if a.name == "C1'"
+    }
     hd = helix_dir or {}
     wc, wc_fwd, wc_rev = [], [], []
-    for (h, bp, d) in c1:
+    for h, bp, d in c1:
         if d == "FORWARD" and (h, bp, "REVERSE") in c1:
             v = float(np.linalg.norm(c1[(h, bp, "FORWARD")] - c1[(h, bp, "REVERSE")]))
             wc.append(v)
             (wc_fwd if hd.get(h) == "FORWARD" else wc_rev).append(v)
     stack = []
-    for (h, bp, d) in c1:
+    for h, bp, d in c1:
         nxt = (h, bp + 1, d) if d == "FORWARD" else (h, bp - 1, d)
         if nxt in c1:
             stack.append(float(np.linalg.norm(c1[(h, bp, d)] - c1[nxt])))
     wc_med = float(np.median(wc)) if wc else None
     fwd_med = float(np.median(wc_fwd)) if wc_fwd else None
     rev_med = float(np.median(wc_rev)) if wc_rev else None
-    imbalanced = bool(fwd_med is not None and rev_med is not None
-                      and abs(fwd_med - rev_med) > imbalance_nm)
+    imbalanced = bool(
+        fwd_med is not None
+        and rev_med is not None
+        and abs(fwd_med - rev_med) > imbalance_nm
+    )
     return {
         "wc_c1c1": _stats(wc) | {"median": wc_med},
         "wc_c1c1_forward_helix_median": fwd_med,
         "wc_c1c1_reverse_helix_median": rev_med,
-        "stacking_c1c1": _stats(stack) | {
-            "median": float(np.median(stack)) if stack else None},
+        "stacking_c1c1": _stats(stack)
+        | {"median": float(np.median(stack)) if stack else None},
         "wc_collapsed": bool(wc_med is not None and wc_med < wc_collapse_nm),
         "wc_helix_imbalanced": imbalanced,
     }
@@ -250,11 +307,15 @@ def _bond_row(a, b, cls, length_nm, reason) -> dict:
         "serials": [a.serial, b.serial],
         "atoms": [a.name, b.name],
         "residues": [a.residue, b.residue],
-        "sites": [[a.helix_id, a.bp_index, a.direction],
-                  [b.helix_id, b.bp_index, b.direction]],
+        "sites": [
+            [a.helix_id, a.bp_index, a.direction],
+            [b.helix_id, b.bp_index, b.direction],
+        ],
         "strands": [a.strand_id, b.strand_id],
         "class": cls,
-        "length_nm": None if (isinstance(length_nm, float) and math.isnan(length_nm)) else round(length_nm, 4),
+        "length_nm": None
+        if (isinstance(length_nm, float) and math.isnan(length_nm))
+        else round(length_nm, 4),
         "reason": reason,
     }
 
@@ -278,7 +339,7 @@ def _find_clashes(pos, finite, bonds, clash_nm, max_report) -> list[dict]:
         for dx in (-1, 0, 1):
             for dy in (-1, 0, 1):
                 for dz in (-1, 0, 1):
-                    neigh.extend(grid.get((c[0]+dx, c[1]+dy, c[2]+dz), ()))
+                    neigh.extend(grid.get((c[0] + dx, c[1] + dy, c[2] + dz), ()))
         for a in members:
             for b in neigh:
                 if b <= a:
@@ -301,9 +362,14 @@ def _find_bad_atoms(model, finite, max_report) -> list[dict]:
     out: list[dict] = []
     for k, a in enumerate(model.atoms):
         if not finite[k]:
-            out.append({"serial": a.serial, "name": a.name,
-                        "site": [a.helix_id, a.bp_index, a.direction],
-                        "reason": "non-finite position"})
+            out.append(
+                {
+                    "serial": a.serial,
+                    "name": a.name,
+                    "site": [a.helix_id, a.bp_index, a.direction],
+                    "reason": "non-finite position",
+                }
+            )
             if len(out) >= max_report:
                 break
     return out
@@ -311,11 +377,13 @@ def _find_bad_atoms(model, finite, max_report) -> list[dict]:
 
 # ── Headless entry point: latest oxDNA job for a design ───────────────────────
 
+
 def latest_job_for_design(design_source: str, workspace: Path) -> Optional[str]:
     """Return the job_id of the most recently-created oxDNA job whose
     ``design_source_path`` matches ``design_source`` (by file stem) AND that has at
     least one stage ``last_conf.dat`` to read.  ``None`` if there is no relaxed job."""
     from backend.core.oxdna_job import OxdnaJob
+
     stem = Path(design_source).stem
     best: tuple[float, str] | None = None
     # list_jobs is archive-aware, so a relaxed job seeded from this design is still
@@ -323,21 +391,28 @@ def latest_job_for_design(design_source: str, workspace: Path) -> Optional[str]:
     for job in OxdnaJob.list_jobs(workspace):
         if not job.design_source_path or Path(job.design_source_path).stem != stem:
             continue
-        if not any((job.stage_dir(workspace, st.name) / "last_conf.dat").exists()
-                   for st in job.stages):
+        if not any(
+            (job.stage_dir(workspace, st.name) / "last_conf.dat").exists()
+            for st in job.stages
+        ):
             continue
         if best is None or job.created_at > best[0]:
             best = (job.created_at, job.job_id)
     return best[1] if best else None
 
 
-def relaxed_frame_for_job(design, job, workspace: Path, *, align: bool = True,
-                          copies: bool = True) -> tuple[Optional[dict], Optional[str]]:
+def relaxed_frame_for_job(
+    design, job, workspace: Path, *, align: bool = True, copies: bool = True
+) -> tuple[Optional[dict], Optional[str]]:
     """Load the latest relaxed frame of ``job`` as the per-nucleotide oxDNA frame
     dict the placer consumes (copy-aware), PBC-unwrapped + aligned to the design
     pose exactly like the display route.  Returns (frame, stage_name) or (None,None)
     when no stage has a ``last_conf.dat`` yet."""
-    from backend.physics.oxdna_interface import read_configuration_unwrapped, write_configuration
+    from backend.physics.oxdna_interface import (
+        read_configuration_unwrapped,
+        write_configuration,
+    )
+
     conf_path = None
     stage_name = None
     for st in reversed(job.stages):
@@ -351,8 +426,13 @@ def relaxed_frame_for_job(design, job, workspace: Path, *, align: bool = True,
     ref = jd / "design_ref.dat"
     if not ref.exists():
         from backend.api.crud import _geometry_for_design
-        write_configuration(design, _geometry_for_design(design, compact_skips=True), ref)
-    frame = read_configuration_unwrapped(conf_path, design, ref, align=align, copies=copies)
+
+        write_configuration(
+            design, _geometry_for_design(design, compact_skips=True), ref
+        )
+    frame = read_configuration_unwrapped(
+        conf_path, design, ref, align=align, copies=copies
+    )
     return (frame, stage_name)
 
 
@@ -363,8 +443,11 @@ def audit_oxdna_job(design, job, workspace: Path, *, align: bool = True, **kw) -
     latest oxDNA job."""
     frame, stage_name = relaxed_frame_for_job(design, job, workspace, align=align)
     if frame is None:
-        return {"ready": False, "job_id": job.job_id,
-                "reason": "no stage has a last_conf.dat"}
+        return {
+            "ready": False,
+            "job_id": job.job_id,
+            "reason": "no stage has a last_conf.dat",
+        }
     report = audit_bonds(design, frame, **kw)
     report.update({"ready": True, "job_id": job.job_id, "stage_name": stage_name})
     return report
@@ -377,6 +460,7 @@ def audit_oxdna_job(design, job, workspace: Path, *, align: bool = True, **kw) -
 # relaxed-display audit pins must hold on every frame — not just frame 0.  This
 # audits a sampling of those frames programmatically so a per-frame regression is
 # queryable, not eyeball-only.
+
 
 def _sample_frame_indices(n: int, k: int) -> list[int]:
     """Evenly-spaced frame indices over [0, n-1] (always including the endpoints),
@@ -448,7 +532,9 @@ def _summarize_frames(frames: list[dict]) -> dict:
         "n_audited": len(frames),
         "all_invariants_ok": all(f["invariants_ok"] for f in frames),
         "identity_preserved": all(f["identity_ok"] for f in frames),
-        "max_rigid_stamp_violations": max((f["n_rigid_stamp_violations"] for f in frames), default=0),
+        "max_rigid_stamp_violations": max(
+            (f["n_rigid_stamp_violations"] for f in frames), default=0
+        ),
         "any_wc_collapsed": any(f["wc_collapsed"] for f in frames),
         "any_wc_helix_imbalanced": any(f["wc_helix_imbalanced"] for f in frames),
         "any_over_stretched": any(f["n_invalid_bonds"] > 0 for f in frames),
@@ -458,9 +544,16 @@ def _summarize_frames(frames: list[dict]) -> dict:
     }
 
 
-def audit_trajectory_frames(design, stages, reference_conf_path,
-                            frame_indices: Optional[list[int]] = None, *,
-                            max_audit: int = 8, max_frames: int = 200, **kw) -> dict:
+def audit_trajectory_frames(
+    design,
+    stages,
+    reference_conf_path,
+    frame_indices: Optional[list[int]] = None,
+    *,
+    max_audit: int = 8,
+    max_frames: int = 200,
+    **kw,
+) -> dict:
     """Audit a SAMPLING of composite-trajectory frames — the per-frame counterpart of
     :func:`audit_bonds`.  Reconstructs each requested frame through the SAME shared
     sink the View-trajectory scrubber uses (``_aligned_downsampled_frames`` →
@@ -483,7 +576,8 @@ def audit_trajectory_frames(design, stages, reference_conf_path,
     from backend.core.oxdna_health import _aligned_downsampled_frames
 
     _, ordered, _, _ = _aligned_downsampled_frames(
-        design, stages, reference_conf_path, max_frames, copies=True)
+        design, stages, reference_conf_path, max_frames, copies=True
+    )
     n = len(ordered)
     if n == 0:
         return {"ready": False, "reason": "no trajectory frames", "n_frames": 0}
@@ -496,9 +590,18 @@ def audit_trajectory_frames(design, stages, reference_conf_path,
     else:
         idxs = sorted({i for i in (int(x) for x in frame_indices) if 0 <= i < n})
 
-    frames = [_slim_frame_report(idx, audit_bonds(design, ordered[idx], **kw),
-                                 ref_atoms, ref_bonds)
-              for idx in idxs]
+    frames = [
+        _slim_frame_report(
+            idx, audit_bonds(design, ordered[idx], **kw), ref_atoms, ref_bonds
+        )
+        for idx in idxs
+    ]
     summary = _summarize_frames(frames)
-    return {"ready": True, "n_frames": n, "audited_frames": idxs,
-            "frames": frames, "summary": summary, "ok": summary["all_invariants_ok"]}
+    return {
+        "ready": True,
+        "n_frames": n,
+        "audited_frames": idxs,
+        "frames": frames,
+        "summary": summary,
+        "ok": summary["all_invariants_ok"],
+    }

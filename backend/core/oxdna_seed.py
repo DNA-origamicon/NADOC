@@ -34,8 +34,8 @@ def reorient_to_principal_axes(model) -> None:
     # Principal axes, largest variance first (vt rows are sorted by singular value desc).
     _, _, vt = np.linalg.svd(P, full_matrices=False)
     # Map principal axes -> (x, y, z) with the LONGEST (vt[0]) onto z.
-    R = np.vstack([vt[2], vt[1], vt[0]])          # rows: new x, y, z basis vectors
-    if np.linalg.det(R) < 0:                        # keep it a rotation, not a reflection
+    R = np.vstack([vt[2], vt[1], vt[0]])  # rows: new x, y, z basis vectors
+    if np.linalg.det(R) < 0:  # keep it a rotation, not a reflection
         R[0] = -R[0]
     Pr = P @ R.T
 
@@ -43,7 +43,9 @@ def reorient_to_principal_axes(model) -> None:
         a.x, a.y, a.z = float(x), float(y), float(z)
 
 
-def separate_coincident_atoms(model, *, min_sep: float = 0.03, nudge_to: float = 0.10) -> int:
+def separate_coincident_atoms(
+    model, *, min_sep: float = 0.03, nudge_to: float = 0.10
+) -> int:
     """Nudge apart heavy-atom pairs closer than ``min_sep`` nm (cg-spline backmap artifact).
 
     ``build_atomistic_model_from_cg_spline`` occasionally reconstructs two backbone atoms
@@ -60,7 +62,9 @@ def separate_coincident_atoms(model, *, min_sep: float = 0.03, nudge_to: float =
     if not heavy:
         return 0
     idx = [i for i, _ in heavy]
-    P = np.asarray([[model.atoms[i].x, model.atoms[i].y, model.atoms[i].z] for i in idx])
+    P = np.asarray(
+        [[model.atoms[i].x, model.atoms[i].y, model.atoms[i].z] for i in idx]
+    )
     pairs = cKDTree(P).query_pairs(r=min_sep, output_type="ndarray")
     n = 0
     for a, b in pairs:
@@ -95,8 +99,13 @@ def oxdna_extra_base_override(design, relaxed_conf, design_ref):
     import numpy as np
     from pathlib import Path
     from backend.physics.oxdna_interface import (
-        OXDNA_LENGTH_UNIT, _XB_SENTINEL, _build_unwrap_adjacency,
-        read_configuration_full, unwrap_align_to_reference)
+        OXDNA_LENGTH_UNIT,
+        _XB_SENTINEL,
+        _build_unwrap_adjacency,
+        read_configuration_full,
+        unwrap_align_to_reference,
+    )
+
     box = None
     for line in Path(relaxed_conf).read_text().splitlines():
         if line.startswith("b ="):
@@ -104,14 +113,26 @@ def oxdna_extra_base_override(design, relaxed_conf, design_ref):
             break
     if box is None:
         raise ValueError(f"no box header in {relaxed_conf}")
-    relax = read_configuration_full(relaxed_conf, design, include_extra_bases=True, copies=True)
-    ref = read_configuration_full(design_ref, design, include_extra_bases=True, copies=True)
+    relax = read_configuration_full(
+        relaxed_conf, design, include_extra_bases=True, copies=True
+    )
+    ref = read_configuration_full(
+        design_ref, design, include_extra_bases=True, copies=True
+    )
     adj = _build_unwrap_adjacency(relax, design)
-    aligned = unwrap_align_to_reference(relax, ref, design, box, align=True, rotate=True, adj=adj)
-    pos = {(k[1], k[2]): np.asarray(v["backbone_position"])
-           for k, v in aligned.items() if k[0] == _XB_SENTINEL}
-    orient = {(k[1], k[2]): (np.asarray(v["a1"]), np.asarray(v["a3"]))
-              for k, v in aligned.items() if k[0] == _XB_SENTINEL}
+    aligned = unwrap_align_to_reference(
+        relax, ref, design, box, align=True, rotate=True, adj=adj
+    )
+    pos = {
+        (k[1], k[2]): np.asarray(v["backbone_position"])
+        for k, v in aligned.items()
+        if k[0] == _XB_SENTINEL
+    }
+    orient = {
+        (k[1], k[2]): (np.asarray(v["a1"]), np.asarray(v["a3"]))
+        for k, v in aligned.items()
+        if k[0] == _XB_SENTINEL
+    }
     return pos, orient
 
 
@@ -124,9 +145,11 @@ def build_ideal_duplex_seeded_model(design, relaxed_conf, design_ref):
     4 fs. Reorients + clears any backmap coincidences.
     """
     from backend.core.atomistic import build_atomistic_model
+
     pos_ov, orient_ov = oxdna_extra_base_override(design, relaxed_conf, design_ref)
-    m = build_atomistic_model(design, xb_pos_override=pos_ov or None,
-                              xb_orient_override=orient_ov or None)
+    m = build_atomistic_model(
+        design, xb_pos_override=pos_ov or None, xb_orient_override=orient_ov or None
+    )
     reorient_to_principal_axes(m)
     separate_coincident_atoms(m)
     return m

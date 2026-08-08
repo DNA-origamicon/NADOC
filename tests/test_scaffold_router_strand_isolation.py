@@ -44,7 +44,9 @@ def _with_strand_at(base, grid_pos, lo, hi, direction, strand_type, sid):
     start, end = (lo, hi) if direction == Direction.FORWARD else (hi, lo)
     s = Strand(
         id=sid,
-        domains=[Domain(helix_id=h.id, start_bp=start, end_bp=end, direction=direction)],
+        domains=[
+            Domain(helix_id=h.id, start_bp=start, end_bp=end, direction=direction)
+        ],
         strand_type=strand_type,
     )
     return base.copy_with(strands=list(base.strands) + [s]), h
@@ -52,20 +54,30 @@ def _with_strand_at(base, grid_pos, lo, hi, direction, strand_type, sid):
 
 # ── The repro, as a pin ──────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("router", [
-    pytest.param(lambda d: auto_scaffold_seamed(d)[0], id="seamed"),
-    pytest.param(lambda d: auto_scaffold_seamless(d)[0], id="seamless"),
-])
-@pytest.mark.parametrize("strand_type", [
-    StrandType.LINKER, StrandType.STAPLE, StrandType.OH_BINDER,
-])
+
+@pytest.mark.parametrize(
+    "router",
+    [
+        pytest.param(lambda d: auto_scaffold_seamed(d)[0], id="seamed"),
+        pytest.param(lambda d: auto_scaffold_seamless(d)[0], id="seamless"),
+    ],
+)
+@pytest.mark.parametrize(
+    "strand_type",
+    [
+        StrandType.LINKER,
+        StrandType.STAPLE,
+        StrandType.OH_BINDER,
+    ],
+)
 def test_scaffold_router_never_edits_a_non_scaffold_strand(router, strand_type):
     """Plant a non-scaffold strand whose 3' terminus lands ON a scaffold-crossover half
     (bp 81, the seam site on this bundle) in the SCAFFOLD direction — the exact slot the
     unfiltered lookup used to grab. It must come out byte-identical."""
     base = make_bundle_design(CELLS_4HB, length_bp=168)
-    d, _ = _with_strand_at(base, (0, 1), 81, 86, Direction.REVERSE,
-                           strand_type, "victim")
+    d, _ = _with_strand_at(
+        base, (0, 1), 81, 86, Direction.REVERSE, strand_type, "victim"
+    )
 
     before = _nonscaffold(d)
     after = _nonscaffold(router(d))
@@ -75,15 +87,18 @@ def test_scaffold_router_never_edits_a_non_scaffold_strand(router, strand_type):
         f"scaffold router MUTATED a {strand_type}: "
         f"{before['victim']} -> {after['victim']}"
     )
-    assert len(after) == len(before), "scaffold router split a non-scaffold strand in two"
+    assert len(after) == len(before), (
+        "scaffold router split a non-scaffold strand in two"
+    )
 
 
 def test_scaffold_router_leaves_a_linker_in_the_end_turn_zone_alone():
     """The realistic case: a linker in the region the near-end turn extends INTO
     (bp -9..-4), not overlapping the scaffold's original footprint."""
     base = make_bundle_design(CELLS_4HB, length_bp=168)
-    d, _ = _with_strand_at(base, (0, 1), -9, -4, Direction.REVERSE,
-                           StrandType.LINKER, "endzone")
+    d, _ = _with_strand_at(
+        base, (0, 1), -9, -4, Direction.REVERSE, StrandType.LINKER, "endzone"
+    )
 
     before = _nonscaffold(d)
     after = _nonscaffold(auto_scaffold_seamed(d)[0])
@@ -94,16 +109,21 @@ def test_scaffold_router_leaves_a_linker_in_the_end_turn_zone_alone():
 def test_a_clean_bundle_still_routes_to_one_strand():
     """The allowlist must not break the ordinary path: no linkers → unchanged."""
     routed = auto_scaffold_seamed(make_bundle_design(CELLS_4HB, length_bp=168))[0]
-    n_scaf = sum(1 for s in routed.strands
-                 if s.strand_type == StrandType.SCAFFOLD and not s.is_reference)
+    n_scaf = sum(
+        1
+        for s in routed.strands
+        if s.strand_type == StrandType.SCAFFOLD and not s.is_reference
+    )
     assert n_scaf == 1
 
 
 # ── The allowlist itself ─────────────────────────────────────────────────────
 
+
 def test_allowlist_is_positive_not_a_linker_blocklist():
     """A blocklist ('not LINKER') would still let the router chew on OH_BINDERs and
     hand-drawn staples, and would silently miss any strand type added later."""
+
     def mk(t, ref=False):
         return Strand(id="x", domains=[], strand_type=t, is_reference=ref)
 
@@ -123,7 +143,7 @@ def test_staple_paths_keep_the_unfiltered_lookup():
     dom = staple.domains[0]
     mid = (min(dom.start_bp, dom.end_bp) + max(dom.start_bp, dom.end_bp)) // 2
 
-    nicked = make_nick(base, dom.helix_id, mid, dom.direction)   # no predicate
+    nicked = make_nick(base, dom.helix_id, mid, dom.direction)  # no predicate
 
     n_before = sum(1 for s in base.strands if s.strand_type == StrandType.STAPLE)
     n_after = sum(1 for s in nicked.strands if s.strand_type == StrandType.STAPLE)

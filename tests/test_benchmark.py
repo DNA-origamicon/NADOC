@@ -47,6 +47,7 @@ def test_parse_nvidia_smi_l_empty_and_garbage():
 
 # ── resource-guard detection (skip heavy tests while a sim is running) ──────────
 
+
 def test_parse_pgrep_l_extracts_process_names():
     text = "12345 namd3\n  678 oxDNA\n42 arbd\n"
     assert hardware.parse_pgrep_l(text) == ["arbd", "namd3", "oxDNA"]
@@ -346,20 +347,35 @@ def test_run_oxdna_trials_prerelaxes_and_suppresses_trajectory(tmp_path, monkeyp
 
     async def fake_runner(oxdna_bin, input_path, stage_dir, log, job_id):
         if job_id.endswith("prerelax"):
-            (stage_dir / "last_conf.dat").write_text("settled\n")  # produce a settled conf
+            (stage_dir / "last_conf.dat").write_text(
+                "settled\n"
+            )  # produce a settled conf
         inputs[job_id] = input_path.read_text()
         return 0, None
 
-    state = br.BenchmarkState(benchmark_id="t3", engine="oxdna", trials_total=1,
-                              proxy_nucleotides=plan["proxy_nucleotides"])
-    asyncio.run(br.run_oxdna_trials(state, design, geometry, configs, tmp_path / "r",
-                                    steps=2000, runner=fake_runner))
+    state = br.BenchmarkState(
+        benchmark_id="t3",
+        engine="oxdna",
+        trials_total=1,
+        proxy_nucleotides=plan["proxy_nucleotides"],
+    )
+    asyncio.run(
+        br.run_oxdna_trials(
+            state,
+            design,
+            geometry,
+            configs,
+            tmp_path / "r",
+            steps=2000,
+            runner=fake_runner,
+        )
+    )
 
     pre = next(v for k, v in inputs.items() if k.endswith("prerelax"))
-    assert "sim_type = MC" in pre and "backend = CPU" in pre   # CPU MC pre-relax
+    assert "sim_type = MC" in pre and "backend = CPU" in pre  # CPU MC pre-relax
     trial = next(v for k, v in inputs.items() if k.endswith("-0"))
-    assert "../prerelax/last_conf.dat" in trial                # starts from the settled conf
-    assert "print_conf_interval = 2001" in trial               # no intermediate trajectory frames
+    assert "../prerelax/last_conf.dat" in trial  # starts from the settled conf
+    assert "print_conf_interval = 2001" in trial  # no intermediate trajectory frames
     assert state.recommendation is not None
 
 
@@ -625,7 +641,9 @@ def test_namd_benchmark_completes_end_to_end_on_a_6hb(monkeypatch):
     monkeypatch.setattr(
         bench,
         "namd_config_grid",
-        lambda *a, **k: [bench.NamdTrialConfig(f"+p{trial_threads} CPU", trial_threads, "")],
+        lambda *a, **k: [
+            bench.NamdTrialConfig(f"+p{trial_threads} CPU", trial_threads, "")
+        ],
     )
 
     # Press the button: the real route counts the design's nucleotides, builds the

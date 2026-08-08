@@ -21,7 +21,9 @@ from backend.core.blade_job import BladeStatus, new_blade_job
 from backend.core import blade_runner
 
 
-def _write_blade_job(tmp_path: Path, *, status=BladeStatus.completed, pdb=True, design=True):
+def _write_blade_job(
+    tmp_path: Path, *, status=BladeStatus.completed, pdb=True, design=True
+):
     """Materialise a minimal completed BLADE job dir (design.json + relaxed.pdb)."""
     job = new_blade_job("6hb")
     job.status = status
@@ -41,6 +43,7 @@ def _write_blade_job(tmp_path: Path, *, status=BladeStatus.completed, pdb=True, 
 
 # ── Coordinate parse ──────────────────────────────────────────────────────────
 
+
 def test_parse_pdb_xyz_reads_atom_and_hetatm_in_order():
     xyz = blade_runner._parse_pdb_xyz(
         "ATOM      1  P   DA5 A   1      12.340  56.780  90.120  1.00  0.00      P\n"
@@ -49,7 +52,7 @@ def test_parse_pdb_xyz_reads_atom_and_hetatm_in_order():
     )
     assert xyz.shape == (2, 3)
     assert np.allclose(xyz[0], [12.34, 56.78, 90.12])
-    assert np.allclose(xyz[1], [-1.5, 2.0, -3.0])   # HETATM + negatives preserved
+    assert np.allclose(xyz[1], [-1.5, 2.0, -3.0])  # HETATM + negatives preserved
 
 
 def test_parse_pdb_xyz_ignores_non_atom_lines():
@@ -61,6 +64,7 @@ def test_parse_pdb_xyz_ignores_non_atom_lines():
 
 
 # ── build_namd_seed_from_blade ────────────────────────────────────────────────
+
 
 def test_build_seed_returns_design_snapshot_and_exact_coords(tmp_path: Path):
     job, _ = _write_blade_job(tmp_path)
@@ -102,9 +106,10 @@ def test_build_seed_rejects_a_missing_snapshot(tmp_path: Path):
 
 # ── assert_blade_namd_seed_available (cheap precheck) ──────────────────────────
 
+
 def test_assert_seed_available_passes_for_a_completed_job(tmp_path: Path):
     job, _ = _write_blade_job(tmp_path)
-    blade_runner.assert_blade_namd_seed_available(job.job_id, tmp_path)   # no raise
+    blade_runner.assert_blade_namd_seed_available(job.job_id, tmp_path)  # no raise
 
 
 def test_assert_seed_available_rejects_incomplete(tmp_path: Path):
@@ -129,11 +134,13 @@ def test_assert_seed_available_rejects_unknown_job(tmp_path: Path):
 
 # ── MdJob provenance round-trip ───────────────────────────────────────────────
 
+
 def test_md_job_persists_the_blade_seed_provenance(tmp_path: Path):
     """The NAMD job records which BLADE relax seeded it — the link is provenance, not tree
     nesting (cross-engine parent/child is unsupported), so it must survive save/load like the
     oxDNA/mrDNA seed fields."""
     from backend.core.md_job import MdJob, new_job
+
     job = new_job("6hb", "equilibrium_aware_v1", "", "", seed_blade_job_id="blade123")
     job.save(tmp_path)
     back = MdJob.load(job.job_id, tmp_path)
@@ -146,6 +153,7 @@ def test_md_job_backfills_blade_seed_on_older_json(tmp_path: Path):
     """A job.json written before seed_blade_job_id existed must still load."""
     import json
     from backend.core.md_job import MdJob, new_job
+
     job = new_job("6hb", "equilibrium_aware_v1", "", "")
     job.save(tmp_path)
     jd = job.job_dir(tmp_path)

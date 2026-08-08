@@ -70,7 +70,7 @@ def edit_cluster_op_entry(
     if the cluster no longer exists.
     """
     p = params or {}
-    for f in ('translation', 'rotation', 'pivot'):
+    for f in ("translation", "rotation", "pivot"):
         if f not in p:
             raise FeatureEditError(f"cluster_op edit requires '{f}'.", status=400)
 
@@ -82,26 +82,33 @@ def edit_cluster_op_entry(
         )
 
     new_log = list(design.feature_log)
-    new_log[index] = entry.model_copy(update={
-        'translation': list(p['translation']),
-        'rotation':    list(p['rotation']),
-        'pivot':       list(p['pivot']),
-    })
+    new_log[index] = entry.model_copy(
+        update={
+            "translation": list(p["translation"]),
+            "rotation": list(p["rotation"]),
+            "pivot": list(p["pivot"]),
+        }
+    )
 
     # Live pose = the LAST cluster_op for this cluster across the full (edited)
     # log. That's this op when it's the latest, else a later op that must keep
     # winning — so editing an earlier op leaves the final pose untouched.
     last_op = next(
-        (e for e in reversed(new_log)
-         if e.feature_type == 'cluster_op' and e.cluster_id == entry.cluster_id),
+        (
+            e
+            for e in reversed(new_log)
+            if e.feature_type == "cluster_op" and e.cluster_id == entry.cluster_id
+        ),
         None,
     )
     if last_op is not None:
-        cts[ct_idx] = cts[ct_idx].model_copy(update={
-            'translation': list(last_op.translation),
-            'rotation':    list(last_op.rotation),
-            'pivot':       list(last_op.pivot),
-        })
+        cts[ct_idx] = cts[ct_idx].model_copy(
+            update={
+                "translation": list(last_op.translation),
+                "rotation": list(last_op.rotation),
+                "pivot": list(last_op.pivot),
+            }
+        )
 
     return design.copy_with(cluster_transforms=cts, feature_log=new_log)
 
@@ -132,17 +139,17 @@ def edit_deformation_entry(
     no stored op snapshot to edit.
     """
     p = params or {}
-    op_type = p.get('type', entry.op_snapshot.type if entry.op_snapshot else None)
-    if op_type not in ('twist', 'bend'):
+    op_type = p.get("type", entry.op_snapshot.type if entry.op_snapshot else None)
+    if op_type not in ("twist", "bend"):
         raise FeatureEditError(
             f"deformation 'type' must be 'twist' or 'bend' (got {op_type!r}).",
             status=400,
         )
-    if 'plane_a_bp' not in p or 'plane_b_bp' not in p:
+    if "plane_a_bp" not in p or "plane_b_bp" not in p:
         raise FeatureEditError(
             "deformation edit requires plane_a_bp and plane_b_bp.", status=400
         )
-    if 'params' not in p:
+    if "params" not in p:
         raise FeatureEditError("deformation edit requires nested params.", status=400)
     if entry.op_snapshot is None:
         raise FeatureEditError(
@@ -152,38 +159,44 @@ def edit_deformation_entry(
         )
 
     try:
-        new_params = parse_deformation_params(op_type, p['params'])
+        new_params = parse_deformation_params(op_type, p["params"])
     except ValueError as e:
         raise FeatureEditError(str(e), status=400) from e
 
-    helix_ids = p.get('affected_helix_ids') or helices_crossing_planes(
-        design, p['plane_a_bp'], p['plane_b_bp']
+    helix_ids = p.get("affected_helix_ids") or helices_crossing_planes(
+        design, p["plane_a_bp"], p["plane_b_bp"]
     )
-    resolved = resolve_cluster_scope(design, p.get('cluster_ids') or [], helix_ids)
+    resolved = resolve_cluster_scope(design, p.get("cluster_ids") or [], helix_ids)
     helix_ids = resolved["helix_ids"]
     cluster_ids = resolved["cluster_ids"]
 
     # Build the edited op from the entry's stored snapshot (preserves the op id).
-    new_op = entry.op_snapshot.model_copy(update={
-        'type':               op_type,
-        'plane_a_bp':         p['plane_a_bp'],
-        'plane_b_bp':         p['plane_b_bp'],
-        'affected_helix_ids': helix_ids,
-        'cluster_ids':        cluster_ids,
-        'params':             new_params,
-    })
+    new_op = entry.op_snapshot.model_copy(
+        update={
+            "type": op_type,
+            "plane_a_bp": p["plane_a_bp"],
+            "plane_b_bp": p["plane_b_bp"],
+            "affected_helix_ids": helix_ids,
+            "cluster_ids": cluster_ids,
+            "params": new_params,
+        }
+    )
 
     # Refresh the entry's op_snapshot so seek replays match the new params.
     new_log = list(design.feature_log)
-    new_log[index] = entry.model_copy(update={'op_snapshot': new_op})
+    new_log[index] = entry.model_copy(update={"op_snapshot": new_op})
 
     # Rebuild the full deformation set from the log (source of truth). Drops any
     # transient preview op and restores ops the edit-preview seek rolled out.
     rebuilt_ops = [
-        e.op_snapshot for e in new_log
-        if getattr(e, 'feature_type', None) == 'deformation' and e.op_snapshot is not None
+        e.op_snapshot
+        for e in new_log
+        if getattr(e, "feature_type", None) == "deformation"
+        and e.op_snapshot is not None
     ]
 
     return design.copy_with(
-        deformations=rebuilt_ops, feature_log=new_log, feature_log_cursor=-1,
+        deformations=rebuilt_ops,
+        feature_log=new_log,
+        feature_log_cursor=-1,
     )

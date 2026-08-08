@@ -206,9 +206,7 @@ class TestSmoothCgPositionsPerDomain:
         # Pick a domain with at least 5 nucleotides.
         target_strand = design.strands[0]
         target_domain = next(
-            d
-            for d in target_strand.domains
-            if abs(d.end_bp - d.start_bp) + 1 >= 5
+            d for d in target_strand.domains if abs(d.end_bp - d.start_bp) + 1 >= 5
         )
         keys = [
             (target_domain.helix_id, bp, target_domain.direction.value)
@@ -219,13 +217,13 @@ class TestSmoothCgPositionsPerDomain:
 
         smoothed = _smooth_cg_positions_per_domain(design, cg_noisy, sigma=2.0)
 
-        noisy_arr    = np.array([cg_noisy[k] for k in keys])
+        noisy_arr = np.array([cg_noisy[k] for k in keys])
         smoothed_arr = np.array([smoothed[k] for k in keys])
 
         # Variance of bp-to-bp position differences along the domain is the
         # right measure (domain-mean differences cancel; we want curvature/
         # noise reduction).
-        noisy_diffs    = np.diff(noisy_arr,    axis=0)
+        noisy_diffs = np.diff(noisy_arr, axis=0)
         smoothed_diffs = np.diff(smoothed_arr, axis=0)
         assert np.var(smoothed_diffs) < np.var(noisy_diffs), (
             f"Smoothing failed to reduce diff-variance: "
@@ -285,7 +283,7 @@ class TestRefitHelixAxes:
         design = _small_design()
         helix = design.helices[0]
         start = np.array([helix.axis_start.x, helix.axis_start.y, helix.axis_start.z])
-        end   = np.array([helix.axis_end.x,   helix.axis_end.y,   helix.axis_end.z])
+        end = np.array([helix.axis_end.x, helix.axis_end.y, helix.axis_end.z])
         orig_dir = (end - start) / (np.linalg.norm(end - start) + 1e-14)
 
         # Generate 10 points along the axis with tiny radial noise.
@@ -298,8 +296,12 @@ class TestRefitHelixAxes:
 
         new_design = _refit_helix_axes(design, cg)
         new_helix = next(h for h in new_design.helices if h.id == helix.id)
-        new_start = np.array([new_helix.axis_start.x, new_helix.axis_start.y, new_helix.axis_start.z])
-        new_end   = np.array([new_helix.axis_end.x,   new_helix.axis_end.y,   new_helix.axis_end.z])
+        new_start = np.array(
+            [new_helix.axis_start.x, new_helix.axis_start.y, new_helix.axis_start.z]
+        )
+        new_end = np.array(
+            [new_helix.axis_end.x, new_helix.axis_end.y, new_helix.axis_end.z]
+        )
         new_dir = (new_end - new_start) / (np.linalg.norm(new_end - new_start) + 1e-14)
 
         # New direction must be close to original (the sign-correction branch
@@ -330,7 +332,7 @@ class TestRefitHelixAxes:
         design = _small_design()
         helix = design.helices[0]
         start = np.array([helix.axis_start.x, helix.axis_start.y, helix.axis_start.z])
-        end   = np.array([helix.axis_end.x,   helix.axis_end.y,   helix.axis_end.z])
+        end = np.array([helix.axis_end.x, helix.axis_end.y, helix.axis_end.z])
         orig_dir = (end - start) / (np.linalg.norm(end - start) + 1e-14)
 
         # Generate strict-line points (no noise) so PCA is deterministic.
@@ -346,9 +348,11 @@ class TestRefitHelixAxes:
         new_design = _refit_helix_axes(design, cg)
         new_helix = next(h for h in new_design.helices if h.id == helix.id)
         new_dir = np.array(
-            [new_helix.axis_end.x - new_helix.axis_start.x,
-             new_helix.axis_end.y - new_helix.axis_start.y,
-             new_helix.axis_end.z - new_helix.axis_start.z]
+            [
+                new_helix.axis_end.x - new_helix.axis_start.x,
+                new_helix.axis_end.y - new_helix.axis_start.y,
+                new_helix.axis_end.z - new_helix.axis_start.z,
+            ]
         )
         new_dir /= np.linalg.norm(new_dir) + 1e-14
         # Guarantee: new_dir is in the same half-space as orig_dir.
@@ -427,10 +431,10 @@ class TestBuildAtomisticModelFromCg:
         conf = tmp_path / "ideal.dat"
         _write_synthetic_conf(design, conf)
 
-        model_pca    = build_atomistic_model_from_cg(design, conf)
+        model_pca = build_atomistic_model_from_cg(design, conf)
         model_spline = build_atomistic_model_from_cg_spline(design, conf, sigma=2.0)
-        assert len(model_pca.atoms)    == len(model_spline.atoms)
-        assert len(model_pca.bonds)    == len(model_spline.bonds)
+        assert len(model_pca.atoms) == len(model_spline.atoms)
+        assert len(model_pca.bonds) == len(model_spline.bonds)
 
     def test_atom_positions_finite(self, tmp_path: Path):
         design = _small_design()
@@ -554,7 +558,7 @@ def _write_relaxed_oxdna_conf(design: Design, conf_path: Path) -> None:
         z = bp * 0.34
         if dir_str == "FORWARD":
             cm = np.array([-half, hy, z])
-            a1 = np.array([1.0, 0.0, 0.0])   # toward partner (inward)
+            a1 = np.array([1.0, 0.0, 0.0])  # toward partner (inward)
             a3 = np.array([0.0, 0.0, 1.0])
         else:
             cm = np.array([half, hy, z])
@@ -657,7 +661,7 @@ def _heavy_clash_count(model, cutoff_nm: float = 0.20) -> int:
 
     pts, keys = [], []
     for a in model.atoms:
-        nm = (a.name or "")
+        nm = a.name or ""
         if nm.lstrip("0123456789")[:1] == "H":
             continue
         pts.append([a.x, a.y, a.z])
@@ -695,7 +699,9 @@ class TestDeformedHelixAxes:
             r = full.get((h_id, bp, "REVERSE"))
             if f is not None and r is not None:
                 mid = 0.5 * (f["backbone_position"] + r["backbone_position"])
-                assert np.linalg.norm(pt - mid) < 0.6  # near the centerline (post-smoothing)
+                assert (
+                    np.linalg.norm(pt - mid) < 0.6
+                )  # near the centerline (post-smoothing)
 
     def test_deformed_axis_slashes_clashes_on_a_displaced_helix(self):
         """The payoff: when a helix is displaced from its ideal straight axis (as a
@@ -708,7 +714,7 @@ class TestDeformedHelixAxes:
 
         from tests.conftest import make_6hb_design
 
-        design = make_6hb_design()   # fully base-paired → the axis covers every bp
+        design = make_6hb_design()  # fully base-paired → the axis covers every bp
         full = _ideal_full_map(design)
         # Bend every helix into an arc: displace each nucleotide transverse to the
         # helix by an amount growing with bp (∝ bp²) — a relaxed origami curls like
@@ -719,9 +725,9 @@ class TestDeformedHelixAxes:
         for k, rec in full.items():
             r = dict(rec)
             bp = k[1]
-            r["backbone_position"] = (
-                np.asarray(rec["backbone_position"], float)
-                + np.array([0.012 * bp * bp, 0.0, 0.0]))
+            r["backbone_position"] = np.asarray(
+                rec["backbone_position"], float
+            ) + np.array([0.012 * bp * bp, 0.0, 0.0])
             bent[k] = r
 
         pos_override = {
@@ -732,7 +738,8 @@ class TestDeformedHelixAxes:
 
         straight = build_atomistic_model(design, nuc_pos_override=pos_override)
         deformed = build_atomistic_model(
-            design, nuc_pos_override=pos_override, axis_override=axis_override)
+            design, nuc_pos_override=pos_override, axis_override=axis_override
+        )
 
         n_straight = _heavy_clash_count(straight)
         n_deformed = _heavy_clash_count(deformed)

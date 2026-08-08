@@ -6,17 +6,25 @@ as ~80 ASCII bytes/atom/frame. Correctness here is checked against this module's
 which was written independently (for NAMD output) and parses the real CHARMM layout — so a
 round-trip through it is a genuine format check, not a tautology.
 """
+
 import numpy as np
 import pytest
 
 from backend.core.dcd_fast import (
-    UnsupportedDCD, append_frame, read_frame, read_layout, write_header, write_trajectory,
+    UnsupportedDCD,
+    append_frame,
+    read_frame,
+    read_layout,
+    write_header,
+    write_trajectory,
 )
 
 
 def _frames(n_frames, n_atoms, seed=0):
     rng = np.random.default_rng(seed)
-    return [rng.normal(size=(n_atoms, 3)).astype(np.float32) * 25.0 for _ in range(n_frames)]
+    return [
+        rng.normal(size=(n_atoms, 3)).astype(np.float32) * 25.0 for _ in range(n_frames)
+    ]
 
 
 class TestRoundTrip:
@@ -74,7 +82,7 @@ class TestDeclaredCountCorrection:
         # A short iterable must not leave NSET overstating the file, or a reader computes
         # a frame count the bytes don't support.
         path = tmp_path / "t.dcd"
-        written = write_trajectory(path, 16, _frames(3, 16), 10)   # promised 10, gave 3
+        written = write_trajectory(path, 16, _frames(3, 16), 10)  # promised 10, gave 3
         assert written == 3
         layout = read_layout(path)
         assert layout.n_frames == 3
@@ -113,4 +121,7 @@ class TestValidation:
         path = tmp_path / "t.dcd"
         write_trajectory(path, 2, [[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]], 1)
         layout = read_layout(path)
-        assert read_frame(path, layout, 0)[0].tolist() == [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+        assert read_frame(path, layout, 0)[0].tolist() == [
+            [1.0, 2.0, 3.0],
+            [4.0, 5.0, 6.0],
+        ]

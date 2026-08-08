@@ -38,7 +38,7 @@ from backend.physics.oxdna_interface import (
 
 # oxDNA's hydrogen-bond (base) interaction site sits at CM + POS_BASE·a1, where the
 # .dat position IS the centre of mass and POS_BASE = 0.4 oxDNA units (model.h).
-OXDNA_BASE_SITE_NM: float = 0.4 * OXDNA_LENGTH_UNIT   # ≈ 0.341 nm
+OXDNA_BASE_SITE_NM: float = 0.4 * OXDNA_LENGTH_UNIT  # ≈ 0.341 nm
 
 # A designed WC pair counts as "formed" when the two oxDNA base sites are within
 # this distance — i.e. actually hydrogen-bonded (oxDNA forms H-bonds at ~0.34 nm).
@@ -82,9 +82,9 @@ BACKBONE_CLASH_NM: float = 1.5
 # that same bond at 1.024 (exactly one bond over r_max), while a CM-based metric
 # mis-reported 880 "over" bonds.  So the site-based distance is the one that predicts
 # the abort.
-FENE_R0_OXDNA2:   float = 0.7564           # oxDNA units (model.h FENE_R0_OXDNA2)
-FENE_DELTA:       float = 0.25             # oxDNA units (FENE_DELTA)
-FENE_RMAX_UNITS:  float = FENE_R0_OXDNA2 + FENE_DELTA   # ≈ 1.0064 — the hard cliff
+FENE_R0_OXDNA2: float = 0.7564  # oxDNA units (model.h FENE_R0_OXDNA2)
+FENE_DELTA: float = 0.25  # oxDNA units (FENE_DELTA)
+FENE_RMAX_UNITS: float = FENE_R0_OXDNA2 + FENE_DELTA  # ≈ 1.0064 — the hard cliff
 # A bond at/over this is "not equil-ready": below the cliff with a margin for the
 # first velocity-refresh kick (~0.025 units observed) that can tip a borderline bond
 # over r_max before the integrator ever runs a step.
@@ -94,22 +94,22 @@ FENE_SAFE_MAX_UNITS: float = 0.98
 @dataclass
 class OxdnaHealthResult:
     bp_retained_fraction: float | None = None
-    n_pairs:              int = 0
-    potential_energy:     float | None = None
-    energy_converged:     bool = False
+    n_pairs: int = 0
+    potential_energy: float | None = None
+    energy_converged: bool = False
     max_backbone_stretch: float | None = None
-    n_clashes:            int = 0
+    n_clashes: int = 0
     # FENE equil-readiness (site-based, oxDNA units): the longest backbone bond and
     # how many exceed oxDNA's FENE cliff.  ``fene_safe`` is False when an uncapped
     # (bare-FENE) stage would risk aborting at config load.  Advisory — drives the
     # runner's escalate-and-retry, NOT the ``passed`` gate (a capped equil tolerates
     # a residual over-stretch, so this never on its own fails a stage).
     max_backbone_fene_units: float | None = None
-    n_fene_over:          int = 0
-    fene_safe:            bool = True
-    passed:               bool = True
-    reason:               str = ""
-    error:                str | None = None
+    n_fene_over: int = 0
+    fene_safe: bool = True
+    passed: bool = True
+    reason: str = ""
+    error: str | None = None
 
 
 # ── energy.dat parsing ────────────────────────────────────────────────────────
@@ -209,23 +209,37 @@ def production_rmsd(
         read_trajectory_frames_full,
         unwrap_align_to_reference,
     )
+
     ref = read_configuration_full(reference_conf_path, design)
     frames = read_trajectory_frames_full(production_traj_path, design)
     box = _parse_box_nm(production_traj_path)
     series: list[float] = []
     for fr in frames:
-        aligned = (unwrap_align_to_reference(fr, ref, design, box)
-                   if box is not None and np.all(box > 0) else fr)
+        aligned = (
+            unwrap_align_to_reference(fr, ref, design, box)
+            if box is not None and np.all(box > 0)
+            else fr
+        )
         keys = [k for k in aligned if k in ref]
         if not keys:
             continue
-        d = np.array([aligned[k]["backbone_position"] - ref[k]["backbone_position"] for k in keys])
-        series.append(float(np.sqrt((d ** 2).sum(1).mean())))
+        d = np.array(
+            [
+                aligned[k]["backbone_position"] - ref[k]["backbone_position"]
+                for k in keys
+            ]
+        )
+        series.append(float(np.sqrt((d**2).sum(1).mean())))
     if not series:
         return {"n_frames": 0, "series": [], "mean": None, "max": None, "min": None}
     s = np.array(series)
-    return {"n_frames": len(series), "series": series,
-            "mean": float(s.mean()), "max": float(s.max()), "min": float(s.min())}
+    return {
+        "n_frames": len(series),
+        "series": series,
+        "mean": float(s.mean()),
+        "max": float(s.max()),
+        "min": float(s.min()),
+    }
 
 
 def production_rmsf(
@@ -271,25 +285,39 @@ def production_rmsf(
         read_trajectory_frames_full,
         unwrap_align_to_reference,
     )
+
     # copies=True keeps each loop-insertion copy under its own 4-tuple key so the
     # flexibility/deviation maps carry a per-copy value instead of collapsing them.
     ref = read_configuration_full(
-        reference_conf_path, design, copies=copies, n_trailing_extra=n_trailing_extra,
-        trailing_extra_strand_length=trailing_extra_strand_length)
-    paths = (list(production_traj_path)
-             if isinstance(production_traj_path, (list, tuple))
-             else [production_traj_path])
+        reference_conf_path,
+        design,
+        copies=copies,
+        n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length,
+    )
+    paths = (
+        list(production_traj_path)
+        if isinstance(production_traj_path, (list, tuple))
+        else [production_traj_path]
+    )
 
-    acc: dict[tuple, dict] = {}   # key → {"pos": [bb xyz...], "a1": [a1...]}
+    acc: dict[tuple, dict] = {}  # key → {"pos": [bb xyz...], "a1": [a1...]}
     n_frames = 0
     for path in paths:
         frames = read_trajectory_frames_full(
-            path, design, copies=copies, n_trailing_extra=n_trailing_extra,
-            trailing_extra_strand_length=trailing_extra_strand_length)
+            path,
+            design,
+            copies=copies,
+            n_trailing_extra=n_trailing_extra,
+            trailing_extra_strand_length=trailing_extra_strand_length,
+        )
         box = _parse_box_nm(path)
         for fr in frames:
-            aligned = (unwrap_align_to_reference(fr, ref, design, box, align=align)
-                       if box is not None and np.all(box > 0) else fr)
+            aligned = (
+                unwrap_align_to_reference(fr, ref, design, box, align=align)
+                if box is not None and np.all(box > 0)
+                else fr
+            )
             n_frames += 1
             for k, v in aligned.items():
                 bb = oxdna_backbone_site(v["backbone_position"], v["a1"], v["a3"])
@@ -301,39 +329,61 @@ def production_rmsf(
                     slot["a3"].append(np.asarray(v["a3"], dtype=float))
 
     if n_frames == 0 or not acc:
-        return {"ready": False, "n_frames": 0, "positions": [],
-                "min_rmsf": None, "max_rmsf": None, "mean_rmsf": None}
+        return {
+            "ready": False,
+            "n_frames": 0,
+            "positions": [],
+            "min_rmsf": None,
+            "max_rmsf": None,
+            "mean_rmsf": None,
+        }
 
     positions: list[dict] = []
     rmsfs: list[float] = []
     average_frame: dict = {}
     for key, slot in acc.items():
         hid, bp, direction = key[0], key[1], key[2]
-        copy = key[3] if len(key) == 4 else 0   # loop-copy index (0 for plain nucleotides)
-        P = np.array(slot["pos"])                      # (F, 3)
+        copy = (
+            key[3] if len(key) == 4 else 0
+        )  # loop-copy index (0 for plain nucleotides)
+        P = np.array(slot["pos"])  # (F, 3)
         mean_pos = P.mean(axis=0)
         rmsf = float(np.sqrt(((P - mean_pos) ** 2).sum(axis=1).mean()))
         a1m = np.array(slot["a1"]).mean(axis=0)
         a1m = a1m / (np.linalg.norm(a1m) + 1e-14)
-        positions.append({
-            "helix_id": hid, "bp_index": bp, "direction": direction, "copy": copy,
-            "backbone_position": mean_pos.tolist(),
-            "nx": float(a1m[0]), "ny": float(a1m[1]), "nz": float(a1m[2]),
-            "rmsf": rmsf,
-        })
+        positions.append(
+            {
+                "helix_id": hid,
+                "bp_index": bp,
+                "direction": direction,
+                "copy": copy,
+                "backbone_position": mean_pos.tolist(),
+                "nx": float(a1m[0]),
+                "ny": float(a1m[1]),
+                "nz": float(a1m[2]),
+                "rmsf": rmsf,
+            }
+        )
         rmsfs.append(rmsf)
         if include_average_frame:
             cmm = np.array(slot["cm"]).mean(axis=0)
             a3m = np.array(slot["a3"]).mean(axis=0)
             a3m = a3m / (np.linalg.norm(a3m) + 1e-14)
             average_frame[key] = {
-                "backbone_position": cmm, "a1": a1m, "a3": a3m,
+                "backbone_position": cmm,
+                "a1": a1m,
+                "a3": a3m,
             }
 
     r = np.array(rmsfs)
-    out = {"ready": True, "n_frames": n_frames, "positions": positions,
-           "min_rmsf": float(r.min()), "max_rmsf": float(r.max()),
-           "mean_rmsf": float(r.mean())}
+    out = {
+        "ready": True,
+        "n_frames": n_frames,
+        "positions": positions,
+        "min_rmsf": float(r.min()),
+        "max_rmsf": float(r.max()),
+        "mean_rmsf": float(r.mean()),
+    }
     if include_average_frame:
         out["average_frame"] = average_frame
     return out
@@ -347,10 +397,16 @@ _PRODUCTION_RMSF_CACHE = None
 _PRODUCTION_RMSF_CACHE_MAX = 4
 
 
-def production_rmsf_cached(design, production_traj_path, reference_conf_path,
-                           *, copies: bool = False, align: bool = True,
-                           n_trailing_extra: int = 0,
-                           trailing_extra_strand_length: int = 0) -> dict:
+def production_rmsf_cached(
+    design,
+    production_traj_path,
+    reference_conf_path,
+    *,
+    copies: bool = False,
+    align: bool = True,
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
+) -> dict:
     """LRU-cached :func:`production_rmsf` including its average reconstruction frame.
 
     File size+mtime signatures naturally invalidate running trajectories as they
@@ -360,21 +416,34 @@ def production_rmsf_cached(design, production_traj_path, reference_conf_path,
     global _PRODUCTION_RMSF_CACHE
     from collections import OrderedDict
 
-    paths = (list(production_traj_path)
-             if isinstance(production_traj_path, (list, tuple))
-             else [production_traj_path])
-    key = (tuple(_traj_file_sig(p) for p in paths), _traj_file_sig(reference_conf_path),
-           bool(copies), bool(align), int(n_trailing_extra),
-           int(trailing_extra_strand_length))
+    paths = (
+        list(production_traj_path)
+        if isinstance(production_traj_path, (list, tuple))
+        else [production_traj_path]
+    )
+    key = (
+        tuple(_traj_file_sig(p) for p in paths),
+        _traj_file_sig(reference_conf_path),
+        bool(copies),
+        bool(align),
+        int(n_trailing_extra),
+        int(trailing_extra_strand_length),
+    )
     if _PRODUCTION_RMSF_CACHE is not None:
         cached = _PRODUCTION_RMSF_CACHE.get(key)
         if cached is not None:
             _PRODUCTION_RMSF_CACHE.move_to_end(key)
             return cached
     result = production_rmsf(
-        design, paths, reference_conf_path, include_average_frame=True, copies=copies,
-        align=align, n_trailing_extra=n_trailing_extra,
-        trailing_extra_strand_length=trailing_extra_strand_length)
+        design,
+        paths,
+        reference_conf_path,
+        include_average_frame=True,
+        copies=copies,
+        align=align,
+        n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length,
+    )
     if _PRODUCTION_RMSF_CACHE is None:
         _PRODUCTION_RMSF_CACHE = OrderedDict()
     _PRODUCTION_RMSF_CACHE[key] = result
@@ -405,23 +474,43 @@ def twist_series_stats(series) -> dict:
     n = int(a.size)
     if n < 2:
         m = float(a.mean()) if n else 0.0
-        return {"n": n, "mean": m, "std": 0.0, "tau_int": 1.0, "n_eff": float(n), "sem": 0.0}
+        return {
+            "n": n,
+            "mean": m,
+            "std": 0.0,
+            "tau_int": 1.0,
+            "n_eff": float(n),
+            "sem": 0.0,
+        }
     mean = float(a.mean())
     d = a - mean
     var = float((d * d).mean())
-    if var <= 0.0:                                  # constant series → fully correlated-free
-        return {"n": n, "mean": mean, "std": 0.0, "tau_int": 1.0, "n_eff": float(n), "sem": 0.0}
+    if var <= 0.0:  # constant series → fully correlated-free
+        return {
+            "n": n,
+            "mean": mean,
+            "std": 0.0,
+            "tau_int": 1.0,
+            "n_eff": float(n),
+            "sem": 0.0,
+        }
     tau = 1.0
     for t in range(1, n):
         rho = float((d[:-t] * d[t:]).mean()) / var
-        if rho <= 0.0:                              # automatic windowing at first zero-crossing
+        if rho <= 0.0:  # automatic windowing at first zero-crossing
             break
         tau += 2.0 * rho
     tau = max(1.0, tau)
     n_eff = n / tau
-    std = var ** 0.5
-    return {"n": n, "mean": mean, "std": std, "tau_int": tau,
-            "n_eff": n_eff, "sem": std / (n_eff ** 0.5)}
+    std = var**0.5
+    return {
+        "n": n,
+        "mean": mean,
+        "std": std,
+        "tau_int": tau,
+        "n_eff": n_eff,
+        "sem": std / (n_eff**0.5),
+    }
 
 
 def detect_equilibration(series, *, min_remaining: int = 20) -> dict:
@@ -444,7 +533,7 @@ def detect_equilibration(series, *, min_remaining: int = 20) -> dict:
     if n < min_remaining + 2:
         st = twist_series_stats(series)
         return {"t0": 0, "n_eff": st["n_eff"], "stats": st}
-    step = max(1, n // 200)                          # coarse scan — n is ≤ a few thousand frames
+    step = max(1, n // 200)  # coarse scan — n is ≤ a few thousand frames
     best_t0, best_neff, best_stats = 0, -1.0, None
     for t0 in range(0, n - min_remaining, step):
         st = twist_series_stats(a[t0:])
@@ -485,47 +574,78 @@ def production_twist_series(
         read_trajectory_frames_full,
         unwrap_align_to_reference,
     )
+
     ref = read_configuration_full(reference_conf_path, design)
-    paths = (list(production_traj_path)
-             if isinstance(production_traj_path, (list, tuple))
-             else [production_traj_path])
+    paths = (
+        list(production_traj_path)
+        if isinstance(production_traj_path, (list, tuple))
+        else [production_traj_path]
+    )
     analytic_twist = measure_bundle_twist(analytic_reference, n_slices=n_slices)
 
     per_frame: list[float] = []
-    acc: dict[tuple, list] = {}                     # key → [bb xyz, …] for the mean-structure twist
+    acc: dict[tuple, list] = {}  # key → [bb xyz, …] for the mean-structure twist
     n_frames = 0
     for path in paths:
         frames = read_trajectory_frames_full(path, design)
         box = _parse_box_nm(path)
         for fr in frames:
-            aligned = (unwrap_align_to_reference(fr, ref, design, box)
-                       if box is not None and np.all(box > 0) else fr)
+            aligned = (
+                unwrap_align_to_reference(fr, ref, design, box)
+                if box is not None and np.all(box > 0)
+                else fr
+            )
             frame_positions = []
             for k, v in aligned.items():
                 bb = oxdna_backbone_site(v["backbone_position"], v["a1"], v["a3"])
-                frame_positions.append({"helix_id": k[0], "bp_index": k[1], "direction": k[2],
-                                        "backbone_position": bb})
+                frame_positions.append(
+                    {
+                        "helix_id": k[0],
+                        "bp_index": k[1],
+                        "direction": k[2],
+                        "backbone_position": bb,
+                    }
+                )
                 acc.setdefault(k, []).append(bb)
             core = _filter_to_reference_core(frame_positions, analytic_reference)
             try:
-                per_frame.append(measure_bundle_twist(core, n_slices=n_slices) - analytic_twist)
+                per_frame.append(
+                    measure_bundle_twist(core, n_slices=n_slices) - analytic_twist
+                )
             except ValueError:
-                continue                            # degenerate frame (too few helices) — skip
+                continue  # degenerate frame (too few helices) — skip
             n_frames += 1
 
     if n_frames == 0 or not per_frame:
-        return {"ready": False, "n_frames": 0, "twist_per_frame": [],
-                "twist_on_mean_structure": None, "analytic_twist": analytic_twist, "stats": None}
+        return {
+            "ready": False,
+            "n_frames": 0,
+            "twist_per_frame": [],
+            "twist_on_mean_structure": None,
+            "analytic_twist": analytic_twist,
+            "stats": None,
+        }
 
-    mean_positions = [{"helix_id": k[0], "bp_index": k[1], "direction": k[2],
-                       "backbone_position": np.mean(v, axis=0)} for k, v in acc.items()]
+    mean_positions = [
+        {
+            "helix_id": k[0],
+            "bp_index": k[1],
+            "direction": k[2],
+            "backbone_position": np.mean(v, axis=0),
+        }
+        for k, v in acc.items()
+    ]
     mean_core = _filter_to_reference_core(mean_positions, analytic_reference)
     twist_on_mean = measure_bundle_twist(mean_core, n_slices=n_slices) - analytic_twist
-    return {"ready": True, "n_frames": n_frames, "analytic_twist": analytic_twist,
-            "twist_per_frame": [round(t, 3) for t in per_frame],
-            "twist_on_mean_structure": round(twist_on_mean, 3),
-            "stats": twist_series_stats(per_frame),
-            "equilibrated": detect_equilibration(per_frame)}
+    return {
+        "ready": True,
+        "n_frames": n_frames,
+        "analytic_twist": analytic_twist,
+        "twist_per_frame": [round(t, 3) for t in per_frame],
+        "twist_on_mean_structure": round(twist_on_mean, 3),
+        "stats": twist_series_stats(per_frame),
+        "equilibrated": detect_equilibration(per_frame),
+    }
 
 
 # path -> {size, reported, offset, count, anchor}: an INCREMENTAL frame-count memo.
@@ -535,8 +655,8 @@ def production_twist_series(
 #   size     file size when `reported` was last computed (stat-only fast path)
 _COUNT_CACHE: dict = {}
 _COUNT_CACHE_MAX = 512
-_COUNT_CHUNK = 1 << 20           # 1 MiB scan chunk
-_COUNT_ANCHOR = 4096             # bytes of counted-prefix kept to detect a rewrite
+_COUNT_CHUNK = 1 << 20  # 1 MiB scan chunk
+_COUNT_ANCHOR = 4096  # bytes of counted-prefix kept to detect a rewrite
 
 
 def _scan_frames(fh, start: int, count: int) -> tuple[int, int, bytes]:
@@ -552,9 +672,9 @@ def _scan_frames(fh, start: int, count: int) -> tuple[int, int, bytes]:
         chunk = fh.read(_COUNT_CHUNK)
         if not chunk:
             break
-        buf = tail + chunk           # buf begins at byte `pos`
+        buf = tail + chunk  # buf begins at byte `pos`
         lines = buf.split(b"\n")
-        tail = lines.pop()           # possibly-truncated final line
+        tail = lines.pop()  # possibly-truncated final line
         n += sum(1 for ln in lines if ln.startswith(b"t "))
         pos += len(buf) - len(tail)
     return n, pos, tail
@@ -577,6 +697,7 @@ def count_trajectory_frames(traj_path) -> int:
     of a full re-read.  Truncation, or a rewrite that changed the bytes before the
     resume point (a restarted stage rewinds to ``t = 0``), falls back to a full recount."""
     from pathlib import Path
+
     p = Path(traj_path)
     try:
         size = p.stat().st_size
@@ -605,10 +726,17 @@ def count_trajectory_frames(traj_path) -> int:
             anchor = fh.read(pos - max(0, pos - _COUNT_ANCHOR))
     except OSError:
         return 0
-    _COUNT_CACHE[key] = {"size": size, "reported": reported,
-                         "offset": pos, "count": n, "anchor": anchor}
+    _COUNT_CACHE[key] = {
+        "size": size,
+        "reported": reported,
+        "offset": pos,
+        "count": n,
+        "anchor": anchor,
+    }
     if len(_COUNT_CACHE) > _COUNT_CACHE_MAX:
-        _COUNT_CACHE.pop(next(iter(_COUNT_CACHE)), None)   # drop oldest (insertion order)
+        _COUNT_CACHE.pop(
+            next(iter(_COUNT_CACHE)), None
+        )  # drop oldest (insertion order)
     return reported
 
 
@@ -628,8 +756,10 @@ def differential_profile(sim_profile, analytic_profile):
     ana = [(float(t), float(v)) for t, v in analytic_profile]
     if not ana:
         return sim
-    st = np.array([t for t, _ in sim]); sv = np.array([v for _, v in sim])
-    at = np.array([t for t, _ in ana]); av = np.array([v for _, v in ana])
+    st = np.array([t for t, _ in sim])
+    sv = np.array([v for _, v in sim])
+    at = np.array([t for t, _ in ana])
+    av = np.array([v for _, v in ana])
 
     def _norm(x):
         lo, hi = float(x.min()), float(x.max())
@@ -639,10 +769,14 @@ def differential_profile(sim_profile, analytic_profile):
     # np.interp needs ascending xp; the analytic profile's normalised t is monotone by span.
     order = np.argsort(an)
     interp = np.interp(sn, an[order], av[order])
-    return [(round(float(t), 3), round(float(s - i), 3)) for t, s, i in zip(st, sv, interp)]
+    return [
+        (round(float(t), 3), round(float(s - i), 3)) for t, s, i in zip(st, sv, interp)
+    ]
 
 
-def base_pairing_spatial_profile(per_pair_formed_frac, mean_positions, *, n_slices: int = 0):
+def base_pairing_spatial_profile(
+    per_pair_formed_frac, mean_positions, *, n_slices: int = 0
+):
     """Fraction-of-pairs-formed vs axial position ``[(axial_t_nm, fraction), …]`` — localises
     WHERE a bundle melts (ends fray first, core holds), the spatial companion to the per-frame
     base-pairing series.  ``per_pair_formed_frac`` maps ``(helix_id, bp_index) → fraction of
@@ -657,10 +791,12 @@ def base_pairing_spatial_profile(per_pair_formed_frac, mean_positions, *, n_slic
     for p in mean_positions:
         bp = p["bp_index"]
         if not isinstance(bp, int):
-            continue                       # crossover extra-base inserts (bp_index = crossover id, ssDNA — not a designed pair)
+            continue  # crossover extra-base inserts (bp_index = crossover id, ssDNA — not a designed pair)
         key = (p["helix_id"], bp)
         if key in per_pair_formed_frac:
-            bp_pts.setdefault(key, []).append(np.asarray(p["backbone_position"], dtype=float))
+            bp_pts.setdefault(key, []).append(
+                np.asarray(p["backbone_position"], dtype=float)
+            )
     keys = list(bp_pts.keys())
     if len(keys) < 3:
         return []
@@ -717,39 +853,55 @@ def production_metric_series(
         read_trajectory_frames_full,
         unwrap_align_to_reference,
     )
+
     ref = read_configuration_full(reference_conf_path, design)
-    paths = (list(production_traj_path)
-             if isinstance(production_traj_path, (list, tuple))
-             else [production_traj_path])
+    paths = (
+        list(production_traj_path)
+        if isinstance(production_traj_path, (list, tuple))
+        else [production_traj_path]
+    )
     analytic_twist = measure_bundle_twist(analytic_reference, n_slices=n_slices)
     analytic_curv = measure_bundle_curvature(analytic_reference, n_slices=n_slices)
 
     twist_pf: list[float] = []
     curv_pf: list[float] = []
     bp_pf: list[float] = []
-    acc: dict[tuple, list] = {}                     # key → [bb xyz, …] for the mean structure
-    formed: dict[tuple, int] = {}                   # (helix,bp) → frames the pair was H-bonded
-    total_pair: dict[tuple, int] = {}               # (helix,bp) → frames the pair was designed
+    acc: dict[tuple, list] = {}  # key → [bb xyz, …] for the mean structure
+    formed: dict[tuple, int] = {}  # (helix,bp) → frames the pair was H-bonded
+    total_pair: dict[tuple, int] = {}  # (helix,bp) → frames the pair was designed
     n_frames = 0
     n_designed = 0
     for path in paths:
         frames = read_trajectory_frames_full(path, design)
         box = _parse_box_nm(path)
         for fr in frames:
-            aligned = (unwrap_align_to_reference(fr, ref, design, box)
-                       if box is not None and np.all(box > 0) else fr)
+            aligned = (
+                unwrap_align_to_reference(fr, ref, design, box)
+                if box is not None and np.all(box > 0)
+                else fr
+            )
             frame_positions = []
             for k, v in aligned.items():
                 bb = oxdna_backbone_site(v["backbone_position"], v["a1"], v["a3"])
-                frame_positions.append({"helix_id": k[0], "bp_index": k[1], "direction": k[2],
-                                        "backbone_position": bb})
+                frame_positions.append(
+                    {
+                        "helix_id": k[0],
+                        "bp_index": k[1],
+                        "direction": k[2],
+                        "backbone_position": bb,
+                    }
+                )
                 acc.setdefault(k, []).append(bb)
             core = _filter_to_reference_core(frame_positions, analytic_reference)
             try:
-                twist_pf.append(measure_bundle_twist(core, n_slices=n_slices) - analytic_twist)
-                curv_pf.append(measure_bundle_curvature(core, n_slices=n_slices) - analytic_curv)
+                twist_pf.append(
+                    measure_bundle_twist(core, n_slices=n_slices) - analytic_twist
+                )
+                curv_pf.append(
+                    measure_bundle_curvature(core, n_slices=n_slices) - analytic_curv
+                )
             except ValueError:
-                continue                            # degenerate frame (too few helices) — skip
+                continue  # degenerate frame (too few helices) — skip
             # base pairing on the FULL frame map + per-pair accumulation (mirrors base_pair_retention)
             fwd = {(a, b) for (a, b, d) in aligned if d == "FORWARD"}
             rev = {(a, b) for (a, b, d) in aligned if d == "REVERSE"}
@@ -757,7 +909,8 @@ def production_metric_series(
             n_designed = max(n_designed, len(designed))
             n_formed = 0
             for hid, bp in designed:
-                f = aligned[(hid, bp, "FORWARD")]; r = aligned[(hid, bp, "REVERSE")]
+                f = aligned[(hid, bp, "FORWARD")]
+                r = aligned[(hid, bp, "REVERSE")]
                 fb = f["backbone_position"] + OXDNA_BASE_SITE_NM * f["a1"]
                 rb = r["backbone_position"] + OXDNA_BASE_SITE_NM * r["a1"]
                 total_pair[(hid, bp)] = total_pair.get((hid, bp), 0) + 1
@@ -772,29 +925,53 @@ def production_metric_series(
     if n_frames == 0 or not twist_pf:
         return {"ready": False, "n_frames": 0}
 
-    mean_positions = [{"helix_id": k[0], "bp_index": k[1], "direction": k[2],
-                       "backbone_position": np.mean(v, axis=0)} for k, v in acc.items()]
+    mean_positions = [
+        {
+            "helix_id": k[0],
+            "bp_index": k[1],
+            "direction": k[2],
+            "backbone_position": np.mean(v, axis=0),
+        }
+        for k, v in acc.items()
+    ]
     mean_core = _filter_to_reference_core(mean_positions, analytic_reference)
-    twist_sp = differential_profile(measure_bundle_twist_profile(mean_core, n_slices=n_slices),
-                                    measure_bundle_twist_profile(analytic_reference, n_slices=n_slices))
-    curv_sp = differential_profile(measure_bundle_curvature_profile(mean_core, n_slices=n_slices),
-                                   measure_bundle_curvature_profile(analytic_reference, n_slices=n_slices))
+    twist_sp = differential_profile(
+        measure_bundle_twist_profile(mean_core, n_slices=n_slices),
+        measure_bundle_twist_profile(analytic_reference, n_slices=n_slices),
+    )
+    curv_sp = differential_profile(
+        measure_bundle_curvature_profile(mean_core, n_slices=n_slices),
+        measure_bundle_curvature_profile(analytic_reference, n_slices=n_slices),
+    )
     pair_frac = {k: formed.get(k, 0) / total_pair[k] for k in total_pair}
     bp_sp = base_pairing_spatial_profile(pair_frac, mean_positions, n_slices=n_slices)
 
     return {
-        "ready": True, "n_frames": n_frames,
-        "twist": {"temporal": {"per_frame": [round(x, 3) for x in twist_pf],
-                               "stats": twist_series_stats(twist_pf),
-                               "analytic": round(analytic_twist, 3)},
-                  "spatial": twist_sp},
-        "curvature": {"temporal": {"per_frame": [round(x, 4) for x in curv_pf],
-                                   "stats": twist_series_stats(curv_pf),
-                                   "analytic": round(analytic_curv, 4)},
-                      "spatial": curv_sp},
-        "base_pairing": {"temporal": {"per_frame": [round(x, 4) for x in bp_pf],
-                                      "n_designed": n_designed},
-                         "spatial": bp_sp},
+        "ready": True,
+        "n_frames": n_frames,
+        "twist": {
+            "temporal": {
+                "per_frame": [round(x, 3) for x in twist_pf],
+                "stats": twist_series_stats(twist_pf),
+                "analytic": round(analytic_twist, 3),
+            },
+            "spatial": twist_sp,
+        },
+        "curvature": {
+            "temporal": {
+                "per_frame": [round(x, 4) for x in curv_pf],
+                "stats": twist_series_stats(curv_pf),
+                "analytic": round(analytic_curv, 4),
+            },
+            "spatial": curv_sp,
+        },
+        "base_pairing": {
+            "temporal": {
+                "per_frame": [round(x, 4) for x in bp_pf],
+                "n_designed": n_designed,
+            },
+            "spatial": bp_sp,
+        },
     }
 
 
@@ -837,6 +1014,7 @@ def rmsf_confidence(n_frames: int) -> dict:
 # strand-polarity/terminus resolution is needed here).  Read-only over the
 # Physical layer; nothing here writes a relaxed coordinate back into topology.
 
+
 def _landmark_key(landmark) -> tuple:
     """Normalise a ``(helix_id, bp_index, direction)`` landmark to a hashable key.
 
@@ -863,20 +1041,25 @@ def measure_end_to_end(positions, landmark_a, landmark_b) -> float:
     if not positions:
         raise ValueError("measure_end_to_end: empty position map")
     lookup = {
-        (p["helix_id"], int(p["bp_index"]),
-         getattr(p["direction"], "value", p["direction"])): p["backbone_position"]
+        (
+            p["helix_id"],
+            int(p["bp_index"]),
+            getattr(p["direction"], "value", p["direction"]),
+        ): p["backbone_position"]
         for p in positions
     }
     ka, kb = _landmark_key(landmark_a), _landmark_key(landmark_b)
     if ka == kb:
         raise ValueError(
             f"measure_end_to_end: the two landmarks are identical ({ka}) — "
-            "end-to-end distance would be trivially 0")
+            "end-to-end distance would be trivially 0"
+        )
     for k in (ka, kb):
         if k not in lookup:
             raise ValueError(
                 f"measure_end_to_end: landmark {k} is not a nucleotide of the "
-                "position map")
+                "position map"
+            )
     a = np.asarray(lookup[ka], dtype=float)
     b = np.asarray(lookup[kb], dtype=float)
     return float(np.linalg.norm(a - b))
@@ -899,8 +1082,7 @@ def measure_radius_of_gyration(positions) -> float:
     """
     if not positions:
         raise ValueError("measure_radius_of_gyration: empty position map")
-    pts = np.array(
-        [np.asarray(p["backbone_position"], dtype=float) for p in positions])
+    pts = np.array([np.asarray(p["backbone_position"], dtype=float) for p in positions])
     cm = pts.mean(axis=0)
     return float(np.sqrt(((pts - cm) ** 2).sum(axis=1).mean()))
 
@@ -909,9 +1091,11 @@ def _backbone_lookup(positions):
     """{(helix_id, bp_index, direction): np.array backbone_position} for a
     production_rmsf-style / display position list."""
     return {
-        (p["helix_id"], int(p["bp_index"]),
-         getattr(p["direction"], "value", p["direction"])):
-            np.asarray(p["backbone_position"], dtype=float)
+        (
+            p["helix_id"],
+            int(p["bp_index"]),
+            getattr(p["direction"], "value", p["direction"]),
+        ): np.asarray(p["backbone_position"], dtype=float)
         for p in positions
     }
 
@@ -947,22 +1131,25 @@ def measure_segment_angle(positions, landmark_a, landmark_b, landmark_c) -> floa
     if len({ka, kb, kc}) != 3:
         raise ValueError(
             f"measure_segment_angle: landmarks must be three distinct nucleotides, "
-            f"got a={ka}, b={kb}, c={kc} — the angle would be degenerate")
+            f"got a={ka}, b={kb}, c={kc} — the angle would be degenerate"
+        )
     for k in (ka, kb, kc):
         if k not in lookup:
             raise ValueError(
                 f"measure_segment_angle: landmark {k} is not a nucleotide of the "
-                "position map")
+                "position map"
+            )
     b = lookup[kb]
-    leg_a = lookup[ka] - b      # b → a
-    leg_c = lookup[kc] - b      # b → c
+    leg_a = lookup[ka] - b  # b → a
+    leg_c = lookup[kc] - b  # b → c
     na = float(np.linalg.norm(leg_a))
     nc = float(np.linalg.norm(leg_c))
     if na < 1e-12 or nc < 1e-12:
         raise ValueError(
-            "measure_segment_angle: a leg has ~zero length — coincident landmarks")
+            "measure_segment_angle: a leg has ~zero length — coincident landmarks"
+        )
     cos_theta = float(np.dot(leg_a, leg_c) / (na * nc))
-    cos_theta = max(-1.0, min(1.0, cos_theta))      # guard arccos domain
+    cos_theta = max(-1.0, min(1.0, cos_theta))  # guard arccos domain
     return float(np.degrees(np.arccos(cos_theta)))
 
 
@@ -980,7 +1167,8 @@ def _fit_helix_axis(points):
     _, sv, vh = np.linalg.svd(pts - centroid, full_matrices=False)
     if sv[0] < 1e-9:
         raise ValueError(
-            "_fit_helix_axis: backbone sites are coincident — no axis to fit")
+            "_fit_helix_axis: backbone sites are coincident — no axis to fit"
+        )
     return centroid, vh[0]
 
 
@@ -1023,30 +1211,34 @@ def measure_inter_helix_spacing(positions, landmark_a, landmark_b) -> float:
         if k not in lookup:
             raise ValueError(
                 f"measure_inter_helix_spacing: landmark {k} is not a nucleotide of "
-                "the position map")
+                "the position map"
+            )
     hid_a, hid_b = ka[0], kb[0]
     if hid_a == hid_b:
         raise ValueError(
             f"measure_inter_helix_spacing: both landmarks are on the same helix "
-            f"({hid_a!r}) — inter-helix spacing needs two distinct helices")
+            f"({hid_a!r}) — inter-helix spacing needs two distinct helices"
+        )
     by_helix = {}
     for p in positions:
         by_helix.setdefault(p["helix_id"], []).append(
-            np.asarray(p["backbone_position"], dtype=float))
+            np.asarray(p["backbone_position"], dtype=float)
+        )
     for hid in (hid_a, hid_b):
         if len(by_helix.get(hid, [])) < 2:
             raise ValueError(
                 f"measure_inter_helix_spacing: helix {hid!r} has fewer than two "
-                "nucleotides — cannot fit an axis")
+                "nucleotides — cannot fit an axis"
+            )
     c_a, d_a = _fit_helix_axis(by_helix[hid_a])
     c_b, d_b = _fit_helix_axis(by_helix[hid_b])
-    if float(np.dot(d_a, d_b)) < 0.0:           # PCA sign is arbitrary — align them
+    if float(np.dot(d_a, d_b)) < 0.0:  # PCA sign is arbitrary — align them
         d_b = -d_b
     mean_dir = d_a + d_b
     n = float(np.linalg.norm(mean_dir))
     mean_dir = d_a if n < 1e-9 else mean_dir / n
     w = c_b - c_a
-    perp = w - float(np.dot(w, mean_dir)) * mean_dir    # drop the axial component
+    perp = w - float(np.dot(w, mean_dir)) * mean_dir  # drop the axial component
     return float(np.linalg.norm(perp))
 
 
@@ -1081,9 +1273,10 @@ def measure_geometry_rmsd(positions, reference_positions) -> float:
     if len(shared) < 3:
         raise ValueError(
             f"measure_geometry_rmsd: only {len(shared)} nucleotide(s) shared between "
-            "the mean structure and the analytic reference — need >= 3 to superpose")
-    P = np.array([cur[k] for k in shared])      # simulated mean
-    Q = np.array([ref[k] for k in shared])      # analytic reference
+            "the mean structure and the analytic reference — need >= 3 to superpose"
+        )
+    P = np.array([cur[k] for k in shared])  # simulated mean
+    Q = np.array([ref[k] for k in shared])  # analytic reference
     _R, Pa, Qc, _Qm = _kabsch_superpose(P, Q)
     return float(np.sqrt(((Pa - Qc) ** 2).sum(axis=1).mean()))
 
@@ -1107,7 +1300,9 @@ def _kabsch_superpose(P, Q):
     return R, Pc @ R.T, Qc, Qmean
 
 
-def geometry_deviation_map(positions, reference_positions, *, align_output: bool = True) -> dict:
+def geometry_deviation_map(
+    positions, reference_positions, *, align_output: bool = True
+) -> dict:
     """PER-NUCLEOTIDE deviation of a relaxed/mean structure from the analytic design,
     after Kabsch superposition — the spatial breakdown of :func:`measure_geometry_rmsd`.
 
@@ -1120,38 +1315,63 @@ def geometry_deviation_map(positions, reference_positions, *, align_output: bool
         raise ValueError("geometry_deviation_map: empty position map")
     if not reference_positions:
         raise ValueError("geometry_deviation_map: empty reference map")
+
     # Copy-aware keys ((helix,bp,dir,copy), copy defaults 0) so loop-insertion copies
     # stay distinct on BOTH the mean structure and the design reference instead of
     # collapsing to one — every loop bead then gets its own deviation value.
     def _k(p):
-        return (p["helix_id"], int(p["bp_index"]),
-                getattr(p["direction"], "value", p["direction"]), int(p.get("copy", 0)))
+        return (
+            p["helix_id"],
+            int(p["bp_index"]),
+            getattr(p["direction"], "value", p["direction"]),
+            int(p.get("copy", 0)),
+        )
+
     cur_pos = {_k(p): np.array(p["backbone_position"], float) for p in positions}
-    cur_a1 = {_k(p): np.array([p.get("nx", 0.0), p.get("ny", 0.0), p.get("nz", 0.0)], float)
-              for p in positions}
+    cur_a1 = {
+        _k(p): np.array([p.get("nx", 0.0), p.get("ny", 0.0), p.get("nz", 0.0)], float)
+        for p in positions
+    }
     ref = {_k(p): np.array(p["backbone_position"], float) for p in reference_positions}
     shared = sorted(set(cur_pos) & set(ref))
     if len(shared) < 3:
         raise ValueError(
             f"geometry_deviation_map: only {len(shared)} shared nucleotide(s) — "
-            "need >= 3 to superpose")
+            "need >= 3 to superpose"
+        )
     P = np.array([cur_pos[k] for k in shared])
     Q = np.array([ref[k] for k in shared])
     R, Pa, Qc, Qmean = _kabsch_superpose(P, Q)
-    dev = np.linalg.norm(Pa - Qc, axis=1)       # per-nucleotide deviation (nm)
-    aligned = Pa + Qmean                         # aligned mean positions in design frame
+    dev = np.linalg.norm(Pa - Qc, axis=1)  # per-nucleotide deviation (nm)
+    aligned = Pa + Qmean  # aligned mean positions in design frame
     out = []
     for i, k in enumerate(shared):
-        a1 = (R @ cur_a1.get(k, np.zeros(3)) if align_output
-              else cur_a1.get(k, np.zeros(3)))
+        a1 = (
+            R @ cur_a1.get(k, np.zeros(3))
+            if align_output
+            else cur_a1.get(k, np.zeros(3))
+        )
         shown = aligned[i] if align_output else cur_pos[k]
-        out.append({"helix_id": k[0], "bp_index": k[1], "direction": k[2], "copy": k[3],
-                    "backbone_position": shown.tolist(),
-                    "nx": float(a1[0]), "ny": float(a1[1]), "nz": float(a1[2]),
-                    "deviation": float(dev[i])})
-    return {"positions": out, "min_deviation": float(dev.min()),
-            "max_deviation": float(dev.max()), "mean_deviation": float(dev.mean()),
-            "n_shared": len(shared)}
+        out.append(
+            {
+                "helix_id": k[0],
+                "bp_index": k[1],
+                "direction": k[2],
+                "copy": k[3],
+                "backbone_position": shown.tolist(),
+                "nx": float(a1[0]),
+                "ny": float(a1[1]),
+                "nz": float(a1[2]),
+                "deviation": float(dev[i]),
+            }
+        )
+    return {
+        "positions": out,
+        "min_deviation": float(dev.min()),
+        "max_deviation": float(dev.max()),
+        "mean_deviation": float(dev.mean()),
+        "n_shared": len(shared),
+    }
 
 
 def _bundle_axis_frame(pts):
@@ -1174,12 +1394,14 @@ def _bundle_axis_frame(pts):
         L = -L
     e1 = vh[1] - float(vh[1] @ L) * L
     n1 = np.linalg.norm(e1)
-    if n1 < 1e-9:                                # degenerate 2nd singular vector
-        seed = np.array([1.0, 0.0, 0.0]) if abs(L[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+    if n1 < 1e-9:  # degenerate 2nd singular vector
+        seed = (
+            np.array([1.0, 0.0, 0.0]) if abs(L[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+        )
         e1 = seed - float(seed @ L) * L
         n1 = np.linalg.norm(e1)
     e1 = e1 / n1
-    e2 = np.cross(L, e1)                         # e1 x e2 == L (right-handed)
+    e2 = np.cross(L, e1)  # e1 x e2 == L (right-handed)
     return C, L, e1, e2
 
 
@@ -1220,20 +1442,22 @@ def measure_bundle_twist(positions, *, n_slices: int = 0) -> float:
     bp_pts: dict = {}
     for p in positions:
         bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
-            np.asarray(p["backbone_position"], dtype=float))
+            np.asarray(p["backbone_position"], dtype=float)
+        )
     keys = list(bp_pts.keys())
     pts = np.array([np.mean(bp_pts[k], axis=0) for k in keys])
     helix_ids = [k[0] for k in keys]
     if len(set(helix_ids)) < 2:
         raise ValueError(
-            "measure_bundle_twist: need >= 2 helices to define a cross-section twist")
+            "measure_bundle_twist: need >= 2 helices to define a cross-section twist"
+        )
     C, L, e1, e2 = _bundle_axis_frame(pts)
-    t = (pts - C) @ L                                   # axial coordinate
-    u = np.column_stack([(pts - C) @ e1, (pts - C) @ e2])   # 2-D cross-section coords
+    t = (pts - C) @ L  # axial coordinate
+    u = np.column_stack([(pts - C) @ e1, (pts - C) @ e2])  # 2-D cross-section coords
     span = float(t.max() - t.min())
     if span < 1e-6:
         raise ValueError("measure_bundle_twist: zero axial span")
-    if n_slices <= 0:                                   # ~one B-DNA turn (~3.5 nm) per slab
+    if n_slices <= 0:  # ~one B-DNA turn (~3.5 nm) per slab
         n_slices = max(3, int(round(span / 3.5)))
     edges = np.linspace(t.min(), t.max(), n_slices + 1)
     slab = np.clip(np.digitize(t, edges[1:-1]), 0, n_slices - 1)
@@ -1262,7 +1486,7 @@ def measure_bundle_twist(positions, *, n_slices: int = 0) -> float:
             if len(common) >= 2:
                 A = np.array([prev[h] for h in common])
                 B = np.array([cur[h] for h in common])
-                A = A - A.mean(axis=0)                  # drop translation/bend
+                A = A - A.mean(axis=0)  # drop translation/bend
                 B = B - B.mean(axis=0)
                 cross = float(np.sum(A[:, 0] * B[:, 1] - A[:, 1] * B[:, 0]))
                 dot = float(np.sum(A[:, 0] * B[:, 0] + A[:, 1] * B[:, 1]))
@@ -1280,7 +1504,9 @@ def measure_bundle_twist(positions, *, n_slices: int = 0) -> float:
     return total
 
 
-def measure_bundle_twist_profile(positions, *, n_slices: int = 0) -> list[tuple[float, float]]:
+def measure_bundle_twist_profile(
+    positions, *, n_slices: int = 0
+) -> list[tuple[float, float]]:
     """Per-slab CUMULATIVE twist profile ``[(axial_t_nm, cumulative_twist_deg), …]`` — the
     spatially-resolved breakdown of :func:`measure_bundle_twist` (whose scalar return is the
     last value of this profile).  Drives the Phase-5 iterative profile-matcher: the residual
@@ -1298,7 +1524,8 @@ def measure_bundle_twist_profile(positions, *, n_slices: int = 0) -> list[tuple[
     bp_pts: dict = {}
     for p in positions:
         bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
-            np.asarray(p["backbone_position"], dtype=float))
+            np.asarray(p["backbone_position"], dtype=float)
+        )
     keys = list(bp_pts.keys())
     pts = np.array([np.mean(bp_pts[k], axis=0) for k in keys])
     helix_ids = [k[0] for k in keys]
@@ -1337,8 +1564,10 @@ def measure_bundle_twist_profile(positions, *, n_slices: int = 0) -> list[tuple[
         if prev is not None:
             common = sorted(set(prev) & set(cur))
             if len(common) >= 2:
-                A = np.array([prev[h] for h in common]); B = np.array([cur[h] for h in common])
-                A = A - A.mean(axis=0); B = B - B.mean(axis=0)
+                A = np.array([prev[h] for h in common])
+                B = np.array([cur[h] for h in common])
+                A = A - A.mean(axis=0)
+                B = B - B.mean(axis=0)
                 cross = float(np.sum(A[:, 0] * B[:, 1] - A[:, 1] * B[:, 0]))
                 dot = float(np.sum(A[:, 0] * B[:, 0] + A[:, 1] * B[:, 1]))
                 total += float(np.degrees(np.arctan2(cross, dot)))
@@ -1374,7 +1603,8 @@ def measure_bundle_bend(positions, *, n_slices: int = 0) -> float:
     bp_pts: dict = {}
     for p in positions:
         bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
-            np.asarray(p["backbone_position"], dtype=float))
+            np.asarray(p["backbone_position"], dtype=float)
+        )
     pts = np.array([np.mean(v, axis=0) for v in bp_pts.values()])
     if len(pts) < 4:
         return 0.0
@@ -1387,7 +1617,9 @@ def measure_bundle_bend(positions, *, n_slices: int = 0) -> float:
         n_slices = max(3, int(round(span / 3.5)))
     edges = np.linspace(t.min(), t.max(), n_slices + 1)
     slab = np.clip(np.digitize(t, edges[1:-1]), 0, n_slices - 1)
-    centroids = [pts[slab == k].mean(axis=0) for k in range(n_slices) if np.any(slab == k)]
+    centroids = [
+        pts[slab == k].mean(axis=0) for k in range(n_slices) if np.any(slab == k)
+    ]
     if len(centroids) < 3:
         return 0.0
     centroids = np.array(centroids)
@@ -1422,7 +1654,8 @@ def measure_bundle_curvature(positions, *, n_slices: int = 0) -> float:
     bp_pts: dict = {}
     for p in positions:
         bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
-            np.asarray(p["backbone_position"], dtype=float))
+            np.asarray(p["backbone_position"], dtype=float)
+        )
     pts = np.array([np.mean(v, axis=0) for v in bp_pts.values()])
     if len(pts) < 4:
         return 0.0
@@ -1435,11 +1668,13 @@ def measure_bundle_curvature(positions, *, n_slices: int = 0) -> float:
         n_slices = max(3, int(round(span / 3.5)))
     edges = np.linspace(t.min(), t.max(), n_slices + 1)
     slab = np.clip(np.digitize(t, edges[1:-1]), 0, n_slices - 1)
-    centroids = [pts[slab == k].mean(axis=0) for k in range(n_slices) if np.any(slab == k)]
+    centroids = [
+        pts[slab == k].mean(axis=0) for k in range(n_slices) if np.any(slab == k)
+    ]
     if len(centroids) < 3:
         return 0.0
     centroids = np.array(centroids)
-    segs = np.diff(centroids, axis=0)                       # consecutive polyline segments
+    segs = np.diff(centroids, axis=0)  # consecutive polyline segments
     seg_len = np.linalg.norm(segs, axis=1)
     arc = float(seg_len.sum())
     if arc < 1e-9:
@@ -1451,7 +1686,7 @@ def measure_bundle_curvature(positions, *, n_slices: int = 0) -> float:
             continue
         cos = float(np.dot(segs[k], segs[k + 1]) / (n0 * n1))
         total_turn += float(np.degrees(np.arccos(np.clip(cos, -1.0, 1.0))))
-    return total_turn / arc                                  # deg per nm
+    return total_turn / arc  # deg per nm
 
 
 def _chord_sagitta_bend(centerline) -> tuple[float, float]:
@@ -1471,12 +1706,12 @@ def _chord_sagitta_bend(centerline) -> tuple[float, float]:
         return 0.0, float("inf")
     u = chord_v / c
     perp = (cen - a) - np.outer((cen - a) @ u, u)
-    s = float(np.linalg.norm(perp, axis=1).max())            # sagitta (max deviation)
+    s = float(np.linalg.norm(perp, axis=1).max())  # sagitta (max deviation)
     if s < 1e-6:
         return 0.0, float("inf")
     R = (c * c / 4.0 + s * s) / (2.0 * s)
     bend = float(np.degrees(2.0 * np.arcsin(np.clip((c / 2.0) / R, -1.0, 1.0))))
-    if s > R:                                                # arc past 180° (hairpin)
+    if s > R:  # arc past 180° (hairpin)
         bend = 360.0 - bend
     return bend, R
 
@@ -1496,7 +1731,8 @@ def measure_bundle_arc_bend(positions, *, n_slices: int = 0) -> float:
     bp_pts: dict = {}
     for p in positions:
         bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
-            np.asarray(p["backbone_position"], dtype=float))
+            np.asarray(p["backbone_position"], dtype=float)
+        )
     pts = np.array([np.mean(v, axis=0) for v in bp_pts.values()])
     if len(pts) < 5:
         return 0.0
@@ -1509,7 +1745,9 @@ def measure_bundle_arc_bend(positions, *, n_slices: int = 0) -> float:
         n_slices = max(5, int(round(span / 3.5)))
     edges = np.linspace(t.min(), t.max(), n_slices + 1)
     slab = np.clip(np.digitize(t, edges[1:-1]), 0, n_slices - 1)
-    centroids = [pts[slab == k].mean(axis=0) for k in range(n_slices) if np.any(slab == k)]
+    centroids = [
+        pts[slab == k].mean(axis=0) for k in range(n_slices) if np.any(slab == k)
+    ]
     if len(centroids) < 5:
         return 0.0
     bend, _R = _chord_sagitta_bend(np.array(centroids))
@@ -1530,7 +1768,8 @@ def bundle_slab_centreline(positions, *, n_slices: int = 0):
     bp_pts: dict = {}
     for p in positions:
         bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
-            np.asarray(p["backbone_position"], dtype=float))
+            np.asarray(p["backbone_position"], dtype=float)
+        )
     pts = np.array([np.mean(v, axis=0) for v in bp_pts.values()])
     if len(pts) < 5:
         return np.zeros((0, 3))
@@ -1543,11 +1782,15 @@ def bundle_slab_centreline(positions, *, n_slices: int = 0):
         n_slices = max(5, int(round(span / 3.5)))
     edges = np.linspace(t.min(), t.max(), n_slices + 1)
     slab = np.clip(np.digitize(t, edges[1:-1]), 0, n_slices - 1)
-    centroids = [pts[slab == k].mean(axis=0) for k in range(n_slices) if np.any(slab == k)]
+    centroids = [
+        pts[slab == k].mean(axis=0) for k in range(n_slices) if np.any(slab == k)
+    ]
     return np.array(centroids) if len(centroids) >= 2 else np.zeros((0, 3))
 
 
-def measure_bundle_curvature_profile(positions, *, n_slices: int = 0) -> list[tuple[float, float]]:
+def measure_bundle_curvature_profile(
+    positions, *, n_slices: int = 0
+) -> list[tuple[float, float]]:
     """Per-position CUMULATIVE bending profile ``[(axial_t_nm, cumulative_turning_deg), …]`` — the
     curvature analogue of :func:`measure_bundle_twist_profile`.  The running sum of |turning angle|
     along the slab-centroid polyline: a straight bundle stays ~flat near 0, a bent region ramps,
@@ -1561,7 +1804,8 @@ def measure_bundle_curvature_profile(positions, *, n_slices: int = 0) -> list[tu
     bp_pts: dict = {}
     for p in positions:
         bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
-            np.asarray(p["backbone_position"], dtype=float))
+            np.asarray(p["backbone_position"], dtype=float)
+        )
     pts = np.array([np.mean(v, axis=0) for v in bp_pts.values()])
     if len(pts) < 4:
         return []
@@ -1578,13 +1822,17 @@ def measure_bundle_curvature_profile(positions, *, n_slices: int = 0) -> list[tu
     for k in range(n_slices):
         m = slab == k
         if np.any(m):
-            cen.append(pts[m].mean(axis=0)); cen_t.append(float(t[m].mean()))
+            cen.append(pts[m].mean(axis=0))
+            cen_t.append(float(t[m].mean()))
     if len(cen) < 3:
         return []
     cen = np.array(cen)
     segs = np.diff(cen, axis=0)
     seg_len = np.linalg.norm(segs, axis=1)
-    profile = [(cen_t[0], 0.0), (cen_t[1], 0.0)]            # turning is defined at interior vertices
+    profile = [
+        (cen_t[0], 0.0),
+        (cen_t[1], 0.0),
+    ]  # turning is defined at interior vertices
     total = 0.0
     for k in range(len(segs) - 1):
         n0, n1 = float(seg_len[k]), float(seg_len[k + 1])
@@ -1645,7 +1893,9 @@ def measure_field_response(
             free_projs.append(float(np.dot(disp, fdir)))
 
     if not free_disps:
-        raise ValueError("measure_field_response: no free (non-anchored) nucleotides to measure")
+        raise ValueError(
+            "measure_field_response: no free (non-anchored) nucleotides to measure"
+        )
 
     anchored_max = max(anchored_drifts) if anchored_drifts else 0.0
     anchored_mean = float(np.mean(anchored_drifts)) if anchored_drifts else 0.0
@@ -1656,9 +1906,13 @@ def measure_field_response(
     deflected = free_proj >= min_free_proj_nm
     reasons = []
     if not held:
-        reasons.append(f"anchors drifted {anchored_max:.2f} nm > {anchor_tol_nm} nm tol")
+        reasons.append(
+            f"anchors drifted {anchored_max:.2f} nm > {anchor_tol_nm} nm tol"
+        )
     if not deflected:
-        reasons.append(f"free motion along field {free_proj:.2f} nm < {min_free_proj_nm} nm min")
+        reasons.append(
+            f"free motion along field {free_proj:.2f} nm < {min_free_proj_nm} nm min"
+        )
     return {
         "anchored_max_drift_nm": anchored_max,
         "anchored_mean_drift_nm": anchored_mean,
@@ -1667,7 +1921,8 @@ def measure_field_response(
         "n_anchored": len(anchored_drifts),
         "n_free": len(free_disps),
         "passed": held and deflected,
-        "reason": "; ".join(reasons) or "anchors held; structure deflected along the field",
+        "reason": "; ".join(reasons)
+        or "anchors held; structure deflected along the field",
     }
 
 
@@ -1705,9 +1960,12 @@ def measure_wall_response(
     mean_clear = float(np.mean(clearances))
     n_below = sum(1 for c in clearances if c < -penetration_tol_nm)
     passed = min_clear >= -penetration_tol_nm
-    reason = (f"{n_below} nucleotide(s) penetrate the surface "
-              f"(min clearance {min_clear:.2f} nm < -{penetration_tol_nm} nm)"
-              if not passed else "all nucleotides rest on or above the surface")
+    reason = (
+        f"{n_below} nucleotide(s) penetrate the surface "
+        f"(min clearance {min_clear:.2f} nm < -{penetration_tol_nm} nm)"
+        if not passed
+        else "all nucleotides rest on or above the surface"
+    )
     return {
         "min_clearance_nm": min_clear,
         "mean_clearance_nm": mean_clear,
@@ -1747,12 +2005,23 @@ def field_response_from_confs(
 
     def _to_positions(path):
         fm = read_configuration_full(path, design)
-        return [{"helix_id": k[0], "bp_index": k[1], "direction": k[2],
-                 "backbone_position": v["backbone_position"]} for k, v in fm.items()]
+        return [
+            {
+                "helix_id": k[0],
+                "bp_index": k[1],
+                "direction": k[2],
+                "backbone_position": v["backbone_position"],
+            }
+            for k, v in fm.items()
+        ]
 
     return measure_field_response(
-        _to_positions(field_conf_path), _to_positions(reference_conf_path),
-        field_dir, anchor_keys, **kw)
+        _to_positions(field_conf_path),
+        _to_positions(reference_conf_path),
+        field_dir,
+        anchor_keys,
+        **kw,
+    )
 
 
 def _full_map_to_positions(full_map) -> list[dict]:
@@ -1760,9 +2029,15 @@ def _full_map_to_positions(full_map) -> list[dict]:
     a1, a3}}``, ``copies=False``) → the per-nucleotide position list the
     list-based measures (:func:`measure_field_response`,
     :func:`measure_radius_of_gyration`) expect."""
-    return [{"helix_id": k[0], "bp_index": k[1], "direction": k[2],
-             "backbone_position": v["backbone_position"]}
-            for k, v in full_map.items()]
+    return [
+        {
+            "helix_id": k[0],
+            "bp_index": k[1],
+            "direction": k[2],
+            "backbone_position": v["backbone_position"],
+        }
+        for k, v in full_map.items()
+    ]
 
 
 def field_equilibrium_observables(
@@ -1797,7 +2072,8 @@ def field_equilibrium_observables(
     field_positions = _full_map_to_positions(field_full_map)
     reference_positions = _full_map_to_positions(reference_full_map)
     resp = measure_field_response(
-        field_positions, reference_positions, field_dir, anchor_keys)
+        field_positions, reference_positions, field_dir, anchor_keys
+    )
     rg = measure_radius_of_gyration(field_positions)
     bp, _n_pairs = base_pair_retention(design, field_full_map)
     return {
@@ -1822,10 +2098,14 @@ def field_equilibrium_from_confs(
     binary run's equilibrium fingerprint).  ``field_conf_path`` is the post-field
     configuration; ``reference_conf_path`` the field-off (relaxed) seed."""
     from backend.physics.oxdna_interface import read_configuration_full
+
     return field_equilibrium_observables(
         read_configuration_full(field_conf_path, design),
         read_configuration_full(reference_conf_path, design),
-        field_dir, anchor_keys, design=design)
+        field_dir,
+        anchor_keys,
+        design=design,
+    )
 
 
 def measure_field_equilibration(
@@ -1887,7 +2167,8 @@ def measure_field_equilibration(
     if frames is None or len(frames) < 2:
         raise ValueError(
             "measure_field_equilibration: need at least two trajectory frames to "
-            "measure a time course")
+            "measure a time course"
+        )
     fdir = np.asarray(field_dir, dtype=float)
     fnorm = float(np.linalg.norm(fdir))
     if fnorm <= 1e-9:
@@ -1900,7 +2181,8 @@ def measure_field_equilibration(
     if not free_keys:
         raise ValueError(
             "measure_field_equilibration: no free (non-anchored) nucleotides to "
-            "measure — every key is anchored")
+            "measure — every key is anchored"
+        )
 
     alignment: list[float] = []
     for fr in frames:
@@ -1908,8 +2190,9 @@ def measure_field_equilibration(
         for k in free_keys:
             if k not in fr:
                 continue
-            disp = np.asarray(fr[k]["backbone_position"], dtype=float) - \
-                np.asarray(ref[k]["backbone_position"], dtype=float)
+            disp = np.asarray(fr[k]["backbone_position"], dtype=float) - np.asarray(
+                ref[k]["backbone_position"], dtype=float
+            )
             projs.append(float(np.dot(disp, fdir)))
         alignment.append(float(np.mean(projs)) if projs else 0.0)
 
@@ -1927,14 +2210,17 @@ def measure_field_equilibration(
     if total_rise < min_rise_nm:
         reasons.append(
             f"free-body response {total_rise:.2f} nm < {min_rise_nm} nm min "
-            "(no field response / field-independent)")
+            "(no field response / field-independent)"
+        )
 
     back_tol = monotone_tol_frac * abs(plateau)
-    backsteps = sum(1 for i in range(1, n)
-                    if alignment[i] < alignment[i - 1] - back_tol)
+    backsteps = sum(
+        1 for i in range(1, n) if alignment[i] < alignment[i - 1] - back_tol
+    )
     if backsteps:
         reasons.append(
-            f"approach is non-monotone ({backsteps} frame(s) recede past noise)")
+            f"approach is non-monotone ({backsteps} frame(s) recede past noise)"
+        )
 
     third = max(1, n // 3)
     early_slope = (alignment[third] - alignment[0]) / third
@@ -1943,7 +2229,8 @@ def measure_field_equilibration(
     if not plateaued:
         reasons.append(
             "trajectory has not plateaued (late-frame slope "
-            f"{late_slope:.3f} vs early {early_slope:.3f} nm/frame) — not equilibrated")
+            f"{late_slope:.3f} vs early {early_slope:.3f} nm/frame) — not equilibrated"
+        )
 
     converged = not reasons
     tau_frames: float | None = None
@@ -1987,13 +2274,21 @@ def measure_field_equilibration(
 # the confidence gate: ``met`` is NEVER True on an under-sampled run, even if the
 # measured value happens to land within tolerance.  Physical-layer only.
 
+
 class ConstraintSpecError(ValueError):
     """Raised when a declarative relaxed-structure constraint spec is malformed."""
 
 
 _CONSTRAINT_MEASURES = frozenset(
-    {"end_to_end", "radius_of_gyration", "segment_angle", "inter_helix_spacing",
-     "geometry_match", "bundle_twist"})
+    {
+        "end_to_end",
+        "radius_of_gyration",
+        "segment_angle",
+        "inter_helix_spacing",
+        "geometry_match",
+        "bundle_twist",
+    }
+)
 # How many landmarks each measure consumes.  0 = whole-structure (no landmarks).
 # NB: target_nm/tol_nm carry the measure's native unit — nm for length measures
 # (end_to_end, radius_of_gyration, inter_helix_spacing, geometry_match), DEGREES for
@@ -2005,37 +2300,49 @@ _CONSTRAINT_MEASURES = frozenset(
 # they require a ``reference_positions`` supplied at check time (not in the spec).
 _REFERENCE_MEASURES = frozenset({"geometry_match", "bundle_twist"})
 _MEASURE_LANDMARK_COUNT = {
-    "end_to_end": 2, "radius_of_gyration": 0, "segment_angle": 3,
-    "inter_helix_spacing": 2, "geometry_match": 0, "bundle_twist": 0}
+    "end_to_end": 2,
+    "radius_of_gyration": 0,
+    "segment_angle": 3,
+    "inter_helix_spacing": 2,
+    "geometry_match": 0,
+    "bundle_twist": 0,
+}
 _CONSTRAINT_KEYS = frozenset(
-    {"measure", "landmarks", "target_nm", "tol_nm", "min_confidence"})
+    {"measure", "landmarks", "target_nm", "tol_nm", "min_confidence"}
+)
 
 
 def _validate_landmark(lm, *, which: str) -> tuple:
     if not isinstance(lm, (list, tuple)) or len(lm) != 3:
         raise ConstraintSpecError(
             f"constraint landmark {which} must be a (helix_id, bp_index, "
-            f"direction) triple, got {lm!r}")
+            f"direction) triple, got {lm!r}"
+        )
     hid, bp, direction = lm
     try:
         bp_int = int(bp)
     except (TypeError, ValueError):
         raise ConstraintSpecError(
-            f"constraint landmark {which}: bp_index must be an integer, got {bp!r}")
+            f"constraint landmark {which}: bp_index must be an integer, got {bp!r}"
+        )
     return (hid, bp_int, getattr(direction, "value", direction))
 
 
 def _require_number(value, name: str, *, positive: bool = False) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) \
-            or not math.isfinite(value):
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+    ):
         raise ConstraintSpecError(
-            f"constraint {name} must be a finite number, got {value!r}")
+            f"constraint {name} must be a finite number, got {value!r}"
+        )
     if positive and value <= 0:
-        raise ConstraintSpecError(
-            f"constraint {name} must be positive, got {value!r}")
+        raise ConstraintSpecError(f"constraint {name} must be positive, got {value!r}")
     if not positive and value < 0:
         raise ConstraintSpecError(
-            f"constraint {name} must be non-negative, got {value!r}")
+            f"constraint {name} must be non-negative, got {value!r}"
+        )
     return float(value)
 
 
@@ -2056,8 +2363,9 @@ def _filter_to_reference_core(positions, reference):
     as the CORE MASK, so ragged ssDNA ends absent from the reference are dropped from
     the simulated mean before a self-consistency measure runs."""
     ref_keys = {k for p in reference if (k := _core_column_key(p)) is not None}
-    return [p for p in positions
-            if (k := _core_column_key(p)) is not None and k in ref_keys]
+    return [
+        p for p in positions if (k := _core_column_key(p)) is not None and k in ref_keys
+    ]
 
 
 def _dispatch_measure(measure: str, positions, landmarks, reference=None):
@@ -2072,14 +2380,16 @@ def _dispatch_measure(measure: str, positions, landmarks, reference=None):
         return measure_radius_of_gyration(positions)
     if measure == "segment_angle":
         return measure_segment_angle(
-            positions, landmarks[0], landmarks[1], landmarks[2])
+            positions, landmarks[0], landmarks[1], landmarks[2]
+        )
     if measure == "inter_helix_spacing":
         return measure_inter_helix_spacing(positions, landmarks[0], landmarks[1])
     if measure in _REFERENCE_MEASURES:
         if not reference:
             raise ConstraintSpecError(
                 f"constraint measure {measure!r} is a self-consistency measure — it "
-                "needs the design's analytic reference geometry (reference_positions)")
+                "needs the design's analytic reference geometry (reference_positions)"
+            )
         core = _filter_to_reference_core(positions, reference)
         if measure == "geometry_match":
             return measure_geometry_rmsd(core, reference)
@@ -2087,7 +2397,8 @@ def _dispatch_measure(measure: str, positions, landmarks, reference=None):
         # reproducible measurement offset cancels (target a 0° residual).
         return measure_bundle_twist(core) - measure_bundle_twist(reference)
     raise ConstraintSpecError(  # unreachable — parse pins the measure
-        f"no measurement implemented for {measure!r}")
+        f"no measurement implemented for {measure!r}"
+    )
 
 
 def parse_constraint_spec(spec) -> dict:
@@ -2109,16 +2420,19 @@ def parse_constraint_spec(spec) -> dict:
     """
     if not isinstance(spec, dict):
         raise ConstraintSpecError(
-            f"constraint spec must be a dict, got {type(spec).__name__}")
+            f"constraint spec must be a dict, got {type(spec).__name__}"
+        )
     unknown = set(spec) - _CONSTRAINT_KEYS
     if unknown:
         raise ConstraintSpecError(
-            f"constraint spec has unknown key(s): {sorted(unknown)}")
+            f"constraint spec has unknown key(s): {sorted(unknown)}"
+        )
     measure = spec.get("measure")
     if measure not in _CONSTRAINT_MEASURES:
         raise ConstraintSpecError(
             f"constraint measure must be one of {sorted(_CONSTRAINT_MEASURES)}, "
-            f"got {measure!r}")
+            f"got {measure!r}"
+        )
     n_landmarks = _MEASURE_LANDMARK_COUNT[measure]
     landmarks_in = spec.get("landmarks")
     if n_landmarks == 0:
@@ -2126,31 +2440,46 @@ def parse_constraint_spec(spec) -> dict:
         if landmarks_in:
             raise ConstraintSpecError(
                 f"constraint '{measure}' takes no landmarks (it measures the whole "
-                f"structure), got {landmarks_in!r}")
+                f"structure), got {landmarks_in!r}"
+            )
         landmarks = []
     else:
-        if not isinstance(landmarks_in, (list, tuple)) \
-                or len(landmarks_in) != n_landmarks:
+        if (
+            not isinstance(landmarks_in, (list, tuple))
+            or len(landmarks_in) != n_landmarks
+        ):
             raise ConstraintSpecError(
                 f"constraint '{measure}' needs exactly {n_landmarks} landmarks, "
-                f"got {landmarks_in!r}")
-        landmarks = [_validate_landmark(lm, which=chr(ord("a") + i))
-                     for i, lm in enumerate(landmarks_in)]
+                f"got {landmarks_in!r}"
+            )
+        landmarks = [
+            _validate_landmark(lm, which=chr(ord("a") + i))
+            for i, lm in enumerate(landmarks_in)
+        ]
         if len(set(landmarks)) != len(landmarks):
             raise ConstraintSpecError(
                 f"constraint landmarks are identical ({landmarks[0]}) — the "
-                "measurement is trivially 0")
+                "measurement is trivially 0"
+            )
     target = _require_number(spec.get("target_nm"), "target_nm")
     tol = _require_number(spec.get("tol_nm"), "tol_nm", positive=True)
     min_conf = spec.get("min_confidence", RMSF_PRELIM_FRAMES)
     if isinstance(min_conf, bool) or not isinstance(min_conf, int) or min_conf < 1:
         raise ConstraintSpecError(
-            f"constraint min_confidence must be an integer >= 1, got {min_conf!r}")
-    return {"measure": measure, "landmarks": landmarks, "target_nm": target,
-            "tol_nm": tol, "min_confidence": int(min_conf)}
+            f"constraint min_confidence must be an integer >= 1, got {min_conf!r}"
+        )
+    return {
+        "measure": measure,
+        "landmarks": landmarks,
+        "target_nm": target,
+        "tol_nm": tol,
+        "min_confidence": int(min_conf),
+    }
 
 
-def check_relaxed_constraint(constraint, relaxed_output, reference_positions=None) -> dict:
+def check_relaxed_constraint(
+    constraint, relaxed_output, reference_positions=None
+) -> dict:
     """REPORT (do not assert) whether a relaxed structure meets a declarative
     constraint — the AF-13 P3 reporter that AF-13 P4's iterate-until-met loop and
     the AF-11 grammar's ``constraints`` block consume.
@@ -2202,15 +2531,18 @@ def check_relaxed_constraint(constraint, relaxed_output, reference_positions=Non
             # panel read.  geometry_match RMSD is too insensitive to a distributed global
             # twist to gate a large bundle, so bundle_twist is the right gate for plain
             # square lattices; both are still reported either way.
-            rmsd = _dispatch_measure("geometry_match", positions, [],
-                                     reference=reference_positions)
-            twist = _dispatch_measure("bundle_twist", positions, [],
-                                      reference=reference_positions)
+            rmsd = _dispatch_measure(
+                "geometry_match", positions, [], reference=reference_positions
+            )
+            twist = _dispatch_measure(
+                "bundle_twist", positions, [], reference=reference_positions
+            )
             steering = {"geometry_rmsd_nm": rmsd, "bundle_twist_residual_deg": twist}
             measured = rmsd if c["measure"] == "geometry_match" else twist
         else:
             measured = _dispatch_measure(
-                c["measure"], positions, c["landmarks"], reference=reference_positions)
+                c["measure"], positions, c["landmarks"], reference=reference_positions
+            )
 
     if not has_structure or n_frames < min_conf:
         status, met = "inconclusive", False
@@ -2219,9 +2551,16 @@ def check_relaxed_constraint(constraint, relaxed_output, reference_positions=Non
     else:
         status, met = "unmet", False
 
-    result = {"met": met, "status": status, "measured_nm": measured,
-              "target_nm": target, "tol_nm": tol, "n_frames": n_frames,
-              "min_confidence": min_conf, "confidence": confidence}
+    result = {
+        "met": met,
+        "status": status,
+        "measured_nm": measured,
+        "target_nm": target,
+        "tol_nm": tol,
+        "n_frames": n_frames,
+        "min_confidence": min_conf,
+        "confidence": confidence,
+    }
     if steering is not None:
         result["steering"] = steering
     return result
@@ -2234,7 +2573,7 @@ def check_relaxed_constraint(constraint, relaxed_output, reference_positions=Non
 # aligned frames depend only on the immutable stage/reference files, so memoize them
 # keyed by a (path,size,mtime) signature: a completed job aligns once; a still-writing
 # job's signature changes as files grow, so it re-aligns (stays live-correct).
-_ALIGNED_CACHE = None   # lazily-created collections.OrderedDict[cache_key -> result]
+_ALIGNED_CACHE = None  # lazily-created collections.OrderedDict[cache_key -> result]
 _ALIGNED_CACHE_MAX = 6
 
 # Per-FRAME aligned cache: an individual trajectory frame, PBC-unwrapped + Kabsch-aligned
@@ -2247,9 +2586,9 @@ _ALIGNED_CACHE_MAX = 6
 # differ (its own leaf run), not the whole lineage.  Keyed by reference *content* (not
 # path) because sibling jobs write byte-identical ``design_ref.dat`` files at different
 # paths.  Bounded by cumulative nucleotide-frames (memory-proportional for big structures).
-_FRAME_CACHE = None     # lazily-created OrderedDict[frame_key -> aligned frame dict]
-_FRAME_CACHE_NT = 0     # running Σ len(frame) across the cache (for memory-bounded evict)
-_FRAME_CACHE_MAX_NT = 3_000_000   # ~a couple of large lineages' shared ancestors
+_FRAME_CACHE = None  # lazily-created OrderedDict[frame_key -> aligned frame dict]
+_FRAME_CACHE_NT = 0  # running Σ len(frame) across the cache (for memory-bounded evict)
+_FRAME_CACHE_MAX_NT = 3_000_000  # ~a couple of large lineages' shared ancestors
 
 # Per-frame DISPLAY OUTPUT cache: the finished atomistic flat-XYZ list / surface JSON
 # for one relaxed or trajectory frame.  The two caches above memoize the *aligned frame*
@@ -2262,9 +2601,11 @@ _FRAME_CACHE_MAX_NT = 3_000_000   # ~a couple of large lineages' shared ancestor
 # for the relaxed single frame the conf-file signature + align).  Bounded by cumulative
 # element count (floats/ints across cached payloads), so memory scales with structure size
 # the same way the frame cache does.
-_DISPLAY_OUT_CACHE = None   # lazily-created OrderedDict[key -> list|dict payload]
-_DISPLAY_OUT_ELEMS = 0      # running Σ payload element count (for memory-bounded evict)
-_DISPLAY_OUT_MAX_ELEMS = 6_000_000   # ~30 large-origami frames, or hundreds of small ones
+_DISPLAY_OUT_CACHE = None  # lazily-created OrderedDict[key -> list|dict payload]
+_DISPLAY_OUT_ELEMS = 0  # running Σ payload element count (for memory-bounded evict)
+_DISPLAY_OUT_MAX_ELEMS = (
+    6_000_000  # ~30 large-origami frames, or hundreds of small ones
+)
 
 
 def _out_payload_elems(payload) -> int:
@@ -2297,8 +2638,10 @@ def _display_out_put(key, payload):
     """Insert a display payload, evicting oldest until under the element budget."""
     global _DISPLAY_OUT_CACHE, _DISPLAY_OUT_ELEMS
     from collections import OrderedDict
+
     if _DISPLAY_OUT_CACHE is None:
-        _DISPLAY_OUT_CACHE = OrderedDict(); _DISPLAY_OUT_ELEMS = 0
+        _DISPLAY_OUT_CACHE = OrderedDict()
+        _DISPLAY_OUT_ELEMS = 0
     if key in _DISPLAY_OUT_CACHE:
         return
     _DISPLAY_OUT_CACHE[key] = payload
@@ -2320,6 +2663,7 @@ def display_out_cache_clear():
 
 def _aligned_cache_key(stages, reference_conf_path, max_frames, copies):
     import os
+
     sig = []
     for item in (*stages, ("__ref__", "", reference_conf_path)):
         path = item[2]
@@ -2335,6 +2679,7 @@ def _traj_file_sig(path):
     """(path, size, mtime_ns) — changes when a still-writing trajectory grows, so a live
     run naturally invalidates its cached frames instead of serving stale ones."""
     import os
+
     try:
         st = os.stat(path)
         return (str(path), st.st_size, st.st_mtime_ns)
@@ -2347,6 +2692,7 @@ def _ref_content_sig(reference_conf_path):
     design write byte-identical ``design_ref.dat`` at DIFFERENT paths, so keying the frame
     cache by content — not path — lets them share the aligned ancestor frames."""
     import hashlib
+
     try:
         with open(reference_conf_path, "rb") as fh:
             return hashlib.blake2b(fh.read(), digest_size=16).digest()
@@ -2362,7 +2708,7 @@ def _frame_cache_get(key):
     v = _FRAME_CACHE.get(key)
     if v is not None:
         try:
-            _FRAME_CACHE.move_to_end(key)      # LRU touch (tolerate a concurrent evict)
+            _FRAME_CACHE.move_to_end(key)  # LRU touch (tolerate a concurrent evict)
         except KeyError:
             pass
     return v
@@ -2372,8 +2718,10 @@ def _frame_cache_put(key, frame):
     """Insert an aligned frame, evicting oldest until under the nucleotide-frame budget."""
     global _FRAME_CACHE, _FRAME_CACHE_NT
     from collections import OrderedDict
+
     if _FRAME_CACHE is None:
-        _FRAME_CACHE = OrderedDict(); _FRAME_CACHE_NT = 0
+        _FRAME_CACHE = OrderedDict()
+        _FRAME_CACHE_NT = 0
     if key in _FRAME_CACHE:
         return
     _FRAME_CACHE[key] = frame
@@ -2386,10 +2734,18 @@ def _frame_cache_put(key, frame):
             break
 
 
-def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames: int = 200,
-                                *, copies: bool = False, progress=None, align: bool = True,
-                                n_trailing_extra: int = 0,
-                                trailing_extra_strand_length: int = 0):
+def _aligned_downsampled_frames(
+    design,
+    stages,
+    reference_conf_path,
+    max_frames: int = 200,
+    *,
+    copies: bool = False,
+    progress=None,
+    align: bool = True,
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
+):
     """Shared core for the composite trajectory: per stage, downsample to a ≤
     ``max_frames`` budget FIRST (cheap header count → stride), then PBC-unwrap +
     Kabsch-align only the surviving frames to the design reference.  The seed
@@ -2408,14 +2764,21 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
     """
     global _ALIGNED_CACHE
     from collections import OrderedDict
+
     if _ALIGNED_CACHE is None:
         _ALIGNED_CACHE = OrderedDict()
-    cache_key = (_aligned_cache_key(stages, reference_conf_path, max_frames, copies),
-                 bool(align), int(n_trailing_extra), int(trailing_extra_strand_length))
+    cache_key = (
+        _aligned_cache_key(stages, reference_conf_path, max_frames, copies),
+        bool(align),
+        int(n_trailing_extra),
+        int(trailing_extra_strand_length),
+    )
     hit = _ALIGNED_CACHE.get(cache_key)
     if hit is not None:
         try:
-            _ALIGNED_CACHE.move_to_end(cache_key)   # LRU touch (tolerate a concurrent evict)
+            _ALIGNED_CACHE.move_to_end(
+                cache_key
+            )  # LRU touch (tolerate a concurrent evict)
         except KeyError:
             pass
         return hit
@@ -2423,14 +2786,20 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
     from backend.physics.oxdna_interface import (
         _build_unwrap_plan,
         _parse_box_nm,
-        _capture_particle_key, _strand_nucleotide_order,
+        _capture_particle_key,
+        _strand_nucleotide_order,
         read_configuration_full,
         read_trajectory_frames_at,
         unwrap_align_to_reference,
     )
-    ref = read_configuration_full(reference_conf_path, design, copies=copies,
-                                  n_trailing_extra=n_trailing_extra,
-                                  trailing_extra_strand_length=trailing_extra_strand_length)
+
+    ref = read_configuration_full(
+        reference_conf_path,
+        design,
+        copies=copies,
+        n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length,
+    )
     # SEPARATE read for the prepended seed frame: the alignment reference deliberately
     # omits synthetic particles (extra bases / extension tails would otherwise join the
     # Kabsch fit as floppy outliers), but the seed frame IS a displayed frame and must
@@ -2438,24 +2807,37 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
     # first frame of every trajectory drew all extra bases + extension tails at the world
     # origin (missing key → six zeros in _flatten_cg_frame), which snapped away at frame 1.
     ref_display = read_configuration_full(
-        reference_conf_path, design, copies=copies,
-        include_extra_bases=True, include_extensions=True,
+        reference_conf_path,
+        design,
+        copies=copies,
+        include_extra_bases=True,
+        include_extensions=True,
         n_trailing_extra=n_trailing_extra,
-        trailing_extra_strand_length=trailing_extra_strand_length)
-    ref_sig = _ref_content_sig(reference_conf_path)   # content hash → siblings share frames
+        trailing_extra_strand_length=trailing_extra_strand_length,
+    )
+    ref_sig = _ref_content_sig(
+        reference_conf_path
+    )  # content hash → siblings share frames
     # copies=True keeps loop-insertion copies distinct (full 4-tuple key); else collapse
     # to the 3-tuple so the CG trajectory key list is one entry per (helix,bp,dir).
-    key_list = list(dict.fromkeys(
-        (k if copies else k[:3]) for k in _strand_nucleotide_order(design)))
+    key_list = list(
+        dict.fromkeys(
+            (k if copies else k[:3]) for k in _strand_nucleotide_order(design)
+        )
+    )
     if n_trailing_extra > 0 and trailing_extra_strand_length > 0:
-        key_list.extend(_capture_particle_key(i, trailing_extra_strand_length)
-                        for i in range(int(n_trailing_extra)))
+        key_list.extend(
+            _capture_particle_key(i, trailing_extra_strand_length)
+            for i in range(int(n_trailing_extra))
+        )
 
     def _store(result):
         _ALIGNED_CACHE[cache_key] = result
         try:
             while len(_ALIGNED_CACHE) > _ALIGNED_CACHE_MAX:
-                _ALIGNED_CACHE.popitem(last=False)   # evict oldest (tolerate concurrent pop)
+                _ALIGNED_CACHE.popitem(
+                    last=False
+                )  # evict oldest (tolerate concurrent pop)
         except KeyError:
             pass
         return result
@@ -2463,8 +2845,11 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
     def _stride_pick(items: list, keep: int) -> list:
         if keep >= len(items) or keep <= 0:
             return items
-        return [items[round(i * (len(items) - 1) / (keep - 1))] for i in range(keep)] \
-            if keep > 1 else [items[0]]
+        return (
+            [items[round(i * (len(items) - 1) / (keep - 1))] for i in range(keep)]
+            if keep > 1
+            else [items[0]]
+        )
 
     # A stage tuple is ``(name, kind, path)``, ``(…, marker_label)`` or
     # ``(…, marker_label, field)`` (field = the run's E-field descriptor or None).
@@ -2504,7 +2889,8 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
         if max_frames <= 0 or total <= max_frames:
             return e
         return max(1, round(e * max_frames / total))
-    total_kept = sum(_keep_for(e) for e in eff_lens if e > 0)   # progress denominator
+
+    total_kept = sum(_keep_for(e) for e in eff_lens if e > 0)  # progress denominator
     if n_trailing_extra > 0 and trailing_extra_strand_length > 0:
         total_kept += 1  # raw frame 0 supplies capture coordinates for the design seed
     done = 0
@@ -2522,14 +2908,17 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
         if eff == 0:
             continue
         keep = _keep_for(eff)
-        picked = _stride_pick(list(range(eff)), keep)   # positions into this stage's eff list
+        picked = _stride_pick(
+            list(range(eff)), keep
+        )  # positions into this stage's eff list
 
         # Map each kept eff-position to a raw trajectory-header index (position 0 of the
         # first non-empty stage is the prepended seed ref, which needs no parse), then parse
         # + align only those raw frames.
-        seed_here = (i == first_nonempty)
-        needed = sorted({(p - 1 if seed_here else p) for p in picked
-                         if not (seed_here and p == 0)})
+        seed_here = i == first_nonempty
+        needed = sorted(
+            {(p - 1 if seed_here else p) for p in picked if not (seed_here and p == 0)}
+        )
         if seed_here and n_trailing_extra > 0 and trailing_extra_strand_length > 0:
             needed = sorted(set(needed) | {0})
 
@@ -2540,8 +2929,15 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
         aligned = {}
         missing = []
         for idx in needed:
-            frame_key = (tsig, ref_sig, copies, bool(align), int(n_trailing_extra),
-                         int(trailing_extra_strand_length), idx)
+            frame_key = (
+                tsig,
+                ref_sig,
+                copies,
+                bool(align),
+                int(n_trailing_extra),
+                int(trailing_extra_strand_length),
+                idx,
+            )
             hit = _frame_cache_get(frame_key) if ref_sig is not None else None
             if hit is not None:
                 aligned[idx] = hit
@@ -2552,19 +2948,40 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
                 missing.append(idx)
         if missing:
             parsed = read_trajectory_frames_at(
-                path, design, missing, copies=copies,
+                path,
+                design,
+                missing,
+                copies=copies,
                 n_trailing_extra=n_trailing_extra,
-                trailing_extra_strand_length=trailing_extra_strand_length)
+                trailing_extra_strand_length=trailing_extra_strand_length,
+            )
             box = _parse_box_nm(path)
             do_align = box is not None and np.all(box > 0)
-            for idx, fr in parsed.items():   # the per-frame align is the load's heavy work
-                af = (unwrap_align_to_reference(fr, ref, design, box, plan=_plan_for(fr), align=align)
-                      if do_align else fr)
+            for (
+                idx,
+                fr,
+            ) in parsed.items():  # the per-frame align is the load's heavy work
+                af = (
+                    unwrap_align_to_reference(
+                        fr, ref, design, box, plan=_plan_for(fr), align=align
+                    )
+                    if do_align
+                    else fr
+                )
                 aligned[idx] = af
                 if ref_sig is not None:
-                    _frame_cache_put((tsig, ref_sig, copies, bool(align),
-                                      int(n_trailing_extra),
-                                      int(trailing_extra_strand_length), idx), af)
+                    _frame_cache_put(
+                        (
+                            tsig,
+                            ref_sig,
+                            copies,
+                            bool(align),
+                            int(n_trailing_extra),
+                            int(trailing_extra_strand_length),
+                            idx,
+                        ),
+                        af,
+                    )
                 done += 1
                 if progress:
                     progress(done, total_kept)
@@ -2579,26 +2996,37 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
                 # from ref_display, at their design-pose positions.)
                 seed = dict(ref_display)
                 first = aligned.get(0) or {}
-                seed.update({k: v for k, v in first.items()
-                             if isinstance(k[0], str) and k[0].startswith("cap")})
+                seed.update(
+                    {
+                        k: v
+                        for k, v in first.items()
+                        if isinstance(k[0], str) and k[0].startswith("cap")
+                    }
+                )
                 stage_frames.append(seed)
                 continue
             fr = aligned.get((p - 1) if seed_here else p)
-            if fr is not None:          # a malformed / half-written frame drops out (as before)
+            if fr is not None:  # a malformed / half-written frame drops out (as before)
                 stage_frames.append(fr)
         if not stage_frames:
             continue
 
         if ordered_frames:  # a transition into this stage (skip the very first frame)
-            markers.append({"frame": len(ordered_frames),
-                            "label": marker_label or f"→ {kind}",
-                            "kind": kind, "stage_name": name})
-        out_stages.append({"name": name, "kind": kind, "n_frames": len(stage_frames),
-                           "field": field})
+            markers.append(
+                {
+                    "frame": len(ordered_frames),
+                    "label": marker_label or f"→ {kind}",
+                    "kind": kind,
+                    "stage_name": name,
+                }
+            )
+        out_stages.append(
+            {"name": name, "kind": kind, "n_frames": len(stage_frames), "field": field}
+        )
         ordered_frames.extend(stage_frames)
 
     if progress:
-        progress(total_kept, total_kept)   # snap to 100% (the seed frame needs no align)
+        progress(total_kept, total_kept)  # snap to 100% (the seed frame needs no align)
     if not ordered_frames:
         return key_list, [], [], []
     return _store((key_list, ordered_frames, out_stages, markers))
@@ -2614,13 +3042,18 @@ def _flatten_cg_frame(frame: dict, key_list) -> list:
     missing key stays all-zeros — cm/a1/a3 default to 0 → backbone site 0 → six zeros,
     identical to the old per-key fallback."""
     from backend.physics.oxdna_interface import oxdna_backbone_sites
+
     n = len(key_list)
-    cm = np.zeros((n, 3)); a1 = np.zeros((n, 3)); a3 = np.zeros((n, 3))
+    cm = np.zeros((n, 3))
+    a1 = np.zeros((n, 3))
+    a3 = np.zeros((n, 3))
     for i, key in enumerate(key_list):
         v = frame.get(key)
         if v is None:
             continue
-        cm[i] = v["backbone_position"]; a1[i] = v["a1"]; a3[i] = v["a3"]
+        cm[i] = v["backbone_position"]
+        a1[i] = v["a1"]
+        a3[i] = v["a3"]
     out = np.zeros((n, 6))
     out[:, 0:3] = oxdna_backbone_sites(cm, a1, a3)
     out[:, 3:6] = a1
@@ -2662,17 +3095,34 @@ def composite_trajectory(
     """
     # copies=True → loop-insertion copies stay distinct so every loop bead scrubs.
     key_list, ordered, out_stages, markers = _aligned_downsampled_frames(
-        design, stages, reference_conf_path, max_frames, copies=True, progress=progress,
-        align=align, n_trailing_extra=n_trailing_extra,
-        trailing_extra_strand_length=trailing_extra_strand_length)
+        design,
+        stages,
+        reference_conf_path,
+        max_frames,
+        copies=True,
+        progress=progress,
+        align=align,
+        n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length,
+    )
     if not ordered:
-        return {"n_frames": 0, "n_nucleotides": len(key_list),
-                "keys": [list(k) for k in key_list], "frames": [],
-                "stages": [], "markers": []}
+        return {
+            "n_frames": 0,
+            "n_nucleotides": len(key_list),
+            "keys": [list(k) for k in key_list],
+            "frames": [],
+            "stages": [],
+            "markers": [],
+        }
     out_frames = [_flatten_cg_frame(fr, key_list) for fr in ordered]
-    return {"n_frames": len(out_frames), "n_nucleotides": len(key_list),
-            "keys": [list(k) for k in key_list], "frames": out_frames,
-            "stages": out_stages, "markers": markers}
+    return {
+        "n_frames": len(out_frames),
+        "n_nucleotides": len(key_list),
+        "keys": [list(k) for k in key_list],
+        "frames": out_frames,
+        "stages": out_stages,
+        "markers": markers,
+    }
 
 
 def _count_dat_frames(path) -> int:
@@ -2702,9 +3152,15 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
         name, kind, path = item[0], item[1], item[2]
         marker_label = item[3] if len(item) > 3 else None
         field = item[4] if len(item) > 4 else None
-        per_stage.append({"name": name, "kind": kind,
-                          "count": _count_dat_frames(path), "marker_label": marker_label,
-                          "field": field})
+        per_stage.append(
+            {
+                "name": name,
+                "kind": kind,
+                "count": _count_dat_frames(path),
+                "marker_label": marker_label,
+                "field": field,
+            }
+        )
     # Seed frame is prepended to the first non-empty stage (mirrors the composite).
     for s in per_stage:
         if s["count"] > 0:
@@ -2713,7 +3169,12 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
 
     total = sum(s["count"] for s in per_stage)
     if total == 0:
-        return {"n_frames": 0, "n_nucleotides": len(key_list), "stages": [], "markers": []}
+        return {
+            "n_frames": 0,
+            "n_nucleotides": len(key_list),
+            "stages": [],
+            "markers": [],
+        }
 
     out_n = 0
     out_stages: list[dict] = []
@@ -2724,16 +3185,35 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
             continue
         # Mirrors _aligned_downsampled_frames._keep_for, including the
         # max_frames <= 0 → UNLIMITED case, so the slider matches the payload.
-        keep = c if (max_frames <= 0 or total <= max_frames) \
+        keep = (
+            c
+            if (max_frames <= 0 or total <= max_frames)
             else max(1, round(c * max_frames / total))
+        )
         if out_n:
-            markers.append({"frame": out_n, "label": s.get("marker_label") or f"→ {s['kind']}",
-                            "kind": s["kind"], "stage_name": s["name"]})
-        out_stages.append({"name": s["name"], "kind": s["kind"], "n_frames": keep,
-                           "field": s.get("field")})
+            markers.append(
+                {
+                    "frame": out_n,
+                    "label": s.get("marker_label") or f"→ {s['kind']}",
+                    "kind": s["kind"],
+                    "stage_name": s["name"],
+                }
+            )
+        out_stages.append(
+            {
+                "name": s["name"],
+                "kind": s["kind"],
+                "n_frames": keep,
+                "field": s.get("field"),
+            }
+        )
         out_n += keep
-    return {"n_frames": out_n, "n_nucleotides": len(key_list),
-            "stages": out_stages, "markers": markers}
+    return {
+        "n_frames": out_n,
+        "n_nucleotides": len(key_list),
+        "stages": out_stages,
+        "markers": markers,
+    }
 
 
 def _frame_atomistic_overrides(design, frame: dict, base_orient: str = "design_axis"):
@@ -2764,13 +3244,19 @@ def _frame_atomistic_overrides(design, frame: dict, base_orient: str = "design_a
     handled separately by ``close_backbone=True`` (display-only backbone closure),
     which made the σ per-domain position smoother (a prior band-aid) unnecessary."""
     from backend.physics.oxdna_interface import (
-        oxdna_backbone_site, _XB_SENTINEL, is_extension_key, is_synthetic_nuc_key,
+        oxdna_backbone_site,
+        _XB_SENTINEL,
+        is_extension_key,
+        is_synthetic_nuc_key,
     )
     from backend.core.cg_to_atomistic import deformed_helix_axes
 
     def _sited(rec) -> bool:
-        return (rec.get("backbone_position") is not None
-                and rec.get("a1") is not None and rec.get("a3") is not None)
+        return (
+            rec.get("backbone_position") is not None
+            and rec.get("a1") is not None
+            and rec.get("a3") is not None
+        )
 
     # Crossover extra-base inserts: keyed (_XB_SENTINEL, crossover_id, k).  Their
     # backbone-site positions drive the heavy-rep placement; they are EXCLUDED from
@@ -2780,7 +3266,8 @@ def _frame_atomistic_overrides(design, frame: dict, base_orient: str = "design_a
         (key[1], key[2]): {
             "cm": np.asarray(rec["backbone_position"], dtype=float),
             "position": oxdna_backbone_site(
-                rec["backbone_position"], rec["a1"], rec["a3"]),
+                rec["backbone_position"], rec["a1"], rec["a3"]
+            ),
             "a1": np.asarray(rec["a1"], dtype=float),
             "a3": np.asarray(rec["a3"], dtype=float),
         }
@@ -2793,10 +3280,11 @@ def _frame_atomistic_overrides(design, frame: dict, base_orient: str = "design_a
     # every `isinstance(k[1], int)` filter written to catch __xb__: it has to be
     # excluded EXPLICITLY or deformed_helix_axes builds a junk one-nucleotide "helix".
     ext_pos_override = {
-        (key[0][len("__ext_"):], key[1]): {
+        (key[0][len("__ext_") :], key[1]): {
             "cm": np.asarray(rec["backbone_position"], dtype=float),
             "position": oxdna_backbone_site(
-                rec["backbone_position"], rec["a1"], rec["a3"]),
+                rec["backbone_position"], rec["a1"], rec["a3"]
+            ),
             "a1": np.asarray(rec["a1"], dtype=float),
             "a3": np.asarray(rec["a3"], dtype=float),
         }
@@ -2805,13 +3293,18 @@ def _frame_atomistic_overrides(design, frame: dict, base_orient: str = "design_a
     }
     # Collapse loop-insertion copies to their 3-tuple base (last copy wins) — both the
     # backbone-site override and deformed_helix_axes are keyed by (helix, bp, dir).
-    frame3 = {key[:3]: rec for key, rec in frame.items()
-              if not is_synthetic_nuc_key(key) and _sited(rec)}
+    frame3 = {
+        key[:3]: rec
+        for key, rec in frame.items()
+        if not is_synthetic_nuc_key(key) and _sited(rec)
+    }
     nuc_pos_override = {
         key: oxdna_backbone_site(rec["backbone_position"], rec["a1"], rec["a3"])
         for key, rec in frame3.items()
     }
-    axis_override = deformed_helix_axes(design, frame3, sigma=2.0, base_orient=base_orient)
+    axis_override = deformed_helix_axes(
+        design, frame3, sigma=2.0, base_orient=base_orient
+    )
     return nuc_pos_override, axis_override, xb_pos_override, ext_pos_override
 
 
@@ -2834,14 +3327,20 @@ def _ssdna_frame_override(design, frame: dict) -> dict:
     Returns ``{(helix, bp, dir[, copy]): (CM, a1, a3)}`` for unpaired real nucleotides."""
     import numpy as _np
     from backend.physics.oxdna_interface import (
-        _strand_nucleotide_order, is_synthetic_nuc_key, topology_rows,
+        _strand_nucleotide_order,
+        is_synthetic_nuc_key,
+        topology_rows,
         oxdna_backbone_site,
     )
     from backend.core.atomistic import _extra_base_frame
 
     def _real(k) -> bool:
-        return (isinstance(k, tuple) and len(k) >= 3 and isinstance(k[1], int)
-                and not is_synthetic_nuc_key(k))
+        return (
+            isinstance(k, tuple)
+            and len(k) >= 3
+            and isinstance(k[1], int)
+            and not is_synthetic_nuc_key(k)
+        )
 
     present = {k[:3] for k in frame if _real(k)}
     order = _strand_nucleotide_order(design)
@@ -2868,14 +3367,21 @@ def _ssdna_frame_override(design, frame: dict) -> dict:
         h0, bp0, d0 = k[:3]
         other0 = (h0, bp0, "REVERSE" if d0 == "FORWARD" else "FORWARD")
         v1 = frame.get(other0)
-        if (v0 is None or v1 is None or v0.get("backbone_position") is None
-                or v1.get("backbone_position") is None or v0.get("a1") is None
-                or v1.get("a1") is None):
+        if (
+            v0 is None
+            or v1 is None
+            or v0.get("backbone_position") is None
+            or v1.get("backbone_position") is None
+            or v0.get("a1") is None
+            or v1.get("a1") is None
+        ):
             continue
-        b0 = (_np.asarray(v0["backbone_position"], float)
-              + OXDNA_BASE_SITE_NM * _np.asarray(v0["a1"], float))
-        b1 = (_np.asarray(v1["backbone_position"], float)
-              + OXDNA_BASE_SITE_NM * _np.asarray(v1["a1"], float))
+        b0 = _np.asarray(
+            v0["backbone_position"], float
+        ) + OXDNA_BASE_SITE_NM * _np.asarray(v0["a1"], float)
+        b1 = _np.asarray(
+            v1["backbone_position"], float
+        ) + OXDNA_BASE_SITE_NM * _np.asarray(v1["a1"], float)
         if float(_np.linalg.norm(b0 - b1)) > DUPLEX_AXIS_MAX_BASE_SEPARATION_NM:
             separated_pairs.add(k[:3])
 
@@ -2902,25 +3408,37 @@ def _ssdna_frame_override(design, frame: dict) -> dict:
             if k[:3] in melted_segment:
                 pass  # locally melted duplex segment → independent rigid frame below
             else:
-                continue                       # formed/near or isolated outlier → shared axis
+                continue  # formed/near or isolated outlier → shared axis
             partner_site = _site(partner_key)
             # Backbone sites remain about a duplex diameter apart even for a formed
             # pair, so compare oxDNA's actual base interaction sites instead.  The
             # display cutoff is intentionally looser than hydrogen-bond retention:
             # a distorted-but-near pair still has a meaningful shared helix axis.
             partner = frame.get(partner_key)
-            if (partner is not None and partner_site is not None
-                    and v.get("backbone_position") is not None and v.get("a1") is not None
-                    and partner.get("backbone_position") is not None
-                    and partner.get("a1") is not None):
-                base = (_np.asarray(v["backbone_position"], float)
-                        + OXDNA_BASE_SITE_NM * _np.asarray(v["a1"], float))
-                partner_base = (_np.asarray(partner["backbone_position"], float)
-                                + OXDNA_BASE_SITE_NM * _np.asarray(partner["a1"], float))
-                if (float(_np.linalg.norm(base - partner_base))
-                        <= DUPLEX_AXIS_MAX_BASE_SEPARATION_NM):
-                    continue                           # defensive: formed duplex → axis path
-        if (v.get("backbone_position") is None or v.get("a1") is None or v.get("a3") is None):
+            if (
+                partner is not None
+                and partner_site is not None
+                and v.get("backbone_position") is not None
+                and v.get("a1") is not None
+                and partner.get("backbone_position") is not None
+                and partner.get("a1") is not None
+            ):
+                base = _np.asarray(
+                    v["backbone_position"], float
+                ) + OXDNA_BASE_SITE_NM * _np.asarray(v["a1"], float)
+                partner_base = _np.asarray(
+                    partner["backbone_position"], float
+                ) + OXDNA_BASE_SITE_NM * _np.asarray(partner["a1"], float)
+                if (
+                    float(_np.linalg.norm(base - partner_base))
+                    <= DUPLEX_AXIS_MAX_BASE_SEPARATION_NM
+                ):
+                    continue  # defensive: formed duplex → axis path
+        if (
+            v.get("backbone_position") is None
+            or v.get("a1") is None
+            or v.get("a3") is None
+        ):
             continue
         site = _site(k)
         if site is None:
@@ -2941,7 +3459,8 @@ def _ssdna_frame_override(design, frame: dict) -> dict:
         # a1 points toward the base in oxDNA and supplies the base-facing/bow
         # direction; the strand tangent independently fixes ribose polarity.
         fo[k] = _extra_base_frame(
-            np.asarray(site, float), np.asarray(chain_dir, float),
+            np.asarray(site, float),
+            np.asarray(chain_dir, float),
             np.asarray(v["a1"], float),
         )
     return fo
@@ -2955,8 +3474,13 @@ def _ssdna_frame_override(design, frame: dict) -> dict:
 _DISPLAY_BASE_ORIENT = os.environ.get("NADOC_ATOMISTIC_BASE_ORIENT", "oxdna_a3")
 
 
-def build_display_model(design, frame: dict, frame_sink: dict | None = None,
-                        close_backbone: bool = True, base_orient: str | None = None):
+def build_display_model(
+    design,
+    frame: dict,
+    frame_sink: dict | None = None,
+    close_backbone: bool = True,
+    base_orient: str | None = None,
+):
     """The canonical relaxed-frame DISPLAY reconstruction — ONE builder shared by the
     atomistic/surface display sinks AND the validation audit, so what's measured is
     exactly what's drawn.  Axis-derived base placement (correct WC pairing/stacking)
@@ -2971,25 +3495,33 @@ def build_display_model(design, frame: dict, frame_sink: dict | None = None,
     ``{(h,bp,dir,copy): (origin, R)}`` — the per-nucleotide UNDEFORMED rigid frame —
     for the fast display path (``display_frames_payload``)."""
     from backend.core.atomistic import build_atomistic_model
+
     orient = base_orient if base_orient is not None else _DISPLAY_BASE_ORIENT
-    (nuc_pos_override, axis_override,
-     xb_pos_override, ext_pos_override) = _frame_atomistic_overrides(design, frame, base_orient=orient)
+    (nuc_pos_override, axis_override, xb_pos_override, ext_pos_override) = (
+        _frame_atomistic_overrides(design, frame, base_orient=orient)
+    )
     # Anchor floppy UNPAIRED ssDNA (overhangs/tails/loops) at its true relaxed pose via the
     # a1/a3 rigid stamp — the axis-derived path has no helix to fit there and flings it tens
     # of nm off.  Paired duplex stays on the axis path (correct WC pairing).
     frame_override = _ssdna_frame_override(design, frame)
     return build_atomistic_model(
-        design, nuc_pos_override=nuc_pos_override, axis_override=axis_override,
+        design,
+        nuc_pos_override=nuc_pos_override,
+        axis_override=axis_override,
         frame_override=frame_override,
-        xb_pos_override=xb_pos_override, ext_pos_override=ext_pos_override,
-        close_backbone=close_backbone, relaxed_oxdna_phase=True, frame_sink=frame_sink,
-        fast_bridges=True,   # DISPLAY: cheap interpolated phosphate linkers (6× faster; ≤2.4 Å at junctions)
+        xb_pos_override=xb_pos_override,
+        ext_pos_override=ext_pos_override,
+        close_backbone=close_backbone,
+        relaxed_oxdna_phase=True,
+        frame_sink=frame_sink,
+        fast_bridges=True,  # DISPLAY: cheap interpolated phosphate linkers (6× faster; ≤2.4 Å at junctions)
         # The relaxed CG override already supplies each nucleotide's FINAL world position
         # (deformed + cluster-transformed, then simulated) and the axis is fit from those
         # positions — so DON'T re-apply the design's deformation/cluster transform, which
         # would DOUBLE it on the clustered helices (VoltronCore: the 2×3 cluster shifted
         # ~3.2 nm vs the CG display).  Same reason the oxDNA/mrDNA seed path uses False.
-        apply_design_geometry=False)
+        apply_design_geometry=False,
+    )
 
 
 def display_frames_payload(design, frame: dict) -> dict:
@@ -3017,10 +3549,22 @@ def display_frames_payload(design, frame: dict) -> dict:
     frames: list = []
     for key in desc.nuc_keys:
         origin, R = sink[key]
-        frames.extend((round(float(origin[0]), 6), round(float(origin[1]), 6), round(float(origin[2]), 6),
-                       round(float(R[0, 0]), 7), round(float(R[0, 1]), 7), round(float(R[0, 2]), 7),
-                       round(float(R[1, 0]), 7), round(float(R[1, 1]), 7), round(float(R[1, 2]), 7),
-                       round(float(R[2, 0]), 7), round(float(R[2, 1]), 7), round(float(R[2, 2]), 7)))
+        frames.extend(
+            (
+                round(float(origin[0]), 6),
+                round(float(origin[1]), 6),
+                round(float(origin[2]), 6),
+                round(float(R[0, 0]), 7),
+                round(float(R[0, 1]), 7),
+                round(float(R[0, 2]), 7),
+                round(float(R[1, 0]), 7),
+                round(float(R[1, 1]), 7),
+                round(float(R[1, 2]), 7),
+                round(float(R[2, 0]), 7),
+                round(float(R[2, 1]), 7),
+                round(float(R[2, 2]), 7),
+            )
+        )
 
     atoms = model.atoms
     nonrigid_xyz: list = []
@@ -3028,8 +3572,13 @@ def display_frames_payload(design, frame: dict) -> dict:
         a = atoms[s]
         nonrigid_xyz.extend((round(a.x, 6), round(a.y, 6), round(a.z, 6)))
 
-    return {"ready": True, "n_nuc": len(desc.nuc_keys), "frames": frames,
-            "nonrigid_xyz": nonrigid_xyz, "topology_hash": desc.topology_hash}
+    return {
+        "ready": True,
+        "n_nuc": len(desc.nuc_keys),
+        "frames": frames,
+        "nonrigid_xyz": nonrigid_xyz,
+        "topology_hash": desc.topology_hash,
+    }
 
 
 def frame_atomistic_flat(design, frame: dict) -> list:
@@ -3038,6 +3587,7 @@ def frame_atomistic_flat(design, frame: dict) -> list:
     ``/design/features/atomistic-batch``. Shared sink for the composite trajectory
     AND the single relaxed-display / rmsf-average frames."""
     from backend.core.atomistic import atomistic_positions_flat
+
     return atomistic_positions_flat(build_display_model(design, frame))
 
 
@@ -3064,24 +3614,39 @@ def _strand_id_map(design) -> dict:
     """{(helix_id, bp_index, direction): strand_id} from design geometry — for colouring the
     coarse CG-bead surface (which has no all-atom model to carry strand ids)."""
     from backend.core.design_geometry import _geometry_for_design
-    return {(g["helix_id"], g["bp_index"], g["direction"]): g.get("strand_id", "")
-            for g in _geometry_for_design(design)}
+
+    return {
+        (g["helix_id"], g["bp_index"], g["direction"]): g.get("strand_id", "")
+        for g in _geometry_for_design(design)
+    }
 
 
 def _cg_beads_from_frame(design, frame: dict) -> list:
     """Coarse per-nucleotide spheres (backbone site + base site) from a relaxed FRAME — the
     fast CG-surface input, skipping the ~300k-atom rebuild.  Base site ≈ CM + a1·0.34 nm
     (oxDNA POS_BASE); backbone site via oxdna_backbone_site."""
-    from backend.physics.oxdna_interface import oxdna_backbone_site, is_synthetic_nuc_key
+    from backend.physics.oxdna_interface import (
+        oxdna_backbone_site,
+        is_synthetic_nuc_key,
+    )
     from backend.core.surface import make_cg_bead
+
     _BASE_OFF_NM = 0.34
     sid = _strand_id_map(design)
     beads: list = []
     for k, v in frame.items():
-        if not (isinstance(k, tuple) and len(k) >= 3 and isinstance(k[1], int)
-                and not is_synthetic_nuc_key(k)):
+        if not (
+            isinstance(k, tuple)
+            and len(k) >= 3
+            and isinstance(k[1], int)
+            and not is_synthetic_nuc_key(k)
+        ):
             continue
-        if v.get("backbone_position") is None or v.get("a1") is None or v.get("a3") is None:
+        if (
+            v.get("backbone_position") is None
+            or v.get("a1") is None
+            or v.get("a3") is None
+        ):
             continue
         cm = np.asarray(v["backbone_position"], float)
         a1 = np.asarray(v["a1"], float)
@@ -3089,15 +3654,31 @@ def _cg_beads_from_frame(design, frame: dict) -> list:
         base = cm + a1 * _BASE_OFF_NM
         s = sid.get((k[0], k[1], k[2]), "")
         for p in (bb, base):
-            beads.append(make_cg_bead(p[0], p[1], p[2], strand_id=s,
-                                      helix_id=k[0], bp_index=k[1], direction=k[2]))
+            beads.append(
+                make_cg_bead(
+                    p[0],
+                    p[1],
+                    p[2],
+                    strand_id=s,
+                    helix_id=k[0],
+                    bp_index=k[1],
+                    direction=k[2],
+                )
+            )
     return beads
 
 
-def frame_surface_json(design, frame: dict, color_mode: str = "strand",
-                       probe_radius: float = 0.28, grid_spacing: float = 0.20,
-                       radius_inflate: float = 1.30, smooth: int = 15,
-                       rmsf_by_key: dict | None = None, detail: str = "coarse") -> dict:
+def frame_surface_json(
+    design,
+    frame: dict,
+    color_mode: str = "strand",
+    probe_radius: float = 0.28,
+    grid_spacing: float = 0.20,
+    radius_inflate: float = 1.30,
+    smooth: int = 15,
+    rmsf_by_key: dict | None = None,
+    detail: str = "coarse",
+) -> dict:
     """Molecular surface ``{vertices, faces, vertex_colors?|vertex_rmsf?}`` for ONE
     per-nucleotide frame — the SAME wire format as ``/design/features/surface-batch``.
     Shared sink for the composite trajectory AND the single relaxed/rmsf frames.
@@ -3107,12 +3688,20 @@ def frame_surface_json(design, frame: dict, color_mode: str = "strand",
     ``detail='coarse'`` (default) builds the envelope from ~2 CG spheres/nucleotide (no
     all-atom rebuild — ~3× faster, ~2.8 Å from the atomic surface); ``'fine'`` uses the
     full all-atom model."""
-    from backend.core.surface import (compute_surface, smooth_mesh, surface_to_json,
-                                       adaptive_grid_spacing, cg_surface_mesh,
-                                       vertex_index_tables)
+    from backend.core.surface import (
+        compute_surface,
+        smooth_mesh,
+        surface_to_json,
+        adaptive_grid_spacing,
+        cg_surface_mesh,
+        vertex_index_tables,
+    )
+
     if detail == "coarse":
         beads = _cg_beads_from_frame(design, frame)
-        mesh = cg_surface_mesh(beads, grid_spacing=grid_spacing, probe_radius=probe_radius, smooth=smooth)
+        mesh = cg_surface_mesh(
+            beads, grid_spacing=grid_spacing, probe_radius=probe_radius, smooth=smooth
+        )
         rmsf_atoms = beads
     else:
         # Surface = a VdW envelope, so it needs atom POSITIONS, not a connected backbone —
@@ -3120,22 +3709,42 @@ def frame_surface_json(design, frame: dict, color_mode: str = "strand",
         model = build_display_model(design, frame, close_backbone=False)
         if detail == "chimerax":
             # EXPERIMENTAL ChimeraX-quality SES: fine 0.5 Å grid + 1.4 Å probe + true VdW.
-            from backend.core.surface import (CHIMERAX_GRID_SPACING, CHIMERAX_PROBE_RADIUS,
-                                              CHIMERAX_RADIUS_SCALE, CHIMERAX_VOXEL_CAP,
-                                              CHIMERAX_MAX_SPACING, CHIMERAX_SMOOTH)
-            gs = adaptive_grid_spacing(model.atoms, CHIMERAX_GRID_SPACING,
-                                       cap_voxels=CHIMERAX_VOXEL_CAP, max_spacing=CHIMERAX_MAX_SPACING)
-            mesh = compute_surface(model.atoms, grid_spacing=gs,
-                                   probe_radius=CHIMERAX_PROBE_RADIUS, radius_scale=CHIMERAX_RADIUS_SCALE)
+            from backend.core.surface import (
+                CHIMERAX_GRID_SPACING,
+                CHIMERAX_PROBE_RADIUS,
+                CHIMERAX_RADIUS_SCALE,
+                CHIMERAX_VOXEL_CAP,
+                CHIMERAX_MAX_SPACING,
+                CHIMERAX_SMOOTH,
+            )
+
+            gs = adaptive_grid_spacing(
+                model.atoms,
+                CHIMERAX_GRID_SPACING,
+                cap_voxels=CHIMERAX_VOXEL_CAP,
+                max_spacing=CHIMERAX_MAX_SPACING,
+            )
+            mesh = compute_surface(
+                model.atoms,
+                grid_spacing=gs,
+                probe_radius=CHIMERAX_PROBE_RADIUS,
+                radius_scale=CHIMERAX_RADIUS_SCALE,
+            )
             mesh = smooth_mesh(mesh, iterations=CHIMERAX_SMOOTH)
         else:
             gs = adaptive_grid_spacing(model.atoms, grid_spacing)
-            mesh = compute_surface(model.atoms, grid_spacing=gs,
-                                   probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
+            mesh = compute_surface(
+                model.atoms,
+                grid_spacing=gs,
+                probe_radius=probe_radius,
+                radius_scale=1.2 * radius_inflate,
+            )
             mesh = smooth_mesh(mesh, iterations=smooth)
         rmsf_atoms = model.atoms
-    entry = {"vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
-             "faces": [int(f) for f in mesh.faces.ravel()]}
+    entry = {
+        "vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
+        "faces": [int(f) for f in mesh.faces.ravel()],
+    }
     # Per-vertex identity, exactly as the DESIGN surface ships it. Without it a simulated
     # surface carries no way to resolve a cluster, so per-cluster colour and opacity were
     # silently ignored on every engine overlay. Both the coarse (CG-bead) and fine
@@ -3176,14 +3785,20 @@ def pack_surface_bin(data: dict) -> bytes:
     how the nucleotide block was added without breaking anything.
     n_verts == 0 signals "not ready / empty"."""
     import struct
+
     v = np.asarray(data.get("vertices") or [], dtype=np.float32)
     f = np.asarray(data.get("faces") or [], dtype=np.uint32)
     nv, nf = v.size // 3, f.size // 3
     if data.get("vertex_colors"):
-        rgb = np.clip(np.asarray(data["vertex_colors"], dtype=np.float32) * 255.0, 0, 255).astype(np.uint8)
+        rgb = np.clip(
+            np.asarray(data["vertex_colors"], dtype=np.float32) * 255.0, 0, 255
+        ).astype(np.uint8)
         color_kind, color_bytes = 1, rgb.tobytes()
     elif data.get("vertex_rmsf"):
-        color_kind, color_bytes = 2, np.asarray(data["vertex_rmsf"], dtype=np.float32).tobytes()
+        color_kind, color_bytes = (
+            2,
+            np.asarray(data["vertex_rmsf"], dtype=np.float32).tobytes(),
+        )
     else:
         color_kind, color_bytes = 0, b""
     import json
@@ -3200,8 +3815,11 @@ def pack_surface_bin(data: dict) -> bytes:
         if not nv or table is None or index is None:
             return struct.pack("<I", 0)
         tbl_bytes = json.dumps(table).encode("utf-8")
-        return (struct.pack("<II", 1, len(tbl_bytes)) + tbl_bytes
-                + np.asarray(index, dtype=np.uint32).tobytes())
+        return (
+            struct.pack("<II", 1, len(tbl_bytes))
+            + tbl_bytes
+            + np.asarray(index, dtype=np.uint32).tobytes()
+        )
 
     strand_block = _index_block("vertex_strand_index_table", "vertex_strand_index")
     # Per-vertex NUCLEOTIDE key (helix:bp:direction). Lets per-cluster colouring resolve
@@ -3209,16 +3827,27 @@ def pack_surface_bin(data: dict) -> bytes:
     # (LESSONS D15). Absent from producers that have no nucleotide identity (the oxDNA
     # frame-surface overlay), and the client falls back to the strand table.
     nuc_block = _index_block("vertex_nuc_index_table", "vertex_nuc_index")
-    return (struct.pack("<IIII", 0x4E535246, nv, nf, color_kind)
-            + v.tobytes() + f.tobytes() + color_bytes + strand_block + nuc_block)
+    return (
+        struct.pack("<IIII", 0x4E535246, nv, nf, color_kind)
+        + v.tobytes()
+        + f.tobytes()
+        + color_bytes
+        + strand_block
+        + nuc_block
+    )
 
 
-def composite_trajectory_atomistic(design, stages, reference_conf_path,
-                                   frame_indices, max_frames: int = 200,
-                                   align: bool = True,
-                                   n_trailing_extra: int = 0,
-                                   trailing_extra_strand_length: int = 0,
-                                   progress=None) -> dict:
+def composite_trajectory_atomistic(
+    design,
+    stages,
+    reference_conf_path,
+    frame_indices,
+    max_frames: int = 200,
+    align: bool = True,
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
+    progress=None,
+) -> dict:
     """Per-frame atomistic flat-XYZ for the requested composite-frame indices.
     Returns ``{ "<idx>": [x0,y0,z0, …] }`` — the SAME wire format as
     ``/design/features/atomistic-batch`` (atom-serial order, nm). Frame indices
@@ -3232,18 +3861,34 @@ def composite_trajectory_atomistic(design, stages, reference_conf_path,
     Materialises EVERY requested frame at once (~4 MB per 100k atoms), so a large range
     is a large dict. Callers that consume frames one at a time — the trajectory-range
     export — should use ``iter_composite_trajectory_atomistic`` instead."""
-    return {str(idx): flat for idx, flat in iter_composite_trajectory_atomistic(
-        design, stages, reference_conf_path, frame_indices, max_frames=max_frames,
-        align=align, n_trailing_extra=n_trailing_extra,
-        trailing_extra_strand_length=trailing_extra_strand_length, progress=progress)}
+    return {
+        str(idx): flat
+        for idx, flat in iter_composite_trajectory_atomistic(
+            design,
+            stages,
+            reference_conf_path,
+            frame_indices,
+            max_frames=max_frames,
+            align=align,
+            n_trailing_extra=n_trailing_extra,
+            trailing_extra_strand_length=trailing_extra_strand_length,
+            progress=progress,
+        )
+    }
 
 
-def iter_composite_trajectory_atomistic(design, stages, reference_conf_path,
-                                        frame_indices, max_frames: int = 200,
-                                        align: bool = True,
-                                        n_trailing_extra: int = 0,
-                                        trailing_extra_strand_length: int = 0,
-                                        progress=None, cache: bool = True):
+def iter_composite_trajectory_atomistic(
+    design,
+    stages,
+    reference_conf_path,
+    frame_indices,
+    max_frames: int = 200,
+    align: bool = True,
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
+    progress=None,
+    cache: bool = True,
+):
     """Streaming sibling of ``composite_trajectory_atomistic``: yields ``(idx, flat)`` one
     frame at a time, in ascending index order, so a consumer can write each frame out and
     drop it instead of holding the whole range in memory.
@@ -3254,11 +3899,21 @@ def iter_composite_trajectory_atomistic(design, stages, reference_conf_path,
     Interactive callers (which re-request the frames they just scrubbed) keep ``cache=True``.
     """
     _, ordered, _, _ = _aligned_downsampled_frames(
-        design, stages, reference_conf_path, max_frames, copies=True, align=align,
+        design,
+        stages,
+        reference_conf_path,
+        max_frames,
+        copies=True,
+        align=align,
         n_trailing_extra=n_trailing_extra,
-        trailing_extra_strand_length=trailing_extra_strand_length)
-    akey = (_aligned_cache_key(stages, reference_conf_path, max_frames, True),
-            bool(align), int(n_trailing_extra), int(trailing_extra_strand_length))
+        trailing_extra_strand_length=trailing_extra_strand_length,
+    )
+    akey = (
+        _aligned_cache_key(stages, reference_conf_path, max_frames, True),
+        bool(align),
+        int(n_trailing_extra),
+        int(trailing_extra_strand_length),
+    )
     wanted = sorted(set(int(i) for i in frame_indices))
     # Count against every requested index (not just the in-range ones) so a range that
     # overruns the trajectory still walks the bar to 100% instead of stopping short.
@@ -3276,25 +3931,48 @@ def iter_composite_trajectory_atomistic(design, stages, reference_conf_path,
             progress(done, len(wanted))
 
 
-def composite_trajectory_surface(design, stages, reference_conf_path, frame_indices,
-                                 color_mode: str = "strand", probe_radius: float = 0.28,
-                                 grid_spacing: float = 0.20, radius_inflate: float = 1.30,
-                                 smooth: int = 15, max_frames: int = 200,
-                                 align: bool = True,
-                                 n_trailing_extra: int = 0,
-                                 trailing_extra_strand_length: int = 0) -> dict:
+def composite_trajectory_surface(
+    design,
+    stages,
+    reference_conf_path,
+    frame_indices,
+    color_mode: str = "strand",
+    probe_radius: float = 0.28,
+    grid_spacing: float = 0.20,
+    radius_inflate: float = 1.30,
+    smooth: int = 15,
+    max_frames: int = 200,
+    align: bool = True,
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
+) -> dict:
     """Per-frame molecular surface for the requested composite-frame indices.
     Returns ``{ "<idx>": {vertices, faces, vertex_colors?} }`` — the SAME wire
     format as ``/design/features/surface-batch``. Topology can vary per frame
     (marching cubes); the frontend rebuilds the buffer on a count change."""
     _, ordered, _, _ = _aligned_downsampled_frames(
-        design, stages, reference_conf_path, max_frames, copies=True, align=align,
+        design,
+        stages,
+        reference_conf_path,
+        max_frames,
+        copies=True,
+        align=align,
         n_trailing_extra=n_trailing_extra,
-        trailing_extra_strand_length=trailing_extra_strand_length)
-    akey = (_aligned_cache_key(stages, reference_conf_path, max_frames, True),
-            bool(align), int(n_trailing_extra), int(trailing_extra_strand_length))
-    sparams = (color_mode, round(probe_radius, 4), round(grid_spacing, 4),
-               round(radius_inflate, 4), int(smooth))
+        trailing_extra_strand_length=trailing_extra_strand_length,
+    )
+    akey = (
+        _aligned_cache_key(stages, reference_conf_path, max_frames, True),
+        bool(align),
+        int(n_trailing_extra),
+        int(trailing_extra_strand_length),
+    )
+    sparams = (
+        color_mode,
+        round(probe_radius, 4),
+        round(grid_spacing, 4),
+        round(radius_inflate, 4),
+        int(smooth),
+    )
     out: dict[str, dict] = {}
     for idx in sorted(set(int(i) for i in frame_indices)):
         if idx < 0 or idx >= len(ordered):
@@ -3303,8 +3981,14 @@ def composite_trajectory_surface(design, stages, reference_conf_path, frame_indi
         payload = _display_out_get(ck)
         if payload is None:
             payload = frame_surface_json(
-                design, ordered[idx], color_mode, probe_radius, grid_spacing,
-                radius_inflate, smooth)
+                design,
+                ordered[idx],
+                color_mode,
+                probe_radius,
+                grid_spacing,
+                radius_inflate,
+                smooth,
+            )
             _display_out_put(ck, payload)
         out[str(idx)] = payload
     return out
@@ -3425,7 +4109,9 @@ def strain_field(
     onto their base 3-tuple, since :func:`backbone_bond_pairs` does the same.
     """
     if metric not in ("backbone", "wc"):
-        raise ValueError(f"strain_field: unknown metric {metric!r} (expected 'backbone' or 'wc')")
+        raise ValueError(
+            f"strain_field: unknown metric {metric!r} (expected 'backbone' or 'wc')"
+        )
     base = _strain_base_map(full_map)
     keys = list(base)
     ia, ib = _strain_index(design, keys, metric)
@@ -3434,8 +4120,9 @@ def strain_field(
     arrs = _gather_frame(base, keys)
     if arrs is None:
         return {}
-    vals, _att, _rej = _strain_values(*arrs, ia, ib, metric=metric,
-                                      r0_units=r0_units, wc_r0_units=wc_r0_units)
+    vals, _att, _rej = _strain_values(
+        *arrs, ia, ib, metric=metric, r0_units=r0_units, wc_r0_units=wc_r0_units
+    )
     return {k: float(v) for k, v in zip(keys, vals) if not np.isnan(v)}
 
 
@@ -3472,10 +4159,16 @@ def _strain_index(design: Design, keys: list[tuple], metric: str):
         # crossover extra-base inserts and 5′/3′ strand-extension tail beads — are unpaired
         # ssDNA; an extension key is a 3-tuple carrying a direction string, so it would
         # otherwise be eligible to pair with anything sharing its synthetic helix id.
-        fwd = {(k[0], k[1]): i for k, i in pos.items()
-               if k[2] == "FORWARD" and not is_synthetic_nuc_key(k)}
-        rev = {(k[0], k[1]): i for k, i in pos.items()
-               if k[2] == "REVERSE" and not is_synthetic_nuc_key(k)}
+        fwd = {
+            (k[0], k[1]): i
+            for k, i in pos.items()
+            if k[2] == "FORWARD" and not is_synthetic_nuc_key(k)
+        }
+        rev = {
+            (k[0], k[1]): i
+            for k, i in pos.items()
+            if k[2] == "REVERSE" and not is_synthetic_nuc_key(k)
+        }
         paired = sorted(fwd.keys() & rev.keys())
         ia = [fwd[p] for p in paired]
         ib = [rev[p] for p in paired]
@@ -3494,7 +4187,9 @@ def _gather_frame(base: dict[tuple, dict], keys: list[tuple]):
     return cm, a1, a3
 
 
-def _fene_violation_fraction(cm, a1, a3, ia, ib, *, r0_units: float = FENE_R0_OXDNA2) -> float:
+def _fene_violation_fraction(
+    cm, a1, a3, ia, ib, *, r0_units: float = FENE_R0_OXDNA2
+) -> float:
     """Fraction of BACKBONE bonds outside oxDNA's FENE window in one reconstructed frame.
 
     A production frame cannot contain even one such bond — the potential is undefined past
@@ -3516,9 +4211,17 @@ def _fene_violation_fraction(cm, a1, a3, ia, ib, *, r0_units: float = FENE_R0_OX
     return float((np.abs(s) > (FENE_DELTA / r0_units)).mean())
 
 
-def _strain_values(cm, a1, a3, ia, ib, *, metric: str,
-                   r0_units: float = FENE_R0_OXDNA2,
-                   wc_r0_units: float = HYDR_R0_OXDNA2):
+def _strain_values(
+    cm,
+    a1,
+    a3,
+    ia,
+    ib,
+    *,
+    metric: str,
+    r0_units: float = FENE_R0_OXDNA2,
+    wc_r0_units: float = HYDR_R0_OXDNA2,
+):
     """Vectorized per-nucleotide strain for ONE gathered configuration, aligned to the
     same key order.  Returns ``(values, n_attempted, n_rejected)``; ``values`` is ``NaN``
     where nothing was measurable, and the two counts cover FENE-window rejection (see
@@ -3558,7 +4261,7 @@ def _strain_values(cm, a1, a3, ia, ib, *, metric: str,
         ia, ib, s = ia[keep], ib[keep], s[keep]
         idx = np.concatenate([ia, ib])
         vv = np.concatenate([s, s])
-        order = np.argsort(np.abs(vv), kind="stable")   # ascending |s| → worst wins
+        order = np.argsort(np.abs(vv), kind="stable")  # ascending |s| → worst wins
         out[idx[order]] = vv[order]
     else:
         out[ia] = s
@@ -3632,9 +4335,16 @@ def strain_map(
     layer — never written back into topology.
     """
     if metric not in ("backbone", "wc"):
-        raise ValueError(f"strain_map: unknown metric {metric!r} (expected 'backbone' or 'wc')")
-    per3 = field if field is not None else strain_field(
-        design, full_map, metric=metric, r0_units=r0_units, wc_r0_units=wc_r0_units)
+        raise ValueError(
+            f"strain_map: unknown metric {metric!r} (expected 'backbone' or 'wc')"
+        )
+    per3 = (
+        field
+        if field is not None
+        else strain_field(
+            design, full_map, metric=metric, r0_units=r0_units, wc_r0_units=wc_r0_units
+        )
+    )
 
     ss_of = designed_ssdna_flags(full_map)
     out: list[dict] = []
@@ -3650,19 +4360,27 @@ def strain_map(
         # colour, so they ride along at their simulated positions in their native colour.
         s = per3.get((k[0], k[1], k[2]))
         a1 = np.asarray(v["a1"], dtype=float)
-        site = oxdna_backbone_site(v["backbone_position"], a1, np.asarray(v["a3"], dtype=float))
+        site = oxdna_backbone_site(
+            v["backbone_position"], a1, np.asarray(v["a3"], dtype=float)
+        )
         ss = ss_of(k)
-        out.append({
-            # Emitted RAW, exactly as /display does: a synthetic key's bp_index slot holds
-            # a crossover id (extra bases) or a bead index (extension tails) and must not
-            # be coerced — int() on a string crossover id would throw.
-            "helix_id": k[0], "bp_index": k[1], "direction": k[2],
-            "copy": int(k[3]) if len(k) > 3 else 0,
-            "backbone_position": np.asarray(site, dtype=float).tolist(),
-            "nx": float(a1[0]), "ny": float(a1[1]), "nz": float(a1[2]),
-            "strain": s,
-            "ss": ss,
-        })
+        out.append(
+            {
+                # Emitted RAW, exactly as /display does: a synthetic key's bp_index slot holds
+                # a crossover id (extra bases) or a bead index (extension tails) and must not
+                # be coerced — int() on a string crossover id would throw.
+                "helix_id": k[0],
+                "bp_index": k[1],
+                "direction": k[2],
+                "copy": int(k[3]) if len(k) > 3 else 0,
+                "backbone_position": np.asarray(site, dtype=float).tolist(),
+                "nx": float(a1[0]),
+                "ny": float(a1[1]),
+                "nz": float(a1[2]),
+                "strain": s,
+                "ss": ss,
+            }
+        )
         if s is not None:
             vals.append(s)
             if not ss:
@@ -3670,20 +4388,38 @@ def strain_map(
 
     unit_r0 = r0_units if metric == "backbone" else wc_r0_units
     if not vals:
-        return {"positions": out, "min_strain": None, "max_strain": None,
-                "mean_strain": None, "abs_max_strain": None, "display_abs_strain": None,
-                "n_shared": 0, "n_positions": len(out), "dsdna": None,
-                "metric": metric, "unit": "fraction", "r0_units": unit_r0}
+        return {
+            "positions": out,
+            "min_strain": None,
+            "max_strain": None,
+            "mean_strain": None,
+            "abs_max_strain": None,
+            "display_abs_strain": None,
+            "n_shared": 0,
+            "n_positions": len(out),
+            "dsdna": None,
+            "metric": metric,
+            "unit": "fraction",
+            "r0_units": unit_r0,
+        }
     a = np.asarray(vals, dtype=float)
-    return {"positions": out, "min_strain": float(a.min()), "max_strain": float(a.max()),
-            "mean_strain": float(a.mean()), "abs_max_strain": float(np.abs(a).max()),
-            "display_abs_strain": _display_strain_bound(a, metric),
-            # Companion stats over the designed-dsDNA subset alone, so the "exclude ssDNA"
-            # display option can rescale instantly without a refetch — and so a lone flailing
-            # overhang cannot set the colour range for the duplex the user is inspecting.
-            "dsdna": _strain_stats(ds_vals, metric),
-            "n_shared": len(vals), "n_positions": len(out),
-            "metric": metric, "unit": "fraction", "r0_units": unit_r0}
+    return {
+        "positions": out,
+        "min_strain": float(a.min()),
+        "max_strain": float(a.max()),
+        "mean_strain": float(a.mean()),
+        "abs_max_strain": float(np.abs(a).max()),
+        "display_abs_strain": _display_strain_bound(a, metric),
+        # Companion stats over the designed-dsDNA subset alone, so the "exclude ssDNA"
+        # display option can rescale instantly without a refetch — and so a lone flailing
+        # overhang cannot set the colour range for the duplex the user is inspecting.
+        "dsdna": _strain_stats(ds_vals, metric),
+        "n_shared": len(vals),
+        "n_positions": len(out),
+        "metric": metric,
+        "unit": "fraction",
+        "r0_units": unit_r0,
+    }
 
 
 def _strain_stats(vals, metric: str) -> dict | None:
@@ -3691,9 +4427,14 @@ def _strain_stats(vals, metric: str) -> dict | None:
     if not len(vals):
         return None
     a = np.asarray(vals, dtype=float)
-    return {"min_strain": float(a.min()), "max_strain": float(a.max()),
-            "mean_strain": float(a.mean()), "abs_max_strain": float(np.abs(a).max()),
-            "display_abs_strain": _display_strain_bound(a, metric), "n": int(a.size)}
+    return {
+        "min_strain": float(a.min()),
+        "max_strain": float(a.max()),
+        "mean_strain": float(a.mean()),
+        "abs_max_strain": float(np.abs(a).max()),
+        "display_abs_strain": _display_strain_bound(a, metric),
+        "n": int(a.size),
+    }
 
 
 def designed_ssdna_flags(full_map: dict[tuple, dict]):
@@ -3716,12 +4457,21 @@ def designed_ssdna_flags(full_map: dict[tuple, dict]):
     This is what lets the strain map colour ONLY the regions that are supposed to be duplex,
     so a disrupted one stands out instead of competing with ssDNA that is floppy by design.
     """
-    fwd = {(k[0], k[1]) for k in full_map if k[2] == "FORWARD" and not is_synthetic_nuc_key(k)}
-    rev = {(k[0], k[1]) for k in full_map if k[2] == "REVERSE" and not is_synthetic_nuc_key(k)}
+    fwd = {
+        (k[0], k[1])
+        for k in full_map
+        if k[2] == "FORWARD" and not is_synthetic_nuc_key(k)
+    }
+    rev = {
+        (k[0], k[1])
+        for k in full_map
+        if k[2] == "REVERSE" and not is_synthetic_nuc_key(k)
+    }
     duplex = fwd & rev
 
     def _ss(k) -> bool:
         return is_synthetic_nuc_key(k) or (k[0], k[1]) not in duplex
+
     return _ss
 
 
@@ -3748,7 +4498,9 @@ _STRAIN_DISPLAY_PERCENTILE = {"backbone": 98.0, "wc": 90.0}
 # simply UNPAIRED and extra distance carries no further information, so it is both the
 # saturation point of the ramp and the cut that separates the bonded population (whose
 # spread the display should resolve) from the melted one.
-WC_UNPAIRED_STRAIN: float = BP_FORMED_CUTOFF_NM / (OXDNA_LENGTH_UNIT * HYDR_R0_OXDNA2) - 1.0
+WC_UNPAIRED_STRAIN: float = (
+    BP_FORMED_CUTOFF_NM / (OXDNA_LENGTH_UNIT * HYDR_R0_OXDNA2) - 1.0
+)
 
 
 def _display_strain_bound(values, metric: str) -> float:
@@ -3852,19 +4604,33 @@ def production_strain_field(
         read_trajectory_frames_at,
         unwrap_align_to_reference,
     )
-    paths = (list(production_traj_path)
-             if isinstance(production_traj_path, (list, tuple))
-             else [production_traj_path])
+
+    paths = (
+        list(production_traj_path)
+        if isinstance(production_traj_path, (list, tuple))
+        else [production_traj_path]
+    )
     ref = read_configuration_full(
-        reference_conf_path, design, copies=copies, include_extra_bases=True,
-        include_extensions=True, n_trailing_extra=n_trailing_extra,
-        trailing_extra_strand_length=trailing_extra_strand_length)
+        reference_conf_path,
+        design,
+        copies=copies,
+        include_extra_bases=True,
+        include_extensions=True,
+        n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length,
+    )
 
     counts = [count_trajectory_frames(p) for p in paths]
     total = sum(counts)
     if total <= 0:
-        return {"field": {}, "frame": {}, "n_frames": 0,
-                "rejected_fraction": 0.0, "n_rejected": 0, "n_frames_torn": 0}
+        return {
+            "field": {},
+            "frame": {},
+            "n_frames": 0,
+            "rejected_fraction": 0.0,
+            "n_rejected": 0,
+            "n_frames_torn": 0,
+        }
 
     # The key ordering + endpoint index are topology, not geometry: build them once from
     # the reference and reuse for every frame (rebuilding per frame walks every strand).
@@ -3873,10 +4639,18 @@ def production_strain_field(
     # The backbone index is built for EVERY metric: it drives the per-frame torn-unwrap
     # gate below, which `wc` needs even more than `backbone` does (it has no bound of its
     # own).  Reused directly when the requested metric IS backbone.
-    ia_bb, ib_bb = (ia, ib) if metric == "backbone" else _strain_index(design, keys, "backbone")
+    ia_bb, ib_bb = (
+        (ia, ib) if metric == "backbone" else _strain_index(design, keys, "backbone")
+    )
     if not ia.size:
-        return {"field": {}, "frame": {}, "n_frames": 0,
-                "rejected_fraction": 0.0, "n_rejected": 0, "n_frames_torn": 0}
+        return {
+            "field": {},
+            "frame": {},
+            "n_frames": 0,
+            "rejected_fraction": 0.0,
+            "n_rejected": 0,
+            "n_frames_torn": 0,
+        }
     # Superpose on the REAL nucleotides only — matching production_rmsf, whose reference
     # drops synthetic keys entirely.  Without this the tails would both bias the fit and
     # land the mean structure in a different pose than the RMSF/deviation overlays.
@@ -3910,22 +4684,39 @@ def production_strain_field(
         # long production run isn't drowned out by a short field child (or vice versa).
         keep = max(1, int(round(max_frames * n / total)))
         frames = read_trajectory_frames_at(
-            path, design, _even_indices(n, keep), copies=copies,
+            path,
+            design,
+            _even_indices(n, keep),
+            copies=copies,
             n_trailing_extra=n_trailing_extra,
-            trailing_extra_strand_length=trailing_extra_strand_length)
+            trailing_extra_strand_length=trailing_extra_strand_length,
+        )
         box = _parse_box_nm(path)
         for fr in frames.values():
-            whole = (unwrap_align_to_reference(fr, ref, design, box, align=align,
-                                               align_keys=fit_keys, plan=_plan_for(fr))
-                     if box is not None and np.all(box > 0) else fr)
+            whole = (
+                unwrap_align_to_reference(
+                    fr,
+                    ref,
+                    design,
+                    box,
+                    align=align,
+                    align_keys=fit_keys,
+                    plan=_plan_for(fr),
+                )
+                if box is not None and np.all(box > 0)
+                else fr
+            )
             arrs = _gather_frame(_strain_base_map(whole), keys)
             if arrs is None:
-                continue                 # ragged/short frame — doesn't match the topology
+                continue  # ragged/short frame — doesn't match the topology
             cm, a1, a3 = arrs
             # Torn-unwrap gate FIRST — a frame whose backbone reconstruction is impossible
             # is unusable for either metric, so discard it whole rather than trying to
             # salvage individual measurements out of a structure that isn't connected.
-            if _fene_violation_fraction(cm, a1, a3, ia_bb, ib_bb) > _STRAIN_FRAME_REJECT_FRAC:
+            if (
+                _fene_violation_fraction(cm, a1, a3, ia_bb, ib_bb)
+                > _STRAIN_FRAME_REJECT_FRAC
+            ):
                 n_frames_torn += 1
                 continue
             vals, att, rej = _strain_values(cm, a1, a3, ia, ib, metric=metric)
@@ -3940,49 +4731,81 @@ def production_strain_field(
             counted[ok] += 1
 
     if n_frames == 0:
-        return {"field": {}, "frame": {}, "n_frames": 0, "rejected_fraction": 0.0,
-                "n_rejected": 0, "n_frames_torn": n_frames_torn}
+        return {
+            "field": {},
+            "frame": {},
+            "n_frames": 0,
+            "rejected_fraction": 0.0,
+            "n_rejected": 0,
+            "n_frames_torn": n_frames_torn,
+        }
     seen = counted > 0
     mean = np.divide(total_s, counted, out=np.zeros_like(total_s), where=seen)
     mcm = sum_cm / n_frames
     ma1 = sum_a1 / (np.linalg.norm(sum_a1, axis=1, keepdims=True) + 1e-14)
     ma3 = sum_a3 / (np.linalg.norm(sum_a3, axis=1, keepdims=True) + 1e-14)
-    return {"field": {k: float(mean[i]) for i, k in enumerate(keys) if seen[i]},
-            "frame": {k: {"backbone_position": mcm[i], "a1": ma1[i], "a3": ma3[i]}
-                      for i, k in enumerate(keys)},
-            "n_frames": n_frames, "n_rejected": n_rejected,
-            "n_frames_torn": n_frames_torn,
-            "rejected_fraction": (n_rejected / n_attempted) if n_attempted else 0.0}
+    return {
+        "field": {k: float(mean[i]) for i, k in enumerate(keys) if seen[i]},
+        "frame": {
+            k: {"backbone_position": mcm[i], "a1": ma1[i], "a3": ma3[i]}
+            for i, k in enumerate(keys)
+        },
+        "n_frames": n_frames,
+        "n_rejected": n_rejected,
+        "n_frames_torn": n_frames_torn,
+        "rejected_fraction": (n_rejected / n_attempted) if n_attempted else 0.0,
+    }
 
 
-def production_strain_field_cached(design, production_traj_path, reference_conf_path, *,
-                                   metric: str = "backbone",
-                                   max_frames: int = _STRAIN_MAX_FRAMES,
-                                   copies: bool = True,
-                                   align: bool = True,
-                                   n_trailing_extra: int = 0,
-                                   trailing_extra_strand_length: int = 0) -> dict:
+def production_strain_field_cached(
+    design,
+    production_traj_path,
+    reference_conf_path,
+    *,
+    metric: str = "backbone",
+    max_frames: int = _STRAIN_MAX_FRAMES,
+    copies: bool = True,
+    align: bool = True,
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
+) -> dict:
     """LRU-cached :func:`production_strain_field`.  File size+mtime signatures naturally
     invalidate a still-growing trajectory; a finished one is reused across metric toggles
     and re-selections of the same job."""
     global _PRODUCTION_STRAIN_CACHE
     from collections import OrderedDict
 
-    paths = (list(production_traj_path)
-             if isinstance(production_traj_path, (list, tuple))
-             else [production_traj_path])
-    key = (tuple(_traj_file_sig(p) for p in paths), _traj_file_sig(reference_conf_path),
-           str(metric), int(max_frames), bool(copies), bool(align), int(n_trailing_extra),
-           int(trailing_extra_strand_length))
+    paths = (
+        list(production_traj_path)
+        if isinstance(production_traj_path, (list, tuple))
+        else [production_traj_path]
+    )
+    key = (
+        tuple(_traj_file_sig(p) for p in paths),
+        _traj_file_sig(reference_conf_path),
+        str(metric),
+        int(max_frames),
+        bool(copies),
+        bool(align),
+        int(n_trailing_extra),
+        int(trailing_extra_strand_length),
+    )
     if _PRODUCTION_STRAIN_CACHE is not None:
         cached = _PRODUCTION_STRAIN_CACHE.get(key)
         if cached is not None:
             _PRODUCTION_STRAIN_CACHE.move_to_end(key)
             return cached
     result = production_strain_field(
-        design, paths, reference_conf_path, metric=metric, max_frames=max_frames,
-        copies=copies, align=align, n_trailing_extra=n_trailing_extra,
-        trailing_extra_strand_length=trailing_extra_strand_length)
+        design,
+        paths,
+        reference_conf_path,
+        metric=metric,
+        max_frames=max_frames,
+        copies=copies,
+        align=align,
+        n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length,
+    )
     if _PRODUCTION_STRAIN_CACHE is None:
         _PRODUCTION_STRAIN_CACHE = OrderedDict()
     _PRODUCTION_STRAIN_CACHE[key] = result
@@ -3996,15 +4819,15 @@ def production_strain_field_cached(design, production_traj_path, reference_conf_
 
 
 def run_oxdna_health_check(
-    design:          Design,
-    stage_dir:       Path,
+    design: Design,
+    stage_dir: Path,
     *,
-    kind:            str,
+    kind: str,
     min_bp_retained: float,
-    topology_path:   Path | None = None,
-    dnanalysis_bin:  str | None = None,
+    topology_path: Path | None = None,
+    dnanalysis_bin: str | None = None,
     salt_concentration: float = 0.5,
-    temperature:     str = "296K",
+    temperature: str = "296K",
 ) -> OxdnaHealthResult:
     """Evaluate a finished stage's health from its ``last_conf.dat`` + ``energy.dat``.
 
@@ -4040,8 +4863,13 @@ def run_oxdna_health_check(
     # Prefer oxDNA's own HBList (ground truth); fall back to the geometric proxy.
     frac = geo_frac
     if dnanalysis_bin and topology_path and n_pairs > 0:
-        n_hb = count_hbonds(conf, topology_path, dnanalysis_bin,
-                            salt_concentration=salt_concentration, temperature=temperature)
+        n_hb = count_hbonds(
+            conf,
+            topology_path,
+            dnanalysis_bin,
+            salt_concentration=salt_concentration,
+            temperature=temperature,
+        )
         if n_hb is not None:
             frac = min(n_hb, n_pairs) / n_pairs
     res.bp_retained_fraction = frac

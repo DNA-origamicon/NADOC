@@ -34,6 +34,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.api import state as design_state
+
 # _design_response is the shared response helper used by 100+ crud.py routes; it
 # stays in crud.py and is imported back here (same convention as the other
 # extracted routers). bespoke-B=0.
@@ -70,6 +71,7 @@ class PlateLayoutSaveRequest(BaseModel):
 
 class RepresentationOverridesSaveRequest(BaseModel):
     """Replace the design's full list of per-region representation overrides."""
+
     overrides: List[RepresentationOverride]
 
 
@@ -130,7 +132,9 @@ def save_representation_overrides(body: RepresentationOverridesSaveRequest) -> d
             raise HTTPException(422, detail=f"Override {ov.id!r} covers no segments.")
         missing_h = {seg.helix_id for seg in ov.segments} - valid_helices
         if missing_h:
-            raise HTTPException(404, detail=f"Helix id(s) not found: {sorted(missing_h)}")
+            raise HTTPException(
+                404, detail=f"Helix id(s) not found: {sorted(missing_h)}"
+            )
 
     def _apply(d: Design) -> None:
         d.representation_overrides = [ov.model_copy(deep=True) for ov in body.overrides]

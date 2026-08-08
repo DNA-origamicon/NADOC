@@ -72,14 +72,20 @@ def _single_helix_design() -> Design:
     scaffold = Strand(
         id="scaf",
         strand_type=StrandType.SCAFFOLD,
-        domains=[Domain(helix_id="h0", start_bp=0, end_bp=50, direction=Direction.REVERSE)],
+        domains=[
+            Domain(helix_id="h0", start_bp=0, end_bp=50, direction=Direction.REVERSE)
+        ],
     )
     staple = Strand(
         id="stap",
         strand_type=StrandType.STAPLE,
-        domains=[Domain(helix_id="h0", start_bp=10, end_bp=20, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=10, end_bp=20, direction=Direction.FORWARD)
+        ],
     )
-    return Design(helices=[h], strands=[scaffold, staple], lattice_type=LatticeType.HONEYCOMB)
+    return Design(
+        helices=[h], strands=[scaffold, staple], lattice_type=LatticeType.HONEYCOMB
+    )
 
 
 def _two_staples_same_dir_design() -> Design:
@@ -88,14 +94,20 @@ def _two_staples_same_dir_design() -> Design:
     stapA = Strand(
         id="stapA",
         strand_type=StrandType.STAPLE,
-        domains=[Domain(helix_id="h0", start_bp=0, end_bp=9, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=0, end_bp=9, direction=Direction.FORWARD)
+        ],
     )
     stapB = Strand(
         id="stapB",
         strand_type=StrandType.STAPLE,
-        domains=[Domain(helix_id="h0", start_bp=11, end_bp=20, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=11, end_bp=20, direction=Direction.FORWARD)
+        ],
     )
-    return Design(helices=[h], strands=[stapA, stapB], lattice_type=LatticeType.HONEYCOMB)
+    return Design(
+        helices=[h], strands=[stapA, stapB], lattice_type=LatticeType.HONEYCOMB
+    )
 
 
 def _crossover_design() -> Design:
@@ -110,7 +122,7 @@ def _crossover_design() -> Design:
         id="s",
         strand_type=StrandType.STAPLE,
         domains=[
-            Domain(helix_id="h0", start_bp=5,  end_bp=15, direction=Direction.FORWARD),
+            Domain(helix_id="h0", start_bp=5, end_bp=15, direction=Direction.FORWARD),
             Domain(helix_id="h1", start_bp=25, end_bp=15, direction=Direction.REVERSE),
         ],
     )
@@ -138,12 +150,16 @@ def _inner_crossover_design() -> Design:
     target = Strand(
         id="target",
         strand_type=StrandType.STAPLE,
-        domains=[Domain(helix_id="h0", start_bp=5, end_bp=25, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=5, end_bp=25, direction=Direction.FORWARD)
+        ],
     )
     other = Strand(
         id="other",
         strand_type=StrandType.STAPLE,
-        domains=[Domain(helix_id="h1", start_bp=15, end_bp=25, direction=Direction.REVERSE)],
+        domains=[
+            Domain(helix_id="h1", start_bp=15, end_bp=25, direction=Direction.REVERSE)
+        ],
     )
     xo = Crossover(
         id="xo0",
@@ -169,12 +185,16 @@ def _forced_ligation_design() -> Design:
     stapA = Strand(
         id="stapA",
         strand_type=StrandType.STAPLE,
-        domains=[Domain(helix_id="h0", start_bp=1, end_bp=9, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=1, end_bp=9, direction=Direction.FORWARD)
+        ],
     )
     stapB = Strand(
         id="stapB",
         strand_type=StrandType.STAPLE,
-        domains=[Domain(helix_id="h0", start_bp=10, end_bp=20, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=10, end_bp=20, direction=Direction.FORWARD)
+        ],
     )
     fl = ForcedLigation(
         id="fl0",
@@ -205,7 +225,14 @@ def _linker_design() -> Design:
     s = Strand(
         id="__lnk__abc__a",
         strand_type=StrandType.LINKER,
-        domains=[Domain(helix_id="__lnk__abc__a", start_bp=2, end_bp=12, direction=Direction.FORWARD)],
+        domains=[
+            Domain(
+                helix_id="__lnk__abc__a",
+                start_bp=2,
+                end_bp=12,
+                direction=Direction.FORWARD,
+            )
+        ],
     )
     return Design(helices=[h], strands=[s], lattice_type=LatticeType.HONEYCOMB)
 
@@ -245,10 +272,13 @@ def test_shift_into_adjacent_domain_rejected():
 def test_shift_both_adjacent_domains_together_succeeds():
     """Shifting BOTH stapA and stapB by the same delta keeps them non-overlapping."""
     d = _two_staples_same_dir_design()
-    out = shift_domains(d, [
-        {"strand_id": "stapA", "domain_index": 0, "delta_bp": 3},
-        {"strand_id": "stapB", "domain_index": 0, "delta_bp": 3},
-    ])
+    out = shift_domains(
+        d,
+        [
+            {"strand_id": "stapA", "domain_index": 0, "delta_bp": 3},
+            {"strand_id": "stapB", "domain_index": 0, "delta_bp": 3},
+        ],
+    )
     a = next(s for s in out.strands if s.id == "stapA")
     b = next(s for s in out.strands if s.id == "stapB")
     assert (a.domains[0].start_bp, a.domains[0].end_bp) == (3, 12)
@@ -282,10 +312,13 @@ def test_forced_ligation_endpoint_3p_only_updates_matching_side():
 def test_forced_ligation_both_sides_shifted_together():
     """Selecting both stapA and stapB and shifting by +2 updates both sides."""
     d = _forced_ligation_design()
-    out = shift_domains(d, [
-        {"strand_id": "stapA", "domain_index": 0, "delta_bp": 2},
-        {"strand_id": "stapB", "domain_index": 0, "delta_bp": 2},
-    ])
+    out = shift_domains(
+        d,
+        [
+            {"strand_id": "stapA", "domain_index": 0, "delta_bp": 2},
+            {"strand_id": "stapB", "domain_index": 0, "delta_bp": 2},
+        ],
+    )
     fl = out.forced_ligations[0]
     assert fl.three_prime_bp == 11
     assert fl.five_prime_bp == 12
@@ -293,7 +326,9 @@ def test_forced_ligation_both_sides_shifted_together():
 
 def test_linker_strand_domain_shifts_successfully():
     d = _linker_design()
-    out = shift_domains(d, [{"strand_id": "__lnk__abc__a", "domain_index": 0, "delta_bp": 3}])
+    out = shift_domains(
+        d, [{"strand_id": "__lnk__abc__a", "domain_index": 0, "delta_bp": 3}]
+    )
     s = next(s for s in out.strands if s.id == "__lnk__abc__a")
     assert (s.domains[0].start_bp, s.domains[0].end_bp) == (5, 15)
 
@@ -314,10 +349,13 @@ def test_helix_grows_on_extension_past_max_bp():
 def test_duplicate_entry_rejected():
     d = _single_helix_design()
     with pytest.raises(ValueError, match="Duplicate"):
-        shift_domains(d, [
-            {"strand_id": "stap", "domain_index": 0, "delta_bp": 3},
-            {"strand_id": "stap", "domain_index": 0, "delta_bp": 5},
-        ])
+        shift_domains(
+            d,
+            [
+                {"strand_id": "stap", "domain_index": 0, "delta_bp": 3},
+                {"strand_id": "stap", "domain_index": 0, "delta_bp": 5},
+            ],
+        )
 
 
 # ── HTTP endpoint tests ──────────────────────────────────────────────────────
@@ -334,9 +372,13 @@ def test_endpoint_response_includes_updated_helix_axes_segments():
     rebuild the per-domain axis sticks at their new positions.
     """
     design_state.set_design(_single_helix_design())
-    body = domain_shift(DomainShiftRequest(entries=[
-        DomainShiftEntry(strand_id="stap", domain_index=0, delta_bp=4),
-    ]))
+    body = domain_shift(
+        DomainShiftRequest(
+            entries=[
+                DomainShiftEntry(strand_id="stap", domain_index=0, delta_bp=4),
+            ]
+        )
+    )
     axes = body["helix_axes"]
     assert axes, "expected helix_axes in response"
     helix_entry = next(a for a in axes if a["helix_id"] == "h0")
@@ -353,19 +395,24 @@ def test_endpoint_response_includes_updated_helix_axes_segments():
     # which derives from the new bp range — checked by comparing against
     # deformed_helix_axes computed directly.
     from backend.core.deformation import deformed_helix_axes
+
     after = design_state.get_or_404()
     direct = next(a for a in deformed_helix_axes(after) if a["helix_id"] == "h0")
     assert helix_entry["start"] == direct["start"]
-    assert helix_entry["end"]   == direct["end"]
+    assert helix_entry["end"] == direct["end"]
     assert seg_ranges == {(s["bp_lo"], s["bp_hi"]) for s in direct["segments"]}
 
 
 def test_endpoint_shifts_and_appends_minor_under_fine_routing():
     design_state.set_design(_single_helix_design())
 
-    body = domain_shift(DomainShiftRequest(entries=[
-        DomainShiftEntry(strand_id="stap", domain_index=0, delta_bp=3),
-    ]))
+    body = domain_shift(
+        DomainShiftRequest(
+            entries=[
+                DomainShiftEntry(strand_id="stap", domain_index=0, delta_bp=3),
+            ]
+        )
+    )
     assert body["design"]["strands"]
     stap = next(s for s in body["design"]["strands"] if s["id"] == "stap")
     assert stap["domains"][0]["start_bp"] == 13
@@ -386,26 +433,33 @@ def test_endpoint_shifts_and_appends_minor_under_fine_routing():
 
 def test_endpoint_returns_400_for_collision():
     design_state.set_design(_two_staples_same_dir_design())
-    r = client.post("/api/design/domain-shift", json={
-        "entries": [{"strand_id": "stapA", "domain_index": 0, "delta_bp": 5}]
-    })
+    r = client.post(
+        "/api/design/domain-shift",
+        json={"entries": [{"strand_id": "stapA", "domain_index": 0, "delta_bp": 5}]},
+    )
     assert r.status_code == 400
     assert "overlap" in r.json()["detail"]
 
 
 def test_endpoint_returns_400_for_crossover_endpoint():
     design_state.set_design(_crossover_design())
-    r = client.post("/api/design/domain-shift", json={
-        "entries": [{"strand_id": "s", "domain_index": 0, "delta_bp": 1}]
-    })
+    r = client.post(
+        "/api/design/domain-shift",
+        json={"entries": [{"strand_id": "s", "domain_index": 0, "delta_bp": 1}]},
+    )
     assert r.status_code == 400
 
 
 def test_endpoint_returns_404_for_missing_strand():
     design_state.set_design(_single_helix_design())
-    r = client.post("/api/design/domain-shift", json={
-        "entries": [{"strand_id": "no-such-strand", "domain_index": 0, "delta_bp": 1}]
-    })
+    r = client.post(
+        "/api/design/domain-shift",
+        json={
+            "entries": [
+                {"strand_id": "no-such-strand", "domain_index": 0, "delta_bp": 1}
+            ]
+        },
+    )
     assert r.status_code == 404
 
 
@@ -417,9 +471,13 @@ def test_endpoint_returns_400_for_empty_entries():
 
 def test_undo_restores_pre_shift_state():
     design_state.set_design(_single_helix_design())
-    domain_shift(DomainShiftRequest(entries=[
-        DomainShiftEntry(strand_id="stap", domain_index=0, delta_bp=3),
-    ]))
+    domain_shift(
+        DomainShiftRequest(
+            entries=[
+                DomainShiftEntry(strand_id="stap", domain_index=0, delta_bp=3),
+            ]
+        )
+    )
 
     r = client.post("/api/design/undo")
     assert r.status_code == 200
@@ -431,12 +489,20 @@ def test_undo_restores_pre_shift_state():
 
 def test_revert_cluster_restores_pre_state_and_truncates():
     design_state.set_design(_single_helix_design())
-    domain_shift(DomainShiftRequest(entries=[
-        DomainShiftEntry(strand_id="stap", domain_index=0, delta_bp=3),
-    ]))
-    domain_shift(DomainShiftRequest(entries=[
-        DomainShiftEntry(strand_id="stap", domain_index=0, delta_bp=2),
-    ]))
+    domain_shift(
+        DomainShiftRequest(
+            entries=[
+                DomainShiftEntry(strand_id="stap", domain_index=0, delta_bp=3),
+            ]
+        )
+    )
+    domain_shift(
+        DomainShiftRequest(
+            entries=[
+                DomainShiftEntry(strand_id="stap", domain_index=0, delta_bp=2),
+            ]
+        )
+    )
     pre = design_state.get_or_404()
     assert len(pre.feature_log) == 1
     cluster = pre.feature_log[0]
@@ -463,30 +529,45 @@ def test_reverse_single_domain_with_forced_ligations_on_both_ends_moves():
     other_a = Strand(
         id="other_a",
         strand_type=StrandType.SCAFFOLD,
-        domains=[Domain(helix_id="h0", start_bp=120, end_bp=105, direction=Direction.REVERSE)],
+        domains=[
+            Domain(helix_id="h0", start_bp=120, end_bp=105, direction=Direction.REVERSE)
+        ],
     )
     target = Strand(
         id="target",
         strand_type=StrandType.SCAFFOLD,
-        domains=[Domain(helix_id="h0", start_bp=103, end_bp=100, direction=Direction.REVERSE)],
+        domains=[
+            Domain(helix_id="h0", start_bp=103, end_bp=100, direction=Direction.REVERSE)
+        ],
     )
     other_b = Strand(
         id="other_b",
         strand_type=StrandType.SCAFFOLD,
-        domains=[Domain(helix_id="h0", start_bp=98, end_bp=80, direction=Direction.REVERSE)],
+        domains=[
+            Domain(helix_id="h0", start_bp=98, end_bp=80, direction=Direction.REVERSE)
+        ],
     )
     fl_5p = ForcedLigation(
         id="fl_5p",
-        three_prime_helix_id="h0", three_prime_bp=105, three_prime_direction=Direction.REVERSE,
-        five_prime_helix_id="h0",  five_prime_bp=103,  five_prime_direction=Direction.REVERSE,
+        three_prime_helix_id="h0",
+        three_prime_bp=105,
+        three_prime_direction=Direction.REVERSE,
+        five_prime_helix_id="h0",
+        five_prime_bp=103,
+        five_prime_direction=Direction.REVERSE,
     )
     fl_3p = ForcedLigation(
         id="fl_3p",
-        three_prime_helix_id="h0", three_prime_bp=100, three_prime_direction=Direction.REVERSE,
-        five_prime_helix_id="h0",  five_prime_bp=98,   five_prime_direction=Direction.REVERSE,
+        three_prime_helix_id="h0",
+        three_prime_bp=100,
+        three_prime_direction=Direction.REVERSE,
+        five_prime_helix_id="h0",
+        five_prime_bp=98,
+        five_prime_direction=Direction.REVERSE,
     )
     d = Design(
-        helices=[h], strands=[other_a, target, other_b],
+        helices=[h],
+        strands=[other_a, target, other_b],
         forced_ligations=[fl_5p, fl_3p],
         lattice_type=LatticeType.HONEYCOMB,
     )
@@ -522,7 +603,9 @@ def test_shift_preserves_axis_span_with_cadnano_array_length_bp():
     s = Strand(
         id="s",
         strand_type=StrandType.SCAFFOLD,
-        domains=[Domain(helix_id="h0", start_bp=119, end_bp=90, direction=Direction.REVERSE)],
+        domains=[
+            Domain(helix_id="h0", start_bp=119, end_bp=90, direction=Direction.REVERSE)
+        ],
     )
     d = Design(helices=[helix], strands=[s], lattice_type=LatticeType.SQUARE)
     out = shift_domains(d, [{"strand_id": "s", "domain_index": 0, "delta_bp": 24}])
@@ -535,7 +618,7 @@ def test_shift_preserves_axis_span_with_cadnano_array_length_bp():
     #   axis_end.z   = 143 * RISE = 47.762
     #   span          = 29 * RISE = 9.686 nm
     assert abs(h.axis_start.z - 114 * BDNA_RISE_PER_BP) < 1e-6
-    assert abs(h.axis_end.z   - 143 * BDNA_RISE_PER_BP) < 1e-6
+    assert abs(h.axis_end.z - 143 * BDNA_RISE_PER_BP) < 1e-6
     span_nm = h.axis_end.z - h.axis_start.z
     assert abs(span_nm - 29 * BDNA_RISE_PER_BP) < 1e-6
 
@@ -556,18 +639,25 @@ def test_shift_with_scaffold_change_does_not_split_staple_via_inline_overhang_re
     scaf = Strand(
         id="scaf",
         strand_type=StrandType.SCAFFOLD,
-        domains=[Domain(helix_id="h0", start_bp=119, end_bp=90, direction=Direction.REVERSE)],
+        domains=[
+            Domain(helix_id="h0", start_bp=119, end_bp=90, direction=Direction.REVERSE)
+        ],
     )
     stap = Strand(
         id="stap",
         strand_type=StrandType.STAPLE,
-        domains=[Domain(helix_id="h0", start_bp=92, end_bp=103, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=92, end_bp=103, direction=Direction.FORWARD)
+        ],
     )
     d = Design(helices=[h], strands=[scaf, stap], lattice_type=LatticeType.HONEYCOMB)
-    out = shift_domains(d, [
-        {"strand_id": "scaf", "domain_index": 0, "delta_bp": 24},
-        {"strand_id": "stap", "domain_index": 0, "delta_bp": 24},
-    ])
+    out = shift_domains(
+        d,
+        [
+            {"strand_id": "scaf", "domain_index": 0, "delta_bp": 24},
+            {"strand_id": "stap", "domain_index": 0, "delta_bp": 24},
+        ],
+    )
     out_stap = next(s for s in out.strands if s.id == "stap")
     assert len(out_stap.domains) == 1, (
         f"staple was incorrectly split; new domains: {out_stap.domains}"
@@ -582,12 +672,20 @@ def test_internal_domain_shift_updates_fl_anchors_at_endpoints():
     importer audit, and the user shifts an internal domain.
     """
     h0 = _helix("h0", 200)
-    h1 = Helix(id="h1", axis_start=Vec3(x=0, y=2.5, z=0),
-               axis_end=Vec3(x=0, y=2.5, z=200 * BDNA_RISE_PER_BP),
-               length_bp=200, bp_start=0)
-    h2 = Helix(id="h2", axis_start=Vec3(x=0, y=5.0, z=0),
-               axis_end=Vec3(x=0, y=5.0, z=200 * BDNA_RISE_PER_BP),
-               length_bp=200, bp_start=0)
+    h1 = Helix(
+        id="h1",
+        axis_start=Vec3(x=0, y=2.5, z=0),
+        axis_end=Vec3(x=0, y=2.5, z=200 * BDNA_RISE_PER_BP),
+        length_bp=200,
+        bp_start=0,
+    )
+    h2 = Helix(
+        id="h2",
+        axis_start=Vec3(x=0, y=5.0, z=0),
+        axis_end=Vec3(x=0, y=5.0, z=200 * BDNA_RISE_PER_BP),
+        length_bp=200,
+        bp_start=0,
+    )
     # Three-domain strand with cross-helix transitions at non-matching bps
     # (mimics scadnano loopout / cadnano non-neighbour case).
     s = Strand(
@@ -595,19 +693,29 @@ def test_internal_domain_shift_updates_fl_anchors_at_endpoints():
         strand_type=StrandType.SCAFFOLD,
         domains=[
             Domain(helix_id="h0", start_bp=20, end_bp=30, direction=Direction.FORWARD),
-            Domain(helix_id="h1", start_bp=40, end_bp=50, direction=Direction.FORWARD),  # internal
+            Domain(
+                helix_id="h1", start_bp=40, end_bp=50, direction=Direction.FORWARD
+            ),  # internal
             Domain(helix_id="h2", start_bp=60, end_bp=70, direction=Direction.FORWARD),
         ],
     )
     fl_pre = ForcedLigation(
         id="fl_pre",
-        three_prime_helix_id="h0", three_prime_bp=30, three_prime_direction=Direction.FORWARD,
-        five_prime_helix_id="h1",  five_prime_bp=40,  five_prime_direction=Direction.FORWARD,
+        three_prime_helix_id="h0",
+        three_prime_bp=30,
+        three_prime_direction=Direction.FORWARD,
+        five_prime_helix_id="h1",
+        five_prime_bp=40,
+        five_prime_direction=Direction.FORWARD,
     )
     fl_post = ForcedLigation(
         id="fl_post",
-        three_prime_helix_id="h1", three_prime_bp=50, three_prime_direction=Direction.FORWARD,
-        five_prime_helix_id="h2",  five_prime_bp=60,  five_prime_direction=Direction.FORWARD,
+        three_prime_helix_id="h1",
+        three_prime_bp=50,
+        three_prime_direction=Direction.FORWARD,
+        five_prime_helix_id="h2",
+        five_prime_bp=60,
+        five_prime_direction=Direction.FORWARD,
     )
     d = Design(
         helices=[h0, h1, h2],
@@ -666,12 +774,14 @@ def test_dom22_scenario_remains_movable_after_axis_fix():
         id="s",
         strand_type=StrandType.SCAFFOLD,
         domains=[
-            Domain(helix_id="h0",   start_bp=119, end_bp=90,  direction=Direction.REVERSE),
-            Domain(helix_id="h_far", start_bp=90,  end_bp=119, direction=Direction.FORWARD),
+            Domain(helix_id="h0", start_bp=119, end_bp=90, direction=Direction.REVERSE),
+            Domain(
+                helix_id="h_far", start_bp=90, end_bp=119, direction=Direction.FORWARD
+            ),
         ],
     )
     bad_xo = Crossover(
-        half_a=HalfCrossover(helix_id="h0",   index=90, strand=Direction.REVERSE),
+        half_a=HalfCrossover(helix_id="h0", index=90, strand=Direction.REVERSE),
         half_b=HalfCrossover(helix_id="h_far", index=90, strand=Direction.FORWARD),
     )
     d = Design(
@@ -684,21 +794,28 @@ def test_dom22_scenario_remains_movable_after_axis_fix():
     reloaded = Design.from_json(d.to_json())
     assert len(reloaded.crossovers) == 0, "non-neighbour Crossover should reclassify"
     assert len(reloaded.forced_ligations) >= 1
-    out = shift_domains(reloaded, [{"strand_id": "s", "domain_index": 0, "delta_bp": 5}])
+    out = shift_domains(
+        reloaded, [{"strand_id": "s", "domain_index": 0, "delta_bp": 5}]
+    )
     s_out = next(x for x in out.strands if x.id == "s")
     assert (s_out.domains[0].start_bp, s_out.domains[0].end_bp) == (124, 95)
     h_out = next(h for h in out.helices if h.id == "h0")
     # Axis must rebuild correctly using physical RISE — NOT the legacy
     # `(lo - old_lo) / length_bp` formula that would collapse it.
     assert abs(h_out.axis_start.z - 95 * BDNA_RISE_PER_BP) < 1e-6
-    assert abs(h_out.axis_end.z   - 124 * BDNA_RISE_PER_BP) < 1e-6
+    assert abs(h_out.axis_end.z - 124 * BDNA_RISE_PER_BP) < 1e-6
     span = h_out.axis_end.z - h_out.axis_start.z
     assert abs(span - 29 * BDNA_RISE_PER_BP) < 1e-6
     # FL anchored to the moved domain's 3' end (was bp 90) tracks to 95.
-    matching = [fl for fl in out.forced_ligations
-                if fl.three_prime_helix_id == "h0" and fl.three_prime_direction == Direction.REVERSE]
-    assert any(fl.three_prime_bp == 95 for fl in matching), \
+    matching = [
+        fl
+        for fl in out.forced_ligations
+        if fl.three_prime_helix_id == "h0"
+        and fl.three_prime_direction == Direction.REVERSE
+    ]
+    assert any(fl.three_prime_bp == 95 for fl in matching), (
         f"FL 3p anchor failed to track shift: {matching}"
+    )
 
 
 def test_co_selected_domains_skip_each_others_endpoint_blocking():
@@ -709,10 +826,13 @@ def test_co_selected_domains_skip_each_others_endpoint_blocking():
     domain.
     """
     d = _two_staples_same_dir_design()
-    out = shift_domains(d, [
-        {"strand_id": "stapA", "domain_index": 0, "delta_bp": 30},
-        {"strand_id": "stapB", "domain_index": 0, "delta_bp": 30},
-    ])
+    out = shift_domains(
+        d,
+        [
+            {"strand_id": "stapA", "domain_index": 0, "delta_bp": 30},
+            {"strand_id": "stapB", "domain_index": 0, "delta_bp": 30},
+        ],
+    )
     a = next(s for s in out.strands if s.id == "stapA")
     b = next(s for s in out.strands if s.id == "stapB")
     assert (a.domains[0].start_bp, a.domains[0].end_bp) == (30, 39)
@@ -722,14 +842,24 @@ def test_co_selected_domains_skip_each_others_endpoint_blocking():
 def test_seek_sub_position_replays_partial_children():
     """Cluster of 2 domain-shift minors; seek to (0, 0) → first applied only."""
     design_state.set_design(_single_helix_design())
-    domain_shift(DomainShiftRequest(entries=[
-        DomainShiftEntry(strand_id="stap", domain_index=0, delta_bp=3),
-    ]))
-    domain_shift(DomainShiftRequest(entries=[
-        DomainShiftEntry(strand_id="stap", domain_index=0, delta_bp=2),
-    ]))
+    domain_shift(
+        DomainShiftRequest(
+            entries=[
+                DomainShiftEntry(strand_id="stap", domain_index=0, delta_bp=3),
+            ]
+        )
+    )
+    domain_shift(
+        DomainShiftRequest(
+            entries=[
+                DomainShiftEntry(strand_id="stap", domain_index=0, delta_bp=2),
+            ]
+        )
+    )
 
-    r = client.post("/api/design/features/seek", json={"position": 0, "sub_position": 0})
+    r = client.post(
+        "/api/design/features/seek", json={"position": 0, "sub_position": 0}
+    )
     assert r.status_code == 200, r.text
     seeked = design_state.get_or_404()
     stap = next(s for s in seeked.strands if s.id == "stap")

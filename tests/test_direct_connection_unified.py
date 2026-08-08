@@ -4,6 +4,7 @@ Both direct types now materialize as ONE non-consuming OverhangBinding, relocate
 on apply (duplex forms; driven tip↔root bond left stretched). Relax closes that
 bond to ~0.67 nm. See backend/core/direct_relax.py + crud._cv_create_bound_binding.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -12,11 +13,22 @@ from backend.api.crud import _cv_create_bound_binding, _geometry_for_design
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.direct_relax import (
-    _bead_pos, _find_driven_tip_and_root, relax_direct_binding,
+    _bead_pos,
+    _find_driven_tip_and_root,
+    relax_direct_binding,
 )
 from backend.core.models import (
-    ClusterJoint, ClusterRigidTransform, Crossover, Direction, Domain, HalfCrossover,
-    Helix, OverhangSpec, Strand, StrandType, Vec3,
+    ClusterJoint,
+    ClusterRigidTransform,
+    Crossover,
+    Direction,
+    Domain,
+    HalfCrossover,
+    Helix,
+    OverhangSpec,
+    Strand,
+    StrandType,
+    Vec3,
 )
 from backend.core.validator import validate_design
 
@@ -28,44 +40,105 @@ def _seed(*, same_body=False, cluster_b_translation=(5.0, 2.0, 1.0), joint=None)
     """Two extruded-style overhangs, each a [root → overhang-tip] staple."""
     base = _demo_design()
     L = 16
-    ha = Helix(id="d_ha", axis_start=Vec3(x=0.0, y=0.0, z=0.0),
-               axis_end=Vec3(x=0.0, y=0.0, z=L * BDNA_RISE_PER_BP),
-               phase_offset=0.0, length_bp=L, grid_pos=(0, 0))
-    hb = Helix(id="d_hb", axis_start=Vec3(x=0.0, y=0.0, z=0.0),
-               axis_end=Vec3(x=0.0, y=0.0, z=L * BDNA_RISE_PER_BP),
-               phase_offset=0.0, length_bp=L, grid_pos=(0, 4))
-    sa = Strand(id="d_sa", strand_type=StrandType.STAPLE, domains=[
-        Domain(helix_id="d_ha", start_bp=0, end_bp=3, direction=Direction.FORWARD),
-        Domain(helix_id="d_ha", start_bp=4, end_bp=11, direction=Direction.FORWARD,
-               overhang_id="oh_a")])
-    sb = Strand(id="d_sb", strand_type=StrandType.STAPLE, domains=[
-        Domain(helix_id="d_hb", start_bp=0, end_bp=3, direction=Direction.FORWARD),
-        Domain(helix_id="d_hb", start_bp=4, end_bp=11, direction=Direction.FORWARD,
-               overhang_id="oh_b")])
+    ha = Helix(
+        id="d_ha",
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=L * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=L,
+        grid_pos=(0, 0),
+    )
+    hb = Helix(
+        id="d_hb",
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=L * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=L,
+        grid_pos=(0, 4),
+    )
+    sa = Strand(
+        id="d_sa",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="d_ha", start_bp=0, end_bp=3, direction=Direction.FORWARD),
+            Domain(
+                helix_id="d_ha",
+                start_bp=4,
+                end_bp=11,
+                direction=Direction.FORWARD,
+                overhang_id="oh_a",
+            ),
+        ],
+    )
+    sb = Strand(
+        id="d_sb",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="d_hb", start_bp=0, end_bp=3, direction=Direction.FORWARD),
+            Domain(
+                helix_id="d_hb",
+                start_bp=4,
+                end_bp=11,
+                direction=Direction.FORWARD,
+                overhang_id="oh_b",
+            ),
+        ],
+    )
     overhangs = [
-        OverhangSpec(id="oh_a", helix_id="d_ha", strand_id="d_sa", label="OHA",
-                     sequence="ACGTACGT"),
-        OverhangSpec(id="oh_b", helix_id="d_hb", strand_id="d_sb", label="OHB",
-                     sequence="ACGTACGT"),
+        OverhangSpec(
+            id="oh_a",
+            helix_id="d_ha",
+            strand_id="d_sa",
+            label="OHA",
+            sequence="ACGTACGT",
+        ),
+        OverhangSpec(
+            id="oh_b",
+            helix_id="d_hb",
+            strand_id="d_sb",
+            label="OHB",
+            sequence="ACGTACGT",
+        ),
     ]
     if same_body:
-        clusters = [ClusterRigidTransform(
-            id="cAB", name="AB", helix_ids=["d_ha", "d_hb"],
-            translation=[0, 0, 0], rotation=_IDENTITY, pivot=[0, 0, 0])]
+        clusters = [
+            ClusterRigidTransform(
+                id="cAB",
+                name="AB",
+                helix_ids=["d_ha", "d_hb"],
+                translation=[0, 0, 0],
+                rotation=_IDENTITY,
+                pivot=[0, 0, 0],
+            )
+        ]
     else:
         clusters = [
-            ClusterRigidTransform(id="cA", name="A", helix_ids=["d_ha"],
-                                  translation=[0, 0, 0], rotation=_IDENTITY, pivot=[0, 0, 0]),
-            ClusterRigidTransform(id="cB", name="B", helix_ids=["d_hb"],
-                                  translation=list(cluster_b_translation),
-                                  rotation=_IDENTITY, pivot=[0, 0, 0])]
-    return base.model_copy(update={
-        "helices": [*base.helices, ha, hb],
-        "strands": [*base.strands, sa, sb],
-        "overhangs": overhangs,
-        "cluster_transforms": clusters,
-        "cluster_joints": [joint] if joint else [],
-    })
+            ClusterRigidTransform(
+                id="cA",
+                name="A",
+                helix_ids=["d_ha"],
+                translation=[0, 0, 0],
+                rotation=_IDENTITY,
+                pivot=[0, 0, 0],
+            ),
+            ClusterRigidTransform(
+                id="cB",
+                name="B",
+                helix_ids=["d_hb"],
+                translation=list(cluster_b_translation),
+                rotation=_IDENTITY,
+                pivot=[0, 0, 0],
+            ),
+        ]
+    return base.model_copy(
+        update={
+            "helices": [*base.helices, ha, hb],
+            "strands": [*base.strands, sa, sb],
+            "overhangs": overhangs,
+            "cluster_transforms": clusters,
+            "cluster_joints": [joint] if joint else [],
+        }
+    )
 
 
 def _tip_root_chord(design) -> float:
@@ -123,18 +196,23 @@ def test_apply_direct_seats_duplex_on_midpoint_symmetric_and_aligned():
     axis is aligned with that chord (both bonds minimized), instead of the old one-sided
     placement (driver bond ~0.67, driven bond bearing the whole gap)."""
     from backend.core.duplex_cluster import duplex_cluster_for
+
     d = _seed(cluster_b_translation=(6.0, 3.0, 2.0))
     d = _cv_create_bound_binding(d, "oh_a", "oh_b", "free_end", "root", "end-to-root")
     # Pose now lives on the child DUPLEX cluster (not OverhangSpec) — non-trivial re-seat.
     cl = duplex_cluster_for(d, "oh_a")
-    assert cl is not None and (np.linalg.norm(cl.translation) > 0.5 or cl.rotation != _IDENTITY)
-    assert next(o for o in d.overhangs if o.id == "oh_a").rotation == _IDENTITY  # cleared
+    assert cl is not None and (
+        np.linalg.norm(cl.translation) > 0.5 or cl.rotation != _IDENTITY
+    )
+    assert (
+        next(o for o in d.overhangs if o.id == "oh_a").rotation == _IDENTITY
+    )  # cleared
     c_a, p_a = _conn_beads(d, "oh_a")
     c_b, p_b = _conn_beads(d, "oh_b")
     # Symmetric split: both root bonds equal.
     bond_a, bond_b = np.linalg.norm(c_a - p_a), np.linalg.norm(c_b - p_b)
     assert abs(bond_a - bond_b) < 0.3, (bond_a, bond_b)
-    assert bond_a > 1.0                                       # a real, shared stretch
+    assert bond_a > 1.0  # a real, shared stretch
     # Duplex connection axis aligned with the anchor chord (cos ≈ 1).
     u = c_b - c_a
     v = p_b - p_a
@@ -144,7 +222,11 @@ def test_apply_direct_seats_duplex_on_midpoint_symmetric_and_aligned():
 
 def _ovhg_axis_endpoints(design, helix_id, ovhg_id):
     """Per-overhang axis (start, end) as arrays, after overhang rotation+translation."""
-    from backend.core.deformation import _apply_ovhg_rotations_to_axes, deformed_helix_axes
+    from backend.core.deformation import (
+        _apply_ovhg_rotations_to_axes,
+        deformed_helix_axes,
+    )
+
     nucs = _geometry_for_design(design)
     axes = deformed_helix_axes(design)
     _apply_ovhg_rotations_to_axes(design, axes, nucs)
@@ -162,7 +244,12 @@ def test_apply_direct_moves_the_overhang_helix_axis_with_the_duplex():
     d = _cv_create_bound_binding(d, "oh_a", "oh_b", "root", "root", "root-to-root")
     s1, e1 = _ovhg_axis_endpoints(d, "d_ha", "oh_a")
     # The overhang axis segment actually moved.
-    assert np.linalg.norm(s1 - s0) > 0.5 or np.linalg.norm(e1 - e0) > 0.5, (s0, s1, e0, e1)
+    assert np.linalg.norm(s1 - s0) > 0.5 or np.linalg.norm(e1 - e0) > 0.5, (
+        s0,
+        s1,
+        e0,
+        e1,
+    )
     # Axis stays consistent with the transformed backbone bead (within a helix radius).
     c_a, _p_a = _conn_beads(d, "oh_a")
     dist_to_axis = min(np.linalg.norm(c_a - s1), np.linalg.norm(c_a - e1))
@@ -174,10 +261,13 @@ def test_unbind_removes_the_duplex_cluster():
     midpoint pose) and leaves the driver OverhangSpec identity — no stale pose/cluster."""
     from backend.core.binding_relax import revert_bind_topology
     from backend.core.duplex_cluster import duplex_cluster_for
+
     d = _seed(cluster_b_translation=(6.0, 3.0, 2.0))
     d = _cv_create_bound_binding(d, "oh_a", "oh_b", "root", "root", "root-to-root")
     cl = duplex_cluster_for(d, "oh_a")
-    assert cl is not None and (np.linalg.norm(cl.translation) > 0.5 or cl.rotation != _IDENTITY)
+    assert cl is not None and (
+        np.linalg.norm(cl.translation) > 0.5 or cl.rotation != _IDENTITY
+    )
     d = revert_bind_topology(d, d.overhang_bindings[0].prior_driven_topology)
     assert duplex_cluster_for(d, "oh_a") is None
     assert next(o for o in d.overhangs if o.id == "oh_a").rotation == _IDENTITY
@@ -186,17 +276,22 @@ def test_unbind_removes_the_duplex_cluster():
 def test_apply_direct_end_to_root_also_relocates_not_consumes():
     d = _seed()
     d = _cv_create_bound_binding(d, "oh_a", "oh_b", "free_end", "root", "end-to-root")
-    assert {o.id for o in d.overhangs} == {"oh_a", "oh_b"}          # B not consumed
+    assert {o.id for o in d.overhangs} == {"oh_a", "oh_b"}  # B not consumed
     assert d.overhang_bindings[0].connection_type == "end-to-root"
     # No ForcedLigation created (splice path is gone).
     assert d.forced_ligations == []
 
 
 def test_relax_direct_closes_tip_root_chord_with_joint():
-    joint = ClusterJoint(id="jB", cluster_id="cB", name="Hinge",
-                         local_axis_origin=[0.0, 0.0, 6 * BDNA_RISE_PER_BP],
-                         local_axis_direction=[0.0, 1.0, 0.0],
-                         min_angle_deg=-180.0, max_angle_deg=180.0)
+    joint = ClusterJoint(
+        id="jB",
+        cluster_id="cB",
+        name="Hinge",
+        local_axis_origin=[0.0, 0.0, 6 * BDNA_RISE_PER_BP],
+        local_axis_direction=[0.0, 1.0, 0.0],
+        min_angle_deg=-180.0,
+        max_angle_deg=180.0,
+    )
     d = _seed(cluster_b_translation=(6.0, 0.0, 0.0), joint=joint)
     d = _cv_create_bound_binding(d, "oh_a", "oh_b", "root", "root", "root-to-root")
     before = _tip_root_chord(d)
@@ -204,7 +299,7 @@ def test_relax_direct_closes_tip_root_chord_with_joint():
     # rotates the joint to bring the two roots to the duplex's natural span, closing the
     # residual tip↔root bond to one backbone step. (A modest gap the single revolute can
     # reach; a very large gap only partially closes — the joint's reachability limit.)
-    assert before > 0.85                                           # still stretched
+    assert before > 0.85  # still stretched
     updated, info = relax_direct_binding(d, "oh_a", "oh_b")
     assert info["mode"] == "joints"
     after = _tip_root_chord(updated)
@@ -212,6 +307,7 @@ def test_relax_direct_closes_tip_root_chord_with_joint():
     # The duplex placement (re-seat + clash spin) now lives on the child DUPLEX cluster;
     # both OverhangSpec poses stay identity (pose migrated onto the cluster).
     from backend.core.duplex_cluster import duplex_cluster_for
+
     cl = duplex_cluster_for(updated, "oh_a")
     assert cl is not None and cl.rotation != _IDENTITY
     assert next(o for o in updated.overhangs if o.id == "oh_a").rotation == _IDENTITY
@@ -224,10 +320,16 @@ def test_relax_logs_cluster_op_not_overhang_rotation_for_cluster_backed():
     a timeline SEEK reconstructs the cluster pose instead of double-transforming the
     now-cleared OverhangSpec."""
     from backend.core.duplex_cluster import duplex_cluster_for
-    joint = ClusterJoint(id="jB", cluster_id="cB", name="Hinge",
-                         local_axis_origin=[0.0, 0.0, 6 * BDNA_RISE_PER_BP],
-                         local_axis_direction=[0.0, 1.0, 0.0],
-                         min_angle_deg=-180.0, max_angle_deg=180.0)
+
+    joint = ClusterJoint(
+        id="jB",
+        cluster_id="cB",
+        name="Hinge",
+        local_axis_origin=[0.0, 0.0, 6 * BDNA_RISE_PER_BP],
+        local_axis_direction=[0.0, 1.0, 0.0],
+        min_angle_deg=-180.0,
+        max_angle_deg=180.0,
+    )
     d = _seed(cluster_b_translation=(6.0, 0.0, 0.0), joint=joint)
     d = _cv_create_bound_binding(d, "oh_a", "oh_b", "root", "root", "root-to-root")
     cl0 = duplex_cluster_for(d, "oh_a")
@@ -235,23 +337,30 @@ def test_relax_logs_cluster_op_not_overhang_rotation_for_cluster_backed():
     n_before = len(d.feature_log)
     updated, _info = relax_direct_binding(d, "oh_a", "oh_b")
     cl1 = duplex_cluster_for(updated, "oh_a")
-    assert cl1 is not None and cl1.id == cl0.id                     # stable id
+    assert cl1 is not None and cl1.id == cl0.id  # stable id
     new_entries = updated.feature_log[n_before:]
-    assert any(getattr(e, "feature_type", None) == "cluster_op"
-               and getattr(e, "cluster_id", None) == cl1.id
-               and getattr(e, "source", "") == "relax:duplex-cluster"
-               for e in new_entries), "no duplex-cluster cluster_op logged"
-    assert not any(getattr(e, "feature_type", None) == "overhang_rotation"
-                   and "oh_a" in getattr(e, "overhang_ids", [])
-                   for e in new_entries), "relax wrongly logged an overhang_rotation"
+    assert any(
+        getattr(e, "feature_type", None) == "cluster_op"
+        and getattr(e, "cluster_id", None) == cl1.id
+        and getattr(e, "source", "") == "relax:duplex-cluster"
+        for e in new_entries
+    ), "no duplex-cluster cluster_op logged"
+    assert not any(
+        getattr(e, "feature_type", None) == "overhang_rotation"
+        and "oh_a" in getattr(e, "overhang_ids", [])
+        for e in new_entries
+    ), "relax wrongly logged an overhang_rotation"
     # Re-relaxing keeps the SAME cluster id (idempotent id).
     upd2, _ = relax_direct_binding(updated, "oh_a", "oh_b")
     assert duplex_cluster_for(upd2, "oh_a").id == cl0.id
 
 
 def _improper_msgs(design):
-    return [r.message for r in validate_design(design).results
-            if not r.ok and "Improper crossover" in r.message]
+    return [
+        r.message
+        for r in validate_design(design).results
+        if not r.ok and "Improper crossover" in r.message
+    ]
 
 
 def test_validator_flags_improper_crossover():
@@ -261,11 +370,13 @@ def test_validator_flags_improper_crossover():
     d = _seed()
     good = Crossover(
         half_a=HalfCrossover(helix_id="d_ha", index=5, strand=Direction.FORWARD),
-        half_b=HalfCrossover(helix_id="d_hb", index=5, strand=Direction.REVERSE))
+        half_b=HalfCrossover(helix_id="d_hb", index=5, strand=Direction.REVERSE),
+    )
     assert not _improper_msgs(d.model_copy(update={"crossovers": [good]}))
     bad = Crossover(
         half_a=HalfCrossover(helix_id="d_ha", index=5, strand=Direction.FORWARD),
-        half_b=HalfCrossover(helix_id="d_hb", index=9, strand=Direction.REVERSE))
+        half_b=HalfCrossover(helix_id="d_hb", index=9, strand=Direction.REVERSE),
+    )
     assert _improper_msgs(d.model_copy(update={"crossovers": [bad]}))
 
 

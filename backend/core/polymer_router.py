@@ -37,6 +37,7 @@ seam endpoints land on the terminal cross-sections, so the derived repeat period
 equals the whole part length. ``test_polymer_router`` pins this via the
 ``derive_periodic_delta`` → pure-axial-translation oracle.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -56,7 +57,7 @@ from backend.core.models import (
     StrandType,
 )
 
-_CONNECTOR_COLOR = "#7CFC00"          # chartreuse — visually flags polymer connectors
+_CONNECTOR_COLOR = "#7CFC00"  # chartreuse — visually flags polymer connectors
 _CONNECTOR_NOTE = "polymerization connector"
 
 # Feature-log op kinds that count as "the user has run autoscaffold".
@@ -71,9 +72,10 @@ _AUTOSCAFFOLD_OP_KINDS = (
 @dataclass
 class _Ends:
     """Per-helix bare-scaffold end runs (inclusive bp ranges, or None)."""
-    near: tuple[int, int] | None       # run touching the low-bp face
-    far: tuple[int, int] | None        # run touching the high-bp face
-    whole: bool = False                # entire scaffold on this helix is unpaired
+
+    near: tuple[int, int] | None  # run touching the low-bp face
+    far: tuple[int, int] | None  # run touching the high-bp face
+    whole: bool = False  # entire scaffold on this helix is unpaired
 
 
 @dataclass
@@ -135,7 +137,7 @@ def _bare_end_runs(design: Design) -> dict[str, _Ends]:
         runs = _contiguous_runs(ubps)
         near = next((r for r in runs if r[0] == lo), None)
         far = next((r for r in runs if r[1] == hi), None)
-        whole = near is not None and near == far     # one run spans the whole helix
+        whole = near is not None and near == far  # one run spans the whole helix
         if whole:
             out[hid] = _Ends(near=None, far=None, whole=True)
         else:
@@ -143,7 +145,9 @@ def _bare_end_runs(design: Design) -> dict[str, _Ends]:
     return out
 
 
-def _complement_strand(helix_id: str, lo: int, hi: int, scaffold_dir: Direction) -> Strand:
+def _complement_strand(
+    helix_id: str, lo: int, hi: int, scaffold_dir: Direction
+) -> Strand:
     """A single-domain STAPLE antiparallel to the scaffold over ``[lo, hi]``."""
     cdir = _opposite_direction(scaffold_dir)
     # 5'→3' traversal: FORWARD runs low→high, REVERSE runs high→low.
@@ -193,7 +197,9 @@ def _bridge(
     scaffold polarity.
     """
     near_dom = near_s.domains[0]
-    near_cap = min(near_dom.start_bp, near_dom.end_bp)   # near connector's outer (low) cap
+    near_cap = min(
+        near_dom.start_bp, near_dom.end_bp
+    )  # near connector's outer (low) cap
     # near connector's cap tip is its 3' end iff its domain ends at the low cap.
     if near_dom.end_bp == near_cap:
         tp_strand, fp_strand = near_s, far_s
@@ -212,9 +218,11 @@ def _bridge(
         is_periodic_seam=is_periodic_seam,
     )
     design = _ligate(design, tp_strand, fp_strand)
-    design = design.model_copy(update={
-        "forced_ligations": list(design.forced_ligations) + [fl],
-    })
+    design = design.model_copy(
+        update={
+            "forced_ligations": list(design.forced_ligations) + [fl],
+        }
+    )
     return design, fl
 
 
@@ -241,7 +249,7 @@ def route_for_polymerization(design: Design) -> tuple[Design, PolymerRouteResult
     ends = _bare_end_runs(design)
 
     new_strands: list[Strand] = []
-    bridges: list[tuple[Strand, Strand]] = []      # (near, far) pairs to ligate
+    bridges: list[tuple[Strand, Strand]] = []  # (near, far) pairs to ligate
     for hid, e in ends.items():
         label = _helix_label(design, hid)
         if e.whole:

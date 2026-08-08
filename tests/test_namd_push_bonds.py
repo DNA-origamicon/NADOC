@@ -75,10 +75,14 @@ def test_crossover_orientation_does_not_depend_on_input_order():
     """Half A/B may be recorded either way round; the pair key is sorted, so the
     result must be identical."""
     forward = qualifying_positions(_Design([_xo(0, 0), _xo(40, 40)]))
-    flipped = qualifying_positions(_Design([
-        _Crossover(_Half("B", 0), _Half("A", 0)),
-        _Crossover(_Half("B", 40), _Half("A", 40)),
-    ]))
+    flipped = qualifying_positions(
+        _Design(
+            [
+                _Crossover(_Half("B", 0), _Half("A", 0)),
+                _Crossover(_Half("B", 40), _Half("A", 40)),
+            ]
+        )
+    )
     assert forward == flipped
 
 

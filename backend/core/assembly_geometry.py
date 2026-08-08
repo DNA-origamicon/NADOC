@@ -43,14 +43,15 @@ def geo_cache_key(inst: "PartInstance", workspace_dir: Path | None) -> str | Non
     try:
         ov_str = json.dumps(
             [co.model_dump() for co in overrides],
-            sort_keys=True, separators=(',', ':'),
+            sort_keys=True,
+            separators=(",", ":"),
         )
     except Exception:
         return None
-    ov_hash = hashlib.sha256(ov_str.encode()).hexdigest()[:12] if overrides else ''
+    ov_hash = hashlib.sha256(ov_str.encode()).hexdigest()[:12] if overrides else ""
 
     src = inst.source
-    if src.type == 'file':
+    if src.type == "file":
         p = Path(src.path)
         if not p.is_absolute():
             for base in filter(None, [workspace_dir]):
@@ -64,7 +65,7 @@ def geo_cache_key(inst: "PartInstance", workspace_dir: Path | None) -> str | Non
             return None
         mtime_ns = p.stat().st_mtime_ns
         return f"f:{p}:{mtime_ns}:{ov_hash}"
-    elif src.type == 'inline' and src.design:
+    elif src.type == "inline" and src.design:
         return f"i:{src.design.id}:{ov_hash}"
     return None
 

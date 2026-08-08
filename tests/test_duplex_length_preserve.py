@@ -6,6 +6,7 @@ Root cause fixed: (frontend) the complementary-sequence write is capped to the
 target's length; (backend) `_cv_create_bound_binding` skips different-length pairs.
 See `memory/project_overhang_duplex_foundation.md`.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -15,7 +16,13 @@ from backend.api import state as design_state
 from backend.api.main import app
 from backend.api.routes import _demo_design
 from backend.core.models import (
-    ConnectionVersion, Design, Direction, Domain, OverhangSpec, Strand, StrandType,
+    ConnectionVersion,
+    Design,
+    Direction,
+    Domain,
+    OverhangSpec,
+    Strand,
+    StrandType,
     SubDomain,
 )
 
@@ -30,19 +37,54 @@ def _reset_state():
 
 def _design_diff_lengths() -> Design:
     """Overhang A = 24 bp, overhang B = 10 bp, plus a root-to-root version to apply."""
-    sa = Strand(id="sa", strand_type=StrandType.STAPLE,
-                domains=[Domain(helix_id="hA", start_bp=0, end_bp=23,
-                                direction=Direction.FORWARD, overhang_id="ohA")])
-    sb = Strand(id="sb", strand_type=StrandType.STAPLE,
-                domains=[Domain(helix_id="hB", start_bp=0, end_bp=9,
-                                direction=Direction.FORWARD, overhang_id="ohB")])
-    ohA = OverhangSpec(id="ohA", helix_id="hA", strand_id="sa", sequence="A" * 24,
-                       sub_domains=[SubDomain(id="sdA", start_bp_offset=0, length_bp=24)])
-    ohB = OverhangSpec(id="ohB", helix_id="hB", strand_id="sb", sequence="T" * 10,
-                       sub_domains=[SubDomain(id="sdB", start_bp_offset=0, length_bp=10)])
+    sa = Strand(
+        id="sa",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(
+                helix_id="hA",
+                start_bp=0,
+                end_bp=23,
+                direction=Direction.FORWARD,
+                overhang_id="ohA",
+            )
+        ],
+    )
+    sb = Strand(
+        id="sb",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(
+                helix_id="hB",
+                start_bp=0,
+                end_bp=9,
+                direction=Direction.FORWARD,
+                overhang_id="ohB",
+            )
+        ],
+    )
+    ohA = OverhangSpec(
+        id="ohA",
+        helix_id="hA",
+        strand_id="sa",
+        sequence="A" * 24,
+        sub_domains=[SubDomain(id="sdA", start_bp_offset=0, length_bp=24)],
+    )
+    ohB = OverhangSpec(
+        id="ohB",
+        helix_id="hB",
+        strand_id="sb",
+        sequence="T" * 10,
+        sub_domains=[SubDomain(id="sdB", start_bp_offset=0, length_bp=10)],
+    )
     ver = ConnectionVersion(
-        id="v1", name="V1", overhang_a_id="ohA", overhang_b_id="ohB",
-        connection_type="root-to-root", overhang_a_seq="A" * 24, overhang_b_seq="T" * 10,
+        id="v1",
+        name="V1",
+        overhang_a_id="ohA",
+        overhang_b_id="ohB",
+        connection_type="root-to-root",
+        overhang_a_seq="A" * 24,
+        overhang_b_seq="T" * 10,
         applied=False,
     )
     return Design(strands=[sa, sb], overhangs=[ohA, ohB], connection_versions=[ver])

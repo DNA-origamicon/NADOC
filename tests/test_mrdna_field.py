@@ -28,8 +28,10 @@ _PN_IN_KCAL_MOL_A = 1e-12 / _KCAL_MOL_A_IN_N  # ≈ 0.0143933
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+
 def _built_model(design):
     from backend.core.mrdna_bridge import mrdna_model_from_nadoc
+
     return mrdna_model_from_nadoc(design)
 
 
@@ -38,6 +40,7 @@ def _flat_beads(model):
 
 
 # ── FAST: the per-bead force scaling (first-principles, not the code's constant) ──
+
 
 def test_field_force_vector_matches_first_principles():
     from backend.core.mrdna_field import field_force_vector
@@ -60,13 +63,17 @@ def test_field_force_vector_linear_and_noop():
     d = {"dir": [1.0, 0.0, 0.0]}
     f1 = field_force_vector({**d, "field_pN": 1.0}, 690.0, 140.0)
     f2 = field_force_vector({**d, "field_pN": 2.0}, 690.0, 140.0)
-    assert np.allclose(f2, 2.0 * f1)                      # linear in field magnitude
+    assert np.allclose(f2, 2.0 * f1)  # linear in field magnitude
     # Heavier (more-nucleotide) bead feels proportionally more force.
     fh = field_force_vector({**d, "field_pN": 1.0}, 1380.0, 140.0)
-    assert np.allclose(fh, 2.0 * f1)                      # 2× mass ⇒ 2× force
+    assert np.allclose(fh, 2.0 * f1)  # 2× mass ⇒ 2× force
     # No-op cases → zero force.
-    for bad in (None, {}, {"field_pN": 0.0, "dir": [1, 0, 0]},
-                {"field_pN": 5.0, "dir": [0, 0, 0]}):
+    for bad in (
+        None,
+        {},
+        {"field_pN": 0.0, "dir": [1, 0, 0]},
+        {"field_pN": 5.0, "dir": [0, 0, 0]},
+    ):
         assert np.allclose(field_force_vector(bad, 690.0, 140.0), 0.0)
 
 
@@ -81,6 +88,7 @@ def test_ramp_grid_encodes_constant_force():
     hi = np.array([100.0, 100.0, 100.0])  # cubic ⇒ one delta for all axes
     import tempfile
     from pathlib import Path
+
     p = Path(tempfile.mkdtemp()) / "ramp.dx"
     _write_ramp_grid(p, fvec, lo, hi)
     U, origin, delta = loadGrid(str(p))
@@ -93,6 +101,7 @@ def test_ramp_grid_encodes_constant_force():
 
 
 # ── FAST: the model wiring (real mrDNA model, no ARBD run) ─────────────────────
+
 
 def test_apply_sets_per_type_force_grid(tmp_path):
     from backend.core.mrdna_field import (
@@ -142,11 +151,19 @@ def test_field_block_in_arbd_input(tmp_path):
 
     d = make_6hb_design(length_bp=42)
     m = _built_model(d)
-    n = install_field_force(d, m, {"field_pN": 0.4, "dir": [1.0, 0.0, 0.0]},
-                            out_dir=tmp_path)
+    n = install_field_force(
+        d, m, {"field_pN": 0.4, "dir": [1.0, 0.0, 0.0]}, out_dir=tmp_path
+    )
     assert n >= 1
-    m.simulate(output_name="field", directory=str(tmp_path),
-               num_steps=0.0, timestep=200e-6, output_period=1.0, gpu=0, dry_run=True)
+    m.simulate(
+        output_name="field",
+        directory=str(tmp_path),
+        num_steps=0.0,
+        timestep=200e-6,
+        output_period=1.0,
+        gpu=0,
+        dry_run=True,
+    )
     conf = (tmp_path / "field.bd").read_text()
     grid_lines = [ln for ln in conf.splitlines() if ln.startswith("gridFile ")]
     assert any("field_" in ln and ".dx" in ln for ln in grid_lines), grid_lines
@@ -159,7 +176,9 @@ def test_install_survives_bead_regeneration(tmp_path):
 
     d = make_6hb_design(length_bp=42)
     m = _built_model(d)
-    install_field_force(d, m, {"field_pN": 0.4, "dir": [1.0, 0.0, 0.0]}, out_dir=tmp_path)
+    install_field_force(
+        d, m, {"field_pN": 0.4, "dir": [1.0, 0.0, 0.0]}, out_dir=tmp_path
+    )
     # Simulate a resolution-stage regeneration: fresh bead cloud + fresh types.
     m.clear_beads()
     m.generate_bead_model()
@@ -169,6 +188,7 @@ def test_install_survives_bead_regeneration(tmp_path):
 
 # ── FAST: REST guards (a field needs an anchor; malformed field → 400) ─────────
 
+
 def _mrdna_client(monkeypatch, tmp_path):
     from fastapi.testclient import TestClient
 
@@ -177,8 +197,11 @@ def _mrdna_client(monkeypatch, tmp_path):
     from backend.api.main import app
 
     monkeypatch.setattr(routes_mrdna, "_WORKSPACE_DIR", tmp_path)
-    monkeypatch.setattr(routes_mrdna, "mrdna_available",
-                        lambda: {"available": True, "mrdna": "/x", "arbd": "/y"})
+    monkeypatch.setattr(
+        routes_mrdna,
+        "mrdna_available",
+        lambda: {"available": True, "mrdna": "/x", "arbd": "/y"},
+    )
     monkeypatch.setattr(routes_mrdna, "start_job", lambda job, ws: None)
     design_state.set_design_silent(make_6hb_design(length_bp=42))
     return TestClient(app)
@@ -188,22 +211,27 @@ def test_field_without_anchor_allowed(monkeypatch, tmp_path):
     """An unanchored uniform field just streams the structure down-field (COM drift)
     — the UI warns, but the job is no longer rejected."""
     client = _mrdna_client(monkeypatch, tmp_path)
-    r = client.post("/api/mrdna/jobs",
-                    json={"coarse_steps": 1000, "field": {"field_pN": 1.0, "dir": [1, 0, 0]}})
+    r = client.post(
+        "/api/mrdna/jobs",
+        json={"coarse_steps": 1000, "field": {"field_pN": 1.0, "dir": [1, 0, 0]}},
+    )
     assert r.status_code == 200, r.text
 
 
 def test_malformed_field_rejected(monkeypatch, tmp_path):
     client = _mrdna_client(monkeypatch, tmp_path)
-    for bad in ({"field_pN": 0.0, "dir": [1, 0, 0]},   # zero magnitude
-                {"field_pN": 1.0, "dir": [0, 0, 0]},   # zero direction
-                {"field_pN": "abc", "dir": [1, 0, 0]}):  # non-numeric → 400 not 500
+    for bad in (
+        {"field_pN": 0.0, "dir": [1, 0, 0]},  # zero magnitude
+        {"field_pN": 1.0, "dir": [0, 0, 0]},  # zero direction
+        {"field_pN": "abc", "dir": [1, 0, 0]},
+    ):  # non-numeric → 400 not 500
         r = client.post("/api/mrdna/jobs", json={"coarse_steps": 1000, "field": bad})
         assert r.status_code == 400, (bad, r.text)
         assert "field" in r.json()["detail"].lower()
 
 
 # ── SLOW: real ARBD anchored field run deflects the free bulk along the field ──
+
 
 @pytest.mark.slow
 def test_real_arbd_field_deflects_along_field(tmp_path):
@@ -212,10 +240,14 @@ def test_real_arbd_field_deflects_along_field(tmp_path):
     prediction from the engine's OWN diffusivity/mass — a comparable field-deflection
     prediction, not a smoke run.  RED baseline: field-off shows no directional drift."""
     from backend.core.mrdna_bridge import find_arbd
+
     if not find_arbd():
         pytest.skip("arbd binary not installed")
 
-    from backend.core.mrdna_anchors import install_anchor_restraints, resolve_anchor_beads
+    from backend.core.mrdna_anchors import (
+        install_anchor_restraints,
+        resolve_anchor_beads,
+    )
     from backend.core.mrdna_field import (
         dalton_per_nucleotide,
         install_field_force,
@@ -240,18 +272,28 @@ def test_real_arbd_field_deflects_along_field(tmp_path):
         start = np.array([b.get_collapsed_position() for b in beads])
         install_anchor_restraints(d, m, anchor)
         if with_field:
-            install_field_force(d, m, {"field_pN": FIELD_PN, "dir": DIRECTION.tolist()},
-                                out_dir=run_dir)
-        m.simulate(output_name="f", directory=str(run_dir), num_steps=NSTEPS,
-                   timestep=TIMESTEP, output_period=1000.0, gpu=0)
+            install_field_force(
+                d, m, {"field_pN": FIELD_PN, "dir": DIRECTION.tolist()}, out_dir=run_dir
+            )
+        m.simulate(
+            output_name="f",
+            directory=str(run_dir),
+            num_steps=NSTEPS,
+            timestep=TIMESTEP,
+            output_period=1000.0,
+            gpu=0,
+        )
         import MDAnalysis as mda  # noqa: PLC0415
+
         u = mda.Universe(str(run_dir / "f.psf"), str(run_dir / "output" / "f.dcd"))
         u.trajectory[-1]
         disp = u.atoms.positions[: len(beads)] - start
         return disp, held_idx, free_idx, beads
 
-    on_dir = tmp_path / "on"; on_dir.mkdir()
-    off_dir = tmp_path / "off"; off_dir.mkdir()
+    on_dir = tmp_path / "on"
+    on_dir.mkdir()
+    off_dir = tmp_path / "off"
+    off_dir.mkdir()
     disp_on, held_idx, free_idx, beads = _run(True, on_dir)
     disp_off, _, _, _ = _run(False, off_dir)
 
@@ -286,8 +328,10 @@ def test_real_arbd_field_deflects_along_field(tmp_path):
     #    the constant).  Fine direction + substantial-drift are guarded independently and
     #    robustly by the proj_on > 4 Å / |proj_off| < 4 Å / held < free assertions above;
     #    restoring fine ≥2× sensitivity here would require averaging over seeded replicas.
-    KB = 831447.2          # k_B in amu·Å²·ns⁻²·K⁻¹
-    KCAL_TO_INTERNAL = _KCAL_MOL_A_IN_N * 6.02214076e26 * 1e10 * 1e-18  # kcal/mol/Å→amu·Å/ns²
+    KB = 831447.2  # k_B in amu·Å²·ns⁻²·K⁻¹
+    KCAL_TO_INTERNAL = (
+        _KCAL_MOL_A_IN_N * 6.02214076e26 * 1e10 * 1e-18
+    )  # kcal/mol/Å→amu·Å/ns²
     T_KELVIN = 295.0
     sim_ns = NSTEPS * TIMESTEP
     dpn = dalton_per_nucleotide(d, _built_model(d))

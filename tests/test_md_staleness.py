@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 import backend.api.routes_md as routes_md
 from backend.api import state as design_state
+
 # Imported at MODULE level (collection time) so the app is built with the REAL routers
 # BEFORE any test that swaps a fake fastapi into sys.modules (test_md_milestone1) runs.
 from backend.api.main import app
@@ -23,6 +24,7 @@ def _clean_default_doc():
     # uses the contextvar) and the TestClient routes (which use the default doc) agree.
     from backend.api import doc_context
     from backend.api import state as design_state
+
     doc_context.set_current_doc(None)
     yield
     design_state.drop_doc(doc_context.DEFAULT_DOC_ID)
@@ -43,7 +45,9 @@ def test_md_out_of_date_flag_and_roll_clears_it(monkeypatch, tmp_path):
     prepared = make_6hb_design()
     for s in prepared.strands:
         s.sequence = "ACGT"
-    job = _make_md_job(tmp_path, prepared, fingerprint=design_build_fingerprint(prepared))
+    job = _make_md_job(
+        tmp_path, prepared, fingerprint=design_build_fingerprint(prepared)
+    )
 
     # User edits the design (clears sequences) → MD job is out of date.
     edited = prepared.model_copy(deep=True)
@@ -77,19 +81,23 @@ def test_md_stale_message_names_a_different_loaded_design(monkeypatch, tmp_path)
     This is the real-world 'Bundle loaded instead of the job's design' case."""
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
 
-    prepared = make_6hb_design()          # what the job was built from
-    job = _make_md_job(tmp_path, prepared, fingerprint=design_build_fingerprint(prepared))
+    prepared = make_6hb_design()  # what the job was built from
+    job = _make_md_job(
+        tmp_path, prepared, fingerprint=design_build_fingerprint(prepared)
+    )
 
-    other = make_18hb_design()            # a different structure entirely
+    other = make_18hb_design()  # a different structure entirely
     assert len(other.helices) != len(prepared.helices)
     design_state.set_design(other)
 
-    r409 = TestClient(app).post(f"/api/md/jobs/{job.job_id}/production", json={"steps": 1000})
+    r409 = TestClient(app).post(
+        f"/api/md/jobs/{job.job_id}/production", json={"steps": 1000}
+    )
     assert r409.status_code == 409
     detail = r409.json()["detail"].lower()
     assert "different design is loaded" in detail
-    assert f"{len(other.helices)} helices" in detail        # names the loaded design's size
-    assert f"{len(prepared.helices)} helices" in detail      # and the job's design's size
+    assert f"{len(other.helices)} helices" in detail  # names the loaded design's size
+    assert f"{len(prepared.helices)} helices" in detail  # and the job's design's size
 
 
 def test_list_md_jobs_size_is_cache_only_then_warms(monkeypatch, tmp_path):
@@ -98,22 +106,26 @@ def test_list_md_jobs_size_is_cache_only_then_warms(monkeypatch, tmp_path):
     real size so it appears on the next poll."""
     import asyncio
 
-    from backend.core.design_disk_usage import _size_cache, dir_size_bytes, warm_dir_sizes
+    from backend.core.design_disk_usage import (
+        _size_cache,
+        dir_size_bytes,
+        warm_dir_sizes,
+    )
 
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     job = new_job("6hb", "equilibrium_aware", "", "")
     job.design_source_path = "6hb.nadoc"
     job.save(tmp_path)
     (job.job_dir(tmp_path) / "blob.bin").write_bytes(b"\0" * 2048)
-    _size_cache.pop(str(job.job_dir(tmp_path)), None)          # ensure a cold cache
-    expected = dir_size_bytes(job.job_dir(tmp_path))          # blob + job.json metadata
+    _size_cache.pop(str(job.job_dir(tmp_path)), None)  # ensure a cold cache
+    expected = dir_size_bytes(job.job_dir(tmp_path))  # blob + job.json metadata
     assert expected >= 2048
 
     rows = asyncio.run(routes_md.list_md_jobs())
     row = next(r for r in rows if r["job_id"] == job.job_id)
-    assert row["size_bytes"] is None                          # cold → the response never walked
+    assert row["size_bytes"] is None  # cold → the response never walked
 
-    warm_dir_sizes([job.job_dir(tmp_path)])                   # what the scheduled bg task does
+    warm_dir_sizes([job.job_dir(tmp_path)])  # what the scheduled bg task does
     rows2 = asyncio.run(routes_md.list_md_jobs())
     row2 = next(r for r in rows2 if r["job_id"] == job.job_id)
-    assert row2["size_bytes"] == expected                     # filled in on the next poll
+    assert row2["size_bytes"] == expected  # filled in on the next poll

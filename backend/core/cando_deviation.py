@@ -19,6 +19,7 @@ because the FEM positions were aligned to it; diffing against the straight layer
 just re-report the DeformationOp bend itself.  Everything here is Physical/display-layer
 only — topology is never mutated (Three-Layer Law).
 """
+
 from __future__ import annotations
 
 import math
@@ -82,12 +83,12 @@ def compute_deviation(design: Design, display_positions: List[dict]) -> dict:
             dev_min = dev if dev_min is None else min(dev_min, dev)
             dev_max = dev if dev_max is None else max(dev_max, dev)
         entry = {
-            "helix_id":          p["helix_id"],
-            "bp_index":          p["bp_index"],
-            "direction":         p["direction"],
-            "copy":              copy,
+            "helix_id": p["helix_id"],
+            "bp_index": p["bp_index"],
+            "direction": p["direction"],
+            "copy": copy,
             "backbone_position": bb,
-            "deviation":         dev,
+            "deviation": dev,
         }
         # Forward the wound slab normal/tangent (present on newer display caches) so the
         # deviation-map slabs follow the wound backbones like the deform/flex modes.
@@ -99,10 +100,10 @@ def compute_deviation(design: Design, display_positions: List[dict]) -> dict:
     rmsd = math.sqrt(sq_sum / matched) if matched else 0.0
     mean_dev = (sum(o["deviation"] for o in out) / len(out)) if out else 0.0
     return {
-        "positions":      out,
-        "rmsd_nm":        rmsd,
-        "min_deviation":  dev_min if dev_min is not None else 0.0,
-        "max_deviation":  dev_max if dev_max is not None else 0.0,
+        "positions": out,
+        "rmsd_nm": rmsd,
+        "min_deviation": dev_min if dev_min is not None else 0.0,
+        "max_deviation": dev_max if dev_max is not None else 0.0,
         "mean_deviation": mean_dev,
-        "n":              matched,
+        "n": matched,
     }

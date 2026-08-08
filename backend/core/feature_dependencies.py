@@ -16,6 +16,7 @@ The module is PURE: it operates on already-decoded `Design` objects + log
 entries, never touches gzip/snapshots/HTTP. The caller (crud.delete_feature)
 decodes snapshots and feeds the results in.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -24,29 +25,45 @@ from typing import Optional
 
 # Snapshot op_kinds whose builder can be replayed on an arbitrary base design
 # via crud._edit_dispatch_run. MUST stay in sync with that dispatcher.
-REPLAYABLE_SNAPSHOT_OPS = frozenset({
-    'bundle-create',
-    'extrude-segment',
-    'extrude-continuation',
-    'extrude-deformed-continuation',
-    'overhang-extrude',
-})
+REPLAYABLE_SNAPSHOT_OPS = frozenset(
+    {
+        "bundle-create",
+        "extrude-segment",
+        "extrude-continuation",
+        "extrude-deformed-continuation",
+        "overhang-extrude",
+    }
+)
 
 # Delta / overlay feature_types — no baked topology; `_seek_feature_log` rebuilds
 # their visible effect from the surviving log every time, so they are always
 # reconstructable on a new base (as long as their target ids survive).
-_DELTA_FEATURE_TYPES = frozenset({
-    'deformation', 'cluster_op', 'cluster_create', 'overhang_rotation',
-})
+_DELTA_FEATURE_TYPES = frozenset(
+    {
+        "deformation",
+        "cluster_op",
+        "cluster_create",
+        "overhang_rotation",
+    }
+)
 
 # Collections on a Design whose members carry a stable `.id`. Used to diff two
 # design states into added / modified id sets.
 _ID_COLLECTIONS = (
-    'helices', 'strands', 'crossovers', 'overhang_connections',
-    'extensions', 'photoproduct_junctions', 'forced_ligations',
-    'overhangs', 'cluster_transforms', 'cluster_joints',
-    'flexible_segment_marks', 'flexible_connections',
-    'protein_assets', 'protein_attachments',
+    "helices",
+    "strands",
+    "crossovers",
+    "overhang_connections",
+    "extensions",
+    "photoproduct_junctions",
+    "forced_ligations",
+    "overhangs",
+    "cluster_transforms",
+    "cluster_joints",
+    "flexible_segment_marks",
+    "flexible_connections",
+    "protein_assets",
+    "protein_attachments",
 )
 
 
@@ -57,11 +74,11 @@ def _id_map(design) -> dict:
     out: dict = {}
     for coll in _ID_COLLECTIONS:
         for item in getattr(design, coll, None) or []:
-            iid = getattr(item, 'id', None)
+            iid = getattr(item, "id", None)
             if iid is not None:
                 out[iid] = item
-            for sd in getattr(item, 'sub_domains', None) or []:
-                sid = getattr(sd, 'id', None)
+            for sd in getattr(item, "sub_domains", None) or []:
+                sid = getattr(sd, "id", None)
                 if sid is not None:
                     out[sid] = sd
     return out
@@ -96,19 +113,19 @@ def _add(v, out: set) -> None:
 
 
 def _strand_domain_refs(strand, out: set) -> None:
-    for dom in getattr(strand, 'domains', None) or []:
-        _add(getattr(dom, 'helix_id', None), out)
-        _add(getattr(dom, 'overhang_id', None), out)
-        _add(getattr(dom, 'binds_overhang_id', None), out)
+    for dom in getattr(strand, "domains", None) or []:
+        _add(getattr(dom, "helix_id", None), out)
+        _add(getattr(dom, "overhang_id", None), out)
+        _add(getattr(dom, "binds_overhang_id", None), out)
 
 
 def _strand_domain_helix(design, strand_id: str, domain_index: int):
-    for strand in getattr(design, 'strands', None) or []:
+    for strand in getattr(design, "strands", None) or []:
         if strand.id != strand_id:
             continue
-        domains = getattr(strand, 'domains', None) or []
+        domains = getattr(strand, "domains", None) or []
         if 0 <= domain_index < len(domains):
-            return getattr(domains[domain_index], 'helix_id', None)
+            return getattr(domains[domain_index], "helix_id", None)
     return None
 
 
@@ -121,54 +138,57 @@ def _object_refs(item, design=None) -> set:
     out: set = set()
     name = item.__class__.__name__
 
-    if name == 'Strand':
+    if name == "Strand":
         _strand_domain_refs(item, out)
-    elif name == 'Crossover':
+    elif name == "Crossover":
         _add(item.half_a.helix_id, out)
         _add(item.half_b.helix_id, out)
-    elif name == 'ForcedLigation':
+    elif name == "ForcedLigation":
         _add(item.three_prime_helix_id, out)
         _add(item.five_prime_helix_id, out)
-    elif name == 'OverhangSpec':
+    elif name == "OverhangSpec":
         _add(item.helix_id, out)
         _add(item.strand_id, out)
         _add(item.parent_overhang_id, out)
-    elif name == 'OverhangConnection':
+    elif name == "OverhangConnection":
         _add(item.overhang_a_id, out)
         _add(item.overhang_b_id, out)
-        _add(getattr(item, 'target_joint_id', None), out)
-    elif name == 'OverhangBinding':
+        _add(getattr(item, "target_joint_id", None), out)
+    elif name == "OverhangBinding":
         _add(item.sub_domain_a_id, out)
         _add(item.sub_domain_b_id, out)
         _add(item.overhang_a_id, out)
         _add(item.overhang_b_id, out)
         _add(item.target_joint_id, out)
-    elif name == 'StrandExtension':
+    elif name == "StrandExtension":
         _add(item.strand_id, out)
-    elif name == 'ClusterRigidTransform':
+    elif name == "ClusterRigidTransform":
         for ref in item.domain_ids or []:
             _add(ref.strand_id, out)
-    elif name == 'ClusterJoint':
+    elif name == "ClusterJoint":
         _add(item.cluster_id, out)
-    elif name == 'FlexibleSegmentMark':
+    elif name == "FlexibleSegmentMark":
         _add(item.strand_id, out)
         if design is not None:
             _add(_strand_domain_helix(design, item.strand_id, item.domain_index), out)
-    elif name == 'FlexibleConnection':
+    elif name == "FlexibleConnection":
         _add(item.cluster_a_id, out)
         _add(item.cluster_b_id, out)
         for anchor in [item.anchor_a, item.anchor_b, *(item.segment_bead_keys or [])]:
             _add(anchor.strand_id, out)
             if design is not None:
-                _add(_strand_domain_helix(design, anchor.strand_id, anchor.domain_index), out)
-    elif name == 'ProteinAttachment':
-        _add(getattr(item, 'asset_id', None), out)
-        _add(getattr(item, 'helix_id', None), out)
-        _add(getattr(item, 'strand_id', None), out)
+                _add(
+                    _strand_domain_helix(design, anchor.strand_id, anchor.domain_index),
+                    out,
+                )
+    elif name == "ProteinAttachment":
+        _add(getattr(item, "asset_id", None), out)
+        _add(getattr(item, "helix_id", None), out)
+        _add(getattr(item, "strand_id", None), out)
     else:
-        _add(getattr(item, 'helix_id', None), out)
-        _add(getattr(item, 'strand_id', None), out)
-        _add(getattr(item, 'cluster_id', None), out)
+        _add(getattr(item, "helix_id", None), out)
+        _add(getattr(item, "strand_id", None), out)
+        _add(getattr(item, "cluster_id", None), out)
     return out
 
 
@@ -196,7 +216,7 @@ def structural_reference_targets(pre, post, added: set, modified: set) -> set:
 def _cluster_helices(design, cluster_id: str) -> Optional[set]:
     """Helix ids belonging to ``cluster_id``, or None if the cluster is unknown
     (caller treats None as 'can't prove independence' → dependent)."""
-    for ct in getattr(design, 'cluster_transforms', None) or []:
+    for ct in getattr(design, "cluster_transforms", None) or []:
         if ct.id == cluster_id:
             return set(ct.helix_ids or [])
     return None
@@ -209,22 +229,22 @@ def delta_entry_targets(entry, design) -> Optional[set]:
     a dependent (safer to over-cascade than to keep an entry whose target we
     couldn't resolve and silently corrupt topology)."""
     ft = entry.feature_type
-    if ft == 'deformation':
+    if ft == "deformation":
         op = entry.op_snapshot
         if op is None:
             return None
         ids = set(op.affected_helix_ids or [])
-        for cid in (op.cluster_ids or []):
+        for cid in op.cluster_ids or []:
             h = _cluster_helices(design, cid)
             if h is None:
                 return None
             ids |= h
         return ids
-    if ft == 'cluster_op':
+    if ft == "cluster_op":
         return _cluster_helices(design, entry.cluster_id)
-    if ft == 'cluster_create':
+    if ft == "cluster_create":
         return set(entry.helix_ids or [])
-    if ft == 'overhang_rotation':
+    if ft == "overhang_rotation":
         return set(entry.overhang_ids or [])
     return None
 
@@ -241,6 +261,7 @@ class EntryInfo:
     * reconstructable — retained as metadata for callers that need to choose a
       reconstruction strategy; it does NOT gate dependency analysis.
     """
+
     added: set = field(default_factory=set)
     modified: set = field(default_factory=set)
     targets: Optional[set] = None

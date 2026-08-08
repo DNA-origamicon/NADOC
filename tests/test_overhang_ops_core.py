@@ -150,19 +150,37 @@ def test_used_overhang_ends_empty():
 # ── Sub-domain tiling / sequence / annotations (Refactor #39) ────────────────
 
 
-def _design_with_overhang(ovhg_id="oh_x_5p", backing_len=8, sub_domains=None,
-                          sequence=None, direction=Direction.FORWARD):
+def _design_with_overhang(
+    ovhg_id="oh_x_5p",
+    backing_len=8,
+    sub_domains=None,
+    sequence=None,
+    direction=Direction.FORWARD,
+):
     """Design with one overhang backed by a single domain of length backing_len."""
     spec = OverhangSpec(
-        id=ovhg_id, helix_id="h_oh", strand_id="s1", sequence=sequence,
+        id=ovhg_id,
+        helix_id="h_oh",
+        strand_id="s1",
+        sequence=sequence,
         sub_domains=sub_domains if sub_domains is not None else [],
     )
     if direction == Direction.FORWARD:
-        dom = Domain(helix_id="h0", start_bp=0, end_bp=backing_len - 1,
-                     direction=Direction.FORWARD, overhang_id=ovhg_id)
+        dom = Domain(
+            helix_id="h0",
+            start_bp=0,
+            end_bp=backing_len - 1,
+            direction=Direction.FORWARD,
+            overhang_id=ovhg_id,
+        )
     else:
-        dom = Domain(helix_id="h0", start_bp=backing_len - 1, end_bp=0,
-                     direction=Direction.REVERSE, overhang_id=ovhg_id)
+        dom = Domain(
+            helix_id="h0",
+            start_bp=backing_len - 1,
+            end_bp=0,
+            direction=Direction.REVERSE,
+            overhang_id=ovhg_id,
+        )
     d = Design(name="t")
     d.strands = [Strand(id="s1", domains=[dom])]
     d.overhangs = [spec]
@@ -194,9 +212,16 @@ def test_ovhg_domain_lengths_maps_every_overhang_domain():
 
 def test_ovhg_domain_lengths_ignores_non_overhang_domains():
     d = Design(name="t")
-    d.strands = [Strand(id="s1", domains=[
-        Domain(helix_id="h0", start_bp=0, end_bp=10, direction=Direction.FORWARD),
-    ])]
+    d.strands = [
+        Strand(
+            id="s1",
+            domains=[
+                Domain(
+                    helix_id="h0", start_bp=0, end_bp=10, direction=Direction.FORWARD
+                ),
+            ],
+        )
+    ]
     assert _ovhg_domain_lengths(d) == {}
 
 
@@ -204,23 +229,27 @@ def test_ovhg_domain_lengths_ignores_non_overhang_domains():
 
 
 def test_validate_tiling_ok():
-    subs = [SubDomain(name="a", start_bp_offset=0, length_bp=4),
-            SubDomain(name="b", start_bp_offset=4, length_bp=4)]
+    subs = [
+        SubDomain(name="a", start_bp_offset=0, length_bp=4),
+        SubDomain(name="b", start_bp_offset=4, length_bp=4),
+    ]
     d = _design_with_overhang(backing_len=8, sub_domains=subs)
     validate_sub_domain_tiling(d, "oh_x_5p")  # no raise
 
 
 def test_validate_tiling_overhang_not_found():
-    d = _design_with_overhang(backing_len=8,
-                              sub_domains=[SubDomain(name="a", length_bp=8)])
+    d = _design_with_overhang(
+        backing_len=8, sub_domains=[SubDomain(name="a", length_bp=8)]
+    )
     with pytest.raises(SubDomainTilingError) as exc:
         validate_sub_domain_tiling(d, "missing")
     assert exc.value.status == 404
 
 
 def test_validate_tiling_no_sub_domains():
-    d = _design_with_overhang(backing_len=8,
-                              sub_domains=[SubDomain(name="a", length_bp=8)])
+    d = _design_with_overhang(
+        backing_len=8, sub_domains=[SubDomain(name="a", length_bp=8)]
+    )
     d.overhangs[0].sub_domains = []
     with pytest.raises(SubDomainTilingError) as exc:
         validate_sub_domain_tiling(d, "oh_x_5p")
@@ -237,8 +266,10 @@ def test_validate_tiling_length_below_one():
 
 
 def test_validate_tiling_not_gap_less():
-    subs = [SubDomain(name="a", start_bp_offset=0, length_bp=4),
-            SubDomain(name="b", start_bp_offset=5, length_bp=3)]
+    subs = [
+        SubDomain(name="a", start_bp_offset=0, length_bp=4),
+        SubDomain(name="b", start_bp_offset=5, length_bp=3),
+    ]
     d = _design_with_overhang(backing_len=8, sub_domains=subs)
     with pytest.raises(SubDomainTilingError) as exc:
         validate_sub_domain_tiling(d, "oh_x_5p")
@@ -246,7 +277,9 @@ def test_validate_tiling_not_gap_less():
 
 
 def test_validate_tiling_override_length_mismatch():
-    subs = [SubDomain(name="a", start_bp_offset=0, length_bp=4, sequence_override="ACG")]
+    subs = [
+        SubDomain(name="a", start_bp_offset=0, length_bp=4, sequence_override="ACG")
+    ]
     d = _design_with_overhang(backing_len=4, sub_domains=subs)
     with pytest.raises(SubDomainTilingError) as exc:
         validate_sub_domain_tiling(d, "oh_x_5p")
@@ -254,7 +287,9 @@ def test_validate_tiling_override_length_mismatch():
 
 
 def test_validate_tiling_override_non_acgtn():
-    subs = [SubDomain(name="a", start_bp_offset=0, length_bp=3, sequence_override="ACX")]
+    subs = [
+        SubDomain(name="a", start_bp_offset=0, length_bp=3, sequence_override="ACX")
+    ]
     d = _design_with_overhang(backing_len=3, sub_domains=subs)
     with pytest.raises(SubDomainTilingError) as exc:
         validate_sub_domain_tiling(d, "oh_x_5p")
@@ -302,8 +337,10 @@ def test_resolve_sequence_none_when_slice_too_short():
 def test_compute_annotations_empty_seq():
     ann = _compute_sub_domain_annotations(None, na_mM=50.0, conc_nM=100.0)
     assert ann == {
-        "tm_celsius": None, "gc_percent": None,
-        "hairpin_warning": False, "dimer_warning": False,
+        "tm_celsius": None,
+        "gc_percent": None,
+        "hairpin_warning": False,
+        "dimer_warning": False,
     }
 
 
@@ -343,8 +380,9 @@ def test_replace_ovhg_leaves_other_overhangs():
 
 
 def test_hairpin_warnings_noop_when_overhang_missing():
-    d = _design_with_overhang(backing_len=8,
-                              sub_domains=[SubDomain(name="a", length_bp=8)])
+    d = _design_with_overhang(
+        backing_len=8, sub_domains=[SubDomain(name="a", length_bp=8)]
+    )
     assert _apply_boundary_hairpin_warnings(d, "no_such_overhang") is d
 
 
@@ -355,16 +393,30 @@ def test_hairpin_warnings_noop_when_no_sub_domains():
 
 def test_hairpin_warnings_no_change_returns_same_design():
     # Benign sequence, flag already False → nothing to toggle → identity.
-    subs = [SubDomain(name="a", start_bp_offset=0, length_bp=8,
-                      sequence_override="AAAAAAAA", hairpin_warning=False)]
+    subs = [
+        SubDomain(
+            name="a",
+            start_bp_offset=0,
+            length_bp=8,
+            sequence_override="AAAAAAAA",
+            hairpin_warning=False,
+        )
+    ]
     d = _design_with_overhang(backing_len=8, sub_domains=subs)
     assert _apply_boundary_hairpin_warnings(d, "oh_x_5p") is d
 
 
 def test_hairpin_warnings_clears_stale_true():
     # Benign sequence + no boundary hairpin, but flag stuck True → cleared.
-    subs = [SubDomain(name="a", start_bp_offset=0, length_bp=8,
-                      sequence_override="AAAAAAAA", hairpin_warning=True)]
+    subs = [
+        SubDomain(
+            name="a",
+            start_bp_offset=0,
+            length_bp=8,
+            sequence_override="AAAAAAAA",
+            hairpin_warning=True,
+        )
+    ]
     d = _design_with_overhang(backing_len=8, sub_domains=subs)
     out = _apply_boundary_hairpin_warnings(d, "oh_x_5p")
     assert out is not d
@@ -373,8 +425,15 @@ def test_hairpin_warnings_clears_stale_true():
 
 def test_hairpin_warnings_sets_from_inner_sequence():
     # Strongly self-complementary inner sequence → has_hairpin fires → flag set.
-    subs = [SubDomain(name="a", start_bp_offset=0, length_bp=12,
-                      sequence_override="GCGCGCGCGCGC", hairpin_warning=False)]
+    subs = [
+        SubDomain(
+            name="a",
+            start_bp_offset=0,
+            length_bp=12,
+            sequence_override="GCGCGCGCGCGC",
+            hairpin_warning=False,
+        )
+    ]
     d = _design_with_overhang(backing_len=12, sub_domains=subs)
     out = _apply_boundary_hairpin_warnings(d, "oh_x_5p")
     assert out is not d

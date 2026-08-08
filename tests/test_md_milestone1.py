@@ -21,39 +21,41 @@ from backend.core import md_ensemble
 
 # ── md_job ─────────────────────────────────────────────────────────────────────
 
+
 class TestMdJob:
     def test_new_job_roundtrip(self, tmp_path: Path) -> None:
         from backend.core.md_job import MdJob, MdStatus, new_job
 
         job = new_job(
-            design_name    = "B_tube",
-            protocol       = "mgh_slow_release",
-            name_stem      = "B_tube",
-            package_subdir = "package/B_tube_namd_solvated",
-            threads        = 16,
-            devices        = "0",
+            design_name="B_tube",
+            protocol="mgh_slow_release",
+            name_stem="B_tube",
+            package_subdir="package/B_tube_namd_solvated",
+            threads=16,
+            devices="0",
         )
         assert job.status == MdStatus.queued
         assert len(job.job_id) == 12
 
         job.save(tmp_path)
         loaded = MdJob.load(job.job_id, tmp_path)
-        assert loaded.job_id         == job.job_id
-        assert loaded.design_name    == "B_tube"
-        assert loaded.protocol       == "mgh_slow_release"
-        assert loaded.name_stem      == "B_tube"
+        assert loaded.job_id == job.job_id
+        assert loaded.design_name == "B_tube"
+        assert loaded.protocol == "mgh_slow_release"
+        assert loaded.name_stem == "B_tube"
         assert loaded.package_subdir == "package/B_tube_namd_solvated"
-        assert loaded.threads        == 16
-        assert loaded.devices        == "0"
-        assert loaded.status         == MdStatus.queued
+        assert loaded.threads == 16
+        assert loaded.devices == "0"
+        assert loaded.status == MdStatus.queued
 
     def test_parent_job_id_roundtrip(self, tmp_path: Path) -> None:
         """A derived (refit/retry) job records its origin so the list can nest it."""
         from backend.core.md_job import MdJob, new_job
 
         parent = new_job("A", "mgh_slow_release", "A", "pkg/A")
-        child = new_job("A", "mgh_slow_release", "A", "pkg/A",
-                        parent_job_id=parent.job_id)
+        child = new_job(
+            "A", "mgh_slow_release", "A", "pkg/A", parent_job_id=parent.job_id
+        )
         assert parent.parent_job_id is None
         assert child.parent_job_id == parent.job_id
         child.save(tmp_path)
@@ -72,6 +74,7 @@ class TestMdJob:
 
     def test_list_empty_workspace(self, tmp_path: Path) -> None:
         from backend.core.md_job import MdJob
+
         assert MdJob.list_jobs(tmp_path) == []
 
     def test_status_roundtrip(self, tmp_path: Path) -> None:
@@ -89,24 +92,26 @@ class TestMdJob:
 
         job = new_job("X", "mgh_slow_release", "X", "pkg")
         d = job.to_dict()
-        assert json.dumps(d)   # must be JSON-serializable
+        assert json.dumps(d)  # must be JSON-serializable
         assert d["status"] == "queued"
 
     def test_health_sample_roundtrip(self, tmp_path: Path) -> None:
         from backend.core.md_job import MdJob, MdHealthSample, new_job
 
         job = new_job("Z", "mgh_slow_release", "Z", "pkg")
-        job.health_samples.append(MdHealthSample(
-            wall_time              = time.time(),
-            stage                  = "50K NVT k=5.0",
-            segment                = "Z_01_050K_NVT_k5_p10",
-            c1_paired_fraction     = 0.998,
-            c1_mean_ang            = 9.5,
-            c1_p90_ang             = 10.2,
-            wc_ref_relative_fraction = 0.992,
-            wc_mean_hbond_ang      = 3.1,
-            passed                 = True,
-        ))
+        job.health_samples.append(
+            MdHealthSample(
+                wall_time=time.time(),
+                stage="50K NVT k=5.0",
+                segment="Z_01_050K_NVT_k5_p10",
+                c1_paired_fraction=0.998,
+                c1_mean_ang=9.5,
+                c1_p90_ang=10.2,
+                wc_ref_relative_fraction=0.992,
+                wc_mean_hbond_ang=3.1,
+                passed=True,
+            )
+        )
         job.save(tmp_path)
         loaded = MdJob.load(job.job_id, tmp_path)
         s = loaded.health_samples[0]
@@ -143,14 +148,14 @@ class TestNamdMetrics:
         m = parse_namd_log(log)
 
         assert m.n_energy_lines == 2
-        assert m.temperature_k   == pytest.approx(310.1234, rel=1e-4)
+        assert m.temperature_k == pytest.approx(310.1234, rel=1e-4)
         assert m.temperature_avg_k == pytest.approx(310.0987, rel=1e-4)
-        assert m.pressure_bar    == pytest.approx(1.0100,   rel=1e-3)
-        assert m.gpressure_bar   == pytest.approx(1.0050,   rel=1e-3)
-        assert m.pressure_avg_bar == pytest.approx(1.0050,  rel=1e-3)
+        assert m.pressure_bar == pytest.approx(1.0100, rel=1e-3)
+        assert m.gpressure_bar == pytest.approx(1.0050, rel=1e-3)
+        assert m.pressure_avg_bar == pytest.approx(1.0050, rel=1e-3)
         assert m.gpressure_avg_bar == pytest.approx(1.0020, rel=1e-3)
-        assert m.volume_ang3     == pytest.approx(1234500.0, rel=1e-4)
-        assert m.timestep        == 200
+        assert m.volume_ang3 == pytest.approx(1234500.0, rel=1e-4)
+        assert m.timestep == 200
 
     def test_parse_ns_per_day(self, tmp_path: Path) -> None:
         from backend.core.namd_metrics import parse_namd_log
@@ -183,8 +188,8 @@ class TestNamdMetrics:
 
         m = parse_namd_log(tmp_path / "nonexistent.log")
         assert m.n_energy_lines == 0
-        assert m.temperature_k  is None
-        assert len(m.warnings)  > 0
+        assert m.temperature_k is None
+        assert len(m.warnings) > 0
 
     def test_empty_log(self, tmp_path: Path) -> None:
         from backend.core.namd_metrics import parse_namd_log
@@ -193,7 +198,7 @@ class TestNamdMetrics:
         log.write_text("")
         m = parse_namd_log(log)
         assert m.n_energy_lines == 0
-        assert m.temperature_k  is None
+        assert m.temperature_k is None
 
     def test_minimisation_lines_skipped_by_temp_check(self, tmp_path: Path) -> None:
         """Minimisation ENERGY lines have TEMP=0; they should still be parsed."""
@@ -364,14 +369,18 @@ class TestBenchmarkSPerStep:
         s_per_step = benchmark_s_per_step(log)
         ns_per_day = benchmark_ns_per_day(log)
         steps_per_ns = 1e6 / 4.0
-        assert s_per_step * steps_per_ns * ns_per_day == pytest.approx(86_400.0, rel=1e-3)
+        assert s_per_step * steps_per_ns * ns_per_day == pytest.approx(
+            86_400.0, rel=1e-3
+        )
 
     def test_missing_and_unbenchmarked(self, tmp_path: Path) -> None:
         from backend.core.namd_metrics import benchmark_s_per_step
 
         assert benchmark_s_per_step(tmp_path / "nope.log") is None
         fresh = tmp_path / "fresh.log"
-        fresh.write_text("Info: NAMD 3.0 for Linux-x86_64\nInfo: Startup phase 0 took 9e-05 s\n")
+        fresh.write_text(
+            "Info: NAMD 3.0 for Linux-x86_64\nInfo: Startup phase 0 took 9e-05 s\n"
+        )
         assert benchmark_s_per_step(fresh) is None
 
 
@@ -409,30 +418,39 @@ class TestOverallFraction:
 
         # A single-segment production child, 60% through its one segment: must read 0.6,
         # NOT 0 (done/total = 0/1) — the "sits at 0% until done" bug.
-        assert overall_fraction(0, 1, running_timestep=600, running_steps=1000) == pytest.approx(0.6)
+        assert overall_fraction(
+            0, 1, running_timestep=600, running_steps=1000
+        ) == pytest.approx(0.6)
 
     def test_counts_done_plus_running(self) -> None:
         from backend.core.namd_metrics import overall_fraction
 
         # 2 of 4 done, running segment half-through → (2 + 0.5) / 4 = 0.625.
-        assert overall_fraction(2, 4, running_timestep=500, running_steps=1000) == pytest.approx(0.625)
+        assert overall_fraction(
+            2, 4, running_timestep=500, running_steps=1000
+        ) == pytest.approx(0.625)
 
     def test_no_live_step_falls_back_to_done_count(self) -> None:
         from backend.core.namd_metrics import overall_fraction
 
-        assert overall_fraction(1, 4) == pytest.approx(0.25)          # no running info
-        assert overall_fraction(1, 4, running_timestep=0, running_steps=1000) == pytest.approx(0.25)
+        assert overall_fraction(1, 4) == pytest.approx(0.25)  # no running info
+        assert overall_fraction(
+            1, 4, running_timestep=0, running_steps=1000
+        ) == pytest.approx(0.25)
 
     def test_clamps_and_guards(self) -> None:
         from backend.core.namd_metrics import overall_fraction
 
-        assert overall_fraction(0, 0) == 0.0                          # no segments
-        assert overall_fraction(4, 4) == pytest.approx(1.0)           # all done
+        assert overall_fraction(0, 0) == 0.0  # no segments
+        assert overall_fraction(4, 4) == pytest.approx(1.0)  # all done
         # An overshot timestep (log past the planned steps) can't push past 1.0.
-        assert overall_fraction(0, 1, running_timestep=1500, running_steps=1000) == pytest.approx(1.0)
+        assert overall_fraction(
+            0, 1, running_timestep=1500, running_steps=1000
+        ) == pytest.approx(1.0)
 
 
 # ── md_protocols (pure functions) ─────────────────────────────────────────────
+
 
 class TestParseBoxFromNamdConf:
     def test_standard_orthogonal_box(self) -> None:
@@ -555,8 +573,8 @@ class TestMghSlowReleaseSegments:
         from backend.core.md_protocols import mgh_slow_release_segments
 
         _, segments = mgh_slow_release_segments("X")
-        npt_segs  = [s for s in segments if s.npt]
-        nvt_segs  = [s for s in segments if not s.npt]
+        npt_segs = [s for s in segments if s.npt]
+        nvt_segs = [s for s in segments if not s.npt]
         assert len(npt_segs) > 0
         assert len(nvt_segs) == 0
         # Aksimentiev-style default relax runs NPT at 300 K.
@@ -564,8 +582,10 @@ class TestMghSlowReleaseSegments:
             assert s.temp == pytest.approx(300.0)
 
     def test_default_segments_use_long_aksimentiev_enm_stages(self) -> None:
-        from backend.core.md_protocols import (AKSIMENTIEV_STEPS_PER_CYCLE,
-                                               mgh_slow_release_segments)
+        from backend.core.md_protocols import (
+            AKSIMENTIEV_STEPS_PER_CYCLE,
+            mgh_slow_release_segments,
+        )
 
         _, segments = mgh_slow_release_segments("X")
         ladder = [s for s in segments if s.restraint_ref_file is None]
@@ -584,7 +604,7 @@ class TestMghSlowReleaseSegments:
         from backend.core.md_protocols import _round_up_to_cycle
 
         # stepspercycle is 20 (AKSIMENTIEV_STEPS_PER_CYCLE, must match _common_header).
-        assert _round_up_to_cycle(4_800) == 4_800    # already aligned → unchanged
+        assert _round_up_to_cycle(4_800) == 4_800  # already aligned → unchanged
         assert _round_up_to_cycle(10_000) == 10_000  # already aligned → unchanged
         assert _round_up_to_cycle(10_001) == 10_020  # rounds UP to the next multiple
 
@@ -631,7 +651,7 @@ class TestSegmentConf:
         _, segs = mgh_slow_release_segments("S")
         spec = next(s for s in segs if s.extra_bonds_file)
         with_extra = _segment_conf(spec, "S", (100.0, 90.0, 80.0), mgh_extrabonds=True)
-        without    = _segment_conf(spec, "S", (100.0, 90.0, 80.0), mgh_extrabonds=False)
+        without = _segment_conf(spec, "S", (100.0, 90.0, 80.0), mgh_extrabonds=False)
         assert "extraBondsFile     mgh_extrabonds.txt" in with_extra
         assert "extraBondsFile     mgh_extrabonds.txt" not in without
         assert "extraBondsFile     S_k0.5.enm.extra" in without
@@ -640,7 +660,7 @@ class TestSegmentConf:
         from backend.core.md_protocols import _segment_conf, mgh_slow_release_segments
 
         _, segs = mgh_slow_release_segments("S")
-        spec = next(s for s in segs if s.extra_bonds_file)   # first ENM stage — k=0.5
+        spec = next(s for s in segs if s.extra_bonds_file)  # first ENM stage — k=0.5
         assert spec.scale is not None
         conf = _segment_conf(spec, "S", (100.0, 90.0, 80.0), mgh_extrabonds=False)
         assert "extraBondsFile     S_k0.5.enm.extra" in conf
@@ -677,6 +697,7 @@ class TestMghExtraBonds:
 
 # ── production append protocol ────────────────────────────────────────────────
 
+
 class TestProductionAppend:
     def _routes_md(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         class _Router:
@@ -687,7 +708,9 @@ class TestProductionAppend:
                 def _decorator(*args, **kwargs):
                     def _wrap(fn):
                         return fn
+
                     return _wrap
+
                 return _decorator
 
         class _HTTPException(Exception):
@@ -759,7 +782,12 @@ class TestProductionAppend:
         return routes_md
 
     def _ready_job(self, tmp_path: Path):
-        from backend.core.md_job import MdHealthSample, MdSegmentStatus, MdStatus, new_job
+        from backend.core.md_job import (
+            MdHealthSample,
+            MdSegmentStatus,
+            MdStatus,
+            new_job,
+        )
 
         job = new_job(
             design_name="D",
@@ -768,21 +796,25 @@ class TestProductionAppend:
             package_subdir="package/D_namd_solvated",
         )
         job.status = MdStatus.completed
-        job.segments.append(MdSegmentStatus(
-            name="D_16_310K_NPT_k0_qualification_p100",
-            stage="310K NPT unrestrained qualification",
-            percent=100.0,
-            steps=1000,
-            status="done",
-        ))
-        job.health_samples.append(MdHealthSample(
-            wall_time=time.time(),
-            stage="310K NPT unrestrained qualification",
-            segment="D_16_310K_NPT_k0_qualification_p100",
-            c1_paired_fraction=0.98,
-            wc_ref_relative_fraction=0.77,
-            passed=True,
-        ))
+        job.segments.append(
+            MdSegmentStatus(
+                name="D_16_310K_NPT_k0_qualification_p100",
+                stage="310K NPT unrestrained qualification",
+                percent=100.0,
+                steps=1000,
+                status="done",
+            )
+        )
+        job.health_samples.append(
+            MdHealthSample(
+                wall_time=time.time(),
+                stage="310K NPT unrestrained qualification",
+                segment="D_16_310K_NPT_k0_qualification_p100",
+                c1_paired_fraction=0.98,
+                wc_ref_relative_fraction=0.77,
+                passed=True,
+            )
+        )
         job.save(tmp_path)
 
         package_dir = job.package_dir(tmp_path)
@@ -796,21 +828,23 @@ class TestProductionAppend:
             "fast_relaxation": {"enabled": True},
             "declash": False,
             "minimization": {"name": "D_00_min_k5"},
-            "segments": [{
-                "name": "D_16_310K_NPT_k0_qualification_p100",
-                "stage": "310K NPT unrestrained qualification",
-                "percent": 100.0,
-                "steps": 1000,
-                "temp": 310.0,
-                "damping": 1.0,
-                "scale": None,
-                "npt": True,
-                "previous": "D_16_310K_NPT_k0_qualification_p50",
-                "reinit": False,
-                "dcd_freq": 100,
-                "min_c1_paired": 0.90,
-                "min_wc_ref_relative": 0.75,
-            }],
+            "segments": [
+                {
+                    "name": "D_16_310K_NPT_k0_qualification_p100",
+                    "stage": "310K NPT unrestrained qualification",
+                    "percent": 100.0,
+                    "steps": 1000,
+                    "temp": 310.0,
+                    "damping": 1.0,
+                    "scale": None,
+                    "npt": True,
+                    "previous": "D_16_310K_NPT_k0_qualification_p50",
+                    "reinit": False,
+                    "dcd_freq": 100,
+                    "min_c1_paired": 0.90,
+                    "min_wc_ref_relative": 0.75,
+                }
+            ],
         }
         text = json.dumps(manifest, indent=2)
         (package_dir / "manifest.json").write_text(text)
@@ -823,7 +857,9 @@ class TestProductionAppend:
         output_dir = package_dir / "output"
         output_dir.mkdir()
         for ext in ("coor", "vel", "xsc"):
-            (output_dir / f"D_16_310K_NPT_k0_qualification_p100.{ext}").write_text("restart\n")
+            (output_dir / f"D_16_310K_NPT_k0_qualification_p100.{ext}").write_text(
+                "restart\n"
+            )
         return job
 
     def test_steps_and_ns_use_conservative_one_fs_timestep(
@@ -855,7 +891,9 @@ class TestProductionAppend:
         routes_md = self._routes_md(tmp_path, monkeypatch)
         job = self._ready_job(tmp_path)
 
-        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(length_ns=1.0))
+        plan = routes_md._production_fast_plan(
+            job, routes_md.ProductionRequest(length_ns=1.0)
+        )
         assert plan["fast"] is True
         assert plan["timestep_fs"] == pytest.approx(4.0)
         assert plan["total_steps"] == 250_000  # 1 ns at 4 fs
@@ -870,8 +908,10 @@ class TestProductionAppend:
         # — and the group's production runs these would be compared with use ~1.
         # See md_protocols.PRODUCTION_LANGEVIN_DAMPING / PRODUCTION_RECIPE_VERSION.
         from backend.core.md_protocols import PRODUCTION_LANGEVIN_DAMPING
-        assert all(s.damping == pytest.approx(PRODUCTION_LANGEVIN_DAMPING)
-                   for s in segments)
+
+        assert all(
+            s.damping == pytest.approx(PRODUCTION_LANGEVIN_DAMPING) for s in segments
+        )
         assert all(s.temp == pytest.approx(300.0) for s in segments)
         assert all("fast production" in s.stage for s in segments)
 
@@ -905,7 +945,9 @@ class TestProductionAppend:
 
         manifest = json.loads((package_dir / "manifest.json").read_text())
         assert manifest["production_extension"]["timestep_fs"] == pytest.approx(4.0)
-        assert manifest["production_extension"]["settings"] == "fast_hmr_gpuresident_4fs"
+        assert (
+            manifest["production_extension"]["settings"] == "fast_hmr_gpuresident_4fs"
+        )
         assert manifest["production_extension"]["fast_production"]["enabled"] is True
         assert manifest["production_extension"]["health_gate"] == {
             "min_c1_paired": 0.90,
@@ -913,7 +955,9 @@ class TestProductionAppend:
         }
 
     def test_fast_plan_eligibility_gate(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Eligibility keys off fast_relaxation.enabled + declash — NOT the presence
         of a soft segment.  A normal fast ladder always has one soft strain-relief
@@ -927,7 +971,9 @@ class TestProductionAppend:
             m = json.loads(mpath.read_text())
             m.update(manifest_overrides)
             mpath.write_text(json.dumps(m, indent=2))
-            return routes_md._production_fast_plan(job, routes_md.ProductionRequest(length_ns=1.0))
+            return routes_md._production_fast_plan(
+                job, routes_md.ProductionRequest(length_ns=1.0)
+            )
 
         # Fast ladder + a lone soft strain-relief segment → still FAST (the bug).
         plan = _plan_with(
@@ -938,10 +984,15 @@ class TestProductionAppend:
         assert plan["fast"] is True
 
         # Declash design → conservative even though the ladder ran fast.
-        assert _plan_with(fast_relaxation={"enabled": True}, declash=True)["fast"] is False
+        assert (
+            _plan_with(fast_relaxation={"enabled": True}, declash=True)["fast"] is False
+        )
 
         # Relaxation never ran fast (old job) → conservative.
-        assert _plan_with(fast_relaxation={"enabled": False}, declash=False)["fast"] is False
+        assert (
+            _plan_with(fast_relaxation={"enabled": False}, declash=False)["fast"]
+            is False
+        )
 
     def test_declash_job_falls_back_to_conservative_production(
         self,
@@ -956,7 +1007,9 @@ class TestProductionAppend:
         manifest["declash"] = True
         (package_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
-        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(length_ns=0.001))
+        plan = routes_md._production_fast_plan(
+            job, routes_md.ProductionRequest(length_ns=0.001)
+        )
         assert plan["fast"] is False
         assert plan["timestep_fs"] == pytest.approx(1.0)
 
@@ -971,7 +1024,9 @@ class TestProductionAppend:
         # a declash job falls back to, which the three assertions above cover.
         assert all("conservative production" in s.stage for s in segments)
         manifest = json.loads((package_dir / "manifest.json").read_text())
-        assert manifest["production_extension"]["settings"] == "conservative_unrestrained"
+        assert (
+            manifest["production_extension"]["settings"] == "conservative_unrestrained"
+        )
 
     def _seeded_job(self, tmp_path: Path):
         """An oxDNA-seeded job whose package is built but NO relaxation has run
@@ -979,8 +1034,10 @@ class TestProductionAppend:
         from backend.core.md_job import MdStatus, new_job
 
         job = new_job(
-            design_name="S", protocol="equilibrium_aware",
-            name_stem="S", package_subdir="package/S_namd_solvated",
+            design_name="S",
+            protocol="equilibrium_aware",
+            name_stem="S",
+            package_subdir="package/S_namd_solvated",
             seed_oxdna_job_id="oxjob123",
         )
         job.status = MdStatus.queued
@@ -1001,7 +1058,9 @@ class TestProductionAppend:
         return job
 
     def test_seeded_job_must_relax_before_production(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A seeded job with no relaxation checkpoint can NO LONGER produce directly
         from the seed (the minimize-then-unrestrained shortcut blew up).  It must run
@@ -1013,15 +1072,25 @@ class TestProductionAppend:
         job = self._seeded_job(tmp_path)
         with pytest.raises(Exception) as exc:
             routes_md._append_production_segments(
-                job, {"total_steps": 1000, "length_ns": 0.001, "timestep_fs": 1.0, "fast": False})
+                job,
+                {
+                    "total_steps": 1000,
+                    "length_ns": 0.001,
+                    "timestep_fs": 1.0,
+                    "fast": False,
+                },
+            )
         assert getattr(exc.value, "status_code", None) == 400
 
     def test_display_meta_seeded_job_not_production_ready_without_checkpoint(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """The /display meta must NOT mark a seeded job production-ready before it has
         a relaxation checkpoint — it has to run the ladder first (no from-seed skip)."""
         import asyncio
+
         routes_md = self._routes_md(tmp_path, monkeypatch)
         job = self._seeded_job(tmp_path)
         meta = asyncio.run(routes_md.get_md_job_display(job.job_id))
@@ -1029,37 +1098,58 @@ class TestProductionAppend:
         assert meta["production_from_seed"] is False
 
     def test_unseeded_job_without_checkpoint_still_blocks_production(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A NON-seeded job with no relaxation checkpoint must still 400 (no
         produce-from-seed shortcut)."""
         routes_md = self._routes_md(tmp_path, monkeypatch)
         job = self._seeded_job(tmp_path)
-        job.seed_oxdna_job_id = None          # remove the seed provenance
+        job.seed_oxdna_job_id = None  # remove the seed provenance
         job.save(tmp_path)
         with pytest.raises(Exception) as exc:
             routes_md._append_production_segments(
-                job, {"total_steps": 1000, "length_ns": 0.001, "timestep_fs": 1.0, "fast": False})
+                job,
+                {
+                    "total_steps": 1000,
+                    "length_ns": 0.001,
+                    "timestep_fs": 1.0,
+                    "fast": False,
+                },
+            )
         assert getattr(exc.value, "status_code", None) == 400
 
     # ── production-run child jobs (mirror oxDNA: relaxation stays, productions nest) ──
 
-    def _spawn(self, routes_md, tmp_path, monkeypatch, parent, *, autostart=False, seed=None):
+    def _spawn(
+        self, routes_md, tmp_path, monkeypatch, parent, *, autostart=False, seed=None
+    ):
         """Call the production-run endpoint with staleness + NAMD launch stubbed out."""
         import asyncio
+
         # build_replica_package hardlinks the parent PSF *and* PDB into the child pkg;
         # the _ready_job fixture only writes the PSF, so add the PDB it copies.
         (parent.package_dir(tmp_path) / "D.pdb").write_text("* stub\n")
         monkeypatch.setattr(routes_md, "_assert_md_job_current", lambda job: None)
         started: list = []
-        monkeypatch.setattr(routes_md, "start_job", lambda job, ws: started.append(job.job_id))
-        result = asyncio.run(routes_md.spawn_md_production(
-            parent.job_id,
-            routes_md.ProductionRunRequest(length_ns=1.0, autostart=autostart, seed=seed)))
+        monkeypatch.setattr(
+            routes_md, "start_job", lambda job, ws: started.append(job.job_id)
+        )
+        result = asyncio.run(
+            routes_md.spawn_md_production(
+                parent.job_id,
+                routes_md.ProductionRunRequest(
+                    length_ns=1.0, autostart=autostart, seed=seed
+                ),
+            )
+        )
         return result, started
 
     def test_production_spawns_child_leaving_relaxation_intact(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Production creates a CHILD job under the relaxation; the relaxation job is
         NOT mutated (its segments/manifest are untouched), so it stays visible and
@@ -1080,10 +1170,12 @@ class TestProductionAppend:
         assert 1 <= child.ensemble_seed <= md_ensemble.NAMD_SEED_MAX
         assert child.ensemble_index == 0
         assert child.execution_target == "local"
-        assert child.status == MdStatus.queued          # autostart False
+        assert child.status == MdStatus.queued  # autostart False
         # Child package is a fresh production-only package (reseed + one production seg).
         pkg = child.package_dir(tmp_path)
-        assert (pkg / "demo_00_reseed.conf").exists() or list(pkg.glob("*_00_reseed.conf"))
+        assert (pkg / "demo_00_reseed.conf").exists() or list(
+            pkg.glob("*_00_reseed.conf")
+        )
         assert len(child.segments) == 1
         # The parent relaxation is byte-for-byte unchanged.
         reloaded = MdJob.load(parent.job_id, tmp_path)
@@ -1092,7 +1184,9 @@ class TestProductionAppend:
         assert reloaded.run_kind is None
 
     def test_production_child_of_an_archived_parent_stays_on_the_archive_drive(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A relaxation is archived because its folder is too big for the system disk —
         and PRODUCTION is the part that writes the big trajectory.
@@ -1139,7 +1233,9 @@ class TestProductionAppend:
         assert not (tmp_path / "md_jobs" / child.job_id).exists()
 
     def test_production_child_of_an_unarchived_parent_stays_in_the_workspace(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """The inverse pin: archiving is INHERITED, never invented."""
         from backend.core.md_job import MdJob
@@ -1154,7 +1250,9 @@ class TestProductionAppend:
         assert child.job_dir(tmp_path) == tmp_path / "md_jobs" / child.job_id
 
     def test_repeated_productions_get_distinct_seeds(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Each production child of the same parent draws its own RANDOM velocity seed, so
         a fan-out samples independent trajectories — and so two designs being compared do
@@ -1168,17 +1266,24 @@ class TestProductionAppend:
         r1, _ = self._spawn(routes_md, tmp_path, monkeypatch, parent)
         r2, _ = self._spawn(routes_md, tmp_path, monkeypatch, parent)
 
-        seeds = [MdJob.load(r["job"]["job_id"], tmp_path).ensemble_seed for r in (r0, r1, r2)]
+        seeds = [
+            MdJob.load(r["job"]["job_id"], tmp_path).ensemble_seed for r in (r0, r1, r2)
+        ]
         assert len(set(seeds)) == 3, f"siblings collided onto one trajectory: {seeds}"
         assert all(1 <= s <= md_ensemble.NAMD_SEED_MAX for s in seeds)
         # Not the old deterministic ladder — three consecutive integers from a fixed base
         # would mean the randomisation regressed.
         assert sorted(seeds) != [54321, 54322, 54323]
-        idxs = [MdJob.load(r["job"]["job_id"], tmp_path).ensemble_index for r in (r0, r1, r2)]
+        idxs = [
+            MdJob.load(r["job"]["job_id"], tmp_path).ensemble_index
+            for r in (r0, r1, r2)
+        ]
         assert idxs == [0, 1, 2]
 
     def test_production_inherits_the_parents_anchors_and_field(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """THE bug: the anchors card was read only by the relax launch, and the replica
         builder never forwarded anchors/field — so an anchored relaxation produced an
@@ -1189,7 +1294,8 @@ class TestProductionAppend:
         parent = self._ready_job(tmp_path)
         pkg = parent.package_dir(tmp_path)
         (pkg / "restraints_anchors.pdb").write_text(
-            "ATOM      1  C1' DT  A   1       0.000   0.000   0.000  1.00  1.00\n")
+            "ATOM      1  C1' DT  A   1       0.000   0.000   0.000  1.00  1.00\n"
+        )
         manifest = json.loads((pkg / "manifest.json").read_text())
         manifest["files"] = {"anchors": "restraints_anchors.pdb"}
         manifest["anchors"] = {"requested": [{"kind": "base"}]}
@@ -1208,7 +1314,9 @@ class TestProductionAppend:
         assert cm["field"]["field_pN"] == 5.0
 
     def test_production_request_can_turn_an_inherited_anchor_off(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """`anchors: []` is meaningful — it is how an anchored parent spawns a free
         control run.  It must not be confused with `anchors: None` (inherit)."""
@@ -1220,7 +1328,8 @@ class TestProductionAppend:
         parent = self._ready_job(tmp_path)
         pkg = parent.package_dir(tmp_path)
         (pkg / "restraints_anchors.pdb").write_text(
-            "ATOM      1  C1' DT  A   1       0.000   0.000   0.000  1.00  1.00\n")
+            "ATOM      1  C1' DT  A   1       0.000   0.000   0.000  1.00  1.00\n"
+        )
         manifest = json.loads((pkg / "manifest.json").read_text())
         manifest["files"] = {"anchors": "restraints_anchors.pdb"}
         (pkg / "manifest.json").write_text(json.dumps(manifest))
@@ -1228,16 +1337,25 @@ class TestProductionAppend:
         monkeypatch.setattr(routes_md, "_assert_md_job_current", lambda job: None)
         monkeypatch.setattr(routes_md, "start_job", lambda job, ws: None)
 
-        result = asyncio.run(routes_md.spawn_md_production(
-            parent.job_id,
-            routes_md.ProductionRunRequest(length_ns=1.0, autostart=False, anchors=[])))
+        result = asyncio.run(
+            routes_md.spawn_md_production(
+                parent.job_id,
+                routes_md.ProductionRunRequest(
+                    length_ns=1.0, autostart=False, anchors=[]
+                ),
+            )
+        )
         child = MdJob.load(result["job"]["job_id"], tmp_path)
-        conf = next(child.package_dir(tmp_path).glob("D_01_production_*.conf")).read_text()
+        conf = next(
+            child.package_dir(tmp_path).glob("D_01_production_*.conf")
+        ).read_text()
         assert "fixedAtoms" not in conf
         assert "constraints        off" in conf
 
     def test_production_seed_can_be_pinned_to_reproduce_a_run(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Randomised by default, reproducible on request: an explicit seed is honoured
         verbatim and recorded, so a published trajectory can be re-run."""
@@ -1249,17 +1367,23 @@ class TestProductionAppend:
         result, _ = self._spawn(routes_md, tmp_path, monkeypatch, parent, seed=99991)
         child = MdJob.load(result["job"]["job_id"], tmp_path)
         assert child.ensemble_seed == 99991
-        conf = (child.package_dir(tmp_path) / f"{child.name_stem}_00_reseed.conf").read_text()
+        conf = (
+            child.package_dir(tmp_path) / f"{child.name_stem}_00_reseed.conf"
+        ).read_text()
         assert "seed               99991" in conf
 
     def test_production_autostart_launches_local(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from backend.core.md_job import MdJob, MdStatus
 
         routes_md = self._routes_md(tmp_path, monkeypatch)
         parent = self._ready_job(tmp_path)
-        result, started = self._spawn(routes_md, tmp_path, monkeypatch, parent, autostart=True)
+        result, started = self._spawn(
+            routes_md, tmp_path, monkeypatch, parent, autostart=True
+        )
         child = MdJob.load(result["job"]["job_id"], tmp_path)
         assert child.status == MdStatus.running
         assert started == [child.job_id]
@@ -1274,8 +1398,15 @@ class TestProductionAppend:
 
         pkg = job.package_dir(tmp_path)
         for n in names:
-            job.segments.append(MdSegmentStatus(
-                name=n, stage="1 ns production run", percent=100.0, steps=1000, status="pending"))
+            job.segments.append(
+                MdSegmentStatus(
+                    name=n,
+                    stage="1 ns production run",
+                    percent=100.0,
+                    steps=1000,
+                    status="pending",
+                )
+            )
             (pkg / f"{n}.conf").write_text("conf")
             (pkg / f"{n}.log").write_text("log")
             (pkg / "output" / f"{n}.dcd").write_text("dcd")
@@ -1287,13 +1418,19 @@ class TestProductionAppend:
         manifest = json.loads((pkg / "manifest.json").read_text())
         manifest["segments"].extend(
             {"name": n, "stage": "1 ns production run", "percent": 100.0, "steps": 1000}
-            for n in names)
-        manifest["production_extension"] = {"length_ns": 1.0, "last_new_segment": names[-1]}
+            for n in names
+        )
+        manifest["production_extension"] = {
+            "length_ns": 1.0,
+            "last_new_segment": names[-1],
+        }
         (pkg / "manifest.json").write_text(json.dumps(manifest, indent=2))
         return pkg
 
     def test_revert_appended_production_restores_clean_relaxation(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         import json
         from backend.core.md_job import MdJob, MdStatus, revert_appended_production
@@ -1310,7 +1447,7 @@ class TestProductionAppend:
         assert set(report["removed_segments"]) == set(prod)
 
         j = MdJob.load(job.job_id, tmp_path)
-        assert [s.name for s in j.segments] == relax_only     # production peeled off
+        assert [s.name for s in j.segments] == relax_only  # production peeled off
         assert j.status == MdStatus.completed and j.user_stopped is False
         assert j.current_segment_idx == len(relax_only)
 
@@ -1329,7 +1466,9 @@ class TestProductionAppend:
         assert (pkg / "output" / "D_16_310K_NPT_k0_qualification_p100.coor").exists()
 
     def test_revert_is_idempotent_and_guards_non_legacy_jobs(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from backend.core.md_job import MdJob, revert_appended_production
 
@@ -1341,7 +1480,12 @@ class TestProductionAppend:
         # After one revert of an appended job, a second call is a no-op.
         self._append_fake_production(tmp_path, job, ["D_17_production_1ns_k0_p10"])
         assert revert_appended_production(job, tmp_path)["reverted"] is True
-        assert revert_appended_production(MdJob.load(job.job_id, tmp_path), tmp_path)["reverted"] is False
+        assert (
+            revert_appended_production(MdJob.load(job.job_id, tmp_path), tmp_path)[
+                "reverted"
+            ]
+            is False
+        )
 
         # A real production CHILD must never be reverted (that would nuke a legit run).
         child = self._ready_job(tmp_path)
@@ -1352,7 +1496,9 @@ class TestProductionAppend:
         assert revert_appended_production(child, tmp_path)["reverted"] is False
 
     def test_production_alpine_target_queues_without_local_start(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """An Alpine-targeted production child is created 'queued' (for the submit-review
         card) and is NEVER started locally — even with autostart=True — regardless of
@@ -1363,22 +1509,30 @@ class TestProductionAppend:
         routes_md = self._routes_md(tmp_path, monkeypatch)
         monkeypatch.setattr(routes_md, "_assert_md_job_current", lambda job: None)
         started: list = []
-        monkeypatch.setattr(routes_md, "start_job", lambda job, ws: started.append(job.job_id))
-        parent = self._ready_job(tmp_path)                       # a LOCAL relaxation
+        monkeypatch.setattr(
+            routes_md, "start_job", lambda job, ws: started.append(job.job_id)
+        )
+        parent = self._ready_job(tmp_path)  # a LOCAL relaxation
         (parent.package_dir(tmp_path) / "D.pdb").write_text("* stub\n")
 
-        result = asyncio.run(routes_md.spawn_md_production(
-            parent.job_id,
-            routes_md.ProductionRunRequest(length_ns=1.0, autostart=True,
-                                           execution_target="alpine")))
+        result = asyncio.run(
+            routes_md.spawn_md_production(
+                parent.job_id,
+                routes_md.ProductionRunRequest(
+                    length_ns=1.0, autostart=True, execution_target="alpine"
+                ),
+            )
+        )
         child = MdJob.load(result["job"]["job_id"], tmp_path)
         assert child.execution_target == "alpine"
         assert child.cluster_name == "alpine"
         assert child.status == MdStatus.queued
-        assert started == []                                     # never launched locally
+        assert started == []  # never launched locally
 
     def test_production_refused_while_parent_is_running(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """No new production child may be spawned while the parent job is actively
         running on the GPU (a completed status by segment state isn't enough)."""
@@ -1389,12 +1543,16 @@ class TestProductionAppend:
         monkeypatch.setattr(routes_md, "is_running", lambda jid: True)
         parent = self._ready_job(tmp_path)
         with pytest.raises(Exception) as exc:
-            asyncio.run(routes_md.spawn_md_production(
-                parent.job_id, routes_md.ProductionRunRequest(length_ns=1.0)))
+            asyncio.run(
+                routes_md.spawn_md_production(
+                    parent.job_id, routes_md.ProductionRunRequest(length_ns=1.0)
+                )
+            )
         assert getattr(exc.value, "status_code", None) == 400
 
 
 # ── namd_runner (pure helpers only) ──────────────────────────────────────────
+
 
 class TestOrphanStop:
     """A NAMD run orphaned by a server restart (no in-memory runner thread) must still
@@ -1402,22 +1560,31 @@ class TestOrphanStop:
 
     def _running_job(self, tmp_path: Path):
         from backend.core.md_job import MdSegmentStatus, MdStatus, new_job
-        job = new_job(design_name="S", protocol="equilibrium_aware",
-                      name_stem="S", package_subdir="package/S")
+
+        job = new_job(
+            design_name="S",
+            protocol="equilibrium_aware",
+            name_stem="S",
+            package_subdir="package/S",
+        )
         job.segments = [MdSegmentStatus(name="S_01", stage="x", percent=10, steps=100)]
         job.current_segment_idx = 0
         job.status = MdStatus.running
         job.save(tmp_path)
         return job
 
-    def test_stop_orphan_kills_external_pid_and_marks_stopped(self, tmp_path, monkeypatch):
+    def test_stop_orphan_kills_external_pid_and_marks_stopped(
+        self, tmp_path, monkeypatch
+    ):
         from backend.core import namd_runner
         from backend.core.md_job import MdJob, MdStatus
 
         job = self._running_job(tmp_path)
         killed = []
         monkeypatch.setattr(namd_runner, "_external_pid", lambda j: 4242)
-        monkeypatch.setattr(namd_runner, "_kill_process_group", lambda pid, **k: killed.append(pid))
+        monkeypatch.setattr(
+            namd_runner, "_kill_process_group", lambda pid, **k: killed.append(pid)
+        )
 
         assert namd_runner.stop_job(job.job_id, tmp_path) is True
         assert killed == [4242]
@@ -1432,9 +1599,15 @@ class TestOrphanStop:
         job.namd_pid = 7777
         job.save(tmp_path)
         killed = []
-        monkeypatch.setattr(namd_runner, "_external_pid", lambda j: None)   # /proc scan misses
-        monkeypatch.setattr(namd_runner, "_pid_is_namd", lambda pid: True)  # but persisted PID is ours
-        monkeypatch.setattr(namd_runner, "_kill_process_group", lambda pid, **k: killed.append(pid))
+        monkeypatch.setattr(
+            namd_runner, "_external_pid", lambda j: None
+        )  # /proc scan misses
+        monkeypatch.setattr(
+            namd_runner, "_pid_is_namd", lambda pid: True
+        )  # but persisted PID is ours
+        monkeypatch.setattr(
+            namd_runner, "_kill_process_group", lambda pid, **k: killed.append(pid)
+        )
 
         assert namd_runner.stop_job(job.job_id, tmp_path) is True
         assert killed == [7777]
@@ -1465,16 +1638,20 @@ class TestOrphanStop:
             def cancel(self):  # pragma: no cover - invoked via fake loop
                 cancelled.append("task")
 
-        handle = namd_runner._RunningHandle(thread=thread, loop=_FakeLoop(), task=_FakeTask())
+        handle = namd_runner._RunningHandle(
+            thread=thread, loop=_FakeLoop(), task=_FakeTask()
+        )
         monkeypatch.setitem(namd_runner._RUNNING, job.job_id, handle)
         namd_runner._ACTIVE_PIDS.pop(job.job_id, None)  # nothing spawned by this worker
         monkeypatch.setattr(namd_runner, "_external_pid", lambda j: 5151)
-        monkeypatch.setattr(namd_runner, "_kill_process_group", lambda pid, **k: killed.append(pid))
+        monkeypatch.setattr(
+            namd_runner, "_kill_process_group", lambda pid, **k: killed.append(pid)
+        )
 
         try:
             assert namd_runner.stop_job(job.job_id, tmp_path) is True
-            assert killed == [5151]          # the orphan was actually signalled
-            assert cancelled == ["cancel"]   # and the runner task cancelled
+            assert killed == [5151]  # the orphan was actually signalled
+            assert cancelled == ["cancel"]  # and the runner task cancelled
         finally:
             alive.set()
             thread.join(timeout=2)
@@ -1523,8 +1700,8 @@ class TestOrphanStop:
         assert job.status == MdStatus.stopped
         assert job.user_stopped is True
         assert job.error is None
-        assert job.segments[0].status == "done"      # completed work preserved
-        assert job.segments[1].status == "pending"   # in-flight rewound
+        assert job.segments[0].status == "done"  # completed work preserved
+        assert job.segments[1].status == "pending"  # in-flight rewound
 
     def test_stop_no_orphan_returns_false_without_killing(self, tmp_path, monkeypatch):
         from backend.core import namd_runner
@@ -1532,7 +1709,9 @@ class TestOrphanStop:
         job = self._running_job(tmp_path)
         killed = []
         monkeypatch.setattr(namd_runner, "_external_pid", lambda j: None)
-        monkeypatch.setattr(namd_runner, "_kill_process_group", lambda pid, **k: killed.append(pid))
+        monkeypatch.setattr(
+            namd_runner, "_kill_process_group", lambda pid, **k: killed.append(pid)
+        )
         # no persisted PID, no /proc match → nothing to kill
         assert namd_runner.stop_job(job.job_id, tmp_path) is False
         assert killed == []
@@ -1552,9 +1731,12 @@ class TestFindNamd:
 
     def test_is_running_false_for_unknown(self) -> None:
         from backend.core.namd_runner import is_running
+
         assert is_running("no_such_job_id") is False
 
-    def test_reconcile_completed_orphaned_segment(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_reconcile_completed_orphaned_segment(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from backend.core.md_health import HealthCheckResult
         from backend.core.md_job import MdSegmentStatus, MdStatus, new_job
         import backend.core.namd_runner as runner
@@ -1630,14 +1812,18 @@ class TestFindNamd:
             (output_dir / f"D_01_production_p50.{ext}").write_text("restart\n")
         (output_dir / "D_01_production_p50.dcd").write_text("fake dcd\n")
 
-        monkeypatch.setattr(runner, "run_health_check", lambda *args, **kwargs: HealthCheckResult(
-            passed=True,
-            c1_paired_fraction=0.98,
-            c1_mean_ang=9.7,
-            c1_p90_ang=10.8,
-            wc_ref_relative_fraction=0.74,
-            wc_mean_hbond_ang=5.4,
-        ))
+        monkeypatch.setattr(
+            runner,
+            "run_health_check",
+            lambda *args, **kwargs: HealthCheckResult(
+                passed=True,
+                c1_paired_fraction=0.98,
+                c1_mean_ang=9.7,
+                c1_p90_ang=10.8,
+                wc_ref_relative_fraction=0.74,
+                wc_mean_hbond_ang=5.4,
+            ),
+        )
 
         reconciled = runner.reconcile_job_status(job, tmp_path)
 
@@ -1657,6 +1843,7 @@ class TestReconcilePreparing:
 
     def _preparing_job(self, tmp_path):
         from backend.core.md_job import MdStatus, new_job
+
         job = new_job("P", "equilibrium_aware", "", "")
         job.status = MdStatus.preparing
         job.save(tmp_path)
@@ -1665,15 +1852,21 @@ class TestReconcilePreparing:
     def test_stale_sidecar_marks_failed(self, tmp_path, monkeypatch):
         import time as _time
         from backend.core.md_job import MdStatus
-        from backend.core.md_prep_progress import write_prep_progress, PREP_PROGRESS_FILENAME
+        from backend.core.md_prep_progress import (
+            write_prep_progress,
+            PREP_PROGRESS_FILENAME,
+        )
         import backend.core.namd_runner as runner
 
         job = self._preparing_job(tmp_path)
-        write_prep_progress(job.job_dir(tmp_path), {"phase": "solvate", "fraction": 0.3})
+        write_prep_progress(
+            job.job_dir(tmp_path), {"phase": "solvate", "fraction": 0.3}
+        )
         # Backdate the sidecar well past the stale threshold (task is gone).
         sidecar = job.job_dir(tmp_path) / PREP_PROGRESS_FILENAME
         old = _time.time() - (runner._PREP_STALE_S + 60)
         import os
+
         os.utime(sidecar, (old, old))
 
         out = runner.reconcile_job_status(job, tmp_path)
@@ -1694,10 +1887,11 @@ class TestReconcilePreparing:
         import backend.core.namd_runner as runner
 
         job = self._preparing_job(tmp_path)
-        write_prep_progress(job.job_dir(tmp_path), {"phase": "solvate", "fraction": 0.3})
+        write_prep_progress(
+            job.job_dir(tmp_path), {"phase": "solvate", "fraction": 0.3}
+        )
         out = runner.reconcile_job_status(job, tmp_path)
         assert out.status == MdStatus.preparing  # live heartbeat → untouched
-
 
 
 class TestMdChain:
@@ -1715,10 +1909,17 @@ class TestMdChain:
         (parent.package_dir(tmp_path) / "D.pdb").write_text("* stub\n")
         monkeypatch.setattr(routes_md, "_assert_md_job_current", lambda job: None)
         started: list = []
-        monkeypatch.setattr(routes_md, "start_job", lambda job, ws: started.append(job.job_id))
+        monkeypatch.setattr(
+            routes_md, "start_job", lambda job, ws: started.append(job.job_id)
+        )
         body = routes_md.CreateChainRequest(
-            root_job_id=parent.job_id, root_engine="namd",
-            stages=[routes_md.ChainStageRequest(engine="namd", length_ns=1.0) for _ in range(n)])
+            root_job_id=parent.job_id,
+            root_engine="namd",
+            stages=[
+                routes_md.ChainStageRequest(engine="namd", length_ns=1.0)
+                for _ in range(n)
+            ],
+        )
         result = asyncio.run(routes_md.create_md_chain(body))
         return result["chain"], started
 
@@ -1735,9 +1936,9 @@ class TestMdChain:
         s0_job = chain["stages"][0]["job_id"]
         assert s0_job
         child0 = MdJob.load(s0_job, tmp_path)
-        assert child0.parent_job_id == parent.job_id     # stage 0 seeds from the root
+        assert child0.parent_job_id == parent.job_id  # stage 0 seeds from the root
         assert child0.run_kind == "production"
-        assert started == [s0_job]                        # local child autostarted
+        assert started == [s0_job]  # local child autostarted
 
     def test_create_requires_completed_root(self, tmp_path, monkeypatch):
         import asyncio
@@ -1746,16 +1947,19 @@ class TestMdChain:
 
         routes_md = self._tp._routes_md(tmp_path, monkeypatch)
         parent = self._tp._ready_job(tmp_path)
-        parent.status = MdStatus.failed          # a failed root reconciles to != completed
+        parent.status = MdStatus.failed  # a failed root reconciles to != completed
         parent.save(tmp_path)
         body = routes_md.CreateChainRequest(
             root_job_id=parent.job_id,
-            stages=[routes_md.ChainStageRequest(engine="namd", length_ns=1.0)])
+            stages=[routes_md.ChainStageRequest(engine="namd", length_ns=1.0)],
+        )
         with pytest.raises(Exception) as exc:
             asyncio.run(routes_md.create_md_chain(body))
         assert getattr(exc.value, "status_code", None) == 400
 
-    def test_chain_halts_on_stage_failure_then_resumes_from_failed(self, tmp_path, monkeypatch):
+    def test_chain_halts_on_stage_failure_then_resumes_from_failed(
+        self, tmp_path, monkeypatch
+    ):
         import asyncio
 
         from backend.core.md_job import MdJob, MdStatus
@@ -1811,8 +2015,10 @@ class TestMdChain:
         monkeypatch.setattr(routes_md, "_chain_spawn", _boom)
         monkeypatch.setattr(routes_md, "_assert_md_job_current", lambda job: None)
         body = routes_md.CreateChainRequest(
-            root_job_id=parent.job_id, root_engine="namd",
-            stages=[routes_md.ChainStageRequest(engine="namd", length_ns=1.0)])
+            root_job_id=parent.job_id,
+            root_engine="namd",
+            stages=[routes_md.ChainStageRequest(engine="namd", length_ns=1.0)],
+        )
         result = asyncio.run(routes_md.create_md_chain(body))  # attempt 1
         chain_id = result["chain"]["chain_id"]
 
@@ -1833,7 +2039,9 @@ class TestMdChain:
         assert halted["stages"][0]["spawn_attempts"] == 3
 
         # A manual resume grants a fresh retry budget (attempts reset to 0 pre-retry).
-        resumed = asyncio.run(routes_md.resume_md_chain(chain_id))["chain"]  # attempt 1 again
+        resumed = asyncio.run(routes_md.resume_md_chain(chain_id))[
+            "chain"
+        ]  # attempt 1 again
         assert resumed["stages"][0]["spawn_attempts"] == 1
         assert resumed["status"] != "failed"
 
@@ -1851,8 +2059,16 @@ class TestMdCrossEngineChain:
 
     _tp = TestProductionAppend()
 
-    def _ctx(self, routes_md, *, root_engine, stage_engine, parent_job_id, forces=None,
-             protocol="production"):
+    def _ctx(
+        self,
+        routes_md,
+        *,
+        root_engine,
+        stage_engine,
+        parent_job_id,
+        forces=None,
+        protocol="production",
+    ):
         """A real ``SpawnContext`` for stage 0 of a one-stage chain (via the P1 builder).
 
         ``protocol`` defaults to ``"production"`` to mirror ``ChainStageRequest``'s real
@@ -1861,14 +2077,19 @@ class TestMdCrossEngineChain:
         from backend.core.md_pipeline import MdPipeline, PipelineStage
 
         pipe = MdPipeline(
-            root_job_id="root", root_engine=root_engine,
-            stages=[PipelineStage(engine=stage_engine, protocol=protocol,
-                                  **(forces or {}))])
+            root_job_id="root",
+            root_engine=root_engine,
+            stages=[
+                PipelineStage(engine=stage_engine, protocol=protocol, **(forces or {}))
+            ],
+        )
         run = chain.init_chain_run(pipe, chain_id="c", root_checkpoint="cp")
-        run.root_job_id = parent_job_id     # the resolved predecessor for stage 0
+        run.root_job_id = parent_job_id  # the resolved predecessor for stage 0
         return chain.next_spawn(run)
 
-    def test_chain_spawn_cross_engine_uses_the_seed_create_path(self, tmp_path, monkeypatch):
+    def test_chain_spawn_cross_engine_uses_the_seed_create_path(
+        self, tmp_path, monkeypatch
+    ):
         """oxDNA->NAMD stage: reconstruct via ``create_md_job(oxdna_job_id=root)`` (the
         converter), carrying the stage's field/anchors — NOT ``spawn_md_production``."""
         import asyncio
@@ -1888,21 +2109,29 @@ class TestMdCrossEngineChain:
         monkeypatch.setattr(routes_md, "spawn_md_production", _fake_prod)
 
         ctx = self._ctx(
-            routes_md, root_engine="oxdna", stage_engine="namd", parent_job_id="ox-root",
-            forces={"field": {"field_pN": 5.0, "dir": [1, 0, 0]},
-                    "anchors": [{"scope": "base", "helix": 0, "bp": 0}]})
+            routes_md,
+            root_engine="oxdna",
+            stage_engine="namd",
+            parent_job_id="ox-root",
+            forces={
+                "field": {"field_pN": 5.0, "dir": [1, 0, 0]},
+                "anchors": [{"scope": "base", "helix": 0, "bp": 0}],
+            },
+        )
         job_id = asyncio.run(routes_md._chain_spawn(ctx))
 
         assert job_id == "namd-child"
-        assert "prod" not in calls                       # checkpoint path NOT taken
+        assert "prod" not in calls  # checkpoint path NOT taken
         body = calls["create"]
-        assert body.oxdna_job_id == "ox-root"            # the create-time seed hop kwarg
+        assert body.oxdna_job_id == "ox-root"  # the create-time seed hop kwarg
         assert body.mrdna_job_id is None
         assert body.field == {"field_pN": 5.0, "dir": [1, 0, 0]}
         assert body.anchors == [{"scope": "base", "helix": 0, "bp": 0}]
         assert body.execution_target == "local" and body.autostart is True
 
-    def test_cross_engine_create_uses_a_valid_relaxation_protocol(self, tmp_path, monkeypatch):
+    def test_cross_engine_create_uses_a_valid_relaxation_protocol(
+        self, tmp_path, monkeypatch
+    ):
         """A pipeline stage's protocol defaults to "production", but the cross-engine hop
         goes through the RELAXATION-creation endpoint (``create_md_job`` rejects any protocol
         outside ``SUPPORTED_PROTOCOLS``).  The spawn must map "production" onto a valid
@@ -1921,12 +2150,19 @@ class TestMdCrossEngineChain:
 
         monkeypatch.setattr(routes_md, "create_md_job", _fake_create)
         # protocol="production" is ChainStageRequest's default — the failure case.
-        ctx = self._ctx(routes_md, root_engine="oxdna", stage_engine="namd",
-                        parent_job_id="ox-root", protocol="production")
+        ctx = self._ctx(
+            routes_md,
+            root_engine="oxdna",
+            stage_engine="namd",
+            parent_job_id="ox-root",
+            protocol="production",
+        )
         asyncio.run(routes_md._chain_spawn(ctx))
         assert calls["create"].protocol in SUPPORTED_PROTOCOLS
 
-    def test_cross_engine_create_keeps_an_explicit_relaxation_protocol(self, tmp_path, monkeypatch):
+    def test_cross_engine_create_keeps_an_explicit_relaxation_protocol(
+        self, tmp_path, monkeypatch
+    ):
         """If a stage names a valid relaxation protocol, it's forwarded unchanged."""
         import asyncio
 
@@ -1938,8 +2174,13 @@ class TestMdCrossEngineChain:
             return {"job_id": "namd-child"}
 
         monkeypatch.setattr(routes_md, "create_md_job", _fake_create)
-        ctx = self._ctx(routes_md, root_engine="oxdna", stage_engine="namd",
-                        parent_job_id="ox-root", protocol="mgh_slow_release")
+        ctx = self._ctx(
+            routes_md,
+            root_engine="oxdna",
+            stage_engine="namd",
+            parent_job_id="ox-root",
+            protocol="mgh_slow_release",
+        )
         asyncio.run(routes_md._chain_spawn(ctx))
         assert calls["create"].protocol == "mgh_slow_release"
 
@@ -1954,13 +2195,19 @@ class TestMdCrossEngineChain:
             return {"job_id": "namd-child"}
 
         monkeypatch.setattr(routes_md, "create_md_job", _fake_create)
-        ctx = self._ctx(routes_md, root_engine="mrdna", stage_engine="namd",
-                        parent_job_id="mrdna-root")
+        ctx = self._ctx(
+            routes_md,
+            root_engine="mrdna",
+            stage_engine="namd",
+            parent_job_id="mrdna-root",
+        )
         asyncio.run(routes_md._chain_spawn(ctx))
         assert calls["create"].mrdna_job_id == "mrdna-root"
         assert calls["create"].oxdna_job_id is None
 
-    def test_chain_spawn_same_engine_uses_the_checkpoint_path(self, tmp_path, monkeypatch):
+    def test_chain_spawn_same_engine_uses_the_checkpoint_path(
+        self, tmp_path, monkeypatch
+    ):
         """NAMD->NAMD stage: restart the predecessor checkpoint via ``spawn_md_production``,
         never the reconstruct path (a byte-for-byte no-regression of the P2 behaviour)."""
         import asyncio
@@ -1979,15 +2226,20 @@ class TestMdCrossEngineChain:
         monkeypatch.setattr(routes_md, "create_md_job", _fake_create)
         monkeypatch.setattr(routes_md, "spawn_md_production", _fake_prod)
 
-        ctx = self._ctx(routes_md, root_engine="namd", stage_engine="namd",
-                        parent_job_id="namd-parent")
+        ctx = self._ctx(
+            routes_md,
+            root_engine="namd",
+            stage_engine="namd",
+            parent_job_id="namd-parent",
+        )
         job_id = asyncio.run(routes_md._chain_spawn(ctx))
         assert job_id == "prod-child"
         assert "create" not in calls
         assert calls["prod"][0] == "namd-parent"
 
     def test_cross_engine_chain_seeds_stage0_from_root_then_chains_and_resumes(
-            self, tmp_path, monkeypatch):
+        self, tmp_path, monkeypatch
+    ):
         """End-to-end CHAIN through the real ``advance_chains`` -> ``_chain_spawn`` ->
         ``cross_engine_seed`` path (spawns stubbed): an oxDNA root seeds a NAMD stage 0 via
         the reconstruct path; a completed stage 0 chains a same-engine NAMD stage 1 via the
@@ -2019,19 +2271,25 @@ class TestMdCrossEngineChain:
 
         monkeypatch.setattr(routes_md, "create_md_job", _fake_create)
         monkeypatch.setattr(routes_md, "spawn_md_production", _fake_prod)
-        monkeypatch.setattr(routes_md, "_chain_job_status", lambda jid: status.get(jid, "running"))
+        monkeypatch.setattr(
+            routes_md, "_chain_job_status", lambda jid: status.get(jid, "running")
+        )
 
         body = routes_md.CreateChainRequest(
-            root_job_id="ox-root", root_engine="oxdna",
-            stages=[routes_md.ChainStageRequest(engine="namd", length_ns=1.0),
-                    routes_md.ChainStageRequest(engine="namd", length_ns=1.0)])
+            root_job_id="ox-root",
+            root_engine="oxdna",
+            stages=[
+                routes_md.ChainStageRequest(engine="namd", length_ns=1.0),
+                routes_md.ChainStageRequest(engine="namd", length_ns=1.0),
+            ],
+        )
         chain = asyncio.run(routes_md.create_md_chain(body))["chain"]
         chain_id = chain["chain_id"]
 
         # Stage 0 spawned through the cross-engine reconstruct path (seeded from the root).
         assert chain["stages"][0]["status"] == "running"
         assert created and created[0] == ("s0-1", "ox-root")
-        assert produced == []                              # stage 1 not yet
+        assert produced == []  # stage 1 not yet
         s0 = chain["stages"][0]["job_id"]
         assert s0 == "s0-1"
 
@@ -2041,7 +2299,7 @@ class TestMdCrossEngineChain:
         mid = asyncio.run(routes_md.get_md_chain(chain_id))["chain"]
         assert mid["stages"][0]["status"] == "done"
         assert mid["stages"][1]["status"] == "running"
-        assert produced == ["s0-1"]                        # seeded from the realised stage 0
+        assert produced == ["s0-1"]  # seeded from the realised stage 0
 
         # Stage 1 completes -> the whole chain is completed.
         status["s1"] = "completed"
@@ -2049,7 +2307,9 @@ class TestMdCrossEngineChain:
         done = asyncio.run(routes_md.get_md_chain(chain_id))["chain"]
         assert done["status"] == "completed"
 
-    def test_cross_engine_chain_halts_on_stage0_failure_then_resumes(self, tmp_path, monkeypatch):
+    def test_cross_engine_chain_halts_on_stage0_failure_then_resumes(
+        self, tmp_path, monkeypatch
+    ):
         import asyncio
 
         import backend.core.oxdna_runner as oxr
@@ -2069,12 +2329,18 @@ class TestMdCrossEngineChain:
             return {"job_id": jid}
 
         monkeypatch.setattr(routes_md, "create_md_job", _fake_create)
-        monkeypatch.setattr(routes_md, "_chain_job_status", lambda jid: status.get(jid, "running"))
+        monkeypatch.setattr(
+            routes_md, "_chain_job_status", lambda jid: status.get(jid, "running")
+        )
 
         body = routes_md.CreateChainRequest(
-            root_job_id="ox-root", root_engine="oxdna",
-            stages=[routes_md.ChainStageRequest(engine="namd", length_ns=1.0),
-                    routes_md.ChainStageRequest(engine="namd", length_ns=1.0)])
+            root_job_id="ox-root",
+            root_engine="oxdna",
+            stages=[
+                routes_md.ChainStageRequest(engine="namd", length_ns=1.0),
+                routes_md.ChainStageRequest(engine="namd", length_ns=1.0),
+            ],
+        )
         chain = asyncio.run(routes_md.create_md_chain(body))["chain"]
         chain_id = chain["chain_id"]
         assert created == ["s0-1"]
@@ -2091,5 +2357,5 @@ class TestMdCrossEngineChain:
         resumed = asyncio.run(routes_md.resume_md_chain(chain_id))["chain"]
         assert resumed["status"] == "running"
         assert resumed["stages"][0]["status"] == "running"
-        assert created == ["s0-1", "s0-2"]                 # cross-engine reconstruct re-ran
+        assert created == ["s0-1", "s0-2"]  # cross-engine reconstruct re-ran
         assert resumed["stages"][1]["status"] == "pending"

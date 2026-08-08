@@ -111,7 +111,9 @@ def _write_single_frame_dcd(topology: Path, coor: Path, dest: Path) -> int:
     return int(universe.atoms.n_atoms)
 
 
-async def fetch_live_frame(job, workspace_dir: Path, *, conn=None, force: bool = False) -> dict:
+async def fetch_live_frame(
+    job, workspace_dir: Path, *, conn=None, force: bool = False
+) -> dict:
     """Fetch the running segment's current frame and materialise it for display.
 
     Returns a small status dict; raises ``ValueError`` for a job this cannot apply to
@@ -133,14 +135,19 @@ async def fetch_live_frame(job, workspace_dir: Path, *, conn=None, force: bool =
 
     # A real fetched trajectory outranks anything this module can produce.
     if dest.is_file() and not is_live_stand_in(job, segment):
-        return {"ok": True, "segment": segment, "skipped": "real trajectory already local"}
+        return {
+            "ok": True,
+            "segment": segment,
+            "skipped": "real trajectory already local",
+        }
 
     previous = getattr(job, "live_frame", None) or {}
     if (
         not force
         and dest.is_file()
         and previous.get("segment") == segment
-        and time.time() - float(previous.get("fetched_at") or 0) < MIN_REFETCH_INTERVAL_S
+        and time.time() - float(previous.get("fetched_at") or 0)
+        < MIN_REFETCH_INTERVAL_S
     ):
         return {"ok": True, "reused": True, **previous}
 
@@ -158,10 +165,16 @@ async def fetch_live_frame(job, workspace_dir: Path, *, conn=None, force: bool =
     except Exception as exc:  # noqa: BLE001 — no checkpoint written yet is normal
         logger.info("[%s] no live frame for %s: %s", job.job_id, segment, exc)
         tmp_coor.unlink(missing_ok=True)
-        return {"ok": False, "segment": segment, "reason": "no restart checkpoint on the node yet"}
+        return {
+            "ok": False,
+            "segment": segment,
+            "reason": "no restart checkpoint on the node yet",
+        }
 
     try:
-        n_atoms = await asyncio.to_thread(_write_single_frame_dcd, topology, tmp_coor, dest)
+        n_atoms = await asyncio.to_thread(
+            _write_single_frame_dcd, topology, tmp_coor, dest
+        )
     finally:
         tmp_coor.unlink(missing_ok=True)
 
@@ -171,6 +184,11 @@ async def fetch_live_frame(job, workspace_dir: Path, *, conn=None, force: bool =
         "n_atoms": n_atoms,
         "fetched_at": time.time(),
     }
-    logger.info("[%s] live frame: %s step %s (%d atoms)",
-                job.job_id, segment, job.live_frame["step"], n_atoms)
+    logger.info(
+        "[%s] live frame: %s step %s (%d atoms)",
+        job.job_id,
+        segment,
+        job.live_frame["step"],
+        n_atoms,
+    )
     return {"ok": True, **job.live_frame}

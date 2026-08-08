@@ -70,16 +70,21 @@ router = APIRouter()
 
 # ── Request bodies ────────────────────────────────────────────────────────────
 
+
 class UploadFileRequest(BaseModel):
-    content: str              # raw JSON string
-    filename: str             # e.g. "my_part.nadoc"
-    dest_path: Optional[str] = None   # explicit workspace-relative path (skips auto-dedup)
+    content: str  # raw JSON string
+    filename: str  # e.g. "my_part.nadoc"
+    dest_path: Optional[str] = (
+        None  # explicit workspace-relative path (skips auto-dedup)
+    )
     overwrite: bool = False
 
 
 class SaveAssemblyRequest(BaseModel):
-    filename: Optional[str] = None   # stem only (backward compat)
-    path: Optional[str] = None       # full workspace-relative path, takes priority over filename
+    filename: Optional[str] = None  # stem only (backward compat)
+    path: Optional[str] = (
+        None  # full workspace-relative path, takes priority over filename
+    )
     overwrite: bool = True
 
 
@@ -89,20 +94,21 @@ class SaveDesignWorkspaceRequest(BaseModel):
 
 
 class MkdirRequest(BaseModel):
-    path: str   # workspace-relative folder path to create
+    path: str  # workspace-relative folder path to create
 
 
 class RenameRequest(BaseModel):
-    path: str       # current workspace-relative path (file or folder)
-    new_name: str   # basename only — no path separators
+    path: str  # current workspace-relative path (file or folder)
+    new_name: str  # basename only — no path separators
 
 
 class MoveRequest(BaseModel):
-    path: str           # current workspace-relative path
-    dest_folder: str    # destination folder (workspace-relative), "" = workspace root
+    path: str  # current workspace-relative path
+    dest_folder: str  # destination folder (workspace-relative), "" = workspace root
 
 
 # ── Internal helper (workspace-only; moved out of assembly.py) ─────────────────
+
 
 def _patch_references(old_ref: str, new_ref: str) -> list[str]:
     """Cascade-update PartSourceFile.path across all on-disk .nass files and the
@@ -123,6 +129,7 @@ def _patch_references(old_ref: str, new_ref: str) -> list[str]:
 
 # ── Workspace library ─────────────────────────────────────────────────────────
 
+
 @router.get("/library/files", status_code=200)
 def list_library_files() -> list:
     """Scan workspace for .nadoc / .nass files and subdirectories, sorted by mtime desc.
@@ -134,6 +141,7 @@ def list_library_files() -> list:
     """
     _asm._WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
     from backend.core.design_disk_usage import sim_bytes_by_source_path, _norm
+
     sim_by_path = sim_bytes_by_source_path(_asm._WORKSPACE_DIR)
     entries = []
     for p in _asm._WORKSPACE_DIR.rglob("*"):
@@ -142,28 +150,32 @@ def list_library_files() -> list:
         if any(part.startswith(".") or part.startswith("__") for part in rel_parts):
             continue
         try:
-            stat     = p.stat()
-            rel      = str(p.relative_to(_asm._WORKSPACE_DIR))
-            mtime    = _dt.fromtimestamp(stat.st_mtime, tz=_tz.utc).isoformat()
+            stat = p.stat()
+            rel = str(p.relative_to(_asm._WORKSPACE_DIR))
+            mtime = _dt.fromtimestamp(stat.st_mtime, tz=_tz.utc).isoformat()
             if p.is_dir():
-                entries.append({
-                    "name":       p.name,
-                    "path":       rel,
-                    "type":       "folder",
-                    "mtime_iso":  mtime,
-                    "size_bytes": 0,
-                })
+                entries.append(
+                    {
+                        "name": p.name,
+                        "path": rel,
+                        "type": "folder",
+                        "mtime_iso": mtime,
+                        "size_bytes": 0,
+                    }
+                )
             elif p.suffix in (".nadoc", ".nass"):
                 sim = sim_by_path.get(_norm(rel), 0) if p.suffix == ".nadoc" else 0
-                entries.append({
-                    "name":       p.stem,
-                    "path":       rel,
-                    "type":       "assembly" if p.suffix == ".nass" else "part",
-                    "mtime_iso":  mtime,
-                    "size_bytes": stat.st_size,
-                    "sim_bytes":  sim,
-                    "disk_bytes": stat.st_size + sim,
-                })
+                entries.append(
+                    {
+                        "name": p.stem,
+                        "path": rel,
+                        "type": "assembly" if p.suffix == ".nass" else "part",
+                        "mtime_iso": mtime,
+                        "size_bytes": stat.st_size,
+                        "sim_bytes": sim,
+                        "disk_bytes": stat.st_size + sim,
+                    }
+                )
         except OSError:
             continue
     entries.sort(key=lambda e: e["mtime_iso"], reverse=True)
@@ -204,34 +216,43 @@ def design_about(path: Optional[str] = None) -> dict:
             except Exception:  # noqa: BLE001 — advisory panel, never 500
                 design = None
     if design is None:
-        return {"empty": True, "path": path, "name": (Path(path).stem if path else None)}
+        return {
+            "empty": True,
+            "path": path,
+            "name": (Path(path).stem if path else None),
+        }
 
     # ── Topology (from the live design) ──────────────────────────────────────
     total_bases = sum(
-        abs(d.end_bp - d.start_bp) + 1
-        for s in design.strands
-        for d in s.domains
+        abs(d.end_bp - d.start_bp) + 1 for s in design.strands for d in s.domains
     )
 
     loadouts_info = []
     if design.loadouts:
         from backend.api.crud import _decode_loadout_design_snapshot
+
         for lo in design.loadouts:
             is_active = lo.id == design.active_loadout_id
             if is_active:
                 fcount = len(design.feature_log)
             else:
                 try:
-                    fcount = len(_decode_loadout_design_snapshot(lo.design_snapshot_gz_b64).feature_log)
+                    fcount = len(
+                        _decode_loadout_design_snapshot(
+                            lo.design_snapshot_gz_b64
+                        ).feature_log
+                    )
                 except Exception:  # noqa: BLE001 — advisory count, never 500 the panel
                     fcount = None
-            loadouts_info.append({
-                "id": lo.id,
-                "name": lo.name,
-                "feature_count": fcount,
-                "is_active": is_active,
-                "snapshot_size_bytes": lo.snapshot_size_bytes,
-            })
+            loadouts_info.append(
+                {
+                    "id": lo.id,
+                    "name": lo.name,
+                    "feature_count": fcount,
+                    "is_active": is_active,
+                    "snapshot_size_bytes": lo.snapshot_size_bytes,
+                }
+            )
 
     # ── On-disk facts (keyed off the open file path) ─────────────────────────
     file_size = 0
@@ -247,9 +268,9 @@ def design_about(path: Optional[str] = None) -> dict:
         assemblies = assemblies_referencing(ws, path)
 
     oxdna_jobs = [j for j in jobs if j["kind"] == "oxdna"]
-    md_jobs    = [j for j in jobs if j["kind"] == "md"]
+    md_jobs = [j for j in jobs if j["kind"] == "md"]
     oxdna_bytes = sum(j["size_bytes"] for j in oxdna_jobs)
-    md_bytes    = sum(j["size_bytes"] for j in md_jobs)
+    md_bytes = sum(j["size_bytes"] for j in md_jobs)
 
     return {
         "path": path,
@@ -331,20 +352,24 @@ def library_mkdir(body: MkdirRequest) -> dict:
 def library_rename(body: RenameRequest) -> dict:
     """Rename a workspace file or folder; auto-patches all .nass references."""
     if "/" in body.new_name or "\\" in body.new_name:
-        raise HTTPException(400, detail="new_name must be a plain basename (no path separators).")
+        raise HTTPException(
+            400, detail="new_name must be a plain basename (no path separators)."
+        )
     src = _safe_workspace_path(body.path)
     if not src.exists():
         raise HTTPException(404, detail=f"Not found: {body.path!r}")
     dest = src.parent / body.new_name
     if dest.exists() and dest.resolve() != src.resolve():
-        raise HTTPException(409, detail=f"{body.new_name!r} already exists in the same folder.")
-    is_dir   = src.is_dir()
-    old_rel  = str(src.relative_to(_asm._WORKSPACE_DIR))
-    new_rel  = str((src.parent / body.new_name).relative_to(_asm._WORKSPACE_DIR))
+        raise HTTPException(
+            409, detail=f"{body.new_name!r} already exists in the same folder."
+        )
+    is_dir = src.is_dir()
+    old_rel = str(src.relative_to(_asm._WORKSPACE_DIR))
+    new_rel = str((src.parent / body.new_name).relative_to(_asm._WORKSPACE_DIR))
     src.rename(dest)
-    old_ref  = old_rel + "/" if is_dir else old_rel
-    new_ref  = new_rel + "/" if is_dir else new_rel
-    patched  = _patch_references(old_ref, new_ref)
+    old_ref = old_rel + "/" if is_dir else old_rel
+    new_ref = new_rel + "/" if is_dir else new_rel
+    patched = _patch_references(old_ref, new_ref)
     return {"old_path": old_rel, "new_path": new_rel, "patched_assemblies": patched}
 
 
@@ -364,8 +389,10 @@ def library_move(body: MoveRequest) -> dict:
         old_rel = str(src.relative_to(_asm._WORKSPACE_DIR))
         return {"old_path": old_rel, "new_path": old_rel, "patched_assemblies": []}
     if dest.exists():
-        raise HTTPException(409, detail=f"{src.name!r} already exists in the destination folder.")
-    is_dir  = src.is_dir()
+        raise HTTPException(
+            409, detail=f"{src.name!r} already exists in the destination folder."
+        )
+    is_dir = src.is_dir()
     old_rel = str(src.relative_to(_asm._WORKSPACE_DIR))
     shutil.move(str(src), str(dest))
     new_rel = str(dest.relative_to(_asm._WORKSPACE_DIR))
@@ -383,9 +410,11 @@ def _job_running(kind: str, job) -> bool:
     if kind == "md":
         from backend.core.md_job import MdStatus  # noqa: PLC0415
         from backend.core.namd_runner import is_running as _ir  # noqa: PLC0415
+
         return _ir(job.job_id) or job.status == MdStatus.running
     from backend.core.oxdna_job import OxdnaStatus  # noqa: PLC0415
     from backend.core.oxdna_runner import is_running as _ir  # noqa: PLC0415
+
     return _ir(job.job_id) or job.status == OxdnaStatus.running
 
 
@@ -401,11 +430,19 @@ def library_file_jobs(path: str) -> dict:
         raise HTTPException(404, detail=f"Not found: {path!r}")
     found = find_associated_jobs(_asm._WORKSPACE_DIR, path, dest.is_dir())
     md = [
-        {"job_id": j.job_id, "design_name": j.design_name, "running": _job_running("md", j)}
+        {
+            "job_id": j.job_id,
+            "design_name": j.design_name,
+            "running": _job_running("md", j),
+        }
         for j in found["md"]
     ]
     ox = [
-        {"job_id": j.job_id, "design_name": j.design_name, "running": _job_running("oxdna", j)}
+        {
+            "job_id": j.job_id,
+            "design_name": j.design_name,
+            "running": _job_running("oxdna", j),
+        }
         for j in found["oxdna"]
     ]
     return {"md": md, "oxdna": ox, "running": any(e["running"] for e in (*md, *ox))}
@@ -434,6 +471,7 @@ def library_delete(path: str, delete_jobs: bool = False) -> dict:
                 + ", ".join(running),
             )
         from backend.core.job_archive import purge_index_entry
+
         for _kind, j in jobs:
             job_dir = j.job_dir(_asm._WORKSPACE_DIR)
             if job_dir.exists():
@@ -476,12 +514,18 @@ def save_assembly(body: SaveAssemblyRequest = None) -> dict:
     changed = False
     for idx, inst in enumerate(new_instances):
         if inst.source.type == "inline":
-            design    = inst.source.design
-            safe_stem = "".join(c if c.isalnum() or c in "-_ " else "_"
-                                for c in (design.metadata.name or inst.name or "part"))
-            filename  = _ws.dedup_filename(safe_stem, ".nadoc", _asm._WORKSPACE_DIR)
-            (_asm._WORKSPACE_DIR / filename).write_text(design.to_json(), encoding="utf-8")
-            new_instances[idx] = inst.model_copy(update={"source": PartSourceFile(path=filename)})
+            design = inst.source.design
+            safe_stem = "".join(
+                c if c.isalnum() or c in "-_ " else "_"
+                for c in (design.metadata.name or inst.name or "part")
+            )
+            filename = _ws.dedup_filename(safe_stem, ".nadoc", _asm._WORKSPACE_DIR)
+            (_asm._WORKSPACE_DIR / filename).write_text(
+                design.to_json(), encoding="utf-8"
+            )
+            new_instances[idx] = inst.model_copy(
+                update={"source": PartSourceFile(path=filename)}
+            )
             changed = True
 
     if changed:
@@ -492,16 +536,20 @@ def save_assembly(body: SaveAssemblyRequest = None) -> dict:
     if body and body.path:
         if not body.path.endswith(".nass"):
             raise HTTPException(400, detail="path must end with .nass")
-        dest    = _safe_workspace_path(body.path)
+        dest = _safe_workspace_path(body.path)
         if not body.overwrite and dest.exists():
             raise HTTPException(409, detail=f"File already exists: {body.path!r}")
         dest.parent.mkdir(parents=True, exist_ok=True)
         out_rel = body.path
     else:
-        asm_name  = (body.filename if body and body.filename else None) or assembly.metadata.name or "assembly"
+        asm_name = (
+            (body.filename if body and body.filename else None)
+            or assembly.metadata.name
+            or "assembly"
+        )
         safe_stem = "".join(c if c.isalnum() or c in "-_ " else "_" for c in asm_name)
-        out_rel   = f"{safe_stem}.nass"
-        dest      = _asm._WORKSPACE_DIR / out_rel
+        out_rel = f"{safe_stem}.nass"
+        dest = _asm._WORKSPACE_DIR / out_rel
 
     dest.write_text(assembly.to_json(), encoding="utf-8")
     # Only return the full assembly payload when the in-memory state actually

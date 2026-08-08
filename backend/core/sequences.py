@@ -33,29 +33,27 @@ _CORE = pathlib.Path(__file__).parent
 def _load_seq(filename: str) -> str:
     path = _CORE / filename
     if not path.exists():
-        raise FileNotFoundError(
-            f"Scaffold sequence file not found: {path}."
-        )
+        raise FileNotFoundError(f"Scaffold sequence file not found: {path}.")
     return path.read_text().strip().upper()
 
 
 # ── Available scaffold sequences ──────────────────────────────────────────────
 
-M13MP18_SEQUENCE: str = _load_seq("m13mp18.txt")   # 7249 nt
-P7560_SEQUENCE:   str = _load_seq("p7560.txt")      # 7560 nt
-P8064_SEQUENCE:   str = _load_seq("p8064.txt")      # 8064 nt
+M13MP18_SEQUENCE: str = _load_seq("m13mp18.txt")  # 7249 nt
+P7560_SEQUENCE: str = _load_seq("p7560.txt")  # 7560 nt
+P8064_SEQUENCE: str = _load_seq("p8064.txt")  # 8064 nt
 
 # Ordered list of (display_name, length, sequence) for the UI
 SCAFFOLD_LIBRARY: list[tuple[str, int, str]] = [
     ("M13mp18", len(M13MP18_SEQUENCE), M13MP18_SEQUENCE),
-    ("p7560",   len(P7560_SEQUENCE),   P7560_SEQUENCE),
-    ("p8064",   len(P8064_SEQUENCE),   P8064_SEQUENCE),
+    ("p7560", len(P7560_SEQUENCE), P7560_SEQUENCE),
+    ("p8064", len(P8064_SEQUENCE), P8064_SEQUENCE),
 ]
 
 _SCAFFOLD_BY_NAME: dict[str, str] = {
     "M13mp18": M13MP18_SEQUENCE,
-    "p7560":   P7560_SEQUENCE,
-    "p8064":   P8064_SEQUENCE,
+    "p7560": P7560_SEQUENCE,
+    "p8064": P8064_SEQUENCE,
 }
 
 # Watson-Crick complement map
@@ -131,7 +129,7 @@ def _domain_nt_count(domain, ls_map: dict[tuple[str, int], int]) -> int:
     for bp in domain_bp_range(domain):
         delta = ls_map.get((domain.helix_id, bp), 0)
         if delta <= -1:
-            continue       # skip -- no nucleotide at this position
+            continue  # skip -- no nucleotide at this position
         total += delta + 1  # 1 for normal bp, 2 for a loop (+1), etc.
     return total
 
@@ -236,9 +234,9 @@ def _do_assign_sequence(
     -------
     (updated_design, total_nt, padded_nt)
     """
-    ls_map    = _build_loop_skip_map(design)
-    seq_len   = len(chosen_seq)
-    total_nt  = _strand_nt_with_skips(scaffold_strand, ls_map)
+    ls_map = _build_loop_skip_map(design)
+    seq_len = len(chosen_seq)
+    total_nt = _strand_nt_with_skips(scaffold_strand, ls_map)
     padded_nt = max(0, total_nt - seq_len)
 
     bases: list[str] = []
@@ -254,9 +252,8 @@ def _do_assign_sequence(
                 seq_idx += 1
 
     new_scaffold = scaffold_strand.model_copy(update={"sequence": "".join(bases)})
-    new_strands  = [
-        new_scaffold if s.id == scaffold_strand.id else s
-        for s in design.strands
+    new_strands = [
+        new_scaffold if s.id == scaffold_strand.id else s for s in design.strands
     ]
     return design.model_copy(update={"strands": new_strands}), total_nt, padded_nt
 
@@ -297,10 +294,8 @@ def assign_scaffold_sequence(
     """
     if scaffold_name not in _SCAFFOLD_BY_NAME:
         known = ", ".join(_SCAFFOLD_BY_NAME)
-        raise ValueError(
-            f"Unknown scaffold '{scaffold_name}'. Choose one of: {known}."
-        )
-    scaffold   = _resolve_scaffold_strand(design, strand_id)
+        raise ValueError(f"Unknown scaffold '{scaffold_name}'. Choose one of: {known}.")
+    scaffold = _resolve_scaffold_strand(design, strand_id)
     chosen_seq = _SCAFFOLD_BY_NAME[scaffold_name]
     return _do_assign_sequence(design, scaffold, chosen_seq)
 
@@ -331,7 +326,13 @@ def assign_custom_scaffold_sequence(
     ValueError
         On invalid characters, empty sequence, or missing scaffold strand.
     """
-    cleaned = raw_sequence.strip().upper().replace(" ", "").replace("\n", "").replace("\r", "")
+    cleaned = (
+        raw_sequence.strip()
+        .upper()
+        .replace(" ", "")
+        .replace("\n", "")
+        .replace("\r", "")
+    )
     if not cleaned:
         raise ValueError("Custom sequence is empty after stripping whitespace.")
     bad = sorted({c for c in cleaned if c not in _VALID_BASES})
@@ -360,12 +361,12 @@ def build_scaffold_base_map(design: Design) -> dict[tuple[str, int, str], list[s
     if scaffold is None or scaffold.sequence is None:
         return {}
 
-    ls_map   = _build_loop_skip_map(design)
+    ls_map = _build_loop_skip_map(design)
     base_map: dict[tuple[str, int, str], list[str]] = {}
     seq_iter = iter(scaffold.sequence)
 
     for domain in scaffold.domains:
-        h     = domain.helix_id
+        h = domain.helix_id
         d_val = domain.direction.value
         for bp in domain_bp_range(domain):
             delta = ls_map.get((h, bp), 0)
@@ -416,17 +417,23 @@ def _assemble_overhang_5to3(spec: object, domain_len: int) -> list[str]:
     See LESSONS F3: an overhang's stored ``sequence`` can be shorter than the
     backing domain — the missing 3' positions become 'N'.
     """
-    parent_seq = (spec.sequence.upper()
-                  if spec is not None and getattr(spec, 'sequence', None) is not None
-                  else None)
-    sub_doms = list(getattr(spec, 'sub_domains', []) or []) if spec else []
+    parent_seq = (
+        spec.sequence.upper()
+        if spec is not None and getattr(spec, "sequence", None) is not None
+        else None
+    )
+    sub_doms = list(getattr(spec, "sub_domains", []) or []) if spec else []
 
     def _slot(s: str, n: int) -> list[str]:
         s = s.upper()
         return list(s[:n]) if len(s) >= n else list(s) + ["N"] * (n - len(s))
 
     if not sub_doms:
-        assembled = _slot(parent_seq, domain_len) if parent_seq is not None else ["N"] * domain_len
+        assembled = (
+            _slot(parent_seq, domain_len)
+            if parent_seq is not None
+            else ["N"] * domain_len
+        )
         return assembled[:domain_len]
 
     assembled: list[str] = []
@@ -434,7 +441,7 @@ def _assemble_overhang_5to3(spec: object, domain_len: int) -> list[str]:
         if sd.sequence_override:
             assembled.extend(_slot(sd.sequence_override, sd.length_bp))
         elif parent_seq is not None:
-            window = parent_seq[sd.start_bp_offset: sd.start_bp_offset + sd.length_bp]
+            window = parent_seq[sd.start_bp_offset : sd.start_bp_offset + sd.length_bp]
             assembled.extend(_slot(window, sd.length_bp))
         else:
             assembled.extend(["N"] * sd.length_bp)
@@ -527,7 +534,7 @@ def strand_partner_bases(
             if delta <= -1:
                 continue  # skip -- no nucleotide in the staple at this position
             scaf_bases = scaf_map.get((h, bp, scaf_dir_val))
-            n_copies   = delta + 1  # 1 for normal, 2 for loop
+            n_copies = delta + 1  # 1 for normal, 2 for loop
             if scaf_bases is not None:
                 partners.extend(scaf_bases)
             else:
@@ -568,7 +575,7 @@ def assign_staple_sequences(design: Design) -> Design:
         )
 
     scaf_map = build_scaffold_base_map(design)
-    ls_map   = _build_loop_skip_map(design)
+    ls_map = _build_loop_skip_map(design)
 
     # Build lookup: overhang_id -> OverhangSpec (for user-specified sequences)
     overhang_map: dict[str, object] = {o.id: o for o in design.overhangs}
@@ -585,8 +592,11 @@ def assign_staple_sequences(design: Design) -> Design:
             continue
 
         partners = strand_partner_bases(
-            design, strand,
-            scaf_map=scaf_map, ls_map=ls_map, overhang_bp_bases=overhang_bp_bases,
+            design,
+            strand,
+            scaf_map=scaf_map,
+            ls_map=ls_map,
+            overhang_bp_bases=overhang_bp_bases,
         )
 
         bases: list[str] = []
@@ -607,7 +617,7 @@ def assign_staple_sequences(design: Design) -> Design:
                 continue
 
             # Duplex + binder domains: base = complement of the partner base.
-            for p in partners[idx: idx + span]:
+            for p in partners[idx : idx + span]:
                 bases.append(complement_base(p) if p is not None else "N")
             idx += span
 
@@ -656,17 +666,23 @@ def strand_sequence_segments(design: "Design", strand: Strand) -> list[dict]:
         if d.overhang_id is not None:
             spec = spec_by_id.get(d.overhang_id)
             has_override = any(
-                sd.sequence_override for sd in (getattr(spec, "sub_domains", None) or [])
+                sd.sequence_override
+                for sd in (getattr(spec, "sub_domains", None) or [])
             )
             kind, oid, editable = "overhang", d.overhang_id, not has_override
         elif d.binds_overhang_id is not None:
             kind, oid, editable = "binder", None, True
         else:
             kind, oid, editable = "duplex", None, True
-        out.append({
-            "start": start, "length": span, "kind": kind,
-            "overhang_id": oid, "editable": editable,
-        })
+        out.append(
+            {
+                "start": start,
+                "length": span,
+                "kind": kind,
+                "overhang_id": oid,
+                "editable": editable,
+            }
+        )
         start += span
     return out
 
@@ -695,9 +711,11 @@ def overhang_dependent_strand_ids(
     out: set[str] = set()
     for s in design.strands:
         for d in s.domains:
-            if (d.overhang_id in oh
-                    or d.binds_overhang_id in oh
-                    or d.helix_id in helices):
+            if (
+                d.overhang_id in oh
+                or d.binds_overhang_id in oh
+                or d.helix_id in helices
+            ):
                 out.add(s.id)
                 break
     return out
@@ -816,7 +834,7 @@ def assign_consensus_sequence(
             continue
         seq_iter = iter(strand.sequence)
         for domain in strand.domains:
-            h     = domain.helix_id
+            h = domain.helix_id
             d_val = domain.direction.value
             for bp in domain_bp_range(domain):
                 delta = ls_map.get((h, bp), 0)
@@ -835,8 +853,8 @@ def assign_consensus_sequence(
     covered_positions = {(h, off) for h, off, _ in votes}
     for h, offset in covered_positions:
         fwd_counter = votes.get((h, offset, fwd_val), Counter())
-        fwd_base    = fwd_counter.most_common(1)[0][0] if fwd_counter else "A"
-        rev_base    = _COMPLEMENT.get(fwd_base, "T")
+        fwd_base = fwd_counter.most_common(1)[0][0] if fwd_counter else "A"
+        rev_base = _COMPLEMENT.get(fwd_base, "T")
         consensus[(h, offset, fwd_val)] = fwd_base
         consensus[(h, offset, rev_val)] = rev_base
 
@@ -847,15 +865,15 @@ def assign_consensus_sequence(
     for strand in sliced_design.strands:
         bases: list[str] = []
         for domain in strand.domains:
-            h     = domain.helix_id
+            h = domain.helix_id
             d_val = domain.direction.value
             for bp in domain_bp_range(domain):
                 delta = ls_map_sliced.get((h, bp), 0)
                 if delta <= -1:
                     continue
                 n_copies = delta + 1
-                offset   = (bp - bp_start) % period
-                base     = consensus.get(
+                offset = (bp - bp_start) % period
+                base = consensus.get(
                     (h, offset, d_val),
                     "A" if d_val == fwd_val else "T",
                 )

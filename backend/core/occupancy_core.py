@@ -27,15 +27,15 @@ from backend.physics.oxdna_interface import (
 )
 
 # ── Tunables ──────────────────────────────────────────────────────────────────────
-_OCC_SEED = 0                  # fixed → deterministic clustering (the tests rely on it)
-_OCC_RESTARTS = 5              # kmeans2 does no restarts of its own
+_OCC_SEED = 0  # fixed → deterministic clustering (the tests rely on it)
+_OCC_RESTARTS = 5  # kmeans2 does no restarts of its own
 _OCC_KMAX = 6
-_OCC_MIN_FRAMES = 20           # below this, clustering is not meaningful
-_OCC_VAR_TARGET = 0.90         # cumulative variance retained by the kept PCs
+_OCC_MIN_FRAMES = 20  # below this, clustering is not meaningful
+_OCC_VAR_TARGET = 0.90  # cumulative variance retained by the kept PCs
 _OCC_MAX_PCS = 10
-_OCC_SILHOUETTE_MIN = 0.25     # below → unimodal (invariant 3)
-_OCC_MIN_VISITS = 2            # each state must be ENTERED this many times (invariant 2)
-_OCC_MIN_BP_COLUMNS = 10       # below this, "bp" basis is meaningless → fall back to "nt"
+_OCC_SILHOUETTE_MIN = 0.25  # below → unimodal (invariant 3)
+_OCC_MIN_VISITS = 2  # each state must be ENTERED this many times (invariant 2)
+_OCC_MIN_BP_COLUMNS = 10  # below this, "bp" basis is meaningless → fall back to "nt"
 
 # n_eff below which populations are flagged preliminary. At p=0.5 the relative error
 # sqrt(p(1-p)/N_eff)/p is 0.20 here — the same "one significant figure" threshold
@@ -44,7 +44,6 @@ OCCUPANCY_PRELIM_NEFF = 25.0
 
 _OCCUPANCY_CACHE = None
 _OCCUPANCY_CACHE_MAX = 6
-
 
 
 def _synthetic_selected(key, xb_exact, xb_whole, ext_exact, ext_whole) -> bool:
@@ -56,7 +55,7 @@ def _synthetic_selected(key, xb_exact, xb_whole, ext_exact, ext_whole) -> bool:
     matched explicitly rather than by a shared index rule.
     """
     if is_extension_key(key):
-        ext_id = str(key[0])[len(_EXT_PREFIX):]
+        ext_id = str(key[0])[len(_EXT_PREFIX) :]
         if ext_id in ext_whole:
             return True
         return len(key) >= 2 and (ext_id, int(key[1])) in ext_exact
@@ -66,6 +65,7 @@ def _synthetic_selected(key, xb_exact, xb_whole, ext_exact, ext_whole) -> bool:
             return True
         return (xo_id, int(key[2])) in xb_exact
     return False
+
 
 def resolve_selection_keys(design, keys, selection) -> list:
     """Filter the frame key list down to a user selection. Pure.
@@ -106,7 +106,9 @@ def resolve_selection_keys(design, keys, selection) -> list:
     strand_ids = set(str(s) for s in (selection.get("strand_ids") or []))
     want_clusters = set(selection.get("cluster_ids") or [])
     overhang_ids = set(str(o) for o in (selection.get("overhang_ids") or []))
-    domains = {(str(d[0]), int(d[1])) for d in (selection.get("domains") or []) if len(d) >= 2}
+    domains = {
+        (str(d[0]), int(d[1])) for d in (selection.get("domains") or []) if len(d) >= 2
+    }
     bases = {tuple(b)[:3] for b in (selection.get("bases") or [])}
 
     # Synthetic scopes match on the key tuple directly, so they need no strand walk:
@@ -130,7 +132,7 @@ def resolve_selection_keys(design, keys, selection) -> list:
     # A cluster IS a named set of helices (ClusterRigidTransform.helix_ids), so it
     # expands rather than needing a parallel code path.
     if want_clusters:
-        for ct in (getattr(design, "cluster_transforms", None) or []):
+        for ct in getattr(design, "cluster_transforms", None) or []:
             if getattr(ct, "id", None) in want_clusters:
                 helix_ids.update(getattr(ct, "helix_ids", None) or [])
 
@@ -195,7 +197,7 @@ def _superpose_on_subset(X):
     """
     X = np.asarray(X, dtype=float)
     if X.shape[0] < 2 or X.shape[1] < 3 * _OCC_MIN_FIT_POINTS:
-        return X                              # < 3 points: no rotation to speak of
+        return X  # < 3 points: no rotation to speak of
     n = X.shape[1] // 3
     P = X.reshape(X.shape[0], n, 3)
     every = list(range(n))
@@ -226,8 +228,8 @@ def _superpose_on_subset(X):
 # and smear the very motion the duplex part was picked to show.
 
 OCC_FIT_MODES = ("global", "selection", "local")
-_OCC_LOCAL_FLANK = 3           # bp either side of a junction that define its local frame
-_OCC_MIN_FIT_POINTS = 3        # below 3 points a Kabsch fit has no rotation to remove
+_OCC_LOCAL_FLANK = 3  # bp either side of a junction that define its local frame
+_OCC_MIN_FIT_POINTS = 3  # below 3 points a Kabsch fit has no rotation to remove
 
 
 def _refit(P, fit_pos, out_pos, Q, slots):
@@ -257,8 +259,9 @@ def _local_flank_keys(crossover, flank: int):
     return out
 
 
-def occupancy_fit_plan(design, key_list, sel_idx, *, fit: str = "selection",
-                       flank: int = _OCC_LOCAL_FLANK) -> dict:
+def occupancy_fit_plan(
+    design, key_list, sel_idx, *, fit: str = "selection", flank: int = _OCC_LOCAL_FLANK
+) -> dict:
     """Plan the re-superposition of a scoped feature set. Pure; no frame data needed.
 
     ``key_list`` is the key per FEATURE COLUMN of whatever basis is in play (nucleotide
@@ -282,18 +285,26 @@ def occupancy_fit_plan(design, key_list, sel_idx, *, fit: str = "selection",
     n = len(key_list)
     requested = fit if fit in OCC_FIT_MODES else "selection"
     sel = list(range(n)) if sel_idx is None else list(sel_idx)
-    plain = {"fit": "global", "fit_requested": requested, "note": None,
-             "need_idx": sel, "sel_pos": list(range(len(sel))), "groups": [],
-             "n_fit_points": 0}
+    plain = {
+        "fit": "global",
+        "fit_requested": requested,
+        "note": None,
+        "need_idx": sel,
+        "sel_pos": list(range(len(sel))),
+        "groups": [],
+        "n_fit_points": 0,
+    }
     # A "local" run is NOT subject to the point-count floor: its fit set comes from the
     # junction, not the selection, so picking a single crossover's one or two inserts —
     # the most natural extra-base question there is — must still re-fit.
     if requested == "global" or sel_idx is None:
         return plain
     if requested == "selection" and len(sel) < _OCC_MIN_FIT_POINTS:
-        plain["note"] = (f"fewer than {_OCC_MIN_FIT_POINTS} points selected — a Kabsch fit "
-                         "has no rotation to remove, so the whole-structure alignment is "
-                         "kept")
+        plain["note"] = (
+            f"fewer than {_OCC_MIN_FIT_POINTS} points selected — a Kabsch fit "
+            "has no rotation to remove, so the whole-structure alignment is "
+            "kept"
+        )
         return plain
 
     # Which of the picked columns are duplex-paired.  These are the stable fit set for a
@@ -303,7 +314,7 @@ def occupancy_fit_plan(design, key_list, sel_idx, *, fit: str = "selection",
     try:
         ia_wc, ib_wc = _strain_index(design, list(key_list), "wc")
         paired = set(int(i) for i in ia_wc) | set(int(i) for i in ib_wc)
-    except Exception:                          # noqa: BLE001 — a design we cannot walk
+    except Exception:  # noqa: BLE001 — a design we cannot walk
         paired = set()
     pos_of = {c: p for p, c in enumerate(sel)}
     rigid = [c for c in sel if c in paired]
@@ -327,17 +338,24 @@ def occupancy_fit_plan(design, key_list, sel_idx, *, fit: str = "selection",
                 return need_pos[col]
 
             groups, done, skipped = [], set(), 0
-            for xo in (getattr(design, "crossovers", None) or []):
+            for xo in getattr(design, "crossovers", None) or []:
                 cols = by_col.get(str(getattr(xo, "id", "")))
                 if not cols:
                     continue
-                fl = sorted({key_pos[k] for k in _local_flank_keys(xo, flank)
-                             if k in key_pos} - set(cols))
+                fl = sorted(
+                    {key_pos[k] for k in _local_flank_keys(xo, flank) if k in key_pos}
+                    - set(cols)
+                )
                 if len(fl) < _OCC_MIN_FIT_POINTS:
-                    skipped += 1               # junction not in the basis (e.g. "bp")
+                    skipped += 1  # junction not in the basis (e.g. "bp")
                     continue
-                groups.append(([_need(c) for c in fl], [_need(c) for c in cols],
-                               [pos_of[c] for c in cols]))
+                groups.append(
+                    (
+                        [_need(c) for c in fl],
+                        [_need(c) for c in cols],
+                        [pos_of[c] for c in cols],
+                    )
+                )
                 done.update(cols)
             if groups:
                 # Anything picked that has no junction of its own — ordinary duplex, an
@@ -346,46 +364,83 @@ def occupancy_fit_plan(design, key_list, sel_idx, *, fit: str = "selection",
                 rest = [c for c in sel if c not in done]
                 rest_fit = [c for c in rest if c in paired] or rest
                 if len(rest) >= 1 and len(rest_fit) >= _OCC_MIN_FIT_POINTS:
-                    groups.append(([need_pos[c] for c in rest_fit],
-                                   [need_pos[c] for c in rest], [pos_of[c] for c in rest]))
+                    groups.append(
+                        (
+                            [need_pos[c] for c in rest_fit],
+                            [need_pos[c] for c in rest],
+                            [pos_of[c] for c in rest],
+                        )
+                    )
                 note = None
                 if skipped:
-                    note = (f"{skipped} selected junction(s) had no flanking duplex in this "
-                            "basis and kept the whole-structure alignment")
-                return {"fit": "local", "fit_requested": requested, "note": note,
-                        "need_idx": need, "sel_pos": [need_pos[c] for c in sel],
-                        "groups": groups,
-                        "n_fit_points": sum(len(g[0]) for g in groups)}
+                    note = (
+                        f"{skipped} selected junction(s) had no flanking duplex in this "
+                        "basis and kept the whole-structure alignment"
+                    )
+                return {
+                    "fit": "local",
+                    "fit_requested": requested,
+                    "note": note,
+                    "need_idx": need,
+                    "sel_pos": [need_pos[c] for c in sel],
+                    "groups": groups,
+                    "n_fit_points": sum(len(g[0]) for g in groups),
+                }
         # No extra bases picked (or none resolvable) → the local frame is undefined.
         fit_cols = rigid if (mixed and len(rigid) >= _OCC_MIN_FIT_POINTS) else sel
         if len(fit_cols) < _OCC_MIN_FIT_POINTS:
-            plain["note"] = ("no crossover extra bases in the selection and too few points "
-                             "for a fit of its own — the whole-structure alignment is kept")
+            plain["note"] = (
+                "no crossover extra bases in the selection and too few points "
+                "for a fit of its own — the whole-structure alignment is kept"
+            )
             return plain
-        return {"fit": "selection", "fit_requested": requested,
-                "note": "no crossover extra bases in the selection — a junction frame is "
-                        "undefined, so the fit is on the selection itself",
-                "need_idx": sel, "sel_pos": list(range(len(sel))),
-                "groups": [([pos_of[c] for c in fit_cols], list(range(len(sel))),
-                            list(range(len(sel))))],
-                "n_fit_points": len(fit_cols)}
+        return {
+            "fit": "selection",
+            "fit_requested": requested,
+            "note": "no crossover extra bases in the selection — a junction frame is "
+            "undefined, so the fit is on the selection itself",
+            "need_idx": sel,
+            "sel_pos": list(range(len(sel))),
+            "groups": [
+                (
+                    [pos_of[c] for c in fit_cols],
+                    list(range(len(sel))),
+                    list(range(len(sel))),
+                )
+            ],
+            "n_fit_points": len(fit_cols),
+        }
 
     # fit == "selection"
     note = None
     if mixed and len(rigid) >= _OCC_MIN_FIT_POINTS:
         fit_cols = rigid
-        note = (f"mixed selection — fitted on the {len(rigid)} duplex-paired point(s) only, "
-                f"so the {len(sel) - len(rigid)} unpaired one(s) cannot drag the frame")
+        note = (
+            f"mixed selection — fitted on the {len(rigid)} duplex-paired point(s) only, "
+            f"so the {len(sel) - len(rigid)} unpaired one(s) cannot drag the frame"
+        )
     else:
         fit_cols = sel
         if mixed:
-            note = (f"only {len(rigid)} duplex-paired point(s) in the selection — too few "
-                    "for their own frame, so every selected point is in the fit")
-    return {"fit": "selection", "fit_requested": requested, "note": note,
-            "need_idx": sel, "sel_pos": list(range(len(sel))),
-            "groups": [([pos_of[c] for c in fit_cols], list(range(len(sel))),
-                        list(range(len(sel))))],
-            "n_fit_points": len(fit_cols)}
+            note = (
+                f"only {len(rigid)} duplex-paired point(s) in the selection — too few "
+                "for their own frame, so every selected point is in the fit"
+            )
+    return {
+        "fit": "selection",
+        "fit_requested": requested,
+        "note": note,
+        "need_idx": sel,
+        "sel_pos": list(range(len(sel))),
+        "groups": [
+            (
+                [pos_of[c] for c in fit_cols],
+                list(range(len(sel))),
+                list(range(len(sel))),
+            )
+        ],
+        "n_fit_points": len(fit_cols),
+    }
 
 
 def apply_fit_plan(P, plan) -> np.ndarray:
@@ -439,10 +494,16 @@ def _pca_scores(X, *, var_target: float = _OCC_VAR_TARGET):
     w = np.clip(w[::-1], 0.0, None)
     V = V[:, ::-1]
     total = float(w.sum())
-    if total <= 0.0:                        # every frame identical
+    if total <= 0.0:  # every frame identical
         return np.zeros((X.shape[0], 2)), np.zeros(w.size), 2
     var = w / total
-    n_pcs = int(np.clip(np.searchsorted(np.cumsum(var), var_target) + 1, 2, min(_OCC_MAX_PCS, max(2, X.shape[0] - 1))))
+    n_pcs = int(
+        np.clip(
+            np.searchsorted(np.cumsum(var), var_target) + 1,
+            2,
+            min(_OCC_MAX_PCS, max(2, X.shape[0] - 1)),
+        )
+    )
     scores = V[:, :n_pcs] * np.sqrt(w[:n_pcs])
     return scores, var, n_pcs
 
@@ -472,10 +533,15 @@ def _kmeans_best(scores, k, *, seed=_OCC_SEED, restarts=_OCC_RESTARTS):
     best = None
     for r in range(restarts):
         try:
-            cent, lab = kmeans2(scores, k, minit="++",
-                                rng=np.random.default_rng(seed + r), missing="raise")
+            cent, lab = kmeans2(
+                scores,
+                k,
+                minit="++",
+                rng=np.random.default_rng(seed + r),
+                missing="raise",
+            )
         except ClusterError:
-            continue                        # an empty cluster — this restart failed
+            continue  # an empty cluster — this restart failed
         inertia = float(((scores - cent[lab]) ** 2).sum())
         if best is None or inertia < best[0]:
             best = (inertia, np.asarray(lab, dtype=int))
@@ -504,9 +570,12 @@ def state_recurrence(labels, k: int) -> dict:
         prev = v
     transitions = int((np.diff(lab) != 0).sum())
     min_visits = min(visits) if visits else 0
-    return {"transitions": transitions, "visits": visits,
-            "min_visits": int(min_visits),
-            "recurrent": bool(min_visits >= _OCC_MIN_VISITS)}
+    return {
+        "transitions": transitions,
+        "visits": visits,
+        "min_visits": int(min_visits),
+        "recurrent": bool(min_visits >= _OCC_MIN_VISITS),
+    }
 
 
 def occupancy_confidence(n_frames: int, n_eff: float) -> dict:
@@ -517,14 +586,24 @@ def occupancy_confidence(n_frames: int, n_eff: float) -> dict:
     """
     n_eff = float(max(n_eff, 1e-9))
     rel = float(np.sqrt(0.25 / n_eff) / 0.5)
-    return {"n_frames": int(n_frames), "n_eff": round(n_eff, 2),
-            "rel_error": round(rel, 4), "preliminary": bool(n_eff < OCCUPANCY_PRELIM_NEFF)}
+    return {
+        "n_frames": int(n_frames),
+        "n_eff": round(n_eff, 2),
+        "rel_error": round(rel, 4),
+        "preliminary": bool(n_eff < OCCUPANCY_PRELIM_NEFF),
+    }
 
 
 # ── The pure clustering entry point ───────────────────────────────────────────────
-def occupancy_clusters(X, *, n_clusters: int = 0, k_max: int = _OCC_KMAX,
-                       seed: int = _OCC_SEED, var_target: float = _OCC_VAR_TARGET,
-                       min_silhouette: float = _OCC_SILHOUETTE_MIN) -> dict:
+def occupancy_clusters(
+    X,
+    *,
+    n_clusters: int = 0,
+    k_max: int = _OCC_KMAX,
+    seed: int = _OCC_SEED,
+    var_target: float = _OCC_VAR_TARGET,
+    min_silhouette: float = _OCC_SILHOUETTE_MIN,
+) -> dict:
     """Cluster an ``(F, D)`` ensemble in truncated PC space. Pure — no I/O, no oxDNA.
 
     ``X`` rows MUST be in trajectory order; the recurrence test depends on it.
@@ -547,13 +626,16 @@ def occupancy_clusters(X, *, n_clusters: int = 0, k_max: int = _OCC_KMAX,
     n_points = max(1, int(X.shape[1]) // 3)
 
     if n_frames < _OCC_MIN_FRAMES:
-        return {"ready": False,
-                "reason": f"need at least {_OCC_MIN_FRAMES} frames to cluster (have {n_frames})",
-                "n_frames": n_frames}
+        return {
+            "ready": False,
+            "reason": f"need at least {_OCC_MIN_FRAMES} frames to cluster (have {n_frames})",
+            "n_frames": n_frames,
+        }
 
     scores, var, n_pcs = _pca_scores(X, var_target=var_target)
 
     from scipy.spatial.distance import pdist, squareform
+
     D = squareform(pdist(scores))
 
     def _to_rmsd(d):
@@ -585,8 +667,11 @@ def occupancy_clusters(X, *, n_clusters: int = 0, k_max: int = _OCC_KMAX,
 
     # ── verdict: separated? recurrent? ──────────────────────────────────────────
     separated = best_k is not None and best_k >= 2 and silhouette >= min_silhouette
-    rec = state_recurrence(labels, best_k) if separated else \
-        {"transitions": 0, "visits": [], "min_visits": 0, "recurrent": False}
+    rec = (
+        state_recurrence(labels, best_k)
+        if separated
+        else {"transitions": 0, "visits": [], "min_visits": 0, "recurrent": False}
+    )
 
     if auto_k and not separated:
         verdict, k = "unimodal", 1
@@ -603,7 +688,11 @@ def occupancy_clusters(X, *, n_clusters: int = 0, k_max: int = _OCC_KMAX,
 
     # PC1 smoothness: ≈ +1.0 means a continuous path, not hopping between basins.
     pc1 = scores[:, 0]
-    pc1_lag1 = float(np.corrcoef(pc1[:-1], pc1[1:])[0, 1]) if n_frames > 2 and pc1.std() > 0 else 0.0
+    pc1_lag1 = (
+        float(np.corrcoef(pc1[:-1], pc1[1:])[0, 1])
+        if n_frames > 2 and pc1.std() > 0
+        else 0.0
+    )
 
     # ── per-cluster medoids, populations, spreads ───────────────────────────────
     clusters = []
@@ -616,18 +705,22 @@ def occupancy_clusters(X, *, n_clusters: int = 0, k_max: int = _OCC_KMAX,
         spread = _to_rmsd(sub[int(np.argmin(sub.sum(axis=1)))].mean())
 
         stats = twist_series_stats((labels == c).astype(float))
-        clusters.append({
-            "population": float(stats["mean"]),
-            "population_sem": float(stats["sem"]),
-            "n_frames": int(members.size),
-            "tau_int": float(stats["tau_int"]),
-            "n_eff": float(stats["n_eff"]),
-            "medoid_index": medoid,
-            "rmsd_spread_nm": round(spread, 4),
-            "visits": int(rec["visits"][c]) if c < len(rec["visits"]) else 0,
-            "frames": members.tolist(),
-            "pc_scores": [round(float(v), 4) for v in scores[medoid, :min(3, n_pcs)]],
-        })
+        clusters.append(
+            {
+                "population": float(stats["mean"]),
+                "population_sem": float(stats["sem"]),
+                "n_frames": int(members.size),
+                "tau_int": float(stats["tau_int"]),
+                "n_eff": float(stats["n_eff"]),
+                "medoid_index": medoid,
+                "rmsd_spread_nm": round(spread, 4),
+                "visits": int(rec["visits"][c]) if c < len(rec["visits"]) else 0,
+                "frames": members.tolist(),
+                "pc_scores": [
+                    round(float(v), 4) for v in scores[medoid, : min(3, n_pcs)]
+                ],
+            }
+        )
 
     clusters.sort(key=lambda d: -d["population"])
     for rank, cl in enumerate(clusters):
@@ -669,8 +762,18 @@ def _selection_sig(selection) -> str:
     parts = []
     for field in ("cluster_ids", "helix_ids", "strand_ids", "overhang_ids"):
         parts.append(",".join(sorted(str(v) for v in (selection.get(field) or []))))
-    for field, width in (("domains", 2), ("bases", 3),
-                         ("extra_bases", 2), ("extensions", 2)):
-        parts.append(",".join(sorted("/".join(str(x) for x in tuple(v)[:width])
-                                     for v in (selection.get(field) or []))))
+    for field, width in (
+        ("domains", 2),
+        ("bases", 3),
+        ("extra_bases", 2),
+        ("extensions", 2),
+    ):
+        parts.append(
+            ",".join(
+                sorted(
+                    "/".join(str(x) for x in tuple(v)[:width])
+                    for v in (selection.get(field) or [])
+                )
+            )
+        )
     return "|".join(parts)

@@ -6,6 +6,7 @@ tests/test_snupi_{params,material,element}.py; here we assert the JOB machinery 
 predict_shape correctly (threading ``material``), persists, and normalizes for the unified
 list — Physical-layer only.
 """
+
 from __future__ import annotations
 
 import time
@@ -34,15 +35,21 @@ def _run_to_completion(design, ws: Path, *, nonlinear: bool, material: str = "sn
     from backend.core import snupi_runner as sr
     from backend.core.snupi_job import SnupiJob, SnupiStatus, new_snupi_job
 
-    job = new_snupi_job("6hb", nonlinear=nonlinear, with_rmsf=True, n_steps=5,
-                        material=material, n_nucleotides=1000)
+    job = new_snupi_job(
+        "6hb",
+        nonlinear=nonlinear,
+        with_rmsf=True,
+        n_steps=5,
+        material=material,
+        n_nucleotides=1000,
+    )
     job.status = SnupiStatus.preparing
     job.save(ws)
     sr.prepare_snupi_job(design, job, ws)
     job.status = SnupiStatus.running
     job.save(ws)
-    sr.start_job(job, ws)                       # detached worker subprocess
-    for _ in range(240):                       # ≤120 s guard
+    sr.start_job(job, ws)  # detached worker subprocess
+    for _ in range(240):  # ≤120 s guard
         if not sr.is_running(job.job_id, ws):
             break
         time.sleep(0.5)
@@ -52,9 +59,15 @@ def _run_to_completion(design, ws: Path, *, nonlinear: bool, material: str = "sn
 def test_job_persistence_roundtrip(tmp_path):
     from backend.core.snupi_job import SnupiJob, SnupiStatus, new_snupi_job
 
-    job = new_snupi_job("mydesign", nonlinear=False, n_steps=12, with_rmsf=False,
-                        material="snupi", n_nucleotides=500,
-                        design_source_path="/ws/mydesign.nadoc")
+    job = new_snupi_job(
+        "mydesign",
+        nonlinear=False,
+        n_steps=12,
+        with_rmsf=False,
+        material="snupi",
+        n_nucleotides=500,
+        design_source_path="/ws/mydesign.nadoc",
+    )
     job.save(tmp_path)
     loaded = SnupiJob.load(job.job_id, tmp_path)
     assert loaded.job_id == job.job_id
@@ -75,11 +88,18 @@ def test_new_job_stage_name_tracks_solver(tmp_path):
     assert new_snupi_job("d", nonlinear=False).stages[0].name == "linear"
     # Dynamics jobs run a Langevin trajectory, not the static solve → honest stage label.
     assert new_snupi_job("d", dynamics=True).stages[0].name == "dynamics"
-    assert new_snupi_job("d", dynamics=True, hydrodynamics=True).stages[0].name == "dynamics-rpy"
+    assert (
+        new_snupi_job("d", dynamics=True, hydrodynamics=True).stages[0].name
+        == "dynamics-rpy"
+    )
     # Coarse-grained hydrodynamics is an APPROXIMATION to the RPY kinetics — name it, so it can't be
     # mistaken for the exact per-bp friction.
-    assert new_snupi_job("d", dynamics=True, hydrodynamics=True,
-                         hydro_coarse_bp=8).stages[0].name == "dynamics-rpy-coarse8"
+    assert (
+        new_snupi_job("d", dynamics=True, hydrodynamics=True, hydro_coarse_bp=8)
+        .stages[0]
+        .name
+        == "dynamics-rpy-coarse8"
+    )
 
 
 def test_estimate_seconds_accounts_for_dynamics_and_rpy():
@@ -92,13 +112,17 @@ def test_estimate_seconds_accounts_for_dynamics_and_rpy():
     nuc = 1764  # ≈ 882 FEM nodes, the demo design
     static = _estimate_seconds(new_snupi_job("d", nonlinear=True, n_nucleotides=nuc))
     dyn = _estimate_seconds(new_snupi_job("d", dynamics=True, n_nucleotides=nuc))
-    rpy = _estimate_seconds(new_snupi_job("d", dynamics=True, hydrodynamics=True, n_nucleotides=nuc))
+    rpy = _estimate_seconds(
+        new_snupi_job("d", dynamics=True, hydrodynamics=True, n_nucleotides=nuc)
+    )
 
     # The pin bug was RPY-only: the old static model estimated ~47 s for a run that took 658 s.
-    assert rpy > static                      # RPY estimate now exceeds the old static figure
-    assert rpy > 5.0 * dyn                   # dense RPY friction dominates the Langevin base cost
-    assert 300.0 < rpy < 1500.0              # order-of-magnitude sane for ~880 nodes (observed ≈ 650 s)
-    assert dyn > 2.0                         # Stokes dynamics still gets a real (non-trivial) estimate
+    assert rpy > static  # RPY estimate now exceeds the old static figure
+    assert rpy > 5.0 * dyn  # dense RPY friction dominates the Langevin base cost
+    assert (
+        300.0 < rpy < 1500.0
+    )  # order-of-magnitude sane for ~880 nodes (observed ≈ 650 s)
+    assert dyn > 2.0  # Stokes dynamics still gets a real (non-trivial) estimate
 
 
 def test_material_defaults_snupi_and_is_validated(tmp_path):
@@ -110,6 +134,7 @@ def test_material_defaults_snupi_and_is_validated(tmp_path):
     assert new_snupi_job("d", material="bogus").material == "snupi"
     # A legacy job.json without the material key loads as 'snupi'.
     import json
+
     job = new_snupi_job("d")
     job.save(tmp_path)
     p = job.job_dir(tmp_path) / "job.json"
@@ -138,14 +163,18 @@ def test_create_request_model_defaults_and_material():
 
     assert CreateSnupiJobRequest().material == "snupi"
     assert CreateSnupiJobRequest().anchors is None
-    req = CreateSnupiJobRequest(material="cando",
-                                anchors=[{"kind": "cluster", "id": "c1"}],
-                                field={"field_pN": 0.1, "dir": [1, 0, 0]})
+    req = CreateSnupiJobRequest(
+        material="cando",
+        anchors=[{"kind": "cluster", "id": "c1"}],
+        field={"field_pN": 0.1, "dir": [1, 0, 0]},
+    )
     assert req.material == "cando"
     assert req.field == {"field_pN": 0.1, "dir": [1, 0, 0]}
 
 
-def test_runner_forwards_material_anchors_field_to_predict_shape(routed_6hb, tmp_path, monkeypatch):
+def test_runner_forwards_material_anchors_field_to_predict_shape(
+    routed_6hb, tmp_path, monkeypatch
+):
     """The load-bearing wiring: a SNUPI job's material + anchors + field reach predict_shape.
 
     Exercises ``solve_and_cache`` in-process (the exact body the detached worker runs), so the
@@ -163,15 +192,29 @@ def test_runner_forwards_material_anchors_field_to_predict_shape(routed_6hb, tmp
 
     monkeypatch.setattr(fs, "predict_shape", _spy)
 
-    anchors = [{"kind": "base", "helix_id": routed_6hb.helices[0].id, "bp": 5,
-                "direction": "forward"}]
+    anchors = [
+        {
+            "kind": "base",
+            "helix_id": routed_6hb.helices[0].id,
+            "bp": 5,
+            "direction": "forward",
+        }
+    ]
     field = {"field_pN": 0.1, "dir": [1.0, 0.0, 0.0]}
-    job = new_snupi_job("6hb", nonlinear=False, with_rmsf=False, n_steps=5,
-                        material="snupi", n_nucleotides=1000, anchors=anchors, field=field)
+    job = new_snupi_job(
+        "6hb",
+        nonlinear=False,
+        with_rmsf=False,
+        n_steps=5,
+        material="snupi",
+        n_nucleotides=1000,
+        anchors=anchors,
+        field=field,
+    )
     job.status = SnupiStatus.preparing
     job.save(tmp_path)
     sr.prepare_snupi_job(routed_6hb, job, tmp_path)
-    sr.solve_and_cache(job, tmp_path)          # in-process → the spy applies
+    sr.solve_and_cache(job, tmp_path)  # in-process → the spy applies
     assert captured.get("material") == "snupi"
     assert captured.get("anchors") == anchors
     assert captured.get("field") == field
@@ -180,7 +223,9 @@ def test_runner_forwards_material_anchors_field_to_predict_shape(routed_6hb, tmp
     assert "stop-after-capture" in (job.error or "")
 
 
-def test_runner_forwards_the_ssdna_tail_flags_to_predict_shape(routed_6hb, tmp_path, monkeypatch):
+def test_runner_forwards_the_ssdna_tail_flags_to_predict_shape(
+    routed_6hb, tmp_path, monkeypatch
+):
     """SS-4: the free-ssDNA-tail flags must survive the trip to the worker. If they don't, the
     Advanced-card checkbox silently does nothing and the overhangs stay frozen."""
     import backend.physics.fem_solver as fs
@@ -195,7 +240,9 @@ def test_runner_forwards_the_ssdna_tail_flags_to_predict_shape(routed_6hb, tmp_p
 
     monkeypatch.setattr(fs, "predict_shape", _spy)
 
-    job = new_snupi_job("6hb", dynamics=True, tails=True, tail_max_nt=8, n_nucleotides=1000)
+    job = new_snupi_job(
+        "6hb", dynamics=True, tails=True, tail_max_nt=8, n_nucleotides=1000
+    )
     job.save(tmp_path)
     sr.prepare_snupi_job(routed_6hb, job, tmp_path)
     sr.solve_and_cache(job, tmp_path)
@@ -236,7 +283,9 @@ def test_progress_and_reconcile(routed_6hb, tmp_path):
     job.status = SnupiStatus.running
     job.pid = 2_000_000_000
     job.save(tmp_path)
-    reconciled = sr.reconcile_snupi_status(SnupiJob.load(job.job_id, tmp_path), tmp_path)
+    reconciled = sr.reconcile_snupi_status(
+        SnupiJob.load(job.job_id, tmp_path), tmp_path
+    )
     assert reconciled.status == SnupiStatus.completed
 
 
@@ -272,6 +321,7 @@ def test_pid_field_persists(tmp_path):
     assert SnupiJob.load(job.job_id, tmp_path).pid == 4242
     # A legacy job.json without the pid key loads as None.
     import json
+
     p = job.job_dir(tmp_path) / "job.json"
     data = json.loads(p.read_text())
     data.pop("pid", None)
@@ -305,7 +355,7 @@ def test_reconcile_completed_when_pid_dead_and_display_cached(tmp_path):
 
     job = new_snupi_job("d", nonlinear=True)
     job.status = SnupiStatus.running
-    job.pid = 2_000_000_000                      # dead pid
+    job.pid = 2_000_000_000  # dead pid
     job.save(tmp_path)
     (job.job_dir(tmp_path) / "display.json").write_text(json.dumps({"positions": []}))
     out = sr.reconcile_snupi_status(SnupiJob.load(job.job_id, tmp_path), tmp_path)
@@ -319,7 +369,7 @@ def test_reconcile_stopped_when_pid_dead_and_no_cache(tmp_path):
 
     job = new_snupi_job("d", nonlinear=True)
     job.status = SnupiStatus.running
-    job.pid = 2_000_000_000                      # dead pid, no display.json written
+    job.pid = 2_000_000_000  # dead pid, no display.json written
     job.save(tmp_path)
     out = sr.reconcile_snupi_status(SnupiJob.load(job.job_id, tmp_path), tmp_path)
     assert out.status == SnupiStatus.stopped
@@ -334,7 +384,7 @@ def test_reconcile_leaves_running_while_worker_alive(tmp_path):
 
     job = new_snupi_job("d", nonlinear=True)
     job.status = SnupiStatus.running
-    job.pid = os.getpid()                        # a live pid stands in for the worker
+    job.pid = os.getpid()  # a live pid stands in for the worker
     job.save(tmp_path)
     out = sr.reconcile_snupi_status(SnupiJob.load(job.job_id, tmp_path), tmp_path)
     assert out.status == SnupiStatus.running
@@ -346,13 +396,19 @@ def test_start_job_spawns_detached_worker_and_completes(routed_6hb, tmp_path):
     from backend.core import snupi_runner as sr
     from backend.core.snupi_job import SnupiJob, SnupiStatus, new_snupi_job
 
-    job = new_snupi_job("6hb", nonlinear=False, with_rmsf=True, n_steps=5,
-                        material="snupi", n_nucleotides=1000)
+    job = new_snupi_job(
+        "6hb",
+        nonlinear=False,
+        with_rmsf=True,
+        n_steps=5,
+        material="snupi",
+        n_nucleotides=1000,
+    )
     job.save(tmp_path)
     sr.prepare_snupi_job(routed_6hb, job, tmp_path)
     sr.start_job(job, tmp_path)
-    assert job.pid is not None                   # a subprocess was spawned
-    for _ in range(240):                         # ≤120 s guard
+    assert job.pid is not None  # a subprocess was spawned
+    for _ in range(240):  # ≤120 s guard
         if not sr.is_running(job.job_id, tmp_path):
             break
         time.sleep(0.5)
@@ -365,7 +421,9 @@ def test_normalize_snupi_job_shape():
     """The unified-list normalizer tags the node engine=snupi + a flat relax root."""
     from backend.core.sim_jobs import normalize_snupi_job
 
-    node = normalize_snupi_job({"job_id": "x", "status": "completed", "n_nucleotides": 42})
+    node = normalize_snupi_job(
+        {"job_id": "x", "status": "completed", "n_nucleotides": 42}
+    )
     assert node["engine"] == "snupi"
     assert node["kind"] == "relax"
     assert node["is_child"] is False

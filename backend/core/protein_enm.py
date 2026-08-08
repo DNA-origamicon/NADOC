@@ -25,6 +25,7 @@ Pure + tested.  Coordinates in the AtomisticModel are nm; NAMD extraBonds want �
 (``× 10``).  NAMD extraBonds bond syntax is ``bond <i> <j> <k> <b0>`` with
 **0-based** atom indices (k first, reference length second).
 """
+
 from __future__ import annotations
 
 import math
@@ -46,6 +47,7 @@ _LINKER_DNA_ATOMS = ("P", "C1'", "O5'", "C5'")
 @dataclass
 class ExtraBond:
     """One NAMD extraBond: 0-based atom indices, force const, reference length (Å)."""
+
     i: int
     j: int
     k: float
@@ -60,7 +62,9 @@ def _dist_ang(a, b) -> float:
     return math.sqrt(dx * dx + dy * dy + dz * dz)
 
 
-def ca_enm_pairs(ca_atoms: list, cutoff_ang: float = ENM_CUTOFF_ANG) -> list[tuple[int, int, float]]:
+def ca_enm_pairs(
+    ca_atoms: list, cutoff_ang: float = ENM_CUTOFF_ANG
+) -> list[tuple[int, int, float]]:
     """Every Cα–Cα pair within ``cutoff_ang`` → ``(serial_i, serial_j, r0_ang)``.
 
     ``ca_atoms`` is the list of one protein's Cα atoms (model order).  Pairs are
@@ -91,7 +95,9 @@ def _protein_ca_groups(model) -> dict[str, list]:
     return groups
 
 
-def enm_extra_bonds(model, cutoff_ang: float = ENM_CUTOFF_ANG, k: float = ENM_K) -> list[ExtraBond]:
+def enm_extra_bonds(
+    model, cutoff_ang: float = ENM_CUTOFF_ANG, k: float = ENM_K
+) -> list[ExtraBond]:
     """Cα elastic-network restraints across all protein attachments in *model*."""
     bonds: list[ExtraBond] = []
     for ca_atoms in _protein_ca_groups(model).values():
@@ -108,13 +114,22 @@ def _conjugation_model_atom(model, asset, attachment):
     serial = getattr(attachment, "conjugation_atom_serial", None)
     if serial is None:
         serial = asset.default_conjugation_atom_serial
-    src = next((a for a in asset.atoms if a.serial == serial), None) if serial is not None else None
+    src = (
+        next((a for a in asset.atoms if a.serial == serial), None)
+        if serial is not None
+        else None
+    )
     if src is None:
         return None
     sentinel = f"{PROTEIN_SENTINEL_PREFIX}{attachment.id}"
     return next(
-        (a for a in model.atoms
-         if a.helix_id == sentinel and a.seq_num == src.res_seq and a.name.strip() == src.name.strip()),
+        (
+            a
+            for a in model.atoms
+            if a.helix_id == sentinel
+            and a.seq_num == src.res_seq
+            and a.name.strip() == src.name.strip()
+        ),
         None,
     )
 
@@ -123,8 +138,11 @@ def _dna_terminus_model_atom(model, nuc_key):
     """The DNA backbone atom in *model* for nucleotide ``(helix, bp, direction)``."""
     helix_id, bp_index, direction = nuc_key
     by_name = {
-        a.name.strip(): a for a in model.atoms
-        if a.helix_id == helix_id and a.bp_index == bp_index and a.direction == direction
+        a.name.strip(): a
+        for a in model.atoms
+        if a.helix_id == helix_id
+        and a.bp_index == bp_index
+        and a.direction == direction
     }
     for name in _LINKER_DNA_ATOMS:
         if name in by_name:
@@ -133,7 +151,10 @@ def _dna_terminus_model_atom(model, nuc_key):
 
 
 def linker_extra_bonds(
-    design, model, geometry: list[dict] | None = None, k: float = LINKER_K,
+    design,
+    model,
+    geometry: list[dict] | None = None,
+    k: float = LINKER_K,
 ) -> list[ExtraBond]:
     """One harmonic click-linker extraBond per *conjugated* attachment.
 
@@ -145,7 +166,8 @@ def linker_extra_bonds(
     from backend.physics.oxdna_protein import binder_terminus_nuc_key
 
     attachments = [
-        a for a in getattr(design, "protein_attachments", [])
+        a
+        for a in getattr(design, "protein_attachments", [])
         if getattr(a, "visible", True)
     ]
     if not attachments:
@@ -153,6 +175,7 @@ def linker_extra_bonds(
     assets = {a.id: a for a in getattr(design, "protein_assets", [])}
     if geometry is None:
         from backend.core.design_geometry import _geometry_for_design
+
         geometry = _geometry_for_design(design)
 
     bonds: list[ExtraBond] = []
@@ -167,7 +190,9 @@ def linker_extra_bonds(
         dna = _dna_terminus_model_atom(model, nuc_key)
         if conj is None or dna is None:
             continue
-        bonds.append(ExtraBond(i=conj.serial, j=dna.serial, k=k, b0_ang=_dist_ang(conj, dna)))
+        bonds.append(
+            ExtraBond(i=conj.serial, j=dna.serial, k=k, b0_ang=_dist_ang(conj, dna))
+        )
     return bonds
 
 
@@ -183,7 +208,9 @@ def extrabonds_text(bonds: list[ExtraBond]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def build_protein_extrabonds(design, model=None, geometry: list[dict] | None = None) -> str:
+def build_protein_extrabonds(
+    design, model=None, geometry: list[dict] | None = None
+) -> str:
     """Full protein extraBonds text (ENM + click linkers), or ``""`` if no protein.
 
     ``model`` should be an AtomisticModel built with ``include_proteins=True`` so
@@ -195,6 +222,7 @@ def build_protein_extrabonds(design, model=None, geometry: list[dict] | None = N
         return ""
     if model is None:
         from backend.core.atomistic import build_atomistic_model
+
         model = build_atomistic_model(design, include_proteins=True)
     bonds = enm_extra_bonds(model) + linker_extra_bonds(design, model, geometry)
     if not bonds:

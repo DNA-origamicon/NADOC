@@ -23,6 +23,7 @@ particles occupy the leading indices**, so every DNA particle index — includin
 the ``n3``/``n5`` neighbour columns and any trap/anchor reference — is offset by
 ``+N_protein``.  ``dna_particle_index`` is the single source of truth for that map.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -63,10 +64,14 @@ Block = list[ProteinBead]
 
 def has_proteins(design: Design) -> bool:
     """True when *design* has at least one VISIBLE protein attachment to simulate."""
-    return any(getattr(a, "visible", True) for a in getattr(design, "protein_attachments", []))
+    return any(
+        getattr(a, "visible", True) for a in getattr(design, "protein_attachments", [])
+    )
 
 
-def build_protein_blocks(design: Design, geometry: list[dict]) -> tuple[list, list[Block]]:
+def build_protein_blocks(
+    design: Design, geometry: list[dict]
+) -> tuple[list, list[Block]]:
     """Resolve every visible protein attachment to (attachment, beads) for oxDNA.
 
     Returns parallel lists ``(attachments, blocks)`` — one CG bead block per
@@ -89,7 +94,8 @@ def build_protein_blocks(design: Design, geometry: list[dict]) -> tuple[list, li
         overhang_id = getattr(att.target, "overhang_id", None)
         if overhang_id is not None:
             tip, outward = resolve_overhang_anchor(
-                geometry, overhang_id, getattr(att.target, "attach_end", "free_end"))
+                geometry, overhang_id, getattr(att.target, "attach_end", "free_end")
+            )
             beads = protein_beads(asset, att, tip=tip, outward=outward)
         else:
             beads = protein_beads(asset, att)
@@ -130,7 +136,9 @@ def dna_particle_index(design: Design, key: tuple, offset: int) -> int | None:
     return None if idx is None else offset + idx
 
 
-def protein_topology_lines(blocks: list[Block], cutoff_nm: float = ANM_CUTOFF_NM) -> list[str]:
+def protein_topology_lines(
+    blocks: list[Block], cutoff_nm: float = ANM_CUTOFF_NM
+) -> list[str]:
     """Topology lines for the protein particles (global indices, negative strands).
 
     Each undirected ANM spring ``(i, j)`` (i<j) is recorded once, as ``j`` in
@@ -193,7 +201,9 @@ def anm_par_text(
 
 
 def hybrid_topology_text(
-    design: Design, blocks: list[Block], cutoff_nm: float = ANM_CUTOFF_NM,
+    design: Design,
+    blocks: list[Block],
+    cutoff_nm: float = ANM_CUTOFF_NM,
 ) -> str:
     """Full hybrid topology text: 5-field header + protein lines + shifted DNA lines.
 
@@ -215,8 +225,12 @@ def hybrid_topology_text(
 
 
 def hybrid_configuration_text(
-    design: Design, geometry: list[dict], blocks: list[Block], box_nm: float | None = None,
-    *, oxdna_native_seed: bool = False,
+    design: Design,
+    geometry: list[dict],
+    blocks: list[Block],
+    box_nm: float | None = None,
+    *,
+    oxdna_native_seed: bool = False,
 ) -> str:
     """Full hybrid configuration: header + protein bead lines FIRST + DNA lines.
 
@@ -230,6 +244,7 @@ def hybrid_configuration_text(
     DNA pairs start bonded; protein beads are unaffected.
     """
     from backend.physics.oxdna_interface import oxdna_native_seed_map
+
     resolved = resolved_nuc_map(design, geometry)
     if oxdna_native_seed:
         resolved = oxdna_native_seed_map(design, resolved)
@@ -239,7 +254,11 @@ def hybrid_configuration_text(
         prot_pos = [list(b.pos_nm) for blk in blocks for b in blk]
         box_nm = box_nm_for_positions(dna_pos + prot_pos)
     box = box_nm * NM_TO_OXDNA
-    lines = ["t = 0", f"b = {box:.6f} {box:.6f} {box:.6f}", "E = 0.000000 0.000000 0.000000"]
+    lines = [
+        "t = 0",
+        f"b = {box:.6f} {box:.6f} {box:.6f}",
+        "E = 0.000000 0.000000 0.000000",
+    ]
     lines += protein_conf_lines(blocks)
     for key in order:
         nuc = resolved.get(key)
@@ -247,35 +266,44 @@ def hybrid_configuration_text(
             lines.append(nuc_conf_line(nuc))
         else:
             ctr = box / 2.0
-            lines.append(f"{ctr:.6f} {ctr:.6f} {ctr:.6f}  1.0 0.0 0.0  0.0 0.0 1.0  "
-                         "0.0 0.0 0.0  0.0 0.0 0.0")
+            lines.append(
+                f"{ctr:.6f} {ctr:.6f} {ctr:.6f}  1.0 0.0 0.0  0.0 0.0 1.0  "
+                "0.0 0.0 0.0  0.0 0.0 0.0"
+            )
     return "\n".join(lines) + "\n"
 
 
 # ── Protein↔DNA tethers + free-protein anchors (external forces) ───────────────
 
 
-def _mutual_trap_block(particle: int, ref_particle: int, stiff: float, r0: float) -> str:
+def _mutual_trap_block(
+    particle: int, ref_particle: int, stiff: float, r0: float
+) -> str:
     """One oxDNA ``mutual_trap`` block (a spring pulling ``particle`` toward
     ``ref_particle`` at equilibrium length ``r0``, oxDNA units)."""
-    return ("{\n"
-            "type = mutual_trap\n"
-            f"particle = {particle}\n"
-            f"ref_particle = {ref_particle}\n"
-            f"stiff = {stiff:.6g}\n"
-            f"r0 = {r0:.6g}\n"
-            "}\n")
+    return (
+        "{\n"
+        "type = mutual_trap\n"
+        f"particle = {particle}\n"
+        f"ref_particle = {ref_particle}\n"
+        f"stiff = {stiff:.6g}\n"
+        f"r0 = {r0:.6g}\n"
+        "}\n"
+    )
 
 
 def conjugation_trap_text(
-    prot_particle: int, dna_particle: int,
-    stiff: float = CONJ_TRAP_STIFF, r0: float = CONJ_TRAP_R0,
+    prot_particle: int,
+    dna_particle: int,
+    stiff: float = CONJ_TRAP_STIFF,
+    r0: float = CONJ_TRAP_R0,
 ) -> str:
     """A symmetric ``mutual_trap`` pair tethering a protein conjugation bead to the
     handle (binder) terminal nucleotide — the covalent click linker.  Symmetric so
     both particles feel the spring (the ANM-oxDNA convention)."""
-    return (_mutual_trap_block(prot_particle, dna_particle, stiff, r0)
-            + _mutual_trap_block(dna_particle, prot_particle, stiff, r0))
+    return _mutual_trap_block(
+        prot_particle, dna_particle, stiff, r0
+    ) + _mutual_trap_block(dna_particle, prot_particle, stiff, r0)
 
 
 def _block_centroid_bead(beads: Block) -> int:
@@ -285,7 +313,9 @@ def _block_centroid_bead(beads: Block) -> int:
     return int(np.argmin(np.einsum("ij,ij->i", pos - c, pos - c)))
 
 
-def protein_anchor_trap_text(beads: Block, base: int, stiff: float = ANCHOR_STIFF) -> str:
+def protein_anchor_trap_text(
+    beads: Block, base: int, stiff: float = ANCHOR_STIFF
+) -> str:
     """A single positional ``trap`` pinning a free/overhang protein's centroid bead
     to its placed position (oxDNA units), so the body cannot diffuse away.  One
     anchor (not all beads) leaves the rigid body free to tumble about it."""
@@ -295,7 +325,9 @@ def protein_anchor_trap_text(beads: Block, base: int, stiff: float = ANCHOR_STIF
 
 
 def binder_terminus_nuc_key(
-    design: Design, attachment, geometry: list[dict],
+    design: Design,
+    attachment,
+    geometry: list[dict],
 ) -> tuple | None:
     """The DNA nucleotide key (helix_id, bp_index, direction) at a conjugated
     protein's handle terminus — the click-linker attachment point on the DNA.
@@ -312,14 +344,20 @@ def binder_terminus_nuc_key(
     attach_end = getattr(target, "attach_end", "free_end")
 
     binder = next(
-        (s for s in design.strands
-         if any(getattr(d, "binds_overhang_id", None) == overhang_id for d in s.domains)),
+        (
+            s
+            for s in design.strands
+            if any(
+                getattr(d, "binds_overhang_id", None) == overhang_id for d in s.domains
+            )
+        ),
         None,
     )
     if binder is None:
         return None
 
     from backend.core.protein import resolve_overhang_anchor
+
     anchor_pos, _ = resolve_overhang_anchor(geometry, overhang_id, attach_end)
     if anchor_pos is None:
         return None
@@ -352,7 +390,12 @@ def _kabsch(P, P_to) -> tuple:
 
 
 def protein_display_transforms(
-    conf_path, reference_path, design: Design, geometry: list[dict], *, align: bool = True,
+    conf_path,
+    reference_path,
+    design: Design,
+    geometry: list[dict],
+    *,
+    align: bool = True,
 ) -> dict:
     """Per-attachment rigid 4×4 (row-major, 16 floats) mapping each protein's DESIGN
     pose to its RELAXED pose in the aligned display frame.
@@ -384,14 +427,15 @@ def protein_display_transforms(
         relax = read_configuration_full(conf_path, design)
         ref = read_configuration_full(reference_path, design)
         _, prot_aligned = unwrap_align_to_reference(
-            relax, ref, design, box, align=align, extra_points=prot_sim)
+            relax, ref, design, box, align=align, extra_points=prot_sim
+        )
 
     out: dict = {}
     cursor = 0
     for att, beads in zip(atts, blocks):
         k = len(beads)
         design_pos = [b.pos_nm for b in beads]
-        relaxed_pos = prot_aligned[cursor:cursor + k]
+        relaxed_pos = prot_aligned[cursor : cursor + k]
         cursor += k
         if k >= 3:
             R, t = _kabsch(design_pos, relaxed_pos)
@@ -401,7 +445,7 @@ def protein_display_transforms(
         M = np.eye(4)
         M[:3, :3] = R
         M[:3, 3] = t
-        out[att.id] = [float(x) for x in M.flatten()]   # row-major 16
+        out[att.id] = [float(x) for x in M.flatten()]  # row-major 16
     return out
 
 
@@ -428,9 +472,13 @@ def protein_forces_text(
     for att, beads, base in zip(attachments, blocks, offsets):
         conj_local = conjugation_bead_index(beads)
         nt_key = binder_terminus_nuc_key(design, att, geometry)
-        dna_p = dna_particle_index(design, nt_key, offset) if nt_key is not None else None
+        dna_p = (
+            dna_particle_index(design, nt_key, offset) if nt_key is not None else None
+        )
         if conj_local is not None and dna_p is not None:
-            parts.append(conjugation_trap_text(base + conj_local, dna_p, conj_stiff, conj_r0))
+            parts.append(
+                conjugation_trap_text(base + conj_local, dna_p, conj_stiff, conj_r0)
+            )
         else:
             parts.append(protein_anchor_trap_text(beads, base, anchor_stiff))
     return "".join(parts)

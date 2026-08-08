@@ -4,6 +4,7 @@ Guards backend/physics/snupi_material.py (assembles the transcribed SNUPI params
 into per-motif / per-family 6x6 D matrices). Formulation-independent — no element
 or NADOC-frame mapping here. See memory/project_snupi_mimic.md (Phase 2).
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -23,9 +24,9 @@ def test_motif_D_symmetric_and_diag_matches_rigidity():
     assert D.shape == (6, 6)
     assert np.allclose(D, D.T)
     # diagonal == the tabulated rigidities (EA=1920.9, GJ=400.39, EIy=172.67 for AA/TT)
-    assert D[0, 0] == pytest.approx(1920.9)     # EA
-    assert D[3, 3] == pytest.approx(400.39)     # GJ
-    assert D[4, 4] == pytest.approx(172.67)     # EIy
+    assert D[0, 0] == pytest.approx(1920.9)  # EA
+    assert D[3, 3] == pytest.approx(400.39)  # GJ
+    assert D[4, 4] == pytest.approx(172.67)  # EIy
     # twist-stretch coupling sits at (dx, theta_x) = (0, 3)
     assert D[0, 3] == pytest.approx(-300.81)
     assert D[3, 0] == pytest.approx(-300.81)
@@ -67,12 +68,15 @@ def test_non_pd_is_confined_to_single_co():
     indefiniteness stays confined to single_co (a new non-PD motif elsewhere => a real
     transcription/assembly regression)."""
     from backend.physics.snupi_material import _load
+
     non_pd = {}
     for fam, entries in _load()["motifs"].items():
         bad = [m for m in entries if not _is_pd(sm.motif_D(fam, m))]
         if bad:
             non_pd[fam] = bad
-    assert set(non_pd) <= {"single_co"}, f"non-PD outside single_co (regression!): {non_pd}"
+    assert set(non_pd) <= {"single_co"}, (
+        f"non-PD outside single_co (regression!): {non_pd}"
+    )
     # the 4 non-floppy families are entirely PD
     for fam in ("regular_bp", "nicked_bp", "co_nick", "double_co"):
         assert fam not in non_pd

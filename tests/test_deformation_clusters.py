@@ -70,7 +70,10 @@ def test_cluster_ids_filters_affected_helices(_design):
     op = design.deformations[0]
     assert op.cluster_ids == [cluster_a.id]
     assert set(op.affected_helix_ids).issubset(set(cluster_a.helix_ids))
-    assert set(op.affected_helix_ids) & set(_design.cluster_transforms[1].helix_ids) == set()
+    assert (
+        set(op.affected_helix_ids) & set(_design.cluster_transforms[1].helix_ids)
+        == set()
+    )
 
 
 def test_two_overlapping_bends_on_different_clusters_coexist(_design):
@@ -133,7 +136,8 @@ def test_unaffected_cluster_does_not_translate_when_other_cluster_bent():
     import numpy as np
 
     from backend.core.deformation import (
-        deformed_nucleotide_positions, deformed_nucleotide_arrays,
+        deformed_nucleotide_positions,
+        deformed_nucleotide_arrays,
         deformed_helix_axes,
     )
 
@@ -148,9 +152,10 @@ def test_unaffected_cluster_does_not_translate_when_other_cluster_bent():
     h_b = design.find_helix(h_ids[3])
 
     before = [n.position.copy() for n in deformed_nucleotide_positions(h_b, design)]
-    before_arrs = deformed_nucleotide_arrays(h_b, design)['positions'].copy()
+    before_arrs = deformed_nucleotide_arrays(h_b, design)["positions"].copy()
     before_axes = next(
-        (a for a in deformed_helix_axes(design) if a['helix_id'] == h_b.id), None,
+        (a for a in deformed_helix_axes(design) if a["helix_id"] == h_b.id),
+        None,
     )
     assert before_axes is not None
 
@@ -169,9 +174,10 @@ def test_unaffected_cluster_does_not_translate_when_other_cluster_bent():
 
     bent_design = design_state.get_or_404()
     after = [n.position.copy() for n in deformed_nucleotide_positions(h_b, bent_design)]
-    after_arrs = deformed_nucleotide_arrays(h_b, bent_design)['positions']
+    after_arrs = deformed_nucleotide_arrays(h_b, bent_design)["positions"]
     after_axes = next(
-        (a for a in deformed_helix_axes(bent_design) if a['helix_id'] == h_b.id), None,
+        (a for a in deformed_helix_axes(bent_design) if a["helix_id"] == h_b.id),
+        None,
     )
     assert after_axes is not None
 
@@ -180,10 +186,16 @@ def test_unaffected_cluster_does_not_translate_when_other_cluster_bent():
             f"ArmB nucleotide #{i} moved: before={p0.tolist()} after={p1.tolist()}"
         )
     assert np.allclose(before_arrs, after_arrs, atol=1e-9)
-    assert np.allclose(np.array(before_axes['start']), np.array(after_axes['start']), atol=1e-9)
-    assert np.allclose(np.array(before_axes['end']),   np.array(after_axes['end']),   atol=1e-9)
     assert np.allclose(
-        np.array(before_axes['samples']), np.array(after_axes['samples']), atol=1e-9,
+        np.array(before_axes["start"]), np.array(after_axes["start"]), atol=1e-9
+    )
+    assert np.allclose(
+        np.array(before_axes["end"]), np.array(after_axes["end"]), atol=1e-9
+    )
+    assert np.allclose(
+        np.array(before_axes["samples"]),
+        np.array(after_axes["samples"]),
+        atol=1e-9,
     )
 
 
@@ -202,7 +214,15 @@ def test_helix_axis_samples_use_arm_local_bp_for_off_anchor_helices():
 
     from backend.core.constants import BDNA_RISE_PER_BP
     from backend.core.deformation import deformed_helix_axes
-    from backend.core.models import Direction, Helix, Strand, StrandType, Domain, Vec3, Design
+    from backend.core.models import (
+        Direction,
+        Helix,
+        Strand,
+        StrandType,
+        Domain,
+        Vec3,
+        Design,
+    )
 
     def _z_helix(hid, x, bp_start, length):
         z0 = bp_start * BDNA_RISE_PER_BP
@@ -216,16 +236,18 @@ def test_helix_axis_samples_use_arm_local_bp_for_off_anchor_helices():
         )
 
     helices = [
-        _z_helix("h0", -4.5,  114, 30),
+        _z_helix("h0", -4.5, 114, 30),
         _z_helix("h1", -2.25, 123, 21),
-        _z_helix("h2",  0.0,  114, 30),
-        _z_helix("h3",  2.25, 129, 15),
-        _z_helix("h4",  4.5,  114, 30),
-        _z_helix("h5",  6.75, 135,  9),
+        _z_helix("h2", 0.0, 114, 30),
+        _z_helix("h3", 2.25, 129, 15),
+        _z_helix("h4", 4.5, 114, 30),
+        _z_helix("h5", 6.75, 135, 9),
     ]
     scaf = Strand(
         id="s",
-        domains=[Domain(helix_id="h0", start_bp=114, end_bp=143, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=114, end_bp=143, direction=Direction.FORWARD)
+        ],
         strand_type=StrandType.SCAFFOLD,
     )
     cluster_ = ClusterRigidTransform(name="C", helix_ids=[h.id for h in helices])
@@ -278,7 +300,15 @@ def test_frame_at_bp_uses_min_bp_start_not_first_helix():
 
     from backend.core.constants import BDNA_RISE_PER_BP
     from backend.core.deformation import deformed_helix_axes
-    from backend.core.models import Direction, Helix, Strand, StrandType, Domain, Vec3, Design
+    from backend.core.models import (
+        Direction,
+        Helix,
+        Strand,
+        StrandType,
+        Domain,
+        Vec3,
+        Design,
+    )
 
     def _z_helix(hid, x, bp_start, length):
         z0 = bp_start * BDNA_RISE_PER_BP
@@ -295,16 +325,18 @@ def test_frame_at_bp_uses_min_bp_start_not_first_helix():
     # design.helices[0].bp_start = 135 ≠ arm_min_bp_start = 114. This exposes
     # the helices[0]-vs-min anchor mismatch in _frame_at_bp.
     helices = [
-        _z_helix("h5",  6.75, 135,  9),   # first, but largest bp_start
-        _z_helix("h0", -4.5,  114, 30),
+        _z_helix("h5", 6.75, 135, 9),  # first, but largest bp_start
+        _z_helix("h0", -4.5, 114, 30),
         _z_helix("h1", -2.25, 123, 21),
-        _z_helix("h2",  0.0,  114, 30),
-        _z_helix("h3",  2.25, 129, 15),
-        _z_helix("h4",  4.5,  114, 30),
+        _z_helix("h2", 0.0, 114, 30),
+        _z_helix("h3", 2.25, 129, 15),
+        _z_helix("h4", 4.5, 114, 30),
     ]
     scaf = Strand(
         id="s",
-        domains=[Domain(helix_id="h0", start_bp=114, end_bp=143, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=114, end_bp=143, direction=Direction.FORWARD)
+        ],
         strand_type=StrandType.SCAFFOLD,
     )
     cluster_ = ClusterRigidTransform(name="C", helix_ids=[h.id for h in helices])
@@ -330,7 +362,7 @@ def test_frame_at_bp_uses_min_bp_start_not_first_helix():
     for h in helices:
         ax = axes_by_id[h.id]
         expected = np.array([h.axis_start.x, h.axis_start.y, h.axis_start.z])
-        actual   = np.array(ax["start"])
+        actual = np.array(ax["start"])
         assert np.allclose(expected, actual, atol=1e-6), (
             f"{h.id} (bp_start={h.bp_start}): axis start expected {expected.tolist()} "
             f"got {actual.tolist()}"
@@ -352,7 +384,15 @@ def test_mixed_bp_start_cluster_zero_angle_bend_does_not_translate():
 
     from backend.core.constants import BDNA_RISE_PER_BP
     from backend.core.deformation import deformed_nucleotide_positions
-    from backend.core.models import Direction, Helix, Strand, StrandType, Domain, Vec3, Design
+    from backend.core.models import (
+        Direction,
+        Helix,
+        Strand,
+        StrandType,
+        Domain,
+        Vec3,
+        Design,
+    )
 
     def _z_helix(hid, x, bp_start, length):
         z0 = bp_start * BDNA_RISE_PER_BP
@@ -366,17 +406,19 @@ def test_mixed_bp_start_cluster_zero_angle_bend_does_not_translate():
         )
 
     helices = [
-        _z_helix("h0", -4.5,  114, 30),
+        _z_helix("h0", -4.5, 114, 30),
         _z_helix("h1", -2.25, 123, 21),
-        _z_helix("h2",  0.0,  114, 30),
-        _z_helix("h3",  2.25, 129, 15),
-        _z_helix("h4",  4.5,  114, 30),
-        _z_helix("h5",  6.75, 135,  9),
+        _z_helix("h2", 0.0, 114, 30),
+        _z_helix("h3", 2.25, 129, 15),
+        _z_helix("h4", 4.5, 114, 30),
+        _z_helix("h5", 6.75, 135, 9),
     ]
     # A no-op-ish scaffold to make the design valid (covers h0 forward).
     scaf = Strand(
         id="s",
-        domains=[Domain(helix_id="h0", start_bp=114, end_bp=143, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=114, end_bp=143, direction=Direction.FORWARD)
+        ],
         strand_type=StrandType.SCAFFOLD,
     )
     cluster_ = ClusterRigidTransform(name="C", helix_ids=[h.id for h in helices])

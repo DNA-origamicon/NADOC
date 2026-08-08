@@ -17,7 +17,7 @@ from __future__ import annotations
 # residue → { nadoc_atom: ff_atom }
 _RENAMES_CHARMM27: dict[str, dict[str, str]] = {
     "DA": {"OP1": "O1P", "OP2": "O2P"},
-    "DT": {"OP1": "O1P", "OP2": "O2P", "C7": "C5M"},   # C5M = thymine methyl in CHARMM27
+    "DT": {"OP1": "O1P", "OP2": "O2P", "C7": "C5M"},  # C5M = thymine methyl in CHARMM27
     "DG": {"OP1": "O1P", "OP2": "O2P"},
     "DC": {"OP1": "O1P", "OP2": "O2P"},
 }
@@ -35,7 +35,7 @@ _RENAMES_AMBER: dict[str, dict[str, str]] = {
 # every residue (CHARMM convention where even the first residue has a
 # phosphate).  Strip those three atoms from the first residue of each chain
 # so pdb2gmx can match the 5′-terminus RTP entry.
-_5P_ATOMS = {"P", "O1P", "O2P", "OP1", "OP2"}   # pre- and post-rename variants
+_5P_ATOMS = {"P", "O1P", "O2P", "OP1", "OP2"}  # pre- and post-rename variants
 
 
 def _rename_atom_in_line(line: str, old: str, new: str) -> str:
@@ -73,7 +73,7 @@ def adapt_pdb_for_ff(pdb_text: str, ff: str) -> str:
     if ff == "charmm36-feb2026_cgenff-5.0":
         renames_by_res = _RENAMES_CHARMM27
     elif ff.startswith("charmm36") or ff.startswith("charmm36m"):
-        return pdb_text   # OP1/OP2 + C7 matches NADOC directly
+        return pdb_text  # OP1/OP2 + C7 matches NADOC directly
     elif ff.startswith("amber"):
         renames_by_res = _RENAMES_AMBER
 
@@ -113,9 +113,9 @@ def strip_5prime_phosphate(pdb_text: str) -> str:
     prev_chain: str | None = None
     for line in lines:
         if line.startswith(("ATOM  ", "HETATM")):
-            chain  = line[21]
+            chain = line[21]
             resnum = line[22:26].strip()
-            if chain != prev_chain:          # start of a new contiguous block
+            if chain != prev_chain:  # start of a new contiguous block
                 block_starts.add((chain, resnum))
                 prev_chain = chain
 
@@ -123,10 +123,10 @@ def strip_5prime_phosphate(pdb_text: str) -> str:
     result: list[str] = []
     for line in lines:
         if line.startswith(("ATOM  ", "HETATM")):
-            chain     = line[21]
-            resnum    = line[22:26].strip()
+            chain = line[21]
+            resnum = line[22:26].strip()
             atom_name = line[12:16].strip()
             if (chain, resnum) in block_starts and atom_name in _5P_ATOMS:
-                continue   # drop this phosphate atom from the 5′ end
+                continue  # drop this phosphate atom from the 5′ end
         result.append(line)
     return "\n".join(result) + "\n"

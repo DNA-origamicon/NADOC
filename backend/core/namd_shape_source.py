@@ -31,6 +31,7 @@ Field-response emission is deferred (``field`` defaults to ``None``; a caller ma
 pre-built :func:`field_response_profile` result through) — the natural follow-up once an
 anchored NAMD field run's trajectory is on hand, built the way N1 applies the field.
 """
+
 from __future__ import annotations
 
 from backend.core.oxdna_health import _filter_to_reference_core
@@ -62,20 +63,23 @@ def _rmsf_profile(rmsf_positions) -> list[dict]:
         if not isinstance(p.get("bp_index"), int):
             continue
         if str(p.get("helix_id", "")).startswith("__"):
-            continue      # synthetic particle (extension tail / insert), not a design position
+            continue  # synthetic particle (extension tail / insert), not a design position
         direction = p.get("direction")
-        out.append({
-            "helix_id": p["helix_id"],
-            "bp_index": int(p["bp_index"]),
-            "direction": getattr(direction, "value", direction),
-            "copy": int(p.get("copy", 0)),
-            "rmsf_nm": float(r),
-        })
+        out.append(
+            {
+                "helix_id": p["helix_id"],
+                "bp_index": int(p["bp_index"]),
+                "direction": getattr(direction, "value", direction),
+                "copy": int(p.get("copy", 0)),
+                "rmsf_nm": float(r),
+            }
+        )
     return out
 
 
-def build_namd_shape_source(shape_frame, core_reference, *,
-                            rmsf_positions=None, field=None) -> dict:
+def build_namd_shape_source(
+    shape_frame, core_reference, *, rmsf_positions=None, field=None
+) -> dict:
     """The NAMD source bundle for the cross-engine comparison card.
 
     ``shape_frame`` — the NAMD time-mean display-position list (``md_rmsf(...)["positions"]``:

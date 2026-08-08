@@ -39,31 +39,50 @@ ChainMap = dict[tuple[str, int], tuple[str, int, str]]
 # Ordered list of (helix_id, bp_index, direction) for GRO index mapping
 PAtomOrder = list[tuple[str, int, str]]
 
-_GRO_DNA_RESNAMES = frozenset({
-    "DA", "DT", "DC", "DG",
-    "DA3", "DA5", "DT3", "DT5", "DC3", "DC5", "DG3", "DG5",
-    "ADE", "THY", "CYT", "GUA",
-    "A", "T", "C", "G",
-})
+_GRO_DNA_RESNAMES = frozenset(
+    {
+        "DA",
+        "DT",
+        "DC",
+        "DG",
+        "DA3",
+        "DA5",
+        "DT3",
+        "DT5",
+        "DC3",
+        "DC5",
+        "DG3",
+        "DG5",
+        "ADE",
+        "THY",
+        "CYT",
+        "GUA",
+        "A",
+        "T",
+        "C",
+        "G",
+    }
+)
 
 
 @dataclass(frozen=True)
 class BeadPosition:
     """P-atom backbone position mapped to a NADOC nucleotide."""
+
     helix_id: str
     bp_index: int
     direction: str  # "FORWARD" | "REVERSE"
     pos: np.ndarray  # nm, shape (3,)
-    copy: int = 0    # loop-insertion copy index (0 = base / plain nucleotide)
+    copy: int = 0  # loop-insertion copy index (0 = base / plain nucleotide)
 
 
 @dataclass
 class ComparisonResult:
     n_matched: int
     global_rmsd_nm: float
-    per_helix_rmsd_nm: dict[str, float]   # helix_id → RMSD
+    per_helix_rmsd_nm: dict[str, float]  # helix_id → RMSD
     max_deviation_nm: float
-    n_missing: int                         # keys in beads but not in reference
+    n_missing: int  # keys in beads but not in reference
 
 
 # ── Chain map ─────────────────────────────────────────────────────────────────
@@ -131,13 +150,20 @@ def md_rigid_reference(model, p_order):
     ``bp_index`` is a perfectly ordinary non-negative int and so would otherwise be
     treated as rigid dsDNA core."""
     import numpy as np
-    p_ref = {md_pkey(a): np.array([a.x, a.y, a.z]) for a in model.atoms if a.name == "P"}
+
+    p_ref = {
+        md_pkey(a): np.array([a.x, a.y, a.z]) for a in model.atoms if a.name == "P"
+    }
     eq_list = [p_ref.get(tuple(k)) for k in p_order]
     eq_valid = np.array([v is not None for v in eq_list], dtype=bool)
     eq_positions = np.array([v if v is not None else np.zeros(3) for v in eq_list])
     rigid_mask = eq_valid & np.array(
-        [(not is_synthetic_pkey(tuple(k))) and isinstance(k[1], int) and k[1] >= 0
-         for k in p_order], dtype=bool)
+        [
+            (not is_synthetic_pkey(tuple(k))) and isinstance(k[1], int) and k[1] >= 0
+            for k in p_order
+        ],
+        dtype=bool,
+    )
     return eq_positions, eq_valid, rigid_mask
 
 
@@ -158,8 +184,8 @@ def md_snap_mask(p_order, eq_valid, rigid_mask):
     over-correct them onto the wrong image.
     """
     import numpy as np
-    is_synth = np.array(
-        [is_synthetic_pkey(tuple(k)) for k in p_order], dtype=bool)
+
+    is_synth = np.array([is_synthetic_pkey(tuple(k)) for k in p_order], dtype=bool)
     return (rigid_mask | is_synth) & eq_valid
 
 
@@ -203,17 +229,19 @@ def extract_from_pdb(pdb_text: str, chain_map: ChainMap) -> list[BeadPosition]:
         if line[12:16].strip() != "P":
             continue
         chain_id = line[21]
-        seq_num  = int(line[22:26])
-        entry    = chain_map.get((chain_id, seq_num))
+        seq_num = int(line[22:26])
+        entry = chain_map.get((chain_id, seq_num))
         if entry is None:
             continue
         helix_id, bp_index, direction = entry[0], entry[1], entry[2]
         copy = entry[3] if len(entry) > 3 else 0
-        pos = np.array([
-            float(line[30:38]) / 10.0,
-            float(line[38:46]) / 10.0,
-            float(line[46:54]) / 10.0,
-        ])
+        pos = np.array(
+            [
+                float(line[30:38]) / 10.0,
+                float(line[38:46]) / 10.0,
+                float(line[46:54]) / 10.0,
+            ]
+        )
         beads.append(BeadPosition(helix_id, bp_index, direction, pos, copy))
     return beads
 
@@ -242,7 +270,7 @@ def build_p_gro_order(pdb_text: str, chain_map: ChainMap) -> PAtomOrder:
         if line.startswith(("ATOM  ", "HETATM")):
             if len(line) < 26:
                 continue
-            chain  = line[21]
+            chain = line[21]
             resnum = int(line[22:26])
             if chain != prev_chain:
                 block_starts.add((chain, resnum))
@@ -258,7 +286,7 @@ def build_p_gro_order(pdb_text: str, chain_map: ChainMap) -> PAtomOrder:
         if line[12:16].strip() != "P":
             continue
         chain_id = line[21]
-        seq_num  = int(line[22:26])
+        seq_num = int(line[22:26])
         if (chain_id, seq_num) in block_starts:
             continue  # 5'-terminal P stripped by pdb2gmx
         entry = chain_map.get((chain_id, seq_num))
@@ -325,7 +353,9 @@ def load_segid_chain_map(run_dir: Path) -> dict[str, str] | None:
     if ca_path.exists():
         try:
             ca = json.loads(ca_path.read_text())
-            segs = (ca.get("topology_metadata") or {}).get("segments") or ca.get("segments")
+            segs = (ca.get("topology_metadata") or {}).get("segments") or ca.get(
+                "segments"
+            )
             m = _segs_to_map(segs)
             if m:
                 return m
@@ -338,7 +368,9 @@ def load_segid_chain_map(run_dir: Path) -> dict[str, str] | None:
     if mf_path.exists():
         try:
             ca = (json.loads(mf_path.read_text()) or {}).get("charge_audit") or {}
-            segs = (ca.get("topology_metadata") or {}).get("segments") or ca.get("segments")
+            segs = (ca.get("topology_metadata") or {}).get("segments") or ca.get(
+                "segments"
+            )
             return _segs_to_map(segs)
         except Exception:
             return None
@@ -397,8 +429,8 @@ def build_termini_specs(u, chain_map: ChainMap, seg2chain: dict[str, str], p_ord
         cid = seg2chain.get(str(getattr(res.atoms[0], "segid", "")))
         if cid is None:
             continue
-        key = chain_map.get((cid, int(res.resid)))               # 5' terminus design key
-        nbr_key = chain_map.get((cid, int(res.resid) + 1))       # its 3' neighbour (has P)
+        key = chain_map.get((cid, int(res.resid)))  # 5' terminus design key
+        nbr_key = chain_map.get((cid, int(res.resid) + 1))  # its 3' neighbour (has P)
         nbr_idx = p_key_to_idx.get(tuple(nbr_key)) if nbr_key is not None else None
         if key is None or nbr_idx is None:
             continue
@@ -412,9 +444,14 @@ def build_termini_specs(u, chain_map: ChainMap, seg2chain: dict[str, str], p_ord
 _NO_DESIGN_IDENT = {"strand_id": "", "helix_id": "", "bp_index": -1, "direction": ""}
 
 
-def build_atom_design_meta(u, heavy_ag, p_order, model,
-                           chain_map: ChainMap | None = None,
-                           seg2chain: dict[str, str] | None = None) -> list[dict]:
+def build_atom_design_meta(
+    u,
+    heavy_ag,
+    p_order,
+    model,
+    chain_map: ChainMap | None = None,
+    seg2chain: dict[str, str] | None = None,
+) -> list[dict]:
     """Design identity — ``{strand_id, helix_id, bp_index, direction}`` — per atom of
     *heavy_ag*, in that atom group's order.
 
@@ -466,10 +503,16 @@ def build_atom_design_meta(u, heavy_ag, p_order, model,
         # crossover_id, extra_base_k) puts a str in slot 1 and an int in slot 2.  Type-
         # check rather than positionally trust, so an extra base still gets its strand
         # colour and simply falls back from the base-letter lookup.
-        bp  = key[1] if len(key) > 1 and isinstance(key[1], (int, np.integer)) else -1
-        dr  = key[2] if len(key) > 2 and isinstance(key[2], str) else ""
-        rows.append({"strand_id": sid_by_key.get(key, ""), "helix_id": str(key[0]),
-                     "bp_index": int(bp), "direction": dr})
+        bp = key[1] if len(key) > 1 and isinstance(key[1], (int, np.integer)) else -1
+        dr = key[2] if len(key) > 2 and isinstance(key[2], str) else ""
+        rows.append(
+            {
+                "strand_id": sid_by_key.get(key, ""),
+                "helix_id": str(key[0]),
+                "bp_index": int(bp),
+                "direction": dr,
+            }
+        )
     return rows
 
 
@@ -485,24 +528,39 @@ def intern_atom_design_meta(rows: list[dict]) -> dict:
     arrays index their table; every index is valid (the empty string is interned like
     any other value) so the consumer needs no bounds handling.
     """
-    strands: list[str] = []; s_at: dict[str, int] = {}
-    helices: list[str] = []; h_at: dict[str, int] = {}
-    dirs:    list[str] = []; d_at: dict[str, int] = {}
+    strands: list[str] = []
+    s_at: dict[str, int] = {}
+    helices: list[str] = []
+    h_at: dict[str, int] = {}
+    dirs: list[str] = []
+    d_at: dict[str, int] = {}
 
     def _idx(val: str, table: list[str], at: dict[str, int]) -> int:
         i = at.get(val)
         if i is None:
-            i = len(table); table.append(val); at[val] = i
+            i = len(table)
+            table.append(val)
+            at[val] = i
         return i
 
-    s_idx: list[int] = []; h_idx: list[int] = []; d_idx: list[int] = []; bp: list[int] = []
+    s_idx: list[int] = []
+    h_idx: list[int] = []
+    d_idx: list[int] = []
+    bp: list[int] = []
     for r in rows:
         s_idx.append(_idx(r["strand_id"], strands, s_at))
         h_idx.append(_idx(r["helix_id"], helices, h_at))
         d_idx.append(_idx(r["direction"], dirs, d_at))
         bp.append(int(r["bp_index"]))
-    return {"strands": strands, "helices": helices, "dirs": dirs,
-            "strand_idx": s_idx, "helix_idx": h_idx, "dir_idx": d_idx, "bp": bp}
+    return {
+        "strands": strands,
+        "helices": helices,
+        "dirs": dirs,
+        "strand_idx": s_idx,
+        "helix_idx": h_idx,
+        "dir_idx": d_idx,
+        "bp": bp,
+    }
 
 
 def recover_termini(u, term_specs, p_raw, p_nm, R_align, box_nm, all_pos_A=None):
@@ -526,8 +584,8 @@ def recover_termini(u, term_specs, p_raw, p_nm, R_align, box_nm, all_pos_A=None)
     else:
         o5_raw = u.atoms[o5_idx].positions / 10.0
         c1_raw = u.atoms[c1_idx].positions / 10.0
-    off = o5_raw - p_raw[nbr]      # O5' relative to its 3'-neighbour's raw P
-    dnn = c1_raw - o5_raw          # O5'→C1' base-normal proxy
+    off = o5_raw - p_raw[nbr]  # O5' relative to its 3'-neighbour's raw P
+    dnn = c1_raw - o5_raw  # O5'→C1' base-normal proxy
     if box_nm is not None:
         for _d in range(3):
             if box_nm[_d] > 0:
@@ -555,6 +613,7 @@ def extract_from_gro(
     """
     try:
         import MDAnalysis as mda
+
         u = mda.Universe(str(gro_path))
         return _extract_universe(u, frame, p_order)
     except ImportError:
@@ -578,6 +637,7 @@ def extract_from_xtc(
     used to define the atom topology.
     """
     import MDAnalysis as mda
+
     u = mda.Universe(str(topology_gro), str(xtc_path))
     return _extract_universe(u, frame, p_order)
 
@@ -617,7 +677,7 @@ def _unwrap_min_image(positions: np.ndarray, box_nm: np.ndarray) -> np.ndarray:
     box = np.asarray(box_nm, dtype=np.float64)
 
     # Minimum image of each consecutive raw difference (per-dim, only where box>0).
-    diffs = pos[1:] - pos[:-1]                       # (n-1, 3)
+    diffs = pos[1:] - pos[:-1]  # (n-1, 3)
     periodic = box > 0
     if periodic.any():
         sub = diffs[:, periodic]
@@ -625,19 +685,19 @@ def _unwrap_min_image(positions: np.ndarray, box_nm: np.ndarray) -> np.ndarray:
 
     # A step longer than a real backbone bond is a strand boundary → the atom it
     # steps INTO resets to its raw position, starting a new segment.
-    reset = np.linalg.norm(diffs, axis=1) > _P_BACKBONE_MAX_NM   # (n-1,)
+    reset = np.linalg.norm(diffs, axis=1) > _P_BACKBONE_MAX_NM  # (n-1,)
 
     # Segmented cumulative sum: within a segment starting at s,
     #   out[i] = raw[s] + (cumsum_step[i] - cumsum_step[s]).
     step = np.zeros((n, 3), dtype=np.float64)
-    step[1:] = diffs                                  # step[0] = 0 (segment anchor)
+    step[1:] = diffs  # step[0] = 0 (segment anchor)
     csum = np.cumsum(step, axis=0)
 
     seg_start_here = np.zeros(n, dtype=bool)
     seg_start_here[0] = True
-    seg_start_here[1:] = reset                        # atom i starts a segment iff step i reset
+    seg_start_here[1:] = reset  # atom i starts a segment iff step i reset
     marker = np.where(seg_start_here, np.arange(n), 0)
-    seg_start = np.maximum.accumulate(marker)         # most-recent segment-start index ≤ i
+    seg_start = np.maximum.accumulate(marker)  # most-recent segment-start index ≤ i
 
     out = pos[seg_start] + csum - csum[seg_start]
     return out.astype(dtype, copy=False)
@@ -667,7 +727,9 @@ def _pbc_circular_centroid(pts: np.ndarray, box_nm: np.ndarray) -> np.ndarray:
     return c
 
 
-def _nearest_image_to(pts: np.ndarray, center: np.ndarray, box_nm: np.ndarray) -> np.ndarray:
+def _nearest_image_to(
+    pts: np.ndarray, center: np.ndarray, box_nm: np.ndarray
+) -> np.ndarray:
     """Shift each point by whole box vectors to its periodic image nearest ``center``."""
     pts = np.asarray(pts, dtype=np.float64)
     box = np.asarray(box_nm, dtype=np.float64)
@@ -678,7 +740,9 @@ def _nearest_image_to(pts: np.ndarray, center: np.ndarray, box_nm: np.ndarray) -
     return center + d
 
 
-def _kabsch_rotation(mobile_centered: np.ndarray, target_centered: np.ndarray) -> np.ndarray:
+def _kabsch_rotation(
+    mobile_centered: np.ndarray, target_centered: np.ndarray
+) -> np.ndarray:
     """Optimal proper rotation R (det +1) with R @ mobileᵀ ≈ targetᵀ — i.e. R maps
     mobile→target.  Both inputs must already be centroid-subtracted (row vectors)."""
     H = np.asarray(mobile_centered).T @ np.asarray(target_centered)
@@ -739,7 +803,11 @@ def reassemble_to_posed_reference(
     p_box = np.asarray(p_box, dtype=np.float64)
     box = np.asarray(box_nm, dtype=np.float64)
     N = len(p_box)
-    rigid = rigid_mask if (rigid_mask is not None and np.any(rigid_mask)) else np.ones(N, bool)
+    rigid = (
+        rigid_mask
+        if (rigid_mask is not None and np.any(rigid_mask))
+        else np.ones(N, bool)
+    )
 
     # 1. robust centroid of the rigid backbone
     c_box = _pbc_circular_centroid(p_box[rigid], box)
@@ -804,10 +872,9 @@ def _extract_universe(
     p_order: PAtomOrder,
 ) -> list[BeadPosition]:
     import MDAnalysis as mda  # noqa: F401
+
     u.trajectory[frame]
-    dna_p = u.select_atoms(
-        "name P and resname " + " ".join(_GRO_DNA_RESNAMES)
-    )
+    dna_p = u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES))
     if len(dna_p) != len(p_order):
         raise ValueError(
             f"Frame {frame}: {len(dna_p)} DNA P atoms in trajectory "
@@ -836,7 +903,7 @@ def _parse_gro_p_positions(gro_path: Path) -> list[np.ndarray]:
     for line in lines[2:]:  # skip title + atom-count lines
         if len(line) < 44:
             break  # reached box-vector line
-        res_name  = line[5:10].strip()
+        res_name = line[5:10].strip()
         atom_name = line[10:15].strip()
         if atom_name == "P" and res_name in _GRO_DNA_RESNAMES:
             try:
@@ -926,6 +993,7 @@ def _build_reference_map(
 ) -> dict[tuple[str, int, str], np.ndarray]:
     if use_geometry_layer:
         from backend.core.geometry import nucleotide_positions
+
         ref: dict[tuple[str, int, str], np.ndarray] = {}
         for helix in design.helices:
             for nuc in nucleotide_positions(helix):
@@ -934,6 +1002,7 @@ def _build_reference_map(
         return ref
     else:
         from backend.core.atomistic import build_atomistic_model
+
         model = build_atomistic_model(design)
         ref = {}
         for atom in model.atoms:
@@ -979,12 +1048,12 @@ def _compute_comparison(
         for hid, devs in per_helix_devs.items()
     }
     global_rmsd = float(np.sqrt(np.mean(np.array(all_devs) ** 2))) if all_devs else 0.0
-    max_dev     = float(max(all_devs)) if all_devs else 0.0
+    max_dev = float(max(all_devs)) if all_devs else 0.0
 
     return ComparisonResult(
-        n_matched        = len(all_devs),
-        global_rmsd_nm   = global_rmsd,
-        per_helix_rmsd_nm = per_helix_rmsd,
-        max_deviation_nm = max_dev,
-        n_missing        = n_missing,
+        n_matched=len(all_devs),
+        global_rmsd_nm=global_rmsd,
+        per_helix_rmsd_nm=per_helix_rmsd,
+        max_deviation_nm=max_dev,
+        n_missing=n_missing,
     )

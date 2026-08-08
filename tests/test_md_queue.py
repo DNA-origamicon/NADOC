@@ -3,6 +3,7 @@
 Pure decisions (who blocks, who starts next, what is stale) and the JSON round-trip.
 The drain pass itself is covered in test_routes_md_queue.py.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -25,6 +26,7 @@ class FakeJob:
 
 
 # ── persistence ──────────────────────────────────────────────────────────────────
+
 
 def test_missing_queue_file_reads_empty(tmp_path):
     assert md_queue.load_queue(tmp_path) == []
@@ -65,20 +67,35 @@ def test_prune_drops_ids_with_no_job_but_keeps_a_running_one(tmp_path):
 
 # ── who blocks ───────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.parametrize("status", [MdStatus.running, MdStatus.preparing])
 def test_running_and_preparing_block_the_queue(status):
     assert md_queue.job_is_running(FakeJob("a", status)) is True
 
 
-@pytest.mark.parametrize("status", [MdStatus.queued, MdStatus.stopped, MdStatus.failed,
-                                    MdStatus.completed, MdStatus.draft])
+@pytest.mark.parametrize(
+    "status",
+    [
+        MdStatus.queued,
+        MdStatus.stopped,
+        MdStatus.failed,
+        MdStatus.completed,
+        MdStatus.draft,
+    ],
+)
 def test_idle_statuses_do_not_block(status):
     assert md_queue.job_is_running(FakeJob("a", status)) is False
 
 
 def test_a_submitted_remote_job_counts_as_running():
-    assert md_queue.job_is_running(FakeJob("a", MdStatus.queued, slurm_job_id="12345")) is True
-    assert md_queue.job_is_running(FakeJob("a", MdStatus.queued, runpod_pod_id="pod1")) is True
+    assert (
+        md_queue.job_is_running(FakeJob("a", MdStatus.queued, slurm_job_id="12345"))
+        is True
+    )
+    assert (
+        md_queue.job_is_running(FakeJob("a", MdStatus.queued, runpod_pod_id="pod1"))
+        is True
+    )
 
 
 def test_running_job_returns_the_first_blocker_or_none():
@@ -89,14 +106,19 @@ def test_running_job_returns_the_first_blocker_or_none():
 
 # ── who is startable ─────────────────────────────────────────────────────────────
 
+
 def test_startable_is_prepared_and_unsubmitted():
     assert md_queue.job_is_startable(FakeJob("a", MdStatus.queued)) is True
-    assert md_queue.job_is_startable(FakeJob("a", MdStatus.queued, slurm_job_id="1")) is False
+    assert (
+        md_queue.job_is_startable(FakeJob("a", MdStatus.queued, slurm_job_id="1"))
+        is False
+    )
     assert md_queue.job_is_startable(FakeJob("a", MdStatus.draft)) is False
     assert md_queue.job_is_startable(FakeJob("a", MdStatus.completed)) is False
 
 
 # ── next_startable ───────────────────────────────────────────────────────────────
+
 
 def test_queueable_covers_prepared_and_stopped_but_not_draft_or_paused():
     assert md_queue.job_is_queueable(FakeJob("a", MdStatus.queued)) is True
@@ -110,17 +132,33 @@ def test_queueable_covers_prepared_and_stopped_but_not_draft_or_paused():
 def test_the_queue_is_local_only():
     """An Alpine submit / RunPod rental is a review-card decision, never unattended."""
     for target in ("alpine", "runpod"):
-        assert md_queue.job_is_queueable(
-            FakeJob("a", MdStatus.queued, execution_target=target)) is False
-        assert md_queue.job_is_queueable(
-            FakeJob("a", MdStatus.stopped, execution_target=target)) is False
+        assert (
+            md_queue.job_is_queueable(
+                FakeJob("a", MdStatus.queued, execution_target=target)
+            )
+            is False
+        )
+        assert (
+            md_queue.job_is_queueable(
+                FakeJob("a", MdStatus.stopped, execution_target=target)
+            )
+            is False
+        )
 
 
 def test_a_prepared_remote_job_is_awaiting_submit_not_startable():
-    assert md_queue.remote_awaiting_submit(
-        FakeJob("a", MdStatus.queued, execution_target="alpine")) is True
-    assert md_queue.job_is_startable(
-        FakeJob("a", MdStatus.queued, execution_target="alpine")) is False
+    assert (
+        md_queue.remote_awaiting_submit(
+            FakeJob("a", MdStatus.queued, execution_target="alpine")
+        )
+        is True
+    )
+    assert (
+        md_queue.job_is_startable(
+            FakeJob("a", MdStatus.queued, execution_target="alpine")
+        )
+        is False
+    )
     assert md_queue.remote_awaiting_submit(FakeJob("a", MdStatus.queued)) is False
 
 
@@ -132,7 +170,11 @@ def test_next_startable_picks_the_head():
 
 def test_next_startable_skips_past_a_stale_head():
     """Starting B by hand while [A, B, C] are queued must not strand C behind it."""
-    jobs = [FakeJob("a", MdStatus.completed), FakeJob("b", MdStatus.running), FakeJob("c")]
+    jobs = [
+        FakeJob("a", MdStatus.completed),
+        FakeJob("b", MdStatus.running),
+        FakeJob("c"),
+    ]
     pick, stale = md_queue.next_startable(["a", "b", "c"], jobs)
     assert pick == "c"
     assert stale == ["a", "b"]
@@ -149,10 +191,13 @@ def test_next_startable_on_an_empty_queue():
 
 # ── the view the UI renders ──────────────────────────────────────────────────────
 
+
 def test_queue_view_numbers_from_one_and_carries_status(tmp_path):
     md_queue.save_queue(tmp_path, ["a", "b"])
-    view = md_queue.queue_view(tmp_path, [FakeJob("a", MdStatus.queued, design_name="6hb")])
+    view = md_queue.queue_view(
+        tmp_path, [FakeJob("a", MdStatus.queued, design_name="6hb")]
+    )
     assert [(v["job_id"], v["position"]) for v in view] == [("a", 1), ("b", 2)]
     assert view[0]["design_name"] == "6hb"
     assert view[0]["status"] == "queued"
-    assert view[1]["status"] is None      # job not in the list → unknown, not a crash
+    assert view[1]["status"] is None  # job not in the list → unknown, not a crash

@@ -25,7 +25,14 @@ from backend.api import state as design_state
 from backend.api.main import app
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (
-    Design, Direction, Domain, Helix, OverhangSpec, Strand, StrandType, Vec3,
+    Design,
+    Direction,
+    Domain,
+    Helix,
+    OverhangSpec,
+    Strand,
+    StrandType,
+    Vec3,
 )
 from backend.api.routes import _demo_design
 
@@ -56,38 +63,64 @@ def _seed_with_real_oh_domains() -> Design:
     )
     oh_strand_a = Strand(
         id="oh_strand_a",
-        domains=[Domain(
-            helix_id="oh_helix_a", start_bp=0, end_bp=7,
-            direction=Direction.FORWARD, overhang_id="oh_a_5p",
-        )],
+        domains=[
+            Domain(
+                helix_id="oh_helix_a",
+                start_bp=0,
+                end_bp=7,
+                direction=Direction.FORWARD,
+                overhang_id="oh_a_5p",
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     oh_strand_b = Strand(
         id="oh_strand_b",
-        domains=[Domain(
-            helix_id="oh_helix_b", start_bp=0, end_bp=7,
-            direction=Direction.REVERSE, overhang_id="oh_b_5p",
-        )],
+        domains=[
+            Domain(
+                helix_id="oh_helix_b",
+                start_bp=0,
+                end_bp=7,
+                direction=Direction.REVERSE,
+                overhang_id="oh_b_5p",
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     overhangs = [
-        OverhangSpec(id="oh_a_5p", helix_id="oh_helix_a", strand_id="oh_strand_a", label="OHA",
-                     pivot=[2.5, 0.0, 0.0]),
-        OverhangSpec(id="oh_b_5p", helix_id="oh_helix_b", strand_id="oh_strand_b", label="OHB",
-                     pivot=[5.0, 0.0, 0.0]),
+        OverhangSpec(
+            id="oh_a_5p",
+            helix_id="oh_helix_a",
+            strand_id="oh_strand_a",
+            label="OHA",
+            pivot=[2.5, 0.0, 0.0],
+        ),
+        OverhangSpec(
+            id="oh_b_5p",
+            helix_id="oh_helix_b",
+            strand_id="oh_strand_b",
+            label="OHB",
+            pivot=[5.0, 0.0, 0.0],
+        ),
     ]
-    return base.model_copy(update={
-        "helices": [*base.helices, oh_helix_a, oh_helix_b],
-        "strands": [*base.strands, oh_strand_a, oh_strand_b],
-        "overhangs": overhangs,
-    })
+    return base.model_copy(
+        update={
+            "helices": [*base.helices, oh_helix_a, oh_helix_b],
+            "strands": [*base.strands, oh_strand_a, oh_strand_b],
+            "overhangs": overhangs,
+        }
+    )
 
 
 def _post_conn() -> dict:
     body = {
-        "overhang_a_id": "oh_a_5p", "overhang_a_attach": "free_end",
-        "overhang_b_id": "oh_b_5p", "overhang_b_attach": "free_end",
-        "linker_type": "ds", "length_value": 6, "length_unit": "bp",
+        "overhang_a_id": "oh_a_5p",
+        "overhang_a_attach": "free_end",
+        "overhang_b_id": "oh_b_5p",
+        "overhang_b_attach": "free_end",
+        "linker_type": "ds",
+        "length_value": 6,
+        "length_unit": "bp",
     }
     r = client.post("/api/design/overhang-connections", json=body)
     assert r.status_code == 201, r.text
@@ -117,11 +150,14 @@ def _reset():
 
 
 def _find_nuc(nucs, *, strand_id, helix_id, bp_index, direction=None):
-    out = [n for n in nucs
-           if n.get("strand_id") == strand_id
-           and n.get("helix_id") == helix_id
-           and n.get("bp_index") == bp_index
-           and (direction is None or n.get("direction") == direction)]
+    out = [
+        n
+        for n in nucs
+        if n.get("strand_id") == strand_id
+        and n.get("helix_id") == helix_id
+        and n.get("bp_index") == bp_index
+        and (direction is None or n.get("direction") == direction)
+    ]
     assert len(out) == 1, (
         f"expected exactly 1 nuc for {strand_id=} {helix_id=} {bp_index=} "
         f"{direction=}, got {len(out)}"
@@ -136,16 +172,26 @@ def test_oh_rotation_moves_oh_nuc_baseline():
     design_state.set_design(_seed_with_real_oh_domains())
     pre = _get_geom()
     # Baseline OH backbone position at the OH's free tip (bp 7).
-    oh_pre = _find_nuc(pre, strand_id="oh_strand_a", helix_id="oh_helix_a",
-                       bp_index=0, direction="FORWARD")
+    oh_pre = _find_nuc(
+        pre,
+        strand_id="oh_strand_a",
+        helix_id="oh_helix_a",
+        bp_index=0,
+        direction="FORWARD",
+    )
     pos_pre = np.asarray(oh_pre["backbone_position"], dtype=float)
 
     # Rotate 90° about Y around pivot at (2.5, 0, 0).
     _patch_rotation("oh_a_5p", _quat_axis_angle((0.0, 1.0, 0.0), math.pi / 2))
 
     post = _get_geom()
-    oh_post = _find_nuc(post, strand_id="oh_strand_a", helix_id="oh_helix_a",
-                        bp_index=0, direction="FORWARD")
+    oh_post = _find_nuc(
+        post,
+        strand_id="oh_strand_a",
+        helix_id="oh_helix_a",
+        bp_index=0,
+        direction="FORWARD",
+    )
     pos_post = np.asarray(oh_post["backbone_position"], dtype=float)
 
     delta = float(np.linalg.norm(pos_post - pos_pre))
@@ -167,28 +213,48 @@ def test_linker_complement_follows_rotated_overhang():
 
     # Baseline geometry — record OH nuc and complement nuc at bp 7.
     pre = _get_geom()
-    oh_pre = _find_nuc(pre, strand_id="oh_strand_a", helix_id="oh_helix_a",
-                       bp_index=0, direction="FORWARD")
-    comp_pre = _find_nuc(pre, strand_id=f"__lnk__{cid}__a", helix_id="oh_helix_a",
-                         bp_index=0, direction="REVERSE")
-    oh_pos_pre   = np.asarray(oh_pre["backbone_position"],   dtype=float)
+    oh_pre = _find_nuc(
+        pre,
+        strand_id="oh_strand_a",
+        helix_id="oh_helix_a",
+        bp_index=0,
+        direction="FORWARD",
+    )
+    comp_pre = _find_nuc(
+        pre,
+        strand_id=f"__lnk__{cid}__a",
+        helix_id="oh_helix_a",
+        bp_index=0,
+        direction="REVERSE",
+    )
+    oh_pos_pre = np.asarray(oh_pre["backbone_position"], dtype=float)
     comp_pos_pre = np.asarray(comp_pre["backbone_position"], dtype=float)
 
     # Rotate the OH 90° around Y at the pivot (2.5, 0, 0).
     _patch_rotation("oh_a_5p", _quat_axis_angle((0.0, 1.0, 0.0), math.pi / 2))
 
     post = _get_geom()
-    oh_post = _find_nuc(post, strand_id="oh_strand_a", helix_id="oh_helix_a",
-                        bp_index=0, direction="FORWARD")
-    comp_post = _find_nuc(post, strand_id=f"__lnk__{cid}__a", helix_id="oh_helix_a",
-                          bp_index=0, direction="REVERSE")
-    oh_pos_post   = np.asarray(oh_post["backbone_position"],   dtype=float)
+    oh_post = _find_nuc(
+        post,
+        strand_id="oh_strand_a",
+        helix_id="oh_helix_a",
+        bp_index=0,
+        direction="FORWARD",
+    )
+    comp_post = _find_nuc(
+        post,
+        strand_id=f"__lnk__{cid}__a",
+        helix_id="oh_helix_a",
+        bp_index=0,
+        direction="REVERSE",
+    )
+    oh_pos_post = np.asarray(oh_post["backbone_position"], dtype=float)
     comp_pos_post = np.asarray(comp_post["backbone_position"], dtype=float)
 
-    oh_delta   = float(np.linalg.norm(oh_pos_post - oh_pos_pre))
+    oh_delta = float(np.linalg.norm(oh_pos_post - oh_pos_pre))
     comp_delta = float(np.linalg.norm(comp_pos_post - comp_pos_pre))
-    pair_pre   = float(np.linalg.norm(oh_pos_pre - comp_pos_pre))
-    pair_post  = float(np.linalg.norm(oh_pos_post - comp_pos_post))
+    pair_pre = float(np.linalg.norm(oh_pos_pre - comp_pos_pre))
+    pair_post = float(np.linalg.norm(oh_pos_post - comp_pos_post))
 
     # OH must move (sanity).
     assert oh_delta > 0.5, f"OH nuc did not move under rotation (Δ={oh_delta:.3f})"

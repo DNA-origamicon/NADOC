@@ -40,14 +40,15 @@ from backend.core.mrdna_job import MrdnaJob, MrdnaStatus
 
 logger = logging.getLogger(__name__)
 
-_SIM_STEM = "mrdna_relax"   # model.simulate(output_name=...) base name
+_SIM_STEM = "mrdna_relax"  # model.simulate(output_name=...) base name
 
 
 # ── Global task registry ──────────────────────────────────────────────────────
 
+
 @dataclass
 class _RunningHandle:
-    thread:    threading.Thread
+    thread: threading.Thread
     cancelled: bool = False
 
 
@@ -86,6 +87,7 @@ def _external_arbd_pid(job: MrdnaJob, workspace_dir: Path) -> Optional[int]:
 
 # ── Availability probe ────────────────────────────────────────────────────────
 
+
 def mrdna_available() -> dict:
     """Probe for a usable mrDNA + ARBD install (mirror /oxdna/available).
 
@@ -93,6 +95,7 @@ def mrdna_available() -> dict:
     ARBD binary (run it on the GPU).  ``available`` is true only when both resolve.
     """
     from backend.core.mrdna_bridge import find_arbd, find_mrdna
+
     mrdna = find_mrdna()
     arbd = find_arbd()
     return {
@@ -104,6 +107,7 @@ def mrdna_available() -> dict:
 
 
 # ── Prepare: write the self-contained job dir ─────────────────────────────────
+
 
 def prepare_mrdna_job(design: Design, job: MrdnaJob, workspace_dir: Path) -> None:
     """Write a self-contained ``design.json`` snapshot into the job dir, so the
@@ -164,14 +168,16 @@ def _coarse_sim_paths(job_dir: Path) -> tuple[Path, Path]:
         tail = psf.stem.rsplit("-", 1)[-1]
         if tail.isdigit():
             numbered.append((int(tail), psf))
-    for _n, psf in sorted(numbered):                       # ascending → coarse first
+    for _n, psf in sorted(numbered):  # ascending → coarse first
         dcd = job_dir / "output" / f"{psf.stem}.dcd"
         if dcd.exists() and _psf_is_cg(psf):
             return psf, dcd
     return job_dir / f"{_SIM_STEM}.psf", job_dir / "output" / f"{_SIM_STEM}.dcd"
 
 
-def _override_has_collapsed_helix(design: Design, override: dict, frac: float = 0.45) -> bool:
+def _override_has_collapsed_helix(
+    design: Design, override: dict, frac: float = 0.45
+) -> bool:
     """True when the display reconstruction squashed any helix into a small blob —
     the tight-bundle failure mode where the fine stage's nearest-design-axis bead
     assignment dumps one helix's beads onto its neighbour, so that helix reconstructs
@@ -223,8 +229,11 @@ def _count_stretched_backbone_bonds(override: dict, thr_nm: float = 1.3) -> int:
     for bpmap in by_hd.values():
         bps = sorted(bpmap)
         for a, b in zip(bps, bps[1:]):
-            if b - a == 1 and float(np.linalg.norm(
-                    np.asarray(bpmap[b]) - np.asarray(bpmap[a]))) > thr_nm:
+            if (
+                b - a == 1
+                and float(np.linalg.norm(np.asarray(bpmap[b]) - np.asarray(bpmap[a])))
+                > thr_nm
+            ):
                 n += 1
     return n
 
@@ -288,7 +297,9 @@ def _display_positions(design: Design, job_dir: Path) -> tuple[list[dict], int]:
     if _override_has_collapsed_helix(design, override) or fine_bad >= 12:
         c_psf, c_dcd = _coarse_sim_paths(job_dir)
         if (c_psf, c_dcd) != (psf, dcd) and c_psf.exists() and c_dcd.exists():
-            c_override = nuc_pos_override_display_from_coarse(design, str(c_psf), str(c_dcd))
+            c_override = nuc_pos_override_display_from_coarse(
+                design, str(c_psf), str(c_dcd)
+            )
             if _reconstruction_badness(design, c_override) < fine_bad:
                 override = c_override
                 src_psf, src_dcd = c_psf, c_dcd
@@ -303,8 +314,10 @@ def _display_positions(design: Design, job_dir: Path) -> tuple[list[dict], int]:
     # bead positions instead — the SAME harvest the MD seed uses — merged so ss wins
     # at each unpaired key.  Physical/display only.
     from backend.core.mrdna_bridge import nuc_pos_override_ssdna_from_arbd
+
     ss = nuc_pos_override_ssdna_from_arbd(
-        design, str(src_psf), str(src_dcd), override, prefer_continuity=True)
+        design, str(src_psf), str(src_dcd), override, prefer_continuity=True
+    )
     if ss:
         override = {**override, **ss}
 
@@ -318,12 +331,14 @@ def _display_positions(design: Design, job_dir: Path) -> tuple[list[dict], int]:
     # addresses the same key.
     for key, pos in override.items():
         if isinstance(key[0], str) and key[0].startswith("__ext_"):
-            positions.append({
-                "helix_id":          key[0],
-                "bp_index":          key[1],
-                "direction":         key[2],
-                "backbone_position": pos.tolist(),
-            })
+            positions.append(
+                {
+                    "helix_id": key[0],
+                    "bp_index": key[1],
+                    "direction": key[2],
+                    "backbone_position": pos.tolist(),
+                }
+            )
 
     for helix in design.helices:
         nuc_list = list(nucleotide_positions(helix))
@@ -331,7 +346,9 @@ def _display_positions(design: Design, job_dir: Path) -> tuple[list[dict], int]:
         for nuc in nuc_list:
             key = (nuc.helix_id, nuc.bp_index, nuc.direction.value)
             if key in override:
-                dir_disps[nuc.direction.value][nuc.bp_index] = override[key] - nuc.position
+                dir_disps[nuc.direction.value][nuc.bp_index] = (
+                    override[key] - nuc.position
+                )
         for nuc in nuc_list:
             key = (nuc.helix_id, nuc.bp_index, nuc.direction.value)
             if key in override:
@@ -343,12 +360,14 @@ def _display_positions(design: Design, job_dir: Path) -> tuple[list[dict], int]:
                     pos = nuc.position + d_map[nearest]
                 else:
                     pos = nuc.position
-            positions.append({
-                "helix_id":          nuc.helix_id,
-                "bp_index":          nuc.bp_index,
-                "direction":         nuc.direction.value,
-                "backbone_position": pos.tolist(),
-            })
+            positions.append(
+                {
+                    "helix_id": nuc.helix_id,
+                    "bp_index": nuc.bp_index,
+                    "direction": nuc.direction.value,
+                    "backbone_position": pos.tolist(),
+                }
+            )
 
     # Crossover extra bases: emit ``__xb__``-keyed positions so the native extra-base
     # beads/slabs follow the relaxed structure (they are NOT on any helix, so the walk
@@ -358,10 +377,13 @@ def _display_positions(design: Design, job_dir: Path) -> tuple[list[dict], int]:
     import numpy as np
 
     from backend.core.mrdna_bridge import extra_base_flank_keys
+
     flanks = extra_base_flank_keys(design)
     if flanks:
         pos_lookup = {
-            (p["helix_id"], p["bp_index"], p["direction"]): np.asarray(p["backbone_position"])
+            (p["helix_id"], p["bp_index"], p["direction"]): np.asarray(
+                p["backbone_position"]
+            )
             for p in positions
         }
         for xo_id, extra, prev_key, next_key in flanks:
@@ -372,12 +394,14 @@ def _display_positions(design: Design, job_dir: Path) -> tuple[list[dict], int]:
             n = len(extra)
             for k in range(n):
                 t = (k + 1) / (n + 1)
-                positions.append({
-                    "helix_id":          "__xb__",
-                    "bp_index":          xo_id,
-                    "direction":         k,
-                    "backbone_position": (p0 * (1.0 - t) + p1 * t).tolist(),
-                })
+                positions.append(
+                    {
+                        "helix_id": "__xb__",
+                        "bp_index": xo_id,
+                        "direction": k,
+                        "backbone_position": (p0 * (1.0 - t) + p1 * t).tolist(),
+                    }
+                )
     return positions, len(override)
 
 
@@ -391,11 +415,11 @@ def extract_mrdna_results(design: Design, job_dir: Path) -> dict:
     positions, n_override = _display_positions(design, job_dir)
     beads, edges = _extract_beads_aligned(str(psf), str(dcd))
     return {
-        "positions":  positions,
-        "beads":      beads,
-        "edges":      edges,
+        "positions": positions,
+        "beads": beads,
+        "edges": edges,
         "n_override": n_override,
-        "n_beads":    len(beads),
+        "n_beads": len(beads),
     }
 
 
@@ -410,7 +434,7 @@ def load_display(job_dir: Path) -> Optional[dict]:
     design = _load_snapshot_design(job_dir)
     psf, dcd = _sim_paths(job_dir)
     if design is None or not (psf.exists() and dcd.exists()):
-        return cached   # can't recompute (e.g. archived without outputs) — serve old
+        return cached  # can't recompute (e.g. archived without outputs) — serve old
     positions, _ = _display_positions(design, job_dir)
     out = {"version": _DISPLAY_VERSION, "positions": positions}
     try:
@@ -448,28 +472,41 @@ def mrdna_trajectory_rmsf(
         return None
 
     import MDAnalysis as mda
+
     n = len(mda.Universe(str(psf), str(dcd)).trajectory)
     if n < 2:
         return None
     if n <= max_frames:
         idxs = list(range(n))
     else:
-        idxs = sorted({round(i * (n - 1) / (max_frames - 1)) for i in range(max_frames)})
+        idxs = sorted(
+            {round(i * (n - 1) / (max_frames - 1)) for i in range(max_frames)}
+        )
 
     frames: list[list[dict]] = []
     for i in idxs:
-        override = nuc_pos_override_display_from_coarse(design, str(psf), str(dcd), frame=i)
-        frames.append([
-            {"helix_id": k[0], "bp_index": k[1], "direction": k[2],
-             "backbone_position": v.tolist()}
-            for k, v in override.items()
-        ])
+        override = nuc_pos_override_display_from_coarse(
+            design, str(psf), str(dcd), frame=i
+        )
+        frames.append(
+            [
+                {
+                    "helix_id": k[0],
+                    "bp_index": k[1],
+                    "direction": k[2],
+                    "backbone_position": v.tolist(),
+                }
+                for k, v in override.items()
+            ]
+        )
     if len([f for f in frames if f]) < 2:
         return None
     return rmsf_from_ensemble(frames, align=True)
 
 
-def _extract_beads_aligned(psf: str, dcd: str) -> tuple[list[list[float]], list[list[int]]]:
+def _extract_beads_aligned(
+    psf: str, dcd: str
+) -> tuple[list[list[float]], list[list[int]]]:
     """The coarse DNA bead cloud (last DCD frame), rigid-body (Kabsch) aligned onto
     the initial coarse PDB — which mrDNA writes in the NADOC coordinate frame — so
     the beads overlay the design, PLUS the CG bond connectivity (backbone chain +
@@ -479,6 +516,7 @@ def _extract_beads_aligned(psf: str, dcd: str) -> tuple[list[list[float]], list[
     import numpy as np
 
     from backend.core.mrdna_bridge import _ensure_mrdna
+
     _ensure_mrdna()
     import MDAnalysis as mda
 
@@ -486,19 +524,19 @@ def _extract_beads_aligned(psf: str, dcd: str) -> tuple[list[list[float]], list[
     u_init = mda.Universe(psf, init_pdb)
     names = np.array([a.name for a in u_init.atoms])
     dna = np.where(names == "DNA")[0]
-    ref = u_init.atoms.positions[dna].astype(float)   # NADOC frame, Å
+    ref = u_init.atoms.positions[dna].astype(float)  # NADOC frame, Å
 
     edges = _psf_dna_edges(psf, u_init=u_init, dna=dna)
 
     u = mda.Universe(psf, dcd)
     u.trajectory[-1]
-    sim = u.atoms.positions[dna].astype(float)         # drifted, Å
+    sim = u.atoms.positions[dna].astype(float)  # drifted, Å
 
     if len(ref) >= 3 and len(sim) == len(ref):
         aligned = _kabsch_apply(sim, ref)
     else:
         aligned = sim
-    return (aligned / 10.0).tolist(), edges            # Å → nm
+    return (aligned / 10.0).tolist(), edges  # Å → nm
 
 
 def _psf_dna_edges(psf: str, *, u_init=None, dna=None) -> list[list[int]]:
@@ -509,6 +547,7 @@ def _psf_dna_edges(psf: str, *, u_init=None, dna=None) -> list[list[int]]:
     import numpy as np
 
     from backend.core.mrdna_bridge import _ensure_mrdna
+
     _ensure_mrdna()
     import MDAnalysis as mda
 
@@ -567,6 +606,7 @@ def load_curvature(job_dir: Path) -> Optional[dict]:
     disp = load_display(job_dir)
     positions = disp.get("positions") if disp else None
     from backend.core.mrdna_curvature import curvature_report
+
     report = curvature_report(design, positions)
     try:
         (job_dir / "curvature.json").write_text(json.dumps(report))
@@ -613,7 +653,9 @@ def load_cached(job_dir: Path, name: str) -> Optional[dict]:
 # (the 10¹² kJ/mol LJ spike).  Both are Physical-layer only — never write topology.
 
 
-def resolve_md_seed_inputs(job: MrdnaJob, workspace_dir: Path) -> tuple[Design, Path, Path]:
+def resolve_md_seed_inputs(
+    job: MrdnaJob, workspace_dir: Path
+) -> tuple[Design, Path, Path]:
     """Gate + resolve the inputs to seed an atomistic MD run from a COMPLETED
     fine-stage mrDNA job: the design snapshot the relaxation ran on, plus the
     fine-stage ``(PSF, DCD)``.
@@ -673,6 +715,7 @@ def build_md_seed_override(design: Design, psf: Path, dcd: Path) -> dict:
         nuc_pos_override_from_arbd_strands,
         nuc_pos_override_ssdna_from_arbd,
     )
+
     _ensure_mrdna()
     ds = nuc_pos_override_from_arbd_strands(design, str(psf), str(dcd))
     ss = nuc_pos_override_ssdna_from_arbd(design, str(psf), str(dcd), ds)
@@ -685,7 +728,7 @@ def assert_mrdna_namd_seed_available(job_id: str, workspace_dir: Path) -> None:
     (completed + fine-stage + snapshot/PSF/DCD present) WITHOUT the expensive override
     build, so the create-job route can reject a bad ``mrdna_job_id`` with a fast 400.
     Raises ``FileNotFoundError`` (the error the MD route catches) on any gating fail."""
-    job = MrdnaJob.load(job_id, workspace_dir)          # FileNotFoundError if unknown
+    job = MrdnaJob.load(job_id, workspace_dir)  # FileNotFoundError if unknown
     job = reconcile_mrdna_status(job, workspace_dir)
     try:
         resolve_md_seed_inputs(job, workspace_dir)
@@ -708,35 +751,36 @@ def build_namd_seed_from_mrdna(job_id: str, workspace_dir: Path):
 
     job = MrdnaJob.load(job_id, workspace_dir)
     job = reconcile_mrdna_status(job, workspace_dir)
-    design, psf, dcd = resolve_md_seed_inputs(job, workspace_dir)   # gates; ValueError
+    design, psf, dcd = resolve_md_seed_inputs(job, workspace_dir)  # gates; ValueError
     override = build_md_seed_override(design, psf, dcd)
     model = build_atomistic_model(design, nuc_pos_override=override)
 
     if model.atoms:
         import numpy as np
-        cx, cy, cz = np.mean(
-            [[a.x, a.y, a.z] for a in model.atoms], axis=0).tolist()
+
+        cx, cy, cz = np.mean([[a.x, a.y, a.z] for a in model.atoms], axis=0).tolist()
         for a in model.atoms:
             a.x -= cx
             a.y -= cy
             a.z -= cz
 
     return NamdSeed(
-        design          = design,
-        atomistic_model = model,
-        stage_name      = "mrdna_fine",
-        conf_path       = dcd,
-        source_job_id   = job_id,
+        design=design,
+        atomistic_model=model,
+        stage_name="mrdna_fine",
+        conf_path=dcd,
+        source_job_id=job_id,
     )
 
 
 # ── Progress (time-based estimate; the bar for a short coarse run) ─────────────
 
+
 def _estimate_seconds(job: MrdnaJob) -> float:
     """Rough wall-clock estimate for the coarse ARBD run, scaled by system size and
     step count.  Only drives the progress bar (capped < 1.0 until the thread ends);
     the true completion signal is the runner thread finishing."""
-    beads = max(1.0, job.n_nucleotides / 2.0)          # ≈ base pairs ≈ coarse beads
+    beads = max(1.0, job.n_nucleotides / 2.0)  # ≈ base pairs ≈ coarse beads
     # Reference: ~635 beads · 1e5 coarse steps ≈ 21 s on an RTX 3080 Ti; be generous.
     est = 8.0 + (beads / 635.0) * (job.coarse_steps / 1e5) * 30.0
     # The FINE stage (2 bp/bead + orientation) is ~3× the per-step cost of coarse.
@@ -760,15 +804,16 @@ def job_progress(job: MrdnaJob, workspace_dir: Path) -> dict:
         overall = min(0.97, elapsed / est)
         eta_seconds = max(0.0, est - elapsed)
     return {
-        "overall":      overall,
-        "status":       job.status.value,
+        "overall": overall,
+        "status": job.status.value,
         "stage_status": stage.status if stage else None,
-        "eta_seconds":  eta_seconds,
-        "sim_seconds":  job.sim_seconds,
+        "eta_seconds": eta_seconds,
+        "sim_seconds": job.sim_seconds,
     }
 
 
 # ── Execution ─────────────────────────────────────────────────────────────────
+
 
 def _run_job(job: MrdnaJob, workspace_dir: Path) -> None:
     """Thread body: build the model, run the coarse ARBD sim, extract + cache."""
@@ -784,6 +829,7 @@ def _run_job(job: MrdnaJob, workspace_dir: Path) -> None:
             raise RuntimeError("job design snapshot (design.json) missing")
 
         from backend.core.mrdna_bridge import ensure_wsl_cuda_libs
+
         ensure_wsl_cuda_libs()
 
         # Build the parameterized mrDNA model (same T0 crossover potentials the
@@ -792,6 +838,7 @@ def _run_job(job: MrdnaJob, workspace_dir: Path) -> None:
             CrossoverPotentialOverride,
             mrdna_model_from_nadoc_parameterized,
         )
+
         override = CrossoverPotentialOverride.from_database("T0")
         model = mrdna_model_from_nadoc_parameterized(design, override)
 
@@ -802,8 +849,11 @@ def _run_job(job: MrdnaJob, workspace_dir: Path) -> None:
         n_held = 0
         if job.anchors:
             from backend.core.mrdna_anchors import install_anchor_restraints
+
             n_held = install_anchor_restraints(design, model, job.anchors)
-            logger.info("mrdna job %s: installed anchors on %d bead(s)", job.job_id, n_held)
+            logger.info(
+                "mrdna job %s: installed anchors on %d bead(s)", job.job_id, n_held
+            )
 
         # E-field (job-request annotation, never a topology edit): a constant per-bead
         # force from the shared {field_pN, dir} descriptor, applied via ARBD force grids
@@ -817,11 +867,17 @@ def _run_job(job: MrdnaJob, workspace_dir: Path) -> None:
             if n_held == 0:
                 logger.warning(
                     "mrdna job %s: E-field with no held beads — the structure will "
-                    "drift down-field (COM drift).", job.job_id)
+                    "drift down-field (COM drift).",
+                    job.job_id,
+                )
             from backend.core.mrdna_field import install_field_force
+
             n_types = install_field_force(design, model, job.e_field, out_dir=jd)
-            logger.info("mrdna job %s: installed E-field on %d bead type(s)",
-                        job.job_id, n_types)
+            logger.info(
+                "mrdna job %s: installed E-field on %d bead type(s)",
+                job.job_id,
+                n_types,
+            )
 
         # Hard surface (job-request annotation, never a topology edit): a one-sided
         # repulsion plane from the shared {dir, offset_nm, stiff} descriptor, applied via
@@ -831,9 +887,13 @@ def _run_job(job: MrdnaJob, workspace_dir: Path) -> None:
         # backend/core/mrdna_surface.py.
         if job.surface:
             from backend.core.mrdna_surface import install_surface_force
+
             n_surf = install_surface_force(design, model, job.surface, out_dir=jd)
-            logger.info("mrdna job %s: installed hard surface on %d bead type(s)",
-                        job.job_id, n_surf)
+            logger.info(
+                "mrdna job %s: installed hard surface on %d bead type(s)",
+                job.job_id,
+                n_surf,
+            )
 
         if _cancelled():
             raise _Cancelled()
@@ -854,12 +914,18 @@ def _run_job(job: MrdnaJob, workspace_dir: Path) -> None:
             # …)` does NOT do this — it silently runs a single coarse pass (the
             # coarse_steps/fine_steps kwargs are swallowed by ArbdEngine).
             from mrdna import multiresolution_simulation
+
             try:
                 multiresolution_simulation(
-                    model, _SIM_STEM, directory=str(jd), gpu=gpu,
+                    model,
+                    _SIM_STEM,
+                    directory=str(jd),
+                    gpu=gpu,
                     coarse_steps=float(job.coarse_steps),
                     fine_steps=float(job.fine_steps),
-                    coarse_output_period=float(min(job.output_period, job.coarse_steps)),
+                    coarse_output_period=float(
+                        min(job.output_period, job.coarse_steps)
+                    ),
                     fine_output_period=float(max(1, job.fine_steps // 2)),
                 )
             except Exception as exc:  # noqa: BLE001
@@ -871,15 +937,22 @@ def _run_job(job: MrdnaJob, workspace_dir: Path) -> None:
                 psf, _dcd = _sim_paths(jd)
                 if "-" not in psf.stem or not psf.exists():
                     raise
-                logger.warning("mrdna job %s: multiresolution tail failed (%s); "
-                               "using the completed fine CG stage", job.job_id, exc)
+                logger.warning(
+                    "mrdna job %s: multiresolution tail failed (%s); "
+                    "using the completed fine CG stage",
+                    job.job_id,
+                    exc,
+                )
         else:
             # COARSE path: a single 5 bp/bead pass (fast, global shape, no twist ⇒ no
             # curvature).  The correct step kwarg is `num_steps` (not coarse_steps).
             model.simulate(
-                output_name=_SIM_STEM, directory=str(jd),
-                num_steps=float(job.coarse_steps), timestep=200e-6,
-                output_period=float(job.output_period), gpu=gpu,
+                output_name=_SIM_STEM,
+                directory=str(jd),
+                num_steps=float(job.coarse_steps),
+                timestep=200e-6,
+                output_period=float(job.output_period),
+                gpu=gpu,
             )
         sim_seconds = time.monotonic() - t0
 
@@ -888,21 +961,33 @@ def _run_job(job: MrdnaJob, workspace_dir: Path) -> None:
 
         # Extract relaxed positions + CG beads and cache them for the display.
         payload = extract_mrdna_results(design, jd)
-        (jd / "display.json").write_text(json.dumps({
-            "version":   _DISPLAY_VERSION,
-            "positions": payload["positions"],
-        }))
-        (jd / "beads.json").write_text(json.dumps({
-            "beads": payload["beads"],
-            "edges": payload["edges"],
-        }))
+        (jd / "display.json").write_text(
+            json.dumps(
+                {
+                    "version": _DISPLAY_VERSION,
+                    "positions": payload["positions"],
+                }
+            )
+        )
+        (jd / "beads.json").write_text(
+            json.dumps(
+                {
+                    "beads": payload["beads"],
+                    "edges": payload["edges"],
+                }
+            )
+        )
         # Curvature report (designed vs simulated) — cached for the panel readout.
         try:
             from backend.core.mrdna_curvature import curvature_report
-            (jd / "curvature.json").write_text(json.dumps(
-                curvature_report(design, payload["positions"])))
+
+            (jd / "curvature.json").write_text(
+                json.dumps(curvature_report(design, payload["positions"]))
+            )
         except Exception:  # noqa: BLE001 — a curvature failure must not fail the job
-            logger.warning("mrdna job %s: curvature report failed", job.job_id, exc_info=True)
+            logger.warning(
+                "mrdna job %s: curvature report failed", job.job_id, exc_info=True
+            )
 
         job.sim_seconds = round(sim_seconds, 2)
         job.n_override = payload["n_override"]
@@ -913,8 +998,12 @@ def _run_job(job: MrdnaJob, workspace_dir: Path) -> None:
         job.error = None
         job.arbd_pid = None
         job.save(workspace_dir)
-        logger.info("mrdna job %s completed in %.1fs (%d beads)",
-                    job.job_id, sim_seconds, payload["n_beads"])
+        logger.info(
+            "mrdna job %s completed in %.1fs (%d beads)",
+            job.job_id,
+            sim_seconds,
+            payload["n_beads"],
+        )
 
     except _Cancelled:
         job.status = MrdnaStatus.stopped
@@ -949,9 +1038,14 @@ def start_job(job: MrdnaJob, workspace_dir: Path) -> None:
     """Launch _run_job in a background daemon thread. Idempotent if running."""
     if is_running(job.job_id):
         return
-    handle = _RunningHandle(thread=threading.Thread(
-        target=_run_job, args=(job, workspace_dir),
-        name=f"mrdna-runner-{job.job_id}", daemon=True))
+    handle = _RunningHandle(
+        thread=threading.Thread(
+            target=_run_job,
+            args=(job, workspace_dir),
+            name=f"mrdna-runner-{job.job_id}",
+            daemon=True,
+        )
+    )
     _RUNNING[job.job_id] = handle
     handle.thread.start()
 

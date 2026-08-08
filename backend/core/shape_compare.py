@@ -30,6 +30,7 @@ present.  Every comparison degrades gracefully: a bundle missing an observable s
 doesn't contribute to that observable's rows, and with only one engine present the report
 still carries that engine's raw scalar values (no deltas).
 """
+
 from __future__ import annotations
 
 from backend.core.shape_metrics import (
@@ -88,13 +89,22 @@ def build_comparison_report(sources) -> dict:
     by_engine = {s["engine"]: s for s in sources}
 
     if not engines:
-        return {"ready": False, "engines": [], "references": {},
-                "scalars": [], "rmsf_profiles": [], "agreement": [], "field": None,
-                "reason": "no engine sources supplied"}
+        return {
+            "ready": False,
+            "engines": [],
+            "references": {},
+            "scalars": [],
+            "rmsf_profiles": [],
+            "agreement": [],
+            "field": None,
+            "reason": "no engine sources supplied",
+        }
 
     shape_ref = reference_for(engines, "shape")
     rmsf_ref = reference_for(engines, "rmsf")
-    field_ref = reference_for(engines, "field")   # policy reference (for the references dict)
+    field_ref = reference_for(
+        engines, "field"
+    )  # policy reference (for the references dict)
     # For the field comparison/panel the reference must actually CARRY field data — else the
     # policy engine (e.g. oxDNA) would be labelled the reference while contributing no
     # deflection, and every cosine-vs-ref would be a misleading None.  Resolve it among the
@@ -103,7 +113,9 @@ def build_comparison_report(sources) -> dict:
     field_cmp_ref = reference_for(field_engines, "field") if field_engines else None
 
     # ── Scalar table: each engine's descriptor value + signed %-delta vs shape_ref ──
-    ref_desc = (by_engine.get(shape_ref, {}).get("descriptors") or {}) if shape_ref else {}
+    ref_desc = (
+        (by_engine.get(shape_ref, {}).get("descriptors") or {}) if shape_ref else {}
+    )
     scalars: list[dict] = []
     for name in COMPARABLE_SCALARS:
         cells: dict = {}
@@ -118,9 +130,13 @@ def build_comparison_report(sources) -> dict:
 
     # ── RMSF profiles (per-engine overlay) ─────────────────────────────────────────
     rmsf_profiles = [
-        {"engine": eng, "is_reference": eng == rmsf_ref,
-         "points": _rmsf_profile_points(by_engine[eng].get("rmsf"))}
-        for eng in engines if by_engine[eng].get("rmsf")
+        {
+            "engine": eng,
+            "is_reference": eng == rmsf_ref,
+            "points": _rmsf_profile_points(by_engine[eng].get("rmsf")),
+        }
+        for eng in engines
+        if by_engine[eng].get("rmsf")
     ]
 
     # ── Twist profiles (per-engine overlay) ────────────────────────────────────────
@@ -132,7 +148,8 @@ def build_comparison_report(sources) -> dict:
         pts = _twist_profile_points(by_engine[eng].get("shape_frame"))
         if pts:
             twist_profiles.append(
-                {"engine": eng, "is_reference": eng == shape_ref, "points": pts})
+                {"engine": eng, "is_reference": eng == shape_ref, "points": pts}
+            )
 
     # ── Agreement rows: each candidate engine scored against the per-observable refs ─
     agreement: list[dict] = []
@@ -141,40 +158,58 @@ def build_comparison_report(sources) -> dict:
         is_rmsf_ref = eng == rmsf_ref
         shape_rmsd = None
         if shape_ref and not is_shape_ref:
-            shape_rmsd = compare_descriptors(
-                by_engine[eng], by_engine[shape_ref])["shape_rmsd_nm"]
+            shape_rmsd = compare_descriptors(by_engine[eng], by_engine[shape_ref])[
+                "shape_rmsd_nm"
+            ]
         rmsf_ag = None
         if rmsf_ref and not is_rmsf_ref:
-            rmsf_ag = compare_descriptors(
-                by_engine[eng], by_engine[rmsf_ref])["rmsf"]
+            rmsf_ag = compare_descriptors(by_engine[eng], by_engine[rmsf_ref])["rmsf"]
         field_ag = None
-        if (field_cmp_ref and eng != field_cmp_ref
-                and by_engine[eng].get("field") and by_engine[field_cmp_ref].get("field")):
+        if (
+            field_cmp_ref
+            and eng != field_cmp_ref
+            and by_engine[eng].get("field")
+            and by_engine[field_cmp_ref].get("field")
+        ):
             field_ag = compare_field_response(
-                by_engine[eng]["field"], by_engine[field_cmp_ref]["field"])
+                by_engine[eng]["field"], by_engine[field_cmp_ref]["field"]
+            )
         if shape_rmsd is None and rmsf_ag is None and field_ag is None:
             continue
-        agreement.append({"engine": eng, "shape_rmsd_nm": shape_rmsd,
-                          "rmsf": rmsf_ag, "field": field_ag})
+        agreement.append(
+            {
+                "engine": eng,
+                "shape_rmsd_nm": shape_rmsd,
+                "rmsf": rmsf_ag,
+                "field": field_ag,
+            }
+        )
 
     # ── Field panel: per-engine deflection verdict + agreement vs the field reference ─
     field = None
     if field_engines:
-        ref_field = by_engine.get(field_cmp_ref, {}).get("field") if field_cmp_ref else None
+        ref_field = (
+            by_engine.get(field_cmp_ref, {}).get("field") if field_cmp_ref else None
+        )
         rows = []
         for eng in field_engines:
             prof = by_engine[eng]["field"]
-            cmp = (compare_field_response(prof, ref_field)
-                   if ref_field is not None and eng != field_cmp_ref else None)
-            rows.append({
-                "engine": eng,
-                "is_reference": eng == field_cmp_ref,
-                "anchored_max_drift_nm": prof.get("anchored_max_drift_nm"),
-                "free_proj_along_field_nm": prof.get("free_proj_along_field_nm"),
-                "passed": prof.get("passed"),
-                "cosine_vs_ref": cmp["cosine_similarity"] if cmp else None,
-                "magnitude_ratio": cmp["magnitude_ratio"] if cmp else None,
-            })
+            cmp = (
+                compare_field_response(prof, ref_field)
+                if ref_field is not None and eng != field_cmp_ref
+                else None
+            )
+            rows.append(
+                {
+                    "engine": eng,
+                    "is_reference": eng == field_cmp_ref,
+                    "anchored_max_drift_nm": prof.get("anchored_max_drift_nm"),
+                    "free_proj_along_field_nm": prof.get("free_proj_along_field_nm"),
+                    "passed": prof.get("passed"),
+                    "cosine_vs_ref": cmp["cosine_similarity"] if cmp else None,
+                    "magnitude_ratio": cmp["magnitude_ratio"] if cmp else None,
+                }
+            )
         field = {"reference": field_cmp_ref, "rows": rows}
 
     return {

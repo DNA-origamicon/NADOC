@@ -71,6 +71,7 @@ def test_odd_or_degenerate_column_count_rejected(n):
 
 # --- full hinge weave -------------------------------------------------------
 
+
 def _is_valid_step(prev, cur, rows, rail_a, rail_b):
     (r1, c1), (r2, c2) = prev, cur
     within_row = r1 == r2 and abs(c1 - c2) == 1
@@ -102,7 +103,8 @@ def test_full_weave_is_a_valid_single_trail(k, n):
             assert 1 <= cov[(r, c)] <= 2, f"helix ({r},{c}) visited {cov[(r, c)]}x"
     # every rung (gap crossing) used exactly once
     rungs = [
-        c1 for (r1, c1), (r2, c2) in zip(trail, trail[1:])
+        c1
+        for (r1, c1), (r2, c2) in zip(trail, trail[1:])
         if {r1, r2} == {weave.rail_a, weave.rail_b} and c1 == c2
     ]
     assert sorted(rungs) == cols
@@ -127,13 +129,14 @@ def test_full_weave_matches_reference_domain_count(fname, k, n):
         pytest.skip(f"reference design {fname} not present")
     d = json.loads(path.read_text())
     scaf = next(
-        s for s in d["strands"]
+        s
+        for s in d["strands"]
         if s["strand_type"] == "scaffold" and not s.get("is_reference")
     )
     hm = {h["id"]: tuple(h["grid_pos"]) for h in d["helices"]}
     rows = sorted({r for r, _ in hm.values()})
     gi = next(i for i in range(len(rows) - 1) if rows[i + 1] - rows[i] > 1)
-    leaf_a, leaf_b = rows[: gi + 1], rows[gi + 1:]
+    leaf_a, leaf_b = rows[: gi + 1], rows[gi + 1 :]
 
     weave = weave_hinge_full(leaf_a, leaf_b, n)
     assert len(weave.trail) == len(scaf["domains"])
@@ -151,12 +154,14 @@ def _extract_reference(path: Path):
             inner_a, inner_b = lo, hi
             break
     scaf = next(
-        s for s in d["strands"]
+        s
+        for s in d["strands"]
         if s["strand_type"] == "scaffold" and not s.get("is_reference")
     )
     seq = [hm[dm["helix_id"]] for dm in scaf["domains"]]
     rungs = [
-        c1 for (r1, c1), (r2, c2) in zip(seq, seq[1:])
+        c1
+        for (r1, c1), (r2, c2) in zip(seq, seq[1:])
         if {r1, r2} == {inner_a, inner_b} and c1 == c2
     ]
     cov_a = dict(sorted(Counter(c for r, c in seq if r == inner_a).items()))

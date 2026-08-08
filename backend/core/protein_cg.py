@@ -14,6 +14,7 @@ oxDNA-format writers (topology/conf/.par) and unit conversion live in
 as the renderer (``compose_protein_world_transform``) so the simulated protein
 sits exactly where the user sees it.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -36,13 +37,41 @@ ANM_SPRING_K_STIFF: float = 50.0
 # variants we keep in parse_protein_pdb).  Unknown residues fall back to 'G'
 # (glycine — small, neutral) so the topology always has a valid amino-acid code.
 AA_3TO1: dict[str, str] = {
-    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C",
-    "GLN": "Q", "GLU": "E", "GLY": "G", "HIS": "H", "ILE": "I",
-    "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F", "PRO": "P",
-    "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
-    "SEC": "C", "PYL": "K", "MSE": "M",
-    "HSD": "H", "HSE": "H", "HSP": "H", "HID": "H", "HIE": "H", "HIP": "H",
-    "CYX": "C", "CYM": "C", "ASH": "D", "GLH": "E", "LYN": "K", "ARN": "R",
+    "ALA": "A",
+    "ARG": "R",
+    "ASN": "N",
+    "ASP": "D",
+    "CYS": "C",
+    "GLN": "Q",
+    "GLU": "E",
+    "GLY": "G",
+    "HIS": "H",
+    "ILE": "I",
+    "LEU": "L",
+    "LYS": "K",
+    "MET": "M",
+    "PHE": "F",
+    "PRO": "P",
+    "SER": "S",
+    "THR": "T",
+    "TRP": "W",
+    "TYR": "Y",
+    "VAL": "V",
+    "SEC": "C",
+    "PYL": "K",
+    "MSE": "M",
+    "HSD": "H",
+    "HSE": "H",
+    "HSP": "H",
+    "HID": "H",
+    "HIE": "H",
+    "HIP": "H",
+    "CYX": "C",
+    "CYM": "C",
+    "ASH": "D",
+    "GLH": "E",
+    "LYN": "K",
+    "ARN": "R",
 }
 
 
@@ -54,12 +83,13 @@ def aa_one_letter(res_name: str) -> str:
 @dataclass
 class ProteinBead:
     """One coarse-grained protein bead (residue), placed in WORLD nm."""
-    index: int                 # 0-based order within this attachment's protein
-    aa: str                    # 1-letter amino-acid code
+
+    index: int  # 0-based order within this attachment's protein
+    aa: str  # 1-letter amino-acid code
     chain_id: str
     res_seq: int
-    pos_nm: np.ndarray         # world position (nm)
-    prev_index: int            # backbone-previous bead in the SAME chain, else -1
+    pos_nm: np.ndarray  # world position (nm)
+    prev_index: int  # backbone-previous bead in the SAME chain, else -1
     is_conjugation: bool = False  # True for the residue carrying the conj atom
 
 
@@ -94,7 +124,9 @@ def _bead_local_pos(atoms: list) -> np.ndarray:
 
 def _conjugation_res_key(asset: ProteinAsset, attachment) -> tuple[str, int] | None:
     """(chain_id, res_seq) of the residue carrying the conjugation atom, or None."""
-    serial = getattr(attachment, "conjugation_atom_serial", None) if attachment else None
+    serial = (
+        getattr(attachment, "conjugation_atom_serial", None) if attachment else None
+    )
     if serial is None:
         serial = asset.default_conjugation_atom_serial
     if serial is None:
@@ -117,25 +149,36 @@ def protein_beads(
     at the asset's PDB coordinates (preview).  ``tip``/``outward`` are the overhang
     anchor (only used for an overhang-anchored attachment).
     """
-    world = (compose_protein_world_transform(asset, attachment, tip, outward)
-             if attachment is not None else np.eye(4))
-    conj_key = _conjugation_res_key(asset, attachment) if attachment is not None else None
+    world = (
+        compose_protein_world_transform(asset, attachment, tip, outward)
+        if attachment is not None
+        else np.eye(4)
+    )
+    conj_key = (
+        _conjugation_res_key(asset, attachment) if attachment is not None else None
+    )
 
     beads: list[ProteinBead] = []
     prev_chain: str | None = None
     for i, (chain_id, res_seq, res_name, atoms) in enumerate(_residue_groups(asset)):
         local = _bead_local_pos(atoms)
         w = world @ np.array([local[0], local[1], local[2], 1.0])
-        prev_index = i - 1 if (prev_chain is not None and prev_chain == chain_id) else -1
-        beads.append(ProteinBead(
-            index=i,
-            aa=aa_one_letter(res_name),
-            chain_id=chain_id,
-            res_seq=res_seq,
-            pos_nm=np.array([w[0], w[1], w[2]], dtype=float),
-            prev_index=prev_index,
-            is_conjugation=(conj_key is not None and (chain_id, res_seq) == conj_key),
-        ))
+        prev_index = (
+            i - 1 if (prev_chain is not None and prev_chain == chain_id) else -1
+        )
+        beads.append(
+            ProteinBead(
+                index=i,
+                aa=aa_one_letter(res_name),
+                chain_id=chain_id,
+                res_seq=res_seq,
+                pos_nm=np.array([w[0], w[1], w[2]], dtype=float),
+                prev_index=prev_index,
+                is_conjugation=(
+                    conj_key is not None and (chain_id, res_seq) == conj_key
+                ),
+            )
+        )
         prev_chain = chain_id
     return beads
 
@@ -148,13 +191,15 @@ def conjugation_bead_index(beads: list[ProteinBead]) -> int | None:
 @dataclass
 class AnmSpring:
     """One ANM spring between two beads (indices local to the attachment)."""
+
     i: int
-    j: int            # always j > i
-    r0_nm: float      # equilibrium length (nm)
+    j: int  # always j > i
+    r0_nm: float  # equilibrium length (nm)
 
 
 def anm_springs(
-    beads: list[ProteinBead], cutoff_nm: float = ANM_CUTOFF_NM,
+    beads: list[ProteinBead],
+    cutoff_nm: float = ANM_CUTOFF_NM,
 ) -> list[AnmSpring]:
     """Every bead pair within ``cutoff_nm`` → a spring at its current separation.
 
@@ -169,7 +214,7 @@ def anm_springs(
     cutoff_sq = cutoff_nm * cutoff_nm
     out: list[AnmSpring] = []
     for i in range(n):
-        d = pos[i + 1:] - pos[i]
+        d = pos[i + 1 :] - pos[i]
         sq = np.einsum("ij,ij->i", d, d)
         for off, s in enumerate(sq):
             if s <= cutoff_sq:

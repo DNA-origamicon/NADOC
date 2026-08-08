@@ -53,18 +53,24 @@ def _topology(d: Design) -> dict:
         for dom in s.domains
     )
     xovers = sorted(
-        tuple(sorted([
-            (h.helix_id, h.index, str(h.strand))
-            for h in (xo.half_a, xo.half_b)
-        ]))
+        tuple(
+            sorted(
+                [(h.helix_id, h.index, str(h.strand)) for h in (xo.half_a, xo.half_b)]
+            )
+        )
         for xo in d.crossovers
     )
     n_scaf = sum(
-        1 for s in d.strands
+        1
+        for s in d.strands
         if s.strand_type == StrandType.SCAFFOLD and not s.is_reference
     )
-    return {"helices": helices, "domains": domains,
-            "xovers": xovers, "n_scaffold_strands": n_scaf}
+    return {
+        "helices": helices,
+        "domains": domains,
+        "xovers": xovers,
+        "n_scaffold_strands": n_scaf,
+    }
 
 
 def _staple_spans(d: Design) -> dict:
@@ -73,10 +79,14 @@ def _staple_spans(d: Design) -> dict:
 
 # ── The core property, on the design shapes that actually exist ───────────────
 
-@pytest.mark.parametrize("router", [
-    pytest.param(lambda d: auto_scaffold_seamed(d)[0], id="seamed"),
-    pytest.param(lambda d: auto_scaffold_seamless(d)[0], id="seamless"),
-])
+
+@pytest.mark.parametrize(
+    "router",
+    [
+        pytest.param(lambda d: auto_scaffold_seamed(d)[0], id="seamed"),
+        pytest.param(lambda d: auto_scaffold_seamless(d)[0], id="seamless"),
+    ],
+)
 def test_reroute_is_idempotent_on_a_plain_bundle(router):
     """A plain 4HB bundle — NO teeth, NO sections. The bug was never teeth-specific."""
     once = router(make_bundle_design(CELLS_4HB, length_bp=168))
@@ -129,6 +139,7 @@ def test_reroute_still_yields_a_single_scaffold_strand():
 
 # ── The reset itself ─────────────────────────────────────────────────────────
 
+
 def test_reset_restores_a_routed_design_to_its_fresh_seed():
     """reset(route(fresh)) == fresh, field for field. This is WHY N == 1."""
     fresh = make_bundle_design(CELLS_4HB, length_bp=168)
@@ -165,8 +176,12 @@ def test_reset_bails_out_on_forced_ligations():
     must refuse rather than destroy it — and must say why."""
     d = _load("teeth_unrouted.nadoc")
     routed = auto_scaffold_seamed(d)[0]
-    with_forced = routed.model_copy(update={"forced_ligations": [
-        fl for fl in (routed.forced_ligations or [])] or ["sentinel"]})
+    with_forced = routed.model_copy(
+        update={
+            "forced_ligations": [fl for fl in (routed.forced_ligations or [])]
+            or ["sentinel"]
+        }
+    )
 
     reseeded, warnings = reset_scaffold_to_structure(with_forced)
 
@@ -186,9 +201,14 @@ def test_reset_does_not_grow_a_deliberately_short_scaffold():
     for s in base.strands:
         if s.strand_type == StrandType.SCAFFOLD and s.domains[0].helix_id in arm:
             dom = s.domains[0]
-            upd = ({"end_bp": 41} if dom.direction == Direction.FORWARD
-                   else {"start_bp": 41})
-            strands.append(s.model_copy(update={"domains": [dom.model_copy(update=upd)]}))
+            upd = (
+                {"end_bp": 41}
+                if dom.direction == Direction.FORWARD
+                else {"start_bp": 41}
+            )
+            strands.append(
+                s.model_copy(update={"domains": [dom.model_copy(update=upd)]})
+            )
         else:
             strands.append(s)
     short = base.copy_with(strands=strands)

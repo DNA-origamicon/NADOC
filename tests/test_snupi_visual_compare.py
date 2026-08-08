@@ -5,6 +5,7 @@ CI). These tests pin the pure COMPUTATION building blocks it uses — the Kabsch
 per-bp axis-centre extraction — plus that a predict_shape result carries the fields each visual
 reads (positions / axis / rmsf), so a regression in any visual's data is caught without MD.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -21,7 +22,13 @@ def test_kabsch_rmsd_zero_under_rigid_motion():
     A = rng.normal(size=(40, 3))
     assert _kabsch_rmsd(A, A.copy()) < 1e-9
     theta = 0.7
-    R = np.array([[np.cos(theta), -np.sin(theta), 0], [np.sin(theta), np.cos(theta), 0], [0, 0, 1]])
+    R = np.array(
+        [
+            [np.cos(theta), -np.sin(theta), 0],
+            [np.sin(theta), np.cos(theta), 0],
+            [0, 0, 1],
+        ]
+    )
     assert _kabsch_rmsd(A, A @ R.T + np.array([5.0, -2.0, 1.0])) < 1e-9
 
 
@@ -29,19 +36,25 @@ def test_kabsch_rmsd_recovers_known_deformation():
     """A pure axial stretch of a straight line by factor s → a known, non-zero RMSD."""
     z = np.linspace(-10, 10, 50)
     A = np.column_stack([np.zeros_like(z), np.zeros_like(z), z])
-    B = A.copy(); B[:, 2] *= 1.5                     # stretch 50% along the line
+    B = A.copy()
+    B[:, 2] *= 1.5  # stretch 50% along the line
     rmsd = _kabsch_rmsd(A, B)
-    assert rmsd > 1.0                                # substantially different
-    assert _kabsch_rmsd(A, A) < 1e-9                 # sanity
+    assert rmsd > 1.0  # substantially different
+    assert _kabsch_rmsd(A, A) < 1e-9  # sanity
 
 
 @pytest.fixture(scope="module")
 def routed_2hb():
     from backend.api import headless_build as hb
     from backend.api import state as design_state
+
     with hb.scratch_session(LatticeType.HONEYCOMB):
-        hb.create_bundle([(0, 1), (1, 1)], 42, lattice=LatticeType.HONEYCOMB, name="2hb")
-        hb.auto_scaffold(seamless=False); hb.auto_crossover(); hb.auto_break()
+        hb.create_bundle(
+            [(0, 1), (1, 1)], 42, lattice=LatticeType.HONEYCOMB, name="2hb"
+        )
+        hb.auto_scaffold(seamless=False)
+        hb.auto_crossover()
+        hb.auto_break()
         return design_state.get_or_404().model_copy(deep=True)
 
 

@@ -191,15 +191,17 @@ def create_bundle(
     Records a ``bundle-create`` feature-log entry.  Requires an active design
     (call :func:`new_design` first, or run inside :func:`scratch_session`).
     """
-    _route_create_bundle(BundleRequest(
-        cells=[list(c) for c in cells],
-        length_bp=length_bp,
-        name=name,
-        plane=plane,
-        strand_filter=strand_filter,
-        lattice_type=lattice,
-        ligate_adjacent=ligate_adjacent,
-    ))
+    _route_create_bundle(
+        BundleRequest(
+            cells=[list(c) for c in cells],
+            length_bp=length_bp,
+            name=name,
+            plane=plane,
+            strand_filter=strand_filter,
+            lattice_type=lattice,
+            ligate_adjacent=ligate_adjacent,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -218,15 +220,17 @@ def extrude(
     Cells already ending at ``offset_nm`` extend their existing strands; fresh
     cells start new helices.  Records an ``extrude-continuation`` feature-log entry.
     """
-    _route_extrude(BundleContinuationRequest(
-        cells=[list(c) for c in cells],
-        length_bp=length_bp,
-        plane=plane,
-        offset_nm=offset_nm,
-        strand_filter=strand_filter,
-        extend_inplace=extend_inplace,
-        ligate_adjacent=ligate_adjacent,
-    ))
+    _route_extrude(
+        BundleContinuationRequest(
+            cells=[list(c) for c in cells],
+            length_bp=length_bp,
+            plane=plane,
+            offset_nm=offset_nm,
+            strand_filter=strand_filter,
+            extend_inplace=extend_inplace,
+            ligate_adjacent=ligate_adjacent,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -246,14 +250,16 @@ def extrude_segment(
     tool's "segment" mode.  ``length_bp`` may be negative (−axis).  Records an
     ``extrude-segment`` feature-log entry.
     """
-    _route_extrude_segment(BundleSegmentRequest(
-        cells=[list(c) for c in cells],
-        length_bp=length_bp,
-        plane=plane,
-        offset_nm=offset_nm,
-        strand_filter=strand_filter,
-        ligate_adjacent=ligate_adjacent,
-    ))
+    _route_extrude_segment(
+        BundleSegmentRequest(
+            cells=[list(c) for c in cells],
+            length_bp=length_bp,
+            plane=plane,
+            offset_nm=offset_nm,
+            strand_filter=strand_filter,
+            ligate_adjacent=ligate_adjacent,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -282,21 +288,25 @@ def circle_segment(
     column (no helix clears ``min_chord_bp``).
     """
     footprint = circle_footprint(
-        radius_nm, plane=plane, min_chord_bp=min_chord_bp,
+        radius_nm,
+        plane=plane,
+        min_chord_bp=min_chord_bp,
     )
     if footprint is None:
         raise ValueError(
             f"radius {radius_nm} nm is too small to place any helix "
             f"(no chord reaches the {min_chord_bp}-bp floor)"
         )
-    _route_circle_segment(CircleSegmentRequest(
-        cells=footprint["cells"],
-        cell_lengths=footprint["cell_lengths"],
-        plane=plane,
-        offset_nm=offset_nm,
-        strand_filter=strand_filter,
-        ligate_adjacent=ligate_adjacent,
-    ))
+    _route_circle_segment(
+        CircleSegmentRequest(
+            cells=footprint["cells"],
+            cell_lengths=footprint["cell_lengths"],
+            plane=plane,
+            offset_nm=offset_nm,
+            strand_filter=strand_filter,
+            ligate_adjacent=ligate_adjacent,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -325,17 +335,19 @@ def bundle_deformed_continuation(
     entry.
     """
     frame = _route_deformed_frame(source_bp=source_bp, ref_helix_id=ref_helix_id)
-    _route_deformed_continuation(BundleDeformedContinuationRequest(
-        cells=[list(c) for c in cells],
-        length_bp=length_bp,
-        grid_origin=frame["grid_origin"],
-        axis_dir=frame["axis_dir"],
-        frame_right=frame["frame_right"],
-        frame_up=frame["frame_up"],
-        plane=plane,
-        ref_helix_id=ref_helix_id,
-        source_bp=source_bp,
-    ))
+    _route_deformed_continuation(
+        BundleDeformedContinuationRequest(
+            cells=[list(c) for c in cells],
+            length_bp=length_bp,
+            grid_origin=frame["grid_origin"],
+            axis_dir=frame["axis_dir"],
+            frame_right=frame["frame_right"],
+            frame_up=frame["frame_up"],
+            plane=plane,
+            ref_helix_id=ref_helix_id,
+            source_bp=source_bp,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -361,15 +373,22 @@ def build_bundle(
     """
     with scratch_session(lattice):
         create_bundle(
-            cells, length_bp, lattice=lattice, name=name,
-            plane=plane, strand_filter=strand_filter,
+            cells,
+            length_bp,
+            lattice=lattice,
+            name=name,
+            plane=plane,
+            strand_filter=strand_filter,
         )
         for pass_idx, spec in enumerate(passes, start=1):
             pass_cells = list(cells)[:spec] if isinstance(spec, int) else list(spec)
             extrude(
-                pass_cells, length_bp,
+                pass_cells,
+                length_bp,
                 offset_nm=round(pass_idx * length_bp * BDNA_RISE_PER_BP, 3),
-                plane=plane, strand_filter=strand_filter, extend_inplace=True,
+                plane=plane,
+                strand_filter=strand_filter,
+                extend_inplace=True,
             )
         return design_state.get_or_404().model_copy(deep=True)
 
@@ -390,7 +409,9 @@ def nick(helix_id: str, bp_index: int, direction: Direction) -> Design:
     5′→3′ order becomes the 5′ end of the right fragment.  Inverse of :func:`ligate`
     with the same arguments.  Records a ``nick`` minor-log entry.
     """
-    _route_add_nick(NickRequest(helix_id=helix_id, bp_index=bp_index, direction=direction))
+    _route_add_nick(
+        NickRequest(helix_id=helix_id, bp_index=bp_index, direction=direction)
+    )
     return design_state.get_or_404()
 
 
@@ -401,7 +422,9 @@ def ligate(helix_id: str, bp_index: int, direction: Direction) -> Design:
     end sits at the adjacent bp.  Exact inverse of :func:`nick` (identical request
     shape).  Records a ``ligate`` minor-log entry.
     """
-    _route_ligate(NickRequest(helix_id=helix_id, bp_index=bp_index, direction=direction))
+    _route_ligate(
+        NickRequest(helix_id=helix_id, bp_index=bp_index, direction=direction)
+    )
     return design_state.get_or_404()
 
 
@@ -435,11 +458,18 @@ def resize_strand_end(
     then ``−δ`` at the same end is its own inverse (canonical topology restored).
     Records a ``strand-end-resize`` minor-log entry.
     """
-    _route_strand_end_resize(StrandEndResizeRequest(entries=[
-        StrandEndResizeEntry(
-            strand_id=strand_id, helix_id=helix_id, end=end, delta_bp=delta_bp,
-        ),
-    ]))
+    _route_strand_end_resize(
+        StrandEndResizeRequest(
+            entries=[
+                StrandEndResizeEntry(
+                    strand_id=strand_id,
+                    helix_id=helix_id,
+                    end=end,
+                    delta_bp=delta_bp,
+                ),
+            ]
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -461,9 +491,13 @@ def loop_skip(helix_id: str, bp_index: int, delta: int) -> Design:
     documented "delta=0 removes" convention (a loop/skip's own inverse).  Records a
     ``loop-skip-insert`` minor-log entry.
     """
-    _route_insert_loop_skip(LoopSkipInsertRequest(
-        helix_id=helix_id, bp_index=bp_index, delta=delta,
-    ))
+    _route_insert_loop_skip(
+        LoopSkipInsertRequest(
+            helix_id=helix_id,
+            bp_index=bp_index,
+            delta=delta,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -510,12 +544,20 @@ def add_bend(
     entry.  Pin the realised magnitude with
     :func:`tests.automation_harness.assert_deformation_angle`.
     """
-    _route_add_deformation(AddDeformationBody(
-        type="bend", plane_a_bp=plane_a_bp, plane_b_bp=plane_b_bp,
-        affected_helix_ids=list(affected_helix_ids), cluster_ids=list(cluster_ids),
-        params={"kind": "bend", "curvature_deg_per_bp": curvature_deg_per_bp,
-                "direction_deg": direction_deg},
-    ))
+    _route_add_deformation(
+        AddDeformationBody(
+            type="bend",
+            plane_a_bp=plane_a_bp,
+            plane_b_bp=plane_b_bp,
+            affected_helix_ids=list(affected_helix_ids),
+            cluster_ids=list(cluster_ids),
+            params={
+                "kind": "bend",
+                "curvature_deg_per_bp": curvature_deg_per_bp,
+                "direction_deg": direction_deg,
+            },
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -544,11 +586,16 @@ def add_twist(
         params["total_degrees"] = total_degrees
     else:
         params["degrees_per_nm"] = degrees_per_nm
-    _route_add_deformation(AddDeformationBody(
-        type="twist", plane_a_bp=plane_a_bp, plane_b_bp=plane_b_bp,
-        affected_helix_ids=list(affected_helix_ids), cluster_ids=list(cluster_ids),
-        params=params,
-    ))
+    _route_add_deformation(
+        AddDeformationBody(
+            type="twist",
+            plane_a_bp=plane_a_bp,
+            plane_b_bp=plane_b_bp,
+            affected_helix_ids=list(affected_helix_ids),
+            cluster_ids=list(cluster_ids),
+            params=params,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -616,13 +663,19 @@ def place_crossover(
     :func:`tests.automation_harness.assert_crossover_joins` (which handles both the
     ligated and the unligated-to-avoid-circular outcome).
     """
-    _route_place_crossover(PlaceCrossoverRequest(
-        half_a=HalfCrossoverRequest(helix_id=half_a[0], index=half_a[1], strand=half_a[2]),
-        half_b=HalfCrossoverRequest(helix_id=half_b[0], index=half_b[1], strand=half_b[2]),
-        nick_bp_a=nick_bp_a,
-        nick_bp_b=nick_bp_b,
-        process_id=process_id,
-    ))
+    _route_place_crossover(
+        PlaceCrossoverRequest(
+            half_a=HalfCrossoverRequest(
+                helix_id=half_a[0], index=half_a[1], strand=half_a[2]
+            ),
+            half_b=HalfCrossoverRequest(
+                helix_id=half_b[0], index=half_b[1], strand=half_b[2]
+            ),
+            nick_bp_a=nick_bp_a,
+            nick_bp_b=nick_bp_b,
+            process_id=process_id,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -672,11 +725,13 @@ def force_ligate(
     ``forced_ligations``.  Pin the result with
     :func:`tests.automation_harness.assert_forced_ligation`.
     """
-    _route_forced_ligation(ForcedLigationRequest(
-        three_prime_strand_id=three_prime_strand_id,
-        five_prime_strand_id=five_prime_strand_id,
-        is_periodic_seam=is_periodic_seam,
-    ))
+    _route_forced_ligation(
+        ForcedLigationRequest(
+            three_prime_strand_id=three_prime_strand_id,
+            five_prime_strand_id=five_prime_strand_id,
+            is_periodic_seam=is_periodic_seam,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -706,7 +761,10 @@ _CROSSOVER_FILTERS = ("all", "scaffold", "staple")
 
 
 def set_crossover_extra_bases(
-    helix_a_id: str, helix_b_id: str, bp_index: int, sequence: str,
+    helix_a_id: str,
+    helix_b_id: str,
+    bp_index: int,
+    sequence: str,
 ) -> Design:
     """Set (or clear) extra bases on the crossover linking two helices at ``bp_index``.
 
@@ -719,22 +777,27 @@ def set_crossover_extra_bases(
     design = design_state.get_or_404()
     pair = {helix_a_id, helix_b_id}
     match = next(
-        (x for x in design.crossovers
-         if x.half_a.index == bp_index
-         and {x.half_a.helix_id, x.half_b.helix_id} == pair),
+        (
+            x
+            for x in design.crossovers
+            if x.half_a.index == bp_index
+            and {x.half_a.helix_id, x.half_b.helix_id} == pair
+        ),
         None,
     )
     if match is None:
         raise HTTPException(
             404,
             detail=f"No crossover links helices {helix_a_id!r} and {helix_b_id!r} "
-                   f"at bp {bp_index}.",
+            f"at bp {bp_index}.",
         )
     _route_set_xo_extra_bases(match.id, CrossoverExtraBasesRequest(sequence=sequence))
     return design_state.get_or_404()
 
 
-def set_crossover_extra_bases_bulk(sequence: str, *, crossover_filter: str = "all") -> Design:
+def set_crossover_extra_bases_bulk(
+    sequence: str, *, crossover_filter: str = "all"
+) -> Design:
     """Set (or clear) extra bases on every crossover matching ``crossover_filter``.
 
     ``crossover_filter`` ∈ ``{"all", "scaffold", "staple"}`` — the common strain-relief
@@ -747,24 +810,30 @@ def set_crossover_extra_bases_bulk(sequence: str, *, crossover_filter: str = "al
         raise HTTPException(
             422,
             detail=f"crossover_filter must be one of {_CROSSOVER_FILTERS}, "
-                   f"got {crossover_filter!r}.",
+            f"got {crossover_filter!r}.",
         )
     from backend.core.crossover_positions import enumerate_crossovers  # noqa: PLC0415
 
     design = design_state.get_or_404()
     ids = [
-        rec["id"] for rec in enumerate_crossovers(design)
+        rec["id"]
+        for rec in enumerate_crossovers(design)
         if crossover_filter == "all" or rec["crossover_type"] == crossover_filter
     ]
     if not ids:
         raise HTTPException(
             404,
             detail=f"No {crossover_filter} crossovers to annotate "
-                   f"(design has {len(design.crossovers)} crossover(s)).",
+            f"(design has {len(design.crossovers)} crossover(s)).",
         )
-    _route_batch_xo_extra_bases(BatchCrossoverExtraBasesRequest(
-        entries=[CrossoverExtraBasesBatchEntry(crossover_id=i, sequence=sequence) for i in ids],
-    ))
+    _route_batch_xo_extra_bases(
+        BatchCrossoverExtraBasesRequest(
+            entries=[
+                CrossoverExtraBasesBatchEntry(crossover_id=i, sequence=sequence)
+                for i in ids
+            ],
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -787,19 +856,24 @@ def assign_scaffold_sequence(
     strand_id: str | None = None,
 ) -> Design:
     """Assign a scaffold sequence (POST /design/assign-scaffold-sequence)."""
-    _route_assign_scaffold(_ScaffoldSeqBody(
-        scaffold_name=scaffold_name,
-        custom_sequence=custom_sequence,
-        strand_id=strand_id,
-    ))
+    _route_assign_scaffold(
+        _ScaffoldSeqBody(
+            scaffold_name=scaffold_name,
+            custom_sequence=custom_sequence,
+            strand_id=strand_id,
+        )
+    )
     return design_state.get_or_404()
 
 
 def full_autostaple(scaffold_name: str = "M13mp18", **kwargs) -> Design:
     """One-click: assign sequence + crossovers + tick-break/merge (POST /design/full-autostaple)."""
-    _route_full_autostaple(_FullAutostapleBody(
-        scaffold_name=scaffold_name, **kwargs,
-    ))
+    _route_full_autostaple(
+        _FullAutostapleBody(
+            scaffold_name=scaffold_name,
+            **kwargs,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -835,15 +909,18 @@ def full_sequence(
     """
     if strand_id is not None:
         assign_scaffold_sequence(
-            scaffold_name, custom_sequence=custom_sequence, strand_id=strand_id)
+            scaffold_name, custom_sequence=custom_sequence, strand_id=strand_id
+        )
     else:
         scaffold_ids = [
-            s.id for s in design_state.get_or_404().strands
+            s.id
+            for s in design_state.get_or_404().strands
             if s.strand_type == StrandType.SCAFFOLD and not s.is_reference
         ]
         for sid in scaffold_ids:
             assign_scaffold_sequence(
-                scaffold_name, custom_sequence=custom_sequence, strand_id=sid)
+                scaffold_name, custom_sequence=custom_sequence, strand_id=sid
+            )
     return assign_staple_sequences()
 
 
@@ -858,11 +935,17 @@ def overhang_extrude(
     length_bp: int,
 ) -> Design:
     """Extrude a staple-only overhang from a nick into a neighbour cell (POST /design/overhang/extrude)."""
-    _route_overhang_extrude(OverhangExtrudeRequest(
-        helix_id=helix_id, bp_index=bp_index, direction=direction,
-        is_five_prime=is_five_prime, neighbor_row=neighbor_row,
-        neighbor_col=neighbor_col, length_bp=length_bp,
-    ))
+    _route_overhang_extrude(
+        OverhangExtrudeRequest(
+            helix_id=helix_id,
+            bp_index=bp_index,
+            direction=direction,
+            is_five_prime=is_five_prime,
+            neighbor_row=neighbor_row,
+            neighbor_col=neighbor_col,
+            length_bp=length_bp,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -885,11 +968,15 @@ def connect_duplex(
 
     Pin the relocation with :func:`tests.automation_harness.assert_duplex_relocated`.
     """
-    _route_connect_duplex(ConnectDuplexBody(
-        overhang_a_id=overhang_a_id, overhang_a_attach=overhang_a_attach,
-        overhang_b_id=overhang_b_id, overhang_b_attach=overhang_b_attach,
-        driver=driver,
-    ))
+    _route_connect_duplex(
+        ConnectDuplexBody(
+            overhang_a_id=overhang_a_id,
+            overhang_a_attach=overhang_a_attach,
+            overhang_b_id=overhang_b_id,
+            overhang_b_attach=overhang_b_attach,
+            driver=driver,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -924,6 +1011,7 @@ def materialize_duplex_cluster(driver_oh_id: str) -> Design:
     :func:`tests.automation_harness.assert_duplex_cluster_materialized`.
     """
     from backend.core.duplex_cluster import materialize_duplex_cluster as _mat
+
     out, _cid = _mat(design_state.get_or_404(), driver_oh_id)
     design_state.set_design(out)
     return design_state.get_or_404()
@@ -947,10 +1035,15 @@ def add_strand_extension(
 
     Pin with :func:`tests.automation_harness.assert_extension_present`.
     """
-    _route_add_strand_extension(StrandExtensionRequest(
-        strand_id=strand_id, end=end, sequence=sequence,
-        modification=modification, label=label,
-    ))
+    _route_add_strand_extension(
+        StrandExtensionRequest(
+            strand_id=strand_id,
+            end=end,
+            sequence=sequence,
+            modification=modification,
+            label=label,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -987,17 +1080,19 @@ def connect_overhangs(
     Pin the connection with
     :func:`tests.automation_harness.assert_linker_connects`.
     """
-    _route_create_overhang_connection(OverhangConnectionCreateRequest(
-        overhang_a_id=overhang_a_id,
-        overhang_a_attach=overhang_a_attach,
-        overhang_b_id=overhang_b_id,
-        overhang_b_attach=overhang_b_attach,
-        linker_type=linker_type,
-        length_value=length_value,
-        length_unit=length_unit,
-        name=name,
-        bridge_sequence=bridge_sequence,
-    ))
+    _route_create_overhang_connection(
+        OverhangConnectionCreateRequest(
+            overhang_a_id=overhang_a_id,
+            overhang_a_attach=overhang_a_attach,
+            overhang_b_id=overhang_b_id,
+            overhang_b_attach=overhang_b_attach,
+            linker_type=linker_type,
+            length_value=length_value,
+            length_unit=length_unit,
+            name=name,
+            bridge_sequence=bridge_sequence,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -1026,17 +1121,19 @@ def create_connection_version(
     The new version is the LAST entry of the returned design's
     ``connection_versions``.
     """
-    _route_create_connection_version(ConnectionVersionCreateRequest(
-        overhang_a_id=overhang_a_id,
-        overhang_b_id=overhang_b_id,
-        connection_type=connection_type,
-        overhang_a_seq=overhang_a_seq,
-        overhang_b_seq=overhang_b_seq,
-        bridge_length=bridge_length,
-        bridge_seq=bridge_seq,
-        applied=applied,
-        name=name,
-    ))
+    _route_create_connection_version(
+        ConnectionVersionCreateRequest(
+            overhang_a_id=overhang_a_id,
+            overhang_b_id=overhang_b_id,
+            connection_type=connection_type,
+            overhang_a_seq=overhang_a_seq,
+            overhang_b_seq=overhang_b_seq,
+            bridge_length=bridge_length,
+            bridge_seq=bridge_seq,
+            applied=applied,
+            name=name,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -1084,13 +1181,17 @@ def relax_flexible_segments(
     Pin with :func:`tests.automation_harness.assert_flexible_segments_relaxed`.
     """
     design = design_state.get_or_404()
-    transforms, _residual = compute_relax_transforms(design, scope=scope, conn_id=conn_id)
+    transforms, _residual = compute_relax_transforms(
+        design, scope=scope, conn_id=conn_id
+    )
     if not transforms:
         return design
-    _route_flexible_relax(FlexibleRelaxBody(
-        transforms=[FlexibleRelaxTransform(**t) for t in transforms],
-        label=label,
-    ))
+    _route_flexible_relax(
+        FlexibleRelaxBody(
+            transforms=[FlexibleRelaxTransform(**t) for t in transforms],
+            label=label,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -1122,12 +1223,15 @@ def relax_overhang_connection(
 
     Pin with :func:`tests.automation_harness.assert_linker_relaxed_pose`.
     """
-    _route_relax_overhang_connection(conn_id, RelaxLinkerRequest(
-        joint_ids=joint_ids,
-        bin_index=bin_index,
-        r_ee_min_nm=r_ee_min_nm,
-        r_ee_max_nm=r_ee_max_nm,
-    ))
+    _route_relax_overhang_connection(
+        conn_id,
+        RelaxLinkerRequest(
+            joint_ids=joint_ids,
+            bin_index=bin_index,
+            r_ee_min_nm=r_ee_min_nm,
+            r_ee_max_nm=r_ee_max_nm,
+        ),
+    )
     return design_state.get_or_404()
 
 
@@ -1160,16 +1264,18 @@ def relax_bond(
 
     Pin with :func:`tests.automation_harness.assert_bond_relaxed_pose`.
     """
-    _route_relax_bond(RelaxBondRequest(
-        bond_type=bond_type,
-        bond_id=bond_id,
-        linker_side=linker_side,
-        side_a=RelaxBondEndpoint(**side_a) if side_a is not None else None,
-        side_b=RelaxBondEndpoint(**side_b) if side_b is not None else None,
-        side_to_move=side_to_move,
-        joint_ids=joint_ids,
-        target_nm=target_nm,
-    ))
+    _route_relax_bond(
+        RelaxBondRequest(
+            bond_type=bond_type,
+            bond_id=bond_id,
+            linker_side=linker_side,
+            side_a=RelaxBondEndpoint(**side_a) if side_a is not None else None,
+            side_b=RelaxBondEndpoint(**side_b) if side_b is not None else None,
+            side_to_move=side_to_move,
+            joint_ids=joint_ids,
+            target_nm=target_nm,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -1221,10 +1327,13 @@ def split_sub_domain(
     measured from the overhang's 5' end and must be strictly interior.  The 5'
     half retains ``sub_domain_id``; the 3' half is a new record.
     """
-    _route_split_sub_domain(overhang_id, SubDomainSplitRequest(
-        sub_domain_id=sub_domain_id,
-        split_at_offset=split_at_offset,
-    ))
+    _route_split_sub_domain(
+        overhang_id,
+        SubDomainSplitRequest(
+            sub_domain_id=sub_domain_id,
+            split_at_offset=split_at_offset,
+        ),
+    )
     return design_state.get_or_404()
 
 
@@ -1251,10 +1360,14 @@ def patch_sub_domain(
     cleared.
     """
     fields = {
-        k: v for k, v in (
-            ("name", name), ("color", color),
-            ("sequence_override", sequence_override), ("notes", notes),
-        ) if v is not _UNSET
+        k: v
+        for k, v in (
+            ("name", name),
+            ("color", color),
+            ("sequence_override", sequence_override),
+            ("notes", notes),
+        )
+        if v is not _UNSET
     }
     _route_patch_sub_domain(overhang_id, sub_domain_id, SubDomainPatchRequest(**fields))
     return design_state.get_or_404()
@@ -1288,13 +1401,15 @@ def create_overhang_binding(
     Pin the create→bind→unbind cycle with
     :func:`tests.automation_harness.assert_bind_unbind_inverse`.
     """
-    _route_create_overhang_binding(OverhangBindingCreateRequest(
-        sub_domain_a_id=sub_domain_a_id,
-        sub_domain_b_id=sub_domain_b_id,
-        binding_mode=binding_mode,
-        target_joint_id=target_joint_id,
-        allow_n_wildcard=allow_n_wildcard,
-    ))
+    _route_create_overhang_binding(
+        OverhangBindingCreateRequest(
+            sub_domain_a_id=sub_domain_a_id,
+            sub_domain_b_id=sub_domain_b_id,
+            binding_mode=binding_mode,
+            target_joint_id=target_joint_id,
+            allow_n_wildcard=allow_n_wildcard,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -1327,11 +1442,15 @@ def patch_overhang_binding(
     :func:`tests.automation_harness.assert_bind_unbind_inverse`.
     """
     fields = {
-        k: v for k, v in (
-            ("name", name), ("bound", bound), ("binding_mode", binding_mode),
+        k: v
+        for k, v in (
+            ("name", name),
+            ("bound", bound),
+            ("binding_mode", binding_mode),
             ("target_joint_id", target_joint_id),
             ("allow_n_wildcard", allow_n_wildcard),
-        ) if v is not _UNSET
+        )
+        if v is not _UNSET
     }
     _route_patch_overhang_binding(binding_id, OverhangBindingPatchRequest(**fields))
     return design_state.get_or_404()
@@ -1350,6 +1469,7 @@ def delete_overhang_binding(binding_id: str) -> Design:
 
 
 # ── feature-log timeline navigation (scrub / seek — undo the build to a point) ──
+
 
 def seek_features(position: int, sub_position: int | None = None) -> Design:
     """Scrub the feature-log timeline to *position* (POST /design/features/seek).
@@ -1386,6 +1506,7 @@ def return_to_latest(loadout_id: str) -> Design:
 
 # ── clusters (rigid-body grouping + DISPLAY-layer pose) ─────────────────────────
 
+
 def add_cluster(name: str, helix_ids, *, domain_ids=(), log: bool = False) -> Design:
     """Create a named rigid-body cluster of helices (POST /design/cluster).
 
@@ -1407,9 +1528,14 @@ def add_cluster(name: str, helix_ids, *, domain_ids=(), log: bool = False) -> De
     returned design (``design.cluster_transforms[-1].id``) to pose it with
     :func:`transform_cluster`.
     """
-    _route_add_cluster(AddClusterBody(
-        name=name, helix_ids=list(helix_ids), domain_ids=list(domain_ids), log=log,
-    ))
+    _route_add_cluster(
+        AddClusterBody(
+            name=name,
+            helix_ids=list(helix_ids),
+            domain_ids=list(domain_ids),
+            log=log,
+        )
+    )
     return design_state.get_or_404()
 
 
@@ -1437,12 +1563,16 @@ def transform_cluster(
     (a pure-translation pose shifts the cluster's helix geometry by exactly the
     requested vector; non-cluster helices stay put).
     """
-    _route_update_cluster(cluster_id, PatchClusterBody(
-        translation=list(translation) if translation is not None else None,
-        rotation=list(rotation) if rotation is not None else None,
-        pivot=list(pivot) if pivot is not None else None,
-        commit=commit, log=log,
-    ))
+    _route_update_cluster(
+        cluster_id,
+        PatchClusterBody(
+            translation=list(translation) if translation is not None else None,
+            rotation=list(rotation) if rotation is not None else None,
+            pivot=list(pivot) if pivot is not None else None,
+            commit=commit,
+            log=log,
+        ),
+    )
     return design_state.get_or_404()
 
 
@@ -1478,11 +1608,19 @@ def align_cluster_edge(
 
     design = design_state.get_or_404()
     quat, translation, pivot = align_edge_transform(
-        design, cluster_id, src_edge, target_edge=target_edge, target_line=target_line,
+        design,
+        cluster_id,
+        src_edge,
+        target_edge=target_edge,
+        target_line=target_line,
     )
     return transform_cluster(
-        cluster_id, translation=translation, rotation=quat, pivot=pivot,
-        commit=commit, log=log,
+        cluster_id,
+        translation=translation,
+        rotation=quat,
+        pivot=pivot,
+        commit=commit,
+        log=log,
     )
 
 
@@ -1530,16 +1668,24 @@ def place_cluster_joint(
 
     design = design_state.get_or_404()
     origin, direction = hull_prism_axis(
-        design, cluster_id, edge=edge, corner=corner, face=face, anchor=anchor,
+        design,
+        cluster_id,
+        edge=edge,
+        corner=corner,
+        face=face,
+        anchor=anchor,
     )
-    _route_add_joint(cluster_id, AddJointBody(
-        axis_origin=list(origin),
-        axis_direction=list(direction),
-        surface_detail=surface_detail,
-        name=name,
-        min_angle_deg=min_angle_deg,
-        max_angle_deg=max_angle_deg,
-    ))
+    _route_add_joint(
+        cluster_id,
+        AddJointBody(
+            axis_origin=list(origin),
+            axis_direction=list(direction),
+            surface_detail=surface_detail,
+            name=name,
+            min_angle_deg=min_angle_deg,
+            max_angle_deg=max_angle_deg,
+        ),
+    )
     return design_state.get_or_404()
 
 
@@ -1602,7 +1748,10 @@ def place_primitive(
 
     host = design_state.get_or_404()
     placed = place_primitive_into(
-        host, primitive, anchor_cell=tuple(anchor_cell), plane=plane,
+        host,
+        primitive,
+        anchor_cell=tuple(anchor_cell),
+        plane=plane,
     )
     design_state.snapshot()
     design_state.set_design_silent(placed)

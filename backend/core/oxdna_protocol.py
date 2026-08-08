@@ -41,51 +41,51 @@ from backend.core.oxdna_job import OxdnaStageStatus
 
 @dataclass
 class OxdnaStageSpec:
-    name:                 str           # "1_mc_relax" / "2_md_relax" / "3_equil"
-    kind:                 str           # "mc" / "md_relax" / "equil"
-    sim_type:             str           # "MC" / "MD"
-    steps:                int
-    backend:              str           # "CPU" / "CUDA"
-    temperature:          str = "296K"
-    max_backbone_force:   float | None = None       # None → standard FENE (equil)
+    name: str  # "1_mc_relax" / "2_md_relax" / "3_equil"
+    kind: str  # "mc" / "md_relax" / "equil"
+    sim_type: str  # "MC" / "MD"
+    steps: int
+    backend: str  # "CPU" / "CUDA"
+    temperature: str = "296K"
+    max_backbone_force: float | None = None  # None → standard FENE (equil)
     max_backbone_force_far: float | None = None
-    salt_concentration:   float = 0.5
-    device:               str = "0"                  # CUDA device index
+    salt_concentration: float = 0.5
+    device: str = "0"  # CUDA device index
     # Monte Carlo keys (sim_type == MC)
-    ensemble:             str = "NVT"
-    delta_translation:    float = 0.1
-    delta_rotation:       float = 0.1
+    ensemble: str = "NVT"
+    delta_translation: float = 0.1
+    delta_rotation: float = 0.1
     # Molecular dynamics keys (sim_type == MD)
-    dt:                   float = 0.002
-    thermostat:           str = "bussi"
-    bussi_tau:            int = 1000
-    newtonian_steps:      int = 53
+    dt: float = 0.002
+    thermostat: str = "bussi"
+    bussi_tau: int = 1000
+    newtonian_steps: int = 53
     # Mutual-trap external forces holding designed WC pairs together (relax aid).
-    external_forces:      bool = False
+    external_forces: bool = False
     # External-forces filename in the job dir; None → the default "forces.txt"
     # (mutual traps).  A field stage points this at its own field_forces_N.txt.
-    forces_file:          str | None = None
+    forces_file: str | None = None
     # True when the forces file uses ABSOLUTE-coordinate forces (repulsion_plane /
     # trap anchors).  Those are incompatible with oxDNA's COM diffusion-fix, which
     # periodically recenters coordinates by a box vector — shifting the structure
     # into the wall (a catastrophic spurious repulsion).  Renders fix_diffusion=false.
-    absolute_forces:      bool = False
+    absolute_forces: bool = False
     # Electric-field record (field stages only): {'dir':[x,y,z], 'force_oxdna':f}.
-    efield:               dict | None = None
+    efield: dict | None = None
     # Composed-run record (consolidated production): {'field':{...}|None,
     # 'wall':{...}|None, 'n_anchored':int} — what external elements this run carried.
-    forces_meta:          dict | None = None
+    forces_meta: dict | None = None
     # Health gate (checked after the stage).
-    min_bp_retained:      float = 0.0
+    min_bp_retained: float = 0.0
     # ── ANM-oxDNA hybrid (protein present) ──────────────────────────────────────
     # interaction_type override (e.g. "DNANM" / "DNANM_relax"); None → "DNA2".
-    interaction:          str | None = None
+    interaction: str | None = None
     # ANM parameter-file name in the job dir (the protein spring network); emitted
     # as `parfile = <name>` only for hybrid stages.  Its presence marks a fork
     # (anm-oxdna) stage, so the renderer also emits the keys that fork makes
     # mandatory (refresh_vel for MC) and `relax_type` for DNANM_relax.
-    parfile:              str | None = None
-    relax_type:           str = "harmonic_force"   # DNANM_relax algorithm
+    parfile: str | None = None
+    relax_type: str = "harmonic_force"  # DNANM_relax algorithm
     # ── Output-cadence overrides (benchmark trials) ─────────────────────────────
     # None → derive from `steps` as usual (~100 trajectory + energy samples).  A
     # short THROUGHPUT trial sets print_conf_interval high (no intermediate frames)
@@ -93,16 +93,16 @@ class OxdnaStageSpec:
     # (identical on CPU and CUDA) dominate a 2k-step trial and HIDE CUDA's speedup,
     # making the sweep mis-recommend CPU.
     print_conf_interval_override: int | None = None
-    print_energy_every_override:  int | None = None
+    print_energy_every_override: int | None = None
 
     def to_status(self) -> OxdnaStageStatus:
         return OxdnaStageStatus(name=self.name, kind=self.kind, steps=self.steps)
 
 
 # ── Standard defaults (oxDNA origami relaxation docs) ─────────────────────────
-DEFAULT_MC_STEPS:       int = 1_000        # 10²–10⁴ per docs
-DEFAULT_MD_RELAX_STEPS: int = 1_000_000    # ~1e6 per docs
-DEFAULT_EQUIL_STEPS:    int = 100_000      # short unbiased settle
+DEFAULT_MC_STEPS: int = 1_000  # 10²–10⁴ per docs
+DEFAULT_MD_RELAX_STEPS: int = 1_000_000  # ~1e6 per docs
+DEFAULT_EQUIL_STEPS: int = 100_000  # short unbiased settle
 
 # The equil stage keeps a LARGE backbone-force cap rather than removing it entirely.
 # A bare-FENE equil aborts at config load if the relax left even ONE backbone bond
@@ -113,21 +113,21 @@ DEFAULT_EQUIL_STEPS:    int = 100_000      # short unbiased settle
 # finite linear spring for a residual over-stretched bond, so the stage runs instead
 # of crashing.  This is the robustness half of the equil-readiness fix; the runner's
 # escalate-and-retry is the quality half (it tries to remove the over-stretch first).
-DEFAULT_EQUIL_BACKBONE_FORCE:     float = 50.0
+DEFAULT_EQUIL_BACKBONE_FORCE: float = 50.0
 DEFAULT_EQUIL_BACKBONE_FORCE_FAR: float = 100.0
 
 
 def build_relaxation_stages(
     *,
-    mc_steps:           int = DEFAULT_MC_STEPS,
-    md_relax_steps:     int = DEFAULT_MD_RELAX_STEPS,
-    equil_steps:        int = DEFAULT_EQUIL_STEPS,
-    backend:            str = "CUDA",
-    device:             str = "0",
+    mc_steps: int = DEFAULT_MC_STEPS,
+    md_relax_steps: int = DEFAULT_MD_RELAX_STEPS,
+    equil_steps: int = DEFAULT_EQUIL_STEPS,
+    backend: str = "CUDA",
+    device: str = "0",
     salt_concentration: float = 0.5,
-    min_bp_retained:    float = 0.50,
-    surface_present:    bool = False,
-    protein:            bool = False,
+    min_bp_retained: float = 0.50,
+    surface_present: bool = False,
+    protein: bool = False,
 ) -> list[OxdnaStageSpec]:
     """Return the ordered 3-stage standard relaxation spec list.
 
@@ -159,28 +159,45 @@ def build_relaxation_stages(
 
     return [
         OxdnaStageSpec(
-            name="1_mc_relax", kind="mc", sim_type="MC", steps=mc_steps,
+            name="1_mc_relax",
+            kind="mc",
+            sim_type="MC",
+            steps=mc_steps,
             backend="CPU",
-            max_backbone_force=5.0, max_backbone_force_far=10.0,
-            external_forces=True,          # mutual traps pull designed pairs together
-            absolute_forces=abs_forces,    # + surface/anchors/protein → fix_diffusion off
-            salt_concentration=salt_concentration, device=device,
-            min_bp_retained=0.0,           # MC clears clashes; no bp gate yet
-            interaction=relax_interaction, parfile=parfile,
+            max_backbone_force=5.0,
+            max_backbone_force_far=10.0,
+            external_forces=True,  # mutual traps pull designed pairs together
+            absolute_forces=abs_forces,  # + surface/anchors/protein → fix_diffusion off
+            salt_concentration=salt_concentration,
+            device=device,
+            min_bp_retained=0.0,  # MC clears clashes; no bp gate yet
+            interaction=relax_interaction,
+            parfile=parfile,
         ),
         OxdnaStageSpec(
-            name="2_md_relax", kind="md_relax", sim_type="MD", steps=md_relax_steps,
-            backend=backend, dt=0.002,
-            max_backbone_force=5.0, max_backbone_force_far=10.0,
-            external_forces=True,          # hold pairs while the backbone relaxes
+            name="2_md_relax",
+            kind="md_relax",
+            sim_type="MD",
+            steps=md_relax_steps,
+            backend=backend,
+            dt=0.002,
+            max_backbone_force=5.0,
+            max_backbone_force_far=10.0,
+            external_forces=True,  # hold pairs while the backbone relaxes
             absolute_forces=abs_forces,
-            salt_concentration=salt_concentration, device=device,
+            salt_concentration=salt_concentration,
+            device=device,
             min_bp_retained=md_gate,
-            interaction=relax_interaction, parfile=parfile,
+            interaction=relax_interaction,
+            parfile=parfile,
         ),
         OxdnaStageSpec(
-            name="3_equil", kind="equil", sim_type="MD", steps=equil_steps,
-            backend=backend, dt=0.003,
+            name="3_equil",
+            kind="equil",
+            sim_type="MD",
+            steps=equil_steps,
+            backend=backend,
+            dt=0.003,
             # Large cap (not None): standard FENE for healthy bonds, but never a fatal
             # divergence on a residual over-stretched bond (see DEFAULT_EQUIL_BACKBONE_FORCE).
             max_backbone_force=DEFAULT_EQUIL_BACKBONE_FORCE,
@@ -191,9 +208,11 @@ def build_relaxation_stages(
             external_forces=equil_external,
             forces_file="equil_forces.txt" if equil_external else None,
             absolute_forces=abs_forces,
-            salt_concentration=salt_concentration, device=device,
+            salt_concentration=salt_concentration,
+            device=device,
             min_bp_retained=equil_gate,
-            interaction=equil_interaction, parfile=parfile,
+            interaction=equil_interaction,
+            parfile=parfile,
         ),
     ]
 
@@ -207,8 +226,8 @@ def build_relaxation_stages(
 # stays put — raising it lets the backbone spring pull the bond back within FENE
 # range instead of holding it stretched).  Keyed by attempt number (1-based).
 _RELAX_ESCALATION: dict[int, dict] = {
-    1: {"steps_mult": 3,  "dt": 0.001, "cap": 20.0},
-    2: {"steps_mult": 6,  "dt": 0.001, "cap": 50.0},
+    1: {"steps_mult": 3, "dt": 0.001, "cap": 20.0},
+    2: {"steps_mult": 6, "dt": 0.001, "cap": 50.0},
     3: {"steps_mult": 10, "dt": 0.001, "cap": 100.0},
 }
 MAX_RELAX_RETRIES: int = 3
@@ -235,11 +254,11 @@ def escalate_md_relax_spec(base: OxdnaStageSpec, attempt: int) -> OxdnaStageSpec
 
 
 def render_stage_input(
-    spec:          OxdnaStageSpec,
+    spec: OxdnaStageSpec,
     topology_name: str,
-    conf_name:     str,
-    forces_name:   str | None = None,
-    parfile_name:  str | None = None,
+    conf_name: str,
+    forces_name: str | None = None,
+    parfile_name: str | None = None,
 ) -> str:
     """Render the oxDNA input-file text for *spec*.
 
@@ -357,12 +376,12 @@ DEFAULT_STEPS_PER_FRAME: int = 10_000
 
 def build_production_stage(
     *,
-    name:               str = "4_production",
-    steps:              int = DEFAULT_PRODUCTION_STEPS,
-    backend:            str = "CUDA",
-    device:             str = "0",
+    name: str = "4_production",
+    steps: int = DEFAULT_PRODUCTION_STEPS,
+    backend: str = "CUDA",
+    device: str = "0",
     salt_concentration: float = 0.5,
-    steps_per_frame:    int | None = None,
+    steps_per_frame: int | None = None,
 ) -> OxdnaStageSpec:
     """Return an unbiased MD production stage (standard backbone potential, no
     traps, no force cap) — the real dynamics run, appended after relaxation passes.
@@ -372,11 +391,17 @@ def build_production_stage(
     "Start Production" clicks each get their own stage dir and continue from the
     previous run's ``last_conf.dat`` instead of overwriting it."""
     return OxdnaStageSpec(
-        name=name, kind="production", sim_type="MD", steps=steps,
-        backend=backend, dt=0.005,
-        max_backbone_force=None, max_backbone_force_far=None,
+        name=name,
+        kind="production",
+        sim_type="MD",
+        steps=steps,
+        backend=backend,
+        dt=0.005,
+        max_backbone_force=None,
+        max_backbone_force_far=None,
         external_forces=False,
-        salt_concentration=salt_concentration, device=device,
+        salt_concentration=salt_concentration,
+        device=device,
         min_bp_retained=0.0,
         print_conf_interval_override=steps_per_frame,
     )
@@ -387,13 +412,13 @@ DEFAULT_FIELD_STEPS: int = 2_000_000
 
 def build_field_stage(
     *,
-    name:               str,
-    field_oxdna:        float,
-    field_dir:          list[float],
-    forces_file:        str,
-    steps:              int = DEFAULT_FIELD_STEPS,
-    backend:            str = "CUDA",
-    device:             str = "0",
+    name: str,
+    field_oxdna: float,
+    field_dir: list[float],
+    forces_file: str,
+    steps: int = DEFAULT_FIELD_STEPS,
+    backend: str = "CUDA",
+    device: str = "0",
     salt_concentration: float = 0.5,
 ) -> OxdnaStageSpec:
     """An electric-field MD stage: unbiased dynamics (standard FENE, no force cap)
@@ -406,30 +431,37 @@ def build_field_stage(
     Continues from the previous (relaxed) stage's ``last_conf.dat`` like a
     production run."""
     return OxdnaStageSpec(
-        name=name, kind="field", sim_type="MD", steps=steps,
-        backend=backend, dt=0.005,
-        max_backbone_force=None, max_backbone_force_far=None,
-        external_forces=True, forces_file=forces_file,
-        absolute_forces=True,          # anchor traps are absolute → fix_diffusion off
+        name=name,
+        kind="field",
+        sim_type="MD",
+        steps=steps,
+        backend=backend,
+        dt=0.005,
+        max_backbone_force=None,
+        max_backbone_force_far=None,
+        external_forces=True,
+        forces_file=forces_file,
+        absolute_forces=True,  # anchor traps are absolute → fix_diffusion off
         efield={"dir": list(field_dir), "force_oxdna": float(field_oxdna)},
-        salt_concentration=salt_concentration, device=device,
+        salt_concentration=salt_concentration,
+        device=device,
         min_bp_retained=0.0,
     )
 
 
 def build_run_stage(
     *,
-    name:               str,
-    steps:              int = DEFAULT_PRODUCTION_STEPS,
-    external_forces:    bool = False,
-    forces_file:        str | None = None,
-    efield:             dict | None = None,
-    forces_meta:        dict | None = None,
-    absolute_forces:    bool = False,
-    backend:            str = "CUDA",
-    device:             str = "0",
+    name: str,
+    steps: int = DEFAULT_PRODUCTION_STEPS,
+    external_forces: bool = False,
+    forces_file: str | None = None,
+    efield: dict | None = None,
+    forces_meta: dict | None = None,
+    absolute_forces: bool = False,
+    backend: str = "CUDA",
+    device: str = "0",
     salt_concentration: float = 0.5,
-    steps_per_frame:    int | None = None,
+    steps_per_frame: int | None = None,
 ) -> OxdnaStageSpec:
     """A consolidated production MD stage that may carry any combination of external
     elements (uniform field, hard-surface repulsion plane, anchor traps) via
@@ -441,12 +473,21 @@ def build_run_stage(
     full set of enabled elements.  No base-pair gate — production is sampling, and a
     field/surface deliberately deforms the structure."""
     return OxdnaStageSpec(
-        name=name, kind="production", sim_type="MD", steps=steps,
-        backend=backend, dt=0.005,
-        max_backbone_force=None, max_backbone_force_far=None,
-        external_forces=external_forces, forces_file=forces_file,
-        efield=efield, forces_meta=forces_meta, absolute_forces=absolute_forces,
-        salt_concentration=salt_concentration, device=device,
+        name=name,
+        kind="production",
+        sim_type="MD",
+        steps=steps,
+        backend=backend,
+        dt=0.005,
+        max_backbone_force=None,
+        max_backbone_force_far=None,
+        external_forces=external_forces,
+        forces_file=forces_file,
+        efield=efield,
+        forces_meta=forces_meta,
+        absolute_forces=absolute_forces,
+        salt_concentration=salt_concentration,
+        device=device,
         min_bp_retained=0.0,
         print_conf_interval_override=steps_per_frame,
     )

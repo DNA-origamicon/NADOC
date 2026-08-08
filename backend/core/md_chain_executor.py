@@ -76,7 +76,8 @@ _CHAIN_TERMINAL = (CHAIN_COMPLETED, CHAIN_FAILED)
 # spawn; the guards consult it and stand down.  A ContextVar (not a global) so it is scoped
 # to the awaiting task and never leaks across concurrent work.
 _unattended_chain_spawn: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    "unattended_chain_spawn", default=False)
+    "unattended_chain_spawn", default=False
+)
 
 
 def in_unattended_chain_spawn() -> bool:
@@ -216,6 +217,7 @@ def init_chain_run(
 
 # ── advance primitives (used by the async driver AND step_chain) ─────────────────
 
+
 def reconcile_running(chain: ChainRun, job_status: Callable[[str], str]) -> ChainRun:
     """Fold the currently-running stage's job status into the chain state.
 
@@ -316,7 +318,7 @@ def resume_chain(chain: ChainRun) -> ChainRun:
         for s in chain.stages[fi:]:
             s.status = STAGE_PENDING
             s.job_id = None
-            s.spawn_attempts = 0   # a manual resume grants a fresh retry budget
+            s.spawn_attempts = 0  # a manual resume grants a fresh retry budget
     chain.status = CHAIN_RUNNING
     chain.error = None
     return chain
@@ -401,10 +403,14 @@ def diagnose_chain(chain: ChainRun) -> dict:
     if chain.status == CHAIN_FAILED:
         if failed_job_id:
             # The stage spawned a job that then failed — the crash is INSIDE the job.
-            cause = (f"Stage {fi}'s job ({failed_job_id}) ran but failed — the simulation "
-                     "crashed or was stopped. Its own error/log carries the detail.")
-            action = (f"Inspect job {failed_job_id}'s log (chain_doctor prints the tail), "
-                      "fix the cause, then Resume the chain.")
+            cause = (
+                f"Stage {fi}'s job ({failed_job_id}) ran but failed — the simulation "
+                "crashed or was stopped. Its own error/log carries the detail."
+            )
+            action = (
+                f"Inspect job {failed_job_id}'s log (chain_doctor prints the tail), "
+                "fix the cause, then Resume the chain."
+            )
         else:
             err = (chain.error or "").lower()
             for needles, why, act in _FAILURE_PATTERNS:
@@ -412,7 +418,9 @@ def diagnose_chain(chain: ChainRun) -> dict:
                     cause, action = why, act
                     break
             if cause is None:
-                cause = "The stage's child job could not be spawned (see the raw error)."
+                cause = (
+                    "The stage's child job could not be spawned (see the raw error)."
+                )
                 action = "Resume to retry from the failed stage."
 
     return {
@@ -428,7 +436,10 @@ def diagnose_chain(chain: ChainRun) -> dict:
 
 # ── forces carry-through (the shared conf emitter) ───────────────────────────────
 
-def stage_forces_conf(forces: Optional[dict], *, anchors_file: Optional[str] = None) -> str:
+
+def stage_forces_conf(
+    forces: Optional[dict], *, anchors_file: Optional[str] = None
+) -> str:
     """The NAMD conf snippet a stage's forces contribute, via the SHARED emitter.
 
     Reuses :func:`backend.core.md_protocols.external_forces_block` so a chained stage's
@@ -442,6 +453,7 @@ def stage_forces_conf(forces: Optional[dict], *, anchors_file: Optional[str] = N
 
 
 # ── persistence ──────────────────────────────────────────────────────────────────
+
 
 def chains_dir(workspace) -> Path:
     return Path(workspace) / "md_chains"

@@ -47,17 +47,17 @@ from backend.core.models import Design
 # (residue, atom_name) in _BASE_PARAMS and fall back to _BACKBONE_PARAMS.
 
 _BACKBONE_PARAMS: dict[str, tuple[str, float, float]] = {
-    "P":   ("P2",    1.50,  30.974),
-    "OP1": ("ON3",  -0.78,  15.999),   # non-bridging phosphate O (CHARMM36: ON3)
-    "OP2": ("ON3",  -0.78,  15.999),   # non-bridging phosphate O (CHARMM36: ON3)
-    "O5'": ("ON2",  -0.57,  15.999),   # 5' ester O (CHARMM36: ON2)
-    "C5'": ("CN8B", -0.08,  12.011),   # deoxyribose 5' C (CHARMM36: CN8B)
-    "C4'": ("CN7",   0.16,  12.011),
-    "O4'": ("ON6",  -0.50,  15.999),
-    "C3'": ("CN7",   0.01,  12.011),
-    "O3'": ("ON2",  -0.57,  15.999),
-    "C2'": ("CN8",  -0.18,  12.011),
-    "C1'": ("CN7B",  0.16,  12.011),
+    "P": ("P2", 1.50, 30.974),
+    "OP1": ("ON3", -0.78, 15.999),  # non-bridging phosphate O (CHARMM36: ON3)
+    "OP2": ("ON3", -0.78, 15.999),  # non-bridging phosphate O (CHARMM36: ON3)
+    "O5'": ("ON2", -0.57, 15.999),  # 5' ester O (CHARMM36: ON2)
+    "C5'": ("CN8B", -0.08, 12.011),  # deoxyribose 5' C (CHARMM36: CN8B)
+    "C4'": ("CN7", 0.16, 12.011),
+    "O4'": ("ON6", -0.50, 15.999),
+    "C3'": ("CN7", 0.01, 12.011),
+    "O3'": ("ON2", -0.57, 15.999),
+    "C2'": ("CN8", -0.18, 12.011),
+    "C1'": ("CN7B", 0.16, 12.011),
 }
 
 _BASE_PARAMS: dict[tuple[str, str], tuple[str, float, float]] = {
@@ -66,53 +66,57 @@ _BASE_PARAMS: dict[tuple[str, str], tuple[str, float, float]] = {
     # with the DEOX patch applied (DEOX removes O2'/H2' and changes C2' type).
     #
     # ── DA (deoxyadenosine) — from RTF: ADE ─────────────────────────────────
-    ("DA", "N9"):  ("NN2",  -0.05, 14.007),
-    ("DA", "C8"):  ("CN4",   0.34, 12.011),
-    ("DA", "N7"):  ("NN4",  -0.71, 14.007),   # NN4, not NN3
-    ("DA", "C5"):  ("CN5",   0.28, 12.011),
-    ("DA", "C4"):  ("CN5",   0.43, 12.011),
-    ("DA", "N3"):  ("NN3A", -0.75, 14.007),   # NN3A, not NN3
-    ("DA", "C2"):  ("CN4",   0.50, 12.011),
-    ("DA", "N1"):  ("NN3A", -0.74, 14.007),   # NN3A, not NN3
-    ("DA", "C6"):  ("CN2",   0.46, 12.011),
-    ("DA", "N6"):  ("NN1",  -0.77, 14.007),   # NN1, not NN3A
+    ("DA", "N9"): ("NN2", -0.05, 14.007),
+    ("DA", "C8"): ("CN4", 0.34, 12.011),
+    ("DA", "N7"): ("NN4", -0.71, 14.007),  # NN4, not NN3
+    ("DA", "C5"): ("CN5", 0.28, 12.011),
+    ("DA", "C4"): ("CN5", 0.43, 12.011),
+    ("DA", "N3"): ("NN3A", -0.75, 14.007),  # NN3A, not NN3
+    ("DA", "C2"): ("CN4", 0.50, 12.011),
+    ("DA", "N1"): ("NN3A", -0.74, 14.007),  # NN3A, not NN3
+    ("DA", "C6"): ("CN2", 0.46, 12.011),
+    ("DA", "N6"): ("NN1", -0.77, 14.007),  # NN1, not NN3A
     # ── DT (deoxythymidine) — from RTF: THY ─────────────────────────────────
-    ("DT", "N1"):  ("NN2B", -0.34, 14.007),
-    ("DT", "C6"):  ("CN3",   0.17, 12.011),
-    ("DT", "C2"):  ("CN1T",  0.51, 12.011),   # CN1T, not CN1
-    ("DT", "O2"):  ("ON1",  -0.41, 15.999),   # ON1, not ON1C
-    ("DT", "N3"):  ("NN2U", -0.46, 14.007),   # NN2U, not NN3
-    ("DT", "C4"):  ("CN1",   0.50, 12.011),
-    ("DT", "O4"):  ("ON1",  -0.45, 15.999),
-    ("DT", "C5"):  ("CN3T", -0.15, 12.011),   # CN3T, not CN3
-    ("DT", "C7"):  ("CN9",  -0.11, 12.011),   # thymine methyl (C5M in RTF)
+    ("DT", "N1"): ("NN2B", -0.34, 14.007),
+    ("DT", "C6"): ("CN3", 0.17, 12.011),
+    ("DT", "C2"): ("CN1T", 0.51, 12.011),  # CN1T, not CN1
+    ("DT", "O2"): ("ON1", -0.41, 15.999),  # ON1, not ON1C
+    ("DT", "N3"): ("NN2U", -0.46, 14.007),  # NN2U, not NN3
+    ("DT", "C4"): ("CN1", 0.50, 12.011),
+    ("DT", "O4"): ("ON1", -0.45, 15.999),
+    ("DT", "C5"): ("CN3T", -0.15, 12.011),  # CN3T, not CN3
+    ("DT", "C7"): ("CN9", -0.11, 12.011),  # thymine methyl (C5M in RTF)
     # ── DC (deoxycytidine) — from RTF: CYT ──────────────────────────────────
-    ("DC", "N1"):  ("NN2",  -0.13, 14.007),   # NN2, not NN2B
-    ("DC", "C6"):  ("CN3",   0.05, 12.011),
-    ("DC", "C5"):  ("CN3",  -0.13, 12.011),
-    ("DC", "C2"):  ("CN1",   0.52, 12.011),
-    ("DC", "O2"):  ("ON1C", -0.49, 15.999),
-    ("DC", "N3"):  ("NN3",  -0.66, 14.007),
-    ("DC", "C4"):  ("CN2",   0.65, 12.011),
-    ("DC", "N4"):  ("NN1",  -0.75, 14.007),
+    ("DC", "N1"): ("NN2", -0.13, 14.007),  # NN2, not NN2B
+    ("DC", "C6"): ("CN3", 0.05, 12.011),
+    ("DC", "C5"): ("CN3", -0.13, 12.011),
+    ("DC", "C2"): ("CN1", 0.52, 12.011),
+    ("DC", "O2"): ("ON1C", -0.49, 15.999),
+    ("DC", "N3"): ("NN3", -0.66, 14.007),
+    ("DC", "C4"): ("CN2", 0.65, 12.011),
+    ("DC", "N4"): ("NN1", -0.75, 14.007),
     # ── DG (deoxyguanosine) — from RTF: GUA ─────────────────────────────────
-    ("DG", "N9"):  ("NN2B", -0.02, 14.007),   # NN2B, not NN2
-    ("DG", "C4"):  ("CN5",   0.26, 12.011),
-    ("DG", "N3"):  ("NN3G", -0.74, 14.007),   # NN3G, not NN3
-    ("DG", "C2"):  ("CN2",   0.75, 12.011),
-    ("DG", "N2"):  ("NN1",  -0.68, 14.007),
-    ("DG", "N1"):  ("NN2G", -0.34, 14.007),   # NN2G, not NN2B
-    ("DG", "C6"):  ("CN1",   0.54, 12.011),
-    ("DG", "O6"):  ("ON1",  -0.51, 15.999),
-    ("DG", "C5"):  ("CN5G",  0.00, 12.011),   # CN5G, not CN5
-    ("DG", "N7"):  ("NN4",  -0.60, 14.007),   # NN4, not NN3
-    ("DG", "C8"):  ("CN4",   0.25, 12.011),
+    ("DG", "N9"): ("NN2B", -0.02, 14.007),  # NN2B, not NN2
+    ("DG", "C4"): ("CN5", 0.26, 12.011),
+    ("DG", "N3"): ("NN3G", -0.74, 14.007),  # NN3G, not NN3
+    ("DG", "C2"): ("CN2", 0.75, 12.011),
+    ("DG", "N2"): ("NN1", -0.68, 14.007),
+    ("DG", "N1"): ("NN2G", -0.34, 14.007),  # NN2G, not NN2B
+    ("DG", "C6"): ("CN1", 0.54, 12.011),
+    ("DG", "O6"): ("ON1", -0.51, 15.999),
+    ("DG", "C5"): ("CN5G", 0.00, 12.011),  # CN5G, not CN5
+    ("DG", "N7"): ("NN4", -0.60, 14.007),  # NN4, not NN3
+    ("DG", "C8"): ("CN4", 0.25, 12.011),
 }
 
 # Fallback element masses
 _ELEMENT_MASS: dict[str, float] = {
-    "C": 12.011, "N": 14.007, "O": 15.999,
-    "P": 30.974, "S": 32.060, "H":  1.008,
+    "C": 12.011,
+    "N": 14.007,
+    "O": 15.999,
+    "P": 30.974,
+    "S": 32.060,
+    "H": 1.008,
 }
 
 
@@ -133,6 +137,7 @@ def _charmm_params(atom: Atom) -> tuple[str, float, float]:
 
 # ── Bounding-box helpers ──────────────────────────────────────────────────────
 
+
 def _box_dimensions(
     atoms: list,
     margin_nm: float = 5.0,
@@ -149,7 +154,7 @@ def _box_dimensions(
     lo_x, hi_x = min(xs), max(xs)
     lo_y, hi_y = min(ys), max(ys)
     lo_z, hi_z = min(zs), max(zs)
-    ax = (hi_x - lo_x + 2 * margin_nm) * 10.0   # nm → Å
+    ax = (hi_x - lo_x + 2 * margin_nm) * 10.0  # nm → Å
     ay = (hi_y - lo_y + 2 * margin_nm) * 10.0
     az = (hi_z - lo_z + 2 * margin_nm) * 10.0
     ox = ((lo_x + hi_x) / 2) * 10.0
@@ -161,9 +166,7 @@ def _box_dimensions(
 def _cryst1_record(atoms: list, margin_nm: float = 5.0) -> str:
     """Return the PDB CRYST1 record for a cubic cell enclosing all atoms."""
     ax, ay, az, *_ = _box_dimensions(atoms, margin_nm)
-    return (
-        f"CRYST1{ax:9.3f}{ay:9.3f}{az:9.3f}  90.00  90.00  90.00 P 1           1"
-    )
+    return f"CRYST1{ax:9.3f}{ay:9.3f}{az:9.3f}  90.00  90.00  90.00 P 1           1"
 
 
 # ── Hybrid-36 encoding ────────────────────────────────────────────────────────
@@ -180,7 +183,7 @@ _H36_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz"
 def _base36(value: int, width: int, digits: str) -> str:
     # PDB only uses widths four and five here. Direct indexed conversion avoids
     # allocating/reversing a temporary list for every atom and bond endpoint.
-    if width == 5 and 0 <= value < 36 ** 5:
+    if width == 5 and 0 <= value < 36**5:
         return (
             digits[value // 1679616]
             + digits[(value // 46656) % 36]
@@ -188,7 +191,7 @@ def _base36(value: int, width: int, digits: str) -> str:
             + digits[(value // 36) % 36]
             + digits[value % 36]
         )
-    if width == 4 and 0 <= value < 36 ** 4:
+    if width == 4 and 0 <= value < 36**4:
         return (
             digits[value // 46656]
             + digits[(value // 1296) % 36]
@@ -209,7 +212,7 @@ def _h36(value: int, width: int) -> str:
     Encode *value* as a right-justified hybrid-36 string of *width* characters.
     *width* must be 4 (residue number) or 5 (atom serial).
     """
-    dec_max = 10 ** width                          # 10000 or 100000
+    dec_max = 10**width  # 10000 or 100000
     if 0 <= value < dec_max:
         return f"{value:{width}d}"
     value -= dec_max
@@ -245,7 +248,7 @@ def _chain_char(chain_id: str) -> str:
         idx = letters.index(chain_id) if chain_id in letters else 0
     else:
         # Multi-char: first char is the "tens" digit (1-based), second is units
-        hi = letters.index(chain_id[0]) + 1   # 1-based block number
+        hi = letters.index(chain_id[0]) + 1  # 1-based block number
         lo = letters.index(chain_id[1])
         idx = hi * 26 + lo
     return _CHAIN_CHARS[idx % len(_CHAIN_CHARS)]
@@ -305,27 +308,29 @@ def export_identity_json(
                 "atom_serials": [],
             }
         nucleotide_rows[uid]["atom_serials"].append(atom.serial)
-        atom_rows.append({
-            "atom_serial": atom.serial,
-            "atom_serial_1based": atom.serial + 1,
-            "atom_name": atom.name,
-            "element": atom.element,
-            "residue": atom.residue,
-            "nucleotide_uid": uid,
-            "strand_id": atom.strand_id,
-            "helix_id": atom.helix_id,
-            "bp_index": atom.bp_index,
-            "direction": atom.direction,
-            "chain_id": atom.chain_id,
-            "seq_num": atom.seq_num,
-            "pdb_chain": _chain_char(atom.chain_id),
-            "pdb_resseq": _h36(atom.seq_num, 4),
-            "pdb_atom_serial": (atom.serial % 9999) + 1,
-            "psf_segid": _psf_segid(atom.chain_id),
-            "psf_resid": str(atom.seq_num),
-            "aux_helix_id": atom.aux_helix_id,
-            "aux_t": atom.aux_t,
-        })
+        atom_rows.append(
+            {
+                "atom_serial": atom.serial,
+                "atom_serial_1based": atom.serial + 1,
+                "atom_name": atom.name,
+                "element": atom.element,
+                "residue": atom.residue,
+                "nucleotide_uid": uid,
+                "strand_id": atom.strand_id,
+                "helix_id": atom.helix_id,
+                "bp_index": atom.bp_index,
+                "direction": atom.direction,
+                "chain_id": atom.chain_id,
+                "seq_num": atom.seq_num,
+                "pdb_chain": _chain_char(atom.chain_id),
+                "pdb_resseq": _h36(atom.seq_num, 4),
+                "pdb_atom_serial": (atom.serial % 9999) + 1,
+                "psf_segid": _psf_segid(atom.chain_id),
+                "psf_resid": str(atom.seq_num),
+                "aux_helix_id": atom.aux_helix_id,
+                "aux_t": atom.aux_t,
+            }
+        )
 
     payload = {
         "schema": "nadoc.md_identity.v1",
@@ -354,10 +359,24 @@ def export_identity_tsv(
     if model is None:
         model = build_atomistic_model(design)
     header = [
-        "atom_serial_1based", "atom_serial", "atom_name", "element", "residue",
-        "nucleotide_uid", "strand_id", "helix_id", "bp_index", "direction",
-        "chain_id", "seq_num", "pdb_chain", "pdb_resseq", "psf_segid",
-        "psf_resid", "aux_helix_id", "aux_t",
+        "atom_serial_1based",
+        "atom_serial",
+        "atom_name",
+        "element",
+        "residue",
+        "nucleotide_uid",
+        "strand_id",
+        "helix_id",
+        "bp_index",
+        "direction",
+        "chain_id",
+        "seq_num",
+        "pdb_chain",
+        "pdb_resseq",
+        "psf_segid",
+        "psf_resid",
+        "aux_helix_id",
+        "aux_t",
     ]
     lines = ["\t".join(header)]
     for atom in model.atoms:
@@ -389,7 +408,17 @@ def export_identity_tsv(
 # ── Design-aware MD maps and dry/implicit restraints ─────────────────────────
 
 _BACKBONE_NAMES = {
-    "P", "OP1", "OP2", "O5'", "C5'", "C4'", "O4'", "C3'", "O3'", "C2'", "C1'",
+    "P",
+    "OP1",
+    "OP2",
+    "O5'",
+    "C5'",
+    "C4'",
+    "O4'",
+    "C3'",
+    "O3'",
+    "C2'",
+    "C1'",
 }
 
 _WC_ATOM_PAIRS: dict[tuple[str, str], tuple[tuple[str, str], ...]] = {
@@ -480,8 +509,12 @@ def _build_basepair_records(model: AtomisticModel) -> list[dict]:
         key=lambda key: (str(key[0]), int(key[1])),
     )
     for helix_id, bp_index, _direction in fwd_keys:
-        forward = sorted(by_site[(helix_id, bp_index, "FORWARD")], key=lambda r: r["seq_num"])
-        reverse = sorted(by_site.get((helix_id, bp_index, "REVERSE"), []), key=lambda r: r["seq_num"])
+        forward = sorted(
+            by_site[(helix_id, bp_index, "FORWARD")], key=lambda r: r["seq_num"]
+        )
+        reverse = sorted(
+            by_site.get((helix_id, bp_index, "REVERSE"), []), key=lambda r: r["seq_num"]
+        )
         for copy_index, (a, b) in enumerate(zip(forward, reverse)):
             c1_a = a["atoms_by_name"].get("C1'")
             c1_b = b["atoms_by_name"].get("C1'")
@@ -499,49 +532,59 @@ def _build_basepair_records(model: AtomisticModel) -> list[dict]:
                     ),
                     "type": "canonical_wc",
                 }
-                for atom_a, atom_b in _WC_ATOM_PAIRS.get((a["residue"], b["residue"]), ())
+                for atom_a, atom_b in _WC_ATOM_PAIRS.get(
+                    (a["residue"], b["residue"]), ()
+                )
                 if atom_a in a["atoms_by_name"] and atom_b in b["atoms_by_name"]
             ]
             anchor_pairs = list(wc_pairs)
             if not anchor_pairs and c1_a is not None and c1_b is not None:
-                anchor_pairs.append({
-                    "atom_a": "C1'",
-                    "atom_b": "C1'",
-                    "atom_serial_a": c1_a.serial,
-                    "atom_serial_b": c1_b.serial,
-                    "atom_serial_a_1based": c1_a.serial + 1,
-                    "atom_serial_b_1based": c1_b.serial + 1,
-                    "distance_angstrom": _distance_ang(c1_a, c1_b),
-                    "type": "noncanonical_c1prime_anchor",
-                })
+                anchor_pairs.append(
+                    {
+                        "atom_a": "C1'",
+                        "atom_b": "C1'",
+                        "atom_serial_a": c1_a.serial,
+                        "atom_serial_b": c1_b.serial,
+                        "atom_serial_a_1based": c1_a.serial + 1,
+                        "atom_serial_b_1based": c1_b.serial + 1,
+                        "distance_angstrom": _distance_ang(c1_a, c1_b),
+                        "type": "noncanonical_c1prime_anchor",
+                    }
+                )
             gly_a_name = _GLYCOSIDIC_ATOM_BY_RESIDUE.get(a["residue"])
             gly_b_name = _GLYCOSIDIC_ATOM_BY_RESIDUE.get(b["residue"])
             gly_a = a["atoms_by_name"].get(gly_a_name) if gly_a_name else None
             gly_b = b["atoms_by_name"].get(gly_b_name) if gly_b_name else None
             if not wc_pairs and gly_a is not None and gly_b is not None:
-                anchor_pairs.append({
-                    "atom_a": gly_a.name,
-                    "atom_b": gly_b.name,
-                    "atom_serial_a": gly_a.serial,
-                    "atom_serial_b": gly_b.serial,
-                    "atom_serial_a_1based": gly_a.serial + 1,
-                    "atom_serial_b_1based": gly_b.serial + 1,
-                    "distance_angstrom": _distance_ang(gly_a, gly_b),
-                    "type": "noncanonical_glycosidic_anchor",
-                })
-            records.append({
-                "pair_id": f"{helix_id}:{bp_index}:{copy_index}",
-                "helix_id": helix_id,
-                "bp_index": bp_index,
-                "copy_index": copy_index,
-                "nucleotide_5p_side": _public_nucleotide_record(a),
-                "nucleotide_3p_side": _public_nucleotide_record(b),
-                "wc_atom_pairs": wc_pairs,
-                "basepair_atom_pairs": anchor_pairs,
-                "c1prime_distance_angstrom": (
-                    _distance_ang(c1_a, c1_b) if c1_a is not None and c1_b is not None else None
-                ),
-            })
+                anchor_pairs.append(
+                    {
+                        "atom_a": gly_a.name,
+                        "atom_b": gly_b.name,
+                        "atom_serial_a": gly_a.serial,
+                        "atom_serial_b": gly_b.serial,
+                        "atom_serial_a_1based": gly_a.serial + 1,
+                        "atom_serial_b_1based": gly_b.serial + 1,
+                        "distance_angstrom": _distance_ang(gly_a, gly_b),
+                        "type": "noncanonical_glycosidic_anchor",
+                    }
+                )
+            records.append(
+                {
+                    "pair_id": f"{helix_id}:{bp_index}:{copy_index}",
+                    "helix_id": helix_id,
+                    "bp_index": bp_index,
+                    "copy_index": copy_index,
+                    "nucleotide_5p_side": _public_nucleotide_record(a),
+                    "nucleotide_3p_side": _public_nucleotide_record(b),
+                    "wc_atom_pairs": wc_pairs,
+                    "basepair_atom_pairs": anchor_pairs,
+                    "c1prime_distance_angstrom": (
+                        _distance_ang(c1_a, c1_b)
+                        if c1_a is not None and c1_b is not None
+                        else None
+                    ),
+                }
+            )
     return records
 
 
@@ -552,16 +595,20 @@ def _build_stacking_records(model: AtomisticModel) -> list[dict]:
         by_strand_chain[(rec["strand_id"], rec["chain_id"])].append(rec)
 
     records: list[dict] = []
-    for (strand_id, chain_id), recs in sorted(by_strand_chain.items(), key=lambda item: item[0]):
+    for (strand_id, chain_id), recs in sorted(
+        by_strand_chain.items(), key=lambda item: item[0]
+    ):
         ordered = sorted(recs, key=lambda rec: rec["seq_num"])
         for a, b in zip(ordered, ordered[1:]):
-            records.append({
-                "stack_id": f"{strand_id}:{chain_id}:{a['seq_num']}-{b['seq_num']}",
-                "strand_id": strand_id,
-                "chain_id": chain_id,
-                "nucleotide_5p": _public_nucleotide_record(a),
-                "nucleotide_3p": _public_nucleotide_record(b),
-            })
+            records.append(
+                {
+                    "stack_id": f"{strand_id}:{chain_id}:{a['seq_num']}-{b['seq_num']}",
+                    "strand_id": strand_id,
+                    "chain_id": chain_id,
+                    "nucleotide_5p": _public_nucleotide_record(a),
+                    "nucleotide_3p": _public_nucleotide_record(b),
+                }
+            )
     return records
 
 
@@ -628,32 +675,46 @@ def export_basepair_map_tsv(
     if model is None:
         model = build_atomistic_model(design)
     header = [
-        "pair_id", "helix_id", "bp_index", "copy_index",
-        "uid_forward", "residue_forward", "strand_forward", "seq_forward",
-        "uid_reverse", "residue_reverse", "strand_reverse", "seq_reverse",
-        "wc_atom_pair_count", "c1prime_distance_angstrom",
+        "pair_id",
+        "helix_id",
+        "bp_index",
+        "copy_index",
+        "uid_forward",
+        "residue_forward",
+        "strand_forward",
+        "seq_forward",
+        "uid_reverse",
+        "residue_reverse",
+        "strand_reverse",
+        "seq_reverse",
+        "wc_atom_pair_count",
+        "c1prime_distance_angstrom",
     ]
     lines = ["\t".join(header)]
     for rec in _build_basepair_records(model):
         fwd = rec["nucleotide_5p_side"]
         rev = rec["nucleotide_3p_side"]
         c1dist = rec["c1prime_distance_angstrom"]
-        lines.append("\t".join([
-            rec["pair_id"],
-            str(rec["helix_id"]),
-            str(rec["bp_index"]),
-            str(rec["copy_index"]),
-            fwd["nucleotide_uid"],
-            fwd["residue"],
-            fwd["strand_id"],
-            str(fwd["seq_num"]),
-            rev["nucleotide_uid"],
-            rev["residue"],
-            rev["strand_id"],
-            str(rev["seq_num"]),
-            str(len(rec["wc_atom_pairs"])),
-            "" if c1dist is None else f"{c1dist:.4f}",
-        ]))
+        lines.append(
+            "\t".join(
+                [
+                    rec["pair_id"],
+                    str(rec["helix_id"]),
+                    str(rec["bp_index"]),
+                    str(rec["copy_index"]),
+                    fwd["nucleotide_uid"],
+                    fwd["residue"],
+                    fwd["strand_id"],
+                    str(fwd["seq_num"]),
+                    rev["nucleotide_uid"],
+                    rev["residue"],
+                    rev["strand_id"],
+                    str(rev["seq_num"]),
+                    str(len(rec["wc_atom_pairs"])),
+                    "" if c1dist is None else f"{c1dist:.4f}",
+                ]
+            )
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -664,31 +725,47 @@ def export_stacking_map_tsv(
     if model is None:
         model = build_atomistic_model(design)
     header = [
-        "stack_id", "strand_id", "chain_id",
-        "uid_5p", "helix_5p", "bp_5p", "direction_5p", "residue_5p", "seq_5p",
-        "uid_3p", "helix_3p", "bp_3p", "direction_3p", "residue_3p", "seq_3p",
+        "stack_id",
+        "strand_id",
+        "chain_id",
+        "uid_5p",
+        "helix_5p",
+        "bp_5p",
+        "direction_5p",
+        "residue_5p",
+        "seq_5p",
+        "uid_3p",
+        "helix_3p",
+        "bp_3p",
+        "direction_3p",
+        "residue_3p",
+        "seq_3p",
     ]
     lines = ["\t".join(header)]
     for rec in _build_stacking_records(model):
         a = rec["nucleotide_5p"]
         b = rec["nucleotide_3p"]
-        lines.append("\t".join([
-            rec["stack_id"],
-            rec["strand_id"],
-            rec["chain_id"],
-            a["nucleotide_uid"],
-            str(a["helix_id"]),
-            str(a["bp_index"]),
-            a["direction"],
-            a["residue"],
-            str(a["seq_num"]),
-            b["nucleotide_uid"],
-            str(b["helix_id"]),
-            str(b["bp_index"]),
-            b["direction"],
-            b["residue"],
-            str(b["seq_num"]),
-        ]))
+        lines.append(
+            "\t".join(
+                [
+                    rec["stack_id"],
+                    rec["strand_id"],
+                    rec["chain_id"],
+                    a["nucleotide_uid"],
+                    str(a["helix_id"]),
+                    str(a["bp_index"]),
+                    a["direction"],
+                    a["residue"],
+                    str(a["seq_num"]),
+                    b["nucleotide_uid"],
+                    str(b["helix_id"]),
+                    str(b["bp_index"]),
+                    b["direction"],
+                    b["residue"],
+                    str(b["seq_num"]),
+                ]
+            )
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -699,7 +776,8 @@ def _extra_bond_line(atom_i: Atom, atom_j: Atom, distance_ang: float, k: float) 
 def _base_heavy_atoms(rec: dict) -> list[Atom]:
     atoms = rec["atoms_by_name"].values()
     return [
-        atom for atom in atoms
+        atom
+        for atom in atoms
         if atom.element != "H" and atom.name not in _BACKBONE_NAMES
     ]
 
@@ -778,8 +856,13 @@ def export_dry_implicit_restraints(
             if atom_a is None or atom_b is None:
                 continue
             _append_unique_extra_bond(
-                wc_lines, wc_seen, covalent, atom_a, atom_b,
-                _distance_ang(atom_a, atom_b), wc_k,
+                wc_lines,
+                wc_seen,
+                covalent,
+                atom_a,
+                atom_b,
+                _distance_ang(atom_a, atom_b),
+                wc_k,
             )
 
     stack_lines: list[str] = [
@@ -795,7 +878,13 @@ def export_dry_implicit_restraints(
                 dist = _distance_ang(atom_a, atom_b)
                 if dist <= stacking_cutoff_angstrom:
                     _append_unique_extra_bond(
-                        stack_lines, stack_seen, covalent, atom_a, atom_b, dist, stacking_k,
+                        stack_lines,
+                        stack_seen,
+                        covalent,
+                        atom_a,
+                        atom_b,
+                        dist,
+                        stacking_k,
                     )
 
     bp_by_helix_bp = {(rec["helix_id"], rec["bp_index"]): rec for rec in basepairs}
@@ -803,7 +892,7 @@ def export_dry_implicit_restraints(
     helix_pairs: list[tuple[str, str, float]] = []
     helix_ids = sorted(helix_by_id)
     for idx, hid_a in enumerate(helix_ids):
-        for hid_b in helix_ids[idx + 1:]:
+        for hid_b in helix_ids[idx + 1 :]:
             dist = _helix_midpoint_distance_nm(helix_by_id[hid_a], helix_by_id[hid_b])
             if dist <= interhelix_neighbor_cutoff_nm:
                 helix_pairs.append((hid_a, hid_b, dist))
@@ -815,12 +904,10 @@ def export_dry_implicit_restraints(
     ]
     inter_seen: set[tuple[int, int]] = set()
     for hid_a, hid_b, _dist_nm in helix_pairs:
-        bp_indices = sorted({
-            rec["bp_index"]
-            for rec in basepairs
-            if rec["helix_id"] in {hid_a, hid_b}
-        })
-        for bp_index in bp_indices[::max(1, interhelix_stride_bp)]:
+        bp_indices = sorted(
+            {rec["bp_index"] for rec in basepairs if rec["helix_id"] in {hid_a, hid_b}}
+        )
+        for bp_index in bp_indices[:: max(1, interhelix_stride_bp)]:
             rec_a = bp_by_helix_bp.get((hid_a, bp_index))
             rec_b = bp_by_helix_bp.get((hid_b, bp_index))
             if rec_a is None or rec_b is None:
@@ -833,8 +920,13 @@ def export_dry_implicit_restraints(
                 if atom_a is None or atom_b is None:
                     continue
                 _append_unique_extra_bond(
-                    inter_lines, inter_seen, covalent, atom_a, atom_b,
-                    interhelix_distance_angstrom, interhelix_k,
+                    inter_lines,
+                    inter_seen,
+                    covalent,
+                    atom_a,
+                    atom_b,
+                    interhelix_distance_angstrom,
+                    interhelix_k,
                 )
 
     combined_lines = [
@@ -888,11 +980,13 @@ def export_dry_implicit_restraints(
         "restraints_stack_k1.extrabonds": "\n".join(stack_lines) + "\n",
         "restraints_interhelix_31A_k0p5.extrabonds": "\n".join(inter_lines) + "\n",
         "restraints_dry_implicit_combined.extrabonds": "\n".join(combined_lines) + "\n",
-        "restraints_summary.json": json.dumps(summary, indent=2, sort_keys=False) + "\n",
+        "restraints_summary.json": json.dumps(summary, indent=2, sort_keys=False)
+        + "\n",
     }
 
 
 # ── PDB helpers ───────────────────────────────────────────────────────────────
+
 
 def _pdb_atom_name(name: str, element: str) -> str:
     """
@@ -910,10 +1004,15 @@ def _pdb_atom_name(name: str, element: str) -> str:
     return f"{name:<4s}"
 
 
-def _pdb_atom_record(atom: Atom, *, chain: str | None = None,
-                     seq_num: int | None = None, bfactor: float = 0.0,
-                     serial_field: str | None = None,
-                     seq_field: str | None = None) -> str:
+def _pdb_atom_record(
+    atom: Atom,
+    *,
+    chain: str | None = None,
+    seq_num: int | None = None,
+    bfactor: float = 0.0,
+    serial_field: str | None = None,
+    seq_field: str | None = None,
+) -> str:
     """
     Format one PDB ATOM record (80-char fixed-width).
 
@@ -944,13 +1043,13 @@ def _pdb_atom_record(atom: Atom, *, chain: str | None = None,
     # atoms exported with broken connectivity.  For serials ≤ 99999 hybrid-36 is
     # byte-identical to plain decimal, so the NAMD/psfgen path is unaffected.
     serial_str = serial_field or _h36(atom.serial + 1, 5)
-    seq_str    = seq_field or _h36(atom.seq_num if seq_num is None else seq_num, 4)
+    seq_str = seq_field or _h36(atom.seq_num if seq_num is None else seq_num, 4)
     name_field = _pdb_atom_name(atom.name, atom.element)
-    resname    = f"{atom.residue:>3s}"
-    chain      = _chain_char(atom.chain_id) if chain is None else chain
-    x_ang      = atom.x * 10.0
-    y_ang      = atom.y * 10.0
-    z_ang      = atom.z * 10.0
+    resname = f"{atom.residue:>3s}"
+    chain = _chain_char(atom.chain_id) if chain is None else chain
+    x_ang = atom.x * 10.0
+    y_ang = atom.y * 10.0
+    z_ang = atom.z * 10.0
     elem_field = f"{atom.element:>2s}"
     bfactor = max(-99.99, min(999.99, float(bfactor)))
 
@@ -982,8 +1081,10 @@ def _pdb_conect_records(
     # of defaultdict operations and makes source-serial ordering implicit.
     adj: list[list[int] | None] = [None] * (max_serial + 1)
     for i, j in bonds:
-        if adj[i] is None: adj[i] = []
-        if adj[j] is None: adj[j] = []
+        if adj[i] is None:
+            adj[i] = []
+        if adj[j] is None:
+            adj[j] = []
         adj[i].append(j)
         adj[j].append(i)
 
@@ -992,10 +1093,14 @@ def _pdb_conect_records(
         if raw_partners is None:
             continue
         partners = sorted(raw_partners)
-        serial_str = serial_fields[serial_0] if serial_fields is not None else _h36(serial_0 + 1, 5)
+        serial_str = (
+            serial_fields[serial_0]
+            if serial_fields is not None
+            else _h36(serial_0 + 1, 5)
+        )
         # Emit in groups of 4 partners
         for start in range(0, len(partners), 4):
-            chunk = partners[start:start + 4]
+            chunk = partners[start : start + 4]
             partner_str = "".join(
                 serial_fields[p] if serial_fields is not None else _h36(p + 1, 5)
                 for p in chunk
@@ -1005,8 +1110,11 @@ def _pdb_conect_records(
 
 
 def _pdb_link_record(
-    atom_a: Atom, atom_b: Atom, dist_ang: float,
-    seq_a: int | None = None, seq_b: int | None = None,
+    atom_a: Atom,
+    atom_b: Atom,
+    dist_ang: float,
+    seq_a: int | None = None,
+    seq_b: int | None = None,
 ) -> str:
     """
     Generate a LINK record for a covalent bond between two residues
@@ -1026,14 +1134,14 @@ def _pdb_link_record(
       53-56 res seq 2
       74-78 distance (Å)
     """
-    n1  = _pdb_atom_name(atom_a.name, atom_a.element)
-    r1  = f"{atom_a.residue:>3s}"
+    n1 = _pdb_atom_name(atom_a.name, atom_a.element)
+    r1 = f"{atom_a.residue:>3s}"
     # Must use the exact same multi-character→PDB-chain mapping as ATOM records.
     # Taking chain_id[0] aliases AA..AZ back onto A and creates distant LINK bonds.
-    c1  = _chain_char(atom_a.chain_id)
-    n2  = _pdb_atom_name(atom_b.name, atom_b.element)
-    r2  = f"{atom_b.residue:>3s}"
-    c2  = _chain_char(atom_b.chain_id)
+    c1 = _chain_char(atom_a.chain_id)
+    n2 = _pdb_atom_name(atom_b.name, atom_b.element)
+    r2 = f"{atom_b.residue:>3s}"
+    c2 = _chain_char(atom_b.chain_id)
     return (
         f"LINK        {n1} {r1} {c1}{_h36(atom_a.seq_num if seq_a is None else seq_a, 4)}                "
         f"{n2} {r2} {c2}{_h36(atom_b.seq_num if seq_b is None else seq_b, 4)}                  {dist_ang:5.2f}"
@@ -1112,7 +1220,9 @@ def export_pdb(
     backbone_atoms: dict[tuple[str, int], dict[str, Atom]] = {}
     for atom in atoms:
         if atom.residue in dna_residues and atom.name in {"O3'", "P"}:
-            backbone_atoms.setdefault((atom.chain_id, atom.seq_num), {})[atom.name] = atom
+            backbone_atoms.setdefault((atom.chain_id, atom.seq_num), {})[atom.name] = (
+                atom
+            )
     bond_keys = {tuple(sorted((i, j))) for i, j in bonds}
     repaired_backbone_bonds = 0
     for (chain_id, seq_num), current in backbone_atoms.items():
@@ -1137,22 +1247,37 @@ def export_pdb(
             a, b = atom_by_serial_all.get(i), atom_by_serial_all.get(j)
             if a is None or b is None:
                 continue
-            if a.name == "O3'" and b.name == "P" and (a.chain_id, a.seq_num) != (b.chain_id, b.seq_num):
+            if (
+                a.name == "O3'"
+                and b.name == "P"
+                and (a.chain_id, a.seq_num) != (b.chain_id, b.seq_num)
+            ):
                 incoming_p.add(b.serial)
-            elif b.name == "O3'" and a.name == "P" and (a.chain_id, a.seq_num) != (b.chain_id, b.seq_num):
+            elif (
+                b.name == "O3'"
+                and a.name == "P"
+                and (a.chain_id, a.seq_num) != (b.chain_id, b.seq_num)
+            ):
                 incoming_p.add(a.serial)
         terminal_residues = {
-            (a.chain_id, a.seq_num) for a in atoms
+            (a.chain_id, a.seq_num)
+            for a in atoms
             if a.name == "P" and a.seq_num == 1 and a.serial not in incoming_p
         }
         omitted = {
-            a.serial for a in atoms
-            if (a.chain_id, a.seq_num) in terminal_residues and a.name in {"P", "OP1", "OP2"}
+            a.serial
+            for a in atoms
+            if (a.chain_id, a.seq_num) in terminal_residues
+            and a.name in {"P", "OP1", "OP2"}
         }
         if omitted:
             atoms = [a for a in atoms if a.serial not in omitted]
             bonds = [(i, j) for i, j in bonds if i not in omitted and j not in omitted]
-            non_std_bonds = [(i, j) for i, j in non_std_bonds if i not in omitted and j not in omitted]
+            non_std_bonds = [
+                (i, j)
+                for i, j in non_std_bonds
+                if i not in omitted and j not in omitted
+            ]
 
     lines: list[str] = [
         "REMARK  NADOC all-atom model (Phase AA, heavy atoms only)",
@@ -1160,19 +1285,29 @@ def export_pdb(
         "REMARK  Non-standard bonds (if any) listed as LINK records.",
     ]
     if viewer_terminals:
-        lines.append("REMARK  Viewer termini: unlinked residue-1 P/OP1/OP2 omitted; O5' is the unphosphorylated 5' end.")
+        lines.append(
+            "REMARK  Viewer termini: unlinked residue-1 P/OP1/OP2 omitted; O5' is the unphosphorylated 5' end."
+        )
     if scalar_by_key:
         meta = scalar_metadata or {}
         title = str(meta.get("title") or meta.get("attribute") or "simulation value")
         unit = str(meta.get("unit") or "")
-        cmap = "".join(c for c in str(meta.get("colormap") or "viridis")
-                       if c.isalnum() or c in "_-") or "viridis"
-        palette = str(meta.get("palette") or cmap).replace('"', '')
+        cmap = (
+            "".join(
+                c
+                for c in str(meta.get("colormap") or "viridis")
+                if c.isalnum() or c in "_-"
+            )
+            or "viridis"
+        )
+        palette = str(meta.get("palette") or cmap).replace('"', "")
         lo = float(meta.get("lo", min(scalar_by_key.values())))
         hi = float(meta.get("hi", max(scalar_by_key.values())))
-        lines.append(f"REMARK  NADOC_COLOR_VALUE {title} ({unit}) stored in B-factor column.".rstrip())
         lines.append(
-            f"REMARK  CHIMERAX color byattribute bfactor palette \"{palette}\" "
+            f"REMARK  NADOC_COLOR_VALUE {title} ({unit}) stored in B-factor column.".rstrip()
+        )
+        lines.append(
+            f'REMARK  CHIMERAX color byattribute bfactor palette "{palette}" '
             f"range {lo:.6g},{hi:.6g} target as"
         )
     if repaired_backbone_bonds:
@@ -1202,16 +1337,22 @@ def export_pdb(
     internal_offsets: dict[str, int] = {}
     internal_max_seq: dict[str, int] = {}
     for a in atoms:
-        internal_max_seq[a.chain_id] = max(internal_max_seq.get(a.chain_id, 0), a.seq_num)
+        internal_max_seq[a.chain_id] = max(
+            internal_max_seq.get(a.chain_id, 0), a.seq_num
+        )
     for a in atoms:
         if a.chain_id in internal_offsets:
             continue
         pdb_chain = _chain_char(a.chain_id)
         internal_offsets[a.chain_id] = chain_offsets.get(pdb_chain, 0)
-        chain_offsets[pdb_chain] = internal_offsets[a.chain_id] + internal_max_seq[a.chain_id]
+        chain_offsets[pdb_chain] = (
+            internal_offsets[a.chain_id] + internal_max_seq[a.chain_id]
+        )
 
     def _pdb_seq(a: Atom) -> int:
-        return a.seq_num if use_multi_models else internal_offsets[a.chain_id] + a.seq_num
+        return (
+            a.seq_num if use_multi_models else internal_offsets[a.chain_id] + a.seq_num
+        )
 
     # ── Connectivity ──────────────────────────────────────────────────────
     # CONECT below is the complete topology and addresses atoms by unique serial.
@@ -1224,7 +1365,7 @@ def export_pdb(
     for si, sj in non_std_bonds:
         all_model_bonds.append((si, sj))
 
-    for i, j in ([] if use_multi_models else non_std_bonds):
+    for i, j in [] if use_multi_models else non_std_bonds:
         a = atom_by_serial.get(i)
         b = atom_by_serial.get(j)
         if a is None or b is None:
@@ -1232,14 +1373,19 @@ def export_pdb(
         dx = (a.x - b.x) * 10.0
         dy = (a.y - b.y) * 10.0
         dz = (a.z - b.z) * 10.0
-        dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+        dist = math.sqrt(dx * dx + dy * dy + dz * dz)
         lines.append(_pdb_link_record(a, b, dist, _pdb_seq(a), _pdb_seq(b)))
 
     # ── ATOM records grouped by chain; emit TER after each chain ──────────
     from itertools import groupby
-    ter_serial = max((a.serial for a in atoms), default=-1) + 2  # first 1-based serial after all atoms
 
-    def _emit_chain_block(block_atoms: list[Atom], block_bonds: list[tuple[int, int]]) -> None:
+    ter_serial = (
+        max((a.serial for a in atoms), default=-1) + 2
+    )  # first 1-based serial after all atoms
+
+    def _emit_chain_block(
+        block_atoms: list[Atom], block_bonds: list[tuple[int, int]]
+    ) -> None:
         nonlocal ter_serial
         seq_fields: dict[int, str] = {}
         if viewer_terminals:
@@ -1258,7 +1404,10 @@ def export_pdb(
                 for chain_atoms in by_chain.values()
             ]
         else:
-            grouped = [list(items) for _, items in groupby(block_atoms, key=lambda a: a.chain_id)]
+            grouped = [
+                list(items)
+                for _, items in groupby(block_atoms, key=lambda a: a.chain_id)
+            ]
 
         for chain_atoms in grouped:
             for atom in chain_atoms:
@@ -1266,11 +1415,20 @@ def export_pdb(
                 seq_field = seq_fields.get(pdb_seq)
                 if seq_field is None:
                     seq_field = seq_fields[pdb_seq] = _h36(pdb_seq, 4)
-                lines.append(_pdb_atom_record(
-                    atom, chain=_chain_char(atom.chain_id), seq_num=pdb_seq,
-                    bfactor=(scalar_by_key.get(_scalar_key(atom), 0.0) if scalar_by_key else 0.0),
-                    serial_field=serial_fields[atom.serial],
-                    seq_field=seq_field))
+                lines.append(
+                    _pdb_atom_record(
+                        atom,
+                        chain=_chain_char(atom.chain_id),
+                        seq_num=pdb_seq,
+                        bfactor=(
+                            scalar_by_key.get(_scalar_key(atom), 0.0)
+                            if scalar_by_key
+                            else 0.0
+                        ),
+                        serial_field=serial_fields[atom.serial],
+                        seq_field=seq_field,
+                    )
+                )
             last = chain_atoms[-1]
             lines.append(
                 f"TER   {_h36(ter_serial, 5)}      "
@@ -1280,11 +1438,15 @@ def export_pdb(
         lines.extend(_pdb_conect_records(block_bonds, serial_fields))
 
     if use_multi_models:
-        for model_idx, start in enumerate(range(0, len(internal_chains), len(_CHAIN_CHARS)), 1):
-            chunk = set(internal_chains[start:start + len(_CHAIN_CHARS)])
+        for model_idx, start in enumerate(
+            range(0, len(internal_chains), len(_CHAIN_CHARS)), 1
+        ):
+            chunk = set(internal_chains[start : start + len(_CHAIN_CHARS)])
             block_atoms = [a for a in atoms if a.chain_id in chunk]
             serials = {a.serial for a in block_atoms}
-            block_bonds = [(i, j) for i, j in all_model_bonds if i in serials and j in serials]
+            block_bonds = [
+                (i, j) for i, j in all_model_bonds if i in serials and j in serials
+            ]
             lines.append(f"MODEL     {model_idx:4d}")
             _emit_chain_block(block_atoms, block_bonds)
             lines.append("ENDMDL")
@@ -1362,8 +1524,8 @@ def export_psf(
     lines.append(f"{len(atoms):>8d} !NATOM")
     for atom in atoms:
         serial_1 = atom.serial + 1
-        segid    = _psf_segid(atom.chain_id)
-        resid    = str(atom.seq_num)
+        segid = _psf_segid(atom.chain_id)
+        resid = str(atom.seq_num)
         atype, charge, mass = _charmm_params(atom)
         line = (
             f"{serial_1:>10d} "
@@ -1392,7 +1554,7 @@ def export_psf(
         bond_ints.append(0)
 
     for k in range(0, len(bond_ints), 8):
-        chunk = bond_ints[k:k + 8]
+        chunk = bond_ints[k : k + 8]
         # Drop trailing zero-padding on last line
         while chunk and chunk[-1] == 0:
             chunk.pop()
@@ -1402,8 +1564,12 @@ def export_psf(
     lines.append("")
 
     # ── Empty required sections ───────────────────────────────────────────
-    for section in ("!NTHETA: angles", "!NPHI: dihedrals",
-                    "!NIMPHI: impropers", "!NCRTERM: cross-terms"):
+    for section in (
+        "!NTHETA: angles",
+        "!NPHI: dihedrals",
+        "!NIMPHI: impropers",
+        "!NCRTERM: cross-terms",
+    ):
         lines.append(f"{0:>10d} {section}")
         lines.append("")
 
@@ -1421,7 +1587,7 @@ def export_psf(
 # Instead: render ONCE, cut each ATOM line at the coordinate columns, and per frame emit
 # prefix + 3 formatted floats + suffix.  Columns 31-54 are the only bytes that move.
 
-_PDB_COORD_START = 30   # 0-based slice bounds of the x/y/z columns (PDB cols 31-54)
+_PDB_COORD_START = 30  # 0-based slice bounds of the x/y/z columns (PDB cols 31-54)
 _PDB_COORD_END = 54
 
 
@@ -1451,13 +1617,17 @@ class MultiframePdbTemplate:
             prefix, serial, suffix = seg
             i = serial * 3
             # nm -> Å, same 8.3f fields _pdb_atom_record writes.
-            out.append(f"{prefix}{flat[i] * 10.0:8.3f}{flat[i + 1] * 10.0:8.3f}"
-                       f"{flat[i + 2] * 10.0:8.3f}{suffix}")
+            out.append(
+                f"{prefix}{flat[i] * 10.0:8.3f}{flat[i + 1] * 10.0:8.3f}"
+                f"{flat[i + 2] * 10.0:8.3f}{suffix}"
+            )
         out.append("ENDMDL")
         return "\n".join(out) + "\n"
 
 
-def build_multiframe_pdb_template(design, model, export_pdb_fn=None) -> MultiframePdbTemplate | None:
+def build_multiframe_pdb_template(
+    design, model, export_pdb_fn=None
+) -> MultiframePdbTemplate | None:
     """Render the model once and split it into a reusable multi-frame template.
 
     Returns None when the render can't be split safely — the ATOM-line count not matching
@@ -1480,7 +1650,7 @@ def build_multiframe_pdb_template(design, model, export_pdb_fn=None) -> Multifra
         if line.startswith(("ATOM", "HETATM")):
             k = len(atom_serials)
             if k >= len(atoms):
-                return None                       # more ATOM lines than atoms
+                return None  # more ATOM lines than atoms
             serial = atoms[k].serial
             body.append((line[:_PDB_COORD_START], serial, line[_PDB_COORD_END:]))
             atom_serials.append(serial)
@@ -1488,14 +1658,14 @@ def build_multiframe_pdb_template(design, model, export_pdb_fn=None) -> Multifra
         elif line.startswith("CONECT"):
             conect.append(line)
         elif line.startswith("END") and not line.startswith("ENDMDL"):
-            continue                              # re-emitted after the last model
+            continue  # re-emitted after the last model
         elif line.startswith(("MODEL", "ENDMDL")):
-            return None                           # multi-MODEL source; we add our own
+            return None  # multi-MODEL source; we add our own
         elif seen_atom:
-            body.append(line)                     # TER / ANISOU between atom records
+            body.append(line)  # TER / ANISOU between atom records
         else:
-            header.append(line)                   # REMARK / CRYST1 preamble
+            header.append(line)  # REMARK / CRYST1 preamble
 
     if len(atom_serials) != len(atoms):
-        return None                               # fewer ATOM lines than atoms
+        return None  # fewer ATOM lines than atoms
     return MultiframePdbTemplate(header, body, conect, atom_serials)

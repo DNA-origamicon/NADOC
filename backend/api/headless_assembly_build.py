@@ -125,12 +125,26 @@ def translation(x: float, y: float, z: float) -> Mat4x4:
     The last column carries ``(x, y, z)``; rotation block is identity.  Pass the
     result straight to :func:`add_inline_instance` / :func:`add_instance`.
     """
-    return Mat4x4(values=[
-        1.0, 0.0, 0.0, float(x),
-        0.0, 1.0, 0.0, float(y),
-        0.0, 0.0, 1.0, float(z),
-        0.0, 0.0, 0.0, 1.0,
-    ])
+    return Mat4x4(
+        values=[
+            1.0,
+            0.0,
+            0.0,
+            float(x),
+            0.0,
+            1.0,
+            0.0,
+            float(y),
+            0.0,
+            0.0,
+            1.0,
+            float(z),
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+        ]
+    )
 
 
 def new_assembly(name: str = "Untitled") -> Assembly:
@@ -155,13 +169,19 @@ def add_instance(source, *, name: str = "Part", transform=None) -> Assembly:
     :func:`add_inline_instance` / :func:`add_file_instance` for readability.
     """
     src = source.model_dump(mode="json") if hasattr(source, "model_dump") else source
-    _route_add_instance(AddInstanceRequest(
-        source=src, name=name, transform=_transform_dict(transform),
-    ))
+    _route_add_instance(
+        AddInstanceRequest(
+            source=src,
+            name=name,
+            transform=_transform_dict(transform),
+        )
+    )
     return assembly_state.get_or_404()
 
 
-def add_inline_instance(design: Design, *, name: str = "Part", transform=None) -> Assembly:
+def add_inline_instance(
+    design: Design, *, name: str = "Part", transform=None
+) -> Assembly:
     """Place a part whose Design is embedded inline (PartSourceInline).
 
     The whole ``design`` travels inside the assembly (no external ``.nadoc``
@@ -171,12 +191,14 @@ def add_inline_instance(design: Design, *, name: str = "Part", transform=None) -
     """
     return add_instance(
         {"type": "inline", "design": design.to_dict()},
-        name=name, transform=transform,
+        name=name,
+        transform=transform,
     )
 
 
-def add_file_instance(path: str, *, name: str = "Part", transform=None,
-                      sha256: str | None = None) -> Assembly:
+def add_file_instance(
+    path: str, *, name: str = "Part", transform=None, sha256: str | None = None
+) -> Assembly:
     """Place a part that references a workspace ``.nadoc`` file (PartSourceFile).
 
     ``path`` is relative to the project root / parts-library (the same resolution
@@ -213,10 +235,19 @@ def place_grid(
     Pin the result with :func:`tests.automation_harness.assert_instances_on_grid`
     (the placed instance origins land on the exact ``rows × cols`` lattice).
     """
-    for idx, (x, y, z) in enumerate(grid_translations(
-        rows, cols, pitch=pitch, row_pitch=row_pitch, plane=plane, center=center,
-    )):
-        add_inline_instance(design, name=f"{name}_{idx}", transform=translation(x, y, z))
+    for idx, (x, y, z) in enumerate(
+        grid_translations(
+            rows,
+            cols,
+            pitch=pitch,
+            row_pitch=row_pitch,
+            plane=plane,
+            center=center,
+        )
+    ):
+        add_inline_instance(
+            design, name=f"{name}_{idx}", transform=translation(x, y, z)
+        )
     return assembly_state.get_or_404()
 
 
@@ -244,11 +275,18 @@ def place_ring(
     (the placed origins lie on the ring of the requested radius at the exact angular
     step).
     """
-    for idx, (x, y, z) in enumerate(ring_translations(
-        n, radius=radius, plane=plane, start_angle_deg=start_angle_deg,
-        center=tuple(float(v) for v in center),
-    )):
-        add_inline_instance(design, name=f"{name}_{idx}", transform=translation(x, y, z))
+    for idx, (x, y, z) in enumerate(
+        ring_translations(
+            n,
+            radius=radius,
+            plane=plane,
+            start_angle_deg=start_angle_deg,
+            center=tuple(float(v) for v in center),
+        )
+    ):
+        add_inline_instance(
+            design, name=f"{name}_{idx}", transform=translation(x, y, z)
+        )
     return assembly_state.get_or_404()
 
 
@@ -280,11 +318,19 @@ def place_file_grid(
     :func:`~tests.automation_harness.assert_instances_from_file` (every slot resolves to
     the saved primitive's validated topology — a property the lattice oracle is blind to).
     """
-    for idx, (x, y, z) in enumerate(grid_translations(
-        rows, cols, pitch=pitch, row_pitch=row_pitch, plane=plane, center=center,
-    )):
+    for idx, (x, y, z) in enumerate(
+        grid_translations(
+            rows,
+            cols,
+            pitch=pitch,
+            row_pitch=row_pitch,
+            plane=plane,
+            center=center,
+        )
+    ):
         add_file_instance(
-            path, name=f"{name}_{idx}", transform=translation(x, y, z), sha256=sha256)
+            path, name=f"{name}_{idx}", transform=translation(x, y, z), sha256=sha256
+        )
     return assembly_state.get_or_404()
 
 
@@ -313,12 +359,18 @@ def place_file_ring(
     :func:`~tests.automation_harness.assert_instances_from_file` (every slot resolves to
     the saved primitive's topology).
     """
-    for idx, (x, y, z) in enumerate(ring_translations(
-        n, radius=radius, plane=plane, start_angle_deg=start_angle_deg,
-        center=tuple(float(v) for v in center),
-    )):
+    for idx, (x, y, z) in enumerate(
+        ring_translations(
+            n,
+            radius=radius,
+            plane=plane,
+            start_angle_deg=start_angle_deg,
+            center=tuple(float(v) for v in center),
+        )
+    ):
         add_file_instance(
-            path, name=f"{name}_{idx}", transform=translation(x, y, z), sha256=sha256)
+            path, name=f"{name}_{idx}", transform=translation(x, y, z), sha256=sha256
+        )
     return assembly_state.get_or_404()
 
 
@@ -330,9 +382,14 @@ def add_connector(instance_id: str, label: str, position, normal) -> Assembly:
     — :func:`define_mate` references two of these by label.  Records an
     ``assembly-add-connector`` feature-log entry.
     """
-    _route_add_connector(instance_id, AddConnectorRequest(
-        label=label, position=[float(v) for v in position], normal=[float(v) for v in normal],
-    ))
+    _route_add_connector(
+        instance_id,
+        AddConnectorRequest(
+            label=label,
+            position=[float(v) for v in position],
+            normal=[float(v) for v in normal],
+        ),
+    )
     return assembly_state.get_or_404()
 
 
@@ -361,16 +418,22 @@ def define_mate(
     ``spherical``; ``axis_*`` parameterise the moving DOF for the non-rigid kinds.
     Records an ``assembly-create-mate`` feature-log entry.
     """
-    _route_create_mate(CreateMateRequest(
-        child_connector=MateConnectorSpec(instance_id=child_instance_id, label=child_label),
-        parent_connector=MateConnectorSpec(instance_id=parent_instance_id, label=parent_label),
-        joint_type=joint_type,
-        name=name,
-        axis_origin=[float(v) for v in axis_origin],
-        axis_direction=[float(v) for v in axis_direction],
-        min_limit=min_limit,
-        max_limit=max_limit,
-    ))
+    _route_create_mate(
+        CreateMateRequest(
+            child_connector=MateConnectorSpec(
+                instance_id=child_instance_id, label=child_label
+            ),
+            parent_connector=MateConnectorSpec(
+                instance_id=parent_instance_id, label=parent_label
+            ),
+            joint_type=joint_type,
+            name=name,
+            axis_origin=[float(v) for v in axis_origin],
+            axis_direction=[float(v) for v in axis_direction],
+            min_limit=min_limit,
+            max_limit=max_limit,
+        )
+    )
     return assembly_state.get_or_404()
 
 
@@ -394,9 +457,14 @@ def drive_joint(
     it.  Pass ``silent=True`` to suppress the undo push (animation-playback style).
     Records an ``assembly`` mutation feature-log entry.
     """
-    _route_patch_joint(joint_id, PatchJointRequest(
-        current_value=float(value), silent=silent, endpoint_side=endpoint_side,
-    ))
+    _route_patch_joint(
+        joint_id,
+        PatchJointRequest(
+            current_value=float(value),
+            silent=silent,
+            endpoint_side=endpoint_side,
+        ),
+    )
     return assembly_state.get_or_404()
 
 
@@ -427,18 +495,20 @@ def define_gear(
     the parent side of a "backward"-authored revolute (the Big_wheel_base case).
     Records an ``assembly-create-gear`` feature-log entry.
     """
-    _route_create_gear_relation(CreateGearRelationRequest(
-        name=name,
-        joint_a_id=joint_a_id,
-        joint_b_id=joint_b_id,
-        endpoint_a_instance_id=endpoint_a_instance_id,
-        endpoint_b_instance_id=endpoint_b_instance_id,
-        endpoint_a_side=endpoint_a_side,
-        endpoint_b_side=endpoint_b_side,
-        ratio=ratio,
-        invert=invert,
-        capture_anchors_from_current=capture_anchors_from_current,
-    ))
+    _route_create_gear_relation(
+        CreateGearRelationRequest(
+            name=name,
+            joint_a_id=joint_a_id,
+            joint_b_id=joint_b_id,
+            endpoint_a_instance_id=endpoint_a_instance_id,
+            endpoint_b_instance_id=endpoint_b_instance_id,
+            endpoint_a_side=endpoint_a_side,
+            endpoint_b_side=endpoint_b_side,
+            ratio=ratio,
+            invert=invert,
+            capture_anchors_from_current=capture_anchors_from_current,
+        )
+    )
     return assembly_state.get_or_404()
 
 
@@ -474,17 +544,25 @@ def define_belt(
     :func:`tests.automation_harness.assert_gear_ratio` with ``expected_ratio =
     radius_a / radius_b``).  Records an ``assembly-create-belt`` feature-log entry.
     """
-    _route_create_belt_path(CreateBeltPathRequest(
-        name=name,
-        pulley_a=BeltPulleyRequest(
-            joint_id=joint_a_id, side=side_a, instance_id=instance_a_id,
-            connector_label=connector_a_label, radius=float(radius_a),
-        ),
-        pulley_b=BeltPulleyRequest(
-            joint_id=joint_b_id, side=side_b, instance_id=instance_b_id,
-            connector_label=connector_b_label, radius=float(radius_b),
-        ),
-    ))
+    _route_create_belt_path(
+        CreateBeltPathRequest(
+            name=name,
+            pulley_a=BeltPulleyRequest(
+                joint_id=joint_a_id,
+                side=side_a,
+                instance_id=instance_a_id,
+                connector_label=connector_a_label,
+                radius=float(radius_a),
+            ),
+            pulley_b=BeltPulleyRequest(
+                joint_id=joint_b_id,
+                side=side_b,
+                instance_id=instance_b_id,
+                connector_label=connector_b_label,
+                radius=float(radius_b),
+            ),
+        )
+    )
     return assembly_state.get_or_404()
 
 
@@ -513,12 +591,14 @@ def polymerize(
     Pin the result with :func:`tests.automation_harness.assert_polymer_chain` (every
     new copy sits on the ``delta``-power lattice + the count is exact).
     """
-    _route_polymerize_assembly(PolymerizeAssemblyRequest(
-        joint_id=joint_id,
-        count=count,
-        direction=direction,
-        additional_instance_ids=list(additional_instance_ids or []),
-    ))
+    _route_polymerize_assembly(
+        PolymerizeAssemblyRequest(
+            joint_id=joint_id,
+            count=count,
+            direction=direction,
+            additional_instance_ids=list(additional_instance_ids or []),
+        )
+    )
     return assembly_state.get_or_404()
 
 
@@ -547,11 +627,13 @@ def polymerize_periodic(
     (the derived repeat unit tiles the chain seamlessly at every junction + the chain is
     a single repeating unit — geometry ``canonical_assembly`` is blind to).
     """
-    _route_polymerize_periodic_assembly(PolymerizePeriodicRequest(
-        instance_id=instance_id,
-        count=count,
-        direction=direction,
-    ))
+    _route_polymerize_periodic_assembly(
+        PolymerizePeriodicRequest(
+            instance_id=instance_id,
+            count=count,
+            direction=direction,
+        )
+    )
     return assembly_state.get_or_404()
 
 
@@ -585,16 +667,18 @@ def bind_overhangs(
     round-trip, which ``canonical_assembly`` alone cannot prove because it does not
     fingerprint overhang sub-domains).
     """
-    _route_create_overhang_binding(CreateAssemblyOverhangBindingRequest(
-        instance_a_id=instance_a_id,
-        sub_domain_a_id=sub_domain_a_id,
-        overhang_a_id=overhang_a_id,
-        instance_b_id=instance_b_id,
-        sub_domain_b_id=sub_domain_b_id,
-        overhang_b_id=overhang_b_id,
-        binding_mode=binding_mode,
-        allow_n_wildcard=allow_n_wildcard,
-    ))
+    _route_create_overhang_binding(
+        CreateAssemblyOverhangBindingRequest(
+            instance_a_id=instance_a_id,
+            sub_domain_a_id=sub_domain_a_id,
+            overhang_a_id=overhang_a_id,
+            instance_b_id=instance_b_id,
+            sub_domain_b_id=sub_domain_b_id,
+            overhang_b_id=overhang_b_id,
+            binding_mode=binding_mode,
+            allow_n_wildcard=allow_n_wildcard,
+        )
+    )
     return assembly_state.get_or_404()
 
 
@@ -616,7 +700,8 @@ def patch_binding(
     if allow_n_wildcard is not None:
         fields["allow_n_wildcard"] = allow_n_wildcard
     _route_patch_overhang_binding(
-        binding_id, PatchAssemblyOverhangBindingRequest(**fields))
+        binding_id, PatchAssemblyOverhangBindingRequest(**fields)
+    )
     return assembly_state.get_or_404()
 
 

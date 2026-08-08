@@ -5,6 +5,7 @@ exactly ``delta · n_helices``, coincide at the baseline, stay on the dsDNA core
 deterministic.  Strategy-specific behaviour: uniform spreads evenly, incremental keeps the
 baseline marks fixed, deviation places at the prior sim's hotspot.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -81,7 +82,7 @@ def test_incremental_adds_at_largest_gap(sq_design):
     added = sorted(set(out[h.id]) - set(base.get(h.id, [])))
     assert len(added) == 1
     bp = added[0]
-    assert min(base[h.id]) < bp < max(base[h.id])    # landed between existing marks
+    assert min(base[h.id]) < bp < max(base[h.id])  # landed between existing marks
 
 
 def test_deviation_step_uses_hotspot(sq_design):
@@ -90,7 +91,7 @@ def test_deviation_step_uses_hotspot(sq_design):
     h = sorted(sq_design.helices, key=lambda x: x.id)[0]
     free = [c for c in core_candidates(sq_design, h) if c not in base.get(h.id, [])]
     hotspot = free[len(free) // 3]
-    dev = {(h.id, hotspot): 9.0}                       # one strong hotspot on this helix
+    dev = {(h.id, hotspot): 9.0}  # one strong hotspot on this helix
     out = place_deviation_step(sq_design, base, +1, dev)
     added = sorted(set(out[h.id]) - set(base.get(h.id, [])))
     assert len(added) == 1
@@ -121,9 +122,15 @@ def test_deviation_step_is_sequential_chain(sq_design):
 def test_strategies_coincide_at_delta_zero(sq_design):
     """Every strategy reduces to the baseline at delta = 0 (the shared anchor)."""
     base = baseline_skips(sq_design, skip_period=8)
-    assert place_uniform(sq_design, base, 0) == {k: sorted(v) for k, v in base.items() if v}
-    assert place_incremental(sq_design, base, 0) == {k: sorted(v) for k, v in base.items() if v}
-    assert place_deviation_step(sq_design, base, 0, {}) == {k: sorted(v) for k, v in base.items() if v}
+    assert place_uniform(sq_design, base, 0) == {
+        k: sorted(v) for k, v in base.items() if v
+    }
+    assert place_incremental(sq_design, base, 0) == {
+        k: sorted(v) for k, v in base.items() if v
+    }
+    assert place_deviation_step(sq_design, base, 0, {}) == {
+        k: sorted(v) for k, v in base.items() if v
+    }
 
 
 def test_determinism(sq_design):

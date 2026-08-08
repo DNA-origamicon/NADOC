@@ -78,13 +78,16 @@ def _scaffold_crossovers(design: Design) -> list[Crossover]:
         return half.strand.value == expected
 
     return [
-        xo for xo in design.crossovers
+        xo
+        for xo in design.crossovers
         if _scaffold_half(xo.half_a) and _scaffold_half(xo.half_b)
     ]
 
 
 def scaffold_routing_invariants(
-    design: Design, *, require_seams: bool = True,
+    design: Design,
+    *,
+    require_seams: bool = True,
     min_margin: int = MIN_SSDNA_MARGIN,
 ) -> list[str]:
     """Return a list of invariant violations for a routed scaffold (empty == OK).

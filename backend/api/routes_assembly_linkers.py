@@ -36,6 +36,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.api import assembly_state
+
 # _assembly_response is the shared assembly response helper (the assembly-side
 # twin of crud.py's _design_response); _linker_geometry_for_assembly is the
 # bespoke linker-geometry compute helper that stays in assembly.py (see module
@@ -48,32 +49,37 @@ router = APIRouter()
 
 # ── Request bodies ────────────────────────────────────────────────────────────
 
+
 class AddLinkerHelixRequest(BaseModel):
-    axis_start: list[float]         # [x, y, z] nm
-    axis_end:   list[float]         # [x, y, z] nm
-    length_bp:  int
+    axis_start: list[float]  # [x, y, z] nm
+    axis_end: list[float]  # [x, y, z] nm
+    length_bp: int
     phase_offset: float = 0.0
-    id: Optional[str] = None        # auto-generated if omitted
+    id: Optional[str] = None  # auto-generated if omitted
 
 
 class AddLinkerStrandRequest(BaseModel):
-    id: Optional[str] = None        # prefix with "__vsc__" for virtual scaffold connections
+    id: Optional[str] = None  # prefix with "__vsc__" for virtual scaffold connections
     strand_type: str = "staple"
     domains: list[dict] = []
     color: Optional[str] = None
-    notes: Optional[str] = None     # JSON string; VSC metadata stored here
+    notes: Optional[str] = None  # JSON string; VSC metadata stored here
 
 
 # ── Linker helices ────────────────────────────────────────────────────────────
+
 
 @router.post("/assembly/linker-helices", status_code=201)
 def add_linker_helix(body: AddLinkerHelixRequest) -> dict:
     """Append a linker Helix to assembly.assembly_helices."""
     import uuid as _uuid
+
     assembly = assembly_state.get_or_404()
     helix = Helix(
         id=body.id or str(_uuid.uuid4()),
-        axis_start=Vec3(x=body.axis_start[0], y=body.axis_start[1], z=body.axis_start[2]),
+        axis_start=Vec3(
+            x=body.axis_start[0], y=body.axis_start[1], z=body.axis_start[2]
+        ),
         axis_end=Vec3(x=body.axis_end[0], y=body.axis_end[1], z=body.axis_end[2]),
         length_bp=body.length_bp,
         phase_offset=body.phase_offset,
@@ -102,6 +108,7 @@ def delete_linker_helix(helix_id: str) -> dict:
 
 # ── Linker strands ────────────────────────────────────────────────────────────
 
+
 @router.post("/assembly/linker-strands", status_code=201)
 def add_linker_strand(body: AddLinkerStrandRequest) -> dict:
     """
@@ -112,6 +119,7 @@ def add_linker_strand(body: AddLinkerStrandRequest) -> dict:
     """
     import uuid as _uuid
     from backend.core.models import Domain, StrandType
+
     assembly = assembly_state.get_or_404()
 
     strand_id = body.id or str(_uuid.uuid4())
@@ -121,7 +129,7 @@ def add_linker_strand(body: AddLinkerStrandRequest) -> dict:
         stype = StrandType.STAPLE
 
     domains = []
-    for d in (body.domains or []):
+    for d in body.domains or []:
         try:
             domains.append(Domain(**d))
         except Exception:
@@ -157,6 +165,7 @@ def delete_linker_strand(strand_id: str) -> dict:
 
 
 # ── Linker geometry ───────────────────────────────────────────────────────────
+
 
 @router.get("/assembly/linker-geometry", status_code=200)
 def get_linker_geometry() -> dict:

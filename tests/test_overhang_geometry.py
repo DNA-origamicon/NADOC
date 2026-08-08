@@ -23,7 +23,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from backend.core.constants import BDNA_RISE_PER_BP, BDNA_TWIST_PER_BP_RAD, HONEYCOMB_HELIX_SPACING
+from backend.core.constants import (
+    BDNA_RISE_PER_BP,
+    BDNA_TWIST_PER_BP_RAD,
+    HONEYCOMB_HELIX_SPACING,
+)
 from backend.core.geometry import nucleotide_positions
 from backend.core.lattice import (
     _lattice_direction,
@@ -39,8 +43,8 @@ from backend.core.models import Design, Direction, Helix, LatticeType, StrandTyp
 
 # ── Tolerances ────────────────────────────────────────────────────────────────
 
-Z_TOL     = 0.001   # nm — Z position must match within one thousandth of a nm
-DIST_MAX  = HONEYCOMB_HELIX_SPACING + 0.01   # nm — 0.4% tolerance over HC spacing
+Z_TOL = 0.001  # nm — Z position must match within one thousandth of a nm
+DIST_MAX = HONEYCOMB_HELIX_SPACING + 0.01  # nm — 0.4% tolerance over HC spacing
 
 # ── 6HB cell layout ───────────────────────────────────────────────────────────
 
@@ -48,6 +52,7 @@ CELLS_6HB = [(0, 1), (0, 2), (0, 3), (1, 1), (1, 2), (1, 3)]
 
 
 # ── Design fixtures ───────────────────────────────────────────────────────────
+
 
 def _make_stapled_6hb(length_bp: int = 42) -> Design:
     """6HB HC design for geometry tests."""
@@ -65,24 +70,32 @@ def _shift_design_z(design: Design, bp_offset: int) -> Design:
     shift = bp_offset * BDNA_RISE_PER_BP
     new_helices = []
     for h in design.helices:
-        new_start    = Vec3(x=h.axis_start.x, y=h.axis_start.y, z=h.axis_start.z + shift)
-        new_end      = Vec3(x=h.axis_end.x,   y=h.axis_end.y,   z=h.axis_end.z   + shift)
+        new_start = Vec3(x=h.axis_start.x, y=h.axis_start.y, z=h.axis_start.z + shift)
+        new_end = Vec3(x=h.axis_end.x, y=h.axis_end.y, z=h.axis_end.z + shift)
         new_bp_start = h.bp_start + bp_offset
-        new_helices.append(h.model_copy(update={
-            "axis_start": new_start,
-            "axis_end":   new_end,
-            "bp_start":   new_bp_start,
-        }))
+        new_helices.append(
+            h.model_copy(
+                update={
+                    "axis_start": new_start,
+                    "axis_end": new_end,
+                    "bp_start": new_bp_start,
+                }
+            )
+        )
 
     # Shift all domain bp values by the same offset.
     new_strands = []
     for strand in design.strands:
         new_domains = []
         for d in strand.domains:
-            new_domains.append(d.model_copy(update={
-                "start_bp": d.start_bp + bp_offset,
-                "end_bp":   d.end_bp   + bp_offset,
-            }))
+            new_domains.append(
+                d.model_copy(
+                    update={
+                        "start_bp": d.start_bp + bp_offset,
+                        "end_bp": d.end_bp + bp_offset,
+                    }
+                )
+            )
         new_strands.append(strand.model_copy(update={"domains": new_domains}))
 
     return design.model_copy(update={"helices": new_helices, "strands": new_strands})
@@ -90,10 +103,15 @@ def _shift_design_z(design: Design, bp_offset: int) -> Design:
 
 # ── Geometry helpers ──────────────────────────────────────────────────────────
 
+
 def _nick_z_correct(helix: Helix, bp_index: int) -> float:
     """Expected Z of the nick, using the correct local-bp formula."""
     local_i = bp_index - helix.bp_start
-    rise = BDNA_RISE_PER_BP if helix.axis_end.z >= helix.axis_start.z else -BDNA_RISE_PER_BP
+    rise = (
+        BDNA_RISE_PER_BP
+        if helix.axis_end.z >= helix.axis_start.z
+        else -BDNA_RISE_PER_BP
+    )
     return helix.axis_start.z + local_i * rise
 
 
@@ -102,7 +120,9 @@ def _backbone_pos_at(helix: Helix, bp_index: int, direction: Direction) -> np.nd
     for nuc in nucleotide_positions(helix):
         if nuc.bp_index == bp_index and nuc.direction == direction:
             return nuc.position
-    raise ValueError(f"bp_index={bp_index} direction={direction} not found in helix {helix.id!r}")
+    raise ValueError(
+        f"bp_index={bp_index} direction={direction} not found in helix {helix.id!r}"
+    )
 
 
 # ── Site enumeration ──────────────────────────────────────────────────────────
@@ -143,6 +163,7 @@ def _all_overhang_sites(design: Design) -> list[dict]:
 
     # Build ID → (row, col) from helix ID pattern h_{plane}_{row}_{col}
     import re
+
     _ID_RE = re.compile(r"^h_\w+_(-?\d+)_(-?\d+)$")
 
     def _row_col(hid: str):
@@ -171,12 +192,12 @@ def _all_overhang_sites(design: Design) -> list[dict]:
         if strand.strand_type != StrandType.STAPLE or not strand.domains:
             continue
         first = strand.domains[0]
-        last  = strand.domains[-1]
+        last = strand.domains[-1]
         ends = [
             (first.helix_id, first.start_bp, first.direction, True),
-            (last.helix_id,  last.end_bp,    last.direction,  False),
+            (last.helix_id, last.end_bp, last.direction, False),
         ]
-        for (hid, bp_idx, direc, is_5p) in ends:
+        for hid, bp_idx, direc, is_5p in ends:
             helix = helix_by_id.get(hid)
             if helix is None:
                 continue
@@ -186,20 +207,28 @@ def _all_overhang_sites(design: Design) -> list[dict]:
             z = _nick_z_correct(helix, bp_idx)
             for nr, nc in _hc_valid_cells_at_spacing(row, col):
                 if not _occupied_at_z(nr, nc, z):
-                    sites.append({
-                        "helix_id":     hid,
-                        "bp_index":     bp_idx,
-                        "direction":    direc,
-                        "is_five_prime": is_5p,
-                        "neighbor_row": nr,
-                        "neighbor_col": nc,
-                    })
+                    sites.append(
+                        {
+                            "helix_id": hid,
+                            "bp_index": bp_idx,
+                            "direction": direc,
+                            "is_five_prime": is_5p,
+                            "neighbor_row": nr,
+                            "neighbor_col": nc,
+                        }
+                    )
     # Deduplicate by (helix_id, bp_index, direction, is_five_prime, neighbor)
     seen = set()
     unique = []
     for s in sites:
-        key = (s["helix_id"], s["bp_index"], s["direction"], s["is_five_prime"],
-               s["neighbor_row"], s["neighbor_col"])
+        key = (
+            s["helix_id"],
+            s["bp_index"],
+            s["direction"],
+            s["is_five_prime"],
+            s["neighbor_row"],
+            s["neighbor_col"],
+        )
         if key not in seen:
             seen.add(key)
             unique.append(s)
@@ -208,7 +237,10 @@ def _all_overhang_sites(design: Design) -> list[dict]:
 
 # ── Measurement helpers ───────────────────────────────────────────────────────
 
-def _check_site(design: Design, site: dict, z_tol: float = Z_TOL, dist_max: float = DIST_MAX):
+
+def _check_site(
+    design: Design, site: dict, z_tol: float = Z_TOL, dist_max: float = DIST_MAX
+):
     """
     Extrude an overhang at *site* and return (delta_z, distance) where:
       delta_z   = |overhang axis_start.z − nick Z|
@@ -216,18 +248,20 @@ def _check_site(design: Design, site: dict, z_tol: float = Z_TOL, dist_max: floa
     """
     result = make_overhang_extrude(
         design,
-        helix_id     = site["helix_id"],
-        bp_index     = site["bp_index"],
-        direction    = site["direction"],
-        is_five_prime = site["is_five_prime"],
-        neighbor_row = site["neighbor_row"],
-        neighbor_col = site["neighbor_col"],
-        length_bp    = 8,
+        helix_id=site["helix_id"],
+        bp_index=site["bp_index"],
+        direction=site["direction"],
+        is_five_prime=site["is_five_prime"],
+        neighbor_row=site["neighbor_row"],
+        neighbor_col=site["neighbor_col"],
+        length_bp=8,
     )
     # Find the new overhang helix (not in original design)
     orig_ids = {h.id for h in design.helices}
     new_helices = [h for h in result.helices if h.id not in orig_ids]
-    assert len(new_helices) == 1, f"Expected exactly 1 new helix, got {len(new_helices)}"
+    assert len(new_helices) == 1, (
+        f"Expected exactly 1 new helix, got {len(new_helices)}"
+    )
     ovhg_helix = new_helices[0]
 
     # Orig helix for nick Z reference
@@ -245,26 +279,27 @@ def _check_site(design: Design, site: dict, z_tol: float = Z_TOL, dist_max: floa
         junction_z = ovhg_helix.axis_start.z
     # After axis-flip, bp_start <= bp_index.  Junction bp is always bp_index.
     junction_bp = site["bp_index"]
-    local_junc  = junction_bp - ovhg_helix.bp_start
+    local_junc = junction_bp - ovhg_helix.bp_start
     rise_per_bp = BDNA_RISE_PER_BP
-    junction_z  = ovhg_helix.axis_start.z + local_junc * rise_per_bp * (1 if axis_span_z >= 0 else -1)
+    junction_z = ovhg_helix.axis_start.z + local_junc * rise_per_bp * (
+        1 if axis_span_z >= 0 else -1
+    )
     delta_z = abs(junction_z - expected_z)
 
     # Backbone positions at the crossover
-    nick_dir    = site["direction"]
-    nick_bp     = site["bp_index"]
-    nick_pos    = _backbone_pos_at(orig_helix, nick_bp, nick_dir)
+    nick_dir = site["direction"]
+    nick_bp = site["bp_index"]
+    nick_pos = _backbone_pos_at(orig_helix, nick_bp, nick_dir)
 
     # Junction bp on the overhang helix
-    ovhg_bp     = junction_bp
+    ovhg_bp = junction_bp
     # Direction of overhang domain
     ovhg_strand = next(
-        s for s in result.strands
-        if any(d.helix_id == ovhg_helix.id for d in s.domains)
+        s for s in result.strands if any(d.helix_id == ovhg_helix.id for d in s.domains)
     )
     ovhg_domain = next(d for d in ovhg_strand.domains if d.helix_id == ovhg_helix.id)
-    ovhg_dir    = ovhg_domain.direction
-    ovhg_pos    = _backbone_pos_at(ovhg_helix, ovhg_bp, ovhg_dir)
+    ovhg_dir = ovhg_domain.direction
+    ovhg_pos = _backbone_pos_at(ovhg_helix, ovhg_bp, ovhg_dir)
 
     distance = float(np.linalg.norm(ovhg_pos - nick_pos))
 
@@ -272,6 +307,7 @@ def _check_site(design: Design, site: dict, z_tol: float = Z_TOL, dist_max: floa
 
 
 # ── Tests: native design (bp_start = 0) ──────────────────────────────────────
+
 
 @pytest.fixture(scope="module")
 def design_native():
@@ -286,7 +322,9 @@ def test_overhang_z_match_native(design_native):
     for site in sites:
         dz, _ = _check_site(design_native, site)
         if dz > Z_TOL:
-            failures.append(f"  site {site['helix_id']} bp={site['bp_index']}: Δz={dz:.4f} nm")
+            failures.append(
+                f"  site {site['helix_id']} bp={site['bp_index']}: Δz={dz:.4f} nm"
+            )
     assert not failures, "Z mismatch on native design:\n" + "\n".join(failures)
 
 
@@ -297,13 +335,13 @@ def test_overhang_all_ends_6hb(design_native):
     for site in sites:
         result = make_overhang_extrude(
             design_native,
-            helix_id      = site["helix_id"],
-            bp_index      = site["bp_index"],
-            direction     = site["direction"],
-            is_five_prime = site["is_five_prime"],
-            neighbor_row  = site["neighbor_row"],
-            neighbor_col  = site["neighbor_col"],
-            length_bp     = 8,
+            helix_id=site["helix_id"],
+            bp_index=site["bp_index"],
+            direction=site["direction"],
+            is_five_prime=site["is_five_prime"],
+            neighbor_row=site["neighbor_row"],
+            neighbor_col=site["neighbor_col"],
+            length_bp=8,
         )
         orig_ids = {h.id for h in design_native.helices}
         new_helices = [h for h in result.helices if h.id not in orig_ids]
@@ -319,13 +357,13 @@ def test_overhang_extrude_uses_canonical_lattice_phase(design_native):
     for site in sites:
         result = make_overhang_extrude(
             design_native,
-            helix_id      = site["helix_id"],
-            bp_index      = site["bp_index"],
-            direction     = site["direction"],
-            is_five_prime = site["is_five_prime"],
-            neighbor_row  = site["neighbor_row"],
-            neighbor_col  = site["neighbor_col"],
-            length_bp     = 8,
+            helix_id=site["helix_id"],
+            bp_index=site["bp_index"],
+            direction=site["direction"],
+            is_five_prime=site["is_five_prime"],
+            neighbor_row=site["neighbor_row"],
+            neighbor_col=site["neighbor_col"],
+            length_bp=8,
         )
         orig_ids = {h.id for h in design_native.helices}
         ovhg_helix = next(h for h in result.helices if h.id not in orig_ids)
@@ -346,6 +384,7 @@ def test_overhang_extrude_uses_canonical_lattice_phase(design_native):
 
 # ── Tests: offset design (bp_start = 30, simulates caDNAno import) ───────────
 
+
 @pytest.fixture(scope="module")
 def design_offset():
     d = _make_stapled_6hb(42)
@@ -360,11 +399,16 @@ def test_overhang_z_match_offset(design_offset):
     for site in sites:
         dz, _ = _check_site(design_offset, site)
         if dz > Z_TOL:
-            failures.append(f"  site {site['helix_id']} bp={site['bp_index']}: Δz={dz:.4f} nm")
-    assert not failures, "Z mismatch on bp_start=30 design (z_nick bug):\n" + "\n".join(failures)
+            failures.append(
+                f"  site {site['helix_id']} bp={site['bp_index']}: Δz={dz:.4f} nm"
+            )
+    assert not failures, "Z mismatch on bp_start=30 design (z_nick bug):\n" + "\n".join(
+        failures
+    )
 
 
 # ── Test: PATCH overhang sequence resizes geometry correctly ──────────────────
+
 
 def test_patch_overhang_resizes_helix(design_native):
     """Patching an overhang sequence to a new length must resize axis_end and domain bp."""
@@ -376,13 +420,13 @@ def test_patch_overhang_resizes_helix(design_native):
     # Extrude with 8 bp
     d8 = make_overhang_extrude(
         design_native,
-        helix_id      = site["helix_id"],
-        bp_index      = site["bp_index"],
-        direction     = site["direction"],
-        is_five_prime = site["is_five_prime"],
-        neighbor_row  = site["neighbor_row"],
-        neighbor_col  = site["neighbor_col"],
-        length_bp     = 8,
+        helix_id=site["helix_id"],
+        bp_index=site["bp_index"],
+        direction=site["direction"],
+        is_five_prime=site["is_five_prime"],
+        neighbor_row=site["neighbor_row"],
+        neighbor_col=site["neighbor_col"],
+        length_bp=8,
     )
     orig_ids = {h.id for h in design_native.helices}
     ovhg_id = next(h.id for h in d8.helices if h.id not in orig_ids)
@@ -390,29 +434,40 @@ def test_patch_overhang_resizes_helix(design_native):
     # Simulate PATCH sequence → 12 nt (same as patch_overhang endpoint logic)
     import numpy as _np
 
-    new_seq = "ACGTACGTACGT"   # 12 nt
+    new_seq = "ACGTACGTACGT"  # 12 nt
     new_length_bp = len(new_seq)
 
     # Replicate resize logic from crud.patch_overhang
     helix = next(h for h in d8.helices if h.id == ovhg_id)
-    ax = _np.array([
-        helix.axis_end.x - helix.axis_start.x,
-        helix.axis_end.y - helix.axis_start.y,
-        helix.axis_end.z - helix.axis_start.z,
-    ], dtype=float)
+    ax = _np.array(
+        [
+            helix.axis_end.x - helix.axis_start.x,
+            helix.axis_end.y - helix.axis_start.y,
+            helix.axis_end.z - helix.axis_start.z,
+        ],
+        dtype=float,
+    )
     ax_len = float(_np.linalg.norm(ax))
     unit = ax / ax_len
     new_len_nm = new_length_bp * BDNA_RISE_PER_BP
-    new_end_arr = _np.array([
-        helix.axis_start.x,
-        helix.axis_start.y,
-        helix.axis_start.z,
-    ]) + unit * new_len_nm
+    new_end_arr = (
+        _np.array(
+            [
+                helix.axis_start.x,
+                helix.axis_start.y,
+                helix.axis_start.z,
+            ]
+        )
+        + unit * new_len_nm
+    )
 
     # Check: new axis length ≈ new_len_nm
-    new_ax_len = float(_np.linalg.norm(new_end_arr - _np.array([
-        helix.axis_start.x, helix.axis_start.y, helix.axis_start.z
-    ])))
+    new_ax_len = float(
+        _np.linalg.norm(
+            new_end_arr
+            - _np.array([helix.axis_start.x, helix.axis_start.y, helix.axis_start.z])
+        )
+    )
     assert abs(new_ax_len - new_len_nm) < 1e-9, (
         f"Resized axis length {new_ax_len:.6f} ≠ expected {new_len_nm:.6f}"
     )
@@ -425,6 +480,7 @@ def test_patch_overhang_resizes_helix(design_native):
 
 
 # ── Tests: overhang domain added to cluster ──────────────────────────────────
+
 
 def test_overhang_extrude_adds_domain_to_domain_level_cluster(design_native):
     """When the parent helix belongs to a domain-level cluster, the new overhang
@@ -444,11 +500,19 @@ def test_overhang_extrude_adds_domain_to_domain_level_cluster(design_native):
             first = s.domains[0]
             last = s.domains[-1]
             if site["is_five_prime"]:
-                if first.helix_id == parent_helix_id and first.start_bp == site["bp_index"] and first.direction == site["direction"]:
+                if (
+                    first.helix_id == parent_helix_id
+                    and first.start_bp == site["bp_index"]
+                    and first.direction == site["direction"]
+                ):
                     parent_strand = s
                     break
             else:
-                if last.helix_id == parent_helix_id and last.end_bp == site["bp_index"] and last.direction == site["direction"]:
+                if (
+                    last.helix_id == parent_helix_id
+                    and last.end_bp == site["bp_index"]
+                    and last.direction == site["direction"]
+                ):
                     parent_strand = s
                     break
     assert parent_strand is not None
@@ -472,18 +536,24 @@ def test_overhang_extrude_adds_domain_to_domain_level_cluster(design_native):
 
     result_pre_reconcile = make_overhang_extrude(
         design_with_cluster,
-        helix_id      = site["helix_id"],
-        bp_index      = site["bp_index"],
-        direction     = site["direction"],
-        is_five_prime = site["is_five_prime"],
-        neighbor_row  = site["neighbor_row"],
-        neighbor_col  = site["neighbor_col"],
-        length_bp     = 8,
+        helix_id=site["helix_id"],
+        bp_index=site["bp_index"],
+        direction=site["direction"],
+        is_five_prime=site["is_five_prime"],
+        neighbor_row=site["neighbor_row"],
+        neighbor_col=site["neighbor_col"],
+        length_bp=8,
     )
 
-    from backend.core.cluster_reconcile import MutationReport, reconcile_cluster_membership
+    from backend.core.cluster_reconcile import (
+        MutationReport,
+        reconcile_cluster_membership,
+    )
+
     orig_ids = {h.id for h in design_native.helices}
-    new_helix_id = next(h.id for h in result_pre_reconcile.helices if h.id not in orig_ids)
+    new_helix_id = next(
+        h.id for h in result_pre_reconcile.helices if h.id not in orig_ids
+    )
     result = reconcile_cluster_membership(
         design_with_cluster,
         result_pre_reconcile,
@@ -528,7 +598,11 @@ def test_overhang_extrude_shifts_domain_refs_on_prepend(design_native):
     for s in design_native.strands:
         if s.strand_type == StrandType.STAPLE and s.domains:
             first = s.domains[0]
-            if first.helix_id == parent_helix_id and first.start_bp == site_5p["bp_index"] and first.direction == site_5p["direction"]:
+            if (
+                first.helix_id == parent_helix_id
+                and first.start_bp == site_5p["bp_index"]
+                and first.direction == site_5p["direction"]
+            ):
                 parent_strand = s
                 break
     assert parent_strand is not None
@@ -550,18 +624,24 @@ def test_overhang_extrude_shifts_domain_refs_on_prepend(design_native):
 
     result_pre_reconcile = make_overhang_extrude(
         design_with_cluster,
-        helix_id      = site_5p["helix_id"],
-        bp_index      = site_5p["bp_index"],
-        direction     = site_5p["direction"],
-        is_five_prime = True,
-        neighbor_row  = site_5p["neighbor_row"],
-        neighbor_col  = site_5p["neighbor_col"],
-        length_bp     = 8,
+        helix_id=site_5p["helix_id"],
+        bp_index=site_5p["bp_index"],
+        direction=site_5p["direction"],
+        is_five_prime=True,
+        neighbor_row=site_5p["neighbor_row"],
+        neighbor_col=site_5p["neighbor_col"],
+        length_bp=8,
     )
 
-    from backend.core.cluster_reconcile import MutationReport, reconcile_cluster_membership
+    from backend.core.cluster_reconcile import (
+        MutationReport,
+        reconcile_cluster_membership,
+    )
+
     orig_helix_ids = {h.id for h in design_native.helices}
-    new_helix_id = next(h.id for h in result_pre_reconcile.helices if h.id not in orig_helix_ids)
+    new_helix_id = next(
+        h.id for h in result_pre_reconcile.helices if h.id not in orig_helix_ids
+    )
     result = reconcile_cluster_membership(
         design_with_cluster,
         result_pre_reconcile,
@@ -585,18 +665,33 @@ def test_overhang_extrude_shifts_domain_refs_on_prepend(design_native):
         dr.strand_id == parent_strand.id and dr.domain_index == 0
         for dr in ct.domain_ids
     )
-    assert found_new, "Prepended overhang domain (index 0) not found in cluster domain_ids"
+    assert found_new, (
+        "Prepended overhang domain (index 0) not found in cluster domain_ids"
+    )
 
 
 # ── Tests: overhang_id preservation across domain operations ─────────────
+
 
 def test_merge_adjacent_preserves_overhang_id():
     """_merge_adjacent_domains preserves overhang_id on same-tag merges."""
     from backend.core.lattice import _merge_adjacent_domains
     from backend.core.models import Domain
 
-    d1 = Domain(helix_id="h1", start_bp=0, end_bp=3, direction=Direction.FORWARD, overhang_id="ovhg_test")
-    d2 = Domain(helix_id="h1", start_bp=4, end_bp=7, direction=Direction.FORWARD, overhang_id="ovhg_test")
+    d1 = Domain(
+        helix_id="h1",
+        start_bp=0,
+        end_bp=3,
+        direction=Direction.FORWARD,
+        overhang_id="ovhg_test",
+    )
+    d2 = Domain(
+        helix_id="h1",
+        start_bp=4,
+        end_bp=7,
+        direction=Direction.FORWARD,
+        overhang_id="ovhg_test",
+    )
     merged = _merge_adjacent_domains([d1, d2])
     assert len(merged) == 1
     assert merged[0].overhang_id == "ovhg_test"
@@ -621,8 +716,20 @@ def test_merge_different_overhang_ids_not_merged():
     from backend.core.lattice import _merge_adjacent_domains
     from backend.core.models import Domain
 
-    d1 = Domain(helix_id="h1", start_bp=0, end_bp=3, direction=Direction.FORWARD, overhang_id="ovhg_a")
-    d2 = Domain(helix_id="h1", start_bp=4, end_bp=7, direction=Direction.FORWARD, overhang_id="ovhg_b")
+    d1 = Domain(
+        helix_id="h1",
+        start_bp=0,
+        end_bp=3,
+        direction=Direction.FORWARD,
+        overhang_id="ovhg_a",
+    )
+    d2 = Domain(
+        helix_id="h1",
+        start_bp=4,
+        end_bp=7,
+        direction=Direction.FORWARD,
+        overhang_id="ovhg_b",
+    )
     merged = _merge_adjacent_domains([d1, d2])
     assert len(merged) == 2
 
@@ -635,18 +742,36 @@ def test_ligate_and_merge_cross_type_drops_overhang(design_native):
     # Create two strands: s1 ends with a regular domain, s2 starts with an overhang domain,
     # both on the same helix and adjacent.
     helix = design_native.helices[0]
-    s1 = Strand(id="s1", domains=[
-        Domain(helix_id=helix.id, start_bp=0, end_bp=5, direction=Direction.FORWARD),
-    ], strand_type=StrandType.STAPLE)
-    s2 = Strand(id="s2", domains=[
-        Domain(helix_id=helix.id, start_bp=6, end_bp=10, direction=Direction.FORWARD, overhang_id="ovhg_test"),
-    ], strand_type=StrandType.STAPLE)
+    s1 = Strand(
+        id="s1",
+        domains=[
+            Domain(
+                helix_id=helix.id, start_bp=0, end_bp=5, direction=Direction.FORWARD
+            ),
+        ],
+        strand_type=StrandType.STAPLE,
+    )
+    s2 = Strand(
+        id="s2",
+        domains=[
+            Domain(
+                helix_id=helix.id,
+                start_bp=6,
+                end_bp=10,
+                direction=Direction.FORWARD,
+                overhang_id="ovhg_test",
+            ),
+        ],
+        strand_type=StrandType.STAPLE,
+    )
     ovhg_spec = OverhangSpec(id="ovhg_test", helix_id=helix.id, strand_id="s2")
 
-    d = design_native.model_copy(update={
-        "strands": list(design_native.strands) + [s1, s2],
-        "overhangs": list(design_native.overhangs) + [ovhg_spec],
-    })
+    d = design_native.model_copy(
+        update={
+            "strands": list(design_native.strands) + [s1, s2],
+            "overhangs": list(design_native.overhangs) + [ovhg_spec],
+        }
+    )
 
     result = _ligate_and_merge(d, s1, s2)
 
@@ -667,19 +792,39 @@ def test_ligate_and_merge_remaps_strand_id(design_native):
     helix = design_native.helices[0]
     helix2 = design_native.helices[1]
     # s1 has one domain, s2 has a regular domain followed by an overhang on a different helix.
-    s1 = Strand(id="s1", domains=[
-        Domain(helix_id=helix.id, start_bp=0, end_bp=5, direction=Direction.FORWARD),
-    ], strand_type=StrandType.STAPLE)
-    s2 = Strand(id="s2", domains=[
-        Domain(helix_id=helix.id, start_bp=6, end_bp=10, direction=Direction.FORWARD),
-        Domain(helix_id=helix2.id, start_bp=0, end_bp=5, direction=Direction.REVERSE, overhang_id="ovhg_s2"),
-    ], strand_type=StrandType.STAPLE)
+    s1 = Strand(
+        id="s1",
+        domains=[
+            Domain(
+                helix_id=helix.id, start_bp=0, end_bp=5, direction=Direction.FORWARD
+            ),
+        ],
+        strand_type=StrandType.STAPLE,
+    )
+    s2 = Strand(
+        id="s2",
+        domains=[
+            Domain(
+                helix_id=helix.id, start_bp=6, end_bp=10, direction=Direction.FORWARD
+            ),
+            Domain(
+                helix_id=helix2.id,
+                start_bp=0,
+                end_bp=5,
+                direction=Direction.REVERSE,
+                overhang_id="ovhg_s2",
+            ),
+        ],
+        strand_type=StrandType.STAPLE,
+    )
     ovhg_spec = OverhangSpec(id="ovhg_s2", helix_id=helix2.id, strand_id="s2")
 
-    d = design_native.model_copy(update={
-        "strands": list(design_native.strands) + [s1, s2],
-        "overhangs": list(design_native.overhangs) + [ovhg_spec],
-    })
+    d = design_native.model_copy(
+        update={
+            "strands": list(design_native.strands) + [s1, s2],
+            "overhangs": list(design_native.overhangs) + [ovhg_spec],
+        }
+    )
 
     result = _ligate_and_merge(d, s1, s2)
 
@@ -691,6 +836,7 @@ def test_ligate_and_merge_remaps_strand_id(design_native):
 def _minimal_design_with_strand(strand, overhangs=None):
     """Create a minimal Design containing only the given strand(s) and helix stubs."""
     from backend.core.models import Design, Helix, LatticeType, Vec3
+
     helix_ids = set()
     if isinstance(strand, list):
         strands = strand
@@ -702,12 +848,19 @@ def _minimal_design_with_strand(strand, overhangs=None):
         for d in strand.domains:
             helix_ids.add(d.helix_id)
     helices = [
-        Helix(id=hid, axis_start=Vec3(x=0, y=0, z=0), axis_end=Vec3(x=0, y=0, z=14),
-              bp_start=0, length_bp=42)
+        Helix(
+            id=hid,
+            axis_start=Vec3(x=0, y=0, z=0),
+            axis_end=Vec3(x=0, y=0, z=14),
+            bp_start=0,
+            length_bp=42,
+        )
         for hid in helix_ids
     ]
     return Design(
-        helices=helices, strands=strands, lattice_type=LatticeType.HONEYCOMB,
+        helices=helices,
+        strands=strands,
+        lattice_type=LatticeType.HONEYCOMB,
         overhangs=overhangs or [],
     )
 
@@ -717,11 +870,23 @@ def test_make_nick_propagates_overhang_to_terminal():
     from backend.core.lattice import make_nick
     from backend.core.models import Domain, OverhangSpec, Strand
 
-    s = Strand(id="test_strand", domains=[
-        Domain(helix_id="hA", start_bp=0, end_bp=10, direction=Direction.FORWARD),
-        Domain(helix_id="hA", start_bp=11, end_bp=20, direction=Direction.FORWARD, overhang_id="ovhg_nick_test"),
-    ], strand_type=StrandType.STAPLE)
-    ovhg_spec = OverhangSpec(id="ovhg_nick_test", helix_id="hA", strand_id="test_strand")
+    s = Strand(
+        id="test_strand",
+        domains=[
+            Domain(helix_id="hA", start_bp=0, end_bp=10, direction=Direction.FORWARD),
+            Domain(
+                helix_id="hA",
+                start_bp=11,
+                end_bp=20,
+                direction=Direction.FORWARD,
+                overhang_id="ovhg_nick_test",
+            ),
+        ],
+        strand_type=StrandType.STAPLE,
+    )
+    ovhg_spec = OverhangSpec(
+        id="ovhg_nick_test", helix_id="hA", strand_id="test_strand"
+    )
     d = _minimal_design_with_strand(s, overhangs=[ovhg_spec])
 
     # Nick within the overhang domain (last domain, index 1) at bp 15
@@ -747,10 +912,20 @@ def test_make_nick_5prime_overhang_stays_left():
     from backend.core.lattice import make_nick
     from backend.core.models import Domain, OverhangSpec, Strand
 
-    s = Strand(id="test_strand", domains=[
-        Domain(helix_id="hA", start_bp=0, end_bp=10, direction=Direction.FORWARD, overhang_id="ovhg_5p"),
-        Domain(helix_id="hA", start_bp=11, end_bp=20, direction=Direction.FORWARD),
-    ], strand_type=StrandType.STAPLE)
+    s = Strand(
+        id="test_strand",
+        domains=[
+            Domain(
+                helix_id="hA",
+                start_bp=0,
+                end_bp=10,
+                direction=Direction.FORWARD,
+                overhang_id="ovhg_5p",
+            ),
+            Domain(helix_id="hA", start_bp=11, end_bp=20, direction=Direction.FORWARD),
+        ],
+        strand_type=StrandType.STAPLE,
+    )
     ovhg_spec = OverhangSpec(id="ovhg_5p", helix_id="hA", strand_id="test_strand")
     d = _minimal_design_with_strand(s, overhangs=[ovhg_spec])
 
@@ -768,11 +943,23 @@ def test_make_nick_updates_overhang_strand_id():
     from backend.core.lattice import make_nick
     from backend.core.models import Domain, OverhangSpec, Strand
 
-    s = Strand(id="test_strand", domains=[
-        Domain(helix_id="hA", start_bp=0, end_bp=20, direction=Direction.FORWARD),
-        Domain(helix_id="hA", start_bp=21, end_bp=30, direction=Direction.FORWARD, overhang_id="ovhg_strand_test"),
-    ], strand_type=StrandType.STAPLE)
-    ovhg_spec = OverhangSpec(id="ovhg_strand_test", helix_id="hA", strand_id="test_strand")
+    s = Strand(
+        id="test_strand",
+        domains=[
+            Domain(helix_id="hA", start_bp=0, end_bp=20, direction=Direction.FORWARD),
+            Domain(
+                helix_id="hA",
+                start_bp=21,
+                end_bp=30,
+                direction=Direction.FORWARD,
+                overhang_id="ovhg_strand_test",
+            ),
+        ],
+        strand_type=StrandType.STAPLE,
+    )
+    ovhg_spec = OverhangSpec(
+        id="ovhg_strand_test", helix_id="hA", strand_id="test_strand"
+    )
     d = _minimal_design_with_strand(s, overhangs=[ovhg_spec])
 
     # Nick within the first domain
@@ -794,7 +981,9 @@ CELLS_4SQ = [(0, 0), (0, 1), (1, 0), (1, 1)]
 
 def _make_stapled_4sq(length_bp: int = 32) -> Design:
     """4-helix SQ bundle."""
-    return make_bundle_design(CELLS_4SQ, length_bp=length_bp, lattice_type=LatticeType.SQUARE)
+    return make_bundle_design(
+        CELLS_4SQ, length_bp=length_bp, lattice_type=LatticeType.SQUARE
+    )
 
 
 def test_sq_overhang_uses_square_position():
@@ -803,7 +992,8 @@ def test_sq_overhang_uses_square_position():
     # Find a 3' staple end on helix (0,0) and extrude toward (0,1)
     helix_00 = next(h for h in d.helices if tuple(h.grid_pos) == (0, 0))
     staple = next(
-        s for s in d.strands
+        s
+        for s in d.strands
         if s.strand_type == StrandType.STAPLE
         and any(dom.helix_id == helix_00.id for dom in s.domains)
     )
@@ -811,13 +1001,13 @@ def test_sq_overhang_uses_square_position():
 
     result = make_overhang_extrude(
         d,
-        helix_id     = last_dom.helix_id,
-        bp_index     = last_dom.end_bp,
-        direction    = last_dom.direction,
-        is_five_prime = False,
-        neighbor_row = 0,
-        neighbor_col = 2,   # unoccupied SQ neighbor
-        length_bp    = 8,
+        helix_id=last_dom.helix_id,
+        bp_index=last_dom.end_bp,
+        direction=last_dom.direction,
+        is_five_prime=False,
+        neighbor_row=0,
+        neighbor_col=2,  # unoccupied SQ neighbor
+        length_bp=8,
     )
 
     orig_ids = {h.id for h in d.helices}
@@ -829,7 +1019,9 @@ def test_sq_overhang_uses_square_position():
     assert abs(ovhg_helix.axis_start.x - sx) < 0.001
     assert abs(ovhg_helix.axis_start.y - sy) < 0.001
     # Verify it doesn't accidentally match HC position (they differ)
-    assert abs(sx - hx) > 0.01 or abs(sy - hy) > 0.01, "SQ and HC positions shouldn't be identical"
+    assert abs(sx - hx) > 0.01 or abs(sy - hy) > 0.01, (
+        "SQ and HC positions shouldn't be identical"
+    )
 
 
 def test_overhang_helix_has_grid_pos():
@@ -840,13 +1032,13 @@ def test_overhang_helix_has_grid_pos():
     site = sites[0]
     result = make_overhang_extrude(
         d,
-        helix_id     = site["helix_id"],
-        bp_index     = site["bp_index"],
-        direction    = site["direction"],
-        is_five_prime = site["is_five_prime"],
-        neighbor_row = site["neighbor_row"],
-        neighbor_col = site["neighbor_col"],
-        length_bp    = 8,
+        helix_id=site["helix_id"],
+        bp_index=site["bp_index"],
+        direction=site["direction"],
+        is_five_prime=site["is_five_prime"],
+        neighbor_row=site["neighbor_row"],
+        neighbor_col=site["neighbor_col"],
+        length_bp=8,
     )
     orig_ids = {h.id for h in d.helices}
     ovhg_helix = next(h for h in result.helices if h.id not in orig_ids)
@@ -854,6 +1046,7 @@ def test_overhang_helix_has_grid_pos():
 
 
 # ── Tests: −Z overhang domain direction in cadnano 2D ────────────────────────
+
 
 def test_minus_z_overhang_domain_extends_leftward():
     """For −Z overhang, domain bp range must extend leftward from bp_index in 2D."""
@@ -877,21 +1070,24 @@ def test_minus_z_overhang_domain_extends_leftward():
     length_bp = 8
     result = make_overhang_extrude(
         d,
-        helix_id     = minus_z_site["helix_id"],
-        bp_index     = minus_z_site["bp_index"],
-        direction    = minus_z_site["direction"],
-        is_five_prime = minus_z_site["is_five_prime"],
-        neighbor_row = minus_z_site["neighbor_row"],
-        neighbor_col = minus_z_site["neighbor_col"],
-        length_bp    = length_bp,
+        helix_id=minus_z_site["helix_id"],
+        bp_index=minus_z_site["bp_index"],
+        direction=minus_z_site["direction"],
+        is_five_prime=minus_z_site["is_five_prime"],
+        neighbor_row=minus_z_site["neighbor_row"],
+        neighbor_col=minus_z_site["neighbor_col"],
+        length_bp=length_bp,
     )
     orig_ids = {h.id for h in d.helices}
     ovhg_helix = next(h for h in result.helices if h.id not in orig_ids)
     ovhg_strand = next(
-        s for s in result.strands
+        s
+        for s in result.strands
         if any(dom.helix_id == ovhg_helix.id for dom in s.domains)
     )
-    ovhg_domain = next(dom for dom in ovhg_strand.domains if dom.helix_id == ovhg_helix.id)
+    ovhg_domain = next(
+        dom for dom in ovhg_strand.domains if dom.helix_id == ovhg_helix.id
+    )
 
     # In cadnano 2D, domain horizontal extent is [min(start_bp, end_bp), max(start_bp, end_bp)].
     # For −Z overhang the domain must be to the LEFT of bp_index:
@@ -926,13 +1122,13 @@ def test_minus_z_overhang_axis_is_plus_z():
 
     result = make_overhang_extrude(
         d,
-        helix_id     = minus_z_site["helix_id"],
-        bp_index     = minus_z_site["bp_index"],
-        direction    = minus_z_site["direction"],
-        is_five_prime = minus_z_site["is_five_prime"],
-        neighbor_row = minus_z_site["neighbor_row"],
-        neighbor_col = minus_z_site["neighbor_col"],
-        length_bp    = 8,
+        helix_id=minus_z_site["helix_id"],
+        bp_index=minus_z_site["bp_index"],
+        direction=minus_z_site["direction"],
+        is_five_prime=minus_z_site["is_five_prime"],
+        neighbor_row=minus_z_site["neighbor_row"],
+        neighbor_col=minus_z_site["neighbor_col"],
+        length_bp=8,
     )
     orig_ids = {h.id for h in d.helices}
     ovhg_helix = next(h for h in result.helices if h.id not in orig_ids)
@@ -960,13 +1156,13 @@ def test_minus_z_overhang_junction_z_correct():
 
     result = make_overhang_extrude(
         d,
-        helix_id     = minus_z_site["helix_id"],
-        bp_index     = minus_z_site["bp_index"],
-        direction    = minus_z_site["direction"],
-        is_five_prime = minus_z_site["is_five_prime"],
-        neighbor_row = minus_z_site["neighbor_row"],
-        neighbor_col = minus_z_site["neighbor_col"],
-        length_bp    = 8,
+        helix_id=minus_z_site["helix_id"],
+        bp_index=minus_z_site["bp_index"],
+        direction=minus_z_site["direction"],
+        is_five_prime=minus_z_site["is_five_prime"],
+        neighbor_row=minus_z_site["neighbor_row"],
+        neighbor_col=minus_z_site["neighbor_col"],
+        length_bp=8,
     )
     orig_ids = {h.id for h in d.helices}
     ovhg_helix = next(h for h in result.helices if h.id not in orig_ids)
@@ -1000,21 +1196,24 @@ def test_plus_z_overhang_unchanged():
     length_bp = 8
     result = make_overhang_extrude(
         d,
-        helix_id     = plus_z_site["helix_id"],
-        bp_index     = plus_z_site["bp_index"],
-        direction    = plus_z_site["direction"],
-        is_five_prime = plus_z_site["is_five_prime"],
-        neighbor_row = plus_z_site["neighbor_row"],
-        neighbor_col = plus_z_site["neighbor_col"],
-        length_bp    = length_bp,
+        helix_id=plus_z_site["helix_id"],
+        bp_index=plus_z_site["bp_index"],
+        direction=plus_z_site["direction"],
+        is_five_prime=plus_z_site["is_five_prime"],
+        neighbor_row=plus_z_site["neighbor_row"],
+        neighbor_col=plus_z_site["neighbor_col"],
+        length_bp=length_bp,
     )
     orig_ids = {h.id for h in d.helices}
     ovhg_helix = next(h for h in result.helices if h.id not in orig_ids)
     ovhg_strand = next(
-        s for s in result.strands
+        s
+        for s in result.strands
         if any(dom.helix_id == ovhg_helix.id for dom in s.domains)
     )
-    ovhg_domain = next(dom for dom in ovhg_strand.domains if dom.helix_id == ovhg_helix.id)
+    ovhg_domain = next(
+        dom for dom in ovhg_strand.domains if dom.helix_id == ovhg_helix.id
+    )
 
     bp = plus_z_site["bp_index"]
     # +Z overhang: domain extends rightward from bp_index
@@ -1027,6 +1226,7 @@ def test_plus_z_overhang_unchanged():
 
 
 # ── Tests: shared overhang helix at same lattice cell ─────────────────────────
+
 
 def _find_two_sites_same_cell(design):
     """Find two overhang sites targeting the same neighbor (row, col).
@@ -1054,13 +1254,13 @@ def test_two_overhangs_same_cell_share_helix():
     # Extrude first overhang
     d1 = make_overhang_extrude(
         d,
-        helix_id      = site_a["helix_id"],
-        bp_index      = site_a["bp_index"],
-        direction     = site_a["direction"],
-        is_five_prime = site_a["is_five_prime"],
-        neighbor_row  = site_a["neighbor_row"],
-        neighbor_col  = site_a["neighbor_col"],
-        length_bp     = 8,
+        helix_id=site_a["helix_id"],
+        bp_index=site_a["bp_index"],
+        direction=site_a["direction"],
+        is_five_prime=site_a["is_five_prime"],
+        neighbor_row=site_a["neighbor_row"],
+        neighbor_col=site_a["neighbor_col"],
+        length_bp=8,
     )
     orig_ids = {h.id for h in d.helices}
     ovhg_helices_after_first = [h for h in d1.helices if h.id not in orig_ids]
@@ -1070,13 +1270,13 @@ def test_two_overhangs_same_cell_share_helix():
     # Extrude second overhang to the same cell
     d2 = make_overhang_extrude(
         d1,
-        helix_id      = site_b["helix_id"],
-        bp_index      = site_b["bp_index"],
-        direction     = site_b["direction"],
-        is_five_prime = site_b["is_five_prime"],
-        neighbor_row  = site_b["neighbor_row"],
-        neighbor_col  = site_b["neighbor_col"],
-        length_bp     = 8,
+        helix_id=site_b["helix_id"],
+        bp_index=site_b["bp_index"],
+        direction=site_b["direction"],
+        is_five_prime=site_b["is_five_prime"],
+        neighbor_row=site_b["neighbor_row"],
+        neighbor_col=site_b["neighbor_col"],
+        length_bp=8,
     )
 
     # Should still be only 1 helix at that grid position (not 2)
@@ -1090,7 +1290,9 @@ def test_two_overhangs_same_cell_share_helix():
 
     # Both overhang domains must be on the shared helix
     ovhg_domains = [
-        dom for s in d2.strands for dom in s.domains
+        dom
+        for s in d2.strands
+        for dom in s.domains
         if dom.helix_id == shared_helix_id and dom.overhang_id is not None
     ]
     assert len(ovhg_domains) == 2, (
@@ -1102,10 +1304,7 @@ def test_two_overhangs_same_cell_share_helix():
     assert len(shared_specs) == 2
 
     # Both crossovers must reference the shared helix
-    shared_xovers = [
-        x for x in d2.crossovers
-        if x.half_b.helix_id == shared_helix_id
-    ]
+    shared_xovers = [x for x in d2.crossovers if x.half_b.helix_id == shared_helix_id]
     assert len(shared_xovers) == 2
 
     # Helix bp range covers both domains
@@ -1128,9 +1327,12 @@ def test_shared_helix_extends_backward():
 
     d1 = make_overhang_extrude(
         d,
-        helix_id=site_a["helix_id"], bp_index=site_a["bp_index"],
-        direction=site_a["direction"], is_five_prime=site_a["is_five_prime"],
-        neighbor_row=site_a["neighbor_row"], neighbor_col=site_a["neighbor_col"],
+        helix_id=site_a["helix_id"],
+        bp_index=site_a["bp_index"],
+        direction=site_a["direction"],
+        is_five_prime=site_a["is_five_prime"],
+        neighbor_row=site_a["neighbor_row"],
+        neighbor_col=site_a["neighbor_col"],
         length_bp=8,
     )
     orig_ids = {h.id for h in d.helices}
@@ -1140,6 +1342,7 @@ def test_shared_helix_extends_backward():
 
     # Compute nucleotide positions BEFORE the second extrusion
     from backend.core.geometry import nucleotide_positions as nuc_pos
+
     nucs_before = nuc_pos(helix_after_first)
     # Pick a nucleotide from the first domain to check position stability
     ref_nuc = nucs_before[0]
@@ -1148,9 +1351,12 @@ def test_shared_helix_extends_backward():
 
     d2 = make_overhang_extrude(
         d1,
-        helix_id=site_b["helix_id"], bp_index=site_b["bp_index"],
-        direction=site_b["direction"], is_five_prime=site_b["is_five_prime"],
-        neighbor_row=site_b["neighbor_row"], neighbor_col=site_b["neighbor_col"],
+        helix_id=site_b["helix_id"],
+        bp_index=site_b["bp_index"],
+        direction=site_b["direction"],
+        is_five_prime=site_b["is_five_prime"],
+        neighbor_row=site_b["neighbor_row"],
+        neighbor_col=site_b["neighbor_col"],
         length_bp=8,
     )
     shared = next(h for h in d2.helices if h.id not in orig_ids)
@@ -1163,7 +1369,11 @@ def test_shared_helix_extends_backward():
     # Existing nucleotide positions must not shift
     nucs_after = nuc_pos(shared)
     ref_after = next(
-        (n for n in nucs_after if n.bp_index == ref_bp and n.direction == ref_nuc.direction),
+        (
+            n
+            for n in nucs_after
+            if n.bp_index == ref_bp and n.direction == ref_nuc.direction
+        ),
         None,
     )
     assert ref_after is not None, f"bp_index={ref_bp} not found after extension"
@@ -1199,15 +1409,22 @@ def _make_design_with_stale_overhang() -> Design:
     )
     scaffold = Strand(
         id="scaf1",
-        domains=[Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)
+        ],
         strand_type=StrandType.SCAFFOLD,
     )
     ovhg_id = "ovhg_inline_stap1_5p"
     staple = Strand(
         id="stap1",
         domains=[
-            Domain(helix_id="h0", start_bp=41, end_bp=36, direction=Direction.REVERSE,
-                   overhang_id=ovhg_id),
+            Domain(
+                helix_id="h0",
+                start_bp=41,
+                end_bp=36,
+                direction=Direction.REVERSE,
+                overhang_id=ovhg_id,
+            ),
             Domain(helix_id="h0", start_bp=35, end_bp=0, direction=Direction.REVERSE),
         ],
         strand_type=StrandType.STAPLE,
@@ -1259,7 +1476,9 @@ def _make_design_with_valid_overhang() -> Design:
     )
     scaffold = Strand(
         id="scaf1",
-        domains=[Domain(helix_id="h0", start_bp=5, end_bp=41, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=5, end_bp=41, direction=Direction.FORWARD)
+        ],
         strand_type=StrandType.SCAFFOLD,
     )
     staple = Strand(
@@ -1306,7 +1525,10 @@ def test_overhang_rotation_axis_native(design_native):
     apply_overhang_rotation_if_needed), so axis and backbone beads stay aligned.
     """
     from backend.api.crud import _geometry_for_design
-    from backend.core.deformation import _apply_ovhg_rotations_to_axes, deformed_helix_axes
+    from backend.core.deformation import (
+        _apply_ovhg_rotations_to_axes,
+        deformed_helix_axes,
+    )
 
     sites = _all_overhang_sites(design_native)
     assert sites
@@ -1314,9 +1536,12 @@ def test_overhang_rotation_axis_native(design_native):
 
     d = make_overhang_extrude(
         design_native,
-        helix_id=site["helix_id"], bp_index=site["bp_index"],
-        direction=site["direction"], is_five_prime=site["is_five_prime"],
-        neighbor_row=site["neighbor_row"], neighbor_col=site["neighbor_col"],
+        helix_id=site["helix_id"],
+        bp_index=site["bp_index"],
+        direction=site["direction"],
+        is_five_prime=site["is_five_prime"],
+        neighbor_row=site["neighbor_row"],
+        neighbor_col=site["neighbor_col"],
         length_bp=8,
     )
     orig_ids = {h.id for h in design_native.helices}
@@ -1329,16 +1554,20 @@ def test_overhang_rotation_axis_native(design_native):
     _apply_ovhg_rotations_to_axes(d, axes_pre, nucs_pre)
     ax_pre = next(ax for ax in axes_pre if ax["helix_id"] == ovhg_helix_id)
     start_pre = np.array(ax_pre["start"])
-    end_pre   = np.array(ax_pre["end"])
+    end_pre = np.array(ax_pre["end"])
 
     # Apply 90° rotation about Y axis
     quat_90_y = [0.0, math.sin(math.pi / 4), 0.0, math.cos(math.pi / 4)]
-    d_rot = d.model_copy(update={
-        "overhangs": [
-            o.model_copy(update={"rotation": quat_90_y}) if o.id == ovhg_spec.id else o
-            for o in d.overhangs
-        ]
-    })
+    d_rot = d.model_copy(
+        update={
+            "overhangs": [
+                o.model_copy(update={"rotation": quat_90_y})
+                if o.id == ovhg_spec.id
+                else o
+                for o in d.overhangs
+            ]
+        }
+    )
 
     nucs_post = _geometry_for_design(d_rot)
     axes_post = deformed_helix_axes(d_rot)
@@ -1353,8 +1582,10 @@ def test_overhang_rotation_axis_native(design_native):
     )
 
     # Axis length must be preserved (rotation is rigid)
-    pre_len  = float(np.linalg.norm(end_pre  - start_pre))
-    post_len = float(np.linalg.norm(np.array(ax_post["end"]) - np.array(ax_post["start"])))
+    pre_len = float(np.linalg.norm(end_pre - start_pre))
+    post_len = float(
+        np.linalg.norm(np.array(ax_post["end"]) - np.array(ax_post["start"]))
+    )
     assert abs(pre_len - post_len) < 0.01, (
         f"Axis length changed under rotation: {pre_len:.4f} → {post_len:.4f} nm"
     )
@@ -1369,7 +1600,10 @@ def test_overhang_rotation_axis_cadnano_style():
     After recentering, applying a 90° Y rotation must move the axis end correctly.
     """
     from backend.api.crud import _geometry_for_design, _recenter_design
-    from backend.core.deformation import _apply_ovhg_rotations_to_axes, deformed_helix_axes
+    from backend.core.deformation import (
+        _apply_ovhg_rotations_to_axes,
+        deformed_helix_axes,
+    )
 
     d = _make_stapled_6hb(42)  # helices NOT centred (cx ≈ 3.897, cy ≈ 2.25)
 
@@ -1380,15 +1614,18 @@ def test_overhang_rotation_axis_cadnano_style():
     # Extrude overhang — pivot stored in pre-recenter coordinates
     d_extruded = make_overhang_extrude(
         d,
-        helix_id=site["helix_id"], bp_index=site["bp_index"],
-        direction=site["direction"], is_five_prime=site["is_five_prime"],
-        neighbor_row=site["neighbor_row"], neighbor_col=site["neighbor_col"],
+        helix_id=site["helix_id"],
+        bp_index=site["bp_index"],
+        direction=site["direction"],
+        is_five_prime=site["is_five_prime"],
+        neighbor_row=site["neighbor_row"],
+        neighbor_col=site["neighbor_col"],
         length_bp=8,
     )
     orig_ids = {h.id for h in d.helices}
-    ovhg_helix_id  = next(h.id for h in d_extruded.helices if h.id not in orig_ids)
+    ovhg_helix_id = next(h.id for h in d_extruded.helices if h.id not in orig_ids)
     ovhg_helix_pre = next(h for h in d_extruded.helices if h.id == ovhg_helix_id)
-    ovhg_spec_pre  = next(o for o in d_extruded.overhangs if o.helix_id == ovhg_helix_id)
+    ovhg_spec_pre = next(o for o in d_extruded.overhangs if o.helix_id == ovhg_helix_id)
 
     # Pivot before recentering must match pre-recenter axis_start XY
     assert abs(ovhg_spec_pre.pivot[0] - ovhg_helix_pre.axis_start.x) < 1e-6
@@ -1397,7 +1634,9 @@ def test_overhang_rotation_axis_cadnano_style():
     # Recenter — Fix A: pivot must be shifted by the same (-cx, -cy) as the helices
     d_centered = _recenter_design(d_extruded)
     ovhg_helix_post = next(h for h in d_centered.helices if h.id == ovhg_helix_id)
-    ovhg_spec_post  = next(o for o in d_centered.overhangs if o.helix_id == ovhg_helix_id)
+    ovhg_spec_post = next(
+        o for o in d_centered.overhangs if o.helix_id == ovhg_helix_id
+    )
 
     assert abs(ovhg_spec_post.pivot[0] - ovhg_helix_post.axis_start.x) < 1e-6, (
         f"pivot.x={ovhg_spec_post.pivot[0]:.6f} != axis_start.x={ovhg_helix_post.axis_start.x:.6f}"
@@ -1408,15 +1647,19 @@ def test_overhang_rotation_axis_cadnano_style():
 
     # Apply 90° Y rotation and verify the axis arrow moves correctly
     quat_90_y = [0.0, math.sin(math.pi / 4), 0.0, math.cos(math.pi / 4)]
-    d_rot = d_centered.model_copy(update={
-        "overhangs": [
-            o.model_copy(update={"rotation": quat_90_y}) if o.id == ovhg_spec_post.id else o
-            for o in d_centered.overhangs
-        ]
-    })
+    d_rot = d_centered.model_copy(
+        update={
+            "overhangs": [
+                o.model_copy(update={"rotation": quat_90_y})
+                if o.id == ovhg_spec_post.id
+                else o
+                for o in d_centered.overhangs
+            ]
+        }
+    )
 
-    nucs_pre  = _geometry_for_design(d_centered)
-    axes_pre  = deformed_helix_axes(d_centered)
+    nucs_pre = _geometry_for_design(d_centered)
+    axes_pre = deformed_helix_axes(d_centered)
     _apply_ovhg_rotations_to_axes(d_centered, axes_pre, nucs_pre)
     ax_pre = next(ax for ax in axes_pre if ax["helix_id"] == ovhg_helix_id)
 
@@ -1430,8 +1673,10 @@ def test_overhang_rotation_axis_cadnano_style():
         f"Axis end did not move after 90° rotation on centered design: {end_dist:.4f} nm"
     )
 
-    pre_len  = float(np.linalg.norm(np.array(ax_pre["end"])  - np.array(ax_pre["start"])))
-    post_len = float(np.linalg.norm(np.array(ax_post["end"]) - np.array(ax_post["start"])))
+    pre_len = float(np.linalg.norm(np.array(ax_pre["end"]) - np.array(ax_pre["start"])))
+    post_len = float(
+        np.linalg.norm(np.array(ax_post["end"]) - np.array(ax_post["start"]))
+    )
     assert abs(pre_len - post_len) < 0.01, (
         f"Axis length changed under rotation: {pre_len:.4f} → {post_len:.4f} nm"
     )
@@ -1447,7 +1692,10 @@ def test_cadnano_overhang_axes_use_trimmed_physical_span():
     """
     from backend.api.crud import _geometry_for_design, _recenter_design
     from backend.core.cadnano import import_cadnano
-    from backend.core.deformation import _apply_ovhg_rotations_to_axes, deformed_helix_axes
+    from backend.core.deformation import (
+        _apply_ovhg_rotations_to_axes,
+        deformed_helix_axes,
+    )
     from backend.core.lattice import autodetect_all_overhangs
 
     path = Path("Examples/cadnano/Ultimate Polymer Hinge 191016.json")
@@ -1480,8 +1728,12 @@ def test_cadnano_overhang_axes_use_trimmed_physical_span():
             lo = min(dom.start_bp, dom.end_bp)
             hi = max(dom.start_bp, dom.end_bp)
             ovhg_axis = axes_by_id[dom.helix_id]["ovhg_axes"][dom.overhang_id]
-            start_err = float(np.linalg.norm(np.array(ovhg_axis["start"]) - axis_point(h, lo)))
-            end_err = float(np.linalg.norm(np.array(ovhg_axis["end"]) - axis_point(h, hi + 1)))
+            start_err = float(
+                np.linalg.norm(np.array(ovhg_axis["start"]) - axis_point(h, lo))
+            )
+            end_err = float(
+                np.linalg.norm(np.array(ovhg_axis["end"]) - axis_point(h, hi + 1))
+            )
             if start_err > 0.01 or end_err > 0.01:
                 failures.append(
                     f"{dom.overhang_id} {dom.helix_id} [{lo},{hi}] "
@@ -1489,7 +1741,9 @@ def test_cadnano_overhang_axes_use_trimmed_physical_span():
                 )
 
     assert checked == 36
-    assert not failures, "ovhg_axes domain-span mismatches:\n" + "\n".join(failures[:20])
+    assert not failures, "ovhg_axes domain-span mismatches:\n" + "\n".join(
+        failures[:20]
+    )
 
 
 def test_shared_inline_overhang_rotation_emits_domain_axis_without_moving_parent():
@@ -1500,21 +1754,41 @@ def test_shared_inline_overhang_rotation_emits_domain_axis_without_moving_parent
     rotation so 3D domain-end sprites rebuild with the overhang domain.
     """
     from backend.api.crud import _geometry_for_design
-    from backend.core.deformation import _apply_ovhg_rotations_to_axes, _rot_from_quaternion, deformed_helix_axes
+    from backend.core.deformation import (
+        _apply_ovhg_rotations_to_axes,
+        _rot_from_quaternion,
+        deformed_helix_axes,
+    )
     from backend.core.models import Domain, OverhangSpec, Strand
 
     ovhg_id = "ovhg_inline_shared"
-    strand = Strand(id="stap", domains=[
-        Domain(helix_id="hA", start_bp=0, end_bp=10, direction=Direction.FORWARD),
-        Domain(helix_id="hA", start_bp=11, end_bp=20, direction=Direction.FORWARD, overhang_id=ovhg_id),
-    ], strand_type=StrandType.STAPLE)
-    scaffold = Strand(id="scaf", domains=[
-        Domain(helix_id="hA", start_bp=0, end_bp=41, direction=Direction.REVERSE),
-    ], strand_type=StrandType.SCAFFOLD)
+    strand = Strand(
+        id="stap",
+        domains=[
+            Domain(helix_id="hA", start_bp=0, end_bp=10, direction=Direction.FORWARD),
+            Domain(
+                helix_id="hA",
+                start_bp=11,
+                end_bp=20,
+                direction=Direction.FORWARD,
+                overhang_id=ovhg_id,
+            ),
+        ],
+        strand_type=StrandType.STAPLE,
+    )
+    scaffold = Strand(
+        id="scaf",
+        domains=[
+            Domain(helix_id="hA", start_bp=0, end_bp=41, direction=Direction.REVERSE),
+        ],
+        strand_type=StrandType.SCAFFOLD,
+    )
     rotation = [0.0, math.sin(math.radians(22.5)), 0.0, math.cos(math.radians(22.5))]
     design = _minimal_design_with_strand(
         [strand, scaffold],
-        overhangs=[OverhangSpec(id=ovhg_id, helix_id="hA", strand_id="stap", rotation=rotation)],
+        overhangs=[
+            OverhangSpec(id=ovhg_id, helix_id="hA", strand_id="stap", rotation=rotation)
+        ],
     )
 
     axes = deformed_helix_axes(design)
@@ -1535,11 +1809,16 @@ def test_shared_inline_overhang_rotation_emits_domain_axis_without_moving_parent
         return axis_start + t * axis_vec
 
     nucs = _geometry_for_design(design)
-    pivot = np.array(next(
-        n["backbone_position"]
-        for n in nucs
-        if n["helix_id"] == "hA" and n["bp_index"] == 11 and n["direction"] == "FORWARD"
-    ), dtype=float)
+    pivot = np.array(
+        next(
+            n["backbone_position"]
+            for n in nucs
+            if n["helix_id"] == "hA"
+            and n["bp_index"] == 11
+            and n["direction"] == "FORWARD"
+        ),
+        dtype=float,
+    )
     R = _rot_from_quaternion(*rotation)
     expected_start = R @ (axis_point(11) - pivot) + pivot
     expected_end = R @ (axis_point(21) - pivot) + pivot
@@ -1596,4 +1875,6 @@ def test_hingeV4_no_false_positives():
                 cov_lo, cov_hi = scaf_cov[dom.helix_id]
                 if lo >= cov_lo and hi <= cov_hi:
                     false_pos_after += 1
-    assert false_pos_after == 0, f"Still {false_pos_after} false-positive overhangs after reconciliation"
+    assert false_pos_after == 0, (
+        f"Still {false_pos_after} false-positive overhangs after reconciliation"
+    )

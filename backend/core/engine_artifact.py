@@ -45,6 +45,7 @@ class ArtifactError(RuntimeError):
 
 # ── pure filename logic ───────────────────────────────────────────────────────
 
+
 def parse_namd_filename(name: str) -> dict | None:
     """PURE: a NAMD tarball filename → ``{filename, is_cuda, multicore}`` or None.
 
@@ -60,14 +61,19 @@ def parse_namd_filename(name: str) -> dict | None:
 def _build_warning(parsed: dict, gpu: dict) -> str:
     if gpu.get("present") and not parsed["is_cuda"]:
         names = ", ".join(gpu.get("names") or []) or "a CUDA GPU"
-        return (f"This is the CPU build, but {names} was detected — the "
-                "multicore-CUDA build is much faster. You can install this anyway.")
+        return (
+            f"This is the CPU build, but {names} was detected — the "
+            "multicore-CUDA build is much faster. You can install this anyway."
+        )
     if not gpu.get("present") and parsed["is_cuda"]:
-        return "This is the CUDA (GPU) build but no GPU was detected — it will run on CPU."
+        return (
+            "This is the CUDA (GPU) build but no GPU was detected — it will run on CPU."
+        )
     return ""
 
 
 # ── deep validation + install ─────────────────────────────────────────────────
+
 
 def validate_namd_archive(path: str, gpu: dict) -> dict:
     """Rigorously check a specific file: exists, named right, and CONTAINS namd3.
@@ -76,22 +82,35 @@ def validate_namd_archive(path: str, gpu: dict) -> dict:
     error}``.  ``valid`` is True only when the filename matches AND the tarball
     actually carries a ``namd3`` executable.
     """
-    res = {"path": path, "valid": False, "contains_namd3": False,
-           "is_cuda": False, "build": None, "filename": None, "warning": "", "error": ""}
+    res = {
+        "path": path,
+        "valid": False,
+        "contains_namd3": False,
+        "is_cuda": False,
+        "build": None,
+        "filename": None,
+        "warning": "",
+        "error": "",
+    }
     if not path or not os.path.isfile(os.path.expanduser(path)):
         res["error"] = "File not found."
         return res
     real = os.path.expanduser(path)
     parsed = parse_namd_filename(real)
     if not parsed:
-        res["error"] = "This doesn't look like a NAMD Linux-x86_64 tarball (NAMD_*_Linux-x86_64*.tar.gz)."
+        res["error"] = (
+            "This doesn't look like a NAMD Linux-x86_64 tarball (NAMD_*_Linux-x86_64*.tar.gz)."
+        )
         return res
-    res.update(filename=parsed["filename"], is_cuda=parsed["is_cuda"],
-               build="CUDA" if parsed["is_cuda"] else "CPU",
-               warning=_build_warning(parsed, gpu))
+    res.update(
+        filename=parsed["filename"],
+        is_cuda=parsed["is_cuda"],
+        build="CUDA" if parsed["is_cuda"] else "CPU",
+        warning=_build_warning(parsed, gpu),
+    )
     try:
         with tarfile.open(real) as tar:
-            for m in tar:                       # streams; namd3 sits near the top
+            for m in tar:  # streams; namd3 sits near the top
                 if m.isfile() and os.path.basename(m.name) == "namd3":
                     res["contains_namd3"] = True
                     break
@@ -99,7 +118,9 @@ def validate_namd_archive(path: str, gpu: dict) -> dict:
         res["error"] = f"Could not read the archive: {exc}"
         return res
     if not res["contains_namd3"]:
-        res["error"] = "The archive doesn't contain a namd3 binary — wrong or corrupt download."
+        res["error"] = (
+            "The archive doesn't contain a namd3 binary — wrong or corrupt download."
+        )
         return res
     res["valid"] = True
     return res
@@ -117,7 +138,12 @@ async def install_namd_archive(path: str, send) -> str:
     if not v["valid"]:
         raise ArtifactError(v.get("error") or "Not a valid NAMD archive.")
 
-    await send({"type": "log", "line": f"Verified {v['filename']} ({v['build']} build) — contains namd3 ✓"})
+    await send(
+        {
+            "type": "log",
+            "line": f"Verified {v['filename']} ({v['build']} build) — contains namd3 ✓",
+        }
+    )
     dest = os.path.expanduser("~/Applications")
     os.makedirs(dest, exist_ok=True)
     await send({"type": "progress", "stage": "Extracting NAMD…", "pct": 5})
@@ -125,11 +151,16 @@ async def install_namd_archive(path: str, send) -> str:
     count = 0
     with tarfile.open(real) as tar:
         for m in tar:
-            tar.extract(m, dest, filter="data")   # 3.12 safe-extraction filter
+            tar.extract(m, dest, filter="data")  # 3.12 safe-extraction filter
             count += 1
             if count % 200 == 0:
-                await send({"type": "progress", "stage": f"Extracting NAMD… ({count} files)",
-                            "pct": min(90, 5 + count // 60)})
+                await send(
+                    {
+                        "type": "progress",
+                        "stage": f"Extracting NAMD… ({count} files)",
+                        "pct": min(90, 5 + count // 60),
+                    }
+                )
 
     namd = _safe(find_namd)
     psfgen = _safe(find_psfgen)
@@ -155,6 +186,7 @@ async def install_namd_archive(path: str, send) -> str:
 # the admin password, so that final line stays manual (streamed as a `manual_step`
 # rather than a `complete`).
 
+
 def parse_arbd_filename(name: str) -> dict | None:
     """PURE: an ARBD source-tarball filename → ``{filename}`` or None.
 
@@ -173,8 +205,14 @@ def validate_arbd_archive(path: str, gpu: dict) -> dict:
     True only when the filename matches AND the tarball carries a build entry point
     (a ``CMakeLists.txt`` or a ``src/`` directory).
     """
-    res = {"path": path, "valid": False, "is_source": False,
-           "filename": None, "warning": "", "error": ""}
+    res = {
+        "path": path,
+        "valid": False,
+        "is_source": False,
+        "filename": None,
+        "warning": "",
+        "error": "",
+    }
     if not path or not os.path.isfile(os.path.expanduser(path)):
         res["error"] = "File not found."
         return res
@@ -185,7 +223,9 @@ def validate_arbd_archive(path: str, gpu: dict) -> dict:
         return res
     res["filename"] = parsed["filename"]
     if not gpu.get("present"):
-        res["warning"] = "No CUDA GPU detected — ARBD builds but can't run simulations without a GPU."
+        res["warning"] = (
+            "No CUDA GPU detected — ARBD builds but can't run simulations without a GPU."
+        )
     try:
         with tarfile.open(real) as tar:
             for m in tar:
@@ -197,7 +237,9 @@ def validate_arbd_archive(path: str, gpu: dict) -> dict:
         res["error"] = f"Could not read the archive: {exc}"
         return res
     if not res["is_source"]:
-        res["error"] = "The archive doesn't look like ARBD source (no CMakeLists.txt / src/) — wrong or corrupt download."
+        res["error"] = (
+            "The archive doesn't look like ARBD source (no CMakeLists.txt / src/) — wrong or corrupt download."
+        )
         return res
     res["valid"] = True
     return res
@@ -235,35 +277,52 @@ async def install_arbd_archive(path: str, send) -> None:
             tar.extract(m, src, filter="data")
             count += 1
             if count % 200 == 0:
-                await send({"type": "progress", "stage": f"Unpacking ARBD… ({count} files)",
-                            "pct": min(20, 5 + count // 100)})
+                await send(
+                    {
+                        "type": "progress",
+                        "stage": f"Unpacking ARBD… ({count} files)",
+                        "pct": min(20, 5 + count // 100),
+                    }
+                )
 
     os.makedirs(build, exist_ok=True)
     await send({"type": "progress", "stage": "Configuring (cmake)…", "pct": 25})
-    rc = await _stream_build(["cmake", "..", "-DCMAKE_INSTALL_PREFIX=/usr/local"], build, send)
+    rc = await _stream_build(
+        ["cmake", "..", "-DCMAKE_INSTALL_PREFIX=/usr/local"], build, send
+    )
     if rc != 0:
         raise ArtifactError(
             "cmake failed — usually the CUDA toolkit (nvcc) is missing or CUDA "
             "headers aren't found. Install the CUDA toolkit, then try again."
         )
 
-    await send({"type": "progress", "stage": "Compiling (make) — this can take several minutes…", "pct": 45})
+    await send(
+        {
+            "type": "progress",
+            "stage": "Compiling (make) — this can take several minutes…",
+            "pct": 45,
+        }
+    )
     rc = await _stream_build(["make", f"-j{os.cpu_count() or 2}"], build, send)
     if rc != 0:
         raise ArtifactError("make failed — see the log above for the compiler error.")
 
     await send({"type": "progress", "stage": "Built — one step left", "pct": 95})
-    await send({
-        "type": "manual_step",
-        "engine": "arbd",
-        "command": f"cd {build} && sudo make install",
-        "cwd": build,
-        "can_finish_built": True,   # a no-password finish is available (copy onto PATH)
-        "note": ("ARBD built successfully (the Linux binary). To finish, either click "
-                 "**Finish install (no password)** to copy it onto your PATH, or — for a "
-                 "system-wide install — paste this one line in a terminal (needs your "
-                 f"password):\n\n    cd {build} && sudo make install\n\nThen click Re-check."),
-    })
+    await send(
+        {
+            "type": "manual_step",
+            "engine": "arbd",
+            "command": f"cd {build} && sudo make install",
+            "cwd": build,
+            "can_finish_built": True,  # a no-password finish is available (copy onto PATH)
+            "note": (
+                "ARBD built successfully (the Linux binary). To finish, either click "
+                "**Finish install (no password)** to copy it onto your PATH, or — for a "
+                "system-wide install — paste this one line in a terminal (needs your "
+                f"password):\n\n    cd {build} && sudo make install\n\nThen click Re-check."
+            ),
+        }
+    )
 
 
 async def install_arbd_binary(send) -> str:
@@ -298,10 +357,16 @@ async def install_arbd_binary(send) -> str:
         raise ArtifactError(f"Copied to {dest} but NADOC still can't resolve it.")
     path_dirs = os.environ.get("PATH", "").split(os.pathsep)
     if dest_dir not in path_dirs:
-        await send({"type": "log", "line": (
-            f"Note: {dest_dir} isn't on this server's PATH. arbd is installed, but if a "
-            "simulation can't launch it, add ~/.local/bin to PATH (or use sudo make "
-            "install for /usr/local/bin) and restart NADOC.")})
+        await send(
+            {
+                "type": "log",
+                "line": (
+                    f"Note: {dest_dir} isn't on this server's PATH. arbd is installed, but if a "
+                    "simulation can't launch it, add ~/.local/bin to PATH (or use sudo make "
+                    "install for /usr/local/bin) and restart NADOC."
+                ),
+            }
+        )
     await send({"type": "progress", "stage": "Done", "pct": 100})
     await send({"type": "complete", "engine": "arbd", "path": resolved})
     return resolved
@@ -322,16 +387,28 @@ async def install_arbd_sudo(password: str, send) -> str:
     from backend.core.mrdna_bridge import find_arbd, find_arbd_build
 
     build = find_arbd_build()
-    build_dir = os.path.dirname(build) if build else os.path.expanduser("~/arbd-src/build")
+    build_dir = (
+        os.path.dirname(build) if build else os.path.expanduser("~/arbd-src/build")
+    )
     if not os.path.isdir(build_dir):
-        raise ArtifactError("ARBD isn't built yet — build it first (the download step above).")
+        raise ArtifactError(
+            "ARBD isn't built yet — build it first (the download step above)."
+        )
     if not password:
         raise ArtifactError("No password was entered.")
 
-    await send({"type": "progress", "stage": "Installing ARBD (sudo make install)…", "pct": 30})
+    await send(
+        {"type": "progress", "stage": "Installing ARBD (sudo make install)…", "pct": 30}
+    )
     # -S: read password from stdin;  -k: force re-auth so a wrong password really fails
     proc = await asyncio.create_subprocess_exec(
-        "sudo", "-S", "-k", "-p", "", "make", "install",
+        "sudo",
+        "-S",
+        "-k",
+        "-p",
+        "",
+        "make",
+        "install",
         cwd=build_dir,
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
@@ -359,7 +436,9 @@ async def install_arbd_sudo(password: str, send) -> str:
 
     resolved = find_arbd()
     if not resolved:
-        raise ArtifactError("Ran the install but arbd still isn't where NADOC looks (/usr/local/bin).")
+        raise ArtifactError(
+            "Ran the install but arbd still isn't where NADOC looks (/usr/local/bin)."
+        )
     await send({"type": "progress", "stage": "Done", "pct": 100})
     await send({"type": "complete", "engine": "arbd", "path": resolved})
     return resolved
@@ -367,7 +446,11 @@ async def install_arbd_sudo(password: str, send) -> str:
 
 def _common_prefix_len(members: list) -> str | None:
     """The single top-level dir shared by every member (e.g. ``arbd-may24/``), else None."""
-    tops = {m.name.split("/", 1)[0] for m in members if m.name and not m.name.startswith("/")}
+    tops = {
+        m.name.split("/", 1)[0]
+        for m in members
+        if m.name and not m.name.startswith("/")
+    }
     return tops.pop() if len(tops) == 1 else None
 
 
@@ -377,7 +460,7 @@ def _strip_prefix(name: str, prefix: str | None) -> str:
     if name == prefix:
         return ""
     if name.startswith(prefix + "/"):
-        return name[len(prefix) + 1:]
+        return name[len(prefix) + 1 :]
     return name
 
 
@@ -385,8 +468,10 @@ async def _stream_build(argv: list[str], cwd: str, send) -> int:
     """Run ``argv`` in ``cwd``, forwarding each output line to ``send`` as a log."""
     os.makedirs(cwd, exist_ok=True)
     proc = await asyncio.create_subprocess_exec(
-        *argv, cwd=cwd,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        *argv,
+        cwd=cwd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
     )
     assert proc.stdout is not None
     async for raw in proc.stdout:

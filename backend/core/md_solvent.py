@@ -72,11 +72,16 @@ SPECIES = ("NA", "CL", "MG", "K", "CA")
 # documents.  Qualifying by resname additionally keeps a protein alpha-carbon
 # (atom name "CA", resname ALA/GLY/…) from being read as a calcium ion.
 _ION_NAME_SPECIES = {
-    "SOD": "NA", "NA": "NA",
-    "CLA": "CL", "CL": "CL",
-    "POT": "K",  "K": "K",  "CES": "K",
-    "MG":  "MG",
-    "CAL": "CA", "CA": "CA",
+    "SOD": "NA",
+    "NA": "NA",
+    "CLA": "CL",
+    "CL": "CL",
+    "POT": "K",
+    "K": "K",
+    "CES": "K",
+    "MG": "MG",
+    "CAL": "CA",
+    "CA": "CA",
 }
 
 # Ions are never bounded by the water shell, but they still need a periodic image
@@ -85,11 +90,12 @@ _ION_NAME_SPECIES = {
 # jump a full box); everything further away is simply wrapped into the drawn cell.
 ION_ANCHOR_CUTOFF_NM = 1.2
 
-_MAGIC = 0x4E534C56          # "NSLV"
+_MAGIC = 0x4E534C56  # "NSLV"
 _VERSION = 2
 
 
 # ── The display affine ───────────────────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class DisplayXform:
@@ -108,15 +114,17 @@ class DisplayXform:
     cell is drawn around, see :func:`box_corners`.
     """
 
-    T_dyn: np.ndarray            # (3,) nm
-    c_box: np.ndarray            # (3,) nm, box frame
-    box_nm: np.ndarray           # (3,) nm cell lengths (zeros ⇒ no periodic box)
-    mob_c: np.ndarray            # (3,) nm, pre frame
-    eq_centroid: np.ndarray      # (3,) nm, design frame
+    T_dyn: np.ndarray  # (3,) nm
+    c_box: np.ndarray  # (3,) nm, box frame
+    box_nm: np.ndarray  # (3,) nm cell lengths (zeros ⇒ no periodic box)
+    mob_c: np.ndarray  # (3,) nm, pre frame
+    eq_centroid: np.ndarray  # (3,) nm, design frame
     R: np.ndarray | None = None  # (3,3) or None
 
     @staticmethod
-    def build(*, T_dyn, c_box, box_nm, mob_c=None, eq_centroid=None, R=None) -> "DisplayXform":
+    def build(
+        *, T_dyn, c_box, box_nm, mob_c=None, eq_centroid=None, R=None
+    ) -> "DisplayXform":
         """Coerce whatever the extractors have on hand into a frozen transform."""
         z = np.zeros(3, dtype=float)
         return DisplayXform(
@@ -187,22 +195,24 @@ def box_corners(xf: DisplayXform) -> np.ndarray:
         return np.zeros((0, 3), dtype=float)
     centre_pre = xf.c_box + xf.T_dyn
     half = xf.box_nm / 2.0
-    signs = np.array([[1.0 if (k >> a) & 1 else -1.0 for a in range(3)] for k in range(8)])
+    signs = np.array(
+        [[1.0 if (k >> a) & 1 else -1.0 for a in range(3)] for k in range(8)]
+    )
     return apply_xform(centre_pre + signs * half, xf)
 
 
 #: The 12 cuboid edges as corner-index pairs (each differs in exactly one bit).
 BOX_EDGES = tuple(
-    (k, k | (1 << a))
-    for k in range(8)
-    for a in range(3)
-    if not (k >> a) & 1
+    (k, k | (1 << a)) for k in range(8) for a in range(3) if not (k >> a) & 1
 )
 
 
 # ── Topology: which atoms are water / ions ───────────────────────────────────
 
-def water_triplets(names, resnames, resindices) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+
+def water_triplets(
+    names, resnames, resindices
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Split every water molecule into parallel (O, H1, H2) index arrays.
 
     Water oxygens are the O-named atoms of a water-ish residue — ``OH2`` in TIP3,
@@ -228,19 +238,22 @@ def water_triplets(names, resnames, resindices) -> tuple[np.ndarray, np.ndarray,
 
     is_h = np.char.startswith(names, "H")
     # Fast path: the two atoms right after the oxygen are its hydrogens.
-    ok = (o_rows + 2 < n)
+    ok = o_rows + 2 < n
     h1 = np.where(ok, np.minimum(o_rows + 1, n - 1), 0)
     h2 = np.where(ok, np.minimum(o_rows + 2, n - 1), 0)
     ok &= is_h[h1] & is_h[h2]
-    ok &= (resindices[h1] == resindices[o_rows]) & (resindices[h2] == resindices[o_rows])
+    ok &= (resindices[h1] == resindices[o_rows]) & (
+        resindices[h2] == resindices[o_rows]
+    )
 
     if not ok.all():
         # Slow path, per offending molecule only: the next two H atoms inside the
         # oxygen's own residue, in index order.
         for k in np.flatnonzero(~ok):
             o = int(o_rows[k])
-            found = [j for j in range(o + 1, n)
-                     if resindices[j] == resindices[o] and is_h[j]][:2]
+            found = [
+                j for j in range(o + 1, n) if resindices[j] == resindices[o] and is_h[j]
+            ][:2]
             if len(found) == 2:
                 h1[k], h2[k] = found
                 ok[k] = True
@@ -266,14 +279,15 @@ def ion_rows(names, resnames) -> tuple[np.ndarray, np.ndarray]:
     for i in np.flatnonzero(ion_res):
         sp = _ION_NAME_SPECIES.get(str(names[i]).strip().upper())
         if sp is None:
-            continue          # an MGH water, or a hydrogen on one
+            continue  # an MGH water, or a hydrogen on one
         rows.append(int(i))
         codes.append(SPECIES.index(sp))
     return np.asarray(rows, dtype=np.int64), np.asarray(codes, dtype=np.uint8)
 
 
-def reconstruct_heavy_pre(heavy_ag, dna_p, pos_raw, p_raw, p_pre, box_nm,
-                          rows_cache: dict | None = None):
+def reconstruct_heavy_pre(
+    heavy_ag, dna_p, pos_raw, p_raw, p_pre, box_nm, rows_cache: dict | None = None
+):
     """DNA heavy-atom positions in the ``pre`` frame, from already-corrected P atoms.
 
     ``heavy = corrected_P + minimum_image(raw_heavy - raw_P)`` — the residue-local
@@ -311,18 +325,23 @@ def build_solvent_ctx(universe) -> dict:
     atoms = universe.atoms
     try:
         resindices = atoms.resindices
-    except Exception:            # noqa: BLE001 — a topology with no residue info
+    except Exception:  # noqa: BLE001 — a topology with no residue info
         resindices = np.zeros(len(atoms), dtype=np.int64)
     o, h1, h2 = water_triplets(atoms.names, atoms.resnames, resindices)
     irows, icodes = ion_rows(atoms.names, atoms.resnames)
     return {
-        "water_o": o, "water_h1": h1, "water_h2": h2,
-        "ion_rows": irows, "ion_species": icodes,
-        "n_waters_total": int(o.size), "n_ions": int(irows.size),
+        "water_o": o,
+        "water_h1": h1,
+        "water_h2": h2,
+        "ion_rows": irows,
+        "ion_species": icodes,
+        "n_waters_total": int(o.size),
+        "n_ions": int(irows.size),
     }
 
 
 # ── Per-frame extraction ─────────────────────────────────────────────────────
+
 
 def _nearest_anchor(sel_ang: np.ndarray, dna_ang: np.ndarray, cutoff_ang: float, dims):
     """(selected rows, anchor rows, distance) for points within ``cutoff_ang`` of DNA.
@@ -335,17 +354,23 @@ def _nearest_anchor(sel_ang: np.ndarray, dna_ang: np.ndarray, cutoff_ang: float,
     if sel_ang.shape[0] == 0 or dna_ang.shape[0] == 0:
         return (np.zeros(0, np.int64),) * 2 + (np.zeros(0, float),)
     pairs, dists = capped_distance(
-        sel_ang.astype(np.float32), dna_ang.astype(np.float32),
-        max_cutoff=float(cutoff_ang), box=dims, return_distances=True)
+        sel_ang.astype(np.float32),
+        dna_ang.astype(np.float32),
+        max_cutoff=float(cutoff_ang),
+        box=dims,
+        return_distances=True,
+    )
     if len(pairs) == 0:
         return (np.zeros(0, np.int64),) * 2 + (np.zeros(0, float),)
     # Sort by distance so np.unique's first-occurrence index IS the nearest DNA atom.
     order = np.argsort(dists, kind="stable")
     w_sorted = pairs[order, 0]
     uniq, first = np.unique(w_sorted, return_index=True)
-    return (uniq.astype(np.int64),
-            pairs[order, 1][first].astype(np.int64),
-            dists[order][first])
+    return (
+        uniq.astype(np.int64),
+        pairs[order, 1][first].astype(np.int64),
+        dists[order][first],
+    )
 
 
 def _cap(sel: np.ndarray, anchors: np.ndarray, dist: np.ndarray, max_n: int | None):
@@ -359,17 +384,28 @@ def _cap(sel: np.ndarray, anchors: np.ndarray, dist: np.ndarray, max_n: int | No
         keep.sort()
     else:
         keep = np.linspace(0, sel.size - 1, max_n).astype(np.int64)
-    return (sel[keep],
-            anchors[keep] if anchors.size == sel.size else anchors,
-            dist[keep] if dist.size == sel.size else dist,
-            True)
+    return (
+        sel[keep],
+        anchors[keep] if anchors.size == sel.size else anchors,
+        dist[keep] if dist.size == sel.size else dist,
+        True,
+    )
 
 
-def extract_solvent_frame(universe, sctx: dict, dna_raw: np.ndarray,
-                          dna_pre: np.ndarray, xf: DisplayXform, *,
-                          water: bool = True, ions: bool = True, box: bool = True,
-                          shell_nm: float | None = 0.5, atomistic: bool = False,
-                          max_waters: int | None = None) -> dict:
+def extract_solvent_frame(
+    universe,
+    sctx: dict,
+    dna_raw: np.ndarray,
+    dna_pre: np.ndarray,
+    xf: DisplayXform,
+    *,
+    water: bool = True,
+    ions: bool = True,
+    box: bool = True,
+    shell_nm: float | None = 0.5,
+    atomistic: bool = False,
+    max_waters: int | None = None,
+) -> dict:
     """Solvent + cell for the CURRENT frame of ``universe``, in the display frame.
 
     ``dna_raw`` / ``dna_pre`` are the DNA heavy-atom positions (nm) in the raw
@@ -393,8 +429,10 @@ def extract_solvent_frame(universe, sctx: dict, dna_raw: np.ndarray,
         "n_ions_total": sctx["n_ions"],
         "n_ions": 0,
         "has_box": False,
-        "atomistic": bool(atomistic), "capped": False,
-        "shell_nm": shell_nm, "n_water": 0,
+        "atomistic": bool(atomistic),
+        "capped": False,
+        "shell_nm": shell_nm,
+        "n_water": 0,
     }
     dims = getattr(universe, "dimensions", None)
     pos_all = universe.atoms.positions
@@ -405,7 +443,8 @@ def extract_solvent_frame(universe, sctx: dict, dna_raw: np.ndarray,
         o_raw = pos_all[o_rows] / 10.0
         if shell_nm is not None and dna_raw.shape[0]:
             sel, anchor, dist = _nearest_anchor(
-                o_raw * 10.0, dna_raw * 10.0, shell_nm * 10.0, dims)
+                o_raw * 10.0, dna_raw * 10.0, shell_nm * 10.0, dims
+            )
             sel, anchor, dist, capped = _cap(sel, anchor, dist, max_waters)
             o_sel = o_raw[sel]
             o_pre = dna_pre[anchor] + min_image(o_sel - dna_raw[anchor], xf.box_nm)
@@ -445,9 +484,12 @@ def extract_solvent_frame(universe, sctx: dict, dna_raw: np.ndarray,
         i_pre = (xf.c_box + xf.T_dyn) + min_image(i_raw - xf.c_box, xf.box_nm)
         if dna_raw.shape[0]:
             sel, anchor, _d = _nearest_anchor(
-                i_raw * 10.0, dna_raw * 10.0, ION_ANCHOR_CUTOFF_NM * 10.0, dims)
+                i_raw * 10.0, dna_raw * 10.0, ION_ANCHOR_CUTOFF_NM * 10.0, dims
+            )
             if sel.size:
-                i_pre[sel] = dna_pre[anchor] + min_image(i_raw[sel] - dna_raw[anchor], xf.box_nm)
+                i_pre[sel] = dna_pre[anchor] + min_image(
+                    i_raw[sel] - dna_raw[anchor], xf.box_nm
+                )
         out["ions"] = apply_xform(i_pre, xf).astype(np.float32).reshape(-1)
         out["ion_species"] = sctx["ion_species"]
         out["n_ions"] = int(sctx["n_ions"])
@@ -463,6 +505,7 @@ def extract_solvent_frame(universe, sctx: dict, dna_raw: np.ndarray,
 
 
 # ── Wire format ──────────────────────────────────────────────────────────────
+
 
 def pack_solvent_bin(frames: dict, meta: dict | None = None) -> bytes:
     """Pack ``{composite_frame_index: extract_solvent_frame(...)}`` into one blob.
@@ -517,7 +560,9 @@ def pack_solvent_bin(frames: dict, meta: dict | None = None) -> bytes:
     for k in ids:
         f = frames[k]
         header["atomistic"] = bool(f.get("atomistic", header["atomistic"]))
-        header["n_waters_total"] = int(f.get("n_waters_total", header["n_waters_total"]))
+        header["n_waters_total"] = int(
+            f.get("n_waters_total", header["n_waters_total"])
+        )
         header["n_ions"] = int(f.get("n_ions", header["n_ions"]))
         header["n_ions_total"] = int(f.get("n_ions_total", header["n_ions_total"]))
         header["has_box"] = bool(header["has_box"] or f.get("has_box"))
@@ -525,27 +570,35 @@ def pack_solvent_bin(frames: dict, meta: dict | None = None) -> bytes:
         if f.get("shell_nm") is not None:
             header["shell_nm"] = float(f["shell_nm"])
         if not header["ion_species"] and f.get("ion_species") is not None:
-            header["ion_species"] = [int(c) for c in np.asarray(f["ion_species"]).ravel()]
+            header["ion_species"] = [
+                int(c) for c in np.asarray(f["ion_species"]).ravel()
+            ]
         header["per_frame_nw"].append(int(f.get("n_water", 0)))
         for key in ("water", "ions", "box"):
             blocks.append(np.asarray(f.get(key, []), dtype=np.float32).tobytes())
         # A frame that skipped a block the header claims is present would desync the
         # reader; assert the two agree rather than shipping a silently unreadable blob.
-        assert np.asarray(f.get("ions", [])).size == 3 * int(f.get("n_ions", 0)), \
+        assert np.asarray(f.get("ions", [])).size == 3 * int(f.get("n_ions", 0)), (
             "ion block size disagrees with the header's n_ions"
-        assert np.asarray(f.get("box", [])).size == (24 if f.get("has_box") else 0), \
+        )
+        assert np.asarray(f.get("box", [])).size == (24 if f.get("has_box") else 0), (
             "box block size disagrees with the header's has_box"
+        )
         if n_serials:
             d = np.zeros(n_serials * 3, dtype=np.float32)
             src = np.asarray(f.get("dna", []), dtype=np.float32).ravel()
-            d[:src.size] = src[:d.size]
+            d[: src.size] = src[: d.size]
             blocks.append(d.tobytes())
 
     hb = json.dumps(header, separators=(",", ":")).encode("utf-8")
     pad = (-len(hb)) % 4
-    return (struct.pack("<IIII", _MAGIC, _VERSION, len(ids), 0)
-            + struct.pack("<I", len(hb)) + hb + b"\x00" * pad
-            + b"".join(blocks))
+    return (
+        struct.pack("<IIII", _MAGIC, _VERSION, len(ids), 0)
+        + struct.pack("<I", len(hb))
+        + hb
+        + b"\x00" * pad
+        + b"".join(blocks)
+    )
 
 
 def empty_solvent_bin() -> bytes:

@@ -70,7 +70,13 @@ def derive_metadata(design: dict, stem: str) -> dict:
     if not name or name == stem:
         name = f"{helix_count}-Helix Bundle"
 
-    lattice_label = "Honeycomb" if lattice == "HONEYCOMB" else "Square" if lattice == "SQUARE" else lattice
+    lattice_label = (
+        "Honeycomb"
+        if lattice == "HONEYCOMB"
+        else "Square"
+        if lattice == "SQUARE"
+        else lattice
+    )
 
     return {
         "id": stem,
@@ -162,7 +168,9 @@ def _circle_placement_spec(design: dict, lattice: str) -> dict:
     """
     from backend.core.circle_primitive import DEFAULT_MIN_CHORD_BP, fit_radius
 
-    lengths = [int(h["length_bp"]) for h in (design.get("helices") or []) if h.get("length_bp")]
+    lengths = [
+        int(h["length_bp"]) for h in (design.get("helices") or []) if h.get("length_bp")
+    ]
     plane = "XY"
     for entry in design.get("feature_log") or []:
         if entry.get("op_kind") == "bundle-create":

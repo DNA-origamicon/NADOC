@@ -16,6 +16,7 @@ Units: nm · pN · ns (see :mod:`snupi_dynamics`) — r in nm, ε in pN·nm, a i
 The stacking topology (which node pairs stack) is an EXPLICIT input — identifying coaxial/blunt-end
 stacks from a design is a topological question (Three-Layer Law: never inferred/guessed here).
 """
+
 from __future__ import annotations
 
 import math
@@ -24,9 +25,9 @@ from dataclasses import dataclass
 import numpy as np
 
 # Morse parameters fitted to the all-atom stacking PMF (paper Methods).
-EPS_STACK = 42.79     # pN·nm — stacking dissociation energy (well depth)
-A_STACK = 2.668       # nm⁻¹  — Morse shape parameter
-R0_STACK = 0.3742     # nm    — equilibrium (stacked) distance
+EPS_STACK = 42.79  # pN·nm — stacking dissociation energy (well depth)
+A_STACK = 2.668  # nm⁻¹  — Morse shape parameter
+R0_STACK = 0.3742  # nm    — equilibrium (stacked) distance
 
 
 @dataclass(frozen=True)
@@ -63,12 +64,14 @@ def stacking_force(xi: np.ndarray, xj: np.ndarray, prm: MorseParams = MorseParam
     if r < 1e-9:
         return np.zeros(3), np.zeros(3)
     rh = d / r
-    fmag = -morse_dEdr(r, prm)                 # −dΠ/dr : >0 attractive when r>r₀
-    f_j = fmag * rh                            # on node j, along +r̂
+    fmag = -morse_dEdr(r, prm)  # −dΠ/dr : >0 attractive when r>r₀
+    f_j = fmag * rh  # on node j, along +r̂
     return -f_j, f_j
 
 
-def stacking_tangent(xi: np.ndarray, xj: np.ndarray, prm: MorseParams = MorseParams()) -> np.ndarray:
+def stacking_tangent(
+    xi: np.ndarray, xj: np.ndarray, prm: MorseParams = MorseParams()
+) -> np.ndarray:
     """6×6 stiffness (−∂f/∂x) block for the node pair (translational DOF only), for an implicit/Newton
     solve. Central-force Hessian: ``k_ax r̂r̂ + (Π'/r)(I − r̂r̂)`` with ``k_ax = Π''``. NOT used by the
     explicit Langevin loop (which needs only the force) — provided for the corotational shape solve."""
@@ -80,15 +83,21 @@ def stacking_tangent(xi: np.ndarray, xj: np.ndarray, prm: MorseParams = MorsePar
     P = np.outer(rh, rh)
     k_ax = morse_d2Edr2(r, prm)
     k_perp = morse_dEdr(r, prm) / r
-    Kbb = k_ax * P + k_perp * (np.eye(3) - P)    # ∂²Π/∂x_j∂x_j
+    Kbb = k_ax * P + k_perp * (np.eye(3) - P)  # ∂²Π/∂x_j∂x_j
     K = np.zeros((6, 6))
-    K[0:3, 0:3] = Kbb; K[3:6, 3:6] = Kbb
-    K[0:3, 3:6] = -Kbb; K[3:6, 0:3] = -Kbb
+    K[0:3, 0:3] = Kbb
+    K[3:6, 3:6] = Kbb
+    K[0:3, 3:6] = -Kbb
+    K[3:6, 0:3] = -Kbb
     return K
 
 
-def is_stacked(xi: np.ndarray, xj: np.ndarray, prm: MorseParams = MorseParams(),
-               cutoff_nm: float = 1.0) -> bool:
+def is_stacked(
+    xi: np.ndarray,
+    xj: np.ndarray,
+    prm: MorseParams = MorseParams(),
+    cutoff_nm: float = 1.0,
+) -> bool:
     """True if the bond is in the stacked state (distance within ``cutoff_nm`` of r₀). The Morse well
     is narrow (~0.4 nm); beyond ~1 nm the energy is within a few % of the unstacked plateau."""
     r = float(np.linalg.norm(np.asarray(xj, float) - np.asarray(xi, float)))
@@ -96,6 +105,7 @@ def is_stacked(xi: np.ndarray, xj: np.ndarray, prm: MorseParams = MorseParams(),
 
 
 # ── Blunt-end stacking-site detection (Phase 2 — design → Morse node pairs) ──────
+
 
 def _unit(v: np.ndarray) -> np.ndarray:
     n = float(np.linalg.norm(v))
@@ -135,8 +145,11 @@ def detect_blunt_end_stacks(
     """
     if mesh is None:
         if design is None:
-            raise ValueError("detect_blunt_end_stacks needs a design or a prebuilt mesh")
+            raise ValueError(
+                "detect_blunt_end_stacks needs a design or a prebuilt mesh"
+            )
         from backend.physics.fem_solver import build_fem_mesh
+
         mesh = build_fem_mesh(design)
     nodes = mesh.nodes
     if len(nodes) < 2:
@@ -152,7 +165,9 @@ def detect_blunt_end_stacks(
 
     # Covalently ligated ends → not a reversible stack; exclude by (helix, bp).
     lig_bp: set[tuple] = set()
-    for lg in ((getattr(design, "forced_ligations", None) or []) if design is not None else []):
+    for lg in (
+        (getattr(design, "forced_ligations", None) or []) if design is not None else []
+    ):
         for pre in ("three_prime", "five_prime"):
             h = getattr(lg, f"{pre}_helix_id", None)
             b = getattr(lg, f"{pre}_bp", None)
@@ -160,6 +175,7 @@ def detect_blunt_end_stacks(
                 lig_bp.add((h, int(b)))
 
     from collections import defaultdict
+
     by_helix: dict[str, list[int]] = defaultdict(list)
     for idx, nd in enumerate(nodes):
         by_helix[nd.helix_id].append(idx)
@@ -175,9 +191,13 @@ def detect_blunt_end_stacks(
                 continue
             if (hid, int(nodes[node_idx].global_bp)) in lig_bp:
                 continue
-            outward = _unit(np.asarray(nodes[node_idx].position, float)
-                            - np.asarray(nodes[inward_idx].position, float))
-            ends.append((node_idx, np.asarray(nodes[node_idx].position, float), outward))
+            outward = _unit(
+                np.asarray(nodes[node_idx].position, float)
+                - np.asarray(nodes[inward_idx].position, float)
+            )
+            ends.append(
+                (node_idx, np.asarray(nodes[node_idx].position, float), outward)
+            )
 
     pairs: set[tuple] = set()
     for a in range(len(ends)):
@@ -188,9 +208,9 @@ def detect_blunt_end_stacks(
             dist = float(np.linalg.norm(d))
             if dist < 1e-6 or dist > gap_max_nm:
                 continue
-            if float(ta @ tb) > facing_cos:                       # ends must face each other
+            if float(ta @ tb) > facing_cos:  # ends must face each other
                 continue
-            if abs(float((d / dist) @ ta)) < collinear_cos:       # gap coaxial, not lateral
+            if abs(float((d / dist) @ ta)) < collinear_cos:  # gap coaxial, not lateral
                 continue
             pairs.add((ia, ib) if ia < ib else (ib, ia))
     return sorted(pairs)

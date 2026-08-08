@@ -97,7 +97,9 @@ def build_namd_gbis_package(
     #    in strict mode).  GBIS needs a full all-atom PSF with CHARMM radii.
     if progress is not None:
         progress("topology", None, "Building DNA topology (PSF/PDB)…")
-    topology_build = build_charmm_psfgen_topology(design, atomistic_model=atomistic_model)
+    topology_build = build_charmm_psfgen_topology(
+        design, atomistic_model=atomistic_model
+    )
     dna_pdb = topology_build.pdb_text
     dna_psf = topology_build.psf_text
 
@@ -128,7 +130,9 @@ def build_namd_gbis_package(
     if progress is not None:
         progress("enm", None, "Building elastic-network restraints…")
     write_restraints_pdb(pdb_path, package_dir / "restraints_dna_heavy.pdb")
-    enm_report = write_aksimentiev_enm_files(pdb_path, package_dir, name_stem, progress=progress)
+    enm_report = write_aksimentiev_enm_files(
+        pdb_path, package_dir, name_stem, progress=progress
+    )
 
     # 4. Anchors (optional) — fixedAtoms marker PDB, GBIS honours it the same way.
     anchors_file: Optional[str] = None
@@ -136,27 +140,37 @@ def build_namd_gbis_package(
     n_anchored_atoms = 0
     if anchors:
         from backend.core.namd_topology import (  # noqa: PLC0415
-            requested_atom_names, resolve_anchor_atom_map,
+            requested_atom_names,
+            resolve_anchor_atom_map,
         )
+
         # Each anchor may name its own atoms; anchor_atoms is the fallback for those
         # that don't.
         anchor_indices = resolve_anchor_atom_map(
-            design, anchors, model=atomistic_model, full_topology=True,
-            default_atoms=set(anchor_atoms) if anchor_atoms else None)
+            design,
+            anchors,
+            model=atomistic_model,
+            full_topology=True,
+            default_atoms=set(anchor_atoms) if anchor_atoms else None,
+        )
         if anchor_indices:
             n_anchored_atoms = write_anchor_restraints_pdb(
-                pdb_path, package_dir / "restraints_anchors.pdb", anchor_indices)
+                pdb_path, package_dir / "restraints_anchors.pdb", anchor_indices
+            )
             anchors_file = "restraints_anchors.pdb"
             if not n_anchored_atoms:
                 raise ValueError(
                     f"anchor atoms {requested_atom_names(anchor_indices)} matched no heavy "
-                    f"atom in the {len(anchor_indices)} anchored residue(s).")
+                    f"atom in the {len(anchor_indices)} anchored residue(s)."
+                )
 
     efield_vec = namd_efield_vector(field)
     if efield_vec is not None and anchors_file is None:
         logger.warning(
             "GBIS E-field prepared with no anchor (scopes %r resolved to no DNA "
-            "residues) — the structure will drift down-field.", anchors)
+            "residues) — the structure will drift down-field.",
+            anchors,
+        )
 
     # 5. Declash (auto for designs that insert extra bases at crossovers, or carry
     #    strand-extension ssDNA tails): minimise against an ss-excluded ENM so the
@@ -168,8 +182,11 @@ def build_namd_gbis_package(
         ss = identify_unpaired_residues(package_dir / f"{name_stem}.psf", pdb_path)
         n_unpaired = len(ss)
         write_aksimentiev_enm_files(
-            pdb_path, package_dir, f"{name_stem}_declash",
-            scales=(min_scale,), exclude_residues=ss,
+            pdb_path,
+            package_dir,
+            f"{name_stem}_declash",
+            scales=(min_scale,),
+            exclude_residues=ss,
         )
         declash_enm_file = f"{name_stem}_declash_k{min_scale:g}.enm.extra"
 
@@ -186,7 +203,10 @@ def build_namd_gbis_package(
     # still rewrites any segment that actually fails RATTLE down to 1 fs.
     gentle_ladder = declash and not force_soft
     min_name, segments = mgh_slow_release_segments(
-        name_stem, soft=force_soft, gentle=gentle_ladder, nvt_only=True,
+        name_stem,
+        soft=force_soft,
+        gentle=gentle_ladder,
+        nvt_only=True,
         timestep_fs=2.0,
     )
 
@@ -194,8 +214,15 @@ def build_namd_gbis_package(
     box = (0.0, 0.0, 0.0)
     (package_dir / f"{min_name}.conf").write_text(
         _min_conf(
-            min_name, name_stem, box, False, minimize_steps, min_scale,
-            enm_file=declash_enm_file, anchors_file=anchors_file, field=field,
+            min_name,
+            name_stem,
+            box,
+            False,
+            minimize_steps,
+            min_scale,
+            enm_file=declash_enm_file,
+            anchors_file=anchors_file,
+            field=field,
             gbis=True,
         )
     )
@@ -203,8 +230,13 @@ def build_namd_gbis_package(
     for spec in segments:
         (package_dir / f"{spec.name}.conf").write_text(
             _segment_conf(
-                spec, name_stem, box, False,
-                anchors_file=anchors_file, field=field, gbis=True,
+                spec,
+                name_stem,
+                box,
+                False,
+                anchors_file=anchors_file,
+                field=field,
+                gbis=True,
             ).replace(
                 "ionConcentration   0.15",
                 f"ionConcentration   {gbis_ion_conc_M:g}",
@@ -220,12 +252,23 @@ def build_namd_gbis_package(
 
     segment_dicts = [
         {
-            "name": s.name, "stage": s.stage, "percent": s.percent, "steps": s.steps,
-            "temp": s.temp, "damping": s.damping, "scale": s.scale, "npt": s.npt,
-            "previous": s.previous, "reinit": s.reinit, "dcd_freq": s.dcd_freq,
-            "min_c1_paired": s.min_c1_paired, "min_wc_ref_relative": s.min_wc_ref_relative,
-            "extra_bonds_file": s.extra_bonds_file, "soft": s.soft,
-            "gentle": s.gentle, "timestep_fs": s.timestep_fs,
+            "name": s.name,
+            "stage": s.stage,
+            "percent": s.percent,
+            "steps": s.steps,
+            "temp": s.temp,
+            "damping": s.damping,
+            "scale": s.scale,
+            "npt": s.npt,
+            "previous": s.previous,
+            "reinit": s.reinit,
+            "dcd_freq": s.dcd_freq,
+            "min_c1_paired": s.min_c1_paired,
+            "min_wc_ref_relative": s.min_wc_ref_relative,
+            "extra_bonds_file": s.extra_bonds_file,
+            "soft": s.soft,
+            "gentle": s.gentle,
+            "timestep_fs": s.timestep_fs,
         }
         for s in segments
     ]
@@ -264,12 +307,15 @@ def build_namd_gbis_package(
         },
         "field": (
             {
-                "field_pN": float(field.get("field_pN", field.get("force_pN", 0.0)) or 0.0),
+                "field_pN": float(
+                    field.get("field_pN", field.get("force_pN", 0.0)) or 0.0
+                ),
                 "dir": [float(c) for c in field["dir"]],
                 "efield_vector": list(efield_vec),
                 "mechanism": "native NAMD eFieldOn/eField",
             }
-            if efield_vec is not None else None
+            if efield_vec is not None
+            else None
         ),
         "declash": declash,
         "declash_min_coor": f"output/{min_name}.coor" if declash else None,
@@ -284,7 +330,10 @@ def build_namd_gbis_package(
             "extra_bonds_file": f"{name_stem}_k{min_scale:g}.enm.extra",
         },
         "aksimentiev_enm": enm_report,
-        "fast_relaxation": {"enabled": False, "note": "GBIS runs the standard CUDA path (no GPUresident)."},
+        "fast_relaxation": {
+            "enabled": False,
+            "note": "GBIS runs the standard CUDA path (no GPUresident).",
+        },
         "segments": segment_dicts,
         "health_checks": "After every segment: 10%, 50%, and 100% of each stage.",
     }
@@ -311,15 +360,15 @@ def prepare_implicit_gbis_namd(
     # Accept-and-ignore the explicit-solvent kwargs so the shared prep call site
     # (routes_md) can pass one uniform kwarg set regardless of protocol.
     ion_conc_mM: float = 0.0,  # noqa: ARG001
-    mg_conc_mM: float = 0.0,   # noqa: ARG001
+    mg_conc_mM: float = 0.0,  # noqa: ARG001
     salt_mode: str = "custom",  # noqa: ARG001
-    padding_nm: float = 1.2,   # noqa: ARG001
+    padding_nm: float = 1.2,  # noqa: ARG001
     # Cell-sizing intent: meaningless here — GBIS is implicit solvent with no periodic
     # cell, so there is no image for the solute to rotate into.
     free_ns: Optional[float] = None,  # noqa: ARG001
     water_shell_nm: float = 0.0,  # noqa: ARG001
-    fast: bool = False,        # noqa: ARG001 — GBIS forces standard CUDA
-    seed: int = 42,            # noqa: ARG001
+    fast: bool = False,  # noqa: ARG001 — GBIS forces standard CUDA
+    seed: int = 42,  # noqa: ARG001
     # GBIS has no explicit-solvent box and cannot run GPU-resident (no implicit-solvent
     # path in resident mode), so both of these are inapplicable here — but the shared
     # prep call site in routes_md passes ONE uniform kwarg set for every protocol, so
@@ -327,34 +376,36 @@ def prepare_implicit_gbis_namd(
     # GPU-resident dropdown work without being added here, which broke every GBIS job
     # at prep with "unexpected keyword argument 'gpu_resident_mode'".
     # tests/test_prepare_signatures.py now pins this.
-    gpu_resident_mode: str = "auto",       # noqa: ARG001
-    production_timestep_fs: float = 4.0,   # noqa: ARG001
+    gpu_resident_mode: str = "auto",  # noqa: ARG001
+    production_timestep_fs: float = 4.0,  # noqa: ARG001
     # Accepted and ignored: implicit solvent has no GPU-resident path and no HMR PSF (the
     # repartitioned copy is written by the explicit-solvent prep), and this ladder pins its
     # own integrator.  routes_md passes one uniform kwarg set to every protocol, so these
     # must be accepted here even though they cannot apply — see tests/test_prepare_signatures.
-    relax_timestep_fs: Optional[float] = None,      # noqa: ARG001
-    relax_rigid_bonds: Optional[str] = None,        # noqa: ARG001
-    relax_hmr: Optional[bool] = None,               # noqa: ARG001
-    production_rigid_bonds: Optional[str] = None,   # noqa: ARG001
-    production_hmr: Optional[bool] = None,          # noqa: ARG001
-    devices: str = "0",                    # noqa: ARG001 — no box to size
+    relax_timestep_fs: Optional[float] = None,  # noqa: ARG001
+    relax_rigid_bonds: Optional[str] = None,  # noqa: ARG001
+    relax_hmr: Optional[bool] = None,  # noqa: ARG001
+    production_rigid_bonds: Optional[str] = None,  # noqa: ARG001
+    production_hmr: Optional[bool] = None,  # noqa: ARG001
+    devices: str = "0",  # noqa: ARG001 — no box to size
     # Recorded by the explicit path for its protocol_fidelity block; GBIS has no
     # published protocol to be faithful to, so it accepts-and-ignores.
-    early_stop_relax: bool = False,        # noqa: ARG001
+    early_stop_relax: bool = False,  # noqa: ARG001
     # Per-stage hand edits.  Accepted-and-ignored for now: the GBIS ladder writes its
     # confs through its own emitter, so honouring them here would need the same
     # apply_conf_overrides pass the explicit path got.  Left undone deliberately rather
     # than half-done — the wizard only offers the editable table for the explicit
     # protocol, and silently dropping edits would be worse than not offering them.
-    stage_overrides: Optional[dict] = None,   # noqa: ARG001
+    stage_overrides: Optional[dict] = None,  # noqa: ARG001
 ) -> tuple[str, str, list]:
     """Protocol entry point: prepare an implicit-solvent (GBIS) NAMD job.
 
     Salt: the explicit ``ion_conc_mM`` (NaCl) is mapped to the GBIS Debye
     ``ionConcentration`` when nonzero, else physiological 0.15 M is used.
     """
-    ion_M = (ion_conc_mM / 1000.0) if ion_conc_mM and ion_conc_mM > 0 else _GBIS_ION_CONC_M
+    ion_M = (
+        (ion_conc_mM / 1000.0) if ion_conc_mM and ion_conc_mM > 0 else _GBIS_ION_CONC_M
+    )
     return build_namd_gbis_package(
         design,
         job_dir,

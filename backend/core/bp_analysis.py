@@ -22,6 +22,7 @@ strands.  Multi-domain strands may contain extra-base crossover residues
 that lack C1'; those strands should be excluded from the pairing or
 analysed with a topology-aware method.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -31,14 +32,15 @@ import numpy as np
 
 # ── B-DNA reference constants ─────────────────────────────────────────────────
 
-BP_C1C1_IDEAL_ANG: float = 10.4    # Å  ideal Watson-Crick C1'–C1'
-BP_INTACT_ANG:    float = 12.0    # threshold: intact
-BP_STRAINED_ANG:  float = 15.0    # threshold: strained / disrupted
+BP_C1C1_IDEAL_ANG: float = 10.4  # Å  ideal Watson-Crick C1'–C1'
+BP_INTACT_ANG: float = 12.0  # threshold: intact
+BP_STRAINED_ANG: float = 15.0  # threshold: strained / disrupted
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # §1  GRO PARSER
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def read_gro_c1prime(gro_path: Path) -> list[np.ndarray]:
     """
@@ -51,18 +53,22 @@ def read_gro_c1prime(gro_path: Path) -> list[np.ndarray]:
     """
     positions: list[np.ndarray] = []
     with open(gro_path) as fh:
-        fh.readline()                        # title
+        fh.readline()  # title
         n_atoms = int(fh.readline().strip())
         for _ in range(n_atoms):
             line = fh.readline()
             if len(line) < 44:
                 continue
             if line[10:15].strip() == "C1'":
-                positions.append(np.array([
-                    float(line[20:28]),
-                    float(line[28:36]),
-                    float(line[36:44]),
-                ]))
+                positions.append(
+                    np.array(
+                        [
+                            float(line[20:28]),
+                            float(line[28:36]),
+                            float(line[36:44]),
+                        ]
+                    )
+                )
     return positions
 
 
@@ -90,7 +96,7 @@ def split_c1prime_by_strand(
     strands: list[list[np.ndarray]] = []
     offset = 0
     for n in strand_lengths:
-        strands.append(all_c1prime[offset: offset + n])
+        strands.append(all_c1prime[offset : offset + n])
         offset += n
     return strands
 
@@ -98,6 +104,7 @@ def split_c1prime_by_strand(
 # ══════════════════════════════════════════════════════════════════════════════
 # §2  BASE PAIR INDEX MAPPING
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def antiparallel_duplex_pairs(
     n_bp: int,
@@ -114,22 +121,20 @@ def antiparallel_duplex_pairs(
 
     Base pair k:  fwd C1'[k]  ↔  rev C1'[n_bp-1-k]
     """
-    return [
-        (fwd_strand_idx, k, rev_strand_idx, n_bp - 1 - k)
-        for k in range(n_bp)
-    ]
+    return [(fwd_strand_idx, k, rev_strand_idx, n_bp - 1 - k) for k in range(n_bp)]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # §3  DISTANCE COMPUTATION AND REPORT
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @dataclass
 class BpDistanceReport:
     """Per-snapshot C1'–C1' distance statistics for a DNA duplex."""
 
     label: str
-    distances_ang: np.ndarray   # per-pair, shape (n_bp,)
+    distances_ang: np.ndarray  # per-pair, shape (n_bp,)
 
     # ── derived statistics ────────────────────────────────────────────────────
 
@@ -164,7 +169,9 @@ class BpDistanceReport:
 
     @property
     def strained_pct(self) -> float:
-        mask = (self.distances_ang >= BP_INTACT_ANG) & (self.distances_ang < BP_STRAINED_ANG)
+        mask = (self.distances_ang >= BP_INTACT_ANG) & (
+            self.distances_ang < BP_STRAINED_ANG
+        )
         return 100.0 * float(np.sum(mask)) / self.n
 
     @property
@@ -193,7 +200,7 @@ class BpDistanceReport:
 
     def per_pair_table(self) -> str:
         header = f"  {'bp':>4}  {'C1′–C1′ (Å)':>12}  status"
-        sep    = "  " + "─" * 30
+        sep = "  " + "─" * 30
         rows = [header, sep]
         for i, d in enumerate(self.distances_ang):
             if d < BP_INTACT_ANG:
@@ -225,18 +232,20 @@ def compute_bp_distances(
     bp_pairs        : list of (strand_a, idx_a, strand_b, idx_b)
     label           : descriptive name for the snapshot
     """
-    dists = np.array([
-        np.linalg.norm(
-            c1prime_strands[sa][ia] - c1prime_strands[sb][ib]
-        ) * 10.0          # nm → Å
-        for sa, ia, sb, ib in bp_pairs
-    ])
+    dists = np.array(
+        [
+            np.linalg.norm(c1prime_strands[sa][ia] - c1prime_strands[sb][ib])
+            * 10.0  # nm → Å
+            for sa, ia, sb, ib in bp_pairs
+        ]
+    )
     return BpDistanceReport(label=label, distances_ang=dists)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # §4  CONVENIENCE: analyse a GRO snapshot directly
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def analyse_duplex_gro(
     gro_path: Path,
@@ -259,5 +268,5 @@ def analyse_duplex_gro(
         strand_lengths = [n_bp, n_bp]
     all_c1p = read_gro_c1prime(gro_path)
     strands = split_c1prime_by_strand(all_c1p, strand_lengths)
-    pairs   = antiparallel_duplex_pairs(n_bp)
+    pairs = antiparallel_duplex_pairs(n_bp)
     return compute_bp_distances(strands, pairs, label=label)

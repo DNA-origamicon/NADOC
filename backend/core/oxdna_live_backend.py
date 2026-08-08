@@ -23,7 +23,7 @@ from __future__ import annotations
 import threading
 
 _LOCK = threading.Lock()
-_gpu_present: bool | None = None   # tri-state: None = not yet probed
+_gpu_present: bool | None = None  # tri-state: None = not yet probed
 
 
 def _default_probe() -> bool:

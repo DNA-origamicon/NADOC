@@ -24,8 +24,8 @@ class TestStridedIndices:
         out = _strided_indices(0, 1000, 10)
         assert len(out) == 10
         assert out[0] == 0
-        assert max(out) < 1000          # never emits an out-of-range index
-        assert out == sorted(out)       # monotonic
+        assert max(out) < 1000  # never emits an out-of-range index
+        assert out == sorted(out)  # monotonic
 
     def test_empty_when_lo_ge_hi(self):
         assert _strided_indices(5, 5, 120) == []
@@ -59,7 +59,9 @@ class TestAssembleMultiframePdb:
         # emit one ATOM line per atom (coords from the stamped model) + a TER + CONECT + END
         lines = []
         for i, a in enumerate(model.atoms):
-            lines.append(f"ATOM  {i:5d}  C   AAA A   1    {a.x:8.3f}{a.y:8.3f}{a.z:8.3f}")
+            lines.append(
+                f"ATOM  {i:5d}  C   AAA A   1    {a.x:8.3f}{a.y:8.3f}{a.z:8.3f}"
+            )
         lines.append("TER")
         lines.append("CONECT    0    1")
         lines.append("END")
@@ -71,10 +73,12 @@ class TestAssembleMultiframePdb:
             "0": [0, 0, 0, 1, 1, 1],
             "2": [2, 2, 2, 3, 3, 3],
         }
-        out = _assemble_multiframe_pdb(None, model, flats, [0, 2], self._export_pdb_stub)
+        out = _assemble_multiframe_pdb(
+            None, model, flats, [0, 2], self._export_pdb_stub
+        )
         assert out.count("MODEL") == 2
         assert out.count("ENDMDL") == 2
-        assert out.count("CONECT") == 1          # bonds constant → emitted once
+        assert out.count("CONECT") == 1  # bonds constant → emitted once
         assert out.strip().endswith("END")
         # per-frame coordinates were stamped (frame 2's first atom sits at x=2.000)
         models = out.split("MODEL")
@@ -83,21 +87,37 @@ class TestAssembleMultiframePdb:
     def test_skips_frames_whose_flat_mismatches_topology(self):
         model = _FakeModel(2)
         flats = {"0": [0, 0, 0, 1, 1, 1], "1": [9, 9, 9]}  # idx 1 wrong length
-        out = _assemble_multiframe_pdb(None, model, flats, [0, 1], self._export_pdb_stub)
+        out = _assemble_multiframe_pdb(
+            None, model, flats, [0, 1], self._export_pdb_stub
+        )
         assert out.count("MODEL") == 1
 
     def test_empty_when_no_frames_survive(self):
-        assert _assemble_multiframe_pdb(None, _FakeModel(2), {}, [0, 1], self._export_pdb_stub) == ""
+        assert (
+            _assemble_multiframe_pdb(
+                None, _FakeModel(2), {}, [0, 1], self._export_pdb_stub
+            )
+            == ""
+        )
 
     def test_progress_fires_once_per_index_including_skipped_frames(self):
         # The bar advances per index processed (not per valid frame), so a skipped
         # frame still ticks — otherwise a partly-invalid range would stall the bar.
         model = _FakeModel(2)
-        flats = {"0": [0, 0, 0, 1, 1, 1], "1": [9, 9, 9]}   # idx 1 wrong length → skipped
+        flats = {
+            "0": [0, 0, 0, 1, 1, 1],
+            "1": [9, 9, 9],
+        }  # idx 1 wrong length → skipped
         calls = []
-        _assemble_multiframe_pdb(None, model, flats, [0, 1], self._export_pdb_stub,
-                                 progress=lambda done, total: calls.append((done, total)))
-        assert calls == [(1, 2), (2, 2)]                    # reaches total even with a skip
+        _assemble_multiframe_pdb(
+            None,
+            model,
+            flats,
+            [0, 1],
+            self._export_pdb_stub,
+            progress=lambda done, total: calls.append((done, total)),
+        )
+        assert calls == [(1, 2), (2, 2)]  # reaches total even with a skip
 
 
 class TestMultiframePdbTemplate:
@@ -113,12 +133,16 @@ class TestMultiframePdbTemplate:
     def _export_pdb_stub(self, design, model=None, viewer_terminals=False):
         # Column-accurate: coords occupy [30:54] exactly as _pdb_atom_record writes them,
         # in Angstroms (the model carries nm), with a suffix after column 54.
-        lines = ["REMARK  stub", "CRYST1  100.000  100.000  100.000  90.00  90.00  90.00"]
+        lines = [
+            "REMARK  stub",
+            "CRYST1  100.000  100.000  100.000  90.00  90.00  90.00",
+        ]
         for i, a in enumerate(model.atoms):
             lines.append(
                 f"ATOM  {i + 1:5d}  C   AAA A   1    "
                 f"{a.x * 10.0:8.3f}{a.y * 10.0:8.3f}{a.z * 10.0:8.3f}"
-                f"  1.00  0.00           C  ")
+                f"  1.00  0.00           C  "
+            )
         lines.append("TER")
         lines.append("CONECT    1    2")
         lines.append("END")
@@ -144,7 +168,9 @@ class TestMultiframePdbTemplate:
         tpl = build_multiframe_pdb_template(None, model, self._export_pdb_stub)
         flat = [0.1, 0.2, 0.3, -1.0, 2.5, 3.75, 10.0, -20.0, 30.125, 0.0, 0.0, 0.0]
         for model_no in (1, 7, 240):
-            expected, _ = _render_model_block(None, model, flat, self._export_pdb_stub, model_no)
+            expected, _ = _render_model_block(
+                None, model, flat, self._export_pdb_stub, model_no
+            )
             assert tpl.model_block(flat, model_no) == expected
 
     def test_full_document_matches_the_legacy_non_streaming_builder(self):
@@ -157,11 +183,14 @@ class TestMultiframePdbTemplate:
             "2": [9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0],
         }
         indices = [0, 1, 2]
-        legacy = _assemble_multiframe_pdb(None, model, flats, indices, self._export_pdb_stub)
+        legacy = _assemble_multiframe_pdb(
+            None, model, flats, indices, self._export_pdb_stub
+        )
 
         tpl = build_multiframe_pdb_template(None, model, self._export_pdb_stub)
         first_block, conect = _render_model_block(
-            None, model, flats["0"], self._export_pdb_stub, 1)
+            None, model, flats["0"], self._export_pdb_stub, 1
+        )
         streamed = first_block
         for n, idx in enumerate(indices[1:], start=2):
             streamed += tpl.model_block(flats[str(idx)], n)
@@ -224,10 +253,15 @@ class TestCompositeTrajectoryAtomisticProgress:
     def _patch(self, monkeypatch, n_ordered):
         from backend.core import oxdna_health as oh
 
-        monkeypatch.setattr(oh, "_aligned_downsampled_frames",
-                            lambda *a, **k: (None, [{} for _ in range(n_ordered)], None, None))
+        monkeypatch.setattr(
+            oh,
+            "_aligned_downsampled_frames",
+            lambda *a, **k: (None, [{} for _ in range(n_ordered)], None, None),
+        )
         monkeypatch.setattr(oh, "_aligned_cache_key", lambda *a, **k: "key")
-        monkeypatch.setattr(oh, "frame_atomistic_flat", lambda design, frame: [1.0, 2.0, 3.0])
+        monkeypatch.setattr(
+            oh, "frame_atomistic_flat", lambda design, frame: [1.0, 2.0, 3.0]
+        )
         # Bypass the shared display cache so this test can't be perturbed by, or pollute, it.
         monkeypatch.setattr(oh, "_display_out_get", lambda key: None)
         monkeypatch.setattr(oh, "_display_out_put", lambda key, payload: None)
@@ -237,8 +271,12 @@ class TestCompositeTrajectoryAtomisticProgress:
         oh = self._patch(monkeypatch, n_ordered=5)
         calls = []
         out = oh.composite_trajectory_atomistic(
-            None, [], None, [0, 2, 4],
-            progress=lambda done, total: calls.append((done, total)))
+            None,
+            [],
+            None,
+            [0, 2, 4],
+            progress=lambda done, total: calls.append((done, total)),
+        )
         assert calls == [(1, 3), (2, 3), (3, 3)]
         assert sorted(out) == ["0", "2", "4"]
 
@@ -248,11 +286,18 @@ class TestCompositeTrajectoryAtomisticProgress:
         oh = self._patch(monkeypatch, n_ordered=2)
         calls = []
         out = oh.composite_trajectory_atomistic(
-            None, [], None, [0, 1, 7],
-            progress=lambda done, total: calls.append((done, total)))
+            None,
+            [],
+            None,
+            [0, 1, 7],
+            progress=lambda done, total: calls.append((done, total)),
+        )
         assert calls[-1] == (3, 3)
-        assert sorted(out) == ["0", "1"]      # index 7 dropped, but it counted
+        assert sorted(out) == ["0", "1"]  # index 7 dropped, but it counted
 
     def test_absent_callback_is_optional(self, monkeypatch):
         oh = self._patch(monkeypatch, n_ordered=3)
-        assert sorted(oh.composite_trajectory_atomistic(None, [], None, [0, 1])) == ["0", "1"]
+        assert sorted(oh.composite_trajectory_atomistic(None, [], None, [0, 1])) == [
+            "0",
+            "1",
+        ]

@@ -39,6 +39,7 @@ import sys
 
 # ── VENDORED from backend.core.md_cutoff (keep in lockstep — see test) ─────────
 
+
 # Plain class, NOT a @dataclass: the ``dataclasses`` module is Python 3.7+, and
 # Alpine's bare node python3 is 3.6 (`ModuleNotFoundError: dataclasses`, live-
 # confirmed on amilan c3cpu 2026-07-08). Class-level attributes give the same
@@ -48,14 +49,14 @@ class CutoffParams:
     signal, kept tight) from FLUCT (instantaneous thermal noise — a loose "not
     exploding" guard).  Values kept in lockstep with ``md_cutoff.CutoffParams``."""
 
-    window = 10             # trailing frames to test
-    eps_pot_drift = 5e-4    # 0.05% mean drift = settled
+    window = 10  # trailing frames to test
+    eps_pot_drift = 5e-4  # 0.05% mean drift = settled
     eps_pot_fluct = 3.5e-3  # 0.35% noise guard (fast-run thermal ~0.13%)
-    eps_vol_drift = 3e-3    # 0.30% mean drift
-    eps_vol_fluct = 5e-3    # 0.50% noise guard (fast-run thermal ~0.24%)
-    eps_wc_drift = 0.02     # 2 pts mean drift
-    eps_wc_fluct = 0.05     # 5 pts noise guard
-    min_frames = 20         # skip a tiny p10 chunk; judge on p50's fuller series
+    eps_vol_drift = 3e-3  # 0.30% mean drift
+    eps_vol_fluct = 5e-3  # 0.50% noise guard (fast-run thermal ~0.24%)
+    eps_wc_drift = 0.02  # 2 pts mean drift
+    eps_wc_fluct = 0.05  # 5 pts noise guard
+    min_frames = 20  # skip a tiny p10 chunk; judge on p50's fuller series
 
 
 def _series_flat(vals, window, drift_eps, fluct_eps, absolute):
@@ -64,7 +65,7 @@ def _series_flat(vals, window, drift_eps, fluct_eps, absolute):
     w = [v for v in vals[-window:] if v is not None]
     if len(w) < max(4, window // 2):
         return False
-    lo, hi = w[: len(w) // 2], w[len(w) // 2:]
+    lo, hi = w[: len(w) // 2], w[len(w) // 2 :]
     drift = abs(st.mean(lo) - st.mean(hi))
     fluct = st.pstdev(w)
     if not absolute:
@@ -80,13 +81,19 @@ def energy_plateaued(frames, params=CutoffParams()):
     if len(frames) < params.min_frames:
         return False
     pot = [f.get("POTENTIAL") for f in frames]
-    if not _series_flat(pot, params.window, params.eps_pot_drift,
-                        params.eps_pot_fluct, absolute=False):
+    if not _series_flat(
+        pot, params.window, params.eps_pot_drift, params.eps_pot_fluct, absolute=False
+    ):
         return False
     vol = [f.get("VOLUME") for f in frames]
     if any(v is not None for v in vol):
-        if not _series_flat(vol, params.window, params.eps_vol_drift,
-                            params.eps_vol_fluct, absolute=False):
+        if not _series_flat(
+            vol,
+            params.window,
+            params.eps_vol_drift,
+            params.eps_vol_fluct,
+            absolute=False,
+        ):
             return False
     return True
 
@@ -96,8 +103,13 @@ def wc_plateaued(wc_per_frame, params=CutoffParams()):
     Vendored verbatim from ``md_cutoff.wc_plateaued``."""
     if not wc_per_frame:
         return False
-    return _series_flat(wc_per_frame, params.window, params.eps_wc_drift,
-                        params.eps_wc_fluct, absolute=True)
+    return _series_flat(
+        wc_per_frame,
+        params.window,
+        params.eps_wc_drift,
+        params.eps_wc_fluct,
+        absolute=True,
+    )
 
 
 def should_early_stop_stage(frames, wc_per_frame, params=CutoffParams()):
@@ -151,9 +163,9 @@ def parse_namd_log_frames(log_text):
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
-_EXIT_SKIP = 0   # plateau -> skip remaining chunks
-_EXIT_HOLD = 1   # not plateaued -> run remaining chunks
-_EXIT_ERR = 2    # insufficient data / error -> fail safe (run)
+_EXIT_SKIP = 0  # plateau -> skip remaining chunks
+_EXIT_HOLD = 1  # not plateaued -> run remaining chunks
+_EXIT_ERR = 2  # insufficient data / error -> fail safe (run)
 
 
 def decide(log_text, wc_per_frame=None, params=CutoffParams()):
@@ -161,7 +173,10 @@ def decide(log_text, wc_per_frame=None, params=CutoffParams()):
     Tier A (wc list) = energy AND WC, i.e. ``should_early_stop_stage``."""
     frames = parse_namd_log_frames(log_text)
     if len(frames) < params.min_frames:
-        return _EXIT_ERR, {"reason": "insufficient_frames", "n_energy_frames": len(frames)}
+        return _EXIT_ERR, {
+            "reason": "insufficient_frames",
+            "n_energy_frames": len(frames),
+        }
     if wc_per_frame is None:
         e = energy_plateaued(frames, params)
         diag = {"tier": "B", "n_energy_frames": len(frames), "energy_plateaued": e}
@@ -176,8 +191,11 @@ def main(argv=None):
         description="NADOC relaxation early-stop plateau evaluator (node-side)."
     )
     ap.add_argument("--log", required=True, help="chunk NAMD .log path")
-    ap.add_argument("--wc", default=None,
-                    help="Tier A: JSON file with a list of per-frame WC fractions")
+    ap.add_argument(
+        "--wc",
+        default=None,
+        help="Tier A: JSON file with a list of per-frame WC fractions",
+    )
     args = ap.parse_args(argv)
 
     try:

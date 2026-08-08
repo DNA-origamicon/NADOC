@@ -57,6 +57,7 @@ def _first_staple_end(design: Design):
     and a valid honeycomb neighbour of (0, 1) at z = first staple 3' bp_index.
     """
     from backend.core.models import StrandType
+
     for strand in design.strands:
         if strand.strand_type != StrandType.STAPLE or not strand.domains:
             continue
@@ -72,6 +73,7 @@ def _extrude_overhang(design: Design, length_bp: int = 12) -> tuple[Design, str]
     app's overhang tool would actually offer (backbone bead faces the cell).
     """
     from tests.conftest import extrude_valid_overhang
+
     return extrude_valid_overhang(design, length_bp=length_bp)
 
 
@@ -112,9 +114,14 @@ def test_split_preserves_gapless_invariant() -> None:
 
     spec = design_state.get_or_404().overhangs[0]
     assert len(spec.sub_domains) == 2
-    lengths = [sd.length_bp for sd in sorted(spec.sub_domains, key=lambda s: s.start_bp_offset)]
+    lengths = [
+        sd.length_bp for sd in sorted(spec.sub_domains, key=lambda s: s.start_bp_offset)
+    ]
     assert lengths == [5, 7]
-    offsets = [sd.start_bp_offset for sd in sorted(spec.sub_domains, key=lambda s: s.start_bp_offset)]
+    offsets = [
+        sd.start_bp_offset
+        for sd in sorted(spec.sub_domains, key=lambda s: s.start_bp_offset)
+    ]
     assert offsets == [0, 5]
     assert sum(lengths) == 12
 
@@ -179,21 +186,27 @@ def test_resize_absorbs_last() -> None:
     assert resp.status_code == 200, resp.text
 
     spec = design_state.get_or_404().overhangs[0]
-    lengths = [sd.length_bp for sd in sorted(spec.sub_domains, key=lambda s: s.start_bp_offset)]
+    lengths = [
+        sd.length_bp for sd in sorted(spec.sub_domains, key=lambda s: s.start_bp_offset)
+    ]
     assert lengths == [4, 4, 4]
 
     # Extend parent to 15 → last sub-domain absorbs +3, becoming length 7.
     resp = _patch(f"/design/overhang/{ovhg_id}", {"sequence": "A" * 15})
     assert resp.status_code == 200, resp.text
     spec = design_state.get_or_404().overhangs[0]
-    lengths = [sd.length_bp for sd in sorted(spec.sub_domains, key=lambda s: s.start_bp_offset)]
+    lengths = [
+        sd.length_bp for sd in sorted(spec.sub_domains, key=lambda s: s.start_bp_offset)
+    ]
     assert lengths == [4, 4, 7]
 
     # Shrink to 9 → last sub-domain absorbs −6, becoming length 1.
     resp = _patch(f"/design/overhang/{ovhg_id}", {"sequence": "A" * 9})
     assert resp.status_code == 200, resp.text
     spec = design_state.get_or_404().overhangs[0]
-    lengths = [sd.length_bp for sd in sorted(spec.sub_domains, key=lambda s: s.start_bp_offset)]
+    lengths = [
+        sd.length_bp for sd in sorted(spec.sub_domains, key=lambda s: s.start_bp_offset)
+    ]
     assert lengths == [4, 4, 1]
 
     # Shrink to 7 → last sub-domain would have to become −1 bp → 422.
@@ -455,8 +468,8 @@ def test_tm_gc_hairpin_dimer_correctness() -> None:
     assert abs(gc_content("ACGT") - 50.0) < 1e-6
 
     # Hairpin: a palindrome-bearing sequence should be flagged.
-    palin = "ACGTACGT" + "GCGT" + "ACGTACGT"[::-1].translate(
-        str.maketrans("ACGT", "TGCA")
+    palin = (
+        "ACGTACGT" + "GCGT" + "ACGTACGT"[::-1].translate(str.maketrans("ACGT", "TGCA"))
     )
     # That construction yields a long sequence with a clear reverse-complement
     # window pair. has_hairpin's threshold is > 3 possibilities.
@@ -496,7 +509,9 @@ def test_resize_free_end_grows_and_shrinks() -> None:
     #   end='3p' moves end_bp by delta; growing means end moves AWAY from
     #     start → sign(delta) == sign(end_bp - start_bp).
     bp_run = backing.end_bp - backing.start_bp
-    grow_sign = (-1 if bp_run > 0 else 1) if free_end == "5p" else (1 if bp_run > 0 else -1)
+    grow_sign = (
+        (-1 if bp_run > 0 else 1) if free_end == "5p" else (1 if bp_run > 0 else -1)
+    )
 
     # Set an override so we exercise the override-tracking path.
     resp = _patch(

@@ -11,8 +11,10 @@ import backend.core.fs_browse as fb
 def test_list_dir_sorts_dirs_then_recent_files(tmp_path):
     (tmp_path / "zeta").mkdir()
     (tmp_path / "alpha").mkdir()
-    old = tmp_path / "old.txt"; old.write_text("x")
-    new = tmp_path / "new.txt"; new.write_text("y")
+    old = tmp_path / "old.txt"
+    old.write_text("x")
+    new = tmp_path / "new.txt"
+    new.write_text("y")
     # make new.txt genuinely newer
     os.utime(old, (time.time() - 1000, time.time() - 1000))
     os.utime(new, None)

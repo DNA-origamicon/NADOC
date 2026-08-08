@@ -15,6 +15,7 @@ side, so the cross-part path can NOT drift from the per-design register/polarity
 rules (feedback_crossover_no_reasoning: never re-reason the polarity — reuse the
 proven primitive).
 """
+
 from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
@@ -39,10 +40,12 @@ from backend.core.models import (
 
 # ── instance / overhang resolution ────────────────────────────────────────────
 
+
 def _instance_design(inst: PartInstance) -> Optional[Design]:
     """Resolve a PartInstance's source Design (inline or file). Returns None when
     a file source can't be found — a stale reference is harmless (skipped)."""
     from backend.core.assembly_flatten import _load_design
+
     try:
         return _load_design(inst.source)
     except (FileNotFoundError, ValueError):
@@ -54,8 +57,10 @@ def _instance_map(assembly: Assembly) -> Dict[str, PartInstance]:
 
 
 def _resolve_end_context(
-    assembly: Assembly, inst_map: Dict[str, PartInstance],
-    instance_id: str, overhang_id: str,
+    assembly: Assembly,
+    inst_map: Dict[str, PartInstance],
+    instance_id: str,
+    overhang_id: str,
 ) -> Tuple[Optional[Design], Optional[Domain]]:
     """(design, backing_domain) for an overhang on one instance, or (None, None)."""
     inst = inst_map.get(instance_id)
@@ -68,7 +73,9 @@ def _resolve_end_context(
     return design, dom
 
 
-def _sub_domain(design: Design, overhang_id: str, sub_domain_id: str) -> Optional[SubDomain]:
+def _sub_domain(
+    design: Design, overhang_id: str, sub_domain_id: str
+) -> Optional[SubDomain]:
     for ov in design.overhangs:
         if ov.id != overhang_id:
             continue
@@ -79,7 +86,11 @@ def _sub_domain(design: Design, overhang_id: str, sub_domain_id: str) -> Optiona
 
 
 def _end_from_sub_domain(
-    instance_id: str, overhang_id: str, dom: Domain, sd: SubDomain, length: int,
+    instance_id: str,
+    overhang_id: str,
+    dom: Domain,
+    sd: SubDomain,
+    length: int,
 ) -> AssemblyDuplexEnd:
     """Build an :class:`AssemblyDuplexEnd` covering ``length`` bases from the
     sub-domain's 5' base (mirrors ``backend.core.duplex.subdomain_end`` but for the
@@ -87,14 +98,18 @@ def _end_from_sub_domain(
     start_bp = offset_to_bp(dom, sd.start_bp_offset)
     end_bp = offset_to_bp(dom, sd.start_bp_offset + length - 1)
     return AssemblyDuplexEnd(
-        instance_id=instance_id, overhang_id=overhang_id,
-        start_bp=start_bp, end_bp=end_bp,
+        instance_id=instance_id,
+        overhang_id=overhang_id,
+        start_bp=start_bp,
+        end_bp=end_bp,
     )
 
 
 def assembly_overhang_domain_length(
-    assembly: Assembly, inst_map: Dict[str, PartInstance],
-    instance_id: str, overhang_id: str,
+    assembly: Assembly,
+    inst_map: Dict[str, PartInstance],
+    instance_id: str,
+    overhang_id: str,
 ) -> int:
     _, dom = _resolve_end_context(assembly, inst_map, instance_id, overhang_id)
     return 0 if dom is None else abs(dom.end_bp - dom.start_bp) + 1
@@ -102,22 +117,34 @@ def assembly_overhang_domain_length(
 
 # ── connect producer (cross-part mirror of core.duplex.connect_register) ───────
 
+
 def assembly_longest_driver(
-    assembly: Assembly, inst_map: Dict[str, PartInstance],
-    left: AssemblyDuplexEnd, right: AssemblyDuplexEnd,
+    assembly: Assembly,
+    inst_map: Dict[str, PartInstance],
+    left: AssemblyDuplexEnd,
+    right: AssemblyDuplexEnd,
 ) -> str:
     """Default driver = the LONGER overhang's side (Q4 longest-drives; the shorter
     partner rides its helix). Ties → 'left'. Cross-part mirror of
     ``backend.core.duplex.longest_driver``."""
-    la = assembly_overhang_domain_length(assembly, inst_map, left.instance_id, left.overhang_id)
-    lb = assembly_overhang_domain_length(assembly, inst_map, right.instance_id, right.overhang_id)
-    return 'right' if lb > la else 'left'
+    la = assembly_overhang_domain_length(
+        assembly, inst_map, left.instance_id, left.overhang_id
+    )
+    lb = assembly_overhang_domain_length(
+        assembly, inst_map, right.instance_id, right.overhang_id
+    )
+    return "right" if lb > la else "left"
 
 
 def assembly_connect_register(
-    assembly: Assembly, inst_map: Dict[str, PartInstance],
-    inst_a_id: str, oh_a_id: str, attach_a: str,
-    inst_b_id: str, oh_b_id: str, attach_b: str,
+    assembly: Assembly,
+    inst_map: Dict[str, PartInstance],
+    inst_a_id: str,
+    oh_a_id: str,
+    attach_a: str,
+    inst_b_id: str,
+    oh_b_id: str,
+    attach_b: str,
 ) -> Tuple[AssemblyDuplexEnd, AssemblyDuplexEnd]:
     """Compute the register for CONNECTING two cross-part overhangs at their attach
     ends — the producer for a fresh :class:`AssemblyDuplex`. MECHANICAL (no polarity
@@ -130,6 +157,7 @@ def assembly_connect_register(
     tip). Raises ``ValueError`` on unresolved instance / overhang / sub-domain /
     domain."""
     from backend.core.models import _sub_domain_at_attach
+
     design_a, dom_a = _resolve_end_context(assembly, inst_map, inst_a_id, oh_a_id)
     design_b, dom_b = _resolve_end_context(assembly, inst_map, inst_b_id, oh_b_id)
     if design_a is None or design_b is None:
@@ -147,23 +175,34 @@ def assembly_connect_register(
     length = min(sd_a.length_bp, sd_b.length_bp)
     if length <= 0:
         raise ValueError("attach sub-domain has zero length")
-    return (_end_from_sub_domain(inst_a_id, oh_a_id, dom_a, sd_a, length),
-            _end_from_sub_domain(inst_b_id, oh_b_id, dom_b, sd_b, length))
+    return (
+        _end_from_sub_domain(inst_a_id, oh_a_id, dom_a, sd_a, length),
+        _end_from_sub_domain(inst_b_id, oh_b_id, dom_b, sd_b, length),
+    )
 
 
 # ── migration: AssemblyOverhangBinding → AssemblyDuplex ────────────────────────
 
+
 def _binding_driver_side(
-    assembly: Assembly, inst_map: Dict[str, PartInstance], b: AssemblyOverhangBinding,
+    assembly: Assembly,
+    inst_map: Dict[str, PartInstance],
+    b: AssemblyOverhangBinding,
 ) -> str:
     """Default driver = the LONGER overhang's side (Q4 longest-drives; the
     AssemblyOverhangBinding carries no explicit driver). Ties → 'left'."""
-    la = assembly_overhang_domain_length(assembly, inst_map, b.instance_a_id, b.overhang_a_id)
-    lb = assembly_overhang_domain_length(assembly, inst_map, b.instance_b_id, b.overhang_b_id)
-    return 'right' if lb > la else 'left'
+    la = assembly_overhang_domain_length(
+        assembly, inst_map, b.instance_a_id, b.overhang_a_id
+    )
+    lb = assembly_overhang_domain_length(
+        assembly, inst_map, b.instance_b_id, b.overhang_b_id
+    )
+    return "right" if lb > la else "left"
 
 
-def synthesize_assembly_duplexes_from_bindings(assembly: Assembly) -> List[AssemblyDuplex]:
+def synthesize_assembly_duplexes_from_bindings(
+    assembly: Assembly,
+) -> List[AssemblyDuplex]:
     """Convert every legacy :class:`AssemblyOverhangBinding` into an equivalent
     :class:`AssemblyDuplex`. Pure — returns a new list, does not mutate
     ``assembly``. Bindings whose sub-domains / designs no longer resolve are
@@ -174,9 +213,11 @@ def synthesize_assembly_duplexes_from_bindings(assembly: Assembly) -> List[Assem
     out: List[AssemblyDuplex] = []
     for i, b in enumerate(assembly.overhang_bindings):
         design_a, dom_a = _resolve_end_context(
-            assembly, inst_map, b.instance_a_id, b.overhang_a_id)
+            assembly, inst_map, b.instance_a_id, b.overhang_a_id
+        )
         design_b, dom_b = _resolve_end_context(
-            assembly, inst_map, b.instance_b_id, b.overhang_b_id)
+            assembly, inst_map, b.instance_b_id, b.overhang_b_id
+        )
         if dom_a is None or dom_b is None:
             continue
         sd_a = _sub_domain(design_a, b.overhang_a_id, b.sub_domain_a_id)
@@ -186,16 +227,22 @@ def synthesize_assembly_duplexes_from_bindings(assembly: Assembly) -> List[Assem
         length = min(sd_a.length_bp, sd_b.length_bp)
         if length <= 0:
             continue
-        out.append(AssemblyDuplex(
-            name=b.name or f"AD{i + 1}",
-            created_at=b.created_at,
-            left=_end_from_sub_domain(b.instance_a_id, b.overhang_a_id, dom_a, sd_a, length),
-            right=_end_from_sub_domain(b.instance_b_id, b.overhang_b_id, dom_b, sd_b, length),
-            driver=_binding_driver_side(assembly, inst_map, b),
-            bound=False,
-            binding_mode=b.binding_mode,
-            allow_n_wildcard=b.allow_n_wildcard,
-        ))
+        out.append(
+            AssemblyDuplex(
+                name=b.name or f"AD{i + 1}",
+                created_at=b.created_at,
+                left=_end_from_sub_domain(
+                    b.instance_a_id, b.overhang_a_id, dom_a, sd_a, length
+                ),
+                right=_end_from_sub_domain(
+                    b.instance_b_id, b.overhang_b_id, dom_b, sd_b, length
+                ),
+                driver=_binding_driver_side(assembly, inst_map, b),
+                bound=False,
+                binding_mode=b.binding_mode,
+                allow_n_wildcard=b.allow_n_wildcard,
+            )
+        )
     return out
 
 
@@ -212,11 +259,14 @@ def sync_assembly_duplexes_from_bindings(assembly: Assembly) -> Assembly:
     :class:`AssemblyDuplex`. Skips pairs that already carry a duplex; assigns
     fresh unique names. Mirrors ``backend.core.duplex.sync_duplexes_from_bindings``.
     """
+
     def _pair(dx: AssemblyDuplex):
-        return frozenset({
-            (dx.left.instance_id, dx.left.overhang_id),
-            (dx.right.instance_id, dx.right.overhang_id),
-        })
+        return frozenset(
+            {
+                (dx.left.instance_id, dx.left.overhang_id),
+                (dx.right.instance_id, dx.right.overhang_id),
+            }
+        )
 
     existing = {_pair(dx) for dx in assembly.duplexes}
     additions: List[AssemblyDuplex] = []
@@ -225,17 +275,19 @@ def sync_assembly_duplexes_from_bindings(assembly: Assembly) -> Assembly:
         if pair in existing:
             continue
         existing.add(pair)
-        probe = assembly.model_copy(update={
-            "duplexes": [*assembly.duplexes, *additions]})
-        additions.append(dx.model_copy(update={
-            "name": smallest_unused_assembly_duplex_name(probe)}))
+        probe = assembly.model_copy(
+            update={"duplexes": [*assembly.duplexes, *additions]}
+        )
+        additions.append(
+            dx.model_copy(update={"name": smallest_unused_assembly_duplex_name(probe)})
+        )
     if not additions:
         return assembly
-    return assembly.model_copy(update={
-        "duplexes": [*assembly.duplexes, *additions]})
+    return assembly.model_copy(update={"duplexes": [*assembly.duplexes, *additions]})
 
 
 # ── cross-part classifier / coverage (reuses the per-design kernel) ────────────
+
 
 def classify_assembly_duplex(assembly: Assembly, duplex: AssemblyDuplex) -> dict:
     """Per-base classification of one cross-part duplex. Sources each side's
@@ -245,21 +297,36 @@ def classify_assembly_duplex(assembly: Assembly, duplex: AssemblyDuplex) -> dict
     Same return shape as ``classify_duplex_pairing``."""
     inst_map = _instance_map(assembly)
     design_a, left_dom = _resolve_end_context(
-        assembly, inst_map, duplex.left.instance_id, duplex.left.overhang_id)
+        assembly, inst_map, duplex.left.instance_id, duplex.left.overhang_id
+    )
     design_b, right_dom = _resolve_end_context(
-        assembly, inst_map, duplex.right.instance_id, duplex.right.overhang_id)
-    left_bases = (overhang_offset_bases(design_a, duplex.left.overhang_id)
-                  if design_a is not None else [])
-    right_bases = (overhang_offset_bases(design_b, duplex.right.overhang_id)
-                   if design_b is not None else [])
+        assembly, inst_map, duplex.right.instance_id, duplex.right.overhang_id
+    )
+    left_bases = (
+        overhang_offset_bases(design_a, duplex.left.overhang_id)
+        if design_a is not None
+        else []
+    )
+    right_bases = (
+        overhang_offset_bases(design_b, duplex.right.overhang_id)
+        if design_b is not None
+        else []
+    )
     return classify_antiparallel(
-        left_dom, right_dom, duplex.left, duplex.right,
-        left_bases, right_bases, duplex.allow_n_wildcard,
+        left_dom,
+        right_dom,
+        duplex.left,
+        duplex.right,
+        left_bases,
+        right_bases,
+        duplex.allow_n_wildcard,
     )
 
 
 def assembly_overhang_pairing_map(
-    assembly: Assembly, instance_id: str, overhang_id: str,
+    assembly: Assembly,
+    instance_id: str,
+    overhang_id: str,
 ) -> Dict[int, str]:
     """bp → ``'paired'`` | ``'mismatch'`` | ``'unpaired'`` for every bp of an
     overhang's backing domain on one instance, aggregating ALL AssemblyDuplexes
@@ -271,25 +338,28 @@ def assembly_overhang_pairing_map(
     if dom is None:
         return {}
     lo, hi = sorted((dom.start_bp, dom.end_bp))
-    result: Dict[int, str] = {bp: 'unpaired' for bp in range(lo, hi + 1)}
+    result: Dict[int, str] = {bp: "unpaired" for bp in range(lo, hi + 1)}
     for dx in assembly.duplexes:
-        ends = ((dx.left.instance_id, dx.left.overhang_id, 'left'),
-                (dx.right.instance_id, dx.right.overhang_id, 'right'))
-        if not any(iid == instance_id and oid == overhang_id
-                   for iid, oid, _ in ends):
+        ends = (
+            (dx.left.instance_id, dx.left.overhang_id, "left"),
+            (dx.right.instance_id, dx.right.overhang_id, "right"),
+        )
+        if not any(iid == instance_id and oid == overhang_id for iid, oid, _ in ends):
             continue
         cls = classify_assembly_duplex(assembly, dx)
         for p in cls["positions"]:
             for (iid, oid, side), bp in (
-                ((dx.left.instance_id, dx.left.overhang_id, 'left'), p["left_bp"]),
-                ((dx.right.instance_id, dx.right.overhang_id, 'right'), p["right_bp"]),
+                ((dx.left.instance_id, dx.left.overhang_id, "left"), p["left_bp"]),
+                ((dx.right.instance_id, dx.right.overhang_id, "right"), p["right_bp"]),
             ):
                 if iid == instance_id and oid == overhang_id and bp in result:
-                    result[bp] = 'paired' if p["complementary"] else 'mismatch'
+                    result[bp] = "paired" if p["complementary"] else "mismatch"
     return result
 
 
-def assembly_duplex_wc_ok(assembly: Assembly, duplex: AssemblyDuplex) -> Tuple[bool, str]:
+def assembly_duplex_wc_ok(
+    assembly: Assembly, duplex: AssemblyDuplex
+) -> Tuple[bool, str]:
     """Watson-Crick gate (kept for parity with the per-design ``duplex_wc_ok``): a
     duplex is acceptable iff no position is a REAL mismatch (N wildcards pass when
     ``allow_n_wildcard``). Returns ``(ok, reason)``."""
@@ -310,21 +380,29 @@ def summarize_assembly_duplexes(assembly: Assembly) -> dict:
     per_duplex = []
     for dx in assembly.duplexes:
         cls = classify_assembly_duplex(assembly, dx)
-        per_duplex.append({
-            "id": dx.id, "name": dx.name, "driver": dx.driver, "bound": dx.bound,
-            "length": cls["length"],
-            "n_complementary": cls["n_complementary"],
-            "n_mismatch": cls["n_mismatch"],
-        })
+        per_duplex.append(
+            {
+                "id": dx.id,
+                "name": dx.name,
+                "driver": dx.driver,
+                "bound": dx.bound,
+                "length": cls["length"],
+                "n_complementary": cls["n_complementary"],
+                "n_mismatch": cls["n_mismatch"],
+            }
+        )
     per_overhang = {}
-    touched = {(e.instance_id, e.overhang_id)
-               for dx in assembly.duplexes for e in (dx.left, dx.right)}
+    touched = {
+        (e.instance_id, e.overhang_id)
+        for dx in assembly.duplexes
+        for e in (dx.left, dx.right)
+    }
     for iid, oid in sorted(touched):
         cov = assembly_overhang_pairing_map(assembly, iid, oid)
         vals = list(cov.values())
         per_overhang[f"{iid}::{oid}"] = {
-            "paired": vals.count('paired'),
-            "mismatch": vals.count('mismatch'),
-            "toehold": vals.count('unpaired'),
+            "paired": vals.count("paired"),
+            "mismatch": vals.count("mismatch"),
+            "toehold": vals.count("unpaired"),
         }
     return {"duplexes": per_duplex, "overhangs": per_overhang}

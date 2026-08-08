@@ -37,14 +37,17 @@ def test_psfgen_name_maps_cover_nadoc_dna_names() -> None:
 
 
 def test_psfgen_script_applies_auto_namd_style_deoxy_patches(tmp_path) -> None:
-    script = _psfgen_script([
-        {
-            "segid": "DNAA",
-            "path": tmp_path / "DNAA.pdb",
-            "first_resid": 1,
-            "last_resid": 3,
-        }
-    ], tmp_path / "out")
+    script = _psfgen_script(
+        [
+            {
+                "segid": "DNAA",
+                "path": tmp_path / "DNAA.pdb",
+                "first_resid": 1,
+                "last_resid": 3,
+            }
+        ],
+        tmp_path / "out",
+    )
 
     assert "segment DNAA" in script
     assert "first 5TER" in script
@@ -98,22 +101,34 @@ def test_psfgen_segid_unique_and_four_chars() -> None:
     """Every chain index maps to a distinct 4-char psfgen segname (no collisions
     up to far more chains than any real design)."""
     ids = [_psfgen_segid(i) for i in range(2000)]
-    assert len(set(ids)) == len(ids)            # all unique
-    assert all(len(s) == 4 for s in ids)        # psfgen segname width
+    assert len(set(ids)) == len(ids)  # all unique
+    assert all(len(s) == 4 for s in ids)  # psfgen segname width
     assert ids[0] == "D000"
-    assert ids[40] == "D014"                    # the chain that used to FATAL
+    assert ids[40] == "D014"  # the chain that used to FATAL
 
 
 def test_psfgen_pdb_record_serial_stays_five_wide_past_100k() -> None:
     """A serial > 99999 must stay in a 5-char field (hybrid-36) so the resid
     column never shifts."""
-    atom = Atom(serial=0, name="P", element="P", residue="DA", chain_id="A",
-                seq_num=37, x=1.0, y=2.0, z=3.0, strand_id="s", helix_id="h",
-                bp_index=0, direction="FORWARD")
+    atom = Atom(
+        serial=0,
+        name="P",
+        element="P",
+        residue="DA",
+        chain_id="A",
+        seq_num=37,
+        x=1.0,
+        y=2.0,
+        z=3.0,
+        strand_id="s",
+        helix_id="h",
+        bp_index=0,
+        direction="FORWARD",
+    )
     rec = _psfgen_pdb_record(atom, 123456, "D014")
     assert rec.startswith("ATOM  ")
-    assert len(rec[6:11]) == 5                      # serial field exactly 5 chars
-    assert rec[11] == " "                           # column not shifted
+    assert len(rec[6:11]) == 5  # serial field exactly 5 chars
+    assert rec[11] == " "  # column not shifted
     # resid still parses to seq_num at the fixed hybrid-36 column.
     assert rec[22:26].strip() == "37"
 
@@ -136,10 +151,23 @@ def _fake_many_chain_model(n_chains: int = 40, n_res: int = 50) -> AtomisticMode
         chain_id = _alpha_chain_id(ci)
         for r in range(1, n_res + 1):
             for nm in ("P", "C1'"):
-                atoms.append(Atom(serial=serial, name=nm, element="P" if nm == "P" else "C",
-                                  residue="DA", chain_id=chain_id, seq_num=r,
-                                  x=0.1 * r, y=0.0, z=0.0, strand_id=f"s{ci}",
-                                  helix_id="h", bp_index=r, direction="FORWARD"))
+                atoms.append(
+                    Atom(
+                        serial=serial,
+                        name=nm,
+                        element="P" if nm == "P" else "C",
+                        residue="DA",
+                        chain_id=chain_id,
+                        seq_num=r,
+                        x=0.1 * r,
+                        y=0.0,
+                        z=0.0,
+                        strand_id=f"s{ci}",
+                        helix_id="h",
+                        bp_index=r,
+                        direction="FORWARD",
+                    )
+                )
                 serial += 1
     return AtomisticModel(atoms=atoms, bonds=[])
 
@@ -151,7 +179,7 @@ def test_write_segment_pdbs_unique_segids_and_aligned_resids(tmp_path) -> None:
     model = _fake_many_chain_model()
     segs, _ = _write_segment_pdbs(None, tmp_path, model)
     segids = [s["segid"] for s in segs]
-    assert len(set(segids)) == len(segids)          # FIX 1: no collisions
+    assert len(set(segids)) == len(segids)  # FIX 1: no collisions
     assert len(segids) == 40
 
     # FIX 2 (column alignment): each segment file's DEOX patch range ⊆ resids
@@ -170,6 +198,7 @@ def test_write_segment_pdbs_unique_segids_and_aligned_resids(tmp_path) -> None:
 #   inserts at the END of each chain's range; without _thread_inserts_inline
 #   psfgen would bond the last insert of one crossover to the first insert of the
 #   NEXT (a 50 Å junk O3'→P bond) instead of prev_real → eb → eb → next_real.
+
 
 def _routed_6hb_with_extra(sequence="TT"):
     from backend.api import headless_build as hb
@@ -216,10 +245,11 @@ def test_extra_bases_thread_inline_in_seq_num() -> None:
     checked = 0
     for (chain, _xo, k), a in by_res.items():
         flank = real_seq.get((chain, a.helix_id, a.bp_index, a.direction))
-        if flank is None:      # ambiguous flank (looped helix) — left at tail by design
+        if flank is None:  # ambiguous flank (looped helix) — left at tail by design
             continue
         assert a.seq_num == flank + k + 1, (
-            f"insert k={k} at seq {a.seq_num} not inline after flank seq {flank}")
+            f"insert k={k} at seq {a.seq_num} not inline after flank seq {flank}"
+        )
         checked += 1
     assert checked > 1, "expected several inline-threaded inserts to verify"
 
@@ -241,6 +271,7 @@ def test_extra_base_junction_backbone_bonds_are_sane(tmp_path) -> None:
 
     mda = pytest.importorskip("MDAnalysis")
     import warnings
+
     (tmp_path / "t.psf").write_text(build.psf_text)
     (tmp_path / "t.pdb").write_text(build.pdb_text)
     with warnings.catch_warnings():
@@ -249,7 +280,8 @@ def test_extra_base_junction_backbone_bonds_are_sane(tmp_path) -> None:
         lengths = np.asarray(u.bonds.bonds())
     assert lengths.max() < 3.0, (
         f"a backbone bond is stretched to {lengths.max():.1f} Å — extra-base inserts "
-        "are not threaded inline in the psfgen residue order")
+        "are not threaded inline in the psfgen residue order"
+    )
 
 
 def test_extra_base_segid_resids_maps_extra_bases_by_ordinal(tmp_path):
@@ -261,21 +293,28 @@ def test_extra_base_segid_resids_maps_extra_bases_by_ordinal(tmp_path):
     from backend.core.namd_topology import extra_base_segid_resids
 
     # chains sorted A,B; chain A residue 2 is an extra base (ordinal 1)
-    model = NS(atoms=[
-        NS(chain_id="A", seq_num=1, crossover_id=None),
-        NS(chain_id="A", seq_num=2, crossover_id="xo1"),
-        NS(chain_id="A", seq_num=3, crossover_id=None),
-        NS(chain_id="B", seq_num=1, crossover_id=None),
-    ])
+    model = NS(
+        atoms=[
+            NS(chain_id="A", seq_num=1, crossover_id=None),
+            NS(chain_id="A", seq_num=2, crossover_id="xo1"),
+            NS(chain_id="A", seq_num=3, crossover_id=None),
+            NS(chain_id="B", seq_num=1, crossover_id=None),
+        ]
+    )
     psf = tmp_path / "t.psf"
-    psf.write_text("\n".join([
-        "       4 !NATOM",
-        "       1 D000     1        THY  C1'  CN7   0.0   12.0   0",
-        "       2 D000     2        THY  C1'  CN7   0.0   12.0   0",
-        "       3 D000     3        ADE  C1'  CN7   0.0   12.0   0",
-        "       4 D001     1        CYT  C1'  CN7   0.0   12.0   0",
-        "       0 !NBOND: bonds",
-    ]) + "\n")
+    psf.write_text(
+        "\n".join(
+            [
+                "       4 !NATOM",
+                "       1 D000     1        THY  C1'  CN7   0.0   12.0   0",
+                "       2 D000     2        THY  C1'  CN7   0.0   12.0   0",
+                "       3 D000     3        ADE  C1'  CN7   0.0   12.0   0",
+                "       4 D001     1        CYT  C1'  CN7   0.0   12.0   0",
+                "       0 !NBOND: bonds",
+            ]
+        )
+        + "\n"
+    )
     assert extra_base_segid_resids(model, psf) == {("D000", "2")}
 
 
@@ -286,5 +325,7 @@ def test_extra_base_segid_resids_empty_without_extra_bases(tmp_path):
 
     model = NS(atoms=[NS(chain_id="A", seq_num=1, crossover_id=None)])
     psf = tmp_path / "t.psf"
-    psf.write_text("       1 !NATOM\n       1 D000 1 THY C1' CN7 0.0 12.0 0\n       0 !NBOND\n")
+    psf.write_text(
+        "       1 !NATOM\n       1 D000 1 THY C1' CN7 0.0 12.0 0\n       0 !NBOND\n"
+    )
     assert extra_base_segid_resids(model, psf) == set()

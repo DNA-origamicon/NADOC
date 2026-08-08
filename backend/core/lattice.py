@@ -51,7 +51,22 @@ from backend.core.constants import (
     HONEYCOMB_TWIST_PER_BP_RAD,
     SQUARE_TWIST_PER_BP_RAD,
 )
-from backend.core.models import Crossover, Design, DesignMetadata, Direction, Domain, ForcedLigation, HalfCrossover, Helix, LatticeType, OverhangConnection, OverhangSpec, Strand, StrandType, Vec3
+from backend.core.models import (
+    Crossover,
+    Design,
+    DesignMetadata,
+    Direction,
+    Domain,
+    ForcedLigation,
+    HalfCrossover,
+    Helix,
+    LatticeType,
+    OverhangConnection,
+    OverhangSpec,
+    Strand,
+    StrandType,
+    Vec3,
+)
 from backend.core.sequences import domain_bp_range
 
 
@@ -71,9 +86,14 @@ def _helix_global_bp_start(axis_start: "Vec3", axis_end: "Vec3") -> int:
     This ensures the invariant:
         axis_point(global_bp) = axis_start + (global_bp - bp_start) * BDNA_RISE_PER_BP * axis_hat
     """
-    ax = np.array([axis_end.x - axis_start.x,
-                   axis_end.y - axis_start.y,
-                   axis_end.z - axis_start.z], dtype=float)
+    ax = np.array(
+        [
+            axis_end.x - axis_start.x,
+            axis_end.y - axis_start.y,
+            axis_end.z - axis_start.z,
+        ],
+        dtype=float,
+    )
     length = float(np.linalg.norm(ax))
     if length < 1e-12:
         return 0
@@ -133,9 +153,11 @@ def relaxed_spacing_for_design(design: "Design") -> float:
 def _bundle_axis_index(design: "Design") -> int:
     """Index (0=x, 1=y, 2=z) of the axis the helices run along."""
     h = design.helices[0]
-    d = [abs(h.axis_end.x - h.axis_start.x),
-         abs(h.axis_end.y - h.axis_start.y),
-         abs(h.axis_end.z - h.axis_start.z)]
+    d = [
+        abs(h.axis_end.x - h.axis_start.x),
+        abs(h.axis_end.y - h.axis_start.y),
+        abs(h.axis_end.z - h.axis_start.z),
+    ]
     return int(max(range(3), key=lambda i: d[i]))
 
 
@@ -208,9 +230,9 @@ def honeycomb_position(row: int, col: int) -> Tuple[float, float]:
 
     Returns (x, y) in nm.
     """
-    x   = col * HONEYCOMB_COL_PITCH
+    x = col * HONEYCOMB_COL_PITCH
     odd = (row + col) % 2
-    y   = row * HONEYCOMB_ROW_PITCH + (HONEYCOMB_LATTICE_RADIUS if odd else 0.0)
+    y = row * HONEYCOMB_ROW_PITCH + (HONEYCOMB_LATTICE_RADIUS if odd else 0.0)
     return x, y
 
 
@@ -235,7 +257,9 @@ def square_position(row: int, col: int) -> Tuple[float, float]:
     return col * SQUARE_COL_PITCH, row * SQUARE_ROW_PITCH
 
 
-def _lattice_position(row: int, col: int, lattice_type: "LatticeType") -> Tuple[float, float]:  # type: ignore[name-defined]
+def _lattice_position(
+    row: int, col: int, lattice_type: "LatticeType"
+) -> Tuple[float, float]:  # type: ignore[name-defined]
     """Dispatch to the correct position function for the given lattice type."""
     if lattice_type == LatticeType.SQUARE:
         return square_position(row, col)
@@ -263,7 +287,11 @@ def _lattice_phase_offset(direction: Direction, lattice_type: "LatticeType") -> 
     Formula: phase_offset = SVG_scaffold_base + ½·twist_per_bp
     """
     if lattice_type == LatticeType.SQUARE:
-        base = math.radians(286.875) if direction == Direction.FORWARD else math.radians(256.875)
+        base = (
+            math.radians(286.875)
+            if direction == Direction.FORWARD
+            else math.radians(256.875)
+        )
         return base + SQUARE_TWIST_PER_BP_RAD / 2
     base = math.radians(90.0) if direction == Direction.FORWARD else math.radians(60.0)
     return base + BDNA_TWIST_PER_BP_RAD / 2
@@ -299,11 +327,11 @@ def helix_canonical_axis(
     """
     if helix.grid_pos is None:
         raise ValueError(f"Helix {helix.id!r} has no grid_pos")
-    row, col  = helix.grid_pos
-    x, y      = _lattice_position(row, col, lattice_type)
+    row, col = helix.grid_pos
+    x, y = _lattice_position(row, col, lattice_type)
     direction = _lattice_direction(row, col, lattice_type)
-    phase     = _lattice_phase_offset(direction, lattice_type)
-    twist     = _lattice_twist(lattice_type)
+    phase = _lattice_phase_offset(direction, lattice_type)
+    twist = _lattice_twist(lattice_type)
     return x, y, phase, twist
 
 
@@ -367,7 +395,7 @@ def make_bundle_design(
     are added (those are placed in a later phase).
     """
     include_scaffold = strand_filter in ("both", "scaffold")
-    include_staples  = strand_filter in ("both", "staples")
+    include_staples = strand_filter in ("both", "staples")
     actual_length = abs(length_bp)
     if actual_length < 1:
         raise ValueError(f"length_bp magnitude must be >= 1, got {length_bp}")
@@ -384,8 +412,8 @@ def make_bundle_design(
     for row, col in cells:
         lx, ly = _lattice_position(row, col, lattice_type)
         helix_id = f"h_{plane}_{row}_{col}{id_suffix}"
-        scaf_id  = f"scaf_{plane}_{row}_{col}{id_suffix}"
-        stpl_id  = f"stpl_{plane}_{row}_{col}{id_suffix}"
+        scaf_id = f"scaf_{plane}_{row}_{col}{id_suffix}"
+        stpl_id = f"stpl_{plane}_{row}_{col}{id_suffix}"
 
         # Canonical axis: axis_start is always the lower coordinate, axis_end the
         # higher, regardless of extrude sign.  A negative length_bp ("minus"
@@ -396,17 +424,17 @@ def make_bundle_design(
         seg_hi = offset_nm + max(0.0, helix_length_nm)
         if plane == "XY":
             axis_start = Vec3(x=lx, y=ly, z=seg_lo)
-            axis_end   = Vec3(x=lx, y=ly, z=seg_hi)
+            axis_end = Vec3(x=lx, y=ly, z=seg_hi)
         elif plane == "XZ":
             axis_start = Vec3(x=lx, y=seg_lo, z=ly)
-            axis_end   = Vec3(x=lx, y=seg_hi, z=ly)
+            axis_end = Vec3(x=lx, y=seg_hi, z=ly)
         else:  # YZ
             axis_start = Vec3(x=seg_lo, y=lx, z=ly)
-            axis_end   = Vec3(x=seg_hi, y=lx, z=ly)
+            axis_end = Vec3(x=seg_hi, y=lx, z=ly)
 
-        direction    = _lattice_direction(row, col, lattice_type)
+        direction = _lattice_direction(row, col, lattice_type)
         phase_offset = _lattice_phase_offset(direction, lattice_type)
-        twist        = _lattice_twist(lattice_type)
+        twist = _lattice_twist(lattice_type)
 
         bp_start_val = _helix_global_bp_start(axis_start, axis_end)
         helix = Helix(
@@ -431,7 +459,14 @@ def make_bundle_design(
         if include_scaffold:
             scaffold = Strand(
                 id=scaf_id,
-                domains=[Domain(helix_id=helix_id, start_bp=scaf_start, end_bp=scaf_end, direction=direction)],
+                domains=[
+                    Domain(
+                        helix_id=helix_id,
+                        start_bp=scaf_start,
+                        end_bp=scaf_end,
+                        direction=direction,
+                    )
+                ],
                 strand_type=StrandType.SCAFFOLD,
             )
             strands.append(scaffold)
@@ -439,7 +474,11 @@ def make_bundle_design(
         if include_staples:
             # Placeholder staple covering the complementary backbone.
             # Direction is opposite to scaffold; start_bp = 5′ end convention.
-            staple_dir = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
+            staple_dir = (
+                Direction.REVERSE
+                if direction == Direction.FORWARD
+                else Direction.FORWARD
+            )
             if staple_dir == Direction.FORWARD:
                 stpl_start, stpl_end = bp_start_val, bp_start_val + actual_length - 1
             else:
@@ -447,7 +486,14 @@ def make_bundle_design(
 
             staple = Strand(
                 id=stpl_id,
-                domains=[Domain(helix_id=helix_id, start_bp=stpl_start, end_bp=stpl_end, direction=staple_dir)],
+                domains=[
+                    Domain(
+                        helix_id=helix_id,
+                        start_bp=stpl_start,
+                        end_bp=stpl_end,
+                        direction=staple_dir,
+                    )
+                ],
                 strand_type=StrandType.STAPLE,
             )
             strands.append(staple)
@@ -506,7 +552,7 @@ def make_bundle_segment(
     if plane not in valid_planes:
         raise ValueError(f"plane must be one of {sorted(valid_planes)}, got {plane!r}")
 
-    existing_helix_ids:  set = {h.id for h in existing_design.helices}
+    existing_helix_ids: set = {h.id for h in existing_design.helices}
     existing_strand_ids: set = {s.id for s in existing_design.strands}
 
     helix_length_nm = length_bp * BDNA_RISE_PER_BP  # signed
@@ -542,12 +588,12 @@ def make_bundle_segment(
         base_tid = f"stpl_{plane}_{row}_{col}"
 
         # IDs must be unique across existing AND newly-added items in this batch.
-        all_helix_ids  = existing_helix_ids  | {h.id for h in new_helices}
+        all_helix_ids = existing_helix_ids | {h.id for h in new_helices}
         all_strand_ids = existing_strand_ids | {s.id for s in new_strands}
 
         helix_id = _unique_id(base_hid, all_helix_ids)
-        scaf_id  = _unique_id(base_sid, all_strand_ids)
-        stpl_id  = _unique_id(base_tid, all_strand_ids | {scaf_id})
+        scaf_id = _unique_id(base_sid, all_strand_ids)
+        stpl_id = _unique_id(base_tid, all_strand_ids | {scaf_id})
 
         # Canonical axis (axis_start = lower coordinate); a negative length places
         # the segment in [offset−|L|, offset] below the plane. See make_bundle_design.
@@ -555,17 +601,17 @@ def make_bundle_segment(
         seg_hi = offset_nm + max(0.0, helix_length_nm)
         if plane == "XY":
             axis_start = Vec3(x=lx, y=ly, z=seg_lo)
-            axis_end   = Vec3(x=lx, y=ly, z=seg_hi)
+            axis_end = Vec3(x=lx, y=ly, z=seg_hi)
         elif plane == "XZ":
             axis_start = Vec3(x=lx, y=seg_lo, z=ly)
-            axis_end   = Vec3(x=lx, y=seg_hi, z=ly)
+            axis_end = Vec3(x=lx, y=seg_hi, z=ly)
         else:  # YZ
             axis_start = Vec3(x=seg_lo, y=lx, z=ly)
-            axis_end   = Vec3(x=seg_hi, y=lx, z=ly)
+            axis_end = Vec3(x=seg_hi, y=lx, z=ly)
 
-        direction    = _lattice_direction(row, col, lt)
+        direction = _lattice_direction(row, col, lt)
         phase_offset = _lattice_phase_offset(direction, lt)
-        twist        = _lattice_twist(lt)
+        twist = _lattice_twist(lt)
 
         bp_start_val = _helix_global_bp_start(axis_start, axis_end)
         helix = Helix(
@@ -587,27 +633,49 @@ def make_bundle_segment(
             scaf_start, scaf_end = bp_start_val + actual_length - 1, bp_start_val
 
         include_scaffold = strand_filter in ("both", "scaffold")
-        include_staples  = strand_filter in ("both", "staples")
+        include_staples = strand_filter in ("both", "staples")
 
         if include_scaffold:
-            new_strands.append(Strand(
-                id=scaf_id,
-                domains=[Domain(helix_id=helix_id, start_bp=scaf_start, end_bp=scaf_end, direction=direction)],
-                strand_type=StrandType.SCAFFOLD,
-            ))
+            new_strands.append(
+                Strand(
+                    id=scaf_id,
+                    domains=[
+                        Domain(
+                            helix_id=helix_id,
+                            start_bp=scaf_start,
+                            end_bp=scaf_end,
+                            direction=direction,
+                        )
+                    ],
+                    strand_type=StrandType.SCAFFOLD,
+                )
+            )
 
         if include_staples:
-            staple_dir = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
+            staple_dir = (
+                Direction.REVERSE
+                if direction == Direction.FORWARD
+                else Direction.FORWARD
+            )
             if staple_dir == Direction.FORWARD:
                 stpl_start, stpl_end = bp_start_val, bp_start_val + actual_length - 1
             else:
                 stpl_start, stpl_end = bp_start_val + actual_length - 1, bp_start_val
 
-            new_strands.append(Strand(
-                id=stpl_id,
-                domains=[Domain(helix_id=helix_id, start_bp=stpl_start, end_bp=stpl_end, direction=staple_dir)],
-                strand_type=StrandType.STAPLE,
-            ))
+            new_strands.append(
+                Strand(
+                    id=stpl_id,
+                    domains=[
+                        Domain(
+                            helix_id=helix_id,
+                            start_bp=stpl_start,
+                            end_bp=stpl_end,
+                            direction=staple_dir,
+                        )
+                    ],
+                    strand_type=StrandType.STAPLE,
+                )
+            )
 
     return existing_design.copy_with(
         helices=existing_design.helices + new_helices,
@@ -653,7 +721,7 @@ def make_circle_segment(
     if plane not in valid_planes:
         raise ValueError(f"plane must be one of {sorted(valid_planes)}, got {plane!r}")
 
-    existing_helix_ids:  set = {h.id for h in existing_design.helices}
+    existing_helix_ids: set = {h.id for h in existing_design.helices}
     existing_strand_ids: set = {s.id for s in existing_design.strands}
 
     new_helices: List[Helix] = []
@@ -686,12 +754,12 @@ def make_circle_segment(
         base_sid = f"scaf_{plane}_{row}_{col}"
         base_tid = f"stpl_{plane}_{row}_{col}"
 
-        all_helix_ids  = existing_helix_ids  | {h.id for h in new_helices}
+        all_helix_ids = existing_helix_ids | {h.id for h in new_helices}
         all_strand_ids = existing_strand_ids | {s.id for s in new_strands}
 
         helix_id = _unique_id(base_hid, all_helix_ids)
-        scaf_id  = _unique_id(base_sid, all_strand_ids)
-        stpl_id  = _unique_id(base_tid, all_strand_ids | {scaf_id})
+        scaf_id = _unique_id(base_sid, all_strand_ids)
+        stpl_id = _unique_id(base_tid, all_strand_ids | {scaf_id})
 
         # Centre the helix on the disc mid-line (offset + R), so the whole disc sits
         # in [offset, offset + 2R] — tangent to the plane, all in the +normal direction.
@@ -701,17 +769,17 @@ def make_circle_segment(
         seg_hi = centre_nm + half_nm
         if plane == "XY":
             axis_start = Vec3(x=lx, y=ly, z=seg_lo)
-            axis_end   = Vec3(x=lx, y=ly, z=seg_hi)
+            axis_end = Vec3(x=lx, y=ly, z=seg_hi)
         elif plane == "XZ":
             axis_start = Vec3(x=lx, y=seg_lo, z=ly)
-            axis_end   = Vec3(x=lx, y=seg_hi, z=ly)
+            axis_end = Vec3(x=lx, y=seg_hi, z=ly)
         else:  # YZ
             axis_start = Vec3(x=seg_lo, y=lx, z=ly)
-            axis_end   = Vec3(x=seg_hi, y=lx, z=ly)
+            axis_end = Vec3(x=seg_hi, y=lx, z=ly)
 
-        direction    = _lattice_direction(row, col, lt)
+        direction = _lattice_direction(row, col, lt)
         phase_offset = _lattice_phase_offset(direction, lt)
-        twist        = _lattice_twist(lt)
+        twist = _lattice_twist(lt)
 
         bp_start_val = _helix_global_bp_start(axis_start, axis_end)
         helix = Helix(
@@ -733,27 +801,49 @@ def make_circle_segment(
             scaf_start, scaf_end = bp_start_val + actual_length - 1, bp_start_val
 
         include_scaffold = strand_filter in ("both", "scaffold")
-        include_staples  = strand_filter in ("both", "staples")
+        include_staples = strand_filter in ("both", "staples")
 
         if include_scaffold:
-            new_strands.append(Strand(
-                id=scaf_id,
-                domains=[Domain(helix_id=helix_id, start_bp=scaf_start, end_bp=scaf_end, direction=direction)],
-                strand_type=StrandType.SCAFFOLD,
-            ))
+            new_strands.append(
+                Strand(
+                    id=scaf_id,
+                    domains=[
+                        Domain(
+                            helix_id=helix_id,
+                            start_bp=scaf_start,
+                            end_bp=scaf_end,
+                            direction=direction,
+                        )
+                    ],
+                    strand_type=StrandType.SCAFFOLD,
+                )
+            )
 
         if include_staples:
-            staple_dir = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
+            staple_dir = (
+                Direction.REVERSE
+                if direction == Direction.FORWARD
+                else Direction.FORWARD
+            )
             if staple_dir == Direction.FORWARD:
                 stpl_start, stpl_end = bp_start_val, bp_start_val + actual_length - 1
             else:
                 stpl_start, stpl_end = bp_start_val + actual_length - 1, bp_start_val
 
-            new_strands.append(Strand(
-                id=stpl_id,
-                domains=[Domain(helix_id=helix_id, start_bp=stpl_start, end_bp=stpl_end, direction=staple_dir)],
-                strand_type=StrandType.STAPLE,
-            ))
+            new_strands.append(
+                Strand(
+                    id=stpl_id,
+                    domains=[
+                        Domain(
+                            helix_id=helix_id,
+                            start_bp=stpl_start,
+                            end_bp=stpl_end,
+                            direction=staple_dir,
+                        )
+                    ],
+                    strand_type=StrandType.STAPLE,
+                )
+            )
 
     return existing_design.copy_with(
         helices=existing_design.helices + new_helices,
@@ -781,13 +871,13 @@ def _find_continuation_helix(
         if not (h.id == prefix or h.id.startswith(prefix + "_")):
             continue
         if plane == "XY":
-            end_offset   = h.axis_end.z
+            end_offset = h.axis_end.z
             start_offset = h.axis_start.z
         elif plane == "XZ":
-            end_offset   = h.axis_end.y
+            end_offset = h.axis_end.y
             start_offset = h.axis_start.y
         else:  # YZ
-            end_offset   = h.axis_end.x
+            end_offset = h.axis_end.x
             start_offset = h.axis_start.x
         if abs(end_offset - offset_nm) < tol or abs(start_offset - offset_nm) < tol:
             return h
@@ -865,15 +955,15 @@ def make_bundle_continuation(
     if plane not in valid_planes:
         raise ValueError(f"plane must be one of {sorted(valid_planes)}, got {plane!r}")
 
-    existing_helix_ids:  set = {h.id for h in existing_design.helices}
+    existing_helix_ids: set = {h.id for h in existing_design.helices}
     existing_strand_ids: set = {s.id for s in existing_design.strands}
 
-    actual_length_nm = actual_length * BDNA_RISE_PER_BP   # always positive
-    helix_dir_nm     = length_bp    * BDNA_RISE_PER_BP   # signed — carries user direction
-    new_helices:       List[Helix]  = []
-    new_strands:       List[Strand] = []   # strands for fresh (non-continuation) cells
+    actual_length_nm = actual_length * BDNA_RISE_PER_BP  # always positive
+    helix_dir_nm = length_bp * BDNA_RISE_PER_BP  # signed — carries user direction
+    new_helices: List[Helix] = []
+    new_strands: List[Strand] = []  # strands for fresh (non-continuation) cells
     # strand_id → {'prepend': [Domain, ...], 'append': [Domain, ...]}
-    domain_additions:  dict         = {}
+    domain_additions: dict = {}
     # helix_id → replacement Helix (backward extension keeps the same ID, grows axis_start)
     helix_replacements: dict[str, "Helix"] = {}
     # new_helix_id → cont_helix_id: forward non-inplace continuations that need cluster update
@@ -905,16 +995,21 @@ def make_bundle_continuation(
         ly += _lattice_off_ly
         base_hid = f"h_{plane}_{row}_{col}"
 
-        all_helix_ids  = existing_helix_ids  | {h.id for h in new_helices}
+        all_helix_ids = existing_helix_ids | {h.id for h in new_helices}
         all_strand_ids = existing_strand_ids | {s.id for s in new_strands}
 
-        direction    = _lattice_direction(row, col, lt)
+        direction = _lattice_direction(row, col, lt)
         phase_offset = _lattice_phase_offset(direction, lt)
 
-        cont_helix = _find_continuation_helix(existing_design.helices, row, col, plane, offset_nm)
-        gap_helix  = (
-            None if cont_helix is not None
-            else _find_same_cell_helix(existing_design.helices, row, col, plane, offset_nm)
+        cont_helix = _find_continuation_helix(
+            existing_design.helices, row, col, plane, offset_nm
+        )
+        gap_helix = (
+            None
+            if cont_helix is not None
+            else _find_same_cell_helix(
+                existing_design.helices, row, col, plane, offset_nm
+            )
         )
 
         _tol = BDNA_RISE_PER_BP * 0.05
@@ -928,7 +1023,7 @@ def make_bundle_continuation(
             forward_extrude = is_end_at_offset
         else:
             is_end_at_offset = True
-            forward_extrude  = True
+            forward_extrude = True
 
         if cont_helix is not None and not forward_extrude:
             # ── Backward continuation: grow the existing helix toward lower offset ──
@@ -941,17 +1036,23 @@ def make_bundle_continuation(
             # Phase continuity is maintained by correcting phase_offset so that each
             # original bp retains its absolute rotational angle at its physical position.
             if plane == "XY":
-                new_axis_start = Vec3(x=cont_helix.axis_start.x,
-                                      y=cont_helix.axis_start.y,
-                                      z=cont_helix.axis_start.z - actual_length_nm)
+                new_axis_start = Vec3(
+                    x=cont_helix.axis_start.x,
+                    y=cont_helix.axis_start.y,
+                    z=cont_helix.axis_start.z - actual_length_nm,
+                )
             elif plane == "XZ":
-                new_axis_start = Vec3(x=cont_helix.axis_start.x,
-                                      y=cont_helix.axis_start.y - actual_length_nm,
-                                      z=cont_helix.axis_start.z)
+                new_axis_start = Vec3(
+                    x=cont_helix.axis_start.x,
+                    y=cont_helix.axis_start.y - actual_length_nm,
+                    z=cont_helix.axis_start.z,
+                )
             else:
-                new_axis_start = Vec3(x=cont_helix.axis_start.x - actual_length_nm,
-                                      y=cont_helix.axis_start.y,
-                                      z=cont_helix.axis_start.z)
+                new_axis_start = Vec3(
+                    x=cont_helix.axis_start.x - actual_length_nm,
+                    y=cont_helix.axis_start.y,
+                    z=cont_helix.axis_start.z,
+                )
 
             # New bp_start is shifted backward by actual_length.
             new_bp_start = cont_helix.bp_start - actual_length
@@ -982,7 +1083,7 @@ def make_bundle_continuation(
 
             # Add domains covering the new backward global bps.
             include_scaffold = strand_filter in ("both", "scaffold")
-            include_staples  = strand_filter in ("both", "staples")
+            include_staples = strand_filter in ("both", "staples")
             # Only the strand(s) at the NEAR terminus (covering cont_helix.bp_start)
             # get the new backward bps.  On a gapped helix (multiple coverage
             # intervals) the other intervals do NOT touch bp_start and must be left
@@ -997,8 +1098,9 @@ def make_bundle_continuation(
                 if strand.strand_type == StrandType.STAPLE and not include_staples:
                     continue
                 for domain in strand.domains:
-                    if (domain.helix_id == cont_helix.id
-                            and min(domain.start_bp, domain.end_bp) <= near_bp <= max(domain.start_bp, domain.end_bp)):
+                    if domain.helix_id == cont_helix.id and min(
+                        domain.start_bp, domain.end_bp
+                    ) <= near_bp <= max(domain.start_bp, domain.end_bp):
                         d = domain.direction
                         if d == Direction.FORWARD:
                             # FORWARD: 5′=new_bp_start, 3′=cont_helix.bp_start-1
@@ -1006,17 +1108,21 @@ def make_bundle_continuation(
                                 helix_id=helix_id,
                                 start_bp=new_bp_start,
                                 end_bp=cont_helix.bp_start - 1,
-                                direction=d)
-                            should_prepend = True   # FORWARD: new bps precede existing
+                                direction=d,
+                            )
+                            should_prepend = True  # FORWARD: new bps precede existing
                         else:
                             # REVERSE: 5′=cont_helix.bp_start-1, 3′=new_bp_start
                             new_dom = Domain(
                                 helix_id=helix_id,
                                 start_bp=cont_helix.bp_start - 1,
                                 end_bp=new_bp_start,
-                                direction=d)
+                                direction=d,
+                            )
                             should_prepend = False  # REVERSE: new bps follow existing (strand goes high→low)
-                        entry = domain_additions.setdefault(strand.id, {"prepend": [], "append": []})
+                        entry = domain_additions.setdefault(
+                            strand.id, {"prepend": [], "append": []}
+                        )
                         if should_prepend:
                             entry["prepend"].append(new_dom)
                         else:
@@ -1033,17 +1139,23 @@ def make_bundle_continuation(
             old_length = cont_helix.length_bp
             new_global_start = cont_helix.bp_start + old_length  # first new global bp
             if plane == "XY":
-                new_axis_end = Vec3(x=cont_helix.axis_end.x,
-                                    y=cont_helix.axis_end.y,
-                                    z=cont_helix.axis_end.z + actual_length_nm)
+                new_axis_end = Vec3(
+                    x=cont_helix.axis_end.x,
+                    y=cont_helix.axis_end.y,
+                    z=cont_helix.axis_end.z + actual_length_nm,
+                )
             elif plane == "XZ":
-                new_axis_end = Vec3(x=cont_helix.axis_end.x,
-                                    y=cont_helix.axis_end.y + actual_length_nm,
-                                    z=cont_helix.axis_end.z)
+                new_axis_end = Vec3(
+                    x=cont_helix.axis_end.x,
+                    y=cont_helix.axis_end.y + actual_length_nm,
+                    z=cont_helix.axis_end.z,
+                )
             else:
-                new_axis_end = Vec3(x=cont_helix.axis_end.x + actual_length_nm,
-                                    y=cont_helix.axis_end.y,
-                                    z=cont_helix.axis_end.z)
+                new_axis_end = Vec3(
+                    x=cont_helix.axis_end.x + actual_length_nm,
+                    y=cont_helix.axis_end.y,
+                    z=cont_helix.axis_end.z,
+                )
             extended_helix = Helix(
                 id=cont_helix.id,
                 axis_start=cont_helix.axis_start,
@@ -1059,7 +1171,7 @@ def make_bundle_continuation(
             helix_id = cont_helix.id
 
             include_scaffold = strand_filter in ("both", "scaffold")
-            include_staples  = strand_filter in ("both", "staples")
+            include_staples = strand_filter in ("both", "staples")
             # Only the strand(s) at the FAR terminus (covering the last existing bp)
             # get the new forward bps — gapped intervals below the far end stay put.
             far_bp = cont_helix.bp_start + old_length - 1
@@ -1072,8 +1184,9 @@ def make_bundle_continuation(
                 if strand.strand_type == StrandType.STAPLE and not include_staples:
                     continue
                 for domain in strand.domains:
-                    if (domain.helix_id == cont_helix.id
-                            and min(domain.start_bp, domain.end_bp) <= far_bp <= max(domain.start_bp, domain.end_bp)):
+                    if domain.helix_id == cont_helix.id and min(
+                        domain.start_bp, domain.end_bp
+                    ) <= far_bp <= max(domain.start_bp, domain.end_bp):
                         d = domain.direction
                         if d == Direction.FORWARD:
                             # New far bps: global [new_global_start .. new_global_start+ext-1]
@@ -1081,8 +1194,11 @@ def make_bundle_continuation(
                                 helix_id=helix_id,
                                 start_bp=new_global_start,
                                 end_bp=new_global_start + actual_length - 1,
-                                direction=d)
-                            entry = domain_additions.setdefault(strand.id, {"prepend": [], "append": []})
+                                direction=d,
+                            )
+                            entry = domain_additions.setdefault(
+                                strand.id, {"prepend": [], "append": []}
+                            )
                             entry["append"].append(new_dom)
                         else:
                             # REVERSE: far end is 5' (high global bp).
@@ -1090,8 +1206,11 @@ def make_bundle_continuation(
                                 helix_id=helix_id,
                                 start_bp=new_global_start + actual_length - 1,
                                 end_bp=new_global_start,
-                                direction=d)
-                            entry = domain_additions.setdefault(strand.id, {"prepend": [], "append": []})
+                                direction=d,
+                            )
+                            entry = domain_additions.setdefault(
+                                strand.id, {"prepend": [], "append": []}
+                            )
                             entry["prepend"].append(new_dom)
                         seen_strand_ids.add(strand.id)
                         break
@@ -1111,19 +1230,29 @@ def make_bundle_continuation(
                 h_axis_lo = h.axis_start.x
 
             local_bp_offset = round((offset_nm - h_axis_lo) / BDNA_RISE_PER_BP)
-            new_length_bp   = local_bp_offset + actual_length
-            new_bp_start_val = h.bp_start + local_bp_offset  # global bp of new domain start
+            new_length_bp = local_bp_offset + actual_length
+            new_bp_start_val = (
+                h.bp_start + local_bp_offset
+            )  # global bp of new domain start
 
             if plane == "XY":
-                new_axis_end = Vec3(x=h.axis_end.x, y=h.axis_end.y,
-                                    z=h.axis_start.z + new_length_bp * BDNA_RISE_PER_BP)
+                new_axis_end = Vec3(
+                    x=h.axis_end.x,
+                    y=h.axis_end.y,
+                    z=h.axis_start.z + new_length_bp * BDNA_RISE_PER_BP,
+                )
             elif plane == "XZ":
-                new_axis_end = Vec3(x=h.axis_end.x,
-                                    y=h.axis_start.y + new_length_bp * BDNA_RISE_PER_BP,
-                                    z=h.axis_end.z)
+                new_axis_end = Vec3(
+                    x=h.axis_end.x,
+                    y=h.axis_start.y + new_length_bp * BDNA_RISE_PER_BP,
+                    z=h.axis_end.z,
+                )
             else:
-                new_axis_end = Vec3(x=h.axis_start.x + new_length_bp * BDNA_RISE_PER_BP,
-                                    y=h.axis_end.y, z=h.axis_end.z)
+                new_axis_end = Vec3(
+                    x=h.axis_start.x + new_length_bp * BDNA_RISE_PER_BP,
+                    y=h.axis_end.y,
+                    z=h.axis_end.z,
+                )
 
             extended_helix = Helix(
                 id=h.id,
@@ -1141,43 +1270,63 @@ def make_bundle_continuation(
 
             # Create NEW scaffold + staple strands for the new domain region.
             include_scaffold = strand_filter in ("both", "scaffold")
-            include_staples  = strand_filter in ("both", "staples")
+            include_staples = strand_filter in ("both", "staples")
             all_strand_ids_g = existing_strand_ids | {s.id for s in new_strands}
             base_sid = f"scaf_{plane}_{row}_{col}"
             base_tid = f"stpl_{plane}_{row}_{col}"
-            scaf_id  = _unique_id(base_sid, all_strand_ids_g)
-            stpl_id  = _unique_id(base_tid, all_strand_ids_g | {scaf_id})
+            scaf_id = _unique_id(base_sid, all_strand_ids_g)
+            stpl_id = _unique_id(base_tid, all_strand_ids_g | {scaf_id})
 
             if direction == Direction.FORWARD:
                 scaf_start = new_bp_start_val
-                scaf_end   = new_bp_start_val + actual_length - 1
+                scaf_end = new_bp_start_val + actual_length - 1
             else:
                 scaf_start = new_bp_start_val + actual_length - 1
-                scaf_end   = new_bp_start_val
+                scaf_end = new_bp_start_val
 
             if include_scaffold:
-                new_strands.append(Strand(
-                    id=scaf_id,
-                    domains=[Domain(helix_id=helix_id, start_bp=scaf_start,
-                                    end_bp=scaf_end, direction=direction)],
-                    strand_type=StrandType.SCAFFOLD,
-                ))
+                new_strands.append(
+                    Strand(
+                        id=scaf_id,
+                        domains=[
+                            Domain(
+                                helix_id=helix_id,
+                                start_bp=scaf_start,
+                                end_bp=scaf_end,
+                                direction=direction,
+                            )
+                        ],
+                        strand_type=StrandType.SCAFFOLD,
+                    )
+                )
 
             if include_staples:
-                staple_dir = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
+                staple_dir = (
+                    Direction.REVERSE
+                    if direction == Direction.FORWARD
+                    else Direction.FORWARD
+                )
                 if staple_dir == Direction.FORWARD:
                     stpl_start = new_bp_start_val
-                    stpl_end   = new_bp_start_val + actual_length - 1
+                    stpl_end = new_bp_start_val + actual_length - 1
                 else:
                     stpl_start = new_bp_start_val + actual_length - 1
-                    stpl_end   = new_bp_start_val
+                    stpl_end = new_bp_start_val
 
-                new_strands.append(Strand(
-                    id=stpl_id,
-                    domains=[Domain(helix_id=helix_id, start_bp=stpl_start,
-                                    end_bp=stpl_end, direction=staple_dir)],
-                    strand_type=StrandType.STAPLE,
-                ))
+                new_strands.append(
+                    Strand(
+                        id=stpl_id,
+                        domains=[
+                            Domain(
+                                helix_id=helix_id,
+                                start_bp=stpl_start,
+                                end_bp=stpl_end,
+                                direction=staple_dir,
+                            )
+                        ],
+                        strand_type=StrandType.STAPLE,
+                    )
+                )
 
         else:
             # ── Forward continuation OR fresh cell: create a new helix ──
@@ -1190,13 +1339,13 @@ def make_bundle_continuation(
             seg_hi = offset_nm + max(0.0, helix_dir_nm)
             if plane == "XY":
                 axis_start = Vec3(x=lx, y=ly, z=seg_lo)
-                axis_end   = Vec3(x=lx, y=ly, z=seg_hi)
+                axis_end = Vec3(x=lx, y=ly, z=seg_hi)
             elif plane == "XZ":
                 axis_start = Vec3(x=lx, y=seg_lo, z=ly)
-                axis_end   = Vec3(x=lx, y=seg_hi, z=ly)
+                axis_end = Vec3(x=lx, y=seg_hi, z=ly)
             else:  # YZ
                 axis_start = Vec3(x=seg_lo, y=lx, z=ly)
-                axis_end   = Vec3(x=seg_hi, y=lx, z=ly)
+                axis_end = Vec3(x=seg_hi, y=lx, z=ly)
 
             bp_start_val = _helix_global_bp_start(axis_start, axis_end)
             helix = Helix(
@@ -1219,9 +1368,12 @@ def make_bundle_continuation(
                 # helix the other coverage intervals must be left untouched.
                 continuation_map[helix_id] = cont_helix.id
                 include_scaffold = strand_filter in ("both", "scaffold")
-                include_staples  = strand_filter in ("both", "staples")
-                terminus_bp = (cont_helix.bp_start + cont_helix.length_bp - 1
-                               if is_end_at_offset else cont_helix.bp_start)
+                include_staples = strand_filter in ("both", "staples")
+                terminus_bp = (
+                    cont_helix.bp_start + cont_helix.length_bp - 1
+                    if is_end_at_offset
+                    else cont_helix.bp_start
+                )
                 seen_strand_ids: set = set()
                 for strand in existing_design.strands:
                     if strand.id in seen_strand_ids:
@@ -1231,15 +1383,17 @@ def make_bundle_continuation(
                     if strand.strand_type == StrandType.STAPLE and not include_staples:
                         continue
                     for domain in strand.domains:
-                        if (domain.helix_id == cont_helix.id
-                                and min(domain.start_bp, domain.end_bp) <= terminus_bp <= max(domain.start_bp, domain.end_bp)):
+                        if domain.helix_id == cont_helix.id and min(
+                            domain.start_bp, domain.end_bp
+                        ) <= terminus_bp <= max(domain.start_bp, domain.end_bp):
                             d = domain.direction
                             if d == Direction.FORWARD:
                                 new_dom = Domain(
                                     helix_id=helix_id,
                                     start_bp=bp_start_val,
                                     end_bp=bp_start_val + actual_length - 1,
-                                    direction=d)
+                                    direction=d,
+                                )
                                 # FORWARD at axis_end → append; at axis_start → prepend
                                 should_prepend = not is_end_at_offset
                             else:
@@ -1247,10 +1401,13 @@ def make_bundle_continuation(
                                     helix_id=helix_id,
                                     start_bp=bp_start_val + actual_length - 1,
                                     end_bp=bp_start_val,
-                                    direction=d)
+                                    direction=d,
+                                )
                                 # REVERSE at axis_end (5′) → prepend; at axis_start (3′) → append
                                 should_prepend = is_end_at_offset
-                            entry = domain_additions.setdefault(strand.id, {"prepend": [], "append": []})
+                            entry = domain_additions.setdefault(
+                                strand.id, {"prepend": [], "append": []}
+                            )
                             if should_prepend:
                                 entry["prepend"].append(new_dom)
                             else:
@@ -1260,38 +1417,70 @@ def make_bundle_continuation(
             else:
                 # Fresh cell: new scaffold + staple strands with global bp values.
                 include_scaffold = strand_filter in ("both", "scaffold")
-                include_staples  = strand_filter in ("both", "staples")
+                include_staples = strand_filter in ("both", "staples")
                 base_sid = f"scaf_{plane}_{row}_{col}"
                 base_tid = f"stpl_{plane}_{row}_{col}"
-                scaf_id  = _unique_id(base_sid, all_strand_ids)
-                stpl_id  = _unique_id(base_tid, all_strand_ids | {scaf_id})
+                scaf_id = _unique_id(base_sid, all_strand_ids)
+                stpl_id = _unique_id(base_tid, all_strand_ids | {scaf_id})
 
                 if direction == Direction.FORWARD:
-                    scaf_start, scaf_end = bp_start_val, bp_start_val + actual_length - 1
+                    scaf_start, scaf_end = (
+                        bp_start_val,
+                        bp_start_val + actual_length - 1,
+                    )
                 else:
-                    scaf_start, scaf_end = bp_start_val + actual_length - 1, bp_start_val
+                    scaf_start, scaf_end = (
+                        bp_start_val + actual_length - 1,
+                        bp_start_val,
+                    )
 
                 if include_scaffold:
-                    new_strands.append(Strand(
-                        id=scaf_id,
-                        domains=[Domain(helix_id=helix_id, start_bp=scaf_start,
-                                        end_bp=scaf_end, direction=direction)],
-                        strand_type=StrandType.SCAFFOLD,
-                    ))
+                    new_strands.append(
+                        Strand(
+                            id=scaf_id,
+                            domains=[
+                                Domain(
+                                    helix_id=helix_id,
+                                    start_bp=scaf_start,
+                                    end_bp=scaf_end,
+                                    direction=direction,
+                                )
+                            ],
+                            strand_type=StrandType.SCAFFOLD,
+                        )
+                    )
 
                 if include_staples:
-                    staple_dir = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
+                    staple_dir = (
+                        Direction.REVERSE
+                        if direction == Direction.FORWARD
+                        else Direction.FORWARD
+                    )
                     if staple_dir == Direction.FORWARD:
-                        stpl_start, stpl_end = bp_start_val, bp_start_val + actual_length - 1
+                        stpl_start, stpl_end = (
+                            bp_start_val,
+                            bp_start_val + actual_length - 1,
+                        )
                     else:
-                        stpl_start, stpl_end = bp_start_val + actual_length - 1, bp_start_val
+                        stpl_start, stpl_end = (
+                            bp_start_val + actual_length - 1,
+                            bp_start_val,
+                        )
 
-                    new_strands.append(Strand(
-                        id=stpl_id,
-                        domains=[Domain(helix_id=helix_id, start_bp=stpl_start,
-                                        end_bp=stpl_end, direction=staple_dir)],
-                        strand_type=StrandType.STAPLE,
-                    ))
+                    new_strands.append(
+                        Strand(
+                            id=stpl_id,
+                            domains=[
+                                Domain(
+                                    helix_id=helix_id,
+                                    start_bp=stpl_start,
+                                    end_bp=stpl_end,
+                                    direction=staple_dir,
+                                )
+                            ],
+                            strand_type=StrandType.STAPLE,
+                        )
+                    )
 
     # Rebuild existing strands: apply prepend/append domain additions.
     # With global bp indexing, backward-extended helices no longer shift their
@@ -1302,9 +1491,9 @@ def make_bundle_continuation(
         if strand.id in domain_additions:
             entry = domain_additions[strand.id]
             raw_domains = entry["prepend"] + list(updated.domains) + entry["append"]
-            updated = updated.model_copy(update={
-                "domains": _merge_adjacent_domains(raw_domains)
-            })
+            updated = updated.model_copy(
+                update={"domains": _merge_adjacent_domains(raw_domains)}
+            )
         updated_strands.append(updated)
 
     # Replace backward-extended helices in-place; append any new forward helices.
@@ -1361,13 +1550,13 @@ def make_bundle_deformed_continuation(
         raise ValueError(f"length_bp magnitude must be >= 1, got {length_bp}")
     if not cells:
         raise ValueError("cells list must not be empty")
-    grid_origin  = np.array(frame["grid_origin"],  dtype=float)
-    axis_dir_raw = np.array(frame["axis_dir"],      dtype=float)
-    frame_right  = np.array(frame["frame_right"],   dtype=float)
-    frame_up     = np.array(frame["frame_up"],      dtype=float)
+    grid_origin = np.array(frame["grid_origin"], dtype=float)
+    axis_dir_raw = np.array(frame["axis_dir"], dtype=float)
+    frame_right = np.array(frame["frame_right"], dtype=float)
+    frame_up = np.array(frame["frame_up"], dtype=float)
 
     norm = np.linalg.norm(axis_dir_raw)
-    axis_dir_unit = axis_dir_raw / norm if norm > 1e-12 else np.array([0., 0., 1.])
+    axis_dir_unit = axis_dir_raw / norm if norm > 1e-12 else np.array([0.0, 0.0, 1.0])
     length_nm = length_bp * BDNA_RISE_PER_BP  # signed
 
     # Build deformed endpoint lookup: list of (helix, start_arr, end_arr)
@@ -1375,17 +1564,22 @@ def make_bundle_deformed_continuation(
     for h in existing_design.helices:
         ep = deformed_endpoints.get(h.id)
         if ep is not None:
-            ep_list.append((h, np.array(ep["start"], dtype=float),
-                               np.array(ep["end"],   dtype=float)))
+            ep_list.append(
+                (
+                    h,
+                    np.array(ep["start"], dtype=float),
+                    np.array(ep["end"], dtype=float),
+                )
+            )
 
     _CONT_TOL = 0.5  # nm — proximity tolerance for continuation matching
 
-    existing_helix_ids:  set = {h.id for h in existing_design.helices}
+    existing_helix_ids: set = {h.id for h in existing_design.helices}
     existing_strand_ids: set = {s.id for s in existing_design.strands}
 
-    new_helices:      List[Helix]  = []
-    new_strands:      List[Strand] = []
-    domain_additions: dict         = {}
+    new_helices: List[Helix] = []
+    new_strands: List[Strand] = []
+    domain_additions: dict = {}
     # new_helix_id → cont_helix_id for continuation cells needing cluster update
     continuation_map: dict[str, str] = {}
 
@@ -1393,20 +1587,26 @@ def make_bundle_deformed_continuation(
         lx, ly = honeycomb_position(row, col)
         base_hid = f"h_{plane}_{row}_{col}"
 
-        all_helix_ids  = existing_helix_ids  | {h.id for h in new_helices}
+        all_helix_ids = existing_helix_ids | {h.id for h in new_helices}
         all_strand_ids = existing_strand_ids | {s.id for s in new_strands}
 
         helix_id = _unique_id(base_hid, all_helix_ids)
 
         # Place axis_start at grid_origin + frame_right*lx + frame_up*ly
-        start_pos  = grid_origin + frame_right * lx + frame_up * ly
-        end_pos    = start_pos + axis_dir_unit * length_nm
+        start_pos = grid_origin + frame_right * lx + frame_up * ly
+        end_pos = start_pos + axis_dir_unit * length_nm
 
-        axis_start = Vec3(x=float(start_pos[0]), y=float(start_pos[1]), z=float(start_pos[2]))
-        axis_end   = Vec3(x=float(end_pos[0]),   y=float(end_pos[1]),   z=float(end_pos[2]))
+        axis_start = Vec3(
+            x=float(start_pos[0]), y=float(start_pos[1]), z=float(start_pos[2])
+        )
+        axis_end = Vec3(x=float(end_pos[0]), y=float(end_pos[1]), z=float(end_pos[2]))
 
-        direction    = scaffold_direction_for_cell(row, col)
-        phase_offset = math.radians(322.2) if direction == Direction.FORWARD else math.radians(252.2)
+        direction = scaffold_direction_for_cell(row, col)
+        phase_offset = (
+            math.radians(322.2)
+            if direction == Direction.FORWARD
+            else math.radians(252.2)
+        )
 
         bp_start_val = _helix_global_bp_start(axis_start, axis_end)
         helix = Helix(
@@ -1422,15 +1622,15 @@ def make_bundle_deformed_continuation(
 
         # Continuation detection: find existing helix whose deformed endpoint
         # is within _CONT_TOL of start_pos.
-        cont_helix       = None
+        cont_helix = None
         is_end_at_offset = False
         for h_ex, ep_start, ep_end in ep_list:
             if float(np.linalg.norm(ep_end - start_pos)) < _CONT_TOL:
-                cont_helix       = h_ex
+                cont_helix = h_ex
                 is_end_at_offset = True
                 break
             if float(np.linalg.norm(ep_start - start_pos)) < _CONT_TOL:
-                cont_helix       = h_ex
+                cont_helix = h_ex
                 is_end_at_offset = False
                 break
 
@@ -1444,18 +1644,24 @@ def make_bundle_deformed_continuation(
                     if domain.helix_id == cont_helix.id:
                         d = domain.direction
                         if d == Direction.FORWARD:
-                            new_dom = Domain(helix_id=helix_id,
-                                             start_bp=bp_start_val,
-                                             end_bp=bp_start_val + actual_length - 1,
-                                             direction=d)
+                            new_dom = Domain(
+                                helix_id=helix_id,
+                                start_bp=bp_start_val,
+                                end_bp=bp_start_val + actual_length - 1,
+                                direction=d,
+                            )
                             should_prepend = not is_end_at_offset
                         else:
-                            new_dom = Domain(helix_id=helix_id,
-                                             start_bp=bp_start_val + actual_length - 1,
-                                             end_bp=bp_start_val,
-                                             direction=d)
+                            new_dom = Domain(
+                                helix_id=helix_id,
+                                start_bp=bp_start_val + actual_length - 1,
+                                end_bp=bp_start_val,
+                                direction=d,
+                            )
                             should_prepend = is_end_at_offset
-                        entry = domain_additions.setdefault(strand.id, {"prepend": [], "append": []})
+                        entry = domain_additions.setdefault(
+                            strand.id, {"prepend": [], "append": []}
+                        )
                         if should_prepend:
                             entry["prepend"].append(new_dom)
                         else:
@@ -1466,33 +1672,53 @@ def make_bundle_deformed_continuation(
             # Fresh cell: new scaffold + staple strands with global bp values.
             base_sid = f"scaf_{plane}_{row}_{col}"
             base_tid = f"stpl_{plane}_{row}_{col}"
-            scaf_id  = _unique_id(base_sid, all_strand_ids)
-            stpl_id  = _unique_id(base_tid, all_strand_ids | {scaf_id})
+            scaf_id = _unique_id(base_sid, all_strand_ids)
+            stpl_id = _unique_id(base_tid, all_strand_ids | {scaf_id})
 
             if direction == Direction.FORWARD:
                 scaf_start, scaf_end = bp_start_val, bp_start_val + actual_length - 1
             else:
                 scaf_start, scaf_end = bp_start_val + actual_length - 1, bp_start_val
 
-            new_strands.append(Strand(
-                id=scaf_id,
-                domains=[Domain(helix_id=helix_id, start_bp=scaf_start,
-                                end_bp=scaf_end, direction=direction)],
-                strand_type=StrandType.SCAFFOLD,
-            ))
+            new_strands.append(
+                Strand(
+                    id=scaf_id,
+                    domains=[
+                        Domain(
+                            helix_id=helix_id,
+                            start_bp=scaf_start,
+                            end_bp=scaf_end,
+                            direction=direction,
+                        )
+                    ],
+                    strand_type=StrandType.SCAFFOLD,
+                )
+            )
 
-            staple_dir = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
+            staple_dir = (
+                Direction.REVERSE
+                if direction == Direction.FORWARD
+                else Direction.FORWARD
+            )
             if staple_dir == Direction.FORWARD:
                 stpl_start, stpl_end = bp_start_val, bp_start_val + actual_length - 1
             else:
                 stpl_start, stpl_end = bp_start_val + actual_length - 1, bp_start_val
 
-            new_strands.append(Strand(
-                id=stpl_id,
-                domains=[Domain(helix_id=helix_id, start_bp=stpl_start,
-                                end_bp=stpl_end, direction=staple_dir)],
-                strand_type=StrandType.STAPLE,
-            ))
+            new_strands.append(
+                Strand(
+                    id=stpl_id,
+                    domains=[
+                        Domain(
+                            helix_id=helix_id,
+                            start_bp=stpl_start,
+                            end_bp=stpl_end,
+                            direction=staple_dir,
+                        )
+                    ],
+                    strand_type=StrandType.STAPLE,
+                )
+            )
 
     # Rebuild the existing strand list, extending those with domain_additions.
     updated_strands: List[Strand] = []
@@ -1523,11 +1749,26 @@ def make_bundle_deformed_continuation(
 
     def _build_R_T(ct: object) -> np.ndarray:
         qx, qy, qz, qw = ct.rotation  # type: ignore[union-attr]
-        return np.array([
-            [1-2*(qy*qy+qz*qz),    2*(qx*qy+qz*qw),    2*(qx*qz-qy*qw)],
-            [   2*(qx*qy-qz*qw), 1-2*(qx*qx+qz*qz),    2*(qy*qz+qx*qw)],
-            [   2*(qx*qz+qy*qw),    2*(qy*qz-qx*qw), 1-2*(qx*qx+qy*qy)],
-        ], dtype=float)
+        return np.array(
+            [
+                [
+                    1 - 2 * (qy * qy + qz * qz),
+                    2 * (qx * qy + qz * qw),
+                    2 * (qx * qz - qy * qw),
+                ],
+                [
+                    2 * (qx * qy - qz * qw),
+                    1 - 2 * (qx * qx + qz * qz),
+                    2 * (qy * qz + qx * qw),
+                ],
+                [
+                    2 * (qx * qz + qy * qw),
+                    2 * (qy * qz - qx * qw),
+                    1 - 2 * (qx * qx + qy * qy),
+                ],
+            ],
+            dtype=float,
+        )
 
     corrected_helices: List["Helix"] = []
     for h in new_helices:
@@ -1540,17 +1781,25 @@ def make_bundle_deformed_continuation(
         ct = target_cluster or (cluster_by_helix.get(cont_hid) if cont_hid else None)
         if ct is not None:
             R_T = _build_R_T(ct)
-            piv = np.array(ct.pivot,       dtype=float)  # type: ignore[union-attr]
-            tr  = np.array(ct.translation, dtype=float)  # type: ignore[union-attr]
-            def _to_local(p: "Vec3", _R_T: np.ndarray = R_T,
-                          _piv: np.ndarray = piv, _tr: np.ndarray = tr) -> "Vec3":
+            piv = np.array(ct.pivot, dtype=float)  # type: ignore[union-attr]
+            tr = np.array(ct.translation, dtype=float)  # type: ignore[union-attr]
+
+            def _to_local(
+                p: "Vec3",
+                _R_T: np.ndarray = R_T,
+                _piv: np.ndarray = piv,
+                _tr: np.ndarray = tr,
+            ) -> "Vec3":
                 v = np.array([p.x, p.y, p.z]) - _piv - _tr
                 loc = _R_T @ v + _piv
                 return Vec3(x=float(loc[0]), y=float(loc[1]), z=float(loc[2]))
-            h = h.model_copy(update={
-                "axis_start": _to_local(h.axis_start),
-                "axis_end":   _to_local(h.axis_end),
-            })
+
+            h = h.model_copy(
+                update={
+                    "axis_start": _to_local(h.axis_start),
+                    "axis_end": _to_local(h.axis_end),
+                }
+            )
         corrected_helices.append(h)
     new_helices = corrected_helices
 
@@ -1627,8 +1876,8 @@ def make_nick(
     )
     domain = strand.domains[domain_idx]
 
-    is_last_domain     = (domain_idx == len(strand.domains) - 1)
-    is_last_bp_of_dom  = (bp_index == domain.end_bp)
+    is_last_domain = domain_idx == len(strand.domains) - 1
+    is_last_bp_of_dom = bp_index == domain.end_bp
 
     if is_last_domain and is_last_bp_of_dom:
         raise ValueError(
@@ -1640,36 +1889,52 @@ def make_nick(
     # REVERSE at bp=N → nick at left boundary of cell N
     if is_last_bp_of_dom:
         # Inter-domain split — no domain modification needed.
-        left_domains  = list(strand.domains[:domain_idx + 1])
-        right_domains = list(strand.domains[domain_idx + 1:])
+        left_domains = list(strand.domains[: domain_idx + 1])
+        right_domains = list(strand.domains[domain_idx + 1 :])
     else:
         # Within-domain split.  Propagate overhang_id to the fragment that
         # remains at the strand terminal; the inner fragment becomes regular.
         ovhg = domain.overhang_id
-        is_first_domain = (domain_idx == 0)
+        is_first_domain = domain_idx == 0
         # First domain → left_dom stays at 5' terminal → gets overhang_id.
         # Last domain  → right_dom stays at 3' terminal → gets overhang_id.
         # Mid-strand   → shouldn't have overhang_id; drop from both.
-        left_ovhg  = ovhg if is_first_domain else None
+        left_ovhg = ovhg if is_first_domain else None
         right_ovhg = ovhg if is_last_domain else None
         if direction == Direction.FORWARD:
             # FORWARD: 5′=start_bp (low), 3′=end_bp (high). Next bp after nick → bp_index+1.
-            left_dom  = Domain(helix_id=helix_id, start_bp=domain.start_bp,
-                               end_bp=bp_index, direction=direction,
-                               overhang_id=left_ovhg)
-            right_dom = Domain(helix_id=helix_id, start_bp=bp_index + 1,
-                               end_bp=domain.end_bp, direction=direction,
-                               overhang_id=right_ovhg)
+            left_dom = Domain(
+                helix_id=helix_id,
+                start_bp=domain.start_bp,
+                end_bp=bp_index,
+                direction=direction,
+                overhang_id=left_ovhg,
+            )
+            right_dom = Domain(
+                helix_id=helix_id,
+                start_bp=bp_index + 1,
+                end_bp=domain.end_bp,
+                direction=direction,
+                overhang_id=right_ovhg,
+            )
         else:
             # REVERSE: 5′=start_bp (high), 3′=end_bp (low). Next bp after nick → bp_index-1.
-            left_dom  = Domain(helix_id=helix_id, start_bp=domain.start_bp,
-                               end_bp=bp_index, direction=direction,
-                               overhang_id=left_ovhg)
-            right_dom = Domain(helix_id=helix_id, start_bp=bp_index - 1,
-                               end_bp=domain.end_bp, direction=direction,
-                               overhang_id=right_ovhg)
-        left_domains  = list(strand.domains[:domain_idx]) + [left_dom]
-        right_domains = [right_dom] + list(strand.domains[domain_idx + 1:])
+            left_dom = Domain(
+                helix_id=helix_id,
+                start_bp=domain.start_bp,
+                end_bp=bp_index,
+                direction=direction,
+                overhang_id=left_ovhg,
+            )
+            right_dom = Domain(
+                helix_id=helix_id,
+                start_bp=bp_index - 1,
+                end_bp=domain.end_bp,
+                direction=direction,
+                overhang_id=right_ovhg,
+            )
+        left_domains = list(strand.domains[:domain_idx]) + [left_dom]
+        right_domains = [right_dom] + list(strand.domains[domain_idx + 1 :])
 
     # ── Build new strands ──────────────────────────────────────────────────
     new_strand_left = strand.model_copy(deep=True)
@@ -1755,9 +2020,7 @@ def _ligate(design: Design, s1: "Strand", s2: "Strand") -> Design:  # type: igno
     new_domains = _merge_adjacent_domains(list(s1.domains) + list(s2.domains))
     new_strand = s1.model_copy(update={"domains": new_domains})
     new_strands = [
-        new_strand if s.id == s1.id else s
-        for s in design.strands
-        if s.id != s2.id
+        new_strand if s.id == s1.id else s for s in design.strands if s.id != s2.id
     ]
     # When s2 is absorbed: its 3' terminal becomes the merged strand's 3' terminal,
     # so 3' extensions on s2 follow the merged strand (s1.id).  s2's 5' terminal
@@ -1774,11 +2037,13 @@ def _ligate(design: Design, s1: "Strand", s2: "Strand") -> Design:  # type: igno
         o.model_copy(update={"strand_id": s1.id}) if o.strand_id == s2.id else o
         for o in design.overhangs
     ]
-    return design.model_copy(update={
-        "strands": new_strands,
-        "extensions": new_extensions,
-        "overhangs": new_overhangs,
-    })
+    return design.model_copy(
+        update={
+            "strands": new_strands,
+            "extensions": new_extensions,
+            "overhangs": new_overhangs,
+        }
+    )
 
 
 def _merge_adjacent_domains(domains: list) -> list:
@@ -1795,8 +2060,11 @@ def _merge_adjacent_domains(domains: list) -> list:
     merged = [domains[0]]
     for d in domains[1:]:
         prev = merged[-1]
-        if (prev.helix_id == d.helix_id and prev.direction == d.direction
-                and prev.overhang_id == d.overhang_id):
+        if (
+            prev.helix_id == d.helix_id
+            and prev.direction == d.direction
+            and prev.overhang_id == d.overhang_id
+        ):
             # Check adjacency: for FORWARD end_bp+1==start_bp, for REVERSE end_bp-1==start_bp
             adj = 1 if prev.direction == Direction.FORWARD else -1
             if prev.end_bp + adj == d.start_bp or prev.end_bp == d.start_bp:
@@ -1812,7 +2080,9 @@ def _merge_adjacent_domains(domains: list) -> list:
     return merged
 
 
-def _ligate_and_merge(design: Design, s1: "Strand", s2: "Strand", keep: "Strand | None" = None) -> Design:  # type: ignore[name-defined]
+def _ligate_and_merge(
+    design: Design, s1: "Strand", s2: "Strand", keep: "Strand | None" = None
+) -> Design:  # type: ignore[name-defined]
     """Like _ligate but also merges the two touching domains at the junction.
 
     s1 is the 5'-most strand (its domains come first); s2's domains follow.
@@ -1857,13 +2127,13 @@ def _ligate_and_merge(design: Design, s1: "Strand", s2: "Strand", keep: "Strand 
         merged_domains = list(s1.domains) + list(s2.domains)
 
     # Whose id/color/position survives, and which strand is absorbed.
-    keeper   = keep if keep is not None else s1
+    keeper = keep if keep is not None else s1
     absorbed = s2 if keeper.id == s1.id else s1
     # The absorbed strand's junction-side end becomes internal: 5' if it is the
     # 3'-part (s2), 3' if it is the 5'-part (s1).
     absorbed_junction_end = "five_prime" if absorbed.id == s2.id else "three_prime"
 
-    new_strand  = keeper.model_copy(update={"domains": merged_domains, "sequence": None})
+    new_strand = keeper.model_copy(update={"domains": merged_domains, "sequence": None})
     new_strands = [
         new_strand if s.id == keeper.id else s
         for s in design.strands
@@ -1888,11 +2158,13 @@ def _ligate_and_merge(design: Design, s1: "Strand", s2: "Strand", keep: "Strand 
             new_overhangs.append(o.model_copy(update={"strand_id": keeper.id}))
         else:
             new_overhangs.append(o)
-    return design.model_copy(update={
-        "strands": new_strands,
-        "extensions": new_extensions,
-        "overhangs": new_overhangs,
-    })
+    return design.model_copy(
+        update={
+            "strands": new_strands,
+            "extensions": new_extensions,
+            "overhangs": new_overhangs,
+        }
+    )
 
 
 def _coaxial_helix_ids(design: Design, helix_id: str) -> list:
@@ -1904,13 +2176,15 @@ def _coaxial_helix_ids(design: Design, helix_id: str) -> list:
     counter added by ``_unique_id``.
     """
     import re
+
     # Extract the cell prefix: h_{plane}_{row}_{col}
-    m = re.match(r'(h_[A-Z]+_-?\d+_-?\d+)', helix_id)
+    m = re.match(r"(h_[A-Z]+_-?\d+_-?\d+)", helix_id)
     if not m:
         return [helix_id]
     prefix = m.group(1)
-    return [h.id for h in design.helices
-            if h.id == prefix or h.id.startswith(prefix + "_")]
+    return [
+        h.id for h in design.helices if h.id == prefix or h.id.startswith(prefix + "_")
+    ]
 
 
 def ligate_new_strands(design: Design, new_strand_ids: set) -> Design:
@@ -1939,7 +2213,9 @@ def ligate_new_strands(design: Design, new_strand_ids: set) -> Design:
 
         # ── 3' end: new strand's last domain ────────────────────────────
         last = strand.domains[-1]
-        adj_3p = last.end_bp + 1 if last.direction == Direction.FORWARD else last.end_bp - 1
+        adj_3p = (
+            last.end_bp + 1 if last.direction == Direction.FORWARD else last.end_bp - 1
+        )
         candidate = None
         for hid in _coaxial_helix_ids(design, last.helix_id):
             candidate = _find_strand_by_5prime(design, hid, adj_3p, strand.strand_type)
@@ -1952,7 +2228,7 @@ def ligate_new_strands(design: Design, new_strand_ids: set) -> Design:
         if candidate is not None:
             # keep=candidate: adopt the EXISTING strand's id/color/palette slot.
             design = _ligate_and_merge(design, strand, candidate, keep=candidate)
-            cur_id = candidate.id   # merged strand now lives under the existing id
+            cur_id = candidate.id  # merged strand now lives under the existing id
 
         # Re-lookup the (possibly-merged) strand by its current id.
         strand = next((s for s in design.strands if s.id == cur_id), None)
@@ -1961,7 +2237,11 @@ def ligate_new_strands(design: Design, new_strand_ids: set) -> Design:
 
         # ── 5' end: new strand's first domain ───────────────────────────
         first = strand.domains[0]
-        adj_5p = first.start_bp - 1 if first.direction == Direction.FORWARD else first.start_bp + 1
+        adj_5p = (
+            first.start_bp - 1
+            if first.direction == Direction.FORWARD
+            else first.start_bp + 1
+        )
         candidate = None
         for hid in _coaxial_helix_ids(design, first.helix_id):
             candidate = _find_strand_by_3prime(design, hid, adj_5p, strand.strand_type)
@@ -2043,8 +2323,10 @@ def _retry_ligations_for(design: Design, pending: set[str]) -> Design:
             three_p, five_p = _terminal_maps_inline(current)
             ha, hb = x.half_a, x.half_b
             for from_half, to_half in ((ha, hb), (hb, ha)):
-                s_from = three_p.get((from_half.helix_id, from_half.index, from_half.strand))
-                s_to   = five_p .get((to_half.helix_id,   to_half.index,   to_half.strand))
+                s_from = three_p.get(
+                    (from_half.helix_id, from_half.index, from_half.strand)
+                )
+                s_to = five_p.get((to_half.helix_id, to_half.index, to_half.strand))
                 if s_from is not None and s_to is not None and s_from.id != s_to.id:
                     current = _ligate(current, s_from, s_to)
                     pending.discard(x.id)
@@ -2061,7 +2343,7 @@ def _terminal_maps_inline(design: Design) -> tuple[dict, dict]:
     """Inline equivalent of crud._build_terminal_maps. Lives here so the
     core layer doesn't import from the api layer."""
     three_p: dict = {}
-    five_p:  dict = {}
+    five_p: dict = {}
     for s in design.strands:
         if not s.domains:
             continue
@@ -2080,7 +2362,7 @@ def _unligated_ids_inline(design: Design) -> set[str]:
     for x in design.crossovers:
         for a, b in ((x.half_a, x.half_b), (x.half_b, x.half_a)):
             sf = three_p.get((a.helix_id, a.index, a.strand))
-            st = five_p .get((b.helix_id, b.index, b.strand))
+            st = five_p.get((b.helix_id, b.index, b.strand))
             if sf is not None and st is not None and sf.id == st.id:
                 out.add(x.id)
                 break
@@ -2109,8 +2391,11 @@ def ligate_crossover_chains(design: Design, *, max_length: int | None = None) ->
     strand_map: dict[str, Strand] = {}
 
     for s in design.strands:
-        if (s.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER)
-                or s.is_reference or not s.domains):
+        if (
+            s.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER)
+            or s.is_reference
+            or not s.domains
+        ):
             continue
         strand_map[s.id] = s
         fd = s.domains[0]
@@ -2302,14 +2587,20 @@ def compute_nick_plan_for_strand(
         hi = min(last_break + max_length - 1, max_i)
 
         if lo > hi:
-            best_ideal = last_break + min(preferred_lengths, key=lambda p: abs(remaining - p)) - 1
+            best_ideal = (
+                last_break
+                + min(preferred_lengths, key=lambda p: abs(remaining - p))
+                - 1
+            )
             nick_i = max(min(best_ideal, max_i), last_break + min_length - 1)
         else:
             ranked = sorted(range(lo, hi + 1), key=lambda i: _pref_dist(i, last_break))
 
             nick_i = None
             for candidate in ranked:
-                if not _near_crossover(candidate) and not _seg_sandwich(candidate, last_break):
+                if not _near_crossover(candidate) and not _seg_sandwich(
+                    candidate, last_break
+                ):
                     nick_i = candidate
                     break
             if nick_i is None:
@@ -2324,7 +2615,11 @@ def compute_nick_plan_for_strand(
         last_break = nick_i + 1
 
     return [
-        {"helix_id": positions[idx][0], "bp_index": positions[idx][1], "direction": positions[idx][2]}
+        {
+            "helix_id": positions[idx][0],
+            "bp_index": positions[idx][1],
+            "direction": positions[idx][2],
+        }
         for idx in reversed(nick_indices)
     ]
 
@@ -2351,7 +2646,12 @@ def compute_nick_plan(
         if strand.is_scaffold:
             continue
         strand_nicks = compute_nick_plan_for_strand(
-            strand, preferred_lengths, min_length, max_length, min_crossover_gap, crossover_bps=xover_bps
+            strand,
+            preferred_lengths,
+            min_length,
+            max_length,
+            min_crossover_gap,
+            crossover_bps=xover_bps,
         )
         plan.extend(reversed(strand_nicks))
     return plan
@@ -2377,8 +2677,8 @@ def nick_all_major_ticks(
     ``skip_strand_ids`` names hand-routed staples (locked / overhang) that are left
     whole — never nicked — so full-autostaple does not split them.
     """
-    is_hc    = design.lattice_type == LatticeType.HONEYCOMB
-    period   = 21 if is_hc else 32
+    is_hc = design.lattice_type == LatticeType.HONEYCOMB
+    period = 21 if is_hc else 32
     tick_set = frozenset({0, 7, 14}) if is_hc else frozenset({0, 8, 16, 24})
 
     xover_bps: set[tuple[str, int]] = set()
@@ -2388,7 +2688,10 @@ def nick_all_major_ticks(
 
     result = design
     for strand in design.strands:
-        if strand.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER) or strand.is_reference:
+        if (
+            strand.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER)
+            or strand.is_reference
+        ):
             continue
         if strand.id in skip_strand_ids:
             continue
@@ -2500,14 +2803,21 @@ def grow_staples(
     if min_length is None:
         min_length = 21 if design.lattice_type == LatticeType.HONEYCOMB else 24
     result = make_merge_short_staples(
-        design, max_merged_length=max_merged_length, locked_ids=locked_ids)
+        design, max_merged_length=max_merged_length, locked_ids=locked_ids
+    )
     result = _absorb_short_staples(
-        result, min_length=min_length, max_length=max_merged_length, locked_ids=locked_ids)
+        result,
+        min_length=min_length,
+        max_length=max_merged_length,
+        locked_ids=locked_ids,
+    )
     return result
 
 
 def _absorb_short_staples(
-    design: Design, min_length: int = 14, max_length: int = 56,
+    design: Design,
+    min_length: int = 14,
+    max_length: int = 56,
     locked_ids: frozenset[str] = frozenset(),
 ) -> Design:
     """Eliminate sub-*min_length* staples by folding each into a co-linear neighbour.
@@ -2525,19 +2835,24 @@ def _absorb_short_staples(
     split, is left as-is (rare).  Nicks are only ever placed at co-linear ticks, so
     no crossover is ever split.
     """
-    is_hc    = design.lattice_type == LatticeType.HONEYCOMB
-    period   = 21 if is_hc else 32
+    is_hc = design.lattice_type == LatticeType.HONEYCOMB
+    period = 21 if is_hc else 32
     tick_set = frozenset({0, 7, 14}) if is_hc else frozenset({0, 8, 16, 24})
 
     def _is_staple(s) -> bool:
-        return (s.strand_type not in (StrandType.SCAFFOLD, StrandType.LINKER)
-                and not s.is_reference and bool(s.domains))
+        return (
+            s.strand_type not in (StrandType.SCAFFOLD, StrandType.LINKER)
+            and not s.is_reference
+            and bool(s.domains)
+        )
 
     def _len(s) -> int:
         return sum(abs(d.end_bp - d.start_bp) + 1 for d in s.domains)
 
     def _is_tick(bp: int, direction: "Direction") -> bool:
-        return (((bp + 1) if direction == Direction.FORWARD else bp) % period) in tick_set
+        return (
+            ((bp + 1) if direction == Direction.FORWARD else bp) % period
+        ) in tick_set
 
     def _by_id(des: Design, sid: str):
         return next((s for s in des.strands if s.id == sid), None)
@@ -2555,13 +2870,25 @@ def _absorb_short_staples(
             three[(l.helix_id, l.end_bp, l.direction)] = s.id
 
         last = short.domains[-1]
-        nb3 = five.get((last.helix_id,
-                        last.end_bp + 1 if last.direction == Direction.FORWARD else last.end_bp - 1,
-                        last.direction))
+        nb3 = five.get(
+            (
+                last.helix_id,
+                last.end_bp + 1
+                if last.direction == Direction.FORWARD
+                else last.end_bp - 1,
+                last.direction,
+            )
+        )
         first = short.domains[0]
-        nb5 = three.get((first.helix_id,
-                         first.start_bp - 1 if first.direction == Direction.FORWARD else first.start_bp + 1,
-                         first.direction))
+        nb5 = three.get(
+            (
+                first.helix_id,
+                first.start_bp - 1
+                if first.direction == Direction.FORWARD
+                else first.start_bp + 1,
+                first.direction,
+            )
+        )
         sides = [("3prime", nb3), ("5prime", nb5)]
 
         pos_short = _strand_nucleotide_positions(short)
@@ -2577,7 +2904,9 @@ def _absorb_short_staples(
             merged = pos_short + pos_nb if side == "3prime" else pos_nb + pos_short
             if _has_sandwich(_strand_domain_lens(merged)):
                 continue  # merging here would sandwich a short interior domain
-            return _ligate(res, short, nb) if side == "3prime" else _ligate(res, nb, short)
+            return (
+                _ligate(res, short, nb) if side == "3prime" else _ligate(res, nb, short)
+            )
 
         # Pass 2: rebalance — nick the neighbour at the balancing tick, then merge.
         for side, nbid in sides:
@@ -2592,8 +2921,10 @@ def _absorb_short_staples(
                 continue
             L2 = _len(nb)
             cap = _merge_cap(short, nb, max_length)
-            lo_x = max(min_length - L1, 1)            # S + N_near >= min
-            hi_x = min(cap - L1, L2 - min_length)     # S + N_near <= cap  AND  N_far >= min
+            lo_x = max(min_length - L1, 1)  # S + N_near >= min
+            hi_x = min(
+                cap - L1, L2 - min_length
+            )  # S + N_near <= cap  AND  N_far >= min
             if lo_x > hi_x:
                 continue
             # Co-linear-with-S domain of the neighbour, in 5'→3' order.  Nick strictly
@@ -2629,18 +2960,29 @@ def _absorb_short_staples(
             if sh is None:
                 continue
             if side == "3prime":
-                near = _by_id(res2, nb.id)  # left fragment keeps the id = the 5' (near) part
+                near = _by_id(
+                    res2, nb.id
+                )  # left fragment keeps the id = the 5' (near) part
                 if near is None:
                     continue
                 return _ligate(res2, sh, near)
             # 5': the near part is the NEW (right) fragment whose 3' abuts short's 5'.
             f = sh.domains[0]
-            prev = f.start_bp - 1 if f.direction == Direction.FORWARD else f.start_bp + 1
-            near = next((s for s in res2.strands
-                         if _is_staple(s) and s.id != sh.id
-                         and s.domains[-1].helix_id == f.helix_id
-                         and s.domains[-1].direction == f.direction
-                         and s.domains[-1].end_bp == prev), None)
+            prev = (
+                f.start_bp - 1 if f.direction == Direction.FORWARD else f.start_bp + 1
+            )
+            near = next(
+                (
+                    s
+                    for s in res2.strands
+                    if _is_staple(s)
+                    and s.id != sh.id
+                    and s.domains[-1].helix_id == f.helix_id
+                    and s.domains[-1].direction == f.direction
+                    and s.domains[-1].end_bp == prev
+                ),
+                None,
+            )
             if near is None:
                 continue
             return _ligate(res2, near, sh)
@@ -2689,16 +3031,24 @@ def make_merge_short_staples(
     while True:
         five_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
         for s in result.strands:
-            if (s.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER)
-                or s.is_reference or not s.domains or s.id in locked_ids):
+            if (
+                s.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER)
+                or s.is_reference
+                or not s.domains
+                or s.id in locked_ids
+            ):
                 continue
             f = s.domains[0]
             five_prime[(f.helix_id, f.start_bp, f.direction)] = s
 
         candidates: list[tuple[int, int, str, str]] = []
         for s1 in result.strands:
-            if (s1.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER)
-                    or s1.is_reference or not s1.domains or s1.id in locked_ids):
+            if (
+                s1.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER)
+                or s1.is_reference
+                or not s1.domains
+                or s1.id in locked_ids
+            ):
                 continue
             last = s1.domains[-1]
             if last.direction == Direction.FORWARD:
@@ -2808,13 +3158,15 @@ def _overhang_neighbor_xy(
 # Overhang-candidate geometry — mirrors the UI overhang tool's placement gate in
 # frontend/src/scene/overhang_locations.js so a programmatic / direct-API extrude
 # is rejected at exactly the positions the tool would refuse to offer.
-_OVERHANG_SPACING_EPS = 0.12   # nm — neighbour centre-distance tolerance
-_OVERHANG_Z_EPS       = 0.2    # nm — half a bp; Z-occupancy tolerance
-_OVERHANG_DOT_MIN     = 0.75   # cos(~41°) — backbone bead must face the target cell
+_OVERHANG_SPACING_EPS = 0.12  # nm — neighbour centre-distance tolerance
+_OVERHANG_Z_EPS = 0.2  # nm — half a bp; Z-occupancy tolerance
+_OVERHANG_DOT_MIN = 0.75  # cos(~41°) — backbone bead must face the target cell
 _OVERHANG_NEIGHBOR_SPACING = 2.0 * HONEYCOMB_LATTICE_RADIUS  # 2.25 nm (both lattices)
 
 
-def _overhang_cell_xy(lattice_type: "LatticeType", row: int, col: int) -> Tuple[float, float]:
+def _overhang_cell_xy(
+    lattice_type: "LatticeType", row: int, col: int
+) -> Tuple[float, float]:
     """Formula XY centre of a lattice cell — matches the frontend _hcCellXY/_sqCellXY."""
     if lattice_type == LatticeType.SQUARE:
         return (col * SQUARE_COL_PITCH, row * SQUARE_ROW_PITCH)
@@ -2865,16 +3217,29 @@ def overhang_candidate_error(
     nx, ny = _overhang_cell_xy(design.lattice_type, neighbor_row, neighbor_col)
 
     # 1) Adjacency — must be a nearest-neighbour cell.
-    if abs(math.hypot(nx - px, ny - py) - _OVERHANG_NEIGHBOR_SPACING) > _OVERHANG_SPACING_EPS:
-        return (f"Cell ({neighbor_row},{neighbor_col}) is not a lattice neighbour of "
-                f"helix {orig_helix.grid_pos}.")
+    if (
+        abs(math.hypot(nx - px, ny - py) - _OVERHANG_NEIGHBOR_SPACING)
+        > _OVERHANG_SPACING_EPS
+    ):
+        return (
+            f"Cell ({neighbor_row},{neighbor_col}) is not a lattice neighbour of "
+            f"helix {orig_helix.grid_pos}."
+        )
 
     # 2) Backbone bead at this staple end (straight geometric frame).
-    nuc = next((n for n in nucleotide_positions(orig_helix)
-                if n.bp_index == bp_index and n.direction == direction), None)
+    nuc = next(
+        (
+            n
+            for n in nucleotide_positions(orig_helix)
+            if n.bp_index == bp_index and n.direction == direction
+        ),
+        None,
+    )
     if nuc is None:
-        return (f"No nucleotide at (helix={orig_helix.id!r}, bp={bp_index}, "
-                f"direction={direction.value}).")
+        return (
+            f"No nucleotide at (helix={orig_helix.id!r}, bp={bp_index}, "
+            f"direction={direction.value})."
+        )
     bx, by, bz = float(nuc.position[0]), float(nuc.position[1]), float(nuc.position[2])
 
     # 3) Vacancy at the end's Z — no helix's NUCLEOTIDES may cover bz at the target
@@ -2894,10 +3259,12 @@ def overhang_candidate_error(
     if rl > 0.01 and dl > 0.01:
         dot = (rx * dx + ry * dy) / (rl * dl)
         if dot < _OVERHANG_DOT_MIN:
-            return (f"Staple {direction.value} end at bp {bp_index} on helix "
-                    f"{orig_helix.grid_pos} does not face cell ({neighbor_row},{neighbor_col}): "
-                    f"its backbone bead points away (facing score {dot:.2f} < "
-                    f"{_OVERHANG_DOT_MIN}) — the overhang tool offers no candidate here.")
+            return (
+                f"Staple {direction.value} end at bp {bp_index} on helix "
+                f"{orig_helix.grid_pos} does not face cell ({neighbor_row},{neighbor_col}): "
+                f"its backbone bead points away (facing score {dot:.2f} < "
+                f"{_OVERHANG_DOT_MIN}) — the overhang tool offers no candidate here."
+            )
     return None
 
 
@@ -2940,13 +3307,21 @@ def make_overhang_extrude(
         if s.strand_type != StrandType.STAPLE or not s.domains:
             continue
         first = s.domains[0]
-        last  = s.domains[-1]
+        last = s.domains[-1]
         if is_five_prime:
-            if first.helix_id == helix_id and first.start_bp == bp_index and first.direction == direction:
+            if (
+                first.helix_id == helix_id
+                and first.start_bp == bp_index
+                and first.direction == direction
+            ):
                 strand = s
                 break
         else:
-            if last.helix_id == helix_id and last.end_bp == bp_index and last.direction == direction:
+            if (
+                last.helix_id == helix_id
+                and last.end_bp == bp_index
+                and last.direction == direction
+            ):
                 strand = s
                 break
     if strand is None:
@@ -2962,10 +3337,10 @@ def make_overhang_extrude(
     # IMPORTANT: bp_index is a *global* index; axis_point uses the *local*
     # index (global − bp_start) so that designs with bp_start > 0 (e.g.
     # caDNAno imports) place the overhang at the correct absolute Z.
-    axis_z_span  = orig_helix.axis_end.z - orig_helix.axis_start.z
-    rise         = BDNA_RISE_PER_BP if axis_z_span >= 0 else -BDNA_RISE_PER_BP
+    axis_z_span = orig_helix.axis_end.z - orig_helix.axis_start.z
+    rise = BDNA_RISE_PER_BP if axis_z_span >= 0 else -BDNA_RISE_PER_BP
     local_orig_i = bp_index - orig_helix.bp_start
-    z_nick       = orig_helix.axis_start.z + local_orig_i * rise
+    z_nick = orig_helix.axis_start.z + local_orig_i * rise
 
     # U-turn rule: the overhang strand on helix B must be antiparallel to the
     # original strand at the nick.
@@ -2983,10 +3358,10 @@ def make_overhang_extrude(
     # Result:
     #   3′ nick, FORWARD (+Z) → overhang −Z     3′ nick, REVERSE (−Z) → overhang +Z
     #   5′ nick, FORWARD (+Z) → overhang +Z     5′ nick, REVERSE (−Z) → overhang −Z
-    z_dir         = 1 if axis_z_span >= 0 else -1
-    strand_z_dir  = z_dir if direction == Direction.FORWARD else -z_dir
+    z_dir = 1 if axis_z_span >= 0 else -1
+    strand_z_dir = z_dir if direction == Direction.FORWARD else -z_dir
     overhang_z_dir = strand_z_dir if is_five_prime else -strand_z_dir
-    length_nm     = length_bp * BDNA_RISE_PER_BP
+    length_nm = length_bp * BDNA_RISE_PER_BP
 
     # ── Neighbour cell XY position ───────────────────────────────────────────
     nx, ny = _overhang_neighbor_xy(orig_helix, neighbor_row, neighbor_col, design)
@@ -3009,9 +3384,13 @@ def make_overhang_extrude(
     # Overhang helices preserve their stored pose during geometry generation, so
     # store the same direction/phase a normal lattice helix at this grid cell
     # would have after effective_helix_for_geometry() normalisation.
-    canonical_direction = _lattice_direction(neighbor_row, neighbor_col, design.lattice_type)
+    canonical_direction = _lattice_direction(
+        neighbor_row, neighbor_col, design.lattice_type
+    )
     canonical_twist = _lattice_twist(design.lattice_type)
-    canonical_base_phase = _lattice_phase_offset(canonical_direction, design.lattice_type)
+    canonical_base_phase = _lattice_phase_offset(
+        canonical_direction, design.lattice_type
+    )
 
     # ── Check for existing overhang helix at this grid position ────────────
     # If a previous extrusion already created an overhang helix at
@@ -3021,9 +3400,11 @@ def make_overhang_extrude(
     ovhg_helix_ids = {o.helix_id for o in design.overhangs}
     reuse_helix: Helix | None = None
     for h in design.helices:
-        if (h.grid_pos is not None
-                and tuple(h.grid_pos) == (neighbor_row, neighbor_col)
-                and h.id in ovhg_helix_ids):
+        if (
+            h.grid_pos is not None
+            and tuple(h.grid_pos) == (neighbor_row, neighbor_col)
+            and h.id in ovhg_helix_ids
+        ):
             reuse_helix = h
             break
 
@@ -3045,30 +3426,38 @@ def make_overhang_extrude(
         union_hi = max(ex_hi, new_bp_end)
 
         # Axis extends in +Z.  Grow backward (lower Z) or forward (higher Z).
-        backward = ex_lo - union_lo   # ≥ 0
-        forward  = union_hi - ex_hi   # ≥ 0
+        backward = ex_lo - union_lo  # ≥ 0
+        forward = union_hi - ex_hi  # ≥ 0
         ext_axis_start_z = reuse_helix.axis_start.z - backward * BDNA_RISE_PER_BP
-        ext_axis_end_z   = reuse_helix.axis_end.z   + forward  * BDNA_RISE_PER_BP
+        ext_axis_end_z = reuse_helix.axis_end.z + forward * BDNA_RISE_PER_BP
         ext_phase = canonical_base_phase + union_lo * canonical_twist
 
         new_helix = Helix(
-            id           = reuse_helix.id,
-            grid_pos     = list(reuse_helix.grid_pos),
-            axis_start   = Vec3(x=reuse_helix.axis_start.x, y=reuse_helix.axis_start.y, z=ext_axis_start_z),
-            axis_end     = Vec3(x=reuse_helix.axis_end.x,   y=reuse_helix.axis_end.y,   z=ext_axis_end_z),
-            bp_start     = union_lo,
-            phase_offset = ext_phase,
-            length_bp    = union_hi - union_lo + 1,
-            direction    = canonical_direction,
-            twist_per_bp_rad = canonical_twist,
-            loop_skips   = list(reuse_helix.loop_skips),
+            id=reuse_helix.id,
+            grid_pos=list(reuse_helix.grid_pos),
+            axis_start=Vec3(
+                x=reuse_helix.axis_start.x,
+                y=reuse_helix.axis_start.y,
+                z=ext_axis_start_z,
+            ),
+            axis_end=Vec3(
+                x=reuse_helix.axis_end.x, y=reuse_helix.axis_end.y, z=ext_axis_end_z
+            ),
+            bp_start=union_lo,
+            phase_offset=ext_phase,
+            length_bp=union_hi - union_lo + 1,
+            direction=canonical_direction,
+            twist_per_bp_rad=canonical_twist,
+            loop_skips=list(reuse_helix.loop_skips),
         )
         # Replace the existing helix in the list (don't append a duplicate)
-        new_helices_list: list[Helix] = [new_helix if h.id == reuse_helix.id else h for h in design.helices]
+        new_helices_list: list[Helix] = [
+            new_helix if h.id == reuse_helix.id else h for h in design.helices
+        ]
     else:
         # ── New helix ID (collision-safe) ────────────────────────────────────
         existing_ids = {h.id for h in design.helices}
-        base_id      = f"h_XY_{neighbor_row}_{neighbor_col}"
+        base_id = f"h_XY_{neighbor_row}_{neighbor_col}"
         new_helix_id = base_id
         if new_helix_id in existing_ids:
             i = 1
@@ -3084,21 +3473,23 @@ def make_overhang_extrude(
         #   → junction at local bp L-1 which maps to global bp_index.
         if overhang_z_dir >= 0:
             new_axis_start = Vec3(x=nx, y=ny, z=z_nick)
-            new_axis_end   = Vec3(x=nx, y=ny, z=z_nick + length_nm)
+            new_axis_end = Vec3(x=nx, y=ny, z=z_nick + length_nm)
         else:
-            new_axis_start = Vec3(x=nx, y=ny, z=z_nick - (length_bp - 1) * BDNA_RISE_PER_BP)
-            new_axis_end   = Vec3(x=nx, y=ny, z=z_nick + BDNA_RISE_PER_BP)
+            new_axis_start = Vec3(
+                x=nx, y=ny, z=z_nick - (length_bp - 1) * BDNA_RISE_PER_BP
+            )
+            new_axis_end = Vec3(x=nx, y=ny, z=z_nick + BDNA_RISE_PER_BP)
 
         new_helix = Helix(
-            id           = new_helix_id,
-            grid_pos     = [neighbor_row, neighbor_col],
-            axis_start   = new_axis_start,
-            axis_end     = new_axis_end,
-            bp_start     = new_bp_start,
-            phase_offset = canonical_base_phase + new_bp_start * canonical_twist,
-            length_bp    = length_bp,
-            direction    = canonical_direction,
-            twist_per_bp_rad = canonical_twist,
+            id=new_helix_id,
+            grid_pos=[neighbor_row, neighbor_col],
+            axis_start=new_axis_start,
+            axis_end=new_axis_end,
+            bp_start=new_bp_start,
+            phase_offset=canonical_base_phase + new_bp_start * canonical_twist,
+            length_bp=length_bp,
+            direction=canonical_direction,
+            twist_per_bp_rad=canonical_twist,
         )
         new_helices_list = list(design.helices) + [new_helix]
 
@@ -3109,15 +3500,15 @@ def make_overhang_extrude(
         new_start_bp, new_end_bp = new_bp_start + length_bp - 1, new_bp_start
 
     # ── Overhang ID ──────────────────────────────────────────────────────────
-    end_tag     = "5p" if is_five_prime else "3p"
+    end_tag = "5p" if is_five_prime else "3p"
     overhang_id = f"ovhg_{helix_id}_{bp_index}_{end_tag}"
 
     new_domain = Domain(
-        helix_id    = new_helix_id,
-        start_bp    = new_start_bp,
-        end_bp      = new_end_bp,
-        direction   = new_dir,
-        overhang_id = overhang_id,
+        helix_id=new_helix_id,
+        start_bp=new_start_bp,
+        end_bp=new_end_bp,
+        direction=new_dir,
+        overhang_id=overhang_id,
     )
 
     # ─��� OverhangSpec ─────────────────────────────────────────────────────────
@@ -3127,14 +3518,18 @@ def make_overhang_extrude(
     # Preserve the prior label on re-extrude; otherwise assign next OH{n}.
     existing_overhangs = [o for o in design.overhangs if o.id != overhang_id]
     prior = next((o for o in design.overhangs if o.id == overhang_id), None)
-    overhang_label = (prior.label if prior and prior.label
-                      else _next_overhang_label(existing_overhangs))
+    overhang_label = (
+        prior.label
+        if prior and prior.label
+        else _next_overhang_label(existing_overhangs)
+    )
     # Build the deterministic whole-overhang sub-domain so the gap-less tiling
     # invariant (Σ length_bp == backing domain length) holds from the moment
     # the OverhangSpec is created. Otherwise the model validator backfills with
     # length_bp=1 because it has no access to the backing domain.
     import uuid as _uuid_local
     from backend.core.models import SubDomain as _SubDomain, NADOC_SUBDOMAIN_NS as _NS
+
     whole_sd = _SubDomain(
         id=str(_uuid_local.uuid5(_NS, f"{overhang_id}:whole")),
         name="a",
@@ -3142,11 +3537,11 @@ def make_overhang_extrude(
         length_bp=int(length_bp),
     )
     overhang_spec = OverhangSpec(
-        id        = overhang_id,
-        helix_id  = new_helix_id,
-        strand_id = strand.id,
-        pivot     = junction_pivot,
-        label     = overhang_label,
+        id=overhang_id,
+        helix_id=new_helix_id,
+        strand_id=strand.id,
+        pivot=junction_pivot,
+        label=overhang_label,
         sub_domains=[whole_sd],
     )
     new_overhangs = existing_overhangs + [overhang_spec]
@@ -3155,8 +3550,8 @@ def make_overhang_extrude(
     # The junction is at global bp_index on both helices.  For +Z overhangs
     # that's local bp 0; for −Z (axis-flipped) it's local bp L-1.
     ovhg_xover = Crossover(
-        half_a=HalfCrossover(helix_id=helix_id,     index=bp_index, strand=direction),
-        half_b=HalfCrossover(helix_id=new_helix_id,  index=bp_index, strand=new_dir),
+        half_a=HalfCrossover(helix_id=helix_id, index=bp_index, strand=direction),
+        half_b=HalfCrossover(helix_id=new_helix_id, index=bp_index, strand=new_dir),
     )
     new_crossovers = list(design.crossovers) + [ovhg_xover]
 
@@ -3182,13 +3577,15 @@ def make_overhang_extrude(
     # from scratch by bp-range overlap, so prepend-induced index shifts are
     # transparent.
 
-    return design.model_copy(update={
-        "helices":            new_helices_list,
-        "strands":            new_strands,
-        "crossovers":         new_crossovers,
-        "overhangs":          new_overhangs,
-        "deformations":       design.deformations,
-    })
+    return design.model_copy(
+        update={
+            "helices": new_helices_list,
+            "strands": new_strands,
+            "crossovers": new_crossovers,
+            "overhangs": new_overhangs,
+            "deformations": design.deformations,
+        }
+    )
 
 
 # ── Strand-end resize (interactive drag extrusion / trim) ─────────────────────
@@ -3216,7 +3613,6 @@ def _scaffold_coverage_by_helix(design: Design) -> dict[str, tuple[int, int]]:
                 else:
                     coverage[dom.helix_id] = (lo, hi)
     return coverage
-
 
 
 def _reconcile_inline_overhangs(
@@ -3287,24 +3683,30 @@ def _reconcile_inline_overhangs(
         # After ligation, a terminal domain may carry a stale tag from a
         # different strand that was merged into this one.
         existing_tag = term_dom.overhang_id
-        is_stale_inline = (existing_tag is not None
-                           and existing_tag.startswith(_INLINE))
+        is_stale_inline = existing_tag is not None and existing_tag.startswith(_INLINE)
         # Protected (linker-referenced) overhangs are never merged away.
         # The user explicitly placed a connection on this overhang; the
         # auto-detect topology heuristic must defer to that intent.
         if is_stale_inline and existing_tag in protected:
             continue
-        existing_spec = overhangs_by_id.get(existing_tag if is_stale_inline else ovhg_id)
+        existing_spec = overhangs_by_id.get(
+            existing_tag if is_stale_inline else ovhg_id
+        )
         if is_stale_inline:
             adj_idx = term_idx + 1 if is_5p else term_idx - 1
-            if 0 <= adj_idx < len(domains) and domains[adj_idx].helix_id == term_dom.helix_id:
-                first  = domains[min(term_idx, adj_idx)]
+            if (
+                0 <= adj_idx < len(domains)
+                and domains[adj_idx].helix_id == term_dom.helix_id
+            ):
+                first = domains[min(term_idx, adj_idx)]
                 second = domains[max(term_idx, adj_idx)]
-                merged = first.model_copy(update={
-                    "start_bp":   first.start_bp,
-                    "end_bp":     second.end_bp,
-                    "overhang_id": None,
-                })
+                merged = first.model_copy(
+                    update={
+                        "start_bp": first.start_bp,
+                        "end_bp": second.end_bp,
+                        "overhang_id": None,
+                    }
+                )
                 lo = min(term_idx, adj_idx)
                 domains[lo : lo + 2] = [merged]
             else:
@@ -3335,32 +3737,48 @@ def _reconcile_inline_overhangs(
             # 5' of FORWARD = start_bp (low side). Partial overlap: start below
             # scaf_lo but end still within coverage.
             if term_dom.start_bp < scaf_lo <= term_dom.end_bp:
-                new_ovhg   = term_dom.model_copy(update={"end_bp": scaf_lo - 1, "overhang_id": ovhg_id})
-                scaf_part  = term_dom.model_copy(update={"start_bp": scaf_lo, "overhang_id": None})
+                new_ovhg = term_dom.model_copy(
+                    update={"end_bp": scaf_lo - 1, "overhang_id": ovhg_id}
+                )
+                scaf_part = term_dom.model_copy(
+                    update={"start_bp": scaf_lo, "overhang_id": None}
+                )
                 domains[term_idx : term_idx + 1] = [new_ovhg, scaf_part]
 
         elif is_5p and not is_fwd:
             # 5' of REVERSE = start_bp (high side). Partial overlap: start above
             # scaf_hi but end still within coverage.
             if term_dom.start_bp > scaf_hi >= term_dom.end_bp:
-                new_ovhg   = term_dom.model_copy(update={"end_bp": scaf_hi + 1, "overhang_id": ovhg_id})
-                scaf_part  = term_dom.model_copy(update={"start_bp": scaf_hi, "overhang_id": None})
+                new_ovhg = term_dom.model_copy(
+                    update={"end_bp": scaf_hi + 1, "overhang_id": ovhg_id}
+                )
+                scaf_part = term_dom.model_copy(
+                    update={"start_bp": scaf_hi, "overhang_id": None}
+                )
                 domains[term_idx : term_idx + 1] = [new_ovhg, scaf_part]
 
         elif not is_5p and is_fwd:
             # 3' of FORWARD = end_bp (high side). Partial overlap: end above
             # scaf_hi but start still within coverage.
             if term_dom.end_bp > scaf_hi >= term_dom.start_bp:
-                scaf_part  = term_dom.model_copy(update={"end_bp": scaf_hi, "overhang_id": None})
-                new_ovhg   = term_dom.model_copy(update={"start_bp": scaf_hi + 1, "overhang_id": ovhg_id})
+                scaf_part = term_dom.model_copy(
+                    update={"end_bp": scaf_hi, "overhang_id": None}
+                )
+                new_ovhg = term_dom.model_copy(
+                    update={"start_bp": scaf_hi + 1, "overhang_id": ovhg_id}
+                )
                 domains[term_idx : term_idx + 1] = [scaf_part, new_ovhg]
 
         else:
             # 3' of REVERSE = end_bp (low side). Partial overlap: end below
             # scaf_lo but start still within coverage.
             if term_dom.end_bp < scaf_lo <= term_dom.start_bp:
-                scaf_part  = term_dom.model_copy(update={"end_bp": scaf_lo, "overhang_id": None})
-                new_ovhg   = term_dom.model_copy(update={"start_bp": scaf_lo - 1, "overhang_id": ovhg_id})
+                scaf_part = term_dom.model_copy(
+                    update={"end_bp": scaf_lo, "overhang_id": None}
+                )
+                new_ovhg = term_dom.model_copy(
+                    update={"start_bp": scaf_lo - 1, "overhang_id": ovhg_id}
+                )
                 domains[term_idx : term_idx + 1] = [scaf_part, new_ovhg]
 
         if new_ovhg is not None:
@@ -3370,10 +3788,15 @@ def _reconcile_inline_overhangs(
             )
             pivot_xyz = (
                 _pivot_for_junction(helices_by_id, helix_id, junction_bp)
-                if helices_by_id else [0.0, 0.0, 0.0]
+                if helices_by_id
+                else [0.0, 0.0, 0.0]
             )
-            preserved_label = existing_spec.label if existing_spec and existing_spec.label else None
-            new_label = preserved_label or _next_overhang_label(overhangs_by_id.values())
+            preserved_label = (
+                existing_spec.label if existing_spec and existing_spec.label else None
+            )
+            new_label = preserved_label or _next_overhang_label(
+                overhangs_by_id.values()
+            )
             # Backing-domain length: |end_bp − start_bp| + 1 of new_ovhg.
             ovhg_len = abs(new_ovhg.end_bp - new_ovhg.start_bp) + 1
             # Preserve existing sub_domains if present; otherwise build the
@@ -3382,20 +3805,28 @@ def _reconcile_inline_overhangs(
                 preserved_sub_doms = list(existing_spec.sub_domains)
             else:
                 import uuid as _uuid_local
-                from backend.core.models import SubDomain as _SubDomain, NADOC_SUBDOMAIN_NS as _NS
-                preserved_sub_doms = [_SubDomain(
-                    id=str(_uuid_local.uuid5(_NS, f"{ovhg_id}:whole")),
-                    name="a",
-                    start_bp_offset=0,
-                    length_bp=ovhg_len,
-                )]
+                from backend.core.models import (
+                    SubDomain as _SubDomain,
+                    NADOC_SUBDOMAIN_NS as _NS,
+                )
+
+                preserved_sub_doms = [
+                    _SubDomain(
+                        id=str(_uuid_local.uuid5(_NS, f"{ovhg_id}:whole")),
+                        name="a",
+                        start_bp_offset=0,
+                        length_bp=ovhg_len,
+                    )
+                ]
             overhangs_by_id[ovhg_id] = OverhangSpec(
                 id=ovhg_id,
                 helix_id=helix_id,
                 strand_id=strand_id,
                 sequence=existing_spec.sequence if existing_spec else None,
                 label=new_label,
-                rotation=existing_spec.rotation if existing_spec else [0.0, 0.0, 0.0, 1.0],
+                rotation=existing_spec.rotation
+                if existing_spec
+                else [0.0, 0.0, 0.0, 1.0],
                 pivot=pivot_xyz,
                 sub_domains=preserved_sub_doms,
             )
@@ -3429,7 +3860,9 @@ def _pivot_for_junction(helices_by_id: dict, helix_id: str, bp: int) -> list[flo
     if h is None:
         return [0.0, 0.0, 0.0]
     ax, ae = h.axis_start, h.axis_end
-    dx = ae.x - ax.x; dy = ae.y - ax.y; dz = ae.z - ax.z
+    dx = ae.x - ax.x
+    dy = ae.y - ax.y
+    dz = ae.z - ax.z
     axis_nm = (dx * dx + dy * dy + dz * dz) ** 0.5
     phys_len = max(1, round(axis_nm / BDNA_RISE_PER_BP) + 1)
     t = (bp - h.bp_start) / max(phys_len - 1, 1)
@@ -3503,15 +3936,19 @@ def autodetect_overhangs(design: Design) -> Design:
             # Pivot = helix axis position at the crossover junction on the adjacent
             # (main-bundle) domain.  For 3' end: junction is adjacent.end_bp.
             # For 5' end: junction is adjacent.start_bp.
-            adj_dom  = domains[term_idx - 1] if end == "3p" else domains[term_idx + 1]
-            junc_bp  = adj_dom.end_bp if end == "3p" else adj_dom.start_bp
+            adj_dom = domains[term_idx - 1] if end == "3p" else domains[term_idx + 1]
+            junc_bp = adj_dom.end_bp if end == "3p" else adj_dom.start_bp
             pivot_xyz = _pivot_for_junction(helices_by_id, adj_dom.helix_id, junc_bp)
 
             ovhg_id = f"{_INLINE}{strand.id}_{end}"
             domains[term_idx] = term_dom.model_copy(update={"overhang_id": ovhg_id})
             inline_len = abs(term_dom.end_bp - term_dom.start_bp) + 1
             import uuid as _uuid_local
-            from backend.core.models import SubDomain as _SubDomain, NADOC_SUBDOMAIN_NS as _NS
+            from backend.core.models import (
+                SubDomain as _SubDomain,
+                NADOC_SUBDOMAIN_NS as _NS,
+            )
+
             inline_sd = _SubDomain(
                 id=str(_uuid_local.uuid5(_NS, f"{ovhg_id}:whole")),
                 name="a",
@@ -3539,11 +3976,13 @@ def autodetect_overhangs(design: Design) -> Design:
 
 # Distinct non-scaffold hue for OH-binder strands in 3D + cadnano. Mirrors the
 # frontend CLR_OH_BINDER constant — keep the two in sync.
-_OH_BINDER_DEFAULT_COLOR = "#c050d0"   # magenta
+_OH_BINDER_DEFAULT_COLOR = "#c050d0"  # magenta
 
 
 def _antiparallel_partner_domains(
-    design: Design, binder_strand_id: str, binder_domain: Domain,
+    design: Design,
+    binder_strand_id: str,
+    binder_domain: Domain,
 ) -> list[tuple[Strand, int, Domain]]:
     """Domains on OTHER strands that pair antiparallel with *binder_domain*.
 
@@ -3631,7 +4070,8 @@ def convert_strand_to_binder(design: Design, strand_id: str) -> Design:
             # build the OverhangSpec (whole-domain sub-domain, mirrors autodetect)
             inline_len = abs(p_dom.end_bp - p_dom.start_bp) + 1
             pivot_xyz = _pivot_for_junction(
-                helices_by_id, p_dom.helix_id,
+                helices_by_id,
+                p_dom.helix_id,
                 min(p_dom.start_bp, p_dom.end_bp),
             )
             overhangs_by_id[ovhg_id] = OverhangSpec(
@@ -3640,12 +4080,14 @@ def convert_strand_to_binder(design: Design, strand_id: str) -> Design:
                 strand_id=p_strand.id,
                 pivot=pivot_xyz,
                 label=_next_overhang_label(overhangs_by_id.values()),
-                sub_domains=[_SubDomain(
-                    id=str(_uuid_local.uuid5(_NS, f"{ovhg_id}:whole")),
-                    name="a",
-                    start_bp_offset=0,
-                    length_bp=inline_len,
-                )],
+                sub_domains=[
+                    _SubDomain(
+                        id=str(_uuid_local.uuid5(_NS, f"{ovhg_id}:whole")),
+                        name="a",
+                        start_bp_offset=0,
+                        length_bp=inline_len,
+                    )
+                ],
             )
 
         new_binder_domains[bi] = bdom.model_copy(update={"binds_overhang_id": ovhg_id})
@@ -3656,11 +4098,13 @@ def convert_strand_to_binder(design: Design, strand_id: str) -> Design:
         )
 
     # rebuild the binder strand (new type + colour + linked domains)
-    strands_by_id[strand_id] = strand.model_copy(update={
-        "strand_type": StrandType.OH_BINDER,
-        "color": strand.color or _OH_BINDER_DEFAULT_COLOR,
-        "domains": new_binder_domains,
-    })
+    strands_by_id[strand_id] = strand.model_copy(
+        update={
+            "strand_type": StrandType.OH_BINDER,
+            "color": strand.color or _OH_BINDER_DEFAULT_COLOR,
+            "domains": new_binder_domains,
+        }
+    )
     # apply partner domain tags
     for pid, dom_list in partner_domains.items():
         strands_by_id[pid] = strands_by_id[pid].model_copy(update={"domains": dom_list})
@@ -3689,17 +4133,21 @@ def convert_binder_to_scaffold(design: Design, strand_id: str) -> Design:
     bound_ids = {d.binds_overhang_id for d in strand.domains if d.binds_overhang_id}
 
     # Retype the binder → scaffold; drop colour + binder links.
-    strands_by_id[strand_id] = strand.model_copy(update={
-        "strand_type": StrandType.SCAFFOLD,
-        "color": None,
-        "domains": [d.model_copy(update={"binds_overhang_id": None})
-                    for d in strand.domains],
-    })
+    strands_by_id[strand_id] = strand.model_copy(
+        update={
+            "strand_type": StrandType.SCAFFOLD,
+            "color": None,
+            "domains": [
+                d.model_copy(update={"binds_overhang_id": None}) for d in strand.domains
+            ],
+        }
+    )
 
     # Determine which auto-created overhangs are now orphaned + unreferenced.
     conn_refs: set[str] = set()
     for c in design.overhang_connections:
-        conn_refs.add(c.overhang_a_id); conn_refs.add(c.overhang_b_id)
+        conn_refs.add(c.overhang_a_id)
+        conn_refs.add(c.overhang_b_id)
     bind_refs: set[str] = set()
     for b in design.overhang_bindings:
         bind_refs.add(getattr(b, "overhang_a_id", None))
@@ -3711,7 +4159,8 @@ def convert_binder_to_scaffold(design: Design, strand_id: str) -> Design:
             continue  # pre-existing overhang — leave it
         still_bound = any(
             d.binds_overhang_id == oid
-            for s in strands_by_id.values() if s.id != strand_id
+            for s in strands_by_id.values()
+            if s.id != strand_id
             for d in s.domains
         )
         if still_bound or oid in conn_refs or oid in bind_refs:
@@ -3722,11 +4171,16 @@ def convert_binder_to_scaffold(design: Design, strand_id: str) -> Design:
         # untag the partner domains + drop the OverhangSpecs
         for sid, s in list(strands_by_id.items()):
             if any(d.overhang_id in remove_ovhg for d in s.domains):
-                strands_by_id[sid] = s.model_copy(update={"domains": [
-                    d.model_copy(update={"overhang_id": None})
-                    if d.overhang_id in remove_ovhg else d
-                    for d in s.domains
-                ]})
+                strands_by_id[sid] = s.model_copy(
+                    update={
+                        "domains": [
+                            d.model_copy(update={"overhang_id": None})
+                            if d.overhang_id in remove_ovhg
+                            else d
+                            for d in s.domains
+                        ]
+                    }
+                )
         new_overhangs = [o for o in design.overhangs if o.id not in remove_ovhg]
     else:
         new_overhangs = list(design.overhangs)
@@ -3760,11 +4214,13 @@ def tag_painted_binder(design: Design, strand: Strand) -> Strand:
         changed = True
     if not changed:
         return strand
-    return strand.model_copy(update={
-        "strand_type": StrandType.OH_BINDER,
-        "color": _OH_BINDER_DEFAULT_COLOR,
-        "domains": new_domains,
-    })
+    return strand.model_copy(
+        update={
+            "strand_type": StrandType.OH_BINDER,
+            "color": _OH_BINDER_DEFAULT_COLOR,
+            "domains": new_domains,
+        }
+    )
 
 
 def _binder_domain_for_overhang(
@@ -3797,6 +4253,7 @@ def _binder_domain_for_overhang(
     comp = _make_complement_domain(oh_dom, binds_overhang_id=overhang_id)
 
     from backend.core.sequences import _assemble_overhang_5to3, complement_base
+
     oh_len = abs(oh_dom.end_bp - oh_dom.start_bp) + 1
     oh_bases = _assemble_overhang_5to3(spec, oh_len)
     seq = None
@@ -3819,6 +4276,7 @@ def make_binder_for_overhang(design: Design, overhang_id: str) -> Design:
     comp, seq = _binder_domain_for_overhang(design, overhang_id)
 
     import uuid as _uuid_local
+
     new_strand = Strand(
         id=f"ohbind_{overhang_id}_{_uuid_local.uuid4().hex[:8]}",
         domains=[comp],
@@ -3827,8 +4285,6 @@ def make_binder_for_overhang(design: Design, overhang_id: str) -> Design:
         sequence=seq,
     )
     return design.copy_with(strands=[*design.strands, new_strand])
-
-
 
 
 def migrate_split_staple_domains(design: Design) -> Design:
@@ -3876,12 +4332,18 @@ def migrate_split_staple_domains(design: Design) -> Design:
         local_changed = False
         for nxt in strand.domains[1:]:
             prev = merged[-1]
-            if (prev.helix_id == nxt.helix_id
-                    and prev.direction == nxt.direction
-                    and prev.overhang_id not in protected
-                    and nxt.overhang_id not in protected):
+            if (
+                prev.helix_id == nxt.helix_id
+                and prev.direction == nxt.direction
+                and prev.overhang_id not in protected
+                and nxt.overhang_id not in protected
+            ):
                 fwd = prev.direction == Direction.FORWARD
-                contig = (prev.end_bp + 1 == nxt.start_bp) if fwd else (prev.end_bp - 1 == nxt.start_bp)
+                contig = (
+                    (prev.end_bp + 1 == nxt.start_bp)
+                    if fwd
+                    else (prev.end_bp - 1 == nxt.start_bp)
+                )
                 cov = scaf_cov.get(prev.helix_id) if contig else None
                 if cov is not None:
                     lo, hi = cov
@@ -3891,10 +4353,12 @@ def migrate_split_staple_domains(design: Design) -> Design:
                         for tag in (prev.overhang_id, nxt.overhang_id):
                             if tag and tag.startswith("ovhg_inline_"):
                                 dropped_inline_ids.add(tag)
-                        merged[-1] = prev.model_copy(update={
-                            "end_bp": nxt.end_bp,
-                            "overhang_id": None,
-                        })
+                        merged[-1] = prev.model_copy(
+                            update={
+                                "end_bp": nxt.end_bp,
+                                "overhang_id": None,
+                            }
+                        )
                         local_changed = True
                         continue
             merged.append(nxt)
@@ -3921,8 +4385,8 @@ def reconcile_all_inline_overhangs(design: Design) -> Design:
     partitioning, scaffold split, etc.) and on ``.nadoc`` load to clean up
     stale overhang tags saved from a previous session.
     """
-    helices_by_id2: dict[str, Helix]        = {h.id: h for h in design.helices}
-    strands_by_id:  dict[str, Strand]       = {s.id: s for s in design.strands}
+    helices_by_id2: dict[str, Helix] = {h.id: h for h in design.helices}
+    strands_by_id: dict[str, Strand] = {s.id: s for s in design.strands}
     overhangs_by_id: dict[str, OverhangSpec] = {o.id: o for o in design.overhangs}
     scaf_cov = _scaffold_coverage_by_helix(design)
 
@@ -3940,8 +4404,14 @@ def reconcile_all_inline_overhangs(design: Design) -> Design:
         if s.strand_type == StrandType.STAPLE
         for end in ("5p", "3p")
     ]
-    _reconcile_inline_overhangs(strands_by_id, overhangs_by_id, all_modified, scaf_cov, helices_by_id2,
-                                protected_overhang_ids=protected)
+    _reconcile_inline_overhangs(
+        strands_by_id,
+        overhangs_by_id,
+        all_modified,
+        scaf_cov,
+        helices_by_id2,
+        protected_overhang_ids=protected,
+    )
 
     return design.copy_with(
         strands=[strands_by_id[s.id] for s in design.strands],
@@ -3984,7 +4454,9 @@ def autodetect_all_overhangs(design: Design) -> Design:
     for ovhg_id in sorted(overhangs_by_id):
         ovhg = overhangs_by_id[ovhg_id]
         if not ovhg.label:
-            overhangs_by_id[ovhg_id] = ovhg.model_copy(update={"label": f"OH{oh_counter}"})
+            overhangs_by_id[ovhg_id] = ovhg.model_copy(
+                update={"label": f"OH{oh_counter}"}
+            )
         oh_counter += 1
 
     return design.copy_with(
@@ -3993,7 +4465,9 @@ def autodetect_all_overhangs(design: Design) -> Design:
 
 
 _LINKER_HELIX_PREFIX = "__lnk__"
-_LINKER_DEFAULT_COLOR = "#00ffff"   # cyan — distinguishes new linker strands from staples in 3D + cadnano
+_LINKER_DEFAULT_COLOR = (
+    "#00ffff"  # cyan — distinguishes new linker strands from staples in 3D + cadnano
+)
 
 
 def _length_value_to_bp(value: float, unit: str) -> int:
@@ -4003,6 +4477,7 @@ def _length_value_to_bp(value: float, unit: str) -> int:
     Always returns at least 1 to avoid zero-length helices.
     """
     from backend.core.constants import BDNA_RISE_PER_BP
+
     if unit == "bp":
         return max(1, round(value))
     return max(1, round(value / BDNA_RISE_PER_BP))
@@ -4038,7 +4513,9 @@ def _find_overhang_domain(design: Design, ovhg_id: str) -> Optional[Domain]:
     return strand.domains[di]
 
 
-def _find_overhang_domain_ref(design: Design, ovhg_id: str) -> Optional[tuple[str, int]]:
+def _find_overhang_domain_ref(
+    design: Design, ovhg_id: str
+) -> Optional[tuple[str, int]]:
     """Return (strand_id, domain_index) for the first OH-tagged domain."""
     pairs = _overhang_domains(design, ovhg_id)
     if not pairs:
@@ -4177,7 +4654,9 @@ def _opposite_direction(d: Direction) -> Direction:
     return Direction.REVERSE if d == Direction.FORWARD else Direction.FORWARD
 
 
-def _make_complement_domain(oh_dom: Domain, binds_overhang_id: Optional[str] = None) -> Domain:
+def _make_complement_domain(
+    oh_dom: Domain, binds_overhang_id: Optional[str] = None
+) -> Domain:
     """Antiparallel complement of an overhang domain.
 
     Lives on the SAME real helix at the SAME bp range as the overhang, but with
@@ -4193,7 +4672,7 @@ def _make_complement_domain(oh_dom: Domain, binds_overhang_id: Optional[str] = N
     """
     return Domain(
         helix_id=oh_dom.helix_id,
-        start_bp=oh_dom.end_bp,           # swap for antiparallel traversal
+        start_bp=oh_dom.end_bp,  # swap for antiparallel traversal
         end_bp=oh_dom.start_bp,
         direction=_opposite_direction(oh_dom.direction),
         binds_overhang_id=binds_overhang_id,
@@ -4246,7 +4725,9 @@ def _overhang_attach_bp(ovhg_id: str, domain: Domain, attach: str) -> int:
     return tip_bp if attach == "free_end" else root_bp
 
 
-def _linker_anchor_nuc(design: Design, ovhg_id: str, attach: str, oh_dom: Optional[Domain]):
+def _linker_anchor_nuc(
+    design: Design, ovhg_id: str, attach: str, oh_dom: Optional[Domain]
+):
     """Linker complement bead position at the overhang's chosen attach end.
 
     Returns the *fully* deformed nucleotide (deformations + helix-level AND
@@ -4272,11 +4753,12 @@ def _linker_anchor_nuc(design: Design, ovhg_id: str, attach: str, oh_dom: Option
         return None
     from backend.core.deformation import deformed_nucleotide_arrays
     from backend.core.geometry import NucleotidePosition
+
     bp = _overhang_attach_bp(ovhg_id, oh_dom, attach)
     direction = _opposite_direction(oh_dom.direction)
     arrs = deformed_nucleotide_arrays(helix, design)
     bp_arr = arrs["bp_indices"]
-    dir_arr = arrs["directions"]   # int array: 0 = FORWARD, 1 = REVERSE
+    dir_arr = arrs["directions"]  # int array: 0 = FORWARD, 1 = REVERSE
     dir_int = 0 if direction == Direction.FORWARD else 1
     matches = (bp_arr == bp) & (dir_arr == dir_int)
     if not matches.any():
@@ -4293,12 +4775,22 @@ def _linker_anchor_nuc(design: Design, ovhg_id: str, attach: str, oh_dom: Option
     )
 
 
-def _frame_from_axis(axis_dir: np.ndarray, preferred_normal: Optional[np.ndarray] = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _frame_from_axis(
+    axis_dir: np.ndarray, preferred_normal: Optional[np.ndarray] = None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     z = axis_dir / (np.linalg.norm(axis_dir) or 1.0)
-    x = preferred_normal.copy() if preferred_normal is not None else np.array([0.0, 0.0, 1.0])
+    x = (
+        preferred_normal.copy()
+        if preferred_normal is not None
+        else np.array([0.0, 0.0, 1.0])
+    )
     x = x - z * float(np.dot(x, z))
     if np.linalg.norm(x) < 1e-6:
-        x = np.array([0.0, 0.0, 1.0]) if abs(float(z[2])) < 0.9 else np.array([1.0, 0.0, 0.0])
+        x = (
+            np.array([0.0, 0.0, 1.0])
+            if abs(float(z[2])) < 0.9
+            else np.array([1.0, 0.0, 0.0])
+        )
         x = x - z * float(np.dot(x, z))
     x = x / (np.linalg.norm(x) or 1.0)
     y = np.cross(z, x)
@@ -4323,14 +4815,19 @@ def _make_virtual_linker_helix(
     separated lattice ``grid_pos`` for pathview.
     """
     from backend.core.constants import BDNA_RISE_PER_BP
+
     row, col = grid_pos if grid_pos is not None else _linker_grid_pos(design)
     visual_length = max(length_bp - 1, 1) * BDNA_RISE_PER_BP
     axis_start = np.array([0.0, 0.0, 0.0])
     axis_end = np.array([0.0, 0.0, visual_length])
     phase_offset = 0.0
     if conn is not None:
-        anchor_a = _linker_anchor_nuc(design, conn.overhang_a_id, conn.overhang_a_attach, oh_a_dom)
-        anchor_b = _linker_anchor_nuc(design, conn.overhang_b_id, conn.overhang_b_attach, oh_b_dom)
+        anchor_a = _linker_anchor_nuc(
+            design, conn.overhang_a_id, conn.overhang_a_attach, oh_a_dom
+        )
+        anchor_b = _linker_anchor_nuc(
+            design, conn.overhang_b_id, conn.overhang_b_attach, oh_b_dom
+        )
         if anchor_a is not None and anchor_b is not None:
             pos_a = np.array(anchor_a.position, dtype=float)
             pos_b = np.array(anchor_b.position, dtype=float)
@@ -4346,23 +4843,31 @@ def _make_virtual_linker_helix(
                 # missing comp_first inputs on legacy designs).
                 axis_start = None
                 try:
-                    from backend.core.linker_relax import bridge_axis_geometry, _comp_first
+                    from backend.core.linker_relax import (
+                        bridge_axis_geometry,
+                        _comp_first,
+                    )
+
                     cfa = _comp_first(conn.overhang_a_id, conn.overhang_a_attach)
                     cfb = _comp_first(conn.overhang_b_id, conn.overhang_b_attach)
-                    g = bridge_axis_geometry(pos_a, preferred, pos_b, length_bp, cfa, cfb)
+                    g = bridge_axis_geometry(
+                        pos_a, preferred, pos_b, length_bp, cfa, cfb
+                    )
                     axis_start = g["axis_start"]
-                    axis_end   = g["axis_end"]
+                    axis_end = g["axis_end"]
                 except Exception:
                     pass
                 if axis_start is None:
                     mid = (pos_a + pos_b) * 0.5
                     axis_start = mid - frame_z * (visual_length * 0.5)
-                    axis_end   = axis_start + frame_z * visual_length
+                    axis_end = axis_start + frame_z * visual_length
                 # Geometry's nucleotide frame derives its x/y basis from axis
                 # direction; choose phase so bp0's forward radial matches the
                 # full-renderer frame as closely as the stored helix allows.
                 geom_x, geom_y, _ = _frame_from_axis(frame_z)
-                phase_offset = math.atan2(float(np.dot(frame_x, geom_y)), float(np.dot(frame_x, geom_x)))
+                phase_offset = math.atan2(
+                    float(np.dot(frame_x, geom_y)), float(np.dot(frame_x, geom_x))
+                )
     return Helix(
         id=helix_id,
         axis_start=Vec3.from_array(axis_start),
@@ -4397,11 +4902,20 @@ def position_linker_virtual_helices(design: Design) -> Design:
         oh_a_dom = _find_overhang_domain(design, conn.overhang_a_id)
         oh_b_dom = _find_overhang_domain(design, conn.overhang_b_id)
         new = _make_virtual_linker_helix(
-            design, bridge_helix_id, linker_bp, conn, oh_a_dom, oh_b_dom,
+            design,
+            bridge_helix_id,
+            linker_bp,
+            conn,
+            oh_a_dom,
+            oh_b_dom,
             grid_pos=old.grid_pos,
         )
         replacements[bridge_helix_id] = new
-        if old.axis_start != new.axis_start or old.axis_end != new.axis_end or old.phase_offset != new.phase_offset:
+        if (
+            old.axis_start != new.axis_start
+            or old.axis_end != new.axis_end
+            or old.phase_offset != new.phase_offset
+        ):
             changed = True
 
     if not changed:
@@ -4478,7 +4992,11 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
     # domain(s). For ds the bridge is a duplex (two strands' bridge halves
     # paired antiparallel); for ss it's a single ssDNA segment carried by
     # the one ss linker strand.
-    new_helices.append(_make_virtual_linker_helix(design, bridge_helix_id, linker_bp, conn, oh_a_dom, oh_b_dom))
+    new_helices.append(
+        _make_virtual_linker_helix(
+            design, bridge_helix_id, linker_bp, conn, oh_a_dom, oh_b_dom
+        )
+    )
 
     def _make_bridge_domain(side: str, comp_first: bool) -> Domain:
         """Bridge half whose complement-side end lands at the side's __lnk__ bp.
@@ -4491,23 +5009,47 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
         if side == "a":
             if comp_first:
                 # bridge 5' (= start_bp) at bp=0  →  FORWARD 0 → L−1
-                return Domain(helix_id=bridge_helix_id, start_bp=0, end_bp=L - 1, direction=Direction.FORWARD)
+                return Domain(
+                    helix_id=bridge_helix_id,
+                    start_bp=0,
+                    end_bp=L - 1,
+                    direction=Direction.FORWARD,
+                )
             # bridge 3' (= end_bp) at bp=0  →  REVERSE L−1 → 0
-            return Domain(helix_id=bridge_helix_id, start_bp=L - 1, end_bp=0, direction=Direction.REVERSE)
+            return Domain(
+                helix_id=bridge_helix_id,
+                start_bp=L - 1,
+                end_bp=0,
+                direction=Direction.REVERSE,
+            )
         # side b
         if comp_first:
             # bridge 5' (= start_bp) at bp=L−1  →  REVERSE L−1 → 0
-            return Domain(helix_id=bridge_helix_id, start_bp=L - 1, end_bp=0, direction=Direction.REVERSE)
+            return Domain(
+                helix_id=bridge_helix_id,
+                start_bp=L - 1,
+                end_bp=0,
+                direction=Direction.REVERSE,
+            )
         # bridge 3' (= end_bp) at bp=L−1  →  FORWARD 0 → L−1
-        return Domain(helix_id=bridge_helix_id, start_bp=0, end_bp=L - 1, direction=Direction.FORWARD)
+        return Domain(
+            helix_id=bridge_helix_id,
+            start_bp=0,
+            end_bp=L - 1,
+            direction=Direction.FORWARD,
+        )
 
-    def _build_ds_linker_strand(side: str, oh_id: str, attach: str, oh_dom: Optional[Domain]) -> Optional[Strand]:
+    def _build_ds_linker_strand(
+        side: str, oh_id: str, attach: str, oh_dom: Optional[Domain]
+    ) -> Optional[Strand]:
         # ds: per-side strand with [complement, bridge] (comp-first) OR
         # [bridge, complement] (bridge-first). Synthetic test fixtures with
         # no backing domain emit a bridge-only strand so cleanup hooks have
         # something to delete.
         comp_first = _is_comp_first(oh_id, attach) if oh_dom is not None else True
-        complement = _make_complement_domain(oh_dom, oh_id) if oh_dom is not None else None
+        complement = (
+            _make_complement_domain(oh_dom, oh_id) if oh_dom is not None else None
+        )
         bridge = _make_bridge_domain(side, comp_first)
         if complement is None:
             domains = [bridge]
@@ -4529,8 +5071,16 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
         # Bridge polarity: FORWARD 0 → L-1 so that complementA's 3' tip
         # connects to bridge bp 0 (5' end of bridge) and bridge bp L-1
         # (3' end) connects to complementB's 5' tip.
-        complementA = _make_complement_domain(oh_a_dom, conn.overhang_a_id) if oh_a_dom is not None else None
-        complementB = _make_complement_domain(oh_b_dom, conn.overhang_b_id) if oh_b_dom is not None else None
+        complementA = (
+            _make_complement_domain(oh_a_dom, conn.overhang_a_id)
+            if oh_a_dom is not None
+            else None
+        )
+        complementB = (
+            _make_complement_domain(oh_b_dom, conn.overhang_b_id)
+            if oh_b_dom is not None
+            else None
+        )
         bridge = Domain(
             helix_id=bridge_helix_id,
             start_bp=0,
@@ -4538,9 +5088,11 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
             direction=Direction.FORWARD,
         )
         domains: list[Domain] = []
-        if complementA is not None: domains.append(complementA)
+        if complementA is not None:
+            domains.append(complementA)
         domains.append(bridge)
-        if complementB is not None: domains.append(complementB)
+        if complementB is not None:
+            domains.append(complementB)
         if len(domains) == 1:  # only the bridge — synthetic test fixture
             pass  # still emit so cleanup has something to delete
         return Strand(
@@ -4551,13 +5103,20 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
         )
 
     if conn.linker_type == "ds":
-        s_a = _build_ds_linker_strand("a", conn.overhang_a_id, conn.overhang_a_attach, oh_a_dom)
-        s_b = _build_ds_linker_strand("b", conn.overhang_b_id, conn.overhang_b_attach, oh_b_dom)
-        if s_a is not None: new_strands.append(s_a)
-        if s_b is not None: new_strands.append(s_b)
+        s_a = _build_ds_linker_strand(
+            "a", conn.overhang_a_id, conn.overhang_a_attach, oh_a_dom
+        )
+        s_b = _build_ds_linker_strand(
+            "b", conn.overhang_b_id, conn.overhang_b_attach, oh_b_dom
+        )
+        if s_a is not None:
+            new_strands.append(s_a)
+        if s_b is not None:
+            new_strands.append(s_b)
     else:  # ss
         s = _build_ss_linker_strand()
-        if s is not None: new_strands.append(s)
+        if s is not None:
+            new_strands.append(s)
 
     return design.copy_with(helices=new_helices, strands=new_strands)
 
@@ -4574,8 +5133,9 @@ def remove_linker_topology(design: Design, conn_id: str) -> Design:
     new_helices = [h for h in design.helices if not h.id.startswith(prefix)]
     new_strands = [s for s in design.strands if not s.id.startswith(prefix)]
 
-    if (len(new_helices) == len(design.helices)
-            and len(new_strands) == len(design.strands)):
+    if len(new_helices) == len(design.helices) and len(new_strands) == len(
+        design.strands
+    ):
         return design
     return design.copy_with(
         helices=new_helices,
@@ -4632,13 +5192,13 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
     helices_by_id: dict[str, Helix] = {h.id: h for h in design.helices}
     strands_by_id: dict[str, Strand] = {s.id: s for s in design.strands}
     overhangs_by_id: dict[str, OverhangSpec] = {o.id: o for o in design.overhangs}
-    modified: list[tuple[str, str]] = []   # (strand_id, '5p'|'3p') for reconciliation
+    modified: list[tuple[str, str]] = []  # (strand_id, '5p'|'3p') for reconciliation
 
     for entry in entries:
         strand = strands_by_id[entry["strand_id"]]
-        helix  = helices_by_id[entry["helix_id"]]
-        delta  = int(entry["delta_bp"])
-        end    = entry["end"]   # '5p' or '3p'
+        helix = helices_by_id[entry["helix_id"]]
+        delta = int(entry["delta_bp"])
+        end = entry["end"]  # '5p' or '3p'
 
         if not strand.domains:
             continue
@@ -4646,15 +5206,15 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
         domains = list(strand.domains)
 
         if end == "5p":
-            term_dom   = domains[0]
-            cur_bp     = term_dom.start_bp
-            new_bp     = cur_bp + delta
+            term_dom = domains[0]
+            cur_bp = term_dom.start_bp
+            new_bp = cur_bp + delta
             new_domain = term_dom.model_copy(update={"start_bp": new_bp})
             domains[0] = new_domain
         else:  # '3p'
-            term_dom   = domains[-1]
-            cur_bp     = term_dom.end_bp
-            new_bp     = cur_bp + delta
+            term_dom = domains[-1]
+            cur_bp = term_dom.end_bp
+            new_bp = cur_bp + delta
             new_domain = term_dom.model_copy(update={"end_bp": new_bp})
             domains[-1] = new_domain
 
@@ -4689,52 +5249,63 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
         new_length_bp = hi_bp - lo_bp + 1
         old_bp_start = helix.bp_start
         if lo_bp == old_bp_start and new_length_bp == helix.length_bp:
-            continue   # nothing to do
+            continue  # nothing to do
         ax = helix.axis_start
         bx = helix.axis_end
-        dx = bx.x - ax.x; dy = bx.y - ax.y; dz = bx.z - ax.z
-        length_nm = _math.sqrt(dx*dx + dy*dy + dz*dz)
+        dx = bx.x - ax.x
+        dy = bx.y - ax.y
+        dz = bx.z - ax.z
+        length_nm = _math.sqrt(dx * dx + dy * dy + dz * dz)
         if length_nm < 1e-9:
             ux, uy, uz = 0.0, 0.0, 1.0
         else:
             ux, uy, uz = dx / length_nm, dy / length_nm, dz / length_nm
         offset_lo_nm = (lo_bp - old_bp_start) * BDNA_RISE_PER_BP
         offset_hi_nm = (hi_bp - old_bp_start) * BDNA_RISE_PER_BP
-        helices_by_id[h_id] = helix.model_copy(update={
-            "bp_start":     lo_bp,
-            "length_bp":    new_length_bp,
-            "axis_start":   Vec3(
-                x=ax.x + offset_lo_nm * ux,
-                y=ax.y + offset_lo_nm * uy,
-                z=ax.z + offset_lo_nm * uz,
-            ),
-            "axis_end":     Vec3(
-                x=ax.x + offset_hi_nm * ux,
-                y=ax.y + offset_hi_nm * uy,
-                z=ax.z + offset_hi_nm * uz,
-            ),
-            "phase_offset": helix.phase_offset + (lo_bp - old_bp_start) * helix.twist_per_bp_rad,
-        })
+        helices_by_id[h_id] = helix.model_copy(
+            update={
+                "bp_start": lo_bp,
+                "length_bp": new_length_bp,
+                "axis_start": Vec3(
+                    x=ax.x + offset_lo_nm * ux,
+                    y=ax.y + offset_lo_nm * uy,
+                    z=ax.z + offset_lo_nm * uz,
+                ),
+                "axis_end": Vec3(
+                    x=ax.x + offset_hi_nm * ux,
+                    y=ax.y + offset_hi_nm * uy,
+                    z=ax.z + offset_hi_nm * uz,
+                ),
+                "phase_offset": helix.phase_offset
+                + (lo_bp - old_bp_start) * helix.twist_per_bp_rad,
+            }
+        )
 
     # ── Reconcile inline overhangs ────────────────────────────────────────────
     # Build scaf_cov from the UPDATED strand state — using pre-shift coverage
     # mis-classifies staples on a shifted scaffold (mirrors `shift_domains`).
-    updated_design = design.model_copy(update={
-        "strands": [strands_by_id.get(s.id, s) for s in design.strands],
-    })
+    updated_design = design.model_copy(
+        update={
+            "strands": [strands_by_id.get(s.id, s) for s in design.strands],
+        }
+    )
     scaf_cov = _scaffold_coverage_by_helix(updated_design)
-    _reconcile_inline_overhangs(strands_by_id, overhangs_by_id, modified, scaf_cov, helices_by_id)
+    _reconcile_inline_overhangs(
+        strands_by_id, overhangs_by_id, modified, scaf_cov, helices_by_id
+    )
 
-    new_strands  = [strands_by_id.get(s.id, s) for s in design.strands]
-    new_helices  = [helices_by_id.get(h.id, h) for h in design.helices]
+    new_strands = [strands_by_id.get(s.id, s) for s in design.strands]
+    new_helices = [helices_by_id.get(h.id, h) for h in design.helices]
     new_overhangs = list(overhangs_by_id.values())
 
-    return design.model_copy(update={
-        "strands":      new_strands,
-        "helices":      new_helices,
-        "overhangs":    new_overhangs,
-        "deformations": design.deformations,
-    })
+    return design.model_copy(
+        update={
+            "strands": new_strands,
+            "helices": new_helices,
+            "overhangs": new_overhangs,
+            "deformations": design.deformations,
+        }
+    )
 
 
 def shift_domains(design: Design, entries: list[dict]) -> Design:
@@ -4776,7 +5347,9 @@ def shift_domains(design: Design, entries: list[dict]) -> Design:
     xover_bps_by_hd: dict[tuple[str, Direction], set[int]] = {}
     for xo in design.crossovers:
         for half in (xo.half_a, xo.half_b):
-            xover_bps_by_hd.setdefault((half.helix_id, half.strand), set()).add(half.index)
+            xover_bps_by_hd.setdefault((half.helix_id, half.strand), set()).add(
+                half.index
+            )
 
     # ── Pre-shift validation per entry ─────────────────────────────────────
     seen: set[tuple[str, int]] = set()
@@ -4841,17 +5414,26 @@ def shift_domains(design: Design, entries: list[dict]) -> Design:
         last_idx = len(new_domains) - 1
         for di, delta in ops:
             old_dom = new_domains[di]
-            new_dom = old_dom.model_copy(update={
-                "start_bp": old_dom.start_bp + delta,
-                "end_bp":   old_dom.end_bp + delta,
-            })
+            new_dom = old_dom.model_copy(
+                update={
+                    "start_bp": old_dom.start_bp + delta,
+                    "end_bp": old_dom.end_bp + delta,
+                }
+            )
             new_domains[di] = new_dom
-            shifts_record.append((
-                sid, old_dom.helix_id, old_dom.direction,
-                old_dom.start_bp, old_dom.end_bp,
-                new_dom.start_bp, new_dom.end_bp,
-                di == 0, di == last_idx,
-            ))
+            shifts_record.append(
+                (
+                    sid,
+                    old_dom.helix_id,
+                    old_dom.direction,
+                    old_dom.start_bp,
+                    old_dom.end_bp,
+                    new_dom.start_bp,
+                    new_dom.end_bp,
+                    di == 0,
+                    di == last_idx,
+                )
+            )
             if di == 0:
                 modified_terms.append((sid, "5p"))
             if di == last_idx:
@@ -4870,25 +5452,42 @@ def shift_domains(design: Design, entries: list[dict]) -> Design:
         for fl in forced_ligations:
             five_bp = fl.five_prime_bp
             three_bp = fl.three_prime_bp
-            for (_sid, helix_id, direction, old_start, old_end,
-                 new_start, new_end, _is_first, _is_last) in shifts_record:
-                if (fl.five_prime_helix_id == helix_id
-                        and fl.five_prime_direction == direction):
+            for (
+                _sid,
+                helix_id,
+                direction,
+                old_start,
+                old_end,
+                new_start,
+                new_end,
+                _is_first,
+                _is_last,
+            ) in shifts_record:
+                if (
+                    fl.five_prime_helix_id == helix_id
+                    and fl.five_prime_direction == direction
+                ):
                     if fl.five_prime_bp == old_start:
                         five_bp = new_start
                     elif fl.five_prime_bp == old_end:
                         five_bp = new_end
-                if (fl.three_prime_helix_id == helix_id
-                        and fl.three_prime_direction == direction):
+                if (
+                    fl.three_prime_helix_id == helix_id
+                    and fl.three_prime_direction == direction
+                ):
                     if fl.three_prime_bp == old_start:
                         three_bp = new_start
                     elif fl.three_prime_bp == old_end:
                         three_bp = new_end
             if five_bp != fl.five_prime_bp or three_bp != fl.three_prime_bp:
-                new_forced.append(fl.model_copy(update={
-                    "five_prime_bp": five_bp,
-                    "three_prime_bp": three_bp,
-                }))
+                new_forced.append(
+                    fl.model_copy(
+                        update={
+                            "five_prime_bp": five_bp,
+                            "three_prime_bp": three_bp,
+                        }
+                    )
+                )
             else:
                 new_forced.append(fl)
         forced_ligations = new_forced
@@ -4900,11 +5499,13 @@ def shift_domains(design: Design, entries: list[dict]) -> Design:
         for di, dom in enumerate(s.domains):
             lo = min(dom.start_bp, dom.end_bp)
             hi = max(dom.start_bp, dom.end_bp)
-            occupancy.setdefault((dom.helix_id, dom.direction), []).append((lo, hi, s.id, di))
+            occupancy.setdefault((dom.helix_id, dom.direction), []).append(
+                (lo, hi, s.id, di)
+            )
     for (h_id, dir_), spans in occupancy.items():
         spans.sort()
         for i in range(1, len(spans)):
-            prev_lo, prev_hi, prev_sid, prev_di = spans[i-1]
+            prev_lo, prev_hi, prev_sid, prev_di = spans[i - 1]
             lo, hi, sid, di = spans[i]
             if lo <= prev_hi:
                 raise ValueError(
@@ -4961,53 +5562,64 @@ def shift_domains(design: Design, entries: list[dict]) -> Design:
             continue
         new_length_bp = hi_bp - lo_bp + 1
         old_bp_start = helix.bp_start
-        if (lo_bp == old_bp_start and new_length_bp == helix.length_bp):
-            continue   # nothing to do
+        if lo_bp == old_bp_start and new_length_bp == helix.length_bp:
+            continue  # nothing to do
         ax = helix.axis_start
         bx = helix.axis_end
-        dx = bx.x - ax.x; dy = bx.y - ax.y; dz = bx.z - ax.z
-        length_nm = _math.sqrt(dx*dx + dy*dy + dz*dz)
+        dx = bx.x - ax.x
+        dy = bx.y - ax.y
+        dz = bx.z - ax.z
+        length_nm = _math.sqrt(dx * dx + dy * dy + dz * dz)
         if length_nm < 1e-9:
             ux, uy, uz = 0.0, 0.0, 1.0
         else:
             ux, uy, uz = dx / length_nm, dy / length_nm, dz / length_nm
         offset_lo_nm = (lo_bp - old_bp_start) * BDNA_RISE_PER_BP
         offset_hi_nm = (hi_bp - old_bp_start) * BDNA_RISE_PER_BP
-        helices_by_id[h_id] = helix.model_copy(update={
-            "bp_start":     lo_bp,
-            "length_bp":    new_length_bp,
-            "axis_start":   Vec3(
-                x=ax.x + offset_lo_nm * ux,
-                y=ax.y + offset_lo_nm * uy,
-                z=ax.z + offset_lo_nm * uz,
-            ),
-            "axis_end":     Vec3(
-                x=ax.x + offset_hi_nm * ux,
-                y=ax.y + offset_hi_nm * uy,
-                z=ax.z + offset_hi_nm * uz,
-            ),
-            "phase_offset": helix.phase_offset + (lo_bp - old_bp_start) * helix.twist_per_bp_rad,
-        })
+        helices_by_id[h_id] = helix.model_copy(
+            update={
+                "bp_start": lo_bp,
+                "length_bp": new_length_bp,
+                "axis_start": Vec3(
+                    x=ax.x + offset_lo_nm * ux,
+                    y=ax.y + offset_lo_nm * uy,
+                    z=ax.z + offset_lo_nm * uz,
+                ),
+                "axis_end": Vec3(
+                    x=ax.x + offset_hi_nm * ux,
+                    y=ax.y + offset_hi_nm * uy,
+                    z=ax.z + offset_hi_nm * uz,
+                ),
+                "phase_offset": helix.phase_offset
+                + (lo_bp - old_bp_start) * helix.twist_per_bp_rad,
+            }
+        )
 
     # ── Reconcile inline overhangs on terminal-shifted strands ─────────────
     # Build scaf_cov from the UPDATED strand state — using the pre-shift
     # coverage causes the inline-overhang reconciliation to incorrectly split
     # staple terminals when the scaffold itself was shifted (the old scaffold
     # range no longer matches reality).
-    updated_design = design.model_copy(update={
-        "strands": [strands_by_id.get(s.id, s) for s in design.strands],
-    })
+    updated_design = design.model_copy(
+        update={
+            "strands": [strands_by_id.get(s.id, s) for s in design.strands],
+        }
+    )
     scaf_cov = _scaffold_coverage_by_helix(updated_design)
-    _reconcile_inline_overhangs(strands_by_id, overhangs_by_id, modified_terms, scaf_cov, helices_by_id)
+    _reconcile_inline_overhangs(
+        strands_by_id, overhangs_by_id, modified_terms, scaf_cov, helices_by_id
+    )
 
-    new_strands  = [strands_by_id.get(s.id, s) for s in design.strands]
-    new_helices  = [helices_by_id.get(h.id, h) for h in design.helices]
+    new_strands = [strands_by_id.get(s.id, s) for s in design.strands]
+    new_helices = [helices_by_id.get(h.id, h) for h in design.helices]
     new_overhangs = list(overhangs_by_id.values())
 
-    return design.model_copy(update={
-        "strands":          new_strands,
-        "helices":          new_helices,
-        "overhangs":        new_overhangs,
-        "forced_ligations": forced_ligations,
-        "deformations":     design.deformations,
-    })
+    return design.model_copy(
+        update={
+            "strands": new_strands,
+            "helices": new_helices,
+            "overhangs": new_overhangs,
+            "forced_ligations": forced_ligations,
+            "deformations": design.deformations,
+        }
+    )

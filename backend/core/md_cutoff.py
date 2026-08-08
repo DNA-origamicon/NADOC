@@ -16,6 +16,7 @@ Pure functions, no I/O. Caller passes the chunk's energy frames (from
 namd_metrics.parse_namd_log_frames) and the chunk's per-frame WC list (from the
 health check). Default thresholds are calibrated on the exp36 bank.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 import statistics as st
@@ -30,14 +31,15 @@ class CutoffParams:
     single 0.1%/0.2% thresholds never fired on fast runs even when drift ~0.02%.
     A still-relaxing low-k stage there shows POT drift ~0.15%, so drift ~0.05%
     cleanly separates settled (k=0.5) from relaxing (k=0.1)."""
-    window: int = 10               # trailing frames to test
-    eps_pot_drift: float = 5e-4    # 0.05% mean drift = settled
+
+    window: int = 10  # trailing frames to test
+    eps_pot_drift: float = 5e-4  # 0.05% mean drift = settled
     eps_pot_fluct: float = 3.5e-3  # 0.35% noise guard (fast-run thermal ~0.13%)
-    eps_vol_drift: float = 3e-3    # 0.30% mean drift
-    eps_vol_fluct: float = 5e-3    # 0.50% noise guard (fast-run thermal ~0.24%)
-    eps_wc_drift: float = 0.02     # 2 pts mean drift
-    eps_wc_fluct: float = 0.05     # 5 pts noise guard
-    min_frames: int = 20           # skip a tiny p10 chunk; judge on p50's fuller series
+    eps_vol_drift: float = 3e-3  # 0.30% mean drift
+    eps_vol_fluct: float = 5e-3  # 0.50% noise guard (fast-run thermal ~0.24%)
+    eps_wc_drift: float = 0.02  # 2 pts mean drift
+    eps_wc_fluct: float = 0.05  # 5 pts noise guard
+    min_frames: int = 20  # skip a tiny p10 chunk; judge on p50's fuller series
 
 
 def _rel(a: float, b: float) -> float:
@@ -45,8 +47,9 @@ def _rel(a: float, b: float) -> float:
     return abs(a - b) / m
 
 
-def _series_flat(vals: list[float], window: int, drift_eps: float,
-                 fluct_eps: float, absolute: bool) -> bool:
+def _series_flat(
+    vals: list[float], window: int, drift_eps: float, fluct_eps: float, absolute: bool
+) -> bool:
     """True if the trailing `window` of `vals` has mean-drift < drift_eps AND
     scatter < fluct_eps. Separating the two lets a converged-but-thermally-noisy
     atomistic series read as flat.
@@ -56,7 +59,7 @@ def _series_flat(vals: list[float], window: int, drift_eps: float,
     w = [v for v in vals[-window:] if v is not None]
     if len(w) < max(4, window // 2):
         return False
-    lo, hi = w[: len(w) // 2], w[len(w) // 2:]
+    lo, hi = w[: len(w) // 2], w[len(w) // 2 :]
     drift = abs(st.mean(lo) - st.mean(hi))
     fluct = st.pstdev(w)
     if not absolute:
@@ -71,23 +74,36 @@ def energy_plateaued(frames: list[dict], params: CutoffParams = CutoffParams()) 
     if len(frames) < params.min_frames:
         return False
     pot = [f.get("POTENTIAL") for f in frames]
-    if not _series_flat(pot, params.window, params.eps_pot_drift,
-                        params.eps_pot_fluct, absolute=False):
+    if not _series_flat(
+        pot, params.window, params.eps_pot_drift, params.eps_pot_fluct, absolute=False
+    ):
         return False
     vol = [f.get("VOLUME") for f in frames]
     if any(v is not None for v in vol):
-        if not _series_flat(vol, params.window, params.eps_vol_drift,
-                            params.eps_vol_fluct, absolute=False):
+        if not _series_flat(
+            vol,
+            params.window,
+            params.eps_vol_drift,
+            params.eps_vol_fluct,
+            absolute=False,
+        ):
             return False
     return True
 
 
-def wc_plateaued(wc_per_frame: list[float], params: CutoffParams = CutoffParams()) -> bool:
+def wc_plateaued(
+    wc_per_frame: list[float], params: CutoffParams = CutoffParams()
+) -> bool:
     """WC base-pairing flat over its trailing window. Empty -> not proven -> False."""
     if not wc_per_frame:
         return False
-    return _series_flat(wc_per_frame, params.window, params.eps_wc_drift,
-                        params.eps_wc_fluct, absolute=True)
+    return _series_flat(
+        wc_per_frame,
+        params.window,
+        params.eps_wc_drift,
+        params.eps_wc_fluct,
+        absolute=True,
+    )
 
 
 def should_early_stop_stage(

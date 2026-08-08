@@ -18,6 +18,7 @@ the background). ``run_local_reference`` chains both.
 Real NAMD execution here is a legitimate *production compute* task, not the test
 suite — it does not need a test-dedicated session. Never run ``just test``/``test-slow``.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -43,7 +44,9 @@ def trim_ladder_for_pilot(
     Preserves all other ladder semantics. Returns the trimmed ``SegmentSpec`` list.
     """
     from backend.core.md_protocols import (  # noqa: PLC0415
-        _round_up_to_cycle, _segment_conf, segments_from_manifest,
+        _round_up_to_cycle,
+        _segment_conf,
+        segments_from_manifest,
     )
 
     pkg = Path(package_dir)
@@ -56,7 +59,9 @@ def trim_ladder_for_pilot(
     trimmed = []
     for spec in segments:
         unrestrained = spec.scale is None
-        steps = _round_up_to_cycle(production_steps if unrestrained else restrained_steps)
+        steps = _round_up_to_cycle(
+            production_steps if unrestrained else restrained_steps
+        )
         if unrestrained:
             freq = production_dcd_freq
         else:
@@ -65,9 +70,15 @@ def trim_ladder_for_pilot(
         s2 = dataclasses.replace(spec, steps=steps, dcd_freq=freq)
         trimmed.append(s2)
         conf = _segment_conf(
-            s2, name_stem, box, mgh,
-            fast=False, carved=False, structure_psf=None,
-            anchors_file=None, field=None,
+            s2,
+            name_stem,
+            box,
+            mgh,
+            fast=False,
+            carved=False,
+            structure_psf=None,
+            anchors_file=None,
+            field=None,
             capture_vel_force=unrestrained,
         )
         (pkg / f"{s2.name}.conf").write_text(conf)
@@ -109,12 +120,17 @@ def prepare_local_reference(
 
     job_dir = Path(job_dir)
     subdir, name_stem, _segments = prepare_propagator_reference(
-        design, job_dir,
-        ion_conc_mM=ion_conc_mM, mg_conc_mM=mg_conc_mM, salt_mode="custom",
-        minimize_steps=minimize_steps, solute_coords=solute_coords,
+        design,
+        job_dir,
+        ion_conc_mM=ion_conc_mM,
+        mg_conc_mM=mg_conc_mM,
+        salt_mode="custom",
+        minimize_steps=minimize_steps,
+        solute_coords=solute_coords,
     )
     trimmed = trim_ladder_for_pilot(
-        job_dir / subdir, name_stem,
+        job_dir / subdir,
+        name_stem,
         restrained_steps=restrained_steps,
         production_steps=production_steps,
         production_dcd_freq=production_dcd_freq,
@@ -122,23 +138,38 @@ def prepare_local_reference(
     return subdir, name_stem, trimmed
 
 
-def new_local_job(design_name: str = "propagator_pilot", *, devices: str = "0",
-                  threads: int = 16):
+def new_local_job(
+    design_name: str = "propagator_pilot", *, devices: str = "0", threads: int = 16
+):
     """A fresh local MdJob for the propagator-reference protocol."""
     from backend.core.md_job import new_job  # noqa: PLC0415
-    return new_job(design_name, "propagator_reference", name_stem="pilot",
-                   package_subdir="", threads=threads, devices=devices)
+
+    return new_job(
+        design_name,
+        "propagator_reference",
+        name_stem="pilot",
+        package_subdir="",
+        threads=threads,
+        devices=devices,
+    )
 
 
-def attach_and_queue(job, workspace_dir: str | Path, subdir: str, name_stem: str,
-                     segments: list) -> None:
+def attach_and_queue(
+    job, workspace_dir: str | Path, subdir: str, name_stem: str, segments: list
+) -> None:
     """Mirror routes_md's post-prep wiring: attach package + segments, queue, save."""
     from backend.core.md_job import MdSegmentStatus, MdStatus  # noqa: PLC0415
+
     job.package_subdir = subdir
     job.name_stem = name_stem
     job.segments = [
-        MdSegmentStatus(name=s.name, stage=s.stage, percent=s.percent,
-                        steps=s.steps, status="pending")
+        MdSegmentStatus(
+            name=s.name,
+            stage=s.stage,
+            percent=s.percent,
+            steps=s.steps,
+            status="pending",
+        )
         for s in segments
     ]
     job.status = MdStatus.queued
@@ -183,15 +214,21 @@ def captured_outputs(job, workspace_dir: str | Path) -> dict:
     return result
 
 
-def run_local_reference(design, workspace_dir: str | Path, *,
-                        design_name: str = "propagator_pilot",
-                        devices: str = "0", threads: int = 16,
-                        **prep_kwargs):
+def run_local_reference(
+    design,
+    workspace_dir: str | Path,
+    *,
+    design_name: str = "propagator_pilot",
+    devices: str = "0",
+    threads: int = 16,
+    **prep_kwargs,
+):
     """Full local pilot: create job → prepare (solvate+trim) → run → return job."""
     ws = Path(workspace_dir)
     job = new_local_job(design_name, devices=devices, threads=threads)
     job.save(ws)
     subdir, name_stem, trimmed = prepare_local_reference(
-        design, job.job_dir(ws), **prep_kwargs)
+        design, job.job_dir(ws), **prep_kwargs
+    )
     attach_and_queue(job, ws, subdir, name_stem, trimmed)
     return run_prepared_job(job.job_id, ws)

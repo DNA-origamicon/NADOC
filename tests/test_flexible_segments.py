@@ -5,6 +5,7 @@ derives a fixed-contour connection between the two clusters it bridges; the gate
 says whether a cluster can use real-time "ssDNA constrained" drag. Display-layer
 only — marking never mutates topology or cluster_transforms.
 """
+
 from __future__ import annotations
 
 import os
@@ -25,8 +26,15 @@ from backend.core.flexible_segments import (
     unpaired_bead_keys,
 )
 from backend.core.models import (
-    ClusterRigidTransform, Design, Direction, Domain, FlexibleSegmentMark,
-    Helix, Strand, StrandType, Vec3,
+    ClusterRigidTransform,
+    Design,
+    Direction,
+    Domain,
+    FlexibleSegmentMark,
+    Helix,
+    Strand,
+    StrandType,
+    Vec3,
 )
 
 client = TestClient(app)
@@ -40,58 +48,94 @@ def _reset_state():
 
 # ── Fixture: two clusters (arms) joined by one 6-base ssDNA scaffold run ─────
 _L = 12
-_SS_A = (9, 11)   # h_a ssDNA bp range (scaffold)
-_SS_B = (0, 2)    # h_b ssDNA bp range (scaffold)
+_SS_A = (9, 11)  # h_a ssDNA bp range (scaffold)
+_SS_B = (0, 2)  # h_b ssDNA bp range (scaffold)
 
 
 def _hinge_design() -> Design:
     base = _demo_design()
-    h_a = Helix(id="h_a", axis_start=Vec3(x=0.0, y=0.0, z=0.0),
-                axis_end=Vec3(x=0.0, y=0.0, z=_L * BDNA_RISE_PER_BP),
-                phase_offset=0.0, length_bp=_L, grid_pos=(0, 0))
-    h_b = Helix(id="h_b", axis_start=Vec3(x=2.5, y=0.0, z=0.0),
-                axis_end=Vec3(x=2.5, y=0.0, z=_L * BDNA_RISE_PER_BP),
-                phase_offset=0.0, length_bp=_L, grid_pos=(0, 1))
+    h_a = Helix(
+        id="h_a",
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=_L * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=_L,
+        grid_pos=(0, 0),
+    )
+    h_b = Helix(
+        id="h_b",
+        axis_start=Vec3(x=2.5, y=0.0, z=0.0),
+        axis_end=Vec3(x=2.5, y=0.0, z=_L * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=_L,
+        grid_pos=(0, 1),
+    )
     scaffold = Strand(
-        id="scaf", strand_type=StrandType.SCAFFOLD,
+        id="scaf",
+        strand_type=StrandType.SCAFFOLD,
         domains=[
             Domain(helix_id="h_a", start_bp=0, end_bp=8, direction=Direction.FORWARD),
-            Domain(helix_id="h_a", start_bp=_SS_A[0], end_bp=_SS_A[1],
-                   direction=Direction.FORWARD, overhang_id="ss_a"),
-            Domain(helix_id="h_b", start_bp=_SS_B[0], end_bp=_SS_B[1],
-                   direction=Direction.FORWARD, overhang_id="ss_b"),
+            Domain(
+                helix_id="h_a",
+                start_bp=_SS_A[0],
+                end_bp=_SS_A[1],
+                direction=Direction.FORWARD,
+                overhang_id="ss_a",
+            ),
+            Domain(
+                helix_id="h_b",
+                start_bp=_SS_B[0],
+                end_bp=_SS_B[1],
+                direction=Direction.FORWARD,
+                overhang_id="ss_b",
+            ),
             Domain(helix_id="h_b", start_bp=3, end_bp=11, direction=Direction.FORWARD),
         ],
     )
-    staple_a = Strand(id="stap_a", strand_type=StrandType.STAPLE,
-                      domains=[Domain(helix_id="h_a", start_bp=0, end_bp=8,
-                                      direction=Direction.REVERSE)])
-    staple_b = Strand(id="stap_b", strand_type=StrandType.STAPLE,
-                      domains=[Domain(helix_id="h_b", start_bp=3, end_bp=11,
-                                      direction=Direction.REVERSE)])
+    staple_a = Strand(
+        id="stap_a",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h_a", start_bp=0, end_bp=8, direction=Direction.REVERSE)
+        ],
+    )
+    staple_b = Strand(
+        id="stap_b",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h_b", start_bp=3, end_bp=11, direction=Direction.REVERSE)
+        ],
+    )
     cluster_a = ClusterRigidTransform(id="cl_a", name="Arm A", helix_ids=["h_a"])
     cluster_b = ClusterRigidTransform(id="cl_b", name="Arm B", helix_ids=["h_b"])
-    return base.model_copy(update={
-        "helices": [h_a, h_b],
-        "strands": [scaffold, staple_a, staple_b],
-        "cluster_transforms": [cluster_a, cluster_b],
-        "crossovers": [],
-        "forced_ligations": [],
-    })
+    return base.model_copy(
+        update={
+            "helices": [h_a, h_b],
+            "strands": [scaffold, staple_a, staple_b],
+            "cluster_transforms": [cluster_a, cluster_b],
+            "crossovers": [],
+            "forced_ligations": [],
+        }
+    )
 
 
 def _mark_run(design: Design) -> Design:
     marks = [
-        FlexibleSegmentMark(strand_id="scaf", domain_index=1, bp_index=bp, direction=Direction.FORWARD)
+        FlexibleSegmentMark(
+            strand_id="scaf", domain_index=1, bp_index=bp, direction=Direction.FORWARD
+        )
         for bp in range(_SS_A[0], _SS_A[1] + 1)
     ] + [
-        FlexibleSegmentMark(strand_id="scaf", domain_index=2, bp_index=bp, direction=Direction.FORWARD)
+        FlexibleSegmentMark(
+            strand_id="scaf", domain_index=2, bp_index=bp, direction=Direction.FORWARD
+        )
         for bp in range(_SS_B[0], _SS_B[1] + 1)
     ]
     return design.copy_with(flexible_segment_marks=marks)
 
 
 # ── Derivation ───────────────────────────────────────────────────────────────
+
 
 def test_no_marks_no_connections():
     assert derive_flexible_connections(_hinge_design()) == []
@@ -113,6 +157,7 @@ def test_no_new_clusters_created():
 
 
 # ── Gate ─────────────────────────────────────────────────────────────────────
+
 
 def test_gate_true_when_run_marked():
     d = _mark_run(_hinge_design())
@@ -136,11 +181,16 @@ def test_gate_treats_duplex_child_cluster_as_transparent():
     to False.) Synthetic graph: cl_a has a MARKED flexible crossing to cl_b (should gate
     open) AND an UNMARKED rigid crossing to the duplex child cl_dup (must be ignored)."""
     F = Direction.FORWARD
-    a1, a2 = ("h_a", 5, F), ("h_a", 9, F)   # cl_a beads
-    d1 = ("h_d", 5, F)                       # duplex-child bead (overhang junction)
-    b1 = ("h_b", 0, F)                       # cl_b bead across a marked ssDNA run
+    a1, a2 = ("h_a", 5, F), ("h_a", 9, F)  # cl_a beads
+    d1 = ("h_d", 5, F)  # duplex-child bead (overhang junction)
+    b1 = ("h_b", 0, F)  # cl_b bead across a marked ssDNA run
     adj = {a1: [d1], d1: [a1], a2: [b1], b1: [a2]}
-    bead_domain = {a1: ("scaf", 0), a2: ("scaf", 1), d1: ("ohstrand", 0), b1: ("scaf", 2)}
+    bead_domain = {
+        a1: ("scaf", 0),
+        a2: ("scaf", 1),
+        d1: ("ohstrand", 0),
+        b1: ("scaf", 2),
+    }
     marked = {a2, b1}
     owner = lambda k: {a1: "cl_a", a2: "cl_a", d1: "cl_dup", b1: "cl_b"}[k]  # noqa: E731
 
@@ -159,11 +209,20 @@ def test_gate_treats_duplex_child_cluster_as_transparent():
 
 # ── Three-layer guard ──────────────────────────────────────────────────────────
 
+
 def test_apply_marks_only_touches_connections():
     d = _mark_run(_hinge_design())
-    before = {f: d.model_dump()[f] for f in
-              ("strands", "helices", "crossovers", "forced_ligations",
-               "cluster_transforms", "flexible_segment_marks")}
+    before = {
+        f: d.model_dump()[f]
+        for f in (
+            "strands",
+            "helices",
+            "crossovers",
+            "forced_ligations",
+            "cluster_transforms",
+            "flexible_segment_marks",
+        )
+    }
     out = apply_marks(d)
     after = out.model_dump()
     for f, val in before.items():
@@ -172,6 +231,7 @@ def test_apply_marks_only_touches_connections():
 
 
 # ── Persistence ──────────────────────────────────────────────────────────────
+
 
 def test_roundtrip_marks_and_connections():
     d = apply_marks(_mark_run(_hinge_design()))
@@ -183,6 +243,7 @@ def test_roundtrip_marks_and_connections():
 def test_axis_segments_skip_flexible_bps():
     """The helix axis stick is not drawn over a flexible ssDNA run."""
     from backend.core.deformation import _segments_for_helix
+
     d = _hinge_design()
     h_a = next(h for h in d.helices if h.id == "h_a")
     before = _segments_for_helix(d, h_a)
@@ -190,14 +251,15 @@ def test_axis_segments_skip_flexible_bps():
     d2 = _mark_run(d)
     after = _segments_for_helix(d2, h_a)
     covered = {bp for s in after for bp in range(s["bp_lo"], s["bp_hi"] + 1)}
-    assert covered.isdisjoint({9, 10, 11})          # flexible bps have no axis stick
-    assert {0, 1, 2, 3, 4, 5, 6, 7, 8} <= covered    # rigid bps still do
+    assert covered.isdisjoint({9, 10, 11})  # flexible bps have no axis stick
+    assert {0, 1, 2, 3, 4, 5, 6, 7, 8} <= covered  # rigid bps still do
 
 
 def test_marks_change_forces_full_geometry():
     """A marks-only diff must NOT take the positions_only fast path (which omits
     per-bead is_flexible_segment) — else undo leaves the segment invisible."""
     from backend.api.crud import _topology_diff_field
+
     d0 = _hinge_design()
     d1 = apply_marks(_mark_run(d0))
     assert _topology_diff_field(d0, d1) == "flexible_segment_marks"
@@ -209,10 +271,14 @@ def test_undo_mark_restores_rigid_beads():
     design_state.set_design(_hinge_design())
     # Mark the full bridging run so a connection forms and the beads are excluded
     # from rigid rendering (is_flexible_segment True); undo must restore them.
-    r = client.post("/api/design/flexible-segment/batch",
-                    json={"marks": _run_mark_bodies(), "replace": True})
+    r = client.post(
+        "/api/design/flexible-segment/batch",
+        json={"marks": _run_mark_bodies(), "replace": True},
+    )
     assert r.status_code == 200, r.text
-    assert any(n.get("is_flexible_segment") for n in (r.json().get("nucleotides") or []))
+    assert any(
+        n.get("is_flexible_segment") for n in (r.json().get("nucleotides") or [])
+    )
     u = client.post("/api/design/undo").json()
     # Full geometry (not positions_only/cluster_only) so is_flexible_segment is recomputed.
     assert u.get("diff_kind") not in ("positions_only", "cluster_only")
@@ -236,9 +302,16 @@ def test_topology_change_replace_keeps_flexible_flag():
     # Simulate the topology change whose UNDO triggered the bug: a binder strand was
     # added; undo restores `d_marked` (no binder), which still carries connections.
     binder = Strand(
-        id="ohbind_x", strand_type=StrandType.OH_BINDER,
-        domains=[Domain(helix_id="h_a", start_bp=_SS_A[0], end_bp=_SS_A[1],
-                        direction=Direction.REVERSE)],
+        id="ohbind_x",
+        strand_type=StrandType.OH_BINDER,
+        domains=[
+            Domain(
+                helix_id="h_a",
+                start_bp=_SS_A[0],
+                end_bp=_SS_A[1],
+                direction=Direction.REVERSE,
+            )
+        ],
     )
     d_with_binder = d_marked.copy_with(strands=[*d_marked.strands, binder])
 
@@ -260,6 +333,7 @@ def test_old_file_without_fields_loads_empty():
 
 # ── API ──────────────────────────────────────────────────────────────────────
 
+
 def _run_mark_bodies() -> list[dict]:
     """Batch-mark bodies for the full bridging ssDNA run (cl_a↔cl_b)."""
     return [
@@ -274,15 +348,24 @@ def _run_mark_bodies() -> list[dict]:
 def test_api_mark_requires_unpaired():
     design_state.set_design(_hinge_design())
     # Paired scaffold bead (domain 0, h_a) → rejected.
-    r = client.post("/api/design/flexible-segment", json={
-        "strand_id": "scaf", "domain_index": 0, "bp_index": 0, "direction": "FORWARD"})
+    r = client.post(
+        "/api/design/flexible-segment",
+        json={
+            "strand_id": "scaf",
+            "domain_index": 0,
+            "bp_index": 0,
+            "direction": "FORWARD",
+        },
+    )
     assert r.status_code == 400, r.text
     assert "unpaired" in r.json()["detail"].lower()
     # Marking the full unpaired run bridges cl_a↔cl_b → a connection forms, so the
     # geometry carries is_flexible_segment (the flag tracks connection membership,
     # not raw marks — an unconnected mark leaves its bead rigid-rendered).
-    r = client.post("/api/design/flexible-segment/batch",
-                    json={"marks": _run_mark_bodies(), "replace": True})
+    r = client.post(
+        "/api/design/flexible-segment/batch",
+        json={"marks": _run_mark_bodies(), "replace": True},
+    )
     assert r.status_code == 200, r.text
     nucs = r.json().get("nucleotides") or []
     assert any(n.get("is_flexible_segment") for n in nucs)
@@ -294,20 +377,36 @@ def test_unconnected_mark_leaves_bead_rigid():
     stays False so marking can never silently delete geometry."""
     design_state.set_design(_hinge_design())
     # A single mid-run bead: its rigid neighbours are both on cl_a → no bridge.
-    r = client.post("/api/design/flexible-segment", json={
-        "strand_id": "scaf", "domain_index": 1, "bp_index": 9, "direction": "FORWARD"})
+    r = client.post(
+        "/api/design/flexible-segment",
+        json={
+            "strand_id": "scaf",
+            "domain_index": 1,
+            "bp_index": 9,
+            "direction": "FORWARD",
+        },
+    )
     assert r.status_code == 200, r.text  # accepted (unpaired) …
     assert design_state.get_or_404().flexible_segment_marks  # … and the mark persists
     assert design_state.get_or_404().flexible_connections == []  # but no connection
     nucs = r.json().get("nucleotides") or []
-    assert nucs and not any(n.get("is_flexible_segment") for n in nucs)  # bead stays rigid
+    assert nucs and not any(
+        n.get("is_flexible_segment") for n in nucs
+    )  # bead stays rigid
 
 
 def test_api_mark_adds_feature_log_entry_and_reverts():
     design_state.set_design(_hinge_design())
     n0 = len(design_state.get_or_404().feature_log)
-    r = client.post("/api/design/flexible-segment", json={
-        "strand_id": "scaf", "domain_index": 1, "bp_index": 9, "direction": "FORWARD"})
+    r = client.post(
+        "/api/design/flexible-segment",
+        json={
+            "strand_id": "scaf",
+            "domain_index": 1,
+            "bp_index": 9,
+            "direction": "FORWARD",
+        },
+    )
     assert r.status_code == 200, r.text
     log = design_state.get_or_404().feature_log
     assert len(log) == n0 + 1
@@ -332,8 +431,10 @@ def test_seek_before_mark_drops_flexible_marks():
     it had been marked.
     """
     design_state.set_design(_hinge_design())
-    r = client.post("/api/design/flexible-segment/batch",
-                    json={"marks": _run_mark_bodies(), "replace": True})
+    r = client.post(
+        "/api/design/flexible-segment/batch",
+        json={"marks": _run_mark_bodies(), "replace": True},
+    )
     assert r.status_code == 200, r.text
     assert design_state.get_or_404().flexible_segment_marks
     assert design_state.get_or_404().flexible_connections
@@ -354,8 +455,15 @@ def test_seek_before_mark_drops_flexible_marks():
 def test_api_mark_feature_log_deletable():
     design_state.set_design(_hinge_design())
     n0 = len(design_state.get_or_404().feature_log)
-    client.post("/api/design/flexible-segment", json={
-        "strand_id": "scaf", "domain_index": 1, "bp_index": 9, "direction": "FORWARD"})
+    client.post(
+        "/api/design/flexible-segment",
+        json={
+            "strand_id": "scaf",
+            "domain_index": 1,
+            "bp_index": 9,
+            "direction": "FORWARD",
+        },
+    )
     assert design_state.get_or_404().flexible_segment_marks
     rd = client.delete(f"/api/design/features/{n0}")
     assert rd.status_code == 200, rd.text
@@ -363,17 +471,25 @@ def test_api_mark_feature_log_deletable():
     # Delete forgets the log row but keeps current state (app-wide convention —
     # like deleting an auto-break keeps the nicks). The row is gone.
     assert len(d.feature_log) == n0
-    assert not any(e.feature_type == "snapshot" and e.op_kind.startswith("flexible-segment")
-                   for e in d.feature_log)
+    assert not any(
+        e.feature_type == "snapshot" and e.op_kind.startswith("flexible-segment")
+        for e in d.feature_log
+    )
 
 
 def test_api_batch_then_connections_then_clear():
     design_state.set_design(_hinge_design())
-    marks = [{"strand_id": "scaf", "domain_index": 1, "bp_index": bp, "direction": "FORWARD"}
-             for bp in range(_SS_A[0], _SS_A[1] + 1)]
-    marks += [{"strand_id": "scaf", "domain_index": 2, "bp_index": bp, "direction": "FORWARD"}
-              for bp in range(_SS_B[0], _SS_B[1] + 1)]
-    r = client.post("/api/design/flexible-segment/batch", json={"marks": marks, "replace": True})
+    marks = [
+        {"strand_id": "scaf", "domain_index": 1, "bp_index": bp, "direction": "FORWARD"}
+        for bp in range(_SS_A[0], _SS_A[1] + 1)
+    ]
+    marks += [
+        {"strand_id": "scaf", "domain_index": 2, "bp_index": bp, "direction": "FORWARD"}
+        for bp in range(_SS_B[0], _SS_B[1] + 1)
+    ]
+    r = client.post(
+        "/api/design/flexible-segment/batch", json={"marks": marks, "replace": True}
+    )
     assert r.status_code == 200, r.text
     info = client.get("/api/design/flexible-connections").json()
     assert len(info["connections"]) == 1
@@ -389,6 +505,7 @@ def test_api_batch_then_connections_then_clear():
 
 # ── Relax commit (one atomic, revertable/deletable/undoable feature-log step) ──
 
+
 def _ct(design, cid):
     return next(c for c in design.cluster_transforms if c.id == cid)
 
@@ -396,10 +513,20 @@ def _ct(design, cid):
 def test_api_relax_applies_transforms_one_feature_log_entry():
     design_state.set_design(_hinge_design())
     n0 = len(design_state.get_or_404().feature_log)
-    r = client.post("/api/design/flexible-relax", json={
-        "transforms": [{"cluster_id": "cl_a", "pivot": [0, 0, 0],
-                        "translation": [1.0, 2.0, 3.0], "rotation": [0, 0, 0, 1]}],
-        "label": "Relax flexible segment"})
+    r = client.post(
+        "/api/design/flexible-relax",
+        json={
+            "transforms": [
+                {
+                    "cluster_id": "cl_a",
+                    "pivot": [0, 0, 0],
+                    "translation": [1.0, 2.0, 3.0],
+                    "rotation": [0, 0, 0, 1],
+                }
+            ],
+            "label": "Relax flexible segment",
+        },
+    )
     assert r.status_code == 200, r.text
     d = design_state.get_or_404()
     # Transform applied, the OTHER cluster untouched.
@@ -416,9 +543,19 @@ def test_api_relax_applies_transforms_one_feature_log_entry():
 def test_api_relax_is_revertable():
     design_state.set_design(_hinge_design())
     n0 = len(design_state.get_or_404().feature_log)
-    client.post("/api/design/flexible-relax", json={
-        "transforms": [{"cluster_id": "cl_a", "pivot": [0, 0, 0],
-                        "translation": [5.0, 0.0, 0.0], "rotation": [0, 0, 0, 1]}]})
+    client.post(
+        "/api/design/flexible-relax",
+        json={
+            "transforms": [
+                {
+                    "cluster_id": "cl_a",
+                    "pivot": [0, 0, 0],
+                    "translation": [5.0, 0.0, 0.0],
+                    "rotation": [0, 0, 0, 1],
+                }
+            ]
+        },
+    )
     assert _ct(design_state.get_or_404(), "cl_a").translation == [5.0, 0.0, 0.0]
     rr = client.post(f"/api/design/features/{n0}/revert")
     assert rr.status_code == 200, rr.text
@@ -428,9 +565,19 @@ def test_api_relax_is_revertable():
 def test_api_relax_is_deletable_rolls_back_pose():
     design_state.set_design(_hinge_design())
     n0 = len(design_state.get_or_404().feature_log)
-    client.post("/api/design/flexible-relax", json={
-        "transforms": [{"cluster_id": "cl_a", "pivot": [0, 0, 0],
-                        "translation": [5.0, 0.0, 0.0], "rotation": [0, 0, 0, 1]}]})
+    client.post(
+        "/api/design/flexible-relax",
+        json={
+            "transforms": [
+                {
+                    "cluster_id": "cl_a",
+                    "pivot": [0, 0, 0],
+                    "translation": [5.0, 0.0, 0.0],
+                    "rotation": [0, 0, 0, 1],
+                }
+            ]
+        },
+    )
     rd = client.delete(f"/api/design/features/{n0}")
     assert rd.status_code == 200, rd.text
     d = design_state.get_or_404()
@@ -442,9 +589,19 @@ def test_api_relax_is_deletable_rolls_back_pose():
 
 def test_api_relax_undo_redo():
     design_state.set_design(_hinge_design())
-    client.post("/api/design/flexible-relax", json={
-        "transforms": [{"cluster_id": "cl_a", "pivot": [0, 0, 0],
-                        "translation": [7.0, 0.0, 0.0], "rotation": [0, 0, 0, 1]}]})
+    client.post(
+        "/api/design/flexible-relax",
+        json={
+            "transforms": [
+                {
+                    "cluster_id": "cl_a",
+                    "pivot": [0, 0, 0],
+                    "translation": [7.0, 0.0, 0.0],
+                    "rotation": [0, 0, 0, 1],
+                }
+            ]
+        },
+    )
     assert _ct(design_state.get_or_404(), "cl_a").translation == [7.0, 0.0, 0.0]
     assert client.post("/api/design/undo").status_code == 200
     assert _ct(design_state.get_or_404(), "cl_a").translation == [0.0, 0.0, 0.0]
@@ -455,11 +612,26 @@ def test_api_relax_undo_redo():
 def test_api_relax_multi_cluster_single_entry_single_undo():
     design_state.set_design(_hinge_design())
     n0 = len(design_state.get_or_404().feature_log)
-    r = client.post("/api/design/flexible-relax", json={
-        "transforms": [
-            {"cluster_id": "cl_a", "pivot": [0, 0, 0], "translation": [1.0, 0, 0], "rotation": [0, 0, 0, 1]},
-            {"cluster_id": "cl_b", "pivot": [0, 0, 0], "translation": [0, 1.0, 0], "rotation": [0, 0, 0, 1]},
-        ], "label": "Relax all flexible segments"})
+    r = client.post(
+        "/api/design/flexible-relax",
+        json={
+            "transforms": [
+                {
+                    "cluster_id": "cl_a",
+                    "pivot": [0, 0, 0],
+                    "translation": [1.0, 0, 0],
+                    "rotation": [0, 0, 0, 1],
+                },
+                {
+                    "cluster_id": "cl_b",
+                    "pivot": [0, 0, 0],
+                    "translation": [0, 1.0, 0],
+                    "rotation": [0, 0, 0, 1],
+                },
+            ],
+            "label": "Relax all flexible segments",
+        },
+    )
     assert r.status_code == 200, r.text
     d = design_state.get_or_404()
     assert _ct(d, "cl_a").translation == [1.0, 0.0, 0.0]
@@ -474,15 +646,28 @@ def test_api_relax_multi_cluster_single_entry_single_undo():
 
 def test_api_relax_unknown_cluster_404():
     design_state.set_design(_hinge_design())
-    r = client.post("/api/design/flexible-relax", json={
-        "transforms": [{"cluster_id": "nope", "pivot": [0, 0, 0],
-                        "translation": [1, 0, 0], "rotation": [0, 0, 0, 1]}]})
+    r = client.post(
+        "/api/design/flexible-relax",
+        json={
+            "transforms": [
+                {
+                    "cluster_id": "nope",
+                    "pivot": [0, 0, 0],
+                    "translation": [1, 0, 0],
+                    "rotation": [0, 0, 0, 1],
+                }
+            ]
+        },
+    )
     assert r.status_code == 404
 
 
 def test_api_relax_empty_400():
     design_state.set_design(_hinge_design())
-    assert client.post("/api/design/flexible-relax", json={"transforms": []}).status_code == 400
+    assert (
+        client.post("/api/design/flexible-relax", json={"transforms": []}).status_code
+        == 400
+    )
 
 
 # ── Real design (the worked example) ───────────────────────────────────────────
@@ -494,10 +679,17 @@ _MINI = "workspace/mini_hinge.nadoc"
 def test_mini_hinge_four_connections_both_gates_open():
     d = Design.model_validate_json(open(_MINI).read())
     unp = unpaired_bead_keys(d)
-    marks = [FlexibleSegmentMark(strand_id=s.id, domain_index=di, bp_index=bp, direction=dom.direction)
-             for s in d.strands for di, dom in enumerate(s.domains)
-             for bp in range(min(dom.start_bp, dom.end_bp), max(dom.start_bp, dom.end_bp) + 1)
-             if (dom.helix_id, bp, dom.direction) in unp]
+    marks = [
+        FlexibleSegmentMark(
+            strand_id=s.id, domain_index=di, bp_index=bp, direction=dom.direction
+        )
+        for s in d.strands
+        for di, dom in enumerate(s.domains)
+        for bp in range(
+            min(dom.start_bp, dom.end_bp), max(dom.start_bp, dom.end_bp) + 1
+        )
+        if (dom.helix_id, bp, dom.direction) in unp
+    ]
     d = apply_marks(d.copy_with(flexible_segment_marks=marks))
     cids = {c.id for c in d.cluster_transforms}
     assert len(d.flexible_connections) == 4

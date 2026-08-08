@@ -56,7 +56,9 @@ def test_precondition_report_carries_no_extrabase_workflow_flag():
     design = make_bundle_design([(0, 0)], length_bp=12, plane="XY")
     model = build_atomistic_model(design)
     override = {
-        (atom.helix_id, atom.bp_index, atom.direction): np.array([atom.x, atom.y, atom.z])
+        (atom.helix_id, atom.bp_index, atom.direction): np.array(
+            [atom.x, atom.y, atom.z]
+        )
         for atom in model.atoms
         if atom.name == "P"
     }
@@ -104,4 +106,3 @@ def test_precondition_report_can_be_overridden_for_debugging():
     assert report["workflow_scope"]["allow_crossover_extrabases"] is True
     assert report["workflow_scope"]["requires_no_crossover_extrabases"] is False
     assert report["workflow_scope"]["crossover_extrabase_count"] == 1
-

@@ -29,18 +29,21 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 class LatticeType(str, Enum):
     """Arrangement of helices within the design."""
+
     HONEYCOMB = "HONEYCOMB"
     SQUARE = "SQUARE"
 
 
 class Direction(str, Enum):
     """5′→3′ direction of a domain relative to the helix axis."""
-    FORWARD = "FORWARD"   # 5′→3′ in the direction of increasing bp index
-    REVERSE = "REVERSE"   # 5′→3′ in the direction of decreasing bp index
+
+    FORWARD = "FORWARD"  # 5′→3′ in the direction of increasing bp index
+    REVERSE = "REVERSE"  # 5′→3′ in the direction of decreasing bp index
 
 
 class ConnectionType(str, Enum):
     """Chemical nature of an interface point on a Part."""
+
     BLUNT_END = "BLUNT_END"
     TOEHOLD = "TOEHOLD"
     BIOTIN = "BIOTIN"
@@ -65,6 +68,7 @@ class StrandType(str, Enum):
     they pair with (antiparallel, same helix, same bp range). For routing,
     ordering, and geometry they behave like staples — NOT like scaffold.
     """
+
     SCAFFOLD = "scaffold"
     STAPLE = "staple"
     LINKER = "linker"
@@ -76,6 +80,7 @@ class StrandType(str, Enum):
 
 class Vec3(BaseModel):
     """3-component vector in nanometres (or dimensionless unit vectors)."""
+
     x: float
     y: float
     z: float
@@ -90,12 +95,27 @@ class Vec3(BaseModel):
 
 class Mat4x4(BaseModel):
     """Row-major 4×4 homogeneous transform matrix for Part placement."""
-    values: List[float] = Field(default_factory=lambda: [
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1,
-    ])
+
+    values: List[float] = Field(
+        default_factory=lambda: [
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+        ]
+    )
 
     def to_array(self) -> np.ndarray:
         return np.array(self.values, dtype=float).reshape(4, 4)
@@ -123,13 +143,14 @@ class Helix(BaseModel):
     Negative bp_start values are valid for helices that extend in -Z from the
     design's slice-plane origin.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     axis_start: Vec3
     axis_end: Vec3
-    phase_offset: float = 0.0   # radians
+    phase_offset: float = 0.0  # radians
     twist_per_bp_rad: float = math.radians(34.3)  # radians/bp  (default = B-DNA 34.3°)
     length_bp: int
-    bp_start: int = 0           # global bp coordinate of local bp index 0
+    bp_start: int = 0  # global bp coordinate of local bp index 0
     loop_skips: List[LoopSkip] = Field(default_factory=list)
     label: Optional[str] = None
     """Display label shown in the pathview gutter (e.g. scadnano helix index).  None = use
@@ -137,7 +158,7 @@ class Helix(BaseModel):
     grid_pos: Optional[Tuple[int, int]] = None
     """(row, col) in the originating lattice grid, when known.  Set by scadnano/caDNAno
     importers so that the crossover lookup table can be used without parsing the helix ID."""
-    direction: Optional['Direction'] = None
+    direction: Optional["Direction"] = None
     """Scaffold-strand direction through this helix (FORWARD or REVERSE).  Set by
     lattice/importer code; None for helices created without lattice context."""
     """
@@ -149,12 +170,13 @@ class Helix(BaseModel):
     See LoopSkip for the physical mechanism.
     """
 
-    @model_validator(mode='after')
-    def _recover_grid_pos(self) -> 'Helix':
+    @model_validator(mode="after")
+    def _recover_grid_pos(self) -> "Helix":
         """Back-fill grid_pos from the h_XY_{r}_{c} ID pattern for legacy files."""
         import re
+
         if self.grid_pos is None:
-            m = re.fullmatch(r'h_XY_(-?\d+)_(-?\d+)', self.id)
+            m = re.fullmatch(r"h_XY_(-?\d+)_(-?\d+)", self.id)
             if m:
                 self.grid_pos = (int(m.group(1)), int(m.group(2)))
         return self
@@ -180,8 +202,9 @@ class LoopSkip(BaseModel):
 
     Reference: Dietz, Douglas & Shih, Science 2009.
     """
-    bp_index: int     # absolute bp index within the helix (0-based)
-    delta: int        # +1 = loop (insertion), -1 = skip (deletion)
+
+    bp_index: int  # absolute bp index within the helix (0-based)
+    delta: int  # +1 = loop (insertion), -1 = skip (deletion)
 
 
 # ── Sub-domains (Phase 1, overhang revamp) ───────────────────────────────────
@@ -198,7 +221,7 @@ class LoopSkip(BaseModel):
 # (Phase 5+ bindings) and from `.nadoc` round-trips.
 
 
-NADOC_SUBDOMAIN_NS = uuid.UUID('6f8a8b1e-5b3a-4b1f-8c2a-d0e5b3f1a204')
+NADOC_SUBDOMAIN_NS = uuid.UUID("6f8a8b1e-5b3a-4b1f-8c2a-d0e5b3f1a204")
 
 
 class SubDomain(BaseModel):
@@ -223,13 +246,18 @@ class SubDomain(BaseModel):
     ``dimer_warning``) are invalidated whenever this sub-domain's sequence or
     the design-level ``tm_settings`` change.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "a"
-    color: Optional[str] = None              # "#RRGGBB" hex, or None to inherit parent strand color
-    start_bp_offset: int = 0                 # 0-based from the overhang's 5' end
-    length_bp: int = 1                       # gap-less tiling invariant per parent overhang
-    sequence_override: Optional[str] = None  # None = use parent slice; len must == length_bp
-    rotation_theta_deg: float = 0.0          # parent-relative, 2-DOF; stored but UNUSED in Phase 1
+    color: Optional[str] = None  # "#RRGGBB" hex, or None to inherit parent strand color
+    start_bp_offset: int = 0  # 0-based from the overhang's 5' end
+    length_bp: int = 1  # gap-less tiling invariant per parent overhang
+    sequence_override: Optional[str] = (
+        None  # None = use parent slice; len must == length_bp
+    )
+    rotation_theta_deg: float = (
+        0.0  # parent-relative, 2-DOF; stored but UNUSED in Phase 1
+    )
     rotation_phi_deg: float = 0.0
     notes: str = ""
     # ── Cached annotations (invalidated on sequence / tm_settings change) ────
@@ -264,9 +292,10 @@ class OverhangSpec(BaseModel):
     sum-of-length invariant is enforced at the endpoint level because the
     backing domain length lives outside this model.
     """
+
     id: str
-    helix_id: str           # the overhang helix ID
-    strand_id: str          # the parent staple strand ID
+    helix_id: str  # the overhang helix ID
+    strand_id: str  # the parent staple strand ID
     sequence: Optional[str] = None
     label: Optional[str] = None
     rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])
@@ -299,8 +328,8 @@ class OverhangSpec(BaseModel):
     # the OverhangBinding display-pose annotation. None until the user captures.
     strand_anim_setup: Optional[Dict[str, Any]] = None
 
-    @model_validator(mode='after')
-    def _backfill_whole_overhang_sub_domain(self) -> 'OverhangSpec':
+    @model_validator(mode="after")
+    def _backfill_whole_overhang_sub_domain(self) -> "OverhangSpec":
         """Ensure every overhang has at least one sub-domain.
 
         Idempotent: returns ``self`` unchanged when ``sub_domains`` is non-empty.
@@ -322,7 +351,7 @@ class OverhangSpec(BaseModel):
             sequence_override=None,
         )
         # Avoid re-triggering the validator: assign directly to the underlying dict.
-        object.__setattr__(self, 'sub_domains', [whole])
+        object.__setattr__(self, "sub_domains", [whole])
         return self
 
 
@@ -337,6 +366,7 @@ class OverhangConnection(BaseModel):
       "root"     — embedded end on the main bundle helix.
       "free_end" — protruding 5'/3' tip on the overhang helix.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: Optional[str] = None
     overhang_a_id: str
@@ -401,6 +431,7 @@ class FlexibleSegmentMark(BaseModel):
     the per-bead key emitted by ``crud._strand_nucleotide_info``. A stale mark
     (strand/domain no longer resolves) is harmless: derivation simply ignores it.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     strand_id: str
     domain_index: int
@@ -410,6 +441,7 @@ class FlexibleSegmentMark(BaseModel):
 
 class FlexibleAnchor(BaseModel):
     """A rigid bead flanking a flexible segment, OR a bead within the segment run."""
+
     strand_id: str
     domain_index: int
     bp_index: int
@@ -426,6 +458,7 @@ class FlexibleConnection(BaseModel):
     fixed-length geometric arc; ``segment_bead_keys`` are its beads in 5′→3′ order
     so the renderer can place them along the arc.
     """
+
     id: str
     cluster_a_id: str
     cluster_b_id: str
@@ -436,7 +469,7 @@ class FlexibleConnection(BaseModel):
     segment_bead_keys: List[FlexibleAnchor] = Field(default_factory=list)
 
 
-def _resolve_sd_sequence(ovhg: 'OverhangSpec', sd: 'SubDomain') -> Optional[str]:
+def _resolve_sd_sequence(ovhg: "OverhangSpec", sd: "SubDomain") -> Optional[str]:
     """Module-level helper used by Design._validate_overhang_bindings.
 
     Mirrors backend.api.crud._resolve_sub_domain_sequence (override > parent
@@ -455,7 +488,9 @@ def _resolve_sd_sequence(ovhg: 'OverhangSpec', sd: 'SubDomain') -> Optional[str]
     return sl
 
 
-def _sub_domain_at_attach(design: 'Design', overhang_id: str, attach: str) -> Optional[str]:
+def _sub_domain_at_attach(
+    design: "Design", overhang_id: str, attach: str
+) -> Optional[str]:
     """Return the sub-domain id at the overhang's ``attach`` end (5'→3' offset).
 
     Used to build the mutex pair-set covering both bindings and linker
@@ -469,12 +504,12 @@ def _sub_domain_at_attach(design: 'Design', overhang_id: str, attach: str) -> Op
     # root = embedded end on the bundle (= 5' end of the overhang strand in
     # this convention); free_end = protruding tip = 3' end. The sub-domain
     # tile at each side is the first / last entry by offset.
-    if attach == 'root':
+    if attach == "root":
         return sub_doms[0].id
     return sub_doms[-1].id
 
 
-def _overhang_backing_domain(design: 'Design', overhang_id: str):
+def _overhang_backing_domain(design: "Design", overhang_id: str):
     """Return the (Strand, Domain) whose ``domain.overhang_id == overhang_id``.
 
     The backing domain carries the overhang's helix bp range. ``DuplexEnd``
@@ -499,6 +534,7 @@ class DuplexEnd(BaseModel):
     paired stretch, ``end_bp`` the 3' base (so ``start_bp > end_bp`` for a
     reverse-direction overhang). Length = ``abs(end_bp - start_bp) + 1``.
     """
+
     overhang_id: str
     start_bp: int
     end_bp: int
@@ -538,14 +574,15 @@ class Duplex(BaseModel):
     yet — migration from legacy ``OverhangBinding`` is available in
     ``backend.core.duplex`` but not auto-run, so load behavior is unchanged.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str = ""                       # auto D1, D2, …
+    name: str = ""  # auto D1, D2, …
     created_at: float = Field(default_factory=time.time)
     left: DuplexEnd
     right: DuplexEnd
-    driver: Literal['left', 'right'] = 'left'
+    driver: Literal["left", "right"] = "left"
     bound: bool = False
-    binding_mode: Literal['duplex', 'toehold'] = 'duplex'
+    binding_mode: Literal["duplex", "toehold"] = "duplex"
     allow_n_wildcard: bool = True
     # Reserved for the Phase-4 geometry derivation (unused in Phases 0-3).
     target_joint_id: Optional[str] = None
@@ -557,8 +594,8 @@ class Duplex(BaseModel):
     # — same shape as OverhangBinding.prior_driven_topology. None = not relocated.
     prior_driven_topology: Optional[Dict[str, Any]] = None
 
-    @model_validator(mode='after')
-    def _check_equal_length_and_distinct(self) -> 'Duplex':
+    @model_validator(mode="after")
+    def _check_equal_length_and_distinct(self) -> "Duplex":
         if self.left.length != self.right.length:
             raise ValueError(
                 f"Duplex {self.id}: left ({self.left.length} bp) and right "
@@ -567,8 +604,10 @@ class Duplex(BaseModel):
             )
         # A base cannot pair itself: forbid the two ends covering any shared bp on
         # the same overhang (a same-overhang hairpin with disjoint ranges is fine).
-        if (self.left.overhang_id == self.right.overhang_id and
-                self.left.covered_bp() & self.right.covered_bp()):
+        if (
+            self.left.overhang_id == self.right.overhang_id
+            and self.left.covered_bp() & self.right.covered_bp()
+        ):
             raise ValueError(
                 f"Duplex {self.id}: the two ends overlap on overhang "
                 f"{self.left.overhang_id} — a base cannot pair itself."
@@ -599,15 +638,18 @@ class OverhangBinding(BaseModel):
     window into ``prior_min_angle_deg`` / ``prior_max_angle_deg`` so the
     window can be restored when the last bound claimant releases.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str                           # auto B1, B2, ...
-    created_at: float = Field(default_factory=time.time)  # tiebreak among bound bindings
+    name: str  # auto B1, B2, ...
+    created_at: float = Field(
+        default_factory=time.time
+    )  # tiebreak among bound bindings
     sub_domain_a_id: str
     sub_domain_b_id: str
-    overhang_a_id: str                  # denormalized for fast cross-ref filter
+    overhang_a_id: str  # denormalized for fast cross-ref filter
     overhang_b_id: str
     bound: bool = False
-    binding_mode: Literal['duplex', 'toehold'] = 'duplex'
+    binding_mode: Literal["duplex", "toehold"] = "duplex"
     target_joint_id: Optional[str] = None
     locked_angle_deg: Optional[float] = None
     prior_min_angle_deg: Optional[float] = None  # snapshot taken by the first claimant
@@ -621,7 +663,7 @@ class OverhangBinding(BaseModel):
     # `bound_angle_deg ?? locked_angle_deg`; both endpoints exist regardless of
     # the live `bound` flag so the transition can play in either direction.
     unbound_angle_deg: Optional[float] = None  # authored "open" hinge angle (φ=0)
-    bound_angle_deg: Optional[float] = None     # authored "closed" hinge angle (φ=1)
+    bound_angle_deg: Optional[float] = None  # authored "closed" hinge angle (φ=1)
     # Phase-6: snapshot of the driven side's pre-bind topology so unbind can
     # restore the driven helix + the OH's strand domain. Populated when bind
     # relocates the driven OH's domain onto the driver's helix (sharing the
@@ -656,8 +698,8 @@ class OverhangBinding(BaseModel):
     driven_oh_id: Optional[str] = None
     connection_type: Optional[str] = None
 
-    @model_validator(mode='after')
-    def _check_self_consistency(self) -> 'OverhangBinding':
+    @model_validator(mode="after")
+    def _check_self_consistency(self) -> "OverhangBinding":
         if self.sub_domain_a_id == self.sub_domain_b_id:
             raise ValueError(
                 f"OverhangBinding {self.id}: sub_domain_a_id and "
@@ -690,16 +732,16 @@ class ConnectionVersion(BaseModel):
     """
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str = ""                       # auto V1, V2, … per pair
+    name: str = ""  # auto V1, V2, … per pair
     created_at: float = Field(default_factory=time.time)
     overhang_a_id: str
     overhang_b_id: str
-    connection_type: str                 # CT variant id (attach / ss-ds / direct)
+    connection_type: str  # CT variant id (attach / ss-ds / direct)
     overhang_a_seq: Optional[str] = None
     overhang_b_seq: Optional[str] = None
-    bridge_length: int = 0               # bp — linkers only (0 for direct/indirect)
+    bridge_length: int = 0  # bp — linkers only (0 for direct/indirect)
     bridge_seq: Optional[str] = None
-    applied: bool = False                # the materialized version for this pair
+    applied: bool = False  # the materialized version for this pair
 
 
 class AssemblyOverhangConnection(BaseModel):
@@ -712,6 +754,7 @@ class AssemblyOverhangConnection(BaseModel):
     :class:`AssemblyOverhangBinding` (direct WC pairs) to populate the
     assembly-level connections table.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: Optional[str] = None
     created_at: float = Field(default_factory=time.time)
@@ -745,25 +788,29 @@ class AssemblyOverhangBinding(BaseModel):
     Mirrors :class:`OverhangBinding` but with PartInstance qualification on each
     side. Lives on Assembly.overhang_bindings.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str                           # auto AB1, AB2, ...
+    name: str  # auto AB1, AB2, ...
     created_at: float = Field(default_factory=time.time)
-    instance_a_id: str                  # PartInstance.id (side A)
+    instance_a_id: str  # PartInstance.id (side A)
     sub_domain_a_id: str
-    overhang_a_id: str                  # denormalized for fast lookup
-    instance_b_id: str                  # PartInstance.id (side B)
+    overhang_a_id: str  # denormalized for fast lookup
+    instance_b_id: str  # PartInstance.id (side B)
     sub_domain_b_id: str
     overhang_b_id: str
-    binding_mode: Literal['duplex', 'toehold'] = 'duplex'
+    binding_mode: Literal["duplex", "toehold"] = "duplex"
     allow_n_wildcard: bool = True
 
-    @model_validator(mode='after')
-    def _check_self_consistency(self) -> 'AssemblyOverhangBinding':
-        if (self.instance_a_id == self.instance_b_id and
-                self.sub_domain_a_id == self.sub_domain_b_id):
+    @model_validator(mode="after")
+    def _check_self_consistency(self) -> "AssemblyOverhangBinding":
+        if (
+            self.instance_a_id == self.instance_b_id
+            and self.sub_domain_a_id == self.sub_domain_b_id
+        ):
             raise ValueError(
                 f"AssemblyOverhangBinding {self.id}: cannot bind a sub-domain "
-                f"to itself within the same PartInstance.")
+                f"to itself within the same PartInstance."
+            )
         return self
 
 
@@ -778,6 +825,7 @@ class AssemblyDuplexEnd(BaseModel):
     coordinate (not the flattened namespaced one) — materialization applies the
     instance transform.
     """
+
     instance_id: str
     overhang_id: str
     start_bp: int
@@ -811,14 +859,15 @@ class AssemblyDuplex(BaseModel):
     mutated. ``prior_driven_topology`` carries the flatten-time relocation snapshot
     for symmetry with :class:`Duplex`.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str = ""                       # auto AD1, AD2, …
+    name: str = ""  # auto AD1, AD2, …
     created_at: float = Field(default_factory=time.time)
     left: AssemblyDuplexEnd
     right: AssemblyDuplexEnd
-    driver: Literal['left', 'right'] = 'left'
+    driver: Literal["left", "right"] = "left"
     bound: bool = False
-    binding_mode: Literal['duplex', 'toehold'] = 'duplex'
+    binding_mode: Literal["duplex", "toehold"] = "duplex"
     allow_n_wildcard: bool = True
     connection_type: Optional[str] = None
     # Set when a ds/ss linker's complement register is expressed as a duplex, so a
@@ -826,16 +875,18 @@ class AssemblyDuplex(BaseModel):
     connection_id: Optional[str] = None
     prior_driven_topology: Optional[Dict[str, Any]] = None
 
-    @model_validator(mode='after')
-    def _check_equal_length_and_distinct(self) -> 'AssemblyDuplex':
+    @model_validator(mode="after")
+    def _check_equal_length_and_distinct(self) -> "AssemblyDuplex":
         if self.left.length != self.right.length:
             raise ValueError(
                 f"AssemblyDuplex {self.id}: left ({self.left.length} bp) and right "
                 f"({self.right.length} bp) must be equal length (bulges deferred)."
             )
-        if (self.left.instance_id == self.right.instance_id and
-                self.left.overhang_id == self.right.overhang_id and
-                self.left.covered_bp() & self.right.covered_bp()):
+        if (
+            self.left.instance_id == self.right.instance_id
+            and self.left.overhang_id == self.right.overhang_id
+            and self.left.covered_bp() & self.right.covered_bp()
+        ):
             raise ValueError(
                 f"AssemblyDuplex {self.id}: the two ends overlap on the same "
                 f"overhang — a base cannot pair itself."
@@ -851,11 +902,14 @@ class Domain(BaseModel):
     direction indicates whether the strand travels in the +axis or -axis
     direction through this domain.
     """
+
     helix_id: str
     start_bp: int
     end_bp: int
     direction: Direction
-    overhang_id: Optional[str] = None  # set if this domain is a single-stranded overhang
+    overhang_id: Optional[str] = (
+        None  # set if this domain is a single-stranded overhang
+    )
     # set if this domain is an overhang-BINDING domain — it hybridizes to the
     # OverhangSpec with this id (antiparallel, same helix + bp range). Lives on
     # OH_BINDER strands and on auto-generated LINKER complement domains. Drives
@@ -874,12 +928,13 @@ class Strand(BaseModel):
     color, if set, is a 6-digit hex string (e.g. "#F7931E") overriding the
     default STAPLE_PALETTE assignment.  Preserved on caDNAno import/export.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     domains: List[Domain] = Field(default_factory=list)
     strand_type: StrandType = StrandType.STAPLE
     sequence: Optional[str] = None
-    color: Optional[str] = None   # "#RRGGBB" hex; None → use STAPLE_PALETTE
-    notes: Optional[str] = None   # user-defined notes (shown in spreadsheet panel)
+    color: Optional[str] = None  # "#RRGGBB" hex; None → use STAPLE_PALETTE
+    notes: Optional[str] = None  # user-defined notes (shown in spreadsheet panel)
     # Reference geometry: when True this strand is an inactive "backdrop" — a
     # frozen part the user is designing against.  ALL generative features
     # (bend/twist, sequence assignment, scaffold routing, autostaple/break/merge,
@@ -888,16 +943,20 @@ class Strand(BaseModel):
     # New field, default False → old .nadoc files load unchanged (no migration).
     is_reference: bool = False
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     @classmethod
     def _migrate_is_scaffold(cls, data: object) -> object:
         """Migrate old is_scaffold boolean field from pre-StrandType .nadoc files."""
-        if isinstance(data, dict) and 'is_scaffold' in data and 'strand_type' not in data:
+        if (
+            isinstance(data, dict)
+            and "is_scaffold" in data
+            and "strand_type" not in data
+        ):
             data = dict(data)
-            data['strand_type'] = 'scaffold' if data.pop('is_scaffold') else 'staple'
+            data["strand_type"] = "scaffold" if data.pop("is_scaffold") else "staple"
         return data
 
-    @field_validator('domains', mode='before')
+    @field_validator("domains", mode="before")
     @classmethod
     def _drop_null_domains(cls, v: object) -> object:
         """Strip null entries that corrupt files may contain."""
@@ -920,6 +979,7 @@ class PhotoproductJunction(BaseModel):
     from a scadnano_cpd design.  Stores the two thymine stable-IDs and the
     photoproduct type.  Not rendered by NADOC yet — preserved for future use.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     t1_stable_id: str
     t2_stable_id: str
@@ -936,9 +996,10 @@ class HalfCrossover(BaseModel):
     HalfCrossover on a neighboring helix at the same index, it forms a full
     Crossover.
     """
+
     helix_id: str
-    index: int        # global bp index — identical on both sides of a crossover
-    strand: Direction # FORWARD or REVERSE
+    index: int  # global bp index — identical on both sides of a crossover
+    strand: Direction  # FORWARD or REVERSE
 
 
 class Crossover(BaseModel):
@@ -948,11 +1009,16 @@ class Crossover(BaseModel):
     adjacent in the lattice.  Stored in Design.crossovers; the corresponding
     cross-helix domain transition is also reflected in Design.strands.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     half_a: HalfCrossover
     half_b: HalfCrossover
-    extra_bases: Optional[str] = None  # e.g. "TT" — single-stranded bases at the junction
-    process_id: Optional[str] = None  # operation that placed this crossover, e.g. "manual", "auto_crossover"
+    extra_bases: Optional[str] = (
+        None  # e.g. "TT" — single-stranded bases at the junction
+    )
+    process_id: Optional[str] = (
+        None  # operation that placed this crossover, e.g. "manual", "auto_crossover"
+    )
 
 
 class ForcedLigation(BaseModel):
@@ -962,6 +1028,7 @@ class ForcedLigation(BaseModel):
     scaffold strands that contain these connections.  Each record stores
     the 3' and 5' endpoints (helix, bp, direction) at the time of ligation.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     three_prime_helix_id: str
     three_prime_bp: int
@@ -969,7 +1036,9 @@ class ForcedLigation(BaseModel):
     five_prime_helix_id: str
     five_prime_bp: int
     five_prime_direction: Direction
-    extra_bases: Optional[str] = None  # e.g. "TT" — single-stranded bases at the junction
+    extra_bases: Optional[str] = (
+        None  # e.g. "TT" — single-stranded bases at the junction
+    )
     # True when this ligation closes an end-to-end polymerization seam — set when
     # the user makes it across the 2D editor's periodic-boundary mirror. Marks the
     # part as periodic so it can be polymerized without a hand-defined mate (see
@@ -982,15 +1051,15 @@ class ForcedLigation(BaseModel):
 
 
 MODIFICATION_COLORS: dict[str, str] = {
-    "cy3":     "#ff8c00",
-    "cy5":     "#cc0000",
-    "fam":     "#00cc00",
-    "tamra":   "#cc00cc",
-    "bhq1":    "#444444",
-    "bhq2":    "#666666",
+    "cy3": "#ff8c00",
+    "cy5": "#cc0000",
+    "fam": "#00cc00",
+    "tamra": "#cc00cc",
+    "bhq1": "#444444",
+    "bhq2": "#666666",
     "atto488": "#00ffcc",
     "atto550": "#ffaa00",
-    "biotin":  "#eeeeee",
+    "biotin": "#eeeeee",
 }
 VALID_MODIFICATIONS = frozenset(MODIFICATION_COLORS.keys())
 
@@ -1007,17 +1076,20 @@ class StrandExtension(BaseModel):
     radially outward from the terminal nucleotide in XY, with a +Z bow.
     Uses synthetic helix_id ``__ext_{id}``.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     strand_id: str
     end: Literal["five_prime", "three_prime"]
-    sequence: Optional[str] = None      # ACGTN; None if modification-only
+    sequence: Optional[str] = None  # ACGTN; None if modification-only
     modification: Optional[str] = None  # key from VALID_MODIFICATIONS
     label: Optional[str] = None
 
-    @model_validator(mode='after')
-    def _check_not_both_none(self) -> 'StrandExtension':
+    @model_validator(mode="after")
+    def _check_not_both_none(self) -> "StrandExtension":
         if self.sequence is None and self.modification is None:
-            raise ValueError("At least one of sequence or modification must be provided.")
+            raise ValueError(
+                "At least one of sequence or modification must be provided."
+            )
         return self
 
 
@@ -1027,21 +1099,24 @@ class StrandExtension(BaseModel):
 class WellAssignment(BaseModel):
     """One staple strand placed in a 96-well plate well. Display-only metadata
     persisted in the .nadoc file; never affects topology or geometry."""
+
     strand_id: str
-    plate: int   # 0-based plate index (overflow → 1, 2, …)
-    row: int     # 0-based physical row (0..7, labelled A–H)
-    col: int     # 0-based physical column (0..11, labelled 1–12)
+    plate: int  # 0-based plate index (overflow → 1, 2, …)
+    row: int  # 0-based physical row (0..7, labelled A–H)
+    col: int  # 0-based physical column (0..11, labelled 1–12)
 
 
 class TubeAssignment(BaseModel):
     """A staple segregated out of the plate into an individual tube, because it
     carries a modification, exceeds 60 nt, or both."""
+
     strand_id: str
     reason: Literal["modification", "long", "both"]
 
 
 class PlateLayout(BaseModel):
     """Persisted plate/tube layout for a design (IDT ordering convenience)."""
+
     orientation: Literal["8x12", "12x8"] = "8x12"
     plate_count: int = 1
     wells: List[WellAssignment] = Field(default_factory=list)
@@ -1056,9 +1131,10 @@ class RepresentationSegment(BaseModel):
     helix's bp index space. Inclusive [bp_start, bp_end]. Position-based so it
     survives strand break/merge/crossover edits (which reassign strand ids but
     leave nucleotide positions in place)."""
+
     helix_id: str
-    bp_start: int   # inclusive
-    bp_end: int     # inclusive
+    bp_start: int  # inclusive
+    bp_end: int  # inclusive
 
 
 class RepresentationOverride(BaseModel):
@@ -1079,6 +1155,7 @@ class RepresentationOverride(BaseModel):
     list order; when two overrides cover the same column, the later one wins.
 
     New field, default empty → old .nadoc files load unchanged (no migration)."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
     representation: Literal["full", "cylinders", "surface", "vdw", "ballstick"] = "full"
@@ -1090,9 +1167,12 @@ class RepresentationOverride(BaseModel):
 
 class TwistParams(BaseModel):
     """Parameters for a twist deformation segment."""
-    kind: Literal['twist'] = 'twist'
-    total_degrees: Optional[float] = None    # mutually exclusive with degrees_per_nm
-    degrees_per_nm: Optional[float] = None   # positive = right-handed, negative = left-handed
+
+    kind: Literal["twist"] = "twist"
+    total_degrees: Optional[float] = None  # mutually exclusive with degrees_per_nm
+    degrees_per_nm: Optional[float] = (
+        None  # positive = right-handed, negative = left-handed
+    )
 
 
 class BendParams(BaseModel):
@@ -1110,28 +1190,33 @@ class BendParams(BaseModel):
     region (see ``_effective_bend_window``), this eliminates Kabsch averaging
     artifacts in periodic polymerization.
     """
-    kind: Literal['bend'] = 'bend'
-    curvature_deg_per_bp: float = 0.0   # per-bp curvature; positive = bend toward +direction
-    direction_deg: float = 0.0          # 0 = +X in the bundle cross-section plane
+
+    kind: Literal["bend"] = "bend"
+    curvature_deg_per_bp: float = (
+        0.0  # per-bp curvature; positive = bend toward +direction
+    )
+    direction_deg: float = 0.0  # 0 = +X in the bundle cross-section plane
 
 
 class DeformationOp(BaseModel):
     """One twist or bend applied to a segment of the bundle."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    type: Literal['twist', 'bend']
-    plane_a_bp: int                  # fixed plane (5′ side); must be < plane_b_bp
-    plane_b_bp: int                  # mobile plane (3′ side)
+    type: Literal["twist", "bend"]
+    plane_a_bp: int  # fixed plane (5′ side); must be < plane_b_bp
+    plane_b_bp: int  # mobile plane (3′ side)
     affected_helix_ids: List[str] = Field(default_factory=list)
     # Clusters this deformation was scoped to. Empty list = unscoped (all crossing helices).
     # When non-empty, affected_helix_ids is filtered to the union of these clusters' helix_ids
     # at creation/edit time, so multiple clusters within a part can be bent or twisted
     # independently — even when their bp ranges overlap.
     cluster_ids: List[str] = Field(default_factory=list)
-    params: Annotated[Union[TwistParams, BendParams], Field(discriminator='kind')]
+    params: Annotated[Union[TwistParams, BendParams], Field(discriminator="kind")]
 
 
 class DomainRef(BaseModel):
     """Reference to a single domain within a strand (strand_id + domain_index)."""
+
     strand_id: str
     domain_index: int
 
@@ -1170,9 +1255,10 @@ class ClusterRigidTransform(BaseModel):
     scope which nucleotides get the local pose). Mirrors the local-frame storage
     ClusterJoint already uses for its axis.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Cluster"
-    is_default: bool = False          # True when auto-created to contain all helices
+    is_default: bool = False  # True when auto-created to contain all helices
     helix_ids: List[str] = Field(default_factory=list)
     domain_ids: List[DomainRef] = Field(default_factory=list)
     translation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
@@ -1255,24 +1341,25 @@ class ClusterJoint(BaseModel):
     are tracked in the feature_log via JointPlacementLogEntry (Phase 3 of
     the joint-storage refactor).
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     cluster_id: str
     name: str = "Joint"
-    joint_type: Literal['revolute'] = 'revolute'
+    joint_type: Literal["revolute"] = "revolute"
     # CLUSTER-LOCAL frame. Set once at creation; never mutated by cluster transforms.
-    local_axis_origin:    List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+    local_axis_origin: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
     local_axis_direction: List[float] = Field(default_factory=lambda: [0.0, 1.0, 0.0])
-    surface_detail: int = 6   # lateral face count; 4 = SQ default, 6 = HC default
+    surface_detail: int = 6  # lateral face count; 4 = SQ default, 6 = HC default
     # Mechanical rotation limits (degrees). Defaults of [-180°, +180°] are
     # equivalent to "unbounded" for a revolute joint and preserve legacy
     # designs whose .nadoc files predate these fields. Honoured by the
     # linker-relax optimizer, the cluster rotate gizmo (ring drag + numeric
     # input), and the animation player's per-keyframe slerp.
     min_angle_deg: float = -180.0
-    max_angle_deg: float =  180.0
+    max_angle_deg: float = 180.0
 
-    @model_validator(mode='after')
-    def _check_angle_range(self) -> 'ClusterJoint':
+    @model_validator(mode="after")
+    def _check_angle_range(self) -> "ClusterJoint":
         if self.max_angle_deg < self.min_angle_deg:
             raise ValueError(
                 f"ClusterJoint {self.id}: max_angle_deg ({self.max_angle_deg}) "
@@ -1289,6 +1376,7 @@ class CameraPose(BaseModel):
     position/target/up are in Three.js world space (nanometres).
     orbit_mode matches the viewport control mode at time of capture.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Camera Pose"
     position: List[float] = Field(default_factory=lambda: [6.0, 3.0, 7.0])
@@ -1300,16 +1388,20 @@ class CameraPose(BaseModel):
 
 class AssemblyInstanceConfigState(BaseModel):
     """Saved per-instance placement for an assembly configuration snapshot."""
+
     instance_id: str
     name: str = ""
     transform: Mat4x4
     base_transform: Optional[Mat4x4] = None
     joint_states: dict = Field(default_factory=dict)
-    cluster_transform_overrides: List[ClusterRigidTransform] = Field(default_factory=list)
+    cluster_transform_overrides: List[ClusterRigidTransform] = Field(
+        default_factory=list
+    )
 
 
 class AssemblyJointConfigState(BaseModel):
     """Saved mate/joint state for an assembly configuration snapshot."""
+
     joint_id: str
     current_value: float = 0.0
     axis_origin: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
@@ -1320,6 +1412,7 @@ class AssemblyJointConfigState(BaseModel):
 
 class AssemblyGearRelationConfigState(BaseModel):
     """Saved gear-relation state for an assembly configuration snapshot."""
+
     relation_id: str
     ratio: float = 1.0
     invert: bool = False
@@ -1338,19 +1431,23 @@ class AssemblyConfigurationSnapshot(BaseModel):
     Restoring a configuration updates only instances and joints that still exist;
     parts added after the snapshot was captured are intentionally ignored.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Configuration"
     instance_states: List[AssemblyInstanceConfigState] = Field(default_factory=list)
     joint_states: List[AssemblyJointConfigState] = Field(default_factory=list)
-    gear_relation_states: List[AssemblyGearRelationConfigState] = Field(default_factory=list)
+    gear_relation_states: List[AssemblyGearRelationConfigState] = Field(
+        default_factory=list
+    )
 
 
 class DeformationLogEntry(BaseModel):
     """Feature log entry for a bend or twist deformation operation."""
-    feature_type: Literal['deformation'] = 'deformation'
+
+    feature_type: Literal["deformation"] = "deformation"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    deformation_id: str   # references a DeformationOp.id in design.deformations
-    op_snapshot: Optional[DeformationOp] = None   # full op data for seek replay
+    deformation_id: str  # references a DeformationOp.id in design.deformations
+    op_snapshot: Optional[DeformationOp] = None  # full op data for seek replay
 
 
 class ClusterOpLogEntry(BaseModel):
@@ -1360,13 +1457,14 @@ class ClusterOpLogEntry(BaseModel):
     manual move/rotate UI. Frontend uses it to prefix the label so the user
     can tell e.g. relax-driven cluster updates from manual ones at a glance.
     """
-    feature_type: Literal['cluster_op'] = 'cluster_op'
+
+    feature_type: Literal["cluster_op"] = "cluster_op"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     cluster_id: str
-    translation: List[float]   # absolute cluster state AFTER this op
-    rotation: List[float]      # [qx, qy, qz, qw]
+    translation: List[float]  # absolute cluster state AFTER this op
+    rotation: List[float]  # [qx, qy, qz, qw]
     pivot: List[float]
-    source: Optional[str] = None   # e.g. 'relax', None for manual move/rotate
+    source: Optional[str] = None  # e.g. 'relax', None for manual move/rotate
 
 
 class ClusterCreateLogEntry(BaseModel):
@@ -1383,7 +1481,8 @@ class ClusterCreateLogEntry(BaseModel):
     Creating a cluster is a display/geometry-layer grouping — it never touches the strand
     graph (the three-layer law), exactly like ``ClusterOpLogEntry``.
     """
-    feature_type: Literal['cluster_create'] = 'cluster_create'
+
+    feature_type: Literal["cluster_create"] = "cluster_create"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     cluster_id: str
     name: str
@@ -1410,10 +1509,11 @@ class OverhangRotationLogEntry(BaseModel):
     rotations on different overhangs, in which case the trailing lists
     carry ``None`` for the whole-overhang index.
     """
-    feature_type: Literal['overhang_rotation'] = 'overhang_rotation'
+
+    feature_type: Literal["overhang_rotation"] = "overhang_rotation"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     overhang_ids: List[str]
-    rotations: List[List[float]]   # [qx, qy, qz, qw] per overhang_id (parallel list)
+    rotations: List[List[float]]  # [qx, qy, qz, qw] per overhang_id (parallel list)
     labels: List[Optional[str]] = []
     # Phase 4 parallel lists. Length 0 == legacy entry (all whole-overhang).
     # Length N == one entry per overhang_ids[i]; None == whole-overhang at
@@ -1422,15 +1522,15 @@ class OverhangRotationLogEntry(BaseModel):
     sub_domain_thetas_deg: List[Optional[float]] = []
     sub_domain_phis_deg: List[Optional[float]] = []
 
-    @model_validator(mode='after')
-    def _validate_subdomain_lists(self) -> 'OverhangRotationLogEntry':
+    @model_validator(mode="after")
+    def _validate_subdomain_lists(self) -> "OverhangRotationLogEntry":
         n = len(self.overhang_ids)
 
         # Each trailing list must be empty (legacy) or length-n.
         for name, lst in (
-            ('sub_domain_ids', self.sub_domain_ids),
-            ('sub_domain_thetas_deg', self.sub_domain_thetas_deg),
-            ('sub_domain_phis_deg', self.sub_domain_phis_deg),
+            ("sub_domain_ids", self.sub_domain_ids),
+            ("sub_domain_thetas_deg", self.sub_domain_thetas_deg),
+            ("sub_domain_phis_deg", self.sub_domain_phis_deg),
         ):
             if len(lst) not in (0, n):
                 raise ValueError(
@@ -1438,23 +1538,27 @@ class OverhangRotationLogEntry(BaseModel):
                     f"{n} (== len(overhang_ids)), got {len(lst)}"
                 )
 
-        if not self.sub_domain_ids and not self.sub_domain_thetas_deg and not self.sub_domain_phis_deg:
+        if (
+            not self.sub_domain_ids
+            and not self.sub_domain_thetas_deg
+            and not self.sub_domain_phis_deg
+        ):
             return self
 
         # When any trailing list is populated, all three must be the same
         # length (pad missing ones with None).
         if len(self.sub_domain_ids) == 0:
-            object.__setattr__(self, 'sub_domain_ids', [None] * n)
+            object.__setattr__(self, "sub_domain_ids", [None] * n)
         if len(self.sub_domain_thetas_deg) == 0:
-            object.__setattr__(self, 'sub_domain_thetas_deg', [None] * n)
+            object.__setattr__(self, "sub_domain_thetas_deg", [None] * n)
         if len(self.sub_domain_phis_deg) == 0:
-            object.__setattr__(self, 'sub_domain_phis_deg', [None] * n)
+            object.__setattr__(self, "sub_domain_phis_deg", [None] * n)
 
         # Per-index validation.
         for i in range(n):
             sd_id = self.sub_domain_ids[i]
             theta = self.sub_domain_thetas_deg[i]
-            phi   = self.sub_domain_phis_deg[i]
+            phi = self.sub_domain_phis_deg[i]
             if sd_id is None:
                 # Whole-overhang slot: theta/phi must also be None.
                 if theta is not None or phi is not None:
@@ -1489,77 +1593,77 @@ class OverhangRotationLogEntry(BaseModel):
 # `extrude-*` are continuation/segment ops that grow an existing design.
 # `overhang-extrude` adds a single-helix overhang stub from a nick.
 SnapshotOpKind = Literal[
-    'bundle-create',
-    'cluster-paste',
-    'extrude-segment',
-    'circle-segment',
-    'extrude-continuation',
-    'extrude-deformed-continuation',
-    'overhang-extrude',
-    'overhang-sequence',
-    'strand-sequence',
-    'assign-scaffold-sequence',
-    'assign-staple-sequences',
-    'auto-scaffold',
-    'auto-scaffold-seamed',
-    'auto-scaffold-matched',
-    'auto-scaffold-seamless',
-    'auto-break',
-    'full-autostaple',
-    'auto-merge',
-    'auto-crossover',
-    'route-for-polymerization',
-    'create-near-ends',
-    'create-far-ends',
-    'overhang-bulk',
-    'apply-loop-skips',
-    'autorefine-skips',
-    'cando-autorefine-marks',
-    'flexible-segment-mark',
-    'flexible-segment-unmark',
-    'flexible-relax',
-    'linker-add',
-    'linker-delete',
-    'assembly-overhang-bind',
-    'assembly-overhang-bind-patch',
-    'assembly-overhang-unbind',
-    'assembly-overhang-connection-add',
-    'assembly-overhang-connection-patch',
-    'assembly-overhang-connection-delete',
-    'assembly-overhang-connection-relax',
-    'assembly-duplex-add',
-    'assembly-duplex-connect',
-    'assembly-duplex-patch',
-    'assembly-duplex-delete',
-    'assembly-duplex-sync',
-    'assembly-polymerize',
-    'assembly-polymerize-periodic',
-    'assembly-add-instance',
-    'assembly-delete-instance',
-    'assembly-duplicate-instance',
-    'assembly-add-connector',
-    'assembly-delete-connector',
-    'assembly-add-joint',
-    'assembly-delete-joint',
-    'assembly-create-mate',
-    'protein-import',
-    'protein-attach',
-    'protein-attach-patch',
-    'protein-attach-delete',
-    'protein-conjugate',
-    'assembly-create-group',
-    'assembly-ungroup',
-    'assembly-patch-group',
-    'assembly-duplicate-group',
-    'assembly-delete-group',
-    'assembly-transform-group',
-    'assembly-create-gear',
-    'assembly-delete-gear',
-    'assembly-create-belt',
-    'assembly-delete-belt',
-    'assembly-create-belt-rider',
-    'assembly-delete-belt-rider',
-    'assembly-polymerize-belt',
+    "bundle-create",
+    "cluster-paste",
+    "extrude-segment",
+    "circle-segment",
+    "extrude-continuation",
+    "extrude-deformed-continuation",
+    "overhang-extrude",
+    "overhang-sequence",
+    "strand-sequence",
+    "assign-scaffold-sequence",
+    "assign-staple-sequences",
+    "auto-scaffold",
+    "auto-scaffold-seamed",
+    "auto-scaffold-matched",
+    "auto-scaffold-seamless",
+    "auto-break",
+    "full-autostaple",
+    "auto-merge",
+    "auto-crossover",
+    "route-for-polymerization",
+    "create-near-ends",
+    "create-far-ends",
+    "overhang-bulk",
+    "apply-loop-skips",
+    "autorefine-skips",
+    "cando-autorefine-marks",
+    "flexible-segment-mark",
+    "flexible-segment-unmark",
+    "flexible-relax",
+    "linker-add",
+    "linker-delete",
+    "assembly-overhang-bind",
+    "assembly-overhang-bind-patch",
+    "assembly-overhang-unbind",
+    "assembly-overhang-connection-add",
+    "assembly-overhang-connection-patch",
+    "assembly-overhang-connection-delete",
+    "assembly-overhang-connection-relax",
+    "assembly-duplex-add",
+    "assembly-duplex-connect",
+    "assembly-duplex-patch",
+    "assembly-duplex-delete",
+    "assembly-duplex-sync",
+    "assembly-polymerize",
+    "assembly-polymerize-periodic",
+    "assembly-add-instance",
+    "assembly-delete-instance",
+    "assembly-duplicate-instance",
+    "assembly-add-connector",
+    "assembly-delete-connector",
+    "assembly-add-joint",
+    "assembly-delete-joint",
+    "assembly-create-mate",
+    "protein-import",
+    "protein-attach",
+    "protein-attach-patch",
+    "protein-attach-delete",
+    "protein-conjugate",
+    "assembly-create-group",
+    "assembly-ungroup",
+    "assembly-patch-group",
+    "assembly-duplicate-group",
+    "assembly-delete-group",
+    "assembly-transform-group",
+    "assembly-create-gear",
+    "assembly-delete-gear",
+    "assembly-create-belt",
+    "assembly-delete-belt",
+    "assembly-create-belt-rider",
+    "assembly-delete-belt-rider",
+    "assembly-polymerize-belt",
 ]
 
 
@@ -1584,16 +1688,17 @@ class SnapshotLogEntry(BaseModel):
     ``evicted=True`` means the bodies were dropped to free space; the entry is
     still visible historically but is no longer revertable or seek-restorable.
     """
-    feature_type: Literal['snapshot'] = 'snapshot'
+
+    feature_type: Literal["snapshot"] = "snapshot"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     op_kind: SnapshotOpKind
     label: str
-    timestamp: str = ""                  # ISO-8601 UTC, set by mutate_with_feature_log
+    timestamp: str = ""  # ISO-8601 UTC, set by mutate_with_feature_log
     params: dict = Field(default_factory=dict)
-    design_snapshot_gz_b64: str = ""     # gzipped JSON of PRE-state design, base64
-    snapshot_size_bytes: int = 0         # uncompressed PRE-state JSON byte length
-    post_state_gz_b64: str = ""          # gzipped JSON of POST-state design, base64
-    post_state_size_bytes: int = 0       # uncompressed POST-state JSON byte length
+    design_snapshot_gz_b64: str = ""  # gzipped JSON of PRE-state design, base64
+    snapshot_size_bytes: int = 0  # uncompressed PRE-state JSON byte length
+    post_state_gz_b64: str = ""  # gzipped JSON of POST-state design, base64
+    post_state_size_bytes: int = 0  # uncompressed POST-state JSON byte length
     evicted: bool = False
 
     # ── Diff-snapshot variant (Phase 4b path-to-thousands) ───────────────────
@@ -1619,8 +1724,8 @@ class SnapshotLogEntry(BaseModel):
     #     })).  ``modified.post`` lets us forward-apply against an anchor
     #     by index-replacement; ``modified.pre`` + ``removed`` together let
     #     us inverse-apply to recover the pre-state from the post-state.
-    diff_added_b64:    str = ""
-    diff_removed_ids:  List[str] = Field(default_factory=list)
+    diff_added_b64: str = ""
+    diff_removed_ids: List[str] = Field(default_factory=list)
     diff_modified_b64: str = ""
 
     # ── Skip-pre variant (Phase 1b path-to-thousands) ────────────────────────
@@ -1643,21 +1748,45 @@ class SnapshotLogEntry(BaseModel):
 # falls into a Fine Routing cluster. Keep in sync with state.mutate_with_minor_log
 # call sites in backend/api/crud.py and the dispatcher _replay_minor_op.
 MinorOpSubtype = Literal[
-    'strand-end-resize', 'scaffold-domain-paint',
-    'crossover-place', 'crossover-place-batch',
-    'crossover-move', 'crossover-move-batch',
-    'crossover-delete', 'crossover-delete-batch',
-    'crossover-extra-bases', 'crossover-extra-bases-batch',
-    'nick', 'nick-batch', 'ligate',
-    'forced-ligation-create', 'forced-ligation-delete',
-    'forced-ligation-delete-batch', 'forced-ligation-extra-bases',
-    'helix-add', 'helix-add-at-cell', 'helix-update', 'helix-extend', 'helix-delete',
-    'helix-reorder',
-    'strand-add', 'strand-update', 'strand-delete', 'strand-delete-batch',
-    'domain-add', 'domain-delete', 'domain-shift',
-    'loop-skip-insert', 'loop-skip-twist', 'loop-skip-bend',
-    'strand-patch', 'strands-color-bulk', 'strands-reference',
-    'joint-place', 'joint-update', 'joint-delete',
+    "strand-end-resize",
+    "scaffold-domain-paint",
+    "crossover-place",
+    "crossover-place-batch",
+    "crossover-move",
+    "crossover-move-batch",
+    "crossover-delete",
+    "crossover-delete-batch",
+    "crossover-extra-bases",
+    "crossover-extra-bases-batch",
+    "nick",
+    "nick-batch",
+    "ligate",
+    "forced-ligation-create",
+    "forced-ligation-delete",
+    "forced-ligation-delete-batch",
+    "forced-ligation-extra-bases",
+    "helix-add",
+    "helix-add-at-cell",
+    "helix-update",
+    "helix-extend",
+    "helix-delete",
+    "helix-reorder",
+    "strand-add",
+    "strand-update",
+    "strand-delete",
+    "strand-delete-batch",
+    "domain-add",
+    "domain-delete",
+    "domain-shift",
+    "loop-skip-insert",
+    "loop-skip-twist",
+    "loop-skip-bend",
+    "strand-patch",
+    "strands-color-bulk",
+    "strands-reference",
+    "joint-place",
+    "joint-update",
+    "joint-delete",
 ]
 
 
@@ -1667,10 +1796,11 @@ class MinorMutationLogEntry(BaseModel):
     params dict so the operation can be replayed mid-cluster during slider seek
     via backend.api.crud._replay_minor_op.
     """
-    feature_type: Literal['minor'] = 'minor'
+
+    feature_type: Literal["minor"] = "minor"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     op_subtype: MinorOpSubtype
-    label: str          # rendered detail line, e.g. "h_XY_0_0 5' bp 0 → bp 7"
+    label: str  # rendered detail line, e.g. "h_XY_0_0 5' bp 0 → bp 7"
     timestamp: str = ""
     params: dict = Field(default_factory=dict)
 
@@ -1679,10 +1809,10 @@ class MinorMutationLogEntry(BaseModel):
     # reconstruct mid-cluster state WITHOUT replaying the op (works for any op
     # type — see backend.core.design_diff). All three empty = legacy entry with
     # no diff → callers fall back to _replay_minor_op.
-    diff_added_b64: str = ""       # gzip(JSON {field: [full POST objects added]})
-    diff_removed_b64: str = ""     # gzip(JSON {field: [{id, idx} removed]})
-    diff_modified_b64: str = ""    # gzip(JSON {field: {pre:[...], post:[...]}})
-    diff_size_bytes: int = 0       # uncompressed total, for the eviction budget
+    diff_added_b64: str = ""  # gzip(JSON {field: [full POST objects added]})
+    diff_removed_b64: str = ""  # gzip(JSON {field: [{id, idx} removed]})
+    diff_modified_b64: str = ""  # gzip(JSON {field: {pre:[...], post:[...]}})
+    diff_size_bytes: int = 0  # uncompressed total, for the eviction budget
 
 
 class RoutingClusterLogEntry(BaseModel):
@@ -1707,9 +1837,10 @@ class RoutingClusterLogEntry(BaseModel):
     entry + children remain visible historically but are no longer revertable
     or seek-restorable.
     """
-    feature_type: Literal['routing-cluster'] = 'routing-cluster'
+
+    feature_type: Literal["routing-cluster"] = "routing-cluster"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    label: str = 'Fine Routing'
+    label: str = "Fine Routing"
     timestamp: str = ""
     children: List[MinorMutationLogEntry] = Field(default_factory=list)
     pre_state_gz_b64: str = ""
@@ -1732,7 +1863,7 @@ FeatureLogEntry = Annotated[
         SnapshotLogEntry,
         RoutingClusterLogEntry,
     ],
-    Field(discriminator='feature_type'),
+    Field(discriminator="feature_type"),
 ]
 
 
@@ -1746,15 +1877,22 @@ class AnimationKeyframe(BaseModel):
     transition_duration_s: seconds to tween from the previous keyframe into this one.
     easing: interpolation curve for the transition.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
     camera_pose_id: Optional[str] = None
-    configuration_id: Optional[str] = None  # assembly configuration snapshot id; None = no assembly state change
-    feature_log_index: Optional[int] = None  # feature log position to seek to; None = no change
+    configuration_id: Optional[str] = (
+        None  # assembly configuration snapshot id; None = no assembly state change
+    )
+    feature_log_index: Optional[int] = (
+        None  # feature log position to seek to; None = no change
+    )
     hold_duration_s: float = 1.0
     transition_duration_s: float = 0.5
     easing: Literal["linear", "ease-in", "ease-out", "ease-in-out"] = "ease-in-out"
-    joint_values: dict[str, float] = Field(default_factory=dict)  # assembly joint id → driven value
+    joint_values: dict[str, float] = Field(
+        default_factory=dict
+    )  # assembly joint id → driven value
     # Per-binding display reaction coordinate: OverhangBinding id → φ ∈ [0,1]
     # (φ=1 bound/closed, φ=0 unbound/open). Interpolated linearly across
     # keyframes exactly like joint_values. Empty = no assertion (carried forward).
@@ -1819,6 +1957,7 @@ class AnimationKeyframe(BaseModel):
 
 class DesignAnimation(BaseModel):
     """An ordered sequence of keyframes that can be played back or exported."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Animation"
     fps: int = 30
@@ -1843,6 +1982,7 @@ class ChainSimStage(BaseModel):
     ``field`` / ``anchors`` / ``surface`` are the same job-request force annotations
     the per-engine launch cards emit — never ``Design`` edits (Three-Layer Law).
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     engine: Literal["oxdna", "namd"] = "namd"
     protocol: Literal["relax", "production"] = "production"
@@ -1855,8 +1995,8 @@ class ChainSimStage(BaseModel):
     steps: Optional[int] = None
     label: Optional[str] = None
     seed_job_id: Optional[str] = None
-    seed_job_name: Optional[str] = None   # display name of the seed job (UI only)
-    seed_engine: Optional[str] = None     # engine of the seed job (seed-compat check)
+    seed_job_name: Optional[str] = None  # display name of the seed job (UI only)
+    seed_engine: Optional[str] = None  # engine of the seed job (seed-compat check)
 
 
 class ChainSimProject(BaseModel):
@@ -1867,6 +2007,7 @@ class ChainSimProject(BaseModel):
     into one or more live ``MdPipeline`` chains; the project itself creates no jobs
     and touches no topology.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Chain"
     stages: List[ChainSimStage] = Field(default_factory=list)
@@ -1880,8 +2021,9 @@ class OxdnaHardwareDefault(BaseModel):
     timing was measured on (it may be capped below the real design — see the
     no-silent-caps note in benchmark.py), so the stored default stays auditable.
     """
-    backend: str = "CPU"          # "CPU" | "CUDA"
-    device: str = "0"             # CUDA device index
+
+    backend: str = "CPU"  # "CPU" | "CUDA"
+    device: str = "0"  # CUDA device index
     steps_per_s: Optional[float] = None
     benchmarked_at: str = ""
     proxy_nucleotides: Optional[int] = None
@@ -1893,8 +2035,9 @@ class NamdHardwareDefault(BaseModel):
     ``threads`` is the NAMD ``+p`` count; ``devices`` is the ``+devices`` GPU list
     ("" = CPU-only).  ``ns_per_day`` is the measured throughput on the proxy system.
     """
+
     threads: int = 1
-    devices: str = ""             # "" = CPU-only; "0" / "0,1" for GPU
+    devices: str = ""  # "" = CPU-only; "0" / "0,1" for GPU
     ns_per_day: Optional[float] = None
     benchmarked_at: str = ""
     proxy_nucleotides: Optional[int] = None
@@ -1902,12 +2045,14 @@ class NamdHardwareDefault(BaseModel):
 
 class HardwareBenchmark(BaseModel):
     """Per-machine benchmark result bundle (oxDNA + NAMD)."""
+
     oxdna: Optional[OxdnaHardwareDefault] = None
     namd: Optional[NamdHardwareDefault] = None
 
 
 class DesignMetadata(BaseModel):
     """Freeform metadata attached to a design."""
+
     name: str = "Untitled"
     description: str = ""
     author: str = ""
@@ -1933,11 +2078,14 @@ class TmSettings(BaseModel):
     invalidates all sub-domain Tm caches — see the PATCH /design/tm-settings
     endpoint.
     """
-    na_mM: float = 50.0     # monovalent salt concentration, mM
+
+    na_mM: float = 50.0  # monovalent salt concentration, mM
     conc_nM: float = 250.0  # total oligo concentration, nM (SantaLucia C_T term)
 
 
-def _world_to_local_joint(world_origin, world_direction, ct) -> tuple[list[float], list[float]]:
+def _world_to_local_joint(
+    world_origin, world_direction, ct
+) -> tuple[list[float], list[float]]:
     """Convert a joint axis from world-space to the cluster's local frame.
 
     *ct* is the cluster's transform record (dict, not a Pydantic model — this
@@ -1950,20 +2098,38 @@ def _world_to_local_joint(world_origin, world_direction, ct) -> tuple[list[float
     → local_dir = R⁻¹ · world_dir
     """
     import numpy as np
+
     if not isinstance(ct, dict):
-        return list(world_origin or [0.0, 0.0, 0.0]), list(world_direction or [0.0, 1.0, 0.0])
+        return list(world_origin or [0.0, 0.0, 0.0]), list(
+            world_direction or [0.0, 1.0, 0.0]
+        )
     # Build R from quaternion [x, y, z, w] — same convention as
     # backend.api.crud._rot_from_quaternion. Inlined to avoid a backend.api
     # import from inside backend.core.
-    rotation = ct.get('rotation') or [0.0, 0.0, 0.0, 1.0]
+    rotation = ct.get("rotation") or [0.0, 0.0, 0.0, 1.0]
     qx, qy, qz, qw = (float(rotation[i]) for i in range(4))
-    R = np.array([
-        [1 - 2*(qy*qy + qz*qz), 2*(qx*qy - qz*qw),     2*(qx*qz + qy*qw)],
-        [2*(qx*qy + qz*qw),     1 - 2*(qx*qx + qz*qz), 2*(qy*qz - qx*qw)],
-        [2*(qx*qz - qy*qw),     2*(qy*qz + qx*qw),     1 - 2*(qx*qx + qy*qy)],
-    ], dtype=float)
-    pivot       = np.array(ct.get('pivot')       or [0.0, 0.0, 0.0], dtype=float)
-    translation = np.array(ct.get('translation') or [0.0, 0.0, 0.0], dtype=float)
+    R = np.array(
+        [
+            [
+                1 - 2 * (qy * qy + qz * qz),
+                2 * (qx * qy - qz * qw),
+                2 * (qx * qz + qy * qw),
+            ],
+            [
+                2 * (qx * qy + qz * qw),
+                1 - 2 * (qx * qx + qz * qz),
+                2 * (qy * qz - qx * qw),
+            ],
+            [
+                2 * (qx * qz - qy * qw),
+                2 * (qy * qz + qx * qw),
+                1 - 2 * (qx * qx + qy * qy),
+            ],
+        ],
+        dtype=float,
+    )
+    pivot = np.array(ct.get("pivot") or [0.0, 0.0, 0.0], dtype=float)
+    translation = np.array(ct.get("translation") or [0.0, 0.0, 0.0], dtype=float)
     if world_origin is not None:
         wo = np.array(world_origin, dtype=float)
         local_origin = (R.T @ (wo - pivot - translation) + pivot).tolist()
@@ -1977,7 +2143,9 @@ def _world_to_local_joint(world_origin, world_direction, ct) -> tuple[list[float
     return local_origin, local_dir
 
 
-def _local_to_world_joint(local_origin, local_direction, ct) -> tuple[list[float], list[float]]:
+def _local_to_world_joint(
+    local_origin, local_direction, ct
+) -> tuple[list[float], list[float]]:
     """Inverse of `_world_to_local_joint` — derive the joint's current
     world-space axis from its cluster-local storage and the cluster's
     transform. Used by callers that need world-space axes (rendering,
@@ -1988,33 +2156,49 @@ def _local_to_world_joint(local_origin, local_direction, ct) -> tuple[list[float
     world_dir    = R · local_direction
     """
     import numpy as np
+
     if not isinstance(ct, dict):
         # Pydantic model passed — extract fields.
         if ct is None:
             return list(local_origin), list(local_direction)
-        rotation    = list(ct.rotation)
-        pivot       = list(ct.pivot)
+        rotation = list(ct.rotation)
+        pivot = list(ct.pivot)
         translation = list(ct.translation)
     else:
-        rotation    = ct.get('rotation')    or [0.0, 0.0, 0.0, 1.0]
-        pivot       = ct.get('pivot')       or [0.0, 0.0, 0.0]
-        translation = ct.get('translation') or [0.0, 0.0, 0.0]
+        rotation = ct.get("rotation") or [0.0, 0.0, 0.0, 1.0]
+        pivot = ct.get("pivot") or [0.0, 0.0, 0.0]
+        translation = ct.get("translation") or [0.0, 0.0, 0.0]
     qx, qy, qz, qw = (float(rotation[i]) for i in range(4))
-    R = np.array([
-        [1 - 2*(qy*qy + qz*qz), 2*(qx*qy - qz*qw),     2*(qx*qz + qy*qw)],
-        [2*(qx*qy + qz*qw),     1 - 2*(qx*qx + qz*qz), 2*(qy*qz - qx*qw)],
-        [2*(qx*qz - qy*qw),     2*(qy*qz + qx*qw),     1 - 2*(qx*qx + qy*qy)],
-    ], dtype=float)
-    P = np.array(pivot,       dtype=float)
+    R = np.array(
+        [
+            [
+                1 - 2 * (qy * qy + qz * qz),
+                2 * (qx * qy - qz * qw),
+                2 * (qx * qz + qy * qw),
+            ],
+            [
+                2 * (qx * qy + qz * qw),
+                1 - 2 * (qx * qx + qz * qz),
+                2 * (qy * qz - qx * qw),
+            ],
+            [
+                2 * (qx * qz - qy * qw),
+                2 * (qy * qz + qx * qw),
+                1 - 2 * (qx * qx + qy * qy),
+            ],
+        ],
+        dtype=float,
+    )
+    P = np.array(pivot, dtype=float)
     T = np.array(translation, dtype=float)
     lo = np.array(local_origin, dtype=float)
     ld = np.array(local_direction, dtype=float)
     world_origin = (R @ (lo - P) + P + T).tolist()
-    world_dir    = (R @ ld).tolist()
+    world_dir = (R @ ld).tolist()
     return world_origin, world_dir
 
 
-def _reclassify_invalid_crossovers(design: 'Design') -> None:
+def _reclassify_invalid_crossovers(design: "Design") -> None:
     """Move Crossover records that fail the lattice-neighbour test into
     ``forced_ligations``.
 
@@ -2030,7 +2214,8 @@ def _reclassify_invalid_crossovers(design: 'Design') -> None:
 
     helix_grid: dict[str, tuple[int, int]] = {
         h.id: (h.grid_pos[0], h.grid_pos[1])
-        for h in design.helices if h.grid_pos is not None
+        for h in design.helices
+        if h.grid_pos is not None
     }
 
     valid_xos: list = []
@@ -2039,37 +2224,53 @@ def _reclassify_invalid_crossovers(design: 'Design') -> None:
         a, b = xo.half_a, xo.half_b
         # Mismatched bp index — never a valid DX crossover.
         if a.index != b.index:
-            new_fls.append(ForcedLigation(
-                three_prime_helix_id=a.helix_id, three_prime_bp=a.index, three_prime_direction=a.strand,
-                five_prime_helix_id=b.helix_id,  five_prime_bp=b.index,  five_prime_direction=b.strand,
-            ))
+            new_fls.append(
+                ForcedLigation(
+                    three_prime_helix_id=a.helix_id,
+                    three_prime_bp=a.index,
+                    three_prime_direction=a.strand,
+                    five_prime_helix_id=b.helix_id,
+                    five_prime_bp=b.index,
+                    five_prime_direction=b.strand,
+                )
+            )
             continue
         ga = helix_grid.get(a.helix_id)
         gb = helix_grid.get(b.helix_id)
         if ga is None or gb is None:
-            valid_xos.append(xo)   # cannot test → preserve verbatim
+            valid_xos.append(xo)  # cannot test → preserve verbatim
             continue
         is_neighbor = False
         for is_scaf in (False, True):
-            ab = crossover_neighbor(design.lattice_type, ga[0], ga[1], a.index, is_scaffold=is_scaf)
-            ba = crossover_neighbor(design.lattice_type, gb[0], gb[1], b.index, is_scaffold=is_scaf)
+            ab = crossover_neighbor(
+                design.lattice_type, ga[0], ga[1], a.index, is_scaffold=is_scaf
+            )
+            ba = crossover_neighbor(
+                design.lattice_type, gb[0], gb[1], b.index, is_scaffold=is_scaf
+            )
             if (ab is not None and ab == gb) or (ba is not None and ba == ga):
                 is_neighbor = True
                 break
         if is_neighbor:
             valid_xos.append(xo)
         else:
-            new_fls.append(ForcedLigation(
-                three_prime_helix_id=a.helix_id, three_prime_bp=a.index, three_prime_direction=a.strand,
-                five_prime_helix_id=b.helix_id,  five_prime_bp=b.index,  five_prime_direction=b.strand,
-            ))
+            new_fls.append(
+                ForcedLigation(
+                    three_prime_helix_id=a.helix_id,
+                    three_prime_bp=a.index,
+                    three_prime_direction=a.strand,
+                    five_prime_helix_id=b.helix_id,
+                    five_prime_bp=b.index,
+                    five_prime_direction=b.strand,
+                )
+            )
 
     if new_fls:
         design.crossovers = valid_xos
         design.forced_ligations = list(design.forced_ligations) + new_fls
 
 
-def _backfill_dropped_junctions(design: 'Design') -> None:
+def _backfill_dropped_junctions(design: "Design") -> None:
     """Add Crossover / ForcedLigation records for cross-helix domain transitions
     in the strand graph that no existing record covers.
 
@@ -2104,22 +2305,43 @@ def _backfill_dropped_junctions(design: 'Design') -> None:
         b = (xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value)
         covered_xo.add(a + b)
         covered_xo.add(b + a)
-        covered_junctions.add(_junction(xo.half_a.helix_id, xo.half_a.index, xo.half_b.helix_id, xo.half_b.index))
+        covered_junctions.add(
+            _junction(
+                xo.half_a.helix_id, xo.half_a.index, xo.half_b.helix_id, xo.half_b.index
+            )
+        )
     covered_fl: set[tuple] = set()
     for fl in design.forced_ligations:
-        covered_fl.add((
-            fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction.value,
-            fl.five_prime_helix_id,  fl.five_prime_bp,  fl.five_prime_direction.value,
-        ))
-        covered_junctions.add(_junction(fl.three_prime_helix_id, fl.three_prime_bp, fl.five_prime_helix_id, fl.five_prime_bp))
+        covered_fl.add(
+            (
+                fl.three_prime_helix_id,
+                fl.three_prime_bp,
+                fl.three_prime_direction.value,
+                fl.five_prime_helix_id,
+                fl.five_prime_bp,
+                fl.five_prime_direction.value,
+            )
+        )
+        covered_junctions.add(
+            _junction(
+                fl.three_prime_helix_id,
+                fl.three_prime_bp,
+                fl.five_prime_helix_id,
+                fl.five_prime_bp,
+            )
+        )
 
-    xos, fls = extract_crossovers_from_strands(design.strands, design.helices, design.lattice_type)
+    xos, fls = extract_crossovers_from_strands(
+        design.strands, design.helices, design.lattice_type
+    )
 
     new_xos: list[Crossover] = []
     for xo in xos:
         a = (xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand.value)
         b = (xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value)
-        junc = _junction(xo.half_a.helix_id, xo.half_a.index, xo.half_b.helix_id, xo.half_b.index)
+        junc = _junction(
+            xo.half_a.helix_id, xo.half_a.index, xo.half_b.helix_id, xo.half_b.index
+        )
         # Skip if a record (crossover OR a stale forced ligation) already sits here —
         # never duplicate, and never reclassify a record already stored in the file.
         if a + b in covered_xo or junc in covered_junctions:
@@ -2129,10 +2351,19 @@ def _backfill_dropped_junctions(design: 'Design') -> None:
     new_fls: list[ForcedLigation] = []
     for fl in fls:
         key = (
-            fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction.value,
-            fl.five_prime_helix_id,  fl.five_prime_bp,  fl.five_prime_direction.value,
+            fl.three_prime_helix_id,
+            fl.three_prime_bp,
+            fl.three_prime_direction.value,
+            fl.five_prime_helix_id,
+            fl.five_prime_bp,
+            fl.five_prime_direction.value,
         )
-        junc = _junction(fl.three_prime_helix_id, fl.three_prime_bp, fl.five_prime_helix_id, fl.five_prime_bp)
+        junc = _junction(
+            fl.three_prime_helix_id,
+            fl.three_prime_bp,
+            fl.five_prime_helix_id,
+            fl.five_prime_bp,
+        )
         if key in covered_fl or junc in covered_junctions:
             continue
         new_fls.append(fl)
@@ -2149,6 +2380,7 @@ class DesignLoadout(BaseModel):
     ``design_snapshot_gz_b64`` stores a full Design payload with loadouts
     stripped, but with feature_log and feature_log_cursor preserved.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Loadout"
     design_snapshot_gz_b64: str = ""
@@ -2166,6 +2398,7 @@ class DesignLoadout(BaseModel):
 
 class ProteinAtom(BaseModel):
     """One atom of an imported protein, in the asset's own local frame (nm)."""
+
     serial: int
     name: str
     element: str
@@ -2184,11 +2417,14 @@ class ProteinAsset(BaseModel):
     carry only a placement transform.  Treated as a single rigid unit (a
     multi-chain complex rides together).
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Protein"
     source_filename: str = ""
     atoms: List[ProteinAtom] = Field(default_factory=list)
-    bonds: List[Tuple[int, int]] = Field(default_factory=list)  # 0-based atom-index pairs
+    bonds: List[Tuple[int, int]] = Field(
+        default_factory=list
+    )  # 0-based atom-index pairs
     default_conjugation_atom_serial: Optional[int] = None
     center_of_mass: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
     metadata: Dict[str, Any] = Field(default_factory=dict)
@@ -2196,6 +2432,7 @@ class ProteinAsset(BaseModel):
 
 class ProteinTargetDesign(BaseModel):
     """Anchor a protein to an overhang in a single design."""
+
     kind: Literal["overhang"] = "overhang"
     overhang_id: str
     attach_end: Literal["free_end", "root"] = "free_end"
@@ -2208,6 +2445,7 @@ class ProteinTargetAssembly(BaseModel):
     design supplies the anchor; the result is transformed by the instance's
     placement transform.
     """
+
     kind: Literal["assembly"] = "assembly"
     instance_id: str
     interface_label: Optional[str] = None
@@ -2222,6 +2460,7 @@ class ProteinTargetFree(BaseModel):
     asset's PDB coordinates); ``pose`` defaults to identity, so a freshly
     imported protein sits at its imported coordinates until moved.
     """
+
     kind: Literal["free"] = "free"
 
 
@@ -2242,14 +2481,17 @@ class ProteinAttachment(BaseModel):
     is the same operation for free and anchored proteins, and an anchored
     protein keeps following its overhang as the DNA is edited.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     asset_id: str
     target: ProteinTarget
     conjugation_atom_serial: Optional[int] = None
     pose: Mat4x4 = Field(default_factory=Mat4x4)
-    handle_complement_bp: int = 0     # display-only handle duplex length
+    handle_complement_bp: int = 0  # display-only handle duplex length
     handle_spacer_nt: int = 0
-    handle_sequence: Optional[str] = None   # cached reverse-complement of overhang seq (display only)
+    handle_sequence: Optional[str] = (
+        None  # cached reverse-complement of overhang seq (display only)
+    )
     visible: bool = True
 
 
@@ -2264,6 +2506,7 @@ class AtomisticReferenceAtom(BaseModel):
     truth, while this optional reference lets rendering/export reuse a more
     honest relaxed atomistic pose when the topology still matches.
     """
+
     serial: int
     name: str
     element: str
@@ -2291,6 +2534,7 @@ class AtomisticReferenceAtom(BaseModel):
 
 class AtomisticReference(BaseModel):
     """Persisted all-atom coordinate reference attached to a Design."""
+
     source: str = ""
     notes: str = ""
     topology_hash: str = ""
@@ -2303,6 +2547,7 @@ class Design(BaseModel):
     Top-level design object.  This is the ground truth for a DNA origami
     structure; all geometry and physics are derived from it.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     helices: List[Helix] = Field(default_factory=list)
     strands: List[Strand] = Field(default_factory=list)
@@ -2346,7 +2591,7 @@ class Design(BaseModel):
     atomistic_reference: Optional[AtomisticReference] = None
     active_loadout_id: Optional[str] = None
     feature_log: List[FeatureLogEntry] = Field(default_factory=list)
-    feature_log_cursor: int = -1   # -1 = at end; ≥0 = index of last active entry
+    feature_log_cursor: int = -1  # -1 = at end; ≥0 = index of last active entry
     feature_log_sub_cursor: Optional[int] = None
     """Mid-cluster position when ``feature_log_cursor`` indexes a
     RoutingClusterLogEntry. ``None`` = cluster's post-state (all children
@@ -2354,7 +2599,7 @@ class Design(BaseModel):
     sub_cursor+1 children active. Lets the slider thumb land on the
     specific sub-notch the user scrubbed to."""
 
-    @field_validator('feature_log', mode='before')
+    @field_validator("feature_log", mode="before")
     @classmethod
     def _drop_checkpoint_entries(cls, v: object) -> object:
         """Strip legacy checkpoint entries (configurations removed) and stray
@@ -2363,12 +2608,16 @@ class Design(BaseModel):
         indicate a corrupt file or aborted write)."""
         if isinstance(v, list):
             return [
-                e for e in v
-                if not (isinstance(e, dict) and e.get('feature_type') in ('checkpoint', 'minor'))
+                e
+                for e in v
+                if not (
+                    isinstance(e, dict)
+                    and e.get("feature_type") in ("checkpoint", "minor")
+                )
             ]
         return v
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     @classmethod
     def _migrate_world_space_joints(cls, data: object) -> object:
         """Migrate cluster_joints from the legacy world-space schema
@@ -2385,43 +2634,45 @@ class Design(BaseModel):
         """
         if not isinstance(data, dict):
             return data
-        joints = data.get('cluster_joints')
-        cts    = data.get('cluster_transforms')
+        joints = data.get("cluster_joints")
+        cts = data.get("cluster_transforms")
         if not isinstance(joints, list) or not joints:
             return data
         ct_by_id: dict = {}
         if isinstance(cts, list):
             for ct in cts:
-                if isinstance(ct, dict) and ct.get('id'):
-                    ct_by_id[ct['id']] = ct
+                if isinstance(ct, dict) and ct.get("id"):
+                    ct_by_id[ct["id"]] = ct
         for j in joints:
             if not isinstance(j, dict):
                 continue
-            if 'local_axis_origin' in j and 'local_axis_direction' in j:
-                continue   # already migrated
-            ax_origin    = j.get('axis_origin')
-            ax_direction = j.get('axis_direction')
+            if "local_axis_origin" in j and "local_axis_direction" in j:
+                continue  # already migrated
+            ax_origin = j.get("axis_origin")
+            ax_direction = j.get("axis_direction")
             if ax_origin is None and ax_direction is None:
-                continue   # nothing to migrate
-            ct = ct_by_id.get(j.get('cluster_id'))
+                continue  # nothing to migrate
+            ct = ct_by_id.get(j.get("cluster_id"))
             local_origin, local_dir = _world_to_local_joint(
-                ax_origin, ax_direction, ct,
+                ax_origin,
+                ax_direction,
+                ct,
             )
-            j['local_axis_origin']    = local_origin
-            j['local_axis_direction'] = local_dir
+            j["local_axis_origin"] = local_origin
+            j["local_axis_direction"] = local_dir
             # Drop the legacy fields so the model doesn't carry stale state.
-            j.pop('axis_origin',    None)
-            j.pop('axis_direction', None)
+            j.pop("axis_origin", None)
+            j.pop("axis_direction", None)
         return data
 
-    @field_validator('strands', mode='after')
+    @field_validator("strands", mode="after")
     @classmethod
     def _drop_empty_strands(cls, v: list) -> list:
         """Remove strands that have no domains (can occur in corrupt files)."""
         return [s for s in v if s.domains]
 
-    @model_validator(mode='after')
-    def _validate_overhang_bindings(self) -> 'Design':
+    @model_validator(mode="after")
+    def _validate_overhang_bindings(self) -> "Design":
         """Cross-model checks for Phase 5 OverhangBinding records.
 
         Short-circuits when `overhang_bindings` is empty (backward compat with
@@ -2454,15 +2705,19 @@ class Design(BaseModel):
         # ── Mutex pair set (linker attach endpoints + bindings) ──────────
         used_pairs: dict[frozenset, str] = {}
         for conn in self.overhang_connections:
-            sd_a = _sub_domain_at_attach(self, conn.overhang_a_id, conn.overhang_a_attach)
-            sd_b = _sub_domain_at_attach(self, conn.overhang_b_id, conn.overhang_b_attach)
+            sd_a = _sub_domain_at_attach(
+                self, conn.overhang_a_id, conn.overhang_a_attach
+            )
+            sd_b = _sub_domain_at_attach(
+                self, conn.overhang_b_id, conn.overhang_b_attach
+            )
             if sd_a is None or sd_b is None:
                 continue
             key = frozenset({sd_a, sd_b})
             if len(key) < 2:
                 continue
             if key in used_pairs:
-                continue   # don't reject existing connections; bindings will compare
+                continue  # don't reject existing connections; bindings will compare
             used_pairs[key] = f"linker {conn.id}"
 
         for binding in self.overhang_bindings:
@@ -2508,7 +2763,10 @@ class Design(BaseModel):
             if seq_a is not None and seq_b is not None:
                 # Local import to avoid `models -> sequences -> models` cycle.
                 from backend.core.sequences import is_watson_crick_complement
-                if not is_watson_crick_complement(seq_a, seq_b, allow_n=binding.allow_n_wildcard):
+
+                if not is_watson_crick_complement(
+                    seq_a, seq_b, allow_n=binding.allow_n_wildcard
+                ):
                     raise ValueError(
                         f"OverhangBinding {binding.id}: sequences are not "
                         f"Watson-Crick complementary (allow_n_wildcard="
@@ -2525,15 +2783,18 @@ class Design(BaseModel):
             used_pairs[pair_key] = f"binding {binding.id}"
 
             # target_joint_id resolves.
-            if binding.target_joint_id is not None and binding.target_joint_id not in joint_ids:
+            if (
+                binding.target_joint_id is not None
+                and binding.target_joint_id not in joint_ids
+            ):
                 raise ValueError(
                     f"OverhangBinding {binding.id}: target_joint_id "
                     f"{binding.target_joint_id!r} does not resolve to a cluster_joint."
                 )
         return self
 
-    @model_validator(mode='after')
-    def _validate_duplexes(self) -> 'Design':
+    @model_validator(mode="after")
+    def _validate_duplexes(self) -> "Design":
         """Cross-model checks for Proposal-B :class:`Duplex` edges.
 
         Short-circuits when ``duplexes`` is empty (every pre-Phase-0 `.nadoc`
@@ -2559,7 +2820,7 @@ class Design(BaseModel):
         claimed: dict[str, set] = {}
 
         for dx in self.duplexes:
-            for side, end in (('left', dx.left), ('right', dx.right)):
+            for side, end in (("left", dx.left), ("right", dx.right)):
                 if end.overhang_id not in overhang_ids:
                     raise ValueError(
                         f"Duplex {dx.id}: {side} overhang_id "
@@ -2685,8 +2946,11 @@ class Design(BaseModel):
         if not design.crossovers:
             # Lazy import avoids a circular dependency with crossover_positions.py.
             from backend.core.crossover_positions import extract_crossovers_from_strands  # noqa: PLC0415
+
             xos, fls = extract_crossovers_from_strands(
-                design.strands, design.helices, design.lattice_type,
+                design.strands,
+                design.helices,
+                design.lattice_type,
             )
             design.crossovers = xos
             # Only seed forced_ligations if the file didn't already record any —
@@ -2714,6 +2978,7 @@ class InterfacePoint(BaseModel):
     """
     A named connection point on a Part, expressed in the Part's local frame.
     """
+
     label: str
     position: Vec3
     normal: Vec3
@@ -2727,12 +2992,14 @@ class FluctuationEnvelope(BaseModel):
     from XPBD or oxDNA ensemble data.  Stored as semi-axis lengths (nm) of an
     approximate ellipsoid in the Part's local frame.
     """
-    semi_axes: Vec3                  # half-widths in x, y, z (nm)
-    source: str = ""                 # e.g. "oxdna_50ns"
+
+    semi_axes: Vec3  # half-widths in x, y, z (nm)
+    source: str = ""  # e.g. "oxdna_50ns"
 
 
 class ValidationRecord(BaseModel):
     """Audit trail of external validation runs performed on a Part."""
+
     oxdna_minimized: bool = False
     cando_run: bool = False
     snupi_run: bool = False
@@ -2749,6 +3016,7 @@ class Part(BaseModel):
 
     Note: placement (transform) lives on PartInstance, not here.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     design: Design
     interface_points: List[InterfacePoint] = Field(default_factory=list)
@@ -2761,14 +3029,16 @@ class Part(BaseModel):
 
 class PartSourceInline(BaseModel):
     """Part Design is embedded directly in the assembly file."""
+
     type: Literal["inline"] = "inline"
     design: Design
 
 
 class PartSourceFile(BaseModel):
     """Part Design lives in a separate .nadoc file (path relative to assembly file)."""
+
     type: Literal["file"] = "file"
-    path: str                     # relative path to .nadoc file
+    path: str  # relative path to .nadoc file
     sha256: Optional[str] = None  # content hash for verification; None = unverified
 
 
@@ -2801,6 +3071,7 @@ class PartInstance(BaseModel):
     cluster_transform_overrides: per-instance overrides for cluster positions
     (equivalent to Design.cluster_transforms, scoped to this instance).
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Part"
     source: PartSource
@@ -2808,11 +3079,17 @@ class PartInstance(BaseModel):
     base_transform: Optional[Mat4x4] = None
     mode: Literal["rigid", "flexible"] = "flexible"
     visible: bool = True
-    representation: Literal['full', 'beads', 'cylinders', 'vdw', 'ballstick', 'hull-prism', 'surface'] = 'full'
-    fixed: bool = False   # anchored in assembly; not moved by joint constraint solving
-    allow_part_joints: bool = False  # enable interactive internal ClusterJoints in assembly mode
+    representation: Literal[
+        "full", "beads", "cylinders", "vdw", "ballstick", "hull-prism", "surface"
+    ] = "full"
+    fixed: bool = False  # anchored in assembly; not moved by joint constraint solving
+    allow_part_joints: bool = (
+        False  # enable interactive internal ClusterJoints in assembly mode
+    )
     joint_states: dict = Field(default_factory=dict)  # ClusterJoint.id → float (rad|nm)
-    cluster_transform_overrides: List[ClusterRigidTransform] = Field(default_factory=list)
+    cluster_transform_overrides: List[ClusterRigidTransform] = Field(
+        default_factory=list
+    )
     interface_points: List[InterfacePoint] = Field(default_factory=list)
 
     # ── Wire-format v2 (Phase 2a, path-to-thousands) ───────────────────────────
@@ -2828,9 +3105,18 @@ class PartInstance(BaseModel):
     def to_compact_dict(self, *, src_key: str | None = None) -> dict:
         m = self.transform.values
         t12 = [
-            float(m[0]),  float(m[1]),  float(m[2]),  float(m[3]),
-            float(m[4]),  float(m[5]),  float(m[6]),  float(m[7]),
-            float(m[8]),  float(m[9]),  float(m[10]), float(m[11]),
+            float(m[0]),
+            float(m[1]),
+            float(m[2]),
+            float(m[3]),
+            float(m[4]),
+            float(m[5]),
+            float(m[6]),
+            float(m[7]),
+            float(m[8]),
+            float(m[9]),
+            float(m[10]),
+            float(m[11]),
         ]
         out: dict = {"id": self.id, "t12": t12}
         if src_key is not None:
@@ -2897,10 +3183,22 @@ class PartInstance(BaseModel):
             if len(t12) != 12:
                 raise ValueError(f"t12 must have 12 floats, got {len(t12)}")
             values = [
-                float(t12[0]), float(t12[1]), float(t12[2]),  float(t12[3]),
-                float(t12[4]), float(t12[5]), float(t12[6]),  float(t12[7]),
-                float(t12[8]), float(t12[9]), float(t12[10]), float(t12[11]),
-                0.0, 0.0, 0.0, 1.0,
+                float(t12[0]),
+                float(t12[1]),
+                float(t12[2]),
+                float(t12[3]),
+                float(t12[4]),
+                float(t12[5]),
+                float(t12[6]),
+                float(t12[7]),
+                float(t12[8]),
+                float(t12[9]),
+                float(t12[10]),
+                float(t12[11]),
+                0.0,
+                0.0,
+                0.0,
+                1.0,
             ]
             transform_dict = {"values": values}
         elif "transform" in data:
@@ -2916,9 +3214,16 @@ class PartInstance(BaseModel):
         if transform_dict is not None:
             full["transform"] = transform_dict
         for k in (
-            "name", "base_transform", "mode", "visible", "representation",
-            "fixed", "allow_part_joints", "joint_states",
-            "cluster_transform_overrides", "interface_points",
+            "name",
+            "base_transform",
+            "mode",
+            "visible",
+            "representation",
+            "fixed",
+            "allow_part_joints",
+            "joint_states",
+            "cluster_transform_overrides",
+            "interface_points",
         ):
             if k in data:
                 full[k] = data[k]
@@ -2943,20 +3248,25 @@ class AssemblyJoint(BaseModel):
     base_transform on instance_b is set when this joint is first created, and is
     used by the backend to compute instance_b.transform without accumulation error.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Joint"
     joint_type: Literal["revolute", "prismatic", "spherical", "rigid"] = "revolute"
-    instance_a_id: Optional[str] = None   # None = ground
-    cluster_id_a:  Optional[str] = None
+    instance_a_id: Optional[str] = None  # None = ground
+    cluster_id_a: Optional[str] = None
     instance_b_id: str
-    cluster_id_b:  Optional[str] = None
-    axis_origin:    List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+    cluster_id_b: Optional[str] = None
+    axis_origin: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
     axis_direction: List[float] = Field(default_factory=lambda: [0.0, 0.0, 1.0])
-    current_value:  float = 0.0
+    current_value: float = 0.0
     min_limit: Optional[float] = None
     max_limit: Optional[float] = None
-    connector_a_label: Optional[str] = None   # label of instance_a's InterfacePoint used in this mate
-    connector_b_label: Optional[str] = None   # label of instance_b's InterfacePoint used in this mate
+    connector_a_label: Optional[str] = (
+        None  # label of instance_a's InterfacePoint used in this mate
+    )
+    connector_b_label: Optional[str] = (
+        None  # label of instance_b's InterfacePoint used in this mate
+    )
     # mate_relative_transform: rigid/spherical mates only. 16-element row-major
     # Mat4x4 capturing F_a_world^-1 @ F_b_world at mate creation, where
     # F_a / F_b are the full SE3 frames of connector_a / connector_b in world
@@ -2997,6 +3307,7 @@ class GearRelation(BaseModel):
     (via the silent-patch path). It never writes to any field inside an
     embedded Design.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Gear"
     joint_a_id: str
@@ -3010,10 +3321,12 @@ class GearRelation(BaseModel):
     joint_a_anchor: float = 0.0
     joint_b_anchor: float = 0.0
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def _check(self):
         if not math.isfinite(self.ratio) or abs(self.ratio) < 1e-9:
-            raise ValueError(f"GearRelation {self.id}: ratio must be finite and nonzero, got {self.ratio}")
+            raise ValueError(
+                f"GearRelation {self.id}: ratio must be finite and nonzero, got {self.ratio}"
+            )
         if self.joint_a_id == self.joint_b_id:
             raise ValueError("GearRelation: joint_a_id and joint_b_id must differ.")
         return self
@@ -3034,6 +3347,7 @@ class BeltPulley(BaseModel):
     ADVISORY ONLY (never the source of truth). Kept so a headless reader or test can
     show approximate belt geometry without re-deriving connector world positions.
     """
+
     joint_id: str
     side: Literal["a", "b"] = "b"
     instance_id: Optional[str] = None
@@ -3055,6 +3369,7 @@ class BeltPath(BaseModel):
     so it is static across configuration snapshots (no AssemblyConfigurationSnapshot
     change required this phase).
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Belt"
     pulley_a: BeltPulley
@@ -3066,10 +3381,12 @@ class BeltPath(BaseModel):
     joint_a_anchor: float = 0.0
     joint_b_anchor: float = 0.0
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def _check(self):
         if self.pulley_a.joint_id == self.pulley_b.joint_id:
-            raise ValueError("BeltPath: pulley_a and pulley_b must use different joints.")
+            raise ValueError(
+                "BeltPath: pulley_a and pulley_b must use different joints."
+            )
         for p, lbl in ((self.pulley_a, "pulley_a"), (self.pulley_b, "pulley_b")):
             if not math.isfinite(p.radius) or p.radius < 0:
                 raise ValueError(f"BeltPath {lbl}: radius must be finite and >= 0.")
@@ -3088,6 +3405,7 @@ class BeltRider(BaseModel):
     DISPLAY-LAYER ONLY: like the belt/gears, this only affects assembly-level
     PartInstance.transform — never an embedded Design's topology.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     belt_path_id: str
     instance_id: str
@@ -3105,16 +3423,18 @@ class BeltRider(BaseModel):
 
 class PartLibraryEntry(BaseModel):
     """Registry entry for a known .nadoc file in the part library."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
-    path: str       # absolute or relative path to the .nadoc file
-    sha256: str     # SHA-256 hex digest of file contents at scan time
+    path: str  # absolute or relative path to the .nadoc file
+    sha256: str  # SHA-256 hex digest of file contents at scan time
     interface_points: List[InterfacePoint] = Field(default_factory=list)
     tags: List[str] = Field(default_factory=list)
 
 
 class PartLibrary(BaseModel):
     """User's local library of available Part files."""
+
     entries: List[PartLibraryEntry] = Field(default_factory=list)
 
 
@@ -3134,14 +3454,17 @@ class PartGroup(BaseModel):
     - Every ``subgroup_id`` references a different ``PartGroup``; no cycles.
     - Each instance/subgroup belongs to at most one parent group.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
     instance_ids: List[str] = Field(default_factory=list)
     subgroup_ids: List[str] = Field(default_factory=list)
     visible: bool = True
-    representation: Optional[Literal[
-        "full", "beads", "cylinders", "vdw", "ballstick", "hull-prism", "surface"
-    ]] = None
+    representation: Optional[
+        Literal[
+            "full", "beads", "cylinders", "vdw", "ballstick", "hull-prism", "surface"
+        ]
+    ] = None
     expanded: bool = True
 
 
@@ -3163,6 +3486,7 @@ class Assembly(BaseModel):
     feature_log: undo/redo trail for assembly-level operations only.
     Each Part's own feature_log is separate and unaffected by assembly ops.
     """
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     metadata: DesignMetadata = Field(default_factory=DesignMetadata)
     instances: List[PartInstance] = Field(default_factory=list)
@@ -3192,7 +3516,14 @@ class Assembly(BaseModel):
     # ``representation``; ``'working'`` means export the current reps unchanged.
     # Lets the user edit at a fast LOD (e.g. cylinders) but export at high detail.
     export_representation: Literal[
-        "working", "full", "beads", "cylinders", "vdw", "ballstick", "hull-prism", "surface"
+        "working",
+        "full",
+        "beads",
+        "cylinders",
+        "vdw",
+        "ballstick",
+        "hull-prism",
+        "surface",
     ] = "full"
 
     def to_dict(self) -> dict:
@@ -3221,14 +3552,22 @@ class Assembly(BaseModel):
           emitted so the user knows the next save will switch to v2.
         """
         data = json.loads(text)
-        if isinstance(data, dict) and data.get("format_version") == 2 \
-                and "sources" in data and "instances_v2" in data:
+        if (
+            isinstance(data, dict)
+            and data.get("format_version") == 2
+            and "sources" in data
+            and "instances_v2" in data
+        ):
             data = cls._expand_v2_payload(data)
-        elif isinstance(data, dict) and "instances" in data \
-                and "instances_v2" not in data:
+        elif (
+            isinstance(data, dict)
+            and "instances" in data
+            and "instances_v2" not in data
+        ):
             # Legacy v1 read path.  Warn once per load so the user knows the
             # next save will switch the file to v2 (contract step).
             import warnings as _warnings
+
             _warnings.warn(
                 "Assembly.from_json: legacy v1 wire format detected "
                 "(no format_version=2 / instances_v2).  This payload still "
@@ -3310,8 +3649,11 @@ class Assembly(BaseModel):
             # Reuse PartInstance's expand logic (validated dict → dict).
             inst = PartInstance.from_compact_dict(compact, sources=sources)
             expanded.append(inst.model_dump(mode="json"))
-        out = {k: v for k, v in data.items()
-               if k not in ("format_version", "sources", "instances_v2")}
+        out = {
+            k: v
+            for k, v in data.items()
+            if k not in ("format_version", "sources", "instances_v2")
+        }
         out["instances"] = expanded
         return out
 
@@ -3361,6 +3703,7 @@ class Assembly(BaseModel):
         # without revisiting itself.
         WHITE, GRAY, BLACK = 0, 1, 2
         color = {gid: WHITE for gid in group_ids}
+
         def _dfs(gid: str) -> None:
             color[gid] = GRAY
             for sgid in by_id[gid].subgroup_ids:
@@ -3369,6 +3712,7 @@ class Assembly(BaseModel):
                 if color[sgid] == WHITE:
                     _dfs(sgid)
             color[gid] = BLACK
+
         for gid in group_ids:
             if color[gid] == WHITE:
                 _dfs(gid)

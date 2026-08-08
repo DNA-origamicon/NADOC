@@ -1,4 +1,8 @@
-from experiments.exp43_7bp_crossover_transition.run import CONDITIONS, TOKEN, build_condition
+from experiments.exp43_7bp_crossover_transition.run import (
+    CONDITIONS,
+    TOKEN,
+    build_condition,
+)
 
 
 def test_exp43_token_and_conditions_are_matched():

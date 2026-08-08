@@ -41,6 +41,7 @@ from backend.core.pdb_to_design import _decode_pdb_int
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 def _design_with_extra_bases_and_extension():
     """Two-helix strand: a crossover carrying "TT" extra bases + a 3′ "AAA" tail."""
     base = make_bundle_design(cells=[(0, 0), (0, 1)], length_bp=21, plane="XY")
@@ -59,8 +60,12 @@ def _design_with_extra_bases_and_extension():
         half_b=HalfCrossover(helix_id=h1, index=10, strand=Direction.FORWARD),
         extra_bases="TT",
     )
-    ext = StrandExtension(id="ext1", strand_id="xstrand", end="three_prime", sequence="AAA")
-    return base.model_copy(update={"strands": [strand], "crossovers": [xo], "extensions": [ext]})
+    ext = StrandExtension(
+        id="ext1", strand_id="xstrand", end="three_prime", sequence="AAA"
+    )
+    return base.model_copy(
+        update={"strands": [strand], "crossovers": [xo], "extensions": [ext]}
+    )
 
 
 def _design_with_loop_insertion():
@@ -71,7 +76,9 @@ def _design_with_loop_insertion():
 
 
 def _atom_serial_fields(pdb: str):
-    return [line[6:11].strip() for line in pdb.splitlines() if line.startswith("ATOM  ")]
+    return [
+        line[6:11].strip() for line in pdb.splitlines() if line.startswith("ATOM  ")
+    ]
 
 
 def _conect_tokens(pdb: str):
@@ -81,7 +88,7 @@ def _conect_tokens(pdb: str):
             continue
         body = line[6:]
         for k in range(0, len(body), 5):
-            tok = body[k:k + 5].strip()
+            tok = body[k : k + 5].strip()
             if tok:
                 tokens.add(tok)
     return tokens
@@ -91,27 +98,52 @@ def test_pdb_can_store_residue_scalar_values_and_chimerax_recipe():
     design = _design_with_loop_insertion()
     model = build_atomistic_model(design)
     target = next(a for a in model.atoms if not a.copy_k)
-    key = (target.helix_id, target.bp_index, str(getattr(target.direction, "value", target.direction)))
+    key = (
+        target.helix_id,
+        target.bp_index,
+        str(getattr(target.direction, "value", target.direction)),
+    )
     pdb = export_pdb(
-        design, model=model, scalar_by_key={key: 0.42},
+        design,
+        model=model,
+        scalar_by_key={key: 0.42},
         scalar_metadata={
-            "title": "RMSF", "unit": "nm", "colormap": "viridis",
-            "palette": "#000000:#ffffff", "lo": 0.1, "hi": 0.8,
+            "title": "RMSF",
+            "unit": "nm",
+            "colormap": "viridis",
+            "palette": "#000000:#ffffff",
+            "lo": 0.1,
+            "hi": 0.8,
         },
     )
-    assert 'REMARK  NADOC_COLOR_VALUE RMSF (nm) stored in B-factor column.' in pdb
-    assert 'color byattribute bfactor palette "#000000:#ffffff" range 0.1,0.8 target as' in pdb
+    assert "REMARK  NADOC_COLOR_VALUE RMSF (nm) stored in B-factor column." in pdb
+    assert (
+        'color byattribute bfactor palette "#000000:#ffffff" range 0.1,0.8 target as'
+        in pdb
+    )
     target_serials = {
-        a.serial + 1 for a in model.atoms
-        if (a.helix_id, a.bp_index, str(getattr(a.direction, "value", a.direction))) == key
+        a.serial + 1
+        for a in model.atoms
+        if (a.helix_id, a.bp_index, str(getattr(a.direction, "value", a.direction)))
+        == key
     }
-    target_lines = [line for line in pdb.splitlines() if line.startswith("ATOM  ") and _decode_pdb_int(line[6:11], 5) in target_serials]
+    target_lines = [
+        line
+        for line in pdb.splitlines()
+        if line.startswith("ATOM  ")
+        and _decode_pdb_int(line[6:11], 5) in target_serials
+    ]
     assert target_lines
     assert {float(line[60:66]) for line in target_lines} == {0.42}
-    assert any(float(line[60:66]) == 0.0 for line in pdb.splitlines() if line.startswith("ATOM  "))
+    assert any(
+        float(line[60:66]) == 0.0
+        for line in pdb.splitlines()
+        if line.startswith("ATOM  ")
+    )
 
 
 # ── Non-standard atoms reach the export ───────────────────────────────────────
+
 
 def test_pdb_includes_extra_base_and_extension_atoms():
     design = _design_with_extra_bases_and_extension()
@@ -151,14 +183,17 @@ def test_viewer_pdb_emits_inserted_and_extension_residues_in_polymer_order():
     assert sum(line.startswith("TER") for line in pdb.splitlines()) == 1
 
 
-def test_visualized_pdb_payload_applies_simulated_positions_to_both_extension_ends(monkeypatch):
+def test_visualized_pdb_payload_applies_simulated_positions_to_both_extension_ends(
+    monkeypatch,
+):
     """Renderer ``__ext_`` beads must drive PDB atoms for both 5' and 3' tails."""
     import numpy as np
     from backend.api import routes_export_structure as routes
 
     design = _design_with_extra_bases_and_extension()
     five = StrandExtension(
-        id="ext5", strand_id="xstrand", end="five_prime", sequence="T")
+        id="ext5", strand_id="xstrand", end="five_prime", sequence="T"
+    )
     design = design.model_copy(update={"extensions": [five, *design.extensions]})
     targets = {
         (five.id, 0): [80.0, 10.0, 5.0],
@@ -168,7 +203,9 @@ def test_visualized_pdb_payload_applies_simulated_positions_to_both_extension_en
     }
     positions = [
         routes.PdbVisualizationPosition(
-            helix_id=f"__ext_{ext_id}", bp_index=k, direction="FORWARD",
+            helix_id=f"__ext_{ext_id}",
+            bp_index=k,
+            direction="FORWARD",
             backbone_position=xyz,
         )
         for (ext_id, k), xyz in targets.items()
@@ -178,21 +215,33 @@ def test_visualized_pdb_payload_applies_simulated_positions_to_both_extension_en
 
     response = routes.export_visualized_pdb_file(payload)
     pdb_by_serial = {
-        _decode_pdb_int(line[6:11], 5) - 1: np.array([
-            float(line[30:38]), float(line[38:46]), float(line[46:54])]) / 10.0
+        _decode_pdb_int(line[6:11], 5) - 1: np.array(
+            [float(line[30:38]), float(line[38:46]), float(line[46:54])]
+        )
+        / 10.0
         for line in response.body.decode().splitlines()
         if line.startswith("ATOM  ")
     }
     _, _, ext_override = routes._pdb_visualization_overrides(positions)
     expected = build_atomistic_model(
-        design, ext_pos_override=ext_override, close_backbone=True)
+        design, ext_pos_override=ext_override, close_backbone=True
+    )
 
     for ext_id in (five.id, "ext1"):
-        atoms = [a for a in expected.atoms if a.extension_id == ext_id and a.name == "C1'"]
+        atoms = [
+            a for a in expected.atoms if a.extension_id == ext_id and a.name == "C1'"
+        ]
         assert atoms
         for atom in atoms:
-            assert np.allclose(pdb_by_serial[atom.serial], [atom.x, atom.y, atom.z], atol=6e-5)
-            assert np.linalg.norm(pdb_by_serial[atom.serial] - targets[(ext_id, atom.ext_k)]) < 2.0
+            assert np.allclose(
+                pdb_by_serial[atom.serial], [atom.x, atom.y, atom.z], atol=6e-5
+            )
+            assert (
+                np.linalg.norm(
+                    pdb_by_serial[atom.serial] - targets[(ext_id, atom.ext_k)]
+                )
+                < 2.0
+            )
 
 
 def test_pdb_includes_loop_insertion_atoms():
@@ -213,7 +262,9 @@ def test_viewer_pdb_uses_chemically_valid_unphosphorylated_5prime_termini():
 
     by_residue: dict[tuple[str, int], set[str]] = {}
     for line in lines:
-        by_residue.setdefault((line[21], int(line[22:26])), set()).add(line[12:16].strip())
+        by_residue.setdefault((line[21], int(line[22:26])), set()).add(
+            line[12:16].strip()
+        )
 
     first_residues = [names for (chain, seq), names in by_residue.items() if seq == 1]
     assert first_residues
@@ -263,14 +314,17 @@ def test_export_import_roundtrip_preserves_coordinates_and_bond_endpoints():
         assert source.atoms[idx].name == a.name
         restored_to_source[a.serial] = int(idx)
 
-    assert len(set(restored_to_source.values())) == len(source.atoms), "matching not 1:1"
+    assert len(set(restored_to_source.values())) == len(source.atoms), (
+        "matching not 1:1"
+    )
 
     def bond_pairs(model, remap):
         return {tuple(sorted((remap(i), remap(j)))) for i, j in model.bonds}
 
     src_index = {a.serial: i for i, a in enumerate(source.atoms)}
-    assert bond_pairs(restored, restored_to_source.__getitem__) == \
-           bond_pairs(source, src_index.__getitem__)
+    assert bond_pairs(restored, restored_to_source.__getitem__) == bond_pairs(
+        source, src_index.__getitem__
+    )
 
 
 def test_export_repairs_missing_consecutive_strand_backbone_bond():
@@ -291,7 +345,7 @@ def test_export_repairs_missing_consecutive_strand_backbone_bond():
         for line in pdb.splitlines()
         if line.startswith("CONECT")
         for parts in [[line[6:11].strip()]]
-        for neighbor in [line[i:i + 5].strip() for i in range(11, len(line), 5)]
+        for neighbor in [line[i : i + 5].strip() for i in range(11, len(line), 5)]
         if neighbor
     }
 
@@ -305,15 +359,15 @@ def test_large_design_uses_only_serial_addressed_connectivity():
     ChimeraX otherwise resolves those records onto distant residues and draws a
     starburst of false bonds. Serial-addressed CONECT remains complete.
     """
-    design = make_bundle_design(cells=[(i, 0) for i in range(32)], length_bp=4, plane="XY")
+    design = make_bundle_design(
+        cells=[(i, 0) for i in range(32)], length_bp=4, plane="XY"
+    )
     model = build_atomistic_model(design)
     pdb = export_pdb(design, model=model, viewer_terminals=True)
 
     assert not any(line.startswith("LINK") for line in pdb.splitlines())
     exported_serials = {
-        line[6:11].strip()
-        for line in pdb.splitlines()
-        if line.startswith("ATOM  ")
+        line[6:11].strip() for line in pdb.splitlines() if line.startswith("ATOM  ")
     }
     assert _conect_tokens(pdb) == exported_serials
 
@@ -324,15 +378,20 @@ def test_large_design_uses_only_serial_addressed_connectivity():
             model_no = int(line.split()[1])
         elif line.startswith("ATOM  "):
             atom_ids_by_model.setdefault(model_no, []).append(
-                (line[21], _decode_pdb_int(line[22:26], 4), line[12:16].strip()))
+                (line[21], _decode_pdb_int(line[22:26], 4), line[12:16].strip())
+            )
     assert len(atom_ids_by_model) == 2
     for atom_ids in atom_ids_by_model.values():
         assert len(atom_ids) == len(set(atom_ids)), (
-            "each PDB submodel must have unique chain/residue/atom identifiers")
-    assert sum(line.startswith("TER") for line in pdb.splitlines()) == len({a.chain_id for a in model.atoms})
+            "each PDB submodel must have unique chain/residue/atom identifiers"
+        )
+    assert sum(line.startswith("TER") for line in pdb.splitlines()) == len(
+        {a.chain_id for a in model.atoms}
+    )
 
 
 # ── Serial integrity (the mod-9999 wrap regression) ───────────────────────────
+
 
 def test_pdb_atom_serials_unique_and_match_conect():
     """ATOM serials must be unique and every CONECT token must reference one.
@@ -346,7 +405,9 @@ def test_pdb_atom_serials_unique_and_match_conect():
     serials = _atom_serial_fields(pdb)
     assert len(serials) == len(set(serials)), "duplicate ATOM serials"
     dangling = _conect_tokens(pdb) - set(serials)
-    assert not dangling, f"CONECT tokens with no matching ATOM serial: {sorted(dangling)[:8]}"
+    assert not dangling, (
+        f"CONECT tokens with no matching ATOM serial: {sorted(dangling)[:8]}"
+    )
 
 
 def test_pdb_serials_hybrid36_past_9999():
@@ -354,7 +415,9 @@ def test_pdb_serials_hybrid36_past_9999():
     # A design comfortably over the 9999 wrap point: 3 helices x 120 bp = 14400 atoms
     # (~44% past the wrap), which is all this pin needs — the assert below fails loudly
     # if the atom count per bp ever drops far enough to stop crossing it.
-    design = make_bundle_design(cells=[(0, 0), (0, 1), (1, 0)], length_bp=120, plane="XY")
+    design = make_bundle_design(
+        cells=[(0, 0), (0, 1), (1, 0)], length_bp=120, plane="XY"
+    )
     model = build_atomistic_model(design)
     assert len(model.atoms) > 9999, "fixture not large enough to cross the wrap point"
 
@@ -369,14 +432,17 @@ def test_pdb_serials_hybrid36_past_9999():
     assert "10000" in set(serials)
 
 
-@pytest.mark.parametrize("value, encoded", [
-    (99_999, "99999"),
-    (100_000, "A0000"),
-    (100_009, "A0009"),
-    (100_010, "A000A"),
-    (100_035, "A000Z"),
-    (100_036, "A0010"),
-])
+@pytest.mark.parametrize(
+    "value, encoded",
+    [
+        (99_999, "99999"),
+        (100_000, "A0000"),
+        (100_009, "A0009"),
+        (100_010, "A000A"),
+        (100_035, "A000Z"),
+        (100_036, "A0010"),
+    ],
+)
 def test_standard_hybrid36_serial_boundary(value, encoded):
     """ChimeraX and CONECT must agree immediately above the decimal PDB limit."""
     assert _h36(value, 5) == encoded
@@ -384,6 +450,7 @@ def test_standard_hybrid36_serial_boundary(value, encoded):
 
 
 # ── Backbone connectivity through inserts ─────────────────────────────────────
+
 
 def test_extra_bases_chain_backbone_o3_to_p():
     """The strand backbone must run prev_real → eb0 → eb1 → next_real via O3'→P bonds."""
@@ -414,21 +481,24 @@ def test_extension_tail_bases_are_backbone_linked():
 
     # Every tail residue has a P atom (i.e. an incoming backbone phosphodiester).
     for seq in tail_seqs:
-        names = {a.name for a in model.atoms if a.extension_id is not None and a.seq_num == seq}
+        names = {
+            a.name
+            for a in model.atoms
+            if a.extension_id is not None and a.seq_num == seq
+        }
         assert "P" in names
 
     # And there is an O3'→P bond feeding the first tail base from the anchor.
     linked = any(
         {by_serial[i].name, by_serial[j].name} == {"O3'", "P"}
-        and (
-            (by_serial[i].extension_id is None) != (by_serial[j].extension_id is None)
-        )
+        and ((by_serial[i].extension_id is None) != (by_serial[j].extension_id is None))
         for i, j in model.bonds
     )
     assert linked, "no O3'→P bond bridging anchor to the first tail base"
 
 
 # ── PSF carries the insert bonds ──────────────────────────────────────────────
+
 
 def test_psf_nbond_count_matches_model_including_inserts():
     design = _design_with_extra_bases_and_extension()
@@ -440,6 +510,7 @@ def test_psf_nbond_count_matches_model_including_inserts():
 
 
 # ── Identity persistence round-trip (the dropped-field regression) ────────────
+
 
 def test_atomistic_reference_roundtrip_preserves_insert_identity():
     """copy_k / extension_id / ext_k must survive AtomisticReference persistence.
@@ -456,13 +527,27 @@ def test_atomistic_reference_roundtrip_preserves_insert_identity():
 
     ref_atoms = [
         AtomisticReferenceAtom(
-            serial=a.serial, name=a.name, element=a.element, residue=a.residue,
-            chain_id=a.chain_id, seq_num=a.seq_num, x=a.x, y=a.y, z=a.z,
-            strand_id=a.strand_id, helix_id=a.helix_id, bp_index=a.bp_index,
-            direction=a.direction, is_modified=a.is_modified,
-            aux_helix_id=a.aux_helix_id, aux_t=a.aux_t,
-            crossover_id=a.crossover_id, extra_base_k=a.extra_base_k,
-            copy_k=a.copy_k, extension_id=a.extension_id, ext_k=a.ext_k,
+            serial=a.serial,
+            name=a.name,
+            element=a.element,
+            residue=a.residue,
+            chain_id=a.chain_id,
+            seq_num=a.seq_num,
+            x=a.x,
+            y=a.y,
+            z=a.z,
+            strand_id=a.strand_id,
+            helix_id=a.helix_id,
+            bp_index=a.bp_index,
+            direction=a.direction,
+            is_modified=a.is_modified,
+            aux_helix_id=a.aux_helix_id,
+            aux_t=a.aux_t,
+            crossover_id=a.crossover_id,
+            extra_base_k=a.extra_base_k,
+            copy_k=a.copy_k,
+            extension_id=a.extension_id,
+            ext_k=a.ext_k,
         )
         for a in model.atoms
     ]

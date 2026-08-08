@@ -39,6 +39,7 @@ def client():
 
 # ── Model round-trip ────────────────────────────────────────────────────────
 
+
 def test_plate_layout_round_trips_through_json():
     d = _demo_design()
     d.plate_layout = PlateLayout(
@@ -63,6 +64,7 @@ def test_missing_plate_layout_loads_as_none():
 
 
 # ── PUT /design/plate-layout ──────────────────────────────────────────────────
+
 
 def test_put_plate_layout_happy_path(client):
     body = {
@@ -125,6 +127,7 @@ def test_put_plate_layout_leaves_geometry_untouched(client):
 
 # ── DELETE /design/plate-layout ───────────────────────────────────────────────
 
+
 def test_delete_plate_layout_clears(client):
     body = {
         "orientation": "8x12",
@@ -138,6 +141,7 @@ def test_delete_plate_layout_clears(client):
 
 
 # ── Persistence via import ────────────────────────────────────────────────────
+
 
 def test_plate_layout_survives_import(client):
     d = _demo_design()

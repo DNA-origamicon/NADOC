@@ -75,7 +75,7 @@ def _pid_alive(pid: Optional[int]) -> bool:
     except ProcessLookupError:
         return False
     except PermissionError:
-        return True   # exists but owned by another user — shouldn't happen here
+        return True  # exists but owned by another user — shouldn't happen here
     return True
 
 
@@ -110,13 +110,14 @@ def _kill_pid(pid: int) -> None:
             os.killpg(pgid, sig) if group else os.kill(pid, sig)
         except OSError:
             return
-        for _ in range(20):            # ≤1 s grace before escalating to SIGKILL
+        for _ in range(20):  # ≤1 s grace before escalating to SIGKILL
             if not _pid_alive(pid):
                 return
             time.sleep(0.05)
 
 
 # ── Prepare: write the self-contained job dir ─────────────────────────────────
+
 
 def prepare_snupi_job(design: Design, job: SnupiJob, workspace_dir: Path) -> None:
     """Write a self-contained ``design.json`` snapshot into the job dir, so the
@@ -137,6 +138,7 @@ def _load_snapshot_design(job_dir: Path) -> Optional[Design]:
 
 
 # ── Cache accessors ───────────────────────────────────────────────────────────
+
 
 def load_cached(job_dir: Path, name: str) -> Optional[dict]:
     """Load a cached ``display.json`` / ``rmsf.json`` payload, or None."""
@@ -166,6 +168,7 @@ def load_trajectory(job_dir: Path) -> Optional[dict]:
 
 # ── Progress (time-based estimate; the true completion signal is the thread) ──
 
+
 def _estimate_seconds(job: SnupiJob) -> float:
     """Rough wall-clock estimate for the solve, scaled by system size + mode.
 
@@ -181,7 +184,7 @@ def _estimate_seconds(job: SnupiJob) -> float:
     very CPU-contention-sensitive, so this is an order-of-magnitude figure — deliberately on
     the generous side so ``overall = elapsed/est`` keeps climbing rather than pinning early.
     """
-    nodes = max(1.0, job.n_nucleotides / 2.0)          # ≈ base pairs ≈ FEM nodes
+    nodes = max(1.0, job.n_nucleotides / 2.0)  # ≈ base pairs ≈ FEM nodes
 
     if getattr(job, "dynamics", False):
         # predict_shape runs a fixed dynamics_steps=60000 GJF trajectory (see fem_solver).
@@ -213,14 +216,16 @@ def _estimate_seconds(job: SnupiJob) -> float:
     else:
         est = 1.0 + (nodes / 1260.0) * 4.0
     if job.with_rmsf:
-        est += (nodes / 1260.0) * 8.0                  # the 200-mode NMA eigensolve
+        est += (nodes / 1260.0) * 8.0  # the 200-mode NMA eigensolve
     return max(2.0, est)
 
 
 PROGRESS_FILE = "progress.json"
 
 
-def write_progress(job_dir: Path, fraction: float, phase: str, info: dict | None = None) -> None:
+def write_progress(
+    job_dir: Path, fraction: float, phase: str, info: dict | None = None
+) -> None:
     """Publish REAL solve progress from the (detached) worker to the job dir.
 
     Written atomically — the server polls this file while the worker is mid-solve, and a torn read
@@ -230,14 +235,18 @@ def write_progress(job_dir: Path, fraction: float, phase: str, info: dict | None
     burned minutes of CPU."""
     try:
         tmp = job_dir / (PROGRESS_FILE + ".tmp")
-        tmp.write_text(json.dumps({
-            "fraction": max(0.0, min(1.0, float(fraction))),
-            "phase":    phase,
-            "at":       time.time(),
-            **(info or {}),
-        }))
+        tmp.write_text(
+            json.dumps(
+                {
+                    "fraction": max(0.0, min(1.0, float(fraction))),
+                    "phase": phase,
+                    "at": time.time(),
+                    **(info or {}),
+                }
+            )
+        )
         tmp.replace(job_dir / PROGRESS_FILE)
-    except Exception:                                  # pragma: no cover — best-effort
+    except Exception:  # pragma: no cover — best-effort
         pass
 
 
@@ -249,7 +258,7 @@ def log_worker(job_dir: Path, message: str) -> None:
     try:
         with (job_dir / "worker.log").open("a") as fh:
             fh.write(f"[{time.strftime('%H:%M:%S')}] {message}\n")
-    except Exception:                                  # pragma: no cover — best-effort
+    except Exception:  # pragma: no cover — best-effort
         pass
 
 
@@ -287,20 +296,30 @@ def job_progress(job: SnupiJob, workspace_dir: Path) -> dict:
             overall = min(0.99, float(frac))
             # ETA from the MEASURED rate: elapsed/frac is the projected total.
             eta_seconds = max(0.0, elapsed / max(frac, 1e-3) - elapsed)
-            detail = {k: prog.get(k) for k in
-                      ("step", "n_steps", "steps_per_s", "dt_ns", "n_nodes", "n_blobs", "attempt")
-                      if prog.get(k) is not None}
+            detail = {
+                k: prog.get(k)
+                for k in (
+                    "step",
+                    "n_steps",
+                    "steps_per_s",
+                    "dt_ns",
+                    "n_nodes",
+                    "n_blobs",
+                    "attempt",
+                )
+                if prog.get(k) is not None
+            }
         else:
             est = _estimate_seconds(job)
             overall = min(0.97, elapsed / est)
             eta_seconds = max(0.0, est - elapsed)
     return {
-        "overall":      overall,
-        "status":       job.status.value,
+        "overall": overall,
+        "status": job.status.value,
         "stage_status": stage.status if stage else None,
-        "eta_seconds":  eta_seconds,
-        "phase":        phase,
-        "sim_seconds":  job.sim_seconds,
+        "eta_seconds": eta_seconds,
+        "phase": phase,
+        "sim_seconds": job.sim_seconds,
         # Fine detail for a long-running solve: step/n_steps, the measured step rate, the auto-sized
         # dt, the node/blob counts, and the divergence-retry attempt. Empty for jobs that don't report.
         **detail,
@@ -309,16 +328,23 @@ def job_progress(job: SnupiJob, workspace_dir: Path) -> dict:
 
 # ── Execution ─────────────────────────────────────────────────────────────────
 
+
 def _cache_fem_analysis(job: SnupiJob, jd: Path, result: dict) -> None:
     """Write a ``predict_shape`` result to the job's ``display.json`` + ``rmsf.json`` and record the
     node/RMSF summary on the job — the display cache every SNUPI display mode reads (deform / flex /
     deviation / cylinders)."""
     positions = result.get("positions", [])
-    (jd / "display.json").write_text(json.dumps({
-        "solver":    result.get("solver"),
-        "positions": positions,
-        "axis":      result.get("axis", []),   # per-bp helix-centre nodes (cylinder rep)
-    }))
+    (jd / "display.json").write_text(
+        json.dumps(
+            {
+                "solver": result.get("solver"),
+                "positions": positions,
+                "axis": result.get(
+                    "axis", []
+                ),  # per-bp helix-centre nodes (cylinder rep)
+            }
+        )
+    )
     traj = result.get("trajectory")
     if traj and traj.get("n_frames"):
         # The thermal/reconfiguration trajectory for the animation toggle (dynamics jobs only).
@@ -371,18 +397,26 @@ def solve_and_cache(job: SnupiJob, workspace_dir: Path) -> None:
             elapsed = time.monotonic() - t0
             rate = (info.get("step") or 0) / elapsed if elapsed > 0 else 0.0
             eta = (elapsed / fraction - elapsed) if fraction > 0.01 else None
-            write_progress(jd, fraction, phase, {
-                **info,
-                "elapsed_s":  round(elapsed, 1),
-                "steps_per_s": round(rate, 1) if rate else None,
-                "eta_s":      round(eta) if eta else None,
-            })
+            write_progress(
+                jd,
+                fraction,
+                phase,
+                {
+                    **info,
+                    "elapsed_s": round(elapsed, 1),
+                    "steps_per_s": round(rate, 1) if rate else None,
+                    "eta_s": round(eta) if eta else None,
+                },
+            )
             # A tail-able heartbeat. Phase changes always log; otherwise every ~10 % so a 60k-step run
             # writes ~10 lines, not hundreds.
             if new_phase:
                 _phase_seen[0] = phase
-                log_worker(jd, f"phase: {phase}  " + " ".join(
-                    f"{k}={v}" for k, v in info.items() if v is not None))
+                log_worker(
+                    jd,
+                    f"phase: {phase}  "
+                    + " ".join(f"{k}={v}" for k, v in info.items() if v is not None),
+                )
             elif int(fraction * 10) != int((_last[0] - 0.011) * 10):
                 step, nsteps = info.get("step"), info.get("n_steps")
                 bits = [f"{fraction * 100:.0f}%"]
@@ -399,34 +433,34 @@ def solve_and_cache(job: SnupiJob, workspace_dir: Path) -> None:
             design,
             # Only the dynamics path reports; the static solve is a single sparse solve with no
             # natural fraction, so it keeps the wall-clock estimate.
-            progress_cb = _progress if getattr(job, "dynamics", False) else None,
-            nonlinear = job.nonlinear,
-            n_steps   = job.n_steps,
-            with_rmsf = job.with_rmsf,
+            progress_cb=_progress if getattr(job, "dynamics", False) else None,
+            nonlinear=job.nonlinear,
+            n_steps=job.n_steps,
+            with_rmsf=job.with_rmsf,
             # The SNUPI delta: anisotropic per-motif 6×6 material + twist–stretch couplings +
             # compliant crossover beams (material="snupi").  A job may instead select the
             # isotropic "cando" baseline for an in-tab A/B comparison.
-            material  = getattr(job, "material", "snupi"),
+            material=getattr(job, "material", "snupi"),
             # G12: MgCl₂ molarity → Debye length of the SNUPI inter-helix electrostatics
             # (snupi-only; ignored by cando). Default 0.02 = SNUPI's 20 mM buffer.
-            mgcl2_M   = getattr(job, "mgcl2_M", 0.02),
+            mgcl2_M=getattr(job, "mgcl2_M", 0.02),
             # Langevin structural dynamics: run a thermal trajectory and report its time-mean shape +
             # trajectory RMSF (same display payload). hydrodynamics=True → full RPY coupled friction.
-            dynamics      = getattr(job, "dynamics", False),
-            hydrodynamics = getattr(job, "hydrodynamics", False),
+            dynamics=getattr(job, "dynamics", False),
+            hydrodynamics=getattr(job, "hydrodynamics", False),
             # Coarse blob hydrodynamics (1 bead / k bp) — the only mode that fits at origami scale;
             # the exact per-bp friction is dense O(N²). None = exact (guarded by check_friction_memory).
-            hydro_coarse_bp = getattr(job, "hydro_coarse_bp", None),
+            hydro_coarse_bp=getattr(job, "hydro_coarse_bp", None),
             # Free ssDNA tails (overhangs / toeholds / dangling ends) as explicit Langevin chains,
             # displayed at their simulated positions (SS-4). Dynamics-only; a NADOC extension.
-            tails         = getattr(job, "tails", False),
-            tail_max_nt   = getattr(job, "tail_max_nt", None),
+            tails=getattr(job, "tails", False),
+            tail_max_nt=getattr(job, "tail_max_nt", None),
             # Anchors (Dirichlet BC) + uniform E-field body load — job-request annotations, never a
             # topology edit (C1/C2).  A field needs ≥1 anchor to hold against (COM drift);
             # predict_shape falls back to the free centroid-pinned solve if a selection resolves
             # to nothing.
-            anchors   = getattr(job, "anchors", None),
-            field     = getattr(job, "field", None),
+            anchors=getattr(job, "anchors", None),
+            field=getattr(job, "field", None),
         )
         sim_seconds = time.monotonic() - t0
 
@@ -437,9 +471,14 @@ def solve_and_cache(job: SnupiJob, workspace_dir: Path) -> None:
         job.status = SnupiStatus.completed
         job.error = None
         job.save(workspace_dir)
-        logger.info("snupi job %s completed in %.1fs (%s solve, material=%s, %s nodes)",
-                    job.job_id, sim_seconds, result.get("solver"),
-                    getattr(job, "material", "snupi"), job.n_nodes)
+        logger.info(
+            "snupi job %s completed in %.1fs (%s solve, material=%s, %s nodes)",
+            job.job_id,
+            sim_seconds,
+            result.get("solver"),
+            getattr(job, "material", "snupi"),
+            job.n_nodes,
+        )
 
     except Exception as exc:  # noqa: BLE001
         logger.error("snupi job %s failed: %s", job.job_id, exc, exc_info=True)
@@ -464,13 +503,19 @@ def start_job(job: SnupiJob, workspace_dir: Path) -> None:
         return
     jd = job.job_dir(workspace_dir)
     jd.mkdir(parents=True, exist_ok=True)
-    log_fh = open(jd / "worker.log", "w")   # noqa: SIM115 — closed by the reaper thread
+    log_fh = open(jd / "worker.log", "w")  # noqa: SIM115 — closed by the reaper thread
     proc = subprocess.Popen(
-        [sys.executable, "-m", "backend.core.snupi_worker", str(workspace_dir), job.job_id],
+        [
+            sys.executable,
+            "-m",
+            "backend.core.snupi_worker",
+            str(workspace_dir),
+            job.job_id,
+        ],
         cwd=str(_REPO_ROOT),
         stdout=log_fh,
         stderr=subprocess.STDOUT,
-        start_new_session=True,   # own session → outlives a uvicorn --reload of the parent
+        start_new_session=True,  # own session → outlives a uvicorn --reload of the parent
     )
     job.pid = proc.pid
     # Flip the JOB status to running (not just the stage) so the panel's progress bar + ETA —
@@ -484,7 +529,7 @@ def start_job(job: SnupiJob, workspace_dir: Path) -> None:
 
     def _reap() -> None:
         try:
-            proc.wait()   # reap the child so a finished worker isn't left a zombie
+            proc.wait()  # reap the child so a finished worker isn't left a zombie
         except Exception:  # noqa: BLE001
             pass
         finally:

@@ -25,6 +25,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.api import state as design_state
+
 # _design_response is a response helper shared with the rest of crud.py's
 # route handlers. It stays in crud.py (used by 100+ routes there) and is
 # imported here. Same convention as routes_loop_skip.py (10-F).
@@ -36,9 +37,9 @@ router = APIRouter()
 
 class CreateCameraPoseBody(BaseModel):
     name: str = "Camera Pose"
-    position: List[float]   # [x, y, z]
-    target: List[float]     # [x, y, z]
-    up: List[float]         # [x, y, z]
+    position: List[float]  # [x, y, z]
+    target: List[float]  # [x, y, z]
+    up: List[float]  # [x, y, z]
     fov: float = 55.0
     orbit_mode: str = "trackball"
 

@@ -82,6 +82,7 @@ JSON_PATHS = _cn_json_paths()
 
 # ── Invariants ────────────────────────────────────────────────────────────────
 
+
 def _topology_sig(d: Design) -> tuple:
     """Gauge-independent topology fingerprint: helix count, per-strand total
     base count grouped by type, and the loop/skip delta multiset."""
@@ -147,10 +148,11 @@ def _period_for(d: Design) -> int:
 # TIER 1 — well-formedness: export never crashes and emits a valid caDNAno dict
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 @pytest.mark.parametrize("path", NADOC_PATHS, ids=lambda p: p.stem)
 def test_export_wellformed(path: pathlib.Path):
     d = _load_nadoc(path)
-    data = export_cadnano(d)             # must not raise
+    data = export_cadnano(d)  # must not raise
     array_len = _assert_wellformed(data)
     assert array_len % _period_for(d) == 0, (
         f"array_len {array_len} not a multiple of lattice period"
@@ -161,6 +163,7 @@ def test_export_wellformed(path: pathlib.Path):
 # ═════════════════════════════════════════════════════════════════════════════
 # TIER 2 — round-trip conservation: import(export(d)) conserves topology
 # ═════════════════════════════════════════════════════════════════════════════
+
 
 @pytest.mark.parametrize("path", NADOC_PATHS, ids=lambda p: p.stem)
 def test_roundtrip_conserves_nadoc(path: pathlib.Path):
@@ -181,13 +184,14 @@ def test_roundtrip_conserves_cadnano_native(path: pathlib.Path):
 # TIER 3 — regression: the three designs that previously crashed export
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 @pytest.mark.parametrize("stem", REGRESSION_STEMS)
 def test_regression_extended_designs_export(stem: str):
     path = EXAMPLES / f"{stem}.nadoc"
     if not path.exists():
         pytest.skip(f"{path} not present")
     d = _load_nadoc(path)
-    data = export_cadnano(d)             # previously IndexError
+    data = export_cadnano(d)  # previously IndexError
     _assert_wellformed(data)
     d2, warnings = import_cadnano(data)
     _assert_conserved(d, d2, warnings)
@@ -252,6 +256,7 @@ def test_export_preserves_6hb_grid_parity():
 # ═════════════════════════════════════════════════════════════════════════════
 # Color preservation on a colored native fixture (secondary invariant)
 # ═════════════════════════════════════════════════════════════════════════════
+
 
 def test_colors_preserved_on_colored_fixture():
     path = CN_JSON_DIR / "Honeycomb_6hb_test1.json"

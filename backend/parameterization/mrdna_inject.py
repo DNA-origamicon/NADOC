@@ -67,9 +67,9 @@ logger = logging.getLogger(__name__)
 
 # ── mrdna crossover bond fingerprints ────────────────────────────────────────
 
-_DEFAULT_XOVER_BOND_R0 = 18.5        # Å — default mrdna crossover bond distance
-_XOVER_BOND_R0_TOLERANCE = 3.0      # Å — match window (accounts for T variants)
-_MAX_DIHEDRAL_POTENTIAL = 2.0        # kJ/mol — cap to prevent blow-up at close range
+_DEFAULT_XOVER_BOND_R0 = 18.5  # Å — default mrdna crossover bond distance
+_XOVER_BOND_R0_TOLERANCE = 3.0  # Å — match window (accounts for T variants)
+_MAX_DIHEDRAL_POTENTIAL = 2.0  # kJ/mol — cap to prevent blow-up at close range
 
 # kJ/mol/Å² → mrdna internal units (Å, kJ/mol) — no conversion needed, mrdna uses Å
 
@@ -100,11 +100,12 @@ class CrossoverPotentialOverride:
     sensitivity_check_passed : bool | None
         Whether the restraint sensitivity sweep passed for this variant.
     """
+
     label: str
     r0_ang: float
-    k_bond: float                     # kJ/mol/Å²
-    hj_equilibrium_angle_deg: float   # degrees
-    k_dihedral: float                 # kJ/mol/rad²
+    k_bond: float  # kJ/mol/Å²
+    hj_equilibrium_angle_deg: float  # degrees
+    k_dihedral: float  # kJ/mol/rad²
     source_n_frames: int = 0
     source_restraint_k_kcal: float = 0.0
     sensitivity_check_passed: bool | None = None
@@ -116,7 +117,8 @@ class CrossoverPotentialOverride:
             logger.warning(
                 "Building CrossoverPotentialOverride from UNCONVERGED parameters "
                 "for variant %s.  Convergence warnings: %s",
-                params.variant_label, "; ".join(params.convergence_warnings),
+                params.variant_label,
+                "; ".join(params.convergence_warnings),
             )
         mp = params.mrdna_params
         return cls(
@@ -130,7 +132,9 @@ class CrossoverPotentialOverride:
         )
 
     @classmethod
-    def from_database(cls, crossover_type: str, db_path: str | None = None) -> "CrossoverPotentialOverride":
+    def from_database(
+        cls, crossover_type: str, db_path: str | None = None
+    ) -> "CrossoverPotentialOverride":
         """
         Load a CrossoverPotentialOverride from crossover_params.json.
 
@@ -146,7 +150,12 @@ class CrossoverPotentialOverride:
         from pathlib import Path as _Path
 
         if db_path is None:
-            db_path = _Path(__file__).parent.parent / "data" / "parameters" / "crossover_params.json"
+            db_path = (
+                _Path(__file__).parent.parent
+                / "data"
+                / "parameters"
+                / "crossover_params.json"
+            )
         data = json.loads(_Path(db_path).read_text())
 
         if crossover_type not in data:
@@ -164,7 +173,8 @@ class CrossoverPotentialOverride:
                 "r0=%.2f Å for %s looks like a mid-arm centroid distance, not a "
                 "junction distance.  Expected ~17-22 Å for mrdna bead separation.  "
                 "Check that the database entry uses local junction extraction.",
-                r0, crossover_type,
+                r0,
+                crossover_type,
             )
 
         return cls(
@@ -179,6 +189,7 @@ class CrossoverPotentialOverride:
 
 
 # ── Patched SegmentModel ──────────────────────────────────────────────────────
+
 
 def build_patched_model(
     design,
@@ -222,12 +233,16 @@ def build_patched_model(
 
     import sys
     from backend.core.mrdna_bridge import mrdna_tool_path
+
     _mrdna_path = mrdna_tool_path()
     if _mrdna_path not in sys.path:
         sys.path.insert(0, _mrdna_path)
 
     try:
-        from mrdna.readers.segmentmodel_from_lists import model_from_basepair_stack_3prime
+        from mrdna.readers.segmentmodel_from_lists import (
+            model_from_basepair_stack_3prime,
+        )
+
         # These three are imported to probe mrdna availability (the except below
         # turns a missing install into a clear error); they document the symbols the
         # downstream code path needs even though they aren't referenced here.
@@ -251,7 +266,10 @@ def build_patched_model(
     # NOTE: model_from_basepair_stack_3prime creates segments then instantiates
     # SegmentModel.  We replicate its call signature.
     raw = model_from_basepair_stack_3prime(
-        r, bp, stack, three_prime,
+        r,
+        bp,
+        stack,
+        three_prime,
         sequence=seq,
         orientation=orientation,
         **model_params,
@@ -303,6 +321,7 @@ class PatchedSegmentModel:
 
         import sys
         from backend.core.mrdna_bridge import mrdna_tool_path
+
         _mrdna_path = mrdna_tool_path()
         if _mrdna_path not in sys.path:
             sys.path.insert(0, _mrdna_path)
@@ -334,9 +353,14 @@ class PatchedSegmentModel:
                     logger.debug(
                         "Overriding crossover bond: default r0=%.1f → %.2f Å, "
                         "k=%.3f → %.3f kJ/mol/Å²",
-                        d, r0_target, kSpring, k_bond,
+                        d,
+                        r0_target,
+                        kSpring,
+                        k_bond,
                     )
-                    return super().get_bond_potential(k_bond, r0_target, correct_geometry)
+                    return super().get_bond_potential(
+                        k_bond, r0_target, correct_geometry
+                    )
                 return super().get_bond_potential(kSpring, d, correct_geometry)
 
             def get_dihedral_potential(self, kSpring, d, max_potential=None):
@@ -349,7 +373,9 @@ class PatchedSegmentModel:
                     logger.debug(
                         "Overriding HJ dihedral: default k=%.4f → %.4f kJ/mol/rad², "
                         "t0=%.1f°",
-                        kSpring, k_dihedral, d,
+                        kSpring,
+                        k_dihedral,
+                        d,
                     )
                     return super().get_dihedral_potential(
                         k_dihedral, d, max_potential=_MAX_DIHEDRAL_POTENTIAL
@@ -361,6 +387,7 @@ class PatchedSegmentModel:
 
 
 # ── Integration with mrdna_bridge ────────────────────────────────────────────
+
 
 def mrdna_model_from_nadoc_parameterized(
     design,
@@ -406,6 +433,7 @@ def mrdna_model_from_nadoc_parameterized(
 
     import sys
     from backend.core.mrdna_bridge import mrdna_tool_path
+
     _mrdna_path = mrdna_tool_path()
     if _mrdna_path not in sys.path:
         sys.path.insert(0, _mrdna_path)
@@ -446,7 +474,10 @@ def mrdna_model_from_nadoc_parameterized(
             _sfl.SegmentModel = patched_cls
 
         model = model_from_basepair_stack_3prime(
-            r, bp, stack, three_prime,
+            r,
+            bp,
+            stack,
+            three_prime,
             sequence=seq,
             orientation=orientation,
             **model_params_with_hj,
@@ -461,8 +492,11 @@ def mrdna_model_from_nadoc_parameterized(
     logger.info(
         "Built parameterized SegmentModel for %s "
         "(r0=%.2f Å, k_bond=%.3f, hj=%.1f°, k_dih=%.4f)",
-        override.label, override.r0_ang, override.k_bond,
-        override.hj_equilibrium_angle_deg, override.k_dihedral,
+        override.label,
+        override.r0_ang,
+        override.k_bond,
+        override.hj_equilibrium_angle_deg,
+        override.k_dihedral,
     )
 
     if return_nt_key:
@@ -506,6 +540,7 @@ def _build_patched_class(override: CrossoverPotentialOverride):
 
 
 # ── Diagnostic: compare default vs. overridden parameters ────────────────────
+
 
 def summarize_override(override: CrossoverPotentialOverride) -> str:
     """

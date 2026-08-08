@@ -78,16 +78,18 @@ def parse_psf_atoms(psf_text: str) -> list[PsfAtom]:
         if len(parts) < 8:
             continue
         try:
-            atoms.append(PsfAtom(
-                serial=int(parts[0]),
-                segid=parts[1],
-                resid=parts[2],
-                resname=parts[3],
-                atomname=parts[4],
-                atomtype=parts[5],
-                charge=float(parts[6]),
-                mass=float(parts[7]),
-            ))
+            atoms.append(
+                PsfAtom(
+                    serial=int(parts[0]),
+                    segid=parts[1],
+                    resid=parts[2],
+                    resname=parts[3],
+                    atomname=parts[4],
+                    atomtype=parts[5],
+                    charge=float(parts[6]),
+                    mass=float(parts[7]),
+                )
+            )
         except ValueError:
             continue
         if expected is not None and len(atoms) >= expected:
@@ -115,7 +117,9 @@ def audit_psf(
         if resname in DNA_RESNAMES:
             audit.dna_atoms += 1
             audit.dna_total_charge += atom.charge
-            if atom.atomname.upper().startswith("H") or atom.atomtype.upper().startswith("H"):
+            if atom.atomname.upper().startswith(
+                "H"
+            ) or atom.atomtype.upper().startswith("H"):
                 audit.dna_hydrogens += 1
             key = (atom.segid, atom.resid, resname)
             residue_charge[key] = residue_charge.get(key, 0.0) + atom.charge
@@ -140,14 +144,17 @@ def audit_psf(
             f"Total PSF charge {audit.total_charge:.6f} is not close to an integer."
         )
     if require_neutral and abs(audit.total_charge) > integer_tolerance:
-        audit.errors.append(f"Final PSF is not neutral: total charge {audit.total_charge:.6f} e.")
+        audit.errors.append(
+            f"Final PSF is not neutral: total charge {audit.total_charge:.6f} e."
+        )
     if require_dna_hydrogens and audit.dna_atoms and audit.dna_hydrogens == 0:
         audit.errors.append(
             "DNA topology has zero hydrogens; production NAMD requires a full all-atom DNA topology."
         )
     if require_dna_residue_charge and residue_charge:
         bad = [
-            charge for charge in residue_charge.values()
+            charge
+            for charge in residue_charge.values()
             if not (-1.25 <= charge <= -0.25)
         ]
         if bad:
@@ -156,7 +163,9 @@ def audit_psf(
                 f"(min={min(residue_charge.values()):.3f}, max={max(residue_charge.values()):.3f})."
             )
     if audit.dna_atoms and audit.dna_hydrogens == 0:
-        audit.warnings.append("DNA contains no hydrogens; this is a setup/audit-only topology.")
+        audit.warnings.append(
+            "DNA contains no hydrogens; this is a setup/audit-only topology."
+        )
     if audit.dna_atoms and audit.dna_total_charge / max(audit.dna_residues, 1) < -1.5:
         audit.warnings.append(
             "DNA is substantially overcharged per residue, usually indicating heavy-atom-only partial charges."

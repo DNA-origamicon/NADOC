@@ -86,7 +86,11 @@ def lookup_throughput(
 
 
 def record_throughput(
-    workspace_dir: Path, *, cluster: str, partition: str, n_atoms: int,
+    workspace_dir: Path,
+    *,
+    cluster: str,
+    partition: str,
+    n_atoms: int,
     ns_per_day: float,
 ) -> None:
     """Fold a completed remote run's measured throughput into the store.
@@ -105,7 +109,11 @@ def record_throughput(
         tmp = path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(store, indent=2, sort_keys=True))
         tmp.replace(path)
-        logger.info("recorded throughput %s → %.2f ns/day (n=%d)",
-                    key, store[key]["ns_per_day"], store[key]["n_samples"])
+        logger.info(
+            "recorded throughput %s → %.2f ns/day (n=%d)",
+            key,
+            store[key]["ns_per_day"],
+            store[key]["n_samples"],
+        )
     except OSError as exc:
         logger.warning("could not record cluster throughput: %s", exc)

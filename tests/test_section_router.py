@@ -16,6 +16,7 @@ the proof the checker is correct, and require any router we ship to match it.  T
 is a "tests pass but visually wrong" area (see LESSONS.md H18) — the gap check is
 the missing feedback that earlier diagnostics lacked.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -29,6 +30,7 @@ from backend.core.models import Design, StrandType
 from backend.core.seamed_router import _scaffold_coverage, auto_scaffold_seamed
 from backend.core.seamless_router import auto_scaffold_seamless
 from backend.core.section_router import route_sections
+
 # Promoted to the shared automation harness (AF-1) so the design-automation loop's
 # round-trip oracle and this router test share one definition.
 from tests.automation_harness import canonical_topology as _canonical_topology
@@ -60,10 +62,16 @@ def _load(path: Path) -> Design:
 def _segmented_helices(base: Design) -> dict[str, list[dict]]:
     """Helices whose scaffold coverage spans more than one section (the teeth)."""
     cov = _scaffold_coverage(base)
-    return {h: sorted(ivs, key=lambda iv: iv["lo"]) for h, ivs in cov.items() if len(ivs) > 1}
+    return {
+        h: sorted(ivs, key=lambda iv: iv["lo"])
+        for h, ivs in cov.items()
+        if len(ivs) > 1
+    }
 
 
-def intertooth_gap_extension(routed: Design, base: Design) -> tuple[int, list[tuple[str, int, int]]]:
+def intertooth_gap_extension(
+    routed: Design, base: Design
+) -> tuple[int, list[tuple[str, int, int]]]:
     """Worst inter-tooth gap extension (bp) + the offending (helix, end_bp, dist) list.
 
     Only counts domain ends that fall *strictly between* two of a segmented helix's
@@ -107,9 +115,11 @@ def min_per_gap_clearance(routed: Design, base: Design) -> int:
     got: dict[str, set[int]] = defaultdict(set)
     for s in _active_scaffold_strands(routed):
         for dm in s.domains:
-            for bp in range(min(dm.start_bp, dm.end_bp), max(dm.start_bp, dm.end_bp) + 1):
+            for bp in range(
+                min(dm.start_bp, dm.end_bp), max(dm.start_bp, dm.end_bp) + 1
+            ):
                 got[dm.helix_id].add(bp)
-    worst = 10 ** 9
+    worst = 10**9
     for hid, ivs in seg.items():
         for a, b in zip(ivs, ivs[1:]):
             best = cur = 0
@@ -136,7 +146,9 @@ def max_teeth_extension_past_any_face(routed: Design, base: Design) -> int:
     got: dict[str, set[int]] = defaultdict(set)
     for s in _active_scaffold_strands(routed):
         for dm in s.domains:
-            for bp in range(min(dm.start_bp, dm.end_bp), max(dm.start_bp, dm.end_bp) + 1):
+            for bp in range(
+                min(dm.start_bp, dm.end_bp), max(dm.start_bp, dm.end_bp) + 1
+            ):
                 got[dm.helix_id].add(bp)
     worst = 0
     for hid in seg:
@@ -176,7 +188,9 @@ def trunk_matched_translate(routed: Design, base: Design) -> int | None:
     return None
 
 
-def trunk_tooth_connections_off_midpoint(routed: Design, base: Design) -> list[tuple[int, float]]:
+def trunk_tooth_connections_off_midpoint(
+    routed: Design, base: Design
+) -> list[tuple[int, float]]:
     """For each trunk↔tooth connection crossover, how far its bp sits from the nearest
     tooth (section) midpoint, relative to the tooth half-width.
 
@@ -184,7 +198,9 @@ def trunk_tooth_connections_off_midpoint(routed: Design, base: Design) -> list[t
     of their tooth (off_fraction > 1.0 means closer to a face than the midpoint).
     """
     cov = _scaffold_coverage(base)
-    sections = [(iv["lo"], iv["hi"]) for ivs in cov.values() for iv in ivs if len(ivs) > 1]
+    sections = [
+        (iv["lo"], iv["hi"]) for ivs in cov.values() for iv in ivs if len(ivs) > 1
+    ]
     out: list[tuple[int, float]] = []
     for xo in routed.crossovers:
         if xo.process_id != "auto_scaffold_seamed:section":
@@ -225,7 +241,11 @@ def seam_crossover_count(routed: Design) -> int:
     """Number of seamed-style seam crossovers (mid-helix Holliday junctions).  A fully
     seamless route — like the hand reference — has NONE; they only appear when a helix
     is routed by the seamed raster."""
-    return sum(1 for x in routed.crossovers if (x.process_id or "") == "auto_scaffold_seamed:seam")
+    return sum(
+        1
+        for x in routed.crossovers
+        if (x.process_id or "") == "auto_scaffold_seamed:seam"
+    )
 
 
 def _active_scaffold_strands(d: Design):
@@ -238,7 +258,9 @@ def _full_coverage_missing(routed: Design, base: Design) -> dict[str, int]:
     got: dict[str, set[int]] = defaultdict(set)
     for s in _active_scaffold_strands(routed):
         for dm in s.domains:
-            for bp in range(min(dm.start_bp, dm.end_bp), max(dm.start_bp, dm.end_bp) + 1):
+            for bp in range(
+                min(dm.start_bp, dm.end_bp), max(dm.start_bp, dm.end_bp) + 1
+            ):
                 got[dm.helix_id].add(bp)
     miss: dict[str, int] = {}
     for hid, ivs in cov.items():
@@ -252,6 +274,7 @@ def _full_coverage_missing(routed: Design, base: Design) -> dict[str, int]:
 
 
 # ── The checker is correct: the hand-routed reference satisfies the invariant ──────
+
 
 @pytest.mark.parametrize("ref_path", [_REF1, _REF2])
 def test_reference_route_keeps_inter_tooth_gaps_open(ref_path):
@@ -269,6 +292,7 @@ def test_reference_route_keeps_inter_tooth_gaps_open(ref_path):
 
 
 # ── The builder reproduces the committed fixture (golden-migration pin) ────────────
+
 
 def test_teeth_builder_matches_fixture():
     """`make_teeth_design()` reproduces tests/fixtures/teeth.nadoc exactly.
@@ -301,9 +325,9 @@ def test_teeth_builder_matches_fixture():
         assert rb is not None and rf is not None
         routed_built, _ = rb
         routed_fixture, _ = rf
-        assert _canonical_topology(routed_built) == _canonical_topology(routed_fixture), (
-            f"seamless={seamless}: routed output differs between builder and fixture"
-        )
+        assert _canonical_topology(routed_built) == _canonical_topology(
+            routed_fixture
+        ), f"seamless={seamless}: routed output differs between builder and fixture"
 
 
 def test_18hb_builder_matches_fixture():
@@ -314,23 +338,28 @@ def test_18hb_builder_matches_fixture():
     """
     from tests.conftest import make_18hb_design
 
-    assert _canonical_topology(make_18hb_design()) == _canonical_topology(_load(
-        _ROOT / "tests" / "fixtures" / "18hb_fixture.nadoc"))
+    assert _canonical_topology(make_18hb_design()) == _canonical_topology(
+        _load(_ROOT / "tests" / "fixtures" / "18hb_fixture.nadoc")
+    )
 
 
 # ── Structural guarantees the section router already meets ─────────────────────────
+
 
 @pytest.mark.parametrize("fixture", [_TEETH, _DUMBBELL])
 def test_section_router_single_strand_full_coverage(fixture):
     base = _load(fixture)
     result = route_sections(base.model_copy(deep=True))
-    assert result is not None, "route_sections fell back to None on a multi-section design"
+    assert result is not None, (
+        "route_sections fell back to None on a multi-section design"
+    )
     routed, _ = result
     assert len(_active_scaffold_strands(routed)) == 1
     assert _full_coverage_missing(routed, base) == {}
 
 
 # ── The hard requirement under construction (face-based redesign target) ───────────
+
 
 @pytest.mark.parametrize("fixture", [_TEETH, _DUMBBELL])
 def test_section_router_keeps_inter_tooth_gaps_open(fixture):
@@ -348,7 +377,9 @@ def test_section_router_bounds_per_domain_gap_extension(fixture):
     base = _load(fixture)
     routed, _ = route_sections(base.model_copy(deep=True))
     worst, viol = intertooth_gap_extension(routed, base)
-    assert not viol, f"scaffold extends >{_MAX_GAP_EXT}bp into inter-tooth gaps: worst={worst} {viol}"
+    assert not viol, (
+        f"scaffold extends >{_MAX_GAP_EXT}bp into inter-tooth gaps: worst={worst} {viol}"
+    )
 
 
 @pytest.mark.parametrize("fixture", [_TEETH, _DUMBBELL])
@@ -356,7 +387,9 @@ def test_trunk_tooth_connections_near_midpoint(fixture):
     base = _load(fixture)
     routed, _ = route_sections(base.model_copy(deep=True))
     off = trunk_tooth_connections_off_midpoint(routed, base)
-    assert not off, f"trunk↔tooth connections sit near a face, not the tooth midpoint: {off}"
+    assert not off, (
+        f"trunk↔tooth connections sit near a face, not the tooth midpoint: {off}"
+    )
 
 
 # ── The PUBLIC seamed entry point (the in-app Auto-scaffold) must keep gaps clear ──
@@ -364,16 +397,25 @@ def test_trunk_tooth_connections_near_midpoint(fixture):
 # by default, so the in-app seamed route — not just route_sections — keeps the teeth
 # gaps open (the per-helix seamed path bridged a gap: min_clear=0).
 
+
 def test_seamed_autoscaffold_keeps_teeth_gaps_open():
     base = _load(_TEETH)
     routed, result = auto_scaffold_seamed(base.copy_with(crossovers=[]))
-    scaffold = [s for s in routed.strands if s.strand_type == StrandType.SCAFFOLD and not s.is_reference]
+    scaffold = [
+        s
+        for s in routed.strands
+        if s.strand_type == StrandType.SCAFFOLD and not s.is_reference
+    ]
     assert len(scaffold) == 1, f"expected 1 scaffold strand, got {len(scaffold)}"
     assert _full_coverage_missing(routed, base) == {}
     worst, viol = intertooth_gap_extension(routed, base)
-    assert not viol, f"seamed autoscaffold extends >{_MAX_GAP_EXT}bp into gaps: worst={worst} {viol}"
+    assert not viol, (
+        f"seamed autoscaffold extends >{_MAX_GAP_EXT}bp into gaps: worst={worst} {viol}"
+    )
     clearance = min_per_gap_clearance(routed, base)
-    assert clearance >= _MIN_GAP_CLEARANCE, f"seamed autoscaffold leaves a gap only {clearance}bp clear"
+    assert clearance >= _MIN_GAP_CLEARANCE, (
+        f"seamed autoscaffold leaves a gap only {clearance}bp clear"
+    )
     teeth_ext = max_teeth_extension_past_any_face(routed, base)
     assert teeth_ext <= _MAX_GAP_EXT, (
         f"a tooth face sticks out {teeth_ext}bp (> {_MAX_GAP_EXT}); tooth extension not bounded"
@@ -386,7 +428,9 @@ def test_seamed_autoscaffold_trunk_ends_matched_for_polymerization():
     base = _load(_TEETH)
     routed, _ = auto_scaffold_seamed(base.copy_with(crossovers=[]))
     p = trunk_matched_translate(routed, base)
-    assert p is not None, "trunk far end is not a periodic translate of its near end (not polymerizable)"
+    assert p is not None, (
+        "trunk far end is not a periodic translate of its near end (not polymerizable)"
+    )
 
 
 # ── Seamless autoscaffold: as robust as seamed, with a buried nick ────────────────
@@ -394,17 +438,24 @@ def test_seamed_autoscaffold_trunk_ends_matched_for_polymerization():
 # (windows seamless, backbone seamed→circular), so the dumbbell that used to fragment
 # into 8 pieces routes to one strand with a buried mid-bundle nick.
 
+
 @pytest.mark.parametrize("fixture", [_TEETH, _DUMBBELL])
 def test_seamless_autoscaffold_single_strand_buried_nick(fixture):
     base = _load(fixture)
     routed, result = auto_scaffold_seamless(base.copy_with(crossovers=[]))
-    scaffold = [s for s in routed.strands if s.strand_type == StrandType.SCAFFOLD and not s.is_reference]
+    scaffold = [
+        s
+        for s in routed.strands
+        if s.strand_type == StrandType.SCAFFOLD and not s.is_reference
+    ]
     assert len(scaffold) == 1, f"expected 1 scaffold strand, got {len(scaffold)}"
     assert result.warnings == [], result.warnings
     assert _full_coverage_missing(routed, base) == {}
     assert nick_is_buried(routed, base), "seamless nick is not buried mid-bundle"
     teeth_ext = max_teeth_extension_past_any_face(routed, base)
-    assert teeth_ext <= _MAX_GAP_EXT, f"a tooth face sticks out {teeth_ext}bp (> {_MAX_GAP_EXT})"
+    assert teeth_ext <= _MAX_GAP_EXT, (
+        f"a tooth face sticks out {teeth_ext}bp (> {_MAX_GAP_EXT})"
+    )
     assert min_per_gap_clearance(routed, base) >= _MIN_GAP_CLEARANCE
 
 
@@ -413,6 +464,7 @@ def test_seamless_autoscaffold_single_strand_buried_nick(fixture):
 # seamless — every crossover is an end/bridge, no mid-helix Holliday junction), and a
 # PROPER nick (5'/3' on the same helix at adjacent bp — a circular scaffold opened at
 # one phosphate), buried mid-bundle.  This is the target the router must match.
+
 
 def test_reference_seamless_route_is_golden():
     base = _load(_TEETH)

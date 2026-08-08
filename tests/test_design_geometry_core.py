@@ -30,9 +30,14 @@ from backend.core.models import (
 from backend.core.constants import BDNA_RISE_PER_BP
 
 
-def _single_helix_design(*, direction=Direction.FORWARD, length_bp=10,
-                         strand_type=StrandType.STAPLE, is_reference=False,
-                         extensions=None):
+def _single_helix_design(
+    *,
+    direction=Direction.FORWARD,
+    length_bp=10,
+    strand_type=StrandType.STAPLE,
+    is_reference=False,
+    extensions=None,
+):
     """One helix + one full-span strand. start_bp/end_bp follow the 5'→3'
     convention for the given direction."""
     h = Helix(
@@ -44,11 +49,16 @@ def _single_helix_design(*, direction=Direction.FORWARD, length_bp=10,
         phase_offset=0.0,
     )
     if direction == Direction.FORWARD:
-        dom = Domain(helix_id="h0", direction=direction, start_bp=0, end_bp=length_bp - 1)
+        dom = Domain(
+            helix_id="h0", direction=direction, start_bp=0, end_bp=length_bp - 1
+        )
     else:
-        dom = Domain(helix_id="h0", direction=direction, start_bp=length_bp - 1, end_bp=0)
-    strand = Strand(id="s0", domains=[dom], strand_type=strand_type,
-                    is_reference=is_reference)
+        dom = Domain(
+            helix_id="h0", direction=direction, start_bp=length_bp - 1, end_bp=0
+        )
+    strand = Strand(
+        id="s0", domains=[dom], strand_type=strand_type, is_reference=is_reference
+    )
     return Design(
         metadata=DesignMetadata(name="t"),
         lattice_type=LatticeType.HONEYCOMB,
@@ -117,7 +127,7 @@ def test_geometry_for_design_emits_one_bead_per_bp():
     assert len(on_helix) == 10
     fwd = [n for n in on_helix if n["direction"] == Direction.FORWARD.value]
     assert len(fwd) == 10
-    assert not [n for n in on_helix if n.get("strand_id") is None]   # no phantom bases
+    assert not [n for n in on_helix if n.get("strand_id") is None]  # no phantom bases
     sample = fwd[0]
     for key in ("backbone_position", "base_position", "base_normal", "axis_tangent"):
         assert len(sample[key]) == 3  # xyz vector
@@ -133,8 +143,10 @@ def test_geometry_for_design_straight_strips_deformations_and_clusters():
     d = _single_helix_design(length_bp=10)
     full = _geometry_for_design(d)
     straight = _geometry_for_design_straight(d)
-    full_by_key = {(n["helix_id"], n["bp_index"], n["direction"]): n["backbone_position"]
-                   for n in full}
+    full_by_key = {
+        (n["helix_id"], n["bp_index"], n["direction"]): n["backbone_position"]
+        for n in full
+    }
     for n in straight:
         k = (n["helix_id"], n["bp_index"], n["direction"])
         assert full_by_key[k] == n["backbone_position"]
@@ -143,21 +155,31 @@ def test_geometry_for_design_straight_strips_deformations_and_clusters():
 def test_geometry_for_design_five_prime_extension_tip_is_cube():
     """Full mode appends extension beads; the outermost 5' bead is is_five_prime."""
     ext = StrandExtension(strand_id="s0", end="five_prime", sequence="TT")
-    d = _single_helix_design(direction=Direction.FORWARD, length_bp=10, extensions=[ext])
+    d = _single_helix_design(
+        direction=Direction.FORWARD, length_bp=10, extensions=[ext]
+    )
     nucs = _geometry_for_design(d)
-    ext_beads = [n for n in nucs
-                 if n.get("extension_id") == ext.id and not n.get("is_modification")]
+    ext_beads = [
+        n
+        for n in nucs
+        if n.get("extension_id") == ext.id and not n.get("is_modification")
+    ]
     assert ext_beads
     ext_beads.sort(key=lambda n: n["bp_index"])
     assert ext_beads[-1]["is_five_prime"]
     # The real-helix 5' terminal loses its cube when a 5' extension exists.
-    real_terminal = next(n for n in nucs
-                         if n["helix_id"] == "h0" and n["bp_index"] == 0
-                         and n["direction"] == Direction.FORWARD.value)
+    real_terminal = next(
+        n
+        for n in nucs
+        if n["helix_id"] == "h0"
+        and n["bp_index"] == 0
+        and n["direction"] == Direction.FORWARD.value
+    )
     assert not real_terminal["is_five_prime"]
 
 
 # ── Compaction / positions kernel (service push #48) ─────────────────────────
+
 
 def test_compact_geometry_from_nucleotides_buckets_by_helix_and_direction():
     """Flat nuc dicts → per-helix-per-direction parallel arrays with matching
@@ -173,8 +195,11 @@ def test_compact_geometry_from_nucleotides_buckets_by_helix_and_direction():
     for key in ("bb", "bs", "bn", "at", "sid", "stype", "is5", "is3"):
         assert len(fwd[key]) == n
     # bp values round-trip from the source nuc dicts (same FORWARD bps).
-    src_bps = sorted(x["bp_index"] for x in nucs
-                     if x["helix_id"] == "h0" and x["direction"] == Direction.FORWARD.value)
+    src_bps = sorted(
+        x["bp_index"]
+        for x in nucs
+        if x["helix_id"] == "h0" and x["direction"] == Direction.FORWARD.value
+    )
     assert sorted(fwd["bp"]) == src_bps
 
 
@@ -193,8 +218,9 @@ def test_compact_geometry_for_design_equals_compose():
     """_compact_geometry_for_design is exactly the compaction of the full
     per-nuc geometry (it's a thin composition wrapper)."""
     d = _single_helix_design(length_bp=10)
-    assert _compact_geometry_for_design(d) == \
-        _compact_geometry_from_nucleotides(_geometry_for_design(d))
+    assert _compact_geometry_for_design(d) == _compact_geometry_from_nucleotides(
+        _geometry_for_design(d)
+    )
 
 
 def test_positions_by_helix_emits_only_position_fields():
@@ -237,8 +263,9 @@ def test_positions_for_design_includes_extension_tail_beads():
     pinned at their deformed position when the toggle goes OFF. The compact
     path must match the full per-nuc path bead-for-bead, extensions included."""
     ext3 = StrandExtension(strand_id="s0", end="three_prime", sequence="TT")
-    d = _single_helix_design(direction=Direction.FORWARD, length_bp=10,
-                             extensions=[ext3])
+    d = _single_helix_design(
+        direction=Direction.FORWARD, length_bp=10, extensions=[ext3]
+    )
     direct, _ = _positions_for_design(d)
     fallback = _positions_by_helix(_geometry_for_design(d))
 
@@ -265,12 +292,18 @@ def test_positions_for_design_extension_survives_deformation_strip():
     emitted (and at the STRAIGHT anchor position), so the deform lerp has a t=0
     target for them."""
     from backend.core.models import DeformationOp, TwistParams
+
     ext = StrandExtension(strand_id="s0", end="three_prime", sequence="TTT")
-    d = _single_helix_design(direction=Direction.FORWARD, length_bp=12,
-                             extensions=[ext])
+    d = _single_helix_design(
+        direction=Direction.FORWARD, length_bp=12, extensions=[ext]
+    )
     d.deformations = [
-        DeformationOp(type="twist", plane_a_bp=2, plane_b_bp=9,
-                      params=TwistParams(total_degrees=90.0)),
+        DeformationOp(
+            type="twist",
+            plane_a_bp=2,
+            plane_b_bp=9,
+            params=TwistParams(total_degrees=90.0),
+        ),
     ]
     # Mirror crud.py's straight-anchor build: strip deformations, then compact.
     straight = d.model_copy(update={"deformations": [], "cluster_transforms": []})

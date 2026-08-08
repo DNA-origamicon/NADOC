@@ -38,7 +38,9 @@ def _two_state(n_a=80, n_b=40, d=30, sep=10.0, noise=0.3, seed=7, interleave=Tru
     labels = np.array([0] * n_a + [1] * n_b)
     if interleave:
         rng.shuffle(labels)
-    X = np.where(labels[:, None] == 0, 0.0, mu_b[None, :]) + rng.normal(scale=noise, size=(labels.size, d))
+    X = np.where(labels[:, None] == 0, 0.0, mu_b[None, :]) + rng.normal(
+        scale=noise, size=(labels.size, d)
+    )
     return X, labels
 
 
@@ -83,7 +85,9 @@ def test_monotone_drift_is_not_reported_as_two_states():
     would be a confident lie about an unequilibrated run.
     """
     t = np.linspace(0.0, 1.0, 60)
-    X = np.outer(t, np.ones(20)) * 10.0 + np.random.default_rng(1).normal(scale=0.05, size=(60, 20))
+    X = np.outer(t, np.ones(20)) * 10.0 + np.random.default_rng(1).normal(
+        scale=0.05, size=(60, 20)
+    )
     res = occupancy_clusters(X)
 
     assert res["silhouette"] > 0.25, "the drift should still LOOK separated"
@@ -123,7 +127,9 @@ def test_clustering_is_deterministic():
     X, _ = _two_state()
     a, b = occupancy_clusters(X), occupancy_clusters(X)
     assert [c["frames"] for c in a["clusters"]] == [c["frames"] for c in b["clusters"]]
-    assert [c["medoid_index"] for c in a["clusters"]] == [c["medoid_index"] for c in b["clusters"]]
+    assert [c["medoid_index"] for c in a["clusters"]] == [
+        c["medoid_index"] for c in b["clusters"]
+    ]
 
 
 def test_populations_carry_an_autocorrelation_aware_error_bar():
@@ -136,7 +142,9 @@ def test_populations_carry_an_autocorrelation_aware_error_bar():
     rng = np.random.default_rng(11)
     mu = np.zeros(20)
     mu[:5] = 8.0
-    X = np.where(block[:, None] == 0, 0.0, mu[None, :]) + rng.normal(scale=0.2, size=(block.size, 20))
+    X = np.where(block[:, None] == 0, 0.0, mu[None, :]) + rng.normal(
+        scale=0.2, size=(block.size, 20)
+    )
 
     res = occupancy_clusters(X)
     assert res["verdict"] == "switching"
@@ -159,7 +167,9 @@ def test_forced_k_is_honoured_and_reports_weak_separation():
 
 
 def test_too_few_frames_is_not_ready():
-    res = occupancy_clusters(np.random.default_rng(0).normal(size=(_OCC_MIN_FRAMES - 1, 12)))
+    res = occupancy_clusters(
+        np.random.default_rng(0).normal(size=(_OCC_MIN_FRAMES - 1, 12))
+    )
     assert res["ready"] is False
     assert "at least" in res["reason"]
 
@@ -198,7 +208,10 @@ def test_occupancy_confidence_flags_undersampled_populations():
     assert occupancy_confidence(200, 2.6)["preliminary"] is True
     assert occupancy_confidence(200, OCCUPANCY_PRELIM_NEFF + 1)["preliminary"] is False
     # more independent samples → smaller relative error
-    assert occupancy_confidence(200, 100)["rel_error"] < occupancy_confidence(200, 10)["rel_error"]
+    assert (
+        occupancy_confidence(200, 100)["rel_error"]
+        < occupancy_confidence(200, 10)["rel_error"]
+    )
 
 
 # ── Feature extraction ────────────────────────────────────────────────────────────
@@ -218,10 +231,14 @@ def _frame(keys, positions, a1s=None):
     base-pair midpoint land on the duplex axis."""
     if a1s is None:
         a1s = [[1.0, 0.0, 0.0]] * len(keys)
-    return {k: {"backbone_position": np.array(p, dtype=float),
-                "a1": np.array(a, dtype=float),
-                "a3": np.array([0.0, 0.0, 1.0])}
-            for k, p, a in zip(keys, positions, a1s)}
+    return {
+        k: {
+            "backbone_position": np.array(p, dtype=float),
+            "a1": np.array(a, dtype=float),
+            "a3": np.array([0.0, 0.0, 1.0]),
+        }
+        for k, p, a in zip(keys, positions, a1s)
+    }
 
 
 def test_features_reject_torn_frames_and_report_which_survived(monkeypatch):
@@ -229,15 +246,22 @@ def test_features_reject_torn_frames_and_report_which_survived(monkeypatch):
     import backend.core.oxdna_occupancy as occ
 
     keys = [("h0", i, "FORWARD") for i in range(4)]
-    monkeypatch.setattr(occ, "_strain_index",
-                        lambda design, k, metric: (np.array([0, 1, 2]), np.array([1, 2, 3])))
+    monkeypatch.setattr(
+        occ,
+        "_strain_index",
+        lambda design, k, metric: (np.array([0, 1, 2]), np.array([1, 2, 3])),
+    )
 
     good = [_frame(keys, [[0, 0, i * _BOND_NM] for i in range(4)]) for _ in range(3)]
     # a PBC tear: the last two nucleotides snapped to a different periodic image
-    torn = _frame(keys, [[0, 0, 0], [0, 0, _BOND_NM], [0, 0, 90.0], [0, 0, 90.0 + _BOND_NM]])
+    torn = _frame(
+        keys, [[0, 0, 0], [0, 0, _BOND_NM], [0, 0, 90.0], [0, 0, 90.0 + _BOND_NM]]
+    )
     frames = [good[0], torn, good[1], good[2]]
 
-    X, _fk, kept, _basis, _plan = occ.occupancy_features(frames, keys, _FakeDesign(), basis="nt")
+    X, _fk, kept, _basis, _plan = occ.occupancy_features(
+        frames, keys, _FakeDesign(), basis="nt"
+    )
 
     assert kept == [0, 2, 3], "the torn frame must be dropped, the rest kept in order"
     assert X.shape[0] == 3
@@ -253,22 +277,27 @@ def _duplex_fixture(n_bp):
     for c in range(n_bp):
         keys.append(("h0", c, "FORWARD"))
         keys.append(("h0", c, "REVERSE"))
-    keys.append(("h0", n_bp, "FORWARD"))                # unpaired overhang
+    keys.append(("h0", n_bp, "FORWARD"))  # unpaired overhang
 
     positions, a1s = [], []
     for c in range(n_bp):
-        positions.append([0.0, 0.0, c * _BOND_NM])      # FORWARD strand
-        a1s.append([1.0, 0.0, 0.0])                     # base points across the duplex…
-        positions.append([1.0, 0.0, c * _BOND_NM])      # REVERSE strand
-        a1s.append([-1.0, 0.0, 0.0])                    # …and its partner points back
-    positions.append([5.0, 5.0, 5.0])                   # the ssDNA bead, far away
+        positions.append([0.0, 0.0, c * _BOND_NM])  # FORWARD strand
+        a1s.append([1.0, 0.0, 0.0])  # base points across the duplex…
+        positions.append([1.0, 0.0, c * _BOND_NM])  # REVERSE strand
+        a1s.append([-1.0, 0.0, 0.0])  # …and its partner points back
+    positions.append([5.0, 5.0, 5.0])  # the ssDNA bead, far away
     a1s.append([1.0, 0.0, 0.0])
 
     wc_a = np.array([2 * c for c in range(n_bp)])
     wc_b = np.array([2 * c + 1 for c in range(n_bp)])
     # backbone 3'-neighbours WITHIN each strand (never across the duplex)
-    bb_a = np.array([2 * c for c in range(n_bp - 1)] + [2 * c + 1 for c in range(n_bp - 1)])
-    bb_b = np.array([2 * (c + 1) for c in range(n_bp - 1)] + [2 * (c + 1) + 1 for c in range(n_bp - 1)])
+    bb_a = np.array(
+        [2 * c for c in range(n_bp - 1)] + [2 * c + 1 for c in range(n_bp - 1)]
+    )
+    bb_b = np.array(
+        [2 * (c + 1) for c in range(n_bp - 1)]
+        + [2 * (c + 1) + 1 for c in range(n_bp - 1)]
+    )
 
     def fake_index(design, k, metric):
         return (wc_a, wc_b) if metric == "wc" else (bb_a, bb_b)
@@ -279,13 +308,14 @@ def _duplex_fixture(n_bp):
 def test_bp_basis_uses_only_paired_columns(monkeypatch):
     import backend.core.oxdna_occupancy as occ
 
-    n_bp = 12                                            # ≥ _OCC_MIN_BP_COLUMNS
+    n_bp = 12  # ≥ _OCC_MIN_BP_COLUMNS
     keys, positions, a1s, fake_index = _duplex_fixture(n_bp)
     monkeypatch.setattr(occ, "_strain_index", fake_index)
     frames = [_frame(keys, positions, a1s) for _ in range(2)]
 
     X, feature_keys, kept, basis_used, _plan = occ.occupancy_features(
-        frames, keys, _FakeDesign(), basis="bp")
+        frames, keys, _FakeDesign(), basis="bp"
+    )
 
     assert basis_used == "bp"
     assert X.shape[1] == n_bp * 3, "one 3-vector per duplex column, ssDNA excluded"
@@ -300,13 +330,14 @@ def test_bp_basis_falls_back_to_nt_and_says_so(monkeypatch):
     """A construct with no real duplex must not silently claim a bp basis."""
     import backend.core.oxdna_occupancy as occ
 
-    n_bp = 2                                             # < _OCC_MIN_BP_COLUMNS
+    n_bp = 2  # < _OCC_MIN_BP_COLUMNS
     keys, positions, a1s, fake_index = _duplex_fixture(n_bp)
     monkeypatch.setattr(occ, "_strain_index", fake_index)
     frames = [_frame(keys, positions, a1s) for _ in range(2)]
 
     X, feature_keys, _kept, basis_used, _plan = occ.occupancy_features(
-        frames, keys, _FakeDesign(), basis="bp")
+        frames, keys, _FakeDesign(), basis="bp"
+    )
 
     assert basis_used == "nt", "the fallback must be reported, not applied silently"
     assert X.shape[1] == len(keys) * 3
@@ -317,11 +348,16 @@ def test_nt_basis_keeps_every_nucleotide(monkeypatch):
     import backend.core.oxdna_occupancy as occ
 
     keys = [("h0", i, "FORWARD") for i in range(4)]
-    monkeypatch.setattr(occ, "_strain_index",
-                        lambda design, k, metric: (np.array([0, 1, 2]), np.array([1, 2, 3])))
+    monkeypatch.setattr(
+        occ,
+        "_strain_index",
+        lambda design, k, metric: (np.array([0, 1, 2]), np.array([1, 2, 3])),
+    )
     frames = [_frame(keys, [[0, 0, i * _BOND_NM] for i in range(4)]) for _ in range(2)]
 
-    X, feature_keys, _kept, _basis, _plan = occ.occupancy_features(frames, keys, _FakeDesign(), basis="nt")
+    X, feature_keys, _kept, _basis, _plan = occ.occupancy_features(
+        frames, keys, _FakeDesign(), basis="nt"
+    )
     assert X.shape[1] == 4 * 3
     assert feature_keys == keys
 
@@ -336,14 +372,18 @@ def test_sampling_indices_skip_relaxation_and_the_seed_frame():
     """Relaxation stages are a transient; composite index 0 is the design pose."""
     from backend.core.oxdna_occupancy import _sampling_indices
 
-    stages = [{"name": "1_mc_relax", "kind": "mc", "n_frames": 3},
-              {"name": "2_equil", "kind": "equil", "n_frames": 2},
-              {"name": "3_production", "kind": "production", "n_frames": 4}]
+    stages = [
+        {"name": "1_mc_relax", "kind": "mc", "n_frames": 3},
+        {"name": "2_equil", "kind": "equil", "n_frames": 2},
+        {"name": "3_production", "kind": "production", "n_frames": 4},
+    ]
     assert _sampling_indices(stages) == [5, 6, 7, 8]
 
     # production first → index 0 is the prepended seed and must be dropped
-    seeded = [{"name": "1_production", "kind": "production", "n_frames": 3},
-              {"name": "2_field", "kind": "field", "n_frames": 2}]
+    seeded = [
+        {"name": "1_production", "kind": "production", "n_frames": 3},
+        {"name": "2_field", "kind": "field", "n_frames": 2},
+    ]
     assert _sampling_indices(seeded) == [1, 2, 3, 4]
 
 
@@ -376,14 +416,27 @@ def occ_client(monkeypatch):
     calls = []
 
     monkeypatch.setattr(ro, "_load_job", lambda job_id: _FakeJob())
-    monkeypatch.setattr(ro, "_composite_inputs",
-                        lambda job, scope: ("DESIGN", [("1_production", "production", "t.dat", None, None)], "ref.dat"))
+    monkeypatch.setattr(
+        ro,
+        "_composite_inputs",
+        lambda job, scope: (
+            "DESIGN",
+            [("1_production", "production", "t.dat", None, None)],
+            "ref.dat",
+        ),
+    )
     monkeypatch.setattr(ro, "_capture_bead_count", lambda job: 0)
     monkeypatch.setattr(ro, "_capture_strand_length", lambda job: 0)
 
     def fake_cached(design, stages, ref, **kw):
         calls.append(kw)
-        return {"ready": True, "verdict": "unimodal", "k": 1, "clusters": [], "keys": []}
+        return {
+            "ready": True,
+            "verdict": "unimodal",
+            "k": 1,
+            "clusters": [],
+            "keys": [],
+        }
 
     monkeypatch.setattr(occ, "production_occupancy_cached", fake_cached)
     return TestClient(app), calls
@@ -405,8 +458,12 @@ def test_route_defaults_match_the_trajectory_route(occ_client):
 
 def test_route_rejects_unknown_method_and_basis(occ_client):
     client, _ = occ_client
-    assert client.get("/api/oxdna/jobs/occ-test/occupancy?method=rmsd").status_code == 400
-    assert client.get("/api/oxdna/jobs/occ-test/occupancy?basis=axis").status_code == 400
+    assert (
+        client.get("/api/oxdna/jobs/occ-test/occupancy?method=rmsd").status_code == 400
+    )
+    assert (
+        client.get("/api/oxdna/jobs/occ-test/occupancy?basis=axis").status_code == 400
+    )
 
 
 def test_route_clamps_n_clusters(occ_client):
@@ -445,7 +502,9 @@ def test_occupancy_progress_is_inactive_when_nothing_is_building():
 
     from backend.api.main import app
 
-    assert TestClient(app).get("/api/oxdna/jobs/nobody/occupancy-progress").json() == {"active": False}
+    assert TestClient(app).get("/api/oxdna/jobs/nobody/occupancy-progress").json() == {
+        "active": False
+    }
 
 
 def test_occupancy_progress_dict_is_separate_from_the_trajectory_one():
@@ -466,18 +525,23 @@ class _FakeCluster:
 class _ScopedDesign:
     """Only what resolve_selection_keys reaches: cluster_transforms (+ the strand walk,
     which the tests monkeypatch)."""
+
     def __init__(self, clusters=()):
         self.cluster_transforms = list(clusters)
 
 
 def _keys(n_helices=3, n_bp=4):
-    return [(f"h{h}", b, d)
-            for h in range(n_helices) for b in range(n_bp)
-            for d in ("FORWARD", "REVERSE")]
+    return [
+        (f"h{h}", b, d)
+        for h in range(n_helices)
+        for b in range(n_bp)
+        for d in ("FORWARD", "REVERSE")
+    ]
 
 
 def test_no_selection_means_the_whole_structure():
     from backend.core.oxdna_occupancy import resolve_selection_keys
+
     ks = _keys()
     assert resolve_selection_keys(_ScopedDesign(), ks, None) == ks
     assert resolve_selection_keys(_ScopedDesign(), ks, {}) == ks
@@ -485,6 +549,7 @@ def test_no_selection_means_the_whole_structure():
 
 def test_selection_by_helix():
     from backend.core.oxdna_occupancy import resolve_selection_keys
+
     got = resolve_selection_keys(_ScopedDesign(), _keys(), {"helix_ids": ["h1"]})
     assert got and all(k[0] == "h1" for k in got)
     assert len(got) == 8
@@ -492,6 +557,7 @@ def test_selection_by_helix():
 
 def test_a_cluster_expands_to_its_member_helices():
     from backend.core.oxdna_occupancy import resolve_selection_keys
+
     d = _ScopedDesign([_FakeCluster("c1", ["h0", "h2"])])
     got = resolve_selection_keys(d, _keys(), {"cluster_ids": ["c1"]})
     assert {k[0] for k in got} == {"h0", "h2"}
@@ -501,6 +567,7 @@ def test_selection_by_individual_base_picks_up_its_loop_copies():
     # A base is matched on (helix, bp, direction), so selecting a position takes every
     # loop-insertion copy at it rather than an arbitrary one.
     from backend.core.oxdna_occupancy import resolve_selection_keys
+
     ks = [("h0", 0, "FORWARD"), ("h0", 0, "FORWARD", 1), ("h0", 1, "FORWARD")]
     got = resolve_selection_keys(_ScopedDesign(), ks, {"bases": [["h0", 0, "FORWARD"]]})
     assert got == [("h0", 0, "FORWARD"), ("h0", 0, "FORWARD", 1)]
@@ -518,8 +585,12 @@ def test_selection_by_strand(monkeypatch):
             self.strand = type("S", (), {"id": sid})()
 
     import backend.core.occupancy_core as core
-    monkeypatch.setattr(core, "_walk_strand_nucleotides",
-                        lambda design: [_Step(k, owner[k]) for k in ks])
+
+    monkeypatch.setattr(
+        core,
+        "_walk_strand_nucleotides",
+        lambda design: [_Step(k, owner[k]) for k in ks],
+    )
     got = occ.resolve_selection_keys(_ScopedDesign(), ks, {"strand_ids": ["sB"]})
     assert {k[0] for k in got} == {"h1"}
 
@@ -528,8 +599,10 @@ def test_criteria_union_rather_than_intersect():
     # "Pick these things" means a union; intersecting would make a helix + a base from a
     # different helix select nothing, which is not what the user did.
     from backend.core.oxdna_occupancy import resolve_selection_keys
-    got = resolve_selection_keys(_ScopedDesign(), _keys(),
-                                 {"helix_ids": ["h0"], "bases": [["h2", 1, "FORWARD"]]})
+
+    got = resolve_selection_keys(
+        _ScopedDesign(), _keys(), {"helix_ids": ["h0"], "bases": [["h2", 1, "FORWARD"]]}
+    )
     assert {k[0] for k in got} == {"h0", "h2"}
     assert sum(1 for k in got if k[0] == "h2") == 1
 
@@ -552,7 +625,10 @@ _SYNTH_KEYS = [_REAL, _XB, _XB2, _XB_OTHER, _EXT, _EXT2, _EXT_OTHER]
 
 def _sel(design=None, keys=None, **selection):
     from backend.core.oxdna_occupancy import resolve_selection_keys
-    return resolve_selection_keys(design or _ScopedDesign(), keys or _SYNTH_KEYS, selection)
+
+    return resolve_selection_keys(
+        design or _ScopedDesign(), keys or _SYNTH_KEYS, selection
+    )
 
 
 def test_a_coordinate_scope_never_reaches_synthetic_beads():
@@ -580,8 +656,12 @@ def test_extensions_scope_selects_one_tail_bead_or_the_whole_tail():
 
 
 def test_synthetic_and_real_scopes_union():
-    assert _sel(helix_ids=["h0"], extra_bases=[["x1", 0]], extensions=[["e1"]]) \
-        == [_REAL, _XB, _EXT, _EXT2]
+    assert _sel(helix_ids=["h0"], extra_bases=[["x1", 0]], extensions=[["e1"]]) == [
+        _REAL,
+        _XB,
+        _EXT,
+        _EXT2,
+    ]
 
 
 def test_a_scope_that_asks_for_no_synthetics_still_excludes_them():
@@ -592,6 +672,7 @@ def test_a_scope_that_asks_for_no_synthetics_still_excludes_them():
 
 def test_an_unscoped_run_keeps_synthetics(monkeypatch):
     from backend.core.oxdna_occupancy import resolve_selection_keys
+
     assert resolve_selection_keys(_ScopedDesign(), _SYNTH_KEYS, None) == _SYNTH_KEYS
 
 
@@ -604,12 +685,16 @@ def test_subset_superposition_removes_rigid_body_motion():
     base = rng.normal(size=(12, 3)) * 2.0
     frames = []
     for t in range(60):
-        th = 0.9 * np.sin(t / 3.0)                      # the region swings back and forth
-        R = np.array([[np.cos(th), -np.sin(th), 0], [np.sin(th), np.cos(th), 0], [0, 0, 1]])
+        th = 0.9 * np.sin(t / 3.0)  # the region swings back and forth
+        R = np.array(
+            [[np.cos(th), -np.sin(th), 0], [np.sin(th), np.cos(th), 0], [0, 0, 1]]
+        )
         # A little thermal jitter, so what remains after the fit is a real (unimodal)
         # ensemble rather than float noise that clustering cannot meaningfully describe.
-        frames.append(((base @ R.T) + np.array([3 * np.cos(th), 0, 0])).ravel()
-                      + rng.normal(scale=0.05, size=36))
+        frames.append(
+            ((base @ R.T) + np.array([3 * np.cos(th), 0, 0])).ravel()
+            + rng.normal(scale=0.05, size=36)
+        )
     X = np.array(frames)
 
     # Unfitted, the swing dominates and looks like well-separated states.
@@ -629,7 +714,7 @@ def test_subset_superposition_keeps_a_real_shape_change():
     frames, labels = [], []
     for t in range(60):
         bent = base.copy()
-        sign = 1.0 if (t % 6) < 3 else -1.0              # two genuine internal shapes
+        sign = 1.0 if (t % 6) < 3 else -1.0  # two genuine internal shapes
         bent[:, 2] += sign * 1.5 * bent[:, 0] ** 2 / 4.0
         frames.append(bent.ravel() + rng.normal(scale=0.02, size=36))
         labels.append(sign)
@@ -693,13 +778,15 @@ def test_a_mixed_selection_fits_on_the_duplex_points_only():
     from backend.core.occupancy_core import occupancy_fit_plan
 
     keys = _fit_keys()
-    sel = list(range(len(keys)))                       # duplex AND both inserts
+    sel = list(range(len(keys)))  # duplex AND both inserts
     plan = occupancy_fit_plan(_FitDesign(), keys, sel, fit="selection")
 
     assert plan["fit"] == "selection"
-    assert plan["n_fit_points"] == len(keys) - 2, "the two __xb__ inserts stay out of the fit"
+    assert plan["n_fit_points"] == len(keys) - 2, (
+        "the two __xb__ inserts stay out of the fit"
+    )
     assert "duplex-paired" in (plan["note"] or "")
-    (fit_pos, out_pos, _slots), = plan["groups"]
+    ((fit_pos, out_pos, _slots),) = plan["groups"]
     assert len(out_pos) == len(keys), "every picked point is still a FEATURE"
 
 
@@ -707,8 +794,9 @@ def test_too_few_points_keeps_the_global_fit_and_says_so():
     from backend.core.occupancy_core import occupancy_fit_plan
 
     keys = _fit_keys()
-    plan = occupancy_fit_plan(_FitDesign(), keys, [len(keys) - 2, len(keys) - 1],
-                              fit="selection")
+    plan = occupancy_fit_plan(
+        _FitDesign(), keys, [len(keys) - 2, len(keys) - 1], fit="selection"
+    )
     assert plan["fit"] == "global"
     assert "no rotation to remove" in plan["note"]
 
@@ -723,13 +811,19 @@ def test_local_fit_uses_the_junction_flanking_duplex_not_the_inserts():
     plan = occupancy_fit_plan(_FitDesign(), keys, inserts, fit="local")
 
     assert plan["fit"] == "local"
-    assert len(plan["need_idx"]) > len(inserts), "the flanking duplex must be retained too"
-    (fit_pos, out_pos, slots), = plan["groups"]
+    assert len(plan["need_idx"]) > len(inserts), (
+        "the flanking duplex must be retained too"
+    )
+    ((fit_pos, out_pos, slots),) = plan["groups"]
     assert plan["n_fit_points"] >= 3
     assert sorted(slots) == [0, 1], "both inserts are features"
     fit_keys = {keys[plan["need_idx"][p]] for p in fit_pos}
-    assert all(k[0] != "__xb__" for k in fit_keys), "a junction frame is duplex, not inserts"
-    assert all(abs(k[1] - 14) <= 3 for k in fit_keys), "±3 bp of the crossover, nothing else"
+    assert all(k[0] != "__xb__" for k in fit_keys), (
+        "a junction frame is duplex, not inserts"
+    )
+    assert all(abs(k[1] - 14) <= 3 for k in fit_keys), (
+        "±3 bp of the crossover, nothing else"
+    )
 
 
 def test_local_fit_degrades_to_selection_when_no_extra_bases_are_picked():
@@ -746,7 +840,11 @@ def test_local_fit_degrades_to_selection_when_no_extra_bases_are_picked():
 def test_apply_fit_plan_removes_a_junction_swing_but_keeps_the_flip():
     """End to end on synthetic frames: an insert that FLIPS between two poses while its
     junction swings must come out as the flip. Under the global fit it does not."""
-    from backend.core.occupancy_core import apply_fit_plan, occupancy_clusters, occupancy_fit_plan
+    from backend.core.occupancy_core import (
+        apply_fit_plan,
+        occupancy_clusters,
+        occupancy_fit_plan,
+    )
 
     keys = _fit_keys()
     inserts = [len(keys) - 2, len(keys) - 1]
@@ -754,17 +852,22 @@ def test_apply_fit_plan_removes_a_junction_swing_but_keeps_the_flip():
     need = plan["need_idx"]
 
     rng = np.random.default_rng(3)
-    home = rng.normal(size=(len(need), 3)) * 2.0        # the local rest geometry
+    home = rng.normal(size=(len(need), 3)) * 2.0  # the local rest geometry
     P = []
     for t in range(60):
-        th = 1.1 * np.sin(t / 4.0)                      # the junction swings…
-        R = np.array([[np.cos(th), -np.sin(th), 0], [np.sin(th), np.cos(th), 0], [0, 0, 1]])
+        th = 1.1 * np.sin(t / 4.0)  # the junction swings…
+        R = np.array(
+            [[np.cos(th), -np.sin(th), 0], [np.sin(th), np.cos(th), 0], [0, 0, 1]]
+        )
         f = home.copy()
-        flip = 1.0 if (t % 8) < 4 else -1.0             # …while the inserts flip
+        flip = 1.0 if (t % 8) < 4 else -1.0  # …while the inserts flip
         for slot, col in enumerate(plan["sel_pos"]):
             f[col] = f[col] + np.array([0.0, flip * 1.4, 0.0])
-        P.append(f @ R.T + np.array([4 * np.cos(th), 0.0, 0.0])
-                 + rng.normal(scale=0.03, size=(len(need), 3)))
+        P.append(
+            f @ R.T
+            + np.array([4 * np.cos(th), 0.0, 0.0])
+            + rng.normal(scale=0.03, size=(len(need), 3))
+        )
     P = np.array(P)
 
     X_local = apply_fit_plan(P, plan)
@@ -776,8 +879,9 @@ def test_apply_fit_plan_removes_a_junction_swing_but_keeps_the_flip():
 
     flat = occupancy_fit_plan(_FitDesign(), keys, inserts, fit="global")
     X_global = apply_fit_plan(P[:, [need.index(c) for c in flat["need_idx"]], :], flat)
-    assert X_global.std(axis=0).max() > 2.5 * X_local.std(axis=0).max(), \
+    assert X_global.std(axis=0).max() > 2.5 * X_local.std(axis=0).max(), (
         "the swing dominates the unfitted features — the reason this mode exists"
+    )
 
 
 def test_selection_by_domain_and_overhang(monkeypatch):
@@ -801,10 +905,17 @@ def test_selection_by_domain_and_overhang(monkeypatch):
             self.overhang_id = oid
 
     import backend.core.occupancy_core as core
-    monkeypatch.setattr(core, "_walk_strand_nucleotides", lambda d: [_Step(k) for k in ks])
 
-    assert occ.resolve_selection_keys(_ScopedDesign(), ks, {"domains": [["sA", 1]]}) == [ks[1]]
-    assert occ.resolve_selection_keys(_ScopedDesign(), ks, {"overhang_ids": ["ovh1"]}) == [ks[1]]
+    monkeypatch.setattr(
+        core, "_walk_strand_nucleotides", lambda d: [_Step(k) for k in ks]
+    )
+
+    assert occ.resolve_selection_keys(
+        _ScopedDesign(), ks, {"domains": [["sA", 1]]}
+    ) == [ks[1]]
+    assert occ.resolve_selection_keys(
+        _ScopedDesign(), ks, {"overhang_ids": ["ovh1"]}
+    ) == [ks[1]]
 
 
 def test_selection_signature_ignores_ordering():
@@ -812,11 +923,19 @@ def test_selection_signature_ignores_ordering():
     must hit the same cache entry."""
     from backend.core.oxdna_occupancy import _selection_sig
 
-    a = {"helix_ids": ["h1", "h0"], "bases": [["h0", 1, "FORWARD"], ["h0", 0, "FORWARD"]]}
-    b = {"helix_ids": ["h0", "h1"], "bases": [["h0", 0, "FORWARD"], ["h0", 1, "FORWARD"]]}
+    a = {
+        "helix_ids": ["h1", "h0"],
+        "bases": [["h0", 1, "FORWARD"], ["h0", 0, "FORWARD"]],
+    }
+    b = {
+        "helix_ids": ["h0", "h1"],
+        "bases": [["h0", 0, "FORWARD"], ["h0", 1, "FORWARD"]],
+    }
     assert _selection_sig(a) == _selection_sig(b)
     assert _selection_sig(None) == ""
-    assert _selection_sig({"helix_ids": ["h0"]}) != _selection_sig({"helix_ids": ["h1"]})
+    assert _selection_sig({"helix_ids": ["h0"]}) != _selection_sig(
+        {"helix_ids": ["h1"]}
+    )
 
 
 def test_cached_wrapper_resolves_its_module_globals():
@@ -835,6 +954,7 @@ def test_cached_wrapper_resolves_its_module_globals():
     # Exercise the wrapper far enough to bind the global and build a cache key — a real
     # reference path is needed because the key stats each trajectory file.
     import inspect
+
     src = inspect.getsource(occ.production_occupancy_cached)
     assert "global _OCCUPANCY_CACHE" in src
     occ.occupancy_cache_clear()

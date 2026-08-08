@@ -52,15 +52,15 @@ class VerificationResult:
     """Per-helix C1' drift metrics from a short AMBER14+OL15+GBNeck2 MD run."""
 
     # Metadata
-    n_atoms: int                            # total atoms in system (after addHydrogens)
-    platform_used: str                      # "CUDA" | "CPU"
-    ff_description: str                     # human-readable force field description
+    n_atoms: int  # total atoms in system (after addHydrogens)
+    platform_used: str  # "CUDA" | "CPU"
+    ff_description: str  # human-readable force field description
 
     # Drift — C1' atoms, time-averaged over last 50% of trajectory, vs AtomisticModel
-    global_rmsd_nm: float                   # RMS deviation over all matched C1' atoms
-    per_helix_rmsd_nm: dict[str, float]     # helix_id → per-helix RMSD (nm)
-    max_deviation_nm: float                 # worst-case single C1' deviation (nm)
-    n_missing: int                          # C1' keys absent from simulation result
+    global_rmsd_nm: float  # RMS deviation over all matched C1' atoms
+    per_helix_rmsd_nm: dict[str, float]  # helix_id → per-helix RMSD (nm)
+    max_deviation_nm: float  # worst-case single C1' deviation (nm)
+    n_missing: int  # C1' keys absent from simulation result
 
     # Inter-helix COM drift: |dist_sim - dist_ref| for each helix pair
     inter_helix_com_drift_nm: dict[str, float]  # "hA_hB" → drift (nm), sorted IDs
@@ -77,8 +77,8 @@ class VerificationResult:
 # Rationale: 5 Å allows for genuine thermal motion at 300 K in a 10 ps window;
 # 3 Å global RMS is stricter because ensemble averaging suppresses noise.
 # Both are intentionally generous for this first baseline — adjust after exp21.
-_MAX_DEVIATION_THRESHOLD_NM: float = 0.5   # 5 Å
-_GLOBAL_RMSD_THRESHOLD_NM: float   = 0.3   # 3 Å
+_MAX_DEVIATION_THRESHOLD_NM: float = 0.5  # 5 Å
+_GLOBAL_RMSD_THRESHOLD_NM: float = 0.3  # 3 Å
 
 _FF_DESCRIPTION: str = (
     "AMBER14+OL15+GBNeck2 (igb=8); 150 mM NaCl implicit solvent; "
@@ -126,8 +126,10 @@ def _rename_charmm_to_amber_pdb(pdb_text: str) -> str:
             continue
         chain_seqs.setdefault(chain, {})[seq_num] = None
 
-    chain_first: dict[str, int] = {c: next(iter(d))           for c, d in chain_seqs.items()}
-    chain_last:  dict[str, int] = {c: next(reversed(list(d))) for c, d in chain_seqs.items()}
+    chain_first: dict[str, int] = {c: next(iter(d)) for c, d in chain_seqs.items()}
+    chain_last: dict[str, int] = {
+        c: next(reversed(list(d))) for c, d in chain_seqs.items()
+    }
 
     # Step 2 — rewrite PDB.
     out: list[str] = []
@@ -145,10 +147,10 @@ def _rename_charmm_to_amber_pdb(pdb_text: str) -> str:
             out.append(line)
             continue
 
-        atom_field = line[12:16]        # 4-char atom name field
-        resname    = line[17:20].strip()  # residue name, e.g. "DA"
-        is_5prime  = (seq_num == chain_first.get(chain))
-        is_3prime  = (seq_num == chain_last.get(chain))
+        atom_field = line[12:16]  # 4-char atom name field
+        resname = line[17:20].strip()  # residue name, e.g. "DA"
+        is_5prime = seq_num == chain_first.get(chain)
+        is_3prime = seq_num == chain_last.get(chain)
 
         # Drop 5'-terminal backbone atoms absent from AMBER14 XX5 templates
         if is_5prime and resname in _INNER_DNA and atom_field in _5PRIME_EXCLUDE:
@@ -191,11 +193,17 @@ def _build_seq_to_nuc(design: "Design") -> dict[tuple[str, int], tuple[str, int,
     for atom in model.atoms:
         if atom.name == "P":
             pdb_chain = _chain_char(atom.chain_id)
-            seq_to_nuc[(pdb_chain, atom.seq_num)] = (atom.helix_id, atom.bp_index, atom.direction)
+            seq_to_nuc[(pdb_chain, atom.seq_num)] = (
+                atom.helix_id,
+                atom.bp_index,
+                atom.direction,
+            )
     return seq_to_nuc
 
 
-def _build_c1prime_reference(design: "Design") -> dict[tuple[str, int, str], np.ndarray]:
+def _build_c1prime_reference(
+    design: "Design",
+) -> dict[tuple[str, int, str], np.ndarray]:
     """
     Return reference C1' positions in nm from NADOC's AtomisticModel.
 
@@ -223,6 +231,7 @@ def _select_platform(prefer_gpu: bool) -> str:
         return "CPU"
     try:
         from openmm import Platform
+
         Platform.getPlatformByName("CUDA")
         return "CUDA"
     except Exception:
@@ -280,7 +289,7 @@ def _compute_drift_metrics(
         for hid, devs in per_helix_devs.items()
     }
     global_rmsd = float(np.sqrt(np.mean(np.array(all_devs) ** 2))) if all_devs else 0.0
-    max_dev     = float(max(all_devs)) if all_devs else 0.0
+    max_dev = float(max(all_devs)) if all_devs else 0.0
 
     # Inter-helix COM drift: compare pairwise COM distances sim vs ref
     helix_ids = [h.id for h in design.helices]
@@ -295,7 +304,7 @@ def _compute_drift_metrics(
 
     com_drift: dict[str, float] = {}
     for i, ha in enumerate(helix_ids):
-        for hb in helix_ids[i + 1:]:
+        for hb in helix_ids[i + 1 :]:
             sim_a = _com(avg_c1prime_nm, ha, translation)
             sim_b = _com(avg_c1prime_nm, hb, translation)
             ref_a = _com(ref_c1prime_nm, ha, np.zeros(3))
@@ -381,11 +390,11 @@ def verify_design_with_openmm(
     from backend.core.pdb_export import export_pdb
 
     pdb_charmm = export_pdb(design)
-    pdb_amber  = _rename_charmm_to_amber_pdb(pdb_charmm)
+    pdb_amber = _rename_charmm_to_amber_pdb(pdb_charmm)
 
     # ── 2. Build reference C1' positions and sequence→nucleotide map ──────────
     c1prime_ref = _build_c1prime_reference(design)
-    seq_to_nuc  = _build_seq_to_nuc(design)
+    seq_to_nuc = _build_seq_to_nuc(design)
 
     # ── 3. Load preprocessed PDB into OpenMM ─────────────────────────────────
     pdb = app.PDBFile(io.StringIO(pdb_amber))
@@ -423,9 +432,9 @@ def verify_design_with_openmm(
     # ── 7. Create system with GBNeck2 implicit solvent ────────────────────────
     system = ff.createSystem(
         modeller.topology,
-        nonbondedMethod=app.NoCutoff,      # no PBC in implicit solvent
-        constraints=app.HBonds,            # constrain X-H bonds → 2 fs timestep
-        implicitSolvent=app.GBn2,          # GBNeck2 (igb=8)
+        nonbondedMethod=app.NoCutoff,  # no PBC in implicit solvent
+        constraints=app.HBonds,  # constrain X-H bonds → 2 fs timestep
+        implicitSolvent=app.GBn2,  # GBNeck2 (igb=8)
         soluteDielectric=1.0,
         solventDielectric=78.5,
         implicitSolventSaltConc=0.15 * unit.moles_per_liter,  # 150 mM NaCl
@@ -438,22 +447,24 @@ def verify_design_with_openmm(
         timestep_fs * unit.femtoseconds,
     )
     platform_name = _select_platform(prefer_gpu)
-    platform      = Platform.getPlatformByName(platform_name)
+    platform = Platform.getPlatformByName(platform_name)
 
     simulation = app.Simulation(modeller.topology, system, integrator, platform)
     simulation.context.setPositions(modeller.positions)
 
     # ── 9. Energy minimisation ────────────────────────────────────────────────
     simulation.minimizeEnergy(maxIterations=n_steps_minimize)
-    state_min        = simulation.context.getState(getEnergy=True)
-    potential_energy = state_min.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
+    state_min = simulation.context.getState(getEnergy=True)
+    potential_energy = state_min.getPotentialEnergy().value_in_unit(
+        unit.kilojoule_per_mole
+    )
 
     # ── 10. Set velocities and run NVT production ─────────────────────────────
     simulation.context.setVelocitiesToTemperature(temperature_k * unit.kelvin)
 
     frames_nm: list[np.ndarray] = []
-    n_frames          = max(1, n_steps_nvt // reporting_interval)
-    actual_nvt_steps  = 0
+    n_frames = max(1, n_steps_nvt // reporting_interval)
+    actual_nvt_steps = 0
 
     for _ in range(n_frames):
         simulation.step(reporting_interval)
@@ -466,7 +477,7 @@ def verify_design_with_openmm(
     n_total_atoms = system.getNumParticles()
 
     # ── 11. Time-average C1' positions from last 50% of trajectory ────────────
-    n_last     = max(1, len(frames_nm) // 2)
+    n_last = max(1, len(frames_nm) // 2)
     last_frames = frames_nm[-n_last:]
 
     avg_c1prime: dict[tuple[str, int, str], np.ndarray] = {}
@@ -487,7 +498,9 @@ def verify_design_with_openmm(
     if missing_helices:
         warnings.append(f"No C1' data for helices: {sorted(missing_helices)}")
 
-    passed = (max_dev < _MAX_DEVIATION_THRESHOLD_NM) and (global_rmsd < _GLOBAL_RMSD_THRESHOLD_NM)
+    passed = (max_dev < _MAX_DEVIATION_THRESHOLD_NM) and (
+        global_rmsd < _GLOBAL_RMSD_THRESHOLD_NM
+    )
 
     return VerificationResult(
         n_atoms=n_total_atoms,

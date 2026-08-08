@@ -17,10 +17,15 @@ from backend.core.md_protocols import DEFAULT_MINIMIZATION_STAGE, minimization_s
 
 
 def test_minimization_status_reads_name_steps_and_label():
-    row = minimization_status({
-        "minimization": {"name": "B_tube_00_min_enm_k0p5", "steps": 9600,
-                         "stage": "Minimization ENM k=0.5"},
-    })
+    row = minimization_status(
+        {
+            "minimization": {
+                "name": "B_tube_00_min_enm_k0p5",
+                "steps": 9600,
+                "stage": "Minimization ENM k=0.5",
+            },
+        }
+    )
     assert row.name == "B_tube_00_min_enm_k0p5"
     assert row.steps == 9600
     assert row.stage == "Minimization ENM k=0.5"
@@ -34,8 +39,9 @@ def test_minimization_status_keeps_a_replicas_own_label():
     The label must come from the manifest — a UI that assumed "Minimization" would
     tell the user a replica minimised when it only reseeded velocities.
     """
-    row = minimization_status({"minimization": {"name": "r0_reseed", "steps": 0,
-                                                "stage": "Velocity reseed"}})
+    row = minimization_status(
+        {"minimization": {"name": "r0_reseed", "steps": 0, "stage": "Velocity reseed"}}
+    )
     assert row.stage == "Velocity reseed"
     assert row.steps == 0
 
@@ -63,10 +69,15 @@ def _job(tmp_path) -> MdJob:
 
 def test_minimization_survives_save_load(tmp_path):
     job = _job(tmp_path)
-    job.minimization = minimization_status({
-        "minimization": {"name": "demo_00_min_enm_k0p5", "steps": 9600,
-                         "stage": "Minimization ENM k=0.5"},
-    })
+    job.minimization = minimization_status(
+        {
+            "minimization": {
+                "name": "demo_00_min_enm_k0p5",
+                "steps": 9600,
+                "stage": "Minimization ENM k=0.5",
+            },
+        }
+    )
     job.save(tmp_path)
 
     loaded = MdJob.load(job.job_id, tmp_path)
@@ -79,7 +90,8 @@ def test_minimization_survives_save_load(tmp_path):
 def test_status_transition_round_trips(tmp_path):
     job = _job(tmp_path)
     job.minimization = minimization_status(
-        {"minimization": {"name": "demo_00_min", "steps": 4800}})
+        {"minimization": {"name": "demo_00_min", "steps": 4800}}
+    )
     job.minimization.status = "running"
     job.save(tmp_path)
     assert MdJob.load(job.job_id, tmp_path).minimization.status == "running"
@@ -109,9 +121,21 @@ def test_a_job_json_without_the_field_loads_as_none(tmp_path):
 def test_to_dict_serialises_the_nested_record(tmp_path):
     job = _job(tmp_path)
     job.minimization = minimization_status(
-        {"minimization": {"name": "demo_00_min", "steps": 4800, "stage": "Minimization"}})
+        {
+            "minimization": {
+                "name": "demo_00_min",
+                "steps": 4800,
+                "stage": "Minimization",
+            }
+        }
+    )
     d = job.to_dict()
     assert d["minimization"] == {
-        "name": "demo_00_min", "stage": "Minimization", "percent": 100.0,
-        "steps": 4800, "status": "pending", "skipped": False, "auto_resumes": 0,
+        "name": "demo_00_min",
+        "stage": "Minimization",
+        "percent": 100.0,
+        "steps": 4800,
+        "status": "pending",
+        "skipped": False,
+        "auto_resumes": 0,
     }

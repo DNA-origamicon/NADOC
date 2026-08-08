@@ -31,22 +31,30 @@ class TestThroughputModel:
     def test_reproduces_the_two_real_benchmarks(self) -> None:
         """The model is anchored on real 2080-Super runs; it must return them."""
         # full solvation + GPU-resident: measured 12.8 ns/day @ 747,262 atoms
-        assert predict_ns_per_day(747_262, gpu_resident=True) == pytest.approx(12.8, rel=0.02)
+        assert predict_ns_per_day(747_262, gpu_resident=True) == pytest.approx(
+            12.8, rel=0.02
+        )
         # 12 A carve + CUDA offload: measured 18.8 ns/day @ 196,606 atoms
-        assert predict_ns_per_day(196_606, gpu_resident=False) == pytest.approx(18.8, rel=0.02)
+        assert predict_ns_per_day(196_606, gpu_resident=False) == pytest.approx(
+            18.8, rel=0.02
+        )
 
     def test_throughput_falls_with_atom_count(self) -> None:
-        assert predict_ns_per_day(100_000, gpu_resident=True) > \
-               predict_ns_per_day(400_000, gpu_resident=True)
+        assert predict_ns_per_day(100_000, gpu_resident=True) > predict_ns_per_day(
+            400_000, gpu_resident=True
+        )
 
     def test_gpu_resident_is_faster_per_atom(self) -> None:
         n = 300_000
-        assert predict_ns_per_day(n, gpu_resident=True) > predict_ns_per_day(n, gpu_resident=False)
+        assert predict_ns_per_day(n, gpu_resident=True) > predict_ns_per_day(
+            n, gpu_resident=False
+        )
 
     def test_cpu_is_far_slower_than_gpu(self) -> None:
         n = 200_000
-        assert predict_ns_per_day(n, gpu_resident=False, gpu=False) < \
-               predict_ns_per_day(n, gpu_resident=False, gpu=True)
+        assert predict_ns_per_day(
+            n, gpu_resident=False, gpu=False
+        ) < predict_ns_per_day(n, gpu_resident=False, gpu=True)
 
     def test_zero_atoms_does_not_divide_by_zero(self) -> None:
         assert predict_ns_per_day(0, gpu_resident=True) == 0.0
@@ -60,10 +68,11 @@ class TestChooseWaterShell:
         shell, gpu_res, why = choose_water_shell(
             full_atoms=712_370,
             shell_atoms={1.2: 204_047, 1.0: 180_000, 0.8: 150_000},
-            atom_cap=None, gpu=True,
+            atom_cap=None,
+            gpu=True,
         )
         assert shell == DEFAULT_SHELL_NM
-        assert gpu_res is False           # the carve DISABLES GPU-resident — the whole point
+        assert gpu_res is False  # the carve DISABLES GPU-resident — the whole point
         # Wording changed with the size-aware model: the full box is no longer ALWAYS the
         # GPU-resident candidate, so the reason compares against "the full box".  The
         # payoff (3.5x) and the threshold it must clear (2.6x, since this system IS above
@@ -76,7 +85,8 @@ class TestChooseWaterShell:
         shell, gpu_res, why = choose_water_shell(
             full_atoms=231_328,
             shell_atoms={1.2: 100_000, 1.0: 90_000, 0.8: 80_000},
-            atom_cap=None, gpu=True,
+            atom_cap=None,
+            gpu=True,
         )
         assert shell == 0.0
         assert gpu_res is True
@@ -87,7 +97,8 @@ class TestChooseWaterShell:
         shell, gpu_res, why = choose_water_shell(
             full_atoms=2_000_000,
             shell_atoms={1.2: 900_000, 1.0: 800_000, 0.8: 700_000},
-            atom_cap=1_000_000, gpu=True,
+            atom_cap=1_000_000,
+            gpu=True,
         )
         assert shell == DEFAULT_SHELL_NM
         assert gpu_res is False
@@ -98,9 +109,10 @@ class TestChooseWaterShell:
         shell, _gpu_res, _why = choose_water_shell(
             full_atoms=5_000_000,
             shell_atoms={1.2: 1_200_000, 1.0: 950_000, 0.8: 700_000},
-            atom_cap=1_000_000, gpu=True,
+            atom_cap=1_000_000,
+            gpu=True,
         )
-        assert shell == 1.0                       # the thickest shell that fits — not 0.8
+        assert shell == 1.0  # the thickest shell that fits — not 0.8
 
     def test_never_thins_the_shell_for_speed_alone(self) -> None:
         """Memory is ample; a thinner shell WOULD be faster — it must still be refused.
@@ -112,22 +124,26 @@ class TestChooseWaterShell:
         shell, _gpu_res, _why = choose_water_shell(
             full_atoms=712_370,
             shell_atoms={1.2: 204_047, 1.0: 150_000, 0.8: 100_000},
-            atom_cap=None, gpu=True,                       # no memory pressure at all
+            atom_cap=None,
+            gpu=True,  # no memory pressure at all
         )
-        assert shell == DEFAULT_SHELL_NM               # NOT 0.8, even though 0.8 is 2x faster
+        assert shell == DEFAULT_SHELL_NM  # NOT 0.8, even though 0.8 is 2x faster
 
     def test_never_goes_below_the_hard_floor(self) -> None:
         shell, _gpu_res, _why = choose_water_shell(
             full_atoms=9_000_000,
             shell_atoms={1.2: 3_000_000, 1.0: 2_500_000, 0.8: 2_000_000},
-            atom_cap=1_000, gpu=True,                      # absurd cap: nothing fits
+            atom_cap=1_000,
+            gpu=True,  # absurd cap: nothing fits
         )
         assert shell >= MIN_SHELL_NM
 
     def test_cpu_build_has_no_gpu_resident_even_on_the_full_box(self) -> None:
         _shell, gpu_res, _why = choose_water_shell(
-            full_atoms=100_000, shell_atoms={1.2: 90_000},
-            atom_cap=None, gpu=False,
+            full_atoms=100_000,
+            shell_atoms={1.2: 90_000},
+            atom_cap=None,
+            gpu=False,
         )
         assert gpu_res is False
 
@@ -146,18 +162,23 @@ class TestResidentIsSizeAware:
 
     def test_resident_is_not_predicted_faster_below_the_crossover(self) -> None:
         from backend.core.md_optimize import predict_ns_per_day
+
         n = 32_566
-        assert (predict_ns_per_day(n, gpu_resident=True)
-                < predict_ns_per_day(n, gpu_resident=False))
+        assert predict_ns_per_day(n, gpu_resident=True) < predict_ns_per_day(
+            n, gpu_resident=False
+        )
 
     def test_resident_is_predicted_faster_well_above_it(self) -> None:
         from backend.core.md_optimize import predict_ns_per_day
+
         n = 3_139_238
-        assert (predict_ns_per_day(n, gpu_resident=True)
-                > predict_ns_per_day(n, gpu_resident=False))
+        assert predict_ns_per_day(n, gpu_resident=True) > predict_ns_per_day(
+            n, gpu_resident=False
+        )
 
     def test_gpu_resident_pays_tracks_the_measured_crossover(self) -> None:
         from backend.core.md_optimize import _RESIDENT_MIN_ATOMS, gpu_resident_pays
+
         assert gpu_resident_pays(_RESIDENT_MIN_ATOMS)
         assert not gpu_resident_pays(_RESIDENT_MIN_ATOMS - 1)
         assert not gpu_resident_pays(32_566)
@@ -167,19 +188,25 @@ class TestResidentIsSizeAware:
         """The regression: a 2hb-scale design fits fine and no carve pays, so the old
         code returned gpu_resident=True — recommending the slower path."""
         from backend.core.md_optimize import choose_water_shell
+
         shell, gpu_res, why = choose_water_shell(
-            full_atoms=32_566, shell_atoms={1.2: 30_000},
-            atom_cap=None, gpu=True,
+            full_atoms=32_566,
+            shell_atoms={1.2: 30_000},
+            atom_cap=None,
+            gpu=True,
         )
-        assert shell == 0.0                     # full box still wins (no carve pays)
-        assert gpu_res is False                 # ...but on the OFFLOAD path
+        assert shell == 0.0  # full box still wins (no carve pays)
+        assert gpu_res is False  # ...but on the OFFLOAD path
         assert "slower" in why.lower()
 
     def test_a_large_full_box_design_still_gets_resident(self) -> None:
         from backend.core.md_optimize import choose_water_shell
+
         _shell, gpu_res, _why = choose_water_shell(
-            full_atoms=3_139_238, shell_atoms={1.2: 3_100_000},
-            atom_cap=None, gpu=True,
+            full_atoms=3_139_238,
+            shell_atoms={1.2: 3_100_000},
+            atom_cap=None,
+            gpu=True,
         )
         assert gpu_res is True
 
@@ -190,28 +217,34 @@ class TestGpuResidentModeOverride:
 
     def _soft_conf(self, **kw):
         from backend.core import md_protocols as M
+
         _min, segs = M.mgh_slow_release_segments("S", soft=True)
         soft = next(s for s in segs if s.soft)
         return M._segment_conf(soft, "S", (80.0, 80.0, 200.0), True, fast=False, **kw)
 
     def test_auto_uses_the_size_gate(self) -> None:
         assert "GPUresident" not in self._soft_conf(n_atoms=32_566, force_resident=None)
-        assert "GPUresident        on" in self._soft_conf(n_atoms=3_139_238,
-                                                          force_resident=None)
+        assert "GPUresident        on" in self._soft_conf(
+            n_atoms=3_139_238, force_resident=None
+        )
 
     def test_on_forces_resident_on_a_small_system(self) -> None:
-        assert "GPUresident        on" in self._soft_conf(n_atoms=32_566,
-                                                          force_resident=True)
+        assert "GPUresident        on" in self._soft_conf(
+            n_atoms=32_566, force_resident=True
+        )
 
     def test_off_forces_offload_on_a_large_system(self) -> None:
-        assert "GPUresident" not in self._soft_conf(n_atoms=3_139_238,
-                                                    force_resident=False)
+        assert "GPUresident" not in self._soft_conf(
+            n_atoms=3_139_238, force_resident=False
+        )
 
     def test_forcing_on_cannot_defeat_a_sparse_carve(self) -> None:
         """Not a speed question — resident aborts at step 0 on the exclusion count."""
         assert "GPUresident" not in self._soft_conf(
-            n_atoms=3_139_238, force_resident=True, carved=True, fill_fraction=0.30)
+            n_atoms=3_139_238, force_resident=True, carved=True, fill_fraction=0.30
+        )
 
     def test_forcing_on_cannot_defeat_gbis(self) -> None:
         assert "GPUresident" not in self._soft_conf(
-            n_atoms=3_139_238, force_resident=True, gbis=True)
+            n_atoms=3_139_238, force_resident=True, gbis=True
+        )

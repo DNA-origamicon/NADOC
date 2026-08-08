@@ -32,6 +32,7 @@ Nothing here BLOCKS a combination.  The warnings are stated and the run proceeds
 audit that produced this module was only possible because someone could run the
 combinations the code called impossible.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -63,9 +64,13 @@ class IntegratorChoice:
         return self.rigid_bonds == RIGID_ALL
 
     def as_dict(self) -> dict:
-        return {"timestep_fs": self.timestep_fs, "rigid_bonds": self.rigid_bonds,
-                "hmr": self.hmr, "rigid_explicit": self.rigid_explicit,
-                "hmr_explicit": self.hmr_explicit}
+        return {
+            "timestep_fs": self.timestep_fs,
+            "rigid_bonds": self.rigid_bonds,
+            "hmr": self.hmr,
+            "rigid_explicit": self.rigid_explicit,
+            "hmr_explicit": self.hmr_explicit,
+        }
 
 
 def auto_rigid_bonds(timestep_fs: float) -> str:
@@ -87,8 +92,9 @@ def auto_hmr(timestep_fs: float) -> bool:
     return float(timestep_fs) >= _HMR_REQUIRED_AT_FS
 
 
-def resolve_integrator(timestep_fs: float, rigid_bonds: Optional[str] = None,
-                       hmr: Optional[bool] = None) -> IntegratorChoice:
+def resolve_integrator(
+    timestep_fs: float, rigid_bonds: Optional[str] = None, hmr: Optional[bool] = None
+) -> IntegratorChoice:
     """Resolve the three axes, filling ``None`` from the timestep.
 
     ``rigid_bonds`` accepts "all"/"none" (case-insensitive) or None for auto; ``hmr``
@@ -109,7 +115,9 @@ def resolve_integrator(timestep_fs: float, rigid_bonds: Optional[str] = None,
     )
 
 
-def integrator_warnings(choice: IntegratorChoice, *, scope: str = "relaxation") -> list[dict]:
+def integrator_warnings(
+    choice: IntegratorChoice, *, scope: str = "relaxation"
+) -> list[dict]:
     """Every measured objection to this combination, as plan-condition dicts.
 
     ``scope`` is "relaxation" or "production" and only shapes the wording — the physics is
@@ -125,51 +133,66 @@ def integrator_warnings(choice: IntegratorChoice, *, scope: str = "relaxation") 
     out: list[dict] = []
 
     if dt >= _HMR_REQUIRED_AT_FS and not choice.hmr:
-        out.append({
-            "id": f"{field}_4fs_without_hmr", "kind": "warning",
-            "title": f"{dt:g} fs without hydrogen-mass repartitioning",
-            "detail": (
-                f"The {where} is set to {dt:g} fs on standard masses. exp51 ran exactly "
-                f"this combination on a solvated 2hb_1xT system and it failed RATTLE at "
-                f"step 4,200 — 16.8 ps in, so a shorter probe would have called it stable. "
-                f"A {dt:g} fs step needs the X-H stretch slowed by repartitioning, not just "
-                f"the bond constrained. Turn HMR on, or drop to 2 fs."
-            ),
-            "applies_to": "all", "source": f"CreateJobRequest.{field}_hmr",
-        })
+        out.append(
+            {
+                "id": f"{field}_4fs_without_hmr",
+                "kind": "warning",
+                "title": f"{dt:g} fs without hydrogen-mass repartitioning",
+                "detail": (
+                    f"The {where} is set to {dt:g} fs on standard masses. exp51 ran exactly "
+                    f"this combination on a solvated 2hb_1xT system and it failed RATTLE at "
+                    f"step 4,200 — 16.8 ps in, so a shorter probe would have called it stable. "
+                    f"A {dt:g} fs step needs the X-H stretch slowed by repartitioning, not just "
+                    f"the bond constrained. Turn HMR on, or drop to 2 fs."
+                ),
+                "applies_to": "all",
+                "source": f"CreateJobRequest.{field}_hmr",
+            }
+        )
 
     if dt > _RIGID_REQUIRED_ABOVE_FS and choice.rigid_bonds == RIGID_NONE:
         fatal = dt >= _HMR_REQUIRED_AT_FS
-        out.append({
-            "id": f"{field}_flexible_above_1fs", "kind": "warning",
-            "title": f"{dt:g} fs with flexible bonds",
-            "detail": (
-                f"With rigidBonds none the X-H stretch (~11 fs period) is integrated "
-                f"directly, and {dt:g} fs does not sample it. exp51 measured "
-                + ("this exact combination dying at step 0 on the velocity limit, with and "
-                   "without HMR." if fatal else
-                   "5x worse energy conservation than the same run with rigidBonds all "
-                   "(-8.8e-3 vs -1.7e-3 kcal/mol/ns/atom).")
-                + " 1 fs is the supported timestep for flexible bonds."
-            ),
-            "applies_to": "all", "source": f"CreateJobRequest.{field}_rigid_bonds",
-        })
+        out.append(
+            {
+                "id": f"{field}_flexible_above_1fs",
+                "kind": "warning",
+                "title": f"{dt:g} fs with flexible bonds",
+                "detail": (
+                    f"With rigidBonds none the X-H stretch (~11 fs period) is integrated "
+                    f"directly, and {dt:g} fs does not sample it. exp51 measured "
+                    + (
+                        "this exact combination dying at step 0 on the velocity limit, with and "
+                        "without HMR."
+                        if fatal
+                        else "5x worse energy conservation than the same run with rigidBonds all "
+                        "(-8.8e-3 vs -1.7e-3 kcal/mol/ns/atom)."
+                    )
+                    + " 1 fs is the supported timestep for flexible bonds."
+                ),
+                "applies_to": "all",
+                "source": f"CreateJobRequest.{field}_rigid_bonds",
+            }
+        )
 
     if dt < _HMR_REQUIRED_AT_FS and choice.hmr:
-        out.append({
-            "id": f"{field}_hmr_below_4fs", "kind": "warning",
-            "title": f"Repartitioned masses at {dt:g} fs buy nothing",
-            "detail": (
-                f"HMR exists to make a 4 fs step stable; at {dt:g} fs it is a measured "
-                f"LOSS. exp51: 3.5x worse energy conservation at 2 fs with rigid bonds, "
-                f"7x at 2 fs flexible, 35x at 1 fs flexible — and the drift turns positive "
-                f"(systematic energy gain). Repartitioning subtracts mass from the parent "
-                f"heavy atom, so heavy-atom librations get faster while the X-H stretch "
-                f"rigidBonds already froze gets slower. Leave it off below 4 fs unless you "
-                f"are deliberately matching another run's mass set."
-            ),
-            "applies_to": "all", "source": f"CreateJobRequest.{field}_hmr",
-        })
+        out.append(
+            {
+                "id": f"{field}_hmr_below_4fs",
+                "kind": "warning",
+                "title": f"Repartitioned masses at {dt:g} fs buy nothing",
+                "detail": (
+                    f"HMR exists to make a 4 fs step stable; at {dt:g} fs it is a measured "
+                    f"LOSS. exp51: 3.5x worse energy conservation at 2 fs with rigid bonds, "
+                    f"7x at 2 fs flexible, 35x at 1 fs flexible — and the drift turns positive "
+                    f"(systematic energy gain). Repartitioning subtracts mass from the parent "
+                    f"heavy atom, so heavy-atom librations get faster while the X-H stretch "
+                    f"rigidBonds already froze gets slower. Leave it off below 4 fs unless you "
+                    f"are deliberately matching another run's mass set."
+                ),
+                "applies_to": "all",
+                "source": f"CreateJobRequest.{field}_hmr",
+            }
+        )
 
     return out
 
@@ -185,8 +208,12 @@ def integrator_warnings(choice: IntegratorChoice, *, scope: str = "relaxation") 
 #: preference: implicit solvent has no resident path; a vacuum run has no periodic cell for
 #: resident's density bookkeeping; NAMD 3 refuses fixed atoms under resident; a sparsely
 #: filled carved cell makes it under-count its GPU exclusion buffers and die at step 0.
-HARD_BLOCKERS = ("implicit solvent (GBIS)", "vacuum (no periodic cell)",
-                 "fixed atoms", "a sparsely filled carved cell")
+HARD_BLOCKERS = (
+    "implicit solvent (GBIS)",
+    "vacuum (no periodic cell)",
+    "fixed atoms",
+    "a sparsely filled carved cell",
+)
 
 
 @dataclass(frozen=True)
@@ -205,13 +232,17 @@ class ResidentDecision:
         return self.decided_by == "incompatible"
 
 
-def resident_decision(*, n_atoms: Optional[int] = None,
-                      force_resident: Optional[bool] = None,
-                      min_atoms: int = 100_000,
-                      gbis: bool = False, vacuum: bool = False,
-                      fixed_atoms: bool = False,
-                      carved_fill: Optional[float] = None,
-                      min_fill: float = 0.90) -> ResidentDecision:
+def resident_decision(
+    *,
+    n_atoms: Optional[int] = None,
+    force_resident: Optional[bool] = None,
+    min_atoms: int = 100_000,
+    gbis: bool = False,
+    vacuum: bool = False,
+    fixed_atoms: bool = False,
+    carved_fill: Optional[float] = None,
+    min_fill: float = 0.90,
+) -> ResidentDecision:
     """Resolve GPU-resident once, for both the ladder and production.
 
     Precedence: a hard incompatibility, then the user's explicit choice, then the measured
@@ -223,14 +254,17 @@ def resident_decision(*, n_atoms: Optional[int] = None,
     if gbis:
         blockers.append("implicit solvent has no GPU-resident path in NAMD at all")
     if vacuum:
-        blockers.append("a vacuum run has no periodic cell for resident's density "
-                        "bookkeeping")
+        blockers.append(
+            "a vacuum run has no periodic cell for resident's density bookkeeping"
+        )
     if fixed_atoms:
         blockers.append("NAMD 3 refuses fixed atoms under GPU-resident")
     if carved_fill is not None and carved_fill < min_fill:
-        blockers.append(f"this carved cell is only {carved_fill:.0%} full — below "
-                        f"{min_fill:.0%} resident under-counts its GPU exclusion buffers "
-                        f"and dies at step 0")
+        blockers.append(
+            f"this carved cell is only {carved_fill:.0%} full — below "
+            f"{min_fill:.0%} resident under-counts its GPU exclusion buffers "
+            f"and dies at step 0"
+        )
     if blockers:
         return ResidentDecision(False, "; ".join(blockers), "incompatible")
 
@@ -238,17 +272,26 @@ def resident_decision(*, n_atoms: Optional[int] = None,
         return ResidentDecision(
             bool(force_resident),
             "you chose this" if force_resident else "you turned it off",
-            "user")
+            "user",
+        )
 
     if n_atoms is None:
-        return ResidentDecision(True, "no solvated atom count yet — resident is the "
-                                      "default until solvation says otherwise", "size")
+        return ResidentDecision(
+            True,
+            "no solvated atom count yet — resident is the "
+            "default until solvation says otherwise",
+            "size",
+        )
     on = n_atoms >= min_atoms
     return ResidentDecision(
         on,
-        (f"{n_atoms:,} atoms is at or above the ~{min_atoms:,}-atom crossover, where "
-         f"resident starts winning" if on else
-         f"{n_atoms:,} atoms is below the ~{min_atoms:,}-atom crossover, where resident is "
-         f"a measured LOSS (both paths hit the same per-step floor and resident's setup is "
-         f"pure overhead)"),
-        "size")
+        (
+            f"{n_atoms:,} atoms is at or above the ~{min_atoms:,}-atom crossover, where "
+            f"resident starts winning"
+            if on
+            else f"{n_atoms:,} atoms is below the ~{min_atoms:,}-atom crossover, where resident is "
+            f"a measured LOSS (both paths hit the same per-step floor and resident's setup is "
+            f"pure overhead)"
+        ),
+        "size",
+    )

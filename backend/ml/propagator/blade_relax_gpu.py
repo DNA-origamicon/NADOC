@@ -65,20 +65,37 @@ class _ProgressReporter:
     def report(self, simulation, state):
         step = simulation.currentStep
         frac = self._MIN_FRAC + (1.0 - self._MIN_FRAC) * min(1.0, step / self._total)
-        log(event="progress", fraction=round(frac, 4), phase="langevin",
-            step=int(step), n_steps=self._total)
+        log(
+            event="progress",
+            fraction=round(frac, 4),
+            phase="langevin",
+            step=int(step),
+            n_steps=self._total,
+        )
 
 
 def rg(x):
     """Radius of gyration (Å) of a coordinate array."""
     c = x - x.mean(0)
-    return float(np.sqrt((c ** 2).sum(-1).mean()))
+    return float(np.sqrt((c**2).sum(-1).mean()))
 
 
 def blade_relax(
-    solute_pdb, psf_path, ff_dir, out_pdb, *,
-    n_solute=None, minimize_iters=400, langevin_ps=3.0, dt_fs=1.0, gamma_ps=50.0,
-    platform="CUDA", temp_K=300.0, traj_dcd=None, traj_frames=60, nb_cutoff_A=18.0,
+    solute_pdb,
+    psf_path,
+    ff_dir,
+    out_pdb,
+    *,
+    n_solute=None,
+    minimize_iters=400,
+    langevin_ps=3.0,
+    dt_fs=1.0,
+    gamma_ps=50.0,
+    platform="CUDA",
+    temp_K=300.0,
+    traj_dcd=None,
+    traj_frames=60,
+    nb_cutoff_A=18.0,
 ):
     """Relax the first ``n_solute`` atoms of the PSF under CHARMM+OBC2 implicit solvent.
 
@@ -88,9 +105,14 @@ def blade_relax(
     a NAMD seed).  Returns the summary dict that becomes ``result.json``.
     """
     psf = pmd.charmm.CharmmPsfFile(psf_path)
-    psf.load_parameters(CharmmParameterSet(
-        f"{ff_dir}/top_all36_na.rtf", f"{ff_dir}/par_all36_na.prm",
-        f"{ff_dir}/toppar_water_ions_cufix.str", f"{ff_dir}/par_stub_ions_nbfix.str"))
+    psf.load_parameters(
+        CharmmParameterSet(
+            f"{ff_dir}/top_all36_na.rtf",
+            f"{ff_dir}/par_all36_na.prm",
+            f"{ff_dir}/toppar_water_ions_cufix.str",
+            f"{ff_dir}/par_stub_ions_nbfix.str",
+        )
+    )
     sub = psf if n_solute is None else psf[f"@1-{n_solute}"]
 
     sysm = sub.createSystem(
@@ -102,17 +124,22 @@ def blade_relax(
         hydrogenMass=1.5 * unit.amu,
     )
     integ = mm.LangevinMiddleIntegrator(
-        temp_K * unit.kelvin, gamma_ps / unit.picosecond, dt_fs * unit.femtoseconds)
+        temp_K * unit.kelvin, gamma_ps / unit.picosecond, dt_fs * unit.femtoseconds
+    )
 
     used = platform
     try:
-        sim = app.Simulation(sub.topology, sysm, integ, mm.Platform.getPlatformByName(platform))
+        sim = app.Simulation(
+            sub.topology, sysm, integ, mm.Platform.getPlatformByName(platform)
+        )
     except Exception as e:
         # A CUDA-less box (or a card already saturated by a production job) must not hard-fail
         # the run — fall back and RECORD it, so the panel can show "ran on CPU".
         log(event="platform_fallback", requested=platform, error=str(e)[:300])
         used = "CPU"
-        sim = app.Simulation(sub.topology, sysm, integ, mm.Platform.getPlatformByName("CPU"))
+        sim = app.Simulation(
+            sub.topology, sysm, integ, mm.Platform.getPlatformByName("CPU")
+        )
     log(event="platform", using=used, n=len(sub.atoms), cutoff_A=nb_cutoff_A)
 
     pdb = app.PDBFile(solute_pdb)
@@ -134,7 +161,7 @@ def blade_relax(
 
     schedule = []
     for mi in (int(minimize_iters), max(int(minimize_iters) * 8, 4000), 0):
-        if mi not in schedule:         # 0 = minimize to convergence (OpenMM: no iteration cap)
+        if mi not in schedule:  # 0 = minimize to convergence (OpenMM: no iteration cap)
             schedule.append(mi)
 
     t = time.time()
@@ -144,20 +171,39 @@ def blade_relax(
     last_err = None
     for attempt, mi in enumerate(schedule):
         attempts = attempt + 1
-        sim.reporters.clear()                       # drop a failed attempt's reporters
-        sim.context.setPositions(pdb.positions)     # always restart from the ideal coords
+        sim.reporters.clear()  # drop a failed attempt's reporters
+        sim.context.setPositions(pdb.positions)  # always restart from the ideal coords
         if attempt:
-            log(event="minimize_retry", attempt=attempt, minimize_iters=mi, reason=last_err)
-        n_disp = mi if mi else steps                # a "converge" run has no fixed iter count
-        log(event="progress", fraction=0.02, phase="minimize", step=0, n_steps=int(n_disp))
+            log(
+                event="minimize_retry",
+                attempt=attempt,
+                minimize_iters=mi,
+                reason=last_err,
+            )
+        n_disp = mi if mi else steps  # a "converge" run has no fixed iter count
+        log(
+            event="progress",
+            fraction=0.02,
+            phase="minimize",
+            step=0,
+            n_steps=int(n_disp),
+        )
         sim.minimizeEnergy(maxIterations=mi)
-        xmin = sim.context.getState(getPositions=True).getPositions(asNumpy=True) \
-                  .value_in_unit(unit.angstrom)
+        xmin = (
+            sim.context.getState(getPositions=True)
+            .getPositions(asNumpy=True)
+            .value_in_unit(unit.angstrom)
+        )
         if not _finite(np.asarray(xmin)):
             last_err = "non-finite coordinates after minimization"
             continue
-        log(event="progress", fraction=_ProgressReporter._MIN_FRAC, phase="minimize",
-            step=int(n_disp), n_steps=int(n_disp))
+        log(
+            event="progress",
+            fraction=_ProgressReporter._MIN_FRAC,
+            phase="minimize",
+            step=int(n_disp),
+            n_steps=int(n_disp),
+        )
         sim.context.setVelocitiesToTemperature(temp_K * unit.kelvin)
         # DCD is (re)opened fresh per attempt (truncating), so only the surviving run's frames
         # remain; attach it only now, after minimization produced a finite structure.
@@ -166,8 +212,11 @@ def blade_relax(
         sim.reporters.append(_ProgressReporter(every, steps))
         try:
             sim.step(steps)
-            cand = np.array(sim.context.getState(getPositions=True)
-                            .getPositions(asNumpy=True).value_in_unit(unit.angstrom))
+            cand = np.array(
+                sim.context.getState(getPositions=True)
+                .getPositions(asNumpy=True)
+                .value_in_unit(unit.angstrom)
+            )
         except Exception as exc:  # OpenMM raises "Particle coordinate is NaN"
             last_err = f"{type(exc).__name__}: {str(exc)[:200]}"
             continue
@@ -180,7 +229,8 @@ def blade_relax(
     if x is None:
         raise RuntimeError(
             f"relax blew up after {attempts} minimization attempt(s) "
-            f"(last: {last_err}) — the structure may be too clashed to relax")
+            f"(last: {last_err}) — the structure may be too clashed to relax"
+        )
     finite = True
     with open(out_pdb, "w") as fh:
         app.PDBFile.writeFile(sub.topology, x * unit.angstrom, fh)
@@ -198,15 +248,20 @@ def blade_relax(
     span1 = float(np.linalg.norm(x.max(0) - x.min(0)))
 
     return {
-        "out": out_pdb, "traj": traj_dcd, "n_atoms": len(x), "finite": finite,
+        "out": out_pdb,
+        "traj": traj_dcd,
+        "n_atoms": len(x),
+        "finite": finite,
         "platform_used": used,
         # What minimization budget actually produced a stable relax (0 = ran to convergence),
         # and how many attempts it took — so a big design that needed escalation is visible.
         "used_minimize_iters": used_mi,
         "relax_attempts": attempts,
         "rmsd_moved_A": round(rmsd, 3),
-        "rg_before_A": round(rg(pos0), 3), "rg_after_A": round(rg(x), 3),
-        "bbox_diag_before_A": round(span0, 2), "bbox_diag_after_A": round(span1, 2),
+        "rg_before_A": round(rg(pos0), 3),
+        "rg_after_A": round(rg(x), 3),
+        "bbox_diag_before_A": round(span0, 2),
+        "bbox_diag_after_A": round(span1, 2),
         "n_frames": steps // every,
         "wall_s": round(time.time() - t, 1),
     }
@@ -219,7 +274,10 @@ def main(argv):
     cfg = json.loads(open(argv[1]).read())
     try:
         summary = blade_relax(
-            cfg["solute_pdb"], cfg["psf_path"], cfg["ff_dir"], cfg["out_pdb"],
+            cfg["solute_pdb"],
+            cfg["psf_path"],
+            cfg["ff_dir"],
+            cfg["out_pdb"],
             n_solute=cfg.get("n_solute"),
             minimize_iters=cfg.get("minimize_iters", 400),
             langevin_ps=cfg.get("langevin_ps", 3.0),

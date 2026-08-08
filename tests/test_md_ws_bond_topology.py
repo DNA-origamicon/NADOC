@@ -7,6 +7,7 @@ drew bare spheres for every NAMD job, live or finished.
 
 Fast: builds tiny synthetic Universes in memory, no simulation, no fixture files.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -39,7 +40,7 @@ def test_returns_flat_serial_pairs_in_universe_index_space():
     out = _heavy_bond_pairs(u, np.arange(6))
 
     assert _pairs(out) == {(0, 1), (1, 2), (3, 4)}
-    assert all(isinstance(v, int) for v in out)   # JSON-serialisable, not np.int32
+    assert all(isinstance(v, int) for v in out)  # JSON-serialisable, not np.int32
 
 
 def test_drops_bonds_reaching_outside_the_drawn_heavy_subset():
@@ -104,7 +105,7 @@ def test_nested_shape_is_pairs_not_a_flat_list():
 
     assert all(isinstance(p, list) and len(p) == 2 for p in out)
     assert {tuple(p) for p in out} == {(0, 1), (1, 2), (3, 4)}
-    assert all(isinstance(v, int) for p in out for v in p)   # JSON, not np.int32
+    assert all(isinstance(v, int) for p in out for v in p)  # JSON, not np.int32
 
 
 def test_flat_and_nested_carry_the_same_bonds():
@@ -127,7 +128,8 @@ def test_ws_delegates_to_the_shared_implementation():
     u = _universe(6, bonds=[(0, 1), (1, 2), (3, 4)])
 
     assert _heavy_bond_pairs(u, np.arange(6)) == heavy_bond_pairs(
-        u, np.arange(6), nested=False)
+        u, np.arange(6), nested=False
+    )
 
 
 def test_nested_returns_none_with_no_bonds_so_the_model_declares_unavailable():

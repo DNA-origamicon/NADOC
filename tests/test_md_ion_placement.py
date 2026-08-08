@@ -30,11 +30,11 @@ def _round_xyz(t):
 
 
 def test_mgh_counts_and_six_waters_per_cluster():
-    waters = _grid_waters(20, 20, 20)          # 8000 waters
+    waters = _grid_waters(20, 20, 20)  # 8000 waters
     n_na, n_mg, n_cl = 100, 30, 120
     rem, na, mg, cl, clusters = _place_ions_mixed_mgh(waters, n_na, n_mg, n_cl, seed=1)
 
-    assert mg == []                            # MGH path returns clusters, not bare Mg
+    assert mg == []  # MGH path returns clusters, not bare Mg
     assert len(clusters) == n_mg
     assert len(na) == n_na
     assert len(cl) == n_cl
@@ -62,8 +62,8 @@ def test_mgh_deterministic_for_a_seed():
     waters = _grid_waters(15, 15, 15)
     a = _place_ions_mixed_mgh(waters, 50, 10, 50, seed=7)
     b = _place_ions_mixed_mgh(waters, 50, 10, 50, seed=7)
-    assert a[1] == b[1]                          # na positions
-    assert a[3] == b[3]                          # cl positions
+    assert a[1] == b[1]  # na positions
+    assert a[3] == b[3]  # cl positions
     assert [c.mg for c in a[4]] == [c.mg for c in b[4]]
 
 
@@ -76,16 +76,18 @@ def test_mgh_handles_zero_mg_and_zero_ions():
 
 def test_mgh_raises_when_too_few_waters():
     import pytest
-    waters = _grid_waters(4, 4, 4)               # 64 waters
+
+    waters = _grid_waters(4, 4, 4)  # 64 waters
     with pytest.raises(RuntimeError, match="Not enough water"):
-        _place_ions_mixed_mgh(waters, 10, 10, 10, seed=1)   # needs 10+10+60 = 80
+        _place_ions_mixed_mgh(waters, 10, 10, 10, seed=1)  # needs 10+10+60 = 80
 
 
 def test_mgh_reports_progress():
     waters = _grid_waters(15, 15, 15)
     seen: list[str] = []
-    _place_ions_mixed_mgh(waters, 50, 20, 50, seed=2,
-                          progress=lambda k, f, m="": seen.append(k))
+    _place_ions_mixed_mgh(
+        waters, 50, 20, 50, seed=2, progress=lambda k, f, m="": seen.append(k)
+    )
     assert "assemble" in seen
 
 
@@ -94,14 +96,14 @@ def test_mixed_routes_to_mgh_when_hexahydrate():
     rem, na, mg, cl, clusters = _place_ions_mixed(
         waters, 40, 12, 40, seed=3, mg_hexahydrate=True
     )
-    assert len(clusters) == 12 and mg == []      # clusters, not bare Mg
+    assert len(clusters) == 12 and mg == []  # clusters, not bare Mg
 
 
 def test_mgh_does_not_go_quadratic_at_scale():
     """The old impl rebuilt a tuple of the whole water set per ion + sorted all
     waters per cluster — minutes at this size.  The KDTree+shuffle path is ~linear.
     """
-    waters = _grid_waters(40, 40, 40)            # 64000 waters
+    waters = _grid_waters(40, 40, 40)  # 64000 waters
     t0 = time.monotonic()
     rem, na, _mg, cl, clusters = _place_ions_mixed_mgh(waters, 3000, 300, 3000, seed=3)
     dt = time.monotonic() - t0
@@ -115,6 +117,7 @@ def test_mgh_does_not_go_quadratic_at_scale():
 # molecules diffuse slowly, it is beneficial to place them initially in proximity to
 # the DNA origami structure" (Methods Mol Biol 1811 §3.3).  Uniform placement leaves
 # the divalent atmosphere to form by diffusion, which will not happen in 19 ns.
+
 
 def _p_atom_pdb(points_nm) -> str:
     """A minimal PDB of phosphorus atoms at the given nm positions."""
@@ -133,13 +136,14 @@ def _dist(a, b) -> float:
 
 def test_mg_clusters_are_seeded_near_the_backbone():
     """Mg centres land in the hydration shell; the bulk stays for water and Cl-."""
-    waters = _grid_waters(20, 20, 20)             # 8000 waters spanning ~5.7 nm
+    waters = _grid_waters(20, 20, 20)  # 8000 waters spanning ~5.7 nm
     # A "backbone" running up one edge of the box.
     backbone = [(0.0, 0.0, k * 0.3) for k in range(20)]
     pdb = _p_atom_pdb(backbone)
 
     _rem, _na, _mg, _cl, clusters = _place_ions_mixed_mgh(
-        waters, 0, 20, 0, seed=7, dna_pdb_text=pdb)
+        waters, 0, 20, 0, seed=7, dna_pdb_text=pdb
+    )
 
     assert len(clusters) == 20
     near = [min(_dist(c.mg, p) for p in backbone) for c in clusters]
@@ -163,28 +167,29 @@ def test_shell_biasing_is_deterministic():
     pdb = _p_atom_pdb([(0.0, 0.0, k * 0.3) for k in range(10)])
     a = _place_ions_mixed_mgh(waters, 10, 8, 10, seed=11, dna_pdb_text=pdb)
     b = _place_ions_mixed_mgh(waters, 10, 8, 10, seed=11, dna_pdb_text=pdb)
-    assert [(_round_xyz(c.mg)) for c in a[4]] == \
-           [(_round_xyz(c.mg)) for c in b[4]]
+    assert [(_round_xyz(c.mg)) for c in a[4]] == [(_round_xyz(c.mg)) for c in b[4]]
 
 
 def test_more_clusters_than_shell_sites_falls_back_to_bulk():
     """A tiny solute cannot host every cluster — the overflow must still be placed,
     not dropped or crashed on."""
-    waters = _grid_waters(15, 15, 15)             # 3375 waters
-    pdb = _p_atom_pdb([(0.0, 0.0, 0.0)])          # one P atom → a small shell
+    waters = _grid_waters(15, 15, 15)  # 3375 waters
+    pdb = _p_atom_pdb([(0.0, 0.0, 0.0)])  # one P atom → a small shell
     _rem, _na, _mg, _cl, clusters = _place_ions_mixed_mgh(
-        waters, 0, 200, 0, seed=5, dna_pdb_text=pdb)
+        waters, 0, 200, 0, seed=5, dna_pdb_text=pdb
+    )
     assert len(clusters) == 200
 
 
 def test_biasing_stays_within_the_placement_budget():
     """Same 64k-water budget as the quadratic guard: the extra KD-tree is over P
     atoms only (~1/32 of the DNA), so it must not move the needle."""
-    waters = _grid_waters(40, 40, 40)             # 64000 waters
+    waters = _grid_waters(40, 40, 40)  # 64000 waters
     pdb = _p_atom_pdb([(i * 0.05, 1.0, 1.0) for i in range(2000)])
     t0 = time.monotonic()
     _rem, na, _mg, cl, clusters = _place_ions_mixed_mgh(
-        waters, 3000, 300, 3000, seed=3, dna_pdb_text=pdb)
+        waters, 3000, 300, 3000, seed=3, dna_pdb_text=pdb
+    )
     dt = time.monotonic() - t0
     assert len(clusters) == 300 and len(na) == 3000 and len(cl) == 3000
     assert dt < 10.0, f"biased ion placement took {dt:.1f}s"

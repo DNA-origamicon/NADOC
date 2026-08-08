@@ -24,9 +24,18 @@ from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.flexible_segments import apply_marks
 from backend.core.lattice import generate_linker_topology, overhang_candidate_error
 from backend.core.models import (
-    ClusterJoint, ClusterRigidTransform, Direction, Domain,
-    FlexibleSegmentMark, Helix, LatticeType, OverhangConnection,
-    OverhangSpec, Strand, StrandType, Vec3,
+    ClusterJoint,
+    ClusterRigidTransform,
+    Direction,
+    Domain,
+    FlexibleSegmentMark,
+    Helix,
+    LatticeType,
+    OverhangConnection,
+    OverhangSpec,
+    Strand,
+    StrandType,
+    Vec3,
 )
 from backend.core.validator import validate_design
 from tests.automation_harness import (
@@ -66,35 +75,69 @@ def _seed_two_overhang_leaves():
     ds polarity pair (both 5p, both attach=free_end)."""
     base = _demo_design()
     oh_helix_a = Helix(
-        id="oh_helix_a", axis_start=Vec3(x=2.5, y=0.0, z=0.0),
+        id="oh_helix_a",
+        axis_start=Vec3(x=2.5, y=0.0, z=0.0),
         axis_end=Vec3(x=2.5, y=0.0, z=8 * BDNA_RISE_PER_BP),
-        phase_offset=0.0, length_bp=8, grid_pos=(0, 0),
+        phase_offset=0.0,
+        length_bp=8,
+        grid_pos=(0, 0),
     )
     oh_helix_b = Helix(
-        id="oh_helix_b", axis_start=Vec3(x=5.0, y=0.0, z=0.0),
+        id="oh_helix_b",
+        axis_start=Vec3(x=5.0, y=0.0, z=0.0),
         axis_end=Vec3(x=5.0, y=0.0, z=8 * BDNA_RISE_PER_BP),
-        phase_offset=0.0, length_bp=8, grid_pos=(0, 3),
+        phase_offset=0.0,
+        length_bp=8,
+        grid_pos=(0, 3),
     )
     oh_strand_a = Strand(
         id="oh_strand_a",
-        domains=[Domain(helix_id="oh_helix_a", start_bp=0, end_bp=7,
-                        direction=Direction.FORWARD, overhang_id="oh_a_5p")],
+        domains=[
+            Domain(
+                helix_id="oh_helix_a",
+                start_bp=0,
+                end_bp=7,
+                direction=Direction.FORWARD,
+                overhang_id="oh_a_5p",
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     oh_strand_b = Strand(
         id="oh_strand_b",
-        domains=[Domain(helix_id="oh_helix_b", start_bp=0, end_bp=7,
-                        direction=Direction.REVERSE, overhang_id="oh_b_5p")],
+        domains=[
+            Domain(
+                helix_id="oh_helix_b",
+                start_bp=0,
+                end_bp=7,
+                direction=Direction.REVERSE,
+                overhang_id="oh_b_5p",
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
-    return base.model_copy(update={
-        "helices": [*base.helices, oh_helix_a, oh_helix_b],
-        "strands": [*base.strands, oh_strand_a, oh_strand_b],
-        "overhangs": [
-            OverhangSpec(id="oh_a_5p", helix_id="oh_helix_a", strand_id="oh_strand_a", label="OHA"),
-            OverhangSpec(id="oh_b_5p", helix_id="oh_helix_b", strand_id="oh_strand_b", label="OHB"),
-        ],
-    })
+    return base.model_copy(
+        update={
+            "helices": [*base.helices, oh_helix_a, oh_helix_b],
+            "strands": [*base.strands, oh_strand_a, oh_strand_b],
+            "overhangs": [
+                OverhangSpec(
+                    id="oh_a_5p",
+                    helix_id="oh_helix_a",
+                    strand_id="oh_strand_a",
+                    label="OHA",
+                ),
+                OverhangSpec(
+                    id="oh_b_5p",
+                    helix_id="oh_helix_b",
+                    strand_id="oh_strand_b",
+                    label="OHB",
+                ),
+            ],
+        }
+    )
+
+
 from tests.conftest import SIX_HB_CELLS, TEETH_CELLS, TEETH_PASSES
 
 
@@ -127,8 +170,13 @@ def _place_one_overhang(d):
                 continue
             try:
                 return hb.overhang_extrude(
-                    hid, bp, direction=dirn, is_five_prime=is5,
-                    neighbor_row=nr, neighbor_col=nc, length_bp=8,
+                    hid,
+                    bp,
+                    direction=dirn,
+                    is_five_prime=is5,
+                    neighbor_row=nr,
+                    neighbor_col=nc,
+                    length_bp=8,
                 )
             except HTTPException:
                 continue
@@ -155,7 +203,9 @@ def test_af25_feature_seek_scrubs_timeline_faithfully():
         return total > 0 and undef < total
 
     with hb.scratch_session(LatticeType.HONEYCOMB):
-        d0 = hb.create_bundle(SIX_HB_CELLS, 84, lattice=LatticeType.HONEYCOMB, name="6hb")
+        d0 = hb.create_bundle(
+            SIX_HB_CELLS, 84, lattice=LatticeType.HONEYCOMB, name="6hb"
+        )
         pos_bundle = len(d0.feature_log) - 1
         fp_bundle = _fp(d0)
 
@@ -172,7 +222,9 @@ def test_af25_feature_seek_scrubs_timeline_faithfully():
         fp_seq = _fp(d2)
 
         d3 = _place_one_overhang(d2)
-        assert d3 is not None, "expected at least one valid overhang site on a routed 6hb"
+        assert d3 is not None, (
+            "expected at least one valid overhang site on a routed 6hb"
+        )
         assert len(d3.overhangs) == 1
         pos_overhang = len(d3.feature_log) - 1
         fp_overhang = _fp(d3)
@@ -191,7 +243,11 @@ def test_af25_feature_seek_scrubs_timeline_faithfully():
                 # routed but unsequenced: every base still undefined
                 (pos_scaffold, fp_scaffold, _all_undefined),
                 # scaffold sequenced, overhang not yet placed
-                (pos_seq, fp_seq, lambda d: len(d.overhangs) == 0 and _scaffold_sequenced(d)),
+                (
+                    pos_seq,
+                    fp_seq,
+                    lambda d: len(d.overhangs) == 0 and _scaffold_sequenced(d),
+                ),
                 # latest: the overhang is present
                 (pos_overhang, fp_overhang, lambda d: len(d.overhangs) == 1),
             ],
@@ -204,7 +260,11 @@ def test_af25_feature_seek_scrubs_timeline_faithfully():
 def test_build_bundle_records_feature_log():
     """teeth = one bundle-create + five extrude-continuation entries, in order."""
     d = hb.build_bundle(
-        TEETH_CELLS, 42, lattice=LatticeType.SQUARE, name="teeth", passes=TEETH_PASSES,
+        TEETH_CELLS,
+        42,
+        lattice=LatticeType.SQUARE,
+        name="teeth",
+        passes=TEETH_PASSES,
     )
     assert [e.op_kind for e in d.feature_log] == (
         ["bundle-create"] + ["extrude-continuation"] * len(TEETH_PASSES)
@@ -228,9 +288,11 @@ def test_extrude_segment_appends_fresh_disconnected_helices():
     multi-segment structures programmatically."""
     with hb.scratch_session(LatticeType.HONEYCOMB):
         hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
-        far = [(r + 20, c) for r, c in SIX_HB_CELLS]   # fresh cells, well clear of the bundle
+        far = [
+            (r + 20, c) for r, c in SIX_HB_CELLS
+        ]  # fresh cells, well clear of the bundle
         d = hb.extrude_segment(far, 42, offset_nm=0.0)
-        assert len(d.helices) == 12                    # 6 original + 6 fresh
+        assert len(d.helices) == 12  # 6 original + 6 fresh
         assert {h.grid_pos for h in d.helices} == set(SIX_HB_CELLS) | set(far)
         assert d.feature_log[-1].op_kind == "extrude-segment"
 
@@ -240,7 +302,11 @@ def test_build_on_non_default_plane():
     dropdown → XY/XZ/YZ).  A build on XZ produces XZ-keyed helices, confirming the
     programmatic surface can target any origin plane, not just the XY default."""
     d = hb.build_bundle(
-        SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, plane="XZ", name="6hb-xz",
+        SIX_HB_CELLS,
+        42,
+        lattice=LatticeType.HONEYCOMB,
+        plane="XZ",
+        name="6hb-xz",
     )
     assert len(d.helices) == 6
     assert all(h.id.startswith("h_XZ_") for h in d.helices)
@@ -253,10 +319,13 @@ def test_build_bundle_does_not_disturb_default_document():
     after = design_state.peek_design(dc.DEFAULT_DOC_ID)
     assert after is before  # default session object identity unchanged
     # No scratch sessions leaked into the registry.
-    assert not any(doc.startswith("__headless_build_") for doc in design_state.list_doc_ids())
+    assert not any(
+        doc.startswith("__headless_build_") for doc in design_state.list_doc_ids()
+    )
 
 
 # ── Auto-op wrappers: scaffold routing → crossovers → staple breaking ──────────────
+
 
 def test_auto_op_chain_routes_a_full_18hb():
     """create_bundle → auto_scaffold → auto_crossover → auto_break composes into a
@@ -264,9 +333,13 @@ def test_auto_op_chain_routes_a_full_18hb():
     from tests.conftest import EIGHTEEN_HB_CELLS
 
     with hb.scratch_session(LatticeType.HONEYCOMB):
-        hb.create_bundle(EIGHTEEN_HB_CELLS, 388, lattice=LatticeType.HONEYCOMB, name="18hb")
+        hb.create_bundle(
+            EIGHTEEN_HB_CELLS, 388, lattice=LatticeType.HONEYCOMB, name="18hb"
+        )
         d = hb.auto_scaffold(seamless=False)
-        scaffold = [s for s in d.strands if str(s.strand_type).upper().endswith("SCAFFOLD")]
+        scaffold = [
+            s for s in d.strands if str(s.strand_type).upper().endswith("SCAFFOLD")
+        ]
         assert len(scaffold) == 1  # routed to a single strand
 
         d = hb.auto_crossover()
@@ -274,7 +347,10 @@ def test_auto_op_chain_routes_a_full_18hb():
 
         d = hb.auto_break()
         assert [e.op_kind for e in d.feature_log] == [
-            "bundle-create", "auto-scaffold-seamed", "auto-crossover", "auto-break",
+            "bundle-create",
+            "auto-scaffold-seamed",
+            "auto-crossover",
+            "auto-break",
         ]
 
 
@@ -287,7 +363,9 @@ _HC_PERIOD = 21
 _HC_STAP_BOW_RIGHT = frozenset({0, 7, 14})
 
 
-def _staple_nick_positions(bp: int, dir_a: Direction, dir_b: Direction) -> tuple[int, int]:
+def _staple_nick_positions(
+    bp: int, dir_a: Direction, dir_b: Direction
+) -> tuple[int, int]:
     bow_dir = +1 if (bp % _HC_PERIOD) in _HC_STAP_BOW_RIGHT else -1
     lower_bp = bp - 1 if bow_dir == +1 else bp
     nick_a = lower_bp if dir_a == Direction.FORWARD else lower_bp + 1
@@ -299,7 +377,9 @@ def _place_one_staple_crossover(bp: int = 7):
     """Build a 2-helix HC bundle and place ONE staple crossover at *bp* between the
     col-adjacent cells (0,0)↔(0,1).  Returns (design, half_a, half_b, nick_a, nick_b)
     with the design left active in the current scratch session."""
-    d = hb.create_bundle([[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb")
+    d = hb.create_bundle(
+        [[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb"
+    )
     ha = next(h.id for h in d.helices if h.grid_pos == (0, 0))
     hb_id = next(h.id for h in d.helices if h.grid_pos == (0, 1))
     # even parity at (0,0): scaffold FORWARD → staple REVERSE on A, FORWARD on B.
@@ -317,15 +397,21 @@ def test_place_crossover_joins_two_helices():
         d, half_a, half_b, _na, _nb = _place_one_staple_crossover(7)
         xid = d.crossovers[-1].id
         assert_crossover_joins(
-            d, xid, half_a=(half_a[0], half_a[1]), half_b=(half_b[0], half_b[1]),
+            d,
+            xid,
+            half_a=(half_a[0], half_a[1]),
+            half_b=(half_b[0], half_b[1]),
             expect_ligated=True,
         )
         # the place is a logged minor op (a child of the open Fine Routing cluster)
-        assert any(
-            getattr(e, "op_kind", None) == "fine-routing"
-            or getattr(e, "kind", None) == "routing-cluster"
-            for e in d.feature_log
-        ) or len(d.crossovers) == 1
+        assert (
+            any(
+                getattr(e, "op_kind", None) == "fine-routing"
+                or getattr(e, "kind", None) == "routing-cluster"
+                for e in d.feature_log
+            )
+            or len(d.crossovers) == 1
+        )
 
 
 def test_delete_then_place_crossover_is_inverse():
@@ -351,6 +437,7 @@ def test_delete_then_place_crossover_is_inverse():
 
 # ── AF-32: forced-ligation wrapper (scripted-manual entry) ─────────────────────
 
+
 def _two_scaffold_strands(design):
     """Return (scaf_a_id, scaf_b_id) — the scaffold strands on cells (0,0) and (0,1)
     of a 2-helix bundle (distinct strands ready to force-ligate)."""
@@ -375,14 +462,18 @@ def test_force_ligate_merges_and_records():
     scaffold strands merge into one and a ForcedLigation record carries the right
     endpoints + survives a .nadoc round-trip.  Pinned by assert_forced_ligation."""
     with hb.scratch_session(LatticeType.HONEYCOMB):
-        before = hb.create_bundle([[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB,
-                                  name="2hb")
+        before = hb.create_bundle(
+            [[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb"
+        )
         scaf_a, scaf_b = _two_scaffold_strands(before)
         after = hb.force_ligate(scaf_a, scaf_b)
         fl_id = after.forced_ligations[-1].id
         assert_forced_ligation(
-            before, after, fl_id,
-            three_prime_strand_id=scaf_a, five_prime_strand_id=scaf_b,
+            before,
+            after,
+            fl_id,
+            three_prime_strand_id=scaf_a,
+            five_prime_strand_id=scaf_b,
         )
         # forced ligation creates NO crossover record (it is not a canonical site).
         assert len(after.crossovers) == 0
@@ -394,8 +485,9 @@ def test_force_ligate_then_delete_is_inverse():
     placed crossover, forced ligation introduces no nicks, so forward=ligate /
     inverse=delete is a clean pair."""
     with hb.scratch_session(LatticeType.HONEYCOMB):
-        start = hb.create_bundle([[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB,
-                                 name="2hb")
+        start = hb.create_bundle(
+            [[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb"
+        )
         scaf_a, scaf_b = _two_scaffold_strands(start)
 
         def _ligate():
@@ -427,8 +519,13 @@ def test_overhang_extrude_places_a_valid_candidate():
                     continue
                 try:
                     placed = hb.overhang_extrude(
-                        hid, bp, direction=dirn, is_five_prime=is5,
-                        neighbor_row=nr, neighbor_col=nc, length_bp=8,
+                        hid,
+                        bp,
+                        direction=dirn,
+                        is_five_prime=is5,
+                        neighbor_row=nr,
+                        neighbor_col=nc,
+                        length_bp=8,
                     )
                 except HTTPException:
                     continue  # gate rejected this cell — try the next
@@ -462,17 +559,25 @@ def test_overhang_extrude_rejects_a_non_candidate_placement():
                     break
             if bad is not None:
                 break
-        assert bad is not None, "expected at least one non-candidate site on a routed 6hb"
+        assert bad is not None, (
+            "expected at least one non-candidate site on a routed 6hb"
+        )
         hid, bp, dirn, is5, nr, nc = bad
         with pytest.raises(HTTPException) as exc:
             hb.overhang_extrude(
-                hid, bp, direction=dirn, is_five_prime=is5,
-                neighbor_row=nr, neighbor_col=nc, length_bp=8,
+                hid,
+                bp,
+                direction=dirn,
+                is_five_prime=is5,
+                neighbor_row=nr,
+                neighbor_col=nc,
+                length_bp=8,
             )
         assert exc.value.status_code == 400
 
 
 # ── connect_overhangs (AF-27 — the hinge-confinement keystone) ──────────────────
+
 
 def test_connect_overhangs_ds_ties_two_leaves():
     """The wrapper tie two overhang leaves with a length-defined ds linker: the
@@ -484,15 +589,23 @@ def test_connect_overhangs_ds_ties_two_leaves():
     with hb.scratch_session(LatticeType.HONEYCOMB):
         design_state.set_design(_seed_two_overhang_leaves())
         d = hb.connect_overhangs(
-            "oh_a_5p", "oh_b_5p",
-            overhang_a_attach="free_end", overhang_b_attach="free_end",
-            linker_type="ds", length_value=6, length_unit="bp",
+            "oh_a_5p",
+            "oh_b_5p",
+            overhang_a_attach="free_end",
+            overhang_b_attach="free_end",
+            linker_type="ds",
+            length_value=6,
+            length_unit="bp",
         )
         # The route generated the linker complement strands + virtual bridge helix.
         assert any(h.id.startswith("__lnk__") for h in d.helices)
         conn = d.overhang_connections[-1]
         assert_linker_connects(
-            d, conn.id, overhang_a="oh_a_5p", overhang_b="oh_b_5p", bridge_bp=6,
+            d,
+            conn.id,
+            overhang_a="oh_a_5p",
+            overhang_b="oh_b_5p",
+            bridge_bp=6,
         )
 
         report = headless_coverage_report()
@@ -508,14 +621,22 @@ def test_connect_overhangs_nm_length_lowers_to_bp():
     with hb.scratch_session(LatticeType.HONEYCOMB):
         design_state.set_design(_seed_two_overhang_leaves())
         d = hb.connect_overhangs(
-            "oh_a_5p", "oh_b_5p",
-            overhang_a_attach="free_end", overhang_b_attach="free_end",
-            linker_type="ds", length_value=6 * BDNA_RISE_PER_BP, length_unit="nm",
+            "oh_a_5p",
+            "oh_b_5p",
+            overhang_a_attach="free_end",
+            overhang_b_attach="free_end",
+            linker_type="ds",
+            length_value=6 * BDNA_RISE_PER_BP,
+            length_unit="nm",
         )
         conn = d.overhang_connections[-1]
         # 6 bp × rise, back-converted, must round to 6 bp.
         assert_linker_connects(
-            d, conn.id, overhang_a="oh_a_5p", overhang_b="oh_b_5p", bridge_bp=6,
+            d,
+            conn.id,
+            overhang_a="oh_a_5p",
+            overhang_b="oh_b_5p",
+            bridge_bp=6,
         )
 
 
@@ -527,14 +648,19 @@ def test_connect_overhangs_rejects_invalid_polarity():
         design_state.set_design(_seed_two_overhang_leaves())
         with pytest.raises(HTTPException) as exc:
             hb.connect_overhangs(
-                "oh_a_5p", "oh_b_5p",
-                overhang_a_attach="free_end", overhang_b_attach="root",
-                linker_type="ds", length_value=6, length_unit="bp",
+                "oh_a_5p",
+                "oh_b_5p",
+                overhang_a_attach="free_end",
+                overhang_b_attach="root",
+                linker_type="ds",
+                length_value=6,
+                length_unit="bp",
             )
         assert exc.value.status_code == 400
 
 
 # ── end-to-root direct binding (regenerate B as A's RC binder) ──────────────────
+
 
 def _place_two_overhangs_on_6hb():
     """Route a 6hb, then extrude TWO overhangs on distinct staple termini.
@@ -567,13 +693,16 @@ def test_apply_end_to_root_relocates_b_not_consumes():
     with hb.scratch_session(LatticeType.HONEYCOMB):
         _d, (a_id, b_id) = _place_two_overhangs_on_6hb()
         hb.create_connection_version(
-            a_id, b_id, connection_type="end-to-root",
-            overhang_a_seq="AAACCCGG",   # 8 nt for the 8-bp overhang → RC = CCGGGTTT
+            a_id,
+            b_id,
+            connection_type="end-to-root",
+            overhang_a_seq="AAACCCGG",  # 8 nt for the 8-bp overhang → RC = CCGGGTTT
         )
         vid = design_state.get_or_404().connection_versions[-1].id
         d = hb.apply_connection_version(vid)
-        assert_direct_binding_applied(d, overhang_a_id=a_id, overhang_b_id=b_id,
-                                      connection_type="end-to-root")
+        assert_direct_binding_applied(
+            d, overhang_a_id=a_id, overhang_b_id=b_id, connection_type="end-to-root"
+        )
 
         report = headless_coverage_report()
         assert any(
@@ -598,33 +727,47 @@ def test_apply_end_to_root_cadnano_clean_after_apply():
         has no staple/scaffold pointer to a non-existent helix num.
     """
     from backend.core.cadnano import export_cadnano
+
     with hb.scratch_session(LatticeType.HONEYCOMB):
         d0, (a_id, b_id) = _place_two_overhangs_on_6hb()
         # B's overhang (tip) helix — orphaned + its crossover relocated after apply.
-        b_tip_helix = next(dom.helix_id for s in d0.strands for dom in s.domains
-                           if dom.overhang_id == b_id)
+        b_tip_helix = next(
+            dom.helix_id
+            for s in d0.strands
+            for dom in s.domains
+            if dom.overhang_id == b_id
+        )
         pre_helices = len(d0.helices)
         pre_fl = len(d0.forced_ligations)
-        assert any(b_tip_helix in (xo.half_a.helix_id, xo.half_b.helix_id)
-                   for xo in d0.crossovers), "expected B's overhang crossover pre-apply"
+        assert any(
+            b_tip_helix in (xo.half_a.helix_id, xo.half_b.helix_id)
+            for xo in d0.crossovers
+        ), "expected B's overhang crossover pre-apply"
 
-        hb.create_connection_version(a_id, b_id, connection_type="end-to-root",
-                                     overhang_a_seq="AAACCCGG")
+        hb.create_connection_version(
+            a_id, b_id, connection_type="end-to-root", overhang_a_seq="AAACCCGG"
+        )
         vid = design_state.get_or_404().connection_versions[-1].id
         d = hb.apply_connection_version(vid)
 
         # Design-level invariants the 2D view renders from (orphan helix deleted /
         # B's overhang crossover converted to a ForcedLigation), incl. .nadoc round-trip.
-        assert_direct_binding_applied(d, overhang_a_id=a_id, overhang_b_id=b_id,
-                                      connection_type="end-to-root")
+        assert_direct_binding_applied(
+            d, overhang_a_id=a_id, overhang_b_id=b_id, connection_type="end-to-root"
+        )
         assert not any(h.id == b_tip_helix for h in d.helices)
-        assert not any(b_tip_helix in (xo.half_a.helix_id, xo.half_b.helix_id)
-                       for xo in d.crossovers)
+        assert not any(
+            b_tip_helix in (xo.half_a.helix_id, xo.half_b.helix_id)
+            for xo in d.crossovers
+        )
         # The relocated root↔tip bond is now a ForcedLigation (drawn correctly in 2D),
         # NOT an invalid lattice crossover.
-        assert len(d.forced_ligations) == pre_fl + 1, "relocate must emit one forced ligation"
-        assert all(int(xo.half_a.index) == int(xo.half_b.index) for xo in d.crossovers), \
-            "no improper (mismatched-bp) crossover may remain"
+        assert len(d.forced_ligations) == pre_fl + 1, (
+            "relocate must emit one forced ligation"
+        )
+        assert all(
+            int(xo.half_a.index) == int(xo.half_b.index) for xo in d.crossovers
+        ), "no improper (mismatched-bp) crossover may remain"
 
         # The editor's serialized form exports cleanly + drops the orphan vstrand.
         cad = export_cadnano(d)
@@ -655,13 +798,15 @@ def test_autonomous_build_end_to_root_binding_is_valid_and_roundtrip_stable():
     """
     with hb.scratch_session(LatticeType.HONEYCOMB):
         _d, (a_id, b_id) = _place_two_overhangs_on_6hb()
-        hb.create_connection_version(a_id, b_id, connection_type="end-to-root",
-                                     overhang_a_seq="AAACCCGG")
+        hb.create_connection_version(
+            a_id, b_id, connection_type="end-to-root", overhang_a_seq="AAACCCGG"
+        )
         vid = design_state.get_or_404().connection_versions[-1].id
         built = hb.apply_connection_version(vid)
-    assert_roundtrip_stable(lambda: built)                              # validate + topology-stable
-    assert_direct_binding_applied(built, overhang_a_id=a_id, overhang_b_id=b_id,
-                                  connection_type="end-to-root")
+    assert_roundtrip_stable(lambda: built)  # validate + topology-stable
+    assert_direct_binding_applied(
+        built, overhang_a_id=a_id, overhang_b_id=b_id, connection_type="end-to-root"
+    )
 
 
 # ── relax_overhang_connection + relax_bond (AF-27 P2 — linker/bond pose) ─────────
@@ -681,8 +826,8 @@ def test_autonomous_build_end_to_root_binding_is_valid_and_roundtrip_stable():
 #    length_bp <= 21.  _DS_LINKER_BP=16 (span 5.010 nm) sits comfortably inside
 #    the range AND 1.824 nm off the start chord, so the relax lands exactly ON
 #    the span (strain -> 0) instead of saturating at the kinematic boundary.
-_DS_LINKER_BP = 16   # span 5.010 nm — reachable, unambiguous swing
-_DS_LINKER_BP_UNREACHABLE = 24   # span 7.682 nm — beyond the 6.759 nm max
+_DS_LINKER_BP = 16  # span 5.010 nm — reachable, unambiguous swing
+_DS_LINKER_BP_UNREACHABLE = 24  # span 7.682 nm — beyond the 6.759 nm max
 
 
 def _two_overhang_leaves_with_joint(*, joint_origin, length_bp=_DS_LINKER_BP):
@@ -710,28 +855,47 @@ def _two_overhang_leaves_with_joint(*, joint_origin, length_bp=_DS_LINKER_BP):
     """
     base = _seed_with_real_oh_domains_for_relax()
     ca = ClusterRigidTransform(
-        id="cluster_a", name="A", helix_ids=["oh_helix_a"],
-        translation=[0.0, 0.0, 0.0], rotation=[0.0, 0.0, 0.0, 1.0], pivot=[0.0, 0.0, 0.0],
+        id="cluster_a",
+        name="A",
+        helix_ids=["oh_helix_a"],
+        translation=[0.0, 0.0, 0.0],
+        rotation=[0.0, 0.0, 0.0, 1.0],
+        pivot=[0.0, 0.0, 0.0],
     )
     cb = ClusterRigidTransform(
-        id="cluster_b", name="B", helix_ids=["oh_helix_b"],
-        translation=[0.0, 0.0, 0.0], rotation=[0.0, 0.0, 0.0, 1.0], pivot=[0.0, 0.0, 0.0],
+        id="cluster_b",
+        name="B",
+        helix_ids=["oh_helix_b"],
+        translation=[0.0, 0.0, 0.0],
+        rotation=[0.0, 0.0, 0.0, 1.0],
+        pivot=[0.0, 0.0, 0.0],
     )
     joint = ClusterJoint(
-        id="joint_a", cluster_id="cluster_a", name="Hinge",
-        local_axis_origin=list(joint_origin), local_axis_direction=[0.0, 1.0, 0.0],
-        min_angle_deg=-180.0, max_angle_deg=180.0,
+        id="joint_a",
+        cluster_id="cluster_a",
+        name="Hinge",
+        local_axis_origin=list(joint_origin),
+        local_axis_direction=[0.0, 1.0, 0.0],
+        min_angle_deg=-180.0,
+        max_angle_deg=180.0,
     )
     conn = OverhangConnection(
-        name="L1", overhang_a_id="oh_a_5p", overhang_a_attach="free_end",
-        overhang_b_id="oh_b_5p", overhang_b_attach="root",
-        linker_type="ds", length_value=length_bp, length_unit="bp",
+        name="L1",
+        overhang_a_id="oh_a_5p",
+        overhang_a_attach="free_end",
+        overhang_b_id="oh_b_5p",
+        overhang_b_attach="root",
+        linker_type="ds",
+        length_value=length_bp,
+        length_unit="bp",
     )
-    seeded = base.model_copy(update={
-        "cluster_transforms": [ca, cb],
-        "cluster_joints": [joint],
-        "overhang_connections": [conn],
-    })
+    seeded = base.model_copy(
+        update={
+            "cluster_transforms": [ca, cb],
+            "cluster_joints": [joint],
+            "overhang_connections": [conn],
+        }
+    )
     return generate_linker_topology(seeded, conn), conn.id
 
 
@@ -741,35 +905,67 @@ def _seed_with_real_oh_domains_for_relax():
     so the fingerprint is well-defined.  Mirrors
     ``test_overhang_connections._seed_with_real_oh_domains`` minus the demo base."""
     oh_helix_a = Helix(
-        id="oh_helix_a", axis_start=Vec3(x=2.5, y=0.0, z=0.0),
+        id="oh_helix_a",
+        axis_start=Vec3(x=2.5, y=0.0, z=0.0),
         axis_end=Vec3(x=2.5, y=0.0, z=8 * BDNA_RISE_PER_BP),
-        phase_offset=0.0, length_bp=8, grid_pos=(0, 0),
+        phase_offset=0.0,
+        length_bp=8,
+        grid_pos=(0, 0),
     )
     oh_helix_b = Helix(
-        id="oh_helix_b", axis_start=Vec3(x=5.0, y=0.0, z=0.0),
+        id="oh_helix_b",
+        axis_start=Vec3(x=5.0, y=0.0, z=0.0),
         axis_end=Vec3(x=5.0, y=0.0, z=8 * BDNA_RISE_PER_BP),
-        phase_offset=0.0, length_bp=8, grid_pos=(0, 3),
+        phase_offset=0.0,
+        length_bp=8,
+        grid_pos=(0, 3),
     )
     oh_strand_a = Strand(
         id="oh_strand_a",
-        domains=[Domain(helix_id="oh_helix_a", start_bp=0, end_bp=7,
-                        direction=Direction.FORWARD, overhang_id="oh_a_5p")],
+        domains=[
+            Domain(
+                helix_id="oh_helix_a",
+                start_bp=0,
+                end_bp=7,
+                direction=Direction.FORWARD,
+                overhang_id="oh_a_5p",
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     oh_strand_b = Strand(
         id="oh_strand_b",
-        domains=[Domain(helix_id="oh_helix_b", start_bp=0, end_bp=7,
-                        direction=Direction.REVERSE, overhang_id="oh_b_5p")],
+        domains=[
+            Domain(
+                helix_id="oh_helix_b",
+                start_bp=0,
+                end_bp=7,
+                direction=Direction.REVERSE,
+                overhang_id="oh_b_5p",
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
-    return _demo_design().model_copy(update={
-        "helices": [oh_helix_a, oh_helix_b],
-        "strands": [oh_strand_a, oh_strand_b],
-        "overhangs": [
-            OverhangSpec(id="oh_a_5p", helix_id="oh_helix_a", strand_id="oh_strand_a", label="OHA"),
-            OverhangSpec(id="oh_b_5p", helix_id="oh_helix_b", strand_id="oh_strand_b", label="OHB"),
-        ],
-    })
+    return _demo_design().model_copy(
+        update={
+            "helices": [oh_helix_a, oh_helix_b],
+            "strands": [oh_strand_a, oh_strand_b],
+            "overhangs": [
+                OverhangSpec(
+                    id="oh_a_5p",
+                    helix_id="oh_helix_a",
+                    strand_id="oh_strand_a",
+                    label="OHA",
+                ),
+                OverhangSpec(
+                    id="oh_b_5p",
+                    helix_id="oh_helix_b",
+                    strand_id="oh_strand_b",
+                    label="OHB",
+                ),
+            ],
+        }
+    )
 
 
 def _ds_anchor_chord_nm(design, conn_id):
@@ -809,7 +1005,8 @@ def test_relax_ds_linker_anchors_on_the_real_complement_not_the_fallback():
 
     nucs = _geometry_for_design(seeded)
     complements = [
-        n for n in nucs
+        n
+        for n in nucs
         if n.get("strand_id") in {f"__lnk__{conn_id}__a", f"__lnk__{conn_id}__b"}
         and not (n.get("helix_id") or "").startswith("__lnk__")
     ]
@@ -857,7 +1054,8 @@ def test_relax_overhang_connection_saturates_when_span_is_out_of_reach():
     failing, and strain still falls — so the oracle stays green.  Pins the
     boundary behaviour the default _DS_LINKER_BP deliberately avoids (AF-42)."""
     seeded, conn_id = _two_overhang_leaves_with_joint(
-        joint_origin=[0.0, 0.0, 0.0], length_bp=_DS_LINKER_BP_UNREACHABLE,
+        joint_origin=[0.0, 0.0, 0.0],
+        length_bp=_DS_LINKER_BP_UNREACHABLE,
     )
     design_state.set_design(seeded)
     before = design_state.get_or_404()
@@ -915,8 +1113,8 @@ def test_relax_overhang_connection_is_pose_only():
 #  sweep plus an actual bp=20 relax landing exactly on 6.346 both confirm it is
 #  reachable.  The ds span only leaves reach above length_bp=21.)
 _SS_LINKER_BP = 20
-_SS_BIN_SHORT = 23   # R_ee 2.843 nm — BELOW the start chord
-_SS_BIN_LONG = 39    # R_ee 4.187 nm — ABOVE it; the wide, unambiguous swing
+_SS_BIN_SHORT = 23  # R_ee 2.843 nm — BELOW the start chord
+_SS_BIN_LONG = 39  # R_ee 4.187 nm — ABOVE it; the wide, unambiguous swing
 
 
 def _two_overhang_leaves_ss_linker(*, joint_origin, length_bp=_SS_LINKER_BP):
@@ -940,28 +1138,47 @@ def _two_overhang_leaves_ss_linker(*, joint_origin, length_bp=_SS_LINKER_BP):
     """
     base = _seed_with_real_oh_domains_for_relax()
     ca = ClusterRigidTransform(
-        id="cluster_a", name="A", helix_ids=["oh_helix_a"],
-        translation=[0.0, 0.0, 0.0], rotation=[0.0, 0.0, 0.0, 1.0], pivot=[0.0, 0.0, 0.0],
+        id="cluster_a",
+        name="A",
+        helix_ids=["oh_helix_a"],
+        translation=[0.0, 0.0, 0.0],
+        rotation=[0.0, 0.0, 0.0, 1.0],
+        pivot=[0.0, 0.0, 0.0],
     )
     cb = ClusterRigidTransform(
-        id="cluster_b", name="B", helix_ids=["oh_helix_b"],
-        translation=[0.0, 0.0, 0.0], rotation=[0.0, 0.0, 0.0, 1.0], pivot=[0.0, 0.0, 0.0],
+        id="cluster_b",
+        name="B",
+        helix_ids=["oh_helix_b"],
+        translation=[0.0, 0.0, 0.0],
+        rotation=[0.0, 0.0, 0.0, 1.0],
+        pivot=[0.0, 0.0, 0.0],
     )
     joint = ClusterJoint(
-        id="joint_a", cluster_id="cluster_a", name="Hinge",
-        local_axis_origin=list(joint_origin), local_axis_direction=[0.0, 1.0, 0.0],
-        min_angle_deg=-180.0, max_angle_deg=180.0,
+        id="joint_a",
+        cluster_id="cluster_a",
+        name="Hinge",
+        local_axis_origin=list(joint_origin),
+        local_axis_direction=[0.0, 1.0, 0.0],
+        min_angle_deg=-180.0,
+        max_angle_deg=180.0,
     )
     conn = OverhangConnection(
-        name="L1", overhang_a_id="oh_a_5p", overhang_a_attach="free_end",
-        overhang_b_id="oh_b_5p", overhang_b_attach="root",
-        linker_type="ss", length_value=length_bp, length_unit="bp",
+        name="L1",
+        overhang_a_id="oh_a_5p",
+        overhang_a_attach="free_end",
+        overhang_b_id="oh_b_5p",
+        overhang_b_attach="root",
+        linker_type="ss",
+        length_value=length_bp,
+        length_unit="bp",
     )
-    seeded = base.model_copy(update={
-        "cluster_transforms": [ca, cb],
-        "cluster_joints": [joint],
-        "overhang_connections": [conn],
-    })
+    seeded = base.model_copy(
+        update={
+            "cluster_transforms": [ca, cb],
+            "cluster_joints": [joint],
+            "overhang_connections": [conn],
+        }
+    )
     return generate_linker_topology(seeded, conn), conn.id
 
 
@@ -1008,7 +1225,8 @@ def test_relax_ss_linker_bin_selection_drives_the_chord():
 
     for bin_index, chord in chords.items():
         assert chord == pytest.approx(
-            ssdna_fjc.bin_r_ee(_SS_LINKER_BP, bin_index), abs=0.05,
+            ssdna_fjc.bin_r_ee(_SS_LINKER_BP, bin_index),
+            abs=0.05,
         ), f"bin {bin_index}: chord {chord:.4f} nm missed that bin's R_ee"
     assert chords[_SS_BIN_LONG] - chords[_SS_BIN_SHORT] > 1.0, (
         "the two bins produced indistinguishable chords — bin selection is not "
@@ -1047,45 +1265,127 @@ def test_relax_ss_linker_degenerate_hinge_is_a_noop():
 
 # ── relax_overhang_binding (UNIFIED direct-bind relax: root-to-root + end-to-root) ──
 
+
 def _applied_direct_binding(*, cluster_b_translation=(4.0, 0.0, 0.0), same_body=False):
     """A + B as [root → overhang-tip] staples; a DIRECT connection APPLIED (B's tip
     relocated onto A's helix via _cv_create_bound_binding, neither consumed, the
     tip↔root bond left stretched). Separate clusters + a joint on B's cluster (the
     1-DOF case) unless ``same_body``. Returns ``(seeded_design, binding_id)``."""
     L = 16
-    ha = Helix(id="e2r_ha", axis_start=Vec3(x=0, y=0, z=0),
-               axis_end=Vec3(x=0, y=0, z=L * BDNA_RISE_PER_BP),
-               phase_offset=0.0, length_bp=L, grid_pos=(0, 0))
-    hb_ = Helix(id="e2r_hb", axis_start=Vec3(x=0, y=0, z=0),
-                axis_end=Vec3(x=0, y=0, z=L * BDNA_RISE_PER_BP),
-                phase_offset=0.0, length_bp=L, grid_pos=(0, 4))
-    sa = Strand(id="e2r_sa", strand_type=StrandType.STAPLE, domains=[
-        Domain(helix_id="e2r_ha", start_bp=0, end_bp=3, direction=Direction.FORWARD),
-        Domain(helix_id="e2r_ha", start_bp=4, end_bp=11, direction=Direction.FORWARD, overhang_id="oh_a")])
-    sb = Strand(id="e2r_sb", strand_type=StrandType.STAPLE, domains=[
-        Domain(helix_id="e2r_hb", start_bp=0, end_bp=3, direction=Direction.FORWARD),
-        Domain(helix_id="e2r_hb", start_bp=4, end_bp=11, direction=Direction.FORWARD, overhang_id="oh_b")])
+    ha = Helix(
+        id="e2r_ha",
+        axis_start=Vec3(x=0, y=0, z=0),
+        axis_end=Vec3(x=0, y=0, z=L * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=L,
+        grid_pos=(0, 0),
+    )
+    hb_ = Helix(
+        id="e2r_hb",
+        axis_start=Vec3(x=0, y=0, z=0),
+        axis_end=Vec3(x=0, y=0, z=L * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=L,
+        grid_pos=(0, 4),
+    )
+    sa = Strand(
+        id="e2r_sa",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(
+                helix_id="e2r_ha", start_bp=0, end_bp=3, direction=Direction.FORWARD
+            ),
+            Domain(
+                helix_id="e2r_ha",
+                start_bp=4,
+                end_bp=11,
+                direction=Direction.FORWARD,
+                overhang_id="oh_a",
+            ),
+        ],
+    )
+    sb = Strand(
+        id="e2r_sb",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(
+                helix_id="e2r_hb", start_bp=0, end_bp=3, direction=Direction.FORWARD
+            ),
+            Domain(
+                helix_id="e2r_hb",
+                start_bp=4,
+                end_bp=11,
+                direction=Direction.FORWARD,
+                overhang_id="oh_b",
+            ),
+        ],
+    )
     if same_body:
-        clusters = [ClusterRigidTransform(id="cAB", name="AB", helix_ids=["e2r_ha", "e2r_hb"],
-                    translation=[0, 0, 0], rotation=[0, 0, 0, 1], pivot=[0, 0, 0])]
+        clusters = [
+            ClusterRigidTransform(
+                id="cAB",
+                name="AB",
+                helix_ids=["e2r_ha", "e2r_hb"],
+                translation=[0, 0, 0],
+                rotation=[0, 0, 0, 1],
+                pivot=[0, 0, 0],
+            )
+        ]
         joints = []
     else:
         clusters = [
-            ClusterRigidTransform(id="cA", name="A", helix_ids=["e2r_ha"],
-                                  translation=[0, 0, 0], rotation=[0, 0, 0, 1], pivot=[0, 0, 0]),
-            ClusterRigidTransform(id="cB", name="B", helix_ids=["e2r_hb"],
-                                  translation=list(cluster_b_translation),
-                                  rotation=[0, 0, 0, 1], pivot=[0, 0, 0]),
+            ClusterRigidTransform(
+                id="cA",
+                name="A",
+                helix_ids=["e2r_ha"],
+                translation=[0, 0, 0],
+                rotation=[0, 0, 0, 1],
+                pivot=[0, 0, 0],
+            ),
+            ClusterRigidTransform(
+                id="cB",
+                name="B",
+                helix_ids=["e2r_hb"],
+                translation=list(cluster_b_translation),
+                rotation=[0, 0, 0, 1],
+                pivot=[0, 0, 0],
+            ),
         ]
-        joints = [ClusterJoint(id="jB", cluster_id="cB", name="Hinge",
-                  local_axis_origin=[0.0, 0.0, 6 * BDNA_RISE_PER_BP],
-                  local_axis_direction=[0.0, 1.0, 0.0], min_angle_deg=-180.0, max_angle_deg=180.0)]
-    d = _demo_design().model_copy(update={
-        "helices": [ha, hb_], "strands": [sa, sb],
-        "overhangs": [OverhangSpec(id="oh_a", helix_id="e2r_ha", strand_id="e2r_sa", label="OHA", sequence="ACGTACGT"),
-                      OverhangSpec(id="oh_b", helix_id="e2r_hb", strand_id="e2r_sb", label="OHB", sequence="ACGTACGT")],
-        "cluster_transforms": clusters, "cluster_joints": joints,
-    })
+        joints = [
+            ClusterJoint(
+                id="jB",
+                cluster_id="cB",
+                name="Hinge",
+                local_axis_origin=[0.0, 0.0, 6 * BDNA_RISE_PER_BP],
+                local_axis_direction=[0.0, 1.0, 0.0],
+                min_angle_deg=-180.0,
+                max_angle_deg=180.0,
+            )
+        ]
+    d = _demo_design().model_copy(
+        update={
+            "helices": [ha, hb_],
+            "strands": [sa, sb],
+            "overhangs": [
+                OverhangSpec(
+                    id="oh_a",
+                    helix_id="e2r_ha",
+                    strand_id="e2r_sa",
+                    label="OHA",
+                    sequence="ACGTACGT",
+                ),
+                OverhangSpec(
+                    id="oh_b",
+                    helix_id="e2r_hb",
+                    strand_id="e2r_sb",
+                    label="OHB",
+                    sequence="ACGTACGT",
+                ),
+            ],
+            "cluster_transforms": clusters,
+            "cluster_joints": joints,
+        }
+    )
     d = _cv_create_bound_binding(d, "oh_a", "oh_b", "root", "root", "root-to-root")
     return d, d.overhang_bindings[0].id
 
@@ -1128,15 +1428,20 @@ def test_relax_overhang_binding_same_body_swings_duplex_only():
     can move — so relax is a valid no-op that leaves topology intact. The apply-time
     orientation is a non-identity duplex-cluster pose."""
     from backend.core.duplex_cluster import duplex_cluster_for
+
     seeded, bid = _applied_direct_binding(same_body=True)
     design_state.set_design(seeded)
     before = design_state.get_or_404()
     after = hb.relax_overhang_binding(bid)
-    assert_direct_binding_relaxed_pose(before, after, "oh_a", "oh_b", require_reduced=False)
+    assert_direct_binding_relaxed_pose(
+        before, after, "oh_a", "oh_b", require_reduced=False
+    )
     # Apply already oriented the duplex → the driver's DUPLEX CLUSTER pose is non-identity.
     cl = duplex_cluster_for(before, "oh_a")
-    assert cl is not None and (tuple(cl.rotation) != (0.0, 0.0, 0.0, 1.0)
-                               or any(abs(t) > 1e-9 for t in cl.translation))
+    assert cl is not None and (
+        tuple(cl.rotation) != (0.0, 0.0, 0.0, 1.0)
+        or any(abs(t) > 1e-9 for t in cl.translation)
+    )
 
 
 def _two_helices_with_crossover(*, with_joint):
@@ -1146,31 +1451,91 @@ def _two_helices_with_crossover(*, with_joint):
     from backend.core.models import Crossover, HalfCrossover
 
     L = 12
-    h_a = Helix(id="bond_h_a", axis_start=Vec3(x=0.0, y=0.0, z=0.0),
-                axis_end=Vec3(x=0.0, y=0.0, z=L * BDNA_RISE_PER_BP),
-                phase_offset=0.0, length_bp=L, grid_pos=(0, 0))
-    h_b = Helix(id="bond_h_b", axis_start=Vec3(x=2.5, y=0.0, z=0.0),
-                axis_end=Vec3(x=2.5, y=0.0, z=L * BDNA_RISE_PER_BP),
-                phase_offset=0.0, length_bp=L, grid_pos=(0, 1))
-    s_a = Strand(id="bond_strand_a", domains=[Domain(helix_id="bond_h_a", start_bp=0,
-                end_bp=L - 1, direction=Direction.FORWARD)], strand_type=StrandType.STAPLE)
-    s_b = Strand(id="bond_strand_b", domains=[Domain(helix_id="bond_h_b", start_bp=0,
-                end_bp=L - 1, direction=Direction.REVERSE)], strand_type=StrandType.STAPLE)
-    ca = ClusterRigidTransform(id="bond_cluster_a", name="A", helix_ids=["bond_h_a"],
-                translation=[0, 0, 0], rotation=[0, 0, 0, 1], pivot=[0, 0, 0])
-    cb = ClusterRigidTransform(id="bond_cluster_b", name="B", helix_ids=["bond_h_b"],
-                translation=[0, 0, 0], rotation=[0, 0, 0, 1], pivot=[0, 0, 0])
-    joints = [ClusterJoint(id="bond_joint", cluster_id="bond_cluster_a", name="Hinge",
+    h_a = Helix(
+        id="bond_h_a",
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=L * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=L,
+        grid_pos=(0, 0),
+    )
+    h_b = Helix(
+        id="bond_h_b",
+        axis_start=Vec3(x=2.5, y=0.0, z=0.0),
+        axis_end=Vec3(x=2.5, y=0.0, z=L * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=L,
+        grid_pos=(0, 1),
+    )
+    s_a = Strand(
+        id="bond_strand_a",
+        domains=[
+            Domain(
+                helix_id="bond_h_a",
+                start_bp=0,
+                end_bp=L - 1,
+                direction=Direction.FORWARD,
+            )
+        ],
+        strand_type=StrandType.STAPLE,
+    )
+    s_b = Strand(
+        id="bond_strand_b",
+        domains=[
+            Domain(
+                helix_id="bond_h_b",
+                start_bp=0,
+                end_bp=L - 1,
+                direction=Direction.REVERSE,
+            )
+        ],
+        strand_type=StrandType.STAPLE,
+    )
+    ca = ClusterRigidTransform(
+        id="bond_cluster_a",
+        name="A",
+        helix_ids=["bond_h_a"],
+        translation=[0, 0, 0],
+        rotation=[0, 0, 0, 1],
+        pivot=[0, 0, 0],
+    )
+    cb = ClusterRigidTransform(
+        id="bond_cluster_b",
+        name="B",
+        helix_ids=["bond_h_b"],
+        translation=[0, 0, 0],
+        rotation=[0, 0, 0, 1],
+        pivot=[0, 0, 0],
+    )
+    joints = (
+        [
+            ClusterJoint(
+                id="bond_joint",
+                cluster_id="bond_cluster_a",
+                name="Hinge",
                 local_axis_origin=[1.25, 0.0, L * BDNA_RISE_PER_BP / 2],
-                local_axis_direction=[0.0, 1.0, 0.0], min_angle_deg=-90.0,
-                max_angle_deg=90.0)] if with_joint else []
-    xo = Crossover(id="bond_xover_01",
-                   half_a=HalfCrossover(helix_id="bond_h_a", index=6, strand=Direction.FORWARD),
-                   half_b=HalfCrossover(helix_id="bond_h_b", index=6, strand=Direction.REVERSE))
-    seeded = _demo_design().model_copy(update={
-        "helices": [h_a, h_b], "strands": [s_a, s_b],
-        "cluster_transforms": [ca, cb], "cluster_joints": joints, "crossovers": [xo],
-    })
+                local_axis_direction=[0.0, 1.0, 0.0],
+                min_angle_deg=-90.0,
+                max_angle_deg=90.0,
+            )
+        ]
+        if with_joint
+        else []
+    )
+    xo = Crossover(
+        id="bond_xover_01",
+        half_a=HalfCrossover(helix_id="bond_h_a", index=6, strand=Direction.FORWARD),
+        half_b=HalfCrossover(helix_id="bond_h_b", index=6, strand=Direction.REVERSE),
+    )
+    seeded = _demo_design().model_copy(
+        update={
+            "helices": [h_a, h_b],
+            "strands": [s_a, s_b],
+            "cluster_transforms": [ca, cb],
+            "cluster_joints": joints,
+            "crossovers": [xo],
+        }
+    )
     side_a = {"helix_id": "bond_h_a", "bp_index": 6, "direction": "FORWARD"}
     side_b = {"helix_id": "bond_h_b", "bp_index": 6, "direction": "REVERSE"}
     return seeded, side_a, side_b
@@ -1185,12 +1550,13 @@ def test_relax_bond_crossover_closes_the_gap():
     design_state.set_design(seeded)
     before = design_state.get_or_404()
     after = hb.relax_bond("crossover", bond_id="bond_xover_01", side_to_move="b")
-    assert_bond_relaxed_pose(before, after, side_a=side_a, side_b=side_b, target_nm=0.13)
+    assert_bond_relaxed_pose(
+        before, after, side_a=side_a, side_b=side_b, target_nm=0.13
+    )
 
     report = headless_coverage_report()
     assert any(
-        r["path"].endswith("/design/relax-bond")
-        for r in report["covered_routes"]
+        r["path"].endswith("/design/relax-bond") for r in report["covered_routes"]
     ), "POST /design/relax-bond should now be headless-covered"
 
 
@@ -1201,7 +1567,9 @@ def test_relax_bond_one_dof_rotates_joint_cluster():
     design_state.set_design(seeded)
     before = design_state.get_or_404()
     after = hb.relax_bond("crossover", bond_id="bond_xover_01")
-    assert_bond_relaxed_pose(before, after, side_a=side_a, side_b=side_b, target_nm=0.13)
+    assert_bond_relaxed_pose(
+        before, after, side_a=side_a, side_b=side_b, target_nm=0.13
+    )
 
 
 # ── AF-37: direct overhang-BINDING creation (sub-domain prep → create → bind) ──
@@ -1254,8 +1622,13 @@ def _bindable_pair_headless(*, seq_a="AAGGAAGG", seq_b="CCTTCCTT"):
                     continue
                 try:
                     out = hb.overhang_extrude(
-                        hid, bp, direction=dirn, is_five_prime=is5,
-                        neighbor_row=nr, neighbor_col=nc, length_bp=8,
+                        hid,
+                        bp,
+                        direction=dirn,
+                        is_five_prime=is5,
+                        neighbor_row=nr,
+                        neighbor_col=nc,
+                        length_bp=8,
                     )
                 except HTTPException:
                     continue  # gate rejected this cell — try the next
@@ -1298,9 +1671,7 @@ def test_create_overhang_binding_records_unbound_pair():
         assert b.bound is False, "a created binding starts unbound"
         assert b.binding_mode == "duplex"
         # The route denormalises the parent overhang ids onto the record.
-        sd_owner = {
-            sd.id: o.id for o in d.overhangs for sd in o.sub_domains
-        }
+        sd_owner = {sd.id: o.id for o in d.overhangs for sd in o.sub_domains}
         assert b.overhang_a_id == sd_owner[sd_a]
         assert b.overhang_b_id == sd_owner[sd_b]
 
@@ -1358,7 +1729,10 @@ def test_bind_unbind_inverse_oracle_fires_on_a_vacuous_bind():
         # `before`, so clause 1 must fire rather than silently passing.
         with pytest.raises(AssertionError, match="did not change canonical_topology"):
             assert_bind_unbind_inverse(
-                before, restored, restored, binding_id=binding_id,
+                before,
+                restored,
+                restored,
+                binding_id=binding_id,
             )
 
 
@@ -1414,42 +1788,89 @@ def _overstretched_flexible_hinge():
     overstretched — the natural fixture for a flexible-segment relax.  Mirrors
     test_flexible_segments._hinge_design + _mark_run, then poses cl_b."""
     from backend.core.constants import BDNA_RISE_PER_BP
-    h_a = Helix(id="h_a", axis_start=Vec3(x=0.0, y=0.0, z=0.0),
-                axis_end=Vec3(x=0.0, y=0.0, z=_FLEX_L * BDNA_RISE_PER_BP),
-                phase_offset=0.0, length_bp=_FLEX_L, grid_pos=(0, 0))
-    h_b = Helix(id="h_b", axis_start=Vec3(x=2.5, y=0.0, z=0.0),
-                axis_end=Vec3(x=2.5, y=0.0, z=_FLEX_L * BDNA_RISE_PER_BP),
-                phase_offset=0.0, length_bp=_FLEX_L, grid_pos=(0, 1))
-    scaffold = Strand(id="scaf", strand_type=StrandType.SCAFFOLD, domains=[
-        Domain(helix_id="h_a", start_bp=0, end_bp=8, direction=Direction.FORWARD),
-        Domain(helix_id="h_a", start_bp=_FLEX_SS_A[0], end_bp=_FLEX_SS_A[1],
-               direction=Direction.FORWARD, overhang_id="ss_a"),
-        Domain(helix_id="h_b", start_bp=_FLEX_SS_B[0], end_bp=_FLEX_SS_B[1],
-               direction=Direction.FORWARD, overhang_id="ss_b"),
-        Domain(helix_id="h_b", start_bp=3, end_bp=11, direction=Direction.FORWARD),
-    ])
-    staple_a = Strand(id="stap_a", strand_type=StrandType.STAPLE,
-                      domains=[Domain(helix_id="h_a", start_bp=0, end_bp=8, direction=Direction.REVERSE)])
-    staple_b = Strand(id="stap_b", strand_type=StrandType.STAPLE,
-                      domains=[Domain(helix_id="h_b", start_bp=3, end_bp=11, direction=Direction.REVERSE)])
+
+    h_a = Helix(
+        id="h_a",
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=_FLEX_L * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=_FLEX_L,
+        grid_pos=(0, 0),
+    )
+    h_b = Helix(
+        id="h_b",
+        axis_start=Vec3(x=2.5, y=0.0, z=0.0),
+        axis_end=Vec3(x=2.5, y=0.0, z=_FLEX_L * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=_FLEX_L,
+        grid_pos=(0, 1),
+    )
+    scaffold = Strand(
+        id="scaf",
+        strand_type=StrandType.SCAFFOLD,
+        domains=[
+            Domain(helix_id="h_a", start_bp=0, end_bp=8, direction=Direction.FORWARD),
+            Domain(
+                helix_id="h_a",
+                start_bp=_FLEX_SS_A[0],
+                end_bp=_FLEX_SS_A[1],
+                direction=Direction.FORWARD,
+                overhang_id="ss_a",
+            ),
+            Domain(
+                helix_id="h_b",
+                start_bp=_FLEX_SS_B[0],
+                end_bp=_FLEX_SS_B[1],
+                direction=Direction.FORWARD,
+                overhang_id="ss_b",
+            ),
+            Domain(helix_id="h_b", start_bp=3, end_bp=11, direction=Direction.FORWARD),
+        ],
+    )
+    staple_a = Strand(
+        id="stap_a",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h_a", start_bp=0, end_bp=8, direction=Direction.REVERSE)
+        ],
+    )
+    staple_b = Strand(
+        id="stap_b",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h_b", start_bp=3, end_bp=11, direction=Direction.REVERSE)
+        ],
+    )
     marks = [
-        FlexibleSegmentMark(strand_id="scaf", domain_index=1, bp_index=bp, direction=Direction.FORWARD)
+        FlexibleSegmentMark(
+            strand_id="scaf", domain_index=1, bp_index=bp, direction=Direction.FORWARD
+        )
         for bp in range(_FLEX_SS_A[0], _FLEX_SS_A[1] + 1)
     ] + [
-        FlexibleSegmentMark(strand_id="scaf", domain_index=2, bp_index=bp, direction=Direction.FORWARD)
+        FlexibleSegmentMark(
+            strand_id="scaf", domain_index=2, bp_index=bp, direction=Direction.FORWARD
+        )
         for bp in range(_FLEX_SS_B[0], _FLEX_SS_B[1] + 1)
     ]
-    d = _demo_design().model_copy(update={
-        "helices": [h_a, h_b],
-        "strands": [scaffold, staple_a, staple_b],
-        "cluster_transforms": [
-            ClusterRigidTransform(id="cl_a", name="Arm A", helix_ids=["h_a"]),
-            # cl_b posed 10 nm away → the tether is grossly overstretched.
-            ClusterRigidTransform(id="cl_b", name="Arm B", helix_ids=["h_b"], translation=[10.0, 0.0, 0.0]),
-        ],
-        "crossovers": [], "forced_ligations": [],
-        "flexible_segment_marks": marks,
-    })
+    d = _demo_design().model_copy(
+        update={
+            "helices": [h_a, h_b],
+            "strands": [scaffold, staple_a, staple_b],
+            "cluster_transforms": [
+                ClusterRigidTransform(id="cl_a", name="Arm A", helix_ids=["h_a"]),
+                # cl_b posed 10 nm away → the tether is grossly overstretched.
+                ClusterRigidTransform(
+                    id="cl_b",
+                    name="Arm B",
+                    helix_ids=["h_b"],
+                    translation=[10.0, 0.0, 0.0],
+                ),
+            ],
+            "crossovers": [],
+            "forced_ligations": [],
+            "flexible_segment_marks": marks,
+        }
+    )
     return apply_marks(d)  # derive the FlexibleConnection from the marks
 
 
@@ -1523,18 +1944,34 @@ def test_adjacent_nick_overhangs_are_independently_placeable():
                     break
             if pair:
                 break
-        assert pair is not None, "expected an adjacent nick pair facing one cell on a routed 6hb"
+        assert pair is not None, (
+            "expected an adjacent nick pair facing one cell on a routed 6hb"
+        )
         hid, (nr, nc), (bp_a, dir_a, is5_a), (bp_b, dir_b, is5_b) = pair
 
-        hb.overhang_extrude(hid, bp_a, direction=dir_a, is_five_prime=is5_a,
-                            neighbor_row=nr, neighbor_col=nc, length_bp=8)
+        hb.overhang_extrude(
+            hid,
+            bp_a,
+            direction=dir_a,
+            is_five_prime=is5_a,
+            neighbor_row=nr,
+            neighbor_col=nc,
+            length_bp=8,
+        )
         d = design_state.get_or_404()
         h_after = {h.id: h for h in d.helices}[hid]
         # The sibling one bp away must REMAIN a candidate (this was the bug).
         assert overhang_candidate_error(d, h_after, bp_b, dir_b, nr, nc) is None
         # And it must actually place — sharing the cell's helix — with valid topology.
-        hb.overhang_extrude(hid, bp_b, direction=dir_b, is_five_prime=is5_b,
-                            neighbor_row=nr, neighbor_col=nc, length_bp=8)
+        hb.overhang_extrude(
+            hid,
+            bp_b,
+            direction=dir_b,
+            is_five_prime=is5_b,
+            neighbor_row=nr,
+            neighbor_col=nc,
+            length_bp=8,
+        )
         d = design_state.get_or_404()
         cell_of = {h.id: h.grid_pos for h in d.helices}
         assert sum(1 for o in d.overhangs if cell_of[o.helix_id] == (nr, nc)) == 2
@@ -1567,8 +2004,15 @@ def test_fill_all_overhang_candidates_saturates_and_stays_valid():
                     if (nr, nc) in ring:
                         continue
                     try:
-                        hb.overhang_extrude(hid, bp, direction=dirn, is_five_prime=is5,
-                                            neighbor_row=nr, neighbor_col=nc, length_bp=8)
+                        hb.overhang_extrude(
+                            hid,
+                            bp,
+                            direction=dirn,
+                            is_five_prime=is5,
+                            neighbor_row=nr,
+                            neighbor_col=nc,
+                            length_bp=8,
+                        )
                     except HTTPException:
                         continue
                     placed += 1
@@ -1603,9 +2047,13 @@ def test_make_18hb_routed_design_is_deterministic():
 
     def sig(d):
         return sorted(
-            (s.strand_type.value, tuple((dm.helix_id, dm.start_bp, dm.end_bp) for dm in s.domains))
+            (
+                s.strand_type.value,
+                tuple((dm.helix_id, dm.start_bp, dm.end_bp) for dm in s.domains),
+            )
             for s in d.strands
         )
+
     assert sig(make_18hb_routed_design()) == sig(make_18hb_routed_design())
 
 
@@ -1635,7 +2083,10 @@ def test_nick_then_ligate_is_topology_identity():
     """
     with hb.scratch_session(LatticeType.HONEYCOMB):
         start = hb.create_bundle(
-            SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb",
+            SIX_HB_CELLS,
+            42,
+            lattice=LatticeType.HONEYCOMB,
+            name="6hb",
         ).model_copy(deep=True)
         s = _single_forward_domain_strand(start)
         dm = s.domains[0]
@@ -1651,7 +2102,9 @@ def test_nick_then_ligate_is_topology_identity():
 def test_nick_splits_into_two_fragments():
     """The nick wrapper actually adds a strand (one fragment becomes two)."""
     with hb.scratch_session(LatticeType.HONEYCOMB):
-        d0 = hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+        d0 = hb.create_bundle(
+            SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb"
+        )
         n_before = len(d0.strands)
         s = _single_forward_domain_strand(d0)
         dm = s.domains[0]
@@ -1665,7 +2118,10 @@ def test_delete_strand_removes_exactly_that_strand_and_validates():
     one entry, everything else is untouched, and the result still validates."""
     with hb.scratch_session(LatticeType.HONEYCOMB):
         d0 = hb.create_bundle(
-            SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb",
+            SIX_HB_CELLS,
+            42,
+            lattice=LatticeType.HONEYCOMB,
+            name="6hb",
         ).model_copy(deep=True)
         victim = _single_forward_domain_strand(d0)
         before = collections.Counter(canonical_topology(d0)[1])
@@ -1684,7 +2140,9 @@ def test_delete_strand_removes_exactly_that_strand_and_validates():
 def test_delete_strand_result_survives_roundtrip():
     """A design with a strand deleted still round-trips stably (reuses AF-1)."""
     with hb.scratch_session(LatticeType.HONEYCOMB):
-        d0 = hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+        d0 = hb.create_bundle(
+            SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb"
+        )
         victim = _single_forward_domain_strand(d0)
         deleted = hb.delete_strand(victim.id).model_copy(deep=True)
     assert_roundtrip_stable(lambda: deleted)
@@ -1707,7 +2165,8 @@ def _scaffold_on_grid(design, grid_pos):
     helix geometry one bp at a time."""
     hid = next(h.id for h in design.helices if h.grid_pos == grid_pos)
     sid = next(
-        s.id for s in design.strands
+        s.id
+        for s in design.strands
         if s.strand_type == StrandType.SCAFFOLD and s.domains[0].helix_id == hid
     )
     return hid, sid
@@ -1722,11 +2181,17 @@ def test_resize_strand_end_grows_helix_geometry_by_exactly_delta():
     overhang split would fail the per-helix length-delta count."""
     with hb.scratch_session(LatticeType.HONEYCOMB):
         d0 = hb.create_bundle(
-            [[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb",
+            [[0, 0], [0, 1]],
+            42,
+            lattice=LatticeType.HONEYCOMB,
+            name="2hb",
         )
         hid, sid = _scaffold_on_grid(d0, (0, 0))
         assert_geometric_length_delta(
-            d0, lambda: hb.resize_strand_end(sid, hid, "3p", 5), 5, helix_id=hid,
+            d0,
+            lambda: hb.resize_strand_end(sid, hid, "3p", 5),
+            5,
+            helix_id=hid,
             strands_per_bp=1,
         )
 
@@ -1744,7 +2209,9 @@ def test_resize_strand_end_plus_then_minus_is_topology_identity():
     From a settled start both ±δ runs use the re-trim convention, so the pair is a
     clean inverse.  (The axis-endpoint convention mismatch is logged as ISSUE-13.)"""
     with hb.scratch_session(LatticeType.HONEYCOMB):
-        hb.create_bundle([[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb")
+        hb.create_bundle(
+            [[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb"
+        )
         d0 = design_state.get_or_404()
         hid, sid = _scaffold_on_grid(d0, (0, 0))
         start = hb.resize_strand_end(sid, hid, "3p", 10).model_copy(deep=True)
@@ -1768,12 +2235,17 @@ def test_resize_strand_end_flips_route_to_covered():
 def test_loop_adds_one_bp_of_geometry():
     """A loop (+1) adds exactly one bp of geometry to its helix (one nuc per strand)."""
     with hb.scratch_session(LatticeType.HONEYCOMB):
-        d = hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+        d = hb.create_bundle(
+            SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb"
+        )
         h = d.helices[0]
-        bp = h.bp_start + 14   # interior, on a cell boundary, away from the edges
+        bp = h.bp_start + 14  # interior, on a cell boundary, away from the edges
         start = d.model_copy(deep=True)
         looped = assert_geometric_length_delta(
-            start, lambda: hb.loop_skip(h.id, bp, +1), +1, helix_id=h.id,
+            start,
+            lambda: hb.loop_skip(h.id, bp, +1),
+            +1,
+            helix_id=h.id,
         )
         assert looped.feature_log[-1].children[-1].op_subtype == "loop-skip-insert"
 
@@ -1781,25 +2253,35 @@ def test_loop_adds_one_bp_of_geometry():
 def test_skip_removes_one_bp_of_geometry():
     """A skip (−1) removes exactly one bp of geometry from its helix."""
     with hb.scratch_session(LatticeType.HONEYCOMB):
-        d = hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+        d = hb.create_bundle(
+            SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb"
+        )
         h = d.helices[0]
         bp = h.bp_start + 14
         start = d.model_copy(deep=True)
         assert_geometric_length_delta(
-            start, lambda: hb.loop_skip(h.id, bp, -1), -1, helix_id=h.id,
+            start,
+            lambda: hb.loop_skip(h.id, bp, -1),
+            -1,
+            helix_id=h.id,
         )
 
 
 def test_loop_then_remove_restores_geometry():
     """delta=0 removes a prior mark — the loop's own inverse restores the baseline."""
     with hb.scratch_session(LatticeType.HONEYCOMB):
-        d = hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+        d = hb.create_bundle(
+            SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb"
+        )
         h = d.helices[0]
         bp = h.bp_start + 14
         looped = hb.loop_skip(h.id, bp, +1).model_copy(deep=True)
         # Removing the mark (delta=0) takes the geometry back down by one bp.
         assert_geometric_length_delta(
-            looped, lambda: hb.loop_skip(h.id, bp, 0), -1, helix_id=h.id,
+            looped,
+            lambda: hb.loop_skip(h.id, bp, 0),
+            -1,
+            helix_id=h.id,
         )
 
 
@@ -1811,7 +2293,9 @@ def test_loop_survives_roundtrip():
     oracle that proves the mark was not silently dropped on import.
     """
     with hb.scratch_session(LatticeType.HONEYCOMB):
-        d = hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+        d = hb.create_bundle(
+            SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb"
+        )
         h = d.helices[0]
         built = hb.loop_skip(h.id, h.bp_start + 14, +1).model_copy(deep=True)
     reloaded = roundtrip_nadoc(built)
@@ -1843,8 +2327,9 @@ def test_apply_deformations_geometry_honors_marks_per_helix():
         assert any(ls.delta for h in result.helices for ls in h.loop_skips)
         for h in result.helices:
             net = sum(ls.delta for ls in h.loop_skips)
-            diff = (geometric_nucleotide_count(result, h.id)
-                    - geometric_nucleotide_count(before, h.id))
+            diff = geometric_nucleotide_count(
+                result, h.id
+            ) - geometric_nucleotide_count(before, h.id)
             assert diff == 2 * net, (
                 f"helix {h.id}: geometry changed by {diff}, marks net {net} (×2 expected)"
             )
@@ -1929,11 +2414,19 @@ def _bend_active(curvature_deg_per_bp: float = 2.0):
     """Bend the active design's middle (planes at bp 20–60). Bend construction has
     no headless wrapper yet (AF-6), so this drives the route handler directly."""
     from backend.api.routes_deformation import AddDeformationBody, add_deformation
-    add_deformation(AddDeformationBody(
-        type="bend", plane_a_bp=20, plane_b_bp=60,
-        params={"kind": "bend", "curvature_deg_per_bp": curvature_deg_per_bp,
-                "direction_deg": 0.0},
-    ))
+
+    add_deformation(
+        AddDeformationBody(
+            type="bend",
+            plane_a_bp=20,
+            plane_b_bp=60,
+            params={
+                "kind": "bend",
+                "curvature_deg_per_bp": curvature_deg_per_bp,
+                "direction_deg": 0.0,
+            },
+        )
+    )
 
 
 def test_deformed_continuation_lands_on_the_deformed_frame():
@@ -1948,7 +2441,9 @@ def test_deformed_continuation_lands_on_the_deformed_frame():
         ref = design_state.get_or_404().helices[0].id
         _bend_active()
         before = design_state.get_or_404().model_copy(deep=True)
-        after = hb.bundle_deformed_continuation([(0, 0)], 21, source_bp=84, ref_helix_id=ref)
+        after = hb.bundle_deformed_continuation(
+            [(0, 0)], 21, source_bp=84, ref_helix_id=ref
+        )
         assert after.feature_log[-1].op_kind == "extrude-deformed-continuation"
         assert_on_deformed_frame(before, after, 84, [(0, 0)], ref_helix_id=ref)
 
@@ -2045,6 +2540,7 @@ def test_deformation_flips_route_to_covered():
 # NOT load-bearing for the pose — the geometric assert_cluster_translated is, measuring
 # that the cluster's helix axes actually shift by the requested translation.
 
+
 def _bundle_two_helix_cluster():
     """Active scratch: a 6hb bundle with a named cluster over its first 2 helices.
     Returns (snapshot_before_pose, cluster_id)."""
@@ -2085,6 +2581,7 @@ def test_clustered_pose_survives_roundtrip():
     """A built + clustered + posed design validates and survives a .nadoc round-trip
     with the pose intact — re-running the geometric oracle on the reloaded design proves
     persistence (canonical_topology is blind to the pose, so it can't)."""
+
     def _build():
         _before, cid = _bundle_two_helix_cluster()
         hb.transform_cluster(cid, translation=[10.0, 0.0, 0.0])
@@ -2098,13 +2595,19 @@ def test_clustered_pose_survives_roundtrip():
         rc = next(c for c in reloaded.cluster_transforms if c.id == cid)
         assert rc.translation == [10.0, 0.0, 0.0]
         # … and still drives the geometry after the round-trip (vs an identity-pose base)
-        identity_base = reloaded.model_copy(update={
-            "cluster_transforms": [
-                c.model_copy(update={"translation": [0.0, 0.0, 0.0]}) if c.id == cid else c
-                for c in reloaded.cluster_transforms
-            ]
-        })
-        assert_cluster_translated(identity_base, reloaded, cid, translation=[10.0, 0.0, 0.0])
+        identity_base = reloaded.model_copy(
+            update={
+                "cluster_transforms": [
+                    c.model_copy(update={"translation": [0.0, 0.0, 0.0]})
+                    if c.id == cid
+                    else c
+                    for c in reloaded.cluster_transforms
+                ]
+            }
+        )
+        assert_cluster_translated(
+            identity_base, reloaded, cid, translation=[10.0, 0.0, 0.0]
+        )
 
 
 def test_cluster_routes_flip_to_covered():
@@ -2120,6 +2623,7 @@ def test_cluster_routes_flip_to_covered():
 # multi-bar part's construction history can replay the *grouping* step. canonical_topology
 # is blind to clusters, so the feature-log entry is the only thing that proves the grouping
 # persisted across a .nadoc round-trip — assert_cluster_in_feature_log is the load-bearing pin.
+
 
 def test_add_cluster_log_records_feature_log_entry():
     """add_cluster(log=True) appends a cluster_create entry naming the cluster + its
@@ -2162,13 +2666,15 @@ def test_add_cluster_default_does_not_log():
         after = design_state.get_or_404()
         cid = after.cluster_transforms[-1].id
         assert not any(
-            getattr(e, "feature_type", None) == "cluster_create" for e in after.feature_log
+            getattr(e, "feature_type", None) == "cluster_create"
+            for e in after.feature_log
         )
         with pytest.raises(AssertionError, match="created without logging"):
             assert_cluster_in_feature_log(after, cid)
 
 
 # ── Full sequencing automation (assign scaffold + WC-complement staples) ───────
+
 
 def _routed_6hb():
     """A 6hb auto-scaffolded to a single scaffold (so the staple complement covers

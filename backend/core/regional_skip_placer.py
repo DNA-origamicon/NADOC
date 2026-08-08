@@ -25,6 +25,7 @@ Pure / topological: returns a ``{helix_id: [LoopSkip]}`` mod dict; the caller ap
 with :func:`loop_skip_calculator.apply_loop_skips`.  No simulation, no global state, no
 I/O — every nucleotide coordinate read is Physical-layer, never written back.
 """
+
 from __future__ import annotations
 
 from backend.core.loop_skip_calculator import _active_intervals_for_helices
@@ -36,7 +37,9 @@ def aggregate_deviation_per_bp(deviation_map: dict) -> dict[tuple[str, int], flo
     by averaging the (up to two) strands present at each base-pair column."""
     acc: dict[tuple[str, int], list[float]] = {}
     for p in deviation_map.get("positions", []):
-        acc.setdefault((p["helix_id"], int(p["bp_index"])), []).append(float(p["deviation"]))
+        acc.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
+            float(p["deviation"])
+        )
     return {k: sum(v) / len(v) for k, v in acc.items()}
 
 
@@ -110,20 +113,23 @@ def place_regional_skips(
         strn = _norm([strain_by_bp.get((helix.id, bp), 0.0) for bp in cands])
         score = [w_dev * dev[i] - w_strain * strn[i] for i in range(m)]
 
-        picks: list[int] = []          # chosen candidate INDICES (one per slot)
+        picks: list[int] = []  # chosen candidate INDICES (one per slot)
         last_bp: int | None = None
         for k in range(budget):
             lo_i = (k * m) // budget
             hi_i = max(lo_i + 1, ((k + 1) * m) // budget)
             slot = range(lo_i, min(hi_i, m))
-            feasible = [i for i in slot
-                        if last_bp is None or cands[i] - last_bp >= min_spacing]
-            pool = feasible or list(slot)        # slot is never empty (lo_i < m for k<budget)
+            feasible = [
+                i for i in slot if last_bp is None or cands[i] - last_bp >= min_spacing
+            ]
+            pool = feasible or list(slot)  # slot is never empty (lo_i < m for k<budget)
             best_i = max(pool, key=lambda i: score[i])
             picks.append(best_i)
             last_bp = cands[best_i]
 
-        result[helix.id] = [LoopSkip(bp_index=cands[i], delta=-1) for i in sorted(picks)]
+        result[helix.id] = [
+            LoopSkip(bp_index=cands[i], delta=-1) for i in sorted(picks)
+        ]
     return result
 
 
@@ -164,11 +170,17 @@ def _overtwist_rate_sampler(error_profile):
             if s_lo <= s <= s_hi:
                 return max(0.0, slope)
         return max(0.0, segs[-1][2])
+
     return f
 
 
-def _weighted_spread_select(cands: list[int], weight: list[float], budget: int,
-                            min_spacing: int, phase: float = 0.5) -> list[int]:
+def _weighted_spread_select(
+    cands: list[int],
+    weight: list[float],
+    budget: int,
+    min_spacing: int,
+    phase: float = 0.5,
+) -> list[int]:
     """Choose ``budget`` of ``cands`` so their DENSITY follows ``weight`` (inverse-CDF over
     the cumulative weight, sampled at the ``budget`` quantiles offset by ``phase``∈[0,1)),
     honouring ``min_spacing`` and distinctness.  Uniform weight → even spacing
@@ -179,6 +191,7 @@ def _weighted_spread_select(cands: list[int], weight: list[float], budget: int,
     twist/strain response).  Unlike the even-slot placer this lets >1 deletion fall in a
     high-demand region, which the iterative profile-matcher needs."""
     import itertools
+
     m = len(cands)
     budget = min(budget, m)
     if budget <= 0:
@@ -192,10 +205,13 @@ def _weighted_spread_select(cands: list[int], weight: list[float], budget: int,
         i = 0
         while i < m - 1 and cw[i] < target:
             i += 1
+
         # honour spacing + distinctness by walking forward, then backward, to a free slot
         def _free(idx):
-            return (idx not in picks
-                    and (last_bp is None or cands[idx] - last_bp >= min_spacing))
+            return idx not in picks and (
+                last_bp is None or cands[idx] - last_bp >= min_spacing
+            )
+
         if not _free(i):
             fwd = next((k for k in range(i, m) if _free(k)), None)
             bwd = next((k for k in range(i, -1, -1) if k not in picks), None)
@@ -243,7 +259,9 @@ def redistribute_by_twist_profile(
         # Stagger the sampling grid by helix rank so deletions don't align across the
         # cross-section (the bug that made regional placement read as a different structure
         # from staggered uniform — a ~20° twist artifact, not real refinement).
-        picks = _weighted_spread_select(cands, weight, budget, min_spacing, phase=rank / n)
+        picks = _weighted_spread_select(
+            cands, weight, budget, min_spacing, phase=rank / n
+        )
         if picks:
             result[helix.id] = [LoopSkip(bp_index=bp, delta=-1) for bp in sorted(picks)]
     return result
@@ -255,5 +273,6 @@ def budget_from_uniform_period(design: Design, skip_period: int) -> dict[str, in
     :func:`sq_lattice_periodic_skips` so net twist density is identical to the uniform
     baseline (the regional run differs only in WHERE the same count of deletions go)."""
     from backend.core.loop_skip_calculator import sq_lattice_periodic_skips
+
     mods = sq_lattice_periodic_skips(design, skip_period)
     return {hid: len(skips) for hid, skips in mods.items()}

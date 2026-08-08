@@ -44,14 +44,18 @@ from backend.core.models import Direction
 
 # ── Constants ────────────────────────────────────────────────────────────────────
 NM2_PER_UM2 = 1.0e6
-MIN_SPACING_NM = 2.0            # matches the frontend placement math
-_RISE_OXDNA = SSDNA_CONTOUR_PER_NT_NM * NM_TO_OXDNA   # ssDNA contour reference (unused in B-form seed)
+MIN_SPACING_NM = 2.0  # matches the frontend placement math
+_RISE_OXDNA = (
+    SSDNA_CONTOUR_PER_NT_NM * NM_TO_OXDNA
+)  # ssDNA contour reference (unused in B-form seed)
 
 # B-form seed geometry (user decision 2026-07-17): capture strands stand as a B-DNA helix so
 # the seed is FENE-safe and consistent with the origami build.  These replicate
 # backend/core/geometry.py's FORWARD-nucleotide formula with the LOCKED B-DNA constants — do
 # not diverge (see _PHASE_* banner in cadnano.py / lattice.py).  Native NADOC HC FORWARD phase.
-_BFORM_PHASE0 = math.radians(90.0) + BDNA_TWIST_PER_BP_RAD / 2.0   # lattice._lattice_phase_offset(FORWARD, HC)
+_BFORM_PHASE0 = (
+    math.radians(90.0) + BDNA_TWIST_PER_BP_RAD / 2.0
+)  # lattice._lattice_phase_offset(FORWARD, HC)
 
 # Attach-end tether stiffness ≈ a covalent C-C bond.  A C-C stretch constant ~400 N/m
 # = 4e5 pN/nm; the oxDNA trap-stiffness unit = force_unit/length_unit = 48.63 pN /
@@ -120,7 +124,11 @@ def placement_points_nm(
 ) -> list[tuple[float, float]]:
     """Deterministic in-plane (x, y) placement points in nm, centred on the offset.
     2 nm min centre-to-centre by rejection; best-effort (returns fewer if saturated)."""
-    target = count if count is not None else strand_count(shape, size_nm, density_per_um2 or 0.0)
+    target = (
+        count
+        if count is not None
+        else strand_count(shape, size_nm, density_per_um2 or 0.0)
+    )
     s = float(size_nm)
     if target <= 0 or s <= 0:
         return []
@@ -141,7 +149,7 @@ def placement_points_nm(
             v = r * math.sin(th)
         ok = True
         if min2 > 0:
-            for (pu, pv) in placed:
+            for pu, pv in placed:
                 if (pu - u) ** 2 + (pv - v) ** 2 < min2:
                     ok = False
                     break
@@ -183,11 +191,15 @@ class CaptureSpec:
             attach_end=end,
             shape=shape,
             size_nm=max(0.0, float(d.get("sizeNm", d.get("size_nm", 0)) or 0)),
-            density_per_um2=max(0.0, float(d.get("densityPerUm2", d.get("density_per_um2", 0)) or 0)),
+            density_per_um2=max(
+                0.0, float(d.get("densityPerUm2", d.get("density_per_um2", 0)) or 0)
+            ),
             offset_x_nm=float(d.get("offsetXNm", d.get("offset_x_nm", 0)) or 0),
             offset_y_nm=float(d.get("offsetYNm", d.get("offset_y_nm", 0)) or 0),
             seed=int(d.get("seed", 1) or 0) & 0xFFFFFFFF,
-            subject_to_field=bool(d.get("subjectToField", d.get("subject_to_field", True))),
+            subject_to_field=bool(
+                d.get("subjectToField", d.get("subject_to_field", True))
+            ),
         )
 
 
@@ -221,8 +233,10 @@ class CaptureBuild:
     trap_anchors: list[tuple[int, list[float]]] = field(default_factory=list)
     n_strands: int = 0
     n_beads: int = 0
-    max_extent_oxdna: float = 0.0          # farthest capture-bead coordinate (for box sizing)
-    min_dist_to_origami_nm: float | None = None   # closest capture-bead ↔ origami-bead (clash probe)
+    max_extent_oxdna: float = 0.0  # farthest capture-bead coordinate (for box sizing)
+    min_dist_to_origami_nm: float | None = (
+        None  # closest capture-bead ↔ origami-bead (clash probe)
+    )
 
 
 def _conf_line(pos: np.ndarray, a1: np.ndarray, a3: np.ndarray) -> str:
@@ -265,15 +279,24 @@ def build_capture_strands(
         return out
 
     pts = placement_points_nm(
-        spec.shape, spec.size_nm, spec.seed,
+        spec.shape,
+        spec.size_nm,
+        spec.seed,
         density_per_um2=spec.density_per_um2,
-        offset_x_nm=spec.offset_x_nm, offset_y_nm=spec.offset_y_nm,
+        offset_x_nm=spec.offset_x_nm,
+        offset_y_nm=spec.offset_y_nm,
     )
     if not pts:
         return out
 
-    cm = np.array(origami_cm_oxdna, dtype=float) if origami_cm_oxdna else np.zeros((1, 3))
-    d_hat, e1, e2 = plane_basis(surface.get("dir"))     # d_hat = normal; e1,e2 = in-plane basis
+    cm = (
+        np.array(origami_cm_oxdna, dtype=float)
+        if origami_cm_oxdna
+        else np.zeros((1, 3))
+    )
+    d_hat, e1, e2 = plane_basis(
+        surface.get("dir")
+    )  # d_hat = normal; e1,e2 = in-plane basis
     offset_oxdna = float(surface.get("offset_nm", 0.0)) * NM_TO_OXDNA
 
     # Plane level = origami min projection minus the clearance (where the repulsion plane ends
@@ -290,18 +313,18 @@ def build_capture_strands(
     # +GROOVE happening to equal the FORWARD branch.  Same value; explicit intent.
     groove = groove_offset_rad(Direction.FORWARD)
 
-    p_base = n_particles_origami       # running global particle index
+    p_base = n_particles_origami  # running global particle index
     min_d2 = math.inf
     max_extent = 0.0
 
     for j, (px_nm, py_nm) in enumerate(pts):
         strand_idx = n_strands_origami + 1 + j
-        attach = (centroid_on_plane
-                  + (px_nm * NM_TO_OXDNA) * e1
-                  + (py_nm * NM_TO_OXDNA) * e2)
+        attach = (
+            centroid_on_plane + (px_nm * NM_TO_OXDNA) * e1 + (py_nm * NM_TO_OXDNA) * e2
+        )
         # B-form helical frames along the axis (m=0 at the plane) — replicates
         # geometry.py's FORWARD nucleotide (backbone at HELIX_RADIUS, a1 = base-pair vector).
-        frames: list[tuple[np.ndarray, np.ndarray]] = []   # (backbone_pos, a1)
+        frames: list[tuple[np.ndarray, np.ndarray]] = []  # (backbone_pos, a1)
         for m in range(L):
             axis_pt = attach + (m * rise_ox) * d_hat
             fa = _BFORM_PHASE0 + m * twist
@@ -326,7 +349,9 @@ def build_capture_strands(
 
         for k in range(L):
             backbone, a1 = ordered[k]
-            n3 = (p_base + k + 1) if k + 1 < L else -1   # next in 5′→3′ is the 3′ neighbour
+            n3 = (
+                (p_base + k + 1) if k + 1 < L else -1
+            )  # next in 5′→3′ is the 3′ neighbour
             n5 = (p_base + k - 1) if k - 1 >= 0 else -1
             out.topology_rows.append((strand_idx, seq[k], n3, n5))
             out.conf_lines.append(_conf_line(backbone, a1, a3))
@@ -340,7 +365,9 @@ def build_capture_strands(
                     min_d2 = m2
 
         attach_gi = p_base + attach_local
-        out.trap_anchors.append((attach_gi, [float(x) for x in ordered[attach_local][0]]))
+        out.trap_anchors.append(
+            (attach_gi, [float(x) for x in ordered[attach_local][0]])
+        )
         p_base += L
 
     out.n_strands = len(pts)
@@ -377,7 +404,9 @@ _FENE_MIN_UNITS = 0.5064
 _FENE_MAX_UNITS = 1.0064
 
 
-def _read_top_rows(top_path: str | Path) -> tuple[int, int, list[tuple[int, str, int, int]]]:
+def _read_top_rows(
+    top_path: str | Path,
+) -> tuple[int, int, list[tuple[int, str, int, int]]]:
     lines = Path(top_path).read_text(encoding="utf-8").splitlines()
     n_part, n_str = (int(x) for x in lines[0].split())
     rows = []
@@ -407,7 +436,10 @@ def validate_capture_build(
     5′/3′ terminals); FENE-safe backbone bonds on every capture strand; ≥ min-spacing between
     attach points; finite coordinates; trap indices (if given) inside the capture range.
     """
-    from backend.physics.oxdna_interface import oxdna_backbone_site, read_cm_positions_oxdna
+    from backend.physics.oxdna_interface import (
+        oxdna_backbone_site,
+        read_cm_positions_oxdna,
+    )
 
     checks: dict[str, bool] = {}
     failures: list[str] = []
@@ -416,9 +448,11 @@ def validate_capture_build(
     conf_lines = Path(conf_path).read_text().splitlines()[3:]
     cm = read_cm_positions_oxdna(conf_path)
 
-    checks["count_consistent"] = (len(rows) == n_part == len(conf_lines) == len(cm))
+    checks["count_consistent"] = len(rows) == n_part == len(conf_lines) == len(cm)
     if not checks["count_consistent"]:
-        failures.append(f"count mismatch: header={n_part} rows={len(rows)} conf={len(conf_lines)}")
+        failures.append(
+            f"count mismatch: header={n_part} rows={len(rows)} conf={len(conf_lines)}"
+        )
 
     # Group capture particles (strand_idx > n_origami_strands) by strand, in file order.
     cap_by_strand: dict[int, list[int]] = {}
@@ -444,7 +478,9 @@ def validate_capture_build(
     # FENE-safe backbone bonds on every capture strand.
     def _site(gi: int):
         f = [float(x) for x in conf_lines[gi].split()]
-        return oxdna_backbone_site(np.array(f[:3]) / NM_TO_OXDNA, np.array(f[3:6]), np.array(f[6:9]))
+        return oxdna_backbone_site(
+            np.array(f[:3]) / NM_TO_OXDNA, np.array(f[3:6]), np.array(f[6:9])
+        )
 
     fene_ok = True
     for idxs in cap_by_strand.values():
@@ -478,7 +514,10 @@ def validate_capture_build(
     # Trap indices (if provided) inside the appended capture range.
     if trap_particles is not None:
         lo = n_part - n_cap_beads
-        traps_ok = all(lo <= p < n_part for p in trap_particles) and len(trap_particles) == n_cap_strands
+        traps_ok = (
+            all(lo <= p < n_part for p in trap_particles)
+            and len(trap_particles) == n_cap_strands
+        )
         checks["traps_in_range"] = traps_ok
         if not traps_ok:
             failures.append("capture trap particle indices out of range or miscounted")
@@ -522,6 +561,7 @@ def append_capture_strands(
     n_particles, n_strands = _read_top_header(top_path)
 
     from backend.physics.oxdna_interface import read_cm_positions_oxdna
+
     cm = read_cm_positions_oxdna(conf_path)
 
     build = build_capture_strands(
@@ -532,8 +572,14 @@ def append_capture_strands(
         surface=surface,
     )
     if build.n_beads == 0:
-        return {"n_strands": 0, "n_beads": 0, "trap_anchors": [], "trap_text": "",
-                "min_dist_to_origami_nm": None, "box_nm_grown": None}
+        return {
+            "n_strands": 0,
+            "n_beads": 0,
+            "trap_anchors": [],
+            "trap_text": "",
+            "min_dist_to_origami_nm": None,
+            "box_nm_grown": None,
+        }
 
     # ── topology: bump header, append rows ──
     top_lines = top_path.read_text(encoding="utf-8").splitlines()

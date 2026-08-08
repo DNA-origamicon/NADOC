@@ -14,6 +14,7 @@ CanDo-RMSF policy (:func:`shape_metrics.reference_for`).  This module verifies:
 FAST tests are pure over Physical-layer dicts.  The SLOW test drives ``md_rmsf`` over a real
 NAMD DCD (fixture-gated like ``test_md_trajectory.py``) → a ready NAMD source.
 """
+
 from __future__ import annotations
 
 import json
@@ -52,8 +53,10 @@ def _core_reference(frame):
     """A core-reference geometry that admits every (helix,bp,direction) column in ``frame``
     (so ``_filter_to_reference_core`` keeps them all).  Shape mirrors what
     ``core_reference_geometry`` returns: {helix_id, bp_index, direction, backbone_position}."""
-    return [{k: e[k] for k in ("helix_id", "bp_index", "direction", "backbone_position")}
-            for e in frame]
+    return [
+        {k: e[k] for k in ("helix_id", "bp_index", "direction", "backbone_position")}
+        for e in frame
+    ]
 
 
 # ── FAST: pure source-bundle assembly ───────────────────────────────────────────────
@@ -76,10 +79,10 @@ def test_rmsf_remap_key_and_drops_none():
     bundle = build_namd_shape_source(frame, ref, rmsf_positions=frame)
     prof = bundle["rmsf"]
     assert prof is not None
-    assert len(prof) == len(frame) - 1                     # the rmsf-less entry dropped
+    assert len(prof) == len(frame) - 1  # the rmsf-less entry dropped
     p0 = prof[0]
     assert set(p0) >= {"helix_id", "bp_index", "direction", "copy", "rmsf_nm"}
-    assert p0["rmsf_nm"] == pytest.approx(0.42)            # rmsf -> rmsf_nm
+    assert p0["rmsf_nm"] == pytest.approx(0.42)  # rmsf -> rmsf_nm
     assert all(isinstance(p["bp_index"], int) for p in prof)
 
 
@@ -87,20 +90,32 @@ def test_core_filter_drops_ssdna_ends():
     """A frame carrying extra columns NOT in the core reference (ssDNA ends) — they drop
     before descriptors run, so descriptors match the core-only build."""
     frame = _core_frame()
-    ref = _core_reference(frame)                            # reference = core only
+    ref = _core_reference(frame)  # reference = core only
     # append two ssDNA-end nts on a helix the reference doesn't cover.
     frame = frame + [
-        {"helix_id": 9, "bp_index": 99, "direction": "FORWARD",
-         "backbone_position": [50.0, 0.0, 0.0], "rmsf": 5.0},
-        {"helix_id": 9, "bp_index": 100, "direction": "FORWARD",
-         "backbone_position": [51.0, 0.0, 0.0], "rmsf": 5.0},
+        {
+            "helix_id": 9,
+            "bp_index": 99,
+            "direction": "FORWARD",
+            "backbone_position": [50.0, 0.0, 0.0],
+            "rmsf": 5.0,
+        },
+        {
+            "helix_id": 9,
+            "bp_index": 100,
+            "direction": "FORWARD",
+            "backbone_position": [51.0, 0.0, 0.0],
+            "rmsf": 5.0,
+        },
     ]
     bundle = build_namd_shape_source(frame, ref, rmsf_positions=frame)
-    assert bundle["descriptors"]["n_nucleotides"] == len(ref)   # ss ends excluded
+    assert bundle["descriptors"]["n_nucleotides"] == len(ref)  # ss ends excluded
     # every column in the emitted shape_frame is in the core reference
     core_keys = {(e["helix_id"], e["bp_index"], e["direction"]) for e in ref}
-    assert all((e["helix_id"], e["bp_index"], e["direction"]) in core_keys
-               for e in bundle["shape_frame"])
+    assert all(
+        (e["helix_id"], e["bp_index"], e["direction"]) in core_keys
+        for e in bundle["shape_frame"]
+    )
 
 
 def test_field_passthrough():
@@ -127,22 +142,33 @@ def test_namd_overrides_shape_and_rmsf_reference():
     ref = _core_reference(frame)
 
     # A shifted copy so agreement math has something non-trivial to score.
-    shifted = [dict(e, backbone_position=[e["backbone_position"][0] + 5.0,
-                                          *e["backbone_position"][1:]]) for e in frame]
+    shifted = [
+        dict(
+            e,
+            backbone_position=[
+                e["backbone_position"][0] + 5.0,
+                *e["backbone_position"][1:],
+            ],
+        )
+        for e in frame
+    ]
 
     namd = build_namd_shape_source(frame, ref, rmsf_positions=frame)
     # oxDNA + CanDo built via their own twins (same contract, different engine tag).
     from backend.core.cando_shape_source import build_cando_shape_source
     from backend.core.oxdna_shape_source import build_oxdna_shape_source
+
     oxdna = build_oxdna_shape_source(shifted, ref, rmsf_positions=shifted)
-    cando_rmsf = [{"helix_id": e["helix_id"], "bp_index": e["bp_index"],
-                   "rmsf_nm": 0.2} for e in ref]
+    cando_rmsf = [
+        {"helix_id": e["helix_id"], "bp_index": e["bp_index"], "rmsf_nm": 0.2}
+        for e in ref
+    ]
     cando = build_cando_shape_source(shifted, ref, rmsf=cando_rmsf)
 
     report = build_comparison_report([oxdna, cando, namd])
     assert report["ready"]
-    assert report["references"]["shape"] == "namd"   # overrides oxDNA policy
-    assert report["references"]["rmsf"] == "namd"     # overrides CanDo policy
+    assert report["references"]["shape"] == "namd"  # overrides oxDNA policy
+    assert report["references"]["rmsf"] == "namd"  # overrides CanDo policy
     assert "namd" in report["engines"]
 
 
@@ -153,9 +179,16 @@ def test_namd_reference_without_gold_falls_back_to_policy():
     ref = _core_reference(frame)
     from backend.core.cando_shape_source import build_cando_shape_source
     from backend.core.oxdna_shape_source import build_oxdna_shape_source
+
     oxdna = build_oxdna_shape_source(frame, ref, rmsf_positions=frame)
-    cando = build_cando_shape_source(frame, ref, rmsf=[
-        {"helix_id": e["helix_id"], "bp_index": e["bp_index"], "rmsf_nm": 0.2} for e in ref])
+    cando = build_cando_shape_source(
+        frame,
+        ref,
+        rmsf=[
+            {"helix_id": e["helix_id"], "bp_index": e["bp_index"], "rmsf_nm": 0.2}
+            for e in ref
+        ],
+    )
     report = build_comparison_report([oxdna, cando])
     assert report["references"]["shape"] == "oxdna"
     assert report["references"]["rmsf"] == "cando"
@@ -167,8 +200,14 @@ _JOB = _WS / "md_jobs" / "5c6a87247a60" / "package" / "2hb_namd_solvated"
 _PSF = _JOB / "2hb.psf"
 _REF = _JOB / "2hb.pdb"
 _DESIGN = _WS / "2hb.nadoc"
-_HAVE_FIXTURE = _PSF.exists() and _REF.exists() and _DESIGN.exists() and any(
-    (_JOB / "output").glob("*.dcd")) if _JOB.exists() else False
+_HAVE_FIXTURE = (
+    _PSF.exists()
+    and _REF.exists()
+    and _DESIGN.exists()
+    and any((_JOB / "output").glob("*.dcd"))
+    if _JOB.exists()
+    else False
+)
 
 
 @pytest.mark.skipif(not _HAVE_FIXTURE, reason="real 2hb NAMD job fixture not present")
@@ -195,14 +234,25 @@ def test_real_namd_trajectory_builds_ready_source():
     # position + RMSF.  The P-only path silently dropped one nucleotide per strand, which
     # then rendered un-moved/un-coloured in the flexibility map.
     from backend.physics.oxdna_interface import _XB_SENTINEL, _strand_nucleotide_order
-    design_nt = {(k[0], int(k[1]), getattr(k[2], "value", k[2]))
-                 for k in _strand_nucleotide_order(design) if k[0] != _XB_SENTINEL}
-    rmsf_nt = {(p["helix_id"], int(p["bp_index"]), str(p["direction"]).upper())
-               for p in r["positions"] if p["helix_id"] != _XB_SENTINEL}
-    assert design_nt <= rmsf_nt, f"design nucleotides missing from RMSF map: {sorted(design_nt - rmsf_nt)[:5]}"
+
+    design_nt = {
+        (k[0], int(k[1]), getattr(k[2], "value", k[2]))
+        for k in _strand_nucleotide_order(design)
+        if k[0] != _XB_SENTINEL
+    }
+    rmsf_nt = {
+        (p["helix_id"], int(p["bp_index"]), str(p["direction"]).upper())
+        for p in r["positions"]
+        if p["helix_id"] != _XB_SENTINEL
+    }
+    assert design_nt <= rmsf_nt, (
+        f"design nucleotides missing from RMSF map: {sorted(design_nt - rmsf_nt)[:5]}"
+    )
 
     reference = core_reference_geometry(design)
-    bundle = build_namd_shape_source(r["positions"], reference, rmsf_positions=r["positions"])
+    bundle = build_namd_shape_source(
+        r["positions"], reference, rmsf_positions=r["positions"]
+    )
     assert bundle["engine"] == "namd"
     assert bundle["descriptors"] is not None
     assert bundle["shape_frame"]

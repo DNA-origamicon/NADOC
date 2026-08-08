@@ -41,6 +41,7 @@ from tests.conftest import make_6hb_design, make_18hb_design
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def design():
     return make_6hb_design()
@@ -49,16 +50,21 @@ def design():
 @pytest.fixture
 def geometry(design):
     from backend.api.crud import _geometry_for_design
+
     return _geometry_for_design(design)
 
 
 # ── oxdna-native seed (designed pairs start bonded; no startup collapse) ───────
 
+
 def test_oxdna_native_seed_bonds_pairs_at_frame_zero(tmp_path, design, geometry):
     """The native seed must land every designed WC pair inside oxDNA's H-bond range
     at frame 0 (bp≈0→~1.0) AND clear the FENE backbone over-stretch that NADOC's
     wide geometry carries — the regression oracle for option 1."""
-    from backend.physics.oxdna_interface import write_configuration, read_configuration_full
+    from backend.physics.oxdna_interface import (
+        write_configuration,
+        read_configuration_full,
+    )
     from backend.core.oxdna_health import base_pair_retention, backbone_fene_stretch
 
     wide = tmp_path / "wide.dat"
@@ -81,7 +87,10 @@ def test_oxdna_native_seed_bonds_pairs_at_frame_zero(tmp_path, design, geometry)
 def test_oxdna_native_seed_preserves_orientation(tmp_path, design, geometry):
     """Only the centre of mass moves — a1/a3 (base normal + 5′→3′) are untouched."""
     import numpy as np
-    from backend.physics.oxdna_interface import write_configuration, read_configuration_full
+    from backend.physics.oxdna_interface import (
+        write_configuration,
+        read_configuration_full,
+    )
 
     wide = tmp_path / "wide.dat"
     native = tmp_path / "native.dat"
@@ -126,33 +135,63 @@ def test_oxdna_native_seed_map_handles_loop_inserts():
     design = make_18hb_routed_design(length_bp=168)
     design.helices[1].loop_skips = [LoopSkip(bp_index=50, delta=+2)]
     rmap = resolved_nuc_map(design, _geometry_for_design(design))
-    assert any(len(k) == 4 for k in rmap)            # loop copies present
-    out = oxdna_native_seed_map(design, rmap)        # must not raise
-    assert set(out) == set(rmap)                     # every key (incl. copies) kept
+    assert any(len(k) == 4 for k in rmap)  # loop copies present
+    out = oxdna_native_seed_map(design, rmap)  # must not raise
+    assert set(out) == set(rmap)  # every key (incl. copies) kept
     # the inward shift moved every centre of mass (paired and copy alike)
     for k in rmap:
         moved = np.linalg.norm(
             np.asarray(out[k]["backbone_position"], float)
-            - np.asarray(rmap[k]["backbone_position"], float))
+            - np.asarray(rmap[k]["backbone_position"], float)
+        )
         assert moved > 1e-6
 
 
 def _loop_design(delta: int = 2):
     """1 helix, scaffold FORWARD + staple REVERSE, one loop insertion at bp5."""
     from backend.core.models import (
-        Design, Helix, Strand, Domain, Vec3, DesignMetadata,
-        LatticeType, StrandType, Direction, LoopSkip)
+        Design,
+        Helix,
+        Strand,
+        Domain,
+        Vec3,
+        DesignMetadata,
+        LatticeType,
+        StrandType,
+        Direction,
+        LoopSkip,
+    )
     from backend.core.constants import BDNA_RISE_PER_BP
+
     L = 10
-    h = Helix(id="h0", axis_start=Vec3(x=0, y=0, z=0),
-              axis_end=Vec3(x=0, y=0, z=L * BDNA_RISE_PER_BP), phase_offset=0.0,
-              length_bp=L, loop_skips=[LoopSkip(bp_index=5, delta=delta)])
-    fwd = Strand(id="scaf", strand_type=StrandType.SCAFFOLD,
-                 domains=[Domain(helix_id="h0", direction=Direction.FORWARD, start_bp=0, end_bp=L - 1)])
-    rev = Strand(id="stap", strand_type=StrandType.STAPLE,
-                 domains=[Domain(helix_id="h0", direction=Direction.REVERSE, start_bp=L - 1, end_bp=0)])
-    return Design(metadata=DesignMetadata(name="loop"), helices=[h], strands=[fwd, rev],
-                  lattice_type=LatticeType.HONEYCOMB)
+    h = Helix(
+        id="h0",
+        axis_start=Vec3(x=0, y=0, z=0),
+        axis_end=Vec3(x=0, y=0, z=L * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=L,
+        loop_skips=[LoopSkip(bp_index=5, delta=delta)],
+    )
+    fwd = Strand(
+        id="scaf",
+        strand_type=StrandType.SCAFFOLD,
+        domains=[
+            Domain(helix_id="h0", direction=Direction.FORWARD, start_bp=0, end_bp=L - 1)
+        ],
+    )
+    rev = Strand(
+        id="stap",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h0", direction=Direction.REVERSE, start_bp=L - 1, end_bp=0)
+        ],
+    )
+    return Design(
+        metadata=DesignMetadata(name="loop"),
+        helices=[h],
+        strands=[fwd, rev],
+        lattice_type=LatticeType.HONEYCOMB,
+    )
 
 
 def test_loop_copies_thread_monotonically_on_both_strands():
@@ -164,7 +203,10 @@ def test_loop_copies_thread_monotonically_on_both_strands():
     WRONG groove side (a second ~1.7-unit junction bond)."""
     import numpy as np
     from backend.physics.oxdna_interface import (
-        _walk_strand_nucleotides, resolved_nuc_map, NM_TO_OXDNA)
+        _walk_strand_nucleotides,
+        resolved_nuc_map,
+        NM_TO_OXDNA,
+    )
     from backend.api.crud import _geometry_for_design
 
     design = _loop_design(delta=2)
@@ -184,7 +226,9 @@ def test_loop_copies_thread_monotonically_on_both_strands():
         # monotone axial progression through the whole strand incl. the loop (ties at
         # the flank↔copy junctions are fine — same z, different rotation)
         diffs = np.diff(zs)
-        assert np.all(diffs >= -1e-9) or np.all(diffs <= 1e-9), f"{want_dir} zig-zags: {zs}"
+        assert np.all(diffs >= -1e-9) or np.all(diffs <= 1e-9), (
+            f"{want_dir} zig-zags: {zs}"
+        )
         # no backbone bond past FENE — the loop no longer over-stretches
         assert max(bonds) < 1.006, f"{want_dir} over-stretched bond {max(bonds):.2f}"
 
@@ -194,10 +238,13 @@ def _bent_18hb():
     crossovers desync under per-helix compaction."""
     from backend.core.models import LoopSkip
     from tests.conftest import make_18hb_routed_design
+
     design = make_18hb_routed_design()
     for i, h in enumerate(design.helices):
         if i % 2 == 0:
-            h.loop_skips = [LoopSkip(bp_index=bp, delta=-1) for bp in range(20, 200, 20)]
+            h.loop_skips = [
+                LoopSkip(bp_index=bp, delta=-1) for bp in range(20, 200, 20)
+            ]
     return design
 
 
@@ -208,7 +255,10 @@ def test_unwrap_adjacency_keeps_loop_copies_in_one_component():
     with copies=True the copies were ALL orphaned (tied to a non-existent 3-tuple base
     + a 3-tuple backbone key absent from the copies=True map)."""
     from backend.core.models import LoopSkip
-    from backend.physics.oxdna_interface import resolved_nuc_map, _build_unwrap_adjacency
+    from backend.physics.oxdna_interface import (
+        resolved_nuc_map,
+        _build_unwrap_adjacency,
+    )
     from backend.api.crud import _geometry_for_design
     from tests.conftest import make_18hb_routed_design
 
@@ -218,8 +268,12 @@ def test_unwrap_adjacency_keeps_loop_copies_in_one_component():
     # inject loops on several helices so there are 4-tuple copies to thread
     for i, h in enumerate(design.helices):
         if i % 3 == 0:
-            h.loop_skips = [LoopSkip(bp_index=bp, delta=+1) for bp in range(30, 120, 30)]
-    relax = resolved_nuc_map(design, _geometry_for_design(design))   # 4-tuple loop copies
+            h.loop_skips = [
+                LoopSkip(bp_index=bp, delta=+1) for bp in range(30, 120, 30)
+            ]
+    relax = resolved_nuc_map(
+        design, _geometry_for_design(design)
+    )  # 4-tuple loop copies
     assert any(len(k) == 4 for k in relax)
 
     adj = _build_unwrap_adjacency(relax, design)
@@ -235,8 +289,8 @@ def test_unwrap_adjacency_keeps_loop_copies_in_one_component():
                 continue
             seen.add(n)
             stack.extend(adj.get(n, []))
-    assert comps == 1                                       # one whole structure, no islands
-    assert all(len(k) != 4 or adj[k] for k in relax)       # every loop copy is bonded
+    assert comps == 1  # one whole structure, no islands
+    assert all(len(k) != 4 or adj[k] for k in relax)  # every loop copy is bonded
 
 
 def test_max_crossover_stretch_detects_compaction_desync():
@@ -247,8 +301,12 @@ def test_max_crossover_stretch_detects_compaction_desync():
     from backend.api.crud import _geometry_for_design
 
     design = _bent_18hb()
-    compact = max_crossover_backbone_stretch(design, _geometry_for_design(design, compact_skips=True))
-    deformed = max_crossover_backbone_stretch(design, _geometry_for_design(design, compact_skips=False))
+    compact = max_crossover_backbone_stretch(
+        design, _geometry_for_design(design, compact_skips=True)
+    )
+    deformed = max_crossover_backbone_stretch(
+        design, _geometry_for_design(design, compact_skips=False)
+    )
     assert compact > deformed + 1.0
 
 
@@ -263,17 +321,20 @@ def test_seed_geometry_falls_back_for_bent_bundle():
     balanced = make_18hb_routed_design()
     balanced_seed = max_crossover_backbone_stretch(balanced, _seed_geometry(balanced))
     compact_only = max_crossover_backbone_stretch(
-        balanced, _geometry_for_design(balanced, compact_skips=True))
-    assert balanced_seed == pytest.approx(compact_only)   # no skips → compaction kept
+        balanced, _geometry_for_design(balanced, compact_skips=True)
+    )
+    assert balanced_seed == pytest.approx(compact_only)  # no skips → compaction kept
 
     bent = _bent_18hb()
     bent_seed = max_crossover_backbone_stretch(bent, _seed_geometry(bent))
     bent_compact = max_crossover_backbone_stretch(
-        bent, _geometry_for_design(bent, compact_skips=True))
-    assert bent_seed < bent_compact - 1.0                 # fell back to deformed
+        bent, _geometry_for_design(bent, compact_skips=True)
+    )
+    assert bent_seed < bent_compact - 1.0  # fell back to deformed
 
 
 # ── oxdna_job: persistence round-trip ─────────────────────────────────────────
+
 
 def test_job_roundtrip(tmp_path):
     specs = build_relaxation_stages(mc_steps=100, md_relax_steps=200, equil_steps=300)
@@ -290,12 +351,19 @@ def test_job_roundtrip(tmp_path):
 def test_run_config_roundtrip(tmp_path):
     # run_config carries the conditions echoed back into the panel cards on select.
     rc = {
-        "kind": "relax", "backend": "CUDA", "device": "0",
-        "salt_concentration": 0.6, "mc_steps": 500, "md_relax_steps": 7000,
-        "equil_steps": 800, "min_bp_retained": 0.4,
+        "kind": "relax",
+        "backend": "CUDA",
+        "device": "0",
+        "salt_concentration": 0.6,
+        "mc_steps": 500,
+        "md_relax_steps": 7000,
+        "equil_steps": 800,
+        "min_bp_retained": 0.4,
         "surface": {"dir": [0, 1, 0], "offset_nm": 2.0, "stiff": 5.0},
-        "anchors": [{"kind": "overhang", "id": "oh1"},
-                    {"kind": "domain", "strandId": "s1", "domainIndex": 2}],
+        "anchors": [
+            {"kind": "overhang", "id": "oh1"},
+            {"kind": "domain", "strandId": "s1", "domainIndex": 2},
+        ],
     }
     job = new_oxdna_job("demo", [], run_config=rc)
     job.save(tmp_path)
@@ -314,6 +382,7 @@ def test_list_jobs(tmp_path):
 
 
 # ── oxdna_protocol: input-file generation ─────────────────────────────────────
+
 
 def test_stage_specs_shape():
     specs = build_relaxation_stages(backend="CUDA", device="1")
@@ -336,9 +405,11 @@ def test_stage_specs_shape():
 
 # ── binary resolution: CUDA preference (the GPU-shadowing fix) ─────────────────
 
+
 def _fake_oxdna(tmp_path, name, *, cuda: bool):
     """Write an executable stub and a matching ``ldd`` cache entry for it."""
     from backend.core import oxdna_runner
+
     p = tmp_path / name
     p.write_text("#!/bin/sh\n")
     p.chmod(0o755)
@@ -349,6 +420,7 @@ def _fake_oxdna(tmp_path, name, *, cuda: bool):
 
 def test_oxdna_supports_cuda_cache(tmp_path, monkeypatch):
     from backend.core import oxdna_runner
+
     cpu = _fake_oxdna(tmp_path, "oxDNA_cpu", cuda=False)
     gpu = _fake_oxdna(tmp_path, "oxDNA_gpu", cuda=True)
     assert oxdna_runner.oxdna_supports_cuda(gpu) is True
@@ -360,27 +432,30 @@ def test_oxdna_supports_cuda_cache(tmp_path, monkeypatch):
 def test_find_oxdna_prefers_cuda_over_cpu_on_path(tmp_path, monkeypatch):
     """A CPU-only binary first in the candidate list must NOT shadow a CUDA one."""
     from backend.core import oxdna_runner
+
     cpu = _fake_oxdna(tmp_path, "oxDNA_cpu", cuda=False)
     gpu = _fake_oxdna(tmp_path, "oxDNA_gpu", cuda=True)
     monkeypatch.delenv("OXDNA_BIN", raising=False)
     monkeypatch.setattr(oxdna_runner, "_OXDNA_CANDIDATES", [cpu, gpu])
-    assert oxdna_runner.find_oxdna() == gpu                       # CUDA preferred
-    assert oxdna_runner.find_oxdna(prefer_cuda=False) == cpu      # first-usable
+    assert oxdna_runner.find_oxdna() == gpu  # CUDA preferred
+    assert oxdna_runner.find_oxdna(prefer_cuda=False) == cpu  # first-usable
 
 
 def test_find_oxdna_cpu_only_falls_back(tmp_path, monkeypatch):
     from backend.core import oxdna_runner
+
     cpu = _fake_oxdna(tmp_path, "oxDNA_cpu", cuda=False)
     monkeypatch.delenv("OXDNA_BIN", raising=False)
     monkeypatch.setattr(oxdna_runner, "_OXDNA_CANDIDATES", [cpu])
-    assert oxdna_runner.find_oxdna() == cpu                       # only option wins
+    assert oxdna_runner.find_oxdna() == cpu  # only option wins
 
 
 def test_find_oxdna_env_override_wins(tmp_path, monkeypatch):
     from backend.core import oxdna_runner
+
     cpu = _fake_oxdna(tmp_path, "oxDNA_cpu", cuda=False)
     gpu = _fake_oxdna(tmp_path, "oxDNA_gpu", cuda=True)
-    monkeypatch.setenv("OXDNA_BIN", cpu)                          # explicit user intent
+    monkeypatch.setenv("OXDNA_BIN", cpu)  # explicit user intent
     monkeypatch.setattr(oxdna_runner, "_OXDNA_CANDIDATES", [gpu])
     assert oxdna_runner.find_oxdna() == cpu
 
@@ -437,17 +512,28 @@ def test_render_output_cadence_overrides():
     # intermediate trajectory frames (print_conf_interval > steps) and samples energy
     # sparsely — otherwise frame I/O dominates a short trial and hides CUDA's speedup.
     from backend.core.oxdna_protocol import OxdnaStageSpec
-    spec = OxdnaStageSpec(name="bench", kind="md_relax", sim_type="MD", steps=2000,
-                          backend="CUDA", device="0",
-                          print_conf_interval_override=2001,
-                          print_energy_every_override=200)
+
+    spec = OxdnaStageSpec(
+        name="bench",
+        kind="md_relax",
+        sim_type="MD",
+        steps=2000,
+        backend="CUDA",
+        device="0",
+        print_conf_interval_override=2001,
+        print_energy_every_override=200,
+    )
     txt = render_stage_input(spec, "t", "c")
     assert "print_conf_interval = 2001" in txt
     assert "print_energy_every = 200" in txt
     # Default (no override) still derives ~100 samples from steps.
     base = render_stage_input(
-        OxdnaStageSpec(name="b", kind="md_relax", sim_type="MD", steps=2000,
-                       backend="CUDA"), "t", "c")
+        OxdnaStageSpec(
+            name="b", kind="md_relax", sim_type="MD", steps=2000, backend="CUDA"
+        ),
+        "t",
+        "c",
+    )
     assert "print_conf_interval = 20" in base and "print_energy_every = 20" in base
 
 
@@ -481,20 +567,28 @@ def _large_skipped_design(n_skips_per_helix: int = 6):
     """18-helix bundle (~14k nt) with skips peppered down each helix — a
     deletion-heavy, imported-cadnano-scale structure."""
     from backend.core.models import LoopSkip
+
     d = make_18hb_design(388)
     for h in d.helices:
         step = h.length_bp // (n_skips_per_helix + 1)
-        h.loop_skips = [LoopSkip(bp_index=h.bp_start + step * (k + 1), delta=-1)
-                        for k in range(n_skips_per_helix)]
+        h.loop_skips = [
+            LoopSkip(bp_index=h.bp_start + step * (k + 1), delta=-1)
+            for k in range(n_skips_per_helix)
+        ]
     return d
 
 
 def _intra_backbone_bond_lengths_nm(design, *, compact_skips):
     from backend.api.crud import _geometry_for_design
     from backend.physics.oxdna_interface import backbone_bond_pairs
+
     geo = _geometry_for_design(design, compact_skips=compact_skips)
-    pos = {(n["helix_id"], n["bp_index"], n["direction"]): np.asarray(n["backbone_position"])
-           for n in geo}
+    pos = {
+        (n["helix_id"], n["bp_index"], n["direction"]): np.asarray(
+            n["backbone_position"]
+        )
+        for n in geo
+    }
     out = []
     for a, b in backbone_bond_pairs(design):
         if a[0] != b[0] or a[:3] not in pos or b[:3] not in pos:
@@ -510,8 +604,8 @@ def test_large_structure_skip_compaction_no_fene_violation():
     design = _large_skipped_design()
 
     compacted = _intra_backbone_bond_lengths_nm(design, compact_skips=True)
-    assert len(compacted) > 13_000                 # genuinely large
-    assert compacted.max() < _FENE_MAX_NM          # no bond past FENE divergence
+    assert len(compacted) > 13_000  # genuinely large
+    assert compacted.max() < _FENE_MAX_NM  # no bond past FENE divergence
 
     # Meaningfulness: WITHOUT compaction the deletions leave ~2×-rise gaps that
     # DO violate FENE — proving the test exercises the gap the fix removes.
@@ -532,14 +626,14 @@ def test_skip_after_sequencing_deregisters_complementarity():
     seqd = _sequence_for_oxdna(make_18hb_design(120))
     n_comp, n_pairs = designed_pair_complementarity(seqd)
     assert n_pairs > 0
-    assert n_comp / n_pairs > 0.95            # a freshly-sequenced design is ~complementary
+    assert n_comp / n_pairs > 0.95  # a freshly-sequenced design is ~complementary
 
     # Add one skip per helix WITHOUT re-sequencing → downstream bases de-register.
     skipped = seqd.model_copy(deep=True)
     for h in skipped.helices:
         h.loop_skips = [LoopSkip(bp_index=h.bp_start + h.length_bp // 2, delta=-1)]
     n_comp2, n_pairs2 = designed_pair_complementarity(skipped)
-    assert n_comp2 / n_pairs2 < 0.80          # de-registered (oxDNA could not hold it)
+    assert n_comp2 / n_pairs2 < 0.80  # de-registered (oxDNA could not hold it)
 
 
 def test_large_structure_oxdna_files_self_consistent(tmp_path):
@@ -549,31 +643,38 @@ def test_large_structure_oxdna_files_self_consistent(tmp_path):
     no ghost base), so every count matches exactly."""
     from backend.api.crud import _geometry_for_design
     from backend.physics.oxdna_interface import (
-        _strand_nucleotide_order, write_topology,
+        _strand_nucleotide_order,
+        write_topology,
     )
+
     design = _large_skipped_design()
     for h in design.helices:
-        h.length_bp += 40                            # imported-helix empty lattice tail
+        h.length_bp += 40  # imported-helix empty lattice tail
 
     n_order = len(_strand_nucleotide_order(design))
     n_geom = len(_geometry_for_design(design, compact_skips=True))
-    assert n_geom == n_order                         # empty lattice slots no longer inflate
+    assert n_geom == n_order  # empty lattice slots no longer inflate
 
     top = tmp_path / "topology.top"
     write_topology(design, top)
     header_n = int(top.read_text().splitlines()[0].split()[0])
-    assert header_n == n_order                       # topology counts real nucleotides
+    assert header_n == n_order  # topology counts real nucleotides
 
     conf = tmp_path / "conf.dat"
     write_configuration(design, _geometry_for_design(design, compact_skips=True), conf)
     data_lines = [ln for ln in conf.read_text().splitlines()[3:] if ln.strip()]
-    assert len(data_lines) == n_order                # conf matches topology exactly
+    assert len(data_lines) == n_order  # conf matches topology exactly
 
 
 # ── Mutual-trap external forces (relax aid so the structure holds) ─────────────
 
+
 def test_mutual_traps_file(design, tmp_path):
-    from backend.physics.oxdna_interface import write_mutual_traps, _strand_nucleotide_order
+    from backend.physics.oxdna_interface import (
+        write_mutual_traps,
+        _strand_nucleotide_order,
+    )
+
     p = tmp_path / "forces.txt"
     n_pairs = write_mutual_traps(design, p)
     assert n_pairs > 0
@@ -584,6 +685,7 @@ def test_mutual_traps_file(design, tmp_path):
     # Particle indices are valid 0-based topology indices.
     n_nuc = len(_strand_nucleotide_order(design))
     import re
+
     for idx in map(int, re.findall(r"particle = (\d+)", text)):
         assert 0 <= idx < n_nuc
 
@@ -591,8 +693,8 @@ def test_mutual_traps_file(design, tmp_path):
 def test_stage_external_forces_flags():
     specs = build_relaxation_stages()
     # Traps ON for the MC + MD-relax stages, OFF for the unbiased equil stage.
-    assert specs[0].external_forces is True   # mc
-    assert specs[1].external_forces is True   # md_relax
+    assert specs[0].external_forces is True  # mc
+    assert specs[1].external_forces is True  # md_relax
     assert specs[2].external_forces is False  # equil
 
 
@@ -608,13 +710,15 @@ def test_render_includes_forces_only_when_enabled():
 
 # ── Production stage ──────────────────────────────────────────────────────────
 
+
 def test_production_stage_spec():
     from backend.core.oxdna_protocol import build_production_stage
+
     p = build_production_stage(steps=2_000_000, backend="CUDA")
     assert p.kind == "production" and p.sim_type == "MD"
-    assert p.max_backbone_force is None      # standard backbone potential
-    assert p.external_forces is False        # unbiased — no traps
-    assert p.min_bp_retained == 0.0          # sampling: no bp gate
+    assert p.max_backbone_force is None  # standard backbone potential
+    assert p.external_forces is False  # unbiased — no traps
+    assert p.min_bp_retained == 0.0  # sampling: no bp gate
     txt = render_stage_input(p, "t.top", "c.dat", forces_name="forces.txt")
     assert "max_backbone_force" not in txt and "external_forces" not in txt
 
@@ -636,6 +740,7 @@ _CONFIG_LOAD_ERROR_LOG = (
 
 def test_log_indicates_explosion_distinguishes_blowup_from_setup_error(tmp_path):
     from backend.core import oxdna_runner as r
+
     boom = tmp_path / "boom.log"
     boom.write_text(_EXPLOSION_LOG)
     setup = tmp_path / "setup.log"
@@ -643,7 +748,7 @@ def test_log_indicates_explosion_distinguishes_blowup_from_setup_error(tmp_path)
     clean = tmp_path / "clean.log"
     clean.write_text("INFO: END OF THE SIMULATION, everything went OK!\n")
     assert r._log_indicates_explosion(boom) is True
-    assert r._log_indicates_explosion(setup) is False   # config-load error ≠ blow-up
+    assert r._log_indicates_explosion(setup) is False  # config-load error ≠ blow-up
     assert r._log_indicates_explosion(clean) is False
     assert r._log_indicates_explosion(tmp_path / "missing.log") is False
 
@@ -655,17 +760,21 @@ def test_structure_blew_up_detects_nonaborting_explosion(tmp_path):
     from backend.core import oxdna_runner as r
 
     def conf(p, coords):
-        p.write_text("t = 0\nb = 500 500 500\nE = 0 0 0\n"
-                     + "\n".join(f"{x} {y} {z}  0 0 0  0 0 0" for x, y, z in coords))
+        p.write_text(
+            "t = 0\nb = 500 500 500\nE = 0 0 0\n"
+            + "\n".join(f"{x} {y} {z}  0 0 0  0 0 0" for x, y, z in coords)
+        )
 
-    ref = tmp_path / "ref.dat"; conf(ref, [(0, 0, 0), (2, 1, 160)])      # relaxed extent ~160
-    sd = tmp_path / "stage"; sd.mkdir()
-    conf(sd / "last_conf.dat", [(0, 0, 0), (430, 354, 261)])             # exploded extent ~430
+    ref = tmp_path / "ref.dat"
+    conf(ref, [(0, 0, 0), (2, 1, 160)])  # relaxed extent ~160
+    sd = tmp_path / "stage"
+    sd.mkdir()
+    conf(sd / "last_conf.dat", [(0, 0, 0), (430, 354, 261)])  # exploded extent ~430
     assert r._conf_max_extent(ref) == 160.0
     assert r._structure_blew_up(sd, ref) is True
-    conf(sd / "last_conf.dat", [(0, 0, 0), (40, 20, 150)])               # stable swell/bend
+    conf(sd / "last_conf.dat", [(0, 0, 0), (40, 20, 150)])  # stable swell/bend
     assert r._structure_blew_up(sd, ref) is False
-    conf(sd / "last_conf.dat", [(0, 0, 0), (float("nan"), 1, 1)])        # NaN coordinate
+    conf(sd / "last_conf.dat", [(0, 0, 0), (float("nan"), 1, 1)])  # NaN coordinate
     assert r._structure_blew_up(sd, ref) is True
 
 
@@ -690,10 +799,10 @@ def test_halve_dt_and_restart_transforms_stage(tmp_path):
     r._halve_dt_and_restart(job, tmp_path, specs, 0)
 
     assert job.production_retries == 1
-    assert specs[0].dt == 0.0025                       # halved
+    assert specs[0].dt == 0.0025  # halved
     assert job.stages[0].status == "pending"
     assert job.current_stage_idx == 0
-    assert not (sd / "last_conf.dat").exists()         # exploded checkpoint cleared
+    assert not (sd / "last_conf.dat").exists()  # exploded checkpoint cleared
     assert not (sd / "energy.dat").exists()
     # Specs persisted so a server restart resumes at the reduced dt.
     persisted = json.loads((job.job_dir(tmp_path) / "stages_spec.json").read_text())
@@ -715,7 +824,9 @@ def test_production_retries_roundtrip(tmp_path):
     assert back.production_retries == 0 and back.max_production_retries == 2
 
 
-def test_run_job_recovers_from_production_explosion(tmp_path, monkeypatch, design, geometry):
+def test_run_job_recovers_from_production_explosion(
+    tmp_path, monkeypatch, design, geometry
+):
     """End-to-end: a production stage that explodes on the first attempt is
     automatically re-run at half dt and reaches `completed` — no user intervention."""
     import asyncio
@@ -731,19 +842,23 @@ def test_run_job_recovers_from_production_explosion(tmp_path, monkeypatch, desig
     monkeypatch.setattr(r, "find_oxdna", lambda *a, **k: "/fake/oxDNA")
     monkeypatch.setattr(r, "find_dnanalysis", lambda *a, **k: None)
     monkeypatch.setattr(
-        r, "run_oxdna_health_check",
-        lambda *a, **k: OxdnaHealthResult(passed=True, bp_retained_fraction=0.9,
-                                          potential_energy=-1.3, fene_safe=True),
+        r,
+        "run_oxdna_health_check",
+        lambda *a, **k: OxdnaHealthResult(
+            passed=True, bp_retained_fraction=0.9, potential_energy=-1.3, fene_safe=True
+        ),
     )
 
     calls = {"n": 0}
 
-    async def fake_run(oxdna_bin, input_path, stage_dir, log_path, job_id, on_spawn=None):
+    async def fake_run(
+        oxdna_bin, input_path, stage_dir, log_path, job_id, on_spawn=None
+    ):
         calls["n"] += 1
         if on_spawn:
             on_spawn(12345)
         if calls["n"] == 1:
-            Path(log_path).write_text(_EXPLOSION_LOG)        # blow up first try
+            Path(log_path).write_text(_EXPLOSION_LOG)  # blow up first try
             return 1, 12345
         # Second try (halved dt): succeed — write a checkpoint + energy.
         (Path(stage_dir) / "last_conf.dat").write_text("t = 0\nb = 1 1 1\nE = 0 0 0\n")
@@ -756,13 +871,15 @@ def test_run_job_recovers_from_production_explosion(tmp_path, monkeypatch, desig
     specs = [spec]
     asyncio.run(r.run_job(job, tmp_path, specs))
 
-    assert calls["n"] == 2                       # exploded once, recovered once
+    assert calls["n"] == 2  # exploded once, recovered once
     assert job.status == OxdnaStatus.completed
     assert job.production_retries == 1
-    assert specs[0].dt == 0.0025                  # ran the recovery at half dt
+    assert specs[0].dt == 0.0025  # ran the recovery at half dt
 
 
-def test_run_job_recovers_from_md_relax_bp_melt(tmp_path, monkeypatch, design, geometry):
+def test_run_job_recovers_from_md_relax_bp_melt(
+    tmp_path, monkeypatch, design, geometry
+):
     """A base-pair melt at md_relax is recoverable: the runner escalates the relax
     (more steps + smaller dt) and retries instead of hard-failing, and the job then
     reaches `completed`.  Guards the quickness contract — the fast default relax runs
@@ -773,8 +890,9 @@ def test_run_job_recovers_from_md_relax_bp_melt(tmp_path, monkeypatch, design, g
     from backend.core.oxdna_health import OxdnaHealthResult
 
     specs = build_relaxation_stages(backend="CPU", md_relax_steps=1_000)
-    job = new_oxdna_job("melt-recover", [s.to_status() for s in specs],
-                        n_nucleotides=len(geometry))
+    job = new_oxdna_job(
+        "melt-recover", [s.to_status() for s in specs], n_nucleotides=len(geometry)
+    )
     r.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
 
     monkeypatch.setattr(r, "find_oxdna", lambda *a, **k: "/fake/oxDNA")
@@ -788,15 +906,22 @@ def test_run_job_recovers_from_md_relax_bp_melt(tmp_path, monkeypatch, design, g
             return OxdnaHealthResult(passed=True, bp_retained_fraction=0.79)
         if kind == "md_relax":
             md_health_calls["n"] += 1
-            if md_health_calls["n"] == 1:               # first pass melts
-                return OxdnaHealthResult(passed=False, bp_retained_fraction=0.24,
-                                         reason="base-pair retention 24% below gate 50%")
-            return OxdnaHealthResult(passed=True, bp_retained_fraction=0.9, fene_safe=True)
+            if md_health_calls["n"] == 1:  # first pass melts
+                return OxdnaHealthResult(
+                    passed=False,
+                    bp_retained_fraction=0.24,
+                    reason="base-pair retention 24% below gate 50%",
+                )
+            return OxdnaHealthResult(
+                passed=True, bp_retained_fraction=0.9, fene_safe=True
+            )
         return OxdnaHealthResult(passed=True, bp_retained_fraction=0.9, fene_safe=True)
 
     monkeypatch.setattr(r, "run_oxdna_health_check", fake_health)
 
-    async def fake_run(oxdna_bin, input_path, stage_dir, log_path, job_id, on_spawn=None):
+    async def fake_run(
+        oxdna_bin, input_path, stage_dir, log_path, job_id, on_spawn=None
+    ):
         if on_spawn:
             on_spawn(999)
         (Path(stage_dir) / "last_conf.dat").write_text("t = 0\nb = 1 1 1\nE = 0 0 0\n")
@@ -808,14 +933,16 @@ def test_run_job_recovers_from_md_relax_bp_melt(tmp_path, monkeypatch, design, g
 
     asyncio.run(r.run_job(job, tmp_path, specs))
 
-    assert job.status == OxdnaStatus.completed        # recovered, not failed
-    assert job.relax_retries == 1                     # spent exactly one escalation
+    assert job.status == OxdnaStatus.completed  # recovered, not failed
+    assert job.relax_retries == 1  # spent exactly one escalation
     relax_idx = next(i for i, s in enumerate(specs) if s.kind == "md_relax")
-    assert specs[relax_idx].steps == 3_000            # escalated 3× from the 1_000 base
-    assert specs[relax_idx].dt == 0.001               # escalated to the gentler timestep
+    assert specs[relax_idx].steps == 3_000  # escalated 3× from the 1_000 base
+    assert specs[relax_idx].dt == 0.001  # escalated to the gentler timestep
 
 
-def test_run_job_fails_after_exhausting_melt_retries(tmp_path, monkeypatch, design, geometry):
+def test_run_job_fails_after_exhausting_melt_retries(
+    tmp_path, monkeypatch, design, geometry
+):
     """A persistent melt exhausts the retry budget and then fails cleanly with a
     melt-specific message (not the generic health-gate string)."""
     import asyncio
@@ -824,21 +951,30 @@ def test_run_job_fails_after_exhausting_melt_retries(tmp_path, monkeypatch, desi
     from backend.core.oxdna_health import OxdnaHealthResult
 
     specs = build_relaxation_stages(backend="CPU", md_relax_steps=1_000)
-    job = new_oxdna_job("melt-persist", [s.to_status() for s in specs],
-                        n_nucleotides=len(geometry))
+    job = new_oxdna_job(
+        "melt-persist", [s.to_status() for s in specs], n_nucleotides=len(geometry)
+    )
     r.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
 
     monkeypatch.setattr(r, "find_oxdna", lambda *a, **k: "/fake/oxDNA")
     monkeypatch.setattr(r, "find_dnanalysis", lambda *a, **k: None)
     monkeypatch.setattr(
-        r, "run_oxdna_health_check",
-        lambda *a, **k: (OxdnaHealthResult(passed=True, bp_retained_fraction=0.79)
-                         if k.get("kind") == "mc"
-                         else OxdnaHealthResult(passed=False, bp_retained_fraction=0.24,
-                                                reason="base-pair retention 24% below gate 50%")),
+        r,
+        "run_oxdna_health_check",
+        lambda *a, **k: (
+            OxdnaHealthResult(passed=True, bp_retained_fraction=0.79)
+            if k.get("kind") == "mc"
+            else OxdnaHealthResult(
+                passed=False,
+                bp_retained_fraction=0.24,
+                reason="base-pair retention 24% below gate 50%",
+            )
+        ),
     )
 
-    async def fake_run(oxdna_bin, input_path, stage_dir, log_path, job_id, on_spawn=None):
+    async def fake_run(
+        oxdna_bin, input_path, stage_dir, log_path, job_id, on_spawn=None
+    ):
         if on_spawn:
             on_spawn(999)
         (Path(stage_dir) / "last_conf.dat").write_text("t = 0\nb = 1 1 1\nE = 0 0 0\n")
@@ -851,8 +987,8 @@ def test_run_job_fails_after_exhausting_melt_retries(tmp_path, monkeypatch, desi
     asyncio.run(r.run_job(job, tmp_path, specs))
 
     assert job.status == OxdnaStatus.failed
-    assert job.relax_retries == job.max_relax_retries        # spent the whole budget
-    assert "escalating attempt" in job.error                 # melt-specific message
+    assert job.relax_retries == job.max_relax_retries  # spent the whole budget
+    assert "escalating attempt" in job.error  # melt-specific message
 
 
 def test_job_progress_eta(tmp_path):
@@ -860,19 +996,21 @@ def test_job_progress_eta(tmp_path):
     remaining (current + pending) steps."""
     from backend.core.oxdna_runner import job_progress
 
-    specs = build_relaxation_stages(mc_steps=1000, md_relax_steps=100_000, equil_steps=50_000)
+    specs = build_relaxation_stages(
+        mc_steps=1000, md_relax_steps=100_000, equil_steps=50_000
+    )
     job = new_oxdna_job("d", [s.to_status() for s in specs])
     job.current_stage_idx = 1
     job.stages[0].status = "done"
     job.stages[1].status = "running"
-    job.stages[1].started_at = time.time() - 10.0       # 10 s into md_relax
+    job.stages[1].started_at = time.time() - 10.0  # 10 s into md_relax
     job.save(tmp_path)
     sd = job.stage_dir(tmp_path, job.stages[1].name)
     sd.mkdir(parents=True, exist_ok=True)
     (sd / "energy.dat").write_text("\n".join("0 -1 0.5 -0.5" for _ in range(30)) + "\n")
 
     prog = job_progress(job, tmp_path, specs)
-    assert prog["stage_fraction"] == pytest.approx(0.30, abs=0.02)   # 30/100 lines
+    assert prog["stage_fraction"] == pytest.approx(0.30, abs=0.02)  # 30/100 lines
     # 30% of 100k = 30k steps in 10 s → 3000 st/s; remaining 70k + 50k = 120k → ~40 s.
     assert prog["eta_seconds"] is not None
     assert 20 < prog["eta_seconds"] < 80
@@ -885,8 +1023,13 @@ def test_job_overall_fraction_single_stage_run_advances(tmp_path):
     from backend.core.oxdna_runner import job_overall_fraction, job_progress
     from backend.core.oxdna_protocol import build_field_stage
 
-    spec = build_field_stage(name="1_field", field_oxdna=0.04, field_dir=[1, 0, 0],
-                             forces_file="f.txt", steps=5_000_000)
+    spec = build_field_stage(
+        name="1_field",
+        field_oxdna=0.04,
+        field_dir=[1, 0, 0],
+        forces_file="f.txt",
+        steps=5_000_000,
+    )
     job = new_oxdna_job("d", [spec.to_status()])
     job.current_stage_idx = 0
     job.stages[0].status = "running"
@@ -896,15 +1039,19 @@ def test_job_overall_fraction_single_stage_run_advances(tmp_path):
     (sd / "energy.dat").write_text("\n".join("0 -1 0.5 -0.5" for _ in range(73)) + "\n")
 
     frac = job_overall_fraction(job, tmp_path, [spec])
-    assert frac == pytest.approx(0.73, abs=0.02)                       # 73/100 lines, NOT 0
-    assert frac == pytest.approx(job_progress(job, tmp_path, [spec])["overall"], abs=1e-6)
+    assert frac == pytest.approx(0.73, abs=0.02)  # 73/100 lines, NOT 0
+    assert frac == pytest.approx(
+        job_progress(job, tmp_path, [spec])["overall"], abs=1e-6
+    )
 
 
 def test_job_overall_fraction_counts_done_stages(tmp_path):
     """Multi-stage: completed stages + the running stage's live fraction."""
     from backend.core.oxdna_runner import job_overall_fraction
 
-    specs = build_relaxation_stages(mc_steps=1000, md_relax_steps=100_000, equil_steps=50_000)
+    specs = build_relaxation_stages(
+        mc_steps=1000, md_relax_steps=100_000, equil_steps=50_000
+    )
     job = new_oxdna_job("d", [s.to_status() for s in specs])
     job.current_stage_idx = 1
     job.stages[0].status = "done"
@@ -926,13 +1073,15 @@ def test_stage_energy_lines_fast_matches_exact_on_large_file(tmp_path):
     sd = tmp_path / "stage"
     sd.mkdir()
     # oxDNA writes fixed-width numeric columns; emulate 5000 such lines (~150 KB).
-    lines = [f"{step*1000:>12d}  -1.234567  0.500000 -0.500000" for step in range(5000)]
+    lines = [
+        f"{step * 1000:>12d}  -1.234567  0.500000 -0.500000" for step in range(5000)
+    ]
     (sd / "energy.dat").write_text("\n".join(lines) + "\n")
 
     exact = _stage_energy_lines(sd)
     fast = _stage_energy_lines_fast(sd)
     assert exact == 5000
-    assert abs(fast - exact) <= 2                                      # size/line-width estimate
+    assert abs(fast - exact) <= 2  # size/line-width estimate
 
     # Empty + missing files: both agree at 0 (no fallback surprises).
     (sd / "energy.dat").write_text("")
@@ -943,7 +1092,10 @@ def test_stage_energy_lines_fast_matches_exact_on_large_file(tmp_path):
 def test_print_conf_interval():
     """The display-frame cadence is ~100 frames per stage (mirrors render_stage_input)."""
     from backend.core.oxdna_protocol import print_conf_interval
-    specs = build_relaxation_stages(mc_steps=1000, md_relax_steps=100_000, equil_steps=50_000)
+
+    specs = build_relaxation_stages(
+        mc_steps=1000, md_relax_steps=100_000, equil_steps=50_000
+    )
     assert print_conf_interval(specs[1]) == 1_000
 
 
@@ -953,12 +1105,14 @@ def test_job_progress_next_frame_eta(tmp_path):
     frame index is currently shown."""
     from backend.core.oxdna_runner import job_progress
 
-    specs = build_relaxation_stages(mc_steps=1000, md_relax_steps=100_000, equil_steps=50_000)
+    specs = build_relaxation_stages(
+        mc_steps=1000, md_relax_steps=100_000, equil_steps=50_000
+    )
     job = new_oxdna_job("d", [s.to_status() for s in specs])
     job.current_stage_idx = 1
     job.stages[0].status = "done"
     job.stages[1].status = "running"
-    job.stages[1].started_at = time.time() - 10.0       # 10 s into md_relax
+    job.stages[1].started_at = time.time() - 10.0  # 10 s into md_relax
     job.save(tmp_path)
     sd = job.stage_dir(tmp_path, job.stages[1].name)
     sd.mkdir(parents=True, exist_ok=True)
@@ -978,12 +1132,13 @@ def test_job_progress_eta_mc_stage_excludes_mc_rate_from_md(tmp_path):
     different units at vastly different speeds, so each class is estimated separately."""
     from backend.core.oxdna_runner import job_progress
 
-    specs = build_relaxation_stages(mc_steps=1000, md_relax_steps=1_000_000,
-                                    equil_steps=100_000, backend="CUDA")
+    specs = build_relaxation_stages(
+        mc_steps=1000, md_relax_steps=1_000_000, equil_steps=100_000, backend="CUDA"
+    )
     job = new_oxdna_job("d", [s.to_status() for s in specs], backend="CUDA")
     job.current_stage_idx = 0
     job.stages[0].status = "running"
-    job.stages[0].started_at = time.time() - 100.0      # 100 s into MC at ~2.5 st/s
+    job.stages[0].started_at = time.time() - 100.0  # 100 s into MC at ~2.5 st/s
     job.save(tmp_path)
     sd = job.stage_dir(tmp_path, job.stages[0].name)
     sd.mkdir(parents=True, exist_ok=True)
@@ -995,7 +1150,9 @@ def test_job_progress_eta_mc_stage_excludes_mc_rate_from_md(tmp_path):
     # be seeded at the MD-class default (CUDA ~1000 st/s), so the whole ETA is well under
     # an hour: MC tail ~300 s + MD 1e6/1000 + equil 1e5/1000 ≈ 19 min.
     assert prog["eta_seconds"] is not None
-    assert prog["eta_seconds"] < 3600, f"ETA {prog['eta_seconds']/3600:.1f} h — MC rate leaked into MD"
+    assert prog["eta_seconds"] < 3600, (
+        f"ETA {prog['eta_seconds'] / 3600:.1f} h — MC rate leaked into MD"
+    )
 
 
 def test_live_health_snapshot_energy_only(design, tmp_path):
@@ -1005,9 +1162,9 @@ def test_live_health_snapshot_energy_only(design, tmp_path):
 
     (tmp_path / "energy.dat").write_text("0 -2.0 0.3 -1.7\n0 -2.5 0.3 -2.2\n")
     snap = _live_health_snapshot(design, tmp_path, 1234.0)
-    assert snap["potential_energy"] == pytest.approx(-2.5)   # last energy line's U
+    assert snap["potential_energy"] == pytest.approx(-2.5)  # last energy line's U
     assert snap["steps_per_s"] == 1234.0
-    assert snap["bp_retained_fraction"] is None              # no trajectory.dat
+    assert snap["bp_retained_fraction"] is None  # no trajectory.dat
     assert snap["max_backbone_clash"] is None
 
 
@@ -1016,7 +1173,9 @@ def test_job_progress_live_health_while_running(design, geometry, tmp_path):
     from the partial energy.dat + trajectory.dat — so the panel ticks mid-stage."""
     from backend.core.oxdna_runner import job_progress
 
-    specs = build_relaxation_stages(mc_steps=1000, md_relax_steps=100_000, equil_steps=50_000)
+    specs = build_relaxation_stages(
+        mc_steps=1000, md_relax_steps=100_000, equil_steps=50_000
+    )
     job = new_oxdna_job("d", [s.to_status() for s in specs])
     job.current_stage_idx = 1
     job.stages[0].status = "done"
@@ -1026,14 +1185,16 @@ def test_job_progress_live_health_while_running(design, geometry, tmp_path):
     (job.job_dir(tmp_path) / "design.json").write_text(design.model_dump_json())
     sd = job.stage_dir(tmp_path, job.stages[1].name)
     sd.mkdir(parents=True, exist_ok=True)
-    (sd / "energy.dat").write_text("\n".join("0 -1.23 0.5 -0.73" for _ in range(30)) + "\n")
+    (sd / "energy.dat").write_text(
+        "\n".join("0 -1.23 0.5 -0.73" for _ in range(30)) + "\n"
+    )
     _write_traj(design, geometry, sd / "trajectory.dat", 3)
 
     lh = job_progress(job, tmp_path, specs)["live_health"]
     assert lh is not None
     assert lh["potential_energy"] == pytest.approx(-1.23)
     assert lh["steps_per_s"] is not None and lh["steps_per_s"] > 0
-    assert lh["bp_retained_fraction"] is not None   # from the latest trajectory frame
+    assert lh["bp_retained_fraction"] is not None  # from the latest trajectory frame
     assert lh["max_backbone_clash"] is not None
 
 
@@ -1042,7 +1203,8 @@ def test_production_rmsd(design, geometry, tmp_path):
     frame PBC-unwrapped + Kabsch-aligned (so rigid drift contributes ~0)."""
     from backend.core.constants import NM_TO_OXDNA
     from backend.physics.oxdna_interface import (
-        write_configuration, read_trajectory_frames_full,
+        write_configuration,
+        read_trajectory_frames_full,
     )
     from backend.core.oxdna_health import production_rmsd
 
@@ -1051,7 +1213,7 @@ def test_production_rmsd(design, geometry, tmp_path):
     lines = ref.read_text().splitlines()
     hdr, data = lines[:3], [l for l in lines[3:] if l.strip()]
 
-    def frame(xshift_ox):                       # rigid x-translation → Kabsch removes it
+    def frame(xshift_ox):  # rigid x-translation → Kabsch removes it
         out = list(hdr)
         for ln in data:
             p = ln.split()
@@ -1089,7 +1251,7 @@ def test_production_rmsf(design, geometry, tmp_path):
         out = list(hdr)
         for i, ln in enumerate(data):
             p = ln.split()
-            if i == 0:                          # perturb ONLY the first nucleotide
+            if i == 0:  # perturb ONLY the first nucleotide
                 p[0] = f"{float(p[0]) + move_first_by_ox:.6f}"
             out.append(" ".join(p))
         return out
@@ -1102,19 +1264,30 @@ def test_production_rmsf(design, geometry, tmp_path):
     assert r["n_frames"] == 2
     assert len(r["positions"]) > 0
     p0 = r["positions"][0]
-    assert {"helix_id", "bp_index", "direction", "backbone_position", "nx", "ny", "nz", "rmsf"} <= set(p0)
+    assert {
+        "helix_id",
+        "bp_index",
+        "direction",
+        "backbone_position",
+        "nx",
+        "ny",
+        "nz",
+        "rmsf",
+    } <= set(p0)
     # The moved base is far more flexible than the rest.
     assert r["max_rmsf"] > 0.5
     assert r["max_rmsf"] > r["min_rmsf"] + 0.4
 
 
 def test_production_rmsf_ignores_trailing_surface_capture_particles(
-        design, geometry, tmp_path):
+    design, geometry, tmp_path
+):
     """Capture beads appended after the origami must not be mistaken for leading
     protein particles, which shifts every RMSF identity and draws scaffold bonds
     between unrelated coordinates."""
     from backend.physics.oxdna_interface import (
-        read_trajectory_frames_at, write_configuration,
+        read_trajectory_frames_at,
+        write_configuration,
     )
     from backend.core.oxdna_health import production_rmsf
 
@@ -1129,19 +1302,28 @@ def test_production_rmsf_ignores_trailing_surface_capture_particles(
     ref.write_text("\n".join(header + dna + [capture]) + "\n")
     traj = tmp_path / "traj_with_capture.dat"
     traj.write_text(
-        "\n".join(header + dna + [capture] + header + dna + [moved_capture]) + "\n")
+        "\n".join(header + dna + [capture] + header + dna + [moved_capture]) + "\n"
+    )
 
     result = production_rmsf(
-        design, traj, ref, include_average_frame=True, align=False,
-        n_trailing_extra=1, trailing_extra_strand_length=1)
+        design,
+        traj,
+        ref,
+        include_average_frame=True,
+        align=False,
+        n_trailing_extra=1,
+        trailing_extra_strand_length=1,
+    )
     assert result["ready"] is True
     assert result["n_frames"] == 2
     first_key = next(iter(result["average_frame"]))
     expected = [float(x) for x in dna[0].split()[:3]]
     actual = result["average_frame"][first_key]["backbone_position"]
     from backend.physics.oxdna_interface import OXDNA_LENGTH_UNIT
+
     assert actual.tolist() == pytest.approx(
-        [x * OXDNA_LENGTH_UNIT for x in expected], abs=1e-6)
+        [x * OXDNA_LENGTH_UNIT for x in expected], abs=1e-6
+    )
     cap = next(p for p in result["positions"] if p["helix_id"] == "cap0")
     assert cap["bp_index"] == 1_000_000
     assert cap["rmsf"] == pytest.approx(OXDNA_LENGTH_UNIT, rel=1e-6)
@@ -1149,19 +1331,28 @@ def test_production_rmsf_ignores_trailing_surface_capture_particles(
     # The composite trajectory uses the streaming indexed reader rather than the
     # full RMSF reader; pin that path independently against the same offset bug.
     streamed = read_trajectory_frames_at(
-        traj, design, [0, 1], n_trailing_extra=1,
-        trailing_extra_strand_length=1)
+        traj, design, [0, 1], n_trailing_extra=1, trailing_extra_strand_length=1
+    )
     assert len(streamed) == 2
     streamed_first = streamed[0][next(iter(streamed[0]))]["backbone_position"]
     assert streamed_first.tolist() == pytest.approx(
-        [x * OXDNA_LENGTH_UNIT for x in expected], abs=1e-6)
-    assert streamed[0][("cap0", 1_000_000, "FORWARD")]["backbone_position"][0] \
+        [x * OXDNA_LENGTH_UNIT for x in expected], abs=1e-6
+    )
+    assert (
+        streamed[0][("cap0", 1_000_000, "FORWARD")]["backbone_position"][0]
         != streamed[1][("cap0", 1_000_000, "FORWARD")]["backbone_position"][0]
+    )
 
     from backend.core.oxdna_health import composite_trajectory
+
     composite = composite_trajectory(
-        design, [("production", "production", traj)], ref, align=False,
-        n_trailing_extra=1, trailing_extra_strand_length=1)
+        design,
+        [("production", "production", traj)],
+        ref,
+        align=False,
+        n_trailing_extra=1,
+        trailing_extra_strand_length=1,
+    )
     cap_index = composite["keys"].index(["cap0", 1_000_000, "FORWARD"])
     cap_x = [frame[cap_index * 6] for frame in composite["frames"]]
     assert len(set(cap_x)) > 1
@@ -1170,6 +1361,7 @@ def test_production_rmsf_ignores_trailing_surface_capture_particles(
 def _write_traj(design, geometry, path, n_frames, box_nm=80.0):
     """Write a tiny oxDNA trajectory of n_frames identical frames at *path*."""
     from backend.physics.oxdna_interface import write_configuration
+
     tmp = path.parent / "_one.dat"
     write_configuration(design, geometry, tmp, box_nm=box_nm)
     lines = tmp.read_text().splitlines()
@@ -1183,32 +1375,40 @@ def _write_traj(design, geometry, path, n_frames, box_nm=80.0):
 # ── Graphs & Metrics card: differential_profile / base_pairing_spatial_profile /
 #    count_trajectory_frames / production_metric_series ──────────────────────────
 
+
 def test_differential_profile_subtracts_on_shared_axis():
     """sim − analytic on a common normalised axial grid; identical profiles → ~0."""
     from backend.core.oxdna_health import differential_profile
+
     sim = [(0.0, 0.0), (5.0, 10.0), (10.0, 20.0)]
     same = differential_profile(sim, sim)
     assert all(abs(v) < 1e-6 for _, v in same)
     # analytic sampled at DIFFERENT positions but same shape (linear 0→20) → still ~0.
     analytic = [(0.0, 0.0), (2.0, 5.0), (4.0, 10.0), (6.0, 15.0), (8.0, 20.0)]
     diff = differential_profile(sim, analytic)
-    assert [t for t, _ in diff] == [0.0, 5.0, 10.0]     # keeps the sim's sample positions
+    assert [t for t, _ in diff] == [0.0, 5.0, 10.0]  # keeps the sim's sample positions
     assert all(abs(v) < 1e-6 for _, v in diff)
 
 
 def test_differential_profile_nonzero_when_sim_exceeds_analytic():
     from backend.core.oxdna_health import differential_profile
-    sim = [(0.0, 0.0), (5.0, 30.0), (10.0, 60.0)]       # sim over-twists 3× the analytic
+
+    sim = [(0.0, 0.0), (5.0, 30.0), (10.0, 60.0)]  # sim over-twists 3× the analytic
     analytic = [(0.0, 0.0), (5.0, 10.0), (10.0, 20.0)]
     diff = differential_profile(sim, analytic)
     assert diff[-1][1] == pytest.approx(40.0, abs=1e-6)  # 60 − 20
-    assert differential_profile(sim, []) == [(0.0, 0.0), (5.0, 30.0), (10.0, 60.0)]  # no ref → sim
+    assert differential_profile(sim, []) == [
+        (0.0, 0.0),
+        (5.0, 30.0),
+        (10.0, 60.0),
+    ]  # no ref → sim
 
 
 def _paired_bundle(n_helix=4, n_axial=12, radius=1.2, rise=0.34):
     """Straight bundle with BOTH strands present at every (helix, bp) — so it has
     designed base pairs (unlike ``_straight_bundle``, which is FORWARD-only)."""
     import math
+
     out = []
     for h in range(n_helix):
         ang = 2 * math.pi * h / n_helix
@@ -1221,6 +1421,7 @@ def _paired_bundle(n_helix=4, n_axial=12, radius=1.2, rise=0.34):
 
 def test_base_pairing_spatial_profile_flat_when_uniform():
     from backend.core.oxdna_health import base_pairing_spatial_profile
+
     mean = _paired_bundle(n_axial=40)
     frac = {(p["helix_id"], p["bp_index"]): 1.0 for p in mean}
     prof = base_pairing_spatial_profile(frac, mean)
@@ -1229,9 +1430,13 @@ def test_base_pairing_spatial_profile_flat_when_uniform():
 
 def test_base_pairing_spatial_profile_dips_at_melted_end():
     from backend.core.oxdna_health import base_pairing_spatial_profile
+
     mean = _paired_bundle(n_axial=40)
     # High-bp end is melted (formed fraction 0.1), the rest holds (1.0).
-    frac = {(p["helix_id"], p["bp_index"]): (0.1 if p["bp_index"] >= 34 else 1.0) for p in mean}
+    frac = {
+        (p["helix_id"], p["bp_index"]): (0.1 if p["bp_index"] >= 34 else 1.0)
+        for p in mean
+    }
     prof = base_pairing_spatial_profile(frac, mean)
     # First slab (low axial t) holds; last slab (high axial t) dips.
     assert prof[0][1] > 0.8
@@ -1244,22 +1449,30 @@ def test_base_pairing_spatial_profile_skips_extra_base_inserts():
     # They are ssDNA, not designed WC pairs, and must be dropped — not int()'d (which
     # crashed the MD base-pairing "Generate": invalid literal for int() ... <uuid>).
     from backend.core.oxdna_health import base_pairing_spatial_profile
+
     mean = _paired_bundle(n_axial=40)
     frac = {(p["helix_id"], p["bp_index"]): 1.0 for p in mean}
-    mean.append({"helix_id": "__xb__",
-                 "bp_index": "accc07e6-a6df-431d-9090-d24cf77a8ec9",
-                 "direction": 0,
-                 "backbone_position": [0.0, 0.0, 0.0]})
-    prof = base_pairing_spatial_profile(frac, mean)   # must not raise
+    mean.append(
+        {
+            "helix_id": "__xb__",
+            "bp_index": "accc07e6-a6df-431d-9090-d24cf77a8ec9",
+            "direction": 0,
+            "backbone_position": [0.0, 0.0, 0.0],
+        }
+    )
+    prof = base_pairing_spatial_profile(frac, mean)  # must not raise
     assert prof and all(v == pytest.approx(1.0) for _, v in prof)
 
 
 def test_count_trajectory_frames(tmp_path):
     from backend.core.oxdna_health import count_trajectory_frames
+
     p = tmp_path / "traj.dat"
-    p.write_text("t = 0\nb = 1 1 1\nE = 0 0 0\n1 0 0\n"
-                 "t = 100\nb = 1 1 1\nE = 0 0 0\n1 0 0\n"
-                 "t = 200\nb = 1 1 1\nE = 0 0 0\n1 0 0\n")
+    p.write_text(
+        "t = 0\nb = 1 1 1\nE = 0 0 0\n1 0 0\n"
+        "t = 100\nb = 1 1 1\nE = 0 0 0\n1 0 0\n"
+        "t = 200\nb = 1 1 1\nE = 0 0 0\n1 0 0\n"
+    )
     assert count_trajectory_frames(p) == 3
     assert count_trajectory_frames(tmp_path / "missing.dat") == 0
 
@@ -1278,9 +1491,9 @@ def test_count_trajectory_frames_incremental(tmp_path):
     p = tmp_path / "traj.dat"
     p.write_text(_frames([0, 100]))
     assert count(p) == 2
-    assert count(p) == 2                       # stat-only cache hit, same answer
+    assert count(p) == 2  # stat-only cache hit, same answer
 
-    with p.open("a") as fh:                    # append (the live-stage case)
+    with p.open("a") as fh:  # append (the live-stage case)
         fh.write(_frames([200, 300]))
     assert count(p) == 4
 
@@ -1293,7 +1506,7 @@ def test_count_trajectory_frames_incremental(tmp_path):
         fh.write("\nb = 1 1 1\nE = 0 0 0\n1 0 0\n")
     assert count(p) == 5
 
-    p.write_text(_frames([0]))                 # truncated in place → recount
+    p.write_text(_frames([0]))  # truncated in place → recount
     assert count(p) == 1
 
     # Rewritten LARGER with an identical head (a restarted stage rewinds to t = 0)
@@ -1313,10 +1526,11 @@ def test_count_dat_frames_is_memoized(tmp_path, monkeypatch):
 
     calls: list = []
     real = H._scan_frames
-    monkeypatch.setattr(H, "_scan_frames",
-                        lambda *a, **k: (calls.append(1), real(*a, **k))[1])
+    monkeypatch.setattr(
+        H, "_scan_frames", lambda *a, **k: (calls.append(1), real(*a, **k))[1]
+    )
     assert H._count_dat_frames(p) == 2
-    assert calls == []                         # served from cache, no re-scan
+    assert calls == []  # served from cache, no re-scan
 
 
 def test_production_metric_series_one_pass_all_metrics(design, geometry, tmp_path):
@@ -1324,18 +1538,23 @@ def test_production_metric_series_one_pass_all_metrics(design, geometry, tmp_pat
     (per-frame) + spatial (profile) sections — and calls the progress hook per frame."""
     from backend.core.oxdna_health import production_metric_series
     from backend.api.skip_twist_tuning import core_reference_geometry
-    ref = tmp_path / "ref.dat"; _write_traj(design, geometry, ref, 1)
-    traj = tmp_path / "prod.dat"; _write_traj(design, geometry, traj, 4)
+
+    ref = tmp_path / "ref.dat"
+    _write_traj(design, geometry, ref, 1)
+    traj = tmp_path / "prod.dat"
+    _write_traj(design, geometry, traj, 4)
     analytic = core_reference_geometry(design)
 
     seen = []
-    out = production_metric_series(design, traj, ref, analytic, on_frame=lambda: seen.append(1))
+    out = production_metric_series(
+        design, traj, ref, analytic, on_frame=lambda: seen.append(1)
+    )
     assert out["ready"] is True
     assert out["n_frames"] == 4
-    assert len(seen) == 4                                    # progress hook fired per frame
+    assert len(seen) == 4  # progress hook fired per frame
     for key in ("twist", "curvature", "base_pairing"):
         assert len(out[key]["temporal"]["per_frame"]) == 4
-        assert out[key]["spatial"]                          # non-empty profile
+        assert out[key]["spatial"]  # non-empty profile
     # Base pairing is a fraction in [0, 1]; identical frames → constant.
     assert all(0.0 <= v <= 1.0 for v in out["base_pairing"]["temporal"]["per_frame"])
     assert out["base_pairing"]["temporal"]["n_designed"] > 0
@@ -1345,13 +1564,25 @@ def test_resolve_job_chain_and_descendants():
     """resolve_job_chain returns the whole lineage (root + descendants) chronologically;
     descendants_of returns only the subtree below a job."""
     from backend.core.oxdna_job import descendants_of, new_oxdna_job, resolve_job_chain
-    root = new_oxdna_job("d", []);  root.job_id = "root";  root.created_at = 1.0
-    c1 = new_oxdna_job("d", []);    c1.job_id = "c1";      c1.parent_job_id = "root";  c1.created_at = 2.0
-    c2 = new_oxdna_job("d", []);    c2.job_id = "c2";      c2.parent_job_id = "c1";    c2.created_at = 3.0
-    other = new_oxdna_job("d", []); other.job_id = "x";    other.created_at = 5.0
+
+    root = new_oxdna_job("d", [])
+    root.job_id = "root"
+    root.created_at = 1.0
+    c1 = new_oxdna_job("d", [])
+    c1.job_id = "c1"
+    c1.parent_job_id = "root"
+    c1.created_at = 2.0
+    c2 = new_oxdna_job("d", [])
+    c2.job_id = "c2"
+    c2.parent_job_id = "c1"
+    c2.created_at = 3.0
+    other = new_oxdna_job("d", [])
+    other.job_id = "x"
+    other.created_at = 5.0
     allj = [c2, other, root, c1]
-    assert [j.job_id for j in descendants_of("root", allj)] == ["c1", "c2"] or \
-           sorted(j.job_id for j in descendants_of("root", allj)) == ["c1", "c2"]
+    assert [j.job_id for j in descendants_of("root", allj)] == ["c1", "c2"] or sorted(
+        j.job_id for j in descendants_of("root", allj)
+    ) == ["c1", "c2"]
     # From any node in the lineage, the full chain resolves the same, in time order.
     assert [j.job_id for j in resolve_job_chain("c2", allj)] == ["root", "c1", "c2"]
     assert [j.job_id for j in resolve_job_chain("root", allj)] == ["root", "c1", "c2"]
@@ -1362,20 +1593,27 @@ def _seed_production_job(design, geometry, ws, n_frames, *, parent_job_id=None):
     """Create an oxDNA job with a completed production stage holding ``n_frames`` frames."""
     from backend.core.oxdna_job import new_oxdna_job
     from backend.core.oxdna_protocol import build_production_stage
+
     spec = build_production_stage(name="1_production")
     job = new_oxdna_job("d", [spec.to_status()], parent_job_id=parent_job_id)
     job.stages[0].status = "done"
     job.status = OxdnaStatus.completed
     job.save(ws)
     (job.job_dir(ws) / "design.json").write_text(design.model_dump_json())
-    sd = job.stage_dir(ws, "1_production"); sd.mkdir(parents=True, exist_ok=True)
+    sd = job.stage_dir(ws, "1_production")
+    sd.mkdir(parents=True, exist_ok=True)
     _write_traj(design, geometry, sd / "trajectory.dat", n_frames)
     return job
 
 
 def _run_metrics(job_id, scope):
     """Start a metric run and poll to completion (background daemon thread)."""
-    from backend.api.routes_oxdna_metrics import MetricsStartRequest, get_metrics, start_metrics
+    from backend.api.routes_oxdna_metrics import (
+        MetricsStartRequest,
+        get_metrics,
+        start_metrics,
+    )
+
     r = start_metrics(job_id, MetricsStartRequest(scope=scope))
     rid = r["metrics_id"]
     for _ in range(200):
@@ -1389,6 +1627,7 @@ def _run_metrics(job_id, scope):
 def test_metrics_route_latest_scope(design, geometry, tmp_path, monkeypatch):
     """start → poll → result: one job, all three metrics, both domains, progress reaches 1."""
     import backend.api.routes_oxdna as routes_oxdna
+
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
     job = _seed_production_job(design, geometry, tmp_path, 4)
     st = _run_metrics(job.job_id, "latest")
@@ -1398,7 +1637,7 @@ def test_metrics_route_latest_scope(design, geometry, tmp_path, monkeypatch):
     assert res["ready"] is True and res["jobs"] == [job.job_id]
     for key in ("twist", "curvature", "base_pairing"):
         assert len(res[key]["temporal"]["per_frame"]) == 4
-        assert len(res[key]["spatial"]) == 1                 # one job → one overlay series
+        assert len(res[key]["spatial"]) == 1  # one job → one overlay series
         assert res[key]["spatial"][0]["points"]
 
 
@@ -1406,15 +1645,18 @@ def test_metrics_route_chain_concatenates(design, geometry, tmp_path, monkeypatc
     """chain scope resolves the parent/child lineage: temporal concatenates (4+3 frames),
     spatial overlays one profile per job."""
     import backend.api.routes_oxdna as routes_oxdna
+
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
     parent = _seed_production_job(design, geometry, tmp_path, 4)
-    child = _seed_production_job(design, geometry, tmp_path, 3, parent_job_id=parent.job_id)
+    child = _seed_production_job(
+        design, geometry, tmp_path, 3, parent_job_id=parent.job_id
+    )
     st = _run_metrics(child.job_id, "chain")
     assert st["state"] == "done"
     res = st["result"]
     assert set(res["jobs"]) == {parent.job_id, child.job_id}
-    assert len(res["twist"]["temporal"]["per_frame"]) == 7   # 4 + 3 concatenated
-    assert len(res["twist"]["spatial"]) == 2                 # one overlay per job
+    assert len(res["twist"]["temporal"]["per_frame"]) == 7  # 4 + 3 concatenated
+    assert len(res["twist"]["spatial"]) == 2  # one overlay per job
     # Boundaries mark where each job's frames start in the concatenated series.
     starts = [b["start_frame"] for b in res["twist"]["temporal"]["boundaries"]]
     assert starts == [0, 4]
@@ -1423,6 +1665,7 @@ def test_metrics_route_chain_concatenates(design, geometry, tmp_path, monkeypatc
 def test_metrics_route_unknown_job_404():
     from fastapi import HTTPException
     from backend.api.routes_oxdna_metrics import MetricsStartRequest, start_metrics
+
     with pytest.raises(HTTPException) as ei:
         start_metrics("nope", MetricsStartRequest(scope="latest"))
     assert ei.value.status_code == 404
@@ -1431,6 +1674,7 @@ def test_metrics_route_unknown_job_404():
 def test_build_production_stage_custom_name():
     """Each production re-run gets its own uniquely-named stage dir."""
     from backend.core.oxdna_protocol import build_production_stage
+
     assert build_production_stage().name == "4_production"
     assert build_production_stage(name="5_production").kind == "production"
     assert build_production_stage(name="5_production").name == "5_production"
@@ -1439,57 +1683,73 @@ def test_build_production_stage_custom_name():
 def test_production_rmsf_pools_multiple_trajectories(design, geometry, tmp_path):
     """Passing a LIST of production trajectories pools their frames (all runs)."""
     from backend.core.oxdna_health import production_rmsf
+
     ref = tmp_path / "ref.dat"
     _write_traj(design, geometry, ref, 1)
-    t1 = tmp_path / "p1.dat"; _write_traj(design, geometry, t1, 2)
-    t2 = tmp_path / "p2.dat"; _write_traj(design, geometry, t2, 3)
+    t1 = tmp_path / "p1.dat"
+    _write_traj(design, geometry, t1, 2)
+    t2 = tmp_path / "p2.dat"
+    _write_traj(design, geometry, t2, 3)
     single = production_rmsf(design, t1, ref)
     pooled = production_rmsf(design, [t1, t2], ref)
     assert single["n_frames"] == 2
-    assert pooled["n_frames"] == 5            # 2 + 3 frames across both runs
+    assert pooled["n_frames"] == 5  # 2 + 3 frames across both runs
 
 
 # ── measure_end_to_end (the AF-13 P2 constraint primitive — pure geometry) ─────
 
+
 def _pos(hid, bp, direction, xyz):
-    return {"helix_id": hid, "bp_index": bp, "direction": direction,
-            "backbone_position": list(xyz)}
-
-
+    return {
+        "helix_id": hid,
+        "bp_index": bp,
+        "direction": direction,
+        "backbone_position": list(xyz),
+    }
 
 
 def test_measure_end_to_end_distance():
     """Euclidean distance (nm) between two landmark nucleotides' backbone sites."""
     from backend.core.oxdna_health import measure_end_to_end
+
     positions = [
         _pos(0, 0, "forward", (0.0, 0.0, 0.0)),
-        _pos(0, 9, "forward", (3.0, 4.0, 0.0)),     # 3-4-5 triangle → 5.0 nm
+        _pos(0, 9, "forward", (3.0, 4.0, 0.0)),  # 3-4-5 triangle → 5.0 nm
         _pos(1, 0, "reverse", (0.0, 0.0, 10.0)),
     ]
     d = measure_end_to_end(positions, (0, 0, "forward"), (0, 9, "forward"))
     assert abs(d - 5.0) < 1e-9
     # Order-independent.
-    assert abs(measure_end_to_end(positions, (0, 9, "forward"),
-                                  (0, 0, "forward")) - 5.0) < 1e-9
+    assert (
+        abs(measure_end_to_end(positions, (0, 9, "forward"), (0, 0, "forward")) - 5.0)
+        < 1e-9
+    )
 
 
 def test_measure_end_to_end_normalises_direction_enum():
     """A landmark may name its direction as a Direction enum or its string value."""
     from backend.core.models import Direction
     from backend.core.oxdna_health import measure_end_to_end
+
     # The map keys its direction as the enum's string value ("FORWARD").
-    positions = [_pos(0, 0, Direction.FORWARD.value, (0.0, 0.0, 0.0)),
-                 _pos(0, 5, Direction.FORWARD.value, (0.0, 0.0, 2.0))]
-    d = measure_end_to_end(positions, (0, 0, Direction.FORWARD),
-                           (0, 5, Direction.FORWARD))
+    positions = [
+        _pos(0, 0, Direction.FORWARD.value, (0.0, 0.0, 0.0)),
+        _pos(0, 5, Direction.FORWARD.value, (0.0, 0.0, 2.0)),
+    ]
+    d = measure_end_to_end(
+        positions, (0, 0, Direction.FORWARD), (0, 5, Direction.FORWARD)
+    )
     assert abs(d - 2.0) < 1e-9
 
 
 def test_measure_end_to_end_rejects_bad_input():
     """Empty map, identical landmarks, and an absent landmark each raise."""
     from backend.core.oxdna_health import measure_end_to_end
-    positions = [_pos(0, 0, "forward", (0.0, 0.0, 0.0)),
-                 _pos(0, 5, "forward", (1.0, 0.0, 0.0))]
+
+    positions = [
+        _pos(0, 0, "forward", (0.0, 0.0, 0.0)),
+        _pos(0, 5, "forward", (1.0, 0.0, 0.0)),
+    ]
     with pytest.raises(ValueError, match="empty"):
         measure_end_to_end([], (0, 0, "forward"), (0, 5, "forward"))
     with pytest.raises(ValueError, match="identical"):
@@ -1505,19 +1765,26 @@ def test_measure_radius_of_gyration_analytic():
     away → R_g = sqrt((5² + 5²)/2) = 5.0.  Eight corners of a cube of half-side a
     centred at the origin sit at distance sqrt(3)·a → R_g = sqrt(3)·a."""
     from backend.core.oxdna_health import measure_radius_of_gyration
-    pair = [_pos(0, 0, "forward", (-5.0, 0.0, 0.0)),
-            _pos(0, 1, "forward", (5.0, 0.0, 0.0))]
+
+    pair = [
+        _pos(0, 0, "forward", (-5.0, 0.0, 0.0)),
+        _pos(0, 1, "forward", (5.0, 0.0, 0.0)),
+    ]
     assert abs(measure_radius_of_gyration(pair) - 5.0) < 1e-9
     a = 2.0
-    cube = [_pos(0, i, "forward", (sx * a, sy * a, sz * a))
-            for i, (sx, sy, sz) in enumerate(
-                [(x, y, z) for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)])]
+    cube = [
+        _pos(0, i, "forward", (sx * a, sy * a, sz * a))
+        for i, (sx, sy, sz) in enumerate(
+            [(x, y, z) for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)]
+        )
+    ]
     assert abs(measure_radius_of_gyration(cube) - math.sqrt(3) * a) < 1e-9
 
 
 def test_measure_radius_of_gyration_rejects_empty():
     """An empty position map raises (not a silent 0)."""
     from backend.core.oxdna_health import measure_radius_of_gyration
+
     with pytest.raises(ValueError, match="empty"):
         measure_radius_of_gyration([])
 
@@ -1529,29 +1796,39 @@ def test_measure_segment_angle_analytic():
     Vertex b at the origin; a on +x, c on +y → a right angle (90°).  Three collinear
     points → 180°.  A 60° wedge (legs at 0° and 60°) → 60°."""
     from backend.core.oxdna_health import measure_segment_angle
-    right = [_pos(0, 0, "forward", (1.0, 0.0, 0.0)),     # a
-             _pos(0, 1, "forward", (0.0, 0.0, 0.0)),     # b (vertex)
-             _pos(0, 2, "forward", (0.0, 1.0, 0.0))]     # c
+
+    right = [
+        _pos(0, 0, "forward", (1.0, 0.0, 0.0)),  # a
+        _pos(0, 1, "forward", (0.0, 0.0, 0.0)),  # b (vertex)
+        _pos(0, 2, "forward", (0.0, 1.0, 0.0)),
+    ]  # c
     keys = ((0, 0, "forward"), (0, 1, "forward"), (0, 2, "forward"))
     assert abs(measure_segment_angle(right, *keys) - 90.0) < 1e-9
     # Swapping the two legs about the vertex leaves the magnitude unchanged.
     assert abs(measure_segment_angle(right, keys[2], keys[1], keys[0]) - 90.0) < 1e-9
-    straight = [_pos(0, 0, "forward", (-3.0, 0.0, 0.0)),
-                _pos(0, 1, "forward", (0.0, 0.0, 0.0)),
-                _pos(0, 2, "forward", (5.0, 0.0, 0.0))]
+    straight = [
+        _pos(0, 0, "forward", (-3.0, 0.0, 0.0)),
+        _pos(0, 1, "forward", (0.0, 0.0, 0.0)),
+        _pos(0, 2, "forward", (5.0, 0.0, 0.0)),
+    ]
     assert abs(measure_segment_angle(straight, *keys) - 180.0) < 1e-9
-    wedge = [_pos(0, 0, "forward", (1.0, 0.0, 0.0)),
-             _pos(0, 1, "forward", (0.0, 0.0, 0.0)),
-             _pos(0, 2, "forward", (0.5, math.sqrt(3) / 2, 0.0))]
+    wedge = [
+        _pos(0, 0, "forward", (1.0, 0.0, 0.0)),
+        _pos(0, 1, "forward", (0.0, 0.0, 0.0)),
+        _pos(0, 2, "forward", (0.5, math.sqrt(3) / 2, 0.0)),
+    ]
     assert abs(measure_segment_angle(wedge, *keys) - 60.0) < 1e-9
 
 
 def test_measure_segment_angle_rejects_bad_input():
     """Empty map, a coincident landmark pair, and an absent landmark each raise."""
     from backend.core.oxdna_health import measure_segment_angle
-    positions = [_pos(0, 0, "forward", (1.0, 0.0, 0.0)),
-                 _pos(0, 1, "forward", (0.0, 0.0, 0.0)),
-                 _pos(0, 2, "forward", (0.0, 1.0, 0.0))]
+
+    positions = [
+        _pos(0, 0, "forward", (1.0, 0.0, 0.0)),
+        _pos(0, 1, "forward", (0.0, 0.0, 0.0)),
+        _pos(0, 2, "forward", (0.0, 1.0, 0.0)),
+    ]
     keys = ((0, 0, "forward"), (0, 1, "forward"), (0, 2, "forward"))
     with pytest.raises(ValueError, match="empty"):
         measure_segment_angle([], *keys)
@@ -1563,29 +1840,41 @@ def test_measure_segment_angle_rejects_bad_input():
 
 # ── parse_constraint_spec + check_relaxed_constraint (AF-13 P3 — pure) ─────────
 
-_LANDMARKS = [(0, 0, "forward"), (0, 9, "forward")]   # → 5.0 nm in _CONSTR_POS
+_LANDMARKS = [(0, 0, "forward"), (0, 9, "forward")]  # → 5.0 nm in _CONSTR_POS
 
 
 def _constr(**over) -> dict:
-    spec = {"measure": "end_to_end", "landmarks": _LANDMARKS,
-            "target_nm": 5.0, "tol_nm": 0.5, "min_confidence": 50}
+    spec = {
+        "measure": "end_to_end",
+        "landmarks": _LANDMARKS,
+        "target_nm": 5.0,
+        "tol_nm": 0.5,
+        "min_confidence": 50,
+    }
     spec.update(over)
     return spec
 
 
 def _relaxed(n_frames, *, ready=True):
     """A synthetic read_flexibility_map output: landmarks 5.0 nm apart (3-4-5)."""
-    positions = [_pos(0, 0, "forward", (0.0, 0.0, 0.0)),
-                 _pos(0, 9, "forward", (3.0, 4.0, 0.0))]
-    return {"ready": ready, "positions": positions if ready else [],
-            "confidence": {"n_frames": n_frames, "preliminary": n_frames < 50}}
+    positions = [
+        _pos(0, 0, "forward", (0.0, 0.0, 0.0)),
+        _pos(0, 9, "forward", (3.0, 4.0, 0.0)),
+    ]
+    return {
+        "ready": ready,
+        "positions": positions if ready else [],
+        "confidence": {"n_frames": n_frames, "preliminary": n_frames < 50},
+    }
 
 
 def test_parse_constraint_spec_normalises():
     from backend.core.models import Direction
     from backend.core.oxdna_health import parse_constraint_spec
-    c = parse_constraint_spec(_constr(
-        landmarks=[(0, 0, Direction.FORWARD), (1, 3, Direction.REVERSE)]))
+
+    c = parse_constraint_spec(
+        _constr(landmarks=[(0, 0, Direction.FORWARD), (1, 3, Direction.REVERSE)])
+    )
     assert c["landmarks"] == [(0, 0, "FORWARD"), (1, 3, "REVERSE")]
     assert c["target_nm"] == 5.0 and c["tol_nm"] == 0.5 and c["min_confidence"] == 50
     # Idempotent on its own output.
@@ -1594,8 +1883,15 @@ def test_parse_constraint_spec_normalises():
 
 def test_parse_constraint_spec_default_min_confidence():
     from backend.core.oxdna_health import RMSF_PRELIM_FRAMES, parse_constraint_spec
-    c = parse_constraint_spec({"measure": "end_to_end", "landmarks": _LANDMARKS,
-                               "target_nm": 5.0, "tol_nm": 0.5})
+
+    c = parse_constraint_spec(
+        {
+            "measure": "end_to_end",
+            "landmarks": _LANDMARKS,
+            "target_nm": 5.0,
+            "tol_nm": 0.5,
+        }
+    )
     assert c["min_confidence"] == RMSF_PRELIM_FRAMES
 
 
@@ -1603,19 +1899,28 @@ def test_parse_constraint_spec_radius_of_gyration_no_landmarks():
     """radius_of_gyration is a whole-structure measure — it parses with no
     landmarks (and normalises to an empty landmark list)."""
     from backend.core.oxdna_health import parse_constraint_spec
-    c = parse_constraint_spec({"measure": "radius_of_gyration",
-                               "target_nm": 8.0, "tol_nm": 0.5})
+
+    c = parse_constraint_spec(
+        {"measure": "radius_of_gyration", "target_nm": 8.0, "tol_nm": 0.5}
+    )
     assert c["measure"] == "radius_of_gyration" and c["landmarks"] == []
     assert c["target_nm"] == 8.0
-    assert parse_constraint_spec(c) == c          # idempotent
+    assert parse_constraint_spec(c) == c  # idempotent
 
 
 def test_parse_constraint_spec_radius_of_gyration_rejects_landmarks():
     """Passing landmarks to a whole-structure measure is a spec error."""
     from backend.core.oxdna_health import ConstraintSpecError, parse_constraint_spec
+
     with pytest.raises(ConstraintSpecError, match="takes no landmarks"):
-        parse_constraint_spec({"measure": "radius_of_gyration", "landmarks": _LANDMARKS,
-                               "target_nm": 8.0, "tol_nm": 0.5})
+        parse_constraint_spec(
+            {
+                "measure": "radius_of_gyration",
+                "landmarks": _LANDMARKS,
+                "target_nm": 8.0,
+                "tol_nm": 0.5,
+            }
+        )
 
 
 _ANGLE_LANDMARKS = [(0, 0, "forward"), (0, 5, "forward"), (0, 9, "forward")]
@@ -1625,33 +1930,62 @@ def test_parse_constraint_spec_segment_angle_three_landmarks():
     """segment_angle is the first three-landmark measure — the arity generalisation
     accepts exactly 3 (target_nm/tol_nm carry degrees for an angle)."""
     from backend.core.oxdna_health import parse_constraint_spec
-    c = parse_constraint_spec({"measure": "segment_angle", "landmarks": _ANGLE_LANDMARKS,
-                               "target_nm": 90.0, "tol_nm": 5.0})
+
+    c = parse_constraint_spec(
+        {
+            "measure": "segment_angle",
+            "landmarks": _ANGLE_LANDMARKS,
+            "target_nm": 90.0,
+            "tol_nm": 5.0,
+        }
+    )
     assert c["measure"] == "segment_angle" and len(c["landmarks"]) == 3
     assert c["landmarks"] == [(0, 0, "forward"), (0, 5, "forward"), (0, 9, "forward")]
-    assert parse_constraint_spec(c) == c          # idempotent
+    assert parse_constraint_spec(c) == c  # idempotent
 
 
-@pytest.mark.parametrize("spec, match", [
-    ("nope", "must be a dict"),
-    ({"measure": "end_to_end", "landmarks": _LANDMARKS, "target_nm": 5.0,
-      "tol_nm": 0.5, "bogus": 1}, "unknown key"),
-    (_constr(measure="radius"), "measure must be one of"),
-    (_constr(landmarks=[(0, 0, "forward")]), "needs exactly 2 landmarks"),
-    ({"measure": "segment_angle", "landmarks": _LANDMARKS, "target_nm": 90.0,
-      "tol_nm": 5.0}, "needs exactly 3 landmarks"),
-    (_constr(landmarks=[(0, 0, "forward"), (0, 0, "forward")]), "identical"),
-    (_constr(landmarks=[(0, "x", "forward"), (0, 9, "forward")]), "bp_index must be"),
-    (_constr(landmarks=[(0, 0), (0, 9, "forward")]), "must be a .*triple"),
-    (_constr(target_nm="far"), "target_nm must be a finite number"),
-    (_constr(target_nm=-1.0), "target_nm must be non-negative"),
-    (_constr(tol_nm=0.0), "tol_nm must be positive"),
-    (_constr(tol_nm=-0.5), "tol_nm must be positive"),
-    (_constr(min_confidence=0), "min_confidence must be an integer"),
-    (_constr(min_confidence=2.5), "min_confidence must be an integer"),
-])
+@pytest.mark.parametrize(
+    "spec, match",
+    [
+        ("nope", "must be a dict"),
+        (
+            {
+                "measure": "end_to_end",
+                "landmarks": _LANDMARKS,
+                "target_nm": 5.0,
+                "tol_nm": 0.5,
+                "bogus": 1,
+            },
+            "unknown key",
+        ),
+        (_constr(measure="radius"), "measure must be one of"),
+        (_constr(landmarks=[(0, 0, "forward")]), "needs exactly 2 landmarks"),
+        (
+            {
+                "measure": "segment_angle",
+                "landmarks": _LANDMARKS,
+                "target_nm": 90.0,
+                "tol_nm": 5.0,
+            },
+            "needs exactly 3 landmarks",
+        ),
+        (_constr(landmarks=[(0, 0, "forward"), (0, 0, "forward")]), "identical"),
+        (
+            _constr(landmarks=[(0, "x", "forward"), (0, 9, "forward")]),
+            "bp_index must be",
+        ),
+        (_constr(landmarks=[(0, 0), (0, 9, "forward")]), "must be a .*triple"),
+        (_constr(target_nm="far"), "target_nm must be a finite number"),
+        (_constr(target_nm=-1.0), "target_nm must be non-negative"),
+        (_constr(tol_nm=0.0), "tol_nm must be positive"),
+        (_constr(tol_nm=-0.5), "tol_nm must be positive"),
+        (_constr(min_confidence=0), "min_confidence must be an integer"),
+        (_constr(min_confidence=2.5), "min_confidence must be an integer"),
+    ],
+)
 def test_parse_constraint_spec_rejects(spec, match):
     from backend.core.oxdna_health import ConstraintSpecError, parse_constraint_spec
+
     with pytest.raises(ConstraintSpecError, match=match):
         parse_constraint_spec(spec)
 
@@ -1659,6 +1993,7 @@ def test_parse_constraint_spec_rejects(spec, match):
 def test_check_constraint_met():
     """Enough frames + within tolerance → met."""
     from backend.core.oxdna_health import check_relaxed_constraint
+
     r = check_relaxed_constraint(_constr(target_nm=5.0, tol_nm=0.5), _relaxed(60))
     assert r["status"] == "met" and r["met"] is True
     assert abs(r["measured_nm"] - 5.0) < 1e-9
@@ -1668,6 +2003,7 @@ def test_check_constraint_met():
 def test_check_constraint_unmet():
     """Enough frames but out of tolerance → unmet (met False), value still reported."""
     from backend.core.oxdna_health import check_relaxed_constraint
+
     r = check_relaxed_constraint(_constr(target_nm=10.0, tol_nm=0.5), _relaxed(60))
     assert r["status"] == "unmet" and r["met"] is False
     assert abs(r["measured_nm"] - 5.0) < 1e-9
@@ -1676,25 +2012,28 @@ def test_check_constraint_unmet():
 def test_check_constraint_tolerance_bracket():
     """The met/unmet boundary is |measured − target| <= tol (measured = 5.0)."""
     from backend.core.oxdna_health import check_relaxed_constraint
+
     on = check_relaxed_constraint(_constr(target_nm=4.5, tol_nm=0.5), _relaxed(60))
     off = check_relaxed_constraint(_constr(target_nm=4.4, tol_nm=0.5), _relaxed(60))
-    assert on["status"] == "met"          # |5.0 − 4.5| = 0.5 <= 0.5
-    assert off["status"] == "unmet"       # |5.0 − 4.4| = 0.6 >  0.5
+    assert on["status"] == "met"  # |5.0 − 4.5| = 0.5 <= 0.5
+    assert off["status"] == "unmet"  # |5.0 − 4.4| = 0.6 >  0.5
 
 
 def test_check_constraint_low_confidence_never_met():
     """THE LOAD-BEARING GUARD: too few frames → inconclusive, met False — even
     though the measured value is squarely within tolerance."""
     from backend.core.oxdna_health import check_relaxed_constraint
+
     r = check_relaxed_constraint(_constr(target_nm=5.0, tol_nm=0.5), _relaxed(10))
     assert r["status"] == "inconclusive" and r["met"] is False
-    assert abs(r["measured_nm"] - 5.0) < 1e-9      # within tol, yet NOT met
+    assert abs(r["measured_nm"] - 5.0) < 1e-9  # within tol, yet NOT met
     assert r["n_frames"] == 10
 
 
 def test_check_constraint_no_production_inconclusive():
     """No production mean structure yet → inconclusive, met False, no measurement."""
     from backend.core.oxdna_health import check_relaxed_constraint
+
     r = check_relaxed_constraint(_constr(), _relaxed(0, ready=False))
     assert r["status"] == "inconclusive" and r["met"] is False
     assert r["measured_nm"] is None
@@ -1705,11 +2044,16 @@ def test_check_constraint_radius_of_gyration_dispatches():
     measure (no landmarks) — the two synthetic points 5 nm apart give R_g 2.5 nm —
     and the confidence gate + tolerance bracket apply exactly as for end_to_end."""
     from backend.core.oxdna_health import check_relaxed_constraint
-    rg_spec = {"measure": "radius_of_gyration", "target_nm": 2.5, "tol_nm": 0.1,
-               "min_confidence": 50}
-    met = check_relaxed_constraint(rg_spec, _relaxed(60))      # points at 0 and 5 nm
+
+    rg_spec = {
+        "measure": "radius_of_gyration",
+        "target_nm": 2.5,
+        "tol_nm": 0.1,
+        "min_confidence": 50,
+    }
+    met = check_relaxed_constraint(rg_spec, _relaxed(60))  # points at 0 and 5 nm
     assert met["status"] == "met" and met["met"] is True
-    assert abs(met["measured_nm"] - 2.5) < 1e-9                # R_g of {0, 5} = 2.5
+    assert abs(met["measured_nm"] - 2.5) < 1e-9  # R_g of {0, 5} = 2.5
     # Confidence gate still governs: same value, too few frames → inconclusive.
     weak = check_relaxed_constraint(rg_spec, _relaxed(10))
     assert weak["status"] == "inconclusive" and weak["met"] is False
@@ -1723,19 +2067,32 @@ def test_check_constraint_segment_angle_dispatches():
     (degrees) — a right-angle triple gives 90° — with the same confidence gate +
     tolerance bracket as the length measures."""
     from backend.core.oxdna_health import check_relaxed_constraint
-    positions = [_pos(0, 0, "forward", (1.0, 0.0, 0.0)),
-                 _pos(0, 1, "forward", (0.0, 0.0, 0.0)),     # vertex
-                 _pos(0, 2, "forward", (0.0, 1.0, 0.0))]
-    well = {"ready": True, "positions": positions,
-            "confidence": {"n_frames": 60, "preliminary": False}}
-    weak = {"ready": True, "positions": positions,
-            "confidence": {"n_frames": 10, "preliminary": True}}
-    spec = {"measure": "segment_angle",
-            "landmarks": [(0, 0, "forward"), (0, 1, "forward"), (0, 2, "forward")],
-            "target_nm": 90.0, "tol_nm": 1.0, "min_confidence": 50}      # degrees
+
+    positions = [
+        _pos(0, 0, "forward", (1.0, 0.0, 0.0)),
+        _pos(0, 1, "forward", (0.0, 0.0, 0.0)),  # vertex
+        _pos(0, 2, "forward", (0.0, 1.0, 0.0)),
+    ]
+    well = {
+        "ready": True,
+        "positions": positions,
+        "confidence": {"n_frames": 60, "preliminary": False},
+    }
+    weak = {
+        "ready": True,
+        "positions": positions,
+        "confidence": {"n_frames": 10, "preliminary": True},
+    }
+    spec = {
+        "measure": "segment_angle",
+        "landmarks": [(0, 0, "forward"), (0, 1, "forward"), (0, 2, "forward")],
+        "target_nm": 90.0,
+        "tol_nm": 1.0,
+        "min_confidence": 50,
+    }  # degrees
     met = check_relaxed_constraint(spec, well)
     assert met["status"] == "met" and met["met"] is True
-    assert abs(met["measured_nm"] - 90.0) < 1e-9                # 90° right angle
+    assert abs(met["measured_nm"] - 90.0) < 1e-9  # 90° right angle
     # Confidence gate still governs: same value, too few frames → inconclusive.
     assert check_relaxed_constraint(spec, weak)["status"] == "inconclusive"
     # Out of tolerance → unmet.
@@ -1745,6 +2102,7 @@ def test_check_constraint_segment_angle_dispatches():
 
 # ── measure_inter_helix_spacing (the first axis-grouping measure — pure geometry) ─
 
+
 def test_measure_inter_helix_spacing_analytic():
     """Spacing = radial centre-to-centre gap between two fit helix axes.
 
@@ -1752,14 +2110,20 @@ def test_measure_inter_helix_spacing_analytic():
     perpendicular spacing is 2.5 nm.  A landmark on each helix only NAMES the helix;
     all of that helix's sites are gathered to fit the axis."""
     from backend.core.oxdna_health import measure_inter_helix_spacing
-    positions = (
-        [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(4)] +
-        [_pos(1, i, "forward", (2.5, 0.0, float(i))) for i in range(4)])
+
+    positions = [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(4)] + [
+        _pos(1, i, "forward", (2.5, 0.0, float(i))) for i in range(4)
+    ]
     d = measure_inter_helix_spacing(positions, (0, 0, "forward"), (1, 0, "forward"))
     assert abs(d - 2.5) < 1e-9
     # Symmetric in the two helices.
-    assert abs(measure_inter_helix_spacing(
-        positions, (1, 3, "forward"), (0, 2, "forward")) - 2.5) < 1e-9
+    assert (
+        abs(
+            measure_inter_helix_spacing(positions, (1, 3, "forward"), (0, 2, "forward"))
+            - 2.5
+        )
+        < 1e-9
+    )
 
 
 def test_measure_inter_helix_spacing_ignores_axial_offset_and_tilt():
@@ -1767,30 +2131,38 @@ def test_measure_inter_helix_spacing_ignores_axial_offset_and_tilt():
     radial gap), and a small relative tilt does not collapse the spacing the way an
     infinite-line distance would."""
     from backend.core.oxdna_health import measure_inter_helix_spacing
+
     # Helix 0 along +z at x=0; helix 1 along +z at x=3, shifted +5 nm in z (axial
     # stagger) — the radial gap is still 3.0 nm.
-    staggered = (
-        [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(5)] +
-        [_pos(1, i, "forward", (3.0, 0.0, 5.0 + float(i))) for i in range(5)])
-    assert abs(measure_inter_helix_spacing(
-        staggered, (0, 0, "forward"), (1, 0, "forward")) - 3.0) < 1e-9
+    staggered = [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(5)] + [
+        _pos(1, i, "forward", (3.0, 0.0, 5.0 + float(i))) for i in range(5)
+    ]
+    assert (
+        abs(
+            measure_inter_helix_spacing(staggered, (0, 0, "forward"), (1, 0, "forward"))
+            - 3.0
+        )
+        < 1e-9
+    )
     # Helix 1 tilted slightly toward helix 0 (its infinite axis would nearly meet
     # helix 0's far away → ~0); the perpendicular-to-mean-axis spacing stays ~3 nm.
-    tilted = (
-        [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(11)] +
-        [_pos(1, i, "forward", (3.0 - 0.02 * i, 0.0, float(i))) for i in range(11)])
+    tilted = [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(11)] + [
+        _pos(1, i, "forward", (3.0 - 0.02 * i, 0.0, float(i))) for i in range(11)
+    ]
     s = measure_inter_helix_spacing(tilted, (0, 0, "forward"), (1, 0, "forward"))
-    assert 2.7 < s < 3.0          # tilt nudges it, but it does NOT collapse to 0
+    assert 2.7 < s < 3.0  # tilt nudges it, but it does NOT collapse to 0
 
 
 def test_measure_inter_helix_spacing_rejects_bad_input():
     """Empty map, two landmarks on the same helix, an absent landmark, and a helix
     with a single nucleotide each raise (not a silent 0)."""
     from backend.core.oxdna_health import measure_inter_helix_spacing
+
     positions = (
-        [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(3)] +
-        [_pos(1, i, "forward", (2.0, 0.0, float(i))) for i in range(3)] +
-        [_pos(2, 0, "forward", (5.0, 0.0, 0.0))])      # helix 2: one site only
+        [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(3)]
+        + [_pos(1, i, "forward", (2.0, 0.0, float(i))) for i in range(3)]
+        + [_pos(2, 0, "forward", (5.0, 0.0, 0.0))]
+    )  # helix 2: one site only
     with pytest.raises(ValueError, match="empty"):
         measure_inter_helix_spacing([], (0, 0, "forward"), (1, 0, "forward"))
     with pytest.raises(ValueError, match="same helix"):
@@ -1806,6 +2178,7 @@ def _straight_bundle(n_helix=4, n_axial=12, radius=1.2, rise=0.34):
     """Synthetic CORE position list: ``n_helix`` straight helices on a ring of the
     given radius, each sampled at ``n_axial`` axial levels along +z."""
     import math
+
     out = []
     for h in range(n_helix):
         ang = 2 * math.pi * h / n_helix
@@ -1819,6 +2192,7 @@ def _twist_bundle(total_deg, n_helix=4, n_axial=12, radius=1.2, rise=0.34):
     """Same bundle but the cross-section rotates ``total_deg`` (right-handed about
     +z) progressively from the first axial level to the last."""
     import math
+
     out = []
     zmax = rise * (n_axial - 1)
     for h in range(n_helix):
@@ -1827,28 +2201,38 @@ def _twist_bundle(total_deg, n_helix=4, n_axial=12, radius=1.2, rise=0.34):
             z = rise * i
             phi = math.radians(total_deg) * (z / zmax if zmax else 0.0)
             a = ang0 + phi
-            out.append(_pos(h, i, "forward",
-                            (radius * math.cos(a), radius * math.sin(a), z)))
+            out.append(
+                _pos(h, i, "forward", (radius * math.cos(a), radius * math.sin(a), z))
+            )
     return out
 
 
 def _apply_rigid(positions, axis=(0.3, 0.5, 0.8), deg=37.0, shift=(5.0, -2.0, 9.0)):
     """Rotate + translate a position list by a fixed rigid motion (for Kabsch invariance)."""
     import numpy as np
-    ax = np.asarray(axis, float); ax /= np.linalg.norm(ax)
+
+    ax = np.asarray(axis, float)
+    ax /= np.linalg.norm(ax)
     th = np.radians(deg)
     K = np.array([[0, -ax[2], ax[1]], [ax[2], 0, -ax[0]], [-ax[1], ax[0], 0]])
-    R = np.eye(3) + np.sin(th) * K + (1 - np.cos(th)) * (K @ K)   # Rodrigues
+    R = np.eye(3) + np.sin(th) * K + (1 - np.cos(th)) * (K @ K)  # Rodrigues
     s = np.asarray(shift, float)
-    return [_pos(p["helix_id"], p["bp_index"], p["direction"],
-                 tuple(R @ np.asarray(p["backbone_position"], float) + s))
-            for p in positions]
+    return [
+        _pos(
+            p["helix_id"],
+            p["bp_index"],
+            p["direction"],
+            tuple(R @ np.asarray(p["backbone_position"], float) + s),
+        )
+        for p in positions
+    ]
 
 
 def test_measure_geometry_rmsd_zero_for_rigid_motion():
     """Identical geometry → 0; a pure rigid rotation+translation of the simulated
     structure → ~0 (Kabsch superposes it out — where the bundle floats is irrelevant)."""
     from backend.core.oxdna_health import measure_geometry_rmsd
+
     ref = _straight_bundle()
     assert measure_geometry_rmsd(ref, ref) < 1e-9
     assert measure_geometry_rmsd(_apply_rigid(ref), ref) < 1e-6
@@ -1858,11 +2242,12 @@ def test_measure_geometry_rmsd_grows_with_twist():
     """A residual global twist is NOT a rigid motion, so it survives Kabsch and shows
     up as a nonzero RMSD that grows monotonically with the twist magnitude."""
     from backend.core.oxdna_health import measure_geometry_rmsd
+
     ref = _straight_bundle()
     r10 = measure_geometry_rmsd(_twist_bundle(10.0), ref)
     r30 = measure_geometry_rmsd(_twist_bundle(30.0), ref)
     r60 = measure_geometry_rmsd(_twist_bundle(60.0), ref)
-    assert 0.0 < r10 < r30 < r60          # monotone in the deviation
+    assert 0.0 < r10 < r30 < r60  # monotone in the deviation
     # Even rigidly re-posed, the twisted structure cannot be aligned away.
     assert measure_geometry_rmsd(_apply_rigid(_twist_bundle(30.0)), ref) > 0.05
 
@@ -1871,8 +2256,9 @@ def test_measure_geometry_rmsd_uses_shared_nucleotides_only():
     """Nucleotides absent from the reference (e.g. ragged ssDNA ends not in a
     core-only reference) are ignored — RMSD is over the intersection."""
     from backend.core.oxdna_health import measure_geometry_rmsd
+
     ref = _straight_bundle()
-    sim = ref + [_pos(99, 0, "forward", (1e3, 1e3, 1e3))]   # stray nt not in ref
+    sim = ref + [_pos(99, 0, "forward", (1e3, 1e3, 1e3))]  # stray nt not in ref
     assert measure_geometry_rmsd(sim, ref) < 1e-9
 
 
@@ -1880,14 +2266,20 @@ def test_geometry_deviation_map_per_nucleotide():
     """Per-nucleotide deviation: ~0 for a rigidly-posed match, and larger (growing with
     distance from centre) under a global twist — the spatial breakdown of the RMSD."""
     from backend.core.oxdna_health import geometry_deviation_map
+
     ref = _straight_bundle(n_axial=24)
     m = geometry_deviation_map(_apply_rigid(ref), ref)
     assert m["n_shared"] == len(ref)
-    assert max(p["deviation"] for p in m["positions"]) < 1e-6   # rigid pose => no deviation
-    assert all({"helix_id", "bp_index", "direction", "backbone_position", "deviation"}
-               <= set(p) for p in m["positions"])
+    assert (
+        max(p["deviation"] for p in m["positions"]) < 1e-6
+    )  # rigid pose => no deviation
+    assert all(
+        {"helix_id", "bp_index", "direction", "backbone_position", "deviation"}
+        <= set(p)
+        for p in m["positions"]
+    )
     tw = geometry_deviation_map(_twist_bundle(40.0, n_axial=24), ref)
-    assert tw["max_deviation"] > tw["mean_deviation"] > 0.0       # twist => real spread
+    assert tw["max_deviation"] > tw["mean_deviation"] > 0.0  # twist => real spread
     assert tw["min_deviation"] <= tw["mean_deviation"] <= tw["max_deviation"]
 
 
@@ -1896,27 +2288,57 @@ def test_geometry_deviation_map_keeps_loop_copies_distinct():
     with their OWN deviation — not collapse to one — so the deviation map recolours
     every loop bead. Regression: keys were 3-tuple (last copy won)."""
     from backend.core.oxdna_health import geometry_deviation_map
+
     ref = [
-        {"helix_id": "h0", "bp_index": 5, "direction": "FORWARD", "copy": 0,
-         "backbone_position": [0.0, 0.0, 0.0]},
-        {"helix_id": "h0", "bp_index": 5, "direction": "FORWARD", "copy": 1,
-         "backbone_position": [0.0, 0.0, 0.34]},
-        {"helix_id": "h0", "bp_index": 6, "direction": "FORWARD", "copy": 0,
-         "backbone_position": [0.0, 0.0, 0.68]},
-        {"helix_id": "h0", "bp_index": 5, "direction": "REVERSE", "copy": 0,
-         "backbone_position": [1.9, 0.0, 0.0]},
+        {
+            "helix_id": "h0",
+            "bp_index": 5,
+            "direction": "FORWARD",
+            "copy": 0,
+            "backbone_position": [0.0, 0.0, 0.0],
+        },
+        {
+            "helix_id": "h0",
+            "bp_index": 5,
+            "direction": "FORWARD",
+            "copy": 1,
+            "backbone_position": [0.0, 0.0, 0.34],
+        },
+        {
+            "helix_id": "h0",
+            "bp_index": 6,
+            "direction": "FORWARD",
+            "copy": 0,
+            "backbone_position": [0.0, 0.0, 0.68],
+        },
+        {
+            "helix_id": "h0",
+            "bp_index": 5,
+            "direction": "REVERSE",
+            "copy": 0,
+            "backbone_position": [1.9, 0.0, 0.0],
+        },
     ]
     # current = reference but the two copies each displaced differently
     cur = [dict(p, nx=1.0, ny=0.0, nz=0.0) for p in ref]
-    cur[1]["backbone_position"] = [0.0, 0.5, 0.34]   # only copy 1 moved
+    cur[1]["backbone_position"] = [0.0, 0.5, 0.34]  # only copy 1 moved
     m = geometry_deviation_map(cur, ref)
-    got = {(p["helix_id"], p["bp_index"], p["direction"], p["copy"]) for p in m["positions"]}
-    assert ("h0", 5, "FORWARD", 0) in got and ("h0", 5, "FORWARD", 1) in got   # both copies kept
-    assert m["n_shared"] == 4                                                    # nothing collapsed
+    got = {
+        (p["helix_id"], p["bp_index"], p["direction"], p["copy"])
+        for p in m["positions"]
+    }
+    assert ("h0", 5, "FORWARD", 0) in got and (
+        "h0",
+        5,
+        "FORWARD",
+        1,
+    ) in got  # both copies kept
+    assert m["n_shared"] == 4  # nothing collapsed
 
 
 def test_measure_geometry_rmsd_rejects_bad_input():
     from backend.core.oxdna_health import measure_geometry_rmsd
+
     ref = _straight_bundle()
     with pytest.raises(ValueError, match="empty position map"):
         measure_geometry_rmsd([], ref)
@@ -1930,6 +2352,7 @@ def test_measure_geometry_rmsd_rejects_bad_input():
 def test_measure_bundle_twist_zero_for_straight_bundle():
     """A straight bundle (cross-section identical at every level) has ~0 global twist."""
     from backend.core.oxdna_health import measure_bundle_twist
+
     assert abs(measure_bundle_twist(_straight_bundle())) < 1.0
 
 
@@ -1937,6 +2360,7 @@ def test_measure_bundle_twist_signed_and_accurate():
     """Recovers a known imposed twist in magnitude AND sign (right-handed +, about the
     bundle axis), the signed signal the optimizer steers on."""
     from backend.core.oxdna_health import measure_bundle_twist
+
     for total in (45.0, 90.0, -60.0):
         got = measure_bundle_twist(_twist_bundle(total, n_axial=24))
         assert abs(got - total) < 5.0, f"expected ~{total}, got {got:.1f}"
@@ -1946,6 +2370,7 @@ def test_measure_bundle_twist_accumulates_beyond_180():
     """Accumulating slab-to-slab rotations unwinds a >180° twist instead of aliasing
     it to its (wrong-signed) complement — 270° reads ~270°, not −90°."""
     from backend.core.oxdna_health import measure_bundle_twist
+
     got = measure_bundle_twist(_twist_bundle(270.0, n_axial=48))
     assert abs(got - 270.0) < 10.0
 
@@ -1954,7 +2379,8 @@ def test_measure_bundle_twist_differential_recovers_residual():
     """Self-consistency steering uses twist(sim) − twist(analytic): a geometry-dependent
     measurement offset cancels and the imposed over/under-wind is recovered."""
     from backend.core.oxdna_health import measure_bundle_twist
-    ref = _straight_bundle(n_axial=24)            # the analytic depiction
+
+    ref = _straight_bundle(n_axial=24)  # the analytic depiction
     for residual in (40.0, -50.0):
         sim = _twist_bundle(residual, n_axial=24)
         delta = measure_bundle_twist(sim) - measure_bundle_twist(ref)
@@ -1963,11 +2389,13 @@ def test_measure_bundle_twist_differential_recovers_residual():
 
 def test_measure_bundle_twist_rejects_bad_input():
     from backend.core.oxdna_health import measure_bundle_twist
+
     with pytest.raises(ValueError, match="empty"):
         measure_bundle_twist([])
     with pytest.raises(ValueError, match=">= 2 helices"):
-        measure_bundle_twist([_pos(0, i, "forward", (0.0, 0.0, float(i)))
-                              for i in range(5)])
+        measure_bundle_twist(
+            [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(5)]
+        )
 
 
 # ── bundle_curvature (integrated |κ| guard — straight ⇒ 0, arc ⇒ 1/R, S-bend ⇒ >0) ──
@@ -1976,6 +2404,7 @@ def _arc_bundle(radius_nm, sweep_deg, *, n_helix=4, n_axial=40, sep=0.4):
     ``sweep_deg`` in the xy-plane; the ``n_helix`` helices sit symmetrically about the
     centreline along ±z so each slab centroid lands ON the arc."""
     import math
+
     out = []
     for i in range(n_axial):
         th = math.radians(sweep_deg) * (i / (n_axial - 1))
@@ -1990,19 +2419,26 @@ def _s_bundle(radius_nm, sweep_deg, *, n_helix=4, n_axial=80, sep=0.4):
     """Two opposite arcs joined into an S: the end tangents are parallel (end-to-end bend
     ≈ 0) but the centreline is curved throughout (integrated curvature > 0)."""
     import math
+
     out = []
     half = n_axial // 2
     for i in range(n_axial):
-        if i < half:                                  # first arc curving +
+        if i < half:  # first arc curving +
             th = math.radians(sweep_deg) * (i / (half - 1))
             cx, cy = radius_nm * math.sin(th), radius_nm * (1 - math.cos(th))
-        else:                                         # second arc curving − (mirror)
+        else:  # second arc curving − (mirror)
             j = i - half + 1
             th = math.radians(sweep_deg) * (j / half)
             ox = radius_nm * math.sin(math.radians(sweep_deg))
             oy = radius_nm * (1 - math.cos(math.radians(sweep_deg)))
-            cx = ox + radius_nm * (math.sin(math.radians(sweep_deg)) - math.sin(math.radians(sweep_deg) - th))
-            cy = oy + radius_nm * (math.cos(math.radians(sweep_deg) - th) - math.cos(math.radians(sweep_deg)))
+            cx = ox + radius_nm * (
+                math.sin(math.radians(sweep_deg))
+                - math.sin(math.radians(sweep_deg) - th)
+            )
+            cy = oy + radius_nm * (
+                math.cos(math.radians(sweep_deg) - th)
+                - math.cos(math.radians(sweep_deg))
+            )
         for h in range(n_helix):
             z = sep * (h - (n_helix - 1) / 2.0)
             out.append(_pos(h, i, "forward", (cx, cy, z)))
@@ -2012,6 +2448,7 @@ def _s_bundle(radius_nm, sweep_deg, *, n_helix=4, n_axial=80, sep=0.4):
 def test_measure_bundle_curvature_zero_for_straight_bundle():
     """A straight bundle has ~0 integrated curvature."""
     from backend.core.oxdna_health import measure_bundle_curvature
+
     assert measure_bundle_curvature(_straight_bundle(n_axial=40)) < 0.02
 
 
@@ -2020,45 +2457,52 @@ def test_measure_bundle_curvature_recovers_inverse_radius():
     (smaller R) reads a proportionally larger curvature."""
     import math
     from backend.core.oxdna_health import measure_bundle_curvature
+
     # Fixed slab count → identical discretization, so the comparison isolates 1/R.
     for R in (20.0, 40.0):
         kappa = measure_bundle_curvature(_arc_bundle(R, 60.0, n_axial=80), n_slices=20)
         assert abs(kappa - math.degrees(1.0 / R)) < 0.15 * math.degrees(1.0 / R)
     k20 = measure_bundle_curvature(_arc_bundle(20.0, 60.0, n_axial=80), n_slices=20)
     k40 = measure_bundle_curvature(_arc_bundle(40.0, 60.0, n_axial=80), n_slices=20)
-    assert 1.8 < k20 / k40 < 2.2                   # κ ∝ 1/R → halving R doubles κ
+    assert 1.8 < k20 / k40 < 2.2  # κ ∝ 1/R → halving R doubles κ
 
 
 def test_measure_bundle_curvature_catches_s_bend_that_bend_misses():
     """An S-bend's endpoints are ~collinear so measure_bundle_bend reads ~0, but the
     centreline is curved throughout → integrated curvature is clearly nonzero."""
     from backend.core.oxdna_health import measure_bundle_bend, measure_bundle_curvature
+
     s = _s_bundle(25.0, 45.0)
-    assert measure_bundle_bend(s) < 15.0          # endpoints nearly parallel
-    assert measure_bundle_curvature(s) > 0.2      # but real curvature is captured
+    assert measure_bundle_bend(s) < 15.0  # endpoints nearly parallel
+    assert measure_bundle_curvature(s) > 0.2  # but real curvature is captured
 
 
 def test_measure_bundle_curvature_rejects_empty():
     from backend.core.oxdna_health import measure_bundle_curvature
+
     with pytest.raises(ValueError, match="empty"):
         measure_bundle_curvature([])
 
 
 def test_curvature_profile_flat_for_straight_ramps_for_arc():
     from backend.core.oxdna_health import measure_bundle_curvature_profile
+
     flat = measure_bundle_curvature_profile(_straight_bundle(n_axial=40))
-    assert max(v for _, v in flat) < 2.0                      # straight → ~flat near zero
+    assert max(v for _, v in flat) < 2.0  # straight → ~flat near zero
     arc = measure_bundle_curvature_profile(_arc_bundle(25.0, 90.0, n_axial=80))
     vals = [v for _, v in arc]
-    assert vals == sorted(vals)                                # cumulative turning is monotone
-    assert vals[-1] > 40.0                                     # a 90° arc turns a lot
+    assert vals == sorted(vals)  # cumulative turning is monotone
+    assert vals[-1] > 40.0  # a 90° arc turns a lot
 
 
 def test_curvature_profile_catches_s_bend_endpoint():
     # An S-bend's end tangents are ~parallel (small bend) but the centreline turns throughout →
     # the cumulative curvature profile ramps to a clearly nonzero endpoint.
     from backend.core.oxdna_health import (
-        measure_bundle_bend, measure_bundle_curvature_profile)
+        measure_bundle_bend,
+        measure_bundle_curvature_profile,
+    )
+
     s = _s_bundle(25.0, 45.0)
     prof = measure_bundle_curvature_profile(s)
     assert measure_bundle_bend(s) < 15.0
@@ -2067,6 +2511,7 @@ def test_curvature_profile_catches_s_bend_endpoint():
 
 def test_curvature_profile_rejects_empty():
     from backend.core.oxdna_health import measure_bundle_curvature_profile
+
     with pytest.raises(ValueError, match="empty"):
         measure_bundle_curvature_profile([])
 
@@ -2075,12 +2520,18 @@ def test_parse_constraint_spec_inter_helix_spacing_two_landmarks():
     """inter_helix_spacing is a two-landmark nm measure (each landmark names a
     helix) — it parses with exactly 2 landmarks, like end_to_end."""
     from backend.core.oxdna_health import parse_constraint_spec
-    c = parse_constraint_spec({"measure": "inter_helix_spacing",
-                               "landmarks": _LANDMARKS, "target_nm": 2.5,
-                               "tol_nm": 0.2})
+
+    c = parse_constraint_spec(
+        {
+            "measure": "inter_helix_spacing",
+            "landmarks": _LANDMARKS,
+            "target_nm": 2.5,
+            "tol_nm": 0.2,
+        }
+    )
     assert c["measure"] == "inter_helix_spacing" and len(c["landmarks"]) == 2
     assert c["target_nm"] == 2.5
-    assert parse_constraint_spec(c) == c          # idempotent
+    assert parse_constraint_spec(c) == c  # idempotent
 
 
 def test_check_constraint_inter_helix_spacing_dispatches():
@@ -2088,16 +2539,27 @@ def test_check_constraint_inter_helix_spacing_dispatches():
     measure (nm) with the same confidence gate + tolerance bracket as the other
     measures — two parallel helices 2.5 nm apart give a 2.5 nm spacing."""
     from backend.core.oxdna_health import check_relaxed_constraint
-    positions = (
-        [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(4)] +
-        [_pos(1, i, "forward", (2.5, 0.0, float(i))) for i in range(4)])
-    well = {"ready": True, "positions": positions,
-            "confidence": {"n_frames": 60, "preliminary": False}}
-    weak = {"ready": True, "positions": positions,
-            "confidence": {"n_frames": 10, "preliminary": True}}
-    spec = {"measure": "inter_helix_spacing",
-            "landmarks": [(0, 0, "forward"), (1, 0, "forward")],
-            "target_nm": 2.5, "tol_nm": 0.1, "min_confidence": 50}
+
+    positions = [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(4)] + [
+        _pos(1, i, "forward", (2.5, 0.0, float(i))) for i in range(4)
+    ]
+    well = {
+        "ready": True,
+        "positions": positions,
+        "confidence": {"n_frames": 60, "preliminary": False},
+    }
+    weak = {
+        "ready": True,
+        "positions": positions,
+        "confidence": {"n_frames": 10, "preliminary": True},
+    }
+    spec = {
+        "measure": "inter_helix_spacing",
+        "landmarks": [(0, 0, "forward"), (1, 0, "forward")],
+        "target_nm": 2.5,
+        "tol_nm": 0.1,
+        "min_confidence": 50,
+    }
     met = check_relaxed_constraint(spec, well)
     assert met["status"] == "met" and met["met"] is True
     assert abs(met["measured_nm"] - 2.5) < 1e-9
@@ -2113,26 +2575,40 @@ def test_parse_constraint_spec_self_consistency_measures_no_landmarks():
     """geometry_match (nm) and bundle_twist (deg) are whole-structure measures — they
     parse with zero landmarks and target 0 (perfect match / no residual wind)."""
     from backend.core.oxdna_health import parse_constraint_spec
-    gm = parse_constraint_spec({"measure": "geometry_match", "target_nm": 0.0,
-                                "tol_nm": 1.5})
+
+    gm = parse_constraint_spec(
+        {"measure": "geometry_match", "target_nm": 0.0, "tol_nm": 1.5}
+    )
     assert gm["measure"] == "geometry_match" and gm["landmarks"] == []
-    bt = parse_constraint_spec({"measure": "bundle_twist", "target_nm": 0.0,
-                                "tol_nm": 5.0})
+    bt = parse_constraint_spec(
+        {"measure": "bundle_twist", "target_nm": 0.0, "tol_nm": 5.0}
+    )
     assert bt["measure"] == "bundle_twist" and bt["landmarks"] == []
     with pytest.raises(Exception, match="no landmarks"):
-        parse_constraint_spec({"measure": "geometry_match", "landmarks": _LANDMARKS,
-                               "target_nm": 0.0, "tol_nm": 1.0})
+        parse_constraint_spec(
+            {
+                "measure": "geometry_match",
+                "landmarks": _LANDMARKS,
+                "target_nm": 0.0,
+                "tol_nm": 1.0,
+            }
+        )
 
 
 def test_check_geometry_match_requires_reference():
     """The self-consistency measures fail loudly without an analytic reference rather
     than silently measuring nothing."""
     from backend.core.oxdna_health import check_relaxed_constraint
-    out = {"ready": True, "positions": _straight_bundle(),
-           "confidence": {"n_frames": 60}}
+
+    out = {
+        "ready": True,
+        "positions": _straight_bundle(),
+        "confidence": {"n_frames": 60},
+    }
     with pytest.raises(Exception, match="analytic reference"):
         check_relaxed_constraint(
-            {"measure": "geometry_match", "target_nm": 0.0, "tol_nm": 1.0}, out)
+            {"measure": "geometry_match", "target_nm": 0.0, "tol_nm": 1.0}, out
+        )
 
 
 def test_check_geometry_match_dispatches_with_reference_and_steering():
@@ -2140,40 +2616,66 @@ def test_check_geometry_match_dispatches_with_reference_and_steering():
     companion SIGNED twist residual for steering.  A matched structure is 'met'; a
     twisted one is 'unmet' with a nonzero, correctly-signed residual."""
     from backend.core.oxdna_health import check_relaxed_constraint
-    ref = _straight_bundle(n_axial=24)
-    spec = {"measure": "geometry_match", "target_nm": 0.0, "tol_nm": 0.1,
-            "min_confidence": 50}
 
-    matched = {"ready": True, "positions": _apply_rigid(ref),
-               "confidence": {"n_frames": 60}}
+    ref = _straight_bundle(n_axial=24)
+    spec = {
+        "measure": "geometry_match",
+        "target_nm": 0.0,
+        "tol_nm": 0.1,
+        "min_confidence": 50,
+    }
+
+    matched = {
+        "ready": True,
+        "positions": _apply_rigid(ref),
+        "confidence": {"n_frames": 60},
+    }
     v = check_relaxed_constraint(spec, matched, reference_positions=ref)
     assert v["status"] == "met" and v["measured_nm"] < 0.05
     assert abs(v["steering"]["bundle_twist_residual_deg"]) < 5.0
 
-    twisted = {"ready": True, "positions": _twist_bundle(40.0, n_axial=24),
-               "confidence": {"n_frames": 60}}
+    twisted = {
+        "ready": True,
+        "positions": _twist_bundle(40.0, n_axial=24),
+        "confidence": {"n_frames": 60},
+    }
     v = check_relaxed_constraint(spec, twisted, reference_positions=ref)
     assert v["status"] == "unmet" and v["measured_nm"] > 0.1
-    assert v["steering"]["bundle_twist_residual_deg"] > 10.0     # signed, right-handed
+    assert v["steering"]["bundle_twist_residual_deg"] > 10.0  # signed, right-handed
 
     # Confidence gate still governs — too few frames → inconclusive even if matched.
-    weak = {"ready": True, "positions": _apply_rigid(ref),
-            "confidence": {"n_frames": 5}}
-    assert check_relaxed_constraint(
-        spec, weak, reference_positions=ref)["status"] == "inconclusive"
+    weak = {
+        "ready": True,
+        "positions": _apply_rigid(ref),
+        "confidence": {"n_frames": 5},
+    }
+    assert (
+        check_relaxed_constraint(spec, weak, reference_positions=ref)["status"]
+        == "inconclusive"
+    )
 
 
 def test_check_self_consistency_filters_to_reference_core():
     """The reference doubles as the core mask: stray nucleotides in the mean structure
     that are absent from the (core-only) reference do not perturb the verdict."""
     from backend.core.oxdna_health import check_relaxed_constraint
+
     ref = _straight_bundle(n_axial=24)
-    sim = _apply_rigid(ref) + [_pos(99, 0, "forward", (50.0, 50.0, 50.0))]  # ssDNA-end stand-in
+    sim = _apply_rigid(ref) + [
+        _pos(99, 0, "forward", (50.0, 50.0, 50.0))
+    ]  # ssDNA-end stand-in
     out = {"ready": True, "positions": sim, "confidence": {"n_frames": 60}}
     v = check_relaxed_constraint(
-        {"measure": "geometry_match", "target_nm": 0.0, "tol_nm": 0.5,
-         "min_confidence": 50}, out, reference_positions=ref)
-    assert v["status"] == "met"          # stray nt ignored, not pulled into the RMSD
+        {
+            "measure": "geometry_match",
+            "target_nm": 0.0,
+            "tol_nm": 0.5,
+            "min_confidence": 50,
+        },
+        out,
+        reference_positions=ref,
+    )
+    assert v["status"] == "met"  # stray nt ignored, not pulled into the RMSD
 
 
 def test_check_constraint_reports_both_metrics_in_steering():
@@ -2181,18 +2683,27 @@ def test_check_constraint_reports_both_metrics_in_steering():
     the RMSD-to-design and the signed twist residual (so the optimizer + before/after
     panel always see both)."""
     from backend.core.oxdna_health import check_relaxed_constraint
+
     ref = _straight_bundle(n_axial=24)
-    out = {"ready": True, "positions": _twist_bundle(30.0, n_axial=24),
-           "confidence": {"n_frames": 60}}
+    out = {
+        "ready": True,
+        "positions": _twist_bundle(30.0, n_axial=24),
+        "confidence": {"n_frames": 60},
+    }
     for measure, tol in (("geometry_match", 0.1), ("bundle_twist", 5.0)):
         v = check_relaxed_constraint(
             {"measure": measure, "target_nm": 0.0, "tol_nm": tol, "min_confidence": 50},
-            out, reference_positions=ref)
+            out,
+            reference_positions=ref,
+        )
         assert "geometry_rmsd_nm" in v["steering"]
         assert "bundle_twist_residual_deg" in v["steering"]
         # the gating measured value is the chosen metric
-        expect = v["steering"]["geometry_rmsd_nm"] if measure == "geometry_match" \
+        expect = (
+            v["steering"]["geometry_rmsd_nm"]
+            if measure == "geometry_match"
             else v["steering"]["bundle_twist_residual_deg"]
+        )
         assert abs(v["measured_nm"] - expect) < 1e-9
 
 
@@ -2207,29 +2718,54 @@ def test_pool_until_conclusive_early_rejects_grossly_off(monkeypatch):
 
     def fake_flex(job_id, workspace):
         calls["n"] += 1
-        return {"ready": True, "positions": _twist_bundle(40.0, n_axial=24),
-                "confidence": {"n_frames": 100}}                  # << min_confidence=400
+        return {
+            "ready": True,
+            "positions": _twist_bundle(40.0, n_axial=24),
+            "confidence": {"n_frames": 100},
+        }  # << min_confidence=400
 
     monkeypatch.setattr(hox, "append_production", lambda *a, **k: {})
     monkeypatch.setattr(hox, "wait_for_terminal", lambda *a, **k: None)
     monkeypatch.setattr(hox, "read_flexibility_map", fake_flex)
     ref = _straight_bundle(n_axial=24)
-    parsed = parse_constraint_spec({"measure": "bundle_twist", "target_nm": 0.0,
-                                    "tol_nm": 5.0, "min_confidence": 400})
+    parsed = parse_constraint_spec(
+        {
+            "measure": "bundle_twist",
+            "target_nm": 0.0,
+            "tol_nm": 5.0,
+            "min_confidence": 400,
+        }
+    )
 
     class _Job:
         job_id = "x"
 
     v, n = hox._pool_until_conclusive(
-        _Job(), None, parsed, production_steps=1000, max_production_rounds=8, timeout=1,
-        reference=ref, early_reject_factor=3.0, early_reject_min_frames=20)
-    assert v["status"] == "unmet" and v.get("early_reject") and n == 1 and calls["n"] == 1
+        _Job(),
+        None,
+        parsed,
+        production_steps=1000,
+        max_production_rounds=8,
+        timeout=1,
+        reference=ref,
+        early_reject_factor=3.0,
+        early_reject_min_frames=20,
+    )
+    assert (
+        v["status"] == "unmet" and v.get("early_reject") and n == 1 and calls["n"] == 1
+    )
 
     # Without early-reject it pools every round and stays inconclusive (40°, 100 frames).
     calls["n"] = 0
     v2, n2 = hox._pool_until_conclusive(
-        _Job(), None, parsed, production_steps=1000, max_production_rounds=8, timeout=1,
-        reference=ref)
+        _Job(),
+        None,
+        parsed,
+        production_steps=1000,
+        max_production_rounds=8,
+        timeout=1,
+        reference=ref,
+    )
     assert v2["status"] == "inconclusive" and n2 == 8 and calls["n"] == 8
 
 
@@ -2237,13 +2773,23 @@ def test_check_bundle_twist_constraint_differential():
     """bundle_twist as a constraint reports the SIGNED residual vs the analytic
     reference (target 0°); a matched structure is within tol, a wound one is unmet."""
     from backend.core.oxdna_health import check_relaxed_constraint
+
     ref = _straight_bundle(n_axial=24)
-    spec = {"measure": "bundle_twist", "target_nm": 0.0, "tol_nm": 5.0,
-            "min_confidence": 50}
+    spec = {
+        "measure": "bundle_twist",
+        "target_nm": 0.0,
+        "tol_nm": 5.0,
+        "min_confidence": 50,
+    }
     ok = {"ready": True, "positions": ref, "confidence": {"n_frames": 60}}
-    assert check_relaxed_constraint(spec, ok, reference_positions=ref)["status"] == "met"
-    wound = {"ready": True, "positions": _twist_bundle(30.0, n_axial=24),
-             "confidence": {"n_frames": 60}}
+    assert (
+        check_relaxed_constraint(spec, ok, reference_positions=ref)["status"] == "met"
+    )
+    wound = {
+        "ready": True,
+        "positions": _twist_bundle(30.0, n_axial=24),
+        "confidence": {"n_frames": 60},
+    }
     v = check_relaxed_constraint(spec, wound, reference_positions=ref)
     assert v["status"] == "unmet" and abs(v["measured_nm"] - 30.0) < 6.0
 
@@ -2252,17 +2798,21 @@ def test_composite_trajectory(design, geometry, tmp_path):
     """Composite trajectory concatenates stages, sends keys once, flat float
     frames, and a transition marker at each stage boundary."""
     from backend.core.oxdna_health import composite_trajectory
-    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
-    e = tmp_path / "equil.dat";  _write_traj(design, geometry, e, 2)
-    p = tmp_path / "prod.dat";   _write_traj(design, geometry, p, 3)
+
+    ref = tmp_path / "conf.dat"
+    _write_traj(design, geometry, ref, 1)
+    e = tmp_path / "equil.dat"
+    _write_traj(design, geometry, e, 2)
+    p = tmp_path / "prod.dat"
+    _write_traj(design, geometry, p, 3)
     stages = [("3_equil", "equil", e), ("4_production", "production", p)]
     r = composite_trajectory(design, stages, ref)
-    assert r["n_frames"] == 6                       # seed t=0 + 2 + 3
+    assert r["n_frames"] == 6  # seed t=0 + 2 + 3
     M = r["n_nucleotides"]
     assert M > 0 and len(r["keys"]) == M
     assert all(len(f) == 6 * M for f in r["frames"])  # 6 floats (bb xyz + a1) per key
     assert [s["kind"] for s in r["stages"]] == ["equil", "production"]
-    assert len(r["markers"]) == 1                   # one transition equil→production
+    assert len(r["markers"]) == 1  # one transition equil→production
     assert r["markers"][0]["frame"] == 3 and r["markers"][0]["kind"] == "production"
 
 
@@ -2271,9 +2821,14 @@ def test_job_field_prefers_run_config_falls_back_to_efield():
     the older efield {force_pN, dir}; None for a fieldless (relaxation) job."""
     from types import SimpleNamespace
     from backend.api.routes_oxdna import _job_field
-    rc_job = SimpleNamespace(run_config={"field": {"dir": [1, 0, 0], "field_pN": 5}}, efield=None)
+
+    rc_job = SimpleNamespace(
+        run_config={"field": {"dir": [1, 0, 0], "field_pN": 5}}, efield=None
+    )
     assert _job_field(rc_job) == {"dir": [1.0, 0.0, 0.0], "field_pN": 5}
-    ef_job = SimpleNamespace(run_config=None, efield={"dir": [0, -1, 0], "force_pN": 3, "n_anchored": 4})
+    ef_job = SimpleNamespace(
+        run_config=None, efield={"dir": [0, -1, 0], "force_pN": 3, "n_anchored": 4}
+    )
     assert _job_field(ef_job) == {"dir": [0.0, -1.0, 0.0], "field_pN": 3}
     assert _job_field(SimpleNamespace(run_config=None, efield=None)) is None
     # a run_config without a field record (surface-only / plain production) → None
@@ -2284,13 +2839,23 @@ def test_composite_trajectory_carries_per_stage_field(design, geometry, tmp_path
     """Each stage tuple's optional 5th element (the run's E-field descriptor) flows
     through to stages[].field in BOTH the full composite and the lightweight meta, so
     the View-trajectory arrow can follow a chained run's field direction per frame."""
-    from backend.core.oxdna_health import composite_trajectory, composite_trajectory_meta
-    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
-    e = tmp_path / "equil.dat";  _write_traj(design, geometry, e, 2)
-    f = tmp_path / "field.dat";  _write_traj(design, geometry, f, 3)
+    from backend.core.oxdna_health import (
+        composite_trajectory,
+        composite_trajectory_meta,
+    )
+
+    ref = tmp_path / "conf.dat"
+    _write_traj(design, geometry, ref, 1)
+    e = tmp_path / "equil.dat"
+    _write_traj(design, geometry, e, 2)
+    f = tmp_path / "field.dat"
+    _write_traj(design, geometry, f, 3)
     fld = {"dir": [1.0, 0.0, 0.0], "field_pN": 5.0}
     # relaxation stage has no field; the field child's stage carries its descriptor.
-    stages = [("3_equil", "equil", e, None, None), ("1_field", "field", f, "→ field 1", fld)]
+    stages = [
+        ("3_equil", "equil", e, None, None),
+        ("1_field", "field", f, "→ field 1", fld),
+    ]
     full = composite_trajectory(design, stages, ref)
     meta = composite_trajectory_meta(design, stages)
     assert [s.get("field") for s in full["stages"]] == [None, fld]
@@ -2303,32 +2868,47 @@ def test_aligned_frames_cached_by_file_signature(design, geometry, tmp_path):
     frames (no re-align), but rewriting a file (new size/mtime) invalidates it. This is
     what stops an atomistic scrub from paying the ~14 s alignment on every frame."""
     import backend.core.oxdna_health as H
-    H._ALIGNED_CACHE = None                          # isolate from other tests
-    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
-    p = tmp_path / "prod.dat";   _write_traj(design, geometry, p, 3)
+
+    H._ALIGNED_CACHE = None  # isolate from other tests
+    ref = tmp_path / "conf.dat"
+    _write_traj(design, geometry, ref, 1)
+    p = tmp_path / "prod.dat"
+    _write_traj(design, geometry, p, 3)
     stages = [("4_production", "production", p)]
 
     r1 = H._aligned_downsampled_frames(design, stages, ref, copies=True)
     r2 = H._aligned_downsampled_frames(design, stages, ref, copies=True)
-    assert r2[1] is r1[1]                             # same ordered-frames object → served from cache
+    assert r2[1] is r1[1]  # same ordered-frames object → served from cache
     # A different `copies` flag is a distinct entry (different reconstruction needs).
-    assert H._aligned_downsampled_frames(design, stages, ref, copies=False)[1] is not r1[1]
+    assert (
+        H._aligned_downsampled_frames(design, stages, ref, copies=False)[1] is not r1[1]
+    )
 
     # Rewriting the trajectory (more frames → new size/mtime) invalidates the entry.
     _write_traj(design, geometry, p, 5)
     r3 = H._aligned_downsampled_frames(design, stages, ref, copies=True)
     assert r3[1] is not r1[1]
-    assert len(r3[1]) == 6                            # seed + 5 frames (re-read, not stale)
+    assert len(r3[1]) == 6  # seed + 5 frames (re-read, not stale)
 
 
-def test_composite_trajectory_downsamples_keeping_each_stage(design, geometry, tmp_path):
+def test_composite_trajectory_downsamples_keeping_each_stage(
+    design, geometry, tmp_path
+):
     """Downsampling to a small cap keeps ≥1 frame per stage + the boundary marker."""
     from backend.core.oxdna_health import composite_trajectory
-    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
-    a = tmp_path / "a.dat"; _write_traj(design, geometry, a, 20)
-    b = tmp_path / "b.dat"; _write_traj(design, geometry, b, 20)
-    r = composite_trajectory(design, [("3_equil", "equil", a), ("4_production", "production", b)],
-                             ref, max_frames=6)
+
+    ref = tmp_path / "conf.dat"
+    _write_traj(design, geometry, ref, 1)
+    a = tmp_path / "a.dat"
+    _write_traj(design, geometry, a, 20)
+    b = tmp_path / "b.dat"
+    _write_traj(design, geometry, b, 20)
+    r = composite_trajectory(
+        design,
+        [("3_equil", "equil", a), ("4_production", "production", b)],
+        ref,
+        max_frames=6,
+    )
     assert r["n_frames"] <= 6
     assert all(s["n_frames"] >= 1 for s in r["stages"])
     assert len(r["markers"]) == 1
@@ -2338,40 +2918,68 @@ def test_composite_trajectory_meta_matches_full(design, geometry, tmp_path):
     """The lightweight meta (frame-count only, no coordinate read) reports the SAME
     n_frames + marker frame indices as the full composite — so the trajectory-slider
     sizes itself without downloading the multi-MB trajectory."""
-    from backend.core.oxdna_health import composite_trajectory, composite_trajectory_meta
-    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
-    e = tmp_path / "equil.dat";  _write_traj(design, geometry, e, 5)
-    p = tmp_path / "prod.dat";   _write_traj(design, geometry, p, 7)
+    from backend.core.oxdna_health import (
+        composite_trajectory,
+        composite_trajectory_meta,
+    )
+
+    ref = tmp_path / "conf.dat"
+    _write_traj(design, geometry, ref, 1)
+    e = tmp_path / "equil.dat"
+    _write_traj(design, geometry, e, 5)
+    p = tmp_path / "prod.dat"
+    _write_traj(design, geometry, p, 7)
     stages = [("3_equil", "equil", e), ("4_production", "production", p)]
     full = composite_trajectory(design, stages, ref)
     meta = composite_trajectory_meta(design, stages)
     assert meta["n_frames"] == full["n_frames"]
-    assert [m["frame"] for m in meta["markers"]] == [m["frame"] for m in full["markers"]]
-    assert [m["label"] for m in meta["markers"]] == [m["label"] for m in full["markers"]]
+    assert [m["frame"] for m in meta["markers"]] == [
+        m["frame"] for m in full["markers"]
+    ]
+    assert [m["label"] for m in meta["markers"]] == [
+        m["label"] for m in full["markers"]
+    ]
     assert meta["n_nucleotides"] == full["n_nucleotides"]
 
 
 def test_composite_trajectory_meta_downsample_matches_full(design, geometry, tmp_path):
     """Meta matches the full composite under downsampling too (per-stage stride)."""
-    from backend.core.oxdna_health import composite_trajectory, composite_trajectory_meta
-    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
-    a = tmp_path / "a.dat"; _write_traj(design, geometry, a, 30)
-    b = tmp_path / "b.dat"; _write_traj(design, geometry, b, 30)
+    from backend.core.oxdna_health import (
+        composite_trajectory,
+        composite_trajectory_meta,
+    )
+
+    ref = tmp_path / "conf.dat"
+    _write_traj(design, geometry, ref, 1)
+    a = tmp_path / "a.dat"
+    _write_traj(design, geometry, a, 30)
+    b = tmp_path / "b.dat"
+    _write_traj(design, geometry, b, 30)
     stages = [("3_equil", "equil", a), ("4_production", "production", b)]
     full = composite_trajectory(design, stages, ref, max_frames=8)
     meta = composite_trajectory_meta(design, stages, max_frames=8)
     assert meta["n_frames"] == full["n_frames"]
-    assert [m["frame"] for m in meta["markers"]] == [m["frame"] for m in full["markers"]]
+    assert [m["frame"] for m in meta["markers"]] == [
+        m["frame"] for m in full["markers"]
+    ]
 
 
-def test_composite_trajectory_atomistic_matches_design_atoms(design, geometry, tmp_path):
+def test_composite_trajectory_atomistic_matches_design_atoms(
+    design, geometry, tmp_path
+):
     """Per-frame atomistic for trajectory keyframes returns the SAME flat-XYZ
     length (atom count × 3) as the design's atomistic-batch — same atom ordering —
     for exactly the requested composite-frame indices."""
-    from backend.core.oxdna_health import composite_trajectory, composite_trajectory_atomistic
+    from backend.core.oxdna_health import (
+        composite_trajectory,
+        composite_trajectory_atomistic,
+    )
     from backend.core.atomistic import build_atomistic_model, atomistic_positions_flat
-    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
-    e = tmp_path / "equil.dat";  _write_traj(design, geometry, e, 3)
+
+    ref = tmp_path / "conf.dat"
+    _write_traj(design, geometry, ref, 1)
+    e = tmp_path / "equil.dat"
+    _write_traj(design, geometry, e, 3)
     stages = [("3_equil", "equil", e)]
     ct = composite_trajectory(design, stages, ref)
     n = ct["n_frames"]
@@ -2379,17 +2987,23 @@ def test_composite_trajectory_atomistic_matches_design_atoms(design, geometry, t
 
     ref_floats = len(atomistic_positions_flat(build_atomistic_model(design)))
     out = composite_trajectory_atomistic(design, stages, ref, [0, n - 1, n + 99, -3])
-    assert sorted(out.keys()) == ["0", str(n - 1)]            # out-of-range dropped
+    assert sorted(out.keys()) == ["0", str(n - 1)]  # out-of-range dropped
     for v in out.values():
-        assert len(v) == ref_floats                          # atom order matches design
+        assert len(v) == ref_floats  # atom order matches design
 
 
 def test_composite_trajectory_surface_shape(design, geometry, tmp_path):
     """Per-frame surface for trajectory keyframes returns surface-batch-shaped
     entries (flat verts + int faces, optional strand colours)."""
-    from backend.core.oxdna_health import composite_trajectory, composite_trajectory_surface
-    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
-    e = tmp_path / "equil.dat";  _write_traj(design, geometry, e, 3)
+    from backend.core.oxdna_health import (
+        composite_trajectory,
+        composite_trajectory_surface,
+    )
+
+    ref = tmp_path / "conf.dat"
+    _write_traj(design, geometry, ref, 1)
+    e = tmp_path / "equil.dat"
+    _write_traj(design, geometry, e, 3)
     stages = [("3_equil", "equil", e)]
     n = composite_trajectory(design, stages, ref)["n_frames"]
     out = composite_trajectory_surface(design, stages, ref, [0, n - 1], smooth=3)
@@ -2397,23 +3011,26 @@ def test_composite_trajectory_surface_shape(design, geometry, tmp_path):
     for v in out.values():
         assert len(v["vertices"]) > 0 and len(v["vertices"]) % 3 == 0
         assert len(v["faces"]) > 0 and len(v["faces"]) % 3 == 0
-        assert "vertex_colors" in v                          # default color_mode='strand'
+        assert "vertex_colors" in v  # default color_mode='strand'
 
 
 def test_production_rmsf_average_frame_opt_in(design, geometry, tmp_path):
     """include_average_frame=True adds an `average_frame` map ({key:{backbone_position,
     a1, a3}}) shaped like the relaxed full_map; default omits it (wire route stays lean)."""
     from backend.core.oxdna_health import production_rmsf
-    ref = tmp_path / "ref.dat"; _write_traj(design, geometry, ref, 1)
-    t = tmp_path / "p.dat";     _write_traj(design, geometry, t, 3)
 
-    assert "average_frame" not in production_rmsf(design, t, ref)            # default off
+    ref = tmp_path / "ref.dat"
+    _write_traj(design, geometry, ref, 1)
+    t = tmp_path / "p.dat"
+    _write_traj(design, geometry, t, 3)
+
+    assert "average_frame" not in production_rmsf(design, t, ref)  # default off
 
     r = production_rmsf(design, t, ref, include_average_frame=True)
     af = r["average_frame"]
-    assert len(af) == len(r["positions"])                                    # one per nuc
+    assert len(af) == len(r["positions"])  # one per nuc
     key, rec = next(iter(af.items()))
-    assert len(key) == 3 and isinstance(key[0], str)                         # (hid, bp, dir)
+    assert len(key) == 3 and isinstance(key[0], str)  # (hid, bp, dir)
     assert {"backbone_position", "a1", "a3"} <= set(rec)
     assert len(rec["a1"]) == 3 and len(rec["a3"]) == 3
 
@@ -2424,8 +3041,11 @@ def test_frame_atomistic_flat_matches_design_atoms(design, geometry, tmp_path):
     rmsf display reuses the identical atom ordering the trajectory frames use."""
     from backend.core.oxdna_health import production_rmsf, frame_atomistic_flat
     from backend.core.atomistic import build_atomistic_model, atomistic_positions_flat
-    ref = tmp_path / "ref.dat"; _write_traj(design, geometry, ref, 1)
-    t = tmp_path / "p.dat";     _write_traj(design, geometry, t, 2)
+
+    ref = tmp_path / "ref.dat"
+    _write_traj(design, geometry, ref, 1)
+    t = tmp_path / "p.dat"
+    _write_traj(design, geometry, t, 2)
     frame = production_rmsf(design, t, ref, include_average_frame=True)["average_frame"]
 
     ref_floats = len(atomistic_positions_flat(build_atomistic_model(design)))
@@ -2436,47 +3056,69 @@ def test_frame_atomistic_flat_matches_design_atoms(design, geometry, tmp_path):
 def test_frame_surface_json_shape(design, geometry, tmp_path):
     """A single per-nuc frame reconstructs to a surface-batch-shaped mesh entry."""
     from backend.core.oxdna_health import production_rmsf, frame_surface_json
-    ref = tmp_path / "ref.dat"; _write_traj(design, geometry, ref, 1)
-    t = tmp_path / "p.dat";     _write_traj(design, geometry, t, 2)
+
+    ref = tmp_path / "ref.dat"
+    _write_traj(design, geometry, ref, 1)
+    t = tmp_path / "p.dat"
+    _write_traj(design, geometry, t, 2)
     frame = production_rmsf(design, t, ref, include_average_frame=True)["average_frame"]
 
     v = frame_surface_json(design, frame, smooth=3)
     assert len(v["vertices"]) > 0 and len(v["vertices"]) % 3 == 0
     assert len(v["faces"]) > 0 and len(v["faces"]) % 3 == 0
-    assert "vertex_colors" in v                                              # strand colours
+    assert "vertex_colors" in v  # strand colours
 
 
-def test_frame_surface_json_rmsf_emits_per_vertex_flexibility(design, geometry, tmp_path):
+def test_frame_surface_json_rmsf_emits_per_vertex_flexibility(
+    design, geometry, tmp_path
+):
     """color_mode='rmsf' returns one RMSF value per surface vertex (nearest-atom
     flexibility), NOT strand colours — so the frontend can paint the mesh with the
     same viridis ramp/scale as the beads. Each value sits in the design's RMSF
     range and there is exactly one per vertex (len/3)."""
     from backend.core.oxdna_health import production_rmsf, frame_surface_json
-    ref = tmp_path / "ref.dat"; _write_traj(design, geometry, ref, 1)
-    t = tmp_path / "p.dat";     _write_traj(design, geometry, t, 3)
+
+    ref = tmp_path / "ref.dat"
+    _write_traj(design, geometry, ref, 1)
+    t = tmp_path / "p.dat"
+    _write_traj(design, geometry, t, 3)
     res = production_rmsf(design, t, ref, include_average_frame=True)
     frame = res["average_frame"]
-    rmsf_by_key = {(p["helix_id"], p["bp_index"], p["direction"]): p["rmsf"]
-                   for p in res["positions"]}
+    rmsf_by_key = {
+        (p["helix_id"], p["bp_index"], p["direction"]): p["rmsf"]
+        for p in res["positions"]
+    }
 
-    v = frame_surface_json(design, frame, color_mode="rmsf", smooth=3, rmsf_by_key=rmsf_by_key)
-    assert "vertex_colors" not in v                                          # NOT strand-coloured
+    v = frame_surface_json(
+        design, frame, color_mode="rmsf", smooth=3, rmsf_by_key=rmsf_by_key
+    )
+    assert "vertex_colors" not in v  # NOT strand-coloured
     vr = v["vertex_rmsf"]
-    assert len(vr) == len(v["vertices"]) // 3                                # one per vertex
+    assert len(vr) == len(v["vertices"]) // 3  # one per vertex
     lo, hi = res["min_rmsf"], res["max_rmsf"]
-    assert all(lo - 1e-6 <= x <= hi + 1e-6 for x in vr)                      # within the data range
+    assert all(lo - 1e-6 <= x <= hi + 1e-6 for x in vr)  # within the data range
 
 
 def _ideal_frame_override(design, geometry, tmp_path, *, copies=False):
     """Write + read the design's OWN ideal oxDNA configuration → a frame_override
     map ``{key: (CM, a1, a3)}`` (the input the rigid-frame placer consumes)."""
     import numpy as np
-    from backend.physics.oxdna_interface import write_configuration, read_configuration_full
+    from backend.physics.oxdna_interface import (
+        write_configuration,
+        read_configuration_full,
+    )
+
     conf = tmp_path / "ideal.dat"
     write_configuration(design, geometry, conf, box_nm=200.0)
     frames = read_configuration_full(conf, design, copies=copies)
-    return {k: (np.asarray(r["backbone_position"]), np.asarray(r["a1"]),
-                np.asarray(r["a3"])) for k, r in frames.items()}
+    return {
+        k: (
+            np.asarray(r["backbone_position"]),
+            np.asarray(r["a1"]),
+            np.asarray(r["a3"]),
+        )
+        for k, r in frames.items()
+    }
 
 
 def test_melted_designed_pair_uses_true_oxdna_rigid_frames(design, geometry, tmp_path):
@@ -2493,10 +3135,15 @@ def test_melted_designed_pair_uses_true_oxdna_rigid_frames(design, geometry, tmp
     conf = tmp_path / "melted.dat"
     write_configuration(design, geometry, conf, box_nm=200.0, oxdna_native_seed=True)
     frame = read_configuration_full(conf, design, copies=True)
-    forward = next(k for k in frame if len(k) == 3 and k[2] == "FORWARD"
-                   and (k[0], k[1], "REVERSE") in frame
-                   and (k[0], k[1] + 1, "FORWARD") in frame
-                   and (k[0], k[1] + 1, "REVERSE") in frame)
+    forward = next(
+        k
+        for k in frame
+        if len(k) == 3
+        and k[2] == "FORWARD"
+        and (k[0], k[1], "REVERSE") in frame
+        and (k[0], k[1] + 1, "FORWARD") in frame
+        and (k[0], k[1] + 1, "REVERSE") in frame
+    )
     forward2 = (forward[0], forward[1] + 1, "FORWARD")
     reverse = (forward[0], forward[1], "REVERSE")
     reverse2 = (forward[0], forward[1] + 1, "REVERSE")
@@ -2506,8 +3153,10 @@ def test_melted_designed_pair_uses_true_oxdna_rigid_frames(design, geometry, tmp
     assert forward not in ideal
     assert reverse not in ideal
 
-    melted = {k: {name: np.asarray(value).copy() for name, value in rec.items()}
-              for k, rec in frame.items()}
+    melted = {
+        k: {name: np.asarray(value).copy() for name, value in rec.items()}
+        for k, rec in frame.items()
+    }
     melted[forward]["backbone_position"] += np.array([5.0, 0.0, 0.0])
     melted[forward2]["backbone_position"] += np.array([5.0, 0.0, 0.0])
     overrides = _ssdna_frame_override(design, melted)
@@ -2524,12 +3173,17 @@ def test_rigid_frame_calibration_buckets_exact():
     that every Q is a proper rotation (orthonormal, det +1)."""
     import numpy as np
     from backend.core.atomistic import _rigid_frame_calibration
+
     calib = _rigid_frame_calibration()
-    assert set(calib) == {("FORWARD", True), ("REVERSE", True),
-                          ("FORWARD", False), ("REVERSE", False)}
+    assert set(calib) == {
+        ("FORWARD", True),
+        ("REVERSE", True),
+        ("FORWARD", False),
+        ("REVERSE", False),
+    }
     for _bucket, (Q, c) in calib.items():
-        assert np.allclose(Q @ Q.T, np.eye(3), atol=1e-9)            # orthonormal
-        assert abs(float(np.linalg.det(Q)) - 1.0) < 1e-9            # proper rotation
+        assert np.allclose(Q @ Q.T, np.eye(3), atol=1e-9)  # orthonormal
+        assert abs(float(np.linalg.det(Q)) - 1.0) < 1e-9  # proper rotation
         assert c.shape == (3,)
 
 
@@ -2542,21 +3196,28 @@ def test_rigid_frame_placer_reproduces_design_build(design, geometry, tmp_path):
     so on a relaxed frame it only moves atoms by the genuine relaxation."""
     import numpy as np
     from backend.core.atomistic import build_atomistic_model, atomistic_positions_flat
+
     ref = build_atomistic_model(design)
     # close_backbone=False isolates the rigid STAMP (the display path additionally
     # re-seats the phosphate linker for backbone continuity — tested separately).
     placed = build_atomistic_model(
-        design, frame_override=_ideal_frame_override(design, geometry, tmp_path),
-        close_backbone=False)
+        design,
+        frame_override=_ideal_frame_override(design, geometry, tmp_path),
+        close_backbone=False,
+    )
 
     assert len(ref.atoms) == len(placed.atoms)
     assert ref.bonds == placed.bonds
     for a, b in zip(ref.atoms, placed.atoms):
-        assert (a.serial, a.name, a.element, a.residue) == \
-               (b.serial, b.name, b.element, b.residue)
+        assert (a.serial, a.name, a.element, a.residue) == (
+            b.serial,
+            b.name,
+            b.element,
+            b.residue,
+        )
     rf = np.array(atomistic_positions_flat(ref)).reshape(-1, 3)
     pf = np.array(atomistic_positions_flat(placed)).reshape(-1, 3)
-    assert float(np.linalg.norm(rf - pf, axis=1).max()) < 1e-3       # <0.01 Å
+    assert float(np.linalg.norm(rf - pf, axis=1).max()) < 1e-3  # <0.01 Å
 
 
 def test_rigid_frame_placer_is_rigid_under_reorientation(design, geometry, tmp_path):
@@ -2567,24 +3228,31 @@ def test_rigid_frame_placer_is_rigid_under_reorientation(design, geometry, tmp_p
     output bytes)."""
     import numpy as np
     from backend.core.atomistic import build_atomistic_model, atomistic_positions_flat
+
     fo = _ideal_frame_override(design, geometry, tmp_path)
-    base = np.array(atomistic_positions_flat(
-        build_atomistic_model(design, frame_override=fo))).reshape(-1, 3)
+    base = np.array(
+        atomistic_positions_flat(build_atomistic_model(design, frame_override=fo))
+    ).reshape(-1, 3)
 
     # A fixed rotation (≈37° about a tilted axis), applied to every frame's CM+a1+a3.
-    ax = np.array([1.0, 2.0, 3.0]); ax /= np.linalg.norm(ax)
+    ax = np.array([1.0, 2.0, 3.0])
+    ax /= np.linalg.norm(ax)
     th = 0.65
     K = np.array([[0, -ax[2], ax[1]], [ax[2], 0, -ax[0]], [-ax[1], ax[0], 0]])
     Rg = np.eye(3) + np.sin(th) * K + (1 - np.cos(th)) * (K @ K)
     rot = {k: (Rg @ cm, Rg @ a1, Rg @ a3) for k, (cm, a1, a3) in fo.items()}
-    rotated = np.array(atomistic_positions_flat(
-        build_atomistic_model(design, frame_override=rot))).reshape(-1, 3)
+    rotated = np.array(
+        atomistic_positions_flat(build_atomistic_model(design, frame_override=rot))
+    ).reshape(-1, 3)
 
-    assert float(np.abs(rotated - base @ Rg.T).max()) < 1e-4         # whole model rigidly rotated
+    assert (
+        float(np.abs(rotated - base @ Rg.T).max()) < 1e-4
+    )  # whole model rigidly rotated
 
     again = atomistic_positions_flat(build_atomistic_model(design, frame_override=fo))
-    assert again == atomistic_positions_flat(                        # deterministic
-        build_atomistic_model(design, frame_override=fo))
+    assert again == atomistic_positions_flat(  # deterministic
+        build_atomistic_model(design, frame_override=fo)
+    )
 
 
 def test_frame_atomistic_handles_insertion_design(tmp_path):
@@ -2603,20 +3271,29 @@ def test_frame_atomistic_handles_insertion_design(tmp_path):
 
     base = make_6hb_design(42)
     h0 = base.helices[0]
-    design = base.model_copy(update={
-        "helices": [h0.model_copy(update={"loop_skips": [LoopSkip(bp_index=20, delta=1)]}),
-                    *base.helices[1:]]})
+    design = base.model_copy(
+        update={
+            "helices": [
+                h0.model_copy(update={"loop_skips": [LoopSkip(bp_index=20, delta=1)]}),
+                *base.helices[1:],
+            ]
+        }
+    )
     geometry = _geometry_for_design(design)
 
     fo_all = _ideal_frame_override(design, geometry, tmp_path, copies=True)
-    assert any(len(k) == 4 for k in fo_all)                          # copies surfaced as 4-tuples
+    assert any(len(k) == 4 for k in fo_all)  # copies surfaced as 4-tuples
 
     ref_floats = len(atomistic_positions_flat(build_atomistic_model(design)))
-    flat = frame_atomistic_flat(design, {
-        k: {"backbone_position": cm, "a1": a1, "a3": a3}
-        for k, (cm, a1, a3) in fo_all.items()})
-    assert len(flat) == ref_floats                                  # same atom ordering, no crash
-    assert all(np.isfinite(flat))                                   # every atom placed finitely
+    flat = frame_atomistic_flat(
+        design,
+        {
+            k: {"backbone_position": cm, "a1": a1, "a3": a3}
+            for k, (cm, a1, a3) in fo_all.items()
+        },
+    )
+    assert len(flat) == ref_floats  # same atom ordering, no crash
+    assert all(np.isfinite(flat))  # every atom placed finitely
 
 
 def test_oxdna_continue_production_unique_stage(monkeypatch, tmp_path):
@@ -2634,7 +3311,7 @@ def test_oxdna_continue_production_unique_stage(monkeypatch, tmp_path):
     monkeypatch.setattr(routes_oxdna, "start_job", lambda job, ws, specs: None)
 
     specs = build_relaxation_stages()
-    specs.append(build_production_stage(name="4_production"))   # one run already done
+    specs.append(build_production_stage(name="4_production"))  # one run already done
     job = new_oxdna_job("d", [s.to_status() for s in specs])
     job.status = OxdnaStatus.completed
     for s in job.stages:
@@ -2642,13 +3319,16 @@ def test_oxdna_continue_production_unique_stage(monkeypatch, tmp_path):
     job.current_stage_idx = len(specs)
     job.save(tmp_path)
     (job.job_dir(tmp_path) / "stages_spec.json").write_text(
-        _json.dumps([asdict(s) for s in specs], indent=2))
+        _json.dumps([asdict(s) for s in specs], indent=2)
+    )
 
-    r = TestClient(app).post(f"/api/oxdna/jobs/{job.job_id}/production", json={"steps": 1000})
+    r = TestClient(app).post(
+        f"/api/oxdna/jobs/{job.job_id}/production", json={"steps": 1000}
+    )
     assert r.status_code == 200
     reloaded = OxdnaJob.load(job.job_id, tmp_path)
     prod_names = [s.name for s in reloaded.stages if s.kind == "production"]
-    assert prod_names == ["4_production", "5_production"]   # second run, unique name
+    assert prod_names == ["4_production", "5_production"]  # second run, unique name
     assert reloaded.status == OxdnaStatus.running
 
 
@@ -2675,7 +3355,11 @@ def test_delete_parent_cascades_to_field_children(monkeypatch, tmp_path):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["n_children"] == 2
-    assert set(body["deleted"]) == {parent.job_id, children[0].job_id, children[1].job_id}
+    assert set(body["deleted"]) == {
+        parent.job_id,
+        children[0].job_id,
+        children[1].job_id,
+    }
     for j in (parent, *children):
         assert not j.job_dir(tmp_path).exists()
 
@@ -2687,14 +3371,17 @@ def test_delete_parent_blocked_when_a_child_is_running(monkeypatch, tmp_path):
     import backend.api.routes_oxdna as routes_oxdna
 
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
-    parent = new_oxdna_job("d", []); parent.status = OxdnaStatus.completed; parent.save(tmp_path)
+    parent = new_oxdna_job("d", [])
+    parent.status = OxdnaStatus.completed
+    parent.save(tmp_path)
     child = new_oxdna_job("d · field", [], parent_job_id=parent.job_id)
-    child.status = OxdnaStatus.running; child.save(tmp_path)
+    child.status = OxdnaStatus.running
+    child.save(tmp_path)
     monkeypatch.setattr(routes_oxdna, "is_running", lambda jid: jid == child.job_id)
 
     r = TestClient(app).delete(f"/api/oxdna/jobs/{parent.job_id}")
     assert r.status_code == 400
-    assert parent.job_dir(tmp_path).exists()          # nothing deleted
+    assert parent.job_dir(tmp_path).exists()  # nothing deleted
     assert child.job_dir(tmp_path).exists()
 
 
@@ -2708,16 +3395,20 @@ def test_delete_cascades_through_a_chained_lineage(monkeypatch, tmp_path):
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
     monkeypatch.setattr(routes_oxdna, "is_running", lambda jid: False)
 
-    root = new_oxdna_job("d", []); root.status = OxdnaStatus.completed; root.save(tmp_path)
+    root = new_oxdna_job("d", [])
+    root.status = OxdnaStatus.completed
+    root.save(tmp_path)
     f1 = new_oxdna_job("d · field", [], parent_job_id=root.job_id)
-    f1.status = OxdnaStatus.completed; f1.save(tmp_path)
-    f2 = new_oxdna_job("d · field", [], parent_job_id=f1.job_id)   # grandchild
-    f2.status = OxdnaStatus.completed; f2.save(tmp_path)
+    f1.status = OxdnaStatus.completed
+    f1.save(tmp_path)
+    f2 = new_oxdna_job("d · field", [], parent_job_id=f1.job_id)  # grandchild
+    f2.status = OxdnaStatus.completed
+    f2.save(tmp_path)
 
     r = TestClient(app).delete(f"/api/oxdna/jobs/{root.job_id}")
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["n_children"] == 2                                  # f1 + f2
+    assert body["n_children"] == 2  # f1 + f2
     assert set(body["deleted"]) == {root.job_id, f1.job_id, f2.job_id}
     for j in (root, f1, f2):
         assert not j.job_dir(tmp_path).exists()
@@ -2749,28 +3440,38 @@ def test_oxdna_trajectory_walks_full_lineage(monkeypatch, tmp_path, design, geom
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
 
     def _field_child(name, parent_id):
-        stage = build_field_stage(name="1_field", field_oxdna=0.04, field_dir=[1, 0, 0],
-                                  forces_file="field_forces.txt", steps=2000)
+        stage = build_field_stage(
+            name="1_field",
+            field_oxdna=0.04,
+            field_dir=[1, 0, 0],
+            forces_file="field_forces.txt",
+            steps=2000,
+        )
         j = new_oxdna_job(name, [stage.to_status()], parent_job_id=parent_id)
-        j.stages[0].status = "done"; j.status = OxdnaStatus.completed; j.current_stage_idx = 1
+        j.stages[0].status = "done"
+        j.status = OxdnaStatus.completed
+        j.current_stage_idx = 1
         j.save(tmp_path)
         jd = j.job_dir(tmp_path)
         (jd / "design.json").write_text(design.model_dump_json())
-        sd = j.stage_dir(tmp_path, "1_field"); sd.mkdir(parents=True, exist_ok=True)
+        sd = j.stage_dir(tmp_path, "1_field")
+        sd.mkdir(parents=True, exist_ok=True)
         _write_traj(design, geometry, sd / "trajectory.dat", n_frames=3)
         return j
 
     # Root relaxation with a single done stage (4 written frames).
     root = new_oxdna_job("d", [s.to_status() for s in build_relaxation_stages()])
-    root.stages[0].status = "done"; root.status = OxdnaStatus.completed
+    root.stages[0].status = "done"
+    root.status = OxdnaStatus.completed
     root.save(tmp_path)
     rjd = root.job_dir(tmp_path)
     (rjd / "design.json").write_text(design.model_dump_json())
-    rsd = root.stage_dir(tmp_path, root.stages[0].name); rsd.mkdir(parents=True, exist_ok=True)
+    rsd = root.stage_dir(tmp_path, root.stages[0].name)
+    rsd.mkdir(parents=True, exist_ok=True)
     _write_traj(design, geometry, rsd / "trajectory.dat", n_frames=4)
 
     field1 = _field_child("d · field", root.job_id)
-    field2 = _field_child("d · field", field1.job_id)   # chained OFF field1
+    field2 = _field_child("d · field", field1.job_id)  # chained OFF field1
 
     r = TestClient(app).get(f"/api/oxdna/jobs/{field2.job_id}/trajectory")
     assert r.status_code == 200, r.text
@@ -2785,13 +3486,17 @@ def test_oxdna_trajectory_walks_full_lineage(monkeypatch, tmp_path, design, geom
 
 # ── PBC unwrap for display ────────────────────────────────────────────────────
 
+
 def test_read_configuration_unwrapped(design, geometry, tmp_path):
     """A relaxed conf wrapped across the oxDNA box unwraps to a compact structure
     re-seated at the reference (design) location."""
     from backend.core.constants import NM_TO_OXDNA
     from backend.physics.oxdna_interface import (
-        write_configuration, read_configuration_full, read_configuration_unwrapped,
+        write_configuration,
+        read_configuration_full,
+        read_configuration_unwrapped,
     )
+
     box_nm = 50.0
     orig = tmp_path / "conf.dat"
     write_configuration(design, geometry, orig, box_nm=box_nm)
@@ -2802,9 +3507,9 @@ def test_read_configuration_unwrapped(design, geometry, tmp_path):
     # diffusion + tumbling) and wrap into [0, box) — splitting it across a face.
     box_ox = box_nm * NM_TO_OXDNA
     th = 0.6
-    rot = np.array([[np.cos(th), -np.sin(th), 0.0],
-                    [np.sin(th),  np.cos(th), 0.0],
-                    [0.0, 0.0, 1.0]])
+    rot = np.array(
+        [[np.cos(th), -np.sin(th), 0.0], [np.sin(th), np.cos(th), 0.0], [0.0, 0.0, 1.0]]
+    )
     trans = np.array([box_ox - 2.0, 5.0, -3.0])
     lines_in = orig.read_text().splitlines()
     out = ["t = 0", f"b = {box_ox:.6f} {box_ox:.6f} {box_ox:.6f}", "E = 0 0 0"]
@@ -2814,14 +3519,16 @@ def test_read_configuration_unwrapped(design, geometry, tmp_path):
         p = ln.split()
         pos = rot @ np.array([float(p[0]), float(p[1]), float(p[2])]) + trans
         for i in range(3):
-            p[i] = f"{pos[i] % box_ox:.6f}"   # rotate + translate + wrap
+            p[i] = f"{pos[i] % box_ox:.6f}"  # rotate + translate + wrap
         out.append(" ".join(p))
     wrapped = tmp_path / "wrapped.dat"
     wrapped.write_text("\n".join(out) + "\n")
 
     raw = read_configuration_full(wrapped, design)
     R = np.array([v["backbone_position"] for v in raw.values()])
-    assert (R.max(0) - R.min(0)).max() > (O.max(0) - O.min(0)).max() * 1.5  # wrapped = exploded
+    assert (R.max(0) - R.min(0)).max() > (
+        O.max(0) - O.min(0)
+    ).max() * 1.5  # wrapped = exploded
 
     unw = read_configuration_unwrapped(wrapped, design, orig)
     U = np.array([unw[k]["backbone_position"] for k in orig_map])
@@ -2835,8 +3542,12 @@ def test_read_configuration_unwrapped(design, geometry, tmp_path):
     # frame — still rotated relative to the design (no Kabsch re-pose).
     noal = read_configuration_unwrapped(wrapped, design, orig, align=False)
     N = np.array([noal[k]["backbone_position"] for k in orig_map])
-    assert (N.max(0) - N.min(0)).max() < (O.max(0) - O.min(0)).max() * 1.5  # gathered, not exploded
-    assert float(np.sqrt(((N - O) ** 2).sum(1).mean())) > 1.0               # NOT superposed onto design
+    assert (N.max(0) - N.min(0)).max() < (
+        O.max(0) - O.min(0)
+    ).max() * 1.5  # gathered, not exploded
+    assert (
+        float(np.sqrt(((N - O) ** 2).sum(1).mean())) > 1.0
+    )  # NOT superposed onto design
 
 
 def test_oxdna_backbone_site_widens_duplex():
@@ -2844,22 +3555,26 @@ def test_oxdna_backbone_site_widens_duplex():
     inward — so paired backbones come out wider than the raw CM-CM (otherwise the
     rendered duplex collapses and the base-pair slabs overlap)."""
     from backend.physics.oxdna_interface import oxdna_backbone_site
+
     cm_f, cm_r = np.array([0.0, 0, 0]), np.array([1.04, 0, 0])
-    a1_f, a1_r = np.array([1.0, 0, 0]), np.array([-1.0, 0, 0])   # a1 toward partner
+    a1_f, a1_r = np.array([1.0, 0, 0]), np.array([-1.0, 0, 0])  # a1 toward partner
     a3 = np.array([0.0, 0, 1.0])
     bb_f = oxdna_backbone_site(cm_f, a1_f, a3)
     bb_r = oxdna_backbone_site(cm_r, a1_r, a3)
     d_cm = float(np.linalg.norm(cm_f - cm_r))
     d_bb = float(np.linalg.norm(bb_f - bb_r))
-    assert d_bb > d_cm * 1.3          # backbones meaningfully wider than CMs
-    assert 1.4 < d_bb < 2.0           # ≈ real DNA backbone-backbone
+    assert d_bb > d_cm * 1.3  # backbones meaningfully wider than CMs
+    assert 1.4 < d_bb < 2.0  # ≈ real DNA backbone-backbone
 
 
 # ── oxdna_health: energy parsing + convergence ────────────────────────────────
 
+
 def test_parse_energy_dat(tmp_path):
     p = tmp_path / "energy.dat"
-    p.write_text("0 -1.50 0.5 -1.0\n1000 -1.55 0.5 -1.05\n# comment\n2000 -1.56 0.5 -1.06\n")
+    p.write_text(
+        "0 -1.50 0.5 -1.0\n1000 -1.55 0.5 -1.05\n# comment\n2000 -1.56 0.5 -1.06\n"
+    )
     samples = parse_energy_dat(p)
     assert len(samples) == 3
     assert samples[0] == (0.0, -1.50)
@@ -2877,25 +3592,33 @@ def test_energy_convergence():
 
 # ── oxdna_health: base-pair metric (oxDNA H-bond geometry) ────────────────────
 
+
 def test_base_pair_retention_formed_vs_broken():
     """The geometric proxy measures actual H-bond-range proximity at the oxDNA base
     site (CM + 0.4·a1), NOT loose partner proximity: a pair is formed only when the
     two base sites are within ~0.8 nm (calibrated to oxDNA's HBList)."""
     from backend.core.oxdna_health import base_pair_retention, OXDNA_BASE_SITE_NM
+
     b = OXDNA_BASE_SITE_NM
     fm = {}
     for i in range(4):
         x = i * 5.0
         # FORWARD base site at x+b; REVERSE base site at (rev_bb − b).
-        fm[("h", i, "FORWARD")] = {"backbone_position": np.array([x, 0.0, 0.0]),
-                                   "a1": np.array([1.0, 0, 0]), "a3": np.array([0, 0, 1.0])}
+        fm[("h", i, "FORWARD")] = {
+            "backbone_position": np.array([x, 0.0, 0.0]),
+            "a1": np.array([1.0, 0, 0]),
+            "a3": np.array([0, 0, 1.0]),
+        }
         # i<3 → base sites coincide (bonded); i==3 → 5 nm apart (broken).
         rev_bb = x + 2 * b if i < 3 else x + 5.0
-        fm[("h", i, "REVERSE")] = {"backbone_position": np.array([rev_bb, 0.0, 0.0]),
-                                   "a1": np.array([-1.0, 0, 0]), "a3": np.array([0, 0, -1.0])}
+        fm[("h", i, "REVERSE")] = {
+            "backbone_position": np.array([rev_bb, 0.0, 0.0]),
+            "a1": np.array([-1.0, 0, 0]),
+            "a3": np.array([0, 0, -1.0]),
+        }
     frac, n = base_pair_retention(None, fm)
     assert n == 4
-    assert frac == 0.75          # 3 of 4 within H-bond range
+    assert frac == 0.75  # 3 of 4 within H-bond range
 
 
 def test_bp_metric_low_on_unrelaxed_nadoc_geometry(design, geometry, tmp_path):
@@ -2907,7 +3630,7 @@ def test_bp_metric_low_on_unrelaxed_nadoc_geometry(design, geometry, tmp_path):
     full_map = read_configuration_full(conf, design)
     frac, n_pairs = base_pair_retention(design, full_map)
     assert n_pairs > 0
-    assert frac < 0.1            # NADOC geometry is not oxDNA-bonded
+    assert frac < 0.1  # NADOC geometry is not oxDNA-bonded
 
     max_d, n_clash = max_backbone_stretch(design, full_map)
     assert max_d < 1.5
@@ -2927,7 +3650,7 @@ def test_bp_retention_drops_when_melted(design, geometry, tmp_path):
 
 # ── Mock oxDNA binary ─────────────────────────────────────────────────────────
 
-_MOCK_OXDNA = '''#!/usr/bin/env python3
+_MOCK_OXDNA = """#!/usr/bin/env python3
 import sys, re, shutil
 from pathlib import Path
 inp = Path(sys.argv[1])
@@ -2945,7 +3668,7 @@ n = max(1, steps // 100)
 with open(cwd / energy, "w") as f:
     for i in range(n):
         f.write(f"{i} {-1.5 - 0.001*i} 0.5 -1.0\\n")
-'''
+"""
 
 
 @pytest.fixture
@@ -2969,19 +3692,25 @@ def _wait_terminal(job_id, workspace, timeout=30.0):
 
 # ── End-to-end runner orchestration (mock binary) ─────────────────────────────
 
+
 def test_runner_end_to_end(design, geometry, tmp_path, mock_oxdna):
     from backend.core import oxdna_runner
 
     # min_bp_retained=0: the mock copies the unrelaxed conf (no real H-bonds), so
     # this test validates the ORCHESTRATION (staging, sequential runs, completion),
     # not bp quality (the gate is covered by test_runner_gate_fails_on_melted).
-    specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100,
-                                    min_bp_retained=0.0)
+    specs = build_relaxation_stages(
+        mc_steps=100, md_relax_steps=100, equil_steps=100, min_bp_retained=0.0
+    )
     # retries=0: the mock copies the UNRELAXED conf (never equil-ready), so the escalate
     # loop would otherwise spin to exhaustion — this test validates ORCHESTRATION, and
     # the capped equil completes the under-relaxed structure without crashing.
-    job = new_oxdna_job("6hb", [s.to_status() for s in specs], n_nucleotides=len(geometry),
-                        max_relax_retries=0)
+    job = new_oxdna_job(
+        "6hb",
+        [s.to_status() for s in specs],
+        n_nucleotides=len(geometry),
+        max_relax_retries=0,
+    )
     oxdna_runner.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
 
     # Files staged.
@@ -2990,7 +3719,7 @@ def test_runner_end_to_end(design, geometry, tmp_path, mock_oxdna):
     assert (jd / "conf.dat").exists()
     assert (jd / "design.json").exists()
     assert (jd / "stages_spec.json").exists()
-    assert (jd / "forces.txt").exists()          # mutual-trap external forces
+    assert (jd / "forces.txt").exists()  # mutual-trap external forces
 
     job.status = OxdnaStatus.queued
     job.save(tmp_path)
@@ -3018,7 +3747,7 @@ def test_runner_gate_fails_on_melted(design, geometry, tmp_path, monkeypatch):
 
     # Mock that writes a MELTED last_conf (reverse strands shoved away).
     melt = tmp_path / "melt_oxdna.py"
-    melt.write_text('''#!/usr/bin/env python3
+    melt.write_text("""#!/usr/bin/env python3
 import sys, re
 from pathlib import Path
 inp = Path(sys.argv[1]); text = inp.read_text()
@@ -3038,13 +3767,16 @@ for ln in lines:
     out.append(" ".join(p)); i += 1
 (cwd/"last_conf.dat").write_text("\\n".join(out)+"\\n")
 (cwd/"energy.dat").write_text("0 -1.0 0.5 -0.5\\n")
-''')
+""")
     melt.chmod(melt.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     monkeypatch.setenv("OXDNA_BIN", str(melt))
 
-    specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100,
-                                    min_bp_retained=0.80)
-    job = new_oxdna_job("6hb", [s.to_status() for s in specs], n_nucleotides=len(geometry))
+    specs = build_relaxation_stages(
+        mc_steps=100, md_relax_steps=100, equil_steps=100, min_bp_retained=0.80
+    )
+    job = new_oxdna_job(
+        "6hb", [s.to_status() for s in specs], n_nucleotides=len(geometry)
+    )
     oxdna_runner.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
     job.status = OxdnaStatus.queued
     job.save(tmp_path)
@@ -3059,6 +3791,7 @@ for ln in lines:
 
 # ── FENE equil-readiness + escalate-and-retry ─────────────────────────────────
 
+
 def test_escalate_md_relax_spec_schedule():
     """Each retry is longer + smaller dt + a stronger cap, derived from the ORIGINAL
     spec (never compounded)."""
@@ -3070,7 +3803,11 @@ def test_escalate_md_relax_spec_schedule():
     a3 = escalate_md_relax_spec(base, 3)
     assert (a1.steps, a2.steps, a3.steps) == (3000, 6000, 10000)
     assert a1.dt == a2.dt == a3.dt == 0.001
-    assert (a1.max_backbone_force, a2.max_backbone_force, a3.max_backbone_force) == (20.0, 50.0, 100.0)
+    assert (a1.max_backbone_force, a2.max_backbone_force, a3.max_backbone_force) == (
+        20.0,
+        50.0,
+        100.0,
+    )
     assert a3.max_backbone_force_far == 200.0
     # Derived from base, not compounded: base is untouched.
     assert base.steps == 1000 and base.dt == 0.002
@@ -3092,7 +3829,9 @@ def test_backbone_fene_stretch_is_site_based(design, geometry, tmp_path):
     full_map = read_configuration_full(conf, design)
 
     max_units, n_over = backbone_fene_stretch(design, full_map)
-    assert max_units > FENE_RMAX_UNITS and n_over > 0   # ideal geometry is NOT equil-ready
+    assert (
+        max_units > FENE_RMAX_UNITS and n_over > 0
+    )  # ideal geometry is NOT equil-ready
     # CM-based distance (max_backbone_stretch, nm → units) sits well under the cliff —
     # it would falsely call the same structure safe.
     cm_units = max_backbone_stretch(design, full_map)[0] / OXDNA_LENGTH_UNIT
@@ -3111,27 +3850,35 @@ def test_health_check_flags_not_equil_ready(design, geometry, tmp_path):
     (stage / "energy.dat").write_text("0 -1.0 0.5 -0.5\n")
 
     res = run_oxdna_health_check(design, stage, kind="md_relax", min_bp_retained=0.0)
-    assert res.passed is True            # bp gate (0.0) clears
-    assert res.fene_safe is False        # but not ready for an uncapped equil
+    assert res.passed is True  # bp gate (0.0) clears
+    assert res.fene_safe is False  # but not ready for an uncapped equil
     assert res.n_fene_over > 0
     assert "over-stretched" in res.reason
 
 
-def test_runner_retries_then_fails_when_not_equil_ready(design, geometry, tmp_path, mock_oxdna):
+def test_runner_retries_then_fails_when_not_equil_ready(
+    design, geometry, tmp_path, mock_oxdna
+):
     """When md_relax never reaches equil-readiness, the runner escalates the relax up
     to the budget, then fails with a FENE diagnostic — exercising escalate + rewind +
     spec persistence.  (The mock copies the unrelaxed conf, so it is never safe.)"""
     from backend.core import oxdna_runner
 
-    specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100,
-                                    min_bp_retained=0.0)
-    job = new_oxdna_job("6hb", [s.to_status() for s in specs], n_nucleotides=len(geometry),
-                        max_relax_retries=2)
+    specs = build_relaxation_stages(
+        mc_steps=100, md_relax_steps=100, equil_steps=100, min_bp_retained=0.0
+    )
+    job = new_oxdna_job(
+        "6hb",
+        [s.to_status() for s in specs],
+        n_nucleotides=len(geometry),
+        max_relax_retries=2,
+    )
     oxdna_runner.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
     # prepare_oxdna_job now writes an oxDNA-native (FENE-safe) seed; this test needs an
     # over-stretched start so the mock (which just copies the seed) never reaches
     # equil-readiness — overwrite conf.dat with the raw NADOC-wide geometry.
     from backend.physics.oxdna_interface import write_configuration
+
     write_configuration(design, geometry, job.job_dir(tmp_path) / "conf.dat")
     job.status = OxdnaStatus.queued
     job.save(tmp_path)
@@ -3139,8 +3886,8 @@ def test_runner_retries_then_fails_when_not_equil_ready(design, geometry, tmp_pa
 
     done = _wait_terminal(job.job_id, tmp_path)
     assert done.status == OxdnaStatus.failed
-    assert done.relax_retries == 2                 # spent the full budget
-    assert done.stages[1].status == "failed"       # md_relax is the stuck stage
+    assert done.relax_retries == 2  # spent the full budget
+    assert done.stages[1].status == "failed"  # md_relax is the stuck stage
     assert "FENE" in (done.error or "") or "over-stretched" in (done.error or "")
     # The relax spec was escalated (attempt 2 → 6× steps) and persisted for resume.
     persisted = oxdna_runner.load_stage_specs(job.job_dir(tmp_path))
@@ -3168,7 +3915,11 @@ def _sequence_for_oxdna(design):
         keys = []
         for dm in strand.domains:
             lo, hi = min(dm.start_bp, dm.end_bp), max(dm.start_bp, dm.end_bp)
-            rng = range(lo, hi + 1) if dm.direction == Direction.FORWARD else range(hi, lo - 1, -1)
+            rng = (
+                range(lo, hi + 1)
+                if dm.direction == Direction.FORWARD
+                else range(hi, lo - 1, -1)
+            )
             keys.extend((dm.helix_id, bp) for bp in rng)
         return keys
 
@@ -3189,7 +3940,8 @@ def _sequence_for_oxdna(design):
 
 
 @pytest.mark.skipif(
-    __import__("backend.core.oxdna_runner", fromlist=["find_oxdna"]).find_oxdna() is None,
+    __import__("backend.core.oxdna_runner", fromlist=["find_oxdna"]).find_oxdna()
+    is None,
     reason="oxDNA binary not installed (set $OXDNA_BIN or build ~/oxDNA/build/bin/oxDNA)",
 )
 def test_runner_real_binary_status_lifecycle(design, geometry, tmp_path):
@@ -3199,20 +3951,31 @@ def test_runner_real_binary_status_lifecycle(design, geometry, tmp_path):
     from backend.core import oxdna_runner
 
     sequenced = _sequence_for_oxdna(design)
-    geom = __import__("backend.api.crud", fromlist=["_geometry_for_design"])._geometry_for_design(sequenced)
+    geom = __import__(
+        "backend.api.crud", fromlist=["_geometry_for_design"]
+    )._geometry_for_design(sequenced)
 
     # Small step counts for a fast real run; protocol is identical to standard.
     # No bp gate — this test validates the STATUS LIFECYCLE, not physics quality.
     # bp retention now uses oxDNA's real H-bond count, which is genuinely low for a
     # short CPU run, so gating here would be flaky; the gate is covered by the melt
     # test, and bp quality by the manual long run + HBList calibration.
-    specs = build_relaxation_stages(mc_steps=500, md_relax_steps=5000, equil_steps=2000,
-                                    backend="CPU", min_bp_retained=0.0)
+    specs = build_relaxation_stages(
+        mc_steps=500,
+        md_relax_steps=5000,
+        equil_steps=2000,
+        backend="CPU",
+        min_bp_retained=0.0,
+    )
     # retries=0: a short real run is intentionally under-relaxed (not equil-ready); this
     # test validates the STATUS LIFECYCLE, and the capped equil completes it without an
     # escalate loop.  The retry path has its own dedicated test.
-    job = new_oxdna_job("6hb_real", [s.to_status() for s in specs], n_nucleotides=len(geom),
-                        max_relax_retries=0)
+    job = new_oxdna_job(
+        "6hb_real",
+        [s.to_status() for s in specs],
+        n_nucleotides=len(geom),
+        max_relax_retries=0,
+    )
     oxdna_runner.prepare_oxdna_job(sequenced, geom, job, tmp_path, specs)
     job.status = OxdnaStatus.queued
     job.save(tmp_path)
@@ -3252,25 +4015,36 @@ def test_runner_real_binary_status_lifecycle(design, geometry, tmp_path):
     assert md.steps_per_s and md.steps_per_s > 0
 
     # Display path: the relaxed last_conf is readable with orientation.
-    full = read_configuration_full(job.stage_dir(tmp_path, "3_equil") / "last_conf.dat", sequenced)
+    full = read_configuration_full(
+        job.stage_dir(tmp_path, "3_equil") / "last_conf.dat", sequenced
+    )
     assert len(full) == len(geom)
     any_v = next(iter(full.values()))
     assert "a1" in any_v and "backbone_position" in any_v
 
 
 @pytest.mark.skipif(
-    __import__("backend.core.oxdna_runner", fromlist=["find_dnanalysis"]).find_dnanalysis() is None,
+    __import__(
+        "backend.core.oxdna_runner", fromlist=["find_dnanalysis"]
+    ).find_dnanalysis()
+    is None,
     reason="DNAnalysis binary not installed",
 )
 def test_count_hbonds_ground_truth(tmp_path):
     """count_hbonds runs oxDNA's HBList and returns a valid bond count.  On the
     unrelaxed (wide) NADOC geometry oxDNA finds few/no bonds → a small int, never
     the loose-proxy's inflated number."""
-    from backend.physics.oxdna_interface import write_topology, write_configuration, count_hbonds
+    from backend.physics.oxdna_interface import (
+        write_topology,
+        write_configuration,
+        count_hbonds,
+    )
     from backend.core.oxdna_runner import find_dnanalysis
 
     d = _sequence_for_oxdna(make_6hb_design())
-    geom = __import__("backend.api.crud", fromlist=["_geometry_for_design"])._geometry_for_design(d)
+    geom = __import__(
+        "backend.api.crud", fromlist=["_geometry_for_design"]
+    )._geometry_for_design(d)
     write_topology(d, tmp_path / "t.top")
     write_configuration(d, geom, tmp_path / "c.dat")
     n = count_hbonds(tmp_path / "c.dat", tmp_path / "t.top", find_dnanalysis())
@@ -3282,14 +4056,17 @@ def test_count_hbonds_ground_truth(tmp_path):
 # guard, and (with a real binary) the full create → monitor → finish → display
 # flow over HTTP.
 
+
 def _set_active_design(d):
     from backend.api import state as design_state
+
     design_state.set_design(d)
 
 
 def test_oxdna_available_route():
     from fastapi.testclient import TestClient
     from backend.api.main import app
+
     r = TestClient(app).get("/api/oxdna/available")
     assert r.status_code == 200
     body = r.json()
@@ -3302,8 +4079,10 @@ def test_oxdna_create_rejects_unsequenced(monkeypatch, tmp_path):
     import backend.api.routes_oxdna as routes_oxdna
 
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
-    _set_active_design(make_6hb_design())   # unsequenced → all 'N'
-    r = TestClient(app).post("/api/oxdna/jobs", json={"backend": "CPU", "autostart": False})
+    _set_active_design(make_6hb_design())  # unsequenced → all 'N'
+    r = TestClient(app).post(
+        "/api/oxdna/jobs", json={"backend": "CPU", "autostart": False}
+    )
     assert r.status_code == 400
     assert "sequence" in r.json()["detail"].lower()
 
@@ -3319,12 +4098,16 @@ def test_oxdna_create_rejects_deregistered_sequences(monkeypatch, tmp_path):
     import backend.api.routes_oxdna as routes_oxdna
 
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
-    d = _sequence_for_oxdna(make_18hb_design(120))   # fully sequenced, complementary
-    for h in d.helices:                              # skips AFTER sequencing → de-register
-        h.loop_skips = [LoopSkip(bp_index=h.bp_start + h.length_bp // 3 * (k + 1), delta=-1)
-                        for k in range(3)]
+    d = _sequence_for_oxdna(make_18hb_design(120))  # fully sequenced, complementary
+    for h in d.helices:  # skips AFTER sequencing → de-register
+        h.loop_skips = [
+            LoopSkip(bp_index=h.bp_start + h.length_bp // 3 * (k + 1), delta=-1)
+            for k in range(3)
+        ]
     _set_active_design(d)
-    r = TestClient(app).post("/api/oxdna/jobs", json={"backend": "CPU", "autostart": False})
+    r = TestClient(app).post(
+        "/api/oxdna/jobs", json={"backend": "CPU", "autostart": False}
+    )
     assert r.status_code == 400
     detail = r.json()["detail"].lower()
     assert "complementary" in detail and "assign sequences" in detail
@@ -3344,14 +4127,16 @@ def test_oxdna_create_counts_strand_nucleotides_not_lattice(monkeypatch, tmp_pat
 
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
     d = _sequence_for_oxdna(make_6hb_design())
-    d.helices[0].length_bp += 60          # add empty lattice slots (no strands there)
+    d.helices[0].length_bp += 60  # add empty lattice slots (no strands there)
     _set_active_design(d)
 
     n_strand = len(_strand_nucleotide_order(d))
     n_geom = len(_geometry_for_design(d))
-    assert n_geom == n_strand             # empty slots no longer inflate — no ghost bases
+    assert n_geom == n_strand  # empty slots no longer inflate — no ghost bases
 
-    created = TestClient(app).post("/api/oxdna/jobs", json={"backend": "CPU", "autostart": False})
+    created = TestClient(app).post(
+        "/api/oxdna/jobs", json={"backend": "CPU", "autostart": False}
+    )
     assert created.status_code == 200, created.text
     assert created.json()["n_nucleotides"] == n_strand
 
@@ -3363,13 +4148,15 @@ def _full_seq(strand, base="A"):
 
 def test_count_undefined_bases_all_unsequenced():
     from backend.physics.oxdna_interface import count_undefined_bases
+
     undef, total = count_undefined_bases(make_6hb_design())
     assert total > 0
-    assert undef == total          # every base is 'N'
+    assert undef == total  # every base is 'N'
 
 
 def test_count_undefined_bases_fully_sequenced():
     from backend.physics.oxdna_interface import count_undefined_bases
+
     d = make_6hb_design()
     for s in d.strands:
         s.sequence = _full_seq(s)
@@ -3380,8 +4167,9 @@ def test_count_undefined_bases_fully_sequenced():
 
 def test_count_undefined_bases_partial():
     from backend.physics.oxdna_interface import count_undefined_bases
+
     d = make_6hb_design()
-    for s in d.strands[1:]:         # leave the first strand unsequenced
+    for s in d.strands[1:]:  # leave the first strand unsequenced
         s.sequence = _full_seq(s)
     undef, total = count_undefined_bases(d)
     assert 0 < undef < total
@@ -3389,10 +4177,11 @@ def test_count_undefined_bases_partial():
 
 def test_count_undefined_bases_excludes_reference():
     from backend.physics.oxdna_interface import count_undefined_bases
+
     d = make_6hb_design()
     for s in d.strands:
         s.sequence = _full_seq(s)
-    d.strands[0].is_reference = True   # backdrop strand, all 'N'
+    d.strands[0].is_reference = True  # backdrop strand, all 'N'
     d.strands[0].sequence = None
     assert count_undefined_bases(d, exclude_reference=True)[0] == 0
     assert count_undefined_bases(d, exclude_reference=False)[0] > 0
@@ -3407,10 +4196,12 @@ def test_oxdna_create_rejects_partial_sequence(monkeypatch, tmp_path):
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
     monkeypatch.setattr(routes_oxdna, "find_oxdna", lambda: "/fake/oxDNA")
     d = make_6hb_design()
-    for s in d.strands[1:]:            # one strand left unsequenced
+    for s in d.strands[1:]:  # one strand left unsequenced
         s.sequence = _full_seq(s)
     _set_active_design(d)
-    r = TestClient(app).post("/api/oxdna/jobs", json={"backend": "CPU", "autostart": False})
+    r = TestClient(app).post(
+        "/api/oxdna/jobs", json={"backend": "CPU", "autostart": False}
+    )
     assert r.status_code == 400
     assert "undefined base" in r.json()["detail"].lower()
 
@@ -3423,9 +4214,11 @@ def test_oxdna_production_requires_completed(monkeypatch, tmp_path):
 
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
     specs = build_relaxation_stages()
-    job = new_oxdna_job("d", [s.to_status() for s in specs])   # status=queued
+    job = new_oxdna_job("d", [s.to_status() for s in specs])  # status=queued
     job.save(tmp_path)
-    r = TestClient(app).post(f"/api/oxdna/jobs/{job.job_id}/production", json={"steps": 1000})
+    r = TestClient(app).post(
+        f"/api/oxdna/jobs/{job.job_id}/production", json={"steps": 1000}
+    )
     assert r.status_code == 400
     assert "completed" in r.json()["detail"].lower()
 
@@ -3438,7 +4231,7 @@ def test_oxdna_rmsd_not_ready_without_production(monkeypatch, tmp_path):
 
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
     specs = build_relaxation_stages()
-    job = new_oxdna_job("d", [s.to_status() for s in specs])   # relax stages only
+    job = new_oxdna_job("d", [s.to_status() for s in specs])  # relax stages only
     job.save(tmp_path)
     r = TestClient(app).get(f"/api/oxdna/jobs/{job.job_id}/rmsd")
     assert r.status_code == 200
@@ -3472,7 +4265,9 @@ def test_oxdna_rmsf_gating_before_frames(monkeypatch, tmp_path):
     assert r2["ready"] is False and r2["reason"] == "sampling starting — no frames yet"
 
 
-def test_oxdna_rmsf_available_mid_run_with_confidence(monkeypatch, tmp_path, design, geometry):
+def test_oxdna_rmsf_available_mid_run_with_confidence(
+    monkeypatch, tmp_path, design, geometry
+):
     """As soon as a STILL-RUNNING production stage has written frames, the map is
     available (not blocked) and carries a confidence block flagging it preliminary."""
     from fastapi.testclient import TestClient
@@ -3502,10 +4297,10 @@ def test_oxdna_rmsf_available_mid_run_with_confidence(monkeypatch, tmp_path, des
 
     r = TestClient(app).get(f"/api/oxdna/jobs/{job.job_id}/rmsf").json()
     assert r["ready"] is True
-    assert r["n_frames"] == 5                        # 2 archived + 3 current pooled
+    assert r["n_frames"] == 5  # 2 archived + 3 current pooled
     assert r["production_running"] is True
     assert r["confidence"]["n_frames"] == 5
-    assert r["confidence"]["preliminary"] is True   # 5 frames ≪ RMSF_PRELIM_FRAMES
+    assert r["confidence"]["preliminary"] is True  # 5 frames ≪ RMSF_PRELIM_FRAMES
     assert r["confidence"]["rel_error"] > 0
 
 
@@ -3521,12 +4316,13 @@ def test_rmsf_confidence_metric():
     many = rmsf_confidence(2000)
     assert few["preliminary"] is True
     assert many["preliminary"] is False
-    assert many["rel_error"] < few["rel_error"]            # more frames → tighter
+    assert many["rel_error"] < few["rel_error"]  # more frames → tighter
     assert rmsf_confidence(RMSF_PRELIM_FRAMES)["preliminary"] is False
 
 
 @pytest.mark.skipif(
-    __import__("backend.core.oxdna_runner", fromlist=["find_oxdna"]).find_oxdna() is None,
+    __import__("backend.core.oxdna_runner", fromlist=["find_oxdna"]).find_oxdna()
+    is None,
     reason="oxDNA binary not installed",
 )
 def test_oxdna_job_name_from_source_path(monkeypatch, tmp_path):
@@ -3540,16 +4336,21 @@ def test_oxdna_job_name_from_source_path(monkeypatch, tmp_path):
     d = _sequence_for_oxdna(make_6hb_design())
     d.metadata.name = "stale_old_name"
     _set_active_design(d)
-    r = TestClient(app).post("/api/oxdna/jobs", json={
-        "backend": "CPU", "autostart": False,
-        "design_source_path": "/ws/6hb_OxDNA_test.nadoc",
-    })
+    r = TestClient(app).post(
+        "/api/oxdna/jobs",
+        json={
+            "backend": "CPU",
+            "autostart": False,
+            "design_source_path": "/ws/6hb_OxDNA_test.nadoc",
+        },
+    )
     assert r.status_code == 200, r.text
     assert r.json()["design_name"] == "6hb_OxDNA_test"
 
 
 @pytest.mark.skipif(
-    __import__("backend.core.oxdna_runner", fromlist=["find_oxdna"]).find_oxdna() is None,
+    __import__("backend.core.oxdna_runner", fromlist=["find_oxdna"]).find_oxdna()
+    is None,
     reason="oxDNA binary not installed",
 )
 def test_oxdna_http_lifecycle(monkeypatch, tmp_path):
@@ -3563,10 +4364,18 @@ def test_oxdna_http_lifecycle(monkeypatch, tmp_path):
     _set_active_design(_sequence_for_oxdna(make_6hb_design()))
     client = TestClient(app)
 
-    created = client.post("/api/oxdna/jobs", json={
-        "backend": "CPU", "mc_steps": 500, "md_relax_steps": 5000, "equil_steps": 2000,
-        "min_bp_retained": 0.0, "max_relax_retries": 0, "autostart": True,
-    })
+    created = client.post(
+        "/api/oxdna/jobs",
+        json={
+            "backend": "CPU",
+            "mc_steps": 500,
+            "md_relax_steps": 5000,
+            "equil_steps": 2000,
+            "min_bp_retained": 0.0,
+            "max_relax_retries": 0,
+            "autostart": True,
+        },
+    )
     assert created.status_code == 200, created.text
     job_id = created.json()["job_id"]
 
@@ -3592,7 +4401,15 @@ def test_oxdna_http_lifecycle(monkeypatch, tmp_path):
     assert disp["ready"] is True
     assert disp["n_positions"] > 0
     p0 = disp["positions"][0]
-    assert {"helix_id", "bp_index", "direction", "backbone_position", "nx", "ny", "nz"} <= set(p0)
+    assert {
+        "helix_id",
+        "bp_index",
+        "direction",
+        "backbone_position",
+        "nx",
+        "ny",
+        "nz",
+    } <= set(p0)
 
     # Health endpoint returns per-stage records.
     health = client.get(f"/api/oxdna/jobs/{job_id}/health").json()
@@ -3601,7 +4418,9 @@ def test_oxdna_http_lifecycle(monkeypatch, tmp_path):
     # Production: appends an unbiased MD stage and runs it to completion.
     pr = client.post(f"/api/oxdna/jobs/{job_id}/production", json={"steps": 1000})
     assert pr.status_code == 200, pr.text
-    deadline = time.time() + 300  # wide ceiling for parallel-xdist contention (see above)
+    deadline = (
+        time.time() + 300
+    )  # wide ceiling for parallel-xdist contention (see above)
     while time.time() < deadline:
         s = client.get(f"/api/oxdna/jobs/{job_id}").json()
         if s["status"] in ("completed", "failed", "stopped"):
@@ -3609,7 +4428,12 @@ def test_oxdna_http_lifecycle(monkeypatch, tmp_path):
         time.sleep(0.3)
     final = client.get(f"/api/oxdna/jobs/{job_id}").json()
     assert final["status"] == "completed", final
-    assert [st["kind"] for st in final["stages"]] == ["mc", "md_relax", "equil", "production"]
+    assert [st["kind"] for st in final["stages"]] == [
+        "mc",
+        "md_relax",
+        "equil",
+        "production",
+    ]
     assert final["stages"][-1]["status"] == "done"
 
 
@@ -3617,12 +4441,14 @@ def test_oxdna_http_lifecycle(monkeypatch, tmp_path):
 # build_namd_seed reconstructs a NAMD starting structure from a completed oxDNA
 # job's OWN design.json + latest relaxed last_conf, using the true backbone site.
 
+
 def _stage_a_relaxed_job(tmp_path, design, geometry, *, write_conf=True):
     """Create an oxDNA job dir with a design.json snapshot and (optionally) a
     relaxed last_conf.dat in the final stage — the inputs build_namd_seed reads."""
     specs = build_relaxation_stages()
-    job = new_oxdna_job("seed_src", [s.to_status() for s in specs],
-                        n_nucleotides=len(geometry))
+    job = new_oxdna_job(
+        "seed_src", [s.to_status() for s in specs], n_nucleotides=len(geometry)
+    )
     job.status = OxdnaStatus.completed
     job.save(tmp_path)
     jd = job.job_dir(tmp_path)
@@ -3642,7 +4468,9 @@ def test_build_namd_seed_uses_snapshot_and_backbone_site(tmp_path, geometry):
     from backend.core.oxdna_runner import build_namd_seed
 
     design = _sequence_for_oxdna(make_6hb_design())
-    geom = __import__("backend.api.crud", fromlist=["_geometry_for_design"])._geometry_for_design(design)
+    geom = __import__(
+        "backend.api.crud", fromlist=["_geometry_for_design"]
+    )._geometry_for_design(design)
     job = _stage_a_relaxed_job(tmp_path, design, geom)
 
     seed = build_namd_seed(job.job_id, tmp_path)
@@ -3658,6 +4486,7 @@ def test_build_namd_seed_uses_snapshot_and_backbone_site(tmp_path, geometry):
     # the collapsed ~1.0 nm CM that would clash at NAMD startup.
     from backend.core.cg_to_atomistic import read_backbone_positions
     from backend.physics.oxdna_interface import read_configuration
+
     bb = read_backbone_positions(seed.conf_path, design)
     cm = read_configuration(seed.conf_path, design)
     # Find any designed WC pair present in both maps.
@@ -3678,7 +4507,9 @@ def test_build_namd_seed_recenters_far_from_origin_conf(tmp_path):
     from backend.core.oxdna_runner import build_namd_seed
 
     design = _sequence_for_oxdna(make_6hb_design())
-    geom = __import__("backend.api.crud", fromlist=["_geometry_for_design"])._geometry_for_design(design)
+    geom = __import__(
+        "backend.api.crud", fromlist=["_geometry_for_design"]
+    )._geometry_for_design(design)
     job = _stage_a_relaxed_job(tmp_path, design, geom)
 
     # Shove the staged last_conf.dat +600 nm along every axis (mimics COM diffusion).
@@ -3710,7 +4541,9 @@ def test_build_namd_seed_missing_conf_raises(tmp_path, geometry):
     from backend.core.oxdna_runner import build_namd_seed
 
     design = _sequence_for_oxdna(make_6hb_design())
-    geom = __import__("backend.api.crud", fromlist=["_geometry_for_design"])._geometry_for_design(design)
+    geom = __import__(
+        "backend.api.crud", fromlist=["_geometry_for_design"]
+    )._geometry_for_design(design)
     job = _stage_a_relaxed_job(tmp_path, design, geom, write_conf=False)
     with pytest.raises(FileNotFoundError):
         build_namd_seed(job.job_id, tmp_path)
@@ -3721,7 +4554,11 @@ def _write_detached_job(tmp_path, *, production=True, production_complete=True):
     relax stages have complete energy.dat + last_conf; the trailing stage's
     completeness is controlled by `production_complete`."""
     from dataclasses import asdict
-    from backend.core.oxdna_protocol import build_production_stage, expected_energy_lines
+    from backend.core.oxdna_protocol import (
+        build_production_stage,
+        expected_energy_lines,
+    )
+
     specs = list(build_relaxation_stages())
     if production:
         specs.append(build_production_stage(steps=1000))
@@ -3741,7 +4578,7 @@ def _write_detached_job(tmp_path, *, production=True, production_complete=True):
     for i, spec in enumerate(specs):
         sdir = job.stage_dir(tmp_path, job.stages[i].name)
         sdir.mkdir(parents=True, exist_ok=True)
-        last = (i == len(specs) - 1)
+        last = i == len(specs) - 1
         complete = (not last) or production_complete
         n = expected_energy_lines(spec) + 1 if complete else 1
         sdir.joinpath("energy.dat").write_text(
@@ -3756,6 +4593,7 @@ def test_reconcile_completes_detached_finished_production(tmp_path):
     """A finished production whose runner thread died (status stuck at running) is
     recovered to completed with the production stage marked done."""
     from backend.core.oxdna_runner import reconcile_oxdna_status
+
     job = _write_detached_job(tmp_path, production=True, production_complete=True)
     out = reconcile_oxdna_status(OxdnaJob.load(job.job_id, tmp_path), tmp_path)
     assert out.status == OxdnaStatus.completed
@@ -3769,6 +4607,7 @@ def test_reconcile_interrupted_midstage_to_stopped(tmp_path):
     """A run interrupted partway through a stage (energy.dat incomplete, no
     last_conf) is recovered to stopped, not falsely completed."""
     from backend.core.oxdna_runner import reconcile_oxdna_status
+
     job = _write_detached_job(tmp_path, production=True, production_complete=False)
     out = reconcile_oxdna_status(OxdnaJob.load(job.job_id, tmp_path), tmp_path)
     assert out.status == OxdnaStatus.stopped
@@ -3779,11 +4618,12 @@ def test_reconcile_keeps_running_when_process_still_alive(monkeypatch, tmp_path)
     """An orphaned-but-alive oxDNA process (e.g. detached by a dev-server reload)
     must NOT be mislabeled stopped — the /proc detection keeps it running."""
     import backend.core.oxdna_runner as runner
+
     job = _write_detached_job(tmp_path, production=True, production_complete=False)
     # Simulate the still-running orphan that the in-memory registry lost.
     monkeypatch.setattr(runner, "_external_oxdna_running", lambda j, w: True)
     out = runner.reconcile_oxdna_status(OxdnaJob.load(job.job_id, tmp_path), tmp_path)
-    assert out.status == OxdnaStatus.running          # left running, not stopped
+    assert out.status == OxdnaStatus.running  # left running, not stopped
     assert OxdnaJob.load(job.job_id, tmp_path).status == OxdnaStatus.running
 
 
@@ -3791,13 +4631,16 @@ def test_stop_orphan_kills_external_pid_and_marks_stopped(monkeypatch, tmp_path)
     """An oxDNA run orphaned by a server restart (no in-memory runner) must still be
     stoppable: stop_job finds the detached PID via /proc and kills it."""
     import backend.core.oxdna_runner as runner
+
     specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100)
     job = new_oxdna_job("d", [s.to_status() for s in specs])
     job.status = OxdnaStatus.running
     job.save(tmp_path)
     killed = []
     monkeypatch.setattr(runner, "_external_oxdna_pid", lambda j, w: 5151)
-    monkeypatch.setattr(runner, "_kill_process_group", lambda pid, **k: killed.append(pid))
+    monkeypatch.setattr(
+        runner, "_kill_process_group", lambda pid, **k: killed.append(pid)
+    )
 
     assert runner.stop_job(job.job_id, tmp_path) is True
     assert killed == [5151]
@@ -3809,6 +4652,7 @@ def test_stop_orphan_kills_external_pid_and_marks_stopped(monkeypatch, tmp_path)
 def test_stop_orphan_falls_back_to_persisted_pid(monkeypatch, tmp_path):
     """When the /proc scan misses, stop_job uses the persisted oxdna_pid (verified live)."""
     import backend.core.oxdna_runner as runner
+
     specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100)
     job = new_oxdna_job("d", [s.to_status() for s in specs])
     job.status = OxdnaStatus.running
@@ -3817,7 +4661,9 @@ def test_stop_orphan_falls_back_to_persisted_pid(monkeypatch, tmp_path):
     killed = []
     monkeypatch.setattr(runner, "_external_oxdna_pid", lambda j, w: None)
     monkeypatch.setattr(runner, "_pid_is_oxdna", lambda pid: True)
-    monkeypatch.setattr(runner, "_kill_process_group", lambda pid, **k: killed.append(pid))
+    monkeypatch.setattr(
+        runner, "_kill_process_group", lambda pid, **k: killed.append(pid)
+    )
 
     assert runner.stop_job(job.job_id, tmp_path) is True
     assert killed == [8888]
@@ -3826,13 +4672,16 @@ def test_stop_orphan_falls_back_to_persisted_pid(monkeypatch, tmp_path):
 def test_stop_no_orphan_returns_false(monkeypatch, tmp_path):
     """No live runner, no /proc match, no persisted PID → nothing to stop."""
     import backend.core.oxdna_runner as runner
+
     specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100)
     job = new_oxdna_job("d", [s.to_status() for s in specs])
     job.status = OxdnaStatus.running
     job.save(tmp_path)
     killed = []
     monkeypatch.setattr(runner, "_external_oxdna_pid", lambda j, w: None)
-    monkeypatch.setattr(runner, "_kill_process_group", lambda pid, **k: killed.append(pid))
+    monkeypatch.setattr(
+        runner, "_kill_process_group", lambda pid, **k: killed.append(pid)
+    )
     assert runner.stop_job(job.job_id, tmp_path) is False
     assert killed == []
 
@@ -3841,45 +4690,64 @@ def test_starting_conf_resumes_from_own_checkpoint(tmp_path):
     """Resume continues from the killed stage's OWN checkpoint last_conf.dat
     (keeps simulated progress), not the previous stage / design conf."""
     from backend.core import oxdna_runner
+
     specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100)
     job = new_oxdna_job("d", [s.to_status() for s in specs])
     job.save(tmp_path)
 
-    s0 = job.stage_dir(tmp_path, specs[0].name); s0.mkdir(parents=True, exist_ok=True)
+    s0 = job.stage_dir(tmp_path, specs[0].name)
+    s0.mkdir(parents=True, exist_ok=True)
     (s0 / "last_conf.dat").write_text("prev\n")
-    s1 = job.stage_dir(tmp_path, specs[1].name); s1.mkdir(parents=True, exist_ok=True)
-    (s1 / "last_conf.dat").write_text("t 0\nb 1 1 1\nE 0 0 0\n")   # partial checkpoint
+    s1 = job.stage_dir(tmp_path, specs[1].name)
+    s1.mkdir(parents=True, exist_ok=True)
+    (s1 / "last_conf.dat").write_text("t 0\nb 1 1 1\nE 0 0 0\n")  # partial checkpoint
 
     # Resuming AT the interrupted stage → its own checkpoint (progress kept).
-    assert oxdna_runner._starting_conf(job, tmp_path, specs, 1, 1) == (s1 / "last_conf.dat").resolve()
+    assert (
+        oxdna_runner._starting_conf(job, tmp_path, specs, 1, 1)
+        == (s1 / "last_conf.dat").resolve()
+    )
     # A downstream stage (not the resume point) chains from the previous stage.
-    assert oxdna_runner._starting_conf(job, tmp_path, specs, 2, 1) == (s1 / "last_conf.dat").resolve()
+    assert (
+        oxdna_runner._starting_conf(job, tmp_path, specs, 2, 1)
+        == (s1 / "last_conf.dat").resolve()
+    )
     # An EMPTY checkpoint is ignored → restart from the previous stage's last_conf.
     (s1 / "last_conf.dat").write_text("")
-    assert oxdna_runner._starting_conf(job, tmp_path, specs, 1, 1) == (s0 / "last_conf.dat").resolve()
+    assert (
+        oxdna_runner._starting_conf(job, tmp_path, specs, 1, 1)
+        == (s0 / "last_conf.dat").resolve()
+    )
     # Stage 0 with no checkpoint → the design conf.
     (s0 / "last_conf.dat").unlink()
-    assert oxdna_runner._starting_conf(job, tmp_path, specs, 0, 0) == (job.job_dir(tmp_path) / "conf.dat").resolve()
+    assert (
+        oxdna_runner._starting_conf(job, tmp_path, specs, 0, 0)
+        == (job.job_dir(tmp_path) / "conf.dat").resolve()
+    )
 
 
 def test_archive_partial_outputs_preserves_frames(tmp_path):
     """Resuming a stage archives its partial trajectory/energy (so the sampled
     frames survive oxDNA's truncate-on-open) — last_conf is left as the checkpoint."""
     from backend.core.oxdna_runner import _archive_partial_outputs
-    sdir = tmp_path / "5_production"; sdir.mkdir()
+
+    sdir = tmp_path / "5_production"
+    sdir.mkdir()
     (sdir / "trajectory.dat").write_text("frames-A\n")
     (sdir / "energy.dat").write_text("0 -1.5 0.5 -1.0\n")
     (sdir / "last_conf.dat").write_text("checkpoint\n")
 
     archived = _archive_partial_outputs(sdir)
     assert set(archived) == {"trajectory.r1.dat", "energy.r1.dat"}
-    assert not (sdir / "trajectory.dat").exists()           # moved aside
+    assert not (sdir / "trajectory.dat").exists()  # moved aside
     assert (sdir / "trajectory.r1.dat").read_text() == "frames-A\n"
-    assert (sdir / "last_conf.dat").read_text() == "checkpoint\n"   # checkpoint untouched
+    assert (
+        sdir / "last_conf.dat"
+    ).read_text() == "checkpoint\n"  # checkpoint untouched
 
     # A second resume bumps the index; an empty file is skipped.
     (sdir / "trajectory.dat").write_text("frames-B\n")
-    (sdir / "energy.dat").write_text("")                    # empty → not archived
+    (sdir / "energy.dat").write_text("")  # empty → not archived
     archived2 = _archive_partial_outputs(sdir)
     assert archived2 == ["trajectory.r2.dat"]
     assert (sdir / "trajectory.r2.dat").read_text() == "frames-B\n"
@@ -3889,11 +4757,13 @@ def test_stage_trajectories_chronological_order(tmp_path):
     """_stage_trajectories returns archived resume parts (oldest→newest) then the
     current trajectory.dat, skipping empties — so playback scrubs in time order."""
     from backend.api.routes_oxdna import _stage_trajectories
-    sdir = tmp_path / "5_production"; sdir.mkdir()
+
+    sdir = tmp_path / "5_production"
+    sdir.mkdir()
     (sdir / "trajectory.r1.dat").write_text("a\n")
     (sdir / "trajectory.r2.dat").write_text("b\n")
     (sdir / "trajectory.dat").write_text("c\n")
-    (sdir / "trajectory.r3.dat").write_text("")             # empty → skipped
+    (sdir / "trajectory.r3.dat").write_text("")  # empty → skipped
     names = [p.name for p in _stage_trajectories(sdir)]
     assert names == ["trajectory.r1.dat", "trajectory.r2.dat", "trajectory.dat"]
 
@@ -3901,6 +4771,7 @@ def test_stage_trajectories_chronological_order(tmp_path):
 def test_reconcile_noop_for_terminal_job(tmp_path):
     """Completed/failed jobs are never touched by reconciliation."""
     from backend.core.oxdna_runner import reconcile_oxdna_status
+
     specs = build_relaxation_stages()
     job = new_oxdna_job("done", [s.to_status() for s in specs])
     job.status = OxdnaStatus.completed
@@ -3935,31 +4806,40 @@ def test_md_create_with_bad_oxdna_seed_returns_400(monkeypatch, tmp_path):
     import backend.api.routes_md as routes_md
 
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
-    r = TestClient(app).post("/api/md/jobs", json={
-        "autostart": False,
-        "oxdna_job_id": "does_not_exist",
-    })
+    r = TestClient(app).post(
+        "/api/md/jobs",
+        json={
+            "autostart": False,
+            "oxdna_job_id": "does_not_exist",
+        },
+    )
     assert r.status_code == 400
 
 
 # ── Electric-field forces + anchors + oracle (oxDNA E-field) ──────────────────
 
+
 def test_pn_to_oxdna_force():
     from backend.physics.oxdna_interface import pn_to_oxdna_force, OXDNA_FORCE_PN
+
     assert pn_to_oxdna_force(OXDNA_FORCE_PN) == pytest.approx(1.0)
     assert pn_to_oxdna_force(0) == 0.0
 
 
 def test_resolve_anchor_particles_domain_cluster_unknown(design):
     from backend.physics.oxdna_interface import (
-        resolve_anchor_particles, _strand_nucleotide_order)
+        resolve_anchor_particles,
+        _strand_nucleotide_order,
+    )
+
     order = _strand_nucleotide_order(design)
     # Domain anchor → exactly that domain's nucleotides, valid sorted indices.
     s0 = design.strands[0]
     dom = s0.domains[0]
     n_expected = abs(dom.end_bp - dom.start_bp) + 1
     parts, keys = resolve_anchor_particles(
-        design, [{"kind": "domain", "strand_id": s0.id, "domain_index": 0}])
+        design, [{"kind": "domain", "strand_id": s0.id, "domain_index": 0}]
+    )
     assert len(parts) == n_expected == len(keys)
     assert parts == sorted(parts)
     assert all(0 <= p < len(order) for p in parts)
@@ -3969,41 +4849,57 @@ def test_resolve_anchor_particles_domain_cluster_unknown(design):
     expected_cluster = sum(1 for k in order if k[0] in set(ct.helix_ids))
     assert len(cparts) == expected_cluster > 0
     # Unknown id / kind → nothing (stale selection drops silently, no raise).
-    assert resolve_anchor_particles(design, [{"kind": "overhang", "id": "nope"}]) == ([], [])
+    assert resolve_anchor_particles(design, [{"kind": "overhang", "id": "nope"}]) == (
+        [],
+        [],
+    )
     assert resolve_anchor_particles(design, [{"kind": "bogus"}]) == ([], [])
 
 
 def test_resolve_anchor_particles_strand_and_base(design):
     """Whole-strand (overhang-binding oligo) and individual-base anchor kinds."""
     from backend.physics.oxdna_interface import (
-        resolve_anchor_particles, _strand_nucleotide_order)
+        resolve_anchor_particles,
+        _strand_nucleotide_order,
+    )
+
     order = _strand_nucleotide_order(design)
     s0 = design.strands[0]
 
     # Strand anchor → every nucleotide of that strand; a superset of its domain 0.
     sparts, skeys = resolve_anchor_particles(design, [{"kind": "strand", "id": s0.id}])
     dparts, _ = resolve_anchor_particles(
-        design, [{"kind": "domain", "strand_id": s0.id, "domain_index": 0}])
+        design, [{"kind": "domain", "strand_id": s0.id, "domain_index": 0}]
+    )
     expected_strand = sum(abs(d.end_bp - d.start_bp) + 1 for d in s0.domains)
     assert len(sparts) == expected_strand == len(skeys) > 0
     assert sparts == sorted(sparts)
     assert set(dparts).issubset(set(sparts))
     assert all(0 <= p < len(order) for p in sparts)
     # camelCase / strandId aliases also resolve the strand.
-    assert resolve_anchor_particles(design, [{"kind": "strand", "strandId": s0.id}])[0] == sparts
+    assert (
+        resolve_anchor_particles(design, [{"kind": "strand", "strandId": s0.id}])[0]
+        == sparts
+    )
 
     # Base anchor → the single nucleotide at (helix, bp, direction), all copies.
     k0 = order[0]
     hid, bp, direction = k0[0], k0[1], k0[2]
     bparts, bkeys = resolve_anchor_particles(
-        design, [{"kind": "base", "helix_id": hid, "bp": bp, "direction": direction}])
+        design, [{"kind": "base", "helix_id": hid, "bp": bp, "direction": direction}]
+    )
     assert len(bparts) >= 1 == len({(k[0], k[1], k[2]) for k in bkeys})
     assert all(k[0] == hid and k[1] == bp and k[2] == direction for k in bkeys)
     # camelCase helixId alias resolves too; unknown base drops silently.
+    assert (
+        resolve_anchor_particles(
+            design, [{"kind": "base", "helixId": hid, "bp": bp, "direction": direction}]
+        )[0]
+        == bparts
+    )
     assert resolve_anchor_particles(
-        design, [{"kind": "base", "helixId": hid, "bp": bp, "direction": direction}])[0] == bparts
-    assert resolve_anchor_particles(
-        design, [{"kind": "base", "helix_id": "nope", "bp": 0, "direction": "forward"}]) == ([], [])
+        design, [{"kind": "base", "helix_id": "nope", "bp": 0, "direction": "forward"}]
+    ) == ([], [])
 
 
 def test_field_anchor_preview_route(design, monkeypatch, tmp_path):
@@ -4013,7 +4909,9 @@ def test_field_anchor_preview_route(design, monkeypatch, tmp_path):
     from backend.api.main import app
     import backend.api.routes_oxdna as routes_oxdna
     from backend.physics.oxdna_interface import (
-        resolve_anchor_particles, _strand_nucleotide_order)
+        resolve_anchor_particles,
+        _strand_nucleotide_order,
+    )
 
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
     job = new_oxdna_job("d", [])
@@ -4024,23 +4922,32 @@ def test_field_anchor_preview_route(design, monkeypatch, tmp_path):
     s0 = design.strands[0]
     client = TestClient(app)
     # camelCase keys (the frontend's) are accepted via AnchorRef aliases.
-    r = client.post(f"/api/oxdna/jobs/{job.job_id}/field/anchor-preview",
-                    json={"anchors": [{"kind": "domain", "strandId": s0.id, "domainIndex": 0}]})
+    r = client.post(
+        f"/api/oxdna/jobs/{job.job_id}/field/anchor-preview",
+        json={"anchors": [{"kind": "domain", "strandId": s0.id, "domainIndex": 0}]},
+    )
     assert r.status_code == 200, r.text
     body = r.json()
     parts, _ = resolve_anchor_particles(
-        design, [{"kind": "domain", "strand_id": s0.id, "domain_index": 0}])
+        design, [{"kind": "domain", "strand_id": s0.id, "domain_index": 0}]
+    )
     assert body["n_total"] == len(_strand_nucleotide_order(design))
     assert body["n_anchored"] == len(parts) > 0
     # Empty selection → zero anchored (gizmo then falls back to per-nt grading).
-    r2 = client.post(f"/api/oxdna/jobs/{job.job_id}/field/anchor-preview", json={"anchors": []})
+    r2 = client.post(
+        f"/api/oxdna/jobs/{job.job_id}/field/anchor-preview", json={"anchors": []}
+    )
     assert r2.status_code == 200 and r2.json()["n_anchored"] == 0
 
 
 def test_write_field_forces(design, geometry, tmp_path):
     from backend.physics.oxdna_interface import (
-        write_field_forces, write_configuration, resolve_anchor_particles,
-        pn_to_oxdna_force)
+        write_field_forces,
+        write_configuration,
+        resolve_anchor_particles,
+        pn_to_oxdna_force,
+    )
+
     conf = tmp_path / "conf.dat"
     write_configuration(design, geometry, conf)
     s0 = design.strands[0]
@@ -4048,20 +4955,23 @@ def test_write_field_forces(design, geometry, tmp_path):
     parts, _ = resolve_anchor_particles(design, anchors)
     f_ox = pn_to_oxdna_force(2.0)
     out = tmp_path / "field_forces.txt"
-    info = write_field_forces(out, design, conf, field_oxdna=f_ox,
-                              field_dir=[0, 0, 5], anchors=anchors)
+    info = write_field_forces(
+        out, design, conf, field_oxdna=f_ox, field_dir=[0, 0, 5], anchors=anchors
+    )
     text = out.read_text()
     import re
+
     # One uniform field string force over all particles (anchored beads feel it
     # too but their stiff traps hold them — oxDNA rejects range particle-specs).
     assert text.count("type = string") == 1
     assert "particle = -1" in text
     assert f"F0 = {f_ox:.6g}" in text
-    assert "dir = 0,0,1" in text                       # direction normalized
+    assert "dir = 0,0,1" in text  # direction normalized
     # One static trap per anchored nucleotide, with the immobile default stiffness.
     assert text.count("type = trap") == len(parts) == info["n_anchored"]
     from backend.physics.oxdna_interface import DEFAULT_ANCHOR_STIFF
-    assert DEFAULT_ANCHOR_STIFF >= 500     # immobile, not the old soft 5.0
+
+    assert DEFAULT_ANCHOR_STIFF >= 500  # immobile, not the old soft 5.0
     assert f"stiff = {DEFAULT_ANCHOR_STIFF:.6g}" in text
     trap_particles = set(map(int, re.findall(r"type = trap\nparticle = (\d+)", text)))
     assert trap_particles == set(parts)
@@ -4071,14 +4981,21 @@ def test_write_field_forces_returns_anchor_keys(design, geometry, tmp_path):
     """write_field_forces returns the anchored 3-tuple keys (the display's
     positional-alignment frame), one per anchored nucleotide."""
     from backend.physics.oxdna_interface import write_field_forces, write_configuration
-    conf = tmp_path / "conf.dat"; write_configuration(design, geometry, conf)
+
+    conf = tmp_path / "conf.dat"
+    write_configuration(design, geometry, conf)
     s0 = design.strands[0]
-    info = write_field_forces(tmp_path / "f.txt", design, conf, field_oxdna=0.04,
-                              field_dir=[1, 0, 0],
-                              anchors=[{"kind": "domain", "strand_id": s0.id, "domain_index": 0}])
+    info = write_field_forces(
+        tmp_path / "f.txt",
+        design,
+        conf,
+        field_oxdna=0.04,
+        field_dir=[1, 0, 0],
+        anchors=[{"kind": "domain", "strand_id": s0.id, "domain_index": 0}],
+    )
     assert len(info["anchor_keys"]) == info["n_anchored"]
     k0 = info["anchor_keys"][0]
-    assert len(k0) == 3 and k0[2] in ("FORWARD", "REVERSE")   # [helix, bp, direction]
+    assert len(k0) == 3 and k0[2] in ("FORWARD", "REVERSE")  # [helix, bp, direction]
 
 
 def test_field_string_block_particle_selection():
@@ -4086,6 +5003,7 @@ def test_field_string_block_particle_selection():
     it fields only [0, K) via a comma LIST (never a dash range, which oxDNA reads as a
     DNA topology walk) — the mechanism that excludes trailing surface capture beads."""
     from backend.physics.oxdna_interface import field_string_block
+
     assert "particle = -1" in field_string_block(0.04, [0, 0, 1])
     blk = field_string_block(0.04, [0, 0, 1], n_particles=5)
     assert "particle = 0,1,2,3,4" in blk
@@ -4100,8 +5018,12 @@ def test_write_run_forces_field_excludes_trailing_caps(design, geometry, tmp_pat
     the origami particles and drops the trailing capture beads; ON fields everything."""
     import re
     from backend.physics.oxdna_interface import (
-        write_run_forces, write_configuration, pn_to_oxdna_force,
-        read_cm_positions_oxdna)
+        write_run_forces,
+        write_configuration,
+        pn_to_oxdna_force,
+        read_cm_positions_oxdna,
+    )
+
     conf = tmp_path / "conf.dat"
     write_configuration(design, geometry, conf)
     n_total = len(read_cm_positions_oxdna(conf))
@@ -4121,14 +5043,17 @@ def test_write_run_forces_field_excludes_trailing_caps(design, geometry, tmp_pat
     assert "particle = -1" not in text
     K = n_total - 3
     assert m_off["field"]["particle_count"] == K
-    idxs = [int(x) for x in re.search(r"particle = ([0-9,]+)", text).group(1).split(",")]
-    assert idxs == list(range(K))                        # origami only
+    idxs = [
+        int(x) for x in re.search(r"particle = ([0-9,]+)", text).group(1).split(",")
+    ]
+    assert idxs == list(range(K))  # origami only
     assert all(c not in idxs for c in (n_total - 1, n_total - 2, n_total - 3))
 
     # Degenerate excludes (>= n_total) fall back to field-on-all rather than an empty spec.
     allx = tmp_path / "all.txt"
-    m_all = write_run_forces(allx, design, conf, field=field,
-                             field_exclude_trailing=n_total)
+    m_all = write_run_forces(
+        allx, design, conf, field=field, field_exclude_trailing=n_total
+    )
     assert "particle = -1" in allx.read_text()
     assert m_all["field"]["particle_count"] is None
 
@@ -4139,19 +5064,26 @@ def test_unwrap_anchor_positional_no_rotation():
     rest is preserved, not Kabsch-aligned away."""
     from backend.physics.oxdna_interface import unwrap_align_to_reference
     from backend.core.models import Design
+
     box = np.array([100.0, 100.0, 100.0])
 
     def nuc(p):
-        return {"backbone_position": np.array(p, float),
-                "a1": np.array([1.0, 0, 0]), "a3": np.array([0, 0, 1.0])}
+        return {
+            "backbone_position": np.array(p, float),
+            "a1": np.array([1.0, 0, 0]),
+            "a3": np.array([0, 0, 1.0]),
+        }
 
-    kA = ("hA", 0, "FORWARD"); kB = ("hB", 0, "FORWARD"); kF = ("hF", 0, "FORWARD")
+    kA = ("hA", 0, "FORWARD")
+    kB = ("hB", 0, "FORWARD")
+    kF = ("hF", 0, "FORWARD")
     ref = {kA: nuc([0, 0, 0]), kB: nuc([2, 0, 0]), kF: nuc([10, 0, 0])}
     # whole thing drifted +7 in x; the free bead ALSO swung +5 in y.
     relax = {kA: nuc([7, 0, 0]), kB: nuc([9, 0, 0]), kF: nuc([17, 5, 0])}
 
-    out = unwrap_align_to_reference(relax, ref, Design(), box,
-                                    align_keys=[kA, kB], rotate=False)
+    out = unwrap_align_to_reference(
+        relax, ref, Design(), box, align_keys=[kA, kB], rotate=False
+    )
     # Anchors land back on their reference positions (drift removed = positional ref).
     assert np.allclose(out[kA]["backbone_position"], [0, 0, 0], atol=1e-6)
     assert np.allclose(out[kB]["backbone_position"], [2, 0, 0], atol=1e-6)
@@ -4171,13 +5103,19 @@ class _FakeParticle:
         self.orientation = orientation
 
 
-def test_configuration_full_from_particles_matches_file_readout(design, geometry, tmp_path):
+def test_configuration_full_from_particles_matches_file_readout(
+    design, geometry, tmp_path
+):
     """The in-memory live readout (#2) must reproduce read_configuration_full's map
     byte-for-byte: same (helix,bp,dir) keys, a1 = orientation col 0, a3 = col 2, and
     pos in nm (oxDNA units × length unit).  Built GPU-free from a written conf."""
     from backend.physics.oxdna_interface import (
-        OXDNA_LENGTH_UNIT, _strand_nucleotide_order, configuration_full_from_particles,
-        read_configuration_full, write_configuration)
+        OXDNA_LENGTH_UNIT,
+        _strand_nucleotide_order,
+        configuration_full_from_particles,
+        read_configuration_full,
+        write_configuration,
+    )
 
     conf = tmp_path / "c.dat"
     write_configuration(design, geometry, conf, box_nm=80.0)
@@ -4191,12 +5129,16 @@ def test_configuration_full_from_particles_matches_file_readout(design, geometry
         a1, a3 = np.asarray(v["a1"]), np.asarray(v["a3"])
         a2 = np.cross(a3, a1)
         ori = np.column_stack([a1, a2, a3])
-        parts.append(_FakeParticle(np.asarray(v["backbone_position"]) / OXDNA_LENGTH_UNIT, ori))
+        parts.append(
+            _FakeParticle(np.asarray(v["backbone_position"]) / OXDNA_LENGTH_UNIT, ori)
+        )
 
     mem_map = configuration_full_from_particles(parts, design)
     assert set(mem_map) == set(file_map)
     for k in file_map:
-        assert np.allclose(mem_map[k]["backbone_position"], file_map[k]["backbone_position"], atol=1e-9)
+        assert np.allclose(
+            mem_map[k]["backbone_position"], file_map[k]["backbone_position"], atol=1e-9
+        )
         assert np.allclose(mem_map[k]["a1"], file_map[k]["a1"], atol=1e-9)
         assert np.allclose(mem_map[k]["a3"], file_map[k]["a3"], atol=1e-9)
 
@@ -4205,8 +5147,11 @@ def test_unwrap_precomputed_adj_matches_builtin(design, geometry, tmp_path):
     """The cached-adjacency path (#3) must produce the identical unwrap as building
     the graph inline — so a live session can reuse one graph across frames."""
     from backend.physics.oxdna_interface import (
-        _build_unwrap_adjacency, read_configuration_full, unwrap_align_to_reference,
-        write_configuration)
+        _build_unwrap_adjacency,
+        read_configuration_full,
+        unwrap_align_to_reference,
+        write_configuration,
+    )
 
     conf = tmp_path / "c.dat"
     write_configuration(design, geometry, conf, box_nm=80.0)
@@ -4219,10 +5164,14 @@ def test_unwrap_precomputed_adj_matches_builtin(design, geometry, tmp_path):
     cached = unwrap_align_to_reference(relax, ref, design, box, adj=adj)
     assert set(builtin) == set(cached)
     for k in builtin:
-        assert np.allclose(builtin[k]["backbone_position"], cached[k]["backbone_position"], atol=1e-12)
+        assert np.allclose(
+            builtin[k]["backbone_position"], cached[k]["backbone_position"], atol=1e-12
+        )
 
 
-def test_field_display_aligns_to_design_not_drifted_seed(design, geometry, monkeypatch, tmp_path):
+def test_field_display_aligns_to_design_not_drifted_seed(
+    design, geometry, monkeypatch, tmp_path
+):
     """A field run's display must anchor onto the DESIGN geometry (origin frame),
     NOT the job's conf.dat — which is the relaxation-drifted seed.  A seed shifted
     far from origin must still display with the anchor at its design position."""
@@ -4233,7 +5182,10 @@ def test_field_display_aligns_to_design_not_drifted_seed(design, geometry, monke
     from backend.core.oxdna_protocol import build_field_stage
     from backend.core.constants import NM_TO_OXDNA
     from backend.physics.oxdna_interface import (
-        write_configuration, read_configuration_full, resolve_anchor_particles)
+        write_configuration,
+        read_configuration_full,
+        resolve_anchor_particles,
+    )
 
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
     s0 = design.strands[0]
@@ -4241,15 +5193,32 @@ def test_field_display_aligns_to_design_not_drifted_seed(design, geometry, monke
     parts, keys = resolve_anchor_particles(design, anchors)
     akeys = [list(k[:3]) for k in keys]
 
-    stage = build_field_stage(name="1_field", field_oxdna=0.04, field_dir=[1, 0, 0],
-                              forces_file="field_forces.txt", steps=2000)
-    job = new_oxdna_job("d · field", [stage.to_status()], parent_job_id="P0",
-                        efield={"force_pN": 2.0, "dir": [1, 0, 0],
-                                "n_anchored": len(parts), "anchor_keys": akeys})
-    job.stages[0].status = "done"; job.status = OxdnaStatus.completed; job.current_stage_idx = 1
+    stage = build_field_stage(
+        name="1_field",
+        field_oxdna=0.04,
+        field_dir=[1, 0, 0],
+        forces_file="field_forces.txt",
+        steps=2000,
+    )
+    job = new_oxdna_job(
+        "d · field",
+        [stage.to_status()],
+        parent_job_id="P0",
+        efield={
+            "force_pN": 2.0,
+            "dir": [1, 0, 0],
+            "n_anchored": len(parts),
+            "anchor_keys": akeys,
+        },
+    )
+    job.stages[0].status = "done"
+    job.status = OxdnaStatus.completed
+    job.current_stage_idx = 1
     job.save(tmp_path)
-    jd = job.job_dir(tmp_path); (jd / "design.json").write_text(design.model_dump_json())
-    sd = job.stage_dir(tmp_path, "1_field"); sd.mkdir(parents=True, exist_ok=True)
+    jd = job.job_dir(tmp_path)
+    (jd / "design.json").write_text(design.model_dump_json())
+    sd = job.stage_dir(tmp_path, "1_field")
+    sd.mkdir(parents=True, exist_ok=True)
 
     # conf.dat (the relaxed seed) + last_conf = design geometry shifted +30 oxDNA
     # units in x — i.e. the relaxation diffused the structure far from origin.
@@ -4259,15 +5228,21 @@ def test_field_display_aligns_to_design_not_drifted_seed(design, geometry, monke
     shifted = lines[:3]
     for ln in lines[3:]:
         if not ln.strip():
-            shifted.append(ln); continue
-        p = ln.split(); p[0] = f"{float(p[0]) + SHIFT_OX:.6f}"; shifted.append(" ".join(p))
+            shifted.append(ln)
+            continue
+        p = ln.split()
+        p[0] = f"{float(p[0]) + SHIFT_OX:.6f}"
+        shifted.append(" ".join(p))
     (jd / "conf.dat").write_text("\n".join(shifted) + "\n")
     shutil.copy(jd / "conf.dat", sd / "last_conf.dat")
 
     disp = TestClient(app).get(f"/api/oxdna/jobs/{job.job_id}/display").json()
-    pos = {(p["helix_id"], p["bp_index"], p["direction"]): np.array(p["backbone_position"])
-           for p in disp["positions"]}
-    dref = tmp_path / "dg.dat"; write_configuration(design, geometry, dref, box_nm=80.0)
+    pos = {
+        (p["helix_id"], p["bp_index"], p["direction"]): np.array(p["backbone_position"])
+        for p in disp["positions"]
+    }
+    dref = tmp_path / "dg.dat"
+    write_configuration(design, geometry, dref, box_nm=80.0)
     gm = read_configuration_full(dref, design)
     aset = {tuple(k) for k in akeys}
     design_ac = np.mean([gm[k]["backbone_position"] for k in aset], axis=0)
@@ -4281,25 +5256,38 @@ def test_write_field_forces_allows_no_anchor(design, geometry, tmp_path):
     """A field with no anchor is no longer rejected — it writes the uniform ``string``
     block with no traps (the UI warns about the resulting COM drift)."""
     from backend.physics.oxdna_interface import write_field_forces, write_configuration
+
     conf = tmp_path / "conf.dat"
     write_configuration(design, geometry, conf)
-    info = write_field_forces(tmp_path / "f.txt", design, conf, field_oxdna=0.04,
-                              field_dir=[1, 0, 0], anchors=[])
+    info = write_field_forces(
+        tmp_path / "f.txt",
+        design,
+        conf,
+        field_oxdna=0.04,
+        field_dir=[1, 0, 0],
+        anchors=[],
+    )
     assert info["n_anchored"] == 0
     text = (tmp_path / "f.txt").read_text()
-    assert "type = string" in text          # the uniform field is present
-    assert "type = trap" not in text         # but no anchor traps
+    assert "type = string" in text  # the uniform field is present
+    assert "type = trap" not in text  # but no anchor traps
 
 
 def test_build_field_stage_and_render():
     from backend.core.oxdna_protocol import build_field_stage, render_stage_input
-    st = build_field_stage(name="4_field", field_oxdna=0.04, field_dir=[1, 0, 0],
-                           forces_file="field_forces_4.txt", steps=5000)
+
+    st = build_field_stage(
+        name="4_field",
+        field_oxdna=0.04,
+        field_dir=[1, 0, 0],
+        forces_file="field_forces_4.txt",
+        steps=5000,
+    )
     assert st.kind == "field" and st.sim_type == "MD"
     assert st.external_forces is True
     assert st.forces_file == "field_forces_4.txt"
-    assert st.max_backbone_force is None               # standard FENE, no cap
-    assert st.min_bp_retained == 0.0                   # field deflects → no bp gate
+    assert st.max_backbone_force is None  # standard FENE, no cap
+    assert st.min_bp_retained == 0.0  # field deflects → no bp gate
     assert st.efield["force_oxdna"] == 0.04 and st.efield["dir"] == [1, 0, 0]
     txt = render_stage_input(st, "t.top", "c.dat", forces_name=st.forces_file)
     assert "external_forces = true" in txt
@@ -4311,15 +5299,22 @@ def test_measure_field_response_pass_and_fail():
     """The oracle asserts a physical property: anchors held + free moved ALONG the
     field.  It must go green when that holds and red on either failure mode."""
     from backend.core.oxdna_health import measure_field_response
-    ref = [_pos(0, 0, "forward", (0, 0, 0)),   # anchor
-           _pos(0, 1, "forward", (1, 0, 0)),   # anchor
-           _pos(0, 8, "forward", (8, 0, 0)),   # free
-           _pos(0, 9, "forward", (9, 0, 0))]   # free
+
+    ref = [
+        _pos(0, 0, "forward", (0, 0, 0)),  # anchor
+        _pos(0, 1, "forward", (1, 0, 0)),  # anchor
+        _pos(0, 8, "forward", (8, 0, 0)),  # free
+        _pos(0, 9, "forward", (9, 0, 0)),
+    ]  # free
     anchors = [(0, 0, "forward"), (0, 1, "forward")]
 
     # Anchors held, free displaced +2 nm along +z → passes.
-    moved = [_pos(0, 0, "forward", (0, 0, 0)), _pos(0, 1, "forward", (1, 0, 0)),
-             _pos(0, 8, "forward", (8, 0, 2)), _pos(0, 9, "forward", (9, 0, 2))]
+    moved = [
+        _pos(0, 0, "forward", (0, 0, 0)),
+        _pos(0, 1, "forward", (1, 0, 0)),
+        _pos(0, 8, "forward", (8, 0, 2)),
+        _pos(0, 9, "forward", (9, 0, 2)),
+    ]
     r = measure_field_response(moved, ref, [0, 0, 1], anchors)
     assert r["passed"] is True
     assert r["anchored_max_drift_nm"] == pytest.approx(0.0)
@@ -4327,13 +5322,21 @@ def test_measure_field_response_pass_and_fail():
     assert r["n_anchored"] == 2 and r["n_free"] == 2
 
     # Free moved OPPOSITE the field → fails (deflection check).
-    against = [_pos(0, 0, "forward", (0, 0, 0)), _pos(0, 1, "forward", (1, 0, 0)),
-               _pos(0, 8, "forward", (8, 0, -2)), _pos(0, 9, "forward", (9, 0, -2))]
+    against = [
+        _pos(0, 0, "forward", (0, 0, 0)),
+        _pos(0, 1, "forward", (1, 0, 0)),
+        _pos(0, 8, "forward", (8, 0, -2)),
+        _pos(0, 9, "forward", (9, 0, -2)),
+    ]
     assert measure_field_response(against, ref, [0, 0, 1], anchors)["passed"] is False
 
     # Anchors dragged far → fails (anchor-held check).
-    drifted = [_pos(0, 0, "forward", (0, 0, 5)), _pos(0, 1, "forward", (1, 0, 5)),
-               _pos(0, 8, "forward", (8, 0, 2)), _pos(0, 9, "forward", (9, 0, 2))]
+    drifted = [
+        _pos(0, 0, "forward", (0, 0, 5)),
+        _pos(0, 1, "forward", (1, 0, 5)),
+        _pos(0, 8, "forward", (8, 0, 2)),
+        _pos(0, 9, "forward", (9, 0, 2)),
+    ]
     r3 = measure_field_response(drifted, ref, [0, 0, 1], anchors)
     assert r3["passed"] is False
     assert r3["anchored_max_drift_nm"] == pytest.approx(5.0)
@@ -4349,8 +5352,13 @@ def test_rmsf_route_works_for_a_field_run(design, geometry, monkeypatch, tmp_pat
     from backend.physics.oxdna_interface import write_configuration
 
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
-    stage = build_field_stage(name="1_field", field_oxdna=0.04, field_dir=[1, 0, 0],
-                              forces_file="field_forces.txt", steps=2000)
+    stage = build_field_stage(
+        name="1_field",
+        field_oxdna=0.04,
+        field_dir=[1, 0, 0],
+        forces_file="field_forces.txt",
+        steps=2000,
+    )
     job = new_oxdna_job("d · field", [stage.to_status()], parent_job_id="P0")
     job.stages[0].status = "done"
     job.status = OxdnaStatus.completed
@@ -4359,7 +5367,8 @@ def test_rmsf_route_works_for_a_field_run(design, geometry, monkeypatch, tmp_pat
     jd = job.job_dir(tmp_path)
     (jd / "design.json").write_text(design.model_dump_json())
     write_configuration(design, geometry, jd / "conf.dat", box_nm=80.0)
-    sd = job.stage_dir(tmp_path, "1_field"); sd.mkdir(parents=True, exist_ok=True)
+    sd = job.stage_dir(tmp_path, "1_field")
+    sd.mkdir(parents=True, exist_ok=True)
     _write_traj(design, geometry, sd / "trajectory.dat", n_frames=3)
 
     r = TestClient(app).get(f"/api/oxdna/jobs/{job.job_id}/rmsf")
@@ -4380,7 +5389,9 @@ def test_twist_series_stats_autocorrelation_and_neff():
 
     # constant series: zero variance → tau=1, fully "independent", zero error
     c = twist_series_stats([5.0] * 8)
-    assert c["std"] == 0.0 and c["tau_int"] == 1.0 and c["n_eff"] == 8 and c["sem"] == 0.0
+    assert (
+        c["std"] == 0.0 and c["tau_int"] == 1.0 and c["n_eff"] == 8 and c["sem"] == 0.0
+    )
 
     # alternating series: rho(1) < 0 → window closes at lag 1 → no inflation
     alt = twist_series_stats([1.0, -1.0] * 16)
@@ -4390,10 +5401,10 @@ def test_twist_series_stats_autocorrelation_and_neff():
     n = 200
     slow = [math.cos(2 * math.pi * i / n) for i in range(n)]
     s = twist_series_stats(slow)
-    assert s["tau_int"] > 1.0                      # correlated frames detected
-    assert s["n_eff"] < n                          # fewer effective samples than frames
+    assert s["tau_int"] > 1.0  # correlated frames detected
+    assert s["n_eff"] < n  # fewer effective samples than frames
     naive = s["std"] / math.sqrt(n)
-    assert s["sem"] > naive                        # honest error exceeds the naive std/sqrt(N)
+    assert s["sem"] > naive  # honest error exceeds the naive std/sqrt(N)
 
 
 def test_twist_series_stats_degenerate():
@@ -4413,12 +5424,13 @@ def test_detect_equilibration_finds_burn_in():
 
     # 80-sample monotonic ramp (transient) from +90 → 0, then 400 samples stationary ~0 ± noise
     ramp = [90.0 * (1 - i / 80) for i in range(80)]
-    stat = [3.0 * math.sin(i) for i in range(400)]      # bounded, decorrelated-ish, mean ~0
+    stat = [3.0 * math.sin(i) for i in range(400)]  # bounded, decorrelated-ish, mean ~0
     eq = detect_equilibration(ramp + stat)
-    assert eq["t0"] >= 60                                # discarded ~the whole transient
-    assert abs(eq["stats"]["mean"]) < 10                 # recovered the stationary mean, not biased
+    assert eq["t0"] >= 60  # discarded ~the whole transient
+    assert abs(eq["stats"]["mean"]) < 10  # recovered the stationary mean, not biased
     # keeping the ramp would inflate τ → fewer effective samples than the trimmed tail
     from backend.core.oxdna_health import twist_series_stats
+
     assert eq["n_eff"] > twist_series_stats(ramp + stat)["n_eff"]
 
     # already-stationary input → little/no burn-in
@@ -4428,29 +5440,37 @@ def test_detect_equilibration_finds_burn_in():
 
 # ── WSL CUDA driver-library fix (oxdna_subprocess_env) ────────────────────────
 
+
 def test_wsl_driver_dir_picks_newest_with_jit(tmp_path, monkeypatch):
     """_wsl_gpu_driver_dir globs /usr/lib/wsl/drivers/*/ and returns the NEWEST dir
     that ships libnvidia-ptxjitcompiler.so.1 (the driver-matched JIT compiler)."""
     from backend.core import oxdna_runner
 
     root = tmp_path / "drivers"
-    old = root / "nv_old.inf"; new = root / "nv_new.inf"; nojit = root / "nv_nojit.inf"
+    old = root / "nv_old.inf"
+    new = root / "nv_new.inf"
+    nojit = root / "nv_nojit.inf"
     for d in (old, new, nojit):
         d.mkdir(parents=True)
     (old / "libnvidia-ptxjitcompiler.so.1").write_text("x")
     (new / "libnvidia-ptxjitcompiler.so.1").write_text("x")
     (nojit / "libcuda.so.1").write_text("x")  # no JIT compiler → ineligible
     import os as _os
+
     _os.utime(old / "libnvidia-ptxjitcompiler.so.1", (1000, 1000))
     _os.utime(new / "libnvidia-ptxjitcompiler.so.1", (2000, 2000))
 
     monkeypatch.setattr(oxdna_runner, "_WSL_DRIVER_DIR_CACHE", [])
     # glob is imported lazily inside the function; patch the stdlib module it uses
     import glob as _glob
+
     monkeypatch.setattr(
-        _glob, "glob",
-        lambda pat: [str(old / "libnvidia-ptxjitcompiler.so.1"),
-                     str(new / "libnvidia-ptxjitcompiler.so.1")],
+        _glob,
+        "glob",
+        lambda pat: [
+            str(old / "libnvidia-ptxjitcompiler.so.1"),
+            str(new / "libnvidia-ptxjitcompiler.so.1"),
+        ],
     )
     assert oxdna_runner._wsl_gpu_driver_dir() == str(new)
 
@@ -4460,7 +5480,9 @@ def test_subprocess_env_prepends_driver_dir(monkeypatch):
     any existing entries) so the WSL driver libs win over a shadowing native pkg."""
     from backend.core import oxdna_runner
 
-    monkeypatch.setattr(oxdna_runner, "_wsl_gpu_driver_dir", lambda: "/usr/lib/wsl/drivers/nv.inf")
+    monkeypatch.setattr(
+        oxdna_runner, "_wsl_gpu_driver_dir", lambda: "/usr/lib/wsl/drivers/nv.inf"
+    )
     monkeypatch.setenv("LD_LIBRARY_PATH", "/existing/path")
     env = oxdna_runner.oxdna_subprocess_env()
     assert env["LD_LIBRARY_PATH"] == "/usr/lib/wsl/drivers/nv.inf:/existing/path"
@@ -4484,6 +5506,7 @@ def test_subprocess_env_none_off_wsl(monkeypatch):
 # per-stage stride from a cheap header count and parse + align ONLY the survivors —
 # not read + Kabsch-align every frame of a multi-thousand-frame run. These pin (1) the
 # selective reader against the full reader and (2) the downsample bookkeeping.
+
 
 def _write_trajectory(path, design, geometry, n_frames, box_nm=80.0):
     """Write a synthetic oxDNA .dat with ``n_frames`` frames; each frame nudges the
@@ -4515,8 +5538,9 @@ def test_read_trajectory_frames_at_matches_full_reader(tmp_path, design, geometr
     assert len(full) == 12
     # frames are genuinely distinct (the per-frame x nudge landed)
     k0 = next(iter(full[0]))
-    assert not np.isclose(full[0][k0]["backbone_position"][0],
-                          full[11][k0]["backbone_position"][0])
+    assert not np.isclose(
+        full[0][k0]["backbone_position"][0], full[11][k0]["backbone_position"][0]
+    )
 
     want = [0, 4, 11]
     at = read_trajectory_frames_at(traj, design, want)
@@ -4524,8 +5548,9 @@ def test_read_trajectory_frames_at_matches_full_reader(tmp_path, design, geometr
     for i in want:
         assert set(at[i]) == set(full[i])
         for key in full[i]:
-            assert np.allclose(at[i][key]["backbone_position"],
-                               full[i][key]["backbone_position"])
+            assert np.allclose(
+                at[i][key]["backbone_position"], full[i][key]["backbone_position"]
+            )
             assert np.allclose(at[i][key]["a1"], full[i][key]["a1"])
             assert np.allclose(at[i][key]["a3"], full[i][key]["a3"])
 
@@ -4533,6 +5558,7 @@ def test_read_trajectory_frames_at_matches_full_reader(tmp_path, design, geometr
 def test_read_trajectory_frames_at_empty_request(tmp_path, design, geometry):
     """No requested indices → no parse, empty result (cheap early-out)."""
     from backend.physics.oxdna_interface import read_trajectory_frames_at
+
     traj = tmp_path / "trajectory.dat"
     _write_trajectory(traj, design, geometry, n_frames=3)
     assert read_trajectory_frames_at(traj, design, []) == {}
@@ -4576,18 +5602,25 @@ def test_composite_trajectory_keeps_all_when_under_budget(tmp_path, design, geom
     s0 = tmp_path / "s0.dat"
     _write_trajectory(s0, design, geometry, n_frames=4)
 
-    out = composite_trajectory(design, [("relax", "mc", str(s0))], str(ref), max_frames=200)
-    assert out["n_frames"] == 5          # 4 stage frames + prepended seed
+    out = composite_trajectory(
+        design, [("relax", "mc", str(s0))], str(ref), max_frames=200
+    )
+    assert out["n_frames"] == 5  # 4 stage frames + prepended seed
     assert out["stages"][0]["n_frames"] == 5
     assert out["markers"] == []
 
 
-def test_composite_trajectory_unlimited_budget_keeps_every_frame(tmp_path, design, geometry):
+def test_composite_trajectory_unlimited_budget_keeps_every_frame(
+    tmp_path, design, geometry
+):
     """max_frames <= 0 disables the stride entirely — the full-trajectory view's
     contract.  Same stages that a budget of 10 strides down to 10 frames must come
     back complete (17 = 8 + seed + 8), and the meta helper must agree, or the slider
     would size itself to a different length than the payload it scrubs."""
-    from backend.core.oxdna_health import composite_trajectory, composite_trajectory_meta
+    from backend.core.oxdna_health import (
+        composite_trajectory,
+        composite_trajectory_meta,
+    )
 
     ref = tmp_path / "ref.dat"
     write_configuration(design, geometry, ref, box_nm=80.0)
@@ -4603,7 +5636,9 @@ def test_composite_trajectory_unlimited_budget_keeps_every_frame(tmp_path, desig
     assert len(out["frames"]) == 17
     meta = composite_trajectory_meta(design, stages, 0)
     assert meta["n_frames"] == out["n_frames"]
-    assert [s["n_frames"] for s in meta["stages"]] == [s["n_frames"] for s in out["stages"]]
+    assert [s["n_frames"] for s in meta["stages"]] == [
+        s["n_frames"] for s in out["stages"]
+    ]
 
 
 def test_print_conf_interval_honours_steps_per_frame_override():
@@ -4612,10 +5647,14 @@ def test_print_conf_interval_honours_steps_per_frame_override():
     launched with a dense trajectory would be forecast at a fraction of its real size."""
     from backend.core.disk_guard import oxdna_run_output_bytes
     from backend.core.oxdna_protocol import (
-        DEFAULT_STEPS_PER_FRAME, build_run_stage, print_conf_interval)
+        DEFAULT_STEPS_PER_FRAME,
+        build_run_stage,
+        print_conf_interval,
+    )
 
-    spec = build_run_stage(name="1_production", steps=5_000_000,
-                           steps_per_frame=DEFAULT_STEPS_PER_FRAME)
+    spec = build_run_stage(
+        name="1_production", steps=5_000_000, steps_per_frame=DEFAULT_STEPS_PER_FRAME
+    )
     assert print_conf_interval(spec) == DEFAULT_STEPS_PER_FRAME
     assert spec.steps // print_conf_interval(spec) == 500
     # No override → the legacy ~100-frames-per-stage rule still applies.
@@ -4631,11 +5670,18 @@ def test_print_conf_interval_honours_steps_per_frame_override():
 # unwrap via a cached plan) against the original per-nucleotide implementations, so a
 # future edit can't silently change the displayed trajectory while chasing speed.
 
+
 def test_oxdna_backbone_sites_batched_matches_scalar():
     """The batched backbone-site helper equals the per-nucleotide scalar one."""
-    from backend.physics.oxdna_interface import oxdna_backbone_site, oxdna_backbone_sites
+    from backend.physics.oxdna_interface import (
+        oxdna_backbone_site,
+        oxdna_backbone_sites,
+    )
+
     rng = np.random.default_rng(0)
-    cm = rng.normal(size=(50, 3)); a1 = rng.normal(size=(50, 3)); a3 = rng.normal(size=(50, 3))
+    cm = rng.normal(size=(50, 3))
+    a1 = rng.normal(size=(50, 3))
+    a3 = rng.normal(size=(50, 3))
     batched = oxdna_backbone_sites(cm, a1, a3)
     for i in range(50):
         assert np.allclose(batched[i], oxdna_backbone_site(cm[i], a1[i], a3[i]))
@@ -4646,9 +5692,13 @@ def test_unwrap_plan_matches_bfs(design, geometry, tmp_path):
     byte-for-byte (to float precision) on a rotated + translated + wrapped structure."""
     from backend.core.constants import NM_TO_OXDNA
     from backend.physics.oxdna_interface import (
-        write_configuration, read_configuration_full, _parse_box_nm,
-        _build_unwrap_plan, unwrap_align_to_reference,
+        write_configuration,
+        read_configuration_full,
+        _parse_box_nm,
+        _build_unwrap_plan,
+        unwrap_align_to_reference,
     )
+
     box_nm = 50.0
     orig = tmp_path / "conf.dat"
     write_configuration(design, geometry, orig, box_nm=box_nm)
@@ -4657,8 +5707,9 @@ def test_unwrap_plan_matches_bfs(design, geometry, tmp_path):
     # Build a wrapped "relaxed" frame: rotate + translate + wrap into [0, box).
     box_ox = box_nm * NM_TO_OXDNA
     th = 0.6
-    rot = np.array([[np.cos(th), -np.sin(th), 0.0],
-                    [np.sin(th), np.cos(th), 0.0], [0.0, 0.0, 1.0]])
+    rot = np.array(
+        [[np.cos(th), -np.sin(th), 0.0], [np.sin(th), np.cos(th), 0.0], [0.0, 0.0, 1.0]]
+    )
     trans = np.array([box_ox - 2.0, 5.0, -3.0])
     out = ["t = 0", f"b = {box_ox:.6f} {box_ox:.6f} {box_ox:.6f}", "E = 0 0 0"]
     for ln in orig.read_text().splitlines():
@@ -4674,12 +5725,14 @@ def test_unwrap_plan_matches_bfs(design, geometry, tmp_path):
     fm = read_configuration_full(wrapped, design)
     box = _parse_box_nm(wrapped)
 
-    bfs = unwrap_align_to_reference(fm, ref, design, box)                       # per-nt graph walk
+    bfs = unwrap_align_to_reference(fm, ref, design, box)  # per-nt graph walk
     plan = _build_unwrap_plan(fm, design)
-    vec = unwrap_align_to_reference(fm, ref, design, box, plan=plan)            # vectorized
+    vec = unwrap_align_to_reference(fm, ref, design, box, plan=plan)  # vectorized
     assert set(vec) == set(bfs)
     for k in bfs:
-        assert np.allclose(vec[k]["backbone_position"], bfs[k]["backbone_position"], atol=1e-9)
+        assert np.allclose(
+            vec[k]["backbone_position"], bfs[k]["backbone_position"], atol=1e-9
+        )
         assert np.allclose(vec[k]["a1"], bfs[k]["a1"], atol=1e-9)
         assert np.allclose(vec[k]["a3"], bfs[k]["a3"], atol=1e-9)
 
@@ -4691,20 +5744,25 @@ def test_composite_trajectory_reports_progress(tmp_path, design, geometry):
 
     ref = tmp_path / "ref.dat"
     write_configuration(design, geometry, ref, box_nm=80.0)
-    s0 = tmp_path / "s0.dat"; s1 = tmp_path / "s1.dat"
+    s0 = tmp_path / "s0.dat"
+    s1 = tmp_path / "s1.dat"
     _write_traj(design, geometry, s0, n_frames=8)
     _write_traj(design, geometry, s1, n_frames=8)
 
     calls: list[tuple] = []
     out = composite_trajectory(
-        design, [("relax", "mc", str(s0)), ("prod", "production", str(s1))],
-        str(ref), max_frames=10, progress=lambda d, t: calls.append((d, t)))
+        design,
+        [("relax", "mc", str(s0)), ("prod", "production", str(s1))],
+        str(ref),
+        max_frames=10,
+        progress=lambda d, t: calls.append((d, t)),
+    )
     total = out["n_frames"]
     assert calls[0] == (0, total)
-    assert calls[-1] == (total, total)              # snaps to 100%
+    assert calls[-1] == (total, total)  # snaps to 100%
     dones = [d for d, _ in calls]
-    assert dones == sorted(dones)                   # monotonic non-decreasing
-    assert all(t == total for _, t in calls)        # constant denominator
+    assert dones == sorted(dones)  # monotonic non-decreasing
+    assert all(t == total for _, t in calls)  # constant denominator
 
 
 def test_oxdna_trajectory_progress_endpoint_idle(monkeypatch, tmp_path):
@@ -4719,7 +5777,9 @@ def test_oxdna_trajectory_progress_endpoint_idle(monkeypatch, tmp_path):
     assert r.json() == {"active": False}
 
 
-def test_composite_trajectory_reuses_sibling_ancestor_frames(tmp_path, design, geometry, monkeypatch):
+def test_composite_trajectory_reuses_sibling_ancestor_frames(
+    tmp_path, design, geometry, monkeypatch
+):
     """Selecting a job with a COMMON PARENT reuses the shared ancestor stages' aligned
     frames from the frame cache — only the frames unique to the sibling get parsed."""
     import backend.core.oxdna_health as H
@@ -4728,33 +5788,63 @@ def test_composite_trajectory_reuses_sibling_ancestor_frames(tmp_path, design, g
 
     # Shared root trajectory + two sibling leaf trajectories; byte-identical reference
     # files at DIFFERENT paths (as real sibling jobs write their own design_ref.dat).
-    root = tmp_path / "root.dat"; _write_traj(design, geometry, root, n_frames=6)
-    leafA = tmp_path / "A.dat";   _write_traj(design, geometry, leafA, n_frames=4)
-    leafB = tmp_path / "B.dat";   _write_traj(design, geometry, leafB, n_frames=4)
-    refA = tmp_path / "refA.dat"; write_configuration(design, geometry, refA, box_nm=80.0)
-    refB = tmp_path / "refB.dat"; write_configuration(design, geometry, refB, box_nm=80.0)
-    assert refA.read_bytes() == refB.read_bytes()          # siblings share design → same ref
+    root = tmp_path / "root.dat"
+    _write_traj(design, geometry, root, n_frames=6)
+    leafA = tmp_path / "A.dat"
+    _write_traj(design, geometry, leafA, n_frames=4)
+    leafB = tmp_path / "B.dat"
+    _write_traj(design, geometry, leafB, n_frames=4)
+    refA = tmp_path / "refA.dat"
+    write_configuration(design, geometry, refA, box_nm=80.0)
+    refB = tmp_path / "refB.dat"
+    write_configuration(design, geometry, refB, box_nm=80.0)
+    assert refA.read_bytes() == refB.read_bytes()  # siblings share design → same ref
 
     # Spy on how many frames get parsed (the reuse shows up as fewer parses for the sibling).
     calls: list[tuple] = []
     real = OI.read_trajectory_frames_at
-    monkeypatch.setattr(OI, "read_trajectory_frames_at",
-                        lambda p, d, idx, **kw: (calls.append((str(p), len(list(idx)) if not isinstance(idx, list) else len(idx))), real(p, d, idx, **kw))[1])
+    monkeypatch.setattr(
+        OI,
+        "read_trajectory_frames_at",
+        lambda p, d, idx, **kw: (
+            calls.append(
+                (str(p), len(list(idx)) if not isinstance(idx, list) else len(idx))
+            ),
+            real(p, d, idx, **kw),
+        )[1],
+    )
 
-    H._FRAME_CACHE = None; H._FRAME_CACHE_NT = 0; H._ALIGNED_CACHE = None; H._COUNT_CACHE.clear()
+    H._FRAME_CACHE = None
+    H._FRAME_CACHE_NT = 0
+    H._ALIGNED_CACHE = None
+    H._COUNT_CACHE.clear()
 
-    outA = composite_trajectory(design, [("root", "mc", str(root)), ("leafA", "production", str(leafA))], str(refA))
+    outA = composite_trajectory(
+        design,
+        [("root", "mc", str(root)), ("leafA", "production", str(leafA))],
+        str(refA),
+    )
     a_parsed = sum(n for _, n in calls)
     calls.clear()
-    H._ALIGNED_CACHE = None    # force a whole-composite miss so the FRAME cache is what saves B
+    H._ALIGNED_CACHE = (
+        None  # force a whole-composite miss so the FRAME cache is what saves B
+    )
 
-    outB = composite_trajectory(design, [("root", "mc", str(root)), ("leafB", "production", str(leafB))], str(refB))
+    outB = composite_trajectory(
+        design,
+        [("root", "mc", str(root)), ("leafB", "production", str(leafB))],
+        str(refB),
+    )
     b_parsed = sum(n for _, n in calls)
 
-    assert outA["n_frames"] == outB["n_frames"]            # same structure → same frame budget
-    assert b_parsed < a_parsed                             # the sibling parsed fewer frames
-    assert sum(n for p, n in calls if p.endswith("root.dat")) == 0   # root NOT re-parsed (reused)
-    assert sum(n for p, n in calls if p.endswith("B.dat")) > 0       # its own leaf WAS parsed
+    assert outA["n_frames"] == outB["n_frames"]  # same structure → same frame budget
+    assert b_parsed < a_parsed  # the sibling parsed fewer frames
+    assert (
+        sum(n for p, n in calls if p.endswith("root.dat")) == 0
+    )  # root NOT re-parsed (reused)
+    assert (
+        sum(n for p, n in calls if p.endswith("B.dat")) > 0
+    )  # its own leaf WAS parsed
 
 
 def test_frame_surface_json_carries_per_vertex_identity(design, geometry, tmp_path):
@@ -4765,8 +5855,11 @@ def test_frame_surface_json_carries_per_vertex_identity(design, geometry, tmp_pa
     The identity was always on the mesh (compute_surface assigns it); frame_surface_json
     built its payload by hand and dropped it."""
     from backend.core.oxdna_health import production_rmsf, frame_surface_json
-    ref = tmp_path / "ref.dat"; _write_traj(design, geometry, ref, 1)
-    t = tmp_path / "p.dat";     _write_traj(design, geometry, t, 2)
+
+    ref = tmp_path / "ref.dat"
+    _write_traj(design, geometry, ref, 1)
+    t = tmp_path / "p.dat"
+    _write_traj(design, geometry, t, 2)
     frame = production_rmsf(design, t, ref, include_average_frame=True)["average_frame"]
 
     entry = frame_surface_json(design, frame, smooth=3)
@@ -4782,18 +5875,30 @@ def test_frame_surface_json_carries_per_vertex_identity(design, geometry, tmp_pa
     assert len(tbl) > len(entry["vertex_strand_index_table"])
 
 
-def test_frame_surface_json_rmsf_mode_still_carries_identity(design, geometry, tmp_path):
+def test_frame_surface_json_rmsf_mode_still_carries_identity(
+    design, geometry, tmp_path
+):
     """Identity is independent of colour mode: the flexibility ramp owns the COLOUR, but
     per-cluster OPACITY still has to apply, so the tables must ship in rmsf mode too."""
     from backend.core.oxdna_health import production_rmsf, frame_surface_json
-    ref = tmp_path / "ref.dat"; _write_traj(design, geometry, ref, 1)
-    t = tmp_path / "p.dat";     _write_traj(design, geometry, t, 3)
-    res = production_rmsf(design, t, ref, include_average_frame=True)
-    rmsf_by_key = {(p["helix_id"], p["bp_index"], p["direction"]): p["rmsf"]
-                   for p in res["positions"]}
 
-    entry = frame_surface_json(design, res["average_frame"], color_mode="rmsf",
-                               smooth=3, rmsf_by_key=rmsf_by_key)
+    ref = tmp_path / "ref.dat"
+    _write_traj(design, geometry, ref, 1)
+    t = tmp_path / "p.dat"
+    _write_traj(design, geometry, t, 3)
+    res = production_rmsf(design, t, ref, include_average_frame=True)
+    rmsf_by_key = {
+        (p["helix_id"], p["bp_index"], p["direction"]): p["rmsf"]
+        for p in res["positions"]
+    }
+
+    entry = frame_surface_json(
+        design,
+        res["average_frame"],
+        color_mode="rmsf",
+        smooth=3,
+        rmsf_by_key=rmsf_by_key,
+    )
     assert "vertex_rmsf" in entry
     assert "vertex_colors" not in entry
     assert entry.get("vertex_nuc_index_table")

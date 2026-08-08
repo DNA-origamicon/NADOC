@@ -40,6 +40,7 @@ HC_SCAF_BOW_RIGHT = frozenset({2, 5, 9, 12, 16, 19})
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(autouse=True)
 def _reset():
     design_state.set_design(_demo_design())
@@ -49,10 +50,16 @@ def _reset():
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
+
 def _make_bundle(cells, length_bp=42):
-    r = client.post("/api/design/bundle", json={
-        "cells": cells, "length_bp": length_bp, "plane": "XY",
-    })
+    r = client.post(
+        "/api/design/bundle",
+        json={
+            "cells": cells,
+            "length_bp": length_bp,
+            "plane": "XY",
+        },
+    )
     assert r.status_code == 201
     return r.json()["design"]
 
@@ -75,24 +82,25 @@ def _staple_dirs(row_a, col_a):
     """Return (dir_on_A, dir_on_B) for a staple crossover from cell (row_a, col_a).
     Even parity: scaffold=FWD → staple=REV.  Odd: scaffold=REV → staple=FWD."""
     even_a = (row_a + col_a) % 2 == 0
-    return ("REVERSE" if even_a else "FORWARD",
-            "FORWARD" if even_a else "REVERSE")
+    return ("REVERSE" if even_a else "FORWARD", "FORWARD" if even_a else "REVERSE")
 
 
 def _scaffold_dirs(row_a, col_a):
     even_a = (row_a + col_a) % 2 == 0
-    return ("FORWARD" if even_a else "REVERSE",
-            "REVERSE" if even_a else "FORWARD")
+    return ("FORWARD" if even_a else "REVERSE", "REVERSE" if even_a else "FORWARD")
 
 
 def _place(hid_a, hid_b, bp, dir_a, dir_b, is_scaffold=False):
     nick_a, nick_b = _nick_positions(bp, dir_a, dir_b, is_scaffold)
-    return client.post("/api/design/crossovers/place", json={
-        "half_a": {"helix_id": hid_a, "index": bp, "strand": dir_a},
-        "half_b": {"helix_id": hid_b, "index": bp, "strand": dir_b},
-        "nick_bp_a": nick_a,
-        "nick_bp_b": nick_b,
-    })
+    return client.post(
+        "/api/design/crossovers/place",
+        json={
+            "half_a": {"helix_id": hid_a, "index": bp, "strand": dir_a},
+            "half_b": {"helix_id": hid_b, "index": bp, "strand": dir_b},
+            "nick_bp_a": nick_a,
+            "nick_bp_b": nick_b,
+        },
+    )
 
 
 def _cross_helix_strands(design, hid_a, hid_b, strand_type=None):
@@ -109,8 +117,8 @@ def _cross_helix_strands(design, hid_a, hid_b, strand_type=None):
 # ── HC staple crossovers: col-adjacent cells (0,0)↔(0,1) ───────────────────
 # Valid staple bps between these cells: 6, 7 (and +21n repeats: 27, 28)
 
-class TestHCStapleColAdjacent:
 
+class TestHCStapleColAdjacent:
     @pytest.mark.parametrize("bp", [6, 7, 27, 28])
     def test_crossover_registered(self, bp):
         design = _make_bundle([[0, 0], [0, 1]])
@@ -140,8 +148,12 @@ class TestHCStapleColAdjacent:
 
         result = r.json()["design"]
         cross = _cross_helix_strands(result, ha, hb)
-        assert len(cross) == 1, f"bp={bp}: expected one multi-domain strand spanning both helices"
-        assert len(cross[0]["domains"]) == 2, f"bp={bp}: expected 2 domains in ligated strand"
+        assert len(cross) == 1, (
+            f"bp={bp}: expected one multi-domain strand spanning both helices"
+        )
+        assert len(cross[0]["domains"]) == 2, (
+            f"bp={bp}: expected 2 domains in ligated strand"
+        )
 
     @pytest.mark.parametrize("bp", [6, 7, 27, 28])
     def test_scaffold_untouched_by_staple_xover(self, bp):
@@ -160,8 +172,8 @@ class TestHCStapleColAdjacent:
 # ── HC staple crossovers: row-adjacent cells ────────────────────────────────
 # bp 13,14 from even cell → (-1,0).  Use cells (2,0) even and (1,0) odd.
 
-class TestHCStapleRowAdjacent:
 
+class TestHCStapleRowAdjacent:
     @pytest.mark.parametrize("bp", [13, 14, 34, 35])
     def test_crossover_at_row_neighbor(self, bp):
         design = _make_bundle([[2, 0], [1, 0]])
@@ -178,8 +190,8 @@ class TestHCStapleRowAdjacent:
 # ── HC staple: bp 0,20 (col-adjacent, opposite direction) ──────────────────
 # Cell (1,0) is odd.  bp 0 → (0,+1) = (1,1).  Cell (1,1) is even.
 
-class TestHCStapleBP0And20:
 
+class TestHCStapleBP0And20:
     @pytest.mark.parametrize("bp", [0, 20, 21, 41])
     def test_crossover_at_bp0_family(self, bp):
         design = _make_bundle([[1, 1], [1, 0]])
@@ -196,8 +208,8 @@ class TestHCStapleBP0And20:
 # ── HC scaffold crossovers ──────────────────────────────────────────────────
 # Between (0,0)↔(0,1): scaffold bps 1, 2, 11, 12
 
-class TestHCScaffoldCrossovers:
 
+class TestHCScaffoldCrossovers:
     @pytest.mark.parametrize("bp", [1, 2, 11, 12])
     def test_scaffold_crossover(self, bp):
         design = _make_bundle([[0, 0], [0, 1]])
@@ -229,8 +241,8 @@ class TestHCScaffoldCrossovers:
 
 # ── Same-type enforcement ───────────────────────────────────────────────────
 
-class TestSameTypeEnforcement:
 
+class TestSameTypeEnforcement:
     def test_reject_scaffold_to_staple(self):
         """Sending scaffold direction on one helix and staple direction on the
         other must be rejected — crossovers only connect same-type strands."""
@@ -240,20 +252,23 @@ class TestSameTypeEnforcement:
         # Even: scaffold=FORWARD, staple=REVERSE
         # Odd:  scaffold=REVERSE, staple=FORWARD
         # Send FORWARD on both → scaffold on even, staple on odd → cross-type
-        r = client.post("/api/design/crossovers/place", json={
-            "half_a": {"helix_id": ha, "index": 7, "strand": "FORWARD"},
-            "half_b": {"helix_id": hb, "index": 7, "strand": "FORWARD"},
-            "nick_bp_a": 6,
-            "nick_bp_b": 6,
-        })
+        r = client.post(
+            "/api/design/crossovers/place",
+            json={
+                "half_a": {"helix_id": ha, "index": 7, "strand": "FORWARD"},
+                "half_b": {"helix_id": hb, "index": 7, "strand": "FORWARD"},
+                "nick_bp_a": 6,
+                "nick_bp_b": 6,
+            },
+        )
         assert r.status_code == 400
         assert "same strand type" in r.json()["detail"].lower()
 
 
 # ── Multiple crossovers ─────────────────────────────────────────────────────
 
-class TestMultipleCrossovers:
 
+class TestMultipleCrossovers:
     def test_two_staple_crossovers(self):
         design = _make_bundle([[0, 0], [0, 1]])
         ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
@@ -316,7 +331,9 @@ class TestMultipleCrossovers:
 
         result = r2.json()["design"]
         cross = _cross_helix_strands(result, ha, hb, "staple")
-        assert len(cross) == 2, f"Expected 2 cross-helix staple strands, got {len(cross)}"
+        assert len(cross) == 2, (
+            f"Expected 2 cross-helix staple strands, got {len(cross)}"
+        )
         for s in cross:
             assert len(s["domains"]) == 2, (
                 f"Strand {s['id'][:8]} has {len(s['domains'])} domains, expected 2"
@@ -343,8 +360,8 @@ class TestMultipleCrossovers:
         # Place crossovers one by one, checking coverage after each.
         # HC staple bp 6,7 valid between (0,0)↔(0,1).
         pairs = [
-            ((0, 0), (0, 1), [6, 7]),       # first Holliday junction
-            ((0, 0), (0, 1), [27, 28]),     # second Holliday junction, next period
+            ((0, 0), (0, 1), [6, 7]),  # first Holliday junction
+            ((0, 0), (0, 1), [27, 28]),  # second Holliday junction, next period
         ]
         step = 0
         for (ra, ca), (rb, cb), bps in pairs:
@@ -390,8 +407,8 @@ class TestMultipleCrossovers:
 
 # ── Undo ────────────────────────────────────────────────────────────────────
 
-class TestCrossoverUndo:
 
+class TestCrossoverUndo:
     def test_undo_reverts_crossover(self):
         design = _make_bundle([[0, 0], [0, 1]])
         ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
@@ -409,6 +426,7 @@ class TestCrossoverUndo:
 
 
 # ── Crossover record correctness ─────────────────────────────────────────
+
 
 class TestCrossoverRecordCorrectness:
     """Verify that crossover records are correct and strands are properly ligated."""
@@ -484,17 +502,18 @@ class TestCrossoverRecordCorrectness:
         result = r.json()["design"]
 
         cross = _cross_helix_strands(result, ha, hb, "staple")
-        assert len(cross) == 1, "Expected exactly one ligated staple strand spanning both helices"
+        assert len(cross) == 1, (
+            "Expected exactly one ligated staple strand spanning both helices"
+        )
 
 
 # ── Autocrossover after manual crossovers ─────────────────────────────────────
 
+
 def _total_domain_count(design, strand_type="staple"):
     """Total number of domains across all strands of the given type."""
     return sum(
-        len(s["domains"])
-        for s in design["strands"]
-        if s["strand_type"] == strand_type
+        len(s["domains"]) for s in design["strands"] if s["strand_type"] == strand_type
     )
 
 
@@ -519,7 +538,9 @@ class TestAutocrossoverWithExistingManualCrossovers:
 
         # The manual crossover created a multi-domain staple spanning both helices
         cross_before = _cross_helix_strands(after_manual, ha, hb, "staple")
-        assert len(cross_before) >= 1, "Manual crossover should ligate a cross-helix staple"
+        assert len(cross_before) >= 1, (
+            "Manual crossover should ligate a cross-helix staple"
+        )
 
         # Count total nucleotide coverage before autocrossover
         def _nt_coverage(d):
@@ -575,6 +596,7 @@ class TestAutocrossoverWithExistingManualCrossovers:
 
 # ── Crossover move ─────────────────────────────────────────────────────────
 
+
 class TestCrossoverMove:
     """Tests for POST /design/crossovers/move."""
 
@@ -589,10 +611,13 @@ class TestCrossoverMove:
         xo_id = r.json()["design"]["crossovers"][0]["id"]
 
         # Move from bp 7 to bp 28 (both valid HC staple positions for col-adjacent)
-        r2 = client.post("/api/design/crossovers/move", json={
-            "crossover_id": xo_id,
-            "new_index": 28,
-        })
+        r2 = client.post(
+            "/api/design/crossovers/move",
+            json={
+                "crossover_id": xo_id,
+                "new_index": 28,
+            },
+        )
         assert r2.status_code == 200, r2.json().get("detail")
 
         result = r2.json()["design"]
@@ -612,10 +637,13 @@ class TestCrossoverMove:
         assert r.status_code == 201
         xo_id = r.json()["design"]["crossovers"][0]["id"]
 
-        r2 = client.post("/api/design/crossovers/move", json={
-            "crossover_id": xo_id,
-            "new_index": 28,
-        })
+        r2 = client.post(
+            "/api/design/crossovers/move",
+            json={
+                "crossover_id": xo_id,
+                "new_index": 28,
+            },
+        )
         assert r2.status_code == 200
         result = r2.json()["design"]
 
@@ -633,10 +661,13 @@ class TestCrossoverMove:
         assert r.status_code == 201
         xo_id = r.json()["design"]["crossovers"][0]["id"]
 
-        r2 = client.post("/api/design/crossovers/move", json={
-            "crossover_id": xo_id,
-            "new_index": 28,
-        })
+        r2 = client.post(
+            "/api/design/crossovers/move",
+            json={
+                "crossover_id": xo_id,
+                "new_index": 28,
+            },
+        )
         assert r2.status_code == 200
         result = r2.json()["design"]
 
@@ -660,10 +691,13 @@ class TestCrossoverMove:
         xo_id = r.json()["design"]["crossovers"][0]["id"]
 
         # bp 10 is not a valid HC staple crossover position for these col-adjacent cells
-        r2 = client.post("/api/design/crossovers/move", json={
-            "crossover_id": xo_id,
-            "new_index": 10,
-        })
+        r2 = client.post(
+            "/api/design/crossovers/move",
+            json={
+                "crossover_id": xo_id,
+                "new_index": 10,
+            },
+        )
         assert r2.status_code == 422
 
     def test_move_to_occupied_position_rejected(self):
@@ -681,10 +715,13 @@ class TestCrossoverMove:
         assert r2.status_code == 201
 
         # Try to move first crossover to position of second
-        r3 = client.post("/api/design/crossovers/move", json={
-            "crossover_id": xo1_id,
-            "new_index": 28,
-        })
+        r3 = client.post(
+            "/api/design/crossovers/move",
+            json={
+                "crossover_id": xo1_id,
+                "new_index": 28,
+            },
+        )
         assert r3.status_code == 422
 
     def test_move_noop_same_index(self):
@@ -697,10 +734,13 @@ class TestCrossoverMove:
         assert r.status_code == 201
         xo_id = r.json()["design"]["crossovers"][0]["id"]
 
-        r2 = client.post("/api/design/crossovers/move", json={
-            "crossover_id": xo_id,
-            "new_index": 7,
-        })
+        r2 = client.post(
+            "/api/design/crossovers/move",
+            json={
+                "crossover_id": xo_id,
+                "new_index": 7,
+            },
+        )
         assert r2.status_code == 200
 
     def test_move_preserves_extra_bases(self):
@@ -714,12 +754,17 @@ class TestCrossoverMove:
         xo_id = r.json()["design"]["crossovers"][0]["id"]
 
         # Add extra bases
-        client.patch(f"/api/design/crossovers/{xo_id}/extra-bases", json={"sequence": "TT"})
+        client.patch(
+            f"/api/design/crossovers/{xo_id}/extra-bases", json={"sequence": "TT"}
+        )
 
-        r2 = client.post("/api/design/crossovers/move", json={
-            "crossover_id": xo_id,
-            "new_index": 28,
-        })
+        r2 = client.post(
+            "/api/design/crossovers/move",
+            json={
+                "crossover_id": xo_id,
+                "new_index": 28,
+            },
+        )
         assert r2.status_code == 200
         xo = r2.json()["design"]["crossovers"][0]
         assert xo["extra_bases"] == "TT"
@@ -734,10 +779,13 @@ class TestCrossoverMove:
         assert r.status_code == 201
         xo_id = r.json()["design"]["crossovers"][0]["id"]
 
-        r2 = client.post("/api/design/crossovers/move", json={
-            "crossover_id": xo_id,
-            "new_index": 28,
-        })
+        r2 = client.post(
+            "/api/design/crossovers/move",
+            json={
+                "crossover_id": xo_id,
+                "new_index": 28,
+            },
+        )
         assert r2.status_code == 200
 
         r3 = client.post("/api/design/undo")
@@ -768,12 +816,15 @@ class TestBatchMoveCrossovers:
         xo2_id = next(x["id"] for x in xos if x["id"] != xo1_id)
 
         # Batch move: both by +21 (one full period)
-        r3 = client.post("/api/design/crossovers/batch-move", json={
-            "moves": [
-                {"crossover_id": xo1_id, "new_index": 27},
-                {"crossover_id": xo2_id, "new_index": 48},
-            ]
-        })
+        r3 = client.post(
+            "/api/design/crossovers/batch-move",
+            json={
+                "moves": [
+                    {"crossover_id": xo1_id, "new_index": 27},
+                    {"crossover_id": xo2_id, "new_index": 48},
+                ]
+            },
+        )
         assert r3.status_code == 200, r3.json().get("detail")
         result = r3.json()["design"]
         xo_map = {x["id"]: x for x in result["crossovers"]}
@@ -796,12 +847,15 @@ class TestBatchMoveCrossovers:
         xo2_id = next(x["id"] for x in xos if x["id"] != xo1_id)
 
         # Batch move both by +21
-        r3 = client.post("/api/design/crossovers/batch-move", json={
-            "moves": [
-                {"crossover_id": xo1_id, "new_index": 27},
-                {"crossover_id": xo2_id, "new_index": 48},
-            ]
-        })
+        r3 = client.post(
+            "/api/design/crossovers/batch-move",
+            json={
+                "moves": [
+                    {"crossover_id": xo1_id, "new_index": 27},
+                    {"crossover_id": xo2_id, "new_index": 48},
+                ]
+            },
+        )
         assert r3.status_code == 200
 
         # Single undo should revert both

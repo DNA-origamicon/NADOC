@@ -43,6 +43,7 @@ router = APIRouter()
 
 # ── Instance connectors (InterfacePoints) ─────────────────────────────────────
 
+
 class AddConnectorRequest(BaseModel):
     label: Optional[str] = None
     position: list[float]
@@ -54,15 +55,17 @@ class AddConnectorRequest(BaseModel):
 def add_connector(instance_id: str, body: AddConnectorRequest) -> dict:
     """Append an InterfacePoint (connector) to a PartInstance."""
     assembly = assembly_state.get_or_404()
-    inst     = _find_instance(assembly, instance_id)
+    inst = _find_instance(assembly, instance_id)
 
     # Auto-label if not supplied
     existing = {ip.label for ip in inst.interface_points}
-    label    = body.label or next(
+    label = body.label or next(
         f"C{i}" for i in range(1, 999) if f"C{i}" not in existing
     )
     if label in existing:
-        raise HTTPException(400, detail=f"Connector label {label!r} already exists on this instance.")
+        raise HTTPException(
+            400, detail=f"Connector label {label!r} already exists on this instance."
+        )
 
     ip = InterfacePoint(
         label=label,
@@ -73,7 +76,8 @@ def add_connector(instance_id: str, body: AddConnectorRequest) -> dict:
     )
     new_instances = [
         i.model_copy(update={"interface_points": [*i.interface_points, ip]})
-        if i.id == instance_id else i
+        if i.id == instance_id
+        else i
         for i in assembly.instances
     ]
     mutated = assembly.model_copy(update={"instances": new_instances})
@@ -83,10 +87,10 @@ def add_connector(instance_id: str, body: AddConnectorRequest) -> dict:
         label=f"Add connector {label} on {inst.name}",
         params={
             "instance_id": instance_id,
-            "label":       label,
-            "position":    list(body.position),
-            "normal":      list(body.normal),
-            "cluster_id":  body.cluster_id,
+            "label": label,
+            "position": list(body.position),
+            "normal": list(body.normal),
+            "cluster_id": body.cluster_id,
         },
     )
     return _assembly_response(assembly_state.get_or_404())
@@ -96,12 +100,21 @@ def add_connector(instance_id: str, body: AddConnectorRequest) -> dict:
 def delete_connector(instance_id: str, label: str) -> dict:
     """Remove a named InterfacePoint from a PartInstance."""
     assembly = assembly_state.get_or_404()
-    inst     = _find_instance(assembly, instance_id)
+    inst = _find_instance(assembly, instance_id)
     if not any(ip.label == label for ip in inst.interface_points):
-        raise HTTPException(404, detail=f"Connector {label!r} not found on instance {instance_id!r}.")
+        raise HTTPException(
+            404, detail=f"Connector {label!r} not found on instance {instance_id!r}."
+        )
     new_instances = [
-        i.model_copy(update={"interface_points": [ip for ip in i.interface_points if ip.label != label]})
-        if i.id == instance_id else i
+        i.model_copy(
+            update={
+                "interface_points": [
+                    ip for ip in i.interface_points if ip.label != label
+                ]
+            }
+        )
+        if i.id == instance_id
+        else i
         for i in assembly.instances
     ]
     mutated = assembly.model_copy(update={"instances": new_instances})

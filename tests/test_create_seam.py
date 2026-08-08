@@ -32,52 +32,60 @@ FIXTURES = pathlib.Path(__file__).parent / "fixtures"
 # Canonical: helix_a < helix_b lexicographically so order doesn't matter.
 # ---------------------------------------------------------------------------
 
+
 def _canon(ha, sa, bp, hb, sb):
     if ha > hb:
         ha, sa, hb, sb = hb, sb, ha, sa
     return (ha, sa, bp, hb, sb)
 
 
-EXPECTED_CROSSOVERS = frozenset([
-    # outer↔outer left arm
-    _canon("h_XY_0_5", "REVERSE", 18,  "h_XY_1_5", "FORWARD"),
-    _canon("h_XY_0_5", "REVERSE", 19,  "h_XY_1_5", "FORWARD"),
-    # outer↔outer right arm
-    _canon("h_XY_0_5", "REVERSE", 144, "h_XY_1_5", "FORWARD"),
-    _canon("h_XY_0_5", "REVERSE", 145, "h_XY_1_5", "FORWARD"),
-    # bridge left arm
-    _canon("h_XY_1_4", "REVERSE", 22,  "h_XY_1_3", "FORWARD"),
-    _canon("h_XY_1_4", "REVERSE", 23,  "h_XY_1_3", "FORWARD"),
-    # bridge right arm
-    _canon("h_XY_1_4", "REVERSE", 148, "h_XY_1_3", "FORWARD"),
-    _canon("h_XY_1_4", "REVERSE", 149, "h_XY_1_3", "FORWARD"),
-    # core pair 1
-    _canon("h_XY_1_2", "REVERSE", 85,  "h_XY_1_1", "FORWARD"),
-    _canon("h_XY_1_2", "REVERSE", 86,  "h_XY_1_1", "FORWARD"),
-    # core pair 2
-    _canon("h_XY_0_1", "REVERSE", 88,  "h_XY_0_2", "FORWARD"),
-    _canon("h_XY_0_1", "REVERSE", 89,  "h_XY_0_2", "FORWARD"),
-])
+EXPECTED_CROSSOVERS = frozenset(
+    [
+        # outer↔outer left arm
+        _canon("h_XY_0_5", "REVERSE", 18, "h_XY_1_5", "FORWARD"),
+        _canon("h_XY_0_5", "REVERSE", 19, "h_XY_1_5", "FORWARD"),
+        # outer↔outer right arm
+        _canon("h_XY_0_5", "REVERSE", 144, "h_XY_1_5", "FORWARD"),
+        _canon("h_XY_0_5", "REVERSE", 145, "h_XY_1_5", "FORWARD"),
+        # bridge left arm
+        _canon("h_XY_1_4", "REVERSE", 22, "h_XY_1_3", "FORWARD"),
+        _canon("h_XY_1_4", "REVERSE", 23, "h_XY_1_3", "FORWARD"),
+        # bridge right arm
+        _canon("h_XY_1_4", "REVERSE", 148, "h_XY_1_3", "FORWARD"),
+        _canon("h_XY_1_4", "REVERSE", 149, "h_XY_1_3", "FORWARD"),
+        # core pair 1
+        _canon("h_XY_1_2", "REVERSE", 85, "h_XY_1_1", "FORWARD"),
+        _canon("h_XY_1_2", "REVERSE", 86, "h_XY_1_1", "FORWARD"),
+        # core pair 2
+        _canon("h_XY_0_1", "REVERSE", 88, "h_XY_0_2", "FORWARD"),
+        _canon("h_XY_0_1", "REVERSE", 89, "h_XY_0_2", "FORWARD"),
+    ]
+)
 
 EXPECTED_RAILS = {"h_XY_0_4", "h_XY_0_3"}
 
 
 # ---------------------------------------------------------------------------
 
+
 def _load_seamed():
     from backend.core.models import Design
-    return Design.model_validate_json(
-        (FIXTURES / "10-6-10hb_seamed.nadoc").read_text()
-    )
+
+    return Design.model_validate_json((FIXTURES / "10-6-10hb_seamed.nadoc").read_text())
 
 
 def _actual_crossovers(design):
     result = set()
     for xo in design.crossovers:
-        result.add(_canon(
-            xo.half_a.helix_id, xo.half_a.strand, xo.half_a.index,
-            xo.half_b.helix_id, xo.half_b.strand,
-        ))
+        result.add(
+            _canon(
+                xo.half_a.helix_id,
+                xo.half_a.strand,
+                xo.half_a.index,
+                xo.half_b.helix_id,
+                xo.half_b.strand,
+            )
+        )
     return frozenset(result)
 
 
@@ -91,8 +99,8 @@ def _helices_with_crossovers(design):
 
 # ---------------------------------------------------------------------------
 
-class TestCreateSeamReferenceLayout:
 
+class TestCreateSeamReferenceLayout:
     def test_crossover_count(self):
         """6 Holliday junctions = 12 crossovers total."""
         d = _load_seamed()
@@ -105,7 +113,7 @@ class TestCreateSeamReferenceLayout:
         d = _load_seamed()
         actual = _actual_crossovers(d)
         missing = EXPECTED_CROSSOVERS - actual
-        extra   = actual - EXPECTED_CROSSOVERS
+        extra = actual - EXPECTED_CROSSOVERS
         assert not missing and not extra, (
             f"Crossover mismatch.\n  Missing: {missing}\n  Extra:   {extra}"
         )
@@ -122,10 +130,10 @@ class TestCreateSeamReferenceLayout:
     def test_hj_pairs(self):
         """Verify the six distinct helix pairs that carry Holliday junctions."""
         expected_pairs = {
-            ("h_XY_0_5", "h_XY_1_5"),   # outer↔outer (both arms)
-            ("h_XY_1_3", "h_XY_1_4"),   # bridge (both arms)
-            ("h_XY_1_1", "h_XY_1_2"),   # core pair 1
-            ("h_XY_0_1", "h_XY_0_2"),   # core pair 2
+            ("h_XY_0_5", "h_XY_1_5"),  # outer↔outer (both arms)
+            ("h_XY_1_3", "h_XY_1_4"),  # bridge (both arms)
+            ("h_XY_1_1", "h_XY_1_2"),  # core pair 1
+            ("h_XY_0_1", "h_XY_0_2"),  # core pair 2
         }
         d = _load_seamed()
         actual_pairs = set()

@@ -10,6 +10,7 @@ advanced over the same socket.
 This pins that the WS `state` payload now carries `progress_fraction` for a running job,
 computed by the SAME helper the REST list uses (so the two channels never disagree).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -25,16 +26,29 @@ from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
 def _running_job(ws: Path) -> MdJob:
     """A local NAMD job mid-ladder: 2 of 4 chunks done, the 3rd running (no live log →
     the fraction falls back to done/total = 0.5)."""
-    job = new_job("VoltronCore", "equilibrium_aware_namd", "VoltronCore",
-                  "package/VoltronCore_namd_solvated", design_source_path="VoltronCore.nadoc",
-                  seed_oxdna_job_id="5ce768ef2acf")   # a SEEDED run — the case that regressed
+    job = new_job(
+        "VoltronCore",
+        "equilibrium_aware_namd",
+        "VoltronCore",
+        "package/VoltronCore_namd_solvated",
+        design_source_path="VoltronCore.nadoc",
+        seed_oxdna_job_id="5ce768ef2acf",
+    )  # a SEEDED run — the case that regressed
     job.status = MdStatus.running
     job.current_segment_idx = 2
     job.segments = [
-        MdSegmentStatus(name="s0", stage="k0p5", percent=10.0, steps=1000, status="done"),
-        MdSegmentStatus(name="s1", stage="k0p5", percent=50.0, steps=1000, status="done"),
-        MdSegmentStatus(name="s2", stage="k0p5", percent=100.0, steps=1000, status="running"),
-        MdSegmentStatus(name="s3", stage="k0p1", percent=10.0, steps=1000, status="pending"),
+        MdSegmentStatus(
+            name="s0", stage="k0p5", percent=10.0, steps=1000, status="done"
+        ),
+        MdSegmentStatus(
+            name="s1", stage="k0p5", percent=50.0, steps=1000, status="done"
+        ),
+        MdSegmentStatus(
+            name="s2", stage="k0p5", percent=100.0, steps=1000, status="running"
+        ),
+        MdSegmentStatus(
+            name="s3", stage="k0p1", percent=10.0, steps=1000, status="pending"
+        ),
     ]
     job.save(ws)
     return job
@@ -67,8 +81,12 @@ def test_ws_state_push_omits_progress_fraction_for_non_running(tmp_path, monkeyp
     monkeypatch.setattr(assembly, "_WORKSPACE_DIR", tmp_path)
     monkeypatch.setattr(namd_runner, "reconcile_job_status", lambda job, ws: job)
 
-    job = new_job("VoltronCore", "equilibrium_aware_namd", "VoltronCore",
-                  "package/VoltronCore_namd_solvated")
+    job = new_job(
+        "VoltronCore",
+        "equilibrium_aware_namd",
+        "VoltronCore",
+        "package/VoltronCore_namd_solvated",
+    )
     job.status = MdStatus.queued
     job.save(tmp_path)
 

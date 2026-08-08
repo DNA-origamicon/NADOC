@@ -17,8 +17,18 @@ from backend.core.md_shell_reprep import (
 
 def _atom(serial, x, y, z):
     return Atom(
-        serial=serial, name="C1'", element="C", residue="DA", chain_id="A",
-        seq_num=1, x=x, y=y, z=z, strand_id="s", helix_id="h", bp_index=0,
+        serial=serial,
+        name="C1'",
+        element="C",
+        residue="DA",
+        chain_id="A",
+        seq_num=1,
+        x=x,
+        y=y,
+        z=z,
+        strand_id="s",
+        helix_id="h",
+        bp_index=0,
         direction="FORWARD",
     )
 
@@ -73,15 +83,19 @@ def test_com_colvars_rejects_empty_group():
 
 
 def test_stamp_converts_angstrom_to_nm_and_keeps_topology():
-    model = AtomisticModel(atoms=[_atom(0, 0, 0, 0), _atom(1, 0, 0, 0)],
-                           bonds=[(0, 1)])
+    model = AtomisticModel(atoms=[_atom(0, 0, 0, 0), _atom(1, 0, 0, 0)], bonds=[(0, 1)])
     # 2 DNA rows (small) + 3 water rows spanning a large box
-    coor = np.array([
-        [10.0, 20.0, 30.0], [15.0, 25.0, 35.0],   # DNA (Å)
-        [500.0, 0.0, 0.0], [-500.0, 400.0, 900.0], [0.0, -400.0, -900.0],
-    ])
+    coor = np.array(
+        [
+            [10.0, 20.0, 30.0],
+            [15.0, 25.0, 35.0],  # DNA (Å)
+            [500.0, 0.0, 0.0],
+            [-500.0, 400.0, 900.0],
+            [0.0, -400.0, -900.0],
+        ]
+    )
     out = stamp_relaxed_dna_model(model, coor)
-    assert out.bonds == [(0, 1)]                    # topology preserved
+    assert out.bonds == [(0, 1)]  # topology preserved
     assert (out.atoms[0].x, out.atoms[0].y, out.atoms[0].z) == (1.0, 2.0, 3.0)  # Å→nm
     assert (out.atoms[1].x, out.atoms[1].y, out.atoms[1].z) == (1.5, 2.5, 3.5)
 
@@ -89,8 +103,14 @@ def test_stamp_converts_angstrom_to_nm_and_keeps_topology():
 def test_stamp_guard_rejects_wrong_atom_order():
     # leading "DNA" rows span the full box on every axis → order assumption broken
     model = AtomisticModel(atoms=[_atom(0, 0, 0, 0), _atom(1, 0, 0, 0)], bonds=[])
-    coor = np.array([[-500.0, -500.0, -500.0], [500.0, 500.0, 500.0],
-                     [1.0, 1.0, 1.0], [2.0, 2.0, 2.0]])
+    coor = np.array(
+        [
+            [-500.0, -500.0, -500.0],
+            [500.0, 500.0, 500.0],
+            [1.0, 1.0, 1.0],
+            [2.0, 2.0, 2.0],
+        ]
+    )
     with pytest.raises(ValueError):
         stamp_relaxed_dna_model(model, coor)
 

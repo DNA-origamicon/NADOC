@@ -84,6 +84,7 @@ def build_namd_package(design: Design, *, allow_catenated_seed: bool = False) ->
     model = build_atomistic_model(design, include_proteins=True)
     # Same gate as the MD job pipeline — this ZIP path does not go through md_protocols.
     from backend.core.junction_topology import gate_seed_topology  # noqa: PLC0415
+
     gate_seed_topology(design, model=model, allow=allow_catenated_seed)
     pdb_text = export_pdb(design, model=model)
     identity_json = export_identity_json(design, model=model)
@@ -102,34 +103,34 @@ def build_namd_package(design: Design, *, allow_catenated_seed: bool = False) ->
         stub = export_psf(design, model=model)
         psf_text = (
             "! WARNING: parmed PSF completion failed — using stub PSF\n"
-            f"! Error: {exc}\n"
-            + stub
+            f"! Error: {exc}\n" + stub
         )
 
     from backend.core.protein_enm import build_protein_extrabonds
+
     extrabonds_text = build_protein_extrabonds(design, model)
     has_protein = bool(extrabonds_text)
 
-    conf_text   = _render_namd_conf(name, has_protein=has_protein)
+    conf_text = _render_namd_conf(name, has_protein=has_protein)
     readme_text = _README.format(name=name)
     prompt_text = _AI_PROMPT.replace("{name}", name)
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(prefix + f"{name}.pdb",              pdb_text)
-        zf.writestr(prefix + f"{name}.psf",              psf_text)
-        zf.writestr(prefix + f"{name}.identity.json",    identity_json)
-        zf.writestr(prefix + f"{name}.identity.tsv",     identity_tsv)
+        zf.writestr(prefix + f"{name}.pdb", pdb_text)
+        zf.writestr(prefix + f"{name}.psf", psf_text)
+        zf.writestr(prefix + f"{name}.identity.json", identity_json)
+        zf.writestr(prefix + f"{name}.identity.tsv", identity_tsv)
         zf.writestr(prefix + f"{name}.design_maps.json", design_maps_json)
-        zf.writestr(prefix + f"{name}.basepairs.json",   basepairs_json)
-        zf.writestr(prefix + f"{name}.basepairs.tsv",    basepairs_tsv)
-        zf.writestr(prefix + f"{name}.stacking.json",    stacking_json)
-        zf.writestr(prefix + f"{name}.stacking.tsv",     stacking_tsv)
+        zf.writestr(prefix + f"{name}.basepairs.json", basepairs_json)
+        zf.writestr(prefix + f"{name}.basepairs.tsv", basepairs_tsv)
+        zf.writestr(prefix + f"{name}.stacking.json", stacking_json)
+        zf.writestr(prefix + f"{name}.stacking.tsv", stacking_tsv)
         for filename, text in dry_restraints.items():
             zf.writestr(prefix + f"restraints/{filename}", text)
-        zf.writestr(prefix + "namd.conf",                conf_text)
-        zf.writestr(prefix + "README.txt",               readme_text)
-        zf.writestr(prefix + "AI_ASSISTANT_PROMPT.txt",  prompt_text)
+        zf.writestr(prefix + "namd.conf", conf_text)
+        zf.writestr(prefix + "README.txt", readme_text)
+        zf.writestr(prefix + "AI_ASSISTANT_PROMPT.txt", prompt_text)
         if has_protein:
             zf.writestr(prefix + "extrabonds.txt", extrabonds_text)
 
@@ -147,9 +148,11 @@ def build_namd_package(design: Design, *, allow_catenated_seed: bool = False) ->
         info.compress_type = zipfile.ZIP_DEFLATED
         info.external_attr = (
             stat.S_IFREG
-            | stat.S_IRWXU   # rwx for owner
-            | stat.S_IRGRP | stat.S_IXGRP
-            | stat.S_IROTH | stat.S_IXOTH
+            | stat.S_IRWXU  # rwx for owner
+            | stat.S_IRGRP
+            | stat.S_IXGRP
+            | stat.S_IROTH
+            | stat.S_IXOTH
         ) << 16
         zf.writestr(info, _LAUNCH_SH.format(name=name))
 
@@ -158,6 +161,7 @@ def build_namd_package(design: Design, *, allow_catenated_seed: bool = False) ->
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
+
 
 def _check_ff_files() -> None:
     missing = [f for f in _FF_FILES if not (_FF_DIR / f).exists()]

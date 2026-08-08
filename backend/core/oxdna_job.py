@@ -26,35 +26,37 @@ from typing import Optional
 
 
 class OxdnaStatus(str, Enum):
-    queued    = "queued"
-    preparing = "preparing"   # writing topology/conf/input files
-    running   = "running"
-    failed    = "failed"
-    stopped   = "stopped"     # manually stopped
-    completed = "completed"   # all stages done
+    queued = "queued"
+    preparing = "preparing"  # writing topology/conf/input files
+    running = "running"
+    failed = "failed"
+    stopped = "stopped"  # manually stopped
+    completed = "completed"  # all stages done
 
 
 @dataclass
 class OxdnaHealthSample:
-    wall_time:             float
-    stage:                 str
-    bp_retained_fraction:  Optional[float] = None   # designed WC pairs still formed
-    potential_energy:      Optional[float] = None   # per-particle U (oxDNA units)
-    max_backbone_clash:    Optional[float] = None   # overstretched-bond proxy (steric)
-    max_backbone_fene:     Optional[float] = None   # longest backbone bond (oxDNA units) — FENE-readiness
-    steps_per_s:           Optional[float] = None
-    passed:                bool = True
-    reason:                str  = ""
+    wall_time: float
+    stage: str
+    bp_retained_fraction: Optional[float] = None  # designed WC pairs still formed
+    potential_energy: Optional[float] = None  # per-particle U (oxDNA units)
+    max_backbone_clash: Optional[float] = None  # overstretched-bond proxy (steric)
+    max_backbone_fene: Optional[float] = (
+        None  # longest backbone bond (oxDNA units) — FENE-readiness
+    )
+    steps_per_s: Optional[float] = None
+    passed: bool = True
+    reason: str = ""
 
 
 @dataclass
 class OxdnaStageStatus:
-    name:   str          # e.g. "1_mc_relax", "2_md_relax", "3_equil", "4_production"
-    kind:   str          # "mc" | "md_relax" | "equil" | "production"
-    steps:  int
-    status: str = "pending"   # pending / running / done / failed
-    started_at: Optional[float] = None   # wall time the stage began running (for ETA)
-    resumed: bool = False     # this stage was resumed from its own checkpoint (relabel)
+    name: str  # e.g. "1_mc_relax", "2_md_relax", "3_equil", "4_production"
+    kind: str  # "mc" | "md_relax" | "equil" | "production"
+    steps: int
+    status: str = "pending"  # pending / running / done / failed
+    started_at: Optional[float] = None  # wall time the stage began running (for ETA)
+    resumed: bool = False  # this stage was resumed from its own checkpoint (relabel)
     # Steps already simulated by PREVIOUS attempts when this one was resumed. The
     # resumed run's own energy.dat starts from zero (oxDNA always restarts its step
     # counter), so without this the banked work is invisible and the stage looks 0 %.
@@ -63,28 +65,28 @@ class OxdnaStageStatus:
 
 @dataclass
 class OxdnaJob:
-    job_id:              str
-    design_name:         str
-    status:              OxdnaStatus
-    created_at:          float
-    n_nucleotides:       int = 0
-    stages:              list[OxdnaStageStatus]  = field(default_factory=list)
-    current_stage_idx:   int                     = 0
-    error:               Optional[str]           = None
-    oxdna_pid:           Optional[int]           = None
-    device:              str                     = "0"      # CUDA device index
-    backend:             str                     = "CUDA"   # "CPU" | "CUDA"
-    salt_concentration:  float                   = 0.5      # molar
-    health_samples:      list[OxdnaHealthSample] = field(default_factory=list)
-    design_source_path:  Optional[str]           = None
+    job_id: str
+    design_name: str
+    status: OxdnaStatus
+    created_at: float
+    n_nucleotides: int = 0
+    stages: list[OxdnaStageStatus] = field(default_factory=list)
+    current_stage_idx: int = 0
+    error: Optional[str] = None
+    oxdna_pid: Optional[int] = None
+    device: str = "0"  # CUDA device index
+    backend: str = "CUDA"  # "CPU" | "CUDA"
+    salt_concentration: float = 0.5  # molar
+    health_samples: list[OxdnaHealthSample] = field(default_factory=list)
+    design_source_path: Optional[str] = None
     # Auto-retry budget: when a relax stage finishes but leaves the structure NOT
     # equil-ready (a backbone bond past oxDNA's FENE cliff), the runner re-runs the
     # md_relax stage with escalated parameters (longer + smaller dt + stronger force
     # cap) up to this many times before failing the job.  ``relax_retries`` counts
     # how many escalations have been spent.  0 retries → legacy behaviour (proceed
     # straight to the capped equil).
-    max_relax_retries:   int                     = 3
-    relax_retries:       int                     = 0
+    max_relax_retries: int = 3
+    relax_retries: int = 0
     # Auto-recovery budget for unbiased MD sampling stages (production / field / run).
     # These run at the fast production timestep (dt=0.005); a large or floppy design
     # can go numerically unstable late in the run (a single particle's coordinates
@@ -93,14 +95,14 @@ class OxdnaJob:
     # relaxed seed at half the timestep, up to this many times, before failing.
     # ``production_retries`` counts how many halvings have been spent.  Keeps the fast
     # dt the default and only pays the slower, stabler timestep on designs that need it.
-    max_production_retries: int                   = 2
-    production_retries:     int                   = 0
+    max_production_retries: int = 2
+    production_retries: int = 0
     # Electric-field branches: a field run is its own job seeded from a relaxed
     # parent's structure.  ``parent_job_id`` links a field child to its relaxed
     # parent (None for a normal relaxation job); ``efield`` records the field
     # params for the list sub-item hover ({force_pN, force_oxdna, dir, n_anchored}).
-    parent_job_id:       Optional[str]           = None
-    efield:              Optional[dict]          = None
+    parent_job_id: Optional[str] = None
+    efield: Optional[dict] = None
     # Full run conditions echoed back to the panel cards when the job is selected,
     # so clicking a job re-populates every control (Advanced / Hard surface /
     # Anchors / E-field) with exactly what the run used.  Shape per route:
@@ -110,7 +112,7 @@ class OxdnaJob:
     #   field  -> {kind, steps, field, anchors}
     # ``surface`` = {dir, offset_nm, stiff}|None; ``anchors`` = frontend descriptors
     # (camelCase) so the Anchors card can re-render its chips verbatim.
-    run_config:          Optional[dict]          = None
+    run_config: Optional[dict] = None
     # Out-of-date detection.  ``design_fingerprint`` is a content hash of the
     # design's oxDNA-build-relevant fields at creation (see
     # ``backend.core.oxdna_staleness``); if the current design's fingerprint differs,
@@ -118,15 +120,15 @@ class OxdnaJob:
     # this job's frozen topology and crash.  ``feature_log_position`` is the design's
     # last-active feature-log index at creation — the point to non-destructively roll
     # the feature log back to so the job becomes runnable again (None = no log).
-    design_fingerprint:  Optional[str]           = None
-    feature_log_position: Optional[int]          = None
+    design_fingerprint: Optional[str] = None
+    feature_log_position: Optional[int] = None
     # Archival: heavy job folders can be moved off the workspace to an external
     # location (see backend.core.job_archive).  When archived, ``archive_path`` is
     # the absolute path of the moved folder and ``job_dir`` resolves there, so every
     # consumer that reads job files through job_dir()/stage_dir() keeps working and
     # new jobs can still be chained off the archived parent.
-    archived:            bool                    = False
-    archive_path:        Optional[str]           = None
+    archived: bool = False
+    archive_path: Optional[str] = None
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -159,6 +161,7 @@ class OxdnaJob:
     @classmethod
     def load(cls, job_id: str, workspace_dir: Path) -> "OxdnaJob":
         from backend.core.job_archive import resolve_job_json
+
         path = resolve_job_json(workspace_dir, "oxdna_jobs", job_id)
         data = json.loads(path.read_text())
         data["status"] = OxdnaStatus(data["status"])
@@ -183,6 +186,7 @@ class OxdnaJob:
     @classmethod
     def list_jobs(cls, workspace_dir: Path) -> list["OxdnaJob"]:
         from backend.core.job_archive import archived_job_ids
+
         result: list[OxdnaJob] = []
         seen: set[str] = set()
         jobs_dir = workspace_dir / "oxdna_jobs"
@@ -259,20 +263,20 @@ def new_oxdna_job(
     feature_log_position: Optional[int] = None,
 ) -> OxdnaJob:
     return OxdnaJob(
-        job_id             = uuid.uuid4().hex[:12],
-        design_name        = design_name,
-        status             = OxdnaStatus.queued,
-        created_at         = time.time(),
-        n_nucleotides      = n_nucleotides,
-        stages             = stages,
-        device             = device,
-        backend            = backend,
-        salt_concentration = salt_concentration,
-        design_source_path = design_source_path,
-        parent_job_id      = parent_job_id,
-        efield             = efield,
-        run_config         = run_config,
-        max_relax_retries  = max_relax_retries,
-        design_fingerprint = design_fingerprint,
-        feature_log_position = feature_log_position,
+        job_id=uuid.uuid4().hex[:12],
+        design_name=design_name,
+        status=OxdnaStatus.queued,
+        created_at=time.time(),
+        n_nucleotides=n_nucleotides,
+        stages=stages,
+        device=device,
+        backend=backend,
+        salt_concentration=salt_concentration,
+        design_source_path=design_source_path,
+        parent_job_id=parent_job_id,
+        efield=efield,
+        run_config=run_config,
+        max_relax_retries=max_relax_retries,
+        design_fingerprint=design_fingerprint,
+        feature_log_position=feature_log_position,
     )

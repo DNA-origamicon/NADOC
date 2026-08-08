@@ -11,7 +11,10 @@ def test_make_minimal_design_default_round_trip_and_validates():
     assert len(d.helices) == 1
     assert len(d.strands) == 2
     assert d.lattice_type == LatticeType.HONEYCOMB
-    assert {s.strand_type for s in d.strands} == {StrandType.SCAFFOLD, StrandType.STAPLE}
+    assert {s.strand_type for s in d.strands} == {
+        StrandType.SCAFFOLD,
+        StrandType.STAPLE,
+    }
     assert Design(**d.model_dump()) == d
     assert validate_design(d).passed
 

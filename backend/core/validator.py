@@ -17,6 +17,7 @@ from backend.core.models import Design, Strand, StrandType, VALID_MODIFICATIONS
 @dataclass
 class ValidationResult:
     """Result of a single validation check."""
+
     ok: bool
     message: str
 
@@ -24,6 +25,7 @@ class ValidationResult:
 @dataclass
 class ValidationReport:
     """Aggregated report from validate_design()."""
+
     results: List[ValidationResult] = field(default_factory=list)
 
     @property
@@ -57,7 +59,11 @@ def _is_loop_strand(strand: Strand) -> bool:
     for domain in strand.domains:
         lo = min(domain.start_bp, domain.end_bp)
         hi = max(domain.start_bp, domain.end_bp)
-        dir_val = domain.direction.value if hasattr(domain.direction, "value") else str(domain.direction)
+        dir_val = (
+            domain.direction.value
+            if hasattr(domain.direction, "value")
+            else str(domain.direction)
+        )
         for bp in range(lo, hi + 1):
             key = (domain.helix_id, bp, dir_val)
             if key in seen:
@@ -100,7 +106,7 @@ def validate_design(design: Design) -> ValidationReport:
     bad_refs: List[str] = []
     for strand in design.strands:
         if strand.strand_type == StrandType.LINKER or strand.is_reference:
-            continue   # linker strands live on virtual __lnk__ helices; reference geometry is excluded
+            continue  # linker strands live on virtual __lnk__ helices; reference geometry is excluded
         for domain in strand.domains:
             if domain.helix_id not in helix_ids:
                 bad_refs.append(
@@ -109,19 +115,25 @@ def validate_design(design: Design) -> ValidationReport:
     if bad_refs:
         report.results.append(ValidationResult(False, "; ".join(bad_refs)))
     else:
-        report.results.append(ValidationResult(True, "All domain helix references are valid."))
+        report.results.append(
+            ValidationResult(True, "All domain helix references are valid.")
+        )
 
     # ── Scaffold count ────────────────────────────────────────────────────
     # Multiple scaffold strands are valid for MagicDNA-style multi-scaffold
     # designs and clockwork multi-component assemblies (DTP-0c decision).
-    scaffold_count = sum(1 for s in design.strands if s.is_scaffold and not s.is_reference)
+    scaffold_count = sum(
+        1 for s in design.strands if s.is_scaffold and not s.is_reference
+    )
     if scaffold_count == 0:
         report.results.append(ValidationResult(False, "No scaffold strand defined."))
     elif scaffold_count == 1:
         report.results.append(ValidationResult(True, "Scaffold strand present."))
     else:
         report.results.append(
-            ValidationResult(True, f"Multi-scaffold design: {scaffold_count} scaffold strands.")
+            ValidationResult(
+                True, f"Multi-scaffold design: {scaffold_count} scaffold strands."
+            )
         )
 
     # ── Sequence length consistency ───────────────────────────────────────
@@ -136,38 +148,48 @@ def validate_design(design: Design) -> ValidationReport:
         if strand.sequence is None:
             continue
         if strand.strand_type == StrandType.LINKER or strand.is_reference:
-            continue   # linker sequences auto-generated; reference geometry is excluded
+            continue  # linker sequences auto-generated; reference geometry is excluded
         expected_len = sum(
-            abs(d.end_bp - d.start_bp) + 1
-            - sum(1 for bp in helix_skips.get(d.helix_id, set())
-                  if min(d.start_bp, d.end_bp) <= bp <= max(d.start_bp, d.end_bp))
+            abs(d.end_bp - d.start_bp)
+            + 1
+            - sum(
+                1
+                for bp in helix_skips.get(d.helix_id, set())
+                if min(d.start_bp, d.end_bp) <= bp <= max(d.start_bp, d.end_bp)
+            )
             for d in strand.domains
         )
         if len(strand.sequence) != expected_len:
-            report.results.append(ValidationResult(
-                False,
-                f"Strand {strand.id!r} sequence length {len(strand.sequence)} "
-                f"!= expected {expected_len}."
-            ))
+            report.results.append(
+                ValidationResult(
+                    False,
+                    f"Strand {strand.id!r} sequence length {len(strand.sequence)} "
+                    f"!= expected {expected_len}.",
+                )
+            )
         else:
-            report.results.append(ValidationResult(
-                True,
-                f"Strand {strand.id!r} sequence length is consistent."
-            ))
+            report.results.append(
+                ValidationResult(
+                    True, f"Strand {strand.id!r} sequence length is consistent."
+                )
+            )
 
     # ── Loop / circular strand detection ─────────────────────────────────────
     loop_ids: List[str] = [
-        s.id for s in design.strands
+        s.id
+        for s in design.strands
         if s.strand_type not in (StrandType.SCAFFOLD, StrandType.LINKER)
-           and not s.is_reference
-           and _is_loop_strand(s)
+        and not s.is_reference
+        and _is_loop_strand(s)
     ]
     if loop_ids:
-        report.results.append(ValidationResult(
-            False,
-            "Circular staple strand(s) detected (no free 5′/3′ ends): "
-            + ", ".join(repr(sid) for sid in loop_ids),
-        ))
+        report.results.append(
+            ValidationResult(
+                False,
+                "Circular staple strand(s) detected (no free 5′/3′ ends): "
+                + ", ".join(repr(sid) for sid in loop_ids),
+            )
+        )
     # No "pass" entry when there are no loops — avoids noise in the report.
 
     # ── Nicks at crossover locations (non-physical, hard failure) ─────────────
@@ -181,12 +203,18 @@ def validate_design(design: Design) -> ValidationReport:
     xo_slots: Dict[Tuple[str, int, str], List[str]] = {}
     for xo in design.crossovers:
         for half in (xo.half_a, xo.half_b):
-            dirv = half.strand.value if hasattr(half.strand, "value") else str(half.strand)
+            dirv = (
+                half.strand.value if hasattr(half.strand, "value") else str(half.strand)
+            )
             xo_slots.setdefault((half.helix_id, half.index, dirv), []).append(xo.id)
 
     nicked_at_xo: List[str] = []
     for strand in design.strands:
-        if strand.is_reference or not strand.domains or strand.strand_type == StrandType.LINKER:
+        if (
+            strand.is_reference
+            or not strand.domains
+            or strand.strand_type == StrandType.LINKER
+        ):
             continue
         first, last = strand.domains[0], strand.domains[-1]
         for hid, bp, direction in (
@@ -201,10 +229,12 @@ def validate_design(design: Design) -> ValidationReport:
     if nicked_at_xo:
         shown = "; ".join(nicked_at_xo[:20])
         more = f" (+{len(nicked_at_xo) - 20} more)" if len(nicked_at_xo) > 20 else ""
-        report.results.append(ValidationResult(
-            False,
-            f"Strand nicked at crossover location(s) — non-physical: {shown}{more}",
-        ))
+        report.results.append(
+            ValidationResult(
+                False,
+                f"Strand nicked at crossover location(s) — non-physical: {shown}{more}",
+            )
+        )
 
     # ── Improper crossovers (invalid lattice position) ───────────────────────
     # A real lattice crossover joins two helices at the SAME bp column (the
@@ -225,11 +255,15 @@ def validate_design(design: Design) -> ValidationReport:
             )
     if improper_xovers:
         shown = "; ".join(improper_xovers[:20])
-        more = f" (+{len(improper_xovers) - 20} more)" if len(improper_xovers) > 20 else ""
-        report.results.append(ValidationResult(
-            False,
-            f"Improper crossover(s) at invalid lattice positions: {shown}{more}",
-        ))
+        more = (
+            f" (+{len(improper_xovers) - 20} more)" if len(improper_xovers) > 20 else ""
+        )
+        report.results.append(
+            ValidationResult(
+                False,
+                f"Improper crossover(s) at invalid lattice positions: {shown}{more}",
+            )
+        )
 
     # ── Overhang chain topology (Alt A: parent_overhang_id) ───────────────
     # Each spec's parent_overhang_id (when set) must reference an existing
@@ -255,7 +289,11 @@ def validate_design(design: Design) -> ValidationReport:
                 )
                 break
             seen.add(cur.id)
-            cur = ovhg_by_id.get(cur.parent_overhang_id) if cur.parent_overhang_id else None
+            cur = (
+                ovhg_by_id.get(cur.parent_overhang_id)
+                if cur.parent_overhang_id
+                else None
+            )
     if chain_errors:
         report.results.append(ValidationResult(False, "; ".join(chain_errors)))
 
@@ -269,17 +307,21 @@ def validate_design(design: Design) -> ValidationReport:
     # Partial mismatches are NOT flagged (mismatched-register kinetics are valid).
     if design.duplexes:
         from backend.core.duplex import classify_duplex_pairing
+
         unpaired = [
-            (dx.name or dx.id[:6]) for dx in design.duplexes
+            (dx.name or dx.id[:6])
+            for dx in design.duplexes
             if (cls := classify_duplex_pairing(design, dx))["length"] > 0
             and cls["n_complementary"] == 0
         ]
         if unpaired:
-            report.results.append(ValidationResult(
-                False,
-                "Duplex register has no complementary bases (sequences don't pair): "
-                + ", ".join(unpaired),
-            ))
+            report.results.append(
+                ValidationResult(
+                    False,
+                    "Duplex register has no complementary bases (sequences don't pair): "
+                    + ", ".join(unpaired),
+                )
+            )
 
     # ── Strand extensions (terminal sequence / modification: fluorophore etc.) ─
     # Each extension must reference a live strand, its modification (if set) must be
@@ -292,13 +334,21 @@ def validate_design(design: Design) -> ValidationReport:
             tag = ext.label or ext.id[:6]
             if ext.strand_id not in strand_ids:
                 ext_errors.append(f"{tag}: strand {ext.strand_id!r} does not exist")
-            if ext.modification is not None and ext.modification not in VALID_MODIFICATIONS:
+            if (
+                ext.modification is not None
+                and ext.modification not in VALID_MODIFICATIONS
+            ):
                 ext_errors.append(f"{tag}: unknown modification {ext.modification!r}")
-            if ext.sequence is not None and any(c not in "ACGTNacgtn" for c in ext.sequence):
+            if ext.sequence is not None and any(
+                c not in "ACGTNacgtn" for c in ext.sequence
+            ):
                 ext_errors.append(f"{tag}: sequence has non-ACGTN bases")
         if ext_errors:
-            report.results.append(ValidationResult(
-                False, "Strand extension(s) invalid: " + "; ".join(ext_errors)))
+            report.results.append(
+                ValidationResult(
+                    False, "Strand extension(s) invalid: " + "; ".join(ext_errors)
+                )
+            )
 
     # ── Cluster hierarchy + overhang-duplex cluster integrity ─────────────────
     # A CHILD cluster (parent_cluster_id set) composes inside its parent; it must
@@ -316,9 +366,13 @@ def validate_design(design: Design) -> ValidationReport:
                 if c.parent_cluster_id == c.id:
                     cl_errors.append(f"{tag}: cluster is its own parent")
                 elif c.parent_cluster_id not in cl_by_id:
-                    cl_errors.append(f"{tag}: parent cluster {c.parent_cluster_id!r} does not exist")
+                    cl_errors.append(
+                        f"{tag}: parent cluster {c.parent_cluster_id!r} does not exist"
+                    )
                 elif not c.domain_ids:
-                    cl_errors.append(f"{tag}: child cluster must be domain-level (has no domain_ids)")
+                    cl_errors.append(
+                        f"{tag}: child cluster must be domain-level (has no domain_ids)"
+                    )
                 else:
                     seen, cur, depth = {c.id}, cl_by_id.get(c.parent_cluster_id), 0
                     while cur is not None and cur.parent_cluster_id and depth < 64:
@@ -332,14 +386,21 @@ def validate_design(design: Design) -> ValidationReport:
             if drv is not None:
                 spec = ovhg_by_id.get(drv)
                 if spec is None:
-                    cl_errors.append(f"{tag}: duplex driver overhang {drv!r} does not exist")
-                elif (list(spec.rotation) != [0.0, 0.0, 0.0, 1.0]
-                      or any(abs(float(t)) > 1e-9 for t in spec.translation)):
+                    cl_errors.append(
+                        f"{tag}: duplex driver overhang {drv!r} does not exist"
+                    )
+                elif list(spec.rotation) != [0.0, 0.0, 0.0, 1.0] or any(
+                    abs(float(t)) > 1e-9 for t in spec.translation
+                ):
                     cl_errors.append(
                         f"{tag}: duplex driver {drv!r} still carries an OverhangSpec pose "
-                        "(would double-transform — pose must live on the cluster)")
+                        "(would double-transform — pose must live on the cluster)"
+                    )
         if cl_errors:
-            report.results.append(ValidationResult(
-                False, "Cluster hierarchy invalid: " + "; ".join(cl_errors)))
+            report.results.append(
+                ValidationResult(
+                    False, "Cluster hierarchy invalid: " + "; ".join(cl_errors)
+                )
+            )
 
     return report

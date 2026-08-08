@@ -13,16 +13,22 @@ between two overhang stretches, expressed in helix bp coordinates (see
 The per-base Watson-Crick classifier (paired / mismatch / unpaired) lands in
 Phase 1 alongside the CRUD router.
 """
+
 from __future__ import annotations
 
 from typing import Dict, List, Optional
 
 from backend.core.models import (
-    Design, Domain, Duplex, DuplexEnd, OverhangBinding, SubDomain,
+    Design,
+    Domain,
+    Duplex,
+    DuplexEnd,
+    OverhangBinding,
+    SubDomain,
     _overhang_backing_domain,
 )
 
-_COMPLEMENT = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
+_COMPLEMENT = {"A": "T", "T": "A", "C": "G", "G": "C"}
 
 
 def offset_to_bp(domain: Domain, offset: int) -> int:
@@ -41,8 +47,9 @@ def bp_to_offset(domain: Domain, bp: int) -> int:
     return (bp - domain.start_bp) * step
 
 
-def subdomain_end(domain: Domain, sub_domain: SubDomain, length: int,
-                  overhang_id: str) -> DuplexEnd:
+def subdomain_end(
+    domain: Domain, sub_domain: SubDomain, length: int, overhang_id: str
+) -> DuplexEnd:
     """Build a :class:`DuplexEnd` covering ``length`` bases of ``sub_domain``,
     starting at its 5' base. ``start_bp`` is the 5' base, ``end_bp`` the 3' base
     (order encodes polarity)."""
@@ -55,8 +62,8 @@ def _driver_side(binding: OverhangBinding) -> str:
     """Map a legacy binding's ``driver_oh_id`` onto the Duplex ``left``/``right``
     axis. Defaults to ``'left'`` when the binding predates the field."""
     if binding.driver_oh_id and binding.driver_oh_id == binding.overhang_b_id:
-        return 'right'
-    return 'left'
+        return "right"
+    return "left"
 
 
 def synthesize_duplexes_from_bindings(design: Design) -> List[Duplex]:
@@ -88,23 +95,26 @@ def synthesize_duplexes_from_bindings(design: Design) -> List[Duplex]:
         length = min(sd_a.length_bp, sd_b.length_bp)
         if length <= 0:
             continue
-        out.append(Duplex(
-            name=b.name or f"D{i + 1}",
-            created_at=b.created_at,
-            left=subdomain_end(dom_a, sd_a, length, oid_a),
-            right=subdomain_end(dom_b, sd_b, length, oid_b),
-            driver=_driver_side(b),
-            bound=b.bound,
-            binding_mode=b.binding_mode,
-            allow_n_wildcard=b.allow_n_wildcard,
-            target_joint_id=b.target_joint_id,
-            locked_angle_deg=b.locked_angle_deg,
-            connection_type=b.connection_type,
-        ))
+        out.append(
+            Duplex(
+                name=b.name or f"D{i + 1}",
+                created_at=b.created_at,
+                left=subdomain_end(dom_a, sd_a, length, oid_a),
+                right=subdomain_end(dom_b, sd_b, length, oid_b),
+                driver=_driver_side(b),
+                bound=b.bound,
+                binding_mode=b.binding_mode,
+                allow_n_wildcard=b.allow_n_wildcard,
+                target_joint_id=b.target_joint_id,
+                locked_angle_deg=b.locked_angle_deg,
+                connection_type=b.connection_type,
+            )
+        )
     return out
 
 
 # ── Phase 1: per-base pairing classifier + coverage (the display/oracle read) ──
+
 
 def _wc_base(a: Optional[str], b: Optional[str], allow_n: bool) -> bool:
     """True if bases ``a``/``b`` are Watson-Crick complementary. ``N`` is a
@@ -114,7 +124,7 @@ def _wc_base(a: Optional[str], b: Optional[str], allow_n: bool) -> bool:
     if a is None or b is None:
         return False
     a, b = a.upper(), b.upper()
-    if allow_n and (a == 'N' or b == 'N'):
+    if allow_n and (a == "N" or b == "N"):
         return True
     return _COMPLEMENT.get(a) == b
 
@@ -124,6 +134,7 @@ def overhang_offset_bases(design: Design, overhang_id: str) -> List[str]:
     length == the backing-domain length. Mirrors the frontend
     ``assembleOverhangSequence(ovhg, overhangDomainLength(...))``."""
     from backend.core.sequences import _assemble_overhang_5to3
+
     spec = next((o for o in design.overhangs if o.id == overhang_id), None)
     _, dom = _overhang_backing_domain(design, overhang_id)
     if spec is None or dom is None:
@@ -132,9 +143,15 @@ def overhang_offset_bases(design: Design, overhang_id: str) -> List[str]:
     return list(_assemble_overhang_5to3(spec, domain_len))
 
 
-def classify_antiparallel(left_dom, right_dom, left_end, right_end,
-                          left_bases: List[str], right_bases: List[str],
-                          allow_n: bool) -> dict:
+def classify_antiparallel(
+    left_dom,
+    right_dom,
+    left_end,
+    right_end,
+    left_bases: List[str],
+    right_bases: List[str],
+    allow_n: bool,
+) -> dict:
     """Per-base antiparallel WC walk: ``left_end`` walked 5'→3' against
     ``right_end`` walked 3'→5'. The shared kernel for BOTH the per-design
     (:func:`classify_duplex_pairing`) and the cross-part assembly classifiers —
@@ -146,23 +163,25 @@ def classify_antiparallel(left_dom, right_dom, left_end, right_end,
     positions: List[dict] = []
     n_comp = 0
     if left_dom is not None and right_dom is not None:
-        left_off0 = bp_to_offset(left_dom, left_end.start_bp)     # 5' base of left
+        left_off0 = bp_to_offset(left_dom, left_end.start_bp)  # 5' base of left
         right_off0 = bp_to_offset(right_dom, right_end.start_bp)  # 5' base of right
         for i in range(L):
             l_off = left_off0 + i
-            r_off = right_off0 + (L - 1 - i)   # antiparallel: left 5' ↔ right 3'
-            l_base = left_bases[l_off] if 0 <= l_off < len(left_bases) else 'N'
-            r_base = right_bases[r_off] if 0 <= r_off < len(right_bases) else 'N'
+            r_off = right_off0 + (L - 1 - i)  # antiparallel: left 5' ↔ right 3'
+            l_base = left_bases[l_off] if 0 <= l_off < len(left_bases) else "N"
+            r_base = right_bases[r_off] if 0 <= r_off < len(right_bases) else "N"
             comp = _wc_base(l_base, r_base, allow_n)
             n_comp += 1 if comp else 0
-            positions.append({
-                "offset": i,
-                "left_bp": offset_to_bp(left_dom, l_off),
-                "right_bp": offset_to_bp(right_dom, r_off),
-                "left_base": l_base,
-                "right_base": r_base,
-                "complementary": comp,
-            })
+            positions.append(
+                {
+                    "offset": i,
+                    "left_bp": offset_to_bp(left_dom, l_off),
+                    "right_bp": offset_to_bp(right_dom, r_off),
+                    "left_base": l_base,
+                    "right_base": r_base,
+                    "complementary": comp,
+                }
+            )
     return {
         "length": L,
         "positions": positions,
@@ -189,8 +208,13 @@ def classify_duplex_pairing(design: Design, duplex: Duplex) -> dict:
     left_bases = overhang_offset_bases(design, duplex.left.overhang_id)
     right_bases = overhang_offset_bases(design, duplex.right.overhang_id)
     return classify_antiparallel(
-        left_dom, right_dom, duplex.left, duplex.right,
-        left_bases, right_bases, duplex.allow_n_wildcard,
+        left_dom,
+        right_dom,
+        duplex.left,
+        duplex.right,
+        left_bases,
+        right_bases,
+        duplex.allow_n_wildcard,
     )
 
 
@@ -203,16 +227,18 @@ def overhang_pairing_map(design: Design, overhang_id: str) -> Dict[int, str]:
     if dom is None:
         return {}
     lo, hi = sorted((dom.start_bp, dom.end_bp))
-    result: Dict[int, str] = {bp: 'unpaired' for bp in range(lo, hi + 1)}
+    result: Dict[int, str] = {bp: "unpaired" for bp in range(lo, hi + 1)}
     for dx in design.duplexes:
         if dx.left.overhang_id != overhang_id and dx.right.overhang_id != overhang_id:
             continue
         cls = classify_duplex_pairing(design, dx)
         for p in cls["positions"]:
-            for side_id, bp in ((dx.left.overhang_id, p["left_bp"]),
-                                (dx.right.overhang_id, p["right_bp"])):
+            for side_id, bp in (
+                (dx.left.overhang_id, p["left_bp"]),
+                (dx.right.overhang_id, p["right_bp"]),
+            ):
                 if side_id == overhang_id and bp in result:
-                    result[bp] = 'paired' if p["complementary"] else 'mismatch'
+                    result[bp] = "paired" if p["complementary"] else "mismatch"
     return result
 
 
@@ -245,7 +271,7 @@ def longest_driver(design: Design, left: DuplexEnd, right: DuplexEnd) -> str:
     the shorter partner rides its helix). Ties → 'left'."""
     la = overhang_domain_length(design, left.overhang_id)
     lb = overhang_domain_length(design, right.overhang_id)
-    return 'right' if lb > la else 'left'
+    return "right" if lb > la else "left"
 
 
 def overhang_domain_length(design: Design, overhang_id: str) -> int:
@@ -253,8 +279,9 @@ def overhang_domain_length(design: Design, overhang_id: str) -> int:
     return 0 if dom is None else abs(dom.end_bp - dom.start_bp) + 1
 
 
-def connect_register(design: Design, oh_a_id: str, attach_a: str,
-                     oh_b_id: str, attach_b: str) -> tuple[DuplexEnd, DuplexEnd]:
+def connect_register(
+    design: Design, oh_a_id: str, attach_a: str, oh_b_id: str, attach_b: str
+) -> tuple[DuplexEnd, DuplexEnd]:
     """Compute the register for CONNECTING two overhangs at their attach ends —
     the producer for a fresh duplex. MECHANICAL (no polarity reasoning): reuses the
     same `_sub_domain_at_attach` + `subdomain_end` construction as the validated
@@ -266,6 +293,7 @@ def connect_register(design: Design, oh_a_id: str, attach_a: str,
     tip). Raises ``ValueError`` on unresolved overhang / missing sub-domain / domain.
     """
     from backend.core.models import _sub_domain_at_attach
+
     sd_a_id = _sub_domain_at_attach(design, oh_a_id, attach_a)
     sd_b_id = _sub_domain_at_attach(design, oh_b_id, attach_b)
     if sd_a_id is None or sd_b_id is None:
@@ -283,8 +311,10 @@ def connect_register(design: Design, oh_a_id: str, attach_a: str,
     length = min(sd_a.length_bp, sd_b.length_bp)
     if length <= 0:
         raise ValueError("attach sub-domain has zero length")
-    return (subdomain_end(dom_a, sd_a, length, oh_a_id),
-            subdomain_end(dom_b, sd_b, length, oh_b_id))
+    return (
+        subdomain_end(dom_a, sd_a, length, oh_a_id),
+        subdomain_end(dom_b, sd_b, length, oh_b_id),
+    )
 
 
 def _first_sub_domain_id(design: Design, overhang_id: str) -> Optional[str]:
@@ -304,42 +334,72 @@ def relocate_duplex(design: Design, duplex: Duplex) -> Design:
     from backend.core.binding_relax import compute_bind_topology, apply_bind_topology
     from backend.core.models import OverhangBinding as _OB
 
-    driver_end = duplex.left if duplex.driver == 'left' else duplex.right
-    driven_end = duplex.right if duplex.driver == 'left' else duplex.left
-    sd_a = _first_sub_domain_id(design, driver_end.overhang_id) or 'a'
-    sd_b = _first_sub_domain_id(design, driven_end.overhang_id) or 'b'
+    driver_end = duplex.left if duplex.driver == "left" else duplex.right
+    driven_end = duplex.right if duplex.driver == "left" else duplex.left
+    sd_a = _first_sub_domain_id(design, driver_end.overhang_id) or "a"
+    sd_b = _first_sub_domain_id(design, driven_end.overhang_id) or "b"
     transient = _OB(
-        name='__duplex_reloc__', sub_domain_a_id=sd_a, sub_domain_b_id=sd_b,
-        overhang_a_id=driver_end.overhang_id, overhang_b_id=driven_end.overhang_id,
-        driver_oh_id=driver_end.overhang_id, driven_oh_id=driven_end.overhang_id,
+        name="__duplex_reloc__",
+        sub_domain_a_id=sd_a,
+        sub_domain_b_id=sd_b,
+        overhang_a_id=driver_end.overhang_id,
+        overhang_b_id=driven_end.overhang_id,
+        driver_oh_id=driver_end.overhang_id,
+        driven_oh_id=driven_end.overhang_id,
     )
     topo = compute_bind_topology(
-        design, transient, driver_side='a',
+        design,
+        transient,
+        driver_side="a",
         # Antiparallel onto the driver's paired window (mirror the full-domain swap:
         # target_start = window 3' bp, target_end = window 5' bp).
         target_start_override=driver_end.end_bp,
         target_end_override=driver_end.start_bp,
     )
     out = apply_bind_topology(design, topo)
-    new_dux = [d.model_copy(update={'prior_driven_topology': topo.snapshot, 'bound': True})
-               if d.id == duplex.id else d for d in out.duplexes]
-    out = out.model_copy(update={'duplexes': new_dux})
+    new_dux = [
+        d.model_copy(update={"prior_driven_topology": topo.snapshot, "bound": True})
+        if d.id == duplex.id
+        else d
+        for d in out.duplexes
+    ]
+    out = out.model_copy(update={"duplexes": new_dux})
 
     # Re-seat at the oriented midpoint + promote onto a child DUPLEX cluster — same as the
     # equal-length binding path (`_cv_create_bound_binding`), so a different-length duplex is
     # also a sidebar-listed, gizmo-movable, drift-free cluster. [[overhang-duplex-cluster]].
     from backend.core.direct_relax import duplex_midpoint_placement
     from backend.core.duplex_cluster import materialize_duplex_cluster
+
     driver_oh = driver_end.overhang_id
-    out = out.model_copy(update={'overhangs': [
-        o.model_copy(update={'rotation': [0.0, 0.0, 0.0, 1.0], 'translation': [0.0, 0.0, 0.0]})
-        if o.id == driver_oh else o for o in out.overhangs]})
+    out = out.model_copy(
+        update={
+            "overhangs": [
+                o.model_copy(
+                    update={
+                        "rotation": [0.0, 0.0, 0.0, 1.0],
+                        "translation": [0.0, 0.0, 0.0],
+                    }
+                )
+                if o.id == driver_oh
+                else o
+                for o in out.overhangs
+            ]
+        }
+    )
     placement = duplex_midpoint_placement(out, driver_oh, driven_end.overhang_id)
     if placement is not None:
         rot, trans = placement
-        out = out.model_copy(update={'overhangs': [
-            o.model_copy(update={'rotation': rot, 'translation': trans})
-            if o.id == driver_oh else o for o in out.overhangs]})
+        out = out.model_copy(
+            update={
+                "overhangs": [
+                    o.model_copy(update={"rotation": rot, "translation": trans})
+                    if o.id == driver_oh
+                    else o
+                    for o in out.overhangs
+                ]
+            }
+        )
     out, _cid = materialize_duplex_cluster(out, driver_oh)
     return out
 
@@ -348,12 +408,17 @@ def revert_duplex_relocation(design: Design, duplex: Duplex) -> Design:
     """Undo :func:`relocate_duplex` from the stored snapshot (restore the driven
     helix + domain). No-op when the duplex wasn't relocated."""
     from backend.core.binding_relax import revert_bind_topology
+
     if not duplex.prior_driven_topology:
         return design
     out = revert_bind_topology(design, duplex.prior_driven_topology)
-    new_dux = [d.model_copy(update={'prior_driven_topology': None, 'bound': False})
-               if d.id == duplex.id else d for d in out.duplexes]
-    return out.model_copy(update={'duplexes': new_dux})
+    new_dux = [
+        d.model_copy(update={"prior_driven_topology": None, "bound": False})
+        if d.id == duplex.id
+        else d
+        for d in out.duplexes
+    ]
+    return out.model_copy(update={"duplexes": new_dux})
 
 
 def shift_duplex_ends(design: Design, deltas: Dict[str, int]) -> Design:
@@ -367,15 +432,16 @@ def shift_duplex_ends(design: Design, deltas: Dict[str, int]) -> Design:
     new: List[Duplex] = []
     for dx in design.duplexes:
         upd = {}
-        for side in ('left', 'right'):
+        for side in ("left", "right"):
             end = getattr(dx, side)
             d = deltas.get(end.overhang_id)
             if d:
-                upd[side] = end.model_copy(update={
-                    'start_bp': end.start_bp + d, 'end_bp': end.end_bp + d})
+                upd[side] = end.model_copy(
+                    update={"start_bp": end.start_bp + d, "end_bp": end.end_bp + d}
+                )
                 changed = True
         new.append(dx.model_copy(update=upd) if upd else dx)
-    return design.model_copy(update={'duplexes': new}) if changed else design
+    return design.model_copy(update={"duplexes": new}) if changed else design
 
 
 def drop_invalid_duplexes(design: Design) -> Design:
@@ -400,7 +466,11 @@ def drop_invalid_duplexes(design: Design) -> Design:
                 break
         if ok:
             keep.append(dx)
-    return design if len(keep) == len(design.duplexes) else design.model_copy(update={'duplexes': keep})
+    return (
+        design
+        if len(keep) == len(design.duplexes)
+        else design.model_copy(update={"duplexes": keep})
+    )
 
 
 def sync_duplexes_from_bindings(design: Design) -> Design:
@@ -408,7 +478,9 @@ def sync_duplexes_from_bindings(design: Design) -> Design:
     ``Duplex`` (live equivalent of the load-time `_derive_duplexes_if_empty`).
     Skips pairs that already carry a duplex; assigns fresh unique names. Used after
     a live Connect so the graph populates without a reload."""
-    existing = {frozenset({dx.left.overhang_id, dx.right.overhang_id}) for dx in design.duplexes}
+    existing = {
+        frozenset({dx.left.overhang_id, dx.right.overhang_id}) for dx in design.duplexes
+    }
     additions: List[Duplex] = []
     d = design
     for dx in synthesize_duplexes_from_bindings(design):
@@ -416,8 +488,13 @@ def sync_duplexes_from_bindings(design: Design) -> Design:
         if pair in existing:
             continue
         existing.add(pair)
-        named = dx.model_copy(update={"name": smallest_unused_duplex_name(
-            d.model_copy(update={"duplexes": [*d.duplexes, *additions]}))})
+        named = dx.model_copy(
+            update={
+                "name": smallest_unused_duplex_name(
+                    d.model_copy(update={"duplexes": [*d.duplexes, *additions]})
+                )
+            }
+        )
         additions.append(named)
     if not additions:
         return design
@@ -432,20 +509,25 @@ def summarize_duplexes(design: Design) -> dict:
     per_duplex = []
     for dx in design.duplexes:
         cls = classify_duplex_pairing(design, dx)
-        per_duplex.append({
-            "id": dx.id, "name": dx.name, "driver": dx.driver, "bound": dx.bound,
-            "length": cls["length"],
-            "n_complementary": cls["n_complementary"],
-            "n_mismatch": cls["n_mismatch"],
-        })
+        per_duplex.append(
+            {
+                "id": dx.id,
+                "name": dx.name,
+                "driver": dx.driver,
+                "bound": dx.bound,
+                "length": cls["length"],
+                "n_complementary": cls["n_complementary"],
+                "n_mismatch": cls["n_mismatch"],
+            }
+        )
     per_overhang = {}
     touched = {e.overhang_id for dx in design.duplexes for e in (dx.left, dx.right)}
     for oid in sorted(touched):
         cov = overhang_pairing_map(design, oid)
         vals = list(cov.values())
         per_overhang[oid] = {
-            "paired": vals.count('paired'),
-            "mismatch": vals.count('mismatch'),
-            "toehold": vals.count('unpaired'),
+            "paired": vals.count("paired"),
+            "mismatch": vals.count("mismatch"),
+            "toehold": vals.count("unpaired"),
         }
     return {"duplexes": per_duplex, "overhangs": per_overhang}

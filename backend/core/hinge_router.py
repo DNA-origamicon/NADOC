@@ -81,12 +81,15 @@ def route_hinge(design: Design) -> tuple[Design, SeamedResult] | None:
     # staple-binding FLs (e.g. a ``bound end to root`` overhang duplex) are carried
     # through untouched.
     scaf_fls = [
-        fl for fl in design.forced_ligations
+        fl
+        for fl in design.forced_ligations
         if fl.three_prime_helix_id in coverage and fl.five_prime_helix_id in coverage
     ]
     other_fls = [
-        fl for fl in design.forced_ligations
-        if fl.three_prime_helix_id not in coverage or fl.five_prime_helix_id not in coverage
+        fl
+        for fl in design.forced_ligations
+        if fl.three_prime_helix_id not in coverage
+        or fl.five_prime_helix_id not in coverage
     ]
     if not scaf_fls:
         return None
@@ -121,14 +124,16 @@ def route_hinge(design: Design) -> tuple[Design, SeamedResult] | None:
         key = (min(a_dom.helix_id, b_dom.helix_id), max(a_dom.helix_id, b_dom.helix_id))
         if key not in gap_pairs:
             continue
-        new_fls.append(ForcedLigation(
-            three_prime_helix_id=a_dom.helix_id,
-            three_prime_bp=a_dom.end_bp,
-            three_prime_direction=a_dom.direction,
-            five_prime_helix_id=b_dom.helix_id,
-            five_prime_bp=b_dom.start_bp,
-            five_prime_direction=b_dom.direction,
-        ))
+        new_fls.append(
+            ForcedLigation(
+                three_prime_helix_id=a_dom.helix_id,
+                three_prime_bp=a_dom.end_bp,
+                three_prime_direction=a_dom.direction,
+                five_prime_helix_id=b_dom.helix_id,
+                five_prime_bp=b_dom.start_bp,
+                five_prime_direction=b_dom.direction,
+            )
+        )
         bridged.add(key)
 
     # Every gap bridge present in the input must be carried by the routed strand.

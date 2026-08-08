@@ -86,8 +86,8 @@ class OBB:
     """
 
     center: np.ndarray  # (3,)
-    axes: np.ndarray    # (3, 3) rows = u, v, w
-    half: np.ndarray    # (3,) half-extents along u, v, w
+    axes: np.ndarray  # (3, 3) rows = u, v, w
+    half: np.ndarray  # (3,) half-extents along u, v, w
 
     def corner(self, su: float, sv: float, sw: float) -> np.ndarray:
         """World position of the corner at the given ±1 signs along u, v, w."""
@@ -207,7 +207,7 @@ def cluster_obb(design, cluster_id: str) -> OBB:
         )
 
     u = evecs[:, int(np.argmax(evals))]  # eigenvector of the largest eigenvalue
-    u = u - (u @ w) * w                  # strip any w component
+    u = u - (u @ w) * w  # strip any w component
     u = _unit(u)
     # Sign-anchor u *positionally*: the first cluster helix (in sorted-id order) whose
     # offset has a clear projection onto u sets the sign.  Per-helix |offset·u| is
@@ -244,7 +244,9 @@ def _min_rotation(a, b) -> Rotation:
         # caller's auto-flip, but be defensive: rotate 180° about any ⊥ axis.
         if d >= 0:
             return Rotation.identity()
-        perp = np.array([1.0, 0.0, 0.0]) if abs(a[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+        perp = (
+            np.array([1.0, 0.0, 0.0]) if abs(a[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+        )
         axis = _unit(np.cross(a, perp))
         return Rotation.from_rotvec(axis * math.pi)
     axis = cross / s
@@ -399,23 +401,23 @@ def _obb_intersect(a: "OBB", b: "OBB", eps: float = 1e-9) -> bool:
     products); the boxes intersect iff none separates them.  ``eps`` cushions the
     cross-product axes against near-parallel edges (degenerate zero-length axis).
     """
-    A, B = a.axes, b.axes        # rows = the box's own u, v, w directions
+    A, B = a.axes, b.axes  # rows = the box's own u, v, w directions
     ha, hb = a.half, b.half
-    R = A @ B.T                   # R[i, j] = A_i · B_j
+    R = A @ B.T  # R[i, j] = A_i · B_j
     AbsR = np.abs(R) + eps
     t = b.center - a.center
-    tA = A @ t                   # translation in A's frame
-    tB = B @ t                   # translation in B's frame
+    tA = A @ t  # translation in A's frame
+    tB = B @ t  # translation in B's frame
 
-    for i in range(3):           # A's three face axes
+    for i in range(3):  # A's three face axes
         rb = float(hb @ AbsR[i])
         if abs(tA[i]) > ha[i] + rb:
             return False
-    for j in range(3):           # B's three face axes
+    for j in range(3):  # B's three face axes
         ra = float(ha @ AbsR[:, j])
         if abs(tB[j]) > ra + hb[j]:
             return False
-    for i in range(3):           # the 9 edge-edge cross-product axes
+    for i in range(3):  # the 9 edge-edge cross-product axes
         i1, i2 = (i + 1) % 3, (i + 2) % 3
         for j in range(3):
             j1, j2 = (j + 1) % 3, (j + 2) % 3
@@ -437,7 +439,7 @@ def _padded(obb: "OBB", pad: float) -> "OBB":
 def _rotate_obb(obb: "OBB", rot: Rotation, axis_origin: np.ndarray) -> "OBB":
     """Rigidly rotate an OBB about a world axis through ``axis_origin``."""
     center = axis_origin + rot.apply(obb.center - axis_origin)
-    axes = rot.apply(obb.axes)   # row-wise: each of u, v, w rotated
+    axes = rot.apply(obb.axes)  # row-wise: each of u, v, w rotated
     return OBB(center=center, axes=axes, half=obb.half)
 
 
@@ -547,8 +549,14 @@ def cluster_range_of_motion(
             o if isinstance(o, OBB) else cluster_obb(design, o) for o in obstacles
         ]
     return obb_sweep_rom(
-        moving, obstacle_obbs, axis_origin, axis_direction,
-        min_deg=min_angle_deg, max_deg=max_angle_deg, pad=pad, step_deg=step_deg,
+        moving,
+        obstacle_obbs,
+        axis_origin,
+        axis_direction,
+        min_deg=min_angle_deg,
+        max_deg=max_angle_deg,
+        pad=pad,
+        step_deg=step_deg,
     )
 
 
@@ -608,15 +616,23 @@ def rank_joint_candidates(
     for key in obb.edges():
         origin, direction = hull_prism_axis(design, cluster_id, edge=key)
         rom = obb_sweep_rom(
-            obb, obstacle_obbs, origin, direction,
-            min_deg=min_angle_deg, max_deg=max_angle_deg, pad=pad, step_deg=step_deg,
+            obb,
+            obstacle_obbs,
+            origin,
+            direction,
+            min_deg=min_angle_deg,
+            max_deg=max_angle_deg,
+            pad=pad,
+            step_deg=step_deg,
         )
-        candidates.append({
-            "edge": key,
-            "axis_origin": origin,
-            "axis_direction": direction,
-            "rom_deg": rom,
-        })
+        candidates.append(
+            {
+                "edge": key,
+                "axis_origin": origin,
+                "axis_direction": direction,
+                "rom_deg": rom,
+            }
+        )
     candidates.sort(key=lambda c: c["rom_deg"], reverse=True)
     if target_rom_deg is not None:
         candidates = [c for c in candidates if c["rom_deg"] >= target_rom_deg]
@@ -684,19 +700,27 @@ def recommend_hinge_joints(
         # ROM is a property of the hinge LINE — measure it at the midpoint (anchor only
         # moves the stored point, not the line, so the swing is identical either way).
         rom = obb_sweep_rom(
-            obb, obstacle_obbs, (p_lo + p_hi) / 2.0, edge_dir,
-            min_deg=min_angle_deg, max_deg=max_angle_deg, pad=pad, step_deg=step_deg,
+            obb,
+            obstacle_obbs,
+            (p_lo + p_hi) / 2.0,
+            edge_dir,
+            min_deg=min_angle_deg,
+            max_deg=max_angle_deg,
+            pad=pad,
+            step_deg=step_deg,
         )
         origin = p_lo if anchor == "corner" else (p_lo + p_hi) / 2.0
-        out.append({
-            "edge": key,
-            "edge_length": edge_len,
-            "angle_to_axis_deg": angle_to_axis,
-            "is_axial": is_axial,
-            "rom_deg": rom,
-            "axis_origin": np.asarray(origin, dtype=float).tolist(),
-            "axis_direction": edge_dir.tolist(),
-        })
+        out.append(
+            {
+                "edge": key,
+                "edge_length": edge_len,
+                "angle_to_axis_deg": angle_to_axis,
+                "is_axial": is_axial,
+                "rom_deg": rom,
+                "axis_origin": np.asarray(origin, dtype=float).tolist(),
+                "axis_direction": edge_dir.tolist(),
+            }
+        )
 
     # Priority: non-axial first, then longest edge, then freest swing (ROM).  Rounding the
     # length defeats float noise so the 4 parallel u-edges tie on length and ROM decides.

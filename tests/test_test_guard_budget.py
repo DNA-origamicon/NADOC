@@ -9,6 +9,7 @@ The guard resolves every path (candidates report, lock, session marker) relative
 and the lock/session paths are env-overridable — so these run it in a tmp dir and never
 touch the repo's real lock or report.
 """
+
 from __future__ import annotations
 
 import json
@@ -70,8 +71,8 @@ def test_sim_running_suppresses_the_triage_banner(tmp_path):
     )
     assert "HEAVY TEST IN THE FAST SUITE" not in err
     assert "BUDGET CHECK SUPPRESSED" in err
-    assert "NAMD job 2hb_1xT" in err          # says WHICH job, not just "a sim"
-    assert "3 over-budget test(s) recorded" in err   # the data is not thrown away
+    assert "NAMD job 2hb_1xT" in err  # says WHICH job, not just "a sim"
+    assert "3 over-budget test(s) recorded" in err  # the data is not thrown away
 
 
 def test_sim_running_suppresses_the_total_wallclock_backstop(tmp_path):

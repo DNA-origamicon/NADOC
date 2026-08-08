@@ -18,9 +18,14 @@ from backend.core.models import Helix, LatticeType, Vec3
 
 
 def _helix(hid, gp, bp_start, length, start, end):
-    return Helix(id=hid, grid_pos=gp, bp_start=bp_start, length_bp=length,
-                 axis_start=Vec3(x=start[0], y=start[1], z=start[2]),
-                 axis_end=Vec3(x=end[0], y=end[1], z=end[2]))
+    return Helix(
+        id=hid,
+        grid_pos=gp,
+        bp_start=bp_start,
+        length_bp=length,
+        axis_start=Vec3(x=start[0], y=start[1], z=start[2]),
+        axis_end=Vec3(x=end[0], y=end[1], z=end[2]),
+    )
 
 
 def test_normalize_canonicalises_a_straight_lattice_helix():
@@ -59,18 +64,36 @@ def test_soup_fixture_bent_primitive_is_not_collapsed():
     path = Path("workspace/soup.nadoc")
     if not path.exists():
         import pytest
+
         pytest.skip("soup.nadoc fixture not present")
 
     d = Design.model_validate(json.loads(path.read_text()))
     axes = {a["helix_id"]: a for a in deformed_helix_axes(d)}
-    fresh_cells = {(2, 2), (2, 1), (3, 1), (3, 2), (3, 3), (2, 3),
-                   (2, 4), (2, 5), (2, 6), (1, 6), (1, 5), (1, 4)}
-    placed = [h for h in d.helices
-              if h.id.endswith("_0") or (h.grid_pos and tuple(h.grid_pos) in fresh_cells)]
+    fresh_cells = {
+        (2, 2),
+        (2, 1),
+        (3, 1),
+        (3, 2),
+        (3, 3),
+        (2, 3),
+        (2, 4),
+        (2, 5),
+        (2, 6),
+        (1, 6),
+        (1, 5),
+        (1, 4),
+    }
+    placed = [
+        h
+        for h in d.helices
+        if h.id.endswith("_0") or (h.grid_pos and tuple(h.grid_pos) in fresh_cells)
+    ]
     starts = np.array([axes[h.id]["start"] for h in placed])
     # Cross-section spans 2 dimensions (y and z) → a real bundle, not a line.
     assert np.ptp(starts[:, 1]) > 4.0, "cross-section collapsed in y"
-    assert np.ptp(starts[:, 2]) > 4.0, "cross-section collapsed in z (the 45° collapse bug)"
+    assert np.ptp(starts[:, 2]) > 4.0, (
+        "cross-section collapsed in z (the 45° collapse bug)"
+    )
     # Every placed helix runs along +X (the bent axis), not along Z.
     for h in placed:
         a = axes[h.id]

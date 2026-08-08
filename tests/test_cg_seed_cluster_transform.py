@@ -52,10 +52,15 @@ def _reconstruct_metrics(design) -> dict:
         for k, r in full.items()
     }
     atoms = np.asarray([[a.x, a.y, a.z] for a in model.atoms])
-    d = np.asarray([
-        np.linalg.norm(np.array([a.x, a.y, a.z]) - cg[(a.helix_id, a.bp_index, a.direction)])
-        for a in model.atoms if (a.helix_id, a.bp_index, a.direction) in cg
-    ])
+    d = np.asarray(
+        [
+            np.linalg.norm(
+                np.array([a.x, a.y, a.z]) - cg[(a.helix_id, a.bp_index, a.direction)]
+            )
+            for a in model.atoms
+            if (a.helix_id, a.bp_index, a.direction) in cg
+        ]
+    )
     cg_span = float(np.ptp(np.asarray(list(cg.values())), axis=0).max())
     at_span = float(np.ptp(atoms, axis=0).max())
 
@@ -84,10 +89,14 @@ def _flat_bundle():
 def _with_cluster(**ct_kwargs):
     base = _flat_bundle()
     hids = [h.id for h in base.helices]
-    pivot = np.mean([g["backbone_position"] for g in _geometry_for_design(base)], axis=0).tolist()
-    return base.copy_with(cluster_transforms=[
-        ClusterRigidTransform(name="C", helix_ids=hids, pivot=pivot, **ct_kwargs)
-    ])
+    pivot = np.mean(
+        [g["backbone_position"] for g in _geometry_for_design(base)], axis=0
+    ).tolist()
+    return base.copy_with(
+        cluster_transforms=[
+            ClusterRigidTransform(name="C", helix_ids=hids, pivot=pivot, **ct_kwargs)
+        ]
+    )
 
 
 def test_plain_design_reconstructs_at_unity():
@@ -115,12 +124,23 @@ def test_cluster_rotation_no_double_transform():
 def test_two_clusters_rot_plus_trans():
     base = _flat_bundle()
     hids = [h.id for h in base.helices]
-    pivot = np.mean([g["backbone_position"] for g in _geometry_for_design(base)], axis=0).tolist()
-    design = base.copy_with(cluster_transforms=[
-        ClusterRigidTransform(name="A", helix_ids=hids[:4], rotation=_rot_z_quat(90.0), pivot=pivot),
-        ClusterRigidTransform(name="B", helix_ids=hids[4:], rotation=_rot_z_quat(-90.0),
-                              translation=[80.0, 0.0, 0.0], pivot=pivot),
-    ])
+    pivot = np.mean(
+        [g["backbone_position"] for g in _geometry_for_design(base)], axis=0
+    ).tolist()
+    design = base.copy_with(
+        cluster_transforms=[
+            ClusterRigidTransform(
+                name="A", helix_ids=hids[:4], rotation=_rot_z_quat(90.0), pivot=pivot
+            ),
+            ClusterRigidTransform(
+                name="B",
+                helix_ids=hids[4:],
+                rotation=_rot_z_quat(-90.0),
+                translation=[80.0, 0.0, 0.0],
+                pivot=pivot,
+            ),
+        ]
+    )
     m = _reconstruct_metrics(design)
     assert m["atom_to_cg_p50_nm"] < 2.0, f"multi-cluster double-applied: {m}"
     assert m["ratio"] < 1.3, m

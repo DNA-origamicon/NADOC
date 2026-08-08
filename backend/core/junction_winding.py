@@ -46,6 +46,7 @@ integral over a closed 2-component link), so their agreement is real evidence.  
 DISAGREE the verdict is ``ambiguous`` — reported, never silently resolved.  Quietly
 picking one channel is what produced three false alarms during development.
 """
+
 from __future__ import annotations
 
 from typing import Optional, Sequence
@@ -61,8 +62,8 @@ _WORDING = {
     "ambiguous": "channels disagree - no verdict",
 }
 
-DEFAULT_VIEWS = 64          # 256 gave identical modes and f_hi within 0.03
-DEFAULT_CLAMP_K = 5         # bp of duplex buffer; the k-sweep checks convergence
+DEFAULT_VIEWS = 64  # 256 gave identical modes and f_hi within 0.03
+DEFAULT_CLAMP_K = 5  # bp of duplex buffer; the k-sweep checks convergence
 _CLAMP_KS = (2, 3, 4, 5)
 # The VERDICT uses f_hi, not n_mode.  Measured on real junctions across 6 orientations:
 # a wound pair's modal crossing number flips between 1 and 2 (2,2,1,1,1,2) because the
@@ -72,17 +73,17 @@ _CLAMP_KS = (2, 3, 4, 5)
 # (0.453-0.562 wound vs 0.000-0.016 clean) and the threshold sits in the empty middle.
 _PCS_F_HI_WOUND = 0.15
 _LK_WOUND = 0.5
-_CONVERGENCE_TOL = 0.25     # |Lk(k_max) - round(Lk(k_max))| above this = not converged
+_CONVERGENCE_TOL = 0.25  # |Lk(k_max) - round(Lk(k_max))| above this = not converged
 
 
 def fibonacci_directions(n: int = DEFAULT_VIEWS) -> np.ndarray:
     """``n`` near-uniform unit vectors on the sphere (deterministic)."""
     i = np.arange(n) + 0.5
     phi = np.arccos(1.0 - 2.0 * i / n)
-    theta = np.pi * (1.0 + 5.0 ** 0.5) * i
-    return np.stack([np.cos(theta) * np.sin(phi),
-                     np.sin(theta) * np.sin(phi),
-                     np.cos(phi)], axis=1)
+    theta = np.pi * (1.0 + 5.0**0.5) * i
+    return np.stack(
+        [np.cos(theta) * np.sin(phi), np.sin(theta) * np.sin(phi), np.cos(phi)], axis=1
+    )
 
 
 def signed_crossings(arc_a: np.ndarray, arc_b: np.ndarray, view: np.ndarray) -> int:
@@ -91,7 +92,8 @@ def signed_crossings(arc_a: np.ndarray, arc_b: np.ndarray, view: np.ndarray) -> 
     helper = np.array([1.0, 0.0, 0.0])
     if abs(float(v @ helper)) > 0.9:
         helper = np.array([0.0, 1.0, 0.0])
-    e1 = np.cross(v, helper); e1 /= np.linalg.norm(e1)
+    e1 = np.cross(v, helper)
+    e1 /= np.linalg.norm(e1)
     e2 = np.cross(v, e1)
 
     a2 = np.stack([arc_a @ e1, arc_a @ e2], axis=1)
@@ -121,8 +123,9 @@ def signed_crossings(arc_a: np.ndarray, arc_b: np.ndarray, view: np.ndarray) -> 
     return int(contrib[hit].sum())
 
 
-def projected_crossing_number(arc_a: np.ndarray, arc_b: np.ndarray,
-                              n_views: int = DEFAULT_VIEWS) -> dict:
+def projected_crossing_number(
+    arc_a: np.ndarray, arc_b: np.ndarray, n_views: int = DEFAULT_VIEWS
+) -> dict:
     """Closure-free winding signal: modal signed crossing number over many views.
 
     ``f_hi`` — the fraction of views showing |crossings| >= 2 — is the VERDICT statistic:
@@ -133,8 +136,9 @@ def projected_crossing_number(arc_a: np.ndarray, arc_b: np.ndarray,
     """
     if len(arc_a) < 2 or len(arc_b) < 2:
         return {"n_mode": 0, "f_hi": 0.0, "n_views": 0}
-    vals = np.array([signed_crossings(arc_a, arc_b, v)
-                     for v in fibonacci_directions(n_views)])
+    vals = np.array(
+        [signed_crossings(arc_a, arc_b, v) for v in fibonacci_directions(n_views)]
+    )
     mags = np.abs(vals)
     mode = int(np.bincount(mags).argmax())
     if mode == 0:
@@ -142,14 +146,19 @@ def projected_crossing_number(arc_a: np.ndarray, arc_b: np.ndarray,
     else:
         sel = vals[mags == mode]
         signed = int(np.sign(sel.sum()) * mode) if sel.sum() else mode
-    return {"n_mode": signed, "f_hi": float((mags >= 2).mean()), "n_views": int(n_views)}
+    return {
+        "n_mode": signed,
+        "f_hi": float((mags >= 2).mean()),
+        "n_views": int(n_views),
+    }
 
 
 # ── duplex clamp ──────────────────────────────────────────────────────────────
 
 
-def clamped_loop(residue_lookup, positions, connector, k: int,
-                 backbone: Sequence[str]) -> Optional[np.ndarray]:
+def clamped_loop(
+    residue_lookup, positions, connector, k: int, backbone: Sequence[str]
+) -> Optional[np.ndarray]:
     """Close a crossover strand through the duplex at a buffer of ``k`` bp.
 
     Walk ``k`` bp back along the strand's own backbone on the outgoing helix, through the
@@ -161,8 +170,15 @@ def clamped_loop(residue_lookup, positions, connector, k: int,
     pts: list = []
     step_out = -1 if connector["from_dir"] == "REVERSE" else 1
     for t in range(k, -1, -1):
-        d = residue_lookup(("nt", connector["strand_id"], connector["from_helix"],
-                            connector["from_bp"] - step_out * t, connector["from_dir"]))
+        d = residue_lookup(
+            (
+                "nt",
+                connector["strand_id"],
+                connector["from_helix"],
+                connector["from_bp"] - step_out * t,
+                connector["from_dir"],
+            )
+        )
         if d is None:
             return None
         pts.extend(positions[d[nm]] for nm in backbone if nm in d)
@@ -174,8 +190,15 @@ def clamped_loop(residue_lookup, positions, connector, k: int,
 
     step_in = -1 if connector["to_dir"] == "REVERSE" else 1
     for t in range(0, k + 1):
-        d = residue_lookup(("nt", connector["strand_id"], connector["to_helix"],
-                            connector["to_bp"] + step_in * t, connector["to_dir"]))
+        d = residue_lookup(
+            (
+                "nt",
+                connector["strand_id"],
+                connector["to_helix"],
+                connector["to_bp"] + step_in * t,
+                connector["to_dir"],
+            )
+        )
         if d is None:
             return None
         pts.extend(positions[d[nm]] for nm in backbone if nm in d)
@@ -183,8 +206,9 @@ def clamped_loop(residue_lookup, positions, connector, k: int,
     return np.asarray(pts, dtype=float)
 
 
-def clamp_sweep(residue_lookup, positions, conn_a, conn_b, backbone,
-                ks: Sequence[int] = _CLAMP_KS) -> dict:
+def clamp_sweep(
+    residue_lookup, positions, conn_a, conn_b, backbone, ks: Sequence[int] = _CLAMP_KS
+) -> dict:
     """Duplex-clamped Lk at several buffers, plus whether it converged.
 
     Convergence is the self-check: a genuine invariant settles on an integer as the rung
@@ -206,9 +230,13 @@ def clamp_sweep(residue_lookup, positions, conn_a, conn_b, backbone,
     k_max = max(values)
     lk = values[k_max]
     residual = abs(lk - round(lk))
-    return {"lk_by_k": values, "lk": lk, "k": k_max,
-            "residual": round(residual, 4),
-            "converged": bool(residual <= _CONVERGENCE_TOL)}
+    return {
+        "lk_by_k": values,
+        "lk": lk,
+        "k": k_max,
+        "residual": round(residual, 4),
+        "converged": bool(residual <= _CONVERGENCE_TOL),
+    }
 
 
 # ── composite verdict ─────────────────────────────────────────────────────────

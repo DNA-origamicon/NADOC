@@ -49,8 +49,8 @@ from backend.core.models import Design, Direction
 
 # ── Tolerance ──────────────────────────────────────────────────────────────────
 
-DIST_TOL  = 0.02   # nm  — rounding / float noise in position computation
-ANGLE_TOL = 1.0    # degrees
+DIST_TOL = 0.02  # nm  — rounding / float noise in position computation
+ANGLE_TOL = 1.0  # degrees
 
 # ── Cell layouts ───────────────────────────────────────────────────────────────
 
@@ -80,7 +80,8 @@ def _nearest_neighbours(
     """Return IDs of all helices within *spacing + tol* nm of *hid*."""
     x0, y0 = xy[hid]
     return [
-        bid for bid, (x, y) in xy.items()
+        bid
+        for bid, (x, y) in xy.items()
         if bid != hid and math.hypot(x - x0, y - y0) <= spacing + tol
     ]
 
@@ -93,8 +94,7 @@ def _angles_deg(
     """Return sorted angles (0–360°) from *hid* to each neighbour."""
     x0, y0 = xy[hid]
     angles = [
-        math.degrees(math.atan2(xy[b][1] - y0, xy[b][0] - x0)) % 360
-        for b in nbr_ids
+        math.degrees(math.atan2(xy[b][1] - y0, xy[b][0] - x0)) % 360 for b in nbr_ids
     ]
     return sorted(angles)
 
@@ -125,7 +125,7 @@ def _scaffold_direction(design: Design, hid: str) -> Direction:
 class NeighbourResult(NamedTuple):
     helix_id: str
     n_neighbours: int
-    gaps: list[float]   # sorted circular gaps (degrees)
+    gaps: list[float]  # sorted circular gaps (degrees)
 
 
 def _assert_neighbour_geometry(
@@ -162,10 +162,10 @@ def _assert_neighbour_geometry(
     failures: list[str] = []
 
     for h in design.helices:
-        hid    = h.id
-        nbrs   = _nearest_neighbours(hid, xy, expected_spacing)
+        hid = h.id
+        nbrs = _nearest_neighbours(hid, xy, expected_spacing)
         angles = _angles_deg(hid, nbrs, xy)
-        gaps   = _circular_gaps(angles)
+        gaps = _circular_gaps(angles)
 
         results.append(NeighbourResult(hid, len(nbrs), gaps))
 
@@ -195,8 +195,8 @@ def _assert_neighbour_geometry(
                         f"(angles={[f'{a:.1f}' for a in angles]})"
                     )
 
-    assert not failures, (
-        f"{label}: {len(failures)} geometry failure(s):\n" + "\n".join(failures)
+    assert not failures, f"{label}: {len(failures)} geometry failure(s):\n" + "\n".join(
+        failures
     )
     return results
 
@@ -222,14 +222,14 @@ def test_honeycomb_no_helix_exceeds_3_neighbours(design_18hb):
         nbrs = _nearest_neighbours(h.id, xy, HONEYCOMB_HELIX_SPACING)
         if len(nbrs) > 3:
             violations.append(f"  {h.id}: {len(nbrs)} neighbours")
-    assert not violations, (
-        "Helices with more than 3 nearest neighbours:\n" + "\n".join(violations)
+    assert not violations, "Helices with more than 3 nearest neighbours:\n" + "\n".join(
+        violations
     )
 
 
 def test_honeycomb_interior_helices_have_3_neighbours(design_18hb):
     """Helices fully surrounded by design cells must have exactly 3 neighbours."""
-    results  = _assert_neighbour_geometry(
+    results = _assert_neighbour_geometry(
         design_18hb,
         HONEYCOMB_HELIX_SPACING,
         expected_interior_count=3,
@@ -267,29 +267,29 @@ def test_honeycomb_6hb_geometry_valid(design_6hb):
 
 def test_honeycomb_angular_gaps_are_120_degrees(design_18hb):
     """All interior honeycomb helices must have uniform 120° angular gaps."""
-    xy      = _xy(design_18hb)
+    xy = _xy(design_18hb)
     failures: list[str] = []
     for h in design_18hb.helices:
         nbrs = _nearest_neighbours(h.id, xy, HONEYCOMB_HELIX_SPACING)
         if len(nbrs) != 3:
-            continue   # edge/corner helices — skip gap check
+            continue  # edge/corner helices — skip gap check
         angles = _angles_deg(h.id, nbrs, xy)
-        gaps   = _circular_gaps(angles)
+        gaps = _circular_gaps(angles)
         for gap in gaps:
             if abs(gap - 120.0) > ANGLE_TOL:
                 failures.append(
                     f"  {h.id}: gap {gap:.2f}° ≠ 120° "
                     f"(neighbours={nbrs}, angles={[f'{a:.1f}' for a in angles]})"
                 )
-    assert not failures, (
-        "Interior helices with non-120° gaps:\n" + "\n".join(failures)
-    )
+    assert not failures, "Interior helices with non-120° gaps:\n" + "\n".join(failures)
 
 
 def test_honeycomb_all_neighbours_are_antiparallel(design_18hb):
     """Every nearest neighbour pair must be antiparallel (opposite scaffold direction)."""
-    xy      = _xy(design_18hb)
-    dir_map = {h.id: _scaffold_direction(design_18hb, h.id) for h in design_18hb.helices}
+    xy = _xy(design_18hb)
+    dir_map = {
+        h.id: _scaffold_direction(design_18hb, h.id) for h in design_18hb.helices
+    }
     failures: list[str] = []
     for h in design_18hb.helices:
         nbrs = _nearest_neighbours(h.id, xy, HONEYCOMB_HELIX_SPACING)
@@ -298,18 +298,18 @@ def test_honeycomb_all_neighbours_are_antiparallel(design_18hb):
                 failures.append(
                     f"  {h.id} ({dir_map[h.id].name}) ↔ {bid} ({dir_map[bid].name})"
                 )
-    assert not failures, (
-        "Parallel nearest-neighbour pairs found:\n" + "\n".join(failures)
+    assert not failures, "Parallel nearest-neighbour pairs found:\n" + "\n".join(
+        failures
     )
 
 
 def test_honeycomb_neighbour_distances_exact(design_18hb):
     """Every nearest-neighbour pair must be separated by exactly HONEYCOMB_HELIX_SPACING."""
-    xy      = _xy(design_18hb)
+    xy = _xy(design_18hb)
     failures: list[str] = []
     for h in design_18hb.helices:
         x0, y0 = xy[h.id]
-        nbrs    = _nearest_neighbours(h.id, xy, HONEYCOMB_HELIX_SPACING)
+        nbrs = _nearest_neighbours(h.id, xy, HONEYCOMB_HELIX_SPACING)
         for bid in nbrs:
             x1, y1 = xy[bid]
             d = math.hypot(x1 - x0, y1 - y0)
@@ -353,29 +353,31 @@ def test_square_interior_helices_have_4_neighbours(design_sq_3x4):
 
 def test_square_angular_gaps_are_90_degrees(design_sq_3x4):
     """All interior square-lattice helices must have uniform 90° angular gaps."""
-    xy      = _xy(design_sq_3x4)
+    xy = _xy(design_sq_3x4)
     failures: list[str] = []
     for h in design_sq_3x4.helices:
         nbrs = _nearest_neighbours(h.id, xy, SQUARE_HELIX_SPACING)
         if len(nbrs) != 4:
-            continue   # edge/corner helices
+            continue  # edge/corner helices
         angles = _angles_deg(h.id, nbrs, xy)
-        gaps   = _circular_gaps(angles)
+        gaps = _circular_gaps(angles)
         for gap in gaps:
             if abs(gap - 90.0) > ANGLE_TOL:
                 failures.append(
                     f"  {h.id}: gap {gap:.2f}° ≠ 90° "
                     f"(angles={[f'{a:.1f}' for a in angles]})"
                 )
-    assert not failures, (
-        "Interior square helices with non-90° gaps:\n" + "\n".join(failures)
+    assert not failures, "Interior square helices with non-90° gaps:\n" + "\n".join(
+        failures
     )
 
 
 def test_square_all_neighbours_are_antiparallel(design_sq_3x4):
     """Every nearest neighbour pair in the square lattice must be antiparallel."""
-    xy      = _xy(design_sq_3x4)
-    dir_map = {h.id: _scaffold_direction(design_sq_3x4, h.id) for h in design_sq_3x4.helices}
+    xy = _xy(design_sq_3x4)
+    dir_map = {
+        h.id: _scaffold_direction(design_sq_3x4, h.id) for h in design_sq_3x4.helices
+    }
     failures: list[str] = []
     for h in design_sq_3x4.helices:
         nbrs = _nearest_neighbours(h.id, xy, SQUARE_HELIX_SPACING)
@@ -392,11 +394,11 @@ def test_square_all_neighbours_are_antiparallel(design_sq_3x4):
 
 def test_square_neighbour_distances_exact(design_sq_3x4):
     """Every nearest-neighbour pair in the square lattice is at SQUARE_HELIX_SPACING."""
-    xy      = _xy(design_sq_3x4)
+    xy = _xy(design_sq_3x4)
     failures: list[str] = []
     for h in design_sq_3x4.helices:
         x0, y0 = xy[h.id]
-        nbrs    = _nearest_neighbours(h.id, xy, SQUARE_HELIX_SPACING)
+        nbrs = _nearest_neighbours(h.id, xy, SQUARE_HELIX_SPACING)
         for bid in nbrs:
             x1, y1 = xy[bid]
             d = math.hypot(x1 - x0, y1 - y0)
@@ -423,39 +425,51 @@ def test_honeycomb_lattice_is_not_square_grid():
     use HELIX_SPACING = 2.25 nm centre-to-centre.
     """
     hc_design = make_bundle_design(CELLS_18HB, length_bp=42)
-    sq_design  = make_bundle_design(CELLS_SQ_3X4, length_bp=42, lattice_type=LatticeType.SQUARE)
+    sq_design = make_bundle_design(
+        CELLS_SQ_3X4, length_bp=42, lattice_type=LatticeType.SQUARE
+    )
 
     xy_hc = _xy(hc_design)
     xy_sq = _xy(sq_design)
 
     # Pick one interior honeycomb helix (any with 3 neighbours)
     hc_interior = next(
-        (h.id for h in hc_design.helices
-         if len(_nearest_neighbours(h.id, xy_hc, HONEYCOMB_HELIX_SPACING)) == 3),
+        (
+            h.id
+            for h in hc_design.helices
+            if len(_nearest_neighbours(h.id, xy_hc, HONEYCOMB_HELIX_SPACING)) == 3
+        ),
         None,
     )
     assert hc_interior is not None, "No interior honeycomb helix found"
-    hc_gaps = _circular_gaps(_angles_deg(
-        hc_interior,
-        _nearest_neighbours(hc_interior, xy_hc, HONEYCOMB_HELIX_SPACING),
-        xy_hc,
-    ))
+    hc_gaps = _circular_gaps(
+        _angles_deg(
+            hc_interior,
+            _nearest_neighbours(hc_interior, xy_hc, HONEYCOMB_HELIX_SPACING),
+            xy_hc,
+        )
+    )
     assert len(hc_gaps) == 3 and all(abs(g - 120.0) <= ANGLE_TOL for g in hc_gaps), (
         f"Honeycomb interior helix {hc_interior} does not have 3×120° gaps: {hc_gaps}"
     )
 
     # Pick one interior square helix (any with 4 neighbours)
     sq_interior = next(
-        (h.id for h in sq_design.helices
-         if len(_nearest_neighbours(h.id, xy_sq, SQUARE_HELIX_SPACING)) == 4),
+        (
+            h.id
+            for h in sq_design.helices
+            if len(_nearest_neighbours(h.id, xy_sq, SQUARE_HELIX_SPACING)) == 4
+        ),
         None,
     )
     assert sq_interior is not None, "No interior square helix found"
-    sq_gaps = _circular_gaps(_angles_deg(
-        sq_interior,
-        _nearest_neighbours(sq_interior, xy_sq, SQUARE_HELIX_SPACING),
-        xy_sq,
-    ))
+    sq_gaps = _circular_gaps(
+        _angles_deg(
+            sq_interior,
+            _nearest_neighbours(sq_interior, xy_sq, SQUARE_HELIX_SPACING),
+            xy_sq,
+        )
+    )
     assert len(sq_gaps) == 4 and all(abs(g - 90.0) <= ANGLE_TOL for g in sq_gaps), (
         f"Square interior helix {sq_interior} does not have 4×90° gaps: {sq_gaps}"
     )
@@ -467,6 +481,7 @@ def test_honeycomb_lattice_is_not_square_grid():
 
 try:
     import backend.core.cadnano as cadnano  # noqa: F401
+
     _CADNANO_AVAILABLE = True
 except ImportError:
     _CADNANO_AVAILABLE = False
@@ -479,18 +494,25 @@ def design_cadnano_18hb_seam():
         pytest.skip("cadnano importer not yet implemented")
     import json
     import os
+
     path = os.path.join(
-        os.path.dirname(__file__), "..", "Examples", "cadnano",
+        os.path.dirname(__file__),
+        "..",
+        "Examples",
+        "cadnano",
         "18hb_symm_p7249_21_even_spacing_sequential_coloring.json",
     )
     with open(path) as f:
         data = json.load(f)
     from backend.core.cadnano import import_cadnano
+
     design, _ = import_cadnano(data)
     return design
 
 
-@pytest.mark.skipif(not _CADNANO_AVAILABLE, reason="cadnano importer not yet implemented")
+@pytest.mark.skipif(
+    not _CADNANO_AVAILABLE, reason="cadnano importer not yet implemented"
+)
 def test_cadnano_18hb_honeycomb_neighbour_geometry(design_cadnano_18hb_seam):
     """Imported 18HB caDNAno design must have correct honeycomb neighbour geometry."""
     _assert_neighbour_geometry(
@@ -502,12 +524,14 @@ def test_cadnano_18hb_honeycomb_neighbour_geometry(design_cadnano_18hb_seam):
     )
 
 
-@pytest.mark.skipif(not _CADNANO_AVAILABLE, reason="cadnano importer not yet implemented")
+@pytest.mark.skipif(
+    not _CADNANO_AVAILABLE, reason="cadnano importer not yet implemented"
+)
 def test_cadnano_18hb_all_neighbours_antiparallel(design_cadnano_18hb_seam):
     """All nearest-neighbour pairs in the imported 18HB must be antiparallel."""
     if not _CADNANO_AVAILABLE:
         pytest.skip("cadnano importer not yet implemented")
-    xy      = _xy(design_cadnano_18hb_seam)
+    xy = _xy(design_cadnano_18hb_seam)
     dir_map = {
         h.id: _scaffold_direction(design_cadnano_18hb_seam, h.id)
         for h in design_cadnano_18hb_seam.helices

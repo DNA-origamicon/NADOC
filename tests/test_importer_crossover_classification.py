@@ -21,7 +21,9 @@ from backend.core.models import (
 )
 
 
-def _helix(h_id: str, *, grid_pos: tuple[int, int], length: int = 200, bp_start: int = 0) -> Helix:
+def _helix(
+    h_id: str, *, grid_pos: tuple[int, int], length: int = 200, bp_start: int = 0
+) -> Helix:
     return Helix(
         id=h_id,
         axis_start=Vec3(x=0, y=0, z=0),
@@ -45,8 +47,8 @@ def test_same_bp_valid_neighbor_emits_crossover():
         id="s",
         strand_type=StrandType.SCAFFOLD,
         domains=[
-            Domain(helix_id="h0", start_bp=0,  end_bp=7,  direction=Direction.FORWARD),
-            Domain(helix_id="h1", start_bp=7,  end_bp=20, direction=Direction.REVERSE),
+            Domain(helix_id="h0", start_bp=0, end_bp=7, direction=Direction.FORWARD),
+            Domain(helix_id="h1", start_bp=7, end_bp=20, direction=Direction.REVERSE),
         ],
     )
     xos, fls = extract_crossovers_from_strands([s], [h0, h1], LatticeType.SQUARE)
@@ -67,7 +69,7 @@ def test_mismatched_bp_emits_forced_ligation():
         id="s",
         strand_type=StrandType.SCAFFOLD,
         domains=[
-            Domain(helix_id="h0", start_bp=0,  end_bp=10, direction=Direction.FORWARD),
+            Domain(helix_id="h0", start_bp=0, end_bp=10, direction=Direction.FORWARD),
             Domain(helix_id="h1", start_bp=15, end_bp=25, direction=Direction.REVERSE),
         ],
     )
@@ -76,10 +78,14 @@ def test_mismatched_bp_emits_forced_ligation():
     assert len(fls) == 1
     fl = fls[0]
     assert (fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction) == (
-        "h0", 10, Direction.FORWARD,
+        "h0",
+        10,
+        Direction.FORWARD,
     )
-    assert (fl.five_prime_helix_id,  fl.five_prime_bp,  fl.five_prime_direction) == (
-        "h1", 15, Direction.REVERSE,
+    assert (fl.five_prime_helix_id, fl.five_prime_bp, fl.five_prime_direction) == (
+        "h1",
+        15,
+        Direction.REVERSE,
     )
 
 
@@ -96,8 +102,10 @@ def test_same_bp_non_neighbor_emits_forced_ligation():
         id="s",
         strand_type=StrandType.SCAFFOLD,
         domains=[
-            Domain(helix_id="h0",    start_bp=0, end_bp=7, direction=Direction.FORWARD),
-            Domain(helix_id="h_far", start_bp=7, end_bp=20, direction=Direction.REVERSE),
+            Domain(helix_id="h0", start_bp=0, end_bp=7, direction=Direction.FORWARD),
+            Domain(
+                helix_id="h_far", start_bp=7, end_bp=20, direction=Direction.REVERSE
+            ),
         ],
     )
     xos, fls = extract_crossovers_from_strands([s], [h0, h_far], LatticeType.SQUARE)
@@ -117,7 +125,7 @@ def test_same_helix_consecutive_domains_skipped():
         id="s",
         strand_type=StrandType.SCAFFOLD,
         domains=[
-            Domain(helix_id="h0", start_bp=0,  end_bp=10, direction=Direction.FORWARD),
+            Domain(helix_id="h0", start_bp=0, end_bp=10, direction=Direction.FORWARD),
             Domain(helix_id="h0", start_bp=11, end_bp=20, direction=Direction.FORWARD),
         ],
     )
@@ -138,8 +146,8 @@ def test_no_lattice_context_falls_back_to_same_bp_only():
         id="s",
         strand_type=StrandType.SCAFFOLD,
         domains=[
-            Domain(helix_id="h0", start_bp=0,  end_bp=7,  direction=Direction.FORWARD),
-            Domain(helix_id="h1", start_bp=7,  end_bp=20, direction=Direction.REVERSE),
+            Domain(helix_id="h0", start_bp=0, end_bp=7, direction=Direction.FORWARD),
+            Domain(helix_id="h1", start_bp=7, end_bp=20, direction=Direction.REVERSE),
             Domain(helix_id="h2", start_bp=25, end_bp=30, direction=Direction.FORWARD),
         ],
     )
@@ -166,8 +174,8 @@ def test_from_json_backfills_dropped_forced_ligations():
         id="s",
         strand_type=StrandType.SCAFFOLD,
         domains=[
-            Domain(helix_id="h0", start_bp=0,  end_bp=7,  direction=Direction.FORWARD),
-            Domain(helix_id="h1", start_bp=7,  end_bp=20, direction=Direction.REVERSE),
+            Domain(helix_id="h0", start_bp=0, end_bp=7, direction=Direction.FORWARD),
+            Domain(helix_id="h1", start_bp=7, end_bp=20, direction=Direction.REVERSE),
             # Cross-helix transition with mismatched bp (loopout-style):
             Domain(helix_id="h2", start_bp=25, end_bp=30, direction=Direction.FORWARD),
         ],
@@ -175,6 +183,7 @@ def test_from_json_backfills_dropped_forced_ligations():
     # Hand-craft a design that has the h0→h1 crossover but is MISSING the
     # h1→h2 forced ligation (mimics a file saved by the old importer).
     from backend.core.models import Crossover, HalfCrossover
+
     pre_xo = Crossover(
         half_a=HalfCrossover(helix_id="h0", index=7, strand=Direction.FORWARD),
         half_b=HalfCrossover(helix_id="h1", index=7, strand=Direction.REVERSE),
@@ -194,7 +203,7 @@ def test_from_json_backfills_dropped_forced_ligations():
     assert len(reloaded.forced_ligations) == 1
     fl = reloaded.forced_ligations[0]
     assert (fl.three_prime_helix_id, fl.three_prime_bp) == ("h1", 20)
-    assert (fl.five_prime_helix_id,  fl.five_prime_bp)  == ("h2", 25)
+    assert (fl.five_prime_helix_id, fl.five_prime_bp) == ("h2", 25)
 
 
 def test_from_json_backfills_bare_neighbour_junction_as_crossover():
@@ -209,14 +218,14 @@ def test_from_json_backfills_bare_neighbour_junction_as_crossover():
     from backend.core.models import Design
 
     h0 = _helix("h0", grid_pos=(0, 0))
-    h1 = _helix("h1", grid_pos=(1, 0))   # lattice-adjacent
+    h1 = _helix("h1", grid_pos=(1, 0))  # lattice-adjacent
     # Strand crosses h0→h1 at the SAME bp (7) — a real DX crossover junction —
     # but the file stores NO crossover and NO forced ligation for it.
     s = Strand(
         id="s",
         strand_type=StrandType.STAPLE,
         domains=[
-            Domain(helix_id="h0", start_bp=0, end_bp=7,  direction=Direction.FORWARD),
+            Domain(helix_id="h0", start_bp=0, end_bp=7, direction=Direction.FORWARD),
             Domain(helix_id="h1", start_bp=7, end_bp=20, direction=Direction.REVERSE),
         ],
     )
@@ -226,7 +235,10 @@ def test_from_json_backfills_bare_neighbour_junction_as_crossover():
     assert len(reloaded.forced_ligations) == 0
     assert len(reloaded.crossovers) == 1
     xo = reloaded.crossovers[0]
-    assert {(xo.half_a.helix_id, xo.half_a.index), (xo.half_b.helix_id, xo.half_b.index)} == {("h0", 7), ("h1", 7)}
+    assert {
+        (xo.half_a.helix_id, xo.half_a.index),
+        (xo.half_b.helix_id, xo.half_b.index),
+    } == {("h0", 7), ("h1", 7)}
     # Idempotent: a second load adds nothing.
     twice = Design.from_json(reloaded.to_json())
     assert len(twice.crossovers) == 1
@@ -246,7 +258,7 @@ def test_from_json_backfill_idempotent():
         id="s",
         strand_type=StrandType.SCAFFOLD,
         domains=[
-            Domain(helix_id="h0", start_bp=0,  end_bp=10, direction=Direction.FORWARD),
+            Domain(helix_id="h0", start_bp=0, end_bp=10, direction=Direction.FORWARD),
             Domain(helix_id="h1", start_bp=15, end_bp=20, direction=Direction.REVERSE),
         ],
     )
@@ -264,8 +276,8 @@ def test_from_json_reclassifies_non_neighbour_crossovers_as_fls():
     """
     from backend.core.models import Crossover, Design, HalfCrossover
 
-    h0 = _helix("h0",   grid_pos=(0, 0))
-    h_far = _helix("h2", grid_pos=(2, 0))   # 2 rows away → never a neighbour
+    h0 = _helix("h0", grid_pos=(0, 0))
+    h_far = _helix("h2", grid_pos=(2, 0))  # 2 rows away → never a neighbour
     s = Strand(
         id="s",
         strand_type=StrandType.SCAFFOLD,
@@ -289,7 +301,7 @@ def test_from_json_reclassifies_non_neighbour_crossovers_as_fls():
     assert len(reloaded.forced_ligations) == 1
     fl = reloaded.forced_ligations[0]
     assert (fl.three_prime_helix_id, fl.three_prime_bp) == ("h0", 10)
-    assert (fl.five_prime_helix_id,  fl.five_prime_bp)  == ("h2", 10)
+    assert (fl.five_prime_helix_id, fl.five_prime_bp) == ("h2", 10)
 
 
 def test_from_json_keeps_valid_neighbour_crossovers():
@@ -297,7 +309,7 @@ def test_from_json_keeps_valid_neighbour_crossovers():
     from backend.core.models import Crossover, Design, HalfCrossover
 
     h0 = _helix("h0", grid_pos=(0, 0))
-    h1 = _helix("h1", grid_pos=(1, 0))   # adjacent
+    h1 = _helix("h1", grid_pos=(1, 0))  # adjacent
     s = Strand(
         id="s",
         strand_type=StrandType.STAPLE,
@@ -328,7 +340,7 @@ def test_duplicate_transitions_dedup():
         id="sA",
         strand_type=StrandType.STAPLE,
         domains=[
-            Domain(helix_id="h0", start_bp=0,  end_bp=10, direction=Direction.FORWARD),
+            Domain(helix_id="h0", start_bp=0, end_bp=10, direction=Direction.FORWARD),
             Domain(helix_id="h1", start_bp=15, end_bp=20, direction=Direction.REVERSE),
         ],
     )
@@ -336,7 +348,7 @@ def test_duplicate_transitions_dedup():
         id="sB",
         strand_type=StrandType.STAPLE,
         domains=[
-            Domain(helix_id="h0", start_bp=0,  end_bp=10, direction=Direction.FORWARD),
+            Domain(helix_id="h0", start_bp=0, end_bp=10, direction=Direction.FORWARD),
             Domain(helix_id="h1", start_bp=15, end_bp=20, direction=Direction.REVERSE),
         ],
     )

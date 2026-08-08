@@ -4,6 +4,7 @@ CONFORMATION without disturbing the topology columns (serial/name/resname/chain)
 in exact atom order — that order-preservation is what makes a BLADE-relaxed seed
 line up with the same PSF the reference dataset was exported against.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -35,22 +36,24 @@ def test_overwrites_xyz_in_order_and_preserves_columns():
 
 def test_row_count_mismatch_raises():
     with pytest.raises(ValueError, match="rows but the built PDB"):
-        _overwrite_solute_coords(_PDB, np.zeros((2, 3)))     # too few
+        _overwrite_solute_coords(_PDB, np.zeros((2, 3)))  # too few
     with pytest.raises(ValueError, match="rows but the built PDB|more atoms"):
-        _overwrite_solute_coords(_PDB, np.zeros((4, 3)))     # too many
+        _overwrite_solute_coords(_PDB, np.zeros((4, 3)))  # too many
 
 
 def test_bad_shape_and_nonfinite_rejected():
     with pytest.raises(ValueError, match="must be"):
         _overwrite_solute_coords(_PDB, np.zeros((3, 2)))
     with pytest.raises(ValueError, match="non-finite"):
-        bad = np.zeros((3, 3)); bad[1, 1] = np.inf
+        bad = np.zeros((3, 3))
+        bad[1, 1] = np.inf
         _overwrite_solute_coords(_PDB, bad)
 
 
 def test_out_of_field_coords_rejected():
     with pytest.raises(ValueError, match="9999"):
-        big = np.zeros((3, 3)); big[0, 0] = 12345.0
+        big = np.zeros((3, 3))
+        big[0, 0] = 12345.0
         _overwrite_solute_coords(_PDB, big)
 
 

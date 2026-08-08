@@ -118,16 +118,16 @@ def _early_stop_eligible(chain, scales, idx, min_k, tier) -> bool:
     considers EVERY non-final relaxation chunk (incl. k=0.01 and the k=0/MGHH melt,
     which the WC series naturally holds)."""
     if idx == 0:
-        return False                                   # minimization
+        return False  # minimization
     if _is_production_segment(chain[idx]):
-        return False                                   # sampling, never skip
+        return False  # sampling, never skip
     if idx >= _stage_last_chunk_index(chain, idx):
-        return False                                   # last chunk: nothing to bridge
+        return False  # last chunk: nothing to bridge
     if tier == "A":
-        return True                                    # WC guard handles fragility
+        return True  # WC guard handles fragility
     scale = scales[idx]
     if scale is None or scale < min_k:
-        return False                                   # low/zero restraint: unsafe on energy alone
+        return False  # low/zero restraint: unsafe on energy alone
     return True
 
 
@@ -218,8 +218,9 @@ def is_gpu_target(profile: ClusterProfile, resources: dict) -> bool:
     return part.kind == "gpu"
 
 
-def preview_header(profile: ClusterProfile, resources: dict, *,
-                   job_name: str = "nadoc_job") -> dict:
+def preview_header(
+    profile: ClusterProfile, resources: dict, *, job_name: str = "nadoc_job"
+) -> dict:
     """The sbatch header a job WOULD get, without needing a prepared package.
 
     ``generate_sbatch`` needs a manifest (the real segment chain), which only exists
@@ -239,10 +240,11 @@ def preview_header(profile: ClusterProfile, resources: dict, *,
     gpu = is_gpu_target(profile, resources)
     directives = list(_sbatch_directives(job_name, resources, gpu))
     if not gpu:
-        directives.append("#SBATCH --constraint=ib")   # InfiniBand (OpenMPI)
+        directives.append("#SBATCH --constraint=ib")  # InfiniBand (OpenMPI)
     modules = list(profile.modules_for(gpu))
-    exec_line = _exec_line("<stage>", "output/<stage>.log", resources, gpu,
-                           profile.namd_command(gpu))
+    exec_line = _exec_line(
+        "<stage>", "output/<stage>.log", resources, gpu, profile.namd_command(gpu)
+    )
 
     warnings: list[str] = []
     # Only meaningful when NAMD comes FROM a module.  A private binary is addressed by
@@ -264,13 +266,24 @@ def preview_header(profile: ClusterProfile, resources: dict, *,
             "The run will time out mid-ladder and need a Resume from its checkpoint."
         )
 
-    text = "\n".join([
-        "#!/bin/bash", *directives, "",
-        "source /etc/profile", "set -eo pipefail", "export SLURM_EXPORT_ENV=ALL", "",
-        *_module_block(profile, gpu), "",
-        "cd '<remote scratch dir>'", "mkdir -p output", "",
-        "# for each stage in the ladder:", exec_line,
-    ])
+    text = "\n".join(
+        [
+            "#!/bin/bash",
+            *directives,
+            "",
+            "source /etc/profile",
+            "set -eo pipefail",
+            "export SLURM_EXPORT_ENV=ALL",
+            "",
+            *_module_block(profile, gpu),
+            "",
+            "cd '<remote scratch dir>'",
+            "mkdir -p output",
+            "",
+            "# for each stage in the ladder:",
+            exec_line,
+        ]
+    )
     return {
         "directives": directives,
         "modules": modules,
@@ -334,7 +347,9 @@ def _looks_cpu_only(modules: list[str]) -> bool:
     )
 
 
-def _exec_line(conf: str, log: str, resources: dict, gpu: bool, namd: str = "namd3") -> str:
+def _exec_line(
+    conf: str, log: str, resources: dict, gpu: bool, namd: str = "namd3"
+) -> str:
     """The NAMD invocation for one conf.
 
     GPU: NAMD3 GPU-resident, ``+p<cores> +setcpuaffinity +devices 0[,1,...]``.
@@ -415,7 +430,7 @@ def generate_sbatch(
     # run doesn't need it, and over-constraining node selection can make aa100 report
     # "node configuration not available".
     if not gpu:
-        lines.append("#SBATCH --constraint=ib")   # InfiniBand (OpenMPI)
+        lines.append("#SBATCH --constraint=ib")  # InfiniBand (OpenMPI)
     lines.append("")
     # A GPU run needs a GPU-resident NAMD module; if the resolved GPU module set
     # still looks CPU-only, the `+devices` exec line will FATAL — warn loudly rather
@@ -436,7 +451,7 @@ def generate_sbatch(
         # `-u`: HPC profile/module scripts routinely reference unbound variables.
         "source /etc/profile",
         "set -eo pipefail",
-        "export SLURM_EXPORT_ENV=ALL",      # required for OpenMPI
+        "export SLURM_EXPORT_ENV=ALL",  # required for OpenMPI
         "",
         *_module_block(profile, gpu),
         "",
@@ -449,7 +464,7 @@ def generate_sbatch(
         # every failure is swallowed; the trap kills it however the job ends.
         f"python3 {LIVE_METRICS_NAME} . {LIVE_METRICS_INTERVAL_S} >/dev/null 2>&1 &",
         "NADOC_METRICS_PID=$!",
-        'trap \'kill $NADOC_METRICS_PID 2>/dev/null || true\' EXIT',
+        "trap 'kill $NADOC_METRICS_PID 2>/dev/null || true' EXIT",
         "",
         "# NADOC MD ladder: minimization, then each relaxation segment in order.",
         "# Each conf reads the previous segment's restart coords by relative path.",
@@ -468,16 +483,22 @@ def generate_sbatch(
         lines.append(f'  echo "[NADOC] skip {conf} (already complete)"')
         lines.append("else")
         lines.append(f'  echo "[NADOC] {verb} {conf}"')
-        lines.append("  " + _exec_line(run_conf, log, resources, gpu,
-                                       profile.namd_command(gpu)))
+        lines.append(
+            "  " + _exec_line(run_conf, log, resources, gpu, profile.namd_command(gpu))
+        )
         lines.append("fi")
         # In-sbatch early-stop: after a non-final relaxation chunk, let the node
         # evaluate the plateau and bridge the stage's remaining chunks.
-        if early_stop_relax and _early_stop_eligible(chain, scales, i, early_min_k, tier):
+        if early_stop_relax and _early_stop_eligible(
+            chain, scales, i, early_min_k, tier
+        ):
             last = _stage_last_chunk_index(chain, i)
             lines += _early_stop_block(
-                conf, chain[i + 1 : last + 1],
-                tier=tier, name_stem=name_stem, health_python=health_python,
+                conf,
+                chain[i + 1 : last + 1],
+                tier=tier,
+                name_stem=name_stem,
+                health_python=health_python,
             )
     lines.append("")
     lines.append('echo "[NADOC] ladder complete"')

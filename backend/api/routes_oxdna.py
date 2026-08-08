@@ -111,6 +111,7 @@ def _wall_axis_position_nm(wall_meta: dict) -> float:
     plane_scalar_nm = -float(wall_meta["position"]) / NM_TO_OXDNA
     return axis_component * plane_scalar_nm
 
+
 # Minimum fraction of designed Watson-Crick pairs that must be sequence-complementary
 # for an oxDNA relaxation to be worth starting.  A correctly-sequenced design reads
 # ~0.99 (a few frayed ends aside); a stale-after-skip design reads ~0.27 (≈ random).
@@ -146,6 +147,7 @@ def _seed_geometry(design) -> list[dict]:
     Physical layer only — this is the simulation's starting configuration, never
     written back into Design topology."""
     from backend.api.crud import _geometry_for_design
+
     # No skips/loops → compaction is a no-op; skip the second geometry build.
     if not any(h.loop_skips for h in design.helices):
         return _geometry_for_design(design, compact_skips=True)
@@ -157,49 +159,68 @@ def _seed_geometry(design) -> list[dict]:
         logger.info(
             "oxdna seed: compaction desynced crossovers (worst bond %.2f vs %.2f "
             "units) — using un-compacted deformed geometry instead",
-            compact_stretch, deformed_stretch)
+            compact_stretch,
+            deformed_stretch,
+        )
         return deformed
     return compact
 
 
 # ── Request models ────────────────────────────────────────────────────────────
 
+
 class CreateOxdnaJobRequest(BaseModel):
-    backend:            str   = Field("CUDA", description="'CUDA' or 'CPU' for the MD stages")
-    device:             str   = Field("0", description="CUDA device index")
+    backend: str = Field("CUDA", description="'CUDA' or 'CPU' for the MD stages")
+    device: str = Field("0", description="CUDA device index")
     salt_concentration: float = Field(0.5, gt=0.0, description="Molar salt for DNA2")
-    mc_steps:           int   = Field(1_000,     ge=100,
-                                      description="Stage 1 Monte Carlo relaxation steps (standard 10²–10⁴)")
-    md_relax_steps:     int   = Field(1_000_000, ge=100,
-                                      description="Stage 2 MD relaxation steps (standard ~1e6)")
-    equil_steps:        int   = Field(100_000,   ge=100,
-                                      description="Stage 3 short unbiased equilibration steps")
-    min_bp_retained:    float = Field(0.50, ge=0.0, le=1.0,
-                                      description="Base-pair retention gate for the MD relax/equil stages")
-    max_relax_retries:  int   = Field(3, ge=0, le=5,
-                                      description="Auto-retry budget: if md_relax leaves the structure "
-                                                  "not equil-ready (a backbone bond past oxDNA's FENE "
-                                                  "cliff), re-run it with escalated parameters up to this "
-                                                  "many times before failing. 0 → proceed straight to the "
-                                                  "capped equil.")
-    autostart:          bool  = Field(True)
+    mc_steps: int = Field(
+        1_000,
+        ge=100,
+        description="Stage 1 Monte Carlo relaxation steps (standard 10²–10⁴)",
+    )
+    md_relax_steps: int = Field(
+        1_000_000, ge=100, description="Stage 2 MD relaxation steps (standard ~1e6)"
+    )
+    equil_steps: int = Field(
+        100_000, ge=100, description="Stage 3 short unbiased equilibration steps"
+    )
+    min_bp_retained: float = Field(
+        0.50,
+        ge=0.0,
+        le=1.0,
+        description="Base-pair retention gate for the MD relax/equil stages",
+    )
+    max_relax_retries: int = Field(
+        3,
+        ge=0,
+        le=5,
+        description="Auto-retry budget: if md_relax leaves the structure "
+        "not equil-ready (a backbone bond past oxDNA's FENE "
+        "cliff), re-run it with escalated parameters up to this "
+        "many times before failing. 0 → proceed straight to the "
+        "capped equil.",
+    )
+    autostart: bool = Field(True)
     # Relax-on-a-surface: optional hard surface ({dir, offset_nm, stiff}) + fixed
     # strands held throughout relaxation.  NO electric field here — a field-relaxed
     # structure is not how it would settle, so the field is production-only.
-    surface:            Optional[dict]     = Field(None)
-    anchors:            list[dict]         = Field(default_factory=list)
-    anchor_stiff:       float              = Field(DEFAULT_ANCHOR_STIFF, gt=0.0)
+    surface: Optional[dict] = Field(None)
+    anchors: list[dict] = Field(default_factory=list)
+    anchor_stiff: float = Field(DEFAULT_ANCHOR_STIFF, gt=0.0)
     # Surface capture strands (immobilization): sim-only ssDNA strands complementary to the
     # overhangs, dispersed on the hard surface and built into the relaxed system.  Requires
     # `surface`.  Shape: surfaceStrandsSpec (sequence, attachEnd, shape, sizeNm, densityPerUm2,
     # offsetXNm/Y, seed, subjectToField).  See backend/physics/oxdna_surface_strands.py.
-    surface_strands:    Optional[dict]     = Field(None)
-    design_source_path: Optional[str] = Field(None, description="Workspace path of the active design")
+    surface_strands: Optional[dict] = Field(None)
+    design_source_path: Optional[str] = Field(
+        None, description="Workspace path of the active design"
+    )
 
 
 class ProductionRequest(BaseModel):
-    steps: int = Field(5_000_000, ge=1000, le=200_000_000,
-                       description="Unbiased MD production steps")
+    steps: int = Field(
+        5_000_000, ge=1000, le=200_000_000, description="Unbiased MD production steps"
+    )
 
 
 class AnchorRef(BaseModel):
@@ -215,38 +236,44 @@ class AnchorRef(BaseModel):
     not declared here resolves to zero anchors with no error anywhere. Any new
     anchor kind must add its fields here in the same commit.
     """
+
     model_config = ConfigDict(populate_by_name=True)
-    kind:         str
-    id:           Optional[str] = None
-    strand_id:    Optional[str] = Field(None, alias="strandId")
+    kind: str
+    id: Optional[str] = None
+    strand_id: Optional[str] = Field(None, alias="strandId")
     domain_index: Optional[int] = Field(None, alias="domainIndex")
-    helix_id:     Optional[str] = Field(None, alias="helixId")
-    bp:           Optional[int] = None
-    direction:    Optional[str] = None
+    helix_id: Optional[str] = Field(None, alias="helixId")
+    bp: Optional[int] = None
+    direction: Optional[str] = None
     # Synthetic-bead scopes. `k` is the 5'→3' insert index (extra_base) or the tail
     # bead index (extension); None means the whole run/tail.
     crossover_id: Optional[str] = Field(None, alias="crossoverId")
     extension_id: Optional[str] = Field(None, alias="extensionId")
-    k:            Optional[int] = None
+    k: Optional[int] = None
 
 
 class FieldRequest(BaseModel):
-    field_pN:     float = Field(..., gt=0.0, description="Force per nucleotide (pN)")
-    dir:          list[float] = Field(..., min_length=3, max_length=3,
-                                      description="Field direction (auto-normalized)")
-    anchors:      list[AnchorRef] = Field(default_factory=list)
-    steps:        int = Field(2_000_000, ge=1000, le=200_000_000,
-                              description="Field MD steps")
-    anchor_stiff: float = Field(DEFAULT_ANCHOR_STIFF, gt=0.0,
-                                description="oxDNA trap stiffness per anchored nucleotide "
-                                            "(default pins anchors effectively immobile)")
+    field_pN: float = Field(..., gt=0.0, description="Force per nucleotide (pN)")
+    dir: list[float] = Field(
+        ..., min_length=3, max_length=3, description="Field direction (auto-normalized)"
+    )
+    anchors: list[AnchorRef] = Field(default_factory=list)
+    steps: int = Field(2_000_000, ge=1000, le=200_000_000, description="Field MD steps")
+    anchor_stiff: float = Field(
+        DEFAULT_ANCHOR_STIFF,
+        gt=0.0,
+        description="oxDNA trap stiffness per anchored nucleotide "
+        "(default pins anchors effectively immobile)",
+    )
 
 
 class FieldElement(BaseModel):
     """The electric-field element of a composed run (uniform per-nucleotide force)."""
+
     field_pN: float = Field(..., gt=0.0, description="Force per nucleotide (pN)")
-    dir:      list[float] = Field(..., min_length=3, max_length=3,
-                                  description="Field direction (auto-normalized)")
+    dir: list[float] = Field(
+        ..., min_length=3, max_length=3, description="Field direction (auto-normalized)"
+    )
 
 
 class SurfaceElement(BaseModel):
@@ -256,30 +283,44 @@ class SurfaceElement(BaseModel):
     points toward). ``position_nm`` is authoritative when supplied, keeping an
     immobilization surface fixed across serial runs. ``offset_nm`` is the legacy
     structure-relative placement used when no absolute position is supplied."""
-    dir:       list[float] = Field(..., min_length=3, max_length=3)
-    offset_nm: float = Field(0.0, description="nm of clearance the surface sits beyond "
-                                              "the structure's lowest point")
-    position_nm: Optional[float] = Field(None, description="fixed world-axis plane coordinate in nm")
-    stiff:     float = Field(5.0, gt=0.0, description="Repulsion-plane stiffness (oxDNA units)")
+
+    dir: list[float] = Field(..., min_length=3, max_length=3)
+    offset_nm: float = Field(
+        0.0,
+        description="nm of clearance the surface sits beyond "
+        "the structure's lowest point",
+    )
+    position_nm: Optional[float] = Field(
+        None, description="fixed world-axis plane coordinate in nm"
+    )
+    stiff: float = Field(
+        5.0, gt=0.0, description="Repulsion-plane stiffness (oxDNA units)"
+    )
 
 
 class RunRequest(BaseModel):
     """A consolidated production run: unbiased MD plus any combination of an electric
     field, a hard surface, and anchor traps (each independent/optional).  Branches a
     child job seeded from the relaxed parent so runs can be fanned out + compared."""
-    steps:        int = Field(2_000_000, ge=1000, le=200_000_000)
+
+    steps: int = Field(2_000_000, ge=1000, le=200_000_000)
     # Steps between trajectory frames (oxDNA's print_conf_interval).  Absolute, not a
     # fraction of `steps`, so a longer run gives a LONGER trajectory rather than a
     # coarser one.  The submit card shows the resulting frame count + disk before launch.
-    steps_per_frame: int = Field(DEFAULT_STEPS_PER_FRAME, ge=1, le=200_000_000,
-                                 description="Simulation steps between saved trajectory frames")
-    field:        Optional[FieldElement] = None
-    surface:      Optional[SurfaceElement] = None
-    anchors:      list[AnchorRef] = Field(default_factory=list)
+    steps_per_frame: int = Field(
+        DEFAULT_STEPS_PER_FRAME,
+        ge=1,
+        le=200_000_000,
+        description="Simulation steps between saved trajectory frames",
+    )
+    field: Optional[FieldElement] = None
+    surface: Optional[SurfaceElement] = None
+    anchors: list[AnchorRef] = Field(default_factory=list)
     anchor_stiff: float = Field(DEFAULT_ANCHOR_STIFF, gt=0.0)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _workspace() -> Path:
     return _WORKSPACE_DIR
@@ -345,19 +386,22 @@ _DERIVED_FP_CACHE: dict[str, str] = {}
 def _current_design_fingerprint() -> "str | None":
     """Fingerprint of the CURRENTLY active design (None if there is none)."""
     from backend.core.oxdna_staleness import current_active_design_fingerprint
+
     return current_active_design_fingerprint()
 
 
 def _job_fingerprint(job: OxdnaJob) -> "str | None":
     """The job's creation fingerprint — the stored value, or (for a job saved before
     this field existed) one derived once from its frozen design.json snapshot."""
-    if job.design_fingerprint and (job.design_fingerprint.startswith("v2:")
-                                   or len(job.design_fingerprint) != 64):
+    if job.design_fingerprint and (
+        job.design_fingerprint.startswith("v2:") or len(job.design_fingerprint) != 64
+    ):
         return job.design_fingerprint
     cached = _DERIVED_FP_CACHE.get(job.job_id)
     if cached is not None:
         return cached
     from backend.core.oxdna_staleness import oxdna_design_fingerprint
+
     snap = _load_snapshot_design(job.job_dir(_workspace()))
     if snap is None:
         return None
@@ -368,6 +412,7 @@ def _job_fingerprint(job: OxdnaJob) -> "str | None":
 
 def _job_is_out_of_date(job: OxdnaJob, current_fp: "str | None") -> bool:
     from backend.core.oxdna_staleness import job_out_of_date
+
     return job_out_of_date(_job_fingerprint(job), current_fp)
 
 
@@ -381,11 +426,13 @@ def _assert_job_current(job: OxdnaJob) -> None:
     frozen snapshot, not the loaded design, so which design is open is irrelevant (see
     ``md_chain_executor.in_unattended_chain_spawn``)."""
     from backend.core.md_chain_executor import in_unattended_chain_spawn
+
     if in_unattended_chain_spawn():
         return
     if _job_is_out_of_date(job, _current_design_fingerprint()):
         from backend.api import state as design_state
         from backend.core.oxdna_staleness import describe_staleness
+
         try:
             current = design_state.get_or_404()
         except Exception:  # noqa: BLE001 — staleness messaging must never 500
@@ -423,11 +470,13 @@ def _stage_trajectories(stage_dir: Path) -> list[Path]:
     archived parts first (oldest → newest) then the current file, so the composite
     player scrubs them in time order and the RMSF map pools every sampled frame
     (nothing lost to a resume)."""
+
     def _idx(p: Path) -> int:
         try:
             return int(p.name.split(".r")[1].split(".")[0])
         except (IndexError, ValueError):
             return 0
+
     parts = sorted(stage_dir.glob("trajectory.r*.dat"), key=_idx)
     out = [p for p in parts if p.stat().st_size > 0]
     cur = stage_dir / "trajectory.dat"
@@ -446,10 +495,18 @@ def _job_field(job: OxdnaJob) -> dict | None:
     direction of whichever run in a chain is on screen."""
     rc = job.run_config or {}
     f = rc.get("field")
-    if isinstance(f, dict) and isinstance(f.get("dir"), (list, tuple)) and len(f["dir"]) == 3:
+    if (
+        isinstance(f, dict)
+        and isinstance(f.get("dir"), (list, tuple))
+        and len(f["dir"]) == 3
+    ):
         return {"dir": [float(x) for x in f["dir"]], "field_pN": f.get("field_pN")}
     ef = job.efield or {}
-    if isinstance(ef.get("dir"), (list, tuple)) and len(ef["dir"]) == 3 and ef.get("force_pN") is not None:
+    if (
+        isinstance(ef.get("dir"), (list, tuple))
+        and len(ef["dir"]) == 3
+        and ef.get("force_pN") is not None
+    ):
         return {"dir": [float(x) for x in ef["dir"]], "field_pN": ef.get("force_pN")}
     return None
 
@@ -505,6 +562,7 @@ def _composite_inputs(job: OxdnaJob, scope: str = "lineage"):
 
 def _jsonl_records(path: Path) -> list[dict]:
     import json
+
     if not path.exists():
         return []
     out: list[dict] = []
@@ -519,6 +577,7 @@ def _jsonl_records(path: Path) -> list[dict]:
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
 
 @router.post("/oxdna/jobs/estimate-disk")
 async def estimate_oxdna_disk(body: CreateOxdnaJobRequest) -> dict:
@@ -535,8 +594,10 @@ async def estimate_oxdna_disk(body: CreateOxdnaJobRequest) -> dict:
         design = design_state.get_or_404()
         n_nt = len(_strand_nucleotide_order(design))
         specs = build_relaxation_stages(
-            mc_steps=body.mc_steps, md_relax_steps=body.md_relax_steps,
-            equil_steps=body.equil_steps)
+            mc_steps=body.mc_steps,
+            md_relax_steps=body.md_relax_steps,
+            equil_steps=body.equil_steps,
+        )
         stages = [(s.steps, print_conf_interval(s)) for s in specs]
         predicted = oxdna_run_output_bytes(stages, n_nt)
     except Exception as exc:  # noqa: BLE001 — a forecast must never block a launch
@@ -552,7 +613,8 @@ async def estimate_oxdna_run_disk(job_id: str, body: RunRequest) -> dict:
 
     job = _load_job(job_id)
     predicted = oxdna_run_output_bytes(
-        [(body.steps, max(1, int(body.steps_per_frame)))], job.n_nucleotides)
+        [(body.steps, max(1, int(body.steps_per_frame)))], job.n_nucleotides
+    )
     return forecast(job.job_dir(_workspace()), predicted)
 
 
@@ -620,15 +682,27 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         )
 
     # Relax-on-a-surface elements (field excluded by design).
-    surface_in = body.surface if (body.surface and float(body.surface.get("stiff", 0)) > 0) else None
+    surface_in = (
+        body.surface
+        if (body.surface and float(body.surface.get("stiff", 0)) > 0)
+        else None
+    )
     anchors_in = body.anchors or []
     # Capture strands attach to the plane, so they require a hard surface; ignored without one.
-    surface_strands_in = body.surface_strands if (surface_in and body.surface_strands
-                                                  and body.surface_strands.get("enabled", True)) else None
+    surface_strands_in = (
+        body.surface_strands
+        if (
+            surface_in
+            and body.surface_strands
+            and body.surface_strands.get("enabled", True)
+        )
+        else None
+    )
     relax_has_forces = bool(surface_in or anchors_in or surface_strands_in)
 
     # Proteins present → an ANM-oxDNA (DNANM) hybrid run on the fork binary.
     from backend.physics.oxdna_protein import has_proteins
+
     protein = has_proteins(design)
 
     # Fail fast on the classic broken state: a CUDA run requested but the binary
@@ -650,45 +724,50 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             )
 
     specs = build_relaxation_stages(
-        mc_steps           = body.mc_steps,
-        md_relax_steps     = body.md_relax_steps,
-        equil_steps        = body.equil_steps,
-        backend            = body.backend,
-        device             = body.device,
-        salt_concentration = body.salt_concentration,
-        min_bp_retained    = body.min_bp_retained,
-        surface_present    = relax_has_forces,
-        protein            = protein,
+        mc_steps=body.mc_steps,
+        md_relax_steps=body.md_relax_steps,
+        equil_steps=body.equil_steps,
+        backend=body.backend,
+        device=body.device,
+        salt_concentration=body.salt_concentration,
+        min_bp_retained=body.min_bp_retained,
+        surface_present=relax_has_forces,
+        protein=protein,
     )
 
     job = new_oxdna_job(
-        design_name        = name,
-        stages             = [s.to_status() for s in specs],
-        device             = body.device,
-        backend            = body.backend,
-        salt_concentration = body.salt_concentration,
-        design_source_path = body.design_source_path,
-        max_relax_retries  = body.max_relax_retries,
+        design_name=name,
+        stages=[s.to_status() for s in specs],
+        device=body.device,
+        backend=body.backend,
+        salt_concentration=body.salt_concentration,
+        design_source_path=body.design_source_path,
+        max_relax_retries=body.max_relax_retries,
         # Echo the relaxation conditions so selecting this job repopulates the
         # Advanced / Hard surface / Anchors cards with what the run used.
-        run_config         = {
-            "kind":               "relax",
-            "backend":            body.backend,
-            "device":             body.device,
+        run_config={
+            "kind": "relax",
+            "backend": body.backend,
+            "device": body.device,
             "salt_concentration": body.salt_concentration,
-            "mc_steps":           body.mc_steps,
-            "md_relax_steps":     body.md_relax_steps,
-            "equil_steps":        body.equil_steps,
-            "min_bp_retained":    body.min_bp_retained,
-            "max_relax_retries":  body.max_relax_retries,
-            "surface":            surface_in,
-            "anchors":            anchors_in,
-            "surface_strands":    surface_strands_in,
+            "mc_steps": body.mc_steps,
+            "md_relax_steps": body.md_relax_steps,
+            "equil_steps": body.equil_steps,
+            "min_bp_retained": body.min_bp_retained,
+            "max_relax_retries": body.max_relax_retries,
+            "surface": surface_in,
+            "anchors": anchors_in,
+            "surface_strands": surface_strands_in,
         },
     )
     job.status = OxdnaStatus.preparing
     job.save(_workspace())
-    logger.info("create_oxdna_job: job_id=%s design=%s backend=%s", job.job_id, name, body.backend)
+    logger.info(
+        "create_oxdna_job: job_id=%s design=%s backend=%s",
+        job.job_id,
+        name,
+        body.backend,
+    )
 
     # Build geometry + write the self-contained job dir (threadpool — file I/O).
     try:
@@ -706,13 +785,24 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         # Out-of-date fingerprint + the feature-log point to roll back to if the
         # design is later edited (so live/production can be made consistent again).
         from backend.core.oxdna_staleness import (
-            effective_feature_log_position, oxdna_design_fingerprint)
+            effective_feature_log_position,
+            oxdna_design_fingerprint,
+        )
+
         job.design_fingerprint = oxdna_design_fingerprint(design)
         job.feature_log_position = effective_feature_log_position(design)
         forces_info = await run_in_threadpool(
-            prepare_oxdna_job, design, geometry, job, _workspace(), specs,
-            surface=surface_in, anchors=anchors_in, anchor_stiff=body.anchor_stiff,
-            surface_strands=surface_strands_in)
+            prepare_oxdna_job,
+            design,
+            geometry,
+            job,
+            _workspace(),
+            specs,
+            surface=surface_in,
+            anchors=anchors_in,
+            anchor_stiff=body.anchor_stiff,
+            surface_strands=surface_strands_in,
+        )
         # Persist the writer-resolved ABSOLUTE plane coordinate. The descriptor's
         # offset alone is insufficient after the structure moves or a trajectory is
         # scrubbed; visualization must render the exact plane oxDNA used at run start.
@@ -731,9 +821,15 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             if md is not None and md < _CAPTURE_CLASH_WARN_NM:
                 cap["clash_warning"] = (
                     f"Surface capture strands seed as close as {md:.1f} nm to the origami — "
-                    f"raise the hard-surface offset to avoid a t=0 clash.")
+                    f"raise the hard-surface offset to avoid a t=0 clash."
+                )
     except Exception as exc:  # noqa: BLE001
-        logger.error("create_oxdna_job: prepare FAILED for %s: %s", job.job_id, exc, exc_info=True)
+        logger.error(
+            "create_oxdna_job: prepare FAILED for %s: %s",
+            job.job_id,
+            exc,
+            exc_info=True,
+        )
         job.status = OxdnaStatus.failed
         job.error = f"Preparation failed: {exc}"
         job.save(_workspace())
@@ -751,9 +847,10 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
 @router.get("/oxdna/jobs")
 async def list_oxdna_jobs() -> list[dict]:
     from backend.core.design_disk_usage import dir_size_bytes_cached
+
     ws = _workspace()
     jobs = [reconcile_oxdna_status(j, ws) for j in OxdnaJob.list_jobs(ws)]
-    current_fp = _current_design_fingerprint()   # computed once for the whole list
+    current_fp = _current_design_fingerprint()  # computed once for the whole list
     out: list[dict] = []
     for j in jobs:
         d = j.to_dict()
@@ -801,7 +898,7 @@ async def get_oxdna_error_log(job_id: str) -> dict:
         if p.is_file():
             raw = p.read_text(errors="replace")
             lines = raw.splitlines()
-            if len(lines) > 400:                       # tail-cap huge logs
+            if len(lines) > 400:  # tail-cap huge logs
                 lines = ["… (earlier output trimmed) …", *lines[-400:]]
             log_text = "\n".join(lines)
         else:
@@ -811,6 +908,7 @@ async def get_oxdna_error_log(job_id: str) -> dict:
     protein = False
     try:
         from backend.physics.oxdna_protein import has_proteins
+
         protein = has_proteins(_load_snapshot_design(job.job_dir(ws)))
     except Exception:
         protein = False
@@ -880,7 +978,9 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
     # previous stage's last_conf.dat instead of clobbering "4_production".
     prod = build_production_stage(
         name=f"{len(specs) + 1}_production",
-        steps=body.steps, backend=job.backend, device=job.device,
+        steps=body.steps,
+        backend=job.backend,
+        device=job.device,
         salt_concentration=job.salt_concentration,
     )
     specs.append(prod)
@@ -888,6 +988,7 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
     # Persist the extended spec list + append the stage status; resume into it.
     from dataclasses import asdict
     import json
+
     (job.job_dir(_workspace()) / "stages_spec.json").write_text(
         json.dumps([asdict(s) for s in specs], indent=2)
     )
@@ -897,7 +998,12 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
     job.error = None
     job.save(_workspace())
     start_job(job, _workspace(), specs)
-    return {"ok": True, "job_id": job_id, "status": "running", "production_steps": body.steps}
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "status": "running",
+        "production_steps": body.steps,
+    }
 
 
 @router.post("/oxdna/jobs/{job_id}/roll-design")
@@ -915,9 +1021,13 @@ async def roll_oxdna_job_design(job_id: str) -> dict:
     job = _load_job(job_id)
     design = _load_snapshot_design(job.job_dir(_workspace()))
     if design is None:
-        raise HTTPException(400, "This job has no saved design snapshot to roll back to.")
+        raise HTTPException(
+            400, "This job has no saved design snapshot to roll back to."
+        )
     name = job.design_name or "this job"
-    return roll_active_to_job_state(design, job.feature_log_position, f"Latest — before viewing {name}")
+    return roll_active_to_job_state(
+        design, job.feature_log_position, f"Latest — before viewing {name}"
+    )
 
 
 @router.post("/oxdna/jobs/{job_id}/field")
@@ -938,7 +1048,9 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
     periodic box, so the UI shows a warning notice — but the run is allowed."""
     parent = _load_job(job_id)
     if is_running(job_id) or parent.status != OxdnaStatus.completed:
-        raise HTTPException(400, "An electric-field run requires a completed job to seed from.")
+        raise HTTPException(
+            400, "An electric-field run requires a completed job to seed from."
+        )
     _assert_job_current(parent)
     if find_oxdna() is None:
         raise HTTPException(400, "oxDNA binary not found.")
@@ -947,7 +1059,9 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
     pjd = parent.job_dir(ws)
     design = _load_snapshot_design(pjd)
     if design is None:
-        raise HTTPException(500, "design.json snapshot missing; cannot resolve anchors.")
+        raise HTTPException(
+            500, "design.json snapshot missing; cannot resolve anchors."
+        )
     relaxed_conf, _stage = _latest_relaxed_conf(parent, ws)
     if relaxed_conf is None:
         raise HTTPException(400, "No relaxed configuration to seed the field run from.")
@@ -955,31 +1069,45 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
     field_oxdna = pn_to_oxdna_force(body.field_pN)
     anchors = [a.model_dump(by_alias=False) for a in body.anchors]
     stage = build_field_stage(
-        name="1_field", field_oxdna=field_oxdna, field_dir=body.dir,
-        forces_file="field_forces.txt", steps=body.steps,
-        backend=parent.backend, device=parent.device,
+        name="1_field",
+        field_oxdna=field_oxdna,
+        field_dir=body.dir,
+        forces_file="field_forces.txt",
+        steps=body.steps,
+        backend=parent.backend,
+        device=parent.device,
         salt_concentration=parent.salt_concentration,
     )
     child = new_oxdna_job(
         design_name=f"{parent.design_name} · field",
         stages=[stage.to_status()],
-        n_nucleotides=parent.n_nucleotides, device=parent.device,
-        backend=parent.backend, salt_concentration=parent.salt_concentration,
-        design_source_path=parent.design_source_path, parent_job_id=parent.job_id,
+        n_nucleotides=parent.n_nucleotides,
+        device=parent.device,
+        backend=parent.backend,
+        salt_concentration=parent.salt_concentration,
+        design_source_path=parent.design_source_path,
+        parent_job_id=parent.job_id,
         design_fingerprint=parent.design_fingerprint,
         feature_log_position=parent.feature_log_position,
-        efield={"force_pN": body.field_pN, "force_oxdna": field_oxdna, "dir": list(body.dir)},
+        efield={
+            "force_pN": body.field_pN,
+            "force_oxdna": field_oxdna,
+            "dir": list(body.dir),
+        },
         run_config={
-            "kind":    "field",
-            "steps":   body.steps,
-            "field":   {"field_pN": body.field_pN, "dir": list(body.dir)},
+            "kind": "field",
+            "steps": body.steps,
+            "field": {"field_pN": body.field_pN, "dir": list(body.dir)},
             "surface": None,
-            "anchors": [a.model_dump(by_alias=True, exclude_none=True) for a in body.anchors],
+            "anchors": [
+                a.model_dump(by_alias=True, exclude_none=True) for a in body.anchors
+            ],
         },
     )
 
     import json
     from dataclasses import asdict
+
     cjd = child.job_dir(ws)
     cjd.mkdir(parents=True, exist_ok=True)
     shutil.copy(pjd / "topology.top", cjd / "topology.top")
@@ -987,15 +1115,21 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
     shutil.copy(relaxed_conf, cjd / "conf.dat")
     try:
         info = write_field_forces(
-            cjd / "field_forces.txt", design, cjd / "conf.dat",
-            field_oxdna=field_oxdna, field_dir=body.dir,
-            anchors=anchors, anchor_stiff=body.anchor_stiff,
+            cjd / "field_forces.txt",
+            design,
+            cjd / "conf.dat",
+            field_oxdna=field_oxdna,
+            field_dir=body.dir,
+            anchors=anchors,
+            anchor_stiff=body.anchor_stiff,
         )
     except ValueError as exc:
         shutil.rmtree(cjd, ignore_errors=True)
         raise HTTPException(400, str(exc))
     child.efield["n_anchored"] = info["n_anchored"]
-    child.efield["anchor_keys"] = info["anchor_keys"]   # display aligns on these (positional frame)
+    child.efield["anchor_keys"] = info[
+        "anchor_keys"
+    ]  # display aligns on these (positional frame)
     child.n_nucleotides = info["n_total"]
     (cjd / "stages_spec.json").write_text(json.dumps([asdict(stage)], indent=2))
     child.status = OxdnaStatus.queued
@@ -1021,7 +1155,9 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     box, so the UI shows a warning notice — but the run is not blocked."""
     parent = _load_job(job_id)
     if is_running(job_id) or parent.status != OxdnaStatus.completed:
-        raise HTTPException(400, "A production run requires a completed relaxation job.")
+        raise HTTPException(
+            400, "A production run requires a completed relaxation job."
+        )
     _assert_job_current(parent)
     if find_oxdna() is None:
         raise HTTPException(400, "oxDNA binary not found.")
@@ -1030,7 +1166,9 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     pjd = parent.job_dir(ws)
     design = _load_snapshot_design(pjd)
     if design is None:
-        raise HTTPException(500, "design.json snapshot missing; cannot resolve anchors.")
+        raise HTTPException(
+            500, "design.json snapshot missing; cannot resolve anchors."
+        )
     relaxed_conf, _stage = _latest_relaxed_conf(parent, ws)
     if relaxed_conf is None:
         raise HTTPException(400, "No relaxed configuration to seed the run from.")
@@ -1041,12 +1179,19 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     if body.field:
         f_oxdna = pn_to_oxdna_force(body.field.field_pN)
         field_in = {"force_oxdna": f_oxdna, "dir": body.field.dir}
-        efield_rec = {"dir": list(body.field.dir), "force_oxdna": f_oxdna,
-                      "force_pN": body.field.field_pN}
+        efield_rec = {
+            "dir": list(body.field.dir),
+            "force_oxdna": f_oxdna,
+            "force_pN": body.field.field_pN,
+        }
     wall_in = None
     if body.surface:
-        wall_in = {"dir": body.surface.dir, "offset_nm": body.surface.offset_nm,
-                   "position_nm": body.surface.position_nm, "stiff": body.surface.stiff}
+        wall_in = {
+            "dir": body.surface.dir,
+            "offset_nm": body.surface.offset_nm,
+            "position_nm": body.surface.position_nm,
+            "stiff": body.surface.stiff,
+        }
     anchors = [a.model_dump(by_alias=False) for a in body.anchors]
     # Surface capture strands built into the relaxed parent are inherited via the copied
     # topology/conf; re-pin their attach ends so they stay tethered through production too.
@@ -1058,11 +1203,14 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     # the trailing capture-strand beads from the uniform field so a down-field doesn't
     # press them flat against the plane. Only meaningful with a field AND capture beads.
     subject_caps = ss_spec.get("subjectToField", ss_spec.get("subject_to_field", True))
-    field_exclude = cap_n_beads if (field_in and cap_n_beads > 0 and not subject_caps) else 0
+    field_exclude = (
+        cap_n_beads if (field_in and cap_n_beads > 0 and not subject_caps) else 0
+    )
     has_forces = bool(field_in or wall_in or anchors or cap_particles)
 
     stage = build_run_stage(
-        name="1_production", steps=body.steps,
+        name="1_production",
+        steps=body.steps,
         external_forces=has_forces,
         forces_file="run_forces.txt" if has_forces else None,
         efield=efield_rec,
@@ -1070,51 +1218,84 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         # repulsion plane / anchor / capture-strand traps are absolute-coordinate forces →
         # disable oxDNA's COM diffusion-fix so it doesn't shift them into the structure.
         absolute_forces=bool(wall_in or anchors or cap_particles),
-        backend=parent.backend, device=parent.device,
+        backend=parent.backend,
+        device=parent.device,
         salt_concentration=parent.salt_concentration,
         steps_per_frame=body.steps_per_frame,
     )
 
-    label = " · ".join(
-        x for x in ("field" if field_in else "", "surface" if wall_in else "",
-                    "anchored" if anchors and not field_in else "") if x) or "production"
+    label = (
+        " · ".join(
+            x
+            for x in (
+                "field" if field_in else "",
+                "surface" if wall_in else "",
+                "anchored" if anchors and not field_in else "",
+            )
+            if x
+        )
+        or "production"
+    )
     child = new_oxdna_job(
         design_name=f"{parent.design_name} · {label}",
         stages=[stage.to_status()],
-        n_nucleotides=parent.n_nucleotides, device=parent.device,
-        backend=parent.backend, salt_concentration=parent.salt_concentration,
-        design_source_path=parent.design_source_path, parent_job_id=parent.job_id,
+        n_nucleotides=parent.n_nucleotides,
+        device=parent.device,
+        backend=parent.backend,
+        salt_concentration=parent.salt_concentration,
+        design_source_path=parent.design_source_path,
+        parent_job_id=parent.job_id,
         design_fingerprint=parent.design_fingerprint,
         feature_log_position=parent.feature_log_position,
         efield=efield_rec or {},
         run_config={
-            "kind":    "run",
-            "steps":   body.steps,
-            "field":   {"field_pN": body.field.field_pN, "dir": list(body.field.dir)} if body.field else None,
-            "surface": {"dir": body.surface.dir, "offset_nm": body.surface.offset_nm,
-                        "position_nm": body.surface.position_nm,
-                        "stiff": body.surface.stiff} if body.surface else None,
-            "anchors": [a.model_dump(by_alias=True, exclude_none=True) for a in body.anchors],
+            "kind": "run",
+            "steps": body.steps,
+            "field": {"field_pN": body.field.field_pN, "dir": list(body.field.dir)}
+            if body.field
+            else None,
+            "surface": {
+                "dir": body.surface.dir,
+                "offset_nm": body.surface.offset_nm,
+                "position_nm": body.surface.position_nm,
+                "stiff": body.surface.stiff,
+            }
+            if body.surface
+            else None,
+            "anchors": [
+                a.model_dump(by_alias=True, exclude_none=True) for a in body.anchors
+            ],
             "surface_strands": (parent.run_config or {}).get("surface_strands"),
         },
     )
 
     import json
     from dataclasses import asdict
+
     cjd = child.job_dir(ws)
     cjd.mkdir(parents=True, exist_ok=True)
     shutil.copy(pjd / "topology.top", cjd / "topology.top")
     shutil.copy(pjd / "design.json", cjd / "design.json")
     shutil.copy(relaxed_conf, cjd / "conf.dat")
 
-    info = {"n_anchored": 0, "n_total": parent.n_nucleotides, "anchor_keys": [],
-            "field": None, "wall": None}
+    info = {
+        "n_anchored": 0,
+        "n_total": parent.n_nucleotides,
+        "anchor_keys": [],
+        "field": None,
+        "wall": None,
+    }
     if has_forces:
         try:
             info = write_run_forces(
-                cjd / "run_forces.txt", design, cjd / "conf.dat",
-                field=field_in, wall=wall_in, anchors=anchors,
-                anchor_stiff=body.anchor_stiff, field_exclude_trailing=field_exclude,
+                cjd / "run_forces.txt",
+                design,
+                cjd / "conf.dat",
+                field=field_in,
+                wall=wall_in,
+                anchors=anchors,
+                anchor_stiff=body.anchor_stiff,
+                field_exclude_trailing=field_exclude,
             )
         except ValueError as exc:
             shutil.rmtree(cjd, ignore_errors=True)
@@ -1122,11 +1303,18 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         # Re-pin inherited capture strands at their (relaxed) attach positions, at the
         # covalent-stiff tether.  Appended to the same forces file the run reads.
         if cap_particles:
-            from backend.physics.oxdna_interface import read_cm_positions_oxdna, anchor_trap_block
+            from backend.physics.oxdna_interface import (
+                read_cm_positions_oxdna,
+                anchor_trap_block,
+            )
             from backend.physics.oxdna_surface_strands import CAPTURE_TRAP_STIFF
+
             cm = read_cm_positions_oxdna(cjd / "conf.dat")
-            blocks = [anchor_trap_block(p, cm[p], CAPTURE_TRAP_STIFF)
-                      for p in cap_particles if 0 <= p < len(cm)]
+            blocks = [
+                anchor_trap_block(p, cm[p], CAPTURE_TRAP_STIFF)
+                for p in cap_particles
+                if 0 <= p < len(cm)
+            ]
             if blocks:
                 with open(cjd / "run_forces.txt", "a", encoding="utf-8") as f:
                     f.write("\n" + "\n".join(blocks))
@@ -1135,7 +1323,9 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         child.efield["anchor_keys"] = info["anchor_keys"]
     child.n_nucleotides = info["n_total"]
     if info.get("wall") and child.run_config.get("surface"):
-        child.run_config["surface"]["position_nm"] = _wall_axis_position_nm(info["wall"])
+        child.run_config["surface"]["position_nm"] = _wall_axis_position_nm(
+            info["wall"]
+        )
     (cjd / "stages_spec.json").write_text(json.dumps([asdict(stage)], indent=2))
     child.status = OxdnaStatus.queued
     child.save(ws)
@@ -1160,7 +1350,9 @@ async def preview_oxdna_field_anchors(job_id: str, body: AnchorPreviewRequest) -
     parent = _load_job(job_id)
     design = _load_snapshot_design(parent.job_dir(_workspace()))
     if design is None:
-        raise HTTPException(500, "design.json snapshot missing; cannot resolve anchors.")
+        raise HTTPException(
+            500, "design.json snapshot missing; cannot resolve anchors."
+        )
     anchors = [a.model_dump(by_alias=False) for a in body.anchors]
     particles, _keys = resolve_anchor_particles(design, anchors)
     return {
@@ -1195,34 +1387,47 @@ async def delete_oxdna_job(job_id: str) -> dict:
     # Collect the full descendant subtree (children, grandchildren, …) so a chained
     # lineage is removed as a unit.
     from backend.core.oxdna_job import descendants_of
+
     descendants = descendants_of(job_id, OxdnaJob.list_jobs(ws))
 
     for d in descendants:
         if is_running(d.job_id) or d.status == OxdnaStatus.running:
             raise HTTPException(
-                400, f"Stop the running child run ({d.job_id}) before deleting its ancestor.")
+                400,
+                f"Stop the running child run ({d.job_id}) before deleting its ancestor.",
+            )
 
     from backend.core.job_archive import purge_index_entry
+
     deleted: list[str] = []
     for j in (*descendants, job):
         jd = j.job_dir(ws)
         if jd.exists():
             shutil.rmtree(jd)
-        purge_index_entry(ws, "oxdna_jobs", j.job_id)   # drop archived-job index entry if any
+        purge_index_entry(
+            ws, "oxdna_jobs", j.job_id
+        )  # drop archived-job index entry if any
         deleted.append(j.job_id)
-    return {"ok": True, "job_id": job_id, "deleted": deleted, "n_children": len(descendants)}
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "deleted": deleted,
+        "n_children": len(descendants),
+    }
 
 
 # ── Archive / unarchive ────────────────────────────────────────────────────────
 
+
 class _ArchiveBody(BaseModel):
-    dest_root: str   # parent directory; the job moves to <dest_root>/<job_id>
+    dest_root: str  # parent directory; the job moves to <dest_root>/<job_id>
 
 
 @router.post("/oxdna/jobs/{job_id}/archive", status_code=202)
 async def archive_oxdna_job(job_id: str, body: _ArchiveBody) -> dict:
     """Start moving a job's folder to ``dest_root`` in the background (poll status)."""
     from backend.core import job_archive
+
     ws = _workspace()
     job = _load_job(job_id)
     if is_running(job_id) or job.status == OxdnaStatus.running:
@@ -1238,6 +1443,7 @@ async def archive_oxdna_job(job_id: str, body: _ArchiveBody) -> dict:
 async def unarchive_oxdna_job(job_id: str) -> dict:
     """Start moving an archived job's folder back into the workspace (poll status)."""
     from backend.core import job_archive
+
     ws = _workspace()
     job = _load_job(job_id)
     try:
@@ -1250,6 +1456,7 @@ async def unarchive_oxdna_job(job_id: str) -> dict:
 @router.get("/oxdna/jobs/{job_id}/archive-status")
 async def oxdna_archive_status(job_id: str) -> dict:
     from backend.core import job_archive
+
     return job_archive.task_status("oxdna_jobs", job_id) or {"state": "idle"}
 
 
@@ -1277,8 +1484,9 @@ async def get_oxdna_rmsd(job_id: str) -> dict:
     from backend.core.oxdna_health import production_rmsd
 
     job = _load_job(job_id)
-    prod_idx = next((i for i, s in enumerate(job.stages)
-                     if s.kind in ("production", "field")), None)
+    prod_idx = next(
+        (i for i, s in enumerate(job.stages) if s.kind in ("production", "field")), None
+    )
     if prod_idx is None:
         return {"ready": False, "reason": "no production or field run yet"}
 
@@ -1290,7 +1498,9 @@ async def get_oxdna_rmsd(job_id: str) -> dict:
     # Reference = the stage immediately before production (the relaxed structure).
     ref_conf = jd / "conf.dat"
     if prod_idx > 0:
-        cand = job.stage_dir(_workspace(), job.stages[prod_idx - 1].name) / "last_conf.dat"
+        cand = (
+            job.stage_dir(_workspace(), job.stages[prod_idx - 1].name) / "last_conf.dat"
+        )
         if cand.exists():
             ref_conf = cand
 
@@ -1349,9 +1559,15 @@ async def get_oxdna_rmsf(job_id: str, align: bool = True) -> dict:
 
     # copies=True → a per-loop-copy flexibility value so every loop bead recolours.
     cached = await run_in_threadpool(
-        production_rmsf_cached, design, trajs, ref_conf, copies=True, align=align,
+        production_rmsf_cached,
+        design,
+        trajs,
+        ref_conf,
+        copies=True,
+        align=align,
         n_trailing_extra=_capture_bead_count(job),
-        trailing_extra_strand_length=_capture_strand_length(job))
+        trailing_extra_strand_length=_capture_strand_length(job),
+    )
     # average_frame contains NumPy arrays for server-side reconstruction and is
     # intentionally retained only in the cache, not sent in the CG map payload.
     result = {k: v for k, v in cached.items() if k != "average_frame"}
@@ -1373,7 +1589,9 @@ async def get_oxdna_deviation(job_id: str, align: bool = True) -> dict:
     from backend.api.skip_twist_tuning import core_reference_geometry
     from backend.core.models import Design
     from backend.core.oxdna_health import (
-        geometry_deviation_map, production_rmsf_cached, rmsf_confidence,
+        geometry_deviation_map,
+        production_rmsf_cached,
+        rmsf_confidence,
     )
 
     job = _load_job(job_id)
@@ -1392,13 +1610,19 @@ async def get_oxdna_deviation(job_id: str, align: bool = True) -> dict:
 
     def _compute():
         mean = production_rmsf_cached(
-            design, trajs, ref_conf, copies=True, align=align,
+            design,
+            trajs,
+            ref_conf,
+            copies=True,
+            align=align,
             n_trailing_extra=_capture_bead_count(job),
-            trailing_extra_strand_length=_capture_strand_length(job))
+            trailing_extra_strand_length=_capture_strand_length(job),
+        )
         if not mean.get("ready") or not mean.get("positions"):
             return None, mean
         return geometry_deviation_map(
-            mean["positions"], core_reference_geometry(design), align_output=align), mean
+            mean["positions"], core_reference_geometry(design), align_output=align
+        ), mean
 
     dev, mean = await run_in_threadpool(_compute)
     if dev is None:
@@ -1409,7 +1633,9 @@ async def get_oxdna_deviation(job_id: str, align: bool = True) -> dict:
 
 
 @router.get("/oxdna/jobs/{job_id}/strain")
-async def get_oxdna_strain(job_id: str, metric: str = "backbone", align: bool = True) -> dict:
+async def get_oxdna_strain(
+    job_id: str, metric: str = "backbone", align: bool = True
+) -> dict:
     """Per-nucleotide LOCAL STRAIN map: the production mean structure recoloured by each
     base's time-averaged signed deviation from oxDNA2's equilibrium geometry, as a
     dimensionless fraction (0 = relaxed, + = stretched, − = compressed).  The strain
@@ -1435,11 +1661,15 @@ async def get_oxdna_strain(job_id: str, metric: str = "backbone", align: bool = 
     """
     from backend.core.models import Design
     from backend.core.oxdna_health import (
-        production_strain_field_cached, rmsf_confidence, strain_map,
+        production_strain_field_cached,
+        rmsf_confidence,
+        strain_map,
     )
 
     if metric not in ("backbone", "wc"):
-        raise HTTPException(400, f"unknown strain metric {metric!r} (expected 'backbone' or 'wc')")
+        raise HTTPException(
+            400, f"unknown strain metric {metric!r} (expected 'backbone' or 'wc')"
+        )
     job = _load_job(job_id)
     prod_stages = [s for s in job.stages if s.kind in ("production", "field")]
     if not prod_stages:
@@ -1465,9 +1695,15 @@ async def get_oxdna_strain(job_id: str, metric: str = "backbone", align: bool = 
         # because it also drops torn-unwrap frames.  Positions therefore still coincide with
         # the flexibility/deviation overlays to far below anything visible.
         avg = production_strain_field_cached(
-            design, trajs, ref_conf, metric=metric, copies=True, align=align,
+            design,
+            trajs,
+            ref_conf,
+            metric=metric,
+            copies=True,
+            align=align,
             n_trailing_extra=_capture_bead_count(job),
-            trailing_extra_strand_length=_capture_strand_length(job))
+            trailing_extra_strand_length=_capture_strand_length(job),
+        )
         if not avg["field"]:
             return None, avg
         return strain_map(design, avg["frame"], metric=metric, field=avg["field"]), avg
@@ -1477,10 +1713,16 @@ async def get_oxdna_strain(job_id: str, metric: str = "backbone", align: bool = 
     rejected = float(avg.get("rejected_fraction", 0.0))
     n_rejected = int(avg.get("n_rejected", 0))
     if strain is None:
-        return {"ready": False, "reason": (
-            "no frames yet" if not n_strain_frames
-            else "no paired bases to measure" if metric == "wc"
-            else "no backbone bonds to measure")}
+        return {
+            "ready": False,
+            "reason": (
+                "no frames yet"
+                if not n_strain_frames
+                else "no paired bases to measure"
+                if metric == "wc"
+                else "no backbone bonds to measure"
+            ),
+        }
     strain["confidence"] = rmsf_confidence(n_strain_frames)
     strain["n_strain_frames"] = n_strain_frames
     strain["rejected_fraction"] = rejected
@@ -1518,9 +1760,14 @@ async def get_oxdna_shape_source(job_id: str, align: bool = True) -> dict:
 
     # Render the true backbone site (not the oxDNA centre of mass) — identical to /display.
     shape_frame = [
-        {"helix_id": k[0], "bp_index": k[1], "direction": k[2],
-         "backbone_position": oxdna_backbone_site(
-             v["backbone_position"], v["a1"], v["a3"]).tolist()}
+        {
+            "helix_id": k[0],
+            "bp_index": k[1],
+            "direction": k[2],
+            "backbone_position": oxdna_backbone_site(
+                v["backbone_position"], v["a1"], v["a3"]
+            ).tolist(),
+        }
         for k, v in full_map.items()
     ]
 
@@ -1535,29 +1782,41 @@ async def get_oxdna_shape_source(job_id: str, align: bool = True) -> dict:
     n_frames = None
     trajs: list[Path] = []
     for kinds in (("production", "field"), ("equil",), ("md_relax",)):
-        stages = [s for s in job.stages
-                  if s.kind in kinds and s.status in ("done", "running")]
+        stages = [
+            s for s in job.stages if s.kind in kinds and s.status in ("done", "running")
+        ]
         for s in stages:
             trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
         if trajs:
             break
     if trajs:
         res = await run_in_threadpool(
-            production_rmsf_cached, design, trajs, ref_conf,
+            production_rmsf_cached,
+            design,
+            trajs,
+            ref_conf,
             n_trailing_extra=_capture_bead_count(job),
-            trailing_extra_strand_length=_capture_strand_length(job))
+            trailing_extra_strand_length=_capture_strand_length(job),
+        )
         if res.get("ready"):
             rmsf_positions = res["positions"]
             n_frames = res.get("n_frames")
 
     core_ref = core_reference_geometry(design)
-    source = build_oxdna_shape_source(shape_frame, core_ref, rmsf_positions=rmsf_positions)
-    return {"ready": source["descriptors"] is not None,
-            "stage_name": stage_name, "n_frames": n_frames, **source}
+    source = build_oxdna_shape_source(
+        shape_frame, core_ref, rmsf_positions=rmsf_positions
+    )
+    return {
+        "ready": source["descriptors"] is not None,
+        "stage_name": stage_name,
+        "n_frames": n_frames,
+        **source,
+    }
 
 
 # ── Trajectory-range export helpers (POST /oxdna/jobs/{id}/export-trajectory) ──
 # Pure, unit-tested in tests/test_oxdna_export_trajectory.py — kept small + format-critical.
+
 
 def _strided_indices(lo: int, hi: int, cap: int) -> list[int]:
     """Evenly-spaced indices from the half-open range [lo, hi), capped at ``cap``.
@@ -1577,13 +1836,17 @@ def _strided_indices(lo: int, hi: int, cap: int) -> list[int]:
 def _dat_particle_line(pos, a1, a3) -> str:
     """One oxDNA ``.dat`` configuration line: 15 floats — position, a1, a3, then zero
     velocity and angular velocity — group-separated by a double space, each ``%.6f``."""
+
     def _g(t):
         return " ".join(f"{v:.6f}" for v in t)
+
     zero = (0.0, 0.0, 0.0)
     return "  ".join([_g(pos), _g(a1), _g(a3), _g(zero), _g(zero)])
 
 
-def _assemble_multiframe_pdb(design, model, flats, indices, export_pdb_fn, progress=None) -> str:
+def _assemble_multiframe_pdb(
+    design, model, flats, indices, export_pdb_fn, progress=None
+) -> str:
     """Stamp each composite frame's atom coordinates onto ``model`` and emit a multi-MODEL PDB.
 
     ``flats`` maps ``str(frame_index) -> [x0,y0,z0, x1,y1,z1, …]`` (3 floats per model atom).
@@ -1606,7 +1869,8 @@ def _assemble_multiframe_pdb(design, model, flats, indices, export_pdb_fn, progr
         if flat is not None and len(flat) == expect:
             model_no += 1
             block, frame_conect = _render_model_block(
-                design, model, flat, export_pdb_fn, model_no)
+                design, model, flat, export_pdb_fn, model_no
+            )
             if conect is None:
                 conect = frame_conect
             out.append(block)
@@ -1641,6 +1905,7 @@ def _export_stem(job, design) -> str:
     """A safe filename stem: the design name with non-alphanumerics replaced by ``_``,
     falling back to the job id when there is no name."""
     import re
+
     name = getattr(getattr(design, "metadata", None), "name", None)
     if name:
         return re.sub(r"[^A-Za-z0-9]", "_", name)
@@ -1654,8 +1919,9 @@ _SPARSE_FRAME_CAP = 200
 
 
 @router.get("/oxdna/jobs/{job_id}/trajectory")
-async def get_oxdna_trajectory(job_id: str, request: Request, align: bool = True,
-                               scope: str = "lineage") -> dict:
+async def get_oxdna_trajectory(
+    job_id: str, request: Request, align: bool = True, scope: str = "lineage"
+) -> dict:
     """Composite scrub-able trajectory for the WHOLE lineage: every stage of the
     selected job AND all of its ancestors (relax → field1 → field2 → …), each
     frame PBC-unwrapped + Kabsch-aligned to the design reference, downsampled,
@@ -1690,9 +1956,19 @@ async def get_oxdna_trajectory(job_id: str, request: Request, align: bool = True
 
     _TRAJ_PROGRESS[job_id] = {"done": 0, "total": 0}
     try:
-        task = asyncio.create_task(run_in_threadpool(
-            composite_trajectory, design, stages, ref, budget, _prog, align,
-            _capture_bead_count(job), _capture_strand_length(job)))
+        task = asyncio.create_task(
+            run_in_threadpool(
+                composite_trajectory,
+                design,
+                stages,
+                ref,
+                budget,
+                _prog,
+                align,
+                _capture_bead_count(job),
+                _capture_strand_length(job),
+            )
+        )
         while not task.done():
             if await request.is_disconnected():
                 cancelled.set()
@@ -1701,8 +1977,15 @@ async def get_oxdna_trajectory(job_id: str, request: Request, align: bool = True
         try:
             result = await task
         except _TrajectoryCancelled:
-            return {"ready": False, "reason": "cancelled", "n_frames": 0,
-                    "keys": [], "frames": [], "markers": [], "stages": []}
+            return {
+                "ready": False,
+                "reason": "cancelled",
+                "n_frames": 0,
+                "keys": [],
+                "frames": [],
+                "markers": [],
+                "stages": [],
+            }
     finally:
         cancelled.set()
         _TRAJ_PROGRESS.pop(job_id, None)
@@ -1722,10 +2005,17 @@ async def get_oxdna_trajectory_progress(job_id: str) -> dict:
 
 
 @router.get("/oxdna/jobs/{job_id}/occupancy")
-async def get_oxdna_occupancy(job_id: str, request: Request, align: bool = True,
-                              scope: str = "lineage", max_frames: int = _SPARSE_FRAME_CAP,
-                              n_clusters: int = 0, method: str = "pca",
-                              basis: str = "nt", refetch: bool = False) -> dict:
+async def get_oxdna_occupancy(
+    job_id: str,
+    request: Request,
+    align: bool = True,
+    scope: str = "lineage",
+    max_frames: int = _SPARSE_FRAME_CAP,
+    n_clusters: int = 0,
+    method: str = "pca",
+    basis: str = "nt",
+    refetch: bool = False,
+) -> dict:
     """The top-N most likely CONFIGURATIONS of this job's sampling ensemble.
 
     Where ``/rmsf`` gives one mean structure plus a per-nucleotide spread, this gives
@@ -1751,14 +2041,33 @@ async def get_oxdna_occupancy(job_id: str, request: Request, align: bool = True,
       present them as likelihoods.
     * ``"unimodal"`` — one basin. The flexibility map already describes this ensemble.
     """
-    return await _occupancy_impl(job_id, request, align=align, scope=scope,
-                                 max_frames=max_frames, n_clusters=n_clusters,
-                                 method=method, basis=basis, refetch=refetch)
+    return await _occupancy_impl(
+        job_id,
+        request,
+        align=align,
+        scope=scope,
+        max_frames=max_frames,
+        n_clusters=n_clusters,
+        method=method,
+        basis=basis,
+        refetch=refetch,
+    )
 
 
-async def _occupancy_impl(job_id: str, request: Request, *, align: bool, scope: str,
-                          max_frames: int, n_clusters: int, method: str, basis: str,
-                          refetch: bool, selection=None, fit: str = "selection") -> dict:
+async def _occupancy_impl(
+    job_id: str,
+    request: Request,
+    *,
+    align: bool,
+    scope: str,
+    max_frames: int,
+    n_clusters: int,
+    method: str,
+    basis: str,
+    refetch: bool,
+    selection=None,
+    fit: str = "selection",
+) -> dict:
     """Shared body for the GET (whole structure) and POST (scoped) occupancy routes."""
     from backend.core.occupancy_core import OCC_FIT_MODES
     from backend.core.oxdna_occupancy import production_occupancy_cached
@@ -1789,13 +2098,26 @@ async def _occupancy_impl(job_id: str, request: Request, *, align: bool, scope: 
 
     _OCC_PROGRESS[job_id] = {"done": 0, "total": 0}
     try:
-        task = asyncio.create_task(run_in_threadpool(
-            lambda: production_occupancy_cached(
-                design, stages, ref, max_frames=max_frames, n_clusters=n_clusters,
-                method=method, basis=basis, align=align, progress=_prog, refetch=refetch,
-                selection=selection, fit=fit,
-                n_trailing_extra=_capture_bead_count(job),
-                trailing_extra_strand_length=_capture_strand_length(job))))
+        task = asyncio.create_task(
+            run_in_threadpool(
+                lambda: production_occupancy_cached(
+                    design,
+                    stages,
+                    ref,
+                    max_frames=max_frames,
+                    n_clusters=n_clusters,
+                    method=method,
+                    basis=basis,
+                    align=align,
+                    progress=_prog,
+                    refetch=refetch,
+                    selection=selection,
+                    fit=fit,
+                    n_trailing_extra=_capture_bead_count(job),
+                    trailing_extra_strand_length=_capture_strand_length(job),
+                )
+            )
+        )
         while not task.done():
             if await request.is_disconnected():
                 cancelled.set()
@@ -1809,8 +2131,9 @@ async def _occupancy_impl(job_id: str, request: Request, *, align: bool, scope: 
         cancelled.set()
         _OCC_PROGRESS.pop(job_id, None)
 
-    prod_running = any(s.status == "running" for s in job.stages
-                       if s.kind in ("production", "field"))
+    prod_running = any(
+        s.status == "running" for s in job.stages if s.kind in ("production", "field")
+    )
     return {**result, "production_running": prod_running}
 
 
@@ -1824,16 +2147,17 @@ class OccupancySelection(BaseModel):
     silent no-scope. Any new criterion must also be added to
     ``oxdna_occupancy._selection_sig`` or two different scopes collide in the cache.
     """
+
     model_config = ConfigDict(extra="forbid")
     cluster_ids: list[str] = Field(default_factory=list)
     helix_ids: list[str] = Field(default_factory=list)
     strand_ids: list[str] = Field(default_factory=list)
     overhang_ids: list[str] = Field(default_factory=list)
     domains: list[list] = Field(default_factory=list)  # [strand_id, domain_index]
-    bases: list[list] = Field(default_factory=list)    # [helix_id, bp_index, direction]
+    bases: list[list] = Field(default_factory=list)  # [helix_id, bp_index, direction]
     # Synthetic beads — omit the trailing index to take the whole run/tail.
     extra_bases: list[list] = Field(default_factory=list)  # [crossover_id, k?]
-    extensions: list[list] = Field(default_factory=list)   # [extension_id, k?]
+    extensions: list[list] = Field(default_factory=list)  # [extension_id, k?]
 
 
 class OccupancyBody(BaseModel):
@@ -1852,7 +2176,9 @@ class OccupancyBody(BaseModel):
 
 
 @router.post("/oxdna/jobs/{job_id}/occupancy")
-async def post_oxdna_occupancy(job_id: str, request: Request, body: OccupancyBody) -> dict:
+async def post_oxdna_occupancy(
+    job_id: str, request: Request, body: OccupancyBody
+) -> dict:
     """Occupancy clouds restricted to PART of the structure.
 
     Same analysis as the GET, plus a `selection` of clusters / strands / domains /
@@ -1874,10 +2200,18 @@ async def post_oxdna_occupancy(job_id: str, request: Request, body: OccupancyBod
     POST rather than GET because a base-level selection is far too big for a query string.
     """
     return await _occupancy_impl(
-        job_id, request, align=body.align, scope=body.scope, max_frames=body.max_frames,
-        n_clusters=body.n_clusters, method=body.method, basis=body.basis,
-        refetch=body.refetch, fit=body.fit,
-        selection=body.selection.model_dump() if body.selection else None)
+        job_id,
+        request,
+        align=body.align,
+        scope=body.scope,
+        max_frames=body.max_frames,
+        n_clusters=body.n_clusters,
+        method=body.method,
+        basis=body.basis,
+        refetch=body.refetch,
+        fit=body.fit,
+        selection=body.selection.model_dump() if body.selection else None,
+    )
 
 
 @router.get("/oxdna/jobs/{job_id}/occupancy-progress")
@@ -1924,8 +2258,12 @@ class OxdnaFramesSurfaceBody(BaseModel):
 
 
 @router.post("/oxdna/jobs/{job_id}/frames-atomistic")
-async def oxdna_frames_atomistic(job_id: str, body: OxdnaFramesAtomisticBody,
-                                  align: bool = True, scope: str = "lineage") -> dict:
+async def oxdna_frames_atomistic(
+    job_id: str,
+    body: OxdnaFramesAtomisticBody,
+    align: bool = True,
+    scope: str = "lineage",
+) -> dict:
     """Per-frame ATOMISTIC coordinates for the given composite-trajectory frame
     indices (same wire format as /design/features/atomistic-batch). Used by the
     animation player to make the atomistic rep follow a trajectory keyframe.
@@ -1939,15 +2277,25 @@ async def oxdna_frames_atomistic(job_id: str, body: OxdnaFramesAtomisticBody,
     if not stages:
         return {}
     return await run_in_threadpool(
-        composite_trajectory_atomistic, design, stages, ref, body.frame_indices,
+        composite_trajectory_atomistic,
+        design,
+        stages,
+        ref,
+        body.frame_indices,
         max_frames=(0 if scope == "job" else _SPARSE_FRAME_CAP),
-        align=align, n_trailing_extra=_capture_bead_count(job),
-        trailing_extra_strand_length=_capture_strand_length(job))
+        align=align,
+        n_trailing_extra=_capture_bead_count(job),
+        trailing_extra_strand_length=_capture_strand_length(job),
+    )
 
 
 @router.post("/oxdna/jobs/{job_id}/frames-surface")
-async def oxdna_frames_surface(job_id: str, body: OxdnaFramesSurfaceBody,
-                               align: bool = True, scope: str = "lineage") -> dict:
+async def oxdna_frames_surface(
+    job_id: str,
+    body: OxdnaFramesSurfaceBody,
+    align: bool = True,
+    scope: str = "lineage",
+) -> dict:
     """Per-frame molecular SURFACE meshes for the given composite-trajectory frame
     indices (same wire format as /design/features/surface-batch). Heaviest path
     (all-atom rebuild + marching cubes per frame) — callers downsample hard. Pass the
@@ -1959,18 +2307,27 @@ async def oxdna_frames_surface(job_id: str, body: OxdnaFramesSurfaceBody,
     if not stages:
         return {}
     return await run_in_threadpool(
-        composite_trajectory_surface, design, stages, ref, body.frame_indices,
-        body.color_mode, body.probe_radius, body.grid_spacing,
-        body.radius_inflate, body.smooth,
-        max_frames=(0 if scope == "job" else _SPARSE_FRAME_CAP), align=align,
+        composite_trajectory_surface,
+        design,
+        stages,
+        ref,
+        body.frame_indices,
+        body.color_mode,
+        body.probe_radius,
+        body.grid_spacing,
+        body.radius_inflate,
+        body.smooth,
+        max_frames=(0 if scope == "job" else _SPARSE_FRAME_CAP),
+        align=align,
         n_trailing_extra=_capture_bead_count(job),
-        trailing_extra_strand_length=_capture_strand_length(job))
+        trailing_extra_strand_length=_capture_strand_length(job),
+    )
 
 
 class OxdnaExportTrajectoryBody(BaseModel):
     lo: int
     hi: int
-    format: str = "pdb"      # 'pdb' (multi-MODEL, ChimeraX) | 'oxdna' (.top+.dat, oxView)
+    format: str = "pdb"  # 'pdb' (multi-MODEL, ChimeraX) | 'oxdna' (.top+.dat, oxView)
 
 
 # Each exported frame is a full all-atom rebuild, so cap the count regardless of the range —
@@ -2012,10 +2369,15 @@ async def _export_dcd_bundle(job_id: str, job, design, stages, ref, indices, ste
         model = build_atomistic_model(design)
         expect = 3 * len(model.atoms)
         frames = iter_composite_trajectory_atomistic(
-            design, stages, ref, indices,
+            design,
+            stages,
+            ref,
+            indices,
             n_trailing_extra=_capture_bead_count(job),
             trailing_extra_strand_length=_capture_strand_length(job),
-            progress=_frame_prog, cache=False)
+            progress=_frame_prog,
+            cache=False,
+        )
 
         wrote_topology = False
         n_written = 0
@@ -2026,32 +2388,38 @@ async def _export_dcd_bundle(job_id: str, job, design, stages, ref, indices, ste
             nonlocal wrote_topology, n_written
             for _idx, flat in frames:
                 if len(flat) != expect:
-                    continue          # topology changed mid-range; skip, as the PDB path does
+                    continue  # topology changed mid-range; skip, as the PDB path does
                 arr = np.asarray(flat, dtype=np.float64).reshape(-1, 3)
                 if not wrote_topology:
                     for i, atom in enumerate(model.atoms):
                         atom.x, atom.y, atom.z = arr[i, 0], arr[i, 1], arr[i, 2]
                     (Path(tmpdir) / f"{stem}.pdb").write_text(
-                        export_pdb(design, model=model, viewer_terminals=False))
+                        export_pdb(design, model=model, viewer_terminals=False)
+                    )
                     wrote_topology = True
                 n_written += 1
-                yield arr * 10.0      # nm -> Angstrom (DCD's unit)
+                yield arr * 10.0  # nm -> Angstrom (DCD's unit)
 
         dcd_fast.write_trajectory(
-            Path(tmpdir) / f"{stem}.dcd", len(model.atoms), _coords(), len(indices))
+            Path(tmpdir) / f"{stem}.dcd", len(model.atoms), _coords(), len(indices)
+        )
         if not wrote_topology:
             return "", 0
 
         zip_path = Path(tmpdir) / f"{stem}.zip"
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=1) as zf:
+        with zipfile.ZipFile(
+            zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=1
+        ) as zf:
             zf.write(Path(tmpdir) / f"{stem}.pdb", f"{stem}.pdb")
             zf.write(Path(tmpdir) / f"{stem}.dcd", f"{stem}.dcd")
-            zf.writestr(f"{stem}_README.txt",
-                        "Open in ChimeraX:\n"
-                        f"    open {stem}.pdb\n"
-                        f"    open {stem}.dcd structureModel #1\n\n"
-                        "The PDB carries the topology (one frame); the DCD carries every\n"
-                        "frame's coordinates. Both files must be in the same folder.\n")
+            zf.writestr(
+                f"{stem}_README.txt",
+                "Open in ChimeraX:\n"
+                f"    open {stem}.pdb\n"
+                f"    open {stem}.dcd structureModel #1\n\n"
+                "The PDB carries the topology (one frame); the DCD carries every\n"
+                "frame's coordinates. Both files must be in the same folder.\n",
+            )
         return str(zip_path), n_written
 
     try:
@@ -2065,16 +2433,23 @@ async def _export_dcd_bundle(job_id: str, job, design, stages, ref, indices, ste
     if not zip_path:
         shutil.rmtree(tmpdir, ignore_errors=True)
         raise HTTPException(
-            500, "No frames could be rendered — this can happen for hard-surface / capture-strand "
-                 "jobs whose extra beads aren't in the atomistic model.")
+            500,
+            "No frames could be rendered — this can happen for hard-surface / capture-strand "
+            "jobs whose extra beads aren't in the atomistic model.",
+        )
 
     return FileResponse(
-        zip_path, media_type="application/zip", filename=f"{stem}_chimerax.zip",
-        background=BackgroundTask(shutil.rmtree, tmpdir, True))
+        zip_path,
+        media_type="application/zip",
+        filename=f"{stem}_chimerax.zip",
+        background=BackgroundTask(shutil.rmtree, tmpdir, True),
+    )
 
 
 @router.post("/oxdna/jobs/{job_id}/export-trajectory")
-async def export_oxdna_trajectory(job_id: str, body: OxdnaExportTrajectoryBody) -> Response:
+async def export_oxdna_trajectory(
+    job_id: str, body: OxdnaExportTrajectoryBody
+) -> Response:
     """Export a FRAME RANGE of the composite trajectory for offline rendering.
 
     ``format='pdb'`` → one multi-MODEL PDB (ChimeraX ``open … coordsets true``); the frame
@@ -2089,7 +2464,9 @@ async def export_oxdna_trajectory(job_id: str, body: OxdnaExportTrajectoryBody) 
     job = _load_job(job_id)
     design, stages, ref = _composite_inputs(job)
     if not stages:
-        raise HTTPException(404, "This job has no trajectory to export yet — run a production job.")
+        raise HTTPException(
+            404, "This job has no trajectory to export yet — run a production job."
+        )
 
     meta = await run_in_threadpool(composite_trajectory_meta, design, stages)
     n_frames = int(meta.get("n_frames") or 0)
@@ -2104,8 +2481,10 @@ async def export_oxdna_trajectory(job_id: str, body: OxdnaExportTrajectoryBody) 
         # order; the composite frames carry pos+a1 in a different key order, so the .top/.dat
         # correspondence isn't wired yet. PDB is the supported path (ChimeraX).
         raise HTTPException(
-            501, "oxView (.top + .dat) trajectory export isn't wired yet — export as a "
-                 "multi-frame PDB (the PDB option) for ChimeraX for now.")
+            501,
+            "oxView (.top + .dat) trajectory export isn't wired yet — export as a "
+            "multi-frame PDB (the PDB option) for ChimeraX for now.",
+        )
 
     from backend.core.atomistic import build_atomistic_model
     from backend.core.oxdna_health import iter_composite_trajectory_atomistic
@@ -2117,7 +2496,8 @@ async def export_oxdna_trajectory(job_id: str, body: OxdnaExportTrajectoryBody) 
 
     if body.format == "dcd":
         return await _export_dcd_bundle(
-            job_id, job, design, stages, ref, indices, f"{stem}_frames{lo}-{hi}")
+            job_id, job, design, stages, ref, indices, f"{stem}_frames{lo}-{hi}"
+        )
 
     def _frame_prog(done: int, total: int) -> None:
         # One counting phase now: each frame is rebuilt AND written before the next starts.
@@ -2131,13 +2511,17 @@ async def export_oxdna_trajectory(job_id: str, body: OxdnaExportTrajectoryBody) 
         model = build_atomistic_model(design)
         template = build_multiframe_pdb_template(design, model)
         frames = iter_composite_trajectory_atomistic(
-            design, stages, ref, indices,
+            design,
+            stages,
+            ref,
+            indices,
             n_trailing_extra=_capture_bead_count(job),
             trailing_extra_strand_length=_capture_strand_length(job),
             progress=_frame_prog,
             # An export's frames are write-once; caching them would evict the live
             # display cache (6 M-element budget) for entries nobody re-requests.
-            cache=False)
+            cache=False,
+        )
         expect = 3 * len(model.atoms)
         first = None
         for _idx, flat in frames:
@@ -2157,7 +2541,9 @@ async def export_oxdna_trajectory(job_id: str, body: OxdnaExportTrajectoryBody) 
         return model, template, frames, first, first_block, conect
 
     try:
-        model, template, frames, first, first_block, conect = await run_in_threadpool(_prepare)
+        model, template, frames, first, first_block, conect = await run_in_threadpool(
+            _prepare
+        )
     except Exception:
         _EXPORT_PROGRESS.pop(job_id, None)
         raise
@@ -2167,8 +2553,10 @@ async def export_oxdna_trajectory(job_id: str, body: OxdnaExportTrajectoryBody) 
         # trailing beads aren't in the base atomistic model. Fail with a clear reason.
         _EXPORT_PROGRESS.pop(job_id, None)
         raise HTTPException(
-            500, "No frames could be rendered — this can happen for hard-surface / capture-strand "
-                 "jobs whose extra beads aren't in the atomistic model.")
+            500,
+            "No frames could be rendered — this can happen for hard-surface / capture-strand "
+            "jobs whose extra beads aren't in the atomistic model.",
+        )
 
     expect = 3 * len(model.atoms)
 
@@ -2185,14 +2573,16 @@ async def export_oxdna_trajectory(job_id: str, body: OxdnaExportTrajectoryBody) 
             model_no = 1
             for _idx, flat in frames:
                 if len(flat) != expect:
-                    continue                      # topology changed mid-range; skip it
+                    continue  # topology changed mid-range; skip it
                 model_no += 1
                 if template is not None:
                     yield template.model_block(flat, model_no)
                 else:
                     # Defensive fallback: the splice couldn't be validated, so pay the full
                     # per-frame render. Correct, just slow — never silently wrong.
-                    block, _ = _render_model_block(design, model, flat, export_pdb, model_no)
+                    block, _ = _render_model_block(
+                        design, model, flat, export_pdb, model_no
+                    )
                     yield block
             tail = list(conect or [])
             tail.append("END")
@@ -2201,8 +2591,10 @@ async def export_oxdna_trajectory(job_id: str, body: OxdnaExportTrajectoryBody) 
             _EXPORT_PROGRESS.pop(job_id, None)
 
     return StreamingResponse(
-        _stream(), media_type="chemical/x-pdb",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+        _stream(),
+        media_type="chemical/x-pdb",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/oxdna/jobs/{job_id}/export-progress")
@@ -2224,18 +2616,25 @@ def _job_has_surface(job) -> bool:
 
 def _capture_bead_count(job) -> int:
     """Number of non-design capture particles appended to every oxDNA frame."""
-    built = (((job.run_config or {}).get("surface_strands") or {}).get("built") or {})
+    built = ((job.run_config or {}).get("surface_strands") or {}).get("built") or {}
     return int(built.get("n_beads") or 0)
 
 
 def _capture_strand_length(job) -> int:
-    sequence = ((job.run_config or {}).get("surface_strands") or {}).get("sequence") or ""
+    sequence = ((job.run_config or {}).get("surface_strands") or {}).get(
+        "sequence"
+    ) or ""
     return len("".join(base for base in sequence.upper() if base in "ACGT"))
 
 
-def _relaxed_full_map(job, align: bool, *, copies: bool = False,
-                      include_extra_bases: bool = False,
-                      include_extensions: bool = False):
+def _relaxed_full_map(
+    job,
+    align: bool,
+    *,
+    copies: bool = False,
+    include_extra_bases: bool = False,
+    include_extensions: bool = False,
+):
     """Shared relaxed-frame reader for the display + display-atomistic/surface
     routes. Returns ``(design, full_map, stage_name, conf_path, ref_conf)`` where
     ``full_map`` is ``{(hid,bp,dir): {backbone_position(CM), a1, a3}}`` — the same
@@ -2275,6 +2674,7 @@ def _relaxed_full_map(job, align: bool, *, copies: bool = False,
         align = False
 
     from backend.core.models import Design
+
     snap = jd / "design.json"
     if not snap.exists():
         raise HTTPException(500, "design.json snapshot missing for this job")
@@ -2285,14 +2685,18 @@ def _relaxed_full_map(job, align: bool, *, copies: bool = False,
     # detect that on its own — it clamps the deficit and silently hands every
     # nucleotide after the first extension the WRONG particle line.  Fail loudly.
     from backend.physics.oxdna_interface import (
-        assert_topology_matches_design, StaleJobTopologyError,
+        assert_topology_matches_design,
+        StaleJobTopologyError,
     )
+
     # Surface capture strands are appended after the origami particles — a legitimate,
     # job-specific surplus that isn't in the design walk.  Allow it in the guard and skip
     # it in the reader so the origami particles still line up.
     cap_beads = _capture_bead_count(job)
     try:
-        assert_topology_matches_design(jd / "topology.top", design, extra_trailing=cap_beads)
+        assert_topology_matches_design(
+            jd / "topology.top", design, extra_trailing=cap_beads
+        )
     except StaleJobTopologyError as exc:
         raise HTTPException(409, str(exc)) from exc
 
@@ -2317,18 +2721,30 @@ def _relaxed_full_map(job, align: bool, *, copies: bool = False,
         # look like it did nothing.
         _keys = [tuple(k) for k in anchor_keys]
         _extra_b = include_extra_bases or any(k and k[0] == _XB_SENTINEL for k in _keys)
-        _exts    = include_extensions or any(is_extension_key(k) for k in _keys if k)
+        _exts = include_extensions or any(is_extension_key(k) for k in _keys if k)
         full_map = read_configuration_unwrapped(
-            conf_path, design, ref_conf,
-            align_keys=_keys, rotate=False, align=align,
-            copies=copies, include_extra_bases=_extra_b,
-            include_extensions=_exts, n_trailing_extra=cap_beads)
+            conf_path,
+            design,
+            ref_conf,
+            align_keys=_keys,
+            rotate=False,
+            align=align,
+            copies=copies,
+            include_extra_bases=_extra_b,
+            include_extensions=_exts,
+            n_trailing_extra=cap_beads,
+        )
     else:
-        full_map = read_configuration_unwrapped(conf_path, design, ref_conf,
-                                                align=align, copies=copies,
-                                                include_extra_bases=include_extra_bases,
-                                                include_extensions=include_extensions,
-                                                n_trailing_extra=cap_beads)
+        full_map = read_configuration_unwrapped(
+            conf_path,
+            design,
+            ref_conf,
+            align=align,
+            copies=copies,
+            include_extra_bases=include_extra_bases,
+            include_extensions=include_extensions,
+            n_trailing_extra=cap_beads,
+        )
     return (design, full_map, stage_name, conf_path, ref_conf)
 
 
@@ -2341,6 +2757,7 @@ def _capture_display_strands(job, conf_path, full_map) -> list:
     a single box-shift of the whole capture group onto the origami's display box-image.
     Returns [] for non-capture jobs."""
     import numpy as np
+
     ss = (job.run_config or {}).get("surface_strands") or {}
     built = ss.get("built") or {}
     n_cap = int(built.get("n_beads", 0))
@@ -2349,17 +2766,26 @@ def _capture_display_strands(job, conf_path, full_map) -> list:
     seq = "".join(c for c in (ss.get("sequence") or "").upper() if c in "ACGT")
     L = len(seq) or 8
     from backend.physics.oxdna_interface import OXDNA_LENGTH_UNIT, _parse_box_nm
-    lines = [l for l in Path(conf_path).read_text().splitlines()
-             if l.strip() and not l.startswith(("t ", "b ", "E "))]
+
+    lines = [
+        l
+        for l in Path(conf_path).read_text().splitlines()
+        if l.strip() and not l.startswith(("t ", "b ", "E "))
+    ]
     n_orig = len(lines) - n_cap
     if n_orig < 0 or n_cap % L != 0:
         return []
-    cap = np.array([[float(x) for x in lines[n_orig + i].split()[:3]] for i in range(n_cap)]) * OXDNA_LENGTH_UNIT
+    cap = (
+        np.array(
+            [[float(x) for x in lines[n_orig + i].split()[:3]] for i in range(n_cap)]
+        )
+        * OXDNA_LENGTH_UNIT
+    )
     box = _parse_box_nm(conf_path)
     origami_c = np.mean([v["backbone_position"] for v in full_map.values()], axis=0)
     if box is not None and np.all(box > 0):
         cap = cap + box * np.round((origami_c - cap.mean(axis=0)) / box)
-    return [cap[s * L:(s + 1) * L].tolist() for s in range(n_cap // L)]
+    return [cap[s * L : (s + 1) * L].tolist() for s in range(n_cap // L)]
 
 
 @router.get("/oxdna/jobs/{job_id}/display")
@@ -2379,19 +2805,28 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
     # copies=True keys each loop-insertion copy under its own 4-tuple so the display
     # can move every loop bead (not just the collapsed last copy) to its relaxed spot.
     design, full_map, stage_name, conf_path, ref_conf = _relaxed_full_map(
-        job, align, copies=True, include_extra_bases=True, include_extensions=True)
+        job, align, copies=True, include_extra_bases=True, include_extensions=True
+    )
     if full_map is None:
-        return {"job_id": job.job_id, "ready": False, "positions": [], "stage_name": None}
+        return {
+            "job_id": job.job_id,
+            "ready": False,
+            "positions": [],
+            "stage_name": None,
+        }
 
     # Hybrid (protein) jobs: a per-protein rigid 4×4 (design pose → relaxed pose in
     # the aligned display frame) the frontend applies to the protein render.
     proteins = []
     from backend.physics.oxdna_protein import has_proteins, protein_display_transforms
+
     if has_proteins(design):
         transforms = protein_display_transforms(
-            conf_path, ref_conf, design,
-            _seed_geometry(design), align=align)
-        proteins = [{"attachment_id": aid, "transform": M} for aid, M in transforms.items()]
+            conf_path, ref_conf, design, _seed_geometry(design), align=align
+        )
+        proteins = [
+            {"attachment_id": aid, "transform": M} for aid, M in transforms.items()
+        ]
     # Render the true backbone site, not the oxDNA centre of mass — the CM sits
     # inward of the backbone, so rendering it collapses the apparent duplex.
     positions = [
@@ -2403,7 +2838,8 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
             # (3-tuple) so the frontend addresses the exact loop bead.
             "copy": key[3] if len(key) == 4 else 0,
             "backbone_position": oxdna_backbone_site(
-                v["backbone_position"], v["a1"], v["a3"]).tolist(),
+                v["backbone_position"], v["a1"], v["a3"]
+            ).tolist(),
             "nx": float(v["a1"][0]),
             "ny": float(v["a1"][1]),
             "nz": float(v["a1"][2]),
@@ -2430,7 +2866,9 @@ class OxdnaSurfaceBody(BaseModel):
     grid_spacing: float = 0.20
     radius_inflate: float = 1.30
     smooth: int = 15
-    detail: str = "coarse"   # 'coarse' = fast CG-bead envelope (default) | 'fine' = full all-atom
+    detail: str = (
+        "coarse"  # 'coarse' = fast CG-bead envelope (default) | 'fine' = full all-atom
+    )
 
 
 @router.post("/oxdna/jobs/{job_id}/display-atomistic")
@@ -2446,12 +2884,18 @@ async def get_oxdna_display_atomistic(job_id: str, align: bool = True) -> dict:
     hash to the atoms it is rendering and rebuild from GET .../atomistic-model on a
     mismatch; blindly overlaying these positions on a different topology maps every
     serial to the wrong atom (scrambled colours/bonds/positions)."""
-    from backend.core.oxdna_health import (frame_atomistic_flat, _traj_file_sig,
-                                           _display_out_get, _display_out_put)
+    from backend.core.oxdna_health import (
+        frame_atomistic_flat,
+        _traj_file_sig,
+        _display_out_get,
+        _display_out_put,
+    )
     from backend.core.atomistic import atomistic_reference_topology_hash
 
     job = _load_job(job_id)
-    design, full_map, stage_name, conf_path, _ = _relaxed_full_map(job, align, copies=True, include_extra_bases=True, include_extensions=True)
+    design, full_map, stage_name, conf_path, _ = _relaxed_full_map(
+        job, align, copies=True, include_extra_bases=True, include_extensions=True
+    )
     if full_map is None:
         return {"job_id": job.job_id, "ready": False}
     # Cache the all-atom rebuild (the "≈ several seconds" step) keyed by the conf
@@ -2463,9 +2907,14 @@ async def get_oxdna_display_atomistic(job_id: str, align: bool = True) -> dict:
     if data is None:
         data = await run_in_threadpool(frame_atomistic_flat, design, full_map)
         _display_out_put(ck, data)
-    return {"job_id": job.job_id, "ready": True, "stage_name": stage_name,
-            "atomistic": data, "topology_hash": atomistic_reference_topology_hash(design),
-            "n_atoms": len(data) // 3}
+    return {
+        "job_id": job.job_id,
+        "ready": True,
+        "stage_name": stage_name,
+        "atomistic": data,
+        "topology_hash": atomistic_reference_topology_hash(design),
+        "n_atoms": len(data) // 3,
+    }
 
 
 @router.get("/oxdna/jobs/{job_id}/atomistic-model")
@@ -2475,9 +2924,13 @@ async def get_oxdna_atomistic_model(job_id: str) -> dict:
     belong to — when the app's loaded design has diverged from the job snapshot.
     Same serial space as display-atomistic's flat positions (both build from the job
     design), so a rebuild + applyPositionLerp aligns bond-for-bond."""
-    from backend.core.atomistic import (build_atomistic_model, atomistic_to_json,
-                                         atomistic_reference_topology_hash)
+    from backend.core.atomistic import (
+        build_atomistic_model,
+        atomistic_to_json,
+        atomistic_reference_topology_hash,
+    )
     from backend.core.models import Design
+
     job = _load_job(job_id)
     snap = job.job_dir(_workspace()) / "design.json"
     if not snap.exists():
@@ -2487,7 +2940,8 @@ async def get_oxdna_atomistic_model(job_id: str) -> dict:
     # applyPositionLerp, so use the cheap interpolated phosphate bridges (6× faster
     # build on large structures; the exact MD-seed geometry would be discarded anyway).
     model = await run_in_threadpool(
-        lambda: build_atomistic_model(design, fast_bridges=True))
+        lambda: build_atomistic_model(design, fast_bridges=True)
+    )
     out = atomistic_to_json(model)
     out["topology_hash"] = atomistic_reference_topology_hash(design)
     return out
@@ -2506,6 +2960,7 @@ async def get_oxdna_atomistic_stamp(job_id: str) -> dict:
     design), so the client rebuilds from atomistic-model on a hash mismatch."""
     from backend.core.atomistic import atomistic_stamp_descriptor
     from backend.core.models import Design
+
     job = _load_job(job_id)
     snap = job.job_dir(_workspace()) / "design.json"
     if not snap.exists():
@@ -2514,7 +2969,7 @@ async def get_oxdna_atomistic_stamp(job_id: str) -> dict:
     desc = await run_in_threadpool(atomistic_stamp_descriptor, design)
     # Flatten atom_local (3*n_atoms) for a compact wire; nuc_keys as [h,bp,dir,copy].
     atom_local_flat: list = []
-    for (nx, ny, nz) in desc.atom_local:
+    for nx, ny, nz in desc.atom_local:
         atom_local_flat.extend((nx, ny, nz))
     return {
         "job_id": job.job_id,
@@ -2533,6 +2988,7 @@ def _atomistic_bundle_ctx(job_id: str):
     routes need before they can decide whether their cache is warm."""
     from backend.core.atomistic import atomistic_reference_topology_hash
     from backend.core.models import Design
+
     job = _load_job(job_id)
     jd = job.job_dir(_workspace())
     snap = jd / "design.json"
@@ -2553,6 +3009,7 @@ def _write_atomistic_bin_cache(bundle: dict, jd, thash: str) -> None:
     request a repack, never correctness, and an unpackable bundle is a legitimate outcome
     (the bin route 409s and the client falls back to JSON)."""
     from backend.core.atomistic import pack_bundle_bin
+
     try:
         _atomistic_bin_cache_path(jd, thash).write_bytes(pack_bundle_bin(bundle))
     except Exception:
@@ -2565,6 +3022,7 @@ async def _atomistic_bundle_cached(job_id: str, ctx=None) -> dict:
     one cache; the routes only differ in how they serialise the result."""
     import orjson
     from backend.core.atomistic import atomistic_display_bundle
+
     design, thash, jd = ctx if ctx is not None else _atomistic_bundle_ctx(job_id)
     cache_f = jd / "atomistic_display_bundle.json"
 
@@ -2576,7 +3034,7 @@ async def _atomistic_bundle_cached(job_id: str, ctx=None) -> dict:
                 if cached.get("topology_hash") == thash:
                     return cached
             except Exception:
-                pass   # corrupt/stale cache → rebuild
+                pass  # corrupt/stale cache → rebuild
         return None
 
     hit = _read_cache()
@@ -2587,7 +3045,7 @@ async def _atomistic_bundle_cached(job_id: str, ctx=None) -> dict:
     # result instead of launching its own build.
     lock = await _bundle_build_lock(thash)
     async with lock:
-        hit = _read_cache()          # another request may have just built + cached it
+        hit = _read_cache()  # another request may have just built + cached it
         if hit is not None:
             return hit
         out = await run_in_threadpool(atomistic_display_bundle, design)
@@ -2596,7 +3054,7 @@ async def _atomistic_bundle_cached(job_id: str, ctx=None) -> dict:
             try:
                 cache_f.write_bytes(orjson.dumps(out))
             except Exception:
-                pass   # cache write best-effort; correctness doesn't depend on it
+                pass  # cache write best-effort; correctness doesn't depend on it
             # Pack the binary form NOW, off the in-memory bundle. Deriving it lazily on
             # the first bin request instead would mean re-reading and re-parsing the
             # 129 MB JSON cache just to throw it away — the build already has the dict.
@@ -2641,6 +3099,7 @@ async def get_oxdna_atomistic_display_bundle_bin(job_id: str):
     field wider than its index type); the client falls back to the JSON route."""
     from fastapi import Response
     from backend.core.atomistic import BundleNotPackable, pack_bundle_bin
+
     ctx = _atomistic_bundle_ctx(job_id)
     _design, thash, jd = ctx
     # The blob has its own disk cache, written at BUILD time (_atomistic_bundle_cached) so
@@ -2649,18 +3108,20 @@ async def get_oxdna_atomistic_display_bundle_bin(job_id: str):
     bin_f = _atomistic_bin_cache_path(jd, thash)
     if bin_f.exists():
         try:
-            return Response(content=bin_f.read_bytes(), media_type="application/octet-stream")
+            return Response(
+                content=bin_f.read_bytes(), media_type="application/octet-stream"
+            )
         except OSError:
-            pass       # unreadable/truncated → fall through and repack
+            pass  # unreadable/truncated → fall through and repack
     bundle = await _atomistic_bundle_cached(job_id, ctx)
     try:
         buf = await run_in_threadpool(pack_bundle_bin, bundle)
     except BundleNotPackable as e:
         raise HTTPException(409, f"bundle not packable, use the JSON route: {e}")
     try:
-        bin_f.write_bytes(buf)     # so the migration happens at most once per job
+        bin_f.write_bytes(buf)  # so the migration happens at most once per job
     except OSError:
-        pass           # cache write best-effort; correctness doesn't depend on it
+        pass  # cache write best-effort; correctness doesn't depend on it
     return Response(content=buf, media_type="application/octet-stream")
 
 
@@ -2672,12 +3133,18 @@ async def get_oxdna_display_atomistic_frames(job_id: str, align: bool = True) ->
     (GET .../atomistic-stamp) and expands the fixed templates.  Same conf-signature
     memoisation as display-atomistic so a rep flip on the same frame re-fetches
     instantly and a still-writing run stays fresh."""
-    from backend.core.oxdna_health import (display_frames_payload, _traj_file_sig,
-                                           _display_out_get, _display_out_put)
+    from backend.core.oxdna_health import (
+        display_frames_payload,
+        _traj_file_sig,
+        _display_out_get,
+        _display_out_put,
+    )
     from backend.core.atomistic import atomistic_reference_topology_hash
+
     job = _load_job(job_id)
     design, full_map, stage_name, conf_path, _ = _relaxed_full_map(
-        job, align, copies=True, include_extra_bases=True, include_extensions=True)
+        job, align, copies=True, include_extra_bases=True, include_extensions=True
+    )
     if full_map is None:
         return {"job_id": job.job_id, "ready": False}
     ck = ("dispAF", _traj_file_sig(str(conf_path)), bool(align))
@@ -2685,60 +3152,117 @@ async def get_oxdna_display_atomistic_frames(job_id: str, align: bool = True) ->
     if data is None:
         data = await run_in_threadpool(display_frames_payload, design, full_map)
         _display_out_put(ck, data)
-    return {"job_id": job.job_id, "ready": True, "stage_name": stage_name,
-            "topology_hash": atomistic_reference_topology_hash(design), **data}
+    return {
+        "job_id": job.job_id,
+        "ready": True,
+        "stage_name": stage_name,
+        "topology_hash": atomistic_reference_topology_hash(design),
+        **data,
+    }
 
 
 @router.post("/oxdna/jobs/{job_id}/display-surface")
-async def get_oxdna_display_surface(job_id: str, body: OxdnaSurfaceBody,
-                                    align: bool = True) -> dict:
+async def get_oxdna_display_surface(
+    job_id: str, body: OxdnaSurfaceBody, align: bool = True
+) -> dict:
     """Molecular surface mesh for the relaxed-display structure — the surface
     counterpart of GET /oxdna/jobs/{id}/display. ``surface`` = {vertices, faces,
     vertex_colors?} (same wire format as /design/features/surface-batch)."""
-    from backend.core.oxdna_health import (frame_surface_json, _traj_file_sig,
-                                           _display_out_get, _display_out_put)
+    from backend.core.oxdna_health import (
+        frame_surface_json,
+        _traj_file_sig,
+        _display_out_get,
+        _display_out_put,
+    )
 
     job = _load_job(job_id)
-    design, full_map, stage_name, conf_path, _ = _relaxed_full_map(job, align, copies=True, include_extra_bases=True, include_extensions=True)
+    design, full_map, stage_name, conf_path, _ = _relaxed_full_map(
+        job, align, copies=True, include_extra_bases=True, include_extensions=True
+    )
     if full_map is None:
         return {"job_id": job.job_id, "ready": False}
     # Cache keyed by conf signature + align + the surface mesh params (a different
     # probe/grid/smooth is a different mesh).  Surface = atomistic rebuild + marching
     # cubes, so the re-visit saving is even larger than the atomistic case.
-    sparams = (body.color_mode, round(body.probe_radius, 4), round(body.grid_spacing, 4),
-               round(body.radius_inflate, 4), int(body.smooth), body.detail)
+    sparams = (
+        body.color_mode,
+        round(body.probe_radius, 4),
+        round(body.grid_spacing, 4),
+        round(body.radius_inflate, 4),
+        int(body.smooth),
+        body.detail,
+    )
     ck = ("dispS", _traj_file_sig(str(conf_path)), bool(align), sparams)
     data = _display_out_get(ck)
     if data is None:
         data = await run_in_threadpool(
-            frame_surface_json, design, full_map, body.color_mode, body.probe_radius,
-            body.grid_spacing, body.radius_inflate, body.smooth, None, body.detail)
+            frame_surface_json,
+            design,
+            full_map,
+            body.color_mode,
+            body.probe_radius,
+            body.grid_spacing,
+            body.radius_inflate,
+            body.smooth,
+            None,
+            body.detail,
+        )
         _display_out_put(ck, data)
-    return {"job_id": job.job_id, "ready": True, "stage_name": stage_name, "surface": data}
+    return {
+        "job_id": job.job_id,
+        "ready": True,
+        "stage_name": stage_name,
+        "surface": data,
+    }
 
 
 @router.post("/oxdna/jobs/{job_id}/display-surface-bin")
-async def get_oxdna_display_surface_bin(job_id: str, body: OxdnaSurfaceBody,
-                                        align: bool = True):
+async def get_oxdna_display_surface_bin(
+    job_id: str, body: OxdnaSurfaceBody, align: bool = True
+):
     """Binary counterpart of display-surface — the SAME cached mesh packed into a compact
     little-endian blob (~2× smaller than JSON, no million-number JSON.parse on the client;
     see oxdna_health.pack_surface_bin).  Empty 16-byte header (n_verts=0) = not ready."""
     from fastapi import Response
-    from backend.core.oxdna_health import (frame_surface_json, pack_surface_bin,
-                                           _traj_file_sig, _display_out_get, _display_out_put)
+    from backend.core.oxdna_health import (
+        frame_surface_json,
+        pack_surface_bin,
+        _traj_file_sig,
+        _display_out_get,
+        _display_out_put,
+    )
+
     job = _load_job(job_id)
     design, full_map, _stage, conf_path, _ = _relaxed_full_map(
-        job, align, copies=True, include_extra_bases=True, include_extensions=True)
+        job, align, copies=True, include_extra_bases=True, include_extensions=True
+    )
     if full_map is None:
-        return Response(content=pack_surface_bin({}), media_type="application/octet-stream")
-    sparams = (body.color_mode, round(body.probe_radius, 4), round(body.grid_spacing, 4),
-               round(body.radius_inflate, 4), int(body.smooth), body.detail)
+        return Response(
+            content=pack_surface_bin({}), media_type="application/octet-stream"
+        )
+    sparams = (
+        body.color_mode,
+        round(body.probe_radius, 4),
+        round(body.grid_spacing, 4),
+        round(body.radius_inflate, 4),
+        int(body.smooth),
+        body.detail,
+    )
     ck = ("dispS", _traj_file_sig(str(conf_path)), bool(align), sparams)
     data = _display_out_get(ck)
     if data is None:
         data = await run_in_threadpool(
-            frame_surface_json, design, full_map, body.color_mode, body.probe_radius,
-            body.grid_spacing, body.radius_inflate, body.smooth, None, body.detail)
+            frame_surface_json,
+            design,
+            full_map,
+            body.color_mode,
+            body.probe_radius,
+            body.grid_spacing,
+            body.radius_inflate,
+            body.smooth,
+            None,
+            body.detail,
+        )
         _display_out_put(ck, data)
     buf = await run_in_threadpool(pack_surface_bin, data)
     return Response(content=buf, media_type="application/octet-stream")
@@ -2758,7 +3282,9 @@ async def get_oxdna_display_atomistic_audit(job_id: str, align: bool = True) -> 
     from backend.core.atomistic_validation import audit_bonds
 
     job = _load_job(job_id)
-    design, full_map, stage_name, _, _ = _relaxed_full_map(job, align, copies=True, include_extra_bases=True, include_extensions=True)
+    design, full_map, stage_name, _, _ = _relaxed_full_map(
+        job, align, copies=True, include_extra_bases=True, include_extensions=True
+    )
     if full_map is None:
         return {"job_id": job.job_id, "ready": False}
     report = await run_in_threadpool(audit_bonds, design, full_map)
@@ -2773,7 +3299,8 @@ class OxdnaTrajectoryAuditBody(BaseModel):
 
 @router.post("/oxdna/jobs/{job_id}/trajectory-audit")
 async def get_oxdna_trajectory_audit(
-        job_id: str, body: OxdnaTrajectoryAuditBody = OxdnaTrajectoryAuditBody()) -> dict:
+    job_id: str, body: OxdnaTrajectoryAuditBody = OxdnaTrajectoryAuditBody()
+) -> dict:
     """Per-frame validation audit of the View-trajectory scrub — the programmatic
     counterpart of the atomistic display measured across a SAMPLING of composite
     trajectory frames (whole lineage), not just the single relaxed frame.  Each frame
@@ -2789,8 +3316,13 @@ async def get_oxdna_trajectory_audit(
     if not stages:
         return {"job_id": job.job_id, "ready": False, "reason": "no trajectory yet"}
     report = await run_in_threadpool(
-        audit_trajectory_frames, design, stages, ref, body.frame_indices,
-        max_audit=body.max_audit)
+        audit_trajectory_frames,
+        design,
+        stages,
+        ref,
+        body.frame_indices,
+        max_audit=body.max_audit,
+    )
     report["job_id"] = job.job_id
     return report
 
@@ -2818,9 +3350,14 @@ def _rmsf_average_frame(job, align: bool = True):
     design = Design.model_validate_json((jd / "design.json").read_text())
     ref_conf = _design_ref_conf(jd, design)
     result = production_rmsf_cached(
-        design, trajs, ref_conf, copies=True, align=align,
+        design,
+        trajs,
+        ref_conf,
+        copies=True,
+        align=align,
         n_trailing_extra=_capture_bead_count(job),
-        trailing_extra_strand_length=_capture_strand_length(job))
+        trailing_extra_strand_length=_capture_strand_length(job),
+    )
     if not result.get("ready"):
         return (design, None, None)
     rmsf_by_key = {
@@ -2846,20 +3383,31 @@ async def get_oxdna_rmsf_atomistic(job_id: str, align: bool = True) -> dict:
 
 
 @router.post("/oxdna/jobs/{job_id}/rmsf-surface")
-async def get_oxdna_rmsf_surface(job_id: str, body: OxdnaSurfaceBody,
-                                 align: bool = True) -> dict:
+async def get_oxdna_rmsf_surface(
+    job_id: str, body: OxdnaSurfaceBody, align: bool = True
+) -> dict:
     """Molecular surface for the flexibility-map AVERAGE structure — the surface
     counterpart of GET /oxdna/jobs/{id}/rmsf.  Always coloured by per-vertex RMSF
     (``vertex_rmsf``) so the mesh shows the same rigid→flexible ramp as the beads."""
     from backend.core.oxdna_health import frame_surface_json
 
     job = _load_job(job_id)
-    design, frame, rmsf_by_key = await run_in_threadpool(_rmsf_average_frame, job, align)
+    design, frame, rmsf_by_key = await run_in_threadpool(
+        _rmsf_average_frame, job, align
+    )
     if frame is None:
         return {"job_id": job.job_id, "ready": False}
     data = await run_in_threadpool(
-        frame_surface_json, design, frame, "rmsf", body.probe_radius,
-        body.grid_spacing, body.radius_inflate, body.smooth, rmsf_by_key)
+        frame_surface_json,
+        design,
+        frame,
+        "rmsf",
+        body.probe_radius,
+        body.grid_spacing,
+        body.radius_inflate,
+        body.smooth,
+        rmsf_by_key,
+    )
     return {"job_id": job.job_id, "ready": True, "surface": data}
 
 

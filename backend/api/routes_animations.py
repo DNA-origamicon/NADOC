@@ -28,6 +28,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
+
 # _design_response is a response helper shared with the rest of crud.py's
 # route handlers. It stays in crud.py (used by 100+ routes there) and is
 # imported here. Same convention as routes_camera_poses.py (13-B).
@@ -281,7 +282,9 @@ def reorder_keyframes(anim_id: str, body: ReorderKeyframesBody) -> dict:
     listed = set(body.ordered_ids)
     reordered += [k for k in anims[anim_idx].keyframes if k.id not in listed]
 
-    anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": reordered}, deep=True)
+    anims[anim_idx] = anims[anim_idx].model_copy(
+        update={"keyframes": reordered}, deep=True
+    )
     updated = design.model_copy(update={"animations": anims}, deep=True)
     design_state.set_design(updated)
     report = validate_design(updated)

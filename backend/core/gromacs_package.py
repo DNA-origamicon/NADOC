@@ -70,8 +70,8 @@ from backend.core.gromacs_helpers import (
 )
 from backend.core.pdb_export import (
     _cryst1_record,  # type: ignore[attr-defined]
-    _h36,            # type: ignore[attr-defined]
-    _chain_char,     # type: ignore[attr-defined]
+    _h36,  # type: ignore[attr-defined]
+    _chain_char,  # type: ignore[attr-defined]
     _pdb_atom_name,  # type: ignore[attr-defined]
 )
 
@@ -98,14 +98,14 @@ _FF_CANDIDATES = [
 # §1  GROMACS DISCOVERY
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _find_gmx() -> str:
     """Return the gmx binary name, or raise RuntimeError."""
     for name in ("gmx", "gmx_mpi", "gmx_d"):
         if shutil.which(name):
             return name
     raise RuntimeError(
-        "GROMACS not found in PATH.  Install with:\n"
-        "    sudo apt-get install -y gromacs"
+        "GROMACS not found in PATH.  Install with:\n    sudo apt-get install -y gromacs"
     )
 
 
@@ -123,7 +123,7 @@ def _find_top_dir() -> Path:
     # 1. Explicit env override
     # GROMACS convention: GMXDATA = share/gromacs/ (parent of top/),
     #                     GMXLIB  = share/gromacs/top/ (the top/ dir itself)
-    gmxlib  = os.environ.get("GMXLIB")
+    gmxlib = os.environ.get("GMXLIB")
     gmxdata = os.environ.get("GMXDATA")
     if gmxlib:
         candidates.append(Path(gmxlib))
@@ -171,7 +171,8 @@ def _pick_ff(top_dir: Path, *, require_protein: bool = False) -> str:
     """
     candidates = (
         [ff for ff in _FF_CANDIDATES if ff.startswith("charmm")]
-        if require_protein else _FF_CANDIDATES
+        if require_protein
+        else _FF_CANDIDATES
     )
     for ff in candidates:
         if (top_dir / f"{ff}.ff").is_dir():
@@ -179,7 +180,11 @@ def _pick_ff(top_dir: Path, *, require_protein: bool = False) -> str:
     available = [p.name for p in top_dir.iterdir() if p.name.endswith(".ff")]
     raise RuntimeError(
         f"No supported force field found in {top_dir}.\n"
-        + ("Protein designs require CHARMM36 (AMBER fallback blocked).\n" if require_protein else "")
+        + (
+            "Protein designs require CHARMM36 (AMBER fallback blocked).\n"
+            if require_protein
+            else ""
+        )
         + f"Expected one of: {candidates}\n"
         f"Available: {available}"
     )
@@ -198,7 +203,16 @@ def _pick_ff(top_dir: Path, *, require_protein: bool = False) -> str:
 # §2c  GROMACS-SPECIFIC PDB BUILDER
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _build_gromacs_input_pdb(design: "Design", ff: str, box_margin_nm: float = 2.0, *, use_deformed: bool = True, nuc_pos_override=None, include_proteins: bool = False) -> str:
+
+def _build_gromacs_input_pdb(
+    design: "Design",
+    ff: str,
+    box_margin_nm: float = 2.0,
+    *,
+    use_deformed: bool = True,
+    nuc_pos_override=None,
+    include_proteins: bool = False,
+) -> str:
     """
     Generate a PDB for pdb2gmx with residues in correct 5'→3' traversal order.
 
@@ -225,15 +239,19 @@ def _build_gromacs_input_pdb(design: "Design", ff: str, box_margin_nm: float = 2
     from collections import defaultdict
 
     if not use_deformed:
-        design = design.model_copy(update={"deformations": [], "cluster_transforms": []})
-    model = build_atomistic_model(design, nuc_pos_override=nuc_pos_override, include_proteins=include_proteins)
+        design = design.model_copy(
+            update={"deformations": [], "cluster_transforms": []}
+        )
+    model = build_atomistic_model(
+        design, nuc_pos_override=nuc_pos_override, include_proteins=include_proteins
+    )
     atoms = model.atoms
     bonds = model.bonds
     atom_map = {a.serial: a for a in atoms}
 
     # ── Build O3'→P inter-residue bond map (same-chain bonds only) ─────────
     # These are the backbone links that define the 5'→3' traversal order.
-    o3_to_p: dict[int, int] = {}   # O3' serial → P serial of next residue
+    o3_to_p: dict[int, int] = {}  # O3' serial → P serial of next residue
     p_with_incoming: set[int] = set()  # P serials that have an incoming O3' bond
 
     for i, j in bonds:
@@ -312,13 +330,13 @@ def _build_gromacs_input_pdb(design: "Design", ff: str, box_margin_nm: float = 2
     for chain_id in chain_order:
         for new_seq, a in chain_output[chain_id]:
             serial_str = _h36(a.serial + 1, 5)
-            seq_str    = _h36(new_seq, 4)
+            seq_str = _h36(new_seq, 4)
             name_field = _pdb_atom_name(a.name, a.element)
-            resname    = f"{a.residue:>3s}"
+            resname = f"{a.residue:>3s}"
             chain_char = _chain_char(chain_id)
-            x_ang      = a.x * 10.0
-            y_ang      = a.y * 10.0
-            z_ang      = a.z * 10.0
+            x_ang = a.x * 10.0
+            y_ang = a.y * 10.0
+            z_ang = a.z * 10.0
             elem_field = f"{a.element:>2s}"
             lines.append(
                 f"ATOM  {serial_str} {name_field}{' '}{resname} {chain_char}"
@@ -2259,8 +2277,8 @@ if __name__ == "__main__":
 '''
 
 # Regexes that match specific parameters in any MDP string
-_STEPS_FROM_MDP  = re.compile(r'nsteps\s*=\s*\d+',   re.IGNORECASE)
-_DT_FROM_MDP     = re.compile(r'^dt\s*=\s*[\d.]+',   re.IGNORECASE | re.MULTILINE)
+_STEPS_FROM_MDP = re.compile(r"nsteps\s*=\s*\d+", re.IGNORECASE)
+_DT_FROM_MDP = re.compile(r"^dt\s*=\s*[\d.]+", re.IGNORECASE | re.MULTILINE)
 
 # Maximum steps for the *restrained* NVT stage regardless of user nvt_steps.
 # The restrained stage only needs to cover the annealing ramp (~30 ps normal,
@@ -2268,11 +2286,11 @@ _DT_FROM_MDP     = re.compile(r'^dt\s*=\s*[\d.]+',   re.IGNORECASE | re.MULTILIN
 # dt=0.002, 25 ps at dt=0.001) is sufficient and avoids wasting compute time
 # if the user requests a longer production run.
 _NVT_RESTRAINED_STEPS = 25_000
-_GENVEL_FROM_MDP = re.compile(r'^gen-vel\s*=\s*\S+',  re.IGNORECASE | re.MULTILINE)
+_GENVEL_FROM_MDP = re.compile(r"^gen-vel\s*=\s*\S+", re.IGNORECASE | re.MULTILINE)
 
 # Regex to extract the net system charge from pdb2gmx stdout
 # GROMACS 2021+ prints: "Total charge in system -4972.000 e"
-_TOTAL_CHARGE_RE = re.compile(r'Total charge in system\s+([-\d.]+)', re.IGNORECASE)
+_TOTAL_CHARGE_RE = re.compile(r"Total charge in system\s+([-\d.]+)", re.IGNORECASE)
 
 # Single Na+ ion template files for vacuum counterion neutralisation.
 # The GRO uses GROMACS column format: resnum(5d) resname(5s) atomname(5s) atomnum(5d) x y z (nm).
@@ -2509,6 +2527,7 @@ END OF CONTEXT
 # §6b  POST-pdb2gmx FIXUP
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _ion_names_for_ff(ff: str) -> tuple[str, int, str]:
     """
     Return (pname, pq, nname) for MgCl2 appropriate for the given force field.
@@ -2553,9 +2572,9 @@ def _fix_itp_case(tmpdir: Path) -> None:
 
     include_re = re.compile(r'(#include\s+")([^"]+\.itp)(")')
     for m in include_re.finditer(topol_path.read_text()):
-        fname  = m.group(2)          # name as written in topol.top
+        fname = m.group(2)  # name as written in topol.top
         target = tmpdir / fname
-        if target.exists():          # already correctly named — leave it alone
+        if target.exists():  # already correctly named — leave it alone
             continue
         actual = on_disk.get(fname.lower())
         if actual is not None and actual.name != fname:
@@ -2566,6 +2585,7 @@ def _fix_itp_case(tmpdir: Path) -> None:
 # ══════════════════════════════════════════════════════════════════════════════
 # §7  MAIN BUILDER
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def build_gromacs_package(
     design: "Design",
@@ -2594,27 +2614,24 @@ def build_gromacs_package(
     ion_conc_mM  : MgCl2 concentration in mM (default: 10.0)
     """
     from backend.physics.oxdna_protein import has_proteins
+
     _has_protein = has_proteins(design)
-    gmx     = _find_gmx()
+    gmx = _find_gmx()
     top_dir = _find_top_dir()
-    ff      = _pick_ff(top_dir, require_protein=_has_protein)
-    ff_dir  = top_dir / f"{ff}.ff"
-    name    = (package_name or design.metadata.name or "design").replace(" ", "_")
+    ff = _pick_ff(top_dir, require_protein=_has_protein)
+    ff_dir = top_dir / f"{ff}.ff"
+    name = (package_name or design.metadata.name or "design").replace(" ", "_")
 
     # NVT step defaults differ between vacuum and solvated protocols
     _nvt_default = 50000 if solvate else 25000
-    _nvt_steps   = nvt_steps if nvt_steps is not None else _nvt_default
+    _nvt_steps = nvt_steps if nvt_steps is not None else _nvt_default
 
     # Non-deformed structures with skip sites (delta ≤ −1 loop_skips) have
     # their backbone bridges adjusted by build_atomistic_model, but the chord
     # interpolation still leaves some deviation from ideal bond geometry.
     # Use more EM steps so steepest descent can fully relax these sites.
-    _has_skips = (
-        not use_deformed
-        and any(
-            any(ls.delta <= -1 for ls in h.loop_skips)
-            for h in design.helices
-        )
+    _has_skips = not use_deformed and any(
+        any(ls.delta <= -1 for ls in h.loop_skips) for h in design.helices
     )
     _em_nsteps = 150000 if _has_skips else 50000
 
@@ -2630,10 +2647,7 @@ def build_gromacs_package(
     # strained backbone geometry; abrupt POSRES removal causes NaN explosions.
     # The extended pipeline (em_free → em_posres → nvt → npt → npt_low →
     # npt_release) is activated automatically only for solvated runs.
-    _has_xover_insertions = (
-        solvate
-        and any(xo.extra_bases for xo in design.crossovers)
-    )
+    _has_xover_insertions = solvate and any(xo.extra_bases for xo in design.crossovers)
 
     with tempfile.TemporaryDirectory() as tmpdir_str:
         tmpdir = Path(tmpdir_str)
@@ -2643,7 +2657,14 @@ def build_gromacs_package(
         # position within each chain so pdb2gmx generates the right sequential
         # backbone bonds (standard export_pdb appends them at chain end, which
         # causes pdb2gmx to create wrong direct bonds across the crossover).
-        adapted = _build_gromacs_input_pdb(design, ff, box_margin_nm=2.0, use_deformed=use_deformed, nuc_pos_override=nuc_pos_override, include_proteins=_has_protein)
+        adapted = _build_gromacs_input_pdb(
+            design,
+            ff,
+            box_margin_nm=2.0,
+            use_deformed=use_deformed,
+            nuc_pos_override=nuc_pos_override,
+            include_proteins=_has_protein,
+        )
         input_pdb = tmpdir / "input.pdb"
         input_pdb.write_text(adapted)
 
@@ -2658,18 +2679,28 @@ def build_gromacs_package(
         # chains, so unique-letter count under-provides inputs and pdb2gmx hangs.
         # Over-providing is safe — extra inputs are ignored.
         _needs_ter = ff.startswith("charmm36-feb2026")
-        _pdb_lines = [l for l in adapted.splitlines() if l.startswith(("ATOM", "HETATM"))]
-        _n_chains  = 1 + sum(
-            1 for a, b in zip(_pdb_lines, _pdb_lines[1:]) if a[21] != b[21]
-        ) if _pdb_lines else 1
+        _pdb_lines = [
+            l for l in adapted.splitlines() if l.startswith(("ATOM", "HETATM"))
+        ]
+        _n_chains = (
+            1 + sum(1 for a, b in zip(_pdb_lines, _pdb_lines[1:]) if a[21] != b[21])
+            if _pdb_lines
+            else 1
+        )
         _pdb2gmx_cmd = [
-            gmx, "pdb2gmx",
-            "-f", str(input_pdb),
-            "-o", str(tmpdir / "conf_raw.gro"),
-            "-p", str(tmpdir / "topol.top"),
+            gmx,
+            "pdb2gmx",
+            "-f",
+            str(input_pdb),
+            "-o",
+            str(tmpdir / "conf_raw.gro"),
+            "-p",
+            str(tmpdir / "topol.top"),
             "-ignh",
-            "-ff", ff,
-            "-water", water_model,
+            "-ff",
+            ff,
+            "-water",
+            water_model,
             "-nobackup",
         ]
         if _needs_ter:
@@ -2694,12 +2725,17 @@ def build_gromacs_package(
         # ── 3. editconf — set up simulation box (2 nm margin) ────────────────
         editconf_result = subprocess.run(
             [
-                gmx, "editconf",
-                "-f", str(tmpdir / "conf_raw.gro"),
-                "-o", str(tmpdir / "conf.gro"),
+                gmx,
+                "editconf",
+                "-f",
+                str(tmpdir / "conf_raw.gro"),
+                "-o",
+                str(tmpdir / "conf.gro"),
                 "-c",
-                "-d", "2.5",
-                "-bt", "triclinic",
+                "-d",
+                "2.5",
+                "-bt",
+                "triclinic",
                 "-nobackup",
             ],
             capture_output=True,
@@ -2707,9 +2743,7 @@ def build_gromacs_package(
             cwd=str(tmpdir),
         )
         if editconf_result.returncode != 0:
-            raise RuntimeError(
-                f"editconf failed:\n{editconf_result.stderr[-2000:]}"
-            )
+            raise RuntimeError(f"editconf failed:\n{editconf_result.stderr[-2000:]}")
 
         # ── 3b. Add Na+ counterions in vacuum (neutralise backbone charge) ──────
         # Parse the net charge pdb2gmx prints to stderr.  Na+ ions are inserted
@@ -2730,13 +2764,20 @@ def build_gromacs_package(
 
                 ins_result = subprocess.run(
                     [
-                        gmx, "insert-molecules",
-                        "-ci",  str(tmpdir / "na_ion.gro"),
-                        "-nmol", str(_n_na),
-                        "-f",   str(tmpdir / "conf.gro"),
-                        "-o",   str(tmpdir / "conf_ions.gro"),
-                        "-try", "2000",
-                        "-scale", "1.0",
+                        gmx,
+                        "insert-molecules",
+                        "-ci",
+                        str(tmpdir / "na_ion.gro"),
+                        "-nmol",
+                        str(_n_na),
+                        "-f",
+                        str(tmpdir / "conf.gro"),
+                        "-o",
+                        str(tmpdir / "conf_ions.gro"),
+                        "-try",
+                        "2000",
+                        "-scale",
+                        "1.0",
                         "-nobackup",
                     ],
                     capture_output=True,
@@ -2773,39 +2814,50 @@ def build_gromacs_package(
             #        from the template).
             r = subprocess.run(
                 [
-                    gmx, "solvate",
-                    "-cp", str(tmpdir / "conf.gro"),
-                    "-cs", "spc216.gro",
-                    "-o",  str(tmpdir / "solvated.gro"),
-                    "-p",  str(tmpdir / "topol.top"),
+                    gmx,
+                    "solvate",
+                    "-cp",
+                    str(tmpdir / "conf.gro"),
+                    "-cs",
+                    "spc216.gro",
+                    "-o",
+                    str(tmpdir / "solvated.gro"),
+                    "-p",
+                    str(tmpdir / "topol.top"),
                     "-nobackup",
                 ],
-                capture_output=True, text=True, cwd=str(tmpdir),
+                capture_output=True,
+                text=True,
+                cwd=str(tmpdir),
             )
             if r.returncode != 0:
-                raise RuntimeError(
-                    f"solvate failed:\n{r.stderr[-2000:]}"
-                )
+                raise RuntimeError(f"solvate failed:\n{r.stderr[-2000:]}")
 
             # 3b-ii. grompp with minimal MDP — just enough to build a .tpr for
             #         genion to read system topology and atom counts from.
             (tmpdir / "ions.mdp").write_text(_IONS_MDP)
             r = subprocess.run(
                 [
-                    gmx, "grompp",
-                    "-f", str(tmpdir / "ions.mdp"),
-                    "-c", str(tmpdir / "solvated.gro"),
-                    "-p", str(tmpdir / "topol.top"),
-                    "-o", str(tmpdir / "ions.tpr"),
-                    "-maxwarn", "20",
+                    gmx,
+                    "grompp",
+                    "-f",
+                    str(tmpdir / "ions.mdp"),
+                    "-c",
+                    str(tmpdir / "solvated.gro"),
+                    "-p",
+                    str(tmpdir / "topol.top"),
+                    "-o",
+                    str(tmpdir / "ions.tpr"),
+                    "-maxwarn",
+                    "20",
                     "-nobackup",
                 ],
-                capture_output=True, text=True, cwd=str(tmpdir),
+                capture_output=True,
+                text=True,
+                cwd=str(tmpdir),
             )
             if r.returncode != 0:
-                raise RuntimeError(
-                    f"grompp (ions) failed:\n{r.stderr[-2000:]}"
-                )
+                raise RuntimeError(f"grompp (ions) failed:\n{r.stderr[-2000:]}")
 
             # 3b-iii. genion — replace SOL molecules with Mg2+ and Cl-.
             #  -neutral  : first neutralise the DNA charge (DNA is negative,
@@ -2814,27 +2866,35 @@ def build_gromacs_package(
             #  Input "SOL\n" selects the solvent group without user interaction.
             r = subprocess.run(
                 [
-                    gmx, "genion",
-                    "-s",      str(tmpdir / "ions.tpr"),
-                    "-o",      str(tmpdir / "conf.gro"),   # overwrites dry conf
-                    "-p",      str(tmpdir / "topol.top"),
-                    "-pname",  pname,
-                    "-pq",     str(pq),
-                    "-nname",  nname,
+                    gmx,
+                    "genion",
+                    "-s",
+                    str(tmpdir / "ions.tpr"),
+                    "-o",
+                    str(tmpdir / "conf.gro"),  # overwrites dry conf
+                    "-p",
+                    str(tmpdir / "topol.top"),
+                    "-pname",
+                    pname,
+                    "-pq",
+                    str(pq),
+                    "-nname",
+                    nname,
                     "-neutral",
-                    "-conc",   str(conc_M),
+                    "-conc",
+                    str(conc_M),
                     "-nobackup",
                 ],
                 input="SOL\n",
-                capture_output=True, text=True, cwd=str(tmpdir),
+                capture_output=True,
+                text=True,
+                cwd=str(tmpdir),
             )
             if r.returncode != 0:
-                raise RuntimeError(
-                    f"genion failed:\n{r.stderr[-2000:]}"
-                )
+                raise RuntimeError(f"genion failed:\n{r.stderr[-2000:]}")
 
         # ── 4. Collect generated files ────────────────────────────────────────
-        conf_gro  = (tmpdir / "conf.gro").read_text()
+        conf_gro = (tmpdir / "conf.gro").read_text()
         topol_top = (tmpdir / "topol.top").read_text()
         itp_files = {
             p.name: p.read_bytes()
@@ -2848,32 +2908,28 @@ def build_gromacs_package(
         # 100 kJ/mol/nm² (POSRES_LOW) for the staged release step, plus matching
         # #ifdef POSRES_LOW include guards in each topol_DNA_chain_X.itp.
         if _has_xover_insertions:
-            _posre_line_re = re.compile(
-                r'(?m)^(\s*\d+\s+1\s+)1000\s+1000\s+1000\s*$'
-            )
+            _posre_line_re = re.compile(r"(?m)^(\s*\d+\s+1\s+)1000\s+1000\s+1000\s*$")
             for _itp_name in list(itp_files.keys()):
                 if not _itp_name.startswith("posre_"):
                     continue
-                _low_name = "posre_low_" + _itp_name[len("posre_"):]
+                _low_name = "posre_low_" + _itp_name[len("posre_") :]
                 _low_text = _posre_line_re.sub(
-                    r'\g<1>100   100   100',
+                    r"\g<1>100   100   100",
                     itp_files[_itp_name].decode(),
                 )
                 itp_files[_low_name] = _low_text.encode()
 
                 # Patch the topol_*.itp that #includes this posre file
-                _old_block = (
-                    f'#ifdef POSRES\n#include "{_itp_name}"\n#endif'
-                )
+                _old_block = f'#ifdef POSRES\n#include "{_itp_name}"\n#endif'
                 _new_block = (
                     f'#ifdef POSRES\n#include "{_itp_name}"\n#endif\n'
                     f'#ifdef POSRES_LOW\n#include "{_low_name}"\n#endif'
                 )
                 for _tn, _tb in list(itp_files.items()):
                     if _tn.startswith("topol_") and _old_block.encode() in _tb:
-                        itp_files[_tn] = _tb.decode().replace(
-                            _old_block, _new_block, 1
-                        ).encode()
+                        itp_files[_tn] = (
+                            _tb.decode().replace(_old_block, _new_block, 1).encode()
+                        )
                         break
 
         # ── 5. Assemble ZIP ───────────────────────────────────────────────────
@@ -2882,8 +2938,8 @@ def build_gromacs_package(
 
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             # Structure and topology
-            zf.writestr(prefix + "conf.gro",   conf_gro)
-            zf.writestr(prefix + "topol.top",  topol_top)
+            zf.writestr(prefix + "conf.gro", conf_gro)
+            zf.writestr(prefix + "topol.top", topol_top)
             for itp_name, itp_bytes in itp_files.items():
                 zf.writestr(prefix + itp_name, itp_bytes)
 
@@ -2894,10 +2950,12 @@ def build_gromacs_package(
                     # Two-phase EM + annealed NVT + staged POSRES release.
                     # dt=0.001 throughout for stability around strained termini.
                     # nsteps doubled vs standard to keep the same simulation time.
-                    _LINCS2 = re.compile(r'lincs-iter\s*=\s*\d+', re.IGNORECASE)
+                    _LINCS2 = re.compile(r"lincs-iter\s*=\s*\d+", re.IGNORECASE)
                     _nvt_xover = _NVT_MDP_SOL
                     _nvt_xover = _DT_FROM_MDP.sub("dt = 0.001", _nvt_xover)
-                    _nvt_xover = _STEPS_FROM_MDP.sub("nsteps = 100000", _nvt_xover, count=1)
+                    _nvt_xover = _STEPS_FROM_MDP.sub(
+                        "nsteps = 100000", _nvt_xover, count=1
+                    )
                     _nvt_xover = _LINCS2.sub("lincs-iter = 2", _nvt_xover)
                     # Annealing-time must match total NVT sim time (100 ps)
                     _nvt_xover = _nvt_xover.replace(
@@ -2907,32 +2965,36 @@ def build_gromacs_package(
                     _npt_xover = _NPT_MDP_SOL
                     _npt_xover = _DT_FROM_MDP.sub("dt = 0.001", _npt_xover)
                     # 500000 steps × dt=0.001 = 500 ps (fix stale "; 1 ns" comment)
-                    _npt_xover = _STEPS_FROM_MDP.sub("nsteps = 500000", _npt_xover, count=1)
+                    _npt_xover = _STEPS_FROM_MDP.sub(
+                        "nsteps = 500000", _npt_xover, count=1
+                    )
                     _npt_xover = _npt_xover.replace(
                         "nsteps = 500000      ; 1 ns", "nsteps = 500000      ; 500 ps"
                     )
                     _npt_xover = _LINCS2.sub("lincs-iter = 2", _npt_xover)
-                    zf.writestr(prefix + "em_free.mdp",    _EM_FREE_MDP_SOL)
-                    zf.writestr(prefix + "em_posres.mdp",  _EM_POSRES_MDP_SOL)
-                    zf.writestr(prefix + "nvt.mdp",        _nvt_xover)
-                    zf.writestr(prefix + "npt.mdp",        _npt_xover)
-                    zf.writestr(prefix + "npt_low.mdp",    _NPT_LOW_MDP_SOL)
+                    zf.writestr(prefix + "em_free.mdp", _EM_FREE_MDP_SOL)
+                    zf.writestr(prefix + "em_posres.mdp", _EM_POSRES_MDP_SOL)
+                    zf.writestr(prefix + "nvt.mdp", _nvt_xover)
+                    zf.writestr(prefix + "npt.mdp", _npt_xover)
+                    zf.writestr(prefix + "npt_low.mdp", _NPT_LOW_MDP_SOL)
                     zf.writestr(prefix + "npt_release.mdp", _NPT_RELEASE_MDP_SOL)
-                    zf.writestr(prefix + "nvt_free.mdp",   _NVT_FREE_MDP_SOL)
+                    zf.writestr(prefix + "nvt_free.mdp", _NVT_FREE_MDP_SOL)
                 else:
-                    em_mdp       = _EM_MDP_SOL
-                    nvt_mdp      = _STEPS_FROM_MDP.sub(
-                                       f"nsteps = {_nvt_steps}", _NVT_MDP_SOL, count=1)
-                    npt_mdp      = _NPT_MDP_SOL
+                    em_mdp = _EM_MDP_SOL
+                    nvt_mdp = _STEPS_FROM_MDP.sub(
+                        f"nsteps = {_nvt_steps}", _NVT_MDP_SOL, count=1
+                    )
+                    npt_mdp = _NPT_MDP_SOL
                     nvt_free_mdp = _NVT_FREE_MDP_SOL
-                    zf.writestr(prefix + "em.mdp",       em_mdp)
-                    zf.writestr(prefix + "nvt.mdp",      nvt_mdp)
-                    zf.writestr(prefix + "npt.mdp",      npt_mdp)
+                    zf.writestr(prefix + "em.mdp", em_mdp)
+                    zf.writestr(prefix + "nvt.mdp", nvt_mdp)
+                    zf.writestr(prefix + "npt.mdp", npt_mdp)
                     zf.writestr(prefix + "nvt_free.mdp", nvt_free_mdp)
             else:
                 em_mdp = (
                     _STEPS_FROM_MDP.sub(f"nsteps = {_em_nsteps}", _EM_MDP, count=1)
-                    if _em_nsteps != 50000 else _EM_MDP
+                    if _em_nsteps != 50000
+                    else _EM_MDP
                 )
                 # dt=0.001 for skip-site structures: extra timestep safety while
                 # Langevin heats from 0 K through the strained backbone geometry.
@@ -2942,13 +3004,18 @@ def build_gromacs_package(
                 _nvt_restrained_ps = _NVT_RESTRAINED_STEPS * _dt
 
                 nvt_mdp = _STEPS_FROM_MDP.sub(
-                              f"nsteps = {_NVT_RESTRAINED_STEPS}", _NVT_MDP, count=1)
+                    f"nsteps = {_NVT_RESTRAINED_STEPS}", _NVT_MDP, count=1
+                )
                 if _has_skips:
                     nvt_mdp = _DT_FROM_MDP.sub("dt = 0.001", nvt_mdp)
 
-                nvt_free_mdp = _STEPS_FROM_MDP.sub(
-                                   f"nsteps = {_nvt_steps}", _NVT_FREE_MDP, count=1) \
-                               if _nvt_steps != 25000 else _NVT_FREE_MDP
+                nvt_free_mdp = (
+                    _STEPS_FROM_MDP.sub(
+                        f"nsteps = {_nvt_steps}", _NVT_FREE_MDP, count=1
+                    )
+                    if _nvt_steps != 25000
+                    else _NVT_FREE_MDP
+                )
                 if _has_skips:
                     nvt_free_mdp = _DT_FROM_MDP.sub("dt = 0.001", nvt_free_mdp)
 
@@ -2968,8 +3035,8 @@ def build_gromacs_package(
                 )
                 nvt_mdp = nvt_mdp.rstrip("\n") + "\n" + _annealing_block
 
-                zf.writestr(prefix + "em.mdp",       em_mdp)
-                zf.writestr(prefix + "nvt.mdp",      nvt_mdp)
+                zf.writestr(prefix + "em.mdp", em_mdp)
+                zf.writestr(prefix + "nvt.mdp", nvt_mdp)
                 zf.writestr(prefix + "nvt_free.mdp", nvt_free_mdp)
                 if _n_na > 0:
                     zf.writestr(prefix + "na_ion.itp", _na_ion_itp_for_ff(ff))
@@ -2978,7 +3045,9 @@ def build_gromacs_package(
             # Bundled force-field directory (entire tree)
             for ff_file in ff_dir.rglob("*"):
                 if ff_file.is_file():
-                    arcname = prefix + ff + ".ff/" + ff_file.relative_to(ff_dir).as_posix()
+                    arcname = (
+                        prefix + ff + ".ff/" + ff_file.relative_to(ff_dir).as_posix()
+                    )
                     zf.write(str(ff_file), arcname)
 
             # launch.sh (executable bit)
@@ -2994,17 +3063,21 @@ def build_gromacs_package(
             launch_info = zipfile.ZipInfo(prefix + "launch.sh")
             launch_info.compress_type = zipfile.ZIP_DEFLATED
             launch_info.external_attr = (
-                stat.S_IFREG | stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP
-                | stat.S_IROTH | stat.S_IXOTH
+                stat.S_IFREG
+                | stat.S_IRWXU
+                | stat.S_IRGRP
+                | stat.S_IXGRP
+                | stat.S_IROTH
+                | stat.S_IXOTH
             ) << 16
             zf.writestr(launch_info, launch_sh_text)
 
             # Scripts and docs
-            zf.writestr(prefix + "scripts/monitor.py",       _MONITOR_PY)
-            zf.writestr(prefix + "README.txt",
-                        _README.format(name=name, ff=ff))
-            zf.writestr(prefix + "AI_ASSISTANT_PROMPT.txt",
-                        _AI_PROMPT.format(name=name, ff=ff))
+            zf.writestr(prefix + "scripts/monitor.py", _MONITOR_PY)
+            zf.writestr(prefix + "README.txt", _README.format(name=name, ff=ff))
+            zf.writestr(
+                prefix + "AI_ASSISTANT_PROMPT.txt", _AI_PROMPT.format(name=name, ff=ff)
+            )
 
         buf.seek(0)
         return buf.getvalue()
@@ -3012,19 +3085,25 @@ def build_gromacs_package(
 
 # ── Convenience: run all pdb2gmx steps and return summary dict ────────────────
 
+
 def probe_gromacs() -> dict:
     """
     Return a dict with GROMACS discovery info.  Useful for health-check endpoints.
     """
     try:
-        gmx     = _find_gmx()
+        gmx = _find_gmx()
         top_dir = _find_top_dir()
-        ff      = _pick_ff(top_dir)
-        ver     = subprocess.run(
+        ff = _pick_ff(top_dir)
+        ver = subprocess.run(
             [gmx, "--version"], capture_output=True, text=True
         ).stdout.splitlines()
         version = next((l for l in ver if "GROMACS version" in l), "unknown")
-        return {"available": True, "binary": gmx, "ff": ff,
-                "top_dir": str(top_dir), "version": version}
+        return {
+            "available": True,
+            "binary": gmx,
+            "ff": ff,
+            "top_dir": str(top_dir),
+            "version": version,
+        }
     except RuntimeError as e:
         return {"available": False, "error": str(e)}

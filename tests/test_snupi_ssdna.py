@@ -15,6 +15,7 @@ Three things are pinned here:
 3. **Nothing else moved.** ``meshed_bp`` reproduces ``build_fem_mesh``'s node set exactly,
    and every node the mesh builds is still ``kind="bp"``. SS-0 is representation only.
 """
+
 from __future__ import annotations
 
 import json
@@ -52,8 +53,13 @@ def _helix(hid: str, n_bp: int = 40, x: float = 0.0) -> Helix:
     )
 
 
-def _dom(hid: str, lo: int, hi: int, direction: Direction = Direction.FORWARD,
-         overhang_id: str | None = None) -> Domain:
+def _dom(
+    hid: str,
+    lo: int,
+    hi: int,
+    direction: Direction = Direction.FORWARD,
+    overhang_id: str | None = None,
+) -> Domain:
     """Domain covering bp ``lo..hi`` on ``hid``.
 
     ``start_bp``/``end_bp`` are 5'→3' TRAVERSAL endpoints, so a REVERSE domain starts at the
@@ -61,8 +67,13 @@ def _dom(hid: str, lo: int, hi: int, direction: Direction = Direction.FORWARD,
     and orient by direction, so a test can't silently build an empty domain.
     """
     start, end = (lo, hi) if direction == Direction.FORWARD else (hi, lo)
-    return Domain(helix_id=hid, start_bp=start, end_bp=end, direction=direction,
-                  overhang_id=overhang_id)
+    return Domain(
+        helix_id=hid,
+        start_bp=start,
+        end_bp=end,
+        direction=direction,
+        overhang_id=overhang_id,
+    )
 
 
 def _two_helix_design(staple_domains, scaffold_domains=None) -> Design:
@@ -77,22 +88,32 @@ def _two_helix_design(staple_domains, scaffold_domains=None) -> Design:
         Strand(id="scaf", strand_type=StrandType.SCAFFOLD, domains=scaffold_domains),
     ]
     for i, doms in enumerate(staple_domains):
-        strands.append(Strand(id=f"stap{i}", strand_type=StrandType.STAPLE, domains=doms))
+        strands.append(
+            Strand(id=f"stap{i}", strand_type=StrandType.STAPLE, domains=doms)
+        )
     return Design(helices=[hA, hB], strands=strands)
 
 
 # ── 1. classification ─────────────────────────────────────────────────────────────
 
+
 def test_tail_has_exactly_one_anchor_and_a_bridge_has_two():
     """The number of meshed neighbours IS the discriminator (module docstring)."""
     # stap0: 10 bp duplex on A, then a 6-nt ssDNA run, then 10 bp duplex on B  → BRIDGE.
     # stap1: 10 bp duplex on A, then a 5-nt overhang tail hanging off the end   → TAIL.
-    design = _two_helix_design([
-        [_dom("A", 0, 9, Direction.REVERSE), _dom("A", 10, 15, Direction.REVERSE),
-         _dom("B", 0, 9, Direction.REVERSE)],
-        [_dom("A", 20, 29, Direction.REVERSE), _dom("A", 30, 34, Direction.REVERSE,
-                                                    overhang_id="oh1")],
-    ])
+    design = _two_helix_design(
+        [
+            [
+                _dom("A", 0, 9, Direction.REVERSE),
+                _dom("A", 10, 15, Direction.REVERSE),
+                _dom("B", 0, 9, Direction.REVERSE),
+            ],
+            [
+                _dom("A", 20, 29, Direction.REVERSE),
+                _dom("A", 30, 34, Direction.REVERSE, overhang_id="oh1"),
+            ],
+        ]
+    )
     # The scaffold covers A/B 0..39, so a staple bp is duplex; the 6-nt run on A 10..15 and
     # the 5-nt overhang on A 30..34 are staple-only *within* the scaffold's span... make them
     # single-stranded by having the scaffold NOT cover them:
@@ -109,13 +130,13 @@ def test_tail_has_exactly_one_anchor_and_a_bridge_has_two():
     #                                               meshed | 6-nt ssDNA  | meshed
     assert bridge.n_nt == 6
     assert bridge.anchor_5 == SSAnchor("A", 0) and bridge.anchor_3 == SSAnchor("B", 9)
-    assert bridge.bridge_kind == "hop"          # anchors on different helices
+    assert bridge.bridge_kind == "hop"  # anchors on different helices
     with pytest.raises(ValueError):
-        _ = bridge.anchor                        # two anchors — must be handled explicitly
+        _ = bridge.anchor  # two anchors — must be handled explicitly
 
     # stap1's path: A29..A20 (meshed) | A34..A30 (5-nt overhang) — anchored on its 5' side.
     assert tail.n_nt == 5
-    assert (tail.anchor_5 is None) != (tail.anchor_3 is None)   # exactly one
+    assert (tail.anchor_5 is None) != (tail.anchor_3 is None)  # exactly one
     assert tail.anchor == SSAnchor("A", 20)
     assert tail.is_overhang and tail.overhang_ids == ("oh1",)
 
@@ -123,11 +144,19 @@ def test_tail_has_exactly_one_anchor_and_a_bridge_has_two():
 def test_interior_gap_and_hop_are_distinguished():
     """Both anchors on one helix = an unstapled interior gap; different helices = a hop.
     SS-1 treats them with the same element but they are different structures — keep them apart."""
-    design = _two_helix_design([
-        [_dom("A", 0, 9, Direction.REVERSE), _dom("A", 10, 13, Direction.REVERSE),
-         _dom("A", 14, 23, Direction.REVERSE)],
-    ])
-    design.strands[0].domains = [_dom("A", 0, 9), _dom("A", 14, 23)]   # scaffold skips 10..13
+    design = _two_helix_design(
+        [
+            [
+                _dom("A", 0, 9, Direction.REVERSE),
+                _dom("A", 10, 13, Direction.REVERSE),
+                _dom("A", 14, 23, Direction.REVERSE),
+            ],
+        ]
+    )
+    design.strands[0].domains = [
+        _dom("A", 0, 9),
+        _dom("A", 14, 23),
+    ]  # scaffold skips 10..13
 
     # path (REVERSE, descending): A9..A0 (meshed) | A13..A10 (4-nt gap) | A23..A14 (meshed)
     runs = classify_ssdna_runs(design)
@@ -141,9 +170,13 @@ def test_free_run_has_no_anchor():
     """A strand that never touches the duplex core is 'free' — reported, not silently dropped."""
     design = _two_helix_design([[_dom("A", 0, 9, Direction.REVERSE)]])
     design.strands.append(
-        Strand(id="floater", strand_type=StrandType.STAPLE,
-               domains=[_dom("B", 20, 27, Direction.REVERSE)]))   # scaffold covers B, but...
-    design.strands[0].domains = [_dom("A", 0, 9)]                  # ...scaffold only on A now
+        Strand(
+            id="floater",
+            strand_type=StrandType.STAPLE,
+            domains=[_dom("B", 20, 27, Direction.REVERSE)],
+        )
+    )  # scaffold covers B, but...
+    design.strands[0].domains = [_dom("A", 0, 9)]  # ...scaffold only on A now
 
     free = [r for r in classify_ssdna_runs(design) if r.kind == "free"]
     assert len(free) == 1 and free[0].n_nt == 8
@@ -152,46 +185,64 @@ def test_free_run_has_no_anchor():
 
 # ── 2. the anchor rule ────────────────────────────────────────────────────────────
 
+
 def test_anchor_is_the_end_that_crosses_into_the_embedded_staple_not_a_fixed_polarity():
     """The user's rule. A tail whose ssDNA domain comes FIRST in the strand path (5' tail)
     anchors on its 3' side; a tail that comes LAST (3' tail) anchors on its 5' side. If we
     had hard-coded a polarity, one of these two would anchor to None."""
     # 5' tail: ssDNA domain first, then the embedded duplex.
-    d5 = _two_helix_design([
-        [_dom("A", 30, 34, Direction.REVERSE, overhang_id="oh5"),
-         _dom("A", 0, 9, Direction.REVERSE)],
-    ])
+    d5 = _two_helix_design(
+        [
+            [
+                _dom("A", 30, 34, Direction.REVERSE, overhang_id="oh5"),
+                _dom("A", 0, 9, Direction.REVERSE),
+            ],
+        ]
+    )
     d5.strands[0].domains = [_dom("A", 0, 9)]
     t5 = next(r for r in classify_ssdna_runs(d5) if r.kind == "tail")
-    assert t5.anchor_5 is None and t5.anchor_3 == SSAnchor("A", 9)   # anchored on its 3' side
+    assert t5.anchor_5 is None and t5.anchor_3 == SSAnchor(
+        "A", 9
+    )  # anchored on its 3' side
     assert t5.anchor == SSAnchor("A", 9)
 
     # 3' tail: the embedded duplex first, then the ssDNA domain.
-    d3 = _two_helix_design([
-        [_dom("A", 0, 9, Direction.REVERSE),
-         _dom("A", 30, 34, Direction.REVERSE, overhang_id="oh3")],
-    ])
+    d3 = _two_helix_design(
+        [
+            [
+                _dom("A", 0, 9, Direction.REVERSE),
+                _dom("A", 30, 34, Direction.REVERSE, overhang_id="oh3"),
+            ],
+        ]
+    )
     d3.strands[0].domains = [_dom("A", 0, 9)]
     t3 = next(r for r in classify_ssdna_runs(d3) if r.kind == "tail")
-    assert t3.anchor_3 is None and t3.anchor_5 == SSAnchor("A", 0)   # anchored on its 5' side
+    assert t3.anchor_3 is None and t3.anchor_5 == SSAnchor(
+        "A", 0
+    )  # anchored on its 5' side
     assert t3.anchor == SSAnchor("A", 0)
 
 
 def test_run_nucleotides_are_in_5_to_3_path_order():
     """The nt list must be traversal-ordered (a REVERSE domain counts bp downward), because
     SS-2 chains tail beads in this order from the anchor outward."""
-    design = _two_helix_design([
-        [_dom("A", 0, 9, Direction.REVERSE),
-         _dom("A", 30, 34, Direction.REVERSE, overhang_id="oh")],
-    ])
+    design = _two_helix_design(
+        [
+            [
+                _dom("A", 0, 9, Direction.REVERSE),
+                _dom("A", 30, 34, Direction.REVERSE, overhang_id="oh"),
+            ],
+        ]
+    )
     design.strands[0].domains = [_dom("A", 0, 9)]
     tail = next(r for r in classify_ssdna_runs(design) if r.kind == "tail")
     bps = [bp for _, bp, _ in tail.nts]
-    assert bps == [34, 33, 32, 31, 30]                 # REVERSE → descending, 5'→3'
+    assert bps == [34, 33, 32, 31, 30]  # REVERSE → descending, 5'→3'
     assert all(d == "REVERSE" for _, _, d in tail.nts)
 
 
 # ── 3. nothing else moved ─────────────────────────────────────────────────────────
+
 
 @pytest.mark.parametrize("name", ["26hb_platform_v3.nadoc"])
 def test_meshed_bp_reproduces_the_mesh_builders_node_set_exactly(name):
@@ -223,17 +274,24 @@ def test_ss0_is_representation_only_every_node_is_still_a_bp_node(name):
 
 
 def test_inventory_totals_add_up():
-    design = _two_helix_design([
-        [_dom("A", 0, 9, Direction.REVERSE), _dom("A", 10, 15, Direction.REVERSE),
-         _dom("B", 0, 9, Direction.REVERSE)],
-        [_dom("A", 20, 29, Direction.REVERSE), _dom("A", 30, 34, Direction.REVERSE,
-                                                    overhang_id="oh1")],
-    ])
+    design = _two_helix_design(
+        [
+            [
+                _dom("A", 0, 9, Direction.REVERSE),
+                _dom("A", 10, 15, Direction.REVERSE),
+                _dom("B", 0, 9, Direction.REVERSE),
+            ],
+            [
+                _dom("A", 20, 29, Direction.REVERSE),
+                _dom("A", 30, 34, Direction.REVERSE, overhang_id="oh1"),
+            ],
+        ]
+    )
     design.strands[0].domains = [_dom("A", 0, 9), _dom("A", 20, 29), _dom("B", 0, 9)]
 
     inv = ssdna_inventory(design)
-    assert inv.n_ss_nt == sum(r.n_nt for r in inv.runs) == 11        # 6-nt bridge + 5-nt tail
-    assert inv.n_nodes == 30                                          # 3 × 10 duplex bp
+    assert inv.n_ss_nt == sum(r.n_nt for r in inv.runs) == 11  # 6-nt bridge + 5-nt tail
+    assert inv.n_nodes == 30  # 3 × 10 duplex bp
     assert len(inv.bridges("hop")) == 1 and len(inv.bridges("interior")) == 0
     assert len(inv.tails(overhang=True)) == 1 and len(inv.tails(overhang=False)) == 0
 
@@ -245,8 +303,8 @@ def test_inventory_totals_add_up():
 # `PROP` array; snupi_material._SS_TABLE is that measurement. The numbers below are lifted
 # straight from those runs, so these tests pin us to SNUPI itself, not to our own algebra.
 
-SNUPI_SS_OBSERVED = {          # n_nt -> (L_rest nm, GJ pN·nm², EI pN·nm²), from ~/SNUPI PROP
-    6:  (2.2667, 6.9368, 40.6013),
+SNUPI_SS_OBSERVED = {  # n_nt -> (L_rest nm, GJ pN·nm², EI pN·nm²), from ~/SNUPI PROP
+    6: (2.2667, 6.9368, 40.6013),
     10: (2.8647, 4.0393, 39.7882),
     18: (3.6686, 2.3584, 23.4259),
     24: (4.1470, 2.1018, 14.2396),
@@ -262,7 +320,7 @@ def test_ssdna_element_reproduces_the_real_snupi_binary(n_nt, expected):
     assert el["l_rest"] == pytest.approx(l_rest, abs=1e-3)
     assert el["gj"] == pytest.approx(gj, rel=1e-3)
     assert el["ei"] == pytest.approx(ei, rel=1e-3)
-    assert el["ea"] == pytest.approx(15.0)      # SS_EA_L — relaxed stretch rigidity
+    assert el["ea"] == pytest.approx(15.0)  # SS_EA_L — relaxed stretch rigidity
 
 
 def test_ssdna_rest_length_is_the_wlc_end_to_end_not_the_contour():
@@ -272,7 +330,7 @@ def test_ssdna_rest_length_is_the_wlc_end_to_end_not_the_contour():
 
     el = ssdna_element(24)
     assert el["l_rest"] == pytest.approx(4.147, abs=1e-3)
-    assert el["l_rest"] < 0.3 * 24 * 0.68        # nowhere near the contour
+    assert el["l_rest"] < 0.3 * 24 * 0.68  # nowhere near the contour
 
 
 def test_ssdna_element_is_length_dependent_and_smooth():
@@ -281,32 +339,40 @@ def test_ssdna_element_is_length_dependent_and_smooth():
     table continuously rather than stepping."""
     from backend.physics.snupi_material import SS_TABLE_MAX_NT, ssdna_element
 
-    assert ssdna_element(1)["gj"] == pytest.approx(15.0)     # SS_GJ_H, the short-ssDNA limit
+    assert ssdna_element(1)["gj"] == pytest.approx(
+        15.0
+    )  # SS_GJ_H, the short-ssDNA limit
     ns = list(range(1, 41))
     els = [ssdna_element(n) for n in ns]
     lengths = [e["l_rest"] for e in els]
     gjs = [e["gj"] for e in els]
-    assert lengths == sorted(lengths)                        # rest length grows with n
-    assert gjs == sorted(gjs, reverse=True)                  # torsional rigidity decays
-    assert gjs[-1] > 2.0                                     # toward SS_GJ_L = 2, never below
+    assert lengths == sorted(lengths)  # rest length grows with n
+    assert gjs == sorted(gjs, reverse=True)  # torsional rigidity decays
+    assert gjs[-1] > 2.0  # toward SS_GJ_L = 2, never below
     edge = SS_TABLE_MAX_NT
-    step_in = lengths[edge - 1] - lengths[edge - 2]          # last step inside the table
-    step_out = lengths[edge] - lengths[edge - 1]             # first extrapolated step
-    assert step_out == pytest.approx(step_in, rel=0.25)      # no discontinuity at the seam
+    step_in = lengths[edge - 1] - lengths[edge - 2]  # last step inside the table
+    step_out = lengths[edge] - lengths[edge - 1]  # first extrapolated step
+    assert step_out == pytest.approx(step_in, rel=0.25)  # no discontinuity at the seam
 
 
 def _ss_runs_in_mesh(mesh):
     from collections import Counter
-    return sorted(Counter(e.ss_nt for e in mesh.elements if e.ss_nt is not None).items())
+
+    return sorted(
+        Counter(e.ss_nt for e in mesh.elements if e.ss_nt is not None).items()
+    )
 
 
-@pytest.mark.parametrize("stem,expected", [
-    # The REAL SNUPI's own ssDNA element list for these two designs, read from its PROP array
-    # (isotropic EIy == EIz is the discriminator). Our mesh must emit exactly the same runs:
-    # one collapsed beam per contiguous unpaired run, no more, no fewer.
-    ("6hbx100_noT", [(6, 2), (10, 2), (18, 2)]),
-    ("3x4SQ", [(6, 2), (10, 1), (14, 1), (16, 4), (22, 2), (24, 1)]),
-])
+@pytest.mark.parametrize(
+    "stem,expected",
+    [
+        # The REAL SNUPI's own ssDNA element list for these two designs, read from its PROP array
+        # (isotropic EIy == EIz is the discriminator). Our mesh must emit exactly the same runs:
+        # one collapsed beam per contiguous unpaired run, no more, no fewer.
+        ("6hbx100_noT", [(6, 2), (10, 2), (18, 2)]),
+        ("3x4SQ", [(6, 2), (10, 1), (14, 1), (16, 4), (22, 2), (24, 1)]),
+    ],
+)
 def test_snupi_mesh_ssdna_elements_match_the_real_binary(stem, expected):
     ws = Path(__file__).resolve().parents[1] / "workspace" / f"{stem}.nadoc"
     if not ws.exists():
@@ -319,8 +385,20 @@ def test_snupi_mesh_ssdna_elements_match_the_real_binary(stem, expected):
 def _element_fingerprint(mesh):
     """Hashable projection of the element list (FEMElement holds ndarrays, so it is not
     directly comparable)."""
-    return [(e.node_i, e.node_j, round(e.length, 9), round(e.ea, 6), round(e.ei, 6),
-             round(e.gj, 6), e.motif_family, e.motif, e.ss_nt) for e in mesh.elements]
+    return [
+        (
+            e.node_i,
+            e.node_j,
+            round(e.length, 9),
+            round(e.ea, 6),
+            round(e.ei, 6),
+            round(e.gj, 6),
+            e.motif_family,
+            e.motif,
+            e.ss_nt,
+        )
+        for e in mesh.elements
+    ]
 
 
 def test_cando_mesh_is_byte_identical_and_carries_no_ssdna_elements():
@@ -331,17 +409,20 @@ def test_cando_mesh_is_byte_identical_and_carries_no_ssdna_elements():
         pytest.skip("6hbx100_noT.nadoc not present")
     design = Design.model_validate_json(ws.read_text())
     cando = build_fem_mesh(design)
-    assert _element_fingerprint(build_fem_mesh(design, material="cando")) == \
-           _element_fingerprint(cando)
+    assert _element_fingerprint(
+        build_fem_mesh(design, material="cando")
+    ) == _element_fingerprint(cando)
     assert all(e.ss_nt is None for e in cando.elements)
     # ...and the snupi mesh keeps the SAME NODES (ssDNA bridges join existing bp nodes and
     # add none — SS-2 is what introduces ss nodes).
     snupi = build_fem_mesh(design, material="snupi")
-    assert [(n.helix_id, n.global_bp) for n in snupi.nodes] == \
-           [(n.helix_id, n.global_bp) for n in cando.nodes]
+    assert [(n.helix_id, n.global_bp) for n in snupi.nodes] == [
+        (n.helix_id, n.global_bp) for n in cando.nodes
+    ]
     # ...and every duplex beam is untouched: snupi only ADDS ssDNA elements here.
-    assert [e for e in _element_fingerprint(snupi) if e[-1] is None] == \
-           _element_fingerprint(cando)
+    assert [
+        e for e in _element_fingerprint(snupi) if e[-1] is None
+    ] == _element_fingerprint(cando)
 
 
 def test_interior_gap_becomes_a_soft_ssdna_beam_not_a_rigid_duplex_one():
@@ -350,28 +431,47 @@ def test_interior_gap_becomes_a_soft_ssdna_beam_not_a_rigid_duplex_one():
     from backend.physics.fem_solver import EA_DS
     from backend.physics.snupi_material import ssdna_element
 
-    design = _two_helix_design([
-        [_dom("A", 0, 9, Direction.REVERSE), _dom("A", 10, 13, Direction.REVERSE),
-         _dom("A", 14, 23, Direction.REVERSE)],
-    ])
-    design.strands[0].domains = [_dom("A", 0, 9), _dom("A", 14, 23)]   # scaffold skips 10..13
+    design = _two_helix_design(
+        [
+            [
+                _dom("A", 0, 9, Direction.REVERSE),
+                _dom("A", 10, 13, Direction.REVERSE),
+                _dom("A", 14, 23, Direction.REVERSE),
+            ],
+        ]
+    )
+    design.strands[0].domains = [
+        _dom("A", 0, 9),
+        _dom("A", 14, 23),
+    ]  # scaffold skips 10..13
 
     cando = build_fem_mesh(design)
     span_c = [e for e in cando.elements if e.length > 1.5 * FEM_RISE_PER_BP]
-    assert len(span_c) == 1                                    # the old duplex beam...
-    assert span_c[0].ss_nt is None and span_c[0].ea == EA_DS   # ...with dsDNA stretch stiffness
-    assert span_c[0].length == pytest.approx(5 * FEM_RISE_PER_BP)   # and a geometric length
+    assert len(span_c) == 1  # the old duplex beam...
+    assert (
+        span_c[0].ss_nt is None and span_c[0].ea == EA_DS
+    )  # ...with dsDNA stretch stiffness
+    assert span_c[0].length == pytest.approx(
+        5 * FEM_RISE_PER_BP
+    )  # and a geometric length
 
     snupi = build_fem_mesh(design, material="snupi")
     ss = [e for e in snupi.elements if e.ss_nt is not None]
     assert len(ss) == 1 and ss[0].ss_nt == 4
     prop = ssdna_element(4)
-    assert ss[0].ei == pytest.approx(prop["ei"]) and ss[0].gj == pytest.approx(prop["gj"])
-    assert ss[0].length == pytest.approx(prop["l_rest"])       # SNUPI's REST length, not 5 rises
-    assert ss[0].ea < 0.05 * EA_DS                             # genuinely soft now (15 vs 1100 pN)
+    assert ss[0].ei == pytest.approx(prop["ei"]) and ss[0].gj == pytest.approx(
+        prop["gj"]
+    )
+    assert ss[0].length == pytest.approx(
+        prop["l_rest"]
+    )  # SNUPI's REST length, not 5 rises
+    assert ss[0].ea < 0.05 * EA_DS  # genuinely soft now (15 vs 1100 pN)
     # ...and no duplex beam is left spanning the gap.
-    assert not [e for e in snupi.elements
-                if e.ss_nt is None and e.length > 1.5 * FEM_RISE_PER_BP]
+    assert not [
+        e
+        for e in snupi.elements
+        if e.ss_nt is None and e.length > 1.5 * FEM_RISE_PER_BP
+    ]
 
 
 def test_cross_helix_hop_becomes_a_real_beam():
@@ -379,20 +479,27 @@ def test_cross_helix_hop_becomes_a_real_beam():
     granularity `_add_ssdna_hops` (it asks whether the domain's HELIX is meshed, not whether
     these nucleotides are) — so the two duplex blocks got no coupling at all. The nucleotide-
     exact classifier sees it, and SNUPI's element couples it with bending + torsion."""
-    design = _two_helix_design([
-        [_dom("A", 0, 9, Direction.REVERSE), _dom("A", 10, 15, Direction.REVERSE),
-         _dom("B", 0, 9, Direction.REVERSE)],
-    ])
+    design = _two_helix_design(
+        [
+            [
+                _dom("A", 0, 9, Direction.REVERSE),
+                _dom("A", 10, 15, Direction.REVERSE),
+                _dom("B", 0, 9, Direction.REVERSE),
+            ],
+        ]
+    )
     design.strands[0].domains = [_dom("A", 0, 9), _dom("B", 0, 9)]
 
     cando = build_fem_mesh(design)
-    assert cando.springs == [] and cando.rigid_links == []     # the blind spot: no coupling
+    assert (
+        cando.springs == [] and cando.rigid_links == []
+    )  # the blind spot: no coupling
 
     snupi = build_fem_mesh(design, material="snupi")
     assert snupi.springs == []
     ss = [e for e in snupi.elements if e.ss_nt is not None]
     assert len(ss) == 1 and ss[0].ss_nt == 6
-    assert ss[0].gj > 0.0 and ss[0].ei > 0.0                   # HAS bending + torsion
+    assert ss[0].gj > 0.0 and ss[0].ei > 0.0  # HAS bending + torsion
     hi, hj = snupi.nodes[ss[0].node_i], snupi.nodes[ss[0].node_j]
     assert {hi.helix_id, hj.helix_id} == {"A", "B"}
 
@@ -405,22 +512,30 @@ def test_no_beam_is_welded_across_a_stretch_with_no_strand_coverage():
     # Scaffold: A 0..9 duplex, hops to B, comes back to A 30..39. A 10..29 is EMPTY — no
     # strand of any kind. So A's duplex bp jump 9 -> 30 with nothing in between.
     design = _two_helix_design(
-        [[_dom("A", 0, 9, Direction.REVERSE)],
-         [_dom("B", 0, 9, Direction.REVERSE)],
-         [_dom("A", 30, 39, Direction.REVERSE)]],
+        [
+            [_dom("A", 0, 9, Direction.REVERSE)],
+            [_dom("B", 0, 9, Direction.REVERSE)],
+            [_dom("A", 30, 39, Direction.REVERSE)],
+        ],
         scaffold_domains=[_dom("A", 0, 9), _dom("B", 0, 9), _dom("A", 30, 39)],
     )
     cando = build_fem_mesh(design)
-    welded = [e for e in cando.elements
-              if cando.nodes[e.node_i].helix_id == cando.nodes[e.node_j].helix_id
-              and e.length > 3 * FEM_RISE_PER_BP]
-    assert len(welded) == 1                                   # the bug, still on the cando path
+    welded = [
+        e
+        for e in cando.elements
+        if cando.nodes[e.node_i].helix_id == cando.nodes[e.node_j].helix_id
+        and e.length > 3 * FEM_RISE_PER_BP
+    ]
+    assert len(welded) == 1  # the bug, still on the cando path
 
     snupi = build_fem_mesh(design, material="snupi")
-    welded = [e for e in snupi.elements
-              if e.ss_nt is None
-              and snupi.nodes[e.node_i].helix_id == snupi.nodes[e.node_j].helix_id
-              and e.length > 3 * FEM_RISE_PER_BP]
+    welded = [
+        e
+        for e in snupi.elements
+        if e.ss_nt is None
+        and snupi.nodes[e.node_i].helix_id == snupi.nodes[e.node_j].helix_id
+        and e.length > 3 * FEM_RISE_PER_BP
+    ]
     assert welded == [], "a beam was emitted across a stretch with no strand coverage"
 
 
@@ -431,10 +546,15 @@ def test_ssdna_element_assembles_an_isotropic_symmetric_stiffness():
 
     from backend.physics.fem_solver import assemble_global_stiffness
 
-    design = _two_helix_design([
-        [_dom("A", 0, 9, Direction.REVERSE), _dom("A", 10, 15, Direction.REVERSE),
-         _dom("B", 0, 9, Direction.REVERSE)],
-    ])
+    design = _two_helix_design(
+        [
+            [
+                _dom("A", 0, 9, Direction.REVERSE),
+                _dom("A", 10, 15, Direction.REVERSE),
+                _dom("B", 0, 9, Direction.REVERSE),
+            ],
+        ]
+    )
     design.strands[0].domains = [_dom("A", 0, 9), _dom("B", 0, 9)]
     mesh = build_fem_mesh(design, material="snupi")
     for material in ("cando", "snupi"):
@@ -450,6 +570,7 @@ def test_ssdna_element_assembles_an_isotropic_symmetric_stiffness():
 # element choice (the intrinsic per-nt link, NOT the collapsed end-to-end element), and the
 # corotational property that lets a tail wave at all.
 
+
 def _tail_design(n_tail_nt: int = 16):
     """A 20-bp duplex on helix A + a staple carrying an `n_tail_nt` overhang TAIL on helix B.
 
@@ -461,8 +582,12 @@ def _tail_design(n_tail_nt: int = 16):
     hi = 39
     lo = hi - n_tail_nt + 1
     return _two_helix_design(
-        [[_dom("A", 0, 19, Direction.REVERSE),
-          _dom("B", lo, hi, Direction.REVERSE, overhang_id="oh1")]],
+        [
+            [
+                _dom("A", 0, 19, Direction.REVERSE),
+                _dom("B", lo, hi, Direction.REVERSE, overhang_id="oh1"),
+            ]
+        ],
         scaffold_domains=[_dom("A", 0, 19)],
     )
 
@@ -483,7 +608,9 @@ def test_ss2_tails_never_enter_the_mesh_the_static_k_or_the_nma():
     mesh = build_fem_mesh(design, material="snupi")
 
     block = build_tail_block(design, mesh)
-    assert block.n_tail == 16, "fixture must actually have a 16-nt tail to make this test mean anything"
+    assert block.n_tail == 16, (
+        "fixture must actually have a 16-nt tail to make this test mean anything"
+    )
 
     assert all(nd.kind == "bp" for nd in mesh.nodes), "an ss node reached the FEM mesh"
     assert len(mesh.nodes) == block.n_bp
@@ -499,8 +626,8 @@ def test_tail_block_matches_the_classifiers_tails_one_bead_per_nucleotide():
     block = build_tail_block(design, mesh)
 
     tails = [r for r in classify_ssdna_runs(design) if r.kind == "tail"]
-    assert block.n_tail == sum(r.n_nt for r in tails)     # 1 bead / nt
-    assert len(block.elements) == block.n_tail            # anchor→b0, b0→b1, … : one per bead
+    assert block.n_tail == sum(r.n_nt for r in tails)  # 1 bead / nt
+    assert len(block.elements) == block.n_tail  # anchor→b0, b0→b1, … : one per bead
     assert len(block.anchors) == len(tails)
     # every bead carries its render-bead key, so SS-4 can map it back to what is drawn
     assert all(nd.helix_id and nd.direction for nd in block.nodes)
@@ -527,7 +654,9 @@ def test_tail_chain_starts_at_the_ssdna_contour_not_the_duplex_rise():
     X = np.vstack([np.array([nd.position for nd in mesh.nodes]), block.positions])
     bonds = [float(np.linalg.norm(X[j] - X[i])) for (i, j, _r, _k) in block.elements]
     assert np.allclose(bonds, SS_CONTOUR_PER_NT, atol=1e-9)
-    assert not np.isclose(SS_CONTOUR_PER_NT, FEM_RISE_PER_BP)   # the two really are different
+    assert not np.isclose(
+        SS_CONTOUR_PER_NT, FEM_RISE_PER_BP
+    )  # the two really are different
 
 
 def test_the_per_nt_link_is_not_the_collapsed_end_to_end_element():
@@ -551,12 +680,18 @@ def test_the_per_nt_link_is_not_the_collapsed_end_to_end_element():
     # itself reports for the one run in its output short enough to be near-taut, TALOS poly-T:
     # EI = 2.775), then carries the measured discretisation correction, because a chain whose bond
     # IS its persistence length is nowhere near the continuum limit that identity assumes.
-    assert link["ei"] == pytest.approx(4.142 * SS_PERSISTENCE_NM * SS_EI_DISCRETE_FACTOR, rel=1e-6)
+    assert link["ei"] == pytest.approx(
+        4.142 * SS_PERSISTENCE_NM * SS_EI_DISCRETE_FACTOR, rel=1e-6
+    )
     assert link["ei"] == pytest.approx(1.593, abs=0.005)
-    assert 0.4 < SS_EI_DISCRETE_FACTOR < 0.8, "the calibration should soften, and only modestly"
+    assert 0.4 < SS_EI_DISCRETE_FACTOR < 0.8, (
+        "the calibration should soften, and only modestly"
+    )
     assert link["ea"] == SS_EA_TAUT == 710.0
     assert collapsed["ea"] == SS_EA_RELAXED == 15.0
-    assert link["ea"] > 40 * collapsed["ea"], "the link must use the TAUT stretch modulus"
+    assert link["ea"] > 40 * collapsed["ea"], (
+        "the link must use the TAUT stretch modulus"
+    )
     # and it must be length-independent — the chain's length lives in the bead count
     assert ssdna_link_element() == link
 
@@ -597,7 +732,7 @@ def test_tail_force_vanishes_at_rest_and_under_rigid_body_motion():
 
     # A genuine BEND, though, must cost something.
     qb = np.zeros(6 * n_tot)
-    qb.reshape(n_tot, 6)[block.n_bp + 8:, :3] += np.array([1.0, 0.0, 0.0])
+    qb.reshape(n_tot, 6)[block.n_bp + 8 :, :3] += np.array([1.0, 0.0, 0.0])
     assert np.abs(tail_internal_force(qb, X0, block)).max() > 1.0
 
 
@@ -622,12 +757,19 @@ def test_simulate_equilibrium_with_tails_keeps_every_core_observable_core_only()
     mesh = build_fem_mesh(design, material="snupi")
     n = len(mesh.nodes)
 
-    out = simulate_equilibrium(design, material="snupi", tails=True,
-                               n_steps=400, n_equil=100, sample_every=50, seed=0)
+    out = simulate_equilibrium(
+        design,
+        material="snupi",
+        tails=True,
+        n_steps=400,
+        n_equil=100,
+        sample_every=50,
+        seed=0,
+    )
 
     assert out["n_tail_nodes"] == 16
     assert out["positions0"].shape == (n, 3)
-    assert out["frames"].shape[1] == n          # core only
+    assert out["frames"].shape[1] == n  # core only
     assert out["rmsf"].shape == (n,)
     assert len(out["helix_ids"]) == n
     assert out["mass_diag"].shape == (6 * n,)
@@ -649,8 +791,9 @@ def test_a_design_with_no_tails_takes_the_plain_path_unchanged():
     # Fully duplex: scaffold and staple span exactly the same bp, so there is no ssDNA anywhere.
     # (Let the scaffold overrun the staple and the uncovered remainder is a dangling-end TAIL —
     # which is precisely what the classifier should say, and did.)
-    design = _two_helix_design([[_dom("A", 0, 19, Direction.REVERSE)]],
-                               scaffold_domains=[_dom("A", 0, 19)])
+    design = _two_helix_design(
+        [[_dom("A", 0, 19, Direction.REVERSE)]], scaffold_domains=[_dom("A", 0, 19)]
+    )
     kw = dict(material="snupi", n_steps=300, n_equil=100, sample_every=50, seed=0)
     off = simulate_equilibrium(design, tails=False, **kw)
     on = simulate_equilibrium(design, tails=True, **kw)
@@ -674,10 +817,13 @@ def test_wlc_oracle_formula_matches_the_snupi_measured_rest_lengths():
     for n in (6, 10, 16, 24):
         wlc = math.sqrt(wlc_mean_square_end_to_end(n))
         snupi = ssdna_element(n)["l_rest"]
-        assert snupi == pytest.approx(wlc, rel=0.22), f"n={n}: SNUPI {snupi} vs WLC {wlc}"
+        assert snupi == pytest.approx(wlc, rel=0.22), (
+            f"n={n}: SNUPI {snupi} vs WLC {wlc}"
+        )
 
 
 # ── 6. SS-2: the ssDNA chain's polymer mechanics ──────────────────────────────────
+
 
 def test_ssdna_chain_joint_stiffness_is_ei_over_the_bond_length():
     """The element-level pin behind the whole tail model, and it is EXACT — no simulation needed.
@@ -713,11 +859,13 @@ def test_ssdna_chain_joint_stiffness_is_ei_over_the_bond_length():
         Xr = np.zeros((n_node, 3))
         Xr[:, 2] = np.arange(n_node) * b
         K12 = local_beam_stiffness_12(b, 710.0, 15.0, ei, ei)
-        refs = [element_reference(Xr[i], Xr[i + 1], np.eye(3), np.eye(3), rest_length=b)
-                for i in range(n_node - 1)]
+        refs = [
+            element_reference(Xr[i], Xr[i + 1], np.eye(3), np.eye(3), rest_length=b)
+            for i in range(n_node - 1)
+        ]
 
         def U(p):
-            R = [exp_so3(p[3 * i:3 * i + 3]) for i in range(n_node)]
+            R = [exp_so3(p[3 * i : 3 * i + 3]) for i in range(n_node)]
             tot = 0.0
             for i in range(n_node - 1):
                 E, _ = _cr_frame(X[i], X[i + 1], R[i], R[i + 1])
@@ -726,9 +874,10 @@ def test_ssdna_chain_joint_stiffness_is_ei_over_the_bond_length():
             return tot
 
         p0 = np.zeros(3 * n_node)
-        p0[1::3] = np.arange(n_node) * theta        # triads start tangent to the arc
-        return minimize(U, p0, method="L-BFGS-B",
-                        options=dict(maxiter=4000, ftol=1e-14, gtol=1e-12)).fun
+        p0[1::3] = np.arange(n_node) * theta  # triads start tangent to the arc
+        return minimize(
+            U, p0, method="L-BFGS-B", options=dict(maxiter=4000, ftol=1e-14, gtol=1e-12)
+        ).fun
 
     theta = 0.05
     # Energy DIFFERENCE between a 24- and a 14-node chain = 10 interior joints, free of end effects.
@@ -752,15 +901,25 @@ def test_tail_langevin_thermalises_its_bonds_to_kt():
     from backend.physics.snupi_material import SS_CONTOUR_PER_NT, SS_EA_TAUT
 
     design = _tail_design(8)
-    out = simulate_equilibrium(design, material="snupi", tails=True,
-                               n_steps=3000, n_equil=500, sample_every=5, seed=1)
+    out = simulate_equilibrium(
+        design,
+        material="snupi",
+        tails=True,
+        n_steps=3000,
+        n_equil=500,
+        sample_every=5,
+        seed=1,
+    )
 
-    beads = out["frames_all"][:, out["frames"].shape[1]:, :]      # (F, 8, 3) tail beads only
+    beads = out["frames_all"][
+        :, out["frames"].shape[1] :, :
+    ]  # (F, 8, 3) tail beads only
     bonds = np.linalg.norm(beads[:, 1:, :] - beads[:, :-1, :], axis=2)
     var = float(np.var(bonds))
-    expected = KBT_300 / (SS_EA_TAUT / SS_CONTOUR_PER_NT)          # k_BT / k_stretch
+    expected = KBT_300 / (SS_EA_TAUT / SS_CONTOUR_PER_NT)  # k_BT / k_stretch
     assert var == pytest.approx(expected, rel=0.30), (
-        f"tail bonds not thermalised: var={var:.5f} nm², expected k_BT/(EA/b)={expected:.5f}")
+        f"tail bonds not thermalised: var={var:.5f} nm², expected k_BT/(EA/b)={expected:.5f}"
+    )
     assert float(np.mean(bonds)) == pytest.approx(SS_CONTOUR_PER_NT, abs=0.05)
 
 
@@ -785,7 +944,10 @@ def test_free_tail_reproduces_the_wlc_end_to_end_distribution(n_nt):
     other lengths.
     """
     from backend.physics.snupi_material import ssdna_link_element
-    from backend.physics.snupi_tails import pivot_sample_chain, wlc_mean_square_end_to_end
+    from backend.physics.snupi_tails import (
+        pivot_sample_chain,
+        wlc_mean_square_end_to_end,
+    )
 
     ei = ssdna_link_element()["ei"]
     got = pivot_sample_chain(n_nt, ei, n_sweep=12000, seed=0)
@@ -794,9 +956,12 @@ def test_free_tail_reproduces_the_wlc_end_to_end_distribution(n_nt):
     # the chain must be a real WLC, i.e. its tangent correlation DECAYS TO ZERO rather than
     # plateauing (a plateau is the signature of an unequilibrated chain — it is how this phase
     # was fooled twice)
-    assert abs(got["corr"][min(6, n_nt - 1)]) < 0.1, "tangent correlation plateaus — not a WLC"
+    assert abs(got["corr"][min(6, n_nt - 1)]) < 0.1, (
+        "tangent correlation plateaus — not a WLC"
+    )
     assert got["r2"] == pytest.approx(want, rel=0.20), (
-        f"{n_nt}-nt tail: ⟨R_ee²⟩ = {got['r2']:.2f} nm², WLC predicts {want:.2f} nm²")
+        f"{n_nt}-nt tail: ⟨R_ee²⟩ = {got['r2']:.2f} nm², WLC predicts {want:.2f} nm²"
+    )
 
 
 def test_vectorised_tail_force_equals_the_scalar_reference():
@@ -820,11 +985,18 @@ def test_vectorised_tail_force_equals_the_scalar_reference():
     X0 = np.vstack([np.array([nd.position for nd in mesh.nodes]), block.positions])
     rng = np.random.default_rng(7)
 
-    for amp in (0.0, 0.05, 0.5, 1.4):        # 1.4 rad ≈ 80° per node — a genuinely waving tail
+    for amp in (
+        0.0,
+        0.05,
+        0.5,
+        1.4,
+    ):  # 1.4 rad ≈ 80° per node — a genuinely waving tail
         q = amp * rng.standard_normal(6 * block.n_total)
         fast = tail_internal_force(q, X0, block)
         ref = _tail_internal_force_scalar(q, X0, block)
-        assert np.allclose(fast, ref, atol=1e-9, rtol=1e-7), f"diverged at amplitude {amp}"
+        assert np.allclose(fast, ref, atol=1e-9, rtol=1e-7), (
+            f"diverged at amplitude {amp}"
+        )
 
 
 # ── 6. SS-3: hydrodynamic drag on the tails ───────────────────────────────────────
@@ -835,6 +1007,7 @@ def test_vectorised_tail_force_equals_the_scalar_reference():
 # the existing PD guarantee and k=8 calibration carry over). These pin exactly that, plus
 # the initial conformation, which SS-3's gate showed was the thing actually keeping the
 # tails from moving.
+
 
 def _tail_mesh_and_block(n_tail=16, **kw):
     from backend.physics.snupi_tails import build_tail_block
@@ -852,17 +1025,23 @@ def test_ss3_an_ssdna_blob_is_the_same_sphere_as_a_duplex_blob():
     import math
 
     from backend.physics.snupi_hydro_coarse import blob_radius_nm, ss_blob_nt
-    from backend.physics.snupi_tails import SS_HYDRO_RADIUS_NM, wlc_mean_square_end_to_end
+    from backend.physics.snupi_tails import (
+        SS_HYDRO_RADIUS_NM,
+        wlc_mean_square_end_to_end,
+    )
 
     assert ss_blob_nt(8) == 11
     assert ss_blob_nt(8) != 4, "this is not the contour ratio — a coil is not a rod"
     for k in (4, 8, 16):
         n = ss_blob_nt(k)
-        coil = math.hypot(0.5 * math.sqrt(wlc_mean_square_end_to_end(n)), SS_HYDRO_RADIUS_NM)
+        coil = math.hypot(
+            0.5 * math.sqrt(wlc_mean_square_end_to_end(n)), SS_HYDRO_RADIUS_NM
+        )
         assert coil == pytest.approx(blob_radius_nm(k), rel=0.10), (
             f"k={k}: the {n}-nt ssDNA blob ({coil:.2f} nm) is not the duplex blob "
-            f"({blob_radius_nm(k):.2f} nm) — C is no longer a single-radius RPY")
-    assert ss_blob_nt(4) < ss_blob_nt(8) < ss_blob_nt(16)      # monotone in the blob size
+            f"({blob_radius_nm(k):.2f} nm) — C is no longer a single-radius RPY"
+        )
+    assert ss_blob_nt(4) < ss_blob_nt(8) < ss_blob_nt(16)  # monotone in the blob size
 
 
 def test_ss3_tails_get_their_own_blobs_and_never_join_a_duplex_one():
@@ -879,10 +1058,14 @@ def test_ss3_tails_get_their_own_blobs_and_never_join_a_duplex_one():
         assert len(with_tails) == block.n_total
         core_blobs = set(with_tails[:n_core].tolist())
         tail_blobs = set(with_tails[n_core:].tolist())
-        assert not (core_blobs & tail_blobs), "a tail bead shares a blob with a duplex node"
+        assert not (core_blobs & tail_blobs), (
+            "a tail bead shares a blob with a duplex node"
+        )
         assert blob_count(mesh, 8, block) == len(core_blobs) + len(tail_blobs)
         if n_tail == 3:
-            assert len(tail_blobs) == 1, "a short tail is one blob, not one blob per bead"
+            assert len(tail_blobs) == 1, (
+                "a short tail is one blob, not one blob per bead"
+            )
 
 
 def test_ss3_adding_tails_does_not_touch_a_single_core_blob():
@@ -894,7 +1077,9 @@ def test_ss3_adding_tails_does_not_touch_a_single_core_blob():
 
     _d, mesh, block = _tail_mesh_and_block(16)
     n_core = len(mesh.nodes)
-    assert np.array_equal(blob_partition(mesh, 8), blob_partition(mesh, 8, block)[:n_core])
+    assert np.array_equal(
+        blob_partition(mesh, 8), blob_partition(mesh, 8, block)[:n_core]
+    )
 
 
 def test_ss3_each_species_keeps_its_exact_self_drag_and_xi_stays_spd():
@@ -912,7 +1097,10 @@ def test_ss3_each_species_keeps_its_exact_self_drag_and_xi_stays_spd():
 
     design, mesh, block = _tail_mesh_and_block(16)
     n_core = len(mesh.nodes)
-    m_core = np.asarray(assemble_mass_matrix(mesh, design).tocsr().diagonal(), float) * MASS_G6_TO_DYN
+    m_core = (
+        np.asarray(assemble_mass_matrix(mesh, design).tocsr().diagonal(), float)
+        * MASS_G6_TO_DYN
+    )
     m_diag = np.concatenate([m_core, block.mass_diag()])
     X0 = np.vstack([np.array([nd.position for nd in mesh.nodes]), block.positions])
 
@@ -924,22 +1112,32 @@ def test_ss3_each_species_keeps_its_exact_self_drag_and_xi_stays_spd():
     want[:, 3:] = mu_self_rot(a)[:, None]
 
     for generalized in (False, True):
-        fric = build_coarse_friction(mesh, X0, m_diag, 8, generalized=generalized, block=block)
+        fric = build_coarse_friction(
+            mesh, X0, m_diag, 8, generalized=generalized, block=block
+        )
         assert fric.n_nodes == block.n_total
-        d = 1.0 / fric.dinv                              # diag(D)
-        C = fric.Lc @ fric.Lc.T                          # (6B,6B) — the blob RPY mobility
+        d = 1.0 / fric.dinv  # diag(D)
+        C = fric.Lc @ fric.Lc.T  # (6B,6B) — the blob RPY mobility
 
         # SPD, argued and then measured. D > 0 and C SPD ⇒ Ξ = D + AᵀCA is SPD identically; the
         # Cholesky IS the C-is-SPD statement, and it is the cheap guard that would catch a repeat of
         # the μ^tr/μ^rt cross-block parity bug (which is what made Ξ indefinite last time).
-        assert (d > 0).all(), "D is not positive — some blob is smaller than a bead it contains"
+        assert (d > 0).all(), (
+            "D is not positive — some blob is smaller than a bead it contains"
+        )
         np.linalg.cholesky(C)
 
         # Ξ = D + AᵀCA, assembled straight from the operator (never inverting anything).
-        Xi = np.column_stack([d * e + fric._gather(C @ fric._scatter(e))
-                              for e in np.eye(6 * fric.n_nodes)])
+        Xi = np.column_stack(
+            [
+                d * e + fric._gather(C @ fric._scatter(e))
+                for e in np.eye(6 * fric.n_nodes)
+            ]
+        )
         assert np.allclose(Xi, Xi.T, atol=1e-12)
-        assert np.linalg.eigvalsh(Xi).min() > 0, f"Ξ not SPD (generalized={generalized})"
+        assert np.linalg.eigvalsh(Xi).min() > 0, (
+            f"Ξ not SPD (generalized={generalized})"
+        )
 
         # …and every node's self-drag is its OWN species', exactly. This is the identity that lets C
         # be a single-radius RPY: the species-dependent part of the drag lives entirely in D.
@@ -958,9 +1156,13 @@ def test_ss3_the_memory_guard_counts_the_real_blobs():
     _d, mesh, block = _tail_mesh_and_block(3)
     nb = blob_count(mesh, 8, block)
     n = block.n_total
-    assert nb > -(-n // 8), "the fixture should fragment — otherwise this test proves nothing"
+    assert nb > -(-n // 8), (
+        "the fixture should fragment — otherwise this test proves nothing"
+    )
     assert estimate_friction_memory_gb(n, 8, nb) > estimate_friction_memory_gb(n, 8)
-    assert estimate_friction_memory_gb(n, 8, nb) < estimate_friction_memory_gb(n)   # ≪ exact
+    assert estimate_friction_memory_gb(n, 8, nb) < estimate_friction_memory_gb(
+        n
+    )  # ≪ exact
 
 
 def test_ss3_hydrodynamics_with_tails_requires_the_coarse_blob_model():
@@ -970,8 +1172,14 @@ def test_ss3_hydrodynamics_with_tails_requires_the_coarse_blob_model():
     from backend.physics.snupi_dynamics import simulate_equilibrium
 
     with pytest.raises(ValueError, match="coarse"):
-        simulate_equilibrium(_tail_design(16), material="snupi", tails=True,
-                             hydrodynamics=True, hydro_coarse_bp=None, n_steps=1)
+        simulate_equilibrium(
+            _tail_design(16),
+            material="snupi",
+            tails=True,
+            hydrodynamics=True,
+            hydro_coarse_bp=None,
+            n_steps=1,
+        )
 
 
 def test_ss3_a_tails_and_hydro_run_drives_the_coarse_friction():
@@ -979,9 +1187,17 @@ def test_ss3_a_tails_and_hydro_run_drives_the_coarse_friction():
 
     from backend.physics.snupi_dynamics import simulate_equilibrium
 
-    out = simulate_equilibrium(_tail_design(16), material="snupi", tails=True,
-                               hydrodynamics=True, hydro_coarse_bp=8,
-                               n_steps=400, n_equil=100, sample_every=50, seed=0)
+    out = simulate_equilibrium(
+        _tail_design(16),
+        material="snupi",
+        tails=True,
+        hydrodynamics=True,
+        hydro_coarse_bp=8,
+        n_steps=400,
+        n_equil=100,
+        sample_every=50,
+        seed=0,
+    )
     assert out["friction"] == "rpy-coarse8"
     assert out["n_tail_nodes"] == 16
     assert out["tail_frames"].shape[1] == 16
@@ -991,6 +1207,7 @@ def test_ss3_a_tails_and_hydro_run_drives_the_coarse_friction():
 
 
 # ── 7. SS-3: the initial conformation (a coil, not a rod) ────────────────────────
+
 
 def test_ss3_a_tail_starts_at_the_wlc_size_not_fully_extended():
     """SS-2 laid every tail out STRAIGHT and reasoned the pose would not survive equilibration.
@@ -1015,8 +1232,11 @@ def test_ss3_a_tail_starts_at_the_wlc_size_not_fully_extended():
             rod2.append(float(((rod.positions[-1] - a) ** 2).sum()))
         want = wlc_mean_square_end_to_end(n_nt)
         assert np.mean(r2) == pytest.approx(want, rel=0.20), (
-            f"{n_nt}-nt tail starts at ⟨R²⟩ = {np.mean(r2):.1f} nm², WLC says {want:.1f}")
-        assert np.mean(rod2) > 4 * want, "the straight control should be wildly over-extended"
+            f"{n_nt}-nt tail starts at ⟨R²⟩ = {np.mean(r2):.1f} nm², WLC says {want:.1f}"
+        )
+        assert np.mean(rod2) > 4 * want, (
+            "the straight control should be wildly over-extended"
+        )
 
 
 def test_ss3_coiling_preserves_every_bond_length_exactly():
@@ -1057,7 +1277,7 @@ def test_ss3_the_coil_must_carry_its_triads_or_the_bend_error_accumulates():
         X = X0 + qn[:, :3]
         R = [cr.exp_so3(qn[i, 3:6]) for i in range(len(X0))]
         U = 0.0
-        for (i, j, ref, K12) in block.elements:
+        for i, j, ref, K12 in block.elements:
             E, _ = cr._cr_frame(X[i], X[j], R[i], R[j])
             d = cr._local_defo(X[i], X[j], R[i], R[j], ref, E)
             U += 0.5 * float(d @ K12 @ d)
@@ -1072,16 +1292,26 @@ def test_ss3_the_coil_must_carry_its_triads_or_the_bend_error_accumulates():
         for seed in range(20):
             block = build_tail_block(design, mesh, seed=seed)
             q = np.zeros(6 * block.n_total)
-            q[6 * block.n_bp:] = block.q0
+            q[6 * block.n_bp :] = block.q0
             with_q0.append(energy_per_element(block, X0core, q))
-            without.append(energy_per_element(block, X0core, np.zeros(6 * block.n_total)))
+            without.append(
+                energy_per_element(block, X0core, np.zeros(6 * block.n_total))
+            )
             # the rest state really is the straight chain: zero energy there
             rod = build_tail_block(design, mesh, seed=seed, coil=False)
-            assert energy_per_element(rod, X0core, np.zeros(6 * rod.n_total)) == pytest.approx(0.0, abs=1e-9)
-        assert np.mean(with_q0) < 3.5, "a thermal coil should cost only a few kT per element"
-        assert np.mean(without) > 2 * np.mean(with_q0), "dropping the triads must hurt, and it does"
+            assert energy_per_element(
+                rod, X0core, np.zeros(6 * rod.n_total)
+            ) == pytest.approx(0.0, abs=1e-9)
+        assert np.mean(with_q0) < 3.5, (
+            "a thermal coil should cost only a few kT per element"
+        )
+        assert np.mean(without) > 2 * np.mean(with_q0), (
+            "dropping the triads must hurt, and it does"
+        )
         naive[n_nt] = np.mean(without)
-    assert naive[28] > naive[3], "the identity-triad error ACCUMULATES with chain length"
+    assert naive[28] > naive[3], (
+        "the identity-triad error ACCUMULATES with chain length"
+    )
 
 
 # ── 7. SS-4: the simulated tails reach the DISPLAY ────────────────────────────────
@@ -1093,11 +1323,20 @@ def test_ss3_the_coil_must_carry_its_triads_or_the_bend_error_accumulates():
 # to undo — misplaced beads skewed the whole-structure superposition into a phantom 7.6 nm
 # duplex offset). Both are pinned below, plus the payload plumbing end-to-end.
 
+
 def _tail_node_dicts(block):
     """The ``tail_nodes`` metadata list, exactly as ``simulate_equilibrium`` returns it."""
-    return [{"helix_id": nd.helix_id, "bp_index": nd.bp, "direction": nd.direction,
-             "run": nd.run, "index_in_run": nd.index_in_run,
-             "overhang_ids": list(nd.overhang_ids)} for nd in block.nodes]
+    return [
+        {
+            "helix_id": nd.helix_id,
+            "bp_index": nd.bp,
+            "direction": nd.direction,
+            "run": nd.run,
+            "index_in_run": nd.index_in_run,
+            "overhang_ids": list(nd.overhang_ids),
+        }
+        for nd in block.nodes
+    ]
 
 
 def test_ss4_the_display_still_omits_tail_beads_that_were_not_simulated():
@@ -1109,10 +1348,14 @@ def test_ss4_the_display_still_omits_tail_beads_that_were_not_simulated():
 
     design = _tail_design(16)
     mesh = build_fem_mesh(design, material="snupi")
-    pos, _axis = deformed_positions_with_axis(design, mesh, np.zeros(6 * len(mesh.nodes)))
+    pos, _axis = deformed_positions_with_axis(
+        design, mesh, np.zeros(6 * len(mesh.nodes))
+    )
 
     assert pos, "the duplex core must still be emitted"
-    assert not [p for p in pos if p["helix_id"] == "B"], "an unsimulated tail bead was emitted"
+    assert not [p for p in pos if p["helix_id"] == "B"], (
+        "an unsimulated tail bead was emitted"
+    )
 
 
 def test_ss4_simulated_tail_beads_are_emitted_without_moving_the_core():
@@ -1130,15 +1373,23 @@ def test_ss4_simulated_tail_beads_are_emitted_without_moving_the_core():
 
     core_only, _ = deformed_positions_with_axis(design, mesh, u)
     with_tails, _ = deformed_positions_with_axis(
-        design, mesh, u, tail_positions=block.positions, tail_nodes=_tail_node_dicts(block))
+        design,
+        mesh,
+        u,
+        tail_positions=block.positions,
+        tail_nodes=_tail_node_dicts(block),
+    )
 
-    assert with_tails[:len(core_only)] == core_only, "emitting tails perturbed the duplex core"
+    assert with_tails[: len(core_only)] == core_only, (
+        "emitting tails perturbed the duplex core"
+    )
 
-    tail_beads = with_tails[len(core_only):]
+    tail_beads = with_tails[len(core_only) :]
     assert len(tail_beads) == block.n_tail == 16
-    assert [(p["helix_id"], p["bp_index"], p["direction"]) for p in tail_beads] == \
-           [(nd.helix_id, nd.bp, nd.direction) for nd in block.nodes]
-    assert all(p["copy"] == 0 for p in tail_beads)        # no loop copies in this fixture
+    assert [(p["helix_id"], p["bp_index"], p["direction"]) for p in tail_beads] == [
+        (nd.helix_id, nd.bp, nd.direction) for nd in block.nodes
+    ]
+    assert all(p["copy"] == 0 for p in tail_beads)  # no loop copies in this fixture
     # the slab frame is finite and orthonormal-ish (normal ⊥ chain tangent), not a degenerate zero
     for p in tail_beads:
         n = np.array([p["nx"], p["ny"], p["nz"]])
@@ -1164,10 +1415,11 @@ def test_ss4_a_tail_bead_never_enters_the_kabsch_fit():
 
     core_only, axis_only = deformed_positions_with_axis(design, mesh, u)
     absurd, axis_absurd = deformed_positions_with_axis(
-        design, mesh, u, tail_positions=block.positions + 1000.0, tail_nodes=nodes)
+        design, mesh, u, tail_positions=block.positions + 1000.0, tail_nodes=nodes
+    )
 
-    assert absurd[:len(core_only)] == core_only
-    assert axis_absurd == axis_only                       # the cylinder rep is core-only too
+    assert absurd[: len(core_only)] == core_only
+    assert axis_absurd == axis_only  # the cylinder rep is core-only too
 
 
 def test_ss4_the_emitted_tail_is_still_a_chain():
@@ -1183,8 +1435,12 @@ def test_ss4_the_emitted_tail_is_still_a_chain():
     mesh = build_fem_mesh(design, material="snupi")
     block = build_tail_block(design, mesh, seed=7)
     pos, _ = deformed_positions_with_axis(
-        design, mesh, np.zeros(6 * len(mesh.nodes)),
-        tail_positions=block.positions, tail_nodes=_tail_node_dicts(block))
+        design,
+        mesh,
+        np.zeros(6 * len(mesh.nodes)),
+        tail_positions=block.positions,
+        tail_nodes=_tail_node_dicts(block),
+    )
 
     beads = np.array([p["backbone_position"] for p in pos if p["helix_id"] == "B"])
     bonds = np.linalg.norm(np.diff(beads, axis=0), axis=1)
@@ -1217,8 +1473,14 @@ def test_ss4_a_dynamics_job_with_tails_carries_them_into_positions_and_every_fra
     from backend.physics.snupi_material import SS_CONTOUR_PER_NT
 
     design = _tail_design(16)
-    res = predict_shape(design, material="snupi", dynamics=True, tails=True,
-                        dynamics_steps=400, with_rmsf=False)
+    res = predict_shape(
+        design,
+        material="snupi",
+        dynamics=True,
+        tails=True,
+        dynamics_steps=400,
+        with_rmsf=False,
+    )
 
     assert res["solver"].endswith("+tails")
     assert res["n_tail_nodes"] == 16
@@ -1233,13 +1495,17 @@ def test_ss4_a_dynamics_job_with_tails_carries_them_into_positions_and_every_fra
 
     traj = res["trajectory"]
     keys = [tuple(k[:3]) for k in traj["keys"]]
-    assert sum(1 for k in keys if k[0] == "B") == 16, "the trajectory frames drop the tails"
+    assert sum(1 for k in keys if k[0] == "B") == 16, (
+        "the trajectory frames drop the tails"
+    )
     assert all(len(f) == 6 * len(traj["keys"]) for f in traj["frames"])
     # and the tails actually MOVE between frames (the whole point of the phase)
     tail_cols = [i for i, k in enumerate(keys) if k[0] == "B"]
     f0 = np.array(traj["frames"][0]).reshape(len(keys), 6)[tail_cols, :3]
     f1 = np.array(traj["frames"][-1]).reshape(len(keys), 6)[tail_cols, :3]
-    assert np.abs(f1 - f0).max() > 1e-3, "the tail beads are frozen across the trajectory"
+    assert np.abs(f1 - f0).max() > 1e-3, (
+        "the tail beads are frozen across the trajectory"
+    )
 
 
 def test_ss4_the_job_layer_carries_the_tail_flags(tmp_path):
@@ -1253,7 +1519,7 @@ def test_ss4_the_job_layer_carries_the_tail_flags(tmp_path):
     back = SnupiJob.load(job.job_id, tmp_path)
     assert (back.tails, back.tail_max_nt) == (True, 12)
 
-    plain = new_snupi_job("d")                            # the default is unchanged
+    plain = new_snupi_job("d")  # the default is unchanged
     assert (plain.tails, plain.tail_max_nt) == (False, None)
 
 
@@ -1271,14 +1537,19 @@ def test_ss4_the_job_layer_carries_the_tail_flags(tmp_path):
 # span, so it grows with tail length. Every SS-2/SS-3 fixture happened to be 5'-anchored, which
 # is exactly why this survived; both polarities are pinned from here on.
 
+
 def _tail_design_5p_terminal(n_tail_nt: int = 16):
     """The MIRROR of `_tail_design`: the overhang is the staple's FIRST domain, so the run sits at
     the strand's 5' terminus and its anchor is on its 3' side (`anchor_3`)."""
     hi = 39
     lo = hi - n_tail_nt + 1
     return _two_helix_design(
-        [[_dom("B", lo, hi, Direction.REVERSE, overhang_id="oh1"),
-          _dom("A", 0, 19, Direction.REVERSE)]],
+        [
+            [
+                _dom("B", lo, hi, Direction.REVERSE, overhang_id="oh1"),
+                _dom("A", 0, 19, Direction.REVERSE),
+            ]
+        ],
         scaffold_domains=[_dom("A", 0, 19)],
     )
 
@@ -1287,15 +1558,20 @@ def test_the_fixture_pair_really_does_cover_both_anchor_polarities():
     """Guard the guard: if both fixtures drifted to the same polarity, the tests below would pass
     while proving nothing — which is how the bug survived SS-2 and SS-3."""
     a = [r for r in classify_ssdna_runs(_tail_design(16)) if r.kind == "tail"]
-    b = [r for r in classify_ssdna_runs(_tail_design_5p_terminal(16)) if r.kind == "tail"]
+    b = [
+        r for r in classify_ssdna_runs(_tail_design_5p_terminal(16)) if r.kind == "tail"
+    ]
     assert len(a) == len(b) == 1
-    assert a[0].anchor_5 is not None and a[0].anchor_3 is None      # 3'-terminal overhang
-    assert b[0].anchor_3 is not None and b[0].anchor_5 is None      # 5'-terminal overhang
+    assert a[0].anchor_5 is not None and a[0].anchor_3 is None  # 3'-terminal overhang
+    assert b[0].anchor_3 is not None and b[0].anchor_5 is None  # 5'-terminal overhang
 
 
-@pytest.mark.parametrize("design_fn", [_tail_design, _tail_design_5p_terminal],
-                         ids=["anchor_5", "anchor_3"])
-def test_a_tail_chain_hangs_from_its_anchor_by_the_nucleotide_that_adjoins_it(design_fn):
+@pytest.mark.parametrize(
+    "design_fn", [_tail_design, _tail_design_5p_terminal], ids=["anchor_5", "anchor_3"]
+)
+def test_a_tail_chain_hangs_from_its_anchor_by_the_nucleotide_that_adjoins_it(
+    design_fn,
+):
     """The chain is built ANCHOR-OUTWARD in both polarities: bead 0 is the nucleotide covalently
     continuous with the anchor, and it is one ssDNA bond away from it — not a coil span."""
     import numpy as np
@@ -1306,16 +1582,22 @@ def test_a_tail_chain_hangs_from_its_anchor_by_the_nucleotide_that_adjoins_it(de
     design = design_fn(16)
     mesh = build_fem_mesh(design, material="snupi")
     run = next(r for r in classify_ssdna_runs(design) if r.kind == "tail")
-    block = build_tail_block(design, mesh, coil=False)      # rod: isolate the topology from the coil
+    block = build_tail_block(
+        design, mesh, coil=False
+    )  # rod: isolate the topology from the coil
 
     # the nucleotide that adjoins the anchor along the strand path
     adjoining = run.nts[0] if run.anchor_5 else run.nts[-1]
     b0 = block.nodes[0]
-    assert (b0.helix_id, b0.bp, b0.direction) == adjoining, "the chain hangs from the wrong end"
+    assert (b0.helix_id, b0.bp, b0.direction) == adjoining, (
+        "the chain hangs from the wrong end"
+    )
     assert block.nodes[-1] != b0
     tip = run.nts[-1] if run.anchor_5 else run.nts[0]
     bl = block.nodes[-1]
-    assert (bl.helix_id, bl.bp, bl.direction) == tip, "the free tip is not at the end of the chain"
+    assert (bl.helix_id, bl.bp, bl.direction) == tip, (
+        "the free tip is not at the end of the chain"
+    )
 
     # and the first element really joins the anchor node to that bead, one bond long
     a_idx = block.anchors[0]
@@ -1324,9 +1606,12 @@ def test_a_tail_chain_hangs_from_its_anchor_by_the_nucleotide_that_adjoins_it(de
     assert d == pytest.approx(SS_CONTOUR_PER_NT, abs=1e-6)
 
 
-@pytest.mark.parametrize("design_fn", [_tail_design, _tail_design_5p_terminal],
-                         ids=["anchor_5", "anchor_3"])
-def test_the_drawn_bond_from_an_overhang_to_its_anchor_is_never_overstretched(design_fn):
+@pytest.mark.parametrize(
+    "design_fn", [_tail_design, _tail_design_5p_terminal], ids=["anchor_5", "anchor_3"]
+)
+def test_the_drawn_bond_from_an_overhang_to_its_anchor_is_never_overstretched(
+    design_fn,
+):
     """The user-visible symptom, pinned in the DISPLAY payload: the backbone bond drawn between the
     anchor's bead and the overhang nucleotide continuous with it must be a bond, not a coil span.
     Pre-fix this read 3.78 nm on VoltronCore's OH15 (and 8.18 nm on a 28-mer)."""
@@ -1340,10 +1625,16 @@ def test_the_drawn_bond_from_an_overhang_to_its_anchor_is_never_overstretched(de
     block = build_tail_block(design, mesh, seed=1)
     run = next(r for r in classify_ssdna_runs(design) if r.kind == "tail")
     pos, _ = deformed_positions_with_axis(
-        design, mesh, np.zeros(6 * len(mesh.nodes)),
-        tail_positions=block.positions, tail_nodes=_tail_node_dicts(block))
-    P = {(p["helix_id"], p["bp_index"], p["direction"]): np.array(p["backbone_position"])
-         for p in pos}
+        design,
+        mesh,
+        np.zeros(6 * len(mesh.nodes)),
+        tail_positions=block.positions,
+        tail_nodes=_tail_node_dicts(block),
+    )
+    P = {
+        (p["helix_id"], p["bp_index"], p["direction"]): np.array(p["backbone_position"])
+        for p in pos
+    }
 
     adjoining = run.nts[0] if run.anchor_5 else run.nts[-1]
     anchor = run.anchor

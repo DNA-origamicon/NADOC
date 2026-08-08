@@ -22,6 +22,7 @@ Public API
 ``catenation_report(design, ...)``— the audit, schema ``nadoc.junction_catenation.v1``
 ``catenation_over_frames(...)``   — the same audit across a trajectory
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -116,8 +117,16 @@ def _junction_index(design) -> dict:
         kb = (xo.half_b.helix_id, xo.half_b.index, _dir_value(xo.half_b.strand))
         idx[frozenset((ka, kb))] = (xo.id, xo.extra_bases or "")
     for fl in getattr(design, "forced_ligations", None) or []:
-        ka = (fl.three_prime_helix_id, fl.three_prime_bp, _dir_value(fl.three_prime_direction))
-        kb = (fl.five_prime_helix_id, fl.five_prime_bp, _dir_value(fl.five_prime_direction))
+        ka = (
+            fl.three_prime_helix_id,
+            fl.three_prime_bp,
+            _dir_value(fl.three_prime_direction),
+        )
+        kb = (
+            fl.five_prime_helix_id,
+            fl.five_prime_bp,
+            _dir_value(fl.five_prime_direction),
+        )
         idx[frozenset((ka, kb))] = (fl.id, fl.extra_bases or "")
     return idx
 
@@ -138,12 +147,19 @@ def crossover_connectors(design) -> list[Connector]:
             ka = (a.helix_id, a.end_bp, _dir_value(a.direction))
             kb = (b.helix_id, b.start_bp, _dir_value(b.direction))
             xo_id, extra = junctions.get(frozenset((ka, kb)), (None, ""))
-            out.append(Connector(
-                strand_id=strand.id,
-                from_helix=a.helix_id, from_bp=a.end_bp, from_dir=_dir_value(a.direction),
-                to_helix=b.helix_id, to_bp=b.start_bp, to_dir=_dir_value(b.direction),
-                crossover_id=xo_id, n_inserts=len(extra),
-            ))
+            out.append(
+                Connector(
+                    strand_id=strand.id,
+                    from_helix=a.helix_id,
+                    from_bp=a.end_bp,
+                    from_dir=_dir_value(a.direction),
+                    to_helix=b.helix_id,
+                    to_bp=b.start_bp,
+                    to_dir=_dir_value(b.direction),
+                    crossover_id=xo_id,
+                    n_inserts=len(extra),
+                )
+            )
     return out
 
 
@@ -184,8 +200,13 @@ def _atom_index(model) -> tuple[dict, dict]:
         if at.crossover_id is not None and at.extra_base_k is not None:
             ins.setdefault((at.crossover_id, at.extra_base_k), {})[at.name] = row
         elif at.extension_id is None:
-            key = (at.strand_id, at.helix_id, at.bp_index, at.direction,
-                   at.copy_k if at.copy_k else 0)
+            key = (
+                at.strand_id,
+                at.helix_id,
+                at.bp_index,
+                at.direction,
+                at.copy_k if at.copy_k else 0,
+            )
             nuc.setdefault(key, {})[at.name] = row
     return nuc, ins
 
@@ -246,10 +267,10 @@ def gauss_linking_number(path_a: np.ndarray, path_b: np.ndarray) -> float:
     if len(a) < 2 or len(b) < 2:
         return 0.0
 
-    r1 = a[:-1, None, :]           # (na, 1, 3) segment starts of A
-    r2 = a[1:, None, :]            # (na, 1, 3) segment ends of A
-    r3 = b[None, :-1, :]           # (1, nb, 3) segment starts of B
-    r4 = b[None, 1:, :]            # (1, nb, 3) segment ends of B
+    r1 = a[:-1, None, :]  # (na, 1, 3) segment starts of A
+    r2 = a[1:, None, :]  # (na, 1, 3) segment ends of A
+    r3 = b[None, :-1, :]  # (1, nb, 3) segment starts of B
+    r4 = b[None, 1:, :]  # (1, nb, 3) segment ends of B
 
     r13 = r3 - r1
     r14 = r4 - r1
@@ -264,7 +285,9 @@ def gauss_linking_number(path_a: np.ndarray, path_b: np.ndarray) -> float:
     def _asin_dot(p, q):
         return np.arcsin(np.clip(np.einsum("ijk,ijk->ij", p, q), -1.0, 1.0))
 
-    omega = _asin_dot(n1, n2) + _asin_dot(n2, n3) + _asin_dot(n3, n4) + _asin_dot(n4, n1)
+    omega = (
+        _asin_dot(n1, n2) + _asin_dot(n2, n3) + _asin_dot(n3, n4) + _asin_dot(n4, n1)
+    )
     sign = np.sign(np.einsum("ijk,ijk->ij", np.cross(r4 - r3, r2 - r1), r13))
     return float(np.sum(omega * sign) / (4.0 * np.pi))
 
@@ -282,16 +305,26 @@ def _min_segment_distance(a: np.ndarray, b: np.ndarray) -> float:
     v = (b[1:] - b[:-1])[None, :, :]
     w = p1 - q1
 
-    dot = lambda x, y: np.einsum("ijk,ijk->ij", np.broadcast_to(x, np.broadcast_shapes(x.shape, y.shape)),
-                                 np.broadcast_to(y, np.broadcast_shapes(x.shape, y.shape)))
+    dot = lambda x, y: np.einsum(
+        "ijk,ijk->ij",
+        np.broadcast_to(x, np.broadcast_shapes(x.shape, y.shape)),
+        np.broadcast_to(y, np.broadcast_shapes(x.shape, y.shape)),
+    )
     uu, uv, vv = dot(u, u), dot(u, v), dot(v, v)
     uw, vw = dot(u, w), dot(v, w)
 
     den = uu * vv - uv * uv
     with np.errstate(invalid="ignore", divide="ignore"):
-        sc = np.where(den > 1e-12, (uv * vw - vv * uw) / np.where(den > 1e-12, den, 1.0), 0.0)
-        tc = np.where(den > 1e-12, (uu * vw - uv * uw) / np.where(den > 1e-12, den, 1.0),
-                      np.where(np.abs(uv) > 1e-12, uw / np.where(np.abs(uv) > 1e-12, uv, 1.0), 0.0))
+        sc = np.where(
+            den > 1e-12, (uv * vw - vv * uw) / np.where(den > 1e-12, den, 1.0), 0.0
+        )
+        tc = np.where(
+            den > 1e-12,
+            (uu * vw - uv * uw) / np.where(den > 1e-12, den, 1.0),
+            np.where(
+                np.abs(uv) > 1e-12, uw / np.where(np.abs(uv) > 1e-12, uv, 1.0), 0.0
+            ),
+        )
     sc = np.clip(sc, 0.0, 1.0)[..., None]
     tc = np.clip(tc, 0.0, 1.0)[..., None]
 
@@ -305,8 +338,8 @@ def _min_segment_distance(a: np.ndarray, b: np.ndarray) -> float:
 @dataclass
 class _Prepared:
     connectors: list[Connector]
-    open_paths: dict          # connector index → open polyline
-    closed_paths: dict        # connector index → chord-closed polyline
+    open_paths: dict  # connector index → open polyline
+    closed_paths: dict  # connector index → chord-closed polyline
     centroids: dict
 
 
@@ -354,10 +387,17 @@ def _residue_lookup(model):
 
 
 def _connector_dict(c: Connector) -> dict:
-    return {"strand_id": c.strand_id, "from_helix": c.from_helix, "from_bp": c.from_bp,
-            "from_dir": c.from_dir, "to_helix": c.to_helix, "to_bp": c.to_bp,
-            "to_dir": c.to_dir, "crossover_id": c.crossover_id,
-            "n_inserts": c.n_inserts}
+    return {
+        "strand_id": c.strand_id,
+        "from_helix": c.from_helix,
+        "from_bp": c.from_bp,
+        "from_dir": c.from_dir,
+        "to_helix": c.to_helix,
+        "to_bp": c.to_bp,
+        "to_dir": c.to_dir,
+        "crossover_id": c.crossover_id,
+        "n_inserts": c.n_inserts,
+    }
 
 
 def catenation_report(
@@ -381,12 +421,16 @@ def catenation_report(
     """
     if model is None:
         from backend.core.atomistic import build_atomistic_model
+
         model = build_atomistic_model(design)
 
     prep = _prepare(design, model, positions)
     lookup = _residue_lookup(model)
-    pos_all = (np.asarray(positions, dtype=float) if positions is not None
-               else np.array([[a.x, a.y, a.z] for a in model.atoms], dtype=float))
+    pos_all = (
+        np.asarray(positions, dtype=float)
+        if positions is not None
+        else np.array([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
+    )
     recip = {frozenset(p) for p in reciprocal_pairs(prep.connectors)}
 
     catenated: list[dict] = []
@@ -396,7 +440,10 @@ def catenation_report(
     for ii in range(len(keys)):
         for jj in range(ii + 1, len(keys)):
             i, j = keys[ii], keys[jj]
-            if float(np.linalg.norm(prep.centroids[i] - prep.centroids[j])) > proximity_nm:
+            if (
+                float(np.linalg.norm(prep.centroids[i] - prep.centroids[j]))
+                > proximity_nm
+            ):
                 continue
             n_tested += 1
             # The verdict comes from the TWO-CHANNEL winding measure — closure-free PCS
@@ -406,12 +453,19 @@ def catenation_report(
             # below could not catch it.  The chord value is still computed and reported,
             # as a legacy diagnostic only.
             from backend.core.junction_winding import (  # noqa: PLC0415
-                clamp_sweep, combine, projected_crossing_number,
+                clamp_sweep,
+                combine,
+                projected_crossing_number,
             )
+
             pcs = projected_crossing_number(prep.open_paths[i], prep.open_paths[j])
-            clamp = clamp_sweep(lookup, pos_all,
-                                _connector_dict(prep.connectors[i]),
-                                _connector_dict(prep.connectors[j]), _BACKBONE_ORDER)
+            clamp = clamp_sweep(
+                lookup,
+                pos_all,
+                _connector_dict(prep.connectors[i]),
+                _connector_dict(prep.connectors[j]),
+                _BACKBONE_ORDER,
+            )
             winding = combine(pcs, clamp)
 
             lk = gauss_linking_number(prep.closed_paths[i], prep.closed_paths[j])
@@ -423,26 +477,32 @@ def catenation_report(
                 continue
             a, b = prep.connectors[i], prep.connectors[j]
             if len(catenated) < max_report:
-                catenated.append({
-                    "verdict": winding["verdict"],
-                    "confidence": winding["confidence"],
-                    "pcs_n_mode": winding["pcs"]["n_mode"],
-                    "pcs_f_hi": round(winding["pcs"]["f_hi"], 3),
-                    "clamp_lk": winding["clamp"].get("lk"),
-                    "clamp_lk_by_k": winding["clamp"].get("lk_by_k"),
-                    "clamp_converged": winding["clamp"].get("converged"),
-                    "lk": round(lk, 4),
-                    "lk_int": int(round(lk)),
-                    "lk_residual": round(residual, 4),
-                    "reciprocal": frozenset((i, j)) in recip,
-                    "crossover_ids": [a.crossover_id, b.crossover_id],
-                    "strand_ids": [a.strand_id, b.strand_id],
-                    "helices": [a.from_helix, a.to_helix],
-                    "bp": [a.from_bp, b.from_bp],
-                    "n_inserts": [a.n_inserts, b.n_inserts],
-                    "min_backbone_dist_nm": round(
-                        _min_segment_distance(prep.open_paths[i], prep.open_paths[j]), 4),
-                })
+                catenated.append(
+                    {
+                        "verdict": winding["verdict"],
+                        "confidence": winding["confidence"],
+                        "pcs_n_mode": winding["pcs"]["n_mode"],
+                        "pcs_f_hi": round(winding["pcs"]["f_hi"], 3),
+                        "clamp_lk": winding["clamp"].get("lk"),
+                        "clamp_lk_by_k": winding["clamp"].get("lk_by_k"),
+                        "clamp_converged": winding["clamp"].get("converged"),
+                        "lk": round(lk, 4),
+                        "lk_int": int(round(lk)),
+                        "lk_residual": round(residual, 4),
+                        "reciprocal": frozenset((i, j)) in recip,
+                        "crossover_ids": [a.crossover_id, b.crossover_id],
+                        "strand_ids": [a.strand_id, b.strand_id],
+                        "helices": [a.from_helix, a.to_helix],
+                        "bp": [a.from_bp, b.from_bp],
+                        "n_inserts": [a.n_inserts, b.n_inserts],
+                        "min_backbone_dist_nm": round(
+                            _min_segment_distance(
+                                prep.open_paths[i], prep.open_paths[j]
+                            ),
+                            4,
+                        ),
+                    }
+                )
 
     return {
         "schema": SCHEMA,
@@ -472,7 +532,9 @@ def design_has_extra_bases(design) -> bool:
     return False
 
 
-def assert_not_catenated(design, *, model=None, positions=None, allow: bool = False) -> dict:
+def assert_not_catenated(
+    design, *, model=None, positions=None, allow: bool = False
+) -> dict:
     """Build gate: raise :class:`CatenatedJunctionError` unless ``allow``.
 
     Returns the report either way so the caller can record it — the report goes into the
@@ -502,8 +564,9 @@ def gate_seed_topology(design, *, model=None, allow: bool = False) -> dict:
             "n_ring_pierced": 0,
             "override_requested": bool(allow),
         }
-    if model is None:                       # build once; both checks measure the same seed
+    if model is None:  # build once; both checks measure the same seed
         from backend.core.atomistic import build_atomistic_model  # noqa: PLC0415
+
         model = build_atomistic_model(design)
     report = assert_not_catenated(design, model=model, allow=allow)
 
@@ -514,12 +577,15 @@ def gate_seed_topology(design, *, model=None, allow: bool = False) -> dict:
     # clean, one phosphodiester bond through a partner insert's ribose, which the
     # relaxation could only convert into a permanently 3.08 A bond.
     from backend.core.ring_piercing import assert_not_pierced  # noqa: PLC0415
+
     pierce = assert_not_pierced(design, model=model, allow=allow)
     report["n_ring_pierced"] = pierce["n_pierced"]
     report["ring_pierced"] = pierce["pierced"][:20]
     report["ring_piercing_schema"] = pierce["schema"]
     report["ok"] = bool(report["ok"] and pierce["ok"])
-    report["override_used"] = bool(report.get("override_used") or pierce["override_used"])
+    report["override_used"] = bool(
+        report.get("override_used") or pierce["override_used"]
+    )
 
     report["gate"] = "overridden" if report.get("override_used") else "passed"
     report["override_requested"] = bool(allow)
@@ -569,12 +635,14 @@ def package_connector_rows(design, package_pdb: "str | Path") -> list[dict]:
         # Walk this strand 5'->3', assigning residue numbers exactly as the builder did.
         resid = 0
         doms = strand.domains
-        marks: list = []            # (kind, resid) with kind in {"nt", "insert"}
+        marks: list = []  # (kind, resid) with kind in {"nt", "insert"}
         for di, dom in enumerate(doms):
             step = 1 if dom.end_bp >= dom.start_bp else -1
             for _bp in range(dom.start_bp, dom.end_bp + step, step):
                 resid += 1
-                marks.append(("nt", resid, dom.helix_id, _bp, _dir_value(dom.direction)))
+                marks.append(
+                    ("nt", resid, dom.helix_id, _bp, _dir_value(dom.direction))
+                )
             if di + 1 < len(doms):
                 nxt = doms[di + 1]
                 ka = (dom.helix_id, dom.end_bp, _dir_value(dom.direction))
@@ -586,7 +654,8 @@ def package_connector_rows(design, package_pdb: "str | Path") -> list[dict]:
         if resid != len(per_seg[seg]):
             raise ValueError(
                 f"{seg}: walked {resid} residues but the package PDB has "
-                f"{len(per_seg[seg])} — package residue layout changed")
+                f"{len(per_seg[seg])} — package residue layout changed"
+            )
 
         # Emit a connector for every helix hop, gathering its backbone rows.
         for k in range(len(marks) - 1):
@@ -599,31 +668,45 @@ def package_connector_rows(design, package_pdb: "str | Path") -> list[dict]:
             if j >= len(marks):
                 continue
             if marks[j][2] == hel:
-                continue                     # same helix: not a crossover
+                continue  # same helix: not a crossover
             span = [rid] + [marks[m][1] for m in range(k + 1, j)] + [marks[j][1]]
-            idxs = [rows[(seg, r, nm)] for r in span
-                    for nm in _BACKBONE_ORDER if (seg, r, nm) in rows]
-            out.append({
-                "strand_id": strand.id, "segid": seg,
-                "from_helix": hel, "from_bp": bp, "from_dir": dirn,
-                "to_helix": marks[j][2], "to_bp": marks[j][3],
-                "n_inserts": j - k - 1,
-                "rows": idxs,
-            })
+            idxs = [
+                rows[(seg, r, nm)]
+                for r in span
+                for nm in _BACKBONE_ORDER
+                if (seg, r, nm) in rows
+            ]
+            out.append(
+                {
+                    "strand_id": strand.id,
+                    "segid": seg,
+                    "from_helix": hel,
+                    "from_bp": bp,
+                    "from_dir": dirn,
+                    "to_helix": marks[j][2],
+                    "to_bp": marks[j][3],
+                    "n_inserts": j - k - 1,
+                    "rows": idxs,
+                }
+            )
     return out
 
 
 def read_namd_coor(path: "str | Path") -> np.ndarray:
     """NAMD binary restart coordinates -> (n_atoms, 3) in Angstroms."""
     import struct
+
     data = Path(path).read_bytes()
     n = struct.unpack("<i", data[:4])[0]
-    return np.frombuffer(data[4:4 + n * 24], dtype="<f8").reshape(n, 3).copy()
+    return np.frombuffer(data[4 : 4 + n * 24], dtype="<f8").reshape(n, 3).copy()
 
 
-def catenation_in_frame(connectors: list[dict], coords: np.ndarray,
-                        proximity_ang: float = 25.0,
-                        reference: "dict | None" = None) -> dict:
+def catenation_in_frame(
+    connectors: list[dict],
+    coords: np.ndarray,
+    proximity_ang: float = 25.0,
+    reference: "dict | None" = None,
+) -> dict:
     """Topology report for one simulated frame (coords in the PDB's row order).
 
     Distances are in Angstroms here (NAMD's unit), unlike the nm-based design build —
@@ -673,7 +756,8 @@ def catenation_in_frame(connectors: list[dict], coords: np.ndarray,
 
             row = {
                 "pair": key,
-                "lk": round(lk, 4), "lk_int": int(round(lk)),
+                "lk": round(lk, 4),
+                "lk_int": int(round(lk)),
                 "g_open": round(g_open, 4),
                 "segids": [ci["segid"], cj["segid"]],
                 "bp": [ci["from_bp"], cj["from_bp"]],
@@ -690,9 +774,16 @@ def catenation_in_frame(connectors: list[dict], coords: np.ndarray,
             if abs(lk) >= _LK_CATENATED and abs(lk - round(lk)) <= _INTEGRALITY_TOL:
                 linked.append(row)
 
-    return {"schema": SCHEMA, "ok": not linked, "n_pairs_tested": tested,
-            "n_catenated": len(linked), "catenated": linked,
-            "gauss_open": gauss, "n_changed": len(changed), "changed": changed}
+    return {
+        "schema": SCHEMA,
+        "ok": not linked,
+        "n_pairs_tested": tested,
+        "n_catenated": len(linked),
+        "catenated": linked,
+        "gauss_open": gauss,
+        "n_changed": len(changed),
+        "changed": changed,
+    }
 
 
 def catenation_over_frames(
@@ -709,9 +800,11 @@ def catenation_over_frames(
     """
     if model is None:
         from backend.core.atomistic import build_atomistic_model
+
         model = build_atomistic_model(design)
     for n, pos in enumerate(frames):
-        rep = catenation_report(design, model=model, positions=pos,
-                                proximity_nm=proximity_nm)
+        rep = catenation_report(
+            design, model=model, positions=pos, proximity_nm=proximity_nm
+        )
         rep["frame"] = n
         yield rep

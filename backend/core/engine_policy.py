@@ -67,17 +67,34 @@ def recommend_engine(
     if has_proteins:
         reason = "Proteins present — only oxDNA supports protein (ANM) hybrids."
         if gpu_busy:
-            reason = (f"Proteins present — must use oxDNA (LAMMPS can't do proteins) — "
-                      f"but the GPU is busy with {hog}.")
-        return {"engine": "oxdna", "backend": "CUDA", "reason": reason,
-                "cpu_slowdown_factor": factor, "needs_dialog": gpu_busy}
+            reason = (
+                f"Proteins present — must use oxDNA (LAMMPS can't do proteins) — "
+                f"but the GPU is busy with {hog}."
+            )
+        return {
+            "engine": "oxdna",
+            "backend": "CUDA",
+            "reason": reason,
+            "cpu_slowdown_factor": factor,
+            "needs_dialog": gpu_busy,
+        }
 
     if not gpu_busy:
-        return {"engine": "oxdna", "backend": "CUDA",
-                "reason": "GPU free — oxDNA on GPU is fastest here.",
-                "cpu_slowdown_factor": factor, "needs_dialog": False}
+        return {
+            "engine": "oxdna",
+            "backend": "CUDA",
+            "reason": "GPU free — oxDNA on GPU is fastest here.",
+            "cpu_slowdown_factor": factor,
+            "needs_dialog": False,
+        }
 
-    return {"engine": "lammps", "backend": "CPU",
-            "reason": (f"GPU busy with {hog} — running on CPU (LAMMPS, {free_cores} cores) "
-                       f"is ~{factor:.0f}× slower but doesn't wait for the GPU."),
-            "cpu_slowdown_factor": factor, "needs_dialog": True}
+    return {
+        "engine": "lammps",
+        "backend": "CPU",
+        "reason": (
+            f"GPU busy with {hog} — running on CPU (LAMMPS, {free_cores} cores) "
+            f"is ~{factor:.0f}× slower but doesn't wait for the GPU."
+        ),
+        "cpu_slowdown_factor": factor,
+        "needs_dialog": True,
+    }

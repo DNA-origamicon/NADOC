@@ -53,41 +53,67 @@ def test_joint_referencing_missing_instance_fails():
     )
     rep = validate_assembly_report(asm)
     assert rep["passed"] is False
-    bad = [r for r in rep["results"] if r["check"] == "joint_instance_refs_valid" and not r["ok"]]
+    bad = [
+        r
+        for r in rep["results"]
+        if r["check"] == "joint_instance_refs_valid" and not r["ok"]
+    ]
     assert bad and "ghost" in bad[0]["message"]
 
 
 def test_joint_below_min_limit_fails():
     asm = Assembly(
         instances=[_inline_instance("b")],
-        joints=[AssemblyJoint(name="j", instance_b_id="b", current_value=-5.0, min_limit=0.0)],
+        joints=[
+            AssemblyJoint(
+                name="j", instance_b_id="b", current_value=-5.0, min_limit=0.0
+            )
+        ],
     )
     rep = validate_assembly_report(asm)
     assert rep["passed"] is False
-    bad = [r for r in rep["results"] if r["check"] == "joint_limits_not_exceeded" and not r["ok"]]
+    bad = [
+        r
+        for r in rep["results"]
+        if r["check"] == "joint_limits_not_exceeded" and not r["ok"]
+    ]
     assert bad and "min_limit" in bad[0]["message"]
 
 
 def test_joint_above_max_limit_fails():
     asm = Assembly(
         instances=[_inline_instance("b")],
-        joints=[AssemblyJoint(name="j", instance_b_id="b", current_value=10.0, max_limit=1.0)],
+        joints=[
+            AssemblyJoint(
+                name="j", instance_b_id="b", current_value=10.0, max_limit=1.0
+            )
+        ],
     )
     rep = validate_assembly_report(asm)
     assert rep["passed"] is False
-    bad = [r for r in rep["results"] if r["check"] == "joint_limits_not_exceeded" and not r["ok"]]
+    bad = [
+        r
+        for r in rep["results"]
+        if r["check"] == "joint_limits_not_exceeded" and not r["ok"]
+    ]
     assert bad and "max_limit" in bad[0]["message"]
 
 
 def test_missing_file_source_fails():
     asm = Assembly(
         instances=[
-            PartInstance(id="f", name="missing", source=PartSourceFile(path="does/not/exist.nadoc")),
+            PartInstance(
+                id="f",
+                name="missing",
+                source=PartSourceFile(path="does/not/exist.nadoc"),
+            ),
         ],
     )
     rep = validate_assembly_report(asm)
     assert rep["passed"] is False
-    bad = [r for r in rep["results"] if r["check"] == "file_sources_exist" and not r["ok"]]
+    bad = [
+        r for r in rep["results"] if r["check"] == "file_sources_exist" and not r["ok"]
+    ]
     assert bad and "not found" in bad[0]["message"]
 
 

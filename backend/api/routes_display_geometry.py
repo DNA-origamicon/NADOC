@@ -120,11 +120,13 @@ def get_atomistic(
             raise HTTPException(
                 status_code=409,
                 detail="Seed view is unavailable for a PDB-imported design: its atoms are "
-                       "measured coordinates, so scaling the lattice around them would mix "
-                       "two frames.",
+                "measured coordinates, so scaling the lattice around them would mix "
+                "two frames.",
             )
         resolved = _resolve_seed_lattice_nm(design, seed_lattice_nm)
-        seed_design = scale_helix_spacing(design, resolved) if resolved is not None else design
+        seed_design = (
+            scale_helix_spacing(design, resolved) if resolved is not None else design
+        )
         out = atomistic_to_json(build_atomistic_model_cached(seed_design))
         out["seed"] = True
         out["lattice_nm"] = resolved
@@ -142,7 +144,7 @@ def get_atomistic(
             design,
             exclude_helix_ids=pdb_helix_ids,
             nuc_frame_override=nuc_frame_override,
-            fast_bridges=True,   # display renderer: cheap interpolated linkers (6× faster on large designs)
+            fast_bridges=True,  # display renderer: cheap interpolated linkers (6× faster on large designs)
             measured_positioning=measured_positioning,
         )
         return atomistic_to_json(merge_models(pdb_model, template_model))
@@ -151,7 +153,7 @@ def get_atomistic(
         build_atomistic_model(
             design,
             nuc_frame_override=nuc_frame_override,
-            fast_bridges=True,   # display renderer: cheap interpolated linkers (6× faster on large designs)
+            fast_bridges=True,  # display renderer: cheap interpolated linkers (6× faster on large designs)
             measured_positioning=measured_positioning,
         )
     )
@@ -232,7 +234,9 @@ def get_surface(
 
     design = design_state.get_or_404()
     t0 = time.perf_counter()
-    mesh = _build_design_surface_mesh(design, grid_spacing, probe_radius, radius_inflate, smooth, detail)
+    mesh = _build_design_surface_mesh(
+        design, grid_spacing, probe_radius, radius_inflate, smooth, detail
+    )
     t_ms = (time.perf_counter() - t0) * 1000.0
 
     return surface_to_json(mesh, design, color_mode=color_mode, t_ms=t_ms)
@@ -257,34 +261,57 @@ def get_surface_bin(
     from backend.core.oxdna_health import pack_surface_bin
 
     design = design_state.get_or_404()
-    mesh = _build_design_surface_mesh(design, grid_spacing, probe_radius, radius_inflate, smooth, detail)
+    mesh = _build_design_surface_mesh(
+        design, grid_spacing, probe_radius, radius_inflate, smooth, detail
+    )
     data = surface_to_json(mesh, design, color_mode=color_mode)
-    return Response(content=pack_surface_bin(data), media_type="application/octet-stream")
+    return Response(
+        content=pack_surface_bin(data), media_type="application/octet-stream"
+    )
 
 
-def _build_design_surface_mesh(design, grid_spacing, probe_radius, radius_inflate, smooth, detail):
+def _build_design_surface_mesh(
+    design, grid_spacing, probe_radius, radius_inflate, smooth, detail
+):
     """Build the design's molecular surface mesh — the shared body of ``get_surface`` and
     ``get_surface_bin`` (JSON vs binary transfer).  ``detail='coarse'`` (default) rasterises
     ~2 CG spheres/nucleotide from design geometry (no all-atom rebuild — ~3× faster, envelope
     within ~2.8 Å); ``'fine'`` builds the exact all-atom model."""
-    from backend.core.surface import (compute_surface, compute_surface_from_cloud, smooth_mesh,
-                                      adaptive_grid_spacing, adaptive_grid_spacing_arr,
-                                      cg_surface_mesh, make_cg_bead)
+    from backend.core.surface import (
+        compute_surface,
+        compute_surface_from_cloud,
+        smooth_mesh,
+        adaptive_grid_spacing,
+        adaptive_grid_spacing_arr,
+        cg_surface_mesh,
+        make_cg_bead,
+    )
+
     if detail == "chimerax":
         return _build_chimerax_surface(design)
     if detail == "coarse":
         from backend.core.design_geometry import _geometry_for_design
+
         beads = []
         for g in _geometry_for_design(design):
             for _k in ("backbone_position", "base_position"):
                 p = g.get(_k)
                 if p is None:
                     continue
-                beads.append(make_cg_bead(
-                    p[0], p[1], p[2], strand_id=g.get("strand_id", ""),
-                    helix_id=g.get("helix_id", ""), bp_index=int(g.get("bp_index", 0)),
-                    direction=g.get("direction", "FORWARD")))
-        return cg_surface_mesh(beads, grid_spacing=grid_spacing, probe_radius=probe_radius, smooth=smooth)
+                beads.append(
+                    make_cg_bead(
+                        p[0],
+                        p[1],
+                        p[2],
+                        strand_id=g.get("strand_id", ""),
+                        helix_id=g.get("helix_id", ""),
+                        bp_index=int(g.get("bp_index", 0)),
+                        direction=g.get("direction", "FORWARD"),
+                    )
+                )
+        return cg_surface_mesh(
+            beads, grid_spacing=grid_spacing, probe_radius=probe_radius, smooth=smooth
+        )
 
     # FINE (all-atom) surface.  The vectorised point cloud (surface_atom_cloud) reproduces the
     # full fast_bridges build BYTE-FOR-BYTE on designs it covers (VoltronCore build 7 s → 0.8 s)
@@ -292,21 +319,33 @@ def _build_design_surface_mesh(design, grid_spacing, probe_radius, radius_inflat
     # those designs fall back to the exact Atom-object build (correctness over speed).
     if _can_use_surface_cloud(design):
         from backend.core.atomistic import surface_atom_cloud
+
         pos, radii, sids, nucs = surface_atom_cloud(design)
         gs = adaptive_grid_spacing_arr(pos, grid_spacing)
-        mesh = compute_surface_from_cloud(pos, radii, sids, grid_spacing=gs,
-                                          probe_radius=probe_radius, radius_scale=1.2 * radius_inflate,
-                                          nuc_ids=nucs)
+        mesh = compute_surface_from_cloud(
+            pos,
+            radii,
+            sids,
+            grid_spacing=gs,
+            probe_radius=probe_radius,
+            radius_scale=1.2 * radius_inflate,
+            nuc_ids=nucs,
+        )
         return smooth_mesh(mesh, iterations=smooth)
 
     from backend.core.atomistic import build_atomistic_model
+
     # DISPLAY surface: cheap interpolated phosphate bridges (fast_bridges — 6× faster
     # build; the VdW envelope is unaffected) + adaptive grid coarsening.
     model = build_atomistic_model(
-        design, nuc_frame_override=_flexible_display_override(design), fast_bridges=True)
+        design, nuc_frame_override=_flexible_display_override(design), fast_bridges=True
+    )
     mesh = compute_surface(
-        model.atoms, grid_spacing=adaptive_grid_spacing(model.atoms, grid_spacing),
-        probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
+        model.atoms,
+        grid_spacing=adaptive_grid_spacing(model.atoms, grid_spacing),
+        probe_radius=probe_radius,
+        radius_scale=1.2 * radius_inflate,
+    )
     return smooth_mesh(mesh, iterations=smooth)
 
 
@@ -320,17 +359,26 @@ def _build_chimerax_surface(design):
     ``surface.CHIMERAX_*``.  EXPENSIVE (one marching-cubes pass per strand) but voxel-capped."""
     import numpy as np
     from backend.core.surface import compute_split_surfaces_from_cloud, _nuc_key
+
     if _can_use_surface_cloud(design):
         from backend.core.atomistic import surface_atom_cloud
+
         pos, radii, sids, nucs = surface_atom_cloud(design)
     else:
         # Extra-base crossovers / flexible ssDNA / extension tails → exact Atom build (includes
         # every atom the cloud omits; the extra-base atoms carry their crossover's strand id).
         from backend.core.atomistic import build_atomistic_model, VDW_RADIUS
+
         model = build_atomistic_model(
-            design, nuc_frame_override=_flexible_display_override(design), fast_bridges=True)
+            design,
+            nuc_frame_override=_flexible_display_override(design),
+            fast_bridges=True,
+        )
         pos = np.array([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
-        radii = np.array([VDW_RADIUS.get(a.element, VDW_RADIUS["C"]) for a in model.atoms], dtype=float)
+        radii = np.array(
+            [VDW_RADIUS.get(a.element, VDW_RADIUS["C"]) for a in model.atoms],
+            dtype=float,
+        )
         sids = [a.strand_id or "" for a in model.atoms]
         nucs = [_nuc_key(a) for a in model.atoms]
     return compute_split_surfaces_from_cloud(pos, radii, sids, nuc_ids=nucs)

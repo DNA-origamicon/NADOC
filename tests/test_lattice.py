@@ -32,13 +32,13 @@ from backend.core.models import Direction, LatticeType, StrandType
 
 def test_cell_value_formula():
     """cell_value = (row + col) % 2 — parity only, no holes."""
-    assert honeycomb_cell_value(0, 0) == 0   # even parity → FORWARD
-    assert honeycomb_cell_value(0, 1) == 1   # odd  parity → REVERSE
-    assert honeycomb_cell_value(1, 0) == 1   # odd  parity → REVERSE
-    assert honeycomb_cell_value(1, 1) == 0   # even parity → FORWARD
-    assert honeycomb_cell_value(2, 0) == 0   # even parity → FORWARD (was hole)
-    assert honeycomb_cell_value(2, 1) == 1   # odd  parity → REVERSE
-    assert honeycomb_cell_value(2, 2) == 0   # even parity → FORWARD (was hole)
+    assert honeycomb_cell_value(0, 0) == 0  # even parity → FORWARD
+    assert honeycomb_cell_value(0, 1) == 1  # odd  parity → REVERSE
+    assert honeycomb_cell_value(1, 0) == 1  # odd  parity → REVERSE
+    assert honeycomb_cell_value(1, 1) == 0  # even parity → FORWARD
+    assert honeycomb_cell_value(2, 0) == 0  # even parity → FORWARD (was hole)
+    assert honeycomb_cell_value(2, 1) == 1  # odd  parity → REVERSE
+    assert honeycomb_cell_value(2, 2) == 0  # even parity → FORWARD (was hole)
 
 
 def test_all_cells_valid():
@@ -67,6 +67,7 @@ def test_scaffold_direction_odd_parity_is_reverse():
 def test_adjacent_valid_cells_are_antiparallel():
     """Every pair of cells at HELIX_SPACING distance have opposite directions."""
     from backend.core.constants import HONEYCOMB_HELIX_SPACING
+
     rows, cols = 8, 12
     violations = []
     for c in range(cols):
@@ -78,8 +79,13 @@ def test_adjacent_valid_cells_are_antiparallel():
                     if r2 < 0 or c2 < 0 or r2 >= rows or c2 >= cols:
                         continue
                     x2, y2 = honeycomb_position(r2, c2)
-                    if abs(math.hypot(x2 - x0, y2 - y0) - HONEYCOMB_HELIX_SPACING) < 0.02:
-                        if scaffold_direction_for_cell(r, c) == scaffold_direction_for_cell(r2, c2):
+                    if (
+                        abs(math.hypot(x2 - x0, y2 - y0) - HONEYCOMB_HELIX_SPACING)
+                        < 0.02
+                    ):
+                        if scaffold_direction_for_cell(
+                            r, c
+                        ) == scaffold_direction_for_cell(r2, c2):
                             violations.append(((r, c), (r2, c2)))
     assert violations == []
 
@@ -206,30 +212,34 @@ def test_bundle_phase_offset_forward():
     """FORWARD helices get phase_offset=90°+½·twist (cadnano base + HJ correction)."""
     design = make_bundle_design([(0, 0)], length_bp=21)  # (0,0) → even parity → FORWARD
     h = design.helices[0]
-    assert h.phase_offset == pytest.approx(math.radians(90.0 + BDNA_TWIST_PER_BP_DEG / 2))
+    assert h.phase_offset == pytest.approx(
+        math.radians(90.0 + BDNA_TWIST_PER_BP_DEG / 2)
+    )
 
 
 def test_bundle_phase_offset_reverse():
     """REVERSE helices get phase_offset=60°+½·twist (cadnano base + HJ correction)."""
     design = make_bundle_design([(1, 0)], length_bp=21)  # (1,0) → odd parity → REVERSE
     h = design.helices[0]
-    assert h.phase_offset == pytest.approx(math.radians(60.0 + BDNA_TWIST_PER_BP_DEG / 2))
+    assert h.phase_offset == pytest.approx(
+        math.radians(60.0 + BDNA_TWIST_PER_BP_DEG / 2)
+    )
 
 
 def test_bundle_one_scaffold_one_staple_per_helix():
     """Each helix contributes exactly one scaffold and one staple strand."""
     design = make_bundle_design([(0, 0), (0, 1)], length_bp=21)
     scaffolds = [s for s in design.strands if s.strand_type == StrandType.SCAFFOLD]
-    staples   = [s for s in design.strands if s.strand_type == StrandType.STAPLE]
+    staples = [s for s in design.strands if s.strand_type == StrandType.STAPLE]
     assert len(scaffolds) == 2
-    assert len(staples)   == 2
+    assert len(staples) == 2
 
 
 def test_bundle_staple_direction_opposite_scaffold():
     """Placeholder staple runs in the direction opposite to the scaffold."""
     for cell in [(0, 0), (0, 1), (1, 0)]:
         design = make_bundle_design([cell], length_bp=21)
-        scaf  = next(s for s in design.strands if s.strand_type == StrandType.SCAFFOLD)
+        scaf = next(s for s in design.strands if s.strand_type == StrandType.SCAFFOLD)
         stapl = next(s for s in design.strands if s.strand_type == StrandType.STAPLE)
         assert scaf.domains[0].direction != stapl.domains[0].direction
 
@@ -257,7 +267,9 @@ def test_bundle_reverse_strand_at_value_one():
 def test_bundle_direction_r2c1():
     """Cell (2,1): parity (2+1)%2=1 → odd → REVERSE scaffold."""
     design = make_bundle_design([(2, 1)], length_bp=21)
-    domain = next(s for s in design.strands if s.strand_type == StrandType.SCAFFOLD).domains[0]
+    domain = next(
+        s for s in design.strands if s.strand_type == StrandType.SCAFFOLD
+    ).domains[0]
     assert domain.direction == Direction.REVERSE
 
 
@@ -281,7 +293,7 @@ def test_default_plane_is_xy():
     expected_z = 42 * BDNA_RISE_PER_BP
     # axis_start.z == 0, axis_end.z == length_nm
     assert h.axis_start.z == pytest.approx(0.0)
-    assert h.axis_end.z   == pytest.approx(expected_z)
+    assert h.axis_end.z == pytest.approx(expected_z)
     # x and y are non-zero (from honeycomb_position), not the helix direction
     assert h.axis_start.x == h.axis_end.x
     assert h.axis_start.y == h.axis_end.y
@@ -295,7 +307,7 @@ def test_plane_xy_explicit():
     assert h1.axis_start.x == pytest.approx(h2.axis_start.x)
     assert h1.axis_start.y == pytest.approx(h2.axis_start.y)
     assert h1.axis_start.z == pytest.approx(h2.axis_start.z)
-    assert h1.axis_end.z   == pytest.approx(h2.axis_end.z)
+    assert h1.axis_end.z == pytest.approx(h2.axis_end.z)
 
 
 def test_plane_xz_helix_along_y():
@@ -305,7 +317,7 @@ def test_plane_xz_helix_along_y():
     h = design.helices[0]
     expected_len = length_bp * BDNA_RISE_PER_BP
     assert h.axis_start.y == pytest.approx(0.0)
-    assert h.axis_end.y   == pytest.approx(expected_len)
+    assert h.axis_end.y == pytest.approx(expected_len)
     # x and z are fixed (lattice coords), not the helix direction
     assert h.axis_start.x == pytest.approx(h.axis_end.x)
     assert h.axis_start.z == pytest.approx(h.axis_end.z)
@@ -318,7 +330,7 @@ def test_plane_yz_helix_along_x():
     h = design.helices[0]
     expected_len = length_bp * BDNA_RISE_PER_BP
     assert h.axis_start.x == pytest.approx(0.0)
-    assert h.axis_end.x   == pytest.approx(expected_len)
+    assert h.axis_end.x == pytest.approx(expected_len)
     # y and z are fixed (lattice coords), not the helix direction
     assert h.axis_start.y == pytest.approx(h.axis_end.y)
     assert h.axis_start.z == pytest.approx(h.axis_end.z)
@@ -350,7 +362,7 @@ def test_bundle_with_offset_nm():
     h = design.helices[0]
     expected_end = offset + 42 * BDNA_RISE_PER_BP
     assert h.axis_start.z == pytest.approx(offset)
-    assert h.axis_end.z   == pytest.approx(expected_end)
+    assert h.axis_end.z == pytest.approx(expected_end)
 
 
 def test_bundle_with_offset_xz_plane():
@@ -359,7 +371,7 @@ def test_bundle_with_offset_xz_plane():
     design = make_bundle_design([(0, 0)], length_bp=21, plane="XZ", offset_nm=offset)
     h = design.helices[0]
     assert h.axis_start.y == pytest.approx(offset)
-    assert h.axis_end.y   == pytest.approx(offset + 21 * BDNA_RISE_PER_BP)
+    assert h.axis_end.y == pytest.approx(offset + 21 * BDNA_RISE_PER_BP)
 
 
 def test_bundle_negative_length_xy():
@@ -369,7 +381,7 @@ def test_bundle_negative_length_xy():
     h = design.helices[0]
     assert h.length_bp == 42
     assert h.axis_start.z == pytest.approx(-42 * BDNA_RISE_PER_BP)
-    assert h.axis_end.z   == pytest.approx(0.0)
+    assert h.axis_end.z == pytest.approx(0.0)
 
 
 def test_bundle_negative_length_offset():
@@ -379,7 +391,7 @@ def test_bundle_negative_length_offset():
     h = design.helices[0]
     assert h.length_bp == 21
     assert h.axis_start.z == pytest.approx(offset - 21 * BDNA_RISE_PER_BP)
-    assert h.axis_end.z   == pytest.approx(offset)
+    assert h.axis_end.z == pytest.approx(offset)
 
 
 def test_bundle_negative_length_zero_raises():
@@ -393,10 +405,10 @@ def test_bundle_strand_bp_uses_actual_length():
     helix in [-L, 0], so the global bp range runs [-L, -1] (still 42 bp wide)."""
     design = make_bundle_design([(0, 0)], length_bp=-42, plane="XY")
     scaf = next(s for s in design.strands if s.strand_type == StrandType.SCAFFOLD)
-    dom  = scaf.domains[0]
+    dom = scaf.domains[0]
     # Cell (0,0) is FORWARD; helix sits below the plane → bp_start=-42.
     assert dom.start_bp == -42
-    assert dom.end_bp   == -1
+    assert dom.end_bp == -1
     assert dom.end_bp - dom.start_bp + 1 == 42
 
 
@@ -407,9 +419,11 @@ def test_bundle_segment_appends_helices():
     """make_bundle_segment adds new helices to an existing design."""
     base = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
     offset = 42 * BDNA_RISE_PER_BP
-    result = make_bundle_segment(base, [(0, 0)], length_bp=42, plane="XY", offset_nm=offset)
+    result = make_bundle_segment(
+        base, [(0, 0)], length_bp=42, plane="XY", offset_nm=offset
+    )
     assert len(result.helices) == 2
-    assert len(result.strands) == 4   # 2 scaffold + 2 staple
+    assert len(result.strands) == 4  # 2 scaffold + 2 staple
 
 
 def test_bundle_segment_from_empty_design_builds_full_bundle():
@@ -442,25 +456,25 @@ def test_bundle_segment_unique_ids():
 
 def test_bundle_segment_correct_offset():
     """Segment helix axis_start matches the supplied offset_nm."""
-    base   = make_bundle_design([(0, 0)], length_bp=42)
+    base = make_bundle_design([(0, 0)], length_bp=42)
     offset = 42 * BDNA_RISE_PER_BP
     result = make_bundle_segment(base, [(0, 0)], length_bp=21, offset_nm=offset)
     new_helix = result.helices[-1]
     assert new_helix.axis_start.z == pytest.approx(offset)
-    assert new_helix.axis_end.z   == pytest.approx(offset + 21 * BDNA_RISE_PER_BP)
+    assert new_helix.axis_end.z == pytest.approx(offset + 21 * BDNA_RISE_PER_BP)
 
 
 def test_bundle_segment_multiple_cells():
     """Segment with multiple cells generates one helix per cell."""
-    base   = make_bundle_design([(0, 0), (0, 1)], length_bp=42)
+    base = make_bundle_design([(0, 0), (0, 1)], length_bp=42)
     offset = 42 * BDNA_RISE_PER_BP
     result = make_bundle_segment(base, [(0, 0), (0, 1)], length_bp=21, offset_nm=offset)
-    assert len(result.helices) == 4   # 2 base + 2 new
+    assert len(result.helices) == 4  # 2 base + 2 new
 
 
 def test_bundle_segment_preserves_existing_helices():
     """Existing helices and strands are untouched."""
-    base   = make_bundle_design([(0, 0)], length_bp=42)
+    base = make_bundle_design([(0, 0)], length_bp=42)
     offset = 42 * BDNA_RISE_PER_BP
     result = make_bundle_segment(base, [(0, 0)], length_bp=21, offset_nm=offset)
     assert result.helices[0].id == base.helices[0].id
@@ -470,13 +484,15 @@ def test_bundle_segment_preserves_existing_helices():
 def test_bundle_segment_negative_length():
     """Negative length_bp: new segment sits below the plane as a canonical helix
     (spans [offset-L, offset], axis_start.z < axis_end.z=offset)."""
-    base   = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
+    base = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
     offset = 0.0
-    result = make_bundle_segment(base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset)
+    result = make_bundle_segment(
+        base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset
+    )
     new_helix = next(h for h in result.helices if h.id != base.helices[0].id)
     assert new_helix.length_bp == 21
     assert new_helix.axis_start.z == pytest.approx(offset - 21 * BDNA_RISE_PER_BP)
-    assert new_helix.axis_end.z   == pytest.approx(offset)
+    assert new_helix.axis_end.z == pytest.approx(offset)
 
 
 # ── make_bundle_continuation ───────────────────────────────────────────────────
@@ -485,7 +501,7 @@ def test_bundle_segment_negative_length():
 def test_continuation_fresh_cell_creates_new_strands():
     """A cell with no helix ending at offset creates new scaffold + staple (same as segment)."""
     # Blank design — no existing helices for cell (0,0)
-    base   = make_bundle_design([(0, 1)], length_bp=42)   # different cell
+    base = make_bundle_design([(0, 1)], length_bp=42)  # different cell
     offset = 0.0
     result = make_bundle_continuation(base, [(0, 0)], length_bp=21, offset_nm=offset)
     # New helix added
@@ -496,9 +512,11 @@ def test_continuation_fresh_cell_creates_new_strands():
 
 def test_continuation_extends_existing_strands():
     """A cell whose helix ends at offset appends a domain to existing strands."""
-    base   = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
-    offset = 42 * BDNA_RISE_PER_BP   # axis_end.z of base helix
-    result = make_bundle_continuation(base, [(0, 0)], length_bp=21, plane="XY", offset_nm=offset)
+    base = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
+    offset = 42 * BDNA_RISE_PER_BP  # axis_end.z of base helix
+    result = make_bundle_continuation(
+        base, [(0, 0)], length_bp=21, plane="XY", offset_nm=offset
+    )
     # One new helix
     assert len(result.helices) == 2
     # Strand count unchanged — domains were appended to existing strands
@@ -510,34 +528,43 @@ def test_continuation_extends_existing_strands():
 
 def test_continuation_new_helix_placed_at_offset():
     """The continuation helix starts at offset_nm and extends by length_bp."""
-    base   = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
+    base = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
     offset = 42 * BDNA_RISE_PER_BP
-    result = make_bundle_continuation(base, [(0, 0)], length_bp=21, plane="XY", offset_nm=offset)
+    result = make_bundle_continuation(
+        base, [(0, 0)], length_bp=21, plane="XY", offset_nm=offset
+    )
     new_helix = result.helices[-1]
     assert new_helix.axis_start.z == pytest.approx(offset)
-    assert new_helix.axis_end.z   == pytest.approx(offset + 21 * BDNA_RISE_PER_BP)
+    assert new_helix.axis_end.z == pytest.approx(offset + 21 * BDNA_RISE_PER_BP)
 
 
 def test_continuation_domain_direction_preserved():
     """The appended domain has the same direction as the original domain."""
     from backend.core.models import Direction
-    base   = make_bundle_design([(0, 0)], length_bp=42, plane="XY")  # (0,0) → FORWARD scaffold
+
+    base = make_bundle_design(
+        [(0, 0)], length_bp=42, plane="XY"
+    )  # (0,0) → FORWARD scaffold
     offset = 42 * BDNA_RISE_PER_BP
-    result = make_bundle_continuation(base, [(0, 0)], length_bp=21, plane="XY", offset_nm=offset)
+    result = make_bundle_continuation(
+        base, [(0, 0)], length_bp=21, plane="XY", offset_nm=offset
+    )
     # scaffold strand at (0,0) is FORWARD; its new domain should also be FORWARD
     scaf = next(s for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
     assert scaf.domains[1].direction == Direction.FORWARD
     # With global bp indexing, the new segment at offset_nm=42*rise has bp_start=42
-    assert scaf.domains[1].start_bp  == 42
-    assert scaf.domains[1].end_bp    == 62
+    assert scaf.domains[1].start_bp == 42
+    assert scaf.domains[1].end_bp == 62
 
 
 def test_continuation_mixed_fresh_and_continuation():
     """A mix of continuation + fresh cells is handled correctly in one call."""
-    base   = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
+    base = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
     offset = 42 * BDNA_RISE_PER_BP
     # (0,0) has a helix ending at offset → continuation; (0,1) is fresh
-    result = make_bundle_continuation(base, [(0, 0), (0, 1)], length_bp=21, plane="XY", offset_nm=offset)
+    result = make_bundle_continuation(
+        base, [(0, 0), (0, 1)], length_bp=21, plane="XY", offset_nm=offset
+    )
     # 3 helices: original + continuation + fresh
     assert len(result.helices) == 3
     # 2 original strands (extended) + 2 new strands for fresh cell (0,1)
@@ -552,25 +579,35 @@ def test_continuation_mixed_fresh_and_continuation():
 def test_continuation_negative_length_fresh_cell():
     """Negative length_bp on a fresh cell: new helix sits below the plane (canonical,
     spans [offset-L, offset])."""
-    base   = make_bundle_design([(0, 1)], length_bp=42, plane="XY")   # different cell
+    base = make_bundle_design([(0, 1)], length_bp=42, plane="XY")  # different cell
     offset = 0.0
-    result = make_bundle_continuation(base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset)
-    new_helix = next(h for h in result.helices if h.id not in {h2.id for h2 in base.helices})
+    result = make_bundle_continuation(
+        base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset
+    )
+    new_helix = next(
+        h for h in result.helices if h.id not in {h2.id for h2 in base.helices}
+    )
     assert new_helix.length_bp == 21
     assert new_helix.axis_start.z == pytest.approx(offset - 21 * BDNA_RISE_PER_BP)
-    assert new_helix.axis_end.z   == pytest.approx(offset)
+    assert new_helix.axis_end.z == pytest.approx(offset)
 
 
 def test_continuation_negative_length_forward():
     """Negative length_bp at a forward continuation point: new helix is canonical and
     sits below the offset plane (spans [offset-L, offset])."""
-    base   = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
-    offset = 42 * BDNA_RISE_PER_BP   # axis_end.z of base helix (forward continuation point)
-    result = make_bundle_continuation(base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset)
-    new_helix = next(h for h in result.helices if h.id not in {h2.id for h2 in base.helices})
+    base = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
+    offset = (
+        42 * BDNA_RISE_PER_BP
+    )  # axis_end.z of base helix (forward continuation point)
+    result = make_bundle_continuation(
+        base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset
+    )
+    new_helix = next(
+        h for h in result.helices if h.id not in {h2.id for h2 in base.helices}
+    )
     assert new_helix.length_bp == 21
     assert new_helix.axis_start.z == pytest.approx(offset - 21 * BDNA_RISE_PER_BP)
-    assert new_helix.axis_end.z   == pytest.approx(offset)
+    assert new_helix.axis_end.z == pytest.approx(offset)
 
 
 def test_continuation_near_end_anchored_at_axis_start_extends_backward():
@@ -580,20 +617,24 @@ def test_continuation_near_end_anchored_at_axis_start_extends_backward():
 
     This is what the frontend fix sends (anchor on axis_start, not axis_start-rise).
     """
-    base   = make_bundle_design([(0, 0)], length_bp=42, plane="XY")  # bp_start=0, axis_start.z=0
-    offset = 0.0                                                       # = base helix axis_start.z
-    result = make_bundle_continuation(base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset)
+    base = make_bundle_design(
+        [(0, 0)], length_bp=42, plane="XY"
+    )  # bp_start=0, axis_start.z=0
+    offset = 0.0  # = base helix axis_start.z
+    result = make_bundle_continuation(
+        base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset
+    )
     # Backward in-place growth — same helix id, no extra helix.
     assert len(result.helices) == 1
     h = result.helices[0]
     assert h.bp_start == -21
     assert h.length_bp == 63
     assert h.axis_start.z == pytest.approx(-21 * BDNA_RISE_PER_BP)
-    assert h.axis_end.z   == pytest.approx(42 * BDNA_RISE_PER_BP)
+    assert h.axis_end.z == pytest.approx(42 * BDNA_RISE_PER_BP)
     # The new bps [-21, -1] merge into the existing FORWARD scaffold domain [0, 41],
     # giving one contiguous, ligated domain [-21, 41] (no gap, no overlap, no off-by-one).
     scaf = next(s for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
-    bps  = [(d.start_bp, d.end_bp) for d in scaf.domains]
+    bps = [(d.start_bp, d.end_bp) for d in scaf.domains]
     assert (-21, 41) in bps
 
 
@@ -602,10 +643,16 @@ def test_continuation_near_end_off_by_one_offset_does_not_continue():
     position for a near end) does NOT reach the backward branch — it spawns a separate
     helix instead of ligating. Documents exactly the bug the frontend anchor fix avoids;
     if this ever yields 1 helix, the off-by-one has been reintroduced upstream."""
-    base   = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
-    offset = -1 * BDNA_RISE_PER_BP   # one rise below axis_start (the buggy near disk position)
-    result = make_bundle_continuation(base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset)
-    assert len(result.helices) == 2   # separate (shifted/overlapping) helix — NOT a clean continuation
+    base = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
+    offset = (
+        -1 * BDNA_RISE_PER_BP
+    )  # one rise below axis_start (the buggy near disk position)
+    result = make_bundle_continuation(
+        base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset
+    )
+    assert (
+        len(result.helices) == 2
+    )  # separate (shifted/overlapping) helix — NOT a clean continuation
 
 
 def test_ligate_new_strand_adopts_existing_strand_color_and_id():
@@ -615,23 +662,40 @@ def test_ligate_new_strand_adopts_existing_strand_color_and_id():
     from backend.core.lattice import _ligate_and_merge
     from backend.core.models import Strand, Domain
 
-    base = make_bundle_design([(0, 0)], length_bp=42, plane="XY")  # valid helix h_XY_0_0 [0,41]
-    h    = base.helices[0].id
+    base = make_bundle_design(
+        [(0, 0)], length_bp=42, plane="XY"
+    )  # valid helix h_XY_0_0 [0,41]
+    h = base.helices[0].id
     # new = 5'-part [0,20]; existing = 3'-part [21,41] with an explicit colour, placed FIRST.
-    new = Strand(id="stpl_new", strand_type=StrandType.STAPLE,
-                 domains=[Domain(helix_id=h, start_bp=0, end_bp=20, direction=Direction.FORWARD)])
-    existing = Strand(id="stpl_existing", strand_type=StrandType.STAPLE, color="#abcdef",
-                      domains=[Domain(helix_id=h, start_bp=21, end_bp=41, direction=Direction.FORWARD)])
+    new = Strand(
+        id="stpl_new",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id=h, start_bp=0, end_bp=20, direction=Direction.FORWARD)
+        ],
+    )
+    existing = Strand(
+        id="stpl_existing",
+        strand_type=StrandType.STAPLE,
+        color="#abcdef",
+        domains=[
+            Domain(helix_id=h, start_bp=21, end_bp=41, direction=Direction.FORWARD)
+        ],
+    )
     design = base.model_copy(update={"strands": [existing, new]})
 
     # 3' ligation: new (s1, 5') + existing (s2, 3'); keep the existing identity.
     out = _ligate_and_merge(design, new, existing, keep=existing)
     ids = [s.id for s in out.strands]
-    assert ids == ["stpl_existing"]                 # existing id survives at its position; new absorbed
+    assert ids == [
+        "stpl_existing"
+    ]  # existing id survives at its position; new absorbed
     merged = out.strands[0]
-    assert merged.color == "#abcdef"                # existing colour preserved
-    assert merged.domains[0].start_bp == 0          # domain order is new→existing, merged to [0,41]
-    assert merged.domains[-1].end_bp  == 41
+    assert merged.color == "#abcdef"  # existing colour preserved
+    assert (
+        merged.domains[0].start_bp == 0
+    )  # domain order is new→existing, merged to [0,41]
+    assert merged.domains[-1].end_bp == 41
 
     # Without keep, the default keeps s1 (the NEW strand) — documents the old behaviour.
     out_default = _ligate_and_merge(design, new, existing)
@@ -642,15 +706,34 @@ def _gapped_helix_design():
     """A single helix [0,209] covered by three scaffold+staple intervals
     [0,41], [84,125], [168,209] (the teeth tooth pattern)."""
     from backend.core.models import Strand, Domain
+
     base = make_bundle_design([(0, 0)], length_bp=210, plane="XY")
     h = base.helices[0].id
     strands = []
     for i, (lo, hi) in enumerate([(0, 41), (84, 125), (168, 209)]):
-        suf = "" if i == 0 else f"_{i-1}"
-        strands.append(Strand(id=f"scaf_XY_0_0{suf}", strand_type=StrandType.SCAFFOLD,
-                              domains=[Domain(helix_id=h, start_bp=lo, end_bp=hi, direction=Direction.FORWARD)]))
-        strands.append(Strand(id=f"stpl_XY_0_0{suf}", strand_type=StrandType.STAPLE,
-                              domains=[Domain(helix_id=h, start_bp=hi, end_bp=lo, direction=Direction.REVERSE)]))
+        suf = "" if i == 0 else f"_{i - 1}"
+        strands.append(
+            Strand(
+                id=f"scaf_XY_0_0{suf}",
+                strand_type=StrandType.SCAFFOLD,
+                domains=[
+                    Domain(
+                        helix_id=h, start_bp=lo, end_bp=hi, direction=Direction.FORWARD
+                    )
+                ],
+            )
+        )
+        strands.append(
+            Strand(
+                id=f"stpl_XY_0_0{suf}",
+                strand_type=StrandType.STAPLE,
+                domains=[
+                    Domain(
+                        helix_id=h, start_bp=hi, end_bp=lo, direction=Direction.REVERSE
+                    )
+                ],
+            )
+        )
     return base.model_copy(update={"strands": strands})
 
 
@@ -659,7 +742,10 @@ def _scaf_intervals(design):
     out = {}
     for s in design.strands:
         if s.strand_type == StrandType.SCAFFOLD:
-            out[s.id] = sorted((min(d.start_bp, d.end_bp), max(d.start_bp, d.end_bp)) for d in s.domains)
+            out[s.id] = sorted(
+                (min(d.start_bp, d.end_bp), max(d.start_bp, d.end_bp))
+                for d in s.domains
+            )
     return out
 
 
@@ -667,26 +753,33 @@ def test_continuation_gapped_helix_near_extends_only_bp0_interval():
     """A near-end (offset 0, -L) continuation on a gapped helix extends ONLY the
     interval touching bp 0; the [84,125] and [168,209] intervals must stay put
     (regression for the spurious near↔far strands seen in teeth.nadoc)."""
-    out = make_bundle_continuation(_gapped_helix_design(), [(0, 0)], length_bp=-42, plane="XY", offset_nm=0.0)
+    out = make_bundle_continuation(
+        _gapped_helix_design(), [(0, 0)], length_bp=-42, plane="XY", offset_nm=0.0
+    )
     iv = _scaf_intervals(out)
-    assert iv["scaf_XY_0_0"]   == [(-42, 41)]      # bp-0 interval grew backward
-    assert iv["scaf_XY_0_0_0"] == [(84, 125)]      # untouched
-    assert iv["scaf_XY_0_0_1"] == [(168, 209)]     # untouched
+    assert iv["scaf_XY_0_0"] == [(-42, 41)]  # bp-0 interval grew backward
+    assert iv["scaf_XY_0_0_0"] == [(84, 125)]  # untouched
+    assert iv["scaf_XY_0_0_1"] == [(168, 209)]  # untouched
     # No scaffold may bridge the new near bps to a far interval.
     for ranges in iv.values():
         has_near = any(lo < 0 for lo, hi in ranges)
-        has_far  = any(hi >= 84 for lo, hi in ranges)
+        has_far = any(hi >= 84 for lo, hi in ranges)
         assert not (has_near and has_far), f"near↔far bridge: {ranges}"
 
 
 def test_continuation_gapped_helix_far_extends_only_far_interval():
     """A far-end (+L) continuation on a gapped helix extends ONLY the far interval."""
-    out = make_bundle_continuation(_gapped_helix_design(), [(0, 0)], length_bp=42, plane="XY",
-                                   offset_nm=210 * BDNA_RISE_PER_BP)
+    out = make_bundle_continuation(
+        _gapped_helix_design(),
+        [(0, 0)],
+        length_bp=42,
+        plane="XY",
+        offset_nm=210 * BDNA_RISE_PER_BP,
+    )
     iv = _scaf_intervals(out)
-    assert iv["scaf_XY_0_0"]   == [(0, 41)]        # untouched
-    assert iv["scaf_XY_0_0_0"] == [(84, 125)]      # untouched
-    assert iv["scaf_XY_0_0_1"] == [(168, 209), (210, 251)]   # far interval grew forward
+    assert iv["scaf_XY_0_0"] == [(0, 41)]  # untouched
+    assert iv["scaf_XY_0_0_0"] == [(84, 125)]  # untouched
+    assert iv["scaf_XY_0_0_1"] == [(168, 209), (210, 251)]  # far interval grew forward
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -709,15 +802,20 @@ def test_resize_strand_ends_extend_3p_within_helix():
     design, staple = _make_simple_design()
     # Find a strand that has only one domain so we can predict the result easily
     single_domain_staple = next(
-        (s for s in design.strands
-         if s.strand_type.value == "staple" and len(s.domains) == 1),
+        (
+            s
+            for s in design.strands
+            if s.strand_type.value == "staple" and len(s.domains) == 1
+        ),
         None,
     )
     # If no single-domain staple, just use any staple
     if single_domain_staple is None:
         single_domain_staple = staple
 
-    helix = next(h for h in design.helices if h.id == single_domain_staple.domains[-1].helix_id)
+    helix = next(
+        h for h in design.helices if h.id == single_domain_staple.domains[-1].helix_id
+    )
     term_dom = single_domain_staple.domains[-1]
 
     # Only extend if there is room
@@ -726,15 +824,20 @@ def test_resize_strand_ends_extend_3p_within_helix():
         pytest.skip("no room to extend within helix bounds in this design")
 
     original_end_bp = term_dom.end_bp
-    result = resize_strand_ends(design, [{
-        "strand_id": single_domain_staple.id,
-        "helix_id":  helix.id,
-        "end":       "3p",
-        "delta_bp":  3,
-    }])
+    result = resize_strand_ends(
+        design,
+        [
+            {
+                "strand_id": single_domain_staple.id,
+                "helix_id": helix.id,
+                "end": "3p",
+                "delta_bp": 3,
+            }
+        ],
+    )
 
     updated_strand = next(s for s in result.strands if s.id == single_domain_staple.id)
-    updated_helix  = next(h for h in result.helices if h.id == helix.id)
+    updated_helix = next(h for h in result.helices if h.id == helix.id)
 
     assert updated_strand.domains[-1].end_bp == original_end_bp + 3
     # Helix unchanged when extension is within bounds
@@ -748,7 +851,8 @@ def test_resize_strand_ends_grow_helix_forward():
     # Pick a staple on the first helix
     helix = design.helices[0]
     staple = next(
-        s for s in design.strands
+        s
+        for s in design.strands
         if s.strand_type.value == "staple"
         and any(d.helix_id == helix.id for d in s.domains)
         and s.domains[-1].helix_id == helix.id
@@ -757,17 +861,22 @@ def test_resize_strand_ends_grow_helix_forward():
     helix_end_bp = helix.bp_start + helix.length_bp - 1
 
     # Force delta such that new_bp > helix_end_bp
-    delta = (helix_end_bp - term_dom.end_bp) + 5   # 5 bp past the helix end
+    delta = (helix_end_bp - term_dom.end_bp) + 5  # 5 bp past the helix end
 
-    result = resize_strand_ends(design, [{
-        "strand_id": staple.id,
-        "helix_id":  helix.id,
-        "end":       "3p",
-        "delta_bp":  delta,
-    }])
+    result = resize_strand_ends(
+        design,
+        [
+            {
+                "strand_id": staple.id,
+                "helix_id": helix.id,
+                "end": "3p",
+                "delta_bp": delta,
+            }
+        ],
+    )
 
     updated_strand = next(s for s in result.strands if s.id == staple.id)
-    updated_helix  = next(h for h in result.helices if h.id == helix.id)
+    updated_helix = next(h for h in result.helices if h.id == helix.id)
 
     expected_new_end_bp = term_dom.end_bp + delta
     assert updated_strand.domains[-1].end_bp == expected_new_end_bp
@@ -778,6 +887,7 @@ def test_resize_strand_ends_grow_helix_forward():
     # (delta - 1) * RISE relative to the original axis_end (which under the
     # native build convention sat one bp past the old last).
     import math
+
     new_last_bp = updated_helix.bp_start + updated_helix.length_bp - 1
     expected_axis_end_z = updated_helix.axis_start.z + new_last_bp * BDNA_RISE_PER_BP
     assert math.isclose(updated_helix.axis_end.z, expected_axis_end_z, abs_tol=1e-6)
@@ -788,9 +898,12 @@ def test_resize_strand_ends_trim_3p():
     design, _ = _make_simple_design()
     # Choose any staple whose terminal domain has length ≥ 3 bp
     staple = next(
-        (s for s in design.strands
-         if s.strand_type.value == "staple"
-         and abs(s.domains[-1].end_bp - s.domains[-1].start_bp) + 1 >= 3),
+        (
+            s
+            for s in design.strands
+            if s.strand_type.value == "staple"
+            and abs(s.domains[-1].end_bp - s.domains[-1].start_bp) + 1 >= 3
+        ),
         None,
     )
     if staple is None:
@@ -799,12 +912,17 @@ def test_resize_strand_ends_trim_3p():
     helix = next(h for h in design.helices if h.id == staple.domains[-1].helix_id)
     original_end_bp = staple.domains[-1].end_bp
 
-    result = resize_strand_ends(design, [{
-        "strand_id": staple.id,
-        "helix_id":  helix.id,
-        "end":       "3p",
-        "delta_bp":  -2,
-    }])
+    result = resize_strand_ends(
+        design,
+        [
+            {
+                "strand_id": staple.id,
+                "helix_id": helix.id,
+                "end": "3p",
+                "delta_bp": -2,
+            }
+        ],
+    )
 
     updated_strand = next(s for s in result.strands if s.id == staple.id)
     assert updated_strand.domains[-1].end_bp == original_end_bp - 2
@@ -820,7 +938,16 @@ def _make_single_helix_scaffolded():
     require growing the helix axis.
     """
     import math as _math
-    from backend.core.models import Design, Helix, Strand, Domain, StrandType, Direction, Vec3
+    from backend.core.models import (
+        Design,
+        Helix,
+        Strand,
+        Domain,
+        StrandType,
+        Direction,
+        Vec3,
+    )
+
     helix = Helix(
         id="h0",
         axis_start=Vec3(x=0, y=0, z=0),
@@ -833,12 +960,16 @@ def _make_single_helix_scaffolded():
     scaffold = Strand(
         id="scaf",
         strand_type=StrandType.SCAFFOLD,
-        domains=[Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)
+        ],
     )
     staple = Strand(
         id="stap",
         strand_type=StrandType.STAPLE,
-        domains=[Domain(helix_id="h0", start_bp=5, end_bp=35, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=5, end_bp=35, direction=Direction.FORWARD)
+        ],
     )
     return Design(helices=[helix], strands=[scaffold, staple])
 
@@ -846,62 +977,75 @@ def _make_single_helix_scaffolded():
 def test_resize_inline_overhang_created_on_3p_extension():
     """Extending a 3' end past scaffold coverage splits the domain and adds an OverhangSpec."""
     design = _make_single_helix_scaffolded()
-    result = resize_strand_ends(design, [{
-        "strand_id": "stap",
-        "helix_id":  "h0",
-        "end":       "3p",
-        "delta_bp":  +10,   # end_bp: 35 → 45; scaffold ends at 41 → 4 bp overhang
-    }])
+    result = resize_strand_ends(
+        design,
+        [
+            {
+                "strand_id": "stap",
+                "helix_id": "h0",
+                "end": "3p",
+                "delta_bp": +10,  # end_bp: 35 → 45; scaffold ends at 41 → 4 bp overhang
+            }
+        ],
+    )
 
     staple = next(s for s in result.strands if s.id == "stap")
     # Domain was split: scaffold portion + overhang portion
     assert len(staple.domains) == 2, "domain should be split into scaffold + overhang"
     scaf_dom, ovhg_dom = staple.domains
-    assert scaf_dom.end_bp       == 41,  "scaffold portion ends at scaffold boundary"
-    assert scaf_dom.overhang_id  is None
-    assert ovhg_dom.start_bp     == 42,  "overhang portion starts just past scaffold"
-    assert ovhg_dom.end_bp       == 45
-    assert ovhg_dom.overhang_id  is not None
+    assert scaf_dom.end_bp == 41, "scaffold portion ends at scaffold boundary"
+    assert scaf_dom.overhang_id is None
+    assert ovhg_dom.start_bp == 42, "overhang portion starts just past scaffold"
+    assert ovhg_dom.end_bp == 45
+    assert ovhg_dom.overhang_id is not None
     # OverhangSpec added
     assert len(result.overhangs) == 1
     spec = result.overhangs[0]
-    assert spec.helix_id  == "h0"
+    assert spec.helix_id == "h0"
     assert spec.strand_id == "stap"
-    assert spec.id        == ovhg_dom.overhang_id
+    assert spec.id == ovhg_dom.overhang_id
 
 
 def test_resize_inline_overhang_grows_on_second_extension():
     """A second extension from an already-overhanging state extends the overhang domain."""
     design = _make_single_helix_scaffolded()
     # First drag: extend 3' by 10
-    d1 = resize_strand_ends(design, [{"strand_id": "stap", "helix_id": "h0",
-                                       "end": "3p", "delta_bp": +10}])
+    d1 = resize_strand_ends(
+        design, [{"strand_id": "stap", "helix_id": "h0", "end": "3p", "delta_bp": +10}]
+    )
     # Second drag: extend by 3 more (end_bp 45 → 48)
-    d2 = resize_strand_ends(d1, [{"strand_id": "stap", "helix_id": "h0",
-                                   "end": "3p", "delta_bp": +3}])
+    d2 = resize_strand_ends(
+        d1, [{"strand_id": "stap", "helix_id": "h0", "end": "3p", "delta_bp": +3}]
+    )
 
     staple = next(s for s in d2.strands if s.id == "stap")
     assert len(staple.domains) == 2
     ovhg_dom = staple.domains[-1]
-    assert ovhg_dom.end_bp       == 48,  "overhang extended to bp 48"
-    assert ovhg_dom.overhang_id  is not None
-    assert len(d2.overhangs)     == 1
+    assert ovhg_dom.end_bp == 48, "overhang extended to bp 48"
+    assert ovhg_dom.overhang_id is not None
+    assert len(d2.overhangs) == 1
 
 
 def test_resize_inline_overhang_preserves_rotation_on_second_extension():
     """Dragging an already rotated inline overhang end must not reset orientation."""
     design = _make_single_helix_scaffolded()
-    d1 = resize_strand_ends(design, [{"strand_id": "stap", "helix_id": "h0",
-                                      "end": "3p", "delta_bp": +10}])
-    rotation = [0.0, _math.sin(_math.radians(22.5)), 0.0, _math.cos(_math.radians(22.5))]
+    d1 = resize_strand_ends(
+        design, [{"strand_id": "stap", "helix_id": "h0", "end": "3p", "delta_bp": +10}]
+    )
+    rotation = [
+        0.0,
+        _math.sin(_math.radians(22.5)),
+        0.0,
+        _math.cos(_math.radians(22.5)),
+    ]
     rotated_overhangs = [
-        ovhg.model_copy(update={"rotation": rotation})
-        for ovhg in d1.overhangs
+        ovhg.model_copy(update={"rotation": rotation}) for ovhg in d1.overhangs
     ]
     d1 = d1.model_copy(update={"overhangs": rotated_overhangs})
 
-    d2 = resize_strand_ends(d1, [{"strand_id": "stap", "helix_id": "h0",
-                                  "end": "3p", "delta_bp": +3}])
+    d2 = resize_strand_ends(
+        d1, [{"strand_id": "stap", "helix_id": "h0", "end": "3p", "delta_bp": +3}]
+    )
 
     assert len(d2.overhangs) == 1
     assert d2.overhangs[0].rotation == pytest.approx(rotation)
@@ -911,19 +1055,21 @@ def test_resize_inline_overhang_removed_when_trimmed_back():
     """Trimming a previously-overhanging end back inside scaffold removes the split and OverhangSpec."""
     design = _make_single_helix_scaffolded()
     # First drag: create overhang (end_bp 35 → 45)
-    d1 = resize_strand_ends(design, [{"strand_id": "stap", "helix_id": "h0",
-                                       "end": "3p", "delta_bp": +10}])
+    d1 = resize_strand_ends(
+        design, [{"strand_id": "stap", "helix_id": "h0", "end": "3p", "delta_bp": +10}]
+    )
     assert len(d1.overhangs) == 1
 
     # Second drag: trim back well inside scaffold (end_bp 45 → 37)
-    d2 = resize_strand_ends(d1, [{"strand_id": "stap", "helix_id": "h0",
-                                   "end": "3p", "delta_bp": -8}])
+    d2 = resize_strand_ends(
+        d1, [{"strand_id": "stap", "helix_id": "h0", "end": "3p", "delta_bp": -8}]
+    )
 
     staple = next(s for s in d2.strands if s.id == "stap")
-    assert len(staple.domains)       == 1,  "split domains should be merged back"
-    assert staple.domains[0].end_bp  == 37
+    assert len(staple.domains) == 1, "split domains should be merged back"
+    assert staple.domains[0].end_bp == 37
     assert staple.domains[0].overhang_id is None
-    assert len(d2.overhangs)         == 0,  "OverhangSpec should be removed"
+    assert len(d2.overhangs) == 0, "OverhangSpec should be removed"
 
 
 # ── autodetect_overhangs tests ─────────────────────────────────────────────────
@@ -940,8 +1086,16 @@ def _design_with_scaffold_free_overhang_helix():
     user extrudes a staple-only helix and force-connects the ends with 'X'.
     """
     from backend.core.models import (
-        Design, Helix, Strand, Domain, StrandType, Direction, Vec3, DesignMetadata,
+        Design,
+        Helix,
+        Strand,
+        Domain,
+        StrandType,
+        Direction,
+        Vec3,
+        DesignMetadata,
     )
+
     h0 = Helix(
         id="h0",
         axis_start=Vec3(x=0, y=0, z=0),
@@ -963,7 +1117,9 @@ def _design_with_scaffold_free_overhang_helix():
     scaffold = Strand(
         id="scaf",
         strand_type=StrandType.SCAFFOLD,
-        domains=[Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)
+        ],
     )
     # Staple: 5' on h_ext (scaffold-free), 3' on h0
     staple = Strand(
@@ -971,7 +1127,7 @@ def _design_with_scaffold_free_overhang_helix():
         strand_type=StrandType.STAPLE,
         domains=[
             Domain(helix_id="h_ext", start_bp=7, end_bp=0, direction=Direction.REVERSE),
-            Domain(helix_id="h0",    start_bp=0, end_bp=20, direction=Direction.REVERSE),
+            Domain(helix_id="h0", start_bp=0, end_bp=20, direction=Direction.REVERSE),
         ],
     )
     return Design(
@@ -988,12 +1144,12 @@ def test_autodetect_overhangs_tags_scaffold_free_terminal():
 
     staple = next(s for s in result.strands if s.id == "stap")
     term_5p = staple.domains[0]
-    assert term_5p.helix_id   == "h_ext"
+    assert term_5p.helix_id == "h_ext"
     assert term_5p.overhang_id == "ovhg_inline_stap_5p"
     assert len(result.overhangs) == 1
     spec = result.overhangs[0]
-    assert spec.id        == "ovhg_inline_stap_5p"
-    assert spec.helix_id  == "h_ext"
+    assert spec.id == "ovhg_inline_stap_5p"
+    assert spec.helix_id == "h_ext"
     assert spec.strand_id == "stap"
 
 
@@ -1004,8 +1160,8 @@ def test_autodetect_overhangs_scaffold_covered_end_untouched():
 
     staple = next(s for s in result.strands if s.id == "stap")
     term_3p = staple.domains[-1]
-    assert term_3p.helix_id     == "h0"
-    assert term_3p.overhang_id  is None
+    assert term_3p.helix_id == "h0"
+    assert term_3p.overhang_id is None
 
 
 def test_autodetect_overhangs_idempotent():
@@ -1027,34 +1183,58 @@ def _design_with_crossover_tail_overhang():
     missed it.
     """
     from backend.core.models import (
-        Design, Helix, Strand, Domain, StrandType, Direction, Vec3, DesignMetadata,
+        Design,
+        Helix,
+        Strand,
+        Domain,
+        StrandType,
+        Direction,
+        Vec3,
+        DesignMetadata,
     )
+
     h0 = Helix(
-        id="h0", axis_start=Vec3(x=0, y=0, z=0),
+        id="h0",
+        axis_start=Vec3(x=0, y=0, z=0),
         axis_end=Vec3(x=0, y=0, z=150 * BDNA_RISE_PER_BP),
-        length_bp=150, bp_start=0, phase_offset=0.0, twist_per_bp_rad=_math.radians(34.3),
+        length_bp=150,
+        bp_start=0,
+        phase_offset=0.0,
+        twist_per_bp_rad=_math.radians(34.3),
     )
     h1 = Helix(
-        id="h1", axis_start=Vec3(x=2.5, y=0, z=0),
+        id="h1",
+        axis_start=Vec3(x=2.5, y=0, z=0),
         axis_end=Vec3(x=2.5, y=0, z=42 * BDNA_RISE_PER_BP),
-        length_bp=42, bp_start=0, phase_offset=0.0, twist_per_bp_rad=_math.radians(34.3),
+        length_bp=42,
+        bp_start=0,
+        phase_offset=0.0,
+        twist_per_bp_rad=_math.radians(34.3),
     )
     scaffold = Strand(
-        id="scaf", strand_type=StrandType.SCAFFOLD,
+        id="scaf",
+        strand_type=StrandType.SCAFFOLD,
         domains=[
-            Domain(helix_id="h0", start_bp=0,  end_bp=41, direction=Direction.FORWARD),
-            Domain(helix_id="h1", start_bp=41, end_bp=0,  direction=Direction.REVERSE),
+            Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD),
+            Domain(helix_id="h1", start_bp=41, end_bp=0, direction=Direction.REVERSE),
         ],
     )
     # Staple: 5' tail on h0 at bp 100-111 (scaffold-free region of h0), 3' body on h1.
     staple = Strand(
-        id="stap", strand_type=StrandType.STAPLE,
+        id="stap",
+        strand_type=StrandType.STAPLE,
         domains=[
-            Domain(helix_id="h0", start_bp=111, end_bp=100, direction=Direction.REVERSE),
-            Domain(helix_id="h1", start_bp=0,   end_bp=15,  direction=Direction.FORWARD),
+            Domain(
+                helix_id="h0", start_bp=111, end_bp=100, direction=Direction.REVERSE
+            ),
+            Domain(helix_id="h1", start_bp=0, end_bp=15, direction=Direction.FORWARD),
         ],
     )
-    return Design(helices=[h0, h1], strands=[scaffold, staple], metadata=DesignMetadata(name="xtail"))
+    return Design(
+        helices=[h0, h1],
+        strands=[scaffold, staple],
+        metadata=DesignMetadata(name="xtail"),
+    )
 
 
 def test_autodetect_overhangs_tags_crossover_tail_outside_scaffold_range():
@@ -1074,6 +1254,7 @@ def test_autodetect_all_overhangs_keeps_crossover_tail_through_pass2():
     """The full pipeline must keep the cross-over tail tagged — Pass 2's merge
     step must not strip a whole-domain overhang it can't re-split."""
     from backend.core.lattice import autodetect_all_overhangs
+
     design = _design_with_crossover_tail_overhang()
     result = autodetect_all_overhangs(design)
     staple = next(s for s in result.strands if s.id == "stap")
@@ -1085,8 +1266,16 @@ def test_autodetect_all_overhangs_keeps_crossover_tail_through_pass2():
 def test_autodetect_overhangs_skips_isolated_staple():
     """A staple entirely on a scaffold-free helix (not anchored to the bundle) is not tagged."""
     from backend.core.models import (
-        Design, Helix, Strand, Domain, StrandType, Direction, Vec3, DesignMetadata,
+        Design,
+        Helix,
+        Strand,
+        Domain,
+        StrandType,
+        Direction,
+        Vec3,
+        DesignMetadata,
     )
+
     h0 = Helix(
         id="h0",
         axis_start=Vec3(x=0, y=0, z=0),
@@ -1099,7 +1288,9 @@ def test_autodetect_overhangs_skips_isolated_staple():
     scaffold = Strand(
         id="scaf",
         strand_type=StrandType.SCAFFOLD,
-        domains=[Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)],
+        domains=[
+            Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)
+        ],
     )
     # Isolated staple — entirely on scaffold-free helix h_iso (no h0 domain)
     h_iso = Helix(
@@ -1114,7 +1305,9 @@ def test_autodetect_overhangs_skips_isolated_staple():
     iso_staple = Strand(
         id="iso",
         strand_type=StrandType.STAPLE,
-        domains=[Domain(helix_id="h_iso", start_bp=7, end_bp=0, direction=Direction.REVERSE)],
+        domains=[
+            Domain(helix_id="h_iso", start_bp=7, end_bp=0, direction=Direction.REVERSE)
+        ],
     )
     design = Design(
         helices=[h0, h_iso],
@@ -1130,6 +1323,7 @@ def test_autodetect_overhangs_skips_isolated_staple():
 def test_autodetect_overhangs_preserves_existing_overhangs():
     """autodetect_overhangs preserves pre-existing OverhangSpecs."""
     from backend.core.models import OverhangSpec
+
     design = _design_with_scaffold_free_overhang_helix()
     # Pre-set an unrelated overhang
     existing = OverhangSpec(id="ovhg_other", helix_id="h0", strand_id="scaf")
@@ -1149,12 +1343,14 @@ def _strand_endpoints(design):
     for s in design.strands:
         doms = []
         for d in s.domains:
-            doms.append({
-                "helix": d.helix_id,
-                "dir": d.direction.value,
-                "5p": d.start_bp,
-                "3p": d.end_bp,
-            })
+            doms.append(
+                {
+                    "helix": d.helix_id,
+                    "dir": d.direction.value,
+                    "5p": d.start_bp,
+                    "3p": d.end_bp,
+                }
+            )
         out[s.id] = {"type": s.strand_type.value, "domains": doms}
     return out
 
@@ -1196,8 +1392,12 @@ def test_ligate_after_segment_merges_across_coaxial_helices():
 
     # Verify merged scaffold: 2 domains on different helices, spanning full range
     scaf = next(s for s in ligated.strands if s.strand_type.value == "scaffold")
-    assert len(scaf.domains) == 2, f"Expected 2 domains (cross-helix), got {len(scaf.domains)}"
-    assert scaf.domains[0].helix_id != scaf.domains[1].helix_id, "Domains must be on different helices"
+    assert len(scaf.domains) == 2, (
+        f"Expected 2 domains (cross-helix), got {len(scaf.domains)}"
+    )
+    assert scaf.domains[0].helix_id != scaf.domains[1].helix_id, (
+        "Domains must be on different helices"
+    )
     assert scaf.domains[0].start_bp == 0
     assert scaf.domains[0].end_bp == 41
     assert scaf.domains[1].start_bp == 42
@@ -1205,7 +1405,9 @@ def test_ligate_after_segment_merges_across_coaxial_helices():
 
     # Verify merged staple: 2 domains on different helices
     stpl = next(s for s in ligated.strands if s.strand_type.value == "staple")
-    assert len(stpl.domains) == 2, f"Expected 2 domains (cross-helix), got {len(stpl.domains)}"
+    assert len(stpl.domains) == 2, (
+        f"Expected 2 domains (cross-helix), got {len(stpl.domains)}"
+    )
     # REVERSE staple: 3' end first then 5' end, so domain order is original then new
     all_bps = {d.start_bp for d in stpl.domains} | {d.end_bp for d in stpl.domains}
     assert min(all_bps) == 0
@@ -1219,15 +1421,21 @@ def test_ligate_after_segment_merges_across_coaxial_helices():
     print(f"BEFORE extrude ({len(base.strands)} strands):")
     for sid, info in before.items():
         for d in info["domains"]:
-            print(f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}")
+            print(
+                f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}"
+            )
     print(f"AFTER extrude, BEFORE ligate ({len(result.strands)} strands):")
     for sid, info in after_pre_ligate.items():
         for d in info["domains"]:
-            print(f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}")
+            print(
+                f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}"
+            )
     print(f"AFTER ligate ({len(ligated.strands)} strands):")
     for sid, info in after_post_ligate.items():
         for d in info["domains"]:
-            print(f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}")
+            print(
+                f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}"
+            )
 
 
 def test_ligate_after_continuation_non_inplace():
@@ -1238,7 +1446,10 @@ def test_ligate_after_continuation_non_inplace():
 
     offset = 42 * BDNA_RISE_PER_BP
     result = make_bundle_continuation(
-        base, [(0, 0)], length_bp=42, offset_nm=offset,
+        base,
+        [(0, 0)],
+        length_bp=42,
+        offset_nm=offset,
         extend_inplace=False,
     )
 
@@ -1267,7 +1478,10 @@ def test_continuation_inplace_merges_domains():
 
     offset = 42 * BDNA_RISE_PER_BP
     result = make_bundle_continuation(
-        base, [(0, 0)], length_bp=42, offset_nm=offset,
+        base,
+        [(0, 0)],
+        length_bp=42,
+        offset_nm=offset,
         extend_inplace=True,
     )
 
@@ -1277,11 +1491,15 @@ def test_continuation_inplace_merges_domains():
     print(f"BEFORE extrude ({len(base.strands)} strands):")
     for sid, info in before.items():
         for d in info["domains"]:
-            print(f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}")
+            print(
+                f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}"
+            )
     print(f"AFTER continuation in-place ({len(result.strands)} strands):")
     for sid, info in after.items():
         for d in info["domains"]:
-            print(f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}")
+            print(
+                f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}"
+            )
 
     # Same strand count — continuation appended to existing strands.
     assert len(result.strands) == len(base.strands)
@@ -1290,7 +1508,10 @@ def test_continuation_inplace_merges_domains():
     for s in result.strands:
         assert len(s.domains) == 1, (
             f"{s.id} should have 1 merged domain, got {len(s.domains)}: "
-            + ", ".join(f"{d.helix_id} {d.direction.value} [{d.start_bp}..{d.end_bp}]" for d in s.domains)
+            + ", ".join(
+                f"{d.helix_id} {d.direction.value} [{d.start_bp}..{d.end_bp}]"
+                for d in s.domains
+            )
         )
 
     # Verify the merged scaffold domain spans full range (0-83).
@@ -1317,7 +1538,10 @@ def test_ligate_after_continuation_gap_cell():
     # Leave a gap: base ends at 42*RISE, but we extrude from 84*RISE (skip 42bp gap)
     gap_offset = 84 * BDNA_RISE_PER_BP
     result = make_bundle_continuation(
-        base, [(0, 0)], length_bp=42, offset_nm=gap_offset,
+        base,
+        [(0, 0)],
+        length_bp=42,
+        offset_nm=gap_offset,
     )
 
     old_ids = {s.id for s in base.strands}
@@ -1332,20 +1556,28 @@ def test_ligate_after_continuation_gap_cell():
     print(f"New strand IDs: {new_ids}")
     for hid in sorted({h.id for h in result.helices}):
         h = next(x for x in result.helices if x.id == hid)
-        print(f"  Helix {hid}: bp_start={h.bp_start} length_bp={h.length_bp} "
-              f"→ bp {h.bp_start}..{h.bp_start + h.length_bp - 1}")
+        print(
+            f"  Helix {hid}: bp_start={h.bp_start} length_bp={h.length_bp} "
+            f"→ bp {h.bp_start}..{h.bp_start + h.length_bp - 1}"
+        )
     print(f"BEFORE extrude ({len(base.strands)} strands):")
     for sid, info in before.items():
         for d in info["domains"]:
-            print(f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}")
+            print(
+                f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}"
+            )
     print(f"AFTER continuation, BEFORE ligate ({len(result.strands)} strands):")
     for sid, info in after_pre_ligate.items():
         for d in info["domains"]:
-            print(f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}")
+            print(
+                f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}"
+            )
     print(f"AFTER ligate ({len(ligated.strands)} strands):")
     for sid, info in after_post_ligate.items():
         for d in info["domains"]:
-            print(f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}")
+            print(
+                f"  {sid} ({info['type']}) on {d['helix']} {d['dir']}: 5'={d['5p']}  3'={d['3p']}"
+            )
 
     # Gap strands are on the SAME helix but NOT adjacent (42bp gap).
     # Ligation should NOT merge them.
@@ -1371,8 +1603,9 @@ from backend.core.lattice import (  # noqa: E402
 
 def _nn_spacing(design):
     """Median nearest-neighbour distance between helix axis_start points."""
-    p = _np_rs.array([[h.axis_start.x, h.axis_start.y, h.axis_start.z]
-                      for h in design.helices])
+    p = _np_rs.array(
+        [[h.axis_start.x, h.axis_start.y, h.axis_start.z] for h in design.helices]
+    )
     d = _np_rs.linalg.norm(p[:, None, :] - p[None, :, :], axis=-1)
     _np_rs.fill_diagonal(d, _np_rs.inf)
     return float(_np_rs.median(d.min(axis=1)))
@@ -1438,12 +1671,20 @@ def test_scale_helix_spacing_preserves_helix_length_and_topology():
     scaled = scale_helix_spacing(design, 2.55)
 
     for h0, h1 in zip(design.helices, scaled.helices):
-        v0 = _np_rs.array([h0.axis_end.x - h0.axis_start.x,
-                           h0.axis_end.y - h0.axis_start.y,
-                           h0.axis_end.z - h0.axis_start.z])
-        v1 = _np_rs.array([h1.axis_end.x - h1.axis_start.x,
-                           h1.axis_end.y - h1.axis_start.y,
-                           h1.axis_end.z - h1.axis_start.z])
+        v0 = _np_rs.array(
+            [
+                h0.axis_end.x - h0.axis_start.x,
+                h0.axis_end.y - h0.axis_start.y,
+                h0.axis_end.z - h0.axis_start.z,
+            ]
+        )
+        v1 = _np_rs.array(
+            [
+                h1.axis_end.x - h1.axis_start.x,
+                h1.axis_end.y - h1.axis_start.y,
+                h1.axis_end.z - h1.axis_start.z,
+            ]
+        )
         assert _np_rs.linalg.norm(v0) == pytest.approx(_np_rs.linalg.norm(v1), abs=1e-9)
         # Helices run along Z in the XY plane — the axial component must not scale.
         assert h1.axis_start.z == pytest.approx(h0.axis_start.z, abs=1e-9)

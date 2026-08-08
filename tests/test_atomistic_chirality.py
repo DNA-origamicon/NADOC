@@ -16,6 +16,7 @@ Signed volume is the tool throughout: for a stereocentre C with substituents a, 
 ``(a-C) . ((b-C) x (c-C))`` is invariant under proper rotation and flips sign under
 reflection.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -48,8 +49,9 @@ def _two_cell_design() -> Design:
     from backend.core.models import LatticeType
 
     with hb.scratch_session(LatticeType.SQUARE):
-        return hb.create_bundle([[0, 0], [0, 1]], 24, lattice=LatticeType.SQUARE,
-                                name="chirality-fixture")
+        return hb.create_bundle(
+            [[0, 0], [0, 1]], 24, lattice=LatticeType.SQUARE, name="chirality-fixture"
+        )
 
 
 @pytest.fixture(scope="module")
@@ -61,7 +63,9 @@ def built():
     for a in model.atoms:
         if a.crossover_id is not None or a.extension_id is not None:
             continue
-        groups[(a.helix_id, a.bp_index, a.direction)][a.name] = np.array([a.x, a.y, a.z])
+        groups[(a.helix_id, a.bp_index, a.direction)][a.name] = np.array(
+            [a.x, a.y, a.z]
+        )
         resnames[(a.helix_id, a.bp_index, a.direction)] = a.residue
     return design, groups, resnames
 
@@ -77,7 +81,8 @@ def test_every_stamping_frame_is_a_proper_rotation():
         for nuc in nucleotide_positions(helix):
             axis_pt = start + nuc.bp_index * BDNA_RISE_PER_BP * axis
             _origin, R = at._atom_frame(
-                nuc, nuc.direction, axis_point=axis_pt, helix_direction=helix.direction)
+                nuc, nuc.direction, axis_point=axis_pt, helix_direction=helix.direction
+            )
             dets.append(float(np.linalg.det(R)))
     assert dets, "fixture produced no frames"
     assert min(dets) == pytest.approx(1.0, abs=1e-9)
@@ -97,11 +102,15 @@ def test_the_sugar_template_itself_is_D_deoxyribose():
     assert c3 < 0, "C3' inverted — the sugar template is the wrong enantiomer"
 
 
-@pytest.mark.parametrize("centre,subs", [
-    ("C4'", ("O4'", "C3'", "C5'")),
-])
+@pytest.mark.parametrize(
+    "centre,subs",
+    [
+        ("C4'", ("O4'", "C3'", "C5'")),
+    ],
+)
 def test_sugar_stereocentres_hold_one_sign_across_both_cells_and_both_strands(
-        built, centre, subs):
+    built, centre, subs
+):
     _design, groups, _resnames = built
     signs = defaultdict(list)
     for key, res in groups.items():
@@ -113,7 +122,8 @@ def test_sugar_stereocentres_hold_one_sign_across_both_cells_and_both_strands(
     for direction, values in signs.items():
         arr = np.array(values)
         assert (arr < 0).all(), (
-            f"{centre} inverted on {len(arr[arr >= 0])}/{len(arr)} {direction} nucleotides")
+            f"{centre} inverted on {len(arr[arr >= 0])}/{len(arr)} {direction} nucleotides"
+        )
 
 
 def test_the_glycosidic_centre_is_beta_on_every_nucleotide(built):
@@ -128,7 +138,9 @@ def test_the_glycosidic_centre_is_beta_on_every_nucleotide(built):
         values.append(_signed_volume(res["C1'"], res["O4'"], res["C2'"], res[n_base]))
     arr = np.array(values)
     assert arr.size
-    assert (arr > 0).all(), f"C1' inverted on {int((arr <= 0).sum())}/{arr.size} nucleotides"
+    assert (arr > 0).all(), (
+        f"C1' inverted on {int((arr <= 0).sum())}/{arr.size} nucleotides"
+    )
 
 
 def test_reverse_base_templates_are_rotations_not_reflections():
@@ -141,21 +153,27 @@ def test_reverse_base_templates_are_rotations_not_reflections():
     """
     for name in ("DA", "DT", "DG", "DC"):
         fwd = {a[0]: np.array(a[2:5], dtype=float) for a in at.BASE_TEMPLATES[name][0]}
-        rev = {a[0]: np.array(a[2:5], dtype=float) for a in at.BASE_TEMPLATES_REV[name][0]}
+        rev = {
+            a[0]: np.array(a[2:5], dtype=float) for a in at.BASE_TEMPLATES_REV[name][0]
+        }
         common = [n for n in fwd if n in rev]
         P = np.array([fwd[n] for n in common])
         W = np.array([rev[n] for n in common])
 
         # planar to a few pm — the premise of the degeneracy argument
         out_of_plane = np.linalg.svd(P - P.mean(0), compute_uv=False)[2]
-        assert out_of_plane < 0.005, f"{name} ring is not planar ({out_of_plane:.4f} nm)"
+        assert out_of_plane < 0.005, (
+            f"{name} ring is not planar ({out_of_plane:.4f} nm)"
+        )
 
         Pc, Wc = P.mean(0), W.mean(0)
         U, _S, Vt = np.linalg.svd((P - Pc).T @ (W - Wc))
         D = np.sign(np.linalg.det(Vt.T @ U.T))
         R = Vt.T @ np.diag([1.0, 1.0, D]) @ U.T
         rms = np.sqrt(np.mean(np.sum(((R @ (P - Pc).T).T - (W - Wc)) ** 2, axis=1)))
-        assert rms < 0.005, f"{name} REVERSE template is not a rotation of FORWARD ({rms:.4f} nm)"
+        assert rms < 0.005, (
+            f"{name} REVERSE template is not a rotation of FORWARD ({rms:.4f} nm)"
+        )
 
 
 def test_whole_nucleotides_are_rotations_of_one_another(built):
@@ -175,15 +193,16 @@ def test_whole_nucleotides_are_rotations_of_one_another(built):
             continue
         # Exclude the atoms the linker builder relocates; this is a question about the
         # stamped rigid body, not about the phosphodiester bridge.
-        common = [n for n in ref
-                  if n in res and n not in ("P", "OP1", "OP2", "O5'", "O3'")]
+        common = [
+            n for n in ref if n in res and n not in ("P", "OP1", "OP2", "O5'", "O3'")
+        ]
         if len(common) < 8:
             continue
         P = np.array([ref[n] for n in common])
         W = np.array([res[n] for n in common])
         Pc, Wc = P.mean(0), W.mean(0)
         U, _S, Vt = np.linalg.svd((P - Pc).T @ (W - Wc))
-        R = Vt.T @ U.T                      # deliberately unguarded
+        R = Vt.T @ U.T  # deliberately unguarded
         assert np.linalg.det(R) > 0, f"{key} is a REFLECTION of its reference"
         checked += 1
     assert checked > 50, f"only {checked} residues checked"
@@ -205,11 +224,13 @@ def test_o3prime_displacement_is_a_bond_defect_not_a_chirality_one(built):
     for key, res in groups.items():
         if "C3'" in res and "C4'" in res:
             control[(resnames[key], key[2])].append(
-                float(np.linalg.norm(res["C3'"] - res["C4'"])))
+                float(np.linalg.norm(res["C3'"] - res["C4'"]))
+            )
     assert control
     for (residue, direction), vals in control.items():
         arr = np.array(vals)
         assert arr.std() < 1e-6, (
             f"C3'-C4' varies within {residue}/{direction} — the template is no longer "
             "stamped rigidly, so a C3' sign flip can no longer be attributed to O3' "
-            "displacement alone")
+            "displacement alone"
+        )

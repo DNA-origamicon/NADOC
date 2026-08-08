@@ -82,26 +82,34 @@ def _make_helix(
 def _simple_design(helices: list[Helix]) -> Design:
     strands = []
     for h in helices:
-        strands.append(Strand(
-            id=f"scaf_{h.id}",
-            strand_type=StrandType.SCAFFOLD,
-            domains=[Domain(
-                helix_id=h.id,
-                direction=Direction.FORWARD,
-                start_bp=0,
-                end_bp=h.length_bp - 1,
-            )],
-        ))
-        strands.append(Strand(
-            id=f"stap_{h.id}",
-            strand_type=StrandType.STAPLE,
-            domains=[Domain(
-                helix_id=h.id,
-                direction=Direction.REVERSE,
-                start_bp=h.length_bp - 1,
-                end_bp=0,
-            )],
-        ))
+        strands.append(
+            Strand(
+                id=f"scaf_{h.id}",
+                strand_type=StrandType.SCAFFOLD,
+                domains=[
+                    Domain(
+                        helix_id=h.id,
+                        direction=Direction.FORWARD,
+                        start_bp=0,
+                        end_bp=h.length_bp - 1,
+                    )
+                ],
+            )
+        )
+        strands.append(
+            Strand(
+                id=f"stap_{h.id}",
+                strand_type=StrandType.STAPLE,
+                domains=[
+                    Domain(
+                        helix_id=h.id,
+                        direction=Direction.REVERSE,
+                        start_bp=h.length_bp - 1,
+                        end_bp=0,
+                    )
+                ],
+            )
+        )
     return Design(
         metadata=DesignMetadata(name="test"),
         helices=helices,
@@ -147,22 +155,26 @@ def test_skip_reduces_count():
     """One skip removes 2 nucleotides (both strands at that bp)."""
     h = _make_helix("h0", length_bp=21, loop_skips=[LoopSkip(bp_index=7, delta=-1)])
     nucs = nucleotide_positions(h)
-    assert len(nucs) == 2 * 20   # 21 - 1 skip = 20 effective bp
+    assert len(nucs) == 2 * 20  # 21 - 1 skip = 20 effective bp
 
 
 def test_loop_increases_count():
     """One loop adds 2 nucleotides (both strands get extra at that bp)."""
     h = _make_helix("h0", length_bp=21, loop_skips=[LoopSkip(bp_index=7, delta=+1)])
     nucs = nucleotide_positions(h)
-    assert len(nucs) == 2 * 22   # 21 + 1 loop = 22 effective bp
+    assert len(nucs) == 2 * 22  # 21 + 1 loop = 22 effective bp
 
 
 def test_multiple_skips():
-    h = _make_helix("h0", length_bp=21, loop_skips=[
-        LoopSkip(bp_index=0, delta=-1),
-        LoopSkip(bp_index=7, delta=-1),
-        LoopSkip(bp_index=14, delta=-1),
-    ])
+    h = _make_helix(
+        "h0",
+        length_bp=21,
+        loop_skips=[
+            LoopSkip(bp_index=0, delta=-1),
+            LoopSkip(bp_index=7, delta=-1),
+            LoopSkip(bp_index=14, delta=-1),
+        ],
+    )
     nucs = nucleotide_positions(h)
     assert len(nucs) == 2 * 18  # 21 - 3 skips
 
@@ -178,8 +190,11 @@ def test_skip_bp_index_absent():
 def test_skip_leaves_axial_gap_by_default():
     """Default (gap model): the bp flanking a skip are 2× rise apart along the axis."""
     h = _make_helix("h0", length_bp=10, loop_skips=[LoopSkip(bp_index=5, delta=-1)])
-    nucs = {n.bp_index: n for n in nucleotide_positions(h)
-            if n.direction == Direction.FORWARD}
+    nucs = {
+        n.bp_index: n
+        for n in nucleotide_positions(h)
+        if n.direction == Direction.FORWARD
+    }
     gap = abs(nucs[6].position[2] - nucs[4].position[2])
     assert abs(gap - 2 * BDNA_RISE_PER_BP) < 1e-6
 
@@ -188,16 +203,23 @@ def test_compact_skips_closes_axial_gap():
     """compact_skips=True (oxDNA path): the bp flanking a skip are ONE rise apart —
     the deletion is removed, not left as a stretched gap.  bp_index labels unchanged."""
     h = _make_helix("h0", length_bp=10, loop_skips=[LoopSkip(bp_index=5, delta=-1)])
-    nucs = {n.bp_index: n for n in nucleotide_positions(h, compact_skips=True)
-            if n.direction == Direction.FORWARD}
-    assert 5 not in nucs                       # skipped bp still absent
+    nucs = {
+        n.bp_index: n
+        for n in nucleotide_positions(h, compact_skips=True)
+        if n.direction == Direction.FORWARD
+    }
+    assert 5 not in nucs  # skipped bp still absent
     gap = abs(nucs[6].position[2] - nucs[4].position[2])
     assert abs(gap - BDNA_RISE_PER_BP) < 1e-6  # gap closed to one normal bp
     # Twist is compacted too: bp 6 sits at the angle of the 5th emitted column,
     # i.e. exactly one twist step past bp 4 (not two).
     import numpy as np
+
     def angle(n):
-        return np.arctan2(n.position[1] - h.axis_start.y, n.position[0] - h.axis_start.x)
+        return np.arctan2(
+            n.position[1] - h.axis_start.y, n.position[0] - h.axis_start.x
+        )
+
     step_before = angle(nucs[4]) - angle(nucs[3])
     step_across = angle(nucs[6]) - angle(nucs[4])
     assert abs(((step_across - step_before + np.pi) % (2 * np.pi)) - np.pi) < 1e-6
@@ -237,12 +259,28 @@ def test_atomistic_loop_backbone_threads_in_order_on_reverse_strand():
     import numpy as np
 
     h = _make_helix("h0", length_bp=12, loop_skips=[LoopSkip(bp_index=6, delta=+2)])
-    rev = Strand(id="scaf", strand_type=StrandType.SCAFFOLD, sequence="A" * 20,
-                 domains=[Domain(helix_id="h0", direction=Direction.REVERSE, start_bp=11, end_bp=0)])
-    fwd = Strand(id="stap", strand_type=StrandType.STAPLE, sequence="T" * 20,
-                 domains=[Domain(helix_id="h0", direction=Direction.FORWARD, start_bp=0, end_bp=11)])
-    design = Design(metadata=DesignMetadata(name="loop"), helices=[h], strands=[rev, fwd],
-                    lattice_type=LatticeType.HONEYCOMB)
+    rev = Strand(
+        id="scaf",
+        strand_type=StrandType.SCAFFOLD,
+        sequence="A" * 20,
+        domains=[
+            Domain(helix_id="h0", direction=Direction.REVERSE, start_bp=11, end_bp=0)
+        ],
+    )
+    fwd = Strand(
+        id="stap",
+        strand_type=StrandType.STAPLE,
+        sequence="T" * 20,
+        domains=[
+            Domain(helix_id="h0", direction=Direction.FORWARD, start_bp=0, end_bp=11)
+        ],
+    )
+    design = Design(
+        metadata=DesignMetadata(name="loop"),
+        helices=[h],
+        strands=[rev, fwd],
+        lattice_type=LatticeType.HONEYCOMB,
+    )
     model = build_atomistic_model(design)
 
     def worst_backbone_bond(strand_id):
@@ -263,7 +301,7 @@ def test_atomistic_loop_backbone_threads_in_order_on_reverse_strand():
     rev_worst = worst_backbone_bond("scaf")
     # The reverse strand mirrors the forward: same worst bond, no bulge-spanning bond.
     assert rev_worst == pytest.approx(fwd_worst, abs=0.05)
-    assert rev_worst < 0.6   # nm; a zig-zag bond spanning the δ=2 bulge would be > 1
+    assert rev_worst < 0.6  # nm; a zig-zag bond spanning the δ=2 bulge would be > 1
 
 
 # ── _cell_boundaries ──────────────────────────────────────────────────────────
@@ -391,7 +429,7 @@ def test_twist_same_mods_all_helices():
     helices = [_make_helix(f"h{i}") for i in range(4)]
     mods = twist_loop_skips(helices, 0, 126, target_twist_deg=205.7)
     counts = [len(mods[h.id]) for h in helices]
-    assert len(set(counts)) == 1   # all same count
+    assert len(set(counts)) == 1  # all same count
 
 
 def test_twist_exceeds_limit_raises():
@@ -426,7 +464,10 @@ def test_predict_twist_round_trip_positive():
     mods = twist_loop_skips(helices, 0, 126, target_twist_deg=target)
     predicted = predict_global_twist_deg(mods)
     # Should recover approximately the target (rounded to integer mods)
-    assert abs(predicted - round(target / BDNA_TWIST_PER_BP_DEG) * BDNA_TWIST_PER_BP_DEG) < 0.5
+    assert (
+        abs(predicted - round(target / BDNA_TWIST_PER_BP_DEG) * BDNA_TWIST_PER_BP_DEG)
+        < 0.5
+    )
 
 
 def test_predict_twist_round_trip_negative():
@@ -434,7 +475,10 @@ def test_predict_twist_round_trip_negative():
     target = -171.4
     mods = twist_loop_skips(helices, 0, 126, target_twist_deg=target)
     predicted = predict_global_twist_deg(mods)
-    assert abs(predicted - round(target / BDNA_TWIST_PER_BP_DEG) * BDNA_TWIST_PER_BP_DEG) < 0.5
+    assert (
+        abs(predicted - round(target / BDNA_TWIST_PER_BP_DEG) * BDNA_TWIST_PER_BP_DEG)
+        < 0.5
+    )
 
 
 # ── bend_loop_skips ───────────────────────────────────────────────────────────
@@ -460,9 +504,13 @@ def test_bend_inner_gets_deletions_outer_gets_insertions():
     h1 = _make_helix("h1", x=4.5, y=0.0)
     mods = bend_loop_skips([h0, h1], 0, 105, radius_nm=15.0, direction_deg=0.0)
     if mods["h0"]:
-        assert all(ls.delta == +1 for ls in mods["h0"]), "outer (h0) should have insertions"
+        assert all(ls.delta == +1 for ls in mods["h0"]), (
+            "outer (h0) should have insertions"
+        )
     if mods["h1"]:
-        assert all(ls.delta == -1 for ls in mods["h1"]), "inner (h1) should have deletions"
+        assert all(ls.delta == -1 for ls in mods["h1"]), (
+            "inner (h1) should have deletions"
+        )
 
 
 def test_bend_inner_outer_opposite_signs():
@@ -491,7 +539,9 @@ def test_bend_mods_within_segment():
     mods = bend_loop_skips([h0, h1], 21, 21 + 105, radius_nm=15.0, direction_deg=0.0)
     for hid, lst in mods.items():
         for ls in lst:
-            assert 21 <= ls.bp_index < 21 + 105, f"bp_index {ls.bp_index} outside segment"
+            assert 21 <= ls.bp_index < 21 + 105, (
+                f"bp_index {ls.bp_index} outside segment"
+            )
 
 
 # ── predict_radius_nm ─────────────────────────────────────────────────────────
@@ -568,6 +618,7 @@ def test_apply_loop_skips_overwrites_same_position():
 def test_apply_loop_skips_preserves_deformations():
     """The Design.deformations list must survive apply_loop_skips."""
     from backend.core.models import DeformationOp, TwistParams
+
     h0 = _make_helix("h0")
     design = _simple_design([h0])
     op = DeformationOp(
@@ -597,10 +648,10 @@ def test_clear_removes_mods_in_range():
     updated = clear_loop_skips(design, ["h0"], plane_a_bp=7, plane_b_bp=21)
     h = next(h for h in updated.helices if h.id == "h0")
     remaining = {ls.bp_index for ls in h.loop_skips}
-    assert 0 in remaining      # outside range — kept
-    assert 7 not in remaining   # in range [7, 21) — removed
+    assert 0 in remaining  # outside range — kept
+    assert 7 not in remaining  # in range [7, 21) — removed
     assert 14 not in remaining  # in range — removed
-    assert 21 in remaining      # at plane_b_bp (exclusive) — kept
+    assert 21 in remaining  # at plane_b_bp (exclusive) — kept
 
 
 def test_clear_does_not_touch_other_helices():
@@ -618,30 +669,52 @@ def test_clear_does_not_touch_other_helices():
 # ── Gap-aware placement (multi-domain designs) ─────────────────────────────────
 
 
-def _make_gap_design(helices: list[Helix], domain1_end: int, domain2_start: int) -> Design:
+def _make_gap_design(
+    helices: list[Helix], domain1_end: int, domain2_start: int
+) -> Design:
     """Two-domain design: bp [0, domain1_end] and [domain2_start, length_bp-1] on each helix."""
     strands = []
     for h in helices:
-        strands.append(Strand(
-            id=f"scaf_{h.id}",
-            strand_type=StrandType.SCAFFOLD,
-            domains=[
-                Domain(helix_id=h.id, direction=Direction.FORWARD,
-                       start_bp=0, end_bp=domain1_end),
-                Domain(helix_id=h.id, direction=Direction.FORWARD,
-                       start_bp=domain2_start, end_bp=h.length_bp - 1),
-            ],
-        ))
-        strands.append(Strand(
-            id=f"stap_{h.id}",
-            strand_type=StrandType.STAPLE,
-            domains=[
-                Domain(helix_id=h.id, direction=Direction.REVERSE,
-                       start_bp=domain1_end, end_bp=0),
-                Domain(helix_id=h.id, direction=Direction.REVERSE,
-                       start_bp=h.length_bp - 1, end_bp=domain2_start),
-            ],
-        ))
+        strands.append(
+            Strand(
+                id=f"scaf_{h.id}",
+                strand_type=StrandType.SCAFFOLD,
+                domains=[
+                    Domain(
+                        helix_id=h.id,
+                        direction=Direction.FORWARD,
+                        start_bp=0,
+                        end_bp=domain1_end,
+                    ),
+                    Domain(
+                        helix_id=h.id,
+                        direction=Direction.FORWARD,
+                        start_bp=domain2_start,
+                        end_bp=h.length_bp - 1,
+                    ),
+                ],
+            )
+        )
+        strands.append(
+            Strand(
+                id=f"stap_{h.id}",
+                strand_type=StrandType.STAPLE,
+                domains=[
+                    Domain(
+                        helix_id=h.id,
+                        direction=Direction.REVERSE,
+                        start_bp=domain1_end,
+                        end_bp=0,
+                    ),
+                    Domain(
+                        helix_id=h.id,
+                        direction=Direction.REVERSE,
+                        start_bp=h.length_bp - 1,
+                        end_bp=domain2_start,
+                    ),
+                ],
+            )
+        )
     return Design(
         metadata=DesignMetadata(name="test_gap"),
         helices=helices,
@@ -681,9 +754,9 @@ def test_cells_from_active_intervals_gap_case():
 def test_bend_in_gap_no_mods_in_gap():
     """When all helices have a gap in [plane_a, plane_b], bend_loop_skips returns no mods."""
     helices = [
-        _make_helix("h0", x=0.0,  y=0.0,  length_bp=252),
-        _make_helix("h1", x=2.25, y=0.0,  length_bp=252),
-        _make_helix("h2", x=0.0,  y=2.25, length_bp=252),
+        _make_helix("h0", x=0.0, y=0.0, length_bp=252),
+        _make_helix("h1", x=2.25, y=0.0, length_bp=252),
+        _make_helix("h2", x=0.0, y=2.25, length_bp=252),
         _make_helix("h3", x=2.25, y=2.25, length_bp=252),
     ]
     design = _make_gap_design(helices, domain1_end=83, domain2_start=168)
@@ -696,8 +769,8 @@ def test_bend_in_gap_no_mods_in_gap():
 def test_twist_in_gap_no_mods_in_gap():
     """When all helices have a gap in [plane_a, plane_b], twist_loop_skips returns no mods."""
     helices = [
-        _make_helix("h0", x=0.0,  y=0.0,  length_bp=252),
-        _make_helix("h1", x=2.25, y=0.0,  length_bp=252),
+        _make_helix("h0", x=0.0, y=0.0, length_bp=252),
+        _make_helix("h1", x=2.25, y=0.0, length_bp=252),
     ]
     design = _make_gap_design(helices, domain1_end=83, domain2_start=168)
     mods = twist_loop_skips(helices, 87, 165, target_twist_deg=30.0, design=design)
@@ -712,34 +785,70 @@ def test_bend_mixed_coverage_per_helix():
     """
     # 4 helices: h0/h1 have full coverage, h2/h3 have a gap at [84, 167]
     helices = [
-        _make_helix("h0", x=0.0,  y=0.0,  length_bp=252),
-        _make_helix("h1", x=2.25, y=0.0,  length_bp=252),
-        _make_helix("h2", x=0.0,  y=2.25, length_bp=252),
+        _make_helix("h0", x=0.0, y=0.0, length_bp=252),
+        _make_helix("h1", x=2.25, y=0.0, length_bp=252),
+        _make_helix("h2", x=0.0, y=2.25, length_bp=252),
         _make_helix("h3", x=2.25, y=2.25, length_bp=252),
     ]
     # h0 and h1: full coverage including middle segment
     full_strands = [
-        Strand(id=f"scaf_{h.id}", strand_type=StrandType.SCAFFOLD, domains=[
-            Domain(helix_id=h.id, direction=Direction.FORWARD, start_bp=0, end_bp=83),
-            Domain(helix_id=h.id, direction=Direction.FORWARD, start_bp=84, end_bp=167),
-            Domain(helix_id=h.id, direction=Direction.FORWARD, start_bp=168, end_bp=251),
-        ]) for h in helices[:2]
+        Strand(
+            id=f"scaf_{h.id}",
+            strand_type=StrandType.SCAFFOLD,
+            domains=[
+                Domain(
+                    helix_id=h.id, direction=Direction.FORWARD, start_bp=0, end_bp=83
+                ),
+                Domain(
+                    helix_id=h.id, direction=Direction.FORWARD, start_bp=84, end_bp=167
+                ),
+                Domain(
+                    helix_id=h.id, direction=Direction.FORWARD, start_bp=168, end_bp=251
+                ),
+            ],
+        )
+        for h in helices[:2]
     ] + [
-        Strand(id=f"stap_{h.id}", strand_type=StrandType.STAPLE, domains=[
-            Domain(helix_id=h.id, direction=Direction.REVERSE, start_bp=251, end_bp=0),
-        ]) for h in helices[:2]
+        Strand(
+            id=f"stap_{h.id}",
+            strand_type=StrandType.STAPLE,
+            domains=[
+                Domain(
+                    helix_id=h.id, direction=Direction.REVERSE, start_bp=251, end_bp=0
+                ),
+            ],
+        )
+        for h in helices[:2]
     ]
     # h2 and h3: gap at [84, 167]
     gap_strands = [
-        Strand(id=f"scaf_{h.id}", strand_type=StrandType.SCAFFOLD, domains=[
-            Domain(helix_id=h.id, direction=Direction.FORWARD, start_bp=0, end_bp=83),
-            Domain(helix_id=h.id, direction=Direction.FORWARD, start_bp=168, end_bp=251),
-        ]) for h in helices[2:]
+        Strand(
+            id=f"scaf_{h.id}",
+            strand_type=StrandType.SCAFFOLD,
+            domains=[
+                Domain(
+                    helix_id=h.id, direction=Direction.FORWARD, start_bp=0, end_bp=83
+                ),
+                Domain(
+                    helix_id=h.id, direction=Direction.FORWARD, start_bp=168, end_bp=251
+                ),
+            ],
+        )
+        for h in helices[2:]
     ] + [
-        Strand(id=f"stap_{h.id}", strand_type=StrandType.STAPLE, domains=[
-            Domain(helix_id=h.id, direction=Direction.REVERSE, start_bp=83, end_bp=0),
-            Domain(helix_id=h.id, direction=Direction.REVERSE, start_bp=251, end_bp=168),
-        ]) for h in helices[2:]
+        Strand(
+            id=f"stap_{h.id}",
+            strand_type=StrandType.STAPLE,
+            domains=[
+                Domain(
+                    helix_id=h.id, direction=Direction.REVERSE, start_bp=83, end_bp=0
+                ),
+                Domain(
+                    helix_id=h.id, direction=Direction.REVERSE, start_bp=251, end_bp=168
+                ),
+            ],
+        )
+        for h in helices[2:]
     ]
     design = Design(
         metadata=DesignMetadata(name="mixed"),
@@ -764,9 +873,9 @@ def test_bend_mixed_coverage_per_helix():
 def test_bend_without_design_unchanged():
     """bend_loop_skips without design= still places mods anywhere (backward compat)."""
     helices = [
-        _make_helix("h0", x=0.0,  y=0.0,  length_bp=252),
-        _make_helix("h1", x=2.25, y=0.0,  length_bp=252),
-        _make_helix("h2", x=0.0,  y=2.25, length_bp=252),
+        _make_helix("h0", x=0.0, y=0.0, length_bp=252),
+        _make_helix("h1", x=2.25, y=0.0, length_bp=252),
+        _make_helix("h2", x=0.0, y=2.25, length_bp=252),
         _make_helix("h3", x=2.25, y=2.25, length_bp=252),
     ]
     mods = bend_loop_skips(helices, 87, 165, radius_nm=20.0)
@@ -829,7 +938,9 @@ def _two_row_design():
 
 def test_classify_deformation_twist_zero_is_ok():
     hs, d = _two_row_design()
-    r = classify_deformation(hs, 0, 126, "twist", TwistParams(total_degrees=0.0), design=d)
+    r = classify_deformation(
+        hs, 0, 126, "twist", TwistParams(total_degrees=0.0), design=d
+    )
     assert r["status"] == OK.value
     assert r["n_cells"] == 18
     assert abs(r["max_twist_deg"] - max_twist_deg(18)) < 1e-6
@@ -839,7 +950,9 @@ def test_classify_deformation_twist_zero_is_ok():
 def test_classify_deformation_twist_over_max_blocks():
     hs, d = _two_row_design()
     over = max_twist_deg(18) * 1.1
-    r = classify_deformation(hs, 0, 126, "twist", TwistParams(total_degrees=over), design=d)
+    r = classify_deformation(
+        hs, 0, 126, "twist", TwistParams(total_degrees=over), design=d
+    )
     assert r["status"] == BLOCK.value
     assert r["requested_twist_deg"] > r["max_twist_deg"]
 
@@ -848,7 +961,9 @@ def test_classify_deformation_twist_degrees_per_nm_matches_total():
     hs, d = _two_row_design()
     length_nm = 18 * CELL_BP_DEFAULT * BDNA_RISE_PER_BP
     total = 300.0
-    r_total = classify_deformation(hs, 0, 126, "twist", TwistParams(total_degrees=total), design=d)
+    r_total = classify_deformation(
+        hs, 0, 126, "twist", TwistParams(total_degrees=total), design=d
+    )
     r_pernm = classify_deformation(
         hs, 0, 126, "twist", TwistParams(degrees_per_nm=total / length_nm), design=d
     )
@@ -874,7 +989,9 @@ def test_bend_params_to_radius_round_trip():
 
 def test_classify_deformation_bend_gentle_is_ok():
     hs, d = _two_row_design()
-    r = classify_deformation(hs, 0, 126, "bend", _bend_params_for_radius(20.0), design=d)
+    r = classify_deformation(
+        hs, 0, 126, "bend", _bend_params_for_radius(20.0), design=d
+    )
     assert r["status"] == OK.value
     assert abs(r["requested_radius_nm"] - 20.0) < 1e-3
     assert abs(r["min_bend_radius_nm"] - 5.25) < 1e-2
@@ -896,7 +1013,9 @@ def test_classify_deformation_bend_just_above_min_warns():
 def test_classify_deformation_bend_on_axis_helix_cannot_bend():
     h = _make_helix("h0")  # single helix at origin → on the neutral axis
     d = _simple_design([h])
-    r = classify_deformation([h], 0, 126, "bend", _bend_params_for_radius(8.0), design=d)
+    r = classify_deformation(
+        [h], 0, 126, "bend", _bend_params_for_radius(8.0), design=d
+    )
     assert r["status"] == OK.value  # no marks produced → nothing to warn about
 
 
@@ -917,7 +1036,13 @@ def test_classify_predicts_bend_loop_skips_raise():
         verdict = classify_deformation(hs, 0, 126, "bend", params, design=d)
         radius_from_classify = verdict["requested_radius_nm"]
         # The radius the classifier reports must equal the shared converter's output.
-        assert abs(radius_from_classify - _bend_params_to_radius_nm(params.curvature_deg_per_bp)) < 1e-9
+        assert (
+            abs(
+                radius_from_classify
+                - _bend_params_to_radius_nm(params.curvature_deg_per_bp)
+            )
+            < 1e-9
+        )
         if verdict["status"] == BLOCK.value:
             with pytest.raises(ValueError):
                 bend_loop_skips(hs, 0, 126, radius_nm, design=d)
@@ -937,13 +1062,16 @@ def test_validate_deformation_endpoint_never_422_on_block():
     design_state.set_design(d)
     client = TestClient(app)
     params = _bend_params_for_radius(4.0)  # below min radius → BLOCK
-    resp = client.post("/api/design/deformation/validate", json={
-        "type": "bend",
-        "plane_a_bp": 0,
-        "plane_b_bp": 126,
-        "helix_ids": [h.id for h in hs],
-        "params": {"curvature_deg_per_bp": params.curvature_deg_per_bp},
-    })
+    resp = client.post(
+        "/api/design/deformation/validate",
+        json={
+            "type": "bend",
+            "plane_a_bp": 0,
+            "plane_b_bp": 126,
+            "helix_ids": [h.id for h in hs],
+            "params": {"curvature_deg_per_bp": params.curvature_deg_per_bp},
+        },
+    )
     assert resp.status_code == 200
     assert resp.json()["status"] == "block"
 
@@ -967,12 +1095,16 @@ def test_add_loops_skips_tool_places_no_mark_on_crossover_or_end():
         hb.auto_crossover()
         hb.auto_break()
         hb.add_bend(0, 126, curvature_deg_per_bp=90.0 / 126)
-        apply_loop_skips_from_deformations()            # ← the tool
+        apply_loop_skips_from_deformations()  # ← the tool
         d = design_state.get_or_404()
 
         forb = forbidden_loop_skip_bps(d)
         n_marks = sum(len(h.loop_skips) for h in d.helices)
-        on_forbidden = [(h.id, ls.bp_index) for h in d.helices for ls in h.loop_skips
-                        if ls.bp_index in forb.get(h.id, set())]
+        on_forbidden = [
+            (h.id, ls.bp_index)
+            for h in d.helices
+            for ls in h.loop_skips
+            if ls.bp_index in forb.get(h.id, set())
+        ]
         assert n_marks > 0, "the tool produced marks"
         assert on_forbidden == [], f"marks on crossovers/ends: {on_forbidden[:8]}"

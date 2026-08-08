@@ -25,6 +25,7 @@ keep only the pure, testable pieces:
 Three-Layer Law: everything here is analysis / display only — nothing mutates
 topology or geometry.
 """
+
 from __future__ import annotations
 
 import copy
@@ -41,7 +42,7 @@ ANGSTROM_PER_NM: float = 10.0
 # modes.  Verified: reconstructing NMA_RMSF from (NMA_EIG_VAL, NMA_EIG_VEC) with
 # these two constants matches SNUPI's stored RMSF to <1e-3 %.  (The mimic's own
 # NMA uses 298 K / 4.11 — a documented ~0.4 % systematic on RMSF magnitude.)
-KBT_300K: float = 1.380649e-23 * 300.0 / 1e-21   # 4.1419 pN·nm
+KBT_300K: float = 1.380649e-23 * 300.0 / 1e-21  # 4.1419 pN·nm
 SNUPI_N_RIGID: int = 6
 # Free-free Euler–Bernoulli fundamental bending wavenumber (cosh·cos = 1).
 _EB_BETA1_L: float = 4.730040744862704
@@ -55,6 +56,7 @@ _SNUPI_ADD_VSTRAND_KEYS: Tuple[str, ...] = ("scafLoop", "stapLoop")
 # ══════════════════════════════════════════════════════════════════════════════
 # 1. caDNAno JSON schema shim
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def nadoc_json_to_snupi_json(cadnano: dict) -> dict:
     """Return a copy of a NADOC caDNAno-export dict that SNUPI's parser accepts.
@@ -78,6 +80,7 @@ def nadoc_json_to_snupi_json(cadnano: dict) -> dict:
 # 2. Parsers for SNUPI output files
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @dataclass
 class SnupiNode:
     """One SNUPI FE node parsed from a ``*_STRCT.pdb`` file.
@@ -87,10 +90,11 @@ class SnupiNode:
     With ``PDB_OB_IND 1`` the occupancy column carries the node's RMSF (nm-scale
     values already; SNUPI stores RMSF directly, not the coordinate unit).
     """
-    chain: str          # e.g. "H1"
-    resseq: int         # per-helix node index, 1-based
-    pos: np.ndarray     # (3,) position in nm
-    rmsf: Optional[float] = None   # occupancy column (RMSF) if present
+
+    chain: str  # e.g. "H1"
+    resseq: int  # per-helix node index, 1-based
+    pos: np.ndarray  # (3,) position in nm
+    rmsf: Optional[float] = None  # occupancy column (RMSF) if present
 
 
 def parse_snupi_pdb(path: str | Path) -> List[SnupiNode]:
@@ -124,12 +128,14 @@ def parse_snupi_pdb(path: str | Path) -> List[SnupiNode]:
                 occ = float(tok[8])
             except ValueError:
                 occ = None
-        nodes.append(SnupiNode(
-            chain=chain,
-            resseq=resseq,
-            pos=np.array([x, y, z]) / ANGSTROM_PER_NM,
-            rmsf=occ,
-        ))
+        nodes.append(
+            SnupiNode(
+                chain=chain,
+                resseq=resseq,
+                pos=np.array([x, y, z]) / ANGSTROM_PER_NM,
+                rmsf=occ,
+            )
+        )
     return nodes
 
 
@@ -161,7 +167,9 @@ def parse_snupi_xyz(path: str | Path) -> np.ndarray:
     return arr
 
 
-def parse_snupi_mode_vector(out_dir: str | Path, basename: str, mode: int) -> Optional[np.ndarray]:
+def parse_snupi_mode_vector(
+    out_dir: str | Path, basename: str, mode: int
+) -> Optional[np.ndarray]:
     """Return SNUPI mode ``mode`` (1-based) as an (N, 3) displacement field, nm.
 
     SNUPI saves each mode as a perturbed config ``_NMA_MODE_{k}_p.xyz`` (and
@@ -191,12 +199,12 @@ def parse_snupi_mode_vector(out_dir: str | Path, basename: str, mode: int) -> Op
 # under these keys — verified on a real 6HB run.  The low-precision PDB occupancy
 # column is a DIFFERENT quantity; always prefer NMA_RMSF here for RMSF.
 _MAT_KEYS = {
-    "rmsf": "NMA_RMSF",                         # (n_nodes, 1) per-node RMSF, nm
+    "rmsf": "NMA_RMSF",  # (n_nodes, 1) per-node RMSF, nm
     "pearson_correlation": "NMA_CORR_PEARSON",  # (n, n)
     "generalized_correlation": "NMA_CORR_GENERAL",  # (n, n)
-    "eigenvalues": "NMA_EIG_VAL",               # (1, n_modes) ascending, rigid removed
-    "eigenvectors": "NMA_EIG_VEC",              # (n_modes, 6*n_nodes) per-node [tx,ty,tz,rx,ry,rz]
-    "node_init": "NODE_INIT",                   # (6, n_nodes)
+    "eigenvalues": "NMA_EIG_VAL",  # (1, n_modes) ascending, rigid removed
+    "eigenvectors": "NMA_EIG_VEC",  # (n_modes, 6*n_nodes) per-node [tx,ty,tz,rx,ry,rz]
+    "node_init": "NODE_INIT",  # (6, n_nodes)
     "node_finl": "NODE_FINL",
 }
 
@@ -287,6 +295,7 @@ def snupi_translational_modes(mat: dict, n_modes: int) -> List[np.ndarray]:
 # 3. Output-directory discovery
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def find_snupi_output(output_root: str | Path, basename: str) -> Optional[Path]:
     """Return the newest ``OUTPUT/<basename>_[YYMMDD_HHMMSS]/`` dir, or None.
 
@@ -317,6 +326,7 @@ def snupi_output_files(out_dir: str | Path, basename: str) -> dict:
 # 4. Node correspondence (the crux)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @dataclass
 class NodeMatch:
     """Result of matching SNUPI nodes ↔ mimic nodes.
@@ -325,6 +335,7 @@ class NodeMatch:
     Consumers MUST check ``ok`` before trusting any RMSD/RMSF/MAC computed from
     the pairs — a silently-bad match poisons every downstream number.
     """
+
     pairs: List[Tuple[int, int]] = field(default_factory=list)
     method: str = ""
     residual_nm: float = float("nan")
@@ -416,8 +427,11 @@ def match_nodes(
 
     if labels is None:
         return match_nodes_spatial(
-            snupi_nodes, mimic_keys, mimic_pos,
-            residual_tol_nm=residual_tol_nm, chain_prefix=chain_prefix,
+            snupi_nodes,
+            mimic_keys,
+            mimic_pos,
+            residual_tol_nm=residual_tol_nm,
+            chain_prefix=chain_prefix,
         )
 
     mimic_index = {tuple(k): i for i, k in enumerate(mimic_keys)}
@@ -457,14 +471,18 @@ def match_nodes(
         chain_blocks.append((chain, s_idx, mi_list))
         result.chain_to_helix[chain] = lab["helix_id"]
 
-    corr0 = [(si, mi) for _, s_idx, mi_list in chain_blocks
-             for si, mi in zip(s_idx, mi_list)]
+    corr0 = [
+        (si, mi) for _, s_idx, mi_list in chain_blocks for si, mi in zip(s_idx, mi_list)
+    ]
     if len(corr0) < 4:
         result.reason = "too few topological pairs to align"
         result.warnings = warnings
         return match_nodes_spatial(
-            snupi_nodes, mimic_keys, mimic_pos,
-            residual_tol_nm=residual_tol_nm, chain_prefix=chain_prefix,
+            snupi_nodes,
+            mimic_keys,
+            mimic_pos,
+            residual_tol_nm=residual_tol_nm,
+            chain_prefix=chain_prefix,
         )
 
     # Global Kabsch: align mimic onto SNUPI over the ascending correspondence.
@@ -533,10 +551,11 @@ def match_nodes(
         )
     else:
         result.ok = True
-        result.reason = (
-            "topological match validated"
-            + (f" ({result.n_snupi_unmatched} boundary node(s) salvaged-or-dropped; "
-               f"coverage {coverage:.1%})" if warnings else "")
+        result.reason = "topological match validated" + (
+            f" ({result.n_snupi_unmatched} boundary node(s) salvaged-or-dropped; "
+            f"coverage {coverage:.1%})"
+            if warnings
+            else ""
         )
     return result
 
@@ -596,7 +615,7 @@ def match_nodes_spatial(
     for sx in (1, -1):
         for sy in (1, -1):
             sz = sx * sy  # keep det(+1)
-            Rm = (np.diag([sx, sy, sz]) @ Vm)
+            Rm = np.diag([sx, sy, sz]) @ Vm
             R = Vs.T @ Rm  # maps mimic-centroid frame → snupi-centroid frame
             Mc_al = (Mc - Mm) @ R.T + Sm
             # Greedy count-constrained assignment mimic-helix → snupi-chain.
@@ -670,6 +689,7 @@ def match_nodes_spatial(
 # 5. Observable agreement (given a validated match)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def shape_rmsd_nm(
     snupi_pos: np.ndarray, mimic_pos: np.ndarray, pairs: Sequence[Tuple[int, int]]
 ) -> Optional[float]:
@@ -683,7 +703,8 @@ def shape_rmsd_nm(
 
 
 def _pearson(a: np.ndarray, b: np.ndarray) -> float:
-    a = a - a.mean(); b = b - b.mean()
+    a = a - a.mean()
+    b = b - b.mean()
     denom = np.sqrt((a * a).sum() * (b * b).sum())
     return float((a * b).sum() / denom) if denom > 0 else float("nan")
 
@@ -783,15 +804,17 @@ def mac_matrix(
         for j in range(K):
             phi_m = mimic_vecs[j]
             denom = ns * mimic_norm[j]
-            mac = float((phi_s @ phi_m) ** 2 / (denom ** 2)) if denom > 0 else 0.0
+            mac = float((phi_s @ phi_m) ** 2 / (denom**2)) if denom > 0 else 0.0
             row.append(round(mac, 4))
         matrix.append(row)
         best_j = int(np.argmax(row)) if row else -1
-        assignment.append({
-            "snupi_mode": s + 1,
-            "best_mimic_mode": best_j + 1,
-            "mac": row[best_j] if row else None,
-        })
+        assignment.append(
+            {
+                "snupi_mode": s + 1,
+                "best_mimic_mode": best_j + 1,
+                "mac": row[best_j] if row else None,
+            }
+        )
     return {"matrix": matrix, "assignment": assignment}
 
 
@@ -821,8 +844,14 @@ def correlation_agreement(
     mimic_corr = _symmetrize(mimic_corr)
     s_idx = np.array([si for si, _ in pairs])
     m_idx = np.array([mi for _, mi in pairs])
-    if snupi_corr.shape[0] <= s_idx.max(initial=-1) or mimic_corr.shape[0] <= m_idx.max(initial=-1):
-        return {"pearson": None, "n": 0, "reason": "index out of range for a corr matrix"}
+    if snupi_corr.shape[0] <= s_idx.max(initial=-1) or mimic_corr.shape[0] <= m_idx.max(
+        initial=-1
+    ):
+        return {
+            "pearson": None,
+            "n": 0,
+            "reason": "index out of range for a corr matrix",
+        }
     S = snupi_corr[np.ix_(s_idx, s_idx)]
     M = mimic_corr[np.ix_(m_idx, m_idx)]
     iu = np.triu_indices(len(s_idx), k=1)
@@ -842,10 +871,16 @@ def correlation_agreement(
 # precision — a per-run guard that our parsing/units/DOF-layout are faithful before
 # any mimic-vs-SNUPI number is trusted.
 
+
 def _median_pct(a: np.ndarray, b: np.ndarray) -> float:
-    a = np.asarray(a, float).ravel(); b = np.asarray(b, float).ravel()
+    a = np.asarray(a, float).ravel()
+    b = np.asarray(b, float).ravel()
     m = np.abs(b) > 1e-9
-    return float(np.median(np.abs(a[m] - b[m]) / np.abs(b[m])) * 100) if m.any() else float("nan")
+    return (
+        float(np.median(np.abs(a[m] - b[m]) / np.abs(b[m])) * 100)
+        if m.any()
+        else float("nan")
+    )
 
 
 def _trans_dof(n_nodes: int) -> np.ndarray:
@@ -856,25 +891,32 @@ def _trans_dof(n_nodes: int) -> np.ndarray:
     return tr
 
 
-def reconstruct_rmsf(eigenvalues, eigenvectors, n_nodes: int, *,
-                     n_rigid: int = SNUPI_N_RIGID, kbt: float = KBT_300K) -> np.ndarray:
+def reconstruct_rmsf(
+    eigenvalues,
+    eigenvectors,
+    n_nodes: int,
+    *,
+    n_rigid: int = SNUPI_N_RIGID,
+    kbt: float = KBT_300K,
+) -> np.ndarray:
     """SNUPI's per-node RMSF (nm) from its own modes: sqrt(kBT·Σ φ²/λ) over the
     elastic modes (the first ``n_rigid`` dropped).  ``eigenvectors`` is (n_modes,
     6·n_nodes) — the ``parse_snupi_nma_mat`` layout, per-node [tx,ty,tz,rx,ry,rz]."""
     lam = np.asarray(eigenvalues, float).ravel()[n_rigid:]
-    phi = np.asarray(eigenvectors, float)[n_rigid:, :]        # (m, 6N)
+    phi = np.asarray(eigenvectors, float)[n_rigid:, :]  # (m, 6N)
     var = np.zeros(n_nodes)
     for dim in range(3):
-        cols = phi[:, 6 * np.arange(n_nodes) + dim]           # (m, N)
-        var += kbt * np.sum(cols ** 2 / lam[:, None], axis=0)
+        cols = phi[:, 6 * np.arange(n_nodes) + dim]  # (m, N)
+        var += kbt * np.sum(cols**2 / lam[:, None], axis=0)
     return np.sqrt(np.clip(var, 0.0, None))
 
 
-def reconstruct_pearson_correlation(eigenvalues, eigenvectors, n_nodes: int, *,
-                                    n_rigid: int = SNUPI_N_RIGID) -> np.ndarray:
+def reconstruct_pearson_correlation(
+    eigenvalues, eigenvectors, n_nodes: int, *, n_rigid: int = SNUPI_N_RIGID
+) -> np.ndarray:
     """SNUPI's bp-bp Pearson DCCM from its own modes (kBT cancels)."""
     lam = np.asarray(eigenvalues, float).ravel()[n_rigid:]
-    phi = np.asarray(eigenvectors, float)[n_rigid:, :]        # (m, 6N)
+    phi = np.asarray(eigenvectors, float)[n_rigid:, :]  # (m, 6N)
     tr = _trans_dof(n_nodes)
     psi = (phi[:, tr].T / np.sqrt(lam)[None, :]).reshape(n_nodes, 3, -1)
     cov = np.einsum("idm,jdm->ij", psi, psi)
@@ -897,21 +939,30 @@ def self_consistency(mat: dict, *, n_rigid: int = SNUPI_N_RIGID) -> dict:
     n = vec.shape[1] // 6
     stored_rmsf = mat.get("rmsf")
     if stored_rmsf is not None and len(stored_rmsf) == n:
-        out["rmsf_median_pct"] = round(_median_pct(
-            reconstruct_rmsf(ev, vec, n, n_rigid=n_rigid), stored_rmsf), 6)
+        out["rmsf_median_pct"] = round(
+            _median_pct(reconstruct_rmsf(ev, vec, n, n_rigid=n_rigid), stored_rmsf), 6
+        )
     stored_cp = mat.get("pearson_correlation")
     if stored_cp is not None and stored_cp.shape[0] == n:
         rec = reconstruct_pearson_correlation(ev, vec, n, n_rigid=n_rigid)
-        S = np.asarray(stored_cp) + np.asarray(stored_cp).T   # SNUPI stores lower-tri
+        S = np.asarray(stored_cp) + np.asarray(stored_cp).T  # SNUPI stores lower-tri
         iu = np.triu_indices(n, 1)
         out["pearson_median_abs"] = float(np.median(np.abs(rec[iu] - S[iu])))
-    out["ok"] = (out.get("rmsf_median_pct", 1e9) < 0.1
-                 and out.get("pearson_median_abs", 1e9) < 1e-6)
+    out["ok"] = (
+        out.get("rmsf_median_pct", 1e9) < 0.1
+        and out.get("pearson_median_abs", 1e9) < 1e-6
+    )
     return out
 
 
-def bending_amplitude_variance(eigenvalues, eigenvectors, positions, *,
-                               n_rigid: int = SNUPI_N_RIGID, kbt: float = KBT_300K):
+def bending_amplitude_variance(
+    eigenvalues,
+    eigenvectors,
+    positions,
+    *,
+    n_rigid: int = SNUPI_N_RIGID,
+    kbt: float = KBT_300K,
+):
     """⟨a₁²⟩ (nm²): thermal variance of the fundamental free-free bending amplitude.
 
     Projects the physical NMA displacement covariance onto the analytic free-free
@@ -925,7 +976,7 @@ def bending_amplitude_variance(eigenvalues, eigenvectors, positions, *,
     6·N); ``positions`` (N, 3) in the same node order.
     """
     lam = np.asarray(eigenvalues, float).ravel()[n_rigid:]
-    phi = np.asarray(eigenvectors, float)[n_rigid:, :]        # (m, 6N)
+    phi = np.asarray(eigenvectors, float)[n_rigid:, :]  # (m, 6N)
     P = np.asarray(positions, float)
     n = len(P)
     ctr = P - P.mean(0)
@@ -938,14 +989,16 @@ def bending_amplitude_variance(eigenvalues, eigenvectors, positions, *,
     sig = (np.cosh(bl) - np.cos(bl)) / (np.sinh(bl) - np.sin(bl))
     bb = bl * xi
     shp = np.cosh(bb) + np.cos(bb) - sig * (np.sinh(bb) + np.sin(bb))
-    shp = shp / np.sqrt(np.mean(shp ** 2))                    # RMS-normalised
+    shp = shp / np.sqrt(np.mean(shp**2))  # RMS-normalised
 
     def _av(vec_field: np.ndarray) -> float:
         p = np.zeros(6 * n)
         idx = 6 * np.arange(n)
-        p[idx] = vec_field[:, 0]; p[idx + 1] = vec_field[:, 1]; p[idx + 2] = vec_field[:, 2]
-        proj = phi @ p                                        # (m,)
-        return float(kbt * np.sum(proj ** 2 / lam))
+        p[idx] = vec_field[:, 0]
+        p[idx + 1] = vec_field[:, 1]
+        p[idx + 2] = vec_field[:, 2]
+        proj = phi @ p  # (m,)
+        return float(kbt * np.sum(proj**2 / lam))
 
     a1 = 0.5 * (_av(shp[:, None] * e1) + _av(shp[:, None] * e2))
     return a1, L

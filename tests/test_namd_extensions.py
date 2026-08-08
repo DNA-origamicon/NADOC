@@ -8,6 +8,7 @@ the bridge minimisers ``_minimize_{1,2,3}_extra_base`` (they solve for a linker 
 both ends) and it changes the chain's TERMINI — a 5′ tail means the anchor is no longer the
 strand's 5′ end, which is exactly what psfgen's ``5TER`` / ``DEO5`` patches key off.
 """
+
 from __future__ import annotations
 
 import json
@@ -34,7 +35,7 @@ def _with_tails() -> Design:
     d = _load()
     d.extensions = [
         StrandExtension(strand_id=d.strands[1].id, end="three_prime", sequence="TT"),
-        StrandExtension(strand_id=d.strands[2].id, end="five_prime",  sequence="A"),
+        StrandExtension(strand_id=d.strands[2].id, end="five_prime", sequence="A"),
     ]
     return d
 
@@ -48,8 +49,8 @@ def test_model_grows_by_exactly_the_tail_base_count():
     d = _with_tails()
 
     n_bare = len(_residues(build_atomistic_model(bare)))
-    n_ext  = len(_residues(build_atomistic_model(d)))
-    assert n_ext - n_bare == 3      # TT + A
+    n_ext = len(_residues(build_atomistic_model(d)))
+    assert n_ext - n_bare == 3  # TT + A
 
 
 def test_modification_only_extension_builds_no_residue():
@@ -59,9 +60,13 @@ def test_modification_only_extension_builds_no_residue():
     bare.extensions = []
     d = _load()
     d.extensions = [
-        StrandExtension(strand_id=d.strands[1].id, end="five_prime", modification="cy3"),
+        StrandExtension(
+            strand_id=d.strands[1].id, end="five_prime", modification="cy3"
+        ),
     ]
-    assert len(_residues(build_atomistic_model(d))) == len(_residues(build_atomistic_model(bare)))
+    assert len(_residues(build_atomistic_model(d))) == len(
+        _residues(build_atomistic_model(bare))
+    )
     assert not design_has_extensions(d)
 
 
@@ -104,12 +109,15 @@ def test_simulated_tail_backbone_closure_reseats_linkers_at_both_ends():
     d = _with_tails()
     ext_override = {
         (n["extension_id"], int(n["bp_index"])): np.asarray(
-            n["backbone_position"], dtype=float)
+            n["backbone_position"], dtype=float
+        )
         for n in _geometry_for_design(d)
         if n.get("extension_id") and not n.get("is_modification")
     }
     raw = build_atomistic_model(d, ext_pos_override=ext_override, close_backbone=False)
-    closed = build_atomistic_model(d, ext_pos_override=ext_override, close_backbone=True)
+    closed = build_atomistic_model(
+        d, ext_pos_override=ext_override, close_backbone=True
+    )
 
     def extension_o3p_distances(model):
         by = {a.serial: a for a in model.atoms}
@@ -120,8 +128,10 @@ def test_simulated_tail_backbone_closure_reseats_linkers_at_both_ends():
                 continue
             if a.extension_id is None and b.extension_id is None:
                 continue
-            distances.append(float(np.linalg.norm(
-                np.array([a.x - b.x, a.y - b.y, a.z - b.z]))) * 10.0)
+            distances.append(
+                float(np.linalg.norm(np.array([a.x - b.x, a.y - b.y, a.z - b.z])))
+                * 10.0
+            )
         return distances
 
     raw_dist = extension_o3p_distances(raw)
@@ -137,7 +147,8 @@ def test_simulated_tail_backbone_closure_reseats_linkers_at_both_ends():
     for before, after in zip(raw.atoms, closed.atoms):
         if before.extension_id is not None and before.name in rigid_names:
             assert np.allclose(
-                [before.x, before.y, before.z], [after.x, after.y, after.z])
+                [before.x, before.y, before.z], [after.x, after.y, after.z]
+            )
 
 
 # ── Chain termini — what makes the psfgen patches land ───────────────────────
@@ -165,9 +176,9 @@ def test_five_prime_tail_becomes_the_chain_five_prime_terminus():
     lo = min(a.seq_num for a in in_chain)
     tail_seqs = sorted({a.seq_num for a in tail})
 
-    assert tail_seqs == [lo, lo + 1, lo + 2]          # the tail IS the head of the chain
-    outermost = [a for a in tail if a.ext_k == 2]     # ext_k = distance from the anchor
-    assert {a.seq_num for a in outermost} == {lo}     # …and its tip is residue #1
+    assert tail_seqs == [lo, lo + 1, lo + 2]  # the tail IS the head of the chain
+    outermost = [a for a in tail if a.ext_k == 2]  # ext_k = distance from the anchor
+    assert {a.seq_num for a in outermost} == {lo}  # …and its tip is residue #1
 
 
 def test_three_prime_tail_becomes_the_chain_three_prime_terminus():
@@ -183,7 +194,7 @@ def test_three_prime_tail_becomes_the_chain_three_prime_terminus():
 
     tail_seqs = sorted({a.seq_num for a in tail})
     assert tail_seqs == [hi - 1, hi]
-    tip = [a for a in tail if a.ext_k == 1]           # outermost base
+    tip = [a for a in tail if a.ext_k == 1]  # outermost base
     assert {a.seq_num for a in tip} == {hi}
 
 
@@ -199,7 +210,8 @@ def test_tail_backbone_is_bonded_through_the_anchor():
     by = {a.serial: a for a in m.atoms}
 
     joins = [
-        (by[s1], by[s2]) for s1, s2 in m.bonds
+        (by[s1], by[s2])
+        for s1, s2 in m.bonds
         if {by[s1].name, by[s2].name} == {"O3'", "P"}
         and ((by[s1].extension_id is None) != (by[s2].extension_id is None))
     ]
@@ -214,14 +226,14 @@ def test_tail_backbone_bonds_are_physical():
     d = _load()
     d.extensions = [
         StrandExtension(strand_id=d.strands[1].id, end="three_prime", sequence="TTT"),
-        StrandExtension(strand_id=d.strands[2].id, end="five_prime",  sequence="TT"),
+        StrandExtension(strand_id=d.strands[2].id, end="five_prime", sequence="TT"),
     ]
     m = build_atomistic_model(d)
-    by  = {a.serial: a for a in m.atoms}
+    by = {a.serial: a for a in m.atoms}
     pos = {a.serial: np.array([a.x, a.y, a.z]) for a in m.atoms}
 
     lens = [
-        float(np.linalg.norm(pos[s1] - pos[s2])) * 10.0        # nm → Å
+        float(np.linalg.norm(pos[s1] - pos[s2])) * 10.0  # nm → Å
         for s1, s2 in m.bonds
         if {by[s1].name, by[s2].name} == {"O3'", "P"}
         and (by[s1].extension_id is not None or by[s2].extension_id is not None)
@@ -258,4 +270,5 @@ def test_extensions_enable_declash():
     assert design_has_extensions(d)
 
     from backend.core.md_protocols import design_has_extra_bases
-    assert not design_has_extra_bases(d)     # so declash can only be coming from the tails
+
+    assert not design_has_extra_bases(d)  # so declash can only be coming from the tails

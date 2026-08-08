@@ -18,34 +18,63 @@ These are fast/in-memory: build the atomistic model of a tiny loop design and
 assert every nucleotide — including each loop copy — is DISTINCTLY addressable and
 receives its OWN relaxed position.  No MDAnalysis / on-disk trajectory required.
 """
+
 from __future__ import annotations
 
 import numpy as np
 
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (
-    Design, Helix, Strand, Domain, Vec3, DesignMetadata,
-    LatticeType, StrandType, Direction, LoopSkip,
+    Design,
+    Helix,
+    Strand,
+    Domain,
+    Vec3,
+    DesignMetadata,
+    LatticeType,
+    StrandType,
+    Direction,
+    LoopSkip,
 )
 from backend.core.atomistic import build_atomistic_model
 from backend.core.atomistic_to_nadoc import (
-    build_chain_map, md_pkey, md_rigid_reference, _map_positions,
+    build_chain_map,
+    md_pkey,
+    md_rigid_reference,
+    _map_positions,
 )
 
 
 def _loop_design(delta: int = 1, bp: int = 5, L: int = 10) -> Design:
     """1 helix, scaffold FORWARD + staple REVERSE, one loop insertion at ``bp``."""
-    h = Helix(id="h0", axis_start=Vec3(x=0, y=0, z=0),
-              axis_end=Vec3(x=0, y=0, z=L * BDNA_RISE_PER_BP), phase_offset=0.0,
-              length_bp=L, loop_skips=[LoopSkip(bp_index=bp, delta=delta)])
-    fwd = Strand(id="scaf", strand_type=StrandType.SCAFFOLD,
-                 domains=[Domain(helix_id="h0", direction=Direction.FORWARD,
-                                 start_bp=0, end_bp=L - 1)])
-    rev = Strand(id="stap", strand_type=StrandType.STAPLE,
-                 domains=[Domain(helix_id="h0", direction=Direction.REVERSE,
-                                 start_bp=L - 1, end_bp=0)])
-    return Design(metadata=DesignMetadata(name="loop"), helices=[h],
-                  strands=[fwd, rev], lattice_type=LatticeType.HONEYCOMB)
+    h = Helix(
+        id="h0",
+        axis_start=Vec3(x=0, y=0, z=0),
+        axis_end=Vec3(x=0, y=0, z=L * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=L,
+        loop_skips=[LoopSkip(bp_index=bp, delta=delta)],
+    )
+    fwd = Strand(
+        id="scaf",
+        strand_type=StrandType.SCAFFOLD,
+        domains=[
+            Domain(helix_id="h0", direction=Direction.FORWARD, start_bp=0, end_bp=L - 1)
+        ],
+    )
+    rev = Strand(
+        id="stap",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h0", direction=Direction.REVERSE, start_bp=L - 1, end_bp=0)
+        ],
+    )
+    return Design(
+        metadata=DesignMetadata(name="loop"),
+        helices=[h],
+        strands=[fwd, rev],
+        lattice_type=LatticeType.HONEYCOMB,
+    )
 
 
 def _p_order_from_model(model):
@@ -76,10 +105,13 @@ def test_loop_copies_get_distinct_md_keys():
         "(loop copies not disambiguated)"
     )
     # Concretely: the loop bp on the FORWARD strand carries >=2 distinct keys.
-    fwd_at_loop = [md_pkey(a) for a in p_atoms
-                   if a.helix_id == "h0" and a.bp_index == 5 and a.direction == "FORWARD"]
-    assert len(fwd_at_loop) == 2                      # base + one insertion copy
-    assert len(set(fwd_at_loop)) == 2                 # ...and they are distinct
+    fwd_at_loop = [
+        md_pkey(a)
+        for a in p_atoms
+        if a.helix_id == "h0" and a.bp_index == 5 and a.direction == "FORWARD"
+    ]
+    assert len(fwd_at_loop) == 2  # base + one insertion copy
+    assert len(set(fwd_at_loop)) == 2  # ...and they are distinct
 
 
 def test_chain_map_addresses_every_loop_copy():
@@ -88,7 +120,7 @@ def test_chain_map_addresses_every_loop_copy():
     model = build_atomistic_model(_loop_design(delta=1))
     cm = build_chain_map(model)
     n_p = sum(1 for a in model.atoms if a.name == "P")
-    assert len(cm) == n_p                             # one (chain,seq) per P atom
+    assert len(cm) == n_p  # one (chain,seq) per P atom
     # Every distinct residue resolves to a distinct design key.
     assert len(set(cm.values())) == n_p, (
         "chain_map values collide across residues — loop copies indistinguishable"
@@ -100,7 +132,7 @@ def test_p_order_covers_every_nucleotide_including_loops():
     p_order = _p_order_from_model(model)
     # delta=+1 adds one nucleotide per strand at the loop bp: 2 strands × (10 + 1).
     assert len(p_order) == 22
-    assert len(set(p_order)) == len(p_order)          # no duplicate keys
+    assert len(set(p_order)) == len(p_order)  # no duplicate keys
 
 
 # ── Stage 3: the Kabsch equilibrium reference keeps loop copies apart ──────────
@@ -114,10 +146,13 @@ def test_md_rigid_reference_gives_loop_copies_distinct_eq_positions():
     p_order = _p_order_from_model(model)
     eq_positions, eq_valid, _rigid = md_rigid_reference(model, p_order)
 
-    assert eq_valid.all()                             # every P atom has an eq position
+    assert eq_valid.all()  # every P atom has an eq position
     # The two FORWARD loop-copy entries must be at different eq positions.
-    idxs = [i for i, k in enumerate(p_order)
-            if k[0] == "h0" and k[1] == 5 and k[2] == "FORWARD"]
+    idxs = [
+        i
+        for i, k in enumerate(p_order)
+        if k[0] == "h0" and k[1] == 5 and k[2] == "FORWARD"
+    ]
     assert len(idxs) == 2
     d = float(np.linalg.norm(eq_positions[idxs[0]] - eq_positions[idxs[1]]))
     assert d > 1e-3, f"loop copies collapsed onto one eq position (sep {d:.2e} nm)"
@@ -135,11 +170,13 @@ def test_relaxed_readback_moves_every_base_including_loops():
     start = _p_positions_from_model(model)
 
     # A unique NON-ZERO per-atom shift so any two-into-one collapse is detectable.
-    relaxed = [p + np.array([0.11 * (i + 1), -0.07 * (i + 1), 0.05 * (i + 3)])
-               for i, p in enumerate(start)]
+    relaxed = [
+        p + np.array([0.11 * (i + 1), -0.07 * (i + 1), 0.05 * (i + 3)])
+        for i, p in enumerate(start)
+    ]
     beads = _map_positions(relaxed, p_order)
 
-    assert len(beads) == len(p_order)                 # every base processed
+    assert len(beads) == len(p_order)  # every base processed
     # Every base moved off its start.
     for b, s in zip(beads, start):
         assert np.linalg.norm(b.pos - s) > 1e-6
@@ -164,14 +201,19 @@ def test_md_rmsf_payload_carries_copy_for_loop_bases(monkeypatch):
     p_order = [
         ("h0", 4, "FORWARD"),
         ("h0", 5, "FORWARD"),
-        ("h0", 5, "FORWARD", 1),      # the loop insertion copy
+        ("h0", 5, "FORWARD", 1),  # the loop insertion copy
         ("h0", 6, "FORWARD"),
     ]
     n = len(p_order)
     fake_ctx = {
-        "universe": object(), "p_order": p_order, "n_frames": 3,
-        "term_specs": [], "n_dna_p": n, "p_order_source": "segid",
-        "eq_positions": np.zeros((n, 3)), "rigid_mask": np.ones(n, bool),
+        "universe": object(),
+        "p_order": p_order,
+        "n_frames": 3,
+        "term_specs": [],
+        "n_dna_p": n,
+        "p_order_source": "segid",
+        "eq_positions": np.zeros((n, 3)),
+        "rigid_mask": np.ones(n, bool),
     }
 
     def _fake_ctx(*a, **k):
@@ -193,9 +235,12 @@ def test_md_rmsf_payload_carries_copy_for_loop_bases(monkeypatch):
     out = mt.md_rmsf("top.psf", [(0, 0, "seg.dcd")], "coord.pdb", _loop_design())
     assert out.get("ready") is True
     positions = out["positions"]
-    assert len(positions) == n                        # every nucleotide, incl. loop copy
+    assert len(positions) == n  # every nucleotide, incl. loop copy
     # Every payload entry exposes `copy`; the loop copy carries copy==1.
     assert all("copy" in p for p in positions)
-    loop = [p for p in positions
-            if p["helix_id"] == "h0" and p["bp_index"] == 5 and p["direction"] == "FORWARD"]
+    loop = [
+        p
+        for p in positions
+        if p["helix_id"] == "h0" and p["bp_index"] == 5 and p["direction"] == "FORWARD"
+    ]
     assert sorted(p["copy"] for p in loop) == [0, 1]

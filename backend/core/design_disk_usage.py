@@ -96,7 +96,7 @@ def warm_dir_sizes(paths, ttl: float = _SIZE_TTL_S) -> None:
             hit = _size_cache.get(key)
             if key in _warming or (hit is not None and time.time() - hit[0] < ttl):
                 continue
-            _warming.add(key)          # claim it before releasing the lock
+            _warming.add(key)  # claim it before releasing the lock
         try:
             size = dir_size_bytes(Path(p))
             with _warm_lock:
@@ -153,7 +153,11 @@ def jobs_for_source_path(workspace_dir: Path, target_path: str) -> list[dict]:
     tgt = _norm(target_path)
     if not tgt:
         return []
-    return [r for r in all_job_records(workspace_dir) if _norm(r["design_source_path"]) == tgt]
+    return [
+        r
+        for r in all_job_records(workspace_dir)
+        if _norm(r["design_source_path"]) == tgt
+    ]
 
 
 def assemblies_referencing(workspace_dir: Path, target_path: str) -> list[dict]:
@@ -188,9 +192,11 @@ def assemblies_referencing(workspace_dir: Path, target_path: str) -> list[dict]:
             except ValueError:
                 rel = _norm(src["path"])
             if rel == tgt:
-                out.append({
-                    "name": nass.stem,
-                    "path": _norm(str(nass.relative_to(workspace_dir))),
-                })
+                out.append(
+                    {
+                        "name": nass.stem,
+                        "path": _norm(str(nass.relative_to(workspace_dir))),
+                    }
+                )
                 break
     return out

@@ -8,6 +8,7 @@ surface still recolours client-side.  These tests pin: the ``pack_surface_bin`` 
 round-trip (incl. the not-ready/empty case) and byte-parity between the binary route and the
 JSON route on a real (small) design.
 """
+
 from __future__ import annotations
 
 import json
@@ -29,23 +30,31 @@ def _unpack(buf: bytes) -> dict:
     magic, nv, nf, ck = struct.unpack_from("<IIII", buf, 0)
     assert magic == _MAGIC
     off = 16
-    verts = np.frombuffer(buf, np.float32, nv * 3, off).reshape(-1, 3); off += nv * 3 * 4
-    faces = np.frombuffer(buf, np.uint32, nf * 3, off).reshape(-1, 3); off += nf * 3 * 4
+    verts = np.frombuffer(buf, np.float32, nv * 3, off).reshape(-1, 3)
+    off += nv * 3 * 4
+    faces = np.frombuffer(buf, np.uint32, nf * 3, off).reshape(-1, 3)
+    off += nf * 3 * 4
     out = {"nv": nv, "nf": nf, "color_kind": ck, "vertices": verts, "faces": faces}
     if ck == 1:
-        out["rgb"] = np.frombuffer(buf, np.uint8, nv * 3, off); off += nv * 3
+        out["rgb"] = np.frombuffer(buf, np.uint8, nv * 3, off)
+        off += nv * 3
     elif ck == 2:
-        out["rmsf"] = np.frombuffer(buf, np.float32, nv, off); off += nv * 4
+        out["rmsf"] = np.frombuffer(buf, np.float32, nv, off)
+        off += nv * 4
 
     def _block(off: int, table_key: str, index_key: str) -> int:
         """One optional ``kind · len · JSON · u32[nv]`` block. Both trailing blocks share
         this shape, which is what lets new ones be appended without a version bump."""
-        (kind,) = struct.unpack_from("<I", buf, off); off += 4
+        (kind,) = struct.unpack_from("<I", buf, off)
+        off += 4
         if kind != 1:
             return off
-        (tbl_len,) = struct.unpack_from("<I", buf, off); off += 4
-        out[table_key] = json.loads(buf[off:off + tbl_len].decode("utf-8")); off += tbl_len
-        out[index_key] = np.frombuffer(buf, np.uint32, nv, off); off += nv * 4
+        (tbl_len,) = struct.unpack_from("<I", buf, off)
+        off += 4
+        out[table_key] = json.loads(buf[off : off + tbl_len].decode("utf-8"))
+        off += tbl_len
+        out[index_key] = np.frombuffer(buf, np.uint32, nv, off)
+        off += nv * 4
         return off
 
     off = _block(off, "strand_table", "strand_index")
@@ -152,11 +161,16 @@ def test_pack_surface_bin_is_backward_compatible_for_old_decoders():
         "vertex_strand_index": [0, 0, 0],
     }
     without = pack_surface_bin(base)
-    with_nuc = pack_surface_bin({**base, "vertex_nuc_index_table": ["h0:5:FORWARD"],
-                                 "vertex_nuc_index": [0, 0, 0]})
+    with_nuc = pack_surface_bin(
+        {
+            **base,
+            "vertex_nuc_index_table": ["h0:5:FORWARD"],
+            "vertex_nuc_index": [0, 0, 0],
+        }
+    )
     # `without` ends with the nuc-absent marker (4 bytes); everything before it is the
     # legacy payload and must be a strict prefix of the extended one.
-    assert with_nuc[:len(without) - 4] == without[:len(without) - 4]
+    assert with_nuc[: len(without) - 4] == without[: len(without) - 4]
     assert len(with_nuc) > len(without)
 
 

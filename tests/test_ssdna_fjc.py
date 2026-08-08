@@ -18,6 +18,7 @@ from backend.core import ssdna_fjc
 
 # ── Metadata + schema ────────────────────────────────────────────────────────
 
+
 def test_metadata_present_and_consistent():
     md = ssdna_fjc.metadata()
     assert md["kuhn_length_nm"] == pytest.approx(1.5)
@@ -32,6 +33,7 @@ def test_metadata_present_and_consistent():
 
 def test_every_entry_in_active_range_has_bins():
     from scripts.generate_ssdna_fjc_lookup import MAX_NEW_ALGORITHM_BP
+
     for n_bp in range(2, MAX_NEW_ALGORITHM_BP + 1):
         assert ssdna_fjc.has_entry(n_bp)
         entry = ssdna_fjc.entry(n_bp)
@@ -66,7 +68,7 @@ def test_bin_r_ee_lies_inside_bin():
                 continue
             r_ee = b["rep_r_ee_nm"]
             assert edges[k] - 1e-6 <= r_ee <= edges[k + 1] + 1e-6, (
-                f"n_bp={n_bp} bin {k}: rep R_ee {r_ee} outside [{edges[k]}, {edges[k+1]}]"
+                f"n_bp={n_bp} bin {k}: rep R_ee {r_ee} outside [{edges[k]}, {edges[k + 1]}]"
             )
 
 
@@ -88,6 +90,7 @@ def test_rg_subcounts_sum_to_bin_count():
 def test_slab_constraint_holds_for_active_lengths():
     """For n_bp 2..35 every stored rep shape stays inside the slab [0, D]."""
     from scripts.generate_ssdna_fjc_lookup import MAX_NEW_ALGORITHM_BP
+
     eps = 1e-5
     for n_bp in range(2, MAX_NEW_ALGORITHM_BP + 1):
         entry = ssdna_fjc.entry(n_bp)
@@ -96,14 +99,19 @@ def test_slab_constraint_holds_for_active_lengths():
             if b["count"] == 0:
                 continue
             positions = np.asarray(b["rep_positions"], dtype=float)
-            assert np.all(positions[:, 0] >= -eps), f"n_bp={n_bp} bin {k}: bead behind wall A"
-            assert np.all(positions[:, 0] <= D + eps), f"n_bp={n_bp} bin {k}: bead past wall B"
+            assert np.all(positions[:, 0] >= -eps), (
+                f"n_bp={n_bp} bin {k}: bead behind wall A"
+            )
+            assert np.all(positions[:, 0] <= D + eps), (
+                f"n_bp={n_bp} bin {k}: bead past wall B"
+            )
 
 
 def test_saw_radius_respected_for_active_lengths():
     """SAW: non-adjacent beads >= saw_radius apart, for every rep shape
     in the active n_bp range."""
     from scripts.generate_ssdna_fjc_lookup import MAX_NEW_ALGORITHM_BP
+
     saw_radius = ssdna_fjc.metadata()["saw_radius_nm"]
     for n_bp in range(3, MAX_NEW_ALGORITHM_BP + 1):
         entry = ssdna_fjc.entry(n_bp)
@@ -127,7 +135,9 @@ def test_wall_separation_matches_b_sqrt_N():
     for n_bp in (3, 5, 10, 25, 35):
         entry = ssdna_fjc.entry(n_bp)
         n_kuhn = entry["n_kuhn"]
-        assert entry["wall_separation_nm"] == pytest.approx(1.5 * math.sqrt(n_kuhn), abs=1e-3)
+        assert entry["wall_separation_nm"] == pytest.approx(
+            1.5 * math.sqrt(n_kuhn), abs=1e-3
+        )
 
 
 def test_default_bin_index_points_to_occupied_bin():
@@ -152,6 +162,7 @@ def test_resolve_bin_index_walks_to_nearest_occupied():
 
 # ── transform_to_chord ───────────────────────────────────────────────────────
 
+
 def test_transform_to_chord_places_first_bead_on_anchor_a():
     idx = ssdna_fjc.default_bin_index(20)
     positions = ssdna_fjc.bin_positions(20, idx)
@@ -172,6 +183,7 @@ def test_out_of_range_raises():
 
 
 # ── relax_ss_linker integration ──────────────────────────────────────────────
+
 
 def _seed_ss_relax_design(linker_bp: int):
     from backend.core.constants import BDNA_RISE_PER_BP
@@ -194,34 +206,62 @@ def _seed_ss_relax_design(linker_bp: int):
         id="oh_helix_a",
         axis_start=Vec3(x=2.5, y=0.0, z=0.0),
         axis_end=Vec3(x=2.5, y=0.0, z=8 * BDNA_RISE_PER_BP),
-        phase_offset=0.0, length_bp=8, grid_pos=(0, 0),
+        phase_offset=0.0,
+        length_bp=8,
+        grid_pos=(0, 0),
     )
     oh_helix_b = Helix(
         id="oh_helix_b",
         axis_start=Vec3(x=5.0, y=0.0, z=0.0),
         axis_end=Vec3(x=5.0, y=0.0, z=8 * BDNA_RISE_PER_BP),
-        phase_offset=0.0, length_bp=8, grid_pos=(0, 3),
+        phase_offset=0.0,
+        length_bp=8,
+        grid_pos=(0, 3),
     )
     oh_strand_a = Strand(
         id="oh_strand_a",
-        domains=[Domain(helix_id="oh_helix_a", start_bp=0, end_bp=7,
-                        direction=Direction.FORWARD, overhang_id="oh_a_5p")],
+        domains=[
+            Domain(
+                helix_id="oh_helix_a",
+                start_bp=0,
+                end_bp=7,
+                direction=Direction.FORWARD,
+                overhang_id="oh_a_5p",
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     oh_strand_b = Strand(
         id="oh_strand_b",
-        domains=[Domain(helix_id="oh_helix_b", start_bp=0, end_bp=7,
-                        direction=Direction.REVERSE, overhang_id="oh_b_5p")],
+        domains=[
+            Domain(
+                helix_id="oh_helix_b",
+                start_bp=0,
+                end_bp=7,
+                direction=Direction.REVERSE,
+                overhang_id="oh_b_5p",
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     overhangs = [
-        OverhangSpec(id="oh_a_5p", helix_id="oh_helix_a", strand_id="oh_strand_a", label="OHA"),
-        OverhangSpec(id="oh_b_5p", helix_id="oh_helix_b", strand_id="oh_strand_b", label="OHB"),
+        OverhangSpec(
+            id="oh_a_5p", helix_id="oh_helix_a", strand_id="oh_strand_a", label="OHA"
+        ),
+        OverhangSpec(
+            id="oh_b_5p", helix_id="oh_helix_b", strand_id="oh_strand_b", label="OHB"
+        ),
     ]
-    cluster_a = ClusterRigidTransform(id="cluster_a", name="A", helix_ids=["oh_helix_a"])
-    cluster_b = ClusterRigidTransform(id="cluster_b", name="B", helix_ids=["oh_helix_b"])
+    cluster_a = ClusterRigidTransform(
+        id="cluster_a", name="A", helix_ids=["oh_helix_a"]
+    )
+    cluster_b = ClusterRigidTransform(
+        id="cluster_b", name="B", helix_ids=["oh_helix_b"]
+    )
     joint = ClusterJoint(
-        id="joint_a", cluster_id="cluster_a", name="Hinge",
+        id="joint_a",
+        cluster_id="cluster_a",
+        name="Hinge",
         local_axis_origin=[2.5, 0.0, 0.0],
         local_axis_direction=[0.0, 1.0, 0.0],
     )
@@ -233,9 +273,13 @@ def _seed_ss_relax_design(linker_bp: int):
         cluster_joints=[joint],
     )
     conn = OverhangConnection(
-        overhang_a_id="oh_a_5p", overhang_a_attach="free_end",
-        overhang_b_id="oh_b_5p", overhang_b_attach="root",
-        linker_type="ss", length_value=linker_bp, length_unit="bp",
+        overhang_a_id="oh_a_5p",
+        overhang_a_attach="free_end",
+        overhang_b_id="oh_b_5p",
+        overhang_b_attach="root",
+        linker_type="ss",
+        length_value=linker_bp,
+        length_unit="bp",
     )
     design = design.copy_with(overhang_connections=[conn])
     design = generate_linker_topology(design, conn)
@@ -257,7 +301,8 @@ def test_relax_ss_linker_uses_explicit_bin_index():
     assert relaxed.bridge_relaxed is True
     assert relaxed.bridge_bin_index == requested
     assert info["target_chord_nm"] == pytest.approx(
-        ssdna_fjc.bin_r_ee(n_bp, requested), abs=1e-6,
+        ssdna_fjc.bin_r_ee(n_bp, requested),
+        abs=1e-6,
     )
 
 
@@ -268,9 +313,11 @@ def test_relax_ss_linker_persists_r_ee_limits():
     n_bp = 20
     design, conn = _seed_ss_relax_design(linker_bp=n_bp)
     new_design, info = relax_ss_linker(
-        design, conn,
+        design,
+        conn,
         bin_index=ssdna_fjc.default_bin_index(n_bp),
-        r_ee_min_nm=1.5, r_ee_max_nm=4.0,
+        r_ee_min_nm=1.5,
+        r_ee_max_nm=4.0,
     )
     relaxed = next(c for c in new_design.overhang_connections if c.id == conn.id)
     assert relaxed.bridge_r_ee_min_nm == pytest.approx(1.5)

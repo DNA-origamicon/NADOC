@@ -27,8 +27,10 @@ from backend.core.models import (
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
-def _inst(iid: str, *, fixed: bool = False, tx: float = 0.0,
-          base: bool = False) -> PartInstance:
+
+def _inst(
+    iid: str, *, fixed: bool = False, tx: float = 0.0, base: bool = False
+) -> PartInstance:
     """A minimal PartInstance at translation (tx,0,0), optional base_transform."""
     t = np.eye(4)
     t[0, 3] = tx
@@ -54,6 +56,7 @@ def _tx(inst: PartInstance) -> float:
 
 # ── _build_inst_by_id ─────────────────────────────────────────────────────────
 
+
 def test_build_inst_by_id_maps_every_instance():
     a, b = _inst("a"), _inst("b")
     asm = Assembly(instances=[a, b])
@@ -64,8 +67,11 @@ def test_build_inst_by_id_maps_every_instance():
 
 # ── _fk_apply_to_joint ────────────────────────────────────────────────────────
 
+
 def test_fk_apply_to_joint_translates_origin_not_direction():
-    j = AssemblyJoint(instance_b_id="b", axis_origin=[0, 0, 0], axis_direction=[0, 0, 1])
+    j = AssemblyJoint(
+        instance_b_id="b", axis_origin=[0, 0, 0], axis_direction=[0, 0, 1]
+    )
     _fk_apply_to_joint(j, _translation(10))
     assert j.axis_origin == [10.0, 0.0, 0.0]
     # A pure translation leaves a (w=0) direction vector unchanged.
@@ -75,14 +81,17 @@ def test_fk_apply_to_joint_translates_origin_not_direction():
 def test_fk_apply_to_joint_rotates_and_renormalizes_direction():
     rot_z90 = np.eye(4)
     rot_z90[:3, :3] = [[0, -1, 0], [1, 0, 0], [0, 0, 1]]
-    j = AssemblyJoint(instance_b_id="b", axis_origin=[1, 0, 0], axis_direction=[1, 0, 0])
+    j = AssemblyJoint(
+        instance_b_id="b", axis_origin=[1, 0, 0], axis_direction=[1, 0, 0]
+    )
     _fk_apply_to_joint(j, rot_z90)
-    assert np.allclose(j.axis_origin, [0.0, 1.0, 0.0])      # origin rotated
-    assert np.allclose(j.axis_direction, [0.0, 1.0, 0.0])   # x → y, unit length
+    assert np.allclose(j.axis_origin, [0.0, 1.0, 0.0])  # origin rotated
+    assert np.allclose(j.axis_direction, [0.0, 1.0, 0.0])  # x → y, unit length
     assert np.isclose(np.linalg.norm(j.axis_direction), 1.0)
 
 
 # ── _fk_expand_rigid_group ────────────────────────────────────────────────────
+
 
 def test_rigid_group_moves_bidirectionally_skipping_fixed():
     a, b, c = _inst("a"), _inst("b"), _inst("c", fixed=True)
@@ -96,8 +105,8 @@ def test_rigid_group_moves_bidirectionally_skipping_fixed():
     visited = {"a"}
     queue: list = []
     _fk_expand_rigid_group(asm, "a", _translation(5), visited, queue)
-    assert _tx(b) == 5.0          # rigid neighbour moved
-    assert _tx(c) == 0.0          # fixed neighbour untouched
+    assert _tx(b) == 5.0  # rigid neighbour moved
+    assert _tx(c) == 0.0  # fixed neighbour untouched
     assert "b" in visited and "c" not in visited
     assert queue == ["b"]
 
@@ -106,7 +115,9 @@ def test_rigid_group_respects_visited_no_remove():
     a, b = _inst("a"), _inst("b")
     asm = Assembly(
         instances=[a, b],
-        joints=[AssemblyJoint(joint_type="rigid", instance_a_id="a", instance_b_id="b")],
+        joints=[
+            AssemblyJoint(joint_type="rigid", instance_a_id="a", instance_b_id="b")
+        ],
     )
     # b already visited → must not be moved again.
     visited = {"a", "b"}
@@ -118,7 +129,9 @@ def test_rigid_group_also_moves_base_transform():
     a, b = _inst("a"), _inst("b", base=True)
     asm = Assembly(
         instances=[a, b],
-        joints=[AssemblyJoint(joint_type="rigid", instance_a_id="a", instance_b_id="b")],
+        joints=[
+            AssemblyJoint(joint_type="rigid", instance_a_id="a", instance_b_id="b")
+        ],
     )
     _fk_expand_rigid_group(asm, "a", _translation(7), {"a"}, [])
     assert _tx(b) == 7.0
@@ -127,10 +140,15 @@ def test_rigid_group_also_moves_base_transform():
 
 # ── _fk_propagate ─────────────────────────────────────────────────────────────
 
+
 def test_propagate_moves_nonrigid_child_and_updates_joint_axis():
     a, b = _inst("a"), _inst("b")
-    j = AssemblyJoint(joint_type="revolute", instance_a_id="a", instance_b_id="b",
-                      axis_origin=[0, 0, 0])
+    j = AssemblyJoint(
+        joint_type="revolute",
+        instance_a_id="a",
+        instance_b_id="b",
+        axis_origin=[0, 0, 0],
+    )
     asm = Assembly(instances=[a, b], joints=[j])
     _fk_propagate(asm, {"a"}, _translation(3), {"a"})
     assert _tx(b) == 3.0
@@ -143,7 +161,9 @@ def test_propagate_skips_rigid_joints():
     a, b = _inst("a"), _inst("b")
     asm = Assembly(
         instances=[a, b],
-        joints=[AssemblyJoint(joint_type="rigid", instance_a_id="a", instance_b_id="b")],
+        joints=[
+            AssemblyJoint(joint_type="rigid", instance_a_id="a", instance_b_id="b")
+        ],
     )
     _fk_propagate(asm, {"a"}, _translation(4), {"a"})
     assert _tx(b) == 0.0
@@ -151,8 +171,12 @@ def test_propagate_skips_rigid_joints():
 
 def test_propagate_skips_fixed_child():
     a, b = _inst("a"), _inst("b", fixed=True)
-    j = AssemblyJoint(joint_type="revolute", instance_a_id="a", instance_b_id="b",
-                      axis_origin=[0, 0, 0])
+    j = AssemblyJoint(
+        joint_type="revolute",
+        instance_a_id="a",
+        instance_b_id="b",
+        axis_origin=[0, 0, 0],
+    )
     asm = Assembly(instances=[a, b], joints=[j])
     _fk_propagate(asm, {"a"}, _translation(3), {"a"})
     assert _tx(b) == 0.0
@@ -176,16 +200,19 @@ def test_propagate_cascades_through_chain():
 
 # ── _move_instance_with_fk_delta ──────────────────────────────────────────────
 
+
 def test_move_instance_moves_self_and_subtree():
     a, b = _inst("a"), _inst("b")
     asm = Assembly(
         instances=[a, b],
-        joints=[AssemblyJoint(joint_type="revolute", instance_a_id="a", instance_b_id="b")],
+        joints=[
+            AssemblyJoint(joint_type="revolute", instance_a_id="a", instance_b_id="b")
+        ],
     )
     moved = _move_instance_with_fk_delta(asm, "a", _translation(6), set())
     assert moved is True
-    assert _tx(a) == 6.0   # self moved
-    assert _tx(b) == 6.0   # kinematic child moved
+    assert _tx(a) == 6.0  # self moved
+    assert _tx(b) == 6.0  # kinematic child moved
 
 
 def test_move_instance_returns_false_for_fixed_or_missing_or_visited():

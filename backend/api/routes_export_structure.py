@@ -37,6 +37,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
+
 # Shared export/geometry resolvers used by many routes across crud.py +
 # assembly.py + core; they stay in crud.py and are imported back here (same
 # convention as routes_export_md.py / routes_camera_poses.py).
@@ -112,7 +113,7 @@ def _pdb_visualization_overrides(positions: list[PdbVisualizationPosition]):
         if helix_id == "__xb__":
             crossover[(p.bp_index, int(p.direction))] = xyz
         elif helix_id.startswith("__ext_"):
-            extensions[(helix_id[len("__ext_"):], int(p.bp_index))] = xyz
+            extensions[(helix_id[len("__ext_") :], int(p.bp_index))] = xyz
         else:
             key = (helix_id, int(p.bp_index), _direction(p.direction))
             if p.copy:
@@ -121,20 +122,27 @@ def _pdb_visualization_overrides(positions: list[PdbVisualizationPosition]):
     return regular, crossover, extensions
 
 
-def _pdb_coloring_values(coloring: PdbVisualizationColoring | None) -> dict[tuple, float]:
+def _pdb_coloring_values(
+    coloring: PdbVisualizationColoring | None,
+) -> dict[tuple, float]:
     if coloring is None:
         return {}
     out = {}
     for p in coloring.values:
         hid = str(p.helix_id)
         direction = str(p.direction).upper()
-        if direction in {"1", "+1"}: direction = "FORWARD"
-        elif direction == "-1": direction = "REVERSE"
-        if hid == "__xb__": key = ("__xb__", str(p.bp_index), int(p.direction))
-        elif hid.startswith("__ext_"): key = (hid, int(p.bp_index), direction)
+        if direction in {"1", "+1"}:
+            direction = "FORWARD"
+        elif direction == "-1":
+            direction = "REVERSE"
+        if hid == "__xb__":
+            key = ("__xb__", str(p.bp_index), int(p.direction))
+        elif hid.startswith("__ext_"):
+            key = (hid, int(p.bp_index), direction)
         else:
             key = (hid, int(p.bp_index), direction)
-            if p.copy: key += (int(p.copy),)
+            if p.copy:
+                key += (int(p.copy),)
         out[key] = float(p.value)
     return out
 
@@ -169,18 +177,21 @@ def export_oxdna() -> Response:
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         # topology.top
         import tempfile, pathlib
+
         with tempfile.TemporaryDirectory() as tmpdir:
-            top_path  = pathlib.Path(tmpdir) / "topology.top"
+            top_path = pathlib.Path(tmpdir) / "topology.top"
             conf_path = pathlib.Path(tmpdir) / "conf.dat"
-            inp_path  = pathlib.Path(tmpdir) / "input.txt"
+            inp_path = pathlib.Path(tmpdir) / "input.txt"
 
             write_topology(design, top_path)
             write_configuration(design, geometry, conf_path)
-            write_oxdna_input(top_path, conf_path, inp_path, steps=10_000, relaxation_steps=1_000)
+            write_oxdna_input(
+                top_path, conf_path, inp_path, steps=10_000, relaxation_steps=1_000
+            )
 
-            zf.write(top_path,  "topology.top")
+            zf.write(top_path, "topology.top")
             zf.write(conf_path, "conf.dat")
-            zf.write(inp_path,  "input.txt")
+            zf.write(inp_path, "input.txt")
 
         readme = (
             "# NADOC oxDNA Export\n\n"
@@ -237,15 +248,20 @@ def run_oxdna_simulation(steps: int = 10_000) -> dict:
     )
 
     oxdna_bin = os.environ.get("OXDNA_BIN", "oxDNA")
-    design  = design_state.get_or_404()
+    design = design_state.get_or_404()
     geometry = _geometry_for_design(design)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         p = pathlib.Path(tmpdir)
-        write_topology(design,   p / "topology.top")
+        write_topology(design, p / "topology.top")
         write_configuration(design, geometry, p / "conf.dat")
-        write_oxdna_input(p / "topology.top", p / "conf.dat",
-                          p / "input.txt", steps=steps, relaxation_steps=min(steps // 10, 1000))
+        write_oxdna_input(
+            p / "topology.top",
+            p / "conf.dat",
+            p / "input.txt",
+            steps=steps,
+            relaxation_steps=min(steps // 10, 1000),
+        )
 
         ret = run_oxdna(p / "input.txt", oxdna_bin=oxdna_bin, timeout=120)
 
@@ -280,16 +296,16 @@ def run_oxdna_simulation(steps: int = 10_000) -> dict:
         pos_map = read_configuration(last_conf, design)
         positions = [
             {
-                "helix_id":          k[0],
-                "bp_index":          k[1],
-                "direction":         k[2],
+                "helix_id": k[0],
+                "bp_index": k[1],
+                "direction": k[2],
                 "backbone_position": v.tolist(),
             }
             for k, v in pos_map.items()
         ]
         return {
             "available": True,
-            "message":   f"oxDNA relaxation complete ({steps} steps).",
+            "message": f"oxDNA relaxation complete ({steps} steps).",
             "positions": positions,
         }
 
@@ -303,16 +319,17 @@ def export_pdb_file() -> Response:
     from backend.core.atomistic_cache import build_atomistic_model_cached
     from backend.core.pdb_export import export_pdb
 
-    design   = _design_for_export()
+    design = _design_for_export()
     pdb_text = export_pdb(
-        design, model=build_atomistic_model_cached(design, fast_bridges=True),
+        design,
+        model=build_atomistic_model_cached(design, fast_bridges=True),
         viewer_terminals=True,
     )
-    name     = (design.metadata.name or "design").replace(" ", "_")
+    name = (design.metadata.name or "design").replace(" ", "_")
     return Response(
-        content     = pdb_text.encode("utf-8"),
-        media_type  = "chemical/x-pdb",
-        headers     = {"Content-Disposition": f'attachment; filename="{name}.pdb"'},
+        content=pdb_text.encode("utf-8"),
+        media_type="chemical/x-pdb",
+        headers={"Content-Disposition": f'attachment; filename="{name}.pdb"'},
     )
 
 
@@ -332,49 +349,83 @@ def export_visualized_pdb_file(payload: PdbVisualizationExport) -> Response:
     model = None
     if src and src.engine == "oxdna" and src.job_id:
         from backend.api.routes_oxdna import (
-            _capture_bead_count, _capture_strand_length, _composite_inputs, _load_job,
-            _relaxed_full_map, _rmsf_average_frame,
+            _capture_bead_count,
+            _capture_strand_length,
+            _composite_inputs,
+            _load_job,
+            _relaxed_full_map,
+            _rmsf_average_frame,
         )
         from backend.core.atomistic import build_atomistic_model
         from backend.core.oxdna_health import (
-            build_display_model, composite_trajectory_atomistic,
+            build_display_model,
+            composite_trajectory_atomistic,
         )
 
         job = _load_job(src.job_id)
         if src.mode == "rmsf":
             design, frame_map, _ = _rmsf_average_frame(job, src.align)
-            model = build_display_model(design, frame_map) if frame_map is not None else None
+            model = (
+                build_display_model(design, frame_map)
+                if frame_map is not None
+                else None
+            )
             flat = None
         elif src.mode == "trajectory" and src.frame is not None:
             design, stages, ref = _composite_inputs(job)
             idx = max(0, src.frame - 1)
-            frames = composite_trajectory_atomistic(
-                design, stages, ref, [idx], align=src.align,
-                n_trailing_extra=_capture_bead_count(job),
-                trailing_extra_strand_length=_capture_strand_length(job)) if stages else {}
+            frames = (
+                composite_trajectory_atomistic(
+                    design,
+                    stages,
+                    ref,
+                    [idx],
+                    align=src.align,
+                    n_trailing_extra=_capture_bead_count(job),
+                    trailing_extra_strand_length=_capture_strand_length(job),
+                )
+                if stages
+                else {}
+            )
             flat = frames.get(str(idx))
         else:
             design, frame_map, _, _, _ = _relaxed_full_map(
-                job, src.align, copies=True, include_extra_bases=True, include_extensions=True)
-            model = build_display_model(design, frame_map) if frame_map is not None else None
+                job,
+                src.align,
+                copies=True,
+                include_extra_bases=True,
+                include_extensions=True,
+            )
+            model = (
+                build_display_model(design, frame_map)
+                if frame_map is not None
+                else None
+            )
             flat = None
 
         if model is None and flat is None:
-            raise HTTPException(409, "The selected oxDNA frame is no longer available for PDB export.")
+            raise HTTPException(
+                409, "The selected oxDNA frame is no longer available for PDB export."
+            )
         if model is None:
             model = build_atomistic_model(design, fast_bridges=True)
             if len(flat) != len(model.atoms) * 3:
-                raise HTTPException(409, "The selected oxDNA frame does not match its saved topology.")
+                raise HTTPException(
+                    409, "The selected oxDNA frame does not match its saved topology."
+                )
             for i, atom in enumerate(model.atoms):
-                atom.x, atom.y, atom.z = map(float, flat[i * 3:i * 3 + 3])
+                atom.x, atom.y, atom.z = map(float, flat[i * 3 : i * 3 + 3])
     # nuc_pos_override is intentionally the same axis-derived atomistic stamping
     # path used for relaxed CG display: it moves each residue to the selected CG
     # backbone position while preserving chemically sane DNA orientation.
-    override, xb_override, ext_override = _pdb_visualization_overrides(payload.positions)
+    override, xb_override, ext_override = _pdb_visualization_overrides(
+        payload.positions
+    )
     if model is None and not payload.positions:
         # Native coordinates plus a scalar map can reuse the bounded atomistic
         # cache; an empty override used to trigger a complete rebuild.
         from backend.core.atomistic_cache import build_atomistic_model_cached
+
         model = build_atomistic_model_cached(design, fast_bridges=True)
     elif model is None:
         model = build_atomistic_model(
@@ -389,7 +440,9 @@ def export_visualized_pdb_file(payload: PdbVisualizationExport) -> Response:
         )
     coloring = payload.coloring
     pdb_text = export_pdb(
-        design, model=model, viewer_terminals=True,
+        design,
+        model=model,
+        viewer_terminals=True,
         scalar_by_key=_pdb_coloring_values(coloring),
         scalar_metadata=(coloring.model_dump(exclude={"values"}) if coloring else None),
     )
@@ -442,7 +495,9 @@ def export_design_maps_file() -> Response:
     return Response(
         content=maps_text.encode("utf-8"),
         media_type="application/json",
-        headers={"Content-Disposition": f'attachment; filename="{name}.design_maps.json"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{name}.design_maps.json"'
+        },
     )
 
 
@@ -457,7 +512,9 @@ def export_basepair_map_file() -> Response:
     return Response(
         content=map_text.encode("utf-8"),
         media_type="application/json",
-        headers={"Content-Disposition": f'attachment; filename="{name}.basepairs.json"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{name}.basepairs.json"'
+        },
     )
 
 
@@ -524,7 +581,9 @@ def export_dry_implicit_restraints_file() -> Response:
     return Response(
         content=buf.getvalue(),
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{name}_dry_implicit_restraints.zip"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{name}_dry_implicit_restraints.zip"'
+        },
     )
 
 
@@ -546,7 +605,11 @@ def debug_mrdna_roundtrip() -> Response:
     import numpy as np
     import MDAnalysis as mda
 
-    from backend.core.gromacs_package import _build_gromacs_input_pdb, _find_top_dir, _pick_ff
+    from backend.core.gromacs_package import (
+        _build_gromacs_input_pdb,
+        _find_top_dir,
+        _pick_ff,
+    )
     from backend.core.mrdna_bridge import (
         mrdna_model_from_nadoc,
         nuc_pos_override_from_mrdna_coarse,
@@ -561,6 +624,7 @@ def debug_mrdna_roundtrip() -> Response:
     # ── mrdna path: dry_run → coarse PDB → override → atomistic ──────────────
     with tempfile.TemporaryDirectory(prefix="nadoc_roundtrip_") as tmpdir:
         import pathlib
+
         model = mrdna_model_from_nadoc(design)
         model.simulate(
             "roundtrip",
@@ -594,17 +658,17 @@ def debug_mrdna_roundtrip() -> Response:
         atoms = {}
         for line in pdb_text.splitlines():
             if line.startswith(("ATOM", "HETATM")):
-                aname  = line[12:16].strip()
-                chain  = line[21]
+                aname = line[12:16].strip()
+                chain = line[21]
                 resnum = line[22:26].strip()
-                x      = float(line[30:38])
-                y      = float(line[38:46])
-                z      = float(line[46:54])
+                x = float(line[30:38])
+                y = float(line[38:46])
+                z = float(line[46:54])
                 atoms[(chain, resnum, aname)] = np.array([x, y, z])
         return atoms
 
     before_atoms = _parse_pdb_atoms(before_pdb)
-    after_atoms  = _parse_pdb_atoms(after_pdb)
+    after_atoms = _parse_pdb_atoms(after_pdb)
 
     p_disp: list[float] = []
     all_disp: list[float] = []
@@ -615,10 +679,16 @@ def debug_mrdna_roundtrip() -> Response:
         if k[2] == "P":
             p_disp.append(d)
 
-    rmsd_p   = math.sqrt(sum(x**2 for x in p_disp)   / len(p_disp))   if p_disp   else float("nan")
-    rmsd_all = math.sqrt(sum(x**2 for x in all_disp) / len(all_disp)) if all_disp else float("nan")
-    mean_p   = sum(p_disp) / len(p_disp) if p_disp else float("nan")
-    max_p    = max(p_disp) if p_disp else float("nan")
+    rmsd_p = (
+        math.sqrt(sum(x**2 for x in p_disp) / len(p_disp)) if p_disp else float("nan")
+    )
+    rmsd_all = (
+        math.sqrt(sum(x**2 for x in all_disp) / len(all_disp))
+        if all_disp
+        else float("nan")
+    )
+    mean_p = sum(p_disp) / len(p_disp) if p_disp else float("nan")
+    max_p = max(p_disp) if p_disp else float("nan")
 
     passed = rmsd_p < 2.0
     stats_txt = (
@@ -646,14 +716,14 @@ def debug_mrdna_roundtrip() -> Response:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(f"{name}_roundtrip_before.pdb", before_pdb)
-        zf.writestr(f"{name}_roundtrip_after.pdb",  after_pdb)
+        zf.writestr(f"{name}_roundtrip_after.pdb", after_pdb)
         zf.writestr("roundtrip_stats.txt", stats_txt)
     buf.seek(0)
 
     return Response(
-        content    = buf.read(),
-        media_type = "application/zip",
-        headers    = {"Content-Disposition": f'attachment; filename="{name}_roundtrip.zip"'},
+        content=buf.read(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{name}_roundtrip.zip"'},
     )
 
 
@@ -665,11 +735,11 @@ def export_psf_file() -> Response:
     """Export the active design as a NAMD-compatible PSF topology file."""
     from backend.core.pdb_export import export_psf
 
-    design   = _design_for_export()
+    design = _design_for_export()
     psf_text = export_psf(design)
-    name     = (design.metadata.name or "design").replace(" ", "_")
+    name = (design.metadata.name or "design").replace(" ", "_")
     return Response(
-        content     = psf_text.encode("utf-8"),
-        media_type  = "text/plain",
-        headers     = {"Content-Disposition": f'attachment; filename="{name}.psf"'},
+        content=psf_text.encode("utf-8"),
+        media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{name}.psf"'},
     )

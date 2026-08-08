@@ -3,6 +3,7 @@
 The pure half of md_bench_probe — parsing NAMD's own benchmark line, the cache, and the
 verdict wording. Running NAMD itself is exercised by experiments/exp52, not here.
 """
+
 import json
 
 import pytest
@@ -24,8 +25,10 @@ Info: Benchmark time: 8 CPUs 0.00176488 s/step 97.8949 ns/day 0 MB memory
 
 
 def pair(off_ns=50.7, on_ns=97.9, ok=True):
-    return [ProbeResult("resident_off", False, 8, 3.4, off_ns, ok),
-            ProbeResult("resident_on", True, 8, 1.77, on_ns, ok)]
+    return [
+        ProbeResult("resident_off", False, 8, 3.4, off_ns, ok),
+        ProbeResult("resident_on", True, 8, 1.77, on_ns, ok),
+    ]
 
 
 class TestParse:
@@ -68,22 +71,28 @@ class TestCache:
 
     def test_a_different_machine_does_not_answer_for_this_one(self, tmp_path):
         # The whole point: one machine's number must not be served as another's.
-        save_measurement(tmp_path, machine_key("RTX 3080 Ti", "/opt/a/namd3", 16),
-                         32_754, pair())
-        assert load_measurement(tmp_path, machine_key("RTX 2080 SUPER", "/opt/a/namd3", 8),
-                                32_754) is None
+        save_measurement(
+            tmp_path, machine_key("RTX 3080 Ti", "/opt/a/namd3", 16), 32_754, pair()
+        )
+        assert (
+            load_measurement(
+                tmp_path, machine_key("RTX 2080 SUPER", "/opt/a/namd3", 8), 32_754
+            )
+            is None
+        )
 
     def test_thread_count_is_part_of_the_machine(self, tmp_path):
         assert machine_key("g", "/o/b/namd3", 8) != machine_key("g", "/o/b/namd3", 16)
 
     def test_the_namd_build_is_part_of_the_machine(self, tmp_path):
-        assert machine_key("g", "/o/NAMD_3.0.2/namd3", 8) != \
-               machine_key("g", "/o/NAMD_3.0.2p1/namd3", 8)
+        assert machine_key("g", "/o/NAMD_3.0.2/namd3", 8) != machine_key(
+            "g", "/o/NAMD_3.0.2p1/namd3", 8
+        )
 
     def test_a_comparable_size_is_reused(self, tmp_path):
         key = machine_key("g", "/o/b/namd3", 8)
         save_measurement(tmp_path, key, 32_754, pair())
-        assert load_measurement(tmp_path, key, 40_000) is not None      # within the bucket
+        assert load_measurement(tmp_path, key, 40_000) is not None  # within the bucket
 
     def test_a_far_larger_system_is_not_answered_from_a_small_one(self, tmp_path):
         key = machine_key("g", "/o/b/namd3", 8)

@@ -18,7 +18,7 @@ from backend.core.md_solvent import (
     pack_solvent_bin,
 )
 
-MAGIC = 0x4E534C56   # "NSLV"
+MAGIC = 0x4E534C56  # "NSLV"
 
 
 def unpack(buf: bytes) -> dict:
@@ -26,8 +26,8 @@ def unpack(buf: bytes) -> dict:
     magic, version, n_frames, reserved = struct.unpack_from("<IIII", buf, 0)
     assert magic == MAGIC, f"bad magic {magic:#x}"
     (header_len,) = struct.unpack_from("<I", buf, 16)
-    header = json.loads(buf[20:20 + header_len].decode("utf-8"))
-    off = 20 + header_len + ((-header_len) % 4)      # zero-padded to 4 bytes
+    header = json.loads(buf[20 : 20 + header_len].decode("utf-8"))
+    off = 20 + header_len + ((-header_len) % 4)  # zero-padded to 4 bytes
     assert off % 4 == 0, "float blocks must be 4-byte aligned"
 
     per_mol = 9 if header["atomistic"] else 3
@@ -36,20 +36,29 @@ def unpack(buf: bytes) -> dict:
     for i, fid in enumerate(header["frame_ids"]):
         nw = header["per_frame_nw"][i]
         n = nw * per_mol
-        water = np.frombuffer(buf, dtype="<f4", count=n, offset=off); off += 4 * n
+        water = np.frombuffer(buf, dtype="<f4", count=n, offset=off)
+        off += 4 * n
         n = header["n_ions"] * 3
-        ions = np.frombuffer(buf, dtype="<f4", count=n, offset=off); off += 4 * n
+        ions = np.frombuffer(buf, dtype="<f4", count=n, offset=off)
+        off += 4 * n
         box = None
         if header.get("has_box"):
-            box = np.frombuffer(buf, dtype="<f4", count=24, offset=off); off += 4 * 24
+            box = np.frombuffer(buf, dtype="<f4", count=24, offset=off)
+            off += 4 * 24
         dna = None
         if n_serials:
             n = n_serials * 3
-            dna = np.frombuffer(buf, dtype="<f4", count=n, offset=off); off += 4 * n
+            dna = np.frombuffer(buf, dtype="<f4", count=n, offset=off)
+            off += 4 * n
         frames[fid] = {"water": water, "ions": ions, "box": box, "dna": dna}
     assert off == len(buf), f"trailing bytes: read {off} of {len(buf)}"
-    return {"version": version, "n_frames": n_frames, "reserved": reserved,
-            "header": header, "frames": frames}
+    return {
+        "version": version,
+        "n_frames": n_frames,
+        "reserved": reserved,
+        "header": header,
+        "frames": frames,
+    }
 
 
 def make_frame(nw, n_ions, *, atomistic=False, seed=0, has_box=True, **kw):
@@ -60,11 +69,18 @@ def make_frame(nw, n_ions, *, atomistic=False, seed=0, has_box=True, **kw):
     f = {
         "water": rng.normal(size=nw * per_mol).astype(np.float32),
         "ions": rng.normal(size=n_ions * 3).astype(np.float32),
-        "box": rng.normal(size=24).astype(np.float32) if has_box else np.zeros(0, np.float32),
+        "box": rng.normal(size=24).astype(np.float32)
+        if has_box
+        else np.zeros(0, np.float32),
         "ion_species": np.arange(n_ions, dtype=np.uint8) % len(SPECIES),
-        "n_water": nw, "n_ions": n_ions, "n_ions_total": max(n_ions, 7),
-        "n_waters_total": nw * 10, "has_box": has_box,
-        "atomistic": atomistic, "capped": False, "shell_nm": 0.5,
+        "n_water": nw,
+        "n_ions": n_ions,
+        "n_ions_total": max(n_ions, 7),
+        "n_waters_total": nw * 10,
+        "has_box": has_box,
+        "atomistic": atomistic,
+        "capped": False,
+        "shell_nm": 0.5,
     }
     f.update(kw)
     return f
@@ -88,13 +104,18 @@ class TestRoundTrip:
         assert got["frames"][0]["water"].size == 4 * 9
 
     def test_multiple_frames_keep_their_composite_ids_and_order(self):
-        frames = {7: make_frame(3, 2, seed=1), 2: make_frame(5, 2, seed=2),
-                  11: make_frame(1, 2, seed=3)}
+        frames = {
+            7: make_frame(3, 2, seed=1),
+            2: make_frame(5, 2, seed=2),
+            11: make_frame(1, 2, seed=3),
+        }
         got = unpack(pack_solvent_bin(frames))
-        assert got["header"]["frame_ids"] == [2, 7, 11]      # sorted numerically
+        assert got["header"]["frame_ids"] == [2, 7, 11]  # sorted numerically
         assert got["header"]["per_frame_nw"] == [5, 3, 1]
         for fid in (2, 7, 11):
-            np.testing.assert_array_equal(got["frames"][fid]["water"], frames[fid]["water"])
+            np.testing.assert_array_equal(
+                got["frames"][fid]["water"], frames[fid]["water"]
+            )
 
     # A hydration shell is a DIFFERENT molecule set each frame, so the per-frame
     # water block length varies. The header's per_frame_nw is what lets the reader
@@ -120,7 +141,9 @@ class TestRoundTrip:
 
 class TestLayout:
     def test_magic_and_version(self):
-        magic, version = struct.unpack_from("<II", pack_solvent_bin({0: make_frame(1, 1)}), 0)
+        magic, version = struct.unpack_from(
+            "<II", pack_solvent_bin({0: make_frame(1, 1)}), 0
+        )
         assert magic == MAGIC
         assert version == 2
 
@@ -128,12 +151,14 @@ class TestLayout:
     # unaligned offset, and `new Float32Array(buf, offset)` throws in JS unless
     # offset % 4 == 0.
     @pytest.mark.parametrize("pad_key_len", range(1, 9))
-    def test_float_blocks_are_four_byte_aligned_for_any_header_length(self, pad_key_len):
+    def test_float_blocks_are_four_byte_aligned_for_any_header_length(
+        self, pad_key_len
+    ):
         f = make_frame(2, 1)
         buf = pack_solvent_bin({0: f}, meta={"x" * pad_key_len: 1})
         (header_len,) = struct.unpack_from("<I", buf, 16)
         assert (20 + header_len + ((-header_len) % 4)) % 4 == 0
-        unpack(buf)                    # and it decodes
+        unpack(buf)  # and it decodes
 
     def test_no_trailing_bytes(self):
         unpack(pack_solvent_bin({0: make_frame(3, 2), 1: make_frame(4, 2)}))
@@ -156,7 +181,7 @@ class TestIncludeDna:
 
     def test_dna_block_round_trips(self):
         f = make_frame(3, 2)
-        f["dna"] = np.arange(12, dtype=np.float32)      # 4 serials × 3
+        f["dna"] = np.arange(12, dtype=np.float32)  # 4 serials × 3
         got = unpack(pack_solvent_bin({0: f}, meta={"n_serials": 4}))
         assert got["header"]["n_serials"] == 4
         np.testing.assert_array_equal(got["frames"][0]["dna"], np.arange(12))
@@ -172,8 +197,9 @@ class TestIncludeDna:
         f = make_frame(1, 1)
         f["dna"] = np.array([1.0, 2.0, 3.0], dtype=np.float32)
         got = unpack(pack_solvent_bin({0: f}, meta={"n_serials": 3}))
-        np.testing.assert_array_equal(got["frames"][0]["dna"],
-                                      [1, 2, 3, 0, 0, 0, 0, 0, 0])
+        np.testing.assert_array_equal(
+            got["frames"][0]["dna"], [1, 2, 3, 0, 0, 0, 0, 0, 0]
+        )
 
     def test_dna_follows_the_box_block(self):
         f = make_frame(1, 1)
@@ -253,8 +279,10 @@ class TestIndependentToggles:
         assert got["frames"][0]["ions"].size == 0
 
     def test_mixed_combinations_across_multiple_frames(self):
-        frames = {0: make_frame(3, 2, has_box=True, seed=1),
-                  1: make_frame(7, 2, has_box=True, seed=2)}
+        frames = {
+            0: make_frame(3, 2, has_box=True, seed=1),
+            1: make_frame(7, 2, has_box=True, seed=2),
+        }
         got = unpack(pack_solvent_bin(frames))
         assert got["header"]["per_frame_nw"] == [3, 7]
 
@@ -262,7 +290,7 @@ class TestIndependentToggles:
     # future caller cannot reintroduce the desync silently.
     def test_packer_rejects_a_header_block_mismatch(self):
         bad = make_frame(2, 3)
-        bad["ions"] = np.zeros(0, dtype=np.float32)    # claims 3, writes none
+        bad["ions"] = np.zeros(0, dtype=np.float32)  # claims 3, writes none
         with pytest.raises(AssertionError):
             pack_solvent_bin({0: bad})
 
@@ -276,4 +304,6 @@ class TestIndependentToggles:
 class TestVersion:
     def test_version_is_two(self):
         """Bumped when blocks became optional — a stale client must fail closed."""
-        assert struct.unpack_from("<I", pack_solvent_bin({0: make_frame(1, 1)}), 4)[0] == 2
+        assert (
+            struct.unpack_from("<I", pack_solvent_bin({0: make_frame(1, 1)}), 4)[0] == 2
+        )

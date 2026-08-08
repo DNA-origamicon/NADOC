@@ -83,7 +83,7 @@ def _smooth_cg_positions_per_domain(
 
     for strand in design.strands:
         for domain in strand.domains:
-            h_id    = domain.helix_id
+            h_id = domain.helix_id
             dir_str = domain.direction.value  # "FORWARD" or "REVERSE"
 
             # Collect bp indices in 5'→3' order for this domain.
@@ -112,7 +112,7 @@ def _smooth_cg_positions_per_domain(
 
             # Gaussian smooth each coordinate axis independently.
             # mode='nearest' avoids edge ringing by clamping boundary values.
-            smoothed_pts = gaussian_filter1d(pts, sigma=sigma, axis=0, mode='nearest')
+            smoothed_pts = gaussian_filter1d(pts, sigma=sigma, axis=0, mode="nearest")
 
             for key, pos in zip(valid_keys, smoothed_pts):
                 smoothed[key] = pos
@@ -164,9 +164,14 @@ def deformed_helix_axes(
     """
     axis_dir = {}
     for h in design.helices:
-        d = np.array([h.axis_end.x - h.axis_start.x,
-                      h.axis_end.y - h.axis_start.y,
-                      h.axis_end.z - h.axis_start.z], dtype=float)
+        d = np.array(
+            [
+                h.axis_end.x - h.axis_start.x,
+                h.axis_end.y - h.axis_start.y,
+                h.axis_end.z - h.axis_start.z,
+            ],
+            dtype=float,
+        )
         n = np.linalg.norm(d)
         axis_dir[h.id] = d / n if n > 1e-9 else np.array([0.0, 0.0, 1.0])
 
@@ -183,7 +188,7 @@ def deformed_helix_axes(
         adir = axis_dir.get(h_id)
         paired_bp: list[int] = []
         paired_pt: list[np.ndarray] = []
-        paired_s: list[np.ndarray | None] = []   # per-pair shared a3 stacking axis
+        paired_s: list[np.ndarray | None] = []  # per-pair shared a3 stacking axis
         for bp in sorted(bpmap):
             dd = bpmap[bp]
             if "FORWARD" in dd and "REVERSE" in dd:
@@ -198,7 +203,11 @@ def deformed_helix_axes(
                     # front (so opposite-signed rows never cancel when interpolated/smoothed).
                     s = a3f - a3r
                     n = float(np.linalg.norm(s))
-                    s = s / n if n > 1e-9 else (adir if adir is not None else np.array([0.0, 0.0, 1.0]))
+                    s = (
+                        s / n
+                        if n > 1e-9
+                        else (adir if adir is not None else np.array([0.0, 0.0, 1.0]))
+                    )
                     if adir is not None and float(np.dot(s, adir)) < 0:
                         s = -s
                     paired_s.append(s)
@@ -218,7 +227,9 @@ def deformed_helix_axes(
             # renormalised.  a3 is on-axis on an ideal duplex, so this removes the
             # ~12° off-axis tilt the d(centerline)/dbp tangent carries.
             ks = np.array(paired_s)
-            s_axis = np.stack([np.interp(core_bps, kb, ks[:, c]) for c in range(3)], axis=1)
+            s_axis = np.stack(
+                [np.interp(core_bps, kb, ks[:, c]) for c in range(3)], axis=1
+            )
             if sigma > 0 and len(core_bps) >= 3:
                 s_axis = gaussian_filter1d(s_axis, sigma=sigma, axis=0, mode="nearest")
             sn = np.linalg.norm(s_axis, axis=1, keepdims=True)
@@ -304,8 +315,9 @@ def build_atomistic_model_from_cg_spline(
     # not the ~12°-off-axis centerline tangent — the tangent rotates WC pairs OPEN
     # (primary H-bond 3.35 Å, 55% closed on VoltronCore) whereas a3 seats them at the
     # native duplex geometry (2.85 Å, 77% closed).  Same fix the display path uses.
-    axis_override = deformed_helix_axes(design, full_map, sigma=sigma,
-                                        base_orient="oxdna_a3")
+    axis_override = deformed_helix_axes(
+        design, full_map, sigma=sigma, base_orient="oxdna_a3"
+    )
     # UNPAIRED ssDNA (overhangs / tails / unpaired scaffold loops) has no helix axis to
     # fit, so the axis-derived placement above collapses distinct ssDNA nucleotides —
     # 0.5-1.1 nm apart in the relaxed conf — onto near-coincident atoms.  NAMD then can't
@@ -317,6 +329,7 @@ def build_atomistic_model_from_cg_spline(
     # Lazy import breaks the cg_to_atomistic <-> oxdna_health cycle (oxdna_health imports
     # deformed_helix_axes from this module).
     from backend.core.oxdna_health import _ssdna_frame_override
+
     ssdna_override = _ssdna_frame_override(design, full_map)
     # apply_design_geometry=False: the CG override already gives each nucleotide's FINAL
     # world position (deformed + cluster-transformed, then oxDNA-relaxed).  Letting
@@ -329,9 +342,13 @@ def build_atomistic_model_from_cg_spline(
     # Without it, REVERSE helices keep the wrong correction and pairs stay open
     # (2.85 Å vs 3.08 Å primary H-bond on VoltronCore).
     model = build_atomistic_model(
-        design, nuc_pos_override=pos_override, axis_override=axis_override,
-        frame_override=ssdna_override, apply_design_geometry=False,
-        relaxed_oxdna_phase=True)
+        design,
+        nuc_pos_override=pos_override,
+        axis_override=axis_override,
+        frame_override=ssdna_override,
+        apply_design_geometry=False,
+        relaxed_oxdna_phase=True,
+    )
 
     # Safety net: the reconstruction must preserve the CG structure's extent.  If a
     # future seed still blows up (e.g. an unwrapped/torn conf), fail with an actionable
@@ -345,7 +362,7 @@ def build_atomistic_model_from_cg_spline(
         if cg_span > 1.0 and at_span > 2.0 * cg_span:
             raise ValueError(
                 f"oxDNA→atomistic reconstruction exploded the structure "
-                f"({cg_span:.0f} nm CG → {at_span:.0f} nm all-atom, {at_span/cg_span:.1f}×). "
+                f"({cg_span:.0f} nm CG → {at_span:.0f} nm all-atom, {at_span / cg_span:.1f}×). "
                 f"The relaxed conf could not be reconstructed cleanly — re-run the oxDNA "
                 f"relaxation, or seed from a conformation that fits within one box."
             )
@@ -354,7 +371,7 @@ def build_atomistic_model_from_cg_spline(
 
 def read_backbone_positions(
     conf_path: str | Path,
-    design:    Design,
+    design: Design,
 ) -> dict[tuple[str, int, str], np.ndarray]:
     """
     Read a relaxed oxDNA configuration and return the reconstructed true
@@ -433,22 +450,34 @@ def _refit_helix_axes(
 
         # Ensure fitted direction points in the same half-space as the original
         # helix axis (avoid axis flip).
-        orig_start = np.array([helix.axis_start.x, helix.axis_start.y, helix.axis_start.z])
-        orig_end   = np.array([helix.axis_end.x,   helix.axis_end.y,   helix.axis_end.z])
-        orig_dir   = orig_end - orig_start
-        orig_dir  /= np.linalg.norm(orig_dir) + 1e-14
+        orig_start = np.array(
+            [helix.axis_start.x, helix.axis_start.y, helix.axis_start.z]
+        )
+        orig_end = np.array([helix.axis_end.x, helix.axis_end.y, helix.axis_end.z])
+        orig_dir = orig_end - orig_start
+        orig_dir /= np.linalg.norm(orig_dir) + 1e-14
         if np.dot(fitted_dir, orig_dir) < 0:
             fitted_dir = -fitted_dir
 
         # Project the original axis_start and axis_end onto the fitted line to
         # get new start/end that preserve the bp_start/bp_end mapping.
-        new_start = centroid + _project_onto_axis(orig_start, centroid, fitted_dir) * fitted_dir
-        new_end   = centroid + _project_onto_axis(orig_end,   centroid, fitted_dir) * fitted_dir
+        new_start = (
+            centroid + _project_onto_axis(orig_start, centroid, fitted_dir) * fitted_dir
+        )
+        new_end = (
+            centroid + _project_onto_axis(orig_end, centroid, fitted_dir) * fitted_dir
+        )
 
-        new_helix = helix.model_copy(update={
-            "axis_start": Vec3(x=float(new_start[0]), y=float(new_start[1]), z=float(new_start[2])),
-            "axis_end":   Vec3(x=float(new_end[0]),   y=float(new_end[1]),   z=float(new_end[2])),
-        })
+        new_helix = helix.model_copy(
+            update={
+                "axis_start": Vec3(
+                    x=float(new_start[0]), y=float(new_start[1]), z=float(new_start[2])
+                ),
+                "axis_end": Vec3(
+                    x=float(new_end[0]), y=float(new_end[1]), z=float(new_end[2])
+                ),
+            }
+        )
         new_helices.append(new_helix)
 
     return design.model_copy(update={"helices": new_helices})

@@ -29,7 +29,8 @@ from urllib.parse import parse_qs
 DEFAULT_DOC_ID = "__default__"
 
 _current_doc: contextvars.ContextVar[str] = contextvars.ContextVar(
-    "nadoc_current_doc", default=DEFAULT_DOC_ID,
+    "nadoc_current_doc",
+    default=DEFAULT_DOC_ID,
 )
 
 # The 2D cadnano editor draws from topology and never reads embedded 3D
@@ -38,7 +39,8 @@ _current_doc: contextvars.ContextVar[str] = contextvars.ContextVar(
 # Requests that don't send the header — the 3D view, internal callers, tests —
 # resolve to False and get full geometry, so all legacy behavior is unchanged.
 _skip_geometry: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    "nadoc_skip_geometry", default=False,
+    "nadoc_skip_geometry",
+    default=False,
 )
 
 # Revision assigned to the mutation handled by the CURRENT request, set under the
@@ -48,7 +50,8 @@ _skip_geometry: contextvars.ContextVar[bool] = contextvars.ContextVar(
 # inherits a prior request's revision — must live HERE (not in state.py) so the
 # middleware can reset it in the same context chain as the doc id.
 _request_revision: contextvars.ContextVar = contextvars.ContextVar(
-    "nadoc_request_revision", default=None,
+    "nadoc_request_revision",
+    default=None,
 )
 
 
@@ -61,6 +64,7 @@ def current_request_revision():
 def set_request_revision(value: int) -> None:
     """Record the revision assigned to the current request's mutation."""
     _request_revision.set(value)
+
 
 # Header / query names the frontend uses to name its document.
 DOC_HEADER = "x-nadoc-doc"

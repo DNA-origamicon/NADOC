@@ -60,6 +60,7 @@ router = APIRouter(tags=["cando"])
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _workspace() -> Path:
     return _WORKSPACE_DIR
 
@@ -76,6 +77,7 @@ def _load_job(job_id: str) -> CandoJob:
 
 def _current_fingerprint() -> "str | None":
     from backend.core.oxdna_staleness import oxdna_design_fingerprint
+
     design = design_state.get_design()
     if design is None:
         return None
@@ -87,35 +89,53 @@ def _current_fingerprint() -> "str | None":
 
 def _is_out_of_date(job: CandoJob, current_fp: "str | None") -> bool:
     from backend.core.oxdna_staleness import job_out_of_date
+
     return job_out_of_date(job.design_fingerprint, current_fp)
 
 
 # ── Request models ────────────────────────────────────────────────────────────
 
+
 class CreateCandoJobRequest(BaseModel):
-    kind:       str = Field("predict",
-                            description="'predict' (plain FEM shape prediction) or 'autorefine' "
-                                        "(tune the loop/skip program, auto-apply it as a reversible "
-                                        "feature-log entry, then cache the FEM analysis of the "
-                                        "refined design so all display modes work on the job).")
-    nonlinear:  bool = Field(True,
-                             description="Fine (geometrically-nonlinear corotational, "
-                                         "~0.95·CanDo) vs Coarse (linear preview, ~0.92).  For an "
-                                         "autorefine job this is also the per-trial oracle mode.")
-    n_steps:    int = Field(20, ge=1, le=200,
-                            description="Corotational load-step count (nonlinear only)")
-    with_rmsf:  bool = Field(True, description="Also compute the free-free NMA per-bp RMSF")
+    kind: str = Field(
+        "predict",
+        description="'predict' (plain FEM shape prediction) or 'autorefine' "
+        "(tune the loop/skip program, auto-apply it as a reversible "
+        "feature-log entry, then cache the FEM analysis of the "
+        "refined design so all display modes work on the job).",
+    )
+    nonlinear: bool = Field(
+        True,
+        description="Fine (geometrically-nonlinear corotational, "
+        "~0.95·CanDo) vs Coarse (linear preview, ~0.92).  For an "
+        "autorefine job this is also the per-trial oracle mode.",
+    )
+    n_steps: int = Field(
+        20, ge=1, le=200, description="Corotational load-step count (nonlinear only)"
+    )
+    with_rmsf: bool = Field(
+        True, description="Also compute the free-free NMA per-bp RMSF"
+    )
     # Job-request annotations (C1/C2): anchors held fixed (Dirichlet BC) + a uniform E-field body
     # load, both threaded into predict_shape(...).  Never a topology edit (Three-Layer Law).
-    anchors:    Optional[list] = Field(None, description="Shared oxDNA anchor-scope descriptors "
-                                       "(overhang/cluster/domain/strand/base) held fixed during the solve")
-    field:      Optional[dict] = Field(None, description="Uniform E-field {field_pN, dir} — the same "
-                                       "per-nucleotide force oxDNA applies; needs ≥1 anchor (COM drift)")
-    autostart:  bool = Field(True)
-    design_source_path: Optional[str] = Field(None, description="Workspace path of the active design")
+    anchors: Optional[list] = Field(
+        None,
+        description="Shared oxDNA anchor-scope descriptors "
+        "(overhang/cluster/domain/strand/base) held fixed during the solve",
+    )
+    field: Optional[dict] = Field(
+        None,
+        description="Uniform E-field {field_pN, dir} — the same "
+        "per-nucleotide force oxDNA applies; needs ≥1 anchor (COM drift)",
+    )
+    autostart: bool = Field(True)
+    design_source_path: Optional[str] = Field(
+        None, description="Workspace path of the active design"
+    )
 
 
 # ── Create / list / status ────────────────────────────────────────────────────
+
 
 @router.post("/cando/jobs")
 async def create_cando_job(body: CreateCandoJobRequest) -> dict:
@@ -138,32 +158,41 @@ async def create_cando_job(body: CreateCandoJobRequest) -> dict:
 
     kind = body.kind if body.kind in ("predict", "autorefine") else "predict"
     job = new_cando_job(
-        design_name        = name,
-        kind               = kind,
-        nonlinear          = body.nonlinear,
-        n_steps            = body.n_steps,
-        with_rmsf          = body.with_rmsf,
+        design_name=name,
+        kind=kind,
+        nonlinear=body.nonlinear,
+        n_steps=body.n_steps,
+        with_rmsf=body.with_rmsf,
         # Autorefine is a free-free design-optimization loop → don't drive it with anchors/field
         # (they'd change the twist/bend objective); they apply only to a plain predict job.
-        anchors            = body.anchors if kind == "predict" else None,
-        field              = body.field if kind == "predict" else None,
-        n_nucleotides      = len(_strand_nucleotide_order(design)),
-        design_source_path = body.design_source_path,
-        design_fingerprint = oxdna_design_fingerprint(design),
-        feature_log_position = effective_feature_log_position(design),
+        anchors=body.anchors if kind == "predict" else None,
+        field=body.field if kind == "predict" else None,
+        n_nucleotides=len(_strand_nucleotide_order(design)),
+        design_source_path=body.design_source_path,
+        design_fingerprint=oxdna_design_fingerprint(design),
+        feature_log_position=effective_feature_log_position(design),
         # Autorefine auto-applies from its worker thread → bind the job to the current document so
         # the feature-log entry lands on the right design in a multi-doc session.
-        doc_id             = doc_context.get_current_doc(),
+        doc_id=doc_context.get_current_doc(),
     )
     job.status = CandoStatus.preparing
     job.save(_workspace())
-    logger.info("create_cando_job: job_id=%s design=%s nonlinear=%s",
-                job.job_id, name, body.nonlinear)
+    logger.info(
+        "create_cando_job: job_id=%s design=%s nonlinear=%s",
+        job.job_id,
+        name,
+        body.nonlinear,
+    )
 
     try:
         await run_in_threadpool(prepare_cando_job, design, job, _workspace())
     except Exception as exc:  # noqa: BLE001
-        logger.error("create_cando_job: prepare FAILED for %s: %s", job.job_id, exc, exc_info=True)
+        logger.error(
+            "create_cando_job: prepare FAILED for %s: %s",
+            job.job_id,
+            exc,
+            exc_info=True,
+        )
         job.status = CandoStatus.failed
         job.error = f"Preparation failed: {exc}"
         job.save(_workspace())
@@ -179,6 +208,7 @@ async def create_cando_job(body: CreateCandoJobRequest) -> dict:
 @router.get("/cando/jobs")
 async def list_cando_jobs() -> list[dict]:
     from backend.core.design_disk_usage import dir_size_bytes_cached
+
     ws = _workspace()
     jobs = [reconcile_cando_status(j, ws) for j in CandoJob.list_jobs(ws)]
     current_fp = _current_fingerprint()
@@ -223,6 +253,7 @@ async def get_cando_error_log(job_id: str) -> dict:
 
 # ── Control ───────────────────────────────────────────────────────────────────
 
+
 @router.post("/cando/jobs/{job_id}/start")
 async def start_cando_job(job_id: str) -> dict:
     job = _load_job(job_id)
@@ -259,6 +290,7 @@ async def delete_cando_job(job_id: str) -> dict:
     if is_running(job_id) or job.status == CandoStatus.running:
         raise HTTPException(400, "Stop the CanDo job before deleting it")
     from backend.core.job_archive import purge_index_entry
+
     jd = job.job_dir(ws)
     if jd.exists():
         shutil.rmtree(jd)
@@ -267,6 +299,7 @@ async def delete_cando_job(job_id: str) -> dict:
 
 
 # ── Display ───────────────────────────────────────────────────────────────────
+
 
 @router.get("/cando/jobs/{job_id}/snapshot-geometry")
 async def get_cando_snapshot_geometry(job_id: str) -> dict:
@@ -279,14 +312,22 @@ async def get_cando_snapshot_geometry(job_id: str) -> dict:
     Same shape as ``GET /design/geometry`` plus the snapshot ``design`` object:
     ``{ready, design, nucleotides:[...], helix_axes:[{helix_id,start,end,...}]}``.
     """
-    from backend.core.deformation import _apply_ovhg_rotations_to_axes, deformed_helix_axes
+    from backend.core.deformation import (
+        _apply_ovhg_rotations_to_axes,
+        deformed_helix_axes,
+    )
     from backend.core.design_geometry import _geometry_for_helices
     from backend.core.cando_runner import _load_snapshot_design
 
     job = _load_job(job_id)
     design = _load_snapshot_design(job.job_dir(_workspace()))
     if design is None or not design.helices:
-        return {"job_id": job.job_id, "ready": False, "nucleotides": [], "helix_axes": []}
+        return {
+            "job_id": job.job_id,
+            "ready": False,
+            "nucleotides": [],
+            "helix_axes": [],
+        }
 
     def _compute() -> tuple[list, list]:
         nucleotides = _geometry_for_helices(design, None)
@@ -361,7 +402,9 @@ async def get_cando_deviation(job_id: str) -> dict:
         return {"job_id": job.job_id, "ready": False, "positions": []}
     design = _load_snapshot_design(jd)
     if design is None:
-        raise HTTPException(500, f"CanDo job {job_id!r} has no design snapshot to compare against")
+        raise HTTPException(
+            500, f"CanDo job {job_id!r} has no design snapshot to compare against"
+        )
 
     result = await run_in_threadpool(compute_deviation, design, cached["positions"])
     return {"job_id": job.job_id, "ready": True, **result}
@@ -386,7 +429,9 @@ async def get_cando_cylinders(job_id: str) -> dict:
         return {"job_id": job.job_id, "ready": False, "helices": [], "joints": []}
     design = _load_snapshot_design(jd)
     if design is None:
-        raise HTTPException(500, f"CanDo job {job_id!r} has no design snapshot for cylinders")
+        raise HTTPException(
+            500, f"CanDo job {job_id!r} has no design snapshot for cylinders"
+        )
 
     rmsf_cached = load_rmsf(jd)
     rmsf = rmsf_cached.get("rmsf") if rmsf_cached else None
@@ -419,13 +464,16 @@ async def get_cando_shape_source(job_id: str) -> dict:
         return {"job_id": job.job_id, "ready": False}
     design = _load_snapshot_design(jd)
     if design is None:
-        raise HTTPException(500, f"CanDo job {job_id!r} has no design snapshot to compare against")
+        raise HTTPException(
+            500, f"CanDo job {job_id!r} has no design snapshot to compare against"
+        )
 
     rmsf_cached = load_rmsf(jd)
     rmsf = rmsf_cached.get("rmsf") if rmsf_cached else None
     reference = await run_in_threadpool(core_reference_geometry, design)
     bundle = await run_in_threadpool(
-        build_cando_shape_source, cached["positions"], reference, rmsf=rmsf)
+        build_cando_shape_source, cached["positions"], reference, rmsf=rmsf
+    )
     ready = bundle["descriptors"] is not None
     return {"job_id": job.job_id, "ready": ready, **bundle}
 

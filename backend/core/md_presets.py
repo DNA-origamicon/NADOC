@@ -31,6 +31,7 @@ owns by definition, and a preset's ``locked`` fields — settings where an overr
 make the preset's NAME a lie rather than merely tune it.  Today that is exactly one field
 (`literature` locks ``allow_water_shell_carve``); see ``RelaxPreset.locked``.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -112,7 +113,7 @@ PRESETS: dict[str, RelaxPreset] = {
             "from the Mg-screened equilibrium. See experiments/exp50_vacuum_on_curved."
         ),
         reference="Yoo, Li, Slone, Maffeo & Aksimentiev, Methods Mol Biol 1811 (2018) "
-                  "§3.2 (ENRG-MD, in vacuo) — not applicable to NADOC geometry",
+        "§3.2 (ENRG-MD, in vacuo) — not applicable to NADOC geometry",
     ),
     IMPLICIT_GBIS: RelaxPreset(
         id=IMPLICIT_GBIS,
@@ -140,7 +141,7 @@ PRESETS: dict[str, RelaxPreset] = {
         ),
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
-            "water_shell_nm": 0.0,     # full box; the carve is a memory fallback only
+            "water_shell_nm": 0.0,  # full box; the carve is a memory fallback only
             # The tutorial's own recipe is the DNA bbox ± 20 Å.  NADOC shipped 1.2 nm,
             # 40 % tighter.  namd_solvate.resolve_padding_nm trims this back down when
             # the resulting cell would not fit the hardware — a carve would cost the
@@ -166,10 +167,12 @@ PRESETS: dict[str, RelaxPreset] = {
             # numbers go in a paper, so give the solute more room to tumble than the
             # reference strictly needs.
             "padding_nm": 2.5,
-            "early_stop_relax": False,   # never truncate a stage you intend to publish
+            "early_stop_relax": False,  # never truncate a stage you intend to publish
         },
-        reference=("Roodhuizen et al., ACS Nano 13, 10798 (2019); "
-                   "Joshi, Li & Aksimentiev, Methods Mol Biol 2639 (2023)"),
+        reference=(
+            "Roodhuizen et al., ACS Nano 13, 10798 (2019); "
+            "Joshi, Li & Aksimentiev, Methods Mol Biol 2639 (2023)"
+        ),
     ),
     DESIGN_SPEED: RelaxPreset(
         id=DESIGN_SPEED,
@@ -194,9 +197,11 @@ PRESETS: dict[str, RelaxPreset] = {
             "fast": True,
             "production_timestep_fs": 4.0,
         },
-        reference=("NADOC measured defaults: exp47 electrostatics (+39 % throughput, "
-                   "structurally indistinguishable), exp49 integrator probe, the "
-                   "GPU-resident size crossover, bounding-box cell sizing under 20 ns"),
+        reference=(
+            "NADOC measured defaults: exp47 electrostatics (+39 % throughput, "
+            "structurally indistinguishable), exp49 integrator probe, the "
+            "GPU-resident size crossover, bounding-box cell sizing under 20 ns"
+        ),
     ),
     LITERATURE: RelaxPreset(
         id=LITERATURE,
@@ -236,24 +241,35 @@ PRESETS: dict[str, RelaxPreset] = {
         # system will not fit, the run is ATTEMPTED at full box with a warning — see
         # md_gate_a.gateAMessage — rather than quietly becoming something else.
         locked=frozenset({"allow_water_shell_carve"}),
-        reference=("Yoo, Li, Slone, Maffeo & Aksimentiev, Methods Mol Biol 1811 (2018) "
-                   "§3.3 — explicit MgCl2, Mg(H2O)6 + CUFIX, ENM ladder "
-                   "k = 0.5 / 0.1 / 0.01 / 0, 4.8 ns per stage at 2 fs"),
+        reference=(
+            "Yoo, Li, Slone, Maffeo & Aksimentiev, Methods Mol Biol 1811 (2018) "
+            "§3.3 — explicit MgCl2, Mg(H2O)6 + CUFIX, ENM ladder "
+            "k = 0.5 / 0.1 / 0.01 / 0, 4.8 ns per stage at 2 fs"
+        ),
     ),
 }
 
 #: Presentation order for the dropdown — cheapest first.
-PRESET_ORDER = (FAST_SHAPE, IMPLICIT_GBIS, DESIGN_SPEED, STANDARD, LITERATURE, FULL_PHYSICS)
+PRESET_ORDER = (
+    FAST_SHAPE,
+    IMPLICIT_GBIS,
+    DESIGN_SPEED,
+    STANDARD,
+    LITERATURE,
+    FULL_PHYSICS,
+)
 
 
 def get_preset(preset_id: "str | None") -> RelaxPreset:
     """Look up a preset, falling back to the default for unknown/empty ids."""
-    return PRESETS.get((preset_id or "").strip() or DEFAULT_PRESET,
-                       PRESETS[DEFAULT_PRESET])
+    return PRESETS.get(
+        (preset_id or "").strip() or DEFAULT_PRESET, PRESETS[DEFAULT_PRESET]
+    )
 
 
-def apply_preset(preset_id: "str | None", requested: dict,
-                 explicit: "set[str] | None" = None) -> dict:
+def apply_preset(
+    preset_id: "str | None", requested: dict, explicit: "set[str] | None" = None
+) -> dict:
     """Merge a preset's defaults under ``requested``.
 
     ``explicit`` names the fields the caller actually set; those are never overridden —
@@ -305,16 +321,17 @@ def preset_catalogue() -> list[dict]:
     for p in (PRESETS[i] for i in PRESET_ORDER):
         ok, why = preset_availability(p)
         out.append(
-        {
-            "id": p.id,
-            "label": p.label,
-            "summary": p.summary,
-            "available": ok,
-            "unavailable_reason": why,
-            "reference": p.reference,
-            "defaults": dict(p.defaults),
-            "locked": sorted(p.locked),
-            "protocol": p.defaults.get("protocol", EXPLICIT_PROTOCOL),
-            "is_default": p.id == DEFAULT_PRESET,
-        })
+            {
+                "id": p.id,
+                "label": p.label,
+                "summary": p.summary,
+                "available": ok,
+                "unavailable_reason": why,
+                "reference": p.reference,
+                "defaults": dict(p.defaults),
+                "locked": sorted(p.locked),
+                "protocol": p.defaults.get("protocol", EXPLICIT_PROTOCOL),
+                "is_default": p.id == DEFAULT_PRESET,
+            }
+        )
     return out

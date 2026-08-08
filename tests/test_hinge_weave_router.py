@@ -17,10 +17,18 @@ from pathlib import Path
 import pytest
 
 from backend.core.hinge_weave_router import (
-    _analyze_leaves, realize_hinge_weave, realize_hinge_weave_seamless,
+    _analyze_leaves,
+    realize_hinge_weave,
+    realize_hinge_weave_seamless,
 )
 from backend.core.models import (
-    Design, Direction, Domain, ForcedLigation, LatticeType, Strand, StrandType,
+    Design,
+    Direction,
+    Domain,
+    ForcedLigation,
+    LatticeType,
+    Strand,
+    StrandType,
 )
 from backend.core.scaffold_invariants import scaffold_routing_invariants
 from backend.core.seamed_router import _is_forward
@@ -45,8 +53,11 @@ def _scaf(design: Design):
 
 def _params():
     return [
-        pytest.param(p, id=name, marks=pytest.mark.skipif(
-            not p.exists(), reason=f"fixture missing: {p}"))
+        pytest.param(
+            p,
+            id=name,
+            marks=pytest.mark.skipif(not p.exists(), reason=f"fixture missing: {p}"),
+        )
         for name, p in _HINGES.items()
     ]
 
@@ -56,7 +67,9 @@ def _skip_if_not_primitive(design: Design):
     file was overwritten by a routed design (e.g. saved from the app), skip rather
     than fail on a corrupted fixture."""
     if design.crossovers or len(_scaf(design)) <= 1:
-        pytest.skip("fixture is a routed design, not a primitive (workspace file mutated)")
+        pytest.skip(
+            "fixture is a routed design, not a primitive (workspace file mutated)"
+        )
 
 
 @pytest.mark.parametrize("path", _params())
@@ -64,8 +77,12 @@ def test_realizes_single_gate_clean_strand(path: Path):
     design = _load(path)
     _skip_if_not_primitive(design)
     orig_fls = {
-        (f.three_prime_helix_id, f.three_prime_bp,
-         f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in design.forced_ligations
     }
     routed = realize_hinge_weave(design.model_copy(deep=True))
@@ -80,8 +97,12 @@ def test_realizes_single_gate_clean_strand(path: Path):
     assert validate_design(out).passed
     # forced ligations preserved verbatim
     assert {
-        (f.three_prime_helix_id, f.three_prime_bp,
-         f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in out.forced_ligations
     } == orig_fls
 
@@ -91,12 +112,16 @@ def test_declines_non_rung_forced_ligation():
     """An FL between lattice-adjacent helices (a manual anchor, not a gap rung) →
     the realizer declines so the classic preserve pipeline handles it."""
     design = _load(_HINGES["2x6"])
-    design.forced_ligations.append(ForcedLigation(
-        three_prime_helix_id="h_XY_0_0", three_prime_bp=39,
-        three_prime_direction=Direction.FORWARD,
-        five_prime_helix_id="h_XY_0_1", five_prime_bp=39,
-        five_prime_direction=Direction.REVERSE,
-    ))
+    design.forced_ligations.append(
+        ForcedLigation(
+            three_prime_helix_id="h_XY_0_0",
+            three_prime_bp=39,
+            three_prime_direction=Direction.FORWARD,
+            five_prime_helix_id="h_XY_0_1",
+            five_prime_bp=39,
+            five_prime_direction=Direction.REVERSE,
+        )
+    )
     assert realize_hinge_weave(design.model_copy(deep=True)) is None
 
 
@@ -104,9 +129,10 @@ def test_declines_non_hinge_bundle():
     """A plain contiguous bundle (no gap) is not a hinge → analysis returns None."""
     from backend.core.lattice import make_bundle_design
     from backend.core.seamed_router import _scaffold_coverage
+
     design = make_bundle_design(
-        [(0, 0), (0, 1), (1, 0), (1, 1)], length_bp=64,
-        lattice_type=LatticeType.SQUARE)
+        [(0, 0), (0, 1), (1, 0), (1, 1)], length_bp=64, lattice_type=LatticeType.SQUARE
+    )
     assert _analyze_leaves(design, set(_scaffold_coverage(design))) is None
     assert realize_hinge_weave(design) is None
 
@@ -116,6 +142,7 @@ def test_declines_non_hinge_bundle():
 # reconstruct a routable input from each reference by stripping its scaffold route
 # back to per-helix duplex seeds + 2-domain gap-bridge seeds carrying the FLs, and
 # assert the realizer re-routes it to one gate-clean strand.
+
 
 def _strip_to_primitive(routed: Design) -> Design:
     gp = {h.id: tuple(h.grid_pos) for h in routed.helices}
@@ -136,8 +163,11 @@ def _strip_to_primitive(routed: Design) -> Design:
         frozenset([gp[f.three_prime_helix_id], gp[f.five_prime_helix_id]]): f
         for f in routed.forced_ligations
     }
-    keep = [s for s in routed.strands
-            if s.strand_type != StrandType.SCAFFOLD or s.is_reference]
+    keep = [
+        s
+        for s in routed.strands
+        if s.strand_type != StrandType.SCAFFOLD or s.is_reference
+    ]
     seeds, bridged = [], set()
 
     def _dom(g, end_bp, is_tp):
@@ -155,29 +185,42 @@ def _strip_to_primitive(routed: Design) -> Design:
         fl = fl_by_pair.get(frozenset([ga, gb]))
         if not fl or id_of[ga] not in ext or id_of[gb] not in ext:
             continue
-        seeds.append(Strand(
-            id=f"seed_bridge_{c}",
-            domains=[_dom(gp[fl.three_prime_helix_id], fl.three_prime_bp, True),
-                     _dom(gp[fl.five_prime_helix_id], fl.five_prime_bp, False)],
-            strand_type=StrandType.SCAFFOLD))
+        seeds.append(
+            Strand(
+                id=f"seed_bridge_{c}",
+                domains=[
+                    _dom(gp[fl.three_prime_helix_id], fl.three_prime_bp, True),
+                    _dom(gp[fl.five_prime_helix_id], fl.five_prime_bp, False),
+                ],
+                strand_type=StrandType.SCAFFOLD,
+            )
+        )
         bridged |= {ga, gb}
     for hid, g in gp.items():
         if g in bridged or hid not in ext:
             continue
         lo, hi = ext[hid]
         d = Direction.FORWARD if _is_forward(*g) else Direction.REVERSE
-        dm = (Domain(helix_id=hid, start_bp=lo, end_bp=hi, direction=d)
-              if d == Direction.FORWARD
-              else Domain(helix_id=hid, start_bp=hi, end_bp=lo, direction=d))
-        seeds.append(Strand(id=f"seed_{g[0]}_{g[1]}", domains=[dm],
-                            strand_type=StrandType.SCAFFOLD))
+        dm = (
+            Domain(helix_id=hid, start_bp=lo, end_bp=hi, direction=d)
+            if d == Direction.FORWARD
+            else Domain(helix_id=hid, start_bp=hi, end_bp=lo, direction=d)
+        )
+        seeds.append(
+            Strand(
+                id=f"seed_{g[0]}_{g[1]}", domains=[dm], strand_type=StrandType.SCAFFOLD
+            )
+        )
     return routed.model_copy(update={"strands": keep + seeds, "crossovers": []})
 
 
-@pytest.mark.parametrize("fname,k", [
-    ("3x2_hinge_routed.nadoc", 3),
-    ("3x4_hinge_routed.nadoc", 3),
-])
+@pytest.mark.parametrize(
+    "fname,k",
+    [
+        ("3x2_hinge_routed.nadoc", 3),
+        ("3x4_hinge_routed.nadoc", 3),
+    ],
+)
 def test_thick_leaf_hinge_routes(fname, k):
     """3-helix-leaf hinges (k=3) route to one gate-clean validated strand, FLs
     preserved — the realizer generalizes past the 2-row leaf."""
@@ -187,8 +230,12 @@ def test_thick_leaf_hinge_routes(fname, k):
     routed = Design.model_validate(json.loads(path.read_text()))
     inp = _strip_to_primitive(routed)
     orig_fls = {
-        (f.three_prime_helix_id, f.three_prime_bp,
-         f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in inp.forced_ligations
     }
     result = realize_hinge_weave(inp)
@@ -200,18 +247,26 @@ def test_thick_leaf_hinge_routes(fname, k):
     assert not scaffold_routing_invariants(out, require_seams=True)
     assert validate_design(out).passed
     assert {
-        (f.three_prime_helix_id, f.three_prime_bp,
-         f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in out.forced_ligations
     } == orig_fls
 
 
 # ── seamless (single-pass) hinge routing ─────────────────────────────────────
 
-@pytest.mark.parametrize("fname,k,n", [
-    ("3x2_hinge_routed.nadoc", 3, 2),
-    ("3x4_hinge_routed.nadoc", 3, 4),
-])
+
+@pytest.mark.parametrize(
+    "fname,k,n",
+    [
+        ("3x2_hinge_routed.nadoc", 3, 2),
+        ("3x4_hinge_routed.nadoc", 3, 4),
+    ],
+)
 def test_seamless_routes_thick_leaf(fname, k, n):
     """Reconstructed k=3 hinges route to one SEAMLESS strand (single-pass, no seams),
     gate-clean at require_seams=False, validated, FLs preserved."""
@@ -220,8 +275,15 @@ def test_seamless_routes_thick_leaf(fname, k, n):
         pytest.skip(f"reference missing: {path}")
     routed = Design.model_validate(json.loads(path.read_text()))
     inp = _strip_to_primitive(routed)
-    orig = {(f.three_prime_helix_id, f.three_prime_bp,
-             f.five_prime_helix_id, f.five_prime_bp) for f in inp.forced_ligations}
+    orig = {
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
+        for f in inp.forced_ligations
+    }
     result = realize_hinge_weave_seamless(inp)
     assert result is not None
     out, _ = result
@@ -231,9 +293,15 @@ def test_seamless_routes_thick_leaf(fname, k, n):
     assert scaffold_routing_invariants(out, require_seams=True)
     assert not scaffold_routing_invariants(out, require_seams=False)
     assert validate_design(out).passed
-    assert {(f.three_prime_helix_id, f.three_prime_bp,
-             f.five_prime_helix_id, f.five_prime_bp)
-            for f in out.forced_ligations} == orig
+    assert {
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
+        for f in out.forced_ligations
+    } == orig
 
 
 def test_seamless_decodes_user_reference():

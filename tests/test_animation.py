@@ -98,13 +98,15 @@ def test_geometry_batch_no_deformations_all_positions_equal():
     assert r.status_code == 200
     body = r.json()
     nucs_empty = _compact_to_pos_map(body["-2"]["nucleotides_compact"])
-    nucs_all   = _compact_to_pos_map(body["-1"]["nucleotides_compact"])
+    nucs_all = _compact_to_pos_map(body["-1"]["nucleotides_compact"])
     assert nucs_empty.keys() == nucs_all.keys()
     max_diff = max(
         np.linalg.norm(np.array(nucs_empty[k]) - np.array(nucs_all[k]))
         for k in nucs_empty
     )
-    assert max_diff < 1e-9, f"Positions -2 and -1 differ on plain design: Δ={max_diff:.3e} nm"
+    assert max_diff < 1e-9, (
+        f"Positions -2 and -1 differ on plain design: Δ={max_diff:.3e} nm"
+    )
 
 
 def test_geometry_batch_position_zero_matches_seek_then_geometry():
@@ -127,7 +129,9 @@ def test_geometry_batch_position_zero_matches_seek_then_geometry():
     design_state.set_design(bent)
 
     # Now call batch for position 0
-    batch_r = client.post("/api/design/features/geometry-batch", json={"positions": [0]})
+    batch_r = client.post(
+        "/api/design/features/geometry-batch", json={"positions": [0]}
+    )
     assert batch_r.status_code == 200
     batch_nucs = _compact_to_pos_map(batch_r.json()["0"]["nucleotides_compact"])
 
@@ -136,13 +140,15 @@ def test_geometry_batch_position_zero_matches_seek_then_geometry():
         np.linalg.norm(np.array(ref_nucs[k]) - np.array(batch_nucs[k]))
         for k in ref_nucs
     )
-    assert max_diff < 1e-9, f"Batch pos 0 disagrees with seek+geometry: Δ={max_diff:.3e} nm"
+    assert max_diff < 1e-9, (
+        f"Batch pos 0 disagrees with seek+geometry: Δ={max_diff:.3e} nm"
+    )
 
 
 def test_geometry_batch_multiple_positions_are_distinct():
     """With two bends, positions -2 / 0 / 1 / -1 produce four distinct states."""
     design = design_state.get_design()
-    after_f1 = _add_bend(design, plane_a=5,  plane_b=20, angle_deg=45.0)
+    after_f1 = _add_bend(design, plane_a=5, plane_b=20, angle_deg=45.0)
     after_f2 = _add_bend(after_f1, plane_a=22, plane_b=37, angle_deg=45.0)
     # after_f2 has two bends in the log; deformations = both ops active
     design_state.set_design(after_f2)
@@ -156,13 +162,15 @@ def test_geometry_batch_multiple_positions_are_distinct():
     assert set(body.keys()) == {"-2", "0", "1", "-1"}
 
     c_empty = _compact_centroid(body["-2"]["nucleotides_compact"])
-    c_f1    = _compact_centroid(body["0"]["nucleotides_compact"])
-    c_f2    = _compact_centroid(body["1"]["nucleotides_compact"])
-    c_all   = _compact_centroid(body["-1"]["nucleotides_compact"])
+    c_f1 = _compact_centroid(body["0"]["nucleotides_compact"])
+    c_f2 = _compact_centroid(body["1"]["nucleotides_compact"])
+    c_all = _compact_centroid(body["-1"]["nucleotides_compact"])
 
     # Each successive deformation shifts the centroid — they must all differ
-    assert not np.allclose(c_empty, c_f1, atol=1e-3), "F0 and F1 centroids are identical"
-    assert not np.allclose(c_f1,   c_f2, atol=1e-3), "F1 and F2 centroids are identical"
+    assert not np.allclose(c_empty, c_f1, atol=1e-3), (
+        "F0 and F1 centroids are identical"
+    )
+    assert not np.allclose(c_f1, c_f2, atol=1e-3), "F1 and F2 centroids are identical"
     # -1 (all active) == 1 (index of last entry = second bend)
     assert np.allclose(c_f2, c_all, atol=1e-9), "position 1 and -1 (all) should match"
 
@@ -181,7 +189,9 @@ def test_geometry_batch_position_minus2_equals_straight():
         for n in straight_r.json()["nucleotides"]
     }
 
-    batch_r = client.post("/api/design/features/geometry-batch", json={"positions": [-2]})
+    batch_r = client.post(
+        "/api/design/features/geometry-batch", json={"positions": [-2]}
+    )
     assert batch_r.status_code == 200
     batch_nucs = _compact_to_pos_map(batch_r.json()["-2"]["nucleotides_compact"])
 
@@ -190,7 +200,9 @@ def test_geometry_batch_position_minus2_equals_straight():
         np.linalg.norm(np.array(straight_nucs[k]) - np.array(batch_nucs[k]))
         for k in straight_nucs
     )
-    assert max_diff < 1e-9, f"Position -2 differs from straight geometry: Δ={max_diff:.3e} nm"
+    assert max_diff < 1e-9, (
+        f"Position -2 differs from straight geometry: Δ={max_diff:.3e} nm"
+    )
 
 
 def test_geometry_batch_helix_axes_present():
@@ -249,26 +261,32 @@ def test_geometry_batch_duplicates_deduplicated():
 
 # ── Keyframe binding_states (bind/unbind φ on the timeline) ──────────────────
 
+
 def test_keyframe_binding_states_create_patch_roundtrip():
     """A design keyframe carries per-binding φ via binding_states; create and
     patch both persist it, and it survives a design JSON round-trip."""
     design_state.set_design(_demo_design())
-    a = client.post("/api/design/animations",
-                    json={"name": "A", "fps": 30, "loop": False})
+    a = client.post(
+        "/api/design/animations", json={"name": "A", "fps": 30, "loop": False}
+    )
     assert a.status_code == 200, a.text
     anim_id = a.json()["design"]["animations"][-1]["id"]
 
     # Create with binding_states.
-    k = client.post(f"/api/design/animations/{anim_id}/keyframes",
-                    json={"binding_states": {"b1": 1.0}})
+    k = client.post(
+        f"/api/design/animations/{anim_id}/keyframes",
+        json={"binding_states": {"b1": 1.0}},
+    )
     assert k.status_code == 200, k.text
     anim = next(an for an in k.json()["design"]["animations"] if an["id"] == anim_id)
     kf = anim["keyframes"][-1]
     assert kf["binding_states"] == {"b1": 1.0}
 
     # Patch to a new φ map.
-    p = client.patch(f"/api/design/animations/{anim_id}/keyframes/{kf['id']}",
-                     json={"binding_states": {"b1": 0.0, "b2": 0.5}})
+    p = client.patch(
+        f"/api/design/animations/{anim_id}/keyframes/{kf['id']}",
+        json={"binding_states": {"b1": 0.0, "b2": 0.5}},
+    )
     assert p.status_code == 200, p.text
     anim = next(an for an in p.json()["design"]["animations"] if an["id"] == anim_id)
     kf2 = next(x for x in anim["keyframes"] if x["id"] == kf["id"])
@@ -286,6 +304,7 @@ def test_keyframe_binding_states_defaults_empty():
 
 # ── Keyframe strand_anim_phi (rich un/hybridization φ on the timeline) ───────
 
+
 def test_keyframe_strand_anim_phi_create_patch_roundtrip():
     """A design keyframe carries per-overhang φ via strand_anim_phi; create and
     patch both persist it. Distinct from binding_states."""
@@ -293,16 +312,20 @@ def test_keyframe_strand_anim_phi_create_patch_roundtrip():
     a = client.post("/api/design/animations", json={"name": "A"})
     anim_id = a.json()["design"]["animations"][-1]["id"]
 
-    k = client.post(f"/api/design/animations/{anim_id}/keyframes",
-                    json={"strand_anim_phi": {"ovhg_x": 1.0}})
+    k = client.post(
+        f"/api/design/animations/{anim_id}/keyframes",
+        json={"strand_anim_phi": {"ovhg_x": 1.0}},
+    )
     assert k.status_code == 200, k.text
     anim = next(an for an in k.json()["design"]["animations"] if an["id"] == anim_id)
     kf = anim["keyframes"][-1]
     assert kf["strand_anim_phi"] == {"ovhg_x": 1.0}
     assert kf["binding_states"] == {}  # the two fields are independent
 
-    p = client.patch(f"/api/design/animations/{anim_id}/keyframes/{kf['id']}",
-                     json={"strand_anim_phi": {"ovhg_x": 0.0, "ovhg_y": 0.5}})
+    p = client.patch(
+        f"/api/design/animations/{anim_id}/keyframes/{kf['id']}",
+        json={"strand_anim_phi": {"ovhg_x": 0.0, "ovhg_y": 0.5}},
+    )
     assert p.status_code == 200, p.text
     anim = next(an for an in p.json()["design"]["animations"] if an["id"] == anim_id)
     kf2 = next(x for x in anim["keyframes"] if x["id"] == kf["id"])
@@ -323,18 +346,24 @@ def test_keyframe_strand_anim_phi_patch_clears():
     design_state.set_design(_demo_design())
     a = client.post("/api/design/animations", json={"name": "A"})
     anim_id = a.json()["design"]["animations"][-1]["id"]
-    k = client.post(f"/api/design/animations/{anim_id}/keyframes",
-                    json={"strand_anim_phi": {"ovhg_x": 1.0}})
-    kf_id = next(an for an in k.json()["design"]["animations"]
-                 if an["id"] == anim_id)["keyframes"][-1]["id"]
-    p = client.patch(f"/api/design/animations/{anim_id}/keyframes/{kf_id}",
-                     json={"strand_anim_phi": {}})
+    k = client.post(
+        f"/api/design/animations/{anim_id}/keyframes",
+        json={"strand_anim_phi": {"ovhg_x": 1.0}},
+    )
+    kf_id = next(an for an in k.json()["design"]["animations"] if an["id"] == anim_id)[
+        "keyframes"
+    ][-1]["id"]
+    p = client.patch(
+        f"/api/design/animations/{anim_id}/keyframes/{kf_id}",
+        json={"strand_anim_phi": {}},
+    )
     anim = next(an for an in p.json()["design"]["animations"] if an["id"] == anim_id)
     kf2 = next(x for x in anim["keyframes"] if x["id"] == kf_id)
     assert kf2["strand_anim_phi"] == {}
 
 
 # ── Trajectory keyframes (oxDNA trajectory playback) ─────────────────────────
+
 
 def test_keyframe_trajectory_create_patch_roundtrip():
     """A trajectory keyframe carries is_trajectory + job id + frame range; create
@@ -356,8 +385,11 @@ def test_keyframe_trajectory_create_patch_roundtrip():
 
     p = client.patch(
         f"/api/design/animations/{anim_id}/keyframes/{kf['id']}",
-        json={"trajectory_job_id": "job-7", "trajectory_frame_start": 3,
-              "trajectory_frame_end": 88},
+        json={
+            "trajectory_job_id": "job-7",
+            "trajectory_frame_start": 3,
+            "trajectory_frame_end": 88,
+        },
     )
     assert p.status_code == 200, p.text
     anim = next(an for an in p.json()["design"]["animations"] if an["id"] == anim_id)
@@ -391,8 +423,11 @@ def test_keyframe_trajectory_resolution_roundtrip():
     # The UI's default for a new oxDNA trajectory keyframe: this job, every frame.
     k = client.post(
         f"/api/design/animations/{anim_id}/keyframes",
-        json={"is_trajectory": True, "trajectory_engine": "oxdna",
-              "trajectory_scope": "job"},
+        json={
+            "is_trajectory": True,
+            "trajectory_engine": "oxdna",
+            "trajectory_scope": "job",
+        },
     )
     assert k.status_code == 200, k.text
     anim = next(an for an in k.json()["design"]["animations"] if an["id"] == anim_id)
@@ -403,8 +438,11 @@ def test_keyframe_trajectory_resolution_roundtrip():
     # Switching the same keyframe to a NAMD job swaps which field carries the resolution.
     p = client.patch(
         f"/api/design/animations/{anim_id}/keyframes/{kf['id']}",
-        json={"trajectory_engine": "namd", "trajectory_scope": None,
-              "trajectory_stride": 1},
+        json={
+            "trajectory_engine": "namd",
+            "trajectory_scope": None,
+            "trajectory_stride": 1,
+        },
     )
     assert p.status_code == 200, p.text
     anim = next(an for an in p.json()["design"]["animations"] if an["id"] == anim_id)
@@ -421,10 +459,12 @@ def test_keyframe_trajectory_resolution_defaults_to_none():
     design_state.set_design(_demo_design())
     a = client.post("/api/design/animations", json={"name": "A"})
     anim_id = a.json()["design"]["animations"][-1]["id"]
-    k = client.post(f"/api/design/animations/{anim_id}/keyframes",
-                    json={"is_trajectory": True})
-    kf = next(an for an in k.json()["design"]["animations"]
-              if an["id"] == anim_id)["keyframes"][-1]
+    k = client.post(
+        f"/api/design/animations/{anim_id}/keyframes", json={"is_trajectory": True}
+    )
+    kf = next(an for an in k.json()["design"]["animations"] if an["id"] == anim_id)[
+        "keyframes"
+    ][-1]
     assert kf["trajectory_scope"] is None
     assert kf["trajectory_stride"] is None
 
@@ -433,16 +473,20 @@ def test_keyframe_trajectory_scope_rejects_an_unknown_value():
     design_state.set_design(_demo_design())
     a = client.post("/api/design/animations", json={"name": "A"})
     anim_id = a.json()["design"]["animations"][-1]["id"]
-    r = client.post(f"/api/design/animations/{anim_id}/keyframes",
-                    json={"is_trajectory": True, "trajectory_scope": "everything"})
+    r = client.post(
+        f"/api/design/animations/{anim_id}/keyframes",
+        json={"is_trajectory": True, "trajectory_scope": "everything"},
+    )
     assert r.status_code >= 400
 
 
 # ── Overhang strand_anim_setup endpoint ──────────────────────────────────────
 
+
 def _demo_design_with_overhang():
     """Demo design plus one OverhangSpec referencing the existing helix/strand."""
     from backend.core.models import OverhangSpec
+
     d = _demo_design()
     oh = OverhangSpec(id="ovhg_x", helix_id="demo_helix", strand_id="staple_0")
     return d.model_copy(update={"overhangs": [oh]}, deep=True)
@@ -450,11 +494,17 @@ def _demo_design_with_overhang():
 
 def test_overhang_strand_anim_setup_roundtrip_and_clear():
     design_state.set_design(_demo_design_with_overhang())
-    setup = {"mode": "unzip", "form": "helical", "meltBp": 2.0,
-             "thetaDeg": 30, "binder_strand_id": "binder_1"}
+    setup = {
+        "mode": "unzip",
+        "form": "helical",
+        "meltBp": 2.0,
+        "thetaDeg": 30,
+        "binder_strand_id": "binder_1",
+    }
 
-    r = client.patch("/api/design/overhangs/ovhg_x/strand-anim-setup",
-                     json={"setup": setup})
+    r = client.patch(
+        "/api/design/overhangs/ovhg_x/strand-anim-setup", json={"setup": setup}
+    )
     assert r.status_code == 200, r.text
 
     g = client.get("/api/design")
@@ -462,8 +512,9 @@ def test_overhang_strand_anim_setup_roundtrip_and_clear():
     assert oh["strand_anim_setup"] == setup
 
     # Clear.
-    r2 = client.patch("/api/design/overhangs/ovhg_x/strand-anim-setup",
-                      json={"setup": None})
+    r2 = client.patch(
+        "/api/design/overhangs/ovhg_x/strand-anim-setup", json={"setup": None}
+    )
     assert r2.status_code == 200, r2.text
     g2 = client.get("/api/design")
     oh2 = next(o for o in g2.json()["design"]["overhangs"] if o["id"] == "ovhg_x")
@@ -472,15 +523,21 @@ def test_overhang_strand_anim_setup_roundtrip_and_clear():
 
 def test_overhang_strand_anim_setup_404():
     design_state.set_design(_demo_design())
-    r = client.patch("/api/design/overhangs/nope/strand-anim-setup",
-                     json={"setup": {"mode": "unzip"}})
+    r = client.patch(
+        "/api/design/overhangs/nope/strand-anim-setup",
+        json={"setup": {"mode": "unzip"}},
+    )
     assert r.status_code == 404
 
 
 def test_strand_anim_fields_survive_model_roundtrip():
     """Both new display-only fields survive a Design JSON dump→reload."""
     from backend.core.models import Design
+
     d = _demo_design_with_overhang()
     d.overhangs[0].strand_anim_setup = {"mode": "displacement", "thetaDeg": 45}
     reloaded = Design.model_validate(d.model_dump())
-    assert reloaded.overhangs[0].strand_anim_setup == {"mode": "displacement", "thetaDeg": 45}
+    assert reloaded.overhangs[0].strand_anim_setup == {
+        "mode": "displacement",
+        "thetaDeg": 45,
+    }

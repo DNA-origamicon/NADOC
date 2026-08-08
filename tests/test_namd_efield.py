@@ -93,7 +93,12 @@ def test_unit_constant_matches_first_principles():
 
 @pytest.mark.parametrize(
     "field",
-    [None, {}, {"field_pN": 0.0, "dir": [0, 1, 0]}, {"field_pN": 5.0, "dir": [0, 0, 0]}],
+    [
+        None,
+        {},
+        {"field_pN": 0.0, "dir": [0, 1, 0]},
+        {"field_pN": 5.0, "dir": [0, 0, 0]},
+    ],
 )
 def test_no_field_is_an_exact_no_op(field):
     """Absent / zero magnitude / zero direction → no field at all (RED guard)."""
@@ -164,7 +169,9 @@ def test_min_conf_emits_efield_only_with_a_field():
     with_field = _min_conf("demo_min", "demo", box, False, 4800, 0.5, field=field)
     assert "eFieldOn           on" in with_field
     np.testing.assert_allclose(
-        _force_pn_on_nucleotide(_conf_efield_vector(with_field)), [1.5, 0.0, 0.0], atol=1e-9
+        _force_pn_on_nucleotide(_conf_efield_vector(with_field)),
+        [1.5, 0.0, 0.0],
+        atol=1e-9,
     )
 
     without = _min_conf("demo_min", "demo", box, False, 4800, 0.5)
@@ -175,16 +182,19 @@ def test_zero_field_conf_is_byte_identical_to_no_field():
     """A zero-magnitude field must not perturb the conf at all."""
     spec = _first_spec()
     box = (100.0, 100.0, 100.0)
-    assert _segment_conf(spec, "demo", box, False, field={"field_pN": 0.0, "dir": [0, 1, 0]}) == (
-        _segment_conf(spec, "demo", box, False)
-    )
+    assert _segment_conf(
+        spec, "demo", box, False, field={"field_pN": 0.0, "dir": [0, 1, 0]}
+    ) == (_segment_conf(spec, "demo", box, False))
 
 
 def test_remote_resume_preserves_the_field():
     """A mid-segment cluster resume must not silently drop the field."""
     spec = _first_spec()
     conf = _segment_conf(
-        spec, "demo", (100.0, 100.0, 100.0), False,
+        spec,
+        "demo",
+        (100.0, 100.0, 100.0),
+        False,
         field={"field_pN": 2.0, "dir": [0.0, 1.0, 0.0]},
         anchors_file="restraints_anchors.pdb",
     )
@@ -221,14 +231,22 @@ def test_production_confs_carry_field_and_anchors():
             spec, "demo", box, False, anchors_file="restraints_anchors.pdb", field=field
         ),
         _seed_production_conf(
-            spec, "demo", box, False, 100, anchors_file="restraints_anchors.pdb", field=field
+            spec,
+            "demo",
+            box,
+            False,
+            100,
+            anchors_file="restraints_anchors.pdb",
+            field=field,
         ),
     ):
         assert "fixedAtoms         on" in text
         assert "fixedAtomsFile     restraints_anchors.pdb" in text
         assert "eFieldOn           on" in text
         np.testing.assert_allclose(
-            _force_pn_on_nucleotide(_conf_efield_vector(text)), [0.0, 0.0, 2.0], atol=1e-9
+            _force_pn_on_nucleotide(_conf_efield_vector(text)),
+            [0.0, 0.0, 2.0],
+            atol=1e-9,
         )
 
     plain = _conservative_production_conf(spec, "demo", box, False)
@@ -254,28 +272,39 @@ def test_field_without_anchor_is_allowed(monkeypatch):
     deterministically, proving it reached PAST where the anchor 400 used to be."""
     import backend.api.routes_md as rm
 
-    monkeypatch.setattr(rm, "find_namd", lambda: (_ for _ in ()).throw(RuntimeError("no namd here")))
+    monkeypatch.setattr(
+        rm, "find_namd", lambda: (_ for _ in ()).throw(RuntimeError("no namd here"))
+    )
     r = _post_create(anchors=None)
     assert r.status_code == 400
     detail = r.json()["detail"].lower()
-    assert "no namd here" in detail   # reached the engine probe ⇒ anchor guard did not fire
+    assert (
+        "no namd here" in detail
+    )  # reached the engine probe ⇒ anchor guard did not fire
     assert "anchor" not in detail
 
 
 def test_field_with_multi_gpu_is_rejected():
     """NAMD 3: 'EField is not compatible with multi-GPU GPUresident'."""
-    r = _post_create(anchors=[{"kind": "base", "helix_id": 0, "bp_index": 0}], devices="0,1")
+    r = _post_create(
+        anchors=[{"kind": "base", "helix_id": 0, "bp_index": 0}], devices="0,1"
+    )
     assert r.status_code == 400
     assert "multi-gpu" in r.json()["detail"].lower()
 
 
-@pytest.mark.parametrize("bad", [
-    {"field_pN": "x", "dir": [0, 1, 0]},
-    {"field_pN": 1.0, "dir": [1, 0]},
-    {"field_pN": 1.0, "dir": 5},
-])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"field_pN": "x", "dir": [0, 1, 0]},
+        {"field_pN": 1.0, "dir": [1, 0]},
+        {"field_pN": 1.0, "dir": 5},
+    ],
+)
 def test_malformed_field_is_a_400_not_a_500(bad):
-    r = _post_create(field=bad, anchors=[{"kind": "base", "helix_id": 0, "bp_index": 0}])
+    r = _post_create(
+        field=bad, anchors=[{"kind": "base", "helix_id": 0, "bp_index": 0}]
+    )
     assert r.status_code == 400
     assert "malformed field spec" in r.json()["detail"].lower()
 
@@ -293,13 +322,19 @@ def test_no_field_skips_both_guards(monkeypatch):
 
     from backend.api.main import app
 
-    monkeypatch.setattr(rm, "find_namd", lambda: (_ for _ in ()).throw(RuntimeError("no namd here")))
+    monkeypatch.setattr(
+        rm, "find_namd", lambda: (_ for _ in ()).throw(RuntimeError("no namd here"))
+    )
 
     for field in (None, {"field_pN": 0.0, "dir": [0, 1, 0]}):
-        r = TestClient(app).post("/api/md/jobs", json={"field": field, "devices": "0,1"})
+        r = TestClient(app).post(
+            "/api/md/jobs", json={"field": field, "devices": "0,1"}
+        )
         assert r.status_code == 400
         detail = r.json()["detail"].lower()
-        assert "no namd here" in detail   # reached the engine probe ⇒ guards did not fire
+        assert (
+            "no namd here" in detail
+        )  # reached the engine probe ⇒ guards did not fire
         assert "anchor" not in detail
         assert "multi-gpu" not in detail
 
@@ -307,7 +342,9 @@ def test_no_field_skips_both_guards(monkeypatch):
 # ── prep-time guard: anchors that RESOLVE to nothing must not run an unanchored field ──
 
 
-def test_field_with_unresolvable_anchors_is_allowed_at_prep(tmp_path, monkeypatch, caplog):
+def test_field_with_unresolvable_anchors_is_allowed_at_prep(
+    tmp_path, monkeypatch, caplog
+):
     """A stale/ssDNA-only anchor scope resolves to zero residues.  That's no longer a
     hard error — the field is prepared anchorless (the UI warns about the COM drift)."""
     import backend.core.namd_solvate as ns
@@ -323,11 +360,18 @@ def test_field_with_unresolvable_anchors_is_allowed_at_prep(tmp_path, monkeypatc
 
     with caplog.at_level("WARNING"):
         prepare_mgh_slow_release(
-            design, job_dir, ion_conc_mM=0.0, mg_conc_mM=0.0, salt_mode="custom",
-            fast=False, anchors=stale, field={"field_pN": 2.0, "dir": [0, 1, 0]},
+            design,
+            job_dir,
+            ion_conc_mM=0.0,
+            mg_conc_mM=0.0,
+            salt_mode="custom",
+            fast=False,
+            anchors=stale,
+            field={"field_pN": 2.0, "dir": [0, 1, 0]},
         )
-    assert any("drift" in r.message.lower() for r in caplog.records), \
+    assert any("drift" in r.message.lower() for r in caplog.records), (
         "expected a COM-drift warning when the field's anchors resolve to nothing"
+    )
 
 
 def test_local_resume_conf_preserves_field_and_anchors(tmp_path):
@@ -337,7 +381,10 @@ def test_local_resume_conf_preserves_field_and_anchors(tmp_path):
 
     spec = _first_spec()
     conf = _segment_conf(
-        spec, "demo", (100.0, 100.0, 100.0), False,
+        spec,
+        "demo",
+        (100.0, 100.0, 100.0),
+        False,
         field={"field_pN": 2.0, "dir": [0.0, 1.0, 0.0]},
         anchors_file="restraints_anchors.pdb",
     )
@@ -347,7 +394,9 @@ def test_local_resume_conf_preserves_field_and_anchors(tmp_path):
     for ext in ("coor", "vel", "xsc"):
         (output_dir / f"{spec.name}.restart.{ext}").write_bytes(b"")
 
-    base = namd_runner._write_resume_conf(package_dir, output_dir, spec.name, 100, spec.steps)
+    base = namd_runner._write_resume_conf(
+        package_dir, output_dir, spec.name, 100, spec.steps
+    )
     resumed = (package_dir / f"{base}.conf").read_text()
     assert "eFieldOn           on" in resumed
     assert _conf_efield_vector(resumed) == _conf_efield_vector(conf)
@@ -357,20 +406,31 @@ def test_local_resume_conf_preserves_field_and_anchors(tmp_path):
 # ── real psfgen: q_res = −1 e is the force field's value, not our assumption ───
 
 
-def _fake_solvate(_pdb_text, _padding_nm, _tmpdir, progress=None, *,
-                  water_shell_nm=None, box_mode=None):
+def _fake_solvate(
+    _pdb_text,
+    _padding_nm,
+    _tmpdir,
+    progress=None,
+    *,
+    water_shell_nm=None,
+    box_mode=None,
+):
     """Stand-in for gmx solvation (mirrors test_namd_anchors): psfgen still runs for real,
     so the PSF whose charges we read below is the genuine CHARMM topology."""
     import backend.core.namd_solvate as ns
     from backend.core.namd_solvate import _Water
 
     ns._emit(progress, "solvate", None, "fake solvate")
-    waters = [_Water(i * 0.31, 0, 0, i * 0.31, 0.1, 0, i * 0.31, -0.1, 0) for i in range(2000)]
+    waters = [
+        _Water(i * 0.31, 0, 0, i * 0.31, 0.1, 0, i * 0.31, -0.1, 0) for i in range(2000)
+    ]
     return waters, (12.0, 12.0, 12.0), _pdb_text
 
 
 @pytest.mark.slow
-def test_prepare_writes_efield_end_to_end_and_psf_charge_is_minus_one(tmp_path, monkeypatch):
+def test_prepare_writes_efield_end_to_end_and_psf_charge_is_minus_one(
+    tmp_path, monkeypatch
+):
     """SLOW: real psfgen → every ladder conf carries the field, and the REAL PSF's
     per-DNA-residue net charge is exactly −1 e, which is what makes the emitted
     eField vector deliver ``field_pN`` per nucleotide."""
@@ -387,8 +447,14 @@ def test_prepare_writes_efield_end_to_end_and_psf_charge_is_minus_one(tmp_path, 
     job_dir = tmp_path / "job"
     job_dir.mkdir()
     _sub, stem, segments = prepare_mgh_slow_release(
-        design, job_dir, ion_conc_mM=0.0, mg_conc_mM=0.0, salt_mode="custom",
-        fast=False, anchors=anchors, field=field,
+        design,
+        job_dir,
+        ion_conc_mM=0.0,
+        mg_conc_mM=0.0,
+        salt_mode="custom",
+        fast=False,
+        anchors=anchors,
+        field=field,
     )
 
     pkg = next((job_dir / "package").iterdir())
@@ -401,7 +467,9 @@ def test_prepare_writes_efield_end_to_end_and_psf_charge_is_minus_one(tmp_path, 
         text = c.read_text()
         assert "eFieldOn           on" in text, c.name
         np.testing.assert_allclose(
-            _force_pn_on_nucleotide(_conf_efield_vector(text)), [0.0, 2.0, 0.0], atol=1e-9
+            _force_pn_on_nucleotide(_conf_efield_vector(text)),
+            [0.0, 2.0, 0.0],
+            atol=1e-9,
         )
 
     assert manifest["field"]["field_pN"] == 2.0
@@ -477,7 +545,7 @@ def _read_namd_coor(path: Path) -> np.ndarray:
     """NAMD binary .coor → (n, 3) Å (int32 count, then little-endian float64 xyz)."""
     raw = path.read_bytes()
     n = struct.unpack("<i", raw[:4])[0]
-    return np.array(struct.unpack(f"<{3 * n}d", raw[4:4 + 24 * n])).reshape(n, 3)
+    return np.array(struct.unpack(f"<{3 * n}d", raw[4 : 4 + 24 * n])).reshape(n, 3)
 
 
 def _probe_header(dt_fs: float) -> str:
@@ -556,23 +624,37 @@ def test_real_namd_run_holds_anchor_and_accelerates_free_strand_along_field(tmp_
     (tmp_path / "fixed.pdb").write_text("\n".join(out) + "\n")
 
     efield = namd_efield_vector({"field_pN": field_pN, "dir": dir_.tolist()})
-    fixed_block = "fixedAtoms         on\nfixedAtomsFile     fixed.pdb\nfixedAtomsCol      B\n"
+    fixed_block = (
+        "fixedAtoms         on\nfixedAtomsFile     fixed.pdb\nfixedAtomsCol      B\n"
+    )
 
     (tmp_path / "min.conf").write_text(
         _probe_header(dt_fs) + "outputName         min\nminimize           500\n"
     )
     for tag, field_block in (
         ("off", ""),
-        ("on", "eFieldOn           on\neField             {:.8g} {:.8g} {:.8g}\n".format(*efield)),
+        (
+            "on",
+            "eFieldOn           on\neField             {:.8g} {:.8g} {:.8g}\n".format(
+                *efield
+            ),
+        ),
     ):
         (tmp_path / f"dyn_{tag}.conf").write_text(
-            _probe_header(dt_fs) + fixed_block + field_block
+            _probe_header(dt_fs)
+            + fixed_block
+            + field_block
             + f"outputName         dyn_{tag}\nbinCoordinates     min.coor\nrun                {steps}\n"
         )
 
     for name in ("min", "dyn_off", "dyn_on"):
-        proc = subprocess.run([namd_bin, f"{name}.conf"], cwd=tmp_path,
-                              capture_output=True, text=True, timeout=600)
+        proc = subprocess.run(
+            [namd_bin, f"{name}.conf"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
         assert proc.returncode == 0, f"{name} failed:\n{proc.stdout[-2500:]}"
 
     start = _read_namd_coor(tmp_path / "min.coor")
@@ -586,7 +668,7 @@ def test_real_namd_run_holds_anchor_and_accelerates_free_strand_along_field(tmp_
     # (2) the field's impulse on the free strand, isolated by differencing
     m_free = mass[free_mask]
     com = lambda p: (p[free_mask] * m_free[:, None]).sum(0) / m_free.sum()  # noqa: E731
-    delta = com(on) - com(off)                                   # Å
+    delta = com(on) - com(off)  # Å
 
     # 8-nt strand carries exactly 7 phosphates → −7 e (the terminal-deficit fact above)
     q_free = charge[free_mask].sum()
@@ -598,9 +680,9 @@ def test_real_namd_run_holds_anchor_and_accelerates_free_strand_along_field(tmp_
     # scaling this, so the magnitude assertion would fail.  n_phosphates comes from NAMD's
     # own PSF charges, not from our per-nucleotide constant.
     n_phosphates = abs(q_free)
-    force_pn = n_phosphates * field_pN                           # pN, along +dir
-    accel = force_pn * _ACCEL_PN_PER_AMU / m_free.sum()          # Å·fs⁻²
-    predicted_mag = 0.5 * accel * (steps * dt_fs) ** 2           # Å
+    force_pn = n_phosphates * field_pN  # pN, along +dir
+    accel = force_pn * _ACCEL_PN_PER_AMU / m_free.sum()  # Å·fs⁻²
+    predicted_mag = 0.5 * accel * (steps * dt_fs) ** 2  # Å
 
     # direction: along +dir (a sign error would point it at −dir)
     assert float(delta @ dir_) > 0.0

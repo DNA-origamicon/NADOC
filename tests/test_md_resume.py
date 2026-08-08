@@ -183,7 +183,8 @@ class TestReconcileMidSegment:
         """
         job = _make_job(tmp_path)  # no restart, no coor
         (job.package_dir(tmp_path) / "SEG0.log").write_text(
-            "Info: NAMD 3.0.2\nFATAL ERROR: died at startup\n")
+            "Info: NAMD 3.0.2\nFATAL ERROR: died at startup\n"
+        )
         job.save(tmp_path)
         result = nr.reconcile_job_status(job, tmp_path)
         assert result.status == MdStatus.failed
@@ -227,11 +228,13 @@ class TestReconcileDuringMinimisation:
     def _job(self, tmp_path: Path, *, min_done: bool) -> MdJob:
         job = _make_job(tmp_path, n_segments=2)
         job.minimization = MdSegmentStatus(
-            name="MIN", stage="Minimisation", percent=100.0, steps=23480)
+            name="MIN", stage="Minimisation", percent=100.0, steps=23480
+        )
         job.minimization.status = "done" if min_done else "running"
         pkg = job.package_dir(tmp_path)
         (pkg / "manifest.json").write_text(
-            json.dumps({"minimization": {"name": "MIN"}, "segments": []}))
+            json.dumps({"minimization": {"name": "MIN"}, "segments": []})
+        )
         out = pkg / "output"
         (out / ("MIN.coor" if min_done else "MIN.restart.coor")).write_text("x")
         job.save(tmp_path)
@@ -272,7 +275,10 @@ class TestReconcileDuringMinimisation:
         job = _make_job(tmp_path)
         (job.package_dir(tmp_path) / "SEG0.log").write_text("FATAL ERROR: boom\n")
         job.save(tmp_path)
-        assert nr._reconcile_min_name(job, job.package_dir(tmp_path) / "manifest.json") is None
+        assert (
+            nr._reconcile_min_name(job, job.package_dir(tmp_path) / "manifest.json")
+            is None
+        )
         assert nr.reconcile_job_status(job, tmp_path).status == MdStatus.failed
 
 

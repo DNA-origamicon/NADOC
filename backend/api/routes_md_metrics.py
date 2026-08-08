@@ -13,6 +13,7 @@ background daemon thread with a pollable progress + ETA (identical registry patt
 ``routes_oxdna_metrics``); the card drives a per-metric loading bar off it.  Registered
 in ``backend/api/main.py``.
 """
+
 from __future__ import annotations
 
 import threading
@@ -38,8 +39,8 @@ _LOCK = threading.Lock()
 
 
 class MdMetricsStartRequest(BaseModel):
-    scope: str = "latest"      # "latest" (this job only) | "chain" (whole refit lineage)
-    n_slices: int = 0          # 0 => auto (~1-turn slabs), matching the measure defaults
+    scope: str = "latest"  # "latest" (this job only) | "chain" (whole refit lineage)
+    n_slices: int = 0  # 0 => auto (~1-turn slabs), matching the measure defaults
 
 
 def _set(run_id: str, **fields) -> None:
@@ -70,8 +71,10 @@ def _job_inputs(job, ws: Path):
         try:
             design = design_state.get_or_404()
         except Exception:
-            return ("design snapshot missing for this job — load its design "
-                    "(File → Open) so the trajectory can be measured")
+            return (
+                "design snapshot missing for this job — load its design "
+                "(File → Open) so the trajectory can be measured"
+            )
     return psf, ref, segments, design
 
 
@@ -134,16 +137,23 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
             # Every selected job was unusable — surface the specific reason(s) rather than
             # a blanket "no trajectory" (which is wrong when a DCD is present but its
             # design snapshot isn't).  De-dupe while preserving order.
-            reasons = list(dict.fromkeys(io for _j, io in resolved if isinstance(io, str)))
-            reason = "; ".join(reasons) if reasons else \
-                "no NAMD trajectory yet for the selected job(s)"
+            reasons = list(
+                dict.fromkeys(io for _j, io in resolved if isinstance(io, str))
+            )
+            reason = (
+                "; ".join(reasons)
+                if reasons
+                else "no NAMD trajectory yet for the selected job(s)"
+            )
             _set(run_id, state="done", result={"ready": False, "reason": reason})
             return
 
         total = 0
         for _j, (_psf, _ref, segments, _d) in inputs:
             total += count_md_frames(segments)
-        _set(run_id, frames_total=max(1, total), frames_done=0, progress=0.0, eta_s=None)
+        _set(
+            run_id, frames_total=max(1, total), frames_done=0, progress=0.0, eta_s=None
+        )
 
         started = time.time()
         done = {"n": 0}
@@ -153,8 +163,12 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
             elapsed = time.time() - started
             frac = done["n"] / max(1, total)
             eta = (elapsed / done["n"]) * (total - done["n"]) if done["n"] else None
-            _set(run_id, frames_done=done["n"], progress=round(min(1.0, frac), 4),
-                 eta_s=round(eta, 1) if eta is not None else None)
+            _set(
+                run_id,
+                frames_done=done["n"],
+                progress=round(min(1.0, frac), 4),
+                eta_s=round(eta, 1) if eta is not None else None,
+            )
 
         # temporal series concatenate end-to-end; spatial profiles overlay one per job.
         twist_pf: list[float] = []
@@ -165,45 +179,80 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
         n_designed = 0
         for j, (psf, ref, segments, design) in inputs:
             analytic = core_reference_geometry(design)
-            res = md_metric_series(psf, segments, ref, design, analytic,
-                                   n_slices=req.n_slices, on_frame=_tick)
+            res = md_metric_series(
+                psf,
+                segments,
+                ref,
+                design,
+                analytic,
+                n_slices=req.n_slices,
+                on_frame=_tick,
+            )
             if not res.get("ready"):
                 continue
-            boundaries.append({"job_id": j.job_id, "start_frame": len(twist_pf),
-                               "n_frames": res["n_frames"]})
+            boundaries.append(
+                {
+                    "job_id": j.job_id,
+                    "start_frame": len(twist_pf),
+                    "n_frames": res["n_frames"],
+                }
+            )
             twist_pf.extend(res["twist"]["temporal"]["per_frame"])
             curv_pf.extend(res["curvature"]["temporal"]["per_frame"])
             bp_pf.extend(res["base_pairing"]["temporal"]["per_frame"])
             n_designed = max(n_designed, res["base_pairing"]["temporal"]["n_designed"])
-            per_job.append({
-                "job_id": j.job_id,
-                "twist_spatial": res["twist"]["spatial"],
-                "curvature_spatial": res["curvature"]["spatial"],
-                "base_pairing_spatial": res["base_pairing"]["spatial"],
-            })
+            per_job.append(
+                {
+                    "job_id": j.job_id,
+                    "twist_spatial": res["twist"]["spatial"],
+                    "curvature_spatial": res["curvature"]["spatial"],
+                    "base_pairing_spatial": res["base_pairing"]["spatial"],
+                }
+            )
 
         if not per_job:
-            _set(run_id, state="done", result={"ready": False,
-                 "reason": "trajectory has too few helices/frames to measure"})
+            _set(
+                run_id,
+                state="done",
+                result={
+                    "ready": False,
+                    "reason": "trajectory has too few helices/frames to measure",
+                },
+            )
             return
 
         result = {
             "ready": True,
             "scope": req.scope,
             "jobs": [j.job_id for j, _ in inputs],
-            "twist": {"temporal": {"per_frame": twist_pf, "boundaries": boundaries},
-                      "spatial": [{"job_id": p["job_id"], "points": p["twist_spatial"]}
-                                  for p in per_job]},
-            "curvature": {"temporal": {"per_frame": curv_pf, "boundaries": boundaries},
-                          "spatial": [{"job_id": p["job_id"], "points": p["curvature_spatial"]}
-                                      for p in per_job]},
-            "base_pairing": {"temporal": {"per_frame": bp_pf, "boundaries": boundaries,
-                                          "n_designed": n_designed},
-                             "spatial": [{"job_id": p["job_id"], "points": p["base_pairing_spatial"]}
-                                         for p in per_job]},
+            "twist": {
+                "temporal": {"per_frame": twist_pf, "boundaries": boundaries},
+                "spatial": [
+                    {"job_id": p["job_id"], "points": p["twist_spatial"]}
+                    for p in per_job
+                ],
+            },
+            "curvature": {
+                "temporal": {"per_frame": curv_pf, "boundaries": boundaries},
+                "spatial": [
+                    {"job_id": p["job_id"], "points": p["curvature_spatial"]}
+                    for p in per_job
+                ],
+            },
+            "base_pairing": {
+                "temporal": {
+                    "per_frame": bp_pf,
+                    "boundaries": boundaries,
+                    "n_designed": n_designed,
+                },
+                "spatial": [
+                    {"job_id": p["job_id"], "points": p["base_pairing_spatial"]}
+                    for p in per_job
+                ],
+            },
         }
         _set(run_id, state="done", progress=1.0, eta_s=0.0, result=result)
-    except Exception as exc:                   # surface any failure to the poller
+    except Exception as exc:  # surface any failure to the poller
         _set(run_id, state="error", error=str(exc))
 
 
@@ -212,12 +261,21 @@ def start_md_metrics(job_id: str, req: MdMetricsStartRequest) -> dict:
     """Launch a background twist/curvature/base-pairing compute for a NAMD job
     (``scope=latest``) or its whole refit lineage (``scope=chain``).  Returns
     ``{metrics_id}``; poll ``GET /md/metrics/{id}`` for progress + the result."""
-    _load_job(job_id)                          # 404 early if the job is unknown
+    _load_job(job_id)  # 404 early if the job is unknown
     run_id = uuid.uuid4().hex[:12]
-    _set(run_id, state="running", progress=0.0, eta_s=None, frames_done=0,
-         frames_total=None, result=None, error=None)
-    threading.Thread(target=_compute, args=(run_id, job_id, req, _workspace()),
-                     daemon=True).start()
+    _set(
+        run_id,
+        state="running",
+        progress=0.0,
+        eta_s=None,
+        frames_done=0,
+        frames_total=None,
+        result=None,
+        error=None,
+    )
+    threading.Thread(
+        target=_compute, args=(run_id, job_id, req, _workspace()), daemon=True
+    ).start()
     return {"metrics_id": run_id, "state": "running"}
 
 
@@ -236,36 +294,59 @@ def get_md_cpd_pairs(job_id: str) -> dict:
     which is not an error — most designs have none.
     """
     from backend.core.cpd_metrics import (
-        D0, N0, REACTIVE_D_NM, REACTIVE_ETA_DEG, VDW_FLOOR_NM,
-        designed_weld_pairs, resolve_weld_serials,
+        D0,
+        N0,
+        REACTIVE_D_NM,
+        REACTIVE_ETA_DEG,
+        VDW_FLOOR_NM,
+        designed_weld_pairs,
+        resolve_weld_serials,
     )
 
     job = _load_job(job_id)
     inputs = _job_inputs(job, _workspace())
-    constants = {"d0_nm": D0, "eta0_deg": N0, "reactive_d_nm": REACTIVE_D_NM,
-                 "reactive_eta_deg": REACTIVE_ETA_DEG, "vdw_floor_nm": VDW_FLOOR_NM}
+    constants = {
+        "d0_nm": D0,
+        "eta0_deg": N0,
+        "reactive_d_nm": REACTIVE_D_NM,
+        "reactive_eta_deg": REACTIVE_ETA_DEG,
+        "vdw_floor_nm": VDW_FLOOR_NM,
+    }
     if isinstance(inputs, str):
         return {"ready": False, "reason": inputs, "pairs": [], "constants": constants}
 
     psf, _ref, _segments, design = inputs
     pairs = designed_weld_pairs(design)
     if not pairs:
-        return {"ready": True, "reason": "design has no extra-base reciprocal crossover pair",
-                "pairs": [], "constants": constants}
+        return {
+            "ready": True,
+            "reason": "design has no extra-base reciprocal crossover pair",
+            "pairs": [],
+            "constants": constants,
+        }
     try:
         import MDAnalysis as mda
 
         pairs = resolve_weld_serials(pairs, mda.Universe(str(psf)))
     except Exception as exc:  # noqa: BLE001 - identity is still useful without serials
-        return {"ready": False, "reason": f"could not read topology: {exc}",
-                "pairs": pairs, "constants": constants}
+        return {
+            "ready": False,
+            "reason": f"could not read topology: {exc}",
+            "pairs": pairs,
+            "constants": constants,
+        }
     return {"ready": True, "pairs": pairs, "constants": constants}
 
 
 @router.get("/md/jobs/{job_id}/cpd-colvars")
-def get_md_cpd_colvars(job_id: str, mode: str = "metrics", center_ang: float | None = None,
-                       force_constant: float = 2.0,
-                       d_start_ang: float = 3.5, d_end_ang: float = 12.0) -> dict:
+def get_md_cpd_colvars(
+    job_id: str,
+    mode: str = "metrics",
+    center_ang: float | None = None,
+    force_constant: float = 2.0,
+    d_start_ang: float = 3.5,
+    d_end_ang: float = 12.0,
+) -> dict:
     """The runnable Colvars config for this job's weld pair, plus a window ladder.
 
     ``mode`` is ``metrics`` (observe only) | ``umbrella`` (one window at ``center_ang``)
@@ -283,21 +364,34 @@ def get_md_cpd_colvars(job_id: str, mode: str = "metrics", center_ang: float | N
     psf, _ref, _segments, design = inputs
     pairs = designed_weld_pairs(design)
     if not pairs:
-        return {"ready": True, "config": "", "windows": [],
-                "reason": "design has no extra-base reciprocal crossover pair"}
+        return {
+            "ready": True,
+            "config": "",
+            "windows": [],
+            "reason": "design has no extra-base reciprocal crossover pair",
+        }
     try:
         import MDAnalysis as mda
 
         pairs = resolve_weld_serials(pairs, mda.Universe(str(psf)))
-        config = emit_colvars(pairs, mode=mode, center_ang=center_ang,
-                              force_constant=force_constant,
-                              comment=f"{job.name_stem} — {mode}")
+        config = emit_colvars(
+            pairs,
+            mode=mode,
+            center_ang=center_ang,
+            force_constant=force_constant,
+            comment=f"{job.name_stem} — {mode}",
+        )
         windows = umbrella_windows(d_start_ang, d_end_ang)
     except Exception as exc:  # noqa: BLE001 - a preview must not 500
         return {"ready": False, "reason": str(exc), "config": "", "windows": []}
-    return {"ready": True, "config": config, "windows": windows,
-            "mode": mode, "vdw_floor_ang": VDW_FLOOR_ANG,
-            "pairs": [{"id": p["id"], "label": p["label"]} for p in pairs]}
+    return {
+        "ready": True,
+        "config": config,
+        "windows": windows,
+        "mode": mode,
+        "vdw_floor_ang": VDW_FLOOR_ANG,
+        "pairs": [{"id": p["id"], "label": p["label"]} for p in pairs],
+    }
 
 
 class MdCpdTraceRequest(BaseModel):
@@ -309,7 +403,9 @@ class MdCpdTraceRequest(BaseModel):
     d_end_ang: float = 12.0
 
 
-def _compute_cpd_trace(run_id: str, job_id: str, req: MdCpdTraceRequest, ws: Path) -> None:
+def _compute_cpd_trace(
+    run_id: str, job_id: str, req: MdCpdTraceRequest, ws: Path
+) -> None:
     """Background pass: read the trajectory once and measure the weld coordinates."""
     from backend.core.cpd_metrics import weld_trace
 
@@ -323,17 +419,27 @@ def _compute_cpd_trace(run_id: str, job_id: str, req: MdCpdTraceRequest, ws: Pat
         _set(run_id, frames_total=None)
 
         def _progress(done: int, total: int) -> None:
-            _set(run_id, progress=(done / total) if total else 0.0,
-                 frames_done=done, frames_total=total)
+            _set(
+                run_id,
+                progress=(done / total) if total else 0.0,
+                frames_done=done,
+                frames_total=total,
+            )
 
         windows = None
         if req.with_windows:
             from backend.core.cpd_colvars import umbrella_windows
 
             windows = umbrella_windows(req.d_start_ang, req.d_end_ang)
-        result = weld_trace(psf, [s[2] for s in segments], design,
-                            stride=max(1, req.stride), max_frames=max(1, req.max_frames),
-                            windows=windows, progress=_progress)
+        result = weld_trace(
+            psf,
+            [s[2] for s in segments],
+            design,
+            stride=max(1, req.stride),
+            max_frames=max(1, req.max_frames),
+            windows=windows,
+            progress=_progress,
+        )
         _set(run_id, state="done", progress=1.0, result=result)
     except Exception as exc:  # surface any failure to the poller
         _set(run_id, state="error", error=str(exc))
@@ -348,12 +454,20 @@ def start_md_cpd_trace(job_id: str, req: MdCpdTraceRequest) -> dict:
     "did these two extra bases EVER get close enough to weld" is a whole-run question,
     and on a 1xT design the answer so far is no — which you can only see as a trace.
     """
-    _load_job(job_id)                          # 404 early if the job is unknown
+    _load_job(job_id)  # 404 early if the job is unknown
     run_id = uuid.uuid4().hex[:12]
-    _set(run_id, state="running", progress=0.0, frames_done=0, frames_total=None,
-         result=None, error=None)
-    threading.Thread(target=_compute_cpd_trace,
-                     args=(run_id, job_id, req, _workspace()), daemon=True).start()
+    _set(
+        run_id,
+        state="running",
+        progress=0.0,
+        frames_done=0,
+        frames_total=None,
+        result=None,
+        error=None,
+    )
+    threading.Thread(
+        target=_compute_cpd_trace, args=(run_id, job_id, req, _workspace()), daemon=True
+    ).start()
     return {"trace_id": run_id, "state": "running"}
 
 

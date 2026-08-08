@@ -60,7 +60,10 @@ def test_axial_stacking_positions_and_identity_stability_after_relaxation():
     assert initial_ids == relaxed_ids
     for ring_idx in range(spec["stack"]["rings"]):
         z_vals = relaxed.centers[relaxed.ring_indices == ring_idx, 2]
-        assert abs(float(z_vals.mean()) - ring_idx * spec["stack"]["axial_spacing_nm"]) < 0.5
+        assert (
+            abs(float(z_vals.mean()) - ring_idx * spec["stack"]["axial_spacing_nm"])
+            < 0.5
+        )
 
 
 def test_coarse_relaxation_decreases_energy_without_nans():
@@ -85,13 +88,15 @@ def test_excluded_volume_report_catches_overlaps():
 
 def test_window_expansion_produces_unique_design_and_atomistic_model():
     spec = _spec(units=6, rings=2)
-    spec["reconstruction"].update({
-        "ring_start": 0,
-        "ring_count": 1,
-        "unit_start": 0,
-        "unit_count": 2,
-        "context_units": 1,
-    })
+    spec["reconstruction"].update(
+        {
+            "ring_start": 0,
+            "ring_count": 1,
+            "unit_start": 0,
+            "unit_count": 2,
+            "context_units": 1,
+        }
+    )
     state = initial_tube_state(spec)
     instances = symbolic_instances(state)
     selected, manifest = select_reconstruction_instances(instances, spec)
@@ -101,7 +106,9 @@ def test_window_expansion_produces_unique_design_and_atomistic_model():
     assert len(selected) == 4
     assert manifest["window"]["expanded_units"] == [0, 1, 2, 5]
     assert len({h.id for h in expanded.helices}) == len(expanded.helices)
-    assert all(d.helix_id.startswith("inst-") for s in expanded.strands for d in s.domains)
+    assert all(
+        d.helix_id.startswith("inst-") for s in expanded.strands for d in s.domains
+    )
 
     atomistic = build_atomistic_model(expanded)
     assert len(atomistic.atoms) > 0
@@ -122,11 +129,15 @@ def test_write_outputs_reproducible_window_manifest(tmp_path):
 
 def test_load_spec_deep_overrides(tmp_path):
     path = tmp_path / "tube_spec.json"
-    path.write_text(json.dumps({
-        "ring": {"units": 10},
-        "stack": {"rings": 2},
-        "relaxation": {"steps": 3},
-    }))
+    path.write_text(
+        json.dumps(
+            {
+                "ring": {"units": 10},
+                "stack": {"rings": 2},
+                "relaxation": {"steps": 3},
+            }
+        )
+    )
     spec = load_spec(path)
     assert spec["ring"]["units"] == 10
     assert spec["ring"]["radius_nm"] == DEFAULT_SPEC["ring"]["radius_nm"]
@@ -144,4 +155,3 @@ def test_scale_smoke_symbolic_memory_scales_with_instance_count():
     assert approx_length >= 900.0
     assert state.centers.shape == (10_000, 3)
     assert len(instances[0].connector_sites) == len(spec["coarse_sites"])
-

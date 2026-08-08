@@ -46,26 +46,39 @@ from backend.core.models import Design
 # order (same 12 colours, int form instead of '#rrggbb'). That comment lists
 # every copy of the palette in the repo.
 
-_SCAFFOLD_COLOR = (0x29, 0xB6, 0xF6)   # sky blue, normalised below
+_SCAFFOLD_COLOR = (0x29, 0xB6, 0xF6)  # sky blue, normalised below
 _STAPLE_PALETTE_HEX = [
-    0xFF6B6B, 0xFFD93D, 0x6BCB77, 0xF9844A, 0xA29BFE, 0xFF9FF3,
-    0x00CEC9, 0xE17055, 0x74B9FF, 0x55EFC4, 0xFDCB6E, 0xD63031,
+    0xFF6B6B,
+    0xFFD93D,
+    0x6BCB77,
+    0xF9844A,
+    0xA29BFE,
+    0xFF9FF3,
+    0x00CEC9,
+    0xE17055,
+    0x74B9FF,
+    0x55EFC4,
+    0xFDCB6E,
+    0xD63031,
 ]
 _UNASSIGNED_COLOR = (0x44, 0x55, 0x66)
 
 # Convert palette to (R,G,B) tuples in 0-1 range once
-_SCAFFOLD_RGB  = tuple(c / 255.0 for c in _SCAFFOLD_COLOR)
-_PALETTE_RGB   = [((h >> 16) / 255.0, ((h >> 8) & 0xFF) / 255.0, (h & 0xFF) / 255.0)
-                  for h in _STAPLE_PALETTE_HEX]
+_SCAFFOLD_RGB = tuple(c / 255.0 for c in _SCAFFOLD_COLOR)
+_PALETTE_RGB = [
+    ((h >> 16) / 255.0, ((h >> 8) & 0xFF) / 255.0, (h & 0xFF) / 255.0)
+    for h in _STAPLE_PALETTE_HEX
+]
 _UNASSIGNED_RGB = tuple(c / 255.0 for c in _UNASSIGNED_COLOR)
 
 
 # ── Result type ───────────────────────────────────────────────────────────────
 
+
 @dataclass
 class SurfaceMesh:
-    vertices: np.ndarray          # (N, 3) float32, world coords (nm)
-    faces: np.ndarray             # (M, 3) int32, triangle indices
+    vertices: np.ndarray  # (N, 3) float32, world coords (nm)
+    faces: np.ndarray  # (M, 3) int32, triangle indices
     vertex_strand_ids: list[str]  # length N; empty string = unassigned
     # Length N, "helix_id:bp_index:direction" — the app's canonical nucleotide key.
     # Defaulted so the four external constructors (STL / 3MF exporters and their tests)
@@ -77,11 +90,12 @@ class SurfaceMesh:
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
+
 def _sphere_struct(radius_voxels: float) -> np.ndarray:
     """Spherical binary structuring element with given radius in voxels."""
     r = max(1, int(math.ceil(radius_voxels)))
-    x, y, z = np.mgrid[-r:r + 1, -r:r + 1, -r:r + 1]
-    return (x ** 2 + y ** 2 + z ** 2) <= radius_voxels ** 2
+    x, y, z = np.mgrid[-r : r + 1, -r : r + 1, -r : r + 1]
+    return (x**2 + y**2 + z**2) <= radius_voxels**2
 
 
 def _build_occupancy_grid(
@@ -162,6 +176,7 @@ def _assign_vertex_owners(
 
 # ── Public surface computation ────────────────────────────────────────────────
 
+
 def _marching_cubes_safe(
     grid: np.ndarray,
     level: float,
@@ -176,12 +191,18 @@ def _marching_cubes_safe(
             faces=np.empty((0, 3), dtype=np.int32),
             vertex_strand_ids=[],
         )
-    verts, faces, _, _ = marching_cubes(grid.astype(np.float32), level=level, allow_degenerate=False)
+    verts, faces, _, _ = marching_cubes(
+        grid.astype(np.float32), level=level, allow_degenerate=False
+    )
     verts = (verts * grid_spacing + bbox_min).astype(np.float32)
     faces = faces.astype(np.int32)
     strand_ids, nuc_ids = _assign_vertex_owners(verts, atoms)
-    return SurfaceMesh(vertices=verts, faces=faces, vertex_strand_ids=strand_ids,
-                       vertex_nuc_ids=nuc_ids)
+    return SurfaceMesh(
+        vertices=verts,
+        faces=faces,
+        vertex_strand_ids=strand_ids,
+        vertex_nuc_ids=nuc_ids,
+    )
 
 
 # Voxel budget for the adaptive grid.  At 0.20 nm a 14774-nt VoltronCore rasterises to
@@ -191,9 +212,12 @@ def _marching_cubes_safe(
 _ADAPTIVE_VOXEL_CAP = 3_500_000
 
 
-def adaptive_grid_spacing(atoms: list[Atom], requested: float,
-                          cap_voxels: int = _ADAPTIVE_VOXEL_CAP,
-                          max_spacing: float = 0.40) -> float:
+def adaptive_grid_spacing(
+    atoms: list[Atom],
+    requested: float,
+    cap_voxels: int = _ADAPTIVE_VOXEL_CAP,
+    max_spacing: float = 0.40,
+) -> float:
     """Coarsen the surface grid for LARGE structures so the voxel count stays bounded.
 
     Returns ``requested`` (the finest allowed — default 0.20 nm) for small designs; a big
@@ -206,15 +230,20 @@ def adaptive_grid_spacing(atoms: list[Atom], requested: float,
     return adaptive_grid_spacing_arr(positions, requested, cap_voxels, max_spacing)
 
 
-def adaptive_grid_spacing_arr(positions: np.ndarray, requested: float,
-                              cap_voxels: int = _ADAPTIVE_VOXEL_CAP,
-                              max_spacing: float = 0.40) -> float:
+def adaptive_grid_spacing_arr(
+    positions: np.ndarray,
+    requested: float,
+    cap_voxels: int = _ADAPTIVE_VOXEL_CAP,
+    max_spacing: float = 0.40,
+) -> float:
     """:func:`adaptive_grid_spacing` for a raw ``(N,3)`` positions array (the point-cloud
     fast path) — same voxel-cap coarsening, no ``Atom`` objects."""
     positions = np.asarray(positions, dtype=np.float64)
     if positions.shape[0] == 0:
         return requested
-    span = np.maximum(positions.max(axis=0) - positions.min(axis=0), 1e-6) + 2.0  # + padding slack
+    span = (
+        np.maximum(positions.max(axis=0) - positions.min(axis=0), 1e-6) + 2.0
+    )  # + padding slack
     gs_cap = float(np.prod(span) / max(cap_voxels, 1)) ** (1.0 / 3.0)
     return float(min(max_spacing, max(requested, gs_cap)))
 
@@ -258,7 +287,9 @@ def compute_surface(
         envelope by ~30% so thin features print robustly.
     """
     scaled_radii = {elem: r * radius_scale for elem, r in VDW_RADIUS.items()}
-    grid, bbox_min = _build_occupancy_grid(atoms, scaled_radii, grid_spacing, padding=0.5 + probe_radius)
+    grid, bbox_min = _build_occupancy_grid(
+        atoms, scaled_radii, grid_spacing, padding=0.5 + probe_radius
+    )
 
     if probe_radius > 0:
         probe_vox = probe_radius / grid_spacing
@@ -276,7 +307,9 @@ def compute_surface(
 # the rebuild entirely and lands within ~2.8 Å of the full-atom envelope (< the grid's own
 # spacing).  This is the ChimeraX-style low-resolution surface; the full-atom path stays
 # available for "high detail".
-CG_BEAD_RADIUS_NM = 0.50   # per-nucleotide sphere radius (nm) ≈ a nucleotide's atomic extent
+CG_BEAD_RADIUS_NM = (
+    0.50  # per-nucleotide sphere radius (nm) ≈ a nucleotide's atomic extent
+)
 
 
 # ── EXPERIMENTAL "ChimeraX quality" SES parameters ────────────────────────────
@@ -288,22 +321,41 @@ CG_BEAD_RADIUS_NM = 0.50   # per-nucleotide sphere radius (nm) ≈ a nucleotide'
 # render at ChimeraX's true 0.5 Å grid with a 1.4 Å water probe and TRUE VdW radii
 # (no display-path 1.2× inflation).  EXPENSIVE — the voxel cap here is far higher
 # so small parts get the full grid; VoltronCore-scale designs still auto-coarsen.
-CHIMERAX_GRID_SPACING = 0.05        # nm (0.5 Å — ChimeraX default gridSpacing)
-CHIMERAX_PROBE_RADIUS = 0.14        # nm (1.4 Å — ChimeraX default water probe)
-CHIMERAX_RADIUS_SCALE = 1.0         # true VdW radii (no display 1.2× inflation)
-CHIMERAX_VOXEL_CAP    = 12_000_000  # ~4× the display cap; small designs stay at 0.05 nm
-CHIMERAX_MAX_SPACING  = 0.25        # nm — auto-coarsen ceiling for huge designs
-CHIMERAX_SMOOTH       = 8           # Taubin iters — fewer; the fine grid is already smooth
-_SPLIT_VOXEL_BUDGET   = 90_000_000  # total voxel budget shared across per-strand surfaces
+CHIMERAX_GRID_SPACING = 0.05  # nm (0.5 Å — ChimeraX default gridSpacing)
+CHIMERAX_PROBE_RADIUS = 0.14  # nm (1.4 Å — ChimeraX default water probe)
+CHIMERAX_RADIUS_SCALE = 1.0  # true VdW radii (no display 1.2× inflation)
+CHIMERAX_VOXEL_CAP = 12_000_000  # ~4× the display cap; small designs stay at 0.05 nm
+CHIMERAX_MAX_SPACING = 0.25  # nm — auto-coarsen ceiling for huge designs
+CHIMERAX_SMOOTH = 8  # Taubin iters — fewer; the fine grid is already smooth
+_SPLIT_VOXEL_BUDGET = 90_000_000  # total voxel budget shared across per-strand surfaces
 
 
-def make_cg_bead(x, y, z, strand_id: str = "", helix_id: str = "",
-                 bp_index: int = 0, direction: str = "FORWARD") -> Atom:
+def make_cg_bead(
+    x,
+    y,
+    z,
+    strand_id: str = "",
+    helix_id: str = "",
+    bp_index: int = 0,
+    direction: str = "FORWARD",
+) -> Atom:
     """One coarse per-nucleotide sphere as an element-'C' Atom (radius set by cg_surface_mesh
     via radius_scale); carries strand/helix/bp/dir for colouring + RMSF lookup."""
-    return Atom(serial=0, name="CG", element="C", residue="DT", chain_id="A", seq_num=0,
-                x=float(x), y=float(y), z=float(z), strand_id=strand_id, helix_id=helix_id,
-                bp_index=int(bp_index), direction=direction)
+    return Atom(
+        serial=0,
+        name="CG",
+        element="C",
+        residue="DT",
+        chain_id="A",
+        seq_num=0,
+        x=float(x),
+        y=float(y),
+        z=float(z),
+        strand_id=strand_id,
+        helix_id=helix_id,
+        bp_index=int(bp_index),
+        direction=direction,
+    )
 
 
 def compute_surface_from_cloud(
@@ -328,8 +380,11 @@ def compute_surface_from_cloud(
     positions = np.asarray(positions, dtype=np.float64)
     radii = np.asarray(radii, dtype=np.float64) * radius_scale
     if positions.shape[0] == 0:
-        return SurfaceMesh(vertices=np.empty((0, 3), np.float32),
-                           faces=np.empty((0, 3), np.int32), vertex_strand_ids=[])
+        return SurfaceMesh(
+            vertices=np.empty((0, 3), np.float32),
+            faces=np.empty((0, 3), np.int32),
+            vertex_strand_ids=[],
+        )
 
     # Pad the bbox by the SAME max radius _build_occupancy_grid uses — the max over the WHOLE
     # VDW_RADIUS table (not just the elements present) — so this grid's origin aligns voxel-for-
@@ -342,8 +397,11 @@ def compute_surface_from_cloud(
     shape = tuple((np.ceil((bbox_max - bbox_min) / grid_spacing)).astype(int) + 1)
 
     grid = np.zeros(shape, dtype=bool)
-    idx_all = np.clip(np.round((positions - bbox_min) / grid_spacing).astype(int),
-                      0, np.array(shape) - 1)
+    idx_all = np.clip(
+        np.round((positions - bbox_min) / grid_spacing).astype(int),
+        0,
+        np.array(shape) - 1,
+    )
     # Group by the handful of distinct radii (P/C/N/O × scale) → one dilation each.
     uniq = np.unique(np.round(radii, 6))
     for r in uniq:
@@ -358,15 +416,24 @@ def compute_surface_from_cloud(
         grid = binary_erosion(binary_dilation(grid, structure=struct), structure=struct)
 
     if grid.max() <= 0.5 or grid.min() >= 0.5:
-        return SurfaceMesh(vertices=np.empty((0, 3), np.float32),
-                           faces=np.empty((0, 3), np.int32), vertex_strand_ids=[])
-    verts, faces, _, _ = marching_cubes(grid.astype(np.float32), level=0.5, allow_degenerate=False)
+        return SurfaceMesh(
+            vertices=np.empty((0, 3), np.float32),
+            faces=np.empty((0, 3), np.int32),
+            vertex_strand_ids=[],
+        )
+    verts, faces, _, _ = marching_cubes(
+        grid.astype(np.float32), level=0.5, allow_degenerate=False
+    )
     verts = (verts * grid_spacing + bbox_min).astype(np.float32)
     _, nn = cKDTree(positions).query(verts, workers=-1)
     vsids = [strand_ids[int(i)] if strand_ids else "" for i in nn]
     vnucs = [nuc_ids[int(i)] if nuc_ids else "" for i in nn]
-    return SurfaceMesh(vertices=verts, faces=faces.astype(np.int32), vertex_strand_ids=vsids,
-                       vertex_nuc_ids=vnucs)
+    return SurfaceMesh(
+        vertices=verts,
+        faces=faces.astype(np.int32),
+        vertex_strand_ids=vsids,
+        vertex_nuc_ids=vnucs,
+    )
 
 
 def compute_split_surfaces_from_cloud(
@@ -410,7 +477,9 @@ def compute_split_surfaces_from_cloud(
     # One marching-cubes pass PER strand, so total cost scales with strand count.  Split a
     # global voxel budget across strands (floored) so a small design gets fine per-strand
     # grids while a 200-staple origami auto-coarsens instead of hanging for minutes.
-    eff_cap = int(min(cap_voxels, max(500_000, _SPLIT_VOXEL_BUDGET // max(1, len(order)))))
+    eff_cap = int(
+        min(cap_voxels, max(500_000, _SPLIT_VOXEL_BUDGET // max(1, len(order))))
+    )
 
     parts_v: list[np.ndarray] = []
     parts_f: list[np.ndarray] = []
@@ -423,12 +492,19 @@ def compute_split_surfaces_from_cloud(
         if sub_pos.shape[0] < 4:
             continue
         sub_r = radii[mask]
-        gs = adaptive_grid_spacing_arr(sub_pos, grid_spacing, cap_voxels=eff_cap,
-                                       max_spacing=max_spacing)
+        gs = adaptive_grid_spacing_arr(
+            sub_pos, grid_spacing, cap_voxels=eff_cap, max_spacing=max_spacing
+        )
         sub_nuc = [nuc_ids[i] for i in np.nonzero(mask)[0]] if nuc_ids else None
-        m = compute_surface_from_cloud(sub_pos, sub_r, None, grid_spacing=gs,
-                                       probe_radius=probe_radius, radius_scale=radius_scale,
-                                       nuc_ids=sub_nuc)
+        m = compute_surface_from_cloud(
+            sub_pos,
+            sub_r,
+            None,
+            grid_spacing=gs,
+            probe_radius=probe_radius,
+            radius_scale=radius_scale,
+            nuc_ids=sub_nuc,
+        )
         if m.vertices.shape[0] == 0:
             continue
         m = smooth_mesh(m, iterations=smooth)
@@ -448,19 +524,27 @@ def compute_split_surfaces_from_cloud(
     )
 
 
-def cg_surface_mesh(bead_atoms: list, grid_spacing: float = 0.20, probe_radius: float = 0.28,
-                    smooth: int = 15, bead_radius: float = CG_BEAD_RADIUS_NM) -> SurfaceMesh:
+def cg_surface_mesh(
+    bead_atoms: list,
+    grid_spacing: float = 0.20,
+    probe_radius: float = 0.28,
+    smooth: int = 15,
+    bead_radius: float = CG_BEAD_RADIUS_NM,
+) -> SurfaceMesh:
     """FAST approximate molecular surface from coarse per-nucleotide spheres — skips the
     all-atom rebuild (the bottleneck).  ~3× faster than the full-atom path; envelope within
     ~2.8 Å of it (< the grid spacing).  ``bead_radius`` (nm) sets the sphere size; the grid
     is coarsened adaptively for large structures."""
     rs = bead_radius / VDW_RADIUS["C"]
     gs = adaptive_grid_spacing(bead_atoms, grid_spacing)
-    mesh = compute_surface(bead_atoms, grid_spacing=gs, probe_radius=probe_radius, radius_scale=rs)
+    mesh = compute_surface(
+        bead_atoms, grid_spacing=gs, probe_radius=probe_radius, radius_scale=rs
+    )
     return smooth_mesh(mesh, iterations=smooth)
 
 
 # ── Mesh smoothing ────────────────────────────────────────────────────────────
+
 
 def smooth_mesh(
     mesh: SurfaceMesh,
@@ -491,15 +575,15 @@ def smooth_mesh(
     e = np.vstack([F[:, [0, 1]], F[:, [1, 2]], F[:, [2, 0]]])
     e = np.vstack([e, e[:, ::-1]])
     A = csr_matrix((np.ones(len(e)), (e[:, 0], e[:, 1])), shape=(n, n))
-    A.data[:] = 1.0                                       # binarise (dedupe duplicate edges)
+    A.data[:] = 1.0  # binarise (dedupe duplicate edges)
     deg = np.asarray(A.sum(axis=1)).ravel()
     deg[deg == 0] = 1.0
     Dinv = csr_matrix((1.0 / deg, (np.arange(n), np.arange(n))), shape=(n, n))
-    W = Dinv @ A                                          # neighbour-averaging operator
+    W = Dinv @ A  # neighbour-averaging operator
 
     for _ in range(iterations):
         V += lamb * (W @ V - V)
-        V += mu   * (W @ V - V)
+        V += mu * (W @ V - V)
 
     return SurfaceMesh(
         vertices=V.astype(np.float32),
@@ -510,6 +594,7 @@ def smooth_mesh(
 
 
 # ── Per-colour closed sub-surfaces (manifold multi-material export) ────────────
+
 
 def _weld_smooth_parts(
     parts: list[tuple[np.ndarray, np.ndarray] | None],
@@ -553,7 +638,7 @@ def _weld_smooth_parts(
         vertex_strand_ids=[],
     )
     smoothed = smooth_mesh(welded, iterations=iterations)
-    V_new = smoothed.vertices.astype(np.float64)[inv]      # back to per-part order
+    V_new = smoothed.vertices.astype(np.float64)[inv]  # back to per-part order
 
     out: list[tuple[np.ndarray, np.ndarray] | None] = []
     for p, meta in zip(parts, metas):
@@ -607,7 +692,7 @@ def compute_colored_surfaces(
         count=len(atoms),
     )
     tree = cKDTree(positions)
-    occ = np.argwhere(grid)                                # (K, 3) voxel indices
+    occ = np.argwhere(grid)  # (K, 3) voxel indices
     _, nn = tree.query(occ * grid_spacing + bbox_min, workers=-1)
     label = np.full(grid.shape, -1, dtype=np.int64)
     label[occ[:, 0], occ[:, 1], occ[:, 2]] = atom_group[nn]
@@ -633,7 +718,9 @@ def compute_colored_surfaces(
         raw = _weld_smooth_parts(raw, smooth)
 
     return [
-        None if p is None else SurfaceMesh(
+        None
+        if p is None
+        else SurfaceMesh(
             vertices=p[0].astype(np.float32),
             faces=p[1].astype(np.int32),
             vertex_strand_ids=[],
@@ -643,6 +730,7 @@ def compute_colored_surfaces(
 
 
 # ── JSON serialisation ────────────────────────────────────────────────────────
+
 
 def vertex_index_tables(mesh: SurfaceMesh) -> dict:
     """Per-vertex identity as ``(unique table, per-vertex index)`` pairs — the compact
@@ -657,6 +745,7 @@ def vertex_index_tables(mesh: SurfaceMesh) -> dict:
     The nucleotide pair is omitted when the mesh has none (older producers, the welded
     multi-material path); clients fall back to the strand pair.
     """
+
     def _dedupe(ids: list[str]) -> tuple[list[str], list[int]]:
         table: list[str] = []
         index: dict[str, int] = {}
@@ -710,7 +799,11 @@ def surface_to_json(
         elif strand.color:
             # Custom colour saved in design (#RRGGBB)
             h = int(strand.color.lstrip("#"), 16)
-            strand_rgb[strand.id] = ((h >> 16) / 255.0, ((h >> 8) & 0xFF) / 255.0, (h & 0xFF) / 255.0)
+            strand_rgb[strand.id] = (
+                (h >> 16) / 255.0,
+                ((h >> 8) & 0xFF) / 255.0,
+                (h & 0xFF) / 255.0,
+            )
         else:
             strand_rgb[strand.id] = _PALETTE_RGB[palette_idx % len(_PALETTE_RGB)]
             palette_idx += 1

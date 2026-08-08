@@ -46,7 +46,9 @@ _CACHE_MAX = 2
 
 _cache: "OrderedDict[str, object]" = OrderedDict()
 _key_locks: "dict[str, threading.Lock]" = {}
-_registry_lock = threading.Lock()  # guards _cache + _key_locks (never held during a build)
+_registry_lock = (
+    threading.Lock()
+)  # guards _cache + _key_locks (never held during a build)
 
 
 def atomistic_fingerprint(design: "Design") -> str:
@@ -62,7 +64,10 @@ def atomistic_fingerprint(design: "Design") -> str:
 
 
 def build_atomistic_model_cached(
-    design: "Design", *, fingerprint: str | None = None, fast_bridges: bool = False,
+    design: "Design",
+    *,
+    fingerprint: str | None = None,
+    fast_bridges: bool = False,
     measured_positioning: bool = True,
 ):
     """``build_atomistic_model(design)`` with a bounded cache + single-flight build.

@@ -55,7 +55,9 @@ def _manifest_file(package_dir: Path, files: dict, key: str) -> Path | None:
     return _resolve_relative(package_dir, value)
 
 
-def _parse_namd_metrics(log_path: Path | None, conf_path: Path | None = None) -> tuple[float | None, float | None, float | None, int | None]:
+def _parse_namd_metrics(
+    log_path: Path | None, conf_path: Path | None = None
+) -> tuple[float | None, float | None, float | None, int | None]:
     ns_per_day = None
     temp = None
     dt_ps = None
@@ -97,7 +99,9 @@ def _first_existing(candidates: list[Path]) -> Path | None:
     return None
 
 
-def _latest_existing_dcd(package_dir: Path, stage_names: list[str], output_dir: Path | None = None) -> tuple[Path | None, str | None]:
+def _latest_existing_dcd(
+    package_dir: Path, stage_names: list[str], output_dir: Path | None = None
+) -> tuple[Path | None, str | None]:
     output = output_dir or package_dir / "output"
     for name in reversed(stage_names):
         # A resumed segment writes its continuation frames to <name>.contN.dcd and
@@ -116,14 +120,20 @@ def _latest_existing_dcd(package_dir: Path, stage_names: list[str], output_dir: 
         if candidates:
             dcd = max(candidates, key=lambda p: p.stat().st_mtime)
             return dcd.resolve(), name
-    dcds = sorted(output.glob("*.dcd"), key=lambda p: p.stat().st_mtime) if output.exists() else []
+    dcds = (
+        sorted(output.glob("*.dcd"), key=lambda p: p.stat().st_mtime)
+        if output.exists()
+        else []
+    )
     if dcds:
         dcd = dcds[-1]
         return dcd.resolve(), dcd.stem
     return None, None
 
 
-def resolve_topology(package_dir: Path, files: dict | None = None, name_stem: str | None = None) -> Path | None:
+def resolve_topology(
+    package_dir: Path, files: dict | None = None, name_stem: str | None = None
+) -> Path | None:
     """The PSF this package's manifest points at — manifest entry, ``<name_stem>.psf``, then any.
 
     Split out of ``resolve_md_config`` so a caller that has to MATERIALISE a
@@ -133,11 +143,16 @@ def resolve_topology(package_dir: Path, files: dict | None = None, name_stem: st
     at render time.  ``remote_live_frame`` is that caller.
     """
     files = files if isinstance(files, dict) else {}
-    return _first_existing([
-        _manifest_file(package_dir, files, "topology") or package_dir / "__missing__.psf",
-        package_dir / f"{name_stem}.psf" if name_stem else package_dir / "__missing__.psf",
-        *sorted(package_dir.glob("*.psf")),
-    ])
+    return _first_existing(
+        [
+            _manifest_file(package_dir, files, "topology")
+            or package_dir / "__missing__.psf",
+            package_dir / f"{name_stem}.psf"
+            if name_stem
+            else package_dir / "__missing__.psf",
+            *sorted(package_dir.glob("*.psf")),
+        ]
+    )
 
 
 def resolve_md_config(config_path: str | Path) -> MdTrajectorySource:
@@ -150,31 +165,46 @@ def resolve_md_config(config_path: str | Path) -> MdTrajectorySource:
 
     if path.suffix.lower() == ".json":
         data = json.loads(path.read_text(errors="replace"))
-        package_dir = Path(data.get("package_dir") or path.parent).expanduser().resolve()
+        package_dir = (
+            Path(data.get("package_dir") or path.parent).expanduser().resolve()
+        )
         name_stem = data.get("name_stem")
         files = data.get("files") if isinstance(data.get("files"), dict) else {}
         raw_stages = data.get("stages")
         if not isinstance(raw_stages, list):
             raw_stages = data.get("segments")
-        stage_names = [s.get("name") for s in raw_stages or [] if isinstance(s, dict) and s.get("name")]
-        output_dir = _manifest_file(package_dir, files, "output_dir") or package_dir / "output"
+        stage_names = [
+            s.get("name")
+            for s in raw_stages or []
+            if isinstance(s, dict) and s.get("name")
+        ]
+        output_dir = (
+            _manifest_file(package_dir, files, "output_dir") or package_dir / "output"
+        )
         if not name_stem:
             psfs = sorted(package_dir.glob("*.psf"))
             name_stem = psfs[0].stem if psfs else None
 
         topology = resolve_topology(package_dir, files, name_stem)
-        coordinate = _first_existing([
-            _manifest_file(package_dir, files, "coordinates") or package_dir / "__missing__.pdb",
-            package_dir / f"{name_stem}.pdb" if name_stem else package_dir / "__missing__.pdb",
-            *sorted(package_dir.glob("*.pdb")),
-        ])
+        coordinate = _first_existing(
+            [
+                _manifest_file(package_dir, files, "coordinates")
+                or package_dir / "__missing__.pdb",
+                package_dir / f"{name_stem}.pdb"
+                if name_stem
+                else package_dir / "__missing__.pdb",
+                *sorted(package_dir.glob("*.pdb")),
+            ]
+        )
         trajectory, stage = _latest_existing_dcd(package_dir, stage_names, output_dir)
         conf = None
         if stage:
-            conf = _first_existing([
-                package_dir / f"{stage}.conf",
-                package_dir / f"{stage}.namd",
-            ])
+            conf = _first_existing(
+                [
+                    package_dir / f"{stage}.conf",
+                    package_dir / f"{stage}.namd",
+                ]
+            )
         log = package_dir / f"{stage}.log" if stage else None
 
         if not topology:
@@ -184,7 +214,10 @@ def resolve_md_config(config_path: str | Path) -> MdTrajectorySource:
         if not trajectory:
             raise ValueError(f"No DCD trajectory found in {output_dir}")
 
-        ns_day, temp, dt_ps, dcd_freq = _parse_namd_metrics(log if log and log.exists() else None, conf if conf and conf.exists() else None)
+        ns_day, temp, dt_ps, dcd_freq = _parse_namd_metrics(
+            log if log and log.exists() else None,
+            conf if conf and conf.exists() else None,
+        )
         return MdTrajectorySource(
             config_path=path,
             package_dir=package_dir,
@@ -217,9 +250,15 @@ def resolve_md_config(config_path: str | Path) -> MdTrajectorySource:
             if candidates:
                 trajectory = candidates[-1].resolve()
 
-        if coordinate is None or coordinate.suffix.lower() != ".pdb" or not coordinate.exists():
+        if (
+            coordinate is None
+            or coordinate.suffix.lower() != ".pdb"
+            or not coordinate.exists()
+        ):
             stem = topology.stem if topology else path.stem
-            coordinate = _first_existing([package_dir / f"{stem}.pdb", *sorted(package_dir.glob("*.pdb"))])
+            coordinate = _first_existing(
+                [package_dir / f"{stem}.pdb", *sorted(package_dir.glob("*.pdb"))]
+            )
         log = package_dir / f"{path.stem}.log"
 
         if not topology or not topology.exists():
@@ -229,7 +268,9 @@ def resolve_md_config(config_path: str | Path) -> MdTrajectorySource:
         if not trajectory or not trajectory.exists():
             raise ValueError(f"No DCD trajectory found from {path.name}")
 
-        ns_day, temp, dt_ps, dcd_freq = _parse_namd_metrics(log if log.exists() else None, path)
+        ns_day, temp, dt_ps, dcd_freq = _parse_namd_metrics(
+            log if log.exists() else None, path
+        )
         return MdTrajectorySource(
             config_path=path,
             package_dir=package_dir,

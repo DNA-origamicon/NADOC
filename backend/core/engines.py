@@ -586,9 +586,11 @@ def _blade_plan() -> dict:
     return {
         "auto": False,
         "name": "BLADE (OpenMM)",
-        "note": ("BLADE runs OpenMM, which is not in the NADOC Python environment. Create a "
-                 "conda/micromamba env with openmm + parmed, or point $BLADE_OPENMM_ENV at one "
-                 "you already have."),
+        "note": (
+            "BLADE runs OpenMM, which is not in the NADOC Python environment. Create a "
+            "conda/micromamba env with openmm + parmed, or point $BLADE_OPENMM_ENV at one "
+            "you already have."
+        ),
         "commands": [
             "micromamba create -n gpu -c conda-forge python=3.12 openmm parmed cudatoolkit",
             "# then either name it 'gpu' (auto-detected) or export BLADE_OPENMM_ENV=<prefix>",
@@ -787,7 +789,7 @@ def engines_status() -> dict:
             blade_python,
             _blade_plan(),
             required_note="Only needed for the BLADE tab; ships as a conda/micromamba env, "
-                          "not a NADOC build.",
+            "not a NADOC build.",
             forced=_f("blade"),
         ),
         # These ship *inside* another engine's install — reported, never installed

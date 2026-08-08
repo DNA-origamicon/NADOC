@@ -54,6 +54,7 @@ from backend.core.models import (
 
 # ── Result payload ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class BindTopology:
     """Result of compute_bind_topology.
@@ -68,6 +69,7 @@ class BindTopology:
     Plus a snapshot dict that ``OverhangBinding.prior_driven_topology``
     persists for unbind restoration.
     """
+
     driver_oh_id: str
     driven_oh_id: str
     driver_side: str  # 'a' or 'b'
@@ -76,14 +78,14 @@ class BindTopology:
     target_helix_id: str
     target_start_bp: int
     target_end_bp: int
-    target_direction: 'Direction'
+    target_direction: "Direction"
     snapshot: Dict[str, Any]
     # ForcedLigation that REPLACES the relocated overhang-extrude crossover (the
     # root↔tip backbone bond). After relocation the crossover's halves sit on
     # non-adjacent helices at mismatched bp — an INVALID lattice crossover — so the
     # bond is represented as a ForcedLigation (drawn correctly in 3D + cadnano).
     # None for the legacy single-domain / no-crossover case (keeps the rewrite path).
-    forced_ligation: Optional['ForcedLigation'] = None
+    forced_ligation: Optional["ForcedLigation"] = None
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -137,17 +139,21 @@ def _resolve_driver_side(
     driver (its anchor doesn't move). Both- or neither-joints → side A is
     the driver. The driven side's domain relocates onto the driver's helix
     and the driven helix is removed."""
-    has_joint_a = any(
-        j.cluster_id == cluster_a for j in design.cluster_joints
-    ) if cluster_a is not None else False
-    has_joint_b = any(
-        j.cluster_id == cluster_b for j in design.cluster_joints
-    ) if cluster_b is not None else False
+    has_joint_a = (
+        any(j.cluster_id == cluster_a for j in design.cluster_joints)
+        if cluster_a is not None
+        else False
+    )
+    has_joint_b = (
+        any(j.cluster_id == cluster_b for j in design.cluster_joints)
+        if cluster_b is not None
+        else False
+    )
     if has_joint_a and not has_joint_b:
-        return 'b'
+        return "b"
     if has_joint_b and not has_joint_a:
-        return 'a'
-    return 'a'
+        return "a"
+    return "a"
 
 
 def _find_oh_strand_and_domain(
@@ -160,10 +166,13 @@ def _find_oh_strand_and_domain(
         for i, dom in enumerate(strand.domains):
             if dom.overhang_id == overhang_id:
                 return strand, i, dom
-    raise HTTPException(422, detail=(
-        f"OverhangBinding: no strand domain has overhang_id={overhang_id!r}; "
-        f"the overhang may be malformed or already relocated."
-    ))
+    raise HTTPException(
+        422,
+        detail=(
+            f"OverhangBinding: no strand domain has overhang_id={overhang_id!r}; "
+            f"the overhang may be malformed or already relocated."
+        ),
+    )
 
 
 def _crossovers_on_helix(
@@ -172,7 +181,8 @@ def _crossovers_on_helix(
 ) -> list[tuple[int, Crossover]]:
     """Return (index, crossover) pairs for crossovers touching *helix_id*."""
     return [
-        (i, xo) for i, xo in enumerate(design.crossovers)
+        (i, xo)
+        for i, xo in enumerate(design.crossovers)
         if xo.half_a.helix_id == helix_id or xo.half_b.helix_id == helix_id
     ]
 
@@ -181,10 +191,7 @@ def _half_in_range(half, helix_id: str, lo: int, hi: int) -> bool:
     """True iff `half` sits on `helix_id` at a bp index inside [lo, hi].
     Used to scope crossover rewriting to a SINGLE overhang's bp range when
     the underlying helix may host multiple overhangs."""
-    return (
-        half.helix_id == helix_id
-        and lo <= int(half.index) <= hi
-    )
+    return half.helix_id == helix_id and lo <= int(half.index) <= hi
 
 
 # ── Public entry point — topology relocation ────────────────────────────────
@@ -222,34 +229,44 @@ def compute_bind_topology(
     oh_a = next((o for o in design.overhangs if o.id == binding.overhang_a_id), None)
     oh_b = next((o for o in design.overhangs if o.id == binding.overhang_b_id), None)
     if oh_a is None or oh_b is None:
-        raise HTTPException(422, detail=(
-            f"OverhangBinding {binding.id}: overhangs do not resolve."
-        ))
+        raise HTTPException(
+            422, detail=(f"OverhangBinding {binding.id}: overhangs do not resolve.")
+        )
 
     # Cluster checks only constrain the HEURISTIC driver pick. When the caller
     # forces ``driver_side`` (the unified direct-apply path), relocation is a pure
     # topology move — valid with no clusters or a single shared cluster — so we skip
     # them entirely.
-    if driver_side not in ('a', 'b'):
+    if driver_side not in ("a", "b"):
         cluster_a = _overhang_owning_cluster_id(design, oh_a.id)
         cluster_b = _overhang_owning_cluster_id(design, oh_b.id)
         if cluster_a is None or cluster_b is None:
-            raise HTTPException(422, detail=(
-                "Binding endpoints are not owned by any cluster — bind requires "
-                "both overhangs to be in clusters."
-            ))
+            raise HTTPException(
+                422,
+                detail=(
+                    "Binding endpoints are not owned by any cluster — bind requires "
+                    "both overhangs to be in clusters."
+                ),
+            )
         if cluster_a == cluster_b:
-            raise HTTPException(422, detail=(
-                "Binding spans a single rigid body — both overhangs sit on the "
-                "same cluster, so no relocation is possible."
-            ))
+            raise HTTPException(
+                422,
+                detail=(
+                    "Binding spans a single rigid body — both overhangs sit on the "
+                    "same cluster, so no relocation is possible."
+                ),
+            )
         driver_side = _resolve_driver_side(design, binding, cluster_a, cluster_b)
-    driver_oh = oh_a if driver_side == 'a' else oh_b
-    driven_oh = oh_b if driver_side == 'a' else oh_a
+    driver_oh = oh_a if driver_side == "a" else oh_b
+    driven_oh = oh_b if driver_side == "a" else oh_a
 
     # Locate the driver's OH domain — sets the target (helix + bp range).
-    driver_strand, driver_di, driver_dom = _find_oh_strand_and_domain(design, driver_oh.id)
-    driven_strand, driven_di, driven_dom = _find_oh_strand_and_domain(design, driven_oh.id)
+    driver_strand, driver_di, driver_dom = _find_oh_strand_and_domain(
+        design, driver_oh.id
+    )
+    driven_strand, driven_di, driven_dom = _find_oh_strand_and_domain(
+        design, driven_oh.id
+    )
 
     target_helix_id = driver_dom.helix_id
     # Antiparallel pairing — flip the direction AND swap start/end. The
@@ -268,7 +285,8 @@ def compute_bind_topology(
     # mapping lands at the wrong end of the OH. The swap restores the
     # invariant.
     target_direction = (
-        Direction.REVERSE if driver_dom.direction == Direction.FORWARD
+        Direction.REVERSE
+        if driver_dom.direction == Direction.FORWARD
         else Direction.FORWARD
     )
     target_start_bp = driver_dom.end_bp
@@ -284,11 +302,14 @@ def compute_bind_topology(
     # Snapshot the driven side's pre-bind topology for unbind restoration.
     driven_helix = next((h for h in design.helices if h.id == driven_oh.helix_id), None)
     if driven_helix is None:
-        raise HTTPException(422, detail=(
-            f"OverhangBinding {binding.id}: driven OH helix "
-            f"{driven_oh.helix_id!r} not found."
-        ))
-    driven_helix_dict = driven_helix.model_dump(mode='json')
+        raise HTTPException(
+            422,
+            detail=(
+                f"OverhangBinding {binding.id}: driven OH helix "
+                f"{driven_oh.helix_id!r} not found."
+            ),
+        )
+    driven_helix_dict = driven_helix.model_dump(mode="json")
 
     # Crossovers whose half lies on the driven OH helix *within the
     # driven OH's bp range* — snapshot for unbind, rewrite on bind. We
@@ -300,7 +321,7 @@ def compute_bind_topology(
     lo = min(driven_dom.start_bp, driven_dom.end_bp)
     hi = max(driven_dom.start_bp, driven_dom.end_bp)
     xover_snapshots = [
-        xo.model_dump(mode='json')
+        xo.model_dump(mode="json")
         for _i, xo in _crossovers_on_helix(design, driven_helix.id)
         if _half_in_range(xo.half_a, driven_helix.id, lo, hi)
         or _half_in_range(xo.half_b, driven_helix.id, lo, hi)
@@ -333,20 +354,29 @@ def compute_bind_topology(
     n_dom = len(driven_strand.domains)
     if n_dom >= 2 and xover_snapshots:
         is_tip_last = driven_di == n_dom - 1
-        root_dom = (driven_strand.domains[driven_di - 1] if is_tip_last
-                    else driven_strand.domains[driven_di + 1])
+        root_dom = (
+            driven_strand.domains[driven_di - 1]
+            if is_tip_last
+            else driven_strand.domains[driven_di + 1]
+        )
         if is_tip_last:
             relocate_fl = ForcedLigation(
-                three_prime_helix_id=root_dom.helix_id, three_prime_bp=root_dom.end_bp,
+                three_prime_helix_id=root_dom.helix_id,
+                three_prime_bp=root_dom.end_bp,
                 three_prime_direction=root_dom.direction,
-                five_prime_helix_id=target_helix_id, five_prime_bp=target_start_bp,
-                five_prime_direction=target_direction)
+                five_prime_helix_id=target_helix_id,
+                five_prime_bp=target_start_bp,
+                five_prime_direction=target_direction,
+            )
         else:
             relocate_fl = ForcedLigation(
-                three_prime_helix_id=target_helix_id, three_prime_bp=target_end_bp,
+                three_prime_helix_id=target_helix_id,
+                three_prime_bp=target_end_bp,
                 three_prime_direction=target_direction,
-                five_prime_helix_id=root_dom.helix_id, five_prime_bp=root_dom.start_bp,
-                five_prime_direction=root_dom.direction)
+                five_prime_helix_id=root_dom.helix_id,
+                five_prime_bp=root_dom.start_bp,
+                five_prime_direction=root_dom.direction,
+            )
         snapshot["forced_ligation"] = relocate_fl.model_dump(mode="json")
 
     return BindTopology(
@@ -375,21 +405,27 @@ def apply_bind_topology(design: Design, topology: BindTopology) -> Design:
             continue
         new_doms = list(strand.domains)
         old = new_doms[topology.domain_index]
-        new_doms[topology.domain_index] = old.model_copy(update={
-            "helix_id": topology.target_helix_id,
-            "start_bp": topology.target_start_bp,
-            "end_bp": topology.target_end_bp,
-            "direction": topology.target_direction,
-        })
+        new_doms[topology.domain_index] = old.model_copy(
+            update={
+                "helix_id": topology.target_helix_id,
+                "start_bp": topology.target_start_bp,
+                "end_bp": topology.target_end_bp,
+                "direction": topology.target_direction,
+            }
+        )
         new_strands.append(strand.model_copy(update={"domains": new_doms}))
 
     # 2) Update the driven OverhangSpec.helix_id.
     new_overhangs = []
     for oh in design.overhangs:
         if oh.id == topology.driven_oh_id:
-            new_overhangs.append(oh.model_copy(update={
-                "helix_id": topology.target_helix_id,
-            }))
+            new_overhangs.append(
+                oh.model_copy(
+                    update={
+                        "helix_id": topology.target_helix_id,
+                    }
+                )
+            )
         else:
             new_overhangs.append(oh)
 
@@ -431,8 +467,9 @@ def apply_bind_topology(design: Design, topology: BindTopology) -> Design:
     prior_hi = max(int(prior_domain["start_bp"]), int(prior_domain["end_bp"]))
 
     def _in_oh_range(xo: Crossover) -> bool:
-        return (_half_in_range(xo.half_a, driven_helix_id, prior_lo, prior_hi)
-                or _half_in_range(xo.half_b, driven_helix_id, prior_lo, prior_hi))
+        return _half_in_range(
+            xo.half_a, driven_helix_id, prior_lo, prior_hi
+        ) or _half_in_range(xo.half_b, driven_helix_id, prior_lo, prior_hi)
 
     new_forced = list(design.forced_ligations)
     if topology.forced_ligation is not None:
@@ -444,21 +481,29 @@ def apply_bind_topology(design: Design, topology: BindTopology) -> Design:
             new_ha = xo.half_a
             new_hb = xo.half_b
             if _half_in_range(xo.half_a, driven_helix_id, prior_lo, prior_hi):
-                new_ha = _rewrite_half_to_driver(xo.half_a, driven_helix_id, topology, prior_domain)
+                new_ha = _rewrite_half_to_driver(
+                    xo.half_a, driven_helix_id, topology, prior_domain
+                )
             if _half_in_range(xo.half_b, driven_helix_id, prior_lo, prior_hi):
-                new_hb = _rewrite_half_to_driver(xo.half_b, driven_helix_id, topology, prior_domain)
+                new_hb = _rewrite_half_to_driver(
+                    xo.half_b, driven_helix_id, topology, prior_domain
+                )
             if new_ha is xo.half_a and new_hb is xo.half_b:
                 new_crossovers.append(xo)
             else:
-                new_crossovers.append(xo.model_copy(update={"half_a": new_ha, "half_b": new_hb}))
+                new_crossovers.append(
+                    xo.model_copy(update={"half_a": new_ha, "half_b": new_hb})
+                )
 
-    return design.model_copy(update={
-        "strands": new_strands,
-        "overhangs": new_overhangs,
-        "helices": new_helices,
-        "crossovers": new_crossovers,
-        "forced_ligations": new_forced,
-    })
+    return design.model_copy(
+        update={
+            "strands": new_strands,
+            "overhangs": new_overhangs,
+            "helices": new_helices,
+            "crossovers": new_crossovers,
+            "forced_ligations": new_forced,
+        }
+    )
 
 
 def _rewrite_half_to_driver(
@@ -478,9 +523,9 @@ def _rewrite_half_to_driver(
     # one bp end of the OH's domain.) Fall back to proportional mapping if
     # the old index isn't at either named endpoint.
     prior_start = int(prior_domain["start_bp"])
-    prior_end   = int(prior_domain["end_bp"])
+    prior_end = int(prior_domain["end_bp"])
     target_start = topology.target_start_bp
-    target_end   = topology.target_end_bp
+    target_end = topology.target_end_bp
     if half.index == prior_end:
         new_index = target_end
     elif half.index == prior_start:
@@ -495,11 +540,13 @@ def _rewrite_half_to_driver(
         else:
             frac = (half.index - prior_lo) / (prior_hi - prior_lo)
             new_index = int(round(target_lo + frac * (target_hi - target_lo)))
-    return half.model_copy(update={
-        "helix_id": topology.target_helix_id,
-        "index":    new_index,
-        "strand":   topology.target_direction,
-    })
+    return half.model_copy(
+        update={
+            "helix_id": topology.target_helix_id,
+            "index": new_index,
+            "strand": topology.target_direction,
+        }
+    )
 
 
 def revert_bind_topology(design: Design, snapshot: Dict[str, Any]) -> Design:
@@ -528,12 +575,14 @@ def revert_bind_topology(design: Design, snapshot: Dict[str, Any]) -> Design:
         new_doms = list(strand.domains)
         if 0 <= target_domain_index < len(new_doms):
             old = new_doms[target_domain_index]
-            new_doms[target_domain_index] = old.model_copy(update={
-                "helix_id": prior_dom["helix_id"],
-                "start_bp": prior_dom["start_bp"],
-                "end_bp":   prior_dom["end_bp"],
-                "direction": Direction(prior_dom["direction"]),
-            })
+            new_doms[target_domain_index] = old.model_copy(
+                update={
+                    "helix_id": prior_dom["helix_id"],
+                    "start_bp": prior_dom["start_bp"],
+                    "end_bp": prior_dom["end_bp"],
+                    "direction": Direction(prior_dom["direction"]),
+                }
+            )
         new_strands.append(strand.model_copy(update={"domains": new_doms}))
 
     # 3) Restore the driven OverhangSpec.helix_id, and zero the DRIVER's midpoint
@@ -547,14 +596,22 @@ def revert_bind_topology(design: Design, snapshot: Dict[str, Any]) -> Design:
     new_overhangs = []
     for oh in design.overhangs:
         if oh.id == snapshot["driven_oh_id"]:
-            new_overhangs.append(oh.model_copy(update={
-                "helix_id": prior_ovhg_helix_id,
-            }))
+            new_overhangs.append(
+                oh.model_copy(
+                    update={
+                        "helix_id": prior_ovhg_helix_id,
+                    }
+                )
+            )
         elif oh.id == driver_oh_id:
-            new_overhangs.append(oh.model_copy(update={
-                "rotation": [0.0, 0.0, 0.0, 1.0],
-                "translation": [0.0, 0.0, 0.0],
-            }))
+            new_overhangs.append(
+                oh.model_copy(
+                    update={
+                        "rotation": [0.0, 0.0, 0.0, 1.0],
+                        "translation": [0.0, 0.0, 0.0],
+                    }
+                )
+            )
         else:
             new_overhangs.append(oh)
 
@@ -591,17 +648,22 @@ def revert_bind_topology(design: Design, snapshot: Dict[str, Any]) -> Design:
     # torn down with the binding (the driver OverhangSpec was reset to identity above).
     # [[overhang-duplex-cluster]] P1b.
     driver = snapshot.get("driver_oh_id")
-    new_clusters = [c for c in design.cluster_transforms
-                    if c.overhang_duplex_driver_id != driver] if driver else design.cluster_transforms
+    new_clusters = (
+        [c for c in design.cluster_transforms if c.overhang_duplex_driver_id != driver]
+        if driver
+        else design.cluster_transforms
+    )
 
-    return design.model_copy(update={
-        "helices": new_helices,
-        "strands": new_strands,
-        "overhangs": new_overhangs,
-        "crossovers": restored_xovers,
-        "forced_ligations": new_forced,
-        "cluster_transforms": new_clusters,
-    })
+    return design.model_copy(
+        update={
+            "helices": new_helices,
+            "strands": new_strands,
+            "overhangs": new_overhangs,
+            "crossovers": restored_xovers,
+            "forced_ligations": new_forced,
+            "cluster_transforms": new_clusters,
+        }
+    )
 
 
 # ── Backwards-compatible 1-DOF joint-angle path ─────────────────────────────
@@ -629,62 +691,67 @@ def compute_locked_angle(
     res_a = sd_lookup.get(binding.sub_domain_a_id)
     res_b = sd_lookup.get(binding.sub_domain_b_id)
     if res_a is None or res_b is None:
-        raise HTTPException(422, detail=(
-            f"OverhangBinding {binding.id}: sub_domains do not resolve."
-        ))
+        raise HTTPException(
+            422, detail=(f"OverhangBinding {binding.id}: sub_domains do not resolve.")
+        )
     ovhg_a, sd_a = res_a
     ovhg_b, sd_b = res_b
     cluster_a = _overhang_owning_cluster_id(design, ovhg_a.id)
     cluster_b = _overhang_owning_cluster_id(design, ovhg_b.id)
     if cluster_a is None or cluster_b is None:
-        raise HTTPException(422, detail=(
-            "Binding endpoints are not owned by any cluster."
-        ))
+        raise HTTPException(
+            422, detail=("Binding endpoints are not owned by any cluster.")
+        )
     if cluster_a == cluster_b:
-        raise HTTPException(422, detail=(
-            "Binding spans a single rigid body."
-        ))
+        raise HTTPException(422, detail=("Binding spans a single rigid body."))
 
     candidates = [
-        j for j in design.cluster_joints
+        j
+        for j in design.cluster_joints
         if j.cluster_id == cluster_a or j.cluster_id == cluster_b
     ]
     if binding.target_joint_id is not None:
         candidates = [j for j in candidates if j.id == binding.target_joint_id]
     if not candidates:
-        raise HTTPException(422, detail=(
-            "compute_locked_angle: no joints between the two clusters "
-            "(0-DOF binding has no joint to lock)."
-        ))
+        raise HTTPException(
+            422,
+            detail=(
+                "compute_locked_angle: no joints between the two clusters "
+                "(0-DOF binding has no joint to lock)."
+            ),
+        )
     if len(candidates) > 1:
-        raise HTTPException(422, detail=(
-            "compute_locked_angle: N-DOF binding (multiple joints) has no "
-            "single angle to lock."
-        ))
+        raise HTTPException(
+            422,
+            detail=(
+                "compute_locked_angle: N-DOF binding (multiple joints) has no "
+                "single angle to lock."
+            ),
+        )
     joint = candidates[0]
 
     cts_by_id = {c.id: c for c in design.cluster_transforms}
     ct = cts_by_id.get(joint.cluster_id)
     world_origin, world_dir = _local_to_world_joint(
-        joint.local_axis_origin, joint.local_axis_direction, ct,
+        joint.local_axis_origin,
+        joint.local_axis_direction,
+        ct,
     )
     axis = np.asarray(world_dir, dtype=float)
     norm = float(np.linalg.norm(axis))
     if norm < 1e-9:
-        raise HTTPException(422, detail=(
-            f"Joint {joint.id} axis is degenerate."
-        ))
+        raise HTTPException(422, detail=(f"Joint {joint.id} axis is degenerate."))
     axis = axis / norm
     origin = np.asarray(world_origin, dtype=float)
 
     p_a, n_a, _ = _sub_domain_junction_anchor(design, binding.sub_domain_a_id, geometry)
     p_b, n_b, _ = _sub_domain_junction_anchor(design, binding.sub_domain_b_id, geometry)
     if p_a is None or p_b is None:
-        raise HTTPException(422, detail=(
-            "Could not resolve sub-domain anchor positions from geometry."
-        ))
+        raise HTTPException(
+            422, detail=("Could not resolve sub-domain anchor positions from geometry.")
+        )
 
-    moving_is_a = (joint.cluster_id == cluster_a)
+    moving_is_a = joint.cluster_id == cluster_a
     moving_anchor = p_a if moving_is_a else p_b
     moving_normal = n_a if moving_is_a else n_b
     fixed_anchor = p_b if moving_is_a else p_a
@@ -694,10 +761,17 @@ def compute_locked_angle(
     theta_min = float(joint.min_angle_deg) * np.pi / 180.0
     theta_max = float(joint.max_angle_deg) * np.pi / 180.0
     theta_rad = _optimize_angle(
-        moving_anchor, moving_normal,
-        fixed_anchor, fixed_normal,
-        moving_is_a, origin, axis, base_count,
-        True, True,
-        theta_min=theta_min, theta_max=theta_max,
+        moving_anchor,
+        moving_normal,
+        fixed_anchor,
+        fixed_normal,
+        moving_is_a,
+        origin,
+        axis,
+        base_count,
+        True,
+        True,
+        theta_min=theta_min,
+        theta_max=theta_max,
     )
     return float(theta_rad * 180.0 / np.pi)

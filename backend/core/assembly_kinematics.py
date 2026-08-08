@@ -38,7 +38,7 @@ from backend.core.assembly_connectors import _enforce_connector_coincidence
 
 
 def _apply_revolute_joint(
-    base_mat: np.ndarray,         # 4×4 row-major base transform of instance_b
+    base_mat: np.ndarray,  # 4×4 row-major base transform of instance_b
     axis_origin: list[float],
     axis_direction: list[float],
     angle_rad: float,
@@ -52,6 +52,7 @@ def _apply_revolute_joint(
     world-space origin of instance_b at angle=0 (from base_mat).
     """
     from scipy.spatial.transform import Rotation
+
     o = np.array(axis_origin, dtype=float)
     d = np.array(axis_direction, dtype=float)
     d_norm = np.linalg.norm(d)
@@ -63,16 +64,16 @@ def _apply_revolute_joint(
 
     # Build 4×4 result.  The rotation is applied in world space about axis_origin.
     # Translation component: t_new = o + R @ (t_base - o)
-    t_base = base_mat[:3, 3]   # column 3 in row-major = last column
-    t_new  = o + R @ (t_base - o)
+    t_base = base_mat[:3, 3]  # column 3 in row-major = last column
+    t_new = o + R @ (t_base - o)
 
     # Rotation component: R_new = R @ R_base
     R_base = base_mat[:3, :3]
-    R_new  = R @ R_base
+    R_new = R @ R_base
 
     result = np.eye(4)
     result[:3, :3] = R_new
-    result[:3, 3]  = t_new
+    result[:3, 3] = t_new
     return result
 
 
@@ -101,14 +102,17 @@ def _derive_revolute_angle(base_T, current_T, axis_direction):
         axis = axis / n
         # Recover rotation axis from antisymmetric part of R; sign vs the
         # given axis_direction tells us which way the rotation went.
-        w = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]]) / (2.0 * sin_a)
+        w = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]]) / (
+            2.0 * sin_a
+        )
         if float(np.dot(w, axis)) < 0.0:
             angle = -angle
     return angle
 
 
-def _sync_revolute_values_for_instances(assembly, instance_ids, *,
-                                          base_transforms_override=None):
+def _sync_revolute_values_for_instances(
+    assembly, instance_ids, *, base_transforms_override=None
+):
     """For each revolute joint whose ``instance_b_id`` is in ``instance_ids``,
     derive the new ``current_value`` from the current vs base transform and
     update the joint in place. Returns the list of joint ids whose value
@@ -126,16 +130,22 @@ def _sync_revolute_values_for_instances(assembly, instance_ids, *,
         return []
     updated: list[str] = []
     inst_by_id = _build_inst_by_id(assembly)
-    debug = os.environ.get('NADOC_GEAR_DEBUG', '1') != '0'
+    debug = os.environ.get("NADOC_GEAR_DEBUG", "1") != "0"
     for j in assembly.joints:
-        if j.joint_type != 'revolute':         continue
-        if j.instance_b_id not in instance_ids: continue
+        if j.joint_type != "revolute":
+            continue
+        if j.instance_b_id not in instance_ids:
+            continue
         inst = inst_by_id.get(j.instance_b_id)
-        if inst is None:                       continue
-        base_model = (base_transforms_override or {}).get(j.instance_b_id) or inst.base_transform
-        if base_model is None:                 continue
+        if inst is None:
+            continue
+        base_model = (base_transforms_override or {}).get(
+            j.instance_b_id
+        ) or inst.base_transform
+        if base_model is None:
+            continue
         try:
-            base_T    = base_model.to_array()
+            base_T = base_model.to_array()
             current_T = inst.transform.to_array()
         except Exception:
             continue
@@ -152,8 +162,10 @@ def _sync_revolute_values_for_instances(assembly, instance_ids, *,
             continue
         j.current_value = float(new_value)
         if debug:
-            print(f"[gear-sync] joint={j.id[:8]} current_value {old_value:+.3f} → {new_value:+.3f}",
-                  flush=True)
+            print(
+                f"[gear-sync] joint={j.id[:8]} current_value {old_value:+.3f} → {new_value:+.3f}",
+                flush=True,
+            )
         updated.append(j.id)
     return updated
 
@@ -181,13 +193,18 @@ def _sync_revolute_values_for_parent_moves(assembly, moved_ids, world_delta_M):
         return []
     M = np.asarray(world_delta_M, dtype=float).reshape(4, 4)
     updated: list[str] = []
-    debug = os.environ.get('NADOC_GEAR_DEBUG', '1') != '0'
+    debug = os.environ.get("NADOC_GEAR_DEBUG", "1") != "0"
     for j in assembly.joints:
-        if j.joint_type != 'revolute':           continue
-        if not j.instance_a_id:                  continue
-        if j.instance_a_id not in moved_ids:     continue
-        if j.instance_b_id is None:              continue
-        if j.instance_b_id in moved_ids:         continue   # both moved → standard FK
+        if j.joint_type != "revolute":
+            continue
+        if not j.instance_a_id:
+            continue
+        if j.instance_a_id not in moved_ids:
+            continue
+        if j.instance_b_id is None:
+            continue
+        if j.instance_b_id in moved_ids:
+            continue  # both moved → standard FK
         delta_angle = _derive_revolute_angle(np.eye(4), M, j.axis_direction)
         if delta_angle is None or not math.isfinite(delta_angle):
             continue
@@ -199,8 +216,11 @@ def _sync_revolute_values_for_parent_moves(assembly, moved_ids, world_delta_M):
         # by the joint, so the sign matches.
         j.current_value = float(old_value - delta_angle)
         if debug:
-            print(f"[gear-sync-parent] joint={j.id[:8]} parent_rotated={delta_angle:+.3f} → "
-                  f"current_value {old_value:+.3f} → {j.current_value:+.3f}", flush=True)
+            print(
+                f"[gear-sync-parent] joint={j.id[:8]} parent_rotated={delta_angle:+.3f} → "
+                f"current_value {old_value:+.3f} → {j.current_value:+.3f}",
+                flush=True,
+            )
         updated.append(j.id)
     return updated
 
@@ -222,15 +242,24 @@ def _axis_angle_rotation_matrix(axis, angle: float) -> np.ndarray:
     c = math.cos(angle)
     s = math.sin(angle)
     C = 1.0 - c
-    return np.array([
-        [c + x * x * C,     x * y * C - z * s, x * z * C + y * s],
-        [y * x * C + z * s, c + y * y * C,     y * z * C - x * s],
-        [z * x * C - y * s, z * y * C + x * s, c + z * z * C],
-    ], dtype=float)
+    return np.array(
+        [
+            [c + x * x * C, x * y * C - z * s, x * z * C + y * s],
+            [y * x * C + z * s, c + y * y * C, y * z * C - x * s],
+            [z * x * C - y * s, z * y * C + x * s, c + z * z * C],
+        ],
+        dtype=float,
+    )
 
 
-def _apply_revolute_value_to_gear_endpoint(assembly, joint, endpoint_side: str, new_value: float,
-                                           inst_by_id: dict, debug: bool = False):
+def _apply_revolute_value_to_gear_endpoint(
+    assembly,
+    joint,
+    endpoint_side: str,
+    new_value: float,
+    inst_by_id: dict,
+    debug: bool = False,
+):
     """Apply ``joint.current_value = new_value`` by moving the relation's chosen endpoint.
 
     Legacy revolute driving always moves ``instance_b``. Endpoint-aware gear
@@ -245,14 +274,20 @@ def _apply_revolute_value_to_gear_endpoint(assembly, joint, endpoint_side: str, 
     seed = inst_by_id.get(old_seed_id)
     if seed is None or seed.fixed:
         if debug:
-            print(f"[gear]   skip endpoint side={endpoint_side}: seed missing/fixed", flush=True)
+            print(
+                f"[gear]   skip endpoint side={endpoint_side}: seed missing/fixed",
+                flush=True,
+            )
         return False
 
     old_T = seed.transform.to_array()
     if endpoint_side == "b":
         base_mat = (seed.base_transform or seed.transform).to_array()
         new_T = _apply_revolute_joint(
-            base_mat, joint.axis_origin, joint.axis_direction, new_value,
+            base_mat,
+            joint.axis_origin,
+            joint.axis_direction,
+            new_value,
         )
     else:
         # Parent-side motion is the inverse of child-side current_value:
@@ -267,8 +302,10 @@ def _apply_revolute_value_to_gear_endpoint(assembly, joint, endpoint_side: str, 
         R = _axis_angle_rotation_matrix(axis, delta_angle)
         T = np.eye(4)
         T[:3, :3] = R
-        to_o = np.eye(4); to_o[:3, 3] = origin
-        from_o = np.eye(4); from_o[:3, 3] = -origin
+        to_o = np.eye(4)
+        to_o[:3, 3] = origin
+        from_o = np.eye(4)
+        from_o[:3, 3] = -origin
         delta = to_o @ T @ from_o
         new_T = delta @ old_T
 
@@ -365,58 +402,96 @@ def _propagate_gear_relations_from(assembly, source_joint_id):
     """
     if not assembly.gear_relations and not assembly.belt_paths:
         return
-    inst_by_id  = _build_inst_by_id(assembly)
+    inst_by_id = _build_inst_by_id(assembly)
     joint_by_id = {j.id: j for j in assembly.joints}
-    relations   = _coupling_relations(assembly, joint_by_id)
+    relations = _coupling_relations(assembly, joint_by_id)
     if not relations:
         return
-    debug = os.environ.get('NADOC_GEAR_DEBUG', '1') != '0'
+    debug = os.environ.get("NADOC_GEAR_DEBUG", "1") != "0"
     if debug:
-        print(f"[gear] propagate_from(source={source_joint_id[:8]!r}, "
-              f"relations={len(relations)})", flush=True)
+        print(
+            f"[gear] propagate_from(source={source_joint_id[:8]!r}, "
+            f"relations={len(relations)})",
+            flush=True,
+        )
     visited_relations: set = set()
-    written_set: set      = set()    # joint ids that have been driven by propagation (first-wins)
-    queue: list           = [source_joint_id]
-    n_applied             = 0
+    written_set: set = (
+        set()
+    )  # joint ids that have been driven by propagation (first-wins)
+    queue: list = [source_joint_id]
+    n_applied = 0
 
-    def _apply(rel, src_joint, tgt_id, anchor_src, anchor_tgt, factor, direction,
-               endpoint_side, source_endpoint_side):
+    def _apply(
+        rel,
+        src_joint,
+        tgt_id,
+        anchor_src,
+        anchor_tgt,
+        factor,
+        direction,
+        endpoint_side,
+        source_endpoint_side,
+    ):
         nonlocal n_applied
         tgt = joint_by_id.get(tgt_id)
         if not tgt:
-            if debug: print(f"[gear]   skip rel={rel.id[:8]!r} ({direction}): target joint missing", flush=True)
+            if debug:
+                print(
+                    f"[gear]   skip rel={rel.id[:8]!r} ({direction}): target joint missing",
+                    flush=True,
+                )
             return
-        if tgt.joint_type != 'revolute':
-            if debug: print(f"[gear]   skip rel={rel.id[:8]!r} ({direction}): target not revolute", flush=True)
+        if tgt.joint_type != "revolute":
+            if debug:
+                print(
+                    f"[gear]   skip rel={rel.id[:8]!r} ({direction}): target not revolute",
+                    flush=True,
+                )
             return
         sign = -1.0 if rel.invert else 1.0
         raw_value = anchor_tgt + sign * (src_joint.current_value - anchor_src) * factor
         lo = tgt.min_limit if tgt.min_limit is not None else -math.inf
-        hi = tgt.max_limit if tgt.max_limit is not None else  math.inf
+        hi = tgt.max_limit if tgt.max_limit is not None else math.inf
         new_value = max(lo, min(hi, raw_value))
 
         if abs(new_value - raw_value) > 1e-9 and abs(factor) > 1e-12:
             source_raw = anchor_src + sign * (new_value - anchor_tgt) / factor
-            src_lo = src_joint.min_limit if src_joint.min_limit is not None else -math.inf
-            src_hi = src_joint.max_limit if src_joint.max_limit is not None else math.inf
+            src_lo = (
+                src_joint.min_limit if src_joint.min_limit is not None else -math.inf
+            )
+            src_hi = (
+                src_joint.max_limit if src_joint.max_limit is not None else math.inf
+            )
             source_value = max(src_lo, min(src_hi, source_raw))
             if abs(source_value - src_joint.current_value) > 1e-9:
                 _apply_revolute_value_to_gear_endpoint(
-                    assembly, src_joint, source_endpoint_side, float(source_value), inst_by_id, debug,
+                    assembly,
+                    src_joint,
+                    source_endpoint_side,
+                    float(source_value),
+                    inst_by_id,
+                    debug,
                 )
 
         old_value = tgt.current_value
         if not _apply_revolute_value_to_gear_endpoint(
-            assembly, tgt, endpoint_side, float(new_value), inst_by_id, debug,
+            assembly,
+            tgt,
+            endpoint_side,
+            float(new_value),
+            inst_by_id,
+            debug,
         ):
             return
         n_applied += 1
         if debug:
-            print(f"[gear]   APPLY rel={rel.id[:8]!r} ({direction}) "
-                  f"{src_joint.id[:8]}={src_joint.current_value:+.3f} → "
-                  f"{tgt_id[:8]} {old_value:+.3f} → {new_value:+.3f} "
-                  f"(ratio={rel.ratio} factor={factor:+.4f} invert={rel.invert} endpoint={endpoint_side})",
-                  flush=True)
+            print(
+                f"[gear]   APPLY rel={rel.id[:8]!r} ({direction}) "
+                f"{src_joint.id[:8]}={src_joint.current_value:+.3f} → "
+                f"{tgt_id[:8]} {old_value:+.3f} → {new_value:+.3f} "
+                f"(ratio={rel.ratio} factor={factor:+.4f} invert={rel.invert} endpoint={endpoint_side})",
+                flush=True,
+            )
 
         # Recurse: the target joint may itself be coupled by further gear
         # relations on either side.
@@ -437,12 +512,16 @@ def _propagate_gear_relations_from(assembly, source_joint_id):
                 visited_relations.add(rel.id)
                 written_set.add(rel.joint_b_id)
                 _apply(
-                    rel, cur_joint, rel.joint_b_id,
+                    rel,
+                    cur_joint,
+                    rel.joint_b_id,
                     anchor_src=rel.joint_a_anchor,
                     anchor_tgt=rel.joint_b_anchor,
                     factor=float(rel.ratio),
-                    direction='fwd',
-                    endpoint_side=_gear_endpoint_side(rel, "b", joint_by_id.get(rel.joint_b_id)),
+                    direction="fwd",
+                    endpoint_side=_gear_endpoint_side(
+                        rel, "b", joint_by_id.get(rel.joint_b_id)
+                    ),
                     source_endpoint_side=_gear_endpoint_side(rel, "a", cur_joint),
                 )
                 continue
@@ -454,12 +533,16 @@ def _propagate_gear_relations_from(assembly, source_joint_id):
                 written_set.add(rel.joint_a_id)
                 # Inverse factor = 1/ratio; ratio is validated non-zero by GearRelation
                 _apply(
-                    rel, cur_joint, rel.joint_a_id,
+                    rel,
+                    cur_joint,
+                    rel.joint_a_id,
                     anchor_src=rel.joint_b_anchor,
                     anchor_tgt=rel.joint_a_anchor,
                     factor=1.0 / float(rel.ratio),
-                    direction='inv',
-                    endpoint_side=_gear_endpoint_side(rel, "a", joint_by_id.get(rel.joint_a_id)),
+                    direction="inv",
+                    endpoint_side=_gear_endpoint_side(
+                        rel, "a", joint_by_id.get(rel.joint_a_id)
+                    ),
                     source_endpoint_side=_gear_endpoint_side(rel, "b", cur_joint),
                 )
                 continue

@@ -109,9 +109,7 @@ def weave_gap_ladder(n_cols: int) -> LadderWeave:
         visits.append(LadderVisit(rail, c, "full" if rail == "B" else "lo", "rail"))
         # ...then hop the rung to the other rail at this column.
         other: Rail = "A" if rail == "B" else "B"
-        visits.append(
-            LadderVisit(other, c, "full" if other == "B" else "lo", "rung")
-        )
+        visits.append(LadderVisit(other, c, "full" if other == "B" else "lo", "rung"))
         rail = other
         c += 1
 
@@ -121,7 +119,9 @@ def weave_gap_ladder(n_cols: int) -> LadderWeave:
     #    which exits to the leaf-A body.  rail is B here for even n.
     visits.append(LadderVisit("B", n - 1, "hi", "rail"))  # weave -> B_{n-1}, body-B out
     visits.append(LadderVisit("B", n - 1, "lo", "body"))  # body-B in -> rung n-1
-    visits.append(LadderVisit("A", n - 1, "lo", "rung"))  # rung n-1 -> rail A, body-A out
+    visits.append(
+        LadderVisit("A", n - 1, "lo", "rung")
+    )  # rung n-1 -> rail A, body-A out
 
     return LadderWeave(
         n_cols=n,
@@ -132,6 +132,7 @@ def weave_gap_ladder(n_cols: int) -> LadderWeave:
 
 
 # --- full hinge weave (leaf bodies + gap ladder, unified) ---------------------
+
 
 @dataclass
 class HingeWeave:
@@ -188,7 +189,7 @@ def weave_hinge_full(
     rail_a = leaf_a_rows[-1]
     rail_b = leaf_b_rows[0]
     outer_a = leaf_a_rows[:-1]  # a_0 .. a_{k-2}
-    outer_b = leaf_b_rows[1:]   # b_1 .. b_{k-1}
+    outer_b = leaf_b_rows[1:]  # b_1 .. b_{k-1}
     far = n_cols - 1
     ladder = weave_gap_ladder(n_cols).visits
 

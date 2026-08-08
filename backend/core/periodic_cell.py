@@ -87,13 +87,13 @@ def _detect_periodic_start(design: Design, n_periods: int) -> int:
     For B_tube (global range [-9, 296)): returns 21.
     """
     bp_starts = [h.bp_start for h in design.helices]
-    bp_ends   = [h.bp_start + h.length_bp for h in design.helices]
+    bp_ends = [h.bp_start + h.length_bp for h in design.helices]
     global_start = min(bp_starts)
-    global_end   = max(bp_ends)
+    global_end = max(bp_ends)
 
     bulk_start = global_start + HC_CROSSOVER_PERIOD
-    bulk_end   = global_end   - HC_CROSSOVER_PERIOD
-    period_bp  = n_periods * HC_CROSSOVER_PERIOD
+    bulk_end = global_end - HC_CROSSOVER_PERIOD
+    period_bp = n_periods * HC_CROSSOVER_PERIOD
 
     for bp in range(bulk_start, bulk_end - period_bp + 1):
         if bp % HC_CROSSOVER_PERIOD == 0:
@@ -135,20 +135,21 @@ def _slice_to_bp_range(design: Design, bp_start: int, bp_end: int) -> Design:
         local_e = bp_end - 1 - h.bp_start
 
         new_axis_start = ax_s + local_s * BDNA_RISE_PER_BP * ax_hat
-        new_axis_end   = ax_s + local_e * BDNA_RISE_PER_BP * ax_hat
+        new_axis_end = ax_s + local_e * BDNA_RISE_PER_BP * ax_hat
 
-        new_loop_skips = [
-            ls for ls in h.loop_skips
-            if bp_start <= ls.bp_index < bp_end
-        ]
+        new_loop_skips = [ls for ls in h.loop_skips if bp_start <= ls.bp_index < bp_end]
 
-        new_helices.append(h.model_copy(update={
-            "axis_start": Vec3.from_array(new_axis_start),
-            "axis_end":   Vec3.from_array(new_axis_end),
-            "length_bp":  bp_end - bp_start,
-            "bp_start":   bp_start,
-            "loop_skips": new_loop_skips,
-        }))
+        new_helices.append(
+            h.model_copy(
+                update={
+                    "axis_start": Vec3.from_array(new_axis_start),
+                    "axis_end": Vec3.from_array(new_axis_end),
+                    "length_bp": bp_end - bp_start,
+                    "bp_start": bp_start,
+                    "loop_skips": new_loop_skips,
+                }
+            )
+        )
 
     new_strands = []
     for strand in design.strands:
@@ -160,54 +161,68 @@ def _slice_to_bp_range(design: Design, bp_start: int, bp_end: int) -> Design:
                 new_hi = min(d_hi, bp_end - 1)
                 if new_lo > new_hi:
                     continue
-                new_domains.append(domain.model_copy(update={
-                    "start_bp": new_lo,
-                    "end_bp":   new_hi,
-                }))
+                new_domains.append(
+                    domain.model_copy(
+                        update={
+                            "start_bp": new_lo,
+                            "end_bp": new_hi,
+                        }
+                    )
+                )
             else:  # REVERSE: start_bp >= end_bp
-                d_lo = domain.end_bp    # lower global bp (end_bp for REVERSE)
+                d_lo = domain.end_bp  # lower global bp (end_bp for REVERSE)
                 d_hi = domain.start_bp  # higher global bp (start_bp for REVERSE)
                 new_lo = max(d_lo, bp_start)
                 new_hi = min(d_hi, bp_end - 1)
                 if new_lo > new_hi:
                     continue
-                new_domains.append(domain.model_copy(update={
-                    "start_bp": new_hi,  # REVERSE: start_bp = higher value
-                    "end_bp":   new_lo,
-                }))
+                new_domains.append(
+                    domain.model_copy(
+                        update={
+                            "start_bp": new_hi,  # REVERSE: start_bp = higher value
+                            "end_bp": new_lo,
+                        }
+                    )
+                )
 
         if not new_domains:
             continue
 
-        new_strands.append(strand.model_copy(update={
-            "domains":  new_domains,
-            "sequence": None,  # partial slice sequence is meaningless
-        }))
+        new_strands.append(
+            strand.model_copy(
+                update={
+                    "domains": new_domains,
+                    "sequence": None,  # partial slice sequence is meaningless
+                }
+            )
+        )
 
     new_crossovers = [
-        xo for xo in design.crossovers
-        if bp_start <= xo.half_a.index < bp_end
-        and bp_start <= xo.half_b.index < bp_end
+        xo
+        for xo in design.crossovers
+        if bp_start <= xo.half_a.index < bp_end and bp_start <= xo.half_b.index < bp_end
     ]
 
-    return design.model_copy(update={
-        "helices":                 new_helices,
-        "strands":                 new_strands,
-        "crossovers":              new_crossovers,
-        "forced_ligations":        [],
-        "deformations":            [],
-        "cluster_transforms":      [],
-        "cluster_joints":          [],
-        "extensions":              [],
-        "overhangs":               [],
-        "overhang_connections":    [],
-        "photoproduct_junctions":  [],
-        "feature_log":             [],
-        "feature_log_cursor":      -1,
-        "feature_log_sub_cursor":  None,
-        "animations":              [],
-        "camera_poses":            [],
-    })
+    return design.model_copy(
+        update={
+            "helices": new_helices,
+            "strands": new_strands,
+            "crossovers": new_crossovers,
+            "forced_ligations": [],
+            "deformations": [],
+            "cluster_transforms": [],
+            "cluster_joints": [],
+            "extensions": [],
+            "overhangs": [],
+            "overhang_connections": [],
+            "photoproduct_junctions": [],
+            "feature_log": [],
+            "feature_log_cursor": -1,
+            "feature_log_sub_cursor": None,
+            "animations": [],
+            "camera_poses": [],
+        }
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -253,18 +268,20 @@ def _build_wrap_bonds(
 
     atom_key: dict[tuple[str, int, str, str], int] = {}
     for atom in model.atoms:
-        atom_key[(atom.helix_id, atom.bp_index, atom.direction, atom.name)] = atom.serial
+        atom_key[(atom.helix_id, atom.bp_index, atom.direction, atom.name)] = (
+            atom.serial
+        )
 
     helix_ids = {h.id for h in helices}
     wrap_bonds: list[tuple[int, int]] = []
 
     for h_id in helix_ids:
         for dir_str, o3_bp, p_bp in (
-            ("FORWARD", bp_end - 1, bp_start),   # O3' at high end → P at low end
-            ("REVERSE", bp_start,   bp_end - 1),  # O3' at low end  → P at high end
+            ("FORWARD", bp_end - 1, bp_start),  # O3' at high end → P at low end
+            ("REVERSE", bp_start, bp_end - 1),  # O3' at low end  → P at high end
         ):
             o3 = atom_key.get((h_id, o3_bp, dir_str, "O3'"))
-            p  = atom_key.get((h_id, p_bp,  dir_str, "P"))
+            p = atom_key.get((h_id, p_bp, dir_str, "P"))
             if o3 is None or p is None:
                 continue
             # Only add if both sides are truly terminal (no existing O3'-P bond)
@@ -301,29 +318,30 @@ def _apply_wrap_bond_geometry(
     # Build (helix_id, bp_index, direction) → {atom_name: serial}
     sugar_map: dict[tuple[str, int, str], dict[str, int]] = defaultdict(dict)
     for atom in model.atoms:
-        sugar_map[(atom.helix_id, atom.bp_index, atom.direction)][atom.name] = atom.serial
+        sugar_map[(atom.helix_id, atom.bp_index, atom.direction)][atom.name] = (
+            atom.serial
+        )
 
     # Build serial → (helix_id, bp_index, direction) for O3' and P lookups
     serial_to_key: dict[int, tuple[str, int, str]] = {
-        a.serial: (a.helix_id, a.bp_index, a.direction)
-        for a in model.atoms
+        a.serial: (a.helix_id, a.bp_index, a.direction) for a in model.atoms
     }
 
     # Build helix axis cache
     helix_by_id = {h.id: h for h in helices}
 
-    atoms      = model.atoms
-    period_bp  = bp_end - bp_start
-    bz_nm      = period_bp * BDNA_RISE_PER_BP
+    atoms = model.atoms
+    period_bp = bp_end - bp_start
+    bz_nm = period_bp * BDNA_RISE_PER_BP
 
     for o3_serial, p_serial in wrap_bonds:
         o3_key = serial_to_key.get(o3_serial)
-        p_key  = serial_to_key.get(p_serial)
+        p_key = serial_to_key.get(p_serial)
         if o3_key is None or p_key is None:
             continue
 
         h_id_o3, o3_bp, o3_dir = o3_key
-        h_id_p,  p_bp,  p_dir  = p_key
+        h_id_p, p_bp, p_dir = p_key
 
         if h_id_o3 != h_id_p or o3_dir != p_dir:
             continue  # wrap bond crosses helices or directions — skip
@@ -632,7 +650,10 @@ def build_periodic_cell_package(
     # Each position (helix, bp%period, direction) gets the most common base
     # across all periods in the full design; REVERSE = complement(FORWARD).
     sliced_design, _consensus = assign_consensus_sequence(
-        design, sliced_design, bp_start, n_periods * HC_CROSSOVER_PERIOD,
+        design,
+        sliced_design,
+        bp_start,
+        n_periods * HC_CROSSOVER_PERIOD,
     )
 
     # ── 3. Build atomistic model for the slice ───────────────────────────────
@@ -642,10 +663,12 @@ def build_periodic_cell_package(
     wrap_bonds = _build_wrap_bonds(model, sliced_design.helices, bp_start, bp_end)
 
     # ── 5. Apply image-trick geometry correction to wrap-bond atoms ──────────
-    _apply_wrap_bond_geometry(model, sliced_design.helices, bp_start, bp_end, wrap_bonds)
+    _apply_wrap_bond_geometry(
+        model, sliced_design.helices, bp_start, bp_end, wrap_bonds
+    )
 
     # ── 6–7. Export PDB and PSF stub with wrap bonds ─────────────────────────
-    dna_pdb  = export_pdb(sliced_design, non_std_bonds=wrap_bonds, model=model)
+    dna_pdb = export_pdb(sliced_design, non_std_bonds=wrap_bonds, model=model)
     psf_stub = export_psf(sliced_design, non_std_bonds=wrap_bonds, model=model)
 
     # ── 8. Complete PSF (angles/dihedrals generated from bond graph) ─────────
@@ -654,7 +677,9 @@ def build_periodic_cell_package(
     # ── 9. GROMACS solvation with exact periodic Z ───────────────────────────
     with tempfile.TemporaryDirectory(prefix="nadoc_pcell_") as _tmpdir:
         tmpdir = Path(_tmpdir)
-        waters, box_nm = _gmx_solvate_periodic(dna_pdb, padding_nm, periodic_z_nm, tmpdir)
+        waters, box_nm = _gmx_solvate_periodic(
+            dna_pdb, padding_nm, periodic_z_nm, tmpdir
+        )
 
     # ── 10. Ion placement ─────────────────────────────────────────────────────
     dna_charge = _count_dna_charge(dna_pdb)
@@ -662,15 +687,20 @@ def build_periodic_cell_package(
     waters, na_pos, cl_pos = _place_ions(waters, n_na, n_cl, seed=seed)
 
     # ── 11. Assemble solvated PSF and PDB ────────────────────────────────────
-    dna_n_atoms  = _find_last_atom_serial(dna_psf)
-    n_total      = dna_n_atoms + len(waters) * 3 + n_na + n_cl
+    dna_n_atoms = _find_last_atom_serial(dna_psf)
+    n_total = dna_n_atoms + len(waters) * 3 + n_na + n_cl
     solvated_psf = _extend_psf(dna_psf, waters, na_pos, cl_pos)
-    solvated_pdb = _build_solvated_pdb(dna_pdb, waters, na_pos, cl_pos, box_nm, dna_n_atoms)
+    solvated_pdb = _build_solvated_pdb(
+        dna_pdb, waters, na_pos, cl_pos, box_nm, dna_n_atoms
+    )
 
     # ── 12. NAMD configurations ───────────────────────────────────────────────
     namd_conf = _render_periodic_namd_conf(name, box_nm, n_total, periodic_z_nm)
     relax_conf = _render_periodic_locked_nvt_conf(
-        name, box_nm, n_total, periodic_z_nm,
+        name,
+        box_nm,
+        n_total,
+        periodic_z_nm,
         suffix="relax_locked_nvt",
         run_steps=250_000,
         restart_from="equilibrate_npt",
@@ -681,27 +711,43 @@ def build_periodic_cell_package(
     previous_suffix = "relax_locked_nvt"
     for i, scaling in enumerate(ramp_schedule):
         suffix = f"ramp_locked_nvt_{i:02d}"
-        ramp_confs.append((
-            f"{suffix}.template.conf",
-            _render_periodic_locked_nvt_conf(
-                name, box_nm, n_total, periodic_z_nm,
-                suffix=suffix,
-                run_steps=50_000,
-                restart_from=previous_suffix,
-                restraint_scaling=scaling,
-            ),
-        ))
+        ramp_confs.append(
+            (
+                f"{suffix}.template.conf",
+                _render_periodic_locked_nvt_conf(
+                    name,
+                    box_nm,
+                    n_total,
+                    periodic_z_nm,
+                    suffix=suffix,
+                    run_steps=50_000,
+                    restart_from=previous_suffix,
+                    restraint_scaling=scaling,
+                ),
+            )
+        )
         previous_suffix = suffix
     production_conf = _render_periodic_locked_nvt_conf(
-        name, box_nm, n_total, periodic_z_nm,
+        name,
+        box_nm,
+        n_total,
+        periodic_z_nm,
         suffix="production_locked_nvt",
         restart_from=previous_suffix,
     )
     bench_standard_conf = _render_periodic_benchmark_conf(
-        name, box_nm, n_total, periodic_z_nm, gpu_resident=False,
+        name,
+        box_nm,
+        n_total,
+        periodic_z_nm,
+        gpu_resident=False,
     )
     bench_gpu_conf = _render_periodic_benchmark_conf(
-        name, box_nm, n_total, periodic_z_nm, gpu_resident=True,
+        name,
+        box_nm,
+        n_total,
+        periodic_z_nm,
+        gpu_resident=True,
     )
     restraints_pdb = _build_constraint_pdb_from_solvated(solvated_pdb, dna_k=1.0)
 
@@ -719,10 +765,10 @@ def build_periodic_cell_package(
     # ── 14. ZIP bundle ────────────────────────────────────────────────────────
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(prefix + f"{name}.pdb",        solvated_pdb)
-        zf.writestr(prefix + f"{name}.psf",        solvated_psf)
+        zf.writestr(prefix + f"{name}.pdb", solvated_pdb)
+        zf.writestr(prefix + f"{name}.psf", solvated_psf)
         zf.writestr(prefix + f"{name}_restraints.pdb", restraints_pdb)
-        zf.writestr(prefix + "namd.conf",           namd_conf)
+        zf.writestr(prefix + "namd.conf", namd_conf)
         zf.writestr(prefix + "equilibrate_npt.conf", namd_conf)
         zf.writestr(prefix + "relax_locked_nvt.template.conf", relax_conf)
         for rel_name, conf_text in ramp_confs:
@@ -730,8 +776,8 @@ def build_periodic_cell_package(
         zf.writestr(prefix + "production_locked_nvt.template.conf", production_conf)
         zf.writestr(prefix + "benchmark_standard_cuda.conf", bench_standard_conf)
         zf.writestr(prefix + "benchmark_gpu_resident.conf", bench_gpu_conf)
-        zf.writestr(prefix + "README.txt",          readme)
-        zf.writestr(prefix + "scripts/monitor.py",  _MONITOR_PY)
+        zf.writestr(prefix + "README.txt", readme)
+        zf.writestr(prefix + "scripts/monitor.py", _MONITOR_PY)
         zf.writestr(prefix + "scripts/lock_box_from_xst.py", _LOCK_BOX_FROM_XST_PY)
         zf.writestr(prefix + "scripts/benchmark_gpu_modes.sh", benchmark_gpu_modes)
 
@@ -745,8 +791,10 @@ def build_periodic_cell_package(
         info.external_attr = (
             stat.S_IFREG
             | stat.S_IRWXU
-            | stat.S_IRGRP | stat.S_IXGRP
-            | stat.S_IROTH | stat.S_IXOTH
+            | stat.S_IRGRP
+            | stat.S_IXGRP
+            | stat.S_IROTH
+            | stat.S_IXOTH
         ) << 16
         zf.writestr(info, launch)
 
@@ -773,41 +821,45 @@ def get_periodic_cell_stats(
     periodic_z_nm = n_periods * HC_CROSSOVER_PERIOD * BDNA_RISE_PER_BP
 
     sliced_design, _ = assign_consensus_sequence(
-        design, _slice_to_bp_range(design, bp_start, bp_end),
-        bp_start, n_periods * HC_CROSSOVER_PERIOD,
+        design,
+        _slice_to_bp_range(design, bp_start, bp_end),
+        bp_start,
+        n_periods * HC_CROSSOVER_PERIOD,
     )
-    model         = build_atomistic_model(sliced_design)
-    wrap_bonds    = _build_wrap_bonds(model, sliced_design.helices, bp_start, bp_end)
+    model = build_atomistic_model(sliced_design)
+    wrap_bonds = _build_wrap_bonds(model, sliced_design.helices, bp_start, bp_end)
 
-    dna_pdb      = export_pdb(sliced_design, non_std_bonds=wrap_bonds, model=model)
-    psf_stub     = export_psf(sliced_design, non_std_bonds=wrap_bonds, model=model)
-    dna_psf      = _complete_psf_from_stub(psf_stub)
-    dna_n_atoms  = _find_last_atom_serial(dna_psf)
-    dna_charge   = _count_dna_charge(dna_pdb)
+    dna_pdb = export_pdb(sliced_design, non_std_bonds=wrap_bonds, model=model)
+    psf_stub = export_psf(sliced_design, non_std_bonds=wrap_bonds, model=model)
+    dna_psf = _complete_psf_from_stub(psf_stub)
+    dna_n_atoms = _find_last_atom_serial(dna_psf)
+    dna_charge = _count_dna_charge(dna_pdb)
 
     with tempfile.TemporaryDirectory(prefix="nadoc_pcell_stats_") as _tmp:
         tmpdir = Path(_tmp)
-        waters, box_nm = _gmx_solvate_periodic(dna_pdb, padding_nm, periodic_z_nm, tmpdir)
+        waters, box_nm = _gmx_solvate_periodic(
+            dna_pdb, padding_nm, periodic_z_nm, tmpdir
+        )
 
-    n_na, n_cl    = _ion_counts(len(waters), dna_charge, ion_conc_mM, box_nm)
+    n_na, n_cl = _ion_counts(len(waters), dna_charge, ion_conc_mM, box_nm)
     n_water_atoms = len(waters) * 3
-    n_total       = dna_n_atoms + n_water_atoms + n_na + n_cl
+    n_total = dna_n_atoms + n_water_atoms + n_na + n_cl
 
     bx, by, bz = box_nm
     return {
-        "bp_start":       bp_start,
-        "bp_end":         bp_end,
-        "n_periods":      n_periods,
-        "periodic_z_nm":  periodic_z_nm,
-        "n_wrap_bonds":   len(wrap_bonds),
-        "n_crossovers":   len(sliced_design.crossovers),
-        "dna_atoms":      dna_n_atoms,
-        "n_waters":       len(waters),
-        "water_atoms":    n_water_atoms,
-        "n_na":           n_na,
-        "n_cl":           n_cl,
-        "total_atoms":    n_total,
-        "box_nm":         box_nm,
+        "bp_start": bp_start,
+        "bp_end": bp_end,
+        "n_periods": n_periods,
+        "periodic_z_nm": periodic_z_nm,
+        "n_wrap_bonds": len(wrap_bonds),
+        "n_crossovers": len(sliced_design.crossovers),
+        "dna_atoms": dna_n_atoms,
+        "n_waters": len(waters),
+        "water_atoms": n_water_atoms,
+        "n_na": n_na,
+        "n_cl": n_cl,
+        "total_atoms": n_total,
+        "box_nm": box_nm,
         "box_volume_nm3": bx * by * bz,
-        "dna_charge":     dna_charge,
+        "dna_charge": dna_charge,
     }

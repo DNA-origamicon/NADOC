@@ -18,6 +18,7 @@ absolute vs CanDo absolute).  It is deliberately NOT the DIFFERENTIAL (measured 
 twist/curvature the Graphs-&-Metrics card plots over the production trajectory, so the two
 numbers are not expected to be equal — same estimator, different reference and frame.
 """
+
 from __future__ import annotations
 
 from backend.core.oxdna_health import _filter_to_reference_core
@@ -52,20 +53,23 @@ def _rmsf_profile(rmsf_positions) -> list[dict]:
         if not isinstance(p.get("bp_index"), int):
             continue
         if str(p.get("helix_id", "")).startswith("__"):
-            continue      # synthetic particle (extension tail / insert), not a design position
+            continue  # synthetic particle (extension tail / insert), not a design position
         direction = p.get("direction")
-        out.append({
-            "helix_id": p["helix_id"],
-            "bp_index": int(p["bp_index"]),
-            "direction": getattr(direction, "value", direction),
-            "copy": int(p.get("copy", 0)),
-            "rmsf_nm": float(r),
-        })
+        out.append(
+            {
+                "helix_id": p["helix_id"],
+                "bp_index": int(p["bp_index"]),
+                "direction": getattr(direction, "value", direction),
+                "copy": int(p.get("copy", 0)),
+                "rmsf_nm": float(r),
+            }
+        )
     return out
 
 
-def build_oxdna_shape_source(shape_frame, core_reference, *,
-                             rmsf_positions=None, field=None) -> dict:
+def build_oxdna_shape_source(
+    shape_frame, core_reference, *, rmsf_positions=None, field=None
+) -> dict:
     """The oxDNA source bundle for the cross-engine comparison card.
 
     ``shape_frame`` — the relaxed display-position list (``{helix_id, bp_index, direction,

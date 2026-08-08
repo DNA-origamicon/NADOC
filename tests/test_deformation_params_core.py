@@ -33,7 +33,9 @@ def test_parse_twist_params():
 def test_parse_strips_kind_discriminator():
     # A stray ``kind`` key (the pydantic discriminator) must be dropped, not
     # forwarded into the params constructor.
-    p = parse_deformation_params("bend", {"kind": "bend", "angle_deg": 12.0, "direction_deg": 0.0})
+    p = parse_deformation_params(
+        "bend", {"kind": "bend", "angle_deg": 12.0, "direction_deg": 0.0}
+    )
     assert isinstance(p, BendParams)
 
 

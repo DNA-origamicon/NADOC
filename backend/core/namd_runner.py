@@ -43,7 +43,11 @@ from backend.core.disk_guard import (
     wait_external_proc_with_disk_guard,
     wait_proc_with_disk_guard,
 )
-from backend.core.md_health import _latest_segment_dcd, run_health_check, append_health_jsonl
+from backend.core.md_health import (
+    _latest_segment_dcd,
+    run_health_check,
+    append_health_jsonl,
+)
 from backend.core.namd_metrics import parse_namd_log, parse_namd_log_frames
 from backend.core.md_cutoff import should_early_stop_stage
 from backend.core.md_protocols import minimization_status, segments_from_manifest
@@ -98,14 +102,21 @@ def _record_settle_report(job, spec, output_dir: Path, workspace_dir: Path) -> N
         job.cell_settle_reports.append(rep)
         job.save(workspace_dir)
         if rep["ok"] is False:
-            logger.warning("[%s] %s: box did NOT settle — %s",
-                           job.job_id, spec.name, rep["reason"])
+            logger.warning(
+                "[%s] %s: box did NOT settle — %s", job.job_id, spec.name, rep["reason"]
+            )
         else:
-            logger.info("[%s] %s: cell %.1f%% of start, %s",
-                        job.job_id, spec.name,
-                        (rep.get("volume_end_ang3", 0) /
-                         max(rep.get("volume_start_ang3", 1), 1e-9)) * 100.0,
-                        rep["reason"])
+            logger.info(
+                "[%s] %s: cell %.1f%% of start, %s",
+                job.job_id,
+                spec.name,
+                (
+                    rep.get("volume_end_ang3", 0)
+                    / max(rep.get("volume_start_ang3", 1), 1e-9)
+                )
+                * 100.0,
+                rep["reason"],
+            )
     except Exception as exc:  # noqa: BLE001
         logger.debug("settle report unavailable for %s: %s", spec.name, exc)
 
@@ -132,11 +143,13 @@ def _record_design_rmsd(job, spec, output_dir: Path, workspace_dir: Path) -> Non
         if design is None:
             return
         from backend.api.skip_twist_tuning import core_reference_geometry  # noqa: PLC0415
+
         ref = core_reference_geometry(design)
         if ref is None or not len(ref):
             return
 
         import MDAnalysis as mda  # noqa: PLC0415
+
         pkg = job.package_dir(workspace_dir)
         dcd = output_dir / f"{spec.name}.dcd"
         if not dcd.exists() or dcd.stat().st_size == 0:
@@ -146,7 +159,7 @@ def _record_design_rmsd(job, spec, output_dir: Path, workspace_dir: Path) -> Non
         if not len(sel):
             return
         u.trajectory[-1]
-        cand = _np.asarray(sel.positions, dtype=float) / 10.0     # Å → nm
+        cand = _np.asarray(sel.positions, dtype=float) / 10.0  # Å → nm
         ref_arr = _np.asarray(ref, dtype=float)
         if cand.shape != ref_arr.shape:
             # A seeded / extended topology can carry atoms the design reference does
@@ -164,8 +177,12 @@ def _record_design_rmsd(job, spec, output_dir: Path, workspace_dir: Path) -> Non
         }
         job.design_rmsd_reports.append(rec)
         job.save(workspace_dir)
-        logger.info("[%s] %s: RMSD from the idealised design %.2f nm",
-                    job.job_id, spec.name, rec["rmsd_nm"])
+        logger.info(
+            "[%s] %s: RMSD from the idealised design %.2f nm",
+            job.job_id,
+            spec.name,
+            rec["rmsd_nm"],
+        )
     except Exception as exc:  # noqa: BLE001 — a diagnostic must never fail a run
         logger.debug("design RMSD unavailable for %s: %s", spec.name, exc)
 
@@ -191,7 +208,8 @@ _PISTON_MAX_PERIOD_FS = 100_000.0
 
 _PISTON_RE = re.compile(
     r"^([ \t]*langevinPiston(?:Period|Decay)[ \t]+)([0-9.eE+-]+)[ \t]*$",
-    re.IGNORECASE | re.MULTILINE)
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 def soften_piston(conf_text: str, factor: float = PISTON_SOFTEN_FACTOR) -> str:
@@ -202,6 +220,7 @@ def soften_piston(conf_text: str, factor: float = PISTON_SOFTEN_FACTOR) -> str:
     only up to :data:`_PISTON_MAX_PERIOD_FS` — past that the value is left alone, since a
     barostat that slow is not going to settle the cell either.
     """
+
     def _bump(m: "re.Match[str]") -> str:
         try:
             value = float(m.group(2))
@@ -221,8 +240,13 @@ def _soften_piston_in_conf(conf_path: Path, job_id: str, segment: str) -> None:
         softened = soften_piston(text)
         if softened != text:
             conf_path.write_text(softened)
-            logger.warning("[%s] %s: softened the barostat %gx before auto-resume "
-                           "(Aksimentiev Note 4)", job_id, segment, PISTON_SOFTEN_FACTOR)
+            logger.warning(
+                "[%s] %s: softened the barostat %gx before auto-resume "
+                "(Aksimentiev Note 4)",
+                job_id,
+                segment,
+                PISTON_SOFTEN_FACTOR,
+            )
     except Exception as exc:  # noqa: BLE001 — never block a resume on this
         logger.debug("could not soften the piston for %s: %s", segment, exc)
 
@@ -258,8 +282,13 @@ def _cell_shrink_diagnosis(output_dir: Path, segment_name: str) -> dict:
 
     rows = _read_segment_xst(output_dir, segment_name)
     if rows.size == 0:
-        return {"volume_fraction": float("nan"), "collapsing": False,
-                "cell_start_ang": None, "cell_end_ang": None, "n_samples": 0}
+        return {
+            "volume_fraction": float("nan"),
+            "collapsing": False,
+            "cell_start_ang": None,
+            "cell_end_ang": None,
+            "n_samples": 0,
+        }
     frac = _cell.volume_fraction(rows)
     return {
         "volume_fraction": frac,
@@ -268,6 +297,7 @@ def _cell_shrink_diagnosis(output_dir: Path, segment_name: str) -> dict:
         "cell_end_ang": [round(float(x), 2) for x in rows[-1, 1:]],
         "n_samples": int(rows.shape[0]),
     }
+
 
 # A host pinned-memory OOM (cudaHostAlloc in the bonded-CUDA tuple staging — see
 # md_vram.FAILURE_HOST_OOM) is usually TRANSIENT: the same allocation succeeds when
@@ -303,7 +333,10 @@ def _free_host_ram_for_namd(job_id: str, phase: str) -> None:
         if freed:
             logger.info(
                 "[%s] Host RAM low before %s; released %d cached atomistic model(s) "
-                "to give NAMD pinning headroom.", job_id, phase, freed,
+                "to give NAMD pinning headroom.",
+                job_id,
+                phase,
+                freed,
             )
     except Exception:  # noqa: BLE001 — reclaim must never break a run
         pass
@@ -318,10 +351,12 @@ def _classify_namd_failure(log_path: Path) -> str:
     """
     return classify_failure_log_file(log_path)
 
+
 logger = logging.getLogger(__name__)
 
 
 # ── Global task registry ──────────────────────────────────────────────────────
+
 
 @dataclass
 class _RunningHandle:
@@ -372,7 +407,9 @@ def _segment_pid(segment_name: str) -> Optional[int]:
         except OSError:
             continue
         lower = cmdline.lower()
-        if any(n in cmdline for n in needles) and (b"namd" in lower or b"srun" in lower):
+        if any(n in cmdline for n in needles) and (
+            b"namd" in lower or b"srun" in lower
+        ):
             try:
                 return int(proc_dir.name)
             except ValueError:
@@ -424,7 +461,7 @@ def _package_process_running(package_dir: Path) -> bool:
                 continue
             if (proc_dir / "cwd").resolve() == target:
                 return True
-        except OSError:           # process exited, or not ours to inspect
+        except OSError:  # process exited, or not ours to inspect
             continue
     return False
 
@@ -435,8 +472,9 @@ def _external_process_running(job: MdJob, workspace_dir: Optional[Path] = None) 
     Checks the current segment AND (via cwd) any other NAMD running out of this job's
     package — notably the minimisation, which owns no segment name.
     """
-    if 0 <= job.current_segment_idx < len(job.segments) and \
-            _segment_process_running(job.segments[job.current_segment_idx].name):
+    if 0 <= job.current_segment_idx < len(job.segments) and _segment_process_running(
+        job.segments[job.current_segment_idx].name
+    ):
         return True
     if workspace_dir is not None:
         try:
@@ -614,8 +652,12 @@ def _log_completed(log_path: Path) -> bool:
 #: Keys that make a metrics/health JSONL record worth keeping.  If every one of them is
 #: null the record carries no information and must not block a recompute.
 _JSONL_SUBSTANTIVE_KEYS = (
-    "c1_paired_fraction", "wc_ref_relative_fraction",   # health.jsonl
-    "temperature_k", "pressure_bar", "ns_per_day", "volume_ang3",  # metrics.jsonl
+    "c1_paired_fraction",
+    "wc_ref_relative_fraction",  # health.jsonl
+    "temperature_k",
+    "pressure_bar",
+    "ns_per_day",
+    "volume_ang3",  # metrics.jsonl
 )
 
 
@@ -639,11 +681,11 @@ def _jsonl_has_segment(path: Path, segment_name: str) -> bool:
             try:
                 rec = json.loads(line)
             except json.JSONDecodeError:
-                continue          # a torn final line — treat as not-yet-written
+                continue  # a torn final line — treat as not-yet-written
             if rec.get("segment") != segment_name:
                 continue
             if rec.get("error"):
-                return True       # a real failure; do not recompute it endlessly
+                return True  # a real failure; do not recompute it endlessly
             if any(rec.get(k) is not None for k in _JSONL_SUBSTANTIVE_KEYS):
                 return True
             # else: an all-empty record — fall through so it can be rewritten
@@ -653,7 +695,10 @@ def _jsonl_has_segment(path: Path, segment_name: str) -> bool:
 
 
 def _segment_outputs_complete(output_dir: Path, segment_name: str) -> bool:
-    return all((output_dir / f"{segment_name}.{ext}").exists() for ext in ("coor", "vel", "xsc"))
+    return all(
+        (output_dir / f"{segment_name}.{ext}").exists()
+        for ext in ("coor", "vel", "xsc")
+    )
 
 
 # A preparing job whose prep_progress sidecar hasn't been touched in this many
@@ -752,7 +797,7 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
         # retire it so it stops rendering as a perpetually-active "queued" row.
         if _remote_job_abandoned_queued(job):
             job.status = MdStatus.stopped
-            job.user_stopped = True   # terminal + benign — no resume, clean-stop UI
+            job.user_stopped = True  # terminal + benign — no resume, clean-stop UI
             job.error = None
             try:
                 job.save(workspace_dir)
@@ -766,8 +811,11 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
         return _reconcile_preparing(job, workspace_dir)
     # workspace_dir lets the check also see a running MINIMISATION (it owns no segment
     # name).  Without it, a restart during minimisation failed the job under a live NAMD.
-    if job.status != MdStatus.running or is_running(job.job_id) \
-            or _external_process_running(job, workspace_dir):
+    if (
+        job.status != MdStatus.running
+        or is_running(job.job_id)
+        or _external_process_running(job, workspace_dir)
+    ):
         return job
     if not (0 <= job.current_segment_idx < len(job.segments)):
         job.status = MdStatus.completed
@@ -872,21 +920,30 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
         _append_metrics_jsonl(output_dir, active.name, active.stage, log_path)
 
     health_path = output_dir / "health.jsonl"
-    if not _jsonl_has_segment(health_path, active.name) and _segment_outputs_complete(output_dir, active.name):
+    if not _jsonl_has_segment(health_path, active.name) and _segment_outputs_complete(
+        output_dir, active.name
+    ):
         hresult = run_health_check(
-            package_dir, active.name, job.name_stem,
-            min_c1_paired       = spec.min_c1_paired,
-            min_wc_ref_relative = spec.min_wc_ref_relative,
+            package_dir,
+            active.name,
+            job.name_stem,
+            min_c1_paired=spec.min_c1_paired,
+            min_wc_ref_relative=spec.min_wc_ref_relative,
         )
         append_health_jsonl(output_dir, active.name, active.stage, hresult)
-        job.health_samples.append(MdHealthSample.from_result(
-            hresult, active.stage, active.name, blocking=hresult.blocking))
+        job.health_samples.append(
+            MdHealthSample.from_result(
+                hresult, active.stage, active.name, blocking=hresult.blocking
+            )
+        )
         # Health is advisory only — a below-threshold checkpoint warns and is
         # flagged in the UI, but never stops the run.
         if not hresult.passed:
             logger.warning(
                 "[%s] Health warning after %s (below threshold, continuing): %s",
-                job.job_id, active.name, hresult.reason or hresult.error,
+                job.job_id,
+                active.name,
+                hresult.reason or hresult.error,
             )
 
     active.status = "done"
@@ -907,6 +964,7 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
 
 # ── NAMD binary discovery ─────────────────────────────────────────────────────
 
+
 def _namd_install_dirs() -> list[str]:
     """Conventional NAMD install dirs (``~/Applications/NAMD_*``), any version.
 
@@ -916,8 +974,11 @@ def _namd_install_dirs() -> list[str]:
     sort first.  See ``docs/namd_setup.md``.
     """
     import glob
+
     dirs = sorted(glob.glob(os.path.expanduser("~/Applications/NAMD_*")), reverse=True)
-    dirs.sort(key=lambda d: 0 if "cuda" in os.path.basename(d).lower() else 1)  # stable: CUDA first
+    dirs.sort(
+        key=lambda d: 0 if "cuda" in os.path.basename(d).lower() else 1
+    )  # stable: CUDA first
     return dirs
 
 
@@ -927,13 +988,16 @@ def _namd_candidates() -> list[str]:
     restart."""
     return ["namd3", *(os.path.join(d, "namd3") for d in _namd_install_dirs())]
 
+
 _GMX_CANDIDATES = ["gmx", "gmx_mpi", "gmx_d"]
 
 
 def _resolve_namd(candidate: str) -> Optional[str]:
     """Resolve a candidate (PATH name or explicit path) to an executable, else None."""
     return shutil.which(candidate) or (
-        candidate if os.path.isfile(candidate) and os.access(candidate, os.X_OK) else None
+        candidate
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK)
+        else None
     )
 
 
@@ -983,12 +1047,15 @@ def job_wants_cpu(protocol: Optional[str], devices: Optional[str]) -> bool:
       means CPU; GPU indices (``"0"``, ``"0,1"``, or empty = auto) mean the CUDA build.
     """
     from backend.core.md_protocols import IMPLICIT_GBIS_PROTOCOL  # noqa: PLC0415
+
     if protocol == IMPLICIT_GBIS_PROTOCOL:
         return True
     return (devices or "").strip().lower() in ("cpu", "none")
 
 
-def resolve_namd_launch(protocol: Optional[str], devices: Optional[str]) -> tuple[str, str]:
+def resolve_namd_launch(
+    protocol: Optional[str], devices: Optional[str]
+) -> tuple[str, str]:
     """Pick the NAMD binary + ``+devices`` string for a job's compute target.
 
     Robust across every install combo ("works on all versions"):
@@ -1012,7 +1079,7 @@ def resolve_namd_launch(protocol: Optional[str], devices: Optional[str]) -> tupl
             return find_namd(), "0"
     namd_bin = find_namd()  # CUDA-first ordering
     if not namd_is_cuda_build(namd_bin):
-        return namd_bin, ""   # CPU-only machine: a GPU request degrades cleanly
+        return namd_bin, ""  # CPU-only machine: a GPU request degrades cleanly
     return namd_bin, devices or ""
 
 
@@ -1028,9 +1095,7 @@ def namd_is_cuda_build(namd_bin: str) -> bool:
     uses the GPU), and the config grid must not offer it.
     """
     try:
-        out = subprocess.run(
-            [namd_bin], capture_output=True, text=True, timeout=60
-        )
+        out = subprocess.run([namd_bin], capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.SubprocessError):
         return False
     return "CUDA" in (out.stdout + out.stderr)
@@ -1068,10 +1133,18 @@ def _write_probe_conf(min_conf: Path, probe_conf: Path, out_stem: str) -> None:
     text = min_conf.read_text()
     m = re.search(r"^\s*stepspercycle\s+(\d+)", text, re.IGNORECASE | re.MULTILINE)
     cycle = int(m.group(1)) if m else 20
-    text = re.sub(r"^(\s*minimize\s+)\d+", rf"\g<1>{cycle}", text,
-                  flags=re.IGNORECASE | re.MULTILINE)
-    text = re.sub(r"^(\s*outputName\s+)\S+", rf"\g<1>{out_stem}", text,
-                  flags=re.IGNORECASE | re.MULTILINE)
+    text = re.sub(
+        r"^(\s*minimize\s+)\d+",
+        rf"\g<1>{cycle}",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+    text = re.sub(
+        r"^(\s*outputName\s+)\S+",
+        rf"\g<1>{out_stem}",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
     probe_conf.write_text(text)
 
 
@@ -1104,7 +1177,7 @@ def gpu_tilelist_probe(
 
     probe_conf = package_dir / "_gpu_probe.conf"
     probe_stem = "_gpu_probe_out"
-    probe_log  = package_dir / "_gpu_probe.log"
+    probe_log = package_dir / "_gpu_probe.log"
     try:
         _write_probe_conf(min_conf, probe_conf, probe_stem)
         cmd = [namd_bin, f"+p{threads or default_threads()}", "+setcpuaffinity"]
@@ -1112,7 +1185,10 @@ def gpu_tilelist_probe(
             cmd += ["+devices", devices]
         cmd.append(probe_conf.name)
         out = subprocess.run(
-            cmd, cwd=package_dir, capture_output=True, text=True,
+            cmd,
+            cwd=package_dir,
+            capture_output=True,
+            text=True,
             timeout=GPU_PROBE_TIMEOUT_S,
         )
         log = out.stdout + out.stderr
@@ -1155,13 +1231,19 @@ GPU_RESIDENT_PROBE_CACHE = ".gpu_resident_probe.json"
 #     ~90%+ is needed.  md_protocols now refuses to emit GPUresident on a carved
 #     package at all, so this pattern is a backstop for anything that slips through.
 _GPU_RESIDENT_FAIL_PAT = re.compile(
-    r"cudaMallocHost|cudaHostAlloc|Low global CUDA exclusion count", re.IGNORECASE)
+    r"cudaMallocHost|cudaHostAlloc|Low global CUDA exclusion count", re.IGNORECASE
+)
 
 
 def _has_gpu_resident(conf: Path) -> bool:
     try:
-        return bool(re.search(r"^[ \t]*GPUresident\b[ \t]+on", conf.read_text(),
-                              re.IGNORECASE | re.MULTILINE))
+        return bool(
+            re.search(
+                r"^[ \t]*GPUresident\b[ \t]+on",
+                conf.read_text(),
+                re.IGNORECASE | re.MULTILINE,
+            )
+        )
     except OSError:
         return False
 
@@ -1210,26 +1292,44 @@ def gpu_resident_probe(
         text = conf.read_text()
         m = re.search(r"^\s*stepspercycle\s+(\d+)", text, re.IGNORECASE | re.MULTILINE)
         cycle = int(m.group(1)) if m else 20
-        text = re.sub(r"^(\s*run\s+)\d+", rf"\g<1>{cycle}", text,
-                      flags=re.IGNORECASE | re.MULTILINE)
-        text = re.sub(r"^(\s*(?:outputName|dcdFile|xstFile)\s+)\S+",
-                      lambda mm: f"{mm.group(1)}{probe_stem}", text,
-                      flags=re.IGNORECASE | re.MULTILINE)
+        text = re.sub(
+            r"^(\s*run\s+)\d+",
+            rf"\g<1>{cycle}",
+            text,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+        text = re.sub(
+            r"^(\s*(?:outputName|dcdFile|xstFile)\s+)\S+",
+            lambda mm: f"{mm.group(1)}{probe_stem}",
+            text,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
         # Re-seed from the minimised state, which exists and is clash-free.
         if seed_stem:
-            for key, ext in (("binCoordinates", "coor"),
-                             ("binVelocities", "vel"),
-                             ("extendedSystem", "xsc")):
-                text = re.sub(rf"^(\s*{key}\s+)\S+", rf"\g<1>output/{seed_stem}.{ext}", text,
-                              flags=re.IGNORECASE | re.MULTILINE)
+            for key, ext in (
+                ("binCoordinates", "coor"),
+                ("binVelocities", "vel"),
+                ("extendedSystem", "xsc"),
+            ):
+                text = re.sub(
+                    rf"^(\s*{key}\s+)\S+",
+                    rf"\g<1>output/{seed_stem}.{ext}",
+                    text,
+                    flags=re.IGNORECASE | re.MULTILINE,
+                )
         probe_conf.write_text(text)
 
         cmd = [namd_bin, f"+p{threads or default_threads()}", "+setcpuaffinity"]
         if devices:
             cmd += ["+devices", devices]
         cmd.append(probe_conf.name)
-        out = subprocess.run(cmd, cwd=package_dir, capture_output=True, text=True,
-                             timeout=GPU_PROBE_TIMEOUT_S)
+        out = subprocess.run(
+            cmd,
+            cwd=package_dir,
+            capture_output=True,
+            text=True,
+            timeout=GPU_PROBE_TIMEOUT_S,
+        )
         log = out.stdout + out.stderr
         (package_dir / "_gpures_probe.log").write_text(log)
         ok = not _GPU_RESIDENT_FAIL_PAT.search(log) and "FATAL ERROR" not in log
@@ -1247,7 +1347,9 @@ def gpu_resident_probe(
 
 
 def retarget_settle_restraints(
-    package_dir: Path, min_coor: Path, job_id: str = "",
+    package_dir: Path,
+    min_coor: Path,
+    job_id: str = "",
 ) -> bool:
     """Re-point the settle stage's restraint reference at the minimised coordinates.
 
@@ -1270,12 +1372,15 @@ def retarget_settle_restraints(
         logger.error(
             "[%s] Could not re-reference %s to the minimised coordinates (%s) — the "
             "settle stage will restrain to the build pose instead.",
-            job_id, SOLUTE_RESTRAINT_PDB, exc,
+            job_id,
+            SOLUTE_RESTRAINT_PDB,
+            exc,
         )
         return False
     logger.info(
         "[%s] Settle restraints re-referenced to the minimised structure (%d atoms).",
-        job_id, n,
+        job_id,
+        n,
     )
     return True
 
@@ -1300,7 +1405,9 @@ def downgrade_gpu_resident_confs(package_dir: Path, job_id: str = "") -> list[st
         logger.warning(
             "[%s] GPU-resident unavailable on this host (pinned-host limit) — rewrote "
             "%d segment(s) to GPUresident off + half timestep (same simulated time): %s",
-            job_id, len(rewritten), ", ".join(rewritten),
+            job_id,
+            len(rewritten),
+            ", ".join(rewritten),
         )
     return rewritten
 
@@ -1312,8 +1419,9 @@ def downgrade_gpu_resident_confs(package_dir: Path, job_id: str = "") -> list[st
 # NADOC_GPU_FALLBACK=auto_offload restores the old silent-downgrade for unattended
 # runs. (With a resident-capable NAMD build pinned, this path rarely fires at all.)
 
+
 def gpu_fallback_policy() -> str:
-    """"ask" (default — pause + decision) or "auto_offload" (silent downgrade)."""
+    """ "ask" (default — pause + decision) or "auto_offload" (silent downgrade)."""
     val = os.environ.get("NADOC_GPU_FALLBACK", "").strip().lower()
     return "auto_offload" if val == "auto_offload" else "ask"
 
@@ -1328,12 +1436,12 @@ def build_gpu_fallback_decision(fux) -> dict:
     """
     return {
         "gate": "gpu_resident",
-        "severity": fux.severity,                      # "decision"
+        "severity": fux.severity,  # "decision"
         "title": fux.title,
         "message": fux.message,
-        "technical_reason": fux.technical_reason,      # logs/tooltip only, never headline
+        "technical_reason": fux.technical_reason,  # logs/tooltip only, never headline
         "retry_hint": bool(fux.retry_other_binary),
-        "degrade_target": fux.degrade_target,          # "offload"
+        "degrade_target": fux.degrade_target,  # "offload"
         "checks": [
             {"label": "GPU found", "ok": True},
             {"label": "System fits in memory", "ok": True},
@@ -1369,7 +1477,8 @@ def handle_resident_probe_failure(
     job.save(workspace_dir)
     logger.info(
         "[%s] GPU-resident unavailable (%s) — paused for user decision (Gate B).",
-        job.job_id, fux.kind,
+        job.job_id,
+        fux.kind,
     )
     return False
 
@@ -1390,13 +1499,13 @@ def build_cpu_reroute_decision(namd_cpu_available: bool) -> dict:
             "NAMD's CUDA build crashes while building its neighbour lists on this "
             "geometry (a known bug in 3.0.2's buildTileLists). The CPU build runs it "
             "correctly, but roughly 12x slower. Nothing about the physics changes."
-            if namd_cpu_available else
-            "NAMD's CUDA build crashes while building its neighbour lists on this "
+            if namd_cpu_available
+            else "NAMD's CUDA build crashes while building its neighbour lists on this "
             "geometry, and no CPU (-multicore) build is installed to fall back to. "
             "Running anyway will crash at the first segment."
         ),
         "technical_reason": "gpu_tilelist_probe failed (illegal memory access in "
-                            "buildTileLists)",
+        "buildTileLists)",
         "retry_hint": True,
         "degrade_target": "cpu",
         "checks": [
@@ -1406,10 +1515,16 @@ def build_cpu_reroute_decision(namd_cpu_available: bool) -> dict:
             {"label": "CPU build available", "ok": bool(namd_cpu_available)},
         ],
         "options": (
-            [{"id": "cpu", "label": "Run on the CPU build (~12x slower)", "primary": True},
-             {"id": "cancel", "label": "Cancel", "primary": False}]
-            if namd_cpu_available else
-            [{"id": "cancel", "label": "Cancel", "primary": True}]
+            [
+                {
+                    "id": "cpu",
+                    "label": "Run on the CPU build (~12x slower)",
+                    "primary": True,
+                },
+                {"id": "cancel", "label": "Cancel", "primary": False},
+            ]
+            if namd_cpu_available
+            else [{"id": "cancel", "label": "Cancel", "primary": True}]
         ),
     }
 
@@ -1424,7 +1539,7 @@ def resolve_gpu_decision(job: MdJob, choice: str, workspace_dir: Path) -> MdJob:
     if choice == "offload":
         downgrade_gpu_resident_confs(job.package_dir(workspace_dir), job.job_id)
         job.decision = None
-        job.status = MdStatus.running   # runner flips it on relaunch; resume skips probe
+        job.status = MdStatus.running  # runner flips it on relaunch; resume skips probe
         job.error = None
     elif choice == "cpu":
         # Gate B2. Recorded on the job so the reroute is a CHOICE with a trace, not a
@@ -1458,7 +1573,8 @@ def resolve_gpu_decision(job: MdJob, choice: str, workspace_dir: Path) -> MdJob:
 # `run_health_check` reads output/<segment>.dcd, which NAMD writes incrementally, so the
 # data was there all along.  Measured cost on a live 2.4 GB DCD: ~13 s.
 _INFLIGHT_HEALTH_INTERVAL_S = float(
-    os.environ.get("NADOC_INFLIGHT_HEALTH_INTERVAL_S", "300"))
+    os.environ.get("NADOC_INFLIGHT_HEALTH_INTERVAL_S", "300")
+)
 # Skip the last frames: NAMD may be mid-write at the DCD tail while we read it.
 _INFLIGHT_HEALTH_SAFE_BACK = 2
 # How soon the FIRST in-flight probe runs, so the Health card fills in promptly instead
@@ -1466,12 +1582,15 @@ _INFLIGHT_HEALTH_SAFE_BACK = 2
 _INFLIGHT_HEALTH_FIRST_S = float(os.environ.get("NADOC_INFLIGHT_HEALTH_FIRST_S", "30"))
 
 
-def _fail_on_disk_abort(job, spec, idx: int, package_dir: Path, workspace_dir: Path) -> None:
+def _fail_on_disk_abort(
+    job, spec, idx: int, package_dir: Path, workspace_dir: Path
+) -> None:
     """Mark a job failed because the disk guard stopped it.  Shared by the spawned and
     adopted segment paths so an adopted run reports the abort identically."""
     fb = free_bytes(package_dir)
-    logger.error("[%s] Disk guard aborted %s: %.1f GB free",
-                 job.job_id, spec.name, fb / GiB)
+    logger.error(
+        "[%s] Disk guard aborted %s: %.1f GB free", job.job_id, spec.name, fb / GiB
+    )
     if idx < len(job.segments):
         job.segments[idx].status = "failed"
     job.status = MdStatus.failed
@@ -1496,9 +1615,11 @@ def _note_health_probe(job, workspace_dir: Path, **fields) -> None:
         probe = dict(job.health_probe or {})
         probe.setdefault("enabled", True)
         probe.setdefault("interval_s", _INFLIGHT_HEALTH_INTERVAL_S)
-        probe.setdefault("started_at", None)   # when this segment's probe began watching
-        probe.setdefault("last_tick_at", None)  # last time the probe RAN (sample or not)
-        probe.setdefault("last_at", None)       # last time it produced a SAMPLE
+        probe.setdefault("started_at", None)  # when this segment's probe began watching
+        probe.setdefault(
+            "last_tick_at", None
+        )  # last time the probe RAN (sample or not)
+        probe.setdefault("last_at", None)  # last time it produced a SAMPLE
         probe.setdefault("last_error", None)
         probe.setdefault("reason", None)
         if fields.pop("adopted", False):
@@ -1514,8 +1635,9 @@ def _note_health_probe(job, workspace_dir: Path, **fields) -> None:
         logger.debug("[%s] health_probe bookkeeping failed", job.job_id, exc_info=True)
 
 
-def _make_inflight_health_tick(job, spec, package_dir: Path, output_dir: Path,
-                               workspace_dir: Path):
+def _make_inflight_health_tick(
+    job, spec, package_dir: Path, output_dir: Path, workspace_dir: Path
+):
     """Periodic callback that appends a health sample WHILE a segment runs.
 
     Returns None when sampling is disabled.  The callback is deliberately total: any
@@ -1523,9 +1645,13 @@ def _make_inflight_health_tick(job, spec, package_dir: Path, output_dir: Path,
     disturb (let alone kill) the run it is watching.
     """
     if _INFLIGHT_HEALTH_INTERVAL_S <= 0:
-        _note_health_probe(job, workspace_dir, enabled=False,
-                           reason="in-flight health sampling is disabled "
-                                  "(NADOC_INFLIGHT_HEALTH_INTERVAL_S=0)")
+        _note_health_probe(
+            job,
+            workspace_dir,
+            enabled=False,
+            reason="in-flight health sampling is disabled "
+            "(NADOC_INFLIGHT_HEALTH_INTERVAL_S=0)",
+        )
         return None
     # Publish the probe's existence up front, so the card can distinguish "a sample is
     # coming" from "nothing will ever sample this" before the first tick has run.
@@ -1534,15 +1660,25 @@ def _make_inflight_health_tick(job, spec, package_dir: Path, output_dir: Path,
     # reset with it.  The job's own `created_at` is not a usable clock here: a resumed
     # run can be many hours old while its probe is seconds old, which would make any
     # staleness test fire instantly on resume.
-    _note_health_probe(job, workspace_dir, enabled=True,
-                       interval_s=_INFLIGHT_HEALTH_INTERVAL_S,
-                       started_at=time.time(), last_tick_at=None,
-                       last_at=None, last_error=None, reason=None)
+    _note_health_probe(
+        job,
+        workspace_dir,
+        enabled=True,
+        interval_s=_INFLIGHT_HEALTH_INTERVAL_S,
+        started_at=time.time(),
+        last_tick_at=None,
+        last_at=None,
+        last_error=None,
+        reason=None,
+    )
     # The FIRST probe fires early, then the loop settles to the full interval.  Waiting
     # a whole interval meant the Health card sat blank for five minutes at the start of
     # every segment even when everything was working.
-    state = {"next_at": time.time() + min(_INFLIGHT_HEALTH_FIRST_S, _INFLIGHT_HEALTH_INTERVAL_S),
-             "busy": False}
+    state = {
+        "next_at": time.time()
+        + min(_INFLIGHT_HEALTH_FIRST_S, _INFLIGHT_HEALTH_INTERVAL_S),
+        "busy": False,
+    }
 
     async def _tick():
         now = time.time()
@@ -1553,14 +1689,21 @@ def _make_inflight_health_tick(job, spec, package_dir: Path, output_dir: Path,
             return
         dcd = _latest_segment_dcd(output_dir, spec.name)
         if not dcd.exists() or dcd.stat().st_size == 0:
-            _note_health_probe(job, workspace_dir, last_tick_at=time.time(),
-                               last_error=None,
-                               reason="waiting for the first trajectory frames")
+            _note_health_probe(
+                job,
+                workspace_dir,
+                last_tick_at=time.time(),
+                last_error=None,
+                reason="waiting for the first trajectory frames",
+            )
             return
         state["busy"] = True
         try:
             hresult = await asyncio.to_thread(
-                run_health_check, package_dir, spec.name, job.name_stem,
+                run_health_check,
+                package_dir,
+                spec.name,
+                job.name_stem,
                 min_c1_paired=spec.min_c1_paired,
                 min_wc_ref_relative=spec.min_wc_ref_relative,
                 safe_back=_INFLIGHT_HEALTH_SAFE_BACK,
@@ -1574,23 +1717,42 @@ def _make_inflight_health_tick(job, spec, package_dir: Path, output_dir: Path,
                 # start of a segment and must not read as a failure; anything else is
                 # one, and the card says so instead of spinning on it forever.
                 _note_health_probe(
-                    job, workspace_dir, last_tick_at=time.time(),
+                    job,
+                    workspace_dir,
+                    last_tick_at=time.time(),
                     last_error=None if hresult.not_ready else hresult.error,
-                    reason=("waiting for the first trajectory frames"
-                            if hresult.not_ready else None),
+                    reason=(
+                        "waiting for the first trajectory frames"
+                        if hresult.not_ready
+                        else None
+                    ),
                 )
                 return
-            job.health_samples.append(MdHealthSample.from_result(
-                # Advisory by construction: an in-flight probe must never be able to
-                # stop the run it is watching.
-                hresult, spec.stage, spec.name, blocking=False))
-            _note_health_probe(job, workspace_dir, last_at=time.time(),
-                               last_tick_at=time.time(),
-                               last_error=hresult.diagnostics_error, reason=None)
-            logger.info("[%s] in-flight health %s: c1=%.3f wc=%.3f",
-                        job.job_id, spec.name,
-                        hresult.c1_paired_fraction or 0.0,
-                        hresult.wc_ref_relative_fraction or 0.0)
+            job.health_samples.append(
+                MdHealthSample.from_result(
+                    # Advisory by construction: an in-flight probe must never be able to
+                    # stop the run it is watching.
+                    hresult,
+                    spec.stage,
+                    spec.name,
+                    blocking=False,
+                )
+            )
+            _note_health_probe(
+                job,
+                workspace_dir,
+                last_at=time.time(),
+                last_tick_at=time.time(),
+                last_error=hresult.diagnostics_error,
+                reason=None,
+            )
+            logger.info(
+                "[%s] in-flight health %s: c1=%.3f wc=%.3f",
+                job.job_id,
+                spec.name,
+                hresult.c1_paired_fraction or 0.0,
+                hresult.wc_ref_relative_fraction or 0.0,
+            )
         finally:
             state["busy"] = False
             state["next_at"] = time.time() + _INFLIGHT_HEALTH_INTERVAL_S
@@ -1623,7 +1785,9 @@ def soften_stability_confs(
     if rewritten:
         logger.warning(
             "[%s] instability rescue — softened %d segment(s) to rigidBonds none + 1 fs: %s",
-            job_id, len(rewritten), ", ".join(rewritten),
+            job_id,
+            len(rewritten),
+            ", ".join(rewritten),
         )
     return rewritten
 
@@ -1654,6 +1818,7 @@ def find_gmx() -> str:
 
 # ── Thread defaulting ─────────────────────────────────────────────────────────
 
+
 def default_threads() -> int:
     """Autodetect a sensible NAMD ``+p`` count: half the logical CPUs.
 
@@ -1665,6 +1830,7 @@ def default_threads() -> int:
 
 
 # ── Low-level subprocess helpers ──────────────────────────────────────────────
+
 
 def _core_binding_prefix(threads: int) -> list[str]:
     """Return an optional ``taskset`` prefix for the NAMD launch.
@@ -1719,17 +1885,20 @@ async def _run_namd_async(
             cwd=str(package_dir),
             stdout=log_fh,
             stderr=asyncio.subprocess.STDOUT,
-            start_new_session=True,   # own process group for clean kill
+            start_new_session=True,  # own process group for clean kill
         )
         pid = proc.pid
         if job_id:
             _ACTIVE_PIDS[job_id] = pid
         if on_spawn:
-            try: on_spawn(pid)
-            except Exception: pass  # noqa: E722,S110 — persistence must never break the run
+            try:
+                on_spawn(pid)
+            except Exception:
+                pass  # noqa: E722,S110 — persistence must never break the run
         try:
             rc = await wait_proc_with_disk_guard(
-                proc, package_dir, kill=_kill_process_group, on_tick=on_tick)
+                proc, package_dir, kill=_kill_process_group, on_tick=on_tick
+            )
         except asyncio.CancelledError:
             _kill_process_group(pid)
             raise
@@ -1737,8 +1906,10 @@ async def _run_namd_async(
             if job_id:
                 _ACTIVE_PIDS.pop(job_id, None)
             if on_spawn:
-                try: on_spawn(None)
-                except Exception: pass  # noqa: E722,S110
+                try:
+                    on_spawn(None)
+                except Exception:
+                    pass  # noqa: E722,S110
     return rc, pid
 
 
@@ -1750,7 +1921,7 @@ def _kill_process_group(pid: int, timeout: float = 15.0) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            os.killpg(os.getpgid(pid), 0)   # check if still alive
+            os.killpg(os.getpgid(pid), 0)  # check if still alive
         except (ProcessLookupError, OSError):
             return
         time.sleep(0.25)
@@ -1762,23 +1933,25 @@ def _kill_process_group(pid: int, timeout: float = 15.0) -> None:
 
 # ── Metrics jsonl helper ──────────────────────────────────────────────────────
 
-def _append_metrics_jsonl(output_dir: Path, segment_name: str, stage: str,
-                          log_path: Path) -> None:
+
+def _append_metrics_jsonl(
+    output_dir: Path, segment_name: str, stage: str, log_path: Path
+) -> None:
     if not log_path.exists():
         return
     m = parse_namd_log(log_path)
     record = {
-        "wall_time":    time.time(),
-        "segment":      segment_name,
-        "stage":        stage,
-        "ns_per_day":   m.ns_per_day,
+        "wall_time": time.time(),
+        "segment": segment_name,
+        "stage": stage,
+        "ns_per_day": m.ns_per_day,
         "temperature_k": m.temperature_k,
         "temperature_avg_k": m.temperature_avg_k,
         "pressure_bar": m.pressure_bar,
         "pressure_avg_bar": m.pressure_avg_bar,
         "gpressure_bar": m.gpressure_bar,
         "gpressure_avg_bar": m.gpressure_avg_bar,
-        "volume_ang3":  m.volume_ang3,
+        "volume_ang3": m.volume_ang3,
         "n_energy_lines": m.n_energy_lines,
     }
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1787,6 +1960,7 @@ def _append_metrics_jsonl(output_dir: Path, segment_name: str, stage: str,
 
 
 # ── Main runner coroutine ─────────────────────────────────────────────────────
+
 
 def _stage_base(segment_name: str) -> str:
     """Stage identity = segment name minus the _pNN chunk suffix."""
@@ -1834,7 +2008,9 @@ def _alias_skipped_stage_outputs(
         if not src.exists():
             logger.warning(
                 "early-stop alias: no %s output for completed chunk %s — "
-                "next stage may fail to restart", ext, completed_name,
+                "next stage may fail to restart",
+                ext,
+                completed_name,
             )
             continue
         for skip in skipped_names:
@@ -1845,7 +2021,7 @@ def _alias_skipped_stage_outputs(
 async def run_job(job: MdJob, workspace_dir: Path) -> None:
     """Async coroutine — runs until completion, failure, or cancellation."""
     package_dir = job.package_dir(workspace_dir)
-    output_dir  = package_dir / "output"
+    output_dir = package_dir / "output"
     output_dir.mkdir(exist_ok=True)
 
     logger.info("[%s] run_job starting; package_dir=%s", job.job_id, package_dir)
@@ -1856,12 +2032,16 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     want_cpu = job_wants_cpu(job.protocol, job.devices)
     try:
         namd_bin, run_devices = resolve_namd_launch(job.protocol, job.devices)
-        logger.info("[%s] NAMD binary: %s%s", job.job_id, namd_bin,
-                    " (CPU build)" if want_cpu else "")
+        logger.info(
+            "[%s] NAMD binary: %s%s",
+            job.job_id,
+            namd_bin,
+            " (CPU build)" if want_cpu else "",
+        )
     except RuntimeError as exc:
         logger.error("[%s] NAMD not found: %s", job.job_id, exc)
         job.status = MdStatus.failed
-        job.error  = str(exc)
+        job.error = str(exc)
         job.save(workspace_dir)
         return
 
@@ -1870,7 +2050,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     if not manifest_path.exists():
         logger.error("[%s] manifest.json not found at %s", job.job_id, manifest_path)
         job.status = MdStatus.failed
-        job.error  = "manifest.json not found in package_dir"
+        job.error = "manifest.json not found in package_dir"
         job.save(workspace_dir)
         return
 
@@ -1881,7 +2061,9 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     # already-queued run does not have to be rebuilt to show its minimisation.
     if job.minimization is None:
         job.minimization = minimization_status(manifest)
-    logger.info("[%s] Loaded manifest: %d segments, min=%s", job.job_id, len(segments), min_name)
+    logger.info(
+        "[%s] Loaded manifest: %d segments, min=%s", job.job_id, len(segments), min_name
+    )
 
     # GPU pre-flight.  NAMD 3.0.2's CUDA buildTileLists kernel dies with an illegal
     # memory access on the first step for certain (patch-grid × atom-density)
@@ -1891,7 +2073,12 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     if not want_cpu and namd_is_cuda_build(namd_bin):
         # blocking subprocess → off the event loop, or the whole API stalls on it
         gpu_safe = await asyncio.to_thread(
-            gpu_tilelist_probe, package_dir, min_name, namd_bin, run_devices, job.threads,
+            gpu_tilelist_probe,
+            package_dir,
+            min_name,
+            namd_bin,
+            run_devices,
+            job.threads,
         )
         if not gpu_safe:
             # ASK, do not reroute.  The CPU build is ~12x slower; swapping to it behind
@@ -1903,21 +2090,29 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             except RuntimeError:
                 cpu_bin = None
             already = bool((job.prep_params or {}).get("cpu_reroute_accepted"))
-            policy = ((job.prep_params or {}).get("gpu_fallback_policy")
-                      or gpu_fallback_policy())
+            policy = (job.prep_params or {}).get(
+                "gpu_fallback_policy"
+            ) or gpu_fallback_policy()
             if already or policy == "auto_offload":
                 if cpu_bin:
                     namd_bin, run_devices = cpu_bin, ""
-                    logger.info("[%s] NAMD binary (rerouted, accepted): %s (CPU build)",
-                                job.job_id, namd_bin)
+                    logger.info(
+                        "[%s] NAMD binary (rerouted, accepted): %s (CPU build)",
+                        job.job_id,
+                        namd_bin,
+                    )
                 else:
                     logger.error(
                         "[%s] No CPU NAMD build installed — staying on the GPU build, "
-                        "which will crash on this geometry.", job.job_id)
+                        "which will crash on this geometry.",
+                        job.job_id,
+                    )
             else:
                 logger.warning(
                     "[%s] GPU pre-flight FAILED (NAMD CUDA tile-list bug on this "
-                    "geometry) — paused for user decision (Gate B2).", job.job_id)
+                    "geometry) — paused for user decision (Gate B2).",
+                    job.job_id,
+                )
                 job.decision = build_cpu_reroute_decision(bool(cpu_bin))
                 job.status = MdStatus.paused
                 job.save(workspace_dir)
@@ -1936,8 +2131,13 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         fb = free_bytes(package_dir)
         if fb >= ABORT_MIN_FREE_BYTES:
             return True
-        logger.error("[%s] Refusing to start %s: only %.1f GB free (floor %.0f GB)",
-                     job.job_id, label, fb / GiB, ABORT_MIN_FREE_BYTES / GiB)
+        logger.error(
+            "[%s] Refusing to start %s: only %.1f GB free (floor %.0f GB)",
+            job.job_id,
+            label,
+            fb / GiB,
+            ABORT_MIN_FREE_BYTES / GiB,
+        )
         job.status = MdStatus.failed
         job.failure_kind = "disk_full"
         job.error = (
@@ -1967,7 +2167,8 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         logger.info(
             "[%s] Minimization %s is already running (orphaned by a restart) — adopting it "
             "and waiting, rather than starting a second NAMD on the same files.",
-            job.job_id, min_name,
+            job.job_id,
+            min_name,
         )
         job.status = MdStatus.running
         _set_min_status("running")
@@ -1988,16 +2189,27 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         min_log = package_dir / f"{min_name}.log"
         _free_host_ram_for_namd(job.job_id, "minimization")
         rc, pid = await _run_namd_async(
-            namd_bin, min_name, package_dir, min_log, job.threads, run_devices, job.job_id,
+            namd_bin,
+            min_name,
+            package_dir,
+            min_log,
+            job.threads,
+            run_devices,
+            job.job_id,
             on_spawn=_persist_pid,
         )
         if rc != 0:
-            logger.error("[%s] Minimization failed rc=%d; log=%s", job.job_id, rc, min_log)
+            logger.error(
+                "[%s] Minimization failed rc=%d; log=%s", job.job_id, rc, min_log
+            )
             job.status = MdStatus.failed
             job.failure_kind = _classify_namd_failure(min_log)
             _cause = extract_error_line_from_file(min_log)
-            job.error  = (f"Minimization failed (rc={rc}). {_cause} (see {min_name}.log)"
-                          if _cause else f"Minimization failed (rc={rc}). See {min_name}.log")
+            job.error = (
+                f"Minimization failed (rc={rc}). {_cause} (see {min_name}.log)"
+                if _cause
+                else f"Minimization failed (rc={rc}). See {min_name}.log"
+            )
             if job.minimization is not None:
                 job.minimization.status = "failed"
             job.save(workspace_dir)
@@ -2064,11 +2276,22 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     # BEFORE the GPU-resident checks fire — which is precisely how a GPU-resident-
     # incompatible package got all the way into production once already.
     if not want_cpu and namd_is_cuda_build(namd_bin):
-        fast = next((s.name for s in segments
-                     if _has_gpu_resident(package_dir / f"{s.name}.conf")), None)
+        fast = next(
+            (
+                s.name
+                for s in segments
+                if _has_gpu_resident(package_dir / f"{s.name}.conf")
+            ),
+            None,
+        )
         if fast is not None:
             ok = await asyncio.to_thread(
-                gpu_resident_probe, package_dir, fast, namd_bin, run_devices, job.threads,
+                gpu_resident_probe,
+                package_dir,
+                fast,
+                namd_bin,
+                run_devices,
+                job.threads,
                 min_name,
             )
             if not ok:
@@ -2076,7 +2299,10 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 # silently halving throughput. Returns False → exit cleanly; the paused
                 # job is not auto-resumed (resume_interrupted_jobs only touches running).
                 proceed = await asyncio.to_thread(
-                    handle_resident_probe_failure, job, package_dir, workspace_dir,
+                    handle_resident_probe_failure,
+                    job,
+                    package_dir,
+                    workspace_dir,
                 )
                 if not proceed:
                     return
@@ -2091,15 +2317,22 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     job.save(workspace_dir)
 
     start_idx = job.current_segment_idx
-    skip_until = 0            # early-stop: chunks below this were skipped as redundant
+    skip_until = 0  # early-stop: chunks below this were skipped as redundant
     for idx, spec in enumerate(segments):
         if idx < start_idx:
-            continue   # resume support
+            continue  # resume support
         if idx < skip_until:
-            continue   # stage plateaued; this chunk was skipped (already marked done)
+            continue  # stage plateaued; this chunk was skipped (already marked done)
 
         # Mark segment running
-        logger.info("[%s] Segment %d/%d: %s (%s)", job.job_id, idx+1, len(segments), spec.name, spec.stage)
+        logger.info(
+            "[%s] Segment %d/%d: %s (%s)",
+            job.job_id,
+            idx + 1,
+            len(segments),
+            spec.name,
+            spec.stage,
+        )
         job.current_segment_idx = idx
         job.error = None
         if idx < len(job.segments):
@@ -2124,14 +2357,19 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             # is indistinguishable from one we spawned ourselves.  Without them a
             # routine backend edit left the rest of the run unguarded and its Health
             # card spinning on data that was never collected.
-            logger.info("[%s] Adopting running NAMD for %s "
-                        "(disk guard + in-flight health enabled)", job.job_id, spec.name)
+            logger.info(
+                "[%s] Adopting running NAMD for %s "
+                "(disk guard + in-flight health enabled)",
+                job.job_id,
+                spec.name,
+            )
             _note_health_probe(job, workspace_dir, adopted=True)
             rc = await _wait_for_segment_process(
                 spec.name,
                 guard_dir=package_dir,
                 on_tick=_make_inflight_health_tick(
-                    job, spec, package_dir, output_dir, workspace_dir),
+                    job, spec, package_dir, output_dir, workspace_dir
+                ),
             )
             if rc == DISK_ABORT_RC:
                 _fail_on_disk_abort(job, spec, idx, package_dir, workspace_dir)
@@ -2187,7 +2425,8 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 # Sample health WHILE the segment runs, so a one-segment production run
                 # shows a trend instead of a single number ~13 hours later.
                 on_tick=_make_inflight_health_tick(
-                    job, spec, package_dir, output_dir, workspace_dir),
+                    job, spec, package_dir, output_dir, workspace_dir
+                ),
             )
 
             # Check if we were cancelled while NAMD was running
@@ -2222,11 +2461,13 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                     # `error` string, so a run that crashed four times finished
                     # "completed" with no trace — which is how the 2hb_1xT 200 ns run
                     # came to inherit a cell that had collapsed 38 % (exp47).
-                    job.cell_shrink_events.append({
-                        "segment": spec.name,
-                        "attempt": seg.auto_resumes + 1,
-                        **cell,
-                    })
+                    job.cell_shrink_events.append(
+                        {
+                            "segment": spec.name,
+                            "attempt": seg.auto_resumes + 1,
+                            **cell,
+                        }
+                    )
                     if cell["collapsing"]:
                         # Not equilibration. The box was built with vacuum in it, and
                         # resuming only walks further into a cell too small for the
@@ -2249,7 +2490,9 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                         logger.error(
                             "[%s] %s: cell collapsed to %.0f%% of initial volume — "
                             "refusing to auto-resume (box is under-filled)",
-                            job.job_id, spec.name, cell["volume_fraction"] * 100,
+                            job.job_id,
+                            spec.name,
+                            cell["volume_fraction"] * 100,
                         )
                         return
                     if (
@@ -2264,8 +2507,9 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                         # can be helpful."  A cell that outgrew its patch grid IS that
                         # abrupt change, so soften the barostat before retrying instead of
                         # replaying the same collapse against the same piston.
-                        _soften_piston_in_conf(package_dir / f"{spec.name}.conf",
-                                               job.job_id, spec.name)
+                        _soften_piston_in_conf(
+                            package_dir / f"{spec.name}.conf", job.job_id, spec.name
+                        )
                         seg.status = "running"
                         job.status = MdStatus.running
                         job.failure_kind = None
@@ -2280,8 +2524,11 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                         logger.warning(
                             "[%s] %s hit periodic-cell-too-small at %.0f%% of initial "
                             "volume; auto-resuming from checkpoint (attempt %d/%d)",
-                            job.job_id, spec.name, cell["volume_fraction"] * 100,
-                            seg.auto_resumes, MAX_CELL_SHRINK_RESUMES,
+                            job.job_id,
+                            spec.name,
+                            cell["volume_fraction"] * 100,
+                            seg.auto_resumes,
+                            MAX_CELL_SHRINK_RESUMES,
                         )
                         return
                 # A host pinned-memory OOM is usually a transient starvation, not a
@@ -2308,7 +2555,10 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                     logger.warning(
                         "[%s] %s hit host pinned-memory OOM; auto-resuming "
                         "(attempt %d/%d)",
-                        job.job_id, spec.name, seg.auto_resumes, MAX_HOST_OOM_RESUMES,
+                        job.job_id,
+                        spec.name,
+                        seg.auto_resumes,
+                        MAX_HOST_OOM_RESUMES,
                     )
                     return
                 # A RATTLE / "atoms moving too fast" blow-up is a strained-seed problem,
@@ -2345,8 +2595,11 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                         logger.warning(
                             "[%s] %s hit a RATTLE/instability; auto-softened %d "
                             "segment(s) and resuming (attempt %d/%d)",
-                            job.job_id, spec.name, len(rewritten),
-                            seg.auto_resumes, MAX_INSTABILITY_RESUMES,
+                            job.job_id,
+                            spec.name,
+                            len(rewritten),
+                            seg.auto_resumes,
+                            MAX_INSTABILITY_RESUMES,
                         )
                         return
                 if seg is not None:
@@ -2354,8 +2607,11 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 job.status = MdStatus.failed
                 job.failure_kind = failure_kind
                 _cause = extract_error_line_from_file(seg_log)
-                job.error = (f"NAMD failed for {spec.name} (rc={rc}). {_cause} (see {seg_log.name})"
-                             if _cause else f"NAMD failed for {spec.name} (rc={rc}). See {seg_log.name}")
+                job.error = (
+                    f"NAMD failed for {spec.name} (rc={rc}). {_cause} (see {seg_log.name})"
+                    if _cause
+                    else f"NAMD failed for {spec.name} (rc={rc}). See {seg_log.name}"
+                )
                 job.save(workspace_dir)
                 return
 
@@ -2367,9 +2623,11 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         if run_check:
             logger.info("[%s] Health check: %s", job.job_id, spec.name)
             hresult = run_health_check(
-                package_dir, spec.name, job.name_stem,
-                min_c1_paired       = spec.min_c1_paired,
-                min_wc_ref_relative = spec.min_wc_ref_relative,
+                package_dir,
+                spec.name,
+                job.name_stem,
+                min_c1_paired=spec.min_c1_paired,
+                min_wc_ref_relative=spec.min_wc_ref_relative,
             )
             logger.info(
                 "[%s] Health: c1=%.3f wc=%.3f passed=%s%s",
@@ -2377,8 +2635,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 hresult.c1_paired_fraction or 0.0,
                 hresult.wc_ref_relative_fraction or 0.0,
                 hresult.passed,
-                ("" if hresult.passed
-                 else f" WARN: {hresult.reason or hresult.error}"),
+                ("" if hresult.passed else f" WARN: {hresult.reason or hresult.error}"),
             )
             append_health_jsonl(output_dir, spec.name, spec.stage, hresult)
 
@@ -2397,7 +2654,8 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
 
             # Save health sample to job object
             sample = MdHealthSample.from_result(
-                hresult, spec.stage, spec.name, blocking=hresult.blocking)
+                hresult, spec.stage, spec.name, blocking=hresult.blocking
+            )
             job.health_samples.append(sample)
 
             # Health is advisory only — a below-threshold checkpoint (C1' or WC,
@@ -2406,7 +2664,9 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             if not hresult.passed:
                 logger.warning(
                     "[%s] Health warning after %s (below threshold, continuing): %s",
-                    job.job_id, spec.name, hresult.reason or hresult.error,
+                    job.job_id,
+                    spec.name,
+                    hresult.reason or hresult.error,
                 )
 
             if idx < len(job.segments):
@@ -2454,7 +2714,11 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                     job.save(workspace_dir)
                     logger.info(
                         "[%s] early-stop: stage '%s' plateaued at %s (%s) — skipped %d chunk(s)",
-                        job.job_id, spec.stage, spec.name, diag, last_idx - idx,
+                        job.job_id,
+                        spec.stage,
+                        spec.name,
+                        diag,
+                        last_idx - idx,
                     )
 
     logger.info("[%s] All segments completed", job.job_id)
@@ -2464,6 +2728,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
 
 
 # ── Public API called by routes_md ────────────────────────────────────────────
+
 
 def start_job(job: MdJob, workspace_dir: Path) -> None:
     """Launch run_job in a background thread. Idempotent if already running.

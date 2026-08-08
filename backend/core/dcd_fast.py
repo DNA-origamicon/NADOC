@@ -15,6 +15,7 @@ Scope: the common NAMD/CHARMM case (no fixed atoms).  ``read_layout`` raises
 ``UnsupportedDCD`` for anything it can't safely treat as fixed-record (fixed atoms,
 4D, bad magic), so callers fall back to the MDAnalysis path.
 """
+
 from __future__ import annotations
 
 import struct
@@ -31,7 +32,7 @@ class UnsupportedDCD(Exception):
 
 @dataclass(frozen=True)
 class DcdLayout:
-    endian: str          # "<" or ">"
+    endian: str  # "<" or ">"
     n_atoms: int
     has_cell: bool
     header_bytes: int
@@ -39,8 +40,8 @@ class DcdLayout:
     n_frames: int
     istart: int
     nsavc: int
-    delta_ps: float      # timestep between saved frames, in ps (0 if unknown)
-    first_ps: float      # simulation time of frame 0 = istart·dt, in ps (0 if unknown)
+    delta_ps: float  # timestep between saved frames, in ps (0 if unknown)
+    first_ps: float  # simulation time of frame 0 = istart·dt, in ps (0 if unknown)
 
 
 def read_layout(path) -> DcdLayout:
@@ -74,11 +75,13 @@ def read_layout(path) -> DcdLayout:
         four_dims = bool(icntrl[11])
         # DELTA: float32 for CHARMM/NAMD (icntrl[9] reinterpreted), in AKMA time units.
         if charmm_ver > 0:
-            delta_akma = struct.unpack(f"{endian}f", struct.pack(f"{endian}i", icntrl[9]))[0]
+            delta_akma = struct.unpack(
+                f"{endian}f", struct.pack(f"{endian}i", icntrl[9])
+            )[0]
         else:
             delta_akma = 0.0
-        step_ps  = float(delta_akma) * 0.04888821            # AKMA → ps, per integrator step
-        delta_ps = step_ps * nsavc                           # ps per saved frame
+        step_ps = float(delta_akma) * 0.04888821  # AKMA → ps, per integrator step
+        delta_ps = step_ps * nsavc  # ps per saved frame
         # Absolute time of the first saved frame.  Continuation segments (.contN.dcd)
         # start at ISTART != 0, so frame time is first_ps + idx·delta_ps, not idx·delta_ps.
         first_ps = step_ps * istart
@@ -100,12 +103,22 @@ def read_layout(path) -> DcdLayout:
 
     if n_atoms <= 0:
         raise UnsupportedDCD(f"non-positive atom count {n_atoms}")
-    cell_bytes = (4 + 48 + 4) if has_cell else 0          # int32 + 6 doubles + int32
-    coord_block = 4 + 4 * n_atoms + 4                      # int32 + n floats + int32
+    cell_bytes = (4 + 48 + 4) if has_cell else 0  # int32 + 6 doubles + int32
+    coord_block = 4 + 4 * n_atoms + 4  # int32 + n floats + int32
     frame_bytes = cell_bytes + 3 * coord_block
     n_frames = max(0, (size - header_bytes) // frame_bytes)
-    return DcdLayout(endian, n_atoms, has_cell, header_bytes, frame_bytes,
-                     int(n_frames), istart, nsavc, delta_ps, first_ps)
+    return DcdLayout(
+        endian,
+        n_atoms,
+        has_cell,
+        header_bytes,
+        frame_bytes,
+        int(n_frames),
+        istart,
+        nsavc,
+        delta_ps,
+        first_ps,
+    )
 
 
 def read_frame(path, layout: DcdLayout, frame_idx: int):
@@ -128,18 +141,23 @@ def read_frame(path, layout: DcdLayout, frame_idx: int):
     pos = 0
     cell = None
     if layout.has_cell:
-        m0 = struct.unpack_from(f"{e}i", buf, pos)[0]; pos += 4
+        m0 = struct.unpack_from(f"{e}i", buf, pos)[0]
+        pos += 4
         if m0 != 48:
             raise IndexError("bad unit-cell record marker")
-        cell = np.array(struct.unpack_from(f"{e}6d", buf, pos), dtype=np.float64); pos += 48
+        cell = np.array(struct.unpack_from(f"{e}6d", buf, pos), dtype=np.float64)
+        pos += 48
         pos += 4  # trailing marker
 
     def _axis() -> np.ndarray:
         nonlocal pos
-        m = struct.unpack_from(f"{e}i", buf, pos)[0]; pos += 4
+        m = struct.unpack_from(f"{e}i", buf, pos)[0]
+        pos += 4
         if m != 4 * n:
             raise IndexError("bad coordinate-block marker (size mismatch)")
-        a = np.frombuffer(buf, dtype=np.dtype(e + "f4"), count=n, offset=pos).astype(np.float32)
+        a = np.frombuffer(buf, dtype=np.dtype(e + "f4"), count=n, offset=pos).astype(
+            np.float32
+        )
         pos += 4 * n + 4  # data + trailing marker
         return a
 
@@ -178,8 +196,16 @@ def cell_to_dimensions(cell: Optional[np.ndarray]) -> Optional[np.ndarray]:
 _DCD_TITLE = b"NADOC composite trajectory export".ljust(80)[:80]
 
 
-def write_header(fh, n_atoms: int, n_frames: int, *, istart: int = 0,
-                 nsavc: int = 1, delta: float = 1.0, title: bytes = _DCD_TITLE) -> None:
+def write_header(
+    fh,
+    n_atoms: int,
+    n_frames: int,
+    *,
+    istart: int = 0,
+    nsavc: int = 1,
+    delta: float = 1.0,
+    title: bytes = _DCD_TITLE,
+) -> None:
     """Write the three DCD header records to a binary file object.
 
     ``n_frames`` goes in the NSET field. A composite NADOC trajectory splices stages with
@@ -190,15 +216,15 @@ def write_header(fh, n_atoms: int, n_frames: int, *, istart: int = 0,
     if n_atoms <= 0:
         raise ValueError(f"n_atoms must be positive, got {n_atoms}")
     icntrl = [0] * 20
-    icntrl[0] = int(n_frames)                 # NSET
-    icntrl[1] = int(istart)                   # ISTART
-    icntrl[2] = int(nsavc)                    # NSAVC
-    icntrl[3] = int(n_frames) * int(nsavc)    # NSTEP
-    icntrl[8] = 0                             # NFIXED — none, so frames are fixed-size
+    icntrl[0] = int(n_frames)  # NSET
+    icntrl[1] = int(istart)  # ISTART
+    icntrl[2] = int(nsavc)  # NSAVC
+    icntrl[3] = int(n_frames) * int(nsavc)  # NSTEP
+    icntrl[8] = 0  # NFIXED — none, so frames are fixed-size
     icntrl[9] = struct.unpack("<i", struct.pack("<f", float(delta)))[0]
-    icntrl[10] = 0                            # no unit-cell record
-    icntrl[11] = 0                            # not 4D
-    icntrl[19] = 24                           # CHARMM version marker (>0 = CHARMM-style)
+    icntrl[10] = 0  # no unit-cell record
+    icntrl[11] = 0  # not 4D
+    icntrl[19] = 24  # CHARMM version marker (>0 = CHARMM-style)
 
     fh.write(struct.pack("<i", 84))
     fh.write(b"CORD")
@@ -207,7 +233,7 @@ def write_header(fh, n_atoms: int, n_frames: int, *, istart: int = 0,
 
     block = title.ljust(80)[:80]
     fh.write(struct.pack("<i", 4 + len(block)))
-    fh.write(struct.pack("<i", 1))            # NTITLE
+    fh.write(struct.pack("<i", 1))  # NTITLE
     fh.write(block)
     fh.write(struct.pack("<i", 4 + len(block)))
 
@@ -229,7 +255,9 @@ def append_frame(fh, xyz) -> None:
         fh.write(marker)
 
 
-def write_trajectory(path, n_atoms: int, frames_iter, n_frames: int, **header_kw) -> int:
+def write_trajectory(
+    path, n_atoms: int, frames_iter, n_frames: int, **header_kw
+) -> int:
     """Write a whole DCD from an iterable of ``(n_atoms, 3)`` Angstrom arrays.
 
     ``n_frames`` is the COUNT DECLARED IN THE HEADER, written before any frame is seen (the

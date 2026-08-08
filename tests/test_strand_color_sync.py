@@ -41,6 +41,7 @@ from backend.core.constants import STAPLE_PALETTE
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(autouse=True)
 def _reset():
     """Fresh HC demo design before each test; restored afterwards."""
@@ -56,6 +57,7 @@ def client():
 
 # ── Colour model helpers (mirror the JS logic) ─────────────────────────────────
 
+
 def cadnano_color(strand: dict, idx: int) -> str | None:
     """Mirror pathview.js strandColor(strand, idx).
 
@@ -63,9 +65,9 @@ def cadnano_color(strand: dict, idx: int) -> str | None:
     position `idx` in the design.strands array.
     """
     if strand["strand_type"] == "scaffold":
-        return None                                    # scaffold has a fixed CSS colour
+        return None  # scaffold has a fixed CSS colour
     if strand.get("color"):
-        return strand["color"]                         # explicit backend-assigned colour
+        return strand["color"]  # explicit backend-assigned colour
     return STAPLE_PALETTE[idx % len(STAPLE_PALETTE)]  # index-based fallback
 
 
@@ -83,8 +85,9 @@ def build_strand_colors(design: dict) -> dict[str, str]:
     return result
 
 
-def threed_color(strand: dict, strand_colors: dict[str, str],
-                 geometry_idx: int) -> str | None:
+def threed_color(
+    strand: dict, strand_colors: dict[str, str], geometry_idx: int
+) -> str | None:
     """Mirror helix_renderer.js nucColor() + buildStapleColorMap fallback.
 
     `geometry_idx` is the position this strand would receive in
@@ -95,11 +98,12 @@ def threed_color(strand: dict, strand_colors: dict[str, str],
         return None
     sid = strand["id"]
     if sid in strand_colors:
-        return strand_colors[sid]                          # customColors priority
+        return strand_colors[sid]  # customColors priority
     return STAPLE_PALETTE[geometry_idx % len(STAPLE_PALETTE)]  # fallback
 
 
 # ── API helpers ───────────────────────────────────────────────────────────────
+
 
 def _make_hc_design(client) -> dict:
     r = client.post("/api/design", json={"name": "test", "lattice_type": "HONEYCOMB"})
@@ -113,34 +117,50 @@ def _add_helix(client, row: int, col: int) -> dict:
     return r.json()
 
 
-def _paint_staple(client, helix_id: str, start_bp: int, end_bp: int,
-                  direction: str = "FORWARD") -> dict:
+def _paint_staple(
+    client, helix_id: str, start_bp: int, end_bp: int, direction: str = "FORWARD"
+) -> dict:
     """Add a single-domain staple via the pencil-tool endpoint."""
-    r = client.post("/api/design/strands", json={
-        "domains": [{
-            "helix_id": helix_id,
-            "start_bp": start_bp,
-            "end_bp":   end_bp,
-            "direction": direction,
-        }],
-        "strand_type": "staple",
-    })
+    r = client.post(
+        "/api/design/strands",
+        json={
+            "domains": [
+                {
+                    "helix_id": helix_id,
+                    "start_bp": start_bp,
+                    "end_bp": end_bp,
+                    "direction": direction,
+                }
+            ],
+            "strand_type": "staple",
+        },
+    )
     assert r.status_code == 201, r.text
     return r.json()
 
 
 def _nick(client, helix_id: str, bp_index: int, direction: str) -> dict:
-    r = client.post("/api/design/nick", json={
-        "helix_id": helix_id, "bp_index": bp_index, "direction": direction,
-    })
+    r = client.post(
+        "/api/design/nick",
+        json={
+            "helix_id": helix_id,
+            "bp_index": bp_index,
+            "direction": direction,
+        },
+    )
     assert r.status_code == 201, r.text
     return r.json()
 
 
 def _ligate(client, helix_id: str, bp_index: int, direction: str) -> dict:
-    r = client.post("/api/design/ligate", json={
-        "helix_id": helix_id, "bp_index": bp_index, "direction": direction,
-    })
+    r = client.post(
+        "/api/design/ligate",
+        json={
+            "helix_id": helix_id,
+            "bp_index": bp_index,
+            "direction": direction,
+        },
+    )
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -151,6 +171,7 @@ def _staples(design: dict) -> list[dict]:
 
 
 # ── Tests: pencil-painted strands ─────────────────────────────────────────────
+
 
 class TestPencilStrandColors:
     """POST /design/strands — new strands from the pencil tool."""
@@ -226,6 +247,7 @@ class TestPencilStrandColors:
 
 # ── Tests: nick tool ──────────────────────────────────────────────────────────
 
+
 class TestNickStrandColors:
     """POST /design/nick — colour assignment on split strands."""
 
@@ -253,9 +275,7 @@ class TestNickStrandColors:
         _make_hc_design(client)
         helix_ids = []
         for row, col in self.CELLS_6HB:
-            r = client.post(
-                "/api/design/helix-at-cell", json={"row": row, "col": col}
-            )
+            r = client.post("/api/design/helix-at-cell", json={"row": row, "col": col})
             assert r.status_code == 201
             helix_ids.append(r.json()["design"]["helices"][-1]["id"])
 
@@ -322,8 +342,8 @@ class TestNickStrandColors:
                 mismatches.append(
                     f"  idx={idx} id={strand['id'][:8]}: cadnano={cn!r} 3D={td!r}"
                 )
-        assert not mismatches, (
-            "Cadnano / 3D colour mismatch after nick:\n" + "\n".join(mismatches)
+        assert not mismatches, "Cadnano / 3D colour mismatch after nick:\n" + "\n".join(
+            mismatches
         )
 
     def test_double_nick_all_fragments_colored(self, client):
@@ -371,9 +391,7 @@ class TestNickStrandColors:
         shifts = []
         for sid in unchanged_ids:
             if after[sid] != before[sid]:
-                shifts.append(
-                    f"  {sid[:8]}: was {before[sid]!r}, now {after[sid]!r}"
-                )
+                shifts.append(f"  {sid[:8]}: was {before[sid]!r}, now {after[sid]!r}")
         assert not shifts, (
             "Nick caused colour shift in unrelated strands:\n" + "\n".join(shifts)
         )
@@ -394,12 +412,13 @@ class TestNickStrandColors:
                 mismatches.append(
                     f"  idx={idx} id={strand['id'][:8]}: cadnano={cn!r} 3D={td!r}"
                 )
-        assert not mismatches, (
-            "Cadnano / 3D mismatch in 6HB after nick:\n" + "\n".join(mismatches)
+        assert not mismatches, "Cadnano / 3D mismatch in 6HB after nick:\n" + "\n".join(
+            mismatches
         )
 
 
 # ── Tests: ligate ─────────────────────────────────────────────────────────────
+
 
 class TestLigateStrandColors:
     """POST /design/ligate — colour preservation after strand merge."""
@@ -460,8 +479,8 @@ class TestLigateStrandColors:
                 mismatches.append(
                     f"  idx={idx} id={strand['id'][:8]}: cadnano={cn!r} 3D={td!r}"
                 )
-        assert not mismatches, (
-            "Cadnano / 3D mismatch after ligate:\n" + "\n".join(mismatches)
+        assert not mismatches, "Cadnano / 3D mismatch after ligate:\n" + "\n".join(
+            mismatches
         )
 
     def test_nick_then_ligate_restores_original_color(self, client):
@@ -493,6 +512,7 @@ class TestLigateStrandColors:
 
 # ── Tests: 6HB full colour comparison ─────────────────────────────────────────
 
+
 class TestSixHelixBundleColors:
     """End-to-end: 6-helix HC design, one staple per helix, full colour check."""
 
@@ -503,9 +523,7 @@ class TestSixHelixBundleColors:
         _make_hc_design(client)
         helix_ids = []
         for row, col in self.CELLS_6HB:
-            r = client.post(
-                "/api/design/helix-at-cell", json={"row": row, "col": col}
-            )
+            r = client.post("/api/design/helix-at-cell", json={"row": row, "col": col})
             assert r.status_code == 201
             helix_ids.append(r.json()["design"]["helices"][-1]["id"])
         for hid in helix_ids:
@@ -547,8 +565,8 @@ class TestSixHelixBundleColors:
                 mismatches.append(
                     f"  helix={helix} idx={idx}: cadnano={cn!r} 3D={td!r}"
                 )
-        assert not mismatches, (
-            "Cadnano / 3D colour mismatch across 6HB:\n" + "\n".join(mismatches)
+        assert not mismatches, "Cadnano / 3D colour mismatch across 6HB:\n" + "\n".join(
+            mismatches
         )
 
     def test_6hb_nick_then_check_all_colors(self, client):
@@ -564,7 +582,9 @@ class TestSixHelixBundleColors:
         resp = _nick(client, helix_ids[3], 18, "FORWARD")
         design_after = resp["design"]
         staples_after = _staples(design_after)
-        assert len(staples_after) == 7, f"Expected 7 staples after nick, got {len(staples_after)}"
+        assert len(staples_after) == 7, (
+            f"Expected 7 staples after nick, got {len(staples_after)}"
+        )
 
         after_map = {s["id"]: s for s in staples_after}
         strand_colors = build_strand_colors(design_after)
@@ -576,7 +596,9 @@ class TestSixHelixBundleColors:
             for sid in unchanged
             if after_map[sid]["color"] != before[sid]
         ]
-        assert not shifts, "Nick shifted colours of unrelated strands:\n" + "\n".join(shifts)
+        assert not shifts, "Nick shifted colours of unrelated strands:\n" + "\n".join(
+            shifts
+        )
 
         # All strands must have color set
         no_color = [s["id"][:8] for s in staples_after if not s.get("color")]
@@ -591,6 +613,6 @@ class TestSixHelixBundleColors:
                 mismatches.append(
                     f"  idx={idx} id={strand['id'][:8]}: cadnano={cn!r} 3D={td!r}"
                 )
-        assert not mismatches, (
-            "Cadnano / 3D mismatch after nick in 6HB:\n" + "\n".join(mismatches)
+        assert not mismatches, "Cadnano / 3D mismatch after nick in 6HB:\n" + "\n".join(
+            mismatches
         )

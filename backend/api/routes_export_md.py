@@ -38,6 +38,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 from backend.api import state as design_state
+
 # Shared export/geometry resolvers used by 100+ routes across crud.py +
 # assembly.py + core; they stay in crud.py and are imported back here (same
 # convention as routes_camera_poses.py / routes_flexible_segments.py).
@@ -166,13 +167,15 @@ def export_namd_complete() -> Response:
     """Complete NAMD simulation package — ready to run on a fresh Ubuntu machine."""
     from backend.core.namd_package import build_namd_package
 
-    design    = _design_for_export()
-    name      = (design.metadata.name or "design").replace(" ", "_")
+    design = _design_for_export()
+    name = (design.metadata.name or "design").replace(" ", "_")
     zip_bytes = build_namd_package(design)
     return Response(
-        content    = zip_bytes,
-        media_type = "application/zip",
-        headers    = {"Content-Disposition": f'attachment; filename="{name}_namd_complete.zip"'},
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{name}_namd_complete.zip"'
+        },
     )
 
 
@@ -183,8 +186,8 @@ def export_namd_prompt() -> Response:
 
     design = design_state.get_or_404()
     return Response(
-        content    = get_ai_prompt(design),
-        media_type = "text/plain; charset=utf-8",
+        content=get_ai_prompt(design),
+        media_type="text/plain; charset=utf-8",
     )
 
 
@@ -199,16 +202,16 @@ def export_gromacs_complete() -> Response:
     """
     from backend.core.gromacs_package import build_gromacs_package
 
-    design    = _design_for_export()
-    name      = (design.metadata.name or "design").replace(" ", "_")
+    design = _design_for_export()
+    name = (design.metadata.name or "design").replace(" ", "_")
     try:
         zip_bytes = build_gromacs_package(design)
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return Response(
-        content    = zip_bytes,
-        media_type = "application/zip",
-        headers    = {"Content-Disposition": f'attachment; filename="{name}_gromacs.zip"'},
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{name}_gromacs.zip"'},
     )
 
 
@@ -216,6 +219,7 @@ def export_gromacs_complete() -> Response:
 def probe_gromacs_installation() -> dict:
     """Return GROMACS availability and chosen force-field on this server."""
     from backend.core.gromacs_package import probe_gromacs
+
     return probe_gromacs()
 
 
@@ -242,17 +246,17 @@ def start_gromacs_export(
     """
     from backend.core.gromacs_package import build_gromacs_package
 
-    design   = design_state.get_or_404()
+    design = design_state.get_or_404()
     snapshot = copy.deepcopy(design)
-    name     = (package_name or design.metadata.name or "design").replace(" ", "_")
-    job_id   = str(_uuid.uuid4())
+    name = (package_name or design.metadata.name or "design").replace(" ", "_")
+    job_id = str(_uuid.uuid4())
 
     with _gromacs_jobs_lock:
         _gromacs_jobs[job_id] = {
             "status": "running",
             "result": None,
-            "error":  None,
-            "name":   name,
+            "error": None,
+            "name": name,
         }
 
     def _run() -> None:
@@ -271,7 +275,7 @@ def start_gromacs_export(
         except Exception as exc:
             with _gromacs_jobs_lock:
                 _gromacs_jobs[job_id]["status"] = "error"
-                _gromacs_jobs[job_id]["error"]  = str(exc)
+                _gromacs_jobs[job_id]["error"] = str(exc)
 
     threading.Thread(target=_run, daemon=True).start()
     return {"job_id": job_id}
@@ -313,18 +317,18 @@ def start_gromacs_cg_export(
         read_configuration,
     )
 
-    design   = design_state.get_or_404()
+    design = design_state.get_or_404()
     snapshot = copy.deepcopy(design)
     geometry = _geometry_for_design(design)
-    name     = (package_name or design.metadata.name or "design").replace(" ", "_")
-    job_id   = str(_uuid.uuid4())
+    name = (package_name or design.metadata.name or "design").replace(" ", "_")
+    job_id = str(_uuid.uuid4())
 
     with _gromacs_jobs_lock:
         _gromacs_jobs[job_id] = {
             "status": "running",
             "result": None,
-            "error":  None,
-            "name":   name,
+            "error": None,
+            "name": name,
         }
 
     def _run() -> None:
@@ -335,7 +339,9 @@ def start_gromacs_cg_export(
                 write_topology(snapshot, p / "topology.top")
                 write_configuration(snapshot, geometry, p / "conf.dat")
                 write_oxdna_input(
-                    p / "topology.top", p / "conf.dat", p / "input.txt",
+                    p / "topology.top",
+                    p / "conf.dat",
+                    p / "input.txt",
                     steps=oxdna_steps,
                     relaxation_steps=min(oxdna_steps // 10, 5000),
                 )
@@ -357,10 +363,14 @@ def start_gromacs_cg_export(
                     raise RuntimeError("oxDNA finished but produced no last_conf.dat.")
 
                 from backend.core.cg_to_atomistic import _smooth_cg_positions_per_domain
+
                 cg_positions = read_configuration(last_conf, snapshot)
-                nuc_pos_override = _smooth_cg_positions_per_domain(snapshot, cg_positions)
+                nuc_pos_override = _smooth_cg_positions_per_domain(
+                    snapshot, cg_positions
+                )
 
             from backend.core.gromacs_package import build_gromacs_package
+
             data = build_gromacs_package(
                 snapshot,
                 package_name=name,
@@ -375,7 +385,7 @@ def start_gromacs_cg_export(
         except Exception as exc:
             with _gromacs_jobs_lock:
                 _gromacs_jobs[job_id]["status"] = "error"
-                _gromacs_jobs[job_id]["error"]  = str(exc)
+                _gromacs_jobs[job_id]["error"] = str(exc)
 
     threading.Thread(target=_run, daemon=True).start()
     return {"job_id": job_id}
@@ -423,9 +433,13 @@ def start_gromacs_mrdna_export(
     try:
         job = MrdnaJob.load(mrdna_job_id, _WORKSPACE_DIR)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail=f"mrDNA job {mrdna_job_id!r} not found")
+        raise HTTPException(
+            status_code=404, detail=f"mrDNA job {mrdna_job_id!r} not found"
+        )
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"Failed to load mrDNA job {mrdna_job_id}: {exc}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load mrDNA job {mrdna_job_id}: {exc}"
+        )
     job = reconcile_mrdna_status(job, _WORKSPACE_DIR)
 
     # Gate + resolve fine-stage inputs synchronously so the client gets a specific,
@@ -436,17 +450,23 @@ def start_gromacs_mrdna_export(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
 
-    name   = (package_name or snapshot.metadata.name or job.design_name or "design").replace(" ", "_")
+    name = (
+        package_name or snapshot.metadata.name or job.design_name or "design"
+    ).replace(" ", "_")
     job_id = str(_uuid.uuid4())
     with _gromacs_jobs_lock:
         _gromacs_jobs[job_id] = {
-            "status": "running", "result": None, "error": None, "name": name,
+            "status": "running",
+            "result": None,
+            "error": None,
+            "name": name,
         }
 
     def _run() -> None:
         try:
             override = build_md_seed_override(snapshot, psf, dcd)
             from backend.core.gromacs_package import build_gromacs_package
+
             data = build_gromacs_package(
                 snapshot,
                 package_name=name,
@@ -461,7 +481,7 @@ def start_gromacs_mrdna_export(
         except Exception as exc:  # noqa: BLE001
             with _gromacs_jobs_lock:
                 _gromacs_jobs[job_id]["status"] = "error"
-                _gromacs_jobs[job_id]["error"]  = str(exc)
+                _gromacs_jobs[job_id]["error"] = str(exc)
 
     threading.Thread(target=_run, daemon=True).start()
     return {"job_id": job_id}
@@ -490,13 +510,13 @@ def gromacs_export_result(job_id: str) -> Response:
     if job["status"] != "done":
         raise HTTPException(status_code=409, detail=f"Job status: {job['status']}")
     result = job["result"]
-    name   = job["name"]
+    name = job["name"]
     with _gromacs_jobs_lock:
         _gromacs_jobs.pop(job_id, None)
     return Response(
-        content    = result,
-        media_type = "application/zip",
-        headers    = {"Content-Disposition": f'attachment; filename="{name}_gromacs.zip"'},
+        content=result,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{name}_gromacs.zip"'},
     )
 
 
@@ -521,13 +541,13 @@ def export_namd_bundle_file() -> Response:
     )
 
     design = _design_for_export()
-    name   = (design.metadata.name or "design").replace(" ", "_")
+    name = (design.metadata.name or "design").replace(" ", "_")
 
-    model              = build_atomistic_model(design)
+    model = build_atomistic_model(design)
     ax, ay, az, ox, oy, oz = _box_dimensions(model.atoms, margin_nm=5.0)
 
-    pdb_text    = export_pdb(design, model=model)
-    psf_text    = export_psf(design, model=model)
+    pdb_text = export_pdb(design, model=model)
+    psf_text = export_psf(design, model=model)
     identity_json = export_identity_json(design, model=model)
     identity_tsv = export_identity_tsv(design, model=model)
     design_maps_json = export_design_maps_json(design, model=model)
@@ -536,15 +556,21 @@ def export_namd_bundle_file() -> Response:
     stacking_json = export_stacking_map_json(design, model=model)
     stacking_tsv = export_stacking_map_tsv(design, model=model)
     dry_restraints = export_dry_implicit_restraints(design, model=model)
-    conf_text   = _NAMD_CONF_TEMPLATE.format(
-        name=name, ax=ax, ay=ay, az=az, ox=ox, oy=oy, oz=oz,
+    conf_text = _NAMD_CONF_TEMPLATE.format(
+        name=name,
+        ax=ax,
+        ay=ay,
+        az=az,
+        ox=ox,
+        oy=oy,
+        oz=oz,
     )
     readme_text = _NAMD_README_TEMPLATE.format(name=name)
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(f"{name}.pdb",  pdb_text)
-        zf.writestr(f"{name}.psf",  psf_text)
+        zf.writestr(f"{name}.pdb", pdb_text)
+        zf.writestr(f"{name}.psf", psf_text)
         zf.writestr(f"{name}.identity.json", identity_json)
         zf.writestr(f"{name}.identity.tsv", identity_tsv)
         zf.writestr(f"{name}.design_maps.json", design_maps_json)
@@ -554,12 +580,12 @@ def export_namd_bundle_file() -> Response:
         zf.writestr(f"{name}.stacking.tsv", stacking_tsv)
         for filename, text in dry_restraints.items():
             zf.writestr(f"restraints/{filename}", text)
-        zf.writestr("namd.conf",    conf_text)
-        zf.writestr("README.txt",   readme_text)
+        zf.writestr("namd.conf", conf_text)
+        zf.writestr("README.txt", readme_text)
     buf.seek(0)
 
     return Response(
-        content    = buf.getvalue(),
-        media_type = "application/zip",
-        headers    = {"Content-Disposition": f'attachment; filename="{name}_namd.zip"'},
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{name}_namd.zip"'},
     )

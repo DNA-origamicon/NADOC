@@ -47,17 +47,19 @@ def parse_pdb(path: str | Path) -> list[PDBAtom]:
         for line in f:
             if not line.startswith("ATOM"):
                 continue
-            atoms.append(PDBAtom(
-                serial=int(line[6:11]),
-                name=line[12:16].strip(),
-                resName=line[17:20].strip(),
-                chainID=line[21],
-                resSeq=int(line[22:26]),
-                x=float(line[30:38]) / 10.0,
-                y=float(line[38:46]) / 10.0,
-                z=float(line[46:54]) / 10.0,
-                element=line[76:78].strip(),
-            ))
+            atoms.append(
+                PDBAtom(
+                    serial=int(line[6:11]),
+                    name=line[12:16].strip(),
+                    resName=line[17:20].strip(),
+                    chainID=line[21],
+                    resSeq=int(line[22:26]),
+                    x=float(line[30:38]) / 10.0,
+                    y=float(line[38:46]) / 10.0,
+                    z=float(line[46:54]) / 10.0,
+                    element=line[76:78].strip(),
+                )
+            )
     return atoms
 
 
@@ -84,7 +86,9 @@ def group_residues(atoms: list[PDBAtom]) -> dict[tuple[str, int], Residue]:
     for a in atoms:
         key = (a.chainID, a.resSeq)
         if key not in residues:
-            residues[key] = Residue(chainID=a.chainID, resSeq=a.resSeq, resName=a.resName)
+            residues[key] = Residue(
+                chainID=a.chainID, resSeq=a.resSeq, resName=a.resName
+            )
         residues[key].atoms[a.name] = a
     return residues
 
@@ -219,11 +223,36 @@ def sugar_pucker_phase(residue: Residue) -> tuple[float, float, str]:
     Returns (phase_deg, amplitude_deg, pucker_label).
     """
     nu = [
-        _dihedral(residue.pos("C4'"), residue.pos("O4'"), residue.pos("C1'"), residue.pos("C2'")),
-        _dihedral(residue.pos("O4'"), residue.pos("C1'"), residue.pos("C2'"), residue.pos("C3'")),
-        _dihedral(residue.pos("C1'"), residue.pos("C2'"), residue.pos("C3'"), residue.pos("C4'")),
-        _dihedral(residue.pos("C2'"), residue.pos("C3'"), residue.pos("C4'"), residue.pos("O4'")),
-        _dihedral(residue.pos("C3'"), residue.pos("C4'"), residue.pos("O4'"), residue.pos("C1'")),
+        _dihedral(
+            residue.pos("C4'"),
+            residue.pos("O4'"),
+            residue.pos("C1'"),
+            residue.pos("C2'"),
+        ),
+        _dihedral(
+            residue.pos("O4'"),
+            residue.pos("C1'"),
+            residue.pos("C2'"),
+            residue.pos("C3'"),
+        ),
+        _dihedral(
+            residue.pos("C1'"),
+            residue.pos("C2'"),
+            residue.pos("C3'"),
+            residue.pos("C4'"),
+        ),
+        _dihedral(
+            residue.pos("C2'"),
+            residue.pos("C3'"),
+            residue.pos("C4'"),
+            residue.pos("O4'"),
+        ),
+        _dihedral(
+            residue.pos("C3'"),
+            residue.pos("C4'"),
+            residue.pos("O4'"),
+            residue.pos("C1'"),
+        ),
     ]
 
     # Altona-Sundaralingam: tan(P) = ((ν4 + ν1) - (ν3 + ν0)) / (2 ν2 (sin(36°) + sin(72°)))
@@ -256,9 +285,15 @@ def sugar_pucker_phase(residue: Residue) -> tuple[float, float, str]:
     else:
         # Generic Cremer-Pople sector labels
         sectors = [
-            (0, 36, "C3'-endo"), (36, 72, "C4'-exo"), (72, 108, "O4'-endo"),
-            (108, 144, "C1'-exo"), (144, 180, "C2'-endo"), (180, 216, "C3'-exo"),
-            (216, 252, "C4'-endo"), (252, 288, "O4'-exo"), (288, 324, "C1'-endo"),
+            (0, 36, "C3'-endo"),
+            (36, 72, "C4'-exo"),
+            (72, 108, "O4'-endo"),
+            (108, 144, "C1'-exo"),
+            (144, 180, "C2'-endo"),
+            (180, 216, "C3'-exo"),
+            (216, 252, "C4'-endo"),
+            (252, 288, "O4'-exo"),
+            (288, 324, "C1'-endo"),
             (324, 360, "C2'-exo"),
         ]
         label = "unknown"
@@ -280,13 +315,17 @@ def chi_angle(residue: Residue) -> float:
     """
     if residue.resName in ("DA", "DG"):
         angle = _dihedral(
-            residue.pos("O4'"), residue.pos("C1'"),
-            residue.pos("N9"), residue.pos("C4"),
+            residue.pos("O4'"),
+            residue.pos("C1'"),
+            residue.pos("N9"),
+            residue.pos("C4"),
         )
     else:
         angle = _dihedral(
-            residue.pos("O4'"), residue.pos("C1'"),
-            residue.pos("N1"), residue.pos("C2"),
+            residue.pos("O4'"),
+            residue.pos("C1'"),
+            residue.pos("N1"),
+            residue.pos("C2"),
         )
     return math.degrees(angle)
 
@@ -326,11 +365,13 @@ def ribose_base_rotation(residue: Residue) -> np.ndarray:
     if s < 1e-12:
         return np.eye(3)
 
-    vx = np.array([
-        [0, -v[2], v[1]],
-        [v[2], 0, -v[0]],
-        [-v[1], v[0], 0],
-    ])
+    vx = np.array(
+        [
+            [0, -v[2], v[1]],
+            [v[2], 0, -v[0]],
+            [-v[1], v[0], 0],
+        ]
+    )
     R = np.eye(3) + vx + vx @ vx * (1 - c) / (s * s)
     return R
 
@@ -445,30 +486,81 @@ def analyze_backbone_step(
     shift = float(np.dot(dp_perp, shift_dir))
 
     label = f"{res_i.chainID}:{res_i.resSeq}→{res_j.resSeq}"
-    return BackboneStep(label=label, rise_nm=rise, twist_deg=twist,
-                        slide_nm=slide, shift_nm=shift)
+    return BackboneStep(
+        label=label, rise_nm=rise, twist_deg=twist, slide_nm=slide, shift_nm=shift
+    )
 
 
 # ── Bond distance measurement ─────────────────────────────────────────────────
 
 # Standard covalent bonds within a DNA nucleotide
 SUGAR_BONDS: list[tuple[str, str]] = [
-    ("P", "OP1"), ("P", "OP2"), ("P", "O5'"),
-    ("O5'", "C5'"), ("C5'", "C4'"),
-    ("C4'", "O4'"), ("C4'", "C3'"),
-    ("O4'", "C1'"), ("C3'", "O3'"), ("C3'", "C2'"),
+    ("P", "OP1"),
+    ("P", "OP2"),
+    ("P", "O5'"),
+    ("O5'", "C5'"),
+    ("C5'", "C4'"),
+    ("C4'", "O4'"),
+    ("C4'", "C3'"),
+    ("O4'", "C1'"),
+    ("C3'", "O3'"),
+    ("C3'", "C2'"),
     ("C2'", "C1'"),
 ]
 
 BASE_BONDS: dict[str, list[tuple[str, str]]] = {
-    "DC": [("C1'", "N1"), ("N1", "C2"), ("C2", "N3"), ("N3", "C4"),
-           ("C4", "C5"), ("C5", "C6"), ("C6", "N1"), ("C2", "O2"), ("C4", "N4")],
-    "DT": [("C1'", "N1"), ("N1", "C2"), ("C2", "N3"), ("N3", "C4"),
-           ("C4", "C5"), ("C5", "C6"), ("C6", "N1"), ("C2", "O2"), ("C4", "O4"), ("C5", "C7")],
-    "DA": [("C1'", "N9"), ("N9", "C8"), ("C8", "N7"), ("N7", "C5"), ("C5", "C4"), ("C4", "N9"),
-           ("C4", "N3"), ("N3", "C2"), ("C2", "N1"), ("N1", "C6"), ("C6", "C5"), ("C6", "N6")],
-    "DG": [("C1'", "N9"), ("N9", "C8"), ("C8", "N7"), ("N7", "C5"), ("C5", "C4"), ("C4", "N9"),
-           ("C4", "N3"), ("N3", "C2"), ("C2", "N1"), ("N1", "C6"), ("C6", "C5"), ("C6", "O6"), ("C2", "N2")],
+    "DC": [
+        ("C1'", "N1"),
+        ("N1", "C2"),
+        ("C2", "N3"),
+        ("N3", "C4"),
+        ("C4", "C5"),
+        ("C5", "C6"),
+        ("C6", "N1"),
+        ("C2", "O2"),
+        ("C4", "N4"),
+    ],
+    "DT": [
+        ("C1'", "N1"),
+        ("N1", "C2"),
+        ("C2", "N3"),
+        ("N3", "C4"),
+        ("C4", "C5"),
+        ("C5", "C6"),
+        ("C6", "N1"),
+        ("C2", "O2"),
+        ("C4", "O4"),
+        ("C5", "C7"),
+    ],
+    "DA": [
+        ("C1'", "N9"),
+        ("N9", "C8"),
+        ("C8", "N7"),
+        ("N7", "C5"),
+        ("C5", "C4"),
+        ("C4", "N9"),
+        ("C4", "N3"),
+        ("N3", "C2"),
+        ("C2", "N1"),
+        ("N1", "C6"),
+        ("C6", "C5"),
+        ("C6", "N6"),
+    ],
+    "DG": [
+        ("C1'", "N9"),
+        ("N9", "C8"),
+        ("C8", "N7"),
+        ("N7", "C5"),
+        ("C5", "C4"),
+        ("C4", "N9"),
+        ("C4", "N3"),
+        ("N3", "C2"),
+        ("C2", "N1"),
+        ("N1", "C6"),
+        ("C6", "C5"),
+        ("C6", "O6"),
+        ("C2", "N2"),
+    ],
 }
 
 
@@ -490,8 +582,17 @@ def measure_bond_distances(residue: Residue) -> dict[tuple[str, str], float]:
 
 # Atom names for the sugar-phosphate backbone (shared by all residues)
 SUGAR_ATOMS: list[str] = [
-    "P", "OP1", "OP2", "O5'", "C5'",
-    "C4'", "O4'", "C3'", "O3'", "C2'", "C1'",
+    "P",
+    "OP1",
+    "OP2",
+    "O5'",
+    "C5'",
+    "C4'",
+    "O4'",
+    "C3'",
+    "O3'",
+    "C2'",
+    "C1'",
 ]
 
 # Base-specific atom names
@@ -504,30 +605,55 @@ BASE_ATOMS: dict[str, list[str]] = {
 
 # Element lookup
 ATOM_ELEMENT: dict[str, str] = {
-    "P": "P", "OP1": "O", "OP2": "O", "O5'": "O", "C5'": "C",
-    "C4'": "C", "O4'": "O", "C3'": "C", "O3'": "O", "C2'": "C", "C1'": "C",
-    "N1": "N", "C2": "C", "O2": "O", "N3": "N", "C4": "C", "N4": "N",
-    "C5": "C", "C6": "C", "O4": "O", "C7": "C", "N6": "N",
-    "N9": "N", "C8": "C", "N7": "N", "N2": "N", "O6": "O",
+    "P": "P",
+    "OP1": "O",
+    "OP2": "O",
+    "O5'": "O",
+    "C5'": "C",
+    "C4'": "C",
+    "O4'": "O",
+    "C3'": "C",
+    "O3'": "O",
+    "C2'": "C",
+    "C1'": "C",
+    "N1": "N",
+    "C2": "C",
+    "O2": "O",
+    "N3": "N",
+    "C4": "C",
+    "N4": "N",
+    "C5": "C",
+    "C6": "C",
+    "O4": "O",
+    "C7": "C",
+    "N6": "N",
+    "N9": "N",
+    "C8": "C",
+    "N7": "N",
+    "N2": "N",
+    "O6": "O",
 }
 
 
 @dataclass
 class DuplexAnalysis:
     """Complete analysis of a B-DNA duplex from a PDB file."""
+
     # Averaged template coordinates {atom_name: (n, y, z)} in nm
     sugar_template: dict[str, np.ndarray]
     sugar_std: dict[str, np.ndarray]
-    base_templates: dict[str, dict[str, np.ndarray]]   # {resName: {atom: coords}}
+    base_templates: dict[str, dict[str, np.ndarray]]  # {resName: {atom: coords}}
     base_std: dict[str, dict[str, np.ndarray]]
 
     # Diagnostics
     backbone_steps: list[BackboneStep]
     wc_pairs: list[WCPairGeometry]
-    chi_angles: dict[str, list[float]]          # {chain:resSeq: chi_deg}
+    chi_angles: dict[str, list[float]]  # {chain:resSeq: chi_deg}
     sugar_puckers: dict[str, tuple[float, float, str]]
     ribose_base_rotations: dict[str, np.ndarray]
-    bond_distances: dict[str, dict[tuple[str, str], float]]  # {chain:resSeq: {(a1,a2): dist_nm}}
+    bond_distances: dict[
+        str, dict[tuple[str, str], float]
+    ]  # {chain:resSeq: {(a1,a2): dist_nm}}
 
     # Per-instance raw template coords for inspection
     sugar_instances: list[dict[str, np.ndarray]]
@@ -595,14 +721,17 @@ def analyze_duplex(
     #   Chain A 3'→5' = -axis_dir
     #   Chain B 3'→5' = +axis_dir  (antiparallel)
     e_z_chain_a = -axis_dir  # chain A 3'→5'
-    e_z_chain_b = axis_dir   # chain B 3'→5'
+    e_z_chain_b = axis_dir  # chain B 3'→5'
 
     # Build reverse WC lookup for chain B
     wc_map_rev: dict[int, int] = {b: a for a, b in wc_map.items()}
 
     sugar_instances: list[dict[str, np.ndarray]] = []
     base_instances: dict[str, list[dict[str, np.ndarray]]] = {
-        "DA": [], "DT": [], "DG": [], "DC": [],
+        "DA": [],
+        "DT": [],
+        "DG": [],
+        "DC": [],
     }
     chi_angles_map: dict[str, list[float]] = {}
     sugar_puckers_map: dict[str, tuple[float, float, str]] = {}
@@ -628,14 +757,18 @@ def analyze_duplex(
         origin, R_raw = compute_nucleotide_frame(res, partner, e_z)
 
         # Extract sugar template coords
-        sugar_coords = extract_template_coords(res, origin, R_raw, frame_rot_rad, SUGAR_ATOMS)
+        sugar_coords = extract_template_coords(
+            res, origin, R_raw, frame_rot_rad, SUGAR_ATOMS
+        )
         if sugar_coords:
             sugar_instances.append(sugar_coords)
 
         # Extract base template coords
         base_type = res.resName
         if base_type in BASE_ATOMS:
-            base_coords = extract_template_coords(res, origin, R_raw, frame_rot_rad, BASE_ATOMS[base_type])
+            base_coords = extract_template_coords(
+                res, origin, R_raw, frame_rot_rad, BASE_ATOMS[base_type]
+            )
             if base_coords:
                 base_instances[base_type].append(base_coords)
 
@@ -653,7 +786,9 @@ def analyze_duplex(
 
     # ── Average templates ─────────────────────────────────────────────────
 
-    def _average_coords(instances: list[dict[str, np.ndarray]], atom_names: list[str]) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    def _average_coords(
+        instances: list[dict[str, np.ndarray]], atom_names: list[str]
+    ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
         avg: dict[str, np.ndarray] = {}
         std: dict[str, np.ndarray] = {}
         for name in atom_names:
@@ -691,13 +826,17 @@ def analyze_duplex(
         res_j = residues[(chain_a, seq_j)]
         partner_i = residues[(chain_b, wc_map[seq_i])]
         partner_j = residues[(chain_b, wc_map[seq_j])]
-        backbone_steps.append(analyze_backbone_step(res_i, res_j, partner_i, partner_j, axis_dir))
+        backbone_steps.append(
+            analyze_backbone_step(res_i, res_j, partner_i, partner_j, axis_dir)
+        )
 
     # ── WC pair analysis ──────────────────────────────────────────────────
     wc_pairs: list[WCPairGeometry] = []
     for a_seq in inner_a:
         b_seq = wc_map[a_seq]
-        wc_pairs.append(analyze_wc_pair(residues[(chain_a, a_seq)], residues[(chain_b, b_seq)]))
+        wc_pairs.append(
+            analyze_wc_pair(residues[(chain_a, a_seq)], residues[(chain_b, b_seq)])
+        )
 
     return DuplexAnalysis(
         sugar_template=sugar_avg,
@@ -722,15 +861,16 @@ def analyze_duplex(
 class CalibrationResult:
     """Optimal frame constants derived by comparing NADOC's geometric layer
     against real PDB crystallographic positions."""
+
     frame_rot_rad: float
-    frame_shift_n: float    # nm
-    frame_shift_y: float    # nm
-    frame_shift_z: float    # nm
-    measured_helix_radius: float   # nm (P-to-axis mean)
+    frame_shift_n: float  # nm
+    frame_shift_y: float  # nm
+    frame_shift_z: float  # nm
+    measured_helix_radius: float  # nm (P-to-axis mean)
     measured_twist_deg: float
     measured_rise_nm: float
-    rmsd_before: float      # P-atom RMSD with old constants (nm)
-    rmsd_after: float       # P-atom RMSD with calibrated constants (nm)
+    rmsd_before: float  # P-atom RMSD with old constants (nm)
+    rmsd_after: float  # P-atom RMSD with calibrated constants (nm)
     per_nucleotide: list[dict]
 
 
@@ -807,7 +947,9 @@ def calibrate_from_pdb(
         res_j = residues[(chain_a, inner_a[i + 1])]
         partner_i = residues[(chain_b, wc_map[inner_a[i]])]
         partner_j = residues[(chain_b, wc_map[inner_a[i + 1]])]
-        backbone_steps.append(analyze_backbone_step(res_i, res_j, partner_i, partner_j, axis_dir))
+        backbone_steps.append(
+            analyze_backbone_step(res_i, res_j, partner_i, partner_j, axis_dir)
+        )
     measured_rise = float(np.mean([s.rise_nm for s in backbone_steps]))
     measured_twist = float(np.mean([s.twist_deg for s in backbone_steps]))
 
@@ -858,8 +1000,8 @@ def calibrate_from_pdb(
 
     # ── 4. Per-nucleotide comparison ──────────────────────────────────────
     # For chain A (FORWARD) and chain B (REVERSE), compute frame offsets.
-    e_z_chain_a = -axis_dir   # chain A 3'→5'
-    e_z_chain_b = axis_dir    # chain B 3'→5'
+    e_z_chain_a = -axis_dir  # chain A 3'→5'
+    e_z_chain_b = axis_dir  # chain B 3'→5'
     wc_map_rev = {b: a for a, b in wc_map.items()}
 
     # Collect per-direction residuals separately.  FORWARD calibration is
@@ -878,7 +1020,10 @@ def calibrate_from_pdb(
     per_nuc: list[dict] = []
 
     def _compare_nucleotide(
-        chain: str, seq: int, bp_idx: int, direction_str: str,
+        chain: str,
+        seq: int,
+        bp_idx: int,
+        direction_str: str,
     ) -> None:
         res = residues[(chain, seq)]
         if not res.has("P"):
@@ -893,6 +1038,7 @@ def calibrate_from_pdb(
 
         # NADOC backbone bead position, radially corrected to match real B-DNA
         from backend.core.atomistic import _ATOMISTIC_P_RADIUS
+
         bb = nuc.position
         # Radial correction: move backbone from HELIX_RADIUS to _ATOMISTIC_P_RADIUS
         axis_pt_local = ax_start + bp_idx * BDNA_RISE_PER_BP * axis_dir
@@ -901,7 +1047,11 @@ def calibrate_from_pdb(
         r_norm = np.linalg.norm(radial_perp)
         if r_norm > 1e-9:
             radial_hat = radial_perp / r_norm
-            bb = axis_pt_local + np.dot(radial, nuc.axis_tangent) * nuc.axis_tangent + _ATOMISTIC_P_RADIUS * radial_hat
+            bb = (
+                axis_pt_local
+                + np.dot(radial, nuc.axis_tangent) * nuc.axis_tangent
+                + _ATOMISTIC_P_RADIUS * radial_hat
+            )
 
         # NADOC local basis
         e_n = nuc.base_normal
@@ -945,8 +1095,9 @@ def calibrate_from_pdb(
         e_n_pdb_proj = _norm(e_n_pdb_proj)
 
         cross_val = np.cross(e_n_nadoc_proj, e_n_pdb_proj)
-        rot = math.atan2(float(np.dot(cross_val, e_z)),
-                         float(np.dot(e_n_nadoc_proj, e_n_pdb_proj)))
+        rot = math.atan2(
+            float(np.dot(cross_val, e_z)), float(np.dot(e_n_nadoc_proj, e_n_pdb_proj))
+        )
 
         if direction_str == "FORWARD":
             fwd_shift_n.append(sn)
@@ -959,13 +1110,27 @@ def calibrate_from_pdb(
             rev_shift_z.append(sz)
             rev_rot.append(rot)
 
-        per_nuc.append({
-            "chain": chain, "seq": seq, "bp": bp_idx,
-            "direction": direction_str,
-            "shift_n": sn, "shift_y": sy, "shift_z": sz,
-            "rot_deg": math.degrees(rot),
-            "p_to_axis_nm": float(np.linalg.norm(P_pdb - (axis_centroid + np.dot(P_pdb - axis_centroid, axis_dir) * axis_dir))),
-        })
+        per_nuc.append(
+            {
+                "chain": chain,
+                "seq": seq,
+                "bp": bp_idx,
+                "direction": direction_str,
+                "shift_n": sn,
+                "shift_y": sy,
+                "shift_z": sz,
+                "rot_deg": math.degrees(rot),
+                "p_to_axis_nm": float(
+                    np.linalg.norm(
+                        P_pdb
+                        - (
+                            axis_centroid
+                            + np.dot(P_pdb - axis_centroid, axis_dir) * axis_dir
+                        )
+                    )
+                ),
+            }
+        )
 
     for bp_idx, a_seq in enumerate(inner_a):
         _compare_nucleotide(chain_a, a_seq, bp_idx, "FORWARD")
@@ -979,13 +1144,24 @@ def calibrate_from_pdb(
     opt_rot = float(np.mean(fwd_rot))
 
     # ── 6. Compute RMSD before/after ──────────────────────────────────────
-    from backend.core.atomistic import _FRAME_ROT_RAD, _FRAME_SHIFT_N, _FRAME_SHIFT_Y, _FRAME_SHIFT_Z
+    from backend.core.atomistic import (
+        _FRAME_ROT_RAD,
+        _FRAME_SHIFT_N,
+        _FRAME_SHIFT_Y,
+        _FRAME_SHIFT_Z,
+    )
 
-    def _p_atom_rmsd(rot_rad: float, sn: float, sy: float, sz: float,
-                     direction_filter: str = "FORWARD") -> float:
+    def _p_atom_rmsd(
+        rot_rad: float,
+        sn: float,
+        sy: float,
+        sz: float,
+        direction_filter: str = "FORWARD",
+    ) -> float:
         """Compute RMS distance between predicted P position and actual PDB P.
         Only considers nucleotides matching *direction_filter*."""
         from backend.core.atomistic import _ATOMISTIC_P_RADIUS
+
         sq_sum = 0.0
         count = 0
         for entry in per_nuc:
@@ -1014,7 +1190,11 @@ def calibrate_from_pdb(
             r_norm = np.linalg.norm(radial_perp)
             if r_norm > 1e-9:
                 radial_hat = radial_perp / r_norm
-                bb = axis_pt_local + np.dot(radial, nuc.axis_tangent) * nuc.axis_tangent + _ATOMISTIC_P_RADIUS * radial_hat
+                bb = (
+                    axis_pt_local
+                    + np.dot(radial, nuc.axis_tangent) * nuc.axis_tangent
+                    + _ATOMISTIC_P_RADIUS * radial_hat
+                )
 
             predicted_P = bb + sn * e_n + sy * e_y + sz * e_z
             actual_P = residues[(entry["chain"], entry["seq"])].pos("P")
@@ -1022,7 +1202,9 @@ def calibrate_from_pdb(
             count += 1
         return math.sqrt(sq_sum / max(count, 1))
 
-    rmsd_before = _p_atom_rmsd(_FRAME_ROT_RAD, _FRAME_SHIFT_N, _FRAME_SHIFT_Y, _FRAME_SHIFT_Z)
+    rmsd_before = _p_atom_rmsd(
+        _FRAME_ROT_RAD, _FRAME_SHIFT_N, _FRAME_SHIFT_Y, _FRAME_SHIFT_Z
+    )
     rmsd_after = _p_atom_rmsd(opt_rot, opt_shift_n, opt_shift_y, opt_shift_z)
 
     return CalibrationResult(

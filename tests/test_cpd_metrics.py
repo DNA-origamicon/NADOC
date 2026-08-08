@@ -26,7 +26,8 @@ from backend.core import cpd_metrics as cm
 from tests.test_junction_topology import _reciprocal_design
 
 _REF = json.loads(
-    (Path(__file__).parent / "fixtures" / "cpd_reference_cases.json").read_text())
+    (Path(__file__).parent / "fixtures" / "cpd_reference_cases.json").read_text()
+)
 
 
 # ── the cross-language geometry contract ──────────────────────────────────────
@@ -74,7 +75,9 @@ def test_angular_separation_never_exceeds_180():
 
 
 def test_dihedral_of_a_planar_cis_arrangement_is_zero():
-    assert cm.dihedral_deg([0, 1, 0], [0, 0, 0], [1, 0, 0], [1, 1, 0]) == pytest.approx(0.0)
+    assert cm.dihedral_deg([0, 1, 0], [0, 0, 0], [1, 0, 0], [1, 1, 0]) == pytest.approx(
+        0.0
+    )
 
 
 def test_dihedral_sign_flips_with_the_mirror_image():
@@ -88,10 +91,10 @@ def test_d_mid_is_the_bond_midpoint_distance_not_the_c5_c5_distance():
     """The KIMMDY expression 0.5*((C5b-C5a)+(C6b-C6a)) simplifies to the distance between
     the two C5=C6 bond midpoints. Using C5-C5 instead is a different number."""
     c5a, c6a = np.array([0.0, 0, 0]), np.array([0.139, 0, 0])
-    c5b, c6b = np.array([0.139, 0, 0.34]), np.array([0.0, 0, 0.34])   # flipped bond
+    c5b, c6b = np.array([0.139, 0, 0.34]), np.array([0.0, 0, 0.34])  # flipped bond
     got = cm.weld_geometry(c5a, c6a, c5b, c6b)
-    assert got["d_nm"] == pytest.approx(0.34, abs=1e-9)               # midpoints align
-    assert np.linalg.norm(c5b - c5a) > 0.36                           # C5-C5 does not
+    assert got["d_nm"] == pytest.approx(0.34, abs=1e-9)  # midpoints align
+    assert np.linalg.norm(c5b - c5a) > 0.36  # C5-C5 does not
 
 
 # ── pair identity from topology ───────────────────────────────────────────────
@@ -109,7 +112,11 @@ def test_two_extra_bases_per_crossover_give_four_combinations():
     pairs = cm.designed_weld_pairs(_reciprocal_design("TT"))
     assert len(pairs) == 4
     assert {(p["extra_base_k_a"], p["extra_base_k_b"]) for p in pairs} == {
-        (0, 0), (0, 1), (1, 0), (1, 1)}
+        (0, 0),
+        (0, 1),
+        (1, 0),
+        (1, 1),
+    }
     assert len({p["id"] for p in pairs}) == 4, "pair ids must be unique"
 
 
@@ -127,7 +134,9 @@ def test_extra_bases_on_non_reciprocal_crossovers_are_not_a_weld():
     if not path.exists():
         pytest.skip("example design not present")
     design = Design(**json.loads(path.read_text()))
-    assert any(x.extra_bases for x in (design.crossovers or [])), "fixture lost its inserts"
+    assert any(x.extra_bases for x in (design.crossovers or [])), (
+        "fixture lost its inserts"
+    )
     assert cm.designed_weld_pairs(design) == []
 
 
@@ -212,7 +221,7 @@ def test_make_whole_dna_brings_a_strand_back_from_a_neighbouring_image():
     ~9 A) rather than any error — which is why it is pinned."""
     box = np.array([100.0, 100.0, 100.0])
     a = _FakeFragment([[10.0, 10.0, 10.0], [12.0, 10.0, 10.0]])
-    b = _FakeFragment([[111.0, 10.0, 10.0], [113.0, 10.0, 10.0]])   # one box over in x
+    b = _FakeFragment([[111.0, 10.0, 10.0], [113.0, 10.0, 10.0]])  # one box over in x
     dna = _FakeDna()
 
     cm.make_whole_dna(dna, [a, b], box)
@@ -254,7 +263,7 @@ def _ladder(*centers, k=1.0):
 
 
 def test_seed_picks_the_frame_closest_to_each_window_centre():
-    d_nm = [1.20, 0.90, 0.60, 0.40, 0.35]          # 12, 9, 6, 4, 3.5 A
+    d_nm = [1.20, 0.90, 0.60, 0.40, 0.35]  # 12, 9, 6, 4, 3.5 A
     seeds = cm.seed_windows(d_nm, _ladder(4.0, 6.0, 9.0))
 
     assert [s["frame"] for s in seeds] == [3, 2, 1]
@@ -279,8 +288,8 @@ def test_tolerance_defaults_to_half_the_local_window_spacing():
     seeds = cm.seed_windows([0.35, 1.20], _ladder(3.5, 4.0, 12.0))
 
     by_centre = {s["center_ang"]: s for s in seeds}
-    assert by_centre[3.5]["tolerance_ang"] == pytest.approx(0.25)   # neighbour 0.5 away
-    assert by_centre[12.0]["tolerance_ang"] == pytest.approx(4.0)   # neighbour 8.0 away
+    assert by_centre[3.5]["tolerance_ang"] == pytest.approx(0.25)  # neighbour 0.5 away
+    assert by_centre[12.0]["tolerance_ang"] == pytest.approx(4.0)  # neighbour 8.0 away
 
 
 def test_explicit_tolerance_overrides_the_spacing_rule():
@@ -293,13 +302,13 @@ def test_frame_indices_map_back_to_the_real_trajectory_when_strided():
     d_nm = [1.20, 0.90, 0.60]
     seeds = cm.seed_windows(d_nm, _ladder(6.0), frame_indices=[0, 50, 100])
 
-    assert seeds[0]["frame"] == 100        # real frame
-    assert seeds[0]["series_index"] == 2   # position within the strided series
+    assert seeds[0]["frame"] == 100  # real frame
+    assert seeds[0]["series_index"] == 2  # position within the strided series
 
 
 def test_offset_is_signed_so_you_can_see_which_way_the_seed_misses():
     seeds = cm.seed_windows([0.50], _ladder(4.0))
-    assert seeds[0]["offset_ang"] == pytest.approx(1.0)     # seed is FURTHER out
+    assert seeds[0]["offset_ang"] == pytest.approx(1.0)  # seed is FURTHER out
 
 
 def test_seed_windows_is_empty_without_data_or_windows():

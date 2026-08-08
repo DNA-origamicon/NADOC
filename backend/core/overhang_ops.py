@@ -27,13 +27,16 @@ from backend.core.models import Design
 
 def _overhang_end(ovhg_id: str) -> Optional[str]:
     """Parse `_5p` / `_3p` suffix from an overhang id, or None if absent."""
-    if ovhg_id.endswith("_5p"): return "5p"
-    if ovhg_id.endswith("_3p"): return "3p"
+    if ovhg_id.endswith("_5p"):
+        return "5p"
+    if ovhg_id.endswith("_3p"):
+        return "3p"
     return None
 
 
 def _used_overhang_ends(
-    design: Design, exclude_conn_id: Optional[str] = None,
+    design: Design,
+    exclude_conn_id: Optional[str] = None,
 ) -> set[tuple[str, str]]:
     """Collect every (overhang_id, attach) tuple already in use, optionally
     excluding a single connection (e.g. the one being patched in place)."""
@@ -214,34 +217,46 @@ def validate_sub_domain_tiling(design: Design, overhang_id: str) -> None:
     expected_offset = 0
     for sd in sub_doms:
         if sd.length_bp < 1:
-            raise SubDomainTilingError(422, (
-                f"Sub-domain {sd.name!r} ({sd.id}) has length_bp < 1."
-            ))
+            raise SubDomainTilingError(
+                422, (f"Sub-domain {sd.name!r} ({sd.id}) has length_bp < 1.")
+            )
         if sd.start_bp_offset != expected_offset:
-            raise SubDomainTilingError(422, (
-                f"Sub-domains on overhang {overhang_id!r} are not gap-less "
-                f"(sub-domain {sd.name!r} starts at {sd.start_bp_offset}, "
-                f"expected {expected_offset})."
-            ))
+            raise SubDomainTilingError(
+                422,
+                (
+                    f"Sub-domains on overhang {overhang_id!r} are not gap-less "
+                    f"(sub-domain {sd.name!r} starts at {sd.start_bp_offset}, "
+                    f"expected {expected_offset})."
+                ),
+            )
         if sd.sequence_override is not None:
             if len(sd.sequence_override) != sd.length_bp:
-                raise SubDomainTilingError(422, (
-                    f"Sub-domain {sd.name!r} ({sd.id}) sequence_override length "
-                    f"({len(sd.sequence_override)}) != length_bp ({sd.length_bp})."
-                ))
+                raise SubDomainTilingError(
+                    422,
+                    (
+                        f"Sub-domain {sd.name!r} ({sd.id}) sequence_override length "
+                        f"({len(sd.sequence_override)}) != length_bp ({sd.length_bp})."
+                    ),
+                )
             if any(b not in _DNA_BASES for b in sd.sequence_override.upper()):
-                raise SubDomainTilingError(422, (
-                    f"Sub-domain {sd.name!r} ({sd.id}) sequence_override contains "
-                    f"non-ACGTN bases."
-                ))
+                raise SubDomainTilingError(
+                    422,
+                    (
+                        f"Sub-domain {sd.name!r} ({sd.id}) sequence_override contains "
+                        f"non-ACGTN bases."
+                    ),
+                )
         expected_offset += sd.length_bp
 
     backing = _ovhg_backing_length(design, overhang_id)
     if backing is not None and expected_offset != backing:
-        raise SubDomainTilingError(422, (
-            f"Sub-domain tiling sum ({expected_offset}) != backing domain length "
-            f"({backing}) for overhang {overhang_id!r}."
-        ))
+        raise SubDomainTilingError(
+            422,
+            (
+                f"Sub-domain tiling sum ({expected_offset}) != backing domain length "
+                f"({backing}) for overhang {overhang_id!r}."
+            ),
+        )
 
 
 def _resolve_sub_domain_sequence(ovhg, sub_dom) -> Optional[str]:
@@ -263,10 +278,13 @@ def _resolve_sub_domain_sequence(ovhg, sub_dom) -> Optional[str]:
     return slice_
 
 
-def _compute_sub_domain_annotations(seq: Optional[str], na_mM: float, conc_nM: float) -> dict:
+def _compute_sub_domain_annotations(
+    seq: Optional[str], na_mM: float, conc_nM: float
+) -> dict:
     """Return the annotation cache dict for *seq*; safely handles None / 'N's."""
     from backend.core.overhang_generator import has_hairpin, has_dimer
     from backend.core.thermo import tm_nn, gc_content
+
     if not seq:
         return {
             "tm_celsius": None,
@@ -331,6 +349,7 @@ def _apply_boundary_hairpin_warnings(design: Design, overhang_id: str) -> Design
     the existing inner-warning bit is preserved via the explicit ``or``.
     """
     from backend.core.overhang_generator import detect_boundary_hairpins
+
     ovhg = next((o for o in design.overhangs if o.id == overhang_id), None)
     if ovhg is None or not ovhg.sub_domains:
         return design
@@ -351,8 +370,8 @@ def _apply_boundary_hairpin_warnings(design: Design, overhang_id: str) -> Design
             seq, na_mM=design.tm_settings.na_mM, conc_nM=design.tm_settings.conc_nM
         )
         inner_hp = bool(ann.get("hairpin_warning"))
-        bdy_hp   = sd.id in boundary_warn_ids
-        new_hp   = inner_hp or bdy_hp
+        bdy_hp = sd.id in boundary_warn_ids
+        new_hp = inner_hp or bdy_hp
         if new_hp != sd.hairpin_warning:
             changed = True
             new_sub_doms.append(sd.model_copy(update={"hairpin_warning": new_hp}))

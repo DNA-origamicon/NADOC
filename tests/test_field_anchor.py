@@ -16,6 +16,7 @@ from backend.core.field_anchor import (
 
 # ── surface_opposes_field geometry ───────────────────────────────────────────────
 
+
 def test_field_straight_into_the_floor_is_opposed():
     # The real stage-1 config: field points −y, floor normal +y → held.
     assert surface_opposes_field([0, -1, 0], [0, 1, 0]) is True
@@ -49,6 +50,7 @@ def test_missing_or_zero_directions_are_not_opposed():
 
 # ── field_needs_strand_anchor decision ───────────────────────────────────────────
 
+
 def test_no_field_never_needs_an_anchor():
     assert field_needs_strand_anchor(has_field=False, has_anchors=False) is False
 
@@ -58,19 +60,35 @@ def test_field_with_anchors_is_satisfied():
 
 
 def test_field_alone_needs_an_anchor():
-    assert field_needs_strand_anchor(
-        has_field=True, has_anchors=False, field_dir=[0, -1, 0], surface_dir=None) is True
+    assert (
+        field_needs_strand_anchor(
+            has_field=True, has_anchors=False, field_dir=[0, -1, 0], surface_dir=None
+        )
+        is True
+    )
 
 
 def test_field_into_opposing_surface_needs_no_anchor():
     # THE fix: the 6hbx100_1xT deposition stage is now valid without a strand anchor.
-    assert field_needs_strand_anchor(
-        has_field=True, has_anchors=False,
-        field_dir=[0, -1, 0], surface_dir=[0, 1, 0]) is False
+    assert (
+        field_needs_strand_anchor(
+            has_field=True,
+            has_anchors=False,
+            field_dir=[0, -1, 0],
+            surface_dir=[0, 1, 0],
+        )
+        is False
+    )
 
 
 def test_field_with_non_opposing_surface_still_needs_an_anchor():
     # A surface parallel to the field's drift (field in-plane) does not hold it.
-    assert field_needs_strand_anchor(
-        has_field=True, has_anchors=False,
-        field_dir=[1, 0, 0], surface_dir=[0, 1, 0]) is True
+    assert (
+        field_needs_strand_anchor(
+            has_field=True,
+            has_anchors=False,
+            field_dir=[1, 0, 0],
+            surface_dir=[0, 1, 0],
+        )
+        is True
+    )

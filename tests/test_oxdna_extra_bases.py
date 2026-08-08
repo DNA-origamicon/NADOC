@@ -53,6 +53,7 @@ def _with_extra(design, sequence="TT", *, all_crossovers=False):
 
 # ── no-regression: the centralized walk is identical for extra-base-free designs ──
 
+
 def test_walk_is_consistent_without_extra_bases(routed_6hb):
     order = ox._strand_nucleotide_order(routed_6hb)
     rows, n_strands = ox.topology_rows(routed_6hb)
@@ -65,6 +66,7 @@ def test_walk_is_consistent_without_extra_bases(routed_6hb):
 
 
 # ── pins #1–3, #6: topology materialization ───────────────────────────────────
+
 
 def test_precise_extra_bases_materialized(routed_6hb):
     """TT at one crossover → 2 extra ssDNA nucleotides, right base, in-chain."""
@@ -89,6 +91,7 @@ def test_single_t_precise(routed_6hb):
 
 # ── pin #4: configuration geometry is FENE-safe and orthonormal ───────────────
 
+
 def test_extra_base_config_geometry_is_sane(routed_6hb):
     d = _with_extra(routed_6hb, "TT")
     rm = ox.resolved_nuc_map(d, _geometry_for_design(d))
@@ -111,6 +114,7 @@ def test_extra_base_config_geometry_is_sane(routed_6hb):
 
 # ── file consistency: topology header + config line counts include the inserts ─
 
+
 def test_topology_and_config_line_counts_match(routed_6hb, tmp_path):
     d = _with_extra(routed_6hb, "TT")
     order = ox._strand_nucleotide_order(d)
@@ -121,12 +125,16 @@ def test_topology_and_config_line_counts_match(routed_6hb, tmp_path):
 
     top_lines = top.read_text().splitlines()
     assert int(top_lines[0].split()[0]) == len(order) == len(top_lines) - 1
-    conf_data = [l for l in conf.read_text().splitlines()
-                 if l and not l.startswith(("t ", "b ", "E "))]
+    conf_data = [
+        l
+        for l in conf.read_text().splitlines()
+        if l and not l.startswith(("t ", "b ", "E "))
+    ]
     assert len(conf_data) == len(order)
 
 
 # ── read-back stays design-keyed (inserts hold their slot, then drop out) ──────
+
 
 def test_readback_drops_inserts_keeps_real_alignment(routed_6hb, tmp_path):
     d = _with_extra(routed_6hb, "TT")
@@ -138,7 +146,9 @@ def test_readback_drops_inserts_keeps_real_alignment(routed_6hb, tmp_path):
     real_keys = {k[:3] for k in order if k[0] != ox._XB_SENTINEL}
 
     full = ox.read_configuration_full(conf, d)
-    assert not any(k[0] == ox._XB_SENTINEL for k in full), "inserts must drop from read-back"
+    assert not any(k[0] == ox._XB_SENTINEL for k in full), (
+        "inserts must drop from read-back"
+    )
     # Read-back covers exactly the strand-covered real nucleotides (a subset of the
     # geometry kernel, which also emits dangling helix-end positions no strand uses).
     assert set(full.keys()) == real_keys
@@ -157,6 +167,7 @@ def test_readback_drops_inserts_keeps_real_alignment(routed_6hb, tmp_path):
 
 
 # ── health check must not phantom-bond across the inserts ─────────────────────
+
 
 def test_health_check_threads_inserts_not_phantom_bond(routed_6hb):
     """The over-stretch/FENE health check pairs consecutive backbone nucleotides.
@@ -178,6 +189,7 @@ def test_health_check_threads_inserts_not_phantom_bond(routed_6hb):
 
 
 # ── display readers can surface inserts for rendering ─────────────────────────
+
 
 def test_display_readers_surface_extra_bases_on_request(routed_6hb, tmp_path):
     """The relaxed-display readers drop inserts by default (design-keyed display +
@@ -203,6 +215,7 @@ def test_display_readers_surface_extra_bases_on_request(routed_6hb, tmp_path):
 
 # ── heavy reps (atomistic): inserts follow the simulated positions ────────────
 
+
 def test_heavy_rep_extra_bases_follow_sim_positions(routed_6hb):
     """The atomistic heavy rep places each extra base at its REAL simulated position
     (``xb_pos_override``) instead of the geometric junction arc; without the override
@@ -214,14 +227,21 @@ def test_heavy_rep_extra_bases_follow_sim_positions(routed_6hb):
     xoid = d.crossovers[0].id
 
     geo = build_atomistic_model(d)  # no override → geometric arc
-    ov = {(xoid, 0): np.array([40.0, 40.0, 40.0]), (xoid, 1): np.array([41.0, 41.0, 41.0])}
+    ov = {
+        (xoid, 0): np.array([40.0, 40.0, 40.0]),
+        (xoid, 1): np.array([41.0, 41.0, 41.0]),
+    }
     # The display flags (close_backbone + relaxed_oxdna_phase) are what build_display_model uses.
-    sim = build_atomistic_model(d, xb_pos_override=ov,
-                                close_backbone=True, relaxed_oxdna_phase=True)
+    sim = build_atomistic_model(
+        d, xb_pos_override=ov, close_backbone=True, relaxed_oxdna_phase=True
+    )
 
     def centroid(m, k):
-        pts = [(a.x, a.y, a.z) for a in m.atoms
-               if a.crossover_id == xoid and a.extra_base_k == k]
+        pts = [
+            (a.x, a.y, a.z)
+            for a in m.atoms
+            if a.crossover_id == xoid and a.extra_base_k == k
+        ]
         return np.mean(pts, axis=0)
 
     assert len(geo.atoms) == len(sim.atoms), "override changes positions, not topology"
@@ -244,10 +264,21 @@ def test_heavy_rep_extra_base_uses_full_simulated_orientation(routed_6hb):
     def built(a1):
         # The position is the corresponding backbone site; the calibrated rigid
         # placer consumes CM+a1+a3 while legacy array-only overrides remain valid.
-        ov = {(xoid, 0): {"cm": cm, "position": cm - 0.3 * np.asarray(a1),
-                          "a1": np.asarray(a1), "a3": np.array([0.0, 0.0, 1.0])}}
-        return build_atomistic_model(d, xb_pos_override=ov, close_backbone=True,
-                                     relaxed_oxdna_phase=True, fast_bridges=True)
+        ov = {
+            (xoid, 0): {
+                "cm": cm,
+                "position": cm - 0.3 * np.asarray(a1),
+                "a1": np.asarray(a1),
+                "a3": np.array([0.0, 0.0, 1.0]),
+            }
+        }
+        return build_atomistic_model(
+            d,
+            xb_pos_override=ov,
+            close_backbone=True,
+            relaxed_oxdna_phase=True,
+            fast_bridges=True,
+        )
 
     def glycosidic_vector(model):
         aa = [a for a in model.atoms if a.crossover_id == xoid]
@@ -274,6 +305,7 @@ def test_heavy_rep_extra_base_uses_full_simulated_orientation(routed_6hb):
 
 
 # ── MD viz: extra-base P atoms get unique keys (no source collision) ──────────
+
 
 def test_md_chain_map_keys_extra_bases_uniquely(routed_6hb):
     """MD P-atom mapping (build_chain_map): crossover extra-base P atoms get unique
@@ -306,17 +338,22 @@ def test_md_rigid_reference_tolerates_extra_base_keys(routed_6hb):
 
     d = _with_extra(routed_6hb, "TT")
     model = build_atomistic_model(d)
-    p_order = list(build_chain_map(model).values())   # real + __xb__ keys
+    p_order = list(build_chain_map(model).values())  # real + __xb__ keys
     _eq, eq_valid, rigid = md_rigid_reference(model, p_order)
 
     xb_idx = [i for i, k in enumerate(p_order) if k[0] == "__xb__"]
     assert xb_idx, "expected __xb__ entries in p_order"
-    assert not any(bool(rigid[i]) for i in xb_idx), "extra-base inserts must be non-rigid"
+    assert not any(bool(rigid[i]) for i in xb_idx), (
+        "extra-base inserts must be non-rigid"
+    )
     assert int(rigid.sum()) > 0, "real nucleotides must remain rigid"
-    assert bool(eq_valid.all()), "every P atom should resolve to a design equilibrium position"
+    assert bool(eq_valid.all()), (
+        "every P atom should resolve to a design equilibrium position"
+    )
 
 
 # ── regression: reciprocal crossover must own the insert on ONE strand only ────
+
 
 def _half(helix_id, index, direction):
     return SimpleNamespace(
@@ -326,7 +363,9 @@ def _half(helix_id, index, direction):
 
 def _dom(helix_id, start_bp, end_bp, direction):
     return SimpleNamespace(
-        helix_id=helix_id, start_bp=start_bp, end_bp=end_bp,
+        helix_id=helix_id,
+        start_bp=start_bp,
+        end_bp=end_bp,
         direction=SimpleNamespace(value=direction),
     )
 
@@ -342,15 +381,18 @@ def test_reciprocal_crossover_owns_insert_on_one_strand():
     Mirrors the atomistic ground truth (``domain_end_to_strand``, half_a preferred).
     """
     # Strand 1: helix h0 (5→10) → helix h1 (10→15); 3′ exit of dom0 at (h0, 10).
-    s1 = SimpleNamespace(id="s1", domains=[
-        _dom("h0", 5, 10, "FORWARD"), _dom("h1", 10, 15, "FORWARD")])
+    s1 = SimpleNamespace(
+        id="s1", domains=[_dom("h0", 5, 10, "FORWARD"), _dom("h1", 10, 15, "FORWARD")]
+    )
     # Strand 2 reciprocates: helix h1 (5→10) → helix h0 (10→15); 3′ exit at (h1, 10).
-    s2 = SimpleNamespace(id="s2", domains=[
-        _dom("h1", 5, 10, "REVERSE"), _dom("h0", 10, 15, "REVERSE")])
+    s2 = SimpleNamespace(
+        id="s2", domains=[_dom("h1", 5, 10, "REVERSE"), _dom("h0", 10, 15, "REVERSE")]
+    )
     xo = SimpleNamespace(
-        id="xo-recip", extra_bases="TT",
-        half_a=_half("h0", 10, "FORWARD"),   # domain end of s1 → atomistic src
-        half_b=_half("h1", 10, "REVERSE"),   # domain end of s2
+        id="xo-recip",
+        extra_bases="TT",
+        half_a=_half("h0", 10, "FORWARD"),  # domain end of s1 → atomistic src
+        half_b=_half("h1", 10, "REVERSE"),  # domain end of s2
     )
     design = SimpleNamespace(strands=[s1, s2], crossovers=[xo])
 
@@ -361,6 +403,7 @@ def test_reciprocal_crossover_owns_insert_on_one_strand():
 
 
 # ── regression: bulk extra bases keep every insert key unique + topology sane ──
+
 
 def test_all_crossovers_insert_keys_unique_and_topology_consistent(routed_6hb):
     """Every insert key is unique and n3/n5 pointers are reciprocal even with TT on
@@ -380,9 +423,12 @@ def test_all_crossovers_insert_keys_unique_and_topology_consistent(routed_6hb):
 
 # ── the oracle is can-go-red ──────────────────────────────────────────────────
 
+
 def test_oracle_fires_without_extra_bases(routed_6hb):
     with pytest.raises(AssertionError):
-        assert_extra_bases_in_oxdna(routed_6hb, expected_count=2, expected_sequence="TT")
+        assert_extra_bases_in_oxdna(
+            routed_6hb, expected_count=2, expected_sequence="TT"
+        )
 
 
 # ── Anchoring synthetic beads (extra bases + extension tails) ─────────────────
@@ -407,7 +453,8 @@ def test_extra_base_anchor_selects_one_insert(routed_6hb):
     assert len(_xb_keys(d)) == 3, "fixture should have a 3-base insert run"
 
     parts, keys = ox.resolve_anchor_particles(
-        d, [{"kind": "extra_base", "crossover_id": xo_id, "k": 1}])
+        d, [{"kind": "extra_base", "crossover_id": xo_id, "k": 1}]
+    )
     assert keys == [(ox._XB_SENTINEL, xo_id, 1)]
     assert len(parts) == 1
     assert order[parts[0]] == keys[0], "particle index must address that exact bead"
@@ -417,7 +464,8 @@ def test_extra_base_anchor_without_k_takes_the_whole_run(routed_6hb):
     d = _with_extra(routed_6hb, "TTT")
     xo_id = d.crossovers[0].id
     parts, keys = ox.resolve_anchor_particles(
-        d, [{"kind": "extra_base", "crossover_id": xo_id}])
+        d, [{"kind": "extra_base", "crossover_id": xo_id}]
+    )
     assert len(parts) == 3
     assert [k[2] for k in keys] == [0, 1, 2], "5'→3' insert order"
     assert all(k[1] == xo_id for k in keys)
@@ -435,7 +483,8 @@ def test_extra_base_anchor_does_not_leak_across_crossovers(routed_6hb):
     d = _with_extra(routed_6hb, "TT", all_crossovers=True)
     xo_id = d.crossovers[0].id
     _parts, keys = ox.resolve_anchor_particles(
-        d, [{"kind": "extra_base", "crossover_id": xo_id}])
+        d, [{"kind": "extra_base", "crossover_id": xo_id}]
+    )
     assert {k[1] for k in keys} == {xo_id}
     assert len(_xb_keys(d)) > len(keys), "other crossovers also carry inserts"
 
@@ -443,35 +492,41 @@ def test_extra_base_anchor_does_not_leak_across_crossovers(routed_6hb):
 def test_unknown_extra_base_anchor_drops_silently(routed_6hb):
     d = _with_extra(routed_6hb, "TT")
     assert ox.resolve_anchor_particles(
-        d, [{"kind": "extra_base", "crossover_id": "nope"}]) == ([], [])
+        d, [{"kind": "extra_base", "crossover_id": "nope"}]
+    ) == ([], [])
     # A run index past the end of the insert is also just empty, not an error.
     assert ox.resolve_anchor_particles(
-        d, [{"kind": "extra_base", "crossover_id": d.crossovers[0].id, "k": 99}]) == ([], [])
+        d, [{"kind": "extra_base", "crossover_id": d.crossovers[0].id, "k": 99}]
+    ) == ([], [])
     # No crossover_id at all must select NOTHING (not every extra base in the design).
     assert ox.resolve_anchor_particles(d, [{"kind": "extra_base"}]) == ([], [])
 
 
 def test_extension_anchor_selects_tail_beads(routed_6hb):
     from backend.core.models import StrandExtension
+
     d = routed_6hb.model_copy(deep=True)
     ext = StrandExtension(strand_id=d.strands[1].id, end="three_prime", sequence="TTTT")
     d.extensions = [ext]
     order = ox._strand_nucleotide_order(d)
 
     parts, keys = ox.resolve_anchor_particles(
-        d, [{"kind": "extension", "extension_id": ext.id, "k": 2}])
+        d, [{"kind": "extension", "extension_id": ext.id, "k": 2}]
+    )
     assert len(parts) == 1
     assert keys[0][0] == f"{ox._EXT_PREFIX}{ext.id}" and keys[0][1] == 2
     assert order[parts[0]] == keys[0]
 
     # Whole tail.
     wparts, wkeys = ox.resolve_anchor_particles(
-        d, [{"kind": "extension", "extensionId": ext.id}])
+        d, [{"kind": "extension", "extensionId": ext.id}]
+    )
     assert len(wparts) == 4 == len(wkeys)
     assert sorted(k[1] for k in wkeys) == [0, 1, 2, 3]
 
-    assert ox.resolve_anchor_particles(d, [{"kind": "extension", "extension_id": "nope"}]) \
-        == ([], [])
+    assert ox.resolve_anchor_particles(
+        d, [{"kind": "extension", "extension_id": "nope"}]
+    ) == ([], [])
     assert ox.resolve_anchor_particles(d, [{"kind": "extension"}]) == ([], [])
 
 
@@ -479,12 +534,15 @@ def test_a_bare_base_anchor_selects_nothing_not_every_synthetic(routed_6hb):
     """Regression: synthetic rows have helix_id/bp/direction all None, so a descriptor
     with no coordinates used to match EVERY one of them."""
     from backend.core.models import StrandExtension
+
     d = _with_extra(routed_6hb, "TT")
-    d.extensions = [StrandExtension(strand_id=d.strands[1].id, end="three_prime",
-                                    sequence="TT")]
+    d.extensions = [
+        StrandExtension(strand_id=d.strands[1].id, end="three_prime", sequence="TT")
+    ]
     assert ox.resolve_anchor_particles(d, [{"kind": "base"}]) == ([], [])
-    assert ox.resolve_anchor_particles(d, [{"kind": "domain", "strand_id": d.strands[0].id}]) \
-        == ([], [])
+    assert ox.resolve_anchor_particles(
+        d, [{"kind": "domain", "strand_id": d.strands[0].id}]
+    ) == ([], [])
     assert ox.resolve_anchor_particles(d, [{"kind": "overhang"}]) == ([], [])
     assert ox.resolve_anchor_particles(d, [{"kind": "strand"}]) == ([], [])
 

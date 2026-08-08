@@ -8,6 +8,7 @@ whose local pose composes INSIDE its parent: its domains end up at
   3. moving the CHILD moves only the child's domains.
 Behaviour-neutral: a design with no child clusters is geometry-identical to before.
 """
+
 from __future__ import annotations
 
 import math
@@ -19,8 +20,14 @@ from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.deformation import _rot_from_quaternion
 from backend.core.models import (
-    ClusterRigidTransform, Direction, Domain, DomainRef, Helix, Strand,
-    StrandType, Vec3,
+    ClusterRigidTransform,
+    Direction,
+    Domain,
+    DomainRef,
+    Helix,
+    Strand,
+    StrandType,
+    Vec3,
 )
 
 _IDENTITY = [0.0, 0.0, 0.0, 1.0]
@@ -47,27 +54,44 @@ def _seed(*, parent=None, child=None):
     (bp 8-15). Optional parent (helix-level) + child (domain-level) clusters."""
     base = _demo_design()
     L = 16
-    h = Helix(id="cc_h", axis_start=Vec3(x=0.0, y=0.0, z=0.0),
-              axis_end=Vec3(x=0.0, y=0.0, z=L * BDNA_RISE_PER_BP),
-              phase_offset=0.0, length_bp=L, grid_pos=(0, 0))
-    s = Strand(id="cc_s", strand_type=StrandType.STAPLE, domains=[
-        Domain(helix_id="cc_h", start_bp=0, end_bp=7, direction=Direction.FORWARD),
-        Domain(helix_id="cc_h", start_bp=8, end_bp=15, direction=Direction.FORWARD)])
+    h = Helix(
+        id="cc_h",
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=L * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=L,
+        grid_pos=(0, 0),
+    )
+    s = Strand(
+        id="cc_s",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="cc_h", start_bp=0, end_bp=7, direction=Direction.FORWARD),
+            Domain(helix_id="cc_h", start_bp=8, end_bp=15, direction=Direction.FORWARD),
+        ],
+    )
     clusters = []
     if parent is not None:
         clusters.append(parent)
     if child is not None:
         clusters.append(child)
-    return base.model_copy(update={
-        "helices": [*base.helices, h],
-        "strands": [*base.strands, s],
-        "cluster_transforms": clusters,
-    })
+    return base.model_copy(
+        update={
+            "helices": [*base.helices, h],
+            "strands": [*base.strands, s],
+            "cluster_transforms": clusters,
+        }
+    )
 
 
 def _bead(nucs, bp):
-    n = next(x for x in nucs if x.get("helix_id") == "cc_h" and x.get("bp_index") == bp
-             and x.get("direction") == "FORWARD")
+    n = next(
+        x
+        for x in nucs
+        if x.get("helix_id") == "cc_h"
+        and x.get("bp_index") == bp
+        and x.get("direction") == "FORWARD"
+    )
     return np.asarray(n.get("backbone_position") or n.get("base_position"), float)
 
 
@@ -81,14 +105,24 @@ def test_child_cluster_composes_inside_parent():
     rest = _geometry_for_design(_seed())
     rest_body, rest_child = _bead(rest, _BODY_BP), _bead(rest, _CHILD_BP)
 
-    parent = ClusterRigidTransform(id="P", name="part", helix_ids=["cc_h"],
-                                   rotation=_quat([0, 0, 1], 30.0),
-                                   translation=[5.0, 0.0, 0.0], pivot=[0.0, 0.0, 0.0])
+    parent = ClusterRigidTransform(
+        id="P",
+        name="part",
+        helix_ids=["cc_h"],
+        rotation=_quat([0, 0, 1], 30.0),
+        translation=[5.0, 0.0, 0.0],
+        pivot=[0.0, 0.0, 0.0],
+    )
     child = ClusterRigidTransform(
-        id="C", name="duplex", helix_ids=["cc_h"],
+        id="C",
+        name="duplex",
+        helix_ids=["cc_h"],
         domain_ids=[DomainRef(strand_id="cc_s", domain_index=1)],
-        parent_cluster_id="P", rotation=_quat([0, 1, 0], 20.0),
-        translation=[0.0, 2.0, 0.0], pivot=list(rest_child))  # rest-frame pivot
+        parent_cluster_id="P",
+        rotation=_quat([0, 1, 0], 20.0),
+        translation=[0.0, 2.0, 0.0],
+        pivot=list(rest_child),
+    )  # rest-frame pivot
 
     nucs = _geometry_for_design(_seed(parent=parent, child=child))
     Tp = _xf(parent.rotation, parent.pivot, parent.translation)
@@ -103,56 +137,95 @@ def test_child_cluster_composes_inside_parent():
 def test_moving_the_parent_carries_the_child_rigidly():
     """Changing only the parent's translation shifts BOTH body and child domains by the
     same delta — the child's stored local pose never changes (drift-free)."""
-    parent = ClusterRigidTransform(id="P", name="part", helix_ids=["cc_h"],
-                                   rotation=_quat([0, 0, 1], 25.0),
-                                   translation=[1.0, 0.0, 0.0], pivot=[0.0, 0.0, 0.0])
+    parent = ClusterRigidTransform(
+        id="P",
+        name="part",
+        helix_ids=["cc_h"],
+        rotation=_quat([0, 0, 1], 25.0),
+        translation=[1.0, 0.0, 0.0],
+        pivot=[0.0, 0.0, 0.0],
+    )
     rest_child = _bead(_geometry_for_design(_seed()), _CHILD_BP)
     child = ClusterRigidTransform(
-        id="C", name="duplex", helix_ids=["cc_h"],
+        id="C",
+        name="duplex",
+        helix_ids=["cc_h"],
         domain_ids=[DomainRef(strand_id="cc_s", domain_index=1)],
-        parent_cluster_id="P", rotation=_quat([1, 0, 0], 15.0),
-        translation=[0.0, 0.0, 1.0], pivot=list(rest_child))
+        parent_cluster_id="P",
+        rotation=_quat([1, 0, 0], 15.0),
+        translation=[0.0, 0.0, 1.0],
+        pivot=list(rest_child),
+    )
 
     before = _geometry_for_design(_seed(parent=parent, child=child))
     moved_parent = parent.model_copy(update={"translation": [1.0, 3.0, -2.0]})
     after = _geometry_for_design(_seed(parent=moved_parent, child=child))
 
     delta = np.array([0.0, 3.0, -2.0])
-    assert np.allclose(_bead(after, _BODY_BP) - _bead(before, _BODY_BP), delta, atol=1e-6)
-    assert np.allclose(_bead(after, _CHILD_BP) - _bead(before, _CHILD_BP), delta, atol=1e-6)
+    assert np.allclose(
+        _bead(after, _BODY_BP) - _bead(before, _BODY_BP), delta, atol=1e-6
+    )
+    assert np.allclose(
+        _bead(after, _CHILD_BP) - _bead(before, _CHILD_BP), delta, atol=1e-6
+    )
 
 
 def test_moving_the_child_moves_only_its_domains():
-    parent = ClusterRigidTransform(id="P", name="part", helix_ids=["cc_h"],
-                                   rotation=_quat([0, 1, 0], 40.0),
-                                   translation=[2.0, 1.0, 0.0], pivot=[0.0, 0.0, 0.0])
+    parent = ClusterRigidTransform(
+        id="P",
+        name="part",
+        helix_ids=["cc_h"],
+        rotation=_quat([0, 1, 0], 40.0),
+        translation=[2.0, 1.0, 0.0],
+        pivot=[0.0, 0.0, 0.0],
+    )
     rest_child = _bead(_geometry_for_design(_seed()), _CHILD_BP)
     child0 = ClusterRigidTransform(
-        id="C", name="duplex", helix_ids=["cc_h"],
+        id="C",
+        name="duplex",
+        helix_ids=["cc_h"],
         domain_ids=[DomainRef(strand_id="cc_s", domain_index=1)],
-        parent_cluster_id="P", rotation=_IDENTITY, translation=[0.0, 0.0, 0.0],
-        pivot=list(rest_child))
-    child1 = child0.model_copy(update={"rotation": _quat([0, 0, 1], 35.0),
-                                       "translation": [0.0, 4.0, 0.0]})
+        parent_cluster_id="P",
+        rotation=_IDENTITY,
+        translation=[0.0, 0.0, 0.0],
+        pivot=list(rest_child),
+    )
+    child1 = child0.model_copy(
+        update={"rotation": _quat([0, 0, 1], 35.0), "translation": [0.0, 4.0, 0.0]}
+    )
 
     a = _geometry_for_design(_seed(parent=parent, child=child0))
     b = _geometry_for_design(_seed(parent=parent, child=child1))
-    assert np.allclose(_bead(a, _BODY_BP), _bead(b, _BODY_BP), atol=1e-6)       # body unchanged
-    assert not np.allclose(_bead(a, _CHILD_BP), _bead(b, _CHILD_BP), atol=1e-3)  # child moved
+    assert np.allclose(
+        _bead(a, _BODY_BP), _bead(b, _BODY_BP), atol=1e-6
+    )  # body unchanged
+    assert not np.allclose(
+        _bead(a, _CHILD_BP), _bead(b, _CHILD_BP), atol=1e-3
+    )  # child moved
 
 
 def test_no_child_clusters_is_behaviour_neutral():
     """A domain-level cluster with NO parent behaves exactly as before (parent-then-child
     overwrite) — the child path is inert unless parent_cluster_id is set."""
-    parent = ClusterRigidTransform(id="P", name="part", helix_ids=["cc_h"],
-                                   rotation=_quat([0, 0, 1], 20.0),
-                                   translation=[3.0, 0.0, 0.0], pivot=[0.0, 0.0, 0.0])
+    parent = ClusterRigidTransform(
+        id="P",
+        name="part",
+        helix_ids=["cc_h"],
+        rotation=_quat([0, 0, 1], 20.0),
+        translation=[3.0, 0.0, 0.0],
+        pivot=[0.0, 0.0, 0.0],
+    )
     rest_child = _bead(_geometry_for_design(_seed()), _CHILD_BP)
     # Same numbers, but parent_cluster_id=None → legacy domain-level overwrite = T_child(T_parent).
     legacy = ClusterRigidTransform(
-        id="C", name="dom", helix_ids=["cc_h"],
+        id="C",
+        name="dom",
+        helix_ids=["cc_h"],
         domain_ids=[DomainRef(strand_id="cc_s", domain_index=1)],
-        rotation=_quat([0, 1, 0], 20.0), translation=[0.0, 2.0, 0.0], pivot=list(rest_child))
+        rotation=_quat([0, 1, 0], 20.0),
+        translation=[0.0, 2.0, 0.0],
+        pivot=list(rest_child),
+    )
     rest_child_rest = _bead(_geometry_for_design(_seed()), _CHILD_BP)
 
     nucs = _geometry_for_design(_seed(parent=parent, child=legacy))

@@ -16,6 +16,7 @@ Background (2hb_1xT, 2026-07-30): prep measured ``fits_rotated=False`` /
 dropped the whole ``solvation`` block, and the guard's ``fits_rotated=True`` default
 then waved every child through.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -32,7 +33,9 @@ _PDB = "ATOM      1  P   ADE A   1       0.000   0.000   0.000  1.00  0.00      
 
 class TestIntentDrivesCellSizing:
     def test_no_intent_keeps_the_cheap_ladder_cell(self) -> None:
-        mode, note = resolve_box_mode(_PDB, 2.0, max_atoms=None, free_ns=_LADDER_FREE_NS)
+        mode, note = resolve_box_mode(
+            _PDB, 2.0, max_atoms=None, free_ns=_LADDER_FREE_NS
+        )
         assert mode == "bbox"
         # The note is the record of WHY, which the package manifest carries forward.
         assert "not trustworthy" in note.lower()
@@ -42,11 +45,14 @@ class TestIntentDrivesCellSizing:
         assert mode == "rotation"
         assert note is None
 
-    @pytest.mark.parametrize("free_ns,expected", [
-        (ROTATION_FREE_NS_THRESHOLD - 0.1, "bbox"),
-        (ROTATION_FREE_NS_THRESHOLD, "bbox"),          # at the threshold: still cheap
-        (ROTATION_FREE_NS_THRESHOLD + 0.1, "rotation"),
-    ])
+    @pytest.mark.parametrize(
+        "free_ns,expected",
+        [
+            (ROTATION_FREE_NS_THRESHOLD - 0.1, "bbox"),
+            (ROTATION_FREE_NS_THRESHOLD, "bbox"),  # at the threshold: still cheap
+            (ROTATION_FREE_NS_THRESHOLD + 0.1, "rotation"),
+        ],
+    )
     def test_the_flip_is_at_the_documented_threshold(self, free_ns, expected) -> None:
         mode, _ = resolve_box_mode(_PDB, 2.0, max_atoms=None, free_ns=free_ns)
         assert mode == expected
@@ -71,6 +77,7 @@ class _FakeJob:
 
 def _package(tmp_path, solvation) -> _FakeJob:
     import json
+
     pkg = tmp_path / "package"
     pkg.mkdir(parents=True, exist_ok=True)
     manifest = {"name_stem": "d"}
@@ -81,22 +88,30 @@ def _package(tmp_path, solvation) -> _FakeJob:
 
 
 # The verdict prep recorded for 2hb_1xT: a turned solute overlaps its image by 33 A.
-_FAILS_ROTATED = {"box_check": {"measured": True, "fits_rotated": False,
-                                "image_gap_rotated_ang": -33.04}}
-_FITS_ROTATED = {"box_check": {"measured": True, "fits_rotated": True,
-                               "image_gap_rotated_ang": 18.2}}
+_FAILS_ROTATED = {
+    "box_check": {
+        "measured": True,
+        "fits_rotated": False,
+        "image_gap_rotated_ang": -33.04,
+    }
+}
+_FITS_ROTATED = {
+    "box_check": {"measured": True, "fits_rotated": True, "image_gap_rotated_ang": 18.2}
+}
 
 
 class TestFreeRunCellGuard:
-    def test_refuses_a_long_run_in_a_cell_the_solute_turns_out_of(self, tmp_path) -> None:
+    def test_refuses_a_long_run_in_a_cell_the_solute_turns_out_of(
+        self, tmp_path
+    ) -> None:
         job = _package(tmp_path, _FAILS_ROTATED)
         with pytest.raises(HTTPException) as exc:
             _assert_cell_fits_a_free_run(job, 1000.0, allow=False)
         assert exc.value.status_code == 400
         detail = exc.value.detail
-        assert "33" in detail                      # how far it overlaps
-        assert "production_ns_intent" in detail    # the actual remedy
-        assert "allow_undersized_cell" in detail   # the override
+        assert "33" in detail  # how far it overlaps
+        assert "production_ns_intent" in detail  # the actual remedy
+        assert "allow_undersized_cell" in detail  # the override
 
     def test_a_negative_gap_reads_as_an_overlap_not_a_clearance(self, tmp_path) -> None:
         # "within -33 A" is faithful and unreadable; a negative gap IS an overlap.
@@ -107,8 +122,13 @@ class TestFreeRunCellGuard:
         assert "-33" not in exc.value.detail
 
     def test_a_positive_gap_reads_as_a_clearance(self, tmp_path) -> None:
-        tight = {"box_check": {"measured": True, "fits_rotated": False,
-                               "image_gap_rotated_ang": 4.0}}
+        tight = {
+            "box_check": {
+                "measured": True,
+                "fits_rotated": False,
+                "image_gap_rotated_ang": 4.0,
+            }
+        }
         job = _package(tmp_path, tight)
         with pytest.raises(HTTPException) as exc:
             _assert_cell_fits_a_free_run(job, 1000.0, allow=False)
@@ -154,16 +174,19 @@ class TestVerdictIsInheritedThroughAncestry:
     Treating "no block" as "unknown, allow" is what let the 1 us run through.
     """
 
-    def test_walks_up_to_an_ancestor_that_has_the_verdict(self, tmp_path, monkeypatch) -> None:
+    def test_walks_up_to_an_ancestor_that_has_the_verdict(
+        self, tmp_path, monkeypatch
+    ) -> None:
         from backend.api import routes_md
 
         grandparent = _package(tmp_path / "gp", _FAILS_ROTATED)
         grandparent.job_id = "gp"
-        child = _package(tmp_path / "c", None)          # no solvation block at all
+        child = _package(tmp_path / "c", None)  # no solvation block at all
         child.job_id, child.parent_job_id = "c", "gp"
 
-        monkeypatch.setattr(routes_md.MdJob, "load",
-                            staticmethod(lambda jid, ws: grandparent))
+        monkeypatch.setattr(
+            routes_md.MdJob, "load", staticmethod(lambda jid, ws: grandparent)
+        )
         check = routes_md._inherited_box_check(child)
         assert check is not None
         assert check["fits_rotated"] is False
@@ -179,6 +202,7 @@ class TestVerdictIsInheritedThroughAncestry:
 
         def _boom(jid, ws):
             raise FileNotFoundError(jid)
+
         monkeypatch.setattr(routes_md.MdJob, "load", staticmethod(_boom))
         assert routes_md._inherited_box_check(child) is None
         routes_md._assert_cell_fits_a_free_run(child, 1000.0, allow=False)
@@ -187,7 +211,7 @@ class TestVerdictIsInheritedThroughAncestry:
         from backend.api import routes_md
 
         job = _package(tmp_path / "c", None)
-        job.job_id, job.parent_job_id = "c", "c"        # self-parent
+        job.job_id, job.parent_job_id = "c", "c"  # self-parent
         monkeypatch.setattr(routes_md.MdJob, "load", staticmethod(lambda jid, ws: job))
         assert routes_md._inherited_box_check(job) is None
 
@@ -200,14 +224,18 @@ class TestChildInheritsTheVerdict:
         import inspect
 
         from backend.core import md_ensemble
+
         src = inspect.getsource(md_ensemble.build_replica_package)
         assert '"solvation": manifest.get("solvation")' in src
 
-    def test_guard_runs_on_the_child_spawn_route_not_only_the_append_route(self) -> None:
+    def test_guard_runs_on_the_child_spawn_route_not_only_the_append_route(
+        self,
+    ) -> None:
         # The panel's Start Production button calls spawn_md_production; for a long
         # time only its sibling append route checked the cell.
         import inspect
 
         from backend.api import routes_md
+
         for fn in (routes_md.spawn_md_production, routes_md.append_md_production):
             assert "_assert_cell_fits_a_free_run" in inspect.getsource(fn), fn.__name__

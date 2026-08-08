@@ -56,11 +56,12 @@ class PrepPhase:
     fill_cap:     max time-based fraction an opaque phase reaches before it
                   actually completes (so the bar never sits at 100% mid-phase).
     """
-    key:         str
-    label:       str
-    nominal_s:   float
+
+    key: str
+    label: str
+    nominal_s: float
     soft_factor: float = 3.0
-    fill_cap:    float = 0.97
+    fill_cap: float = 0.97
 
 
 # ── Canonical phase catalogue ────────────────────────────────────────────────
@@ -69,13 +70,26 @@ class PrepPhase:
 # they shape how fast the bar moves through each phase — and the ETA recalibrates
 # against the wall clock as phases complete.
 
-_SEED_PHASE = PrepPhase("seed", "Reconstructing relaxed atomic model", nominal_s=8.0, soft_factor=4.0)
+_SEED_PHASE = PrepPhase(
+    "seed", "Reconstructing relaxed atomic model", nominal_s=8.0, soft_factor=4.0
+)
 _CORE_PHASES = [
-    PrepPhase("topology", "Building DNA topology (PSF/PDB)",            nominal_s=10.0, soft_factor=3.0),
-    PrepPhase("solvate",  "Adding explicit water (GROMACS)",           nominal_s=30.0, soft_factor=2.5),
-    PrepPhase("assemble", "Placing ions + assembling solvated system", nominal_s=25.0, soft_factor=3.0),
-    PrepPhase("enm",      "Building elastic-network restraints",       nominal_s=15.0, soft_factor=3.0),
-    PrepPhase("finalize", "Writing simulation configs",                nominal_s=4.0,  soft_factor=5.0),
+    PrepPhase(
+        "topology", "Building DNA topology (PSF/PDB)", nominal_s=10.0, soft_factor=3.0
+    ),
+    PrepPhase(
+        "solvate", "Adding explicit water (GROMACS)", nominal_s=30.0, soft_factor=2.5
+    ),
+    PrepPhase(
+        "assemble",
+        "Placing ions + assembling solvated system",
+        nominal_s=25.0,
+        soft_factor=3.0,
+    ),
+    PrepPhase(
+        "enm", "Building elastic-network restraints", nominal_s=15.0, soft_factor=3.0
+    ),
+    PrepPhase("finalize", "Writing simulation configs", nominal_s=4.0, soft_factor=5.0),
 ]
 
 
@@ -94,20 +108,13 @@ def build_prep_phases(
     if implicit:
         core = [p for p in _CORE_PHASES if p.key not in ("solvate", "assemble")]
     src = ([_SEED_PHASE] if seeded else []) + core
-    return [
-        dataclasses.replace(p, nominal_s=max(1.0, p.nominal_s * sf))
-        for p in src
-    ]
+    return [dataclasses.replace(p, nominal_s=max(1.0, p.nominal_s * sf)) for p in src]
 
 
 def design_size_factor(design) -> float:
     """Coarse size proxy (≈ nt / 7000) used to scale phase nominal durations."""
     try:
-        nt = sum(
-            (d.end_bp - d.start_bp + 1)
-            for s in design.strands
-            for d in s.domains
-        )
+        nt = sum((d.end_bp - d.start_bp + 1) for s in design.strands for d in s.domains)
     except Exception:
         nt = 0
     if nt <= 0:
@@ -132,10 +139,10 @@ class PrepTracker:
         self._lock = threading.Lock()
 
         self._start = clock()
-        self._cur = 0                       # index of the active phase
+        self._cur = 0  # index of the active phase
         self._phase_start = self._start
-        self._frac_in_phase = 0.0           # discrete fraction reported for cur
-        self._reported = False              # has cur received a discrete report?
+        self._frac_in_phase = 0.0  # discrete fraction reported for cur
+        self._reported = False  # has cur received a discrete report?
         self._message = phases[0].label
         # actual durations of completed phases (key -> seconds), for ETA recal
         self._actual: dict[str, float] = {}
@@ -145,7 +152,9 @@ class PrepTracker:
 
     # ── Worker-thread API (the `progress` callback) ──────────────────────────
 
-    def report(self, phase_key: str, frac: Optional[float] = None, message: str = "") -> None:
+    def report(
+        self, phase_key: str, frac: Optional[float] = None, message: str = ""
+    ) -> None:
         """Report progress within ``phase_key`` (auto-enters it if new).
 
         ``frac`` is the 0..1 fraction *within that phase*.  Pass ``frac=None`` to
@@ -216,9 +225,7 @@ class PrepTracker:
 
     def _speed_factor(self) -> float:
         """actual / nominal over completed phases (1.0 until one completes)."""
-        nominal = sum(
-            p.nominal_s for p in self._phases if p.key in self._actual
-        )
+        nominal = sum(p.nominal_s for p in self._phases if p.key in self._actual)
         actual = sum(self._actual.values())
         if nominal <= 0 or actual <= 0:
             return 1.0
@@ -240,7 +247,11 @@ class PrepTracker:
             else:
                 # Opaque phase: time-fill against nominal, capped below 100%.
                 t_in = max(0.0, now - self._phase_start)
-                frac_cur = min(phase.fill_cap, t_in / phase.nominal_s) if phase.nominal_s > 0 else 0.0
+                frac_cur = (
+                    min(phase.fill_cap, t_in / phase.nominal_s)
+                    if phase.nominal_s > 0
+                    else 0.0
+                )
 
             total_nominal = sum(p.nominal_s for p in self._phases)
             done_nominal = sum(self._phases[j].nominal_s for j in range(self._cur))
@@ -252,9 +263,9 @@ class PrepTracker:
                 eta = 0.0 if not self._failed else None
             else:
                 speed = self._speed_factor()
-                remaining_nominal = (
-                    phase.nominal_s * (1.0 - frac_cur)
-                    + sum(self._phases[j].nominal_s for j in range(self._cur + 1, len(self._phases)))
+                remaining_nominal = phase.nominal_s * (1.0 - frac_cur) + sum(
+                    self._phases[j].nominal_s
+                    for j in range(self._cur + 1, len(self._phases))
                 )
                 eta = speed * remaining_nominal
 
@@ -266,22 +277,23 @@ class PrepTracker:
             warning = ""
 
             return {
-                "phase":           phase.key,
-                "label":           phase.label,
-                "phase_index":     self._cur,
-                "n_phases":        len(self._phases),
-                "fraction":        round(fraction, 4),
-                "eta_seconds":     None if eta is None else round(eta, 1),
+                "phase": phase.key,
+                "label": phase.label,
+                "phase_index": self._cur,
+                "n_phases": len(self._phases),
+                "fraction": round(fraction, 4),
+                "eta_seconds": None if eta is None else round(eta, 1),
                 "elapsed_seconds": round(elapsed, 1),
-                "message":         self._message,
-                "warning":         warning,
-                "done":            self._done,
-                "failed":          self._failed,
-                "error":           self._error,
+                "message": self._message,
+                "warning": warning,
+                "done": self._done,
+                "failed": self._failed,
+                "error": self._error,
             }
 
 
 # ── Sidecar persistence ──────────────────────────────────────────────────────
+
 
 def write_prep_progress(job_dir: Path, snapshot: dict) -> None:
     """Atomically write the progress snapshot to the job's sidecar file."""

@@ -37,6 +37,7 @@ def gpu_resources(alpine):
 
 # ── is_gpu_target ─────────────────────────────────────────────────────────────
 
+
 def test_is_gpu_target_gpu_partition(alpine, gpu_resources):
     assert gpu_resources["partition"] == "ah200"
     assert ss.is_gpu_target(alpine, gpu_resources) is True
@@ -55,8 +56,10 @@ def test_is_gpu_target_unknown_partition_raises(alpine):
 
 # ── strip_gpu_resident (conf amendment for CPU/multicore targets) ──────────────
 
+
 def test_strip_gpu_resident_removes_directive():
     from backend.core.md_protocols import strip_gpu_resident
+
     conf = "timestep           4\nGPUresident        on\nrun                600000\n"
     out = strip_gpu_resident(conf)
     assert "GPUresident" not in out
@@ -67,12 +70,14 @@ def test_strip_gpu_resident_removes_directive():
 
 def test_strip_gpu_resident_noop_when_absent():
     from backend.core.md_protocols import strip_gpu_resident
+
     conf = "timestep           1\nrigidBonds         none\nrun                120000\n"
     assert strip_gpu_resident(conf) == conf
 
 
 def test_strip_gpu_resident_idempotent():
     from backend.core.md_protocols import strip_gpu_resident
+
     conf = "a\nGPUresident on\nb\n"
     once = strip_gpu_resident(conf)
     assert strip_gpu_resident(once) == once
@@ -81,8 +86,10 @@ def test_strip_gpu_resident_idempotent():
 
 # ── build_remote_resume_conf (mid-segment checkpoint resume) ───────────────────
 
+
 def test_build_remote_resume_conf_continues_from_checkpoint():
     from backend.core.md_protocols import build_remote_resume_conf
+
     conf = (
         "structure          x.psf\n"
         "binCoordinates     start.coor\n"
@@ -90,30 +97,36 @@ def test_build_remote_resume_conf_continues_from_checkpoint():
         "dcdFile            output/seg.dcd\n"
         "run                480000\n"
     )
-    out = build_remote_resume_conf(conf, segment_name="seg", restart_step=144000,
-                                   total_steps=480000, cont_index=2)
+    out = build_remote_resume_conf(
+        conf, segment_name="seg", restart_step=144000, total_steps=480000, cont_index=2
+    )
     # original coord/run/dcd/firsttimestep dropped, restart directives re-emitted
     assert "binCoordinates     output/seg.restart.coor" in out
     assert "binVelocities      output/seg.restart.vel" in out
     assert "extendedSystem     output/seg.restart.xsc" in out
     assert "firsttimestep      144000" in out
-    assert "run                336000" in out             # 480000 - 144000
+    assert "run                336000" in out  # 480000 - 144000
     assert "output/seg.cont2.dcd" in out
-    assert "structure          x.psf" in out              # untouched directives kept
-    assert "binCoordinates     start.coor" not in out     # old coords directive gone
+    assert "structure          x.psf" in out  # untouched directives kept
+    assert "binCoordinates     start.coor" not in out  # old coords directive gone
 
 
 def test_build_remote_resume_conf_rejects_completed_step():
     from backend.core.md_protocols import build_remote_resume_conf
+
     with pytest.raises(ValueError):
-        build_remote_resume_conf("run 100\n", segment_name="s",
-                                 restart_step=100, total_steps=100)
+        build_remote_resume_conf(
+            "run 100\n", segment_name="s", restart_step=100, total_steps=100
+        )
 
 
 def test_generate_resume_sbatch_runs_resume_conf_for_interrupted(alpine, gpu_resources):
     interrupted = "6hb_demo_01_p100"
     script = ss.generate_sbatch(
-        _manifest(), alpine, gpu_resources, "/scratch/x",
+        _manifest(),
+        alpine,
+        gpu_resources,
+        "/scratch/x",
         resume_conf_for={interrupted: f"{interrupted}.resume"},
     )
     # completed-segment skip guard still keys on the segment's final .coor
@@ -127,6 +140,7 @@ def test_generate_resume_sbatch_runs_resume_conf_for_interrupted(alpine, gpu_res
 
 
 # ── sanitize_job_name ─────────────────────────────────────────────────────────
+
 
 def test_sanitize_keeps_safe_chars():
     assert ss.sanitize_job_name("6hb_2xT.v3-1") == "6hb_2xT.v3-1"
@@ -145,8 +159,11 @@ def test_sanitize_rejects_empty():
 
 # ── generate_sbatch: structure ────────────────────────────────────────────────
 
+
 def test_generate_has_shebang_and_directives(alpine, gpu_resources):
-    script = ss.generate_sbatch(_manifest(), alpine, gpu_resources, "/scratch/alpine/jojo/nadoc_jobs/j1")
+    script = ss.generate_sbatch(
+        _manifest(), alpine, gpu_resources, "/scratch/alpine/jojo/nadoc_jobs/j1"
+    )
     assert script.startswith("#!/bin/bash\n")
     assert "#SBATCH --job-name=6hb_demo" in script
     assert f"#SBATCH --partition={gpu_resources['partition']}" in script
@@ -183,7 +200,7 @@ def test_gpu_exec_line_is_gpu_resident(alpine, gpu_resources):
 def test_untyped_gres_when_partition_has_no_gres_type(alpine):
     # A GPU partition without a gres_type falls back to the untyped form.
     res = cr.recommend(alpine, n_atoms=100_000, total_ns=4.0, measured_ns_per_day=50.0)
-    res["gres_type"] = ""       # simulate a profile that doesn't specify the type
+    res["gres_type"] = ""  # simulate a profile that doesn't specify the type
     script = ss.generate_sbatch(_manifest(), alpine, res, "/scratch/x")
     assert "#SBATCH --gres=gpu:1" in script
     assert "+setcpuaffinity +devices 0" in script
@@ -192,8 +209,12 @@ def test_untyped_gres_when_partition_has_no_gres_type(alpine):
 
 
 def test_cpu_partition_uses_mpirun(alpine):
-    res = cr.recommend(alpine, n_atoms=cr.gpu_atom_ceiling("ah200") + 1, total_ns=4.0,
-                       measured_ns_per_day=5.0)
+    res = cr.recommend(
+        alpine,
+        n_atoms=cr.gpu_atom_ceiling("ah200") + 1,
+        total_ns=4.0,
+        measured_ns_per_day=5.0,
+    )
     script = ss.generate_sbatch(_manifest(), alpine, res, "/scratch/x")
     assert "mpirun -np $SLURM_NTASKS namd3" in script
     assert "+devices" not in script
@@ -220,29 +241,35 @@ def test_profile_sourced_before_errexit_and_no_nounset(alpine, gpu_resources):
     # source aborted a real job at "line 47: HISTCONTROL: unbound variable" before
     # NAMD ran.  Source must precede errexit, and -u must be gone.
     script = ss.generate_sbatch(_manifest(), alpine, gpu_resources, "/scratch/x")
-    assert "set -euo pipefail" not in script          # no nounset
+    assert "set -euo pipefail" not in script  # no nounset
     assert "set -uo" not in script and "set -u\n" not in script
     assert "set -eo pipefail" in script
     assert script.index("source /etc/profile") < script.index("set -eo pipefail")
 
 
 def test_cd_into_scratch(alpine, gpu_resources):
-    script = ss.generate_sbatch(_manifest(), alpine, gpu_resources, "/scratch/alpine/jojo/nadoc_jobs/j1")
+    script = ss.generate_sbatch(
+        _manifest(), alpine, gpu_resources, "/scratch/alpine/jojo/nadoc_jobs/j1"
+    )
     assert "cd '/scratch/alpine/jojo/nadoc_jobs/j1'" in script
 
 
 def test_job_name_override_is_sanitized(alpine, gpu_resources):
-    script = ss.generate_sbatch(_manifest(), alpine, gpu_resources, "/scratch/x",
-                                job_name="run for paper")
+    script = ss.generate_sbatch(
+        _manifest(), alpine, gpu_resources, "/scratch/x", job_name="run for paper"
+    )
     assert "#SBATCH --job-name=run_for_paper" in script
 
 
 # ── module/partition sanity warning ───────────────────────────────────────────
 
+
 def test_gpu_with_cpu_module_warns(alpine, gpu_resources):
     # A GPU partition whose GPU module set is (mis)configured CPU-only must warn.
     cpu_gpu_profile = replace(alpine, gpu_module_loads=["gcc/14.2.0", "namd/3.0.1_cpu"])
-    script = ss.generate_sbatch(_manifest(), cpu_gpu_profile, gpu_resources, "/scratch/x")
+    script = ss.generate_sbatch(
+        _manifest(), cpu_gpu_profile, gpu_resources, "/scratch/x"
+    )
     assert "WARNING" in script and "CPU-only" in script
 
 
@@ -253,6 +280,7 @@ def test_gpu_with_gpu_module_does_not_warn(alpine, gpu_resources):
 
 
 # ── generate_sbatch: guards ───────────────────────────────────────────────────
+
 
 def test_declash_manifest_is_rejected(alpine, gpu_resources):
     with pytest.raises(ValueError, match="[Dd]eclash"):
@@ -281,7 +309,9 @@ def test_gpu_job_omits_infiniband_constraint(alpine, gpu_resources):
 
 def test_cpu_job_keeps_infiniband_constraint(alpine):
     # CPU/MPI runs still want InfiniBand.
-    res = cr.recommend(alpine, n_atoms=8_000_000, total_ns=2.0, measured_ns_per_day=50.0)
+    res = cr.recommend(
+        alpine, n_atoms=8_000_000, total_ns=2.0, measured_ns_per_day=50.0
+    )
     assert res["kind"] == "cpu"
     script = ss.generate_sbatch(_manifest(), alpine, res, "/scratch/x")
     assert "#SBATCH --constraint=ib" in script
@@ -289,19 +319,35 @@ def test_cpu_job_keeps_infiniband_constraint(alpine):
 
 # ── in-sbatch relaxation early-stop ────────────────────────────────────────────
 
+
 def _ladder_manifest(early_stop=None, min_k=None, declash=False, production=False):
     """A realistic mgh_slow_release ladder: 4 stages × (p10,p50,p100), k = 0.5,
     0.1, 0.01, None (MGHH). Mirrors md_protocols.mgh_slow_release_segments naming."""
     stem = "6hb_demo"
-    ladder = [(1, "300K_NPT_ENM_k0p5", 0.5), (2, "300K_NPT_ENM_k0p1", 0.1),
-              (3, "300K_NPT_ENM_k0p01", 0.01), (4, "300K_NPT_MGHH_only", None)]
+    ladder = [
+        (1, "300K_NPT_ENM_k0p5", 0.5),
+        (2, "300K_NPT_ENM_k0p1", 0.1),
+        (3, "300K_NPT_ENM_k0p01", 0.01),
+        (4, "300K_NPT_MGHH_only", None),
+    ]
     segs = []
     for stage_idx, label, scale in ladder:
         for pct in (10, 50, 100):
-            segs.append({"name": f"{stem}_{stage_idx:02d}_{label}_p{pct}",
-                         "steps": 100_000, "scale": scale})
+            segs.append(
+                {
+                    "name": f"{stem}_{stage_idx:02d}_{label}_p{pct}",
+                    "steps": 100_000,
+                    "scale": scale,
+                }
+            )
     if production:
-        segs.append({"name": f"{stem}_05_production_20ns_k0_p100", "steps": 500_000, "scale": None})
+        segs.append(
+            {
+                "name": f"{stem}_05_production_20ns_k0_p100",
+                "steps": 500_000,
+                "scale": None,
+            }
+        )
     m = {
         "name_stem": stem,
         "declash": declash,
@@ -322,7 +368,7 @@ def _gen(alpine, gpu_resources, m, **kw):
 
 
 def test_early_stop_off_is_byte_identical(alpine, gpu_resources):
-    m_no_key = _ladder_manifest()                      # manifest lacks the key
+    m_no_key = _ladder_manifest()  # manifest lacks the key
     m_false = _ladder_manifest(early_stop=False)
     base = _gen(alpine, gpu_resources, m_no_key)
     assert _gen(alpine, gpu_resources, m_no_key, early_stop_relax=False) == base
@@ -343,7 +389,10 @@ def test_early_stop_emits_for_nonfinal_restrained_chunks_only(alpine, gpu_resour
     # eligible: p10 and p50 of the k=0.5 and k=0.1 stages (non-final, k >= 0.1)
     for stage in ("300K_NPT_ENM_k0p5", "300K_NPT_ENM_k0p1"):
         for pct in (10, 50):
-            assert f'--log "6hb_demo_0{ "1" if "k0p5" in stage else "2"}_{stage}_p{pct}.log"' in script
+            assert (
+                f'--log "6hb_demo_0{"1" if "k0p5" in stage else "2"}_{stage}_p{pct}.log"'
+                in script
+            )
     # NOT the last chunk of a stage (p100 has nothing to bridge)
     assert '--log "6hb_demo_01_300K_NPT_ENM_k0p5_p100.log"' not in script
     assert '--log "6hb_demo_02_300K_NPT_ENM_k0p1_p100.log"' not in script
@@ -378,14 +427,20 @@ def _extract_block(script, conf):
     end = start + 1
     while end < len(lines) and not lines[end].startswith('if [ -f "output/6hb_demo'):
         # stop at the next chunk's run/skip guard (a top-level `if [ -f ...coor ]`)
-        if lines[end].startswith('if [ -f "output/') and ".coor" in lines[end] and "then" in lines[end]:
+        if (
+            lines[end].startswith('if [ -f "output/')
+            and ".coor" in lines[end]
+            and "then" in lines[end]
+        ):
             break
         end += 1
     return "\n".join(lines[start:end])
 
 
 def test_early_stop_never_on_production_segments(alpine, gpu_resources):
-    script = _gen(alpine, gpu_resources, _ladder_manifest(early_stop=True, production=True))
+    script = _gen(
+        alpine, gpu_resources, _ladder_manifest(early_stop=True, production=True)
+    )
     assert '--log "6hb_demo_05_production_20ns_k0_p100.log"' not in script
 
 
@@ -414,18 +469,25 @@ def test_tier_a_emits_health_step_and_wc_gate(alpine, gpu_resources):
     script = _gen(alpine, gpu_resources, _tier_a_manifest())
     conf = "6hb_demo_01_300K_NPT_ENM_k0p5_p10"
     # WC health step produces output/<conf>.wc.json (best-effort, || true)
-    assert f'{ss.EARLY_STOP_HEALTH_NAME} --seg "{conf}" --stem "6hb_demo" ' \
-           f'--out "output/{conf}.wc.json" || true' in script
+    assert (
+        f'{ss.EARLY_STOP_HEALTH_NAME} --seg "{conf}" --stem "6hb_demo" '
+        f'--out "output/{conf}.wc.json" || true' in script
+    )
     # only bridge when BOTH the wc.json exists AND the cutoff eval (with --wc) says plateau
-    assert f'if [ -f "output/{conf}.wc.json" ] && python3 {ss.EARLY_STOP_EVAL_NAME} ' \
-           f'--log "{conf}.log" --wc "output/{conf}.wc.json"; then' in script
+    assert (
+        f'if [ -f "output/{conf}.wc.json" ] && python3 {ss.EARLY_STOP_EVAL_NAME} '
+        f'--log "{conf}.log" --wc "output/{conf}.wc.json"; then' in script
+    )
 
 
 def test_tier_a_considers_low_k_and_mghh_chunks(alpine, gpu_resources):
     # Tier A's WC guard holds fragile stages, so (unlike B) k=0.01 AND the k=0/MGHH
     # melt's non-final chunks are eligible — the node evaluator holds them via WC.
     script = _gen(alpine, gpu_resources, _tier_a_manifest())
-    for conf in ("6hb_demo_03_300K_NPT_ENM_k0p01_p10", "6hb_demo_04_300K_NPT_MGHH_only_p10"):
+    for conf in (
+        "6hb_demo_03_300K_NPT_ENM_k0p01_p10",
+        "6hb_demo_04_300K_NPT_MGHH_only_p10",
+    ):
         assert f'--out "output/{conf}.wc.json"' in script
     # still NOT the last chunk of a stage, production, or minimization
     assert '--out "output/6hb_demo_04_300K_NPT_MGHH_only_p100.wc.json"' not in script
@@ -440,7 +502,7 @@ def test_tier_a_health_python_override(alpine, gpu_resources):
 
 
 def test_tier_b_default_emits_no_health_step(alpine, gpu_resources):
-    script = _gen(alpine, gpu_resources, _ladder_manifest(early_stop=True))   # tier B
+    script = _gen(alpine, gpu_resources, _ladder_manifest(early_stop=True))  # tier B
     assert ss.EARLY_STOP_HEALTH_NAME not in script
     assert ".wc.json" not in script
 
@@ -458,6 +520,7 @@ def test_early_stop_run_guards_still_present(alpine, gpu_resources):
 
 
 # ── preview_header: the wizard's manifest-free sbatch preview ─────────────────
+
 
 def test_preview_header_needs_no_manifest(alpine):
     """generate_sbatch needs a prepared package; the wizard asks BEFORE one exists."""
@@ -477,7 +540,7 @@ def test_preview_header_matches_the_real_script(alpine):
     real = ss.generate_sbatch(_manifest(), alpine, res, "/scratch/x", job_name="j")
     for line in h["directives"]:
         assert line in real, line
-    assert h["exec_line"].split()[0] in real          # same NAMD invocation form
+    assert h["exec_line"].split()[0] in real  # same NAMD invocation form
 
 
 def test_preview_header_cpu_adds_infiniband_and_mpirun(alpine):
@@ -504,6 +567,7 @@ def test_preview_header_no_warning_when_walltime_fits(alpine):
 
 def test_preview_header_warns_on_a_cpu_module_for_a_gpu_partition(alpine):
     from dataclasses import replace as _replace
+
     bad = _replace(alpine, gpu_module_loads=["gcc/14.2.0", "namd/3.0.1_cpu"])
     res = cr.recommend(bad, n_atoms=62_673, total_ns=10.0, partition="ah200")
     h = ss.preview_header(bad, res)
@@ -520,8 +584,10 @@ def test_preview_header_text_is_readable_shell(alpine):
 
 # ── private NAMD build (Alpine has no CUDA NAMD module) ──────────────────────
 
+
 def _with_private_namd(alpine, path="/projects/me/namd3-git/namd3"):
     from dataclasses import replace as _replace
+
     return _replace(alpine, gpu_namd_bin=path)
 
 
@@ -541,7 +607,7 @@ def test_private_binary_reaches_the_real_sbatch(alpine):
 
 
 def test_cpu_target_still_uses_the_module_binary(alpine):
-    prof = _with_private_namd(alpine)          # gpu-only override
+    prof = _with_private_namd(alpine)  # gpu-only override
     res = cr.recommend(prof, n_atoms=100_000, total_ns=4.0, partition="acpu")
     h = ss.preview_header(prof, res)
     assert "mpirun -np $SLURM_NTASKS namd3" in h["exec_line"]
@@ -551,7 +617,10 @@ def test_no_cpu_module_warning_when_namd_comes_from_a_private_path(alpine):
     """Alpine's only NAMD modules are 2.14 and 3.0.1_cpu, so a GPU run legitimately
     loads a CPU-looking module set (just cuda/gcc) beside a private binary."""
     from dataclasses import replace as _replace
-    prof = _replace(alpine, gpu_namd_bin="/projects/me/namd3", gpu_module_loads=["namd/3.0.1_cpu"])
+
+    prof = _replace(
+        alpine, gpu_namd_bin="/projects/me/namd3", gpu_module_loads=["namd/3.0.1_cpu"]
+    )
     res = cr.recommend(prof, n_atoms=62_673, total_ns=10.0, partition="ah200")
     assert not any("CPU-only" in w for w in ss.preview_header(prof, res)["warnings"])
 
@@ -559,10 +628,22 @@ def test_no_cpu_module_warning_when_namd_comes_from_a_private_path(alpine):
 def test_namd_command_roundtrips_through_json(tmp_path):
     import json as _json
     from backend.core import cluster_config as _cc
-    (tmp_path / "clusters.json").write_text(_json.dumps([{
-        "name": "c", "host": "h", "project_base": "/p/$USER", "scratch_base": "/s/$USER",
-        "default_partition": "g", "default_qos": "n", "gpu_namd_bin": "/opt/namd3",
-    }]))
+
+    (tmp_path / "clusters.json").write_text(
+        _json.dumps(
+            [
+                {
+                    "name": "c",
+                    "host": "h",
+                    "project_base": "/p/$USER",
+                    "scratch_base": "/s/$USER",
+                    "default_partition": "g",
+                    "default_qos": "n",
+                    "gpu_namd_bin": "/opt/namd3",
+                }
+            ]
+        )
+    )
     prof = _cc.load_profiles(tmp_path)["c"]
     assert prof.namd_command(gpu=True) == "/opt/namd3"
     assert prof.namd_command(gpu=False) == "namd3"

@@ -59,7 +59,9 @@ from typing import TYPE_CHECKING, Callable, Optional
 ProgressCb = Callable[[str, Optional[float], str], None]
 
 
-def _emit(progress: Optional[ProgressCb], key: str, frac: Optional[float], msg: str = "") -> None:
+def _emit(
+    progress: Optional[ProgressCb], key: str, frac: Optional[float], msg: str = ""
+) -> None:
     """Call the optional progress callback, swallowing any callback error."""
     if progress is None:
         return
@@ -67,6 +69,7 @@ def _emit(progress: Optional[ProgressCb], key: str, frac: Optional[float], msg: 
         progress(key, frac, msg)
     except Exception:
         pass
+
 
 if TYPE_CHECKING:
     import numpy as np
@@ -84,8 +87,8 @@ _FF_DIR = Path(__file__).parent.parent / "data" / "forcefield"
 _FF_FILES = [
     "top_all36_na.rtf",
     "par_all36_na.prm",
-    "toppar_water_ions_cufix.str",   # includes Yoo/Aksimentiev Na+/Mg2+ CUFIX terms
-    "par_stub_ions_nbfix.str",       # stub vdW for protein/lipid types in cufix NBFIX
+    "toppar_water_ions_cufix.str",  # includes Yoo/Aksimentiev Na+/Mg2+ CUFIX terms
+    "par_stub_ions_nbfix.str",  # stub vdW for protein/lipid types in cufix NBFIX
 ]
 
 # ── Ion parameters (CHARMM36 / toppar_water_ions_cufix.str) ───────────────────
@@ -93,22 +96,22 @@ _FF_FILES = [
 # MG:  Mg2+ type MG   charge +2.00  mass 24.30500
 # CLA: Cl-  type CLA  charge -1.00  mass 35.45000
 _ION_PARAMS = {
-    "SOD": ("SOD",  1.00, 22.98977),   # (atomtype, charge, mass)
-    "MG":  ("MG",   2.00, 24.30500),
+    "SOD": ("SOD", 1.00, 22.98977),  # (atomtype, charge, mass)
+    "MG": ("MG", 2.00, 24.30500),
     "CLA": ("CLA", -1.00, 35.45000),
 }
 
 # TIP3P water parameters (CHARMM36 / toppar_water_ions_cufix.str)
 _TIP3_PARAMS = {
-    "OH2": ("OT",  -0.834, 15.99940),
-    "H1":  ("HT",  +0.417,  1.00800),
-    "H2":  ("HT",  +0.417,  1.00800),
+    "OH2": ("OT", -0.834, 15.99940),
+    "H1": ("HT", +0.417, 1.00800),
+    "H2": ("HT", +0.417, 1.00800),
 }
 
 _MGH_PARAMS = {
     "MG": ("MG", 2.00, 24.30500),
-    "O":  ("OTMG", -1.190, 15.99940),
-    "H":  ("HT", +0.595, 1.00800),
+    "O": ("OTMG", -1.190, 15.99940),
+    "H": ("HT", +0.595, 1.00800),
 }
 
 _MGH_WATER_NAMES = (
@@ -149,17 +152,26 @@ MGH_WATERS_CONSUMED = 6
 # §1  DATA TYPES
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @dataclasses.dataclass
 class _Water:
     """TIP3P water molecule with atom positions in nm."""
-    ox: float;  oy: float;  oz: float   # OW → OH2
-    h1x: float; h1y: float; h1z: float  # HW1 → H1
-    h2x: float; h2y: float; h2z: float  # HW2 → H2
+
+    ox: float
+    oy: float
+    oz: float  # OW → OH2
+    h1x: float
+    h1y: float
+    h1z: float  # HW1 → H1
+    h2x: float
+    h2y: float
+    h2z: float  # HW2 → H2
 
 
 @dataclasses.dataclass
 class _MgHexahydrate:
     """Idealized Mg(H2O)6 cluster with positions in nm."""
+
     mg: tuple[float, float, float]
     waters: list[_Water]
 
@@ -168,6 +180,7 @@ class _MgHexahydrate:
 # §2  GROMACS SOLVATION
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _find_gmx() -> str:
     """Return the gmx binary path, or raise RuntimeError."""
     for name in ("gmx", "gmx_mpi", "gmx_d"):
@@ -175,12 +188,13 @@ def _find_gmx() -> str:
         if p:
             return p
     raise RuntimeError(
-        "GROMACS not found in PATH.  Install with:\n"
-        "    sudo apt-get install -y gromacs"
+        "GROMACS not found in PATH.  Install with:\n    sudo apt-get install -y gromacs"
     )
 
 
-def _run(cmd: list, cwd: Optional[Path] = None, stdin: str = "") -> subprocess.CompletedProcess:
+def _run(
+    cmd: list, cwd: Optional[Path] = None, stdin: str = ""
+) -> subprocess.CompletedProcess:
     """Run a subprocess; raise RuntimeError if it fails."""
     result = subprocess.run(
         cmd,
@@ -225,7 +239,10 @@ def _run_watched(
                 out, err = proc.communicate(timeout=2.0)
                 break
             except subprocess.TimeoutExpired:
-                if hard_timeout_s is not None and (time.monotonic() - t0) > hard_timeout_s:
+                if (
+                    hard_timeout_s is not None
+                    and (time.monotonic() - t0) > hard_timeout_s
+                ):
                     proc.kill()
                     try:
                         proc.communicate(timeout=10)
@@ -252,7 +269,9 @@ def _gmx_hard_timeout_s(pdb_text: str) -> float:
     Legitimate large-box solvation can take a minute or two; the cap only exists
     to catch a truly stuck process, so it sits well above any realistic runtime.
     """
-    n_atoms = sum(1 for ln in pdb_text.splitlines() if ln.startswith(("ATOM", "HETATM")))
+    n_atoms = sum(
+        1 for ln in pdb_text.splitlines() if ln.startswith(("ATOM", "HETATM"))
+    )
     return max(600.0, n_atoms * 0.05)
 
 
@@ -292,11 +311,15 @@ def _parse_gro(
     n_body = len(body) or 1
     for li, line in enumerate(body):
         if progress is not None and (li & 0x3FFFF) == 0:  # every ~262k lines
-            _emit(progress, "assemble", 0.4 * (li / n_body),
-                  "Reading solvated water positions…")
+            _emit(
+                progress,
+                "assemble",
+                0.4 * (li / n_body),
+                "Reading solvated water positions…",
+            )
         if len(line) < 44:
             continue
-        resname  = line[5:10].strip()
+        resname = line[5:10].strip()
         atomname = line[10:15].strip()
         if resname != "SOL":
             # Flush any incomplete water on transition out of SOL (edge case)
@@ -309,9 +332,9 @@ def _parse_gro(
         sol_buf[atomname] = (x, y, z)
         if len(sol_buf) == 3:
             try:
-                ox, oy, oz     = sol_buf["OW"]
-                h1x, h1y, h1z  = sol_buf["HW1"]
-                h2x, h2y, h2z  = sol_buf["HW2"]
+                ox, oy, oz = sol_buf["OW"]
+                h1x, h1y, h1z = sol_buf["HW1"]
+                h2x, h2y, h2z = sol_buf["HW2"]
                 waters.append(_Water(ox, oy, oz, h1x, h1y, h1z, h2x, h2y, h2z))
             except KeyError:
                 pass  # unexpected atom names — skip molecule
@@ -320,9 +343,9 @@ def _parse_gro(
     return waters, box_nm
 
 
-def _dna_atom_positions_nm(pdb_text: str,
-                           atom_name: "str | None" = None
-                           ) -> "list[tuple[float, float, float]]":
+def _dna_atom_positions_nm(
+    pdb_text: str, atom_name: "str | None" = None
+) -> "list[tuple[float, float, float]]":
     """Return DNA heavy-atom (x, y, z) in nm from ATOM records of a PDB string.
 
     ``atom_name`` restricts to one atom type — pass ``"P"`` for the phosphate
@@ -335,11 +358,13 @@ def _dna_atom_positions_nm(pdb_text: str,
             if atom_name is not None and line[12:16].strip() != atom_name:
                 continue
             try:
-                pts.append((
-                    float(line[30:38]) / 10.0,   # Å → nm
-                    float(line[38:46]) / 10.0,
-                    float(line[46:54]) / 10.0,
-                ))
+                pts.append(
+                    (
+                        float(line[30:38]) / 10.0,  # Å → nm
+                        float(line[38:46]) / 10.0,
+                        float(line[46:54]) / 10.0,
+                    )
+                )
             except ValueError:
                 pass
     return pts
@@ -374,8 +399,12 @@ def _carve_water_shell(
     if not dna:
         return waters  # no DNA reference → cannot carve safely; keep all water
 
-    _emit(progress, "assemble", 0.45,
-          f"Carving {shell_nm * 10:.0f} Å hydration shell (removing bulk water)…")
+    _emit(
+        progress,
+        "assemble",
+        0.45,
+        f"Carving {shell_nm * 10:.0f} Å hydration shell (removing bulk water)…",
+    )
 
     tree = cKDTree(np.asarray(dna, dtype=float))
     w_o = np.empty((len(waters), 3), dtype=float)
@@ -424,8 +453,14 @@ def estimate_box_atoms(box_nm, n_dna_atoms: int, n_phosphates: int = 0) -> int:
     waters = max(0.0, v_box - v_dna) * _WATER_PER_ANG3
     total = waters * 3 + n_dna_atoms
     if n_phosphates > 0:
-        ions = ion_counts(int(waters), -float(n_phosphates), nacl_mM=0.0,
-                          mgcl2_mM=12.5, box_nm=box_nm, mg_hexahydrate=True)
+        ions = ion_counts(
+            int(waters),
+            -float(n_phosphates),
+            nacl_mM=0.0,
+            mgcl2_mM=12.5,
+            box_nm=box_nm,
+            mg_hexahydrate=True,
+        )
         displaced = ions.n_mg * MGH_WATERS_CONSUMED + ions.n_na + ions.n_cl
         total += ions.n_mg * MGH_ATOMS + ions.n_na + ions.n_cl - displaced * 3
     return int(round(total))
@@ -435,8 +470,13 @@ def _box_mode_atom_cap(devices: "str | None") -> "int | None":
     """Atom ceiling the box sizer must respect — the same VRAM/host-RAM cap the
     water-shell auto-sizer uses, so the two agree about what "fits"."""
     try:
-        from backend.core.md_vram import (detect_host_ram_mb, detect_vram_mb,  # noqa: PLC0415
-                                          max_atoms_for_host_ram, max_atoms_for_vram)
+        from backend.core.md_vram import (
+            detect_host_ram_mb,
+            detect_vram_mb,  # noqa: PLC0415
+            max_atoms_for_host_ram,
+            max_atoms_for_vram,
+        )
+
         host = detect_host_ram_mb()
         host_cap = max_atoms_for_host_ram(host) if host else None
         if (devices or "").strip().lower() in ("cpu", "none"):
@@ -456,10 +496,13 @@ TUTORIAL_PADDING_NM = 2.0
 FALLBACK_PADDING_NM = 1.2
 
 
-def resolve_padding_nm(pdb_text: str, requested_nm: float, *,
-                       max_atoms: "int | None",
-                       fallback_nm: float = FALLBACK_PADDING_NM,
-                       ) -> tuple[float, "str | None"]:
+def resolve_padding_nm(
+    pdb_text: str,
+    requested_nm: float,
+    *,
+    max_atoms: "int | None",
+    fallback_nm: float = FALLBACK_PADDING_NM,
+) -> tuple[float, "str | None"]:
     """Trim the requested padding when the resulting cell would not fit (pure).
 
     The protocol asks for bbox ± 20 Å and that is the default, but honouring it is not
@@ -492,7 +535,8 @@ def resolve_padding_nm(pdb_text: str, requested_nm: float, *,
         f"trimmed padding {requested_nm:g} -> {fallback_nm:g} nm: the requested cell "
         f"would be ~{atoms:,} atoms against a {max_atoms:,} cap, which forces a "
         f"water-shell carve — and a carved cell runs NVT throughout, losing the "
-        f"fixed-DNA settle stage and the box-trace criterion.")
+        f"fixed-DNA settle stage and the box-trace criterion."
+    )
 
 
 #: Unrestrained nanoseconds below which rotation sizing buys nothing.
@@ -512,10 +556,14 @@ def resolve_padding_nm(pdb_text: str, requested_nm: float, *,
 ROTATION_FREE_NS_THRESHOLD = 20.0
 
 
-def resolve_box_mode(pdb_text: str, padding_nm: float, *,
-                     max_atoms: "int | None",
-                     free_ns: "float | None" = None,
-                     preferred: str = DEFAULT_BOX_MODE) -> tuple[str, "str | None"]:
+def resolve_box_mode(
+    pdb_text: str,
+    padding_nm: float,
+    *,
+    max_atoms: "int | None",
+    free_ns: "float | None" = None,
+    preferred: str = DEFAULT_BOX_MODE,
+) -> tuple[str, "str | None"]:
     """Pick a cell-sizing rule that is both correct and affordable (pure).
 
     Two independent reasons to decline rotation sizing:
@@ -540,7 +588,8 @@ def resolve_box_mode(pdb_text: str, padding_nm: float, *,
             f"{ROTATION_FREE_NS_THRESHOLD:g} ns at which a solute can rotate into its own "
             f"periodic image. A rotation-sized cell would cost several times the water "
             f"for no benefit. A LONG free run (production) in this cell is NOT "
-            f"trustworthy — re-solvate for one.")
+            f"trustworthy — re-solvate for one."
+        )
     if not max_atoms:
         return preferred, None
     n_dna = 0
@@ -560,7 +609,8 @@ def resolve_box_mode(pdb_text: str, padding_nm: float, *,
         f"rotation-sized cell would be ~{rot_atoms:,} atoms (cap {max_atoms:,}); "
         f"fell back to bbox sizing (~{estimate_box_atoms(bb_box, n_dna, n_p):,} atoms). "
         f"A free (unrestrained) stage in this box is NOT trustworthy — the solute can "
-        f"rotate into its own periodic image. Use a cluster target for a free run.")
+        f"rotate into its own periodic image. Use a cluster target for a free run."
+    )
 
 
 def _recenter_pdb_in_padded_box(
@@ -618,7 +668,9 @@ def _recenter_pdb_in_padded_box(
     elif box_mode == "bbox":
         span = 2.0 * half
     else:
-        raise ValueError(f"unknown box_mode {box_mode!r} (expected 'bbox' or 'rotation')")
+        raise ValueError(
+            f"unknown box_mode {box_mode!r} (expected 'bbox' or 'rotation')"
+        )
 
     # Translation that centres the structure in a cell of ``span + 2*padding``.
     tx, ty, tz = (pad_a + span / 2.0) - centre
@@ -678,28 +730,46 @@ def _gmx_solvate(
 
     # editconf: set the explicit box; do NOT centre (coords are already centred).
     _emit(progress, "solvate", None, "Building solvation box (gmx editconf)…")
-    _run_watched([
-        gmx, "editconf",
-        "-f", "dry.pdb",
-        "-o", "dry.gro",
-        "-noc",
-        "-box", f"{bx:.4f}", f"{by:.4f}", f"{bz:.4f}",
-        "-bt", "triclinic",
-        "-nobackup",
-    ], cwd=tmpdir, hard_timeout_s=hard_timeout)
+    _run_watched(
+        [
+            gmx,
+            "editconf",
+            "-f",
+            "dry.pdb",
+            "-o",
+            "dry.gro",
+            "-noc",
+            "-box",
+            f"{bx:.4f}",
+            f"{by:.4f}",
+            f"{bz:.4f}",
+            "-bt",
+            "triclinic",
+            "-nobackup",
+        ],
+        cwd=tmpdir,
+        hard_timeout_s=hard_timeout,
+    )
 
     # solvate.  With a shell request, pass -shell so gmx places ONLY a hydration
     # layer around the DNA (no full-box fill → no multi-GB memory spike); otherwise
     # fill the box (small designs that fit).  TIP3P geometry comes from spc216.gro.
     shell_native = bool(water_shell_nm and water_shell_nm > 0)
-    msg = (f"Adding TIP3P hydration shell ({water_shell_nm:.2f} nm, gmx solvate -shell)…"
-           if shell_native else "Adding TIP3P water (gmx solvate)…")
+    msg = (
+        f"Adding TIP3P hydration shell ({water_shell_nm:.2f} nm, gmx solvate -shell)…"
+        if shell_native
+        else "Adding TIP3P water (gmx solvate)…"
+    )
     _emit(progress, "solvate", None, msg)
     solvate_cmd = [
-        gmx, "solvate",
-        "-cp", "dry.gro",
-        "-cs", "spc216.gro",
-        "-o", "solvated.gro",
+        gmx,
+        "solvate",
+        "-cp",
+        "dry.gro",
+        "-cs",
+        "spc216.gro",
+        "-o",
+        "solvated.gro",
         "-nobackup",
     ]
     if shell_native:
@@ -743,30 +813,48 @@ def _gmx_solvate_periodic(
                 pass
 
     if not xs:
-        raise RuntimeError("No ATOM/HETATM records found in PDB for periodic solvation.")
+        raise RuntimeError(
+            "No ATOM/HETATM records found in PDB for periodic solvation."
+        )
 
     bx = (max(xs) - min(xs)) + 2 * padding_nm
     by = (max(ys) - min(ys)) + 2 * padding_nm
     bz = periodic_z_nm
 
     # editconf: centre structure in the explicit box (no auto-padding)
-    _run([
-        gmx, "editconf",
-        "-f", "dry.pdb",
-        "-o", "dry.gro",
-        "-c",
-        "-box", f"{bx:.4f}", f"{by:.4f}", f"{bz:.4f}",
-        "-nobackup",
-    ], cwd=tmpdir)
+    _run(
+        [
+            gmx,
+            "editconf",
+            "-f",
+            "dry.pdb",
+            "-o",
+            "dry.gro",
+            "-c",
+            "-box",
+            f"{bx:.4f}",
+            f"{by:.4f}",
+            f"{bz:.4f}",
+            "-nobackup",
+        ],
+        cwd=tmpdir,
+    )
 
     # solvate: fill box with pre-equilibrated TIP3P water
-    _run([
-        gmx, "solvate",
-        "-cp", "dry.gro",
-        "-cs", "spc216.gro",
-        "-o", "solvated.gro",
-        "-nobackup",
-    ], cwd=tmpdir)
+    _run(
+        [
+            gmx,
+            "solvate",
+            "-cp",
+            "dry.gro",
+            "-cs",
+            "spc216.gro",
+            "-o",
+            "solvated.gro",
+            "-nobackup",
+        ],
+        cwd=tmpdir,
+    )
 
     gro_text = (tmpdir / "solvated.gro").read_text()
     waters, box_from_gro = _parse_gro(gro_text)
@@ -785,7 +873,7 @@ def _periodic_cell_header(
 ) -> str:
     bx, by, bz = box_nm
     bx_a, by_a = bx * 10, by * 10
-    bz_a = periodic_z_nm * 10   # exact period in Å
+    bz_a = periodic_z_nm * 10  # exact period in Å
     cx, cy, cz = bx_a / 2, by_a / 2, bz_a / 2
     return f"""\
 # NAMD periodic unit-cell configuration generated by NADOC
@@ -866,11 +954,16 @@ def _render_periodic_equilibrate_npt_conf(
     tail X/Y and restore Z to the exact crossover period.
     """
     header = _periodic_cell_header(
-        name, box_nm, n_atoms, periodic_z_nm,
+        name,
+        box_nm,
+        n_atoms,
+        periodic_z_nm,
         mode="standard CUDA, restrained NPT box discovery",
         langevin_damping=5.0,  # stronger coupling during box discovery is fine
     )
-    return header + f"""\
+    return (
+        header
+        + f"""\
 
 # ── Barostat — restrained NPT box discovery ──────────────────────────────────
 useGroupPressure   yes
@@ -909,6 +1002,7 @@ reinitvels         310
 constraintScaling  1.0        ;# DNA heavy atoms restrained at k=1 kcal/mol/Å²
 run                250000     ;# 500 ps restrained NPT box discovery
 """
+    )
 
 
 def _render_periodic_locked_nvt_conf(
@@ -929,7 +1023,10 @@ def _render_periodic_locked_nvt_conf(
     generated box and PDB coordinates.
     """
     header = _periodic_cell_header(
-        name, box_nm, n_atoms, periodic_z_nm,
+        name,
+        box_nm,
+        n_atoms,
+        periodic_z_nm,
         mode="standard CUDA, fixed-box locked-Z NVT",
     )
     if restart_from:
@@ -952,7 +1049,9 @@ constraintScaling  {restraint_scaling:.3f}
 
 """
 
-    return header + f"""\
+    return (
+        header
+        + f"""\
 
 # ── Barostat — disabled for locked-Z production ──────────────────────────────
 # Pressure is handled by the preceding NPT box-discovery phase. This phase fixes
@@ -973,6 +1072,7 @@ stepspercycle      10
 # ── Run ───────────────────────────────────────────────────────────────────────
 {start_block}run                {run_steps}
 """
+    )
 
 
 def _render_periodic_benchmark_conf(
@@ -988,8 +1088,8 @@ def _render_periodic_benchmark_conf(
     suffix = "bench_gpu_resident" if gpu_resident else "bench_standard_cuda"
     mode = (
         "EXPERIMENTAL CUDASOAintegrate, fixed-box NVT"
-        if gpu_resident else
-        "standard CUDA, fixed-box NVT benchmark"
+        if gpu_resident
+        else "standard CUDA, fixed-box NVT benchmark"
     )
     header = _periodic_cell_header(name, box_nm, n_atoms, periodic_z_nm, mode=mode)
     pairlist = 16.0
@@ -1005,7 +1105,9 @@ def _render_periodic_benchmark_conf(
 # explicit benchmark probe, not as a production recommendation.
 GPUresident        on
 """
-    return header.replace("pairlistdist       16.0", f"pairlistdist       {pairlist:.1f}") + f"""\
+    return (
+        header.replace("pairlistdist       16.0", f"pairlistdist       {pairlist:.1f}")
+        + f"""\
 
 # ── Barostat — disabled for benchmark ────────────────────────────────────────
 
@@ -1022,6 +1124,7 @@ minimize           500
 reinitvels         310
 run                {n_steps}
 """
+    )
 
 
 def _render_periodic_namd_conf(
@@ -1152,6 +1255,7 @@ if __name__ == "__main__":
 # §3  ION PLACEMENT
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _count_dna_charge(pdb_text: str) -> float:
     """Return the net DNA charge by counting backbone phosphate atoms.
 
@@ -1160,7 +1264,8 @@ def _count_dna_charge(pdb_text: str) -> float:
     making their sum meaningless for neutralisation purposes.
     """
     n_p = sum(
-        1 for line in pdb_text.splitlines()
+        1
+        for line in pdb_text.splitlines()
         if line.startswith("ATOM") and line[12:16].strip() == "P"
     )
     return float(-n_p)
@@ -1186,6 +1291,7 @@ def _ion_counts(
 @dataclasses.dataclass(frozen=True)
 class IonCounts:
     """The ion census for one solvated cell, plus how it was arrived at."""
+
     n_na: int
     n_mg: int
     n_cl: int
@@ -1272,7 +1378,9 @@ def ion_counts(
         n_cl = n_nacl + 2 * n_mg
 
     return IonCounts(
-        n_na=n_na, n_mg=n_mg, n_cl=n_cl,
+        n_na=n_na,
+        n_mg=n_mg,
+        n_cl=n_cl,
         counterion="mg" if use_mg else "na",
         n_mg_neutralising=n_mg_neutralising,
         n_mg_bulk=n_mg_bulk,
@@ -1305,8 +1413,13 @@ def _ion_counts_mixed(
 ) -> tuple[int, int, int]:
     """(n_Na, n_Mg, n_Cl) — thin tuple wrapper over :func:`ion_counts`."""
     return ion_counts(
-        n_waters, dna_charge, nacl_mM=nacl_mM, mgcl2_mM=mgcl2_mM, box_nm=box_nm,
-        volume_nm3=volume_nm3, mg_hexahydrate=mg_hexahydrate,
+        n_waters,
+        dna_charge,
+        nacl_mM=nacl_mM,
+        mgcl2_mM=mgcl2_mM,
+        box_nm=box_nm,
+        volume_nm3=volume_nm3,
+        mg_hexahydrate=mg_hexahydrate,
     ).as_tuple()
 
 
@@ -1315,7 +1428,9 @@ def _place_ions(
     n_na: int,
     n_cl: int,
     seed: int = 42,
-) -> tuple[list[_Water], list[tuple[float, float, float]], list[tuple[float, float, float]]]:
+) -> tuple[
+    list[_Water], list[tuple[float, float, float]], list[tuple[float, float, float]]
+]:
     """Replace n_na + n_cl randomly selected water molecules with ions.
 
     Returns (remaining_waters, na_positions, cl_positions).
@@ -1364,8 +1479,15 @@ def _place_ions_mixed(
 ]:
     """Replace waters with Na+, Mg2+/MGH, and Cl- ions."""
     if mg_hexahydrate:
-        return _place_ions_mixed_mgh(waters, n_na, n_mg, n_cl, seed=seed,
-                                     progress=progress, dna_pdb_text=dna_pdb_text)
+        return _place_ions_mixed_mgh(
+            waters,
+            n_na,
+            n_mg,
+            n_cl,
+            seed=seed,
+            progress=progress,
+            dna_pdb_text=dna_pdb_text,
+        )
 
     rng = random.Random(seed)
     total_ions = n_na + n_mg + n_cl
@@ -1375,8 +1497,8 @@ def _place_ions_mixed(
         )
     chosen_idx = rng.sample(range(len(waters)), total_ions)
     na_idx = set(chosen_idx[:n_na])
-    mg_idx = set(chosen_idx[n_na:n_na + n_mg])
-    cl_idx = set(chosen_idx[n_na + n_mg:])
+    mg_idx = set(chosen_idx[n_na : n_na + n_mg])
+    cl_idx = set(chosen_idx[n_na + n_mg :])
 
     remaining: list[_Water] = []
     na_pos: list[tuple[float, float, float]] = []
@@ -1404,8 +1526,9 @@ def _place_ions_mixed(
 MGH_SEED_SHELL_NM = 1.2
 
 
-def _shell_biased_order(pos, dna_pdb_text: "str | None", n_mg: int,
-                        fallback_order: list, rng) -> list:
+def _shell_biased_order(
+    pos, dna_pdb_text: "str | None", n_mg: int, fallback_order: list, rng
+) -> list:
     """Shuffled water indices lying within :data:`MGH_SEED_SHELL_NM` of the backbone.
 
     Returns ``[]`` when there is no solute to condense on, or when the shell holds
@@ -1427,13 +1550,18 @@ def _shell_biased_order(pos, dna_pdb_text: "str | None", n_mg: int,
         if not p_atoms:
             return []
         dist, _ = cKDTree(np.asarray(p_atoms, dtype=float)).query(
-            pos, k=1, distance_upper_bound=MGH_SEED_SHELL_NM, workers=-1)
+            pos, k=1, distance_upper_bound=MGH_SEED_SHELL_NM, workers=-1
+        )
         shell = np.flatnonzero(np.isfinite(dist))
         if shell.size < n_mg:
             # Not enough shell sites to seed every cluster — let the caller mix shell
             # first, bulk after, rather than pretending the shell is sufficient.
-            logger.info("Mg seeding: shell holds %d waters for %d clusters; "
-                        "the remainder will be placed in bulk", shell.size, n_mg)
+            logger.info(
+                "Mg seeding: shell holds %d waters for %d clusters; "
+                "the remainder will be placed in bulk",
+                shell.size,
+                n_mg,
+            )
         idx = shell.tolist()
         rng.shuffle(idx)
         return idx
@@ -1465,11 +1593,19 @@ def _ideal_mgh_cluster(mg: tuple[float, float, float]) -> _MgHexahydrate:
         h_spread = tangent * math.sin(half_angle)
         h1 = oxygen + oh_nm * (h_mid + h_spread)
         h2 = oxygen + oh_nm * (h_mid - h_spread)
-        waters.append(_Water(
-            float(oxygen[0]), float(oxygen[1]), float(oxygen[2]),
-            float(h1[0]), float(h1[1]), float(h1[2]),
-            float(h2[0]), float(h2[1]), float(h2[2]),
-        ))
+        waters.append(
+            _Water(
+                float(oxygen[0]),
+                float(oxygen[1]),
+                float(oxygen[2]),
+                float(h1[0]),
+                float(h1[1]),
+                float(h1[2]),
+                float(h2[0]),
+                float(h2[1]),
+                float(h2[2]),
+            )
+        )
     return _MgHexahydrate(mg=mg, waters=waters)
 
 
@@ -1538,7 +1674,7 @@ def _place_ions_mixed_mgh(
     mg_order = _shell_biased_order(pos, dna_pdb_text, n_mg, order, rng) if n_mg else []
     mg_cursor = 0
     cursor = 0
-    claimed = bytearray(n)   # 0/1 flag per water; O(1) membership, no giant tuples
+    claimed = bytearray(n)  # 0/1 flag per water; O(1) membership, no giant tuples
 
     def next_unclaimed() -> int:
         nonlocal cursor
@@ -1558,13 +1694,13 @@ def _place_ions_mixed_mgh(
             if not claimed[idx]:
                 claimed[idx] = 1
                 return idx
-        return next_unclaimed()          # shell exhausted → bulk
+        return next_unclaimed()  # shell exhausted → bulk
 
     def water_xyz(idx: int) -> tuple[float, float, float]:
         return (float(pos[idx, 0]), float(pos[idx, 1]), float(pos[idx, 2]))
 
     # ── Mg(H2O)6 clusters: center water + 5 nearest unclaimed waters ──────────
-    _K = 16   # query margin so 5 unclaimed neighbours are virtually always found
+    _K = 16  # query margin so 5 unclaimed neighbours are virtually always found
     mgh_clusters: list[_MgHexahydrate] = []
     for m in range(n_mg):
         center = next_mg_center()
@@ -1585,7 +1721,12 @@ def _place_ions_mixed_mgh(
             removed += 1
         mgh_clusters.append(_ideal_mgh_cluster(water_xyz(center)))
         if progress is not None and n_mg and (m & 0xFF) == 0:
-            _emit(progress, "assemble", 0.5 + 0.02 * (m / n_mg), "Placing Mg(H₂O)₆ clusters…")
+            _emit(
+                progress,
+                "assemble",
+                0.5 + 0.02 * (m / n_mg),
+                "Placing Mg(H₂O)₆ clusters…",
+            )
 
     # ── Monatomic Na+ / Cl- from the remaining sites ──────────────────────────
     na_pos = [water_xyz(next_unclaimed()) for _ in range(n_na)]
@@ -1610,14 +1751,14 @@ _MAX_RESID = 9000
 
 def _water_seg_info(wi: int) -> tuple[str, int]:
     """Return (segid, local_resid) for the wi-th water molecule (0-based)."""
-    seg_num   = wi // _MAX_RESID
+    seg_num = wi // _MAX_RESID
     local_rid = (wi % _MAX_RESID) + 1
     return f"W{seg_num:03d}", local_rid
 
 
 def _ion_seg_info(ii: int) -> tuple[str, int]:
     """Return (segid, local_resid) for the ii-th ion (0-based)."""
-    seg_num   = ii // _MAX_RESID
+    seg_num = ii // _MAX_RESID
     local_rid = (ii % _MAX_RESID) + 1
     return f"I{seg_num:03d}", local_rid
 
@@ -1651,7 +1792,7 @@ def _psf_bond_lines(bonds: list[tuple[int, int]]) -> list[str]:
     """Format PSF NBOND data lines (4 pairs per line, 8-char serial cols)."""
     lines = []
     for i in range(0, len(bonds), 4):
-        chunk = bonds[i:i + 4]
+        chunk = bonds[i : i + 4]
         lines.append("".join(f"{a:8d}{b:8d}" for a, b in chunk))
     return lines
 
@@ -1660,7 +1801,7 @@ def _psf_angle_lines(angles: list[tuple[int, int, int]]) -> list[str]:
     """Format PSF NTHETA data lines (3 triplets per line, 8-char serial cols)."""
     lines = []
     for i in range(0, len(angles), 3):
-        chunk = angles[i:i + 3]
+        chunk = angles[i : i + 3]
         lines.append("".join(f"{a:8d}{b:8d}{c:8d}" for a, b, c in chunk))
     return lines
 
@@ -1712,11 +1853,15 @@ def _extend_psf(
     n_waters = len(waters) or 1
     for wi, w in enumerate(waters):
         if progress is not None and (wi & 0x1FFFF) == 0:  # every ~131k waters
-            _emit(progress, "assemble", 0.55 + 0.2 * (wi / n_waters),
-                  "Building solvated topology (PSF)…")
+            _emit(
+                progress,
+                "assemble",
+                0.55 + 0.2 * (wi / n_waters),
+                "Building solvated topology (PSF)…",
+            )
         s_oh2 = serial + 1
-        s_h1  = serial + 2
-        s_h2  = serial + 3
+        s_h1 = serial + 2
+        s_h2 = serial + 3
         serial += 3
         segid, resid = _water_seg_info(wi)
 
@@ -1724,10 +1869,10 @@ def _extend_psf(
             _psf_atom_line(s_oh2, segid, resid, "TIP3", "OH2", *_TIP3_PARAMS["OH2"])
         )
         new_atom_lines.append(
-            _psf_atom_line(s_h1,  segid, resid, "TIP3", "H1",  *_TIP3_PARAMS["H1"])
+            _psf_atom_line(s_h1, segid, resid, "TIP3", "H1", *_TIP3_PARAMS["H1"])
         )
         new_atom_lines.append(
-            _psf_atom_line(s_h2,  segid, resid, "TIP3", "H2",  *_TIP3_PARAMS["H2"])
+            _psf_atom_line(s_h2, segid, resid, "TIP3", "H2", *_TIP3_PARAMS["H2"])
         )
         # Bonds: OH2-H1, OH2-H2, H1-H2 (H1-H2 needed for SHAKE in NAMD)
         new_bonds.extend([(s_oh2, s_h1), (s_oh2, s_h2), (s_h1, s_h2)])
@@ -1790,12 +1935,12 @@ def _extend_psf(
     # ── Patch PSF sections ────────────────────────────────────────────────────
     # We scan the PSF line by line, update each !NXXX count, and append data.
 
-    n_new_atoms  = len(new_atom_lines)
-    n_new_bonds  = len(new_bonds)
+    n_new_atoms = len(new_atom_lines)
+    n_new_bonds = len(new_bonds)
     n_new_angles = len(new_angles)
 
-    natom_re  = re.compile(r"^(\s*)(\d+)(\s+!NATOM.*)")
-    nbond_re  = re.compile(r"^(\s*)(\d+)(\s+!NBOND.*)")
+    natom_re = re.compile(r"^(\s*)(\d+)(\s+!NATOM.*)")
+    nbond_re = re.compile(r"^(\s*)(\d+)(\s+!NBOND.*)")
     ntheta_re = re.compile(r"^(\s*)(\d+)(\s+!NTHETA.*)")
 
     out: list[str] = []
@@ -1817,7 +1962,7 @@ def _extend_psf(
                 i += 1
             # Append new atoms
             out.extend(new_atom_lines)
-            out.append("")   # blank separator
+            out.append("")  # blank separator
             continue
 
         m = nbond_re.match(line)
@@ -1860,9 +2005,10 @@ def _extend_psf(
 
 _H36_DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
+
 def _h36(value: int, width: int) -> str:
     """Hybrid-36 encoding: integers beyond 10^width get letter prefixes."""
-    limit = 10 ** width
+    limit = 10**width
     if value < limit:
         return str(value).rjust(width)
     # Standard hybrid-36 algorithm
@@ -1888,7 +2034,7 @@ def _hetatm_record(
     resname: str,
     chain: str,
     resseq: int,
-    x: float,   # Angstrom
+    x: float,  # Angstrom
     y: float,
     z: float,
     segname: str = "",
@@ -1962,7 +2108,8 @@ def _build_solvated_pdb(
 
     # Strip old CRYST1 and END from dna_pdb; keep everything else
     dna_lines = [
-        ln for ln in dna_pdb.splitlines()
+        ln
+        for ln in dna_pdb.splitlines()
         if not ln.startswith("CRYST1") and not ln.startswith("END")
     ]
 
@@ -1973,25 +2120,41 @@ def _build_solvated_pdb(
     n_waters = len(waters) or 1
     for wi, w in enumerate(waters):
         if progress is not None and (wi & 0x1FFFF) == 0:  # every ~131k waters
-            _emit(progress, "assemble", 0.78 + 0.2 * (wi / n_waters),
-                  "Writing solvated structure (PDB)…")
+            _emit(
+                progress,
+                "assemble",
+                0.78 + 0.2 * (wi / n_waters),
+                "Writing solvated structure (PDB)…",
+            )
         s_oh2 = serial + 1
-        s_h1  = serial + 2
-        s_h2  = serial + 3
+        s_h1 = serial + 2
+        s_h2 = serial + 3
         serial += 3
         segid, resid = _water_seg_info(wi)
-        ox_a  = w.ox  * NM_TO_A
-        oy_a  = w.oy  * NM_TO_A
-        oz_a  = w.oz  * NM_TO_A
+        ox_a = w.ox * NM_TO_A
+        oy_a = w.oy * NM_TO_A
+        oz_a = w.oz * NM_TO_A
         h1x_a = w.h1x * NM_TO_A
         h1y_a = w.h1y * NM_TO_A
         h1z_a = w.h1z * NM_TO_A
         h2x_a = w.h2x * NM_TO_A
         h2y_a = w.h2y * NM_TO_A
         h2z_a = w.h2z * NM_TO_A
-        out.append(_hetatm_record(s_oh2, "OH2", "TIP3", "W", resid, ox_a,  oy_a,  oz_a,  segname=segid))
-        out.append(_hetatm_record(s_h1,  "H1",  "TIP3", "W", resid, h1x_a, h1y_a, h1z_a, segname=segid))
-        out.append(_hetatm_record(s_h2,  "H2",  "TIP3", "W", resid, h2x_a, h2y_a, h2z_a, segname=segid))
+        out.append(
+            _hetatm_record(
+                s_oh2, "OH2", "TIP3", "W", resid, ox_a, oy_a, oz_a, segname=segid
+            )
+        )
+        out.append(
+            _hetatm_record(
+                s_h1, "H1", "TIP3", "W", resid, h1x_a, h1y_a, h1z_a, segname=segid
+            )
+        )
+        out.append(
+            _hetatm_record(
+                s_h2, "H2", "TIP3", "W", resid, h2x_a, h2y_a, h2z_a, segname=segid
+            )
+        )
 
     mg_pos = mg_pos or []
     mgh_clusters = mgh_clusters or []
@@ -2001,60 +2164,116 @@ def _build_solvated_pdb(
         serial += 1
         segid, resid = _ion_seg_info(ion_idx)
         ion_idx += 1
-        out.append(_hetatm_record(
-            serial, "SOD", "SOD", "I", resid,
-            x_nm * NM_TO_A, y_nm * NM_TO_A, z_nm * NM_TO_A,
-            segname=segid,
-        ))
+        out.append(
+            _hetatm_record(
+                serial,
+                "SOD",
+                "SOD",
+                "I",
+                resid,
+                x_nm * NM_TO_A,
+                y_nm * NM_TO_A,
+                z_nm * NM_TO_A,
+                segname=segid,
+            )
+        )
 
     for i, (x_nm, y_nm, z_nm) in enumerate(mg_pos):
         serial += 1
         segid, resid = _ion_seg_info(ion_idx)
         ion_idx += 1
-        out.append(_hetatm_record(
-            serial, "MG", "MG", "I", resid,
-            x_nm * NM_TO_A, y_nm * NM_TO_A, z_nm * NM_TO_A,
-            segname=segid,
-        ))
+        out.append(
+            _hetatm_record(
+                serial,
+                "MG",
+                "MG",
+                "I",
+                resid,
+                x_nm * NM_TO_A,
+                y_nm * NM_TO_A,
+                z_nm * NM_TO_A,
+                segname=segid,
+            )
+        )
 
     for cluster in mgh_clusters:
         segid, resid = _ion_seg_info(ion_idx)
         ion_idx += 1
         serial += 1
-        out.append(_hetatm_record(
-            serial, "MG", "MGH", "I", resid,
-            cluster.mg[0] * NM_TO_A, cluster.mg[1] * NM_TO_A, cluster.mg[2] * NM_TO_A,
-            segname=segid,
-        ))
+        out.append(
+            _hetatm_record(
+                serial,
+                "MG",
+                "MGH",
+                "I",
+                resid,
+                cluster.mg[0] * NM_TO_A,
+                cluster.mg[1] * NM_TO_A,
+                cluster.mg[2] * NM_TO_A,
+                segname=segid,
+            )
+        )
         for water, (oname, h1name, h2name) in zip(cluster.waters, _MGH_WATER_NAMES):
             serial += 1
-            out.append(_hetatm_record(
-                serial, oname, "MGH", "I", resid,
-                water.ox * NM_TO_A, water.oy * NM_TO_A, water.oz * NM_TO_A,
-                segname=segid,
-            ))
+            out.append(
+                _hetatm_record(
+                    serial,
+                    oname,
+                    "MGH",
+                    "I",
+                    resid,
+                    water.ox * NM_TO_A,
+                    water.oy * NM_TO_A,
+                    water.oz * NM_TO_A,
+                    segname=segid,
+                )
+            )
             serial += 1
-            out.append(_hetatm_record(
-                serial, h1name, "MGH", "I", resid,
-                water.h1x * NM_TO_A, water.h1y * NM_TO_A, water.h1z * NM_TO_A,
-                segname=segid,
-            ))
+            out.append(
+                _hetatm_record(
+                    serial,
+                    h1name,
+                    "MGH",
+                    "I",
+                    resid,
+                    water.h1x * NM_TO_A,
+                    water.h1y * NM_TO_A,
+                    water.h1z * NM_TO_A,
+                    segname=segid,
+                )
+            )
             serial += 1
-            out.append(_hetatm_record(
-                serial, h2name, "MGH", "I", resid,
-                water.h2x * NM_TO_A, water.h2y * NM_TO_A, water.h2z * NM_TO_A,
-                segname=segid,
-            ))
+            out.append(
+                _hetatm_record(
+                    serial,
+                    h2name,
+                    "MGH",
+                    "I",
+                    resid,
+                    water.h2x * NM_TO_A,
+                    water.h2y * NM_TO_A,
+                    water.h2z * NM_TO_A,
+                    segname=segid,
+                )
+            )
 
     for i, (x_nm, y_nm, z_nm) in enumerate(cl_pos):
         serial += 1
         segid, resid = _ion_seg_info(ion_idx)
         ion_idx += 1
-        out.append(_hetatm_record(
-            serial, "CLA", "CLA", "I", resid,
-            x_nm * NM_TO_A, y_nm * NM_TO_A, z_nm * NM_TO_A,
-            segname=segid,
-        ))
+        out.append(
+            _hetatm_record(
+                serial,
+                "CLA",
+                "CLA",
+                "I",
+                resid,
+                x_nm * NM_TO_A,
+                y_nm * NM_TO_A,
+                z_nm * NM_TO_A,
+                segname=segid,
+            )
+        )
 
     out.append("END")
     return "\n".join(out) + "\n"
@@ -2091,6 +2310,7 @@ def _mgh_extrabonds(
 # ══════════════════════════════════════════════════════════════════════════════
 # §6  NAMD CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def _render_solvated_namd_conf(
     name: str,
@@ -2202,10 +2422,13 @@ def _render_solvated_fast_namd_conf(
     capture_vel_force: bool = False,
 ) -> str:
     from backend.core.namd_helpers import vel_force_dcd_block
+
     bx, by, bz = box_nm
     bx_a, by_a, bz_a = bx * 10, by * 10, bz * 10
     cx, cy, cz = bx_a / 2, by_a / 2, bz_a / 2
-    vf_block = vel_force_dcd_block(f"output/{name}_fast", 9600, capture=capture_vel_force)
+    vf_block = vel_force_dcd_block(
+        f"output/{name}_fast", 9600, capture=capture_vel_force
+    )
     # ``nvt_only`` is set exactly when the package was built with a water-shell carve,
     # and a carved cell contains vacuum.  NAMD 3 GPU-resident sizes its GPU tile /
     # exclusion buffers from the cell-average density, so it under-counts exclusions in
@@ -2215,13 +2438,13 @@ def _render_solvated_fast_namd_conf(
         "# GPUresident is OMITTED: this package was built with a water-shell carve, and\n"
         "# NAMD 3 GPU-resident cannot handle a cell containing vacuum (it needs >=~90%\n"
         "# water fill).  Nonbonded + PME still run on the GPU via the standard CUDA path."
-        if nvt_only else
-        "GPUresident        on"
+        if nvt_only
+        else "GPUresident        on"
     )
     piston = (
         "langevinPiston     off\n"
-        if nvt_only else
-        """useGroupPressure   yes
+        if nvt_only
+        else """useGroupPressure   yes
 useFlexibleCell    no
 useConstantArea    no
 langevinPiston     on
@@ -2426,6 +2649,7 @@ while True:
 # §8  PUBLIC API
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _overwrite_solute_coords(pdb_text: str, coords) -> str:
     """Rewrite the x/y/z columns of the solute PDB's ATOM/HETATM records in order.
 
@@ -2450,7 +2674,8 @@ def _overwrite_solute_coords(pdb_text: str, coords) -> str:
         if line.startswith(("ATOM", "HETATM")):
             if i >= len(xyz):
                 raise ValueError(
-                    f"solute_coords has {len(xyz)} rows but the built PDB has more atoms")
+                    f"solute_coords has {len(xyz)} rows but the built PDB has more atoms"
+                )
             x, y, z = xyz[i]
             nl = line.rstrip("\n").rstrip("\r")
             nl = f"{nl[:30]}{x:8.3f}{y:8.3f}{z:8.3f}{nl[54:]}"
@@ -2460,7 +2685,8 @@ def _overwrite_solute_coords(pdb_text: str, coords) -> str:
             out.append(line)
     if i != len(xyz):
         raise ValueError(
-            f"solute_coords has {len(xyz)} rows but the built PDB has {i} atoms")
+            f"solute_coords has {len(xyz)} rows but the built PDB has {i} atoms"
+        )
     return "".join(out)
 
 
@@ -2541,7 +2767,9 @@ def build_namd_solvated_package(
     topology_metadata: dict = {"topology_builder": "nadoc_legacy_heavy_atom_psf"}
     _emit(progress, "topology", None, "Building DNA topology (PSF/PDB)…")
     if require_full_topology:
-        topology_build = build_charmm_psfgen_topology(design, atomistic_model=atomistic_model)
+        topology_build = build_charmm_psfgen_topology(
+            design, atomistic_model=atomistic_model
+        )
         dna_pdb = topology_build.pdb_text
         dna_psf = topology_build.psf_text
         topology_metadata = topology_build.metadata
@@ -2575,17 +2803,23 @@ def build_namd_solvated_package(
         # Prefer the tutorial's bbox ± 20 Å, but only where it does not force a carve
         # (which would cost the barostat, and with it the settle stage + box trace).
         padding_nm, padding_note = resolve_padding_nm(
-            dna_pdb, padding_nm, max_atoms=_atom_cap)
+            dna_pdb, padding_nm, max_atoms=_atom_cap
+        )
         if padding_note:
             logger.info("box sizing: %s", padding_note)
         box_mode, box_mode_note = resolve_box_mode(
-            dna_pdb, padding_nm, max_atoms=_atom_cap, free_ns=free_ns)
+            dna_pdb, padding_nm, max_atoms=_atom_cap, free_ns=free_ns
+        )
         if box_mode_note:
             logger.warning("box sizing: %s", box_mode_note)
             _emit(progress, "assemble", 0.4, f"Box sizing: {box_mode_note}")
         waters, box_nm, dna_pdb = _gmx_solvate(
-            dna_pdb, padding_nm, tmpdir, progress=progress,
-            water_shell_nm=water_shell_nm, box_mode=box_mode,
+            dna_pdb,
+            padding_nm,
+            tmpdir,
+            progress=progress,
+            water_shell_nm=water_shell_nm,
+            box_mode=box_mode,
         )
 
     # 3. Count DNA net charge (1 phosphate = -1 charge) and calculate ion counts.
@@ -2595,8 +2829,12 @@ def build_namd_solvated_package(
     _emit(progress, "assemble", 0.5, "Placing neutralising ions…")
     dna_charge = _count_dna_charge(dna_pdb)
     ions = ion_counts(
-        len(waters), dna_charge, nacl_mM=ion_conc_mM, mgcl2_mM=mg_conc_mM,
-        box_nm=box_nm, mg_hexahydrate=mg_hexahydrate,
+        len(waters),
+        dna_charge,
+        nacl_mM=ion_conc_mM,
+        mgcl2_mM=mg_conc_mM,
+        box_nm=box_nm,
+        mg_hexahydrate=mg_hexahydrate,
     )
     n_na, n_mg, n_cl = ions.as_tuple()
     ion_volume_nm3 = ions.volume_nm3
@@ -2615,8 +2853,14 @@ def build_namd_solvated_package(
 
     # 4. Place ions (replace water molecules)
     waters, na_pos, mg_pos, cl_pos, mgh_clusters = _place_ions_mixed(
-        waters, n_na, n_mg, n_cl, seed=seed, mg_hexahydrate=mg_hexahydrate,
-        progress=progress, dna_pdb_text=dna_pdb,
+        waters,
+        n_na,
+        n_mg,
+        n_cl,
+        seed=seed,
+        mg_hexahydrate=mg_hexahydrate,
+        progress=progress,
+        dna_pdb_text=dna_pdb,
     )
 
     # 5. Find last DNA atom serial for sequential numbering
@@ -2632,7 +2876,12 @@ def build_namd_solvated_package(
 
     # 6. Build solvated PSF
     solvated_psf = _extend_psf(
-        dna_psf, waters, na_pos, cl_pos, mg_pos=mg_pos, mgh_clusters=mgh_clusters,
+        dna_psf,
+        waters,
+        na_pos,
+        cl_pos,
+        mg_pos=mg_pos,
+        mgh_clusters=mgh_clusters,
         progress=progress,
     )
     final_audit = audit_psf(
@@ -2697,9 +2946,9 @@ def build_namd_solvated_package(
         nvt_only=bool(water_shell_nm and water_shell_nm > 0),
     )
 
-    readme  = _README.format(name=name)
-    prompt  = _AI_PROMPT.replace("{name}", name)
-    launch  = _LAUNCH_SH.format(name=name)
+    readme = _README.format(name=name)
+    prompt = _AI_PROMPT.replace("{name}", name)
+    launch = _LAUNCH_SH.format(name=name)
     audit_json = {
         "topology_builder": topology_metadata.get("topology_builder", "unknown"),
         "topology_metadata": topology_metadata,
@@ -2752,17 +3001,17 @@ def build_namd_solvated_package(
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(prefix + f"{name}.pdb",             solvated_pdb)
-        zf.writestr(prefix + f"{name}.psf",             solvated_psf)
-        zf.writestr(prefix + f"{name}_hmr.psf",         hmr_psf)
-        zf.writestr(prefix + "charge_audit.json",       json.dumps(audit_json, indent=2))
-        zf.writestr(prefix + "namd.conf",               namd_conf)
-        zf.writestr(prefix + "namd_fast.conf",          fast_conf)
+        zf.writestr(prefix + f"{name}.pdb", solvated_pdb)
+        zf.writestr(prefix + f"{name}.psf", solvated_psf)
+        zf.writestr(prefix + f"{name}_hmr.psf", hmr_psf)
+        zf.writestr(prefix + "charge_audit.json", json.dumps(audit_json, indent=2))
+        zf.writestr(prefix + "namd.conf", namd_conf)
+        zf.writestr(prefix + "namd_fast.conf", fast_conf)
         if mgh_extrabonds:
-            zf.writestr(prefix + "mgh_extrabonds.txt",  mgh_extrabonds)
-        zf.writestr(prefix + "README.txt",              readme)
+            zf.writestr(prefix + "mgh_extrabonds.txt", mgh_extrabonds)
+        zf.writestr(prefix + "README.txt", readme)
         zf.writestr(prefix + "AI_ASSISTANT_PROMPT.txt", prompt)
-        zf.writestr(prefix + "scripts/monitor.py",      _MONITOR_PY)
+        zf.writestr(prefix + "scripts/monitor.py", _MONITOR_PY)
 
         for ff_file in _FF_FILES:
             ff_path = _FF_DIR / ff_file
@@ -2774,8 +3023,10 @@ def build_namd_solvated_package(
         info.external_attr = (
             stat.S_IFREG
             | stat.S_IRWXU
-            | stat.S_IRGRP | stat.S_IXGRP
-            | stat.S_IROTH | stat.S_IXOTH
+            | stat.S_IRGRP
+            | stat.S_IXGRP
+            | stat.S_IROTH
+            | stat.S_IXOTH
         ) << 16
         zf.writestr(info, launch)
 
@@ -2804,17 +3055,23 @@ def get_solvation_stats(
     dna_pdb = export_pdb(design, box_margin_nm=padding_nm)
     dna_psf = complete_psf(design)
     dna_n_atoms = _find_last_atom_serial(dna_psf)
-    dna_charge  = _count_dna_charge(dna_pdb)
+    dna_charge = _count_dna_charge(dna_pdb)
 
     with tempfile.TemporaryDirectory(prefix="nadoc_solvate_stats_") as _tmp:
         tmpdir = Path(_tmp)
-        waters, box_nm, _ = _gmx_solvate(dna_pdb, padding_nm, tmpdir, water_shell_nm=water_shell_nm)
+        waters, box_nm, _ = _gmx_solvate(
+            dna_pdb, padding_nm, tmpdir, water_shell_nm=water_shell_nm
+        )
 
     # Same recipe as the real build — ion_counts is the single implementation, so a
     # pre-flight estimate cannot drift from what the package actually gets.
     ions = ion_counts(
-        len(waters), dna_charge, nacl_mM=ion_conc_mM, mgcl2_mM=mg_conc_mM,
-        box_nm=box_nm, mg_hexahydrate=mg_hexahydrate,
+        len(waters),
+        dna_charge,
+        nacl_mM=ion_conc_mM,
+        mgcl2_mM=mg_conc_mM,
+        box_nm=box_nm,
+        mg_hexahydrate=mg_hexahydrate,
     )
     n_na, n_mg, n_cl = ions.as_tuple()
     n_replaced_by_mg = (MGH_WATERS_CONSUMED * n_mg) if mg_hexahydrate else n_mg
@@ -2825,24 +3082,25 @@ def get_solvation_stats(
 
     bx, by, bz = box_nm
     return {
-        "dna_atoms":    dna_n_atoms,
-        "n_waters":     n_remaining_waters,
-        "water_atoms":  n_water_atoms,
-        "n_na":         n_na,
-        "n_mg":         n_mg,
+        "dna_atoms": dna_n_atoms,
+        "n_waters": n_remaining_waters,
+        "water_atoms": n_water_atoms,
+        "n_na": n_na,
+        "n_mg": n_mg,
         "mg_hexahydrate": mg_hexahydrate,
-        "mgh_atoms":    n_mg * MGH_ATOMS if mg_hexahydrate else 0,
-        "counterion":   ions.counterion,
-        "n_cl":         n_cl,
-        "total_atoms":  n_total,
-        "box_nm":       box_nm,
+        "mgh_atoms": n_mg * MGH_ATOMS if mg_hexahydrate else 0,
+        "counterion": ions.counterion,
+        "n_cl": n_cl,
+        "total_atoms": n_total,
+        "box_nm": box_nm,
         "box_volume_nm3": bx * by * bz,
         "water_shell_nm": water_shell_nm,
-        "dna_charge":   dna_charge,
+        "dna_charge": dna_charge,
     }
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
+
 
 def _check_ff_files() -> None:
     missing = [f for f in _FF_FILES if not (_FF_DIR / f).exists()]

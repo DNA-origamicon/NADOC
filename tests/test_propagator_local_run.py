@@ -4,6 +4,7 @@ Pins that trim_ladder_for_pilot shrinks every segment's step count, enables
 velocity/force capture ONLY on the unrestrained (scale=None) production chunks, and
 keeps the manifest's per-segment steps/dcd_freq in sync with the rewritten confs.
 """
+
 import json
 
 from backend.ml.propagator import local_run as LR
@@ -17,14 +18,34 @@ def _min_manifest():
         "box_ang": [60.0, 60.0, 60.0],
         "mgh_extrabonds": False,
         "segments": [
-            {"name": "sys_01_k0p5_p100", "stage": "k0.5", "percent": 100,
-             "steps": 2_400_000, "temp": 300.0, "damping": 1.0, "scale": 0.5,
-             "npt": True, "previous": "sys_00_min", "reinit": False, "dcd_freq": 20000,
-             "soft": False},
-            {"name": "sys_02_MGHH_only_p100", "stage": "MGHH", "percent": 100,
-             "steps": 2_400_000, "temp": 300.0, "damping": 1.0, "scale": None,
-             "npt": True, "previous": "sys_01_k0p5_p100", "reinit": False,
-             "dcd_freq": 20000, "soft": False},
+            {
+                "name": "sys_01_k0p5_p100",
+                "stage": "k0.5",
+                "percent": 100,
+                "steps": 2_400_000,
+                "temp": 300.0,
+                "damping": 1.0,
+                "scale": 0.5,
+                "npt": True,
+                "previous": "sys_00_min",
+                "reinit": False,
+                "dcd_freq": 20000,
+                "soft": False,
+            },
+            {
+                "name": "sys_02_MGHH_only_p100",
+                "stage": "MGHH",
+                "percent": 100,
+                "steps": 2_400_000,
+                "temp": 300.0,
+                "damping": 1.0,
+                "scale": None,
+                "npt": True,
+                "previous": "sys_01_k0p5_p100",
+                "reinit": False,
+                "dcd_freq": 20000,
+                "soft": False,
+            },
         ],
     }
 
@@ -33,8 +54,12 @@ def test_trim_shortens_and_captures_only_unrestrained(tmp_path):
     (tmp_path / "manifest.json").write_text(json.dumps(_min_manifest()))
 
     trimmed = LR.trim_ladder_for_pilot(
-        tmp_path, "sys",
-        restrained_steps=2000, production_steps=6000, production_dcd_freq=10)
+        tmp_path,
+        "sys",
+        restrained_steps=2000,
+        production_steps=6000,
+        production_dcd_freq=10,
+    )
 
     by_name = {s.name: s for s in trimmed}
     restrained = by_name["sys_01_k0p5_p100"]

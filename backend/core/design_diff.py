@@ -59,6 +59,7 @@ def _model_classes() -> dict[str, type]:
         Strand,
         StrandExtension,
     )
+
     return {
         "helices": Helix,
         "strands": Strand,
@@ -153,7 +154,9 @@ def is_diff_child(child: "MinorMutationLogEntry") -> bool:
     apply or by replay, and such edits are rare (most minor ops touch at least
     one diffed field — e.g. strands-color-bulk changes Strand.color).
     """
-    return bool(child.diff_added_b64 or child.diff_removed_b64 or child.diff_modified_b64)
+    return bool(
+        child.diff_added_b64 or child.diff_removed_b64 or child.diff_modified_b64
+    )
 
 
 def apply_child_diff_forward(
@@ -181,8 +184,12 @@ def apply_child_diff_forward(
     """
     classes = _model_classes()
     added = json.loads(_ungzip_b64(added_b64).decode("utf-8")) if added_b64 else {}
-    removed = json.loads(_ungzip_b64(removed_b64).decode("utf-8")) if removed_b64 else {}
-    modified = json.loads(_ungzip_b64(modified_b64).decode("utf-8")) if modified_b64 else {}
+    removed = (
+        json.loads(_ungzip_b64(removed_b64).decode("utf-8")) if removed_b64 else {}
+    )
+    modified = (
+        json.loads(_ungzip_b64(modified_b64).decode("utf-8")) if modified_b64 else {}
+    )
     mod_post = modified.get("post", {}) if modified else {}
 
     warnings: list[str] = []

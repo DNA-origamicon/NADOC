@@ -95,13 +95,13 @@ from backend.core.sequences import domain_bp_range
 # SQ: 50 rows × 50 cols, centre (25, 25).
 _CADNANO_HC_MAX_ROWS: int = 30
 _CADNANO_HC_MAX_COLS: int = 32
-_CADNANO_HC_CENTER_ROW: int = _CADNANO_HC_MAX_ROWS // 2   # 15
-_CADNANO_HC_CENTER_COL: int = _CADNANO_HC_MAX_COLS // 2   # 16
+_CADNANO_HC_CENTER_ROW: int = _CADNANO_HC_MAX_ROWS // 2  # 15
+_CADNANO_HC_CENTER_COL: int = _CADNANO_HC_MAX_COLS // 2  # 16
 
 _CADNANO_SQ_MAX_ROWS: int = 50
 _CADNANO_SQ_MAX_COLS: int = 50
-_CADNANO_SQ_CENTER_ROW: int = _CADNANO_SQ_MAX_ROWS // 2   # 25
-_CADNANO_SQ_CENTER_COL: int = _CADNANO_SQ_MAX_COLS // 2   # 25
+_CADNANO_SQ_CENTER_ROW: int = _CADNANO_SQ_MAX_ROWS // 2  # 25
+_CADNANO_SQ_CENTER_COL: int = _CADNANO_SQ_MAX_COLS // 2  # 25
 
 # ── Helical phase offsets ─────────────────────────────────────────────────────
 #
@@ -248,7 +248,7 @@ def _count_circular_strands(
     remaining = set()
     for num, vs in by_num.items():
         for bp, (ph, pp, nh, np_) in enumerate(vs[strand_key]):
-            if nh != -1 and ph != -1:          # both ends connected → candidate
+            if nh != -1 and ph != -1:  # both ends connected → candidate
                 key = (num, bp)
                 if key not in visited:
                     remaining.add(key)
@@ -336,17 +336,15 @@ def _path_to_domains_and_xovers(
             continue
 
         # Cross-helix jump: close the current domain.
-        direction = (
-            Direction.FORWARD
-            if prev_bp >= seg_start_bp
-            else Direction.REVERSE
+        direction = Direction.FORWARD if prev_bp >= seg_start_bp else Direction.REVERSE
+        domains.append(
+            Domain(
+                helix_id=helix_by_num[seg_start_num].id,
+                start_bp=seg_start_bp,
+                end_bp=prev_bp,
+                direction=direction,
+            )
         )
-        domains.append(Domain(
-            helix_id=helix_by_num[seg_start_num].id,
-            start_bp=seg_start_bp,
-            end_bp=prev_bp,
-            direction=direction,
-        ))
         # Record crossover: (index of domain just closed, next helix num, next bp)
         xover_raw.append((len(domains) - 1, cur_num, cur_bp))
 
@@ -355,17 +353,15 @@ def _path_to_domains_and_xovers(
         prev_num, prev_bp = cur_num, cur_bp
 
     # Close final domain.
-    direction = (
-        Direction.FORWARD
-        if path[-1][1] >= seg_start_bp
-        else Direction.REVERSE
+    direction = Direction.FORWARD if path[-1][1] >= seg_start_bp else Direction.REVERSE
+    domains.append(
+        Domain(
+            helix_id=helix_by_num[seg_start_num].id,
+            start_bp=seg_start_bp,
+            end_bp=path[-1][1],
+            direction=direction,
+        )
     )
-    domains.append(Domain(
-        helix_id=helix_by_num[seg_start_num].id,
-        start_bp=seg_start_bp,
-        end_bp=path[-1][1],
-        direction=direction,
-    ))
 
     return domains, xover_raw
 
@@ -400,7 +396,8 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
     # scaffold OR staple entry; designs like the "Ultimate Polymer Hinge" have
     # structural arm helices that carry staples but no scaffold at all.
     vstrands = [
-        v for v in vstrands
+        v
+        for v in vstrands
         if any(nh != -1 or ph != -1 for ph, pp, nh, np_ in v["scaf"])
         or any(nh != -1 or ph != -1 for ph, pp, nh, np_ in v["stap"])
     ]
@@ -435,18 +432,27 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
         scaf_arr = v["scaf"]
         stap_arr = v["stap"]
         _inactive = [-1, -1, -1, -1]
-        active_bps = [bp for bp in range(array_len)
-                      if scaf_arr[bp] != _inactive or stap_arr[bp] != _inactive]
+        active_bps = [
+            bp
+            for bp in range(array_len)
+            if scaf_arr[bp] != _inactive or stap_arr[bp] != _inactive
+        ]
         first_bp = active_bps[0] if active_bps else 0
-        last_bp  = active_bps[-1] if active_bps else array_len - 1
+        last_bp = active_bps[-1] if active_bps else array_len - 1
 
         direction = Direction.FORWARD if num % 2 == 0 else Direction.REVERSE
         if lattice == LatticeType.SQUARE:
             twist = SQUARE_TWIST_PER_BP_RAD
-            base_phase = _SQ_PHASE_FORWARD if direction == Direction.FORWARD else _SQ_PHASE_REVERSE
+            base_phase = (
+                _SQ_PHASE_FORWARD
+                if direction == Direction.FORWARD
+                else _SQ_PHASE_REVERSE
+            )
         else:
             twist = BDNA_TWIST_PER_BP_RAD
-            base_phase = _PHASE_FORWARD if direction == Direction.FORWARD else _PHASE_REVERSE
+            base_phase = (
+                _PHASE_FORWARD if direction == Direction.FORWARD else _PHASE_REVERSE
+            )
         # geometry.py uses local_bp (0-based from first_bp) for the twist angle,
         # but caDNAno defines phase at bp=0 of the full array.  Bake in the shift
         # so that local_bp=0 yields the correct global phase at first_bp.
@@ -539,7 +545,9 @@ def import_cadnano(data: dict) -> Tuple["Design", List[str]]:
         )
 
     # ── Classify cross-helix transitions: real DX crossovers vs forced ligations ──
-    crossovers, forced_ligations = extract_crossovers_from_strands(strands, helices, lattice)
+    crossovers, forced_ligations = extract_crossovers_from_strands(
+        strands, helices, lattice
+    )
 
     # ── Assemble Design ───────────────────────────────────────────────────────
     name = data.get("name", "Imported Design")
@@ -567,12 +575,12 @@ def check_cadnano_compatibility(design: Design) -> List[str]:
     """
     msgs: List[str] = []
     if design.lattice_type not in (LatticeType.HONEYCOMB, LatticeType.SQUARE):
-        msgs.append(
-            "ERROR: caDNAno v2 export only supports HC and SQ lattices."
-        )
+        msgs.append("ERROR: caDNAno v2 export only supports HC and SQ lattices.")
     n_scaf = sum(1 for s in design.strands if s.is_scaffold)
     if n_scaf == 0:
-        msgs.append("WARNING: No scaffold strand — only staple strands will be exported.")
+        msgs.append(
+            "WARNING: No scaffold strand — only staple strands will be exported."
+        )
     elif n_scaf > 1:
         msgs.append(
             f"WARNING: Design has {n_scaf} scaffold strands. "
@@ -614,7 +622,7 @@ def _assign_grid_coords(
     Parity rule identical to HC: (row+col)%2 == 0 → FORWARD.
     """
 
-    R = HONEYCOMB_LATTICE_RADIUS       # 1.125 nm (HC stagger unit)
+    R = HONEYCOMB_LATTICE_RADIUS  # 1.125 nm (HC stagger unit)
     max_y = max(h.axis_start.y for h in helices)
 
     rows: Dict[str, int] = {}
@@ -668,11 +676,11 @@ def _assign_grid_coords(
         return rows, cols, export_dirs
 
     if lattice == LatticeType.SQUARE:
-        col_pitch = SQUARE_COL_PITCH   # 2.25 nm
-        row_step  = SQUARE_ROW_PITCH   # 2.25 nm (uniform, no stagger)
+        col_pitch = SQUARE_COL_PITCH  # 2.25 nm
+        row_step = SQUARE_ROW_PITCH  # 2.25 nm (uniform, no stagger)
     else:
         col_pitch = HONEYCOMB_COL_PITCH
-        row_step  = _HC_ROW_STEP       # 3.375 nm
+        row_step = _HC_ROW_STEP  # 3.375 nm
 
     for h in helices:
         nc = round(abs(h.axis_start.x) / col_pitch)
@@ -843,9 +851,7 @@ def export_cadnano(design: Design) -> dict:
     4. Write loop/skip from Helix.loop_skips; stap_colors from Strand.color.
     """
     if design.lattice_type not in (LatticeType.HONEYCOMB, LatticeType.SQUARE):
-        raise NotImplementedError(
-            "caDNAno export only supports HC and SQ lattices."
-        )
+        raise NotImplementedError("caDNAno export only supports HC and SQ lattices.")
 
     helices = design.helices
     if not helices:
@@ -939,17 +945,19 @@ def export_cadnano(design: Design) -> dict:
     # ── Assemble vstrands ──────────────────────────────────────────────────────
     vstrands = []
     for h in sorted_helices:
-        vstrands.append({
-            "row": rows[h.id],
-            "col": cols[h.id],
-            "num": helix_num_map[h.id],
-            "scaf": scaf_arrs[h.id],
-            "stap": stap_arrs[h.id],
-            "loop": loop_map[h.id],
-            "skip": skip_map[h.id],
-            "stap_colors": stap_colors_map[h.id],
-            "scaf_colors": [],
-        })
+        vstrands.append(
+            {
+                "row": rows[h.id],
+                "col": cols[h.id],
+                "num": helix_num_map[h.id],
+                "scaf": scaf_arrs[h.id],
+                "stap": stap_arrs[h.id],
+                "loop": loop_map[h.id],
+                "skip": skip_map[h.id],
+                "stap_colors": stap_colors_map[h.id],
+                "scaf_colors": [],
+            }
+        )
 
     return {
         "name": design.metadata.name or "NADOC Export",
@@ -1000,17 +1008,21 @@ def export_cadnano_with_labels(design: Design) -> Tuple[dict, List[dict]]:
             has_stap = stap[b] != _inactive
             if not (has_scaf or has_stap):
                 continue
-            bases.append({
-                "cadnano_base": b,
-                "global_bp": b - offset,
-                "duplex": bool(has_scaf and has_stap),
-            })
+            bases.append(
+                {
+                    "cadnano_base": b,
+                    "global_bp": b - offset,
+                    "duplex": bool(has_scaf and has_stap),
+                }
+            )
         direction = export_dirs.get(hid)
-        labels.append({
-            "snupi_chain_index": k,
-            "num": num,
-            "helix_id": hid,
-            "direction": direction.value if direction is not None else None,
-            "bases": bases,
-        })
+        labels.append(
+            {
+                "snupi_chain_index": k,
+                "num": num,
+                "helix_id": hid,
+                "direction": direction.value if direction is not None else None,
+                "bases": bases,
+            }
+        )
     return cad, labels

@@ -19,8 +19,13 @@ from backend.core import primitive_catalog as pc
 
 # ── Pure derivation ────────────────────────────────────────────────────────────
 
+
 def test_derive_metadata_from_helices():
-    design = {"helices": [{}] * 6, "lattice_type": "HONEYCOMB", "camera_poses": [{}, {}]}
+    design = {
+        "helices": [{}] * 6,
+        "lattice_type": "HONEYCOMB",
+        "camera_poses": [{}, {}],
+    }
     meta = pc.derive_metadata(design, "6hb_primitive")
     assert meta["id"] == "6hb_primitive"
     assert meta["helix_count"] == 6
@@ -35,7 +40,7 @@ def test_derive_metadata_square_and_explicit_name():
     design = {"helices": [{}] * 4, "lattice_type": "SQUARE", "name": "My Block"}
     meta = pc.derive_metadata(design, "blk")
     assert meta["short_name"] == "4HB"
-    assert meta["name"] == "My Block"          # explicit name wins over size-derived
+    assert meta["name"] == "My Block"  # explicit name wins over size-derived
     assert meta["description"] == "Square 4-helix beam"
     assert meta["pose_count"] == 0
 
@@ -56,18 +61,24 @@ def test_is_safe_id_rejects_traversal():
 
 # ── Placement-spec derivation ────────────────────────────────────────────────────
 
+
 def _bundle_create_design(cells, length_bp=42, plane="XY"):
     return {
         "lattice_type": "HONEYCOMB",
         "helices": [{"grid_pos": c, "length_bp": length_bp} for c in cells],
-        "feature_log": [{
-            "op_kind": "bundle-create",
-            "params": {
-                "cells": cells, "length_bp": length_bp, "plane": plane,
-                "strand_filter": "both", "ligate_adjacent": True,
-                "lattice_type": "HONEYCOMB",
-            },
-        }],
+        "feature_log": [
+            {
+                "op_kind": "bundle-create",
+                "params": {
+                    "cells": cells,
+                    "length_bp": length_bp,
+                    "plane": plane,
+                    "strand_filter": "both",
+                    "ligate_adjacent": True,
+                    "lattice_type": "HONEYCOMB",
+                },
+            }
+        ],
     }
 
 
@@ -75,7 +86,7 @@ def test_placement_spec_from_bundle_create_op():
     cells = [[0, 1], [1, 1], [1, 2], [1, 3], [0, 3], [0, 2]]
     spec = pc.derive_placement_spec(_bundle_create_design(cells, length_bp=42))
     assert spec["cells"] == cells
-    assert spec["anchor_cell"] == [0, 1]       # min row then min col
+    assert spec["anchor_cell"] == [0, 1]  # min row then min col
     assert spec["length_bp"] == 42
     assert spec["plane"] == "XY"
     assert spec["strand_filter"] == "both"
@@ -91,8 +102,10 @@ def test_placement_spec_anchor_is_min_row_then_col():
 def test_placement_spec_falls_back_to_helices_without_log():
     design = {
         "lattice_type": "SQUARE",
-        "helices": [{"grid_pos": [0, 0], "length_bp": 32},
-                    {"grid_pos": [0, 1], "length_bp": 32}],
+        "helices": [
+            {"grid_pos": [0, 0], "length_bp": 32},
+            {"grid_pos": [0, 1], "length_bp": 32},
+        ],
         "feature_log": [],
     }
     spec = pc.derive_placement_spec(design)
@@ -109,7 +122,9 @@ def test_placement_spec_none_when_no_footprint():
 
 def test_list_primitives_includes_placement(tmp_path):
     cells = [[0, 1], [1, 1]]
-    (tmp_path / "two.nadoc").write_text(json.dumps(_bundle_create_design(cells)), encoding="utf-8")
+    (tmp_path / "two.nadoc").write_text(
+        json.dumps(_bundle_create_design(cells)), encoding="utf-8"
+    )
     out = pc.list_primitives(tmp_path)
     assert out[0]["placement"]["cells"] == cells
     assert out[0]["placement"]["anchor_cell"] == [0, 1]
@@ -117,23 +132,32 @@ def test_list_primitives_includes_placement(tmp_path):
 
 # ── Directory scan ──────────────────────────────────────────────────────────────
 
+
 def _write_design(path, helices, lattice="HONEYCOMB", poses=()):
-    path.write_text(json.dumps({
-        "helices": [{} for _ in range(helices)],
-        "lattice_type": lattice,
-        "camera_poses": list(poses),
-    }), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "helices": [{} for _ in range(helices)],
+                "lattice_type": lattice,
+                "camera_poses": list(poses),
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def test_list_primitives_scans_sorts_and_flags_assets(tmp_path):
     _write_design(tmp_path / "18hb_primitive.nadoc", 18)
     _write_design(tmp_path / "6hb_primitive.nadoc", 6)
-    (tmp_path / "6hb_primitive.gif").write_bytes(b"GIF89a")          # has preview
+    (tmp_path / "6hb_primitive.gif").write_bytes(b"GIF89a")  # has preview
     (tmp_path / "broken.nadoc").write_text("{not json", encoding="utf-8")
 
     out = pc.list_primitives(tmp_path)
     ids = [m["id"] for m in out]
-    assert ids == ["6hb_primitive", "18hb_primitive"]               # sorted by helix count, broken skipped
+    assert ids == [
+        "6hb_primitive",
+        "18hb_primitive",
+    ]  # sorted by helix count, broken skipped
     assert out[0]["has_preview"] is True
     assert out[0]["has_poster"] is False
     assert out[1]["has_preview"] is False
@@ -144,6 +168,7 @@ def test_list_primitives_missing_dir_is_empty(tmp_path):
 
 
 # ── HTTP surface ────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture()
 def workspace(tmp_path, monkeypatch):
@@ -176,4 +201,7 @@ def test_serve_preview_and_poster(workspace):
 
 def test_missing_asset_404(workspace):
     client = TestClient(app)
-    assert client.get("/api/primitives/6hb_primitive_missing/preview.gif").status_code == 404
+    assert (
+        client.get("/api/primitives/6hb_primitive_missing/preview.gif").status_code
+        == 404
+    )

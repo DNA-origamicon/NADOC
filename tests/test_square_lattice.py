@@ -31,6 +31,7 @@ from backend.core.models import Design, Direction, LatticeType, StrandType
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _sq_2x4(length_bp: int = 32) -> Design:
     """Return a 2-row × 4-col square lattice design (8 helices, all cells valid)."""
     cells = [(r, c) for r in range(2) for c in range(4)]
@@ -48,6 +49,7 @@ def _sq_4hb(length_bp: int = 32) -> Design:
 
 
 # ── SQ-1  Extrusion ────────────────────────────────────────────────────────────
+
 
 class TestSquareExtrusion:
     def test_make_bundle_design_creates_square_design(self):
@@ -85,7 +87,9 @@ class TestSquareExtrusion:
             for col in range(3):
                 d0 = square_cell_direction(row, col)
                 d1 = square_cell_direction(row, col + 1)
-                assert d0 != d1, f"cells ({row},{col}) and ({row},{col+1}) should be antiparallel"
+                assert d0 != d1, (
+                    f"cells ({row},{col}) and ({row},{col + 1}) should be antiparallel"
+                )
 
     def test_helix_stores_square_twist(self):
         """Every helix created for a square design stores the 30°/bp twist."""
@@ -118,6 +122,7 @@ class TestSquareExtrusion:
         """make_bundle_segment should NOT reject cells for square lattice
         (all cells are valid, so a 'honeycomb hole' cell like (0,2) is fine)."""
         from backend.core.lattice import make_bundle_segment
+
         d = _sq_4hb()
         # (0, 2) would be a hole in honeycomb — fine in square
         d2 = make_bundle_segment(d, [(0, 2)], 32, plane="XY")
@@ -125,6 +130,7 @@ class TestSquareExtrusion:
 
 
 # ── SQ-2  Geometry (nucleotide positions use 30°/bp twist) ────────────────────
+
 
 class TestSquareGeometry:
     def test_twist_matches_constant(self):
@@ -134,6 +140,7 @@ class TestSquareGeometry:
         nucs = {(n.bp_index, n.direction): n for n in nucleotide_positions(h)}
 
         ax, ay = h.axis_start.x, h.axis_start.y
+
         def angle_at(bp: int) -> float:
             pos = nucs[(bp, Direction.FORWARD)].position
             return math.atan2(pos[1] - ay, pos[0] - ax)
@@ -160,10 +167,10 @@ class TestSquareGeometry:
         h = d.helices[0]
         nucs = {(n.bp_index, n.direction): n for n in nucleotide_positions(h)}
         for bp in range(h.length_bp - 1):
-            z0 = nucs[(bp,     Direction.FORWARD)].position[2]
+            z0 = nucs[(bp, Direction.FORWARD)].position[2]
             z1 = nucs[(bp + 1, Direction.FORWARD)].position[2]
             assert abs((z1 - z0) - BDNA_RISE_PER_BP) < 1e-6, (
-                f"Rise at bp={bp}: {z1-z0:.4f} nm, expected {BDNA_RISE_PER_BP}"
+                f"Rise at bp={bp}: {z1 - z0:.4f} nm, expected {BDNA_RISE_PER_BP}"
             )
 
     def test_square_vs_honeycomb_different_positions(self):
@@ -178,6 +185,3 @@ class TestSquareGeometry:
         assert abs(h_sq.axis_start.x - h_hc.axis_start.x) > 0.1, (
             "Square and honeycomb x positions should differ for col=1"
         )
-
-
-

@@ -9,6 +9,7 @@ Two layers of coverage:
     the RMSD never rises, kept edits improve it, a flat design yields no edits, and — the
     topological gate — every mark the refiner lands sits off crossovers/ends.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -25,6 +26,7 @@ FOUR_HB_SQ_CELLS = [(0, 0), (1, 0), (0, 1), (1, 1)]
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────────────────────────
+
 
 def _routed_bend(length: int, bend_deg: float | None, *, realize: bool):
     """A fully-routed 6HB honeycomb bundle; optional bend program either realised to loop/skips
@@ -69,14 +71,19 @@ def routed_sq_strut():
 
 # ── Pure helpers ──────────────────────────────────────────────────────────────────────────────
 
+
 def test_aggregate_deviation_by_bp_averages_directions_and_copies():
     positions = [
         {"helix_id": "h0", "bp_index": 5, "deviation": 1.0},
-        {"helix_id": "h0", "bp_index": 5, "deviation": 3.0},   # other strand / copy at same station
+        {
+            "helix_id": "h0",
+            "bp_index": 5,
+            "deviation": 3.0,
+        },  # other strand / copy at same station
         {"helix_id": "h0", "bp_index": 9, "deviation": 2.0},
     ]
     field = car.aggregate_deviation_by_bp(positions)
-    assert field[("h0", 5)] == pytest.approx(2.0)   # mean of 1 and 3
+    assert field[("h0", 5)] == pytest.approx(2.0)  # mean of 1 and 3
     assert field[("h0", 9)] == pytest.approx(2.0)
 
 
@@ -89,9 +96,11 @@ def test_rank_hotspots_threshold_spacing_and_empty():
     field[("h0", 3)] = 10.0
     field[("h0", 7)] = 8.0
     hs = car.rank_hotspots(field, sigma=1.0, max_hotspots=8, min_spacing=2)
-    assert hs[0] == ("h0", 3)                        # most-severe first
+    assert hs[0] == ("h0", 3)  # most-severe first
     # min_spacing de-dups near-neighbours on the same helix.
-    dense = {("h0", i): float(10 - i) for i in range(6)}  # 0 highest, all above? tune spacing
+    dense = {
+        ("h0", i): float(10 - i) for i in range(6)
+    }  # 0 highest, all above? tune spacing
     picked = car.rank_hotspots(dense, sigma=0.0, max_hotspots=8, min_spacing=3)
     for a in range(len(picked)):
         for b in range(a + 1, len(picked)):
@@ -104,11 +113,13 @@ def test_candidate_edits_mode_and_remove_gating():
     # No existing marks → only ADD ops; square mode omits add_loop.
     sq = car.candidate_edits(("h0", 12), {}, free, allow_loops=False)
     assert {e["op"] for e in sq} == {"add_skip"}
-    assert all(e["bp_index"] == 10 for e in sq)      # nearest free bp to 12
+    assert all(e["bp_index"] == 10 for e in sq)  # nearest free bp to 12
     hc = car.candidate_edits(("h0", 12), {}, free, allow_loops=True)
     assert {e["op"] for e in hc} == {"add_skip", "add_loop"}
     # An existing mark on the helix enables a remove targeting the nearest one.
-    withmark = car.candidate_edits(("h0", 12), {"h0": {25: -1}}, free, allow_loops=False)
+    withmark = car.candidate_edits(
+        ("h0", 12), {"h0": {25: -1}}, free, allow_loops=False
+    )
     rm = [e for e in withmark if e["op"] == "remove"]
     assert rm and rm[0]["bp_index"] == 25
     # No free candidates → no ADD ops (nowhere legal to place).
@@ -118,10 +129,20 @@ def test_candidate_edits_mode_and_remove_gating():
 
 def test_with_edit_add_and_remove_semantics():
     marks = {"h0": {25: -1}}
-    assert car._with_edit(marks, {"helix_id": "h0", "op": "add_skip", "bp_index": 10})["h0"][10] == -1
-    assert car._with_edit(marks, {"helix_id": "h0", "op": "add_loop", "bp_index": 10})["h0"][10] == +1
+    assert (
+        car._with_edit(marks, {"helix_id": "h0", "op": "add_skip", "bp_index": 10})[
+            "h0"
+        ][10]
+        == -1
+    )
+    assert (
+        car._with_edit(marks, {"helix_id": "h0", "op": "add_loop", "bp_index": 10})[
+            "h0"
+        ][10]
+        == +1
+    )
     removed = car._with_edit(marks, {"helix_id": "h0", "op": "remove", "bp_index": 25})
-    assert "h0" not in removed                        # last mark gone → helix key dropped
+    assert "h0" not in removed  # last mark gone → helix key dropped
     # original is untouched (copy semantics)
     assert marks == {"h0": {25: -1}}
 
@@ -137,6 +158,7 @@ def test_apply_marks_sets_exactly_the_mark_set():
 
 
 # ── The topological gate: off-crossover / off-end placement ─────────────────────────────────────
+
 
 def test_free_interior_candidates_excludes_crossovers_endpoints_and_margin():
     d = _routed_bend(126, None, realize=False)
@@ -155,16 +177,17 @@ def test_free_interior_candidates_excludes_crossovers_endpoints_and_margin():
 
 # ── Oracle + greedy loop (real linear FEM on small bundles) ─────────────────────────────────────
 
+
 def test_fem_measure_returns_rmsd_and_field():
     d = _routed_bend(105, 60.0, realize=True)
     m = car.fem_measure(d, nonlinear=False)
     assert m is not None
     assert m["rmsd"] >= 0.0 and m["n"] > 0
-    assert m["deviation_by_bp"]                        # per-(helix,bp) field present
+    assert m["deviation_by_bp"]  # per-(helix,bp) field present
 
 
 def test_refine_straight_control_makes_no_edits():
-    d = _routed_bend(105, None, realize=False)          # straight, no marks → no hotspots
+    d = _routed_bend(105, None, realize=False)  # straight, no marks → no hotspots
     res = car.fem_refine(d, nonlinear=False, max_hotspots=4)
     assert res["status"] == "done"
     assert res["edits_kept"] == []
@@ -178,15 +201,17 @@ def test_refine_honeycomb_shape_hits_bend_and_places_marks_off_forbidden():
     # routes to the COUPLED (twist,bend) shape solve (exp38/G1), which drives the bend toward target.
     realized = _routed_bend(210, 90.0, realize=True)
     marks = car.current_marks_by_helix(realized)
-    reduced = {hid: {bp: dl for i, (bp, dl) in enumerate(sorted(bps.items())) if i % 2 == 0}
-               for hid, bps in marks.items()}
-    under = car.apply_marks(realized, reduced)          # keeps the bend DeformationOp
+    reduced = {
+        hid: {bp: dl for i, (bp, dl) in enumerate(sorted(bps.items())) if i % 2 == 0}
+        for hid, bps in marks.items()
+    }
+    under = car.apply_marks(realized, reduced)  # keeps the bend DeformationOp
     res = car.fem_refine(under, nonlinear=False)
 
     assert res["status"] == "done"
-    assert res["objective"] == "shape"                  # programmed bend → coupled twist+bend solve
-    assert res["mode"] == "loops_and_skips"             # honeycomb → loops allowed
-    assert res["authority"] is not None                 # per-helix [∂twist/∂skip, ∂bend/∂skip] map
+    assert res["objective"] == "shape"  # programmed bend → coupled twist+bend solve
+    assert res["mode"] == "loops_and_skips"  # honeycomb → loops allowed
+    assert res["authority"] is not None  # per-helix [∂twist/∂skip, ∂bend/∂skip] map
     # The coupled solve never regresses the shape: bend lands NO FURTHER from target than it started
     # (it only adopts a step that lowers the combined twist+bend error; deviation RMSD may rise).
     tgt_bd = res["bend_target"]
@@ -198,7 +223,9 @@ def test_refine_honeycomb_shape_hits_bend_and_places_marks_off_forbidden():
     for hid, bps in res["converged_marks"].items():
         for bp in bps:
             if (hid, bp) not in inherited:
-                assert bp not in forbidden[hid], "shape solve ADDED a mark on a crossover/end"
+                assert bp not in forbidden[hid], (
+                    "shape solve ADDED a mark on a crossover/end"
+                )
 
 
 def test_refine_emits_per_iteration_twist_bend_deviation_and_target():
@@ -207,13 +234,20 @@ def test_refine_emits_per_iteration_twist_bend_deviation_and_target():
     # measured (not None) and the target bend is a real arc angle > the under-realized current.
     realized = _routed_bend(126, 90.0, realize=True)
     marks = car.current_marks_by_helix(realized)
-    reduced = {hid: {bp: dl for i, (bp, dl) in enumerate(sorted(bps.items())) if i % 2 == 0}
-               for hid, bps in marks.items()}
+    reduced = {
+        hid: {bp: dl for i, (bp, dl) in enumerate(sorted(bps.items())) if i % 2 == 0}
+        for hid, bps in marks.items()
+    }
     under = car.apply_marks(realized, reduced)
 
     events = []
-    res = car.fem_refine(under, nonlinear=False, max_hotspots=4, rmsd_improve_nm=0.02,
-                         on_progress=events.append)
+    res = car.fem_refine(
+        under,
+        nonlinear=False,
+        max_hotspots=4,
+        rmsd_improve_nm=0.02,
+        on_progress=events.append,
+    )
     iters = [e for e in events if e["phase"] == "iteration"]
     assert iters, "at least the baseline (iteration 0) event is emitted"
     assert iters[0]["iteration"] == 0
@@ -222,7 +256,9 @@ def test_refine_emits_per_iteration_twist_bend_deviation_and_target():
             assert set(e[side]) == {"deviation", "twist_deg", "bend_deg"}
         assert e["target"]["deviation"] == 0.0
         # bend/twist are resolvable on a routed multi-helix bundle
-        assert e["current"]["bend_deg"] is not None and e["target"]["bend_deg"] is not None
+        assert (
+            e["current"]["bend_deg"] is not None and e["target"]["bend_deg"] is not None
+        )
     # Target bend is a real arc angle; the FEM under-realizes it (current < target).
     assert iters[-1]["target"]["bend_deg"] > 10.0
     assert res["metrics"]["target"]["deviation"] == 0.0
@@ -232,10 +268,17 @@ def test_refine_emits_per_iteration_twist_bend_deviation_and_target():
 def test_measure_bundle_arc_bend_reads_zero_on_straight_and_angle_on_arc():
     from backend.core.oxdna_health import measure_bundle_arc_bend
     import numpy as np
+
     # A straight 3-helix bundle → ~0.  Points as {helix_id, bp_index, backbone_position}.
-    straight = [{"helix_id": f"h{k}", "bp_index": i,
-                 "backbone_position": [float(k), 0.0, float(i)]}
-                for k in range(3) for i in range(40)]
+    straight = [
+        {
+            "helix_id": f"h{k}",
+            "bp_index": i,
+            "backbone_position": [float(k), 0.0, float(i)],
+        }
+        for k in range(3)
+        for i in range(40)
+    ]
     assert measure_bundle_arc_bend(straight) == pytest.approx(0.0, abs=2.0)
     # A quarter-circle arc of the bundle centreline → ~90°.
     arc = []
@@ -243,12 +286,18 @@ def test_measure_bundle_arc_bend_reads_zero_on_straight_and_angle_on_arc():
         th = (np.pi / 2) * i / 39.0
         cx, cz = 50.0 * np.sin(th), 50.0 * (1 - np.cos(th))
         for k in range(3):
-            arc.append({"helix_id": f"h{k}", "bp_index": i,
-                        "backbone_position": [cx + float(k), 0.0, cz]})
+            arc.append(
+                {
+                    "helix_id": f"h{k}",
+                    "bp_index": i,
+                    "backbone_position": [cx + float(k), 0.0, cz],
+                }
+            )
     assert measure_bundle_arc_bend(arc) == pytest.approx(90.0, abs=10.0)
 
 
 # ── Global skip-DENSITY search (SQUARE register over-twist) ─────────────────────────────────────
+
 
 def test_periodic_skip_marks_are_skips_only_off_forbidden_and_empty_for_honeycomb():
     # Honeycomb has no register-twist knob → no periodic pattern.
@@ -260,10 +309,13 @@ def test_periodic_skip_marks_are_skips_only_off_forbidden_and_empty_for_honeycom
     assert marks and all(dl == -1 for bps in marks.values() for dl in bps.values())
     forbidden, _ = car._forbidden_bps(sq)
     for hid, bps in marks.items():
-        assert not (set(bps) & forbidden[hid]), "a periodic skip landed on a crossover/end"
+        assert not (set(bps) & forbidden[hid]), (
+            "a periodic skip landed on a crossover/end"
+        )
     # A denser period places strictly more skips than a sparser one.
-    assert (sum(len(v) for v in car.periodic_skip_marks(sq, 24).values())
-            > sum(len(v) for v in marks.values()))
+    assert sum(len(v) for v in car.periodic_skip_marks(sq, 24).values()) > sum(
+        len(v) for v in marks.values()
+    )
 
 
 def test_sweep_skip_period_finds_a_twist_relieving_minimum(routed_sq_strut):
@@ -272,9 +324,13 @@ def test_sweep_skip_period_finds_a_twist_relieving_minimum(routed_sq_strut):
     sweep = car.sweep_skip_period(routed_sq_strut, nonlinear=False)
     assert sweep["status"] == "done"
     base_rmsd = sweep["baseline_measure"]["rmsd"]
-    assert sweep["best_period"] is not None, "adding skips must beat the bare (0-skip) strut"
-    assert 16 <= sweep["best_period"] <= 128            # near the ~48 bp literature density
-    assert sweep["best_measure"]["rmsd"] < 0.75 * base_rmsd   # a substantial straightening
+    assert sweep["best_period"] is not None, (
+        "adding skips must beat the bare (0-skip) strut"
+    )
+    assert 16 <= sweep["best_period"] <= 128  # near the ~48 bp literature density
+    assert (
+        sweep["best_measure"]["rmsd"] < 0.75 * base_rmsd
+    )  # a substantial straightening
     assert all(dl == -1 for bps in sweep["best_marks"].values() for dl in bps.values())
     periods = {c["period"] for c in sweep["curve"]}
     assert None in periods and len([p for p in periods if p is not None]) >= 6
@@ -296,8 +352,8 @@ def test_refine_plain_square_strut_nulls_twist_where_greedy_kept_zero(routed_sq_
     tgt = res["twist_target"]
     err_before = abs(res["twist_before"] - tgt)
     err_after = abs(res["twist_after"] - tgt)
-    assert err_before > 5.0                       # register over-twist is large on a bare strut
-    assert err_after < 0.5 * err_before           # substantially nulled
+    assert err_before > 5.0  # register over-twist is large on a bare strut
+    assert err_after < 0.5 * err_before  # substantially nulled
     # A non-empty, skips-only converged pattern (greedy alone produced {} here).
     marks = res["converged_marks"]
     assert marks and all(dl == -1 for bps in marks.values() for dl in bps.values())
@@ -309,9 +365,11 @@ def test_refine_plain_square_strut_nulls_twist_where_greedy_kept_zero(routed_sq_
 
 def test_sweep_honors_should_stop(routed_sq_strut):
     # A should_stop that trips immediately → the sweep bails as 'stopped' with the 0-skip point.
-    sweep = car.sweep_skip_period(routed_sq_strut, nonlinear=False, should_stop=lambda: True)
+    sweep = car.sweep_skip_period(
+        routed_sq_strut, nonlinear=False, should_stop=lambda: True
+    )
     assert sweep["status"] == "stopped"
-    assert sweep["best_period"] is None      # nothing beat the (unmeasured) baseline
+    assert sweep["best_period"] is None  # nothing beat the (unmeasured) baseline
 
 
 def test_refine_square_lattice_is_skips_only():
@@ -319,6 +377,7 @@ def test_refine_square_lattice_is_skips_only():
     # Seed a couple of skips so there is a pattern to tune (still square → skips only).
     from backend.core.loop_skip_calculator import sq_lattice_periodic_skips
     from backend.core.loop_skip_calculator import apply_loop_skips
+
     d = apply_loop_skips(d, sq_lattice_periodic_skips(d, 48))
     res = car.fem_refine(d, nonlinear=False, max_hotspots=3, rmsd_improve_nm=0.02)
     assert res["mode"] == "skips_only"
@@ -333,8 +392,10 @@ def test_shape_iter_events_carry_current_and_target_metrics():
     # contract.  Uses the same under-realised 90° bend that routes to the shape solve.
     realized = _routed_bend(210, 90.0, realize=True)
     marks = car.current_marks_by_helix(realized)
-    reduced = {hid: {bp: dl for i, (bp, dl) in enumerate(sorted(bps.items())) if i % 2 == 0}
-               for hid, bps in marks.items()}
+    reduced = {
+        hid: {bp: dl for i, (bp, dl) in enumerate(sorted(bps.items())) if i % 2 == 0}
+        for hid, bps in marks.items()
+    }
     under = car.apply_marks(realized, reduced)
 
     events = []
@@ -351,24 +412,52 @@ def test_shape_iter_events_carry_current_and_target_metrics():
 
 def test_format_refine_note_surfaces_every_phase_metric():
     from backend.core.cando_runner import _format_refine_note as f
+
     # shape_iter — the coupled twist+bend algorithm's per-iteration line carries dev/curve/twist + err.
-    s = f({"phase": "shape_iter", "iter": 2,
-           "current": {"deviation": 1.2, "twist_deg": 30.0, "bend_deg": 42.0},
-           "target": {"deviation": 0.0, "twist_deg": -1.7, "bend_deg": 72.3}, "shape_err": 32.0})
+    s = f(
+        {
+            "phase": "shape_iter",
+            "iter": 2,
+            "current": {"deviation": 1.2, "twist_deg": 30.0, "bend_deg": 42.0},
+            "target": {"deviation": 0.0, "twist_deg": -1.7, "bend_deg": 72.3},
+            "shape_err": 32.0,
+        }
+    )
     assert "Shape iter 2" in s
-    assert "dev 1.20 nm→0.00 nm" in s and "curve 42.0°→72.3°" in s and "twist 30.0°→-1.7°" in s
+    assert (
+        "dev 1.20 nm→0.00 nm" in s
+        and "curve 42.0°→72.3°" in s
+        and "twist 30.0°→-1.7°" in s
+    )
     assert "err 32.0°" in s
     # iteration — now also carries curvature + twist (was dev-only).
-    s = f({"phase": "iteration", "iteration": 3, "n_hotspots": 4,
-           "current": {"deviation": 2.07, "twist_deg": 1.0, "bend_deg": 42.2},
-           "target": {"deviation": 0.0, "twist_deg": -1.7, "bend_deg": 72.3}})
+    s = f(
+        {
+            "phase": "iteration",
+            "iteration": 3,
+            "n_hotspots": 4,
+            "current": {"deviation": 2.07, "twist_deg": 1.0, "bend_deg": 42.2},
+            "target": {"deviation": 0.0, "twist_deg": -1.7, "bend_deg": 72.3},
+        }
+    )
     assert "Iteration 3/4" in s and "curve 42.2°→72.3°" in s and "twist 1.0°→-1.7°" in s
     # density_trial — twist is now shown alongside the deviation.
-    assert "twist 3.3°" in f({"phase": "density_trial", "period": 40, "n_skips": 12,
-                              "rmsd": 0.46, "twist": 3.3})
+    assert "twist 3.3°" in f(
+        {
+            "phase": "density_trial",
+            "period": 40,
+            "n_skips": 12,
+            "rmsd": 0.46,
+            "twist": 3.3,
+        }
+    )
     # the new phases each get a readable line
     assert "coupled shape" in f({"phase": "shape_target", "twist": -1.7, "bend": 72.3})
-    assert "twist authority" in f({"phase": "twist_authority", "helix_id": "h1", "dtwist": -1.4})
-    assert "Twist tuning" in f({"phase": "twist_bump", "helix_id": "h1", "twist_err": 0.6})
+    assert "twist authority" in f(
+        {"phase": "twist_authority", "helix_id": "h1", "dtwist": -1.4}
+    )
+    assert "Twist tuning" in f(
+        {"phase": "twist_bump", "helix_id": "h1", "twist_err": 0.6}
+    )
     # a metric-less phase keeps the previous note (None)
     assert f({"phase": "baseline"}) is None

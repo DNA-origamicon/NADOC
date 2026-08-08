@@ -75,6 +75,7 @@ def _package(tmp: Path) -> Path:
 
 # ── active_segment_name ───────────────────────────────────────────────────────
 
+
 def test_node_reported_segment_beats_the_index(tmp_path):
     job = _Job(tmp_path)
     job.live_metrics = {"segment": "from_node"}
@@ -100,6 +101,7 @@ def test_no_segments_gives_no_name(tmp_path):
 
 # ── the stand-in marker ───────────────────────────────────────────────────────
 
+
 def test_marker_is_per_segment(tmp_path):
     job = _Job(tmp_path)
     job.live_frame = {"segment": "seg1"}
@@ -122,13 +124,14 @@ def test_health_refuses_a_stand_in_segment(tmp_path):
     out.mkdir()
     (out / "seg1.dcd").write_bytes(b"x" * 20_000)  # well over the 4096 floor
     job = _Job(tmp_path)
-    assert ex._segment_has_trajectory(out, "seg1") is True          # no job → unguarded
-    assert ex._segment_has_trajectory(out, "seg1", job) is True     # unmarked
+    assert ex._segment_has_trajectory(out, "seg1") is True  # no job → unguarded
+    assert ex._segment_has_trajectory(out, "seg1", job) is True  # unmarked
     job.live_frame = {"segment": "seg1"}
-    assert ex._segment_has_trajectory(out, "seg1", job) is False    # marked → excluded
+    assert ex._segment_has_trajectory(out, "seg1", job) is False  # marked → excluded
 
 
 # ── fetch_live_frame guards ───────────────────────────────────────────────────
+
 
 def test_local_job_is_rejected(tmp_path):
     job = _Job(tmp_path, target="local")
@@ -151,7 +154,7 @@ def test_a_real_trajectory_is_never_overwritten(tmp_path):
     conn = _FakeConn()
     res = _run(rlf.fetch_live_frame(job, tmp_path, conn=conn))
     assert res["skipped"] == "real trajectory already local"
-    assert conn.gets == []                                   # nothing pulled
+    assert conn.gets == []  # nothing pulled
     assert (pkg / "output" / "seg0.dcd").read_bytes().startswith(b"REAL")
 
 
@@ -233,6 +236,7 @@ def test_missing_psf_is_rejected(tmp_path):
 
 # ── the conversion itself, against a real (tiny) system ───────────────────────
 
+
 def test_coor_to_single_frame_dcd_round_trip(tmp_path):
     """Pins the real MDAnalysis path: NAMDBIN + topology -> a readable 1-frame DCD."""
     mda = pytest.importorskip("MDAnalysis")
@@ -252,7 +256,7 @@ def test_coor_to_single_frame_dcd_round_trip(tmp_path):
     reread = mda.Universe(str(pdb), str(dest))
     assert len(reread.trajectory) == 1
     assert reread.atoms.positions == pytest.approx(universe.atoms.positions, abs=1e-3)
-    assert list(dest.parent.glob("*.part")) == []       # temp cleaned up by rename
+    assert list(dest.parent.glob("*.part")) == []  # temp cleaned up by rename
 
 
 def test_resolve_topology_prefers_the_manifest_entry(tmp_path):
@@ -262,16 +266,20 @@ def test_resolve_topology_prefers_the_manifest_entry(tmp_path):
     pkg.mkdir()
     (pkg / "a_hmr.psf").write_text("hmr")
     (pkg / "sys.psf").write_text("plain")
-    assert md_import.resolve_topology(pkg, {"topology": "sys.psf"}, None).name == "sys.psf"
+    assert (
+        md_import.resolve_topology(pkg, {"topology": "sys.psf"}, None).name == "sys.psf"
+    )
     assert md_import.resolve_topology(pkg, {}, "sys").name == "sys.psf"
-    assert md_import.resolve_topology(pkg, {}, None).name == "a_hmr.psf"   # first glob
+    assert md_import.resolve_topology(pkg, {}, None).name == "a_hmr.psf"  # first glob
     assert md_import.resolve_topology(tmp_path / "empty", {}, None) is None
 
 
 # ── progress carried forward between sign-ins ────────────────────────────────
 
+
 def test_projected_step_carries_forward_at_the_measured_rate():
     from backend.core.namd_metrics import projected_step
+
     # 0.009 s/step for 90 s = 10 000 steps past the last reading.
     assert projected_step(285_000, 0.009, 90.0) == 285_000 + 10_000
 
@@ -279,16 +287,18 @@ def test_projected_step_carries_forward_at_the_measured_rate():
 def test_projected_step_refuses_to_invent_a_rate():
     """No rate, no extrapolation — a frozen bar beats a fabricated one."""
     from backend.core.namd_metrics import projected_step
+
     assert projected_step(285_000, None, 90.0) == 285_000
     assert projected_step(285_000, 0.0, 90.0) == 285_000
     assert projected_step(285_000, 0.009, None) == 285_000
-    assert projected_step(285_000, 0.009, -5.0) == 285_000   # clock went backwards
+    assert projected_step(285_000, 0.009, -5.0) == 285_000  # clock went backwards
 
 
 def test_projection_never_claims_the_last_one_percent():
     """Reaching 100% would assert a completion nobody observed — the run may have
     crashed or hit its walltime a second after the last report we saw."""
     from backend.core.namd_metrics import projected_step
+
     # Signed out for a week: the raw projection lands far past the end.
     assert projected_step(285_000, 0.009, 7 * 86_400, cap_steps=500_000) == 495_000
     # A real observation past the ceiling still wins — it was measured, not guessed.
@@ -311,12 +321,12 @@ def test_live_metrics_anchor_uses_nadoc_clock_and_only_moves_on_new_data(monkeyp
     assert job.live_metrics["retrieved_at"] == 1000.0
 
     monkeypatch.setattr(mex.time, "time", lambda: 2000.0)
-    assert mex.apply_live_metrics(job, blob) is False      # identical → no change
-    assert job.live_metrics["retrieved_at"] == 1000.0      # anchor NOT moved
+    assert mex.apply_live_metrics(job, blob) is False  # identical → no change
+    assert job.live_metrics["retrieved_at"] == 1000.0  # anchor NOT moved
 
     newer = _json.dumps({"step": 295_000, "s_per_step": 0.009, "collected_at": 95.0})
     assert mex.apply_live_metrics(job, newer) is True
-    assert job.live_metrics["retrieved_at"] == 2000.0      # re-anchored on real data
+    assert job.live_metrics["retrieved_at"] == 2000.0  # re-anchored on real data
 
 
 def test_remote_projected_step_needs_both_an_anchor_and_a_rate(tmp_path):
@@ -328,10 +338,14 @@ def test_remote_projected_step_needs_both_an_anchor_and_a_rate(tmp_path):
     job = _J()
     assert _remote_projected_step(job, 500_000) == (None, False)
 
-    job.live_metrics = {"step": 285_000}                    # observed, not extrapolatable
+    job.live_metrics = {"step": 285_000}  # observed, not extrapolatable
     assert _remote_projected_step(job, 500_000) == (285_000, False)
 
-    job.live_metrics = {"step": 285_000, "s_per_step": 0.009, "retrieved_at": time.time() - 90}
+    job.live_metrics = {
+        "step": 285_000,
+        "s_per_step": 0.009,
+        "retrieved_at": time.time() - 90,
+    }
     step, estimated = _remote_projected_step(job, 500_000)
     assert estimated is True
     assert step == pytest.approx(295_000, abs=200)

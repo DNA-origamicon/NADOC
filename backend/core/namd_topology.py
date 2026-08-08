@@ -33,10 +33,18 @@ _RESNAME_TO_CHARMM = {
 # Histidine defaults to the (neutral, δ-protonated) HSD; AMBER/alt protonation
 # names collapse to their CHARMM standard so psfgen finds a residue definition.
 _PROT_RESNAME_TO_CHARMM = {
-    "HIS": "HSD", "HID": "HSD", "HIE": "HSE", "HIP": "HSP",
-    "CYX": "CYS", "CYM": "CYS",
-    "ASH": "ASP", "GLH": "GLU", "LYN": "LYS", "ARN": "ARG",
-    "MSE": "MET", "SEC": "CYS",
+    "HIS": "HSD",
+    "HID": "HSD",
+    "HIE": "HSE",
+    "HIP": "HSP",
+    "CYX": "CYS",
+    "CYM": "CYS",
+    "ASH": "ASP",
+    "GLH": "GLU",
+    "LYN": "LYS",
+    "ARN": "ARG",
+    "MSE": "MET",
+    "SEC": "CYS",
 }
 
 # psfgen atom/residue aliases for heavy-atom-only PDBs (CHARMM-GUI convention):
@@ -65,6 +73,7 @@ def _psfgen_prot_segid(index: int) -> str:
     c = _B36[index % 36]
     return f"P{a}{b}{c}"
 
+
 _ATOM_TO_CHARMM = {
     "OP1": "O1P",
     "OP2": "O2P",
@@ -85,8 +94,11 @@ class CharmmTopologyBuild:
 # CUDA builds sort first.  See docs/namd_setup.md.
 def _namd_install_dirs() -> list[str]:
     import glob
+
     dirs = sorted(glob.glob(str(Path.home() / "Applications" / "NAMD_*")), reverse=True)
-    dirs.sort(key=lambda d: 0 if "cuda" in os.path.basename(d).lower() else 1)  # stable: CUDA first
+    dirs.sort(
+        key=lambda d: 0 if "cuda" in os.path.basename(d).lower() else 1
+    )  # stable: CUDA first
     return dirs
 
 
@@ -204,7 +216,9 @@ def _write_segment_pdbs(
             segid = _psfgen_prot_segid(prot_seg_index)
             prot_seg_index += 1
         else:
-            segid = _psfgen_segid(dna_seg_index)   # unique 4-char segname (no [:4] collisions)
+            segid = _psfgen_segid(
+                dna_seg_index
+            )  # unique 4-char segname (no [:4] collisions)
             dna_seg_index += 1
         residues = sorted({a.seq_num for a in atoms})
         if not residues:
@@ -228,17 +242,19 @@ def _write_segment_pdbs(
         seg_lines.append("END")
         seg_path = tmpdir / f"{segid}.pdb"
         seg_path.write_text("\n".join(seg_lines) + "\n")
-        segments.append({
-            "segid": segid,
-            "chain_id": chain_id,
-            "path": seg_path,
-            "first_resid": residues[0],
-            "last_resid": residues[-1],
-            "n_residues": len(residues),
-            "n_atoms_input": len(atoms),
-            "is_protein": is_protein,
-            "resids": residues,
-        })
+        segments.append(
+            {
+                "segid": segid,
+                "chain_id": chain_id,
+                "path": seg_path,
+                "first_resid": residues[0],
+                "last_resid": residues[-1],
+                "n_residues": len(residues),
+                "n_atoms_input": len(atoms),
+                "is_protein": is_protein,
+                "resids": residues,
+            }
+        )
 
     full_lines.append("END")
     return segments, "\n".join(full_lines) + "\n"
@@ -480,9 +496,14 @@ def resolve_anchor_residue_indices(
     Which ATOMS of each resolved residue are held is a separate question — see
     :func:`resolve_anchor_atom_map`, which this delegates to and then discards the atom
     sets of.  Callers that write the marker PDB want that one instead."""
-    return set(resolve_anchor_atom_map(
-        design, anchors, model=model, full_topology=full_topology,
-    ))
+    return set(
+        resolve_anchor_atom_map(
+            design,
+            anchors,
+            model=model,
+            full_topology=full_topology,
+        )
+    )
 
 
 def _psfgen_script(segments: list[dict], output_prefix: Path) -> str:
@@ -503,37 +524,45 @@ def _psfgen_script(segments: list[dict], output_prefix: Path) -> str:
         if seg.get("is_protein"):
             # Protein segment: psfgen builds peptide angles/dihedrals from the RTF;
             # standard NTER/CTER termini (the RTF DEFA), no DNA DEO5/DEOX patches.
-            lines.extend([
+            lines.extend(
+                [
+                    f"segment {segid} {{",
+                    "  first NTER",
+                    "  last CTER",
+                    "  auto angles dihedrals",
+                    f"  pdb {path}",
+                    "}",
+                    f"coordpdb {path} {segid}",
+                ]
+            )
+            continue
+        lines.extend(
+            [
                 f"segment {segid} {{",
-                "  first NTER",
-                "  last CTER",
+                "  first 5TER",
+                "  last 3TER",
                 "  auto angles dihedrals",
                 f"  pdb {path}",
                 "}",
-                f"coordpdb {path} {segid}",
-            ])
-            continue
-        lines.extend([
-            f"segment {segid} {{",
-            "  first 5TER",
-            "  last 3TER",
-            "  auto angles dihedrals",
-            f"  pdb {path}",
-            "}",
-            f"patch DEO5 {segid}:{first}",
-        ])
+                f"patch DEO5 {segid}:{first}",
+            ]
+        )
         for resid in range(first + 1, last + 1):
             lines.append(f"patch DEOX {segid}:{resid}")
-        lines.extend([
-            f"coordpdb {path} {segid}",
-        ])
-    lines.extend([
-        "regenerate angles dihedrals",
-        "guesscoord",
-        f"writepsf {output_prefix}.psf",
-        f"writepdb {output_prefix}.pdb",
-        "exit",
-    ])
+        lines.extend(
+            [
+                f"coordpdb {path} {segid}",
+            ]
+        )
+    lines.extend(
+        [
+            "regenerate angles dihedrals",
+            "guesscoord",
+            f"writepsf {output_prefix}.psf",
+            f"writepdb {output_prefix}.pdb",
+            "exit",
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
@@ -607,7 +636,11 @@ def build_charmm_psfgen_topology(
             "psfgen_path": psfgen,
             "forcefield_topology": str(_TOP_ALL36_NA),
             "segments": [
-                {k: str(v) if isinstance(v, Path) else v for k, v in seg.items() if k != "path"}
+                {
+                    k: str(v) if isinstance(v, Path) else v
+                    for k, v in seg.items()
+                    if k != "path"
+                }
                 for seg in segments
             ],
             "audit": audit.to_dict(),
@@ -615,4 +648,6 @@ def build_charmm_psfgen_topology(
             "psfgen_stderr_tail": proc.stderr[-4000:],
         }
         metadata["json"] = json.dumps(metadata, indent=2)
-        return CharmmTopologyBuild(pdb_text=pdb_text, psf_text=psf_text, metadata=metadata)
+        return CharmmTopologyBuild(
+            pdb_text=pdb_text, psf_text=psf_text, metadata=metadata
+        )

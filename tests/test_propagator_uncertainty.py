@@ -1,4 +1,5 @@
 """Deep-ensemble uncertainty machinery (dev #6). torch-dependent → slow suite."""
+
 import numpy as np
 import pytest
 
@@ -7,7 +8,9 @@ torch = pytest.importorskip("torch")
 pytestmark = pytest.mark.slow  # torch/GPU → test-dedicated session
 
 from backend.ml.propagator.uncertainty import (  # noqa: E402
-    EnsembleForceNet, calibration_score, reliability_curve,
+    EnsembleForceNet,
+    calibration_score,
+    reliability_curve,
 )
 from backend.ml.propagator.gnn import radius_edges  # noqa: E402
 
@@ -46,7 +49,7 @@ def test_identical_members_give_zero_uncertainty():
 def test_calibration_detects_correlated_uncertainty():
     rng = np.random.default_rng(0)
     err = rng.random(500)
-    unc = err + 0.05 * rng.standard_normal(500)     # uncertainty tracks error
+    unc = err + 0.05 * rng.standard_normal(500)  # uncertainty tracks error
     sc = calibration_score(unc, err)
     assert sc["pearson"] > 0.9 and sc["spearman"] > 0.9
     rc = reliability_curve(unc, err, n_bins=10)
@@ -56,5 +59,5 @@ def test_calibration_detects_correlated_uncertainty():
 def test_calibration_flat_for_random_uncertainty():
     rng = np.random.default_rng(1)
     err = rng.random(500)
-    unc = rng.random(500)                            # uncorrelated
+    unc = rng.random(500)  # uncorrelated
     assert abs(calibration_score(unc, err)["pearson"]) < 0.2

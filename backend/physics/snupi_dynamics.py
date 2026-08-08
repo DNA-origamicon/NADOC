@@ -34,6 +34,7 @@ K and displacement q keep their NATURAL units (no per-block SI conversion of K):
 
 Three-Layer Law: trajectories are PHYSICAL/display state only — never written back to topology/geometry.
 """
+
 from __future__ import annotations
 
 import math
@@ -42,16 +43,18 @@ from typing import Callable, List, Optional
 import numpy as np
 
 # ── Unit system / physical constants (nm · pN · ns) ─────────────────────────────
-KBT_300 = 4.142          # pN·nm — thermal energy at 300 K (the paper's simulation temperature)
-DT_DEFAULT = 0.005       # ns = 5 ps (the paper's time step)
-ETA_WATER = 8.9e-4       # Pa·s — dynamic viscosity of water near 300 K (paper: 890 µN·s/m²)
-HYDRO_RADIUS_NM = 1.1    # nm — per-node hydrodynamic radius σ (paper)
-MASS_G6_TO_DYN = 1e21    # scales assemble_mass_matrix (kg / kg·nm²) → (mass_u / mass_u·nm²)
+KBT_300 = 4.142  # pN·nm — thermal energy at 300 K (the paper's simulation temperature)
+DT_DEFAULT = 0.005  # ns = 5 ps (the paper's time step)
+ETA_WATER = 8.9e-4  # Pa·s — dynamic viscosity of water near 300 K (paper: 890 µN·s/m²)
+HYDRO_RADIUS_NM = 1.1  # nm — per-node hydrodynamic radius σ (paper)
+MASS_G6_TO_DYN = (
+    1e21  # scales assemble_mass_matrix (kg / kg·nm²) → (mass_u / mass_u·nm²)
+)
 
 # Stokes drag constants in the nm·pN·ns system (traceable to η, σ; used for the diagonal friction).
 _sigma_m = HYDRO_RADIUS_NM * 1e-9
-STOKES_TRANS = 6.0 * math.pi * ETA_WATER * _sigma_m * 1e12          # pN·ns/nm  (N·s/m ×1e12)
-STOKES_ROT = 8.0 * math.pi * ETA_WATER * _sigma_m**3 * 1e30         # pN·nm·ns  (N·m·s ×1e30)
+STOKES_TRANS = 6.0 * math.pi * ETA_WATER * _sigma_m * 1e12  # pN·ns/nm  (N·s/m ×1e12)
+STOKES_ROT = 8.0 * math.pi * ETA_WATER * _sigma_m**3 * 1e30  # pN·nm·ns  (N·m·s ×1e30)
 
 
 def stokes_friction_diag(n_node: int) -> np.ndarray:
@@ -66,6 +69,7 @@ def stokes_friction_diag(n_node: int) -> np.ndarray:
 
 
 # ── GJF-2013 Langevin integrator (diagonal m, γ; generic force) ─────────────────
+
 
 def gjf_integrate(
     force_fn: Callable[[np.ndarray], np.ndarray],
@@ -102,7 +106,9 @@ def gjf_integrate(
     half = gamma * dt / (2.0 * m)
     b = 1.0 / (1.0 + half)
     a = (1.0 - half) * b
-    sig = np.sqrt(2.0 * gamma * kT * dt)      # std of the integrated random impulse per step
+    sig = np.sqrt(
+        2.0 * gamma * kT * dt
+    )  # std of the integrated random impulse per step
 
     f = force_fn(q)
     samples = []
@@ -118,7 +124,8 @@ def gjf_integrate(
         if step % 500 == 0:
             if not np.isfinite(q).all():
                 raise _GJFDiverged(
-                    f"GJF diverged at step {step} (dt={dt} too large for the stiffest mode)")
+                    f"GJF diverged at step {step} (dt={dt} too large for the stiffest mode)"
+                )
             _report_progress(progress_cb, step, n_steps)
     return np.array(samples), v
 
@@ -166,29 +173,39 @@ def gjf_modified_integrate(
     m = np.asarray(m, dtype=float)
     gamma = np.asarray(gamma, dtype=float)
 
-    gbar = gamma / m                                   # mass-normalized friction γ̄
+    gbar = gamma / m  # mass-normalized friction γ̄
     j = 1.0 / (1.0 + gbar * dt / 4.0)
     b = 1.0 / (1.0 + gbar * dt / 2.0)
     a = 2.0 * b - 1.0
     # Each HALF-step random impulse has variance ⟨ββ⟩ = k_BT·ζ·Δt (SI eq 4.7); the full-step impulse is
     # the SUM of the two half impulses (β^{Δt} = β^{[t,t+Δt/2]} + β^{[t+Δt/2,t+Δt]}, eq 4.5) → they SHARE
     # the first half (fluctuation–dissipation consistency), NOT independent draws.
-    s_half = np.sqrt(gamma * kT * dt)                  # std of one half-step impulse β
+    s_half = np.sqrt(gamma * kT * dt)  # std of one half-step impulse β
 
-    acc = force_fn(q) / m                              # a^t = M⁻¹F^t (accel); carried across steps
+    acc = force_fn(q) / m  # a^t = M⁻¹F^t (accel); carried across steps
     samples = []
     for step in range(n_steps):
-        b1 = s_half * rng.standard_normal(q.shape)     # first half impulse  β^{[t, t+Δt/2]}
-        b2 = s_half * rng.standard_normal(q.shape)     # second half impulse β^{[t+Δt/2, t+Δt]}
-        th_half = b1 / m                               # θ^{½} = M⁻¹β^{Δt/2}
-        th_full = (b1 + b2) / m                        # θ^{1} = M⁻¹β^{Δt} = M⁻¹(β^{Δt/2}+·)
+        b1 = s_half * rng.standard_normal(
+            q.shape
+        )  # first half impulse  β^{[t, t+Δt/2]}
+        b2 = s_half * rng.standard_normal(
+            q.shape
+        )  # second half impulse β^{[t+Δt/2, t+Δt]}
+        th_half = b1 / m  # θ^{½} = M⁻¹β^{Δt/2}
+        th_full = (b1 + b2) / m  # θ^{1} = M⁻¹β^{Δt} = M⁻¹(β^{Δt/2}+·)
         # coordinate: the force enters via ∫F dt ≈ (Δt/2)F^t (4.27) → (Δt/8)·acc; θ is a velocity impulse
         q_half = q + dt * j * (0.5 * v + (dt / 8.0) * acc + 0.25 * th_half)
-        acc_half = force_fn(q_half) / m                # the Simpson MIDPOINT accel — buys the stability
+        acc_half = (
+            force_fn(q_half) / m
+        )  # the Simpson MIDPOINT accel — buys the stability
         # full-step force via Simpson ∫F dt ≈ Δt·F^{t+½} (4.28) → (Δt/2)·acc_half
         q_new = q + dt * b * (v + (dt / 2.0) * acc_half + 0.5 * th_full)
         acc_new = force_fn(q_new) / m
-        v = a * v + (dt / 6.0) * (acc_new + 2.0 * (a + b) * acc_half + acc) + b * th_full
+        v = (
+            a * v
+            + (dt / 6.0) * (acc_new + 2.0 * (a + b) * acc_half + acc)
+            + b * th_full
+        )
         q = q_new
         acc = acc_new
         if step >= n_equil and (step - n_equil) % sample_every == 0:
@@ -208,7 +225,9 @@ class _GJFDiverged(RuntimeError):
 _SETUP_FRACTION = 0.10
 
 
-def _report_progress(cb: Optional[Callable[[float, int], None]], step: int, n_steps: int) -> None:
+def _report_progress(
+    cb: Optional[Callable[[float, int], None]], step: int, n_steps: int
+) -> None:
     """Report the trajectory fraction + step index to an optional callback. REAL progress, not a
     wall-clock guess: the dynamics run is a fixed number of GJF steps, so ``step/n_steps`` is exactly
     how far along we are. The runner turns this into the panel's percentage and a ``worker.log``
@@ -219,11 +238,12 @@ def _report_progress(cb: Optional[Callable[[float, int], None]], step: int, n_st
         return
     try:
         cb(min(1.0, step / max(1, n_steps)), step)
-    except Exception:                                  # pragma: no cover — progress is best-effort
+    except Exception:  # pragma: no cover — progress is best-effort
         pass
 
 
 # ── Operator (structured) friction — no dense 6N×6N anywhere ────────────────────
+
 
 def gjf_integrate_operator_friction(
     force_fn: Callable[[np.ndarray], np.ndarray],
@@ -278,21 +298,27 @@ def gjf_integrate_operator_friction(
     samples = []
     for step in range(n_steps):
         beta = fric.sample_beta(kT, dt, rng)
-        qt = qt + fric.apply_b_inv(dt * vt + (0.5 * dt * dt) * ft + (0.5 * dt) * beta, dt)
+        qt = qt + fric.apply_b_inv(
+            dt * vt + (0.5 * dt * dt) * ft + (0.5 * dt) * beta, dt
+        )
         ft_new = force_tilde(qt)
-        vt = apply_a(vt) + 0.5 * dt * (apply_a(ft) + ft_new) + fric.apply_b_inv(beta, dt)
+        vt = (
+            apply_a(vt) + 0.5 * dt * (apply_a(ft) + ft_new) + fric.apply_b_inv(beta, dt)
+        )
         ft = ft_new
         if step >= n_equil and (step - n_equil) % sample_every == 0:
             samples.append(minv_half * qt)
         if step % 500 == 0:
             if not np.isfinite(qt).all():
                 raise _GJFDiverged(
-                    f"GJF diverged at step {step} (dt={dt} too large for the stiffest mode)")
+                    f"GJF diverged at step {step} (dt={dt} too large for the stiffest mode)"
+                )
             _report_progress(progress_cb, step, n_steps)
     return np.array(samples), minv_half * vt
 
 
 # ── Matrix (hydrodynamic) friction via a mass-weighted eigen-transform ──────────
+
 
 def gjf_integrate_matrix_friction(
     force_fn: Callable[[np.ndarray], np.ndarray],
@@ -324,23 +350,32 @@ def gjf_integrate_matrix_friction(
     Ztil = (minv_half[:, None] * Z) * minv_half[None, :]
     Ztil = 0.5 * (Ztil + Ztil.T)
     lam, U = np.linalg.eigh(Ztil)
-    lam = np.clip(lam, 1e-12 * float(lam.max()), None)     # SPD → all > 0; guard round-off
+    lam = np.clip(lam, 1e-12 * float(lam.max()), None)  # SPD → all > 0; guard round-off
 
     def force_p(p):
         q = minv_half * (U @ p)
         return U.T @ (minv_half * force_fn(q))
 
-    p0 = U.T @ (np.asarray(q0, float) / minv_half)         # p = Uᵀ M^{1/2} q
+    p0 = U.T @ (np.asarray(q0, float) / minv_half)  # p = Uᵀ M^{1/2} q
     samples_p, v = gjf_integrate(
-        force_p, p0, np.ones_like(m_diag), lam,
-        kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil, sample_every=sample_every, rng=rng,
+        force_p,
+        p0,
+        np.ones_like(m_diag),
+        lam,
+        kT=kT,
+        dt=dt,
+        n_steps=n_steps,
+        n_equil=n_equil,
+        sample_every=sample_every,
+        rng=rng,
         progress_cb=progress_cb,
     )
-    samples_q = (samples_p @ U.T) * minv_half[None, :]     # p → q = M^{-1/2} U p, per row
+    samples_q = (samples_p @ U.T) * minv_half[None, :]  # p → q = M^{-1/2} U p, per row
     return samples_q, v
 
 
 # ── Rigid-body removal + trajectory RMSF ────────────────────────────────────────
+
 
 def _kabsch(P: np.ndarray, Q: np.ndarray) -> np.ndarray:
     """Rotation R (3×3) best-aligning centered P onto centered Q (min ‖R·P − Q‖). Both (N,3)."""
@@ -362,7 +397,7 @@ def trajectory_rmsf(frames: np.ndarray, ref: np.ndarray) -> np.ndarray:
         fc = fr - fr.mean(axis=0)
         aligned[k] = fc @ _kabsch(fc, ref_c).T
     mean = aligned.mean(axis=0)
-    var = ((aligned - mean) ** 2).sum(axis=2).mean(axis=0)   # <|Δr_i|²> per node
+    var = ((aligned - mean) ** 2).sum(axis=2).mean(axis=0)  # <|Δr_i|²> per node
     return np.sqrt(var)
 
 
@@ -380,16 +415,17 @@ def corotational_internal_force(q: np.ndarray, X0: np.ndarray, elements) -> np.n
     ``f_ext − corotational_internal_force(q, X0, elements)`` — matching the linear ``f_ext − K·q``.
     """
     from backend.physics.snupi_corotational import _internal_force, exp_so3
+
     X0 = np.asarray(X0, dtype=float)
     N = len(X0)
     qn = np.asarray(q, dtype=float).reshape(N, 6)
     X = X0 + qn[:, :3]
     R = [exp_so3(qn[n, 3:6]) for n in range(N)]
     f_int = np.zeros(6 * N)
-    for (i, j, ref, K12) in elements:
+    for i, j, ref, K12 in elements:
         fg = _internal_force(X[i], X[j], R[i], R[j], ref, K12)
-        f_int[6 * i:6 * i + 6] += fg[:6]
-        f_int[6 * j:6 * j + 6] += fg[6:]
+        f_int[6 * i : 6 * i + 6] += fg[:6]
+        f_int[6 * j : 6 * j + 6] += fg[6:]
     return f_int
 
 
@@ -438,29 +474,35 @@ def breathing_mode_pca(
     ref = np.asarray(ref, dtype=float)
     F, N, _ = frames.shape
     aligned = _align_to_ref(frames, ref)
-    disp = (aligned - aligned.mean(axis=0)).reshape(F, 3 * N)   # mean-centred fluctuations (F,3N)
+    disp = (aligned - aligned.mean(axis=0)).reshape(
+        F, 3 * N
+    )  # mean-centred fluctuations (F,3N)
     # Thin SVD of the F×3N fluctuation matrix — at most F−1 nonzero modes; avoids the 3N×3N covariance.
     _U, S, Vt = np.linalg.svd(disp, full_matrices=False)
-    var_all = (S ** 2) / max(F - 1, 1)                          # per-mode fluctuation variance (nm²)
-    m3 = np.repeat(np.asarray(node_mass_trans, dtype=float), 3)  # per-DOF translational mass (3N,)
+    var_all = (S**2) / max(F - 1, 1)  # per-mode fluctuation variance (nm²)
+    m3 = np.repeat(
+        np.asarray(node_mass_trans, dtype=float), 3
+    )  # per-DOF translational mass (3N,)
     modes = []
     for i in range(min(n_modes, len(S))):
         sig2 = float(var_all[i])
         if sig2 <= 0.0:
             break
-        v = Vt[i]                                               # unit 3N shape
-        k_eff = kT / sig2                                       # pN/nm
-        m_eff = float(v @ (m3 * v))                             # pN·ns²/nm
-        omega = math.sqrt(max(k_eff / m_eff, 0.0))             # 1/ns
-        modes.append({
-            "shape": v.reshape(N, 3),                          # unit per-node displacement direction
-            "variance_nm2": sig2,
-            "amplitude_nm": math.sqrt(sig2),                   # RMS thermal amplitude of the mode
-            "k_eff_pN_per_nm": float(k_eff),
-            "m_eff": m_eff,
-            "omega_per_ns": float(omega),
-            "freq_GHz": float(omega / (2.0 * math.pi)),
-        })
+        v = Vt[i]  # unit 3N shape
+        k_eff = kT / sig2  # pN/nm
+        m_eff = float(v @ (m3 * v))  # pN·ns²/nm
+        omega = math.sqrt(max(k_eff / m_eff, 0.0))  # 1/ns
+        modes.append(
+            {
+                "shape": v.reshape(N, 3),  # unit per-node displacement direction
+                "variance_nm2": sig2,
+                "amplitude_nm": math.sqrt(sig2),  # RMS thermal amplitude of the mode
+                "k_eff_pN_per_nm": float(k_eff),
+                "m_eff": m_eff,
+                "omega_per_ns": float(omega),
+                "freq_GHz": float(omega / (2.0 * math.pi)),
+            }
+        )
     return {"modes": modes, "variance_all": var_all}
 
 
@@ -478,18 +520,22 @@ def dynamics_dccm(frames: np.ndarray, ref: np.ndarray) -> np.ndarray:
     """
     frames = np.asarray(frames, dtype=float)
     aligned = _align_to_ref(frames, np.asarray(ref, dtype=float))
-    disp = aligned - aligned.mean(axis=0)                    # (F,N,3) mean-centred fluctuations
+    disp = aligned - aligned.mean(axis=0)  # (F,N,3) mean-centred fluctuations
     F = disp.shape[0]
-    cov = np.einsum("fik,fjk->ij", disp, disp) / F           # ⟨Δrᵢ·Δrⱼ⟩ (dot over xyz)
+    cov = np.einsum("fik,fjk->ij", disp, disp) / F  # ⟨Δrᵢ·Δrⱼ⟩ (dot over xyz)
     d = np.sqrt(np.clip(np.diag(cov), 1e-30, None))
     return np.clip(cov / np.outer(d, d), -1.0, 1.0)
 
 
-def mode_coordinate(frames: np.ndarray, ref: np.ndarray, mode_shape: np.ndarray) -> np.ndarray:
+def mode_coordinate(
+    frames: np.ndarray, ref: np.ndarray, mode_shape: np.ndarray
+) -> np.ndarray:
     """Scalar mode coordinate ``ξ(t) = Σᵢ shapeᵢ · Δrᵢ(t)`` per frame — the projection of the
     rigid-body-aligned displacement onto a unit mode shape ``(N,3)`` (e.g. a PCA breathing mode).
     Returns a ``(F,)`` time series (nm)."""
-    aligned = _align_to_ref(np.asarray(frames, dtype=float), np.asarray(ref, dtype=float))
+    aligned = _align_to_ref(
+        np.asarray(frames, dtype=float), np.asarray(ref, dtype=float)
+    )
     disp = aligned - np.asarray(ref, dtype=float)
     return np.einsum("fik,ik->f", disp, np.asarray(mode_shape, dtype=float))
 
@@ -517,6 +563,7 @@ def mode_autocorr_time_ns(coord: np.ndarray, dt_ns: float) -> float:
 
 # ── Phase 2: base-stacking force composer + salt-driven reconfiguration driver ──
 
+
 def stacking_force_all(positions_flat: np.ndarray, pairs, prm=None) -> np.ndarray:
     """Assemble the total Morse base-stacking force into a flat 6N vector (translational DOF).
 
@@ -524,15 +571,16 @@ def stacking_force_all(positions_flat: np.ndarray, pairs, prm=None) -> np.ndarra
     i's ABSOLUTE position (nm); ``pairs`` = list of ``(i, j)`` stacking bonds. Returns the applied
     stacking force (pN) on every DOF (rotational slots stay 0). See :mod:`snupi_stacking`."""
     from backend.physics import snupi_stacking as stk
+
     prm = stk.MorseParams() if prm is None else prm
     q = np.asarray(positions_flat, float)
     f = np.zeros_like(q)
-    for (i, j) in pairs:
-        xi = q[6 * i:6 * i + 3]
-        xj = q[6 * j:6 * j + 3]
+    for i, j in pairs:
+        xi = q[6 * i : 6 * i + 3]
+        xj = q[6 * j : 6 * j + 3]
         fi, fj = stk.stacking_force(xi, xj, prm)
-        f[6 * i:6 * i + 3] += fi
-        f[6 * j:6 * j + 3] += fj
+        f[6 * i : 6 * i + 3] += fi
+        f[6 * j : 6 * j + 3] += fj
     return f
 
 
@@ -540,8 +588,12 @@ def bond_lengths(positions_flat: np.ndarray, pairs) -> np.ndarray:
     """Current length (nm) of each stacking bond in ``pairs`` — the switch state diagnostic
     (near r₀ ⇒ stacked/closed; large ⇒ unstacked/open)."""
     q = np.asarray(positions_flat, float)
-    return np.array([float(np.linalg.norm(q[6 * j:6 * j + 3] - q[6 * i:6 * i + 3]))
-                     for (i, j) in pairs])
+    return np.array(
+        [
+            float(np.linalg.norm(q[6 * j : 6 * j + 3] - q[6 * i : 6 * i + 3]))
+            for (i, j) in pairs
+        ]
+    )
 
 
 def simulate_reconfiguration(
@@ -584,22 +636,34 @@ def simulate_reconfiguration(
             return force_fn(qq, _salt)
 
         samples, v = gjf_integrate(
-            seg_force, q, m_diag, gamma_diag,
-            kT=kT, dt=dt, n_steps=n_steps, n_equil=max(0, n_steps // 5),
-            sample_every=sample_every, rng=rng, v0=v,
+            seg_force,
+            q,
+            m_diag,
+            gamma_diag,
+            kT=kT,
+            dt=dt,
+            n_steps=n_steps,
+            n_equil=max(0, n_steps // 5),
+            sample_every=sample_every,
+            rng=rng,
+            v0=v,
         )
         if len(samples):
-            q = samples[-1].copy()          # continue from the last sampled config
+            q = samples[-1].copy()  # continue from the last sampled config
         bl = None
         if stacking_pairs is not None and len(samples):
             bl = np.array([bond_lengths(fr, stacking_pairs) for fr in samples])
-        segments.append({
-            "label": seg.get("label", ""),
-            "salt": salt,
-            "frames": samples,
-            "bond_lengths": bl,
-            "mean_bond_length": float(bl.mean()) if bl is not None and bl.size else None,
-        })
+        segments.append(
+            {
+                "label": seg.get("label", ""),
+                "salt": salt,
+                "frames": samples,
+                "bond_lengths": bl,
+                "mean_bond_length": float(bl.mean())
+                if bl is not None and bl.size
+                else None,
+            }
+        )
     return {"segments": segments, "q_final": q}
 
 
@@ -624,22 +688,25 @@ def field_body_load(mesh, block, n_tot: int, field: Optional[dict]) -> np.ndarra
     Returns a length-``6*n_tot`` vector; the caller adds it to ``f_ext``. Pure (no integration).
     """
     from backend.physics.fem_solver import assemble_field_force
+
     f = np.zeros(6 * n_tot, dtype=float)
-    core = assemble_field_force(mesh, field)            # 6*n_core, already 2·field_pN·dir_hat
+    core = assemble_field_force(mesh, field)  # 6*n_core, already 2·field_pN·dir_hat
     f[: core.shape[0]] = core
     if block is not None and field:
         mag = float(field.get("field_pN", 0.0) or 0.0)
         direction = np.asarray(field.get("dir") or (0.0, 0.0, 0.0), dtype=float)
         dnorm = float(np.linalg.norm(direction))
         if mag != 0.0 and dnorm > 1e-12:
-            tvec = mag * (direction / dnorm)           # one nucleotide → 1× per tail bead
+            tvec = mag * (direction / dnorm)  # one nucleotide → 1× per tail bead
             n = len(mesh.nodes)
             for j in range(block.n_tail):
-                f[6 * (n + j): 6 * (n + j) + 3] += tvec
+                f[6 * (n + j) : 6 * (n + j) + 3] += tvec
     return f
 
 
-def anchor_trap_diag(n_tot: int, n_core_nodes: int, fixed_nodes, k_anchor: float) -> np.ndarray:
+def anchor_trap_diag(
+    n_tot: int, n_core_nodes: int, fixed_nodes, k_anchor: float
+) -> np.ndarray:
     """Diagonal harmonic-trap stiffness (pN/nm) on the translational DOF of each anchor node.
 
     A stiff restraint that holds the anchor nodes near rest (∼ oxDNA ``trap``): without it a uniform
@@ -649,13 +716,14 @@ def anchor_trap_diag(n_tot: int, n_core_nodes: int, fixed_nodes, k_anchor: float
     the joint). Only core nodes can be anchored (tails have no anchor scope). Pure (no integration).
     """
     diag = np.zeros(6 * n_tot, dtype=float)
-    for node in (fixed_nodes or ()):
+    for node in fixed_nodes or ():
         if 0 <= node < n_core_nodes:
-            diag[6 * node: 6 * node + 3] = k_anchor
+            diag[6 * node : 6 * node + 3] = k_anchor
     return diag
 
 
 # ── High-level: equilibrium dynamics of a design (linear force, Phase 1a) ────────
+
 
 def simulate_equilibrium(
     design,
@@ -763,8 +831,11 @@ def simulate_equilibrium(
     f_ext = np.asarray(assemble_prestress_force(mesh, design), dtype=float)
     if with_electrostatics and material == "snupi":
         from backend.physics.fem_solver import _snupi_es_params, _snupi_electro_sparse
+
         prm = _snupi_es_params(SNUPI_DEFAULT_MGCL2_M if mgcl2_M is None else mgcl2_M)
-        K_es, _f = _snupi_electro_sparse(mesh, X0, prm, axial_only=True)  # PD tangent (matches NMA)
+        K_es, _f = _snupi_electro_sparse(
+            mesh, X0, prm, axial_only=True
+        )  # PD tangent (matches NMA)
         K = K + K_es.tolil()
     Kcsr = K.tocsr()
 
@@ -777,10 +848,12 @@ def simulate_equilibrium(
     block = None
     if tails:
         from backend.physics import snupi_tails as st
+
         if material != "snupi":
             raise ValueError(
                 "free ssDNA tails are a snupi-only extension (material='snupi'); "
-                f"got material={material!r}")
+                f"got material={material!r}"
+            )
         if hydrodynamics and not hydro_coarse_bp:
             # The tails' drag lives in the COARSE blob model (SS-3, snupi_hydro_coarse): its blob set
             # takes both species, giving each its own bead radius (σ_ss = 0.5 nm vs σ = 1.1 nm for a
@@ -790,10 +863,11 @@ def simulate_equilibrium(
             raise ValueError(
                 "hydrodynamics + free ssDNA tails needs the coarse blob model: pass "
                 "hydro_coarse_bp=k (8 is the calibrated default). The exact per-bp friction does not "
-                "support the tails' smaller hydrodynamic radius.")
+                "support the tails' smaller hydrodynamic radius."
+            )
         block = st.build_tail_block(design, mesh, max_nt=tail_max_nt)
         if block.n_tail == 0:
-            block = None                       # no tails in this design — take the plain path
+            block = None  # no tails in this design — take the plain path
 
     n_tot = n if block is None else block.n_total
     q_start = np.zeros(6 * n_tot)
@@ -807,7 +881,7 @@ def simulate_equilibrium(
         # coiled positions, and q_start carries the bead triads that go with them. Starting straight
         # would strand every tail in a fully extended state that no affordable trajectory can relax
         # — collapsing a rod into a coil is precisely the slow long-wavelength mode.
-        q_start[6 * n:] = block.q0
+        q_start[6 * n :] = block.q0
 
     # ── E-field body load + anchor traps (project_oxdna_efield) ────────────────────────
     # The field is a constant DEAD load added to f_ext (like the prestress): the overdamped mean
@@ -817,7 +891,8 @@ def simulate_equilibrium(
     # region actually deflects. Only core bp nodes can be anchored (tails have no anchor scope).
     f_ext = f_ext + field_body_load(mesh, block, n_tot, field)
     fixed_nodes, anchor_keys = (
-        resolve_anchor_nodes(design, mesh, anchors) if anchors else ([], []))
+        resolve_anchor_nodes(design, mesh, anchors) if anchors else ([], [])
+    )
     k_anchor = ANCHOR_TRAP_FACTOR * (float(np.max(np.abs(Kcsr.diagonal()))) or 1.0)
     k_anchor_diag = anchor_trap_diag(n_tot, n, fixed_nodes, k_anchor)
     has_anchor = bool(np.any(k_anchor_diag))
@@ -833,11 +908,16 @@ def simulate_equilibrium(
             # frequency √λ of (K, M). 0.8/ω_max ≈ 0.4·(2/ω_max) leaves a stability margin.
             from scipy.sparse import diags
             from scipy.sparse.linalg import eigsh
-            Md = diags(m_diag[:6 * n]).tocsr()          # K is core-only; so is its mass metric
+
+            Md = diags(m_diag[: 6 * n]).tocsr()  # K is core-only; so is its mass metric
             # Include the anchor trap: it is a stiff diagonal spring, so it can be the stiffest core
             # mode and must enter ω_max or the step overshoots it (surfacing only as a divergence retry).
-            K_dt = (Kcsr + diags(k_anchor_diag[:6 * n])).tocsr() if has_anchor else Kcsr
-            lam_g = float(eigsh(K_dt, k=1, M=Md, which="LM", return_eigenvectors=False)[0])
+            K_dt = (
+                (Kcsr + diags(k_anchor_diag[: 6 * n])).tocsr() if has_anchor else Kcsr
+            )
+            lam_g = float(
+                eigsh(K_dt, k=1, M=Md, which="LM", return_eigenvectors=False)[0]
+            )
             omega_max = math.sqrt(max(lam_g, 1e-30))
             if block is not None:
                 # The tails are not in K, so their stiffest mode is invisible to that eigensolve. A
@@ -854,22 +934,26 @@ def simulate_equilibrium(
         # unchanged). SLOW at origami scale — the per-step Python element loop is the target of the
         # Phase-2(d) F(x) perf rewrite. dt auto-sizing still uses the linear K tangent (same stiff modes).
         from backend.physics.fem_solver import build_corotational_elements
+
         _X0cr, _cr_elements = build_corotational_elements(mesh, X0[:n])
 
         def core_int(q):
-            return corotational_internal_force(q[:6 * n], X0[:n], _cr_elements)
+            return corotational_internal_force(q[: 6 * n], X0[:n], _cr_elements)
     else:
+
         def core_int(q):
-            return Kcsr @ q[:6 * n]
+            return Kcsr @ q[: 6 * n]
 
     # The anchor trap is an extra diagonal spring −k_anchor_diag·q (a stiff harmonic restraint toward
     # rest). It is kept OUT of core_int / K so the elastic model is untouched, and out of the force_fn
     # entirely when no anchors are set — so the validated equilibrium path stays byte-for-byte as before.
     if block is None:
         if has_anchor:
+
             def force_fn(q):
                 return f_ext - core_int(q) - k_anchor_diag * q
         else:
+
             def force_fn(q):
                 return f_ext - core_int(q)
     else:
@@ -878,15 +962,17 @@ def simulate_equilibrium(
         # two overlap only at the anchor nodes, where the forces simply add — which is exactly how
         # the core comes to feel each tail's mass and drag.
         if has_anchor:
+
             def force_fn(q):
                 f = f_ext - st.tail_internal_force(q, X0, block, _touched)
-                f[:6 * n] -= core_int(q)
+                f[: 6 * n] -= core_int(q)
                 f -= k_anchor_diag * q
                 return f
         else:
+
             def force_fn(q):
                 f = f_ext - st.tail_internal_force(q, X0, block, _touched)
-                f[:6 * n] -= core_int(q)
+                f[: 6 * n] -= core_int(q)
                 return f
 
     # Progress: the friction build is a real, non-trivial phase (a dense O((6N)³) factorisation, or
@@ -896,30 +982,49 @@ def simulate_equilibrium(
         if progress_cb is not None:
             try:
                 progress_cb(frac, label, info or {})
-            except Exception:                          # pragma: no cover — progress is best-effort
+            except Exception:  # pragma: no cover — progress is best-effort
                 pass
 
     Z = None
     coarse_fric = None
     if hydrodynamics:
-        from backend.physics.snupi_hydrodynamics import check_friction_memory, friction_matrix
+        from backend.physics.snupi_hydrodynamics import (
+            check_friction_memory,
+            friction_matrix,
+        )
+
         # Preflight the O(N²) friction BEFORE allocating: a dense 6N×6N Z on a full-size origami wants
         # tens of GB and the OOM killer takes the user's editor, not just this job. The blob count is
         # the real B (helix fragmentation + tail chains push it above ⌈N/k⌉), so count it — it is O(N).
         nb = None
         if hydro_coarse_bp:
-            from backend.physics.snupi_hydro_coarse import blob_count, build_coarse_friction
+            from backend.physics.snupi_hydro_coarse import (
+                blob_count,
+                build_coarse_friction,
+            )
+
             nb = blob_count(mesh, hydro_coarse_bp, block)
         check_friction_memory(n_tot, hydro_coarse_bp, nb)
-        _phase(0.0, "building hydrodynamic friction",
-               {"n_nodes": n_tot, "coarse_bp": hydro_coarse_bp, "n_blobs": nb or n_tot})
+        _phase(
+            0.0,
+            "building hydrodynamic friction",
+            {"n_nodes": n_tot, "coarse_bp": hydro_coarse_bp, "n_blobs": nb or n_tot},
+        )
         if hydro_coarse_bp:
-            coarse_fric = build_coarse_friction(mesh, X0, m_diag, hydro_coarse_bp,
-                                                generalized=hydro_generalized, block=block)
+            coarse_fric = build_coarse_friction(
+                mesh,
+                X0,
+                m_diag,
+                hydro_coarse_bp,
+                generalized=hydro_generalized,
+                block=block,
+            )
         else:
             Z = friction_matrix(X0, generalized=hydro_generalized)
 
-    _phase(_SETUP_FRACTION, "trajectory", {"n_nodes": n, "n_steps": n_steps, "dt_ns": dt})
+    _phase(
+        _SETUP_FRACTION, "trajectory", {"n_nodes": n, "n_steps": n_steps, "dt_ns": dt}
+    )
 
     # The trajectory occupies the remaining [_SETUP_FRACTION, 1] of the bar. `_attempt_box` carries
     # the divergence-retry index so the reported detail says WHY the step counter just reset to 0 —
@@ -929,10 +1034,19 @@ def simulate_equilibrium(
 
     traj_cb = None
     if progress_cb is not None:
-        def traj_cb(f: float, step: int) -> None:                       # noqa: F811
-            _phase(_SETUP_FRACTION + (1.0 - _SETUP_FRACTION) * f, "trajectory",
-                   {"step": step, "n_steps": n_steps, "dt_ns": dt,
-                    "n_nodes": n, "attempt": _attempt_box[0]})
+
+        def traj_cb(f: float, step: int) -> None:  # noqa: F811
+            _phase(
+                _SETUP_FRACTION + (1.0 - _SETUP_FRACTION) * f,
+                "trajectory",
+                {
+                    "step": step,
+                    "n_steps": n_steps,
+                    "dt_ns": dt,
+                    "n_nodes": n,
+                    "attempt": _attempt_box[0],
+                },
+            )
 
     # Run with a divergence-guarded retry: if the auto/explicit dt still overshoots the stiffest
     # mode, halve and retry (up to 4×) so the run always completes at a stable step.
@@ -942,33 +1056,67 @@ def simulate_equilibrium(
         if _attempt:
             # A retry throws away the whole trajectory and starts over at half the step — that is a
             # 2×/4× wall-clock hit, so SAY so rather than let the run just appear to take forever.
-            _phase(_SETUP_FRACTION, "trajectory (restarted: dt halved after divergence)",
-                   {"attempt": _attempt, "dt_ns": dt, "n_steps": n_steps, "n_nodes": n})
+            _phase(
+                _SETUP_FRACTION,
+                "trajectory (restarted: dt halved after divergence)",
+                {"attempt": _attempt, "dt_ns": dt, "n_steps": n_steps, "n_nodes": n},
+            )
         rng = np.random.default_rng(seed)
         try:
             if coarse_fric is not None:
                 samples, _v = gjf_integrate_operator_friction(
-                    force_fn, q_start, m_diag, coarse_fric,
-                    kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil,
-                    sample_every=sample_every, rng=rng, progress_cb=traj_cb,
+                    force_fn,
+                    q_start,
+                    m_diag,
+                    coarse_fric,
+                    kT=kT,
+                    dt=dt,
+                    n_steps=n_steps,
+                    n_equil=n_equil,
+                    sample_every=sample_every,
+                    rng=rng,
+                    progress_cb=traj_cb,
                 )
             elif hydrodynamics:
                 samples, _v = gjf_integrate_matrix_friction(
-                    force_fn, q_start, m_diag, Z,
-                    kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil,
-                    sample_every=sample_every, rng=rng, progress_cb=traj_cb,
+                    force_fn,
+                    q_start,
+                    m_diag,
+                    Z,
+                    kT=kT,
+                    dt=dt,
+                    n_steps=n_steps,
+                    n_equil=n_equil,
+                    sample_every=sample_every,
+                    rng=rng,
+                    progress_cb=traj_cb,
                 )
             elif modified_gjf:
                 samples, _v = gjf_modified_integrate(
-                    force_fn, q_start, m_diag, gamma,
-                    kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil,
-                    sample_every=sample_every, rng=rng,
+                    force_fn,
+                    q_start,
+                    m_diag,
+                    gamma,
+                    kT=kT,
+                    dt=dt,
+                    n_steps=n_steps,
+                    n_equil=n_equil,
+                    sample_every=sample_every,
+                    rng=rng,
                 )
             else:
                 samples, _v = gjf_integrate(
-                    force_fn, q_start, m_diag, gamma,
-                    kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil,
-                    sample_every=sample_every, rng=rng, progress_cb=traj_cb,
+                    force_fn,
+                    q_start,
+                    m_diag,
+                    gamma,
+                    kT=kT,
+                    dt=dt,
+                    n_steps=n_steps,
+                    n_equil=n_equil,
+                    sample_every=sample_every,
+                    rng=rng,
+                    progress_cb=traj_cb,
                 )
             break
         except _GJFDiverged:
@@ -976,7 +1124,9 @@ def simulate_equilibrium(
     if samples is None:
         raise _GJFDiverged("GJF failed to stabilise after halving dt 4×")
 
-    disp_all = samples.reshape(len(samples), n_tot, 6)[:, :, :3]   # translational disp per frame
+    disp_all = samples.reshape(len(samples), n_tot, 6)[
+        :, :, :3
+    ]  # translational disp per frame
     frames_all = X0[None, :, :] + disp_all
     # Everything below the tail block is reported on the DUPLEX CORE ONLY, byte-for-byte as before:
     # `frames`, `rmsf`, `mean_u`, `positions0` are (…, n, …). Mixing tail beads into them would put
@@ -986,7 +1136,9 @@ def simulate_equilibrium(
     frames = frames_all[:, :n, :]
     rmsf = trajectory_rmsf(frames, X0[:n])
     mean_u = np.zeros(6 * n, dtype=float)
-    mean_u.reshape(n, 6)[:, :3] = disp.mean(axis=0)          # mean translational displacement per node
+    mean_u.reshape(n, 6)[:, :3] = disp.mean(
+        axis=0
+    )  # mean translational displacement per node
     out = {
         "positions0": X0[:n],
         "frames": frames,
@@ -998,26 +1150,36 @@ def simulate_equilibrium(
         "dt_ns": float(dt),
         "anchor_keys": [[hid, bp] for (hid, bp) in anchor_keys],
         "friction": (
-            f"rpy-coarse{hydro_coarse_bp}" if coarse_fric is not None
-            else "rpy" if hydrodynamics else "stokes"
+            f"rpy-coarse{hydro_coarse_bp}"
+            if coarse_fric is not None
+            else "rpy"
+            if hydrodynamics
+            else "stokes"
         ),
         "stiffness": Kcsr,
-        "mass_diag": m_diag[:6 * n],
+        "mass_diag": m_diag[: 6 * n],
     }
     if block is not None:
-        out.update({
-            "tail_block": block,
-            "tail_nodes": [
-                {"helix_id": nd.helix_id, "bp_index": nd.bp, "direction": nd.direction,
-                 "run": nd.run, "index_in_run": nd.index_in_run,
-                 "overhang_ids": list(nd.overhang_ids)}
-                for nd in block.nodes
-            ],
-            "tail_positions0": X0[n:],
-            "tail_frames": frames_all[:, n:, :],
-            # The FULL stack (core + tails) in one array — what snupi_tails.tail_end_to_end and the
-            # SS-4 display path index into, since a tail's end-to-end vector starts at a CORE node.
-            "frames_all": frames_all,
-            "n_tail_nodes": int(block.n_tail),
-        })
+        out.update(
+            {
+                "tail_block": block,
+                "tail_nodes": [
+                    {
+                        "helix_id": nd.helix_id,
+                        "bp_index": nd.bp,
+                        "direction": nd.direction,
+                        "run": nd.run,
+                        "index_in_run": nd.index_in_run,
+                        "overhang_ids": list(nd.overhang_ids),
+                    }
+                    for nd in block.nodes
+                ],
+                "tail_positions0": X0[n:],
+                "tail_frames": frames_all[:, n:, :],
+                # The FULL stack (core + tails) in one array — what snupi_tails.tail_end_to_end and the
+                # SS-4 display path index into, since a tail's end-to-end vector starts at a CORE node.
+                "frames_all": frames_all,
+                "n_tail_nodes": int(block.n_tail),
+            }
+        )
     return out

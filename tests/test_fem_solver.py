@@ -5,6 +5,7 @@ holds basic structural invariants. It does NOT assert calibrated RMSF/shape valu
 — pre-stress + calibration are Phase 2/3 (see memory/project_cando_fem.md). The
 solver's equilibrium is trivially u=0 here (no pre-stress force yet).
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -42,8 +43,8 @@ def test_mesh_builds_with_nodes_elements_and_crossover_links(routed_6hb):
     assert len(mesh.nodes) > 0
     assert len(mesh.elements) > 0
     # Standard DX crossovers are RIGID LINKS (exact constraint); ssDNA ones are springs.
-    assert len(mesh.rigid_links) + len(mesh.springs) > 0   # the bundle is coupled
-    assert len(mesh.rigid_links) > 0                        # a DX bundle → rigid links
+    assert len(mesh.rigid_links) + len(mesh.springs) > 0  # the bundle is coupled
+    assert len(mesh.rigid_links) > 0  # a DX bundle → rigid links
 
 
 def test_mesh_nodes_are_duplex_core_not_inflated_axis(routed_6hb):
@@ -56,7 +57,7 @@ def test_mesh_nodes_are_duplex_core_not_inflated_axis(routed_6hb):
     duplex = _duplex_bp_per_helix(routed_6hb)
     total_duplex = sum(len(v) for v in duplex.values())
     assert len(mesh.nodes) == total_duplex
-    assert len(mesh.nodes) <= 6 * 84 + 6    # no cap inflation
+    assert len(mesh.nodes) <= 6 * 84 + 6  # no cap inflation
 
 
 def test_stiffness_assembly_shape_and_zero_force(routed_6hb):
@@ -71,7 +72,7 @@ def test_boundary_conditions_remove_six_rigid_body_dofs(routed_6hb):
     mesh = build_fem_mesh(routed_6hb)
     K, f = assemble_global_stiffness(mesh)
     Kf, ff, free = apply_boundary_conditions(K, f, mesh)
-    assert len(free) == K.shape[0] - 6      # one node fully pinned
+    assert len(free) == K.shape[0] - 6  # one node fully pinned
     assert Kf.shape == (len(free), len(free))
 
 
@@ -81,7 +82,7 @@ def test_equilibrium_is_trivially_zero_without_prestress(routed_6hb):
     Kf, ff, free = apply_boundary_conditions(K, f, mesh)
     u = solve_equilibrium(Kf, ff, K.shape[0], free)
     assert np.all(np.isfinite(u))
-    assert np.abs(u).max() < 1e-9           # u=0 until Phase-2 pre-stress lands
+    assert np.abs(u).max() < 1e-9  # u=0 until Phase-2 pre-stress lands
 
 
 @pytest.fixture(scope="module")
@@ -91,7 +92,7 @@ def routed_sq_bundle():
     from backend.api import headless_build as hb
     from backend.api import state as design_state
 
-    cells = [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2)]   # 2×3 SQ
+    cells = [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2)]  # 2×3 SQ
     with hb.scratch_session(LatticeType.SQUARE):
         hb.create_bundle(cells, 168, lattice=LatticeType.SQUARE, name="sq6")
         hb.auto_scaffold(seamless=False)
@@ -111,13 +112,18 @@ def _max_axis_disp(design):
     return float(np.abs(u.reshape(-1, 6)[:, :3]).max())
 
 
-def test_square_lattice_register_overtwist_present_and_relieved_by_skips(routed_sq_bundle, routed_6hb):
+def test_square_lattice_register_overtwist_present_and_relieved_by_skips(
+    routed_sq_bundle, routed_6hb
+):
     """The square-lattice register over-twist (the emergent global twist CanDo reports on an
     UNSKIPPED square bundle) must now show up as a non-zero pre-stress even with zero loop/skips,
     and deletions must RELIEVE it — the direction that lets autorefine straighten a square strut by
     ADDING skips (validated vs the CanDo web solver on 3x6x400: unskipped +64° → 150-skip +24.8°).
     Honeycomb has natural == lattice helicity, so its register term is exactly zero (unchanged)."""
-    from backend.core.loop_skip_calculator import apply_loop_skips, sq_lattice_periodic_skips
+    from backend.core.loop_skip_calculator import (
+        apply_loop_skips,
+        sq_lattice_periodic_skips,
+    )
 
     # Honeycomb, no skips: register term vanishes → pre-stress is exactly zero (old behaviour).
     hc_mesh = build_fem_mesh(routed_6hb)
@@ -128,14 +134,16 @@ def test_square_lattice_register_overtwist_present_and_relieved_by_skips(routed_
     sq_mesh = build_fem_mesh(routed_sq_bundle)
     assert np.linalg.norm(assemble_prestress_force(sq_mesh, routed_sq_bundle)) > 0.0
     disp_noskip = _max_axis_disp(routed_sq_bundle)
-    assert disp_noskip > 1e-3                       # a genuine predicted twist, not u=0
+    assert disp_noskip > 1e-3  # a genuine predicted twist, not u=0
 
     # Adding the default square-lattice deletions RELIEVES the register over-twist → the
     # predicted deformation SHRINKS (skips straighten the bundle, as CanDo shows).
-    sq_skipped = apply_loop_skips(routed_sq_bundle, sq_lattice_periodic_skips(routed_sq_bundle))
+    sq_skipped = apply_loop_skips(
+        routed_sq_bundle, sq_lattice_periodic_skips(routed_sq_bundle)
+    )
     assert sum(len(h.loop_skips) for h in sq_skipped.helices) > 0
     disp_skipped = _max_axis_disp(sq_skipped)
-    assert disp_skipped < disp_noskip               # relief, not addition
+    assert disp_skipped < disp_noskip  # relief, not addition
 
 
 def test_solve_does_not_globally_promote_warnings_to_errors():
@@ -148,7 +156,7 @@ def test_solve_does_not_globally_promote_warnings_to_errors():
 
     from scipy.sparse import csr_matrix
 
-    K = csr_matrix(np.eye(6))          # trivial well-conditioned system
+    K = csr_matrix(np.eye(6))  # trivial well-conditioned system
     f = np.arange(6, dtype=float)
     free = np.arange(6)
 
@@ -162,8 +170,7 @@ def test_solve_does_not_globally_promote_warnings_to_errors():
 
     # After the solve the global filter list is pristine — no leaked "error" entry.
     assert not any(
-        entry[0] == "error" and entry[2] is Warning
-        for entry in warnings.filters
+        entry[0] == "error" and entry[2] is Warning for entry in warnings.filters
     )
 
 
@@ -188,7 +195,7 @@ def test_rmsf_is_finite_nonnegative_and_per_node(routed_6hb):
     assert rmsf.shape == (len(mesh.nodes),)
     assert np.all(np.isfinite(rmsf))
     assert np.all(rmsf >= 0.0)
-    assert rmsf.max() > 0.0                 # some flexibility present
+    assert rmsf.max() > 0.0  # some flexibility present
 
 
 def test_prestress_produces_damped_bundle_twist(routed_6hb):
@@ -209,17 +216,18 @@ def test_prestress_produces_damped_bundle_twist(routed_6hb):
         hb.auto_break()
         d = design_state.get_or_404()
         for h in d.helices:
-            for bp in (20, 40, 60):        # interior, uniform
+            for bp in (20, 40, 60):  # interior, uniform
                 hb.loop_skip(h.id, bp, -1)
         d = design_state.get_or_404().model_copy(deep=True)
 
     analytic = lsc.predict_global_twist_deg(
-        {h.id: list(h.loop_skips) for h in d.helices if h.loop_skips})
+        {h.id: list(h.loop_skips) for h in d.helices if h.loop_skips}
+    )
 
     mesh = build_fem_mesh(d)
     K, _ = assemble_global_stiffness(mesh)
     f = assemble_prestress_force(mesh, d)
-    assert np.abs(f).max() > 0.0            # non-zero pre-stress from the marks
+    assert np.abs(f).max() > 0.0  # non-zero pre-stress from the marks
     Kf, ff, free = apply_boundary_conditions(K, f, mesh)
     u = solve_equilibrium(Kf, ff, K.shape[0], free)
 
@@ -263,7 +271,7 @@ def test_nonlinear_prestress_shape_runs_and_deforms(routed_6hb):
     pos = solve_prestress_shape(d, mesh, n_steps=4)
     assert pos.shape == (len(mesh.nodes), 3)
     assert np.all(np.isfinite(pos))
-    assert np.linalg.norm(pos - ref, axis=1).max() > 1e-3   # it deformed
+    assert np.linalg.norm(pos - ref, axis=1).max() > 1e-3  # it deformed
 
 
 def test_predict_shape_defaults_to_nonlinear_and_returns_positions_and_rmsf():
@@ -281,7 +289,7 @@ def test_predict_shape_defaults_to_nonlinear_and_returns_positions_and_rmsf():
         hb.auto_crossover()
         hb.auto_break()
         d = design_state.get_or_404()
-        for h in d.helices:              # gradient marks → a bend
+        for h in d.helices:  # gradient marks → a bend
             for bp in (20, 40, 60):
                 hb.loop_skip(h.id, bp, 1 if h.grid_pos[0] == 0 else -1)
         d = design_state.get_or_404().model_copy(deep=True)
@@ -289,19 +297,26 @@ def test_predict_shape_defaults_to_nonlinear_and_returns_positions_and_rmsf():
     mesh = build_fem_mesh(d)
     # Undeformed backbone baseline (u=0) to measure deformation against.
     from backend.physics.fem_solver import deformed_positions
-    base = {(p["helix_id"], p["bp_index"], p["direction"]): np.array(p["backbone_position"])
-            for p in deformed_positions(d, mesh, np.zeros(6 * len(mesh.nodes)))}
 
-    res = predict_shape(d, n_steps=6)                       # nonlinear default
+    base = {
+        (p["helix_id"], p["bp_index"], p["direction"]): np.array(p["backbone_position"])
+        for p in deformed_positions(d, mesh, np.zeros(6 * len(mesh.nodes)))
+    }
+
+    res = predict_shape(d, n_steps=6)  # nonlinear default
     assert res["solver"] == "nonlinear"
     assert len(res["positions"]) > 0
-    assert len(res["rmsf"]) == len(mesh.nodes)              # one RMSF per axis node
+    assert len(res["rmsf"]) == len(mesh.nodes)  # one RMSF per axis node
     assert all(r["rmsf_nm"] >= 0.0 and np.isfinite(r["rmsf_nm"]) for r in res["rmsf"])
 
     # the predicted shape actually deformed off the straight reference
     moved = max(
-        float(np.linalg.norm(np.array(p["backbone_position"])
-                             - base[(p["helix_id"], p["bp_index"], p["direction"])]))
+        float(
+            np.linalg.norm(
+                np.array(p["backbone_position"])
+                - base[(p["helix_id"], p["bp_index"], p["direction"])]
+            )
+        )
         for p in res["positions"]
     )
     assert moved > 1e-3
@@ -342,15 +357,17 @@ def test_predict_shape_covers_every_nucleotide_including_each_loop_copy():
     cells = [(0, 1), (1, 1), (1, 2), (1, 3), (0, 3), (0, 2)]
     with hb.scratch_session(LatticeType.HONEYCOMB):
         hb.create_bundle(cells, 84, lattice=LatticeType.HONEYCOMB, name="6hb")
-        hb.auto_scaffold(seamless=False)      # ssDNA scaffold ends at the strand termini
+        hb.auto_scaffold(seamless=False)  # ssDNA scaffold ends at the strand termini
         hb.auto_crossover()
         hb.auto_break()
         d = design_state.get_or_404()
-        for h in d.helices:                   # +1 on half the helices → LOOP inserts (copies)
+        for h in d.helices:  # +1 on half the helices → LOOP inserts (copies)
             for bp in (20, 40, 60):
                 hb.loop_skip(h.id, bp, 1 if h.grid_pos[0] == 0 else -1)
         d = design_state.get_or_404().model_copy(deep=True)
-        drawn_nucs = _geometry_for_helices(d, None)   # exactly what the renderer receives
+        drawn_nucs = _geometry_for_helices(
+            d, None
+        )  # exactly what the renderer receives
 
     # Every nucleotide the renderer draws, keyed WITH its loop-copy index (appearance
     # order within a (helix, bp, dir) — the same order the renderer + backend assign).
@@ -362,20 +379,28 @@ def test_predict_shape_covers_every_nucleotide_including_each_loop_copy():
         seen[k] += 1
     total_nuc = len(drawn_nucs)
     # The test is only meaningful if the design actually has loop copies (copy > 0).
-    assert any(c > 0 for *_rest, c in expected), "design must contain loop inserts (copy>0)"
+    assert any(c > 0 for *_rest, c in expected), (
+        "design must contain loop inserts (copy>0)"
+    )
 
     mesh = build_fem_mesh(d)
     assert len(mesh.nodes) * 2 < total_nuc, "expected uncovered ssDNA/loop nucleotides"
 
     pos = deformed_positions(d, mesh, np.zeros(6 * len(mesh.nodes)))
-    assert all("copy" in p for p in pos), "every predicted position must carry a copy index"
+    assert all("copy" in p for p in pos), (
+        "every predicted position must carry a copy index"
+    )
     covered = {(p["helix_id"], p["bp_index"], p["direction"], p["copy"]) for p in pos}
     missing = expected - covered
-    assert not missing, f"{len(missing)} loop/ss nucleotide(s) stranded (no predicted position)"
+    assert not missing, (
+        f"{len(missing)} loop/ss nucleotide(s) stranded (no predicted position)"
+    )
     dead = covered - expected
-    assert not dead, f"{len(dead)} bead(s) emitted that the renderer cannot draw (dead payload)"
-    assert covered == expected            # exact per-copy coverage, no phantom keys
-    assert len(pos) == total_nuc          # no loop copies collapsed away
+    assert not dead, (
+        f"{len(dead)} bead(s) emitted that the renderer cannot draw (dead payload)"
+    )
+    assert covered == expected  # exact per-copy coverage, no phantom keys
+    assert len(pos) == total_nuc  # no loop copies collapsed away
 
 
 def test_predict_shape_raises_clear_error_on_duplex_free_design():
@@ -390,7 +415,7 @@ def test_predict_shape_raises_clear_error_on_duplex_free_design():
         hb.create_bundle([(0, 1)], 1, lattice=LatticeType.HONEYCOMB, name="mini")
         d = design_state.get_or_404().model_copy(deep=True)
 
-    assert len(build_fem_mesh(d).nodes) < 2      # degenerate mesh — the trigger
+    assert len(build_fem_mesh(d).nodes) < 2  # degenerate mesh — the trigger
     with pytest.raises(ValueError, match="duplex"):
         predict_shape(d, nonlinear=False, with_rmsf=False)
 
@@ -408,7 +433,7 @@ def test_free_free_nma_rmsf_is_physical_and_flatter_than_pinned(routed_6hb):
 
     assert free.shape == (len(mesh.nodes),)
     assert np.all(np.isfinite(free)) and np.all(free >= 0.0)
-    assert 0.05 < free.mean() < 20.0        # physical order of magnitude (nm)
+    assert 0.05 < free.mean() < 20.0  # physical order of magnitude (nm)
     # Free-free removes the pinned-node cantilever, so it is flatter.
     assert (free.max() / free.mean()) < (pinned.max() / max(pinned.mean(), 1e-9))
 
@@ -456,11 +481,15 @@ def test_deform_backbones_wind_around_the_curved_axis():
                 tan[b] = v / nv
         perp_ratios, radii = [], []
         for p in res["positions"]:
-            if p["helix_id"] != hid or p["bp_index"] not in bp_to_pos or p["bp_index"] not in tan:
+            if (
+                p["helix_id"] != hid
+                or p["bp_index"] not in bp_to_pos
+                or p["bp_index"] not in tan
+            ):
                 continue
             off = np.array(p["backbone_position"]) - bp_to_pos[p["bp_index"]]
             r = np.linalg.norm(off)
-            if r < 1e-6 or r > 4.0:              # skip degenerate / ssDNA-end extrapolations
+            if r < 1e-6 or r > 4.0:  # skip degenerate / ssDNA-end extrapolations
                 continue
             perp_ratios.append(abs(float(off @ tan[p["bp_index"]]) / r))
             radii.append(r)
@@ -470,7 +499,9 @@ def test_deform_backbones_wind_around_the_curved_axis():
         # Beads are ~perpendicular to the local deformed tangent (winding follows the curve)…
         assert np.mean(perp_ratios) < 0.15, f"{hid}: beads not ⊥ deformed tangent"
         # …and at roughly the helix radius (not flung off-axis).
-        assert 0.7 < np.mean(radii) < 1.6, f"{hid}: bead radius off ({np.mean(radii):.2f} nm)"
+        assert 0.7 < np.mean(radii) < 1.6, (
+            f"{hid}: bead radius off ({np.mean(radii):.2f} nm)"
+        )
     assert checked >= 4, "expected several duplex-core helices to validate"
 
 
@@ -531,7 +562,7 @@ def test_deform_slabs_carry_the_wound_frame_not_the_straight_orientation():
             continue
         n = np.array([p["nx"], p["ny"], p["nz"]])
         checked += 1
-        if float(n @ (inward / r)) < 0.0:      # obtuse → slab points radially outward
+        if float(n @ (inward / r)) < 0.0:  # obtuse → slab points radially outward
             outward += 1
     assert checked > 500
     # Pre-fix this design had ~1% radially-outward slabs (max 102°); the wound frame removes them.

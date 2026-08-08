@@ -7,6 +7,7 @@ ligation lands on the terminal faces (caps) — an inner-edge ligation would yie
 a far-too-short period. So this oracle pins the whole construction, not just a
 strand count.
 """
+
 import math
 
 import numpy as np
@@ -41,10 +42,14 @@ def _bundle_with_bare_ends(length_bp: int = 42, toehold: int = 10) -> Design:
         cdir = _opposite_direction(sdir[hid])
         ilo, ihi = lo + toehold, hi - toehold
         start, end = (ilo, ihi) if cdir == Direction.FORWARD else (ihi, ilo)
-        staples.append(Strand(
-            domains=[Domain(helix_id=hid, start_bp=start, end_bp=end, direction=cdir)],
-            strand_type=StrandType.STAPLE,
-        ))
+        staples.append(
+            Strand(
+                domains=[
+                    Domain(helix_id=hid, start_bp=start, end_bp=end, direction=cdir)
+                ],
+                strand_type=StrandType.STAPLE,
+            )
+        )
     new = [s for s in d.strands if s.strand_type == StrandType.SCAFFOLD] + staples
     return d.model_copy(update={"strands": new})
 
@@ -58,10 +63,14 @@ def _fully_stapled_bundle(length_bp: int = 42) -> Design:
     for hid, (lo, hi) in cov.items():
         cdir = _opposite_direction(sdir[hid])
         start, end = (lo, hi) if cdir == Direction.FORWARD else (hi, lo)
-        staples.append(Strand(
-            domains=[Domain(helix_id=hid, start_bp=start, end_bp=end, direction=cdir)],
-            strand_type=StrandType.STAPLE,
-        ))
+        staples.append(
+            Strand(
+                domains=[
+                    Domain(helix_id=hid, start_bp=start, end_bp=end, direction=cdir)
+                ],
+                strand_type=StrandType.STAPLE,
+            )
+        )
     new = [s for s in d.strands if s.strand_type == StrandType.SCAFFOLD] + staples
     return d.model_copy(update={"strands": new})
 
@@ -84,8 +93,9 @@ def test_ends_fully_duplexed_after_routing():
     sdir = _scaffold_dir_by_helix(d)
     routed, _ = route_for_polymerization(d)
     leftover = {
-        (h, bp) for (h, bp, dr) in unpaired_bead_keys(routed)
-        if sdir.get(h) == dr      # an unpaired bead on the scaffold's own slot
+        (h, bp)
+        for (h, bp, dr) in unpaired_bead_keys(routed)
+        if sdir.get(h) == dr  # an unpaired bead on the scaffold's own slot
     }
     assert leftover == set()
 
@@ -98,7 +108,7 @@ def test_every_bridge_is_a_periodic_seam():
     n_helices = len(_scaffold_coverage_by_helix(d))
     routed, res = route_for_polymerization(d)
     seams = [fl for fl in routed.forced_ligations if fl.is_periodic_seam]
-    assert len(seams) == n_helices                       # one per face-helix
+    assert len(seams) == n_helices  # one per face-helix
     assert len(res.seam_ligation_ids) == n_helices
     assert res.principal_seam_id in {fl.id for fl in seams}
 

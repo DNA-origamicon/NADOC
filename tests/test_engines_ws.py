@@ -86,7 +86,9 @@ def _make_namd_tar(dirpath, filename="NAMD_3.0.2_Linux-x86_64-multicore-CUDA.tar
     return tar_path
 
 
-def test_status_endpoint_reflects_simulation(monkeypatch, stub_host_probes, lifespan_client):
+def test_status_endpoint_reflects_simulation(
+    monkeypatch, stub_host_probes, lifespan_client
+):
     monkeypatch.setenv("NADOC_ENGINES_FORCE_MISSING", "oxdna,namd")
     st = lifespan_client.get("/api/engines/status").json()
     assert st["engines"]["oxdna"]["installed"] is False
@@ -143,7 +145,7 @@ def test_browse_endpoint_defaults_to_downloads(tmp_path, monkeypatch, lifespan_c
     (tmp_path / "arbd-may24.tar.gz").write_text("x")
     monkeypatch.setattr(fs_browse, "default_downloads_dir", lambda: str(tmp_path))
     body = lifespan_client.get("/api/engines/browse").json()
-    assert body["cwd"] == str(tmp_path)                        # opened at the Downloads default
+    assert body["cwd"] == str(tmp_path)  # opened at the Downloads default
     assert [e["name"] for e in body["entries"]] == ["arbd-may24.tar.gz"]
 
 
@@ -151,20 +153,28 @@ def test_install_ws_finishes_a_downloaded_namd_archive(tmp_path, monkeypatch):
     """The 'check download & install' round-trip: hand the WS a downloaded tarball
     → it verifies + extracts + reports complete, no NAMD download needed."""
     import backend.core.engine_artifact as art
-    home = tmp_path / "home"; home.mkdir()
+
+    home = tmp_path / "home"
+    home.mkdir()
     tar = _make_namd_tar(str(tmp_path))
     monkeypatch.setenv("HOME", str(home))
-    extracted = str(home / "Applications" / "NAMD_3.0.2_Linux-x86_64-multicore-CUDA" / "namd3")
+    extracted = str(
+        home / "Applications" / "NAMD_3.0.2_Linux-x86_64-multicore-CUDA" / "namd3"
+    )
     monkeypatch.setattr(art, "find_namd", lambda: extracted)
     monkeypatch.setattr(art, "find_psfgen", lambda: None)
-    monkeypatch.setattr(art, "gpu_info", lambda: {"present": True, "names": ["RTX"], "arch": "75"})
+    monkeypatch.setattr(
+        art, "gpu_info", lambda: {"present": True, "names": ["RTX"], "arch": "75"}
+    )
 
     client = TestClient(app)
     with client.websocket_connect("/ws/engines/install") as ws:
         ws.send_json({"engine": "namd", "archive_path": tar})
         types, last = [], None
         for _ in range(50):
-            m = ws.receive_json(); types.append(m["type"]); last = m
+            m = ws.receive_json()
+            types.append(m["type"])
+            last = m
             if m["type"] in ("complete", "error"):
                 break
     assert last["type"] == "complete", last
@@ -182,6 +192,7 @@ def test_install_ws_rejects_archive_for_non_namd():
 
 
 # ── mrDNA + ARBD (the coarse-grained pipeline deps) ───────────────────────────
+
 
 def _make_arbd_tar(dirpath, filename="arbd-may24-beta.tar.gz"):
     payload = os.path.join(dirpath, "_ap")
@@ -208,7 +219,9 @@ def test_install_ws_mrdna_simulated_streams_progress_then_error(monkeypatch):
         ws.send_json({"engine": "mrdna"})
         types, last = [], None
         for _ in range(20):
-            m = ws.receive_json(); types.append(m["type"]); last = m
+            m = ws.receive_json()
+            types.append(m["type"])
+            last = m
             if m["type"] == "error":
                 break
     assert "progress" in types
@@ -219,9 +232,14 @@ def test_install_ws_finishes_built_arbd_no_password(tmp_path, monkeypatch):
     """The no-password finish: hand the WS install_built → copies the built binary
     onto PATH and reports complete, no sudo needed."""
     import backend.core.mrdna_bridge as mb
-    home = tmp_path / "home"; (home / ".local").mkdir(parents=True)
+
+    home = tmp_path / "home"
+    (home / ".local").mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
-    built = tmp_path / "build" / "arbd"; built.parent.mkdir(); built.write_text("x"); os.chmod(built, 0o755)
+    built = tmp_path / "build" / "arbd"
+    built.parent.mkdir()
+    built.write_text("x")
+    os.chmod(built, 0o755)
     monkeypatch.setattr(mb, "find_arbd_build", lambda: str(built))
     dest = str(home / ".local" / "bin" / "arbd")
     monkeypatch.setattr(mb, "find_arbd", lambda: dest if os.path.isfile(dest) else None)
@@ -233,14 +251,18 @@ def test_install_ws_finishes_built_arbd_no_password(tmp_path, monkeypatch):
         for _ in range(30):
             m = ws.receive_json()
             if m["type"] in ("complete", "error"):
-                last = m; break
+                last = m
+                break
     assert last["type"] == "complete", last
     assert os.path.isfile(dest)
 
 
 def test_install_ws_sudo_rejects_empty_password(tmp_path, monkeypatch):
     import backend.core.mrdna_bridge as mb
-    built = tmp_path / "build" / "arbd"; built.parent.mkdir(parents=True); built.write_text("x")
+
+    built = tmp_path / "build" / "arbd"
+    built.parent.mkdir(parents=True)
+    built.write_text("x")
     monkeypatch.setattr(mb, "find_arbd_build", lambda: str(built))
     client = TestClient(app)
     with client.websocket_connect("/ws/engines/install") as ws:
@@ -255,13 +277,18 @@ def test_install_ws_builds_downloaded_arbd_and_asks_for_sudo(tmp_path, monkeypat
     """ARBD 'check download & install': hand the WS a source tarball → it verifies,
     unpacks, 'builds' (cmake/make stubbed), and asks for the one sudo line."""
     import backend.core.engine_artifact as art
-    home = tmp_path / "home"; home.mkdir()
+
+    home = tmp_path / "home"
+    home.mkdir()
     tar = _make_arbd_tar(str(tmp_path))
     monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setattr(art, "gpu_info", lambda: {"present": True, "names": ["RTX"], "arch": "75"})
+    monkeypatch.setattr(
+        art, "gpu_info", lambda: {"present": True, "names": ["RTX"], "arch": "75"}
+    )
 
     async def _ok(argv, cwd, send):
         return 0
+
     monkeypatch.setattr(art, "_stream_build", _ok)
 
     client = TestClient(app)
@@ -269,7 +296,9 @@ def test_install_ws_builds_downloaded_arbd_and_asks_for_sudo(tmp_path, monkeypat
         ws.send_json({"engine": "arbd", "archive_path": tar})
         types, last = [], None
         for _ in range(50):
-            m = ws.receive_json(); types.append(m["type"]); last = m
+            m = ws.receive_json()
+            types.append(m["type"])
+            last = m
             if m["type"] in ("manual_step", "complete", "error"):
                 break
     assert last["type"] == "manual_step", last

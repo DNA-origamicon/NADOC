@@ -66,6 +66,7 @@ router = APIRouter(tags=["blade"])
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _workspace() -> Path:
     return _WORKSPACE_DIR
 
@@ -82,6 +83,7 @@ def _load_job(job_id: str) -> BladeJob:
 
 def _current_fingerprint() -> "str | None":
     from backend.core.oxdna_staleness import oxdna_design_fingerprint
+
     design = design_state.get_design()
     if design is None:
         return None
@@ -93,46 +95,74 @@ def _current_fingerprint() -> "str | None":
 
 def _is_out_of_date(job: BladeJob, current_fp: "str | None") -> bool:
     from backend.core.oxdna_staleness import job_out_of_date
+
     return job_out_of_date(job.design_fingerprint, current_fp)
 
 
 # ── Request models ────────────────────────────────────────────────────────────
 
+
 class CreateBladeJobRequest(BaseModel):
-    mode:       str = Field("relax",
-                            description="'relax' = implicit-solvent relaxation of the idealized "
-                                        "geometry (the shipped mode). 'seed_namd' (relax → solvate → "
-                                        "NAMD equilibration) is reserved and not yet implemented.")
-    correction: str = Field("baseline",
-                            description="Force model: 'baseline' = pure CHARMM36 + OBC2 "
-                                        "(training-free); 'unified' = baseline + the learned unified "
-                                        "duplex+ssDNA ForceNet solvent correction.")
-    minimize_iters: int = Field(400, ge=0, le=20000,
-                            description="OpenMM L-BFGS minimization iteration cap.")
-    langevin_ps: float = Field(3.0, gt=0.0, le=1000.0,
-                            description="Langevin settling time in picoseconds. 3 ps is the "
-                                        "benchmarked default that produced a stable curved-6HB relax.")
-    nb_cutoff_A: float = Field(18.0, ge=8.0, le=50.0,
-                            description="CutoffNonPeriodic radius (Å). Keeps GBSA ~O(N) — the reason a "
-                                        "40k-atom origami relaxes in minutes rather than hitting the "
-                                        "O(N²) NoCutoff wall. Raising it is accuracy-for-time.")
-    temp_K:     float = Field(300.0, ge=1.0, le=500.0, description="Langevin temperature (K).")
-    traj_frames: int = Field(60, ge=0, le=500,
-                            description="DCD frames captured across the Langevin leg (0 = no "
-                                        "trajectory, just the relaxed structure).")
-    platform:   str = Field("CUDA",
-                            description="OpenMM platform. 'CUDA' uses the local card and is gated by "
-                                        "the shared sim guard; 'CPU' never contends but measures "
-                                        "~20× slower.")
-    uncertainty: bool = Field(False,
-                            description="Per-atom epistemic uncertainty overlay (EnsembleForceNet). "
-                                        "NOT AVAILABLE YET — no ensemble checkpoint exists; "
-                                        "forcenet_unified.pt is a single ForceNet. Rejected if set.")
-    autostart:  bool = Field(True)
-    design_source_path: Optional[str] = Field(None, description="Workspace path of the active design")
+    mode: str = Field(
+        "relax",
+        description="'relax' = implicit-solvent relaxation of the idealized "
+        "geometry (the shipped mode). 'seed_namd' (relax → solvate → "
+        "NAMD equilibration) is reserved and not yet implemented.",
+    )
+    correction: str = Field(
+        "baseline",
+        description="Force model: 'baseline' = pure CHARMM36 + OBC2 "
+        "(training-free); 'unified' = baseline + the learned unified "
+        "duplex+ssDNA ForceNet solvent correction.",
+    )
+    minimize_iters: int = Field(
+        400, ge=0, le=20000, description="OpenMM L-BFGS minimization iteration cap."
+    )
+    langevin_ps: float = Field(
+        3.0,
+        gt=0.0,
+        le=1000.0,
+        description="Langevin settling time in picoseconds. 3 ps is the "
+        "benchmarked default that produced a stable curved-6HB relax.",
+    )
+    nb_cutoff_A: float = Field(
+        18.0,
+        ge=8.0,
+        le=50.0,
+        description="CutoffNonPeriodic radius (Å). Keeps GBSA ~O(N) — the reason a "
+        "40k-atom origami relaxes in minutes rather than hitting the "
+        "O(N²) NoCutoff wall. Raising it is accuracy-for-time.",
+    )
+    temp_K: float = Field(
+        300.0, ge=1.0, le=500.0, description="Langevin temperature (K)."
+    )
+    traj_frames: int = Field(
+        60,
+        ge=0,
+        le=500,
+        description="DCD frames captured across the Langevin leg (0 = no "
+        "trajectory, just the relaxed structure).",
+    )
+    platform: str = Field(
+        "CUDA",
+        description="OpenMM platform. 'CUDA' uses the local card and is gated by "
+        "the shared sim guard; 'CPU' never contends but measures "
+        "~20× slower.",
+    )
+    uncertainty: bool = Field(
+        False,
+        description="Per-atom epistemic uncertainty overlay (EnsembleForceNet). "
+        "NOT AVAILABLE YET — no ensemble checkpoint exists; "
+        "forcenet_unified.pt is a single ForceNet. Rejected if set.",
+    )
+    autostart: bool = Field(True)
+    design_source_path: Optional[str] = Field(
+        None, description="Workspace path of the active design"
+    )
 
 
 # ── Create / list / status ────────────────────────────────────────────────────
+
 
 @router.post("/blade/jobs")
 async def create_blade_job(body: CreateBladeJobRequest) -> dict:
@@ -154,54 +184,76 @@ async def create_blade_job(body: CreateBladeJobRequest) -> dict:
     from backend.physics.oxdna_interface import _strand_nucleotide_order
 
     if body.mode != "relax":
-        raise HTTPException(400, "Only mode='relax' is implemented. 'seed_namd' (relax → solvate → "
-                                 "NAMD equilibration) is planned but not wired yet.")
+        raise HTTPException(
+            400,
+            "Only mode='relax' is implemented. 'seed_namd' (relax → solvate → "
+            "NAMD equilibration) is planned but not wired yet.",
+        )
     # The learned correction and the uncertainty overlay are two different maturity levels, and
     # conflating them would be misleading.  The unified ForceNet checkpoint exists and is usable;
     # the ENSEMBLE (which is what per-atom epistemic uncertainty requires) has never been trained
     # or saved — forcenet_unified.pt is a single ForceNet.  Refuse rather than invent a scalar.
     if body.uncertainty:
-        raise HTTPException(400, "Per-atom uncertainty needs an EnsembleForceNet checkpoint, and "
-                                 "none exists yet (forcenet_unified.pt holds a single ForceNet). "
-                                 "Train + save a K-member ensemble first.")
-    correction = body.correction if body.correction in ("baseline", "unified") else "baseline"
+        raise HTTPException(
+            400,
+            "Per-atom uncertainty needs an EnsembleForceNet checkpoint, and "
+            "none exists yet (forcenet_unified.pt holds a single ForceNet). "
+            "Train + save a K-member ensemble first.",
+        )
+    correction = (
+        body.correction if body.correction in ("baseline", "unified") else "baseline"
+    )
     platform = (body.platform or "CUDA").upper()
     if platform not in ("CUDA", "CPU"):
-        raise HTTPException(400, f"Unknown platform {body.platform!r} — use 'CUDA' or 'CPU'.")
+        raise HTTPException(
+            400, f"Unknown platform {body.platform!r} — use 'CUDA' or 'CPU'."
+        )
 
     # Refuse up front if the compute environment is missing, rather than letting the detached
     # worker die seconds in with a stack trace the panel can only show as a raw error.
     from backend.core.blade_runner import blade_available
+
     ok, reason = await run_in_threadpool(blade_available)
     if not ok:
         raise HTTPException(503, f"BLADE cannot run: {reason}")
 
     job = new_blade_job(
-        design_name        = name,
-        mode               = body.mode,
-        correction         = correction,
-        minimize_iters     = body.minimize_iters,
-        langevin_ps        = body.langevin_ps,
-        nb_cutoff_A        = body.nb_cutoff_A,
-        temp_K             = body.temp_K,
-        traj_frames        = body.traj_frames,
-        platform           = platform,
-        uncertainty        = False,
-        n_nucleotides      = len(_strand_nucleotide_order(design)),
-        design_source_path = body.design_source_path,
-        design_fingerprint = oxdna_design_fingerprint(design),
-        feature_log_position = effective_feature_log_position(design),
-        doc_id             = doc_context.get_current_doc(),
+        design_name=name,
+        mode=body.mode,
+        correction=correction,
+        minimize_iters=body.minimize_iters,
+        langevin_ps=body.langevin_ps,
+        nb_cutoff_A=body.nb_cutoff_A,
+        temp_K=body.temp_K,
+        traj_frames=body.traj_frames,
+        platform=platform,
+        uncertainty=False,
+        n_nucleotides=len(_strand_nucleotide_order(design)),
+        design_source_path=body.design_source_path,
+        design_fingerprint=oxdna_design_fingerprint(design),
+        feature_log_position=effective_feature_log_position(design),
+        doc_id=doc_context.get_current_doc(),
     )
     job.status = BladeStatus.preparing
     job.save(_workspace())
-    logger.info("create_blade_job: job_id=%s design=%s mode=%s correction=%s platform=%s",
-                job.job_id, name, body.mode, correction, platform)
+    logger.info(
+        "create_blade_job: job_id=%s design=%s mode=%s correction=%s platform=%s",
+        job.job_id,
+        name,
+        body.mode,
+        correction,
+        platform,
+    )
 
     try:
         await run_in_threadpool(prepare_blade_job, design, job, _workspace())
     except Exception as exc:  # noqa: BLE001
-        logger.error("create_blade_job: prepare FAILED for %s: %s", job.job_id, exc, exc_info=True)
+        logger.error(
+            "create_blade_job: prepare FAILED for %s: %s",
+            job.job_id,
+            exc,
+            exc_info=True,
+        )
         job.status = BladeStatus.failed
         job.error = f"Preparation failed: {exc}"
         job.save(_workspace())
@@ -223,6 +275,7 @@ async def create_blade_job(body: CreateBladeJobRequest) -> dict:
 @router.get("/blade/jobs")
 async def list_blade_jobs() -> list[dict]:
     from backend.core.design_disk_usage import dir_size_bytes_cached
+
     ws = _workspace()
     jobs = [reconcile_blade_status(j, ws) for j in BladeJob.list_jobs(ws)]
     current_fp = _current_fingerprint()
@@ -237,6 +290,7 @@ async def list_blade_jobs() -> list[dict]:
         if d.get("status") == "running":
             try:
                 from backend.core.blade_runner import job_progress
+
                 p = job_progress(j, ws)
                 d["progress_fraction"] = round(float(p.get("overall") or 0.0), 4)
                 d["eta_seconds"] = p.get("eta_seconds")
@@ -279,6 +333,7 @@ async def get_blade_error_log(job_id: str) -> dict:
 
 
 # ── Control ───────────────────────────────────────────────────────────────────
+
 
 @router.post("/blade/jobs/{job_id}/start")
 async def start_blade_job(job_id: str) -> dict:
@@ -324,6 +379,7 @@ async def delete_blade_job(job_id: str) -> dict:
     if is_running(job_id, ws) or job.status == BladeStatus.running:
         raise HTTPException(400, "Stop the BLADE job before deleting it")
     from backend.core.job_archive import purge_index_entry
+
     jd = job.job_dir(ws)
     if jd.exists():
         shutil.rmtree(jd)
@@ -332,6 +388,7 @@ async def delete_blade_job(job_id: str) -> dict:
 
 
 # ── Display ───────────────────────────────────────────────────────────────────
+
 
 @router.get("/blade/jobs/{job_id}/snapshot-geometry")
 async def get_blade_snapshot_geometry(job_id: str) -> dict:
@@ -342,14 +399,22 @@ async def get_blade_snapshot_geometry(job_id: str) -> dict:
     Same shape as ``GET /design/geometry`` plus the snapshot ``design`` object:
     ``{ready, design, nucleotides:[...], helix_axes:[{helix_id,start,end,...}]}``.
     """
-    from backend.core.deformation import _apply_ovhg_rotations_to_axes, deformed_helix_axes
+    from backend.core.deformation import (
+        _apply_ovhg_rotations_to_axes,
+        deformed_helix_axes,
+    )
     from backend.core.design_geometry import _geometry_for_helices
     from backend.core.blade_runner import _load_snapshot_design
 
     job = _load_job(job_id)
     design = _load_snapshot_design(job.job_dir(_workspace()))
     if design is None or not design.helices:
-        return {"job_id": job.job_id, "ready": False, "nucleotides": [], "helix_axes": []}
+        return {
+            "job_id": job.job_id,
+            "ready": False,
+            "nucleotides": [],
+            "helix_axes": [],
+        }
 
     def _compute() -> tuple[list, list]:
         nucleotides = _geometry_for_helices(design, None)
@@ -382,6 +447,7 @@ async def get_blade_display(job_id: str) -> dict:
     NAMD-seed hook consumes.  Physical-layer only; never written back into topology.
     """
     from backend.core.blade_runner import load_trajectory
+
     job = _load_job(job_id)
     jd = job.job_dir(_workspace())
     cached = load_display(jd)
@@ -413,10 +479,17 @@ async def get_blade_trajectory(job_id: str) -> dict:
     ``blade_runner._build_trajectory``, which routes the all-atom DCD through NAMD's
     ``md_composite_trajectory`` rather than inventing a BLADE-specific format."""
     from backend.core.blade_runner import load_trajectory
+
     job = _load_job(job_id)
     cached = load_trajectory(job.job_dir(_workspace()))
     if not cached or not cached.get("n_frames"):
-        return {"job_id": job.job_id, "ready": False, "keys": [], "frames": [], "n_frames": 0}
+        return {
+            "job_id": job.job_id,
+            "ready": False,
+            "keys": [],
+            "frames": [],
+            "n_frames": 0,
+        }
     return {"job_id": job.job_id, "ready": True, **cached}
 
 
@@ -429,6 +502,7 @@ async def get_blade_available() -> dict:
     spawns that interpreter, so it takes a second or two — the panel calls it once on tab
     open, not per poll."""
     from backend.core.blade_runner import blade_available, find_blade_python
+
     ok, reason = await run_in_threadpool(blade_available)
     return {
         "available": ok,

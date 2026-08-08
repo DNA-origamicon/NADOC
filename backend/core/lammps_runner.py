@@ -74,7 +74,7 @@ def resolve_lammps_forces(
     anchor_keys: list = []
     if anchors:
         parts, keys = resolve_anchor_particles(design, anchors)
-        anchor_ids = [p + 1 for p in parts]        # oxDNA 0-based → LAMMPS 1-based
+        anchor_ids = [p + 1 for p in parts]  # oxDNA 0-based → LAMMPS 1-based
         anchor_keys = [list(k[:3]) for k in keys]
 
     force_vec = None
@@ -91,8 +91,10 @@ def resolve_lammps_forces(
         # An unanchored uniform force just streams the whole structure across the box
         # (COM drift).  Anchors are recommended but no longer required — the UI warns;
         # the run proceeds.
-        logger.warning("LAMMPS E-field run has no anchor — the structure will drift "
-                       "down-field (COM drift).")
+        logger.warning(
+            "LAMMPS E-field run has no anchor — the structure will drift "
+            "down-field (COM drift)."
+        )
 
     wall_dict = None
     wall_meta = None
@@ -100,14 +102,25 @@ def resolve_lammps_forces(
         offset_ox = float(wall.get("offset_nm", 0.0)) * L.NM_TO_OXDNA
         face, coord = L.axis_wall_from_extent(positions, wall.get("dir"), offset_ox)
         stiff = float(wall["stiff"])
-        wall_dict = {"face": face, "coord": coord, "epsilon": stiff,
-                     "cutoff": float(wall.get("cutoff_oxdna", 1.0))}
-        wall_meta = {"face": face, "coord": coord, "stiff": stiff,
-                     "dir": L._normalize3_np(wall.get("dir")).tolist()}
+        wall_dict = {
+            "face": face,
+            "coord": coord,
+            "epsilon": stiff,
+            "cutoff": float(wall.get("cutoff_oxdna", 1.0)),
+        }
+        wall_meta = {
+            "face": face,
+            "coord": coord,
+            "stiff": stiff,
+            "dir": L._normalize3_np(wall.get("dir")).tolist(),
+        }
 
     spec = L.LammpsForceSpec(
-        force=force_vec, anchor_ids=anchor_ids,
-        anchor_stiff=float(anchor_stiff), wall=wall_dict)
+        force=force_vec,
+        anchor_ids=anchor_ids,
+        anchor_stiff=float(anchor_stiff),
+        wall=wall_dict,
+    )
     meta = {
         "n_anchored": len(anchor_ids),
         "n_total": n_total,
@@ -157,14 +170,23 @@ def prepare_lammps_job(
     data_path.write_text(data_text)
 
     force_spec, force_meta = resolve_lammps_forces(
-        design, conf_path, field=field, wall=wall, anchors=anchors,
-        anchor_stiff=anchor_stiff)
+        design,
+        conf_path,
+        field=field,
+        wall=wall,
+        anchors=anchors,
+        anchor_stiff=anchor_stiff,
+    )
 
     input_path = job / "in.lammps"
     input_path.write_text(L.build_input_file(params, force_spec))
 
-    n_atoms = int(next(ln for ln in data_text.splitlines() if ln.endswith(" atoms")).split()[0])
-    n_bonds = int(next(ln for ln in data_text.splitlines() if ln.endswith(" bonds")).split()[0])
+    n_atoms = int(
+        next(ln for ln in data_text.splitlines() if ln.endswith(" atoms")).split()[0]
+    )
+    n_bonds = int(
+        next(ln for ln in data_text.splitlines() if ln.endswith(" bonds")).split()[0]
+    )
     return {
         "job_dir": str(job),
         "topology": str(top_path),
@@ -260,11 +282,13 @@ def resolve_lammps() -> str:
     if not path:
         raise LammpsError(
             "No LAMMPS binary found. Build it via the MD Engines panel or "
-            "scripts/lammps_doctor.py --fix (see docs/lammps_setup.md).")
+            "scripts/lammps_doctor.py --fix (see docs/lammps_setup.md)."
+        )
     if not lammps_supports_cgdna(path):
         raise LammpsError(
             f"LAMMPS at {path} was built without the CG-DNA package, so it cannot run "
-            f"the oxDNA force field. Rebuild with -D PKG_CG-DNA=on.")
+            f"the oxDNA force field. Rebuild with -D PKG_CG-DNA=on."
+        )
     return path
 
 
@@ -288,8 +312,10 @@ async def run_lammps(
     argv = build_lammps_argv(lmp, input_file, ranks=ranks)
 
     proc = await asyncio.create_subprocess_exec(
-        *argv, cwd=str(job),
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        *argv,
+        cwd=str(job),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
     )
     assert proc.stdout is not None
     async for raw in proc.stdout:
@@ -304,7 +330,8 @@ async def run_lammps(
     frames = _count_frames(traj) if traj else 0
     if not frames:
         raise LammpsError(
-            "LAMMPS finished but produced no trajectory frames — check the input/data.")
+            "LAMMPS finished but produced no trajectory frames — check the input/data."
+        )
     result = {"rc": rc, "trajectory": str(traj), "frames": frames}
     if send is not None:
         await send({"type": "complete", **result})
@@ -331,6 +358,7 @@ def _count_frames(traj: Path) -> int:
 # A run executes in its own background thread + event loop (like the oxDNA/NAMD
 # runners) so it survives the request and a browser refresh; job.json is updated
 # with live progress and the terminal status.
+
 
 @dataclass
 class _RunHandle:
@@ -389,9 +417,11 @@ async def run_job(job: LammpsJob, workspace_dir: Path) -> None:
     argv = build_lammps_argv(lmp, "in.lammps", ranks=job.ranks)
 
     proc = await asyncio.create_subprocess_exec(
-        *argv, cwd=str(jd),
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-        start_new_session=True,   # own process group so stop can kill the whole run
+        *argv,
+        cwd=str(jd),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        start_new_session=True,  # own process group so stop can kill the whole run
     )
     _ACTIVE_PIDS[job.job_id] = proc.pid
     job.lammps_pid = proc.pid
@@ -409,7 +439,7 @@ async def run_job(job: LammpsJob, workspace_dir: Path) -> None:
             if step is not None:
                 job.current_step = step
                 now = time.time()
-                if now - last_save > 1.0:   # throttle disk writes
+                if now - last_save > 1.0:  # throttle disk writes
                     job.save(workspace_dir)
                     last_save = now
     rc = await proc.wait()
@@ -462,7 +492,9 @@ def start_job(job: LammpsJob, workspace_dir: Path) -> None:
                     pass
             loop.close()
 
-    thread = threading.Thread(target=_thread_main, name=f"lammps-runner-{job.job_id}", daemon=True)
+    thread = threading.Thread(
+        target=_thread_main, name=f"lammps-runner-{job.job_id}", daemon=True
+    )
     _RUNNING[job.job_id] = _RunHandle(thread=thread)
     thread.start()
 
@@ -474,7 +506,7 @@ def _kill_process_group(pid: int) -> None:
         return
     except OSError:
         return
-    for _ in range(20):                       # give it up to ~2 s to exit cleanly
+    for _ in range(20):  # give it up to ~2 s to exit cleanly
         try:
             os.killpg(os.getpgid(pid), 0)
         except OSError:

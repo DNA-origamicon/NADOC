@@ -93,11 +93,14 @@ def exyz_to_quat(mya1, mya3):
         myquat[2] = (mya3[1] + mya2[2]) / (4.0 * myquat[3])
 
     norm = 1.0 / np.sqrt(
-        myquat[0] * myquat[0] + myquat[1] * myquat[1]
-        + myquat[2] * myquat[2] + myquat[3] * myquat[3]
+        myquat[0] * myquat[0]
+        + myquat[1] * myquat[1]
+        + myquat[2] * myquat[2]
+        + myquat[3] * myquat[3]
     )
-    return np.array([myquat[0] * norm, myquat[1] * norm,
-                     myquat[2] * norm, myquat[3] * norm])
+    return np.array(
+        [myquat[0] * norm, myquat[1] * norm, myquat[2] * norm, myquat[3] * norm]
+    )
 
 
 def quat_to_exyz(q):
@@ -125,30 +128,39 @@ def lammps_dump_to_oxdna_traj(dump_text: str, out_path) -> int:
     Returns the number of frames written.
     """
     lines = dump_text.splitlines()
-    frames: list[tuple[np.ndarray, list[tuple[int, np.ndarray, np.ndarray, np.ndarray]]]] = []
+    frames: list[
+        tuple[np.ndarray, list[tuple[int, np.ndarray, np.ndarray, np.ndarray]]]
+    ] = []
     i, n = 0, len(lines)
     while i < n:
         if not lines[i].startswith("ITEM: TIMESTEP"):
             i += 1
             continue
-        i += 2                                           # skip TIMESTEP + value
+        i += 2  # skip TIMESTEP + value
         # NUMBER OF ATOMS
         i += 1
-        natoms = int(lines[i].split()[0]); i += 1
+        natoms = int(lines[i].split()[0])
+        i += 1
         # BOX BOUNDS (3 axes)
         i += 1
         box = []
         for _ in range(3):
-            lo, hi = (float(v) for v in lines[i].split()[:2]); box.append(hi - lo); i += 1
+            lo, hi = (float(v) for v in lines[i].split()[:2])
+            box.append(hi - lo)
+            i += 1
         boxv = np.array(box)
         # ATOMS header → column indices
-        cols = lines[i].split()[2:]; i += 1
+        cols = lines[i].split()[2:]
+        i += 1
         cx = [cols.index(c) for c in ("x", "y", "z")]
-        cq = [cols.index(c) for c in ("c_quat[1]", "c_quat[2]", "c_quat[3]", "c_quat[4]")]
+        cq = [
+            cols.index(c) for c in ("c_quat[1]", "c_quat[2]", "c_quat[3]", "c_quat[4]")
+        ]
         cid = cols.index("id")
         atoms = []
         for _ in range(natoms):
-            f = lines[i].split(); i += 1
+            f = lines[i].split()
+            i += 1
             pos = np.array([float(f[cx[0]]), float(f[cx[1]]), float(f[cx[2]])])
             quat = [float(f[cq[0]]), float(f[cq[1]]), float(f[cq[2]]), float(f[cq[3]])]
             a1, a3 = quat_to_exyz(quat)
@@ -162,19 +174,21 @@ def lammps_dump_to_oxdna_traj(dump_text: str, out_path) -> int:
             fh.write(f"b = {boxv[0]:.6f} {boxv[1]:.6f} {boxv[2]:.6f}\n")
             fh.write("E = 0 0 0\n")
             for _id, pos, a1, a3 in atoms:
-                fh.write(f"{pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f} "
-                         f"{a1[0]:.6f} {a1[1]:.6f} {a1[2]:.6f} "
-                         f"{a3[0]:.6f} {a3[1]:.6f} {a3[2]:.6f} 0 0 0 0 0 0\n")
+                fh.write(
+                    f"{pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f} "
+                    f"{a1[0]:.6f} {a1[1]:.6f} {a1[2]:.6f} "
+                    f"{a3[0]:.6f} {a3[1]:.6f} {a3[2]:.6f} 0 0 0 0 0 0\n"
+                )
     return len(frames)
 
 
 # ── oxDNA file parsers ────────────────────────────────────────────────────────
 @dataclass
 class OxdnaTopoRow:
-    strand: int   # 1-based strand id
-    base: str     # 'A'|'C'|'G'|'T' (or other → treated as unsequenced)
-    n3: int       # 0-based 3′ neighbour particle index, -1 if none
-    n5: int       # 0-based 5′ neighbour particle index, -1 if none
+    strand: int  # 1-based strand id
+    base: str  # 'A'|'C'|'G'|'T' (or other → treated as unsequenced)
+    n3: int  # 0-based 3′ neighbour particle index, -1 if none
+    n5: int  # 0-based 5′ neighbour particle index, -1 if none
 
 
 def parse_topology(text: str) -> tuple[int, list[OxdnaTopoRow]]:
@@ -192,15 +206,17 @@ def parse_topology(text: str) -> tuple[int, list[OxdnaTopoRow]]:
         p = ln.split()
         rows.append(OxdnaTopoRow(int(p[0]), p[1], int(p[2]), int(p[3])))
     if len(rows) != n_atoms:
-        raise ValueError(f"topology header says {n_atoms} atoms but has {len(rows)} rows")
+        raise ValueError(
+            f"topology header says {n_atoms} atoms but has {len(rows)} rows"
+        )
     return n_strands, rows
 
 
 @dataclass
 class OxdnaConfEntry:
-    pos: np.ndarray   # centre-of-mass, oxDNA length units
-    a1: np.ndarray    # base-normal unit vector
-    a3: np.ndarray    # 5′→3′ axis unit vector
+    pos: np.ndarray  # centre-of-mass, oxDNA length units
+    a1: np.ndarray  # base-normal unit vector
+    a3: np.ndarray  # 5′→3′ axis unit vector
 
 
 def parse_configuration(text: str) -> tuple[np.ndarray, list[OxdnaConfEntry]]:
@@ -225,14 +241,23 @@ def parse_configuration(text: str) -> tuple[np.ndarray, list[OxdnaConfEntry]]:
         f = [float(x) for x in s.split()]
         if len(f) < 9:
             continue
-        entries.append(OxdnaConfEntry(
-            pos=np.array(f[0:3]), a1=np.array(f[3:6]), a3=np.array(f[6:9])))
+        entries.append(
+            OxdnaConfEntry(
+                pos=np.array(f[0:3]), a1=np.array(f[3:6]), a3=np.array(f[6:9])
+            )
+        )
     return box, entries
 
 
 # ── LAMMPS data-file writer ───────────────────────────────────────────────────
-def build_data_file(top_text: str, conf_text: str, *, box_margin: float = 12.0,
-                    min_box: float = 24.0, title: str = "NADOC oxDNA2 → LAMMPS CG-DNA") -> str:
+def build_data_file(
+    top_text: str,
+    conf_text: str,
+    *,
+    box_margin: float = 12.0,
+    min_box: float = 24.0,
+    title: str = "NADOC oxDNA2 → LAMMPS CG-DNA",
+) -> str:
     """Transcode an oxDNA (topology, configuration) pair → a LAMMPS data-file string.
 
     Atom types come from the topology base letters (A/C/G/T→1-4); positions +
@@ -249,7 +274,8 @@ def build_data_file(top_text: str, conf_text: str, *, box_margin: float = 12.0,
     _box, entries = parse_configuration(conf_text)
     if len(rows) != len(entries):
         raise ValueError(
-            f"topology has {len(rows)} nucleotides but configuration has {len(entries)}")
+            f"topology has {len(rows)} nucleotides but configuration has {len(entries)}"
+        )
     n = len(rows)
 
     unsequenced = sorted({r.base for r in rows if r.base.upper() not in BASE_TO_TYPE})
@@ -258,12 +284,13 @@ def build_data_file(top_text: str, conf_text: str, *, box_margin: float = 12.0,
         raise ValueError(
             f"design is not fully sequenced: {n_bad}/{n} nucleotides carry a non-ACGT "
             f"base ({', '.join(unsequenced)!r}). oxDNA base-pair strengths are "
-            f"sequence-dependent — assign a full sequence before a LAMMPS run.")
+            f"sequence-dependent — assign a full sequence before a LAMMPS run."
+        )
 
     pos = np.array([e.pos for e in entries])
     lo = pos.min(axis=0) - box_margin
     hi = pos.max(axis=0) + box_margin
-    for d in range(3):                       # enforce a minimum box edge per axis
+    for d in range(3):  # enforce a minimum box edge per axis
         if hi[d] - lo[d] < min_box:
             mid = 0.5 * (hi[d] + lo[d])
             lo[d], hi[d] = mid - min_box / 2, mid + min_box / 2
@@ -272,31 +299,48 @@ def build_data_file(top_text: str, conf_text: str, *, box_margin: float = 12.0,
     bonds = [(i + 1, r.n3 + 1) for i, r in enumerate(rows) if r.n3 >= 0]
 
     out: list[str] = [f"# {title}", ""]
-    out += [f"{n} atoms", f"{len(bonds)} bonds",
-            f"{N_ATOM_TYPES} atom types", "1 bond types", f"{n} ellipsoids", ""]
-    out += [f"{lo[0]:.8f} {hi[0]:.8f} xlo xhi",
-            f"{lo[1]:.8f} {hi[1]:.8f} ylo yhi",
-            f"{lo[2]:.8f} {hi[2]:.8f} zlo zhi", ""]
-    out += ["Masses", ""] + [f"{t} {NUCLEOTIDE_MASS}" for t in range(1, N_ATOM_TYPES + 1)] + [""]
+    out += [
+        f"{n} atoms",
+        f"{len(bonds)} bonds",
+        f"{N_ATOM_TYPES} atom types",
+        "1 bond types",
+        f"{n} ellipsoids",
+        "",
+    ]
+    out += [
+        f"{lo[0]:.8f} {hi[0]:.8f} xlo xhi",
+        f"{lo[1]:.8f} {hi[1]:.8f} ylo yhi",
+        f"{lo[2]:.8f} {hi[2]:.8f} zlo zhi",
+        "",
+    ]
+    out += (
+        ["Masses", ""]
+        + [f"{t} {NUCLEOTIDE_MASS}" for t in range(1, N_ATOM_TYPES + 1)]
+        + [""]
+    )
 
     out += ["Atoms # hybrid", ""]
     for i, (r, e) in enumerate(zip(rows, entries)):
         t = BASE_TO_TYPE[r.base.upper()]
         # id type x y z molecule-id ellipsoidflag density  (density=1 → mass set in input)
-        out.append(f"{i+1} {t} {e.pos[0]:.15e} {e.pos[1]:.15e} {e.pos[2]:.15e} "
-                   f"{r.strand} 1 1")
+        out.append(
+            f"{i + 1} {t} {e.pos[0]:.15e} {e.pos[1]:.15e} {e.pos[2]:.15e} "
+            f"{r.strand} 1 1"
+        )
     out.append("")
 
     out += ["Velocities", ""]
     for i in range(n):
-        out.append(f"{i+1} 0 0 0 0 0 0")
+        out.append(f"{i + 1} 0 0 0 0 0 0")
     out.append("")
 
     out += ["Ellipsoids", ""]
     for i, e in enumerate(entries):
         q = exyz_to_quat(e.a1, e.a3)
-        out.append(f"{i+1} {ELLIPSOID_SHAPE:.15e} {ELLIPSOID_SHAPE:.15e} "
-                   f"{ELLIPSOID_SHAPE:.15e} {q[0]:.15e} {q[1]:.15e} {q[2]:.15e} {q[3]:.15e}")
+        out.append(
+            f"{i + 1} {ELLIPSOID_SHAPE:.15e} {ELLIPSOID_SHAPE:.15e} "
+            f"{ELLIPSOID_SHAPE:.15e} {q[0]:.15e} {q[1]:.15e} {q[2]:.15e} {q[3]:.15e}"
+        )
     out.append("")
 
     out += ["Bonds", ""]
@@ -309,21 +353,21 @@ def build_data_file(top_text: str, conf_text: str, *, box_margin: float = 12.0,
 # ── LAMMPS input-script writer ────────────────────────────────────────────────
 @dataclass
 class LammpsInputParams:
-    data_file: str = "data.oxdna"       # read_data source (relative to run cwd)
-    traj_file: str = "traj.lammpstrj"   # dump output
-    steps: int = 100_000                # MD steps
-    dump_every: int = 1000              # frames every N steps
-    temperature: float = 0.1            # oxDNA reduced units (0.1 ≈ 300 K)
-    salt_molar: float = 0.5             # Debye-Hückel salt concentration [M]
+    data_file: str = "data.oxdna"  # read_data source (relative to run cwd)
+    traj_file: str = "traj.lammpstrj"  # dump output
+    steps: int = 100_000  # MD steps
+    dump_every: int = 1000  # frames every N steps
+    temperature: float = 0.1  # oxDNA reduced units (0.1 ≈ 300 K)
+    salt_molar: float = 0.5  # Debye-Hückel salt concentration [M]
     # oxDNA lj-unit timestep.  The upstream CG-DNA lj_units demo (in.duplex2) ships an
     # ultra-conservative 1e-5; standalone oxDNA runs this SAME force field at 0.005, and
     # a NADOC validation (2026-07-10) confirmed 0.005 is stable (sweep to ≥1e-2), best-
     # conserving in NVE, and dt-converged (0.005 ≡ 0.001 physics: energies within ~1%,
     # mean RMSF within 0.1%) — a ~500× throughput win over the demo value.
     timestep: float = 5e-3
-    langevin_damp: float = 2.5          # thermostat damping (oxDNA time units)
-    seed: int = 457145                  # Langevin RNG seed
-    thermo_every: int = 1000            # console thermo cadence
+    langevin_damp: float = 2.5  # thermostat damping (oxDNA time units)
+    seed: int = 457145  # Langevin RNG seed
+    thermo_every: int = 1000  # console thermo cadence
     # Soft-start: FIRE energy-minimise the seed before the production run so
     # overstretched crossover/nick backbone bonds (the idealised B-DNA seed can
     # place bonds past oxDNA's native FENE length) relax into range first — the
@@ -383,6 +427,7 @@ class LammpsForceSpec:
     - ``wall``: axis-aligned harmonic wall ``{'face':'zlo'|'zhi'|…, 'coord': float,
       'epsilon': float, 'cutoff': float}`` (approximates ``repulsion_plane``), or None.
     """
+
     force: tuple[float, float, float] | None = None
     anchor_ids: list[int] = field(default_factory=list)
     anchor_stiff: float = DEFAULT_ANCHOR_STIFF
@@ -428,10 +473,11 @@ def axis_wall_from_extent(positions, wall_dir, offset_oxdna: float = 0.0):
     if abs(abs(d[ax]) - 1.0) > 1e-6:
         raise ValueError(
             f"LAMMPS surface wall must be axis-aligned (±x/±y/±z); got dir={list(d)}. "
-            f"A general plane orientation is not yet supported.")
+            f"A general plane orientation is not yet supported."
+        )
     axis_name = "xyz"[ax]
     coords = [float(p[ax]) for p in positions]
-    if d[ax] > 0:                       # allowed side = +axis → wall below (lo face)
+    if d[ax] > 0:  # allowed side = +axis → wall below (lo face)
         return f"{axis_name}lo", (min(coords) if coords else 0.0) - float(offset_oxdna)
     return f"{axis_name}hi", (max(coords) if coords else 0.0) + float(offset_oxdna)
 
@@ -453,7 +499,9 @@ def build_force_fixes(spec: LammpsForceSpec | None) -> str:
     from."""
     if spec is None or spec.is_empty():
         return ""
-    lines: list[str] = ["# ── external forces (NADOC oxDNA forces.txt → LAMMPS fixes) ──"]
+    lines: list[str] = [
+        "# ── external forces (NADOC oxDNA forces.txt → LAMMPS fixes) ──"
+    ]
     if spec.force is not None:
         fx, fy, fz = spec.force
         lines.append(f"fix efield all addforce {fx:.8g} {fy:.8g} {fz:.8g}")
@@ -466,7 +514,8 @@ def build_force_fixes(spec: LammpsForceSpec | None) -> str:
         cutoff = float(w.get("cutoff", 1.0))
         lines.append(
             f"fix surface all wall/harmonic {w['face']} {float(w['coord']):.8g} "
-            f"{eps:.8g} 1.0 {cutoff:.8g} units box")
+            f"{eps:.8g} 1.0 {cutoff:.8g} units box"
+        )
     return "\n".join(lines) + "\n\n"
 
 
@@ -484,7 +533,9 @@ def boundary_line(spec: LammpsForceSpec | None) -> str:
     return f"boundary {b['x']} {b['y']} {b['z']}"
 
 
-def build_input_file(p: LammpsInputParams, force_spec: LammpsForceSpec | None = None) -> str:
+def build_input_file(
+    p: LammpsInputParams, force_spec: LammpsForceSpec | None = None
+) -> str:
     """Generate the LAMMPS ``in.lammps`` script for an oxDNA2 CG-DNA run.
 
     Langevin-thermostatted NVE of aspherical particles (``fix nve/asphere`` +
@@ -504,7 +555,9 @@ def build_input_file(p: LammpsInputParams, force_spec: LammpsForceSpec | None = 
     production block so anchor springs tether to the post-minimise (production-start)
     positions.
     """
-    ff = _OXDNA2_FF.replace("{T}", repr(p.temperature)).replace("{RHOS}", repr(p.salt_molar))
+    ff = _OXDNA2_FF.replace("{T}", repr(p.temperature)).replace(
+        "{RHOS}", repr(p.salt_molar)
+    )
     warmup = ""
     if p.relax_iters > 0:
         warmup = (

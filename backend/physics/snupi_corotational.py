@@ -17,6 +17,7 @@ f_g = T f_l. So the effective stiffness is exactly the validated element's, and 
 rotation kinematics are added. Nodal orientations are carried as 3×3 triads, updated by the
 exponential map each Newton step. Pure Physical layer (Three-Layer Law): shape/display only.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -25,6 +26,7 @@ _I3 = np.eye(3)
 
 
 # ── SO(3) utilities (Rodrigues) ─────────────────────────────────────────────────
+
 
 def _skew(v):
     return np.array([[0.0, -v[2], v[1]], [v[2], 0.0, -v[0]], [-v[1], v[0], 0.0]])
@@ -50,7 +52,8 @@ def log_so3(R) -> np.ndarray:
         A = (R + _I3) / 2.0
         axis = np.sqrt(np.clip(np.diag(A), 0.0, None))
         if axis[0] > 1e-6:
-            axis[1] = np.sign(A[0, 1]) * axis[1]; axis[2] = np.sign(A[0, 2]) * axis[2]
+            axis[1] = np.sign(A[0, 1]) * axis[1]
+            axis[2] = np.sign(A[0, 2]) * axis[2]
         elif axis[1] > 1e-6:
             axis[2] = np.sign(A[1, 2]) * axis[2]
         return a * axis / (np.linalg.norm(axis) or 1.0)
@@ -60,29 +63,69 @@ def log_so3(R) -> np.ndarray:
 
 # ── Local 12×12 beam stiffness (DOF [u,v,w,θx,θy,θz] per node, local z = axial) ──
 
+
 def local_beam_stiffness_12(L, EA, GJ, EIy, EIz):
     """12×12 Euler-Bernoulli beam in the local frame, local z = axial (matches fem_solver's
     ``_beam_stiffness_local`` convention). EIy bends in the x–z plane (u,θy), EIz in y–z (v,θx)."""
     K = np.zeros((12, 12))
     ea, gj = EA / L, GJ / L
-    K[2, 2] = ea; K[2, 8] = -ea; K[8, 2] = -ea; K[8, 8] = ea         # axial (w)
-    K[5, 5] = gj; K[5, 11] = -gj; K[11, 5] = -gj; K[11, 11] = gj     # torsion (θz)
+    K[2, 2] = ea
+    K[2, 8] = -ea
+    K[8, 2] = -ea
+    K[8, 8] = ea  # axial (w)
+    K[5, 5] = gj
+    K[5, 11] = -gj
+    K[11, 5] = -gj
+    K[11, 11] = gj  # torsion (θz)
     # bending x–z (u=0,θy=4,u2=6,θy2=10) with EIy
-    ei = EIy; c1 = 12 * ei / L**3; c2 = 6 * ei / L**2; c3 = 4 * ei / L; c4 = 2 * ei / L
-    K[0, 0] = c1; K[0, 4] = c2; K[0, 6] = -c1; K[0, 10] = c2
-    K[4, 0] = c2; K[4, 4] = c3; K[4, 6] = -c2; K[4, 10] = c4
-    K[6, 0] = -c1; K[6, 4] = -c2; K[6, 6] = c1; K[6, 10] = -c2
-    K[10, 0] = c2; K[10, 4] = c4; K[10, 6] = -c2; K[10, 10] = c3
+    ei = EIy
+    c1 = 12 * ei / L**3
+    c2 = 6 * ei / L**2
+    c3 = 4 * ei / L
+    c4 = 2 * ei / L
+    K[0, 0] = c1
+    K[0, 4] = c2
+    K[0, 6] = -c1
+    K[0, 10] = c2
+    K[4, 0] = c2
+    K[4, 4] = c3
+    K[4, 6] = -c2
+    K[4, 10] = c4
+    K[6, 0] = -c1
+    K[6, 4] = -c2
+    K[6, 6] = c1
+    K[6, 10] = -c2
+    K[10, 0] = c2
+    K[10, 4] = c4
+    K[10, 6] = -c2
+    K[10, 10] = c3
     # bending y–z (v=1,θx=3,v2=7,θx2=9) with EIz
-    ei = EIz; c1 = 12 * ei / L**3; c2 = 6 * ei / L**2; c3 = 4 * ei / L; c4 = 2 * ei / L
-    K[1, 1] = c1; K[1, 3] = -c2; K[1, 7] = -c1; K[1, 9] = -c2
-    K[3, 1] = -c2; K[3, 3] = c3; K[3, 7] = c2; K[3, 9] = c4
-    K[7, 1] = -c1; K[7, 3] = c2; K[7, 7] = c1; K[7, 9] = c2
-    K[9, 1] = -c2; K[9, 3] = c4; K[9, 7] = c2; K[9, 9] = c3
+    ei = EIz
+    c1 = 12 * ei / L**3
+    c2 = 6 * ei / L**2
+    c3 = 4 * ei / L
+    c4 = 2 * ei / L
+    K[1, 1] = c1
+    K[1, 3] = -c2
+    K[1, 7] = -c1
+    K[1, 9] = -c2
+    K[3, 1] = -c2
+    K[3, 3] = c3
+    K[3, 7] = c2
+    K[3, 9] = c4
+    K[7, 1] = -c1
+    K[7, 3] = c2
+    K[7, 7] = c1
+    K[7, 9] = c2
+    K[9, 1] = -c2
+    K[9, 3] = c4
+    K[9, 7] = c2
+    K[9, 9] = c3
     return K
 
 
 # ── Corotational kinematics (EICR) ──────────────────────────────────────────────
+
 
 def _cr_frame(x1, x2, R1, R2):
     """Corotated frame E (cols [e1,e2,e3], **e3 = chord = local axial**) + current length Lf.
@@ -91,9 +134,12 @@ def _cr_frame(x1, x2, R1, R2):
     Lf = float(np.linalg.norm(d))
     e3 = d / Lf
     q = 0.5 * (R1[:, 0] + R2[:, 0])
-    e2 = np.cross(e3, q); n2 = np.linalg.norm(e2)
+    e2 = np.cross(e3, q)
+    n2 = np.linalg.norm(e2)
     if n2 < 1e-8:
-        q = 0.5 * (R1[:, 1] + R2[:, 1]); e2 = np.cross(e3, q); n2 = np.linalg.norm(e2)
+        q = 0.5 * (R1[:, 1] + R2[:, 1])
+        e2 = np.cross(e3, q)
+        n2 = np.linalg.norm(e2)
     e2 = e2 / n2
     e1 = np.cross(e2, e3)
     return np.column_stack([e1, e2, e3]), Lf
@@ -132,7 +178,7 @@ def _local_defo(x1, x2, R1, R2, ref, E):
 def _T12(E):
     T = np.zeros((12, 12))
     for b in range(4):
-        T[3 * b:3 * b + 3, 3 * b:3 * b + 3] = E
+        T[3 * b : 3 * b + 3, 3 * b : 3 * b + 3] = E
     return T
 
 
@@ -167,14 +213,27 @@ def element_force_tangent(x1, x2, R1, R2, ref, K12, *, geometric=True):
 
 
 def _axis(i):
-    v = np.zeros(3); v[i] = 1.0
+    v = np.zeros(3)
+    v[i] = 1.0
     return v
 
 
 # ── Global Newton–Raphson corotational solve (G5) ───────────────────────────────
 
-def solve_corotational(X0, elements, f_ext, fixed_dofs, *, n_steps=10, max_iter=30,
-                       tol=1e-6, R0=None, extra_ft=None, geometric=True):
+
+def solve_corotational(
+    X0,
+    elements,
+    f_ext,
+    fixed_dofs,
+    *,
+    n_steps=10,
+    max_iter=30,
+    tol=1e-6,
+    R0=None,
+    extra_ft=None,
+    geometric=True,
+):
     """Load-stepped global Newton over corotational beams.
 
     ``X0`` (N,3) initial positions; ``elements`` = ``(i, j, ref, K12)`` (ref/K12 from
@@ -201,9 +260,10 @@ def solve_corotational(X0, elements, f_ext, fixed_dofs, *, n_steps=10, max_iter=
         for _ in range(max_iter):
             f_int = np.zeros(ndof)
             Kt = lil_matrix((ndof, ndof))
-            for (i, j, ref, K12) in elements:
-                fg, Kg = element_force_tangent(X[i], X[j], R[i], R[j], ref, K12,
-                                               geometric=geometric)
+            for i, j, ref, K12 in elements:
+                fg, Kg = element_force_tangent(
+                    X[i], X[j], R[i], R[j], ref, K12, geometric=geometric
+                )
                 dofs = list(range(6 * i, 6 * i + 6)) + list(range(6 * j, 6 * j + 6))
                 for a in range(12):
                     f_int[dofs[a]] += fg[a]
@@ -213,11 +273,13 @@ def solve_corotational(X0, elements, f_ext, fixed_dofs, *, n_steps=10, max_iter=
                             Kt[dofs[a], dofs[b]] += row[b]
             f_ex = fe
             if extra_ft is not None:
-                f_extra, K_extra = extra_ft(X, scale)          # electrostatics + springs (G11)
-                f_int = f_int - f_extra                         # move to the internal side
+                f_extra, K_extra = extra_ft(X, scale)  # electrostatics + springs (G11)
+                f_int = f_int - f_extra  # move to the internal side
                 Kt = Kt + K_extra
             r = f_ex - f_int
-            if float(np.linalg.norm(r[free])) < tol * (1.0 + float(np.linalg.norm(f_ex[free]))):
+            if float(np.linalg.norm(r[free])) < tol * (
+                1.0 + float(np.linalg.norm(f_ex[free]))
+            ):
                 ok = True
                 break
             try:
@@ -226,12 +288,13 @@ def solve_corotational(X0, elements, f_ext, fixed_dofs, *, n_steps=10, max_iter=
                 break
             if not np.all(np.isfinite(dd_free)):
                 break
-            dd = np.zeros(ndof); dd[free] = dd_free
+            dd = np.zeros(ndof)
+            dd[free] = dd_free
             mx = np.abs(dd).max()
-            if mx > 0.5:                       # cap the increment for robustness
+            if mx > 0.5:  # cap the increment for robustness
                 dd *= 0.5 / mx
             for n in range(N):
-                X[n] = X[n] + dd[6 * n:6 * n + 3]
-                R[n] = exp_so3(dd[6 * n + 3:6 * n + 6]) @ R[n]
+                X[n] = X[n] + dd[6 * n : 6 * n + 3]
+                R[n] = exp_so3(dd[6 * n + 3 : 6 * n + 6]) @ R[n]
         converged = converged and ok
     return X, R, converged

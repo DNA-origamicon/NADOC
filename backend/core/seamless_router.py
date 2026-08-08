@@ -65,6 +65,7 @@ def _closeable_path(ids: list[str], adj: dict[str, set[str]]) -> list[str] | Non
 
 # ── Local helpers ─────────────────────────────────────────────────────────────
 
+
 def _ham_path_ending(
     ids: list[str],
     adj: dict[str, set[str]],
@@ -80,8 +81,8 @@ def _ham_path_ending(
     """
     nbr_key = lambda n: (-len(adj[n]), n)  # noqa: E731 — descending degree, lex tie-break
     starters = (
-        [start_from] + [n for n in sorted(ids, key=lambda n: (len(adj[n]), n))
-                        if n != start_from]
+        [start_from]
+        + [n for n in sorted(ids, key=lambda n: (len(adj[n]), n)) if n != start_from]
         if start_from is not None
         else sorted(ids, key=lambda n: (len(adj[n]), n))
     )
@@ -99,14 +100,16 @@ def _ham_path_ending(
 
 # ── Result dataclass ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class SeamlessResult:
     warnings: list[str] = field(default_factory=list)
-    end_xovers: int = 0      # zig-zag crossovers placed within sections
-    bridge_xovers: int = 0   # HJ bridge crossovers placed between sections
+    end_xovers: int = 0  # zig-zag crossovers placed within sections
+    bridge_xovers: int = 0  # HJ bridge crossovers placed between sections
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
+
 
 def auto_scaffold_seamless(
     design: Design, *, close_cycle: bool = False, reset: bool = True
@@ -135,6 +138,7 @@ def auto_scaffold_seamless(
     result = SeamlessResult()
     if reset:
         from backend.core.scaffold_reset import reset_scaffold_to_structure
+
         design, reset_warnings = reset_scaffold_to_structure(design)
         result.warnings.extend(reset_warnings)
     is_hc = design.lattice_type == LatticeType.HONEYCOMB
@@ -162,6 +166,7 @@ def auto_scaffold_seamless(
     # Falls back to the native route when it cannot cleanly section.
     if not design.forced_ligations:
         from backend.core.section_router import has_multisection_helix, route_sections
+
         if has_multisection_helix(coverage):
             sectioned = route_sections(design.model_copy(deep=True), seamless=True)
             if sectioned is not None:
@@ -189,7 +194,7 @@ def auto_scaffold_seamless(
 
     # ── Build bridge and zig pairs from Hamiltonian paths ────────────────────
     bridge_pairs: list[tuple[str, str]] = []
-    zig_pairs:    list[tuple[str, str]] = []
+    zig_pairs: list[tuple[str, str]] = []
 
     for comp in components:
         if len(comp) < 2:
@@ -241,10 +246,7 @@ def auto_scaffold_seamless(
                 return sum(iv["hi"] - iv["lo"] + 1 for iv in coverage[g[0]])
 
             groups.sort(key=grp_bp)
-            local_adjs = [
-                {gid: adj[gid] & set(grp) for gid in grp}
-                for grp in groups
-            ]
+            local_adjs = [{gid: adj[gid] & set(grp) for gid in grp} for grp in groups]
             # Build group-0 path ending at the bridge helix so that:
             # (a) path[-1] is a spine-adjacent helix (FORWARD preferred) — the
             #     bridge pair connects it to the next section.
@@ -254,14 +256,15 @@ def auto_scaffold_seamless(
             # so that the low-degree bridge candidate is deterministically last.
             nxt_set_0 = set(groups[1])
             spine_adj_0 = [
-                hid for hid in groups[0]
-                if any(nb in nxt_set_0 for nb in adj[hid])
+                hid for hid in groups[0] if any(nb in nxt_set_0 for nb in adj[hid])
             ]
-            spine_adj_0.sort(key=lambda h: (not _is_forward(*helix_by_id[h].grid_pos)))
+            spine_adj_0.sort(key=lambda h: not _is_forward(*helix_by_id[h].grid_pos))
             path = None
             for cand in spine_adj_0:
-                for start in sorted(local_adjs[0].get(cand, set()),
-                                    key=lambda n: (-len(local_adjs[0][n]), n)):
+                for start in sorted(
+                    local_adjs[0].get(cand, set()),
+                    key=lambda n: (-len(local_adjs[0][n]), n),
+                ):
                     raw0 = _ham_path_ending(groups[0], local_adjs[0], cand, start)
                     if raw0 and raw0[-1] == cand:
                         path = raw0
@@ -275,12 +278,11 @@ def auto_scaffold_seamless(
             for gi in range(1, len(groups)):
                 nxt_ids = groups[gi]
                 nxt_set = set(nxt_ids)
-                if (not any(nb in nxt_set for nb in adj[path[-1]])
-                        and any(nb in nxt_set for nb in adj[path[0]])):
+                if not any(nb in nxt_set for nb in adj[path[-1]]) and any(
+                    nb in nxt_set for nb in adj[path[0]]
+                ):
                     path.reverse()
-                bridge = next(
-                    (nb for nb in adj[path[-1]] if nb in nxt_set), None
-                )
+                bridge = next((nb for nb in adj[path[-1]] if nb in nxt_set), None)
                 boundary_idx = len(path) - 1  # index of last element before extending
                 if bridge:
                     nxt = (
@@ -312,11 +314,13 @@ def auto_scaffold_seamless(
             group_starts = [0] + [b + 1 for b in group_boundaries]
             for gi in range(len(groups) - 1):
                 first_hid = path[group_starts[gi]]
-                last_hid  = path[group_boundaries[gi]]
+                last_hid = path[group_boundaries[gi]]
                 if first_hid in adj.get(last_hid, set()):
-                    h_fwd = (first_hid
-                             if _is_forward(*helix_by_id[first_hid].grid_pos)
-                             else last_hid)
+                    h_fwd = (
+                        first_hid
+                        if _is_forward(*helix_by_id[first_hid].grid_pos)
+                        else last_hid
+                    )
                     h_rev = last_hid if h_fwd == first_hid else first_hid
                     zig_pairs.append((h_fwd, h_rev))
 
@@ -341,7 +345,8 @@ def auto_scaffold_seamless(
             mid = (lo + hi) / 2
 
             valid_bps = [
-                bp for bp in range(lo, hi + 1)
+                bp
+                for bp in range(lo, hi + 1)
                 if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)
             ]
             if len(valid_bps) < 2:
@@ -364,8 +369,13 @@ def auto_scaffold_seamless(
                 nick_a = _nick_bp(xover_bp, strand_a, period, bow_right)
                 nick_b = _nick_bp(xover_bp, strand_b, period, bow_right)
                 current, xo = _place_xover(
-                    current, ha, hb, nick_a, nick_b,
-                    "auto_scaffold_seamless:bridge", result.warnings,
+                    current,
+                    ha,
+                    hb,
+                    nick_a,
+                    nick_b,
+                    "auto_scaffold_seamless:bridge",
+                    result.warnings,
                 )
                 if xo:
                     result.bridge_xovers += 1
@@ -393,22 +403,32 @@ def auto_scaffold_seamless(
         for iv in _intersect(covA, covB):
             if face == "hi":
                 face_val = iv["hi"]
-                if not (any(c["lo"] <= face_val <= c["hi"] for c in covA)
-                        and any(c["lo"] <= face_val <= c["hi"] for c in covB)):
+                if not (
+                    any(c["lo"] <= face_val <= c["hi"] for c in covA)
+                    and any(c["lo"] <= face_val <= c["hi"] for c in covB)
+                ):
                     continue
                 xover_bp = next(
-                    (bp for bp in range(face_val + 3, face_val + period + 1)
-                     if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)),
+                    (
+                        bp
+                        for bp in range(face_val + 3, face_val + period + 1)
+                        if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)
+                    ),
                     None,
                 )
             else:
                 face_val = iv["lo"]
-                if not (any(c["lo"] <= face_val <= c["hi"] for c in covA)
-                        and any(c["lo"] <= face_val <= c["hi"] for c in covB)):
+                if not (
+                    any(c["lo"] <= face_val <= c["hi"] for c in covA)
+                    and any(c["lo"] <= face_val <= c["hi"] for c in covB)
+                ):
                     continue
                 xover_bp = next(
-                    (bp for bp in range(face_val - 3, face_val - period - 1, -1)
-                     if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)),
+                    (
+                        bp
+                        for bp in range(face_val - 3, face_val - period - 1, -1)
+                        if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)
+                    ),
                     None,
                 )
 
@@ -417,14 +437,19 @@ def auto_scaffold_seamless(
                     f"[Seamless] No xover found for {hA_id}↔{hB_id} at {face}={face_val}"
                 )
                 continue
-            zig_specs.append({
-                "hA_id": hA_id, "hB_id": hB_id,
-                "face": face, "face_val": face_val,
-                "xover_bp": xover_bp,
-                "strand_a": strand_a, "strand_b": strand_b,
-                "nick_a": _nick_bp(xover_bp, strand_a, period, bow_right),
-                "nick_b": _nick_bp(xover_bp, strand_b, period, bow_right),
-            })
+            zig_specs.append(
+                {
+                    "hA_id": hA_id,
+                    "hB_id": hB_id,
+                    "face": face,
+                    "face_val": face_val,
+                    "xover_bp": xover_bp,
+                    "strand_a": strand_a,
+                    "strand_b": strand_b,
+                    "nick_a": _nick_bp(xover_bp, strand_a, period, bow_right),
+                    "nick_b": _nick_bp(xover_bp, strand_b, period, bow_right),
+                }
+            )
 
     # Extend helix geometry (gather per-helix extremes first).
     helix_new_lo: dict[str, int] = {}
@@ -465,8 +490,13 @@ def auto_scaffold_seamless(
             helix_id=sp["hB_id"], index=sp["xover_bp"], strand=sp["strand_b"]
         )
         current, xo = _place_xover(
-            current, ha, hb, sp["nick_a"], sp["nick_b"],
-            "auto_scaffold_seamless:zig", result.warnings,
+            current,
+            ha,
+            hb,
+            sp["nick_a"],
+            sp["nick_b"],
+            "auto_scaffold_seamless:zig",
+            result.warnings,
         )
         if xo:
             result.end_xovers += 1
@@ -475,6 +505,7 @@ def auto_scaffold_seamless(
     # placement time but become fixable once all phases finish placing
     # their nicks. See seamed_router for the same pattern.
     from backend.core.lattice import retry_all_pending_ligations
+
     current = retry_all_pending_ligations(current)
 
     # close_cycle made the bundle a circular scaffold (closing zig); reopen it with a

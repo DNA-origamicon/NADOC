@@ -6,6 +6,7 @@ sparklines (live-only, no persistence).  Whole-machine, local host.  Read-only /
 display-only — never touches any design (Three-Layer Law).  Registered in
 ``backend/api/main.py``.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter

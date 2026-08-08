@@ -80,8 +80,9 @@ from backend.physics.oxdna_interface import oxdna_backbone_sites
 
 
 # ── Scope: which nucleotides the clustering is allowed to see ─────────────────────
-def occupancy_features(frames, keys, design, *, basis: str = "nt", selection=None,
-                       fit: str = "selection"):
+def occupancy_features(
+    frames, keys, design, *, basis: str = "nt", selection=None, fit: str = "selection"
+):
     """Build the ``(F, D)`` feature matrix from aligned per-nucleotide frame dicts.
 
     ``basis="nt"`` uses every nucleotide's backbone site — the same atom set the
@@ -141,8 +142,11 @@ def occupancy_features(frames, keys, design, *, basis: str = "nt", selection=Non
         if basis == "nt":
             sel_idx = [i for i, k in enumerate(key_list) if k in want]
         else:
-            sel_idx = [c for c, (a, b) in enumerate(zip(ia_wc, ib_wc))
-                       if key_list[a] in want or key_list[b] in want]
+            sel_idx = [
+                c
+                for c, (a, b) in enumerate(zip(ia_wc, ib_wc))
+                if key_list[a] in want or key_list[b] in want
+            ]
         if not sel_idx:
             raise ValueError("the selection matched no nucleotides in this basis")
 
@@ -160,21 +164,35 @@ def occupancy_features(frames, keys, design, *, basis: str = "nt", selection=Non
             a1 = np.array([fr[k]["a1"] for k in key_list], dtype=float)
             a3 = np.array([fr[k]["a3"] for k in key_list], dtype=float)
         except KeyError:
-            continue                        # a half-written frame missing a nucleotide
-        if len(ia_bb) and _fene_violation_fraction(cm, a1, a3, ia_bb, ib_bb) > _STRAIN_FRAME_REJECT_FRAC:
+            continue  # a half-written frame missing a nucleotide
+        if (
+            len(ia_bb)
+            and _fene_violation_fraction(cm, a1, a3, ia_bb, ib_bb)
+            > _STRAIN_FRAME_REJECT_FRAC
+        ):
             continue
         sites = oxdna_backbone_sites(cm, a1, a3)
         cols = sites if basis == "nt" else 0.5 * (sites[ia_wc] + sites[ib_wc])
         # Retained per frame in POINT shape, not ravelled: the fit plan needs (n, 3), and
         # for "local" `need` is wider than the selection (a junction's frame is defined by
         # duplex that was not picked). Same byte count either way.
-        rows.append(np.asarray(cols[need] if sel_idx is not None else cols, dtype=float))
+        rows.append(
+            np.asarray(cols[need] if sel_idx is not None else cols, dtype=float)
+        )
         kept.append(i)
 
-    feature_keys = [col_keys[i] for i in sel_idx] if sel_idx is not None else list(col_keys)
+    feature_keys = (
+        [col_keys[i] for i in sel_idx] if sel_idx is not None else list(col_keys)
+    )
     if not rows:
         return np.zeros((0, 0)), feature_keys, [], basis, plan
-    return apply_fit_plan(np.array(rows, dtype=float), plan), feature_keys, kept, basis, plan
+    return (
+        apply_fit_plan(np.array(rows, dtype=float), plan),
+        feature_keys,
+        kept,
+        basis,
+        plan,
+    )
 
 
 # ── Clustering primitives ─────────────────────────────────────────────────────────
@@ -201,12 +219,22 @@ def _sampling_indices(out_stages) -> list[int]:
     return keep
 
 
-def production_occupancy(design, stages, reference_conf_path, *, max_frames: int = 200,
-                         n_clusters: int = 0, method: str = "pca", basis: str = "nt",
-                         align: bool = True, progress=None, selection=None,
-                         fit: str = "selection",
-                         n_trailing_extra: int = 0,
-                         trailing_extra_strand_length: int = 0) -> dict:
+def production_occupancy(
+    design,
+    stages,
+    reference_conf_path,
+    *,
+    max_frames: int = 200,
+    n_clusters: int = 0,
+    method: str = "pca",
+    basis: str = "nt",
+    align: bool = True,
+    progress=None,
+    selection=None,
+    fit: str = "selection",
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
+) -> dict:
     """Occupancy states for a job's sampling stages — the route payload.
 
     ``max_frames``/``copies`` must match what ``/trajectory`` passes (200 / True) for the
@@ -223,9 +251,16 @@ def production_occupancy(design, stages, reference_conf_path, *, max_frames: int
         raise ValueError("method must be 'pca'")
 
     key_list, ordered, out_stages, _markers = _aligned_downsampled_frames(
-        design, stages, reference_conf_path, max_frames, copies=True,
-        progress=progress, align=align, n_trailing_extra=n_trailing_extra,
-        trailing_extra_strand_length=trailing_extra_strand_length)
+        design,
+        stages,
+        reference_conf_path,
+        max_frames,
+        copies=True,
+        progress=progress,
+        align=align,
+        n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length,
+    )
 
     if not ordered:
         return {"ready": False, "reason": "sampling starting — no frames yet"}
@@ -237,14 +272,18 @@ def production_occupancy(design, stages, reference_conf_path, *, max_frames: int
     samples = [ordered[i] for i in idx]
     try:
         X, feature_keys, kept_rows, basis_used, plan = occupancy_features(
-            samples, key_list, design, basis=basis, selection=selection, fit=fit)
+            samples, key_list, design, basis=basis, selection=selection, fit=fit
+        )
     except ValueError as e:
         return {"ready": False, "reason": str(e)}
     n_torn = len(samples) - len(kept_rows)
     if X.shape[0] < _OCC_MIN_FRAMES:
-        return {"ready": False,
-                "reason": f"need at least {_OCC_MIN_FRAMES} frames to cluster (have {int(X.shape[0])})",
-                "n_frames": int(X.shape[0]), "n_frames_torn": n_torn}
+        return {
+            "ready": False,
+            "reason": f"need at least {_OCC_MIN_FRAMES} frames to cluster (have {int(X.shape[0])})",
+            "n_frames": int(X.shape[0]),
+            "n_frames_torn": n_torn,
+        }
 
     # Row r of X is sample kept_rows[r], which is composite frame idx[kept_rows[r]].
     kept = [idx[r] for r in kept_rows]
@@ -255,10 +294,10 @@ def production_occupancy(design, stages, reference_conf_path, *, max_frames: int
         return res
 
     res["method"] = method
-    res["basis"] = basis_used           # what was actually used, not what was asked for
+    res["basis"] = basis_used  # what was actually used, not what was asked for
     res["basis_requested"] = basis
     res["scoped"] = bool(selection) and len(feature_keys) < len(key_list)
-    res["fit"] = plan["fit"]            # what was actually used, not what was asked for
+    res["fit"] = plan["fit"]  # what was actually used, not what was asked for
     res["fit_requested"] = plan["fit_requested"]
     res["fit_note"] = plan["note"]
     res["n_fit_points"] = plan["n_fit_points"]
@@ -275,12 +314,23 @@ def production_occupancy(design, stages, reference_conf_path, *, max_frames: int
     return res
 
 
-def production_occupancy_cached(design, stages, reference_conf_path, *, max_frames: int = 200,
-                                n_clusters: int = 0, method: str = "pca", basis: str = "nt",
-                                align: bool = True, progress=None, refetch: bool = False,
-                                selection=None, fit: str = "selection",
-                                n_trailing_extra: int = 0,
-                                trailing_extra_strand_length: int = 0) -> dict:
+def production_occupancy_cached(
+    design,
+    stages,
+    reference_conf_path,
+    *,
+    max_frames: int = 200,
+    n_clusters: int = 0,
+    method: str = "pca",
+    basis: str = "nt",
+    align: bool = True,
+    progress=None,
+    refetch: bool = False,
+    selection=None,
+    fit: str = "selection",
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
+) -> dict:
     """LRU over :func:`production_occupancy`, keyed on the full parameter set.
 
     The ``_aligned_cache_key`` component carries each trajectory's size+mtime, so a
@@ -293,9 +343,17 @@ def production_occupancy_cached(design, stages, reference_conf_path, *, max_fram
     if _OCCUPANCY_CACHE is None:
         _OCCUPANCY_CACHE = OrderedDict()
 
-    key = (_aligned_cache_key(stages, reference_conf_path, max_frames, True),
-           bool(align), int(n_trailing_extra), int(trailing_extra_strand_length),
-           int(n_clusters), str(method), str(basis), _selection_sig(selection), str(fit))
+    key = (
+        _aligned_cache_key(stages, reference_conf_path, max_frames, True),
+        bool(align),
+        int(n_trailing_extra),
+        int(trailing_extra_strand_length),
+        int(n_clusters),
+        str(method),
+        str(basis),
+        _selection_sig(selection),
+        str(fit),
+    )
 
     if refetch:
         _OCCUPANCY_CACHE.pop(key, None)
@@ -309,10 +367,20 @@ def production_occupancy_cached(design, stages, reference_conf_path, *, max_fram
             return hit
 
     res = production_occupancy(
-        design, stages, reference_conf_path, max_frames=max_frames, n_clusters=n_clusters,
-        method=method, basis=basis, align=align, progress=progress, selection=selection,
-        fit=fit, n_trailing_extra=n_trailing_extra,
-        trailing_extra_strand_length=trailing_extra_strand_length)
+        design,
+        stages,
+        reference_conf_path,
+        max_frames=max_frames,
+        n_clusters=n_clusters,
+        method=method,
+        basis=basis,
+        align=align,
+        progress=progress,
+        selection=selection,
+        fit=fit,
+        n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length,
+    )
 
     _OCCUPANCY_CACHE[key] = res
     while len(_OCCUPANCY_CACHE) > _OCCUPANCY_CACHE_MAX:
@@ -324,6 +392,8 @@ def occupancy_cache_clear() -> None:
     """Drop every cached occupancy result (tests, and a design edit)."""
     global _OCCUPANCY_CACHE
     _OCCUPANCY_CACHE = None
+
+
 #: Parameter-keyed LRU over production_occupancy. Module-level so a re-toggle of the
 #: same view is free; the key carries each trajectory's size+mtime so a growing run
 #: self-invalidates.

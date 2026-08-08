@@ -41,4 +41,5 @@ async def browse_files(path: str | None = None, kind: str | None = None) -> dict
     restricted).  Returns ``fs_browse.list_dir`` shape.
     """
     from backend.core.fs_browse import list_dir
+
     return list_dir(path, name_glob=_BROWSE_GLOB.get(kind or ""))

@@ -23,6 +23,7 @@ POST   /design/cando/autorefine/{run_id}/apply land the converged marks on the a
 Three-Layer Law: the loop reads topology + predicts a Physical-layer shape; only ``apply`` mutates
 the design, and it does so as a single reversible feature-log entry.
 """
+
 from __future__ import annotations
 
 import threading
@@ -45,20 +46,31 @@ _LOCK = threading.Lock()
 
 
 class CandoAutorefineStartRequest(BaseModel):
-    nonlinear: bool = Field(False,
-                            description="FEM oracle mode per trial: Coarse/linear (default, "
-                                        "~seconds) vs Fine/nonlinear (slower, closer to CanDo). "
-                                        "Coarse is the sensible inner-loop oracle; run a Fine job "
-                                        "afterwards to confirm.")
-    allow_loops: bool | None = Field(None,
-                                     description="Candidate edit space: None => auto (square "
-                                                 "lattice = skips only, else skips + loops); "
-                                                 "True/False overrides.")
-    sigma: float = Field(1.0, ge=0.0, description="Hotspot noise-floor: mean + sigma·std")
-    max_hotspots: int = Field(8, ge=1, le=64, description="Max deviation hotspots to visit")
-    min_spacing: int = Field(8, ge=1, description="Min bp between hotspots / marks on a helix")
-    rmsd_improve_nm: float = Field(0.05, ge=0.0,
-                                   description="Min RMSD drop (nm) to accept an edit")
+    nonlinear: bool = Field(
+        False,
+        description="FEM oracle mode per trial: Coarse/linear (default, "
+        "~seconds) vs Fine/nonlinear (slower, closer to CanDo). "
+        "Coarse is the sensible inner-loop oracle; run a Fine job "
+        "afterwards to confirm.",
+    )
+    allow_loops: bool | None = Field(
+        None,
+        description="Candidate edit space: None => auto (square "
+        "lattice = skips only, else skips + loops); "
+        "True/False overrides.",
+    )
+    sigma: float = Field(
+        1.0, ge=0.0, description="Hotspot noise-floor: mean + sigma·std"
+    )
+    max_hotspots: int = Field(
+        8, ge=1, le=64, description="Max deviation hotspots to visit"
+    )
+    min_spacing: int = Field(
+        8, ge=1, description="Min bp between hotspots / marks on a helix"
+    )
+    rmsd_improve_nm: float = Field(
+        0.05, ge=0.0, description="Min RMSD drop (nm) to accept an edit"
+    )
 
 
 def _set(run_id: str, **fields) -> None:
@@ -82,20 +94,27 @@ def _run(run_id: str, design, req: CandoAutorefineStartRequest) -> None:
 
     try:
         result = fem_refine(
-            design, nonlinear=req.nonlinear, allow_loops=req.allow_loops,
-            sigma=req.sigma, max_hotspots=req.max_hotspots, min_spacing=req.min_spacing,
+            design,
+            nonlinear=req.nonlinear,
+            allow_loops=req.allow_loops,
+            sigma=req.sigma,
+            max_hotspots=req.max_hotspots,
+            min_spacing=req.min_spacing,
             rmsd_improve_nm=req.rmsd_improve_nm,
-            on_progress=on_progress, should_stop=stop_event.is_set)
+            on_progress=on_progress,
+            should_stop=stop_event.is_set,
+        )
         final = "stopped" if result.get("status") == "stopped" else "done"
         _set(run_id, state=final, result=result, phase=final)
-        try:                                   # durable copy alongside the oxDNA autorefine runs
+        try:  # durable copy alongside the oxDNA autorefine runs
             import json
+
             out_dir = _workspace() / "cando_autorefine"
             out_dir.mkdir(parents=True, exist_ok=True)
             (out_dir / f"{run_id}.json").write_text(json.dumps(result, indent=2))
         except OSError:
             pass
-    except Exception as exc:                   # surface any failure to the poller
+    except Exception as exc:  # surface any failure to the poller
         _set(run_id, state="error", error=str(exc), phase="error")
 
 
@@ -105,17 +124,23 @@ def start_cando_autorefine(req: CandoAutorefineStartRequest) -> dict:
     ``{autorefine_id}``; poll ``/design/cando/autorefine/{id}``."""
     design = design_state.get_or_404()
     from backend.core.models import LatticeType
+
     if not design.helices:
         raise HTTPException(400, detail="Design has no helices to refine.")
     # A SQUARE bundle is always refinable even bare: its crossover register imposes an intrinsic
     # global over-twist at ZERO skips, and the density sweep adds the deletions that relieve it.
     # Honeycomb has no such register term, so a bare honeycomb design needs a bend/twist or marks.
-    if (design.lattice_type != LatticeType.SQUARE
-            and not any(h.loop_skips for h in design.helices) and not design.deformations):
+    if (
+        design.lattice_type != LatticeType.SQUARE
+        and not any(h.loop_skips for h in design.helices)
+        and not design.deformations
+    ):
         raise HTTPException(
-            400, detail="Nothing to refine: the design carries no loop/skips and no bend/twist "
+            400,
+            detail="Nothing to refine: the design carries no loop/skips and no bend/twist "
             "to realise.  Draw a bend/twist (or add loop/skips) first, then autorefine tunes the "
-            "loop/skip placement so the FEM-predicted shape matches it.")
+            "loop/skip placement so the FEM-predicted shape matches it.",
+        )
 
     run_id = uuid.uuid4().hex[:12]
     _STOP[run_id] = threading.Event()
@@ -175,16 +200,27 @@ def apply_cando_autorefine(run_id: str) -> dict:
     n_loop = sum(1 for bps in marks.values() for dl in bps.values() if dl == +1)
     n_kept = len(result.get("edits_kept") or [])
     label = f"CanDo autorefine ({n_skip} skips, {n_loop} loops)"
-    params = {"source": "cando-autorefine", "run_id": run_id, "mode": result.get("mode"),
-              "edits_kept": n_kept, "before_rmsd": (result.get("before") or {}).get("rmsd"),
-              "after_rmsd": (result.get("after") or {}).get("rmsd"), "resequenced": True}
+    params = {
+        "source": "cando-autorefine",
+        "run_id": run_id,
+        "mode": result.get("mode"),
+        "edits_kept": n_kept,
+        "before_rmsd": (result.get("before") or {}).get("rmsd"),
+        "after_rmsd": (result.get("after") or {}).get("rmsd"),
+        "resequenced": True,
+    }
 
     # Build OUTSIDE mutate_with_feature_log: the resequence rebuild runs in a scratch headless
     # session that re-acquires the same global state lock the callback holds → self-deadlock.
     # Build first, hand the finished design in as a pure replacement (same pattern as the oxDNA
     # autorefine apply).
     from backend.core.cando_autorefine import build_refined_design
+
     refined = build_refined_design(design, marks)
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind="cando-autorefine-marks", label=label, params=params, fn=lambda _d: refined)
+        op_kind="cando-autorefine-marks",
+        label=label,
+        params=params,
+        fn=lambda _d: refined,
+    )
     return _design_response(updated, report)

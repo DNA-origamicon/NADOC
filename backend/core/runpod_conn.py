@@ -129,22 +129,32 @@ class RunpodConnection:
         for attempt in range(retries + 1):
             try:
                 conn = self._require()
-            except RunpodSSHError as exc:      # not connected — try to (re)establish
+            except RunpodSSHError as exc:  # not connected — try to (re)establish
                 last = exc
                 if attempt < retries and await self._reconnect():
                     continue
                 raise
             try:
-                res = await asyncio.wait_for(conn.run(cmd, check=False), timeout=timeout)
+                res = await asyncio.wait_for(
+                    conn.run(cmd, check=False), timeout=timeout
+                )
                 rc = getattr(res, "exit_status", 0) or 0
-                return RunResult(rc=int(rc), stdout=_s(res.stdout), stderr=_s(res.stderr))
+                return RunResult(
+                    rc=int(rc), stdout=_s(res.stdout), stderr=_s(res.stderr)
+                )
             except asyncio.TimeoutError as exc:
-                raise RunpodSSHError(f"command timed out after {timeout}s: {cmd}") from exc
+                raise RunpodSSHError(
+                    f"command timed out after {timeout}s: {cmd}"
+                ) from exc
             except Exception as exc:  # noqa: BLE001 — broken pipe / pod reclaimed / SSH drop
                 last = exc
                 if attempt < retries:
-                    log.warning("runpod ssh: transport drop (try %d/%d), reconnecting: %s",
-                                attempt + 1, retries, exc)
+                    log.warning(
+                        "runpod ssh: transport drop (try %d/%d), reconnecting: %s",
+                        attempt + 1,
+                        retries,
+                        exc,
+                    )
                     await self._reconnect()
                     await asyncio.sleep(2.0 * (attempt + 1))
                     continue
@@ -232,7 +242,9 @@ class RunpodConnection:
         res = await self.run(cmd)
         pid = res.stdout.strip().splitlines()[-1] if res.stdout.strip() else ""
         if not pid.isdigit():
-            raise RunpodSSHError(f"could not launch chain script (rc={res.rc}): {res.stderr[:200]}")
+            raise RunpodSSHError(
+                f"could not launch chain script (rc={res.rc}): {res.stderr[:200]}"
+            )
         return int(pid)
 
     async def pid_alive(self, pid: int) -> bool:
@@ -243,14 +255,17 @@ class RunpodConnection:
         we spawned is the only reliable handle — this cost an hour of debugging and a
         contaminated benchmark.
         """
-        res = await self.run(f"kill -0 {int(pid)} 2>/dev/null && echo alive || echo dead",
-                             retries=3)
+        res = await self.run(
+            f"kill -0 {int(pid)} 2>/dev/null && echo alive || echo dead", retries=3
+        )
         return "alive" in res.stdout
 
     async def read_file(self, remote_path: str) -> str:
         # retries: read_file backs the poll loop's status/heartbeat reads; a transient SSH
         # drop there must not abort a live run (the chain runs detached and keeps going).
-        res = await self.run(f"cat {shlex.quote(remote_path)} 2>/dev/null || true", retries=3)
+        res = await self.run(
+            f"cat {shlex.quote(remote_path)} 2>/dev/null || true", retries=3
+        )
         return res.stdout
 
 

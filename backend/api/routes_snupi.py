@@ -66,6 +66,7 @@ router = APIRouter(tags=["snupi"])
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _workspace() -> Path:
     return _WORKSPACE_DIR
 
@@ -82,6 +83,7 @@ def _load_job(job_id: str) -> SnupiJob:
 
 def _current_fingerprint() -> "str | None":
     from backend.core.oxdna_staleness import oxdna_design_fingerprint
+
     design = design_state.get_design()
     if design is None:
         return None
@@ -93,63 +95,99 @@ def _current_fingerprint() -> "str | None":
 
 def _is_out_of_date(job: SnupiJob, current_fp: "str | None") -> bool:
     from backend.core.oxdna_staleness import job_out_of_date
+
     return job_out_of_date(job.design_fingerprint, current_fp)
 
 
 # ── Request models ────────────────────────────────────────────────────────────
 
+
 class CreateSnupiJobRequest(BaseModel):
-    nonlinear:  bool = Field(True,
-                             description="Fine (geometrically-nonlinear corotational) vs Coarse "
-                                         "(linear preview)")
-    n_steps:    int = Field(20, ge=1, le=200,
-                            description="Corotational load-step count (nonlinear only)")
-    with_rmsf:  bool = Field(True, description="Also compute the free-free NMA per-bp RMSF")
-    material:   str = Field("snupi",
-                            description="Intra-helix beam constitutive law: 'snupi' (anisotropic "
-                                        "per-motif 6×6 + twist–stretch couplings + compliant "
-                                        "crossovers) or 'cando' (isotropic baseline for comparison)")
-    mgcl2_M:    float = Field(0.02, ge=0.0, le=1.0,
-                             description="MgCl₂ molarity (mol/L) setting the Debye length of the "
-                                         "SNUPI inter-helix electrostatics; default 0.02 = 20 mM. "
-                                         "snupi-only (ignored by 'cando').")
-    dynamics:   bool = Field(False,
-                             description="Run Langevin structural DYNAMICS (thermal trajectory → "
-                                         "time-mean shape + trajectory RMSF) instead of the static "
-                                         "equilibrium solve (project_snupi_dynamics).")
-    hydrodynamics: bool = Field(False,
-                             description="Dynamics only: use the Rotne–Prager–Yamakawa coupled "
-                                         "friction matrix vs diagonal Stokes drag.")
-    hydro_coarse_bp: Optional[int] = Field(None, ge=4, le=64,
-                             description="Hydrodynamics only: coarse-grain to ONE hydrodynamic bead "
-                                         "per this many bp (blob RPY). The exact per-bp friction is a "
-                                         "dense O(N²) matrix (~83 GB on a full M13 origami), so any "
-                                         "large design must coarse-grain; 8 is the calibrated default. "
-                                         "Minimum 4 — below that the blob is no bigger than a bead and "
-                                         "the hydrodynamic coupling degenerates to Stokes. "
-                                         "None = exact (refused up front if it would not fit).")
-    tails:      bool = Field(False,
-                             description="Dynamics + snupi only: simulate the FREE ssDNA — overhangs, "
-                                         "toeholds, dangling scaffold ends — as explicit one-bead-per-"
-                                         "nucleotide Langevin chains and display them at their simulated "
-                                         "positions (they are otherwise omitted and left at their "
-                                         "rendered pose). A documented NADOC extension: published SNUPI "
-                                         "cannot represent a free tail (it has no distal bp node). With "
-                                         "hydrodynamics this requires hydro_coarse_bp.")
-    tail_max_nt: Optional[int] = Field(None, ge=1, le=200,
-                             description="Tails only: truncate each tail to at most this many "
-                                         "nucleotides. None = the full tail.")
+    nonlinear: bool = Field(
+        True,
+        description="Fine (geometrically-nonlinear corotational) vs Coarse "
+        "(linear preview)",
+    )
+    n_steps: int = Field(
+        20, ge=1, le=200, description="Corotational load-step count (nonlinear only)"
+    )
+    with_rmsf: bool = Field(
+        True, description="Also compute the free-free NMA per-bp RMSF"
+    )
+    material: str = Field(
+        "snupi",
+        description="Intra-helix beam constitutive law: 'snupi' (anisotropic "
+        "per-motif 6×6 + twist–stretch couplings + compliant "
+        "crossovers) or 'cando' (isotropic baseline for comparison)",
+    )
+    mgcl2_M: float = Field(
+        0.02,
+        ge=0.0,
+        le=1.0,
+        description="MgCl₂ molarity (mol/L) setting the Debye length of the "
+        "SNUPI inter-helix electrostatics; default 0.02 = 20 mM. "
+        "snupi-only (ignored by 'cando').",
+    )
+    dynamics: bool = Field(
+        False,
+        description="Run Langevin structural DYNAMICS (thermal trajectory → "
+        "time-mean shape + trajectory RMSF) instead of the static "
+        "equilibrium solve (project_snupi_dynamics).",
+    )
+    hydrodynamics: bool = Field(
+        False,
+        description="Dynamics only: use the Rotne–Prager–Yamakawa coupled "
+        "friction matrix vs diagonal Stokes drag.",
+    )
+    hydro_coarse_bp: Optional[int] = Field(
+        None,
+        ge=4,
+        le=64,
+        description="Hydrodynamics only: coarse-grain to ONE hydrodynamic bead "
+        "per this many bp (blob RPY). The exact per-bp friction is a "
+        "dense O(N²) matrix (~83 GB on a full M13 origami), so any "
+        "large design must coarse-grain; 8 is the calibrated default. "
+        "Minimum 4 — below that the blob is no bigger than a bead and "
+        "the hydrodynamic coupling degenerates to Stokes. "
+        "None = exact (refused up front if it would not fit).",
+    )
+    tails: bool = Field(
+        False,
+        description="Dynamics + snupi only: simulate the FREE ssDNA — overhangs, "
+        "toeholds, dangling scaffold ends — as explicit one-bead-per-"
+        "nucleotide Langevin chains and display them at their simulated "
+        "positions (they are otherwise omitted and left at their "
+        "rendered pose). A documented NADOC extension: published SNUPI "
+        "cannot represent a free tail (it has no distal bp node). With "
+        "hydrodynamics this requires hydro_coarse_bp.",
+    )
+    tail_max_nt: Optional[int] = Field(
+        None,
+        ge=1,
+        le=200,
+        description="Tails only: truncate each tail to at most this many "
+        "nucleotides. None = the full tail.",
+    )
     # Job-request annotations (C1/C2): anchors held fixed (Dirichlet BC) + a uniform E-field body
     # load, both threaded into predict_shape(...).  Never a topology edit (Three-Layer Law).
-    anchors:    Optional[list] = Field(None, description="Shared oxDNA anchor-scope descriptors "
-                                       "(overhang/cluster/domain/strand/base) held fixed during the solve")
-    field:      Optional[dict] = Field(None, description="Uniform E-field {field_pN, dir} — the same "
-                                       "per-nucleotide force oxDNA applies; needs ≥1 anchor (COM drift)")
-    autostart:  bool = Field(True)
-    design_source_path: Optional[str] = Field(None, description="Workspace path of the active design")
+    anchors: Optional[list] = Field(
+        None,
+        description="Shared oxDNA anchor-scope descriptors "
+        "(overhang/cluster/domain/strand/base) held fixed during the solve",
+    )
+    field: Optional[dict] = Field(
+        None,
+        description="Uniform E-field {field_pN, dir} — the same "
+        "per-nucleotide force oxDNA applies; needs ≥1 anchor (COM drift)",
+    )
+    autostart: bool = Field(True)
+    design_source_path: Optional[str] = Field(
+        None, description="Workspace path of the active design"
+    )
 
 
 # ── Create / list / status ────────────────────────────────────────────────────
+
 
 @router.post("/snupi/jobs")
 async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
@@ -179,15 +217,24 @@ async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
     # here with the fix, rather than let the detached worker die minutes in.
     if body.tails:
         if not body.dynamics:
-            raise HTTPException(400, "Free ssDNA tails need Langevin dynamics — tick 'Langevin "
-                                     "dynamics' as well (they are absent from the static solve).")
+            raise HTTPException(
+                400,
+                "Free ssDNA tails need Langevin dynamics — tick 'Langevin "
+                "dynamics' as well (they are absent from the static solve).",
+            )
         if material != "snupi":
-            raise HTTPException(400, "Free ssDNA tails are a SNUPI-material extension; the CanDo "
-                                     "baseline has no ssDNA chain model.")
+            raise HTTPException(
+                400,
+                "Free ssDNA tails are a SNUPI-material extension; the CanDo "
+                "baseline has no ssDNA chain model.",
+            )
         if body.hydrodynamics and not body.hydro_coarse_bp:
-            raise HTTPException(400, "Free ssDNA tails with hydrodynamics need the coarse blob model "
-                                     "— choose a 'Coarse beads' value (the exact per-bp friction is "
-                                     "single-radius and cannot carry the tails' smaller bead).")
+            raise HTTPException(
+                400,
+                "Free ssDNA tails with hydrodynamics need the coarse blob model "
+                "— choose a 'Coarse beads' value (the exact per-bp friction is "
+                "single-radius and cannot carry the tails' smaller bead).",
+            )
 
     # Preflight the RPY friction BEFORE spawning the detached worker. The friction is dense and O(N²)
     # in the FE node count (1 node/bp), so a full-size origami wants tens of GB; letting the worker try
@@ -196,7 +243,11 @@ async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
     if body.dynamics and body.hydrodynamics:
         from backend.physics.fem_solver import build_fem_mesh
         from backend.physics.snupi_hydro_coarse import blob_count
-        from backend.physics.snupi_hydrodynamics import HydroMemoryError, check_friction_memory
+        from backend.physics.snupi_hydrodynamics import (
+            HydroMemoryError,
+            check_friction_memory,
+        )
+
         mesh = build_fem_mesh(design, material=material)
         # Count the blobs for real. The coarse friction's only dense object is 6B×6B, and B is NOT
         # ⌈N/k⌉ — blobs never straddle a helix, so a design's helix boundaries fragment it upwards.
@@ -209,34 +260,44 @@ async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
             raise HTTPException(413, str(exc)) from exc
 
     job = new_snupi_job(
-        design_name        = name,
-        nonlinear          = body.nonlinear,
-        n_steps            = body.n_steps,
-        with_rmsf          = body.with_rmsf,
-        material           = material,
-        mgcl2_M            = body.mgcl2_M,
-        dynamics           = body.dynamics,
-        hydrodynamics      = body.hydrodynamics,
-        hydro_coarse_bp    = body.hydro_coarse_bp,
-        tails              = body.tails,
-        tail_max_nt        = body.tail_max_nt,
-        anchors            = body.anchors,
-        field              = body.field,
-        n_nucleotides      = len(_strand_nucleotide_order(design)),
-        design_source_path = body.design_source_path,
-        design_fingerprint = oxdna_design_fingerprint(design),
-        feature_log_position = effective_feature_log_position(design),
-        doc_id             = doc_context.get_current_doc(),
+        design_name=name,
+        nonlinear=body.nonlinear,
+        n_steps=body.n_steps,
+        with_rmsf=body.with_rmsf,
+        material=material,
+        mgcl2_M=body.mgcl2_M,
+        dynamics=body.dynamics,
+        hydrodynamics=body.hydrodynamics,
+        hydro_coarse_bp=body.hydro_coarse_bp,
+        tails=body.tails,
+        tail_max_nt=body.tail_max_nt,
+        anchors=body.anchors,
+        field=body.field,
+        n_nucleotides=len(_strand_nucleotide_order(design)),
+        design_source_path=body.design_source_path,
+        design_fingerprint=oxdna_design_fingerprint(design),
+        feature_log_position=effective_feature_log_position(design),
+        doc_id=doc_context.get_current_doc(),
     )
     job.status = SnupiStatus.preparing
     job.save(_workspace())
-    logger.info("create_snupi_job: job_id=%s design=%s nonlinear=%s material=%s",
-                job.job_id, name, body.nonlinear, material)
+    logger.info(
+        "create_snupi_job: job_id=%s design=%s nonlinear=%s material=%s",
+        job.job_id,
+        name,
+        body.nonlinear,
+        material,
+    )
 
     try:
         await run_in_threadpool(prepare_snupi_job, design, job, _workspace())
     except Exception as exc:  # noqa: BLE001
-        logger.error("create_snupi_job: prepare FAILED for %s: %s", job.job_id, exc, exc_info=True)
+        logger.error(
+            "create_snupi_job: prepare FAILED for %s: %s",
+            job.job_id,
+            exc,
+            exc_info=True,
+        )
         job.status = SnupiStatus.failed
         job.error = f"Preparation failed: {exc}"
         job.save(_workspace())
@@ -252,6 +313,7 @@ async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
 @router.get("/snupi/jobs")
 async def list_snupi_jobs() -> list[dict]:
     from backend.core.design_disk_usage import dir_size_bytes_cached
+
     ws = _workspace()
     jobs = [reconcile_snupi_status(j, ws) for j in SnupiJob.list_jobs(ws)]
     current_fp = _current_fingerprint()
@@ -267,6 +329,7 @@ async def list_snupi_jobs() -> list[dict]:
         if d.get("status") == "running":
             try:
                 from backend.core.snupi_runner import job_progress
+
                 p = job_progress(j, ws)
                 d["progress_fraction"] = round(float(p.get("overall") or 0.0), 4)
                 d["eta_seconds"] = p.get("eta_seconds")
@@ -309,6 +372,7 @@ async def get_snupi_error_log(job_id: str) -> dict:
 
 # ── Control ───────────────────────────────────────────────────────────────────
 
+
 @router.post("/snupi/jobs/{job_id}/start")
 async def start_snupi_job(job_id: str) -> dict:
     job = _load_job(job_id)
@@ -345,6 +409,7 @@ async def delete_snupi_job(job_id: str) -> dict:
     if is_running(job_id, ws) or job.status == SnupiStatus.running:
         raise HTTPException(400, "Stop the SNUPI job before deleting it")
     from backend.core.job_archive import purge_index_entry
+
     jd = job.job_dir(ws)
     if jd.exists():
         shutil.rmtree(jd)
@@ -353,6 +418,7 @@ async def delete_snupi_job(job_id: str) -> dict:
 
 
 # ── Display ───────────────────────────────────────────────────────────────────
+
 
 @router.get("/snupi/jobs/{job_id}/snapshot-geometry")
 async def get_snupi_snapshot_geometry(job_id: str) -> dict:
@@ -363,14 +429,22 @@ async def get_snupi_snapshot_geometry(job_id: str) -> dict:
     Same shape as ``GET /design/geometry`` plus the snapshot ``design`` object:
     ``{ready, design, nucleotides:[...], helix_axes:[{helix_id,start,end,...}]}``.
     """
-    from backend.core.deformation import _apply_ovhg_rotations_to_axes, deformed_helix_axes
+    from backend.core.deformation import (
+        _apply_ovhg_rotations_to_axes,
+        deformed_helix_axes,
+    )
     from backend.core.design_geometry import _geometry_for_helices
     from backend.core.snupi_runner import _load_snapshot_design
 
     job = _load_job(job_id)
     design = _load_snapshot_design(job.job_dir(_workspace()))
     if design is None or not design.helices:
-        return {"job_id": job.job_id, "ready": False, "nucleotides": [], "helix_axes": []}
+        return {
+            "job_id": job.job_id,
+            "ready": False,
+            "nucleotides": [],
+            "helix_axes": [],
+        }
 
     def _compute() -> tuple[list, list]:
         nucleotides = _geometry_for_helices(design, None)
@@ -432,10 +506,17 @@ async def get_snupi_trajectory(job_id: str) -> dict:
     ``{keys:[[helix,bp,dir,copy],…], frames:[[6 floats/key],…], n_frames}`` — the same wire shape as
     oxDNA's /trajectory, so the frontend scrubber/player (``framesToUpdates``) is reused."""
     from backend.core.snupi_runner import load_trajectory
+
     job = _load_job(job_id)
     cached = load_trajectory(job.job_dir(_workspace()))
     if not cached or not cached.get("n_frames"):
-        return {"job_id": job.job_id, "ready": False, "keys": [], "frames": [], "n_frames": 0}
+        return {
+            "job_id": job.job_id,
+            "ready": False,
+            "keys": [],
+            "frames": [],
+            "n_frames": 0,
+        }
     return {"job_id": job.job_id, "ready": True, **cached}
 
 
@@ -454,7 +535,9 @@ async def get_snupi_deviation(job_id: str) -> dict:
         return {"job_id": job.job_id, "ready": False, "positions": []}
     design = _load_snapshot_design(jd)
     if design is None:
-        raise HTTPException(500, f"SNUPI job {job_id!r} has no design snapshot to compare against")
+        raise HTTPException(
+            500, f"SNUPI job {job_id!r} has no design snapshot to compare against"
+        )
 
     result = await run_in_threadpool(compute_deviation, design, cached["positions"])
     return {"job_id": job.job_id, "ready": True, **result}
@@ -475,7 +558,9 @@ async def get_snupi_cylinders(job_id: str) -> dict:
         return {"job_id": job.job_id, "ready": False, "helices": [], "joints": []}
     design = _load_snapshot_design(jd)
     if design is None:
-        raise HTTPException(500, f"SNUPI job {job_id!r} has no design snapshot for cylinders")
+        raise HTTPException(
+            500, f"SNUPI job {job_id!r} has no design snapshot for cylinders"
+        )
 
     rmsf_cached = load_rmsf(jd)
     rmsf = rmsf_cached.get("rmsf") if rmsf_cached else None
@@ -503,13 +588,16 @@ async def get_snupi_shape_source(job_id: str) -> dict:
         return {"job_id": job.job_id, "ready": False}
     design = _load_snapshot_design(jd)
     if design is None:
-        raise HTTPException(500, f"SNUPI job {job_id!r} has no design snapshot to compare against")
+        raise HTTPException(
+            500, f"SNUPI job {job_id!r} has no design snapshot to compare against"
+        )
 
     rmsf_cached = load_rmsf(jd)
     rmsf = rmsf_cached.get("rmsf") if rmsf_cached else None
     reference = await run_in_threadpool(core_reference_geometry, design)
     bundle = await run_in_threadpool(
-        build_cando_shape_source, cached["positions"], reference, rmsf=rmsf)
+        build_cando_shape_source, cached["positions"], reference, rmsf=rmsf
+    )
     bundle["engine"] = "snupi"
     ready = bundle["descriptors"] is not None
     return {"job_id": job.job_id, "ready": ready, **bundle}

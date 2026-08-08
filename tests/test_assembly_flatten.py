@@ -58,15 +58,23 @@ def _design_with_real_oh(oh_id: str, sequence: str | None) -> Design:
     direction = Direction.FORWARD if oh_id.endswith("_5p") else Direction.REVERSE
     strand = Strand(
         id=strand_id,
-        domains=[Domain(
-            helix_id=helix_id, start_bp=0, end_bp=length_bp - 1,
-            direction=direction, overhang_id=oh_id,
-        )],
+        domains=[
+            Domain(
+                helix_id=helix_id,
+                start_bp=0,
+                end_bp=length_bp - 1,
+                direction=direction,
+                overhang_id=oh_id,
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     ovhg = OverhangSpec(
-        id=oh_id, helix_id=helix_id, strand_id=strand_id,
-        sequence=sequence, label=oh_id,
+        id=oh_id,
+        helix_id=helix_id,
+        strand_id=strand_id,
+        sequence=sequence,
+        label=oh_id,
     )
     return Design(helices=[helix], strands=[strand], overhangs=[ovhg])
 
@@ -75,24 +83,36 @@ def _seed_real_two_part_assembly() -> Assembly:
     d_a = _design_with_real_oh("oh-A_5p", "ACGTACGT")
     d_b = _design_with_real_oh("oh-B_3p", "GGGGCCCC")
     t_b = Mat4x4(values=[1, 0, 0, 10, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
-    a = Assembly(instances=[
-        PartInstance(id="inst-A", name="PartA", source=PartSourceInline(design=d_a)),
-        PartInstance(id="inst-B", name="PartB", source=PartSourceInline(design=d_b),
-                     transform=t_b),
-    ])
+    a = Assembly(
+        instances=[
+            PartInstance(
+                id="inst-A", name="PartA", source=PartSourceInline(design=d_a)
+            ),
+            PartInstance(
+                id="inst-B",
+                name="PartB",
+                source=PartSourceInline(design=d_b),
+                transform=t_b,
+            ),
+        ]
+    )
     assembly_state.set_assembly(a)
     return a
 
 
-def _conn_payload(*, linker_type="ds", attach_a="free_end", attach_b="root",
-                  length_value=8):
+def _conn_payload(
+    *, linker_type="ds", attach_a="free_end", attach_b="root", length_value=8
+):
     return {
-        "instance_a_id": "inst-A", "overhang_a_id": "oh-A_5p",
+        "instance_a_id": "inst-A",
+        "overhang_a_id": "oh-A_5p",
         "overhang_a_attach": attach_a,
-        "instance_b_id": "inst-B", "overhang_b_id": "oh-B_3p",
+        "instance_b_id": "inst-B",
+        "overhang_b_id": "oh-B_3p",
         "overhang_b_attach": attach_b,
         "linker_type": linker_type,
-        "length_value": length_value, "length_unit": "bp",
+        "length_value": length_value,
+        "length_unit": "bp",
     }
 
 
@@ -113,12 +133,16 @@ def test_flatten_empty_assembly_has_no_dangling_refs():
     assert _dangling_refs(flat) == []
 
 
-@pytest.mark.parametrize("payload", [
-    _conn_payload(linker_type="ds", attach_a="free_end", attach_b="root"),
-    _conn_payload(linker_type="ss", attach_a="free_end", attach_b="free_end"),
-    _conn_payload(linker_type="ss", attach_a="free_end", attach_b="free_end",
-                  length_value=0),  # indirect (zero-length ss)
-])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        _conn_payload(linker_type="ds", attach_a="free_end", attach_b="root"),
+        _conn_payload(linker_type="ss", attach_a="free_end", attach_b="free_end"),
+        _conn_payload(
+            linker_type="ss", attach_a="free_end", attach_b="free_end", length_value=0
+        ),  # indirect (zero-length ss)
+    ],
+)
 def test_flatten_linkered_assembly_has_no_dangling_refs(payload):
     _seed_real_two_part_assembly()
     r = client.post("/api/assembly/overhang-connections", json=payload)
@@ -143,20 +167,24 @@ def test_flatten_linkered_assembly_has_no_dangling_refs(payload):
     }
     assert complement_refs, "no complement domains found on the linker strands"
     assert complement_refs <= part_helix_ids, (
-        f"complement domains not on a part helix: "
-        f"{complement_refs - part_helix_ids}"
+        f"complement domains not on a part helix: {complement_refs - part_helix_ids}"
     )
 
 
 # ── Direct WC binding materialization (Phase D) ─────────────────────────────────
+
 
 def _binding(assembly: Assembly) -> AssemblyOverhangBinding:
     sda = assembly.instances[0].source.design.overhangs[0].sub_domains[0].id
     sdb = assembly.instances[1].source.design.overhangs[0].sub_domains[0].id
     return AssemblyOverhangBinding(
         name="AB1",
-        instance_a_id="inst-A", sub_domain_a_id=sda, overhang_a_id="oh-A_5p",
-        instance_b_id="inst-B", sub_domain_b_id=sdb, overhang_b_id="oh-B_3p",
+        instance_a_id="inst-A",
+        sub_domain_a_id=sda,
+        overhang_a_id="oh-A_5p",
+        instance_b_id="inst-B",
+        sub_domain_b_id=sdb,
+        overhang_b_id="oh-B_3p",
     )
 
 
@@ -174,6 +202,7 @@ def test_flatten_materializes_direct_wc_binding_into_paired_topology():
     # Find a helix hosting two domains covering the SAME bp range in OPPOSITE
     # directions — the materialized duplex.
     from collections import defaultdict
+
     by_helix = defaultdict(list)
     for s in flat.strands:
         for d in s.domains:
@@ -188,15 +217,13 @@ def test_flatten_materializes_direct_wc_binding_into_paired_topology():
         for i in range(len(doms)):
             for j in range(i + 1, len(doms)):
                 di, dj = doms[i], doms[j]
-                if (_covered(di) == _covered(dj)
-                        and di.direction != dj.direction):
+                if _covered(di) == _covered(dj) and di.direction != dj.direction:
                     paired = True
     assert paired, "no antiparallel co-located domain pair (duplex) in flattened design"
 
     # The two overhangs must now sit on ONE helix (the driven relocated onto the
     # driver), not two.
-    oh_helices = {d.helix_id for s in flat.strands for d in s.domains
-                  if d.overhang_id}
+    oh_helices = {d.helix_id for s in flat.strands for d in s.domains if d.overhang_id}
     assert len(oh_helices) == 1, f"overhangs not co-located: {oh_helices}"
 
 

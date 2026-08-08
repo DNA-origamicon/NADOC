@@ -17,6 +17,7 @@ the design the job was built from, and checks BOTH things that were broken/slow:
     ``get_latest`` frame (what a prewarmed toggle pays) stay within budget.  The
     ``_try_unwrap`` make-whole skip keeps the load off its former multi-minute path.
 """
+
 from __future__ import annotations
 
 import json
@@ -35,9 +36,9 @@ from backend.core.models import Design
 _REPO = Path(__file__).resolve().parents[1]
 _JOBS = _REPO / "workspace" / "md_jobs"
 
-_LOAD_BUDGET_S = 30.0        # cold model build + PSF parse ≈ ~9 s (regression ceiling)
-_WARM_FRAME_BUDGET_S = 2.0   # warm get_latest = O(1) dcd read + PBC/Kabsch (~tens of ms)
-_RMSD_SANE_A = 20.0          # correct mapping ≈ 7 Å; a scrambled one is >50 Å
+_LOAD_BUDGET_S = 30.0  # cold model build + PSF parse ≈ ~9 s (regression ceiling)
+_WARM_FRAME_BUDGET_S = 2.0  # warm get_latest = O(1) dcd read + PBC/Kabsch (~tens of ms)
+_RMSD_SANE_A = 20.0  # correct mapping ≈ 7 Å; a scrambled one is >50 Å
 
 
 def _find_job():
@@ -89,13 +90,15 @@ def test_display_md_end_to_end_correct_and_ready(capsys):
 
     client = TestClient(app)
     with client.websocket_connect("/ws/md-run") as ws:
-        ws.send_json({
-            "action": "load",
-            "topology_path": str(_JOB["psf"]),
-            "xtc_path": str(_JOB["dcd"]),
-            "coordinate_path": str(_JOB["pdb"]),
-            "mode": "nadoc",
-        })
+        ws.send_json(
+            {
+                "action": "load",
+                "topology_path": str(_JOB["psf"]),
+                "xtc_path": str(_JOB["dcd"]),
+                "coordinate_path": str(_JOB["pdb"]),
+                "mode": "nadoc",
+            }
+        )
         t0 = time.perf_counter()
         ready = None
         for _ in range(400):
@@ -150,5 +153,7 @@ def test_display_md_end_to_end_correct_and_ready(capsys):
         f"rigid RMSD to design {rmsd_A:.1f} Å exceeds {_RMSD_SANE_A} Å "
         "— the p_order mapping is likely scrambled"
     )
-    assert t_load < _LOAD_BUDGET_S, f"load {t_load:.1f}s exceeds {_LOAD_BUDGET_S}s ceiling"
+    assert t_load < _LOAD_BUDGET_S, (
+        f"load {t_load:.1f}s exceeds {_LOAD_BUDGET_S}s ceiling"
+    )
     assert t_frame < _WARM_FRAME_BUDGET_S, f"warm frame {t_frame:.2f}s exceeds budget"

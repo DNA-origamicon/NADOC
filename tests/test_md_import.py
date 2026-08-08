@@ -22,16 +22,20 @@ def test_resolve_namd_manifest_picks_latest_existing_stage(tmp_path: Path) -> No
         "ENERGY: 4953600 0 0 0 0 0 0 0 0 0 0 299.7859 0 0 0 0 0 0 0 0\n"
     )
     manifest = package / "manifest.json"
-    manifest.write_text(json.dumps({
-        "package_dir": str(package),
-        "name_stem": "tube",
-        "stages": [
-            {"name": "equil_k0.5"},
-            {"name": "equil_k0.1"},
-            {"name": "equil_k0.01"},
-            {"name": "equil_k0"},
-        ],
-    }))
+    manifest.write_text(
+        json.dumps(
+            {
+                "package_dir": str(package),
+                "name_stem": "tube",
+                "stages": [
+                    {"name": "equil_k0.5"},
+                    {"name": "equil_k0.1"},
+                    {"name": "equil_k0.01"},
+                    {"name": "equil_k0"},
+                ],
+            }
+        )
+    )
 
     source = resolve_md_config(manifest)
 
@@ -55,17 +59,21 @@ def test_resolve_nadoc_run_manifest_uses_files_block(tmp_path: Path) -> None:
     (output / "stage_a.dcd").write_bytes(b"frame")
     (package / "stage_a.namd").write_text("timestep 1\nDCDfreq 100\n")
     manifest = package / "nadoc_md_run.json"
-    manifest.write_text(json.dumps({
-        "nadoc_md_run_manifest_version": 1,
-        "package_dir": str(package),
-        "name_stem": "ignored",
-        "files": {
-            "topology": "topology.psf",
-            "coordinates": "coords.pdb",
-            "output_dir": "traj",
-        },
-        "stages": [{"name": "stage_a"}],
-    }))
+    manifest.write_text(
+        json.dumps(
+            {
+                "nadoc_md_run_manifest_version": 1,
+                "package_dir": str(package),
+                "name_stem": "ignored",
+                "files": {
+                    "topology": "topology.psf",
+                    "coordinates": "coords.pdb",
+                    "output_dir": "traj",
+                },
+                "stages": [{"name": "stage_a"}],
+            }
+        )
+    )
 
     source = resolve_md_config(manifest)
 
@@ -89,20 +97,24 @@ def test_resolve_nadoc_segments_manifest_uses_conf_metadata(tmp_path: Path) -> N
         "ENERGY: 10000 0 0 0 0 0 0 0 0 0 0 310.1 0 0 0 0 0 0 0 0\n"
     )
     manifest = package / "nadoc_md_run.json"
-    manifest.write_text(json.dumps({
-        "nadoc_md_run_manifest_version": 1,
-        "package_dir": str(package),
-        "name_stem": "tube",
-        "files": {
-            "topology": "tube.psf",
-            "coordinates": "tube.pdb",
-            "output_dir": "output",
-        },
-        "segments": [
-            {"name": "tube_01_k0p05_p100"},
-            {"name": "tube_02_k0_p10"},
-        ],
-    }))
+    manifest.write_text(
+        json.dumps(
+            {
+                "nadoc_md_run_manifest_version": 1,
+                "package_dir": str(package),
+                "name_stem": "tube",
+                "files": {
+                    "topology": "tube.psf",
+                    "coordinates": "tube.pdb",
+                    "output_dir": "output",
+                },
+                "segments": [
+                    {"name": "tube_01_k0p05_p100"},
+                    {"name": "tube_02_k0_p10"},
+                ],
+            }
+        )
+    )
 
     source = resolve_md_config(manifest)
 

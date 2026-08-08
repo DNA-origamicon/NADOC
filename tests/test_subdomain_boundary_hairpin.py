@@ -68,9 +68,7 @@ def _split(ovhg_id: str, sd_id: str, at: int):
 
 
 def _get_subdoms(ovhg_id: str):
-    spec = next(
-        o for o in design_state.get_or_404().overhangs if o.id == ovhg_id
-    )
+    spec = next(o for o in design_state.get_or_404().overhangs if o.id == ovhg_id)
     return sorted(spec.sub_domains, key=lambda s: s.start_bp_offset)
 
 
@@ -78,8 +76,8 @@ def _get_subdoms(ovhg_id: str):
 # contains a guaranteed hairpin: A's last 6 bases are the reverse complement
 # of B's first 6 bases, separated by enough spacing to trigger has_hairpin.
 # Padding bases are chosen to avoid hairpins internally.
-_A_TAIL = "AAAGGGCCCAAA"   # last 6 = "CCCAAA"  -> rc = "TTTGGG"
-_B_HEAD = "TTTGGGAAACCC"   # first 6 = "TTTGGG" — pairs with rc of _A_TAIL[-6:]
+_A_TAIL = "AAAGGGCCCAAA"  # last 6 = "CCCAAA"  -> rc = "TTTGGG"
+_B_HEAD = "TTTGGGAAACCC"  # first 6 = "TTTGGG" — pairs with rc of _A_TAIL[-6:]
 
 
 def test_boundary_hairpin_detected_across_locked_override() -> None:
@@ -103,9 +101,7 @@ def test_boundary_hairpin_detected_across_locked_override() -> None:
     )
     assert resp.status_code == 200, resp.text
 
-    spec = next(
-        o for o in design_state.get_or_404().overhangs if o.id == ovhg_id
-    )
+    spec = next(o for o in design_state.get_or_404().overhangs if o.id == ovhg_id)
     reports = detect_boundary_hairpins(spec)
     assert reports, f"expected ≥1 boundary-hairpin report, got {reports!r}"
     # The endpoint should have flipped hairpin_warning=True on BOTH sides.
@@ -144,9 +140,7 @@ def test_no_false_positive_on_random_neighbors() -> None:
     )
     assert resp.status_code == 200, resp.text
 
-    spec = next(
-        o for o in design_state.get_or_404().overhangs if o.id == ovhg_id
-    )
+    spec = next(o for o in design_state.get_or_404().overhangs if o.id == ovhg_id)
     reports = detect_boundary_hairpins(spec)
     assert reports == [], f"expected no reports, got {reports!r}"
 
@@ -210,7 +204,7 @@ def test_regenerate_blocked_by_warning() -> None:
     # Induce a hairpin warning on sd_a by setting a self-hairpinning sequence.
     # 12-base sequence whose own scan flags as a hairpin (has_hairpin returns
     # True on >3 internal hairpin possibilities).
-    sd_a_hairpin = "GCGCATATGCGC"   # palindromic — strong hairpin
+    sd_a_hairpin = "GCGCATATGCGC"  # palindromic — strong hairpin
     resp = _patch(
         f"/design/overhang/{ovhg_id}/sub-domains/{sd_a.id}",
         {"sequence_override": sd_a_hairpin},
@@ -228,8 +222,10 @@ def test_regenerate_blocked_by_warning() -> None:
         {"seed": 7},
     )
     assert resp.status_code == 422, resp.text
-    assert "hairpin" in resp.json().get("detail", "").lower() or \
-           "dimer"   in resp.json().get("detail", "").lower()
+    assert (
+        "hairpin" in resp.json().get("detail", "").lower()
+        or "dimer" in resp.json().get("detail", "").lower()
+    )
 
 
 def test_boundary_detection_clears_on_unrelated_patch() -> None:
@@ -266,13 +262,12 @@ def test_boundary_detection_clears_on_unrelated_patch() -> None:
 
     sd_a_after, sd_b_after = _get_subdoms(ovhg_id)
     # Boundary report must now be empty.
-    spec = next(
-        o for o in design_state.get_or_404().overhangs if o.id == ovhg_id
-    )
+    spec = next(o for o in design_state.get_or_404().overhangs if o.id == ovhg_id)
     assert detect_boundary_hairpins(spec) == []
     # Boundary warning on sd_a must clear (it only had the boundary flag).
     # sd_b's flag depends on whether the new sequence triggers inner-hairpin
     # on its own; we just assert that the warning state matches its inner scan.
     from backend.core.overhang_generator import has_hairpin as _hp
+
     assert sd_a_after.hairpin_warning is _hp(_A_TAIL)
     assert sd_b_after.hairpin_warning is _hp(innocuous_b)

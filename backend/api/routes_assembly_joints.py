@@ -87,6 +87,7 @@ router = APIRouter()
 
 # ── Request bodies ────────────────────────────────────────────────────────────
 
+
 class AddJointRequest(BaseModel):
     name: str = "Joint"
     joint_type: str = "revolute"
@@ -112,6 +113,7 @@ class MateConnectorSpec(BaseModel):
     ``is_bend_center`` — derived center-of-curvature of a bend op (label
     ``bend_<i>_center``). Auto-registered the same way as blunt ends.
     """
+
     instance_id: str
     label: str
     position: list[float] = [0.0, 0.0, 0.0]
@@ -126,10 +128,11 @@ class CreateMateRequest(BaseModel):
     aligned pose + add the joint, in ONE request.  Collapses the old
     4-round-trip frontend sequence (addConnector ×2 → propagate_fk → add_joint)
     into a single store update / undo step / feature-log entry."""
+
     child_connector: MateConnectorSpec
-    parent_connector: Optional[MateConnectorSpec] = None   # None => World mate
-    moved_instance_id: Optional[str] = None                # which instance FK moves (None => no move)
-    transform: Optional[dict] = None                       # {"values": [16]} row-major, for moved instance
+    parent_connector: Optional[MateConnectorSpec] = None  # None => World mate
+    moved_instance_id: Optional[str] = None  # which instance FK moves (None => no move)
+    transform: Optional[dict] = None  # {"values": [16]} row-major, for moved instance
     name: str = "Joint"
     joint_type: str = "rigid"
     axis_origin: list[float] = [0.0, 0.0, 0.0]
@@ -147,8 +150,8 @@ class PatchJointRequest(BaseModel):
     min_limit: Optional[float] = None
     max_limit: Optional[float] = None
     clear_limits: Optional[bool] = None
-    angular_velocity_rpm: Optional[float] = None   # revolute only; 0 = static
-    spin_paused: Optional[bool] = None             # per-joint freeze
+    angular_velocity_rpm: Optional[float] = None  # revolute only; 0 = static
+    spin_paused: Optional[bool] = None  # per-joint freeze
     silent: Optional[bool] = None  # True during animation playback (suppress undo push)
     # Which body moves when driving current_value on a revolute joint: 'b' (child,
     # the default/legacy) or 'a' (parent). Set by the gizmo when the moving body
@@ -159,8 +162,10 @@ class PatchJointRequest(BaseModel):
 
 # ── Joint routes ──────────────────────────────────────────────────────────────
 
+
 def _compose_add_joint(
-    assembly: Assembly, body: AddJointRequest,
+    assembly: Assembly,
+    body: AddJointRequest,
 ) -> tuple[Assembly, AssemblyJoint, str, dict]:
     """Build the assembly state for a new joint: derive axis_origin, snap
     instance_b to connector_a, snapshot base_transform, capture
@@ -178,7 +183,7 @@ def _compose_add_joint(
     # Derive axis_origin from connector positions (safety net — frontend pre-aligns,
     # but the backend recomputes to guarantee connector coincidence at creation time).
     axis_origin = list(body.axis_origin)
-    snap_delta: 'np.ndarray | None' = None
+    snap_delta: "np.ndarray | None" = None
 
     inst_b = _find_instance(assembly, body.instance_b_id)
     cluster_id_a = body.cluster_id_a
@@ -190,23 +195,44 @@ def _compose_add_joint(
     # markers all on the same definition of "where the connector is."
     asm_path = _assembly_source_path(assembly)
     if body.connector_b_label:
-        ip_b = next((p for p in inst_b.interface_points if p.label == body.connector_b_label), None)
+        ip_b = next(
+            (p for p in inst_b.interface_points if p.label == body.connector_b_label),
+            None,
+        )
         if ip_b is not None:
             if cluster_id_b is None:
-                cluster_id_b = (_infer_cluster_ids_for_connector_label(inst_b, body.connector_b_label) or [ip_b.cluster_id])[0]
+                cluster_id_b = (
+                    _infer_cluster_ids_for_connector_label(
+                        inst_b, body.connector_b_label
+                    )
+                    or [ip_b.cluster_id]
+                )[0]
             design_b = _design_with_instance_overrides(inst_b, asm_path)
             cb_world = _get_connector_world(inst_b, body.connector_b_label, design_b)
             if cb_world is None:
                 cb_world = np.zeros(3, dtype=float)
             if body.connector_a_label and body.instance_a_id:
                 inst_a = _find_instance(assembly, body.instance_a_id)
-                ip_a   = next((p for p in inst_a.interface_points
-                               if p.label == body.connector_a_label), None)
+                ip_a = next(
+                    (
+                        p
+                        for p in inst_a.interface_points
+                        if p.label == body.connector_a_label
+                    ),
+                    None,
+                )
                 if ip_a is not None:
                     if cluster_id_a is None:
-                        cluster_id_a = (_infer_cluster_ids_for_connector_label(inst_a, body.connector_a_label) or [ip_a.cluster_id])[0]
+                        cluster_id_a = (
+                            _infer_cluster_ids_for_connector_label(
+                                inst_a, body.connector_a_label
+                            )
+                            or [ip_a.cluster_id]
+                        )[0]
                     design_a = _design_with_instance_overrides(inst_a, asm_path)
-                    ca_world = _get_connector_world(inst_a, body.connector_a_label, design_a)
+                    ca_world = _get_connector_world(
+                        inst_a, body.connector_a_label, design_a
+                    )
                     if ca_world is None:
                         ca_world = np.zeros(3, dtype=float)
                     snap = ca_world - cb_world
@@ -236,34 +262,50 @@ def _compose_add_joint(
     )
 
     # Apply any residual snap and snapshot base_transform (value=0 reference pose)
-    T_b         = _mat4_from_model(inst_b.transform)
+    T_b = _mat4_from_model(inst_b.transform)
     snapped_T_b = snap_delta @ T_b if snap_delta is not None else T_b
-    new_inst_b  = inst_b.model_copy(update={
-        "transform":      _mat4_to_model(snapped_T_b),
-        "base_transform": _mat4_to_model(snapped_T_b),
-    })
+    new_inst_b = inst_b.model_copy(
+        update={
+            "transform": _mat4_to_model(snapped_T_b),
+            "base_transform": _mat4_to_model(snapped_T_b),
+        }
+    )
     new_instances = [new_inst_b if i.id == inst_b.id else i for i in assembly.instances]
-    new_joints    = list(assembly.joints) + [joint]
-    new_assembly = assembly.model_copy(update={"instances": new_instances, "joints": new_joints})
+    new_joints = list(assembly.joints) + [joint]
+    new_assembly = assembly.model_copy(
+        update={"instances": new_instances, "joints": new_joints}
+    )
 
     # Capture mate_relative_transform = F_a_world^-1 @ F_b_world right after the
     # creation-time snap so future resolve_assembly invocations can restore not
     # just the position coincidence but the full relative orientation between
     # the two connector frames (important when a later part edit rotates a
     # connector within its part — e.g. via a Relax Bond cluster transform).
-    if joint.joint_type in ("rigid", "spherical") and body.connector_a_label and body.instance_a_id and body.connector_b_label:
+    if (
+        joint.joint_type in ("rigid", "spherical")
+        and body.connector_a_label
+        and body.instance_a_id
+        and body.connector_b_label
+    ):
         post_inst_a = _find_instance(new_assembly, body.instance_a_id)
         post_inst_b = _find_instance(new_assembly, body.instance_b_id)
-        design_a = _design_with_instance_overrides(post_inst_a, _assembly_source_path(new_assembly))
-        design_b = _design_with_instance_overrides(post_inst_b, _assembly_source_path(new_assembly))
+        design_a = _design_with_instance_overrides(
+            post_inst_a, _assembly_source_path(new_assembly)
+        )
+        design_b = _design_with_instance_overrides(
+            post_inst_b, _assembly_source_path(new_assembly)
+        )
         F_a = _get_connector_world_frame(post_inst_a, body.connector_a_label, design_a)
         F_b = _get_connector_world_frame(post_inst_b, body.connector_b_label, design_b)
         if F_a is not None and F_b is not None:
             try:
                 M = np.linalg.inv(F_a) @ F_b
                 new_joints = [
-                    j.model_copy(update={"mate_relative_transform": M.flatten().tolist()})
-                    if j.id == joint.id else j
+                    j.model_copy(
+                        update={"mate_relative_transform": M.flatten().tolist()}
+                    )
+                    if j.id == joint.id
+                    else j
                     for j in new_assembly.joints
                 ]
                 new_assembly = new_assembly.model_copy(update={"joints": new_joints})
@@ -280,31 +322,41 @@ def _compose_add_joint(
     # move. (Same reasoning as the rigid branch in resolve_assembly.)
     if snap_delta is not None:
         try:
-            _fk_propagate(new_assembly, {body.instance_b_id}, snap_delta, {body.instance_b_id},
-                          _build_inst_by_id(new_assembly))
+            _fk_propagate(
+                new_assembly,
+                {body.instance_b_id},
+                snap_delta,
+                {body.instance_b_id},
+                _build_inst_by_id(new_assembly),
+            )
         except np.linalg.LinAlgError:
             pass
 
-    inst_a_name = (_find_instance(new_assembly, body.instance_a_id).name
-                    if body.instance_a_id else "world")
+    inst_a_name = (
+        _find_instance(new_assembly, body.instance_a_id).name
+        if body.instance_a_id
+        else "world"
+    )
     inst_b_name = _find_instance(new_assembly, body.instance_b_id).name
     label_str = f"Add mate: {inst_a_name} ↔ {inst_b_name}"
 
     params = {
-        "joint_id":          joint.id,
-        "name":              joint.name,
-        "joint_type":        joint.joint_type,
-        "instance_a_id":     joint.instance_a_id,
-        "instance_b_id":     joint.instance_b_id,
-        "cluster_id_a":      joint.cluster_id_a,
-        "cluster_id_b":      joint.cluster_id_b,
-        "axis_origin":       list(joint.axis_origin),
-        "axis_direction":    list(joint.axis_direction),
-        "min_limit":         joint.min_limit,
-        "max_limit":         joint.max_limit,
+        "joint_id": joint.id,
+        "name": joint.name,
+        "joint_type": joint.joint_type,
+        "instance_a_id": joint.instance_a_id,
+        "instance_b_id": joint.instance_b_id,
+        "cluster_id_a": joint.cluster_id_a,
+        "cluster_id_b": joint.cluster_id_b,
+        "axis_origin": list(joint.axis_origin),
+        "axis_direction": list(joint.axis_direction),
+        "min_limit": joint.min_limit,
+        "max_limit": joint.max_limit,
         "connector_a_label": joint.connector_a_label,
         "connector_b_label": joint.connector_b_label,
-        "mate_relative_transform": list(joint.mate_relative_transform) if joint.mate_relative_transform else None,
+        "mate_relative_transform": list(joint.mate_relative_transform)
+        if joint.mate_relative_transform
+        else None,
     }
     return new_assembly, joint, label_str, params
 
@@ -344,57 +396,73 @@ def create_mate(body: CreateMateRequest) -> dict:
 
     # 1. Register blunt-end connectors as InterfacePoints (idempotent — skip if
     #    the label already exists, e.g. a previously-defined interface point).
-    def _register(conn: 'MateConnectorSpec | None') -> None:
+    def _register(conn: "MateConnectorSpec | None") -> None:
         if conn is None or not (conn.is_blunt_end or conn.is_bend_center):
             return
         inst = inst_by_id.get(conn.instance_id)
         if inst is None or any(ip.label == conn.label for ip in inst.interface_points):
             return
-        inst.interface_points.append(InterfacePoint(
-            label=conn.label,
-            position=Vec3(x=conn.position[0], y=conn.position[1], z=conn.position[2]),
-            normal=Vec3(x=conn.normal[0], y=conn.normal[1], z=conn.normal[2]),
-            connection_type=ConnectionType.COVALENT,
-            cluster_id=conn.cluster_id,
-        ))
+        inst.interface_points.append(
+            InterfacePoint(
+                label=conn.label,
+                position=Vec3(
+                    x=conn.position[0], y=conn.position[1], z=conn.position[2]
+                ),
+                normal=Vec3(x=conn.normal[0], y=conn.normal[1], z=conn.normal[2]),
+                connection_type=ConnectionType.COVALENT,
+                cluster_id=conn.cluster_id,
+            )
+        )
+
     _register(body.child_connector)
     _register(body.parent_connector)
 
     # 2. Propagate FK to the aligned pose.  Skipped for World mates / both-fixed
     #    parts, where the frontend sends no transform.
     if body.moved_instance_id and body.transform and "values" in body.transform:
-        _propagate_fk_inplace(assembly, body.moved_instance_id, body.transform["values"], inst_by_id)
+        _propagate_fk_inplace(
+            assembly, body.moved_instance_id, body.transform["values"], inst_by_id
+        )
 
     # 3. Compose the joint on the connector-registered, FK-moved assembly.
     joint_body = AddJointRequest(
         name=body.name,
         joint_type=body.joint_type,
-        instance_a_id=(body.parent_connector.instance_id if body.parent_connector else None),
-        cluster_id_a=(body.parent_connector.cluster_id if body.parent_connector else None),
+        instance_a_id=(
+            body.parent_connector.instance_id if body.parent_connector else None
+        ),
+        cluster_id_a=(
+            body.parent_connector.cluster_id if body.parent_connector else None
+        ),
         instance_b_id=body.child_connector.instance_id,
         cluster_id_b=body.child_connector.cluster_id,
         axis_origin=body.axis_origin,
         axis_direction=body.axis_direction,
         min_limit=body.min_limit,
         max_limit=body.max_limit,
-        connector_a_label=(body.parent_connector.label if body.parent_connector else None),
+        connector_a_label=(
+            body.parent_connector.label if body.parent_connector else None
+        ),
         connector_b_label=body.child_connector.label,
     )
     new_assembly, joint, _label, _params = _compose_add_joint(assembly, joint_body)
 
     # 4. Apply once: single undo step + single feature-log entry.
-    inst_a_name = (_find_instance(new_assembly, joint.instance_a_id).name
-                   if joint.instance_a_id else "world")
+    inst_a_name = (
+        _find_instance(new_assembly, joint.instance_a_id).name
+        if joint.instance_a_id
+        else "world"
+    )
     inst_b_name = _find_instance(new_assembly, joint.instance_b_id).name
     _apply_assembly_mutation_with_feature_log(
         new_assembly,
         op_kind="assembly-create-mate",
         label=f"Create mate: {inst_a_name} ↔ {inst_b_name}",
         params={
-            "joint_id":          joint.id,
-            "joint_type":        joint.joint_type,
-            "instance_a_id":     joint.instance_a_id,
-            "instance_b_id":     joint.instance_b_id,
+            "joint_id": joint.id,
+            "joint_type": joint.joint_type,
+            "instance_a_id": joint.instance_a_id,
+            "instance_b_id": joint.instance_b_id,
             "moved_instance_id": body.moved_instance_id,
             "connector_a_label": joint.connector_a_label,
             "connector_b_label": joint.connector_b_label,
@@ -411,17 +479,20 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
     """
     assembly = assembly_state.get_or_404()
     joint = _find_joint(assembly, joint_id)
-    if os.environ.get('NADOC_GEAR_DEBUG', '1') != '0':
-        print(f"[patch_joint] joint={joint_id[:8]} type={joint.joint_type} "
-              f"body.current_value={body.current_value} "
-              f"joint.current_value={joint.current_value}", flush=True)
+    if os.environ.get("NADOC_GEAR_DEBUG", "1") != "0":
+        print(
+            f"[patch_joint] joint={joint_id[:8]} type={joint.joint_type} "
+            f"body.current_value={body.current_value} "
+            f"joint.current_value={joint.current_value}",
+            flush=True,
+        )
 
     joint_updates: dict = {}
     if body.name is not None:
         joint_updates["name"] = body.name
     if body.joint_type is not None and body.joint_type != joint.joint_type:
         joint_updates["joint_type"] = body.joint_type
-        joint_updates["current_value"] = 0.0   # reset value when type changes
+        joint_updates["current_value"] = 0.0  # reset value when type changes
         joint_updates["min_limit"] = None
         joint_updates["max_limit"] = None
     if body.axis_origin is not None:
@@ -441,14 +512,16 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
     if body.spin_paused is not None:
         joint_updates["spin_paused"] = bool(body.spin_paused)
 
-    value_changed = body.current_value is not None and body.current_value != joint.current_value
+    value_changed = (
+        body.current_value is not None and body.current_value != joint.current_value
+    )
     if body.current_value is not None:
         # Clamp to limits if set
         val = body.current_value
         active_min = joint_updates.get("min_limit", joint.min_limit)
         active_max = joint_updates.get("max_limit", joint.max_limit)
-        lo  = active_min if active_min is not None else -math.inf
-        hi  = active_max if active_max is not None else  math.inf
+        lo = active_min if active_min is not None else -math.inf
+        hi = active_max if active_max is not None else math.inf
         joint_updates["current_value"] = max(lo, min(hi, val))
 
     # ── Endpoint-aware revolute drive ────────────────────────────────────────
@@ -461,14 +534,23 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
     # instance_b is anchored but the parent isn't, the moving body is the parent.
     endpoint_side = body.endpoint_side
     if endpoint_side is None and value_changed and joint.joint_type == "revolute":
-        inst_a = next((i for i in assembly.instances if i.id == joint.instance_a_id), None)
-        inst_b = next((i for i in assembly.instances if i.id == joint.instance_b_id), None)
-        if inst_b is not None and inst_b.fixed and not (inst_a is not None and inst_a.fixed):
+        inst_a = next(
+            (i for i in assembly.instances if i.id == joint.instance_a_id), None
+        )
+        inst_b = next(
+            (i for i in assembly.instances if i.id == joint.instance_b_id), None
+        )
+        if (
+            inst_b is not None
+            and inst_b.fixed
+            and not (inst_a is not None and inst_a.fixed)
+        ):
             endpoint_side = "a"
 
-    if (value_changed and joint.joint_type == "revolute"
-            and endpoint_side in ("a", "b")):
-        target_value = joint_updates.pop("current_value")  # helper sets it from the OLD value
+    if value_changed and joint.joint_type == "revolute" and endpoint_side in ("a", "b"):
+        target_value = joint_updates.pop(
+            "current_value"
+        )  # helper sets it from the OLD value
         new_joint = joint.model_copy(update=joint_updates)
         new_joints = [new_joint if j.id == joint_id else j for j in assembly.joints]
         silent = bool(body.silent)
@@ -478,7 +560,11 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
         inst_by_id = _build_inst_by_id(new_assembly)
         target_joint = next(j for j in new_assembly.joints if j.id == joint_id)
         _apply_revolute_value_to_gear_endpoint(
-            new_assembly, target_joint, endpoint_side, float(target_value), inst_by_id,
+            new_assembly,
+            target_joint,
+            endpoint_side,
+            float(target_value),
+            inst_by_id,
         )
         _propagate_gear_relations_from(new_assembly, joint_id)
         assembly_state.set_assembly_silent(new_assembly)
@@ -508,14 +594,18 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
                 new_joint.axis_direction,
                 new_joint.current_value,
             )
-        new_inst_b    = inst_b.model_copy(update={"transform": _mat4_to_model(new_mat)})
-        new_instances = [new_inst_b if i.id == inst_b.id else i for i in assembly.instances]
+        new_inst_b = inst_b.model_copy(update={"transform": _mat4_to_model(new_mat)})
+        new_instances = [
+            new_inst_b if i.id == inst_b.id else i for i in assembly.instances
+        ]
 
     silent = body.silent  # True during animation playback
     if not silent:
         assembly_state.snapshot()
 
-    new_assembly = assembly.model_copy(update={"instances": new_instances, "joints": new_joints})
+    new_assembly = assembly.model_copy(
+        update={"instances": new_instances, "joints": new_joints}
+    )
 
     # FK propagation: propagate delta from instance_b's motion to its kinematic descendants
     if new_mat is not None and old_inst_b_T is not None:
@@ -523,7 +613,9 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
             delta = new_mat @ np.linalg.inv(old_inst_b_T)
             visited = {new_joint.instance_b_id}
             inst_by_id = _build_inst_by_id(new_assembly)
-            _fk_expand_rigid_group(new_assembly, new_joint.instance_b_id, delta, visited, [], inst_by_id)
+            _fk_expand_rigid_group(
+                new_assembly, new_joint.instance_b_id, delta, visited, [], inst_by_id
+            )
             _fk_propagate(new_assembly, visited.copy(), delta, visited, inst_by_id)
             _enforce_connector_coincidence(new_assembly, visited, inst_by_id)
         except np.linalg.LinAlgError:
@@ -533,7 +625,7 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
     # update each driven joint's current_value + instance_b transform + FK so
     # the gear-coupled part follows whether the user got here via ring drag,
     # the joint edit form, or any other source.
-    if value_changed and new_joint.joint_type == 'revolute':
+    if value_changed and new_joint.joint_type == "revolute":
         _propagate_gear_relations_from(new_assembly, joint_id)
 
     assembly_state.set_assembly_silent(new_assembly)
@@ -567,9 +659,15 @@ def refresh_mate(joint_id: str) -> dict:
     assembly = assembly_state.get_or_404()
     joint = _find_joint(assembly, joint_id)
     if joint.joint_type not in ("rigid", "spherical"):
-        raise HTTPException(400, detail="Only rigid / spherical mates store a relative transform.")
-    if not (joint.connector_a_label and joint.instance_a_id and joint.connector_b_label):
-        raise HTTPException(400, detail="Joint must reference both connectors to refresh.")
+        raise HTTPException(
+            400, detail="Only rigid / spherical mates store a relative transform."
+        )
+    if not (
+        joint.connector_a_label and joint.instance_a_id and joint.connector_b_label
+    ):
+        raise HTTPException(
+            400, detail="Joint must reference both connectors to refresh."
+        )
     inst_a = _find_instance(assembly, joint.instance_a_id)
     inst_b = _find_instance(assembly, joint.instance_b_id)
     design_a = _design_with_instance_overrides(inst_a, _assembly_source_path(assembly))
@@ -577,11 +675,15 @@ def refresh_mate(joint_id: str) -> dict:
     F_a = _get_connector_world_frame(inst_a, joint.connector_a_label, design_a)
     F_b = _get_connector_world_frame(inst_b, joint.connector_b_label, design_b)
     if F_a is None or F_b is None:
-        raise HTTPException(400, detail="Failed to compute connector frames for this mate.")
+        raise HTTPException(
+            400, detail="Failed to compute connector frames for this mate."
+        )
     try:
         M_full = np.linalg.inv(F_a) @ F_b
     except np.linalg.LinAlgError:
-        raise HTTPException(400, detail="Singular connector frame; cannot capture mate transform.")
+        raise HTTPException(
+            400, detail="Singular connector frame; cannot capture mate transform."
+        )
 
     # Rotation-only capture: discard any current position discrepancy.
     M = np.eye(4, dtype=float)
@@ -594,7 +696,9 @@ def refresh_mate(joint_id: str) -> dict:
     try:
         snap_T = F_b_target @ np.linalg.inv(F_b)
     except np.linalg.LinAlgError:
-        raise HTTPException(400, detail="Singular connector frame; cannot capture mate transform.")
+        raise HTTPException(
+            400, detail="Singular connector frame; cannot capture mate transform."
+        )
 
     new_origin = F_a[:3, 3].tolist()
     # Apply the snap to inst_b's transform + base_transform.
@@ -603,26 +707,34 @@ def refresh_mate(joint_id: str) -> dict:
     new_inst_b_updates = {"transform": _mat4_to_model(new_T)}
     if inst_b.base_transform:
         new_inst_b_updates["base_transform"] = _mat4_to_model(
-            snap_T @ _mat4_from_model(inst_b.base_transform))
+            snap_T @ _mat4_from_model(inst_b.base_transform)
+        )
 
     new_instances = [
         i.model_copy(update=new_inst_b_updates) if i.id == inst_b.id else i
         for i in assembly.instances
     ]
     new_joints = [
-        j.model_copy(update={
-            "mate_relative_transform": M.flatten().tolist(),
-            "axis_origin": new_origin,
-        }) if j.id == joint_id else j
+        j.model_copy(
+            update={
+                "mate_relative_transform": M.flatten().tolist(),
+                "axis_origin": new_origin,
+            }
+        )
+        if j.id == joint_id
+        else j
         for j in assembly.joints
     ]
-    mutated = assembly.model_copy(update={"instances": new_instances, "joints": new_joints})
+    mutated = assembly.model_copy(
+        update={"instances": new_instances, "joints": new_joints}
+    )
 
     # Propagate the snap to inst_b's non-rigid kinematic children so
     # revolute / prismatic descendants follow the mate fix.
     try:
-        _fk_propagate(mutated, {inst_b.id}, snap_T, {inst_b.id},
-                      _build_inst_by_id(mutated))
+        _fk_propagate(
+            mutated, {inst_b.id}, snap_T, {inst_b.id}, _build_inst_by_id(mutated)
+        )
     except np.linalg.LinAlgError:
         pass
 
@@ -634,12 +746,17 @@ def refresh_mate(joint_id: str) -> dict:
 def delete_joint(joint_id: str) -> dict:
     """Remove an AssemblyJoint."""
     assembly = assembly_state.get_or_404()
-    target   = _find_joint(assembly, joint_id)
+    target = _find_joint(assembly, joint_id)
     new_joints = [j for j in assembly.joints if j.id != joint_id]
     # Cascade-drop any gear relations that referenced this joint.
-    new_gears  = [g for g in assembly.gear_relations
-                  if g.joint_a_id != joint_id and g.joint_b_id != joint_id]
-    mutated = assembly.model_copy(update={"joints": new_joints, "gear_relations": new_gears})
+    new_gears = [
+        g
+        for g in assembly.gear_relations
+        if g.joint_a_id != joint_id and g.joint_b_id != joint_id
+    ]
+    mutated = assembly.model_copy(
+        update={"joints": new_joints, "gear_relations": new_gears}
+    )
     _apply_assembly_mutation_with_feature_log(
         mutated,
         op_kind="assembly-delete-joint",

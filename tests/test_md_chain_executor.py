@@ -14,8 +14,13 @@ from backend.core import md_chain_executor as ce
 from backend.core.md_pipeline import MdPipeline, PipelineStage
 
 
-def _pipeline(n: int, *, root_job_id: str = "root", engine: str = "namd", **stage_kw) -> MdPipeline:
-    stages = [PipelineStage(engine=engine, protocol="production", **stage_kw) for _ in range(n)]
+def _pipeline(
+    n: int, *, root_job_id: str = "root", engine: str = "namd", **stage_kw
+) -> MdPipeline:
+    stages = [
+        PipelineStage(engine=engine, protocol="production", **stage_kw)
+        for _ in range(n)
+    ]
     return MdPipeline(stages=stages, root_job_id=root_job_id, root_engine=engine)
 
 
@@ -24,7 +29,7 @@ class _Harness:
 
     def __init__(self, chain: ce.ChainRun):
         self.chain = chain
-        self.job_status: dict[str, str] = {}   # job_id -> running/completed/failed
+        self.job_status: dict[str, str] = {}  # job_id -> running/completed/failed
         self.spawns: list[ce.SpawnContext] = []
 
     def _spawn(self, ctx: ce.SpawnContext) -> str:
@@ -52,6 +57,7 @@ def _harness(n: int, **kw) -> _Harness:
 
 # ── init / structure ─────────────────────────────────────────────────────────────
 
+
 def test_init_builds_a_pending_stage_per_pipeline_stage():
     chain = ce.init_chain_run(_pipeline(3), chain_id="c1")
     assert chain.status == ce.CHAIN_PENDING
@@ -63,6 +69,7 @@ def test_init_builds_a_pending_stage_per_pipeline_stage():
 
 # ── the core CHAIN property: seeded from the predecessor ─────────────────────────
 
+
 def test_advances_seeded_from_predecessor():
     h = _harness(3)
 
@@ -70,7 +77,7 @@ def test_advances_seeded_from_predecessor():
     h.step()
     assert len(h.spawns) == 1
     assert h.spawns[0].stage_index == 0
-    assert h.spawns[0].parent_job_id == "root"     # RED: not a later stage's job
+    assert h.spawns[0].parent_job_id == "root"  # RED: not a later stage's job
     assert h.chain.stages[0].status == ce.STAGE_RUNNING
     assert h.chain.status == ce.CHAIN_RUNNING
 
@@ -84,7 +91,7 @@ def test_advances_seeded_from_predecessor():
     assert h.chain.stages[0].status == ce.STAGE_DONE
     assert len(h.spawns) == 2
     assert h.spawns[1].stage_index == 1
-    assert h.spawns[1].parent_job_id == "job0"     # RED guard: predecessor, not "root"
+    assert h.spawns[1].parent_job_id == "job0"  # RED guard: predecessor, not "root"
 
     # Stage 1 completes -> stage 2 spawns seeded from stage 1.
     h.complete("job1")
@@ -111,20 +118,21 @@ def test_single_stage_chain_completes_with_one_spawn():
 
 def test_running_stage_blocks_the_next_spawn():
     h = _harness(2)
-    h.step()                       # stage 0 running
+    h.step()  # stage 0 running
     for _ in range(3):
-        h.step()                   # job0 still "running"
+        h.step()  # job0 still "running"
     assert len(h.spawns) == 1
     assert h.chain.status == ce.CHAIN_RUNNING
 
 
 # ── halt on failure ──────────────────────────────────────────────────────────────
 
+
 def test_halts_on_stage_failure_without_spawning_downstream():
     h = _harness(3)
-    h.step()                       # stage 0 running
+    h.step()  # stage 0 running
     h.complete("job0")
-    h.step()                       # stage 1 running
+    h.step()  # stage 1 running
     assert len(h.spawns) == 2
 
     h.fail("job1")
@@ -144,14 +152,15 @@ def test_halts_on_stage_failure_without_spawning_downstream():
 
 # ── resume from the failed stage (retry-only-failed) ─────────────────────────────
 
+
 def test_resume_reruns_only_the_failed_stage():
     h = _harness(3)
     h.step()
     h.complete("job0")
-    h.step()                       # stage 1 running
+    h.step()  # stage 1 running
     stage0_job = h.chain.stages[0].job_id
     h.fail("job1")
-    h.step()                       # HALTED at stage 1
+    h.step()  # HALTED at stage 1
     assert h.chain.status == ce.CHAIN_FAILED
 
     ce.resume_chain(h.chain)
@@ -165,16 +174,18 @@ def test_resume_reruns_only_the_failed_stage():
     assert h.chain.stages[1].job_id is None
 
     spawns_before = len(h.spawns)
-    h.step()                       # re-spawn ONLY stage 1
+    h.step()  # re-spawn ONLY stage 1
     assert len(h.spawns) == spawns_before + 1
     assert h.spawns[-1].stage_index == 1
-    assert h.spawns[-1].parent_job_id == "job0"    # RED: stage 0 not re-run, still the seed
+    assert (
+        h.spawns[-1].parent_job_id == "job0"
+    )  # RED: stage 0 not re-run, still the seed
     # Stage 0 was never handed to the spawner a second time.
     assert [c.stage_index for c in h.spawns] == [0, 1, 1]
 
     # Finish the chain from the recovered point.
     h.complete("job1")
-    h.step()                       # stage 2
+    h.step()  # stage 2
     h.complete("job2")
     h.step()
     assert h.chain.status == ce.CHAIN_COMPLETED
@@ -184,11 +195,12 @@ def test_resume_is_a_noop_on_a_non_failed_chain():
     h = _harness(2)
     h.step()
     before = h.chain.to_dict()
-    ce.resume_chain(h.chain)       # chain is RUNNING, not FAILED
+    ce.resume_chain(h.chain)  # chain is RUNNING, not FAILED
     assert h.chain.to_dict() == before
 
 
 # ── forces carry into the child conf via the SHARED emitter ──────────────────────
+
 
 def test_stage_forces_carry_into_spawn_context():
     field = {"field_pN": 5.0, "dir": [1.0, 0.0, 0.0]}
@@ -222,9 +234,10 @@ def test_stage_forces_conf_reuses_external_forces_block():
 
 # ── failure diagnosis (the shared brain behind scripts/chain_doctor.py) ──────────
 
+
 def test_diagnose_healthy_chain_has_no_cause_or_action():
     h = _harness(2)
-    h.step()                       # stage 0 running, chain running
+    h.step()  # stage 0 running, chain running
     dx = ce.diagnose_chain(h.chain)
     assert dx["status"] == ce.CHAIN_RUNNING
     assert dx["cause"] is None and dx["action"] is None
@@ -249,11 +262,13 @@ def test_diagnose_classifies_the_design_mismatch_spawn_failure():
     h.step()
     h.chain.status = ce.CHAIN_FAILED
     h.chain.stages[1].status = ce.STAGE_FAILED
-    h.chain.error = ("stage 1 spawn failed after 3 attempts: 409: A different design is "
-                     "loaded: the app currently has 'Bundle' ...")
+    h.chain.error = (
+        "stage 1 spawn failed after 3 attempts: 409: A different design is "
+        "loaded: the app currently has 'Bundle' ..."
+    )
     dx = ce.diagnose_chain(h.chain)
     assert dx["failed_index"] == 1
-    assert dx["failed_job_id"] is None            # spawn failure — no job realised
+    assert dx["failed_job_id"] is None  # spawn failure — no job realised
     assert "different design" in dx["cause"].lower()
     assert "resume" in dx["action"].lower()
 
@@ -262,8 +277,10 @@ def test_diagnose_classifies_the_field_without_anchor_spawn_failure():
     h = _harness(2)
     h.chain.status = ce.CHAIN_FAILED
     h.chain.stages[1].status = ce.STAGE_FAILED
-    h.chain.error = ("stage 1 spawn failed after 3 attempts: 400: An electric field needs "
-                     "≥1 anchor OR a hard surface it pushes into")
+    h.chain.error = (
+        "stage 1 spawn failed after 3 attempts: 400: An electric field needs "
+        "≥1 anchor OR a hard surface it pushes into"
+    )
     dx = ce.diagnose_chain(h.chain)
     assert "field" in dx["cause"].lower() and "hold" in dx["cause"].lower()
     assert "anchor" in dx["action"].lower() or "surface" in dx["action"].lower()
@@ -283,9 +300,9 @@ def test_diagnose_job_failure_points_at_the_jobs_log():
     # A stage that SPAWNED a job which then failed — the failed stage keeps its job_id,
     # so the diagnosis routes the user to that job's log (not a spawn-error classifier).
     h = _harness(2)
-    h.step()                       # stage 0 running with job0
+    h.step()  # stage 0 running with job0
     h.fail("job0")
-    h.step()                       # reconcile -> chain failed, stage 0 keeps job0
+    h.step()  # reconcile -> chain failed, stage 0 keeps job0
     dx = ce.diagnose_chain(h.chain)
     assert dx["failed_index"] == 0
     assert dx["failed_job_id"] == "job0"
@@ -304,15 +321,18 @@ def test_diagnose_unknown_spawn_error_falls_back_to_generic_resume():
 
 # ── persistence ──────────────────────────────────────────────────────────────────
 
+
 def test_chain_run_dict_roundtrip_preserves_state_and_plan():
     h = _harness(2)
     h.step()
     h.complete("job0")
-    h.step()                       # stage 0 done, stage 1 running
+    h.step()  # stage 0 done, stage 1 running
     restored = ce.ChainRun.from_dict(h.chain.to_dict())
     assert restored.chain_id == h.chain.chain_id
     assert restored.status == h.chain.status
-    assert [s.to_dict() for s in restored.stages] == [s.to_dict() for s in h.chain.stages]
+    assert [s.to_dict() for s in restored.stages] == [
+        s.to_dict() for s in h.chain.stages
+    ]
     assert [p.to_dict() for p in restored.plan] == [p.to_dict() for p in h.chain.plan]
 
 

@@ -73,6 +73,7 @@ def current_request_revision() -> int | None:
 @dataclass
 class _DesignSession:
     """Per-document design state: the active design + its undo/redo + extras."""
+
     design: Design | None = None
     history: deque = field(default_factory=lambda: deque(maxlen=MAX_UNDO_STEPS))
     redo: deque = field(default_factory=lambda: deque(maxlen=MAX_UNDO_STEPS))
@@ -85,6 +86,7 @@ class _DesignSession:
 
 _lock = threading.Lock()
 _sessions: dict[str, _DesignSession] = {}
+
 
 def _bump_revision(s: "_DesignSession") -> None:
     """Increment a session's revision and record it for the current request.
@@ -99,6 +101,7 @@ def _bump_revision(s: "_DesignSession") -> None:
     """
     s.revision += 1
     set_request_revision(s.revision)
+
 
 # Session-level protein library, keyed by asset id.  PROCESS-GLOBAL (shared
 # across documents) — an imported PDB can be attached across designs.  Persisted
@@ -120,6 +123,7 @@ def _session() -> _DesignSession:
 
 
 # ── Document registry helpers (multi-document) ───────────────────────────────
+
 
 def list_doc_ids() -> list[str]:
     """Doc ids that currently hold a design."""
@@ -179,6 +183,7 @@ def copy_doc_for_persist(doc_id: str) -> tuple[Design | None, int]:
 
 
 # ── Current-document accessors ───────────────────────────────────────────────
+
 
 def get_design() -> Design | None:
     with _lock:
@@ -332,13 +337,15 @@ def encode_design_snapshot(design: Design) -> tuple[str, int]:
 
     Returns ``(payload_b64, uncompressed_byte_length)``.
     """
-    stripped = design.model_copy(update={
-        "feature_log": [],
-        "feature_log_cursor": -1,
-        "feature_log_sub_cursor": None,
-        "loadouts": [],
-        "active_loadout_id": None,
-    })
+    stripped = design.model_copy(
+        update={
+            "feature_log": [],
+            "feature_log_cursor": -1,
+            "feature_log_sub_cursor": None,
+            "loadouts": [],
+            "active_loadout_id": None,
+        }
+    )
     raw = stripped.model_dump_json().encode("utf-8")
     gz = gzip.compress(raw, compresslevel=6)
     return base64.b64encode(gz).decode("ascii"), len(raw)
@@ -361,7 +368,11 @@ def _payload_total_bytes(entry: SnapshotLogEntry | RoutingClusterLogEntry) -> in
     total = len(entry.pre_state_gz_b64) + len(entry.post_state_gz_b64)
     if not entry.diffs_evicted:
         for c in entry.children:
-            total += len(c.diff_added_b64) + len(c.diff_removed_b64) + len(c.diff_modified_b64)
+            total += (
+                len(c.diff_added_b64)
+                + len(c.diff_removed_b64)
+                + len(c.diff_modified_b64)
+            )
     return total
 
 
@@ -398,7 +409,8 @@ def _evict_oldest_payloads_if_over_budget(design: Design) -> None:
     payload alone exceeds the budget.
     """
     payload_entries = [
-        e for e in design.feature_log
+        e
+        for e in design.feature_log
         if isinstance(e, (SnapshotLogEntry, RoutingClusterLogEntry))
     ]
     total = sum(_payload_total_bytes(e) for e in payload_entries if not e.evicted)
@@ -463,7 +475,11 @@ def mutate_with_feature_log(
         #   - Design                      : pure-functional, no custom report.
         #   - (Design, MutationReport)    : pure-functional + custom reconcile hint.
         #   - MutationReport / None       : in-place mutation; report optional.
-        if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], Design):
+        if (
+            isinstance(result, tuple)
+            and len(result) == 2
+            and isinstance(result[0], Design)
+        ):
             s.design = result[0]
             report = result[1] if isinstance(result[1], MutationReport) else None
         elif isinstance(result, Design):
@@ -473,7 +489,7 @@ def mutate_with_feature_log(
             report = result if isinstance(result, MutationReport) else None
 
         reconciled = reconcile_cluster_membership(before, s.design, report)
-        if op_kind in ('auto-break', 'full-autostaple'):
+        if op_kind in ("auto-break", "full-autostaple"):
             # Autobreak / full-autostaple deliberately leave crossovers unligated
             # so staples stay at or below the length cap.  Retrying pre-existing
             # unligated crossovers here would re-ligate across those breaks,
@@ -578,6 +594,7 @@ def mutate_with_minor_log(
         # reconcile + ligation retry, so the diff already includes those effects
         # and reconstruction never re-reconciles. See backend.core.design_diff.
         from backend.core.design_diff import encode_child_diff
+
         d_added, d_removed, d_modified, d_size = encode_child_diff(before, s.design)
 
         now_iso = _dt.datetime.now(_dt.timezone.utc).isoformat()
@@ -599,7 +616,7 @@ def mutate_with_minor_log(
             cluster.post_state_size_bytes = post_size
         else:
             cluster = RoutingClusterLogEntry(
-                label='Fine Routing',
+                label="Fine Routing",
                 timestamp=now_iso,
                 children=[minor_entry],
                 pre_state_gz_b64=pre_b64,

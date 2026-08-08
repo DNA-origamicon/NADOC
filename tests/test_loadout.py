@@ -38,7 +38,9 @@ def test_auto_loadout_name_skips_taken_numbers():
 def test_first_create_from_implicit_does_not_duplicate_loadout_1():
     # No loadouts yet -> frontend shows the implicit "Loadout 1"; the "+" button
     # now sends NO name, so the backend must materialise "Loadout 1" + "Loadout 2".
-    design_state.set_design(Design().copy_with(feature_log=[_fl("A")], feature_log_cursor=0))
+    design_state.set_design(
+        Design().copy_with(feature_log=[_fl("A")], feature_log_cursor=0)
+    )
     create_loadout(LoadoutCreateBody(name=None))
     assert _names() == ["Loadout 1", "Loadout 2"]
 
@@ -77,11 +79,19 @@ def test_loadouts_have_independent_feature_logs():
 
     # Edit inside Loadout 2: replace B with C.
     cur = design_state.get_or_404()
-    design_state.set_design(cur.copy_with(feature_log=[_fl("A"), _fl("C")], feature_log_cursor=1))
+    design_state.set_design(
+        cur.copy_with(feature_log=[_fl("A"), _fl("C")], feature_log_cursor=1)
+    )
 
     # Switching to Loadout 1 must restore its untouched [A, B]...
     select_loadout(l1_id)
-    assert [e.deformation_id for e in design_state.get_or_404().feature_log] == ["A", "B"]
+    assert [e.deformation_id for e in design_state.get_or_404().feature_log] == [
+        "A",
+        "B",
+    ]
     # ...and switching back must preserve Loadout 2's edited [A, C].
     select_loadout(l2_id)
-    assert [e.deformation_id for e in design_state.get_or_404().feature_log] == ["A", "C"]
+    assert [e.deformation_id for e in design_state.get_or_404().feature_log] == [
+        "A",
+        "C",
+    ]

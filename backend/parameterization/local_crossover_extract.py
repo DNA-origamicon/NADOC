@@ -56,10 +56,11 @@ from backend.core.atomistic_to_nadoc import (
 
 log = logging.getLogger(__name__)
 
-_kT_kJ_MOL = 2.5788   # kJ/mol at 310 K
+_kT_kJ_MOL = 2.5788  # kJ/mol at 310 K
 
 
 # ── Residue index map ─────────────────────────────────────────────────────────
+
 
 def _build_c1p_map(
     u,
@@ -74,7 +75,7 @@ def _build_c1p_map(
     extraction: we must select the CROSSING strand's C1', not any strand.
     """
     model = build_atomistic_model(design)
-    cmap  = build_chain_map(model)
+    cmap = build_chain_map(model)
     p_order = build_p_gro_order(pdb_path.read_text(), cmap)
 
     sel_str = "name P and resname " + " ".join(sorted(_GRO_DNA_RESNAMES))
@@ -128,6 +129,7 @@ def _bp_center(u, c1p_map, helix_id: str, bp_idx: int) -> "np.ndarray | None":
 
 # ── 4-atom dihedral ───────────────────────────────────────────────────────────
 
+
 def _dihedral(p1, p2, p3, p4) -> float:
     """IUPAC dihedral angle (radians) from 4 Cartesian positions."""
     b1 = p2 - p1
@@ -151,6 +153,7 @@ def _dihedral(p1, p2, p3, p4) -> float:
 
 # ── ESS (first-lag estimate) ──────────────────────────────────────────────────
 
+
 def _ess_1d(x: np.ndarray) -> float:
     n = len(x)
     c = x - x.mean()
@@ -163,6 +166,7 @@ def _ess_1d(x: np.ndarray) -> float:
 
 
 # ── Main extraction function ──────────────────────────────────────────────────
+
 
 def extract_local_crossover_params(
     run_dir: Path,
@@ -238,8 +242,8 @@ def extract_local_crossover_params(
             continue
         bp_a = xo.half_a.index
         bp_b = xo.half_b.index
-        h_a  = xo.half_a.helix_id
-        h_b  = xo.half_b.helix_id
+        h_a = xo.half_a.helix_id
+        h_b = xo.half_b.helix_id
 
         # Both strands at each bp position — needed for bp-center computation
         ag_a_fwd = _c1p_ag(h_a, bp_a, "FORWARD")
@@ -247,9 +251,16 @@ def extract_local_crossover_params(
         ag_b_fwd = _c1p_ag(h_b, bp_b, "FORWARD")
         ag_b_rev = _c1p_ag(h_b, bp_b, "REVERSE")
 
-        if (ag_a_fwd is None and ag_a_rev is None) or (ag_b_fwd is None and ag_b_rev is None):
-            log.debug("Crossover %s@%d – %s@%d: no C1' atoms on one side, skipping",
-                      h_a, bp_a, h_b, bp_b)
+        if (ag_a_fwd is None and ag_a_rev is None) or (
+            ag_b_fwd is None and ag_b_rev is None
+        ):
+            log.debug(
+                "Crossover %s@%d – %s@%d: no C1' atoms on one side, skipping",
+                h_a,
+                bp_a,
+                h_b,
+                bp_b,
+            )
             continue
 
         # Dihedral: use crossing-strand neighbors (prev on half_a, next on half_b)
@@ -258,13 +269,18 @@ def extract_local_crossover_params(
         flank_a = _c1p_ag(h_a, bp_a - 1, dir_a) or _c1p_ag(h_a, bp_a + 1, dir_a)
         flank_b = _c1p_ag(h_b, bp_b + 1, dir_b) or _c1p_ag(h_b, bp_b - 1, dir_b)
 
-        crossovers_to_measure.append({
-            "label": f"{h_a}@{bp_a}–{h_b}@{bp_b}",
-            "extra_bases": eb,
-            "ag_a_fwd": ag_a_fwd, "ag_a_rev": ag_a_rev,
-            "ag_b_fwd": ag_b_fwd, "ag_b_rev": ag_b_rev,
-            "flank_a": flank_a,   "flank_b": flank_b,
-        })
+        crossovers_to_measure.append(
+            {
+                "label": f"{h_a}@{bp_a}–{h_b}@{bp_b}",
+                "extra_bases": eb,
+                "ag_a_fwd": ag_a_fwd,
+                "ag_a_rev": ag_a_rev,
+                "ag_b_fwd": ag_b_fwd,
+                "ag_b_rev": ag_b_rev,
+                "flank_a": flank_a,
+                "flank_b": flank_b,
+            }
+        )
 
     log.info("Crossovers to measure: %d", len(crossovers_to_measure))
     if not crossovers_to_measure:
@@ -274,8 +290,10 @@ def extract_local_crossover_params(
     def _center(ag_fwd, ag_rev) -> np.ndarray:
         """bp center = average of available strand C1' positions."""
         pts = []
-        if ag_fwd is not None: pts.append(ag_fwd.positions[0])
-        if ag_rev is not None: pts.append(ag_rev.positions[0])
+        if ag_fwd is not None:
+            pts.append(ag_fwd.positions[0])
+        if ag_rev is not None:
+            pts.append(ag_rev.positions[0])
         return np.mean(pts, axis=0)
 
     n_xo = len(crossovers_to_measure)
@@ -326,18 +344,24 @@ def extract_local_crossover_params(
             theta = np.array(theta_lists[i])
             all_theta.append(theta)
             ess_theta = _ess_1d(theta)
-            k_theta = _kT_kJ_MOL / np.var(theta, ddof=1) if np.var(theta) > 1e-10 else float("inf")
-            entry.update({
-                "theta_mean_deg": float(np.degrees(theta.mean())),
-                "theta_std_deg": float(np.degrees(theta.std(ddof=1))),
-                "k_dihedral_kJ_mol_rad2": float(k_theta),
-                "ESS_theta": float(ess_theta),
-            })
+            k_theta = (
+                _kT_kJ_MOL / np.var(theta, ddof=1)
+                if np.var(theta) > 1e-10
+                else float("inf")
+            )
+            entry.update(
+                {
+                    "theta_mean_deg": float(np.degrees(theta.mean())),
+                    "theta_std_deg": float(np.degrees(theta.std(ddof=1))),
+                    "k_dihedral_kJ_mol_rad2": float(k_theta),
+                    "ESS_theta": float(ess_theta),
+                }
+            )
 
         per_xo.append(entry)
 
     # ── Pooled statistics ─────────────────────────────────────────────────────
-    D = np.concatenate(all_d)         # all crossover d values pooled
+    D = np.concatenate(all_d)  # all crossover d values pooled
     r0_pooled = float(D.mean())
     k_bond_pooled = float(_kT_kJ_MOL / np.var(D, ddof=1))
     # Pooled ESS: sum of per-crossover ESS (independent crossovers)
@@ -350,12 +374,16 @@ def extract_local_crossover_params(
         THETA = np.concatenate(all_theta)
         theta_mean_deg = float(np.degrees(THETA.mean()))
         k_dihedral_pooled = float(_kT_kJ_MOL / np.var(THETA, ddof=1))
-        pooled_ess_theta = float(sum(e.get("ESS_theta", 0.0) for e in per_xo if "ESS_theta" in e))
+        pooled_ess_theta = float(
+            sum(e.get("ESS_theta", 0.0) for e in per_xo if "ESS_theta" in e)
+        )
 
     # ── Convergence check ─────────────────────────────────────────────────────
     warnings: list[str] = []
     if pooled_ess_d < 200:
-        warnings.append(f"Pooled ESS_d = {pooled_ess_d:.0f} < 200 — extend run or add crossovers.")
+        warnings.append(
+            f"Pooled ESS_d = {pooled_ess_d:.0f} < 200 — extend run or add crossovers."
+        )
     if pooled_ess_theta is not None and pooled_ess_theta < 200:
         warnings.append(f"Pooled ESS_theta = {pooled_ess_theta:.0f} < 200.")
     if n_frames < 100:
@@ -369,8 +397,10 @@ def extract_local_crossover_params(
     # indices strictly between 0 and the max bp in their helix.
     interior_indices = []
     for i, xoi in enumerate(crossovers_to_measure):
-        bps = [int(xoi["label"].split("@")[1].split("–")[0]),
-               int(xoi["label"].split("@")[2])]
+        bps = [
+            int(xoi["label"].split("@")[1].split("–")[0]),
+            int(xoi["label"].split("@")[2]),
+        ]
         # Skip if any bp is at or beyond the helix boundary (0 or max)
         # We use bp > 0 and bp < 41 as a conservative filter for 10hb (42 bp helices)
         if all(1 <= bp <= 40 for bp in bps):
@@ -385,7 +415,11 @@ def extract_local_crossover_params(
         k_bond_interior = float(_kT_kJ_MOL / np.var(D_int, ddof=1))
         pooled_ess_interior = float(sum(per_xo[i]["ESS_d"] for i in interior_indices))
     else:
-        r0_interior, k_bond_interior, pooled_ess_interior = r0_pooled, k_bond_pooled, pooled_ess_d
+        r0_interior, k_bond_interior, pooled_ess_interior = (
+            r0_pooled,
+            k_bond_pooled,
+            pooled_ess_d,
+        )
 
     # ── Determine crossover type label ────────────────────────────────────────
     eb_set = {xo["extra_bases"] for xo in crossovers_to_measure}

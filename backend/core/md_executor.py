@@ -57,6 +57,7 @@ _SKIP_SUFFIXES = {".log"}
 
 # ── Pure parsers (unit-tested directly) ───────────────────────────────────────
 
+
 def parse_sbatch_job_id(stdout: str) -> str | None:
     """Extract the numeric job id from ``Submitted batch job <id>``."""
     m = re.search(r"Submitted batch job (\d+)", stdout or "")
@@ -104,18 +105,36 @@ def parse_state_lines(text: str) -> dict[str, str]:
 
 # SLURM state code → NADOC lifecycle bucket.  Mirrors the Appendix status-code map.
 _STATE_MAP = {
-    "PD": "pending", "PENDING": "pending", "CF": "pending", "CONFIGURING": "pending",
-    "R": "running", "RUNNING": "running", "CG": "running", "COMPLETING": "running",
-    "S": "running", "SUSPENDED": "running", "RQ": "running", "REQUEUED": "pending",
-    "CD": "completed", "COMPLETED": "completed",
-    "CA": "cancelled", "CANCELLED": "cancelled",
-    "F": "failed", "FAILED": "failed",
-    "TO": "failed", "TIMEOUT": "failed",
-    "NF": "failed", "NODE_FAIL": "failed",
-    "PR": "failed", "PREEMPTED": "failed",
-    "OOM": "failed", "OUT_OF_MEMORY": "failed",
-    "BF": "failed", "BOOT_FAIL": "failed",
-    "DL": "failed", "DEADLINE": "failed",
+    "PD": "pending",
+    "PENDING": "pending",
+    "CF": "pending",
+    "CONFIGURING": "pending",
+    "R": "running",
+    "RUNNING": "running",
+    "CG": "running",
+    "COMPLETING": "running",
+    "S": "running",
+    "SUSPENDED": "running",
+    "RQ": "running",
+    "REQUEUED": "pending",
+    "CD": "completed",
+    "COMPLETED": "completed",
+    "CA": "cancelled",
+    "CANCELLED": "cancelled",
+    "F": "failed",
+    "FAILED": "failed",
+    "TO": "failed",
+    "TIMEOUT": "failed",
+    "NF": "failed",
+    "NODE_FAIL": "failed",
+    "PR": "failed",
+    "PREEMPTED": "failed",
+    "OOM": "failed",
+    "OUT_OF_MEMORY": "failed",
+    "BF": "failed",
+    "BOOT_FAIL": "failed",
+    "DL": "failed",
+    "DEADLINE": "failed",
 }
 
 
@@ -211,7 +230,11 @@ def apply_remote_progress(job: MdJob, finished: set[str], started: set[str]) -> 
             seg.status = new
             changed = True
     n_done = sum(1 for s in job.segments if s.status == "done")
-    new_idx = running_idx if running_idx is not None else min(n_done, max(len(job.segments) - 1, 0))
+    new_idx = (
+        running_idx
+        if running_idx is not None
+        else min(n_done, max(len(job.segments) - 1, 0))
+    )
     if job.current_segment_idx != new_idx:
         job.current_segment_idx = new_idx
         changed = True
@@ -239,8 +262,10 @@ def stage_plan(package_dir: Path) -> list[tuple[Path, str]]:
 
 # ── Async orchestration (drive from the main-loop async endpoints/supervisor) ──
 
+
 def _default_conn():
     from backend.core import cluster_ssh
+
     return cluster_ssh.get_manager()
 
 
@@ -261,8 +286,9 @@ def _early_stop_tier(job: MdJob) -> str:
     return t if t in ("A", "B") else "B"
 
 
-async def _stage_early_stop_evaluator(conn, remote_dir: str, workspace_dir: Path,
-                                      job: MdJob, *, tier: str) -> None:
+async def _stage_early_stop_evaluator(
+    conn, remote_dir: str, workspace_dir: Path, job: MdJob, *, tier: str
+) -> None:
     """Upload the node early-stop scripts next to the confs.
 
     Tier B: just the stdlib ``nadoc_cutoff_eval.py`` (the sbatch runs
@@ -275,8 +301,13 @@ async def _stage_early_stop_evaluator(conn, remote_dir: str, workspace_dir: Path
     from backend.core import md_health, remote_cutoff_eval, remote_health_eval
 
     async def _stage(module, remote_name):
-        await _put_text(conn, Path(module.__file__).read_text(),
-                        f"{remote_dir}/{remote_name}", workspace_dir, job)
+        await _put_text(
+            conn,
+            Path(module.__file__).read_text(),
+            f"{remote_dir}/{remote_name}",
+            workspace_dir,
+            job,
+        )
 
     await _stage(remote_cutoff_eval, EARLY_STOP_EVAL_NAME)
     if tier == "A":
@@ -300,8 +331,11 @@ async def submit_job(
     """
     conn = conn or _default_conn()
     if job.slurm_job_id:
-        logger.info("[%s] already submitted as SLURM %s; skipping re-submit",
-                    job.job_id, job.slurm_job_id)
+        logger.info(
+            "[%s] already submitted as SLURM %s; skipping re-submit",
+            job.job_id,
+            job.slurm_job_id,
+        )
         return job
 
     user = getattr(conn, "user", "") or ""
@@ -322,10 +356,15 @@ async def submit_job(
     early_stop = _early_stop_on(job, manifest)
     es_tier = _early_stop_tier(job)
     if early_stop:
-        manifest["early_stop_tier"] = es_tier          # generate_sbatch reads this
-    sbatch = generate_sbatch(manifest, profile, resources, scratch_dir,
-                             job_name=job.name_stem or job.design_name,
-                             early_stop_relax=early_stop)
+        manifest["early_stop_tier"] = es_tier  # generate_sbatch reads this
+    sbatch = generate_sbatch(
+        manifest,
+        profile,
+        resources,
+        scratch_dir,
+        job_name=job.name_stem or job.design_name,
+        early_stop_relax=early_stop,
+    )
 
     # 1) stage package → project (persistent), skipping local output/logs.
     #    NADOC's confs bake ``GPUresident on`` into the fast (HMR/4 fs) segments —
@@ -355,13 +394,20 @@ async def submit_job(
         # the question we actually care about — does this module EXIST — which is what
         # caught `namd/3.0.1_gpu` (SLURM 30948986).  A private binary is an absolute
         # path, identical from either node, so `test -x` settles it outright.
-        checks = [f"module spider {_shq(m)} >/dev/null 2>&1 || "
-                  f'{{ echo \"MISSING MODULE: {m}\"; exit 1; }}' for m in mods]
+        checks = [
+            f"module spider {_shq(m)} >/dev/null 2>&1 || "
+            f'{{ echo "MISSING MODULE: {m}"; exit 1; }}'
+            for m in mods
+        ]
         if namd_cmd.startswith("/"):
-            checks.append(f'test -x {_shq(namd_cmd)} || '
-                          f'{{ echo \"NOT EXECUTABLE: {namd_cmd}\"; exit 1; }}')
+            checks.append(
+                f"test -x {_shq(namd_cmd)} || "
+                f'{{ echo "NOT EXECUTABLE: {namd_cmd}"; exit 1; }}'
+            )
         check = await conn.run(
-            "source /etc/profile >/dev/null 2>&1; " + "; ".join(checks) + "; echo PREFLIGHT_OK"
+            "source /etc/profile >/dev/null 2>&1; "
+            + "; ".join(checks)
+            + "; echo PREFLIGHT_OK"
         )
         # Each guard ends in `exit 1`, so a failure propagates as the command's exit
         # code; the echoed marker is for the log, not the decision.
@@ -376,7 +422,9 @@ async def submit_job(
             )
 
     plan = stage_plan(package_dir)
-    logger.info("[%s] staging %d files → %s (gpu=%s)", job.job_id, len(plan), project_dir, gpu)
+    logger.info(
+        "[%s] staging %d files → %s (gpu=%s)", job.job_id, len(plan), project_dir, gpu
+    )
     await conn.mkdir_p(project_dir)
     for local_path, rel in plan:
         remote = f"{project_dir}/{rel}"
@@ -389,12 +437,20 @@ async def submit_job(
     # 1b) the node live-metrics collector — ALWAYS staged, independent of early-stop.
     #     Without it a remote run shows no speed/temp/pressure at all while it runs.
     from backend.core import remote_live_metrics  # noqa: PLC0415
-    await _put_text(conn, Path(remote_live_metrics.__file__).read_text(),
-                    f"{project_dir}/{LIVE_METRICS_NAME}", workspace_dir, job)
+
+    await _put_text(
+        conn,
+        Path(remote_live_metrics.__file__).read_text(),
+        f"{project_dir}/{LIVE_METRICS_NAME}",
+        workspace_dir,
+        job,
+    )
 
     # 1c) stage the node early-stop scripts into project (mirrored to scratch next).
     if early_stop:
-        await _stage_early_stop_evaluator(conn, project_dir, workspace_dir, job, tier=es_tier)
+        await _stage_early_stop_evaluator(
+            conn, project_dir, workspace_dir, job, tier=es_tier
+        )
 
     # 2) mirror project → scratch (two-filesystem model — jobs MUST run on scratch).
     await conn.mirror(project_dir, scratch_dir)
@@ -451,7 +507,9 @@ async def list_namd_modules(conn=None, *, compilers=("gcc/14.2.0",)) -> list[str
     if not found:
         # `spider` walks every hierarchy branch; its output is prose, but the module
         # tokens still match the same `namd/...` shape the parser looks for.
-        res = await conn.run("source /etc/profile >/dev/null 2>&1; module -t spider namd 2>&1")
+        res = await conn.run(
+            "source /etc/profile >/dev/null 2>&1; module -t spider namd 2>&1"
+        )
         found += parse_namd_modules(f"{res.stdout}\n{res.stderr}")
     return sorted(set(found))
 
@@ -534,8 +592,12 @@ def apply_live_metrics(job: MdJob, blob: str) -> bool:
 
 
 async def resume_job(
-    job: MdJob, workspace_dir: Path, *, profile: ClusterProfile,
-    resources: dict | None = None, conn=None,
+    job: MdJob,
+    workspace_dir: Path,
+    *,
+    profile: ClusterProfile,
+    resources: dict | None = None,
+    conn=None,
 ) -> MdJob:
     """Resume a timed-out remote job from its latest checkpoint (user-triggered).
 
@@ -578,21 +640,32 @@ async def resume_job(
     if interrupted is not None:
         # 3) mid-segment checkpoint? read its restart step.
         total_steps = _segment_total_steps(manifest, interrupted.name)
-        step = await _remote_restart_step(conn, scratch, interrupted.name, workspace_dir, job)
+        step = await _remote_restart_step(
+            conn, scratch, interrupted.name, workspace_dir, job
+        )
         if step and total_steps and 0 < step < total_steps:
             conf_path = package_dir / f"{interrupted.name}.conf"
             resume_text = md_protocols.build_remote_resume_conf(
-                conf_path.read_text(), segment_name=interrupted.name,
-                restart_step=step, total_steps=total_steps,
+                conf_path.read_text(),
+                segment_name=interrupted.name,
+                restart_step=step,
+                total_steps=total_steps,
                 cont_index=(job.resubmit_count or 0) + 1,
             )
             if not is_gpu_target(profile, job.resources or {}):
                 resume_text = strip_gpu_resident(resume_text)
             resume_base = f"{interrupted.name}.resume"
-            await _put_text(conn, resume_text, f"{scratch}/{resume_base}.conf", workspace_dir, job)
+            await _put_text(
+                conn, resume_text, f"{scratch}/{resume_base}.conf", workspace_dir, job
+            )
             resume_conf_for[interrupted.name] = resume_base
-            logger.info("[%s] resume seg %s from step %d/%d",
-                        job.job_id, interrupted.name, step, total_steps)
+            logger.info(
+                "[%s] resume seg %s from step %d/%d",
+                job.job_id,
+                interrupted.name,
+                step,
+                total_steps,
+            )
 
     # 4) regenerate the sbatch (skip done; resume the interrupted one) and submit.
     early_stop = _early_stop_on(job, manifest)
@@ -600,7 +673,10 @@ async def resume_job(
     if early_stop:
         manifest["early_stop_tier"] = es_tier
     sbatch = generate_sbatch(
-        manifest, profile, job.resources or {}, scratch,
+        manifest,
+        profile,
+        job.resources or {},
+        scratch,
         job_name=job.name_stem or job.design_name,
         resume_conf_for=resume_conf_for or None,
         early_stop_relax=early_stop,
@@ -609,11 +685,15 @@ async def resume_job(
     # resume conf; the original copy is normally still there, but this keeps a resumed
     # run self-consistent even if scratch was partially purged).
     if early_stop:
-        await _stage_early_stop_evaluator(conn, scratch, workspace_dir, job, tier=es_tier)
+        await _stage_early_stop_evaluator(
+            conn, scratch, workspace_dir, job, tier=es_tier
+        )
     await _put_text(conn, sbatch, f"{scratch}/{_SBATCH_NAME}", workspace_dir, job)
     res = await conn.run(f"cd {_shq(scratch)} && sbatch {_SBATCH_NAME}")
     if res.rc != 0:
-        raise RuntimeError(f"resume sbatch failed (rc={res.rc}): {res.stderr or res.stdout}")
+        raise RuntimeError(
+            f"resume sbatch failed (rc={res.rc}): {res.stderr or res.stdout}"
+        )
     slurm_id = parse_sbatch_job_id(res.stdout)
     if not slurm_id:
         raise RuntimeError(f"could not parse SLURM job id from resume: {res.stdout!r}")
@@ -628,15 +708,22 @@ async def resume_job(
     job.failure_kind = None
     job.user_stopped = False
     job.save(workspace_dir)
-    logger.info("[%s] resumed as SLURM %s (resume #%d)",
-                job.job_id, slurm_id, job.resubmit_count)
+    logger.info(
+        "[%s] resumed as SLURM %s (resume #%d)",
+        job.job_id,
+        slurm_id,
+        job.resubmit_count,
+    )
     return job
 
 
-async def _remote_restart_step(conn, scratch, seg_name, workspace_dir, job) -> int | None:
+async def _remote_restart_step(
+    conn, scratch, seg_name, workspace_dir, job
+) -> int | None:
     """Fetch the interrupted segment's ``.restart.xsc`` and read its checkpoint step,
     or None if there is no usable mid-segment checkpoint."""
     from backend.core.namd_runner import _read_xsc_step
+
     remote = f"{scratch}/output/{seg_name}.restart.xsc"
     local = job.job_dir(workspace_dir) / "_resume.xsc"
     try:
@@ -708,7 +795,9 @@ class _SkipHealth(Exception):
     """Internal: this segment's health is already recorded and final."""
 
 
-def _segment_has_trajectory(output_dir: Path, segment_name: str, job: MdJob | None = None) -> bool:
+def _segment_has_trajectory(
+    output_dir: Path, segment_name: str, job: MdJob | None = None
+) -> bool:
     """True if a segment wrote a non-trivial DCD, finished or not.
 
     ``run_health_check`` reads ``output/<segment>.dcd``, so a partial trajectory is
@@ -746,6 +835,7 @@ def _completion_checkpoint_present(job: MdJob, workspace_dir: Path) -> bool:
     if not job.segments:
         return True
     from backend.core.namd_runner import _segment_outputs_complete
+
     output_dir = job.package_dir(workspace_dir) / "output"
     return any(_segment_outputs_complete(output_dir, seg.name) for seg in job.segments)
 
@@ -799,9 +889,14 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
             logger.warning(
                 "[%s] remote job %s COMPLETED but no checkpoint restart files "
                 "downloaded — keeping re-pollable, retry %d/%d on next poll",
-                job.job_id, job.slurm_job_id, job.fetch_attempts, _MAX_FETCH_ATTEMPTS,
+                job.job_id,
+                job.slurm_job_id,
+                job.fetch_attempts,
+                _MAX_FETCH_ATTEMPTS,
             )
-            job.status = MdStatus.running   # stays is_remote_active → re-polled + re-fetched
+            job.status = (
+                MdStatus.running
+            )  # stays is_remote_active → re-polled + re-fetched
             job.error = (
                 "Completed remotely but the checkpoint restart files failed to "
                 f"download (attempt {job.fetch_attempts}/{_MAX_FETCH_ATTEMPTS}) — retrying."
@@ -819,8 +914,11 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
             "Check the SSH connection and re-run."
         )
         job.save(workspace_dir)
-        logger.info("[%s] remote job %s → failed (fetch incomplete)",
-                    job.job_id, job.slurm_job_id)
+        logger.info(
+            "[%s] remote job %s → failed (fetch incomplete)",
+            job.job_id,
+            job.slurm_job_id,
+        )
         return job
 
     # Record this finished submission so the panel's expand chevron can show the
@@ -861,7 +959,9 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
         else:
             job.error = base
     job.save(workspace_dir)
-    logger.info("[%s] remote job %s → %s", job.job_id, job.slurm_job_id, job.status.value)
+    logger.info(
+        "[%s] remote job %s → %s", job.job_id, job.slurm_job_id, job.status.value
+    )
     return job
 
 
@@ -886,8 +986,11 @@ async def poll_remote_jobs(workspace_dir: Path, *, conn=None) -> list[str]:
             if job.slurm_job_id:
                 try:
                     await cancel_job(job, conn=conn)
-                    logger.info("[%s] drained deferred scancel (SLURM %s)",
-                                job.job_id, job.slurm_job_id)
+                    logger.info(
+                        "[%s] drained deferred scancel (SLURM %s)",
+                        job.job_id,
+                        job.slurm_job_id,
+                    )
                 except Exception:  # noqa: BLE001 — one job must not kill the pass
                     logger.exception("[%s] deferred scancel failed", job.job_id)
                     continue  # keep the flag; retry next pass
@@ -907,7 +1010,10 @@ async def poll_remote_jobs(workspace_dir: Path, *, conn=None) -> list[str]:
 
 # ── local helpers ─────────────────────────────────────────────────────────────
 
-def _scan_logs_for_error(package_dir: Path) -> tuple[str | None, str | None, str | None]:
+
+def _scan_logs_for_error(
+    package_dir: Path,
+) -> tuple[str | None, str | None, str | None]:
     """Best ``(excerpt, source_filename, failure_kind)`` from a failed remote run's
     fetched logs — the human-meaningful cause behind a bare SLURM ``FAILED``.
 
@@ -949,6 +1055,7 @@ def _record_learned_throughput(job: MdJob, workspace_dir: Path) -> None:
     ns/day store, keyed by (cluster, partition, size-bucket), so future estimates for
     similar systems tighten toward reality.  Best-effort; never raises."""
     from backend.core import cluster_resources, cluster_throughput
+
     try:
         pkg = job.package_dir(workspace_dir)
         nsday = cluster_resources.latest_ns_per_day(pkg / "output" / "metrics.jsonl")
@@ -958,31 +1065,40 @@ def _record_learned_throughput(job: MdJob, workspace_dir: Path) -> None:
         n_atoms = cluster_resources.n_atoms_from_manifest(manifest)
         partition = (job.resources or {}).get("partition", "")
         cluster_throughput.record_throughput(
-            workspace_dir, cluster=job.cluster_name or "", partition=partition,
-            n_atoms=n_atoms, ns_per_day=nsday,
+            workspace_dir,
+            cluster=job.cluster_name or "",
+            partition=partition,
+            n_atoms=n_atoms,
+            ns_per_day=nsday,
         )
     except Exception:  # noqa: BLE001 — learning must not break job completion
-        logger.warning("[%s] learned-throughput record failed", job.job_id, exc_info=True)
+        logger.warning(
+            "[%s] learned-throughput record failed", job.job_id, exc_info=True
+        )
 
 
 def _append_history(job: MdJob, state: str) -> None:
     """Record a finished remote submission on the job so the panel's expand chevron can
     show the full resumption chain (original + each resume)."""
     import time
+
     n = len(job.segments)
     job.resume_history = list(job.resume_history or [])
-    job.resume_history.append({
-        "slurm_job_id": job.slurm_job_id,
-        "state": state,
-        "segment_reached": min(job.current_segment_idx + 1, n) if n else 0,
-        "segments_total": n,
-        "walltime": (job.resources or {}).get("walltime"),
-        "at": time.time(),
-    })
+    job.resume_history.append(
+        {
+            "slurm_job_id": job.slurm_job_id,
+            "state": state,
+            "segment_reached": min(job.current_segment_idx + 1, n) if n else 0,
+            "segments_total": n,
+            "walltime": (job.resources or {}).get("walltime"),
+            "at": time.time(),
+        }
+    )
 
 
 def _read_manifest(package_dir: Path) -> dict:
     import json
+
     return json.loads((Path(package_dir) / "manifest.json").read_text())
 
 
@@ -990,7 +1106,9 @@ def _shq(path: str) -> str:
     return "'" + path.replace("'", "'\\''") + "'"
 
 
-async def _put_text(conn, text: str, remote_path: str, workspace_dir: Path, job: MdJob) -> None:
+async def _put_text(
+    conn, text: str, remote_path: str, workspace_dir: Path, job: MdJob
+) -> None:
     """Upload an in-memory string as a remote file via a scratch tempfile."""
     tmp = job.job_dir(workspace_dir) / "_upload.tmp"
     tmp.write_text(text)
@@ -1073,17 +1191,21 @@ def _finalize_local_bookkeeping(job: MdJob, workspace_dir: Path) -> None:
             if complete and _jsonl_has_segment(health_path, seg.name):
                 raise _SkipHealth
             hres = run_health_check(
-                package_dir, seg.name, job.name_stem,
+                package_dir,
+                seg.name,
+                job.name_stem,
                 min_c1_paired=spec.min_c1_paired,
                 min_wc_ref_relative=spec.min_wc_ref_relative,
             )
             append_health_jsonl(output_dir, seg.name, seg.stage, hres)
             sample = MdHealthSample.from_result(
-                hres, seg.stage, seg.name, blocking=hres.blocking)
+                hres, seg.stage, seg.name, blocking=hres.blocking
+            )
             # Replace an earlier partial sample for the same segment rather than
             # appending a second one, or a long run accretes duplicates.
-            job.health_samples = [h for h in job.health_samples
-                                  if getattr(h, "segment", None) != seg.name]
+            job.health_samples = [
+                h for h in job.health_samples if getattr(h, "segment", None) != seg.name
+            ]
             job.health_samples.append(sample)
         except _SkipHealth:
             pass

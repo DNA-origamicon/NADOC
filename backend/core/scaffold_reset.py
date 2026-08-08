@@ -44,7 +44,13 @@ import math
 
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (
-    Design, Direction, Domain, Helix, Strand, StrandType, Vec3,
+    Design,
+    Direction,
+    Domain,
+    Helix,
+    Strand,
+    StrandType,
+    Vec3,
 )
 from backend.core.scaffold_invariants import _staple_coverage
 
@@ -87,8 +93,8 @@ def _snap_to_interval(lo: int, hi: int, intervals: list[tuple[int, int]]):
         ov = min(hi, ihi) - max(lo, ilo) + 1
         if ov > best_ov:
             best, best_ov = (ilo, ihi), ov
-    if best is None:                     # no overlap at all (e.g. a domain wholly in
-        return None                      # a gap) — caller decides what to do
+    if best is None:  # no overlap at all (e.g. a domain wholly in
+        return None  # a gap) — caller decides what to do
     return max(lo, best[0]), min(hi, best[1])
 
 
@@ -117,20 +123,24 @@ def _set_helix_extent(helix: Helix, lo: int, hi: int) -> Helix:
 
     cur_lo = helix.bp_start
     cur_hi = helix.bp_start + helix.length_bp - 1
-    d_lo = lo - cur_lo          # >0 shrink from the lo end, <0 grow
-    d_hi = cur_hi - hi          # >0 shrink from the hi end, <0 grow
+    d_lo = lo - cur_lo  # >0 shrink from the lo end, <0 grow
+    d_hi = cur_hi - hi  # >0 shrink from the hi end, <0 grow
     if d_lo == 0 and d_hi == 0:
         return helix
 
-    return helix.model_copy(update={
-        "axis_start":   Vec3.from_array(
-            helix.axis_start.to_array() + d_lo * BDNA_RISE_PER_BP * unit),
-        "axis_end":     Vec3.from_array(
-            helix.axis_end.to_array() - d_hi * BDNA_RISE_PER_BP * unit),
-        "bp_start":     lo,
-        "length_bp":    hi - lo + 1,
-        "phase_offset": helix.phase_offset + d_lo * helix.twist_per_bp_rad,
-    })
+    return helix.model_copy(
+        update={
+            "axis_start": Vec3.from_array(
+                helix.axis_start.to_array() + d_lo * BDNA_RISE_PER_BP * unit
+            ),
+            "axis_end": Vec3.from_array(
+                helix.axis_end.to_array() - d_hi * BDNA_RISE_PER_BP * unit
+            ),
+            "bp_start": lo,
+            "length_bp": hi - lo + 1,
+            "phase_offset": helix.phase_offset + d_lo * helix.twist_per_bp_rad,
+        }
+    )
 
 
 # Every ``process_id`` an autoscaffold route stamps on a crossover it creates.
@@ -171,7 +181,7 @@ def reset_scaffold_to_structure(design: Design) -> tuple[Design, list[str]]:
     intervals = structural_intervals(design)
     extents = structural_extents(design)
     if not extents:
-        return design, warnings          # no staples anywhere → nothing to anchor to
+        return design, warnings  # no staples anywhere → nothing to anchor to
 
     # 1. Helices: re-cut to the staple span (skip any helix with no staples).
     new_helices, retracted = [], 0
@@ -217,7 +227,8 @@ def reset_scaffold_to_structure(design: Design) -> tuple[Design, list[str]]:
         for dom in s.domains:
             scaf_dir.setdefault(dom.helix_id, dom.direction)
             scaf_cov.setdefault(dom.helix_id, []).append(
-                (min(dom.start_bp, dom.end_bp), max(dom.start_bp, dom.end_bp)))
+                (min(dom.start_bp, dom.end_bp), max(dom.start_bp, dom.end_bp))
+            )
 
     def _touches_reset_helix(strand) -> bool:
         return any(dom.helix_id in intervals for dom in strand.domains)
@@ -226,31 +237,43 @@ def reset_scaffold_to_structure(design: Design) -> tuple[Design, list[str]]:
     for s in design.strands:
         # Staples ARE the structure — never touched.  A scaffold strand on a helix we
         # are not resetting (no staples → extent undefined) is likewise left alone.
-        if s.is_reference or s.strand_type != StrandType.SCAFFOLD or not _touches_reset_helix(s):
+        if (
+            s.is_reference
+            or s.strand_type != StrandType.SCAFFOLD
+            or not _touches_reset_helix(s)
+        ):
             new_strands.append(s)
 
     for h in design.helices:
         ivs = intervals.get(h.id)
         direction = scaf_dir.get(h.id)
         if ivs is None or direction is None:
-            continue                     # no staples, or no scaffold on this helix
+            continue  # no staples, or no scaffold on this helix
         for i, (ilo, ihi) in enumerate(ivs):
             # The scaffold's OWN reach inside this staple interval.  A routed helix has
             # two domains here (split at the seam, e.g. (0,81) + (82,167)); they are
             # adjacent, so their union heals the split back into one seed domain.
             reach = [(lo, hi) for lo, hi in scaf_cov[h.id] if lo <= ihi and hi >= ilo]
             if not reach:
-                continue                 # no scaffold in this section — nothing to seed
+                continue  # no scaffold in this section — nothing to seed
             lo = max(ilo, min(r[0] for r in reach))
             hi = min(ihi, max(r[1] for r in reach))
             # Convention (lattice.make_bundle_design): start_bp = 5' end, end_bp = 3'.
             start, end = (lo, hi) if direction == Direction.FORWARD else (hi, lo)
-            new_strands.append(Strand(
-                id=f"scaf_seed_{h.id}_{i}",
-                domains=[Domain(helix_id=h.id, start_bp=start, end_bp=end,
-                                direction=direction)],
-                strand_type=StrandType.SCAFFOLD,
-            ))
+            new_strands.append(
+                Strand(
+                    id=f"scaf_seed_{h.id}_{i}",
+                    domains=[
+                        Domain(
+                            helix_id=h.id,
+                            start_bp=start,
+                            end_bp=end,
+                            direction=direction,
+                        )
+                    ],
+                    strand_type=StrandType.SCAFFOLD,
+                )
+            )
             seeds += 1
 
     # 3. Drop the prior route's own crossovers (manual ones are kept).

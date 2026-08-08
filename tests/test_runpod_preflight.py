@@ -29,8 +29,11 @@ NO_STOCK = {
 
 def _ok(**over):
     kw = dict(
-        connected=True, network_volume_id=VOLUME, ssh_key_present=True,
-        stock=GOOD_STOCK, n_atoms=SIXHB,
+        connected=True,
+        network_volume_id=VOLUME,
+        ssh_key_present=True,
+        stock=GOOD_STOCK,
+        n_atoms=SIXHB,
     )
     kw.update(over)
     return pf.evaluate(**kw)
@@ -47,7 +50,7 @@ class TestGpuTable:
         """
         assert GPU_TYPES[0].label == "RTX 4090"
         assert GPU_TYPES[0].usd_per_hour == 0.69
-        assert GPU_TYPES[1].label == "RTX PRO 4500"   # the fallback that is always there
+        assert GPU_TYPES[1].label == "RTX PRO 4500"  # the fallback that is always there
         assert GPU_TYPES[1].vram_mb > GPU_TYPES[0].vram_mb
 
     def test_every_offered_card_is_an_arch_the_binary_can_run(self):
@@ -73,7 +76,12 @@ class TestHappyPath:
         pre = _ok()
         assert pre.ok is True
         assert [c.key for c in pre.checks] == [
-            "api_key", "volume", "ssh_key", "namd_arch", "gpu_stock", "sizing",
+            "api_key",
+            "volume",
+            "ssh_key",
+            "namd_arch",
+            "gpu_stock",
+            "sizing",
         ]
         assert pf.blocking_reason(pre) == ""
 
@@ -133,8 +141,11 @@ class TestEachFailureBlocks:
         """
         bad = (GpuType("NVIDIA B200", "B200", 183_000, 5.89, "sm_100"),)
         pre = pf.evaluate(
-            connected=True, network_volume_id=VOLUME, ssh_key_present=True,
-            stock={"NVIDIA B200": {"stock": "High"}}, allowed=bad,
+            connected=True,
+            network_volume_id=VOLUME,
+            ssh_key_present=True,
+            stock={"NVIDIA B200": {"stock": "High"}},
+            allowed=bad,
         )
         assert not pre.ok
         assert "cannot run" in pf.blocking_reason(pre)
@@ -146,8 +157,11 @@ class TestEachFailureBlocks:
 
     def test_every_failure_is_named_in_the_blocking_reason(self):
         pre = pf.evaluate(
-            connected=False, network_volume_id=None, ssh_key_present=False,
-            stock=None, n_atoms=SIXHB,
+            connected=False,
+            network_volume_id=None,
+            ssh_key_present=False,
+            stock=None,
+            n_atoms=SIXHB,
         )
         reason = pf.blocking_reason(pre)
         for word in ("API key", "Network volume", "SSH key", "GPU availability"):
@@ -156,12 +170,22 @@ class TestEachFailureBlocks:
 
 class TestStockFetch:
     def test_parses_graphql_stock(self):
-        payload = {"data": {"gpuTypes": [
-            {"id": "NVIDIA GeForce RTX 4090", "displayName": "RTX 4090",
-             "memoryInGb": 24,
-             "lowestPrice": {"stockStatus": "Low", "uninterruptablePrice": 0.34,
-                             "minimumBidPrice": 0.34}},
-        ]}}
+        payload = {
+            "data": {
+                "gpuTypes": [
+                    {
+                        "id": "NVIDIA GeForce RTX 4090",
+                        "displayName": "RTX 4090",
+                        "memoryInGb": 24,
+                        "lowestPrice": {
+                            "stockStatus": "Low",
+                            "uninterruptablePrice": 0.34,
+                            "minimumBidPrice": 0.34,
+                        },
+                    },
+                ]
+            }
+        }
         transport = httpx.MockTransport(lambda r: httpx.Response(200, json=payload))
         stock = asyncio.run(pf.fetch_gpu_stock("k", transport=transport))
         assert stock["NVIDIA GeForce RTX 4090"]["stock"] == "Low"
@@ -177,7 +201,9 @@ class TestStockFetch:
             seen["ua"] = req.headers.get("user-agent", "")
             return httpx.Response(200, json={"data": {"gpuTypes": []}})
 
-        asyncio.run(pf.fetch_gpu_stock("SECRET", transport=httpx.MockTransport(handler)))
+        asyncio.run(
+            pf.fetch_gpu_stock("SECRET", transport=httpx.MockTransport(handler))
+        )
         assert "api_key=SECRET" in seen["url"]
         assert "Mozilla" in seen["ua"]
 
@@ -191,7 +217,9 @@ class TestBalanceFetch:
     lives only on the legacy GraphQL API — same key-as-query-param quirk as stock."""
 
     def test_reads_the_balance(self):
-        payload = {"data": {"myself": {"clientBalance": 207.0, "currentSpendPerHr": 0.34}}}
+        payload = {
+            "data": {"myself": {"clientBalance": 207.0, "currentSpendPerHr": 0.34}}
+        }
         transport = httpx.MockTransport(lambda r: httpx.Response(200, json=payload))
         got = asyncio.run(pf.fetch_balance("k", transport=transport))
         assert got == {"available": True, "balance": 207.0, "spend_per_hr": 0.34}

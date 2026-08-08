@@ -51,14 +51,17 @@ class TestApplyXform:
             xf = _xform(rng)
             pts = rng.normal(size=(50, 3)) * 3.0
             expected = (pts - xf.mob_c) @ xf.R.T + xf.eq_centroid
-            np.testing.assert_allclose(apply_xform(pts, xf), expected, rtol=0, atol=1e-12)
+            np.testing.assert_allclose(
+                apply_xform(pts, xf), expected, rtol=0, atol=1e-12
+            )
 
     def test_no_rotation_is_a_pure_translation(self):
         rng = np.random.default_rng(7)
         xf = _xform(rng, with_rotation=False)
         pts = rng.normal(size=(10, 3))
-        np.testing.assert_allclose(apply_xform(pts, xf), pts - xf.mob_c + xf.eq_centroid,
-                                   rtol=0, atol=1e-12)
+        np.testing.assert_allclose(
+            apply_xform(pts, xf), pts - xf.mob_c + xf.eq_centroid, rtol=0, atol=1e-12
+        )
 
     def test_identity_transform_is_a_no_op(self):
         xf = DisplayXform.build(T_dyn=None, c_box=None, box_nm=(0, 0, 0))
@@ -82,17 +85,21 @@ class TestApplyXform:
         offsets *= (shell * 0.9) / np.linalg.norm(offsets, axis=1, keepdims=True)
         waters = anchors + offsets
 
-        d_display = np.linalg.norm(apply_xform(waters, xf) - apply_xform(anchors, xf), axis=1)
-        np.testing.assert_allclose(d_display, np.linalg.norm(offsets, axis=1),
-                                   rtol=0, atol=1e-12)
+        d_display = np.linalg.norm(
+            apply_xform(waters, xf) - apply_xform(anchors, xf), axis=1
+        )
+        np.testing.assert_allclose(
+            d_display, np.linalg.norm(offsets, axis=1), rtol=0, atol=1e-12
+        )
         assert (d_display <= shell + 1e-9).all()
 
 
 class TestMinImage:
     def test_folds_a_full_box_displacement_to_zero(self):
         box = np.array([4.0, 5.0, 6.0])
-        np.testing.assert_allclose(min_image(np.array([[4.0, 5.0, 6.0]]), box),
-                                   [[0.0, 0.0, 0.0]], atol=1e-12)
+        np.testing.assert_allclose(
+            min_image(np.array([[4.0, 5.0, 6.0]]), box), [[0.0, 0.0, 0.0]], atol=1e-12
+        )
 
     def test_leaves_a_short_displacement_alone(self):
         box = np.array([4.0, 5.0, 6.0])
@@ -129,7 +136,9 @@ class TestBoxCorners:
         np.testing.assert_allclose(
             c.mean(axis=0),
             apply_xform((xf.c_box + xf.T_dyn)[None, :], xf)[0],
-            rtol=0, atol=1e-10)
+            rtol=0,
+            atol=1e-10,
+        )
 
     def test_edge_lengths_are_the_cell_lengths(self):
         rng = np.random.default_rng(12)
@@ -139,8 +148,9 @@ class TestBoxCorners:
         # Each edge joins corners differing in one bit; that bit names the axis.
         for a, b in BOX_EDGES:
             axis = int(np.log2((a ^ b)))
-            np.testing.assert_allclose(np.linalg.norm(c[b] - c[a]), box[axis],
-                                       rtol=0, atol=1e-10)
+            np.testing.assert_allclose(
+                np.linalg.norm(c[b] - c[a]), box[axis], rtol=0, atol=1e-10
+            )
 
     def test_twelve_edges_each_differing_in_exactly_one_bit(self):
         assert len(BOX_EDGES) == 12
@@ -162,10 +172,17 @@ class TestBoxCorners:
         rng = np.random.default_rng(14)
         small = _xform(rng, box=(4.0, 5.0, 6.0))
         big = DisplayXform.build(
-            T_dyn=small.T_dyn, c_box=small.c_box, box_nm=(8.0, 10.0, 12.0),
-            mob_c=small.mob_c, eq_centroid=small.eq_centroid, R=small.R)
+            T_dyn=small.T_dyn,
+            c_box=small.c_box,
+            box_nm=(8.0, 10.0, 12.0),
+            mob_c=small.mob_c,
+            eq_centroid=small.eq_centroid,
+            R=small.R,
+        )
         a, b = box_corners(small), box_corners(big)
-        assert np.linalg.norm(b[7] - b[0]) == pytest.approx(2 * np.linalg.norm(a[7] - a[0]))
+        assert np.linalg.norm(b[7] - b[0]) == pytest.approx(
+            2 * np.linalg.norm(a[7] - a[0])
+        )
 
     def test_no_box_yields_no_corners(self):
         xf = DisplayXform.build(T_dyn=None, c_box=None, box_nm=(0.0, 0.0, 0.0))

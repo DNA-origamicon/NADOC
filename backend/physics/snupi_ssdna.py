@@ -52,6 +52,7 @@ NtKey = Tuple[str, int, str]
 @dataclass(frozen=True)
 class SSAnchor:
     """A meshed duplex base pair that an ssDNA run hangs from / bridges to."""
+
     helix_id: str
     bp: int
 
@@ -59,12 +60,13 @@ class SSAnchor:
 @dataclass
 class SSRun:
     """One maximal run of consecutive single-stranded nucleotides along a strand path."""
-    kind: str                       # "bridge" | "tail" | "free"
+
+    kind: str  # "bridge" | "tail" | "free"
     strand_id: str
     strand_type: str
-    nts: List[NtKey]                # 5'→3' order
-    anchor_5: Optional[SSAnchor]    # meshed duplex bp immediately 5' of the run
-    anchor_3: Optional[SSAnchor]    # meshed duplex bp immediately 3' of the run
+    nts: List[NtKey]  # 5'→3' order
+    anchor_5: Optional[SSAnchor]  # meshed duplex bp immediately 5' of the run
+    anchor_3: Optional[SSAnchor]  # meshed duplex bp immediately 3' of the run
     overhang_ids: Tuple[str, ...] = ()
 
     @property
@@ -167,17 +169,21 @@ def classify_ssdna_runs(design: Design) -> List[SSRun]:
                 h, bp, _ = path[j][0]
                 a3 = SSAnchor(helix_id=h, bp=bp)
             n_anchors = (a5 is not None) + (a3 is not None)
-            kind = "bridge" if n_anchors == 2 else ("tail" if n_anchors == 1 else "free")
+            kind = (
+                "bridge" if n_anchors == 2 else ("tail" if n_anchors == 1 else "free")
+            )
             ohs = tuple(sorted({oh for _, oh in path[i:j] if oh}))
-            runs.append(SSRun(
-                kind=kind,
-                strand_id=strand.id,
-                strand_type=strand.strand_type.value,
-                nts=[k for k, _ in path[i:j]],
-                anchor_5=a5,
-                anchor_3=a3,
-                overhang_ids=ohs,
-            ))
+            runs.append(
+                SSRun(
+                    kind=kind,
+                    strand_id=strand.id,
+                    strand_type=strand.strand_type.value,
+                    nts=[k for k, _ in path[i:j]],
+                    anchor_5=a5,
+                    anchor_3=a3,
+                    overhang_ids=ohs,
+                )
+            )
             i = j
 
     return runs
@@ -186,6 +192,7 @@ def classify_ssdna_runs(design: Design) -> List[SSRun]:
 @dataclass
 class SSInventory:
     """Summary counts for one design — what the SS-0 audit reports."""
+
     n_helices: int = 0
     n_meshed_helices: int = 0
     n_nodes: int = 0
@@ -197,7 +204,11 @@ class SSInventory:
 
     def bridges(self, bridge_kind: Optional[str] = None) -> List[SSRun]:
         rs = self.of_kind("bridge")
-        return rs if bridge_kind is None else [r for r in rs if r.bridge_kind == bridge_kind]
+        return (
+            rs
+            if bridge_kind is None
+            else [r for r in rs if r.bridge_kind == bridge_kind]
+        )
 
     def tails(self, *, overhang: Optional[bool] = None) -> List[SSRun]:
         rs = self.of_kind("tail")

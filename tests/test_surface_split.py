@@ -4,6 +4,7 @@ compute_split_surfaces_from_cloud builds a SEPARATE solvent-excluded surface per
 adjacent strands are distinct geometry with a real gap between them (vs one fused blob).  These
 use tiny synthetic point clouds so they stay in the fast suite.
 """
+
 import numpy as np
 from scipy.spatial import cKDTree
 
@@ -20,13 +21,14 @@ def _blob(center, n=3, spacing=0.3):
 
 def test_two_separated_strands_give_two_disconnected_coloured_surfaces():
     a = _blob([0.0, 0.0, 0.0])
-    b = _blob([4.0, 0.0, 0.0])                    # 4 nm apart — clearly separate
+    b = _blob([4.0, 0.0, 0.0])  # 4 nm apart — clearly separate
     positions = np.vstack([a, b])
-    radii = np.full(len(positions), 0.17)         # carbon-ish
+    radii = np.full(len(positions), 0.17)  # carbon-ish
     strand_ids = ["A"] * len(a) + ["B"] * len(b)
 
-    mesh = compute_split_surfaces_from_cloud(positions, radii, strand_ids,
-                                             grid_spacing=0.1, smooth=2)
+    mesh = compute_split_surfaces_from_cloud(
+        positions, radii, strand_ids, grid_spacing=0.1, smooth=2
+    )
 
     # Each strand contributes its own vertices, tagged with its id.
     assert set(mesh.vertex_strand_ids) == {"A", "B"}
@@ -45,15 +47,18 @@ def test_face_indices_are_offset_per_part_and_in_range():
     positions = np.vstack([_blob([0.0, 0.0, 0.0]), _blob([4.0, 0.0, 0.0])])
     radii = np.full(len(positions), 0.17)
     strand_ids = ["A"] * 27 + ["B"] * 27
-    mesh = compute_split_surfaces_from_cloud(positions, radii, strand_ids,
-                                             grid_spacing=0.1, smooth=0)
+    mesh = compute_split_surfaces_from_cloud(
+        positions, radii, strand_ids, grid_spacing=0.1, smooth=0
+    )
     # Concatenation must offset each part's face indices into the combined vertex array.
     assert mesh.faces.min() >= 0
     assert mesh.faces.max() < mesh.vertices.shape[0]
     # Every face's three vertices belong to ONE strand (no cross-strand triangle).
     sid = np.asarray(mesh.vertex_strand_ids)
     tri_sid = sid[mesh.faces]
-    assert np.all(tri_sid[:, 0] == tri_sid[:, 1]) and np.all(tri_sid[:, 1] == tri_sid[:, 2])
+    assert np.all(tri_sid[:, 0] == tri_sid[:, 1]) and np.all(
+        tri_sid[:, 1] == tri_sid[:, 2]
+    )
 
 
 def test_empty_cloud_returns_empty_mesh():

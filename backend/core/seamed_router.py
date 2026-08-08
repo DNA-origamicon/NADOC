@@ -38,10 +38,13 @@ from backend.core.models import (
 
 # Bow-right offset sets for scaffold crossovers (bp % period ∈ set → bow-right).
 _HC_SCAF_BOW_RIGHT: frozenset[int] = frozenset({2, 5, 9, 12, 16, 19})
-_SQ_SCAF_BOW_RIGHT: frozenset[int] = frozenset({0, 3, 5, 8, 11, 13, 16, 19, 21, 24, 27, 29})
+_SQ_SCAF_BOW_RIGHT: frozenset[int] = frozenset(
+    {0, 3, 5, 8, 11, 13, 16, 19, 21, 24, 27, 29}
+)
 
 
 # ── Low-level helpers ─────────────────────────────────────────────────────────
+
 
 def _active_scaffolds(design: Design) -> list[Strand]:
     """Non-reference scaffold strands. Reference geometry is excluded from routing."""
@@ -106,8 +109,11 @@ def _scaffold_coverage_excluding(
 
     raw: dict[str, list[tuple[int, int]]] = {}
     for s in design.strands:
-        if (s.strand_type != StrandType.SCAFFOLD or s.is_reference
-                or s.id in excluded_strand_ids):
+        if (
+            s.strand_type != StrandType.SCAFFOLD
+            or s.is_reference
+            or s.id in excluded_strand_ids
+        ):
             continue
         for dom in s.domains:
             lo = min(dom.start_bp, dom.end_bp)
@@ -132,7 +138,8 @@ def _scaffold_coverage_excluding(
 def _intersect(cA: list[dict], cB: list[dict]) -> list[dict]:
     return [
         {"lo": max(a["lo"], b["lo"]), "hi": min(a["hi"], b["hi"])}
-        for a in cA for b in cB
+        for a in cA
+        for b in cB
         if max(a["lo"], b["lo"]) <= min(a["hi"], b["hi"])
     ]
 
@@ -162,8 +169,7 @@ def _build_adj(
 ) -> dict[str, set[str]]:
     """Undirected scaffold adjacency: edge when a valid scaffold xover bp exists."""
     scaf_helices = [
-        h for h in design.helices
-        if h.id in coverage and h.grid_pos is not None
+        h for h in design.helices if h.id in coverage and h.grid_pos is not None
     ]
     adj: dict[str, set[str]] = {h.id: set() for h in scaf_helices}
     for i, hA in enumerate(scaf_helices):
@@ -234,7 +240,8 @@ def _ham_path_search(
             x = stack.pop()
             for nb in adj[x]:
                 if nb in rem and nb not in seen:
-                    seen.add(nb); stack.append(nb)
+                    seen.add(nb)
+                    stack.append(nb)
         if seen != rem:
             return False
         if len(rem) == 1:
@@ -256,7 +263,8 @@ def _ham_path_search(
         budget[0] -= 1
         if budget[0] <= 0:
             return False
-        vis.add(node); path.append(node)
+        vis.add(node)
+        path.append(node)
         if len(path) == n:
             return True
         if _can_complete(node):
@@ -265,13 +273,15 @@ def _ham_path_search(
                     break
                 if dfs(nb):
                     return True
-        vis.discard(node); path.pop()
+        vis.discard(node)
+        path.pop()
         return False
 
     for s in starters:
         if budget[0] <= 0:
             break
-        vis.clear(); path.clear()
+        vis.clear()
+        path.clear()
         if dfs(s):
             return list(path)
     return None
@@ -295,8 +305,11 @@ def _hamiltonian_path(
     # applied to BOTH the starter sort and the neighbor key.  TOPOLOGY-SENSITIVE.
     key = lambda n: (len(adj[n]), n)  # noqa: E731
     ordered = sorted(ids, key=key)
-    starters = ([start_from] + [n for n in ordered if n != start_from]
-                if start_from is not None else ordered)
+    starters = (
+        [start_from] + [n for n in ordered if n != start_from]
+        if start_from is not None
+        else ordered
+    )
     return _ham_path_search(ids, adj, key, starters)
 
 
@@ -329,9 +342,11 @@ def _nick_if_needed(
     there is nothing for the scaffold router to break).
     """
     from backend.core.lattice import _find_strand_at, make_nick
+
     try:
-        strand, di = _find_strand_at(design, helix_id, bp_index, direction,
-                                     predicate=is_routable_scaffold)
+        strand, di = _find_strand_at(
+            design, helix_id, bp_index, direction, predicate=is_routable_scaffold
+        )
     except ValueError:
         return design
     dom = strand.domains[di]
@@ -341,15 +356,15 @@ def _nick_if_needed(
     if di == 0 and bp_index == dom.start_bp:
         return design  # 1-nt left stub guard
     if di == n - 1:
-        stub = (
-            (direction == Direction.FORWARD and bp_index == dom.end_bp - 1) or
-            (direction == Direction.REVERSE and bp_index == dom.end_bp + 1)
+        stub = (direction == Direction.FORWARD and bp_index == dom.end_bp - 1) or (
+            direction == Direction.REVERSE and bp_index == dom.end_bp + 1
         )
         if stub:
             return design  # 1-nt right stub guard
     try:
-        return make_nick(design, helix_id, bp_index, direction,
-                         predicate=is_routable_scaffold)
+        return make_nick(
+            design, helix_id, bp_index, direction, predicate=is_routable_scaffold
+        )
     except ValueError as exc:
         if "terminus" in str(exc):
             return design
@@ -364,6 +379,7 @@ def _ligate_xover(design: Design, xover: Crossover) -> Design:
     half got fused into the scaffold.
     """
     from backend.core.lattice import _ligate
+
     ha, hb = xover.half_a, xover.half_b
     three_p: dict = {}
     five_p: dict = {}
@@ -417,14 +433,20 @@ def _extend_helix_lo(
     ax = helix.axis_end.to_array() - helix.axis_start.to_array()
     ax_len = float(math.sqrt(float((ax * ax).sum())))
     unit = ax / ax_len if ax_len > 1e-9 else [0.0, 0.0, 1.0]
-    updated = helix.model_copy(update={
-        "axis_start":   Vec3.from_array(helix.axis_start.to_array() - extra * BDNA_RISE_PER_BP * unit),
-        "length_bp":    helix.length_bp + extra,
-        "bp_start":     new_lo,
-        "phase_offset": helix.phase_offset - extra * helix.twist_per_bp_rad,
-    })
+    updated = helix.model_copy(
+        update={
+            "axis_start": Vec3.from_array(
+                helix.axis_start.to_array() - extra * BDNA_RISE_PER_BP * unit
+            ),
+            "length_bp": helix.length_bp + extra,
+            "bp_start": new_lo,
+            "phase_offset": helix.phase_offset - extra * helix.twist_per_bp_rad,
+        }
+    )
     helix_by_id[hid] = updated
-    return design.copy_with(helices=[updated if h.id == hid else h for h in design.helices])
+    return design.copy_with(
+        helices=[updated if h.id == hid else h for h in design.helices]
+    )
 
 
 def _extend_helix_hi(
@@ -441,12 +463,18 @@ def _extend_helix_hi(
     ax = helix.axis_end.to_array() - helix.axis_start.to_array()
     ax_len = float(math.sqrt(float((ax * ax).sum())))
     unit = ax / ax_len if ax_len > 1e-9 else [0.0, 0.0, 1.0]
-    updated = helix.model_copy(update={
-        "axis_end":  Vec3.from_array(helix.axis_end.to_array() + extra * BDNA_RISE_PER_BP * unit),
-        "length_bp": helix.length_bp + extra,
-    })
+    updated = helix.model_copy(
+        update={
+            "axis_end": Vec3.from_array(
+                helix.axis_end.to_array() + extra * BDNA_RISE_PER_BP * unit
+            ),
+            "length_bp": helix.length_bp + extra,
+        }
+    )
     helix_by_id[hid] = updated
-    return design.copy_with(helices=[updated if h.id == hid else h for h in design.helices])
+    return design.copy_with(
+        helices=[updated if h.id == hid else h for h in design.helices]
+    )
 
 
 def _extend_scaf_domain_lo(
@@ -461,9 +489,11 @@ def _extend_scaf_domain_lo(
                 continue
             if min(dom.start_bp, dom.end_bp) <= new_lo:
                 return design
-            new_dom = (dom.model_copy(update={"start_bp": new_lo})
-                       if dom.direction == Direction.FORWARD
-                       else dom.model_copy(update={"end_bp": new_lo}))
+            new_dom = (
+                dom.model_copy(update={"start_bp": new_lo})
+                if dom.direction == Direction.FORWARD
+                else dom.model_copy(update={"end_bp": new_lo})
+            )
             new_doms = list(strand.domains)
             new_doms[di] = new_dom
             new_strand = strand.model_copy(update={"domains": new_doms})
@@ -485,9 +515,11 @@ def _extend_scaf_domain_hi(
                 continue
             if max(dom.start_bp, dom.end_bp) >= new_hi:
                 return design
-            new_dom = (dom.model_copy(update={"end_bp": new_hi})
-                       if dom.direction == Direction.FORWARD
-                       else dom.model_copy(update={"start_bp": new_hi}))
+            new_dom = (
+                dom.model_copy(update={"end_bp": new_hi})
+                if dom.direction == Direction.FORWARD
+                else dom.model_copy(update={"start_bp": new_hi})
+            )
             new_doms = list(strand.domains)
             new_doms[di] = new_dom
             new_strand = strand.model_copy(update={"domains": new_doms})
@@ -499,6 +531,7 @@ def _extend_scaf_domain_hi(
 
 # ── Result dataclass ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class SeamedResult:
     warnings: list[str] = field(default_factory=list)
@@ -508,6 +541,7 @@ class SeamedResult:
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
+
 
 def _auto_scaffold_seamed_impl(
     design: Design, *, matched_ends: bool = False, bounded_ends: bool = False
@@ -577,12 +611,13 @@ def _auto_scaffold_seamed_impl(
             nid = stack.pop()
             if nid in visited:
                 continue
-            visited.add(nid); comp.append(nid)
+            visited.add(nid)
+            comp.append(nid)
             stack.extend(adj[nid] - visited)
         components.append(comp)
 
     # ── Build seam and near-end pairs from Hamiltonian path ──────────────────
-    seam_pairs:     list[tuple[str, str]] = []
+    seam_pairs: list[tuple[str, str]] = []
     near_end_pairs: list[tuple[str, str]] = []
 
     for comp in components:
@@ -594,7 +629,7 @@ def _auto_scaffold_seamed_impl(
 
         def cov_sig(hid: str) -> str:
             ivs = sorted(coverage[hid], key=lambda iv: iv["lo"])
-            return "|".join(f'{iv["lo"]}:{iv["hi"]}' for iv in ivs)
+            return "|".join(f"{iv['lo']}:{iv['hi']}" for iv in ivs)
 
         sig_map: dict[str, list[str]] = {}
         for hid in comp:
@@ -613,20 +648,16 @@ def _auto_scaffold_seamed_impl(
                 return sum(iv["hi"] - iv["lo"] + 1 for iv in coverage[g[0]])
 
             groups.sort(key=grp_bp)
-            local_adjs = [
-                {gid: adj[gid] & set(grp) for gid in grp}
-                for grp in groups
-            ]
+            local_adjs = [{gid: adj[gid] & set(grp) for gid in grp} for grp in groups]
             path = _hamiltonian_path(groups[0], local_adjs[0]) or list(groups[0])
             for gi in range(1, len(groups)):
                 nxt_ids = groups[gi]
                 nxt_set = set(nxt_ids)
-                if (not any(nb in nxt_set for nb in adj[path[-1]])
-                        and any(nb in nxt_set for nb in adj[path[0]])):
+                if not any(nb in nxt_set for nb in adj[path[-1]]) and any(
+                    nb in nxt_set for nb in adj[path[0]]
+                ):
                     path.reverse()
-                bridge = next(
-                    (nb for nb in adj[path[-1]] if nb in nxt_set), None
-                )
+                bridge = next((nb for nb in adj[path[-1]] if nb in nxt_set), None)
                 if bridge:
                     nxt = (
                         _hamiltonian_path(nxt_ids, local_adjs[gi], bridge)
@@ -637,7 +668,9 @@ def _auto_scaffold_seamed_impl(
                         nxt = list(reversed(nxt))
                     path = path + nxt
                 else:
-                    path = path + (_hamiltonian_path(nxt_ids, local_adjs[gi]) or nxt_ids)
+                    path = path + (
+                        _hamiltonian_path(nxt_ids, local_adjs[gi]) or nxt_ids
+                    )
 
         if not path or len(path) < 4:
             result.warnings.append(
@@ -672,7 +705,8 @@ def _auto_scaffold_seamed_impl(
             mid = (lo + hi) / 2
 
             valid_bps = [
-                bp for bp in range(lo, hi + 1)
+                bp
+                for bp in range(lo, hi + 1)
                 if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)
             ]
             if len(valid_bps) < 2:
@@ -685,7 +719,8 @@ def _auto_scaffold_seamed_impl(
                 if valid_bps[j + 1] == valid_bps[j] + 1:
                     d = abs((valid_bps[j] + valid_bps[j + 1]) / 2 - mid)
                     if d < best:
-                        best = d; bp1, bp2 = valid_bps[j], valid_bps[j + 1]
+                        best = d
+                        bp1, bp2 = valid_bps[j], valid_bps[j + 1]
             if bp1 is None:
                 continue
 
@@ -695,8 +730,13 @@ def _auto_scaffold_seamed_impl(
                 nick_a = _nick_bp(xover_bp, strand_a, period, bow_right)
                 nick_b = _nick_bp(xover_bp, strand_b, period, bow_right)
                 current, xo = _place_xover(
-                    current, ha, hb, nick_a, nick_b,
-                    "auto_scaffold_seamed:seam", result.warnings,
+                    current,
+                    ha,
+                    hb,
+                    nick_a,
+                    nick_b,
+                    "auto_scaffold_seamed:seam",
+                    result.warnings,
                 )
                 if xo:
                     result.seam_xovers += 1
@@ -704,7 +744,9 @@ def _auto_scaffold_seamed_impl(
     # =========================================================================
     # Phase 2 — Create Near Ends
     # =========================================================================
-    coverage = _scaffold_coverage_excluding(current, protected_scaffold_ids)  # rebuild after seam splits
+    coverage = _scaffold_coverage_excluding(
+        current, protected_scaffold_ids
+    )  # rebuild after seam splits
 
     # Collect all near-end placements before mutating.
     near_specs: list[dict] = []
@@ -748,8 +790,11 @@ def _auto_scaffold_seamed_impl(
         for face_a, face_b, face in turn_items:
             near_floor = face if bounded_ends else face - 3
             xover_bp = next(
-                (bp for bp in range(near_floor, face - period - 1, -1)
-                 if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)),
+                (
+                    bp
+                    for bp in range(near_floor, face - period - 1, -1)
+                    if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)
+                ),
                 None,
             )
             if xover_bp is None:
@@ -773,14 +818,20 @@ def _auto_scaffold_seamed_impl(
                 and _scaf_nb(current, rowA, colA, xover_bp + 1) == tuple(hB.grid_pos)
             ):
                 xover_bp += 1
-            near_specs.append({
-                "hA_id": hA_id, "hB_id": hB_id,
-                "face_a": face_a, "face_b": face_b,
-                "new_lo": xover_bp, "xover_bp": xover_bp,
-                "strand_a": strand_a, "strand_b": strand_b,
-                "nick_a": _nick_bp(xover_bp, strand_a, period, bow_right),
-                "nick_b": _nick_bp(xover_bp, strand_b, period, bow_right),
-            })
+            near_specs.append(
+                {
+                    "hA_id": hA_id,
+                    "hB_id": hB_id,
+                    "face_a": face_a,
+                    "face_b": face_b,
+                    "new_lo": xover_bp,
+                    "xover_bp": xover_bp,
+                    "strand_a": strand_a,
+                    "strand_b": strand_b,
+                    "nick_a": _nick_bp(xover_bp, strand_a, period, bow_right),
+                    "nick_b": _nick_bp(xover_bp, strand_b, period, bow_right),
+                }
+            )
 
     # Extend helix geometry (gather minimums first).
     helix_new_lo: dict[str, int] = {}
@@ -794,13 +845,26 @@ def _auto_scaffold_seamed_impl(
 
     # Extend scaffold domains, then place crossovers.
     for sp in near_specs:
-        current = _extend_scaf_domain_lo(current, sp["hA_id"], sp["face_a"], sp["new_lo"])
-        current = _extend_scaf_domain_lo(current, sp["hB_id"], sp["face_b"], sp["new_lo"])
-        ha = HalfCrossover(helix_id=sp["hA_id"], index=sp["xover_bp"], strand=sp["strand_a"])
-        hb = HalfCrossover(helix_id=sp["hB_id"], index=sp["xover_bp"], strand=sp["strand_b"])
+        current = _extend_scaf_domain_lo(
+            current, sp["hA_id"], sp["face_a"], sp["new_lo"]
+        )
+        current = _extend_scaf_domain_lo(
+            current, sp["hB_id"], sp["face_b"], sp["new_lo"]
+        )
+        ha = HalfCrossover(
+            helix_id=sp["hA_id"], index=sp["xover_bp"], strand=sp["strand_a"]
+        )
+        hb = HalfCrossover(
+            helix_id=sp["hB_id"], index=sp["xover_bp"], strand=sp["strand_b"]
+        )
         current, xo = _place_xover(
-            current, ha, hb, sp["nick_a"], sp["nick_b"],
-            "create_near_ends", result.warnings,
+            current,
+            ha,
+            hb,
+            sp["nick_a"],
+            sp["nick_b"],
+            "create_near_ends",
+            result.warnings,
         )
         if xo:
             result.near_end_xovers += 1
@@ -842,7 +906,11 @@ def _auto_scaffold_seamed_impl(
             mi = min(helix_array_idx.get(ha_id, 0), helix_array_idx.get(hb_id, 0))
             if mi < lowest:
                 lowest = mi
-                skip_id = ha_id if helix_array_idx.get(ha_id, 0) <= helix_array_idx.get(hb_id, 0) else hb_id
+                skip_id = (
+                    ha_id
+                    if helix_array_idx.get(ha_id, 0) <= helix_array_idx.get(hb_id, 0)
+                    else hb_id
+                )
 
     # Matched mode: one repeat period P = smallest whole multiple of the lattice
     # crossover period that spans the bundle, so far_xover = near_xover + P stays
@@ -916,8 +984,11 @@ def _auto_scaffold_seamed_impl(
                         f"{near_list[idx] + P} off-lattice; used local far search."
                     )
                     xover_bp = next(
-                        (bp for bp in range(hi + 3, hi + period + 1)
-                         if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)),
+                        (
+                            bp
+                            for bp in range(hi + 3, hi + period + 1)
+                            if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)
+                        ),
                         None,
                     )
                 # Put every far crossover on the LEFT side of its junction: a
@@ -930,8 +1001,11 @@ def _auto_scaffold_seamed_impl(
             else:
                 far_floor = hi if bounded_ends else hi + 3
                 xover_bp = next(
-                    (bp for bp in range(far_floor, hi + period + 1)
-                     if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)),
+                    (
+                        bp
+                        for bp in range(far_floor, hi + period + 1)
+                        if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)
+                    ),
                     None,
                 )
             if xover_bp is None:
@@ -939,14 +1013,20 @@ def _auto_scaffold_seamed_impl(
                     f"[FarEnds] No xover found for {ha_id}↔{hb_id} near hi={hi}"
                 )
                 continue
-            far_specs.append({
-                "hA_id": ha_id, "hB_id": hb_id,
-                "face_a": face_a, "face_b": face_b,
-                "new_hi": xover_bp, "xover_bp": xover_bp,
-                "strand_a": strand_a, "strand_b": strand_b,
-                "nick_a": _nick_bp(xover_bp, strand_a, period, bow_right),
-                "nick_b": _nick_bp(xover_bp, strand_b, period, bow_right),
-            })
+            far_specs.append(
+                {
+                    "hA_id": ha_id,
+                    "hB_id": hb_id,
+                    "face_a": face_a,
+                    "face_b": face_b,
+                    "new_hi": xover_bp,
+                    "xover_bp": xover_bp,
+                    "strand_a": strand_a,
+                    "strand_b": strand_b,
+                    "nick_a": _nick_bp(xover_bp, strand_a, period, bow_right),
+                    "nick_b": _nick_bp(xover_bp, strand_b, period, bow_right),
+                }
+            )
 
     # Extend helix geometry at hi face.
     helix_new_hi: dict[str, int] = {}
@@ -960,13 +1040,26 @@ def _auto_scaffold_seamed_impl(
 
     # Extend scaffold domains, then place crossovers.
     for sp in far_specs:
-        current = _extend_scaf_domain_hi(current, sp["hA_id"], sp["face_a"], sp["new_hi"])
-        current = _extend_scaf_domain_hi(current, sp["hB_id"], sp["face_b"], sp["new_hi"])
-        ha = HalfCrossover(helix_id=sp["hA_id"], index=sp["xover_bp"], strand=sp["strand_a"])
-        hb = HalfCrossover(helix_id=sp["hB_id"], index=sp["xover_bp"], strand=sp["strand_b"])
+        current = _extend_scaf_domain_hi(
+            current, sp["hA_id"], sp["face_a"], sp["new_hi"]
+        )
+        current = _extend_scaf_domain_hi(
+            current, sp["hB_id"], sp["face_b"], sp["new_hi"]
+        )
+        ha = HalfCrossover(
+            helix_id=sp["hA_id"], index=sp["xover_bp"], strand=sp["strand_a"]
+        )
+        hb = HalfCrossover(
+            helix_id=sp["hB_id"], index=sp["xover_bp"], strand=sp["strand_b"]
+        )
         current, xo = _place_xover(
-            current, ha, hb, sp["nick_a"], sp["nick_b"],
-            "create_far_ends", result.warnings,
+            current,
+            ha,
+            hb,
+            sp["nick_a"],
+            sp["nick_b"],
+            "create_far_ends",
+            result.warnings,
         )
         if xo:
             result.far_end_xovers += 1
@@ -977,6 +1070,7 @@ def _auto_scaffold_seamed_impl(
     # break those cycles. Run a final retry-ligate pass so the marker only
     # fires for genuine, unfixable circularizations.
     from backend.core.lattice import retry_all_pending_ligations
+
     current = retry_all_pending_ligations(current)
 
     # A scaffold that closes into a circle (its 5'/3' termini joined by a
@@ -1031,7 +1125,8 @@ def append_single_strand_warning(design: Design, result) -> None:
     """
     clusters = scaffold_strand_clusters(design)
     scaf = [
-        s for s in design.strands
+        s
+        for s in design.strands
         if s.is_scaffold and not getattr(s, "is_reference", False)
     ]
     if len(scaf) > len(clusters):
@@ -1057,14 +1152,18 @@ def _scaffold_end_join_xover(design: Design, strand: Strand) -> Crossover | None
     f, l = strand.domains[0], strand.domains[-1]
     target = {(f.helix_id, f.start_bp), (l.helix_id, l.end_bp)}
     for xo in design.crossovers:
-        ends = {(xo.half_a.helix_id, xo.half_a.index),
-                (xo.half_b.helix_id, xo.half_b.index)}
+        ends = {
+            (xo.half_a.helix_id, xo.half_a.index),
+            (xo.half_b.helix_id, xo.half_b.index),
+        }
         if ends == target:
             return xo
     return None
 
 
-def _choose_buried_nick(design: Design, strand: Strand) -> tuple[str, int, Direction] | None:
+def _choose_buried_nick(
+    design: Design, strand: Strand
+) -> tuple[str, int, Direction] | None:
     """Pick a buried, non-crossover interior bp on ``strand`` nearest the structure's
     bp-center — the spot to reopen a circular scaffold so its 5'/3' land mid-bundle.
 
@@ -1082,8 +1181,11 @@ def _choose_buried_nick(design: Design, strand: Strand) -> tuple[str, int, Direc
     for dm in strand.domains:
         lo, hi = min(dm.start_bp, dm.end_bp), max(dm.start_bp, dm.end_bp)
         # interior bps with >=2 margin from each domain end (clear of termini/stubs)
-        interior = [bp for bp in range(lo + 2, hi - 1)
-                    if bp not in xover_bp.get(dm.helix_id, ())]
+        interior = [
+            bp
+            for bp in range(lo + 2, hi - 1)
+            if bp not in xover_bp.get(dm.helix_id, ())
+        ]
         if not interior:
             continue
         bp = min(interior, key=lambda b: abs(b - center))
@@ -1103,6 +1205,7 @@ def _linearize_circular_scaffolds(design: Design, result: SeamedResult) -> Desig
     mid-bundle instead of on the (often surface) closing crossover.
     """
     from backend.core.lattice import make_nick
+
     for strand in [s for s in design.strands if s.is_scaffold and not s.is_reference]:
         xo = _scaffold_end_join_xover(design, strand)
         if xo is None:
@@ -1119,8 +1222,9 @@ def _linearize_circular_scaffolds(design: Design, result: SeamedResult) -> Desig
             # SCAFFOLD-ONLY (ISSUE-18): the buried nick site is chosen FROM the scaffold
             # strand, but make_nick re-resolves the target itself — unfiltered it could
             # land on a linker/binder overlapping that slot.
-            design = make_nick(design, helix_id, bp_index, direction,
-                               predicate=is_routable_scaffold)
+            design = make_nick(
+                design, helix_id, bp_index, direction, predicate=is_routable_scaffold
+            )
         except ValueError:
             result.warnings.append(
                 "Scaffold is circular; automatic mid-structure nick hit a terminus guard "
@@ -1179,6 +1283,7 @@ def seamed_routability_errors(design: Design) -> list[str]:
         return []  # nothing to route; the router reports its own "no scaffold" warning
 
     from backend.core.section_router import has_multisection_helix
+
     if has_multisection_helix(coverage):
         return []  # section router path — out of scope for this guard
 
@@ -1195,7 +1300,8 @@ def seamed_routability_errors(design: Design) -> list[str]:
             nid = stack.pop()
             if nid in visited:
                 continue
-            visited.add(nid); comp.append(nid)
+            visited.add(nid)
+            comp.append(nid)
             stack.extend(adj[nid] - visited)
         components.append(comp)
 
@@ -1250,6 +1356,7 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
     must run BEFORE the multi-section probe below, which reads scaffold coverage.
     """
     from backend.core.scaffold_reset import reset_scaffold_to_structure
+
     design, reset_warnings = reset_scaffold_to_structure(design)
 
     if design.forced_ligations:
@@ -1259,6 +1366,7 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
         # cannot route compliantly (incl. genuine one-off manual anchors), which
         # falls through to the classic preserve-the-anchor pipeline — no regression.
         from backend.core.hinge_router import route_hinge
+
         hinged = route_hinge(design.model_copy(deep=True))
         if hinged is not None:
             hinged[1].warnings.extend(reset_warnings)
@@ -1266,6 +1374,7 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
     else:
         coverage = _scaffold_coverage(design)
         from backend.core.section_router import has_multisection_helix, route_sections
+
         if has_multisection_helix(coverage):
             sectioned = route_sections(design.model_copy(deep=True))
             if sectioned is not None:
@@ -1336,13 +1445,17 @@ def _auto_scaffold_process_id(process_id: str | None) -> bool:
     return bool(process_id and process_id.startswith("auto_scaffold_"))
 
 
-def _clear_auto_scaffold_route_for_seamed(design: Design, result: SeamedResult) -> Design:
+def _clear_auto_scaffold_route_for_seamed(
+    design: Design, result: SeamedResult
+) -> Design:
     """Remove prior auto scaffold routing so advanced seamed can reroute cleanly.
 
     Designs with forced ligations are left intact because splitting their scaffold
     strands can destroy the manual fixed-edge topology the user requested.
     """
-    auto_xovers = [xo for xo in design.crossovers if _auto_scaffold_process_id(xo.process_id)]
+    auto_xovers = [
+        xo for xo in design.crossovers if _auto_scaffold_process_id(xo.process_id)
+    ]
     if not auto_xovers:
         return design
     if design.forced_ligations:
@@ -1378,8 +1491,7 @@ def _clear_auto_scaffold_route_for_seamed(design: Design, result: SeamedResult) 
             split_count += 1
 
     kept_xovers = [
-        xo for xo in design.crossovers
-        if not _auto_scaffold_process_id(xo.process_id)
+        xo for xo in design.crossovers if not _auto_scaffold_process_id(xo.process_id)
     ]
     result.warnings.append(
         f"Cleared {len(auto_xovers)} existing auto scaffold crossover(s) and "

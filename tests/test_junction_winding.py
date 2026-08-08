@@ -34,7 +34,7 @@ from backend.core.junction_winding import (
 
 def _threaded_arcs(separation=1.0, n=26, seed=None):
     """Two open arcs; ``separation`` ~1 threads them, large values pull them apart."""
-    t = np.linspace(0.0, 2.0 * np.pi * 0.88, n)          # open, not closed
+    t = np.linspace(0.0, 2.0 * np.pi * 0.88, n)  # open, not closed
     a = np.stack([np.cos(t), np.sin(t), 0.06 * t], axis=1)
     b = np.stack([separation + np.cos(t), 0.06 * t, np.sin(t)], axis=1)
     if seed is not None:
@@ -47,9 +47,9 @@ def _threaded_arcs(separation=1.0, n=26, seed=None):
 def _rotate(points, axis=(0.3, 0.5, 0.81), angle=0.9):
     axis = np.asarray(axis, dtype=float)
     axis = axis / np.linalg.norm(axis)
-    k = np.array([[0, -axis[2], axis[1]],
-                  [axis[2], 0, -axis[0]],
-                  [-axis[1], axis[0], 0]])
+    k = np.array(
+        [[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]]
+    )
     r = np.eye(3) + np.sin(angle) * k + (1 - np.cos(angle)) * (k @ k)
     return points @ r.T
 
@@ -104,8 +104,9 @@ def test_thermal_jitter_does_not_change_the_verdict():
 
 def test_swapping_the_two_arcs_preserves_the_verdict():
     a, b = _threaded_arcs(separation=1.0)
-    assert projected_crossing_number(a, b)["f_hi"] == \
-           pytest.approx(projected_crossing_number(b, a)["f_hi"], abs=0.05)
+    assert projected_crossing_number(a, b)["f_hi"] == pytest.approx(
+        projected_crossing_number(b, a)["f_hi"], abs=0.05
+    )
 
 
 def test_degenerate_input_does_not_raise():
@@ -156,7 +157,9 @@ def test_disagreement_refuses_to_pick_a_side():
 def test_unconverged_clamp_falls_back_to_the_closure_free_channel():
     """A clamp that never settles is untrustworthy, so PCS decides alone — and the
     report says the verdict rests on one channel."""
-    v = combine({"n_mode": 2, "f_hi": 0.50, "n_views": 64}, _clamp(0.4, converged=False))
+    v = combine(
+        {"n_mode": 2, "f_hi": 0.50, "n_views": 64}, _clamp(0.4, converged=False)
+    )
     assert v["verdict"] == "wound"
     assert v["confidence"] == "single-channel"
 
@@ -165,8 +168,9 @@ def test_verdict_wording_never_claims_strands_are_linked():
     """Two OPEN chains are never topologically linked — they can always be separated.
     The report must describe a bounded window, not assert a theorem."""
     for f_hi, lk in ((0.50, 1.0), (0.01, 0.0)):
-        meaning = combine({"n_mode": 0, "f_hi": f_hi, "n_views": 64},
-                          _clamp(lk))["meaning"]
+        meaning = combine({"n_mode": 0, "f_hi": f_hi, "n_views": 64}, _clamp(lk))[
+            "meaning"
+        ]
         assert "linked" not in meaning.lower()
 
 
@@ -194,10 +198,13 @@ def _reciprocal_pair_inputs(extra_bases, bp):
     prep = jt._prepare(design, model, None)
     i, j = jt.reciprocal_pairs(prep.connectors)[0]
     positions = np.array([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
-    return (jt._residue_lookup(model), positions,
-            jt._connector_dict(prep.connectors[i]),
-            jt._connector_dict(prep.connectors[j]),
-            jt._BACKBONE_ORDER)
+    return (
+        jt._residue_lookup(model),
+        positions,
+        jt._connector_dict(prep.connectors[i]),
+        jt._connector_dict(prep.connectors[j]),
+        jt._BACKBONE_ORDER,
+    )
 
 
 def test_clamp_converges_and_separates_wound_from_clean():
@@ -213,7 +220,9 @@ def test_clamp_converges_and_separates_wound_from_clean():
     # convergence is monotone toward the integer, which is what makes it trustworthy
     by_k = wound["lk_by_k"]
     ks = sorted(by_k)
-    assert abs(by_k[ks[-1]] - round(by_k[ks[-1]])) < abs(by_k[ks[0]] - round(by_k[ks[-1]]))
+    assert abs(by_k[ks[-1]] - round(by_k[ks[-1]])) < abs(
+        by_k[ks[0]] - round(by_k[ks[-1]])
+    )
 
 
 def test_a_wound_junction_survives_the_orientation_that_breaks_n_mode():

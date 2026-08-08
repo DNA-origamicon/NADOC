@@ -69,9 +69,10 @@ router = APIRouter()
 # :mod:`backend.core.assembly_polymer`; this route applies the resulting
 # transforms + spawns new PartInstance + AssemblyJoint records.
 
+
 class PolymerizeAssemblyRequest(BaseModel):
-    joint_id:  str
-    count:     int                                            # total chain length, ≥ 2
+    joint_id: str
+    count: int  # total chain length, ≥ 2
     direction: Literal["forward", "backward", "both"] = "forward"
     # Additional instances (beyond the seed mate's two) that should be
     # carried along as part of the pattern. Each gets cloned at every chain
@@ -119,7 +120,7 @@ def polymerize_assembly(body: PolymerizeAssemblyRequest) -> dict:
     seed_pair_ids: set[str] = {joint.instance_a_id, joint.instance_b_id}
     additional_instances: list[PartInstance] = []
     seen: set[str] = set()
-    for aid in (body.additional_instance_ids or []):
+    for aid in body.additional_instance_ids or []:
         if aid in seed_pair_ids or aid in seen:
             continue
         seen.add(aid)
@@ -133,30 +134,41 @@ def polymerize_assembly(body: PolymerizeAssemblyRequest) -> dict:
     # replication) lives in backend.core.assembly_polymer; this handler owns
     # only validation, lookups, and the feature-log commit.
     existing_instances, new_instances, new_joints = build_polymer_chain(
-        joint, inst_a, inst_b, additional_instances,
-        body.count, body.direction,
-        assembly.instances, assembly.joints,
+        joint,
+        inst_a,
+        inst_b,
+        additional_instances,
+        body.count,
+        body.direction,
+        assembly.instances,
+        assembly.joints,
     )
 
-    mutated = assembly.model_copy(update={
-        "instances": existing_instances + new_instances,
-        "joints":    list(assembly.joints)    + new_joints,
-    })
+    mutated = assembly.model_copy(
+        update={
+            "instances": existing_instances + new_instances,
+            "joints": list(assembly.joints) + new_joints,
+        }
+    )
 
     new_instance_ids = [i.id for i in new_instances]
-    new_joint_ids    = [j.id for j in new_joints]
-    extra_suffix = f", +{len(additional_instances)} pattern part(s)" if additional_instances else ""
+    new_joint_ids = [j.id for j in new_joints]
+    extra_suffix = (
+        f", +{len(additional_instances)} pattern part(s)"
+        if additional_instances
+        else ""
+    )
     updated = _apply_assembly_mutation_with_feature_log(
         mutated,
         op_kind="assembly-polymerize",
         label=f"Polymerize {joint.name}: chain length {body.count} ({body.direction}){extra_suffix}",
         params={
-            "joint_id":                body.joint_id,
-            "count":                   body.count,
-            "direction":               body.direction,
+            "joint_id": body.joint_id,
+            "count": body.count,
+            "direction": body.direction,
             "additional_instance_ids": [a.id for a in additional_instances],
-            "new_instance_ids":        new_instance_ids,
-            "new_joint_ids":           new_joint_ids,
+            "new_instance_ids": new_instance_ids,
+            "new_joint_ids": new_joint_ids,
         },
     )
     return _assembly_response(updated)
@@ -164,8 +176,8 @@ def polymerize_assembly(body: PolymerizeAssemblyRequest) -> dict:
 
 class PolymerizePeriodicRequest(BaseModel):
     instance_id: str
-    count:       int                                          # total chain length, ≥ 2
-    direction:   Literal["forward", "backward", "both"] = "forward"
+    count: int  # total chain length, ≥ 2
+    direction: Literal["forward", "backward", "both"] = "forward"
 
 
 @router.get("/assembly/instances/{instance_id}/periodic-closure", status_code=200)
@@ -182,12 +194,17 @@ def get_instance_periodic_closure(instance_id: str, count: int = 4) -> dict:
     "snap to closing κ" button writes this back to the bend op.
     """
     from backend.core.periodic_polymer import (
-        PeriodicSeamError, closure_residual, solve_closing_curvature,
+        PeriodicSeamError,
+        closure_residual,
+        solve_closing_curvature,
     )
+
     assembly = assembly_state.get_or_404()
     seed = _find_instance(assembly, instance_id)
     design = _design_with_instance_overrides(seed, _assembly_source_path(assembly))
-    if not any(getattr(fl, "is_periodic_seam", False) for fl in design.forced_ligations):
+    if not any(
+        getattr(fl, "is_periodic_seam", False) for fl in design.forced_ligations
+    ):
         raise HTTPException(422, detail="Part has no periodic seam.")
     try:
         angle_deg, trans_nm = closure_residual(design, count)
@@ -195,10 +212,12 @@ def get_instance_periodic_closure(instance_id: str, count: int = 4) -> dict:
     except PeriodicSeamError as exc:
         raise HTTPException(422, detail=str(exc)) from exc
     return {
-        "count":                              int(count),
-        "rotation_residual_deg":              float(angle_deg),
-        "translation_residual_nm":            float(trans_nm),
-        "suggested_curvature_deg_per_bp":     None if suggested is None else float(suggested),
+        "count": int(count),
+        "rotation_residual_deg": float(angle_deg),
+        "translation_residual_nm": float(trans_nm),
+        "suggested_curvature_deg_per_bp": None
+        if suggested is None
+        else float(suggested),
     }
 
 
@@ -217,7 +236,9 @@ def polymerize_periodic_assembly(body: PolymerizePeriodicRequest) -> dict:
     """
     from backend.core.assembly_polymer import build_periodic_chain
     from backend.core.periodic_polymer import (
-        PeriodicSeamError, derive_periodic_delta, principal_seam_connectors,
+        PeriodicSeamError,
+        derive_periodic_delta,
+        principal_seam_connectors,
     )
 
     if body.count < 2:
@@ -231,47 +252,59 @@ def polymerize_periodic_assembly(body: PolymerizePeriodicRequest) -> dict:
     # would not affect but we want the authoritative topology regardless.
     design = _design_with_instance_overrides(seed, _assembly_source_path(assembly))
 
-    if not any(getattr(fl, "is_periodic_seam", False) for fl in design.forced_ligations):
+    if not any(
+        getattr(fl, "is_periodic_seam", False) for fl in design.forced_ligations
+    ):
         raise HTTPException(
             422,
             detail="Part has no periodic seam. Mark the end-to-end seam across "
-                   "the cadnano editor's periodic-boundary mirror first.",
+            "the cadnano editor's periodic-boundary mirror first.",
         )
     try:
-        delta = derive_periodic_delta(design)                # 4×4 part-local SE3
+        delta = derive_periodic_delta(design)  # 4×4 part-local SE3
         delta_inv = np.linalg.inv(delta)
     except PeriodicSeamError as exc:
         raise HTTPException(422, detail=str(exc)) from exc
     except np.linalg.LinAlgError as exc:
-        raise HTTPException(422, detail=f"Could not derive periodic repeat transform: {exc}") from exc
+        raise HTTPException(
+            422, detail=f"Could not derive periodic repeat transform: {exc}"
+        ) from exc
 
     specs = principal_seam_connectors(design)
     if specs is None:
-        raise HTTPException(422, detail="Periodic seam did not resolve to helix geometry.")
+        raise HTTPException(
+            422, detail="Periodic seam did not resolve to helix geometry."
+        )
 
     # Pure record-assembly (chain geometry + seam-connector union + seam-joint
     # wiring) lives in backend.core.assembly_polymer; this handler owns only
     # validation, the design load, the delta derivation, and the commit.
     existing_instances, new_instances, new_joints = build_periodic_chain(
-        seed, delta, delta_inv, specs,
-        body.count, body.direction,
+        seed,
+        delta,
+        delta_inv,
+        specs,
+        body.count,
+        body.direction,
         assembly.instances,
     )
 
-    mutated = assembly.model_copy(update={
-        "instances": existing_instances + new_instances,
-        "joints":    list(assembly.joints) + new_joints,
-    })
+    mutated = assembly.model_copy(
+        update={
+            "instances": existing_instances + new_instances,
+            "joints": list(assembly.joints) + new_joints,
+        }
+    )
     updated = _apply_assembly_mutation_with_feature_log(
         mutated,
         op_kind="assembly-polymerize-periodic",
         label=f"Polymerize (periodic) {seed.name}: chain length {body.count} ({body.direction})",
         params={
-            "instance_id":      body.instance_id,
-            "count":            body.count,
-            "direction":        body.direction,
+            "instance_id": body.instance_id,
+            "count": body.count,
+            "direction": body.direction,
             "new_instance_ids": [i.id for i in new_instances],
-            "new_joint_ids":    [j.id for j in new_joints],
+            "new_joint_ids": [j.id for j in new_joints],
         },
     )
     return _assembly_response(updated)

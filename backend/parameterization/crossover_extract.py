@@ -56,7 +56,8 @@ _DEFAULT_DESIGN_PATH = (
 
 # ── Reproducible sequence generation ─────────────────────────────────────────
 
-_GC_CONTENT = 0.50   # target GC fraction
+_GC_CONTENT = 0.50  # target GC fraction
+
 
 def _gc_balanced_sequence(length: int, rng: np.random.Generator) -> str:
     """Generate a GC-balanced random DNA sequence with no runs of >3 identical bases."""
@@ -77,7 +78,7 @@ def _gc_balanced_sequence(length: int, rng: np.random.Generator) -> str:
 
     # Break any runs of 4+ identical bases by swapping with a distant position
     for i in range(3, len(pool)):
-        if pool[i] == pool[i-1] == pool[i-2] == pool[i-3]:
+        if pool[i] == pool[i - 1] == pool[i - 2] == pool[i - 3]:
             for j in range(i + 1, len(pool)):
                 if pool[j] != pool[i]:
                     pool[i], pool[j] = pool[j], pool[i]
@@ -107,6 +108,7 @@ def assign_sequences_to_design(design: Design, seed: int = 42) -> Design:
     Updated Design with all strand sequences populated.
     """
     from backend.core.models import StrandType
+
     rng = np.random.default_rng(seed)
 
     updated = design
@@ -114,17 +116,16 @@ def assign_sequences_to_design(design: Design, seed: int = 42) -> Design:
         if strand.strand_type != StrandType.SCAFFOLD:
             continue
         # Count nucleotides in this scaffold strand
-        n_nt = sum(
-            abs(dom.end_bp - dom.start_bp) + 1
-            for dom in strand.domains
-        )
+        n_nt = sum(abs(dom.end_bp - dom.start_bp) + 1 for dom in strand.domains)
         seq = _gc_balanced_sequence(n_nt, rng)
         updated, _, _ = assign_custom_scaffold_sequence(
             updated, seq, strand_id=strand.id
         )
         logger.info(
             "Assigned %d-nt sequence to scaffold %s (GC=%.0f%%)",
-            n_nt, strand.id, 100 * (seq.count("G") + seq.count("C")) / n_nt,
+            n_nt,
+            strand.id,
+            100 * (seq.count("G") + seq.count("C")) / n_nt,
         )
 
     updated = assign_staple_sequences(updated)
@@ -132,6 +133,7 @@ def assign_sequences_to_design(design: Design, seed: int = 42) -> Design:
 
 
 # ── Variant definition ────────────────────────────────────────────────────────
+
 
 @dataclass
 class CrossoverVariant:
@@ -153,6 +155,7 @@ class CrossoverVariant:
         The first value is the "nominal" run; all values feed the
         restraint-sensitivity sweep in md_setup.
     """
+
     label: str
     n_extra_t: int
     cpd_pairs: list[tuple[int, int]] = field(default_factory=list)
@@ -179,12 +182,14 @@ def _apply_extra_t(design: Design, n_extra_t: int) -> Design:
     single-stranded ssDNA at the crossover site, which is physically correct.
     """
     extra = "T" * n_extra_t if n_extra_t > 0 else None
-    new_crossovers = [xo.model_copy(update={"extra_bases": extra})
-                      for xo in design.crossovers]
+    new_crossovers = [
+        xo.model_copy(update={"extra_bases": extra}) for xo in design.crossovers
+    ]
     return design.model_copy(update={"crossovers": new_crossovers})
 
 
 # ── Main extraction API ───────────────────────────────────────────────────────
+
 
 def load_reference_design(design_path: str | Path | None = None) -> Design:
     """

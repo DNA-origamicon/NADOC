@@ -10,6 +10,7 @@ strand/base/cluster colouring buttons did nothing.
 the design model's strand id), and ``intern_atom_design_meta`` packs it for the wire.
 These are pure/fast: a faked MDAnalysis Universe, no topology or trajectory on disk.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -24,9 +25,17 @@ from backend.core.atomistic_to_nadoc import (
 
 def _model_p(helix_id, bp_index, direction, strand_id, **extra):
     """A design-model P atom (md_pkey reads the identity fields off it)."""
-    return SimpleNamespace(name="P", helix_id=helix_id, bp_index=bp_index,
-                           direction=direction, strand_id=strand_id,
-                           crossover_id=None, extension_id=None, copy_k=0, **extra)
+    return SimpleNamespace(
+        name="P",
+        helix_id=helix_id,
+        bp_index=bp_index,
+        direction=direction,
+        strand_id=strand_id,
+        crossover_id=None,
+        extension_id=None,
+        copy_k=0,
+        **extra,
+    )
 
 
 def _residue(ix, resid, segid, n_atoms=1):
@@ -56,10 +65,12 @@ def test_heavy_atoms_inherit_their_residues_strand_id():
     # Two nucleotides, each with 3 heavy atoms, on two different strands.
     u = _FakeUniverse([_residue(0, 1, "A"), _residue(1, 1, "B")], p_resindices=[0, 1])
     p_order = [("h0", 5, "FORWARD"), ("h1", 9, "REVERSE")]
-    model = SimpleNamespace(atoms=[
-        _model_p("h0", 5, "FORWARD", "scaf"),
-        _model_p("h1", 9, "REVERSE", "stap7"),
-    ])
+    model = SimpleNamespace(
+        atoms=[
+            _model_p("h0", 5, "FORWARD", "scaf"),
+            _model_p("h1", 9, "REVERSE", "stap7"),
+        ]
+    )
 
     rows = build_atom_design_meta(u, _heavy([0, 0, 0, 1, 1, 1]), p_order, model)
 
@@ -73,16 +84,19 @@ def test_five_prime_terminus_without_a_p_atom_still_gets_its_strand():
     """pdb2gmx strips the 5' P, so that residue is absent from p_order — it must be
     recovered through the chain map or the whole first base of every strand goes CPK."""
     residues = [_residue(0, 1, "SEGA"), _residue(1, 2, "SEGA")]
-    u = _FakeUniverse(residues, p_resindices=[1])          # only residue 1 has a P
+    u = _FakeUniverse(residues, p_resindices=[1])  # only residue 1 has a P
     p_order = [("h0", 2, "FORWARD")]
-    model = SimpleNamespace(atoms=[
-        _model_p("h0", 1, "FORWARD", "scaf"),
-        _model_p("h0", 2, "FORWARD", "scaf"),
-    ])
+    model = SimpleNamespace(
+        atoms=[
+            _model_p("h0", 1, "FORWARD", "scaf"),
+            _model_p("h0", 2, "FORWARD", "scaf"),
+        ]
+    )
     chain_map = {("A", 1): ("h0", 1, "FORWARD"), ("A", 2): ("h0", 2, "FORWARD")}
 
-    rows = build_atom_design_meta(u, _heavy([0, 1]), p_order, model,
-                                  chain_map, {"SEGA": "A"})
+    rows = build_atom_design_meta(
+        u, _heavy([0, 1]), p_order, model, chain_map, {"SEGA": "A"}
+    )
 
     assert [r["strand_id"] for r in rows] == ["scaf", "scaf"]
     assert [r["bp_index"] for r in rows] == [1, 2]
@@ -91,7 +105,9 @@ def test_five_prime_terminus_without_a_p_atom_still_gets_its_strand():
 def test_terminus_falls_back_to_cpk_when_the_segid_map_is_unavailable():
     """Without the segid→chain map there is no way to key the P-less residue — it must
     come back blank (→ CPK) rather than borrow a neighbour's strand."""
-    u = _FakeUniverse([_residue(0, 1, "SEGA"), _residue(1, 2, "SEGA")], p_resindices=[1])
+    u = _FakeUniverse(
+        [_residue(0, 1, "SEGA"), _residue(1, 2, "SEGA")], p_resindices=[1]
+    )
     model = SimpleNamespace(atoms=[_model_p("h0", 2, "FORWARD", "scaf")])
 
     rows = build_atom_design_meta(u, _heavy([0, 1]), [("h0", 2, "FORWARD")], model)
@@ -104,14 +120,22 @@ def test_crossover_extra_base_keeps_its_strand_colour_without_a_bogus_bp():
     """A ``__xb__`` key puts a str in slot 1 and an int in slot 2 — positionally reading
     them as (bp_index, direction) would emit garbage.  Strand id must still resolve."""
     u = _FakeUniverse([_residue(0, 1, "A")], p_resindices=[0])
-    xb = SimpleNamespace(name="P", crossover_id="xo3", extra_base_k=1, strand_id="stap2",
-                         helix_id="h0", bp_index=4, direction="FORWARD")
-    rows = build_atom_design_meta(u, _heavy([0, 0]), [("__xb__", "xo3", 1)],
-                                  SimpleNamespace(atoms=[xb]))
+    xb = SimpleNamespace(
+        name="P",
+        crossover_id="xo3",
+        extra_base_k=1,
+        strand_id="stap2",
+        helix_id="h0",
+        bp_index=4,
+        direction="FORWARD",
+    )
+    rows = build_atom_design_meta(
+        u, _heavy([0, 0]), [("__xb__", "xo3", 1)], SimpleNamespace(atoms=[xb])
+    )
 
     assert [r["strand_id"] for r in rows] == ["stap2", "stap2"]
     assert rows[0]["helix_id"] == "__xb__"
-    assert rows[0]["bp_index"] == -1        # no base-letter lookup → falls back to strand
+    assert rows[0]["bp_index"] == -1  # no base-letter lookup → falls back to strand
     assert rows[0]["direction"] == ""
 
 
@@ -127,10 +151,12 @@ def test_intern_round_trips_every_atom():
     assert packed["strands"] == ["scaf", ""]
     assert len(packed["strand_idx"]) == len(rows)
     unpacked = [
-        {"strand_id": packed["strands"][packed["strand_idx"][i]],
-         "helix_id":  packed["helices"][packed["helix_idx"][i]],
-         "direction": packed["dirs"][packed["dir_idx"][i]],
-         "bp_index":  packed["bp"][i]}
+        {
+            "strand_id": packed["strands"][packed["strand_idx"][i]],
+            "helix_id": packed["helices"][packed["helix_idx"][i]],
+            "direction": packed["dirs"][packed["dir_idx"][i]],
+            "bp_index": packed["bp"][i],
+        }
         for i in range(len(rows))
     ]
     assert unpacked == rows

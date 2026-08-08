@@ -72,11 +72,13 @@ class _WorkspaceHandler(FileSystemEventHandler):
         # not library files — never surface them as file-changed events.
         if ".session" in p.parts:
             return
-        _push({
-            "type":      event_type,
-            "path":      rel,
-            "file_type": "assembly" if p.suffix == ".nass" else "part",
-        })
+        _push(
+            {
+                "type": event_type,
+                "path": rel,
+                "file_type": "assembly" if p.suffix == ".nass" else "part",
+            }
+        )
 
     def on_created(self, event) -> None:
         self._handle(event.src_path, "file-changed")

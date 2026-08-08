@@ -2,6 +2,7 @@
 building blocks: the parameterized periodic-skip design builder, the simulation-keyed
 analytic reference, and the secant period adjuster.  The full closed loop (real oxDNA)
 is exercised opt-in in tests/test_skip_twist_tuning_production.py."""
+
 import pytest
 
 from backend.api.skip_twist_tuning import (
@@ -17,13 +18,22 @@ CELLS = square_cells(2, 3)
 
 
 def _ox_keys(design):
-    return {(k[0], int(k[1]), getattr(k[2], "value", k[2]))
-            for k in ox._strand_nucleotide_order(design) if k[0] != ox._XB_SENTINEL}
+    return {
+        (k[0], int(k[1]), getattr(k[2], "value", k[2]))
+        for k in ox._strand_nucleotide_order(design)
+        if k[0] != ox._XB_SENTINEL
+    }
 
 
 def _ref_keys(ref):
-    return {(g["helix_id"], int(g["bp_index"]),
-             getattr(g["direction"], "value", g["direction"])) for g in ref}
+    return {
+        (
+            g["helix_id"],
+            int(g["bp_index"]),
+            getattr(g["direction"], "value", g["direction"]),
+        )
+        for g in ref
+    }
 
 
 # ── build_sq_skip_design ─────────────────────────────────────────────────────────
@@ -32,13 +42,15 @@ def test_build_sq_skip_design_is_routed_sequenced_square():
     assert d.lattice_type == LatticeType.SQUARE
     assert len(d.helices) == 6
     assert any(s.strand_type.value == "scaffold" for s in d.strands)
-    assert all(s.sequence for s in d.strands)            # fully sequenced (no None)
+    assert all(s.sequence for s in d.strands)  # fully sequenced (no None)
     assert sum(len(h.loop_skips) for h in d.helices) == 0  # period=None => no skips
 
 
 def test_build_sq_skip_design_skip_count_scales_inversely_with_period():
-    counts = {p: sum(len(h.loop_skips) for h in build_sq_skip_design(CELLS, 40, p).helices)
-              for p in (48, 24, 16)}
+    counts = {
+        p: sum(len(h.loop_skips) for h in build_sq_skip_design(CELLS, 40, p).helices)
+        for p in (48, 24, 16)
+    }
     assert counts[48] < counts[24] < counts[16]
     assert counts[48] > 0
 
@@ -46,7 +58,7 @@ def test_build_sq_skip_design_skip_count_scales_inversely_with_period():
 def test_build_sq_skip_design_skips_are_all_deletions_in_dsDNA_core():
     d = build_sq_skip_design(CELLS, 40, 24)
     marks = [ls for h in d.helices for ls in h.loop_skips]
-    assert marks and all(ls.delta == -1 for ls in marks)   # skips (deletions), not loops
+    assert marks and all(ls.delta == -1 for ls in marks)  # skips (deletions), not loops
 
 
 # ── core_reference_geometry ──────────────────────────────────────────────────────
@@ -57,22 +69,24 @@ def test_core_reference_keys_match_oxdna_particles(period):
     d = build_sq_skip_design(CELLS, 40, period)
     ref = core_reference_geometry(d)
     assert ref, "reference must not be empty"
-    assert _ref_keys(ref) <= _ox_keys(d)                  # subset, no orphan keys
+    assert _ref_keys(ref) <= _ox_keys(d)  # subset, no orphan keys
 
 
 def test_core_reference_is_paired_core_and_straight():
     """The reference is the dsDNA core (both strands per column) and reads ~0 global
     twist — the straight bundle the design depicts (the self-consistency target)."""
     from backend.core.oxdna_health import measure_bundle_twist
+
     d = build_sq_skip_design(CELLS, 40, None)
     ref = core_reference_geometry(d)
     # every (helix, bp) in the reference carries both strands
     by_pos = {}
     for g in ref:
         by_pos.setdefault((g["helix_id"], g["bp_index"]), set()).add(
-            getattr(g["direction"], "value", g["direction"]))
+            getattr(g["direction"], "value", g["direction"])
+        )
     assert all(len(dirs) == 2 for dirs in by_pos.values())
-    assert abs(measure_bundle_twist(ref)) < 2.0           # straight depiction
+    assert abs(measure_bundle_twist(ref)) < 2.0  # straight depiction
 
 
 # ── PeriodAdjuster ───────────────────────────────────────────────────────────────
@@ -95,7 +109,7 @@ def test_period_adjuster_secant_converges_on_monotone_residual():
 
 def test_period_adjuster_clamps_and_returns_distinct_int():
     adj = PeriodAdjuster(p_min=10, p_max=60)
-    nxt = adj(12, _verdict(100.0))                # huge residual would overshoot bounds
+    nxt = adj(12, _verdict(100.0))  # huge residual would overshoot bounds
     assert isinstance(nxt, int) and 10 <= nxt <= 60
     # a second call with a flat residual still returns a distinct, in-bounds int
     nxt2 = adj(nxt, _verdict(100.0))
@@ -105,36 +119,41 @@ def test_period_adjuster_clamps_and_returns_distinct_int():
 def test_prepare_design_for_autorefine_applies_skips_and_sequences():
     """Autorefine auto-prep: a design without the default skips / sequences is made oxDNA-ready
     (analytical skips applied + fully sequenced); an already-ready design is returned unchanged."""
-    from backend.api.skip_twist_tuning import build_sq_skip_design, prepare_design_for_autorefine
+    from backend.api.skip_twist_tuning import (
+        build_sq_skip_design,
+        prepare_design_for_autorefine,
+    )
     from backend.physics.oxdna_interface import count_undefined_bases
 
-    bare = build_sq_skip_design(CELLS, 40, None)               # routed, no skips
+    bare = build_sq_skip_design(CELLS, 40, None)  # routed, no skips
     assert not any(h.loop_skips for h in bare.helices)
     prepared, did = prepare_design_for_autorefine(bare)
     assert did
-    assert any(h.loop_skips for h in prepared.helices)          # default skips applied
-    assert count_undefined_bases(prepared, exclude_reference=True)[0] == 0   # sequenced
+    assert any(h.loop_skips for h in prepared.helices)  # default skips applied
+    assert count_undefined_bases(prepared, exclude_reference=True)[0] == 0  # sequenced
 
-    ready = build_sq_skip_design(CELLS, 40, 24)                 # skips + sequenced
+    ready = build_sq_skip_design(CELLS, 40, 24)  # skips + sequenced
     prepared2, did2 = prepare_design_for_autorefine(ready)
-    assert did2 is False and prepared2 is ready                 # untouched
+    assert did2 is False and prepared2 is ready  # untouched
 
 
 def test_period_adjuster_step_scales_with_residual_and_is_directed():
     """First step is sign-directed and SIZED to the residual: far-off → big step (square's
     48→~24); near-converged → gentle. Over-twisted (residual>0) → smaller period; under → larger."""
-    big = PeriodAdjuster()(48, _verdict(70.0))       # far off, over-twisted → big step down
-    assert big <= 26, big                             # ~halved toward more skips (square 48→24)
-    small = PeriodAdjuster()(48, _verdict(3.0))       # near converged → gentle
+    big = PeriodAdjuster()(48, _verdict(70.0))  # far off, over-twisted → big step down
+    assert big <= 26, big  # ~halved toward more skips (square 48→24)
+    small = PeriodAdjuster()(48, _verdict(3.0))  # near converged → gentle
     assert 44 <= small < 48, small
-    under = PeriodAdjuster()(48, _verdict(-70.0))     # far off, under-twisted → big step up
+    under = PeriodAdjuster()(
+        48, _verdict(-70.0)
+    )  # far off, under-twisted → big step up
     assert under >= 70, under
 
 
 def test_period_adjuster_requires_steering_signal():
     adj = PeriodAdjuster()
     with pytest.raises(ValueError, match="signed twist residual"):
-        adj(48, {"measured_nm": 1.0})             # no steering block => cannot direct
+        adj(48, {"measured_nm": 1.0})  # no steering block => cannot direct
 
 
 # ── autorefine (loaded-design refine + route gating) ─────────────────────────────
@@ -142,7 +161,11 @@ def test_build_sq_skip_from_design_reapplies_pattern():
     """The autorefine build_fn re-derives the skip pattern on an already-routed design:
     None clears skips, a smaller period adds more — and the design stays square +
     fully sequenced."""
-    from backend.api.skip_twist_tuning import build_sq_skip_design, build_sq_skip_from_design
+    from backend.api.skip_twist_tuning import (
+        build_sq_skip_design,
+        build_sq_skip_from_design,
+    )
+
     base = build_sq_skip_design(CELLS, 40, 48)
     n0 = sum(len(h.loop_skips) for h in build_sq_skip_from_design(base, None).helices)
     n48 = sum(len(h.loop_skips) for h in build_sq_skip_from_design(base, 48).helices)
@@ -159,7 +182,7 @@ def test_autorefine_route_rejects_non_square():
     from fastapi import HTTPException
     from backend.api import state as design_state
     from backend.api.routes_autorefine import AutorefineStartRequest, start_autorefine
-    from tests.conftest import make_6hb_design       # honeycomb
+    from tests.conftest import make_6hb_design  # honeycomb
 
     design_state.set_design(make_6hb_design())
     with pytest.raises(HTTPException) as ei:
@@ -174,20 +197,30 @@ def test_autorefine_route_starts_for_square(monkeypatch):
     import backend.api.skip_twist_tuning as stt
     from backend.api import state as design_state
     from backend.api.routes_autorefine import (
-        AutorefineStartRequest, get_autorefine, start_autorefine,
+        AutorefineStartRequest,
+        get_autorefine,
+        start_autorefine,
     )
     from backend.api.skip_twist_tuning import build_sq_skip_design
 
     monkeypatch.setattr(
-        stt, "autorefine_sq_design",
-        lambda design, ws, **k: {"status": "met", "converged_period": 24,
-                                 "primary_metric": "global_twist_deg",
-                                 "before": {}, "after": {}, "iterations": []})
+        stt,
+        "autorefine_sq_design",
+        lambda design, ws, **k: {
+            "status": "met",
+            "converged_period": 24,
+            "primary_metric": "global_twist_deg",
+            "before": {},
+            "after": {},
+            "iterations": [],
+        },
+    )
     design_state.set_design(build_sq_skip_design(CELLS, 40, 48))
     r = start_autorefine(AutorefineStartRequest())
     assert r["autorefine_id"] and r["state"] == "running"
     # the background stub completes ~instantly; poll the registry briefly
     import time
+
     rid = r["autorefine_id"]
     for _ in range(50):
         s = get_autorefine(rid)
@@ -205,16 +238,24 @@ def test_autorefine_stop_route_cancels_run(monkeypatch):
     import backend.api.skip_twist_tuning as stt
     from backend.api import state as design_state
     from backend.api.routes_autorefine import (
-        AutorefineStartRequest, get_autorefine, start_autorefine, stop_autorefine,
+        AutorefineStartRequest,
+        get_autorefine,
+        start_autorefine,
+        stop_autorefine,
     )
     from backend.api.skip_twist_tuning import build_sq_skip_design
 
     def _blocking(design, ws, *, should_stop=None, on_job=None, on_progress=None, **k):
         while not (should_stop and should_stop()):
             time.sleep(0.01)
-        return {"status": "stopped", "converged_period": None,
-                "primary_metric": "global_twist_deg", "before": {}, "after": {},
-                "iterations": []}
+        return {
+            "status": "stopped",
+            "converged_period": None,
+            "primary_metric": "global_twist_deg",
+            "before": {},
+            "after": {},
+            "iterations": [],
+        }
 
     monkeypatch.setattr(stt, "autorefine_sq_design", _blocking)
     design_state.set_design(build_sq_skip_design(CELLS, 40, 48))
@@ -232,17 +273,20 @@ def test_seed_skip_period_standard_when_no_skips_else_from_density():
     (so iteration 0 = the 'add loops/skips' routine), else derived from the existing
     skip density (refine in place — denser marks => smaller period)."""
     from backend.api.skip_twist_tuning import (
-        build_sq_skip_design, build_sq_skip_from_design, seed_skip_period,
+        build_sq_skip_design,
+        build_sq_skip_from_design,
+        seed_skip_period,
     )
+
     bare = build_sq_skip_design(CELLS, 40, None)
     assert sum(len(h.loop_skips) for h in bare.helices) == 0
-    assert seed_skip_period(bare) == 48                      # no skips → standard
+    assert seed_skip_period(bare) == 48  # no skips → standard
 
-    dense = build_sq_skip_from_design(bare, 16)              # ~3x the standard density
+    dense = build_sq_skip_from_design(bare, 16)  # ~3x the standard density
     p_dense = seed_skip_period(dense)
-    assert 8 <= p_dense < 48                                 # denser → shorter period
+    assert 8 <= p_dense < 48  # denser → shorter period
     std = build_sq_skip_from_design(bare, 48)
-    assert abs(seed_skip_period(std) - 48) <= 24             # ballpark recovery of 48
+    assert abs(seed_skip_period(std) - 48) <= 24  # ballpark recovery of 48
 
 
 def test_autorefine_apply_adds_skips_and_feature_log_entry():
@@ -253,17 +297,17 @@ def test_autorefine_apply_adds_skips_and_feature_log_entry():
     from backend.api.routes_autorefine import _RUNS, apply_autorefine_skips
     from backend.api.skip_twist_tuning import build_sq_skip_design
 
-    design_state.set_design(build_sq_skip_design(CELLS, 40, None))   # square, no skips
+    design_state.set_design(build_sq_skip_design(CELLS, 40, None))  # square, no skips
     assert sum(len(h.loop_skips) for h in design_state.get_or_404().helices) == 0
     _RUNS["rApply"] = {"state": "done", "result": {"converged_period": 24}}
 
     apply_autorefine_skips("rApply")
     cur = design_state.get_or_404()
-    assert sum(len(h.loop_skips) for h in cur.helices) > 0           # skips landed
+    assert sum(len(h.loop_skips) for h in cur.helices) > 0  # skips landed
     entry = cur.feature_log[-1]
     assert entry.op_kind == "autorefine-skips"
     assert "period 24" in entry.label
-    assert entry.feature_type == "snapshot"                          # => revert/seek/delete work
+    assert entry.feature_type == "snapshot"  # => revert/seek/delete work
 
 
 def test_autorefine_apply_regional_lands_explicit_pattern():
@@ -278,14 +322,19 @@ def test_autorefine_apply_regional_lands_explicit_pattern():
     design_state.set_design(base)
     h = next(hh for hh in base.helices if len(core_candidates(base, hh)) >= 3)
     want = sorted(core_candidates(base, h)[1:4])
-    _RUNS["rRegional"] = {"state": "done", "result": {
-        "converged_period": 24, "placement": "regional",
-        "converged_skips": {h.id: want}}}
+    _RUNS["rRegional"] = {
+        "state": "done",
+        "result": {
+            "converged_period": 24,
+            "placement": "regional",
+            "converged_skips": {h.id: want},
+        },
+    }
 
-    apply_autorefine_skips("rRegional")          # period None => apply the regional pattern
+    apply_autorefine_skips("rRegional")  # period None => apply the regional pattern
     cur = design_state.get_or_404()
     bh = next(hh for hh in cur.helices if hh.id == h.id)
-    assert sorted(ls.bp_index for ls in bh.loop_skips) == want    # EXACT pattern landed
+    assert sorted(ls.bp_index for ls in bh.loop_skips) == want  # EXACT pattern landed
     entry = cur.feature_log[-1]
     assert entry.op_kind == "autorefine-skips"
     assert entry.params.get("placement") == "regional"
@@ -313,7 +362,7 @@ def test_autorefine_apply_resequences_to_keep_complementarity():
     assert sum(len(h.loop_skips) for h in cur.helices) > 0
     n_comp, n_pairs = designed_pair_complementarity(cur)
     assert n_pairs > 0
-    assert n_comp / n_pairs > 0.95           # re-sequenced → oxDNA-ready, not de-registered
+    assert n_comp / n_pairs > 0.95  # re-sequenced → oxDNA-ready, not de-registered
 
 
 def test_autorefine_apply_with_explicit_period_during_run():
@@ -324,7 +373,7 @@ def test_autorefine_apply_with_explicit_period_during_run():
     from backend.api.skip_twist_tuning import build_sq_skip_design
 
     design_state.set_design(build_sq_skip_design(CELLS, 40, None))
-    _RUNS["rLive"] = {"state": "running", "result": None}      # mid-run, no converged yet
+    _RUNS["rLive"] = {"state": "running", "result": None}  # mid-run, no converged yet
     apply_autorefine_skips("rLive", period=48)
     cur = design_state.get_or_404()
     assert sum(len(h.loop_skips) for h in cur.helices) > 0
@@ -352,6 +401,7 @@ def test_autorefine_apply_rejects_when_no_period_or_not_complete():
 def test_autorefine_stop_route_unknown_id():
     from fastapi import HTTPException
     from backend.api.routes_autorefine import stop_autorefine
+
     with pytest.raises(HTTPException) as ei:
         stop_autorefine("doesnotexist")
     assert ei.value.status_code == 404
@@ -365,28 +415,31 @@ def test_autorefine_defaults_long_equilibration_and_override(monkeypatch):
     from backend.api import skip_twist_tuning as st
     from backend.api.headless_oxdna_build import STANDARD_RELAX_PARAMS
 
-    assert STANDARD_RELAX_PARAMS["equil_steps"] == 100_000          # the too-short stock default
+    assert (
+        STANDARD_RELAX_PARAMS["equil_steps"] == 100_000
+    )  # the too-short stock default
 
-    base = build_sq_skip_design(CELLS, 40, 24)                      # prepared (skips + sequenced)
+    base = build_sq_skip_design(CELLS, 40, 24)  # prepared (skips + sequenced)
     captured: dict = {}
 
     class _Stop(Exception):
         pass
 
-    def _fake_measure(design, workspace, **kw):                     # capture relax_params, short-circuit
-        captured.clear(); captured.update(kw)
+    def _fake_measure(design, workspace, **kw):  # capture relax_params, short-circuit
+        captured.clear()
+        captured.update(kw)
         raise _Stop
 
     monkeypatch.setattr(st, "measure_design_self_consistency", _fake_measure)
 
     with pytest.raises(_Stop):
         st.autorefine_sq_design(base, "/tmp/unused")
-    assert captured.get("equil_steps") == 10_000_000               # default bumped ~100x
+    assert captured.get("equil_steps") == 10_000_000  # default bumped ~100x
 
     with pytest.raises(_Stop):
         st.autorefine_sq_design(base, "/tmp/unused", equilibration_steps=6_000_000)
-    assert captured.get("equil_steps") == 6_000_000                # knob honored
+    assert captured.get("equil_steps") == 6_000_000  # knob honored
 
     with pytest.raises(_Stop):
         st.autorefine_sq_design(base, "/tmp/unused", equil_steps=2_000_000)
-    assert captured.get("equil_steps") == 2_000_000                # explicit relax_param still wins
+    assert captured.get("equil_steps") == 2_000_000  # explicit relax_param still wins

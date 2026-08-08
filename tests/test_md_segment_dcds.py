@@ -30,8 +30,9 @@ def _write_dcd(path, n_frames, start_time, dt=100.0, n_atoms=4):
     # istart is what carries the start into the HEADER — a per-frame ts.time is not
     # written through, which is exactly how a real NAMD continuation differs from its
     # base (firsttimestep).
-    with DCDWriter(str(path), n_atoms=n_atoms, dt=dt, nsavc=1,
-                   istart=int(start_time / dt)) as w:
+    with DCDWriter(
+        str(path), n_atoms=n_atoms, dt=dt, nsavc=1, istart=int(start_time / dt)
+    ) as w:
         for i in range(n_frames):
             u.atoms.positions = np.zeros((n_atoms, 3), dtype=np.float32) + i
             w.write(u.atoms)
@@ -136,7 +137,7 @@ def test_empty_and_missing_files_are_skipped(job):
     from backend.api.routes_md import _md_segment_dcds
 
     j, pkg = job
-    (pkg / "output" / "prod.dcd").write_bytes(b"")        # zero-length
+    (pkg / "output" / "prod.dcd").write_bytes(b"")  # zero-length
     _write_dcd(pkg / "output" / "prod.cont1.dcd", 3, start_time=100.0)
 
     segs = _md_segment_dcds(j)

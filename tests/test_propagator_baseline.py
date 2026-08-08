@@ -4,6 +4,7 @@ Pins the parts that must be correct independent of any trajectory: pair formatio
 respects segment boundaries, minimum-image kills box-wrap jumps, the velocity-Verlet
 fit recovers known coefficients, and evaluate() scores a synthetic dataset sanely.
 """
+
 import json
 
 import numpy as np
@@ -14,13 +15,18 @@ from backend.ml.propagator import baseline as B
 def test_pair_indices_never_cross_a_segment_boundary():
     # 8 frames, two segments starting at 0 and 5 → within-segment pairs only.
     idx = B._pair_indices(8, np.array([0, 5]))
-    assert list(idx) == [0, 1, 2, 3, 5, 6]   # 4→5 (boundary) excluded
+    assert list(idx) == [0, 1, 2, 3, 5, 6]  # 4→5 (boundary) excluded
 
 
 def test_pair_indices_stride_stays_within_segments():
     # stride 2 over the same layout: pairs (t, t+2) must not cross the 5-boundary.
     idx = B._pair_indices(8, np.array([0, 5]), stride=2)
-    assert list(idx) == [0, 1, 2, 5]   # seg0: 0,1,2 (3→5 excluded); seg1: 5 (6→8 excluded)
+    assert list(idx) == [
+        0,
+        1,
+        2,
+        5,
+    ]  # seg0: 0,1,2 (3→5 excluded); seg1: 5 (6→8 excluded)
 
 
 def test_min_image_removes_full_box_jump():
@@ -48,7 +54,7 @@ def test_fit_recovers_known_coefficients():
 
 def test_per_element_fit_specializes_by_element():
     rng = np.random.default_rng(1)
-    z = np.array([1, 1, 8, 8])                    # two H, two O
+    z = np.array([1, 1, 8, 8])  # two H, two O
     velP = rng.normal(size=(200, 4, 3))
     accP = np.zeros_like(velP)
     # H moves at 0.01·v (fast vibration), O at 0.2·v — the exact real-data pattern.
@@ -66,13 +72,23 @@ def _write_synthetic_dataset(tmp_path, a=0.3, b=0.05, n_frames=60, n_atoms=8):
     # disp = a·v + b·(f/m); positions are the running sum so within-segment pairs
     # reproduce disp exactly.
     disp = a * vel + b * frc
-    pos = np.cumsum(np.concatenate([np.zeros((1, n_atoms, 3), np.float32), disp[:-1]]), axis=0)
+    pos = np.cumsum(
+        np.concatenate([np.zeros((1, n_atoms, 3), np.float32), disp[:-1]]), axis=0
+    )
     npz = tmp_path / "syn.npz"
     np.savez_compressed(
-        npz, positions=pos.astype(np.float32), velocities=vel, forces=frc,
-        z=np.ones(n_atoms, np.int16), mass=mass, charge=np.zeros(n_atoms, np.float32),
-        resid=np.ones(n_atoms, np.int32), bonds=np.zeros((0, 2), np.int32),
-        segment_starts=np.array([0], np.int32), box_ang=np.zeros(3, np.float32))
+        npz,
+        positions=pos.astype(np.float32),
+        velocities=vel,
+        forces=frc,
+        z=np.ones(n_atoms, np.int16),
+        mass=mass,
+        charge=np.zeros(n_atoms, np.float32),
+        resid=np.ones(n_atoms, np.int32),
+        bonds=np.zeros((0, 2), np.int32),
+        segment_starts=np.array([0], np.int32),
+        box_ang=np.zeros(3, np.float32),
+    )
     (tmp_path / "dataset_manifest.json").write_text(json.dumps({"dt_fs": 20.0}))
     return npz
 

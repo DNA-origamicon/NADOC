@@ -15,6 +15,7 @@ dynamic (``prepare`` is bound to one of three functions) and the kwargs are lite
 test reads the call site with ``ast`` and checks each candidate function against it, so
 adding a kwarg without updating a protocol fails here instead of in a user's job.
 """
+
 from __future__ import annotations
 
 import ast
@@ -41,7 +42,8 @@ def _prep_call_kwargs() -> set[str]:
             return {kw.arg for kw in node.keywords if kw.arg is not None}
     raise AssertionError(
         "could not find run_in_threadpool(prepare, ...) in routes_md — if that call was "
-        "renamed or restructured, update this test rather than deleting it")
+        "renamed or restructured, update this test rather than deleting it"
+    )
 
 
 def _accepts(fn, names: set[str]) -> set[str]:
@@ -49,16 +51,22 @@ def _accepts(fn, names: set[str]) -> set[str]:
     sig = inspect.signature(fn)
     if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
         return set()
-    ok = {n for n, p in sig.parameters.items()
-          if p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                        inspect.Parameter.KEYWORD_ONLY)}
+    ok = {
+        n
+        for n, p in sig.parameters.items()
+        if p.kind
+        in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    }
     return names - ok
 
 
 def _prepare_functions() -> dict:
-    from backend.core.md_protocols import (prepare_equilibrium_aware_namd,
-                                           prepare_mgh_slow_release)
+    from backend.core.md_protocols import (
+        prepare_equilibrium_aware_namd,
+        prepare_mgh_slow_release,
+    )
     from backend.core.namd_gbis import prepare_implicit_gbis_namd
+
     return {
         "equilibrium_aware_namd": prepare_equilibrium_aware_namd,
         "mgh_slow_release": prepare_mgh_slow_release,
@@ -79,12 +87,14 @@ def test_every_protocol_accepts_every_prep_kwarg(protocol):
     assert not missing, (
         f"{fn.__name__} cannot accept {sorted(missing)} — routes_md passes one uniform "
         f"kwarg set to every protocol, so each entry point must accept-and-ignore what "
-        f"does not apply to it")
+        f"does not apply to it"
+    )
 
 
 def test_gbis_accepts_the_two_kwargs_that_actually_broke_it():
     """Named explicitly so the regression is legible without re-deriving it."""
     from backend.core.namd_gbis import prepare_implicit_gbis_namd
+
     params = inspect.signature(prepare_implicit_gbis_namd).parameters
     assert "gpu_resident_mode" in params
     assert "production_timestep_fs" in params
@@ -94,5 +104,5 @@ def test_the_seed_kwargs_branch_stays_protocol_aware():
     """``allow_catenated_seed`` and ``require_full_topology`` are added conditionally
     because GBIS has neither; if that guard is dropped, GBIS breaks the same way."""
     src = ROUTES.read_text()
-    assert 'if body.protocol != IMPLICIT_GBIS_PROTOCOL:' in src
+    assert "if body.protocol != IMPLICIT_GBIS_PROTOCOL:" in src
     assert 'seed_kwargs["allow_catenated_seed"]' in src

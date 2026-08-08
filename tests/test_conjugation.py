@@ -1,4 +1,5 @@
 """Tests for backend.core.conjugation — azide-oligo conjugation site finder."""
+
 import math
 
 from backend.core.conjugation import (
@@ -11,8 +12,15 @@ from backend.core.models import ProteinAsset, ProteinAtom
 def _atom(serial, name, element, res_name, res_seq, xyz, chain="A"):
     x, y, z = xyz
     return ProteinAtom(
-        serial=serial, name=name, element=element, res_name=res_name,
-        chain_id=chain, res_seq=res_seq, x=x, y=y, z=z,
+        serial=serial,
+        name=name,
+        element=element,
+        res_name=res_name,
+        chain_id=chain,
+        res_seq=res_seq,
+        x=x,
+        y=y,
+        z=z,
     )
 
 
@@ -25,9 +33,11 @@ def _shell(start_serial, center, res_seq, radius=0.30, n=60, res_name="LYS"):
         z = 1.0 - (2.0 * i + 1.0) / n
         r = math.sqrt(max(0.0, 1.0 - z * z))
         th = golden * i
-        p = (cx + radius * r * math.cos(th),
-             cy + radius * r * math.sin(th),
-             cz + radius * z)
+        p = (
+            cx + radius * r * math.cos(th),
+            cy + radius * r * math.sin(th),
+            cz + radius * z,
+        )
         out.append(_atom(start_serial + i, "CX", "C", res_name, res_seq, p))
     return out
 
@@ -50,7 +60,9 @@ def test_sasa_enclosed_atom_buried():
 def test_sasa_monotonic_isolated_above_enclosed():
     iso = ProteinAsset(atoms=[_atom(1, "NZ", "N", "LYS", 1, (0, 0, 0))])
     center = (0.0, 0.0, 0.0)
-    enc = ProteinAsset(atoms=[_atom(1, "NZ", "N", "LYS", 1, center)] + _shell(2, center, 1))
+    enc = ProteinAsset(
+        atoms=[_atom(1, "NZ", "N", "LYS", 1, center)] + _shell(2, center, 1)
+    )
     assert atom_sasa(iso)[1] > atom_sasa(enc)[1]
 
 
@@ -77,10 +89,10 @@ def _candidate_asset():
 def test_candidates_pick_exposed_drop_buried():
     cands = find_conjugation_candidates(_candidate_asset())
     by_chem = {(c["chemistry"], c["res_seq"]) for c in cands}
-    assert ("nterm", 1) in by_chem       # N-terminal backbone N
-    assert ("lys", 5) in by_chem          # exposed Lys NZ
-    assert ("cys", 7) in by_chem          # exposed Cys SG
-    assert ("lys", 6) not in by_chem      # buried Lys NZ rejected
+    assert ("nterm", 1) in by_chem  # N-terminal backbone N
+    assert ("lys", 5) in by_chem  # exposed Lys NZ
+    assert ("cys", 7) in by_chem  # exposed Cys SG
+    assert ("lys", 6) not in by_chem  # buried Lys NZ rejected
 
 
 def test_candidate_functional_atom_serials_and_coords():

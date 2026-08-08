@@ -29,18 +29,18 @@ def _find_nondeclash_chunk():
         return None
     best = None
     for dcd in ws.glob("*/package/*/output/*_p*.dcd"):
-        name = dcd.stem                                  # <seg>
+        name = dcd.stem  # <seg>
         if any(k in name.lower() for k in ("production", "cont", "qualification")):
             continue
         pkg = dcd.parent.parent
-        if not (pkg / f"{name}.log").exists():           # seg log lives at package root
+        if not (pkg / f"{name}.log").exists():  # seg log lives at package root
             continue
         # infer stem from a non-hmr psf present in the package
         psfs = [p for p in pkg.glob("*.psf") if "hmr" not in p.name]
         if not psfs:
             continue
         stem = psfs[0].stem
-        if (pkg / f"{stem}_build.pdb").exists():         # declash design — skip
+        if (pkg / f"{stem}_build.pdb").exists():  # declash design — skip
             continue
         if not (pkg / f"{stem}.pdb").exists():
             continue
@@ -73,7 +73,7 @@ def test_health_eval_writes_wc_json_matching_run_health_check(tmp_path):
     log = (pkg / f"{seg}.log").read_text(errors="replace")
     code, diag = remote_cutoff_eval.decide(log, wc)
     assert code in (0, 1, 2)
-    assert diag.get("tier") in ("A", None)               # A when enough frames
+    assert diag.get("tier") in ("A", None)  # A when enough frames
 
 
 def test_health_eval_missing_dcd_fails_safe(tmp_path):
@@ -83,7 +83,16 @@ def test_health_eval_missing_dcd_fails_safe(tmp_path):
     (tmp_path / "nostem.pdb").write_text("")
     out = tmp_path / "wc.json"
     rc = remote_health_eval.main(
-        ["--package-dir", str(tmp_path), "--seg", "nostem_01_p10", "--stem", "nostem", "--out", str(out)]
+        [
+            "--package-dir",
+            str(tmp_path),
+            "--seg",
+            "nostem_01_p10",
+            "--stem",
+            "nostem",
+            "--out",
+            str(out),
+        ]
     )
     assert rc == 3
     assert not out.exists()

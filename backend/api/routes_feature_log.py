@@ -37,6 +37,7 @@ from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 
 from backend.api import state as design_state
+
 # Shared kernel/infra helpers that stay in crud.py and are imported back
 # (same convention as routes_camera_poses.py / routes_loop_skip.py):
 #   _seek_feature_log              — the feature-log replay/seek ENGINE; L4-blocked
@@ -62,7 +63,7 @@ router = APIRouter()
 
 
 class SeekFeaturesBody(BaseModel):
-    position: int   # -2 = empty (no features); -1 = end (all active); ≥0 = index of last active entry
+    position: int  # -2 = empty (no features); -1 = end (all active); ≥0 = index of last active entry
     sub_position: Optional[int] = None
     """Mid-cluster sub-position. None → cluster's post-state (all children active).
     -2 → cluster's pre-state (no children active). 0..M-1 → first sub_position+1
@@ -106,7 +107,7 @@ def seek_features(body: SeekFeaturesBody):
 
 
 class GeometryBatchBody(BaseModel):
-    positions: list[int]   # e.g. [-2, 0, 1, -1]; duplicates ignored
+    positions: list[int]  # e.g. [-2, 0, 1, -1]; duplicates ignored
 
 
 @router.post("/design/features/geometry-batch", status_code=200)
@@ -130,7 +131,7 @@ def geometry_batch(body: GeometryBatchBody) -> dict:
         d = _seek_feature_log(design, position)
         result[str(position)] = {
             "nucleotides_compact": _compact_geometry_for_design(d),
-            "helix_axes":          deformed_helix_axes(d),
+            "helix_axes": deformed_helix_axes(d),
         }
     return result
 
@@ -157,12 +158,12 @@ def atomistic_batch(body: GeometryBatchBody) -> dict:
 
 
 class SurfaceBatchBody(BaseModel):
-    positions:      list[int]
-    color_mode:     str   = "strand"
-    probe_radius:   float = 0.28
-    grid_spacing:   float = 0.20
+    positions: list[int]
+    color_mode: str = "strand"
+    probe_radius: float = 0.28
+    grid_spacing: float = 0.20
     radius_inflate: float = 1.30
-    smooth:         int   = 15
+    smooth: int = 15
 
 
 @router.post("/design/features/surface-batch", status_code=200)
@@ -188,19 +189,21 @@ def surface_batch(body: SurfaceBatchBody) -> dict:
     design = design_state.get_or_404()
     result: dict[str, dict] = {}
     for position in set(body.positions):
-        d     = _seek_feature_log(design, position)
+        d = _seek_feature_log(design, position)
         model = build_atomistic_model(d)
-        mesh  = compute_surface(model.atoms,
-                                grid_spacing=body.grid_spacing,
-                                probe_radius=body.probe_radius,
-                                radius_scale=1.2 * body.radius_inflate)
-        mesh  = smooth_mesh(mesh, iterations=body.smooth)
+        mesh = compute_surface(
+            model.atoms,
+            grid_spacing=body.grid_spacing,
+            probe_radius=body.probe_radius,
+            radius_scale=1.2 * body.radius_inflate,
+        )
+        mesh = smooth_mesh(mesh, iterations=body.smooth)
         verts = [round(float(v), 5) for v in mesh.vertices.ravel()]
         faces = [int(f) for f in mesh.faces.ravel()]
         entry: dict = {"vertices": verts, "faces": faces}
         if body.color_mode == "strand":
             full = surface_to_json(mesh, d, color_mode="strand")
-            vc   = full.get("vertex_colors")
+            vc = full.get("vertex_colors")
             if vc:
                 # 4 decimals is more than enough for 8-bit display precision and
                 # keeps the bake payload compact for many-keyframe animations.

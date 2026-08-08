@@ -33,6 +33,7 @@ Two things worth knowing before you edit these:
   between overlapping nucleotides (a steric blow-up rather than a FENE one).  Don't merge
   the arc test into the FENE test on the assumption that one implies the other.
 """
+
 from __future__ import annotations
 
 import json
@@ -62,17 +63,18 @@ from backend.physics.oxdna_interface import (
     write_topology,
 )
 
-FENE_LO = FENE_R0_OXDNA2 - FENE_DELTA      # 0.5064 units — the SHORT-bond cliff
-FENE_HI = FENE_R0_OXDNA2 + FENE_DELTA      # 1.0064 units — the LONG-bond cliff
+FENE_LO = FENE_R0_OXDNA2 - FENE_DELTA  # 0.5064 units — the SHORT-bond cliff
+FENE_HI = FENE_R0_OXDNA2 + FENE_DELTA  # 1.0064 units — the LONG-bond cliff
 
 VOLTRON = Path("workspace/VoltronCoreScad.nadoc")
-SMALL   = Path("Examples/6hb_test.nadoc")
+SMALL = Path("Examples/6hb_test.nadoc")
 
 # VOLTRON is a real user design (334 single-T extensions) kept in the local workspace, not
 # committed to the repo — skip its regressions cleanly on a checkout that doesn't have it
 # rather than erroring with FileNotFoundError.
 _needs_voltron = pytest.mark.skipif(
-    not VOLTRON.exists(), reason=f"{VOLTRON} not present (user-local design)")
+    not VOLTRON.exists(), reason=f"{VOLTRON} not present (user-local design)"
+)
 
 
 def _load(path: Path) -> Design:
@@ -84,7 +86,7 @@ def _small_with_extensions(**kw) -> Design:
     d = _load(SMALL)
     d.extensions = [
         StrandExtension(strand_id=d.strands[1].id, end="three_prime", sequence="TT"),
-        StrandExtension(strand_id=d.strands[2].id, end="five_prime",  sequence="A"),
+        StrandExtension(strand_id=d.strands[2].id, end="five_prime", sequence="A"),
         StrandExtension(strand_id=d.strands[4].id, end="three_prime", sequence="TTTTT"),
     ]
     return d
@@ -113,7 +115,8 @@ def _bond_units(full_map: dict, a: tuple, b: tuple) -> float | None:
 
 def _extension_bonds(design: Design, full_map: dict) -> list[float]:
     return [
-        u for a, b in backbone_bond_pairs(design)
+        u
+        for a, b in backbone_bond_pairs(design)
         if (is_extension_key(a) or is_extension_key(b))
         and (u := _bond_units(full_map, a, b)) is not None
     ]
@@ -127,13 +130,15 @@ def test_extension_bases_become_particles():
     bare = _load(SMALL)
     bare.extensions = []
     d = _small_with_extensions()
-    d.extensions.append(       # a fluorophore is not DNA: it must add ZERO particles
+    d.extensions.append(  # a fluorophore is not DNA: it must add ZERO particles
         StrandExtension(strand_id=d.strands[3].id, end="five_prime", modification="cy3")
     )
 
     n_bare = len(_strand_nucleotide_order(bare))
-    n_ext  = len(_strand_nucleotide_order(d))
-    assert n_ext - n_bare == 2 + 1 + 5 == sum(len(e.sequence or "") for e in d.extensions)
+    n_ext = len(_strand_nucleotide_order(d))
+    assert (
+        n_ext - n_bare == 2 + 1 + 5 == sum(len(e.sequence or "") for e in d.extensions)
+    )
 
 
 def test_extension_does_not_consume_the_strand_sequence():
@@ -178,7 +183,7 @@ def test_five_prime_tail_is_walked_outermost_first():
     base_of = {k: r[1] for k, r in zip(order, rows)}
     tail = [k for k in order if is_extension_key(k)]
 
-    assert [k[1] for k in tail] == [2, 1, 0]              # outermost bead first
+    assert [k[1] for k in tail] == [2, 1, 0]  # outermost bead first
     assert [base_of[k] for k in tail] == ["A", "C", "G"]  # 5′→3′
 
 
@@ -196,7 +201,7 @@ def test_extension_threads_into_the_backbone_chain():
     s3, s5 = d.strands[1], d.strands[2]
     d.extensions = [
         StrandExtension(strand_id=s3.id, end="three_prime", sequence="TT"),
-        StrandExtension(strand_id=s5.id, end="five_prime",  sequence="TT"),
+        StrandExtension(strand_id=s5.id, end="five_prime", sequence="TT"),
     ]
     order = _strand_nucleotide_order(d)
     rows, _ = topology_rows(d)
@@ -208,7 +213,7 @@ def test_extension_threads_into_the_backbone_chain():
         # order[] is chain order, so the free 5′/3′ terminus is the outer end.
         first, last = idx[tail[0]], idx[tail[-1]]
         n5_first = rows[first][3]
-        n3_last  = rows[last][2]
+        n3_last = rows[last][2]
         if e.end == "three_prime":
             # tail runs anchor → t0 → t1;  t1 (the tip) has no 3′ neighbour
             assert n5_first != -1 and rows[n5_first][0] == rows[first][0]
@@ -224,14 +229,18 @@ def test_extension_threads_into_the_backbone_chain():
 
 def _arc_spacings(design: Design) -> dict[str, list[float]]:
     """Consecutive backbone separations along each tail, anchor outward (nm)."""
-    geo  = _geometry_for_design(design)
-    real = {(n["helix_id"], n["bp_index"], n["direction"]): n for n in geo
-            if not n["helix_id"].startswith("__ext_")}
+    geo = _geometry_for_design(design)
+    real = {
+        (n["helix_id"], n["bp_index"], n["direction"]): n
+        for n in geo
+        if not n["helix_id"].startswith("__ext_")
+    }
     beads: dict[str, dict[int, np.ndarray]] = {}
     for n in geo:
         if n["helix_id"].startswith("__ext_"):
-            beads.setdefault(n["extension_id"], {})[n["bp_index"]] = \
-                np.asarray(n["backbone_position"], dtype=float)
+            beads.setdefault(n["extension_id"], {})[n["bp_index"]] = np.asarray(
+                n["backbone_position"], dtype=float
+            )
 
     strands = {s.id: s for s in design.strands}
     out: dict[str, list[float]] = {}
@@ -239,12 +248,14 @@ def _arc_spacings(design: Design) -> dict[str, list[float]]:
         s = strands[e.strand_id]
         five = e.end == "five_prime"
         dom = s.domains[0] if five else s.domains[-1]
-        bp  = dom.start_bp if five else dom.end_bp
+        bp = dom.start_bp if five else dom.end_bp
         anchor = real[(dom.helix_id, bp, dom.direction.value)]
         chain = [np.asarray(anchor["backbone_position"], dtype=float)]
         chain += [beads[e.id][i] for i in sorted(beads[e.id])]
-        out[e.id] = [float(np.linalg.norm(chain[i + 1] - chain[i]))
-                     for i in range(len(chain) - 1)]
+        out[e.id] = [
+            float(np.linalg.norm(chain[i + 1] - chain[i]))
+            for i in range(len(chain) - 1)
+        ]
     return out
 
 
@@ -265,7 +276,7 @@ def test_extension_arc_spacing_is_ssdna_contour(n):
     d = _load(SMALL)
     d.extensions = [
         StrandExtension(strand_id=d.strands[1].id, end="three_prime", sequence="T" * n),
-        StrandExtension(strand_id=d.strands[2].id, end="five_prime",  sequence="T" * n),
+        StrandExtension(strand_id=d.strands[2].id, end="five_prime", sequence="T" * n),
     ]
     for spacings in _arc_spacings(d).values():
         assert len(spacings) == n
@@ -287,12 +298,13 @@ def test_extension_arc_is_rigid_under_cluster_rotation():
     # Rotate the structure so the radial swings toward the old world-+Z bow axis.
     for h in d.helices:
         for p in (h.axis_start, h.axis_end):
-            p.x, p.y, p.z = p.x, -p.z, p.y      # 90° about X
+            p.x, p.y, p.z = p.x, -p.z, p.y  # 90° about X
     after = _arc_spacings(d)
 
     for ext_id, spacings in before.items():
         assert np.allclose(spacings, after[ext_id], atol=1e-9), (
-            f"arc changed under rotation: {spacings} -> {after[ext_id]}")
+            f"arc changed under rotation: {spacings} -> {after[ext_id]}"
+        )
 
 
 # ── The FENE oracle (the reason this feature is hard) ─────────────────────────
@@ -349,7 +361,7 @@ def test_voltroncore_334_tails_are_all_fene_safe(tmp_path):
 
     assert len(bonds) == 334
     assert min(bonds) > FENE_LO and max(bonds) < FENE_HI
-    assert max(bonds) < FENE_SAFE_MAX_UNITS      # would not trip the relax fene_safe gate
+    assert max(bonds) < FENE_SAFE_MAX_UNITS  # would not trip the relax fene_safe gate
 
 
 def _assert_real_bonds_undisturbed(with_tails: Design, bare: Design, tmp_path: Path):
@@ -358,13 +370,19 @@ def _assert_real_bonds_undisturbed(with_tails: Design, bare: Design, tmp_path: P
     the slow full-scale VoltronCore pin below.)"""
     assert with_tails.extensions and not bare.extensions
 
-    fm      = _seed(with_tails, tmp_path / "with")
-    fm_bare = _seed(bare,       tmp_path / "bare")
-    real      = [u for a, b in backbone_bond_pairs(with_tails)
-                 if not (is_extension_key(a) or is_extension_key(b))
-                 and (u := _bond_units(fm, a, b)) is not None]
-    real_bare = [u for a, b in backbone_bond_pairs(bare)
-                 if (u := _bond_units(fm_bare, a, b)) is not None]
+    fm = _seed(with_tails, tmp_path / "with")
+    fm_bare = _seed(bare, tmp_path / "bare")
+    real = [
+        u
+        for a, b in backbone_bond_pairs(with_tails)
+        if not (is_extension_key(a) or is_extension_key(b))
+        and (u := _bond_units(fm, a, b)) is not None
+    ]
+    real_bare = [
+        u
+        for a, b in backbone_bond_pairs(bare)
+        if (u := _bond_units(fm_bare, a, b)) is not None
+    ]
 
     assert real and len(real) == len(real_bare)
     assert np.allclose(sorted(real), sorted(real_bare))
@@ -396,7 +414,7 @@ def test_voltroncore_extensions_do_not_disturb_the_rest_of_the_design(tmp_path):
     checks is already pinned per-change on the 6hb; this one guards against a
     scale-dependent surprise (an ordering/aggregation bug that only shows up with hundreds
     of tails)."""
-    d    = _load(VOLTRON)
+    d = _load(VOLTRON)
     bare = _load(VOLTRON)
     bare.extensions = []
     assert len(d.extensions) == 334
@@ -446,7 +464,7 @@ def test_readback_drops_tails_by_default(tmp_path):
     write_configuration(d, geo, conf, oxdna_native_seed=True)
 
     default = read_configuration_full(conf, d)
-    opted   = read_configuration_full(conf, d, include_extensions=True)
+    opted = read_configuration_full(conf, d, include_extensions=True)
 
     assert not any(is_extension_key(k) for k in default)
     assert sum(is_extension_key(k) for k in opted) == 8
@@ -454,7 +472,9 @@ def test_readback_drops_tails_by_default(tmp_path):
     bare = _load(SMALL)
     bare.extensions = []
     bare_conf = tmp_path / "bare.dat"
-    write_configuration(bare, _geometry_for_design(bare), bare_conf, oxdna_native_seed=True)
+    write_configuration(
+        bare, _geometry_for_design(bare), bare_conf, oxdna_native_seed=True
+    )
     # the design-keyed view is exactly what it was before the feature existed
     assert set(default) == set(read_configuration_full(bare_conf, bare))
 
@@ -466,11 +486,11 @@ def test_stale_job_topology_is_rejected(tmp_path):
     bare = _load(SMALL)
     bare.extensions = []
     top = tmp_path / "topology.top"
-    write_topology(bare, top)                 # the "old" job's topology
+    write_topology(bare, top)  # the "old" job's topology
 
     assert_topology_matches_design(top, bare)  # same build: fine
 
-    grown = _small_with_extensions()           # design now has tails → more particles
+    grown = _small_with_extensions()  # design now has tails → more particles
     with pytest.raises(StaleJobTopologyError, match="predates"):
         assert_topology_matches_design(top, grown)
 
@@ -505,20 +525,25 @@ def test_trajectory_first_frame_places_tails_not_the_origin(tmp_path):
 
     d = _small_with_extensions()
     geo = _geometry_for_design(d)
-    ref = tmp_path / "design_ref.dat"; _write_traj(d, geo, ref, 1)
-    prod = tmp_path / "prod.dat";      _write_traj(d, geo, prod, 2)
+    ref = tmp_path / "design_ref.dat"
+    _write_traj(d, geo, ref, 1)
+    prod = tmp_path / "prod.dat"
+    _write_traj(d, geo, prod, 2)
 
-    r = composite_trajectory(d, [("4_production", "production", prod)], ref, align=False)
-    assert r["n_frames"] == 3                       # seed + 2
+    r = composite_trajectory(
+        d, [("4_production", "production", prod)], ref, align=False
+    )
+    assert r["n_frames"] == 3  # seed + 2
 
     ext_idx = [i for i, k in enumerate(r["keys"]) if is_extension_key(tuple(k))]
-    assert len(ext_idx) == 8                        # 2 + 1 + 5 tail beads
+    assert len(ext_idx) == 8  # 2 + 1 + 5 tail beads
 
     for f, frame in enumerate(r["frames"]):
         for i in ext_idx:
-            xyz = np.array(frame[6 * i:6 * i + 3])
+            xyz = np.array(frame[6 * i : 6 * i + 3])
             assert np.linalg.norm(xyz) > 1e-6, (
-                f"frame {f}: extension bead {r['keys'][i]} sits at the origin")
+                f"frame {f}: extension bead {r['keys'][i]} sits at the origin"
+            )
         # and the seed must agree with the (identical) physical frames it precedes
         if f:
             assert np.allclose(frame, r["frames"][0], atol=1e-6)

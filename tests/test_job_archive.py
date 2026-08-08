@@ -21,14 +21,22 @@ def _wait(kind: str, job_id: str, timeout: float = 5.0) -> dict:
         if st and st["state"] in ("done", "error"):
             return st
         time.sleep(0.02)
-    raise AssertionError(f"archive task for {job_id} did not finish: {ja.task_status(kind, job_id)}")
+    raise AssertionError(
+        f"archive task for {job_id} did not finish: {ja.task_status(kind, job_id)}"
+    )
 
 
 class TestIndex:
     def test_resolve_default_and_archived(self, tmp_path: Path) -> None:
-        assert ja.resolve_job_json(tmp_path, "oxdna_jobs", "abc") == tmp_path / "oxdna_jobs" / "abc" / "job.json"
+        assert (
+            ja.resolve_job_json(tmp_path, "oxdna_jobs", "abc")
+            == tmp_path / "oxdna_jobs" / "abc" / "job.json"
+        )
         ja._write_index(tmp_path, "oxdna_jobs", {"abc": "/ext/abc"})
-        assert ja.resolve_job_json(tmp_path, "oxdna_jobs", "abc") == Path("/ext/abc") / "job.json"
+        assert (
+            ja.resolve_job_json(tmp_path, "oxdna_jobs", "abc")
+            == Path("/ext/abc") / "job.json"
+        )
         assert ja.archived_job_ids(tmp_path, "oxdna_jobs") == ["abc"]
 
     def test_purge(self, tmp_path: Path) -> None:
@@ -74,7 +82,8 @@ class TestArchiveRoundTrip:
         # The blocking archive_job (for headless/scripted callers) moves the folder,
         # flips `archived`, updates the index, and leaves the job loadable — same end
         # state as the async start_archive, but inline (no task polling).
-        ws = tmp_path / "ws"; ws.mkdir()
+        ws = tmp_path / "ws"
+        ws.mkdir()
         arch = tmp_path / "ext"
         job = new_oxdna_job("demo", [], design_source_path="demo.nadoc")
         job.save(ws)
@@ -82,14 +91,15 @@ class TestArchiveRoundTrip:
 
         dest = ja.archive_job(job, ws, "oxdna_jobs", arch)
         assert dest == str(arch / job.job_id)
-        assert not (ws / "oxdna_jobs" / job.job_id).exists()        # source moved
-        assert (arch / job.job_id / "trajectory.dat").exists()       # data preserved
+        assert not (ws / "oxdna_jobs" / job.job_id).exists()  # source moved
+        assert (arch / job.job_id / "trajectory.dat").exists()  # data preserved
         assert ja.archived_job_ids(ws, "oxdna_jobs") == [job.job_id]
         j2 = OxdnaJob.list_jobs(ws)[0]
         assert j2.archived and j2.job_dir(ws) == arch / job.job_id
 
     def test_archive_job_sync_rejects_double_archive(self, tmp_path: Path) -> None:
-        ws = tmp_path / "ws"; ws.mkdir()
+        ws = tmp_path / "ws"
+        ws.mkdir()
         job = new_oxdna_job("d", [])
         job.save(ws)
         job.archived = True
@@ -97,7 +107,8 @@ class TestArchiveRoundTrip:
             ja.archive_job(job, ws, "oxdna_jobs", tmp_path / "ext")
 
     def test_archive_rejects_double_archive(self, tmp_path: Path) -> None:
-        ws = tmp_path / "ws"; ws.mkdir()
+        ws = tmp_path / "ws"
+        ws.mkdir()
         job = new_oxdna_job("d", [])
         job.save(ws)
         job.archived = True
@@ -109,8 +120,10 @@ class TestArchiveRoundTrip:
         # A job whose workspace folder is a symlink (manually relocated to an
         # external drive) must NOT be followed-and-copied — that duplicated 40 GB
         # in the field. Refuse with a clear error instead.
-        ws = tmp_path / "ws"; (ws / "oxdna_jobs").mkdir(parents=True)
-        real = tmp_path / "external"; real.mkdir()
+        ws = tmp_path / "ws"
+        (ws / "oxdna_jobs").mkdir(parents=True)
+        real = tmp_path / "external"
+        real.mkdir()
         job = new_oxdna_job("d", [])
         # Build the job at the external location, then symlink the workspace slot.
         real_job = real / job.job_id
@@ -124,11 +137,12 @@ class TestArchiveRoundTrip:
         assert not (tmp_path / "dest").exists()
 
     def test_archive_rejects_existing_dest(self, tmp_path: Path) -> None:
-        ws = tmp_path / "ws"; ws.mkdir()
+        ws = tmp_path / "ws"
+        ws.mkdir()
         job = new_md_job("A", "mgh_slow_release", "A", "pkg")
         job.save(ws)
         dest_root = tmp_path / "ext"
-        (dest_root / job.job_id).mkdir(parents=True)   # pre-existing collision
+        (dest_root / job.job_id).mkdir(parents=True)  # pre-existing collision
         with pytest.raises(FileExistsError):
             ja.start_archive(job, ws, "md_jobs", dest_root)
 
@@ -146,6 +160,7 @@ class TestRoutes:
         monkeypatch.setattr(assembly, "_WORKSPACE_DIR", tmp_path)
         # routes_md/_oxdna read their own _workspace(); point those at tmp_path too.
         from backend.api import routes_md, routes_oxdna
+
         monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
         monkeypatch.setattr(routes_oxdna, "_workspace", lambda: tmp_path)
         design_state.set_design(make_minimal_design())
@@ -155,7 +170,9 @@ class TestRoutes:
         from backend.core.design_disk_usage import warm_dir_sizes
 
         c, ws = client
-        job = new_md_job("A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc")
+        job = new_md_job(
+            "A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc"
+        )
         job.save(ws)
         (job.job_dir(ws) / "blob.bin").write_bytes(b"\0" * 2048)
         # Size is warmed lazily OFF the poll hot path: a cold list reports None (never blocks
@@ -165,7 +182,7 @@ class TestRoutes:
         entry = next(e for e in r.json() if e["job_id"] == job.job_id)
         assert entry["size_bytes"] is None or entry["size_bytes"] >= 2048
         assert entry["archived"] is False
-        warm_dir_sizes([job.job_dir(ws)])   # what the scheduled background task does
+        warm_dir_sizes([job.job_dir(ws)])  # what the scheduled background task does
         # The list endpoint's own fire-and-forget warm (from the cold GET above) may
         # still hold the _warming claim on this dir, in which case our warm_dir_sizes()
         # dedups to a no-op and the size fills in a beat later once that walk finishes.
@@ -173,8 +190,9 @@ class TestRoutes:
         # single call populated the cache synchronously (the source of a full-suite flake).
         size = None
         for _ in range(100):
-            size = next(e for e in c.get("/api/md/jobs").json()
-                        if e["job_id"] == job.job_id)["size_bytes"]
+            size = next(
+                e for e in c.get("/api/md/jobs").json() if e["job_id"] == job.job_id
+            )["size_bytes"]
             if size is not None:
                 break
             time.sleep(0.02)
@@ -187,12 +205,16 @@ class TestRoutes:
         (job.job_dir(ws) / "trajectory.dat").write_bytes(b"x" * 3000)
         dest_root = tmp_path / "archive_drive"
 
-        r = c.post(f"/api/oxdna/jobs/{job.job_id}/archive", json={"dest_root": str(dest_root)})
+        r = c.post(
+            f"/api/oxdna/jobs/{job.job_id}/archive", json={"dest_root": str(dest_root)}
+        )
         assert r.status_code == 202
         _wait("oxdna_jobs", job.job_id)
 
         # Job still listed, now archived with the right size + path.
-        entry = next(e for e in c.get("/api/oxdna/jobs").json() if e["job_id"] == job.job_id)
+        entry = next(
+            e for e in c.get("/api/oxdna/jobs").json() if e["job_id"] == job.job_id
+        )
         assert entry["archived"] is True
         assert entry["archive_path"] == str(dest_root / job.job_id)
         assert entry["size_bytes"] >= 3000
@@ -203,7 +225,9 @@ class TestRoutes:
         r = c.post(f"/api/oxdna/jobs/{job.job_id}/unarchive")
         assert r.status_code == 202
         _wait("oxdna_jobs", job.job_id)
-        entry = next(e for e in c.get("/api/oxdna/jobs").json() if e["job_id"] == job.job_id)
+        entry = next(
+            e for e in c.get("/api/oxdna/jobs").json() if e["job_id"] == job.job_id
+        )
         assert entry["archived"] is False
 
     def test_fs_listdir_and_mkdir(self, client, tmp_path) -> None:
@@ -215,7 +239,7 @@ class TestRoutes:
         assert r.status_code == 200
         body = r.json()
         names = [e["name"] for e in body["entries"]]
-        assert names == ["sub_a", "sub_b"]          # dirs only, sorted, no files
+        assert names == ["sub_a", "sub_b"]  # dirs only, sorted, no files
         assert body["parent"] == str(tmp_path.parent)
 
         r = c.post("/api/fs/mkdir", json={"path": str(tmp_path), "name": "fresh"})

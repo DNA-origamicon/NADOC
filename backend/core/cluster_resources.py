@@ -50,8 +50,8 @@ _GPU_NSDAY_ATOM_CONSTANT = 4.5e6
 # First-run guesses only — cluster_throughput.py is keyed cluster:partition:bucket,
 # so real measured ns/day per partition supersedes these as soon as one run lands.
 _GPU_SPEED_FACTOR = {
-    "aa100": 1.0,           # the anchor
-    "ah200": 2.5,           # H200: ~2-3x A100 on NAMD3 GPU-resident
+    "aa100": 1.0,  # the anchor
+    "ah200": 2.5,  # H200: ~2-3x A100 on NAMD3 GPU-resident
     # MEASURED equal to the H200, not 1.6.  Head-to-head under identical settings
     # (2026-08-07): 2hb 650.0 vs 644.4 ns/day, 24hb 41.9 vs 38.2, VoltronCore 0.0761
     # vs 0.0753 s/step — Blackwell within ~10% either way across three system sizes.
@@ -74,7 +74,7 @@ _GPU_SPEED_FACTOR = {
     #
     # Also confirms the sm_90 binary JITs onto Ada sm_89 -- no separate al40 build.
     "al40": 1.4,
-    "ami100": 0.5,          # AMD MI100 via HIP, historically the slowest here
+    "ami100": 0.5,  # AMD MI100 via HIP, historically the slowest here
     "atesting_a100": 1.0,
 }
 
@@ -108,14 +108,14 @@ _QUEUE_GUESS_MIN = {
     # fair-share, so backfill cannot help even a 15-minute job.  `squeue --start`
     # returns N/A: SLURM itself declines to predict a start.  The number below is a
     # placeholder that says "do not plan around this", not a real estimate.
-    "aa100": 10080,        # 7 days
-    "al40": 428,           # 638 samples
-    "ami100": 1,           # 650 samples, median 0.5 min — unpopular, so wide open
-    "ah200": 1,            # 97 samples — new, and the fastest card here
-    "artxpro6000": 1,      # 58 samples; whole cards contended, MIG slices free
+    "aa100": 10080,  # 7 days
+    "al40": 428,  # 638 samples
+    "ami100": 1,  # 650 samples, median 0.5 min — unpopular, so wide open
+    "ah200": 1,  # 97 samples — new, and the fastest card here
+    "artxpro6000": 1,  # 58 samples; whole cards contended, MIG slices free
     "atesting_a100": 15,
-    "acpu": 60,            # not measured (GPU-only probe); pre-2026 amilan figure
-    "amem": 120,           # not measured
+    "acpu": 60,  # not measured (GPU-only probe); pre-2026 amilan figure
+    "amem": 120,  # not measured
 }
 
 
@@ -227,7 +227,10 @@ def recommend(
         notes.append(f"Partition manually set to {partition_name} ({part.kind}).")
     else:
         atom_ceiling = gpu_atom_ceiling(profile.default_partition)
-        use_gpu = n_atoms <= atom_ceiling and profile.partition(profile.default_partition) is not None
+        use_gpu = (
+            n_atoms <= atom_ceiling
+            and profile.partition(profile.default_partition) is not None
+        )
         if not use_gpu:
             notes.append(
                 f"{n_atoms:,} atoms exceeds the single-GPU ceiling "
@@ -276,7 +279,9 @@ def recommend(
     # aa100), CPU partitions use the plain names.
     normal = profile.qos_for(kind, "normal")
     long_q = profile.qos_for(kind, "long")
-    normal_name = normal.name if normal else ("gpu-normal" if kind == "gpu" else "normal")
+    normal_name = (
+        normal.name if normal else ("gpu-normal" if kind == "gpu" else "normal")
+    )
     long_name = long_q.name if long_q else ("gpu-long" if kind == "gpu" else "long")
     normal_ceil = normal.max_walltime_h if normal else 24
     long_ceil = long_q.max_walltime_h if long_q else 168
@@ -334,6 +339,7 @@ def recommend(
 
 
 # ── Manifest / metrics extractors (thin, best-effort) ─────────────────────────
+
 
 def n_atoms_from_manifest(manifest: dict) -> int:
     """Total solvated atom count from a run manifest.

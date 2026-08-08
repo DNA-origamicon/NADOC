@@ -26,6 +26,7 @@ force field cannot reach it; the usable range bottoms out at van der Waals conta
 
 See ``memory/project_cpd_umbrella_sampling.md``.
 """
+
 from __future__ import annotations
 
 from typing import Any, Sequence
@@ -33,10 +34,10 @@ from typing import Any, Sequence
 import numpy as np
 
 # KIMMDY geometric rate parameters (kimmdy-dimerization schema, GPL-3.0).
-K1 = 2.017017017017017      # 1/nm    distance penalty
-K2 = 0.03003003003003003    # 1/deg   angle penalty
-D0 = 0.157177               # nm      optimal (product) midpoint distance
-N0 = 16.743651884789273     # deg     optimal dihedral
+K1 = 2.017017017017017  # 1/nm    distance penalty
+K2 = 0.03003003003003003  # 1/deg   angle penalty
+D0 = 0.157177  # nm      optimal (product) midpoint distance
+N0 = 16.743651884789273  # deg     optimal dihedral
 
 #: Below this the pair is treated as "in contact" for display purposes [nm].
 REACTIVE_D_NM = 0.45
@@ -59,8 +60,12 @@ def angular_separation_deg(eta_deg):
 
 def kimmdy_rate(d_nm, eta_deg):
     """Geometric CPD propensity in [0, 1]; 1.0 at the product geometry."""
-    return np.exp(-(K1 * np.abs(np.asarray(d_nm, dtype=float) - D0)
-                    + K2 * angular_separation_deg(eta_deg)))
+    return np.exp(
+        -(
+            K1 * np.abs(np.asarray(d_nm, dtype=float) - D0)
+            + K2 * angular_separation_deg(eta_deg)
+        )
+    )
 
 
 def dihedral_deg(p0, p1, p2, p3):
@@ -84,9 +89,14 @@ def weld_geometry(c5a, c6a, c5b, c6b) -> dict:
     mid_b = 0.5 * (c5b + c6b)
     d = float(np.linalg.norm(mid_b - mid_a))
     eta = float(dihedral_deg(c5a, c6a, c6b, c5b))
-    return {"d_nm": d, "eta_deg": eta, "k": float(kimmdy_rate(d, eta)),
-            "reactive": bool(d < REACTIVE_D_NM
-                             and float(angular_separation_deg(eta)) < REACTIVE_ETA_DEG)}
+    return {
+        "d_nm": d,
+        "eta_deg": eta,
+        "k": float(kimmdy_rate(d, eta)),
+        "reactive": bool(
+            d < REACTIVE_D_NM and float(angular_separation_deg(eta)) < REACTIVE_ETA_DEG
+        ),
+    }
 
 
 def _insert_residues_by_crossover(design) -> dict[str, list[tuple[str, int]]]:
@@ -140,14 +150,20 @@ def designed_weld_pairs(design) -> list[dict]:
         xa, xb = connectors[i].crossover_id, connectors[j].crossover_id
         for ka, (sa, ra) in enumerate(inserts.get(xa, [])):
             for kb, (sb, rb) in enumerate(inserts.get(xb, [])):
-                pairs.append({
-                    "id": f"{xa}:{ka}~{xb}:{kb}",
-                    "label": f"{xa[:8]}[k={ka}]~{xb[:8]}[k={kb}]",
-                    "crossover_a": xa, "extra_base_k_a": ka,
-                    "crossover_b": xb, "extra_base_k_b": kb,
-                    "segid_a": sa, "resid_a": ra,
-                    "segid_b": sb, "resid_b": rb,
-                })
+                pairs.append(
+                    {
+                        "id": f"{xa}:{ka}~{xb}:{kb}",
+                        "label": f"{xa[:8]}[k={ka}]~{xb[:8]}[k={kb}]",
+                        "crossover_a": xa,
+                        "extra_base_k_a": ka,
+                        "crossover_b": xb,
+                        "extra_base_k_b": kb,
+                        "segid_a": sa,
+                        "resid_a": ra,
+                        "segid_b": sb,
+                        "resid_b": rb,
+                    }
+                )
     return pairs
 
 
@@ -220,9 +236,13 @@ def make_whole_dna(dna, fragments, box) -> None:
             frag.positions = frag.positions + shift
 
 
-def seed_windows(d_nm: Sequence[float], windows: Sequence[dict], *,
-                 frame_indices: Sequence[int] | None = None,
-                 tolerance_ang: float | None = None) -> list[dict]:
+def seed_windows(
+    d_nm: Sequence[float],
+    windows: Sequence[dict],
+    *,
+    frame_indices: Sequence[int] | None = None,
+    tolerance_ang: float | None = None,
+) -> list[dict]:
     """Pick the frame that best seeds each umbrella window.
 
     PURE — takes a d_mid series (nm, e.g. from :func:`weld_trace`) and a ladder, and for
@@ -250,21 +270,26 @@ def seed_windows(d_nm: Sequence[float], windows: Sequence[dict], *,
         if tolerance_ang is not None:
             tol = float(tolerance_ang)
         else:
-            gaps = [abs(c_ang - centers[j]) for j in (i - 1, i + 1)
-                    if 0 <= j < len(centers)]
+            gaps = [
+                abs(c_ang - centers[j]) for j in (i - 1, i + 1) if 0 <= j < len(centers)
+            ]
             tol = (min(gaps) / 2.0) if gaps else 0.5
         best = int(np.argmin(np.abs(d * 10.0 - c_ang)))
         actual = float(d[best] * 10.0)
-        out.append({
-            "center_ang": c_ang,
-            "force_constant": w.get("force_constant"),
-            "frame": int(frame_indices[best]) if frame_indices is not None else best,
-            "series_index": best,
-            "actual_ang": round(actual, 3),
-            "offset_ang": round(actual - c_ang, 3),
-            "tolerance_ang": round(tol, 3),
-            "seeded": abs(actual - c_ang) <= tol,
-        })
+        out.append(
+            {
+                "center_ang": c_ang,
+                "force_constant": w.get("force_constant"),
+                "frame": int(frame_indices[best])
+                if frame_indices is not None
+                else best,
+                "series_index": best,
+                "actual_ang": round(actual, 3),
+                "offset_ang": round(actual - c_ang, 3),
+                "tolerance_ang": round(tol, 3),
+                "seeded": abs(actual - c_ang) <= tol,
+            }
+        )
     return out
 
 
@@ -295,13 +320,20 @@ def trace_stride(n_total: int, stride: int = 1, max_frames: int = 2000) -> int:
     step = max(int(stride), 1)
     n_max = max(int(max_frames), 1)
     if n_total // step > n_max:
-        step = max(1, -(-n_total // n_max))     # ceil division
+        step = max(1, -(-n_total // n_max))  # ceil division
     return step
 
 
-def weld_trace(topology_path, trajectory_paths, design, *, stride: int = 1,
-               max_frames: int = 2000, windows: Sequence[dict] | None = None,
-               progress=None) -> dict:
+def weld_trace(
+    topology_path,
+    trajectory_paths,
+    design,
+    *,
+    stride: int = 1,
+    max_frames: int = 2000,
+    windows: Sequence[dict] | None = None,
+    progress=None,
+) -> dict:
     """(d_mid, eta, k) per frame for every designed weld pair.
 
     This is the "watch it over the whole run" view: the overlay shows the current frame,
@@ -318,21 +350,34 @@ def weld_trace(topology_path, trajectory_paths, design, *, stride: int = 1,
 
     pairs = designed_weld_pairs(design)
     if not pairs:
-        return {"ready": True, "n_frames": 0, "pairs": [],
-                "reason": "design has no extra-base reciprocal crossover pair"}
+        return {
+            "ready": True,
+            "n_frames": 0,
+            "pairs": [],
+            "reason": "design has no extra-base reciprocal crossover pair",
+        }
 
     paths = [str(p) for p in trajectory_paths]
     u = mda.Universe(str(topology_path), paths if len(paths) > 1 else paths[0])
     pairs = resolve_weld_serials(pairs, u)
     pairs = [p for p in pairs if p.get("serials_resolved")]
     if not pairs:
-        return {"ready": False, "n_frames": 0, "pairs": [],
-                "reason": "weld residues are absent from this job's topology"}
+        return {
+            "ready": False,
+            "n_frames": 0,
+            "pairs": [],
+            "reason": "weld residues are absent from this job's topology",
+        }
 
     dna = u.select_atoms("resname " + " ".join(_GRO_DNA_RESNAMES))
     frags = list(dna.fragments)
     if not frags:
-        return {"ready": False, "n_frames": 0, "pairs": [], "reason": "no DNA in topology"}
+        return {
+            "ready": False,
+            "n_frames": 0,
+            "pairs": [],
+            "reason": "no DNA in topology",
+        }
 
     n_total = len(u.trajectory)
     step = trace_stride(n_total, stride, max_frames)
@@ -345,8 +390,12 @@ def weld_trace(topology_path, trajectory_paths, design, *, stride: int = 1,
         make_whole_dna(dna, frags, u.dimensions[:3])
         pos = u.atoms.positions
         for p in pairs:
-            g = weld_geometry(0.1 * pos[p["c5_a"]], 0.1 * pos[p["c6_a"]],
-                              0.1 * pos[p["c5_b"]], 0.1 * pos[p["c6_b"]])
+            g = weld_geometry(
+                0.1 * pos[p["c5_a"]],
+                0.1 * pos[p["c6_a"]],
+                0.1 * pos[p["c5_b"]],
+                0.1 * pos[p["c6_b"]],
+            )
             s = series[p["id"]]
             s["d"].append(round(g["d_nm"], 5))
             s["eta"].append(round(g["eta_deg"], 3))
@@ -359,23 +408,39 @@ def weld_trace(topology_path, trajectory_paths, design, *, stride: int = 1,
     out = []
     for p in pairs:
         s = series[p["id"]]
-        d = np.asarray(s["d"]); eta = np.asarray(s["eta"]); k = np.asarray(s["k"])
-        reactive = (d < REACTIVE_D_NM) & (angular_separation_deg(eta) < REACTIVE_ETA_DEG)
-        out.append({
-            "id": p["id"], "label": p["label"],
-            "d_nm": s["d"], "eta_deg": s["eta"], "k": s["k"],
-            "d_min_nm": float(d.min()) if len(d) else None,
-            "d_mean_nm": float(d.mean()) if len(d) else None,
-            "k_max": float(k.max()) if len(k) else None,
-            "k_mean": float(k.mean()) if len(k) else None,
-            "reactive_frames": int(reactive.sum()),
-            # Which umbrella windows this run could actually start. Computed here because
-            # it needs the same d series — and knowing a window has no seed is worth far
-            # more BEFORE the GPU time than after.
-            "seeds": seed_windows(s["d"], windows, frame_indices=frame_indices)
-            if windows else [],
-        })
+        d = np.asarray(s["d"])
+        eta = np.asarray(s["eta"])
+        k = np.asarray(s["k"])
+        reactive = (d < REACTIVE_D_NM) & (
+            angular_separation_deg(eta) < REACTIVE_ETA_DEG
+        )
+        out.append(
+            {
+                "id": p["id"],
+                "label": p["label"],
+                "d_nm": s["d"],
+                "eta_deg": s["eta"],
+                "k": s["k"],
+                "d_min_nm": float(d.min()) if len(d) else None,
+                "d_mean_nm": float(d.mean()) if len(d) else None,
+                "k_max": float(k.max()) if len(k) else None,
+                "k_mean": float(k.mean()) if len(k) else None,
+                "reactive_frames": int(reactive.sum()),
+                # Which umbrella windows this run could actually start. Computed here because
+                # it needs the same d series — and knowing a window has no seed is worth far
+                # more BEFORE the GPU time than after.
+                "seeds": seed_windows(s["d"], windows, frame_indices=frame_indices)
+                if windows
+                else [],
+            }
+        )
         if windows:
             out[-1]["seeding"] = seeding_report(out[-1]["seeds"])
-    return {"ready": True, "n_frames": len(times), "stride": step,
-            "n_total_frames": n_total, "times_ps": times, "pairs": out}
+    return {
+        "ready": True,
+        "n_frames": len(times),
+        "stride": step,
+        "n_total_frames": n_total,
+        "times_ps": times,
+        "pairs": out,
+    }

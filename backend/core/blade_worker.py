@@ -21,6 +21,7 @@ with the repo root as cwd (start_job passes ``cwd=_REPO_ROOT``).  All heavy lift
 :func:`backend.core.blade_runner.relax_and_cache`, which writes the terminal status itself and
 never raises — this module is a thin process shell around it.
 """
+
 from __future__ import annotations
 
 import sys
@@ -47,7 +48,9 @@ def main(workspace_dir: str, job_id: str) -> int:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("usage: python -m backend.core.blade_worker <workspace_dir> <job_id>",
-              file=sys.stderr)
+        print(
+            "usage: python -m backend.core.blade_worker <workspace_dir> <job_id>",
+            file=sys.stderr,
+        )
         raise SystemExit(2)
     raise SystemExit(main(sys.argv[1], sys.argv[2]))

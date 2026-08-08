@@ -16,6 +16,7 @@ it; we never reason from strand direction).
 
 Pure / topological — no simulation.  The iterative sim loop lives in the exp32 driver.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -33,9 +34,10 @@ def _bundle_axis(design):
     for h in design.helices:
         s = np.array([h.axis_start.x, h.axis_start.y, h.axis_start.z], float)
         e = np.array([h.axis_end.x, h.axis_end.y, h.axis_end.z], float)
-        starts.append(s); vecs.append(e - s)
+        starts.append(s)
+        vecs.append(e - s)
     axis = np.mean(vecs, axis=0)
-    axis /= (np.linalg.norm(axis) or 1.0)
+    axis /= np.linalg.norm(axis) or 1.0
     # Match measure_bundle_twist's axis SIGN convention (`_bundle_axis_frame`: largest-magnitude
     # component positive) so the binning's front/back agrees with the profile's position axis —
     # otherwise the controller would add skips at the mirror-image (wrong) end.
@@ -56,8 +58,11 @@ def core_bps(design, helix) -> list[int]:
     """All dsDNA-core bp indices on a helix (both tracks present), INCLUDING marked ones —
     the candidate set for binning + gap-finding (unlike ``core_candidates`` which drops marks)."""
     ivls = _active_intervals_for_helices(design, {helix.id})
-    return [helix.bp_start + i for i in range(helix.length_bp)
-            if any(lo <= helix.bp_start + i < hi for lo, hi in ivls)]
+    return [
+        helix.bp_start + i
+        for i in range(helix.length_bp)
+        if any(lo <= helix.bp_start + i < hi for lo, hi in ivls)
+    ]
 
 
 def bin_layout(design, n_bins: int):
@@ -69,8 +74,10 @@ def bin_layout(design, n_bins: int):
     the whole bundle's core extent, so bin ``i`` is the SAME physical slab for every helix."""
     origin, axis = _bundle_axis(design)
     helices = sorted(design.helices, key=lambda h: h.id)
-    axial = {h.id: {bp: _bp_axial(h, bp, origin, axis) for bp in core_bps(design, h)}
-             for h in helices}
+    axial = {
+        h.id: {bp: _bp_axial(h, bp, origin, axis) for bp in core_bps(design, h)}
+        for h in helices
+    }
     allt = [t for d in axial.values() for t in d.values()]
     tmin, tmax = min(allt), max(allt)
     span = (tmax - tmin) or 1.0
@@ -94,14 +101,22 @@ def local_twist_per_bin(profile: list[dict], n_bins: int) -> list[float]:
     it aligns with ``bin_layout`` regardless of the profile's own slab count."""
     fr = np.array([p["position_frac"] for p in profile], float)
     cum = np.array([p["cum_twist_diff"] for p in profile], float)
-    order = np.argsort(fr); fr, cum = fr[order], cum[order]
+    order = np.argsort(fr)
+    fr, cum = fr[order], cum[order]
     edges = np.linspace(0.0, 1.0, n_bins + 1)
     cum_at = np.interp(edges, fr, cum)
     return [float(cum_at[i + 1] - cum_at[i]) for i in range(n_bins)]
 
 
-def secant_targets(prev_counts, prev_lt, cur_counts, cur_lt, *, gain: float,
-                   deg_per_del: float = ANALYTIC_DEG_PER_DELETION) -> list[int]:
+def secant_targets(
+    prev_counts,
+    prev_lt,
+    cur_counts,
+    cur_lt,
+    *,
+    gain: float,
+    deg_per_del: float = ANALYTIC_DEG_PER_DELETION,
+) -> list[int]:
     """Per-bin desired NEW deletions-per-helix count, driving local twist → 0.
 
     ``cur_counts``/``cur_lt`` = this round's per-bin (deletions-per-helix, measured local twist).
@@ -116,13 +131,18 @@ def secant_targets(prev_counts, prev_lt, cur_counts, cur_lt, *, gain: float,
                 slope = -deg_per_del
         else:
             slope = -deg_per_del
-        step = -gain * lt / slope                 # counts to change to reach lt = 0
+        step = -gain * lt / slope  # counts to change to reach lt = 0
         out.append(max(0, int(round(n + step))))
     return out
 
 
-def plan_edits(current_skips: dict[str, list[int]], per_helix_bins,
-               target_counts: list[int], *, min_spacing: int = 4) -> dict[str, list[int]]:
+def plan_edits(
+    current_skips: dict[str, list[int]],
+    per_helix_bins,
+    target_counts: list[int],
+    *,
+    min_spacing: int = 4,
+) -> dict[str, list[int]]:
     """New ``{helix_id: [bp,...]}`` after moving each helix's per-bin deletion count toward
     ``target_counts[i]`` via incremental-gap: ADD at the largest gap within the bin, REMOVE the
     one bordering the smallest gap.  ``current_skips`` need not be confined to bins (baseline
@@ -134,14 +154,17 @@ def plan_edits(current_skips: dict[str, list[int]], per_helix_bins,
             cand_set = set(cand)
             present = sorted(b for b in cur if b in cand_set)
             want = target_counts[i]
-            while len(present) > want and present:                 # REMOVE (under-wound)
+            while len(present) > want and present:  # REMOVE (under-wound)
                 rem = _smallest_gap_member(present, cand)
-                present.remove(rem); cur.discard(rem)
-            while len(present) < want:                              # ADD (over-wound)
+                present.remove(rem)
+                cur.discard(rem)
+            while len(present) < want:  # ADD (over-wound)
                 new = _largest_gap_free(present, cand, cur, min_spacing)
                 if new is None:
                     break
-                present.append(new); present.sort(); cur.add(new)
+                present.append(new)
+                present.sort()
+                cur.add(new)
         if cur:
             out[hid] = sorted(cur)
     return out

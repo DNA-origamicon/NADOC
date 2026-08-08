@@ -35,7 +35,15 @@ from backend.api.main import app
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (
-    Design, Direction, Domain, Helix, OverhangSpec, Strand, StrandType, SubDomain, Vec3,
+    Design,
+    Direction,
+    Domain,
+    Helix,
+    OverhangSpec,
+    Strand,
+    StrandType,
+    SubDomain,
+    Vec3,
 )
 
 
@@ -43,6 +51,7 @@ client = TestClient(app)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _get_geom() -> list[dict]:
     return client.get("/api/design/geometry").json()["nucleotides"]
@@ -60,11 +69,14 @@ def _quat_axis_angle(axis: tuple[float, float, float], angle_rad: float) -> list
 
 
 def _find_nuc(nucs, *, strand_id, helix_id, bp_index, direction=None):
-    out = [n for n in nucs
-           if n.get("strand_id") == strand_id
-           and n.get("helix_id") == helix_id
-           and n.get("bp_index") == bp_index
-           and (direction is None or n.get("direction") == direction)]
+    out = [
+        n
+        for n in nucs
+        if n.get("strand_id") == strand_id
+        and n.get("helix_id") == helix_id
+        and n.get("bp_index") == bp_index
+        and (direction is None or n.get("direction") == direction)
+    ]
     assert len(out) == 1, (
         f"expected exactly 1 nuc for {strand_id=} {helix_id=} {bp_index=} "
         f"{direction=}, got {len(out)}"
@@ -79,6 +91,7 @@ def _reset():
 
 
 # ── Case 1: OH_BINDER strand with a toehold past the overhang ─────────────────
+
 
 def _seed_oh_binder_with_toehold() -> Design:
     """Overhang A (bp 0-7 FORWARD) on its own helix + an OH_BINDER strand whose
@@ -95,67 +108,144 @@ def _seed_oh_binder_with_toehold() -> Design:
     )
     oh_strand = Strand(
         id="oh_strand_a",
-        domains=[Domain(helix_id="oh_helix_a", start_bp=0, end_bp=7,
-                        direction=Direction.FORWARD, overhang_id="oh_a")],
+        domains=[
+            Domain(
+                helix_id="oh_helix_a",
+                start_bp=0,
+                end_bp=7,
+                direction=Direction.FORWARD,
+                overhang_id="oh_a",
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     # Binder: antiparallel, bp 0-10 (REVERSE traversal 10→0), extends past OH (0-7).
     binder = Strand(
         id="binder_strand",
-        domains=[Domain(helix_id="oh_helix_a", start_bp=10, end_bp=0,
-                        direction=Direction.REVERSE, binds_overhang_id="oh_a")],
+        domains=[
+            Domain(
+                helix_id="oh_helix_a",
+                start_bp=10,
+                end_bp=0,
+                direction=Direction.REVERSE,
+                binds_overhang_id="oh_a",
+            )
+        ],
         strand_type=StrandType.OH_BINDER,
     )
     # Control: a non-binder STAPLE, same helix, antiparallel, but NON-overlapping
     # bp range — must be excluded by the relaxed partner filter.
     control = Strand(
         id="control_strand",
-        domains=[Domain(helix_id="oh_helix_a", start_bp=27, end_bp=20,
-                        direction=Direction.REVERSE)],
+        domains=[
+            Domain(
+                helix_id="oh_helix_a",
+                start_bp=27,
+                end_bp=20,
+                direction=Direction.REVERSE,
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
-    overhangs = [OverhangSpec(id="oh_a", helix_id="oh_helix_a", strand_id="oh_strand_a",
-                             label="OHA", pivot=[2.5, 0.0, 0.0])]
-    return base.model_copy(update={
-        "helices": [*base.helices, oh_helix],
-        "strands": [*base.strands, oh_strand, binder, control],
-        "overhangs": overhangs,
-    })
+    overhangs = [
+        OverhangSpec(
+            id="oh_a",
+            helix_id="oh_helix_a",
+            strand_id="oh_strand_a",
+            label="OHA",
+            pivot=[2.5, 0.0, 0.0],
+        )
+    ]
+    return base.model_copy(
+        update={
+            "helices": [*base.helices, oh_helix],
+            "strands": [*base.strands, oh_strand, binder, control],
+            "overhangs": overhangs,
+        }
+    )
 
 
 def test_oh_binder_with_toehold_follows_rotated_overhang():
     design_state.set_design(_seed_oh_binder_with_toehold())
     pre = _get_geom()
 
-    oh0_pre   = _find_nuc(pre, strand_id="oh_strand_a", helix_id="oh_helix_a", bp_index=0, direction="FORWARD")
-    bind0_pre = _find_nuc(pre, strand_id="binder_strand", helix_id="oh_helix_a", bp_index=0, direction="REVERSE")
-    bind10_pre = _find_nuc(pre, strand_id="binder_strand", helix_id="oh_helix_a", bp_index=10, direction="REVERSE")
-    ctrl_pre  = _find_nuc(pre, strand_id="control_strand", helix_id="oh_helix_a", bp_index=20, direction="REVERSE")
+    oh0_pre = _find_nuc(
+        pre,
+        strand_id="oh_strand_a",
+        helix_id="oh_helix_a",
+        bp_index=0,
+        direction="FORWARD",
+    )
+    bind0_pre = _find_nuc(
+        pre,
+        strand_id="binder_strand",
+        helix_id="oh_helix_a",
+        bp_index=0,
+        direction="REVERSE",
+    )
+    bind10_pre = _find_nuc(
+        pre,
+        strand_id="binder_strand",
+        helix_id="oh_helix_a",
+        bp_index=10,
+        direction="REVERSE",
+    )
+    ctrl_pre = _find_nuc(
+        pre,
+        strand_id="control_strand",
+        helix_id="oh_helix_a",
+        bp_index=20,
+        direction="REVERSE",
+    )
 
-    p_oh0_pre   = np.asarray(oh0_pre["backbone_position"], dtype=float)
+    p_oh0_pre = np.asarray(oh0_pre["backbone_position"], dtype=float)
     p_bind0_pre = np.asarray(bind0_pre["backbone_position"], dtype=float)
     p_bind10_pre = np.asarray(bind10_pre["backbone_position"], dtype=float)
-    p_ctrl_pre  = np.asarray(ctrl_pre["backbone_position"], dtype=float)
+    p_ctrl_pre = np.asarray(ctrl_pre["backbone_position"], dtype=float)
 
     # Rotate the OH 90° about Y. Junction (pivot) is at A's 3' end (bp 7).
     _patch_rotation("oh_a", _quat_axis_angle((0.0, 1.0, 0.0), math.pi / 2))
 
     post = _get_geom()
-    oh0_post   = _find_nuc(post, strand_id="oh_strand_a", helix_id="oh_helix_a", bp_index=0, direction="FORWARD")
-    bind0_post = _find_nuc(post, strand_id="binder_strand", helix_id="oh_helix_a", bp_index=0, direction="REVERSE")
-    bind10_post = _find_nuc(post, strand_id="binder_strand", helix_id="oh_helix_a", bp_index=10, direction="REVERSE")
-    ctrl_post  = _find_nuc(post, strand_id="control_strand", helix_id="oh_helix_a", bp_index=20, direction="REVERSE")
+    oh0_post = _find_nuc(
+        post,
+        strand_id="oh_strand_a",
+        helix_id="oh_helix_a",
+        bp_index=0,
+        direction="FORWARD",
+    )
+    bind0_post = _find_nuc(
+        post,
+        strand_id="binder_strand",
+        helix_id="oh_helix_a",
+        bp_index=0,
+        direction="REVERSE",
+    )
+    bind10_post = _find_nuc(
+        post,
+        strand_id="binder_strand",
+        helix_id="oh_helix_a",
+        bp_index=10,
+        direction="REVERSE",
+    )
+    ctrl_post = _find_nuc(
+        post,
+        strand_id="control_strand",
+        helix_id="oh_helix_a",
+        bp_index=20,
+        direction="REVERSE",
+    )
 
-    p_oh0_post   = np.asarray(oh0_post["backbone_position"], dtype=float)
+    p_oh0_post = np.asarray(oh0_post["backbone_position"], dtype=float)
     p_bind0_post = np.asarray(bind0_post["backbone_position"], dtype=float)
     p_bind10_post = np.asarray(bind10_post["backbone_position"], dtype=float)
-    p_ctrl_post  = np.asarray(ctrl_post["backbone_position"], dtype=float)
+    p_ctrl_post = np.asarray(ctrl_post["backbone_position"], dtype=float)
 
     # OH moved (sanity).
     assert float(np.linalg.norm(p_oh0_post - p_oh0_pre)) > 0.5
 
     # In-overlap: WC pairing distance OH bp0 ↔ binder bp0 preserved.
-    pair_pre  = float(np.linalg.norm(p_oh0_pre - p_bind0_pre))
+    pair_pre = float(np.linalg.norm(p_oh0_pre - p_bind0_pre))
     pair_post = float(np.linalg.norm(p_oh0_post - p_bind0_post))
     assert abs(pair_post - pair_pre) < 0.1, (
         f"binder bp0 lagged the OH: pair pre={pair_pre:.3f} post={pair_post:.3f}"
@@ -166,11 +256,27 @@ def test_oh_binder_with_toehold_follows_rotated_overhang():
     assert float(np.linalg.norm(p_bind10_post - p_bind10_pre)) > 0.5, (
         "binder toehold bead (bp10, past the overhang) did NOT rotate with the OH"
     )
-    pivot = np.asarray(_find_nuc(pre, strand_id="oh_strand_a", helix_id="oh_helix_a",
-                                bp_index=7, direction="FORWARD")["backbone_position"], dtype=float)
-    pivot_post = np.asarray(_find_nuc(post, strand_id="oh_strand_a", helix_id="oh_helix_a",
-                                      bp_index=7, direction="FORWARD")["backbone_position"], dtype=float)
-    r_pre  = float(np.linalg.norm(p_bind10_pre - pivot))
+    pivot = np.asarray(
+        _find_nuc(
+            pre,
+            strand_id="oh_strand_a",
+            helix_id="oh_helix_a",
+            bp_index=7,
+            direction="FORWARD",
+        )["backbone_position"],
+        dtype=float,
+    )
+    pivot_post = np.asarray(
+        _find_nuc(
+            post,
+            strand_id="oh_strand_a",
+            helix_id="oh_helix_a",
+            bp_index=7,
+            direction="FORWARD",
+        )["backbone_position"],
+        dtype=float,
+    )
+    r_pre = float(np.linalg.norm(p_bind10_pre - pivot))
     r_post = float(np.linalg.norm(p_bind10_post - pivot_post))
     assert abs(r_post - r_pre) < 0.05, (
         f"toehold not rigid about pivot: |r| pre={r_pre:.3f} post={r_post:.3f}"
@@ -184,43 +290,83 @@ def test_oh_binder_with_toehold_follows_rotated_overhang():
 
 # ── Case 2: end-to-root binder spliced into a STAPLE strand ───────────────────
 
+
 def _seed_end_to_root() -> tuple[Design, str, str]:
     """Overhang A (free) + overhang B as a 2-domain staple (root on the bundle
     helix + tip on B's own helix). Returns (design, a_id, b_id)."""
     base = _demo_design()
-    oh_helix_a = Helix(id="oh_helix_a", axis_start=Vec3(x=2.5, y=0.0, z=0.0),
-                       axis_end=Vec3(x=2.5, y=0.0, z=8 * BDNA_RISE_PER_BP),
-                       phase_offset=0.0, length_bp=8, grid_pos=(0, 0))
-    oh_helix_b = Helix(id="oh_helix_b", axis_start=Vec3(x=5.0, y=0.0, z=0.0),
-                       axis_end=Vec3(x=5.0, y=0.0, z=8 * BDNA_RISE_PER_BP),
-                       phase_offset=0.0, length_bp=8, grid_pos=(0, 3))
+    oh_helix_a = Helix(
+        id="oh_helix_a",
+        axis_start=Vec3(x=2.5, y=0.0, z=0.0),
+        axis_end=Vec3(x=2.5, y=0.0, z=8 * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=8,
+        grid_pos=(0, 0),
+    )
+    oh_helix_b = Helix(
+        id="oh_helix_b",
+        axis_start=Vec3(x=5.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=5.0, y=0.0, z=8 * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=8,
+        grid_pos=(0, 3),
+    )
     oh_strand_a = Strand(
         id="oh_strand_a",
-        domains=[Domain(helix_id="oh_helix_a", start_bp=0, end_bp=7,
-                        direction=Direction.FORWARD, overhang_id="oh_a")],
+        domains=[
+            Domain(
+                helix_id="oh_helix_a",
+                start_bp=0,
+                end_bp=7,
+                direction=Direction.FORWARD,
+                overhang_id="oh_a",
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     # B: root domain anchored on the bundle helix, tip = the overhang on its own helix.
     oh_strand_b = Strand(
         id="oh_strand_b",
         domains=[
-            Domain(helix_id="demo_helix", start_bp=20, end_bp=27, direction=Direction.REVERSE),
-            Domain(helix_id="oh_helix_b", start_bp=0, end_bp=7,
-                   direction=Direction.FORWARD, overhang_id="oh_b"),
+            Domain(
+                helix_id="demo_helix",
+                start_bp=20,
+                end_bp=27,
+                direction=Direction.REVERSE,
+            ),
+            Domain(
+                helix_id="oh_helix_b",
+                start_bp=0,
+                end_bp=7,
+                direction=Direction.FORWARD,
+                overhang_id="oh_b",
+            ),
         ],
         strand_type=StrandType.STAPLE,
     )
     overhangs = [
-        OverhangSpec(id="oh_a", helix_id="oh_helix_a", strand_id="oh_strand_a", label="OHA",
-                     pivot=[2.5, 0.0, 0.0]),
-        OverhangSpec(id="oh_b", helix_id="oh_helix_b", strand_id="oh_strand_b", label="OHB",
-                     pivot=[5.0, 0.0, 0.0]),
+        OverhangSpec(
+            id="oh_a",
+            helix_id="oh_helix_a",
+            strand_id="oh_strand_a",
+            label="OHA",
+            pivot=[2.5, 0.0, 0.0],
+        ),
+        OverhangSpec(
+            id="oh_b",
+            helix_id="oh_helix_b",
+            strand_id="oh_strand_b",
+            label="OHB",
+            pivot=[5.0, 0.0, 0.0],
+        ),
     ]
-    d = base.model_copy(update={
-        "helices": [*base.helices, oh_helix_a, oh_helix_b],
-        "strands": [*base.strands, oh_strand_a, oh_strand_b],
-        "overhangs": overhangs,
-    })
+    d = base.model_copy(
+        update={
+            "helices": [*base.helices, oh_helix_a, oh_helix_b],
+            "strands": [*base.strands, oh_strand_a, oh_strand_b],
+            "overhangs": overhangs,
+        }
+    )
     return d, "oh_a", "oh_b"
 
 
@@ -230,8 +376,12 @@ def test_relocated_direct_binding_partner_follows_rotated_driver():
     d = _cv_create_bound_binding(d, a_id, b_id, "root", "root", "root-to-root")
 
     # Locate B's relocated tip domain: tagged overhang_id == b_id, now on A's helix.
-    binders = [(s, di) for s in d.strands for di, dom in enumerate(s.domains)
-               if dom.overhang_id == b_id]
+    binders = [
+        (s, di)
+        for s in d.strands
+        for di, dom in enumerate(s.domains)
+        if dom.overhang_id == b_id
+    ]
     assert len(binders) == 1, f"expected one relocated B tip, got {len(binders)}"
     b_strand, b_di = binders[0]
     binder_dom = b_strand.domains[b_di]
@@ -239,24 +389,46 @@ def test_relocated_direct_binding_partner_follows_rotated_driver():
 
     design_state.set_design(d)
     pre = _get_geom()
-    oh0_pre   = _find_nuc(pre, strand_id="oh_strand_a", helix_id="oh_helix_a", bp_index=0, direction="FORWARD")
-    bind0_pre = _find_nuc(pre, strand_id=b_strand.id, helix_id="oh_helix_a", bp_index=0,
-                          direction=binder_dom.direction.value)
-    p_oh0_pre   = np.asarray(oh0_pre["backbone_position"], dtype=float)
+    oh0_pre = _find_nuc(
+        pre,
+        strand_id="oh_strand_a",
+        helix_id="oh_helix_a",
+        bp_index=0,
+        direction="FORWARD",
+    )
+    bind0_pre = _find_nuc(
+        pre,
+        strand_id=b_strand.id,
+        helix_id="oh_helix_a",
+        bp_index=0,
+        direction=binder_dom.direction.value,
+    )
+    p_oh0_pre = np.asarray(oh0_pre["backbone_position"], dtype=float)
     p_bind0_pre = np.asarray(bind0_pre["backbone_position"], dtype=float)
 
     _patch_rotation(a_id, _quat_axis_angle((0.0, 1.0, 0.0), math.pi / 2))
 
     post = _get_geom()
-    oh0_post   = _find_nuc(post, strand_id="oh_strand_a", helix_id="oh_helix_a", bp_index=0, direction="FORWARD")
-    bind0_post = _find_nuc(post, strand_id=b_strand.id, helix_id="oh_helix_a", bp_index=0,
-                           direction=binder_dom.direction.value)
-    p_oh0_post   = np.asarray(oh0_post["backbone_position"], dtype=float)
+    oh0_post = _find_nuc(
+        post,
+        strand_id="oh_strand_a",
+        helix_id="oh_helix_a",
+        bp_index=0,
+        direction="FORWARD",
+    )
+    bind0_post = _find_nuc(
+        post,
+        strand_id=b_strand.id,
+        helix_id="oh_helix_a",
+        bp_index=0,
+        direction=binder_dom.direction.value,
+    )
+    p_oh0_post = np.asarray(oh0_post["backbone_position"], dtype=float)
     p_bind0_post = np.asarray(bind0_post["backbone_position"], dtype=float)
 
     # OH moved; the spliced STAPLE binder followed it (WC pairing preserved).
     assert float(np.linalg.norm(p_oh0_post - p_oh0_pre)) > 0.5, "OH did not move"
-    pair_pre  = float(np.linalg.norm(p_oh0_pre - p_bind0_pre))
+    pair_pre = float(np.linalg.norm(p_oh0_pre - p_bind0_pre))
     pair_post = float(np.linalg.norm(p_oh0_post - p_bind0_post))
     assert abs(pair_post - pair_pre) < 0.1, (
         f"end-to-root binder lagged the rotated OH: pair pre={pair_pre:.3f} "
@@ -274,45 +446,87 @@ def test_relocated_direct_binding_partner_follows_rotated_driver():
 # binding is TRANSIENT and never persisted. These two tests ask whether the driven
 # overhang still tracks the driver on that fork.
 
+
 def _seed_diff_length_direct() -> tuple[Design, str, str]:
     """Driver overhang A = 12 bp on its own helix; driven overhang B = 8 bp as a
     2-domain staple (root on the bundle helix + tip on B's own helix). Sequences are
     complementary over the 8 bp window so the WC gate passes."""
     base = _demo_design()
-    oh_helix_a = Helix(id="oh_helix_a", axis_start=Vec3(x=2.5, y=0.0, z=0.0),
-                       axis_end=Vec3(x=2.5, y=0.0, z=12 * BDNA_RISE_PER_BP),
-                       phase_offset=0.0, length_bp=12, grid_pos=(0, 0))
-    oh_helix_b = Helix(id="oh_helix_b", axis_start=Vec3(x=5.0, y=0.0, z=0.0),
-                       axis_end=Vec3(x=5.0, y=0.0, z=8 * BDNA_RISE_PER_BP),
-                       phase_offset=0.0, length_bp=8, grid_pos=(0, 3))
+    oh_helix_a = Helix(
+        id="oh_helix_a",
+        axis_start=Vec3(x=2.5, y=0.0, z=0.0),
+        axis_end=Vec3(x=2.5, y=0.0, z=12 * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=12,
+        grid_pos=(0, 0),
+    )
+    oh_helix_b = Helix(
+        id="oh_helix_b",
+        axis_start=Vec3(x=5.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=5.0, y=0.0, z=8 * BDNA_RISE_PER_BP),
+        phase_offset=0.0,
+        length_bp=8,
+        grid_pos=(0, 3),
+    )
     oh_strand_a = Strand(
         id="oh_strand_a",
-        domains=[Domain(helix_id="oh_helix_a", start_bp=0, end_bp=11,
-                        direction=Direction.FORWARD, overhang_id="oh_a")],
+        domains=[
+            Domain(
+                helix_id="oh_helix_a",
+                start_bp=0,
+                end_bp=11,
+                direction=Direction.FORWARD,
+                overhang_id="oh_a",
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     oh_strand_b = Strand(
         id="oh_strand_b",
         domains=[
-            Domain(helix_id="demo_helix", start_bp=20, end_bp=27, direction=Direction.REVERSE),
-            Domain(helix_id="oh_helix_b", start_bp=0, end_bp=7,
-                   direction=Direction.FORWARD, overhang_id="oh_b"),
+            Domain(
+                helix_id="demo_helix",
+                start_bp=20,
+                end_bp=27,
+                direction=Direction.REVERSE,
+            ),
+            Domain(
+                helix_id="oh_helix_b",
+                start_bp=0,
+                end_bp=7,
+                direction=Direction.FORWARD,
+                overhang_id="oh_b",
+            ),
         ],
         strand_type=StrandType.STAPLE,
     )
     overhangs = [
-        OverhangSpec(id="oh_a", helix_id="oh_helix_a", strand_id="oh_strand_a", label="OHA",
-                     pivot=[2.5, 0.0, 0.0], sequence="A" * 12,
-                     sub_domains=[SubDomain(id="sd_a", start_bp_offset=0, length_bp=12)]),
-        OverhangSpec(id="oh_b", helix_id="oh_helix_b", strand_id="oh_strand_b", label="OHB",
-                     pivot=[5.0, 0.0, 0.0], sequence="T" * 8,
-                     sub_domains=[SubDomain(id="sd_b", start_bp_offset=0, length_bp=8)]),
+        OverhangSpec(
+            id="oh_a",
+            helix_id="oh_helix_a",
+            strand_id="oh_strand_a",
+            label="OHA",
+            pivot=[2.5, 0.0, 0.0],
+            sequence="A" * 12,
+            sub_domains=[SubDomain(id="sd_a", start_bp_offset=0, length_bp=12)],
+        ),
+        OverhangSpec(
+            id="oh_b",
+            helix_id="oh_helix_b",
+            strand_id="oh_strand_b",
+            label="OHB",
+            pivot=[5.0, 0.0, 0.0],
+            sequence="T" * 8,
+            sub_domains=[SubDomain(id="sd_b", start_bp_offset=0, length_bp=8)],
+        ),
     ]
-    d = base.model_copy(update={
-        "helices": [*base.helices, oh_helix_a, oh_helix_b],
-        "strands": [*base.strands, oh_strand_a, oh_strand_b],
-        "overhangs": overhangs,
-    })
+    d = base.model_copy(
+        update={
+            "helices": [*base.helices, oh_helix_a, oh_helix_b],
+            "strands": [*base.strands, oh_strand_a, oh_strand_b],
+            "overhangs": overhangs,
+        }
+    )
     return d, "oh_a", "oh_b"
 
 
@@ -320,10 +534,15 @@ def _connect_diff_length_duplex() -> dict:
     """Seed + connect the different-length pair. Returns the response design dict."""
     d, a_id, b_id = _seed_diff_length_direct()
     design_state.set_design(d)
-    r = client.post("/api/design/duplexes/connect", json={
-        "overhang_a_id": a_id, "overhang_a_attach": "root",
-        "overhang_b_id": b_id, "overhang_b_attach": "root",
-    })
+    r = client.post(
+        "/api/design/duplexes/connect",
+        json={
+            "overhang_a_id": a_id,
+            "overhang_a_attach": "root",
+            "overhang_b_id": b_id,
+            "overhang_b_attach": "root",
+        },
+    )
     assert r.status_code == 201, r.text
     design = r.json()["design"]
     # Precondition for this whole case: the length fork means NO binding was created,
@@ -332,10 +551,16 @@ def _connect_diff_length_duplex() -> dict:
         "expected the different-length fork (no OverhangBinding); if this fires, "
         "_cv_create_bound_binding's length skip changed and these tests are moot"
     )
-    b_doms = [(s["id"], di, dom) for s in design["strands"]
-              for di, dom in enumerate(s["domains"]) if dom.get("overhang_id") == "oh_b"]
+    b_doms = [
+        (s["id"], di, dom)
+        for s in design["strands"]
+        for di, dom in enumerate(s["domains"])
+        if dom.get("overhang_id") == "oh_b"
+    ]
     assert len(b_doms) == 1, f"expected one B tip domain, got {len(b_doms)}"
-    assert b_doms[0][2]["helix_id"] == "oh_helix_a", "B's tip must relocate onto A's helix"
+    assert b_doms[0][2]["helix_id"] == "oh_helix_a", (
+        "B's tip must relocate onto A's helix"
+    )
     return design
 
 
@@ -343,30 +568,56 @@ def test_diff_length_duplex_partner_follows_rotated_driver():
     """Rotating the DRIVER overhang must co-rotate the relocated DRIVEN overhang,
     exactly as it does for the equal-length binding in case 2 above."""
     design = _connect_diff_length_duplex()
-    b_dom = next(dom for s in design["strands"] for dom in s["domains"]
-                 if dom.get("overhang_id") == "oh_b")
+    b_dom = next(
+        dom
+        for s in design["strands"]
+        for dom in s["domains"]
+        if dom.get("overhang_id") == "oh_b"
+    )
     bp = min(b_dom["start_bp"], b_dom["end_bp"])
     b_dir = b_dom["direction"]
 
     pre = _get_geom()
-    a_pre = _find_nuc(pre, strand_id="oh_strand_a", helix_id="oh_helix_a",
-                      bp_index=bp, direction="FORWARD")
-    b_pre = _find_nuc(pre, strand_id="oh_strand_b", helix_id="oh_helix_a",
-                      bp_index=bp, direction=b_dir)
+    a_pre = _find_nuc(
+        pre,
+        strand_id="oh_strand_a",
+        helix_id="oh_helix_a",
+        bp_index=bp,
+        direction="FORWARD",
+    )
+    b_pre = _find_nuc(
+        pre,
+        strand_id="oh_strand_b",
+        helix_id="oh_helix_a",
+        bp_index=bp,
+        direction=b_dir,
+    )
     p_a_pre = np.asarray(a_pre["backbone_position"], dtype=float)
     p_b_pre = np.asarray(b_pre["backbone_position"], dtype=float)
 
     _patch_rotation("oh_a", _quat_axis_angle((0.0, 1.0, 0.0), math.pi / 2))
 
     post = _get_geom()
-    a_post = _find_nuc(post, strand_id="oh_strand_a", helix_id="oh_helix_a",
-                       bp_index=bp, direction="FORWARD")
-    b_post = _find_nuc(post, strand_id="oh_strand_b", helix_id="oh_helix_a",
-                       bp_index=bp, direction=b_dir)
+    a_post = _find_nuc(
+        post,
+        strand_id="oh_strand_a",
+        helix_id="oh_helix_a",
+        bp_index=bp,
+        direction="FORWARD",
+    )
+    b_post = _find_nuc(
+        post,
+        strand_id="oh_strand_b",
+        helix_id="oh_helix_a",
+        bp_index=bp,
+        direction=b_dir,
+    )
     p_a_post = np.asarray(a_post["backbone_position"], dtype=float)
     p_b_post = np.asarray(b_post["backbone_position"], dtype=float)
 
-    assert float(np.linalg.norm(p_a_post - p_a_pre)) > 0.5, "driver overhang did not move"
+    assert float(np.linalg.norm(p_a_post - p_a_pre)) > 0.5, (
+        "driver overhang did not move"
+    )
     pair_pre = float(np.linalg.norm(p_a_pre - p_b_pre))
     pair_post = float(np.linalg.norm(p_a_post - p_b_post))
     assert abs(pair_post - pair_pre) < 0.1, (
@@ -383,12 +634,22 @@ def test_diff_length_duplex_cluster_contains_the_driven_domain():
     the driver helix has PARTIAL coverage ('bridge' helix) and a cluster drag moves the
     driver alone."""
     design = _connect_diff_length_duplex()
-    cluster = next((c for c in design["cluster_transforms"]
-                    if c.get("overhang_duplex_driver_id") == "oh_a"), None)
+    cluster = next(
+        (
+            c
+            for c in design["cluster_transforms"]
+            if c.get("overhang_duplex_driver_id") == "oh_a"
+        ),
+        None,
+    )
     assert cluster is not None, "connect did not materialize a duplex cluster"
 
-    b_ref = next((s["id"], di) for s in design["strands"]
-                 for di, dom in enumerate(s["domains"]) if dom.get("overhang_id") == "oh_b")
+    b_ref = next(
+        (s["id"], di)
+        for s in design["strands"]
+        for di, dom in enumerate(s["domains"])
+        if dom.get("overhang_id") == "oh_b"
+    )
     listed = {(dr["strand_id"], dr["domain_index"]) for dr in cluster["domain_ids"]}
     assert b_ref in listed, (
         f"duplex cluster omits the relocated driven domain {b_ref}; listed={sorted(listed)}. "

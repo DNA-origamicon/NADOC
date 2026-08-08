@@ -79,11 +79,17 @@ def test_protein_asset_meta_shape():
     assert meta["id"] == asset.id
     assert meta["name"] == "synth"
     assert meta["source_filename"] == "synth.pdb"
-    assert meta["atom_count"] == len(asset.atoms) == 9   # 9 protein atoms (water+ion dropped)
-    assert meta["residue_count"] == 2                    # ALA + CYS
+    assert (
+        meta["atom_count"] == len(asset.atoms) == 9
+    )  # 9 protein atoms (water+ion dropped)
+    assert meta["residue_count"] == 2  # ALA + CYS
     assert meta["chain_ids"] == asset.metadata.get("chain_ids", [])
-    assert meta["default_conjugation_atom_serial"] == asset.default_conjugation_atom_serial
-    assert "atoms" not in meta   # metadata-only — the heavy atom list must not be embedded
+    assert (
+        meta["default_conjugation_atom_serial"] == asset.default_conjugation_atom_serial
+    )
+    assert (
+        "atoms" not in meta
+    )  # metadata-only — the heavy atom list must not be embedded
 
 
 def test_parse_keeps_protein_drops_water_ions():
@@ -93,14 +99,14 @@ def test_parse_keeps_protein_drops_water_ions():
     assert len(asset.atoms) == 9
     assert asset.name == "synth"
     assert asset.metadata["residue_count"] == 2
-    assert asset.metadata["chain_ids"] == ["PROA"]   # falls back to segid
+    assert asset.metadata["chain_ids"] == ["PROA"]  # falls back to segid
 
 
 def test_element_inference_charmm_blank_column():
     """Blank element column → infer from name; 'CA' is carbon, 'SG' is sulfur."""
     asset = parse_protein_pdb(_SYNTH_PDB)
     by_name = {(a.res_name, a.name): a for a in asset.atoms}
-    assert by_name[("ALA", "CA")].element == "C"   # NOT calcium
+    assert by_name[("ALA", "CA")].element == "C"  # NOT calcium
     assert by_name[("ALA", "N")].element == "N"
     assert by_name[("ALA", "O")].element == "O"
     assert by_name[("CYS", "SG")].element == "S"
@@ -121,6 +127,7 @@ def test_asset_to_atomistic_and_json():
 
 def test_asset_to_atomistic_applies_pose():
     import numpy as np
+
     asset = parse_protein_pdb(_SYNTH_PDB)
     # Pure translation by (10, 0, 0) nm (row-major homogeneous).
     pose = np.eye(4)
@@ -151,7 +158,9 @@ def test_design_roundtrip_with_protein():
 
 def test_assembly_roundtrip_v2_preserves_proteins():
     asset = parse_protein_pdb(_SYNTH_PDB)
-    att = ProteinAttachment(asset_id=asset.id, target=ProteinTargetDesign(overhang_id="ovhg_h0_5_3p"))
+    att = ProteinAttachment(
+        asset_id=asset.id, target=ProteinTargetDesign(overhang_id="ovhg_h0_5_3p")
+    )
     part = PartInstance(source=PartSourceInline(design=make_minimal_design()))
     asm = Assembly(instances=[part], protein_assets=[asset], protein_attachments=[att])
     # v2 wire format round-trip (the default for new writes).
@@ -173,9 +182,12 @@ def test_three_layer_law_protein_does_not_touch_topology():
     dna_atoms_before = atomistic_to_json(build_atomistic_model(d))["atoms"]
 
     d.protein_assets = [asset]
-    d.protein_attachments = [ProteinAttachment(
-        asset_id=asset.id, target=ProteinTargetDesign(overhang_id="ovhg_h0_5_3p"),
-    )]
+    d.protein_attachments = [
+        ProteinAttachment(
+            asset_id=asset.id,
+            target=ProteinTargetDesign(overhang_id="ovhg_h0_5_3p"),
+        )
+    ]
 
     assert d.model_dump()["strands"] == strands_before
     assert d.model_dump()["overhangs"] == overhangs_before
@@ -192,30 +204,53 @@ def _design_with_overhang() -> Design:
     x=2.5) so geometry resolves a free-tip anchor."""
     base = make_minimal_design()
     oh_helix = Helix(
-        id="oh_helix", axis_start=Vec3(x=2.5, y=0.0, z=0.0),
+        id="oh_helix",
+        axis_start=Vec3(x=2.5, y=0.0, z=0.0),
         axis_end=Vec3(x=2.5, y=0.0, z=8 * BDNA_RISE_PER_BP),
-        phase_offset=0.0, length_bp=8, grid_pos=(0, 0),
+        phase_offset=0.0,
+        length_bp=8,
+        grid_pos=(0, 0),
     )
     oh_strand = Strand(
         id="oh_strand",
-        domains=[Domain(helix_id="oh_helix", start_bp=0, end_bp=7,
-                        direction=Direction.FORWARD, overhang_id="oh_5p")],
+        domains=[
+            Domain(
+                helix_id="oh_helix",
+                start_bp=0,
+                end_bp=7,
+                direction=Direction.FORWARD,
+                overhang_id="oh_5p",
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
-    return base.model_copy(update={
-        "helices": [*base.helices, oh_helix],
-        "strands": [*base.strands, oh_strand],
-        "overhangs": [OverhangSpec(id="oh_5p", helix_id="oh_helix",
-                                   strand_id="oh_strand", label="OHA")],
-    })
+    return base.model_copy(
+        update={
+            "helices": [*base.helices, oh_helix],
+            "strands": [*base.strands, oh_strand],
+            "overhangs": [
+                OverhangSpec(
+                    id="oh_5p", helix_id="oh_helix", strand_id="oh_strand", label="OHA"
+                )
+            ],
+        }
+    )
 
 
 def test_resolve_overhang_anchor_points_outward():
     # Synthetic nucs: root at z=0, free tip at z=2 → outward should be +z.
     nucs = [
-        {"overhang_id": "ov", "backbone_position": [1.0, 0.0, 0.0], "axis_tangent": [0, 0, 1]},
-        {"overhang_id": "ov", "backbone_position": [1.0, 0.0, 2.0], "is_three_prime": True,
-         "axis_tangent": [0, 0, 1]},
+        {
+            "overhang_id": "ov",
+            "backbone_position": [1.0, 0.0, 0.0],
+            "axis_tangent": [0, 0, 1],
+        },
+        {
+            "overhang_id": "ov",
+            "backbone_position": [1.0, 0.0, 2.0],
+            "is_three_prime": True,
+            "axis_tangent": [0, 0, 1],
+        },
     ]
     tip, outward = resolve_overhang_anchor(nucs, "ov", "free_end")
     assert np.allclose(tip, [1.0, 0.0, 2.0])
@@ -225,16 +260,18 @@ def test_resolve_overhang_anchor_points_outward():
 def test_compose_places_conjugation_at_tip_body_outward():
     asset = parse_protein_pdb(_SYNTH_PDB)
     att = ProteinAttachment(
-        asset_id=asset.id, target=ProteinTargetDesign(overhang_id="ov"),
+        asset_id=asset.id,
+        target=ProteinTargetDesign(overhang_id="ov"),
         conjugation_atom_serial=asset.default_conjugation_atom_serial,
     )
-    tip = np.array([1.0, 0.0, 2.0]); outward = np.array([0.0, 0.0, 1.0])
+    tip = np.array([1.0, 0.0, 2.0])
+    outward = np.array([0.0, 0.0, 1.0])
     m = compose_protein_world_transform(asset, att, tip, outward)
     conj = next(a for a in asset.atoms if a.serial == att.conjugation_atom_serial)
     cw = m @ np.array([conj.x, conj.y, conj.z, 1.0])
-    assert np.allclose(cw[:3], tip, atol=1e-6)            # conjugation atom at the tip
+    assert np.allclose(cw[:3], tip, atol=1e-6)  # conjugation atom at the tip
     com = m @ np.array([*asset.center_of_mass, 1.0])
-    assert float(np.dot(com[:3] - tip, outward)) > 0       # protein body points outward
+    assert float(np.dot(com[:3] - tip, outward)) > 0  # protein body points outward
 
 
 @pytest.fixture
@@ -247,8 +284,9 @@ def _clean_state():
 
 
 def _import_protein() -> str:
-    r = client.post("/api/design/protein/import",
-                    json={"content": _SYNTH_PDB, "name": "synth"})
+    r = client.post(
+        "/api/design/protein/import", json={"content": _SYNTH_PDB, "name": "synth"}
+    )
     assert r.status_code == 201, r.text
     return r.json()["id"]
 
@@ -257,16 +295,18 @@ def test_attach_embeds_asset_and_preserves_topology(_clean_state):
     asset_id = _import_protein()
     strands_before = [s.id for s in design_state.get_design().strands]
 
-    r = client.post("/api/design/protein/attachments",
-                    json={"asset_id": asset_id, "overhang_id": "oh_5p"})
+    r = client.post(
+        "/api/design/protein/attachments",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p"},
+    )
     assert r.status_code == 201, r.text
     att_id = r.json()["attachment_id"]
 
     d = design_state.get_design()
     assert len(d.protein_attachments) == 1
     assert d.protein_attachments[0].id == att_id
-    assert any(a.id == asset_id for a in d.protein_assets)   # asset embedded
-    assert [s.id for s in d.strands] == strands_before        # topology untouched
+    assert any(a.id == asset_id for a in d.protein_assets)  # asset embedded
+    assert [s.id for s in d.strands] == strands_before  # topology untouched
 
 
 def test_placement_endpoint_places_protein_at_overhang(_clean_state):
@@ -277,8 +317,10 @@ def test_placement_endpoint_places_protein_at_overhang(_clean_state):
     before = client.get("/api/design/protein/atomistic").json()
     assert len(before["atoms"]) == 0
 
-    client.post("/api/design/protein/attachments",
-                json={"asset_id": asset_id, "overhang_id": "oh_5p"})
+    client.post(
+        "/api/design/protein/attachments",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p"},
+    )
 
     after = client.get("/api/design/protein/atomistic").json()
     assert len(after["atoms"]) == 9
@@ -289,11 +331,21 @@ def test_placement_endpoint_places_protein_at_overhang(_clean_state):
 
 def test_azide_attach_end_picks_nearer_overhang_end():
     from backend.core.protein import azide_attach_end
+
     # Overhang "ov": root at z=0, free tip at z=2. Binder "bnd" antiparallel:
     # its 5' terminus is co-located with the free tip (z=2), 3' with the root (z=0).
     nucs = [
-        {"overhang_id": "ov", "backbone_position": [1, 0, 0], "axis_tangent": [0, 0, 1]},
-        {"overhang_id": "ov", "backbone_position": [1, 0, 2], "is_three_prime": True, "axis_tangent": [0, 0, 1]},
+        {
+            "overhang_id": "ov",
+            "backbone_position": [1, 0, 0],
+            "axis_tangent": [0, 0, 1],
+        },
+        {
+            "overhang_id": "ov",
+            "backbone_position": [1, 0, 2],
+            "is_three_prime": True,
+            "axis_tangent": [0, 0, 1],
+        },
         {"strand_id": "bnd", "backbone_position": [1, 0, 2], "is_five_prime": True},
         {"strand_id": "bnd", "backbone_position": [1, 0, 0], "is_three_prime": True},
     ]
@@ -303,7 +355,11 @@ def test_azide_attach_end_picks_nearer_overhang_end():
 
 def _set_sequenced_overhang():
     d = _design_with_overhang()
-    d = d.model_copy(update={"overhangs": [d.overhangs[0].model_copy(update={"sequence": "ACGTACGT"})]})
+    d = d.model_copy(
+        update={
+            "overhangs": [d.overhangs[0].model_copy(update={"sequence": "ACGTACGT"})]
+        }
+    )
     design_state.set_design(d)
 
 
@@ -312,8 +368,10 @@ def test_conjugate_creates_binder_and_attachment(_clean_state):
     asset_id = _import_protein()
     strands_before = {s.id for s in design_state.get_design().strands}
 
-    r = client.post("/api/design/protein/conjugate",
-                    json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "5p"})
+    r = client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "5p"},
+    )
     assert r.status_code == 201, r.text
     binder_id = r.json()["binder_strand_id"]
 
@@ -323,7 +381,7 @@ def test_conjugate_creates_binder_and_attachment(_clean_state):
     assert binder.id not in strands_before
     assert binder.strand_type == StrandType.OH_BINDER
     assert any(dom.binds_overhang_id == "oh_5p" for dom in binder.domains)
-    assert binder.sequence and len(binder.sequence) == 8        # RC of the 8-nt overhang
+    assert binder.sequence and len(binder.sequence) == 8  # RC of the 8-nt overhang
     # (2) the protein is attached at the chosen site, asset embedded
     assert len(d.protein_attachments) == 1
     att = d.protein_attachments[0]
@@ -336,43 +394,58 @@ def test_conjugate_creates_binder_and_attachment(_clean_state):
 def test_conjugate_azide_end_flips_attach_end(_clean_state):
     _set_sequenced_overhang()
     asset_id = _import_protein()
-    r5 = client.post("/api/design/protein/conjugate",
-                     json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "5p"})
+    r5 = client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "5p"},
+    )
     end5 = design_state.get_design().protein_attachments[-1].target.attach_end
     client.post("/api/design/undo")
-    r3 = client.post("/api/design/protein/conjugate",
-                     json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "3p"})
+    r3 = client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "3p"},
+    )
     end3 = design_state.get_design().protein_attachments[-1].target.attach_end
     assert r5.status_code == 201 and r3.status_code == 201
-    assert {end5, end3} == {"free_end", "root"}      # the two azide ends land on opposite ends
+    assert {end5, end3} == {
+        "free_end",
+        "root",
+    }  # the two azide ends land on opposite ends
 
 
 def test_conjugate_one_undo_reverts_binder_and_attachment(_clean_state):
     _set_sequenced_overhang()
     asset_id = _import_protein()
     n_strands = len(design_state.get_design().strands)
-    client.post("/api/design/protein/conjugate",
-                json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "5p"})
+    client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "5p"},
+    )
     assert len(design_state.get_design().strands) == n_strands + 1
     r = client.post("/api/design/undo")
     assert r.status_code == 200, r.text
     d = design_state.get_design()
-    assert len(d.strands) == n_strands                  # binder gone
-    assert len(d.protein_attachments) == 0              # attachment gone (single undo)
+    assert len(d.strands) == n_strands  # binder gone
+    assert len(d.protein_attachments) == 0  # attachment gone (single undo)
 
 
 def test_undo_import_removes_rendered_protein(_clean_state):
     # Free import → protein renders; undo → it disappears (no orphan at origin).
-    client.post("/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth"})
+    client.post(
+        "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth"}
+    )
     assert len(client.get("/api/design/protein/atomistic").json()["atoms"]) == 9
     r = client.post("/api/design/undo")
     assert r.status_code == 200, r.text
     assert len(design_state.get_design().protein_attachments) == 0
-    assert len(client.get("/api/design/protein/atomistic").json()["atoms"]) == 0  # gone, not at origin
+    assert (
+        len(client.get("/api/design/protein/atomistic").json()["atoms"]) == 0
+    )  # gone, not at origin
 
 
 def test_delete_attachment_clears_render(_clean_state):
-    client.post("/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth"})
+    client.post(
+        "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth"}
+    )
     att_id = design_state.get_design().protein_attachments[0].id
     client.delete(f"/api/design/protein/attachments/{att_id}")
     assert len(client.get("/api/design/protein/atomistic").json()["atoms"]) == 0
@@ -382,7 +455,9 @@ def test_delete_protein_import_feature_clears_render(_clean_state):
     # Deleting the protein-import feature-log row must remove the imported
     # protein from the view (it's a root op: the asset/attachment it created
     # have no other creating entry in the log).
-    client.post("/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth"})
+    client.post(
+        "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth"}
+    )
     d = design_state.get_design()
     assert d.feature_log[-1].op_kind == "protein-import"
     idx = len(d.feature_log) - 1
@@ -397,8 +472,12 @@ def test_delete_protein_import_feature_clears_render(_clean_state):
 def test_delete_last_protein_import_keeps_earlier(_clean_state):
     # Two imports; deleting the LAST import row surgically removes just it and
     # keeps the earlier protein (it has no later dependents).
-    client.post("/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth1"})
-    client.post("/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth2"})
+    client.post(
+        "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth1"}
+    )
+    client.post(
+        "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth2"}
+    )
     assert len(design_state.get_design().protein_attachments) == 2
     last_idx = len(design_state.get_design().feature_log) - 1
     r = client.delete(f"/api/design/features/{last_idx}")
@@ -414,9 +493,13 @@ def test_delete_last_protein_import_keeps_earlier(_clean_state):
 def test_delete_earlier_protein_import_keeps_independent_later_import(_clean_state):
     # Reference-based delete: a later protein import that does not reference the
     # first import's ids survives. Non-reconstructable alone is not a dependency.
-    client.post("/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth1"})
+    client.post(
+        "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth1"}
+    )
     first_idx = len(design_state.get_design().feature_log) - 1
-    client.post("/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth2"})
+    client.post(
+        "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth2"}
+    )
     r = client.delete(f"/api/design/features/{first_idx}")
     assert r.status_code == 200, r.text
     j = r.json()
@@ -429,10 +512,14 @@ def test_delete_earlier_protein_import_keeps_independent_later_import(_clean_sta
 
 def test_patch_visible_false_hides_protein(_clean_state):
     asset_id = _import_protein()
-    att_id = client.post("/api/design/protein/attachments",
-                         json={"asset_id": asset_id, "overhang_id": "oh_5p"}).json()["attachment_id"]
+    att_id = client.post(
+        "/api/design/protein/attachments",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p"},
+    ).json()["attachment_id"]
 
-    r = client.patch(f"/api/design/protein/attachments/{att_id}", json={"visible": False})
+    r = client.patch(
+        f"/api/design/protein/attachments/{att_id}", json={"visible": False}
+    )
     assert r.status_code == 200, r.text
     # Hidden, NOT relocated to the origin.
     hidden = client.get("/api/design/protein/atomistic").json()
@@ -441,8 +528,10 @@ def test_patch_visible_false_hides_protein(_clean_state):
 
 def test_delete_attachment(_clean_state):
     asset_id = _import_protein()
-    att_id = client.post("/api/design/protein/attachments",
-                         json={"asset_id": asset_id, "overhang_id": "oh_5p"}).json()["attachment_id"]
+    att_id = client.post(
+        "/api/design/protein/attachments",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p"},
+    ).json()["attachment_id"]
     r = client.delete(f"/api/design/protein/attachments/{att_id}")
     assert r.status_code == 200, r.text
     assert len(design_state.get_design().protein_attachments) == 0
@@ -450,30 +539,36 @@ def test_delete_attachment(_clean_state):
 
 def test_attach_unknown_overhang_404(_clean_state):
     asset_id = _import_protein()
-    r = client.post("/api/design/protein/attachments",
-                    json={"asset_id": asset_id, "overhang_id": "nope"})
+    r = client.post(
+        "/api/design/protein/attachments",
+        json={"asset_id": asset_id, "overhang_id": "nope"},
+    )
     assert r.status_code == 404
 
 
 # ── Merged "Import PDB": classification + auto-routing ──────────────────────────
 
-_DD12_DNA = "backend/data/dd12_na.pdb"   # Drew-Dickerson dodecamer (B-DNA)
+_DD12_DNA = "backend/data/dd12_na.pdb"  # Drew-Dickerson dodecamer (B-DNA)
 
 
 def test_classify_pdb_content():
     from backend.core.protein import classify_pdb_content
-    assert classify_pdb_content(_SYNTH_PDB) == (False, True)          # protein only
+
+    assert classify_pdb_content(_SYNTH_PDB) == (False, True)  # protein only
     dna = open(_DD12_DNA).read()
-    assert classify_pdb_content(dna) == (True, False)                 # DNA only
+    assert classify_pdb_content(dna) == (True, False)  # DNA only
     # Water/ions alone classify as neither.
-    water = "ATOM      1  OH2 TIP3    1       0.000   0.000   0.000  1.00  0.00      WAT\n"
+    water = (
+        "ATOM      1  OH2 TIP3    1       0.000   0.000   0.000  1.00  0.00      WAT\n"
+    )
     assert classify_pdb_content(water) == (False, False)
 
 
 def test_pdb_auto_routes_protein_to_library_without_touching_design(_clean_state):
     strands_before = [s.id for s in design_state.get_design().strands]
-    r = client.post("/api/design/import/pdb-auto",
-                    json={"content": _SYNTH_PDB, "name": "synth"})
+    r = client.post(
+        "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth"}
+    )
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["imported"] == {"dna": False, "protein": True}
@@ -487,23 +582,33 @@ def test_pdb_auto_routes_dna_to_design(_clean_state, monkeypatch):
     # Verify the DNA *routing branch* without running the real (heavy,
     # globally-stateful) import_pdb — classification still uses real DNA content.
     from backend.core import pdb_to_design
-    monkeypatch.setattr(pdb_to_design, "import_pdb",
-                        lambda content: (make_minimal_design(), None, []))
-    monkeypatch.setattr(pdb_to_design, "merge_pdb_into_design",
-                        lambda d, content: (make_minimal_design(), None, []))
+
+    monkeypatch.setattr(
+        pdb_to_design, "import_pdb", lambda content: (make_minimal_design(), None, [])
+    )
+    monkeypatch.setattr(
+        pdb_to_design,
+        "merge_pdb_into_design",
+        lambda d, content: (make_minimal_design(), None, []),
+    )
 
     dna = open(_DD12_DNA).read()
     r = client.post("/api/design/import/pdb-auto", json={"content": dna})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["imported"]["dna"] is True
-    assert "design" in body and body["design"]["helices"]   # full design response
+    assert "design" in body and body["design"]["helices"]  # full design response
 
 
 def test_pdb_auto_rejects_empty_and_irrelevant(_clean_state):
     assert client.post("/api/design/import/pdb-auto", json={}).status_code == 400
-    water = "ATOM      1  OH2 TIP3    1       0.000   0.000   0.000  1.00  0.00      WAT\n"
-    assert client.post("/api/design/import/pdb-auto", json={"content": water}).status_code == 400
+    water = (
+        "ATOM      1  OH2 TIP3    1       0.000   0.000   0.000  1.00  0.00      WAT\n"
+    )
+    assert (
+        client.post("/api/design/import/pdb-auto", json={"content": water}).status_code
+        == 400
+    )
 
 
 def test_pdb_auto_invalid_rcsb_id_400(_clean_state):
@@ -524,13 +629,14 @@ _SYNTH_PROT_DNA = _SYNTH_PDB.replace("END\n", "") + (
 def test_parse_exclude_dna():
     full = parse_protein_pdb(_SYNTH_PROT_DNA, exclude_dna=False)
     stripped = parse_protein_pdb(_SYNTH_PROT_DNA, exclude_dna=True)
-    assert len(full.atoms) == 12          # 9 protein + 3 DNA
-    assert len(stripped.atoms) == 9       # DNA removed
+    assert len(full.atoms) == 12  # 9 protein + 3 DNA
+    assert len(stripped.atoms) == 9  # DNA removed
     assert {a.res_name for a in stripped.atoms} == {"ALA", "CYS"}
 
 
 def test_classify_complex():
     from backend.core.protein import classify_pdb_content
+
     assert classify_pdb_content(_SYNTH_PROT_DNA) == (True, True)
 
 
@@ -543,22 +649,30 @@ def test_pdb_auto_complex_needs_dna_decision_then_imports(_clean_state):
     assert body["has_dna"] and body["has_protein"]
     assert body["imported"] == {"dna": False, "protein": False}
     content = body["content"]
-    assert len(design_state.get_design().protein_attachments) == 0   # nothing imported yet
+    assert (
+        len(design_state.get_design().protein_attachments) == 0
+    )  # nothing imported yet
 
     # Remove DNA → protein-only asset (9 atoms).
-    r2 = client.post("/api/design/import/pdb-auto",
-                     json={"content": content, "remove_dna_from_protein": True})
+    r2 = client.post(
+        "/api/design/import/pdb-auto",
+        json={"content": content, "remove_dna_from_protein": True},
+    )
     assert r2.json()["protein"]["atom_count"] == 9
 
 
 def test_pdb_auto_complex_keep_dna(_clean_state):
-    r = client.post("/api/design/import/pdb-auto",
-                    json={"content": _SYNTH_PROT_DNA, "remove_dna_from_protein": False})
-    assert r.json()["protein"]["atom_count"] == 12   # DNA kept in the protein object
+    r = client.post(
+        "/api/design/import/pdb-auto",
+        json={"content": _SYNTH_PROT_DNA, "remove_dna_from_protein": False},
+    )
+    assert r.json()["protein"]["atom_count"] == 12  # DNA kept in the protein object
 
 
 def test_import_places_free_protein_and_logs(_clean_state):
-    r = client.post("/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth"})
+    r = client.post(
+        "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth"}
+    )
     assert r.status_code == 200, r.text
     assert r.json()["imported"] == {"dna": False, "protein": True}
     d = design_state.get_design()
@@ -570,8 +684,10 @@ def test_import_places_free_protein_and_logs(_clean_state):
 
 def test_gizmo_move_to_pose_math():
     from backend.core.protein import gizmo_move_to_pose
-    new = gizmo_move_to_pose(np.eye(4), pivot=[0, 0, 0],
-                             translation=[5, 0, 0], rotation=[0, 0, 0, 1])
+
+    new = gizmo_move_to_pose(
+        np.eye(4), pivot=[0, 0, 0], translation=[5, 0, 0], rotation=[0, 0, 0, 1]
+    )
     assert np.allclose(new[:3, 3], [5, 0, 0])
 
 
@@ -582,12 +698,20 @@ def test_gizmo_move_translates_free_protein_and_logs(_clean_state):
     before = client.get("/api/design/protein/atomistic").json()
     c0 = np.mean([[a["x"], a["y"], a["z"]] for a in before["atoms"]], axis=0)
 
-    r = client.patch(f"/api/design/protein/attachments/{att_id}",
-                     json={"gizmo_move": {"pivot": [0, 0, 0],
-                                          "translation": [5, 0, 0],
-                                          "rotation": [0, 0, 0, 1]}})
+    r = client.patch(
+        f"/api/design/protein/attachments/{att_id}",
+        json={
+            "gizmo_move": {
+                "pivot": [0, 0, 0],
+                "translation": [5, 0, 0],
+                "rotation": [0, 0, 0, 1],
+            }
+        },
+    )
     assert r.status_code == 200, r.text
     after = client.get("/api/design/protein/atomistic").json()
     c1 = np.mean([[a["x"], a["y"], a["z"]] for a in after["atoms"]], axis=0)
-    assert np.allclose(c1 - c0, [5, 0, 0], atol=1e-4)   # whole protein translated +5 in x
+    assert np.allclose(
+        c1 - c0, [5, 0, 0], atol=1e-4
+    )  # whole protein translated +5 in x
     assert design_state.get_design().feature_log[-1].op_kind == "protein-attach-patch"

@@ -29,8 +29,8 @@ from backend.physics.fem_solver import HELIX_DIAMETER
 
 # Cylinder radii (nm), matching the CanDo BILD: helix tube = duplex radius (11.25 Å),
 # crossover joint connector = thin (2.0 Å).
-TUBE_RADIUS_NM = HELIX_DIAMETER / 2.0   # 1.125 nm
-JOINT_RADIUS_NM = 0.20                   # nm
+TUBE_RADIUS_NM = HELIX_DIAMETER / 2.0  # 1.125 nm
+JOINT_RADIUS_NM = 0.20  # nm
 
 
 def axis_from_backbones(
@@ -49,7 +49,7 @@ def axis_from_backbones(
         if p.get("copy", 0) != 0:
             continue
         key = (p["helix_id"], p["bp_index"])
-        if rmsf_bp and key not in rmsf_bp:      # keep only meshed duplex core (drop ssDNA)
+        if rmsf_bp and key not in rmsf_bp:  # keep only meshed duplex core (drop ssDNA)
             continue
         pos = p.get("backbone_position")
         if pos is None:
@@ -63,8 +63,17 @@ def axis_from_backbones(
         b = rev.get(key)
         if b is None:
             continue
-        out.append({"helix_id": key[0], "bp_index": key[1],
-                    "position": [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0, (a[2] + b[2]) / 2.0]})
+        out.append(
+            {
+                "helix_id": key[0],
+                "bp_index": key[1],
+                "position": [
+                    (a[0] + b[0]) / 2.0,
+                    (a[1] + b[1]) / 2.0,
+                    (a[2] + b[2]) / 2.0,
+                ],
+            }
+        )
     return out
 
 
@@ -114,11 +123,13 @@ def compute_cylinders(
             (bp, axis[(hid, bp)]) for (hid, bp) in axis if hid == helix.id
         )  # sort by bp index → ordered along the helix
         if len(keyed) >= 2:
-            helices.append({
-                "helix_id": helix.id,
-                "points": [p for _, p in keyed],
-                "rmsf": [rmsf_by_node.get((helix.id, bp)) for bp, _ in keyed],
-            })
+            helices.append(
+                {
+                    "helix_id": helix.id,
+                    "points": [p for _, p in keyed],
+                    "rmsf": [rmsf_by_node.get((helix.id, bp)) for bp, _ in keyed],
+                }
+            )
 
     joints: List[list] = []
     joint_rmsf: List[Optional[float]] = []

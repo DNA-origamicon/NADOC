@@ -54,9 +54,9 @@ from backend.core.md_vram import (
 #
 # K is machine-specific (a 3080 is ~3x these), but the RATIO — which is all the
 # carve/no-carve decision depends on — is a property of NAMD, not of the card.
-K_GPU_RESIDENT = 12.8 * 747_262   # ~9.6e6 atom·ns/day
-K_OFFLOAD      = 18.8 * 196_606   # ~3.7e6 atom·ns/day
-K_CPU          = K_OFFLOAD / 12.0  # crude: the CPU build is ~an order slower
+K_GPU_RESIDENT = 12.8 * 747_262  # ~9.6e6 atom·ns/day
+K_OFFLOAD = 18.8 * 196_606  # ~3.7e6 atom·ns/day
+K_CPU = K_OFFLOAD / 12.0  # crude: the CPU build is ~an order slower
 
 #: A carve must remove more than this factor of atoms to beat GPU-resident (~2.6x).
 CARVE_BREAKEVEN = K_GPU_RESIDENT / K_OFFLOAD
@@ -71,8 +71,8 @@ CARVE_MIN_PAYOFF_NO_RESIDENT = 1.5
 # be thick enough to (a) hydrate the duplex properly and (b) keep the minimum-image
 # convention valid (2 x shell >= cutoff).  So we FIX the shell at a validated
 # thickness and only ever go thinner when memory forces it — never for speed.
-DEFAULT_SHELL_NM = 1.2   # 12 A — the thickness validated on 6hbx100_90deg
-MIN_SHELL_NM     = 0.8   # hard floor; below this the hydration layer is not credible
+DEFAULT_SHELL_NM = 1.2  # 12 A — the thickness validated on 6hbx100_90deg
+MIN_SHELL_NM = 0.8  # hard floor; below this the hydration layer is not credible
 
 
 # GPU-resident's advantage is NOT scale-free — the 2.6x-per-atom ratio above only holds
@@ -88,7 +88,7 @@ MIN_SHELL_NM     = 0.8   # hard floor; below this the hydration layer is not cre
 # resident path is predicted at the OFFLOAD rate times the measured small-system penalty.
 # Threshold shared with the conf writer (md_protocols._RESIDENT_MIN_ATOMS) so the
 # optimiser's advice and the emitted confs can never disagree.
-_SMALL_SYSTEM_RESIDENT_PENALTY = 0.89   # 1.116 -> 1.266 ms/step at 32.5k atoms
+_SMALL_SYSTEM_RESIDENT_PENALTY = 0.89  # 1.116 -> 1.266 ms/step at 32.5k atoms
 
 
 def predict_ns_per_day(n_atoms: int, *, gpu_resident: bool, gpu: bool = True) -> float:
@@ -134,6 +134,7 @@ def measured_resident(n_atoms: int, *, workspace=None, machine=None) -> dict | N
         load_measurement,
         resident_verdict,
     )
+
     entry = load_measurement(workspace, machine, n_atoms)
     return resident_verdict(entry) if entry else None
 
@@ -164,7 +165,7 @@ def probe_hardware(devices: str = "0") -> dict:
         try:
             act = detect_gpu_activity(devices)
             name = (act or {}).get("name")
-        except Exception:                                   # noqa: BLE001
+        except Exception:  # noqa: BLE001
             name = None
 
     vram_cap = max_atoms_for_vram(vram_mb) if vram_mb else None
@@ -209,6 +210,7 @@ def choose_water_shell(
     The shell is NEVER thinned for throughput (see DEFAULT_SHELL_NM): the only choice
     made on speed grounds is the binary carve-vs-full-box one.
     """
+
     def fits(n: int) -> bool:
         return atom_cap is None or n <= atom_cap
 
@@ -216,20 +218,28 @@ def choose_water_shell(
     carve_shell = 0.0
     for s in sorted((s for s in shell_atoms if s >= MIN_SHELL_NM), reverse=True):
         if s > DEFAULT_SHELL_NM:
-            continue                       # never thicker than the default — no benefit
-        carve_shell = s                    # the thickest shell <= default...
+            continue  # never thicker than the default — no benefit
+        carve_shell = s  # the thickest shell <= default...
         if fits(shell_atoms[s]):
-            break                          # ...that also fits memory
-    carve_atoms = shell_atoms.get(carve_shell, full_atoms) if carve_shell else full_atoms
+            break  # ...that also fits memory
+    carve_atoms = (
+        shell_atoms.get(carve_shell, full_atoms) if carve_shell else full_atoms
+    )
 
     full_ok = fits(full_atoms)
     # Predict the full box on the path it would ACTUALLY take: resident only where that
     # pays (below the crossover it is slower than offload, see predict_ns_per_day).
     full_resident = gpu and gpu_resident_pays(full_atoms)
-    full_rate = (predict_ns_per_day(full_atoms, gpu_resident=full_resident, gpu=gpu)
-                 if full_ok else -1.0)
-    carve_rate = (predict_ns_per_day(carve_atoms, gpu_resident=False, gpu=gpu)
-                  if carve_shell else -1.0)
+    full_rate = (
+        predict_ns_per_day(full_atoms, gpu_resident=full_resident, gpu=gpu)
+        if full_ok
+        else -1.0
+    )
+    carve_rate = (
+        predict_ns_per_day(carve_atoms, gpu_resident=False, gpu=gpu)
+        if carve_shell
+        else -1.0
+    )
     # How much a carve must buy to be worth taking.  This used to be implicit in the rate
     # comparison: with the full box on resident, `carve_rate <= full_rate` is exactly
     # `payoff <= K_GPU_RESIDENT/K_OFFLOAD`.  That equivalence BREAKS once a small full box
@@ -239,34 +249,49 @@ def choose_water_shell(
     payoff_needed = CARVE_BREAKEVEN if full_resident else CARVE_MIN_PAYOFF_NO_RESIDENT
 
     if not full_ok and not fits(carve_atoms):
-        return (carve_shell, False,
-                f"nothing fits this machine's ~{atom_cap:,}-atom ceiling; using the "
-                f"thinnest credible shell ({round(carve_shell * 10)} Å)")
+        return (
+            carve_shell,
+            False,
+            f"nothing fits this machine's ~{atom_cap:,}-atom ceiling; using the "
+            f"thinnest credible shell ({round(carve_shell * 10)} Å)",
+        )
 
     if not full_ok:
-        return (carve_shell, False,
-                f"the full box (~{full_atoms:,} atoms) exceeds this machine's memory, so a "
-                f"{round(carve_shell * 10)} Å shell (~{carve_atoms:,} atoms) is required")
+        return (
+            carve_shell,
+            False,
+            f"the full box (~{full_atoms:,} atoms) exceeds this machine's memory, so a "
+            f"{round(carve_shell * 10)} Å shell (~{carve_atoms:,} atoms) is required",
+        )
 
     if carve_payoff < payoff_needed or carve_rate <= full_rate:
         # Full box wins — but that does NOT automatically mean run it GPU-resident.
         if gpu and not full_resident:
-            return (0.0, False,
-                    f"the full box fits and a {round(carve_shell * 10)} Å carve would only "
-                    f"remove {carve_payoff:.1f}x the atoms (needs >{payoff_needed:.1f}x to be "
-                    f"worth forcing NVT); at ~{full_atoms:,} atoms GPU-resident is SLOWER than "
-                    f"CUDA offload — below ~{_RESIDENT_MIN_ATOMS:,} both paths hit the same "
-                    f"per-step floor and resident's setup is pure overhead — so the run stays "
-                    f"on offload")
-        return (0.0, full_resident,
-                f"a {round(carve_shell * 10)} Å carve would only remove {carve_payoff:.1f}x the "
-                f"atoms, which does not pay for losing GPU-resident mode "
-                f"(needs >{payoff_needed:.1f}x) — this design largely fills its own bounding box")
+            return (
+                0.0,
+                False,
+                f"the full box fits and a {round(carve_shell * 10)} Å carve would only "
+                f"remove {carve_payoff:.1f}x the atoms (needs >{payoff_needed:.1f}x to be "
+                f"worth forcing NVT); at ~{full_atoms:,} atoms GPU-resident is SLOWER than "
+                f"CUDA offload — below ~{_RESIDENT_MIN_ATOMS:,} both paths hit the same "
+                f"per-step floor and resident's setup is pure overhead — so the run stays "
+                f"on offload",
+            )
+        return (
+            0.0,
+            full_resident,
+            f"a {round(carve_shell * 10)} Å carve would only remove {carve_payoff:.1f}x the "
+            f"atoms, which does not pay for losing GPU-resident mode "
+            f"(needs >{payoff_needed:.1f}x) — this design largely fills its own bounding box",
+        )
 
-    return (carve_shell, False,
-            f"a {round(carve_shell * 10)} Å shell cuts {full_atoms:,} → {carve_atoms:,} atoms "
-            f"({carve_payoff:.1f}x), which beats the full box "
-            f"(needs >{payoff_needed:.1f}x)")
+    return (
+        carve_shell,
+        False,
+        f"a {round(carve_shell * 10)} Å shell cuts {full_atoms:,} → {carve_atoms:,} atoms "
+        f"({carve_payoff:.1f}x), which beats the full box "
+        f"(needs >{payoff_needed:.1f}x)",
+    )
 
 
 def recommend_advanced(
@@ -305,7 +330,9 @@ def recommend_advanced(
         )
         rationale.append("Compute → CPU: no GPU detected.")
     else:
-        rationale.append(f"Compute → GPU: {round(vram_mb / 1024)} GB CUDA device detected.")
+        rationale.append(
+            f"Compute → GPU: {round(vram_mb / 1024)} GB CUDA device detected."
+        )
 
     # Memory ceiling: the run must fit BOTH the card and host RAM.
     vram_cap = max_atoms_for_vram(vram_mb) if vram_mb else None
@@ -316,39 +343,59 @@ def recommend_advanced(
     profile = None
     try:
         profile = estimate_profile_from_design(
-            design, padding_nm=padding_nm, atomistic_model=atomistic_model)
-    except Exception as exc:                                   # noqa: BLE001
-        warnings.append(f"Could not size the solvated system ({exc}) — left the water shell alone.")
+            design, padding_nm=padding_nm, atomistic_model=atomistic_model
+        )
+    except Exception as exc:  # noqa: BLE001
+        warnings.append(
+            f"Could not size the solvated system ({exc}) — left the water shell alone."
+        )
 
     rec: dict = {
         "threads": threads,
         "compute": "cpu" if (cpu_only or vram_mb is None) else "gpu",
         "fast": True,
         "padding_nm": padding_nm,
-        "minimize_steps": _round_up_to_cycle(max(AKSIMENTIEV_STEPS_PER_CYCLE, minimize_steps)),
+        "minimize_steps": _round_up_to_cycle(
+            max(AKSIMENTIEV_STEPS_PER_CYCLE, minimize_steps)
+        ),
     }
-    facts: dict = {"vram_mb": vram_mb, "host_ram_mb": host_mb, "atom_cap": atom_cap,
-                   "cpu_logical": (physical_cores() * 2)}
+    facts: dict = {
+        "vram_mb": vram_mb,
+        "host_ram_mb": host_mb,
+        "atom_cap": atom_cap,
+        "cpu_logical": (physical_cores() * 2),
+    }
 
     if profile is None:
-        rec["water_shell_a"] = None      # leave the user's value alone
+        rec["water_shell_a"] = None  # leave the user's value alone
         rec["gpu_resident"] = None
-        return {"recommended": rec, "rationale": rationale, "warnings": warnings, "facts": facts}
+        return {
+            "recommended": rec,
+            "rationale": rationale,
+            "warnings": warnings,
+            "facts": facts,
+        }
 
     full_atoms = profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
     shell_atoms = {
         s: estimate_total_atoms(
-            dna_xyz_nm=profile["dna_xyz_nm"], box_nm=profile["box_nm"],
-            full_water=profile["full_water"], dna_atoms=profile["dna_atoms"],
-            ion_atoms=profile["ion_atoms"], shell_nm=s,
+            dna_xyz_nm=profile["dna_xyz_nm"],
+            box_nm=profile["box_nm"],
+            full_water=profile["full_water"],
+            dna_atoms=profile["dna_atoms"],
+            ion_atoms=profile["ion_atoms"],
+            shell_nm=s,
         )
         for s in CANDIDATE_SHELLS_NM
     }
 
     shell_nm, gpu_resident, why = choose_water_shell(
-        full_atoms=full_atoms, shell_atoms=shell_atoms, atom_cap=atom_cap, gpu=gpu)
+        full_atoms=full_atoms, shell_atoms=shell_atoms, atom_cap=atom_cap, gpu=gpu
+    )
 
-    chosen_atoms = full_atoms if shell_nm == 0 else shell_atoms.get(shell_nm, full_atoms)
+    chosen_atoms = (
+        full_atoms if shell_nm == 0 else shell_atoms.get(shell_nm, full_atoms)
+    )
     rec["water_shell_a"] = round(shell_nm * 10, 1)
     rec["gpu_resident"] = bool(gpu_resident)
 
@@ -365,13 +412,15 @@ def recommend_advanced(
         )
 
     est = predict_ns_per_day(chosen_atoms, gpu_resident=gpu_resident, gpu=gpu)
-    facts.update({
-        "full_atoms": full_atoms,
-        "chosen_atoms": chosen_atoms,
-        "shell_atoms": {str(k): v for k, v in shell_atoms.items()},
-        "est_ns_per_day": round(est, 1),
-        "gpu_resident": bool(gpu_resident),
-    })
+    facts.update(
+        {
+            "full_atoms": full_atoms,
+            "chosen_atoms": chosen_atoms,
+            "shell_atoms": {str(k): v for k, v in shell_atoms.items()},
+            "est_ns_per_day": round(est, 1),
+            "gpu_resident": bool(gpu_resident),
+        }
+    )
     rationale.append(
         f"Estimated throughput ≈ {est:.0f} ns/day at ~{chosen_atoms:,} atoms "
         f"({'GPU-resident' if gpu_resident else 'CUDA offload'}, 4 fs)."
@@ -384,4 +433,9 @@ def recommend_advanced(
             "abort. Consider a smaller design or the CPU build."
         )
 
-    return {"recommended": rec, "rationale": rationale, "warnings": warnings, "facts": facts}
+    return {
+        "recommended": rec,
+        "rationale": rationale,
+        "warnings": warnings,
+        "facts": facts,
+    }

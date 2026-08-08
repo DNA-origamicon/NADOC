@@ -81,6 +81,7 @@ not) on a common value.  Until that lands this value is the measured-but-contami
 one, and it is the ONLY number here that the seed sweep can move: the radii and the
 base-centroid placement all relaxed demonstrably away from the seed.
 """
+
 from __future__ import annotations
 
 import math
@@ -169,8 +170,13 @@ def _from_atomistic_template() -> "MeasuredPositioning | None":
                 v = np.mean([pos[a] for a in ring], axis=0)
             else:  # the Watson-Crick donor/acceptor
                 v = pos["N1"] if residue in ("DA", "DG") else pos["N3"]
-            vals.append((float(math.hypot(v[0], v[1])),
-                         math.degrees(math.atan2(v[1], v[0])), float(v[2])))
+            vals.append(
+                (
+                    float(math.hypot(v[0], v[1])),
+                    math.degrees(math.atan2(v[1], v[0])),
+                    float(v[2]),
+                )
+            )
         return _site(vals)
 
     bb_f, bb_r = landmark("FORWARD", "C3'"), landmark("REVERSE", "C3'")
@@ -182,13 +188,22 @@ def _from_atomistic_template() -> "MeasuredPositioning | None":
     # the bead sits 0.29 nm off the base's cross-strand line, so a slab merely lengthened
     # radially reaches the right radius and still misses the bead entirely.
     def xyz(s: Site) -> np.ndarray:
-        return np.array([s.radius_nm * math.cos(s.azimuth_rad()),
-                         s.radius_nm * math.sin(s.azimuth_rad()), s.axial_nm])
+        return np.array(
+            [
+                s.radius_nm * math.cos(s.azimuth_rad()),
+                s.radius_nm * math.sin(s.azimuth_rad()),
+                s.axial_nm,
+            ]
+        )
 
     extent = float(np.linalg.norm(xyz(wc_f) - xyz(bb_f)))
-    return MeasuredPositioning(backbone_fwd=bb_f, backbone_rev=bb_r,
-                               base_fwd=ba_f, base_rev=ba_r,
-                               slab_extent_nm=round(extent, 4))
+    return MeasuredPositioning(
+        backbone_fwd=bb_f,
+        backbone_rev=bb_r,
+        base_fwd=ba_f,
+        base_rev=ba_r,
+        slab_extent_nm=round(extent, 4),
+    )
 
 
 # Frozen fallback, and the documentation of what the derivation produces today.
@@ -353,17 +368,21 @@ def apply_measured_positioning(
         # Both beads must actually belong to this centreline — see the docstring.
         radial_r = positions[j] - axis_pt
         radial_r = radial_r - np.dot(radial_r, t) * t
-        if (abs(n - legacy_radius) > 1e-3
-                or abs(float(np.linalg.norm(radial_r)) - legacy_radius) > 1e-3):
+        if (
+            abs(n - legacy_radius) > 1e-3
+            or abs(float(np.linalg.norm(radial_r)) - legacy_radius) > 1e-3
+        ):
             continue
         radial_f = radial_f / n
-        perp_f = np.cross(t, radial_f)   # +90° CCW about t, completing the frame
+        perp_f = np.cross(t, radial_f)  # +90° CCW about t, completing the frame
 
         def at(site: Site) -> np.ndarray:
             a = site.azimuth_rad()
-            return (axis_pt
-                    + site.radius_nm * (math.cos(a) * radial_f + math.sin(a) * perp_f)
-                    + site.axial_nm * t)
+            return (
+                axis_pt
+                + site.radius_nm * (math.cos(a) * radial_f + math.sin(a) * perp_f)
+                + site.axial_nm * t
+            )
 
         # Backbone bead = the ribose C3'; base bead = the base-ring centroid.  Each
         # strand from its own measured site, neither derived from the other.
@@ -386,14 +405,18 @@ def apply_measured_positioning(
             g = math.degrees(groove_rad)
             d_base_f = params.base_fwd.azimuth_deg - params.backbone_fwd.azimuth_deg
             d_base_r = params.base_rev.azimuth_deg - params.backbone_rev.azimuth_deg
-            positions[i] = at(Site(params.backbone_fwd.radius_nm, 0.0,
-                                   params.backbone_fwd.axial_nm))
-            base_positions[i] = at(Site(params.base_fwd.radius_nm, d_base_f,
-                                        params.base_fwd.axial_nm))
-            positions[j] = at(Site(params.backbone_rev.radius_nm, g,
-                                   params.backbone_rev.axial_nm))
-            base_positions[j] = at(Site(params.base_rev.radius_nm, g + d_base_r,
-                                        params.base_rev.axial_nm))
+            positions[i] = at(
+                Site(params.backbone_fwd.radius_nm, 0.0, params.backbone_fwd.axial_nm)
+            )
+            base_positions[i] = at(
+                Site(params.base_fwd.radius_nm, d_base_f, params.base_fwd.axial_nm)
+            )
+            positions[j] = at(
+                Site(params.backbone_rev.radius_nm, g, params.backbone_rev.axial_nm)
+            )
+            base_positions[j] = at(
+                Site(params.base_rev.radius_nm, g + d_base_r, params.base_rev.axial_nm)
+            )
 
         cross = base_positions[j] - base_positions[i]
         nc = np.linalg.norm(cross)

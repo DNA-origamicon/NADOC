@@ -24,6 +24,7 @@ BDNA_TWIST_PER_BP_DEG: float = 34.3  # degrees/bp
 
 # Twist per base pair in radians (derived, for convenience in geometry code).
 import math
+
 BDNA_TWIST_PER_BP_RAD: float = math.radians(BDNA_TWIST_PER_BP_DEG)
 
 # Full turn length in base pairs (360 / twist_per_bp).
@@ -41,7 +42,7 @@ HELIX_RADIUS: float = 1.0  # nm
 # Angular separation between FORWARD and REVERSE strand backbone beads.
 # Set to 150° to match caDNAno's phase convention.
 # (Standard B-DNA crystallographic value is 120°; caDNAno uses 150°.)
-BDNA_MINOR_GROOVE_ANGLE_DEG: float = 150.0          # degrees
+BDNA_MINOR_GROOVE_ANGLE_DEG: float = 150.0  # degrees
 BDNA_MINOR_GROOVE_ANGLE_RAD: float = math.radians(BDNA_MINOR_GROOVE_ANGLE_DEG)
 
 # ── Nucleotide geometry within a strand ──────────────────────────────────────
@@ -125,8 +126,8 @@ SQUARE_TWIST_PER_BP_RAD: float = math.radians(SQUARE_TWIST_PER_BP_DEG)
 SQUARE_BP_PER_TURN: float = 360.0 / SQUARE_TWIST_PER_BP_DEG  # = 32/3 ≈ 10.667 bp/turn
 
 # Column and row pitch (nm) for the square lattice — uniform in both directions.
-SQUARE_COL_PITCH: float = SQUARE_HELIX_SPACING   # = 2.6 nm
-SQUARE_ROW_PITCH: float = SQUARE_HELIX_SPACING   # = 2.6 nm
+SQUARE_COL_PITCH: float = SQUARE_HELIX_SPACING  # = 2.6 nm
+SQUARE_ROW_PITCH: float = SQUARE_HELIX_SPACING  # = 2.6 nm
 
 
 # ── oxDNA simulation units ────────────────────────────────────────────────────
@@ -156,12 +157,12 @@ FAST_SEGMENT_LENGTH_NM: float = FAST_SEGMENT_BP * BDNA_RISE_PER_BP  # = 7.014 nm
 # ── Mechanical parameters (ssDNA / dsDNA) ────────────────────────────────────
 
 # Persistence lengths
-SSDNA_PERSISTENCE_LENGTH_NM: float = 2.0   # ssDNA in physiological buffer
+SSDNA_PERSISTENCE_LENGTH_NM: float = 2.0  # ssDNA in physiological buffer
 DSDNA_PERSISTENCE_LENGTH_NM: float = 50.0  # dsDNA in physiological buffer
 
 # Rise per base / base-pair
-SSDNA_RISE_PER_BASE_NM: float = 0.59   # ssDNA relaxed conformation
-DSDNA_RISE_PER_BP_NM: float = BDNA_RISE_PER_BP   # alias = 0.334 nm
+SSDNA_RISE_PER_BASE_NM: float = 0.59  # ssDNA relaxed conformation
+DSDNA_RISE_PER_BP_NM: float = BDNA_RISE_PER_BP  # alias = 0.334 nm
 
 # ssDNA CONTOUR length per nucleotide — the backbone-to-backbone spacing of a chain
 # laid out taut, which is what a single-stranded seed (extension tails, free tails)
@@ -177,14 +178,14 @@ SSDNA_CONTOUR_PER_NT_NM: float = 0.68
 
 # Twist aliases
 DSDNA_TWIST_PER_BP_DEG: float = BDNA_TWIST_PER_BP_DEG  # alias = 34.3°/bp
-SKIP_TWIST_DEFICIT_DEG: float = -34.3   # one missing bp = −34.3° twist deficit
+SKIP_TWIST_DEFICIT_DEG: float = -34.3  # one missing bp = −34.3° twist deficit
 
 # Helix radius (backbone bead distance from axis)
-HELIX_RADIUS_NM: float = HELIX_RADIUS   # alias = 1.0 nm
+HELIX_RADIUS_NM: float = HELIX_RADIUS  # alias = 1.0 nm
 
 # Preferred crossover distances (centre-to-centre between helix axes)
-HONEYCOMB_HELIX_SPACING_NM: float = HONEYCOMB_HELIX_SPACING   # 2.25 nm
-SQUARE_HELIX_SPACING_NM: float = SQUARE_HELIX_SPACING          # 2.25 nm
+HONEYCOMB_HELIX_SPACING_NM: float = HONEYCOMB_HELIX_SPACING  # 2.25 nm
+SQUARE_HELIX_SPACING_NM: float = SQUARE_HELIX_SPACING  # 2.25 nm
 
 # ── XPBD solver parameters ───────────────────────────────────────────────────
 
@@ -199,17 +200,17 @@ XPBD_CONVERGENCE_CONSECUTIVE_FRAMES: int = 3
 ALPHA_BACKBONE: float = 1e-6
 ALPHA_TWIST: float = 1e-5
 ALPHA_BEND_DSDNA: float = 1e-5
-ALPHA_BEND_SSDNA: float = 1e-2   # ~1000× more flexible than dsDNA
+ALPHA_BEND_SSDNA: float = 1e-2  # ~1000× more flexible than dsDNA
 ALPHA_CROSSOVER: float = 1e-6
 ALPHA_REPULSION: float = 1e-3
 
 # ── Fast-mode geometry thresholds ────────────────────────────────────────────
 
-FAST_REPULSION_DIST_NM: float = 2.0    # minimum allowed centre-to-centre distance
+FAST_REPULSION_DIST_NM: float = 2.0  # minimum allowed centre-to-centre distance
 FAST_REPULSION_CUTOFF_NM: float = 4.0  # build repulsion pairs within this distance
-FAST_CROSSOVER_DIST_HC_NM: float = HONEYCOMB_HELIX_SPACING   # 2.25 nm
-FAST_CROSSOVER_DIST_SQ_NM: float = SQUARE_HELIX_SPACING      # 2.25 nm
-FAST_MAX_FRAMES: int = 500   # hard cap on solver iterations before forced stop
+FAST_CROSSOVER_DIST_HC_NM: float = HONEYCOMB_HELIX_SPACING  # 2.25 nm
+FAST_CROSSOVER_DIST_SQ_NM: float = SQUARE_HELIX_SPACING  # 2.25 nm
+FAST_MAX_FRAMES: int = 500  # hard cap on solver iterations before forced stop
 
 # ── Crossover site tables ─────────────────────────────────────────────────────
 #
@@ -232,12 +233,12 @@ HC_CROSSOVER_OFFSETS: dict[tuple[bool, int], tuple[int, int]] = {
     # _stapL[1]=13 → bp13 fwd → neighbor(r-1,c) → (-1,0)
     # _stapH[2]=0  → bp0  fwd → neighbor(r,c-1) → (0,-1)
     # _stapL[2]=20 → bp20 fwd → neighbor(r,c-1) → (0,-1)
-    (True,  0): ( 0, -1),
-    (True,  6): ( 0, +1),
-    (True,  7): ( 0, +1),
-    (True, 13): (-1,  0),
-    (True, 14): (-1,  0),
-    (True, 20): ( 0, -1),
+    (True, 0): (0, -1),
+    (True, 6): (0, +1),
+    (True, 7): (0, +1),
+    (True, 13): (-1, 0),
+    (True, 14): (-1, 0),
+    (True, 20): (0, -1),
     # Reverse cell (odd parity: scaffold runs REVERSE) — cadnano2 canonical
     # Odd neighbors: [(r,c-1),(r+1,c),(r,c+1)] → indices 0,1,2
     # _stapH[0]=7  → bp7  rev → neighbor(r,c-1) → (0,-1)
@@ -246,12 +247,12 @@ HC_CROSSOVER_OFFSETS: dict[tuple[bool, int], tuple[int, int]] = {
     # _stapL[1]=13 → bp13 rev → neighbor(r+1,c) → (+1,0)
     # _stapH[2]=0  → bp0  rev → neighbor(r,c+1) → (0,+1)
     # _stapL[2]=20 → bp20 rev → neighbor(r,c+1) → (0,+1)
-    (False,  0): ( 0, +1),
-    (False,  6): ( 0, -1),
-    (False,  7): ( 0, -1),
-    (False, 13): (+1,  0),
-    (False, 14): (+1,  0),
-    (False, 20): ( 0, +1),
+    (False, 0): (0, +1),
+    (False, 6): (0, -1),
+    (False, 7): (0, -1),
+    (False, 13): (+1, 0),
+    (False, 14): (+1, 0),
+    (False, 20): (0, +1),
 }
 
 SQ_CROSSOVER_PERIOD: int = 32
@@ -267,14 +268,14 @@ SQ_CROSSOVER_OFFSETS: dict[tuple[bool, int], tuple[int, int]] = {
     # _stapL[2]=15 → bp15 fwd → neighbor(r,c-1) → (0,-1)
     # _stapH[3]=8  → bp8  fwd → neighbor(r-1,c) → (-1,0)
     # _stapL[3]=7  → bp7  fwd → neighbor(r-1,c) → (-1,0)
-    (True,  0): ( 0, +1),
-    (True, 31): ( 0, +1),
-    (True, 23): (+1,  0),
-    (True, 24): (+1,  0),
-    (True, 15): ( 0, -1),
-    (True, 16): ( 0, -1),
-    (True,  7): (-1,  0),
-    (True,  8): (-1,  0),
+    (True, 0): (0, +1),
+    (True, 31): (0, +1),
+    (True, 23): (+1, 0),
+    (True, 24): (+1, 0),
+    (True, 15): (0, -1),
+    (True, 16): (0, -1),
+    (True, 7): (-1, 0),
+    (True, 8): (-1, 0),
     # Reverse (odd parity: (row+col)%2==1) — cadnano2 canonical
     # Odd neighbors: [(r,c-1),(r-1,c),(r,c+1),(r+1,c)] → indices 0,1,2,3
     # _stapH[0]=0  → bp0  rev → neighbor(r,c-1) → (0,-1)
@@ -285,14 +286,14 @@ SQ_CROSSOVER_OFFSETS: dict[tuple[bool, int], tuple[int, int]] = {
     # _stapL[2]=15 → bp15 rev → neighbor(r,c+1) → (0,+1)
     # _stapH[3]=8  → bp8  rev → neighbor(r+1,c) → (+1,0)
     # _stapL[3]=7  → bp7  rev → neighbor(r+1,c) → (+1,0)
-    (False,  0): ( 0, -1),
-    (False, 31): ( 0, -1),
-    (False, 23): (-1,  0),
-    (False, 24): (-1,  0),
-    (False, 15): ( 0, +1),
-    (False, 16): ( 0, +1),
-    (False,  7): (+1,  0),
-    (False,  8): (+1,  0),
+    (False, 0): (0, -1),
+    (False, 31): (0, -1),
+    (False, 23): (-1, 0),
+    (False, 24): (-1, 0),
+    (False, 15): (0, +1),
+    (False, 16): (0, +1),
+    (False, 7): (+1, 0),
+    (False, 8): (+1, 0),
 }
 
 # ── Scaffold crossover site tables ───────────────────────────────────────────
@@ -305,24 +306,36 @@ SQ_CROSSOVER_OFFSETS: dict[tuple[bool, int], tuple[int, int]] = {
 HC_SCAFFOLD_CROSSOVER_OFFSETS: dict[tuple[bool, int], tuple[int, int]] = {
     # Forward cell (even parity) ────────────────────────────────────────────
     # p0 (r,c+1): ScafLow[0]={1,11}, ScafHigh[0]={2,12}
-    (True,  1): ( 0, +1), (True,  2): ( 0, +1),
-    (True, 11): ( 0, +1), (True, 12): ( 0, +1),
+    (True, 1): (0, +1),
+    (True, 2): (0, +1),
+    (True, 11): (0, +1),
+    (True, 12): (0, +1),
     # p1 (r-1,c): ScafLow[1]={8,18}, ScafHigh[1]={9,19}
-    (True,  8): (-1,  0), (True,  9): (-1,  0),
-    (True, 18): (-1,  0), (True, 19): (-1,  0),
+    (True, 8): (-1, 0),
+    (True, 9): (-1, 0),
+    (True, 18): (-1, 0),
+    (True, 19): (-1, 0),
     # p2 (r,c-1): ScafLow[2]={4,15}, ScafHigh[2]={5,16}
-    (True,  4): ( 0, -1), (True,  5): ( 0, -1),
-    (True, 15): ( 0, -1), (True, 16): ( 0, -1),
+    (True, 4): (0, -1),
+    (True, 5): (0, -1),
+    (True, 15): (0, -1),
+    (True, 16): (0, -1),
     # Reverse cell (odd parity) — neighbor order: p0=(r,c-1), p1=(r+1,c), p2=(r,c+1)
     # p0 (r,c-1): same bp offsets as forward p0
-    (False,  1): ( 0, -1), (False,  2): ( 0, -1),
-    (False, 11): ( 0, -1), (False, 12): ( 0, -1),
+    (False, 1): (0, -1),
+    (False, 2): (0, -1),
+    (False, 11): (0, -1),
+    (False, 12): (0, -1),
     # p1 (r+1,c): same bp offsets as forward p1
-    (False,  8): (+1,  0), (False,  9): (+1,  0),
-    (False, 18): (+1,  0), (False, 19): (+1,  0),
+    (False, 8): (+1, 0),
+    (False, 9): (+1, 0),
+    (False, 18): (+1, 0),
+    (False, 19): (+1, 0),
     # p2 (r,c+1): same bp offsets as forward p2
-    (False,  4): ( 0, +1), (False,  5): ( 0, +1),
-    (False, 15): ( 0, +1), (False, 16): ( 0, +1),
+    (False, 4): (0, +1),
+    (False, 5): (0, +1),
+    (False, 15): (0, +1),
+    (False, 16): (0, +1),
 }
 
 # SQ scaffold: squareScafLow=[[4,26,15],[18,28,7],[10,20,31],[2,12,23]]
@@ -331,38 +344,62 @@ HC_SCAFFOLD_CROSSOVER_OFFSETS: dict[tuple[bool, int], tuple[int, int]] = {
 SQ_SCAFFOLD_CROSSOVER_OFFSETS: dict[tuple[bool, int], tuple[int, int]] = {
     # Forward cell (even parity) ────────────────────────────────────────────
     # p0 (r,c+1): ScafLow[0]={4,26,15}, ScafHigh[0]={5,27,16}
-    (True,  4): ( 0, +1), (True,  5): ( 0, +1),
-    (True, 15): ( 0, +1), (True, 16): ( 0, +1),
-    (True, 26): ( 0, +1), (True, 27): ( 0, +1),
+    (True, 4): (0, +1),
+    (True, 5): (0, +1),
+    (True, 15): (0, +1),
+    (True, 16): (0, +1),
+    (True, 26): (0, +1),
+    (True, 27): (0, +1),
     # p1 (r+1,c): ScafLow[1]={18,28,7}, ScafHigh[1]={19,29,8}
-    (True,  7): (+1,  0), (True,  8): (+1,  0),
-    (True, 18): (+1,  0), (True, 19): (+1,  0),
-    (True, 28): (+1,  0), (True, 29): (+1,  0),
+    (True, 7): (+1, 0),
+    (True, 8): (+1, 0),
+    (True, 18): (+1, 0),
+    (True, 19): (+1, 0),
+    (True, 28): (+1, 0),
+    (True, 29): (+1, 0),
     # p2 (r,c-1): ScafLow[2]={10,20,31}, ScafHigh[2]={11,21,0}
-    (True,  0): ( 0, -1), (True, 10): ( 0, -1),
-    (True, 11): ( 0, -1), (True, 20): ( 0, -1),
-    (True, 21): ( 0, -1), (True, 31): ( 0, -1),
+    (True, 0): (0, -1),
+    (True, 10): (0, -1),
+    (True, 11): (0, -1),
+    (True, 20): (0, -1),
+    (True, 21): (0, -1),
+    (True, 31): (0, -1),
     # p3 (r-1,c): ScafLow[3]={2,12,23}, ScafHigh[3]={3,13,24}
-    (True,  2): (-1,  0), (True,  3): (-1,  0),
-    (True, 12): (-1,  0), (True, 13): (-1,  0),
-    (True, 23): (-1,  0), (True, 24): (-1,  0),
+    (True, 2): (-1, 0),
+    (True, 3): (-1, 0),
+    (True, 12): (-1, 0),
+    (True, 13): (-1, 0),
+    (True, 23): (-1, 0),
+    (True, 24): (-1, 0),
     # Reverse cell (odd parity) — neighbor order: p0=(r,c-1), p1=(r-1,c), p2=(r,c+1), p3=(r+1,c)
     # p0 (r,c-1): same bp offsets as forward p0
-    (False,  4): ( 0, -1), (False,  5): ( 0, -1),
-    (False, 15): ( 0, -1), (False, 16): ( 0, -1),
-    (False, 26): ( 0, -1), (False, 27): ( 0, -1),
+    (False, 4): (0, -1),
+    (False, 5): (0, -1),
+    (False, 15): (0, -1),
+    (False, 16): (0, -1),
+    (False, 26): (0, -1),
+    (False, 27): (0, -1),
     # p1 (r-1,c): same bp offsets as forward p1
-    (False,  7): (-1,  0), (False,  8): (-1,  0),
-    (False, 18): (-1,  0), (False, 19): (-1,  0),
-    (False, 28): (-1,  0), (False, 29): (-1,  0),
+    (False, 7): (-1, 0),
+    (False, 8): (-1, 0),
+    (False, 18): (-1, 0),
+    (False, 19): (-1, 0),
+    (False, 28): (-1, 0),
+    (False, 29): (-1, 0),
     # p2 (r,c+1): same bp offsets as forward p2
-    (False,  0): ( 0, +1), (False, 10): ( 0, +1),
-    (False, 11): ( 0, +1), (False, 20): ( 0, +1),
-    (False, 21): ( 0, +1), (False, 31): ( 0, +1),
+    (False, 0): (0, +1),
+    (False, 10): (0, +1),
+    (False, 11): (0, +1),
+    (False, 20): (0, +1),
+    (False, 21): (0, +1),
+    (False, 31): (0, +1),
     # p3 (r+1,c): same bp offsets as forward p3
-    (False,  2): (+1,  0), (False,  3): (+1,  0),
-    (False, 12): (+1,  0), (False, 13): (+1,  0),
-    (False, 23): (+1,  0), (False, 24): (+1,  0),
+    (False, 2): (+1, 0),
+    (False, 3): (+1, 0),
+    (False, 12): (+1, 0),
+    (False, 13): (+1, 0),
+    (False, 23): (+1, 0),
+    (False, 24): (+1, 0),
 }
 
 # ── Staple colour palette ─────────────────────────────────────────────────────
@@ -376,7 +413,16 @@ SQ_SCAFFOLD_CROSSOVER_OFFSETS: dict[tuple[bool, int], tuple[int, int]] = {
 # (helix_renderer.js only IMPORTS it — it has not defined it since the palette
 #  module was extracted. Backend consumers import from HERE.)
 STAPLE_PALETTE: list[str] = [
-    '#ff6b6b', '#ffd93d', '#6bcb77', '#f9844a',
-    '#a29bfe', '#ff9ff3', '#00cec9', '#e17055',
-    '#74b9ff', '#55efc4', '#fdcb6e', '#d63031',
+    "#ff6b6b",
+    "#ffd93d",
+    "#6bcb77",
+    "#f9844a",
+    "#a29bfe",
+    "#ff9ff3",
+    "#00cec9",
+    "#e17055",
+    "#74b9ff",
+    "#55efc4",
+    "#fdcb6e",
+    "#d63031",
 ]

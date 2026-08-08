@@ -17,6 +17,7 @@ def alpine():
 
 # ── recommend: partition / GPU vs CPU ─────────────────────────────────────────
 
+
 def test_recommend_defaults_to_gpu_ah200(alpine):
     # Default moved aa100 -> ah200 on 2026-08-06: live `sbatch --test-only` put an
     # aa100 start 13 d out (630 jobs pending) against an immediate ah200 start.
@@ -38,6 +39,7 @@ def test_recommend_falls_back_to_cpu_when_too_big(alpine):
 
 
 # ── walltime + QoS clamping ───────────────────────────────────────────────────
+
 
 def test_short_run_stays_in_normal_qos(alpine):
     # GPU partition (default aa100) → gpu-* QoS names (SLURM rejects plain names there).
@@ -90,7 +92,9 @@ def test_forced_unknown_partition_raises(alpine):
 
 def test_walltime_clamped_to_long_ceiling(alpine):
     # Absurdly long → clamp to 168 h and warn about resubmit.
-    r = cr.recommend(alpine, n_atoms=200_000, total_ns=100_000.0, measured_ns_per_day=10.0)
+    r = cr.recommend(
+        alpine, n_atoms=200_000, total_ns=100_000.0, measured_ns_per_day=10.0
+    )
     assert r["walltime_h"] == 168.0
     assert any("auto-resubmit" in n for n in r["notes"])
 
@@ -111,8 +115,9 @@ def test_measured_throughput_beats_guess(alpine):
     but would not test what this asserts.
     """
     guessed = cr.recommend(alpine, n_atoms=100_000, total_ns=10.0)
-    measured = cr.recommend(alpine, n_atoms=100_000, total_ns=10.0,
-                            measured_ns_per_day=500.0)
+    measured = cr.recommend(
+        alpine, n_atoms=100_000, total_ns=10.0, measured_ns_per_day=500.0
+    )
     assert not guessed["measured"]
     assert measured["measured"]
     assert measured["expected_ns_per_day"] == pytest.approx(500.0)
@@ -122,6 +127,7 @@ def test_measured_throughput_beats_guess(alpine):
 
 # ── memory + cost + queue ─────────────────────────────────────────────────────
 
+
 def test_mem_scales_with_atoms_and_has_floor(alpine):
     small = cr.recommend(alpine, n_atoms=1_000, total_ns=1.0, measured_ns_per_day=50.0)
     big = cr.recommend(alpine, n_atoms=500_000, total_ns=1.0, measured_ns_per_day=50.0)
@@ -130,8 +136,13 @@ def test_mem_scales_with_atoms_and_has_floor(alpine):
 
 
 def test_cost_uses_gpu_billing(alpine):
-    r = cr.recommend(alpine, n_atoms=100_000, total_ns=10.0, measured_ns_per_day=50.0,
-                     partition="aa100")
+    r = cr.recommend(
+        alpine,
+        n_atoms=100_000,
+        total_ns=10.0,
+        measured_ns_per_day=50.0,
+        partition="aa100",
+    )
     hours = r["walltime_h"]
     expected = r["cores"] * hours * 1.0 + r["gpus"] * hours * 108.2
     assert r["est_cost_su"] == pytest.approx(round(expected, 1))
@@ -140,12 +151,13 @@ def test_cost_uses_gpu_billing(alpine):
 def test_estimate_queue_time_known_and_unknown():
     # Offline fallback only — measured 30-day medians (Alpine, 2026-08-06).  A live
     # session supersedes these via GET /cluster/availability.
-    assert cr.estimate_queue_time_min("aa100") >= 1425     # effectively unschedulable
-    assert cr.estimate_queue_time_min("ah200") == 1         # new + wide open
+    assert cr.estimate_queue_time_min("aa100") >= 1425  # effectively unschedulable
+    assert cr.estimate_queue_time_min("ah200") == 1  # new + wide open
     assert cr.estimate_queue_time_min("who_knows") == 60
 
 
 # ── manifest / metrics extractors ─────────────────────────────────────────────
+
 
 def _mini_manifest():
     return {
@@ -201,6 +213,7 @@ def test_latest_ns_per_day_missing_file(tmp_path):
 
 # ── 2026 GPU expansion: per-partition speed + billing ─────────────────────────
 
+
 def test_faster_gpu_gets_a_shorter_walltime(alpine):
     """Walltime is derived from throughput, and throughput was A100-anchored.  An
     H200 job that asks for 2.5x the walltime it needs gets worse queue priority for
@@ -215,8 +228,13 @@ def test_faster_gpu_gets_a_shorter_walltime(alpine):
 def test_measured_throughput_still_overrides_the_speed_factor(alpine):
     """A real measured ns/day is ground truth — the guess multiplier must not
     re-scale it."""
-    r = cr.recommend(alpine, n_atoms=180_000, total_ns=10.0,
-                     measured_ns_per_day=40.0, partition="ah200")
+    r = cr.recommend(
+        alpine,
+        n_atoms=180_000,
+        total_ns=10.0,
+        measured_ns_per_day=40.0,
+        partition="ah200",
+    )
     assert r["expected_ns_per_day"] == pytest.approx(40.0)
     assert r["measured"] is True
 
@@ -231,18 +249,32 @@ def test_new_partitions_use_their_own_su_rate(alpine):
 
 
 def test_recommend_costs_against_the_chosen_partition(alpine):
-    r = cr.recommend(alpine, n_atoms=180_000, total_ns=10.0,
-                     measured_ns_per_day=20.0, partition="ah200")
+    r = cr.recommend(
+        alpine,
+        n_atoms=180_000,
+        total_ns=10.0,
+        measured_ns_per_day=20.0,
+        partition="ah200",
+    )
     expected = cr.estimate_cost_su(
-        r["cores"], r["gpus"], r["walltime_h"], alpine, alpine.partition("ah200"),
+        r["cores"],
+        r["gpus"],
+        r["walltime_h"],
+        alpine,
+        alpine.partition("ah200"),
     )
     assert r["est_cost_su"] == pytest.approx(round(expected, 1))
 
 
 def test_new_partitions_bump_to_gpu_long_not_gpu_testing(alpine):
     """ah200 has no gpu-testing QoS; a long run must land on gpu-long."""
-    r = cr.recommend(alpine, n_atoms=180_000, total_ns=500.0,
-                     measured_ns_per_day=5.0, partition="ah200")
+    r = cr.recommend(
+        alpine,
+        n_atoms=180_000,
+        total_ns=500.0,
+        measured_ns_per_day=5.0,
+        partition="ah200",
+    )
     assert r["qos"] == "gpu-long"
 
 
@@ -260,6 +292,7 @@ def test_big_vram_partitions_raise_the_cpu_fallback_ceiling():
 
 # ── recalibration from measured benchmarks (2026-08-07) ──────────────────────
 
+
 def test_blackwell_measured_equal_to_hopper_not_slower(alpine):
     """Head-to-head under identical settings: 2hb 650.0 vs 644.4 ns/day, 24hb 41.9
     vs 38.2. The old 1.6 factor claimed the H200 was 1.56x faster; it is not."""
@@ -270,8 +303,8 @@ def test_artxpro6000_is_the_su_efficient_choice(alpine):
     """Same speed, lower billing rate — so the same job must cost less there."""
     a = cr.recommend(alpine, n_atoms=62_673, total_ns=200.0, partition="ah200")
     b = cr.recommend(alpine, n_atoms=62_673, total_ns=200.0, partition="artxpro6000")
-    assert b["expected_ns_per_day"] == a["expected_ns_per_day"]   # equally fast
-    assert b["est_cost_su"] < a["est_cost_su"]                    # but cheaper
+    assert b["expected_ns_per_day"] == a["expected_ns_per_day"]  # equally fast
+    assert b["est_cost_su"] < a["est_cost_su"]  # but cheaper
 
 
 def test_throughput_anchor_matches_the_measured_production_run(alpine):

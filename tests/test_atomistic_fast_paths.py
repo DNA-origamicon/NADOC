@@ -10,6 +10,7 @@ Motivating profile — one export frame of VoltronCoreScad (16,168 nt / 330,622 
       np.cross (57,500 calls)       3.0 s   <- _cross3
       builtins.round (996,960)      0.5 s   <- atomistic_positions_flat
 """
+
 import numpy as np
 import pytest
 
@@ -19,14 +20,17 @@ from backend.core.atomistic import _cross3, atomistic_positions_flat
 class TestCross3:
     """_cross3 must be indistinguishable from np.cross on 3-vectors."""
 
-    @pytest.mark.parametrize("a,b", [
-        ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),          # canonical basis
-        ([0.0, 0.0, 1.0], [0.0, 0.0, 1.0]),          # parallel -> zero
-        ([1.0, 2.0, 3.0], [4.0, 5.0, 6.0]),          # generic
-        ([-3.5, 0.25, 7.125], [2.0, -8.5, 0.125]),   # exact binary fractions
-        ([1e-12, 2e-12, 3e-12], [4e12, 5e12, 6e12]), # wide dynamic range
-        ([0.1, 0.2, 0.3], [0.4, 0.5, 0.6]),          # inexact binary reprs
-    ])
+    @pytest.mark.parametrize(
+        "a,b",
+        [
+            ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),  # canonical basis
+            ([0.0, 0.0, 1.0], [0.0, 0.0, 1.0]),  # parallel -> zero
+            ([1.0, 2.0, 3.0], [4.0, 5.0, 6.0]),  # generic
+            ([-3.5, 0.25, 7.125], [2.0, -8.5, 0.125]),  # exact binary fractions
+            ([1e-12, 2e-12, 3e-12], [4e12, 5e12, 6e12]),  # wide dynamic range
+            ([0.1, 0.2, 0.3], [0.4, 0.5, 0.6]),  # inexact binary reprs
+        ],
+    )
     def test_bit_identical_to_np_cross(self, a, b):
         av, bv = np.array(a), np.array(b)
         expected = np.cross(av, bv)
@@ -81,18 +85,32 @@ def _positions_flat_original(model):
 class TestAtomisticPositionsFlat:
     def test_matches_original_loop_on_dense_serials(self):
         rng = np.random.default_rng(7)
-        atoms = [_FakeAtom(i, *(float(v) for v in rng.normal(size=3) * 30.0))
-                 for i in range(500)]
+        atoms = [
+            _FakeAtom(i, *(float(v) for v in rng.normal(size=3) * 30.0))
+            for i in range(500)
+        ]
         model = _FakeModel(atoms)
         assert atomistic_positions_flat(model) == _positions_flat_original(model)
 
     def test_scatters_by_serial_not_list_order(self):
         # Serials out of list order must land at serial*3, as the loop did.
-        atoms = [_FakeAtom(2, 7.0, 8.0, 9.0),
-                 _FakeAtom(0, 1.0, 2.0, 3.0),
-                 _FakeAtom(1, 4.0, 5.0, 6.0)]
+        atoms = [
+            _FakeAtom(2, 7.0, 8.0, 9.0),
+            _FakeAtom(0, 1.0, 2.0, 3.0),
+            _FakeAtom(1, 4.0, 5.0, 6.0),
+        ]
         model = _FakeModel(atoms)
-        assert atomistic_positions_flat(model) == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        assert atomistic_positions_flat(model) == [
+            1.0,
+            2.0,
+            3.0,
+            4.0,
+            5.0,
+            6.0,
+            7.0,
+            8.0,
+            9.0,
+        ]
         assert atomistic_positions_flat(model) == _positions_flat_original(model)
 
     def test_unwritten_slot_reads_zero_not_garbage(self):
@@ -101,7 +119,7 @@ class TestAtomisticPositionsFlat:
         atoms = [_FakeAtom(0, 1.0, 1.0, 1.0), _FakeAtom(0, 3.0, 3.0, 3.0)]
         model = _FakeModel(atoms)
         out = atomistic_positions_flat(model)
-        assert out == [3.0, 3.0, 3.0, 0.0, 0.0, 0.0]      # last write wins, slot 1 zeroed
+        assert out == [3.0, 3.0, 3.0, 0.0, 0.0, 0.0]  # last write wins, slot 1 zeroed
         assert out == _positions_flat_original(model)
 
     def test_serial_beyond_atom_count_raises_as_it_always_did(self):
@@ -126,7 +144,9 @@ class TestAtomisticPositionsFlat:
         for _ in range(40):
             n = int(rng.integers(1, 60))
             order = rng.permutation(n)
-            atoms = [_FakeAtom(int(s), *(float(v) for v in rng.normal(size=3) * 100.0))
-                     for s in order]
+            atoms = [
+                _FakeAtom(int(s), *(float(v) for v in rng.normal(size=3) * 100.0))
+                for s in order
+            ]
             model = _FakeModel(atoms)
             assert atomistic_positions_flat(model) == _positions_flat_original(model)

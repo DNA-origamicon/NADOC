@@ -27,6 +27,7 @@ guessed:
   by emitting each stage twice (unknown vs. small atom count) and diffing, so a future
   size-gated directive is picked up without anyone remembering to add it here.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
@@ -40,54 +41,131 @@ from backend.core.md_protocols import SegmentSpec
 # ── What the diff ignores ─────────────────────────────────────────────────────
 #: Per-segment bookkeeping — output paths and restart-chain filenames.  These differ on
 #: EVERY stage by construction, so leaving them in would bury the physics under noise.
-NOISE_KEYS = frozenset({
-    "outputname", "dcdfile", "xstfile", "veldcdfile", "forcedcdfile",
-    "bincoordinates", "binvelocities", "extendedsystem",
-    "coordinates", "structure",
-})
+NOISE_KEYS = frozenset(
+    {
+        "outputname",
+        "dcdfile",
+        "xstfile",
+        "veldcdfile",
+        "forcedcdfile",
+        "bincoordinates",
+        "binvelocities",
+        "extendedsystem",
+        "coordinates",
+        "structure",
+    }
+)
 
 #: Resolved by ``namd_solvate`` from the solvated system, so a pre-prep plan cannot know
 #: them.  Reported as ``deferred`` instead of being shown as zeros.
-BOX_KEYS = frozenset({
-    "cellbasisvector1", "cellbasisvector2", "cellbasisvector3", "cellorigin",
-})
+BOX_KEYS = frozenset(
+    {
+        "cellbasisvector1",
+        "cellbasisvector2",
+        "cellbasisvector3",
+        "cellorigin",
+    }
+)
 
 #: Directive ordering for display: the wizard groups rows so an integrator change is not
 #: three screens away from the timestep it belongs to.  Anything unlisted falls into
 #: "Other" in source order, so a new NAMD directive shows up rather than vanishing.
 PARAM_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Integrator", (
-        "timestep", "rigidbonds", "rigidtolerance", "nonbondedfreq",
-        "fullelectfrequency", "stepspercycle", "gpuresident", "minimize", "run",
-    )),
-    ("Electrostatics & solvent", (
-        "pme", "pmegridspacing", "cutoff", "switching", "switchdist", "pairlistdist",
-        "exclude", "onefourscaling", "gbis", "alphacutoff", "ionconcentration",
-        "solventdielectric", "wrapall", "wrapwater",
-    )),
-    ("Thermostat & barostat", (
-        "temperature", "langevin", "langevintemp", "langevindamping", "langevinhydrogen",
-        "reinitvels", "margin", "usegrouppressure", "useflexiblecell", "useconstantarea",
-        "langevinpiston", "langevinpistontarget", "langevinpistonperiod",
-        "langevinpistondecay", "langevinpistontemp",
-    )),
-    ("Restraints & fixed atoms", (
-        "extrabonds", "extrabondsfile", "constraints", "consref", "conskfile",
-        "conskcol", "constraintscaling", "fixedatoms", "fixedatomsfile", "fixedatomscol",
-        "efieldon", "efield", "colvars", "colvarsconfig",
-    )),
-    ("Output cadence", (
-        "outputenergies", "xstfreq", "restartfreq", "binaryrestart", "dcdfreq",
-        "veldcdfreq", "forcedcdfreq",
-    )),
-    ("Files & forcefield", (
-        "paratypecharmm", "parameters", "seed",
-    )),
+    (
+        "Integrator",
+        (
+            "timestep",
+            "rigidbonds",
+            "rigidtolerance",
+            "nonbondedfreq",
+            "fullelectfrequency",
+            "stepspercycle",
+            "gpuresident",
+            "minimize",
+            "run",
+        ),
+    ),
+    (
+        "Electrostatics & solvent",
+        (
+            "pme",
+            "pmegridspacing",
+            "cutoff",
+            "switching",
+            "switchdist",
+            "pairlistdist",
+            "exclude",
+            "onefourscaling",
+            "gbis",
+            "alphacutoff",
+            "ionconcentration",
+            "solventdielectric",
+            "wrapall",
+            "wrapwater",
+        ),
+    ),
+    (
+        "Thermostat & barostat",
+        (
+            "temperature",
+            "langevin",
+            "langevintemp",
+            "langevindamping",
+            "langevinhydrogen",
+            "reinitvels",
+            "margin",
+            "usegrouppressure",
+            "useflexiblecell",
+            "useconstantarea",
+            "langevinpiston",
+            "langevinpistontarget",
+            "langevinpistonperiod",
+            "langevinpistondecay",
+            "langevinpistontemp",
+        ),
+    ),
+    (
+        "Restraints & fixed atoms",
+        (
+            "extrabonds",
+            "extrabondsfile",
+            "constraints",
+            "consref",
+            "conskfile",
+            "conskcol",
+            "constraintscaling",
+            "fixedatoms",
+            "fixedatomsfile",
+            "fixedatomscol",
+            "efieldon",
+            "efield",
+            "colvars",
+            "colvarsconfig",
+        ),
+    ),
+    (
+        "Output cadence",
+        (
+            "outputenergies",
+            "xstfreq",
+            "restartfreq",
+            "binaryrestart",
+            "dcdfreq",
+            "veldcdfreq",
+            "forcedcdfreq",
+        ),
+    ),
+    (
+        "Files & forcefield",
+        (
+            "paratypecharmm",
+            "parameters",
+            "seed",
+        ),
+    ),
 )
 
-_GROUP_OF: dict[str, str] = {
-    key: group for group, keys in PARAM_GROUPS for key in keys
-}
+_GROUP_OF: dict[str, str] = {key: group for group, keys in PARAM_GROUPS for key in keys}
 
 
 def param_group(key: str) -> str:
@@ -96,6 +174,7 @@ def param_group(key: str) -> str:
 
 
 # ── Conf parsing ──────────────────────────────────────────────────────────────
+
 
 def parse_conf_directives(conf_text: str) -> dict:
     """NAMD conf text → ``{directive.lower(): value}`` (pure).
@@ -130,6 +209,7 @@ class PlanContext:
     The zero vectors are stripped from the emitted parameters (see :data:`BOX_KEYS`) and
     reported as deferred, rather than displayed as a 0 Å box.
     """
+
     name_stem: str = "design"
     box: tuple[float, float, float] = (0.0, 0.0, 0.0)
     mgh_extrabonds: bool = True
@@ -163,58 +243,110 @@ def _strip(params: dict) -> dict:
     return {k: v for k, v in params.items() if k not in BOX_KEYS}
 
 
-def stage_parameters(spec: SegmentSpec, ctx: PlanContext,
-                     overrides: Optional[dict] = None) -> dict:
+def stage_parameters(
+    spec: SegmentSpec, ctx: PlanContext, overrides: Optional[dict] = None
+) -> dict:
     """Every directive ``_segment_conf`` would write for this segment (pure)."""
-    return _strip(parse_conf_directives(_p._segment_conf(
-        spec, ctx.name_stem, ctx.box, ctx.mgh_extrabonds,
-        fast=ctx.fast, carved=ctx.carved, fill_fraction=ctx.fill_fraction,
-        structure_psf=ctx.structure_psf, colvars_file=ctx.colvars_file,
-        rigid_bonds=ctx.rigid_bonds, hmr=ctx.hmr,
-        base_timestep_fs=ctx.base_timestep_fs,
-        anchors_file=ctx.anchors_file, field=ctx.field,
-        gbis=ctx.gbis, vacuum=ctx.vacuum,
-        capture_vel_force=ctx.capture_vel_force,
-        n_atoms=ctx.n_atoms, force_resident=ctx.force_resident,
-        overrides=overrides,
-    )))
+    return _strip(
+        parse_conf_directives(
+            _p._segment_conf(
+                spec,
+                ctx.name_stem,
+                ctx.box,
+                ctx.mgh_extrabonds,
+                fast=ctx.fast,
+                carved=ctx.carved,
+                fill_fraction=ctx.fill_fraction,
+                structure_psf=ctx.structure_psf,
+                colvars_file=ctx.colvars_file,
+                rigid_bonds=ctx.rigid_bonds,
+                hmr=ctx.hmr,
+                base_timestep_fs=ctx.base_timestep_fs,
+                anchors_file=ctx.anchors_file,
+                field=ctx.field,
+                gbis=ctx.gbis,
+                vacuum=ctx.vacuum,
+                capture_vel_force=ctx.capture_vel_force,
+                n_atoms=ctx.n_atoms,
+                force_resident=ctx.force_resident,
+                overrides=overrides,
+            )
+        )
+    )
 
 
-def minimization_parameters(min_name: str, ctx: PlanContext,
-                            overrides: Optional[dict] = None) -> dict:
+def minimization_parameters(
+    min_name: str, ctx: PlanContext, overrides: Optional[dict] = None
+) -> dict:
     """Every directive ``_min_conf`` would write for the minimisation step (pure)."""
-    return _strip(parse_conf_directives(_p._min_conf(
-        min_name, ctx.name_stem, ctx.box, ctx.mgh_extrabonds,
-        ctx.minimize_steps, ctx.min_scale,
-        enm_file=ctx.enm_file, no_enm=ctx.no_enm,
-        anchors_file=ctx.anchors_file, field=ctx.field,
-        gbis=ctx.gbis, vacuum=ctx.vacuum,
-        overrides=overrides,
-    )))
+    return _strip(
+        parse_conf_directives(
+            _p._min_conf(
+                min_name,
+                ctx.name_stem,
+                ctx.box,
+                ctx.mgh_extrabonds,
+                ctx.minimize_steps,
+                ctx.min_scale,
+                enm_file=ctx.enm_file,
+                no_enm=ctx.no_enm,
+                anchors_file=ctx.anchors_file,
+                field=ctx.field,
+                gbis=ctx.gbis,
+                vacuum=ctx.vacuum,
+                overrides=overrides,
+            )
+        )
+    )
 
 
-def production_parameters(spec: SegmentSpec, ctx: PlanContext, *,
-                          timestep_fs: Optional[float] = None,
-                          start_checkpoint: Optional[str] = None,
-                          npt: bool = True,
-                          damping: float = _p.PRODUCTION_LANGEVIN_DAMPING,
-                          enm_file: Optional[str] = None,
-                          overrides: Optional[dict] = None) -> dict:
+def production_parameters(
+    spec: SegmentSpec,
+    ctx: PlanContext,
+    *,
+    timestep_fs: Optional[float] = None,
+    start_checkpoint: Optional[str] = None,
+    npt: bool = True,
+    damping: float = _p.PRODUCTION_LANGEVIN_DAMPING,
+    enm_file: Optional[str] = None,
+    overrides: Optional[dict] = None,
+) -> dict:
     """Every directive ``build_production_conf`` would write (pure)."""
-    return _strip(parse_conf_directives(_p.build_production_conf(
-        spec, ctx.name_stem, ctx.box, ctx.mgh_extrabonds,
-        seed=ctx.seed, fast=ctx.fast, timestep_fs=timestep_fs,
-        structure_psf=ctx.structure_psf, start_checkpoint=start_checkpoint,
-        rigid_bonds=ctx.rigid_bonds, hmr=ctx.hmr,
-        anchors_file=ctx.anchors_file, field=ctx.field,
-        colvars_file=ctx.colvars_file, n_atoms=ctx.n_atoms,
-        force_resident=ctx.force_resident, npt=npt,
-        damping=damping, enm_file=enm_file, overrides=overrides,
-    )))
+    return _strip(
+        parse_conf_directives(
+            _p.build_production_conf(
+                spec,
+                ctx.name_stem,
+                ctx.box,
+                ctx.mgh_extrabonds,
+                seed=ctx.seed,
+                fast=ctx.fast,
+                timestep_fs=timestep_fs,
+                structure_psf=ctx.structure_psf,
+                start_checkpoint=start_checkpoint,
+                rigid_bonds=ctx.rigid_bonds,
+                hmr=ctx.hmr,
+                anchors_file=ctx.anchors_file,
+                field=ctx.field,
+                colvars_file=ctx.colvars_file,
+                n_atoms=ctx.n_atoms,
+                force_resident=ctx.force_resident,
+                npt=npt,
+                damping=damping,
+                enm_file=enm_file,
+                overrides=overrides,
+            )
+        )
+    )
 
 
-def reseed_parameters(reseed_name: str, ctx: PlanContext, *,
-                      npt: bool = True, preserve_velocities: bool = False) -> dict:
+def reseed_parameters(
+    reseed_name: str,
+    ctx: PlanContext,
+    *,
+    npt: bool = True,
+    preserve_velocities: bool = False,
+) -> dict:
     """Every directive ``build_reseed_conf`` would write for the bridge stage (pure).
 
     The velocity reseed is a real conf the production child executes — a zero-step run
@@ -222,12 +354,21 @@ def reseed_parameters(reseed_name: str, ctx: PlanContext, *,
     carries the parent's forward).  It was invisible in the plan, which meant the wizard
     showed the production run starting from a checkpoint it does not actually read.
     """
-    return _strip(parse_conf_directives(_p.build_reseed_conf(
-        reseed_name, ctx.name_stem, ctx.box, ctx.mgh_extrabonds,
-        seed=ctx.seed, equil_base="equilibrated",
-        structure_psf=ctx.structure_psf,
-        preserve_velocities=preserve_velocities, npt=npt,
-    )))
+    return _strip(
+        parse_conf_directives(
+            _p.build_reseed_conf(
+                reseed_name,
+                ctx.name_stem,
+                ctx.box,
+                ctx.mgh_extrabonds,
+                seed=ctx.seed,
+                equil_base="equilibrated",
+                structure_psf=ctx.structure_psf,
+                preserve_velocities=preserve_velocities,
+                npt=npt,
+            )
+        )
+    )
 
 
 def conditional_keys(spec: SegmentSpec, ctx: PlanContext, *, emit=None) -> dict:
@@ -256,12 +397,15 @@ def conditional_keys(spec: SegmentSpec, ctx: PlanContext, *, emit=None) -> dict:
         f"A one-cycle probe re-checks it on the real structure before the first fast "
         f"segment, and can still fall back."
     )
-    return {k: reason
-            for k in set(unknown) | set(tiny)
-            if unknown.get(k, "(absent)") != tiny.get(k, "(absent)")}
+    return {
+        k: reason
+        for k in set(unknown) | set(tiny)
+        if unknown.get(k, "(absent)") != tiny.get(k, "(absent)")
+    }
 
 
 # ── Diffing ───────────────────────────────────────────────────────────────────
+
 
 def stage_diff(prev: Optional[dict], nxt: dict, *, ignore=NOISE_KEYS) -> dict:
     """``{directive: [old, new]}`` for everything that changed (pure).
@@ -333,7 +477,11 @@ def production_asymmetries(last_stage: dict, production: dict) -> list[dict]:
 
 #: How a production run is split into chunks.  Not a physics choice — it exists so a long
 #: run has health checkpoints and can be resumed part-way.
-PRODUCTION_CHUNKS: tuple[tuple[float, float], ...] = ((10.0, 0.10), (50.0, 0.40), (100.0, 0.50))
+PRODUCTION_CHUNKS: tuple[tuple[float, float], ...] = (
+    (10.0, 0.10),
+    (50.0, 0.40),
+    (100.0, 0.50),
+)
 
 _PRODUCTION_TIER_LABEL = {4.0: "fast", 2.0: "medium", 1.0: "conservative"}
 
@@ -348,10 +496,18 @@ def production_length_ns(total_steps: int, timestep_fs: float) -> float:
     return total_steps * timestep_fs / 1_000_000.0
 
 
-def production_segment_spec(name_stem: str, *, stage_idx: int, pct: float, frac: float,
-                            total_steps: int, timestep_fs: float, previous: str,
-                            damping: float = _p.PRODUCTION_LANGEVIN_DAMPING,
-                            dcd_freq: Optional[int] = None) -> SegmentSpec:
+def production_segment_spec(
+    name_stem: str,
+    *,
+    stage_idx: int,
+    pct: float,
+    frac: float,
+    total_steps: int,
+    timestep_fs: float,
+    previous: str,
+    damping: float = _p.PRODUCTION_LANGEVIN_DAMPING,
+    dcd_freq: Optional[int] = None,
+) -> SegmentSpec:
     """One production chunk's SegmentSpec (pure).
 
     Shared by ``routes_md._append_production_segments`` (the path that really runs) and
@@ -390,6 +546,7 @@ def production_segment_spec(name_stem: str, *, stage_idx: int, pct: float, frac:
 
 # ── The stage table ───────────────────────────────────────────────────────────
 
+
 def _role_for(spec: SegmentSpec) -> str:
     # The settle stage is the one that holds the solute still while the barostat finds the
     # box size.  It is identified by its restraint reference — it used to hold the solute
@@ -403,11 +560,21 @@ def _role_for(spec: SegmentSpec) -> str:
     return "ladder"
 
 
-def _stage_row(index: int, name: str, stage: str, role: str, *, steps: int,
-               timestep_fs: float, params: dict, prev_params: Optional[dict],
-               conditional: dict, spec: Optional[SegmentSpec] = None,
-               protocol_params: Optional[dict] = None,
-               accepts_overrides: bool = True) -> dict:
+def _stage_row(
+    index: int,
+    name: str,
+    stage: str,
+    role: str,
+    *,
+    steps: int,
+    timestep_fs: float,
+    params: dict,
+    prev_params: Optional[dict],
+    conditional: dict,
+    spec: Optional[SegmentSpec] = None,
+    protocol_params: Optional[dict] = None,
+    accepts_overrides: bool = True,
+) -> dict:
     return {
         "index": index,
         # Whether a hand edit on THIS stage reaches the conf that runs.  Every ladder and
@@ -444,9 +611,15 @@ def _stage_row(index: int, name: str, stage: str, role: str, *, steps: int,
     }
 
 
-def relaxation_stages(ctx: PlanContext, *, soft: bool = False, gentle: bool = False,
-                      nvt_only: bool = False, timestep_fs: Optional[float] = None,
-                      stage_overrides: Optional[dict] = None) -> list[dict]:
+def relaxation_stages(
+    ctx: PlanContext,
+    *,
+    soft: bool = False,
+    gentle: bool = False,
+    nvt_only: bool = False,
+    timestep_fs: Optional[float] = None,
+    stage_overrides: Optional[dict] = None,
+) -> list[dict]:
     """The full ordered stage table for a relaxation, minimisation included (pure).
 
     The ladder itself comes from ``mgh_slow_release_segments`` — the same call
@@ -457,9 +630,14 @@ def relaxation_stages(ctx: PlanContext, *, soft: bool = False, gentle: bool = Fa
     # The caller's explicit ladder timestep wins; otherwise the historical fast-derived
     # 4/2 fs. The step counts are sized from THIS, so a 1 fs ladder reports the step count
     # it will really run rather than a 4 fs one's.
-    ladder_dt = float(timestep_fs) if timestep_fs is not None else (4.0 if ctx.fast else 2.0)
+    ladder_dt = (
+        float(timestep_fs) if timestep_fs is not None else (4.0 if ctx.fast else 2.0)
+    )
     min_name, segments = _p.mgh_slow_release_segments(
-        ctx.name_stem, soft=soft, gentle=gentle, nvt_only=nvt_only,
+        ctx.name_stem,
+        soft=soft,
+        gentle=gentle,
+        nvt_only=nvt_only,
         timestep_fs=ladder_dt,
     )
 
@@ -469,71 +647,119 @@ def relaxation_stages(ctx: PlanContext, *, soft: bool = False, gentle: bool = Fa
     # this protocol here" a computed fact rather than a claim.
     min_ov = _p.overrides_for_stage(stage_overrides, 0)
     min_params = minimization_parameters(min_name, ctx, min_ov)
-    rows.append(_stage_row(
-        0, min_name, "Energy minimisation", "minimization",
-        steps=ctx.minimize_steps, timestep_fs=0.0,
-        params=min_params, prev_params=None, conditional={},
-        protocol_params=minimization_parameters(min_name, ctx) if min_ov else None,
-    ))
+    rows.append(
+        _stage_row(
+            0,
+            min_name,
+            "Energy minimisation",
+            "minimization",
+            steps=ctx.minimize_steps,
+            timestep_fs=0.0,
+            params=min_params,
+            prev_params=None,
+            conditional={},
+            protocol_params=minimization_parameters(min_name, ctx) if min_ov else None,
+        )
+    )
 
     prev_params = min_params
     for i, spec in enumerate(segments, start=1):
         ov = _p.overrides_for_stage(stage_overrides, i)
         params = stage_parameters(spec, ctx, ov)
-        rows.append(_stage_row(
-            i, spec.name, spec.stage, _role_for(spec),
-            steps=spec.steps,
-            # SAME call the conf writer makes, base included — this used to omit the base
-            # and so reported 2 fs (and therefore double the ns) for a ladder whose confs
-            # said 1 fs.  The "one source of truth" the docstring promises only holds if
-            # both callers pass the same arguments.
-            timestep_fs=_p.effective_timestep_fs(
-                spec, ctx.fast and not ctx.gbis and not ctx.vacuum, ladder_dt),
-            params=params, prev_params=prev_params,
-            conditional=conditional_keys(spec, ctx), spec=spec,
-            protocol_params=stage_parameters(spec, ctx) if ov else None,
-        ))
+        rows.append(
+            _stage_row(
+                i,
+                spec.name,
+                spec.stage,
+                _role_for(spec),
+                steps=spec.steps,
+                # SAME call the conf writer makes, base included — this used to omit the base
+                # and so reported 2 fs (and therefore double the ns) for a ladder whose confs
+                # said 1 fs.  The "one source of truth" the docstring promises only holds if
+                # both callers pass the same arguments.
+                timestep_fs=_p.effective_timestep_fs(
+                    spec, ctx.fast and not ctx.gbis and not ctx.vacuum, ladder_dt
+                ),
+                params=params,
+                prev_params=prev_params,
+                conditional=conditional_keys(spec, ctx),
+                spec=spec,
+                protocol_params=stage_parameters(spec, ctx) if ov else None,
+            )
+        )
         prev_params = params
     return rows
 
 
-def production_stages(ctx: PlanContext, *, total_steps: int, timestep_fs: float,
-                      stage_idx: int = 1, previous: str = "equilibrated",
-                      npt: bool = True,
-                      damping: float = _p.PRODUCTION_LANGEVIN_DAMPING,
-                      enm_file: Optional[str] = None,
-                      stage_overrides: Optional[dict] = None) -> list[dict]:
+def production_stages(
+    ctx: PlanContext,
+    *,
+    total_steps: int,
+    timestep_fs: float,
+    stage_idx: int = 1,
+    previous: str = "equilibrated",
+    npt: bool = True,
+    damping: float = _p.PRODUCTION_LANGEVIN_DAMPING,
+    enm_file: Optional[str] = None,
+    stage_overrides: Optional[dict] = None,
+) -> list[dict]:
     """The production chunk table (pure)."""
+
     def _emit(spec, c, ov=None):
-        return production_parameters(spec, c, timestep_fs=timestep_fs, npt=npt,
-                                     damping=damping, enm_file=enm_file, overrides=ov)
+        return production_parameters(
+            spec,
+            c,
+            timestep_fs=timestep_fs,
+            npt=npt,
+            damping=damping,
+            enm_file=enm_file,
+            overrides=ov,
+        )
 
     rows: list[dict] = []
     prev_params: Optional[dict] = None
     prev_name = previous
     for i, (pct, frac) in enumerate(PRODUCTION_CHUNKS):
         spec = production_segment_spec(
-            ctx.name_stem, stage_idx=stage_idx, pct=pct, frac=frac,
-            total_steps=total_steps, timestep_fs=timestep_fs, previous=prev_name,
+            ctx.name_stem,
+            stage_idx=stage_idx,
+            pct=pct,
+            frac=frac,
+            total_steps=total_steps,
+            timestep_fs=timestep_fs,
+            previous=prev_name,
             damping=damping,
         )
         ov = _p.overrides_for_stage(stage_overrides, i + 1)
         params = _emit(spec, ctx, ov)
-        rows.append(_stage_row(
-            i, spec.name, spec.stage, "production",
-            steps=spec.steps, timestep_fs=timestep_fs,
-            params=params, prev_params=prev_params,
-            conditional=conditional_keys(spec, ctx, emit=_emit), spec=spec,
-            protocol_params=_emit(spec, ctx) if ov else None,
-        ))
+        rows.append(
+            _stage_row(
+                i,
+                spec.name,
+                spec.stage,
+                "production",
+                steps=spec.steps,
+                timestep_fs=timestep_fs,
+                params=params,
+                prev_params=prev_params,
+                conditional=conditional_keys(spec, ctx, emit=_emit),
+                spec=spec,
+                protocol_params=_emit(spec, ctx) if ov else None,
+            )
+        )
         prev_params, prev_name = params, spec.name
     return rows
 
 
-def replica_production_spec(ctx: PlanContext, *, total_steps: int, timestep_fs: float,
-                            previous: str,
-                            damping: float = _p.PRODUCTION_LANGEVIN_DAMPING,
-                            dcd_freq: Optional[int] = None) -> SegmentSpec:
+def replica_production_spec(
+    ctx: PlanContext,
+    *,
+    total_steps: int,
+    timestep_fs: float,
+    previous: str,
+    damping: float = _p.PRODUCTION_LANGEVIN_DAMPING,
+    dcd_freq: Optional[int] = None,
+) -> SegmentSpec:
     """The ONE production segment a production CHILD job runs (pure).
 
     Mirrors ``md_ensemble.build_replica_package`` line for line — the child package is a
@@ -561,13 +787,18 @@ def replica_production_spec(ctx: PlanContext, *, total_steps: int, timestep_fs: 
     )
 
 
-def replica_production_stages(ctx: PlanContext, *, total_steps: int, timestep_fs: float,
-                              npt: bool = True,
-                              damping: float = _p.PRODUCTION_LANGEVIN_DAMPING,
-                              enm_file: Optional[str] = None,
-                              dcd_freq: Optional[int] = None,
-                              continuation: bool = False,
-                              stage_overrides: Optional[dict] = None) -> list[dict]:
+def replica_production_stages(
+    ctx: PlanContext,
+    *,
+    total_steps: int,
+    timestep_fs: float,
+    npt: bool = True,
+    damping: float = _p.PRODUCTION_LANGEVIN_DAMPING,
+    enm_file: Optional[str] = None,
+    dcd_freq: Optional[int] = None,
+    continuation: bool = False,
+    stage_overrides: Optional[dict] = None,
+) -> list[dict]:
     """The stage table a production CHILD really runs: reseed bridge, then production.
 
     ``production_stages`` above describes the OTHER production path — the legacy route
@@ -581,43 +812,79 @@ def replica_production_stages(ctx: PlanContext, *, total_steps: int, timestep_fs
     stage is slot ``1``.
     """
     reseed_name = f"{ctx.name_stem}_00_reseed"
-    reseed_params = reseed_parameters(reseed_name, ctx, npt=npt,
-                                      preserve_velocities=continuation)
-    rows = [_stage_row(
-        0, reseed_name,
-        "Velocity continuation" if continuation else "Velocity reseed",
-        "reseed", steps=0, timestep_fs=timestep_fs,
-        params=reseed_params, prev_params=None, conditional={},
-        accepts_overrides=False,
-    )]
+    reseed_params = reseed_parameters(
+        reseed_name, ctx, npt=npt, preserve_velocities=continuation
+    )
+    rows = [
+        _stage_row(
+            0,
+            reseed_name,
+            "Velocity continuation" if continuation else "Velocity reseed",
+            "reseed",
+            steps=0,
+            timestep_fs=timestep_fs,
+            params=reseed_params,
+            prev_params=None,
+            conditional={},
+            accepts_overrides=False,
+        )
+    ]
 
-    spec = replica_production_spec(ctx, total_steps=total_steps, timestep_fs=timestep_fs,
-                                   previous=reseed_name, damping=damping,
-                                   dcd_freq=dcd_freq)
+    spec = replica_production_spec(
+        ctx,
+        total_steps=total_steps,
+        timestep_fs=timestep_fs,
+        previous=reseed_name,
+        damping=damping,
+        dcd_freq=dcd_freq,
+    )
 
     def _emit(s, c, ov=None):
-        return production_parameters(s, c, timestep_fs=timestep_fs, npt=npt,
-                                     damping=damping, enm_file=enm_file, overrides=ov)
+        return production_parameters(
+            s,
+            c,
+            timestep_fs=timestep_fs,
+            npt=npt,
+            damping=damping,
+            enm_file=enm_file,
+            overrides=ov,
+        )
 
     ov = _p.overrides_for_stage(stage_overrides, 1)
     params = _emit(spec, ctx, ov)
-    rows.append(_stage_row(
-        1, spec.name, spec.stage, "production",
-        steps=spec.steps, timestep_fs=timestep_fs,
-        params=params, prev_params=reseed_params,
-        conditional=conditional_keys(spec, ctx, emit=_emit), spec=spec,
-        protocol_params=_emit(spec, ctx) if ov else None,
-    ))
+    rows.append(
+        _stage_row(
+            1,
+            spec.name,
+            spec.stage,
+            "production",
+            steps=spec.steps,
+            timestep_fs=timestep_fs,
+            params=params,
+            prev_params=reseed_params,
+            conditional=conditional_keys(spec, ctx, emit=_emit),
+            spec=spec,
+            protocol_params=_emit(spec, ctx) if ov else None,
+        )
+    )
     return rows
 
 
 # ── Conditions, retries, deferred values ──────────────────────────────────────
 
-def protocol_conditions(*, carved: bool, gbis: bool, force_soft: bool,
-                        gentle_ladder: bool, early_stop: bool,
-                        gpu_resident_mode: str, stages: list[dict],
-                        n_atoms: Optional[int] = None,
-                        fill_fraction: float = 1.0) -> list[dict]:
+
+def protocol_conditions(
+    *,
+    carved: bool,
+    gbis: bool,
+    force_soft: bool,
+    gentle_ladder: bool,
+    early_stop: bool,
+    gpu_resident_mode: str,
+    stages: list[dict],
+    n_atoms: Optional[int] = None,
+    fill_fraction: float = 1.0,
+) -> list[dict]:
     """Everything that can skip, alter or repeat a stage (pure).
 
     Every number here is IMPORTED from the module that enforces it.  Retyping a threshold
@@ -626,98 +893,125 @@ def protocol_conditions(*, carved: bool, gbis: bool, force_soft: bool,
     cut = CutoffParams()
     out: list[dict] = []
     settle = next((s for s in stages if s["role"] == "settle"), None)
-    first_gentle = next((s for s in stages if s.get("gentle") and s["role"] != "settle"), None)
+    first_gentle = next(
+        (s for s in stages if s.get("gentle") and s["role"] != "settle"), None
+    )
 
     if carved:
-        out.append({
-            "id": "settle_skipped", "kind": "skip",
-            "title": "The settle stage is not run",
-            "detail": (
-                f"A water-shell carve leaves vacuum in the corners of the cell, so the "
-                f"whole ladder runs at constant volume. The {_p.SETTLE_STAGE_PS:g} ps "
-                f"fixed-DNA settle stage exists to let the barostat find the right box "
-                f"size before the structure starts moving — with no barostat there is "
-                f"nothing for it to settle, so it is skipped."
-            ),
-            "applies_to": [], "source": "md_protocols.mgh_slow_release_segments",
-        })
-        out.append({
-            "id": "barostat_off", "kind": "forced",
-            "title": "Constant volume (barostat off) for every stage",
-            "detail": (
-                "Required, not merely allowed: a barostat would expel the vacuum from a "
-                "carved cell, collapsing it onto the solute until the DNA meets its own "
-                "periodic image. The box-size equilibration criterion is unavailable for "
-                "this run as a result."
-            ),
-            "applies_to": [s["name"] for s in stages if s["role"] == "ladder"],
-            "source": "md_protocols._pressure_block",
-        })
+        out.append(
+            {
+                "id": "settle_skipped",
+                "kind": "skip",
+                "title": "The settle stage is not run",
+                "detail": (
+                    f"A water-shell carve leaves vacuum in the corners of the cell, so the "
+                    f"whole ladder runs at constant volume. The {_p.SETTLE_STAGE_PS:g} ps "
+                    f"fixed-DNA settle stage exists to let the barostat find the right box "
+                    f"size before the structure starts moving — with no barostat there is "
+                    f"nothing for it to settle, so it is skipped."
+                ),
+                "applies_to": [],
+                "source": "md_protocols.mgh_slow_release_segments",
+            }
+        )
+        out.append(
+            {
+                "id": "barostat_off",
+                "kind": "forced",
+                "title": "Constant volume (barostat off) for every stage",
+                "detail": (
+                    "Required, not merely allowed: a barostat would expel the vacuum from a "
+                    "carved cell, collapsing it onto the solute until the DNA meets its own "
+                    "periodic image. The box-size equilibration criterion is unavailable for "
+                    "this run as a result."
+                ),
+                "applies_to": [s["name"] for s in stages if s["role"] == "ladder"],
+                "source": "md_protocols._pressure_block",
+            }
+        )
     elif settle is not None:
-        out.append({
-            "id": "settle_stage", "kind": "stage",
-            "title": f"{_p.SETTLE_STAGE_PS:g} ps settle stage with every DNA atom fixed",
-            "detail": (
-                "Solvation deliberately under-fills the box, which is why the cell shrinks "
-                "at all and why the box trace is the reference's equilibration monitor. "
-                "Pinning the solute while the cell finds its own size separates 'the water "
-                "is settling' from 'the structure is moving', so the ladder starts from a "
-                "box that already holds the right amount of water. It is not numbered, so "
-                "stages 01-04 mean the same thing whether or not it ran."
-            ),
-            "applies_to": [settle["name"]], "source": "Aksimentiev tutorial Note 4",
-        })
+        out.append(
+            {
+                "id": "settle_stage",
+                "kind": "stage",
+                "title": f"{_p.SETTLE_STAGE_PS:g} ps settle stage with every DNA atom fixed",
+                "detail": (
+                    "Solvation deliberately under-fills the box, which is why the cell shrinks "
+                    "at all and why the box trace is the reference's equilibration monitor. "
+                    "Pinning the solute while the cell finds its own size separates 'the water "
+                    "is settling' from 'the structure is moving', so the ladder starts from a "
+                    "box that already holds the right amount of water. It is not numbered, so "
+                    "stages 01-04 mean the same thing whether or not it ran."
+                ),
+                "applies_to": [settle["name"]],
+                "source": "Aksimentiev tutorial Note 4",
+            }
+        )
 
     if force_soft:
-        out.append({
-            "id": "force_soft", "kind": "forced",
-            "title": "Every stage runs the 1 fs flexible-bond integrator",
-            "detail": (
-                "The whole ladder is pinned to rigidBonds none + 1 fs. This is the manual "
-                "escape hatch for a model that keeps failing rigid-bond RATTLE; it roughly "
-                "doubles the wall clock versus the 2 fs gentle tier."
-            ),
-            "applies_to": "all", "source": "CreateJobRequest.force_soft",
-        })
+        out.append(
+            {
+                "id": "force_soft",
+                "kind": "forced",
+                "title": "Every stage runs the 1 fs flexible-bond integrator",
+                "detail": (
+                    "The whole ladder is pinned to rigidBonds none + 1 fs. This is the manual "
+                    "escape hatch for a model that keeps failing rigid-bond RATTLE; it roughly "
+                    "doubles the wall clock versus the 2 fs gentle tier."
+                ),
+                "applies_to": "all",
+                "source": "CreateJobRequest.force_soft",
+            }
+        )
     elif gentle_ladder:
-        out.append({
-            "id": "declash_gentle", "kind": "forced",
-            "title": "Every stage runs the 2 fs gentle tier (declash)",
-            "detail": (
-                "This design inserts extra bases at crossovers or carries single-stranded "
-                "extensions, which are built clashed. A 25 ps probe measured that 2 fs with "
-                "rigid bonds survives every such case while 4 fs + hydrogen-mass "
-                "repartitioning blows up, so the whole ladder drops to the gentle tier. "
-                "Seeding the design from an oxDNA relaxation removes the clash and lets it "
-                "run the 4 fs path instead."
-            ),
-            "applies_to": "all", "source": "md_protocols.prepare_mgh_slow_release",
-        })
+        out.append(
+            {
+                "id": "declash_gentle",
+                "kind": "forced",
+                "title": "Every stage runs the 2 fs gentle tier (declash)",
+                "detail": (
+                    "This design inserts extra bases at crossovers or carries single-stranded "
+                    "extensions, which are built clashed. A 25 ps probe measured that 2 fs with "
+                    "rigid bonds survives every such case while 4 fs + hydrogen-mass "
+                    "repartitioning blows up, so the whole ladder drops to the gentle tier. "
+                    "Seeding the design from an oxDNA relaxation removes the clash and lets it "
+                    "run the 4 fs path instead."
+                ),
+                "applies_to": "all",
+                "source": "md_protocols.prepare_mgh_slow_release",
+            }
+        )
     elif first_gentle is not None:
-        out.append({
-            "id": "soft_start", "kind": "forced",
-            "title": f"First moving stage runs at 2 fs: {first_gentle['name']}",
-            "detail": (
-                "A freshly built ideal-B-DNA model usually has one residual local strain "
-                "that the restrained minimisation cannot relieve, and hitting it with the "
-                "full timestep on the very first dynamics steps trips a RATTLE constraint "
-                "failure. Only this one segment is slowed; every later stage reverts. It "
-                "lands on the first stage whose solute atoms actually MOVE, which is why "
-                "it is not the settle stage."
-            ),
-            "applies_to": [first_gentle["name"]],
-            "source": "md_protocols.mgh_slow_release_segments",
-        })
+        out.append(
+            {
+                "id": "soft_start",
+                "kind": "forced",
+                "title": f"First moving stage runs at 2 fs: {first_gentle['name']}",
+                "detail": (
+                    "A freshly built ideal-B-DNA model usually has one residual local strain "
+                    "that the restrained minimisation cannot relieve, and hitting it with the "
+                    "full timestep on the very first dynamics steps trips a RATTLE constraint "
+                    "failure. Only this one segment is slowed; every later stage reverts. It "
+                    "lands on the first stage whose solute atoms actually MOVE, which is why "
+                    "it is not the settle stage."
+                ),
+                "applies_to": [first_gentle["name"]],
+                "source": "md_protocols.mgh_slow_release_segments",
+            }
+        )
 
     # GPU-resident, decided by the SAME function the confs use, so the reason shown here
     # is the reason the run will actually have.  The timestep is not one of its inputs
     # (exp52): production used to drop resident at 1 fs, discarding the user's own choice.
     mode = (gpu_resident_mode or "auto").lower()
     decision = resident_decision(
-        n_atoms=n_atoms, force_resident={"on": True, "off": False}.get(mode),
-        min_atoms=_p._RESIDENT_MIN_ATOMS, gbis=gbis,
+        n_atoms=n_atoms,
+        force_resident={"on": True, "off": False}.get(mode),
+        min_atoms=_p._RESIDENT_MIN_ATOMS,
+        gbis=gbis,
         carved_fill=fill_fraction if carved else None,
-        min_fill=_p._RESIDENT_MIN_FILL)
+        min_fill=_p._RESIDENT_MIN_FILL,
+    )
     gpu_detail = (
         f"{'ON' if decision.on else 'OFF'} for this run — {decision.reason}. "
         f"GPU-resident changes WHERE integration runs, not what is computed, so it never "
@@ -731,45 +1025,60 @@ def protocol_conditions(*, carved: bool, gbis: bool, force_soft: bool,
         f"under-counts its GPU exclusion buffers and dies at step 0). "
         f"A one-cycle probe re-checks the real structure before the first fast segment."
     )
-    out.append({
-        # A user choice that cannot be honoured is a WARNING, not a footnote: it is the
-        # one case where the control on screen and the run disagree.
-        "id": "gpu_resident_gate",
-        "kind": "warning" if decision.overridden else "conditional",
-        "title": (f"GPU-resident: {mode} requested, {'on' if decision.on else 'off'} in "
-                  f"this run" if decision.overridden
-                  else f"GPU-resident mode: {mode}"),
-        "detail": gpu_detail,
-        "applies_to": "all", "source": "CreateJobRequest.gpu_resident",
-    })
+    out.append(
+        {
+            # A user choice that cannot be honoured is a WARNING, not a footnote: it is the
+            # one case where the control on screen and the run disagree.
+            "id": "gpu_resident_gate",
+            "kind": "warning" if decision.overridden else "conditional",
+            "title": (
+                f"GPU-resident: {mode} requested, {'on' if decision.on else 'off'} in "
+                f"this run"
+                if decision.overridden
+                else f"GPU-resident mode: {mode}"
+            ),
+            "detail": gpu_detail,
+            "applies_to": "all",
+            "source": "CreateJobRequest.gpu_resident",
+        }
+    )
 
     if early_stop:
-        out.append({
-            "id": "early_stop", "kind": "skip",
-            "title": "Settled stages stop early",
-            "detail": (
-                f"Once a stage's trajectory is flat in BOTH energy and base pairing, its "
-                f"remaining chunks are skipped and the restart files are carried forward. "
-                f"Both criteria must agree — energy alone plateaus while the structure is "
-                f"still rearranging. Thresholds over a {cut.window}-frame window, minimum "
-                f"{cut.min_frames} frames: potential energy drift < {cut.eps_pot_drift:.2%} "
-                f"and fluctuation < {cut.eps_pot_fluct:.2%}; volume drift < "
-                f"{cut.eps_vol_drift:.2%} and fluctuation < {cut.eps_vol_fluct:.2%}; "
-                f"base-pairing drift < {cut.eps_wc_drift:.2%} and fluctuation < "
-                f"{cut.eps_wc_fluct:.2%}. Never applied to a production stage."
-            ),
-            "applies_to": [s["name"] for s in stages if s["role"] == "ladder"],
-            "source": "md_cutoff.should_early_stop_stage",
-        })
+        out.append(
+            {
+                "id": "early_stop",
+                "kind": "skip",
+                "title": "Settled stages stop early",
+                "detail": (
+                    f"Once a stage's trajectory is flat in BOTH energy and base pairing, its "
+                    f"remaining chunks are skipped and the restart files are carried forward. "
+                    f"Both criteria must agree — energy alone plateaus while the structure is "
+                    f"still rearranging. Thresholds over a {cut.window}-frame window, minimum "
+                    f"{cut.min_frames} frames: potential energy drift < {cut.eps_pot_drift:.2%} "
+                    f"and fluctuation < {cut.eps_pot_fluct:.2%}; volume drift < "
+                    f"{cut.eps_vol_drift:.2%} and fluctuation < {cut.eps_vol_fluct:.2%}; "
+                    f"base-pairing drift < {cut.eps_wc_drift:.2%} and fluctuation < "
+                    f"{cut.eps_wc_fluct:.2%}. Never applied to a production stage."
+                ),
+                "applies_to": [s["name"] for s in stages if s["role"] == "ladder"],
+                "source": "md_cutoff.should_early_stop_stage",
+            }
+        )
     else:
-        out.append({
-            "id": "early_stop_off", "kind": "info",
-            "title": "Every stage runs to its full length",
-            "detail": ("Early stopping is off, so no chunk is skipped even if the "
-                       "trajectory has clearly settled. This is the right setting for a "
-                       "run whose numbers are going in a paper."),
-            "applies_to": "all", "source": "CreateJobRequest.early_stop_relax",
-        })
+        out.append(
+            {
+                "id": "early_stop_off",
+                "kind": "info",
+                "title": "Every stage runs to its full length",
+                "detail": (
+                    "Early stopping is off, so no chunk is skipped even if the "
+                    "trajectory has clearly settled. This is the right setting for a "
+                    "run whose numbers are going in a paper."
+                ),
+                "applies_to": "all",
+                "source": "CreateJobRequest.early_stop_relax",
+            }
+        )
     return out
 
 
@@ -780,6 +1089,7 @@ def retry_policy() -> list[dict]:
     should be able to see that this is designed behaviour with a limit, not a loop.
     """
     from backend.core import namd_runner as _r  # noqa: PLC0415 — avoids an import cycle
+
     return [
         {
             "id": "retry_cell_shrink",
@@ -834,36 +1144,47 @@ def retry_policy() -> list[dict]:
     ]
 
 
-def deferred_notes(*, minimize_steps: int, n_atoms: Optional[int],
-                   padding_nm: float) -> list[dict]:
+def deferred_notes(
+    *, minimize_steps: int, n_atoms: Optional[int], padding_nm: float
+) -> list[dict]:
     """Values this plan cannot resolve until the system is solvated (pure)."""
-    out: list[dict] = [{
-        "key": "cellBasisVector",
-        "title": "Periodic cell size",
-        "detail": ("Computed during solvation from the solute's bounding box (or its "
-                   "rotation radius, for a package sized for a long unrestrained run) "
-                   "plus the padding below."),
-    }]
-    if n_atoms is None:
-        out.append({
-            "key": "minimize",
-            "title": f"Minimisation steps: at least {minimize_steps:,}",
+    out: list[dict] = [
+        {
+            "key": "cellBasisVector",
+            "title": "Periodic cell size",
             "detail": (
-                f"This is a FLOOR, not the value. Minimisation has to scale with the "
-                f"system — a flat count is safe on a small bundle and catastrophic on a "
-                f"large origami, which starts with enormous van der Waals energy "
-                f"concentrated at inserted bases and detonates well into dynamics. After "
-                f"solvation it becomes one step per {_p.MIN_STEPS_PER_ATOMS} atoms, "
-                f"rounded up (a 224,000-atom system would run "
-                f"{_p.minimize_steps_for_atoms(224_000, minimize_steps):,} steps)."
+                "Computed during solvation from the solute's bounding box (or its "
+                "rotation radius, for a package sized for a long unrestrained run) "
+                "plus the padding below."
             ),
-        })
-    out.append({
-        "key": "padding_nm",
-        "title": f"Padding: {padding_nm:g} nm requested",
-        "detail": ("Trimmed automatically if the resulting cell would not fit this "
-                   "machine — a smaller box is preferred over a water-shell carve, "
-                   "because a carve costs the barostat, and with it the settle stage and "
-                   "the box-size equilibration criterion."),
-    })
+        }
+    ]
+    if n_atoms is None:
+        out.append(
+            {
+                "key": "minimize",
+                "title": f"Minimisation steps: at least {minimize_steps:,}",
+                "detail": (
+                    f"This is a FLOOR, not the value. Minimisation has to scale with the "
+                    f"system — a flat count is safe on a small bundle and catastrophic on a "
+                    f"large origami, which starts with enormous van der Waals energy "
+                    f"concentrated at inserted bases and detonates well into dynamics. After "
+                    f"solvation it becomes one step per {_p.MIN_STEPS_PER_ATOMS} atoms, "
+                    f"rounded up (a 224,000-atom system would run "
+                    f"{_p.minimize_steps_for_atoms(224_000, minimize_steps):,} steps)."
+                ),
+            }
+        )
+    out.append(
+        {
+            "key": "padding_nm",
+            "title": f"Padding: {padding_nm:g} nm requested",
+            "detail": (
+                "Trimmed automatically if the resulting cell would not fit this "
+                "machine — a smaller box is preferred over a water-shell carve, "
+                "because a carve costs the barostat, and with it the settle stage and "
+                "the box-size equilibration criterion."
+            ),
+        }
+    )
     return out

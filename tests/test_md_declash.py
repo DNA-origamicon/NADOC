@@ -269,6 +269,9 @@ def test_fast_prepare_does_not_reference_a_removed_variable():
     src = inspect.getsource(M.prepare_mgh_slow_release)
     assert "fast = fast and not force_soft" in src
     # Token-level, so a mention in a COMMENT does not count — only real identifiers.
-    names = {tok.string for tok in tokenize.generate_tokens(io.StringIO(src).readline)
-             if tok.type == tokenize.NAME}
+    names = {
+        tok.string
+        for tok in tokenize.generate_tokens(io.StringIO(src).readline)
+        if tok.type == tokenize.NAME
+    }
     assert "soft_ladder" not in names

@@ -5,6 +5,7 @@ representation: one axis tube per helix (bp-ordered) + thin crossover joint conn
 The axis of a duplex bp is the midpoint of its two strand backbones; ssDNA ends / loop
 copies (no clean axis) are excluded, matching CanDo's duplex-only tubes.
 """
+
 from __future__ import annotations
 
 from backend.api import headless_build as hb
@@ -36,15 +37,47 @@ def test_axis_from_backbones_is_midpoint_restricted_to_rmsf_duplex_core():
     """The fallback axis = midpoint of a bp's FORWARD+REVERSE backbones, but ONLY for bp
     that carry an RMSF node (the meshed duplex core) → ssDNA ends and loop copies drop."""
     disp = [
-        {"helix_id": "h0", "bp_index": 0, "direction": "FORWARD", "copy": 0, "backbone_position": [0.0, 0.0, 0.0]},
-        {"helix_id": "h0", "bp_index": 0, "direction": "REVERSE", "copy": 0, "backbone_position": [2.0, 0.0, 0.0]},
+        {
+            "helix_id": "h0",
+            "bp_index": 0,
+            "direction": "FORWARD",
+            "copy": 0,
+            "backbone_position": [0.0, 0.0, 0.0],
+        },
+        {
+            "helix_id": "h0",
+            "bp_index": 0,
+            "direction": "REVERSE",
+            "copy": 0,
+            "backbone_position": [2.0, 0.0, 0.0],
+        },
         # ssDNA bp (h0, 5): both strands present in display but NOT an RMSF node → excluded
-        {"helix_id": "h0", "bp_index": 5, "direction": "FORWARD", "copy": 0, "backbone_position": [9.0, 0.0, 0.0]},
-        {"helix_id": "h0", "bp_index": 5, "direction": "REVERSE", "copy": 0, "backbone_position": [9.0, 2.0, 0.0]},
+        {
+            "helix_id": "h0",
+            "bp_index": 5,
+            "direction": "FORWARD",
+            "copy": 0,
+            "backbone_position": [9.0, 0.0, 0.0],
+        },
+        {
+            "helix_id": "h0",
+            "bp_index": 5,
+            "direction": "REVERSE",
+            "copy": 0,
+            "backbone_position": [9.0, 2.0, 0.0],
+        },
         # loop copy (copy>0) → ignored
-        {"helix_id": "h0", "bp_index": 0, "direction": "FORWARD", "copy": 1, "backbone_position": [0.0, 0.0, 0.0]},
+        {
+            "helix_id": "h0",
+            "bp_index": 0,
+            "direction": "FORWARD",
+            "copy": 1,
+            "backbone_position": [0.0, 0.0, 0.0],
+        },
     ]
-    rmsf = [{"helix_id": "h0", "bp_index": 0, "rmsf_nm": 1.0}]   # only bp 0 is duplex core
+    rmsf = [
+        {"helix_id": "h0", "bp_index": 0, "rmsf_nm": 1.0}
+    ]  # only bp 0 is duplex core
     axis = axis_from_backbones(disp, rmsf)
     assert axis == [{"helix_id": "h0", "bp_index": 0, "position": [1.0, 0.0, 0.0]}]
 
@@ -64,7 +97,7 @@ def test_compute_cylinders_orders_axis_nodes_by_bp_and_reports_radii():
     assert out["joint_radius_nm"] == JOINT_RADIUS_NM
     assert out["n_helices"] == 1
     pts = out["helices"][0]["points"]
-    assert [p[0] for p in pts] == [0.0, 10.0, 20.0]      # sorted by bp
+    assert [p[0] for p in pts] == [0.0, 10.0, 20.0]  # sorted by bp
     assert all(p[1] == 1.0 for p in pts)
 
 
@@ -82,11 +115,11 @@ def test_real_6hb_yields_a_tube_per_helix_and_crossover_joints():
     assert res["axis"], "predict_shape emits helix-centre axis nodes"
     out = compute_cylinders(design, res["axis"])
 
-    assert out["n_helices"] == 6                      # one tube per helix
+    assert out["n_helices"] == 6  # one tube per helix
     for h in out["helices"]:
-        assert len(h["points"]) >= 2                  # a drawable chain
+        assert len(h["points"]) >= 2  # a drawable chain
         assert all(len(p) == 3 for p in h["points"])
-        assert len(h["rmsf"]) == len(h["points"])     # parallel per-node RMSF slot
+        assert len(h["rmsf"]) == len(h["points"])  # parallel per-node RMSF slot
     # Joints are a non-empty subset of the crossovers (both ends must be duplex-core).
     assert 0 < out["n_joints"] <= len(design.crossovers)
     for j in out["joints"]:
@@ -113,14 +146,20 @@ def test_axis_nodes_are_helix_centre_not_backbone_midpoint():
     # Axis nodes ARE the RMSF/mesh (duplex-core) nodes → no ssDNA, full colour coverage.
     assert axis_bp == rmsf_bp
     # The cached axis differs from the backbone-midpoint fallback (helical wobble removed).
-    fallback = {(n["helix_id"], n["bp_index"]): n["position"]
-                for n in axis_from_backbones(res["positions"], res["rmsf"])}
+    fallback = {
+        (n["helix_id"], n["bp_index"]): n["position"]
+        for n in axis_from_backbones(res["positions"], res["rmsf"])
+    }
     solver = {(n["helix_id"], n["bp_index"]): n["position"] for n in res["axis"]}
     shared = set(fallback) & set(solver)
     assert shared
-    diffs = [abs(fallback[k][0] - solver[k][0]) + abs(fallback[k][1] - solver[k][1])
-             + abs(fallback[k][2] - solver[k][2]) for k in shared]
-    assert max(diffs) > 1e-6      # the two axis definitions genuinely differ
+    diffs = [
+        abs(fallback[k][0] - solver[k][0])
+        + abs(fallback[k][1] - solver[k][1])
+        + abs(fallback[k][2] - solver[k][2])
+        for k in shared
+    ]
+    assert max(diffs) > 1e-6  # the two axis definitions genuinely differ
 
 
 def test_rmsf_heatmap_attached_per_node_with_p95_ramp():

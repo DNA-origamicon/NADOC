@@ -61,12 +61,14 @@ def _with_tails(design, **kw) -> Design:
     d = design.model_copy(deep=True)
     d.extensions = [
         StrandExtension(strand_id=d.strands[1].id, end="three_prime", sequence="TT"),
-        StrandExtension(strand_id=d.strands[2].id, end="five_prime",  sequence="A"),
+        StrandExtension(strand_id=d.strands[2].id, end="five_prime", sequence="A"),
         StrandExtension(strand_id=d.strands[4].id, end="three_prime", sequence="GCTAG"),
     ]
     if kw.get("modification_only"):
         d.extensions.append(
-            StrandExtension(strand_id=d.strands[6].id, end="five_prime", modification="cy3")
+            StrandExtension(
+                strand_id=d.strands[6].id, end="five_prime", modification="cy3"
+            )
         )
     return d
 
@@ -75,7 +77,9 @@ def _arrays(design):
     """(r, bp, stack, three_prime, seq, ext_idx_by_key) — ext_idx_by_key maps each
     ``("__ext_<id>", bead_i, direction)`` tail-bead key to its bead index."""
     r, bp, stack, tp, _orient, seq, ntkey = _build_nt_arrays(design, return_nt_key=True)
-    ext = {(h, b, dr): i for (h, b, dr, k), i in ntkey.items() if h.startswith("__ext_")}
+    ext = {
+        (h, b, dr): i for (h, b, dr, k), i in ntkey.items() if h.startswith("__ext_")
+    }
     return r, bp, stack, tp, seq, ext
 
 
@@ -86,6 +90,7 @@ def _five_prime_of(tp) -> dict:
 
 # ── no-regression: extension-free designs are untouched ───────────────────────
 
+
 def test_no_extensions_no_beads(routed_6hb):
     assert routed_6hb.extensions == []
     *_, ext = _arrays(routed_6hb)
@@ -93,6 +98,7 @@ def test_no_extensions_no_beads(routed_6hb):
 
 
 # ── pin #1: bead count grows by exactly the extension-base total ──────────────
+
 
 def test_bead_count_grows_by_extension_base_total(routed_6hb):
     base_r, *_ = _build_nt_arrays(routed_6hb)
@@ -106,14 +112,15 @@ def test_bead_count_grows_by_extension_base_total(routed_6hb):
 def test_modification_only_extension_adds_no_beads(routed_6hb):
     """A cy3/biotin with no sequence is not DNA: zero beads (it still renders)."""
     plain = _with_tails(routed_6hb)
-    mod   = _with_tails(routed_6hb, modification_only=True)
+    mod = _with_tails(routed_6hb, modification_only=True)
     assert len(mod.extensions) == len(plain.extensions) + 1
     r_plain, *_ = _build_nt_arrays(plain)
-    r_mod,   *_ = _build_nt_arrays(mod)
+    r_mod, *_ = _build_nt_arrays(mod)
     assert len(r_mod) == len(r_plain)
 
 
 # ── pin #2: tail beads are single-stranded (unpaired) ─────────────────────────
+
 
 def test_tail_beads_are_unpaired(routed_6hb):
     d = _with_tails(routed_6hb)
@@ -125,22 +132,26 @@ def test_tail_beads_are_unpaired(routed_6hb):
 # ── pin #3: the tail is threaded into the strand chain (3′ + stack) ───────────
 #   Can-go-red: emit the beads without splicing strand_indices → every tp is −1.
 
+
 def test_three_prime_tail_threads_anchor_to_tip(routed_6hb):
     """3′ tail: anchor → bead0 → … → bead n-1, and the outermost bead is a free 3′ end."""
     d = _with_tails(routed_6hb)
     ext3 = next(e for e in d.extensions if e.sequence == "GCTAG")
     _r, bp, stack, tp, _seq, ext = _arrays(d)
-    beads = [ext[(f"__ext_{ext3.id}", i, dr)]
-             for i in range(5) for dr in ("FORWARD", "REVERSE")
-             if (f"__ext_{ext3.id}", i, dr) in ext]
+    beads = [
+        ext[(f"__ext_{ext3.id}", i, dr)]
+        for i in range(5)
+        for dr in ("FORWARD", "REVERSE")
+        if (f"__ext_{ext3.id}", i, dr) in ext
+    ]
     assert len(beads) == 5
 
     anchor = _five_prime_of(tp)[beads[0]]
-    assert bp[anchor] >= 0                       # the anchor is real, paired duplex
+    assert bp[anchor] >= 0  # the anchor is real, paired duplex
     for a, b in zip([anchor, *beads[:-1]], beads):
-        assert tp[a] == b                        # 3′ chain runs anchor → tip
-        assert stack[a] == b                     # stacking mirrors it
-    assert tp[beads[-1]] == -1                   # the tip is the strand's 3′ end
+        assert tp[a] == b  # 3′ chain runs anchor → tip
+        assert stack[a] == b  # stacking mirrors it
+    assert tp[beads[-1]] == -1  # the tip is the strand's 3′ end
 
 
 def test_five_prime_tail_threads_tip_to_anchor(routed_6hb):
@@ -150,12 +161,12 @@ def test_five_prime_tail_threads_tip_to_anchor(routed_6hb):
     d = _with_tails(routed_6hb)
     ext5 = next(e for e in d.extensions if e.end == "five_prime")
     _r, bp, stack, tp, _seq, ext = _arrays(d)
-    (key, bead), = [(k, i) for k, i in ext.items() if k[0] == f"__ext_{ext5.id}"]
-    assert key[1] == 0                           # a 1-base tail: bead 0 IS the tip
+    ((key, bead),) = [(k, i) for k, i in ext.items() if k[0] == f"__ext_{ext5.id}"]
+    assert key[1] == 0  # a 1-base tail: bead 0 IS the tip
 
-    assert bead not in _five_prime_of(tp)        # free 5′ end: no chain predecessor
+    assert bead not in _five_prime_of(tp)  # free 5′ end: no chain predecessor
     anchor = int(tp[bead])
-    assert bp[anchor] >= 0                       # threads INTO the duplex anchor
+    assert bp[anchor] >= 0  # threads INTO the duplex anchor
     assert stack[bead] == anchor
 
 
@@ -163,22 +174,24 @@ def test_five_prime_tail_is_walked_outermost_first(routed_6hb):
     """A multi-base 5′ tail runs bead n-1 (outermost = 5′ terminus) → … → bead 0 →
     anchor, and its bases index ext.sequence 5′→3′ along that walk."""
     d = _with_tails(routed_6hb)
-    d.extensions = [StrandExtension(
-        strand_id=d.strands[2].id, end="five_prime", sequence="GCA")]
+    d.extensions = [
+        StrandExtension(strand_id=d.strands[2].id, end="five_prime", sequence="GCA")
+    ]
     _r, bp, _stack, tp, seq, ext = _arrays(d)
     e = d.extensions[0]
     dr = next(k[2] for k in ext)
     b2, b1, b0 = (ext[(f"__ext_{e.id}", i, dr)] for i in (2, 1, 0))
 
-    assert b2 not in _five_prime_of(tp)          # outermost bead is the 5′ terminus
-    assert tp[b2] == b1 and tp[b1] == b0         # walked inward toward the anchor
-    assert bp[int(tp[b0])] >= 0                  # bead0's 3′ neighbour is the anchor
-    assert [seq[b] for b in (b2, b1, b0)] == ["G", "C", "A"]   # ext.sequence 5′→3′
+    assert b2 not in _five_prime_of(tp)  # outermost bead is the 5′ terminus
+    assert tp[b2] == b1 and tp[b1] == b0  # walked inward toward the anchor
+    assert bp[int(tp[b0])] >= 0  # bead0's 3′ neighbour is the anchor
+    assert [seq[b] for b in (b2, b1, b0)] == ["G", "C", "A"]  # ext.sequence 5′→3′
 
 
 # ── pin #4: base identity from ext.sequence — the strand's cursor is NOT consumed ─
 #   This bug bit TWICE in oxDNA (topology_rows and count_undefined_bases each had
 #   their own copy of the sequence logic).
+
 
 def test_tail_bases_come_from_the_extension_not_the_strand_sequence(routed_6hb):
     d = _with_tails(routed_6hb)
@@ -188,7 +201,7 @@ def test_tail_bases_come_from_the_extension_not_the_strand_sequence(routed_6hb):
     ext3 = next(e for e in d.extensions if e.sequence == "GCTAG")
     dr = next(k[2] for k in ext if k[0] == f"__ext_{ext3.id}")
     chars = [seq[ext[(f"__ext_{ext3.id}", i, dr)]] for i in range(5)]
-    assert chars == list("GCTAG")                # own bases, i=0 nearest the anchor
+    assert chars == list("GCTAG")  # own bases, i=0 nearest the anchor
 
     # and every REAL nucleotide still reads its own designed base (cursor not shifted).
     r0, *_ = _build_nt_arrays(routed_6hb)
@@ -201,6 +214,7 @@ def test_tail_bases_come_from_the_extension_not_the_strand_sequence(routed_6hb):
 #   The twin of test_insert_geometry_even_and_noncoincident.  Cross-engine: this is
 #   the arc oxDNA and the atomistic model already put the tails on.
 
+
 def test_tail_arc_spacing_is_ssdna_contour(routed_6hb):
     d = _with_tails(routed_6hb)
     r, _bp, _stack, tp, _seq, ext = _arrays(d)
@@ -208,11 +222,11 @@ def test_tail_arc_spacing_is_ssdna_contour(routed_6hb):
 
     seglens: list[float] = []
     for key, i in ext.items():
-        for j in (int(tp[i]), five_p.get(i, -1)):    # both bonds this bead is in
+        for j in (int(tp[i]), five_p.get(i, -1)):  # both bonds this bead is in
             if j >= 0:
-                seglens.append(float(np.linalg.norm(r[i] - r[j])) / 10.0)   # Å → nm
+                seglens.append(float(np.linalg.norm(r[i] - r[j])) / 10.0)  # Å → nm
     assert seglens
-    assert min(seglens) > 0.1                       # never coincident (steric blow-up)
+    assert min(seglens) > 0.1  # never coincident (steric blow-up)
     # One ssDNA contour length per bead; the Bézier bow bounds the spread (≤0.793 nm).
     assert min(seglens) >= SSDNA_CONTOUR_PER_NT_NM - 1e-6
     assert max(seglens) <= 0.80
@@ -248,14 +262,16 @@ def test_tail_bows_away_from_the_helix_axis(routed_6hb):
 #   beads on the RELAXED structure.  It maps indices back through nt_key, so tail
 #   beads only surface here because they carry a key.
 
+
 def test_tails_surface_as_ssdna_runs_with_the_right_root_side(routed_6hb):
     d = _with_tails(routed_6hb)
     runs = _ssdna_runs(d)
     ext_runs = [
-        run for run in runs
+        run
+        for run in runs
         if any(k is not None and k[0].startswith("__ext_") for k in run["keys"])
     ]
-    assert len(ext_runs) == 3                      # one run per (sequence-carrying) tail
+    assert len(ext_runs) == 3  # one run per (sequence-carrying) tail
 
     by_end = {}
     for run in ext_runs:
@@ -264,13 +280,14 @@ def test_tails_surface_as_ssdna_runs_with_the_right_root_side(routed_6hb):
     for e in d.extensions:
         run = by_end[f"__ext_{e.id}"]
         assert run["root_key"] is not None
-        assert not run["root_key"][0].startswith("__")          # roots in the duplex
+        assert not run["root_key"][0].startswith("__")  # roots in the duplex
         # A 3′ tail's root PRECEDES it in the chain (root_side '5p'); a 5′ tail's
         # root FOLLOWS it ('3p') — the tail runs tip→anchor.
         assert run["root_side"] == ("5p" if e.end == "three_prime" else "3p")
 
 
 # ── pin #7: THE TRAP — tail keys must not leak into dsDNA-core / anchor paths ──
+
 
 def test_tails_stay_out_of_the_dsdna_core_shape_column(routed_6hb):
     """mrdna_shape_source's core mask + RMSF filter must drop tail beads.  A tail's
@@ -282,18 +299,36 @@ def test_tails_stay_out_of_the_dsdna_core_shape_column(routed_6hb):
     d = _with_tails(routed_6hb)
     ref = core_reference_geometry(d)
     frame = [
-        {"helix_id": p["helix_id"], "bp_index": p["bp_index"],
-         "direction": p["direction"], "backbone_position": p["backbone_position"]}
+        {
+            "helix_id": p["helix_id"],
+            "bp_index": p["bp_index"],
+            "direction": p["direction"],
+            "backbone_position": p["backbone_position"],
+        }
         for p in ref
     ] + [
-        {"helix_id": "__ext_abc", "bp_index": 0, "direction": "FORWARD",
-         "backbone_position": [9.0, 9.0, 9.0]},
+        {
+            "helix_id": "__ext_abc",
+            "bp_index": 0,
+            "direction": "FORWARD",
+            "backbone_position": [9.0, 9.0, 9.0],
+        },
     ]
     rmsf = [
-        {"helix_id": "__ext_abc", "bp_index": 0, "direction": "FORWARD",
-         "copy": 0, "rmsf_nm": 5.0},
-        {"helix_id": ref[0]["helix_id"], "bp_index": ref[0]["bp_index"],
-         "direction": ref[0]["direction"], "copy": 0, "rmsf_nm": 0.2},
+        {
+            "helix_id": "__ext_abc",
+            "bp_index": 0,
+            "direction": "FORWARD",
+            "copy": 0,
+            "rmsf_nm": 5.0,
+        },
+        {
+            "helix_id": ref[0]["helix_id"],
+            "bp_index": ref[0]["bp_index"],
+            "direction": ref[0]["direction"],
+            "copy": 0,
+            "rmsf_nm": 0.2,
+        },
     ]
     src = build_mrdna_shape_source(frame, ref, rmsf=rmsf)
     assert all(p["helix_id"] != "__ext_abc" for p in src["shape_frame"])
@@ -312,14 +347,16 @@ def test_tail_beads_are_never_anchor_tether_points(routed_6hb):
     anchors = [{"kind": "strand", "id": ext3.strand_id}]
 
     r, _bp, _stack, _tp, _seq, ext = _arrays(d)
-    tail_pts = {tuple(np.round(r[i], 6)) for k, i in ext.items()
-                if k[0] == f"__ext_{ext3.id}"}
+    tail_pts = {
+        tuple(np.round(r[i], 6)) for k, i in ext.items() if k[0] == f"__ext_{ext3.id}"
+    }
     pos = _anchor_nt_positions(d, anchors)
     assert len(pos) > 0
     assert not any(tuple(np.round(p, 6)) in tail_pts for p in pos)
 
 
 # ── cross-engine scale check: VoltronCoreScad's 334 tails ─────────────────────
+
 
 @pytest.mark.skipif(not VOLTRON.exists(), reason="VoltronCoreScad.nadoc not present")
 def test_voltroncore_model_grows_by_334_beads():
@@ -347,8 +384,10 @@ try:
     import sys
 
     from backend.core.mrdna_bridge import mrdna_tool_path
+
     sys.path.insert(0, mrdna_tool_path())
     import mrdna  # noqa: F401
+
     _has_mrdna = True
 except Exception:  # noqa: BLE001
     pass
@@ -364,7 +403,8 @@ def _model_seg_stats(design):
 
     r, bp, stack, tp, orient, seq, _ = _build_nt_arrays(design, return_nt_key=True)
     m = model_from_basepair_stack_3prime(
-        r, bp, stack, tp, sequence=seq, orientation=orient)
+        r, bp, stack, tp, sequence=seq, orientation=orient
+    )
     ss = sum(s.num_nt for s in m.segments if isinstance(s, SingleStrandedSegment))
     ds = sum(s.num_nt for s in m.segments if isinstance(s, DoubleStrandedSegment))
     return ss + ds, ss, ds
@@ -388,6 +428,7 @@ def test_tails_are_flexible_ssdna_in_the_built_model(routed_6hb):
 
 # ── pin #8 (slow, opt-in): a real ARBD sim runs end-to-end with the tails ─────
 
+
 @pytest.mark.slow
 @skip_no_mrdna
 def test_real_arbd_runs_with_extensions(tmp_path, routed_6hb):
@@ -409,8 +450,13 @@ def test_real_arbd_runs_with_extensions(tmp_path, routed_6hb):
     def _run(design, out):
         out.mkdir(parents=True, exist_ok=True)
         mrdna_model_from_nadoc(design).simulate(
-            output_name=_SIM_STEM, directory=str(out),
-            num_steps=500, timestep=200e-6, gpu=0, output_period=250)
+            output_name=_SIM_STEM,
+            directory=str(out),
+            num_steps=500,
+            timestep=200e-6,
+            gpu=0,
+            output_period=250,
+        )
         return extract_mrdna_results(design, out)
 
     d = _with_tails(routed_6hb)
@@ -423,9 +469,11 @@ def test_real_arbd_runs_with_extensions(tmp_path, routed_6hb):
 
     ids = {f"__ext_{e.id}" for e in d.extensions}
     tails = [p for p in res_with["positions"] if p["helix_id"] in ids]
-    assert len(tails) == n_ext                        # every tail bead follows the shape
+    assert len(tails) == n_ext  # every tail bead follows the shape
     assert all(isinstance(p["bp_index"], int) for p in tails)
-    assert not any(str(p["helix_id"]).startswith("__ext_") for p in res_base["positions"])
+    assert not any(
+        str(p["helix_id"]).startswith("__ext_") for p in res_base["positions"]
+    )
 
     # The tail beads join the simulated CG cloud — real particles, not bookkeeping.
     assert res_with["n_beads"] >= res_base["n_beads"]
@@ -438,13 +486,27 @@ def test_real_arbd_runs_with_extensions(tmp_path, routed_6hb):
     # neighbour (body OR same-tail) within a bond length, and (b) each tail stays rooted — at
     # least one of its beads sits on the duplex body.
     all_pos = np.array([p["backbone_position"] for p in res_with["positions"]])
-    body = np.array([p["backbone_position"] for p in res_with["positions"]
-                     if p["helix_id"] not in ids])
-    for p in tails:                                    # (a) bonded to the structure somewhere
+    body = np.array(
+        [
+            p["backbone_position"]
+            for p in res_with["positions"]
+            if p["helix_id"] not in ids
+        ]
+    )
+    for p in tails:  # (a) bonded to the structure somewhere
         pos = np.array(p["backbone_position"])
-        nn = np.sort(np.linalg.norm(all_pos - pos, axis=1))[1]   # nearest OTHER bead (skip self)
-        assert nn < 2.0, (p["helix_id"], p["bp_index"], nn)      # nm — not isolated
-    for e_id in ids:                                   # (b) tail rooted to the duplex body
-        tail_pos = np.array([p["backbone_position"] for p in tails if p["helix_id"] == e_id])
-        root_dmin = np.linalg.norm(body[:, None, :] - tail_pos[None, :, :], axis=2).min()
-        assert root_dmin < 2.0, (e_id, root_dmin)      # nm — at least one bead on the structure
+        nn = np.sort(np.linalg.norm(all_pos - pos, axis=1))[
+            1
+        ]  # nearest OTHER bead (skip self)
+        assert nn < 2.0, (p["helix_id"], p["bp_index"], nn)  # nm — not isolated
+    for e_id in ids:  # (b) tail rooted to the duplex body
+        tail_pos = np.array(
+            [p["backbone_position"] for p in tails if p["helix_id"] == e_id]
+        )
+        root_dmin = np.linalg.norm(
+            body[:, None, :] - tail_pos[None, :, :], axis=2
+        ).min()
+        assert root_dmin < 2.0, (
+            e_id,
+            root_dmin,
+        )  # nm — at least one bead on the structure

@@ -16,8 +16,16 @@ import numpy as np
 from backend.core.md_protocols import write_aksimentiev_enm_files
 
 
-def _atom_line(serial: int, name: str, resn: str, chain: str, resid: int,
-               x: float, y: float, z: float) -> str:
+def _atom_line(
+    serial: int,
+    name: str,
+    resn: str,
+    chain: str,
+    resid: int,
+    x: float,
+    y: float,
+    z: float,
+) -> str:
     # Column-accurate PDB ATOM record (name@12, resn@17, chain@21, resid@22, xyz@30).
     return (
         f"ATOM  {serial:5d} {name:<4s} {resn:<3s} {chain}{resid:>4d}    "
@@ -44,7 +52,7 @@ def _bonds_from_file(path: Path) -> set[tuple[int, int]]:
 def _brute_force(atoms: list[tuple], cut: float = 8.0) -> set[tuple[int, int]]:
     """Reference: inter-residue base-ring atom pairs within `cut` (the intended set)."""
     pos = {i: np.array(a[4:7], float) for i, a in enumerate(atoms)}
-    resid = {i: (a[2], a[3]) for i, a in enumerate(atoms)}   # (chain, resid)
+    resid = {i: (a[2], a[3]) for i, a in enumerate(atoms)}  # (chain, resid)
     expected = set()
     for i, j in combinations(range(len(atoms)), 2):
         if resid[i] == resid[j]:
@@ -56,10 +64,18 @@ def _brute_force(atoms: list[tuple], cut: float = 8.0) -> set[tuple[int, int]]:
 
 def test_enm_bonds_are_inter_residue_within_cutoff(tmp_path: Path) -> None:
     atoms = [
-        ("N1", "ADE", "A", 1, 0.0, 0.0, 0.0),   # idx 0
-        ("C2", "ADE", "A", 1, 1.4, 0.0, 0.0),   # idx 1  (intra-pair with 0 — must NOT bond)
-        ("N1", "THY", "A", 2, 3.0, 0.0, 0.0),   # idx 2
-        ("C2", "THY", "A", 2, 4.4, 0.0, 0.0),   # idx 3
+        ("N1", "ADE", "A", 1, 0.0, 0.0, 0.0),  # idx 0
+        (
+            "C2",
+            "ADE",
+            "A",
+            1,
+            1.4,
+            0.0,
+            0.0,
+        ),  # idx 1  (intra-pair with 0 — must NOT bond)
+        ("N1", "THY", "A", 2, 3.0, 0.0, 0.0),  # idx 2
+        ("C2", "THY", "A", 2, 4.4, 0.0, 0.0),  # idx 3
         ("N1", "ADE", "A", 3, 50.0, 0.0, 0.0),  # idx 4  (far — no bonds)
     ]
     pdb = tmp_path / "small.pdb"
@@ -68,7 +84,7 @@ def test_enm_bonds_are_inter_residue_within_cutoff(tmp_path: Path) -> None:
     report = write_aksimentiev_enm_files(pdb, tmp_path, "small")
 
     expected = _brute_force(atoms)
-    assert expected == {(0, 2), (0, 3), (1, 2), (1, 3)}   # sanity on the fixture
+    assert expected == {(0, 2), (0, 3), (1, 2), (1, 3)}  # sanity on the fixture
 
     bonds = _bonds_from_file(tmp_path / "small_k0.5.enm.extra")
     assert bonds == expected
@@ -93,17 +109,21 @@ def test_enm_matches_brute_force_on_a_denser_cluster(tmp_path: Path) -> None:
     for cx in range(4):
         for cy in range(4):
             resid += 1
-            base = np.array([cx * 6.0, cy * 6.0, 0.0])   # residues ~6 Å apart → many in range
+            base = np.array(
+                [cx * 6.0, cy * 6.0, 0.0]
+            )  # residues ~6 Å apart → many in range
             for n in names:
                 p = base + rng.normal(0, 0.8, 3)
-                atoms.append((n, "ADE", "A", resid, float(p[0]), float(p[1]), float(p[2])))
+                atoms.append(
+                    (n, "ADE", "A", resid, float(p[0]), float(p[1]), float(p[2]))
+                )
     pdb = tmp_path / "grid.pdb"
     _write_pdb(pdb, atoms)
 
     write_aksimentiev_enm_files(pdb, tmp_path, "grid")
     bonds = _bonds_from_file(tmp_path / "grid_k0.5.enm.extra")
     assert bonds == _brute_force(atoms)
-    assert len(bonds) > 0   # the cluster genuinely produces cross-residue restraints
+    assert len(bonds) > 0  # the cluster genuinely produces cross-residue restraints
 
 
 def test_enm_handles_no_pairs_in_range(tmp_path: Path) -> None:

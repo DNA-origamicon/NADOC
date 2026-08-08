@@ -12,6 +12,7 @@ for explicit-MD verification — flag the junction, not the whole box.
 
 torch is the optional dep (see energy.py).
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -28,21 +29,28 @@ class EnsembleForceNet(nn.Module):
     member — ensembling averages out variance) and a per-atom scalar uncertainty u_i =
     RMS deviation of the members' force vectors at atom i (Å-force units)."""
 
-    def __init__(self, k: int = 5, hidden: int = 48, n_layers: int = 3, cutoff: float = 5.0):
+    def __init__(
+        self, k: int = 5, hidden: int = 48, n_layers: int = 3, cutoff: float = 5.0
+    ):
         super().__init__()
-        self.members = nn.ModuleList([
-            ForceNet(hidden=hidden, n_layers=n_layers, cutoff=cutoff) for _ in range(k)
-        ])
+        self.members = nn.ModuleList(
+            [
+                ForceNet(hidden=hidden, n_layers=n_layers, cutoff=cutoff)
+                for _ in range(k)
+            ]
+        )
 
     def stack(self, z, pos, edge_index) -> torch.Tensor:
         """All members' force predictions, stacked [K, N, 3]."""
         return torch.stack([m(z, pos, edge_index) for m in self.members], dim=0)
 
     def forward(self, z, pos, edge_index):
-        f = self.stack(z, pos, edge_index)                 # [K,N,3]
-        mean = f.mean(dim=0)                                # [N,3]
+        f = self.stack(z, pos, edge_index)  # [K,N,3]
+        mean = f.mean(dim=0)  # [N,3]
         # per-atom epistemic uncertainty: RMS spread of the force VECTORS across members
-        var = ((f - mean[None]) ** 2).sum(dim=-1).mean(dim=0)   # [N]  (mean_k |f_k - fbar|^2)
+        var = (
+            ((f - mean[None]) ** 2).sum(dim=-1).mean(dim=0)
+        )  # [N]  (mean_k |f_k - fbar|^2)
         return mean, torch.sqrt(var + 1e-12)
 
 
@@ -64,7 +72,8 @@ def calibration_score(uncertainty, error) -> dict:
     u = np.asarray(uncertainty, dtype=float)
     e = np.asarray(error, dtype=float)
     pear = float(np.corrcoef(u, e)[0, 1])
-    ru = np.argsort(np.argsort(u)); re = np.argsort(np.argsort(e))     # rank transform
+    ru = np.argsort(np.argsort(u))
+    re = np.argsort(np.argsort(e))  # rank transform
     spear = float(np.corrcoef(ru, re)[0, 1])
     rc = reliability_curve(u, e)
     # fraction of adjacent reliability-bin steps that increase (1.0 = perfectly monotone)

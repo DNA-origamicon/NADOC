@@ -64,7 +64,9 @@ def assembly_relax_status(assembly, conn, inst_a, inst_b) -> dict[str, Any]:
         # complement↔complement arc, collapsed by one part translation. A
         # length>0 ss linker (with a bridge) is deferred — use ds for those.
         if conn.length_value != 0:
-            out["reason"] = "ss linker relax is only supported for zero-length (indirect) linkers."
+            out["reason"] = (
+                "ss linker relax is only supported for zero-length (indirect) linkers."
+            )
             return out
     elif lt == "ds":
         if conn.length_value == 0:
@@ -74,7 +76,9 @@ def assembly_relax_status(assembly, conn, inst_a, inst_b) -> dict[str, Any]:
         out["reason"] = f"Unsupported linker type {lt!r}."
         return out
     if inst_a.id == inst_b.id:
-        out["reason"] = "Both overhangs are on the same part instance; moving it can't relax the linker."
+        out["reason"] = (
+            "Both overhangs are on the same part instance; moving it can't relax the linker."
+        )
         return out
 
     a_fixed = bool(getattr(inst_a, "fixed", False))
@@ -82,21 +86,26 @@ def assembly_relax_status(assembly, conn, inst_a, inst_b) -> dict[str, Any]:
     if a_fixed and b_fixed:
         out["reason"] = "Both parts are fixed; free a part to relax."
         return out
-    if a_fixed:        # only A fixed → move B
+    if a_fixed:  # only A fixed → move B
         fixed_id, movable_id = inst_a.id, inst_b.id
-    elif b_fixed:      # only B fixed → move A
+    elif b_fixed:  # only B fixed → move A
         fixed_id, movable_id = inst_b.id, inst_a.id
-    else:              # neither fixed → hold A, move B
+    else:  # neither fixed → hold A, move B
         fixed_id, movable_id = inst_a.id, inst_b.id
 
-    out.update(available=True, reason="", movable_instance_id=movable_id,
-               fixed_instance_id=fixed_id)
+    out.update(
+        available=True,
+        reason="",
+        movable_instance_id=movable_id,
+        fixed_instance_id=fixed_id,
+    )
     return out
 
 
 # ── Anchor + axial exit direction ────────────────────────────────────────────
-def _world_anchor_axial(design, instance, ovhg_id: str, attach: str,
-                        oh_dom) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+def _world_anchor_axial(
+    design, instance, ovhg_id: str, attach: str, oh_dom
+) -> Optional[Tuple[np.ndarray, np.ndarray]]:
     """World ``(anchor_position, axial_exit_direction)`` at the overhang's
     attach end.
 
@@ -116,15 +125,15 @@ def _world_anchor_axial(design, instance, ovhg_id: str, attach: str,
 
     from backend.core.deformation import deformed_nucleotide_arrays
 
-    tip_bp  = oh_dom.end_bp if ovhg_id.endswith("_3p") else oh_dom.start_bp
+    tip_bp = oh_dom.end_bp if ovhg_id.endswith("_3p") else oh_dom.start_bp
     root_bp = oh_dom.start_bp if tip_bp == oh_dom.end_bp else oh_dom.end_bp
     attach_bp = tip_bp if attach == "free_end" else root_bp
-    other_bp  = root_bp if attach == "free_end" else tip_bp
+    other_bp = root_bp if attach == "free_end" else tip_bp
     direction = _opposite_direction(oh_dom.direction)
-    dir_int   = 0 if direction == Direction.FORWARD else 1
+    dir_int = 0 if direction == Direction.FORWARD else 1
 
-    arrs    = deformed_nucleotide_arrays(helix, design)
-    bp_arr  = arrs["bp_indices"]
+    arrs = deformed_nucleotide_arrays(helix, design)
+    bp_arr = arrs["bp_indices"]
     dir_arr = arrs["directions"]
 
     def _pos_local(bp: int) -> Optional[np.ndarray]:
@@ -160,7 +169,9 @@ def _world_anchor_axial(design, instance, ovhg_id: str, attach: str,
 
 
 # ── Connector-arc endpoints (ACTUAL emitted backbone beads) ───────────────────
-def _connector_arc_endpoints(nucs: list, strands: list, conn) -> dict[str, Optional[Tuple[np.ndarray, np.ndarray]]]:
+def _connector_arc_endpoints(
+    nucs: list, strands: list, conn
+) -> dict[str, Optional[Tuple[np.ndarray, np.ndarray]]]:
     """``{'a': (anchor, bead), 'b': (anchor, bead)}`` — the two ends of each ds
     side strand's rendered connector arc, read from the EMITTED ``nucs``:
 
@@ -193,10 +204,10 @@ def _connector_arc_endpoints(nucs: list, strands: list, conn) -> dict[str, Optio
         domains = strand.domains or []
         for i in range(len(domains) - 1):
             d0, d1 = domains[i], domains[i + 1]
-            d0_bridge = (d0.helix_id == bridge_hid)
-            d1_bridge = (d1.helix_id == bridge_hid)
+            d0_bridge = d0.helix_id == bridge_hid
+            d1_bridge = d1.helix_id == bridge_hid
             if d0_bridge == d1_bridge:
-                continue   # need exactly one bridge domain in this adjacent pair
+                continue  # need exactly one bridge domain in this adjacent pair
             p0 = pos.get((sid, d0.helix_id, int(d0.end_bp)))
             p1 = pos.get((sid, d1.helix_id, int(d1.start_bp)))
             if p0 is None or p1 is None:
@@ -210,8 +221,13 @@ def _connector_arc_endpoints(nucs: list, strands: list, conn) -> dict[str, Optio
 
 # ── Placement solver (two translations, on the ACTUAL emitted beads) ──────────
 def relax_assembly_linker(
-    conn, nucs: list, strands: list, inst_moved,
-    *, movable_instance_id: str, fixed_instance_id: str,
+    conn,
+    nucs: list,
+    strands: list,
+    inst_moved,
+    *,
+    movable_instance_id: str,
+    fixed_instance_id: str,
 ) -> Tuple[list[float], list[float], dict[str, Any]]:
     """Two-translation, rotation-free relax computed on the ACTUAL emitted
     backbone-bead coordinates (``nucs`` from
@@ -245,14 +261,15 @@ def relax_assembly_linker(
     t2 = (bead_m + t1) - anchor_m
 
     # Movable part — pure world translation (rotation block unchanged).
-    D = np.eye(4); D[:3, 3] = t2
+    D = np.eye(4)
+    D[:3, 3] = t2
     T_new = D @ inst_moved.transform.to_array()
 
     info = {
         "moved_instance_id": movable_instance_id,
         "fixed_instance_id": fixed_instance_id,
         "bridge_translation_nm": [float(v) for v in t1],
-        "part_translation_nm":   [float(v) for v in t2],
+        "part_translation_nm": [float(v) for v in t2],
         # The arc lengths this move is closing (actual emitted-bead distances).
         "pre_arc_fixed_nm": float(np.linalg.norm(bead_f - anchor_f)),
         "pre_arc_moved_nm": float(np.linalg.norm(bead_m - anchor_m)),
@@ -261,7 +278,9 @@ def relax_assembly_linker(
 
 
 # ── Indirect (zero-length ss) relax — single complement↔complement arc ─────────
-def _indirect_arc_endpoints(nucs: list, strands: list, conn) -> Optional[dict[str, np.ndarray]]:
+def _indirect_arc_endpoints(
+    nucs: list, strands: list, conn
+) -> Optional[dict[str, np.ndarray]]:
     """``{instance_id: endpoint}`` for a zero-length indirect ss linker.
 
     The single ``__lnk__<id>__s`` strand has domains ``[comp_a, comp_b]`` (no
@@ -280,7 +299,7 @@ def _indirect_arc_endpoints(nucs: list, strands: list, conn) -> Optional[dict[st
         return None
     domains = strand.domains or []
     if len(domains) != 2:
-        return None   # not the zero-bridge indirect form
+        return None  # not the zero-bridge indirect form
 
     pos: dict = {}
     for n in nucs:
@@ -302,8 +321,13 @@ def _indirect_arc_endpoints(nucs: list, strands: list, conn) -> Optional[dict[st
 
 
 def relax_assembly_indirect_linker(
-    conn, nucs: list, strands: list, inst_moved,
-    *, movable_instance_id: str, fixed_instance_id: str,
+    conn,
+    nucs: list,
+    strands: list,
+    inst_moved,
+    *,
+    movable_instance_id: str,
+    fixed_instance_id: str,
 ) -> Tuple[list[float], dict[str, Any]]:
     """Single-translation relax for a zero-length indirect ss linker.
 
@@ -318,12 +342,15 @@ def relax_assembly_indirect_linker(
     """
     ends = _indirect_arc_endpoints(nucs, strands, conn)
     if not ends or movable_instance_id not in ends or fixed_instance_id not in ends:
-        raise ValueError("Could not resolve the indirect linker's binding-domain beads from emitted geometry.")
+        raise ValueError(
+            "Could not resolve the indirect linker's binding-domain beads from emitted geometry."
+        )
     p_fixed = ends[fixed_instance_id]
     p_moved = ends[movable_instance_id]
 
     t = p_fixed - p_moved
-    D = np.eye(4); D[:3, 3] = t
+    D = np.eye(4)
+    D[:3, 3] = t
     T_new = D @ inst_moved.transform.to_array()
 
     info = {

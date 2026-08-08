@@ -82,9 +82,19 @@ class LiveSession:
     steering).  Read the latest captured frame with :meth:`frame`.
     """
 
-    def __init__(self, session_id: str, session, *, frame_builder,
-                 field_oxdna: float, field_dir, burst_steps: int = 500,
-                 rundir: Path | None = None, design=None, design_ref=None):
+    def __init__(
+        self,
+        session_id: str,
+        session,
+        *,
+        frame_builder,
+        field_oxdna: float,
+        field_dir,
+        burst_steps: int = 500,
+        rundir: Path | None = None,
+        design=None,
+        design_ref=None,
+    ):
         self.session_id = session_id
         self._session = session
         self._frame_builder = frame_builder
@@ -97,9 +107,9 @@ class LiveSession:
         self.design_ref = Path(design_ref) if design_ref is not None else None
 
         self._lock = threading.Lock()
-        self._pending: tuple | None = None       # (field_oxdna|None, dir|None)
-        self._pending_reconfig: tuple | None = None   # (rebuild_fn, field_oxdna, dir)
-        self._latest: list | None = None          # last captured positions payload
+        self._pending: tuple | None = None  # (field_oxdna|None, dir|None)
+        self._pending_reconfig: tuple | None = None  # (rebuild_fn, field_oxdna, dir)
+        self._latest: list | None = None  # last captured positions payload
         self._field_oxdna = float(field_oxdna)
         self._field_dir = list(field_dir)
         self._n_bursts = 0
@@ -111,7 +121,8 @@ class LiveSession:
     # ── Lifecycle ─────────────────────────────────────────────────────────────
     def start(self) -> None:
         self._thread = threading.Thread(
-            target=self._run, name=f"oxdna-live-{self.session_id}", daemon=True)
+            target=self._run, name=f"oxdna-live-{self.session_id}", daemon=True
+        )
         self._thread.start()
 
     def _run(self) -> None:
@@ -123,8 +134,9 @@ class LiveSession:
             try:
                 # Field on at the requested magnitude + direction, then a first
                 # capture so the display has a frame before the first burst lands.
-                self._session.set_field(field_oxdna=self._field_oxdna,
-                                        field_dir=self._field_dir)
+                self._session.set_field(
+                    field_oxdna=self._field_oxdna, field_dir=self._field_dir
+                )
                 self.status = "running"
                 self._capture_frame()
                 while not self._stop.is_set():
@@ -220,8 +232,9 @@ class LiveSession:
             "backend_reason": getattr(stepper, "fallback_reason", None),
         }
 
-    def reconfigure(self, rebuild_fn, *, field_oxdna: float = 0.0,
-                    field_dir=None) -> None:
+    def reconfigure(
+        self, rebuild_fn, *, field_oxdna: float = 0.0, field_dir=None
+    ) -> None:
         """Queue a live recomposition (the element set changed — floor/field/anchors
         toggled).  ``rebuild_fn()`` (built by the route) returns the
         ``(new_session, new_frame_builder)`` for the new composition, seeded from the

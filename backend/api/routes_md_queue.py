@@ -17,6 +17,7 @@ must survive closing the tab.  See ``backend/core/md_queue.py`` for the model.
 
 Lives outside ``routes_md.py`` (already ~4,500 lines and an active carve-up target).
 """
+
 from __future__ import annotations
 
 import logging
@@ -108,7 +109,7 @@ async def advance_md_queue(workspace: Path) -> list[str]:
 
     jobs = MdJob.list_jobs(workspace)
     if md_queue.running_job(jobs) is not None:
-        return []   # something is in flight — the queue waits
+        return []  # something is in flight — the queue waits
 
     job_id, stale = md_queue.next_startable(queued, jobs)
     if stale:
@@ -120,11 +121,15 @@ async def advance_md_queue(workspace: Path) -> list[str]:
     # Same handler the ▶ Run button hits — one launch path, one set of gates.
     from backend.api.routes_md import start_md_job
 
-    md_queue.dequeue(workspace, job_id)   # dequeue FIRST: a start that throws must not retry forever
+    md_queue.dequeue(
+        workspace, job_id
+    )  # dequeue FIRST: a start that throws must not retry forever
     try:
         await start_md_job(job_id)
     except Exception:
-        logger.exception("md queue: could not start %s — dropped from the queue", job_id)
+        logger.exception(
+            "md queue: could not start %s — dropped from the queue", job_id
+        )
         return []
     logger.info("md queue: started %s", job_id)
     return [job_id]

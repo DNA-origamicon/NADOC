@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
 
-_MIN_ESS = 100       # minimum effective sample size per coordinate
-_MAX_RUNNING_DRIFT = 0.10   # max fractional drift of running mean in final 25% of traj
+_MIN_ESS = 100  # minimum effective sample size per coordinate
+_MAX_RUNNING_DRIFT = 0.10  # max fractional drift of running mean in final 25% of traj
 
 _DOF_NAMES = [
     "q0 (separation, Å)",
@@ -44,6 +44,7 @@ _DOF_NAMES = [
 
 
 # ── Block averaging ───────────────────────────────────────────────────────────
+
 
 def _block_average_variance(x: np.ndarray, min_blocks: int = 4) -> np.ndarray:
     """
@@ -69,14 +70,20 @@ def _block_average_variance(x: np.ndarray, min_blocks: int = 4) -> np.ndarray:
     if max_block_size < 2:
         return np.var(x, axis=0, ddof=1)[None, ...]
 
-    block_sizes = np.unique(np.logspace(0, np.log2(max_block_size), num=20, base=2).astype(int))
+    block_sizes = np.unique(
+        np.logspace(0, np.log2(max_block_size), num=20, base=2).astype(int)
+    )
     block_vars = []
     for bs in block_sizes:
         n_blocks = n // bs
         if n_blocks < min_blocks:
             break
-        trimmed = x[:n_blocks * bs]
-        blocks = trimmed.reshape(n_blocks, bs, -1) if x.ndim > 1 else trimmed.reshape(n_blocks, bs)
+        trimmed = x[: n_blocks * bs]
+        blocks = (
+            trimmed.reshape(n_blocks, bs, -1)
+            if x.ndim > 1
+            else trimmed.reshape(n_blocks, bs)
+        )
         block_means = blocks.mean(axis=1)
         block_vars.append(np.var(block_means, axis=0, ddof=1) / n_blocks)
     return np.array(block_vars)
@@ -84,7 +91,10 @@ def _block_average_variance(x: np.ndarray, min_blocks: int = 4) -> np.ndarray:
 
 # ── Integrated autocorrelation time ──────────────────────────────────────────
 
-def _integrated_autocorr_time(x: np.ndarray, max_lag_fraction: float = 0.1) -> np.ndarray:
+
+def _integrated_autocorr_time(
+    x: np.ndarray, max_lag_fraction: float = 0.1
+) -> np.ndarray:
     """
     Estimate the integrated autocorrelation time τ for each column of x.
 
@@ -122,6 +132,7 @@ def _integrated_autocorr_time(x: np.ndarray, max_lag_fraction: float = 0.1) -> n
 
 # ── Running mean / covariance ─────────────────────────────────────────────────
 
+
 def _running_mean(Q: np.ndarray, n_points: int = 50) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute the running mean of Q at n_points evenly spaced intervals.
@@ -135,7 +146,9 @@ def _running_mean(Q: np.ndarray, n_points: int = 50) -> tuple[np.ndarray, np.nda
     return checkpoints, means
 
 
-def _running_cov_diag(Q: np.ndarray, n_points: int = 50) -> tuple[np.ndarray, np.ndarray]:
+def _running_cov_diag(
+    Q: np.ndarray, n_points: int = 50
+) -> tuple[np.ndarray, np.ndarray]:
     """Return (frame_indices, running_variances) for diagonal of covariance."""
     n = len(Q)
     checkpoints = np.unique(np.linspace(max(2, n // n_points), n, n_points, dtype=int))
@@ -144,6 +157,7 @@ def _running_cov_diag(Q: np.ndarray, n_points: int = 50) -> tuple[np.ndarray, np
 
 
 # ── Convergence check ─────────────────────────────────────────────────────────
+
 
 def check(
     params: CrossoverParameters,
@@ -199,7 +213,7 @@ def check(
 
         # Running mean drift: fraction of final-value range seen in last 25%
         n = len(Q)
-        final_quarter = Q[3 * n // 4:]
+        final_quarter = Q[3 * n // 4 :]
         overall_mean = Q.mean(axis=0)
         q_std = Q.std(axis=0)
         q_std_safe = np.where(q_std > 1e-10, q_std, 1.0)
@@ -224,10 +238,18 @@ def check(
             f"DO NOT USE THESE PARAMETERS — {len(warnings)} convergence warning(s). "
             "Extend the production run and re-run param_extract.extract_parameters()."
         )
-        logger.warning("Convergence check FAILED for %s: %s", params.variant_label, "; ".join(warnings))
+        logger.warning(
+            "Convergence check FAILED for %s: %s",
+            params.variant_label,
+            "; ".join(warnings),
+        )
     else:
         recommendation = "Convergence check passed."
-        logger.info("Convergence check PASSED for %s (n_frames=%d)", params.variant_label, params.n_frames)
+        logger.info(
+            "Convergence check PASSED for %s (n_frames=%d)",
+            params.variant_label,
+            params.n_frames,
+        )
 
     return {
         "passed": passed,
@@ -241,6 +263,7 @@ def check(
 
 
 # ── Optional diagnostic plots ─────────────────────────────────────────────────
+
 
 def plot_diagnostics(
     q_series: np.ndarray,
@@ -257,6 +280,7 @@ def plot_diagnostics(
     """
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
@@ -306,7 +330,9 @@ def plot_diagnostics(
             ax.semilogx(block_sizes, bv[:, i] if bv.ndim > 1 else bv)
             ax.set_ylabel(name, fontsize=7)
         axes[-1].set_xlabel("Block size (frames)")
-        axes[0].set_title(f"Block-averaged variance (Flyvbjerg-Petersen) — {variant_label}")
+        axes[0].set_title(
+            f"Block-averaged variance (Flyvbjerg-Petersen) — {variant_label}"
+        )
         fig.tight_layout()
         fig.savefig(out_dir / "block_avg.png", dpi=120)
         plt.close(fig)

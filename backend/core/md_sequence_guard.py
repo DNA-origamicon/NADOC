@@ -12,15 +12,28 @@ insufficient: it blocks only a design with ZERO assigned bases across ALL strand
 design with sequenced STAPLES but a ``None`` SCAFFOLD passes it. This module checks the
 SCAFFOLD specifically and is wired at the shared build choke point AND at RunPod launch.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
-_DNA_SELECT = ("resname ADE THY GUA CYT DA DT DG DC "
-               "DA3 DA5 DT3 DT5 DG3 DG5 DC3 DC5 A T G C")
-_BASE_OF = {"ADE": "A", "THY": "T", "GUA": "G", "CYT": "C",
-            "DA": "A", "DT": "T", "DG": "G", "DC": "C",
-            "A": "A", "T": "T", "G": "G", "C": "C"}
+_DNA_SELECT = (
+    "resname ADE THY GUA CYT DA DT DG DC DA3 DA5 DT3 DT5 DG3 DG5 DC3 DC5 A T G C"
+)
+_BASE_OF = {
+    "ADE": "A",
+    "THY": "T",
+    "GUA": "G",
+    "CYT": "C",
+    "DA": "A",
+    "DT": "T",
+    "DG": "G",
+    "DC": "C",
+    "A": "A",
+    "T": "T",
+    "G": "G",
+    "C": "C",
+}
 
 
 def _strand_build_nt_count(design, strand) -> int:
@@ -29,17 +42,20 @@ def _strand_build_nt_count(design, strand) -> int:
     Mirrors ``atomistic._build_sequence_map``'s position enumeration exactly, so the
     coverage comparison against the sequence length is apples-to-apples."""
     from backend.core.atomistic import _atomistic_domain_bp_range  # noqa: PLC0415
+
     ls_lookup: dict = {}
     for h in design.helices:
         for ls in h.loop_skips:
-            ls_lookup[(h.id, ls.bp_index)] = ls_lookup.get((h.id, ls.bp_index), 0) + ls.delta
+            ls_lookup[(h.id, ls.bp_index)] = (
+                ls_lookup.get((h.id, ls.bp_index), 0) + ls.delta
+            )
     n = 0
     for domain in strand.domains:
         for bp in _atomistic_domain_bp_range(domain, strand):
             delta = ls_lookup.get((domain.helix_id, bp), 0)
             if delta <= -1:
-                continue                      # deletion (skip): no nucleotide built
-            n += max(1, delta + 1)            # loop copies add nucleotides
+                continue  # deletion (skip): no nucleotide built
+            n += max(1, delta + 1)  # loop copies add nucleotides
     return n
 
 
@@ -50,20 +66,29 @@ def scaffold_sequence_problems(design) -> list[str]:
     matching how the endpoint guard treats it) and the loop/skip-aware nt count so it does
     NOT false-positive on skip designs (fewer sequence chars than raw domain span)."""
     from backend.core.models import StrandType  # noqa: PLC0415
+
     problems: list[str] = []
-    scaffs = [s for s in design.strands
-              if s.strand_type == StrandType.SCAFFOLD and not getattr(s, "is_reference", False)]
+    scaffs = [
+        s
+        for s in design.strands
+        if s.strand_type == StrandType.SCAFFOLD
+        and not getattr(s, "is_reference", False)
+    ]
     for s in scaffs:
         acgt = sum(1 for c in (s.sequence or "") if c.upper() in "ACGT")
         expected = _strand_build_nt_count(design, s)
         if expected == 0:
             continue
         if acgt == 0:
-            problems.append(f"scaffold {s.id!r}: NO sequence assigned "
-                            f"({expected} nt would build as poly-T)")
+            problems.append(
+                f"scaffold {s.id!r}: NO sequence assigned "
+                f"({expected} nt would build as poly-T)"
+            )
         elif acgt < expected:
-            problems.append(f"scaffold {s.id!r}: under-sequenced "
-                            f"({acgt}/{expected} nt; the remaining {expected - acgt} build as poly-T)")
+            problems.append(
+                f"scaffold {s.id!r}: under-sequenced "
+                f"({acgt}/{expected} nt; the remaining {expected - acgt} build as poly-T)"
+            )
     return problems
 
 
@@ -76,7 +101,8 @@ def require_sequenced_scaffold(design) -> None:
             "Refusing all-atom MD build/run: unassigned scaffold sequence. Every "
             "unassigned base is silently built as thymine (poly-T), making the topology "
             "physically meaningless. Assign the scaffold sequence first. "
-            + "; ".join(problems))
+            + "; ".join(problems)
+        )
 
 
 def psf_polyt_problems(psf_path, min_nt: int = 20, frac: float = 0.95) -> list[str]:
@@ -87,15 +113,20 @@ def psf_polyt_problems(psf_path, min_nt: int = 20, frac: float = 0.95) -> list[s
     cannot see — the box may have been built from a stale/unsequenced design)."""
     import MDAnalysis as mda  # noqa: PLC0415
     from collections import Counter  # noqa: PLC0415
+
     u = mda.Universe(str(Path(psf_path)))
     problems: list[str] = []
     for seg in u.segments:
-        bases = [_BASE_OF.get(r.resname.strip().upper(), r.resname)
-                 for r in seg.atoms.select_atoms(_DNA_SELECT).residues]
+        bases = [
+            _BASE_OF.get(r.resname.strip().upper(), r.resname)
+            for r in seg.atoms.select_atoms(_DNA_SELECT).residues
+        ]
         if len(bases) < min_nt:
             continue
         top, n = Counter(bases).most_common(1)[0]
         if n / len(bases) >= frac:
-            problems.append(f"segment {seg.segid}: {len(bases)} nt, {n} are '{top}' "
-                            f"({100 * n / len(bases):.0f}% poly-{top} — unsequenced placeholder?)")
+            problems.append(
+                f"segment {seg.segid}: {len(bases)} nt, {n} are '{top}' "
+                f"({100 * n / len(bases):.0f}% poly-{top} — unsequenced placeholder?)"
+            )
     return problems

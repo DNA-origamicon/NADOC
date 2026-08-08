@@ -49,6 +49,7 @@ _UNKNOWN_TIMES = {"", "unknown", "n/a", "none", "invalid", "(null)"}
 
 # ── Pure parsers ──────────────────────────────────────────────────────────────
 
+
 def _parse_slurm_time(text: str) -> datetime | None:
     """SLURM timestamp (``2026-08-06T14:22:11``) → datetime, else ``None``.
 
@@ -177,19 +178,21 @@ def parse_scontrol_nodes(text: str) -> list[dict]:
             whole_alloc = min(alloc_total, whole_total)
             mig_alloc = min(max(0, alloc_total - whole_alloc), mig_total)
 
-        nodes.append({
-            "node": name,
-            "partitions": partitions,
-            "state": state,
-            "gpus_total": whole_total,
-            "gpus_alloc": min(whole_alloc, whole_total),
-            "mig_total": mig_total,
-            "mig_alloc": min(mig_alloc, mig_total),
-            "gpu_model": _gres_model(gres),
-            "gres": gres,
-            "cpus_total": int(fields.get("CPUTot", 0) or 0),
-            "cpus_alloc": int(fields.get("CPUAlloc", 0) or 0),
-        })
+        nodes.append(
+            {
+                "node": name,
+                "partitions": partitions,
+                "state": state,
+                "gpus_total": whole_total,
+                "gpus_alloc": min(whole_alloc, whole_total),
+                "mig_total": mig_total,
+                "mig_alloc": min(mig_alloc, mig_total),
+                "gpu_model": _gres_model(gres),
+                "gres": gres,
+                "cpus_total": int(fields.get("CPUTot", 0) or 0),
+                "cpus_alloc": int(fields.get("CPUAlloc", 0) or 0),
+            }
+        )
     return nodes
 
 
@@ -224,7 +227,9 @@ def observed_gres(nodes: list[dict], partition: str) -> list[str]:
 _UNAVAILABLE_STATE_FLAGS = ("DOWN", "DRAIN", "DRNG", "FAIL", "MAINT", "RESERVED", "UNK")
 
 
-def aggregate_nodes_by_partition(nodes: list[dict], partitions: list[str]) -> dict[str, dict]:
+def aggregate_nodes_by_partition(
+    nodes: list[dict], partitions: list[str]
+) -> dict[str, dict]:
     """Roll per-node occupancy up to a per-partition availability row.
 
     GPUs on a drained/down node are excluded from ``gpus_total`` — counting them
@@ -232,10 +237,16 @@ def aggregate_nodes_by_partition(nodes: list[dict], partitions: list[str]) -> di
     """
     out: dict[str, dict] = {
         p: {
-            "nodes_total": 0, "nodes_idle": 0, "nodes_mixed": 0,
-            "nodes_alloc": 0, "nodes_down": 0,
-            "gpus_total": 0, "gpus_alloc": 0, "gpus_free": 0,
-            "mig_total": 0, "mig_free": 0,
+            "nodes_total": 0,
+            "nodes_idle": 0,
+            "nodes_mixed": 0,
+            "nodes_alloc": 0,
+            "nodes_down": 0,
+            "gpus_total": 0,
+            "gpus_alloc": 0,
+            "gpus_free": 0,
+            "mig_total": 0,
+            "mig_free": 0,
             "gpu_model": "",
         }
         for p in partitions
@@ -261,7 +272,9 @@ def aggregate_nodes_by_partition(nodes: list[dict], partitions: list[str]) -> di
                 row["gpus_total"] += node["gpus_total"]
                 row["gpus_alloc"] += node["gpus_alloc"]
                 row["mig_total"] += node.get("mig_total", 0)
-                row["mig_free"] += max(0, node.get("mig_total", 0) - node.get("mig_alloc", 0))
+                row["mig_free"] += max(
+                    0, node.get("mig_total", 0) - node.get("mig_alloc", 0)
+                )
             if node["gpu_model"] and not row["gpu_model"]:
                 row["gpu_model"] = node["gpu_model"]
     for row in out.values():
@@ -289,10 +302,16 @@ def parse_squeue_pending(text: str) -> dict[str, dict]:
         partition = parts[0].strip().rstrip("*")
         if not partition:
             continue
-        row = out.setdefault(partition, {
-            "pending_jobs": 0, "pending_gpus": 0, "reasons": {},
-            "earliest_start": None, "blocked_on_hardware": 0,
-        })
+        row = out.setdefault(
+            partition,
+            {
+                "pending_jobs": 0,
+                "pending_gpus": 0,
+                "reasons": {},
+                "earliest_start": None,
+                "blocked_on_hardware": 0,
+            },
+        )
         row["pending_jobs"] += 1
         gres = parts[2].strip()
         m = re.search(r"gpu:(?:[^:]+:)?(\d+)", gres)
@@ -345,7 +364,11 @@ def parse_sacct_waits(text: str, *, min_samples: int = 3) -> dict[str, dict]:
         samples.sort()
         n = len(samples)
         if n < min_samples:
-            out[partition] = {"median_wait_min": None, "p90_wait_min": None, "n_samples": n}
+            out[partition] = {
+                "median_wait_min": None,
+                "p90_wait_min": None,
+                "n_samples": n,
+            }
             continue
         out[partition] = {
             "median_wait_min": round(_percentile(samples, 0.5), 1),
@@ -357,7 +380,9 @@ def parse_sacct_waits(text: str, *, min_samples: int = 3) -> dict[str, dict]:
 
 def _percentile(sorted_samples: list[float], q: float) -> float:
     """Nearest-rank percentile of an already-sorted list (non-empty)."""
-    idx = max(0, min(len(sorted_samples) - 1, int(round(q * (len(sorted_samples) - 1)))))
+    idx = max(
+        0, min(len(sorted_samples) - 1, int(round(q * (len(sorted_samples) - 1))))
+    )
     return sorted_samples[idx]
 
 
@@ -455,7 +480,10 @@ def summarize_availability(
         elif slurm_wait_min is not None:
             wait_min, basis = slurm_wait_min, "SLURM backfill estimate"
         elif median is not None:
-            wait_min, basis = float(median), f"median of {past.get('n_samples')} recent jobs ({history_scope})"
+            wait_min, basis = (
+                float(median),
+                f"median of {past.get('n_samples')} recent jobs ({history_scope})",
+            )
         else:
             wait_min, basis = None, "unknown"
 
@@ -520,23 +548,37 @@ def summarize_availability(
                 # Blackwell bills 242 vs 334 SU/GPU-h — ~30% more science per SU.
                 if job_shape.get("total_ns"):
                     row["job_su_per_ns"] = round(
-                        rec["est_cost_su"] / float(job_shape["total_ns"]), 1)
+                        rec["est_cost_su"] / float(job_shape["total_ns"]), 1
+                    )
                 row["job_qos"] = rec["qos"]
                 if wait_min is not None:
-                    row["time_to_result_h"] = round(wait_min / 60.0 + rec["walltime_h"], 2)
+                    row["time_to_result_h"] = round(
+                        wait_min / 60.0 + rec["walltime_h"], 2
+                    )
         rows.append(row)
 
     # gh200 is real hardware but needs a support request first — surface it so the
     # option is known to exist, never as something that can just be submitted to.
     if not any(r["partition"] == "gh200" for r in rows):
-        rows.append({
-            "partition": "gh200", "gpu_model": "NVIDIA Grace-Hopper", "gres_type": "gh200",
-            "gpus_per_node": 1, "request_only": True,
-            "nodes_total": 2, "gpus_total": 2, "gpus_free": 0,
-            "pending_jobs": 0, "pending_gpus": 0, "top_reason": "",
-            "wait_min": None, "wait_basis": "request-only — needs a CURC support request",
-            "wait_label": "request access", "max_walltime_h": 168,
-        })
+        rows.append(
+            {
+                "partition": "gh200",
+                "gpu_model": "NVIDIA Grace-Hopper",
+                "gres_type": "gh200",
+                "gpus_per_node": 1,
+                "request_only": True,
+                "nodes_total": 2,
+                "gpus_total": 2,
+                "gpus_free": 0,
+                "pending_jobs": 0,
+                "pending_gpus": 0,
+                "top_reason": "",
+                "wait_min": None,
+                "wait_basis": "request-only — needs a CURC support request",
+                "wait_label": "request access",
+                "max_walltime_h": 168,
+            }
+        )
 
     def _sort_key(r: dict) -> tuple:
         ttr = r.get("time_to_result_h")
@@ -594,17 +636,29 @@ def probe_command(name: str, arg: str | None = None) -> str:
     """
     template = _PROBES.get(name)
     if template is None:
-        raise ValueError(f"unknown probe {name!r}; expected one of {', '.join(sorted(_PROBES))}")
+        raise ValueError(
+            f"unknown probe {name!r}; expected one of {', '.join(sorted(_PROBES))}"
+        )
     if "{arg}" not in template:
         return template
     token = (arg or "").strip()
     if not _ARG_OK.match(token):
-        raise ValueError(f"probe {name!r} needs an argument matching [A-Za-z0-9_.+/-]{{1,64}}")
+        raise ValueError(
+            f"probe {name!r} needs an argument matching [A-Za-z0-9_.+/-]{{1,64}}"
+        )
     return template.format(arg=token)
 
 
-def build_test_only_cmd(partition: str, *, gres: str, gpus: int, cores: int,
-                        mem_gb: int, walltime: str, qos: str) -> str:
+def build_test_only_cmd(
+    partition: str,
+    *,
+    gres: str,
+    gpus: int,
+    cores: int,
+    mem_gb: int,
+    walltime: str,
+    qos: str,
+) -> str:
     """The read-only ``sbatch --test-only`` probe for one partition.
 
     ``--test-only`` makes SLURM validate the request and report when it *would*
@@ -625,7 +679,11 @@ _cache: dict[str, tuple[float, dict]] = {}
 
 
 def _cache_key(profile_name: str, job_shape: dict | None, history_days: int) -> str:
-    shape = "generic" if not job_shape else f"{job_shape.get('n_atoms')}:{job_shape.get('total_ns')}"
+    shape = (
+        "generic"
+        if not job_shape
+        else f"{job_shape.get('n_atoms')}:{job_shape.get('total_ns')}"
+    )
     return f"{profile_name}|{shape}|{history_days}"
 
 
@@ -675,7 +733,9 @@ async def probe_availability(
             warnings.append(f"timed out: {cmd.split()[0]}")
             return 124, "", "timeout"
         except Exception as exc:  # noqa: BLE001 — one flaky probe must not kill the view
-            logger.warning("availability probe command failed: %s (%s)", cmd.split()[0], exc)
+            logger.warning(
+                "availability probe command failed: %s (%s)", cmd.split()[0], exc
+            )
             warnings.append(f"failed: {cmd.split()[0]}")
             return 1, "", str(exc)
 

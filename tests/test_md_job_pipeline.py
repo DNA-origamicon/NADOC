@@ -27,6 +27,7 @@ from backend.core.md_ensemble import _DEFAULT_BASE_SEED, generate_seeds
 
 # ── construction / validation ────────────────────────────────────────────────
 
+
 def _stage(engine="namd", protocol="mgh_slow_release", **kw):
     return mp.PipelineStage(engine=engine, protocol=protocol, **kw)
 
@@ -50,9 +51,11 @@ def test_stage_needs_engine_and_protocol():
 
 
 def test_forces_bundle_groups_field_anchors_surface():
-    st = _stage(field={"field_pN": 5.0, "dir": [1, 0, 0]},
-                anchors=[{"scope": "base", "helix": 0, "bp": 3}],
-                surface={"z_nm": 0.0})
+    st = _stage(
+        field={"field_pN": 5.0, "dir": [1, 0, 0]},
+        anchors=[{"scope": "base", "helix": 0, "bp": 3}],
+        surface={"z_nm": 0.0},
+    )
     assert st.forces() == {
         "field": {"field_pN": 5.0, "dir": [1, 0, 0]},
         "anchors": [{"scope": "base", "helix": 0, "bp": 3}],
@@ -61,6 +64,7 @@ def test_forces_bundle_groups_field_anchors_surface():
 
 
 # ── the chaining oracle (the bright line) ────────────────────────────────────
+
 
 def test_three_stage_plan_chains_each_stage_from_its_immediate_predecessor():
     """The headline deposition chain: field -> surface -> anchored field-sweep.
@@ -75,8 +79,11 @@ def test_three_stage_plan_chains_each_stage_from_its_immediate_predecessor():
         stages=[
             _stage(field={"field_pN": 3.0, "dir": [1, 0, 0]}, label="deposit"),
             _stage(surface={"z_nm": 0.0}, label="immobilize"),
-            _stage(field={"field_pN": 3.0, "dir": [0, 1, 0]},
-                   anchors=[{"scope": "base", "helix": 0, "bp": 0}], label="sweep"),
+            _stage(
+                field={"field_pN": 3.0, "dir": [0, 1, 0]},
+                anchors=[{"scope": "base", "helix": 0, "bp": 0}],
+                label="sweep",
+            ),
         ],
     )
     plan = mp.build_pipeline_plan(pipe, root_checkpoint="equilibrated")
@@ -91,8 +98,9 @@ def test_three_stage_plan_chains_each_stage_from_its_immediate_predecessor():
     # Stages 1..N seed from their IMMEDIATE predecessor's output — not root, not i-2.
     for i in (1, 2):
         assert plan[i].parent_job_id == plan[i - 1].stage_id, f"stage {i} parent"
-        assert plan[i].start_checkpoint == mp.stage_output_ref(plan[i - 1].stage_id), \
+        assert plan[i].start_checkpoint == mp.stage_output_ref(plan[i - 1].stage_id), (
             f"stage {i} seed checkpoint"
+        )
         # RED guards: a builder that always seeds from root or from i-2 would trip these.
         assert plan[i].parent_job_id != "relax-root"
         assert plan[i].start_checkpoint != "equilibrated"
@@ -106,8 +114,9 @@ def test_three_stage_plan_chains_each_stage_from_its_immediate_predecessor():
 
 
 def test_each_stage_gets_a_distinct_seed():
-    pipe = mp.MdPipeline(root_job_id="r", root_engine="namd",
-                         stages=[_stage(), _stage(), _stage()])
+    pipe = mp.MdPipeline(
+        root_job_id="r", root_engine="namd", stages=[_stage(), _stage(), _stage()]
+    )
     plan = mp.build_pipeline_plan(pipe, root_checkpoint="equilibrated")
     seeds = [s.seed for s in plan]
     assert len(set(seeds)) == 3
@@ -116,6 +125,7 @@ def test_each_stage_gets_a_distinct_seed():
 
 
 # ── 1-stage parity with spawn_md_production (no regression) ───────────────────
+
 
 def test_single_stage_plan_matches_spawn_md_production_provenance():
     """A 1-stage production pipeline reproduces the exact provenance fields
@@ -128,29 +138,38 @@ def test_single_stage_plan_matches_spawn_md_production_provenance():
 
     (routes_md.spawn_md_production, lines ~1596-1611).
     """
-    pipe = mp.MdPipeline(root_job_id="parent-abc", root_engine="namd",
-                         stages=[_stage(field=None, anchors=None)])
+    pipe = mp.MdPipeline(
+        root_job_id="parent-abc",
+        root_engine="namd",
+        stages=[_stage(field=None, anchors=None)],
+    )
     plan = mp.build_pipeline_plan(pipe, root_checkpoint="04_prod_probe")
     assert len(plan) == 1
     only = plan[0]
     assert only.parent_job_id == "parent-abc"
     assert only.run_kind == "production"
     # The literal seed spawn_md_production computes for the first child (index 0).
-    assert only.seed == generate_seeds(_DEFAULT_BASE_SEED, 0 + 1)[-1] == _DEFAULT_BASE_SEED
+    assert (
+        only.seed == generate_seeds(_DEFAULT_BASE_SEED, 0 + 1)[-1] == _DEFAULT_BASE_SEED
+    )
     assert only.start_checkpoint == "04_prod_probe"
     assert only.cross_engine is False
 
 
 # ── cross-engine representability (generalizes seed_oxdna/mrdna_job_id) ───────
 
+
 def test_cross_engine_hop_is_flagged():
     """A stage whose engine differs from the job it seeds from is a cross-engine hop
     (the generalization of seed_oxdna_job_id / seed_mrdna_job_id).  P1 must be able to
     REPRESENT it; P3 performs the coordinate conversion."""
     pipe = mp.MdPipeline(
-        root_job_id="ox-relax", root_engine="oxdna",
+        root_job_id="ox-relax",
+        root_engine="oxdna",
         stages=[
-            _stage(engine="oxdna", protocol="relax"),   # same engine as root -> not cross
+            _stage(
+                engine="oxdna", protocol="relax"
+            ),  # same engine as root -> not cross
             _stage(engine="namd", protocol="mgh_slow_release"),  # oxdna -> namd: cross
         ],
     )
@@ -166,9 +185,13 @@ def test_cross_engine_hop_is_flagged():
 # converter.  cross_engine_seed resolves the seed spec; a same-engine hop returns None
 # (checkpoint restart), and an unsupported hop raises rather than silently mis-seeding.
 
+
 def _ox_to_namd_plan(root_job="ox-relax"):
-    pipe = mp.MdPipeline(root_job_id=root_job, root_engine="oxdna",
-                         stages=[_stage(engine="namd", protocol="mgh_slow_release")])
+    pipe = mp.MdPipeline(
+        root_job_id=root_job,
+        root_engine="oxdna",
+        stages=[_stage(engine="namd", protocol="mgh_slow_release")],
+    )
     return mp.build_pipeline_plan(pipe, root_checkpoint="last_conf")
 
 
@@ -179,14 +202,15 @@ def test_cross_engine_seed_maps_oxdna_root_to_oxdna_job_id():
     seed = mp.cross_engine_seed(plan[0], "ox-relax-realised")
     assert seed is not None
     assert seed.seed_engine == "oxdna"
-    assert seed.seed_field == "oxdna_job_id"       # the create-time / MdJob provenance kwarg
+    assert seed.seed_field == "oxdna_job_id"  # the create-time / MdJob provenance kwarg
     assert seed.seed_job_id == "ox-relax-realised"  # resolved parent, never "stage0"
     assert seed.target_engine == "namd"
 
 
 def test_cross_engine_seed_maps_mrdna_root_to_mrdna_job_id():
-    pipe = mp.MdPipeline(root_job_id="m", root_engine="mrdna",
-                         stages=[_stage(engine="namd")])
+    pipe = mp.MdPipeline(
+        root_job_id="m", root_engine="mrdna", stages=[_stage(engine="namd")]
+    )
     plan = mp.build_pipeline_plan(pipe, root_checkpoint="fine")
     seed = mp.cross_engine_seed(plan[0], "mrdna-realised")
     assert seed.seed_field == "mrdna_job_id" and seed.seed_engine == "mrdna"
@@ -196,8 +220,11 @@ def test_cross_engine_seed_maps_mrdna_root_to_mrdna_job_id():
 def test_same_engine_stage_has_no_cross_engine_seed():
     """A NAMD->NAMD hop returns None -> the executor restarts a checkpoint via
     ``spawn_md_production``, never the reconstruct path."""
-    pipe = mp.MdPipeline(root_job_id="r", root_engine="namd",
-                         stages=[_stage(engine="namd"), _stage(engine="namd")])
+    pipe = mp.MdPipeline(
+        root_job_id="r",
+        root_engine="namd",
+        stages=[_stage(engine="namd"), _stage(engine="namd")],
+    )
     plan = mp.build_pipeline_plan(pipe, root_checkpoint="eq")
     assert mp.cross_engine_seed(plan[0], "r") is None
     assert mp.cross_engine_seed(plan[1], "stage0-job") is None
@@ -206,8 +233,11 @@ def test_same_engine_stage_has_no_cross_engine_seed():
 def test_cross_engine_seed_rejects_an_unsupported_sink():
     """Only NAMD can rebuild an atomistic model from coarse coords; a hop INTO oxDNA
     (namd->oxdna) is flagged cross but has no reconstructor -> raises, not mis-seeds."""
-    pipe = mp.MdPipeline(root_job_id="n", root_engine="namd",
-                         stages=[_stage(engine="oxdna", protocol="relax")])
+    pipe = mp.MdPipeline(
+        root_job_id="n",
+        root_engine="namd",
+        stages=[_stage(engine="oxdna", protocol="relax")],
+    )
     plan = mp.build_pipeline_plan(pipe, root_checkpoint="eq")
     assert plan[0].cross_engine is True
     with pytest.raises(ValueError):
@@ -216,10 +246,23 @@ def test_cross_engine_seed_rejects_an_unsupported_sink():
 
 def test_cross_engine_seed_rejects_an_unknown_source_engine():
     bad = mp.StagePlan(
-        index=0, stage_id="stage0", engine="namd", protocol="p",
-        parent_job_id="c", parent_engine="cando", run_kind="production", seed=1,
-        start_checkpoint=None, forces={}, run_target="local", cluster_name=None,
-        length_ns=None, steps=None, label=None, cross_engine=True)
+        index=0,
+        stage_id="stage0",
+        engine="namd",
+        protocol="p",
+        parent_job_id="c",
+        parent_engine="cando",
+        run_kind="production",
+        seed=1,
+        start_checkpoint=None,
+        forces={},
+        run_target="local",
+        cluster_name=None,
+        length_ns=None,
+        steps=None,
+        label=None,
+        cross_engine=True,
+    )
     with pytest.raises(ValueError):
         mp.cross_engine_seed(bad, "c")
 
@@ -227,8 +270,9 @@ def test_cross_engine_seed_rejects_an_unknown_source_engine():
 def test_cross_engine_seed_requires_a_resolved_parent():
     """The seed job must be the RESOLVED predecessor; an unresolved (None) parent raises
     rather than seeding from nothing."""
-    pipe = mp.MdPipeline(root_job_id=None, root_engine="oxdna",
-                         stages=[_stage(engine="namd")])
+    pipe = mp.MdPipeline(
+        root_job_id=None, root_engine="oxdna", stages=[_stage(engine="namd")]
+    )
     plan = mp.build_pipeline_plan(pipe)
     assert plan[0].cross_engine is True
     with pytest.raises(ValueError):
@@ -237,12 +281,19 @@ def test_cross_engine_seed_requires_a_resolved_parent():
 
 # ── persistence round-trip (P2/P4 persist the plan) ──────────────────────────
 
+
 def test_pipeline_dict_round_trip():
     pipe = mp.MdPipeline(
-        root_job_id="r", root_engine="namd",
+        root_job_id="r",
+        root_engine="namd",
         stages=[
-            _stage(field={"field_pN": 2.0, "dir": [0, 0, 1]}, run_target="alpine",
-                   cluster_name="alpine", length_ns=5.0, label="s0"),
+            _stage(
+                field={"field_pN": 2.0, "dir": [0, 0, 1]},
+                run_target="alpine",
+                cluster_name="alpine",
+                length_ns=5.0,
+                label="s0",
+            ),
             _stage(surface={"z_nm": 1.0}, steps=100_000, label="s1"),
         ],
     )

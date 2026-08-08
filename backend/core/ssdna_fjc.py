@@ -96,7 +96,11 @@ def _resolve_bin(n_bp: int, bin_index: int) -> tuple[int, dict]:
     # Walk outward until we find a populated bin.
     for d in range(1, n + 1):
         for cand in (raw - d, raw + d):
-            if 0 <= cand < n and bins[cand]["count"] > 0 and bins[cand].get("rep_positions") is not None:
+            if (
+                0 <= cand < n
+                and bins[cand]["count"] > 0
+                and bins[cand].get("rep_positions") is not None
+            ):
                 return cand, bins[cand]
     raise ValueError(f"FJC entry n_bp={n_bp} has no occupied bins")
 
@@ -107,7 +111,9 @@ def bin_positions(n_bp: int, bin_index: int) -> np.ndarray:
     _idx, b = _resolve_bin(n_bp, bin_index)
     pos = np.asarray(b["rep_positions"], dtype=float)
     if pos.ndim != 2 or pos.shape[1] != 3:
-        raise ValueError(f"FJC bin n_bp={n_bp}, bin={bin_index} has malformed positions {pos.shape}")
+        raise ValueError(
+            f"FJC bin n_bp={n_bp}, bin={bin_index} has malformed positions {pos.shape}"
+        )
     return pos
 
 

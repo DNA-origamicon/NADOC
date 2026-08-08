@@ -49,6 +49,7 @@ __all__ = [
 
 # ── Colour-group assignment ──────────────────────────────────────────────────
 
+
 def scaffold_staple_groups(
     mesh: SurfaceMesh, design: Design
 ) -> tuple[np.ndarray, list[str], list[str]]:
@@ -76,7 +77,7 @@ def scaffold_staple_groups(
     )
 
     # A face's group = majority vote of its three vertices (ties → staple).
-    tri = vert_is_staple[faces]                       # (M, 3) of {0,1}
+    tri = vert_is_staple[faces]  # (M, 3) of {0,1}
     face_group = (tri.sum(axis=1) >= 2).astype(np.int8)
 
     return face_group, names, colors
@@ -218,7 +219,7 @@ def scaffold_staple_colored_groups(
         dtype=np.int64,
         count=len(mesh.vertex_strand_ids),
     )
-    g = vert_group[faces]                              # (M, 3)
+    g = vert_group[faces]  # (M, 3)
     counts = np.zeros((faces.shape[0], k + 1), dtype=np.int64)
     rows = np.arange(faces.shape[0])
     for j in range(3):
@@ -236,7 +237,10 @@ _MAT_NS = "http://schemas.microsoft.com/3dmanufacturing/material/2015/02"
 
 def _xml_attr(s: str) -> str:
     return (
-        s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+        s.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
     )
 
 
@@ -348,7 +352,18 @@ def _zip_store(files: list[tuple[str, bytes]]) -> bytes:
         body = comp.compress(data) + comp.flush()
         offset = len(out)
         out += struct.pack(
-            "<IHHHHHIIIHH", 0x04034B50, 20, 0, 8, 0, 0, crc, len(body), len(data), len(name_b), 0
+            "<IHHHHHIIIHH",
+            0x04034B50,
+            20,
+            0,
+            8,
+            0,
+            0,
+            crc,
+            len(body),
+            len(data),
+            len(name_b),
+            0,
         )
         out += name_b + body
         records.append((arcname, offset, crc, len(body), len(data)))
@@ -356,15 +371,39 @@ def _zip_store(files: list[tuple[str, bytes]]) -> bytes:
     for arcname, offset, crc, csize, usize in records:
         name_b = arcname.encode("utf-8")
         central += struct.pack(
-            "<IHHHHHHIIIHHHHHII", 0x02014B50, 20, 20, 0, 8, 0, 0, crc, csize, usize,
-            len(name_b), 0, 0, 0, 0, 0, offset
+            "<IHHHHHHIIIHHHHHII",
+            0x02014B50,
+            20,
+            20,
+            0,
+            8,
+            0,
+            0,
+            crc,
+            csize,
+            usize,
+            len(name_b),
+            0,
+            0,
+            0,
+            0,
+            0,
+            offset,
         )
         central += name_b
 
     cd_offset = len(out)
     out += central
     out += struct.pack(
-        "<IHHHHIIH", 0x06054B50, 0, 0, len(records), len(records), len(central), cd_offset, 0
+        "<IHHHHIIH",
+        0x06054B50,
+        0,
+        0,
+        len(records),
+        len(records),
+        len(central),
+        cd_offset,
+        0,
     )
     return bytes(out)
 
@@ -424,10 +463,12 @@ def export_3mf_parts(
             continue
         verts = mesh.vertices.astype(np.float64) * float(scale)
         faces = mesh.faces.astype(np.int64)
-        if _signed_volume(verts, faces) < 0.0:        # outward winding per part
+        if _signed_volume(verts, faces) < 0.0:  # outward winding per part
             faces = faces[:, ::-1]
         pindex = len(bases)
-        bases.append(f'<base name="{_xml_attr(gname)}" displaycolor="{_hex_rgba(color)}"/>')
+        bases.append(
+            f'<base name="{_xml_attr(gname)}" displaycolor="{_hex_rgba(color)}"/>'
+        )
         objects.append(
             f'<object id="{oid}" type="model" pid="1" pindex="{pindex}" '
             f'name="{_xml_attr(gname)}">{_mesh_xml(verts, faces)}</object>'

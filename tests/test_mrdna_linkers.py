@@ -48,8 +48,8 @@ _LNK = "__lnk__"
 # nucleotides.  That lets a ds-model-vs-ss-model diff on the same two overhangs
 # isolate the BRIDGE exactly (everything else is identical).
 
-_DS_ATTACH = ("free_end", "free_end")   # both comp-first  → valid ds
-_SS_ATTACH = ("root", "free_end")       # mixed polarity   → valid ss
+_DS_ATTACH = ("free_end", "free_end")  # both comp-first  → valid ds
+_SS_ATTACH = ("root", "free_end")  # mixed polarity   → valid ss
 
 
 def _link(linker_type, length_bp, attach):
@@ -58,8 +58,13 @@ def _link(linker_type, length_bp, attach):
     with hb.scratch_session(LatticeType.HONEYCOMB):
         _bare, (a_id, b_id) = _place_two_overhangs_on_6hb()
         d = hb.connect_overhangs(
-            a_id, b_id, overhang_a_attach=attach[0], overhang_b_attach=attach[1],
-            linker_type=linker_type, length_value=length_bp, length_unit="bp",
+            a_id,
+            b_id,
+            overhang_a_attach=attach[0],
+            overhang_b_attach=attach[1],
+            linker_type=linker_type,
+            length_value=length_bp,
+            length_unit="bp",
         )
         d = d.model_copy(deep=True)
     bridge = next(h.id for h in d.helices if h.id.startswith(_LNK))
@@ -82,6 +87,7 @@ def _bridge_indices(design):
 
 # ── FAST (always-run): the coarse-grainer INPUT arrays carry the bridge ───────
 
+
 def test_no_linker_no_bridge_beads():
     """Control: a bundle with no connection emits no ``__lnk__`` bridge beads."""
     *_ignore, bridge = _bridge_indices(_bare_6hb())
@@ -94,8 +100,8 @@ def test_ds_bridge_is_a_duplex_in_the_arrays():
     L = 6
     d, _bridge = _link("ds", L, _DS_ATTACH)
     _r, bp, _tp, _seq, bridge = _bridge_indices(d)
-    assert len(bridge) == 2 * L                      # both bridge halves present
-    assert all(bp[i] != -1 for i in bridge)          # every bridge bead is WC-paired
+    assert len(bridge) == 2 * L  # both bridge halves present
+    assert all(bp[i] != -1 for i in bridge)  # every bridge bead is WC-paired
     # each bridge bead's partner is the OTHER bridge half (paired within the bridge)
     assert all(bp[i] in bridge for i in bridge)
 
@@ -107,7 +113,7 @@ def test_ss_bridge_is_a_flexible_ssdna_tether_in_the_arrays():
     d, _bridge = _link("ss", L, _SS_ATTACH)
     _r, bp, _tp, _seq, bridge = _bridge_indices(d)
     assert len(bridge) == L
-    assert all(bp[i] == -1 for i in bridge)          # unpaired ssDNA
+    assert all(bp[i] == -1 for i in bridge)  # unpaired ssDNA
 
 
 def test_ss_bridge_threads_in_chain_between_the_two_parts():
@@ -121,15 +127,15 @@ def test_ss_bridge_threads_in_chain_between_the_two_parts():
     bset = set(bridge)
     # The bridge forms ONE contiguous 3' chain b0→b1→…→b_{L-1}.
     entry = [i for i in bridge if tp[i] in bset and not any(tp[j] == i for j in bridge)]
-    assert len(entry) == 1                            # a single 5' end of the tether
+    assert len(entry) == 1  # a single 5' end of the tether
     chain = [entry[0]]
     while tp[chain[-1]] in bset:
         chain.append(tp[chain[-1]])
-    assert sorted(chain) == bridge                    # every bridge bead is on the chain
+    assert sorted(chain) == bridge  # every bridge bead is on the chain
     # A real (non-bridge) predecessor enters the tether and a real successor exits it.
     prev = [j for j in range(len(tp)) if tp[j] == chain[0]]
-    assert len(prev) == 1 and prev[0] not in bset     # part A → tether
-    assert tp[chain[-1]] not in bset and tp[chain[-1]] >= 0   # tether → part B
+    assert len(prev) == 1 and prev[0] not in bset  # part A → tether
+    assert tp[chain[-1]] not in bset and tp[chain[-1]] >= 0  # tether → part B
     # No coincident beads along the spliced chain (LJ guard).
     walk = [prev[0], *chain, tp[chain[-1]]]
     seglens = [np.linalg.norm(r[a] - r[b]) for a, b in zip(walk, walk[1:])]
@@ -142,8 +148,10 @@ _has_mrdna = False
 try:
     import sys
     from backend.core.mrdna_bridge import mrdna_tool_path
+
     sys.path.insert(0, mrdna_tool_path())
     import mrdna  # noqa: F401
+
     _has_mrdna = True
 except Exception:
     pass
@@ -159,7 +167,9 @@ def _seg_stats(design):
     from mrdna.readers.segmentmodel_from_lists import model_from_basepair_stack_3prime
 
     r, bp, stack, tp, orient, seq, _ = _build_nt_arrays(design, return_nt_key=True)
-    m = model_from_basepair_stack_3prime(r, bp, stack, tp, sequence=seq, orientation=orient)
+    m = model_from_basepair_stack_3prime(
+        r, bp, stack, tp, sequence=seq, orientation=orient
+    )
     ss = sum(s.num_nt for s in m.segments if isinstance(s, SingleStrandedSegment))
     ds = sum(s.num_nt for s in m.segments if isinstance(s, DoubleStrandedSegment))
     beads = sum(len(s.children) for s in m.segments)
@@ -180,8 +190,8 @@ def test_bridge_mechanical_class_ds_duplex_vs_ss_tether_in_the_model(L):
     if the bridge were dropped (both zero) or mis-typed."""
     ds_ss, ds_ds, *_ = _seg_stats(_link("ds", L, _DS_ATTACH)[0])
     ss_ss, ss_ds, *_ = _seg_stats(_link("ss", L, _SS_ATTACH)[0])
-    assert ds_ds - ss_ds == L        # ds bridge = L base pairs of rigid duplex
-    assert ss_ss - ds_ss == L        # ss bridge = L nucleotides of flexible ssDNA
+    assert ds_ds - ss_ds == L  # ds bridge = L base pairs of rigid duplex
+    assert ss_ss - ds_ss == L  # ss bridge = L nucleotides of flexible ssDNA
 
 
 @skip_no_mrdna
@@ -194,7 +204,9 @@ def test_bridge_beads_scale_with_bridge_length(linker_type, attach):
     bridge alone, so this can-go-red if the bridge were dropped."""
     short_beads = _seg_stats(_link(linker_type, 4, attach)[0])[2]
     long_beads = _seg_stats(_link(linker_type, 20, attach)[0])[2]
-    assert long_beads > short_beads   # the extra bridge length materializes as extra CG beads
+    assert (
+        long_beads > short_beads
+    )  # the extra bridge length materializes as extra CG beads
 
 
 @skip_no_mrdna
@@ -213,6 +225,7 @@ def test_overhangs_hybridize_into_duplex_in_the_model():
 
 
 # ── SLOW (opt-in): a real ARBD CG sim runs with the linker + the bridge survives ─
+
 
 @pytest.mark.slow
 @skip_no_mrdna
@@ -239,8 +252,13 @@ def test_real_arbd_runs_with_linker(tmp_path, linker_type, attach):
     def _run(design, out):
         out.mkdir(parents=True, exist_ok=True)
         mrdna_model_from_nadoc(design).simulate(
-            output_name=_SIM_STEM, directory=str(out),
-            num_steps=500, timestep=200e-6, gpu=0, output_period=250)
+            output_name=_SIM_STEM,
+            directory=str(out),
+            num_steps=500,
+            timestep=200e-6,
+            gpu=0,
+            output_period=250,
+        )
         return extract_mrdna_results(design, out)
 
     d, bridge = _link(linker_type, 6, attach)

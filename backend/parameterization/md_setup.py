@@ -66,12 +66,12 @@ logger = logging.getLogger(__name__)
 
 # ── Unit conversion ───────────────────────────────────────────────────────────
 
-_KCAL_A2_TO_KJ_NM2 = 418.4   # 1 kcal/mol/Å² → kJ/mol/nm²
+_KCAL_A2_TO_KJ_NM2 = 418.4  # 1 kcal/mol/Å² → kJ/mol/nm²
 
 # ── Sensitivity-check threshold ───────────────────────────────────────────────
 # If any diagonal of the stiffness matrix shifts by more than this fraction
 # across the restraint-k sweep, flag the result as unreliable.
-RESTRAINT_SENSITIVITY_THRESHOLD = 0.20   # 20%
+RESTRAINT_SENSITIVITY_THRESHOLD = 0.20  # 20%
 
 # ── MDP templates ─────────────────────────────────────────────────────────────
 
@@ -294,6 +294,7 @@ echo "[$(date)] === Done. Production trajectory: prod.xtc ==="
 
 # ── Restraint ITP helpers ─────────────────────────────────────────────────────
 
+
 def _build_posre_section(
     atom_indices_1based: list[int],
     k_gmx: float,
@@ -323,7 +324,7 @@ def _parse_itp_terminal_p_local_indices(
     We need: nr (local index), resnr, atom name.
     """
     in_atoms = False
-    records: list[tuple[int, int, str]] = []   # (local_idx, resid, atom_name)
+    records: list[tuple[int, int, str]] = []  # (local_idx, resid, atom_name)
     for line in itp_text.splitlines():
         stripped = line.strip()
         if stripped.startswith("[") and "atoms" in stripped.lower():
@@ -355,9 +356,11 @@ def _count_itp_residues(itp_text: str) -> int:
     for line in itp_text.splitlines():
         s = line.strip()
         if s.startswith("[") and "atoms" in s.lower():
-            in_atoms = True; continue
+            in_atoms = True
+            continue
         if s.startswith("["):
-            in_atoms = False; continue
+            in_atoms = False
+            continue
         if not in_atoms or not s or s.startswith(";"):
             continue
         parts = s.split()
@@ -397,13 +400,17 @@ def _inject_terminal_posres_into_chain_itp(
             logger.debug(
                 "Skipping POSRES_TERMINAL for %s: %d residues > max %d "
                 "(likely central crossover staple with terminals in measurement region).",
-                itp_path.name, n_res, max_residues,
+                itp_path.name,
+                n_res,
+                max_residues,
             )
             return 0
 
     p_indices = _parse_itp_terminal_p_local_indices(itp_text, n_terminal_residues)
     if not p_indices:
-        logger.debug("No terminal P atoms found in %s — skipping POSRES_TERMINAL.", itp_path.name)
+        logger.debug(
+            "No terminal P atoms found in %s — skipping POSRES_TERMINAL.", itp_path.name
+        )
         return 0
 
     posre_section = _build_posre_section(
@@ -414,21 +421,19 @@ def _inject_terminal_posres_into_chain_itp(
             f"; k = {k_gmx:.1f} kJ/mol/nm² | {itp_path.name}"
         ),
     )
-    terminal_block = (
-        "\n#ifdef POSRES_TERMINAL\n"
-        + posre_section
-        + "#endif\n"
-    )
+    terminal_block = "\n#ifdef POSRES_TERMINAL\n" + posre_section + "#endif\n"
     # Append at end of itp (after all other sections)
     itp_path.write_text(itp_text.rstrip("\n") + "\n" + terminal_block)
     logger.debug(
         "Injected POSRES_TERMINAL into %s: %d P atoms",
-        itp_path.name, len(p_indices),
+        itp_path.name,
+        len(p_indices),
     )
     return len(p_indices)
 
 
 # ── Main setup function ───────────────────────────────────────────────────────
+
 
 def setup_run_directory(
     design: Design,
@@ -485,7 +490,7 @@ def setup_run_directory(
     ff_dir = top_dir / f"{ff}.ff"
 
     k_gmx = restraint_k_kcal * _KCAL_A2_TO_KJ_NM2
-    prod_nsteps = int(prod_ns * 1e6 / 2)   # dt=0.002 ps → steps per ns = 500000
+    prod_nsteps = int(prod_ns * 1e6 / 2)  # dt=0.002 ps → steps per ns = 500000
     nacl_conc_M = nacl_conc_mM / 1000.0
 
     restraint_log_entry = {
@@ -527,24 +532,39 @@ def setup_run_directory(
         # Count chain BLOCKS not unique letters: pdb2gmx splits non-sequential
         # reuse of the same chain letter, so unique-letter count under-provides
         # -ter inputs and pdb2gmx hangs waiting for more.
-        _pdb_lines = [l for l in adapted.splitlines() if l.startswith(("ATOM", "HETATM"))]
-        _n_chains  = 1 + sum(
-            1 for a, b in zip(_pdb_lines, _pdb_lines[1:]) if a[21] != b[21]
-        ) if _pdb_lines else 1
+        _pdb_lines = [
+            l for l in adapted.splitlines() if l.startswith(("ATOM", "HETATM"))
+        ]
+        _n_chains = (
+            1 + sum(1 for a, b in zip(_pdb_lines, _pdb_lines[1:]) if a[21] != b[21])
+            if _pdb_lines
+            else 1
+        )
         _needs_ter = ff.startswith("charmm36-feb2026")
         _pdb2gmx_cmd = [
-            gmx, "pdb2gmx",
-            "-f", str(input_pdb),
-            "-o", str(tmpdir / "conf_raw.gro"),
-            "-p", str(tmpdir / "topol.top"),
-            "-ignh", "-ff", ff, "-water", "tip3p", "-nobackup",
+            gmx,
+            "pdb2gmx",
+            "-f",
+            str(input_pdb),
+            "-o",
+            str(tmpdir / "conf_raw.gro"),
+            "-p",
+            str(tmpdir / "topol.top"),
+            "-ignh",
+            "-ff",
+            ff,
+            "-water",
+            "tip3p",
+            "-nobackup",
         ]
         if _needs_ter:
             _pdb2gmx_cmd.append("-ter")
         r = subprocess.run(
             _pdb2gmx_cmd,
             input=("4\n6\n" * _n_chains) if _needs_ter else None,
-            capture_output=True, text=True, cwd=str(tmpdir),
+            capture_output=True,
+            text=True,
+            cwd=str(tmpdir),
         )
         if r.returncode != 0:
             raise RuntimeError(f"pdb2gmx failed:\n{r.stderr[-3000:]}")
@@ -552,24 +572,45 @@ def setup_run_directory(
 
         # ── 2. editconf — centre + box ────────────────────────────────────────
         r = subprocess.run(
-            [gmx, "editconf",
-             "-f", str(tmpdir / "conf_raw.gro"),
-             "-o", str(tmpdir / "conf_edit.gro"),
-             "-c", "-d", "1.2", "-bt", "triclinic", "-nobackup"],
-            capture_output=True, text=True, cwd=str(tmpdir),
+            [
+                gmx,
+                "editconf",
+                "-f",
+                str(tmpdir / "conf_raw.gro"),
+                "-o",
+                str(tmpdir / "conf_edit.gro"),
+                "-c",
+                "-d",
+                "1.2",
+                "-bt",
+                "triclinic",
+                "-nobackup",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=str(tmpdir),
         )
         if r.returncode != 0:
             raise RuntimeError(f"editconf failed:\n{r.stderr[-2000:]}")
 
         # ── 3. solvate ────────────────────────────────────────────────────────
         r = subprocess.run(
-            [gmx, "solvate",
-             "-cp", str(tmpdir / "conf_edit.gro"),
-             "-cs", "spc216.gro",
-             "-o",  str(tmpdir / "solvated.gro"),
-             "-p",  str(tmpdir / "topol.top"),
-             "-nobackup"],
-            capture_output=True, text=True, cwd=str(tmpdir),
+            [
+                gmx,
+                "solvate",
+                "-cp",
+                str(tmpdir / "conf_edit.gro"),
+                "-cs",
+                "spc216.gro",
+                "-o",
+                str(tmpdir / "solvated.gro"),
+                "-p",
+                str(tmpdir / "topol.top"),
+                "-nobackup",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=str(tmpdir),
         )
         if r.returncode != 0:
             raise RuntimeError(f"solvate failed:\n{r.stderr[-2000:]}")
@@ -577,30 +618,56 @@ def setup_run_directory(
         # ── 4. genion — NaCl counterions ─────────────────────────────────────
         (tmpdir / "ions.mdp").write_text(_IONS_MDP)
         r = subprocess.run(
-            [gmx, "grompp",
-             "-f", str(tmpdir / "ions.mdp"),
-             "-c", str(tmpdir / "solvated.gro"),
-             "-p", str(tmpdir / "topol.top"),
-             "-o", str(tmpdir / "ions.tpr"),
-             "-maxwarn", "20", "-nobackup"],
-            capture_output=True, text=True, cwd=str(tmpdir),
+            [
+                gmx,
+                "grompp",
+                "-f",
+                str(tmpdir / "ions.mdp"),
+                "-c",
+                str(tmpdir / "solvated.gro"),
+                "-p",
+                str(tmpdir / "topol.top"),
+                "-o",
+                str(tmpdir / "ions.tpr"),
+                "-maxwarn",
+                "20",
+                "-nobackup",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=str(tmpdir),
         )
         if r.returncode != 0:
             raise RuntimeError(f"grompp (ions) failed:\n{r.stderr[-2000:]}")
 
         # NaCl: Na+ neutralises DNA charge (-), then NaCl pairs for concentration
         r = subprocess.run(
-            [gmx, "genion",
-             "-s",     str(tmpdir / "ions.tpr"),
-             "-o",     str(tmpdir / "conf.gro"),
-             "-p",     str(tmpdir / "topol.top"),
-             "-pname", "NA", "-pq", "1",
-             "-nname", "CL", "-nq", "-1",
-             "-neutral",
-             "-conc",  str(nacl_conc_M),
-             "-nobackup"],
+            [
+                gmx,
+                "genion",
+                "-s",
+                str(tmpdir / "ions.tpr"),
+                "-o",
+                str(tmpdir / "conf.gro"),
+                "-p",
+                str(tmpdir / "topol.top"),
+                "-pname",
+                "NA",
+                "-pq",
+                "1",
+                "-nname",
+                "CL",
+                "-nq",
+                "-1",
+                "-neutral",
+                "-conc",
+                str(nacl_conc_M),
+                "-nobackup",
+            ],
             input="SOL\n",
-            capture_output=True, text=True, cwd=str(tmpdir),
+            capture_output=True,
+            text=True,
+            cwd=str(tmpdir),
         )
         if r.returncode != 0:
             raise RuntimeError(f"genion failed:\n{r.stderr[-2000:]}")
@@ -617,9 +684,11 @@ def setup_run_directory(
         # the 2hb design), making its ITP "terminal" residues fall in the
         # measurement region rather than on the outer arm stubs.
         from backend.core.models import StrandType as _StrandType
+
         _scaffold_lengths = [
             sum(abs(dom.end_bp - dom.start_bp) + 1 for dom in s.domains)
-            for s in design.strands if s.strand_type == _StrandType.SCAFFOLD
+            for s in design.strands
+            if s.strand_type == _StrandType.SCAFFOLD
         ]
         _max_res = max(_scaffold_lengths) if _scaffold_lengths else None
 
@@ -675,11 +744,15 @@ def setup_run_directory(
     ff_out = run_dir / f"{ff}.ff"
     if not ff_out.exists():
         import shutil
+
         shutil.copytree(str(ff_dir), str(ff_out))
 
     logger.info(
         "Run directory ready: %s (variant=%s, k=%.1f kcal/mol/Å², %d ns)",
-        run_dir, variant_label, restraint_k_kcal, prod_ns,
+        run_dir,
+        variant_label,
+        restraint_k_kcal,
+        prod_ns,
     )
     return run_dir
 

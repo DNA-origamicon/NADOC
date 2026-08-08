@@ -48,7 +48,7 @@ class TestWaterTriplets:
         # claims it). Its six waters are ordinary water and DO appear.
         o, h1, h2 = water_triplets(*_topology(MGH))
         assert o.size == 6
-        assert 0 not in o.tolist()             # index 0 is the MG atom
+        assert 0 not in o.tolist()  # index 0 is the MG atom
         names = _topology(MGH)[0]
         assert [names[i] for i in o] == ["OHA", "OHB", "OHC", "OHD", "OHE", "OHF"]
         assert [names[i] for i in h1] == ["H1A", "H1B", "H1C", "H1D", "H1E", "H1F"]
@@ -57,7 +57,7 @@ class TestWaterTriplets:
     def test_ignores_dna_and_protein_oxygens(self):
         dna = ("DA", ["P", "O1P", "O2P", "O5'", "C5'", "O4'"])
         o, _, _ = water_triplets(*_topology(dna, PROTEIN, TIP3))
-        assert o.size == 1                     # only the TIP3 oxygen
+        assert o.size == 1  # only the TIP3 oxygen
 
     def test_empty_topology(self):
         o, h1, h2 = water_triplets([], [], [])
@@ -70,13 +70,13 @@ class TestWaterTriplets:
         scrambled = ("TIP3", ["OH2", "XX", "H1", "H2"])
         o, h1, h2 = water_triplets(*_topology(scrambled))
         assert o.tolist() == [0]
-        assert h1.tolist() == [2]              # skipped the interloper
+        assert h1.tolist() == [2]  # skipped the interloper
         assert h2.tolist() == [3]
 
     def test_drops_a_molecule_whose_hydrogens_are_missing(self):
         lone = ("TIP3", ["OH2"])
         o, _, _ = water_triplets(*_topology(lone, TIP3))
-        assert o.size == 1                     # only the intact molecule
+        assert o.size == 1  # only the intact molecule
         assert o.tolist() == [1]
 
     def test_a_trailing_oxygen_cannot_read_past_the_end(self):
@@ -142,8 +142,7 @@ class TestBuildSolventCtxShape:
 
         class _Atoms:
             names = np.array([a for a in (TIP3[1] + MGH[1] + ["SOD"])], dtype="U8")
-            resnames = np.array(
-                ["TIP3"] * 3 + ["MGH"] * 19 + ["SOD"], dtype="U8")
+            resnames = np.array(["TIP3"] * 3 + ["MGH"] * 19 + ["SOD"], dtype="U8")
             resindices = np.array([0] * 3 + [1] * 19 + [2], dtype=np.int64)
 
             def __len__(self):
@@ -153,8 +152,8 @@ class TestBuildSolventCtxShape:
             atoms = _Atoms()
 
         ctx = build_solvent_ctx(_U())
-        assert ctx["n_waters_total"] == 7      # 1 TIP3 + 6 hexahydrate waters
-        assert ctx["n_ions"] == 2              # the MG core + the Na+
+        assert ctx["n_waters_total"] == 7  # 1 TIP3 + 6 hexahydrate waters
+        assert ctx["n_ions"] == 2  # the MG core + the Na+
         assert ctx["water_o"].size == ctx["n_waters_total"]
 
 

@@ -47,8 +47,17 @@ FIXTURE = Path(__file__).resolve().parents[1] / "workspace" / "6hbx100_1xT.nadoc
 # The fields a ChainSimStage contributes to the backend ChainStageRequest (drops the
 # UI-only seed_job_name / seed_engine / id). Mirrors chain_sim_model.toChainStagePayload.
 _STAGE_KEYS = (
-    "engine", "protocol", "field", "anchors", "surface",
-    "run_target", "cluster_name", "length_ns", "steps", "label", "seed_job_id",
+    "engine",
+    "protocol",
+    "field",
+    "anchors",
+    "surface",
+    "run_target",
+    "cluster_name",
+    "length_ns",
+    "steps",
+    "label",
+    "seed_job_id",
 )
 
 
@@ -65,8 +74,8 @@ class _Spawns:
     """
 
     def __init__(self):
-        self.calls: list[dict] = []   # {kind, parent, plan, unattended}
-        self.status: dict[str, str] = {}   # job_id -> running/completed/failed
+        self.calls: list[dict] = []  # {kind, parent, plan, unattended}
+        self.status: dict[str, str] = {}  # job_id -> running/completed/failed
         self._n = 0
 
     def _new_job(self) -> str:
@@ -77,14 +86,28 @@ class _Spawns:
 
     async def fresh_relax(self, plan):
         jid = self._new_job()
-        self.calls.append({"kind": "fresh_relax", "parent": None, "plan": plan, "job_id": jid,
-                           "unattended": ce.in_unattended_chain_spawn()})
+        self.calls.append(
+            {
+                "kind": "fresh_relax",
+                "parent": None,
+                "plan": plan,
+                "job_id": jid,
+                "unattended": ce.in_unattended_chain_spawn(),
+            }
+        )
         return jid
 
     async def oxdna_child(self, parent, plan):
         jid = self._new_job()
-        self.calls.append({"kind": "oxdna_child", "parent": parent, "plan": plan, "job_id": jid,
-                           "unattended": ce.in_unattended_chain_spawn()})
+        self.calls.append(
+            {
+                "kind": "oxdna_child",
+                "parent": parent,
+                "plan": plan,
+                "job_id": jid,
+                "unattended": ce.in_unattended_chain_spawn(),
+            }
+        )
         return jid
 
     def chain_job_status(self, job_id):
@@ -108,7 +131,9 @@ def spawns(monkeypatch, tmp_path):
     monkeypatch.setattr(routes_md, "_spawn_oxdna_child", s.oxdna_child)
     monkeypatch.setattr(routes_md, "_chain_job_status", s.chain_job_status)
 
-    async def _no_namd(*a, **k):  # pragma: no cover - only fires on a routing regression
+    async def _no_namd(
+        *a, **k
+    ):  # pragma: no cover - only fires on a routing regression
         raise AssertionError("all-oxDNA chain must not touch the NAMD spawn path")
 
     monkeypatch.setattr(routes_md, "spawn_md_production", _no_namd)
@@ -133,7 +158,7 @@ def _load_authored_chain_request():
     project = design.chain_sim_projects[0]
     stages = [_stage_payload(st) for st in project.stages]
     request = {
-        "root_job_id": None,             # rootless: stage 0 CREATES the structure
+        "root_job_id": None,  # rootless: stage 0 CREATES the structure
         "root_engine": stages[0]["engine"],
         "design_source_path": str(FIXTURE),
         "stages": stages,
@@ -147,7 +172,9 @@ def _tick(workspace) -> None:
 
 
 def _running_job(chain: dict) -> str | None:
-    return next((s["job_id"] for s in chain["stages"] if s["status"] == "running"), None)
+    return next(
+        (s["job_id"] for s in chain["stages"] if s["status"] == "running"), None
+    )
 
 
 def _get_chain(chain_id: str) -> dict:
@@ -158,17 +185,27 @@ def _get_chain(chain_id: str) -> dict:
 
 # ── fixture sanity: the authored chain is what we think it is ────────────────────────
 
+
 def test_fixture_ships_the_expected_three_stage_oxdna_chain():
     _, project, req = _load_authored_chain_request()
     kinds = [(s["engine"], s["protocol"]) for s in req["stages"]]
-    assert kinds == [("oxdna", "relax"), ("oxdna", "production"), ("oxdna", "production")]
+    assert kinds == [
+        ("oxdna", "relax"),
+        ("oxdna", "production"),
+        ("oxdna", "production"),
+    ]
     # The two productions carry the field/surface the launch card echoes; the last also
     # pins anchors. (Guards the fixture — if it changes, the drive assertions would lie.)
     assert req["stages"][1]["field"] and req["stages"][1]["surface"]
-    assert req["stages"][2]["field"] and req["stages"][2]["surface"] and req["stages"][2]["anchors"]
+    assert (
+        req["stages"][2]["field"]
+        and req["stages"][2]["surface"]
+        and req["stages"][2]["anchors"]
+    )
 
 
 # ── the core property: the authored chain DRIVES TO COMPLETED ────────────────────────
+
 
 def test_authored_chain_runs_all_stages_to_completed(spawns):
     design, _, request = _load_authored_chain_request()
@@ -181,7 +218,7 @@ def test_authored_chain_runs_all_stages_to_completed(spawns):
     chain = r.json()["chain"]
     chain_id = chain["chain_id"]
     assert chain["status"] == "running"
-    assert _running_job(chain) is not None          # stage 0 is live immediately
+    assert _running_job(chain) is not None  # stage 0 is live immediately
 
     # Drive the supervisor: complete the in-flight stage, tick, repeat. Bounded so a
     # regression that never converges fails loudly instead of hanging.
@@ -200,14 +237,18 @@ def test_authored_chain_runs_all_stages_to_completed(spawns):
 
     # Routing: stage 0 went through the fresh-relax creator, stages 1+2 through the
     # same-engine oxDNA child hop (never NAMD — the stubbed NAMD path would have raised).
-    assert [c["kind"] for c in spawns.calls] == ["fresh_relax", "oxdna_child", "oxdna_child"]
+    assert [c["kind"] for c in spawns.calls] == [
+        "fresh_relax",
+        "oxdna_child",
+        "oxdna_child",
+    ]
 
     # Seeding: each production is seeded FROM THE PREVIOUS STAGE's realised job — the
     # chain property. (RED guard: not the root, not a later stage.)
     j0, j1, j2 = (c["job_id"] for c in spawns.calls)
     assert spawns.calls[1]["parent"] == j0
     assert spawns.calls[2]["parent"] == j1
-    assert len({j0, j1, j2}) == 3                    # three distinct child jobs
+    assert len({j0, j1, j2}) == 3  # three distinct child jobs
 
     # Forces carried VERBATIM into each stage's spawn (Three-Layer Law: annotations,
     # not Design edits). Stage 1 = field+surface; stage 2 = field+surface+anchors.
@@ -230,11 +271,12 @@ def test_authored_chain_runs_all_stages_to_completed(spawns):
 # be a hard 400 at create_md_chain; it is now a per-stage WARNING surfaced in the UI
 # preflight (chain_sim_model.stagePreflight → level 'warn'), and the launch proceeds.
 
+
 def test_launch_allows_a_field_stage_with_nothing_to_hold_it(spawns):
     design, _, request = _load_authored_chain_request()
     design_state.set_design(design)
-    request["stages"][1]["surface"] = None      # strip the opposing surface
-    request["stages"][1]["anchors"] = None       # and it has no strand anchor
+    request["stages"][1]["surface"] = None  # strip the opposing surface
+    request["stages"][1]["anchors"] = None  # and it has no strand anchor
     r = client.post("/api/md/chains", json=request)
     assert r.status_code == 200, r.text
     # The chain launched — stage 0 was spawned.
@@ -255,6 +297,7 @@ def test_launch_accepts_the_real_deposition_chain(spawns):
 # "is the loaded design current?" guard and 409'd (a different design was open). Under the
 # unattended-chain flag that guard must stand down — the stage seeds from the parent job's
 # own frozen state, not the loaded design.
+
 
 def test_oxdna_design_guard_409s_interactively_but_stands_down_for_a_chain(monkeypatch):
     from fastapi import HTTPException
@@ -288,7 +331,9 @@ def test_namd_design_guard_409s_interactively_but_stands_down_for_a_chain(monkey
     from backend.core import oxdna_staleness
 
     monkeypatch.setattr(oxdna_staleness, "job_out_of_date", lambda a, b: True)
-    monkeypatch.setattr(oxdna_staleness, "current_active_design_fingerprint", lambda: "live-fp")
+    monkeypatch.setattr(
+        oxdna_staleness, "current_active_design_fingerprint", lambda: "live-fp"
+    )
     monkeypatch.setattr(routes_md, "_md_job_fingerprint", lambda job: "job-fp")
     monkeypatch.setattr(routes_md, "_md_snapshot_design", lambda job: None)
     design_state.set_design(_demo_design())
@@ -310,6 +355,7 @@ def test_unattended_flag_resets_after_the_context():
 
 # ── recovery: a mid-chain failure HALTS, and Resume drives it to completion ──────────
 
+
 def test_mid_chain_failure_halts_then_resume_completes(spawns):
     design, _, request = _load_authored_chain_request()
     design_state.set_design(design)
@@ -320,7 +366,7 @@ def test_mid_chain_failure_halts_then_resume_completes(spawns):
     # Stage 0 completes; stage 1 spawns then FAILS -> chain halts, stage 2 never spawns.
     chain = _get_chain(chain_id)
     spawns.complete(_running_job(chain))
-    _tick(spawns.workspace)                          # stage 1 now running
+    _tick(spawns.workspace)  # stage 1 now running
     chain = _get_chain(chain_id)
     stage1_job = _running_job(chain)
     spawns.fail(stage1_job)
@@ -330,15 +376,15 @@ def test_mid_chain_failure_halts_then_resume_completes(spawns):
     assert chain["status"] == ce.CHAIN_FAILED
     assert chain["stages"][0]["status"] == ce.STAGE_DONE
     assert chain["stages"][1]["status"] == ce.STAGE_FAILED
-    assert chain["stages"][2]["status"] == ce.STAGE_PENDING   # downstream never spawned
-    spawns_at_halt = len(spawns.calls)               # fresh_relax + one oxdna_child
+    assert chain["stages"][2]["status"] == ce.STAGE_PENDING  # downstream never spawned
+    spawns_at_halt = len(spawns.calls)  # fresh_relax + one oxdna_child
 
     # Resume: retry-only-failed re-spawns from stage 1 (stage 0 stays done, not re-run).
     r = client.post(f"/api/md/chains/{chain_id}/resume")
     assert r.status_code == 200, r.text
     chain = _get_chain(chain_id)
     assert chain["status"] == "running"
-    assert chain["stages"][0]["status"] == ce.STAGE_DONE     # completed stage untouched
+    assert chain["stages"][0]["status"] == ce.STAGE_DONE  # completed stage untouched
 
     # Drive the recovered chain to completion.
     for _ in range(10):
@@ -354,7 +400,11 @@ def test_mid_chain_failure_halts_then_resume_completes(spawns):
     # Resume re-spawned only stage 1 + then stage 2: stage 0 was never handed to a
     # creator a second time.
     assert [c["kind"] for c in spawns.calls] == [
-        "fresh_relax", "oxdna_child", "oxdna_child", "oxdna_child"]
+        "fresh_relax",
+        "oxdna_child",
+        "oxdna_child",
+        "oxdna_child",
+    ]
     assert len(spawns.calls) == spawns_at_halt + 2
 
 
@@ -365,6 +415,7 @@ def test_mid_chain_failure_halts_then_resume_completes(spawns):
 # relax -> seed -> append -> append -> completion orchestration on the real design, mocking
 # only the oxDNA BINARY (a fake runner that carries the configuration forward), so every
 # spawn precondition, seed resolution, force-file write, and file copy is exercised for real.
+
 
 @pytest.mark.slow
 def test_full_chain_runs_end_to_end_with_a_mock_binary(tmp_path, monkeypatch):
@@ -385,9 +436,15 @@ def test_full_chain_runs_end_to_end_with_a_mock_binary(tmp_path, monkeypatch):
     monkeypatch.setattr(r, "find_oxdna", lambda *a, **k: "/fake/oxDNA")
     monkeypatch.setattr(r, "find_dnanalysis", lambda *a, **k: None)
     monkeypatch.setattr(
-        r, "run_oxdna_health_check",
-        lambda *a, **k: OxdnaHealthResult(passed=True, bp_retained_fraction=0.95,
-                                          potential_energy=-1.3, fene_safe=True))
+        r,
+        "run_oxdna_health_check",
+        lambda *a, **k: OxdnaHealthResult(
+            passed=True,
+            bp_retained_fraction=0.95,
+            potential_energy=-1.3,
+            fene_safe=True,
+        ),
+    )
 
     def _conf_file_from_input(input_path):
         for line in Path(input_path).read_text().splitlines():
@@ -396,7 +453,9 @@ def test_full_chain_runs_end_to_end_with_a_mock_binary(tmp_path, monkeypatch):
                 return s.split("=", 1)[1].strip()
         return None
 
-    async def fake_run(oxdna_bin, input_path, stage_dir, log_path, job_id, on_spawn=None):
+    async def fake_run(
+        oxdna_bin, input_path, stage_dir, log_path, job_id, on_spawn=None
+    ):
         # Carry the starting configuration forward as the "relaxed" last_conf so downstream
         # seed resolution + wall/anchor placement (which READ the conf) work on real coords.
         if on_spawn:
@@ -411,7 +470,9 @@ def test_full_chain_runs_end_to_end_with_a_mock_binary(tmp_path, monkeypatch):
         if src is not None:
             shutil.copy(src, stage_dir / "last_conf.dat")
         else:
-            (stage_dir / "last_conf.dat").write_text("t = 0\nb = 100 100 100\nE = 0 0 0\n")
+            (stage_dir / "last_conf.dat").write_text(
+                "t = 0\nb = 100 100 100\nE = 0 0 0\n"
+            )
         (stage_dir / "energy.dat").write_text("0 -1.3 0.3 -1.0\n")
         Path(log_path).write_text("INFO: END OF THE SIMULATION, everything went OK!\n")
         return 0, 4242

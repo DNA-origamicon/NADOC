@@ -10,6 +10,7 @@ never realised to loop/skips predicts a STRAIGHT shape → large deviation from 
 drawn (bent) geometry.  Realising the loop/skips brings the prediction into agreement
 → the RMSD collapses.  A straight control has ~zero deviation.
 """
+
 from __future__ import annotations
 
 
@@ -50,7 +51,13 @@ def test_deviation_payload_shape_and_stats():
     assert dev["n"] > 0
     assert dev["positions"], "one entry per displayed nucleotide"
     for p in dev["positions"][:5]:
-        assert set(p) >= {"helix_id", "bp_index", "direction", "backbone_position", "deviation"}
+        assert set(p) >= {
+            "helix_id",
+            "bp_index",
+            "direction",
+            "backbone_position",
+            "deviation",
+        }
         assert p["deviation"] >= 0.0
     # min ≤ mean ≤ max, and RMSD ≥ mean (quadratic mean dominates the arithmetic mean).
     assert dev["min_deviation"] <= dev["mean_deviation"] <= dev["max_deviation"]
@@ -77,8 +84,8 @@ def test_unrealized_bend_deviates_far_more_than_realized():
     realized = _deviation(_routed(bend_deg=90.0, realize=True))
     display_only = _deviation(_routed(bend_deg=90.0, realize=False))
 
-    assert display_only["rmsd_nm"] > 3.0            # straight FEM vs a drawn ~90° bend
-    assert realized["rmsd_nm"] < 3.0                # realised loop/skips ≈ the drawn shape
+    assert display_only["rmsd_nm"] > 3.0  # straight FEM vs a drawn ~90° bend
+    assert realized["rmsd_nm"] < 3.0  # realised loop/skips ≈ the drawn shape
     # Realising the marks at least halves the deviation — the unambiguous refine signal.
     assert realized["rmsd_nm"] < 0.5 * display_only["rmsd_nm"]
 
@@ -96,7 +103,7 @@ def test_loop_copies_each_get_their_own_deviation_entry():
         hb.auto_crossover()
         hb.auto_break()
         d = design_state.get_or_404()
-        for h in d.helices:                   # +1 → loop inserts (extra copies)
+        for h in d.helices:  # +1 → loop inserts (extra copies)
             for bp in (30, 40, 50):
                 hb.loop_skip(h.id, bp, 1)
         d = design_state.get_or_404().model_copy(deep=True)
@@ -106,12 +113,19 @@ def test_loop_copies_each_get_their_own_deviation_entry():
 
     # Every entry carries a copy; some keys have copy > 0 (the loop inserts).
     assert all("copy" in p for p in dev["positions"])
-    per_key = Counter((p["helix_id"], p["bp_index"], p["direction"]) for p in dev["positions"])
-    assert any(v > 1 for v in per_key.values()), "expected loop keys with multiple copies"
+    per_key = Counter(
+        (p["helix_id"], p["bp_index"], p["direction"]) for p in dev["positions"]
+    )
+    assert any(v > 1 for v in per_key.values()), (
+        "expected loop keys with multiple copies"
+    )
     # Distinct (helix, bp, dir, copy) tuples == number of entries → no copy collapsed.
-    keyed = {(p["helix_id"], p["bp_index"], p["direction"], p["copy"]) for p in dev["positions"]}
+    keyed = {
+        (p["helix_id"], p["bp_index"], p["direction"], p["copy"])
+        for p in dev["positions"]
+    }
     assert len(keyed) == len(dev["positions"])
-    assert dev["n"] == len(dev["positions"])          # every entry matched a native copy
+    assert dev["n"] == len(dev["positions"])  # every entry matched a native copy
 
 
 def test_unmatched_positions_excluded_from_stats():
@@ -119,8 +133,14 @@ def test_unmatched_positions_excluded_from_stats():
     is excluded from the matched count ``n`` (defensive — the display list is normally
     built from the same nucleotides, so this should not happen in practice)."""
     d = _routed(bend_deg=None, realize=False)
-    phantom = [{"helix_id": "nope", "bp_index": 9999, "direction": "forward",
-                "backbone_position": [1.0, 2.0, 3.0]}]
+    phantom = [
+        {
+            "helix_id": "nope",
+            "bp_index": 9999,
+            "direction": "forward",
+            "backbone_position": [1.0, 2.0, 3.0],
+        }
+    ]
     dev = compute_deviation(d, phantom)
     assert dev["n"] == 0
     assert dev["positions"][0]["deviation"] == 0.0

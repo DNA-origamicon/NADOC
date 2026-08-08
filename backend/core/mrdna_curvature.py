@@ -34,12 +34,18 @@ def _loop_skip_modifications(design: Design) -> tuple[dict, list, int, int]:
     """Return (modifications, segment_helices, n_loops, n_skips) from the design's
     loop/skip marks — the input to the analytic Dietz model."""
     mods = {h.id: list(h.loop_skips or []) for h in design.helices}
-    n_loops = sum(ls.delta for h in design.helices for ls in (h.loop_skips or []) if ls.delta > 0)
-    n_skips = sum(-ls.delta for h in design.helices for ls in (h.loop_skips or []) if ls.delta < 0)
+    n_loops = sum(
+        ls.delta for h in design.helices for ls in (h.loop_skips or []) if ls.delta > 0
+    )
+    n_skips = sum(
+        -ls.delta for h in design.helices for ls in (h.loop_skips or []) if ls.delta < 0
+    )
     return mods, list(design.helices), n_loops, n_skips
 
 
-def analytic_curvature(design: Design, *, direction_deg: Optional[float] = None) -> dict:
+def analytic_curvature(
+    design: Design, *, direction_deg: Optional[float] = None
+) -> dict:
     """Designed curvature from the loop/skip pattern via NADOC's continuum model.
 
     Scans the bend direction for the maximum curvature when ``direction_deg`` is
@@ -51,8 +57,12 @@ def analytic_curvature(design: Design, *, direction_deg: Optional[float] = None)
     mods, helices, n_loops, n_skips = _loop_skip_modifications(design)
     all_bp = [ls.bp_index for h in design.helices for ls in (h.loop_skips or [])]
     out = {
-        "radius_nm": math.inf, "kappa_deg_per_nm": 0.0, "bend_deg": 0.0,
-        "direction_deg": 0.0, "n_loops": n_loops, "n_skips": n_skips,
+        "radius_nm": math.inf,
+        "kappa_deg_per_nm": 0.0,
+        "bend_deg": 0.0,
+        "direction_deg": 0.0,
+        "n_loops": n_loops,
+        "n_skips": n_skips,
         "has_marks": bool(all_bp),
     }
     if not all_bp:
@@ -82,7 +92,8 @@ def _slab_centroids(positions: list[dict], n_slices: int = 15) -> "np.ndarray | 
     bp_pts: dict = {}
     for p in positions:
         bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
-            np.asarray(p["backbone_position"], dtype=float))
+            np.asarray(p["backbone_position"], dtype=float)
+        )
     pts = np.array([np.mean(v, axis=0) for v in bp_pts.values()])
     if len(pts) < n_slices:
         return None
@@ -135,6 +146,10 @@ def curvature_report(design: Design, positions: Optional[list[dict]]) -> dict:
     analytic = analytic_curvature(design)
     measured = measured_curvature(positions) if positions else None
     ratio = None
-    if measured and analytic["kappa_deg_per_nm"] > 1e-6 and measured["kappa_deg_per_nm"] > 1e-6:
+    if (
+        measured
+        and analytic["kappa_deg_per_nm"] > 1e-6
+        and measured["kappa_deg_per_nm"] > 1e-6
+    ):
         ratio = measured["kappa_deg_per_nm"] / analytic["kappa_deg_per_nm"]
     return {"analytic": analytic, "measured": measured, "ratio": ratio}

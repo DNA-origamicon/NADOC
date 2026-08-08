@@ -18,6 +18,7 @@ Pure geometry over a :class:`ProteinAsset`; no FastAPI, no topology mutation.
 Coordinates are the asset's own local/PDB frame (nm), matching the
 ``?asset_id=`` atomistic preview render.
 """
+
 from __future__ import annotations
 
 import math
@@ -154,15 +155,17 @@ def find_conjugation_candidates(
         acc = sasa.get(a.serial, 1.0)
         if acc < min_accessible:
             continue
-        candidates.append({
-            "res_name": a.res_name,
-            "chain_id": a.chain_id,
-            "res_seq": a.res_seq,
-            "chemistry": chem,
-            "functional_atom_serial": a.serial,
-            "x": a.x,
-            "y": a.y,
-            "z": a.z,
-            "accessible": round(acc, 4),
-        })
+        candidates.append(
+            {
+                "res_name": a.res_name,
+                "chain_id": a.chain_id,
+                "res_seq": a.res_seq,
+                "chemistry": chem,
+                "functional_atom_serial": a.serial,
+                "x": a.x,
+                "y": a.y,
+                "z": a.z,
+                "accessible": round(acc, 4),
+            }
+        )
     return candidates

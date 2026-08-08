@@ -10,6 +10,7 @@ from backend.core import md_vram as V
 
 # ── Failure detection ─────────────────────────────────────────────────────────
 
+
 def test_log_indicates_oom():
     oom = (
         "Info: Finished startup\n"
@@ -29,22 +30,39 @@ def test_log_file_indicates_oom(tmp_path: Path):
 
 def test_classify_failure_log_multikind():
     assert V.classify_failure_log("FATAL: cudaMalloc ... : out of memory") == "vram_oom"
-    assert V.classify_failure_log(
-        "ERROR: Constraint failure in RATTLE algorithm for atom 459556!") == "instability"
-    assert V.classify_failure_log("ERROR: Margin is too small for 1 atoms") == "instability"
-    assert V.classify_failure_log(
-        "FATAL ERROR: CUDA error cudaStreamSynchronize ... buildTileLists") == "gpu_error"
+    assert (
+        V.classify_failure_log(
+            "ERROR: Constraint failure in RATTLE algorithm for atom 459556!"
+        )
+        == "instability"
+    )
+    assert (
+        V.classify_failure_log("ERROR: Margin is too small for 1 atoms")
+        == "instability"
+    )
+    assert (
+        V.classify_failure_log(
+            "FATAL ERROR: CUDA error cudaStreamSynchronize ... buildTileLists"
+        )
+        == "gpu_error"
+    )
     assert V.classify_failure_log("MINIMIZER RESTARTING\nEnd of program") == "other"
     # OOM wins even though it is also a "CUDA error" line.
     assert V.classify_failure_log("CUDA error cudaMalloc: out of memory") == "vram_oom"
     # NPT equilibration outgrowing the patch grid — a self-healing, auto-resumable
     # fatal, distinct from an instability blow-up.
-    assert V.classify_failure_log(
-        "FATAL ERROR: Periodic cell has become too small for original patch grid!"
-    ) == "cell_shrink"
+    assert (
+        V.classify_failure_log(
+            "FATAL ERROR: Periodic cell has become too small for original patch grid!"
+        )
+        == "cell_shrink"
+    )
     # "Margin is too small" (a RATTLE blow-up) must NOT be mistaken for the cell
     # shrink — it stays an instability so it is not auto-resumed into a re-crash.
-    assert V.classify_failure_log("ERROR: Margin is too small for 1 atoms") == "instability"
+    assert (
+        V.classify_failure_log("ERROR: Margin is too small for 1 atoms")
+        == "instability"
+    )
 
 
 def test_classify_host_pinned_oom_not_vram():
@@ -64,6 +82,7 @@ def test_classify_host_pinned_oom_not_vram():
 
 # ── Failure → UX description (Relax decision gates) ───────────────────────────
 
+
 def test_describe_failure_tile_list_bug_offers_newer_binary():
     # The resident tile-list crash is the one a newer NAMD build fixes -> the ONLY
     # kind with retry_other_binary True; it's a decision (offer slower GPU), not a stop.
@@ -78,8 +97,8 @@ def test_describe_failure_tile_list_bug_offers_newer_binary():
     assert d.severity == "decision"
     assert d.retry_other_binary is True
     assert d.degrade_target == "offload"
-    assert "buildTileLists" in d.technical_reason      # raw cause kept for logs
-    assert "buildTileLists" not in d.message           # never in the user message
+    assert "buildTileLists" in d.technical_reason  # raw cause kept for logs
+    assert "buildTileLists" not in d.message  # never in the user message
     assert "GPUresident" not in d.message
 
 
@@ -107,9 +126,13 @@ def test_describe_failure_vram_oom_is_hard_stop():
 
 def test_describe_failure_instability_and_cellshrink_are_auto():
     # Both are handled by NADOC's auto-resume — info note, never a modal.
-    assert V.describe_failure("ERROR: Margin is too small for 1 atoms").severity == "auto"
-    assert V.describe_failure(
-        "FATAL ERROR: Periodic cell has become too small").severity == "auto"
+    assert (
+        V.describe_failure("ERROR: Margin is too small for 1 atoms").severity == "auto"
+    )
+    assert (
+        V.describe_failure("FATAL ERROR: Periodic cell has become too small").severity
+        == "auto"
+    )
 
 
 def test_describe_failure_unknown_is_generic_decision():
@@ -126,36 +149,65 @@ def test_describe_failure_file(tmp_path: Path):
 
 # ── Pre-flight size gate (Gate A: A1 / A2 / A3) ───────────────────────────────
 
+
 def test_classify_vram_fit_tiers():
     # full box fits -> no gate
     assert V.classify_vram_fit({"current_atoms": 100, "max_atoms": 200}) == "ok"
     # a comfortable (>=15 A) shell fits -> A1
-    assert V.classify_vram_fit({"current_atoms": 2_000_000, "max_atoms": 1_000_000,
-                                "feasible": True, "recommended_shell_nm": 1.5}) == "a1"
+    assert (
+        V.classify_vram_fit(
+            {
+                "current_atoms": 2_000_000,
+                "max_atoms": 1_000_000,
+                "feasible": True,
+                "recommended_shell_nm": 1.5,
+            }
+        )
+        == "a1"
+    )
     # only a tight (<15 A) shell fits -> A2
-    assert V.classify_vram_fit({"current_atoms": 2_000_000, "max_atoms": 1_000_000,
-                                "feasible": True, "recommended_shell_nm": 1.0}) == "a2"
+    assert (
+        V.classify_vram_fit(
+            {
+                "current_atoms": 2_000_000,
+                "max_atoms": 1_000_000,
+                "feasible": True,
+                "recommended_shell_nm": 1.0,
+            }
+        )
+        == "a2"
+    )
     # nothing fits -> A3 hard stop
-    assert V.classify_vram_fit({"current_atoms": 5_000_000, "max_atoms": 1_000_000,
-                                "feasible": False}) == "a3"
+    assert (
+        V.classify_vram_fit(
+            {"current_atoms": 5_000_000, "max_atoms": 1_000_000, "feasible": False}
+        )
+        == "a3"
+    )
 
 
 def test_classify_vram_fit_missing_data_never_gates():
     assert V.classify_vram_fit(None) == "ok"
     assert V.classify_vram_fit({}) == "ok"
-    assert V.classify_vram_fit({"current_atoms": 9, "max_atoms": 0}) == "ok"  # unknown cap
+    assert (
+        V.classify_vram_fit({"current_atoms": 9, "max_atoms": 0}) == "ok"
+    )  # unknown cap
 
 
 def test_carve_fill_fraction_tight_vs_big_box():
     # A compact ~4 nm DNA blob; a shell carve fills a TIGHT box but leaves a BIG box
     # mostly vacuum. This is exactly the resident-capable-vs-not distinction.
-    dna = [(x / 10, y / 10, z / 10)
-           for x in range(0, 40, 4) for y in range(0, 40, 4) for z in range(0, 40, 4)]
-    assert V.carve_fill_fraction(dna, (5.0, 5.0, 5.0), 0.0) == 1.0     # no carve = full
-    tight = V.carve_fill_fraction(dna, (5.5, 5.5, 5.5), 1.5)           # blob fills the box
-    big = V.carve_fill_fraction(dna, (20.0, 20.0, 20.0), 1.5)          # blob lost in vacuum
-    assert tight > 0.8            # well-filled → would attempt resident
-    assert big < 0.3              # sparse → stays offload
+    dna = [
+        (x / 10, y / 10, z / 10)
+        for x in range(0, 40, 4)
+        for y in range(0, 40, 4)
+        for z in range(0, 40, 4)
+    ]
+    assert V.carve_fill_fraction(dna, (5.0, 5.0, 5.0), 0.0) == 1.0  # no carve = full
+    tight = V.carve_fill_fraction(dna, (5.5, 5.5, 5.5), 1.5)  # blob fills the box
+    big = V.carve_fill_fraction(dna, (20.0, 20.0, 20.0), 1.5)  # blob lost in vacuum
+    assert tight > 0.8  # well-filled → would attempt resident
+    assert big < 0.3  # sparse → stays offload
     assert tight > big
 
 
@@ -172,6 +224,7 @@ def test_preflight_vram_advice_skips_cpu_without_host(monkeypatch):
 
 
 # ── Error-line extraction (frontend cause surfacing) ──────────────────────────
+
 
 def test_extract_error_line_namd_fatal():
     log = (
@@ -193,12 +246,18 @@ def test_extract_error_line_prefers_fatal_over_generic_error():
 
 def test_extract_error_line_slurm_level():
     assert "TIME LIMIT" in V.extract_error_line(
-        "slurmstepd: error: *** JOB 42 CANCELLED AT ... DUE TO TIME LIMIT ***")
-    assert V.extract_error_line(
-        "/etc/profile: line 47: HISTCONTROL: unbound variable"
-    ) == "/etc/profile: line 47: HISTCONTROL: unbound variable"
-    assert "oom-kill" in V.extract_error_line(
-        "slurmstepd: error: Detected 1 oom-kill event(s)").lower()
+        "slurmstepd: error: *** JOB 42 CANCELLED AT ... DUE TO TIME LIMIT ***"
+    )
+    assert (
+        V.extract_error_line("/etc/profile: line 47: HISTCONTROL: unbound variable")
+        == "/etc/profile: line 47: HISTCONTROL: unbound variable"
+    )
+    assert (
+        "oom-kill"
+        in V.extract_error_line(
+            "slurmstepd: error: Detected 1 oom-kill event(s)"
+        ).lower()
+    )
 
 
 def test_extract_error_line_none_when_clean():
@@ -214,6 +273,7 @@ def test_extract_error_line_from_file(tmp_path: Path):
 
 
 # ── VRAM model ────────────────────────────────────────────────────────────────
+
 
 def test_vram_model_monotonic_and_invertible():
     assert V.max_atoms_for_vram(24000) > V.max_atoms_for_vram(12000)
@@ -231,6 +291,7 @@ def test_first_device_id():
 
 # ── Downsize recommendation ───────────────────────────────────────────────────
 
+
 def _dna_line(n=60, spacing=0.34):
     """A thin DNA filament along x — most of a big box is empty bulk water."""
     return [(i * spacing, 0.0, 0.0) for i in range(n)]
@@ -242,8 +303,12 @@ _FULL_WATER = int(20 * 20 * 20 * 33.0)
 
 def _est(shell):
     return V.estimate_total_atoms(
-        dna_xyz_nm=_dna_line(), box_nm=_BOX, full_water=_FULL_WATER,
-        dna_atoms=60, ion_atoms=0, shell_nm=shell,
+        dna_xyz_nm=_dna_line(),
+        box_nm=_BOX,
+        full_water=_FULL_WATER,
+        dna_atoms=60,
+        ion_atoms=0,
+        shell_nm=shell,
     )
 
 
@@ -253,8 +318,12 @@ def test_estimate_shrinks_with_shell():
 
 def _recommend(vram_mb):
     return V.recommend_downsize(
-        dna_xyz_nm=_dna_line(), box_nm=_BOX, full_water=_FULL_WATER,
-        dna_atoms=60, ion_atoms=0, vram_mb=vram_mb,
+        dna_xyz_nm=_dna_line(),
+        box_nm=_BOX,
+        full_water=_FULL_WATER,
+        dna_atoms=60,
+        ion_atoms=0,
+        vram_mb=vram_mb,
     )
 
 
@@ -283,13 +352,24 @@ def test_recommend_infeasible_for_tiny_card():
 
 # ── Package profile loader ────────────────────────────────────────────────────
 
+
 def test_package_solvation_profile(tmp_path: Path):
     pkg = tmp_path
-    (pkg / "charge_audit.json").write_text(json.dumps({"ionization": {
-        "n_waters": 1000, "n_na": 10, "n_mg": 2, "n_cl": 14,
-        "mg_hexahydrate": True, "box_nm": [10.0, 10.0, 10.0],
-        "water_shell_nm": None,
-    }}))
+    (pkg / "charge_audit.json").write_text(
+        json.dumps(
+            {
+                "ionization": {
+                    "n_waters": 1000,
+                    "n_na": 10,
+                    "n_mg": 2,
+                    "n_cl": 14,
+                    "mg_hexahydrate": True,
+                    "box_nm": [10.0, 10.0, 10.0],
+                    "water_shell_nm": None,
+                }
+            }
+        )
+    )
     (pkg / "x.pdb").write_text(
         "CRYST1  100 100 100  90 90 90 P 1\n"
         "ATOM      1  P   DA  A   1       1.000   2.000   3.000  1.00  0.00      D\n"
@@ -297,7 +377,7 @@ def test_package_solvation_profile(tmp_path: Path):
         "HETATM    3  OH2 TIP3 W  1       9.000   9.000   9.000  1.00  0.00      W\n"
     )
     prof = V.package_solvation_profile(pkg, "x")
-    assert prof["dna_atoms"] == 2                 # stopped at HETATM
+    assert prof["dna_atoms"] == 2  # stopped at HETATM
     assert prof["full_water"] == 1000
     assert prof["ion_atoms"] == 10 + 14 + 2 * 19  # MGH = 19 atoms each
     assert prof["box_nm"] == (10.0, 10.0, 10.0)
@@ -308,13 +388,18 @@ def test_package_solvation_profile(tmp_path: Path):
 
 # ── MdJob persists the new fix-related fields ─────────────────────────────────
 
+
 def test_mdjob_failure_kind_and_prep_params_roundtrip(tmp_path: Path):
     from backend.core.md_job import MdJob, MdStatus, new_job
 
     job = new_job("d", "equilibrium_aware_namd", "", "", devices="0")
     job.status = MdStatus.failed
     job.failure_kind = "vram_oom"
-    job.prep_params = {"padding_nm": 1.2, "water_shell_nm": 0.0, "salt_mode": "screening"}
+    job.prep_params = {
+        "padding_nm": 1.2,
+        "water_shell_nm": 0.0,
+        "salt_mode": "screening",
+    }
     job.save(tmp_path)
 
     loaded = MdJob.load(job.job_id, tmp_path)
@@ -328,17 +413,26 @@ def test_mdjob_load_defaults_missing_fix_fields(tmp_path: Path):
 
     jd = tmp_path / "md_jobs" / "old123"
     jd.mkdir(parents=True)
-    (jd / "job.json").write_text(json.dumps({
-        "job_id": "old123", "design_name": "d", "protocol": "p",
-        "status": "failed", "created_at": 1.0,
-        "package_subdir": "", "name_stem": "",
-    }))
+    (jd / "job.json").write_text(
+        json.dumps(
+            {
+                "job_id": "old123",
+                "design_name": "d",
+                "protocol": "p",
+                "status": "failed",
+                "created_at": 1.0,
+                "package_subdir": "",
+                "name_stem": "",
+            }
+        )
+    )
     loaded = MdJob.load("old123", tmp_path)
     assert loaded.failure_kind is None
     assert loaded.prep_params is None
 
 
 # ── Pre-flight auto-sizing (proactive, no GROMACS) ────────────────────────────
+
 
 def test_estimate_profile_from_design():
     from tests.conftest import make_6hb_design
@@ -363,8 +457,8 @@ def test_auto_water_shell_carves_when_too_small(monkeypatch):
 
     monkeypatch.setattr(V, "detect_vram_mb", lambda devices="0": 40)  # tiny card
     out = V.auto_water_shell(make_6hb_design(42))
-    assert out["shell_nm"] > 0.0          # a carve (or tightest) was chosen
-    assert out["note"]                    # with a human explanation
+    assert out["shell_nm"] > 0.0  # a carve (or tightest) was chosen
+    assert out["note"]  # with a human explanation
 
 
 def test_auto_water_shell_no_vram_reading(monkeypatch):
@@ -384,8 +478,8 @@ def test_auto_water_shell_cpu_sizes_to_host_ram_not_vram(monkeypatch):
     monkeypatch.setattr(V, "detect_vram_mb", lambda devices="0": 1_000_000)
     monkeypatch.setattr(V, "detect_host_ram_mb", lambda: 500)  # tiny host
     out = V.auto_water_shell(make_6hb_design(42), devices="cpu")
-    assert out["vram_mb"] is None                     # VRAM never consulted
-    assert out["shell_nm"] > 0.0 and out["note"]      # carved to fit host RAM
+    assert out["vram_mb"] is None  # VRAM never consulted
+    assert out["shell_nm"] > 0.0 and out["note"]  # carved to fit host RAM
     assert "host RAM" in out["note"]
 
 
@@ -410,11 +504,18 @@ def test_max_atoms_for_host_ram_monotonic():
 
 def test_recommend_downsize_honours_max_atoms_override():
     import numpy as np
+
     xyz = np.random.RandomState(0).rand(200, 3) * 8.0  # ~8 nm cube of DNA points
-    common = dict(dna_xyz_nm=xyz, box_nm=(12.0, 12.0, 12.0),
-                  full_water=400_000, dna_atoms=6_000, ion_atoms=200, vram_mb=12288)
-    loose = V.recommend_downsize(**common)                       # GPU budget only
-    tight = V.recommend_downsize(**common, max_atoms=50_000)     # host-tightened
+    common = dict(
+        dna_xyz_nm=xyz,
+        box_nm=(12.0, 12.0, 12.0),
+        full_water=400_000,
+        dna_atoms=6_000,
+        ion_atoms=200,
+        vram_mb=12288,
+    )
+    loose = V.recommend_downsize(**common)  # GPU budget only
+    tight = V.recommend_downsize(**common, max_atoms=50_000)  # host-tightened
     assert tight["max_atoms"] == 50_000
     assert loose["max_atoms"] == V.max_atoms_for_vram(12288)
     # A tighter atom budget can never recommend a *larger* (less restrictive) shell.
@@ -436,9 +537,15 @@ def test_auto_water_shell_carves_when_host_ram_tight(monkeypatch):
 
 # ── External GPU-contention detection (pre-launch warning) ────────────────────
 
+
 def _activity(procs, used=4000, total=12288, util=40):
-    return {"used_mb": used, "total_mb": total, "free_mb": total - used,
-            "util_pct": util, "processes": procs}
+    return {
+        "used_mb": used,
+        "total_mb": total,
+        "free_mb": total - used,
+        "util_pct": util,
+        "processes": procs,
+    }
 
 
 def test_gpu_contention_flags_external_heavy_process():
@@ -450,10 +557,12 @@ def test_gpu_contention_flags_external_heavy_process():
 
 
 def test_gpu_contention_ignores_small_and_own_processes():
-    act = _activity([
-        {"pid": 100, "name": "nxnode.bin", "mem_mb": 287},   # below threshold
-        {"pid": 200, "name": "namd3", "mem_mb": 8000},        # our own job
-    ])
+    act = _activity(
+        [
+            {"pid": 100, "name": "nxnode.bin", "mem_mb": 287},  # below threshold
+            {"pid": 200, "name": "namd3", "mem_mb": 8000},  # our own job
+        ]
+    )
     out = V.gpu_contention_summary(act, own_pids={200})
     assert out["busy"] is False and out["processes"] == []
 

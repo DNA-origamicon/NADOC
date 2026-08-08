@@ -16,6 +16,7 @@ scored against:
 
 Fast: no real engine binary — the 6HB fixture is a headless bundle build + in-process solve.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -42,6 +43,7 @@ from backend.physics.fem_solver import (
 
 # ── assemble_field_force: pure body-load property tests (no design) ──────────
 
+
 def _straight_chain_mesh(n: int = 6, rise: float = 0.34) -> FEMMesh:
     axis = _frame_from_helix_axis(np.array([0.0, 0.0, 1.0]))
     nodes = [
@@ -49,8 +51,9 @@ def _straight_chain_mesh(n: int = 6, rise: float = 0.34) -> FEMMesh:
         for i in range(n)
     ]
     elems = [
-        FEMElement(node_i=i, node_j=i + 1, length=rise, R=axis,
-                   ea=EA_DS, ei=EI_DS, gj=GJ_DS)
+        FEMElement(
+            node_i=i, node_j=i + 1, length=rise, R=axis, ea=EA_DS, ei=EI_DS, gj=GJ_DS
+        )
         for i in range(n - 1)
     ]
     return FEMMesh(nodes=nodes, elements=elems)
@@ -62,9 +65,11 @@ def test_field_force_none_and_zero_are_noops():
     assert np.array_equal(assemble_field_force(mesh, None), zero)
     assert np.array_equal(assemble_field_force(mesh, {}), zero)
     assert np.array_equal(
-        assemble_field_force(mesh, {"field_pN": 0.0, "dir": [1, 0, 0]}), zero)
+        assemble_field_force(mesh, {"field_pN": 0.0, "dir": [1, 0, 0]}), zero
+    )
     assert np.array_equal(
-        assemble_field_force(mesh, {"field_pN": 5.0, "dir": [0, 0, 0]}), zero)
+        assemble_field_force(mesh, {"field_pN": 5.0, "dir": [0, 0, 0]}), zero
+    )
 
 
 def test_field_force_direction_and_charges_per_node():
@@ -74,8 +79,8 @@ def test_field_force_direction_and_charges_per_node():
     f = assemble_field_force(mesh, {"field_pN": 3.0, "dir": [0.0, 4.0, 3.0]})  # |dir|=5
     expected = FEM_FIELD_CHARGES_PER_NODE * 3.0 * np.array([0.0, 0.8, 0.6])
     for node in range(len(mesh.nodes)):
-        assert np.allclose(f[6 * node: 6 * node + 3], expected)   # translational
-        assert np.allclose(f[6 * node + 3: 6 * node + 6], 0.0)    # rotational
+        assert np.allclose(f[6 * node : 6 * node + 3], expected)  # translational
+        assert np.allclose(f[6 * node + 3 : 6 * node + 6], 0.0)  # rotational
 
 
 def test_field_force_scales_linearly_with_magnitude():
@@ -86,6 +91,7 @@ def test_field_force_scales_linearly_with_magnitude():
 
 
 # ── End-to-end: predict_shape(field=...) scored by the shared S4 descriptor ──
+
 
 @pytest.fixture(scope="module")
 def straight_6hb():
@@ -110,7 +116,7 @@ def straight_6hb():
 # design geometry (deformed_positions_with_axis) with a per-frame rigid transform, so the
 # straight and bent frames land in DIFFERENT poses and the anchor would spuriously "drift"
 # ~5 nm. The C5 field-source builder must likewise emit field-response from the raw frame.
-_N_STEPS = 8   # corotational increments — converged for these gentle fields (see C2 log)
+_N_STEPS = 8  # corotational increments — converged for these gentle fields (see C2 log)
 
 
 def _end_anchor_nodes_and_transverse_dir(design):
@@ -121,8 +127,15 @@ def _end_anchor_nodes_and_transverse_dir(design):
     min_bp = {}
     for n in mesh.nodes:
         min_bp[n.helix_id] = min(min_bp.get(n.helix_id, n.global_bp), n.global_bp)
-    anchors = [{"kind": "base", "helix_id": hid, "bp": bp,
-                "direction": Direction.FORWARD.value} for hid, bp in min_bp.items()]
+    anchors = [
+        {
+            "kind": "base",
+            "helix_id": hid,
+            "bp": bp,
+            "direction": Direction.FORWARD.value,
+        }
+        for hid, bp in min_bp.items()
+    ]
     fixed_nodes, keys = resolve_anchor_nodes(design, mesh, anchors)
     pos = np.array([n.position for n in mesh.nodes])
     axis_hat = np.linalg.svd(pos - pos.mean(0), full_matrices=False)[2][0]
@@ -136,42 +149,63 @@ def _end_anchor_nodes_and_transverse_dir(design):
 def _node_position_map(mesh, node_positions):
     """The raw solved axis-node positions as an S4 display-position map (one 'forward'
     entry per bp node — the axis deflection IS the FEM field response)."""
-    return [{"helix_id": n.helix_id, "bp_index": n.global_bp, "direction": "forward",
-             "backbone_position": [float(x) for x in node_positions[i]]}
-            for i, n in enumerate(mesh.nodes)]
+    return [
+        {
+            "helix_id": n.helix_id,
+            "bp_index": n.global_bp,
+            "direction": "forward",
+            "backbone_position": [float(x) for x in node_positions[i]],
+        }
+        for i, n in enumerate(mesh.nodes)
+    ]
 
 
 def _fem_field_response(design, mesh, fixed_nodes, keys, field_dir, field_pN):
-    field = None if field_pN is None else {"field_pN": field_pN,
-                                            "dir": [float(x) for x in field_dir]}
-    ref = solve_prestress_shape(design, build_fem_mesh(design), n_steps=_N_STEPS,
-                                fixed_nodes=fixed_nodes, field=None)
-    cand = solve_prestress_shape(design, build_fem_mesh(design), n_steps=_N_STEPS,
-                                 fixed_nodes=fixed_nodes, field=field)
+    field = (
+        None
+        if field_pN is None
+        else {"field_pN": field_pN, "dir": [float(x) for x in field_dir]}
+    )
+    ref = solve_prestress_shape(
+        design,
+        build_fem_mesh(design),
+        n_steps=_N_STEPS,
+        fixed_nodes=fixed_nodes,
+        field=None,
+    )
+    cand = solve_prestress_shape(
+        design,
+        build_fem_mesh(design),
+        n_steps=_N_STEPS,
+        fixed_nodes=fixed_nodes,
+        field=field,
+    )
     return field_response_profile(
-        _node_position_map(mesh, cand), _node_position_map(mesh, ref),
-        field_dir, [(h, bp, "forward") for (h, bp) in keys])
+        _node_position_map(mesh, cand),
+        _node_position_map(mesh, ref),
+        field_dir,
+        [(h, bp, "forward") for (h, bp) in keys],
+    )
 
 
 def test_anchored_field_deflects_free_region_along_field(straight_6hb):
     """The headline C2 property: anchors held, free region deflects along the field —
     exactly the S4 verdict oxDNA is scored on."""
     mesh, fixed, keys, fdir = _end_anchor_nodes_and_transverse_dir(straight_6hb)
-    assert len(fixed) == 6                            # one node per helix resolved
+    assert len(fixed) == 6  # one node per helix resolved
     fr = _fem_field_response(straight_6hb, mesh, fixed, keys, fdir, field_pN=0.1)
 
     assert fr["n_anchored"] > 0 and fr["n_free"] > 0
     assert fr["passed"], fr["reason"]
-    assert fr["anchored_max_drift_nm"] <= 1.0        # tethered end holds (clamped: ~0)
-    assert fr["free_proj_along_field_nm"] >= 0.5     # free end swings along the field
+    assert fr["anchored_max_drift_nm"] <= 1.0  # tethered end holds (clamped: ~0)
+    assert fr["free_proj_along_field_nm"] >= 0.5  # free end swings along the field
 
 
 def test_deflection_is_monotone_in_field_magnitude(straight_6hb):
     mesh, fixed, keys, fdir = _end_anchor_nodes_and_transverse_dir(straight_6hb)
     small = _fem_field_response(straight_6hb, mesh, fixed, keys, fdir, field_pN=0.05)
     large = _fem_field_response(straight_6hb, mesh, fixed, keys, fdir, field_pN=0.1)
-    assert (large["free_proj_along_field_nm"]
-            > small["free_proj_along_field_nm"] + 1e-3)
+    assert large["free_proj_along_field_nm"] > small["free_proj_along_field_nm"] + 1e-3
 
 
 def test_zero_field_produces_no_deflection(straight_6hb):
@@ -188,16 +222,31 @@ def test_predict_shape_field_threads_through_and_changes_shape(straight_6hb):
     """The public entry point: predict_shape(field=...) reaches the solve and produces a
     different displayed shape than the field-off solve (a field=None no-op is identical)."""
     mesh, fixed, keys, fdir = _end_anchor_nodes_and_transverse_dir(straight_6hb)
-    anchors = [{"kind": "base", "helix_id": h, "bp": b,
-                "direction": Direction.FORWARD.value} for (h, b) in keys]
-    off = predict_shape(straight_6hb, nonlinear=True, n_steps=_N_STEPS,
-                        with_rmsf=False, anchors=anchors)
-    none = predict_shape(straight_6hb, nonlinear=True, n_steps=_N_STEPS,
-                         with_rmsf=False, anchors=anchors, field=None)
-    on = predict_shape(straight_6hb, nonlinear=True, n_steps=_N_STEPS, with_rmsf=False,
-                       anchors=anchors, field={"field_pN": 0.1, "dir": list(fdir)})
+    anchors = [
+        {"kind": "base", "helix_id": h, "bp": b, "direction": Direction.FORWARD.value}
+        for (h, b) in keys
+    ]
+    off = predict_shape(
+        straight_6hb, nonlinear=True, n_steps=_N_STEPS, with_rmsf=False, anchors=anchors
+    )
+    none = predict_shape(
+        straight_6hb,
+        nonlinear=True,
+        n_steps=_N_STEPS,
+        with_rmsf=False,
+        anchors=anchors,
+        field=None,
+    )
+    on = predict_shape(
+        straight_6hb,
+        nonlinear=True,
+        n_steps=_N_STEPS,
+        with_rmsf=False,
+        anchors=anchors,
+        field={"field_pN": 0.1, "dir": list(fdir)},
+    )
     p_off = np.array([p["backbone_position"] for p in off["positions"]])
     p_none = np.array([p["backbone_position"] for p in none["positions"]])
     p_on = np.array([p["backbone_position"] for p in on["positions"]])
-    assert np.array_equal(p_off, p_none)                          # field=None is a no-op
-    assert np.linalg.norm(p_on - p_off, axis=1).max() > 0.5       # field bent the shape
+    assert np.array_equal(p_off, p_none)  # field=None is a no-op
+    assert np.linalg.norm(p_on - p_off, axis=1).max() > 0.5  # field bent the shape

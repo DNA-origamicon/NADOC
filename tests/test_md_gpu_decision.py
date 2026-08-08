@@ -22,20 +22,25 @@ _TILELIST_LOG = (
 
 def _job(tmp: Path) -> MdJob:
     return MdJob(
-        job_id="t1", design_name="d", protocol="mgh_slow_release",
-        status=MdStatus.running, created_at=0.0,
-        package_subdir="package/pkg", name_stem="d",
+        job_id="t1",
+        design_name="d",
+        protocol="mgh_slow_release",
+        status=MdStatus.running,
+        created_at=0.0,
+        package_subdir="package/pkg",
+        name_stem="d",
     )
 
 
 # ── decision payload builder ──────────────────────────────────────────────────
 
+
 def test_build_gpu_fallback_decision_payload():
-    fux = V.describe_failure(_TILELIST_LOG)          # gpu_error, retry_other_binary True
+    fux = V.describe_failure(_TILELIST_LOG)  # gpu_error, retry_other_binary True
     d = R.build_gpu_fallback_decision(fux)
     assert d["gate"] == "gpu_resident"
     assert d["severity"] == "decision"
-    assert d["retry_hint"] is True                    # newer build would fix it
+    assert d["retry_hint"] is True  # newer build would fix it
     assert d["degrade_target"] == "offload"
     ids = [o["id"] for o in d["options"]]
     assert ids == ["offload", "cancel"]
@@ -49,11 +54,13 @@ def test_build_gpu_fallback_decision_payload():
 
 def test_build_decision_host_limit_no_retry_hint():
     fux = V.describe_failure(
-        "FATAL ERROR: CUDA error cudaHostAlloc(...) reallocate_host_T: out of memory")
+        "FATAL ERROR: CUDA error cudaHostAlloc(...) reallocate_host_T: out of memory"
+    )
     assert R.build_gpu_fallback_decision(fux)["retry_hint"] is False
 
 
 # ── policy switch ─────────────────────────────────────────────────────────────
+
 
 def test_gpu_fallback_policy_default_is_ask(monkeypatch):
     monkeypatch.delenv("NADOC_GPU_FALLBACK", raising=False)
@@ -67,6 +74,7 @@ def test_gpu_fallback_policy_auto_offload(monkeypatch):
 
 # ── probe-failure handler: pause vs auto ──────────────────────────────────────
 
+
 def test_handle_probe_failure_ask_pauses_with_decision(tmp_path, monkeypatch):
     monkeypatch.delenv("NADOC_GPU_FALLBACK", raising=False)
     ws = tmp_path
@@ -77,7 +85,7 @@ def test_handle_probe_failure_ask_pauses_with_decision(tmp_path, monkeypatch):
 
     proceed = R.handle_resident_probe_failure(job, pkg, ws)
 
-    assert proceed is False                            # caller must exit cleanly
+    assert proceed is False  # caller must exit cleanly
     assert job.status == MdStatus.paused
     assert job.decision and job.decision["gate"] == "gpu_resident"
     assert job.decision["retry_hint"] is True
@@ -92,7 +100,8 @@ def test_handle_probe_failure_per_job_policy_beats_env(tmp_path, monkeypatch):
     ws = tmp_path
     job = _job(ws)
     job.prep_params = {"gpu_fallback_policy": "auto_offload"}
-    pkg = job.package_dir(ws); pkg.mkdir(parents=True)
+    pkg = job.package_dir(ws)
+    pkg.mkdir(parents=True)
     (pkg / "_gpures_probe.log").write_text(_TILELIST_LOG)
     assert R.handle_resident_probe_failure(job, pkg, ws) is True
     assert job.decision is None
@@ -104,7 +113,8 @@ def test_handle_probe_failure_per_job_ask_beats_env_auto(tmp_path, monkeypatch):
     ws = tmp_path
     job = _job(ws)
     job.prep_params = {"gpu_fallback_policy": "ask"}
-    pkg = job.package_dir(ws); pkg.mkdir(parents=True)
+    pkg = job.package_dir(ws)
+    pkg.mkdir(parents=True)
     (pkg / "_gpures_probe.log").write_text(_TILELIST_LOG)
     assert R.handle_resident_probe_failure(job, pkg, ws) is False
     assert job.status == MdStatus.paused
@@ -120,12 +130,13 @@ def test_handle_probe_failure_auto_offload_proceeds(tmp_path, monkeypatch):
 
     proceed = R.handle_resident_probe_failure(job, pkg, ws)
 
-    assert proceed is True                             # run continues (legacy behaviour)
+    assert proceed is True  # run continues (legacy behaviour)
     assert job.decision is None
     assert job.status == MdStatus.running
 
 
 # ── resolve ───────────────────────────────────────────────────────────────────
+
 
 def test_resolve_cancel_clean_stops(tmp_path):
     ws = tmp_path
@@ -138,7 +149,7 @@ def test_resolve_cancel_clean_stops(tmp_path):
     assert job.status == MdStatus.stopped
     assert job.user_stopped is True
     assert job.decision is None
-    assert job.error is None                            # clean stop, no error box
+    assert job.error is None  # clean stop, no error box
 
 
 def test_resolve_offload_downgrades_and_requeues(tmp_path):
@@ -150,7 +161,8 @@ def test_resolve_offload_downgrades_and_requeues(tmp_path):
     # a fast segment conf that asks for GPU-resident (what downgrade rewrites)
     (pkg / "s2.conf").write_text(
         "GPUresident on\nrigidBonds all\ntimestep 4\nstepspercycle 20\nrun 1000\n"
-        "outputTiming 100\noutputName out/s2\n")
+        "outputTiming 100\noutputName out/s2\n"
+    )
 
     R.resolve_gpu_decision(job, "offload", ws)
 
@@ -171,6 +183,7 @@ def test_resolve_rejects_unknown_choice(tmp_path):
 
 
 # ── data model round-trip ─────────────────────────────────────────────────────
+
 
 def test_mdjob_decision_survives_save_load(tmp_path):
     job = _job(tmp_path)

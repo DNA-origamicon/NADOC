@@ -63,7 +63,7 @@ def _nn_lookup(dinuc: str) -> Optional[tuple[float, float]]:
 
 
 # Initiation terms (kcal/mol, cal/mol·K) — SantaLucia 1998 Table 1.
-_INIT_AT = (2.3, 4.1)   # terminal A·T bp
+_INIT_AT = (2.3, 4.1)  # terminal A·T bp
 _INIT_GC = (0.1, -2.8)  # terminal G·C bp
 
 

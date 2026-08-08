@@ -1,18 +1,38 @@
 """Relax presets: the named protocols the panel and the Job Wizard offer."""
+
 from __future__ import annotations
 
 import pytest
 
-from backend.core.md_presets import (DEFAULT_PRESET, DESIGN_SPEED, EXPLICIT_PROTOCOL,
-                                     FAST_SHAPE, FULL_PHYSICS, IMPLICIT_GBIS,
-                                     IMPLICIT_PROTOCOL, LITERATURE, PRESET_ORDER, PRESETS,
-                                     RETIRED_FROM_MENU, STANDARD, apply_preset, get_preset,
-                                     preset_catalogue, protocol_for)
+from backend.core.md_presets import (
+    DEFAULT_PRESET,
+    DESIGN_SPEED,
+    EXPLICIT_PROTOCOL,
+    FAST_SHAPE,
+    FULL_PHYSICS,
+    IMPLICIT_GBIS,
+    IMPLICIT_PROTOCOL,
+    LITERATURE,
+    PRESET_ORDER,
+    PRESETS,
+    RETIRED_FROM_MENU,
+    STANDARD,
+    apply_preset,
+    get_preset,
+    preset_catalogue,
+    protocol_for,
+)
 
 
 def test_presets_are_listed_cheapest_first():
-    assert PRESET_ORDER == (FAST_SHAPE, IMPLICIT_GBIS, DESIGN_SPEED, STANDARD,
-                            LITERATURE, FULL_PHYSICS)
+    assert PRESET_ORDER == (
+        FAST_SHAPE,
+        IMPLICIT_GBIS,
+        DESIGN_SPEED,
+        STANDARD,
+        LITERATURE,
+        FULL_PHYSICS,
+    )
     assert set(PRESETS) == set(PRESET_ORDER)
 
 
@@ -41,7 +61,7 @@ def test_the_vacuum_tier_is_retired_with_a_reason():
     p = PRESETS[FAST_SHAPE]
     assert p.available is False
     assert "caDNAno" in p.unavailable_reason
-    assert "ZERO" in p.unavailable_reason          # the measured failure, not a hunch
+    assert "ZERO" in p.unavailable_reason  # the measured failure, not a hunch
     assert all(PRESETS[i].available for i in (STANDARD, FULL_PHYSICS))
 
 
@@ -54,8 +74,10 @@ def test_solvated_presets_ask_for_a_full_water_box():
 def test_full_physics_disables_early_stop_and_pads_wider():
     assert PRESETS[FULL_PHYSICS].defaults["early_stop_relax"] is False
     assert PRESETS[STANDARD].defaults["early_stop_relax"] is True
-    assert (PRESETS[FULL_PHYSICS].defaults["padding_nm"]
-            > PRESETS[STANDARD].defaults["padding_nm"])
+    assert (
+        PRESETS[FULL_PHYSICS].defaults["padding_nm"]
+        > PRESETS[STANDARD].defaults["padding_nm"]
+    )
 
 
 # ── the two wizard tiers: reproduce the paper, or get an answer about the design ──
@@ -66,12 +88,12 @@ def test_literature_trades_nothing_for_speed():
     a hopeful one.  Each assertion below is a place where NADOC's default deviates.
     """
     d = PRESETS[LITERATURE].defaults
-    assert d["early_stop_relax"] is False        # never truncate a stage you will publish
-    assert d["fast"] is False                    # no hydrogen-mass repartitioning
-    assert d["production_timestep_fs"] == 2.0    # the paper's 2 fs + rigidBonds all
-    assert d["padding_nm"] == 2.0                # the tutorial's bounding box +/- 20 A
-    assert d["salt_mode"] == "screening"         # Mg(H2O)6 neutralises, no sodium
-    assert d["minimize_steps"] == 4_800          # the tutorial's literal figure
+    assert d["early_stop_relax"] is False  # never truncate a stage you will publish
+    assert d["fast"] is False  # no hydrogen-mass repartitioning
+    assert d["production_timestep_fs"] == 2.0  # the paper's 2 fs + rigidBonds all
+    assert d["padding_nm"] == 2.0  # the tutorial's bounding box +/- 20 A
+    assert d["salt_mode"] == "screening"  # Mg(H2O)6 neutralises, no sodium
+    assert d["minimize_steps"] == 4_800  # the tutorial's literal figure
     assert "Methods Mol Biol 1811" in PRESETS[LITERATURE].reference
 
 
@@ -83,8 +105,11 @@ def test_literature_refuses_a_water_shell_carve():
     something else.  Every other preset lets prep carve rather than fail.
     """
     assert PRESETS[LITERATURE].defaults["allow_water_shell_carve"] is False
-    assert all("allow_water_shell_carve" not in PRESETS[p].defaults
-               for p in PRESET_ORDER if p != LITERATURE)
+    assert all(
+        "allow_water_shell_carve" not in PRESETS[p].defaults
+        for p in PRESET_ORDER
+        if p != LITERATURE
+    )
 
 
 def test_literature_LOCKS_the_carve_rather_than_merely_defaulting_it():
@@ -99,15 +124,21 @@ def test_literature_LOCKS_the_carve_rather_than_merely_defaulting_it():
 
 
 def test_a_locked_field_beats_an_explicit_request():
-    out = apply_preset(LITERATURE, {"allow_water_shell_carve": True},
-                       explicit={"allow_water_shell_carve"})
+    out = apply_preset(
+        LITERATURE,
+        {"allow_water_shell_carve": True},
+        explicit={"allow_water_shell_carve"},
+    )
     assert out["allow_water_shell_carve"] is False
 
 
 def test_locking_does_not_leak_into_the_presets_other_settings():
     """A lock is surgical — everything else stays overridable."""
-    out = apply_preset(LITERATURE, {"padding_nm": 1.0, "early_stop_relax": True},
-                       explicit={"padding_nm", "early_stop_relax"})
+    out = apply_preset(
+        LITERATURE,
+        {"padding_nm": 1.0, "early_stop_relax": True},
+        explicit={"padding_nm", "early_stop_relax"},
+    )
     assert out["padding_nm"] == 1.0
     assert out["early_stop_relax"] is True
     assert out["allow_water_shell_carve"] is False
@@ -122,11 +153,11 @@ def test_the_catalogue_tells_the_ui_which_fields_are_locked():
 
 def test_design_speed_turns_every_measured_accelerator_on():
     d = PRESETS[DESIGN_SPEED].defaults
-    assert d["fast"] is True                     # HMR + 4 fs + GPU-resident
+    assert d["fast"] is True  # HMR + 4 fs + GPU-resident
     assert d["early_stop_relax"] is True
     assert d["production_timestep_fs"] == 4.0
-    assert d["padding_nm"] == 1.2                # the cheap bounding-box cell
-    assert d["protocol"] == EXPLICIT_PROTOCOL    # same chemistry, only scheduling moves
+    assert d["padding_nm"] == 1.2  # the cheap bounding-box cell
+    assert d["protocol"] == EXPLICIT_PROTOCOL  # same chemistry, only scheduling moves
 
 
 def test_the_two_wizard_tiers_disagree_on_every_speed_axis():
@@ -153,17 +184,19 @@ def test_every_preset_default_names_a_real_request_field():
 # ── merge semantics ───────────────────────────────────────────────────────────
 def test_apply_preset_fills_unset_fields():
     out = apply_preset(STANDARD, {"mg_conc_mM": 12.5}, explicit={"mg_conc_mM"})
-    assert out["mg_conc_mM"] == 12.5              # untouched
-    assert out["padding_nm"] == 2.0               # from the preset (the tutorial's ±20 Å)
+    assert out["mg_conc_mM"] == 12.5  # untouched
+    assert out["padding_nm"] == 2.0  # from the preset (the tutorial's ±20 Å)
     assert out["early_stop_relax"] is True
 
 
 def test_explicit_user_settings_always_win():
-    out = apply_preset(FULL_PHYSICS,
-                       {"padding_nm": 3.0, "early_stop_relax": True},
-                       explicit={"padding_nm", "early_stop_relax"})
+    out = apply_preset(
+        FULL_PHYSICS,
+        {"padding_nm": 3.0, "early_stop_relax": True},
+        explicit={"padding_nm", "early_stop_relax"},
+    )
     assert out["padding_nm"] == 3.0
-    assert out["early_stop_relax"] is True         # not clobbered by the preset's False
+    assert out["early_stop_relax"] is True  # not clobbered by the preset's False
 
 
 def test_apply_preset_does_not_mutate_its_input():
@@ -228,16 +261,22 @@ def test_gbis_requires_a_cpu_namd_build():
     CUDA build cannot run it.  Marking it available regardless meant the job was
     accepted, solvated, queued — and only then failed on the first segment."""
     assert PRESETS[IMPLICIT_GBIS].requires_cpu_namd is True
-    assert not any(PRESETS[p].requires_cpu_namd
-                   for p in (FAST_SHAPE, STANDARD, FULL_PHYSICS))
+    assert not any(
+        PRESETS[p].requires_cpu_namd for p in (FAST_SHAPE, STANDARD, FULL_PHYSICS)
+    )
 
 
 def test_availability_is_false_when_no_cpu_namd_build_exists(monkeypatch):
     import backend.core.namd_runner as runner
     from backend.core.md_presets import preset_availability
 
-    monkeypatch.setattr(runner, "find_namd", lambda prefer_cpu=False: (
-        _ for _ in ()).throw(RuntimeError("needs a CPU (non-CUDA) NAMD build")))
+    monkeypatch.setattr(
+        runner,
+        "find_namd",
+        lambda prefer_cpu=False: (_ for _ in ()).throw(
+            RuntimeError("needs a CPU (non-CUDA) NAMD build")
+        ),
+    )
     ok, why = preset_availability(PRESETS[IMPLICIT_GBIS])
     assert ok is False
     assert "CPU (non-CUDA)" in why
@@ -251,7 +290,9 @@ def test_availability_is_true_when_a_cpu_build_is_present(monkeypatch):
     assert preset_availability(PRESETS[IMPLICIT_GBIS]) == (True, "")
 
 
-def test_a_statically_unavailable_preset_would_short_circuit_the_host_probe(monkeypatch):
+def test_a_statically_unavailable_preset_would_short_circuit_the_host_probe(
+    monkeypatch,
+):
     """No preset is statically unavailable today, but the short-circuit is what stops a
     future one from paying for a toolchain probe it can never use — so pin the rule
     against a synthetic preset rather than deleting the guarantee with the last case."""
@@ -262,9 +303,14 @@ def test_a_statically_unavailable_preset_would_short_circuit_the_host_probe(monk
         raise AssertionError("must not probe for a statically-unavailable preset")
 
     monkeypatch.setattr(runner, "find_namd", _boom)
-    ghost = RelaxPreset(id="ghost", label="Ghost", summary="", available=False,
-                        unavailable_reason="pipeline does not exist",
-                        requires_cpu_namd=True)
+    ghost = RelaxPreset(
+        id="ghost",
+        label="Ghost",
+        summary="",
+        available=False,
+        unavailable_reason="pipeline does not exist",
+        requires_cpu_namd=True,
+    )
     ok, why = preset_availability(ghost)
     assert ok is False and why == "pipeline does not exist"
 

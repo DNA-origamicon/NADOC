@@ -5,6 +5,7 @@ Two concurrent first-clicks for the same job — or a warm-ahead prefetch racing
 real click — must collapse to ONE build, not stack N of them.  These tests stub the
 builder with a counting/sleeping fake and prove the collapse + per-topology keying.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -33,6 +34,7 @@ def _stub_bundle(tmp_path, monkeypatch):
     jd.mkdir()
     # Any parseable design.json; the stubbed builder/hash ignore its contents.
     from backend.core.models import Design
+
     (jd / "design.json").write_text(Design().model_dump_json())
 
     monkeypatch.setattr(R, "_load_job", lambda jid: _FakeJob(jd))
@@ -45,10 +47,12 @@ def _stub_bundle(tmp_path, monkeypatch):
             calls["n"] += 1
         # Simulate a slow build so concurrent requests overlap inside the lock window.
         import time
+
         time.sleep(0.3)
         return {"topology_hash": "THASH", "atoms": [{"serial": 0}], "bonds": [[0, 1]]}
 
     import backend.core.atomistic as A
+
     monkeypatch.setattr(A, "atomistic_reference_topology_hash", lambda d: "THASH")
     monkeypatch.setattr(A, "atomistic_display_bundle", _counting_build)
     # Fresh lock registry + guard per test — each test runs its own event loop via
@@ -63,9 +67,9 @@ def test_concurrent_first_clicks_build_once(_stub_bundle):
 
     async def _run():
         # 5 concurrent requests for the same job → exactly one build; rest take cache.
-        return await asyncio.gather(*[
-            R.get_oxdna_atomistic_display_bundle("fake") for _ in range(5)
-        ])
+        return await asyncio.gather(
+            *[R.get_oxdna_atomistic_display_bundle("fake") for _ in range(5)]
+        )
 
     results = asyncio.run(_run())
     assert calls["n"] == 1, f"expected single-flight (1 build), got {calls['n']}"
@@ -95,10 +99,22 @@ def test_build_also_writes_the_packed_bin_cache(_stub_bundle, monkeypatch):
     def _packable_build(design):
         return {
             "topology_hash": "THASH",
-            "atoms": [{"serial": i, "element": "P", "x": 0.0, "y": 0.0, "z": 0.0,
-                       "strand_id": "s", "helix_id": "h", "bp_index": i,
-                       "direction": "FORWARD", "aux_helix_id": "", "aux_t": 0.0}
-                      for i in range(3)],
+            "atoms": [
+                {
+                    "serial": i,
+                    "element": "P",
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "strand_id": "s",
+                    "helix_id": "h",
+                    "bp_index": i,
+                    "direction": "FORWARD",
+                    "aux_helix_id": "",
+                    "aux_t": 0.0,
+                }
+                for i in range(3)
+            ],
             "bonds": [[0, 1], [1, 2]],
             "element_meta": {},
             "n_nuc": 1,
@@ -108,6 +124,7 @@ def test_build_also_writes_the_packed_bin_cache(_stub_bundle, monkeypatch):
         }
 
     import backend.core.atomistic as A
+
     monkeypatch.setattr(A, "atomistic_display_bundle", _packable_build)
 
     asyncio.run(R.get_oxdna_atomistic_display_bundle("fake"))

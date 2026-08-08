@@ -50,8 +50,13 @@ def solvated():
     atoms = MT._extract_md_atoms_frame(ctx, 0, frame_out=fo)
     assert fo, "the heavy extractor did not hand over its display transform"
     xf = MS.DisplayXform.build(
-        T_dyn=fo["T_dyn"], c_box=fo["c_box"], box_nm=fo["box_nm"],
-        mob_c=fo["mob_c"], eq_centroid=fo["eq_centroid"], R=fo["R_align"])
+        T_dyn=fo["T_dyn"],
+        c_box=fo["c_box"],
+        box_nm=fo["box_nm"],
+        mob_c=fo["mob_c"],
+        eq_centroid=fo["eq_centroid"],
+        R=fo["R_align"],
+    )
     dna = np.array([[a["x"], a["y"], a["z"]] for a in atoms])
     return ctx, sctx, fo, xf, dna
 
@@ -59,10 +64,12 @@ def solvated():
 def _extract(solvated, **kw):
     ctx, sctx, fo, xf, _dna = solvated
     return MS.extract_solvent_frame(
-        ctx["universe"], sctx, fo["pos_raw"], fo["pos_pre"], xf, **kw)
+        ctx["universe"], sctx, fo["pos_raw"], fo["pos_pre"], xf, **kw
+    )
 
 
 # ── the transform actually reaches the wire ──────────────────────────────────
+
 
 def test_the_emitted_affine_reproduces_the_served_dna_exactly(solvated):
     """If this drifts, solvent lands somewhere else from the DNA it belongs to.
@@ -76,8 +83,11 @@ def test_the_emitted_affine_reproduces_the_served_dna_exactly(solvated):
 
 # ── the shell is a shell ─────────────────────────────────────────────────────
 
+
 @pytest.mark.parametrize("shell_ang", [3.5, 5.0, 8.0])
-def test_every_selected_water_is_inside_the_shell_after_the_transform(solvated, shell_ang):
+def test_every_selected_water_is_inside_the_shell_after_the_transform(
+    solvated, shell_ang
+):
     """A rotation is an isometry, so 'within N Å of a DNA atom' has to still be
     true on screen. This is the property that makes the shell mean anything."""
     from scipy.spatial import cKDTree
@@ -106,6 +116,7 @@ def test_the_shell_is_a_small_fraction_of_the_cell(solvated):
 
 
 # ── periodic imaging ─────────────────────────────────────────────────────────
+
 
 def test_water_molecules_are_whole_after_imaging(solvated):
     """A molecule straddling the cell boundary must be re-imaged as a UNIT.
@@ -137,6 +148,7 @@ def test_whole_cell_water_is_imaged_inside_the_drawn_cell(solvated):
 
 # ── counts ───────────────────────────────────────────────────────────────────
 
+
 def test_ion_counts_match_the_packages_own_charge_audit(solvated):
     """Independent oracle: the audit was written by the solvation builder, and
     the viewer reads the PSF. They must agree species by species."""
@@ -155,7 +167,9 @@ def test_hexahydrate_waters_count_as_water(solvated):
     solvated on screen."""
     _ctx, sctx, _fo, _xf, _dna = solvated
     audit = json.loads((PKG / "charge_audit.json").read_text())["ionization"]
-    expected = audit["n_waters"] + (6 * audit["n_mg"] if audit.get("mg_hexahydrate") else 0)
+    expected = audit["n_waters"] + (
+        6 * audit["n_mg"] if audit.get("mg_hexahydrate") else 0
+    )
     assert sctx["n_waters_total"] == expected
 
 
@@ -172,6 +186,7 @@ def test_all_ions_are_drawn_regardless_of_the_shell(solvated):
 
 
 # ── the cap ──────────────────────────────────────────────────────────────────
+
 
 def test_the_cap_keeps_the_nearest_molecules_not_an_arbitrary_prefix(solvated):
     """A prefix would show one corner of the box and read as the whole thing."""
@@ -192,6 +207,7 @@ def test_the_cap_keeps_the_nearest_molecules_not_an_arbitrary_prefix(solvated):
 
 
 # ── the cell ─────────────────────────────────────────────────────────────────
+
 
 def test_the_drawn_cell_contains_the_dna(solvated):
     _ctx, _sctx, _fo, xf, dna = solvated
@@ -214,6 +230,7 @@ def test_cell_edges_match_the_simulation_box(solvated):
 
 # ── the frame-to-frame property the overlay is built around ──────────────────
 
+
 def test_the_shell_membership_changes_between_frames(solvated):
     """Water diffuses, so the molecule SET differs frame to frame. This is why
     the overlay snaps instead of interpolating, and why its meshes are
@@ -224,9 +241,16 @@ def test_the_shell_membership_changes_between_frames(solvated):
         fo: dict = {}
         MT._extract_md_atoms_frame(ctx, idx, frame_out=fo)
         xf = MS.DisplayXform.build(
-            T_dyn=fo["T_dyn"], c_box=fo["c_box"], box_nm=fo["box_nm"],
-            mob_c=fo["mob_c"], eq_centroid=fo["eq_centroid"], R=fo["R_align"])
-        counts.append(MS.extract_solvent_frame(
-            ctx["universe"], sctx, fo["pos_raw"], fo["pos_pre"], xf,
-            shell_nm=0.50)["n_water"])
+            T_dyn=fo["T_dyn"],
+            c_box=fo["c_box"],
+            box_nm=fo["box_nm"],
+            mob_c=fo["mob_c"],
+            eq_centroid=fo["eq_centroid"],
+            R=fo["R_align"],
+        )
+        counts.append(
+            MS.extract_solvent_frame(
+                ctx["universe"], sctx, fo["pos_raw"], fo["pos_pre"], xf, shell_nm=0.50
+            )["n_water"]
+        )
     assert counts[0] != counts[1], f"expected the shell to churn, got {counts}"

@@ -45,7 +45,15 @@ def _strand_endpoints(d: Design) -> list:
         if not s.domains:
             continue
         first, last = s.domains[0], s.domains[-1]
-        out.append((s.strand_type.value, first.helix_id, first.start_bp, last.helix_id, last.end_bp))
+        out.append(
+            (
+                s.strand_type.value,
+                first.helix_id,
+                first.start_bp,
+                last.helix_id,
+                last.end_bp,
+            )
+        )
     return sorted(out)
 
 
@@ -55,13 +63,16 @@ def _post(path: str, body=None):
     return r
 
 
-def _nick(helix_id: str, bp: int, direction: str = 'FORWARD'):
+def _nick(helix_id: str, bp: int, direction: str = "FORWARD"):
     """Helper to invoke the converted add_nick endpoint."""
-    return _post('/api/design/nick', {
-        'helix_id': helix_id,
-        'bp_index': bp,
-        'direction': direction,
-    })
+    return _post(
+        "/api/design/nick",
+        {
+            "helix_id": helix_id,
+            "bp_index": bp,
+            "direction": direction,
+        },
+    )
 
 
 # ── Test 1: consecutive minor ops cluster together ────────────────────────────
@@ -73,19 +84,21 @@ def test_two_consecutive_minor_ops_share_cluster():
     h_ids = [h.id for h in d0.helices]
     assert len(h_ids) >= 2
 
-    _nick(h_ids[0], 7, 'FORWARD')
-    _nick(h_ids[1], 14, 'REVERSE')
+    _nick(h_ids[0], 7, "FORWARD")
+    _nick(h_ids[1], 14, "REVERSE")
 
     log = design_state.get_or_404().feature_log
-    assert len(log) == 1, f"expected 1 cluster, got {len(log)}: {[e.feature_type for e in log]}"
+    assert len(log) == 1, (
+        f"expected 1 cluster, got {len(log)}: {[e.feature_type for e in log]}"
+    )
     cluster = log[0]
     assert isinstance(cluster, RoutingClusterLogEntry)
-    assert cluster.label == 'Fine Routing'
+    assert cluster.label == "Fine Routing"
     assert len(cluster.children) == 2
     assert all(isinstance(c, MinorMutationLogEntry) for c in cluster.children)
-    assert all(c.op_subtype == 'nick' for c in cluster.children)
-    assert cluster.pre_state_gz_b64 != ''
-    assert cluster.post_state_gz_b64 != ''
+    assert all(c.op_subtype == "nick" for c in cluster.children)
+    assert cluster.pre_state_gz_b64 != ""
+    assert cluster.post_state_gz_b64 != ""
 
 
 # ── Test 2: snapshot op closes the cluster ────────────────────────────────────
@@ -97,13 +110,13 @@ def test_snapshot_op_closes_cluster():
     d0 = design_state.get_or_404()
     h0 = d0.helices[0].id
 
-    _nick(h0, 7, 'FORWARD')
-    _post('/api/design/auto-break')      # snapshot-emitting auto-op
-    _nick(h0, 14, 'FORWARD')
+    _nick(h0, 7, "FORWARD")
+    _post("/api/design/auto-break")  # snapshot-emitting auto-op
+    _nick(h0, 14, "FORWARD")
 
     log = design_state.get_or_404().feature_log
     types = [e.feature_type for e in log]
-    assert types == ['routing-cluster', 'snapshot', 'routing-cluster'], types
+    assert types == ["routing-cluster", "snapshot", "routing-cluster"], types
     assert len(log[0].children) == 1
     assert len(log[2].children) == 1
 
@@ -117,13 +130,13 @@ def test_cluster_revert_restores_pre_state_and_truncates():
     h_ids = [h.id for h in d0.helices]
     pre_sig = _strand_endpoints(d0)
 
-    _nick(h_ids[0], 7, 'FORWARD')
-    _nick(h_ids[1], 14, 'REVERSE')
-    _nick(h_ids[0], 21, 'FORWARD')
+    _nick(h_ids[0], 7, "FORWARD")
+    _nick(h_ids[1], 14, "REVERSE")
+    _nick(h_ids[0], 21, "FORWARD")
     post_sig = _strand_endpoints(design_state.get_or_404())
     assert post_sig != pre_sig, "nicks must actually change the strand topology"
 
-    r = client.post('/api/design/features/0/revert')
+    r = client.post("/api/design/features/0/revert")
     assert r.status_code == 200, r.text
     reverted = design_state.get_or_404()
 
@@ -139,25 +152,29 @@ def test_seek_sub_position_replays_partial_children():
     d0 = design_state.get_or_404()
     h_ids = [h.id for h in d0.helices]
 
-    _nick(h_ids[0], 7, 'FORWARD')                  # child 0
+    _nick(h_ids[0], 7, "FORWARD")  # child 0
     sig_after_one = _strand_endpoints(design_state.get_or_404())
-    _nick(h_ids[1], 14, 'REVERSE')                 # child 1
+    _nick(h_ids[1], 14, "REVERSE")  # child 1
     sig_after_two = _strand_endpoints(design_state.get_or_404())
-    _nick(h_ids[0], 21, 'FORWARD')                 # child 2
+    _nick(h_ids[0], 21, "FORWARD")  # child 2
     sig_after_three = _strand_endpoints(design_state.get_or_404())
 
     # Seek to (0, 1) — first two children active
-    r = client.post('/api/design/features/seek', json={'position': 0, 'sub_position': 1})
+    r = client.post(
+        "/api/design/features/seek", json={"position": 0, "sub_position": 1}
+    )
     assert r.status_code == 200, r.text
     assert _strand_endpoints(design_state.get_or_404()) == sig_after_two
 
     # Seek to (0, 0) — only first child active
-    r = client.post('/api/design/features/seek', json={'position': 0, 'sub_position': 0})
+    r = client.post(
+        "/api/design/features/seek", json={"position": 0, "sub_position": 0}
+    )
     assert r.status_code == 200, r.text
     assert _strand_endpoints(design_state.get_or_404()) == sig_after_one
 
     # Seek back to end — all three active again
-    r = client.post('/api/design/features/seek', json={'position': -1})
+    r = client.post("/api/design/features/seek", json={"position": -1})
     assert r.status_code == 200, r.text
     assert _strand_endpoints(design_state.get_or_404()) == sig_after_three
 
@@ -172,10 +189,12 @@ def test_seek_sub_position_minus_two_restores_pre_cluster():
     pre_sig = _strand_endpoints(d0)
     h_ids = [h.id for h in d0.helices]
 
-    _nick(h_ids[0], 7, 'FORWARD')
-    _nick(h_ids[1], 14, 'REVERSE')
+    _nick(h_ids[0], 7, "FORWARD")
+    _nick(h_ids[1], 14, "REVERSE")
 
-    r = client.post('/api/design/features/seek', json={'position': 0, 'sub_position': -2})
+    r = client.post(
+        "/api/design/features/seek", json={"position": 0, "sub_position": -2}
+    )
     assert r.status_code == 200, r.text
     assert _strand_endpoints(design_state.get_or_404()) == pre_sig
 
@@ -189,8 +208,8 @@ def test_cluster_persists_through_round_trip():
     pre_sig = _strand_endpoints(d0)
     h_ids = [h.id for h in d0.helices]
 
-    _nick(h_ids[0], 7, 'FORWARD')
-    _nick(h_ids[1], 14, 'REVERSE')
+    _nick(h_ids[0], 7, "FORWARD")
+    _nick(h_ids[1], 14, "REVERSE")
     payload = design_state.get_or_404().to_json()
 
     design_state.close_session()
@@ -201,10 +220,10 @@ def test_cluster_persists_through_round_trip():
     cluster = log[0]
     assert isinstance(cluster, RoutingClusterLogEntry)
     assert len(cluster.children) == 2
-    assert all(c.op_subtype == 'nick' for c in cluster.children)
+    assert all(c.op_subtype == "nick" for c in cluster.children)
 
     # Revert still works after the round-trip.
-    r = client.post('/api/design/features/0/revert')
+    r = client.post("/api/design/features/0/revert")
     assert r.status_code == 200, r.text
     assert _strand_endpoints(design_state.get_or_404()) == pre_sig
 
@@ -219,13 +238,13 @@ def test_undo_pops_one_minor_op_at_a_time():
     pre_sig = _strand_endpoints(d0)
     h_ids = [h.id for h in d0.helices]
 
-    _nick(h_ids[0], 7, 'FORWARD')
-    _nick(h_ids[1], 14, 'REVERSE')
-    _nick(h_ids[0], 21, 'FORWARD')
+    _nick(h_ids[0], 7, "FORWARD")
+    _nick(h_ids[1], 14, "REVERSE")
+    _nick(h_ids[0], 21, "FORWARD")
     assert len(design_state.get_or_404().feature_log[0].children) == 3
 
     for _ in range(3):
-        r = client.post('/api/design/undo')
+        r = client.post("/api/design/undo")
         assert r.status_code == 200, r.text
 
     # Three undos should restore the pre-cluster state.
@@ -238,21 +257,21 @@ def test_undo_pops_one_minor_op_at_a_time():
 def test_evicted_cluster_revert_returns_410(monkeypatch):
     """Force a tiny budget so the first cluster is evicted; revert on it
     returns 410 GONE (matches snapshot-evicted behavior)."""
-    monkeypatch.setattr(design_state, 'MAX_SNAPSHOT_BUDGET_BYTES', 100)
+    monkeypatch.setattr(design_state, "MAX_SNAPSHOT_BUDGET_BYTES", 100)
 
     d0 = design_state.get_or_404()
     h0 = d0.helices[0].id
 
-    _nick(h0, 7, 'FORWARD')                     # cluster 0 (will be evicted)
-    _post('/api/design/auto-break')             # snapshot — closes cluster 0
-    _nick(h0, 21, 'FORWARD')                    # cluster 2 (newest)
+    _nick(h0, 7, "FORWARD")  # cluster 0 (will be evicted)
+    _post("/api/design/auto-break")  # snapshot — closes cluster 0
+    _nick(h0, 21, "FORWARD")  # cluster 2 (newest)
 
     log = design_state.get_or_404().feature_log
     cluster0 = log[0]
     assert isinstance(cluster0, RoutingClusterLogEntry)
     assert cluster0.evicted is True
 
-    r = client.post('/api/design/features/0/revert')
+    r = client.post("/api/design/features/0/revert")
     assert r.status_code == 410, r.text
 
 
@@ -266,8 +285,8 @@ def test_cluster_pre_state_matches_pre_cluster_design():
     pre_sig = _strand_endpoints(d0)
     h0 = d0.helices[0].id
 
-    _nick(h0, 7, 'FORWARD')
-    _nick(h0, 14, 'FORWARD')
+    _nick(h0, 7, "FORWARD")
+    _nick(h0, 14, "FORWARD")
 
     cluster = design_state.get_or_404().feature_log[0]
     pre = design_state.decode_design_snapshot(cluster.pre_state_gz_b64)
@@ -285,24 +304,29 @@ def test_mixed_subtype_cluster_groups_correctly():
     d0 = design_state.get_or_404()
     h_ids = [h.id for h in d0.helices]
 
-    _nick(h_ids[0], 7, 'FORWARD')
-    _post('/api/design/ligate', {'helix_id': h_ids[0], 'bp_index': 7, 'direction': 'FORWARD'})
+    _nick(h_ids[0], 7, "FORWARD")
+    _post(
+        "/api/design/ligate",
+        {"helix_id": h_ids[0], "bp_index": 7, "direction": "FORWARD"},
+    )
     # Trigger a strand-color update to add another distinct subtype.
-    staple_strands = [s for s in design_state.get_or_404().strands if s.strand_type.value == 'staple']
+    staple_strands = [
+        s for s in design_state.get_or_404().strands if s.strand_type.value == "staple"
+    ]
     if staple_strands:
         client.patch(
-            '/api/design/strands/colors',
-            json={'strand_ids': [staple_strands[0].id], 'color': '#FF00FF'},
+            "/api/design/strands/colors",
+            json={"strand_ids": [staple_strands[0].id], "color": "#FF00FF"},
         )
 
     log = design_state.get_or_404().feature_log
     assert len(log) == 1
     cluster = log[0]
     subtypes = [c.op_subtype for c in cluster.children]
-    assert 'nick' in subtypes
-    assert 'ligate' in subtypes
+    assert "nick" in subtypes
+    assert "ligate" in subtypes
     if staple_strands:
-        assert 'strands-color-bulk' in subtypes
+        assert "strands-color-bulk" in subtypes
 
 
 def test_revert_to_before_extrusion_after_cluster():
@@ -313,19 +337,25 @@ def test_revert_to_before_extrusion_after_cluster():
     h0 = design_state.get_or_404().helices[0].id
 
     # Some minor ops form cluster 0.
-    _nick(h0, 7, 'FORWARD')
-    _nick(h0, 14, 'FORWARD')
+    _nick(h0, 7, "FORWARD")
+    _nick(h0, 14, "FORWARD")
     # Snapshot op (auto-break) closes cluster 0, becomes log[1].
-    _post('/api/design/auto-break')
+    _post("/api/design/auto-break")
     # Another cluster after the snapshot.
-    _nick(h0, 21, 'FORWARD')
+    _nick(h0, 21, "FORWARD")
 
     log = design_state.get_or_404().feature_log
-    assert [e.feature_type for e in log] == ['routing-cluster', 'snapshot', 'routing-cluster']
+    assert [e.feature_type for e in log] == [
+        "routing-cluster",
+        "snapshot",
+        "routing-cluster",
+    ]
 
     # Revert the cluster at index 0 — truncates entire log + restores pre-cluster state.
-    pre_sig = _strand_endpoints(design_state.decode_design_snapshot(log[0].pre_state_gz_b64))
-    r = client.post('/api/design/features/0/revert')
+    pre_sig = _strand_endpoints(
+        design_state.decode_design_snapshot(log[0].pre_state_gz_b64)
+    )
+    r = client.post("/api/design/features/0/revert")
     assert r.status_code == 200, r.text
     assert _strand_endpoints(design_state.get_or_404()) == pre_sig
     assert design_state.get_or_404().feature_log == []
@@ -344,9 +374,9 @@ def test_sub_position_seek_sets_cursor_correctly_for_last_cluster():
     h0 = d0.helices[0].id
 
     # Single cluster (it IS the last log entry).
-    _nick(h0, 7, 'FORWARD')
-    _nick(h0, 14, 'FORWARD')
-    _nick(h0, 21, 'FORWARD')
+    _nick(h0, 7, "FORWARD")
+    _nick(h0, 14, "FORWARD")
+    _nick(h0, 21, "FORWARD")
 
     log = design_state.get_or_404().feature_log
     assert len(log) == 1
@@ -354,14 +384,20 @@ def test_sub_position_seek_sets_cursor_correctly_for_last_cluster():
 
     # Seek to mid-cluster (sub_position=0). Cursor MUST be 0 (cluster index),
     # NOT -1 (end-of-log). And feature_log_sub_cursor should reflect 0.
-    r = client.post('/api/design/features/seek', json={'position': 0, 'sub_position': 0})
+    r = client.post(
+        "/api/design/features/seek", json={"position": 0, "sub_position": 0}
+    )
     assert r.status_code == 200, r.text
     d = design_state.get_or_404()
     assert d.feature_log_cursor == 0, f"cursor was {d.feature_log_cursor}, expected 0"
-    assert d.feature_log_sub_cursor == 0, f"sub_cursor was {d.feature_log_sub_cursor}, expected 0"
+    assert d.feature_log_sub_cursor == 0, (
+        f"sub_cursor was {d.feature_log_sub_cursor}, expected 0"
+    )
 
     # Seek to a different sub_position; both fields update.
-    r = client.post('/api/design/features/seek', json={'position': 0, 'sub_position': 1})
+    r = client.post(
+        "/api/design/features/seek", json={"position": 0, "sub_position": 1}
+    )
     assert r.status_code == 200, r.text
     d = design_state.get_or_404()
     assert d.feature_log_cursor == 0
@@ -369,7 +405,7 @@ def test_sub_position_seek_sets_cursor_correctly_for_last_cluster():
 
     # Seek with sub_position=None (full cluster post-state). Cursor still 0
     # if cluster is the last entry, sub_cursor None.
-    r = client.post('/api/design/features/seek', json={'position': 0})
+    r = client.post("/api/design/features/seek", json={"position": 0})
     assert r.status_code == 200, r.text
     d = design_state.get_or_404()
     # When sub_position is unspecified AND position is the last entry, the
@@ -385,21 +421,28 @@ def test_unsupported_subtype_replay_falls_back_to_post_state():
     d0 = design_state.get_or_404()
     h0 = d0.helices[0].id
 
-    _nick(h0, 7, 'FORWARD')         # child 0 — replayable
-    _nick(h0, 14, 'FORWARD')        # child 1 — replayable
+    _nick(h0, 7, "FORWARD")  # child 0 — replayable
+    _nick(h0, 14, "FORWARD")  # child 1 — replayable
 
     # Inject a synthetic child with an unsupported op_subtype to simulate a
     # v1-deferred subtype the dispatcher can't replay.
     d = design_state.get_or_404()
     cluster = d.feature_log[0]
     from backend.core.models import MinorMutationLogEntry
-    cluster.children.append(MinorMutationLogEntry(
-        op_subtype='helix-update', label='synthetic stub', params={},
-    ))
+
+    cluster.children.append(
+        MinorMutationLogEntry(
+            op_subtype="helix-update",
+            label="synthetic stub",
+            params={},
+        )
+    )
     design_state.set_design_silent(d)
 
     # Sub-position seek to the synthetic child should NOT raise — fallback path.
-    r = client.post('/api/design/features/seek', json={'position': 0, 'sub_position': 2})
+    r = client.post(
+        "/api/design/features/seek", json={"position": 0, "sub_position": 2}
+    )
     assert r.status_code == 200, r.text
     # Topology stays consistent (some valid design returned, no crash).
     assert design_state.get_or_404().helices
@@ -413,12 +456,12 @@ def test_child_delete_last_substep_equals_seek_before_it():
     prior sub-step, and the cluster keeps its earlier children."""
     h_ids = [h.id for h in design_state.get_or_404().helices]
 
-    _nick(h_ids[0], 7, 'FORWARD')                  # child 0
-    _nick(h_ids[1], 14, 'REVERSE')                 # child 1
+    _nick(h_ids[0], 7, "FORWARD")  # child 0
+    _nick(h_ids[1], 14, "REVERSE")  # child 1
     sig_after_two = _strand_endpoints(design_state.get_or_404())
-    _nick(h_ids[0], 21, 'FORWARD')                 # child 2
+    _nick(h_ids[0], 21, "FORWARD")  # child 2
 
-    r = client.delete('/api/design/features/0?sub_index=2')
+    r = client.delete("/api/design/features/0?sub_index=2")
     assert r.status_code == 200, r.text
 
     d = design_state.get_or_404()
@@ -433,19 +476,19 @@ def test_child_delete_middle_substep_removes_only_that_child():
     are replayed. Result differs from the full-cluster state."""
     h_ids = [h.id for h in design_state.get_or_404().helices]
 
-    _nick(h_ids[0], 7, 'FORWARD')                  # child 0
-    _nick(h_ids[1], 14, 'REVERSE')                 # child 1  (delete this)
-    _nick(h_ids[0], 21, 'FORWARD')                 # child 2
+    _nick(h_ids[0], 7, "FORWARD")  # child 0
+    _nick(h_ids[1], 14, "REVERSE")  # child 1  (delete this)
+    _nick(h_ids[0], 21, "FORWARD")  # child 2
     sig_all_three = _strand_endpoints(design_state.get_or_404())
 
-    r = client.delete('/api/design/features/0?sub_index=1')
+    r = client.delete("/api/design/features/0?sub_index=1")
     assert r.status_code == 200, r.text
 
     d = design_state.get_or_404()
     cluster = d.feature_log[0]
     assert len(cluster.children) == 2
     # The two surviving children are the h0 nicks (child 0 + child 2).
-    surviving_bps = sorted(c.params.get('bp_index') for c in cluster.children)
+    surviving_bps = sorted(c.params.get("bp_index") for c in cluster.children)
     assert surviving_bps == [7, 21]
     # Removing the h1 nick changes the topology relative to all three.
     assert _strand_endpoints(d) != sig_all_three
@@ -457,9 +500,9 @@ def test_child_delete_only_substep_removes_whole_cluster():
     pre_sig = _strand_endpoints(design_state.get_or_404())
     h0 = design_state.get_or_404().helices[0].id
 
-    _nick(h0, 7, 'FORWARD')                        # single child
+    _nick(h0, 7, "FORWARD")  # single child
 
-    r = client.delete('/api/design/features/0?sub_index=0')
+    r = client.delete("/api/design/features/0?sub_index=0")
     assert r.status_code == 200, r.text
 
     d = design_state.get_or_404()
@@ -471,13 +514,13 @@ def test_child_delete_undo_restores_cluster():
     """Ctrl-Z after a per-sub-step delete restores the full cluster + topology."""
     h_ids = [h.id for h in design_state.get_or_404().helices]
 
-    _nick(h_ids[0], 7, 'FORWARD')
-    _nick(h_ids[1], 14, 'REVERSE')
-    _nick(h_ids[0], 21, 'FORWARD')
+    _nick(h_ids[0], 7, "FORWARD")
+    _nick(h_ids[1], 14, "REVERSE")
+    _nick(h_ids[0], 21, "FORWARD")
     sig_all_three = _strand_endpoints(design_state.get_or_404())
 
-    client.delete('/api/design/features/0?sub_index=1')
-    r = client.post('/api/design/undo')
+    client.delete("/api/design/features/0?sub_index=1")
+    r = client.post("/api/design/undo")
     assert r.status_code == 200, r.text
 
     d = design_state.get_or_404()
@@ -487,16 +530,16 @@ def test_child_delete_undo_restores_cluster():
 
 def test_child_delete_out_of_range_returns_400():
     h0 = design_state.get_or_404().helices[0].id
-    _nick(h0, 7, 'FORWARD')
-    _nick(h0, 14, 'FORWARD')
-    r = client.delete('/api/design/features/0?sub_index=9')
+    _nick(h0, 7, "FORWARD")
+    _nick(h0, 14, "FORWARD")
+    r = client.delete("/api/design/features/0?sub_index=9")
     assert r.status_code == 400, r.text
 
 
 def test_child_delete_on_non_cluster_returns_400():
     """sub_index targeting a snapshot entry (auto-op) is rejected."""
-    _post('/api/design/auto-break')          # snapshot entry at index 0
-    r = client.delete('/api/design/features/0?sub_index=0')
+    _post("/api/design/auto-break")  # snapshot entry at index 0
+    r = client.delete("/api/design/features/0?sub_index=0")
     assert r.status_code == 400, r.text
 
 
@@ -507,12 +550,12 @@ def test_child_revert_before_substep_truncates_to_that_point():
     """Reverting before a sub-step keeps earlier children, drops it + later."""
     h_ids = [h.id for h in design_state.get_or_404().helices]
 
-    _nick(h_ids[0], 7, 'FORWARD')                  # child 0
-    _nick(h_ids[1], 14, 'REVERSE')                 # child 1
+    _nick(h_ids[0], 7, "FORWARD")  # child 0
+    _nick(h_ids[1], 14, "REVERSE")  # child 1
     sig_after_two = _strand_endpoints(design_state.get_or_404())
-    _nick(h_ids[0], 21, 'FORWARD')                 # child 2
+    _nick(h_ids[0], 21, "FORWARD")  # child 2
 
-    r = client.post('/api/design/features/0/revert?sub_index=2')
+    r = client.post("/api/design/features/0/revert?sub_index=2")
     assert r.status_code == 200, r.text
 
     d = design_state.get_or_404()
@@ -526,10 +569,10 @@ def test_child_revert_before_first_substep_drops_cluster():
     pre_sig = _strand_endpoints(design_state.get_or_404())
     h0 = design_state.get_or_404().helices[0].id
 
-    _nick(h0, 7, 'FORWARD')
-    _nick(h0, 14, 'FORWARD')
+    _nick(h0, 7, "FORWARD")
+    _nick(h0, 14, "FORWARD")
 
-    r = client.post('/api/design/features/0/revert?sub_index=0')
+    r = client.post("/api/design/features/0/revert?sub_index=0")
     assert r.status_code == 200, r.text
 
     d = design_state.get_or_404()
@@ -542,26 +585,26 @@ def test_child_revert_drops_later_top_level_entries():
     snapshot from auto-break that closed the cluster)."""
     h_ids = [h.id for h in design_state.get_or_404().helices]
 
-    _nick(h_ids[0], 7, 'FORWARD')                  # child 0
-    _nick(h_ids[1], 14, 'REVERSE')                 # child 1
+    _nick(h_ids[0], 7, "FORWARD")  # child 0
+    _nick(h_ids[1], 14, "REVERSE")  # child 1
     sig_after_two = _strand_endpoints(design_state.get_or_404())
-    _nick(h_ids[0], 21, 'FORWARD')                 # child 2
-    _post('/api/design/auto-break')                # snapshot — closes cluster
+    _nick(h_ids[0], 21, "FORWARD")  # child 2
+    _post("/api/design/auto-break")  # snapshot — closes cluster
 
     log = design_state.get_or_404().feature_log
-    assert [e.feature_type for e in log] == ['routing-cluster', 'snapshot']
+    assert [e.feature_type for e in log] == ["routing-cluster", "snapshot"]
 
-    r = client.post('/api/design/features/0/revert?sub_index=2')
+    r = client.post("/api/design/features/0/revert?sub_index=2")
     assert r.status_code == 200, r.text
 
     d = design_state.get_or_404()
-    assert [e.feature_type for e in d.feature_log] == ['routing-cluster']
+    assert [e.feature_type for e in d.feature_log] == ["routing-cluster"]
     assert len(d.feature_log[0].children) == 2
     assert _strand_endpoints(d) == sig_after_two
 
 
 def test_child_revert_out_of_range_returns_400():
     h0 = design_state.get_or_404().helices[0].id
-    _nick(h0, 7, 'FORWARD')
-    r = client.post('/api/design/features/0/revert?sub_index=9')
+    _nick(h0, 7, "FORWARD")
+    r = client.post("/api/design/features/0/revert?sub_index=9")
     assert r.status_code == 400, r.text

@@ -51,6 +51,7 @@ def _all_overhang_sites(design: Design):
     a bespoke enumeration that omitted it.
     """
     from tests.conftest import valid_overhang_sites
+
     return valid_overhang_sites(design)
 
 
@@ -89,8 +90,9 @@ def _junction_and_tip_bp(domain, helix) -> tuple[int, int]:
     return None, None  # filled in by caller using axis info; placeholder
 
 
-def _extrude_junction_bp(orig_design: Design, orig_helix_id: str, bp_index: int,
-                         new_helix) -> int:
+def _extrude_junction_bp(
+    orig_design: Design, orig_helix_id: str, bp_index: int, new_helix
+) -> int:
     """The junction bp on the overhang helix is just bp_index (by construction
     in make_overhang_extrude). Both +Z and −Z cases match parent's bp_index."""
     return bp_index
@@ -206,8 +208,8 @@ def test_patch_overhang_extrude_resizes_tip_not_junction(
                 f"bp; expected {delta} (pre={pre_endpoints}, post={post_endpoints})"
             )
 
-    assert not failures, (
-        "patch_overhang resized the wrong end:\n  " + "\n  ".join(failures)
+    assert not failures, "patch_overhang resized the wrong end:\n  " + "\n  ".join(
+        failures
     )
 
 
@@ -243,4 +245,6 @@ def test_patch_overhang_extrude_helix_length_grows(design_native):
                 f"{site['bp_index']} fell outside resized helix bp range [{lo}, {hi}]"
             )
 
-    assert not failures, "helix resize broke junction containment:\n  " + "\n  ".join(failures)
+    assert not failures, "helix resize broke junction containment:\n  " + "\n  ".join(
+        failures
+    )

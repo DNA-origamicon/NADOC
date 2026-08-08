@@ -20,7 +20,11 @@ import pytest
 
 from backend.api import headless_build as hb
 from backend.api import state as design_state
-from backend.api.headless_hinge_build import build_hinge, build_hinge_primitive, build_applied_2x2_binding
+from backend.api.headless_hinge_build import (
+    build_hinge,
+    build_hinge_primitive,
+    build_applied_2x2_binding,
+)
 from backend.core.models import Design
 from backend.core.scaffold_invariants import scaffold_routing_invariants
 from backend.core.validator import validate_design
@@ -48,7 +52,14 @@ def test_build_2x2_has_the_hinge_shape():
     assert len(d.forced_ligations) == 2
     # the two leaves: rows {0,1} and {4,5}, cols {0,1}
     assert {h.grid_pos for h in d.helices} == {
-        (0, 0), (0, 1), (1, 0), (1, 1), (4, 0), (4, 1), (5, 0), (5, 1)
+        (0, 0),
+        (0, 1),
+        (1, 0),
+        (1, 1),
+        (4, 0),
+        (4, 1),
+        (5, 0),
+        (5, 1),
     }
     assert validate_design(d).passed
 
@@ -129,11 +140,18 @@ def test_build_2x2_autoscaffolds_compliantly():
     assert validate_design(out).passed
 
 
-@pytest.mark.parametrize("k,n", [
-    (2, 2), (2, 4), (2, 6),   # 2-row leaves (single / double / triple link)
-    (3, 2), (3, 4), (3, 6),   # 3-row leaves
-    (4, 4),                   # 4-row leaves
-])
+@pytest.mark.parametrize(
+    "k,n",
+    [
+        (2, 2),
+        (2, 4),
+        (2, 6),  # 2-row leaves (single / double / triple link)
+        (3, 2),
+        (3, 4),
+        (3, 6),  # 3-row leaves
+        (4, 4),  # 4-row leaves
+    ],
+)
 def test_build_kxn_hinge_routes_compliantly(k, n):
     """FULL PIPELINE, arbitrary k×N: ``build_hinge(k, n)`` (from scratch, no golden)
     → ``hb.auto_scaffold`` → exactly one seamed, invariant-clean, validated scaffold
@@ -141,8 +159,12 @@ def test_build_kxn_hinge_routes_compliantly(k, n):
     d = build_hinge(k, n)
     assert len(d.forced_ligations) == n  # one rung per column
     orig_fls = {
-        (f.three_prime_helix_id, f.three_prime_bp,
-         f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in d.forced_ligations
     }
     design_state.set_design(d)
@@ -152,26 +174,42 @@ def test_build_kxn_hinge_routes_compliantly(k, n):
     assert validate_design(out).passed
     assert {dm.helix_id for dm in scaffolds[0].domains} == {h.id for h in out.helices}
     assert {
-        (f.three_prime_helix_id, f.three_prime_bp,
-         f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in out.forced_ligations
     } == orig_fls
 
 
-@pytest.mark.parametrize("k,n", [
-    (2, 2), (2, 4), (2, 6),
-    (3, 2), (3, 4), (3, 6),
-    (4, 4),
-])
+@pytest.mark.parametrize(
+    "k,n",
+    [
+        (2, 2),
+        (2, 4),
+        (2, 6),
+        (3, 2),
+        (3, 4),
+        (3, 6),
+        (4, 4),
+    ],
+)
 def test_build_kxn_hinge_routes_seamless(k, n):
     """FULL PIPELINE (seamless), arbitrary k×N: ``build_hinge`` → seamless route →
     one single-pass scaffold strand (no seams), invariant-clean (require_seams=False),
     validated, full coverage, every rung preserved."""
     from backend.core.seamless_router import auto_scaffold_seamless
+
     d = build_hinge(k, n)
     orig_fls = {
-        (f.three_prime_helix_id, f.three_prime_bp,
-         f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in d.forced_ligations
     }
     out, _ = auto_scaffold_seamless(d.model_copy(deep=True))
@@ -190,8 +228,12 @@ def test_build_kxn_hinge_routes_seamless(k, n):
     for bp in (first.start_bp, last.end_bp):
         assert lo + 2 <= bp <= hi - 2  # nick is mid-helix, not at an end/crossover
     assert {
-        (f.three_prime_helix_id, f.three_prime_bp,
-         f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in out.forced_ligations
     } == orig_fls
 
@@ -221,14 +263,16 @@ def test_scaffold_fls_filter_excludes_staple_only_endpoint_fl():
     cov = _scaffold_coverage(d)
     rail = next(h for h in d.helices if h.grid_pos == (2, 0))
     staple_fl = ForcedLigation(
-        three_prime_helix_id=rail.id, three_prime_bp=rail.bp_start + 10,
+        three_prime_helix_id=rail.id,
+        three_prime_bp=rail.bp_start + 10,
         three_prime_direction=Direction.REVERSE,
-        five_prime_helix_id="h_staple_only", five_prime_bp=0,
+        five_prime_helix_id="h_staple_only",
+        five_prime_bp=0,
         five_prime_direction=Direction.FORWARD,
     )
     fls = list(d.forced_ligations) + [staple_fl]
     kept = _scaffold_fls(fls, cov)
-    assert staple_fl not in kept                 # staple FL excluded
+    assert staple_fl not in kept  # staple FL excluded
     assert len(kept) == len(d.forced_ligations)  # all 6 rungs kept
 
 
@@ -241,22 +285,34 @@ def test_hinge_with_staple_only_helix_still_routes_to_one_strand():
 
     d = build_hinge(3, 6)
     rung_fls = {
-        (f.three_prime_helix_id, f.three_prime_bp,
-         f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in d.forced_ligations
     }
     base = d.helices[0]
     root = base.model_copy(update={"id": "h_root", "grid_pos": (3, 0)})  # gap row
     root_stpl = Strand(
         id="stpl_root",
-        domains=[Domain(helix_id="h_root", start_bp=base.bp_start,
-                        end_bp=base.bp_start + 3, direction=Direction.FORWARD)],
+        domains=[
+            Domain(
+                helix_id="h_root",
+                start_bp=base.bp_start,
+                end_bp=base.bp_start + 3,
+                direction=Direction.FORWARD,
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
-    d = d.model_copy(update={
-        "helices": list(d.helices) + [root],
-        "strands": list(d.strands) + [root_stpl],
-    })
+    d = d.model_copy(
+        update={
+            "helices": list(d.helices) + [root],
+            "strands": list(d.strands) + [root_stpl],
+        }
+    )
 
     design_state.set_design(d)
     out = hb.auto_scaffold()
@@ -267,8 +323,12 @@ def test_hinge_with_staple_only_helix_still_routes_to_one_strand():
     scaf_helix_ids = {h.id for h in out.helices if h.id != "h_root"}
     assert {dm.helix_id for dm in scaffolds[0].domains} == scaf_helix_ids
     assert {
-        (f.three_prime_helix_id, f.three_prime_bp,
-         f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in out.forced_ligations
     } == rung_fls  # rungs preserved
 
@@ -285,8 +345,12 @@ def test_real_bound_end_to_root_design_routes_and_preserves_all_fls():
         pytest.skip(f"{fixture} not present in this checkout")
     d = Design.model_validate(json.loads(fixture.read_text()))
     orig_fls = {
-        (f.three_prime_helix_id, f.three_prime_bp,
-         f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in d.forced_ligations
     }
     assert len(orig_fls) == 8
@@ -297,8 +361,12 @@ def test_real_bound_end_to_root_design_routes_and_preserves_all_fls():
     assert len(scaffolds) == 1
     assert validate_design(out).passed
     assert {
-        (f.three_prime_helix_id, f.three_prime_bp,
-         f.five_prime_helix_id, f.five_prime_bp)
+        (
+            f.three_prime_helix_id,
+            f.three_prime_bp,
+            f.five_prime_helix_id,
+            f.five_prime_bp,
+        )
         for f in out.forced_ligations
     } == orig_fls  # both the 6 rungs AND the 2 root-binding FLs preserved
 
@@ -346,6 +414,7 @@ def test_build_2x6_matches_golden():
 
 # ── AF-FIXTURES: the relax_2x2 fixture builder (regenerates tests/fixtures/relax_2x2_*.nadoc) ──
 
+
 def test_build_applied_2x2_binding_is_valid_applied_duplex():
     """The headless builder for the relax_2x2 fixtures produces a VALID two-leaf hinge with ONE
     applied end-to-root binding: driver + driven overhang, the duplex on the shared gap helix
@@ -358,10 +427,16 @@ def test_build_applied_2x2_binding_is_valid_applied_duplex():
     b = d.overhang_bindings[0]
     assert b.bound and b.connection_type == "end-to-root"
     assert len(d.duplexes) == 1, "the Duplex graph must be derived (load-path parity)"
-    assert len(d.cluster_joints) == 1, "the driven leaf carries the revolute hinge joint"
+    assert len(d.cluster_joints) == 1, (
+        "the driven leaf carries the revolute hinge joint"
+    )
     # Both duplex domains land on the shared gap helix, which rides the DRIVER leaf cluster.
-    dup_dom_helices = {dm.helix_id for s in d.strands for dm in s.domains
-                       if dm.overhang_id in (b.driver_oh_id, b.driven_oh_id)}
+    dup_dom_helices = {
+        dm.helix_id
+        for s in d.strands
+        for dm in s.domains
+        if dm.overhang_id in (b.driver_oh_id, b.driven_oh_id)
+    }
     assert "h_XY_2_0" in dup_dom_helices
     cl1 = next(c for c in d.cluster_transforms if c.name == "Cluster 1")
     assert "h_XY_2_0" in cl1.helix_ids
@@ -381,4 +456,6 @@ def test_build_applied_2x2_binding_close_bond_is_over_compressed():
     nucs = _geometry_for_design(d)
     _pa, _ca, p_b, c_b = _root_anchors(d, nucs, b.driver_oh_id, b.driven_oh_id)
     chord = float(np.linalg.norm(np.asarray(p_b, float) - np.asarray(c_b, float)))
-    assert chord < 0.67, f"close-bond chord {chord:.3f} nm should be under the ~0.67 nm target"
+    assert chord < 0.67, (
+        f"close-bond chord {chord:.3f} nm should be under the ~0.67 nm target"
+    )

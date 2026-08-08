@@ -14,21 +14,22 @@ from pathlib import Path
 
 # ── Data class ────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class NamdLogMetrics:
-    ns_per_day:       float | None = None
-    temperature_k:    float | None = None
+    ns_per_day: float | None = None
+    temperature_k: float | None = None
     temperature_avg_k: float | None = None
-    pressure_bar:     float | None = None
-    gpressure_bar:    float | None = None
+    pressure_bar: float | None = None
+    gpressure_bar: float | None = None
     pressure_avg_bar: float | None = None
     gpressure_avg_bar: float | None = None
-    volume_ang3:      float | None = None
+    volume_ang3: float | None = None
     total_energy_kcal: float | None = None
-    kinetic_kcal:     float | None = None
-    n_energy_lines:   int          = 0
-    timestep:         int   | None = None   # last TS value
-    warnings:         list[str]    = field(default_factory=list)
+    kinetic_kcal: float | None = None
+    n_energy_lines: int = 0
+    timestep: int | None = None  # last TS value
+    warnings: list[str] = field(default_factory=list)
 
 
 # ── Regexes ───────────────────────────────────────────────────────────────────
@@ -45,6 +46,7 @@ _RE_S_PER_STEP = re.compile(r"([\d.]+(?:e[+-]?\d+)?)\s+s/step")
 
 
 # ── Parser ────────────────────────────────────────────────────────────────────
+
 
 def parse_namd_log(log_path: Path) -> NamdLogMetrics:
     """
@@ -72,7 +74,7 @@ def parse_namd_log(log_path: Path) -> NamdLogMetrics:
             # fields[0] = "ETITLE:", fields[1..] = column names; data index = name index - 1
             col_idx = {name: i - 1 for i, name in enumerate(fields) if i >= 1}
         elif line.startswith("ENERGY:"):
-            vals = line.split()[1:]   # strip "ENERGY:" token
+            vals = line.split()[1:]  # strip "ENERGY:" token
             try:
                 energy_rows.append([float(v) for v in vals])
             except ValueError:
@@ -88,16 +90,20 @@ def parse_namd_log(log_path: Path) -> NamdLogMetrics:
                 return last[idx]
             return None
 
-        m.timestep         = int(last[col_idx["TS"]]) if "TS" in col_idx and col_idx["TS"] < len(last) else None
-        m.temperature_k    = _get("TEMP")
+        m.timestep = (
+            int(last[col_idx["TS"]])
+            if "TS" in col_idx and col_idx["TS"] < len(last)
+            else None
+        )
+        m.temperature_k = _get("TEMP")
         m.temperature_avg_k = _get("TEMPAVG")
-        m.pressure_bar     = _get("PRESSURE")
-        m.gpressure_bar    = _get("GPRESSURE")
+        m.pressure_bar = _get("PRESSURE")
+        m.gpressure_bar = _get("GPRESSURE")
         m.pressure_avg_bar = _get("PRESSAVG")
         m.gpressure_avg_bar = _get("GPRESSAVG")
-        m.volume_ang3      = _get("VOLUME")
+        m.volume_ang3 = _get("VOLUME")
         m.total_energy_kcal = _get("TOTAL")
-        m.kinetic_kcal     = _get("KINETIC")
+        m.kinetic_kcal = _get("KINETIC")
 
     # ns/day from the Benchmark lines (present once a run has timed steps).  Prefer the
     # last "days/ns" value (old format); else the last "ns/day" value (NAMD 3 format).
@@ -321,7 +327,12 @@ def projected_step(
     Never decreases, and never crosses ``_MAX_PROJECTED_FRACTION`` of ``cap_steps``.
     """
     step = max(0, int(last_step))
-    if not s_per_step or float(s_per_step) <= 0 or age_seconds is None or float(age_seconds) <= 0:
+    if (
+        not s_per_step
+        or float(s_per_step) <= 0
+        or age_seconds is None
+        or float(age_seconds) <= 0
+    ):
         return step
     step += int(float(age_seconds) / float(s_per_step))
     if cap_steps and int(cap_steps) > 0:

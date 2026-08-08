@@ -34,6 +34,7 @@ router = APIRouter()
 
 # ── Seed design ───────────────────────────────────────────────────────────────
 
+
 def _demo_design() -> Design:
     """
     Single 42 bp helix along +Z, phase_offset=0.
@@ -41,6 +42,7 @@ def _demo_design() -> Design:
     Staple strand:   REVERSE (5′ at bp 41, 3′ at bp 0).
     """
     from backend.core.constants import BDNA_RISE_PER_BP
+
     helix = Helix(
         id="demo_helix",
         axis_start=Vec3(x=0.0, y=0.0, z=0.0),
@@ -50,12 +52,26 @@ def _demo_design() -> Design:
     )
     scaffold = Strand(
         id="scaffold",
-        domains=[Domain(helix_id="demo_helix", start_bp=0, end_bp=41, direction=Direction.FORWARD)],
+        domains=[
+            Domain(
+                helix_id="demo_helix",
+                start_bp=0,
+                end_bp=41,
+                direction=Direction.FORWARD,
+            )
+        ],
         strand_type=StrandType.SCAFFOLD,
     )
     staple = Strand(
         id="staple_0",
-        domains=[Domain(helix_id="demo_helix", start_bp=0, end_bp=41, direction=Direction.REVERSE)],
+        domains=[
+            Domain(
+                helix_id="demo_helix",
+                start_bp=0,
+                end_bp=41,
+                direction=Direction.REVERSE,
+            )
+        ],
         strand_type=StrandType.STAPLE,
     )
     return Design(
@@ -84,10 +100,10 @@ def _strand_nucleotide_info(design: Design) -> dict:
         if not strand.domains:
             continue
         first = strand.domains[0]
-        last  = strand.domains[-1]
+        last = strand.domains[-1]
 
-        five_prime_key  = (first.helix_id, first.start_bp, first.direction)
-        three_prime_key = (last.helix_id,  last.end_bp,   last.direction)
+        five_prime_key = (first.helix_id, first.start_bp, first.direction)
+        three_prime_key = (last.helix_id, last.end_bp, last.direction)
 
         for di, domain in enumerate(strand.domains):
             lo = min(domain.start_bp, domain.end_bp)
@@ -95,16 +111,17 @@ def _strand_nucleotide_info(design: Design) -> dict:
             for bp in range(lo, hi + 1):
                 key = (domain.helix_id, bp, domain.direction)
                 info[key] = {
-                    "strand_id":    strand.id,
-                    "strand_type":  strand.strand_type.value,
-                    "is_five_prime":  key == five_prime_key,
+                    "strand_id": strand.id,
+                    "strand_type": strand.strand_type.value,
+                    "is_five_prime": key == five_prime_key,
                     "is_three_prime": key == three_prime_key,
-                    "domain_index":   di,
+                    "domain_index": di,
                 }
     return info
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
 
 @router.get("/health")
 def health() -> dict:
@@ -152,22 +169,29 @@ def get_demo_geometry() -> list[dict]:
     """
     design = _demo_design()
     nuc_info = _strand_nucleotide_info(design)
-    _missing = {"strand_id": None, "strand_type": StrandType.STAPLE.value,
-                "is_five_prime": False, "is_three_prime": False, "domain_index": 0}
+    _missing = {
+        "strand_id": None,
+        "strand_type": StrandType.STAPLE.value,
+        "is_five_prime": False,
+        "is_three_prime": False,
+        "domain_index": 0,
+    }
 
     result: list[dict] = []
     for helix in design.helices:
         for nuc in nucleotide_positions(helix):
             key = (nuc.helix_id, nuc.bp_index, nuc.direction)
             sinfo = nuc_info.get(key, _missing)
-            result.append({
-                "helix_id":          nuc.helix_id,
-                "bp_index":          nuc.bp_index,
-                "direction":         nuc.direction.value,
-                "backbone_position": nuc.position.tolist(),
-                "base_position":     nuc.base_position.tolist(),
-                "base_normal":       nuc.base_normal.tolist(),
-                "axis_tangent":      nuc.axis_tangent.tolist(),
-                **sinfo,
-            })
+            result.append(
+                {
+                    "helix_id": nuc.helix_id,
+                    "bp_index": nuc.bp_index,
+                    "direction": nuc.direction.value,
+                    "backbone_position": nuc.position.tolist(),
+                    "base_position": nuc.base_position.tolist(),
+                    "base_normal": nuc.base_normal.tolist(),
+                    "axis_tangent": nuc.axis_tangent.tolist(),
+                    **sinfo,
+                }
+            )
     return result

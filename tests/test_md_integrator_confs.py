@@ -4,6 +4,7 @@ Before exp51 these were one dial: ``_segment_conf`` derived rigidBonds from ``sp
 and the PSF from ``fast``; ``build_production_conf`` branched on the timestep alone. These
 tests pin the decoupling, including the combinations the old writers could not express.
 """
+
 import re
 
 import pytest
@@ -21,8 +22,17 @@ def directive(conf: str, name: str):
 
 
 def spec(**kw) -> SegmentSpec:
-    base = dict(name=f"{STEM}_01_k0p5", stage="k=0.5", percent=100.0, steps=1000,
-                temp=300.0, damping=5.0, scale=0.5, npt=True, previous=f"{STEM}_00_min")
+    base = dict(
+        name=f"{STEM}_01_k0p5",
+        stage="k=0.5",
+        percent=100.0,
+        steps=1000,
+        temp=300.0,
+        damping=5.0,
+        scale=0.5,
+        npt=True,
+        previous=f"{STEM}_00_min",
+    )
     base.update(kw)
     return SegmentSpec(**base)
 
@@ -31,11 +41,14 @@ class TestProductionConf:
     def _conf(self, **kw):
         return build_production_conf(spec(scale=None), STEM, BOX, False, **kw)
 
-    @pytest.mark.parametrize("dt,rigid,hmr_psf", [
-        (4.0, "all", True),      # the sanctioned fast path
-        (2.0, "all", False),     # the paper's path
-        (1.0, "none", False),    # the conservative reference
-    ])
+    @pytest.mark.parametrize(
+        "dt,rigid,hmr_psf",
+        [
+            (4.0, "all", True),  # the sanctioned fast path
+            (2.0, "all", False),  # the paper's path
+            (1.0, "none", False),  # the conservative reference
+        ],
+    )
     def test_auto_reproduces_the_sanctioned_diagonals(self, dt, rigid, hmr_psf):
         c = self._conf(timestep_fs=dt)
         assert directive(c, "timestep") == f"{dt:g}"
@@ -52,7 +65,10 @@ class TestProductionConf:
 
     def test_1fs_can_be_run_with_rigid_bonds(self):
         # Stable per exp51; the old writer forced rigidBonds none at 1 fs unconditionally.
-        assert directive(self._conf(timestep_fs=1.0, rigid_bonds="all"), "rigidBonds") == "all"
+        assert (
+            directive(self._conf(timestep_fs=1.0, rigid_bonds="all"), "rigidBonds")
+            == "all"
+        )
 
     def test_2fs_can_be_run_with_hmr(self):
         c = self._conf(timestep_fs=2.0, hmr=True)
@@ -106,6 +122,7 @@ class TestForceSoftIsExpressible:
 
     def _ladder(self, **kw):
         from backend.core.md_protocols import mgh_slow_release_segments
+
         return mgh_slow_release_segments(STEM, **kw)
 
     def test_the_soft_tier_and_the_explicit_axes_emit_the_same_integrator(self):
@@ -114,15 +131,32 @@ class TestForceSoftIsExpressible:
         assert len(soft_specs) == len(axis_specs)
         for a, b in zip(soft_specs, axis_specs):
             soft_conf = _segment_conf(a, STEM, BOX, False, fast=False)
-            axis_conf = _segment_conf(b, STEM, BOX, False, fast=False,
-                                      rigid_bonds="none", base_timestep_fs=1.0)
+            axis_conf = _segment_conf(
+                b,
+                STEM,
+                BOX,
+                False,
+                fast=False,
+                rigid_bonds="none",
+                base_timestep_fs=1.0,
+            )
             for key in ("timestep", "rigidBonds", "structure"):
-                assert directive(soft_conf, key) == directive(axis_conf, key), (a.name, key)
+                assert directive(soft_conf, key) == directive(axis_conf, key), (
+                    a.name,
+                    key,
+                )
 
     def test_and_that_integrator_really_is_1fs_flexible(self):
         _min, specs = self._ladder(timestep_fs=1.0)
-        conf = _segment_conf(specs[-1], STEM, BOX, False, fast=False,
-                             rigid_bonds="none", base_timestep_fs=1.0)
+        conf = _segment_conf(
+            specs[-1],
+            STEM,
+            BOX,
+            False,
+            fast=False,
+            rigid_bonds="none",
+            base_timestep_fs=1.0,
+        )
         assert directive(conf, "timestep") == "1"
         assert directive(conf, "rigidBonds") == "none"
 

@@ -43,8 +43,12 @@ class TestPathMatches:
 
 class TestFindAssociatedJobs:
     def test_matches_by_file(self, tmp_path: Path) -> None:
-        a = new_md_job("A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc")
-        b = new_md_job("B", "mgh_slow_release", "B", "pkg", design_source_path="b.nadoc")
+        a = new_md_job(
+            "A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc"
+        )
+        b = new_md_job(
+            "B", "mgh_slow_release", "B", "pkg", design_source_path="b.nadoc"
+        )
         a.save(tmp_path)
         b.save(tmp_path)
         ox = new_oxdna_job("A", [], design_source_path="a.nadoc")
@@ -55,8 +59,12 @@ class TestFindAssociatedJobs:
         assert {j.job_id for j in found["oxdna"]} == {ox.job_id}
 
     def test_matches_by_folder(self, tmp_path: Path) -> None:
-        inside = new_md_job("X", "mgh_slow_release", "X", "pkg", design_source_path="figs/x.nadoc")
-        outside = new_md_job("Y", "mgh_slow_release", "Y", "pkg", design_source_path="y.nadoc")
+        inside = new_md_job(
+            "X", "mgh_slow_release", "X", "pkg", design_source_path="figs/x.nadoc"
+        )
+        outside = new_md_job(
+            "Y", "mgh_slow_release", "Y", "pkg", design_source_path="y.nadoc"
+        )
         inside.save(tmp_path)
         outside.save(tmp_path)
 
@@ -64,7 +72,9 @@ class TestFindAssociatedJobs:
         assert {j.job_id for j in found["md"]} == {inside.job_id}
 
     def test_no_jobs_for_unrelated_path(self, tmp_path: Path) -> None:
-        new_md_job("A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc").save(tmp_path)
+        new_md_job(
+            "A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc"
+        ).save(tmp_path)
         found = find_associated_jobs(tmp_path, "nope.nadoc", False)
         assert found == {"md": [], "oxdna": []}
 
@@ -89,7 +99,9 @@ class TestLibraryDeleteRoute:
 
     def test_lists_associated_jobs(self, client) -> None:
         c, ws = client
-        new_md_job("A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc").save(ws)
+        new_md_job(
+            "A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc"
+        ).save(ws)
         new_oxdna_job("A", [], design_source_path="a.nadoc").save(ws)
         r = c.get("/api/library/file/jobs", params={"path": "a.nadoc"})
         assert r.status_code == 200
@@ -100,19 +112,25 @@ class TestLibraryDeleteRoute:
 
     def test_delete_without_flag_keeps_jobs(self, client) -> None:
         c, ws = client
-        job = new_md_job("A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc")
+        job = new_md_job(
+            "A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc"
+        )
         job.save(ws)
         r = c.delete("/api/library/file", params={"path": "a.nadoc"})
         assert r.status_code == 200
         assert r.json()["deleted_jobs"] == []
-        assert job.job_dir(ws).exists()           # job folder untouched
-        assert not (ws / "a.nadoc").exists()       # file gone
+        assert job.job_dir(ws).exists()  # job folder untouched
+        assert not (ws / "a.nadoc").exists()  # file gone
 
     def test_delete_with_flag_removes_job_folders(self, client) -> None:
         c, ws = client
-        job = new_md_job("A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc")
+        job = new_md_job(
+            "A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc"
+        )
         job.save(ws)
-        r = c.delete("/api/library/file", params={"path": "a.nadoc", "delete_jobs": "true"})
+        r = c.delete(
+            "/api/library/file", params={"path": "a.nadoc", "delete_jobs": "true"}
+        )
         assert r.status_code == 200
         assert r.json()["deleted_jobs"] == [job.job_id]
         assert not job.job_dir(ws).exists()
@@ -122,10 +140,14 @@ class TestLibraryDeleteRoute:
         from backend.core.md_job import MdStatus
 
         c, ws = client
-        job = new_md_job("A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc")
+        job = new_md_job(
+            "A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc"
+        )
         job.status = MdStatus.running
         job.save(ws)
-        r = c.delete("/api/library/file", params={"path": "a.nadoc", "delete_jobs": "true"})
+        r = c.delete(
+            "/api/library/file", params={"path": "a.nadoc", "delete_jobs": "true"}
+        )
         assert r.status_code == 409
-        assert job.job_dir(ws).exists()            # nothing deleted
-        assert (ws / "a.nadoc").exists()           # file kept too (whole op refused)
+        assert job.job_dir(ws).exists()  # nothing deleted
+        assert (ws / "a.nadoc").exists()  # file kept too (whole op refused)

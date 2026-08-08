@@ -5,6 +5,7 @@ is faked so these stay fast + always-on: the point is the metric ASSEMBLY (singl
 all three metrics, both domains, C1'…C1' pairing) and the route/chain glue, not the
 MDAnalysis reader (covered by the env-gated heavy fixtures in test_md_trajectory.py).
 """
+
 from __future__ import annotations
 
 import math
@@ -26,8 +27,14 @@ def _paired_bundle(n_helix=4, n_axial=12, radius=1.2, rise=0.34):
             for d, dx in (("FORWARD", 0.0), ("REVERSE", 0.1)):
                 pos = [x + dx, y, rise * i]
                 order.append((h, i, d))
-                analytic.append({"helix_id": h, "bp_index": i, "direction": d,
-                                 "backbone_position": pos})
+                analytic.append(
+                    {
+                        "helix_id": h,
+                        "bp_index": i,
+                        "direction": d,
+                        "backbone_position": pos,
+                    }
+                )
     return order, analytic
 
 
@@ -42,30 +49,36 @@ def _install_fake_reader(monkeypatch, order, analytic, n_frames, *, c1p_offset=0
     p_nm = np.array([a["backbone_position"] for a in analytic], dtype=float)
     c1p = p_nm + np.array([0.0, 0.0, c1p_offset])
 
-    monkeypatch.setattr(mt, "_build_md_nadoc_ctx",
-                        lambda *a, **k: {"p_order": order, "n_frames": n_frames})
+    monkeypatch.setattr(
+        mt,
+        "_build_md_nadoc_ctx",
+        lambda *a, **k: {"p_order": order, "n_frames": n_frames},
+    )
 
     def _fake_extract(ctx, idx, with_c1p=False):
         if with_c1p:
             return p_nm, None, c1p
         return p_nm, None
+
     monkeypatch.setattr(mt, "_extract_md_nadoc_frame", _fake_extract)
 
 
 def test_md_metric_series_one_pass_all_metrics(monkeypatch):
     from backend.core.md_trajectory import md_metric_series
+
     order, analytic = _paired_bundle(n_axial=12)
     _install_fake_reader(monkeypatch, order, analytic, 4)
 
     seen: list[int] = []
-    out = md_metric_series("psf", [], "ref", object(), analytic,
-                           on_frame=lambda: seen.append(1))
+    out = md_metric_series(
+        "psf", [], "ref", object(), analytic, on_frame=lambda: seen.append(1)
+    )
     assert out["ready"] is True
     assert out["n_frames"] == 4
-    assert len(seen) == 4                                   # progress hook fired per frame
+    assert len(seen) == 4  # progress hook fired per frame
     for key in ("twist", "curvature", "base_pairing"):
         assert len(out[key]["temporal"]["per_frame"]) == 4
-        assert out[key]["spatial"]                          # non-empty profile
+        assert out[key]["spatial"]  # non-empty profile
     # Frames equal the analytic reference → differential twist/curvature ≈ 0.
     assert all(abs(v) < 1e-3 for v in out["twist"]["temporal"]["per_frame"])
     # Every designed pair is within the C1' cutoff → fraction 1.0.
@@ -77,25 +90,34 @@ def test_md_metric_series_one_pass_all_metrics(monkeypatch):
 def test_md_metric_series_pairing_drops_when_c1p_separated(monkeypatch):
     """Push the C1' atoms apart in z so no FORWARD/REVERSE pair is within cutoff → 0."""
     from backend.core.md_trajectory import MD_BP_CUTOFF_NM, md_metric_series
+
     order, analytic = _paired_bundle(n_axial=12)
     # Same z-offset on every C1' keeps the pair separation... so instead offset would not
     # separate FWD/REV (they share z).  Use a large asymmetric offset via a custom reader.
     import backend.core.md_trajectory as mt
+
     p_nm = np.array([a["backbone_position"] for a in analytic], dtype=float)
     c1p = p_nm.copy()
     # Shove only REVERSE C1' atoms far in +z so each pair's C1'…C1' >> cutoff.
     for i, (_h, _bp, d) in enumerate(order):
         if d == "REVERSE":
             c1p[i, 2] += MD_BP_CUTOFF_NM * 5
-    monkeypatch.setattr(mt, "_build_md_nadoc_ctx",
-                        lambda *a, **k: {"p_order": order, "n_frames": 3})
-    monkeypatch.setattr(mt, "_extract_md_nadoc_frame",
-                        lambda ctx, idx, with_c1p=False:
-                        (p_nm, None, c1p) if with_c1p else (p_nm, None))
+    monkeypatch.setattr(
+        mt, "_build_md_nadoc_ctx", lambda *a, **k: {"p_order": order, "n_frames": 3}
+    )
+    monkeypatch.setattr(
+        mt,
+        "_extract_md_nadoc_frame",
+        lambda ctx, idx, with_c1p=False: (
+            (p_nm, None, c1p) if with_c1p else (p_nm, None)
+        ),
+    )
 
     out = md_metric_series("psf", [], "ref", object(), analytic)
     assert out["ready"] is True
-    assert all(v == pytest.approx(0.0) for v in out["base_pairing"]["temporal"]["per_frame"])
+    assert all(
+        v == pytest.approx(0.0) for v in out["base_pairing"]["temporal"]["per_frame"]
+    )
 
 
 def test_md_metric_series_tolerates_extra_base_inserts(monkeypatch):
@@ -106,20 +128,28 @@ def test_md_metric_series_tolerates_extra_base_inserts(monkeypatch):
     was ``invalid literal for int() with base 10: '<crossover-uuid>'``."""
     import backend.core.md_trajectory as mt
     from backend.core.md_trajectory import md_metric_series
+
     order, analytic = _paired_bundle(n_axial=12)
     xo_id = "accc07e6-a6df-431d-9090-d24cf77a8ec9"
     # Two inserts threaded in-chain at the junction, keyed like the real extra bases.
     order = order + [("__xb__", xo_id, 0), ("__xb__", xo_id, 1)]
-    p_nm = np.array([a["backbone_position"] for a in analytic]
-                    + [[0.0, 0.0, 0.5], [0.1, 0.0, 0.6]], dtype=float)
+    p_nm = np.array(
+        [a["backbone_position"] for a in analytic] + [[0.0, 0.0, 0.5], [0.1, 0.0, 0.6]],
+        dtype=float,
+    )
     c1p = p_nm.copy()
-    monkeypatch.setattr(mt, "_build_md_nadoc_ctx",
-                        lambda *a, **k: {"p_order": order, "n_frames": 3})
-    monkeypatch.setattr(mt, "_extract_md_nadoc_frame",
-                        lambda ctx, idx, with_c1p=False:
-                        (p_nm, None, c1p) if with_c1p else (p_nm, None))
+    monkeypatch.setattr(
+        mt, "_build_md_nadoc_ctx", lambda *a, **k: {"p_order": order, "n_frames": 3}
+    )
+    monkeypatch.setattr(
+        mt,
+        "_extract_md_nadoc_frame",
+        lambda ctx, idx, with_c1p=False: (
+            (p_nm, None, c1p) if with_c1p else (p_nm, None)
+        ),
+    )
     # analytic reference EXCLUDES __xb__ (core_reference_geometry drops _XB_SENTINEL).
-    out = md_metric_series("psf", [], "ref", object(), analytic)   # must NOT raise
+    out = md_metric_series("psf", [], "ref", object(), analytic)  # must NOT raise
     assert out["ready"] is True
     # Inserts are ssDNA, not designed pairs, and every profile still resolves.
     assert out["base_pairing"]["temporal"]["n_designed"] == 4 * 12
@@ -131,17 +161,30 @@ def test_filter_to_reference_core_skips_extra_base_inserts():
     """Unit pin on the crash site itself: the core filter drops non-integer bp_index
     (extra-base inserts) instead of int()-ing a crossover-id string."""
     from backend.core.oxdna_health import _filter_to_reference_core
-    reference = [{"helix_id": 0, "bp_index": 3, "direction": "FORWARD",
-                  "backbone_position": [0.0, 0.0, 0.0]}]
+
+    reference = [
+        {
+            "helix_id": 0,
+            "bp_index": 3,
+            "direction": "FORWARD",
+            "backbone_position": [0.0, 0.0, 0.0],
+        }
+    ]
     positions = reference + [
-        {"helix_id": "__xb__", "bp_index": "accc07e6-a6df-431d-9090-d24cf77a8ec9",
-         "direction": 0, "backbone_position": [1.0, 0.0, 0.0]}]
-    core = _filter_to_reference_core(positions, reference)          # must NOT raise
-    assert [p["helix_id"] for p in core] == [0]                     # insert dropped
+        {
+            "helix_id": "__xb__",
+            "bp_index": "accc07e6-a6df-431d-9090-d24cf77a8ec9",
+            "direction": 0,
+            "backbone_position": [1.0, 0.0, 0.0],
+        }
+    ]
+    core = _filter_to_reference_core(positions, reference)  # must NOT raise
+    assert [p["helix_id"] for p in core] == [0]  # insert dropped
 
 
 def test_md_job_chain_resolves_refit_lineage():
     from backend.api.routes_md_metrics import _md_job_chain
+
     root = SimpleNamespace(job_id="root", parent_job_id=None, created_at=1.0)
     c1 = SimpleNamespace(job_id="c1", parent_job_id="root", created_at=2.0)
     c2 = SimpleNamespace(job_id="c2", parent_job_id="c1", created_at=3.0)
@@ -164,11 +207,13 @@ def test_md_snapshot_design_walks_parent_chain(tmp_path, monkeypatch):
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     root = new_job("demo", "p", name_stem="demo", package_subdir="pkg")
     root.save(tmp_path)
-    child = new_job("demo", "p", name_stem="demo", package_subdir="pkg",
-                    parent_job_id=root.job_id)
+    child = new_job(
+        "demo", "p", name_stem="demo", package_subdir="pkg", parent_job_id=root.job_id
+    )
     child.save(tmp_path)
-    grandchild = new_job("demo", "p", name_stem="demo", package_subdir="pkg",
-                         parent_job_id=child.job_id)
+    grandchild = new_job(
+        "demo", "p", name_stem="demo", package_subdir="pkg", parent_job_id=child.job_id
+    )
     grandchild.save(tmp_path)
     # Snapshot lives ONLY on the root; neither child nor grandchild has its own.
     (root.job_dir(tmp_path) / "design.json").write_text(Design().model_dump_json())
@@ -185,8 +230,9 @@ def test_md_snapshot_design_none_when_no_lineage_snapshot(tmp_path, monkeypatch)
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     root = new_job("demo", "p", name_stem="demo", package_subdir="pkg")
     root.save(tmp_path)
-    child = new_job("demo", "p", name_stem="demo", package_subdir="pkg",
-                    parent_job_id=root.job_id)
+    child = new_job(
+        "demo", "p", name_stem="demo", package_subdir="pkg", parent_job_id=root.job_id
+    )
     child.save(tmp_path)
     assert routes_md._md_snapshot_design(child) is None
 
@@ -195,6 +241,7 @@ def test_md_metrics_route_unknown_job_404():
     from fastapi import HTTPException
 
     from backend.api.routes_md_metrics import MdMetricsStartRequest, start_md_metrics
+
     with pytest.raises(HTTPException) as ei:
         start_md_metrics("nope", MdMetricsStartRequest(scope="latest"))
     assert ei.value.status_code == 404
@@ -202,5 +249,6 @@ def test_md_metrics_route_unknown_job_404():
 
 def test_count_md_frames_missing_files_is_zero():
     from backend.core.md_trajectory import count_md_frames
+
     assert count_md_frames([("s", "md", "/no/such.dcd")]) == 0
     assert count_md_frames([]) == 0

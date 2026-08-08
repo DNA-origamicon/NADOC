@@ -39,6 +39,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.api import state as design_state
+
 # _design_response is the shared response helper used by 100+ crud.py routes; it
 # stays in crud.py and is imported back here (same convention as
 # routes_clusters.py / routes_camera_poses.py).
@@ -49,12 +50,12 @@ router = APIRouter()
 
 
 class AddJointBody(BaseModel):
-    axis_origin: List[float]       # [x, y, z] nm world-space
-    axis_direction: List[float]    # unit vector (normalised by backend)
-    surface_detail: int = 6        # lateral face count used in surface approximation
+    axis_origin: List[float]  # [x, y, z] nm world-space
+    axis_direction: List[float]  # unit vector (normalised by backend)
+    surface_detail: int = 6  # lateral face count used in surface approximation
     name: str = "Joint"
     min_angle_deg: float = -180.0  # mechanical lower limit (degrees)
-    max_angle_deg: float =  180.0  # mechanical upper limit (degrees)
+    max_angle_deg: float = 180.0  # mechanical upper limit (degrees)
 
 
 class PatchJointBody(BaseModel):
@@ -77,19 +78,19 @@ def _build_add_joint(design: Design, params: dict) -> Design:
     feature-log params are deterministic across replays (the local-frame
     axis is invariant under subsequent cluster transforms).
     """
-    cluster_id = params['cluster_id']
+    cluster_id = params["cluster_id"]
     cluster = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
     if cluster is None:
         raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
     joint = ClusterJoint(
-        id=params['joint_id'],
+        id=params["joint_id"],
         cluster_id=cluster_id,
-        name=params.get('name', 'Joint'),
-        local_axis_origin=list(params['local_axis_origin']),
-        local_axis_direction=list(params['local_axis_direction']),
-        surface_detail=int(params.get('surface_detail', 6)),
-        min_angle_deg=float(params.get('min_angle_deg', -180.0)),
-        max_angle_deg=float(params.get('max_angle_deg',  180.0)),
+        name=params.get("name", "Joint"),
+        local_axis_origin=list(params["local_axis_origin"]),
+        local_axis_direction=list(params["local_axis_direction"]),
+        surface_detail=int(params.get("surface_detail", 6)),
+        min_angle_deg=float(params.get("min_angle_deg", -180.0)),
+        max_angle_deg=float(params.get("max_angle_deg", 180.0)),
     )
     # Each cluster has at most one joint — replace any existing one.
     existing = [j for j in design.cluster_joints if j.cluster_id != cluster_id]
@@ -104,30 +105,30 @@ def _build_update_joint(design: Design, params: dict) -> Design:
     world→local and stores the local-frame fields directly, so replay is
     deterministic regardless of intervening cluster transforms.
     """
-    joint_id = params['joint_id']
+    joint_id = params["joint_id"]
     joints = list(design.cluster_joints)
     idx = next((i for i, j in enumerate(joints) if j.id == joint_id), None)
     if idx is None:
         raise HTTPException(404, detail=f"Joint {joint_id!r} not found.")
     fields: dict = {}
-    if 'name' in params:
-        fields['name'] = params['name']
-    if 'surface_detail' in params:
-        fields['surface_detail'] = int(params['surface_detail'])
-    if 'local_axis_origin' in params:
-        fields['local_axis_origin'] = list(params['local_axis_origin'])
-    if 'local_axis_direction' in params:
-        fields['local_axis_direction'] = list(params['local_axis_direction'])
-    if 'min_angle_deg' in params:
-        fields['min_angle_deg'] = float(params['min_angle_deg'])
-    if 'max_angle_deg' in params:
-        fields['max_angle_deg'] = float(params['max_angle_deg'])
+    if "name" in params:
+        fields["name"] = params["name"]
+    if "surface_detail" in params:
+        fields["surface_detail"] = int(params["surface_detail"])
+    if "local_axis_origin" in params:
+        fields["local_axis_origin"] = list(params["local_axis_origin"])
+    if "local_axis_direction" in params:
+        fields["local_axis_direction"] = list(params["local_axis_direction"])
+    if "min_angle_deg" in params:
+        fields["min_angle_deg"] = float(params["min_angle_deg"])
+    if "max_angle_deg" in params:
+        fields["max_angle_deg"] = float(params["max_angle_deg"])
     # Pydantic re-runs the model validator on `model_copy(update=…)`, so an
     # update that would invert min/max is caught here rather than silently
     # accepted.
     cur = joints[idx]
-    new_min = fields.get('min_angle_deg', cur.min_angle_deg)
-    new_max = fields.get('max_angle_deg', cur.max_angle_deg)
+    new_min = fields.get("min_angle_deg", cur.min_angle_deg)
+    new_max = fields.get("max_angle_deg", cur.max_angle_deg)
     if new_max < new_min:
         raise HTTPException(
             400,
@@ -139,7 +140,7 @@ def _build_update_joint(design: Design, params: dict) -> Design:
 
 def _build_delete_joint(design: Design, params: dict) -> Design:
     """Pure builder for the joint-delete op."""
-    joint_id = params['joint_id']
+    joint_id = params["joint_id"]
     joints = [j for j in design.cluster_joints if j.id != joint_id]
     if len(joints) == len(design.cluster_joints):
         raise HTTPException(404, detail=f"Joint {joint_id!r} not found.")
@@ -173,33 +174,35 @@ def add_joint(cluster_id: str, body: AddJointBody) -> dict:
     world_direction = [dx / length, dy / length, dz / length]
 
     ct_dict = {
-        'rotation':    list(cluster.rotation),
-        'translation': list(cluster.translation),
-        'pivot':       list(cluster.pivot),
+        "rotation": list(cluster.rotation),
+        "translation": list(cluster.translation),
+        "pivot": list(cluster.pivot),
     }
     local_origin, local_dir = _world_to_local_joint(
-        list(body.axis_origin), world_direction, ct_dict,
+        list(body.axis_origin),
+        world_direction,
+        ct_dict,
     )
 
     if body.max_angle_deg < body.min_angle_deg:
         raise HTTPException(
             400,
             detail=f"max_angle_deg ({body.max_angle_deg}) must be >= "
-                   f"min_angle_deg ({body.min_angle_deg}).",
+            f"min_angle_deg ({body.min_angle_deg}).",
         )
     params = {
-        'cluster_id':           cluster_id,
-        'joint_id':             str(_uuid.uuid4()),
-        'name':                 body.name,
-        'surface_detail':       body.surface_detail,
-        'local_axis_origin':    local_origin,
-        'local_axis_direction': local_dir,
-        'min_angle_deg':        body.min_angle_deg,
-        'max_angle_deg':        body.max_angle_deg,
+        "cluster_id": cluster_id,
+        "joint_id": str(_uuid.uuid4()),
+        "name": body.name,
+        "surface_detail": body.surface_detail,
+        "local_axis_origin": local_origin,
+        "local_axis_direction": local_dir,
+        "min_angle_deg": body.min_angle_deg,
+        "max_angle_deg": body.max_angle_deg,
     }
     label = f"Place joint {body.name!r} on cluster {cluster_id}"
     updated, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='joint-place',
+        op_subtype="joint-place",
         label=label,
         params=params,
         fn=lambda d: _build_add_joint(d, params),
@@ -220,43 +223,61 @@ def update_joint(joint_id: str, body: PatchJointBody) -> dict:
     from backend.core.models import _world_to_local_joint, _local_to_world_joint
 
     design = design_state.get_or_404()
-    joint  = next((j for j in design.cluster_joints if j.id == joint_id), None)
+    joint = next((j for j in design.cluster_joints if j.id == joint_id), None)
     if joint is None:
         raise HTTPException(404, detail=f"Joint {joint_id!r} not found.")
-    cluster = next((c for c in design.cluster_transforms if c.id == joint.cluster_id), None)
-    ct_dict = None if cluster is None else {
-        'rotation':    list(cluster.rotation),
-        'translation': list(cluster.translation),
-        'pivot':       list(cluster.pivot),
-    }
+    cluster = next(
+        (c for c in design.cluster_transforms if c.id == joint.cluster_id), None
+    )
+    ct_dict = (
+        None
+        if cluster is None
+        else {
+            "rotation": list(cluster.rotation),
+            "translation": list(cluster.translation),
+            "pivot": list(cluster.pivot),
+        }
+    )
 
-    params: dict = {'joint_id': joint_id}
+    params: dict = {"joint_id": joint_id}
     if body.name is not None:
-        params['name'] = body.name
+        params["name"] = body.name
     if body.surface_detail is not None:
-        params['surface_detail'] = int(body.surface_detail)
+        params["surface_detail"] = int(body.surface_detail)
     if body.axis_origin is not None or body.axis_direction is not None:
         cur_world_origin, cur_world_dir = _local_to_world_joint(
-            joint.local_axis_origin, joint.local_axis_direction, cluster,
+            joint.local_axis_origin,
+            joint.local_axis_direction,
+            cluster,
         )
-        new_world_origin = list(body.axis_origin) if body.axis_origin is not None else cur_world_origin
+        new_world_origin = (
+            list(body.axis_origin) if body.axis_origin is not None else cur_world_origin
+        )
         if body.axis_direction is not None:
-            dx, dy, dz = body.axis_direction[0], body.axis_direction[1], body.axis_direction[2]
+            dx, dy, dz = (
+                body.axis_direction[0],
+                body.axis_direction[1],
+                body.axis_direction[2],
+            )
             length = _math.sqrt(dx * dx + dy * dy + dz * dz)
             if length < 1e-9:
-                raise HTTPException(400, detail="axis_direction must be a non-zero vector.")
+                raise HTTPException(
+                    400, detail="axis_direction must be a non-zero vector."
+                )
             new_world_dir = [dx / length, dy / length, dz / length]
         else:
             new_world_dir = cur_world_dir
-        local_origin, local_dir = _world_to_local_joint(new_world_origin, new_world_dir, ct_dict)
-        params['local_axis_origin']    = local_origin
-        params['local_axis_direction'] = local_dir
+        local_origin, local_dir = _world_to_local_joint(
+            new_world_origin, new_world_dir, ct_dict
+        )
+        params["local_axis_origin"] = local_origin
+        params["local_axis_direction"] = local_dir
     if body.min_angle_deg is not None:
-        params['min_angle_deg'] = float(body.min_angle_deg)
+        params["min_angle_deg"] = float(body.min_angle_deg)
     if body.max_angle_deg is not None:
-        params['max_angle_deg'] = float(body.max_angle_deg)
-    new_min = params.get('min_angle_deg', joint.min_angle_deg)
-    new_max = params.get('max_angle_deg', joint.max_angle_deg)
+        params["max_angle_deg"] = float(body.max_angle_deg)
+    new_min = params.get("min_angle_deg", joint.min_angle_deg)
+    new_max = params.get("max_angle_deg", joint.max_angle_deg)
     if new_max < new_min:
         raise HTTPException(
             400,
@@ -265,7 +286,7 @@ def update_joint(joint_id: str, body: PatchJointBody) -> dict:
 
     label = f"Update joint {joint.name!r}"
     updated, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='joint-update',
+        op_subtype="joint-update",
         label=label,
         params=params,
         fn=lambda d: _build_update_joint(d, params),
@@ -277,14 +298,14 @@ def update_joint(joint_id: str, body: PatchJointBody) -> dict:
 def delete_joint(joint_id: str) -> dict:
     """Delete a joint. Logged as a 'joint-delete' minor op."""
     design = design_state.get_or_404()
-    joint  = next((j for j in design.cluster_joints if j.id == joint_id), None)
+    joint = next((j for j in design.cluster_joints if j.id == joint_id), None)
     if joint is None:
         raise HTTPException(404, detail=f"Joint {joint_id!r} not found.")
 
-    params = {'joint_id': joint_id}
+    params = {"joint_id": joint_id}
     label = f"Delete joint {joint.name!r}"
     updated, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='joint-delete',
+        op_subtype="joint-delete",
         label=label,
         params=params,
         fn=lambda d: _build_delete_joint(d, params),

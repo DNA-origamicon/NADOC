@@ -116,9 +116,13 @@ def parse_log_text(text):
     if energy is not None:
         tok = energy.split()[1:]
         out["step"] = int(_float(tok, _E_TS) or 0)
-        for key, idx in (("temperature_k", _E_TEMP), ("total_energy", _E_TOTAL),
-                         ("pressure_bar", _E_PRESSURE), ("volume_ang3", _E_VOLUME),
-                         ("gpressure_avg_bar", _E_GPRESSAVG)):
+        for key, idx in (
+            ("temperature_k", _E_TEMP),
+            ("total_energy", _E_TOTAL),
+            ("pressure_bar", _E_PRESSURE),
+            ("volume_ang3", _E_VOLUME),
+            ("gpressure_avg_bar", _E_GPRESSAVG),
+        ):
             val = _float(tok, idx)
             if val is not None:
                 out[key] = val
@@ -165,8 +169,9 @@ def step_from_xsc(path):
 
 def collect(work_dir):
     """Scan a job's scratch dir → the live-metrics dict NADOC retrieves."""
-    logs = sorted(glob.glob(os.path.join(work_dir, "*.log")),
-                  key=lambda p: os.path.getmtime(p))
+    logs = sorted(
+        glob.glob(os.path.join(work_dir, "*.log")), key=lambda p: os.path.getmtime(p)
+    )
     if not logs:
         return {"collected_at": time.time(), "segment": None}
     active = logs[-1]
@@ -214,7 +219,7 @@ def main(argv):
             # Atomic replace: NADOC may `cat` this at any moment and must never
             # read a half-written file.
             os.rename(tmp, out)
-        except Exception as exc:            # never kill the run over metrics
+        except Exception as exc:  # never kill the run over metrics
             sys.stderr.write("live-metrics: %s\n" % exc)
         if interval <= 0:
             return 0

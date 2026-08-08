@@ -38,9 +38,20 @@ from backend.core.pdb_import import ATOM_ELEMENT, BASE_BONDS, SUGAR_BONDS
 # ── Constants ──────────���─────────────────────────────────────────────────────
 
 _DNA_RESNAME: dict[str, str] = {
-    "DA": "A", "DT": "T", "DG": "G", "DC": "C",
-    "A": "A", "T": "T", "G": "G", "C": "C", "U": "U",
-    "ADE": "A", "THY": "T", "GUA": "G", "CYT": "C", "URA": "U",
+    "DA": "A",
+    "DT": "T",
+    "DG": "G",
+    "DC": "C",
+    "A": "A",
+    "T": "T",
+    "G": "G",
+    "C": "C",
+    "U": "U",
+    "ADE": "A",
+    "THY": "T",
+    "GUA": "G",
+    "CYT": "C",
+    "URA": "U",
 }
 
 _WC_COMPLEMENT: set[frozenset[str]] = {
@@ -76,17 +87,45 @@ def _frame_from_axis(axis_hat: np.ndarray) -> np.ndarray:
 
 _WATER = {"HOH", "WAT", "H2O", "DOD", "D2O", "TIP3", "TIP4", "SPC"}
 _IONS = {
-    "NA", "CL", "MG", "ZN", "CA", "K", "MN", "FE", "CU", "CO", "NI",
-    "BR", "IOD", "CS", "RB", "LI", "BA", "SR", "CD",
-    "NA+", "CL-", "MG2", "K+",
+    "NA",
+    "CL",
+    "MG",
+    "ZN",
+    "CA",
+    "K",
+    "MN",
+    "FE",
+    "CU",
+    "CO",
+    "NI",
+    "BR",
+    "IOD",
+    "CS",
+    "RB",
+    "LI",
+    "BA",
+    "SR",
+    "CD",
+    "NA+",
+    "CL-",
+    "MG2",
+    "K+",
 }
 
 
 class _Atom:
     __slots__ = ("serial", "name", "res_name", "chain_id", "res_seq", "pos", "element")
 
-    def __init__(self, serial: int, name: str, res_name: str, chain_id: str,
-                 res_seq: int, pos: np.ndarray, element: str = ""):
+    def __init__(
+        self,
+        serial: int,
+        name: str,
+        res_name: str,
+        chain_id: str,
+        res_seq: int,
+        pos: np.ndarray,
+        element: str = "",
+    ):
         self.serial = serial
         self.name = name
         self.res_name = res_name
@@ -118,9 +157,9 @@ def _decode_pdb_int(field: str, width: int) -> int:
     offset = 10 * 36 ** (width - 1)
     block = 26 * 36 ** (width - 1)
     if value and value[0].isupper():
-        return int(value, 36) - offset + 10 ** width
+        return int(value, 36) - offset + 10**width
     if value and value[0].islower():
-        return int(value.upper(), 36) - offset + 10 ** width + block
+        return int(value.upper(), 36) - offset + 10**width + block
     return int(value)
 
 
@@ -132,7 +171,7 @@ def _parse_conect(text: str) -> list[tuple[int, int]]:
             continue
         source = _decode_pdb_int(line[6:11], 5)
         for start in range(11, len(line), 5):
-            field = line[start:start + 5]
+            field = line[start : start + 5]
             if not field.strip():
                 continue
             target = _decode_pdb_int(field, 5)
@@ -170,17 +209,25 @@ def _parse_dna_atoms(text: str) -> dict[tuple[str, int], _Residue]:
         res_seq = _decode_pdb_int(line[22:26], 4)
         key = (chain_id, res_seq)
         atom_name = line[12:16].strip()
-        pos = np.array([
-            float(line[30:38]) / 10.0,
-            float(line[38:46]) / 10.0,
-            float(line[46:54]) / 10.0,
-        ])
+        pos = np.array(
+            [
+                float(line[30:38]) / 10.0,
+                float(line[38:46]) / 10.0,
+                float(line[46:54]) / 10.0,
+            ]
+        )
         element = line[76:78].strip() if len(line) >= 78 else ""
 
         if key not in residues:
             residues[key] = _Residue(chain_id, res_seq, res_name)
         residues[key].atoms[atom_name] = _Atom(
-            _decode_pdb_int(line[6:11], 5), atom_name, res_name, chain_id, res_seq, pos, element,
+            _decode_pdb_int(line[6:11], 5),
+            atom_name,
+            res_name,
+            chain_id,
+            res_seq,
+            pos,
+            element,
         )
 
     return residues
@@ -212,7 +259,7 @@ def _detect_wc_pairs(
     used: set[tuple[str, int]] = set()
 
     for i, cid_a in enumerate(chain_ids):
-        for cid_b in chain_ids[i + 1:]:
+        for cid_b in chain_ids[i + 1 :]:
             # Try antiparallel assignment first: A ascending ↔ B descending.
             res_a = sorted(chains[cid_a], key=lambda k: k[1])
             res_b = sorted(chains[cid_b], key=lambda k: k[1], reverse=True)
@@ -260,7 +307,10 @@ def _detect_wc_pairs(
                         if frozenset({base_a, base_b}) not in _WC_COMPLEMENT:
                             continue
                         dist = float(np.linalg.norm(c1_pos[key_a] - c1_pos[key_b]))
-                        if _WC_C1_DIST_MIN <= dist <= _WC_C1_DIST_MAX and dist < best_dist:
+                        if (
+                            _WC_C1_DIST_MIN <= dist <= _WC_C1_DIST_MAX
+                            and dist < best_dist
+                        ):
                             best_dist = dist
                             best_key = key_b
                     if best_key is not None:
@@ -313,23 +363,31 @@ def _rotation_between(v_from: np.ndarray, v_to: np.ndarray) -> np.ndarray:
         return 2.0 * np.outer(axis, axis) - np.eye(3)
     axis = _norm(np.cross(v_from, v_to))
     s = math.sqrt(1.0 - c * c)
-    K = np.array([
-        [0, -axis[2], axis[1]],
-        [axis[2], 0, -axis[0]],
-        [-axis[1], axis[0], 0],
-    ])
+    K = np.array(
+        [
+            [0, -axis[2], axis[1]],
+            [axis[2], 0, -axis[0]],
+            [-axis[1], axis[0], 0],
+        ]
+    )
     return np.eye(3) + s * K + (1.0 - c) * (K @ K)
-
-
 
 
 # ── Per-duplex analysis (PDB space) ───���───────────────���─────────────────────
 
+
 class _DuplexInfo:
     """Intermediate analysis of one duplex in PDB coordinate space."""
+
     __slots__ = (
-        "n_bp", "axis_dir", "centroid", "t_min", "t_max",
-        "fwd_keys", "rev_keys", "fwd_c1_0",
+        "n_bp",
+        "axis_dir",
+        "centroid",
+        "t_min",
+        "t_max",
+        "fwd_keys",
+        "rev_keys",
+        "fwd_c1_0",
     )
 
     def __init__(self) -> None:
@@ -352,11 +410,13 @@ def _analyze_duplex_pdb(
     info = _DuplexInfo()
     info.n_bp = len(duplex)
 
-    midpoints = np.array([
-        (c1_pos[pa] + c1_pos[pb]) / 2.0
-        for pa, pb in duplex
-        if pa in c1_pos and pb in c1_pos
-    ])
+    midpoints = np.array(
+        [
+            (c1_pos[pa] + c1_pos[pb]) / 2.0
+            for pa, pb in duplex
+            if pa in c1_pos and pb in c1_pos
+        ]
+    )
     if len(midpoints) < 2:
         return None
 
@@ -395,8 +455,13 @@ def _analyze_duplex_pdb(
 
 class _PdbAnalysis:
     """Result of parsing + analysing a PDB file."""
+
     __slots__ = (
-        "dna_residues", "duplex_infos", "xform", "warnings", "conect_bonds",
+        "dna_residues",
+        "duplex_infos",
+        "xform",
+        "warnings",
+        "conect_bonds",
     )
 
     def __init__(self) -> None:
@@ -497,8 +562,12 @@ def import_pdb(
     for dup_idx, info in analysis.duplex_infos:
         n_bp = info.n_bp
 
-        ax_start_pdb = info.centroid + (info.t_min - BDNA_RISE_PER_BP * 0.5) * info.axis_dir
-        ax_end_pdb = info.centroid + (info.t_max + BDNA_RISE_PER_BP * 0.5) * info.axis_dir
+        ax_start_pdb = (
+            info.centroid + (info.t_min - BDNA_RISE_PER_BP * 0.5) * info.axis_dir
+        )
+        ax_end_pdb = (
+            info.centroid + (info.t_max + BDNA_RISE_PER_BP * 0.5) * info.axis_dir
+        )
         ax_start = xform(ax_start_pdb)
         ax_end = xform(ax_end_pdb)
 
@@ -542,24 +611,28 @@ def import_pdb(
 
         fwd_strand = Strand(
             id=fwd_strand_id,
-            domains=[Domain(
-                helix_id=helix_id,
-                start_bp=0,
-                end_bp=n_bp - 1,
-                direction=Direction.FORWARD,
-            )],
+            domains=[
+                Domain(
+                    helix_id=helix_id,
+                    start_bp=0,
+                    end_bp=n_bp - 1,
+                    direction=Direction.FORWARD,
+                )
+            ],
             strand_type=StrandType.SCAFFOLD if dup_idx == 0 else StrandType.STAPLE,
             sequence=fwd_seq,
             color="#0066CC",
         )
         rev_strand = Strand(
             id=rev_strand_id,
-            domains=[Domain(
-                helix_id=helix_id,
-                start_bp=n_bp - 1,
-                end_bp=0,
-                direction=Direction.REVERSE,
-            )],
+            domains=[
+                Domain(
+                    helix_id=helix_id,
+                    start_bp=n_bp - 1,
+                    end_bp=0,
+                    direction=Direction.REVERSE,
+                )
+            ],
             strand_type=StrandType.STAPLE,
             sequence=rev_seq,
             color="#CC0000",
@@ -593,7 +666,8 @@ def import_pdb(
 
     # ── Build atomistic model from real PDB positions ────────────────────
     atomistic = _build_pdb_atomistic(
-        dna_residues, res_mapping, xform, analysis.conect_bonds)
+        dna_residues, res_mapping, xform, analysis.conect_bonds
+    )
 
     total_bp = sum(h.length_bp for h in helices)
     warnings.append(f"Imported {len(helices)} duplex(es), {total_bp} total bp.")
@@ -665,21 +739,23 @@ def _build_pdb_atomistic(
         for atom_name, pdb_atom in res.atoms.items():
             p = xform(pdb_atom.pos)
             elem = _atom_element(pdb_atom)
-            atoms.append(Atom(
-                serial=serial,
-                name=atom_name,
-                element=elem,
-                residue=res.res_name,
-                chain_id=chain_id,
-                seq_num=seq_num,
-                x=float(p[0]),
-                y=float(p[1]),
-                z=float(p[2]),
-                strand_id=strand_id,
-                helix_id=helix_id,
-                bp_index=bp_index,
-                direction=direction,
-            ))
+            atoms.append(
+                Atom(
+                    serial=serial,
+                    name=atom_name,
+                    element=elem,
+                    residue=res.res_name,
+                    chain_id=chain_id,
+                    seq_num=seq_num,
+                    x=float(p[0]),
+                    y=float(p[1]),
+                    z=float(p[2]),
+                    strand_id=strand_id,
+                    helix_id=helix_id,
+                    bp_index=bp_index,
+                    direction=direction,
+                )
+            )
             atom_serials[atom_name] = serial
             pdb_serial_to_model[pdb_atom.serial] = serial
             serial += 1
@@ -732,6 +808,7 @@ def merge_pdb_into_design(
     merged = existing.copy_with(
         helices=list(existing.helices) + list(pdb_design.helices),
         strands=list(existing.strands) + list(pdb_design.strands),
-        cluster_transforms=list(existing.cluster_transforms) + list(pdb_design.cluster_transforms),
+        cluster_transforms=list(existing.cluster_transforms)
+        + list(pdb_design.cluster_transforms),
     )
     return merged, atomistic, warnings

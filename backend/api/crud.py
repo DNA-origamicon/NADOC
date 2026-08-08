@@ -85,7 +85,7 @@ class _TimingTrace:
         # Names must contain only token characters (no spaces / commas).
         parts = []
         for name, dur in self._steps:
-            safe = name.replace(' ', '_').replace(',', '_').replace(';', '_')
+            safe = name.replace(" ", "_").replace(",", "_").replace(";", "_")
             parts.append(f"{safe};dur={dur:.1f}")
         return ", ".join(parts)
 
@@ -93,6 +93,7 @@ class _TimingTrace:
         if self._steps:
             response.headers["Server-Timing"] = self.header_value()
         return response
+
 
 from backend.api import state as design_state
 from backend.api.doc_context import should_skip_geometry
@@ -131,6 +132,7 @@ from backend.core.models import (
 )
 from backend.core.constants import STAPLE_PALETTE
 from backend.core.validator import ValidationReport
+
 # Cluster auto-detection lives in backend/core (pure topology; carve-up #34).
 # Only the two entry points called by crud routes are imported back; the three
 # inner phase helpers are module-private to cluster_autodetect (L17).
@@ -138,6 +140,7 @@ from backend.core.cluster_autodetect import (  # noqa: F401
     _autodetect_clusters,
     _cluster_bundle_regions,
 )
+
 # Per-nucleotide display-geometry kernel lives in backend/core (pure compute;
 # carve-up service push #46). Re-exported here under the original underscore
 # names so the ~15 cross-file callers that import them from backend.api.crud
@@ -156,6 +159,7 @@ from backend.core.design_geometry import (  # noqa: F401
     _strand_extension_geometry,
     _strand_nucleotide_info,
 )
+
 # Render fast-path diff kernel lives in backend/core (pure Design×Design
 # comparison; carve-up service push #47). Re-exported here under the original
 # underscore names so the response fast-path callers + the test imports
@@ -188,16 +192,19 @@ router = APIRouter()
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 
-
-
 def _validation_dict(report: ValidationReport, design: "Design | None" = None) -> dict:
     from backend.core.validator import _is_loop_strand
+
     loop_ids: list[str] = []
     if design is not None:
-        loop_ids = [s.id for s in design.strands if s.strand_type == StrandType.STAPLE and _is_loop_strand(s)]
+        loop_ids = [
+            s.id
+            for s in design.strands
+            if s.strand_type == StrandType.STAPLE and _is_loop_strand(s)
+        ]
     return {
-        "passed":        report.passed,
-        "results":       [{"ok": r.ok, "message": r.message} for r in report.results],
+        "passed": report.passed,
+        "results": [{"ok": r.ok, "message": r.message} for r in report.results],
         "loop_strand_ids": loop_ids,
     }
 
@@ -231,6 +238,7 @@ def _ensure_default_cluster(design: Design) -> Design:
     if design.cluster_transforms or not design.helices:
         return design
     from backend.core.models import ClusterRigidTransform
+
     # Reference geometry is excluded from clusters — keep it a fixed backdrop.
     ref_ids = design.reference_helix_ids()
     default_ct = ClusterRigidTransform(
@@ -300,7 +308,7 @@ def _design_response(design: Design, report: ValidationReport) -> dict:
     if rev is None:
         rev = design_state.revision()
     return {
-        "design":     design_dict,
+        "design": design_dict,
         "validation": _validation_dict(report, design),
         # Crossovers whose two halves currently resolve to the same strand
         # (would form a circular strand on ligation, so _ligate_crossover
@@ -322,21 +330,22 @@ def _inject_joint_world_axes(design_dict: dict) -> None:
     storage remains local so cluster transforms apply lazily.
     """
     from backend.core.models import _local_to_world_joint
-    cts = design_dict.get('cluster_transforms') or []
+
+    cts = design_dict.get("cluster_transforms") or []
     if not cts:
         return
-    ct_by_id = {ct.get('id'): ct for ct in cts if isinstance(ct, dict)}
-    for j in design_dict.get('cluster_joints') or []:
+    ct_by_id = {ct.get("id"): ct for ct in cts if isinstance(ct, dict)}
+    for j in design_dict.get("cluster_joints") or []:
         if not isinstance(j, dict):
             continue
-        local_origin = j.get('local_axis_origin')
-        local_dir    = j.get('local_axis_direction')
+        local_origin = j.get("local_axis_origin")
+        local_dir = j.get("local_axis_direction")
         if local_origin is None or local_dir is None:
             continue
-        ct = ct_by_id.get(j.get('cluster_id'))
+        ct = ct_by_id.get(j.get("cluster_id"))
         world_origin, world_dir = _local_to_world_joint(local_origin, local_dir, ct)
-        j['axis_origin']    = world_origin
-        j['axis_direction'] = world_dir
+        j["axis_origin"] = world_origin
+        j["axis_direction"] = world_dir
 
 
 def _design_response_with_geometry(
@@ -385,12 +394,14 @@ def _design_response_with_geometry(
         return _design_response(design, report)
     if changed_helix_ids is not None:
         # Partial path — compute only the real helices that actually changed.
-        real_ids = frozenset(hid for hid in changed_helix_ids if not hid.startswith('__'))
+        real_ids = frozenset(
+            hid for hid in changed_helix_ids if not hid.startswith("__")
+        )
         nucs = _geometry_for_helices(design, real_ids) if real_ids else []
         resp = {
             **_design_response(design, report),
-            "nucleotides":       nucs,
-            "partial_geometry":  True,
+            "nucleotides": nucs,
+            "partial_geometry": True,
             "changed_helix_ids": changed_helix_ids,
             # helix_axes omitted by default — see docstring (crossover/xb mutations
             # don't move axes, so the frontend keeps its existing currentHelixAxes).
@@ -419,13 +430,13 @@ def _design_response_with_geometry(
         out = {
             **_design_response(design, report),
             "nucleotides_compact": _compact_geometry_from_nucleotides(nucleotides),
-            "helix_axes":          axes,
+            "helix_axes": axes,
         }
     else:
         out = {
             **_design_response(design, report),
             "nucleotides": nucleotides,
-            "helix_axes":  axes,
+            "helix_axes": axes,
         }
     # Auto-decide: embed straight only when it would differ from the deformed
     # payload — i.e. design has deformations OR cluster_transforms. When
@@ -442,10 +453,12 @@ def _design_response_with_geometry(
         # unfold_view only read backbone_position / base_normal / (helix_id,
         # bp_index, direction) per nuc, so the full strand metadata is wasted
         # bytes. Compact format ~3× smaller on the wire, ~3× faster to parse.
-        straight = design.model_copy(update={"deformations": [], "cluster_transforms": []})
+        straight = design.model_copy(
+            update={"deformations": [], "cluster_transforms": []}
+        )
         straight_positions, straight_axes = _positions_for_design(straight)
         out["straight_positions_by_helix"] = straight_positions
-        out["straight_helix_axes"]         = straight_axes
+        out["straight_helix_axes"] = straight_axes
     return out
 
 
@@ -489,7 +502,7 @@ class HelixAtCellRequest(BaseModel):
     row: int
     col: int
     length_bp: int = 42
-    populate_strands: bool = False   # if True, also adds a full-length scaffold + staple
+    populate_strands: bool = False  # if True, also adds a full-length scaffold + staple
 
 
 class DomainRequest(BaseModel):
@@ -545,7 +558,7 @@ def _linker_conn_id_from_strand_id(strand_id: str) -> Optional[str]:
     prefix = "__lnk__"
     if not strand_id.startswith(prefix):
         return None
-    rest = strand_id[len(prefix):]
+    rest = strand_id[len(prefix) :]
     if "__" not in rest:
         return None
     conn_id, side = rest.rsplit("__", 1)
@@ -582,9 +595,7 @@ def _delete_regular_strands_from_design(design: Design, id_set: set[str]) -> Des
     new_overhangs = [o for o in design.overhangs if o.id not in ovhg_ids_to_remove]
 
     covered_helix_ids: set[str] = {
-        dom.helix_id
-        for s in new_strands
-        for dom in s.domains
+        dom.helix_id for s in new_strands for dom in s.domains
     }
     new_helices = [h for h in design.helices if h.id in covered_helix_ids]
 
@@ -598,36 +609,41 @@ def _delete_regular_strands_from_design(design: Design, id_set: set[str]) -> Des
 
     def _covered(helix_id: str, bp: int, direction: str) -> bool:
         return any(
-            lo <= bp <= hi
-            for lo, hi in slot_cov.get(f"{helix_id}_{direction}", [])
+            lo <= bp <= hi for lo, hi in slot_cov.get(f"{helix_id}_{direction}", [])
         )
 
     new_crossovers = [
-        xo for xo in design.crossovers
+        xo
+        for xo in design.crossovers
         if _covered(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)
         and _covered(xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)
     ]
 
-    return design.model_copy(update={
-        "strands": new_strands,
-        "overhangs": new_overhangs,
-        "helices": new_helices,
-        "crossovers": new_crossovers,
-    })
+    return design.model_copy(
+        update={
+            "strands": new_strands,
+            "overhangs": new_overhangs,
+            "helices": new_helices,
+            "crossovers": new_crossovers,
+        }
+    )
 
 
-def _delete_linker_connections_from_design(design: Design, conn_ids: set[str]) -> Design:
+def _delete_linker_connections_from_design(
+    design: Design, conn_ids: set[str]
+) -> Design:
     """Delete linker connection records and all generated linker topology."""
     if not conn_ids:
         return design
     from backend.core.lattice import remove_linker_topology
 
-    updated = design.model_copy(update={
-        "overhang_connections": [
-            conn for conn in design.overhang_connections
-            if conn.id not in conn_ids
-        ]
-    })
+    updated = design.model_copy(
+        update={
+            "overhang_connections": [
+                conn for conn in design.overhang_connections if conn.id not in conn_ids
+            ]
+        }
+    )
     for conn_id in conn_ids:
         updated = remove_linker_topology(updated, conn_id)
     return updated
@@ -674,53 +690,59 @@ class DesignImportRequest(BaseModel):
 
 
 class BundleRequest(BaseModel):
-    cells: List[List[int]]   # [[row, col], ...]
+    cells: List[List[int]]  # [[row, col], ...]
     length_bp: int
     name: str = "Bundle"
     plane: str = "XY"
-    strand_filter: str = "both"   # "both" | "scaffold" | "staples"
+    strand_filter: str = "both"  # "both" | "scaffold" | "staples"
     lattice_type: LatticeType = LatticeType.HONEYCOMB
     ligate_adjacent: bool = True
 
 
 class BundleSegmentRequest(BaseModel):
-    cells: List[List[int]]   # [[row, col], ...]
-    length_bp: int           # may be negative — extrudes in -axis direction
+    cells: List[List[int]]  # [[row, col], ...]
+    length_bp: int  # may be negative — extrudes in -axis direction
     plane: str = "XY"
-    offset_nm: float = 0.0   # position of axis_start along the plane normal
-    strand_filter: str = "both"   # "both" | "scaffold" | "staples"
+    offset_nm: float = 0.0  # position of axis_start along the plane normal
+    strand_filter: str = "both"  # "both" | "scaffold" | "staples"
     ligate_adjacent: bool = True
 
 
 class CircleSegmentRequest(BaseModel):
-    cells: List[List[int]]        # [[row, col], ...] — a single row (the disc footprint)
-    cell_lengths: List[int]       # per-cell bp length, parallel to cells (circular chord profile)
+    cells: List[List[int]]  # [[row, col], ...] — a single row (the disc footprint)
+    cell_lengths: List[
+        int
+    ]  # per-cell bp length, parallel to cells (circular chord profile)
     plane: str = "XY"
-    offset_nm: float = 0.0        # the slice plane bisects the disc (helices centred on it)
-    strand_filter: str = "both"   # "both" | "scaffold" | "staples"
+    offset_nm: float = 0.0  # the slice plane bisects the disc (helices centred on it)
+    strand_filter: str = "both"  # "both" | "scaffold" | "staples"
     ligate_adjacent: bool = True
 
 
 class BundleContinuationRequest(BaseModel):
-    cells: List[List[int]]   # [[row, col], ...] — may mix continuation and fresh cells
+    cells: List[List[int]]  # [[row, col], ...] — may mix continuation and fresh cells
     length_bp: int
     plane: str = "XY"
     offset_nm: float = 0.0
-    strand_filter: str = "both"   # "both" | "scaffold" | "staples"
-    extend_inplace: bool = True   # True = extend existing helix axis in-place; False = create new helix
+    strand_filter: str = "both"  # "both" | "scaffold" | "staples"
+    extend_inplace: bool = (
+        True  # True = extend existing helix axis in-place; False = create new helix
+    )
     ligate_adjacent: bool = True
 
 
 class BundleDeformedContinuationRequest(BaseModel):
-    cells: List[List[int]]   # [[row, col], ...]
+    cells: List[List[int]]  # [[row, col], ...]
     length_bp: int
     # Deformed cross-section frame from GET /design/deformed-frame
-    grid_origin: List[float]   # [x, y, z]
-    axis_dir:    List[float]   # [x, y, z]
-    frame_right: List[float]   # [x, y, z]
-    frame_up:    List[float]   # [x, y, z]
-    plane: str = "XY"          # used for helix/strand ID naming only
-    ref_helix_id: Optional[str] = None  # helix that opened the slice plane — used for cluster membership
+    grid_origin: List[float]  # [x, y, z]
+    axis_dir: List[float]  # [x, y, z]
+    frame_right: List[float]  # [x, y, z]
+    frame_up: List[float]  # [x, y, z]
+    plane: str = "XY"  # used for helix/strand ID naming only
+    ref_helix_id: Optional[str] = (
+        None  # helix that opened the slice plane — used for cluster membership
+    )
     # bp index at which the deformed frame was sampled. When present, the frame is
     # RECOMPUTED server-side from the live design at this bp (instead of trusting the
     # baked grid_origin/axis_dir/... fields), which makes the op replayable: if an
@@ -747,6 +769,7 @@ class NickBatchRequest(BaseModel):
 def get_active_design() -> dict:
     """Return the active design and its current validation report."""
     from backend.core.validator import validate_design
+
     design = design_state.get_or_404()
     report = validate_design(design)
     return _design_response(design, report)
@@ -774,10 +797,10 @@ def export_design() -> Response:
 
 
 def _design_replace_response(
-    prev_design: 'Design',
-    design: 'Design',
-    report: 'ValidationReport',
-    trace: '_TimingTrace | None' = None,
+    prev_design: "Design",
+    design: "Design",
+    report: "ValidationReport",
+    trace: "_TimingTrace | None" = None,
 ) -> dict:
     """Build the response for any endpoint that REPLACES the active design
     (undo, redo, feature-log slider seek). Picks one of three shapes,
@@ -804,7 +827,7 @@ def _design_replace_response(
             trace._steps.append(("path:cluster_only", 0.0))
         return {
             **_design_response(design, report),
-            "diff_kind":     "cluster_only",
+            "diff_kind": "cluster_only",
             "cluster_diffs": _cluster_diff_payload(prev_design, design),
         }
     diff_field = _topology_diff_field(prev_design, design)
@@ -820,9 +843,9 @@ def _design_replace_response(
         positions, axes = _positions_for_design(design)
         return {
             **_design_response(design, report),
-            "diff_kind":          "positions_only",
+            "diff_kind": "positions_only",
             "positions_by_helix": positions,
-            "helix_axes":         axes,
+            "helix_axes": axes,
         }
     if trace is not None:
         # Tag with the rejecting field so the frontend perf log shows
@@ -838,7 +861,10 @@ def _design_replace_response(
         # an OH-binder strand, whose undo would otherwise drop the flag and
         # silently re-rigidify a flexible scaffold run).
         return _design_response_with_geometry(
-            design, report, embed_straight=True, compact_deformed=False,
+            design,
+            report,
+            embed_straight=True,
+            compact_deformed=False,
         )
     # embed_straight=True bundles the straight (un-deformed) geometry into
     # the same response, so deform_view doesn't have to fire a second
@@ -848,7 +874,8 @@ def _design_replace_response(
     # per helix per direction (instead of a list of per-nuc dicts), cutting
     # wire size and JSON.parse time roughly in half.
     return _design_response_with_geometry(
-        design, report,
+        design,
+        report,
         embed_straight=True,
         compact_deformed=True,
     )
@@ -920,14 +947,19 @@ def _origins_by_grid_pos(
     return origins
 
 
-def _build_extrude_segment(d: Design, body: 'BundleSegmentRequest'):
+def _build_extrude_segment(d: Design, body: "BundleSegmentRequest"):
     """Pure builder + cluster-membership report for a slice-plane extrude."""
     from backend.core.cluster_reconcile import MutationReport
     from backend.core.lattice import make_bundle_segment, ligate_new_strands
 
     cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
     updated = make_bundle_segment(
-        d, cells, body.length_bp, body.plane, body.offset_nm, body.strand_filter,
+        d,
+        cells,
+        body.length_bp,
+        body.plane,
+        body.offset_nm,
+        body.strand_filter,
     )
     if body.ligate_adjacent:
         existing_ids = {s.id for s in d.strands}
@@ -951,26 +983,31 @@ def add_bundle_segment(body: BundleSegmentRequest) -> dict:
             updated, mreport = _build_extrude_segment(d, body)
         except ValueError as exc:
             raise HTTPException(400, detail=str(exc)) from exc
-        holder['mreport'] = mreport
+        holder["mreport"] = mreport
         return updated
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='extrude-segment',
-        label=f'Extrude segment: {len(body.cells)} cells × {body.length_bp} bp',
-        params=body.model_dump(mode='json'),
+        op_kind="extrude-segment",
+        label=f"Extrude segment: {len(body.cells)} cells × {body.length_bp} bp",
+        params=body.model_dump(mode="json"),
         fn=_fn,
     )
     return _design_response(updated, report)
 
 
-def _build_circle_segment(d: Design, body: 'CircleSegmentRequest'):
+def _build_circle_segment(d: Design, body: "CircleSegmentRequest"):
     """Pure builder + cluster-membership report for a circle/disc placement."""
     from backend.core.cluster_reconcile import MutationReport
     from backend.core.lattice import ligate_new_strands, make_circle_segment
 
     cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
     updated = make_circle_segment(
-        d, cells, body.cell_lengths, body.plane, body.offset_nm, body.strand_filter,
+        d,
+        cells,
+        body.cell_lengths,
+        body.plane,
+        body.offset_nm,
+        body.strand_filter,
     )
     if body.ligate_adjacent:
         existing_ids = {s.id for s in d.strands}
@@ -989,32 +1026,38 @@ def add_circle_segment(body: CircleSegmentRequest) -> dict:
     ``backend.core.circle_primitive``); this route just lays down the final
     geometry as one additive, revertable ``circle-segment`` feature-log entry.
     """
+
     def _fn(d: Design) -> Design:
         try:
             updated, mreport = _build_circle_segment(d, body)
         except ValueError as exc:
             raise HTTPException(400, detail=str(exc)) from exc
-        holder['mreport'] = mreport
+        holder["mreport"] = mreport
         return updated
 
     holder: dict = {}
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='circle-segment',
-        label=f'Place circle: {len(body.cells)} helices',
-        params=body.model_dump(mode='json'),
+        op_kind="circle-segment",
+        label=f"Place circle: {len(body.cells)} helices",
+        params=body.model_dump(mode="json"),
         fn=_fn,
     )
     return _design_response(updated, report)
 
 
-def _build_extrude_continuation(d: Design, body: 'BundleContinuationRequest'):
+def _build_extrude_continuation(d: Design, body: "BundleContinuationRequest"):
     """Pure builder + cluster-membership report for a bundle-continuation extrude."""
     from backend.core.cluster_reconcile import MutationReport
     from backend.core.lattice import make_bundle_continuation, ligate_new_strands
 
     cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
     updated = make_bundle_continuation(
-        d, cells, body.length_bp, body.plane, body.offset_nm, body.strand_filter,
+        d,
+        cells,
+        body.length_bp,
+        body.plane,
+        body.offset_nm,
+        body.strand_filter,
         extend_inplace=body.extend_inplace,
     )
     if body.ligate_adjacent:
@@ -1039,13 +1082,13 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
             updated, mreport = _build_extrude_continuation(d, body)
         except ValueError as exc:
             raise HTTPException(400, detail=str(exc)) from exc
-        holder['mreport'] = mreport
+        holder["mreport"] = mreport
         return updated
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='extrude-continuation',
-        label=f'Extrude continuation: {len(body.cells)} cells × {body.length_bp} bp',
-        params=body.model_dump(mode='json'),
+        op_kind="extrude-continuation",
+        label=f"Extrude continuation: {len(body.cells)} cells × {body.length_bp} bp",
+        params=body.model_dump(mode="json"),
         fn=_fn,
     )
     return _design_response(updated, report)
@@ -1053,8 +1096,12 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
 
 @router.get("/design/deformed-frame")
 def get_deformed_frame(
-    source_bp: int = Query(..., description="bp index at which to sample the deformed frame"),
-    ref_helix_id: Optional[str] = Query(None, description="Reference helix ID to select arm"),
+    source_bp: int = Query(
+        ..., description="bp index at which to sample the deformed frame"
+    ),
+    ref_helix_id: Optional[str] = Query(
+        None, description="Reference helix ID to select arm"
+    ),
 ) -> dict:
     """Return the deformed cross-section frame at source_bp.
 
@@ -1066,7 +1113,9 @@ def get_deformed_frame(
     return deformed_frame_at_bp(design, source_bp, ref_helix_id)
 
 
-def _build_extrude_deformed_continuation(d: Design, body: 'BundleDeformedContinuationRequest'):
+def _build_extrude_deformed_continuation(
+    d: Design, body: "BundleDeformedContinuationRequest"
+):
     """Pure builder + cluster-membership report for a deformed-continuation extrude."""
     from backend.core.cluster_reconcile import MutationReport
     from backend.core.lattice import make_bundle_deformed_continuation
@@ -1079,19 +1128,28 @@ def _build_extrude_deformed_continuation(d: Design, body: 'BundleDeformedContinu
     else:
         frame = {
             "grid_origin": body.grid_origin,
-            "axis_dir":    body.axis_dir,
+            "axis_dir": body.axis_dir,
             "frame_right": body.frame_right,
-            "frame_up":    body.frame_up,
+            "frame_up": body.frame_up,
         }
     axes = deformed_helix_axes(d)
-    deformed_endpoints = {ax["helix_id"]: {"start": ax["start"], "end": ax["end"]} for ax in axes}
+    deformed_endpoints = {
+        ax["helix_id"]: {"start": ax["start"], "end": ax["end"]} for ax in axes
+    }
     cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
     updated = make_bundle_deformed_continuation(
-        d, cells, body.length_bp, frame, deformed_endpoints, body.plane,
+        d,
+        cells,
+        body.length_bp,
+        frame,
+        deformed_endpoints,
+        body.plane,
         ref_helix_id=body.ref_helix_id,
     )
     return updated, MutationReport(
-        new_helix_origins=_origins_by_grid_pos(d, updated, fallback_origin=body.ref_helix_id),
+        new_helix_origins=_origins_by_grid_pos(
+            d, updated, fallback_origin=body.ref_helix_id
+        ),
     )
 
 
@@ -1106,6 +1164,7 @@ def add_bundle_deformed_continuation(body: BundleDeformedContinuationRequest) ->
     Emits a ``snapshot`` feature-log entry so the extrude can be reverted
     after a refresh and replayed via the edit-feature endpoint.
     """
+
     def _fn(d: Design) -> Design:
         try:
             updated, _mreport = _build_extrude_deformed_continuation(d, body)
@@ -1114,9 +1173,9 @@ def add_bundle_deformed_continuation(body: BundleDeformedContinuationRequest) ->
         return updated
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='extrude-deformed-continuation',
-        label=f'Extrude (deformed): {len(body.cells)} cells × {body.length_bp} bp',
-        params=body.model_dump(mode='json'),
+        op_kind="extrude-deformed-continuation",
+        label=f"Extrude (deformed): {len(body.cells)} cells × {body.length_bp} bp",
+        params=body.model_dump(mode="json"),
         fn=_fn,
     )
     return _design_response(updated, report)
@@ -1146,22 +1205,26 @@ def create_bundle(body: BundleRequest) -> dict:
     design_state.set_design(empty)
 
     new_design, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='bundle-create',
-        label=f'Create bundle: {body.name}',
-        params=body.model_dump(mode='json'),
+        op_kind="bundle-create",
+        label=f"Create bundle: {body.name}",
+        params=body.model_dump(mode="json"),
         fn=lambda _d: _cluster_bundle_regions(_build_bundle(cells, body)),
     )
     return _design_response(new_design, report)
 
 
-def _build_bundle(cells, body: 'BundleRequest') -> Design:
+def _build_bundle(cells, body: "BundleRequest") -> Design:
     """Pure builder for a fresh bundle design — used by both the create-bundle
     endpoint and the edit-feature dispatcher."""
     from backend.core.lattice import make_bundle_design, ligate_new_strands
 
     new_design = make_bundle_design(
-        cells, body.length_bp, body.name, body.plane,
-        strand_filter=body.strand_filter, lattice_type=body.lattice_type,
+        cells,
+        body.length_bp,
+        body.name,
+        body.plane,
+        strand_filter=body.strand_filter,
+        lattice_type=body.lattice_type,
     )
     if body.ligate_adjacent:
         new_ids = {s.id for s in new_design.strands}
@@ -1174,6 +1237,7 @@ def _build_bundle(cells, body: 'BundleRequest') -> Design:
 def create_design(body: CreateDesignRequest) -> dict:
     """Create and activate a new empty design, discarding any current design."""
     from backend.core.validator import validate_design
+
     new_design = Design(
         metadata=DesignMetadata(name=body.name),
         lattice_type=body.lattice_type,
@@ -1187,11 +1251,16 @@ def create_design(body: CreateDesignRequest) -> dict:
 @router.put("/design/metadata")
 def update_metadata(body: MetadataUpdateRequest) -> dict:
     """Update design name, description, author, or tags."""
+
     def _apply(d: Design) -> None:
-        if body.name        is not None: d.metadata.name        = body.name
-        if body.description is not None: d.metadata.description = body.description
-        if body.author      is not None: d.metadata.author      = body.author
-        if body.tags        is not None: d.metadata.tags        = body.tags
+        if body.name is not None:
+            d.metadata.name = body.name
+        if body.description is not None:
+            d.metadata.description = body.description
+        if body.author is not None:
+            d.metadata.author = body.author
+        if body.tags is not None:
+            d.metadata.tags = body.tags
 
     design, report = design_state.mutate_and_validate(_apply)
     return _design_response(design, report)
@@ -1203,13 +1272,13 @@ def get_geometry(
     helix_ids: str | None = Query(
         None,
         description="Comma-separated helix IDs.  When given, only those helices "
-                    "are returned (partial update for Fix B).  helix_axes always "
-                    "covers all helices regardless of this filter.",
+        "are returned (partial update for Fix B).  helix_axes always "
+        "covers all helices regardless of this filter.",
     ),
     measured_positioning: bool = Query(
         False,
         description="Display-only.  Re-place backbone beads and base beads onto the "
-                    "MD-measured radii and P-P azimuthal separation instead of the "
+        "MD-measured radii and P-P azimuthal separation instead of the "
         "legacy HELIX_RADIUS / +-150 deg groove.  The app always states "
         "this explicitly; it stays opt-out here because the other CG "
         "position paths (oxDNA seeding, linker relax, extension tails) do "
@@ -1236,20 +1305,19 @@ def get_geometry(
     trace = _TimingTrace()
     with trace.step("get_design"):
         design = design_state.get_or_404()
-    ids: frozenset[str] | None = (
-        frozenset(helix_ids.split(",")) if helix_ids else None
-    )
+    ids: frozenset[str] | None = frozenset(helix_ids.split(",")) if helix_ids else None
     if apply_deformations:
         with trace.step("nucleotides"):
             nucleotides = _geometry_for_helices(
-                design, ids, measured_positioning=measured_positioning)
+                design, ids, measured_positioning=measured_positioning
+            )
         with trace.step("helix_axes"):
             axes = deformed_helix_axes(design)
         with trace.step("ovhg_rotations"):
             _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
         out = {
             "nucleotides": nucleotides,
-            "helix_axes":  axes,
+            "helix_axes": axes,
         }
         # Auto-embed straight geometry whenever the design has deformations
         # or cluster_transforms — mirrors _design_response_with_geometry's
@@ -1265,29 +1333,34 @@ def get_geometry(
         if ids is None and (design.deformations or design.cluster_transforms):
             with trace.step("strip_for_embed_straight"):
                 straight_design = design.model_copy(
-                    update={"deformations": [], "cluster_transforms": []})
+                    update={"deformations": [], "cluster_transforms": []}
+                )
             with trace.step("straight_positions_embed"):
                 straight_positions, straight_axes = _positions_for_design(
-                    straight_design, measured_positioning=measured_positioning)
+                    straight_design, measured_positioning=measured_positioning
+                )
             out["straight_positions_by_helix"] = straight_positions
-            out["straight_helix_axes"]         = straight_axes
+            out["straight_helix_axes"] = straight_axes
     else:
         with trace.step("strip_deformations"):
-            straight = design.model_copy(update={"deformations": [], "cluster_transforms": []})
+            straight = design.model_copy(
+                update={"deformations": [], "cluster_transforms": []}
+            )
         with trace.step("nucleotides_straight"):
             nucleotides = _geometry_for_helices(
-                straight, ids, measured_positioning=measured_positioning)
+                straight, ids, measured_positioning=measured_positioning
+            )
         with trace.step("helix_axes_straight"):
             axes = _straight_helix_axes(design)
         out = {
             "nucleotides": nucleotides,
-            "helix_axes":  axes,
+            "helix_axes": axes,
         }
     if ids is not None:
         # Signal to the frontend that this is a partial response — only the
         # requested helices are present and the result should be merged rather
         # than replacing the full geometry (Fix B merge path in client.js).
-        out["partial_geometry"]  = True
+        out["partial_geometry"] = True
         out["changed_helix_ids"] = list(ids)
     return trace.attach(ORJSONResponse(out))
 
@@ -1301,8 +1374,12 @@ def load_design(body: FilePathRequest) -> dict:
     coordinates are arbitrary. The user can manually trigger recentering via
     POST ``/design/center``.
     """
-    from backend.core.lattice import migrate_split_staple_domains, autodetect_all_overhangs
+    from backend.core.lattice import (
+        migrate_split_staple_domains,
+        autodetect_all_overhangs,
+    )
     from backend.core.validator import validate_design
+
     path = os.path.abspath(body.path)
     if not os.path.isfile(path):
         raise HTTPException(400, detail=f"File not found: {path}")
@@ -1323,7 +1400,7 @@ def load_design(body: FilePathRequest) -> dict:
     design = _derive_duplexes_if_empty(design)
     design = _materialize_duplex_clusters_on_load(design)
     design = _recompute_flexible_connections(design)
-    design_state.clear_history()   # fresh baseline — no undo into previous session
+    design_state.clear_history()  # fresh baseline — no undo into previous session
     design_state.set_design(design)
     report = validate_design(design)
     return _design_response(design, report)
@@ -1340,8 +1417,12 @@ def import_design(body: DesignImportRequest) -> dict:
     Like ``/design/load``, native .nadoc content preserves absolute positions —
     recentering is only applied to non-native imports.
     """
-    from backend.core.lattice import migrate_split_staple_domains, autodetect_all_overhangs
+    from backend.core.lattice import (
+        migrate_split_staple_domains,
+        autodetect_all_overhangs,
+    )
     from backend.core.validator import validate_design
+
     try:
         design = Design.from_json(body.content)
     except Exception as exc:
@@ -1364,12 +1445,14 @@ def import_design(body: DesignImportRequest) -> dict:
 
 
 class CadnanoImportRequest(BaseModel):
-    content: str   # raw caDNAno v2 JSON string sent by the browser
+    content: str  # raw caDNAno v2 JSON string sent by the browser
 
 
 class ScadnanoImportRequest(BaseModel):
-    content: str            # raw scadnano JSON string sent by the browser
-    name: Optional[str] = None  # filename (without extension) from the browser — overrides embedded name
+    content: str  # raw scadnano JSON string sent by the browser
+    name: Optional[str] = (
+        None  # filename (without extension) from the browser — overrides embedded name
+    )
 
 
 @router.post("/design/import/cadnano", status_code=200)
@@ -1384,6 +1467,7 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     from backend.core.lattice import autodetect_all_overhangs
     from backend.core.validator import validate_design
     import json as _json
+
     try:
         data = _json.loads(body.content)
     except Exception as exc:
@@ -1420,7 +1504,7 @@ def _fix_stale_ovhg_pivots(design: "Design") -> "Design":
         return design
 
     helices_by_id = {h.id: h for h in design.helices}
-    strand_by_id  = {s.id: s for s in design.strands}
+    strand_by_id = {s.id: s for s in design.strands}
 
     new_overhangs = []
     for ovhg in design.overhangs:
@@ -1462,7 +1546,7 @@ def _fix_stale_ovhg_pivots(design: "Design") -> "Design":
             continue
 
         # Junction bp: the end of adj_dom that faces the overhang domain
-        junc_bp   = adj_dom.end_bp if adj_is_before else adj_dom.start_bp
+        junc_bp = adj_dom.end_bp if adj_is_before else adj_dom.start_bp
         pivot_xyz = _pivot_for_junction(helices_by_id, adj_dom.helix_id, junc_bp)
         new_overhangs.append(ovhg.model_copy(update={"pivot": pivot_xyz}))
 
@@ -1484,10 +1568,16 @@ def _recenter_design(design: "Design") -> "Design":
     if abs(cx) < 1e-6 and abs(cy) < 1e-6:
         return design
     new_helices = [
-        h.model_copy(update={
-            "axis_start": Vec3(x=h.axis_start.x - cx, y=h.axis_start.y - cy, z=h.axis_start.z),
-            "axis_end":   Vec3(x=h.axis_end.x   - cx, y=h.axis_end.y   - cy, z=h.axis_end.z),
-        })
+        h.model_copy(
+            update={
+                "axis_start": Vec3(
+                    x=h.axis_start.x - cx, y=h.axis_start.y - cy, z=h.axis_start.z
+                ),
+                "axis_end": Vec3(
+                    x=h.axis_end.x - cx, y=h.axis_end.y - cy, z=h.axis_end.z
+                ),
+            }
+        )
         for h in design.helices
     ]
     new_overhangs = [
@@ -1499,11 +1589,20 @@ def _recenter_design(design: "Design") -> "Design":
     # be computed fresh from geometry when the move/rotate tool is first used.
     _ZERO = [0.0, 0.0, 0.0]
     new_clusters = [
-        ct.model_copy(update={"pivot": [ct.pivot[0] - cx, ct.pivot[1] - cy, ct.pivot[2]]})
-        if list(ct.pivot) != _ZERO else ct
+        ct.model_copy(
+            update={"pivot": [ct.pivot[0] - cx, ct.pivot[1] - cy, ct.pivot[2]]}
+        )
+        if list(ct.pivot) != _ZERO
+        else ct
         for ct in design.cluster_transforms
     ]
-    return design.model_copy(update={"helices": new_helices, "overhangs": new_overhangs, "cluster_transforms": new_clusters})
+    return design.model_copy(
+        update={
+            "helices": new_helices,
+            "overhangs": new_overhangs,
+            "cluster_transforms": new_clusters,
+        }
+    )
 
 
 @router.post("/design/center", status_code=200)
@@ -1587,6 +1686,7 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
     from backend.core.lattice import autodetect_all_overhangs
     from backend.core.validator import validate_design
     import json as _json
+
     try:
         data = _json.loads(body.content)
     except Exception as exc:
@@ -1596,13 +1696,21 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"scadnano import failed: {exc}") from exc
     if body.name:
-        design = design.model_copy(update={"metadata": design.metadata.model_copy(update={"name": body.name})})
+        design = design.model_copy(
+            update={"metadata": design.metadata.model_copy(update={"name": body.name})}
+        )
     design = autodetect_all_overhangs(design)
     design = _backfill_overhang_sequences(design)
     # Capture sample positions before and after re-centering for debug info.
-    _pre_recenter = [(h.id, round(h.axis_start.x, 4), round(h.axis_start.y, 4)) for h in design.helices[:5]]
+    _pre_recenter = [
+        (h.id, round(h.axis_start.x, 4), round(h.axis_start.y, 4))
+        for h in design.helices[:5]
+    ]
     design = _recenter_design(design)
-    _post_recenter = [(h.id, round(h.axis_start.x, 4), round(h.axis_start.y, 4)) for h in design.helices[:5]]
+    _post_recenter = [
+        (h.id, round(h.axis_start.x, 4), round(h.axis_start.y, 4))
+        for h in design.helices[:5]
+    ]
     _cx = round(_post_recenter[0][1] - _pre_recenter[0][1], 4) if _pre_recenter else 0.0
     _cy = round(_post_recenter[0][2] - _pre_recenter[0][2], 4) if _pre_recenter else 0.0
     design = _autodetect_clusters(design)
@@ -1616,8 +1724,12 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
         "recentered": True,
         "center_shift": {"x": _cx, "y": _cy},
         "helix_count": len(design.helices),
-        "sample_axes_before": [{"id": hid, "x": x, "y": y} for hid, x, y in _pre_recenter],
-        "sample_axes_after":  [{"id": hid, "x": x, "y": y} for hid, x, y in _post_recenter],
+        "sample_axes_before": [
+            {"id": hid, "x": x, "y": y} for hid, x, y in _pre_recenter
+        ],
+        "sample_axes_after": [
+            {"id": hid, "x": x, "y": y} for hid, x, y in _post_recenter
+        ],
     }
     return resp
 
@@ -1631,24 +1743,27 @@ def debug_design_positions() -> dict:
     """
     design = design_state.get_or_404()
     from backend.core.deformation import _normalize_helix_for_grid
+
     rows = []
     for h in design.helices:
         hn = _normalize_helix_for_grid(h, design.lattice_type)
-        rows.append({
-            "id":           h.id,
-            "grid_pos":     list(h.grid_pos) if h.grid_pos is not None else None,
-            "axis_x":       round(h.axis_start.x, 4),
-            "axis_y":       round(h.axis_start.y, 4),
-            "normalized_x": round(hn.axis_start.x, 4),
-            "normalized_y": round(hn.axis_start.y, 4),
-            "match":        abs(h.axis_start.x - hn.axis_start.x) < 0.01 and
-                            abs(h.axis_start.y - hn.axis_start.y) < 0.01,
-        })
+        rows.append(
+            {
+                "id": h.id,
+                "grid_pos": list(h.grid_pos) if h.grid_pos is not None else None,
+                "axis_x": round(h.axis_start.x, 4),
+                "axis_y": round(h.axis_start.y, 4),
+                "normalized_x": round(hn.axis_start.x, 4),
+                "normalized_y": round(hn.axis_start.y, 4),
+                "match": abs(h.axis_start.x - hn.axis_start.x) < 0.01
+                and abs(h.axis_start.y - hn.axis_start.y) < 0.01,
+            }
+        )
     return {"helix_count": len(rows), "helices": rows}
 
 
 class PdbImportRequest(BaseModel):
-    content: str   # raw PDB file text sent by the browser
+    content: str  # raw PDB file text sent by the browser
     merge: bool = False  # if True, add to existing design instead of replacing
 
 
@@ -1671,7 +1786,9 @@ def import_pdb_design(body: PdbImportRequest) -> dict:
 
     try:
         if existing and existing.helices:
-            design, pdb_atomistic, import_warnings = merge_pdb_into_design(existing, body.content)
+            design, pdb_atomistic, import_warnings = merge_pdb_into_design(
+                existing, body.content
+            )
         else:
             design, pdb_atomistic, import_warnings = import_pdb(body.content)
     except Exception as exc:
@@ -1699,7 +1816,9 @@ def _download_rcsb_pdb(pdb_id: str) -> str:
 
     pid = pdb_id.strip().upper()
     if not re.fullmatch(r"[0-9A-Z]{4}", pid):
-        raise HTTPException(400, detail="PDB ID must be 4 alphanumeric characters (e.g. 1BNA).")
+        raise HTTPException(
+            400, detail="PDB ID must be 4 alphanumeric characters (e.g. 1BNA)."
+        )
     url = f"https://files.rcsb.org/download/{pid}.pdb"
     try:
         with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310 (fixed host)
@@ -1716,8 +1835,8 @@ def _download_rcsb_pdb(pdb_id: str) -> str:
 
 
 class PdbAutoImportRequest(BaseModel):
-    content: Optional[str] = None   # raw PDB text (file import)
-    pdb_id: Optional[str] = None    # 4-char RCSB id (download)
+    content: Optional[str] = None  # raw PDB text (file import)
+    pdb_id: Optional[str] = None  # 4-char RCSB id (download)
     name: str = ""
     # None = undecided (ask the user when the structure has both protein + DNA);
     # True/False = remove (or keep) DNA in the imported protein object.
@@ -1755,19 +1874,31 @@ def import_pdb_auto(body: PdbAutoImportRequest) -> dict:
     if not has_dna and not has_protein:
         raise HTTPException(400, detail="No DNA or protein residues found in the PDB.")
 
-    resp: dict = {"imported": {"dna": False, "protein": False}, "source": source, "name": name}
+    resp: dict = {
+        "imported": {"dna": False, "protein": False},
+        "source": source,
+        "name": name,
+    }
 
     if has_protein:
         # Ask before stripping DNA from a protein-DNA complex.
         if has_dna and body.remove_dna_from_protein is None:
-            return {**resp, "needs_dna_decision": True, "has_dna": True,
-                    "has_protein": True, "content": content}
+            return {
+                **resp,
+                "needs_dna_decision": True,
+                "has_dna": True,
+                "has_protein": True,
+                "content": content,
+            }
         exclude_dna = bool(body.remove_dna_from_protein)
         try:
-            asset = parse_protein_pdb(content, name=name, source_filename=name,
-                                      exclude_dna=exclude_dna)
+            asset = parse_protein_pdb(
+                content, name=name, source_filename=name, exclude_dna=exclude_dna
+            )
         except Exception as exc:
-            raise HTTPException(400, detail=f"Protein PDB import failed: {exc}") from exc
+            raise HTTPException(
+                400, detail=f"Protein PDB import failed: {exc}"
+            ) from exc
         if not asset.atoms:
             raise HTTPException(400, detail="No protein atoms found after parsing.")
         updated, report, meta = _import_protein_free(asset)
@@ -1822,8 +1953,10 @@ def _import_protein_free(asset):
         d.protein_attachments = [*d.protein_attachments, attachment]
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        "protein-import", f"Import protein {asset.name}",
-        {"asset_id": asset.id, "name": asset.name}, _fn,
+        "protein-import",
+        f"Import protein {asset.name}",
+        {"asset_id": asset.id, "name": asset.name},
+        _fn,
     )
     return updated, report, protein_asset_meta(asset)
 
@@ -1894,22 +2027,22 @@ def add_helix(body: HelixRequest) -> dict:
 
     label = f"Add helix · {new_helix.length_bp} bp"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='helix-add',
+        op_subtype="helix-add",
         label=label,
-        params={**body.model_dump(mode='json'), '_helix_id': new_helix.id},
+        params={**body.model_dump(mode="json"), "_helix_id": new_helix.id},
         fn=_apply,
     )
     return {
-        "helix":      new_helix.model_dump(),
-        "geometry":   [
+        "helix": new_helix.model_dump(),
+        "geometry": [
             {
-                "helix_id":          n.helix_id,
-                "bp_index":          n.bp_index,
-                "direction":         n.direction.value,
+                "helix_id": n.helix_id,
+                "bp_index": n.bp_index,
+                "direction": n.direction.value,
                 "backbone_position": n.position.tolist(),
-                "base_position":     n.base_position.tolist(),
-                "base_normal":       n.base_normal.tolist(),
-                "axis_tangent":      n.axis_tangent.tolist(),
+                "base_position": n.base_position.tolist(),
+                "base_normal": n.base_normal.tolist(),
+                "axis_tangent": n.axis_tangent.tolist(),
             }
             for n in nucleotide_positions(new_helix)
         ],
@@ -1946,39 +2079,43 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
     design = design_state.get_or_404()
     lt = design.lattice_type
 
-    direction  = _lattice_direction(body.row, body.col, lt)
-    phase_base = _lattice_phase_offset(direction, lt)   # angle at global bp 0
-    twist      = _lattice_twist(lt)
+    direction = _lattice_direction(body.row, body.col, lt)
+    phase_base = _lattice_phase_offset(direction, lt)  # angle at global bp 0
+    twist = _lattice_twist(lt)
 
     # Reference = nearest existing lattice helix (Manhattan distance in grid
     # cells).  Linker helices are synthetic and parked far off-lattice, so they
     # are excluded as references.
     candidates = [
-        h for h in design.helices
+        h
+        for h in design.helices
         if h.grid_pos is not None and not h.id.startswith(_LINKER_HELIX_PREFIX)
     ]
     ref = (
-        min(candidates,
-            key=lambda h: abs(h.grid_pos[0] - body.row) + abs(h.grid_pos[1] - body.col))
-        if candidates else None
+        min(
+            candidates,
+            key=lambda h: abs(h.grid_pos[0] - body.row) + abs(h.grid_pos[1] - body.col),
+        )
+        if candidates
+        else None
     )
 
     if ref is not None:
         # Adjacent placement: XY offset from the reference's real axis, Z-span +
         # bp_start + length copied so the new track lines up with its neighbours.
-        nx, ny       = _overhang_neighbor_xy(ref, body.row, body.col, design)
-        bp_start     = ref.bp_start
-        length_bp    = ref.length_bp
-        axis_start   = Vec3(x=nx, y=ny, z=ref.axis_start.z)
-        axis_end     = Vec3(x=nx, y=ny, z=ref.axis_end.z)
+        nx, ny = _overhang_neighbor_xy(ref, body.row, body.col, design)
+        bp_start = ref.bp_start
+        length_bp = ref.length_bp
+        axis_start = Vec3(x=nx, y=ny, z=ref.axis_start.z)
+        axis_end = Vec3(x=nx, y=ny, z=ref.axis_end.z)
         phase_offset = phase_base + bp_start * twist
     else:
         # Empty design (first helix): raw lattice position, requested default length.
-        lx, ly       = _lattice_position(body.row, body.col, lt)
-        bp_start     = 0
-        length_bp    = body.length_bp
-        axis_start   = Vec3(x=lx, y=ly, z=0.0)
-        axis_end     = Vec3(x=lx, y=ly, z=length_bp * _RISE)
+        lx, ly = _lattice_position(body.row, body.col, lt)
+        bp_start = 0
+        length_bp = body.length_bp
+        axis_start = Vec3(x=lx, y=ly, z=0.0)
+        axis_end = Vec3(x=lx, y=ly, z=length_bp * _RISE)
         phase_offset = phase_base
 
     new_helix = Helix(
@@ -2003,18 +2140,34 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
             scaf_start, scaf_end = lo, hi
         else:
             scaf_start, scaf_end = hi, lo
-        staple_dir = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
+        staple_dir = (
+            Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
+        )
         if staple_dir == Direction.FORWARD:
             stpl_start, stpl_end = lo, hi
         else:
             stpl_start, stpl_end = hi, lo
 
         scaffold = Strand(
-            domains=[Domain(helix_id=new_helix.id, start_bp=scaf_start, end_bp=scaf_end, direction=direction)],
+            domains=[
+                Domain(
+                    helix_id=new_helix.id,
+                    start_bp=scaf_start,
+                    end_bp=scaf_end,
+                    direction=direction,
+                )
+            ],
             strand_type=StrandType.SCAFFOLD,
         )
         staple = Strand(
-            domains=[Domain(helix_id=new_helix.id, start_bp=stpl_start, end_bp=stpl_end, direction=staple_dir)],
+            domains=[
+                Domain(
+                    helix_id=new_helix.id,
+                    start_bp=stpl_start,
+                    end_bp=stpl_end,
+                    direction=staple_dir,
+                )
+            ],
             strand_type=StrandType.STAPLE,
         )
 
@@ -2023,27 +2176,28 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
             d.strands.append(scaffold)
             d.strands.append(staple)
     else:
+
         def _apply(d):
             d.helices.append(new_helix)
 
     label = f"Add helix at ({body.row}, {body.col}) · {length_bp} bp"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='helix-add-at-cell',
+        op_subtype="helix-add-at-cell",
         label=label,
-        params={**body.model_dump(mode='json'), '_helix_id': new_helix.id},
+        params={**body.model_dump(mode="json"), "_helix_id": new_helix.id},
         fn=_apply,
     )
     return {
         **_design_response(design, report),
         "nucleotides": [
             {
-                "helix_id":          n.helix_id,
-                "bp_index":          n.bp_index,
-                "direction":         n.direction.value,
+                "helix_id": n.helix_id,
+                "bp_index": n.bp_index,
+                "direction": n.direction.value,
                 "backbone_position": n.position.tolist(),
-                "base_position":     n.base_position.tolist(),
-                "base_normal":       n.base_normal.tolist(),
-                "axis_tangent":      n.axis_tangent.tolist(),
+                "base_position": n.base_position.tolist(),
+                "base_normal": n.base_normal.tolist(),
+                "axis_tangent": n.axis_tangent.tolist(),
             }
             for n in nucleotide_positions(new_helix)
         ],
@@ -2096,9 +2250,9 @@ def reorder_helices(body: ReorderHelicesBody) -> dict:
         d.helices = [m[i] for i in ids]
 
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='helix-reorder',
-        label='Reorder helices',
-        params={'ordered_ids': ids},
+        op_subtype="helix-reorder",
+        label="Reorder helices",
+        params={"ordered_ids": ids},
         fn=_apply,
     )
     return _design_response(design, report)
@@ -2109,16 +2263,16 @@ def get_helix(helix_id: str) -> dict:
     design = design_state.get_or_404()
     helix = _find_helix(design, helix_id)
     return {
-        "helix":    helix.model_dump(),
+        "helix": helix.model_dump(),
         "geometry": [
             {
-                "helix_id":          n.helix_id,
-                "bp_index":          n.bp_index,
-                "direction":         n.direction.value,
+                "helix_id": n.helix_id,
+                "bp_index": n.bp_index,
+                "direction": n.direction.value,
                 "backbone_position": n.position.tolist(),
-                "base_position":     n.base_position.tolist(),
-                "base_normal":       n.base_normal.tolist(),
-                "axis_tangent":      n.axis_tangent.tolist(),
+                "base_position": n.base_position.tolist(),
+                "base_normal": n.base_normal.tolist(),
+                "axis_tangent": n.axis_tangent.tolist(),
             }
             for n in nucleotide_positions(helix)
         ],
@@ -2144,9 +2298,9 @@ def update_helix(helix_id: str, body: HelixRequest) -> dict:
 
     label = f"Update helix {_helix_label(design_state.get_or_404(), helix_id)}"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='helix-update',
+        op_subtype="helix-update",
         label=label,
-        params={'helix_id': helix_id, **body.model_dump(mode='json')},
+        params={"helix_id": helix_id, **body.model_dump(mode="json")},
         fn=_apply,
     )
     return {
@@ -2156,8 +2310,8 @@ def update_helix(helix_id: str, body: HelixRequest) -> dict:
 
 
 class HelixExtendRequest(BaseModel):
-    lo_bp: int   # desired minimum bp — only extends left, never shrinks
-    hi_bp: int   # desired maximum bp — only extends right, never shrinks
+    lo_bp: int  # desired minimum bp — only extends left, never shrinks
+    hi_bp: int  # desired maximum bp — only extends right, never shrinks
 
 
 @router.patch("/design/helices/{helix_id}/extend")
@@ -2174,7 +2328,7 @@ def extend_helix_bounds(helix_id: str, body: HelixExtendRequest) -> dict:
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
-    helix  = _find_helix(design, helix_id)
+    helix = _find_helix(design, helix_id)
 
     h_lo = helix.bp_start
     h_hi = helix.bp_start + helix.length_bp - 1
@@ -2184,28 +2338,32 @@ def extend_helix_bounds(helix_id: str, body: HelixExtendRequest) -> dict:
 
     if new_lo == h_lo and new_hi == h_hi:
         report = validate_design(design)
-        return _design_response_with_geometry(design, report, changed_helix_ids=[helix_id])
+        return _design_response_with_geometry(
+            design, report, changed_helix_ids=[helix_id]
+        )
 
-    ax     = helix.axis_end.to_array() - helix.axis_start.to_array()
+    ax = helix.axis_end.to_array() - helix.axis_start.to_array()
     ax_len = float(_math.sqrt(float((ax * ax).sum())))
-    unit   = ax / ax_len if ax_len > 1e-9 else helix.axis_start.to_array() * 0 + [0, 0, 1]
+    unit = ax / ax_len if ax_len > 1e-9 else helix.axis_start.to_array() * 0 + [0, 0, 1]
 
-    extra_lo = h_lo - new_lo   # bps prepended (≥ 0)
-    extra_hi = new_hi - h_hi   # bps appended  (≥ 0)
+    extra_lo = h_lo - new_lo  # bps prepended (≥ 0)
+    extra_hi = new_hi - h_hi  # bps appended  (≥ 0)
 
     new_axis_start = helix.axis_start.to_array() - extra_lo * BDNA_RISE_PER_BP * unit
-    new_axis_end   = helix.axis_end.to_array()   + extra_hi * BDNA_RISE_PER_BP * unit
+    new_axis_end = helix.axis_end.to_array() + extra_hi * BDNA_RISE_PER_BP * unit
 
-    updated = helix.model_copy(update={
-        "axis_start":   Vec3.from_array(new_axis_start),
-        "axis_end":     Vec3.from_array(new_axis_end),
-        "length_bp":    new_hi - new_lo + 1,
-        "bp_start":     new_lo,
-        # phase_offset is defined at local_bp=0 (= axis_start).  Moving axis_start
-        # back by extra_lo steps means the old geometry now starts at local_bp=extra_lo,
-        # so we subtract extra_lo × twist to keep the old nucleotides in place.
-        "phase_offset": helix.phase_offset - extra_lo * helix.twist_per_bp_rad,
-    })
+    updated = helix.model_copy(
+        update={
+            "axis_start": Vec3.from_array(new_axis_start),
+            "axis_end": Vec3.from_array(new_axis_end),
+            "length_bp": new_hi - new_lo + 1,
+            "bp_start": new_lo,
+            # phase_offset is defined at local_bp=0 (= axis_start).  Moving axis_start
+            # back by extra_lo steps means the old geometry now starts at local_bp=extra_lo,
+            # so we subtract extra_lo × twist to keep the old nucleotides in place.
+            "phase_offset": helix.phase_offset - extra_lo * helix.twist_per_bp_rad,
+        }
+    )
 
     def _apply(d: Design) -> None:
         for i, h in enumerate(d.helices):
@@ -2215,9 +2373,9 @@ def extend_helix_bounds(helix_id: str, body: HelixExtendRequest) -> dict:
 
     label = f"Extend helix {_helix_label(design, helix_id)} · bp [{new_lo}, {new_hi}]"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='helix-extend',
+        op_subtype="helix-extend",
         label=label,
-        params={'helix_id': helix_id, **body.model_dump(mode='json')},
+        params={"helix_id": helix_id, **body.model_dump(mode="json")},
         fn=_apply,
     )
     return _design_response_with_geometry(design, report, changed_helix_ids=[helix_id])
@@ -2228,7 +2386,8 @@ def delete_helix(helix_id: str) -> dict:
     # Referential integrity check — reject if any strand domain references this helix.
     design = design_state.get_or_404()
     blocking = [
-        s.id for s in design.strands
+        s.id
+        for s in design.strands
         if any(dom.helix_id == helix_id for dom in s.domains)
     ]
     if blocking:
@@ -2245,9 +2404,9 @@ def delete_helix(helix_id: str) -> dict:
 
     label = f"Delete helix {_helix_label(design, helix_id)}"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='helix-delete',
+        op_subtype="helix-delete",
         label=label,
-        params={'helix_id': helix_id},
+        params={"helix_id": helix_id},
         fn=_apply,
     )
     return _design_response(design, report)
@@ -2263,6 +2422,7 @@ class ScaffoldPaintRequest(BaseModel):
     order-independent).  The server determines the strand direction from the
     helix's grid_pos + lattice_type and enforces correct start_bp/end_bp polarity.
     """
+
     helix_id: str
     lo_bp: int
     hi_bp: int
@@ -2283,8 +2443,8 @@ def scaffold_domain_paint(body: ScaffoldPaintRequest) -> dict:
     _HC_RE = re.compile(r"^h_\w+_(-?\d+)_(-?\d+)$")
 
     design = design_state.get_or_404()
-    helix  = _find_helix(design, body.helix_id)
-    lt     = design.lattice_type
+    helix = _find_helix(design, body.helix_id)
+    lt = design.lattice_type
 
     # Resolve (row, col) for direction lookup
     if helix.grid_pos is not None:
@@ -2304,8 +2464,8 @@ def scaffold_domain_paint(body: ScaffoldPaintRequest) -> dict:
     # Clamp to helix bp bounds
     h_lo = helix.bp_start
     h_hi = helix.bp_start + helix.length_bp - 1
-    lo   = max(body.lo_bp, h_lo)
-    hi   = min(body.hi_bp, h_hi)
+    lo = max(body.lo_bp, h_lo)
+    hi = min(body.hi_bp, h_hi)
     if lo > hi:
         raise HTTPException(400, detail="bp range outside helix bounds.")
 
@@ -2321,34 +2481,40 @@ def scaffold_domain_paint(body: ScaffoldPaintRequest) -> dict:
             if d_lo <= hi and d_hi >= lo:
                 raise HTTPException(
                     409,
-                    detail=(f"Scaffold domain already covers helix {body.helix_id!r} "
-                            f"in range [{d_lo}, {d_hi}]."),
+                    detail=(
+                        f"Scaffold domain already covers helix {body.helix_id!r} "
+                        f"in range [{d_lo}, {d_hi}]."
+                    ),
                 )
 
     # Polarity: start_bp = 5' end
     if direction == Direction.FORWARD:
         start_bp, end_bp = lo, hi
     else:
-        start_bp, end_bp = hi, lo   # REVERSE: 5' is at higher bp index
+        start_bp, end_bp = hi, lo  # REVERSE: 5' is at higher bp index
 
     new_strand = Strand(
-        domains=[Domain(
-            helix_id=body.helix_id,
-            start_bp=start_bp,
-            end_bp=end_bp,
-            direction=direction,
-        )],
+        domains=[
+            Domain(
+                helix_id=body.helix_id,
+                start_bp=start_bp,
+                end_bp=end_bp,
+                direction=direction,
+            )
+        ],
         strand_type=StrandType.SCAFFOLD,
     )
 
     def _apply(d: Design) -> None:
         d.strands.append(new_strand)
 
-    label = f"Scaffold paint · helix {_helix_label(design, body.helix_id)} bp [{lo}, {hi}]"
+    label = (
+        f"Scaffold paint · helix {_helix_label(design, body.helix_id)} bp [{lo}, {hi}]"
+    )
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='scaffold-domain-paint',
+        op_subtype="scaffold-domain-paint",
         label=label,
-        params={**body.model_dump(mode='json'), '_strand_id': new_strand.id},
+        params={**body.model_dump(mode="json"), "_strand_id": new_strand.id},
         fn=_apply,
     )
     return _design_response_with_geometry(design, report)
@@ -2362,7 +2528,9 @@ def add_strand(body: StrandRequest) -> dict:
     if body.strand_type == StrandType.STAPLE:
         # Index by total staple count (not just colored ones) so it matches
         # the cadnano editor's index-based fallback (STAPLE_PALETTE[strand_index]).
-        staple_count = sum(1 for s in design_cur.strands if s.strand_type == StrandType.STAPLE)
+        staple_count = sum(
+            1 for s in design_cur.strands if s.strand_type == StrandType.STAPLE
+        )
         color = STAPLE_PALETTE[staple_count % len(STAPLE_PALETTE)]
 
     new_strand = Strand(
@@ -2384,6 +2552,7 @@ def add_strand(body: StrandRequest) -> dict:
     # overhang becomes an OH binder linked to that overhang.
     if new_strand.strand_type == StrandType.STAPLE:
         from backend.core.lattice import tag_painted_binder
+
         new_strand = tag_painted_binder(design_cur, new_strand)
 
     def _apply(d: Design) -> None:
@@ -2391,9 +2560,13 @@ def add_strand(body: StrandRequest) -> dict:
 
     label = f"Add {new_strand.strand_type.value} strand · {len(body.domains)} domain(s)"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='strand-add',
+        op_subtype="strand-add",
         label=label,
-        params={**body.model_dump(mode='json'), '_strand_id': new_strand.id, '_color': color},
+        params={
+            **body.model_dump(mode="json"),
+            "_strand_id": new_strand.id,
+            "_color": color,
+        },
         fn=_apply,
     )
     return {
@@ -2428,9 +2601,9 @@ def update_strand(strand_id: str, body: StrandRequest) -> dict:
 
     label = f"Update strand {strand_id} · {len(body.domains)} domain(s)"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='strand-update',
+        op_subtype="strand-update",
         label=label,
-        params={'strand_id': strand_id, **body.model_dump(mode='json')},
+        params={"strand_id": strand_id, **body.model_dump(mode="json")},
         fn=_apply,
     )
     return {
@@ -2456,9 +2629,9 @@ def convert_strand_to_binder_endpoint(strand_id: str) -> dict:
 
     try:
         design, report, _entry = design_state.mutate_with_feature_log(
-            op_kind='overhang-bulk',
+            op_kind="overhang-bulk",
             label=f"Convert strand {strand_id} → OH binder",
-            params={'strand_id': strand_id},
+            params={"strand_id": strand_id},
             fn=_build,
         )
     except ValueError as exc:
@@ -2469,7 +2642,9 @@ def convert_strand_to_binder_endpoint(strand_id: str) -> dict:
     # Position-preserving retype (+ possible overhang re-tag) — reship only the
     # affected strands' helices instead of the whole design.
     changed = _local_changed_helices(before_occ, _strand_occupancy(design))
-    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
+    return _design_response_with_geometry(
+        design, report, changed_helix_ids=changed, partial_axes=True
+    )
 
 
 @router.post("/design/overhang/{overhang_id}/generate-binder", status_code=201)
@@ -2486,9 +2661,9 @@ def generate_binder_for_overhang_endpoint(overhang_id: str) -> dict:
 
     try:
         design, report, _entry = design_state.mutate_with_feature_log(
-            op_kind='overhang-bulk',
+            op_kind="overhang-bulk",
             label=f"Generate OH binding strand for {overhang_id}",
-            params={'overhang_id': overhang_id},
+            params={"overhang_id": overhang_id},
             fn=_build,
         )
     except ValueError as exc:
@@ -2512,22 +2687,25 @@ def convert_binder_to_scaffold_endpoint(strand_id: str) -> dict:
 
     try:
         design, report, _entry = design_state.mutate_with_feature_log(
-            op_kind='overhang-bulk',
+            op_kind="overhang-bulk",
             label=f"Convert strand {strand_id} → scaffold",
-            params={'strand_id': strand_id},
+            params={"strand_id": strand_id},
             fn=_build,
         )
     except ValueError as exc:
         raise HTTPException(404, detail=str(exc)) from exc
 
     changed = _local_changed_helices(before_occ, _strand_occupancy(design))
-    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
+    return _design_response_with_geometry(
+        design, report, changed_helix_ids=changed, partial_axes=True
+    )
 
 
-def _build_strand_end_resize(d: Design, body: 'StrandEndResizeRequest') -> Design:
+def _build_strand_end_resize(d: Design, body: "StrandEndResizeRequest") -> Design:
     """Pure builder for a strand end resize."""
     from backend.core.lattice import resize_strand_ends
     from backend.core.duplex import drop_invalid_duplexes
+
     out = resize_strand_ends(d, [entry.model_dump() for entry in body.entries])
     # A shrink can push a duplex register out of its (now shorter) domain; drop
     # such duplexes so the resize doesn't break the connections graph.
@@ -2541,14 +2719,16 @@ def strand_end_resize(body: StrandEndResizeRequest) -> dict:
         n = len(body.entries)
         label = f"Resize {n} strand end{'s' if n != 1 else ''}"
         updated, report, _entry = design_state.mutate_with_minor_log(
-            op_subtype='strand-end-resize',
+            op_subtype="strand-end-resize",
             label=label,
-            params=body.model_dump(mode='json'),
+            params=body.model_dump(mode="json"),
             fn=lambda d: _build_strand_end_resize(d, body),
         )
     except KeyError as exc:
         missing = exc.args[0] if exc.args else "unknown"
-        raise HTTPException(404, detail=f"Resize target not found: {missing!r}") from exc
+        raise HTTPException(
+            404, detail=f"Resize target not found: {missing!r}"
+        ) from exc
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
@@ -2560,14 +2740,18 @@ def strand_end_resize(body: StrandEndResizeRequest) -> dict:
     # JS rebuild from the merged geometry when nuc count / coverage changed.
     changed_helix_ids = list({entry.helix_id for entry in body.entries})
     return _design_response_with_geometry(
-        updated, report, changed_helix_ids=changed_helix_ids, partial_axes=True,
+        updated,
+        report,
+        changed_helix_ids=changed_helix_ids,
+        partial_axes=True,
     )
 
 
-def _build_domain_shift(d: Design, body: 'DomainShiftRequest') -> Design:
+def _build_domain_shift(d: Design, body: "DomainShiftRequest") -> Design:
     """Pure builder for a domain-shift batch."""
     from backend.core.lattice import shift_domains
     from backend.core.duplex import shift_duplex_ends, drop_invalid_duplexes
+
     # Map each moved overhang → its Δbp (pre-shift), so its duplex ends move with
     # it and the SAME bases stay paired (Q1: a move preserves the register).
     deltas: dict[str, int] = {}
@@ -2596,21 +2780,23 @@ def domain_shift(body: DomainShiftRequest) -> dict:
         else:
             label = f"Shift {n} domains"
         updated, report, _entry = design_state.mutate_with_minor_log(
-            op_subtype='domain-shift',
+            op_subtype="domain-shift",
             label=label,
-            params=body.model_dump(mode='json'),
+            params=body.model_dump(mode="json"),
             fn=lambda d: _build_domain_shift(d, body),
         )
     except KeyError as exc:
         missing = exc.args[0] if exc.args else "unknown"
-        raise HTTPException(404, detail=f"Domain-shift target not found: {missing!r}") from exc
+        raise HTTPException(
+            404, detail=f"Domain-shift target not found: {missing!r}"
+        ) from exc
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
     return _design_response_with_geometry(updated, report)
 
 
-def _build_delete_strands_batch(d: Design, body: 'StrandBatchDeleteRequest') -> Design:
+def _build_delete_strands_batch(d: Design, body: "StrandBatchDeleteRequest") -> Design:
     """Pure builder: remove specified strands (handling linker connections too)
     and re-detect overhangs on now-orphaned ends."""
     from backend.core.lattice import autodetect_all_overhangs
@@ -2622,11 +2808,13 @@ def _build_delete_strands_batch(d: Design, body: 'StrandBatchDeleteRequest') -> 
 
     existing_conn_ids = {conn.id for conn in d.overhang_connections}
     linker_conn_ids = {
-        conn_id for strand_id in id_set
+        conn_id
+        for strand_id in id_set
         if (conn_id := _linker_conn_id_from_strand_id(strand_id)) in existing_conn_ids
     }
     linker_strand_ids = {
-        s.id for s in d.strands
+        s.id
+        for s in d.strands
         if _linker_conn_id_from_strand_id(s.id) in linker_conn_ids
     }
     regular_ids = id_set - linker_strand_ids
@@ -2643,16 +2831,18 @@ def delete_strands_batch(body: StrandBatchDeleteRequest) -> dict:
     n = len(body.strand_ids)
     label = f"Delete {n} strand{'s' if n != 1 else ''}"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='strand-delete-batch',
+        op_subtype="strand-delete-batch",
         label=label,
-        params=body.model_dump(mode='json'),
+        params=body.model_dump(mode="json"),
         fn=lambda d: _build_delete_strands_batch(d, body),
     )
     # Deletion moves no nucleotide — reship only the deleted strands' helices
     # (+ any helix where autodetect re-tagged a now-orphaned end as an overhang,
     # caught by the occupancy diff) instead of recomputing the whole design.
     changed = _local_changed_helices(before_occ, _strand_occupancy(design))
-    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
+    return _design_response_with_geometry(
+        design, report, changed_helix_ids=changed, partial_axes=True
+    )
 
 
 def _build_delete_strand(d: Design, strand_id: str) -> Design:
@@ -2681,13 +2871,15 @@ def delete_strand(strand_id: str) -> dict:
     before_occ = _strand_occupancy(design_state.get_or_404())
     label = f"Delete strand {strand_id}"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='strand-delete',
+        op_subtype="strand-delete",
         label=label,
-        params={'strand_id': strand_id},
+        params={"strand_id": strand_id},
         fn=lambda d: _build_delete_strand(d, strand_id),
     )
     changed = _local_changed_helices(before_occ, _strand_occupancy(design))
-    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
+    return _design_response_with_geometry(
+        design, report, changed_helix_ids=changed, partial_axes=True
+    )
 
 
 # ── Domain sub-resource ───────────────────────────────────────────────────────
@@ -2711,9 +2903,9 @@ def add_domain(strand_id: str, body: DomainRequest) -> dict:
         f"bp [{body.start_bp}, {body.end_bp}] {body.direction.value}"
     )
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='domain-add',
+        op_subtype="domain-add",
         label=label,
-        params={'strand_id': strand_id, **body.model_dump(mode='json')},
+        params={"strand_id": strand_id, **body.model_dump(mode="json")},
         fn=_apply,
     )
     strand = _find_strand(design, strand_id)
@@ -2752,9 +2944,9 @@ def _build_delete_domain(d: Design, strand_id: str, domain_index: int) -> Design
 def delete_domain(strand_id: str, domain_index: int) -> dict:
     label = f"Delete domain · {strand_id}[{domain_index}]"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='domain-delete',
+        op_subtype="domain-delete",
         label=label,
-        params={'strand_id': strand_id, 'domain_index': domain_index},
+        params={"strand_id": strand_id, "domain_index": domain_index},
         fn=lambda d: _build_delete_domain(d, strand_id, domain_index),
     )
     # Strand may have been auto-removed; return None strand in that case.
@@ -2821,9 +3013,11 @@ def _desplice_strands_for_crossover(
                     continue
                 if d1.start_bp != index:
                     continue
-                part_a = strand.model_copy(update={"domains": list(strand.domains[:di + 1])})
+                part_a = strand.model_copy(
+                    update={"domains": list(strand.domains[: di + 1])}
+                )
                 part_b = Strand(
-                    domains=list(strand.domains[di + 1:]),
+                    domains=list(strand.domains[di + 1 :]),
                     strand_type=strand.strand_type,
                 )
                 new_strands = [s for s in design.strands if s.id != strand.id]
@@ -2927,7 +3121,7 @@ def unligated_crossover_ids(design: "Design") -> list[str]:
     out: list[str] = []
     for x in design.crossovers:
         ha, hb = x.half_a, x.half_b
-        for (a, b) in ((ha, hb), (hb, ha)):
+        for a, b in ((ha, hb), (hb, ha)):
             sf = three_prime.get((a.helix_id, a.index, a.strand))
             st = five_prime.get((b.helix_id, b.index, b.strand))
             if sf is not None and st is not None and sf.id == st.id:
@@ -2937,14 +3131,16 @@ def unligated_crossover_ids(design: "Design") -> list[str]:
 
 
 class PlaceCrossoverRequest(BaseModel):
-    half_a:     HalfCrossoverRequest
-    half_b:     HalfCrossoverRequest
-    nick_bp_a:  int
-    nick_bp_b:  int
+    half_a: HalfCrossoverRequest
+    half_b: HalfCrossoverRequest
+    nick_bp_a: int
+    nick_bp_b: int
     process_id: Optional[str] = "manual"
 
 
-def _nick_if_needed(d: "Design", helix_id: str, bp_index: int, direction: "Direction") -> "Design":
+def _nick_if_needed(
+    d: "Design", helix_id: str, bp_index: int, direction: "Direction"
+) -> "Design":
     """Nick at (helix_id, bp_index, direction) unless the strand already
     terminates there.  No-op cases:
     • "terminus" — bp_index is the 3′ end of the strand (already nicked).
@@ -2964,10 +3160,11 @@ def _nick_if_needed(d: "Design", helix_id: str, bp_index: int, direction: "Direc
         REVERSE first-domain nick at start_bp  → 1-nt left stub
         REVERSE last-domain nick at end_bp+1   → 1-nt right stub"""
     from backend.core.lattice import _find_strand_at, make_nick
+
     try:
         strand, domain_idx = _find_strand_at(d, helix_id, bp_index, direction)
     except ValueError:
-        return d   # no strand covers this position — no-op
+        return d  # no strand covers this position — no-op
     domain = strand.domains[domain_idx]
     n_doms = len(strand.domains)
     if bp_index == domain.end_bp and domain_idx < n_doms - 1:
@@ -2976,7 +3173,7 @@ def _nick_if_needed(d: "Design", helix_id: str, bp_index: int, direction: "Direc
         # helix) is not a junction — nick through it, severing the beyond-part into
         # its own strand so bp_index becomes a terminus the crossover can ligate to.
         if strand.domains[domain_idx + 1].helix_id != helix_id:
-            return d   # cross-helix crossover junction — no-op
+            return d  # cross-helix crossover junction — no-op
     # NOTE: no 1-nt-stub guard here.  A nick that lands one bp inside a strand's
     # terminus (or on a first domain's 5′ start) legitimately splits off a single-
     # nucleotide stub — that is the intended result when a crossover sits just
@@ -2988,7 +3185,7 @@ def _nick_if_needed(d: "Design", helix_id: str, bp_index: int, direction: "Direc
         return make_nick(d, helix_id, bp_index, direction)
     except ValueError as exc:
         if "terminus" in str(exc):
-            return d   # already nicked — no-op
+            return d  # already nicked — no-op
         raise
 
 
@@ -3012,8 +3209,7 @@ def _strip_orphan_inline_overhangs(design: "Design") -> "Design":
             continue
         # A "paired anchor" domain is any domain that is NOT an inline overhang.
         has_anchor = any(
-            not (d.overhang_id and d.overhang_id.startswith(_INLINE))
-            for d in s.domains
+            not (d.overhang_id and d.overhang_id.startswith(_INLINE)) for d in s.domains
         )
         if has_anchor:
             new_strands.append(s)
@@ -3033,7 +3229,9 @@ def _strip_orphan_inline_overhangs(design: "Design") -> "Design":
     return design.copy_with(strands=new_strands, overhangs=new_overhangs)
 
 
-def _build_place_crossover(d: Design, body: 'PlaceCrossoverRequest') -> tuple[Design, 'Crossover', bool]:
+def _build_place_crossover(
+    d: Design, body: "PlaceCrossoverRequest"
+) -> tuple[Design, "Crossover", bool]:
     """Pure builder: nick + ligate + record one crossover.
 
     Returns (new design, xover, ligated). `ligated` is False iff the crossover's
@@ -3044,7 +3242,10 @@ def _build_place_crossover(d: Design, body: 'PlaceCrossoverRequest') -> tuple[De
     CROSSOVER = nick + ligate + record. If changing this, ask user first.
     """
     from backend.core.crossover_positions import (
-        build_strand_ranges, crossover_junction_slots, slot_covered, validate_crossover,
+        build_strand_ranges,
+        crossover_junction_slots,
+        slot_covered,
+        validate_crossover,
     )
 
     half_a = HalfCrossover(
@@ -3086,8 +3287,10 @@ def _build_place_crossover(d: Design, body: 'PlaceCrossoverRequest') -> tuple[De
     lower_bp = min(body.nick_bp_a, body.nick_bp_b)
     required_bp = half_a.index + 1 if lower_bp < half_a.index else half_a.index - 1
     sr = build_strand_ranges(d)
-    if not (slot_covered(sr, half_a.helix_id, required_bp, half_a.strand.value)
-            and slot_covered(sr, half_b.helix_id, required_bp, half_b.strand.value)):
+    if not (
+        slot_covered(sr, half_a.helix_id, required_bp, half_a.strand.value)
+        and slot_covered(sr, half_b.helix_id, required_bp, half_b.strand.value)
+    ):
         raise HTTPException(
             422,
             detail=(
@@ -3096,8 +3299,12 @@ def _build_place_crossover(d: Design, body: 'PlaceCrossoverRequest') -> tuple[De
             ),
         )
 
-    current = _nick_if_needed(d, body.half_a.helix_id, body.nick_bp_a, body.half_a.strand)
-    current = _nick_if_needed(current, body.half_b.helix_id, body.nick_bp_b, body.half_b.strand)
+    current = _nick_if_needed(
+        d, body.half_a.helix_id, body.nick_bp_a, body.half_a.strand
+    )
+    current = _nick_if_needed(
+        current, body.half_b.helix_id, body.nick_bp_b, body.half_b.strand
+    )
 
     err = validate_crossover(current, half_a, half_b)
     if err:
@@ -3129,8 +3336,8 @@ def place_crossover(body: PlaceCrossoverRequest) -> dict:
             current, xover, ligated = _build_place_crossover(d, body)
         except (KeyError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc))
-        holder['xover'] = xover
-        holder['ligated'] = ligated
+        holder["xover"] = xover
+        holder["ligated"] = ligated
         return current
 
     _d = design_state.get_or_404()
@@ -3139,17 +3346,17 @@ def place_crossover(body: PlaceCrossoverRequest) -> dict:
         f"h{_helix_label(_d, body.half_b.helix_id)} bp {body.half_a.index}"
     )
     current, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='crossover-place',
+        op_subtype="crossover-place",
         label=label,
-        params=body.model_dump(mode='json'),
+        params=body.model_dump(mode="json"),
         fn=_fn,
     )
     resp = {
-        "crossover": holder['xover'].model_dump(),
+        "crossover": holder["xover"].model_dump(),
         **_design_response_with_geometry(current, report),
     }
-    if not holder.get('ligated'):
-        x = holder['xover']
+    if not holder.get("ligated"):
+        x = holder["xover"]
         resp["placement_warnings"] = [
             f"Crossover at h{_helix_label(current, x.half_a.helix_id)} ↔ "
             f"h{_helix_label(current, x.half_b.helix_id)} bp {x.half_a.index} "
@@ -3162,7 +3369,9 @@ class PlaceCrossoverBatchRequest(BaseModel):
     placements: list[PlaceCrossoverRequest]
 
 
-def _build_place_crossover_batch(d: Design, body: 'PlaceCrossoverBatchRequest') -> tuple[Design, list, list]:
+def _build_place_crossover_batch(
+    d: Design, body: "PlaceCrossoverBatchRequest"
+) -> tuple[Design, list, list]:
     """Pure builder: place multiple crossovers in order.
 
     Returns (new design, [xovers], [skipped_xover_ids]). skipped_xover_ids
@@ -3190,23 +3399,23 @@ def place_crossover_batch(body: PlaceCrossoverBatchRequest) -> dict:
             current, new_crossovers, skipped_ids = _build_place_crossover_batch(d, body)
         except (KeyError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc))
-        holder['xovers'] = new_crossovers
-        holder['skipped_ids'] = skipped_ids
+        holder["xovers"] = new_crossovers
+        holder["skipped_ids"] = skipped_ids
         return current
 
     n = len(body.placements)
     label = f"Place {n} crossover{'s' if n != 1 else ''}"
     current, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='crossover-place-batch',
+        op_subtype="crossover-place-batch",
         label=label,
-        params=body.model_dump(mode='json'),
+        params=body.model_dump(mode="json"),
         fn=_fn,
     )
     resp = {
-        "crossovers": [x.model_dump() for x in holder['xovers']],
+        "crossovers": [x.model_dump() for x in holder["xovers"]],
         **_design_response_with_geometry(current, report),
     }
-    skipped = holder.get('skipped_ids') or []
+    skipped = holder.get("skipped_ids") or []
     if skipped:
         m = len(skipped)
         resp["placement_warnings"] = [
@@ -3246,16 +3455,19 @@ def auto_crossover() -> dict:
     sites_considered = 0
     for _ in range(12):  # safety bound; placement is monotonic so it converges fast
         new_design, stats = _place_auto_crossovers(new_design)
-        sites_considered = sites_considered or stats['sites_considered']
-        placed_total += stats['placed']
-        if stats['placed'] == 0:
+        sites_considered = sites_considered or stats["sites_considered"]
+        placed_total += stats["placed"]
+        if stats["placed"] == 0:
             break
-    stats = {'sites_considered': sites_considered, 'placed': placed_total}
+    stats = {"sites_considered": sites_considered, "placed": placed_total}
 
     current, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='auto-crossover',
-        label='Auto-crossover',
-        params={'sites_considered': stats['sites_considered'], 'placed': stats['placed']},
+        op_kind="auto-crossover",
+        label="Auto-crossover",
+        params={
+            "sites_considered": stats["sites_considered"],
+            "placed": stats["placed"],
+        },
         fn=lambda _d: new_design,
     )
     print(f"[AUTO XOVER] placed {stats['placed']} crossovers", flush=True)
@@ -3336,7 +3548,9 @@ def _place_auto_crossovers(
         if not (fully or tip_only):
             continue
         for d in s.domains:
-            if not fully and not (d.overhang_id is not None or d.binds_overhang_id is not None):
+            if not fully and not (
+                d.overhang_id is not None or d.binds_overhang_id is not None
+            ):
                 continue  # overhang body domain — leave eligible so it gets woven in
             lo, hi = min(d.start_bp, d.end_bp), max(d.start_bp, d.end_bp)
             for b in range(lo, hi + 1):
@@ -3393,7 +3607,9 @@ def _place_auto_crossovers(
         ):
             continue
 
-        sr = build_strand_ranges(current.model_copy(update={"strands": current.active_strands()}))
+        sr = build_strand_ranges(
+            current.model_copy(update={"strands": current.active_strands()})
+        )
         ha = helix_map.get(hid_a)
         hb = helix_map.get(hid_b)
         ha_min = ha.bp_start if ha else 0
@@ -3509,10 +3725,15 @@ def move_crossover_endpoint(body: MoveCrossoverRequest) -> dict:
 
     def _is_valid_at(idx: int) -> bool:
         for is_scaf in (False, True):
-            eb = crossover_neighbor(design.lattice_type, *h_a.grid_pos, idx, is_scaffold=is_scaf)
-            ea = crossover_neighbor(design.lattice_type, *h_b.grid_pos, idx, is_scaffold=is_scaf)
-            if (eb is not None and eb == tuple(h_b.grid_pos)) or \
-               (ea is not None and ea == tuple(h_a.grid_pos)):
+            eb = crossover_neighbor(
+                design.lattice_type, *h_a.grid_pos, idx, is_scaffold=is_scaf
+            )
+            ea = crossover_neighbor(
+                design.lattice_type, *h_b.grid_pos, idx, is_scaffold=is_scaf
+            )
+            if (eb is not None and eb == tuple(h_b.grid_pos)) or (
+                ea is not None and ea == tuple(h_a.grid_pos)
+            ):
                 return True
         return False
 
@@ -3527,22 +3748,33 @@ def move_crossover_endpoint(body: MoveCrossoverRequest) -> dict:
         if xo.id == body.crossover_id:
             continue
         for half in (xo.half_a, xo.half_b):
-            if half.helix_id == xover.half_a.helix_id and \
-               half.index == new_index and half.strand == xover.half_a.strand:
+            if (
+                half.helix_id == xover.half_a.helix_id
+                and half.index == new_index
+                and half.strand == xover.half_a.strand
+            ):
                 raise HTTPException(
-                    422, detail=f"Position {new_index} on helix A already occupied by another crossover",
+                    422,
+                    detail=f"Position {new_index} on helix A already occupied by another crossover",
                 )
-            if half.helix_id == xover.half_b.helix_id and \
-               half.index == new_index and half.strand == xover.half_b.strand:
+            if (
+                half.helix_id == xover.half_b.helix_id
+                and half.index == new_index
+                and half.strand == xover.half_b.strand
+            ):
                 raise HTTPException(
-                    422, detail=f"Position {new_index} on helix B already occupied by another crossover",
+                    422,
+                    detail=f"Position {new_index} on helix B already occupied by another crossover",
                 )
 
     # ── Find the two adjacent domains that the crossover connects ────────────
     # Same lookup logic as _desplice_strands_for_crossover: consecutive domains
     # d0.end_bp == old_index → d1.start_bp == old_index.
     found = None
-    for ha_half, hb_half in [(xover.half_a, xover.half_b), (xover.half_b, xover.half_a)]:
+    for ha_half, hb_half in [
+        (xover.half_a, xover.half_b),
+        (xover.half_b, xover.half_a),
+    ]:
         if found:
             break
         for strand in design.strands:
@@ -3551,20 +3783,26 @@ def move_crossover_endpoint(body: MoveCrossoverRequest) -> dict:
             for di in range(len(strand.domains) - 1):
                 d0 = strand.domains[di]
                 d1 = strand.domains[di + 1]
-                if d0.helix_id == ha_half.helix_id and d0.direction == ha_half.strand \
-                        and d0.end_bp == old_index \
-                        and d1.helix_id == hb_half.helix_id and d1.direction == hb_half.strand \
-                        and d1.start_bp == old_index:
+                if (
+                    d0.helix_id == ha_half.helix_id
+                    and d0.direction == ha_half.strand
+                    and d0.end_bp == old_index
+                    and d1.helix_id == hb_half.helix_id
+                    and d1.direction == hb_half.strand
+                    and d1.start_bp == old_index
+                ):
                     found = (strand, di, d0, d1)
                     break
 
     if found is None:
-        raise HTTPException(422, detail="Could not find adjacent domains for this crossover")
+        raise HTTPException(
+            422, detail="Could not find adjacent domains for this crossover"
+        )
 
     strand, di, d0, d1 = found
 
     # ── Validate resized domains ─────────────────────────────────────────────
-    new_d0_end   = new_index
+    new_d0_end = new_index
     new_d1_start = new_index
 
     # Domains must remain at least 1 bp long
@@ -3574,13 +3812,23 @@ def move_crossover_endpoint(body: MoveCrossoverRequest) -> dict:
     d1_hi = max(new_d1_start, d1.end_bp)
 
     if d0_lo > d0_hi:
-        raise HTTPException(422, detail="Moving crossover would make domain on first helix empty")
+        raise HTTPException(
+            422, detail="Moving crossover would make domain on first helix empty"
+        )
     if d1_lo > d1_hi:
-        raise HTTPException(422, detail="Moving crossover would make domain on second helix empty")
+        raise HTTPException(
+            422, detail="Moving crossover would make domain on second helix empty"
+        )
 
     # Check overlap with other domains on same helix+direction
-    def _overlaps(helix_id: str, direction, new_lo: int, new_hi: int,
-                  exclude_strand_id: str, exclude_dom_idx: int) -> bool:
+    def _overlaps(
+        helix_id: str,
+        direction,
+        new_lo: int,
+        new_hi: int,
+        exclude_strand_id: str,
+        exclude_dom_idx: int,
+    ) -> bool:
         for s in design.strands:
             for dj, dom in enumerate(s.domains):
                 if s.id == exclude_strand_id and dj == exclude_dom_idx:
@@ -3594,9 +3842,15 @@ def move_crossover_endpoint(body: MoveCrossoverRequest) -> dict:
         return False
 
     if _overlaps(d0.helix_id, d0.direction, d0_lo, d0_hi, strand.id, di):
-        raise HTTPException(422, detail="Moving crossover would overlap with existing domain on first helix")
+        raise HTTPException(
+            422,
+            detail="Moving crossover would overlap with existing domain on first helix",
+        )
     if _overlaps(d1.helix_id, d1.direction, d1_lo, d1_hi, strand.id, di + 1):
-        raise HTTPException(422, detail="Moving crossover would overlap with existing domain on second helix")
+        raise HTTPException(
+            422,
+            detail="Moving crossover would overlap with existing domain on second helix",
+        )
 
     # ── Apply the move ───────────────────────────────────────────────────────
     # (No explicit design_state.snapshot() — the mutate_with_minor_log wrapper
@@ -3606,16 +3860,20 @@ def move_crossover_endpoint(body: MoveCrossoverRequest) -> dict:
     new_crossovers = []
     for xo in design.crossovers:
         if xo.id == body.crossover_id:
-            new_crossovers.append(xo.model_copy(update={
-                "half_a": xo.half_a.model_copy(update={"index": new_index}),
-                "half_b": xo.half_b.model_copy(update={"index": new_index}),
-            }))
+            new_crossovers.append(
+                xo.model_copy(
+                    update={
+                        "half_a": xo.half_a.model_copy(update={"index": new_index}),
+                        "half_b": xo.half_b.model_copy(update={"index": new_index}),
+                    }
+                )
+            )
         else:
             new_crossovers.append(xo)
 
     # Update domains
     new_domains = list(strand.domains)
-    new_domains[di]     = d0.model_copy(update={"end_bp": new_d0_end})
+    new_domains[di] = d0.model_copy(update={"end_bp": new_d0_end})
     new_domains[di + 1] = d1.model_copy(update={"start_bp": new_d1_start})
     new_strand = strand.model_copy(update={"domains": new_domains})
 
@@ -3638,17 +3896,22 @@ def move_crossover_endpoint(body: MoveCrossoverRequest) -> dict:
             continue  # within bounds
 
         ax, bx = helix.axis_start, helix.axis_end
-        dx = bx.x - ax.x; dy = bx.y - ax.y; dz = bx.z - ax.z
-        length_nm = _math.sqrt(dx*dx + dy*dy + dz*dz)
+        dx = bx.x - ax.x
+        dy = bx.y - ax.y
+        dz = bx.z - ax.z
+        length_nm = _math.sqrt(dx * dx + dy * dy + dz * dz)
         if length_nm < 1e-9:
-            ux = uy = 0.0; uz = 1.0
+            ux = uy = 0.0
+            uz = 1.0
         else:
-            ux = dx / length_nm; uy = dy / length_nm; uz = dz / length_nm
+            ux = dx / length_nm
+            uy = dy / length_nm
+            uz = dz / length_nm
 
-        new_bp_start  = helix.bp_start
+        new_bp_start = helix.bp_start
         new_length_bp = helix.length_bp
         new_axis_start = ax
-        new_phase      = helix.phase_offset
+        new_phase = helix.phase_offset
 
         if check_lo < helix.bp_start:
             extra = helix.bp_start - check_lo
@@ -3658,7 +3921,7 @@ def move_crossover_endpoint(body: MoveCrossoverRequest) -> dict:
                 z=ax.z - extra * BDNA_RISE_PER_BP * uz,
             )
             new_phase = helix.phase_offset - extra * helix.twist_per_bp_rad
-            new_bp_start  = check_lo
+            new_bp_start = check_lo
             new_length_bp += extra
 
         new_axis_end = helix.axis_end
@@ -3672,6 +3935,7 @@ def move_crossover_endpoint(body: MoveCrossoverRequest) -> dict:
             new_length_bp += extra
 
         from backend.core.models import Helix
+
         new_helices[idx_h] = Helix(
             id=helix.id,
             axis_start=new_axis_start,
@@ -3695,13 +3959,15 @@ def move_crossover_endpoint(body: MoveCrossoverRequest) -> dict:
         f"h{_helix_label(design, xover.half_b.helix_id)} · bp {old_index} → {new_index}"
     )
     updated, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='crossover-move',
+        op_subtype="crossover-move",
         label=label,
-        params=body.model_dump(mode='json'),
+        params=body.model_dump(mode="json"),
         fn=lambda _d: updated,
     )
     changed_helix_ids = list({d0.helix_id, d1.helix_id})
-    return _design_response_with_geometry(updated, report, changed_helix_ids=changed_helix_ids)
+    return _design_response_with_geometry(
+        updated, report, changed_helix_ids=changed_helix_ids
+    )
 
 
 @router.post("/design/crossovers/batch-move", status_code=200)
@@ -3755,34 +4021,56 @@ def batch_move_crossovers(body: BatchMoveCrossoversRequest) -> dict:
         h_a = helix_map.get(xover.half_a.helix_id)
         h_b = helix_map.get(xover.half_b.helix_id)
         if h_a is None or h_b is None or h_a.grid_pos is None or h_b.grid_pos is None:
-            raise HTTPException(422, detail="Crossover helices missing or have no grid_pos")
+            raise HTTPException(
+                422, detail="Crossover helices missing or have no grid_pos"
+            )
 
         valid = False
         for is_scaf in (False, True):
-            eb = crossover_neighbor(design.lattice_type, *h_a.grid_pos, new_index, is_scaffold=is_scaf)
-            ea = crossover_neighbor(design.lattice_type, *h_b.grid_pos, new_index, is_scaffold=is_scaf)
-            if (eb is not None and eb == tuple(h_b.grid_pos)) or \
-               (ea is not None and ea == tuple(h_a.grid_pos)):
+            eb = crossover_neighbor(
+                design.lattice_type, *h_a.grid_pos, new_index, is_scaffold=is_scaf
+            )
+            ea = crossover_neighbor(
+                design.lattice_type, *h_b.grid_pos, new_index, is_scaffold=is_scaf
+            )
+            if (eb is not None and eb == tuple(h_b.grid_pos)) or (
+                ea is not None and ea == tuple(h_a.grid_pos)
+            ):
                 valid = True
                 break
         if not valid:
-            raise HTTPException(422, detail=f"Index {new_index} is not a valid crossover site")
+            raise HTTPException(
+                422, detail=f"Index {new_index} is not a valid crossover site"
+            )
 
         # Check occupancy — skip crossovers that are also being moved in this batch
         for xo in design.crossovers:
             if xo.id == m.crossover_id or xo.id in move_ids:
                 continue
             for half in (xo.half_a, xo.half_b):
-                if half.helix_id == xover.half_a.helix_id and \
-                   half.index == new_index and half.strand == xover.half_a.strand:
-                    raise HTTPException(422, detail=f"Position {new_index} already occupied")
-                if half.helix_id == xover.half_b.helix_id and \
-                   half.index == new_index and half.strand == xover.half_b.strand:
-                    raise HTTPException(422, detail=f"Position {new_index} already occupied")
+                if (
+                    half.helix_id == xover.half_a.helix_id
+                    and half.index == new_index
+                    and half.strand == xover.half_a.strand
+                ):
+                    raise HTTPException(
+                        422, detail=f"Position {new_index} already occupied"
+                    )
+                if (
+                    half.helix_id == xover.half_b.helix_id
+                    and half.index == new_index
+                    and half.strand == xover.half_b.strand
+                ):
+                    raise HTTPException(
+                        422, detail=f"Position {new_index} already occupied"
+                    )
 
         # Find adjacent domains
         found = None
-        for ha_half, hb_half in [(xover.half_a, xover.half_b), (xover.half_b, xover.half_a)]:
+        for ha_half, hb_half in [
+            (xover.half_a, xover.half_b),
+            (xover.half_b, xover.half_a),
+        ]:
             if found:
                 break
             for strand in design.strands:
@@ -3791,15 +4079,21 @@ def batch_move_crossovers(body: BatchMoveCrossoversRequest) -> dict:
                 for di in range(len(strand.domains) - 1):
                     d0 = strand.domains[di]
                     d1 = strand.domains[di + 1]
-                    if d0.helix_id == ha_half.helix_id and d0.direction == ha_half.strand \
-                            and d0.end_bp == old_index \
-                            and d1.helix_id == hb_half.helix_id and d1.direction == hb_half.strand \
-                            and d1.start_bp == old_index:
+                    if (
+                        d0.helix_id == ha_half.helix_id
+                        and d0.direction == ha_half.strand
+                        and d0.end_bp == old_index
+                        and d1.helix_id == hb_half.helix_id
+                        and d1.direction == hb_half.strand
+                        and d1.start_bp == old_index
+                    ):
                         found = (strand, di, d0, d1)
                         break
 
         if found is None:
-            raise HTTPException(422, detail="Could not find adjacent domains for crossover")
+            raise HTTPException(
+                422, detail="Could not find adjacent domains for crossover"
+            )
 
         move_infos.append((xover, new_index, *found))
 
@@ -3812,10 +4106,12 @@ def batch_move_crossovers(body: BatchMoveCrossoversRequest) -> dict:
         for i, xo in enumerate(d.crossovers):
             if xo.id in xover_updates:
                 ni = xover_updates[xo.id]
-                d.crossovers[i] = xo.model_copy(update={
-                    "half_a": xo.half_a.model_copy(update={"index": ni}),
-                    "half_b": xo.half_b.model_copy(update={"index": ni}),
-                })
+                d.crossovers[i] = xo.model_copy(
+                    update={
+                        "half_a": xo.half_a.model_copy(update={"index": ni}),
+                        "half_b": xo.half_b.model_copy(update={"index": ni}),
+                    }
+                )
 
         # Update domains — group edits by strand to handle multiple moves on same strand
         strand_dom_edits: dict[str, list[tuple[int, int]]] = {}
@@ -3828,8 +4124,10 @@ def batch_move_crossovers(body: BatchMoveCrossoversRequest) -> dict:
                 continue
             new_doms = list(s.domains)
             for di, new_index in strand_dom_edits[s.id]:
-                new_doms[di]     = new_doms[di].model_copy(update={"end_bp": new_index})
-                new_doms[di + 1] = new_doms[di + 1].model_copy(update={"start_bp": new_index})
+                new_doms[di] = new_doms[di].model_copy(update={"end_bp": new_index})
+                new_doms[di + 1] = new_doms[di + 1].model_copy(
+                    update={"start_bp": new_index}
+                )
             d.strands[si] = s.model_copy(update={"domains": new_doms})
 
         # Grow helices if needed
@@ -3849,18 +4147,23 @@ def batch_move_crossovers(body: BatchMoveCrossoversRequest) -> dict:
                     continue
 
                 ax, bx = helix.axis_start, helix.axis_end
-                dx = bx.x - ax.x; dy = bx.y - ax.y; dz = bx.z - ax.z
-                length_nm = _math.sqrt(dx*dx + dy*dy + dz*dz)
+                dx = bx.x - ax.x
+                dy = bx.y - ax.y
+                dz = bx.z - ax.z
+                length_nm = _math.sqrt(dx * dx + dy * dy + dz * dz)
                 if length_nm < 1e-9:
-                    ux = uy = 0.0; uz = 1.0
+                    ux = uy = 0.0
+                    uz = 1.0
                 else:
-                    ux = dx / length_nm; uy = dy / length_nm; uz = dz / length_nm
+                    ux = dx / length_nm
+                    uy = dy / length_nm
+                    uz = dz / length_nm
 
-                new_bp_start  = helix.bp_start
+                new_bp_start = helix.bp_start
                 new_length_bp = helix.length_bp
                 new_axis_start = ax
-                new_phase      = helix.phase_offset
-                new_axis_end   = helix.axis_end
+                new_phase = helix.phase_offset
+                new_axis_end = helix.axis_end
 
                 if check_lo < helix.bp_start:
                     extra = helix.bp_start - check_lo
@@ -3870,7 +4173,7 @@ def batch_move_crossovers(body: BatchMoveCrossoversRequest) -> dict:
                         z=ax.z - extra * BDNA_RISE_PER_BP * uz,
                     )
                     new_phase = helix.phase_offset - extra * helix.twist_per_bp_rad
-                    new_bp_start  = check_lo
+                    new_bp_start = check_lo
                     new_length_bp += extra
                 if check_hi > helix_end_bp:
                     extra = check_hi - helix_end_bp
@@ -3896,12 +4199,14 @@ def batch_move_crossovers(body: BatchMoveCrossoversRequest) -> dict:
     n = len(moves)
     label = f"Move {n} crossover{'s' if n != 1 else ''}"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='crossover-move-batch',
+        op_subtype="crossover-move-batch",
         label=label,
-        params=body.model_dump(mode='json'),
+        params=body.model_dump(mode="json"),
         fn=_apply,
     )
-    return _design_response_with_geometry(design, report, changed_helix_ids=list(changed_helix_ids))
+    return _design_response_with_geometry(
+        design, report, changed_helix_ids=list(changed_helix_ids)
+    )
 
 
 @router.delete("/design/crossovers/{crossover_id}", status_code=200)
@@ -3928,15 +4233,17 @@ def delete_crossover(crossover_id: str) -> dict:
         f"h{_helix_label(design, xover.half_b.helix_id)} bp {xover.half_a.index}"
     )
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='crossover-delete',
+        op_subtype="crossover-delete",
         label=label,
-        params={'crossover_id': crossover_id},
+        params={"crossover_id": crossover_id},
         fn=_apply,
     )
     # Desplice moves no nucleotide — it only splits a strand at the junction and
     # retags the fragment. Reship just the affected strands' helices.
     changed = _local_changed_helices(before_occ, _strand_occupancy(design))
-    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
+    return _design_response_with_geometry(
+        design, report, changed_helix_ids=changed, partial_axes=True
+    )
 
 
 @router.post("/design/crossovers/batch-delete", status_code=200)
@@ -3968,13 +4275,15 @@ def batch_delete_crossovers(body: BatchDeleteCrossoversRequest) -> dict:
     n = len(ids_to_delete)
     label = f"Delete {n} crossover{'s' if n != 1 else ''}"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='crossover-delete-batch',
+        op_subtype="crossover-delete-batch",
         label=label,
-        params=body.model_dump(mode='json'),
+        params=body.model_dump(mode="json"),
         fn=_apply,
     )
     changed = _local_changed_helices(before_occ, _strand_occupancy(design))
-    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
+    return _design_response_with_geometry(
+        design, report, changed_helix_ids=changed, partial_axes=True
+    )
 
 
 _EXTRA_BASES_RE = __import__("re").compile(r"^[ACGTNacgtn]*$")
@@ -3995,11 +4304,15 @@ def batch_patch_crossover_extra_bases(body: BatchCrossoverExtraBasesRequest) -> 
             raise HTTPException(
                 422,
                 detail=f"Sequence {entry.sequence!r} for crossover {entry.crossover_id!r} "
-                       f"contains invalid bases. Only A, T, G, C, N are allowed.",
+                f"contains invalid bases. Only A, T, G, C, N are allowed.",
             )
 
-    id_to_seq: dict[str, str] = {e.crossover_id: e.sequence.upper() for e in body.entries}
-    missing = [cid for cid in id_to_seq if not any(x.id == cid for x in design.crossovers)]
+    id_to_seq: dict[str, str] = {
+        e.crossover_id: e.sequence.upper() for e in body.entries
+    }
+    missing = [
+        cid for cid in id_to_seq if not any(x.id == cid for x in design.crossovers)
+    ]
     if missing:
         raise HTTPException(404, detail=f"Crossovers not found: {missing}")
 
@@ -4012,16 +4325,18 @@ def batch_patch_crossover_extra_bases(body: BatchCrossoverExtraBasesRequest) -> 
     n = len(id_to_seq)
     label = f"Set extra bases on {n} crossover{'s' if n != 1 else ''}"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='crossover-extra-bases-batch',
+        op_subtype="crossover-extra-bases-batch",
         label=label,
-        params=body.model_dump(mode='json'),
+        params=body.model_dump(mode="json"),
         fn=_apply,
     )
     return _design_response_with_geometry(design, report)
 
 
 @router.patch("/design/crossovers/{crossover_id}/extra-bases", status_code=200)
-def patch_crossover_extra_bases(crossover_id: str, body: CrossoverExtraBasesRequest) -> dict:
+def patch_crossover_extra_bases(
+    crossover_id: str, body: CrossoverExtraBasesRequest
+) -> dict:
     """Set (or clear) extra bases on a single crossover.
 
     sequence must match [ACGTNacgtn]*.  Pass an empty string to remove extra bases.
@@ -4030,7 +4345,7 @@ def patch_crossover_extra_bases(crossover_id: str, body: CrossoverExtraBasesRequ
         raise HTTPException(
             422,
             detail=f"Sequence {body.sequence!r} contains invalid bases. "
-                   f"Only A, T, G, C, N are allowed.",
+            f"Only A, T, G, C, N are allowed.",
         )
 
     design = design_state.get_or_404()
@@ -4048,16 +4363,18 @@ def patch_crossover_extra_bases(crossover_id: str, body: CrossoverExtraBasesRequ
 
     label = f"Extra bases on crossover {crossover_id} · {seq or '(cleared)'}"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='crossover-extra-bases',
+        op_subtype="crossover-extra-bases",
         label=label,
-        params={'crossover_id': crossover_id, **body.model_dump(mode='json')},
+        params={"crossover_id": crossover_id, **body.model_dump(mode="json")},
         fn=_apply,
     )
     return _design_response_with_geometry(design, report)
 
 
 @router.patch("/design/forced-ligations/{fl_id}/extra-bases", status_code=200)
-def patch_forced_ligation_extra_bases(fl_id: str, body: CrossoverExtraBasesRequest) -> dict:
+def patch_forced_ligation_extra_bases(
+    fl_id: str, body: CrossoverExtraBasesRequest
+) -> dict:
     """Set (or clear) extra bases on a single forced ligation junction.
 
     sequence must match [ACGTNacgtn]*.  Pass an empty string to remove extra bases.
@@ -4066,7 +4383,7 @@ def patch_forced_ligation_extra_bases(fl_id: str, body: CrossoverExtraBasesReque
         raise HTTPException(
             422,
             detail=f"Sequence {body.sequence!r} contains invalid bases. "
-                   f"Only A, T, G, C, N are allowed.",
+            f"Only A, T, G, C, N are allowed.",
         )
 
     design = design_state.get_or_404()
@@ -4084,15 +4401,15 @@ def patch_forced_ligation_extra_bases(fl_id: str, body: CrossoverExtraBasesReque
 
     label = f"Extra bases on forced ligation {fl_id} · {seq or '(cleared)'}"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='forced-ligation-extra-bases',
+        op_subtype="forced-ligation-extra-bases",
         label=label,
-        params={'fl_id': fl_id, **body.model_dump(mode='json')},
+        params={"fl_id": fl_id, **body.model_dump(mode="json")},
         fn=_apply,
     )
     return _design_response_with_geometry(design, report)
 
 
-def _build_nick(design: Design, body: 'NickRequest') -> Design:
+def _build_nick(design: Design, body: "NickRequest") -> Design:
     """Pure builder for a nick: ``make_nick`` + auto-color any new staple
     fragments using the palette indexing rule. Used by both the live
     endpoint and the mid-cluster replay dispatcher.
@@ -4111,12 +4428,16 @@ def _build_nick(design: Design, body: 'NickRequest') -> Design:
     new_strands_list = []
     any_colored = False
     for s in updated.strands:
-        if (s.id not in original_ids
-                and s.strand_type == StrandType.STAPLE
-                and s.color is None):
-            new_strands_list.append(s.model_copy(update={
-                "color": STAPLE_PALETTE[palette_idx % len(STAPLE_PALETTE)]
-            }))
+        if (
+            s.id not in original_ids
+            and s.strand_type == StrandType.STAPLE
+            and s.color is None
+        ):
+            new_strands_list.append(
+                s.model_copy(
+                    update={"color": STAPLE_PALETTE[palette_idx % len(STAPLE_PALETTE)]}
+                )
+            )
             palette_idx += 1
             any_colored = True
         else:
@@ -4143,7 +4464,7 @@ def _helix_label(design: Design, helix_id: str) -> str:
     return helix_id
 
 
-def _label_nick(design: Design, body: 'NickRequest') -> str:
+def _label_nick(design: Design, body: "NickRequest") -> str:
     """Compose the rendered detail line for a nick log entry."""
     return f"Nick: helix {_helix_label(design, body.helix_id)} bp {body.bp_index} {body.direction.value}"
 
@@ -4170,23 +4491,31 @@ def add_nick(body: NickRequest) -> dict:
     # partial geometry response must include every helix whose nucleotides
     # change strand_id — not just the helix where the nick is placed.
     try:
-        nicked_strand, _ = _find_strand_at(design, body.helix_id, body.bp_index, body.direction)
+        nicked_strand, _ = _find_strand_at(
+            design, body.helix_id, body.bp_index, body.direction
+        )
     except ValueError:
         nicked_strand = None
-    changed_hids = list({dom.helix_id for dom in nicked_strand.domains}) if nicked_strand else [body.helix_id]
+    changed_hids = (
+        list({dom.helix_id for dom in nicked_strand.domains})
+        if nicked_strand
+        else [body.helix_id]
+    )
 
     label = _label_nick(design, body)
     try:
         updated, report, _entry = design_state.mutate_with_minor_log(
-            op_subtype='nick',
+            op_subtype="nick",
             label=label,
-            params=body.model_dump(mode='json'),
+            params=body.model_dump(mode="json"),
             fn=lambda d: _build_nick(d, body),
         )
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
-    return _design_response_with_geometry(updated, report, changed_helix_ids=changed_hids)
+    return _design_response_with_geometry(
+        updated, report, changed_helix_ids=changed_hids
+    )
 
 
 @router.post("/design/ligate", status_code=200)
@@ -4202,45 +4531,52 @@ def ligate_strand(body: NickRequest) -> dict:
     """
     design = design_state.get_or_404()
 
-    helix_id  = body.helix_id
-    bp_index  = body.bp_index
+    helix_id = body.helix_id
+    bp_index = body.bp_index
     direction = body.direction
-    adj_bp    = bp_index + 1 if direction == Direction.FORWARD else bp_index - 1
-    label = f"Ligate helix {_helix_label(design, helix_id)} bp {bp_index} {direction.value}"
+    adj_bp = bp_index + 1 if direction == Direction.FORWARD else bp_index - 1
+    label = (
+        f"Ligate helix {_helix_label(design, helix_id)} bp {bp_index} {direction.value}"
+    )
 
     # ── Same-strand domain merge ─────────────────────────────────────────────
     # If a single strand has two adjacent domains at this boundary (e.g. from
     # a forced ligation), merge them — this is the inverse of a nick.
     for s in design.strands:
         for di in range(len(s.domains) - 1):
-            d_left  = s.domains[di]
+            d_left = s.domains[di]
             d_right = s.domains[di + 1]
-            if (d_left.helix_id == helix_id and d_left.direction == direction
-                    and d_left.end_bp == bp_index
-                    and d_right.helix_id == helix_id and d_right.direction == direction
-                    and d_right.start_bp == adj_bp):
+            if (
+                d_left.helix_id == helix_id
+                and d_left.direction == direction
+                and d_left.end_bp == bp_index
+                and d_right.helix_id == helix_id
+                and d_right.direction == direction
+                and d_right.start_bp == adj_bp
+            ):
                 merged_dom = Domain(
-                    helix_id  = helix_id,
-                    start_bp  = d_left.start_bp,
-                    end_bp    = d_right.end_bp,
-                    direction = direction,
+                    helix_id=helix_id,
+                    start_bp=d_left.start_bp,
+                    end_bp=d_right.end_bp,
+                    direction=direction,
                 )
                 new_domains = (
-                    list(s.domains[:di])
-                    + [merged_dom]
-                    + list(s.domains[di + 2:])
+                    list(s.domains[:di]) + [merged_dom] + list(s.domains[di + 2 :])
                 )
-                patched = s.model_copy(update={
-                    "domains": new_domains, "sequence": None,
-                })
+                patched = s.model_copy(
+                    update={
+                        "domains": new_domains,
+                        "sequence": None,
+                    }
+                )
 
                 def _apply_merge(d: Design, *, sid=s.id, p=patched) -> None:
                     d.strands = [p if st.id == sid else st for st in d.strands]
 
                 design, report, _entry = design_state.mutate_with_minor_log(
-                    op_subtype='ligate',
+                    op_subtype="ligate",
                     label=label,
-                    params=body.model_dump(mode='json'),
+                    params=body.model_dump(mode="json"),
                     fn=_apply_merge,
                 )
                 return _design_response(design, report)
@@ -4252,14 +4588,21 @@ def ligate_strand(body: NickRequest) -> dict:
         if not s.domains:
             continue
         last = s.domains[-1]
-        if (last.helix_id == helix_id and last.direction == direction
-                and last.end_bp == bp_index):
-            strand_a = s; break
+        if (
+            last.helix_id == helix_id
+            and last.direction == direction
+            and last.end_bp == bp_index
+        ):
+            strand_a = s
+            break
     if strand_a is None:
-        raise HTTPException(404, detail=(
-            f"No strand has a 3′ end at helix={helix_id!r} bp={bp_index} "
-            f"direction={direction.value}."
-        ))
+        raise HTTPException(
+            404,
+            detail=(
+                f"No strand has a 3′ end at helix={helix_id!r} bp={bp_index} "
+                f"direction={direction.value}."
+            ),
+        )
 
     # Find strand B: 5′ terminus at adj_bp
     strand_b: Strand | None = None
@@ -4267,55 +4610,60 @@ def ligate_strand(body: NickRequest) -> dict:
         if not s.domains:
             continue
         first = s.domains[0]
-        if (first.helix_id == helix_id and first.direction == direction
-                and first.start_bp == adj_bp):
-            strand_b = s; break
+        if (
+            first.helix_id == helix_id
+            and first.direction == direction
+            and first.start_bp == adj_bp
+        ):
+            strand_b = s
+            break
     if strand_b is None:
-        raise HTTPException(404, detail=(
-            f"No strand has a 5′ end at helix={helix_id!r} bp={adj_bp} "
-            f"direction={direction.value}."
-        ))
+        raise HTTPException(
+            404,
+            detail=(
+                f"No strand has a 5′ end at helix={helix_id!r} bp={adj_bp} "
+                f"direction={direction.value}."
+            ),
+        )
     if strand_b.id == strand_a.id:
         raise HTTPException(409, detail="Cannot ligate a strand to itself.")
 
     # Merge the two touching domains into one, combine domain lists
-    dom_a_last  = strand_a.domains[-1]
+    dom_a_last = strand_a.domains[-1]
     dom_b_first = strand_b.domains[0]
-    merged_dom  = Domain(
-        helix_id  = helix_id,
-        start_bp  = dom_a_last.start_bp,
-        end_bp    = dom_b_first.end_bp,
-        direction = direction,
+    merged_dom = Domain(
+        helix_id=helix_id,
+        start_bp=dom_a_last.start_bp,
+        end_bp=dom_b_first.end_bp,
+        direction=direction,
     )
     merged_domains = (
-        list(strand_a.domains[:-1])
-        + [merged_dom]
-        + list(strand_b.domains[1:])
+        list(strand_a.domains[:-1]) + [merged_dom] + list(strand_b.domains[1:])
     )
 
     merged_strand = Strand(
-        id          = strand_a.id,
-        domains     = merged_domains,
-        strand_type = strand_a.strand_type,
-        color       = strand_a.color,
-        sequence    = None,   # topology changed — clear sequence
+        id=strand_a.id,
+        domains=merged_domains,
+        strand_type=strand_a.strand_type,
+        color=strand_a.color,
+        sequence=None,  # topology changed — clear sequence
     )
 
     def _apply(d: Design) -> None:
         new_strands = []
         for s in d.strands:
             if s.id == strand_b.id:
-                continue            # drop strand B (absorbed into A)
+                continue  # drop strand B (absorbed into A)
             elif s.id == strand_a.id:
-                new_strands.append(merged_strand)   # replace A with merged
+                new_strands.append(merged_strand)  # replace A with merged
             else:
                 new_strands.append(s)
         d.strands = new_strands
 
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='ligate',
+        op_subtype="ligate",
         label=label,
-        params=body.model_dump(mode='json'),
+        params=body.model_dump(mode="json"),
         fn=_apply,
     )
     return _design_response(design, report)
@@ -4330,9 +4678,12 @@ class ForcedLigationRequest(BaseModel):
     This is a manual user action only (pencil tool).  It must never be called
     by autocrossover, autobreak, or any automated pipeline.
     """
-    three_prime_strand_id: str   # strand whose 3' end we connect FROM
-    five_prime_strand_id: str    # strand whose 5' end we connect TO
-    is_periodic_seam: bool = False  # True if made across the 2D periodic-boundary mirror
+
+    three_prime_strand_id: str  # strand whose 3' end we connect FROM
+    five_prime_strand_id: str  # strand whose 5' end we connect TO
+    is_periodic_seam: bool = (
+        False  # True if made across the 2D periodic-boundary mirror
+    )
 
 
 @router.post("/design/forced-ligation", status_code=201)
@@ -4358,14 +4709,22 @@ def forced_ligation(body: ForcedLigationRequest) -> dict:
         if s.id == body.five_prime_strand_id:
             strand_b = s
     if strand_a is None:
-        raise HTTPException(404, detail=f"3' strand {body.three_prime_strand_id!r} not found.")
+        raise HTTPException(
+            404, detail=f"3' strand {body.three_prime_strand_id!r} not found."
+        )
     if strand_b is None:
-        raise HTTPException(404, detail=f"5' strand {body.five_prime_strand_id!r} not found.")
+        raise HTTPException(
+            404, detail=f"5' strand {body.five_prime_strand_id!r} not found."
+        )
     if strand_a.id == strand_b.id:
-        raise HTTPException(409, detail="Cannot ligate a strand to itself (would create circular strand).")
+        raise HTTPException(
+            409,
+            detail="Cannot ligate a strand to itself (would create circular strand).",
+        )
 
     # Record the forced ligation endpoints before _ligate merges domains.
     from backend.core.models import ForcedLigation
+
     three_dom = strand_a.domains[-1]
     five_dom = strand_b.domains[0]
     fl = ForcedLigation(
@@ -4379,18 +4738,20 @@ def forced_ligation(body: ForcedLigationRequest) -> dict:
     )
 
     current = _ligate(design, strand_a, strand_b)
-    current = current.model_copy(update={
-        "forced_ligations": list(current.forced_ligations) + [fl],
-    })
+    current = current.model_copy(
+        update={
+            "forced_ligations": list(current.forced_ligations) + [fl],
+        }
+    )
 
     label = (
         f"Forced ligation · h{_helix_label(design, three_dom.helix_id)}:{three_dom.end_bp} "
         f"→ h{_helix_label(design, five_dom.helix_id)}:{five_dom.start_bp}"
     )
     current, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='forced-ligation-create',
+        op_subtype="forced-ligation-create",
         label=label,
-        params={**body.model_dump(mode='json'), '_fl_id': fl.id},
+        params={**body.model_dump(mode="json"), "_fl_id": fl.id},
         fn=lambda _d: current,
     )
     # A ligation moves NO nucleotide — it only re-tags strand_b's nucs onto
@@ -4402,10 +4763,14 @@ def forced_ligation(body: ForcedLigationRequest) -> dict:
     touches_extension = any(
         ext.strand_id in (strand_a.id, strand_b.id) for ext in design.extensions
     )
-    changed_helix_ids = None if touches_extension else list(
-        {d.helix_id for d in (*strand_a.domains, *strand_b.domains)}
+    changed_helix_ids = (
+        None
+        if touches_extension
+        else list({d.helix_id for d in (*strand_a.domains, *strand_b.domains)})
     )
-    return _design_response_with_geometry(current, report, changed_helix_ids=changed_helix_ids)
+    return _design_response_with_geometry(
+        current, report, changed_helix_ids=changed_helix_ids
+    )
 
 
 @router.delete("/design/forced-ligations/{fl_id}", status_code=200)
@@ -4428,15 +4793,19 @@ def delete_forced_ligation(fl_id: str) -> dict:
         for di in range(len(strand.domains) - 1):
             d0 = strand.domains[di]
             d1 = strand.domains[di + 1]
-            if (d0.helix_id == fl.three_prime_helix_id
-                    and d0.end_bp == fl.three_prime_bp
-                    and d0.direction == fl.three_prime_direction
-                    and d1.helix_id == fl.five_prime_helix_id
-                    and d1.start_bp == fl.five_prime_bp
-                    and d1.direction == fl.five_prime_direction):
-                part_a = strand.model_copy(update={"domains": list(strand.domains[:di + 1])})
+            if (
+                d0.helix_id == fl.three_prime_helix_id
+                and d0.end_bp == fl.three_prime_bp
+                and d0.direction == fl.three_prime_direction
+                and d1.helix_id == fl.five_prime_helix_id
+                and d1.start_bp == fl.five_prime_bp
+                and d1.direction == fl.five_prime_direction
+            ):
+                part_a = strand.model_copy(
+                    update={"domains": list(strand.domains[: di + 1])}
+                )
                 part_b = Strand(
-                    domains=list(strand.domains[di + 1:]),
+                    domains=list(strand.domains[di + 1 :]),
                     strand_type=strand.strand_type,
                 )
                 new_strands = [s for s in design.strands if s.id != strand.id]
@@ -4458,13 +4827,15 @@ def delete_forced_ligation(fl_id: str) -> dict:
         f"→ h{_helix_label(design, fl.five_prime_helix_id)}:{fl.five_prime_bp}"
     )
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='forced-ligation-delete',
+        op_subtype="forced-ligation-delete",
         label=label,
-        params={'fl_id': fl_id},
+        params={"fl_id": fl_id},
         fn=_apply,
     )
     changed = _local_changed_helices(before_occ, _strand_occupancy(design))
-    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
+    return _design_response_with_geometry(
+        design, report, changed_helix_ids=changed, partial_axes=True
+    )
 
 
 class BatchDeleteForcedLigationsRequest(BaseModel):
@@ -4486,7 +4857,9 @@ def batch_delete_forced_ligations(body: BatchDeleteForcedLigationsRequest) -> di
     existing_ids = {f.id for f in design.forced_ligations}
     missing = ids_to_delete - existing_ids
     if missing:
-        raise HTTPException(404, detail=f"Forced ligations not found: {sorted(missing)}")
+        raise HTTPException(
+            404, detail=f"Forced ligations not found: {sorted(missing)}"
+        )
 
     def _apply(d: "Design") -> None:
         for fl in list(d.forced_ligations):
@@ -4498,16 +4871,19 @@ def batch_delete_forced_ligations(body: BatchDeleteForcedLigationsRequest) -> di
                 for di in range(len(strand.domains) - 1):
                     d0 = strand.domains[di]
                     d1 = strand.domains[di + 1]
-                    if (d0.helix_id == fl.three_prime_helix_id
-                            and d0.end_bp == fl.three_prime_bp
-                            and d0.direction == fl.three_prime_direction
-                            and d1.helix_id == fl.five_prime_helix_id
-                            and d1.start_bp == fl.five_prime_bp
-                            and d1.direction == fl.five_prime_direction):
+                    if (
+                        d0.helix_id == fl.three_prime_helix_id
+                        and d0.end_bp == fl.three_prime_bp
+                        and d0.direction == fl.three_prime_direction
+                        and d1.helix_id == fl.five_prime_helix_id
+                        and d1.start_bp == fl.five_prime_bp
+                        and d1.direction == fl.five_prime_direction
+                    ):
                         part_a = strand.model_copy(
-                            update={"domains": list(strand.domains[:di + 1])})
+                            update={"domains": list(strand.domains[: di + 1])}
+                        )
                         part_b = Strand(
-                            domains=list(strand.domains[di + 1:]),
+                            domains=list(strand.domains[di + 1 :]),
                             strand_type=strand.strand_type,
                         )
                         d.strands = [s for s in d.strands if s.id != strand.id]
@@ -4519,21 +4895,25 @@ def batch_delete_forced_ligations(body: BatchDeleteForcedLigationsRequest) -> di
                         break
                 if found:
                     break
-        d.forced_ligations = [f for f in d.forced_ligations if f.id not in ids_to_delete]
+        d.forced_ligations = [
+            f for f in d.forced_ligations if f.id not in ids_to_delete
+        ]
 
     n = len(ids_to_delete)
     label = f"Delete {n} forced ligation{'s' if n != 1 else ''}"
     design, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='forced-ligation-delete-batch',
+        op_subtype="forced-ligation-delete-batch",
         label=label,
-        params=body.model_dump(mode='json'),
+        params=body.model_dump(mode="json"),
         fn=_apply,
     )
     changed = _local_changed_helices(before_occ, _strand_occupancy(design))
-    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
+    return _design_response_with_geometry(
+        design, report, changed_helix_ids=changed, partial_axes=True
+    )
 
 
-def _build_nick_batch(d: Design, body: 'NickBatchRequest') -> Design:
+def _build_nick_batch(d: Design, body: "NickBatchRequest") -> Design:
     """Pure builder: apply multiple nicks in order, skipping any that fail."""
     from backend.core.lattice import make_nick
 
@@ -4558,7 +4938,9 @@ def add_nick_batch(body: NickBatchRequest) -> dict:
         # Collect all helix IDs from the strand being nicked (not just the
         # nick helix) so that cross-helix strand splits update all affected nucs.
         try:
-            nicked_strand, _ = _find_strand_at(design, nick.helix_id, nick.bp_index, nick.direction)
+            nicked_strand, _ = _find_strand_at(
+                design, nick.helix_id, nick.bp_index, nick.direction
+            )
             all_changed.update(dom.helix_id for dom in nicked_strand.domains)
         except ValueError:
             all_changed.add(nick.helix_id)
@@ -4566,26 +4948,30 @@ def add_nick_batch(body: NickBatchRequest) -> dict:
     n = len(body.nicks)
     label = f"{n} nick{'s' if n != 1 else ''} (batch)"
     current, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='nick-batch',
+        op_subtype="nick-batch",
         label=label,
-        params=body.model_dump(mode='json'),
+        params=body.model_dump(mode="json"),
         fn=lambda d: _build_nick_batch(d, body),
     )
     changed_helix_ids = list(all_changed) if all_changed else None
-    return _design_response_with_geometry(current, report, changed_helix_ids=changed_helix_ids)
+    return _design_response_with_geometry(
+        current, report, changed_helix_ids=changed_helix_ids
+    )
 
 
 class OverhangExtrudeRequest(BaseModel):
-    helix_id:      str
-    bp_index:      int
-    direction:     Direction
+    helix_id: str
+    bp_index: int
+    direction: Direction
     is_five_prime: bool
-    neighbor_row:  int
-    neighbor_col:  int
-    length_bp:     int
+    neighbor_row: int
+    neighbor_col: int
+    length_bp: int
 
 
-def _build_overhang_extrude(d: Design, body: 'OverhangExtrudeRequest') -> tuple[Design, 'MutationReport']:
+def _build_overhang_extrude(
+    d: Design, body: "OverhangExtrudeRequest"
+) -> tuple[Design, "MutationReport"]:
     """Pure builder for a single-helix overhang extrude.
 
     Returns ``(design_after, mutation_report)``. The report's
@@ -4608,8 +4994,12 @@ def _build_overhang_extrude(d: Design, body: 'OverhangExtrudeRequest') -> tuple[
     orig_helix = d.find_helix(body.helix_id)
     if orig_helix is not None:
         gate_err = overhang_candidate_error(
-            d, orig_helix, body.bp_index, body.direction,
-            body.neighbor_row, body.neighbor_col,
+            d,
+            orig_helix,
+            body.bp_index,
+            body.direction,
+            body.neighbor_row,
+            body.neighbor_col,
         )
         if gate_err:
             raise ValueError(gate_err)
@@ -4644,6 +5034,7 @@ def overhang_extrude(body: OverhangExtrudeRequest) -> dict:
     Emits a ``snapshot`` feature-log entry so the extrude can be reverted
     after a refresh and replayed via the edit-feature endpoint.
     """
+
     def _fn(d: Design) -> Design:
         try:
             return _build_overhang_extrude(d, body)
@@ -4651,9 +5042,9 @@ def overhang_extrude(body: OverhangExtrudeRequest) -> dict:
             raise HTTPException(400, detail=str(exc)) from exc
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='overhang-extrude',
-        label=f'Overhang extrude: {body.length_bp} bp',
-        params=body.model_dump(mode='json'),
+        op_kind="overhang-extrude",
+        label=f"Overhang extrude: {body.length_bp} bp",
+        params=body.model_dump(mode="json"),
         fn=_fn,
     )
     # Embed geometry inline so design + nucleotides + helix_axes arrive in
@@ -4668,7 +5059,9 @@ def overhang_extrude(body: OverhangExtrudeRequest) -> dict:
 class OverhangPatchRequest(BaseModel):
     sequence: str | None = None
     label: str | None = None
-    rotation: list[float] | None = None  # unit quaternion [qx, qy, qz, qw]; None = no change
+    rotation: list[float] | None = (
+        None  # unit quaternion [qx, qy, qz, qw]; None = no change
+    )
     # When True, skip the auto re-derivation of staple sequences after a sequence write.
     # Used by the connection-CREATION flow, which sets both overhangs' sequences then
     # immediately applies the connection (which re-derives once, with the FINAL topology) —
@@ -4677,7 +5070,9 @@ class OverhangPatchRequest(BaseModel):
     defer_reassign: bool = False
 
 
-def _build_overhang_patch(design: Design, overhang_id: str, body: 'OverhangPatchRequest') -> tuple[Design, dict, OverhangSpec]:
+def _build_overhang_patch(
+    design: Design, overhang_id: str, body: "OverhangPatchRequest"
+) -> tuple[Design, dict, OverhangSpec]:
     """Pure builder for patch_overhang. Returns (updated_design, spec_updates, new_spec).
 
     Raises HTTPException for validation errors (404, 409, 422). Does NOT mutate
@@ -4694,7 +5089,9 @@ def _build_overhang_patch(design: Design, overhang_id: str, body: 'OverhangPatch
 
     is_inline = overhang_id.startswith("ovhg_inline_")
     # For inline overhangs the ID encodes the end: ovhg_inline_{strand_id}_{5p|3p}
-    inline_end: str | None = overhang_id.rsplit("_", 1)[-1] if is_inline else None  # "5p" or "3p"
+    inline_end: str | None = (
+        overhang_id.rsplit("_", 1)[-1] if is_inline else None
+    )  # "5p" or "3p"
 
     # ── Build updated OverhangSpec ────────────────────────────────────────────
     # Use model_fields_set so that an explicit {"sequence": null} (clear) is
@@ -4707,11 +5104,16 @@ def _build_overhang_patch(design: Design, overhang_id: str, body: 'OverhangPatch
         spec_updates["label"] = body.label
     if body.rotation is not None:
         if len(body.rotation) != 4:
-            raise HTTPException(422, detail="rotation must be a length-4 quaternion [qx, qy, qz, qw].")
+            raise HTTPException(
+                422, detail="rotation must be a length-4 quaternion [qx, qy, qz, qw]."
+            )
         import math as _math_rot
+
         mag = _math_rot.sqrt(sum(x * x for x in body.rotation))
         if abs(mag) < 1e-9:
-            raise HTTPException(422, detail="rotation quaternion must not be zero-length.")
+            raise HTTPException(
+                422, detail="rotation quaternion must not be zero-length."
+            )
         # Normalise to unit quaternion in case of minor floating-point drift.
         spec_updates["rotation"] = [x / mag for x in body.rotation]
 
@@ -4721,14 +5123,16 @@ def _build_overhang_patch(design: Design, overhang_id: str, body: 'OverhangPatch
     # Require the user to clear them first (Phase 1 design contract).
     if sequence_was_set and body.sequence is not None:
         conflicting = [
-            sd.id for sd in (spec.sub_domains or [])
-            if sd.sequence_override is not None
+            sd.id for sd in (spec.sub_domains or []) if sd.sequence_override is not None
         ]
         if conflicting:
-            raise HTTPException(409, detail={
-                "detail": "Sub-domain overrides conflict with whole-overhang sequence write",
-                "sub_domain_ids": conflicting,
-            })
+            raise HTTPException(
+                409,
+                detail={
+                    "detail": "Sub-domain overrides conflict with whole-overhang sequence write",
+                    "sub_domain_ids": conflicting,
+                },
+            )
 
     new_seq: str | None = spec_updates.get("sequence", spec.sequence)
     new_length_bp: int | None = len(new_seq) if new_seq else None
@@ -4741,42 +5145,62 @@ def _build_overhang_patch(design: Design, overhang_id: str, body: 'OverhangPatch
         current_total = sum(sd.length_bp for sd in spec.sub_domains)
         delta = new_length_bp - current_total
         if delta != 0:
-            sub_doms_sorted = sorted(spec.sub_domains, key=lambda sd: sd.start_bp_offset)
+            sub_doms_sorted = sorted(
+                spec.sub_domains, key=lambda sd: sd.start_bp_offset
+            )
             last = sub_doms_sorted[-1]
             new_last_len = last.length_bp + delta
             if new_last_len < 1:
-                raise HTTPException(422, detail=(
-                    f"Shrink would reduce sub-domain {last.name!r} ({last.id}) "
-                    f"below 1 bp; delete it (or another sub-domain) first."
-                ))
-            if last.sequence_override is not None and new_last_len < len(last.sequence_override):
-                raise HTTPException(422, detail=(
-                    f"Shrink would shorten sub-domain {last.name!r} ({last.id}) "
-                    f"below its locked override length ({len(last.sequence_override)} bp); "
-                    f"clear the override first."
-                ))
+                raise HTTPException(
+                    422,
+                    detail=(
+                        f"Shrink would reduce sub-domain {last.name!r} ({last.id}) "
+                        f"below 1 bp; delete it (or another sub-domain) first."
+                    ),
+                )
+            if last.sequence_override is not None and new_last_len < len(
+                last.sequence_override
+            ):
+                raise HTTPException(
+                    422,
+                    detail=(
+                        f"Shrink would shorten sub-domain {last.name!r} ({last.id}) "
+                        f"below its locked override length ({len(last.sequence_override)} bp); "
+                        f"clear the override first."
+                    ),
+                )
             new_sub_doms = [sd for sd in sub_doms_sorted[:-1]]
-            new_sub_doms.append(last.model_copy(update={
-                "length_bp": new_last_len,
-                # Annotation caches are stale once length changes.
-                "tm_celsius": None,
-                "gc_percent": None,
-                "hairpin_warning": False,
-                "dimer_warning": False,
-            }))
+            new_sub_doms.append(
+                last.model_copy(
+                    update={
+                        "length_bp": new_last_len,
+                        # Annotation caches are stale once length changes.
+                        "tm_celsius": None,
+                        "gc_percent": None,
+                        "hairpin_warning": False,
+                        "dimer_warning": False,
+                    }
+                )
+            )
             spec_updates["sub_domains"] = new_sub_doms
     elif new_length_bp is not None and not spec.sub_domains:
         # Edge case: backfill validator hasn't run (shouldn't happen post-load
         # because validators are always invoked). Insert a single whole-overhang
         # sub-domain matching the new length.
-        from backend.core.models import SubDomain as _SubDomain, NADOC_SUBDOMAIN_NS as _NS
+        from backend.core.models import (
+            SubDomain as _SubDomain,
+            NADOC_SUBDOMAIN_NS as _NS,
+        )
         import uuid as _uuid_local
-        spec_updates["sub_domains"] = [_SubDomain(
-            id=str(_uuid_local.uuid5(_NS, f"{spec.id}:whole")),
-            name="a",
-            start_bp_offset=0,
-            length_bp=new_length_bp,
-        )]
+
+        spec_updates["sub_domains"] = [
+            _SubDomain(
+                id=str(_uuid_local.uuid5(_NS, f"{spec.id}:whole")),
+                name="a",
+                start_bp_offset=0,
+                length_bp=new_length_bp,
+            )
+        ]
 
     new_spec = spec.model_copy(update=spec_updates)
     new_overhangs = [new_spec if o.id == overhang_id else o for o in design.overhangs]
@@ -4791,10 +5215,10 @@ def _build_overhang_patch(design: Design, overhang_id: str, body: 'OverhangPatch
     extrude_junction_bp: int | None = None
     if not is_inline:
         from backend.core.lattice import _overhang_junction_bp
+
         extrude_junction_bp = _overhang_junction_bp(design, spec.helix_id)
 
     if new_length_bp is not None:
-
         if not is_inline:
             # ── Extrude-style: resize the dedicated overhang helix ────────────
             # Keep the junction's world-space position fixed; move axis_start
@@ -4806,7 +5230,7 @@ def _build_overhang_patch(design: Design, overhang_id: str, body: 'OverhangPatch
                 if helix.length_bp == new_length_bp:
                     break
                 ax = helix.axis_end.to_array() - helix.axis_start.to_array()
-                ax_len = _math.sqrt(ax[0]**2 + ax[1]**2 + ax[2]**2)
+                ax_len = _math.sqrt(ax[0] ** 2 + ax[1] ** 2 + ax[2] ** 2)
                 if ax_len < 1e-9:
                     break
                 unit = ax / ax_len
@@ -4814,10 +5238,16 @@ def _build_overhang_patch(design: Design, overhang_id: str, body: 'OverhangPatch
                     # Fall back to legacy +Z behaviour if no crossover record.
                     new_len_nm = new_length_bp * BDNA_RISE_PER_BP
                     new_end = helix.axis_start.to_array() + unit * new_len_nm
-                    new_helices[hi] = helix.model_copy(update={
-                        "length_bp": new_length_bp,
-                        "axis_end":  Vec3(x=float(new_end[0]), y=float(new_end[1]), z=float(new_end[2])),
-                    })
+                    new_helices[hi] = helix.model_copy(
+                        update={
+                            "length_bp": new_length_bp,
+                            "axis_end": Vec3(
+                                x=float(new_end[0]),
+                                y=float(new_end[1]),
+                                z=float(new_end[2]),
+                            ),
+                        }
+                    )
                     break
                 helix_lo = helix.bp_start
                 helix_hi = helix.bp_start + helix.length_bp - 1
@@ -4828,17 +5258,32 @@ def _build_overhang_patch(design: Design, overhang_id: str, body: 'OverhangPatch
                 new_bp_start = min(extrude_junction_bp, new_tip_bp)
                 # Junction's world position from the current axis.
                 local_junc_old = extrude_junction_bp - helix.bp_start
-                junction_world = helix.axis_start.to_array() + local_junc_old * BDNA_RISE_PER_BP * unit
+                junction_world = (
+                    helix.axis_start.to_array()
+                    + local_junc_old * BDNA_RISE_PER_BP * unit
+                )
                 # New axis_start = junction_world − (junction_local_new) * RISE * unit.
                 local_junc_new = extrude_junction_bp - new_bp_start
-                new_axis_start = junction_world - local_junc_new * BDNA_RISE_PER_BP * unit
+                new_axis_start = (
+                    junction_world - local_junc_new * BDNA_RISE_PER_BP * unit
+                )
                 new_axis_end = new_axis_start + new_length_bp * BDNA_RISE_PER_BP * unit
-                new_helices[hi] = helix.model_copy(update={
-                    "length_bp":  new_length_bp,
-                    "bp_start":   new_bp_start,
-                    "axis_start": Vec3(x=float(new_axis_start[0]), y=float(new_axis_start[1]), z=float(new_axis_start[2])),
-                    "axis_end":   Vec3(x=float(new_axis_end[0]),   y=float(new_axis_end[1]),   z=float(new_axis_end[2])),
-                })
+                new_helices[hi] = helix.model_copy(
+                    update={
+                        "length_bp": new_length_bp,
+                        "bp_start": new_bp_start,
+                        "axis_start": Vec3(
+                            x=float(new_axis_start[0]),
+                            y=float(new_axis_start[1]),
+                            z=float(new_axis_start[2]),
+                        ),
+                        "axis_end": Vec3(
+                            x=float(new_axis_end[0]),
+                            y=float(new_axis_end[1]),
+                            z=float(new_axis_end[2]),
+                        ),
+                    }
+                )
                 break
 
         # ── Resize the overhang domain ────────────────────────────────────────
@@ -4855,43 +5300,80 @@ def _build_overhang_patch(design: Design, overhang_id: str, body: 'OverhangPatch
                     if inline_end == "3p":
                         if is_fwd:
                             # 5' junction = start_bp (fixed), 3' free = end_bp
-                            new_domain = domain.model_copy(update={"end_bp": domain.start_bp + new_length_bp - 1})
+                            new_domain = domain.model_copy(
+                                update={"end_bp": domain.start_bp + new_length_bp - 1}
+                            )
                         else:
                             # 5' junction = start_bp (fixed), 3' free = end_bp (lower)
-                            new_domain = domain.model_copy(update={"end_bp": domain.start_bp - (new_length_bp - 1)})
+                            new_domain = domain.model_copy(
+                                update={"end_bp": domain.start_bp - (new_length_bp - 1)}
+                            )
                     else:  # "5p"
                         if is_fwd:
                             # 3' junction = end_bp (fixed), 5' free = start_bp (lower)
-                            new_domain = domain.model_copy(update={"start_bp": domain.end_bp - (new_length_bp - 1)})
+                            new_domain = domain.model_copy(
+                                update={"start_bp": domain.end_bp - (new_length_bp - 1)}
+                            )
                         else:
                             # 3' junction = end_bp (fixed), 5' free = start_bp (higher)
-                            new_domain = domain.model_copy(update={"start_bp": domain.end_bp + (new_length_bp - 1)})
+                            new_domain = domain.model_copy(
+                                update={"start_bp": domain.end_bp + (new_length_bp - 1)}
+                            )
 
                     # Grow the main helix if the new domain falls outside its bounds
-                    helix_idx = next((hi for hi, h in enumerate(new_helices) if h.id == spec.helix_id), None)
+                    helix_idx = next(
+                        (
+                            hi
+                            for hi, h in enumerate(new_helices)
+                            if h.id == spec.helix_id
+                        ),
+                        None,
+                    )
                     if helix_idx is not None:
                         h = new_helices[helix_idx]
-                        free_bp = new_domain.end_bp if inline_end == "3p" else new_domain.start_bp
+                        free_bp = (
+                            new_domain.end_bp
+                            if inline_end == "3p"
+                            else new_domain.start_bp
+                        )
                         helix_end_bp = h.bp_start + h.length_bp - 1
                         ax = h.axis_end.to_array() - h.axis_start.to_array()
-                        ax_len = _math.sqrt(ax[0]**2 + ax[1]**2 + ax[2]**2)
+                        ax_len = _math.sqrt(ax[0] ** 2 + ax[1] ** 2 + ax[2] ** 2)
                         unit = ax / ax_len if ax_len > 1e-9 else ax
                         if free_bp < h.bp_start:
                             extra = h.bp_start - free_bp
-                            new_start = h.axis_start.to_array() - extra * BDNA_RISE_PER_BP * unit
-                            new_helices[helix_idx] = h.model_copy(update={
-                                "axis_start":    Vec3(x=float(new_start[0]), y=float(new_start[1]), z=float(new_start[2])),
-                                "length_bp":     h.length_bp + extra,
-                                "bp_start":      free_bp,
-                                "phase_offset":  h.phase_offset - extra * h.twist_per_bp_rad,
-                            })
+                            new_start = (
+                                h.axis_start.to_array()
+                                - extra * BDNA_RISE_PER_BP * unit
+                            )
+                            new_helices[helix_idx] = h.model_copy(
+                                update={
+                                    "axis_start": Vec3(
+                                        x=float(new_start[0]),
+                                        y=float(new_start[1]),
+                                        z=float(new_start[2]),
+                                    ),
+                                    "length_bp": h.length_bp + extra,
+                                    "bp_start": free_bp,
+                                    "phase_offset": h.phase_offset
+                                    - extra * h.twist_per_bp_rad,
+                                }
+                            )
                         elif free_bp > helix_end_bp:
                             extra = free_bp - helix_end_bp
-                            new_end = h.axis_end.to_array() + extra * BDNA_RISE_PER_BP * unit
-                            new_helices[helix_idx] = h.model_copy(update={
-                                "axis_end":  Vec3(x=float(new_end[0]), y=float(new_end[1]), z=float(new_end[2])),
-                                "length_bp": h.length_bp + extra,
-                            })
+                            new_end = (
+                                h.axis_end.to_array() + extra * BDNA_RISE_PER_BP * unit
+                            )
+                            new_helices[helix_idx] = h.model_copy(
+                                update={
+                                    "axis_end": Vec3(
+                                        x=float(new_end[0]),
+                                        y=float(new_end[1]),
+                                        z=float(new_end[2]),
+                                    ),
+                                    "length_bp": h.length_bp + extra,
+                                }
+                            )
                 else:
                     # Extrude-style: keep the junction bp fixed; move only the
                     # tip endpoint of the domain. The tip is whichever endpoint
@@ -4899,9 +5381,13 @@ def _build_overhang_patch(design: Design, overhang_id: str, body: 'OverhangPatch
                     if extrude_junction_bp is None:
                         # Legacy fallback (no crossover record found).
                         if is_fwd:
-                            new_domain = domain.model_copy(update={"end_bp": domain.start_bp + new_length_bp - 1})
+                            new_domain = domain.model_copy(
+                                update={"end_bp": domain.start_bp + new_length_bp - 1}
+                            )
                         else:
-                            new_domain = domain.model_copy(update={"start_bp": domain.end_bp + new_length_bp - 1})
+                            new_domain = domain.model_copy(
+                                update={"start_bp": domain.end_bp + new_length_bp - 1}
+                            )
                     else:
                         if domain.start_bp == extrude_junction_bp:
                             tip_sign = 1 if domain.end_bp > domain.start_bp else -1
@@ -4914,14 +5400,18 @@ def _build_overhang_patch(design: Design, overhang_id: str, body: 'OverhangPatch
 
                 new_domains = list(strand.domains)
                 new_domains[di] = new_domain
-                new_strands[si] = strand.model_copy(update={"domains": new_domains, "sequence": None})
+                new_strands[si] = strand.model_copy(
+                    update={"domains": new_domains, "sequence": None}
+                )
                 break
 
-    updated = design.model_copy(update={
-        "helices":   new_helices,
-        "strands":   new_strands,
-        "overhangs": new_overhangs,
-    })
+    updated = design.model_copy(
+        update={
+            "helices": new_helices,
+            "strands": new_strands,
+            "overhangs": new_overhangs,
+        }
+    )
 
     # When the sequence is cleared (no resize happened so strand.sequence was not
     # touched above), re-derive the strand's assembled sequence so the overhang
@@ -4963,7 +5453,11 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     # re-derived. A whole-design assign_staple_sequences here would silently wipe
     # any sequence the user typed by hand on an unrelated staple.
     if sequence_was_set and not body.defer_reassign:
-        from backend.core.sequences import overhang_dependent_strand_ids, reassign_strands
+        from backend.core.sequences import (
+            overhang_dependent_strand_ids,
+            reassign_strands,
+        )
+
         affected = overhang_dependent_strand_ids(updated, [overhang_id])
         updated = reassign_strands(updated, affected)
 
@@ -4985,10 +5479,11 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
             params["rotation"] = spec_updates["rotation"]
         log_label = (
             f"Overhang sequence: {spec_updates.get('sequence') or 'cleared'}"
-            if sequence_was_set else f"Overhang label: {body.label}"
+            if sequence_was_set
+            else f"Overhang label: {body.label}"
         )
         updated, report, _entry = design_state.mutate_with_feature_log(
-            op_kind='overhang-sequence',
+            op_kind="overhang-sequence",
             label=log_label,
             params=params,
             fn=lambda _d: updated,
@@ -4998,11 +5493,12 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     # Append rotation to feature log when rotation was changed.
     if body.rotation is not None:
         from backend.core.models import OverhangRotationLogEntry
+
         log = list(updated.feature_log)
         if updated.feature_log_cursor == -2:
             log = []
         elif updated.feature_log_cursor >= 0:
-            log = log[:updated.feature_log_cursor + 1]
+            log = log[: updated.feature_log_cursor + 1]
         log_entry = OverhangRotationLogEntry(
             overhang_ids=[overhang_id],
             rotations=[spec_updates["rotation"]],
@@ -5028,7 +5524,7 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
 
 class OverhangRotationBatchItem(BaseModel):
     overhang_id: str
-    rotation: List[float]   # [qx, qy, qz, qw]
+    rotation: List[float]  # [qx, qy, qz, qw]
 
 
 class PatchOverhangRotationsBatchBody(BaseModel):
@@ -5058,14 +5554,20 @@ def patch_overhang_rotations_batch(body: PatchOverhangRotationsBatchBody) -> dic
         if item.overhang_id not in ovhg_map:
             raise HTTPException(404, detail=f"Overhang {item.overhang_id!r} not found.")
         if len(item.rotation) != 4:
-            raise HTTPException(422, detail="rotation must be a length-4 quaternion [qx, qy, qz, qw].")
+            raise HTTPException(
+                422, detail="rotation must be a length-4 quaternion [qx, qy, qz, qw]."
+            )
         mag = _math_b.sqrt(sum(x * x for x in item.rotation))
         if abs(mag) < 1e-9:
-            raise HTTPException(422, detail="rotation quaternion must not be zero-length.")
-        normalised.append(OverhangRotationBatchItem(
-            overhang_id=item.overhang_id,
-            rotation=[x / mag for x in item.rotation],
-        ))
+            raise HTTPException(
+                422, detail="rotation quaternion must not be zero-length."
+            )
+        normalised.append(
+            OverhangRotationBatchItem(
+                overhang_id=item.overhang_id,
+                rotation=[x / mag for x in item.rotation],
+            )
+        )
 
     # Apply all rotations to overhangs list.
     rot_by_id = {n.overhang_id: n.rotation for n in normalised}
@@ -5079,7 +5581,7 @@ def patch_overhang_rotations_batch(body: PatchOverhangRotationsBatchBody) -> dic
     if design.feature_log_cursor == -2:
         log = []
     elif design.feature_log_cursor >= 0:
-        log = log[:design.feature_log_cursor + 1]
+        log = log[: design.feature_log_cursor + 1]
 
     log_entry = OverhangRotationLogEntry(
         overhang_ids=[n.overhang_id for n in normalised],
@@ -5115,16 +5617,19 @@ _SUBDOMAIN_COALESCE_WINDOW_S = 2.0
 
 class SubDomainRotationPatchBody(BaseModel):
     theta_deg: float
-    phi_deg:   float
-    commit:    bool = False
+    phi_deg: float
+    commit: bool = False
 
 
 def _validate_sd_angles(theta_deg: float, phi_deg: float) -> None:
     import math as _math
+
     if not _math.isfinite(float(theta_deg)) or not _math.isfinite(float(phi_deg)):
         raise HTTPException(422, detail="theta_deg and phi_deg must be finite.")
     if not (-180.0 <= float(theta_deg) <= 180.0):
-        raise HTTPException(422, detail=f"theta_deg out of range [-180, 180]: {theta_deg}")
+        raise HTTPException(
+            422, detail=f"theta_deg out of range [-180, 180]: {theta_deg}"
+        )
     if not (0.0 <= float(phi_deg) <= 180.0):
         raise HTTPException(422, detail=f"phi_deg out of range [0, 180]: {phi_deg}")
 
@@ -5145,15 +5650,20 @@ def _set_subdomain_angles(
         raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
     sd = next((s for s in spec.sub_domains if s.id == sub_domain_id), None)
     if sd is None:
-        raise HTTPException(404, detail=(
-            f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
-        ))
-    new_sd = sd.model_copy(update={
-        'rotation_theta_deg': float(theta_deg),
-        'rotation_phi_deg':   float(phi_deg),
-    })
+        raise HTTPException(
+            404,
+            detail=(
+                f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
+            ),
+        )
+    new_sd = sd.model_copy(
+        update={
+            "rotation_theta_deg": float(theta_deg),
+            "rotation_phi_deg": float(phi_deg),
+        }
+    )
     new_sds = [new_sd if s.id == sub_domain_id else s for s in spec.sub_domains]
-    new_spec = spec.model_copy(update={'sub_domains': new_sds})
+    new_spec = spec.model_copy(update={"sub_domains": new_sds})
     new_overhangs = [new_spec if o.id == overhang_id else o for o in design.overhangs]
     return design.copy_with(overhangs=new_overhangs)
 
@@ -5174,7 +5684,7 @@ def _try_coalesce_subdomain_rotation_entry(
     if not log:
         return False
     last = log[-1]
-    if last.feature_type != 'overhang_rotation':
+    if last.feature_type != "overhang_rotation":
         return False
     if len(last.overhang_ids) != 1:
         return False
@@ -5185,7 +5695,8 @@ def _try_coalesce_subdomain_rotation_entry(
         return False
 
     import datetime as _dt
-    ts = getattr(last, 'timestamp', '') or ''
+
+    ts = getattr(last, "timestamp", "") or ""
     now = _dt.datetime.now(_dt.timezone.utc)
     try:
         prev_ts = _dt.datetime.fromisoformat(ts)
@@ -5196,7 +5707,7 @@ def _try_coalesce_subdomain_rotation_entry(
 
     # Update in place.
     last.sub_domain_thetas_deg[0] = float(theta_deg)
-    last.sub_domain_phis_deg[0]   = float(phi_deg)
+    last.sub_domain_phis_deg[0] = float(phi_deg)
     if label is not None:
         last.labels = [label]
     return True
@@ -5229,12 +5740,19 @@ def patch_sub_domain_rotation(
     design = design_state.get_or_404()
     spec = _find_ovhg_or_404(design, overhang_id)
     if not any(s.id == sub_domain_id for s in spec.sub_domains):
-        raise HTTPException(404, detail=(
-            f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
-        ))
+        raise HTTPException(
+            404,
+            detail=(
+                f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
+            ),
+        )
 
     updated = _set_subdomain_angles(
-        design, overhang_id, sub_domain_id, body.theta_deg, body.phi_deg,
+        design,
+        overhang_id,
+        sub_domain_id,
+        body.theta_deg,
+        body.phi_deg,
     )
 
     if not body.commit:
@@ -5247,11 +5765,16 @@ def patch_sub_domain_rotation(
     if updated.feature_log_cursor == -2:
         log = []
     elif updated.feature_log_cursor >= 0:
-        log = log[:updated.feature_log_cursor + 1]
+        log = log[: updated.feature_log_cursor + 1]
 
     label = spec.label
     if not _try_coalesce_subdomain_rotation_entry(
-        log, overhang_id, sub_domain_id, body.theta_deg, body.phi_deg, label,
+        log,
+        overhang_id,
+        sub_domain_id,
+        body.theta_deg,
+        body.phi_deg,
+        label,
     ):
         entry = OverhangRotationLogEntry(
             overhang_ids=[overhang_id],
@@ -5264,7 +5787,7 @@ def patch_sub_domain_rotation(
         # Attach a timestamp matching mutate_with_feature_log so the
         # coalesce window works.
         try:
-            entry.__dict__['timestamp'] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+            entry.__dict__["timestamp"] = _dt.datetime.now(_dt.timezone.utc).isoformat()
         except Exception:
             pass
         log = log + [entry]
@@ -5278,7 +5801,7 @@ def patch_sub_domain_rotation(
 class SubDomainRotationBatchOp(BaseModel):
     sub_domain_id: str
     theta_deg: float
-    phi_deg:   float
+    phi_deg: float
 
 
 class SubDomainRotationBatchBody(BaseModel):
@@ -5291,7 +5814,8 @@ class SubDomainRotationBatchBody(BaseModel):
     status_code=200,
 )
 def patch_sub_domain_rotations_batch(
-    overhang_id: str, body: SubDomainRotationBatchBody,
+    overhang_id: str,
+    body: SubDomainRotationBatchBody,
 ) -> dict:
     """Set multiple sub-domain rotations on one overhang atomically.
 
@@ -5314,21 +5838,28 @@ def patch_sub_domain_rotations_batch(
     seen: set[str] = set()
     for op in body.ops:
         if op.sub_domain_id in seen:
-            raise HTTPException(422, detail=(
-                f"Duplicate sub_domain_id in batch: {op.sub_domain_id!r}."
-            ))
+            raise HTTPException(
+                422, detail=(f"Duplicate sub_domain_id in batch: {op.sub_domain_id!r}.")
+            )
         seen.add(op.sub_domain_id)
         if op.sub_domain_id not in sd_by_id:
-            raise HTTPException(404, detail=(
-                f"Sub-domain {op.sub_domain_id!r} not found on overhang "
-                f"{overhang_id!r}."
-            ))
+            raise HTTPException(
+                404,
+                detail=(
+                    f"Sub-domain {op.sub_domain_id!r} not found on overhang "
+                    f"{overhang_id!r}."
+                ),
+            )
         _validate_sd_angles(op.theta_deg, op.phi_deg)
 
     updated = design
     for op in body.ops:
         updated = _set_subdomain_angles(
-            updated, overhang_id, op.sub_domain_id, op.theta_deg, op.phi_deg,
+            updated,
+            overhang_id,
+            op.sub_domain_id,
+            op.theta_deg,
+            op.phi_deg,
         )
 
     if not body.commit:
@@ -5340,7 +5871,7 @@ def patch_sub_domain_rotations_batch(
     if updated.feature_log_cursor == -2:
         log = []
     elif updated.feature_log_cursor >= 0:
-        log = log[:updated.feature_log_cursor + 1]
+        log = log[: updated.feature_log_cursor + 1]
 
     n = len(body.ops)
     entry = OverhangRotationLogEntry(
@@ -5352,11 +5883,12 @@ def patch_sub_domain_rotations_batch(
         sub_domain_phis_deg=[float(op.phi_deg) for op in body.ops],
     )
     try:
-        entry.__dict__['timestamp'] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+        entry.__dict__["timestamp"] = _dt.datetime.now(_dt.timezone.utc).isoformat()
     except Exception:
         pass
     updated = updated.copy_with(
-        feature_log=log + [entry], feature_log_cursor=-1,
+        feature_log=log + [entry],
+        feature_log_cursor=-1,
     )
     design_state.set_design(updated)
     report = validate_design(updated)
@@ -5386,24 +5918,27 @@ def get_sub_domain_frame(overhang_id: str, sub_domain_id: str) -> dict:
     spec = _find_ovhg_or_404(design, overhang_id)
     sd = next((s for s in spec.sub_domains if s.id == sub_domain_id), None)
     if sd is None:
-        raise HTTPException(404, detail=(
-            f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
-        ))
+        raise HTTPException(
+            404,
+            detail=(
+                f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
+            ),
+        )
 
     # Find the overhang's backing domain.
     strand = next((s for s in design.strands if s.id == spec.strand_id), None)
     if strand is None:
-        raise HTTPException(409, detail=(
-            f"Overhang {overhang_id!r} has no backing strand."
-        ))
+        raise HTTPException(
+            409, detail=(f"Overhang {overhang_id!r} has no backing strand.")
+        )
     dom_idx = next(
         (i for i, d in enumerate(strand.domains) if d.overhang_id == overhang_id),
         None,
     )
     if dom_idx is None:
-        raise HTTPException(409, detail=(
-            f"Overhang {overhang_id!r} backing domain missing."
-        ))
+        raise HTTPException(
+            409, detail=(f"Overhang {overhang_id!r} backing domain missing.")
+        )
     domain = strand.domains[dom_idx]
     is_first = dom_idx == 0
     sign = 1 if domain.direction == _Direction.FORWARD else -1
@@ -5416,9 +5951,10 @@ def get_sub_domain_frame(overhang_id: str, sub_domain_id: str) -> dict:
 
     helix = next((h for h in design.helices if h.id == spec.helix_id), None)
     if helix is None:
-        raise HTTPException(409, detail=(
-            f"Helix {spec.helix_id!r} not found for overhang {overhang_id!r}."
-        ))
+        raise HTTPException(
+            409,
+            detail=(f"Helix {spec.helix_id!r} not found for overhang {overhang_id!r}."),
+        )
 
     arrs = nucleotide_positions_arrays(helix)
     # Apply existing deformations and rotations so the returned frame is
@@ -5428,21 +5964,25 @@ def get_sub_domain_frame(overhang_id: str, sub_domain_id: str) -> dict:
         _apply_cluster_transforms_domain_aware,
         _clusters_for_helix,
     )
+
     clusters = _clusters_for_helix(design, helix.id)
     if clusters:
         arrs = _apply_cluster_transforms_domain_aware(arrs, clusters, helix, design)
     arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
 
     dir_int = 0 if domain.direction == _Direction.FORWARD else 1
-    mask = (arrs['bp_indices'] == junction_side_bp) & (arrs['directions'] == dir_int)
+    mask = (arrs["bp_indices"] == junction_side_bp) & (arrs["directions"] == dir_int)
     if not mask.any():
-        raise HTTPException(409, detail=(
-            f"Could not locate pivot bp {junction_side_bp} on helix "
-            f"{spec.helix_id!r}; design may need geometry rebuild."
-        ))
+        raise HTTPException(
+            409,
+            detail=(
+                f"Could not locate pivot bp {junction_side_bp} on helix "
+                f"{spec.helix_id!r}; design may need geometry rebuild."
+            ),
+        )
 
-    pivot = arrs['positions'][mask][0].astype(float)
-    pa    = arrs['axis_tangents'][mask][0].astype(float)
+    pivot = arrs["positions"][mask][0].astype(float)
+    pa = arrs["axis_tangents"][mask][0].astype(float)
     pa_norm = float(_np.linalg.norm(pa))
     if pa_norm < 1e-9:
         pa = _np.array([0.0, 0.0, 1.0])
@@ -5451,9 +5991,9 @@ def get_sub_domain_frame(overhang_id: str, sub_domain_id: str) -> dict:
     pr = _default_phi_ref(pa)
 
     return {
-        "pivot":       [float(pivot[0]), float(pivot[1]), float(pivot[2])],
-        "parent_axis": [float(pa[0]),    float(pa[1]),    float(pa[2])],
-        "phi_ref":     [float(pr[0]),    float(pr[1]),    float(pr[2])],
+        "pivot": [float(pivot[0]), float(pivot[1]), float(pivot[2])],
+        "parent_axis": [float(pa[0]), float(pa[1]), float(pa[2])],
+        "phi_ref": [float(pr[0]), float(pr[1]), float(pr[2])],
     }
 
 
@@ -5462,7 +6002,7 @@ _IDENTITY_QUAT_LIST = [0.0, 0.0, 0.0, 1.0]
 
 class StrandPatchRequest(BaseModel):
     notes: str | None = None
-    color: str | None = None   # "#RRGGBB" hex string, or None to reset to palette
+    color: str | None = None  # "#RRGGBB" hex string, or None to reset to palette
     # A full 5'→3' ATGCN sequence to SET by hand, or null to CLEAR back to the
     # unsequenced state. A set must match the strand's nucleotide count exactly.
     sequence: str | None = None
@@ -5498,7 +6038,9 @@ def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
     Pushes an undo snapshot before modifying so the change can be reverted.
     """
     from backend.core.sequences import (
-        normalize_sequence_input, strand_sequence_length, strand_sequence_segments,
+        normalize_sequence_input,
+        strand_sequence_length,
+        strand_sequence_segments,
     )
 
     design = design_state.get_or_404()
@@ -5525,24 +6067,29 @@ def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
         if len(new_seq) != expected:
             raise HTTPException(
                 422,
-                detail=(f"Sequence length {len(new_seq)} does not match strand "
-                        f"{strand_id!r}, which has {expected} nucleotides."),
+                detail=(
+                    f"Sequence length {len(new_seq)} does not match strand "
+                    f"{strand_id!r}, which has {expected} nucleotides."
+                ),
             )
         patch["sequence"] = new_seq
     elif clearing_sequence:
         patch["sequence"] = None
 
     new_strands = [
-        s.model_copy(update=patch) if s.id == strand_id else s
-        for s in design.strands
+        s.model_copy(update=patch) if s.id == strand_id else s for s in design.strands
     ]
 
     new_overhangs = design.overhangs
     if clearing_sequence:
-        strand_overhang_ids = {d.overhang_id for d in strand.domains if d.overhang_id is not None}
+        strand_overhang_ids = {
+            d.overhang_id for d in strand.domains if d.overhang_id is not None
+        }
         if strand_overhang_ids:
             new_overhangs = [
-                o.model_copy(update={"sequence": None}) if o.id in strand_overhang_ids else o
+                o.model_copy(update={"sequence": None})
+                if o.id in strand_overhang_ids
+                else o
                 for o in design.overhangs
             ]
     elif setting_sequence:
@@ -5551,39 +6098,49 @@ def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
         # overhang domain to len(sequence), and here the slice is the domain's
         # existing length by construction, so no resize must happen.
         oh_slices = {
-            seg["overhang_id"]: new_seq[seg["start"]: seg["start"] + seg["length"]]
+            seg["overhang_id"]: new_seq[seg["start"] : seg["start"] + seg["length"]]
             for seg in strand_sequence_segments(design, strand)
             if seg["kind"] == "overhang" and seg["editable"] and seg["overhang_id"]
         }
         if oh_slices:
             new_overhangs = [
-                o.model_copy(update={"sequence": oh_slices[o.id]}) if o.id in oh_slices else o
+                o.model_copy(update={"sequence": oh_slices[o.id]})
+                if o.id in oh_slices
+                else o
                 for o in design.overhangs
             ]
 
-    updated = design.model_copy(update={"strands": new_strands, "overhangs": new_overhangs})
+    updated = design.model_copy(
+        update={"strands": new_strands, "overhangs": new_overhangs}
+    )
 
     bits = []
-    if 'color' in patch:  bits.append(f"color={patch['color']}")
-    if 'notes' in patch:  bits.append('notes')
-    if clearing_sequence: bits.append('seq cleared')
+    if "color" in patch:
+        bits.append(f"color={patch['color']}")
+    if "notes" in patch:
+        bits.append("notes")
+    if clearing_sequence:
+        bits.append("seq cleared")
 
     if setting_sequence:
         # Feature-log step (not a minor log): a sequence is a build-fingerprint field.
         preview = new_seq if len(new_seq) <= 24 else f"{new_seq[:21]}…"
         updated, report, _entry = design_state.mutate_with_feature_log(
-            op_kind='strand-sequence',
+            op_kind="strand-sequence",
             label=f"Strand sequence: {preview} ({len(new_seq)} nt)",
-            params={'strand_id': strand_id, 'sequence': new_seq},
+            params={"strand_id": strand_id, "sequence": new_seq},
             fn=lambda _d: updated,
         )
         return _design_response(updated, report)
 
     label = f"Patch strand {strand_id}" + (f" · {', '.join(bits)}" if bits else "")
     updated, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='strand-patch',
+        op_subtype="strand-patch",
         label=label,
-        params={'strand_id': strand_id, **body.model_dump(mode='json', exclude_unset=True)},
+        params={
+            "strand_id": strand_id,
+            **body.model_dump(mode="json", exclude_unset=True),
+        },
         fn=lambda _d: updated,
     )
     return _design_response(updated, report)
@@ -5591,7 +6148,7 @@ def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
 
 class BulkColorRequest(BaseModel):
     strand_ids: list[str]
-    color: str | None = None   # "#RRGGBB" hex string, or None to reset to palette
+    color: str | None = None  # "#RRGGBB" hex string, or None to reset to palette
 
 
 @router.patch("/design/strands/colors", status_code=200)
@@ -5608,11 +6165,13 @@ def patch_strands_color(body: BulkColorRequest) -> dict:
     ]
     updated = design.model_copy(update={"strands": new_strands})
     n = len(id_set)
-    label = f"Color {n} strand{'s' if n != 1 else ''} · {body.color or '(palette reset)'}"
+    label = (
+        f"Color {n} strand{'s' if n != 1 else ''} · {body.color or '(palette reset)'}"
+    )
     updated, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='strands-color-bulk',
+        op_subtype="strands-color-bulk",
         label=label,
-        params=body.model_dump(mode='json'),
+        params=body.model_dump(mode="json"),
         fn=lambda _d: updated,
     )
     return _design_response(updated, report)
@@ -5639,7 +6198,9 @@ def patch_strands_reference(body: BulkReferenceRequest) -> dict:
     if missing:
         raise HTTPException(404, detail=f"Strand(s) not found: {sorted(missing)}")
     new_strands = [
-        s.model_copy(update={"is_reference": body.is_reference}) if s.id in id_set else s
+        s.model_copy(update={"is_reference": body.is_reference})
+        if s.id in id_set
+        else s
         for s in design.strands
     ]
     updated = design.model_copy(update={"strands": new_strands})
@@ -5648,14 +6209,16 @@ def patch_strands_reference(body: BulkReferenceRequest) -> dict:
     # and reference strands' domain refs from every cluster so it's a fixed backdrop
     # (immune to cluster joints/drags and not counted in cluster calculations).
     ref_strand_ids = {s.id for s in new_strands if s.is_reference}
-    ref_helix_ids  = updated.reference_helix_ids()
+    ref_helix_ids = updated.reference_helix_ids()
     if ref_helix_ids or ref_strand_ids:
         pruned = []
         for c in updated.cluster_transforms:
             new_hids = [h for h in c.helix_ids if h not in ref_helix_ids]
-            new_drs  = [dr for dr in c.domain_ids if dr.strand_id not in ref_strand_ids]
+            new_drs = [dr for dr in c.domain_ids if dr.strand_id not in ref_strand_ids]
             if len(new_hids) != len(c.helix_ids) or len(new_drs) != len(c.domain_ids):
-                pruned.append(c.model_copy(update={"helix_ids": new_hids, "domain_ids": new_drs}))
+                pruned.append(
+                    c.model_copy(update={"helix_ids": new_hids, "domain_ids": new_drs})
+                )
             else:
                 pruned.append(c)
         updated = updated.model_copy(update={"cluster_transforms": pruned})
@@ -5664,9 +6227,9 @@ def patch_strands_reference(body: BulkReferenceRequest) -> dict:
     verb = "Mark" if body.is_reference else "Clear"
     label = f"{verb} reference · {n} strand{'s' if n != 1 else ''}"
     updated, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype='strands-reference',
+        op_subtype="strands-reference",
         label=label,
-        params=body.model_dump(mode='json'),
+        params=body.model_dump(mode="json"),
         fn=lambda _d: updated,
     )
     return _design_response_with_geometry(updated, report)
@@ -5687,8 +6250,8 @@ def auto_break(payload: dict | None = Body(None)) -> dict:
     from backend.core.lattice import make_autobreak
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='auto-break',
-        label='Autobreak',
+        op_kind="auto-break",
+        label="Autobreak",
         params={},
         fn=lambda d: make_autobreak(d),
     )
@@ -5709,8 +6272,8 @@ def auto_merge() -> dict:
     from backend.core.lattice import make_merge_short_staples
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='auto-merge',
-        label='Auto-merge staples',
+        op_kind="auto-merge",
+        label="Auto-merge staples",
         params={},
         fn=lambda d: make_merge_short_staples(d),
     )
@@ -5743,19 +6306,25 @@ def clear_all_overhangs() -> dict:
     Emits a ``snapshot`` feature-log entry so the bulk delete can be reverted
     even after a browser refresh.
     """
+
     def _build(d: Design) -> Design:
         new_strands = [
-            s.model_copy(update={"domains": [
-                dm.model_copy(update={"overhang_id": None}) for dm in s.domains
-            ]}) for s in d.strands
+            s.model_copy(
+                update={
+                    "domains": [
+                        dm.model_copy(update={"overhang_id": None}) for dm in s.domains
+                    ]
+                }
+            )
+            for s in d.strands
         ]
         return d.model_copy(update={"strands": new_strands, "overhangs": []})
 
     overhang_count = len(design_state.get_or_404().overhangs)
     design, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='overhang-bulk',
-        label='Clear all overhangs',
-        params={'overhang_count_before': overhang_count, 'action': 'clear-all'},
+        op_kind="overhang-bulk",
+        label="Clear all overhangs",
+        params={"overhang_count_before": overhang_count, "action": "clear-all"},
         fn=_build,
     )
     return _design_response(design, report)
@@ -5783,38 +6352,40 @@ def delete_overhangs_batch(body: OverhangBatchDeleteRequest) -> dict:
     for oid in list(target_ids):
         expanded_ids.update(_overhang_chain_descendants(design, oid))
 
-    labels = [
-        (o.label or o.id)
-        for o in design.overhangs
-        if o.id in expanded_ids
-    ]
+    labels = [(o.label or o.id) for o in design.overhangs if o.id in expanded_ids]
 
     def _build(d: Design) -> Design:
         conn_ids = {
-            c.id for c in d.overhang_connections
+            c.id
+            for c in d.overhang_connections
             if c.overhang_a_id in expanded_ids or c.overhang_b_id in expanded_ids
         }
         out = _delete_linker_connections_from_design(d, conn_ids)
         remove_binding_ids = {
-            b.id for b in out.overhang_bindings
+            b.id
+            for b in out.overhang_bindings
             if b.overhang_a_id in expanded_ids or b.overhang_b_id in expanded_ids
         }
         bindings = list(out.overhang_bindings)
         affected_joint_ids = {
-            b.target_joint_id for b in bindings
+            b.target_joint_id
+            for b in bindings
             if b.id in remove_binding_ids and b.target_joint_id is not None
         }
         fallback_windows: dict[str, tuple[float, float]] = {}
         for jid in affected_joint_ids:
             removed = [
-                b for b in bindings
+                b
+                for b in bindings
                 if b.id in remove_binding_ids and b.target_joint_id == jid
             ]
             removed.sort(key=lambda b: (b.created_at, b.id))
             snapshot_src = next(
                 (
-                    b for b in removed
-                    if b.prior_min_angle_deg is not None and b.prior_max_angle_deg is not None
+                    b
+                    for b in removed
+                    if b.prior_min_angle_deg is not None
+                    and b.prior_max_angle_deg is not None
                 ),
                 None,
             )
@@ -5825,17 +6396,23 @@ def delete_overhangs_batch(body: OverhangBatchDeleteRequest) -> dict:
                 snapshot_src.prior_max_angle_deg,
             )
             heirs = [
-                b for b in bindings
+                b
+                for b in bindings
                 if b.id not in remove_binding_ids and b.target_joint_id == jid
             ]
             heirs.sort(key=lambda b: (b.created_at, b.id))
             if heirs:
                 heir = heirs[0]
-                if heir.prior_min_angle_deg is None and heir.prior_max_angle_deg is None:
-                    new_heir = heir.model_copy(update={
-                        "prior_min_angle_deg": snapshot_src.prior_min_angle_deg,
-                        "prior_max_angle_deg": snapshot_src.prior_max_angle_deg,
-                    })
+                if (
+                    heir.prior_min_angle_deg is None
+                    and heir.prior_max_angle_deg is None
+                ):
+                    new_heir = heir.model_copy(
+                        update={
+                            "prior_min_angle_deg": snapshot_src.prior_min_angle_deg,
+                            "prior_max_angle_deg": snapshot_src.prior_max_angle_deg,
+                        }
+                    )
                     bindings = [new_heir if b.id == heir.id else b for b in bindings]
 
         def _domain_len(dm: Domain) -> int:
@@ -5846,9 +6423,9 @@ def delete_overhangs_batch(body: OverhangBatchDeleteRequest) -> dict:
             new_domains = []
             seq_parts: list[str] = []
             seq_offset = 0
-            has_exact_sequence = strand.sequence is not None and len(strand.sequence) == sum(
-                _domain_len(dm) for dm in strand.domains
-            )
+            has_exact_sequence = strand.sequence is not None and len(
+                strand.sequence
+            ) == sum(_domain_len(dm) for dm in strand.domains)
             for dm in strand.domains:
                 n = _domain_len(dm)
                 if dm.overhang_id in expanded_ids:
@@ -5856,7 +6433,7 @@ def delete_overhangs_batch(body: OverhangBatchDeleteRequest) -> dict:
                     continue
                 new_domains.append(dm)
                 if has_exact_sequence:
-                    seq_parts.append(strand.sequence[seq_offset:seq_offset + n])
+                    seq_parts.append(strand.sequence[seq_offset : seq_offset + n])
                 seq_offset += n
             if not new_domains:
                 continue
@@ -5866,9 +6443,7 @@ def delete_overhangs_batch(body: OverhangBatchDeleteRequest) -> dict:
             new_strands.append(strand.model_copy(update=updates))
 
         covered_helix_ids = {
-            dm.helix_id
-            for strand in new_strands
-            for dm in strand.domains
+            dm.helix_id for strand in new_strands for dm in strand.domains
         }
         new_helices = [h for h in out.helices if h.id in covered_helix_ids]
 
@@ -5882,54 +6457,62 @@ def delete_overhangs_batch(body: OverhangBatchDeleteRequest) -> dict:
 
         def _covered(helix_id: str, bp: int, direction: str) -> bool:
             return any(
-                lo <= bp <= hi
-                for lo, hi in slot_cov.get(f"{helix_id}_{direction}", [])
+                lo <= bp <= hi for lo, hi in slot_cov.get(f"{helix_id}_{direction}", [])
             )
 
         new_crossovers = [
-            xo for xo in out.crossovers
+            xo
+            for xo in out.crossovers
             if _covered(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)
             and _covered(xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)
         ]
 
-        new_bindings = [
-            b for b in bindings
-            if b.id not in remove_binding_ids
-        ]
+        new_bindings = [b for b in bindings if b.id not in remove_binding_ids]
         new_overhangs = [o for o in out.overhangs if o.id not in expanded_ids]
-        out = out.model_copy(update={
-            "strands": new_strands,
-            "helices": new_helices,
-            "crossovers": new_crossovers,
-            "overhangs": new_overhangs,
-            "overhang_bindings": new_bindings,
-        })
+        out = out.model_copy(
+            update={
+                "strands": new_strands,
+                "helices": new_helices,
+                "crossovers": new_crossovers,
+                "overhangs": new_overhangs,
+                "overhang_bindings": new_bindings,
+            }
+        )
         for jid in affected_joint_ids:
             out = _apply_driver_to_joint(out, jid)
-            if _select_driver_for_joint(out, jid) is None and _first_claimant_for_joint(out, jid) is None:
+            if (
+                _select_driver_for_joint(out, jid) is None
+                and _first_claimant_for_joint(out, jid) is None
+            ):
                 fallback = fallback_windows.get(jid)
                 if fallback is not None:
                     min_angle, max_angle = fallback
-                    out = out.model_copy(update={
-                        "cluster_joints": [
-                            j.model_copy(update={
-                                "min_angle_deg": min_angle,
-                                "max_angle_deg": max_angle,
-                            }) if j.id == jid else j
-                            for j in out.cluster_joints
-                        ],
-                    })
+                    out = out.model_copy(
+                        update={
+                            "cluster_joints": [
+                                j.model_copy(
+                                    update={
+                                        "min_angle_deg": min_angle,
+                                        "max_angle_deg": max_angle,
+                                    }
+                                )
+                                if j.id == jid
+                                else j
+                                for j in out.cluster_joints
+                            ],
+                        }
+                    )
         return out
 
     n = len(expanded_ids)
     label = f"Delete {n} overhang{'s' if n != 1 else ''}"
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='overhang-bulk',
+        op_kind="overhang-bulk",
         label=label,
         params={
-            'action': 'delete-selected',
-            'overhang_ids': sorted(expanded_ids),
-            'labels': labels,
+            "action": "delete-selected",
+            "overhang_ids": sorted(expanded_ids),
+            "labels": labels,
         },
         fn=_build,
     )
@@ -5958,17 +6541,23 @@ def random_sequence(body: RandomSequenceRequest) -> dict:
     scaffold = design.scaffold()
     scaffold_seq = scaffold.sequence if scaffold and scaffold.sequence else ""
     staple_seqs = [
-        s.sequence for s in design.strands
+        s.sequence
+        for s in design.strands
         if s.strand_type != StrandType.SCAFFOLD and s.sequence
     ]
     seq = generate_overhang_sequences(
-        scaffold_seq, staple_seqs, length=body.length, count=1,
+        scaffold_seq,
+        staple_seqs,
+        length=body.length,
+        count=1,
     )[0]
     return {"sequence": seq}
 
 
 @router.post("/design/overhang/{overhang_id}/generate-random", status_code=200)
-def generate_overhang_random_sequence(overhang_id: str, defer_reassign: bool = False) -> dict:
+def generate_overhang_random_sequence(
+    overhang_id: str, defer_reassign: bool = False
+) -> dict:
     """Generate a rare, structure-safe sequence for a single undefined overhang.
 
     The generated sequence has the same length as the current overhang domain.
@@ -5993,20 +6582,27 @@ def generate_overhang_random_sequence(overhang_id: str, defer_reassign: bool = F
     lengths = _ovhg_domain_lengths(design)
     domain_len = lengths.get(overhang_id)
     if domain_len is None:
-        raise HTTPException(404, detail=f"No domain references overhang {overhang_id!r}.")
+        raise HTTPException(
+            404, detail=f"No domain references overhang {overhang_id!r}."
+        )
 
     scaffold = design.scaffold()
     scaffold_seq = scaffold.sequence if scaffold and scaffold.sequence else ""
     staple_seqs = [
-        s.sequence for s in design.strands
+        s.sequence
+        for s in design.strands
         if s.strand_type != StrandType.SCAFFOLD and s.sequence
     ]
     # Honour locked sub-domain overrides: only re-roll the unlocked slices.
     sub_doms = list(spec.sub_domains or [])
     if sub_doms and any(sd.sequence_override for sd in sub_doms):
-        seq = generate_overhang_sequence_with_overrides(scaffold_seq, staple_seqs, sub_doms)
+        seq = generate_overhang_sequence_with_overrides(
+            scaffold_seq, staple_seqs, sub_doms
+        )
     else:
-        seq = generate_overhang_sequences(scaffold_seq, staple_seqs, length=domain_len, count=1)[0]
+        seq = generate_overhang_sequences(
+            scaffold_seq, staple_seqs, length=domain_len, count=1
+        )[0]
     new_overhangs = [
         spec.model_copy(update={"sequence": seq}) if o.id == overhang_id else o
         for o in design.overhangs
@@ -6020,7 +6616,9 @@ def generate_overhang_random_sequence(overhang_id: str, defer_reassign: bool = F
     # Propagate the reverse complement to any OH-binder / linker complement
     # strands bound to this overhang (no-op for strands without a sequence).
     for s in list(updated.strands):
-        if s.id != spec.strand_id and any(d.binds_overhang_id == overhang_id for d in s.domains):
+        if s.id != spec.strand_id and any(
+            d.binds_overhang_id == overhang_id for d in s.domains
+        ):
             updated = _resplice_overhang_in_strand(updated, overhang_id, s.id)
 
     # Phase 3: rescan boundaries for hairpins spanning adjacent sub-domains
@@ -6032,9 +6630,9 @@ def generate_overhang_random_sequence(overhang_id: str, defer_reassign: bool = F
     # sequence is a real timeline step — seeking back to it reproduces the
     # sequence and keeps oxDNA job staleness in sync (see patch_overhang).
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='overhang-sequence',
-        label=f'Generate overhang sequence: {seq}',
-        params={'overhang_id': overhang_id, 'action': 'generate-random'},
+        op_kind="overhang-sequence",
+        label=f"Generate overhang sequence: {seq}",
+        params={"overhang_id": overhang_id, "action": "generate-random"},
         fn=lambda _d: updated,
     )
     return _design_response(updated, report)
@@ -6070,7 +6668,8 @@ def generate_all_overhang_sequences() -> dict:
     scaffold = design.scaffold()
     scaffold_seq = scaffold.sequence if scaffold and scaffold.sequence else ""
     staple_seqs = [
-        s.sequence for s in design.strands
+        s.sequence
+        for s in design.strands
         if s.strand_type != StrandType.SCAFFOLD and s.sequence
     ]
 
@@ -6087,7 +6686,9 @@ def generate_all_overhang_sequences() -> dict:
         sub_doms = list(spec.sub_domains or [])
         if sub_doms and any(sd.sequence_override for sd in sub_doms):
             seq = generate_overhang_sequence_with_overrides(
-                scaffold_seq, staple_seqs + extra_seqs, sub_doms,
+                scaffold_seq,
+                staple_seqs + extra_seqs,
+                sub_doms,
             )
         else:
             seq = generate_overhang_sequences(
@@ -6105,7 +6706,9 @@ def generate_all_overhang_sequences() -> dict:
     affected_strand_ids: set[str] = set()
     for spec in design.overhangs:
         if spec.id in generated:
-            new_overhangs.append(spec.model_copy(update={"sequence": generated[spec.id]}))
+            new_overhangs.append(
+                spec.model_copy(update={"sequence": generated[spec.id]})
+            )
             affected_strand_ids.add(spec.strand_id)
             count += 1
         else:
@@ -6114,7 +6717,9 @@ def generate_all_overhang_sequences() -> dict:
     # OH-binder / linker complement strands that pair with a regenerated
     # overhang must re-derive their reverse-complement sequence too.
     for s in design.strands:
-        if any(d.binds_overhang_id in generated for d in s.domains if d.binds_overhang_id):
+        if any(
+            d.binds_overhang_id in generated for d in s.domains if d.binds_overhang_id
+        ):
             affected_strand_ids.add(s.id)
 
     updated = design.model_copy(update={"overhangs": new_overhangs})
@@ -6128,9 +6733,13 @@ def generate_all_overhang_sequences() -> dict:
         if to_update:
             try:
                 re_derived = assign_staple_sequences(updated)
-                re_seq_map = {s.id: s.sequence for s in re_derived.strands if s.id in to_update}
+                re_seq_map = {
+                    s.id: s.sequence for s in re_derived.strands if s.id in to_update
+                }
                 new_strands = [
-                    s.model_copy(update={"sequence": re_seq_map[s.id]}) if s.id in re_seq_map else s
+                    s.model_copy(update={"sequence": re_seq_map[s.id]})
+                    if s.id in re_seq_map
+                    else s
                     for s in updated.strands
                 ]
                 updated = updated.model_copy(update={"strands": new_strands})
@@ -6138,9 +6747,9 @@ def generate_all_overhang_sequences() -> dict:
                 pass
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='overhang-bulk',
-        label='Generate overhang sequences',
-        params={'generated_count': count, 'action': 'generate-sequences'},
+        op_kind="overhang-bulk",
+        label="Generate overhang sequences",
+        params={"generated_count": count, "action": "generate-sequences"},
         fn=lambda _d: updated,
     )
     result = _design_response(updated, report)
@@ -6166,6 +6775,7 @@ def generate_all_overhang_sequences() -> dict:
 
 
 import re as _re_subdomain  # noqa: E402  (section-scoped helper)
+
 _HEX_RE = _re_subdomain.compile(r"^#[0-9A-Fa-f]{6}$")
 _DNA_BASES = set("ACGTN")
 
@@ -6229,7 +6839,9 @@ def _backfill_sub_domains_if_empty(design: Design) -> Design:
                 if solo.id == expected_id and solo.sequence_override is None:
                     needs_update = True
                     new_solo = solo.model_copy(update={"length_bp": max(backing, 1)})
-                    new_overhangs.append(ovhg.model_copy(update={"sub_domains": [new_solo]}))
+                    new_overhangs.append(
+                        ovhg.model_copy(update={"sub_domains": [new_solo]})
+                    )
                     continue
             # Multi-sub-domain mismatch — preserve verbatim; the endpoint-
             # level validator will reject any subsequent mutation. The
@@ -6264,6 +6876,7 @@ def _derive_duplexes_if_empty(design: Design) -> Design:
     if design.duplexes or not design.overhang_bindings:
         return design
     from backend.core.duplex import synthesize_duplexes_from_bindings
+
     dux = synthesize_duplexes_from_bindings(design)
     if not dux:
         return design
@@ -6276,11 +6889,19 @@ def _materialize_duplex_clusters_on_load(design: Design) -> Design:
     existing .nadoc shows the duplex as a sidebar-listed, gizmo-movable, drift-free cluster.
     Geometry+axis neutral (proven on 2x2_OH_test). Idempotent: skips a driver that already
     has a duplex cluster. [[overhang-duplex-cluster]] P1b."""
-    from backend.core.duplex_cluster import duplex_cluster_for, materialize_duplex_cluster
-    drivers: list[str] = [b.driver_oh_id for b in design.overhang_bindings
-                          if b.bound and b.driver_oh_id]
-    drivers += [(dx.left.overhang_id if dx.driver == 'left' else dx.right.overhang_id)
-                for dx in design.duplexes if dx.bound]
+    from backend.core.duplex_cluster import (
+        duplex_cluster_for,
+        materialize_duplex_cluster,
+    )
+
+    drivers: list[str] = [
+        b.driver_oh_id for b in design.overhang_bindings if b.bound and b.driver_oh_id
+    ]
+    drivers += [
+        (dx.left.overhang_id if dx.driver == "left" else dx.right.overhang_id)
+        for dx in design.duplexes
+        if dx.bound
+    ]
     seen: set = set()
     for drv in drivers:
         if drv in seen or duplex_cluster_for(design, drv) is not None:
@@ -6305,6 +6926,7 @@ def _recompute_flexible_connections(design: Design) -> Design:
     if not design.flexible_segment_marks:
         return design
     from backend.core.flexible_segments import apply_marks
+
     return apply_marks(design)
 
 
@@ -6322,13 +6944,16 @@ def _find_ovhg_or_404(design: Design, overhang_id: str):
 # sub-domain absorbs the Δ length. Rejects shrink that would push the last
 # sub-domain below 1 bp (or below its sequence_override length when one is set).
 
+
 class OverhangResizeFreeEndRequest(BaseModel):
     end: Literal["5p", "3p"]
     delta_bp: int
 
 
 @router.post("/design/overhang/{overhang_id}/resize-free-end", status_code=200)
-def resize_overhang_free_end(overhang_id: str, body: OverhangResizeFreeEndRequest) -> dict:
+def resize_overhang_free_end(
+    overhang_id: str, body: OverhangResizeFreeEndRequest
+) -> dict:
     """Resize an overhang by dragging its FREE end cap in the Domain Designer.
 
     Steps (atomic from the user's perspective — single feature-log entry):
@@ -6364,8 +6989,11 @@ def resize_overhang_free_end(overhang_id: str, body: OverhangResizeFreeEndReques
         # Fallback 1: any domain on the overhang's helix that already carries
         # SOME overhang_id tag (typically an inline-overhang sibling).
         dom_idx = next(
-            (i for i, d in enumerate(domains)
-             if d.helix_id == spec.helix_id and d.overhang_id is not None),
+            (
+                i
+                for i, d in enumerate(domains)
+                if d.helix_id == spec.helix_id and d.overhang_id is not None
+            ),
             -1,
         )
     if dom_idx < 0:
@@ -6378,18 +7006,27 @@ def resize_overhang_free_end(overhang_id: str, body: OverhangResizeFreeEndReques
         raise HTTPException(
             404,
             detail=f"Backing domain for {overhang_id!r} not found on strand "
-                   f"(also tried fallback to helix {spec.helix_id!r}).",
+            f"(also tried fallback to helix {spec.helix_id!r}).",
         )
     is_first = dom_idx == 0
-    is_last  = dom_idx == len(domains) - 1
+    is_last = dom_idx == len(domains) - 1
     free_end: str
-    if is_first and not is_last: free_end = "5p"
-    elif is_last and not is_first: free_end = "3p"
-    elif is_first and is_last:     free_end = "5p"   # whole-strand: arbitrary
-    else: raise HTTPException(409, detail="Overhang is sandwiched between domains; resize unsupported.")
+    if is_first and not is_last:
+        free_end = "5p"
+    elif is_last and not is_first:
+        free_end = "3p"
+    elif is_first and is_last:
+        free_end = "5p"  # whole-strand: arbitrary
+    else:
+        raise HTTPException(
+            409, detail="Overhang is sandwiched between domains; resize unsupported."
+        )
 
     if body.end != free_end:
-        raise HTTPException(422, detail=f"Requested end {body.end!r} is the root, not the free end ({free_end!r}).")
+        raise HTTPException(
+            422,
+            detail=f"Requested end {body.end!r} is the root, not the free end ({free_end!r}).",
+        )
 
     # Sub-domain length change matches |Δ length of overhang|. We resolve the
     # signed Δ from the backing domain length change, NOT from delta_bp (which
@@ -6398,7 +7035,10 @@ def resize_overhang_free_end(overhang_id: str, body: OverhangResizeFreeEndReques
     old_len = abs(backing.end_bp - backing.start_bp) + 1
 
     if not spec.sub_domains:
-        raise HTTPException(409, detail="Overhang has no sub-domains; legacy state — open it once to migrate.")
+        raise HTTPException(
+            409,
+            detail="Overhang has no sub-domains; legacy state — open it once to migrate.",
+        )
     last_sd = spec.sub_domains[-1]
     # Predict the new sub-domain length so we can fail BEFORE mutating state.
     # The resize moves the free end by `delta_bp` in global bp. For the FREE
@@ -6408,7 +7048,7 @@ def resize_overhang_free_end(overhang_id: str, body: OverhangResizeFreeEndReques
     #   new_start = start_bp + delta_bp if end == '5p' else start_bp
     #   new_end   = end_bp   + delta_bp if end == '3p' else end_bp
     new_start = backing.start_bp + (body.delta_bp if free_end == "5p" else 0)
-    new_end   = backing.end_bp   + (body.delta_bp if free_end == "3p" else 0)
+    new_end = backing.end_bp + (body.delta_bp if free_end == "3p" else 0)
     new_len = abs(new_end - new_start) + 1
     delta_len = new_len - old_len  # positive = grow, negative = shrink
 
@@ -6426,12 +7066,17 @@ def resize_overhang_free_end(overhang_id: str, body: OverhangResizeFreeEndReques
         # 1. Resize the strand domain. _reconcile_inline_overhangs runs inside
         #    and preserves existing sub-domains as-is (Σ length will now drift
         #    from the new overhang length until step 2 fixes it).
-        d2 = _resize_strand_ends(d, [{
-            "strand_id": spec.strand_id,
-            "helix_id":  spec.helix_id,
-            "end":       body.end,
-            "delta_bp":  body.delta_bp,
-        }])
+        d2 = _resize_strand_ends(
+            d,
+            [
+                {
+                    "strand_id": spec.strand_id,
+                    "helix_id": spec.helix_id,
+                    "end": body.end,
+                    "delta_bp": body.delta_bp,
+                }
+            ],
+        )
         # 2. Re-tile sub-domains: last absorbs Δ length.
         ovhg_after = next((o for o in d2.overhangs if o.id == overhang_id), None)
         if ovhg_after is None or not ovhg_after.sub_domains:
@@ -6448,15 +7093,17 @@ def resize_overhang_free_end(overhang_id: str, body: OverhangResizeFreeEndReques
                 new_override = new_override + ("N" * (new_last_len_inner - cur_len))
             elif new_last_len_inner < cur_len:
                 new_override = new_override[:new_last_len_inner]
-        adjusted_last = last_after.model_copy(update={
-            "length_bp":        new_last_len_inner,
-            "sequence_override": new_override,
-            # Tm/GC/warning caches invalidate when the slice length changes.
-            "tm_celsius":       None,
-            "gc_percent":       None,
-            "hairpin_warning":  False,
-            "dimer_warning":    False,
-        })
+        adjusted_last = last_after.model_copy(
+            update={
+                "length_bp": new_last_len_inner,
+                "sequence_override": new_override,
+                # Tm/GC/warning caches invalidate when the slice length changes.
+                "tm_celsius": None,
+                "gc_percent": None,
+                "hairpin_warning": False,
+                "dimer_warning": False,
+            }
+        )
         new_subs[-1] = adjusted_last
         new_overhangs = [
             o.model_copy(update={"sub_domains": new_subs}) if o.id == overhang_id else o
@@ -6473,7 +7120,9 @@ def resize_overhang_free_end(overhang_id: str, body: OverhangResizeFreeEndReques
         )
     except KeyError as exc:
         missing = exc.args[0] if exc.args else "unknown"
-        raise HTTPException(404, detail=f"Resize target not found: {missing!r}") from exc
+        raise HTTPException(
+            404, detail=f"Resize target not found: {missing!r}"
+        ) from exc
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
@@ -6491,13 +7140,16 @@ def list_sub_domains(overhang_id: str) -> dict:
     spec = _find_ovhg_or_404(design, overhang_id)
     return {
         "overhang_id": overhang_id,
-        "sub_domains": [sd.model_dump() for sd in sorted(spec.sub_domains, key=lambda sd: sd.start_bp_offset)],
+        "sub_domains": [
+            sd.model_dump()
+            for sd in sorted(spec.sub_domains, key=lambda sd: sd.start_bp_offset)
+        ],
     }
 
 
 class SubDomainSplitRequest(BaseModel):
     sub_domain_id: str
-    split_at_offset: int   # offset within the parent overhang (0-based, strict interior)
+    split_at_offset: int  # offset within the parent overhang (0-based, strict interior)
 
 
 @router.post("/design/overhang/{overhang_id}/sub-domains/split", status_code=200)
@@ -6514,45 +7166,59 @@ def split_sub_domain(overhang_id: str, body: SubDomainSplitRequest) -> dict:
 
     target = next((sd for sd in spec.sub_domains if sd.id == body.sub_domain_id), None)
     if target is None:
-        raise HTTPException(404, detail=(
-            f"Sub-domain {body.sub_domain_id!r} not found on overhang {overhang_id!r}."
-        ))
+        raise HTTPException(
+            404,
+            detail=(
+                f"Sub-domain {body.sub_domain_id!r} not found on overhang {overhang_id!r}."
+            ),
+        )
 
     # ``split_at_offset`` is the absolute overhang offset (5'→3'). Translate to
     # a within-sub-domain offset and require strict interior.
     rel = body.split_at_offset - target.start_bp_offset
     if rel <= 0 or rel >= target.length_bp:
-        raise HTTPException(422, detail=(
-            f"split_at_offset {body.split_at_offset} is not strictly interior "
-            f"to sub-domain {target.name!r} "
-            f"(offset {target.start_bp_offset}, length {target.length_bp})."
-        ))
+        raise HTTPException(
+            422,
+            detail=(
+                f"split_at_offset {body.split_at_offset} is not strictly interior "
+                f"to sub-domain {target.name!r} "
+                f"(offset {target.start_bp_offset}, length {target.length_bp})."
+            ),
+        )
 
     # Phase 5: a sub-domain that is the endpoint of an OverhangBinding can't
     # be split without invalidating that binding's identity. Reject with 409
     # listing the offending binding ids.
     referencing = [
-        bb.id for bb in design.overhang_bindings
+        bb.id
+        for bb in design.overhang_bindings
         if target.id in (bb.sub_domain_a_id, bb.sub_domain_b_id)
     ]
     if referencing:
-        raise HTTPException(409, detail={
-            "error": "sub_domain_referenced_by_binding",
-            "binding_ids": referencing,
-        })
+        raise HTTPException(
+            409,
+            detail={
+                "error": "sub_domain_referenced_by_binding",
+                "binding_ids": referencing,
+            },
+        )
 
     from backend.core.models import SubDomain as _SD
 
     override_5p = target.sequence_override[:rel] if target.sequence_override else None
     override_3p = target.sequence_override[rel:] if target.sequence_override else None
 
-    new_5p = target.model_copy(update={
-        "length_bp": rel,
-        "sequence_override": override_5p,
-        # Annotation caches must be re-derived after a split.
-        "tm_celsius": None, "gc_percent": None,
-        "hairpin_warning": False, "dimer_warning": False,
-    })
+    new_5p = target.model_copy(
+        update={
+            "length_bp": rel,
+            "sequence_override": override_5p,
+            # Annotation caches must be re-derived after a split.
+            "tm_celsius": None,
+            "gc_percent": None,
+            "hairpin_warning": False,
+            "dimer_warning": False,
+        }
+    )
     new_3p = _SD(
         id=str(_uuid.uuid4()),
         name=f"{target.name} (split)",
@@ -6581,7 +7247,7 @@ def split_sub_domain(overhang_id: str, body: SubDomainSplitRequest) -> dict:
         return _replace_ovhg(d, cur.model_copy(update={"sub_domains": new_sub_doms}))
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='overhang-bulk',
+        op_kind="overhang-bulk",
         label=f"Split sub-domain {target.name!r}",
         params={
             "overhang_id": overhang_id,
@@ -6618,9 +7284,10 @@ def merge_sub_domains(overhang_id: str, body: SubDomainMergeRequest) -> dict:
     a = next((sd for sd in spec.sub_domains if sd.id == body.sub_domain_a_id), None)
     b = next((sd for sd in spec.sub_domains if sd.id == body.sub_domain_b_id), None)
     if a is None or b is None:
-        raise HTTPException(404, detail=(
-            f"One or both sub-domains not found on overhang {overhang_id!r}."
-        ))
+        raise HTTPException(
+            404,
+            detail=(f"One or both sub-domains not found on overhang {overhang_id!r}."),
+        )
     if a.id == b.id:
         raise HTTPException(422, detail="Cannot merge a sub-domain with itself.")
 
@@ -6628,29 +7295,35 @@ def merge_sub_domains(overhang_id: str, body: SubDomainMergeRequest) -> dict:
     if a.start_bp_offset > b.start_bp_offset:
         a, b = b, a
     if a.start_bp_offset + a.length_bp != b.start_bp_offset:
-        raise HTTPException(422, detail=(
-            f"Sub-domains {a.name!r} and {b.name!r} are not adjacent "
-            f"(a ends at {a.start_bp_offset + a.length_bp}, "
-            f"b starts at {b.start_bp_offset})."
-        ))
+        raise HTTPException(
+            422,
+            detail=(
+                f"Sub-domains {a.name!r} and {b.name!r} are not adjacent "
+                f"(a ends at {a.start_bp_offset + a.length_bp}, "
+                f"b starts at {b.start_bp_offset})."
+            ),
+        )
 
     # Phase 5: a sub-domain that is the endpoint of an OverhangBinding can't
     # disappear without orphaning that binding. Reject the merge with 409 and
     # list the offending binding ids so the UI can offer to remove them.
-    _bound: set[str] = (
-        {bb.sub_domain_a_id for bb in design.overhang_bindings}
-        | {bb.sub_domain_b_id for bb in design.overhang_bindings}
-    )
+    _bound: set[str] = {bb.sub_domain_a_id for bb in design.overhang_bindings} | {
+        bb.sub_domain_b_id for bb in design.overhang_bindings
+    }
     referencing = [
-        bb.id for bb in design.overhang_bindings
+        bb.id
+        for bb in design.overhang_bindings
         if a.id in (bb.sub_domain_a_id, bb.sub_domain_b_id)
         or b.id in (bb.sub_domain_a_id, bb.sub_domain_b_id)
     ]
     if (a.id in _bound or b.id in _bound) and referencing:
-        raise HTTPException(409, detail={
-            "error": "sub_domain_referenced_by_binding",
-            "binding_ids": referencing,
-        })
+        raise HTTPException(
+            409,
+            detail={
+                "error": "sub_domain_referenced_by_binding",
+                "binding_ids": referencing,
+            },
+        )
 
     if a.sequence_override is not None or b.sequence_override is not None:
         # Fill missing side with 'N'×length to keep the override length valid.
@@ -6660,15 +7333,23 @@ def merge_sub_domains(overhang_id: str, body: SubDomainMergeRequest) -> dict:
     else:
         merged_override = None
 
-    survivor = a.model_copy(update={
-        "length_bp": a.length_bp + b.length_bp,
-        "sequence_override": merged_override,
-        "notes": (a.notes + (" + " + b.notes if b.notes else "")) if a.notes else b.notes,
-        "tm_celsius": None, "gc_percent": None,
-        "hairpin_warning": False, "dimer_warning": False,
-    })
+    survivor = a.model_copy(
+        update={
+            "length_bp": a.length_bp + b.length_bp,
+            "sequence_override": merged_override,
+            "notes": (a.notes + (" + " + b.notes if b.notes else ""))
+            if a.notes
+            else b.notes,
+            "tm_celsius": None,
+            "gc_percent": None,
+            "hairpin_warning": False,
+            "dimer_warning": False,
+        }
+    )
 
-    new_sub_doms = [survivor if sd.id == a.id else sd for sd in spec.sub_domains if sd.id != b.id]
+    new_sub_doms = [
+        survivor if sd.id == a.id else sd for sd in spec.sub_domains if sd.id != b.id
+    ]
     new_sub_doms.sort(key=lambda sd: sd.start_bp_offset)
 
     def _fn(d: Design) -> Design:
@@ -6678,7 +7359,7 @@ def merge_sub_domains(overhang_id: str, body: SubDomainMergeRequest) -> dict:
         return _replace_ovhg(d, cur.model_copy(update={"sub_domains": new_sub_doms}))
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='overhang-bulk',
+        op_kind="overhang-bulk",
         label=f"Merge sub-domains {a.name!r} + {b.name!r}",
         params={
             "overhang_id": overhang_id,
@@ -6697,15 +7378,21 @@ def merge_sub_domains(overhang_id: str, body: SubDomainMergeRequest) -> dict:
 
 class SubDomainPatchRequest(BaseModel):
     name: Optional[str] = None
-    color: Optional[str] = None              # "#RRGGBB" or empty-string / null to clear
-    sequence_override: Optional[str] = None  # ACGTN of length == length_bp; empty/null clears
+    color: Optional[str] = None  # "#RRGGBB" or empty-string / null to clear
+    sequence_override: Optional[str] = (
+        None  # ACGTN of length == length_bp; empty/null clears
+    )
     rotation_theta_deg: Optional[float] = None
     rotation_phi_deg: Optional[float] = None
     notes: Optional[str] = None
 
 
-@router.patch("/design/overhang/{overhang_id}/sub-domains/{sub_domain_id}", status_code=200)
-def patch_sub_domain(overhang_id: str, sub_domain_id: str, body: SubDomainPatchRequest) -> dict:
+@router.patch(
+    "/design/overhang/{overhang_id}/sub-domains/{sub_domain_id}", status_code=200
+)
+def patch_sub_domain(
+    overhang_id: str, sub_domain_id: str, body: SubDomainPatchRequest
+) -> dict:
     """Patch a subset of sub-domain fields.
 
     Per the locked design: changing ``sequence_override`` invalidates the
@@ -6718,9 +7405,12 @@ def patch_sub_domain(overhang_id: str, sub_domain_id: str, body: SubDomainPatchR
     spec = _find_ovhg_or_404(design, overhang_id)
     sd = next((s for s in spec.sub_domains if s.id == sub_domain_id), None)
     if sd is None:
-        raise HTTPException(404, detail=(
-            f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
-        ))
+        raise HTTPException(
+            404,
+            detail=(
+                f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
+            ),
+        )
 
     fields_set = body.model_fields_set
     updates: dict = {}
@@ -6745,14 +7435,17 @@ def patch_sub_domain(overhang_id: str, sub_domain_id: str, body: SubDomainPatchR
         else:
             override = body.sequence_override.upper()
             if len(override) != sd.length_bp:
-                raise HTTPException(422, detail=(
-                    f"sequence_override length ({len(override)}) must equal "
-                    f"length_bp ({sd.length_bp})."
-                ))
+                raise HTTPException(
+                    422,
+                    detail=(
+                        f"sequence_override length ({len(override)}) must equal "
+                        f"length_bp ({sd.length_bp})."
+                    ),
+                )
             if any(b not in _DNA_BASES for b in override):
-                raise HTTPException(422, detail=(
-                    "sequence_override must contain only ACGTN bases."
-                ))
+                raise HTTPException(
+                    422, detail=("sequence_override must contain only ACGTN bases.")
+                )
             updates["sequence_override"] = override
         sequence_override_changed = True
 
@@ -6766,22 +7459,29 @@ def patch_sub_domain(overhang_id: str, sub_domain_id: str, body: SubDomainPatchR
     if not updates:
         # Nothing changed — return current state.
         from backend.core.validator import validate_design as _vd
+
         return _design_response(design, _vd(design))
 
     # If the override changed, invalidate the cache and recompute annotations.
     if sequence_override_changed:
-        updates.update({
-            "tm_celsius": None, "gc_percent": None,
-            "hairpin_warning": False, "dimer_warning": False,
-        })
+        updates.update(
+            {
+                "tm_celsius": None,
+                "gc_percent": None,
+                "hairpin_warning": False,
+                "dimer_warning": False,
+            }
+        )
 
     new_sd = sd.model_copy(update=updates)
 
     if sequence_override_changed:
         # Recompute annotations from the new resolved sequence.
-        new_seq = (new_sd.sequence_override
-                   if new_sd.sequence_override is not None
-                   else _resolve_sub_domain_sequence(spec, new_sd))
+        new_seq = (
+            new_sd.sequence_override
+            if new_sd.sequence_override is not None
+            else _resolve_sub_domain_sequence(spec, new_sd)
+        )
         ann = _compute_sub_domain_annotations(
             new_seq, na_mM=design.tm_settings.na_mM, conc_nM=design.tm_settings.conc_nM
         )
@@ -6799,7 +7499,7 @@ def patch_sub_domain(overhang_id: str, sub_domain_id: str, body: SubDomainPatchR
         return updated
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='overhang-bulk',
+        op_kind="overhang-bulk",
         label=f"Patch sub-domain {sd.name!r}",
         params={
             "overhang_id": overhang_id,
@@ -6819,6 +7519,7 @@ def patch_sub_domain(overhang_id: str, sub_domain_id: str, body: SubDomainPatchR
         updated = _apply_boundary_hairpin_warnings(updated, overhang_id)
         design_state.set_design(updated)
         from backend.core.validator import validate_design as _vd
+
         report = _vd(updated)
     return _design_response(updated, report)
 
@@ -6837,9 +7538,12 @@ def recompute_sub_domain_annotations(overhang_id: str, sub_domain_id: str) -> di
     spec = _find_ovhg_or_404(design, overhang_id)
     sd = next((s for s in spec.sub_domains if s.id == sub_domain_id), None)
     if sd is None:
-        raise HTTPException(404, detail=(
-            f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
-        ))
+        raise HTTPException(
+            404,
+            detail=(
+                f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
+            ),
+        )
 
     seq = _resolve_sub_domain_sequence(spec, sd)
     ann = _compute_sub_domain_annotations(
@@ -6855,7 +7559,7 @@ def recompute_sub_domain_annotations(overhang_id: str, sub_domain_id: str) -> di
         return _replace_ovhg(d, cur.model_copy(update={"sub_domains": new_sub_doms}))
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='overhang-bulk',
+        op_kind="overhang-bulk",
         label=f"Recompute annotations: {sd.name!r}",
         params={
             "overhang_id": overhang_id,
@@ -6871,12 +7575,19 @@ def recompute_sub_domain_annotations(overhang_id: str, sub_domain_id: str) -> di
     updated = _apply_boundary_hairpin_warnings(updated, overhang_id)
     design_state.set_design(updated)
     from backend.core.validator import validate_design as _vd
+
     report = _vd(updated)
     # Refresh the local new_sd reference for the response payload — boundary
     # detection may have flipped hairpin_warning on this sub-domain.
     cur_ovhg = next((o for o in updated.overhangs if o.id == overhang_id), None)
-    cur_sd = next((s for s in (cur_ovhg.sub_domains if cur_ovhg else [])
-                   if s.id == sub_domain_id), None)
+    cur_sd = next(
+        (
+            s
+            for s in (cur_ovhg.sub_domains if cur_ovhg else [])
+            if s.id == sub_domain_id
+        ),
+        None,
+    )
     return {
         **_design_response(updated, report),
         "sub_domain": (cur_sd or new_sd).model_dump(),
@@ -6922,16 +7633,22 @@ def generate_sub_domain_random(
     spec = _find_ovhg_or_404(design, overhang_id)
     sd = next((s for s in spec.sub_domains if s.id == sub_domain_id), None)
     if sd is None:
-        raise HTTPException(404, detail=(
-            f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
-        ))
+        raise HTTPException(
+            404,
+            detail=(
+                f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
+            ),
+        )
 
     # 1. Block on existing warnings — user should fix those first.
     if sd.hairpin_warning or sd.dimer_warning:
-        raise HTTPException(422, detail=(
-            f"Sub-domain {sd.name!r} has an active hairpin/dimer warning; "
-            f"resolve it before regenerating."
-        ))
+        raise HTTPException(
+            422,
+            detail=(
+                f"Sub-domain {sd.name!r} has an active hairpin/dimer warning; "
+                f"resolve it before regenerating."
+            ),
+        )
 
     # 2. Build a temp sub-domain list where this target has NO override
     #    (so the generator fills it) and every other sub-domain's resolved
@@ -6960,7 +7677,8 @@ def generate_sub_domain_random(
     scaffold = design.scaffold()
     scaffold_seq = scaffold.sequence if scaffold and scaffold.sequence else ""
     staple_seqs = [
-        s.sequence for s in design.strands
+        s.sequence
+        for s in design.strands
         if s.strand_type != StrandType.SCAFFOLD and s.sequence
     ]
 
@@ -6968,7 +7686,9 @@ def generate_sub_domain_random(
     #    sequence with the locked overrides verbatim and the target slot
     #    filled with a freshly generated piece.
     full_seq = generate_overhang_sequence_with_overrides(
-        scaffold_seq, staple_seqs, temp_sub_doms,
+        scaffold_seq,
+        staple_seqs,
+        temp_sub_doms,
     )
 
     # 5. Slice out the target sub-domain's segment.
@@ -6976,10 +7696,13 @@ def generate_sub_domain_random(
     end = start + sd.length_bp
     new_override = full_seq[start:end]
     if len(new_override) != sd.length_bp:
-        raise HTTPException(500, detail=(
-            f"Sub-domain generator returned wrong length "
-            f"({len(new_override)} vs {sd.length_bp})."
-        ))
+        raise HTTPException(
+            500,
+            detail=(
+                f"Sub-domain generator returned wrong length "
+                f"({len(new_override)} vs {sd.length_bp})."
+            ),
+        )
 
     # 6. Apply via mutate_with_feature_log. The patch sets sequence_override
     #    and recomputes annotations from the new resolved sequence.
@@ -6995,14 +7718,16 @@ def generate_sub_domain_random(
         cur = next((o for o in d.overhangs if o.id == overhang_id), None)
         if cur is None:
             raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
-        updated_ = _replace_ovhg(d, cur.model_copy(update={"sub_domains": new_sub_doms}))
+        updated_ = _replace_ovhg(
+            d, cur.model_copy(update={"sub_domains": new_sub_doms})
+        )
         # Re-splice into the assembled strand sequence so downstream consumers
         # (atomistic, CSV export, etc.) see the new bases.
         updated_ = _resplice_overhang_in_strand(updated_, overhang_id, cur.strand_id)
         return updated_
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='overhang-bulk',
+        op_kind="overhang-bulk",
         label=f"Generate sub-domain {sd.name!r}",
         params={
             "overhang_id": overhang_id,
@@ -7020,8 +7745,14 @@ def generate_sub_domain_random(
     report = validate_design(updated)
 
     cur_ovhg = next((o for o in updated.overhangs if o.id == overhang_id), None)
-    cur_sd = next((s for s in (cur_ovhg.sub_domains if cur_ovhg else [])
-                   if s.id == sub_domain_id), None)
+    cur_sd = next(
+        (
+            s
+            for s in (cur_ovhg.sub_domains if cur_ovhg else [])
+            if s.id == sub_domain_id
+        ),
+        None,
+    )
     return {
         **_design_response(updated, report),
         "sub_domain": (cur_sd or new_sd).model_dump(),
@@ -7043,11 +7774,14 @@ def patch_tm_settings(body: TmSettingsPatchRequest) -> dict:
     design = design_state.get_or_404()
 
     new_na = design.tm_settings.na_mM if body.na_mM is None else float(body.na_mM)
-    new_conc = design.tm_settings.conc_nM if body.conc_nM is None else float(body.conc_nM)
+    new_conc = (
+        design.tm_settings.conc_nM if body.conc_nM is None else float(body.conc_nM)
+    )
     if new_na <= 0 or new_conc <= 0:
         raise HTTPException(422, detail="na_mM and conc_nM must be positive.")
 
     from backend.core.models import TmSettings
+
     new_settings = TmSettings(na_mM=new_na, conc_nM=new_conc)
 
     # Invalidate ALL sub-domain Tm caches across every overhang. GC / hairpin /
@@ -7058,20 +7792,25 @@ def patch_tm_settings(body: TmSettingsPatchRequest) -> dict:
         if not ovhg.sub_domains:
             new_overhangs.append(ovhg)
             continue
-        new_sub_doms = [sd.model_copy(update={"tm_celsius": None}) for sd in ovhg.sub_domains]
+        new_sub_doms = [
+            sd.model_copy(update={"tm_celsius": None}) for sd in ovhg.sub_domains
+        ]
         new_overhangs.append(ovhg.model_copy(update={"sub_domains": new_sub_doms}))
 
     def _fn(d: Design) -> Design:
-        return d.model_copy(update={
-            "tm_settings": new_settings,
-            "overhangs":   new_overhangs,
-        })
+        return d.model_copy(
+            update={
+                "tm_settings": new_settings,
+                "overhangs": new_overhangs,
+            }
+        )
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='overhang-bulk',
+        op_kind="overhang-bulk",
         label=f"Tm settings: Na+ {new_na:g} mM, oligo {new_conc:g} nM",
         params={
-            "na_mM": new_na, "conc_nM": new_conc,
+            "na_mM": new_na,
+            "conc_nM": new_conc,
             "action": "tm-settings-update",
         },
         fn=_fn,
@@ -7180,12 +7919,13 @@ def create_overhang_connection(body: OverhangConnectionCreateRequest) -> dict:
     )
 
     from backend.core.cluster_reconcile import MutationReport
+
     bridge_id = f"__lnk__{conn.id}"
 
     def _fn(d: Design):
-        nxt = d.model_copy(update={
-            "overhang_connections": [*d.overhang_connections, conn]
-        })
+        nxt = d.model_copy(
+            update={"overhang_connections": [*d.overhang_connections, conn]}
+        )
         nxt = assign_overhang_connection_names(nxt)
         nxt = generate_linker_topology(nxt, conn)
         # Auto-assign so the new linker complement (binds_overhang_id) carries the
@@ -7193,29 +7933,42 @@ def create_overhang_connection(body: OverhangConnectionCreateRequest) -> dict:
         # scaffold is sequenced. Targeted to the two overhangs' own strands, their
         # binders, and the strands on the new __lnk__ bridge helix, so a hand-typed
         # sequence on an unrelated staple survives the connection.
-        from backend.core.sequences import overhang_dependent_strand_ids, reassign_strands
+        from backend.core.sequences import (
+            overhang_dependent_strand_ids,
+            reassign_strands,
+        )
+
         affected = overhang_dependent_strand_ids(
-            nxt, [conn.overhang_a_id, conn.overhang_b_id], extra_helix_ids=[bridge_id])
+            nxt, [conn.overhang_a_id, conn.overhang_b_id], extra_helix_ids=[bridge_id]
+        )
         nxt = reassign_strands(nxt, affected)
         # The virtual __lnk__ bridge helix is invisible to clustering — orphan it
         # so the reconciler doesn't pull it into a cluster via lattice proximity.
         return nxt, MutationReport(new_helix_origins={bridge_id: None})
 
-    a_label = next((o.label for o in design.overhangs if o.id == body.overhang_a_id), body.overhang_a_id[:10])
-    b_label = next((o.label for o in design.overhangs if o.id == body.overhang_b_id), body.overhang_b_id[:10])
+    a_label = next(
+        (o.label for o in design.overhangs if o.id == body.overhang_a_id),
+        body.overhang_a_id[:10],
+    )
+    b_label = next(
+        (o.label for o in design.overhangs if o.id == body.overhang_b_id),
+        body.overhang_b_id[:10],
+    )
     label = f"Linker {body.linker_type} {a_label}↔{b_label} ({body.length_value:g} {body.length_unit})"
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='linker-add',
+        op_kind="linker-add",
         label=label,
-        params=body.model_dump(mode='json'),
+        params=body.model_dump(mode="json"),
         fn=_fn,
     )
     return _design_response(updated, report)
 
 
 @router.patch("/design/overhang-connections/{conn_id}", status_code=200)
-def patch_overhang_connection(conn_id: str, body: OverhangConnectionPatchRequest) -> dict:
+def patch_overhang_connection(
+    conn_id: str, body: OverhangConnectionPatchRequest
+) -> dict:
     """Update name / length_value / length_unit on an existing connection.
 
     Changing length_value or length_unit auto-rebuilds the linker topology
@@ -7239,13 +7992,23 @@ def patch_overhang_connection(conn_id: str, body: OverhangConnectionPatchRequest
         if not new_name:
             raise HTTPException(400, detail="name must be a non-empty string.")
         clash = next(
-            (c for c in design.overhang_connections if c.id != conn_id and c.name == new_name),
+            (
+                c
+                for c in design.overhang_connections
+                if c.id != conn_id and c.name == new_name
+            ),
             None,
         )
         if clash is not None:
-            raise HTTPException(400, detail=f"Connection name {new_name!r} is already in use.")
+            raise HTTPException(
+                400, detail=f"Connection name {new_name!r} is already in use."
+            )
         patch["name"] = new_name
-    if "length_value" in patch and patch["length_value"] is not None and patch["length_value"] < 0:
+    if (
+        "length_value" in patch
+        and patch["length_value"] is not None
+        and patch["length_value"] < 0
+    ):
         raise HTTPException(400, detail="length_value must be non-negative.")
     # bridge_sequence: "" → clear, "ACGT…" → assign (uppercased, ACGTN only),
     # omitted → leave untouched. Run this BEFORE the `if v is not None` filter
@@ -7263,17 +8026,20 @@ def patch_overhang_connection(conn_id: str, body: OverhangConnectionPatchRequest
                 bridge_clear = True
                 del patch["bridge_sequence"]
 
-    new_target = target.model_copy(update={k: v for k, v in patch.items() if v is not None})
+    new_target = target.model_copy(
+        update={k: v for k, v in patch.items() if v is not None}
+    )
     if bridge_clear:
         new_target = new_target.model_copy(update={"bridge_sequence": None})
-    new_list = [new_target if c.id == conn_id else c for c in design.overhang_connections]
+    new_list = [
+        new_target if c.id == conn_id else c for c in design.overhang_connections
+    ]
     updated = design.model_copy(update={"overhang_connections": new_list})
 
     # Auto-rebuild the linker topology if length changed (length_value or unit).
     length_changed = (
-        ("length_value" in patch and new_target.length_value != target.length_value)
-        or ("length_unit" in patch and new_target.length_unit != target.length_unit)
-    )
+        "length_value" in patch and new_target.length_value != target.length_value
+    ) or ("length_unit" in patch and new_target.length_unit != target.length_unit)
     if length_changed:
         # Capture the EXISTING complement-domain (binding) bp ranges so they
         # survive the bridge regeneration. Without this, the user's manually-
@@ -7285,10 +8051,15 @@ def patch_overhang_connection(conn_id: str, body: OverhangConnectionPatchRequest
         # 5'→3' order matching how _make_complement_domain produced them.
         prev_complements: dict[str, list[dict]] = {}
         for strand in updated.strands:
-            if not strand.id.startswith(bridge_helix_id + "__"): continue
+            if not strand.id.startswith(bridge_helix_id + "__"):
+                continue
             comps = [
-                {"helix_id": d.helix_id, "start_bp": d.start_bp,
-                 "end_bp":   d.end_bp,   "direction": d.direction}
+                {
+                    "helix_id": d.helix_id,
+                    "start_bp": d.start_bp,
+                    "end_bp": d.end_bp,
+                    "direction": d.direction,
+                }
                 for d in strand.domains
                 if d.helix_id != bridge_helix_id
             ]
@@ -7312,22 +8083,35 @@ def patch_overhang_connection(conn_id: str, body: OverhangConnectionPatchRequest
                 snap_by_helix = {s["helix_id"]: s for s in snaps}
                 patched_doms = []
                 for d in strand.domains:
-                    s = snap_by_helix.get(d.helix_id) if d.helix_id != bridge_helix_id else None
+                    s = (
+                        snap_by_helix.get(d.helix_id)
+                        if d.helix_id != bridge_helix_id
+                        else None
+                    )
                     if s is not None:
-                        patched_doms.append(d.model_copy(update={
-                            "start_bp": s["start_bp"],
-                            "end_bp":   s["end_bp"],
-                            "direction": s["direction"],
-                        }))
+                        patched_doms.append(
+                            d.model_copy(
+                                update={
+                                    "start_bp": s["start_bp"],
+                                    "end_bp": s["end_bp"],
+                                    "direction": s["direction"],
+                                }
+                            )
+                        )
                     else:
                         patched_doms.append(d)
-                new_strands.append(strand.model_copy(update={
-                    "domains": patched_doms,
-                    "sequence": None,         # length may have changed; clear
-                }))
+                new_strands.append(
+                    strand.model_copy(
+                        update={
+                            "domains": patched_doms,
+                            "sequence": None,  # length may have changed; clear
+                        }
+                    )
+                )
             updated = updated.model_copy(update={"strands": new_strands})
 
     from backend.core.cluster_reconcile import MutationReport
+
     bridge_id = f"__lnk__{conn_id}"
     mreport = MutationReport(new_helix_origins={bridge_id: None})
     updated, report = design_state.replace_with_reconcile(updated, mreport)
@@ -7351,8 +8135,14 @@ def delete_overhang_connection(conn_id: str) -> dict:
     if conn is None:
         raise HTTPException(404, detail=f"Overhang connection {conn_id!r} not found.")
 
-    a_label = next((o.label for o in design.overhangs if o.id == conn.overhang_a_id), conn.overhang_a_id[:10])
-    b_label = next((o.label for o in design.overhangs if o.id == conn.overhang_b_id), conn.overhang_b_id[:10])
+    a_label = next(
+        (o.label for o in design.overhangs if o.id == conn.overhang_a_id),
+        conn.overhang_a_id[:10],
+    )
+    b_label = next(
+        (o.label for o in design.overhangs if o.id == conn.overhang_b_id),
+        conn.overhang_b_id[:10],
+    )
     label = f"Delete linker {conn.name or conn.id[:8]} ({a_label}↔{b_label})"
 
     def _fn(d: Design) -> Design:
@@ -7361,11 +8151,14 @@ def delete_overhang_connection(conn_id: str) -> dict:
         return remove_linker_topology(nxt, conn_id)
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='linker-delete',
+        op_kind="linker-delete",
         label=label,
-        params={"conn_id": conn_id, "linker_type": conn.linker_type,
-                "overhang_a_id": conn.overhang_a_id,
-                "overhang_b_id": conn.overhang_b_id},
+        params={
+            "conn_id": conn_id,
+            "linker_type": conn.linker_type,
+            "overhang_a_id": conn.overhang_a_id,
+            "overhang_b_id": conn.overhang_b_id,
+        },
         fn=_fn,
     )
     return _design_response(updated, report)
@@ -7378,16 +8171,17 @@ def delete_overhang_connection(conn_id: str) -> dict:
 # in v1 (resize overhangs + set sequences + recreate the real connection/binding);
 # these endpoints only store/manage the candidate specs.
 
+
 class ConnectionVersionCreateRequest(BaseModel):
     overhang_a_id: str
     overhang_b_id: str
-    connection_type: str                       # CT variant id
+    connection_type: str  # CT variant id
     overhang_a_seq: Optional[str] = None
     overhang_b_seq: Optional[str] = None
     bridge_length: int = 0
     bridge_seq: Optional[str] = None
     applied: bool = False
-    name: Optional[str] = None                 # auto V1/V2/… per pair if omitted
+    name: Optional[str] = None  # auto V1/V2/… per pair if omitted
 
 
 class ConnectionVersionPatchRequest(BaseModel):
@@ -7407,7 +8201,9 @@ def _cv_clean_seq(s) -> Optional[str]:
     return cleaned or None
 
 
-def _cv_sequence_for_live_overhang(d: Design, overhang_id: str, seq: Optional[str]) -> Optional[str]:
+def _cv_sequence_for_live_overhang(
+    d: Design, overhang_id: str, seq: Optional[str]
+) -> Optional[str]:
     """Return *seq* adjusted to the overhang's current backing-domain length.
 
     Connection versions remember sequence content, but the live overhang geometry
@@ -7473,7 +8269,9 @@ def create_connection_version(body: ConnectionVersionCreateRequest) -> dict:
         if oid not in ids:
             raise HTTPException(404, detail=f"Overhang {oid!r} not found.")
     if body.overhang_a_id == body.overhang_b_id:
-        raise HTTPException(400, detail="A connection version needs two distinct overhangs.")
+        raise HTTPException(
+            400, detail="A connection version needs two distinct overhangs."
+        )
 
     version = ConnectionVersion(
         name=(body.name or "").strip(),
@@ -7497,7 +8295,9 @@ def create_connection_version(body: ConnectionVersionCreateRequest) -> dict:
 
 
 @router.patch("/design/connection-versions/{version_id}", status_code=200)
-def patch_connection_version(version_id: str, body: ConnectionVersionPatchRequest) -> dict:
+def patch_connection_version(
+    version_id: str, body: ConnectionVersionPatchRequest
+) -> dict:
     """Update a candidate version's fields. Setting applied=True clears applied
     on the pair's other versions (at most one materialized per pair)."""
     design = design_state.get_or_404()
@@ -7546,12 +8346,17 @@ def delete_connection_version(version_id: str) -> dict:
 
 # ── Connection-version mapping helpers (mirror frontend ct_icons.js) ───────────
 
+
 def _cv_attach_pair(t: str):
     if isinstance(t, str):
-        if t.startswith("end-to-root"): return ("free_end", "root")
-        if t.startswith("root-to-end"): return ("root", "free_end")
-        if t.startswith("root-to-root"): return ("root", "root")
-        if t.startswith("end-to-end"):   return ("free_end", "free_end")
+        if t.startswith("end-to-root"):
+            return ("free_end", "root")
+        if t.startswith("root-to-end"):
+            return ("root", "free_end")
+        if t.startswith("root-to-root"):
+            return ("root", "root")
+        if t.startswith("end-to-end"):
+            return ("free_end", "free_end")
     return ("root", "root")
 
 
@@ -7575,8 +8380,9 @@ def _cv_sub_domain_at_attach(d: Design, ovhg_id: str, attach: str):
     return (ordered[0] if attach == "root" else ordered[-1]).id
 
 
-def _cv_create_bound_binding(d: Design, a_id: str, b_id: str, attach_a: str,
-                             attach_b: str, connection_type: str) -> Design:
+def _cv_create_bound_binding(
+    d: Design, a_id: str, b_id: str, attach_a: str, attach_b: str, connection_type: str
+) -> Design:
     """Materialize a DIRECT connection (root-to-root OR end-to-root) as a single
     non-consuming `OverhangBinding`, relocated on apply so the duplex renders
     immediately and overhang B's embedded-strand bond is left stretched.
@@ -7603,10 +8409,11 @@ def _cv_create_bound_binding(d: Design, a_id: str, b_id: str, attach_a: str,
     # created separately by the frontend's _ensureDuplexForPair.
     def _sd_len(sd_id: str) -> Optional[int]:
         for o in d.overhangs:
-            for sd in (o.sub_domains or []):
+            for sd in o.sub_domains or []:
                 if sd.id == sd_id:
                     return sd.length_bp
         return None
+
     if _sd_len(sd_a) != _sd_len(sd_b):
         return d
 
@@ -7615,9 +8422,14 @@ def _cv_create_bound_binding(d: Design, a_id: str, b_id: str, attach_a: str,
     while f"B{n}" in used:
         n += 1
     binding = OverhangBinding(
-        name=f"B{n}", sub_domain_a_id=sd_a, sub_domain_b_id=sd_b,
-        overhang_a_id=a_id, overhang_b_id=b_id,
-        driver_oh_id=a_id, driven_oh_id=b_id, connection_type=connection_type,
+        name=f"B{n}",
+        sub_domain_a_id=sd_a,
+        sub_domain_b_id=sd_b,
+        overhang_a_id=a_id,
+        overhang_b_id=b_id,
+        driver_oh_id=a_id,
+        driven_oh_id=b_id,
+        connection_type=connection_type,
         bound=True,
     )
     topology = compute_bind_topology(d, binding, driver_side="a")
@@ -7633,21 +8445,40 @@ def _cv_create_bound_binding(d: Design, a_id: str, b_id: str, attach_a: str,
     # at geometry time. Zero both first so the placement is measured against the
     # freshly-relocated (un-seated, identity) geometry, then store the result.
     from backend.core.direct_relax import duplex_midpoint_placement
-    d = d.model_copy(update={"overhangs": [
-        o.model_copy(update={"rotation": [0.0, 0.0, 0.0, 1.0],
-                             "translation": [0.0, 0.0, 0.0]}) if o.id == a_id else o
-        for o in d.overhangs]})
+
+    d = d.model_copy(
+        update={
+            "overhangs": [
+                o.model_copy(
+                    update={
+                        "rotation": [0.0, 0.0, 0.0, 1.0],
+                        "translation": [0.0, 0.0, 0.0],
+                    }
+                )
+                if o.id == a_id
+                else o
+                for o in d.overhangs
+            ]
+        }
+    )
     placement = duplex_midpoint_placement(d, a_id, b_id)
     if placement is not None:
         rot, trans = placement
-        d = d.model_copy(update={"overhangs": [
-            o.model_copy(update={"rotation": rot, "translation": trans})
-            if o.id == a_id else o
-            for o in d.overhangs]})
+        d = d.model_copy(
+            update={
+                "overhangs": [
+                    o.model_copy(update={"rotation": rot, "translation": trans})
+                    if o.id == a_id
+                    else o
+                    for o in d.overhangs
+                ]
+            }
+        )
     # Promote the just-placed pose onto a first-class child DUPLEX cluster (sidebar-listed,
     # gizmo-movable, drift-free) — geometry+axis neutral (proven on 2x2_OH_test).
     # [[overhang-duplex-cluster]] P1b.
     from backend.core.duplex_cluster import materialize_duplex_cluster
+
     d, _cid = materialize_duplex_cluster(d, a_id)
     return d
 
@@ -7666,7 +8497,9 @@ def apply_connection_version(version_id: str) -> dict:
     from backend.core.binding_relax import revert_bind_topology
     from backend.core.cluster_reconcile import MutationReport
     from backend.core.lattice import (
-        generate_linker_topology, remove_linker_topology, assign_overhang_connection_names,
+        generate_linker_topology,
+        remove_linker_topology,
+        assign_overhang_connection_names,
     )
 
     design = design_state.get_or_404()
@@ -7689,30 +8522,49 @@ def apply_connection_version(version_id: str) -> dict:
         applied_a_seq = _cv_sequence_for_live_overhang(d, a_id, v.overhang_a_seq)
         applied_b_seq = _cv_sequence_for_live_overhang(d, b_id, v.overhang_b_seq)
         if applied_a_seq:
-            d = _build_overhang_patch(d, a_id, OverhangPatchRequest(sequence=applied_a_seq))[0]
+            d = _build_overhang_patch(
+                d, a_id, OverhangPatchRequest(sequence=applied_a_seq)
+            )[0]
         if applied_b_seq:
-            d = _build_overhang_patch(d, b_id, OverhangPatchRequest(sequence=applied_b_seq))[0]
+            d = _build_overhang_patch(
+                d, b_id, OverhangPatchRequest(sequence=applied_b_seq)
+            )[0]
+
         # 2. Tear down EVERY materialized connection / binding that shares either
         #    overhang — an overhang can be in only one applied connection, so any
         #    prior one involving a_id or b_id (even with a third overhang) is
         #    unapplied here before the new one is created.
         def _involves(x):
-            return a_id in (x.overhang_a_id, x.overhang_b_id) or \
-                   b_id in (x.overhang_a_id, x.overhang_b_id)
+            return a_id in (x.overhang_a_id, x.overhang_b_id) or b_id in (
+                x.overhang_a_id,
+                x.overhang_b_id,
+            )
+
         for c in list(d.overhang_connections):
             if _involves(c):
                 d = remove_linker_topology(
-                    d.model_copy(update={"overhang_connections":
-                                         [x for x in d.overhang_connections if x.id != c.id]}),
-                    c.id)
+                    d.model_copy(
+                        update={
+                            "overhang_connections": [
+                                x for x in d.overhang_connections if x.id != c.id
+                            ]
+                        }
+                    ),
+                    c.id,
+                )
         # Bound direct bindings relocated the driven OH's domain — revert that
         # relocation (restore the driven helix + domain + crossovers) BEFORE dropping
         # the binding, else the relocated domain is orphaned on the driver helix.
         for bd in [b for b in d.overhang_bindings if _involves(b)]:
             if bd.bound and bd.prior_driven_topology:
                 d = revert_bind_topology(d, bd.prior_driven_topology)
-        d = d.model_copy(update={"overhang_bindings": [
-            b for b in d.overhang_bindings if not _involves(b)]})
+        d = d.model_copy(
+            update={
+                "overhang_bindings": [
+                    b for b in d.overhang_bindings if not _involves(b)
+                ]
+            }
+        )
         # 3. Create the version's connection type.
         report = None
         bridge_helix_ids: list[str] = []
@@ -7724,14 +8576,20 @@ def apply_connection_version(version_id: str) -> dict:
             d = _cv_create_bound_binding(d, a_id, b_id, attach_a, attach_b, vtype)
         else:
             conn = OverhangConnection(
-                overhang_a_id=a_id, overhang_a_attach=attach_a,
-                overhang_b_id=b_id, overhang_b_attach=attach_b,
+                overhang_a_id=a_id,
+                overhang_a_attach=attach_a,
+                overhang_b_id=b_id,
+                overhang_b_attach=attach_b,
                 linker_type=_cv_linker_type(vtype),
                 length_value=0 if indirect else max(1, int(v.bridge_length or 1)),
-                length_unit="bp", bridge_sequence=bridge_seq,
+                length_unit="bp",
+                bridge_sequence=bridge_seq,
             )
             d = assign_overhang_connection_names(
-                d.model_copy(update={"overhang_connections": [*d.overhang_connections, conn]}))
+                d.model_copy(
+                    update={"overhang_connections": [*d.overhang_connections, conn]}
+                )
+            )
             d = generate_linker_topology(d, conn)
             bridge_helix_ids.append(f"__lnk__{conn.id}")
             report = MutationReport(new_helix_origins={f"__lnk__{conn.id}": None})
@@ -7740,20 +8598,41 @@ def apply_connection_version(version_id: str) -> dict:
         #     simulation — no-op until the scaffold is sequenced. Targeted to the
         #     pair's own strands, their binders and any new __lnk__ bridge helix,
         #     so hand-typed sequences elsewhere in the design are left alone.
-        from backend.core.sequences import overhang_dependent_strand_ids, reassign_strands
+        from backend.core.sequences import (
+            overhang_dependent_strand_ids,
+            reassign_strands,
+        )
+
         affected = overhang_dependent_strand_ids(
-            d, [a_id, b_id], extra_helix_ids=bridge_helix_ids)
+            d, [a_id, b_id], extra_helix_ids=bridge_helix_ids
+        )
         d = reassign_strands(d, affected)
         # 4. Mark this version applied; clear `applied` on every version that
         #    shares either overhang (mirrors the topology teardown in step 2).
-        d = d.model_copy(update={"connection_versions": [
-            ver.model_copy(update={
-                "applied": ver.id == version_id,
-                **({"overhang_a_seq": applied_a_seq} if ver.id == version_id and applied_a_seq else {}),
-                **({"overhang_b_seq": applied_b_seq} if ver.id == version_id and applied_b_seq else {}),
-            })
-            if (ver.id == version_id or _involves(ver)) else ver
-            for ver in d.connection_versions]})
+        d = d.model_copy(
+            update={
+                "connection_versions": [
+                    ver.model_copy(
+                        update={
+                            "applied": ver.id == version_id,
+                            **(
+                                {"overhang_a_seq": applied_a_seq}
+                                if ver.id == version_id and applied_a_seq
+                                else {}
+                            ),
+                            **(
+                                {"overhang_b_seq": applied_b_seq}
+                                if ver.id == version_id and applied_b_seq
+                                else {}
+                            ),
+                        }
+                    )
+                    if (ver.id == version_id or _involves(ver))
+                    else ver
+                    for ver in d.connection_versions
+                ]
+            }
+        )
         return (d, report) if report else d
 
     updated, report, _entry = design_state.mutate_with_feature_log(
@@ -7835,10 +8714,10 @@ def patch_connection_display_pose(conn_id: str, body: BindingDisplayPoseBody) ->
         c = next((cc for cc in d.overhang_connections if cc.id == conn_id), None)
         if c is None:
             return
-        if 'unbound_angle_deg' in patch:
-            c.unbound_angle_deg = patch['unbound_angle_deg']
-        if 'bound_angle_deg' in patch:
-            c.bound_angle_deg = patch['bound_angle_deg']
+        if "unbound_angle_deg" in patch:
+            c.unbound_angle_deg = patch["unbound_angle_deg"]
+        if "bound_angle_deg" in patch:
+            c.bound_angle_deg = patch["bound_angle_deg"]
         if auto_joint is not None:
             c.target_joint_id = auto_joint
 
@@ -7859,6 +8738,7 @@ def get_ssdna_fjc_lookup() -> dict:
     etc. See ``backend/core/ssdna_fjc.py`` for accessor docs.
     """
     from backend.core import ssdna_fjc
+
     return ssdna_fjc.dump_all()
 
 
@@ -7901,6 +8781,7 @@ class RelaxLinkerRequest(BaseModel):
     captured from the modal's range thumbs on the R_ee histogram. Stored
     on the connection for downstream simulation / animation use.
     """
+
     joint_ids: Optional[list[str]] = None
     bin_index: Optional[int] = None
     r_ee_min_nm: Optional[float] = None
@@ -7936,7 +8817,7 @@ def relax_overhang_connection(conn_id: str, body: RelaxLinkerRequest | None = No
     trace = _TimingTrace()
     with trace.step("clone_prev"):
         design = design_state.get_or_404()
-        prev   = design.model_copy(deep=True)
+        prev = design.model_copy(deep=True)
     conn = next((c for c in design.overhang_connections if c.id == conn_id), None)
     if conn is None:
         raise HTTPException(404, detail=f"Overhang connection {conn_id!r} not found.")
@@ -7947,16 +8828,20 @@ def relax_overhang_connection(conn_id: str, body: RelaxLinkerRequest | None = No
         with trace.step("dof_topology"):
             topo = dof_topology(design, conn)
         if topo["status"] != "ok" or topo["n_dof"] != 1:
-            raise HTTPException(400, detail=topo["reason"] or "Relax requires exactly 1 DOF.")
+            raise HTTPException(
+                400, detail=topo["reason"] or "Relax requires exactly 1 DOF."
+            )
 
     try:
         with trace.step("relax_linker"):
             if conn.linker_type == "ss":
-                bin_index   = body.bin_index   if body is not None else None
+                bin_index = body.bin_index if body is not None else None
                 r_ee_min_nm = body.r_ee_min_nm if body is not None else None
                 r_ee_max_nm = body.r_ee_max_nm if body is not None else None
                 updated, info = relax_ss_linker(
-                    design, conn, selected,
+                    design,
+                    conn,
+                    selected,
                     bin_index=bin_index,
                     r_ee_min_nm=r_ee_min_nm,
                     r_ee_max_nm=r_ee_max_nm,
@@ -7990,6 +8875,7 @@ class RelaxBondEndpoint(BaseModel):
     triple. ``strand_id`` is optional but used as a tiebreaker when the
     same slot is occupied by multiple strands (e.g. duplex regions).
     """
+
     helix_id: str
     bp_index: int
     direction: Literal["FORWARD", "REVERSE"]
@@ -8015,6 +8901,7 @@ class RelaxBondRequest(BaseModel):
     bond ~0.67 nm for crossovers and intra-strand arcs; 0 for ligations
     and the direct-binding pre-bind line; duplex/FJC for linker arcs).
     """
+
     bond_type: Literal["crossover", "ligation", "linker_arc", "strand_arc"]
     bond_id: Optional[str] = None
     linker_side: Optional[Literal["a", "b"]] = None
@@ -8027,10 +8914,10 @@ class RelaxBondRequest(BaseModel):
 
 # Type-default chord targets (overridable by request.target_nm).
 _BOND_TYPE_DEFAULT_TARGET_NM: dict[str, float] = {
-    "crossover":   0.13,   # tight nuc-to-nuc gap (was 0.67 = B-DNA backbone bond)
-    "ligation":    0.0,    # the two endpoints should coincide
-    "linker_arc":  0.67,   # bridge boundary → anchor gap
-    "strand_arc":  0.67,   # generic cross-helix backbone bond
+    "crossover": 0.13,  # tight nuc-to-nuc gap (was 0.67 = B-DNA backbone bond)
+    "ligation": 0.0,  # the two endpoints should coincide
+    "linker_arc": 0.67,  # bridge boundary → anchor gap
+    "strand_arc": 0.67,  # generic cross-helix backbone bond
 }
 
 
@@ -8045,23 +8932,29 @@ def _resolve_bond_anchor_from_endpoint(
     # ligations across different strand_ids).
     match = None
     for n in geometry:
-        if n.get("helix_id") != endpoint.helix_id:           continue
-        if n.get("bp_index") != endpoint.bp_index:           continue
-        if n.get("direction") != endpoint.direction:         continue
+        if n.get("helix_id") != endpoint.helix_id:
+            continue
+        if n.get("bp_index") != endpoint.bp_index:
+            continue
+        if n.get("direction") != endpoint.direction:
+            continue
         if endpoint.strand_id and n.get("strand_id") != endpoint.strand_id:
             continue
         match = n
         break
     if match is None:
-        raise HTTPException(422, detail=(
-            f"relax_bond: no nucleotide found at helix={endpoint.helix_id!r}, "
-            f"bp={endpoint.bp_index}, direction={endpoint.direction}"
-        ))
+        raise HTTPException(
+            422,
+            detail=(
+                f"relax_bond: no nucleotide found at helix={endpoint.helix_id!r}, "
+                f"bp={endpoint.bp_index}, direction={endpoint.direction}"
+            ),
+        )
     pos = match.get("backbone_position") or match.get("base_position")
     if pos is None:
-        raise HTTPException(422, detail=(
-            "relax_bond: nucleotide has no backbone position."
-        ))
+        raise HTTPException(
+            422, detail=("relax_bond: nucleotide has no backbone position.")
+        )
     return np.asarray(pos, dtype=float)
 
 
@@ -8075,7 +8968,9 @@ def _cluster_id_for_helix(design: Design, helix_id: str) -> Optional[str]:
 
 
 def _cluster_pair_for_bond_relax(
-    design: Design, helix_a: str, helix_b: str,
+    design: Design,
+    helix_a: str,
+    helix_b: str,
 ) -> tuple[Optional[str], Optional[str]]:
     """Pick a ``(cluster_a, cluster_b)`` pair such that the two ids DIFFER.
 
@@ -8123,29 +9018,31 @@ def _resolve_relax_bond_request(
     if body.bond_type == "crossover" and body.bond_id:
         xo = next((x for x in design.crossovers if x.id == body.bond_id), None)
         if xo is None:
-            raise HTTPException(404, detail=(
-                f"crossover {body.bond_id!r} not found."
-            ))
+            raise HTTPException(404, detail=(f"crossover {body.bond_id!r} not found."))
         side_a = RelaxBondEndpoint(
-            helix_id=xo.half_a.helix_id, bp_index=xo.half_a.index,
+            helix_id=xo.half_a.helix_id,
+            bp_index=xo.half_a.index,
             direction=xo.half_a.strand.value,
         )
         side_b = RelaxBondEndpoint(
-            helix_id=xo.half_b.helix_id, bp_index=xo.half_b.index,
+            helix_id=xo.half_b.helix_id,
+            bp_index=xo.half_b.index,
             direction=xo.half_b.strand.value,
         )
     elif body.bond_type == "ligation" and body.bond_id:
         fl = next((f for f in design.forced_ligations if f.id == body.bond_id), None)
         if fl is None:
-            raise HTTPException(404, detail=(
-                f"forced ligation {body.bond_id!r} not found."
-            ))
+            raise HTTPException(
+                404, detail=(f"forced ligation {body.bond_id!r} not found.")
+            )
         side_a = RelaxBondEndpoint(
-            helix_id=fl.three_prime_helix_id, bp_index=fl.three_prime_bp,
+            helix_id=fl.three_prime_helix_id,
+            bp_index=fl.three_prime_bp,
             direction=fl.three_prime_direction.value,
         )
         side_b = RelaxBondEndpoint(
-            helix_id=fl.five_prime_helix_id, bp_index=fl.five_prime_bp,
+            helix_id=fl.five_prime_helix_id,
+            bp_index=fl.five_prime_bp,
             direction=fl.five_prime_direction.value,
         )
     elif body.bond_type == "linker_arc" and body.bond_id:
@@ -8154,25 +9051,30 @@ def _resolve_relax_bond_request(
         # complement; side "b" symmetric for OH-B. We resolve to the two
         # nuc endpoints of that single arc.
         if body.linker_side not in ("a", "b"):
-            raise HTTPException(422, detail=(
-                "relax_bond: linker_arc requires linker_side='a' or 'b'."
-            ))
+            raise HTTPException(
+                422, detail=("relax_bond: linker_arc requires linker_side='a' or 'b'.")
+            )
         conn = next(
             (c for c in design.overhang_connections if c.id == body.bond_id),
             None,
         )
         if conn is None:
-            raise HTTPException(404, detail=(
-                f"overhang connection {body.bond_id!r} not found."
-            ))
-        side_a, side_b = _resolve_linker_arc_endpoints(design, conn, body.linker_side, geometry)
+            raise HTTPException(
+                404, detail=(f"overhang connection {body.bond_id!r} not found.")
+            )
+        side_a, side_b = _resolve_linker_arc_endpoints(
+            design, conn, body.linker_side, geometry
+        )
     else:
         # Half-edge addressing.
         if body.side_a is None or body.side_b is None:
-            raise HTTPException(422, detail=(
-                "relax_bond: must provide either bond_id (with linker_side "
-                "for linker_arc) or side_a + side_b half-edge endpoints."
-            ))
+            raise HTTPException(
+                422,
+                detail=(
+                    "relax_bond: must provide either bond_id (with linker_side "
+                    "for linker_arc) or side_a + side_b half-edge endpoints."
+                ),
+            )
         side_a = body.side_a
         side_b = body.side_b
 
@@ -8180,12 +9082,15 @@ def _resolve_relax_bond_request(
     anchor_b = _resolve_bond_anchor_from_endpoint(geometry, side_b)
 
     cluster_a_id, cluster_b_id = _cluster_pair_for_bond_relax(
-        design, side_a.helix_id, side_b.helix_id,
+        design,
+        side_a.helix_id,
+        side_b.helix_id,
     )
     if cluster_a_id is None or cluster_b_id is None:
-        raise HTTPException(422, detail=(
-            "relax_bond: one or both endpoint helices are not in a cluster."
-        ))
+        raise HTTPException(
+            422,
+            detail=("relax_bond: one or both endpoint helices are not in a cluster."),
+        )
 
     return anchor_a, anchor_b, cluster_a_id, cluster_b_id, target_nm, source_tag
 
@@ -8206,29 +9111,37 @@ def _resolve_linker_arc_endpoints(
     when the precise boundary identification isn't trivially derivable.
     """
     from backend.core.lattice import _find_overhang_domain
+
     oh = next(
-        (o for o in design.overhangs if o.id == (
-            conn.overhang_a_id if linker_side == "a" else conn.overhang_b_id
-        )),
+        (
+            o
+            for o in design.overhangs
+            if o.id
+            == (conn.overhang_a_id if linker_side == "a" else conn.overhang_b_id)
+        ),
         None,
     )
     if oh is None:
-        raise HTTPException(422, detail=(
-            f"relax_bond: linker_arc side {linker_side!r} OH not found."
-        ))
+        raise HTTPException(
+            422, detail=(f"relax_bond: linker_arc side {linker_side!r} OH not found.")
+        )
     attach = conn.overhang_a_attach if linker_side == "a" else conn.overhang_b_attach
     oh_domain = _find_overhang_domain(design, oh.id)
     if oh_domain is None:
-        raise HTTPException(422, detail=(
-            f"relax_bond: linker_arc side {linker_side!r} OH domain not found."
-        ))
+        raise HTTPException(
+            422,
+            detail=(
+                f"relax_bond: linker_arc side {linker_side!r} OH domain not found."
+            ),
+        )
     # OH-end attach bp = the attach-side end of the OH's domain.
     if attach == "root":
         attach_bp = oh_domain.start_bp
     else:
         attach_bp = oh_domain.end_bp
     oh_endpoint = RelaxBondEndpoint(
-        helix_id=oh_domain.helix_id, bp_index=attach_bp,
+        helix_id=oh_domain.helix_id,
+        bp_index=attach_bp,
         direction=oh_domain.direction.value,
     )
 
@@ -8239,15 +9152,19 @@ def _resolve_linker_arc_endpoints(
     suffix = "a" if linker_side == "a" else ("b" if conn.linker_type == "ds" else "s")
     bridge_strand_id = f"__lnk__{conn.id}__{suffix}"
     bridge_nucs = [
-        n for n in geometry
+        n
+        for n in geometry
         if n.get("strand_id") == bridge_strand_id
         and n.get("helix_id", "").startswith(f"__lnk__{conn.id}")
     ]
     if not bridge_nucs:
-        raise HTTPException(422, detail=(
-            f"relax_bond: no bridge nucleotides found for linker "
-            f"{conn.id!r} side {linker_side!r}."
-        ))
+        raise HTTPException(
+            422,
+            detail=(
+                f"relax_bond: no bridge nucleotides found for linker "
+                f"{conn.id!r} side {linker_side!r}."
+            ),
+        )
     # Side "a" arc reaches the bridge bp closest to side A — the lowest bp
     # on a ds bridge with comp-first-a (linker strand traverses
     # [complement_a, bridge_forward]). The opposite side is bp L-1. Pick
@@ -8255,7 +9172,8 @@ def _resolve_linker_arc_endpoints(
     bridge_nucs.sort(key=lambda n: n.get("bp_index", 0))
     bridge_nuc = bridge_nucs[0] if linker_side == "a" else bridge_nucs[-1]
     bridge_endpoint = RelaxBondEndpoint(
-        helix_id=bridge_nuc["helix_id"], bp_index=bridge_nuc["bp_index"],
+        helix_id=bridge_nuc["helix_id"],
+        bp_index=bridge_nuc["bp_index"],
         direction=bridge_nuc.get("direction", "FORWARD"),
     )
     return oh_endpoint, bridge_endpoint
@@ -8282,8 +9200,9 @@ def relax_bond_endpoint(body: RelaxBondRequest) -> dict:
     prev = design.model_copy(deep=True)
 
     geometry = _geometry_for_design(design)
-    (anchor_a, anchor_b, cluster_a_id, cluster_b_id,
-     target_nm, source_tag) = _resolve_relax_bond_request(design, body, geometry)
+    (anchor_a, anchor_b, cluster_a_id, cluster_b_id, target_nm, source_tag) = (
+        _resolve_relax_bond_request(design, body, geometry)
+    )
 
     try:
         updated, info = core_relax_bond(
@@ -8319,15 +9238,16 @@ def relax_bond_endpoint(body: RelaxBondRequest) -> dict:
 # for the locked-angle computation.
 
 
-def _select_driver_for_joint(design: Design, joint_id: str) -> Optional[OverhangBinding]:
+def _select_driver_for_joint(
+    design: Design, joint_id: str
+) -> Optional[OverhangBinding]:
     """Return the bound binding currently driving *joint_id*.
 
     Driver selection: latest ``created_at`` among bound bindings targeting
     this joint. Tiebreak: lexicographic id.
     """
     candidates = [
-        b for b in design.overhang_bindings
-        if b.bound and b.target_joint_id == joint_id
+        b for b in design.overhang_bindings if b.bound and b.target_joint_id == joint_id
     ]
     if not candidates:
         return None
@@ -8335,16 +9255,15 @@ def _select_driver_for_joint(design: Design, joint_id: str) -> Optional[Overhang
     return candidates[-1]
 
 
-def _first_claimant_for_joint(design: Design, joint_id: str) -> Optional[OverhangBinding]:
+def _first_claimant_for_joint(
+    design: Design, joint_id: str
+) -> Optional[OverhangBinding]:
     """Return the earliest-created binding (bound OR unbound) targeting *joint_id*.
 
     Used to locate the snapshot of the joint's pre-binding angle window so
     the window can be restored when the last bound claimant releases.
     """
-    candidates = [
-        b for b in design.overhang_bindings
-        if b.target_joint_id == joint_id
-    ]
+    candidates = [b for b in design.overhang_bindings if b.target_joint_id == joint_id]
     if not candidates:
         return None
     candidates.sort(key=lambda b: (b.created_at, b.id))
@@ -8366,27 +9285,39 @@ def _apply_driver_to_joint(design: Design, joint_id: str) -> Design:
             new_joints.append(j)
             continue
         if driver is not None and driver.locked_angle_deg is not None:
-            new_joints.append(j.model_copy(update={
-                "min_angle_deg": driver.locked_angle_deg,
-                "max_angle_deg": driver.locked_angle_deg,
-            }))
+            new_joints.append(
+                j.model_copy(
+                    update={
+                        "min_angle_deg": driver.locked_angle_deg,
+                        "max_angle_deg": driver.locked_angle_deg,
+                    }
+                )
+            )
         else:
             # No driver — restore prior window if first claimant snapshotted it.
             first = _first_claimant_for_joint(design, joint_id)
-            if (first is not None
-                    and first.prior_min_angle_deg is not None
-                    and first.prior_max_angle_deg is not None):
-                new_joints.append(j.model_copy(update={
-                    "min_angle_deg": first.prior_min_angle_deg,
-                    "max_angle_deg": first.prior_max_angle_deg,
-                }))
+            if (
+                first is not None
+                and first.prior_min_angle_deg is not None
+                and first.prior_max_angle_deg is not None
+            ):
+                new_joints.append(
+                    j.model_copy(
+                        update={
+                            "min_angle_deg": first.prior_min_angle_deg,
+                            "max_angle_deg": first.prior_max_angle_deg,
+                        }
+                    )
+                )
             else:
                 # Nothing to restore; leave as-is.
                 new_joints.append(j)
     return design.model_copy(update={"cluster_joints": new_joints})
 
 
-def _binding_response(design: Design, report: ValidationReport, binding_id: Optional[str] = None) -> dict:
+def _binding_response(
+    design: Design, report: ValidationReport, binding_id: Optional[str] = None
+) -> dict:
     """Standard envelope: full design response, optionally including the
     affected binding by id for client convenience."""
     base = _design_response_with_geometry(design, report)
@@ -8407,14 +9338,15 @@ def list_overhang_bindings() -> dict:
 class OverhangBindingCreateRequest(BaseModel):
     sub_domain_a_id: str
     sub_domain_b_id: str
-    binding_mode: Literal['duplex', 'toehold'] = 'duplex'
+    binding_mode: Literal["duplex", "toehold"] = "duplex"
     target_joint_id: Optional[str] = None
     allow_n_wildcard: bool = True
 
 
 def _resolve_sd_for_binding(
-    design: Design, sub_domain_id: str,
-) -> tuple[Optional['OverhangSpec'], Optional['SubDomain']]:
+    design: Design,
+    sub_domain_id: str,
+) -> tuple[Optional["OverhangSpec"], Optional["SubDomain"]]:
     for ovhg in design.overhangs:
         for sd in ovhg.sub_domains:
             if sd.id == sub_domain_id:
@@ -8425,6 +9357,7 @@ def _resolve_sd_for_binding(
 def _binding_pair_keys(design: Design) -> set[frozenset]:
     """Build the mutex pair-set for linkers + existing bindings."""
     from backend.core.models import _sub_domain_at_attach
+
     keys: set[frozenset] = set()
     for conn in design.overhang_connections:
         a = _sub_domain_at_attach(design, conn.overhang_a_id, conn.overhang_a_attach)
@@ -8454,45 +9387,61 @@ def create_overhang_binding(body: OverhangBindingCreateRequest) -> dict:
     design = design_state.get_or_404()
 
     if body.sub_domain_a_id == body.sub_domain_b_id:
-        raise HTTPException(422, detail="sub_domain_a_id and sub_domain_b_id must differ.")
+        raise HTTPException(
+            422, detail="sub_domain_a_id and sub_domain_b_id must differ."
+        )
 
     ovhg_a, sd_a = _resolve_sd_for_binding(design, body.sub_domain_a_id)
     ovhg_b, sd_b = _resolve_sd_for_binding(design, body.sub_domain_b_id)
     if ovhg_a is None or sd_a is None:
-        raise HTTPException(404, detail=f"sub_domain_a_id {body.sub_domain_a_id!r} not found.")
+        raise HTTPException(
+            404, detail=f"sub_domain_a_id {body.sub_domain_a_id!r} not found."
+        )
     if ovhg_b is None or sd_b is None:
-        raise HTTPException(404, detail=f"sub_domain_b_id {body.sub_domain_b_id!r} not found.")
+        raise HTTPException(
+            404, detail=f"sub_domain_b_id {body.sub_domain_b_id!r} not found."
+        )
 
     if sd_a.length_bp != sd_b.length_bp:
-        raise HTTPException(422, detail=(
-            f"sub-domain lengths must match ({sd_a.length_bp} vs {sd_b.length_bp})."
-        ))
+        raise HTTPException(
+            422,
+            detail=(
+                f"sub-domain lengths must match ({sd_a.length_bp} vs {sd_b.length_bp})."
+            ),
+        )
 
     seq_a = _resolve_sub_domain_sequence(ovhg_a, sd_a)
     seq_b = _resolve_sub_domain_sequence(ovhg_b, sd_b)
     if seq_a is None or seq_b is None:
-        raise HTTPException(422, detail=(
-            "Both sub-domain sequences must be resolvable (override or parent slice) "
-            "before a binding can be created."
-        ))
+        raise HTTPException(
+            422,
+            detail=(
+                "Both sub-domain sequences must be resolvable (override or parent slice) "
+                "before a binding can be created."
+            ),
+        )
     if not _is_wc(seq_a, seq_b, allow_n=body.allow_n_wildcard):
-        raise HTTPException(422, detail=(
-            f"sequences are not Watson-Crick complementary "
-            f"(allow_n_wildcard={body.allow_n_wildcard})."
-        ))
+        raise HTTPException(
+            422,
+            detail=(
+                f"sequences are not Watson-Crick complementary "
+                f"(allow_n_wildcard={body.allow_n_wildcard})."
+            ),
+        )
 
     pair_key = frozenset({body.sub_domain_a_id, body.sub_domain_b_id})
     if pair_key in _binding_pair_keys(design):
-        raise HTTPException(409, detail=(
-            "sub-domain pair is already claimed by another linker or binding."
-        ))
+        raise HTTPException(
+            409,
+            detail=("sub-domain pair is already claimed by another linker or binding."),
+        )
 
     if body.target_joint_id is not None:
         joint_ids = {j.id for j in design.cluster_joints}
         if body.target_joint_id not in joint_ids:
-            raise HTTPException(404, detail=(
-                f"target_joint_id {body.target_joint_id!r} not found."
-            ))
+            raise HTTPException(
+                404, detail=(f"target_joint_id {body.target_joint_id!r} not found.")
+            )
 
     binding = _OB(
         name=_smallest_unused_binding_name(design),
@@ -8508,12 +9457,14 @@ def create_overhang_binding(body: OverhangBindingCreateRequest) -> dict:
     )
 
     def _fn(d: Design) -> Design:
-        return d.model_copy(update={
-            "overhang_bindings": [*d.overhang_bindings, binding],
-        })
+        return d.model_copy(
+            update={
+                "overhang_bindings": [*d.overhang_bindings, binding],
+            }
+        )
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='overhang-bulk',
+        op_kind="overhang-bulk",
         label=f"Create binding {binding.name}",
         params={
             "binding_id": binding.id,
@@ -8533,7 +9484,7 @@ def create_overhang_binding(body: OverhangBindingCreateRequest) -> dict:
 class OverhangBindingPatchRequest(BaseModel):
     name: Optional[str] = None
     bound: Optional[bool] = None
-    binding_mode: Optional[Literal['duplex', 'toehold']] = None
+    binding_mode: Optional[Literal["duplex", "toehold"]] = None
     target_joint_id: Optional[str] = None
     allow_n_wildcard: Optional[bool] = None
 
@@ -8568,31 +9519,41 @@ def patch_overhang_binding(binding_id: str, body: OverhangBindingPatchRequest) -
 
     patch = body.model_dump(exclude_unset=True)
 
-    if 'name' in patch:
-        new_name = (patch['name'] or '').strip()
+    if "name" in patch:
+        new_name = (patch["name"] or "").strip()
         if not new_name:
             raise HTTPException(422, detail="name must be non-empty.")
         clash = next(
-            (b for b in design.overhang_bindings if b.id != binding_id and b.name == new_name),
+            (
+                b
+                for b in design.overhang_bindings
+                if b.id != binding_id and b.name == new_name
+            ),
             None,
         )
         if clash is not None:
-            raise HTTPException(422, detail=f"binding name {new_name!r} is already in use.")
-        patch['name'] = new_name
+            raise HTTPException(
+                422, detail=f"binding name {new_name!r} is already in use."
+            )
+        patch["name"] = new_name
 
-    if 'target_joint_id' in patch and patch['target_joint_id'] is not None:
+    if "target_joint_id" in patch and patch["target_joint_id"] is not None:
         joint_ids = {j.id for j in design.cluster_joints}
-        if patch['target_joint_id'] not in joint_ids:
-            raise HTTPException(404, detail=(
-                f"target_joint_id {patch['target_joint_id']!r} not found."
-            ))
+        if patch["target_joint_id"] not in joint_ids:
+            raise HTTPException(
+                404, detail=(f"target_joint_id {patch['target_joint_id']!r} not found.")
+            )
 
     # Compute next binding state pieces. We resolve transitions explicitly
     # so all topology + joint mutations sit inside one mutate_with_feature_log atomic.
     prev_bound = target.bound
     prev_joint = target.target_joint_id
-    next_joint = patch.get('target_joint_id', prev_joint) if 'target_joint_id' in patch else prev_joint
-    next_bound = patch.get('bound', prev_bound) if 'bound' in patch else prev_bound
+    next_joint = (
+        patch.get("target_joint_id", prev_joint)
+        if "target_joint_id" in patch
+        else prev_joint
+    )
+    next_bound = patch.get("bound", prev_bound) if "bound" in patch else prev_bound
 
     # Topology change on bind / restore on unbind.
     #   topology: BindTopology | None — computed when we're entering bound state.
@@ -8616,7 +9577,7 @@ def patch_overhang_binding(binding_id: str, body: OverhangBindingPatchRequest) -
         # the guards still apply (unchanged behaviour).
         driver_side = None
         if target.driver_oh_id is not None:
-            driver_side = 'a' if target.driver_oh_id == target.overhang_a_id else 'b'
+            driver_side = "a" if target.driver_oh_id == target.overhang_a_id else "b"
         try:
             topology = compute_bind_topology(design, target, driver_side=driver_side)
         except HTTPException:
@@ -8624,36 +9585,38 @@ def patch_overhang_binding(binding_id: str, body: OverhangBindingPatchRequest) -
         except Exception as exc:
             raise HTTPException(422, detail=f"compute_bind_topology failed: {exc!r}")
         # Snapshot for unbind restoration.
-        patch['prior_driven_topology'] = topology.snapshot
+        patch["prior_driven_topology"] = topology.snapshot
         # Resolve the auto-pick joint id (when exactly one joint connects
         # the two clusters and the user didn't pin target_joint_id).
         if next_joint is None:
             from backend.core.linker_relax import _overhang_owning_cluster_id as _own
+
             cluster_a = _own(design, target.overhang_a_id)
             cluster_b = _own(design, target.overhang_b_id)
             cands = [
-                j for j in design.cluster_joints
+                j
+                for j in design.cluster_joints
                 if j.cluster_id == cluster_a or j.cluster_id == cluster_b
             ]
             if len(cands) == 1:
                 next_joint = cands[0].id
-                patch['target_joint_id'] = next_joint
+                patch["target_joint_id"] = next_joint
         # locked_angle_deg is computed post-relocation inside _fn (see below).
         # Leave it None here; _fn writes the real value before _apply_driver_to_joint
         # reads it.
-        patch['locked_angle_deg'] = None
-        patch['bound'] = True
+        patch["locked_angle_deg"] = None
+        patch["bound"] = True
     elif prev_bound and not next_bound:
         # Going BOUND -> UNBOUND: clear locked_angle_deg + plan to restore
         # the topology snapshot taken at bind time (if any).
-        patch['locked_angle_deg'] = None
-        patch['bound'] = False
+        patch["locked_angle_deg"] = None
+        patch["bound"] = False
         restore_snapshot = target.prior_driven_topology
-        patch['prior_driven_topology'] = None
+        patch["prior_driven_topology"] = None
 
-    updated_target = target.model_copy(update={
-        k: v for k, v in patch.items() if k in OverhangBinding.model_fields
-    })
+    updated_target = target.model_copy(
+        update={k: v for k, v in patch.items() if k in OverhangBinding.model_fields}
+    )
 
     def _fn(d: Design) -> Design:
         # Replace the target binding in the list.
@@ -8696,18 +9659,24 @@ def patch_overhang_binding(binding_id: str, body: OverhangBindingPatchRequest) -
             # the joint's current min/max ONLY IF the first claimant has
             # no snapshot yet (idempotent re-toggle safe).
             if first is not None and first.prior_min_angle_deg is None:
-                joint = next((j for j in nxt.cluster_joints if j.id == next_joint), None)
+                joint = next(
+                    (j for j in nxt.cluster_joints if j.id == next_joint), None
+                )
                 if joint is not None:
-                    new_first = first.model_copy(update={
-                        "prior_min_angle_deg": joint.min_angle_deg,
-                        "prior_max_angle_deg": joint.max_angle_deg,
-                    })
-                    nxt = nxt.model_copy(update={
-                        "overhang_bindings": [
-                            new_first if bb.id == first.id else bb
-                            for bb in nxt.overhang_bindings
-                        ],
-                    })
+                    new_first = first.model_copy(
+                        update={
+                            "prior_min_angle_deg": joint.min_angle_deg,
+                            "prior_max_angle_deg": joint.max_angle_deg,
+                        }
+                    )
+                    nxt = nxt.model_copy(
+                        update={
+                            "overhang_bindings": [
+                                new_first if bb.id == first.id else bb
+                                for bb in nxt.overhang_bindings
+                            ],
+                        }
+                    )
 
         # ── Apply driver to affected joint(s). For 1-DOF bindings, this
         # collapses the joint window to [locked_angle, locked_angle].
@@ -8724,20 +9693,24 @@ def patch_overhang_binding(binding_id: str, body: OverhangBindingPatchRequest) -
             if _select_driver_for_joint(nxt, jid) is None:
                 first = _first_claimant_for_joint(nxt, jid)
                 if first is not None and first.prior_min_angle_deg is not None:
-                    new_first = first.model_copy(update={
-                        "prior_min_angle_deg": None,
-                        "prior_max_angle_deg": None,
-                    })
-                    nxt = nxt.model_copy(update={
-                        "overhang_bindings": [
-                            new_first if bb.id == first.id else bb
-                            for bb in nxt.overhang_bindings
-                        ],
-                    })
+                    new_first = first.model_copy(
+                        update={
+                            "prior_min_angle_deg": None,
+                            "prior_max_angle_deg": None,
+                        }
+                    )
+                    nxt = nxt.model_copy(
+                        update={
+                            "overhang_bindings": [
+                                new_first if bb.id == first.id else bb
+                                for bb in nxt.overhang_bindings
+                            ],
+                        }
+                    )
         return nxt
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='overhang-bulk',
+        op_kind="overhang-bulk",
         label=f"Patch binding {target.name}",
         params={
             "binding_id": binding_id,
@@ -8759,21 +9732,30 @@ def reapply_binding_driver(design: Design, binding_id: str) -> Design:
     Best-effort: on any failure the design is returned unchanged so the driver
     field edit still sticks (the user can Unbind→Bind manually)."""
     from backend.core.binding_relax import (
-        apply_bind_topology, compute_bind_topology, revert_bind_topology,
+        apply_bind_topology,
+        compute_bind_topology,
+        revert_bind_topology,
     )
+
     b = next((x for x in design.overhang_bindings if x.id == binding_id), None)
     if b is None or not b.bound or not b.prior_driven_topology:
         return design
-    driver_side = 'a' if b.driver_oh_id == b.overhang_a_id else 'b'
+    driver_side = "a" if b.driver_oh_id == b.overhang_a_id else "b"
     try:
         reverted = revert_bind_topology(design, b.prior_driven_topology)
         b2 = next((x for x in reverted.overhang_bindings if x.id == binding_id), None)
         topo = compute_bind_topology(reverted, b2, driver_side=driver_side)
         applied = apply_bind_topology(reverted, topo)
-        out = applied.model_copy(update={"overhang_bindings": [
-            x.model_copy(update={"prior_driven_topology": topo.snapshot})
-            if x.id == binding_id else x
-            for x in applied.overhang_bindings]})
+        out = applied.model_copy(
+            update={
+                "overhang_bindings": [
+                    x.model_copy(update={"prior_driven_topology": topo.snapshot})
+                    if x.id == binding_id
+                    else x
+                    for x in applied.overhang_bindings
+                ]
+            }
+        )
         if b.target_joint_id:
             out = _apply_driver_to_joint(out, b.target_joint_id)
         return out
@@ -8801,10 +9783,10 @@ def patch_binding_display_pose(binding_id: str, body: BindingDisplayPoseBody) ->
         b = next((bb for bb in d.overhang_bindings if bb.id == binding_id), None)
         if b is None:
             return
-        if 'unbound_angle_deg' in patch:
-            b.unbound_angle_deg = patch['unbound_angle_deg']
-        if 'bound_angle_deg' in patch:
-            b.bound_angle_deg = patch['bound_angle_deg']
+        if "unbound_angle_deg" in patch:
+            b.unbound_angle_deg = patch["unbound_angle_deg"]
+        if "bound_angle_deg" in patch:
+            b.bound_angle_deg = patch["bound_angle_deg"]
 
     updated, report = design_state.mutate_and_validate(_fn)
     return _binding_response(updated, report, binding_id=binding_id)
@@ -8817,11 +9799,14 @@ class StrandAnimSetupBody(BaseModel):
     to clear). Annotation-only — never read by topology/relax/geometry; consumed
     solely by the animation player's rich un/hybridization driver.
     """
+
     setup: Optional[dict] = None
 
 
 @router.patch("/design/overhangs/{overhang_id}/strand-anim-setup", status_code=200)
-def patch_overhang_strand_anim_setup(overhang_id: str, body: StrandAnimSetupBody) -> dict:
+def patch_overhang_strand_anim_setup(
+    overhang_id: str, body: StrandAnimSetupBody
+) -> dict:
     """Set (or clear) the display-only strand-animation setup for an overhang.
 
     Writes ONLY `OverhangSpec.strand_anim_setup`. Three-layer safe — the field is
@@ -8871,18 +9856,24 @@ def delete_overhang_binding(binding_id: str) -> dict:
         heir_migrated = False
         if must_migrate_snapshot:
             others = [
-                b for b in bindings
+                b
+                for b in bindings
                 if b.target_joint_id == joint_id and b.id != binding_id
             ]
             others.sort(key=lambda b: (b.created_at, b.id))
             if others:
                 heir = others[0]
                 # Migrate snapshot onto heir (only if heir has no snapshot yet).
-                if heir.prior_min_angle_deg is None and heir.prior_max_angle_deg is None:
-                    new_heir = heir.model_copy(update={
-                        "prior_min_angle_deg": target.prior_min_angle_deg,
-                        "prior_max_angle_deg": target.prior_max_angle_deg,
-                    })
+                if (
+                    heir.prior_min_angle_deg is None
+                    and heir.prior_max_angle_deg is None
+                ):
+                    new_heir = heir.model_copy(
+                        update={
+                            "prior_min_angle_deg": target.prior_min_angle_deg,
+                            "prior_max_angle_deg": target.prior_max_angle_deg,
+                        }
+                    )
                     bindings = [new_heir if b.id == heir.id else b for b in bindings]
                     heir_migrated = True
         # Remove target.
@@ -8895,7 +9886,11 @@ def delete_overhang_binding(binding_id: str) -> dict:
             # joint was bound until just now and has no surviving claimant
             # to restore from. Apply the stored fallback window directly so
             # the joint un-locks.
-            if not heir_migrated and fallback_min is not None and fallback_max is not None:
+            if (
+                not heir_migrated
+                and fallback_min is not None
+                and fallback_max is not None
+            ):
                 # Check whether driver-apply already restored (it would only
                 # do so if a remaining claimant carried a snapshot — i.e.,
                 # heir_migrated case).
@@ -8904,17 +9899,21 @@ def delete_overhang_binding(binding_id: str) -> dict:
                     new_joints = []
                     for j in nxt.cluster_joints:
                         if j.id == joint_id:
-                            new_joints.append(j.model_copy(update={
-                                "min_angle_deg": fallback_min,
-                                "max_angle_deg": fallback_max,
-                            }))
+                            new_joints.append(
+                                j.model_copy(
+                                    update={
+                                        "min_angle_deg": fallback_min,
+                                        "max_angle_deg": fallback_max,
+                                    }
+                                )
+                            )
                         else:
                             new_joints.append(j)
                     nxt = nxt.model_copy(update={"cluster_joints": new_joints})
         return nxt
 
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='overhang-bulk',
+        op_kind="overhang-bulk",
         label=f"Delete binding {target.name}",
         params={
             "binding_id": binding_id,
@@ -9003,7 +10002,7 @@ def _state_at_child_boundary(entry, k: int) -> "Design":
         raise HTTPException(
             410,
             detail="Fine Routing cluster snapshot was evicted to save space and can no "
-                   "longer be edited per sub-step.",
+            "longer be edited per sub-step.",
         )
     try:
         state = design_state.decode_design_snapshot(entry.pre_state_gz_b64)
@@ -9013,7 +10012,10 @@ def _state_at_child_boundary(entry, k: int) -> "Design":
     for child in entry.children[:k]:
         if is_diff_child(child):
             state, _w = apply_child_diff_forward(
-                state, child.diff_added_b64, child.diff_removed_b64, child.diff_modified_b64,
+                state,
+                child.diff_added_b64,
+                child.diff_removed_b64,
+                child.diff_modified_b64,
             )
         else:
             try:
@@ -9022,8 +10024,8 @@ def _state_at_child_boundary(entry, k: int) -> "Design":
                 raise HTTPException(
                     422,
                     detail="Cannot reconstruct this sub-step: an earlier sub-step predates "
-                           "per-step history and uses an operation that can't be replayed. "
-                           "Revert or delete the whole Fine Routing cluster instead.",
+                    "per-step history and uses an operation that can't be replayed. "
+                    "Revert or delete the whole Fine Routing cluster instead.",
                 )
     return state
 
@@ -9033,7 +10035,9 @@ def _n_failures(report) -> int:
     return sum(1 for r in report.results if not r.ok)
 
 
-def _delete_routing_child(design: "Design", log: list, index: int, entry, child_index: int) -> dict:
+def _delete_routing_child(
+    design: "Design", log: list, index: int, entry, child_index: int
+) -> dict:
     """Surgically remove ``entry.children[child_index]`` from the Fine Routing
     cluster at log ``index``, keeping every other sub-step and all later log
     entries. Deleting the only remaining sub-step removes the whole cluster and
@@ -9055,7 +10059,7 @@ def _delete_routing_child(design: "Design", log: list, index: int, entry, child_
         raise HTTPException(
             410,
             detail=f"Fine Routing cluster {index} was evicted to save space; its "
-                   "sub-steps can no longer be edited individually.",
+            "sub-steps can no longer be edited individually.",
         )
 
     # State just before the deleted child (children 0..j-1 applied).
@@ -9063,10 +10067,13 @@ def _delete_routing_child(design: "Design", log: list, index: int, entry, child_
 
     # Forward-apply the surviving tail (children j+1..n-1) defensively onto it.
     warnings: list[str] = []
-    for child in entry.children[child_index + 1:]:
+    for child in entry.children[child_index + 1 :]:
         if is_diff_child(child):
             rebuilt, w = apply_child_diff_forward(
-                rebuilt, child.diff_added_b64, child.diff_removed_b64, child.diff_modified_b64,
+                rebuilt,
+                child.diff_added_b64,
+                child.diff_removed_b64,
+                child.diff_modified_b64,
                 defensive=True,
             )
             warnings += w
@@ -9077,11 +10084,13 @@ def _delete_routing_child(design: "Design", log: list, index: int, entry, child_
                 raise HTTPException(
                     422,
                     detail="Cannot delete this sub-step: a later sub-step predates per-step "
-                           "history and uses an operation that can't be replayed. Delete the "
-                           "whole Fine Routing cluster instead.",
+                    "history and uses an operation that can't be replayed. Delete the "
+                    "whole Fine Routing cluster instead.",
                 )
 
-    new_children = list(entry.children[:child_index]) + list(entry.children[child_index + 1:])
+    new_children = list(entry.children[:child_index]) + list(
+        entry.children[child_index + 1 :]
+    )
 
     if new_children:
         # Cluster survives: re-encode its post-state and leave it in the log so
@@ -9089,11 +10098,13 @@ def _delete_routing_child(design: "Design", log: list, index: int, entry, child_
         # unchanged → top-level cursor unchanged. Surviving children keep their
         # stored diffs (a future boundary rebuild re-runs the same logic).
         new_post_b64, new_post_size = design_state.encode_design_snapshot(rebuilt)
-        new_cluster = entry.model_copy(update={
-            'children': new_children,
-            'post_state_gz_b64': new_post_b64,
-            'post_state_size_bytes': new_post_size,
-        })
+        new_cluster = entry.model_copy(
+            update={
+                "children": new_children,
+                "post_state_gz_b64": new_post_b64,
+                "post_state_size_bytes": new_post_size,
+            }
+        )
         new_log = [new_cluster if e.id == entry.id else e for e in log]
         new_cursor = design.feature_log_cursor
         temp = design.copy_with(feature_log=new_log)
@@ -9140,27 +10151,31 @@ def _delete_routing_child(design: "Design", log: list, index: int, entry, child_
         )
     resp = _design_replace_response(design, updated, report)
     if warnings:
-        resp['placement_warnings'] = list(resp.get('placement_warnings') or []) + warnings
+        resp["placement_warnings"] = (
+            list(resp.get("placement_warnings") or []) + warnings
+        )
     return resp
 
 
 def _feature_label(entry) -> str:
     """Short human label for a feature-log entry (used to list dependents)."""
-    ft = getattr(entry, 'feature_type', '')
-    if ft == 'snapshot':
-        return getattr(entry, 'label', None) or getattr(entry, 'op_kind', 'op')
-    if ft == 'routing-cluster':
-        return getattr(entry, 'label', None) or 'Fine Routing'
-    if ft == 'deformation':
-        op = getattr(entry, 'op_snapshot', None)
-        return op.type.capitalize() if op and getattr(op, 'type', None) else 'Deformation'
-    if ft == 'cluster_op':
-        return 'Cluster move'
-    if ft == 'cluster_create':
-        return getattr(entry, 'name', None) or 'Create cluster'
-    if ft == 'overhang_rotation':
-        return 'Overhang rotation'
-    return ft or 'feature'
+    ft = getattr(entry, "feature_type", "")
+    if ft == "snapshot":
+        return getattr(entry, "label", None) or getattr(entry, "op_kind", "op")
+    if ft == "routing-cluster":
+        return getattr(entry, "label", None) or "Fine Routing"
+    if ft == "deformation":
+        op = getattr(entry, "op_snapshot", None)
+        return (
+            op.type.capitalize() if op and getattr(op, "type", None) else "Deformation"
+        )
+    if ft == "cluster_op":
+        return "Cluster move"
+    if ft == "cluster_create":
+        return getattr(entry, "name", None) or "Create cluster"
+    if ft == "overhang_rotation":
+        return "Overhang rotation"
+    return ft or "feature"
 
 
 def _build_entry_info(entry, design):
@@ -9171,13 +10186,18 @@ def _build_entry_info(entry, design):
     :mod:`backend.core.feature_dependencies`.
     """
     from backend.core.feature_dependencies import (
-        EntryInfo, REPLAYABLE_SNAPSHOT_OPS, snapshot_delta,
-        structural_reference_targets, delta_entry_targets,
+        EntryInfo,
+        REPLAYABLE_SNAPSHOT_OPS,
+        snapshot_delta,
+        structural_reference_targets,
+        delta_entry_targets,
     )
 
     ft = entry.feature_type
-    if ft == 'snapshot':
-        reconstructable = (not entry.evicted) and (entry.op_kind in REPLAYABLE_SNAPSHOT_OPS)
+    if ft == "snapshot":
+        reconstructable = (not entry.evicted) and (
+            entry.op_kind in REPLAYABLE_SNAPSHOT_OPS
+        )
         added: set = set()
         modified: set = set()
         try:
@@ -9189,10 +10209,14 @@ def _build_entry_info(entry, design):
         except Exception:
             added, modified = set(), set()
             targets = None
-        return EntryInfo(added=added, modified=modified, targets=targets,
-                         reconstructable=reconstructable)
+        return EntryInfo(
+            added=added,
+            modified=modified,
+            targets=targets,
+            reconstructable=reconstructable,
+        )
 
-    if ft == 'routing-cluster':
+    if ft == "routing-cluster":
         added, modified = set(), set()
         try:
             if entry.pre_state_gz_b64 and entry.post_state_gz_b64 and not entry.evicted:
@@ -9203,14 +10227,18 @@ def _build_entry_info(entry, design):
         except Exception:
             added, modified = set(), set()
             targets = None
-        return EntryInfo(added=added, modified=modified, targets=targets,
-                         reconstructable=False)
+        return EntryInfo(
+            added=added, modified=modified, targets=targets, reconstructable=False
+        )
 
     # Overlay delta (deformation / cluster_op / cluster_create / overhang_rotation):
     # always reconstructable by seek; depends only on the ids it targets.
-    return EntryInfo(added=set(), modified=set(),
-                     targets=delta_entry_targets(entry, design),
-                     reconstructable=True)
+    return EntryInfo(
+        added=set(),
+        modified=set(),
+        targets=delta_entry_targets(entry, design),
+        reconstructable=True,
+    )
 
 
 def _filter_removed_ids_from_design(design: Design, removed_ids: set) -> Design:
@@ -9219,13 +10247,21 @@ def _filter_removed_ids_from_design(design: Design, removed_ids: set) -> Design:
         return design
 
     def keep_id(item) -> bool:
-        return getattr(item, 'id', None) not in removed_ids
+        return getattr(item, "id", None) not in removed_ids
 
     removed_helices = {h.id for h in design.helices if h.id in removed_ids}
     removed_strands = {s.id for s in design.strands if s.id in removed_ids}
-    removed_overhangs = {o.id for o in design.overhangs if o.id in removed_ids or o.helix_id in removed_helices}
-    removed_clusters = {ct.id for ct in design.cluster_transforms if ct.id in removed_ids}
-    removed_protein_assets = {a.id for a in design.protein_assets if a.id in removed_ids}
+    removed_overhangs = {
+        o.id
+        for o in design.overhangs
+        if o.id in removed_ids or o.helix_id in removed_helices
+    }
+    removed_clusters = {
+        ct.id for ct in design.cluster_transforms if ct.id in removed_ids
+    }
+    removed_protein_assets = {
+        a.id for a in design.protein_assets if a.id in removed_ids
+    }
 
     new_cts = []
     for ct in design.cluster_transforms:
@@ -9233,20 +10269,30 @@ def _filter_removed_ids_from_design(design: Design, removed_ids: set) -> Design:
             continue
         helix_ids = [hid for hid in (ct.helix_ids or []) if hid not in removed_helices]
         domain_ids = [
-            ref for ref in (ct.domain_ids or [])
-            if ref.strand_id not in removed_strands
+            ref for ref in (ct.domain_ids or []) if ref.strand_id not in removed_strands
         ]
         if not helix_ids and not domain_ids:
             removed_clusters.add(ct.id)
             continue
-        new_cts.append(ct.model_copy(update={'helix_ids': helix_ids, 'domain_ids': domain_ids}))
+        new_cts.append(
+            ct.model_copy(update={"helix_ids": helix_ids, "domain_ids": domain_ids})
+        )
 
     def strand_survives(s) -> bool:
         return (
             s.id not in removed_ids
             and all(dom.helix_id not in removed_helices for dom in s.domains)
-            and all((dom.overhang_id is None or dom.overhang_id not in removed_overhangs) for dom in s.domains)
-            and all((dom.binds_overhang_id is None or dom.binds_overhang_id not in removed_overhangs) for dom in s.domains)
+            and all(
+                (dom.overhang_id is None or dom.overhang_id not in removed_overhangs)
+                for dom in s.domains
+            )
+            and all(
+                (
+                    dom.binds_overhang_id is None
+                    or dom.binds_overhang_id not in removed_overhangs
+                )
+                for dom in s.domains
+            )
         )
 
     def xover_survives(x) -> bool:
@@ -9268,33 +10314,42 @@ def _filter_removed_ids_from_design(design: Design, removed_ids: set) -> Design:
         strands=[s for s in design.strands if strand_survives(s)],
         crossovers=[x for x in design.crossovers if xover_survives(x)],
         overhangs=[
-            o for o in design.overhangs
-            if o.id not in removed_ids and o.helix_id not in removed_helices and o.strand_id not in removed_strands
+            o
+            for o in design.overhangs
+            if o.id not in removed_ids
+            and o.helix_id not in removed_helices
+            and o.strand_id not in removed_strands
         ],
         overhang_connections=[
-            c for c in design.overhang_connections
-            if c.id not in removed_ids and c.overhang_a_id not in removed_overhangs and c.overhang_b_id not in removed_overhangs
+            c
+            for c in design.overhang_connections
+            if c.id not in removed_ids
+            and c.overhang_a_id not in removed_overhangs
+            and c.overhang_b_id not in removed_overhangs
         ],
         extensions=[
-            e for e in design.extensions
+            e
+            for e in design.extensions
             if e.id not in removed_ids and e.strand_id not in removed_strands
         ],
         photoproduct_junctions=[
-            p for p in design.photoproduct_junctions
-            if p.id not in removed_ids
+            p for p in design.photoproduct_junctions if p.id not in removed_ids
         ],
         forced_ligations=[f for f in design.forced_ligations if fl_survives(f)],
         cluster_transforms=new_cts,
         cluster_joints=[
-            j for j in design.cluster_joints
+            j
+            for j in design.cluster_joints
             if j.id not in removed_ids and j.cluster_id not in removed_clusters
         ],
         flexible_segment_marks=[
-            m for m in design.flexible_segment_marks
+            m
+            for m in design.flexible_segment_marks
             if m.id not in removed_ids and m.strand_id not in removed_strands
         ],
         flexible_connections=[
-            fc for fc in design.flexible_connections
+            fc
+            for fc in design.flexible_connections
             if (
                 fc.id not in removed_ids
                 and fc.cluster_a_id not in removed_clusters
@@ -9303,18 +10358,18 @@ def _filter_removed_ids_from_design(design: Design, removed_ids: set) -> Design:
                 and fc.anchor_b.strand_id not in removed_strands
             )
         ],
-        protein_assets=[
-            a for a in design.protein_assets
-            if a.id not in removed_ids
-        ],
+        protein_assets=[a for a in design.protein_assets if a.id not in removed_ids],
         protein_attachments=[
-            a for a in design.protein_attachments
+            a
+            for a in design.protein_attachments
             if a.id not in removed_ids and a.asset_id not in removed_protein_assets
         ],
     )
 
 
-def _strip_removed_ids_from_snapshot(payload_b64: str, removed_ids: set) -> tuple[str, int]:
+def _strip_removed_ids_from_snapshot(
+    payload_b64: str, removed_ids: set
+) -> tuple[str, int]:
     snap = design_state.decode_design_snapshot(payload_b64)
     scrubbed = _filter_removed_ids_from_design(snap, removed_ids)
     return design_state.encode_design_snapshot(scrubbed)
@@ -9323,14 +10378,18 @@ def _strip_removed_ids_from_snapshot(payload_b64: str, removed_ids: set) -> tupl
 def _snapshot_removed_ids(entry) -> set:
     from backend.core.feature_dependencies import snapshot_removed
 
-    if not getattr(entry, 'design_snapshot_gz_b64', None) or not getattr(entry, 'post_state_gz_b64', None):
+    if not getattr(entry, "design_snapshot_gz_b64", None) or not getattr(
+        entry, "post_state_gz_b64", None
+    ):
         return set()
     pre = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
     post = design_state.decode_design_snapshot(entry.post_state_gz_b64)
     return snapshot_removed(pre, post)
 
 
-def _delete_snapshot_feature_by_replay(design: Design, log: list, index: int, entry, deps: list) -> dict:
+def _delete_snapshot_feature_by_replay(
+    design: Design, log: list, index: int, entry, deps: list
+) -> dict:
     from backend.core.models import SnapshotLogEntry as _SnapEntry
     from backend.core.validator import validate_design
 
@@ -9350,15 +10409,21 @@ def _delete_snapshot_feature_by_replay(design: Design, log: list, index: int, en
                 raise HTTPException(
                     409,
                     detail=f"Could not surgically delete: '{_feature_label(e)}' "
-                           f"could not be re-applied without the deleted feature. "
-                           f"Revert to before it instead.",
+                    f"could not be re-applied without the deleted feature. "
+                    f"Revert to before it instead.",
                 ) from exc
             post_b64, post_sz = design_state.encode_design_snapshot(state)
-            new_entries.append(e.model_copy(update={
-                'design_snapshot_gz_b64': pre_b64, 'snapshot_size_bytes': pre_sz,
-                'post_state_gz_b64': post_b64, 'post_state_size_bytes': post_sz,
-                'evicted': False,
-            }))
+            new_entries.append(
+                e.model_copy(
+                    update={
+                        "design_snapshot_gz_b64": pre_b64,
+                        "snapshot_size_bytes": pre_sz,
+                        "post_state_gz_b64": post_b64,
+                        "post_state_size_bytes": post_sz,
+                        "evicted": False,
+                    }
+                )
+            )
         else:
             new_entries.append(e)
 
@@ -9369,8 +10434,13 @@ def _delete_snapshot_feature_by_replay(design: Design, log: list, index: int, en
     return _design_replace_response(design, updated, report)
 
 
-def _delete_snapshot_feature_by_subtraction(design: Design, log: list, index: int, deps: list, infos: list) -> dict:
-    from backend.core.models import SnapshotLogEntry as _SnapEntry, RoutingClusterLogEntry as _RoutingEntry
+def _delete_snapshot_feature_by_subtraction(
+    design: Design, log: list, index: int, deps: list, infos: list
+) -> dict:
+    from backend.core.models import (
+        SnapshotLogEntry as _SnapEntry,
+        RoutingClusterLogEntry as _RoutingEntry,
+    )
     from backend.core.validator import validate_design
 
     removal = {index} | set(deps)
@@ -9382,34 +10452,60 @@ def _delete_snapshot_feature_by_subtraction(design: Design, log: list, index: in
     for j, e in enumerate(log):
         if j in removal:
             continue
-        if j > index and isinstance(e, _SnapEntry) and e.design_snapshot_gz_b64 and e.post_state_gz_b64:
-            pre_b64, pre_sz = _strip_removed_ids_from_snapshot(e.design_snapshot_gz_b64, removed_ids)
-            post_b64, post_sz = _strip_removed_ids_from_snapshot(e.post_state_gz_b64, removed_ids)
-            e = e.model_copy(update={
-                'design_snapshot_gz_b64': pre_b64,
-                'snapshot_size_bytes': pre_sz,
-                'post_state_gz_b64': post_b64,
-                'post_state_size_bytes': post_sz,
-            })
-        elif j > index and isinstance(e, _RoutingEntry) and e.pre_state_gz_b64 and e.post_state_gz_b64:
-            pre_b64, pre_sz = _strip_removed_ids_from_snapshot(e.pre_state_gz_b64, removed_ids)
-            post_b64, post_sz = _strip_removed_ids_from_snapshot(e.post_state_gz_b64, removed_ids)
-            e = e.model_copy(update={
-                'pre_state_gz_b64': pre_b64,
-                'pre_state_size_bytes': pre_sz,
-                'post_state_gz_b64': post_b64,
-                'post_state_size_bytes': post_sz,
-            })
+        if (
+            j > index
+            and isinstance(e, _SnapEntry)
+            and e.design_snapshot_gz_b64
+            and e.post_state_gz_b64
+        ):
+            pre_b64, pre_sz = _strip_removed_ids_from_snapshot(
+                e.design_snapshot_gz_b64, removed_ids
+            )
+            post_b64, post_sz = _strip_removed_ids_from_snapshot(
+                e.post_state_gz_b64, removed_ids
+            )
+            e = e.model_copy(
+                update={
+                    "design_snapshot_gz_b64": pre_b64,
+                    "snapshot_size_bytes": pre_sz,
+                    "post_state_gz_b64": post_b64,
+                    "post_state_size_bytes": post_sz,
+                }
+            )
+        elif (
+            j > index
+            and isinstance(e, _RoutingEntry)
+            and e.pre_state_gz_b64
+            and e.post_state_gz_b64
+        ):
+            pre_b64, pre_sz = _strip_removed_ids_from_snapshot(
+                e.pre_state_gz_b64, removed_ids
+            )
+            post_b64, post_sz = _strip_removed_ids_from_snapshot(
+                e.post_state_gz_b64, removed_ids
+            )
+            e = e.model_copy(
+                update={
+                    "pre_state_gz_b64": pre_b64,
+                    "pre_state_size_bytes": pre_sz,
+                    "post_state_gz_b64": post_b64,
+                    "post_state_size_bytes": post_sz,
+                }
+            )
         new_entries.append(e)
 
-    base = _filter_removed_ids_from_design(design, removed_ids).copy_with(feature_log=new_entries)
+    base = _filter_removed_ids_from_design(design, removed_ids).copy_with(
+        feature_log=new_entries
+    )
     updated = _seek_feature_log(base, -1)
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_replace_response(design, updated, report)
 
 
-def _delete_snapshot_feature(design: Design, log: list, index: int, entry, cascade: bool) -> dict:
+def _delete_snapshot_feature(
+    design: Design, log: list, index: int, entry, cascade: bool
+) -> dict:
     """Option-1 surgical delete of a topology-producing snapshot entry.
 
     Computes the entry's dependents (later entries that can't survive its
@@ -9440,11 +10536,14 @@ def _delete_snapshot_feature(design: Design, log: list, index: int, entry, casca
         raise HTTPException(
             410,
             detail="This feature's snapshot was evicted to free space, so its "
-                   "geometry can't be rolled back. Revert instead.",
+            "geometry can't be rolled back. Revert instead.",
         )
 
     try:
-        non_additive = any(_snapshot_removed_ids(log[j]) or infos[j].modified for j in ({index} | set(deps)))
+        non_additive = any(
+            _snapshot_removed_ids(log[j]) or infos[j].modified
+            for j in ({index} | set(deps))
+        )
     except Exception:
         non_additive = True
     if non_additive:
@@ -9453,7 +10552,9 @@ def _delete_snapshot_feature(design: Design, log: list, index: int, entry, casca
 
 
 @router.delete("/design/features/{index}", status_code=200)
-def delete_feature(index: int, sub_index: int | None = None, cascade: bool = False) -> dict:
+def delete_feature(
+    index: int, sub_index: int | None = None, cascade: bool = False
+) -> dict:
     """Remove the feature at the given log index (0-based) and reconstruct state.
 
     **Delete = roll back this op's geometry (option-1 semantics).** Deleting a
@@ -9489,7 +10590,10 @@ def delete_feature(index: int, sub_index: int | None = None, cascade: bool = Fal
     log = list(design.feature_log)
 
     if index < 0 or index >= len(log):
-        raise HTTPException(400, detail=f"Feature index {index} out of range (log has {len(log)} entries).")
+        raise HTTPException(
+            400,
+            detail=f"Feature index {index} out of range (log has {len(log)} entries).",
+        )
 
     entry = log[index]
     if entry.feature_type == "checkpoint":
@@ -9497,11 +10601,16 @@ def delete_feature(index: int, sub_index: int | None = None, cascade: bool = Fal
 
     # Per-sub-step delete inside a Fine Routing cluster.
     if sub_index is not None:
-        if entry.feature_type != 'routing-cluster':
-            raise HTTPException(400, detail="sub_index is only valid for Fine Routing cluster entries.")
+        if entry.feature_type != "routing-cluster":
+            raise HTTPException(
+                400, detail="sub_index is only valid for Fine Routing cluster entries."
+            )
         n_children = len(entry.children)
         if sub_index < 0 or sub_index >= n_children:
-            raise HTTPException(400, detail=f"sub_index {sub_index} out of range (cluster has {n_children} sub-steps).")
+            raise HTTPException(
+                400,
+                detail=f"sub_index {sub_index} out of range (cluster has {n_children} sub-steps).",
+            )
         return _delete_routing_child(design, log, index, entry, sub_index)
 
     # Topology-producing snapshot ops (extrusions, auto-*, circle, protein,
@@ -9515,13 +10624,13 @@ def delete_feature(index: int, sub_index: int | None = None, cascade: bool = Fal
     # Adjust the cursor so the active window remains consistent after removal.
     cursor = design.feature_log_cursor
     if cursor == -2 or cursor < index:
-        new_cursor = cursor                # active window unaffected
+        new_cursor = cursor  # active window unaffected
     elif cursor == -1:
-        new_cursor = -1                    # all remaining entries stay active
+        new_cursor = -1  # all remaining entries stay active
     elif cursor == 0:
-        new_cursor = -2                    # only active entry was just deleted → empty
+        new_cursor = -2  # only active entry was just deleted → empty
     else:
-        new_cursor = cursor - 1            # shift left by one
+        new_cursor = cursor - 1  # shift left by one
 
     temp = design.copy_with(feature_log=new_log)
 
@@ -9533,15 +10642,21 @@ def delete_feature(index: int, sub_index: int | None = None, cascade: bool = Fal
     # If the deleted entry was a cluster_op and the cluster has no remaining ops
     # in new_log, _seek_feature_log won't know to reset it (the cluster won't appear
     # in clusters_with_ops).  Pre-reset the transform here so the seek sees identity.
-    if entry.feature_type == 'cluster_op':
+    if entry.feature_type == "cluster_op":
         still_has_ops = any(
-            e.feature_type == 'cluster_op' and e.cluster_id == entry.cluster_id
+            e.feature_type == "cluster_op" and e.cluster_id == entry.cluster_id
             for e in new_log
         )
         if not still_has_ops:
             new_cts = [
-                ct.model_copy(update={'translation': [0.0, 0.0, 0.0], 'rotation': [0.0, 0.0, 0.0, 1.0]})
-                if ct.id == entry.cluster_id else ct
+                ct.model_copy(
+                    update={
+                        "translation": [0.0, 0.0, 0.0],
+                        "rotation": [0.0, 0.0, 0.0, 1.0],
+                    }
+                )
+                if ct.id == entry.cluster_id
+                else ct
                 for ct in temp.cluster_transforms
             ]
             temp = temp.copy_with(cluster_transforms=new_cts)
@@ -9553,9 +10668,13 @@ def delete_feature(index: int, sub_index: int | None = None, cascade: bool = Fal
     # pre/post snapshots to invert this routing-cluster's joint delta on the
     # live cluster_joints. Without pre/post payload (evicted) we can't recover
     # the delta; the indicators stay until a manual joint-delete.
-    if entry.feature_type == 'routing-cluster' and entry.pre_state_gz_b64 and entry.post_state_gz_b64:
+    if (
+        entry.feature_type == "routing-cluster"
+        and entry.pre_state_gz_b64
+        and entry.post_state_gz_b64
+    ):
         try:
-            pre_design  = design_state.decode_design_snapshot(entry.pre_state_gz_b64)
+            pre_design = design_state.decode_design_snapshot(entry.pre_state_gz_b64)
             post_design = design_state.decode_design_snapshot(entry.post_state_gz_b64)
         except Exception:
             pre_design = None
@@ -9569,7 +10688,7 @@ def delete_feature(index: int, sub_index: int | None = None, cascade: bool = Fal
     # Deleting a bend/twist must re-place any primitive that was appended onto the
     # bent face (a deformed continuation bakes the deformed frame), so its geometry
     # reflects the now-un-bent part. No-op when the design has no such continuation.
-    if entry.feature_type == 'deformation':
+    if entry.feature_type == "deformation":
         updated = _rebuild_deformed_continuations(updated)
     design_state.set_design(updated)
     report = validate_design(updated)
@@ -9640,13 +10759,19 @@ def _auto_loadout_name(loadouts: list[DesignLoadout]) -> str:
     return f"Loadout {n}"
 
 
-def _save_active_loadout_snapshot(design: Design, loadouts: list[DesignLoadout], active_id: str) -> list[DesignLoadout]:
+def _save_active_loadout_snapshot(
+    design: Design, loadouts: list[DesignLoadout], active_id: str
+) -> list[DesignLoadout]:
     payload, size = _encode_loadout_design_snapshot(design)
     return [
-        l.model_copy(update={
-            "design_snapshot_gz_b64": payload,
-            "snapshot_size_bytes": size,
-        }) if l.id == active_id else l
+        l.model_copy(
+            update={
+                "design_snapshot_gz_b64": payload,
+                "snapshot_size_bytes": size,
+            }
+        )
+        if l.id == active_id
+        else l
         for l in loadouts
     ]
 
@@ -9663,12 +10788,14 @@ def create_loadout(body: LoadoutCreateBody) -> dict:
     name = (body.name or "").strip() or _auto_loadout_name(loadouts)
     new_id = str(_uuid.uuid4())
     payload, size = _encode_loadout_design_snapshot(current)
-    loadouts.append(DesignLoadout(
-        id=new_id,
-        name=name,
-        design_snapshot_gz_b64=payload,
-        snapshot_size_bytes=size,
-    ))
+    loadouts.append(
+        DesignLoadout(
+            id=new_id,
+            name=name,
+            design_snapshot_gz_b64=payload,
+            snapshot_size_bytes=size,
+        )
+    )
 
     updated = current.copy_with(loadouts=loadouts, active_loadout_id=new_id)
     design_state.set_design(updated)
@@ -9747,9 +10874,13 @@ def delete_loadout(loadout_id: str) -> dict:
         updated = current.copy_with(loadouts=remaining, active_loadout_id=next_id)
     else:
         try:
-            restored = _decode_loadout_design_snapshot(remaining[0].design_snapshot_gz_b64)
+            restored = _decode_loadout_design_snapshot(
+                remaining[0].design_snapshot_gz_b64
+            )
         except Exception as exc:
-            raise HTTPException(500, detail=f"Failed to restore next loadout: {exc}") from exc
+            raise HTTPException(
+                500, detail=f"Failed to restore next loadout: {exc}"
+            ) from exc
         updated = restored.copy_with(loadouts=remaining, active_loadout_id=next_id)
 
     design_state.set_design(updated)
@@ -9768,34 +10899,35 @@ def delete_loadout(loadout_id: str) -> dict:
 # NOT in this table — those operations are usually re-run rather than
 # parameter-edited; the user can revert them and rerun via the original UI.
 
+
 def _edit_dispatch_run(op_kind: str, pre_state: Design, params: dict) -> Design:
     """Validate ``params`` against the schema for ``op_kind`` and return the
     new design produced by replaying the op on ``pre_state``. Raises HTTP 400
     on schema mismatch, HTTP 422 on op-runtime errors."""
-    if op_kind == 'bundle-create':
+    if op_kind == "bundle-create":
         body = BundleRequest.model_validate(params)
         cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
         return _build_bundle(cells, body)
-    if op_kind == 'extrude-segment':
+    if op_kind == "extrude-segment":
         body = BundleSegmentRequest.model_validate(params)
         updated, _ = _build_extrude_segment(pre_state, body)
         return updated
-    if op_kind == 'extrude-continuation':
+    if op_kind == "extrude-continuation":
         body = BundleContinuationRequest.model_validate(params)
         updated, _ = _build_extrude_continuation(pre_state, body)
         return updated
-    if op_kind == 'extrude-deformed-continuation':
+    if op_kind == "extrude-deformed-continuation":
         body = BundleDeformedContinuationRequest.model_validate(params)
         updated, _ = _build_extrude_deformed_continuation(pre_state, body)
         return updated
-    if op_kind == 'overhang-extrude':
+    if op_kind == "overhang-extrude":
         body = OverhangExtrudeRequest.model_validate(params)
         updated, _ = _build_overhang_extrude(pre_state, body)
         return updated
     raise HTTPException(
         400,
         detail=f"op_kind {op_kind!r} is not editable via this endpoint. "
-               "Auto-ops (auto-scaffold, auto-break, etc.) should be reverted and re-run.",
+        "Auto-ops (auto-scaffold, auto-break, etc.) should be reverted and re-run.",
     )
 
 
@@ -9805,7 +10937,7 @@ class EditFeatureBody(BaseModel):
 
 def _edit_cluster_op_feature(
     index: int,
-    entry: 'ClusterOpLogEntry',
+    entry: "ClusterOpLogEntry",
     body: EditFeatureBody,
     design: Design,
 ) -> dict:
@@ -9821,6 +10953,7 @@ def _edit_cluster_op_feature(
         raise HTTPException(e.status, detail=str(e))
 
     from backend.core.validator import validate_design as _validate_design
+
     design_state.set_design(updated)
     report = _validate_design(updated)
     # Cluster-only diff: design differs from prev only in cluster_transforms,
@@ -9831,7 +10964,7 @@ def _edit_cluster_op_feature(
 
 def _edit_deformation_feature(
     index: int,
-    entry: 'DeformationLogEntry',
+    entry: "DeformationLogEntry",
     body: EditFeatureBody,
     design: Design,
 ) -> dict:
@@ -9848,6 +10981,7 @@ def _edit_deformation_feature(
         raise HTTPException(e.status, detail=str(e))
 
     from backend.core.validator import validate_design as _validate_design
+
     # Editing a bend/twist (e.g. changing its angle) must re-place any primitive
     # appended onto the bent face so it tracks the new deformation. No-op when the
     # design has no deformed continuation. (api-bound: needs snapshot decode +
@@ -9890,7 +11024,10 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
     log = list(design.feature_log)
 
     if index < 0 or index >= len(log):
-        raise HTTPException(400, detail=f"Feature index {index} out of range (log has {len(log)} entries).")
+        raise HTTPException(
+            400,
+            detail=f"Feature index {index} out of range (log has {len(log)} entries).",
+        )
 
     entry = log[index]
 
@@ -9900,11 +11037,15 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
 
     # ── Cluster_op edit branch ────────────────────────────────────────────────
     from backend.core.models import ClusterOpLogEntry as _ClusterOpLogEntry
+
     if isinstance(entry, _ClusterOpLogEntry):
         return _edit_cluster_op_feature(index, entry, body, design)
 
     if not isinstance(entry, _SnapshotLogEntry):
-        raise HTTPException(400, detail=f"Feature at index {index} is not editable (type {entry.feature_type!r}).")
+        raise HTTPException(
+            400,
+            detail=f"Feature at index {index} is not editable (type {entry.feature_type!r}).",
+        )
     if entry.evicted or not entry.design_snapshot_gz_b64:
         raise HTTPException(
             410,
@@ -9912,7 +11053,8 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
         )
 
     later_snapshots = [
-        i for i, e in enumerate(log[index + 1:], start=index + 1)
+        i
+        for i, e in enumerate(log[index + 1 :], start=index + 1)
         if isinstance(e, _SnapshotLogEntry)
     ]
     if later_snapshots:
@@ -9932,7 +11074,9 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
     except HTTPException:
         raise
     except ValidationError as exc:
-        raise HTTPException(400, detail=f"Invalid params for {entry.op_kind}: {exc}") from exc
+        raise HTTPException(
+            400, detail=f"Invalid params for {entry.op_kind}: {exc}"
+        ) from exc
     except ValueError as exc:
         raise HTTPException(422, detail=str(exc)) from exc
 
@@ -9940,13 +11084,15 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
     new_pre_b64, new_pre_size = design_state.encode_design_snapshot(pre_state)
     new_post_b64, new_post_size = design_state.encode_design_snapshot(new_post)
 
-    updated_entry = entry.model_copy(update={
-        'params': body.params,
-        'design_snapshot_gz_b64': new_pre_b64,
-        'snapshot_size_bytes': new_pre_size,
-        'post_state_gz_b64': new_post_b64,
-        'post_state_size_bytes': new_post_size,
-    })
+    updated_entry = entry.model_copy(
+        update={
+            "params": body.params,
+            "design_snapshot_gz_b64": new_pre_b64,
+            "snapshot_size_bytes": new_pre_size,
+            "post_state_gz_b64": new_post_b64,
+            "post_state_size_bytes": new_post_size,
+        }
+    )
     new_log = list(log)
     new_log[index] = updated_entry
 
@@ -9966,7 +11112,9 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
     return _design_replace_response(design, final, report)
 
 
-def roll_active_to_job_state(snapshot: Design, feature_log_position, return_name: str) -> dict:
+def roll_active_to_job_state(
+    snapshot: Design, feature_log_position, return_name: str
+) -> dict:
     """Roll the active design back to the state an oxDNA/MD job was run at, by SEEKING
     the feature-log cursor to the job's position — exactly like sliding the Feature Log
     tab's rail.  The full feature log is preserved (later entries — e.g. an overhang
@@ -9990,16 +11138,21 @@ def roll_active_to_job_state(snapshot: Design, feature_log_position, return_name
         loadouts = _save_active_loadout_snapshot(current, loadouts, active_id)
     return_id = str(_uuid.uuid4())
     payload, size = _encode_loadout_design_snapshot(current)
-    loadouts.append(DesignLoadout(
-        id=return_id, name=return_name,
-        design_snapshot_gz_b64=payload, snapshot_size_bytes=size))
+    loadouts.append(
+        DesignLoadout(
+            id=return_id,
+            name=return_name,
+            design_snapshot_gz_b64=payload,
+            snapshot_size_bytes=size,
+        )
+    )
 
     # Seek the cursor to the job's run position (full log kept, cursor moves).
     n = len(current.feature_log)
     if feature_log_position is not None and -1 <= feature_log_position < n:
         seeked = _seek_feature_log(current, feature_log_position)
     else:
-        seeked = current   # no recorded position / out of range → leave the cursor
+        seeked = current  # no recorded position / out of range → leave the cursor
 
     # New jobs: the seek already reproduces the job's state.  Old jobs: overlay the
     # job's exact snapshot topology onto the seeked log/cursor so it still runs.
@@ -10010,7 +11163,9 @@ def roll_active_to_job_state(snapshot: Design, feature_log_position, return_name
             feature_log=seeked.feature_log,
             feature_log_cursor=seeked.feature_log_cursor,
             feature_log_sub_cursor=seeked.feature_log_sub_cursor,
-            loadouts=loadouts, active_loadout_id=None)
+            loadouts=loadouts,
+            active_loadout_id=None,
+        )
 
     design_state.set_design(rolled)
     report = validate_design(rolled)
@@ -10052,14 +11207,19 @@ def revert_to_before_feature(index: int, sub_index: int | None = None) -> dict:
     log = list(design.feature_log)
 
     if index < 0 or index >= len(log):
-        raise HTTPException(400, detail=f"Feature index {index} out of range (log has {len(log)} entries).")
+        raise HTTPException(
+            400,
+            detail=f"Feature index {index} out of range (log has {len(log)} entries).",
+        )
 
     entry = log[index]
 
     # Per-sub-step revert inside a Fine Routing cluster.
     if sub_index is not None:
         if not isinstance(entry, _RoutingClusterLogEntry):
-            raise HTTPException(400, detail="sub_index is only valid for Fine Routing cluster entries.")
+            raise HTTPException(
+                400, detail="sub_index is only valid for Fine Routing cluster entries."
+            )
         return _revert_before_routing_child(design, log, index, entry, sub_index)
 
     # Delta entries (deformation / cluster_op / overhang_rotation) carry no
@@ -10069,7 +11229,7 @@ def revert_to_before_feature(index: int, sub_index: int | None = None) -> dict:
     # the last surviving snapshot and re-derives the deformation / cluster /
     # overhang overlays WITHOUT this entry (and without every entry after it).
     # Same user-facing contract as snapshot revert; Ctrl-Z restores.
-    if entry.feature_type in ('deformation', 'cluster_op', 'overhang_rotation'):
+    if entry.feature_type in ("deformation", "cluster_op", "overhang_rotation"):
         truncated = design.copy_with(feature_log=log[:index])
         if log[:index]:
             restored = _seek_feature_log(truncated, -1)
@@ -10095,8 +11255,8 @@ def revert_to_before_feature(index: int, sub_index: int | None = None) -> dict:
         raise HTTPException(
             400,
             detail=f"Feature at index {index} (type={entry.feature_type!r}) is not a payload-bearing "
-                   "entry. Only snapshot and routing-cluster entries support revert; use DELETE "
-                   "for delta entries.",
+            "entry. Only snapshot and routing-cluster entries support revert; use DELETE "
+            "for delta entries.",
         )
 
     if entry.evicted or not pre_b64:
@@ -10108,7 +11268,9 @@ def revert_to_before_feature(index: int, sub_index: int | None = None) -> dict:
     try:
         restored = design_state.decode_design_snapshot(pre_b64)
     except Exception as e:  # pragma: no cover - defensive
-        raise HTTPException(500, detail=f"Failed to decode snapshot for feature {index}: {e}")
+        raise HTTPException(
+            500, detail=f"Failed to decode snapshot for feature {index}: {e}"
+        )
 
     # Keep only entries strictly before this one — see truncation rationale above.
     truncated_log = log[:index]
@@ -10119,7 +11281,9 @@ def revert_to_before_feature(index: int, sub_index: int | None = None) -> dict:
     return _design_response_with_geometry(restored, report)
 
 
-def _revert_before_routing_child(design: "Design", log: list, index: int, entry, child_index: int) -> dict:
+def _revert_before_routing_child(
+    design: "Design", log: list, index: int, entry, child_index: int
+) -> dict:
     """Revert the design to the state just BEFORE ``entry.children[child_index]``
     of the Fine Routing cluster at log ``index``.
 
@@ -10139,7 +11303,10 @@ def _revert_before_routing_child(design: "Design", log: list, index: int, entry,
         )
     n_children = len(entry.children)
     if child_index < 0 or child_index >= n_children:
-        raise HTTPException(400, detail=f"sub_index {child_index} out of range (cluster has {n_children} sub-steps).")
+        raise HTTPException(
+            400,
+            detail=f"sub_index {child_index} out of range (cluster has {n_children} sub-steps).",
+        )
 
     # Reconstruct the state just before child `child_index` by applying the
     # recorded diffs of children[0..child_index-1] forward (any op type; legacy
@@ -10153,15 +11320,19 @@ def _revert_before_routing_child(design: "Design", log: list, index: int, entry,
         # Keep the cluster holding children[0..child_index-1] (their diffs intact)
         # and re-encode its post-state to the reconstructed boundary.
         post_b64, post_size = design_state.encode_design_snapshot(restored)
-        kept_cluster = entry.model_copy(update={
-            'children': list(entry.children[:child_index]),
-            'post_state_gz_b64': post_b64,
-            'post_state_size_bytes': post_size,
-        })
+        kept_cluster = entry.model_copy(
+            update={
+                "children": list(entry.children[:child_index]),
+                "post_state_gz_b64": post_b64,
+                "post_state_size_bytes": post_size,
+            }
+        )
         truncated_log = log[:index] + [kept_cluster]
 
     restored = restored.copy_with(
-        feature_log=truncated_log, feature_log_cursor=-1, feature_log_sub_cursor=None,
+        feature_log=truncated_log,
+        feature_log_cursor=-1,
+        feature_log_sub_cursor=None,
     )
     design_state.set_design(restored)
     report = validate_design(restored)
@@ -10201,44 +11372,58 @@ def _replay_minor_op(design: Design, op_subtype: str, params: dict) -> Design:
     Raises ``HTTPException`` for genuine replay failures (target removed,
     invalid params).
     """
-    if op_subtype == 'nick':
+    if op_subtype == "nick":
         return _build_nick(design, NickRequest.model_validate(params))
-    if op_subtype == 'nick-batch':
+    if op_subtype == "nick-batch":
         return _build_nick_batch(design, NickBatchRequest.model_validate(params))
-    if op_subtype == 'crossover-place':
-        d, _x, _ligated = _build_place_crossover(design, PlaceCrossoverRequest.model_validate(params))
+    if op_subtype == "crossover-place":
+        d, _x, _ligated = _build_place_crossover(
+            design, PlaceCrossoverRequest.model_validate(params)
+        )
         return d
-    if op_subtype == 'crossover-place-batch':
-        d, _xs, _skipped = _build_place_crossover_batch(design, PlaceCrossoverBatchRequest.model_validate(params))
+    if op_subtype == "crossover-place-batch":
+        d, _xs, _skipped = _build_place_crossover_batch(
+            design, PlaceCrossoverBatchRequest.model_validate(params)
+        )
         return d
-    if op_subtype == 'strand-end-resize':
-        return _build_strand_end_resize(design, StrandEndResizeRequest.model_validate(params))
-    if op_subtype == 'domain-shift':
+    if op_subtype == "strand-end-resize":
+        return _build_strand_end_resize(
+            design, StrandEndResizeRequest.model_validate(params)
+        )
+    if op_subtype == "domain-shift":
         return _build_domain_shift(design, DomainShiftRequest.model_validate(params))
-    if op_subtype == 'strand-delete':
-        return _build_delete_strand(design, params['strand_id'])
-    if op_subtype == 'strand-delete-batch':
-        return _build_delete_strands_batch(design, StrandBatchDeleteRequest.model_validate(params))
-    if op_subtype == 'domain-delete':
-        return _build_delete_domain(design, params['strand_id'], params['domain_index'])
-    if op_subtype == 'helix-delete':
+    if op_subtype == "strand-delete":
+        return _build_delete_strand(design, params["strand_id"])
+    if op_subtype == "strand-delete-batch":
+        return _build_delete_strands_batch(
+            design, StrandBatchDeleteRequest.model_validate(params)
+        )
+    if op_subtype == "domain-delete":
+        return _build_delete_domain(design, params["strand_id"], params["domain_index"])
+    if op_subtype == "helix-delete":
         out = design.model_copy(deep=True)
-        idx = next((i for i, h in enumerate(out.helices) if h.id == params['helix_id']), None)
+        idx = next(
+            (i for i, h in enumerate(out.helices) if h.id == params["helix_id"]), None
+        )
         if idx is None:
-            raise HTTPException(404, detail=f"Helix {params['helix_id']!r} not found at replay.")
+            raise HTTPException(
+                404, detail=f"Helix {params['helix_id']!r} not found at replay."
+            )
         out.helices.pop(idx)
         return out
-    if op_subtype == 'crossover-delete':
-        cid = params['crossover_id']
+    if op_subtype == "crossover-delete":
+        cid = params["crossover_id"]
         xover = next((x for x in design.crossovers if x.id == cid), None)
         if xover is None:
             raise HTTPException(404, detail=f"Crossover {cid!r} missing at replay.")
-        new_strands = _desplice_strands_for_crossover(design, xover.half_a, xover.half_b)
+        new_strands = _desplice_strands_for_crossover(
+            design, xover.half_a, xover.half_b
+        )
         out = design.model_copy(deep=True)
         out.crossovers = [x for x in out.crossovers if x.id != cid]
         out.strands = new_strands
         return out
-    if op_subtype in ('joint-place', 'joint-update', 'joint-delete'):
+    if op_subtype in ("joint-place", "joint-update", "joint-delete"):
         # Builders live in routes_cluster_joints.py (extracted). Import them
         # function-locally: that module imports _design_response back from this
         # one, so a top-level import would be circular.
@@ -10247,9 +11432,10 @@ def _replay_minor_op(design: Design, op_subtype: str, params: dict) -> Design:
             _build_update_joint,
             _build_delete_joint,
         )
-        if op_subtype == 'joint-place':
+
+        if op_subtype == "joint-place":
             return _build_add_joint(design, params)
-        if op_subtype == 'joint-update':
+        if op_subtype == "joint-update":
             return _build_update_joint(design, params)
         return _build_delete_joint(design, params)
 
@@ -10342,9 +11528,10 @@ def _rebuild_deformed_continuations(design: Design) -> Design:
 
     log = list(design.feature_log)
     dc_idxs = [
-        i for i, e in enumerate(log)
+        i
+        for i, e in enumerate(log)
         if isinstance(e, _SnapshotLogEntry)
-        and e.op_kind == 'extrude-deformed-continuation'
+        and e.op_kind == "extrude-deformed-continuation"
         and not e.evicted
         and e.design_snapshot_gz_b64
     ]
@@ -10358,17 +11545,20 @@ def _rebuild_deformed_continuations(design: Design) -> Design:
     # against the surviving bends/twists.
     state = design_state.decode_design_snapshot(log[first].design_snapshot_gz_b64)
     defs_before = [
-        e.op_snapshot for e in log[:first]
-        if e.feature_type == 'deformation' and e.op_snapshot is not None
+        e.op_snapshot
+        for e in log[:first]
+        if e.feature_type == "deformation" and e.op_snapshot is not None
     ]
     state = state.copy_with(deformations=defs_before)
 
     new_log = list(log)
     for i in range(first, len(log)):
         e = log[i]
-        if e.feature_type == 'deformation':
+        if e.feature_type == "deformation":
             if e.op_snapshot is not None:
-                state = state.copy_with(deformations=list(state.deformations) + [e.op_snapshot])
+                state = state.copy_with(
+                    deformations=list(state.deformations) + [e.op_snapshot]
+                )
             continue
         if not isinstance(e, _SnapshotLogEntry):
             continue  # cluster_op / overhang_rotation deltas — overlays, not topology
@@ -10380,21 +11570,27 @@ def _rebuild_deformed_continuations(design: Design) -> Design:
         except (HTTPException, ValidationError, ValueError):
             # Non-replayable (auto-*, circle-segment, schema drift) — keep its baked
             # post-state as the base for whatever follows and move on.
-            state = _topology_substitute(state, design_state.decode_design_snapshot(e.post_state_gz_b64))
+            state = _topology_substitute(
+                state, design_state.decode_design_snapshot(e.post_state_gz_b64)
+            )
             continue
         post_b64, post_size = design_state.encode_design_snapshot(new_post)
-        new_log[i] = e.model_copy(update={
-            'design_snapshot_gz_b64': pre_b64,
-            'snapshot_size_bytes':    pre_size,
-            'post_state_gz_b64':      post_b64,
-            'post_state_size_bytes':  post_size,
-        })
+        new_log[i] = e.model_copy(
+            update={
+                "design_snapshot_gz_b64": pre_b64,
+                "snapshot_size_bytes": pre_size,
+                "post_state_gz_b64": post_b64,
+                "post_state_size_bytes": post_size,
+            }
+        )
         state = new_post
 
     return _topology_substitute(design, state).copy_with(feature_log=new_log)
 
 
-def _seek_snapshot_base(design: Design, position: int, sub_position: int | None = None) -> Design:
+def _seek_snapshot_base(
+    design: Design, position: int, sub_position: int | None = None
+) -> Design:
     """Choose the design whose strand/helix/crossover topology represents the
     state at the requested feature-log position.
 
@@ -10454,7 +11650,7 @@ def _seek_snapshot_base(design: Design, position: int, sub_position: int | None 
             return not e.evicted and bool(e.post_state_gz_b64)
         return False
 
-    pre_indices  = [i for i, e in enumerate(log) if _has_pre(e)]
+    pre_indices = [i for i, e in enumerate(log) if _has_pre(e)]
     post_indices = [i for i, e in enumerate(log) if _has_post(e)]
     if not pre_indices and not post_indices:
         return design
@@ -10464,7 +11660,7 @@ def _seek_snapshot_base(design: Design, position: int, sub_position: int | None 
     if position == -1 or position >= len(log) - 1:
         eff_position = len(log) - 1
     elif position == -2:
-        eff_position = -1   # before everything
+        eff_position = -1  # before everything
     else:
         eff_position = position
 
@@ -10482,7 +11678,8 @@ def _seek_snapshot_base(design: Design, position: int, sub_position: int | None 
             return design
         first = log[pre_indices[0]]
         snap_design = design_state.decode_design_snapshot(
-            first.design_snapshot_gz_b64 if isinstance(first, _SnapshotLogEntry)
+            first.design_snapshot_gz_b64
+            if isinstance(first, _SnapshotLogEntry)
             else first.pre_state_gz_b64
         )
         return _topology_substitute(design, snap_design)
@@ -10498,23 +11695,32 @@ def _seek_snapshot_base(design: Design, position: int, sub_position: int | None 
     ):
         # -2 = pre-cluster (no children active)
         if sub_position == -2 or sub_position < -1:
-            snap_design = design_state.decode_design_snapshot(payload_entry.pre_state_gz_b64)
+            snap_design = design_state.decode_design_snapshot(
+                payload_entry.pre_state_gz_b64
+            )
             return _topology_substitute(design, snap_design)
         # 0..M-1 = first sub_position+1 children active
         n_children = len(payload_entry.children)
         if 0 <= sub_position < n_children:
             from backend.core.design_diff import apply_child_diff_forward, is_diff_child
+
             try:
-                snap_design = design_state.decode_design_snapshot(payload_entry.pre_state_gz_b64)
+                snap_design = design_state.decode_design_snapshot(
+                    payload_entry.pre_state_gz_b64
+                )
                 for child in payload_entry.children[: sub_position + 1]:
                     if is_diff_child(child):
                         # Diff-based: works for any op type, no replay needed.
                         snap_design, _w = apply_child_diff_forward(
-                            snap_design, child.diff_added_b64,
-                            child.diff_removed_b64, child.diff_modified_b64,
+                            snap_design,
+                            child.diff_added_b64,
+                            child.diff_removed_b64,
+                            child.diff_modified_b64,
                         )
                     else:
-                        snap_design = _replay_minor_op(snap_design, child.op_subtype, child.params)
+                        snap_design = _replay_minor_op(
+                            snap_design, child.op_subtype, child.params
+                        )
                 return _topology_substitute(design, snap_design)
             except NotImplementedError:
                 # Legacy child with a non-replayable op AND no diff. Gracefully
@@ -10525,13 +11731,19 @@ def _seek_snapshot_base(design: Design, position: int, sub_position: int | None 
 
     # Default: use POST-state of the chosen payload entry.
     if isinstance(payload_entry, _SnapshotLogEntry):
-        snap_design = design_state.decode_design_snapshot(payload_entry.post_state_gz_b64)
+        snap_design = design_state.decode_design_snapshot(
+            payload_entry.post_state_gz_b64
+        )
     else:
-        snap_design = design_state.decode_design_snapshot(payload_entry.post_state_gz_b64)
+        snap_design = design_state.decode_design_snapshot(
+            payload_entry.post_state_gz_b64
+        )
     return _topology_substitute(design, snap_design)
 
 
-def _seek_feature_log(design: Design, position: int, sub_position: int | None = None) -> Design:
+def _seek_feature_log(
+    design: Design, position: int, sub_position: int | None = None
+) -> Design:
     """Replay feature_log[0..position] to compute effective deformations + cluster states.
 
     position = -1 means 'seek to end' (all entries active).
@@ -10559,10 +11771,18 @@ def _seek_feature_log(design: Design, position: int, sub_position: int | None = 
     if position == -2:
         # Seeking to empty state — no features active.
         # Reset cluster transforms for any cluster that has ops in the log.
-        clusters_with_any_op = {e.cluster_id for e in log if e.feature_type == 'cluster_op'}
+        clusters_with_any_op = {
+            e.cluster_id for e in log if e.feature_type == "cluster_op"
+        }
         new_cts = [
-            ct.model_copy(update={'translation': [0.0, 0.0, 0.0], 'rotation': [0.0, 0.0, 0.0, 1.0]})
-            if ct.id in clusters_with_any_op else ct
+            ct.model_copy(
+                update={
+                    "translation": [0.0, 0.0, 0.0],
+                    "rotation": [0.0, 0.0, 0.0, 1.0],
+                }
+            )
+            if ct.id in clusters_with_any_op
+            else ct
             for ct in design.cluster_transforms
         ]
         new_joints = _rebase_joints_to_cts(design, new_cts)
@@ -10571,7 +11791,7 @@ def _seek_feature_log(design: Design, position: int, sub_position: int | None = 
         ovhgs_with_any_op: set = set()
         sd_pairs_with_any_op: set[tuple[str, str]] = set()
         for e in log:
-            if e.feature_type != 'overhang_rotation':
+            if e.feature_type != "overhang_rotation":
                 continue
             sd_ids = e.sub_domain_ids
             for i, oid in enumerate(e.overhang_ids):
@@ -10584,21 +11804,30 @@ def _seek_feature_log(design: Design, position: int, sub_position: int | None = 
         for ovhg in design.overhangs:
             update: dict = {}
             if ovhg.id in ovhgs_with_any_op:
-                update['rotation'] = [0.0, 0.0, 0.0, 1.0]
-            sds_touched = {sd_id for (oid, sd_id) in sd_pairs_with_any_op if oid == ovhg.id}
+                update["rotation"] = [0.0, 0.0, 0.0, 1.0]
+            sds_touched = {
+                sd_id for (oid, sd_id) in sd_pairs_with_any_op if oid == ovhg.id
+            }
             if sds_touched:
-                update['sub_domains'] = [
-                    sd.model_copy(update={
-                        'rotation_theta_deg': 0.0,
-                        'rotation_phi_deg':   0.0,
-                    }) if sd.id in sds_touched else sd
+                update["sub_domains"] = [
+                    sd.model_copy(
+                        update={
+                            "rotation_theta_deg": 0.0,
+                            "rotation_phi_deg": 0.0,
+                        }
+                    )
+                    if sd.id in sds_touched
+                    else sd
                     for sd in ovhg.sub_domains
                 ]
             new_overhangs.append(ovhg.model_copy(update=update) if update else ovhg)
         return design.copy_with(
-            deformations=[], cluster_transforms=new_cts,
-            cluster_joints=new_joints, overhangs=new_overhangs,
-            feature_log_cursor=-2, feature_log_sub_cursor=None,
+            deformations=[],
+            cluster_transforms=new_cts,
+            cluster_joints=new_joints,
+            overhangs=new_overhangs,
+            feature_log_cursor=-2,
+            feature_log_sub_cursor=None,
         )
 
     if not log:
@@ -10611,20 +11840,20 @@ def _seek_feature_log(design: Design, position: int, sub_position: int | None = 
     # sub-notch — exactly the user-reported snap bug).
     if sub_position is not None and 0 <= position <= len(log) - 1:
         cursor_val = position
-        active = log[:position + 1]
+        active = log[: position + 1]
     elif position == -1 or position >= len(log) - 1:
         # Seeking to end — restore all deformations from log and latest cluster states.
         cursor_val = -1
         active = log
     else:
         cursor_val = position
-        active = log[:position + 1]
+        active = log[: position + 1]
 
     # Rebuild deformation list from active entries.
     deform_map = {d.id: d for d in design.deformations}
     new_deformations = []
     for entry in active:
-        if entry.feature_type == 'deformation':
+        if entry.feature_type == "deformation":
             op = entry.op_snapshot or deform_map.get(entry.deformation_id)
             if op:
                 new_deformations.append(op)
@@ -10632,29 +11861,31 @@ def _seek_feature_log(design: Design, position: int, sub_position: int | None = 
     # Rebuild cluster states: use the last cluster_op per cluster in the active window.
     cluster_last: dict[str, ClusterOpLogEntry] = {}
     for entry in active:
-        if entry.feature_type == 'cluster_op':
+        if entry.feature_type == "cluster_op":
             cluster_last[entry.cluster_id] = entry
 
     # Collect cluster IDs that have ANY cluster_op anywhere in the full log.
-    clusters_with_ops = {
-        e.cluster_id for e in log if e.feature_type == 'cluster_op'
-    }
+    clusters_with_ops = {e.cluster_id for e in log if e.feature_type == "cluster_op"}
 
     new_cts = []
     for ct in design.cluster_transforms:
         if ct.id in cluster_last:
             op = cluster_last[ct.id]
-            ct = ct.model_copy(update={
-                'translation': op.translation,
-                'rotation':    op.rotation,
-                'pivot':       op.pivot,
-            })
+            ct = ct.model_copy(
+                update={
+                    "translation": op.translation,
+                    "rotation": op.rotation,
+                    "pivot": op.pivot,
+                }
+            )
         elif ct.id in clusters_with_ops:
             # Cluster has ops in the log but none in the active window → identity.
-            ct = ct.model_copy(update={
-                'translation': [0.0, 0.0, 0.0],
-                'rotation':    [0.0, 0.0, 0.0, 1.0],
-            })
+            ct = ct.model_copy(
+                update={
+                    "translation": [0.0, 0.0, 0.0],
+                    "rotation": [0.0, 0.0, 0.0, 1.0],
+                }
+            )
         new_cts.append(ct)
 
     new_joints = _rebase_joints_to_cts(design, new_cts)
@@ -10666,11 +11897,11 @@ def _seek_feature_log(design: Design, position: int, sub_position: int | None = 
     ovhgs_with_ops: set = set()
     sd_pairs_with_ops: set[tuple[str, str]] = set()
     for entry in active:
-        if entry.feature_type != 'overhang_rotation':
+        if entry.feature_type != "overhang_rotation":
             continue
         sd_ids = entry.sub_domain_ids
         thetas = entry.sub_domain_thetas_deg
-        phis   = entry.sub_domain_phis_deg
+        phis = entry.sub_domain_phis_deg
         for i, oid in enumerate(entry.overhang_ids):
             sd_id_i = sd_ids[i] if i < len(sd_ids) else None
             if sd_id_i is None:
@@ -10678,7 +11909,7 @@ def _seek_feature_log(design: Design, position: int, sub_position: int | None = 
             else:
                 sd_last_angles[(oid, sd_id_i)] = (float(thetas[i]), float(phis[i]))
     for e in log:
-        if e.feature_type != 'overhang_rotation':
+        if e.feature_type != "overhang_rotation":
             continue
         sd_ids = e.sub_domain_ids
         for i, oid in enumerate(e.overhang_ids):
@@ -10691,9 +11922,9 @@ def _seek_feature_log(design: Design, position: int, sub_position: int | None = 
     new_overhangs = []
     for ovhg in design.overhangs:
         if ovhg.id in ovhg_last_rot:
-            ovhg = ovhg.model_copy(update={'rotation': ovhg_last_rot[ovhg.id]})
+            ovhg = ovhg.model_copy(update={"rotation": ovhg_last_rot[ovhg.id]})
         elif ovhg.id in ovhgs_with_ops:
-            ovhg = ovhg.model_copy(update={'rotation': [0.0, 0.0, 0.0, 1.0]})
+            ovhg = ovhg.model_copy(update={"rotation": [0.0, 0.0, 0.0, 1.0]})
 
         sub_doms_touched = [
             sd_id for (oid, sd_id) in sd_pairs_with_ops if oid == ovhg.id
@@ -10704,17 +11935,21 @@ def _seek_feature_log(design: Design, position: int, sub_position: int | None = 
                 key = (ovhg.id, sd.id)
                 if key in sd_last_angles:
                     theta, phi = sd_last_angles[key]
-                    sd = sd.model_copy(update={
-                        'rotation_theta_deg': theta,
-                        'rotation_phi_deg':   phi,
-                    })
+                    sd = sd.model_copy(
+                        update={
+                            "rotation_theta_deg": theta,
+                            "rotation_phi_deg": phi,
+                        }
+                    )
                 elif sd.id in sub_doms_touched:
-                    sd = sd.model_copy(update={
-                        'rotation_theta_deg': 0.0,
-                        'rotation_phi_deg':   0.0,
-                    })
+                    sd = sd.model_copy(
+                        update={
+                            "rotation_theta_deg": 0.0,
+                            "rotation_phi_deg": 0.0,
+                        }
+                    )
                 new_sds.append(sd)
-            ovhg = ovhg.model_copy(update={'sub_domains': new_sds})
+            ovhg = ovhg.model_copy(update={"sub_domains": new_sds})
 
         new_overhangs.append(ovhg)
 
@@ -10744,7 +11979,7 @@ def _rollback_last_feature(design: Design) -> Design:
     """
     log = list(design.feature_log)
     idx = next(
-        (i for i in range(len(log) - 1, -1, -1) if log[i].feature_type != 'checkpoint'),
+        (i for i in range(len(log) - 1, -1, -1) if log[i].feature_type != "checkpoint"),
         None,
     )
     if idx is None:
@@ -10753,36 +11988,45 @@ def _rollback_last_feature(design: Design) -> Design:
     entry = log[idx]
     new_log = [e for e in log if e.id != entry.id]
 
-    if entry.feature_type == 'deformation':
-        new_deformations = [d for d in design.deformations if d.id != entry.deformation_id]
+    if entry.feature_type == "deformation":
+        new_deformations = [
+            d for d in design.deformations if d.id != entry.deformation_id
+        ]
         return design.copy_with(deformations=new_deformations, feature_log=new_log)
 
-    if entry.feature_type == 'cluster_op':
+    if entry.feature_type == "cluster_op":
         # Restore the previous absolute state of this cluster, or identity if none.
         prev = next(
-            (e for e in reversed(log[:idx])
-             if e.feature_type == 'cluster_op' and e.cluster_id == entry.cluster_id),
+            (
+                e
+                for e in reversed(log[:idx])
+                if e.feature_type == "cluster_op" and e.cluster_id == entry.cluster_id
+            ),
             None,
         )
         new_cts = []
         for ct in design.cluster_transforms:
             if ct.id == entry.cluster_id:
                 if prev:
-                    ct = ct.model_copy(update={
-                        'translation': prev.translation,
-                        'rotation':    prev.rotation,
-                        'pivot':       prev.pivot,
-                    })
+                    ct = ct.model_copy(
+                        update={
+                            "translation": prev.translation,
+                            "rotation": prev.rotation,
+                            "pivot": prev.pivot,
+                        }
+                    )
                 else:
-                    ct = ct.model_copy(update={
-                        'translation': [0.0, 0.0, 0.0],
-                        'rotation':    [0.0, 0.0, 0.0, 1.0],
-                        'pivot':       ct.pivot,
-                    })
+                    ct = ct.model_copy(
+                        update={
+                            "translation": [0.0, 0.0, 0.0],
+                            "rotation": [0.0, 0.0, 0.0, 1.0],
+                            "pivot": ct.pivot,
+                        }
+                    )
             new_cts.append(ct)
         return design.copy_with(cluster_transforms=new_cts, feature_log=new_log)
 
-    if entry.feature_type == 'overhang_rotation':
+    if entry.feature_type == "overhang_rotation":
         # Restore the previous rotation per overhang AND per sub-domain.
         # Splits the entry's per-index slots into:
         #   - whole-overhang slots (sub_domain_ids[i] is None)
@@ -10805,7 +12049,7 @@ def _rollback_last_feature(design: Design) -> Design:
             if ovhg.id in whole_ovhgs_in_entry:
                 prev_rot = None
                 for prev_entry in reversed(log[:idx]):
-                    if prev_entry.feature_type != 'overhang_rotation':
+                    if prev_entry.feature_type != "overhang_rotation":
                         continue
                     if ovhg.id not in prev_entry.overhang_ids:
                         continue
@@ -10820,7 +12064,9 @@ def _rollback_last_feature(design: Design) -> Design:
                             break
                     if prev_rot is not None:
                         break
-                updates['rotation'] = prev_rot if prev_rot is not None else [0.0, 0.0, 0.0, 1.0]
+                updates["rotation"] = (
+                    prev_rot if prev_rot is not None else [0.0, 0.0, 0.0, 1.0]
+                )
 
             sd_touched = {sd_id for (oid, sd_id) in sd_pairs_in_entry if oid == ovhg.id}
             if sd_touched:
@@ -10830,28 +12076,36 @@ def _rollback_last_feature(design: Design) -> Design:
                         new_sds.append(sd)
                         continue
                     prev_theta: Optional[float] = None
-                    prev_phi:   Optional[float] = None
+                    prev_phi: Optional[float] = None
                     for prev_entry in reversed(log[:idx]):
-                        if prev_entry.feature_type != 'overhang_rotation':
+                        if prev_entry.feature_type != "overhang_rotation":
                             continue
                         prev_sd_ids = prev_entry.sub_domain_ids
                         prev_thetas = prev_entry.sub_domain_thetas_deg
-                        prev_phis   = prev_entry.sub_domain_phis_deg
+                        prev_phis = prev_entry.sub_domain_phis_deg
                         for pi, poid in enumerate(prev_entry.overhang_ids):
                             if poid != ovhg.id:
                                 continue
                             sd_pi = prev_sd_ids[pi] if pi < len(prev_sd_ids) else None
                             if sd_pi == sd.id:
                                 prev_theta = float(prev_thetas[pi])
-                                prev_phi   = float(prev_phis[pi])
+                                prev_phi = float(prev_phis[pi])
                                 break
                         if prev_theta is not None:
                             break
-                    new_sds.append(sd.model_copy(update={
-                        'rotation_theta_deg': prev_theta if prev_theta is not None else 0.0,
-                        'rotation_phi_deg':   prev_phi   if prev_phi   is not None else 0.0,
-                    }))
-                updates['sub_domains'] = new_sds
+                    new_sds.append(
+                        sd.model_copy(
+                            update={
+                                "rotation_theta_deg": prev_theta
+                                if prev_theta is not None
+                                else 0.0,
+                                "rotation_phi_deg": prev_phi
+                                if prev_phi is not None
+                                else 0.0,
+                            }
+                        )
+                    )
+                updates["sub_domains"] = new_sds
 
             new_overhangs.append(ovhg.model_copy(update=updates) if updates else ovhg)
         return design.copy_with(overhangs=new_overhangs, feature_log=new_log)
@@ -10880,6 +12134,7 @@ class BindingDisplayPoseBody(BaseModel):
     Sets ONLY the display-pose fields. Never touches `bound`, `target_joint_id`,
     `locked_angle_deg`, joint min/max, or `prior_driven_topology`.
     """
+
     unbound_angle_deg: Optional[float] = None
     bound_angle_deg: Optional[float] = None
 
@@ -10923,6 +12178,7 @@ class RefreshBridgesBody(BaseModel):
     """Cluster IDs that just moved. The endpoint re-emits bridge nucs for every
     ds OverhangConnection whose anchor sits on a helix in any of those clusters.
     Pass an empty list (or omit) to refresh ALL bridges."""
+
     cluster_ids: List[str] = []
 
 
@@ -10962,7 +12218,8 @@ def refresh_bridges(body: RefreshBridgesBody) -> dict:
                 moved_helix_ids.update(ct.helix_ids)
         ovhg_helix = {o.id: o.helix_id for o in design.overhangs}
         affected_conns = [
-            c for c in ds_conns
+            c
+            for c in ds_conns
             if ovhg_helix.get(c.overhang_a_id) in moved_helix_ids
             or ovhg_helix.get(c.overhang_b_id) in moved_helix_ids
         ]
@@ -10978,8 +12235,10 @@ def refresh_bridges(body: RefreshBridgesBody) -> dict:
     for c in affected_conns:
         ha = ovhg_helix.get(c.overhang_a_id)
         hb = ovhg_helix.get(c.overhang_b_id)
-        if ha: needed_helix_ids.add(ha)
-        if hb: needed_helix_ids.add(hb)
+        if ha:
+            needed_helix_ids.add(ha)
+        if hb:
+            needed_helix_ids.add(hb)
     if not needed_helix_ids:
         return {"bridge_nucs": []}
 
@@ -11094,14 +12353,18 @@ def apply_loop_skips_from_deformations() -> dict:
                 target_deg = p.degrees_per_nm * length_nm
             else:
                 continue
-            mods = twist_loop_skips(affected, plane_a, plane_b, target_deg, design=design)
+            mods = twist_loop_skips(
+                affected, plane_a, plane_b, target_deg, design=design
+            )
         else:  # bend
             p = op.params
             # Geometric radius from κ (matches deformation.py: R = RISE / radians(κ)).
             radius_nm = _bend_params_to_radius_nm(p.curvature_deg_per_bp)
             if math.isinf(radius_nm):
                 continue  # κ ≈ 0 → infinite radius, no bend
-            mods = bend_loop_skips(affected, plane_a, plane_b, radius_nm, p.direction_deg, design=design)
+            mods = bend_loop_skips(
+                affected, plane_a, plane_b, radius_nm, p.direction_deg, design=design
+            )
 
         for hid, ls_list in mods.items():
             all_mods.setdefault(hid, []).extend(ls_list)
@@ -11115,6 +12378,7 @@ def apply_loop_skips_from_deformations() -> dict:
     # cell grid and don't self-enforce this; a deletion on a crossover breaks CanDo
     # (feedback_loopskip_no_crossover_ends).  Manual context-menu placement never hits this path.
     from backend.core.loop_skip_calculator import relocate_marks_off_forbidden
+
     all_mods = relocate_marks_off_forbidden(all_mods, design)
     if not all_mods:
         raise HTTPException(400, detail="No loop/skip modifications were produced.")
@@ -11123,20 +12387,19 @@ def apply_loop_skips_from_deformations() -> dict:
     n_marks = sum(len(ls) for ls in all_mods.values())
     label = f"Add loops/skips ({n_marks} mark{'s' if n_marks != 1 else ''} on {n_helices} helix{'es' if n_helices != 1 else ''})"
     updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind='apply-loop-skips',
+        op_kind="apply-loop-skips",
         label=label,
         params={
-            'helix_count':       n_helices,
-            'mark_count':        n_marks,
-            'sq_periodic':       design.lattice_type == LatticeType.SQUARE,
-            'deformation_count': len(design.deformations),
+            "helix_count": n_helices,
+            "mark_count": n_marks,
+            "sq_periodic": design.lattice_type == LatticeType.SQUARE,
+            "deformation_count": len(design.deformations),
         },
         fn=lambda d: apply_loop_skips(d, all_mods),
     )
     response = _design_response(updated, report)
     response["loop_skips"] = {hid: len(ls) for hid, ls in all_mods.items()}
     return response
-
 
 
 # (Plate layout + per-region representation-override CRUD — both display-only
@@ -11170,9 +12433,13 @@ def debug_strand_stats() -> dict:
         termini_bps.append(s.domains[-1].end_bp)
 
     helix_bp_starts = [h.bp_start for h in design.helices]
-    helix_lengths   = [h.length_bp for h in design.helices]
+    helix_lengths = [h.length_bp for h in design.helices]
     all_lo = min(helix_bp_starts) if helix_bp_starts else 0
-    all_hi = max(b + l - 1 for b, l in zip(helix_bp_starts, helix_lengths)) if helix_bp_starts else 0
+    all_hi = (
+        max(b + l - 1 for b, l in zip(helix_bp_starts, helix_lengths))
+        if helix_bp_starts
+        else 0
+    )
 
     # Build 20-bucket histogram
     span = all_hi - all_lo + 1
@@ -11215,8 +12482,13 @@ def debug_strand_stats() -> dict:
         "crossover_max_bp": max(xover_bps) if xover_bps else None,
         "per_helix_crossover_counts": xover_counts,
         "helix_info": [
-            {"id": h.id, "bp_start": h.bp_start, "length_bp": h.length_bp,
-             "axis_start_z": round(h.axis_start.z, 4), "axis_end_z": round(h.axis_end.z, 4)}
+            {
+                "id": h.id,
+                "bp_start": h.bp_start,
+                "length_bp": h.length_bp,
+                "axis_start_z": round(h.axis_start.z, 4),
+                "axis_end_z": round(h.axis_end.z, 4),
+            }
             for h in design.helices
         ],
     }

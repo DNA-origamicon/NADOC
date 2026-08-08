@@ -51,8 +51,8 @@ def chain_data(design):
     from backend.core.atomistic import build_atomistic_model
     from backend.core.atomistic_to_nadoc import build_chain_map, build_p_gro_order
 
-    model   = build_atomistic_model(design)
-    cm      = build_chain_map(model)
+    model = build_atomistic_model(design)
+    cm = build_chain_map(model)
     pdb_txt = (_RUN_DIR / "input_nadoc.pdb").read_text(errors="replace")
     p_order = build_p_gro_order(pdb_txt, cm)
     return {"chain_map": cm, "p_order": p_order}
@@ -77,9 +77,9 @@ def test_chain_map_size(chain_data):
 
 def test_p_order_size(chain_data):
     p_order = chain_data["p_order"]
-    cm      = chain_data["chain_map"]
+    cm = chain_data["chain_map"]
     assert len(p_order) > 0
-    assert len(p_order) <= len(cm) + 10   # allow small discrepancy for 5'-P stripping
+    assert len(p_order) <= len(cm) + 10  # allow small discrepancy for 5'-P stripping
 
 
 def test_try_unwrap_skips_gro(universe, capsys):
@@ -92,6 +92,7 @@ def test_try_unwrap_skips_gro(universe, capsys):
     start = time.monotonic()
     try:
         from MDAnalysis.transformations import unwrap as mda_unwrap  # type: ignore
+
         try:
             _ = universe.bonds
             has_bonds = True
@@ -114,8 +115,8 @@ def test_centroid_offset_nontrivial(universe, chain_data, design):
     from backend.core.atomistic_to_nadoc import _extract_universe, centroid_offset
 
     beads_0 = _extract_universe(universe, 0, chain_data["p_order"])
-    T       = centroid_offset(beads_0, design)
-    magnitude = math.sqrt(sum(c ** 2 for c in T))
+    T = centroid_offset(beads_0, design)
+    magnitude = math.sqrt(sum(c**2 for c in T))
     # GROMACS places the molecule ~6 nm from origin in the periodic box.
     assert magnitude > 0.5, f"Centroid offset suspiciously small: {T}"
 
@@ -125,7 +126,7 @@ def test_frame0_positions_finite(universe, chain_data, design):
 
     p_order = chain_data["p_order"]
     beads_0 = _extract_universe(universe, 0, p_order)
-    T       = centroid_offset(beads_0, design)
+    T = centroid_offset(beads_0, design)
 
     for b in beads_0:
         x, y, z = b.pos[0] + T[0], b.pos[1] + T[1], b.pos[2] + T[2]
@@ -141,24 +142,24 @@ def test_ready_payload_fields(universe, chain_data, design):
     from backend.core.atomistic_to_nadoc import _extract_universe, centroid_offset
     from backend.core.md_metrics import derive_total_ns, parse_log_metrics
 
-    p_order  = chain_data["p_order"]
+    p_order = chain_data["p_order"]
     n_frames = len(universe.trajectory)
-    beads_0  = _extract_universe(universe, 0, p_order)
-    T        = centroid_offset(beads_0, design)
+    beads_0 = _extract_universe(universe, 0, p_order)
+    T = centroid_offset(beads_0, design)
 
     log_path = _RUN_DIR / "prod.log"
-    metrics  = parse_log_metrics(log_path) if log_path.exists() else None
+    metrics = parse_log_metrics(log_path) if log_path.exists() else None
     total_ns = derive_total_ns(metrics, n_frames) if metrics else None
 
     result = {
-        "n_frames":      n_frames,
-        "n_p_atoms":     len(chain_data["chain_map"]),
-        "centroid_T":    T,
-        "dt_ps":         metrics.dt_ps        if metrics else None,
-        "nstxout_comp":  metrics.nstxout_comp if metrics else None,
-        "ns_per_day":    metrics.ns_per_day   if metrics else None,
+        "n_frames": n_frames,
+        "n_p_atoms": len(chain_data["chain_map"]),
+        "centroid_T": T,
+        "dt_ps": metrics.dt_ps if metrics else None,
+        "nstxout_comp": metrics.nstxout_comp if metrics else None,
+        "ns_per_day": metrics.ns_per_day if metrics else None,
         "temperature_k": metrics.temperature_k if metrics else None,
-        "total_ns":      total_ns,
+        "total_ns": total_ns,
     }
 
     assert result["n_frames"] > 0

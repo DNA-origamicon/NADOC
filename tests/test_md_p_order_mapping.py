@@ -11,6 +11,7 @@ the flexibility map as *not ready* (the real bug reported for the 3x6x200 job).
 These are pure/fast: they drive ``_select_p_order`` with a faked Universe + a written
 ``charge_audit.json``, no MDAnalysis or on-disk trajectory required.
 """
+
 from __future__ import annotations
 
 import json
@@ -42,12 +43,17 @@ def _p_line(serial: int, chain: str, resseq: int, resname: str = "ADE") -> str:
 
 # Reference PDB as psfgen writes it: BOTH strands land in chainID 'A' (multi-char 'AA'
 # collapsed) with continued residue numbering, so ('A',3)/('A',4) miss the chain map.
-_PDB_TEXT = "\n".join([
-    _p_line(1, "A", 1),
-    _p_line(2, "A", 2),
-    _p_line(3, "A", 3),   # really strand 'AA' residue 1 — collapsed chainID
-    _p_line(4, "A", 4),   # really strand 'AA' residue 2 — collapsed chainID
-]) + "\n"
+_PDB_TEXT = (
+    "\n".join(
+        [
+            _p_line(1, "A", 1),
+            _p_line(2, "A", 2),
+            _p_line(3, "A", 3),  # really strand 'AA' residue 1 — collapsed chainID
+            _p_line(4, "A", 4),  # really strand 'AA' residue 2 — collapsed chainID
+        ]
+    )
+    + "\n"
+)
 
 
 class _FakeUniverse:
@@ -62,12 +68,14 @@ class _FakeUniverse:
 
 
 def _fake_universe():
-    return _FakeUniverse([
-        SimpleNamespace(segid="D000", resid=1),   # strand A
-        SimpleNamespace(segid="D000", resid=2),
-        SimpleNamespace(segid="D001", resid=1),   # strand AA
-        SimpleNamespace(segid="D001", resid=2),
-    ])
+    return _FakeUniverse(
+        [
+            SimpleNamespace(segid="D000", resid=1),  # strand A
+            SimpleNamespace(segid="D000", resid=2),
+            SimpleNamespace(segid="D001", resid=1),  # strand AA
+            SimpleNamespace(segid="D001", resid=2),
+        ]
+    )
 
 
 def _write_pdb(tmp_path):
@@ -83,25 +91,30 @@ def _write_charge_audit(tmp_path, segments):
 def test_pdb_key_path_drops_multichar_chain_atoms(tmp_path):
     """The old behaviour, pinned: with NO charge_audit the fallback reference-PDB path
     silently drops the collapsed multi-char-chain P atoms (2 of 4) — the root cause."""
-    pdb = _write_pdb(tmp_path)          # no charge_audit.json in tmp_path
+    pdb = _write_pdb(tmp_path)  # no charge_audit.json in tmp_path
     order, source = _select_p_order(_fake_universe(), _CM, tmp_path, pdb)
     assert source == "reference-pdb"
-    assert order == [("h0", 1, "FORWARD"), ("h0", 2, "FORWARD")]   # strand AA lost
+    assert order == [("h0", 1, "FORWARD"), ("h0", 2, "FORWARD")]  # strand AA lost
 
 
 def test_segid_path_recovers_all_atoms(tmp_path):
     """The fix: with a complete charge_audit segid map, every DNA-P atom maps — the
     order covers all 4 nucleotides across both strands (no collision, no drop)."""
     pdb = _write_pdb(tmp_path)
-    _write_charge_audit(tmp_path, [
-        {"segid": "D000", "chain_id": "A"},
-        {"segid": "D001", "chain_id": "AA"},
-    ])
+    _write_charge_audit(
+        tmp_path,
+        [
+            {"segid": "D000", "chain_id": "A"},
+            {"segid": "D001", "chain_id": "AA"},
+        ],
+    )
     order, source = _select_p_order(_fake_universe(), _CM, tmp_path, pdb)
     assert source == "segid"
     assert order == [
-        ("h0", 1, "FORWARD"), ("h0", 2, "FORWARD"),
-        ("h1", 1, "REVERSE"), ("h1", 2, "REVERSE"),
+        ("h0", 1, "FORWARD"),
+        ("h0", 2, "FORWARD"),
+        ("h1", 1, "REVERSE"),
+        ("h1", 2, "REVERSE"),
     ]
 
 

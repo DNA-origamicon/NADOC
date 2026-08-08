@@ -25,6 +25,7 @@ Bend is measured by :func:`tests.automation_harness.measure_fem_bundle_bend`
 angle on an arc).  Marks depend only on per-helix NET loop/skip count, not exact bp
 positions, so the FEM bend is identical to the exp36 battery even if mark placement differs.
 """
+
 from __future__ import annotations
 
 
@@ -74,11 +75,12 @@ def _bend_design(total_deg: float, *, realize: bool):
 
 # ── Positive: FEM reproduces the CanDo bend ───────────────────────────────────
 
+
 def test_fem_reproduces_cando_bend_90_linear():
     """05_bend_90: the fast LINEAR prestress solve reproduces CanDo's 86.9° bend to
     within the calibrated ~0.90 linear envelope (FEM ≈ 81°)."""
     d = _bend_design(90.0, realize=True)
-    assert sum(len(h.loop_skips) for h in d.helices) > 0     # marks were realised
+    assert sum(len(h.loop_skips) for h in d.helices) > 0  # marks were realised
     m = assert_fem_matches_cando_bend(
         d, CANDO_BEND_90, nonlinear=False, ratio_lo=0.85, ratio_hi=1.08
     )
@@ -101,11 +103,17 @@ def test_fem_reproduces_cando_bend_180_hairpin_linear():
     and is unambiguously a deep bend."""
     d = _bend_design(180.0, realize=True)
     assert_fem_matches_cando_bend(
-        d, CANDO_BEND_180, nonlinear=False, ratio_lo=0.78, ratio_hi=1.10, min_bend_deg=120.0
+        d,
+        CANDO_BEND_180,
+        nonlinear=False,
+        ratio_lo=0.78,
+        ratio_hi=1.10,
+        min_bend_deg=120.0,
     )
 
 
 # ── Negative: display bend WITHOUT realized loop/skips → FEM predicts straight ──
+
 
 def test_bend_deformation_without_loopskips_predicts_straight():
     """THE negative test (Three-Layer Law).  A design carrying a real ~90° bend as a
@@ -139,7 +147,11 @@ def test_realized_vs_unrealized_bend_is_the_only_difference():
     """Direct contrast: the SAME 90° bend program predicts a deep FEM bend when realised
     to loop/skips and a straight shape when left as a display op — isolating the loop/skip
     realisation as the sole driver of the FEM prediction."""
-    realized = measure_fem_bundle_bend(_bend_design(90.0, realize=True), nonlinear=False)
-    display_only = measure_fem_bundle_bend(_bend_design(90.0, realize=False), nonlinear=False)
+    realized = measure_fem_bundle_bend(
+        _bend_design(90.0, realize=True), nonlinear=False
+    )
+    display_only = measure_fem_bundle_bend(
+        _bend_design(90.0, realize=False), nonlinear=False
+    )
     assert realized["bend_deg"] > 60.0
     assert display_only["bend_deg"] < 3.0

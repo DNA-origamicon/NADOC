@@ -266,7 +266,9 @@ def build_replica_package(
     structure_psf = hmr_name if use_fast else None
 
     if mgh_extrabonds and (parent_pkg / "mgh_extrabonds.txt").exists():
-        _link_or_copy(parent_pkg / "mgh_extrabonds.txt", child_pkg / "mgh_extrabonds.txt")
+        _link_or_copy(
+            parent_pkg / "mgh_extrabonds.txt", child_pkg / "mgh_extrabonds.txt"
+        )
 
     # Segid → NADOC chain map: the flexibility map / trajectory P-order path reads
     # this from the package dir (load_segid_chain_map).  Without it the replica falls
@@ -290,9 +292,11 @@ def build_replica_package(
     # .restart.coor is clean). A relaxation parent stays a replica SPAWN (coords+box only).
     continuation = getattr(parent, "run_kind", "") == "production"
     if continuation:
-        stage = (("restart.coor", "equilibrated.coor"),
-                 ("restart.vel", "equilibrated.vel"),
-                 ("restart.xsc", "equilibrated.xsc"))
+        stage = (
+            ("restart.coor", "equilibrated.coor"),
+            ("restart.vel", "equilibrated.vel"),
+            ("restart.xsc", "equilibrated.xsc"),
+        )
     else:
         stage = (("coor", "equilibrated.coor"), ("xsc", "equilibrated.xsc"))
     for ext, dst_name in stage:
@@ -320,18 +324,25 @@ def build_replica_package(
             # energy NAMD had logged for it.
             shutil.copy2(src_anchor, dst_anchor)
             n_anchor_atoms = sum(
-                1 for ln in src_anchor.read_text().splitlines()
+                1
+                for ln in src_anchor.read_text().splitlines()
                 if ln.startswith(("ATOM", "HETATM")) and _anchor_weight(ln) > 0
             )
         else:
             from backend.core.md_shell_reprep import read_namd_coor  # noqa: PLC0415
+
             coords = read_namd_coor(child_pkg / "equilibrated.coor")
             n_anchor_atoms = retarget_anchor_pdb(
-                src_anchor, dst_anchor, coords=coords, k=anchor_k)
+                src_anchor, dst_anchor, coords=coords, k=anchor_k
+            )
         logger.info(
-            "[%s] anchors: %d atom(s) %s", child.job_id, n_anchor_atoms,
-            "fixed (fixedAtoms)" if anchor_k is None
-            else f"restrained at k={anchor_k:g} kcal/mol/A^2 vs the equilibrated pose")
+            "[%s] anchors: %d atom(s) %s",
+            child.job_id,
+            n_anchor_atoms,
+            "fixed (fixedAtoms)"
+            if anchor_k is None
+            else f"restrained at k={anchor_k:g} kcal/mol/A^2 vs the equilibrated pose",
+        )
 
     # ── Reseed (velocity reinit for a replica; velocity-PRESERVING for a continuation) ──
     # A carved cell (vacuum corners) must stay at constant volume — the parent package's
@@ -340,9 +351,15 @@ def build_replica_package(
     reseed_name = f"{name_stem}_00_reseed"
     (child_pkg / f"{reseed_name}.conf").write_text(
         build_reseed_conf(
-            reseed_name, name_stem, box, mgh_extrabonds,
-            seed=seed, equil_base="equilibrated", structure_psf=structure_psf,
-            preserve_velocities=continuation, npt=npt_allowed,
+            reseed_name,
+            name_stem,
+            box,
+            mgh_extrabonds,
+            seed=seed,
+            equil_base="equilibrated",
+            structure_psf=structure_psf,
+            preserve_velocities=continuation,
+            npt=npt_allowed,
         )
     )
 
@@ -363,10 +380,13 @@ def build_replica_package(
     if enm_restraints:
         try:
             enm_file = write_production_enm(
-                child_pkg, name_stem, child_pkg / "equilibrated.coor", scale=enm_k)
+                child_pkg, name_stem, child_pkg / "equilibrated.coor", scale=enm_k
+            )
         except (OSError, RuntimeError, ValueError) as exc:
-            enm_error = (f"production elastic network could not be built "
-                         f"({type(exc).__name__}: {exc}); this run is UNRESTRAINED")
+            enm_error = (
+                f"production elastic network could not be built "
+                f"({type(exc).__name__}: {exc}); this run is UNRESTRAINED"
+            )
             logger.warning("[%s] %s", child.job_id, enm_error)
 
     # ONLY an unbuildable HMR PSF drops the timestep.  It used to be `not use_fast`, which
@@ -397,8 +417,13 @@ def build_replica_package(
     # why turning the Advanced-card dropdown off changed nothing for a production run.
     (child_pkg / f"{prod_name}.conf").write_text(
         build_production_conf(
-            prod, name_stem, box, mgh_extrabonds,
-            seed=seed, fast=use_fast, timestep_fs=eff_timestep_fs,
+            prod,
+            name_stem,
+            box,
+            mgh_extrabonds,
+            seed=seed,
+            fast=use_fast,
+            timestep_fs=eff_timestep_fs,
             # The third axis. Without it a child that asked for 2 fs with rigid bonds OFF
             # got `rigidBonds all` anyway, because the writer derived it from the timestep.
             rigid_bonds=("none" if hmr_build_failed else rigid_bonds),
@@ -412,7 +437,9 @@ def build_replica_package(
             # Stage 0 of a production child is the velocity reseed (which takes no
             # overrides — it runs zero steps); the production stage itself is 1.
             overrides=overrides_for_stage(stage_overrides, 1),
-            anchors_file=anchors_file, anchor_k=anchor_k, field=field,
+            anchors_file=anchors_file,
+            anchor_k=anchor_k,
+            field=field,
         )
     )
 
@@ -425,24 +452,31 @@ def build_replica_package(
         # `files.anchors` must describe THIS package, not the parent's: a child can be
         # anchored when its parent was not (or vice versa), and the append route reads
         # this key back to keep an extended stage under the same forces.
-        "files": {**manifest.get("files", {}),
-                  **({"anchors": anchors_file} if anchors_file else {"anchors": None})},
+        "files": {
+            **manifest.get("files", {}),
+            **({"anchors": anchors_file} if anchors_file else {"anchors": None}),
+        },
         "box_ang": list(box),
         "mgh_extrabonds": mgh_extrabonds,
         # The child's OWN external forces, so the run record states what it ran under
         # instead of leaving an analysis to assume "production = unrestrained".
         "field": field,
-        "anchors": ({
-            "requested": anchors_requested or [],
-            "file": anchors_file,
-            "n_atoms_anchored": n_anchor_atoms,
-            "k_kcal_mol_a2": anchor_k,
-            "mechanism": (
-                "fixedAtoms (fixedAtomsCol B); held immobile"
-                if anchor_k is None else
-                "harmonic restraints (constraints/consref/conskfile, conskcol B), "
-                "referenced to this replica's equilibrated coordinates"),
-        } if anchors_file else None),
+        "anchors": (
+            {
+                "requested": anchors_requested or [],
+                "file": anchors_file,
+                "n_atoms_anchored": n_anchor_atoms,
+                "k_kcal_mol_a2": anchor_k,
+                "mechanism": (
+                    "fixedAtoms (fixedAtomsCol B); held immobile"
+                    if anchor_k is None
+                    else "harmonic restraints (constraints/consref/conskfile, conskcol B), "
+                    "referenced to this replica's equilibrated coordinates"
+                ),
+            }
+            if anchors_file
+            else None
+        ),
         # NO "declash" key — a production replica never declashes; generate_sbatch
         # rejects a declash manifest (its mid-chain rebuild can't run in a bare sbatch).
         "charge_audit": manifest.get("charge_audit"),
@@ -475,7 +509,9 @@ def build_replica_package(
         "protocol_fidelity": protocol_fidelity(
             fast=use_fast,
             carved=not npt_allowed,
-            padding_nm=float(((manifest.get("solvation") or {}).get("padding_nm")) or 2.0),
+            padding_nm=float(
+                ((manifest.get("solvation") or {}).get("padding_nm")) or 2.0
+            ),
             charge_audit=manifest.get("charge_audit") or {},
             production_enm=bool(enm_file),
             stage_overrides=stage_overrides,
@@ -513,12 +549,18 @@ def build_replica_package(
 
     child.segments = [
         MdSegmentStatus(
-            name=prod.name, stage=prod.stage, percent=prod.percent,
-            steps=prod.steps, status="pending",
+            name=prod.name,
+            stage=prod.stage,
+            percent=prod.percent,
+            steps=prod.steps,
+            status="pending",
         )
     ]
     child.minimization = MdSegmentStatus(
-        name=reseed_name, stage="Velocity reseed", percent=100.0, steps=0,
+        name=reseed_name,
+        stage="Velocity reseed",
+        percent=100.0,
+        steps=0,
         status="pending",
     )
     child.current_segment_idx = 0

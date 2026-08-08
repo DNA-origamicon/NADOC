@@ -13,6 +13,7 @@ step genuinely slow (reading each engine's trajectory) without changing the card
 the sources are posted pre-computed, so the compute itself is instant.  Registered in
 ``backend/api/main.py``.  Every input here is Physical-layer only (Three-Layer Law).
 """
+
 from __future__ import annotations
 
 import threading
@@ -45,7 +46,7 @@ def _compute(run_id: str, sources: list[dict]) -> None:
     try:
         report = build_comparison_report(sources)
         _set(run_id, state="done", progress=1.0, result=report)
-    except Exception as exc:                    # surface any failure to the poller
+    except Exception as exc:  # surface any failure to the poller
         _set(run_id, state="error", error=str(exc))
 
 
@@ -55,8 +56,9 @@ def start_compare(req: CompareStartRequest) -> dict:
     Returns ``{metrics_id}``; poll ``GET /shape/compare/{id}`` for the assembled report."""
     run_id = uuid.uuid4().hex[:12]
     _set(run_id, state="running", progress=0.0, result=None, error=None)
-    threading.Thread(target=_compute, args=(run_id, list(req.sources)),
-                     daemon=True).start()
+    threading.Thread(
+        target=_compute, args=(run_id, list(req.sources)), daemon=True
+    ).start()
     return {"metrics_id": run_id, "state": "running"}
 
 

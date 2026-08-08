@@ -30,7 +30,9 @@ def _norm(p: Optional[str]) -> str:
     return str(p).replace("\\", "/").rstrip("/") if p else ""
 
 
-def path_matches(design_source_path: Optional[str], target: str, target_is_dir: bool) -> bool:
+def path_matches(
+    design_source_path: Optional[str], target: str, target_is_dir: bool
+) -> bool:
     """True if a job's ``design_source_path`` belongs to the deleted ``target``.
 
     For a file target the (normalised) paths must be equal. For a folder target
@@ -54,11 +56,13 @@ def find_associated_jobs(workspace_dir: Path, target: str, target_is_dir: bool) 
     ``{"md": [MdJob, ...], "oxdna": [OxdnaJob, ...]}``.
     """
     md = [
-        j for j in MdJob.list_jobs(workspace_dir)
+        j
+        for j in MdJob.list_jobs(workspace_dir)
         if path_matches(j.design_source_path, target, target_is_dir)
     ]
     ox = [
-        j for j in OxdnaJob.list_jobs(workspace_dir)
+        j
+        for j in OxdnaJob.list_jobs(workspace_dir)
         if path_matches(j.design_source_path, target, target_is_dir)
     ]
     return {"md": md, "oxdna": ox}

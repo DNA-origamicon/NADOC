@@ -28,70 +28,70 @@ from typing import Optional
 
 
 class MrdnaStatus(str, Enum):
-    queued    = "queued"
-    preparing = "preparing"   # writing the design snapshot
-    running   = "running"     # ARBD simulating
-    failed    = "failed"
-    stopped   = "stopped"     # manually stopped
-    completed = "completed"   # coarse stage done + positions extracted
+    queued = "queued"
+    preparing = "preparing"  # writing the design snapshot
+    running = "running"  # ARBD simulating
+    failed = "failed"
+    stopped = "stopped"  # manually stopped
+    completed = "completed"  # coarse stage done + positions extracted
 
 
 @dataclass
 class MrdnaStageStatus:
-    name:       str          # "coarse"
-    steps:      int
-    status:     str = "pending"   # pending / running / done / failed
-    started_at: Optional[float] = None   # wall time the stage began running (for ETA)
+    name: str  # "coarse"
+    steps: int
+    status: str = "pending"  # pending / running / done / failed
+    started_at: Optional[float] = None  # wall time the stage began running (for ETA)
 
 
 @dataclass
 class MrdnaJob:
-    job_id:              str
-    design_name:         str
-    status:              MrdnaStatus
-    created_at:          float
-    n_nucleotides:       int = 0
-    coarse_steps:        int = 100_000
+    job_id: str
+    design_name: str
+    status: MrdnaStatus
+    created_at: float
+    n_nucleotides: int = 0
+    coarse_steps: int = 100_000
     # fine_steps > 0 runs the mrDNA FINE stage (2 bp/bead + orientation/twist) after
     # the coarse stage.  The fine stage is what develops loop/skip CURVATURE (a
     # twist-coupled effect); coarse-only stays straight.  0 = coarse-only (fast,
     # global shape).  See backend/core/mrdna_curvature.py.
-    fine_steps:          int = 0
-    output_period:       int = 10_000
-    device:              str = "0"      # CUDA device index
+    fine_steps: int = 0
+    output_period: int = 10_000
+    device: str = "0"  # CUDA device index
     # Anchor scopes (shared oxDNA/CanDo/NAMD picker format: overhang / cluster / domain
     # / strand / base) held immobile via ARBD harmonic RESTRAINTs on the covering beads.
     # A JOB-REQUEST annotation, never a Design edit (Three-Layer Law); a selection that
     # resolves to nothing leaves the run unanchored.  See backend/core/mrdna_anchors.py.
-    anchors:             Optional[list] = None
-    stages:              list[MrdnaStageStatus] = field(default_factory=list)
+    anchors: Optional[list] = None
+    stages: list[MrdnaStageStatus] = field(default_factory=list)
     # Uniform E-field descriptor (shared cross-engine form: {"field_pN": <force per
     # NUCLEOTIDE, pN>, "dir": [x,y,z]}) applied as a constant per-bead force via ARBD
     # force grids.  A JOB-REQUEST annotation, never a Design edit; needs >=1 anchor to
     # hold against COM drift.  See backend/core/mrdna_field.py.  (Declared after
     # ``stages`` so the ``field`` attribute name doesn't shadow ``dataclasses.field``
     # used just above.)
-    e_field:             Optional[dict] = None
+    e_field: Optional[dict] = None
     # Hard-surface (repulsion-plane) descriptor (shared cross-engine form: {"dir":
     # [x,y,z], "offset_nm": d, "stiff": s}) realised as a one-sided harmonic wall via an
     # ARBD grid potential.  A JOB-REQUEST annotation, never a Design edit; a field
     # pressing INTO the surface is held by its reaction (no strand anchor needed).  See
     # backend/core/mrdna_surface.py.
-    surface:             Optional[dict] = None
-    error:               Optional[str] = None
-    arbd_pid:            Optional[int] = None
-    design_source_path:  Optional[str] = None
+    surface: Optional[dict] = None
+    error: Optional[str] = None
+    arbd_pid: Optional[int] = None
+    design_source_path: Optional[str] = None
     # Populated on completion — surfaced in the panel + used to gate the display.
-    sim_seconds:         Optional[float] = None   # wall time inside model.simulate()
-    n_override:          Optional[int]   = None   # nucleotides whose position moved
-    n_beads:             Optional[int]   = None   # CG beads in the coarse model
+    sim_seconds: Optional[float] = None  # wall time inside model.simulate()
+    n_override: Optional[int] = None  # nucleotides whose position moved
+    n_beads: Optional[int] = None  # CG beads in the coarse model
     # Out-of-date detection (design edited after the relaxation ran); shares the
     # oxDNA staleness fingerprint so an edit invalidates the relaxed display.
-    design_fingerprint:  Optional[str] = None
+    design_fingerprint: Optional[str] = None
     feature_log_position: Optional[int] = None
     # Archival parity with oxDNA jobs (job_archive is kind-generic).
-    archived:            bool = False
-    archive_path:        Optional[str] = None
+    archived: bool = False
+    archive_path: Optional[str] = None
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -114,6 +114,7 @@ class MrdnaJob:
     @classmethod
     def load(cls, job_id: str, workspace_dir: Path) -> "MrdnaJob":
         from backend.core.job_archive import resolve_job_json
+
         path = resolve_job_json(workspace_dir, "mrdna_jobs", job_id)
         data = json.loads(path.read_text())
         data["status"] = MrdnaStatus(data["status"])
@@ -135,6 +136,7 @@ class MrdnaJob:
     @classmethod
     def list_jobs(cls, workspace_dir: Path) -> list["MrdnaJob"]:
         from backend.core.job_archive import archived_job_ids
+
         result: list[MrdnaJob] = []
         seen: set[str] = set()
         jobs_dir = workspace_dir / "mrdna_jobs"
@@ -180,20 +182,20 @@ def new_mrdna_job(
     if fine_steps > 0:
         stages.append(MrdnaStageStatus(name="fine", steps=fine_steps))
     return MrdnaJob(
-        job_id             = uuid.uuid4().hex[:12],
-        design_name        = design_name,
-        status             = MrdnaStatus.queued,
-        created_at         = time.time(),
-        n_nucleotides      = n_nucleotides,
-        coarse_steps       = coarse_steps,
-        fine_steps         = fine_steps,
-        output_period      = output_period,
-        device             = device,
-        anchors            = anchors,
-        e_field            = e_field,
-        surface            = surface,
-        stages             = stages,
-        design_source_path = design_source_path,
-        design_fingerprint = design_fingerprint,
-        feature_log_position = feature_log_position,
+        job_id=uuid.uuid4().hex[:12],
+        design_name=design_name,
+        status=MrdnaStatus.queued,
+        created_at=time.time(),
+        n_nucleotides=n_nucleotides,
+        coarse_steps=coarse_steps,
+        fine_steps=fine_steps,
+        output_period=output_period,
+        device=device,
+        anchors=anchors,
+        e_field=e_field,
+        surface=surface,
+        stages=stages,
+        design_source_path=design_source_path,
+        design_fingerprint=design_fingerprint,
+        feature_log_position=feature_log_position,
     )

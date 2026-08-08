@@ -59,8 +59,9 @@ from backend.core.models import Design, PartInstance
 router = APIRouter()
 
 
-def _cluster_se3(instance: 'PartInstance', cluster_id: str,
-                 design: 'Optional[Design]') -> 'np.ndarray':
+def _cluster_se3(
+    instance: "PartInstance", cluster_id: str, design: "Optional[Design]"
+) -> "np.ndarray":
     """Resolve the SE3 cluster transform currently active on an instance.
 
     Per-instance override wins over the design's default. Returns identity
@@ -70,15 +71,23 @@ def _cluster_se3(instance: 'PartInstance', cluster_id: str,
     """
     if not cluster_id:
         return np.eye(4, dtype=float)
-    override = next((ct for ct in (instance.cluster_transform_overrides or [])
-                      if ct.id == cluster_id), None)
+    override = next(
+        (
+            ct
+            for ct in (instance.cluster_transform_overrides or [])
+            if ct.id == cluster_id
+        ),
+        None,
+    )
     ct = override
     if ct is None and design is not None:
-        ct = next((c for c in (design.cluster_transforms or [])
-                    if c.id == cluster_id), None)
+        ct = next(
+            (c for c in (design.cluster_transforms or []) if c.id == cluster_id), None
+        )
     if ct is None:
         return np.eye(4, dtype=float)
     from scipy.spatial.transform import Rotation as _R
+
     R = _R.from_quat(list(ct.rotation)).as_matrix()
     pivot = np.array(ct.pivot, dtype=float)
     trans = np.array(ct.translation, dtype=float)
@@ -117,8 +126,9 @@ def get_all_connector_frames() -> dict:
     # call — ~17ms per call × (N_instances × ~2 IPs) = 27 seconds at N=500
     # before this change; cached version is ~30ms total at N=500.
     inst_by_id = _build_inst_by_id(assembly)
-    design_cache: dict[str, 'Design'] = {}
-    def _design_for(inst) -> 'Optional[Design]':
+    design_cache: dict[str, "Design"] = {}
+
+    def _design_for(inst) -> "Optional[Design]":
         if not inst.interface_points:
             return None
         key = _geo_cache_key(inst) or inst.id
@@ -138,13 +148,15 @@ def get_all_connector_frames() -> dict:
         labels_by_inst[inst.id] = {ip.label for ip in inst.interface_points}
 
     # One-shot endpoint — discard the local_cache; no subsequent refresh.
-    frames_by_conn, _ = _build_world_connector_frames(inst_by_id, labels_by_inst, _design_for)
+    frames_by_conn, _ = _build_world_connector_frames(
+        inst_by_id, labels_by_inst, _design_for
+    )
 
     out: dict = {}
     for (inst_id, label), F in frames_by_conn.items():
         per_inst = out.setdefault(inst_id, {})
         per_inst[label] = {
-            "pos":    F[:3, 3].tolist(),
+            "pos": F[:3, 3].tolist(),
             "normal": F[:3, 2].tolist(),
         }
     return out
@@ -172,7 +184,7 @@ def get_joint_debug_frames(joint_id: str) -> dict:
     asm_path = _assembly_source_path(assembly)
     out: dict = {"a": None, "b": None}
 
-    def _side(inst_id: 'Optional[str]', label: 'Optional[str]') -> 'Optional[dict]':
+    def _side(inst_id: "Optional[str]", label: "Optional[str]") -> "Optional[dict]":
         if not inst_id or not label:
             return None
         try:
@@ -188,22 +200,30 @@ def get_joint_debug_frames(joint_id: str) -> dict:
         T_inst_only = (T @ p_h)[:3].tolist()
 
         info: dict = {
-            "instance_id":   inst_id,
-            "label":         label,
-            "cluster_id":    ip.cluster_id,
-            "raw_local":     raw_local.tolist(),
-            "T_inst_only":   T_inst_only,
+            "instance_id": inst_id,
+            "label": label,
+            "cluster_id": ip.cluster_id,
+            "raw_local": raw_local.tolist(),
+            "T_inst_only": T_inst_only,
         }
         design = _design_with_instance_overrides(inst, asm_path)
         if ip.cluster_id and design is not None:
-            override = next((ct for ct in (inst.cluster_transform_overrides or [])
-                              if ct.id == ip.cluster_id), None)
-            ct = override or next((c for c in (design.cluster_transforms or [])
-                                    if c.id == ip.cluster_id), None)
+            override = next(
+                (
+                    ct
+                    for ct in (inst.cluster_transform_overrides or [])
+                    if ct.id == ip.cluster_id
+                ),
+                None,
+            )
+            ct = override or next(
+                (c for c in (design.cluster_transforms or []) if c.id == ip.cluster_id),
+                None,
+            )
             if ct is not None:
-                info["Ct_translation"]    = list(ct.translation)
-                info["Ct_rotation_quat"]  = list(ct.rotation)
-                info["Ct_pivot"]          = list(ct.pivot)
+                info["Ct_translation"] = list(ct.translation)
+                info["Ct_rotation_quat"] = list(ct.rotation)
+                info["Ct_pivot"] = list(ct.pivot)
                 Ct = _cluster_se3(inst, ip.cluster_id, design)
                 info["T_inst_and_Ct"] = (T @ Ct @ p_h)[:3].tolist()
         return info
@@ -245,7 +265,9 @@ def get_joint_connector_frames(joint_id: str) -> dict:
     if joint.instance_a_id and joint.connector_a_label:
         try:
             inst_a = _find_instance(assembly, joint.instance_a_id)
-            design_a = _design_with_instance_overrides(inst_a, _assembly_source_path(assembly))
+            design_a = _design_with_instance_overrides(
+                inst_a, _assembly_source_path(assembly)
+            )
             F_a = _get_connector_world_frame(inst_a, joint.connector_a_label, design_a)
             out["a"] = _frame_to_pos_normal(F_a)
         except HTTPException:
@@ -253,7 +275,9 @@ def get_joint_connector_frames(joint_id: str) -> dict:
     if joint.instance_b_id and joint.connector_b_label:
         try:
             inst_b = _find_instance(assembly, joint.instance_b_id)
-            design_b = _design_with_instance_overrides(inst_b, _assembly_source_path(assembly))
+            design_b = _design_with_instance_overrides(
+                inst_b, _assembly_source_path(assembly)
+            )
             F_b = _get_connector_world_frame(inst_b, joint.connector_b_label, design_b)
             out["b"] = _frame_to_pos_normal(F_b)
         except HTTPException:

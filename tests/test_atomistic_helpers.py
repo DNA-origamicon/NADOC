@@ -89,8 +89,8 @@ class TestConstants:
 
     def test_weights_positive(self) -> None:
         assert _W_GLYCOSIDIC > 0
-        assert _W_REPULSION  > 0
-        assert 0.0 < _R_REPULSION < 1.0   # nm
+        assert _W_REPULSION > 0
+        assert 0.0 < _R_REPULSION < 1.0  # nm
 
     def test_linker_fractions_in_unit_interval(self) -> None:
         for f in (_FRAC_O3_F, _FRAC_P_F, _FRAC_O5_F, _FRAC_P_B, _FRAC_O5_B):
@@ -101,9 +101,7 @@ class TestConstants:
         assert _TOTAL_LINKER_F == pytest.approx(
             _CANON_C3O3 + _CANON_O3P + _CANON_PO5 + _CANON_O5C5
         )
-        assert _TOTAL_LINKER_B == pytest.approx(
-            _CANON_O3P + _CANON_PO5 + _CANON_O5C5
-        )
+        assert _TOTAL_LINKER_B == pytest.approx(_CANON_O3P + _CANON_PO5 + _CANON_O5C5)
 
     def test_bow_frac_3d_value(self) -> None:
         assert _BOW_FRAC_3D == pytest.approx(0.3)
@@ -201,28 +199,32 @@ class TestSpinRotationDeriv:
         axis = np.array([0.0, 0.0, 1.0])
         dR = _spin_rotation_deriv(axis, 0.0)
         # at θ=0: dR/dθ = K (the skew-symmetric matrix)
-        K = np.array([
-            [0.0, -1.0, 0.0],
-            [1.0,  0.0, 0.0],
-            [0.0,  0.0, 0.0],
-        ])
+        K = np.array(
+            [
+                [0.0, -1.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ]
+        )
         assert np.allclose(dR, K)
 
     def test_finite_difference(self) -> None:
         axis = np.array([0.0, 0.0, 1.0])
         theta = 0.5
         eps = 1e-6
-        R_plus  = _make_spin_rotation(axis, theta + eps)
+        R_plus = _make_spin_rotation(axis, theta + eps)
         R_minus = _make_spin_rotation(axis, theta - eps)
-        dR_fd   = (R_plus - R_minus) / (2 * eps)
-        dR_an   = _spin_rotation_deriv(axis, theta)
+        dR_fd = (R_plus - R_minus) / (2 * eps)
+        dR_an = _spin_rotation_deriv(axis, theta)
         assert np.allclose(dR_an, dR_fd, atol=1e-6)
 
 
 # ── Cost / gradient leaves ───────────────────────────────────────────────────
 
 
-def _canonical_chain() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def _canonical_chain() -> tuple[
+    np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
+]:
     """Construct a perfect canonical-geometry C3'–O3'–P–O5'–C5' chain.
 
     Bond lengths match _CANON_* values; bond angles match _CANON_*P/_O3PO5/_PO5C5
@@ -231,6 +233,7 @@ def _canonical_chain() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, 
     subtend the canonical angle. Specifically, the new direction is the previous
     bond's direction rotated by (π − angle), which gives interior angle = angle.
     """
+
     def _rotz(v: np.ndarray, theta: float) -> np.ndarray:
         c, s = math.cos(theta), math.sin(theta)
         return np.array([c * v[0] - s * v[1], s * v[0] + c * v[1], v[2]])
@@ -269,7 +272,7 @@ class TestBackboneBridgeCost:
     def test_cost_nonnegative(self) -> None:
         c3 = np.array([0.0, 0.0, 0.0])
         o3 = np.array([0.5, 0.0, 0.0])
-        p  = np.array([0.5, 0.5, 0.0])
+        p = np.array([0.5, 0.5, 0.0])
         o5 = np.array([0.5, 1.0, 0.0])
         c5 = np.array([0.0, 1.0, 0.0])
         assert _backbone_bridge_cost(c3, o3, p, o5, c5) >= 0.0
@@ -306,8 +309,8 @@ class TestBackboneBridgeCostGrad:
         rng = np.random.default_rng(42)
         c3 = rng.normal(size=3)
         o3 = c3 + np.array([_CANON_C3O3, 0.0, 0.0]) + 0.02 * rng.normal(size=3)
-        p  = o3 + np.array([0.0, _CANON_O3P, 0.0])  + 0.02 * rng.normal(size=3)
-        o5 = p  + np.array([_CANON_PO5, 0.0, 0.0]) + 0.02 * rng.normal(size=3)
+        p = o3 + np.array([0.0, _CANON_O3P, 0.0]) + 0.02 * rng.normal(size=3)
+        o5 = p + np.array([_CANON_PO5, 0.0, 0.0]) + 0.02 * rng.normal(size=3)
         c5 = o5 + np.array([0.0, _CANON_O5C5, 0.0]) + 0.02 * rng.normal(size=3)
 
         cost, g_c3, g_o3, g_p, g_o5, g_c5 = _backbone_bridge_cost_grad(
@@ -320,8 +323,10 @@ class TestBackboneBridgeCostGrad:
         o3_p[1] += eps
         o3_m = o3.copy()
         o3_m[1] -= eps
-        fd = (_backbone_bridge_cost(c3, o3_p, p, o5, c5)
-              - _backbone_bridge_cost(c3, o3_m, p, o5, c5)) / (2 * eps)
+        fd = (
+            _backbone_bridge_cost(c3, o3_p, p, o5, c5)
+            - _backbone_bridge_cost(c3, o3_m, p, o5, c5)
+        ) / (2 * eps)
         assert g_o3[1] == pytest.approx(fd, abs=1e-5)
 
         # Cost matches plain function
@@ -340,14 +345,12 @@ class TestBackboneBridgeCostGrad:
 
 class TestGlycosidicCost:
     def test_aligned_returns_zero(self) -> None:
-        w = {"C1'": np.array([0.0, 0.0, 0.0]),
-             "N1":  np.array([1.0, 0.0, 0.0])}
+        w = {"C1'": np.array([0.0, 0.0, 0.0]), "N1": np.array([1.0, 0.0, 0.0])}
         target = np.array([1.0, 0.0, 0.0])
         assert _glycosidic_cost(w, "N1", target) == pytest.approx(0.0)
 
     def test_anti_aligned_returns_two(self) -> None:
-        w = {"C1'": np.array([0.0, 0.0, 0.0]),
-             "N1":  np.array([1.0, 0.0, 0.0])}
+        w = {"C1'": np.array([0.0, 0.0, 0.0]), "N1": np.array([1.0, 0.0, 0.0])}
         target = np.array([-1.0, 0.0, 0.0])
         assert _glycosidic_cost(w, "N1", target) == pytest.approx(2.0)
 
@@ -362,8 +365,7 @@ class TestGlycosidicCost:
         assert _glycosidic_cost(w, "N1", target) == 0.0
 
     def test_zero_length_c1n_returns_zero(self) -> None:
-        w = {"C1'": np.array([0.0, 0.0, 0.0]),
-             "N1":  np.array([0.0, 0.0, 0.0])}
+        w = {"C1'": np.array([0.0, 0.0, 0.0]), "N1": np.array([0.0, 0.0, 0.0])}
         target = np.array([1.0, 0.0, 0.0])
         assert _glycosidic_cost(w, "N1", target) == 0.0
 
@@ -371,7 +373,7 @@ class TestGlycosidicCost:
 class TestGlycosidicCostGrad:
     def test_finite_difference(self) -> None:
         c1 = np.array([0.0, 0.0, 0.0])
-        n  = np.array([0.7, 0.3, 0.1])
+        n = np.array([0.7, 0.3, 0.1])
         target = np.array([1.0, 0.0, 0.0])
         cost, g_c1, g_n = _glycosidic_cost_grad(c1, n, target)
 
@@ -388,7 +390,7 @@ class TestGlycosidicCostGrad:
 
     def test_zero_length_returns_zeros(self) -> None:
         c1 = np.array([1.0, 0.0, 0.0])
-        n  = np.array([1.0, 0.0, 0.0])
+        n = np.array([1.0, 0.0, 0.0])
         target = np.array([1.0, 0.0, 0.0])
         cost, g_c1, g_n = _glycosidic_cost_grad(c1, n, target)
         assert cost == 0.0
@@ -399,17 +401,17 @@ class TestGlycosidicCostGrad:
 class TestRepulsionCost:
     def test_no_clash_zero_cost(self) -> None:
         w = {"C1'": np.array([0.0, 0.0, 0.0])}
-        repel = [np.array([10.0, 0.0, 0.0])]   # far away
+        repel = [np.array([10.0, 0.0, 0.0])]  # far away
         assert _repulsion_cost(w, repel) == 0.0
 
     def test_clash_increases_cost(self) -> None:
         w = {"C1'": np.array([0.0, 0.0, 0.0])}
-        repel = [np.array([0.1, 0.0, 0.0])]    # well inside _R_REPULSION
+        repel = [np.array([0.1, 0.0, 0.0])]  # well inside _R_REPULSION
         cost = _repulsion_cost(w, repel)
         assert cost > 0.0
 
     def test_missing_atom_skipped(self) -> None:
-        w = {"P": np.array([0.0, 0.0, 0.0])}   # not C1/C3/C4
+        w = {"P": np.array([0.0, 0.0, 0.0])}  # not C1/C3/C4
         repel = [np.array([0.1, 0.0, 0.0])]
         assert _repulsion_cost(w, repel) == 0.0
 
@@ -474,8 +476,7 @@ class TestRBGradPropagate:
         # Translation only: ∂f/∂delta = Σ g_w
         names = ("C1'", "C2'")
         mat = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
-        g_w = {"C1'": np.array([1.0, 2.0, 3.0]),
-               "C2'": np.array([4.0, 5.0, 6.0])}
+        g_w = {"C1'": np.array([1.0, 2.0, 3.0]), "C2'": np.array([4.0, 5.0, 6.0])}
         dR = np.zeros((3, 3))
         g_delta, g_theta = _rb_grad_propagate(g_w, names, mat, dR)
         assert np.allclose(g_delta, np.array([5.0, 7.0, 9.0]))
@@ -486,11 +487,13 @@ class TestRBGradPropagate:
         mat = np.array([[1.0, 0.0, 0.0]])
         g_w = {"C1'": np.array([0.0, 1.0, 0.0])}
         # dR/dθ such that dR @ [1,0,0] = [0,1,0]
-        dR = np.array([
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0],
-        ])
+        dR = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ]
+        )
         _, g_theta = _rb_grad_propagate(g_w, names, mat, dR)
         # dot([0,1,0], dR @ [1,0,0]) = dot([0,1,0],[0,1,0]) = 1.0
         assert g_theta == pytest.approx(1.0)
@@ -498,8 +501,10 @@ class TestRBGradPropagate:
     def test_unknown_name_skipped(self) -> None:
         names = ("C1'",)
         mat = np.array([[1.0, 0.0, 0.0]])
-        g_w = {"C1'": np.array([1.0, 0.0, 0.0]),
-               "FOO": np.array([5.0, 0.0, 0.0])}   # not in names
+        g_w = {
+            "C1'": np.array([1.0, 0.0, 0.0]),
+            "FOO": np.array([5.0, 0.0, 0.0]),
+        }  # not in names
         dR = np.zeros((3, 3))
         g_delta, _ = _rb_grad_propagate(g_w, names, mat, dR)
         # FOO is still summed into delta gradient (translation applies to all)

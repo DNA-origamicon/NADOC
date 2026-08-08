@@ -4,6 +4,7 @@ These pin the audit findings, not just the code: if someone "fixes" the frame-or
 correction in atomistic.py or changes the groove sign convention in geometry.py, the
 assertions about the DEFECT will fail and point at what moved.
 """
+
 from __future__ import annotations
 
 import math
@@ -83,8 +84,12 @@ def _pair_separation_deg(arrs: dict, axis_pt: np.ndarray, t: np.ndarray) -> np.n
         rr = r - axis_pt - np.dot(r - axis_pt, t) * t
         rf /= np.linalg.norm(rf)
         rr /= np.linalg.norm(rr)
-        out.append(math.degrees(math.atan2(float(np.dot(np.cross(rf, rr), t)),
-                                           float(np.dot(rf, rr)))) % 360.0)
+        out.append(
+            math.degrees(
+                math.atan2(float(np.dot(np.cross(rf, rr), t)), float(np.dot(rf, rr)))
+            )
+            % 360.0
+        )
     return np.array(out)
 
 
@@ -99,8 +104,9 @@ def _arrays(direction: Direction) -> dict:
 
 
 def _measured(direction: Direction) -> dict:
-    return apply_measured_positioning(_arrays(direction), axis_origin=ORIGIN, axis_hat=T,
-                                      legacy_radius=HELIX_RADIUS)
+    return apply_measured_positioning(
+        _arrays(direction), axis_origin=ORIGIN, axis_hat=T, legacy_radius=HELIX_RADIUS
+    )
 
 
 # ── the defect being corrected ────────────────────────────────────────────────
@@ -144,7 +150,9 @@ def test_both_cell_types_land_on_one_separation(direction):
     The separation is now the C3'-C3' one (130 deg), not the phosphates' (180): the
     backbone bead IS the ribose C3', and C3' sits a quarter turn round from its own P.
     """
-    want = (MEASURED.backbone_rev.azimuth_deg - MEASURED.backbone_fwd.azimuth_deg) % 360.0
+    want = (
+        MEASURED.backbone_rev.azimuth_deg - MEASURED.backbone_fwd.azimuth_deg
+    ) % 360.0
     seps = _pair_separation_deg(_measured(direction), ORIGIN, T)
     assert seps == pytest.approx(want, abs=1e-6)
 
@@ -175,8 +183,9 @@ def test_the_forward_bead_swings_round_to_its_c3_prime():
         ra = a - np.dot(a, T) * T
         rb /= np.linalg.norm(rb)
         ra /= np.linalg.norm(ra)
-        swing = math.degrees(math.atan2(float(np.dot(np.cross(rb, ra), T)),
-                                        float(np.dot(rb, ra))))
+        swing = math.degrees(
+            math.atan2(float(np.dot(np.cross(rb, ra), T)), float(np.dot(rb, ra)))
+        )
         assert swing == pytest.approx(MEASURED.backbone_fwd.azimuth_deg, abs=1e-6)
 
 
@@ -202,8 +211,9 @@ def test_base_normals_stay_cross_strand_and_antiparallel():
 def test_the_input_arrays_are_not_mutated():
     arrs = _arrays(Direction.FORWARD)
     snapshot = np.array(arrs["positions"], copy=True)
-    apply_measured_positioning(arrs, axis_origin=ORIGIN, axis_hat=T,
-                               legacy_radius=HELIX_RADIUS)
+    apply_measured_positioning(
+        arrs, axis_origin=ORIGIN, axis_hat=T, legacy_radius=HELIX_RADIUS
+    )
     assert np.asarray(arrs["positions"]) == pytest.approx(snapshot)
 
 
@@ -211,11 +221,14 @@ def test_a_bead_on_the_axis_is_left_alone():
     """Fail safe: a nucleotide with no radial direction has no azimuth to place it at,
     so it keeps its existing position rather than being sent somewhere invented."""
     arrs = _arrays(Direction.FORWARD)
-    arrs = {k: (np.array(v, copy=True) if isinstance(v, np.ndarray) else v)
-            for k, v in arrs.items()}
-    arrs["positions"][0] = np.array([0.0, 0.0, 0.0])   # exactly on the axis
-    out = apply_measured_positioning(arrs, axis_origin=ORIGIN, axis_hat=T,
-                                     legacy_radius=HELIX_RADIUS)
+    arrs = {
+        k: (np.array(v, copy=True) if isinstance(v, np.ndarray) else v)
+        for k, v in arrs.items()
+    }
+    arrs["positions"][0] = np.array([0.0, 0.0, 0.0])  # exactly on the axis
+    out = apply_measured_positioning(
+        arrs, axis_origin=ORIGIN, axis_hat=T, legacy_radius=HELIX_RADIUS
+    )
     assert np.asarray(out["positions"])[0] == pytest.approx([0.0, 0.0, 0.0])
     # the rest of the helix still moved
     r_bb, _ = _cyl(np.asarray(out["positions"])[2:], ORIGIN, T)
@@ -232,16 +245,23 @@ def test_a_pair_split_across_a_domain_transform_is_left_alone():
     which is worse than not moving it at all.  Such a pair must keep legacy placement.
     """
     arrs = _arrays(Direction.FORWARD)
-    arrs = {k: (np.array(v, copy=True) if isinstance(v, np.ndarray) else v)
-            for k, v in arrs.items()}
+    arrs = {
+        k: (np.array(v, copy=True) if isinstance(v, np.ndarray) else v)
+        for k, v in arrs.items()
+    }
     before = np.array(arrs["positions"], copy=True)
     # Drag ONE bead of the first pair off the cylinder, as a domain transform would.
     arrs["positions"][0] = arrs["positions"][0] * 3.0
-    out = apply_measured_positioning(arrs, axis_origin=ORIGIN, axis_hat=T,
-                                     legacy_radius=HELIX_RADIUS)
+    out = apply_measured_positioning(
+        arrs, axis_origin=ORIGIN, axis_hat=T, legacy_radius=HELIX_RADIUS
+    )
     pos = np.asarray(out["positions"])
-    assert pos[0] == pytest.approx(before[0] * 3.0), "displaced bead must not be re-placed"
-    assert pos[1] == pytest.approx(before[1]), "its partner must not be re-placed either"
+    assert pos[0] == pytest.approx(before[0] * 3.0), (
+        "displaced bead must not be re-placed"
+    )
+    assert pos[1] == pytest.approx(before[1]), (
+        "its partner must not be re-placed either"
+    )
     # every other pair still moved
     r_bb, _ = _cyl(pos[2:], ORIGIN, T)
     assert r_bb[0::2] == pytest.approx(MEASURED.backbone_fwd.radius_nm, abs=1e-9)
@@ -262,8 +282,11 @@ def test_the_bead_lands_on_the_ribose_c3_prime():
     from backend.core.models import Design
 
     design = Design.model_validate_json(Path("Examples/6hb_test.nadoc").read_text())
-    c3 = {(a.helix_id, a.bp_index, a.direction): np.array([a.x, a.y, a.z])
-          for a in build_atomistic_model(design).atoms if a.name == "C3'"}
+    c3 = {
+        (a.helix_id, a.bp_index, a.direction): np.array([a.x, a.y, a.z])
+        for a in build_atomistic_model(design).atoms
+        if a.name == "C3'"
+    }
 
     def miss(measured: bool) -> float:
         d = []
@@ -288,7 +311,8 @@ def test_the_bead_lands_on_the_ribose_c3_prime():
     # 55.3 deg apart.
     assert miss(measured=False) > 0.40, "legacy bead is nowhere near the C3'"
     assert miss(measured=True) < miss(measured=False) + 0.15, (
-        "the groove-registered bead should stay in the same neighbourhood as legacy")
+        "the groove-registered bead should stay in the same neighbourhood as legacy"
+    )
 
 
 def test_the_frozen_fallback_still_matches_what_the_template_derives():
@@ -371,7 +395,8 @@ def test_the_periodic_seam_solver_still_gets_a_valid_axis():
     assert np.allclose(np.abs(z), [0.0, 0.0, 1.0], atol=1e-9)
     assert np.allclose(origin[:2], [0.0, 0.0], atol=1e-9), (
         "recovered axis is off the true centreline — the inverter's build-convention "
-        "assumption (HELIX_RADIUS + groove_offset_rad) no longer holds")
+        "assumption (HELIX_RADIUS + groove_offset_rad) no longer holds"
+    )
 
 
 def test_the_oxdna_seed_restores_the_cm_radius_and_is_a_legacy_no_op():
@@ -396,9 +421,13 @@ def test_the_oxdna_seed_restores_the_cm_radius_and_is_a_legacy_no_op():
     from backend.physics.oxdna_interface import _oxdna_cm_radius_map, resolved_nuc_map
 
     design = Design.model_validate_json(Path("Examples/6hb_test.nadoc").read_text())
-    axes = {a["helix_id"]: (np.asarray(a["start"], float),
-                            np.asarray(a["end"], float) - np.asarray(a["start"], float))
-            for a in deformed_helix_axes(design)}
+    axes = {
+        a["helix_id"]: (
+            np.asarray(a["start"], float),
+            np.asarray(a["end"], float) - np.asarray(a["start"], float),
+        )
+        for a in deformed_helix_axes(design)
+    }
 
     def radii(rm):
         out = []
@@ -412,10 +441,18 @@ def test_the_oxdna_seed_restores_the_cm_radius_and_is_a_legacy_no_op():
             out.append(float(np.linalg.norm(d - (d @ t) * t)))
         return np.asarray(out)
 
-    legacy = resolved_nuc_map(design, _geometry_for_helices(
-        design, None, compact_skips=True, measured_positioning=False))
-    measured = resolved_nuc_map(design, _geometry_for_helices(
-        design, None, compact_skips=True, measured_positioning=True))
+    legacy = resolved_nuc_map(
+        design,
+        _geometry_for_helices(
+            design, None, compact_skips=True, measured_positioning=False
+        ),
+    )
+    measured = resolved_nuc_map(
+        design,
+        _geometry_for_helices(
+            design, None, compact_skips=True, measured_positioning=True
+        ),
+    )
 
     # (1) legacy beads are already on the CM cylinder, so the conversion changes nothing.
     assert radii(legacy) == pytest.approx(HELIX_RADIUS, abs=1e-6)
@@ -424,4 +461,5 @@ def test_the_oxdna_seed_restores_the_cm_radius_and_is_a_legacy_no_op():
     # (2) measured beads come in at the C3' radius and go out on the CM cylinder.
     assert radii(measured) == pytest.approx(MEASURED.backbone_fwd.radius_nm, abs=5e-3)
     assert radii(_oxdna_cm_radius_map(design, measured)) == pytest.approx(
-        HELIX_RADIUS, abs=1e-6)
+        HELIX_RADIUS, abs=1e-6
+    )

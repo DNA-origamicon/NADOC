@@ -30,6 +30,7 @@ DECOUPLED.**  Proven both synthetically (a minimal two-part mesh) and on the rea
 generated topology (mesh census: a ds linker adds a bridge + two rigid hops; a ss
 linker adds one compliant WLC hop).
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -60,10 +61,15 @@ from backend.physics.fem_solver import (
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
+
 def _oh_helices(design, oh_ids) -> set:
     """The helix ids carrying the overhang domains of ``oh_ids``."""
-    return {dm.helix_id for s in design.strands for dm in s.domains
-            if dm.overhang_id in oh_ids}
+    return {
+        dm.helix_id
+        for s in design.strands
+        for dm in s.domains
+        if dm.overhang_id in oh_ids
+    }
 
 
 def _connector_helix_pairs(mesh) -> set:
@@ -89,8 +95,13 @@ def _linked_bundle(linker_type: str, length_value: float, a_attach: str, b_attac
         bare, (a_id, b_id) = _place_two_overhangs_on_6hb()
         bare = bare.model_copy(deep=True)
         d = hb.connect_overhangs(
-            a_id, b_id, overhang_a_attach=a_attach, overhang_b_attach=b_attach,
-            linker_type=linker_type, length_value=length_value, length_unit="bp",
+            a_id,
+            b_id,
+            overhang_a_attach=a_attach,
+            overhang_b_attach=b_attach,
+            linker_type=linker_type,
+            length_value=length_value,
+            length_unit="bp",
         )
         d = d.model_copy(deep=True)
         return d, bare, {a_id, b_id}, _oh_helices(d, {a_id, b_id})
@@ -102,6 +113,7 @@ def _wlc_k_trans(n_bases: int) -> float:
 
 
 # ── FAST: duplex detection is additive (zero regression on linker-free designs) ─
+
 
 def test_duplex_detection_unchanged_without_linkers():
     """The new linker-duplex term is a UNION that is empty when no linker strand
@@ -122,6 +134,7 @@ def test_duplex_detection_unchanged_without_linkers():
     dbp = _duplex_bp_per_helix(design)
     # Recompute the LEGACY scaffold∧staple set directly and require identity.
     from backend.core.sequences import domain_bp_range
+
     scaf = {h.id: set() for h in design.helices}
     stap = {h.id: set() for h in design.helices}
     for s in design.strands:
@@ -137,6 +150,7 @@ def test_duplex_detection_unchanged_without_linkers():
 
 # ── SLOW: a ds linker meshes a duplex bridge + rigid hops (real routed bundle) ─
 
+
 def test_ds_linker_meshes_duplex_bridge_and_rigid_hops():
     """On a real routed 6HB, a ds linker hybridizes both overhangs (staple∧linker)
     AND builds a duplex ``__lnk__`` bridge (linker∧linker) — all three gain duplex bp
@@ -147,13 +161,13 @@ def test_ds_linker_meshes_duplex_bridge_and_rigid_hops():
 
     dbp_bare, dbp = _duplex_bp_per_helix(bare), _duplex_bp_per_helix(linked)
     for h in oh_h:
-        assert (dbp_bare.get(h) or set()) == set()   # ss overhang before linking
-        assert len(dbp[h]) > 0                        # duplex after linking
-    assert len(dbp[bridge]) > 0                        # ds bridge is duplex
+        assert (dbp_bare.get(h) or set()) == set()  # ss overhang before linking
+        assert len(dbp[h]) > 0  # duplex after linking
+    assert len(dbp[bridge]) > 0  # ds bridge is duplex
 
     m_bare, m = build_fem_mesh(bare), build_fem_mesh(linked)
     meshed = {n.helix_id for n in m.nodes}
-    assert oh_h <= meshed and bridge in meshed         # overhangs + bridge now meshed
+    assert oh_h <= meshed and bridge in meshed  # overhangs + bridge now meshed
     assert bridge not in {n.helix_id for n in m_bare.nodes}
     # A ds linker couples rigidly (bridge + hops), never compliantly.
     assert len(m.rigid_links) > len(m_bare.rigid_links)
@@ -176,12 +190,12 @@ def test_ss_linker_meshes_one_compliant_wlc_hop():
 
     dbp = _duplex_bp_per_helix(linked)
     for h in oh_h:
-        assert len(dbp[h]) > 0                          # overhangs duplex
-    assert (dbp.get(bridge) or set()) == set()          # ss bridge unmeshed
+        assert len(dbp[h]) > 0  # overhangs duplex
+    assert (dbp.get(bridge) or set()) == set()  # ss bridge unmeshed
 
     m_bare, m = build_fem_mesh(bare), build_fem_mesh(linked)
     assert bridge not in {n.helix_id for n in m.nodes}  # ss bridge not meshed
-    assert len(m.springs) == len(m_bare.springs) + 1    # exactly one new compliant hop
+    assert len(m.springs) == len(m_bare.springs) + 1  # exactly one new compliant hop
     sp = m.springs[-1]
     assert sp.k_rot == 0.0
     assert sp.k_trans < K_PENALTY / 1e3
@@ -192,6 +206,7 @@ def test_ss_linker_meshes_one_compliant_wlc_hop():
 
 
 # ── FAST: the bright line — coupling with a linker, decoupled without ─────────
+
 
 def _two_parts(link):
     """Two disjoint 2-node 'parts' (a beam each). Part A = nodes 0-1 along +z at
@@ -207,8 +222,12 @@ def _two_parts(link):
     ]
     R = np.eye(3)
     mesh = FEMMesh(nodes=nodes)
-    mesh.elements.append(FEMElement(node_i=0, node_j=1, length=1.0, R=R.copy(), ea=EA_DS))
-    mesh.elements.append(FEMElement(node_i=2, node_j=3, length=1.0, R=R.copy(), ea=EA_DS))
+    mesh.elements.append(
+        FEMElement(node_i=0, node_j=1, length=1.0, R=R.copy(), ea=EA_DS)
+    )
+    mesh.elements.append(
+        FEMElement(node_i=2, node_j=3, length=1.0, R=R.copy(), ea=EA_DS)
+    )
     if isinstance(link, FEMSpring):
         mesh.springs.append(link)
     elif isinstance(link, FEMRigidLink):
@@ -222,13 +241,13 @@ def _part_b_moves(mesh, force=1.0):
     free rigid body (singular) → we instead pin part B's rotations only and read
     whether node 2 translates: a linker transmits the load, no linker leaves it 0."""
     K, f = assemble_global_stiffness(mesh)
-    f[6] = force                                       # +x on node 1 (part A's free tip)
+    f[6] = force  # +x on node 1 (part A's free tip)
     # Free DOF: node 1 translation (0..2 already clamped? no) — clamp node 0 fully,
     # node 1 free (translate), node 2 translation free, node 3 fully clamped.
     free = np.array([6, 7, 8, 12, 13, 14], dtype=int)
     K_free = K.tocsr()[free, :][:, free]
     u = spsolve(K_free, f[free])
-    return float(np.linalg.norm(u[3:6]))               # node 2 (part B) translation
+    return float(np.linalg.norm(u[3:6]))  # node 2 (part B) translation
 
 
 def test_linker_couples_two_parts_and_absence_decouples():
@@ -239,8 +258,8 @@ def test_linker_couples_two_parts_and_absence_decouples():
     coupled = _part_b_moves(_two_parts(spring))
     decoupled = _part_b_moves(_two_parts(None))
 
-    assert decoupled == pytest.approx(0.0, abs=1e-12)   # no linker → part B untouched
-    assert coupled > 1e-9                                # linker → part B moves
+    assert decoupled == pytest.approx(0.0, abs=1e-12)  # no linker → part B untouched
+    assert coupled > 1e-9  # linker → part B moves
     assert coupled > decoupled + 1e-9
 
 
@@ -255,17 +274,19 @@ def test_rigid_linker_couples_more_stiffly_than_a_soft_one():
     # more than the compliant WLC tether (which lets the two nodes separate).
     u_rigid, u_soft = _part_b_moves(rigid), _part_b_moves(soft)
     assert u_rigid > 1e-9 and u_soft > 1e-9
-    assert u_rigid > u_soft * 10                        # ds bridge ≫ ss tether coupling
+    assert u_rigid > u_soft * 10  # ds bridge ≫ ss tether coupling
 
 
 # ── Disconnected-body robustness (ssDNA-connected blocks, general) ─────────────
+
 
 def test_mesh_component_labels_counts_disconnected_bodies():
     """Two beam parts with NO connector are two components; adding a spring (an ssDNA
     tether) merges them into one — a spring counts as CONNECTED (finite restoring force)."""
     n_disjoint, _ = _mesh_component_labels(_two_parts(None))
     n_tethered, _ = _mesh_component_labels(
-        _two_parts(FEMSpring(node_i=1, node_j=2, k_trans=_wlc_k_trans(6), k_rot=0.0)))
+        _two_parts(FEMSpring(node_i=1, node_j=2, k_trans=_wlc_k_trans(6), k_rot=0.0))
+    )
     assert n_disjoint == 2
     assert n_tethered == 1
 
@@ -276,14 +297,16 @@ def test_ensure_components_pinned_covers_every_body():
     component mesh keeps exactly its one pin (legacy behaviour, validated designs unchanged)."""
     disjoint = _two_parts(None)
     _, labels = _mesh_component_labels(disjoint)
-    pinned = _ensure_components_pinned(disjoint, [0], labels)          # anchor only in body A
+    pinned = _ensure_components_pinned(disjoint, [0], labels)  # anchor only in body A
     comps = {int(labels[i]) for i in pinned}
-    assert comps == {0, 1}                                             # both bodies now covered
+    assert comps == {0, 1}  # both bodies now covered
     assert len(pinned) == 2
 
-    tethered = _two_parts(FEMSpring(node_i=1, node_j=2, k_trans=_wlc_k_trans(6), k_rot=0.0))
+    tethered = _two_parts(
+        FEMSpring(node_i=1, node_j=2, k_trans=_wlc_k_trans(6), k_rot=0.0)
+    )
     _, l1 = _mesh_component_labels(tethered)
-    assert _ensure_components_pinned(tethered, [0], l1) == [0]         # one body → unchanged
+    assert _ensure_components_pinned(tethered, [0], l1) == [0]  # one body → unchanged
 
 
 def test_clean_bundle_gains_no_ssdna_hop_springs():
@@ -328,14 +351,14 @@ def test_voltroncore_ssdna_block_couples_and_solves_bounded():
 
     m = build_fem_mesh(d)
     n_comp, _ = _mesh_component_labels(m)
-    assert n_comp == 1                                    # ssDNA hops merged the block in
-    assert len(m.springs) >= 1                            # the scaffold-stub hop(s)
+    assert n_comp == 1  # ssDNA hops merged the block in
+    assert len(m.springs) >= 1  # the scaffold-stub hop(s)
 
     r = predict_shape(d, nonlinear=True, n_steps=20, with_rmsf=True, material="snupi")
     pos = np.array([bp["backbone_position"] for bp in r["positions"]])
     span = float((pos.max(0) - pos.min(0)).max())
-    assert span < 1000.0                                  # origami-scale, not mm-scale
-    assert max(x["rmsf_nm"] for x in r["rmsf"]) < 100.0   # no runaway rigid-mode RMSF
+    assert span < 1000.0  # origami-scale, not mm-scale
+    assert max(x["rmsf_nm"] for x in r["rmsf"]) < 100.0  # no runaway rigid-mode RMSF
 
 
 def test_wound_backbones_no_rise_collapse_with_ssdna_overhang_tail():
@@ -360,20 +383,27 @@ def test_wound_backbones_no_rise_collapse_with_ssdna_overhang_tail():
     helix = Helix(
         axis_start=Vec3(x=0.0, y=0.0, z=0.0),
         axis_end=Vec3(x=0.0, y=0.0, z=paired_bp * FEM_RISE_PER_BP),
-        length_bp=60, bp_start=0,
+        length_bp=60,
+        bp_start=0,
     )
     straight = list(nucleotide_positions(helix))
     # FEM nodes for the paired region only (build_fem_mesh spacing, line 380), u = 0 → straight.
     node_anchors = []
     for gbp in range(paired_bp):
         p = np.array([0.0, 0.0, (gbp - helix.bp_start) * FEM_RISE_PER_BP])
-        node_anchors.append((gbp, p, p))                 # (global_bp, straight, deformed==straight)
+        node_anchors.append((gbp, p, p))  # (global_bp, straight, deformed==straight)
 
     # Sanity: the buggy ratio really collapses to ~½ the true bead rise (so a revert is caught).
-    axlen = float(np.linalg.norm(helix.axis_end.to_array() - helix.axis_start.to_array()))
+    axlen = float(
+        np.linalg.norm(helix.axis_end.to_array() - helix.axis_start.to_array())
+    )
     assert abs(axlen / helix.length_bp - BDNA_RISE_PER_BP) > 0.1
 
     wound, _, _ = _wound_backbones_for_helix(helix, straight, node_anchors)
-    err = max(float(np.linalg.norm(np.array(w) - np.array(n.position)))
-              for w, n in zip(wound, straight))
-    assert err < 1.0, f"winding rise collapsed with an ssDNA tail: max err {err:.3f} nm at u=0"
+    err = max(
+        float(np.linalg.norm(np.array(w) - np.array(n.position)))
+        for w, n in zip(wound, straight)
+    )
+    assert err < 1.0, (
+        f"winding rise collapsed with an ssDNA tail: max err {err:.3f} nm at u=0"
+    )

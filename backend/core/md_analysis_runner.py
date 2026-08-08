@@ -13,6 +13,7 @@ keyed by ``(job_id, kind)``: starting a new analysis supersedes (kills) the prev
 one for that view, a hard timeout bounds run-away calls, and an explicit
 ``cancel()`` (wired to the frontend toggle-off) tears it down immediately.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -38,8 +39,9 @@ _lock = threading.Lock()
 DEFAULT_TIMEOUT_S = 180.0
 
 
-def _target(result_path: str, module: str, qualname: str, args: tuple,
-            timeout_s: float) -> None:
+def _target(
+    result_path: str, module: str, qualname: str, args: tuple, timeout_s: float
+) -> None:
     """Subprocess entry: own a fresh session, run the function, pickle the result.
 
     Self-enforces the timeout with ``SIGALRM`` so the worker dies on schedule even
@@ -95,10 +97,7 @@ def cancel(job_id: str, kind: Optional[str] = None) -> int:
     when ``kind`` is None (view toggled off / job deselected). Returns how many were
     killed. Safe to call when nothing is running."""
     with _lock:
-        keys = [
-            k for k in _active
-            if k[0] == job_id and (kind is None or k[1] == kind)
-        ]
+        keys = [k for k in _active if k[0] == job_id and (kind is None or k[1] == kind)]
         victims = [(k, _active.pop(k)) for k in keys]
     for _key, (proc, result_path) in victims:
         _kill(proc)
@@ -128,7 +127,10 @@ async def run_analysis(
     os.close(fd)
     result_path = Path(result_name)
     proc = _CTX.Process(
-        target=_target, args=(result_name, module, qualname, args, timeout_s), daemon=True)
+        target=_target,
+        args=(result_name, module, qualname, args, timeout_s),
+        daemon=True,
+    )
     proc.start()
     with _lock:
         _active[(job_id, kind)] = (proc, result_path)
@@ -142,7 +144,9 @@ async def run_analysis(
         try:
             status, payload = pickle.loads(result_path.read_bytes())
         except (FileNotFoundError, EOFError, pickle.UnpicklingError):
-            raise RuntimeError(f"{kind} analysis worker died without a result") from None
+            raise RuntimeError(
+                f"{kind} analysis worker died without a result"
+            ) from None
         if status == "err":
             raise RuntimeError(payload)
         return payload

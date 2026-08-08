@@ -92,6 +92,7 @@ typical conformation from the first step.
 
 Everything is in the module's nm · pN · ns unit system (see :mod:`snupi_dynamics`).
 """
+
 from __future__ import annotations
 
 import math
@@ -141,16 +142,21 @@ def ss_blob_nt(coarse_bp: int) -> int:
     0.34 nm rise would say 4 nt): a coil is far more compact than the chain laid out straight, so
     many more nucleotides fit in the same sphere.
     """
-    from backend.physics.snupi_tails import SS_HYDRO_RADIUS_NM, wlc_mean_square_end_to_end
+    from backend.physics.snupi_tails import (
+        SS_HYDRO_RADIUS_NM,
+        wlc_mean_square_end_to_end,
+    )
 
     target = blob_radius_nm(coarse_bp)
     best, best_err = 1, math.inf
     for n in range(1, 129):
-        r = math.hypot(0.5 * math.sqrt(wlc_mean_square_end_to_end(n)), SS_HYDRO_RADIUS_NM)
+        r = math.hypot(
+            0.5 * math.sqrt(wlc_mean_square_end_to_end(n)), SS_HYDRO_RADIUS_NM
+        )
         err = abs(r - target)
         if err < best_err:
             best, best_err = n, err
-        elif r > target:                      # radius is monotone in n — past the target, stop
+        elif r > target:  # radius is monotone in n — past the target, stop
             break
     return best
 
@@ -179,7 +185,7 @@ def blob_partition(mesh, coarse_bp: int, block=None) -> np.ndarray:
     for hid in sorted(per_helix):
         idx = sorted(per_helix[hid], key=lambda i: mesh.nodes[i].global_bp)
         for c in range(0, len(idx), k):
-            for i in idx[c:c + k]:
+            for i in idx[c : c + k]:
                 bead_of[i] = nxt
             nxt += 1
 
@@ -211,16 +217,19 @@ class CoarseFriction:
     Exposes exactly what the operator GJF integrator needs — ``apply_Z``, ``apply_b_inv``, ``sample_beta``
     — with O(N + (6B)²) memory and cost. Built once (the friction is configuration-independent over the
     run, matching SNUPI's own ``DYN_MAT_FREQ 0`` default)."""
-    bead_of: np.ndarray        # (N,) node → blob id
+
+    bead_of: np.ndarray  # (N,) node → blob id
     n_nodes: int
     n_beads: int
-    dinv: np.ndarray           # (6N,) diagonal of D⁻¹
-    dhalf: np.ndarray          # (6N,) diagonal of D^{1/2}
-    Ginv: np.ndarray           # (6B,6B) = (C⁻¹ + A D⁻¹ Aᵀ)⁻¹
-    Lc: np.ndarray             # (6B,6B) Cholesky factor of C
-    minv_half: np.ndarray      # (6N,) M^{-1/2}
-    m_half: np.ndarray         # (6N,) M^{1/2}
-    _Kinv: Optional[np.ndarray] = None   # (6B,6B) for the GJF auxiliary inverse, set by prepare_gjf
+    dinv: np.ndarray  # (6N,) diagonal of D⁻¹
+    dhalf: np.ndarray  # (6N,) diagonal of D^{1/2}
+    Ginv: np.ndarray  # (6B,6B) = (C⁻¹ + A D⁻¹ Aᵀ)⁻¹
+    Lc: np.ndarray  # (6B,6B) Cholesky factor of C
+    minv_half: np.ndarray  # (6N,) M^{-1/2}
+    m_half: np.ndarray  # (6N,) M^{1/2}
+    _Kinv: Optional[np.ndarray] = (
+        None  # (6B,6B) for the GJF auxiliary inverse, set by prepare_gjf
+    )
     _Ediag: Optional[np.ndarray] = None  # (6N,) diagonal of E = I + (Δt/2)·D̃
 
     # ── sparse A operators (one 6×6 diagonal block per node) ────────────────────
@@ -250,13 +259,13 @@ class CoarseFriction:
         """Precompute the 6B×6B factor for ``apply_b_inv`` at this Δt. Z̃ = D̃ − Ỹᵀ G⁻¹ Ỹ is diagonal
         minus low-rank, so (E − (Δt/2)Ỹᵀ G⁻¹ Ỹ)⁻¹ with E = I + (Δt/2)D̃ is Woodbury again."""
         c = 0.5 * dt
-        dtil = self.minv_half * self.dinv * self.minv_half          # diag(D̃)
+        dtil = self.minv_half * self.dinv * self.minv_half  # diag(D̃)
         self._Ediag = 1.0 + c * dtil
         # Ỹ = A D⁻¹ M^{-1/2}: per node a 6×6 diagonal block  s_i = dinv_i · minv_half_i
         s = self.dinv * self.minv_half
         # K = G − c · Ỹ E⁻¹ Ỹᵀ ; Ỹ E⁻¹ Ỹᵀ is BLOCK-DIAGONAL (6×6 per blob)
-        w = (s * s) / self._Ediag                                    # (6N,)
-        blk = self._scatter(w)                                       # (6B,) — the 6×6 blocks are diagonal
+        w = (s * s) / self._Ediag  # (6N,)
+        blk = self._scatter(w)  # (6B,) — the 6×6 blocks are diagonal
         G = np.linalg.inv(self.Ginv)
         K = G - c * np.diag(blk)
         self._Kinv = np.linalg.inv(K)
@@ -277,7 +286,7 @@ class CoarseFriction:
         6B×6B Cholesky is ever needed (never a 6N×6N one — the paper's dense bottleneck)."""
         g1 = rng.standard_normal(6 * self.n_nodes)
         g2 = rng.standard_normal(6 * self.n_beads)
-        y = self.m_half * (self.dhalf * g1 + self._gather(self.Lc @ g2))   # cov(y) = Ξ̃
+        y = self.m_half * (self.dhalf * g1 + self._gather(self.Lc @ g2))  # cov(y) = Ξ̃
         return math.sqrt(2.0 * kT * dt) * self.apply_Ztilde(y)
 
 
@@ -294,10 +303,15 @@ def node_radii(mesh, block=None, sigma: float = HYDRO_RADIUS_NM) -> np.ndarray:
     return a
 
 
-def build_coarse_friction(mesh, X0: np.ndarray, m_diag: np.ndarray, coarse_bp: int,
-                          sigma: float = HYDRO_RADIUS_NM,
-                          generalized: bool = True,
-                          block=None) -> CoarseFriction:
+def build_coarse_friction(
+    mesh,
+    X0: np.ndarray,
+    m_diag: np.ndarray,
+    coarse_bp: int,
+    sigma: float = HYDRO_RADIUS_NM,
+    generalized: bool = True,
+    block=None,
+) -> CoarseFriction:
     """Assemble the blob RPY friction for ``mesh`` at reference positions ``X0`` (N,3 nm).
 
     ``m_diag`` is the (6N,) diagonal mass (dynamics units). ``coarse_bp`` bp per blob; 1 = exact model
@@ -313,7 +327,9 @@ def build_coarse_friction(mesh, X0: np.ndarray, m_diag: np.ndarray, coarse_bp: i
     generalized RPY is most comfortable in."""
     k = max(int(coarse_bp), 1)
     if k == 1:
-        raise ValueError("coarse_bp=1 is the exact model — call snupi_hydrodynamics.friction_matrix")
+        raise ValueError(
+            "coarse_bp=1 is the exact model — call snupi_hydrodynamics.friction_matrix"
+        )
     if k < MIN_COARSE_BP:
         raise ValueError(
             f"coarse_bp={k} is in the degenerate regime: the blob radius σ_b={blob_radius_nm(k):.3f} nm "
@@ -337,9 +353,11 @@ def build_coarse_friction(mesh, X0: np.ndarray, m_diag: np.ndarray, coarse_bp: i
     # docstring). The species enters through the per-NODE radius below, not here.
     sigma_b = blob_radius_nm(k, sigma)
     if generalized:
-        C = rpy_mobility_generalized(centres, sigma_b)      # (6B,6B) SPD — all four blocks
+        C = rpy_mobility_generalized(centres, sigma_b)  # (6B,6B) SPD — all four blocks
     else:
-        C = mobility_translational_6n(centres, sigma_b)     # tt coupling + self rotational Stokes
+        C = mobility_translational_6n(
+            centres, sigma_b
+        )  # tt coupling + self rotational Stokes
 
     # D = μ_self(σ_i) − μ_self(σ_b) per node: exactly the self-mobility the blob does NOT already
     # supply, so that Ξ_ii = D_i + C_bb = μ_self(σ_i) is the node's EXACT Stokes self-mobility — for a
@@ -349,8 +367,10 @@ def build_coarse_friction(mesh, X0: np.ndarray, m_diag: np.ndarray, coarse_bp: i
     d = np.empty(6 * n, dtype=float)
     d.reshape(n, 6)[:, :3] = (mu_self_trans(a_node) - mu_self_trans(sigma_b))[:, None]
     d.reshape(n, 6)[:, 3:] = (mu_self_rot(a_node) - mu_self_rot(sigma_b))[:, None]
-    if not (d > 0).all():                                   # pragma: no cover — σ_b > σ guarantees it
-        raise ValueError("coarse D is not positive — blob radius must exceed every bead radius")
+    if not (d > 0).all():  # pragma: no cover — σ_b > σ guarantees it
+        raise ValueError(
+            "coarse D is not positive — blob radius must exceed every bead radius"
+        )
 
     dinv = 1.0 / d
     # G = C⁻¹ + A D⁻¹ Aᵀ  (the second term is block-diagonal: sum of D⁻¹ over each blob's nodes)
@@ -359,8 +379,13 @@ def build_coarse_friction(mesh, X0: np.ndarray, m_diag: np.ndarray, coarse_bp: i
     G = np.linalg.inv(C) + np.diag(Ginv_acc)
     m_diag = np.asarray(m_diag, float)
     return CoarseFriction(
-        bead_of=bead_of, n_nodes=n, n_beads=nb,
-        dinv=dinv, dhalf=np.sqrt(d),
-        Ginv=np.linalg.inv(G), Lc=np.linalg.cholesky(C),
-        minv_half=1.0 / np.sqrt(m_diag), m_half=np.sqrt(m_diag),
+        bead_of=bead_of,
+        n_nodes=n,
+        n_beads=nb,
+        dinv=dinv,
+        dhalf=np.sqrt(d),
+        Ginv=np.linalg.inv(G),
+        Lc=np.linalg.cholesky(C),
+        minv_half=1.0 / np.sqrt(m_diag),
+        m_half=np.sqrt(m_diag),
     )

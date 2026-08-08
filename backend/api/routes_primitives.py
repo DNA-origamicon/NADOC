@@ -46,11 +46,17 @@ def list_primitives() -> list[dict]:
     out = []
     for meta in _pc.list_primitives(_primitives_dir()):
         pid = meta["id"]
-        out.append({
-            **meta,
-            "preview_url": f"/api/primitives/{pid}/preview.gif" if meta["has_preview"] else None,
-            "poster_url": f"/api/primitives/{pid}/poster.png" if meta["has_poster"] else None,
-        })
+        out.append(
+            {
+                **meta,
+                "preview_url": f"/api/primitives/{pid}/preview.gif"
+                if meta["has_preview"]
+                else None,
+                "poster_url": f"/api/primitives/{pid}/poster.png"
+                if meta["has_poster"]
+                else None,
+            }
+        )
     return out
 
 

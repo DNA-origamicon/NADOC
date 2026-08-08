@@ -60,6 +60,7 @@ HAND_BUILT_BASELINE = [16, 32, 54, 60, 64, 64, 60, 54, 32, 16]
 
 # ── 1. Pure geometry invariants ────────────────────────────────────────────────
 
+
 @pytest.mark.parametrize("radius", [6.0, 8.0, 10.6, 12.0, 15.0, 20.0])
 def test_column_lengths_even_symmetric_and_above_floor(radius):
     cols = column_lengths(radius)
@@ -68,8 +69,9 @@ def test_column_lengths_even_symmetric_and_above_floor(radius):
     assert lengths, "a usable radius must admit at least the centre column"
     assert all(bp % 2 == 0 for bp in lengths), "lengths must be even (symmetric trim)"
     assert all(bp >= DEFAULT_MIN_CHORD_BP for bp in lengths), "edge cutoff respected"
-    assert offsets == sorted(offsets) and offsets == [-o for o in reversed(offsets)], \
+    assert offsets == sorted(offsets) and offsets == [-o for o in reversed(offsets)], (
         "columns are symmetric about the centre"
+    )
     assert lengths == lengths[::-1], "length profile is centre-symmetric"
     # The centre column is the longest chord.
     assert max(lengths) == lengths[len(lengths) // 2]
@@ -90,17 +92,23 @@ def test_radius_too_small_yields_no_columns():
 
 # ── 2. Circularity beats the hand-built baseline ───────────────────────────────
 
+
 def test_generated_circle_far_more_circular_than_hand_built():
     baseline = circularity_spread(HAND_BUILT_BASELINE)
     # The hand-trimmed original wobbles ~1.2 nm in implied radius.
-    assert baseline > 1.0, f"sanity: hand-built baseline should be wobbly, got {baseline:.3f}"
+    assert baseline > 1.0, (
+        f"sanity: hand-built baseline should be wobbly, got {baseline:.3f}"
+    )
 
-    radius = fit_radius(HAND_BUILT_BASELINE)  # default radius "corresponds" to the original
+    radius = fit_radius(
+        HAND_BUILT_BASELINE
+    )  # default radius "corresponds" to the original
     generated = [bp for _, bp in column_lengths(radius)]
     spread = circularity_spread(generated)
     assert spread < 0.5, f"generated spread {spread:.3f} nm should be tight"
-    assert spread < baseline / 2, \
+    assert spread < baseline / 2, (
         f"generated {spread:.3f} nm must beat hand-built {baseline:.3f} nm by 2x+"
+    )
 
 
 @pytest.mark.parametrize("radius", [6.0, 8.0, 10.6, 12.0, 15.0, 20.0, 30.0])
@@ -113,14 +121,22 @@ def test_circularity_spread_bounded_across_radii(radius):
 
 # ── 3. Placement route: centred, additive, revertable ──────────────────────────
 
+
 def test_place_circle_is_tangent_to_plane_and_revertable():
     design_state.set_design(Design(lattice_type="SQUARE"))
     fp = circle_footprint(10.6)
     assert fp is not None
-    r = client.post("/api/design/circle-segment", json={
-        "cells": fp["cells"], "cell_lengths": fp["cell_lengths"],
-        "plane": "XY", "offset_nm": 0.0, "strand_filter": "both", "ligate_adjacent": True,
-    })
+    r = client.post(
+        "/api/design/circle-segment",
+        json={
+            "cells": fp["cells"],
+            "cell_lengths": fp["cell_lengths"],
+            "plane": "XY",
+            "offset_nm": 0.0,
+            "strand_filter": "both",
+            "ligate_adjacent": True,
+        },
+    )
     assert r.status_code == 201, r.text
 
     d = design_state.get_or_404()
@@ -137,7 +153,9 @@ def test_place_circle_is_tangent_to_plane_and_revertable():
         mid = (h.axis_start.z + h.axis_end.z) / 2.0
         span = abs(h.axis_end.z - h.axis_start.z)
         assert lo >= -1e-6, "no helix dips below the slice plane (+bp only)"
-        assert mid == pytest.approx(radius_nm, abs=1e-6), "centred on the disc mid-line z=R"
+        assert mid == pytest.approx(radius_nm, abs=1e-6), (
+            "centred on the disc mid-line z=R"
+        )
         assert span == pytest.approx(length * BDNA_RISE_PER_BP, abs=1e-6)
         lows.append(lo)
     assert min(lows) == pytest.approx(0.0, abs=1e-6), "disc is tangent to the plane"
@@ -154,9 +172,14 @@ def test_place_circle_into_honeycomb_design():
     """The circle is lattice-agnostic — it builds into a HONEYCOMB design's lattice."""
     design_state.set_design(Design(lattice_type="HONEYCOMB"))
     fp = circle_footprint(10.6)
-    r = client.post("/api/design/circle-segment", json={
-        "cells": fp["cells"], "cell_lengths": fp["cell_lengths"], "plane": "XY",
-    })
+    r = client.post(
+        "/api/design/circle-segment",
+        json={
+            "cells": fp["cells"],
+            "cell_lengths": fp["cell_lengths"],
+            "plane": "XY",
+        },
+    )
     assert r.status_code == 201, r.text
     d = design_state.get_or_404()
     assert len(d.helices) == len(fp["cells"])
@@ -165,14 +188,20 @@ def test_place_circle_into_honeycomb_design():
 
 def test_place_circle_is_additive_over_existing_dna():
     from backend.core.lattice import make_bundle_design
+
     base = make_bundle_design([(0, 0)], length_bp=42, lattice_type="SQUARE")
     design_state.set_design(base)
     fp = circle_footprint(8.0)
     # Shift the footprint columns away from the existing (0,0) helix.
     cells = [[0, c + 5] for _, c in fp["cells"]]
-    r = client.post("/api/design/circle-segment", json={
-        "cells": cells, "cell_lengths": fp["cell_lengths"], "plane": "XY",
-    })
+    r = client.post(
+        "/api/design/circle-segment",
+        json={
+            "cells": cells,
+            "cell_lengths": fp["cell_lengths"],
+            "plane": "XY",
+        },
+    )
     assert r.status_code == 201, r.text
     grid = {tuple(h.grid_pos) for h in design_state.get_or_404().helices}
     assert (0, 0) in grid
@@ -181,9 +210,11 @@ def test_place_circle_is_additive_over_existing_dna():
 
 # ── 4. Catalog surfaces the parametric spec ────────────────────────────────────
 
+
 @_skip_if_no_circle
 def test_small_circle_derives_parametric_circle_spec():
     from backend.core.primitive_catalog import derive_placement_spec
+
     spec = derive_placement_spec(json.loads(_SMALL_CIRCLE.read_text()))
     assert spec is not None
     assert spec["kind"] == "circle"
@@ -196,6 +227,7 @@ def test_small_circle_derives_parametric_circle_spec():
 @_skip_if_no_circle
 def test_small_circle_metadata_is_named_circle_no_lattice():
     from backend.core.primitive_catalog import derive_metadata
+
     meta = derive_metadata(json.loads(_SMALL_CIRCLE.read_text()), "small_circle")
     assert meta["name"] == "Circle"
     assert meta["kind"] == "circle"
