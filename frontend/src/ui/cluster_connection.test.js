@@ -95,6 +95,28 @@ describe('initClusterConnection factory', () => {
 })
 
 describe('two chips on screen (Clusters card + Job Wizard)', () => {
+  it('contains login-field keydowns from both chips before global hotkeys see them', () => {
+    document.body.innerHTML = '<div id="sidebar"></div><div id="wizard"></div>'
+    const fetchImpl = async () => ({ json: async () => ({ state: 'disconnected' }) })
+    const sidebar = initClusterConnection({ mount: document.getElementById('sidebar'), fetchImpl })
+    const wizard = initClusterConnection({ mount: document.getElementById('wizard'), fetchImpl })
+    const globalHotkey = vi.fn()
+    document.addEventListener('keydown', globalHotkey)
+
+    for (const chip of document.querySelectorAll('button[id^="md-cluster-chip"]')) {
+      chip.click()
+      const modal = document.body.lastElementChild
+      for (const input of modal.querySelectorAll('input')) {
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'u', bubbles: true }))
+      }
+      modal.querySelector('#cl-cancel').click()
+    }
+
+    expect(globalHotkey).not.toHaveBeenCalled()
+    document.removeEventListener('keydown', globalHotkey)
+    sidebar.dispose(); wizard.dispose()
+  })
+
   it('mirrors a sign-in from one chip onto the other', async () => {
     // Only the chip that owns the session polls, so without adoption the second chip
     // would sit on a stale "Disconnected" forever.

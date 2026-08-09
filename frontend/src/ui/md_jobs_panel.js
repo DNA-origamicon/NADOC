@@ -2973,6 +2973,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // stopped/failed job resumes here; an Alpine job's cluster-gated resume stays on the
   // dedicated resume button.
   function _runControl() {
+    // Creating a job has begun but the backend has not returned its id yet, so there is
+    // no selected record from which mdRunControl can derive this transient state.
+    if (_launching) {
+      return { action: RUN_ACTION.PREPARING, label: 'Preparing…', disabled: true, spinner: true }
+    }
     // A selected DRAFT (deferred-prep seed) relabels the launcher "Relax from oxDNA"
     // and, when clicked, solvates-from-seed + starts THIS job (POST …/prepare).
     const sel = _selectedJob()
@@ -3441,7 +3446,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const runsOnGpu = deviceStr.toLowerCase() !== 'cpu' && deviceStr.toLowerCase() !== 'none'
     if (isLocalRun && runsOnGpu && !(await confirmGpuNotBusy(deviceStr || '0'))) return
     _launching = true
-    runBtn.disabled = true
+    _paintRunControl()
 
     const payload = {
       ...proto,

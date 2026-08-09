@@ -172,6 +172,14 @@ export function initClusterConnection({ mount, fetchImpl = fetch } = {}) {
     overlay.appendChild(box)
     document.body.appendChild(overlay)
 
+    // The same login modal is opened from both the sidebar chip and the Job Wizard
+    // chip. Keep every keystroke entered into its credentials fields from reaching
+    // the document-level shortcut registry (some shortcuts intentionally remain
+    // active in ordinary inputs).
+    box.querySelectorAll('input').forEach(input => {
+      input.addEventListener('keydown', e => e.stopPropagation())
+    })
+
     const close = () => overlay.remove()
     const errEl = box.querySelector('#cl-err')
     box.querySelector('#cl-cancel').onclick = close

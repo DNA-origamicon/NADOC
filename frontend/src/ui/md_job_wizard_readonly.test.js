@@ -217,6 +217,30 @@ describe('read-only wizard', () => {
   })
 })
 
+describe('live wizard commit', () => {
+  it('closes immediately after Create job while preparation continues in the panel', async () => {
+    let finishLaunch
+    const launch = vi.fn(() => new Promise(resolve => { finishLaunch = resolve }))
+    const onJobCreated = vi.fn()
+    const { wiz } = setup({ launch, onJobCreated })
+    await wiz.open('relaxation')
+
+    // Creation is offered on the final plan step.
+    const tabs = [...modalRoot().querySelectorAll('.wizard-tab')]
+    tabs.at(-1).click()
+    const create = footerButtons().find(b => b.textContent.includes('Create job'))
+    await vi.waitFor(() => expect(create.disabled).toBe(false))
+
+    create.click()
+    expect(launch).toHaveBeenCalledOnce()
+    expect(wiz.isOpen()).toBe(false)
+    expect(onJobCreated).not.toHaveBeenCalled()
+
+    finishLaunch({ job_id: 'new' })
+    await vi.waitFor(() => expect(onJobCreated).toHaveBeenCalledWith('new'))
+  })
+})
+
 describe('a child rebuilt from its parent', () => {
   // An Alpine ensemble replica as it exists on disk: a parent, a seed, an index, and no
   // recorded request of any kind. Reporting these as unviewable is what made every Alpine

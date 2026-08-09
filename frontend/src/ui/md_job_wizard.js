@@ -1642,9 +1642,14 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
         })
         // Step 1's answer, spread OVER the built body: productionPayload takes camelCase
         // args, so these snake_case API fields have to land on the result, not the args.
-        const job = await spawnProduction?.(state.parentJobId,
+        const pendingJob = spawnProduction?.(state.parentJobId,
           { ...body, ...targetStep.payloadFields() })
-        if (job) { onJobCreated?.(job.job_id); close() }
+        // Creation can spend a long time sizing/solvating before the request returns.
+        // The panel owns progress and errors from this point, so dismiss the wizard as
+        // soon as the user commits instead of leaving an apparently inert modal on top.
+        close()
+        const job = await pendingJob
+        if (job) onJobCreated?.(job.job_id)
       } else {
         // Drop anything the server would force anyway. Sending it changes nothing, but it
         // would sit in `model_fields_set` as an explicit choice the user did not make
@@ -1657,7 +1662,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
         const touched = Object.fromEntries(
           Object.entries(state.touched).filter(([k]) =>
             !isForced(k) && fieldAppliesToTarget(FIELD_BY_KEY.get(k), state.target)))
-        const job = await launch?.({
+        const pendingJob = launch?.({
           ...wizardPayload({
             presetId: state.presetId, touched, autostart,
             stageOverrides: state.stageOverrides,
@@ -1666,7 +1671,9 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
           // what actually reaches the API, not the panel's older radio state.
           ...targetStep.payloadFields(),
         }, { draftId: state.draftId })
-        if (job) { onJobCreated?.(job.job_id); close() }
+        close()
+        const job = await pendingJob
+        if (job) onJobCreated?.(job.job_id)
       }
     } finally {
       busy = false
