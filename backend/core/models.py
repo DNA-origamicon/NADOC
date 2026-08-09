@@ -2059,6 +2059,11 @@ class DesignMetadata(BaseModel):
     created_at: str = ""
     modified_at: str = ""
     tags: List[str] = Field(default_factory=list)
+    # Durable identity signoff. ``Design.id`` identifies the logical document;
+    # this path records where NADOC last confirmed that identity in the workspace.
+    # Old files omit both fields and migrate lazily on first open/save.
+    identity_last_known_path: Optional[str] = None
+    identity_confirmed_at: str = ""
     # Marks a design as a *parametric* primitive (e.g. "circle") so the Primitives
     # panel offers it as a generative building block, not a fixed footprint. A real
     # field (not freeform) so it survives a load→save round-trip through the app.

@@ -11161,30 +11161,41 @@ def roll_active_to_job_state(
         )
     )
 
-    # Seek the cursor to the job's run position (full log kept, cursor moves).
-    n = len(current.feature_log)
-    if feature_log_position is not None and -1 <= feature_log_position < n:
-        seeked = _seek_feature_log(current, feature_log_position)
+    if snapshot.id != current.id:
+        # Cross-design roll is allowed, but histories are never interchangeable.
+        # Switch to the job's complete frozen design + its own Feature Log instead
+        # of grafting the active file's log onto unrelated topology.
+        rolled = snapshot.copy_with(loadouts=loadouts, active_loadout_id=None)
     else:
-        seeked = current  # no recorded position / out of range → leave the cursor
+        # Seek the cursor to the job's run position (full log kept, cursor moves).
+        n = len(current.feature_log)
+        if feature_log_position is not None and -1 <= feature_log_position < n:
+            seeked = _seek_feature_log(current, feature_log_position)
+        else:
+            seeked = current  # no recorded position / out of range → leave the cursor
 
-    # New jobs: the seek already reproduces the job's state.  Old jobs: overlay the
-    # job's exact snapshot topology onto the seeked log/cursor so it still runs.
-    if design_build_fingerprint(seeked) == design_build_fingerprint(snapshot):
-        rolled = seeked.copy_with(loadouts=loadouts, active_loadout_id=None)
-    else:
-        rolled = snapshot.copy_with(
-            feature_log=seeked.feature_log,
-            feature_log_cursor=seeked.feature_log_cursor,
-            feature_log_sub_cursor=seeked.feature_log_sub_cursor,
-            loadouts=loadouts,
-            active_loadout_id=None,
-        )
+        # New jobs: the seek already reproduces the job's state. Old jobs: overlay
+        # the exact snapshot topology while retaining this SAME design's log/cursor.
+        if design_build_fingerprint(seeked) == design_build_fingerprint(snapshot):
+            rolled = seeked.copy_with(loadouts=loadouts, active_loadout_id=None)
+        else:
+            rolled = snapshot.copy_with(
+                feature_log=seeked.feature_log,
+                feature_log_cursor=seeked.feature_log_cursor,
+                feature_log_sub_cursor=seeked.feature_log_sub_cursor,
+                loadouts=loadouts,
+                active_loadout_id=None,
+            )
 
     design_state.set_design(rolled)
     report = validate_design(rolled)
     resp = _design_response_with_geometry(rolled, report)
     resp["return_loadout_id"] = return_id
+    # Lets the UI proceed without synchronously re-listing every historical job.
+    # The list refresh can update stale badges later in the background.
+    resp["matches_job"] = (
+        design_build_fingerprint(rolled) == design_build_fingerprint(snapshot)
+    )
     return resp
 
 

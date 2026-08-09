@@ -6,6 +6,7 @@ vi.mock('../api/client.js', () => ({ selectLoadout: vi.fn(), lastErrorMessage: (
 
 import { showConfirm } from './primitives/confirm.js'
 import { showPersistentToast } from './toast.js'
+import * as api from '../api/client.js'
 import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
 
 describe('jobOutOfDate', () => {
@@ -21,7 +22,8 @@ describe('ensureJobCurrent', () => {
   let rollFn, refetch
   beforeEach(() => {
     vi.clearAllMocks()
-    rollFn = vi.fn().mockResolvedValue({ return_loadout_id: 'L1' })
+    vi.useFakeTimers()
+    rollFn = vi.fn().mockResolvedValue({ return_loadout_id: 'L1', matches_job: true })
     refetch = vi.fn().mockResolvedValue()
   })
 
@@ -41,23 +43,28 @@ describe('ensureJobCurrent', () => {
 
   it('rolls + returns true + offers Return-to-latest when confirmed and the roll clears it', async () => {
     showConfirm.mockResolvedValue(true)
-    let stale = true
-    refetch.mockImplementation(async () => { stale = false })   // roll cleared the flag
     const ok = await ensureJobCurrent({
-      job: { job_id: 'j7', out_of_date: true }, rollFn, refetch, isStale: () => stale, actionLabel: 'a production run',
+      job: { job_id: 'j7', out_of_date: true }, rollFn, refetch, isStale: () => true, actionLabel: 'a production run',
     })
     expect(ok).toBe(true)
     expect(rollFn).toHaveBeenCalledWith('j7')
-    expect(refetch).toHaveBeenCalled()
+    expect(refetch).not.toHaveBeenCalled()
+    await vi.runAllTimersAsync()
+    expect(refetch).toHaveBeenCalledOnce()
     expect(showPersistentToast).toHaveBeenCalled()           // Return-to-latest affordance
     const action = showPersistentToast.mock.calls[0][1]?.action
     expect(action?.label).toContain('Return to latest')
+    await action.onClick()
+    expect(api.selectLoadout).toHaveBeenCalledWith('L1', { saveCurrent: false })
   })
 
   it('aborts when the roll did not clear the flag (still stale)', async () => {
     showConfirm.mockResolvedValue(true)
     const ok = await ensureJobCurrent({
-      job: { job_id: 'j', out_of_date: true }, rollFn, refetch, isStale: () => true,
+      job: { job_id: 'j', out_of_date: true },
+      rollFn: vi.fn().mockResolvedValue({ matches_job: false }),
+      refetch,
+      isStale: () => true,
     })
     expect(ok).toBe(false)
     expect(showPersistentToast).not.toHaveBeenCalled()

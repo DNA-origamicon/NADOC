@@ -583,6 +583,31 @@ internal-server-error (the rundir prep runs synchronously in the request handler
   `job_staleness.test.js` + panel/controller pins. The in-app ⚠ + roll-seeks-the-tab + return-to-latest
   gesture is human-eye → **MV-OXSTALE** (covers oxDNA + MD).
 
+### Roll/return re-audit (2026-08-08)
+
+- The historical synchronization failure is now covered end-to-end by
+  `tests.automation_harness.assert_roll_return_lifecycle`: edit present + stale → unsafe follow-on
+  refused 409 → roll keeps the complete Feature Log and restores the job fingerprint/cursor → stale
+  clears → `save_current=false` return restores the exact latest fingerprint/cursor/log → stale
+  correctly reappears. `test_md_staleness.py` drives the same return endpoint for NAMD parity.
+- One live-workflow edge was reproducible and fixed: `showPersistentToast` reused a single global slot
+  but retained its previous action. A pre-existing loading/status toast could therefore consume the
+  roll-complete message while omitting (or miswiring) **Return to latest**. Reuse now replaces severity,
+  loading state, and controls; `ui/toast.test.js` is the can-go-red pin.
+- Identity root cause resolved: cross-design roll is intentionally allowed but now carries the job
+  snapshot's own Feature Log; it never grafts the active file's history onto another `Design.id`.
+  Workspace identity follows professional move/copy semantics: rename/move retains UUID and remaps job
+  provenance; Save As/copy forks UUID. `DesignMetadata.identity_last_known_path` is the durable location
+  signoff. Legacy files acquire it lazily without changing their ID, while duplicate legacy IDs are split
+  during the library audit. See `backend/core/design_identity.py` + `tests/test_design_identity*.py`.
+- ISSUE-22 is therefore **REVALIDATION REQUIRED**, not confirmed broken: hand-drive oxDNA + MD
+  roll/follow/return once; close as stale if both pass.
+- Feature Log seek performance follow-up (2026-08-08): removed the obstructing global `Loading F…`
+  toast and suppressed the generic request popup for slider seeks; progress is now local via
+  `aria-busy`. The backend no longer deep-copies the complete design before copy-on-write replay.
+  MD/oxDNA stale-job badge refreshes are 150 ms coalesced background work, and roll-design returns an
+  authoritative `matches_job` flag so the action path never waits for a full job-list refresh.
+
 ## Trajectory arrow follows the on-screen run's field (2026-07-06, SHIPPED)
 Viewing the composite trajectory of a field lineage (relax → field1 → field2 → …, a
 chain of child runs each with its own `dir`/`field_pN`) now re-aims the E-field arrow

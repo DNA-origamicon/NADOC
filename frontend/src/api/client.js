@@ -3150,7 +3150,7 @@ export async function seekFeatures(position, subPosition = null) {
   const json = await _request('POST', '/design/features/seek', {
     position,
     sub_position: subPosition,
-  })
+  }, { suppressBusy: true })
   if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
   if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
   return _syncFromDesignResponse(json)
@@ -3909,13 +3909,15 @@ export async function saveAssemblyToWorkspace(filename) {
 }
 
 export async function saveDesignToWorkspace(path) {
-  return _request('POST', '/design/save-workspace', { path, overwrite: true })
+  const json = await _request('POST', '/design/save-workspace', { path, overwrite: true })
+  return json ? _syncFromDesignResponse(json, { skipGeometry: true }) : null
 }
 
 /** Save current in-memory design to an explicit workspace path.
  *  Pass overwrite:false to get a 409 if the file already exists (for Save As confirm flow). */
 export async function saveDesignAs(path, overwrite = true) {
-  return _request('POST', '/design/save-workspace', { path, overwrite })
+  const json = await _request('POST', '/design/save-workspace', { path, overwrite })
+  return json ? _syncFromDesignResponse(json, { skipGeometry: true }) : null
 }
 
 /** Save current in-memory assembly to an explicit workspace path. */

@@ -3575,6 +3575,8 @@ def assert_roll_return_lifecycle(
     # 0. precondition
     pre = design_state.get_or_404()
     full_len = len(pre.feature_log)
+    latest_fingerprint = design_build_fingerprint(pre)
+    latest_cursor = pre.feature_log_cursor
     assert edit_probe(pre), (
         "precondition failed: the edit must be present before rolling."
     )
@@ -3623,6 +3625,20 @@ def assert_roll_return_lifecycle(
     back = return_to_latest(rid)
     assert edit_probe(back), (
         "return-to-latest lost the edits (the overhang did not come back)."
+    )
+    assert design_build_fingerprint(back) == latest_fingerprint, (
+        "return-to-latest did not restore the exact simulation-relevant design state."
+    )
+    assert len(back.feature_log) == full_len, (
+        "return-to-latest changed the feature-log length."
+    )
+    assert back.feature_log_cursor == latest_cursor, (
+        f"return-to-latest restored cursor {back.feature_log_cursor}, expected "
+        f"the pre-roll cursor {latest_cursor}."
+    )
+    assert out_of_date() is True, (
+        "return-to-latest should make the older job out_of_date again; otherwise its "
+        "warning is stale and unsafe follow-on actions may be allowed."
     )
     return rid
 

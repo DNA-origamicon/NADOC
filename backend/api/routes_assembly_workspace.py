@@ -51,8 +51,12 @@ from backend.api import assembly as _asm
 from backend.api import assembly_state
 from backend.api import state as design_state
 from backend.core import workspace as _ws
-from backend.core.job_cleanup import find_associated_jobs
-from backend.core.models import PartSourceFile
+from backend.core.job_cleanup import (
+    find_associated_jobs,
+    reassign_job_snapshot_identity,
+    remap_design_source_paths,
+)
+from backend.core.models import Design, PartSourceFile
 
 # Shared back-imports (count toward B):
 #   _safe_workspace_path  — api-layer ValueError→HTTPException wrapper, also used
@@ -66,6 +70,96 @@ from backend.core.models import PartSourceFile
 from backend.api.assembly import _safe_workspace_path, _assembly_response
 
 router = APIRouter()
+
+
+def _audit_workspace_design_identities() -> None:
+    """Resolve duplicate legacy UUIDs deterministically before library use."""
+    from backend.core.design_identity import (
+        fork_identity_for_copy,
+        normalize_workspace_path,
+        reconcile_open_identity,
+    )
+
+    records: list[tuple[Path, str, Design]] = []
+    for path in sorted(_asm._WORKSPACE_DIR.rglob("*.nadoc")):
+        rel_parts = path.relative_to(_asm._WORKSPACE_DIR).parts
+        if any(part.startswith(".") or part.startswith("__") for part in rel_parts):
+            continue
+        try:
+            design = Design.from_json(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        rel = str(path.relative_to(_asm._WORKSPACE_DIR)).replace("\\", "/")
+        records.append((path, rel, design))
+
+    groups: dict[str, list[tuple[Path, str, Design]]] = {}
+    for record in records:
+        groups.setdefault(record[2].id, []).append(record)
+    for group in groups.values():
+        matching = [
+            r
+            for r in group
+            if normalize_workspace_path(r[2].metadata.identity_last_known_path) == r[1]
+        ]
+        owner = (matching or group)[0]
+        for path, rel, design in group:
+            if path == owner[0]:
+                resolved, _, _ = reconcile_open_identity(
+                    design, rel, _asm._WORKSPACE_DIR
+                )
+            else:
+                resolved = fork_identity_for_copy(design, rel)
+            if resolved != design:
+                path.write_text(resolved.to_json(), encoding="utf-8")
+                if resolved.id != design.id:
+                    reassign_job_snapshot_identity(
+                        _asm._WORKSPACE_DIR, rel, design.id, resolved.id
+                    )
+
+
+def _reconcile_nadoc_file(path: Path, rel_path: str) -> tuple[Design | None, str | None]:
+    """Reconcile a persisted part's UUID/path signoff and write migrations in place."""
+    if path.suffix.lower() != ".nadoc" or not path.is_file():
+        return None, None
+    from backend.core.design_identity import reconcile_open_identity
+
+    try:
+        design = Design.from_json(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None, None
+    resolved, disposition, previous = reconcile_open_identity(
+        design, rel_path, _asm._WORKSPACE_DIR
+    )
+    if disposition == "move" and previous:
+        remap_design_source_paths(_asm._WORKSPACE_DIR, previous, rel_path)
+    elif disposition == "copy" and resolved.id != design.id:
+        reassign_job_snapshot_identity(
+            _asm._WORKSPACE_DIR, rel_path, design.id, resolved.id
+        )
+    if resolved != design:
+        path.write_text(resolved.to_json(), encoding="utf-8")
+    return resolved, disposition
+
+
+def _sign_managed_relocation(dest: Path, old_rel: str, new_rel: str, is_dir: bool) -> None:
+    """Update embedded path signoffs after a NADOC-managed rename/move."""
+    from backend.core.design_identity import relocate_identity
+
+    files = dest.rglob("*.nadoc") if is_dir else ([dest] if dest.suffix.lower() == ".nadoc" else [])
+    for file_path in files:
+        try:
+            design = Design.from_json(file_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        suffix = str(file_path.relative_to(dest)).replace("\\", "/") if is_dir else ""
+        old_path = f"{old_rel}/{suffix}" if suffix else old_rel
+        new_path = f"{new_rel}/{suffix}" if suffix else new_rel
+        updated = relocate_identity(design, old_path, new_path)
+        if updated != design:
+            file_path.write_text(updated.to_json(), encoding="utf-8")
+        active = design_state.get_design()
+        if active is not None and active.id == design.id:
+            design_state.set_design_silent(updated)
 
 
 # ── Request bodies ────────────────────────────────────────────────────────────
@@ -140,6 +234,7 @@ def list_library_files() -> list:
     surface which designs are carrying a lot of simulation data.
     """
     _asm._WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+    _audit_workspace_design_identities()
     from backend.core.design_disk_usage import sim_bytes_by_source_path, _norm
 
     sim_by_path = sim_bytes_by_source_path(_asm._WORKSPACE_DIR)
@@ -321,11 +416,23 @@ def upload_library_file(body: UploadFileRequest) -> dict:
         out_rel = _ws.dedup_filename(safe_stem, p.suffix, _asm._WORKSPACE_DIR)
         dest = _asm._WORKSPACE_DIR / out_rel
 
-    dest.write_text(body.content, encoding="utf-8")
+    content = body.content
+    identity_disposition = None
+    if p.suffix == ".nadoc":
+        from backend.core.design_identity import prepare_workspace_save
+
+        try:
+            uploaded = Design.from_json(content)
+            uploaded, identity_disposition, _ = prepare_workspace_save(uploaded, out_rel)
+            content = uploaded.to_json()
+        except Exception as exc:
+            raise HTTPException(400, detail=f"Invalid .nadoc file: {exc}") from exc
+    dest.write_text(content, encoding="utf-8")
     return {
         "path": out_rel,
         "name": Path(out_rel).stem,
         "type": "assembly" if p.suffix == ".nass" else "part",
+        "identity_disposition": identity_disposition,
     }
 
 
@@ -335,7 +442,11 @@ def get_library_file_content(path: str) -> dict:
     dest = _safe_workspace_path(path)
     if not dest.is_file():
         raise HTTPException(404, detail=f"File not found in workspace: {path!r}")
-    return {"content": dest.read_text(encoding="utf-8")}
+    design, disposition = _reconcile_nadoc_file(dest, path)
+    return {
+        "content": design.to_json() if design is not None else dest.read_text(encoding="utf-8"),
+        "identity_disposition": disposition,
+    }
 
 
 @router.post("/library/mkdir", status_code=201)
@@ -370,6 +481,10 @@ def library_rename(body: RenameRequest) -> dict:
     old_ref = old_rel + "/" if is_dir else old_rel
     new_ref = new_rel + "/" if is_dir else new_rel
     patched = _patch_references(old_ref, new_ref)
+    _sign_managed_relocation(dest, old_rel, new_rel, is_dir)
+    remap_design_source_paths(
+        _asm._WORKSPACE_DIR, old_rel, new_rel, old_is_dir=is_dir
+    )
     return {"old_path": old_rel, "new_path": new_rel, "patched_assemblies": patched}
 
 
@@ -399,6 +514,10 @@ def library_move(body: MoveRequest) -> dict:
     old_ref = old_rel + "/" if is_dir else old_rel
     new_ref = new_rel + "/" if is_dir else new_rel
     patched = _patch_references(old_ref, new_ref)
+    _sign_managed_relocation(dest, old_rel, new_rel, is_dir)
+    remap_design_source_paths(
+        _asm._WORKSPACE_DIR, old_rel, new_rel, old_is_dir=is_dir
+    )
     return {"old_path": old_rel, "new_path": new_rel, "patched_assemblies": patched}
 
 
@@ -494,8 +613,46 @@ def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
     if not body.overwrite and dest.exists():
         raise HTTPException(409, detail=f"File already exists: {body.path!r}")
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(design.to_json(), encoding="utf-8")
-    return {"path": body.path}
+    from backend.api.crud import (
+        _decode_loadout_design_snapshot,
+        _design_response,
+        _encode_loadout_design_snapshot,
+    )
+    from backend.core.design_identity import prepare_workspace_save
+    from backend.core.validator import validate_design
+
+    saved, disposition, previous = prepare_workspace_save(design, body.path)
+    if saved.id != design.id and saved.loadouts:
+        migrated_loadouts = []
+        for loadout in saved.loadouts:
+            try:
+                snapshot = _decode_loadout_design_snapshot(
+                    loadout.design_snapshot_gz_b64
+                )
+                snapshot = snapshot.model_copy(
+                    update={"id": saved.id, "metadata": saved.metadata}
+                )
+                payload, size = _encode_loadout_design_snapshot(snapshot)
+                loadout = loadout.model_copy(
+                    update={
+                        "design_snapshot_gz_b64": payload,
+                        "snapshot_size_bytes": size,
+                    }
+                )
+            except Exception:
+                pass
+            migrated_loadouts.append(loadout)
+        saved = saved.model_copy(update={"loadouts": migrated_loadouts})
+    dest.write_text(saved.to_json(), encoding="utf-8")
+    if saved != design:
+        design_state.set_design_silent(saved)
+    response = _design_response(saved, validate_design(saved))
+    response.update({
+        "path": body.path,
+        "identity_disposition": disposition,
+        "previous_path": previous,
+    })
+    return response
 
 
 @router.post("/assembly/save", status_code=200)

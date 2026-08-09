@@ -247,6 +247,15 @@ export function initFileOpen({
         flShowError('Could not load part.')
         return
       }
+      const identityMessages = {
+        claimed: 'Legacy file identity registered at this workspace path.',
+        confirmed: 'File identity and workspace path confirmed.',
+        move: 'Moved file recognized; its design identity was retained.',
+        copy: 'Copied file recognized; a new independent design identity was assigned.',
+      }
+      if (identityMessages[result.identity_disposition]) {
+        flAppendLog(identityMessages[result.identity_disposition], 'info')
+      }
       flAppendLog(`File fetched — ${Math.round(result.content.length / 1024)} KB`)
       flSetProgress(50, 'Importing design…')
       flAppendLog('Parsing and validating design…')

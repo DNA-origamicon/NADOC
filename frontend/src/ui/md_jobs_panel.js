@@ -2919,10 +2919,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // active — so opening a design that has a running MD job makes Display MD instant
   // to toggle (Option 1).  Both are cheap no-ops when nothing applies: _startMdPrewarm
   // is idempotent, and _refreshMdPrewarm opens no socket unless a ready job exists.
-  window.addEventListener('nadoc:design-changed', async () => {
+  let _designChangeRefreshTimer = null
+  window.addEventListener('nadoc:design-changed', () => {
     _metricsCard?.refresh()   // cached twist/curve/bp graphs no longer match the edited design
-    await _fetchJobs()
-    if (!displayToggle?.checked) _startMdPrewarm()
+    clearTimeout(_designChangeRefreshTimer)
+    _designChangeRefreshTimer = setTimeout(async () => {
+      await _fetchJobs()
+      if (!displayToggle?.checked) _startMdPrewarm()
+    }, 150)
   })
 
   window.addEventListener('nadoc:md-display-state', evt => {

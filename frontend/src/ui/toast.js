@@ -138,6 +138,9 @@ export function showPersistentToast(msg, opts = {}) {
   if (existing) {
     const span = existing.el.querySelector('.toast-message')
     if (span) span.textContent = msg
+    existing.el.classList.remove('toast--success', 'toast--warning', 'toast--error')
+    const severity = opts.severity ?? 'info'
+    if (severity !== 'info') existing.el.classList.add(`toast--${severity}`)
     if (opts.loading && !existing.el.querySelector('.nadoc-spinner')) {
       const spinner = document.createElement('span')
       spinner.className = 'nadoc-spinner'
@@ -147,6 +150,17 @@ export function showPersistentToast(msg, opts = {}) {
       existing.el.setAttribute('role', 'status')
       existing.el.setAttribute('aria-live', 'polite')
     }
+    if (!opts.loading) {
+      existing.el.querySelector('.nadoc-spinner')?.remove()
+      existing.el.removeAttribute('role')
+      existing.el.removeAttribute('aria-live')
+    }
+    // A persistent toast is a single reusable slot. Repurposing that slot must
+    // also replace its controls; otherwise a roll-complete message can retain a
+    // prior Cancel action and omit the required "Return to latest" affordance.
+    for (const button of existing.el.querySelectorAll('button')) button.remove()
+    if (opts.action) _addActionButton(existing.el, opts.action, () => _removeToast(existing))
+    _addCloseButton(existing.el, () => _removeToast(existing))
     _restack()
     return
   }

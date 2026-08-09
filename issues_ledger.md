@@ -684,14 +684,34 @@ configuration plays back as a no-op, in the app and in every export.
 
 ## ISSUE-22 — Roll/return staleness workflow remains broken after multiple fixes
 
-- **Status:** OPEN — promoted from MV-OXSTALE on 2026-08-08.
+- **Status:** REVALIDATION REQUIRED — API lifecycle green; one frontend edge fixed 2026-08-08.
 - **Observed:** user-confirmed failure on 2026-06-24 persisted across multiple fix rounds. Rolling the
   feature log to a job's design and returning does not reliably clear stale state and restore the live
   trajectory workflow.
 - **Why this is an issue:** expected behavior was exercised and failed. Do not return it to manual-
   validation debt.
-- **Next:** reproduce the exact roll → follow/view job → return gesture in the current UI before changing
-  fingerprint or panel code. Existing focused tests do not capture the user's failing interaction.
+- **Audit/automation (2026-08-08):** `assert_roll_return_lifecycle` now drives and asserts the complete
+  oxDNA simulate → edit → 409 guard → roll → fingerprint/cursor/log restore → warning clears → return
+  → exact latest fingerprint/cursor/log restore → warning reappears lifecycle. The MD API test now drives
+  the real `save_current=false` return endpoint and asserts parity. All focused tests pass.
+- **Confirmed edge fixed:** `showPersistentToast` reused one global persistent-toast slot but updated only
+  its message. If a loading/status toast already occupied that slot, the roll-complete message retained
+  the old action (or no action), so **Return to latest was unavailable**. Repurposing a persistent toast
+  now replaces severity, loading state, and controls; a discriminating Vitest test pins the action swap.
+- **Identity root cause fixed (2026-08-08):** cross-design roll remains allowed, but now switches to the
+  job snapshot's own Feature Log instead of splicing the active file's history onto unrelated topology.
+  `Design.id` now follows rename/move; Save As and detected copies mint a new UUID. Persisted
+  `identity_last_known_path` + `identity_confirmed_at` provide the location signoff. Legacy files claim
+  their path without changing UUID; duplicate legacy UUIDs are separated deterministically during the
+  library audit. Managed/external moves remap simulation `design_source_path` provenance across all seven
+  job engines. Old files remain schema-compatible through metadata defaults.
+- **Seek latency/UI follow-up (2026-08-08):** Feature Log scrubbing no longer opens the global
+  `Loading F…` persistent toast or the generic slow-request popup. The seek route avoids an unnecessary
+  full-design deep copy, while MD/oxDNA stale-marker refreshes are coalesced and run after the scene has
+  applied the selected state. Roll responses carry their authoritative fingerprint match, so starting
+  the requested workflow no longer waits for a synchronous re-list of every historical job.
+- **Next:** hand-drive the exact roll → follow/view job → return gesture in the current app. If it passes
+  for oxDNA and MD, close this as a stale historical report; the former June failure is now API-pinned.
 
 ## ISSUE-23 — Assembly animation playback ignores keyframe `configuration_id`
 
@@ -707,9 +727,9 @@ configuration plays back as a no-op, in the app and in every export.
 
 _Living pointer — each session overwrites this. **Last updated 2026-08-08 (ledger reconciliation).**_
 
-**NEXT PICK: ISSUE-22.** It is a user-confirmed regression that was incorrectly left in the manual-
-validation ledger. Reproduce the exact roll/return gesture before editing; the existing focused tests are
-green but miss the failing interaction. ISSUE-23 is the next bounded functional fix.
+**NEXT PICK: ISSUE-22 live revalidation, then ISSUE-23.** The complete oxDNA/MD roll-return lifecycle is
+now API-automated and green, and the missing-Return-action persistent-toast edge is fixed. Hand-drive the
+roll → follow/view → return gesture; if green, close ISSUE-22 as stale and proceed to ISSUE-23.
 
 **ISSUE-16 is no longer open:** deterministic `_eigsh_v0(...)` is present on the relevant FEM eigensolver
 calls. Run the focused reproducibility tests, add a fix-log row if missing, then archive its dossier.

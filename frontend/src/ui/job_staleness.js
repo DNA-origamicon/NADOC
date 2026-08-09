@@ -26,10 +26,9 @@ export function jobOutOfDate(job) {
  * @param {object}   opts.job          the selected job (carries `out_of_date`)
  * @param {Function} opts.rollFn       (jobId) => Promise<designResponse|null> — restores the job's snapshot
  * @param {Function} opts.refetch      () => Promise — refresh the job list (re-evaluates out_of_date)
- * @param {Function} opts.isStale      () => boolean — is the (re-fetched) selected job still stale?
  * @param {string}   opts.actionLabel  e.g. 'a production run' / 'a live session'
  */
-export async function ensureJobCurrent({ job, rollFn, refetch, isStale, actionLabel = 'this run' }) {
+export async function ensureJobCurrent({ job, rollFn, refetch, actionLabel = 'this run' }) {
   if (!jobOutOfDate(job)) return true
   const ok = await showConfirm({
     title: 'Design has changed',
@@ -46,11 +45,14 @@ export async function ensureJobCurrent({ job, rollFn, refetch, isStale, actionLa
     showToast(api.lastErrorMessage?.() || 'Could not roll the design back (see console)', 'warn')
     return false
   }
-  await refetch?.()
-  if (isStale?.()) {
+  if (r.matches_job === false) {
     showToast('Rolled, but the job is still out of date — run a new relaxation / MD prep.', 'warn')
     return false
   }
+  // Badge/list reconciliation is not on the critical path. The roll response
+  // already carries the authoritative fingerprint result; refresh historical
+  // jobs after returning control so the next action is not held behind disk I/O.
+  if (refetch) setTimeout(() => { Promise.resolve(refetch()).catch(() => {}) }, 0)
   if (r.return_loadout_id) {
     showPersistentToast(
       'Design rolled back to this job’s run state. Your later edits are saved as a “Latest” loadout.',

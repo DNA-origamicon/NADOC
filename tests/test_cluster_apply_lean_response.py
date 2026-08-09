@@ -263,6 +263,8 @@ def test_seek_through_cluster_op_returns_lean_diff(cluster_id):
     # Seek back to pre-F0 (no features active) — should be cluster-only diff.
     r = client.post("/api/design/features/seek", json={"position": -2})
     assert r.status_code == 200, r.text
+    timing = r.headers.get("server-timing", "")
+    assert "get_prev" in timing and "clone_prev" not in timing
     body = r.json()
     assert body.get("diff_kind") == "cluster_only", (
         f"expected cluster_only diff_kind on cluster_op seek, got "

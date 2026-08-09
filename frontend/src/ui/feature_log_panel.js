@@ -449,15 +449,9 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     }
     _isSeeking = true
     _log('seek START pos=', position, 'sub=', subPosition)
-    let label
-    if (position === -2) {
-      label = 'F0 — initial'
-    } else if (subPosition != null && subPosition >= 0) {
-      label = `F${position + 1}-${subPosition + 1}`
-    } else {
-      label = `F${position + 1}`
-    }
-    showPersistentToast(`Loading ${label}…`)
+    // Seeking is direct manipulation of the timeline, so a global toast obscures
+    // the very control the user is scrubbing. Keep the indication local/non-modal.
+    panelBody.setAttribute('aria-busy', 'true')
     try {
       if (_isAssemblyFeatureMode() && api.seekAssemblyFeatures) {
         const result = await api.seekAssemblyFeatures(position)
@@ -483,7 +477,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       _log('seek ERROR pos=', position, 'sub=', subPosition, err)
     } finally {
       _isSeeking = false
-      if (_pendingSeekPos === null) dismissToast()
+      panelBody.removeAttribute('aria-busy')
       // Flush any position requested while this seek was in-flight.
       if (_pendingSeekPos !== null) {
         const next = _pendingSeekPos

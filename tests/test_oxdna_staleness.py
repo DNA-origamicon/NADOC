@@ -196,6 +196,7 @@ def test_roll_design_restores_snapshot_and_clears_out_of_date(monkeypatch, tmp_p
     r = c.post(f"/api/oxdna/jobs/{job.job_id}/roll-design")
     assert r.status_code == 200, r.text
     assert r.json().get("return_loadout_id")  # later work saved as a branch
+    assert r.json()["matches_job"] is True
     restored = design_state.get_or_404()
     assert all(s.sequence == "ACGT" for s in restored.strands)  # sequences came back
     assert oxdna_design_fingerprint(restored) == job_fp
@@ -212,6 +213,34 @@ def test_roll_design_restores_snapshot_and_clears_out_of_date(monkeypatch, tmp_p
     )
     back = design_state.get_or_404()
     assert all(not s.sequence for s in back.strands)
+
+
+def test_cross_design_roll_uses_job_snapshot_history_not_active_file_history(
+    monkeypatch, tmp_path
+):
+    """Rolling is allowed across files, but the two Feature Logs must never splice."""
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    snapshot = make_6hb_design().model_copy(update={"id": "job-design"})
+    job = new_oxdna_job(
+        "job-design", [], design_fingerprint=oxdna_design_fingerprint(snapshot)
+    )
+    job.status = OxdnaStatus.completed
+    job.save(tmp_path)
+    (job.job_dir(tmp_path) / "design.json").write_text(snapshot.model_dump_json())
+
+    active = make_6hb_design().model_copy(update={"id": "other-design"})
+    design_state.set_design(active)
+    c = TestClient(app)
+    assert c.post(
+        "/api/design/assign-scaffold-sequence", json={"custom_sequence": "ACGT" * 2000}
+    ).status_code == 200
+    assert len(design_state.get_or_404().feature_log) > len(snapshot.feature_log)
+
+    response = c.post(f"/api/oxdna/jobs/{job.job_id}/roll-design")
+    assert response.status_code == 200, response.text
+    rolled = design_state.get_or_404()
+    assert rolled.id == "job-design"
+    assert rolled.feature_log == snapshot.feature_log
 
 
 def test_af26_roll_return_lifecycle_overhang_edit(monkeypatch, tmp_path):

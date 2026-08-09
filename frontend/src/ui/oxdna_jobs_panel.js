@@ -2570,6 +2570,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // The client emits this on every design sync; refetch so the ⚠ markers update
   // even off the Dynamics tab (where the 1.5 s poll is paused) — e.g. when the user
   // seeks the Feature Log back to a job's run position, clearing its stale flag.
+  let _designChangeRefreshTimer = null
   window.addEventListener('nadoc:design-changed', () => {
     // A design edit makes a re-run no longer redundant; drop any live deviation/strain
     // overlay (neither matches the edited design any more).  The DATA stays available
@@ -2580,7 +2581,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (oxdnaDisplay?.mode() === 'occupancy') _setOccupancyOff()
     _metricsCard?.refresh()      // cached twist/curve/bp graphs no longer match the edited design
     _compareCard?.refresh()      // cached cross-engine comparison no longer matches the edited design
-    _fetchJobs()
+    // Staleness is historical UI metadata, not part of applying the selected
+    // Feature Log state. Coalesce rapid scrubs and let the scene paint first.
+    clearTimeout(_designChangeRefreshTimer)
+    _designChangeRefreshTimer = setTimeout(() => { void _fetchJobs() }, 150)
   })
 
   // ── Design switched/opened → re-filter the list to the new design ─────────

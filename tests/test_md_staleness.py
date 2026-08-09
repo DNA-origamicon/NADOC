@@ -69,10 +69,21 @@ def test_md_out_of_date_flag_and_roll_clears_it(monkeypatch, tmp_path):
     r = c.post(f"/api/md/jobs/{job.job_id}/roll-design")
     assert r.status_code == 200, r.text
     assert r.json().get("return_loadout_id")
+    assert r.json()["matches_job"] is True
     restored = design_state.get_or_404()
     assert all(s.sequence == "ACGT" for s in restored.strands)
     assert design_build_fingerprint(restored) == job.design_fingerprint
     assert c.get(f"/api/md/jobs/{job.job_id}").json()["out_of_date"] is False
+
+    # API automation for the other half of the workflow: the toast calls this exact
+    # endpoint with save_current=false so the rolled run-state cannot overwrite the
+    # branch holding the user's later edits.
+    rid = r.json()["return_loadout_id"]
+    back_r = c.post(f"/api/design/loadouts/{rid}/select?save_current=false")
+    assert back_r.status_code == 200, back_r.text
+    returned = design_state.get_or_404()
+    assert all(not s.sequence for s in returned.strands)
+    assert c.get(f"/api/md/jobs/{job.job_id}").json()["out_of_date"] is True
 
 
 def test_md_stale_message_names_a_different_loaded_design(monkeypatch, tmp_path):

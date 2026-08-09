@@ -93,8 +93,12 @@ def seek_features(body: SeekFeaturesBody):
     from backend.core.validator import validate_design
 
     trace = _TimingTrace()
-    with trace.step("clone_prev"):
-        prev = design_state.get_or_404().model_copy(deep=True)
+    # _seek_feature_log is copy-on-write: it returns a new Design and never mutates
+    # its input.  Retaining the current object as the response-diff baseline avoids
+    # a full deep copy of every helix, strand, snapshot and loadout on each slider
+    # notch — a major cost on large designs.
+    with trace.step("get_prev"):
+        prev = design_state.get_or_404()
     with trace.step("seek_log"):
         updated = _seek_feature_log(prev, body.position, body.sub_position)
     with trace.step("commit_state"):
