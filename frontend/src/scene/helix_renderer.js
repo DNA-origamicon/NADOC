@@ -431,6 +431,9 @@ export function orderStrandNucleotides(nucs) {
 
 export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null, lod = 'full') {
   const loopSet = new Set(loopStrandIds)
+  const independentlyPosed = new Set((design?.nucleotide_transforms ?? [])
+    .filter(t => t.kind === 'base')
+    .map(t => `${t.helix_id}:${t.bp_index}:${t.direction}:${t.copy_k ?? 0}`))
 
   // LOD skip flags. Order matters: 'cylinders' implies 'beads' skips too.
   const _initialLodKey = lod === 'cylinders' ? 'cylinders' : (lod === 'beads' ? 'beads' : 'full')
@@ -1144,10 +1147,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // solver adds only the shared-plane and O5'-bead contact adjustment documented above.
       const quat   = slabQuaternion(bnDir, tanDir)
       const mate   = slabMate.get(nuc)
+      const independentPose = independentlyPosed.has(
+        `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}:${nuc.copy ?? 0}`)
       const center = pairedSlabCenter(
         bbPos,
         new THREE.Vector3(...nuc.base_position),
-        mate?.base_position ? new THREE.Vector3(...mate.base_position) : null,
+        !independentPose && mate?.base_position ? new THREE.Vector3(...mate.base_position) : null,
         tanDir,
         bnDir,
       )
@@ -1160,7 +1165,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       slabEntries.push({
         instMesh: iSlabs, id: slabId,
         connectorMesh: iSlabConnectors, connectorId: slabId,
-        nuc, mate, quat, bnDir, bbPos, center, defaultColor: color,
+        nuc, mate, independentPose, quat, bnDir, bbPos, center, defaultColor: color,
       })
       slabId++
     }
@@ -1180,7 +1185,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     const liveEntry = _nucToEntry.get(n)
     _slabCenterL.copy(beadMap?.get(key) ?? liveEntry?.pos ?? _tPos.set(...n.backbone_position))
     let mateBase = null
-    if (slab.mate?.base_position) {
+    if (!slab.independentPose && slab.mate?.base_position) {
       const mate = slab.mate
       const mateKey = `${mate.helix_id}:${mate.bp_index}:${mate.direction}`
       _slabMateBaseS.copy(baseMap?.get(mateKey) ?? _tPos.set(...mate.base_position))
@@ -2871,6 +2876,42 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     backboneEntries,
     coneEntries,
     slabEntries,
+
+    /** Source instance snapshots for a rigid, single-residue transform preview. */
+    residueTransformInfo(target) {
+      if (!target || target.helix_id === '__xb__') return null
+      const key = `${target.helix_id}:${target.bp_index}:${target.direction}:${target.copy ?? 0}`
+      const bead = _copyKeyToEntry.get(key)
+      const slab = slabEntries.find(s => s.nuc === bead?.nuc && (s._copy ?? 0) === (target.copy ?? 0))
+      if (!bead) return null
+      const beadMatrix = new THREE.Matrix4()
+      bead.instMesh.getMatrixAt(bead.id, beadMatrix)
+      const slabMatrix = slab ? new THREE.Matrix4() : null
+      if (slab) slab.instMesh.getMatrixAt(slab.id, slabMatrix)
+      return {
+        bead, slab, beadMatrix, slabMatrix,
+        beadPosition: bead.pos.clone(),
+        centroid: new THREE.Vector3().setFromMatrixPosition(beadMatrix),
+      }
+    },
+
+    /** Apply one world delta to the bead and its slab as a single rigid element. */
+    applyResidueTransformMatrix(info, matrix) {
+      if (!info?.bead) return false
+      info.bead.instMesh.setMatrixAt(info.bead.id, matrix.clone().multiply(info.beadMatrix))
+      info.bead.instMesh.instanceMatrix.needsUpdate = true
+      info.bead.pos.copy(info.beadPosition).applyMatrix4(matrix)
+      const n = info.bead.nuc
+      const beadKey = `${n.helix_id}:${n.bp_index}:${n.direction}`
+      for (const cone of _keyToCones.get(beadKey) ?? []) _recomposeCone(cone)
+      iCones.instanceMatrix.needsUpdate = true
+      if (info.slab && info.slabMatrix) {
+        info.slab.instMesh.setMatrixAt(info.slab.id, matrix.clone().multiply(info.slabMatrix))
+        info.slab.instMesh.instanceMatrix.needsUpdate = true
+      }
+      _refreshSlabConnectors()
+      return true
+    },
 
     // Per-domain cylinder data — exposed so the shared assembly renderer's
     // sharedLodMid can build a per-helix colour texture from the

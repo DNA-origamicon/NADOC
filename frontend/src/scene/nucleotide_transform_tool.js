@@ -31,12 +31,13 @@ export function abstractPreviewUpdate(info, matrix) {
   const point = field => new THREE.Vector3(...info.nuc[field]).applyMatrix4(matrix).toArray()
   const direction = field => new THREE.Vector3(...info.nuc[field]).transformDirection(matrix).toArray()
   const bb = point('backbone_position')
+  const base = point('base_position')
   const bn = direction('base_normal')
   const at = direction('axis_tangent')
   return {
     helix_id: info.nuc.helix_id, bp_index: info.nuc.bp_index,
     direction: info.nuc.direction, copy: info.nuc.copy ?? 0,
-    backbone_position: bb,
+    backbone_position: bb, base_position: base,
     nx: bn[0], ny: bn[1], nz: bn[2],
     tx: at[0], ty: at[1], tz: at[2],
   }
@@ -71,7 +72,7 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     if (atomisticRenderer.getMode?.() !== 'off') return !!atomisticRenderer.residueInfo(selected)
     return selected.helix_id === '__xb__'
       ? !!designRenderer.xoverResidueInfo?.(selected)
-      : !!abstractResidueInfo(selected, store.getState().currentGeometry)
+      : !!designRenderer.residueTransformInfo?.(selected)
   }
 
   function activate() {
@@ -81,7 +82,7 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     abstractInfo = previewKind === 'abstract'
       ? (target.helix_id === '__xb__'
           ? designRenderer.xoverResidueInfo?.(target)
-          : abstractResidueInfo(target, store.getState().currentGeometry))
+          : designRenderer.residueTransformInfo?.(target))
       : null
     const info = previewKind === 'atomistic' ? atomisticRenderer.residueInfo(target) : abstractInfo
     if (!info) {
@@ -101,10 +102,7 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
       if (!dragging) return
       if (previewKind === 'atomistic') atomisticRenderer.applyResidueMatrix(target, liveMatrix())
       else if (target.helix_id === '__xb__') designRenderer.applyXoverResidueMatrix?.(abstractInfo, liveMatrix())
-      else {
-        const update = abstractPreviewUpdate(abstractInfo, liveMatrix())
-        if (update) designRenderer.applyFemPositions([update])
-      }
+      else designRenderer.applyResidueTransformMatrix?.(abstractInfo, liveMatrix())
     })
     document.getElementById('mode-indicator').textContent =
       'NUCLEOTIDE MOVE/ROTATE — Tab: move/rotate · M: apply · Esc: cancel'
@@ -146,7 +144,9 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     if (previewKind === 'atomistic' && target) atomisticRenderer.applyResidueMatrix(target, identity())
     else if (previewKind === 'abstract' && target?.helix_id === '__xb__') {
       designRenderer.applyXoverResidueMatrix?.(abstractInfo, identity())
-    } else if (previewKind === 'abstract') designRenderer.applyFemPositions(null)
+    } else if (previewKind === 'abstract') {
+      designRenderer.applyResidueTransformMatrix?.(abstractInfo, identity())
+    }
   }
 
   function detach(restore = true) {

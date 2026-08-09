@@ -948,6 +948,14 @@ export function initDesignRenderer(scene, storeRef) {
       return _helixCtrl?.slabEntries ?? []
     },
 
+    residueTransformInfo(target) {
+      return _helixCtrl?.residueTransformInfo?.(target) ?? null
+    },
+
+    applyResidueTransformMatrix(info, matrix) {
+      return _helixCtrl?.applyResidueTransformMatrix?.(info, matrix) ?? false
+    },
+
     // ── Instance update delegates (used by selection_manager) ─────────────
     setEntryColor(entry, hex)  { _helixCtrl?.setEntryColor(entry, hex) },
     setBeadScale(entry, s)     { _helixCtrl?.setBeadScale(entry, s) },
