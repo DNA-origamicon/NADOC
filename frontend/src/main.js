@@ -6850,10 +6850,8 @@ async function main() {
     clusterGizmo.setConstraint('centroid', null)
   })
 
-  // Selection→tool bridge: selecting a cluster (3D cluster-filter click OR Movable
-  // Clusters sidebar row — both surface as a `selectedObject` of type 'cluster') auto-opens
-  // Move/Rotate on it; re-targets it to a different cluster; and auto-closes (auto-committing)
-  // when the cluster is deselected. Parts-editor only; sticky for manually-opened tools.
+  // Selection→tool bridge: selection never activates Move/Rotate. While the tool is
+  // explicitly active (M / toolbar / context menu), a cluster click can retarget it.
   // Logic + guards live in translate_rotate_tool.js; this is thin wiring.
   store.subscribe((newState, prevState) => { _translateRotateTool.handleSelectionChange(newState, prevState) })
 

@@ -16,32 +16,56 @@ import { registerShortcut } from '../input/shortcuts.js'
  * factory in main(), so it is injected lazily via getJointRenderer().
  */
 /**
- * Pure decision for the selection→tool bridge. Given the current selection and tool
- * state, decide whether selecting a cluster should open the Move/Rotate tool, re-target
- * it to a different cluster, close it (deselection), or do nothing.
+ * Pure decision for the selection→tool bridge. Selection never activates or closes
+ * Move/Rotate; it can only retarget an explicitly active tool to another cluster.
  *
  * Parts-editor only: open/retarget/close are gated so nothing fires in assembly / cadnano
- * / unfold modes. Auto-close only applies to tools that were AUTO-opened by selection —
- * manually-opened tools (toolbar / hotkey / right-click) stay sticky until Apply/Cancel.
+ * / unfold modes.
  *
- * @returns {{ action: 'open'|'retarget'|'close'|'none', clusterId: string|null }}
+ * @returns {{ action: 'retarget'|'none', clusterId: string|null }}
  */
-export function decideSelectionAction({ newSel, toolActive, autoOpened, activeClusterId, mode, multiSelectedCount = 0 }) {
+export function decideSelectionAction({ newSel, toolActive, activeClusterId, mode }) {
   const partsEditor = !!mode && !mode.assemblyActive && !mode.cadnanoActive && !mode.unfoldActive
   const newCid = newSel?.type === 'cluster' ? (newSel.data?.cluster_id ?? newSel.id ?? null) : null
-  if (!toolActive) {
-    if (partsEditor && newCid) return { action: 'open', clusterId: newCid }
-    return { action: 'none', clusterId: null }
-  }
-  // Tool active: only selection-opened tools react to selection changes.
-  if (!autoOpened) return { action: 'none', clusterId: null }
-  if (!newCid) {
-    // A bare deselection while clusters are multi-selected is a promote-to-group, not a
-    // close — the multi-cluster subscriber keeps the gizmo alive and re-centers it.
-    return { action: multiSelectedCount >= 1 ? 'none' : 'close', clusterId: null }
-  }
+  // Selection never arms or closes the tool. Once explicitly armed, a cluster click
+  // may still retarget the live gizmo; this keeps selection and tool activation as
+  // separate user actions while preserving the useful in-tool switching gesture.
+  if (!partsEditor || !toolActive || !newCid) return { action: 'none', clusterId: null }
   if (newCid !== activeClusterId) return { action: 'retarget', clusterId: newCid }
   return { action: 'none', clusterId: null }
+}
+
+/** Resolve the current selection to an existing rigid-transform scope.
+ *
+ * This is the first entity-neutral seam in the cluster-centric tool. Exact
+ * domain membership wins over a helix-level cluster, so a selected base/domain
+ * in a child or sub-cluster targets the narrowest transform already represented
+ * by the design model. It intentionally does not invent a persistent cluster:
+ * ClusterRigidTransform currently bottoms out at domains, not individual beads.
+ */
+export function resolveSelectionClusterId(selectedObject, design) {
+  const clusters = design?.cluster_transforms ?? []
+  if (!selectedObject || !clusters.length) return null
+  if (selectedObject.type === 'cluster') {
+    const id = selectedObject.data?.cluster_id ?? selectedObject.id ?? null
+    return clusters.some(c => c.id === id) ? id : null
+  }
+
+  const data = selectedObject.data ?? {}
+  const strandId = data.strand_id ?? selectedObject.strand_id ?? null
+  const domainIndex = Number.isInteger(data.domain_index) ? data.domain_index : null
+  let helixId = data.helix_id ?? null
+  if (strandId && domainIndex != null) {
+    const exact = clusters.find(c => (c.domain_ids ?? []).some(
+      d => d.strand_id === strandId && d.domain_index === domainIndex))
+    if (exact) return exact.id
+  }
+
+  const strand = design?.strands?.find(s => s.id === strandId)
+  if (!helixId && domainIndex != null) helixId = strand?.domains?.[domainIndex]?.helix_id ?? null
+  const helixIds = new Set(helixId ? [helixId] : (strand?.domains ?? []).map(d => d.helix_id).filter(Boolean))
+  if (!helixIds.size) return null
+  return clusters.find(c => (c.helix_ids ?? []).some(id => helixIds.has(id)))?.id ?? null
 }
 
 export function initTranslateRotateTool(deps) {
@@ -98,10 +122,6 @@ export function initTranslateRotateTool(deps) {
   const _reemitClusterBridges = reemitClusterBridges
   const _refreshClusterOverlays = refreshClusterOverlays
 
-  // True while the tool was opened by selecting a cluster (vs. toolbar/hotkey/right-click).
-  // Only auto-opened sessions auto-close when the cluster is deselected.
-  let _autoOpened = false
-
   async function _onToolPickPointerDown(e) {
     if (e.button != null && e.button !== 0) return
 
@@ -154,8 +174,7 @@ export function initTranslateRotateTool(deps) {
   _confirmBtn.addEventListener('mouseleave', () => { _confirmBtn.style.background = '#1a6b2a'; _confirmBtn.style.transform = 'scale(1)' })
   document.body.appendChild(_confirmBtn)
 
-  async function _activateTranslateRotateTool(targetClusterId = null, auto = false) {
-    _autoOpened = auto
+  async function _activateTranslateRotateTool(targetClusterId = null) {
     const { assemblyActive, activeInstanceId, currentDesign } = store.getState()
 
     // ── Assembly mode: attach instance gizmo ────────────────────────────────
@@ -286,7 +305,6 @@ export function initTranslateRotateTool(deps) {
   async function _confirmTranslateRotateTool() {
     if (!getActive()) return
     setActive(false)
-    _autoOpened = false
     _confirmBtn.style.display = 'none'
     if (_mrPanel) _mrPanel.style.display = 'none'
 
@@ -469,7 +487,6 @@ export function initTranslateRotateTool(deps) {
     if (!getActive()) return
     const hadLocalPreview = getClusterDirty()
     setActive(false)
-    _autoOpened = false
     _confirmBtn.style.display = 'none'
     if (_mrPanel) _mrPanel.style.display = 'none'
     // Drop any cluster_op edit context so the next gizmo session takes the
@@ -565,25 +582,18 @@ export function initTranslateRotateTool(deps) {
     const { action, clusterId } = decideSelectionAction({
       newSel:          newState.selectedObject,
       toolActive:      getActive(),
-      autoOpened:      _autoOpened,
       activeClusterId: newState.activeClusterId,
-      multiSelectedCount: (newState.multiSelectedClusterIds ?? []).length,
       mode: {
         assemblyActive: newState.assemblyActive,
         cadnanoActive:  newState.cadnanoActive,
         unfoldActive:   newState.unfoldActive,
       },
     })
-    if (action === 'open') {
-      await _activateTranslateRotateTool(clusterId, true)
-    } else if (action === 'retarget') {
+    if (action === 'retarget') {
       // attach() re-sets activeClusterId, which fires the active-cluster subscriber in
       // main.js (repopulates fields / pivot options / cluster dropdown / centroid constraint).
       await _refreshClusterPivotForAttach(clusterId)
       clusterGizmo.attach(clusterId, scene, camera, canvas)
-    } else if (action === 'close') {
-      // Deselection auto-commits pending transforms (safer than discarding a stray move).
-      await _confirmTranslateRotateTool()
     }
   }
 
@@ -669,14 +679,18 @@ export function initTranslateRotateTool(deps) {
   })
 
   registerShortcut({
-    key: 't', ctrl: false,
+    key: 'm', ctrl: false, shift: false,
     description: 'Activate move/rotate tool',
     blockedInInput: true,
     handler() {
       if (getActive()) {
         _confirmTranslateRotateTool()
       } else {
-        _activateTranslateRotateTool()
+        const st = store.getState()
+        const target = st.assemblyActive
+          ? null
+          : resolveSelectionClusterId(st.selectedObject, st.currentDesign)
+        _activateTranslateRotateTool(target)
       }
     },
   })

@@ -3,7 +3,7 @@
  * shared scene-harness.
  *
  * The path unit tests + the console-error smoke gate CANNOT cover: real Alt-click
- * bead selection → 'M' keypress → measurement line + readout, driven through
+ * bead selection → Shift+M → measurement line + readout, driven through
  * selection_manager and the main.js shortcut wiring.
  *
  * v2 change: the load + the alt-pick-two-beads retry now live in the reusable
@@ -32,13 +32,13 @@ test.describe('Measurement tool — interactive gesture', () => {
     expect(count, 'two measurement beads selected via Alt-click').toBe(2)
 
     // Press 'M' → cyan line + "Distance: X.XXX nm" readout.
-    await page.keyboard.press('m')
+    await page.keyboard.press('Shift+m')
     const readout = page.getByText(/^Distance: [\d.]+ nm$/)
     await expect(readout).toBeVisible()
     expect(await hasMeasureLine(page), 'a measurement line should be in the scene').toBe(true)
 
     // Press 'M' again → measurement clears.
-    await page.keyboard.press('m')
+    await page.keyboard.press('Shift+m')
     await expect(readout).not.toBeVisible()
     expect(await hasMeasureLine(page), 'measurement line should be removed on toggle-off').toBe(false)
   })

@@ -452,7 +452,7 @@ export function initKeyboardShortcuts(deps) {
   })
 
   registerShortcut({
-    key: 'm', ctrl: false,
+    key: 'm', ctrl: false, shift: true,
     description: 'Toggle distance measurement',
     blockedInInput: true,
     handler(e) {

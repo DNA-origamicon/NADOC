@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { initTranslateRotateTool, decideSelectionAction } from './translate_rotate_tool.js'
+import { initTranslateRotateTool, decideSelectionAction, resolveSelectionClusterId } from './translate_rotate_tool.js'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 import { clearShortcuts } from '../input/shortcuts.js'
@@ -127,12 +127,12 @@ describe('initTranslateRotateTool — API + init side effects', () => {
     // — the hideConfirmBtn test (explicit style.display set) covers the toggle.
   })
 
-  it('registers the "t" keyboard shortcut whose handler routes activate↔confirm', async () => {
+  it('registers the "m" keyboard shortcut whose handler routes activate↔confirm', async () => {
     const ctx = makeDeps({ state: { currentDesign: { cluster_transforms: [
       { id: 'C1', translation: [0, 0, 0], rotation: [0, 0, 0, 1], helix_ids: [2] },
     ], cluster_joints: [] } } })
     initTranslateRotateTool(ctx.deps)
-    const spec = shortcutSpecs.find(s => s.key === 't')
+    const spec = shortcutSpecs.find(s => s.key === 'm' && s.shift === false)
     expect(spec).toBeTruthy()
     expect(spec.blockedInInput).toBe(true)
     // inactive → handler activates
@@ -449,10 +449,10 @@ describe('decideSelectionAction (selection→tool bridge)', () => {
   const PARTS = { assemblyActive: false, cadnanoActive: false, unfoldActive: false }
   const cluster = id => ({ type: 'cluster', data: { cluster_id: id } })
 
-  it('opens the tool when a cluster is selected in the parts editor (tool inactive)', () => {
+  it('does not open the tool when a cluster is selected', () => {
     expect(decideSelectionAction({
       newSel: cluster('c1'), toolActive: false, autoOpened: false, activeClusterId: null, mode: PARTS,
-    })).toEqual({ action: 'open', clusterId: 'c1' })
+    })).toEqual({ action: 'none', clusterId: null })
   })
 
   it('does NOT open in assembly / cadnano / unfold modes', () => {
@@ -477,10 +477,10 @@ describe('decideSelectionAction (selection→tool bridge)', () => {
     })).toEqual({ action: 'none', clusterId: null })
   })
 
-  it('closes an AUTO-opened tool when the cluster is deselected', () => {
+  it('does not close the explicitly opened tool when selection clears', () => {
     expect(decideSelectionAction({
       newSel: null, toolActive: true, autoOpened: true, activeClusterId: 'c1', mode: PARTS,
-    })).toEqual({ action: 'close', clusterId: null })
+    })).toEqual({ action: 'none', clusterId: null })
   })
 
   it('does NOT close on a bare deselection that is really a promote-to-group', () => {
@@ -496,7 +496,7 @@ describe('decideSelectionAction (selection→tool bridge)', () => {
     })).toEqual({ action: 'none', clusterId: null })
   })
 
-  it('re-targets an AUTO-opened tool when a different cluster is selected', () => {
+  it('re-targets an explicitly opened tool when a different cluster is selected', () => {
     expect(decideSelectionAction({
       newSel: cluster('c2'), toolActive: true, autoOpened: true, activeClusterId: 'c1', mode: PARTS,
     })).toEqual({ action: 'retarget', clusterId: 'c2' })
@@ -508,18 +508,47 @@ describe('decideSelectionAction (selection→tool bridge)', () => {
     })).toEqual({ action: 'none', clusterId: null })
   })
 
-  it('leaves a MANUALLY-opened tool sticky (no close/retarget on selection change)', () => {
+  it('leaves an explicitly opened tool active but permits cluster retargeting', () => {
     expect(decideSelectionAction({
       newSel: null, toolActive: true, autoOpened: false, activeClusterId: 'c1', mode: PARTS,
     })).toEqual({ action: 'none', clusterId: null })
     expect(decideSelectionAction({
       newSel: cluster('c2'), toolActive: true, autoOpened: false, activeClusterId: 'c1', mode: PARTS,
-    })).toEqual({ action: 'none', clusterId: null })
+    })).toEqual({ action: 'retarget', clusterId: 'c2' })
   })
 
   it('falls back to newSel.id when data.cluster_id is absent', () => {
     expect(decideSelectionAction({
       newSel: { type: 'cluster', id: 'c9' }, toolActive: false, autoOpened: false, activeClusterId: null, mode: PARTS,
-    })).toEqual({ action: 'open', clusterId: 'c9' })
+    })).toEqual({ action: 'none', clusterId: null })
+  })
+})
+
+describe('resolveSelectionClusterId', () => {
+  const design = {
+    strands: [{ id: 's1', domains: [{ helix_id: 'h1' }, { helix_id: 'h2' }] }],
+    cluster_transforms: [
+      { id: 'whole', helix_ids: ['h1', 'h2'], domain_ids: [] },
+      { id: 'domain', helix_ids: ['h2'], domain_ids: [{ strand_id: 's1', domain_index: 1 }] },
+    ],
+  }
+
+  it('resolves a cluster directly', () => {
+    expect(resolveSelectionClusterId({ type: 'cluster', id: 'whole' }, design)).toBe('whole')
+  })
+
+  it('prefers exact domain scope for a selected domain or base bead', () => {
+    expect(resolveSelectionClusterId({ type: 'domain', data: { strand_id: 's1', domain_index: 1 } }, design)).toBe('domain')
+    expect(resolveSelectionClusterId({ type: 'nucleotide', data: { strand_id: 's1', domain_index: 1, helix_id: 'h2' } }, design)).toBe('domain')
+  })
+
+  it('falls back from a base or strand to its helix-level transform scope', () => {
+    expect(resolveSelectionClusterId({ type: 'nucleotide', data: { helix_id: 'h1' } }, design)).toBe('whole')
+    expect(resolveSelectionClusterId({ type: 'strand', id: 's1', data: { strand_id: 's1' } }, design)).toBe('whole')
+  })
+
+  it('returns null for stale or unsupported selections', () => {
+    expect(resolveSelectionClusterId({ type: 'cluster', id: 'missing' }, design)).toBeNull()
+    expect(resolveSelectionClusterId({ type: 'protein', id: 'p1' }, design)).toBeNull()
   })
 })

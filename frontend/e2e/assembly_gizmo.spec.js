@@ -2,13 +2,13 @@
  * Assembly Gizmo — Phase 6 verification suite
  *
  * Tests assembly mode toggle, instance selection, and gizmo activation
- * (T key / translate-rotate tool) after the Phase 6 implementation.
+ * (M key / translate-rotate tool) after the Phase 6 implementation.
  *
  * Structure:
  *   Section A — API layer: assembly CRUD, transform patch, undo
  *   Section B — UI mode toggle: A key, mode indicator, panel visibility
  *   Section C — Instance selection: row click, highlight, activeInstanceId
- *   Section D — Gizmo lifecycle: T key activate, confirm (✓), cancel (Esc)
+ *   Section D — Gizmo lifecycle: M key activate, confirm (✓), cancel (Esc)
  *   Section E — Exit assembly: geometry restores, no gizmo artifacts
  *
  * Each test logs EXPECTED and ACTUAL so regressions are easy to spot in
@@ -351,7 +351,7 @@ test.describe('C — Instance selection', () => {
 
 // ── Section D: Gizmo lifecycle ────────────────────────────────────────────────
 
-test.describe('D — Gizmo lifecycle (T key)', () => {
+test.describe('D — Gizmo lifecycle (M key)', () => {
   let _instId = null
 
   test.beforeEach(async ({ page, request }) => {
@@ -364,7 +364,7 @@ test.describe('D — Gizmo lifecycle (T key)', () => {
   })
 
   test('D1: pressing T with no instance selected shows alert', async ({ page }) => {
-    console.log('\n[D1] T key without instance selected')
+    console.log('\n[D1] M key without instance selected')
     // Ensure no instance is selected (deselect if needed)
     const rows = page.locator('[data-instance-id]')
     if (await rows.count() > 0) {
@@ -383,7 +383,7 @@ test.describe('D — Gizmo lifecycle (T key)', () => {
         dialog.message().includes('Select an instance'))
       await dialog.dismiss()
     })
-    await page.keyboard.press('t')
+    await page.keyboard.press('m')
     await page.waitForTimeout(500)
 
     obs('alert fired when no instance selected', true, alertFired)
@@ -396,14 +396,14 @@ test.describe('D — Gizmo lifecycle (T key)', () => {
   })
 
   test('D2: pressing T with instance selected enters MOVE mode', async ({ page }) => {
-    console.log('\n[D2] T key with instance selected → MOVE mode')
+    console.log('\n[D2] M key with instance selected → MOVE mode')
     // Select the instance
     const row = page.locator(`[data-instance-id="${_instId}"]`)
     await expect(row).toBeVisible({ timeout: 5_000 })
     await row.dispatchEvent('click')
     await page.waitForTimeout(300)
 
-    await page.keyboard.press('t')
+    await page.keyboard.press('m')
     await expect(page.locator(MODE)).toHaveText(EXPECTED.moveMode, { timeout: 5_000 })
 
     const actual = await page.locator(MODE).textContent()
@@ -422,7 +422,7 @@ test.describe('D — Gizmo lifecycle (T key)', () => {
     const beforeT = await confirmBtn.isVisible()
     obs('confirm button hidden before T', false, beforeT)
 
-    await page.keyboard.press('t')
+    await page.keyboard.press('m')
     await expect(page.locator(MODE)).toHaveText(EXPECTED.moveMode, { timeout: 5_000 })
 
     const afterT = await confirmBtn.isVisible()
@@ -437,7 +437,7 @@ test.describe('D — Gizmo lifecycle (T key)', () => {
     await row.dispatchEvent('click')
     await page.waitForTimeout(200)
 
-    await page.keyboard.press('t')
+    await page.keyboard.press('m')
     await expect(page.locator(MODE)).toHaveText(EXPECTED.moveMode, { timeout: 5_000 })
 
     await page.keyboard.press('Escape')
@@ -455,7 +455,7 @@ test.describe('D — Gizmo lifecycle (T key)', () => {
     await row.dispatchEvent('click')
     await page.waitForTimeout(200)
 
-    await page.keyboard.press('t')
+    await page.keyboard.press('m')
     await expect(page.locator(MODE)).toHaveText(EXPECTED.moveMode, { timeout: 5_000 })
 
     // Click the confirm ✓ button (green circle in bottom-left)
@@ -475,10 +475,10 @@ test.describe('D — Gizmo lifecycle (T key)', () => {
     await row.dispatchEvent('click')
     await page.waitForTimeout(200)
 
-    await page.keyboard.press('t')
+    await page.keyboard.press('m')
     await expect(page.locator(MODE)).toHaveText(EXPECTED.moveMode, { timeout: 5_000 })
 
-    await page.keyboard.press('t')   // second T = confirm
+    await page.keyboard.press('m')   // second M = confirm
     await expect(page.locator(MODE)).toHaveText(EXPECTED.assemblyMode, { timeout: 5_000 })
 
     const actual = await page.locator(MODE).textContent()
@@ -500,7 +500,7 @@ test.describe('D — Gizmo lifecycle (T key)', () => {
     await expect(row1).toBeVisible({ timeout: 5_000 })
     await row1.dispatchEvent('click')
     await page.waitForTimeout(200)
-    await page.keyboard.press('t')
+    await page.keyboard.press('m')
     await expect(page.locator(MODE)).toHaveText(EXPECTED.moveMode, { timeout: 5_000 })
 
     obs('MOVE mode active', EXPECTED.moveMode, await page.locator(MODE).textContent())
@@ -562,7 +562,7 @@ test.describe('E — Exit assembly mode', () => {
     await row.dispatchEvent('click')
     await page.waitForTimeout(200)
 
-    await page.keyboard.press('t')
+    await page.keyboard.press('m')
     await expect(page.locator(MODE)).toHaveText(EXPECTED.moveMode, { timeout: 5_000 })
     obs('in MOVE mode before exit', EXPECTED.moveMode, await page.locator(MODE).textContent())
 
