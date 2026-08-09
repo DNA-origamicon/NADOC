@@ -36,6 +36,7 @@ test('2hb_1xT nucleotide drag keeps its bead and slab rigidly arranged', async (
 
   const before = await page.evaluate(() => window.__nadocTest.getSelectedResidueArrangement())
   expect(before, 'selected nucleotide has a bead and slab').toBeTruthy()
+  const allBefore = await page.evaluate(() => window.__nadocTest.getResidueArrangements())
 
   await page.keyboard.press('m')
   await expect(page.locator('#move-rotate-panel')).toBeVisible()
@@ -58,8 +59,19 @@ test('2hb_1xT nucleotide drag keeps its bead and slab rigidly arranged', async (
   await expect.poll(() => page.evaluate(() =>
     window.__nadocTest.getNucleotideTransformScreenState().active)).toBe(false)
   const after = await page.evaluate(() => window.__nadocTest.getSelectedResidueArrangement())
+  const allAfter = await page.evaluate(() => window.__nadocTest.getResidueArrangements())
   expect(after.independentPose, JSON.stringify({ before, during, after })).toBe(true)
   expect(after.savedDisplayOffset, JSON.stringify({ before, during, after })).not.toBeNull()
   expect(after.distance, JSON.stringify({ before, during, after })).toBeCloseTo(before.distance, 5)
   for (let i = 0; i < 3; i++) expect(after.offset[i]).toBeCloseTo(before.offset[i], 4)
+
+  // Applying one pose must not swap the entire scene to a different display
+  // projection. Every untouched bead/slab offset remains exactly registered.
+  for (const [key, arrangement] of Object.entries(allBefore)) {
+    if (key === before.key) continue
+    expect(allAfter[key], `untouched residue disappeared: ${key}`).toBeTruthy()
+    for (let i = 0; i < 3; i++) {
+      expect(allAfter[key].offset[i], `global bead/slab shift at ${key}`).toBeCloseTo(arrangement.offset[i], 5)
+    }
+  }
 })

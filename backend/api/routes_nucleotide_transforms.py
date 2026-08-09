@@ -12,7 +12,6 @@ from pydantic import BaseModel, Field
 from backend.api import state as design_state
 from backend.api.crud import _design_response_with_geometry
 from backend.core.models import Direction, NucleotideTransform
-from backend.core.validator import validate_design
 
 router = APIRouter()
 
@@ -86,32 +85,48 @@ def _target_exists(design, transform: NucleotideTransform) -> bool:
 @router.put("/design/nucleotide-transform", status_code=200)
 def put_nucleotide_transform(body: NucleotideTransformBody) -> dict:
     """Create or replace the pose for one residue and push one undo step."""
-    design = design_state.get_or_404()
     transform = NucleotideTransform(**body.model_dump(exclude={"compose"}))
+    design = design_state.get_or_404()
     if not _target_exists(design, transform):
         raise HTTPException(404, detail="The nucleotide transform target does not exist in this design.")
 
-    transforms = list(design.nucleotide_transforms)
-    idx = next((i for i, item in enumerate(transforms) if item.target_key() == transform.target_key()), None)
-    if idx is None:
-        transforms.append(transform)
-    else:
-        transform.id = transforms[idx].id
-        if body.compose:
-            transform = _compose(transforms[idx], transform)
-        transforms[idx] = transform
-    updated = design.copy_with(nucleotide_transforms=transforms)
-    design_state.set_design(updated)
-    return _design_response_with_geometry(updated, validate_design(updated))
+    def apply(current):
+        nonlocal transform
+        transforms = list(current.nucleotide_transforms)
+        idx = next((i for i, item in enumerate(transforms) if item.target_key() == transform.target_key()), None)
+        if idx is None:
+            transforms.append(transform)
+        else:
+            transform.id = transforms[idx].id
+            if body.compose:
+                transform = _compose(transforms[idx], transform)
+            transforms[idx] = transform
+        return current.copy_with(nucleotide_transforms=transforms)
+
+    target = transform.target_key()
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        "nucleotide-transform",
+        f"Move/rotate nucleotide: {target}",
+        {"target": list(target), "compose": body.compose},
+        apply,
+    )
+    return _design_response_with_geometry(updated, report)
 
 
 @router.delete("/design/nucleotide-transform/{transform_id}", status_code=200)
 def delete_nucleotide_transform(transform_id: str) -> dict:
     """Remove one saved residue pose and push one undo step."""
     design = design_state.get_or_404()
+    existing = next((t for t in design.nucleotide_transforms if t.id == transform_id), None)
     transforms = [t for t in design.nucleotide_transforms if t.id != transform_id]
     if len(transforms) == len(design.nucleotide_transforms):
         raise HTTPException(404, detail=f"Nucleotide transform {transform_id!r} not found.")
-    updated = design.copy_with(nucleotide_transforms=transforms)
-    design_state.set_design(updated)
-    return _design_response_with_geometry(updated, validate_design(updated))
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        "nucleotide-transform-delete",
+        f"Reset nucleotide pose: {existing.target_key()}",
+        {"transform_id": transform_id, "target": list(existing.target_key())},
+        lambda current: current.copy_with(
+            nucleotide_transforms=[t for t in current.nucleotide_transforms if t.id != transform_id]
+        ),
+    )
+    return _design_response_with_geometry(updated, report)

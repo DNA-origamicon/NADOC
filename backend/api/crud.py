@@ -96,7 +96,7 @@ class _TimingTrace:
 
 
 from backend.api import state as design_state
-from backend.api.doc_context import should_skip_geometry
+from backend.api.doc_context import requested_measured_positioning, should_skip_geometry
 from backend.core.geometry import (
     nucleotide_positions,
 )
@@ -392,13 +392,24 @@ def _design_response_with_geometry(
     """
     if should_skip_geometry():
         return _design_response(design, report)
+    # The Design stores canonical topology/poses, while measured vs legacy
+    # positioning is a browser-owned display projection. Mutation responses must
+    # use the same projection as GET /geometry or replacing currentGeometry causes
+    # a transient, design-wide bead/slab shift until reload.
+    measured_positioning = requested_measured_positioning()
+    if measured_positioning is None:
+        measured_positioning = False
     if changed_helix_ids is not None:
         # Partial path — compute only the real helices that actually changed.
         real_ids = frozenset(
             hid for hid in changed_helix_ids if not hid.startswith("__")
         )
         nucs = (
-            _geometry_for_helices(design, real_ids, junction_balance=True)
+            _geometry_for_helices(
+                design, real_ids,
+                measured_positioning=measured_positioning,
+                junction_balance=True,
+            )
             if real_ids
             else []
         )
@@ -423,7 +434,11 @@ def _design_response_with_geometry(
         return resp
     # Full path — compute nucleotides first, then derive axis positions using
     # nucleotide-derived pivots so axis arrows stay consistent with backbone beads.
-    nucleotides = _geometry_for_design(design, junction_balance=True)
+    nucleotides = _geometry_for_design(
+        design,
+        measured_positioning=measured_positioning,
+        junction_balance=True,
+    )
     axes = deformed_helix_axes(design)
     _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
     if compact_deformed:
@@ -461,7 +476,9 @@ def _design_response_with_geometry(
             update={"deformations": [], "cluster_transforms": []}
         )
         straight_positions, straight_axes = _positions_for_design(
-            straight, junction_balance=True
+            straight,
+            measured_positioning=measured_positioning,
+            junction_balance=True,
         )
         out["straight_positions_by_helix"] = straight_positions
         out["straight_helix_axes"] = straight_axes

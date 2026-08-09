@@ -1714,6 +1714,8 @@ SnapshotOpKind = Literal[
     "assembly-duplicate-group",
     "assembly-delete-group",
     "assembly-transform-group",
+    "assembly-transform-instance",
+    "assembly-transform-instance-cluster",
     "assembly-create-gear",
     "assembly-delete-gear",
     "assembly-create-belt",
@@ -1721,6 +1723,8 @@ SnapshotOpKind = Literal[
     "assembly-create-belt-rider",
     "assembly-delete-belt-rider",
     "assembly-polymerize-belt",
+    "nucleotide-transform",
+    "nucleotide-transform-delete",
 ]
 
 

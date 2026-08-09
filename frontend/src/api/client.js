@@ -10,7 +10,7 @@
  */
 
 import { store } from '../state/store.js'
-import { geometryQuerySuffix } from '../ui/new_positioning.js'
+import { geometryQuerySuffix, isNewPositioningOn } from '../ui/new_positioning.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
 
 // Signal that the active design's content changed: cross-TAB (BroadcastChannel) so
@@ -318,6 +318,10 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     method,
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      // Mutation responses embed replacement display geometry. Keep its projection
+      // identical to GET /geometry so Apply cannot transiently re-register every
+      // bead and slab until the next reload.
+      'X-NADOC-Measured-Positioning': String(isNewPositioningOn()),
       // X-NADOC-Doc: route to this tab's backend document, OR to an explicitly
       // named doc (docId) for one-off cross-document calls (e.g. a part editor
       // reaching into the assembly's doc). `undefined` keeps the legacy default.

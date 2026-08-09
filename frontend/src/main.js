@@ -7547,6 +7547,25 @@ async function main() {
           savedDisplayOffset: savedPose?.display_slab_offset ?? null,
         }
       },
+      /** Live bead-to-slab offsets for every rendered standard nucleotide. */
+      getResidueArrangements() {
+        const out = {}
+        for (const entry of designRenderer.getBackboneEntries?.() ?? []) {
+          const nuc = entry.nuc
+          if (!nuc?.helix_id || nuc.bp_index == null || !nuc.direction) continue
+          const target = {
+            helix_id: nuc.helix_id, bp_index: nuc.bp_index,
+            direction: nuc.direction, copy: nuc.copy_k ?? nuc.copy ?? 0,
+          }
+          const info = designRenderer.residueTransformInfo?.(target)
+          if (!info?.beadMatrix || !info?.slabMatrix) continue
+          const bead = new THREE.Vector3().setFromMatrixPosition(info.beadMatrix)
+          const slab = new THREE.Vector3().setFromMatrixPosition(info.slabMatrix)
+          const key = `${target.helix_id}:${target.bp_index}:${target.direction}:${target.copy}`
+          out[key] = { offset: slab.sub(bead).toArray() }
+        }
+        return out
+      },
       getNucleotideTransformScreenState() {
         const state = _nucleotideTransformTool.debugState()
         if (!state.pivot) return state

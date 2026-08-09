@@ -14,7 +14,7 @@ flexible-segments sub-routers.
 Routes
 ------
   POST   /design/cluster               — create a named cluster (pushes undo)
-  PATCH  /design/cluster/{cluster_id}  — update pose/membership (silent; commit→undo; +log→feature_log)
+  PATCH  /design/cluster/{cluster_id}  — update pose/membership (silent preview; commit→undo + feature_log)
   DELETE /design/cluster/{cluster_id}  — remove a cluster (pushes undo)
   POST   /design/cluster-paste         — duplicate cluster(s) at a lattice offset (feature-logged)
 
@@ -70,7 +70,7 @@ class PatchClusterBody(BaseModel):
     color: Optional[str] = None  # "#rrggbb"; "" clears to the auto palette
     opacity: Optional[float] = None  # 0..1, clamped
     commit: bool = False  # when True: push to undo stack
-    log: bool = False  # when True (with commit): append to feature_log
+    log: bool = False  # deprecated compatibility field; every commit is logged
 
 
 @router.post("/design/cluster", status_code=200)
@@ -139,7 +139,7 @@ def add_cluster(body: AddClusterBody) -> dict:
 
 @router.patch("/design/cluster/{cluster_id}", status_code=200)
 def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
-    """Update cluster properties (silent — no undo push, used for live gizmo drag)."""
+    """Update a cluster; previews are silent and every committed update is logged."""
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -185,7 +185,7 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
     # floating-point drift across many commits and is no longer needed.
     updated_joints = list(design.cluster_joints)
 
-    if body.commit and body.log:
+    if body.commit:
         # Final tool confirm — push to undo stack and record in feature_log.
         # Truncate suppressed future entries if cursor is not at end.
         log = list(design.feature_log)
@@ -202,12 +202,6 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
             cluster_joints=updated_joints,
             feature_log=log + [log_entry],
             feature_log_cursor=-1,
-        )
-        design_state.set_design(updated)
-    elif body.commit:
-        # Drag-end commit — push to undo stack only (no feature_log entry).
-        updated = design.copy_with(
-            cluster_transforms=cts, cluster_joints=updated_joints
         )
         design_state.set_design(updated)
     else:

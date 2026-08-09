@@ -684,7 +684,7 @@ def propagate_fk(body: PropagateFKRequest) -> dict:
     the same delta, so joint values remain visually unchanged.
     Joint axes along the propagation path are also updated.
     """
-    assembly = assembly_state.get_or_404()
+    assembly = assembly_state.get_or_404().model_copy(deep=True)
     inst_by_id = _build_inst_by_id(assembly)
     inst = inst_by_id.get(body.instance_id)
     if not inst:
@@ -693,12 +693,16 @@ def propagate_fk(body: PropagateFKRequest) -> dict:
         raise HTTPException(
             400, detail=f"Instance {body.instance_id} is fixed and cannot be moved"
         )
-    assembly_state.snapshot()
     _propagate_fk_inplace(
         assembly, body.instance_id, body.transform["values"], inst_by_id
     )
-    assembly_state.set_assembly_silent(assembly)
-    return _assembly_response(assembly)
+    updated = _apply_assembly_mutation_with_feature_log(
+        assembly,
+        op_kind="assembly-transform-instance",
+        label=f"Move/rotate part: {inst.name or body.instance_id}",
+        params={"instance_id": body.instance_id, "transform": body.transform},
+    )
+    return _assembly_response(updated)
 
 
 @router.post("/assembly/resolve", status_code=200)
@@ -1224,6 +1228,11 @@ def patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
     revolute/rigid joints are never violated by a direct transform patch.
     """
     assembly = assembly_state.get_or_404()
+    # Transform commits need an immutable post-state so the assembly feature-log
+    # helper can snapshot the still-live pre-state. Metadata-only patches retain
+    # their established lightweight undo path below.
+    if body.transform is not None:
+        assembly = assembly.model_copy(deep=True)
     inst = _find_instance(assembly, instance_id)
 
     # ── Non-transform fields: use immutable model_copy ────────────────────────
@@ -1261,7 +1270,8 @@ def patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
     if not meta_updates and body.transform is None:
         return _assembly_response(assembly)
 
-    assembly_state.snapshot()
+    if body.transform is None:
+        assembly_state.snapshot()
 
     if meta_updates:
         new_inst = inst.model_copy(update=meta_updates)
@@ -1321,6 +1331,14 @@ def patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
         # Now safe to clear base_transform — gear sync has already used it.
         inst.base_transform = None
 
+    if body.transform is not None:
+        updated = _apply_assembly_mutation_with_feature_log(
+            assembly,
+            op_kind="assembly-transform-instance",
+            label=f"Move/rotate part: {inst.name or instance_id}",
+            params={"instance_id": instance_id, "transform": body.transform},
+        )
+        return _assembly_response(updated)
     assembly_state.set_assembly_silent(assembly)
     return _assembly_response(assembly_state.get_or_404())
 
@@ -1335,8 +1353,7 @@ def patch_instance_cluster_transform(
     any mated child parts attached to this instance/cluster are moved by that
     delta and their own mate descendants are propagated.
     """
-    assembly = assembly_state.get_or_404()
-    assembly_state.snapshot()
+    assembly = assembly_state.get_or_404().model_copy(deep=True)
     inst = _find_instance(assembly, instance_id)
 
     override = ClusterRigidTransform(**body.cluster_transform)
@@ -1368,8 +1385,17 @@ def patch_instance_cluster_transform(
         delta = np.array(body.delta_transform["values"], dtype=float).reshape(4, 4)
         _propagate_cluster_delta_to_mates(assembly, instance_id, body.cluster_id, delta)
 
-    assembly_state.set_assembly_silent(assembly)
-    return _assembly_response(assembly_state.get_or_404())
+    updated = _apply_assembly_mutation_with_feature_log(
+        assembly,
+        op_kind="assembly-transform-instance-cluster",
+        label=f"Move/rotate part cluster: {inst.name or instance_id}",
+        params={
+            "instance_id": instance_id,
+            "cluster_id": body.cluster_id,
+            "joint_id": body.joint_id,
+        },
+    )
+    return _assembly_response(updated)
 
 
 def _replace_instance_design(

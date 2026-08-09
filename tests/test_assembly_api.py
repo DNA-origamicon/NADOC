@@ -459,6 +459,54 @@ def test_patch_instance_cluster_transform_is_assembly_scoped_and_moves_cluster_m
         0.0,
     ]
     assert child["transform"]["values"][3] == pytest.approx(7.0)
+    assert r.json()["assembly"]["feature_log"][-1]["op_kind"] == "assembly-transform-instance-cluster"
+
+    undone = client.post("/api/assembly/undo")
+    undone_instances = v1_instances(undone.json())
+    assert next(i for i in undone_instances if i["id"] == parent_id)["cluster_transform_overrides"] == []
+    assert next(i for i in undone_instances if i["id"] == child_id)["transform"]["values"][3] == pytest.approx(2.0)
+
+    redone = client.post("/api/assembly/redo")
+    redone_instances = v1_instances(redone.json())
+    assert next(i for i in redone_instances if i["id"] == parent_id)["cluster_transform_overrides"][0]["translation"] == [1, 0, 0]
+    assert next(i for i in redone_instances if i["id"] == child_id)["transform"]["values"][3] == pytest.approx(7.0)
+
+
+def test_propagate_fk_records_move_rotate_feature():
+    client.post("/api/assembly")
+    created = client.post("/api/assembly/instances", json={
+        "source": _inline_source_dict(), "name": "Moved part",
+    })
+    instance_id = v1_instances(created.json())[0]["id"]
+    moved = client.post("/api/assembly/propagate_fk", json={
+        "instance_id": instance_id,
+        "transform": {"values": [1, 0, 0, 3, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]},
+    })
+    assert moved.status_code == 200
+    entry = moved.json()["assembly"]["feature_log"][-1]
+    assert entry["op_kind"] == "assembly-transform-instance"
+    assert entry["params"]["instance_id"] == instance_id
+    undone = client.post("/api/assembly/undo")
+    assert v1_instances(undone.json())[0]["transform"]["values"][3] == pytest.approx(0.0)
+    assert undone.json()["assembly"]["feature_log"] == created.json()["assembly"]["feature_log"]
+    redone = client.post("/api/assembly/redo")
+    assert v1_instances(redone.json())[0]["transform"]["values"][3] == pytest.approx(3.0)
+    assert redone.json()["assembly"]["feature_log"][-1]["op_kind"] == "assembly-transform-instance"
+
+
+def test_direct_instance_gizmo_patch_records_move_rotate_feature():
+    client.post("/api/assembly")
+    created = client.post("/api/assembly/instances", json={
+        "source": _inline_source_dict(), "name": "Direct gizmo part",
+    })
+    instance_id = v1_instances(created.json())[0]["id"]
+    moved = client.patch(f"/api/assembly/instances/{instance_id}", json={
+        "transform": {"values": [1, 0, 0, 4, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]},
+    })
+    assert moved.status_code == 200
+    assert moved.json()["assembly"]["feature_log"][-1]["op_kind"] == "assembly-transform-instance"
+    assert v1_instances(client.post("/api/assembly/undo").json())[0]["transform"]["values"][3] == pytest.approx(0.0)
+    assert v1_instances(client.post("/api/assembly/redo").json())[0]["transform"]["values"][3] == pytest.approx(4.0)
 
 
 def test_patch_instance_cluster_transform_moves_mate_when_cluster_is_child_side():

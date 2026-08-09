@@ -43,6 +43,14 @@ _skip_geometry: contextvars.ContextVar[bool] = contextvars.ContextVar(
     default=False,
 )
 
+# Display geometry is a projection of the persisted Design, not part of it.  The
+# browser therefore states which projection it is currently displaying on every
+# API request.  None preserves the legacy behavior for non-frontend callers.
+_measured_positioning: contextvars.ContextVar[bool | None] = contextvars.ContextVar(
+    "nadoc_measured_positioning",
+    default=None,
+)
+
 # Revision assigned to the mutation handled by the CURRENT request, set under the
 # state lock by state._bump_revision. _design_response stamps it on the response
 # so the client can drop out-of-order/stale design responses (rapid-edit race).
@@ -71,6 +79,7 @@ DOC_HEADER = "x-nadoc-doc"
 DOC_QUERY = "doc"
 # Header the cadnano editor sets to opt out of embedded geometry in responses.
 SKIP_GEOMETRY_HEADER = "x-nadoc-skip-geometry"
+MEASURED_POSITIONING_HEADER = "x-nadoc-measured-positioning"
 
 
 def get_current_doc() -> str:
@@ -85,6 +94,11 @@ def should_skip_geometry() -> bool:
     crud.py, which falls back to the geometry-free ``_design_response``.
     """
     return _skip_geometry.get()
+
+
+def requested_measured_positioning() -> bool | None:
+    """Requested display projection, or None when the caller did not specify one."""
+    return _measured_positioning.get()
 
 
 def set_current_doc(doc_id: str | None):
@@ -119,6 +133,18 @@ def _extract_skip_geometry(scope) -> bool:
     return False
 
 
+def _extract_measured_positioning(scope) -> bool | None:
+    """Parse the explicit display-projection header, if present."""
+    for k, v in scope.get("headers", []):
+        if k == MEASURED_POSITIONING_HEADER.encode("latin-1"):
+            value = v.decode("latin-1").strip().lower()
+            if value in ("1", "true"):
+                return True
+            if value in ("0", "false"):
+                return False
+    return None
+
+
 class DocContextMiddleware:
     """Pure-ASGI middleware binding each request's doc id (and the
     skip-geometry flag) to ContextVars for the lifetime of the request."""
@@ -130,6 +156,7 @@ class DocContextMiddleware:
         if scope["type"] in ("http", "websocket"):
             doc_token = _current_doc.set(_extract_doc_id(scope))
             geo_token = _skip_geometry.set(_extract_skip_geometry(scope))
+            measured_token = _measured_positioning.set(_extract_measured_positioning(scope))
             # Start each request with no recorded revision so a read-only request
             # never inherits a prior (mutating) request's value.
             rev_token = _request_revision.set(None)
@@ -137,6 +164,7 @@ class DocContextMiddleware:
                 await self.app(scope, receive, send)
             finally:
                 _request_revision.reset(rev_token)
+                _measured_positioning.reset(measured_token)
                 _skip_geometry.reset(geo_token)
                 _current_doc.reset(doc_token)
         else:
