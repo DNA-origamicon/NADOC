@@ -1222,11 +1222,11 @@ class DomainRef(BaseModel):
 
 
 class NucleotideTransform(BaseModel):
-    """Atomistic-only rigid pose for one complete nucleotide residue.
+    """Representation-independent rigid pose for one complete nucleotide residue.
 
     ``base`` addresses an ordinary nucleotide (including a loop copy);
     ``extra_base`` addresses one inserted crossover nucleotide.  The transform is
-    a world-space delta applied after all design geometry has placed the atoms.
+    a world-space delta applied after design geometry has placed either projection.
     """
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

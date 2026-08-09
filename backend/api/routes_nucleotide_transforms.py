@@ -1,4 +1,4 @@
-"""Persistence API for independent atomistic nucleotide poses."""
+"""Persistence API for representation-independent nucleotide poses."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
-from backend.api.crud import _design_response
+from backend.api.crud import _design_response_with_geometry
 from backend.core.models import Direction, NucleotideTransform
 from backend.core.validator import validate_design
 
@@ -96,7 +96,7 @@ def put_nucleotide_transform(body: NucleotideTransformBody) -> dict:
         transforms[idx] = transform
     updated = design.copy_with(nucleotide_transforms=transforms)
     design_state.set_design(updated)
-    return _design_response(updated, validate_design(updated))
+    return _design_response_with_geometry(updated, validate_design(updated))
 
 
 @router.delete("/design/nucleotide-transform/{transform_id}", status_code=200)
@@ -108,4 +108,4 @@ def delete_nucleotide_transform(transform_id: str) -> dict:
         raise HTTPException(404, detail=f"Nucleotide transform {transform_id!r} not found.")
     updated = design.copy_with(nucleotide_transforms=transforms)
     design_state.set_design(updated)
-    return _design_response(updated, validate_design(updated))
+    return _design_response_with_geometry(updated, validate_design(updated))

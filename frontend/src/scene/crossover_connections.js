@@ -353,6 +353,13 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
   for (const ac of arcCrossovers) {
     const { xo, nucA, nucB, posA, posB } = ac
     const n = xo.extra_bases.length
+    const simReversed = extraBaseOrderReversed(xo, endKeys)
+    const savedTransforms = new Map((design.nucleotide_transforms ?? [])
+      .filter(tr => tr.kind === 'extra_base' && tr.crossover_id === xo.id)
+      .map(tr => [tr.extra_base_k, new THREE.Matrix4()
+        .makeTranslation(...tr.pivot.map((v, i) => v + tr.translation[i]))
+        .multiply(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion(...tr.rotation)))
+        .multiply(new THREE.Matrix4().makeTranslation(...tr.pivot.map(v => -v)))]))
 
     // Compute control point and bow direction (away from Holliday junction)
     arcControlPoint(posA, posB, nucA, nucB, ctrl, bowDir)
@@ -380,12 +387,16 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
     if (plusZ.has(bpMod))       zSign =  1
     else if (minusZ.has(bpMod)) zSign = -1
     const zOffset = zSign * Math.abs(avgAx.z) * SLAB_OFFSET * 0.9
+    const posedPoints = []
 
     for (let i = 1; i <= n; i++) {
       const t = i / (n + 1)
 
       // Bead position
       bezierAt(posA, ctrl, posB, t, pt)
+      const pose = savedTransforms.get(simBeadIndex(i - 1, n, simReversed))
+      if (pose) pt.applyMatrix4(pose)
+      posedPoints.push(pt.clone())
       _mat.compose(pt, ID_QUAT, _scl.set(1, 1, 1))
       beadsMesh.setMatrixAt(beadIdx, _mat)
       beadsMesh.setColorAt(beadIdx, _col.setHex(beadColor))
@@ -396,6 +407,7 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
       arcSlabQuaternion(tan, avgAx, _quat)
       slabPt.set(pt.x, pt.y, pt.z + zOffset)
       _mat.compose(slabPt, _quat, _scl.set(SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK))
+      if (pose) _mat.premultiply(pose)
       slabsMesh.setMatrixAt(beadIdx, _mat)
       slabsMesh.setColorAt(beadIdx, _col.setHex(slabColor))
 
@@ -405,11 +417,7 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
     // Initial connector positions along the geometric arc (sim frames re-thread
     // them through the live bead positions later via setExtraBaseConnectors).
     const cpts = [posA.clone()]
-    for (let i = 1; i <= n; i++) {
-      const p = new THREE.Vector3()
-      bezierAt(posA, ctrl, posB, i / (n + 1), p)
-      cpts.push(p)
-    }
+    cpts.push(...posedPoints)
     cpts.push(posB.clone())
     setExtraBaseConnectors(connMesh, connStartIdx, cpts, n + 1, beadColor)
     connIdx += n + 1
@@ -423,7 +431,7 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
       avgAx: avgAx.clone(),
       // Simulated inserts arrive numbered 5′→3′ from the strand's exit half; beads are
       // laid out A→B.  True when those two disagree — see extraBaseOrderReversed.
-      simReversed: extraBaseOrderReversed(xo, endKeys),
+      simReversed,
       zOffset,
       bowDir: bowDir.clone(),
       beadBaseColor: beadColor,

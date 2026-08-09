@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
+
 from backend.core.models import (
     Design,
     Direction,
@@ -54,6 +56,50 @@ from backend.core.constants import (
 # 0.857 nm FENE ceiling with ~8 % margin.  If a seed ever trips ``fene_safe``, this
 # is the knob: 0.20 pulls the worst spacing down to 0.732 nm.
 _EXT_BOW_FRAC: float = 0.30
+
+
+def apply_nucleotide_transforms_to_geometry(nucleotides: list[dict], design: Design) -> set[str]:
+    """Project persisted residue poses onto the abstract nucleotide geometry.
+
+    The same world-space delta is applied by ``atomistic.apply_nucleotide_transforms``;
+    keeping this projection here makes full and atomistic representations siblings of
+    one saved pose instead of independent edits.
+    """
+    transforms = {
+        t.target_key(): t for t in design.nucleotide_transforms if t.kind == "base"
+    }
+    if not transforms:
+        return set()
+    matched: set[str] = set()
+    matrices: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+    for nuc in nucleotides:
+        key = (
+            "base", nuc.get("helix_id"), nuc.get("bp_index"),
+            nuc.get("direction"), int(nuc.get("copy", 0) or 0),
+        )
+        transform = transforms.get(key)
+        if transform is None:
+            continue
+        parts = matrices.get(transform.id)
+        if parts is None:
+            x, y, z, w = transform.rotation
+            rotation = np.array([
+                [1 - 2*(y*y + z*z), 2*(x*y - z*w), 2*(x*z + y*w)],
+                [2*(x*y + z*w), 1 - 2*(x*x + z*z), 2*(y*z - x*w)],
+                [2*(x*z - y*w), 2*(y*z + x*w), 1 - 2*(x*x + y*y)],
+            ])
+            parts = rotation, np.asarray(transform.pivot), np.asarray(transform.translation)
+            matrices[transform.id] = parts
+        rotation, pivot, translation = parts
+        for field in ("backbone_position", "base_position"):
+            if nuc.get(field) is not None:
+                p = np.asarray(nuc[field], dtype=float)
+                nuc[field] = (pivot + rotation @ (p - pivot) + translation).tolist()
+        for field in ("base_normal", "axis_tangent"):
+            if nuc.get(field) is not None:
+                nuc[field] = (rotation @ np.asarray(nuc[field], dtype=float)).tolist()
+        matched.add(transform.id)
+    return matched
 
 
 def full_rep_balance_roll_rad(design: Design) -> float:
@@ -556,6 +602,7 @@ def _geometry_for_helices(
     if full_mode:
         if design.extensions:
             result.extend(_strand_extension_geometry(design, nuc_pos_map))
+    apply_nucleotide_transforms_to_geometry(result, design)
     return result
 
 

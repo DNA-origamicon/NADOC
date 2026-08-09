@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from backend.core.atomistic import Atom, apply_nucleotide_transforms
+from backend.core.design_geometry import apply_nucleotide_transforms_to_geometry
 from backend.core.models import Design, Direction, NucleotideTransform
 from backend.api import state as design_state
 from backend.api.main import app
@@ -36,6 +37,26 @@ def test_regular_nucleotide_transform_moves_only_matching_residue_atoms():
     assert [matching[0].x, matching[0].y, matching[0].z] == pytest.approx([2, 1, 0])
     assert [matching[1].x, matching[1].y, matching[1].z] == pytest.approx([1, 0, 0])
     assert other.x == 9
+
+
+def test_regular_nucleotide_transform_drives_abstract_geometry_with_same_pose():
+    qz90 = [0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]
+    transform = NucleotideTransform(
+        kind="base", helix_id="h1", bp_index=4, direction=Direction.FORWARD,
+        pivot=[0, 0, 0], translation=[2, 0, 0], rotation=qz90,
+    )
+    nuc = {
+        "helix_id": "h1", "bp_index": 4, "direction": "FORWARD",
+        "backbone_position": [1, 0, 0], "base_position": [0, 1, 0],
+        "base_normal": [1, 0, 0], "axis_tangent": [0, 0, 1],
+    }
+    matched = apply_nucleotide_transforms_to_geometry(
+        [nuc], Design(nucleotide_transforms=[transform]))
+    assert matched == {transform.id}
+    assert nuc["backbone_position"] == pytest.approx([2, 1, 0])
+    assert nuc["base_position"] == pytest.approx([1, 0, 0])
+    assert nuc["base_normal"] == pytest.approx([0, 1, 0])
+    assert nuc["axis_tangent"] == pytest.approx([0, 0, 1])
 
 
 def test_extra_base_transform_uses_crossover_identity_not_source_helix_identity():

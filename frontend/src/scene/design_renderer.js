@@ -1393,6 +1393,30 @@ export function initDesignRenderer(scene, storeRef) {
       return out
     },
 
+    /** Snapshot one crossover-insert residue for independent transform preview. */
+    xoverResidueInfo(target) {
+      if (target?.helix_id !== '__xb__' || !_xoverBeadsMesh || !_xoverSlabsMesh) return null
+      const entry = this.getXoverBeadEntries().find(e => e.xoId === target.crossover_id && e.simK === target.k)
+      if (!entry) return null
+      const beadMatrix = new THREE.Matrix4(), slabMatrix = new THREE.Matrix4()
+      _xoverBeadsMesh.getMatrixAt(entry.id, beadMatrix)
+      _xoverSlabsMesh.getMatrixAt(entry.id, slabMatrix)
+      return {
+        entry, beadMatrix, slabMatrix,
+        centroid: new THREE.Vector3().setFromMatrixPosition(beadMatrix),
+      }
+    },
+
+    /** Preview a world-space delta from an xoverResidueInfo source snapshot. */
+    applyXoverResidueMatrix(info, matrix) {
+      if (!info?.entry || !_xoverBeadsMesh || !_xoverSlabsMesh) return false
+      _xoverBeadsMesh.setMatrixAt(info.entry.id, matrix.clone().multiply(info.beadMatrix))
+      _xoverSlabsMesh.setMatrixAt(info.entry.id, matrix.clone().multiply(info.slabMatrix))
+      _xoverBeadsMesh.instanceMatrix.needsUpdate = true
+      _xoverSlabsMesh.instanceMatrix.needsUpdate = true
+      return true
+    },
+
     /**
      * Scale extra-base crossover beads for the given strand IDs.
      * Pass scale=1.0 to restore default size.
