@@ -77,9 +77,9 @@ export function initTranslateRotateTool(deps) {
     assemblyRenderer, assemblyJointRenderer,
     api,
     moveRotatePanel,
-    mrPanel, mrClusterSel, mrPivotSel,
+    mrPanel, mrPivotSel,
     setTransformValues, setTransformValuesFromMatrix,
-    setPivotOptions, setSelectedPivot, setClusterOptions,
+    setPivotOptions, setSelectedPivot, refreshCurrentSelection,
     createAssemblyTransformContext,
     hasAssemblyPending, commitAssemblyPending,
     assemblyPendingTransforms, assemblyPendingPartJoints,
@@ -100,13 +100,12 @@ export function initTranslateRotateTool(deps) {
   const _showProgress = showOpProgress
   const _hideProgress = hideOpProgress
   const _mrPanel = mrPanel
-  const _mrClusterSel = mrClusterSel
   const _mrPivotSel = mrPivotSel
   const _mrSetTransformValues = setTransformValues
   const _mrSetTransformValuesFromMatrix = setTransformValuesFromMatrix
   const _mrSetPivotOptions = setPivotOptions
   const _mrSetSelectedPivot = setSelectedPivot
-  const _mrSetClusterOptions = setClusterOptions
+  const _mrRefreshCurrentSelection = refreshCurrentSelection
   const _moveRotatePanel = moveRotatePanel
   const _createAssemblyTransformContext = createAssemblyTransformContext
   const _hasAssemblyPending = hasAssemblyPending
@@ -194,8 +193,7 @@ export function initTranslateRotateTool(deps) {
       setActive(true)
       document.getElementById('mode-indicator').textContent = 'MOVE — Tab: move/rotate · click elsewhere: commit · Esc: cancel'
       _attachGroupGizmo(activeInstanceId, ctx)
-      _mrSetClusterOptions([{ id: activeInstanceId, name: _instForGizmo?.name ?? 'Selected part' }], activeInstanceId)
-      if (_mrClusterSel) _mrClusterSel.disabled = true
+      _mrRefreshCurrentSelection?.()
       if (_mrPivotSel) _mrPivotSel.disabled = true
       _mrSetPivotOptions([])
       _mrSetSelectedPivot('centroid')
@@ -232,11 +230,15 @@ export function initTranslateRotateTool(deps) {
       }
     }
 
-    // Attach gizmo to the target cluster (from Rotate button), the active cluster, or the last cluster.
-    const { activeClusterId } = store.getState()
-    const first = (targetClusterId && clusters.find(c => c.id === targetClusterId))
-      ?? (activeClusterId && clusters.find(c => c.id === activeClusterId))
-      ?? clusters[clusters.length - 1]
+    // A design-mode target must come from the current selection or an explicit
+    // context-menu/joint action. Never fall back to an active/last cluster.
+    const first = targetClusterId && clusters.find(c => c.id === targetClusterId)
+    if (!first) {
+      setActive(false)
+      showToast('Select an entity to move, then press M.', { severity: 'warning' })
+      document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      return
+    }
     await _refreshClusterPivotForAttach(first.id)
     clusterGizmo.attach(first.id, scene, camera, canvas)
 
@@ -244,9 +246,8 @@ export function initTranslateRotateTool(deps) {
 
     // Populate and show the right-sidebar move/rotate panel
     _moveRotatePanel.setAssemblyCtx(null)
-    if (_mrClusterSel) _mrClusterSel.disabled = false
     if (_mrPivotSel) _mrPivotSel.disabled = false
-    _mrSetClusterOptions(clusters, first.id)
+    _mrRefreshCurrentSelection?.()
     await _flexRelax.refreshFlexGates()
     const initJoints = store.getState().currentDesign?.cluster_joints?.filter(j => j.cluster_id === first.id) ?? []
     _mrSetPivotOptions(initJoints, first.id)
@@ -273,7 +274,6 @@ export function initTranslateRotateTool(deps) {
       // Tool already active but pointing at a different cluster — switch it.
       await _refreshClusterPivotForAttach(joint.cluster_id)
       clusterGizmo.attach(joint.cluster_id, scene, camera, canvas)
-      _mrSetClusterOptions(clusters, joint.cluster_id)
       const joints = currentDesign?.cluster_joints?.filter(j => j.cluster_id === joint.cluster_id) ?? []
       _mrSetPivotOptions(joints)
     }
@@ -546,12 +546,8 @@ export function initTranslateRotateTool(deps) {
     document.getElementById('mode-indicator').textContent =
       `MOVE/ROTATE (${groupIds.length} clusters) — Tab: move/rotate · Esc: cancel`
     _moveRotatePanel.setAssemblyCtx(null)
-    if (_mrClusterSel) _mrClusterSel.disabled = true   // can't retarget within a group
     if (_mrPivotSel) _mrPivotSel.disabled = true       // pivot is the combined centroid
-    _mrSetClusterOptions(
-      groupIds.map(id => ({ id, name: clusters.find(c => c.id === id)?.name ?? id })),
-      groupIds[0],
-    )
+    _mrRefreshCurrentSelection?.()
     _mrSetPivotOptions([])
     _mrSetSelectedPivot('centroid')
     _mrSetTransformValues(0, 0, 0, 0, 0, 0)   // fields show the group delta, starting at identity
@@ -564,10 +560,9 @@ export function initTranslateRotateTool(deps) {
   // the number boxes / pivot options / centroid constraint (it early-outs while a group
   // is active, so it only runs once we're back in single mode).
   async function _showClusterSingle(clusterId, clusters) {
-    if (_mrClusterSel) _mrClusterSel.disabled = false
     if (_mrPivotSel) _mrPivotSel.disabled = false
     document.getElementById('mode-indicator').textContent = 'MOVE/ROTATE — Esc: cancel'
-    _mrSetClusterOptions(clusters, clusterId)
+    _mrRefreshCurrentSelection?.()
     canvas.addEventListener('pointerdown', _onToolPickPointerDown)   // dedup by the browser
     await _refreshClusterPivotForAttach(clusterId)
     clusterGizmo.attach(clusterId, scene, camera, canvas)
@@ -591,7 +586,7 @@ export function initTranslateRotateTool(deps) {
     })
     if (action === 'retarget') {
       // attach() re-sets activeClusterId, which fires the active-cluster subscriber in
-      // main.js (repopulates fields / pivot options / cluster dropdown / centroid constraint).
+      // main.js (repopulates fields / pivot options / centroid constraint).
       await _refreshClusterPivotForAttach(clusterId)
       clusterGizmo.attach(clusterId, scene, camera, canvas)
     }

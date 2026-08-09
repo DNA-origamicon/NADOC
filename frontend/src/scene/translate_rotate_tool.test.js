@@ -64,13 +64,12 @@ function makeDeps(overrides = {}) {
     api: { skipNextResponseDelta: vi.fn(), editFeature: vi.fn(async () => {}), seekFeatures: vi.fn(async () => {}) },
     moveRotatePanel: { setAssemblyCtx: vi.fn() },
     mrPanel: document.getElementById('__mrPanel'),
-    mrClusterSel: document.getElementById('__mrClusterSel'),
     mrPivotSel: document.getElementById('__mrPivotSel'),
     setTransformValues: vi.fn(),
     setTransformValuesFromMatrix: vi.fn(),
     setPivotOptions: vi.fn(),
     setSelectedPivot: vi.fn(),
-    setClusterOptions: vi.fn(),
+    refreshCurrentSelection: vi.fn(),
     createAssemblyTransformContext: vi.fn((id) => ({ primaryStart: {}, instanceId: id })),
     hasAssemblyPending: vi.fn(() => false),
     commitAssemblyPending: vi.fn(async () => {}),
@@ -99,8 +98,8 @@ beforeEach(() => {
   clearShortcuts()
   toastCalls.length = 0
   // mode-indicator + the panel/sidebar elements the factory + bodies query by id.
-  mountIds(['mode-indicator', 'mr-apply-btn', 'mr-cancel-btn', 'mr-reset-btn', 'menu-tools-translate-rotate',
-            '__mrPanel', '__mrClusterSel', '__mrPivotSel'])
+    mountIds(['mode-indicator', 'mr-apply-btn', 'mr-cancel-btn', 'mr-reset-btn', 'menu-tools-translate-rotate',
+            '__mrPanel', '__mrPivotSel'])
   global.requestAnimationFrame = (cb) => { cb(0); return 0 }
 })
 
@@ -128,7 +127,9 @@ describe('initTranslateRotateTool — API + init side effects', () => {
   })
 
   it('registers the "m" keyboard shortcut whose handler routes activate↔confirm', async () => {
-    const ctx = makeDeps({ state: { currentDesign: { cluster_transforms: [
+    const ctx = makeDeps({ state: {
+      selectedObject: { type: 'cluster', data: { cluster_id: 'C1' } },
+      currentDesign: { cluster_transforms: [
       { id: 'C1', translation: [0, 0, 0], rotation: [0, 0, 0, 1], helix_ids: [2] },
     ], cluster_joints: [] } } })
     initTranslateRotateTool(ctx.deps)
@@ -154,21 +155,16 @@ describe('initTranslateRotateTool — activate (design mode)', () => {
     expect(toastCalls.length).toBe(1)
   })
 
-  it('with clusters → activates, attaches gizmo to last cluster, shows panel, clears dirty', async () => {
+  it('with clusters but no selected target → does not pick the last cluster', async () => {
     const ctx = makeDeps({ state: { currentDesign: { cluster_transforms: [
       { id: 'C0', translation: [0, 0, 0], rotation: [0, 0, 0, 1], helix_ids: [1] },
       { id: 'C1', translation: [1, 2, 3], rotation: [0, 0, 0, 1], helix_ids: [2] },
     ], cluster_joints: [] } } })
     const t = initTranslateRotateTool(ctx.deps)
     await t.activate()
-    expect(ctx.active).toBe(true)
-    expect(ctx.store.getState().translateRotateActive).toBe(true)
-    expect(ctx.dirty).toBe(false)
-    // last cluster is the default target
-    expect(ctx.clusterGizmo.attach).toHaveBeenCalledWith('C1', expect.anything(), expect.anything(), expect.anything())
-    expect(ctx.deps.flexRelax.refreshFlexGates).toHaveBeenCalled()
-    expect(ctx.deps.setClusterOptions).toHaveBeenCalled()
-    expect(document.getElementById('__mrPanel').style.display).toBe('')
+    expect(ctx.active).toBe(false)
+    expect(ctx.clusterGizmo.attach).not.toHaveBeenCalled()
+    expect(toastCalls.at(-1)?.[0]).toContain('Select an entity')
   })
 
   it('targetClusterId selects that cluster over the last', async () => {
@@ -179,6 +175,7 @@ describe('initTranslateRotateTool — activate (design mode)', () => {
     const t = initTranslateRotateTool(ctx.deps)
     await t.activate('C0')
     expect(ctx.clusterGizmo.attach).toHaveBeenCalledWith('C0', expect.anything(), expect.anything(), expect.anything())
+    expect(ctx.deps.refreshCurrentSelection).toHaveBeenCalled()
   })
 
   it('populates the number boxes from the gizmo PENDING transform, not the stored one (duplex pivot fix)', async () => {
@@ -237,7 +234,7 @@ describe('initTranslateRotateTool — activate (assembly mode)', () => {
     expect(ctx.deps.createAssemblyTransformContext).toHaveBeenCalledWith('I1')
     expect(ctx.deps.moveRotatePanel.setAssemblyCtx).toHaveBeenCalled()
     expect(ctx.deps.attachGroupGizmo).toHaveBeenCalledWith('I1', expect.anything())
-    expect(ctx.deps.mrClusterSel.disabled).toBe(true)
+    expect(ctx.deps.refreshCurrentSelection).toHaveBeenCalled()
     const btn = [...document.body.children].find(el => el.textContent === '✓')
     expect(btn.style.display).toBe('none')
   })

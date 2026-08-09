@@ -2,9 +2,42 @@ import * as THREE from 'three'
 import { posEulerFromMatrix, eulerDegToQuat, stepEulerDeg } from './rotation_math.js'
 import { showToast } from '../ui/toast.js'
 
+export function moveRotateSelectionLabels(state) {
+  const design = state.currentDesign
+  const labels = []
+  for (const key of state.multiSelectedBaseKeys ?? []) labels.push(`Base · ${key}`)
+  for (const id of state.multiSelectedClusterIds ?? []) {
+    const name = design?.cluster_transforms?.find(c => c.id === id)?.name ?? id
+    labels.push(`Cluster · ${name}`)
+  }
+  for (const id of state.multiSelectedStrandIds ?? []) labels.push(`Strand · ${id}`)
+  if (labels.length) return [...new Set(labels)]
+
+  if (state.assemblyActive && state.activeInstanceId) {
+    const name = state.currentAssembly?.instances?.find(i => i.id === state.activeInstanceId)?.name
+    return [`Part · ${name ?? state.activeInstanceId}`]
+  }
+  const selected = state.selectedObject
+  if (!selected) return []
+  if (selected.type === 'cluster') {
+    const id = selected.data?.cluster_id ?? selected.id
+    const name = design?.cluster_transforms?.find(c => c.id === id)?.name ?? id
+    return [`Cluster · ${name}`]
+  }
+  if (selected.type === 'strand') return [`Strand · ${selected.data?.strand_id ?? selected.id}`]
+  if (selected.type === 'domain') {
+    return [`Domain · ${selected.data?.strand_id ?? '?'} [${selected.data?.domain_index ?? '?'}]`]
+  }
+  if (selected.type === 'nucleotide') {
+    const d = selected.data ?? {}
+    return [`Base · ${d.helix_id ?? '?'}:${d.bp_index ?? '?'}:${d.direction ?? '?'}`]
+  }
+  return [`${selected.type} · ${selected.id ?? 'selected'}`]
+}
+
 /**
  * Move/Rotate right-sidebar panel — numeric transform inputs (tx/ty/tz, rx/ry/rz,
- * joint-angle) + pivot/cluster dropdowns for the Translate/Rotate tool. Drives the
+ * joint-angle) + pivot dropdown and a read-only current-selection box. Drives the
  * design cluster gizmo (clusterGizmo) and the assembly instance gizmo
  * (instanceGizmo) depending on store.assemblyActive.
  *
@@ -25,18 +58,15 @@ import { showToast } from '../ui/toast.js'
  * @param deps.flexRelax                       scene/flex_relax.js factory API
  * @param deps.applyAssemblyPrimaryLive        from scene/assembly_transform.js
  * @param deps.queueAssemblyPrimaryCommit      from scene/assembly_transform.js
- * @param deps.refreshClusterPivotForAttach    main.js (tool-shared gizmo-attach infra)
- * @param deps.isTranslateRotateActive         () => boolean (the tool's active flag)
  */
 export function initMoveRotatePanel({
   store, scene, camera, canvas,
   clusterGizmo, instanceGizmo, flexRelax,
   applyAssemblyPrimaryLive, queueAssemblyPrimaryCommit,
-  refreshClusterPivotForAttach, isTranslateRotateActive,
   setClusterRotationPoint,
 }) {
   const _mrPanel         = document.getElementById('move-rotate-panel')
-  const _mrClusterSel    = document.getElementById('mr-cluster-sel')
+  const _mrSelectionBox  = document.getElementById('mr-current-selection')
   const _mrTxInp         = document.getElementById('mr-tx')
   const _mrTyInp         = document.getElementById('mr-ty')
   const _mrTzInp         = document.getElementById('mr-tz')
@@ -143,20 +173,23 @@ export function initMoveRotatePanel({
     _mrShowJointMode(id !== 'centroid' && id != null)
   }
 
-  function _mrSetClusterOptions(clusters, selectedId) {
-    if (!_mrClusterSel) return
-    _mrClusterSel.innerHTML = ''
-    for (const c of clusters) {
-      const opt = document.createElement('option')
-      opt.value = c.id
-      opt.textContent = c.name
-      _mrClusterSel.appendChild(opt)
+  function _mrSetCurrentSelection(labels = []) {
+    if (!_mrSelectionBox) return
+    _mrSelectionBox.replaceChildren()
+    const items = labels.filter(Boolean)
+    if (!items.length) {
+      const empty = document.createElement('div')
+      empty.className = 'mr-selection-empty'
+      empty.textContent = 'Nothing selected'
+      _mrSelectionBox.appendChild(empty)
+      return
     }
-    _mrClusterSel.value = selectedId ?? clusters[clusters.length - 1]?.id ?? ''
-  }
-
-  function _mrSyncClusterDropdown(clusterId) {
-    if (_mrClusterSel) _mrClusterSel.value = clusterId
+    for (const label of items) {
+      const item = document.createElement('div')
+      item.className = 'mr-selection-item'
+      item.textContent = label
+      _mrSelectionBox.appendChild(item)
+    }
   }
 
   function _mrCommitInputs() {
@@ -243,7 +276,7 @@ export function initMoveRotatePanel({
   // sets the pivot + rebases the translation, then we re-attach the gizmo so it rotates
   // about the new point. [[overhang-duplex-cluster]] P2.
   //
-  // NOTE: do NOT call refreshClusterPivotForAttach here. That helper recomputes the pivot
+  // NOTE: do not recompute the cluster pivot here. That would use the visual centroid
   // from the cluster's VISUAL CENTROID and queues it as a pending transform — exactly the
   // centroid we're overriding. It would silently drag the pivot back to the centroid (the
   // "always rotates about centroid" bug). Instead drop any pending (centroid) transform and
@@ -316,32 +349,16 @@ export function initMoveRotatePanel({
     }
   })
 
-  // Cluster dropdown change — switch gizmo to chosen cluster
-  _mrClusterSel?.addEventListener('change', async () => {
-    const clusterId = _mrClusterSel.value
-    if (!clusterId || !isTranslateRotateActive()) return
-    if (clusterId === store.getState().activeClusterId) return
-    await refreshClusterPivotForAttach(clusterId)
-    clusterGizmo.attach(clusterId, scene, camera, canvas)
-    // Repopulate pivot options (joints + ssDNA-constrained gate) for this cluster.
-    await flexRelax.refreshFlexGates()
-    const joints = store.getState().currentDesign?.cluster_joints?.filter(j => j.cluster_id === clusterId) ?? []
-    _mrSetPivotOptions(joints, clusterId)
-    _mrSetSelectedPivot('centroid')
-    clusterGizmo.setConstraint('centroid', null)
-  })
-
   return {
     panel:                        _mrPanel,
-    clusterSel:                   _mrClusterSel,
+    selectionBox:                 _mrSelectionBox,
     pivotSel:                     _mrPivotSel,
     setTransformValues:           _mrSetTransformValues,
     setTransformValuesFromMatrix: _mrSetTransformValuesFromMatrix,
     setJointAngle:                _mrSetJointAngle,
     setPivotOptions:              _mrSetPivotOptions,
     setSelectedPivot:             _mrSetSelectedPivot,
-    setClusterOptions:            _mrSetClusterOptions,
-    syncClusterDropdown:          _mrSyncClusterDropdown,
+    setCurrentSelection:          _mrSetCurrentSelection,
     showJointMode:                _mrShowJointMode,
     commitInputs:                 _mrCommitInputs,
     stepAxis:                     _mrStepAxis,

@@ -148,7 +148,7 @@ import { initConnectionMonitor, initAutosaveSync } from './app/lifecycle.js'
 import { initDocSpawn } from './app/doc_spawn.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
 import { computeFixedDepths } from './scene/assembly_constraint_graph.js'
-import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
+import { initClusterPanel } from './ui/cluster_panel.js'
 import { clusterNucKeysFor, withClusterDisplay } from './scene/cluster_entries.js'
 import { initPlateView }                           from './ui/plate_view.js'
 import { STAPLE_PALETTE as PLATE_STAPLE_PALETTE } from './scene/helix_renderer/palette.js'
@@ -167,7 +167,7 @@ import { exportVideo, exportPhotoVideo } from './scene/export_video.js'
 import { initClusterGizmo, computeClusterPivotFromEntries, rebaseClusterTranslationForPivot } from './scene/cluster_gizmo.js'
 import { initSubDomainGizmo } from './scene/sub_domain_gizmo.js'
 import { initInstanceGizmo }       from './scene/instance_gizmo.js'
-import { initMoveRotatePanel }      from './scene/move_rotate_panel.js'
+import { initMoveRotatePanel, moveRotateSelectionLabels } from './scene/move_rotate_panel.js'
 import { initTranslateRotateTool }  from './scene/translate_rotate_tool.js'
 import { initForceCrossoverTool }   from './scene/force_crossover_tool.js'
 import { initOverhangOrientationPanel } from './ui/overhang_orientation_panel.js'
@@ -4859,7 +4859,7 @@ async function main() {
     })
   }
 
-  // Panel shell (numeric inputs + pivot/cluster dropdowns) → scene/move_rotate_panel.js.
+  // Panel shell (current selection + numeric inputs + pivot dropdown) → scene/move_rotate_panel.js.
   // Alias-consts below keep the tool fns + external call sites verbatim — only the
   // function bodies moved.
   const _moveRotatePanel = initMoveRotatePanel({
@@ -4867,20 +4867,18 @@ async function main() {
     clusterGizmo, instanceGizmo, flexRelax: _flexRelax,
     applyAssemblyPrimaryLive:     _applyAssemblyPrimaryLive,
     queueAssemblyPrimaryCommit:   _queueAssemblyPrimaryCommit,
-    refreshClusterPivotForAttach: _refreshClusterPivotForAttach,
     setClusterRotationPoint:      api.setClusterRotationPoint,
-    isTranslateRotateActive:      () => _translateRotateActive,
   })
   const _mrPanel                        = _moveRotatePanel.panel
-  const _mrClusterSel                   = _moveRotatePanel.clusterSel
   const _mrPivotSel                     = _moveRotatePanel.pivotSel
   const _mrSetTransformValues           = _moveRotatePanel.setTransformValues
   const _mrSetTransformValuesFromMatrix = _moveRotatePanel.setTransformValuesFromMatrix
   const _mrSetJointAngle                = _moveRotatePanel.setJointAngle
   const _mrSetPivotOptions              = _moveRotatePanel.setPivotOptions
   const _mrSetSelectedPivot             = _moveRotatePanel.setSelectedPivot
-  const _mrSetClusterOptions            = _moveRotatePanel.setClusterOptions
-  const _mrSyncClusterDropdown          = _moveRotatePanel.syncClusterDropdown
+  const _mrRefreshCurrentSelection      = () => {
+    _moveRotatePanel.setCurrentSelection(moveRotateSelectionLabels(store.getState()))
+  }
 
   // Group/instance gizmo subsystem (revolute-drag angle accumulator + gear/belt
   // live-coupling engine + single-instance gizmo attach). The shared helpers it
@@ -5230,12 +5228,12 @@ async function main() {
     assemblyRenderer, assemblyJointRenderer,
     api,
     moveRotatePanel: _moveRotatePanel,
-    mrPanel: _mrPanel, mrClusterSel: _mrClusterSel, mrPivotSel: _mrPivotSel,
+    mrPanel: _mrPanel, mrPivotSel: _mrPivotSel,
     setTransformValues: _mrSetTransformValues,
     setTransformValuesFromMatrix: _mrSetTransformValuesFromMatrix,
     setPivotOptions: _mrSetPivotOptions,
     setSelectedPivot: _mrSetSelectedPivot,
-    setClusterOptions: _mrSetClusterOptions,
+    refreshCurrentSelection: _mrRefreshCurrentSelection,
     createAssemblyTransformContext: _createAssemblyTransformContext,
     hasAssemblyPending: _hasAssemblyPending,
     commitAssemblyPending: _commitAssemblyPending,
@@ -6268,19 +6266,9 @@ async function main() {
         selectionManager.toggleCluster(clusterId)
         return
       }
-      if (!_translateRotateActive) {
-        // Unify with the 3D cluster-filter click: same green glow + bead scale +
-        // cluster selectedObject. The selectedObject→activeClusterId sync below
-        // mirrors it onto activeClusterId, which lights this sidebar row. Re-click
-        // toggles off. No gizmo, no API calls.
-        selectionManager.selectCluster(clusterId)
-        return
-      }
-      // Tool active: switch gizmo to the clicked cluster.
-      if (clusterId === store.getState().activeClusterId) return
-      await _refreshClusterPivotForAttach(clusterId)
-      clusterGizmo.attach(clusterId, scene, camera, canvas)
-      _mrSyncClusterDropdown(clusterId)
+      // Sidebar clicks only change selection. If Move/Rotate is already active,
+      // its selection subscriber may retarget from that explicit selection change.
+      selectionManager.selectCluster(clusterId)
     },
     api,
     onVisibilityChange: (hiddenClusterIds) => {
@@ -6837,7 +6825,7 @@ async function main() {
     if (newState.activeClusterId === prevState.activeClusterId) return
     if (!newState.activeClusterId || !newState.translateRotateActive) return
     // Group (multi-cluster) mode owns the panel itself — number boxes show the group
-    // delta and the pivot/cluster dropdowns are disabled. Don't overwrite them with a
+    // delta and the pivot dropdown is disabled. Don't overwrite them with a
     // single member's stored transform.
     if (clusterGizmo.isGroupActive?.()) return
     const cluster = newState.currentDesign?.cluster_transforms?.find(c => c.id === newState.activeClusterId)
@@ -6853,8 +6841,17 @@ async function main() {
     const joints = newState.currentDesign?.cluster_joints?.filter(j => j.cluster_id === newState.activeClusterId) ?? []
     _mrSetPivotOptions(joints, newState.activeClusterId)
     _mrSetSelectedPivot('centroid')
-    _mrSyncClusterDropdown(newState.activeClusterId)
     clusterGizmo.setConstraint('centroid', null)
+  })
+
+  store.subscribe((newState, prevState) => {
+    if (!newState.translateRotateActive) return
+    if (newState.selectedObject === prevState.selectedObject &&
+        newState.multiSelectedBaseKeys === prevState.multiSelectedBaseKeys &&
+        newState.multiSelectedClusterIds === prevState.multiSelectedClusterIds &&
+        newState.multiSelectedStrandIds === prevState.multiSelectedStrandIds &&
+        newState.activeInstanceId === prevState.activeInstanceId) return
+    _mrRefreshCurrentSelection()
   })
 
   // Selection→tool bridge: selection never activates Move/Rotate. While the tool is
@@ -6866,44 +6863,6 @@ async function main() {
   // clusters are ctrl/shift-clicked or lassoed in/out while the tool is open.
   store.subscribe((newState, prevState) => { _translateRotateTool.handleMultiClusterSelectionChange(newState, prevState) })
 
-  // Save/restore selectableTypes when translate/rotate tool activates/deactivates.
-  let _savedClusterST = null
-  store.subscribe((newState, prevState) => {
-    if (newState.translateRotateActive === prevState.translateRotateActive) return
-    if (newState.translateRotateActive) {
-      _savedClusterST = { ...newState.selectableTypes }
-      store.setState({
-        selectableTypes: {
-          scaffold: true, staples: true,
-          strands: true, domains: false, ends: false, crossoverArcs: false,
-          loops: false, skips: false,
-        },
-      })
-    } else {
-      if (_savedClusterST) {
-        store.setState({ selectableTypes: _savedClusterST })
-        _savedClusterST = null
-      }
-    }
-  })
-
-  // When a strand is clicked while the tool is active, switch to that strand's cluster (if any).
-  store.subscribe((newState, prevState) => {
-    if (!_translateRotateActive) return
-    if (clusterGizmo.isGroupActive?.()) return   // don't break a multi-cluster group by retargeting to one
-    if (newState.selectedObject === prevState.selectedObject) return
-    const strandId = newState.selectedObject?.data?.strand_id
-    if (!strandId) return
-    const design = newState.currentDesign
-    if (!design) return
-    const helixIds = helixIdsFromStrandIds([strandId], design)
-    const cluster = design.cluster_transforms?.find(c => c.helix_ids.some(h => helixIds.includes(h)))
-    if (!cluster || cluster.id === newState.activeClusterId) return
-    _refreshClusterPivotForAttach(cluster.id).then(() => {
-      clusterGizmo.attach(cluster.id, scene, camera, canvas)
-    })
-  })
-
   // Mutual exclusion: cancel translate/rotate when the deform tool starts.
   store.subscribe((newState, prevState) => {
     if (newState.deformToolActive && !prevState.deformToolActive && _translateRotateActive) {
@@ -6911,24 +6870,9 @@ async function main() {
     }
   })
 
-  // Unify sidebar + 3D cluster selection into ONE state. selection_manager sets a
-  // cluster `selectedObject` (from either the 3D cluster-filter click or the
-  // sidebar row via selectCluster) with the green glow + bead scale; here we mirror
-  // it onto `activeClusterId` so the sidebar "Movable clusters" row highlights too.
-  // Non-tool only — the Move/Rotate tool owns activeClusterId via the gizmo.
-  store.subscribe((newState, prevState) => {
-    if (newState.translateRotateActive) return
-    if (newState.selectedObject === prevState.selectedObject) return
-    const cid = newState.selectedObject?.type === 'cluster'
-      ? newState.selectedObject.data?.cluster_id ?? null
-      : null
-    if (newState.activeClusterId !== cid) store.setState({ activeClusterId: cid })
-  })
-
   // Move/Rotate tool: the blue clusterGlowLayer marks the gizmo's active cluster.
-  // (Plain design-mode cluster SELECTION now glows green via selection_manager —
-  // see the selectedObject→activeClusterId sync above — so this layer is reserved
-  // for the tool to avoid a double halo.) Re-applies after geometry rebuilds.
+  // Plain design-mode cluster selection glows green via selection_manager, so this layer is reserved
+  // for the tool to avoid a double halo. Re-applies after geometry rebuilds.
   store.subscribe((newState, prevState) => {
     if (!newState.translateRotateActive) {
       if (prevState.translateRotateActive) clusterGlowLayer.clear()

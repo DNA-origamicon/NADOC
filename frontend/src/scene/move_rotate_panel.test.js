@@ -1,16 +1,16 @@
 /**
  * Tests for scene/move_rotate_panel.js — the Move/Rotate right-sidebar panel shell
- * (numeric transform inputs + pivot/cluster dropdowns + commit controller).
+ * (numeric transform inputs + pivot + current-selection box + commit controller).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as THREE from 'three'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
-import { initMoveRotatePanel } from './move_rotate_panel.js'
+import { initMoveRotatePanel, moveRotateSelectionLabels } from './move_rotate_panel.js'
 
 const DOM = {
   'move-rotate-panel':      'div',
-  'mr-cluster-sel':         'select',
+  'mr-current-selection':   'div',
   'mr-tx':                  'input',
   'mr-ty':                  'input',
   'mr-tz':                  'input',
@@ -60,9 +60,7 @@ function makeDeps(initialState = {}) {
     },
     applyAssemblyPrimaryLive: vi.fn(),
     queueAssemblyPrimaryCommit: vi.fn(),
-    refreshClusterPivotForAttach: vi.fn(() => Promise.resolve()),
     setClusterRotationPoint: vi.fn(() => Promise.resolve()),
-    isTranslateRotateActive: vi.fn(() => true),
   }
 }
 
@@ -119,14 +117,14 @@ describe('initMoveRotatePanel — view setters', () => {
     expect(els['mr-ja'].value).toBe('42.4')
   })
 
-  it('setClusterOptions builds options; default-selects the last, or the given id', () => {
+  it('setCurrentSelection renders a scrollable read-only list or empty state', () => {
     const els = mountPanelDom()
     const api = initMoveRotatePanel(makeDeps())
-    api.setClusterOptions([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }])
-    expect([...els['mr-cluster-sel'].options].map(o => o.value)).toEqual(['a', 'b'])
-    expect(els['mr-cluster-sel'].value).toBe('b')          // last by default
-    api.setClusterOptions([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], 'a')
-    expect(els['mr-cluster-sel'].value).toBe('a')          // explicit selection
+    api.setCurrentSelection(['Base · h:1:F', 'Strand · s1'])
+    expect([...els['mr-current-selection'].children].map(e => e.textContent))
+      .toEqual(['Base · h:1:F', 'Strand · s1'])
+    api.setCurrentSelection([])
+    expect(els['mr-current-selection'].textContent).toBe('Nothing selected')
   })
 
   it('setPivotOptions lists joints; appends ssDNA only when flexRelax.hasGate', () => {
@@ -153,14 +151,6 @@ describe('initMoveRotatePanel — view setters', () => {
     expect(els['mr-rotation-section'].style.display).toBe('none')
     expect(els['mr-joint-angle-section'].style.display).toBe('')     // visible
     expect(api.getPivotIsJoint()).toBe(true)
-  })
-
-  it('syncClusterDropdown sets the select value', () => {
-    const els = mountPanelDom()
-    els['mr-cluster-sel'].appendChild(new Option('C', 'c'))
-    const api = initMoveRotatePanel(makeDeps())
-    api.syncClusterDropdown('c')
-    expect(els['mr-cluster-sel'].value).toBe('c')
   })
 
   it('getAssemblyCtx/setAssemblyCtx round-trips', () => {
@@ -362,8 +352,6 @@ describe('initMoveRotatePanel — dropdown handlers', () => {
     sel.value = 'dup:root:ohD'; sel.dispatchEvent(new Event('change'))
     await new Promise(r => setTimeout(r))
     expect(deps.setClusterRotationPoint).toHaveBeenCalledWith('dc1', { kind: 'overhang_root', overhangId: 'ohD' })
-    // Must NOT recompute the pivot from the visual centroid (that would undo the root pivot).
-    expect(deps.refreshClusterPivotForAttach).not.toHaveBeenCalled()
     expect(deps.clusterGizmo.clearPendingTransform).toHaveBeenCalledWith('dc1')
     expect(deps.clusterGizmo.attach).toHaveBeenCalledWith('dc1', deps.scene, deps.camera, deps.canvas)
     // The dropdown holds the root even though attach's activeClusterId churn resets it.
@@ -383,26 +371,18 @@ describe('initMoveRotatePanel — dropdown handlers', () => {
     expect(deps.clusterGizmo.setConstraint).not.toHaveBeenCalledWith('centroid', null)
   })
 
-  it('cluster change → refresh pivot + attach + repopulate, guarded by tool-active', async () => {
-    const els = mountPanelDom()
-    const deps = makeDeps()
-    deps.store.setState({ activeClusterId: 'c0', currentDesign: { cluster_joints: [] } })
-    initMoveRotatePanel(deps)
-    const sel = els['mr-cluster-sel']
-    sel.appendChild(new Option('C1', 'c1'))
+})
 
-    // Tool inactive → bails.
-    deps.isTranslateRotateActive.mockReturnValue(false)
-    sel.value = 'c1'; sel.dispatchEvent(new Event('change'))
-    await Promise.resolve()
-    expect(deps.clusterGizmo.attach).not.toHaveBeenCalled()
+describe('moveRotateSelectionLabels', () => {
+  it('describes base selections without substituting their containing cluster', () => {
+    expect(moveRotateSelectionLabels({ multiSelectedBaseKeys: ['__xb__:xo1:0'] }))
+      .toEqual(['Base · __xb__:xo1:0'])
+  })
 
-    // Tool active → switches gizmo to the chosen cluster.
-    deps.isTranslateRotateActive.mockReturnValue(true)
-    sel.value = 'c1'; sel.dispatchEvent(new Event('change'))
-    await new Promise(r => setTimeout(r))
-    expect(deps.refreshClusterPivotForAttach).toHaveBeenCalledWith('c1')
-    expect(deps.clusterGizmo.attach).toHaveBeenCalledWith('c1', deps.scene, deps.camera, deps.canvas)
-    expect(deps.clusterGizmo.setConstraint).toHaveBeenLastCalledWith('centroid', null)
+  it('uses the selected cluster name only when the cluster itself is selected', () => {
+    expect(moveRotateSelectionLabels({
+      currentDesign: { cluster_transforms: [{ id: 'c1', name: 'Arm' }] },
+      selectedObject: { type: 'cluster', data: { cluster_id: 'c1' } },
+    })).toEqual(['Cluster · Arm'])
   })
 })
