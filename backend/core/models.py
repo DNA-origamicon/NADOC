@@ -1221,6 +1221,53 @@ class DomainRef(BaseModel):
     domain_index: int
 
 
+class NucleotideTransform(BaseModel):
+    """Atomistic-only rigid pose for one complete nucleotide residue.
+
+    ``base`` addresses an ordinary nucleotide (including a loop copy);
+    ``extra_base`` addresses one inserted crossover nucleotide.  The transform is
+    a world-space delta applied after all design geometry has placed the atoms.
+    """
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    kind: Literal["base", "extra_base"]
+    helix_id: Optional[str] = None
+    bp_index: Optional[int] = None
+    direction: Optional[Direction] = None
+    copy_k: int = Field(0, ge=0)
+    crossover_id: Optional[str] = None
+    extra_base_k: Optional[int] = Field(None, ge=0)
+    pivot: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0], min_length=3, max_length=3)
+    translation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0], min_length=3, max_length=3)
+    rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0], min_length=4, max_length=4)
+
+    @model_validator(mode="after")
+    def _validate_target_and_pose(self) -> "NucleotideTransform":
+        if self.kind == "base":
+            if self.helix_id is None or self.bp_index is None or self.direction is None:
+                raise ValueError("base transform requires helix_id, bp_index, and direction")
+            if self.crossover_id is not None or self.extra_base_k is not None:
+                raise ValueError("base transform cannot carry crossover identity")
+        else:
+            if self.crossover_id is None or self.extra_base_k is None:
+                raise ValueError("extra_base transform requires crossover_id and extra_base_k")
+            if self.helix_id is not None or self.bp_index is not None or self.direction is not None:
+                raise ValueError("extra_base transform cannot carry ordinary-base identity")
+        values = [*self.pivot, *self.translation, *self.rotation]
+        if not all(math.isfinite(float(v)) for v in values):
+            raise ValueError("nucleotide transform values must be finite")
+        norm = math.sqrt(sum(float(v) ** 2 for v in self.rotation))
+        if norm < 1e-12:
+            raise ValueError("nucleotide transform rotation must be a non-zero quaternion")
+        self.rotation = [float(v) / norm for v in self.rotation]
+        return self
+
+    def target_key(self) -> tuple:
+        if self.kind == "extra_base":
+            return ("extra_base", self.crossover_id, self.extra_base_k)
+        return ("base", self.helix_id, self.bp_index, self.direction.value, self.copy_k)
+
+
 class ClusterRigidTransform(BaseModel):
     """
     A named cluster of helices (or sub-helix domains) with a persistent
@@ -2560,6 +2607,7 @@ class Design(BaseModel):
     metadata: DesignMetadata = Field(default_factory=DesignMetadata)
     deformations: List[DeformationOp] = Field(default_factory=list)
     cluster_transforms: List[ClusterRigidTransform] = Field(default_factory=list)
+    nucleotide_transforms: List[NucleotideTransform] = Field(default_factory=list)
     cluster_joints: List[ClusterJoint] = Field(default_factory=list)
     overhangs: List[OverhangSpec] = Field(default_factory=list)
     overhang_connections: List[OverhangConnection] = Field(default_factory=list)

@@ -50,6 +50,7 @@ from backend.api.routes_cluster import router as cluster_router
 from backend.api.routes_runpod import router as runpod_router
 from backend.api.routes_cluster_joints import router as cluster_joints_router
 from backend.api.routes_clusters import router as clusters_router
+from backend.api.routes_nucleotide_transforms import router as nucleotide_transforms_router
 from backend.api.routes_deformation import router as deformation_router
 from backend.api.routes_display_geometry import router as display_geometry_router
 from backend.api.routes_display_metadata import router as display_metadata_router
@@ -333,6 +334,7 @@ app.include_router(crud_router, prefix="/api")
 app.include_router(loop_skip_router, prefix="/api")
 app.include_router(camera_poses_router, prefix="/api")
 app.include_router(clusters_router, prefix="/api")
+app.include_router(nucleotide_transforms_router, prefix="/api")
 app.include_router(cluster_router, prefix="/api")
 app.include_router(runpod_router, prefix="/api")
 app.include_router(cluster_joints_router, prefix="/api")

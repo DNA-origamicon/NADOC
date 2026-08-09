@@ -168,6 +168,15 @@ export function initAtomisticRenderer(scene) {
     return mat
   }
 
+  function _matchesResidue(atom, target) {
+    if (!atom || !target) return false
+    if (target.helix_id === '__xb__') {
+      return atom.crossover_id === target.crossover_id && atom.extra_base_k === target.k
+    }
+    return atom.helix_id === target.helix_id && atom.bp_index === target.bp_index &&
+      atom.direction === target.direction && Number(atom.copy_k ?? 0) === Number(target.copy ?? 0)
+  }
+
   // ── Cleanup ──────────────────────────────────────────────────────────────
 
   // Removes meshes; materials survive in `matCache` (see _material) and are
@@ -431,6 +440,59 @@ export function initAtomisticRenderer(scene) {
         }
       }
       return null
+    },
+
+    /** Atom rows + centroid for one base_ref target, or null when it is absent. */
+    residueInfo(target) {
+      const rows = []
+      const centroid = new THREE.Vector3()
+      for (let r = 0; r < _state.atoms.count; r++) {
+        const atom = _state.atoms.get(r)
+        if (!_matchesResidue(atom, target)) continue
+        rows.push(r)
+        centroid.x += _state.atoms.x(r)
+        centroid.y += _state.atoms.y(r)
+        centroid.z += _state.atoms.z(r)
+      }
+      if (!rows.length) return null
+      centroid.multiplyScalar(1 / rows.length)
+      return { rows, centroid }
+    },
+
+    /** Preview a world delta on one residue. Passing identity restores source data. */
+    applyResidueMatrix(target, matrix) {
+      const wanted = new Set(this.residueInfo(target)?.rows ?? [])
+      if (!wanted.size) return false
+      const transformed = new Map()
+      const v = new THREE.Vector3()
+      const tmpMat = _state.geom.tmpMat
+      for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
+        const group = _state.elementAtoms[el]
+        const scale = _state.elementScale[el]
+        let dirty = false
+        for (let i = 0; i < group.length; i++) {
+          const row = group[i]
+          if (!wanted.has(row)) continue
+          v.set(_state.atoms.x(row), _state.atoms.y(row), _state.atoms.z(row)).applyMatrix4(matrix)
+          transformed.set(row, v.clone())
+          mesh.setMatrixAt(i, sphereMatrix(_state.geom, v.x, v.y, v.z, scale))
+          dirty = true
+        }
+        if (dirty) mesh.instanceMatrix.needsUpdate = true
+      }
+      const bidx = _state.bondAtomIdx
+      if (_state.bondMesh && bidx?.length) {
+        for (let i = 0; i < bidx.length / 2; i++) {
+          const ra = bidx[i * 2], rb = bidx[i * 2 + 1]
+          if (!wanted.has(ra) && !wanted.has(rb)) continue
+          const pa = transformed.get(ra) ?? new THREE.Vector3(_state.atoms.x(ra), _state.atoms.y(ra), _state.atoms.z(ra))
+          const pb = transformed.get(rb) ?? new THREE.Vector3(_state.atoms.x(rb), _state.atoms.y(rb), _state.atoms.z(rb))
+          const m = bondMatrix(_state.geom, pa.x, pa.y, pa.z, pb.x, pb.y, pb.z, BOND_RADIUS)
+          _state.bondMesh.setMatrixAt(i, m ?? _HIDDEN_BOND)
+        }
+        _state.bondMesh.instanceMatrix.needsUpdate = true
+      }
+      return true
     },
 
     /**

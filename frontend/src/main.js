@@ -120,6 +120,7 @@ import { initViewCube }            from './scene/view_cube.js'
 import { initDebugOverlay }        from './scene/debug_overlay.js'
 import { initSequenceOverlay }     from './scene/sequence_overlay.js'
 import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
+import { initNucleotideTransformTool } from './scene/nucleotide_transform_tool.js'
 import { initCpdWeldOverlay }      from './scene/cpd_weld_overlay.js'
 import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { initAtomSurfaceDisplay }  from './scene/atom_surface_display.js'
@@ -834,6 +835,7 @@ async function main() {
   let _atomSurface = null
   const selectionManager = initSelectionManager(canvas, camera, designRenderer, {
     getProteinRenderer: () => proteinRenderer,
+    getAtomisticRenderer: () => atomisticRenderer,
     // Per-region overlay renderers (mixed rep) — lazy getters resolve after they're
     // created below; used for atom/surface picking in atomistic/surface regions.
     getRegionVdwRenderer:       () => _atomSurface.getRegionVdwRenderer(),
@@ -1859,7 +1861,7 @@ async function main() {
   const _restoreDesignHeavy = () => {
     if (atomisticRenderer.getMode?.() !== 'off') {
       _atomSurface.invalidateAtomCache()
-      _atomSurface.applyAtomisticMode(atomisticRenderer.getMode())
+      return _atomSurface.applyAtomisticMode(atomisticRenderer.getMode())
     }
     if (_atomSurface.getSurfaceMode?.() !== 'off') {
       _atomSurface.invalidateSurfaceCache()
@@ -5214,11 +5216,17 @@ async function main() {
   // _clusterDirty, and the deform-editor-shared _editContext stay main `let`s; the
   // factory reaches them via get/set shims. jointRenderer is declared just below,
   // so it is injected lazily. Alias-consts keep every external call site verbatim.
+  const _nucleotideTransformTool = initNucleotideTransformTool({
+    store, scene, camera, canvas, controls, atomisticRenderer,
+    refreshAtomistic: _restoreDesignHeavy,
+  })
+
   const _translateRotateTool = initTranslateRotateTool({
     store, scene, camera, canvas,
     designRenderer,
     getJointRenderer: () => jointRenderer,
     clusterGizmo, instanceGizmo,
+    nucleotideTransformTool: _nucleotideTransformTool,
     assemblyRenderer, assemblyJointRenderer,
     api,
     moveRotatePanel: _moveRotatePanel,
@@ -6256,7 +6264,6 @@ async function main() {
     },
     onClusterClick: async (clusterId, { additive = false } = {}) => {
       // Ctrl/Shift+click → multi-select, never the gizmo (which drives ONE cluster).
-      // The toggle nulls `selectedObject`, which auto-closes an auto-opened Move/Rotate.
       if (additive) {
         selectionManager.toggleCluster(clusterId)
         return

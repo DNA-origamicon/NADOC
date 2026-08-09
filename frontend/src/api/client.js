@@ -2886,6 +2886,18 @@ export async function deleteCluster(clusterId) {
   return _syncFromDesignResponse(json)
 }
 
+// ── Independent atomistic nucleotide transforms ─────────────────────────────
+
+export async function putNucleotideTransform(body) {
+  const json = await _request('PUT', '/design/nucleotide-transform', body)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
+}
+
+export async function deleteNucleotideTransform(transformId) {
+  const json = await _request('DELETE', `/design/nucleotide-transform/${transformId}`)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
+}
+
 /**
  * Paste a copy of `clusterIds` at a lattice offset (Ctrl+C / Ctrl+V).
  * `(deltaRow + deltaCol)` must be EVEN — an odd shift flips helix polarity and moves

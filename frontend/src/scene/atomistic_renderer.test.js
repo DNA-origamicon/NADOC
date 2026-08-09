@@ -69,6 +69,27 @@ describe('atomistic_renderer applyPositionLerp bond cutoff', () => {
   })
 })
 
+describe('atomistic_renderer residue transform target', () => {
+  it('resolves an extra-base residue by crossover identity and previews its matrix', () => {
+    const scene = new THREE.Scene()
+    const ar = initAtomisticRenderer(scene)
+    ar.setMode('vdw')
+    ar.update({ atoms: [
+      { serial: 0, element: 'P', x: 1, y: 0, z: 0, helix_id: 'h0', bp_index: 2,
+        direction: 'FORWARD', crossover_id: 'xo1', extra_base_k: 0 },
+      { serial: 1, element: 'C', x: 3, y: 0, z: 0, helix_id: 'h0', bp_index: 2,
+        direction: 'FORWARD', crossover_id: 'xo1', extra_base_k: 0 },
+      { serial: 2, element: 'O', x: 9, y: 0, z: 0, helix_id: 'h0', bp_index: 2,
+        direction: 'FORWARD' },
+    ], bonds: [] })
+    const target = { helix_id: '__xb__', crossover_id: 'xo1', k: 0 }
+    const info = ar.residueInfo(target)
+    expect(info.rows).toEqual([0, 1])
+    expect(info.centroid.toArray()).toEqual([2, 0, 0])
+    expect(ar.applyResidueMatrix(target, new THREE.Matrix4().makeTranslation(0, 4, 0))).toBe(true)
+  })
+})
+
 // AF-ATOM P2 — renderer↔audit parity: the renderer must DRAW exactly what the
 // backend audit (atomistic_validation.audit_bonds) classifies as visible, and HIDE
 // exactly what it lists in `hidden_by_renderer` (> _MAX_BOND_NM = 1.0 nm). This ties

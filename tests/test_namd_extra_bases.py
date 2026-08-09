@@ -27,11 +27,13 @@ same str-vs-int class ``md_pkey`` already records having crashed the live displa
 
 from __future__ import annotations
 
+import pytest
+
 from backend.api.skip_twist_tuning import core_reference_geometry
 from backend.core.atomistic import build_atomistic_model
 from backend.core.atomistic_to_nadoc import _XB_SENTINEL
 from backend.core.lattice import make_bundle_design
-from backend.core.models import Crossover, Direction, HalfCrossover
+from backend.core.models import Crossover, Direction, HalfCrossover, NucleotideTransform
 from backend.core.namd_shape_source import build_namd_shape_source
 
 _RIBOSE = {"C1'", "C2'", "C3'", "C4'", "O4'"}
@@ -75,6 +77,25 @@ def test_inserts_tagged_with_crossover_identity():
     assert xb, "no extra-base atoms materialized"
     assert {a.crossover_id for a in xb} == {"xo_extra"}
     assert sorted({a.extra_base_k for a in xb}) == [0, 1]
+
+
+def test_saved_insert_pose_is_the_atomistic_and_namd_builder_starting_coordinate():
+    """The shared builder used by display and ``build_namd_package`` applies the
+    authored pose to every atom in exactly one inserted residue."""
+    bare_design = _design("TT")
+    bare = build_atomistic_model(bare_design)
+    pose = NucleotideTransform(
+        kind="extra_base", crossover_id="xo_extra", extra_base_k=1,
+        pivot=[0, 0, 0], translation=[0.4, -0.2, 0.7], rotation=[0, 0, 0, 1],
+    )
+    moved = build_atomistic_model(
+        bare_design.model_copy(update={"nucleotide_transforms": [pose]})
+    )
+    for before, after in zip(bare.atoms, moved.atoms, strict=True):
+        if before.crossover_id == "xo_extra" and before.extra_base_k == 1:
+            assert [after.x-before.x, after.y-before.y, after.z-before.z] == pytest.approx([0.4, -0.2, 0.7])
+        else:
+            assert [after.x, after.y, after.z] == pytest.approx([before.x, before.y, before.z])
 
 
 def test_each_insert_is_a_full_residue_with_linker():

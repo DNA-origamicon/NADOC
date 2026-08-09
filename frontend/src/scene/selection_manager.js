@@ -40,7 +40,7 @@ import { clusterMemberFilter } from './cluster_entries.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
 import { normalizeLevel, hoverPreviewTarget, lassoCaptureType, toggleClusterSelection } from './selection_level.js'
 import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
-import { baseKey, toggleBaseKey, mergeBaseKeys, pruneBaseKeys } from './base_ref.js'
+import { baseKey, xbKey, toggleBaseKey, mergeBaseKeys, pruneBaseKeys } from './base_ref.js'
 import {
   backboneCandidates, xoverCandidates, flexCandidates, ssLinkCandidates,
   nearestCandidate, candidatesInRect, makeProjector, worldPosOf,
@@ -1653,7 +1653,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldAssignSequence?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionSurfaceRenderer, onDrillLevel } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionSurfaceRenderer, onDrillLevel } = opts
   _onEditStrandSequence = onEditStrandSequence ?? null
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
@@ -3732,7 +3732,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Atoms are the click target in atomistic regions; the surface mesh in surface
     // regions. Each wins only when it is the closest hit.
     let _atomHit = null
-    for (const rr of [getRegionVdwRenderer?.(), getRegionBallstickRenderer?.()]) {
+    for (const rr of [getAtomisticRenderer?.(), getRegionVdwRenderer?.(), getRegionBallstickRenderer?.()]) {
       if (!rr || rr.getMode() === 'off') continue
       const h = rr.raycastPick(raycaster)
       if (h && (!_atomHit || h.distance < _atomHit.distance)) _atomHit = h
@@ -3747,6 +3747,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       // (auto-drill / manual / Tab rules). Falls back to strand for atoms with no
       // backbone entry (extra-base / aux, or arc-rendered flexible/ss-linker nucs).
       const a = _atomHit.atom
+      if (_selLevel === 'base') {
+        const key = a.crossover_id != null && a.extra_base_k != null
+          ? xbKey(a.crossover_id, a.extra_base_k)
+          : baseKey(a, a.copy_k ?? 0)
+        if (key) { _setBaseKeys([key]); return }
+      }
       const hitEntry = backboneEntries.find(e =>
         e.nuc.helix_id === a.helix_id && e.nuc.bp_index === a.bp_index && e.nuc.direction === a.direction)
       if (hitEntry) { _handleBeadHit(hitEntry, backboneEntries, coneEntries); return }

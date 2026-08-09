@@ -451,6 +451,55 @@ class AtomisticModel:
     bonds: list[tuple[int, int]]  # 0-based serial pairs
 
 
+def apply_nucleotide_transforms(atoms: list[Atom], design: Design) -> set[str]:
+    """Apply saved per-residue rigid deltas in place; return matched transform ids.
+
+    This is intentionally the final DNA coordinate operation. It may stretch bonds
+    to neighbouring residues: these poses are authored NAMD starting conditions,
+    not topology edits or a geometry relaxation pass.
+    """
+    transforms = design.nucleotide_transforms
+    if not transforms or not atoms:
+        return set()
+
+    by_key = {t.target_key(): t for t in transforms}
+    matched: set[str] = set()
+    matrix_cache: dict[str, tuple[_np.ndarray, _np.ndarray, _np.ndarray]] = {}
+    for atom in atoms:
+        if atom.crossover_id is not None and atom.extra_base_k is not None:
+            key = ("extra_base", atom.crossover_id, atom.extra_base_k)
+        elif atom.helix_id:
+            key = (
+                "base", atom.helix_id, atom.bp_index, atom.direction,
+                int(atom.copy_k or 0),
+            )
+        else:
+            continue
+        transform = by_key.get(key)
+        if transform is None:
+            continue
+        parts = matrix_cache.get(transform.id)
+        if parts is None:
+            x, y, z, w = transform.rotation
+            rotation = _np.array([
+                [1 - 2 * (y*y + z*z), 2 * (x*y - z*w), 2 * (x*z + y*w)],
+                [2 * (x*y + z*w), 1 - 2 * (x*x + z*z), 2 * (y*z - x*w)],
+                [2 * (x*z - y*w), 2 * (y*z + x*w), 1 - 2 * (x*x + y*y)],
+            ], dtype=float)
+            parts = (
+                rotation,
+                _np.asarray(transform.pivot, dtype=float),
+                _np.asarray(transform.translation, dtype=float),
+            )
+            matrix_cache[transform.id] = parts
+        rotation, pivot, translation = parts
+        pos = _np.array([atom.x, atom.y, atom.z], dtype=float)
+        pos = pivot + rotation @ (pos - pivot) + translation
+        atom.x, atom.y, atom.z = map(float, pos)
+        matched.add(transform.id)
+    return matched
+
+
 def merge_models(*models: AtomisticModel) -> AtomisticModel:
     """Merge multiple AtomisticModels into one, renumbering serials."""
     atoms: list[Atom] = []
@@ -1665,11 +1714,13 @@ def build_atomistic_model(
     if frame_sink is None and nuc_pos_override is None and nuc_frame_override is None:
         ref_model = atomistic_model_from_reference(design, exclude_helix_ids)
         if ref_model is not None:
-            return (
+            model = (
                 _append_protein_atoms(ref_model, design)
                 if include_proteins
                 else ref_model
             )
+            apply_nucleotide_transforms(model.atoms, design)
+            return model
 
     from backend.core.deformation import effective_helix_for_geometry
     from backend.core.lattice import position_linker_virtual_helices
@@ -2283,6 +2334,8 @@ def build_atomistic_model(
         from backend.core.deformation import apply_deformations_to_atoms
 
         apply_deformations_to_atoms(atoms, design)
+
+    apply_nucleotide_transforms(atoms, design)
 
     model = AtomisticModel(atoms=atoms, bonds=bonds)
     if include_proteins:

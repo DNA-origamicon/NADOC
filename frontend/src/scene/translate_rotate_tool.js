@@ -73,7 +73,7 @@ export function initTranslateRotateTool(deps) {
     store, scene, camera, canvas,
     designRenderer,
     getJointRenderer,
-    clusterGizmo, instanceGizmo,
+    clusterGizmo, instanceGizmo, nucleotideTransformTool,
     assemblyRenderer, assemblyJointRenderer,
     api,
     moveRotatePanel,
@@ -683,9 +683,17 @@ export function initTranslateRotateTool(deps) {
     description: 'Activate move/rotate tool',
     blockedInInput: true,
     handler() {
+      if (nucleotideTransformTool?.isActive()) {
+        nucleotideTransformTool.confirm()
+        return
+      }
       if (getActive()) {
         _confirmTranslateRotateTool()
       } else {
+        if (nucleotideTransformTool?.canActivate()) {
+          nucleotideTransformTool.activate()
+          return
+        }
         const st = store.getState()
         const target = st.assemblyActive
           ? null
