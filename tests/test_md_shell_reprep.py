@@ -10,8 +10,10 @@ import pytest
 from backend.core.atomistic import Atom, AtomisticModel
 from backend.core.md_shell_reprep import (
     com_restraint_colvars,
+    orientation_restraint_colvars,
     read_namd_coor,
     stamp_relaxed_dna_model,
+    write_orientation_reference_xyz,
 )
 
 
@@ -80,6 +82,26 @@ def test_com_colvars_pins_all_three_axes_over_the_dna_range():
 def test_com_colvars_rejects_empty_group():
     with pytest.raises(ValueError):
         com_restraint_colvars(0, (0.0, 0.0, 0.0))
+
+
+def test_orientation_colvars_restrains_identity_quaternion():
+    cfg = orientation_restraint_colvars(1234, "start.xyz", force_constant=750)
+    assert "orientation {" in cfg
+    assert "atomNumbersRange 1-1234" in cfg
+    assert "refPositionsFile start.xyz" in cfg
+    assert "centers (1.0, 0.0, 0.0, 0.0)" in cfg
+    assert "forceConstant 750" in cfg
+
+
+def test_orientation_reference_is_dna_only_and_high_precision(tmp_path):
+    coords = np.array([[1.0, 2.0, 3.0], [4.25, 5.5, 6.75], [7.0, 8.0, 9.0], [99, 99, 99]])
+    path = tmp_path / "start.xyz"
+    write_orientation_reference_xyz(path, coords, 3)
+    lines = path.read_text().splitlines()
+    assert lines[0] == "3"
+    assert len(lines) == 5
+    assert lines[2] == "X 1.0000000000 2.0000000000 3.0000000000"
+    assert "99.0000000000" not in path.read_text()
 
 
 def test_stamp_converts_angstrom_to_nm_and_keeps_topology():

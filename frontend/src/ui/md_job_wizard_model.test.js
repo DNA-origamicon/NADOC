@@ -537,6 +537,16 @@ describe('planPayload', () => {
 })
 
 describe('productionPayload', () => {
+  it('sends the opt-in overall-orientation restraint and its quaternion strength', () => {
+    expect(productionPayload({
+      lengthNs: 10,
+      touched: { orientation_restraint: true, orientation_force_constant: 750 },
+    })).toMatchObject({
+      orientation_restraint: true,
+      orientation_force_constant: 750,
+    })
+  })
+
   it('builds the spawn body', () => {
     expect(productionPayload({ touched: { length_ns: 100, dcd_freq: 5000 }, autostart: true }))
       .toEqual({ length_ns: 100, autostart: true, allow_undersized_cell: false,

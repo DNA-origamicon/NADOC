@@ -550,6 +550,17 @@ def test_a_child_keeps_its_elastic_network_when_one_was_asked_for():
     assert any("enm.extra" in str(f) for f in files)
 
 
+def test_tab_three_shows_the_orientation_colvars_directives():
+    rows = md_plan.replica_production_stages(
+        _ctx(fast=True, colvars_file="dna_orientation.colvars"),
+        total_steps=1_000_000,
+        timestep_fs=4.0,
+    )
+    assert "colvars" not in rows[0]["params"]  # reseed bridge is unbiased
+    assert rows[1]["params"]["colvars"] == "on"
+    assert rows[1]["params"]["colvarsconfig"] == "dna_orientation.colvars"
+
+
 def test_a_continuation_carries_velocities_instead_of_redrawing_them():
     """Chaining a production off a completed production is a true continuation.
 

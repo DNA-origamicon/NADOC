@@ -151,6 +151,18 @@ class TestFreeRunCellGuard:
         job = _package(tmp_path, _FAILS_ROTATED)
         _assert_cell_fits_a_free_run(job, 1000.0, allow=True)
 
+    def test_orientation_restraint_makes_pose_sized_cell_an_explicit_plan(self, tmp_path) -> None:
+        from backend.api.routes_md_plan import _box_fit_condition
+
+        job = _package(tmp_path, _FAILS_ROTATED)
+        condition = _box_fit_condition(
+            job, 1000.0, False, orientation_restrained=True
+        )
+        assert condition["ok"] is True
+        assert condition["override"] is None
+        assert condition["source"] == "ProductionRunRequest.orientation_restraint"
+        assert "quaternion" in condition["detail"]
+
     def test_a_rotation_sized_cell_passes(self, tmp_path) -> None:
         job = _package(tmp_path, _FITS_ROTATED)
         _assert_cell_fits_a_free_run(job, 1000.0, allow=False)

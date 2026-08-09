@@ -430,6 +430,8 @@ export function planPayload(state = {}) {
     send('seed')
     send('langevin_damping')
     if (t.enm_restraints && t.enm_restraints !== 'auto') body.enm_restraints = t.enm_restraints
+    send('orientation_restraint')
+    send('orientation_force_constant')
     body.allow_undersized_cell = !!t.allow_undersized_cell
   }
   if (state.nAtomsHint) body.n_atoms_hint = state.nAtomsHint
@@ -449,6 +451,7 @@ export function planPayload(state = {}) {
 export const PRODUCTION_FIELDS = [
   'length_ns', 'steps', 'dcd_freq', 'production_timestep_fs', 'production_rigid_bonds',
   'production_hmr', 'gpu_resident', 'enm_restraints', 'langevin_damping', 'seed',
+  'orientation_restraint', 'orientation_force_constant',
   'allow_undersized_cell',
 ]
 
@@ -489,6 +492,10 @@ export function productionPayload({ touched = {}, autostart = false,
     body.enm_restraints = touched.enm_restraints
   }
   if (has('langevin_damping')) body.langevin_damping = touched.langevin_damping
+  if (has('orientation_restraint')) body.orientation_restraint = !!touched.orientation_restraint
+  if (has('orientation_force_constant')) {
+    body.orientation_force_constant = touched.orientation_force_constant
+  }
   if (has('seed')) body.seed = touched.seed
   if (stageOverrides && Object.keys(stageOverrides).length) {
     body.stage_overrides = stageOverrides

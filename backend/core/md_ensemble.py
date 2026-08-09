@@ -164,6 +164,8 @@ def build_replica_package(
     anchor_k: Optional[float] = None,
     anchors_requested: Optional[list] = None,
     field: Optional[dict] = None,
+    orientation_restraint: bool = False,
+    orientation_force_constant: float = 500.0,
 ) -> Path:
     """Build a production-only package for one ensemble replica; returns its package dir.
 
@@ -389,6 +391,35 @@ def build_replica_package(
             )
             logger.warning("[%s] %s", child.job_id, enm_error)
 
+    colvars_file: Optional[str] = None
+    if orientation_restraint:
+        from backend.core.md_shell_reprep import (  # noqa: PLC0415
+            orientation_restraint_colvars,
+            read_namd_coor,
+            write_orientation_reference_xyz,
+        )
+
+        # NADOC writes the complete hydrogen-bearing DNA block first in both PSF and
+        # PDB; solvent and ions are HETATM records after it.  Reference the equilibrated
+        # checkpoint so the bias starts at zero torque.
+        n_dna = sum(
+            1
+            for line in (child_pkg / f"{name_stem}.pdb").read_text().splitlines()
+            if line.startswith("ATOM")
+        )
+        reference_name = "dna_orientation_reference.xyz"
+        colvars_file = "dna_orientation.colvars"
+        write_orientation_reference_xyz(
+            child_pkg / reference_name,
+            read_namd_coor(child_pkg / "equilibrated.coor"),
+            n_dna,
+        )
+        (child_pkg / colvars_file).write_text(
+            orientation_restraint_colvars(
+                n_dna, reference_name, force_constant=orientation_force_constant
+            )
+        )
+
     # ONLY an unbuildable HMR PSF drops the timestep.  It used to be `not use_fast`, which
     # after exp51 would also fire for a deliberate hmr=False at 4 fs — silently running a
     # quarter of the requested simulated time for a combination the user chose on purpose.
@@ -440,6 +471,7 @@ def build_replica_package(
             anchors_file=anchors_file,
             anchor_k=anchor_k,
             field=field,
+            colvars_file=colvars_file,
         )
     )
 
@@ -502,6 +534,13 @@ def build_replica_package(
             "enm_network": "base-ring, inter-residue, 8 A cutoff" if enm_file else None,
             "enm_built_from": "equilibrated checkpoint" if enm_file else None,
             "enm_error": enm_error,
+            "orientation_restraint": bool(colvars_file),
+            "orientation_force_constant_kcal_mol": (
+                orientation_force_constant if colvars_file else None
+            ),
+            "orientation_reference": (
+                "equilibrated checkpoint" if colvars_file else None
+            ),
         },
         "stage_overrides": stage_overrides or {},
         # A production child's OWN delta from the published protocol — the parent's

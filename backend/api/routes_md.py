@@ -4158,6 +4158,20 @@ class ProductionRunRequest(BaseModel):
         "coordinates this run starts from, never from the prep-time build.",
     )
 
+    orientation_restraint: bool = Field(
+        False,
+        description="Harmonically restrain the DNA's overall best-fit quaternion to its "
+        "production-start pose, limiting rotational diffusion while leaving internal "
+        "degrees of freedom free. Useful for rods/plates in anisotropic solvent boxes.",
+    )
+    orientation_force_constant: float = Field(
+        500.0,
+        gt=0.0,
+        le=100000.0,
+        description="Quaternion harmonic force constant in kcal/mol. Used only when "
+        "orientation_restraint is enabled; 500 is the Colvars manual example.",
+    )
+
     @field_validator("enm_restraints")
     @classmethod
     def _sanctioned_enm(cls, v: str) -> str:
@@ -4555,9 +4569,13 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
     # This check lived only on the sibling append route while the panel's button came
     # here — the one path that can start a microsecond-long free run was the one path
     # that never asked whether the box could hold it.
-    _assert_cell_fits_a_free_run(
-        parent, plan["length_ns"], allow=body.allow_undersized_cell
-    )
+    # The rotation-sized envelope is specifically a guard for a freely tumbling solute.
+    # An enabled quaternion restraint is the physical mechanism that makes the cheaper
+    # pose-sized cell intentional; translation still has the package's normal padding.
+    if not body.orientation_restraint:
+        _assert_cell_fits_a_free_run(
+            parent, plan["length_ns"], allow=body.allow_undersized_cell
+        )
     # ⚠️ `parent` is the COMPLETED RELAXATION and is READ-ONLY from here.  An earlier
     # version failed the parent when it disliked a production setting, which flipped a
     # finished 12/12 ladder to "failed" and discarded the record of hours of successful
@@ -4684,6 +4702,8 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         anchor_k=body.anchor_k,
         anchors_requested=anchors_requested,
         field=field,
+        orientation_restraint=body.orientation_restraint,
+        orientation_force_constant=body.orientation_force_constant,
     )
 
     # Local target autostarts the NAMD run immediately; an Alpine child is left

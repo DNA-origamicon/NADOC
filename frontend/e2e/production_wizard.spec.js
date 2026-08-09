@@ -119,6 +119,7 @@ test.describe('New job on a finished relaxation opens Production, seeded from it
     const labels = await modal.locator('.wizard-fields .wizard-field__label')
       .allTextContents()
     for (const want of ['Run length', 'Trajectory interval', 'Restraints',
+                        'Limit rotational diffusion', 'Orientation strength',
                         'Langevin coupling', 'Random seed', 'Timestep',
                         'Rigid bonds', 'H-mass repartitioning (HMR)', 'GPU-resident mode']) {
       expect(labels.some(l => l.includes(want)), `missing control: ${want}`).toBe(true)
@@ -164,6 +165,23 @@ test.describe('New job on a finished relaxation opens Production, seeded from it
     await expect(modal.locator('td.wizard-cell--reference').first())
       .toHaveClass(/wizard-cell--locked/)
     await modal.screenshot({ path: `${SHOTS}/production-wizard-3-stages.png` })
+  })
+
+  test('tab 3 shows the orientation restraint in the production conf', async ({ page }) => {
+    await openDesign(page, 'prod-wizard', DESIGN)
+    await openNamdPanel(page)
+    await selectARelaxation(page)
+    await page.locator('#md-jobs-new-btn').click({ timeout: 15_000 })
+    const modal = page.locator('.modal--wizard')
+    await expect(modal).toBeVisible({ timeout: 20_000 })
+    await openSettingsTab(modal)
+    const field = modal.locator('.wizard-field', { hasText: 'Limit rotational diffusion' })
+    await field.locator('input[type="checkbox"]').check()
+    await expect(modal.locator('.wizard-status')).toHaveText('', { timeout: 30_000 })
+    await modal.locator('.wizard-tab', { hasText: 'What each stage runs' }).click()
+    const table = modal.locator('.wizard-stages table')
+    await expect(table).toContainText('colvarsconfig')
+    await expect(table).toContainText('dna_orientation.colvars')
   })
 
   test('a production stage parameter can be edited by hand', async ({ page }) => {

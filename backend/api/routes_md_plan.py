@@ -17,6 +17,7 @@ an active carve-up target.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -82,6 +83,13 @@ class ProtocolPlanRequest(CreateJobRequest):
         "auto",
         description="Production only: keep an elastic network through the run "
         "('auto' | 'on' | 'off').",
+    )
+    orientation_restraint: bool = Field(
+        False, description="Production only: restrain overall DNA orientation."
+    )
+    orientation_force_constant: float = Field(
+        500.0, gt=0.0, le=100000.0,
+        description="Quaternion harmonic force constant in kcal/mol."
     )
     langevin_damping: Optional[float] = Field(
         None, gt=0.0, description="Production only: Langevin coupling, ps^-1."
@@ -533,6 +541,12 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         # unpinned one is drawn at launch, so the table shows the placeholder and the
         # `deferred` note below says where the real one comes from.
         seed=int(body.seed) if body.seed is not None else md_plan.PlanContext.seed,
+        # This is the filename the replica builder writes at launch. Feeding it through
+        # the real conf writer makes tab 3 show `colvars on` + `colvarsConfig`, exactly
+        # as the production conf will contain them.
+        colvars_file=(
+            "dna_orientation.colvars" if body.orientation_restraint else None
+        ),
     )
     timestep_fs = float(plan["timestep_fs"])
     # The stage table of the run this wizard is about to CREATE.  `production_stages` (the
@@ -570,9 +584,17 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
     )
     if chained:
         parent_recipe = manifest.get("production_recipe") or {}
+        source_ctx = replace(
+            ctx,
+            colvars_file=(
+                "dna_orientation.colvars"
+                if parent_recipe.get("orientation_restraint")
+                else None
+            ),
+        )
         source_params = md_plan.production_parameters(
             spec,
-            ctx,
+            source_ctx,
             timestep_fs=spec.timestep_fs or timestep_fs,
             npt=not carved,
             damping=float(
@@ -732,6 +754,27 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
     )
     conditions.append(
         {
+            "id": "orientation_restraint",
+            "kind": "info" if body.orientation_restraint else "warning",
+            "title": (
+                "Overall rotational diffusion is restrained"
+                if body.orientation_restraint
+                else "Overall rotational diffusion is free"
+            ),
+            "detail": (
+                f"A Colvars quaternion harmonic (k = {body.orientation_force_constant:g} "
+                "kcal/mol) holds the DNA near its equilibrated production-start pose. "
+                "The best-fit rigid rotation is restrained; internal deformation remains free."
+                if body.orientation_restraint
+                else "The origami may tumble. The solvent cell must accommodate every orientation, "
+                "which can dominate the water count for rods and plates."
+            ),
+            "applies_to": "all",
+            "source": "ProductionRunRequest.orientation_restraint",
+        }
+    )
+    conditions.append(
+        {
             "id": "production_damping",
             "kind": "info",
             "title": f"Langevin coupling {restraints['damping']:g} ps⁻¹",
@@ -749,7 +792,10 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
     )
     conditions.append(
         _box_fit_condition(
-            parent, float(plan["length_ns"]), bool(body.allow_undersized_cell)
+            parent,
+            float(plan["length_ns"]),
+            bool(body.allow_undersized_cell),
+            orientation_restrained=bool(body.orientation_restraint),
         )
     )
     if carved:
@@ -1034,6 +1080,16 @@ def _production_provenance(
             else "derived",
             "reason": restraints["enm_reason"],
         },
+        "orientation_restraint": entry(
+            bool(body.orientation_restraint),
+            "orientation_restraint",
+            reason="off by default; enable only when laboratory-frame rotation is not an observable",
+        ),
+        "orientation_force_constant": entry(
+            float(body.orientation_force_constant),
+            "orientation_force_constant",
+            reason="the Colvars orientation-restraint example value",
+        ),
         "langevin_damping": entry(
             float(restraints["damping"]),
             "langevin_damping",
@@ -1066,7 +1122,13 @@ def _production_provenance(
     }
 
 
-def _box_fit_condition(parent: MdJob, length_ns: float, allow: bool) -> dict:
+def _box_fit_condition(
+    parent: MdJob,
+    length_ns: float,
+    allow: bool,
+    *,
+    orientation_restrained: bool = False,
+) -> dict:
     """Whether the inherited cell is big enough for this run — as a CONDITION, not a 400.
 
     The real endpoint refuses an undersized cell unless the caller opts in.  A preview
@@ -1076,6 +1138,21 @@ def _box_fit_condition(parent: MdJob, length_ns: float, allow: bool) -> dict:
     from backend.api.routes_md import _assert_cell_fits_a_free_run  # noqa: PLC0415
     from backend.core.namd_solvate import ROTATION_FREE_NS_THRESHOLD  # noqa: PLC0415
 
+    if orientation_restrained:
+        return {
+            "id": "box_fit",
+            "kind": "info",
+            "title": "Pose-sized cell (overall rotation restrained)",
+            "detail": (
+                "The rotation-sized envelope is not required because the quaternion bias "
+                "holds the origami near its production-start orientation. Keep ordinary "
+                "solvent padding for conformational fluctuations and translation."
+            ),
+            "ok": True,
+            "override": None,
+            "applies_to": "all",
+            "source": "ProductionRunRequest.orientation_restraint",
+        }
     try:
         _assert_cell_fits_a_free_run(parent, length_ns, allow=allow)
         ok, detail = (
