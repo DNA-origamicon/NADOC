@@ -131,6 +131,21 @@ def test_list_md_jobs_size_is_cache_only_then_warms(monkeypatch, tmp_path):
     assert row2["size_bytes"] == expected  # filled in on the next poll
 
 
+def test_list_md_jobs_uses_live_remote_dcd_and_total_sizes(monkeypatch, tmp_path):
+    import asyncio
+
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    job = new_job("6hb", "equilibrium_aware", "", "")
+    job.execution_target = "alpine"
+    job.live_metrics = {"dcd_size_bytes": 700, "total_size_bytes": 1200}
+    job.save(tmp_path)
+
+    rows = asyncio.run(routes_md.list_md_jobs())
+    row = next(r for r in rows if r["job_id"] == job.job_id)
+    assert row["dcd_size_bytes"] == 700
+    assert row["size_bytes"] == 1200
+
+
 def test_list_md_jobs_repairs_running_runpod_job_when_pod_is_gone(
     monkeypatch, tmp_path
 ):

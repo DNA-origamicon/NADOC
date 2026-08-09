@@ -556,14 +556,43 @@ async def poll_remote_progress(job: MdJob, *, conn=None) -> bool:
     res = await conn.run(
         f"cd {_shq(scratch)} && ls -1 output/*.coor 2>/dev/null; ls -1 *.log 2>/dev/null; "
         f"echo '---NADOC-METRICS---'; cat {LIVE_METRICS_FILE} 2>/dev/null; "
-        f"echo '---NADOC-HEALTH---'; cat {LIVE_HEALTH_FILE} 2>/dev/null"
+        f"echo '---NADOC-HEALTH---'; cat {LIVE_HEALTH_FILE} 2>/dev/null; "
+        # Measure the files directly on every poll as well as asking the staged
+        # collector. Existing Alpine jobs are already running an older collector and
+        # cannot gain new Python code mid-allocation; this makes their growing DCDs
+        # visible immediately and proves the bytes exist in a real remote file.
+        "echo '---NADOC-SIZES---'; "
+        "find output -type f -name '*.dcd' -printf '%s\\n' 2>/dev/null "
+        "| awk '{s+=$1} END {print s+0}'; "
+        "find . -type f -printf '%s\\n' 2>/dev/null "
+        "| awk '{s+=$1} END {print s+0}'"
     )
     listing, _, tail = (res.stdout or "").partition("---NADOC-METRICS---")
-    metrics_blob, _, health_blob = tail.partition("---NADOC-HEALTH---")
+    metrics_blob, _, health_and_sizes = tail.partition("---NADOC-HEALTH---")
+    health_blob, _, sizes_blob = health_and_sizes.partition("---NADOC-SIZES---")
+    dcd_bytes, total_bytes = parse_remote_sizes(sizes_blob)
+    if dcd_bytes is not None and total_bytes is not None:
+        try:
+            metrics = json.loads(metrics_blob.strip()) if metrics_blob.strip() else {}
+        except (ValueError, TypeError):
+            metrics = {}
+        if not isinstance(metrics, dict):
+            metrics = {}
+        metrics["dcd_size_bytes"] = dcd_bytes
+        metrics["total_size_bytes"] = total_bytes
+        metrics_blob = json.dumps(metrics)
     finished, started = parse_progress_listing(listing)
     advanced = apply_remote_progress(job, finished, started)
     health_changed = apply_live_health(job, health_blob)
     return apply_live_metrics(job, metrics_blob) or health_changed or advanced
+
+
+def parse_remote_sizes(blob: str) -> tuple[int | None, int | None]:
+    """Parse the two newline-delimited byte totals emitted by the remote poll."""
+    lines = [line.strip() for line in (blob or "").splitlines() if line.strip()]
+    if len(lines) < 2 or not lines[0].isdigit() or not lines[1].isdigit():
+        return None, None
+    return int(lines[0]), int(lines[1])
 
 
 def apply_live_metrics(job: MdJob, blob: str) -> bool:

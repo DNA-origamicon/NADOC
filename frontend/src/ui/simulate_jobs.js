@@ -495,7 +495,10 @@ export function initSimulateJobs({
       sizeBytes: (n) => n.size_bytes ?? null,
       formatTime: formatJobTime,
       formatSize: formatBytes,
-      rowSig: (n) => `${n.engine}:${n.job_id}:${n.status}:${n.production_state}:${n.out_of_date ? 1 : 0}:${n.archived ? 1 : 0}:${n.size_bytes ?? ''}`,
+      sizeLabel: (n, total) => n.engine === 'namd' && n.dcd_size_bytes != null && total != null
+        ? `${formatBytes(n.dcd_size_bytes)} DCD / ${formatBytes(total)} total`
+        : (total ? formatBytes(total) : ''),
+      rowSig: (n) => `${n.engine}:${n.job_id}:${n.status}:${n.production_state}:${n.out_of_date ? 1 : 0}:${n.archived ? 1 : 0}:${n.size_bytes ?? ''}:${n.dcd_size_bytes ?? ''}`,
       colors: { dim: _C.dim, warn: _C.warn },
     }
   }

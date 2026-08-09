@@ -3799,6 +3799,19 @@ async def list_md_jobs() -> list[dict]:
         d["size_bytes"] = size
         if size is None:
             to_warm.append(job_dir)
+        # Active remote outputs live on Alpine scratch / the RunPod volume and have
+        # not landed in the local package yet.  The node heartbeat reports both the
+        # trajectory and whole-tree sizes, so the jobs list can show growth now rather
+        # than remaining frozen at the staged-input size until the final download.
+        live = j.live_metrics or {}
+        if j.execution_target in {"alpine", "runpod"}:
+            remote_total = live.get("total_size_bytes")
+            remote_dcd = live.get("dcd_size_bytes")
+            if isinstance(remote_total, int) and remote_total >= 0:
+                d["size_bytes"] = remote_total
+                d["dcd_size_bytes"] = (
+                    remote_dcd if isinstance(remote_dcd, int) and remote_dcd >= 0 else 0
+                )
         d["early_stop_pending"] = pending_early_stop(j.job_id)
         frac, eta, estimated = _namd_live_progress(j, ws)
         if frac is not None:

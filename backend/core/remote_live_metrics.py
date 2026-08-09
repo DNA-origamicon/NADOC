@@ -167,13 +167,39 @@ def step_from_xsc(path):
     return None
 
 
+def file_sizes(work_dir):
+    """Return live trajectory and total bytes for the remote job directory."""
+    dcd_bytes = 0
+    total_bytes = 0
+    try:
+        for root, _dirs, files in os.walk(work_dir):
+            for name in files:
+                path = os.path.join(root, name)
+                try:
+                    size = os.path.getsize(path)
+                except OSError:
+                    continue
+                total_bytes += size
+                if name.lower().endswith(".dcd"):
+                    dcd_bytes += size
+    except OSError:
+        pass
+    return dcd_bytes, total_bytes
+
+
 def collect(work_dir):
     """Scan a job's scratch dir → the live-metrics dict NADOC retrieves."""
     logs = sorted(
         glob.glob(os.path.join(work_dir, "*.log")), key=lambda p: os.path.getmtime(p)
     )
+    dcd_bytes, total_bytes = file_sizes(work_dir)
     if not logs:
-        return {"collected_at": time.time(), "segment": None}
+        return {
+            "collected_at": time.time(),
+            "segment": None,
+            "dcd_size_bytes": dcd_bytes,
+            "total_size_bytes": total_bytes,
+        }
     active = logs[-1]
     data = parse_log_text(_tail(active))
     # The head carries TIMESTEP and the early Benchmark lines, both of which scroll
@@ -195,6 +221,8 @@ def collect(work_dir):
         data["ns_per_day"] = live
     data["segment"] = os.path.basename(active)[:-4]
     data["collected_at"] = time.time()
+    data["dcd_size_bytes"] = dcd_bytes
+    data["total_size_bytes"] = total_bytes
 
     xsc = os.path.join(work_dir, "output", data["segment"] + ".restart.xsc")
     step = step_from_xsc(xsc)

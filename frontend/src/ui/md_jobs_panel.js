@@ -1059,7 +1059,7 @@ export function mdHasMetrics(job, persisted = null) {
  *  short-circuit and the unified renderer key off the exact same fields. */
 export function mdJobRowSig(j) {
   return `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}:${j.failure_kind ?? ''}`
-    + `:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}`
+    + `:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}:${j.dcd_size_bytes ?? ''}`
     + `:${j.execution_target ?? ''}:${j.slurm_job_id ?? ''}:${j.ensemble_seed ?? ''}`
     + `:${j.decision ? 1 : 0}`   // GPU-decision pending → ⚠ appears/clears with it
 }
@@ -1099,6 +1099,9 @@ export function mdJobRowCtx({ selectedId = null, collapsedIds = null, jobs = [],
       : 'Design changed since this MD job was prepared — roll the design back, or prepare a new run.',
     formatTime,
     formatSize: formatBytes,
+    sizeLabel: (job, total) => job.dcd_size_bytes != null && total != null
+      ? `${formatBytes(job.dcd_size_bytes)} DCD / ${formatBytes(total)} total`
+      : (total ? formatBytes(total) : ''),
     chevron: true,
     postLabelMarkers: (job, { childCount, collapsed }) => {
       const out = []
@@ -1387,23 +1390,23 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     clusterReconnectEl.style.display = msg ? '' : 'none'
   }
 
-  // Enable/disable the Alpine radio from the live cluster-connection state; fall
-  // back to Local if the session drops while Alpine was selected.
+  // Alpine must remain selectable while signed out: its connection chip lives inside
+  // the Alpine pane, so disabling this radio creates a circular lockout (the user cannot
+  // open the pane in order to sign in). Authentication still gates Submit/Resume through
+  // alpineTargetDisabledReason; this control only chooses which target details to show.
   function _updateRunTargetGate(state = getClusterState?.() ?? 'disconnected') {
     const reason = alpineTargetDisabledReason(state)
-    const disabled = !!reason
-    if (runTargetAlpine) runTargetAlpine.disabled = disabled
+    if (runTargetAlpine) runTargetAlpine.disabled = false
     if (runTargetAlpineLabel) {
-      runTargetAlpineLabel.style.opacity = disabled ? '0.5' : '1'
-      runTargetAlpineLabel.style.cursor = disabled ? 'not-allowed' : 'pointer'
-      runTargetAlpineLabel.title = reason || 'Submit this relaxation to the CU Alpine cluster'
+      runTargetAlpineLabel.style.opacity = '1'
+      runTargetAlpineLabel.style.cursor = 'pointer'
+      runTargetAlpineLabel.title = reason
+        ? `${reason} Select Alpine to sign in.`
+        : 'Submit this relaxation to the CU Alpine cluster'
     }
-    if (runTargetHint) runTargetHint.textContent = disabled ? '(connect cluster)' : ''
-    if (disabled && runTargetAlpine?.checked && runTargetLocal) {
-      runTargetLocal.checked = true
-      _syncTargetPane('alpine')
-      _visibleTarget = 'local'
-    }
+    if (runTargetHint) runTargetHint.textContent = reason && runTargetAlpine?.checked
+      ? '(sign in below)'
+      : ''
   }
 
   // ── RunPod: pre-flight gate ────────────────────────────────────────────────

@@ -1154,6 +1154,12 @@ def test_live_metrics_ignores_a_missing_or_torn_blob(tmp_path):
     assert j.live_metrics == {"ns_per_day": 12.0}
 
 
+def test_parse_remote_sizes_requires_two_real_byte_counts():
+    assert ex.parse_remote_sizes("123\n456\n") == (123, 456)
+    assert ex.parse_remote_sizes("") == (None, None)
+    assert ex.parse_remote_sizes("123\nnot-a-size\n") == (None, None)
+
+
 def test_live_metrics_no_change_reports_false(tmp_path):
     j = _make_prepared_job(tmp_path)
     assert ex.apply_live_metrics(j, '{"ns_per_day": 5}') is True

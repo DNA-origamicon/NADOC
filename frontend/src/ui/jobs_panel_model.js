@@ -88,7 +88,9 @@ export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0
     label,
     title: isChild && ctx.childTitle ? ctx.childTitle(job) : null,
     timeStr: ctx.formatTime ? ctx.formatTime(job.created_at) : '',
-    sizeStr: sizeBytes && ctx.formatSize ? ctx.formatSize(sizeBytes) : '',
+    sizeStr: ctx.sizeLabel
+      ? ctx.sizeLabel(job, sizeBytes)
+      : (sizeBytes && ctx.formatSize ? ctx.formatSize(sizeBytes) : ''),
     archived,
     archivePath,
     stale: ctx.isStale ? !!ctx.isStale(job) : false,

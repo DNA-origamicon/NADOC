@@ -110,7 +110,17 @@ def test_collect_picks_the_newest_log_and_writes_atomically(tmp_path):
     rlm.main(["prog", str(tmp_path)])  # interval 0 -> one pass
     out = json.loads((tmp_path / "output" / "live_metrics.json").read_text())
     assert out["segment"] == "01_production"
+    assert out["dcd_size_bytes"] == 0
+    assert out["total_size_bytes"] > 0
     assert not (tmp_path / "output" / "live_metrics.json.tmp").exists()
+
+
+def test_file_sizes_sums_dcd_and_whole_remote_tree(tmp_path):
+    (tmp_path / "output").mkdir()
+    (tmp_path / "input.psf").write_bytes(b"p" * 7)
+    (tmp_path / "output" / "a.dcd").write_bytes(b"a" * 11)
+    (tmp_path / "output" / "b.DCD").write_bytes(b"b" * 13)
+    assert rlm.file_sizes(str(tmp_path)) == (24, 31)
 
 
 def test_module_is_python36_safe():
