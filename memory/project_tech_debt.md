@@ -24,17 +24,34 @@ Never invent scope. Deletion questions and retired-feature decisions go to the u
 
 ## Queue
 
-Current next item is **TD-06, cross-cutting sweeps**:
+This head was reconciled against the detailed archive on 2026-08-08. Before that pass it stopped at
+TD-16 even though TD-17 through TD-30 were active in the archive. The archive remains the narrative
+store; this table is the authoritative active queue.
 
-1. Probe and retire or relocate the fictional/stale `docs/triage/` material.
-2. Remove or repoint phantom `MAP_*.md` citations.
-3. Sweep vestigial `null` composition-root initialization arguments.
-4. Repair stale “keep in sync” comments by pointing to the real owner.
-5. Replace line-number anchors in auto-loaded rules with stable symbol names.
+| Priority | Item | Current claim |
+|---|---|---|
+| P1 · parked | **TD-30** | Extra-base insert ring piercing. Dedicated topology session only; do not treat the 2026-08-07 suite totals as current without rerunning. |
+| P1 | **TD-07** | Two scripts still call removed `auto_scaffold(design, mode=…)`; retire or port them. |
+| P1 | **TD-08** | Divergent `CELLS_6HB` / `CELLS_18HB` fixture definitions still share misleading names. |
+| P1 | **TD-09** | Deformation comments plus possible deformation loss in assembly flattening. |
+| P1 | **TD-10** | `_arm_filter_cluster` still resolves cluster scope by list order. |
+| P1 | **TD-11** | Autorefine route/function `finetune` defaults still disagree; unsigned ranking needs a product/algorithm pass. |
+| P1 | **TD-12** | Selection comments/state writes need re-probing after the 2026-08-08 selector UI change. |
+| P1 | **TD-23** | Duplex-foundation stragglers and the zero-caller sequence reassignment helper. |
+| P2 | **TD-13–TD-20** | API/state, Cadnano-2D, animation, unfold, strand-animation, fixture-skip, dead-module, and composition-root stragglers. Process one item at a time from the archive. |
+| P2 · blocked | **TD-28** | Linker/relax audit waits for an explicit unblock after the basic-design geometry settlement. |
+| P2 | **TD-24–TD-26** | Photo-mode v1 residue, lint scope, and undeclared `unligatedCrossoverIds` store state. |
+| P3 · blocked | **TD-21** | Delete legacy OverhangSpec pose overlay only after duplex-cluster migration. |
+| P3 · promote | **TD-22** | Rule coverage program; this is a project, not a small debt fix. |
 
-Following items, in priority order: TD-07 dead scaffold API references; TD-08 divergent bundle-cell
-copies; TD-09 deformation stragglers; TD-10 cluster-scoped deformation; TD-11 autorefine defaults;
-TD-12 selection; TD-13 API/state documentation; TD-14 Cadnano-2D; TD-15 animation; TD-16 unfold.
+**Closed 2026-08-08:**
+
+- **TD-06.** The stale `docs/triage/` corpus was deleted after a repo-wide probe; its phantom
+  `MAP_*.md` citations disappeared with it. Remaining bullets are owned by TD-09/12/13/14/15/16.
+- **TD-27 — SUPERSEDED-DOCUMENTED.** The shared `HelicalSite` architecture shipped through phases
+  0–10 on 2026-08-07, followed by removal of legacy slab positioning and full/atomistic coordinate
+  alignment on 2026-08-08. Live invariants are owned by `project_helical_site.md` and
+  `project_atomistic_source_of_truth.md`; unresolved insert topology is TD-30.
 
 ## Decisions requiring the user
 
@@ -50,5 +67,6 @@ one-question framing into this head, obtain the answer, then archive the resolut
 
 ## Next handoff
 
-Run `/audit-debt` on TD-06 only. Probe every occurrence repo-wide, do not silently delete the
-documentation directory, and archive the resolved evidence after each bullet reaches a terminal state.
+Process **TD-07** next. Do not start TD-28 or TD-30 as part of that pass. For any other pickup,
+read only that item's detailed section in `project_tech_debt_archive.md` and verify every anchor
+before editing code.

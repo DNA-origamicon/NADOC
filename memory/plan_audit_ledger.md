@@ -1,4 +1,9 @@
-# Plan-Audit Ledger — reconcile stale plans against live code
+# Plan-Audit Ledger — completed reconciliation index
+
+> **Loop complete 2026-08-08.** Every queued plan has a terminal verdict. There is no unaudited
+> plan queue. The only unresolved entries are the three owner decisions under HOLD; ongoing loop
+> drivers remain intentionally out of scope. The detailed result table below is retained as audit
+> evidence, not as a current work queue.
 
 Driver for the `/audit-plan` loop. **One plan per iteration.** Each iteration takes one
 `memory/project_*.md` (or root plan file), probes the codebase for the concrete things it
@@ -108,7 +113,10 @@ unless a migration touches code.
   (already noted in-file, 2026-07-08). Provisional verdict **LIVE-REFERENCE**, NOT archive.
   Awaiting user OK.
 
-## Audit queue (unaudited — rough priority top-first)
+## Audit queue — empty
+
+All former candidates below reached terminal verdicts on 2026-07-30/31. The crossed-out list is
+historical evidence and must not be interpreted as actionable work.
 
 Genuinely-unfinished-with-intent candidates (likely UNFINISHED-ACTIVE, need rank):
 - ~~project_regional_autorefine~~ (LIVE-REFERENCE 07-30),
@@ -159,7 +167,13 @@ Glob-vs-`ls` check of all 9 unaudited rules. **Don't re-run this; it's the ranki
 **Do not widen a stale rule's globs without auditing its body** — that just auto-loads wrong guidance
 onto *more* files. Glob fix and body rewrite go together, in one pass, per rule.
 
-## Next-session handoff
+## Final handoff
+
+Do not run another routine `/audit-plan` pass from this file. Resolve the three HOLD decisions with
+the owner, or add a newly discovered plan explicitly before restarting the loop. The material below
+this note is the final 2026-07-31 handoff retained for provenance and is **superseded**.
+
+## Superseded final-session notes
 
 **THE AUDIT QUEUE IS EMPTY. The loop has reached its terminal state.** 38 recorded rows (30 here
 + 8 in the archive): every

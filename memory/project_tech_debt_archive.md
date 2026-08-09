@@ -392,7 +392,7 @@ outranks a stale comment; a stale comment outranks a program of work.
 | ~~TD-03~~ | ~~Cadnano-editor app stragglers~~ | — | **CLOSED 2026-07-31** — 5 FIXED / 1 PROMOTED (MV-EDITORDOC) / 1 DECIDE (DEC-02) / 2 ACCEPTED / 1 STALE. Also closed TD-14's reverse-coupling bullet; spawned TD-26. Archived. |
 | ~~TD-04~~ | ~~Dead `POST /design/auto-scaffold` + orphaned matched-ends fns~~ | — | **CLOSED 2026-08-01** — 2 FIXED / 1 DELETED. The "silently fake coverage" was false: all 4 call sites guarded the dead POST and fell back to domain-paint, so the specs always scaffolded. Archived. |
 | ~~TD-05~~ | ~~Rendering stragglers~~ | — | **CLOSED 2026-08-01** — 2 FIXED / 2 DECIDE (DEC-03, DEC-04) / 1 ACCEPTED / 1 PROMOTED. The `refreshAllGlow` lag bug was real *and understated* (fires on every sim frame, not just unfold); fixed + pinned. Also closed TD-09's `reapplyLerp` half. Section kept here until DEC-03/04 are answered. |
-| ▶ TD-06 | Cross-cutting sweeps (see its section) | P0 | Three separate audits each re-found the same rot (`docs/triage/` fiction, `, null)` init args, phantom `MAP_*.md`). Resolve once, strike in all sections. |
+| ~~TD-06~~ | ~~Cross-cutting sweeps~~ | — | **CLOSED 2026-08-08.** Deleted the 12-file fictional `docs/triage/` corpus and its phantom `MAP_*.md` citations; remaining bullets are owned by specific entries. |
 | TD-07 | Dead `lattice.auto_scaffold(mode=…)` in 2 scripts | P1 | Two unrunnable scripts (ImportError) + an orphaned `_pull_window_turns`. |
 | TD-08 | `CELLS_6HB` / `CELLS_18HB` divergent copies | P1 | Copying the name between files silently changes the neighbour graph. |
 | TD-09 | Deformation stragglers | P1 | 3 comments that contradict the code + a possible silent bend-loss in `assembly_flatten.py`. |
@@ -416,7 +416,7 @@ outranks a stale comment; a stale comment outranks a program of work.
 | ~~TD-29~~ | ~~Honeycomb twist incommensurate with the 21-bp repeat~~ | — | **FIXED 2026-08-06.** New lattice constant `HONEYCOMB_TWIST_PER_BP_DEG = 2*360/21` (physical `BDNA_TWIST_PER_BP_DEG` left at 34.3, square untouched). Drift 0.657 → 0.000 u/1000 bp; same-lattice designs now numerically identical; DX rotation optimum became design-independent (−3°). 8 test failures, all understood + fixed; 2 new pins. |
 | TD-28 | DEFERRED AUDIT: all linker + relax code (~5.2k LOC) | P2 · **BLOCKED by design** | Parked until TD-27's basic-design geometry is settled. These modules fit poses against bead positions and are the 14 failures blocking TD-27's flip — re-deriving them before the placement settles means doing it twice. |
 | TD-30 | Extra-base inserts pierce nucleotide rings at most helical phases — 41 slow tests red | P1 · **needs a dedicated session** | Full suite 2026-08-07: 17 of 22 swept phases thread a ring on the reciprocal fixture, and the build gate refuses them. Pre-existing (identical on `6076989`) and red since the suite last passed on 2026-07-20. Owner: park it, do not fix in a normal session. |
-| TD-27 | Nucleotide-geometry correction stack — 5 tiers that partly cancel each other | P1 · staged | Mostly a program of work (→ P3 by the rubric), but it carries **two confirmed live groove-sign bugs** (`oxdna_interface.py:119`, `mrdna_bridge.py:381`) and a false "net effect = 0°" comment on a locked constant. Staged so the cheap, behaviour-preserving half lands first. |
+| ~~TD-27~~ | ~~Nucleotide-geometry correction stack~~ | — | **CLOSED 2026-08-08 — SUPERSEDED-DOCUMENTED.** Shared `HelicalSite` phases 0–10 shipped; later display-coordinate cleanup removed the stale implementation plan. TD-30 owns insert topology. |
 
 ## DECISIONS — one question each, the user's call
 
@@ -671,7 +671,16 @@ loop is fast. Insert positions come from `_build_extra_base_atoms` (`atomistic.p
 interpolates a Bezier between the two junction nucleotides' geometric-layer beads — inserts follow
 that chord and nothing adjusts them afterwards.
 
-### TD-27 — the nucleotide-geometry correction stack: five tiers that partly cancel each other (found 2026-08-06, audit prompted by the measured-atomistic landing)
+### TD-27 — CLOSED 2026-08-08, superseded by the shared helical-site architecture
+
+**Terminal verdict: SUPERSEDED-DOCUMENTED.** The investigation below was accurate for the
+2026-08-06 stack but is not a current implementation plan. `project_helical_site.md` records the
+completed phases 0–10: representations project from a shared site, atomistic stamping no longer
+reads the display bead, and the phase/pose decisions are explicit. The 2026-08-08 follow-up removed
+legacy slab positioning and aligned full and atomistic display coordinates. Deliberately retained
+`_FRAME_ROT_RAD` and `_ATOMISTIC_PHASE_OFFSET_RAD` are documented decisions, not open debt. The
+unresolved extra-base geometry family was separated into TD-30. Preserve the narrative below as
+historical evidence only.
 
 The MD-measured templates shipped native on 2026-08-06 ([[measured-atomistic]]) but landed **on top
 of** the correction stack they were meant to replace: `measured_atomistic.legacy_local_templates()`

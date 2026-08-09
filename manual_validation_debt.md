@@ -94,11 +94,10 @@ over-reported the work left. Counts below are derived from the actual index, not
   MV-OXDNA (2026-06-14), MV-OXNATIVE (2026-06-20), MV-OXREPS (atomistic 2026-06-21 + trajectory scrub/play
   2026-06-22; surface + flex-map lightly owed). **Struck from the PENDING index 2026-07-13** — they were
   double-counted there for a month.
-- **REGRESSION FOUND: 1** — **MV-OXSTALE** (❌ failing 2026-06-24, persists across multiple fix rounds).
-  This is an open **bug**, not debt; it was previously miscounted as 0 while the row sat in PENDING.
-  See the REGRESSION FOUND section — it belongs in `issues_ledger.md`.
-- **Known ID collision:** `MV-32` is used for two different items (Chain Simulations sidebar; Plan Run
-  overlay P4). Renumber one before the counts can be fully trusted.
+- **PROMOTED BUGS: 2** — MV-OXSTALE → ISSUE-22 and MV-8 → ISSUE-23 on 2026-08-08. Neither remains in
+  the pending count.
+- **ID collision resolved 2026-08-08:** the Plan Run overlay formerly called MV-32 is now MV-37;
+  MV-32 remains the Chain Simulations sidebar item.
 - **Blocked, not pending** (can't be run on either dev machine as-is — don't queue them):
   **MV-ENGINES** (needs a machine with engines *missing*; both dev boxes have every engine installed),
   **MV-34** / **MV-35** (Run button is gated on a real mrDNA/ARBD install).
@@ -120,9 +119,10 @@ over-reported the work left. Counts below are derived from the actual index, not
 
 ## REGRESSION FOUND (user-confirmed fail → fix opened)
 
-### MV-OXSTALE — ❌ STILL FAILING (2026-06-24), promoted out of the PENDING index 2026-07-13
+### MV-OXSTALE — PROMOTED TO ISSUE-22 (2026-08-08)
 Snapshot-restore staleness in the oxDNA display. The bug has **persisted across multiple fix rounds**.
-This is **not validation debt — it is an open bug**, and it was sitting in the PENDING queue where it
+This is **not validation debt — it is an open bug**. Its live owner is now `issues_ledger.md` ISSUE-22;
+this historical note remains only to preserve the user-confirmed provenance. It was sitting in PENDING where it
 read as "not yet checked" rather than "checked and broken". It should be filed in `issues_ledger.md`
 and worked as a real issue; leaving it here hides it.
 
@@ -152,38 +152,23 @@ _(none — MV-3 re-validated 2026-06-07; see VALIDATED)_
 arriving from the sim/coverage loops), so the register is accreting debt faster than it discharges. The
 `## Next loop` pointer below sat on MV-8 for a month while the index head moved to MV-29.
 
-**▶ Process MV-8 — Assembly config animation** (discharges #68). **Confirmed to have a REAL BUG behind it
-(2026-07-13 audit) — this is no longer speculative debt, so run it first.** `scene/animation_player.js` never
-references `configuration_id`; only `ui/animation_panel.js` does. So configurations can be pinned to
-keyframes, they display in the panel, and they round-trip through the API — but **pressing Play ignores them
-entirely**. A working reference (`_animateAssemblyConfiguration`) already exists in `main.js`. This is a
-silently-broken user-visible feature, not a deferral. Validating this block = confirming the bug + fixing it.
-
-Dig: the "animate to configuration" entry point (feature-log configuration → tween),
-the saved-configuration data model, and how the instance tween is driven. **Fixture:**
-an assembly that has ≥1 saved configuration — none is known offhand, so the SETUP may
-need to *create* a configuration first (save a pose as a config) before animating to it.
-This is an **assembly-mode** block.
+**▶ Process MV-29 — Cross-engine oxDNA → NAMD handoff.** MV-8 was promoted to ISSUE-23 after static
+inspection proved playback cannot consume `configuration_id`; it is no longer validation debt.
 
 (MV-6 + MV-7 were validated directly by the user 2026-06-07 without generated blocks;
 MV-RSZ, the 3D overhang-resize-through-boundary fix, was pushed PENDING this session.)
 
 ## PENDING queue — index (ordered; first row = next loop processes this)
 
-**84 pending rows** + MV-5 (generated). *(MV-CLUSTYLE added and VALIDATED the same day, 2026-08-01 — struck from this index rather than left to rot.)* Recounted 2026-07-13 from the actual index after striking 9 rows that
-were already VALIDATED and 1 (MV-OXSTALE) that was already FAILING. Full rows (fixture hint, why-deferred,
-discharges) are in the archive's `## PENDING queue` section — open only the one you're working.
+**82 pending rows** + MV-5 (generated). Reconciled 2026-08-08: MV-8 was promoted to ISSUE-23;
+MV-22 through MV-27 were obsolete intermediate Simulate-panel slices and were consolidated into
+MV-28/MV-30; the second MV-32 was renumbered MV-37. Full rows are in the archive's `## PENDING queue`
+section — open only the one being processed.
 
 - **MV-29** — Cross-engine chain: oxDNA relax → NAMD (P3) real handoff — with a completed oxDNA relaxation j…
 - **MV-30** — Simulate section: one collapsible header + static engine headers + Periodic MD gone — open the…
 - **MV-31** — Context Run/Stop/Resume button (oxDNA + NAMD) — with a real running/stopped job. Press Relax →…
-- **MV-22** — Unified Electric-field card (U2) across all 4 engine panels — the oxDNA / LAMMPS / CanDo / NAM…
-- **MV-23** — Canonical job-list rendering (U3) — oxDNA unchanged + mrDNA converged — open the Dynamics tab.…
-- **MV-24** — Canonical job-list rendering (U3 slice 2a) — CanDo + LAMMPS converged — open the Dynamics tab.…
-- **MV-26** — Shared jobs-panel base (U3 slice 2c-3a) — oxDNA section-collapse + poll converged — open the D…
 - **MV-28** — Engine selector + Simulate section (U4) — collapse the 5 stacked engine panels behind one sele…
-- **MV-27** — Shared jobs-panel base (U3 slice 2c-3b) — md (NAMD) section-collapse + advanced drawer converg…
-- **MV-25** — Canonical job-list rendering (U3 slice 2b) — NAMD (md) converged — open the Dynamics tab, NAMD…
 - **MV-FLDEL** — Delete a forced ligation / crossover from the 3D view (in-app) — at the xover selection level …
 - **MV-MRDNA-PANEL** — mrDNA / ARBD / CUDA rows in Help ▸ MD Engines (in-app) — open Help ▸ MD Engines and confirm th…
 - **MV-MRDNA-JOBS** — mrDNA relaxation panel — run + monitor + CG display (in-app) — open the Dynamics tab; the new …
@@ -212,7 +197,6 @@ discharges) are in the archive's `## PENDING queue` section — open only the on
 - **MV-5** — (generated — see GENERATED) Assembly right-click context menu: right-click a part → linker-rel…
 - **MV-RSZ** — 3D overhang-resize through the scaffold boundary: select a staple end whose tail extends past …
 - **MV-SCAF** — Section-router scaffold routing of irregular multi-section designs (teeth / dumbbell), seamed …
-- **MV-8** — Assembly config animation: assembly with a saved feature-log configuration → "animate to confi…
 - **MV-OXDNA-CONFIG** — Clicking an oxDNA job repopulates every card with that run's conditions: load a sequenced desi…
 - **MV-BTNBUSY** — oxDNA / MD Start + Stop buttons are spam-proof (immediate spinner + gray-out) — load a sequenc…
 - **MV-TRAJ-KF** — Trajectory keyframe plays an oxDNA trajectory in an animation — load a sequenced crossover-rou…
@@ -254,7 +238,7 @@ discharges) are in the archive's `## PENDING queue` section — open only the on
 - **MV-CLIPBOARD** — Cluster copy/paste ghost — hover snap, conflict tint, click-to-place (live gesture/visual): lo…
 - **MV-32** — Chain Simulations sidebar — full authoring round-trip. In Dynamics, expand Chain Simulations, …
 - **MV-33** — Chain Simulations — real end-to-end launch + job-list integration. With oxDNA (and/or NAMD) in…
-- **MV-32** — Plan Run overlay — author + queue a multi-stage chain (P4) — open the Dynamics tab → NAMD MD p…
+- **MV-37** — Plan Run overlay — author + queue a multi-stage chain (P4) — open the Dynamics tab → NAMD MD p…
 - **MV-35** — mrDNA Hard-surface card (M8) live gesture → POST body. In the Simulate section select the mrDNA engine, load a design, expand the new **Hard surface** card. Verify: (a) it renders + collapses like oxDNA's floor card (Side / Offset / Stiffness); (b) ticking **Apply** reveals the controls and clicking **Coarse** posts POST /mrdna/jobs with `surface:{dir,offset_nm,stiff}` matching the card (intercept in devtools Network, or confirm the ARBD run installs the wall); (c) with a field ON + surface aimed straight INTO it (e.g. field −Y, side −Y-below) the "needs an anchor" toast does NOT block the launch (deposition exception), while a same-side/parallel surface still blocks. Payload threading + DOM presence are headless-pinned (mrdna_jobs_panel.test.js surface parity + oxdna_floor_setup.test.js custom-ids + engine_capabilities.test.js live-DOM census); this owes the live card-gesture→request check (the `_launch` wiring). Needs a real mrDNA/ARBD install (Run button is gated on availability), same as MV-34. Fixture: any 6HB `.nadoc`.
 - **MV-SYSMON** — System-monitor CPU/GPU/RAM sparklines (live visual) in each engine's Graphs-and-Metrics card. In the Simulate section, for EACH engine (oxDNA, NAMD, CanDo, SNUPI): load a design, expand the engine's **Graphs and Metrics** card, then click the **System monitor** sub-toggle at its top. Verify: (a) it expands to three rows (CPU / GPU / RAM) each with a minigraph + a right-aligned value label; (b) with a job running (or just under load) the sparklines scroll left→right and the value labels update ~every 1.5 s (CPU `NN%`, GPU `NN% · x.x/y.y GB`, RAM `NN% · x.x/y.y GB`); (c) on a CPU-only box (or idle GPU) the GPU row reads `n/a` / flat and the CPU+RAM lines still animate; (d) collapsing the sub-toggle (or the whole card, or hiding the browser tab) STOPS the polling (no `/system/resources` requests in devtools Network); (e) the lines fill 0–100% (not autoscaled). Backend endpoint + shaping are pinned (test_system_resources.py) and the factory contract is headless-pinned (resource_monitor.test.js: toggle-gates-poll, cadence, buffer-roll, labels, n/a; sparkline.test.js: layout math) — this owes ONLY the live canvas-draws + poll-cadence visual, which could not be smoke-checked because a NAMD production job was running (sim guard refuses a browser drive during a sim). Fixture: any `.nadoc` (whole-machine readout — no specific job needed). Run `just smoke` once the job finishes for the console-error gate.
 - **MV-34** — mrDNA E-field + Anchors cards (M6) live gesture → POST body. In the Simulate section select the mrDNA engine, load a design, expand the new **Anchors** card (select a strand/overhang → "Add selection as anchor") and **Electric field** card (tick Apply, set Force/nt pN + direction, try the V/m helper). Verify: (a) both cards render + collapse like CanDo's; (b) clicking **Coarse** with a field ON but NO anchor shows the "needs at least one anchor" toast and does NOT launch; (c) with ≥1 anchor the launch POST /mrdna/jobs body carries `field:{field_pN,dir}` + `anchors:[…]` matching the card values (intercept in devtools Network, or confirm the ARBD run applies the field). Payload threading + DOM presence are headless-pinned (mrdna_jobs_panel.test.js parity + engine_capabilities.test.js live-DOM census); this owes the live card-gesture→request check. Needs a real mrDNA/ARBD install (Run button is gated on availability). Fixture: any curved 6HB `.nadoc`.

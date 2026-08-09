@@ -104,26 +104,26 @@ A bug pushed in already-fixed still earns a dossier + fix-log row — the record
 Ordered for the loop. Functional bugs with a bounded surface come before big UX overhauls that need
 design decisions + research (so early sessions build the loop's muscle on tractable wins).
 
-**Rebuilt 2026-07-13 (docs-cleanup audit).** The previous table was frozen at 2026-06-08 and listed only
-ISSUE-1/2/3/4/8/9 — it had never been updated with ISSUE-11/12/13/14/15, four of which are still open. It
-also still said "→ NEXT: ISSUE-1", written before those issues existed. Ranked below by *severity*
-(silent corruption first), not by intake order.
+**Rebuilt 2026-08-08.** This table is the authoritative open set. Closed dossiers retained below are
+historical only and should move to `issues_ledger_archive.md` during the next archive compaction.
 
 | Order | Issue | Type | Size | Needs UX research? |
 |-------|-------|------|------|--------------------|
-| done | ~~**ISSUE-9**~~ ✅ FIXED 2026-07-13. **Not teeth-specific** — a plain 4HB bundle ratcheted `168→189→199→210` bp and `6→9→12` crossovers over three routes, on both routers. Cause: the router derived the face it extends from its OWN previous output (`_scaffold_coverage`), and the extenders are monotone. Fixed by normalising the INPUT, not the algorithm: `scaffold_reset.py` retracts each helix + re-seeds the scaffold to the **staple**-defined extent (staples are the structure; autoscaffold never touches them) so `reset(route(fresh)) == fresh`. Also fixed a second bug: `create_near_ends`/`create_far_ends` crossovers survived every "clear" (only the `auto_scaffold_` prefix was matched). | routing correctness / **data loss** | medium | no (algorithmic) |
-| done | ~~**ISSUE-14**~~ ✅ FIXED 2026-07-13. NOT a console error and NOT an app bug — the spec died in the **test harness** during setup (a `waitForTimeout(500)` racing File→New's backend POST → 404 "No active design", plus a dead `/design/auto-scaffold` route 405-ing since `e9d6750`). Both fixed in `e2e/helpers/scene_harness.js` (shared by 9 specs). `just smoke` also now refuses to run under a live production sim, which was separately starving the heavy specs into timeouts. | test harness | — | — |
-| **→ 2** | **ISSUE-16** `predict_shape(with_rmsf=True)` is **nondeterministic** — every `eigsh` in `fem_solver.py` omits `v0=`, so ARPACK picks a random start vector and identical inputs give RMSF differing by up to **3.7e-3 nm**. Surfaces as an intermittent `test_g12_salt_ignored_by_cando` failure, but the flaky test is only the messenger: the FEM RMSF output isn't reproducible, which undermines every SNUPI-vs-CanDo/MD comparator that diffs RMSF floats. Fix: seed `v0`. **Coordinate — the other machine is actively working in SNUPI/FEM.** | correctness / reproducibility | small | no |
-| 3 | **ISSUE-11** Deformed-continuation helices carry `grid_pos=None` (`make_bundle_deformed_continuation` is the only builder not setting it). Any design with a deformed continuation **crashes** `canonical_topology`/`assert_roundtrip_stable`. Blast radius: `grid_pos` also drives cluster reconciliation, overhang-neighbor lookup and `loop_skip_calculator`. **ASK-FIRST** — the obvious one-line fix is suspected of being a Three-Layer trap (a non-None `grid_pos` may make `_helix_lattice_params` recompute lattice x/y and clobber the baked deformed world coords). | data model / three-layer | small IF approved | no (topology decision) |
-| 4 | **ISSUE-8** Autoscaffold multi-section single-strand routing. Section router codified in `backend/core/section_router.py` behind default-OFF `NADOC_SECTION_ROUTER`. **BLOCKED on a user decision**, not on code: window end-turn lands *just-inside* (≤6 bp tooth-tip coverage gap) or *just-outside* (few-bp extension into the physical gap, full coverage). Not silently wrong today (default-off + warn-only). Parent of ISSUE-9; can't close without it. | routing correctness | medium | **needs user call** |
-| 5 | **ISSUE-13** `resize_strand_ends` axis re-trim uses a different endpoint convention than `create_bundle` (`(max_bp − min_bp)·rise` vs `length_bp·rise` — one rise, ~0.334 nm, shorter). First resize of any end on a fresh bundle silently shifts `axis_end` and never reverts. Nucleotide count unaffected, but it breaks `canonical_topology` identity for a `+δ/−δ` inverse pair → a correctness hazard for any oracle that fingerprints axis floats. Same three-layer family as ISSUE-11. | geometry off-by-one | small | no (ask-first) |
-| 6 | **ISSUE-12** Feature-log panel catch-all `else` mislabels `cluster_create` entries as "move/rotate" and wires the edit button to the *transform* editor (wrong tool, may error). Low impact today, but the catch-all will silently swallow any future new `feature_type` — a latent class bug. | functional bug | small | no |
-| 7 | **ISSUE-1** Context-menu proliferation — Phase 1 ✅ + 2a-binding ✅ + 2a-orientation ✅ (2026-06-05). Phase 2a-blunt / 2b–2e / Phase 3+ open. 18 builders, 3 dismissal mechanisms, z-index sprawl 1000→9999→10000. Tech debt / UX, not correctness. | UX + tech-debt | large, multi-phase | yes (done) |
-| done | ~~**ISSUE-15**~~ ✅ FIXED 2026-07-08 (surfaced-by-review; see fix log). Dossier belongs in the archive. | — | — | — |
-| done | ~~**ISSUE-2/3/4/5/6/7/10**~~ ✅ closed and archived. | — | — | — |
+| **→ 1** | **ISSUE-22** oxDNA/MD roll-return staleness remains user-confirmed broken after multiple fixes (promoted from MV-OXSTALE). | correctness / workflow | medium | reproduce exact gesture |
+| 2 | **ISSUE-23** Assembly animation keyframes persist `configuration_id`, but the playback engine never reads it (promoted from MV-8). | functional bug | medium | no |
+| 3 | **ISSUE-21** Exported animation video has three shared-frame-loop defects. | export correctness | medium | no |
+| 4 | **ISSUE-19** Scaffold routing may extend through a linker/staple while validation misses the double occupancy. | routing correctness | medium | no |
+| 5 | **ISSUE-18** Scaffold helpers can nick/ligate staple strands because two filters are missing. | routing correctness | small | no |
+| 6 | **ISSUE-20** Fast-suite timing measures contended wall time and misclassifies healthy tests. | test infrastructure | medium | no |
+| 7 | **ISSUE-11** Deformed-continuation helices carry `grid_pos=None`; obvious repair is Three-Layer-sensitive. | data model | small if approved | decision required |
+| 8 | **ISSUE-8** Multi-section autoscaffold end-turn policy remains decision-gated; re-probe reachability before accepting the old “default-off” claim. | routing correctness | medium | decision required |
+| 9 | **ISSUE-13** Strand-end resize still uses the questioned axis endpoint convention. | geometry | small | ask-first |
+| 10 | **ISSUE-12** `cluster_create` still falls through the generic move/rotate feature-log branch. | functional bug | small | no |
+| 11 | **ISSUE-1** Context-menu consolidation remains a large multi-phase UX program. | UX / debt | large | decisions banked |
+| done | ~~**ISSUE-16**~~ ✅ FIXED — all relevant `eigsh()` calls now pass deterministic `_eigsh_v0(...)`; focused verification still owed before archival. | reproducibility | — | — |
 
-This order is a recommendation; the user may name a different issue. Note ISSUE-8 and ISSUE-11 are both
-gated on a decision only the user can make — don't burn a session trying to infer either.
+ISSUE-8 and ISSUE-11 remain decision-gated. Closed ISSUE-9/14/15/16/17 belong in the archive, not in
+future priority calculations.
 
 ---
 
@@ -682,33 +682,39 @@ configuration plays back as a no-op, in the app and in every export.
   carrying a linker whose complement sits in the scaffold-direction slot; assert no non-scaffold strand is
   nicked or fused).
 
+## ISSUE-22 — Roll/return staleness workflow remains broken after multiple fixes
+
+- **Status:** OPEN — promoted from MV-OXSTALE on 2026-08-08.
+- **Observed:** user-confirmed failure on 2026-06-24 persisted across multiple fix rounds. Rolling the
+  feature log to a job's design and returning does not reliably clear stale state and restore the live
+  trajectory workflow.
+- **Why this is an issue:** expected behavior was exercised and failed. Do not return it to manual-
+  validation debt.
+- **Next:** reproduce the exact roll → follow/view job → return gesture in the current UI before changing
+  fingerprint or panel code. Existing focused tests do not capture the user's failing interaction.
+
+## ISSUE-23 — Assembly animation playback ignores keyframe `configuration_id`
+
+- **Status:** OPEN — promoted from MV-8 on 2026-08-08.
+- **Static repro:** `ui/animation_panel.js` persists and displays `configuration_id`, while
+  `scene/animation_player.js` has no `configuration_id` reference. Playback therefore cannot apply a
+  configuration attached to a keyframe.
+- **Reference implementation:** `_animateAssemblyConfiguration` in `frontend/src/main.js`.
+- **Next:** write a failing playback test with a configuration-bearing keyframe, then route configuration
+  application through the animation player. Manual validation comes after the functional fix.
+
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. **Last updated 2026-07-13 (docs-cleanup audit — no issue
-worked).**_
+_Living pointer — each session overwrites this. **Last updated 2026-08-08 (ledger reconciliation).**_
 
-**⚠ THIS LOOP IS DORMANT.** The last work done by the loop's own protocol was **2026-06-08** (ISSUE-7).
-Everything filed since is drive-by intake from sibling loops (`/automate-feature`, `/continue-coverage`) plus
-one opportunistic fix (ISSUE-15). Net flow over the last month: **+4 open, −0 worked.** The intake channel is
-alive; the fix channel is not.
+**NEXT PICK: ISSUE-22.** It is a user-confirmed regression that was incorrectly left in the manual-
+validation ledger. Reproduce the exact roll/return gesture before editing; the existing focused tests are
+green but miss the failing interaction. ISSUE-23 is the next bounded functional fix.
 
-**2026-07-13: ISSUE-14 ✅ and ISSUE-9 ✅ both shipped this session** (the loop is no longer dormant).
+**ISSUE-16 is no longer open:** deterministic `_eigsh_v0(...)` is present on the relevant FEM eigensolver
+calls. Run the focused reproducibility tests, add a fix-log row if missing, then archive its dossier.
 
-**NEXT PICK: ISSUE-13 or ISSUE-12** — both small and unblocked. ISSUE-13 (`resize_strand_ends` axis re-trim
-uses a different endpoint convention than `create_bundle`) is the more valuable: it is the same three-layer
-family as ISSUE-11 and it silently breaks `canonical_topology` identity for a `+δ/−δ` inverse pair, which is a
-correctness hazard for any oracle that fingerprints axis floats. ISSUE-12 (feature-log catch-all `else`
-mislabels `cluster_create`) is smaller and purely cosmetic today, but the catch-all will swallow any future
-`feature_type` — a latent class bug.
-
-**Owed from ISSUE-9:** a user eyeball — run Auto-scaffold **twice** on a teeth design and confirm the tooth
-faces do not move. Backend-only and fully unit-pinned, but it rewrites helix geometry, so it wants one look.
-
-**Two issues are blocked on YOU, not on code** — don't let a session try to infer either:
-- **ISSUE-8** — window end-turns just-inside (≤6 bp tooth-tip coverage gap) vs just-outside (few-bp extension
-  into the physical gap, full coverage)?
-- **ISSUE-11** — is setting `grid_pos` on deformed continuations safe, or does it clobber baked deformed
-  world coords via `_helix_lattice_params`? (Three-Layer question.)
+**Decision-gated:** ISSUE-8 and ISSUE-11. Do not infer either product/geometry decision.
 
 <details><summary>Superseded 2026-06-08 handoff (ISSUE-1 Phase 2a-blunt) — kept for its banked detail</summary>
 
