@@ -216,7 +216,10 @@ export function swapToFlatMaterials(root, presets = null) {
     if (src.isLineBasicMaterial || src.isLineDashedMaterial) return
     if (src.blending === THREE.AdditiveBlending) return
     if (src.userData?.isImpostor || src.userData?.impostorRadius != null) return
-    if (obj.userData?.sharedLodImpostor) return
+    // Assembly surfaces use ordinary instanceMatrix transforms and can safely
+    // receive the selected surface material. Other shared-LOD meshes carry
+    // custom texture-instancing shaders which a material replacement would drop.
+    if (obj.userData?.sharedLodImpostor && obj.name !== 'assemblySurface') return
     if (obj.userData?.photoFloor) return
     // A material flagged `visible:false` means "never draw this", and a fresh
     // material defaults to visible:true — the same class of bug as depthWrite

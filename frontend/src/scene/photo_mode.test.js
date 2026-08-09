@@ -47,6 +47,39 @@ describe('swapToFlatMaterials', () => {
     expect(surf.material.roughness).toBeCloseTo(0.85)    // surface → matte
   })
 
+  it('does not mistake hull-prism MeshStandardMaterial for atomistic', () => {
+    const scene = new THREE.Scene()
+    const hull = new THREE.Mesh(box(), new THREE.MeshStandardMaterial())
+    scene.add(hull)
+    swapToFlatMaterials(scene, { full: 'metallic', cylinders: 'flat', surface: 'flat', atomistic: 'cpk-flat' })
+    expect(hull.material.metalness).toBe(1)
+  })
+
+  it('applies cylinder appearance to newer linker and curved-group meshes', () => {
+    const scene = new THREE.Scene()
+    const linker = new THREE.Mesh(box(), new THREE.MeshLambertMaterial())
+    linker.name = 'linkerBindingCylinders'
+    const curvedGroup = new THREE.Group()
+    curvedGroup.name = 'curvedCylGroup'
+    const curvedTube = new THREE.Mesh(box(), new THREE.MeshLambertMaterial())
+    curvedGroup.add(curvedTube)
+    scene.add(linker, curvedGroup)
+    swapToFlatMaterials(scene, { full: 'flat', cylinders: 'metallic', surface: 'flat', atomistic: 'cpk-flat' })
+    expect(linker.material.metalness).toBe(1)
+    expect(curvedTube.material.metalness).toBe(1)
+  })
+
+  it('applies the surface selection to an assembly surface despite its shared-LOD tag', () => {
+    const scene = new THREE.Scene()
+    const surface = new THREE.InstancedMesh(box(), new THREE.MeshStandardMaterial({ side: THREE.DoubleSide }), 1)
+    surface.name = 'assemblySurface'
+    surface.userData.sharedLodImpostor = true
+    scene.add(surface)
+    swapToFlatMaterials(scene, { full: 'flat', cylinders: 'flat', surface: 'glass', atomistic: 'cpk-flat' })
+    expect(surface.material.isMeshPhysicalMaterial).toBe(true)
+    expect(surface.material.roughness).toBeCloseTo(0.05)
+  })
+
   it('defaults to the flat FIGURE materials when no presets are given', () => {
     const scene = new THREE.Scene()
     const m = new THREE.Mesh(box(), new THREE.MeshPhongMaterial())

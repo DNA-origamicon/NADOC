@@ -24,35 +24,49 @@ export const MESH_NAME_TO_REPR = {
   overhangCylinders:         'cylinders',
   overhangFullCylinders:     'cylinders',
   curvedHelixCylindersProxy: 'cylinders',
+  curvedCylGroup:            'cylinders',
   curvedOverhangFullCylindersProxy: 'cylinders',
   curvedOvhgGroup:           'cylinders',
+  linkerBindingCylinders:    'cylinders',
+  linkerBridgeCylinders:     'cylinders',
+  sharedLodMid:              'cylinders',
+  sharedLodOverhangs:        'cylinders',
+  sharedLodCurvedCyl:        'cylinders',
   'dna-surface':             'surface',
+  'dna-surface-region':      'surface',
+  assemblySurface:           'surface',
   // Atomistic renderer meshes. Named 2026-07-30 so `inferRepr` never has to guess
-  // for them: under the impostor flag their material is a MeshPhongMaterial, which
-  // the `MeshStandardMaterial` test below would misread as 'full'.
+  // for them: under the impostor flag their material is a MeshPhongMaterial, so
+  // material-class inference cannot identify them.
   atomSpheres:               'atomistic',
   atomBonds:                 'atomistic',
 }
 
 /**
  * Fallback for unnamed meshes: the marching-cubes surface is the only thing
- * drawn DoubleSide, and the atomistic renderer is the only thing using a bare
- * MeshStandardMaterial.
+ * drawn DoubleSide. Atomistic meshes are explicitly named above; material class
+ * is not a safe discriminator because hulls and other ordinary PBR geometry also
+ * use MeshStandardMaterial.
  *
- * CAUTION — this must be evaluated against the mesh's ORIGINAL material, before
- * any photo-mode swap. `MeshPhysicalMaterial` extends `MeshStandardMaterial`, so
- * once a swap has run every unnamed mesh infers as 'atomistic'. photo_renderer's
- * own `setMaterialPreset` has that latent bug (documented in
- * memory/project_photo_mode.md); callers that record the representation at swap
- * time, from the source material, sidestep it.
+ * Evaluate this against the original material: the DoubleSide fallback is a
+ * property of the source surface renderer and should not be inferred from a
+ * replacement material whose side may have been copied for another reason.
  */
 export function inferRepr(obj) {
   if (obj.material?.side === THREE.DoubleSide) return 'surface'
-  if (obj.material instanceof THREE.MeshStandardMaterial) return 'atomistic'
   return 'full'
 }
 
-/** Name map first, inference second. */
+/** Name map first, including named representation groups, inference second. */
 export function reprOf(obj) {
-  return MESH_NAME_TO_REPR[obj.name] ?? inferRepr(obj)
+  let node = obj
+  while (node) {
+    const mapped = MESH_NAME_TO_REPR[node.name]
+    if (mapped) return mapped
+    node = node.parent
+  }
+  // Atomistic meshes are explicitly named. Treating every MeshStandardMaterial
+  // as atomistic made ordinary hull-prism and other PBR meshes consume the CPK
+  // selector, which is especially visible when Full and Atomistic differ.
+  return inferRepr(obj)
 }
