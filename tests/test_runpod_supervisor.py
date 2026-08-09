@@ -94,7 +94,7 @@ class FakeClient:
     def __init__(self):
         self.terminated: list[str] = []
 
-    async def terminate_pod(self, pod_id):
+    async def terminate_pod(self, pod_id, **kwargs):
         self.terminated.append(pod_id)
 
     async def list_pods(self):
@@ -366,7 +366,9 @@ class TestBudgetThreading:
             == sup.DEFAULT_BUDGET_USD
         )
 
-    def test_zero_budget_is_rejected_not_promoted_to_default(self, tmp_path, monkeypatch):
+    def test_zero_budget_is_rejected_not_promoted_to_default(
+        self, tmp_path, monkeypatch
+    ):
         """A falsey-dollar cap must never silently become the $15 default."""
         job = _job_with_package(tmp_path)
         job.runpod_budget_usd = 0.0
@@ -518,9 +520,7 @@ class TestRunpodGpuResidentDefault:
     def test_production_defaults_gpu_resident_on(self):
         from backend.api import routes_md
 
-        body = routes_md.ProductionRunRequest(
-            execution_target="runpod", length_ns=1.0
-        )
+        body = routes_md.ProductionRunRequest(execution_target="runpod", length_ns=1.0)
         resolved = routes_md._apply_runpod_gpu_resident_default(body)  # noqa: SLF001
         assert resolved.gpu_resident == "on"
 

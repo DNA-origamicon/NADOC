@@ -338,6 +338,9 @@ class MdJob:
     # ONLY reliable liveness handle, because NAMD renames its process to
     # "NAMD masterPe" and `pgrep namd3` therefore matches nothing.
     runpod_pod_id: Optional[str] = None
+    # Retained when the live handle is cleared so incident reports can still join the
+    # job to provider billing and the durable lifecycle ledger.
+    runpod_last_pod_id: Optional[str] = None
     runpod_pid: Optional[int] = None
     # Last heartbeat epoch written by the chain script.  A stale heartbeat on an
     # INTERRUPTIBLE pod is normal — it means the pod was reclaimed, i.e. resume, not
@@ -445,6 +448,7 @@ class MdJob:
         data.setdefault("resume_history", [])
         data.setdefault("fetch_attempts", 0)
         data.setdefault("runpod_pod_id", None)
+        data.setdefault("runpod_last_pod_id", None)
         data.setdefault("runpod_pid", None)
         data.setdefault("runpod_heartbeat", None)
         data.setdefault("runpod_gpu_key", None)

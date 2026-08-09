@@ -40,6 +40,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
+from backend.api.assembly import _WORKSPACE_DIR
 from backend.api import state as design_state
 from backend.core import runpod_api, runpod_preflight
 from backend.core.md_vram import estimate_profile_from_design
@@ -109,6 +110,62 @@ class _Session:
 _SESSION = _Session()
 
 
+def _reconcile_vanished_jobs(client: RunpodClient, live_pods: list) -> list[str]:
+    """Make durable job state agree with the provider without authorizing new spend."""
+    from backend.api.routes_md import _workspace
+    from backend.core.md_job import MdJob, MdStatus
+
+    live_ids = {p.id for p in live_pods if not p.is_destroyed}
+    reconciled: list[str] = []
+    for job in MdJob.list_jobs(_workspace()):
+        pod_id = job.runpod_pod_id
+        if not (
+            job.execution_target == "runpod"
+            and job.status in (MdStatus.running, MdStatus.paused)
+            and not job.user_stopped
+            and pod_id
+            and pod_id not in live_ids
+        ):
+            continue
+        events = client.lifecycle_events(pod_id)
+        audited_from_creation = any(e.get("event") == "pod_created" for e in events)
+        local_delete = next(
+            (e for e in reversed(events) if e.get("event") == "terminate_requested"),
+            None,
+        )
+        attribution = (
+            f"NADOC requested termination ({local_delete.get('reason', 'unknown reason')})."
+            if local_delete
+            else (
+                "No NADOC termination was recorded; provider/host loss is the likely cause."
+                if audited_from_creation
+                else "No NADOC termination was found, but this pod predates complete audit coverage."
+            )
+        )
+        client.record_lifecycle(
+            "pod_observed_missing",
+            pod_id=pod_id,
+            job_id=job.job_id,
+            attribution=("nadoc_delete" if local_delete else "external_or_unknown"),
+            audited_from_creation=audited_from_creation,
+        )
+        job.status = MdStatus.paused
+        job.resumable = True
+        job.error = f"RunPod pod {pod_id} disappeared. {attribution} Resume manually."
+        job.runpod_last_pod_id = pod_id
+        job.runpod_pod_id = None
+        job.runpod_pid = None
+        job.save(_workspace())
+        reconciled.append(job.job_id)
+        logger.error(
+            "runpod: reconciled vanished pod %s for job %s: %s",
+            pod_id,
+            job.job_id,
+            attribution,
+        )
+    return reconciled
+
+
 class ConnectRequest(BaseModel):
     api_key: str = Field(..., min_length=8)
     # The volume carrying the patched NAMD + packages + checkpoints. A pod without it
@@ -126,7 +183,7 @@ async def connect(body: ConnectRequest):
     A key typed here always wins over the one ``autoconnect`` resolved at startup — that
     is how you use a second account without editing files.
     """
-    client = RunpodClient(body.api_key)
+    client = RunpodClient(body.api_key, audit_dir=_WORKSPACE_DIR)
     try:
         pods = await client.list_pods()
     except RunpodError as exc:
@@ -205,50 +262,15 @@ async def _adopt(
             "runpod: re-attached %d in-flight job(s): %s", len(adopted), adopted
         )
 
-    # A pod can disappear while NADOC itself is down (spot reclaim, host loss, account
-    # interruption).  Such a job is neither adoptable nor an orphan, so the old startup
-    # pass simply overlooked it and left the durable record "running" forever.  Relaunch
-    # it from the network-volume checkpoint.  Explicit Stop and terminal states are
-    # excluded; maximum-lifetime jobs are already PAUSED and require fresh spend consent.
-    live_ids = {p.id for p in live_pods if not p.is_destroyed}
-    restarted: list[str] = []
-    from backend.core.md_job import MdJob, MdStatus
-
-    for job in MdJob.list_jobs(_workspace()):
-        if (
-            job.execution_target == "runpod"
-            and job.status == MdStatus.running
-            and not job.user_stopped
-            and job.runpod_pod_id not in live_ids
-        ):
-            volume_id = job.runpod_volume_id or keep_volume
-            if not volume_id:
-                logger.error(
-                    "runpod: cannot auto-restart disrupted job %s: no network volume",
-                    job.job_id,
-                )
-                continue
-            job.status = MdStatus.paused
-            job.resumable = True
-            job.error = (
-                "Pod disappeared while NADOC was offline; automatically restarting."
-            )
-            job.runpod_pod_id = None
-            job.runpod_pid = None
-            job.save(_workspace())
-            runpod_supervisor.start_job(
-                job,
-                _workspace(),
-                client=client,
-                network_volume_id=volume_id,
-                client_keys=_runpod_client_keys(),
-            )
-            restarted.append(job.job_id)
+    # Disappearance is not authority to spend another full budget. Persist attribution
+    # and pause; the user can resume deliberately from the network-volume checkpoint.
+    disrupted = _reconcile_vanished_jobs(client, live_pods)
 
     payload = _status_payload(live_pods=max(0, len(live_pods) - len(reaped)))
     payload["reaped_pods"] = reaped
     payload["adopted_jobs"] = adopted
-    payload["restarted_jobs"] = restarted
+    payload["restarted_jobs"] = []
+    payload["disrupted_jobs"] = disrupted
     return payload
 
 
@@ -271,7 +293,7 @@ async def autoconnect() -> Optional[dict]:
         )
         return None
 
-    client = RunpodClient(api_key)
+    client = RunpodClient(api_key, audit_dir=_WORKSPACE_DIR)
     try:
         pods = await client.list_pods()
     except Exception as exc:  # noqa: BLE001 — startup must not fail on a RunPod outage
@@ -328,9 +350,11 @@ async def status():
     if not _SESSION.is_connected():
         return _status_payload()
     try:
-        pods = await _SESSION.require().list_pods()
+        client = _SESSION.require()
+        pods = await client.list_pods()
     except RunpodError:
         return _status_payload()
+    _reconcile_vanished_jobs(client, pods)
     return _status_payload(live_pods=len(pods))
 
 
@@ -435,7 +459,7 @@ async def list_pods():
 @router.post("/runpod/pods/{pod_id}/terminate")
 async def terminate(pod_id: str):
     """Manual kill switch. Idempotent — terminating a dead pod is not an error."""
-    await _SESSION.require().terminate_pod(pod_id)
+    await _SESSION.require().terminate_pod(pod_id, reason="manual_api_termination")
     logger.info("runpod: terminated pod %s", pod_id)
     return {"ok": True, "pod_id": pod_id}
 

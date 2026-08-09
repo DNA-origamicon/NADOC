@@ -169,7 +169,11 @@ def _collect_active() -> list[dict]:
                         getattr(j, "runpod_pod_id", None) in pod_names
                     )
                     legacy_name_live = any(j.job_id in ident for ident in pod_names)
-                    if not supervised and not recorded_pod_live and not legacy_name_live:
+                    if (
+                        not supervised
+                        and not recorded_pod_live
+                        and not legacy_name_live
+                    ):
                         try:
                             from backend.core.md_job import MdStatus
 
@@ -182,9 +186,11 @@ def _collect_active() -> list[dict]:
                             j.resumable = True
                             j.error = (
                                 "Remote pod is gone; progress on the network volume is "
-                                "safe. Resume to continue from the checkpoint."
+                                "safe. Awaiting lifecycle attribution."
                             )
-                            j.runpod_pod_id = None
+                            # Preserve the handle until routes_runpod can join it to the
+                            # durable DELETE ledger and record external-vs-NADOC attribution.
+                            j.runpod_last_pod_id = j.runpod_pod_id
                             j.runpod_pid = None
                             j.save(ws)
                         except Exception:  # noqa: BLE001

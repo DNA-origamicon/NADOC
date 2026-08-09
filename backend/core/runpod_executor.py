@@ -606,6 +606,12 @@ async def run_job_on_pod(
         # whole timeout. Registering only at the yield made that spend invisible.
         job.runpod_pod_id = info.id
         job.save(workspace_dir)
+        client.record_lifecycle(
+            "pod_claimed",
+            pod_id=info.id,
+            job_id=job.job_id,
+            terminate_after=job.runpod_terminate_after,
+        )
         if on_pod is not None:
             on_pod(info.id)
 
@@ -675,13 +681,21 @@ async def run_job_on_pod(
         # RunPod's terminateAfter remains the hard bill boundary.
         if job.runpod_pod_id and not submitted:
             with contextlib.suppress(Exception):
-                await client.terminate_pod(job.runpod_pod_id)
+                await client.terminate_pod(
+                    job.runpod_pod_id,
+                    reason="failure_before_chain_submission",
+                    job_id=job.job_id,
+                )
         raise
 
     if job.runpod_pod_id and (
         job.status in (MdStatus.completed, MdStatus.failed) or job.user_stopped
     ):
-        await client.terminate_pod(job.runpod_pod_id)
+        await client.terminate_pod(
+            job.runpod_pod_id,
+            reason=("user_stop" if job.user_stopped else f"job_{job.status.value}"),
+            job_id=job.job_id,
+        )
 
     job.runpod_pid = None
     return job.status
@@ -863,7 +877,11 @@ async def reattach_job_on_pod(
         and job.runpod_pod_id
         and (job.status in (MdStatus.completed, MdStatus.failed) or job.user_stopped)
     ):
-        await client.terminate_pod(job.runpod_pod_id)
+        await client.terminate_pod(
+            job.runpod_pod_id,
+            reason=("user_stop" if job.user_stopped else f"job_{job.status.value}"),
+            job_id=job.job_id,
+        )
 
     job.runpod_pid = None
     job.save(workspace_dir)

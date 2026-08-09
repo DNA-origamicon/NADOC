@@ -216,6 +216,26 @@ Creation uses RunPod GraphQL because the REST create schema does not accept
 mutation accepts one GPU type. The deadline uses the budget and a conservative per-card
 price ceiling; after allocation, the independent on-pod timer uses the pod's actual rate.
 
+### Lifecycle attribution (2026-08-09)
+
+NADOC appends every app-managed creation and termination transition to
+`workspace/.runpod_lifecycle.jsonl` (mode `0600`). A termination is recorded *before* the
+DELETE request and then as succeeded, already absent, or failed. Records include pod id,
+job id when known, reason, provider deadline, and timestamp. This ledger survives the pod,
+whose provider lifecycle fields disappear from the API after deletion.
+
+When a recorded pod is absent from RunPod, NADOC now pauses the job, retains its last pod
+id, and writes `pod_observed_missing` with one of three attributions:
+
+- `nadoc_delete`: a matching `terminate_requested` record exists, including its reason;
+- `external_or_unknown` with creation coverage: NADOC observed creation but issued no
+  DELETE, so provider/host or account-side action is the likely cause;
+- `external_or_unknown` without creation coverage: legacy pod, therefore inconclusive.
+
+Disappearance no longer automatically rents another pod. Checkpoints remain on the network
+volume and Resume requires fresh user authority, preventing an infrastructure loop from
+spending the full budget once per replacement.
+
 This happened: a transient DNS blip (`Temporary failure in name resolution`) on a routine
 poll killed the launcher. `_request` now retries transient/5xx/429 (never 4xx). And the pod
 id is now **persisted the instant it exists** — it wasn't, so the orphan could not even be

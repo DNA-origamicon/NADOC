@@ -24,6 +24,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -364,6 +365,7 @@ class RunpodClient:
         transport: Optional[httpx.AsyncBaseTransport] = None,
         timeout: float = 30.0,
         graphql_url: str = GRAPHQL_API,
+        audit_dir: Optional[Path] = None,
     ):
         if not isinstance(api_key, str):
             raise TypeError(
@@ -374,6 +376,9 @@ class RunpodClient:
             raise RunpodError("A RunPod API key is required.")
         self._api_key = api_key
         self._graphql_url = graphql_url
+        self._audit_path = (
+            Path(audit_dir) / ".runpod_lifecycle.jsonl" if audit_dir else None
+        )
         self._client = httpx.AsyncClient(
             base_url=base_url,
             headers={
@@ -386,6 +391,49 @@ class RunpodClient:
 
     async def aclose(self) -> None:
         await self._client.aclose()
+
+    def record_lifecycle(
+        self, event: str, *, pod_id: Optional[str] = None, **details
+    ) -> None:
+        """Append a durable account-side lifecycle fact when an audit directory is set."""
+        if self._audit_path is None:
+            return
+        record = {
+            "at": datetime.now(timezone.utc)
+            .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z"),
+            "event": event,
+            "pod_id": pod_id,
+            **{k: v for k, v in details.items() if v is not None},
+        }
+        try:
+            self._audit_path.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(
+                self._audit_path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600
+            )
+            try:
+                os.write(fd, (json.dumps(record, sort_keys=True) + "\n").encode())
+            finally:
+                os.close(fd)
+        except OSError:
+            log.exception("runpod: could not persist lifecycle audit event %s", event)
+
+    def lifecycle_events(self, pod_id: str) -> list[dict[str, Any]]:
+        """Durable events for one pod; malformed/torn lines are ignored."""
+        if self._audit_path is None or not self._audit_path.exists():
+            return []
+        events: list[dict[str, Any]] = []
+        try:
+            for line in self._audit_path.read_text().splitlines():
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if event.get("pod_id") == pod_id:
+                    events.append(event)
+        except OSError:
+            log.exception("runpod: could not read lifecycle audit")
+        return events
 
     async def _request(self, method: str, path: str, **kw) -> Any:
         """One API call, retrying TRANSIENT failures.
@@ -451,9 +499,20 @@ class RunpodClient:
         await asyncio.sleep(delay)
 
     async def create_pod(self, payload: dict[str, Any]) -> PodInfo:
-        if payload.get("terminateAfter"):
-            return await self._create_pod_graphql(payload)
-        return parse_pod(await self._request("POST", "/pods", json=payload) or {})
+        info = (
+            await self._create_pod_graphql(payload)
+            if payload.get("terminateAfter")
+            else parse_pod(await self._request("POST", "/pods", json=payload) or {})
+        )
+        self.record_lifecycle(
+            "pod_created",
+            pod_id=info.id,
+            name=payload.get("name"),
+            terminate_after=payload.get("terminateAfter"),
+            gpu_type_ids=payload.get("gpuTypeIds"),
+            interruptible=payload.get("interruptible"),
+        )
+        return info
 
     async def _create_pod_graphql(self, payload: dict[str, Any]) -> PodInfo:
         """Create a GPU pod with provider-enforced expiry.
@@ -532,18 +591,40 @@ class RunpodClient:
             data = data.get("networkVolumes") or data.get("data") or []
         return [parse_network_volume(v) for v in data]
 
-    async def terminate_pod(self, pod_id: str) -> None:
+    async def terminate_pod(
+        self,
+        pod_id: str,
+        *,
+        reason: str = "unspecified",
+        job_id: Optional[str] = None,
+    ) -> None:
         """Destroy the pod. Idempotent: terminating an already-dead pod is not an error.
 
         This is the only thing standing between a bug and an unbounded bill, so it
         swallows 404 (already gone) rather than raising and skipping the cleanup.
         """
+        self.record_lifecycle(
+            "terminate_requested", pod_id=pod_id, reason=reason, job_id=job_id
+        )
         try:
             await self._request("DELETE", f"/pods/{pod_id}")
         except RunpodError as exc:
             if "404" in str(exc):
+                self.record_lifecycle(
+                    "terminate_not_found", pod_id=pod_id, reason=reason, job_id=job_id
+                )
                 return
+            self.record_lifecycle(
+                "terminate_failed",
+                pod_id=pod_id,
+                reason=reason,
+                job_id=job_id,
+                error=str(exc),
+            )
             raise
+        self.record_lifecycle(
+            "terminate_succeeded", pod_id=pod_id, reason=reason, job_id=job_id
+        )
 
     async def wait_for_ssh(
         self,
@@ -574,7 +655,7 @@ class RunpodClient:
             await sleep(poll_s)
 
         with contextlib.suppress(Exception):
-            await self.terminate_pod(pod_id)
+            await self.terminate_pod(pod_id, reason="ssh_readiness_timeout")
         raise RunpodError(
             f"Pod {pod_id} did not expose SSH within {timeout_s:.0f}s "
             f"(last status {last.desired_status if last else 'unknown'}); terminated it."
@@ -643,7 +724,7 @@ class RunpodClient:
                 )
             elif terminate_on_exit:
                 with contextlib.suppress(Exception):
-                    await self.terminate_pod(info.id)
+                    await self.terminate_pod(info.id, reason="pod_context_exit")
 
     @contextlib.asynccontextmanager
     async def adopt(
@@ -677,4 +758,4 @@ class RunpodClient:
                 )
             elif terminate_on_exit:
                 with contextlib.suppress(Exception):
-                    await self.terminate_pod(pod_id)
+                    await self.terminate_pod(pod_id, reason="adopt_context_exit")

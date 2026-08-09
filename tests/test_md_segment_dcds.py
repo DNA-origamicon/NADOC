@@ -108,8 +108,8 @@ def test_an_unresumed_segment_is_unchanged(job):
     assert segs[0][0] == "prod"
 
 
-def test_continuation_entries_are_labelled_distinctly(job):
-    """Consumers that show segment names would otherwise print the same label twice."""
+def test_continuation_files_keep_one_logical_segment_label(job):
+    """Physical restart pieces must not become separate user-facing job segments."""
     from backend.api.routes_md import _md_segment_dcds
 
     j, pkg = job
@@ -118,9 +118,7 @@ def test_continuation_entries_are_labelled_distinctly(job):
 
     labels = [s[0] for s in _md_segment_dcds(j)]
 
-    assert labels[0] == "prod"
-    assert labels[1] != labels[0]
-    assert "cont1" in labels[1]
+    assert labels == ["prod", "prod"]
 
 
 def test_stage_rides_along_on_every_piece(job):
@@ -131,6 +129,22 @@ def test_stage_rides_along_on_every_piece(job):
     _write_dcd(pkg / "output" / "prod.cont1.dcd", 2, start_time=200.0)
 
     assert {s[1] for s in _md_segment_dcds(j)} == {"md"}
+
+
+def test_public_trajectory_meta_coalesces_restart_pieces(job):
+    """All files are counted, but the UI receives one segment and no restart marker."""
+    from backend.api.routes_md import _md_segment_dcds
+    from backend.core.md_trajectory import md_composite_meta
+
+    j, pkg = job
+    _write_dcd(pkg / "output" / "prod.dcd", 2, start_time=0.0)
+    _write_dcd(pkg / "output" / "prod.cont1.dcd", 3, start_time=200.0)
+
+    meta = md_composite_meta(_md_segment_dcds(j), stride=1)
+
+    assert meta["total_raw"] == 5
+    assert meta["stages"] == [{"name": "prod", "kind": "md", "n_frames": 5, "n_raw": 5}]
+    assert meta["markers"] == []
 
 
 def test_empty_and_missing_files_are_skipped(job):

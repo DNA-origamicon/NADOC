@@ -292,6 +292,53 @@ class TestClient:
 
         _run(go())
 
+    def test_lifecycle_audit_survives_pod_deletion(self, tmp_path):
+        requests = []
+
+        async def go():
+            c = RunpodClient(
+                "key",
+                transport=httpx.MockTransport(
+                    lambda req: requests.append(req) or httpx.Response(200)
+                ),
+                audit_dir=tmp_path,
+            )
+            c.record_lifecycle("pod_created", pod_id="p1", job_id="j1")
+            await c.terminate_pod("p1", reason="job_completed", job_id="j1")
+            events = c.lifecycle_events("p1")
+            await c.aclose()
+            return events
+
+        events = _run(go())
+        assert [e["event"] for e in events] == [
+            "pod_created",
+            "terminate_requested",
+            "terminate_succeeded",
+        ]
+        assert events[1]["reason"] == "job_completed"
+        assert events[1]["job_id"] == "j1"
+        assert (tmp_path / ".runpod_lifecycle.jsonl").stat().st_mode & 0o777 == 0o600
+
+    def test_failed_delete_is_durably_distinct_from_provider_loss(self, tmp_path):
+        async def go():
+            c = RunpodClient(
+                "key",
+                transport=httpx.MockTransport(
+                    lambda req: httpx.Response(400, text="bad")
+                ),
+                audit_dir=tmp_path,
+            )
+            with pytest.raises(RunpodError):
+                await c.terminate_pod("p1", reason="explicit_job_stop", job_id="j1")
+            events = c.lifecycle_events("p1")
+            await c.aclose()
+            return events
+
+        assert [e["event"] for e in _run(go())] == [
+            "terminate_requested",
+            "terminate_failed",
+        ]
+
     def test_wait_for_ssh_polls_until_the_ip_appears(self):
         calls = {"n": 0}
 

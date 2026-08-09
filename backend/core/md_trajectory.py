@@ -1351,7 +1351,8 @@ def md_composite_meta(
     for (name, kind, c), keep_idxs in zip(counts, picked):
         if c <= 0:
             continue
-        if out_n:
+        same_logical_stage = bool(out_stages and out_stages[-1]["name"] == name)
+        if out_n and not same_logical_stage:
             markers.append(
                 {
                     "frame": out_n,
@@ -1360,9 +1361,18 @@ def md_composite_meta(
                     "stage_name": name,
                 }
             )
-        out_stages.append(
-            {"name": name, "kind": kind or "md", "n_frames": len(keep_idxs), "n_raw": c}
-        )
+        if same_logical_stage:
+            out_stages[-1]["n_frames"] += len(keep_idxs)
+            out_stages[-1]["n_raw"] += c
+        else:
+            out_stages.append(
+                {
+                    "name": name,
+                    "kind": kind or "md",
+                    "n_frames": len(keep_idxs),
+                    "n_raw": c,
+                }
+            )
         out_n += len(keep_idxs)
     return {
         "n_frames": out_n,
@@ -1477,7 +1487,8 @@ def md_composite_trajectory(
     for (name, stage, _dcd), count, picked in zip(segments, seg_counts, seg_picked):
         if count <= 0:
             continue
-        if out_frames:
+        same_logical_stage = bool(out_stages and out_stages[-1]["name"] == name)
+        if out_frames and not same_logical_stage:
             run_no += 1
             markers.append(
                 {
@@ -1487,9 +1498,12 @@ def md_composite_trajectory(
                     "stage_name": name,
                 }
             )
-        out_stages.append(
-            {"name": name, "kind": stage or "md", "n_frames": len(picked)}
-        )
+        if same_logical_stage:
+            out_stages[-1]["n_frames"] += len(picked)
+        else:
+            out_stages.append(
+                {"name": name, "kind": stage or "md", "n_frames": len(picked)}
+            )
         for gidx in picked:
             p_nm, normals, tpos, tnorm = _extract_md_nadoc_frame(
                 ctx, gidx, with_termini=True

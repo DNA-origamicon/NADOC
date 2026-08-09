@@ -779,8 +779,9 @@ def _md_segment_dcds(job: MdJob) -> list[tuple[str, str, Path]]:
     104.40–161.90 ns, so the newest-only rule saw 36% of the run and every consumer
     (RMSF, metrics, the scrub view, the weld trace) inherited that.
 
-    One entry per DCD: the consumers all concatenate, and the extra label distinguishes
-    the pieces where a UI shows segment names.
+    One entry per DCD: consumers concatenate every physical piece, but every piece keeps
+    the SAME logical segment label. ``md_trajectory`` coalesces adjacent equal labels for
+    public stages/markers, so restart mechanics never leak into the jobs UI.
 
     OVERLAP: a piece whose first frame predates the previous piece's last frame
     re-simulates ground already covered, which happens when ``restartfreq`` does not
@@ -812,9 +813,8 @@ def _md_segment_dcds(job: MdJob) -> list[tuple[str, str, Path]]:
         def _order(d, _seg=seg.name):
             return (_dcd_first_step(d), 0 if d.name == f"{_seg}.dcd" else 1, d.name)
 
-        for i, dcd in enumerate(sorted(dict.fromkeys(dcds), key=_order)):
-            label = seg.name if i == 0 else f"{seg.name} ({dcd.stem.split('.')[-1]})"
-            out.append((label, stage, dcd))
+        for dcd in sorted(dict.fromkeys(dcds), key=_order):
+            out.append((seg.name, stage, dcd))
     return out
 
 
@@ -3767,7 +3767,9 @@ async def list_md_jobs() -> list[dict]:
                 j.runpod_pod_id = None
                 j.runpod_pid = None
                 j.save(ws)
-                volume_id = j.runpod_volume_id or routes_runpod._SESSION.network_volume_id  # noqa: SLF001
+                volume_id = (
+                    j.runpod_volume_id or routes_runpod._SESSION.network_volume_id
+                )  # noqa: SLF001
                 if volume_id:
                     # The user already authorised this run and its per-pod budget.  A
                     # vanished pod is an interruptible-infrastructure event, so resume

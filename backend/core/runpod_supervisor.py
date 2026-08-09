@@ -319,7 +319,9 @@ async def stop_job(job_id: str, *, client: Optional[RunpodClient] = None) -> boo
 
     if pod_id and client is not None:
         with contextlib.suppress(Exception):
-            await client.terminate_pod(pod_id)
+            await client.terminate_pod(
+                pod_id, reason="explicit_job_stop", job_id=job_id
+            )
         log.info("runpod: stop_job terminated pod %s for job %s", pod_id, job_id)
 
     _RUNNING.pop(job_id, None)
@@ -391,7 +393,7 @@ async def reap_orphan_pods(
             )
             continue
         with contextlib.suppress(Exception):
-            await client.terminate_pod(pod.id)
+            await client.terminate_pod(pod.id, reason="unclaimed_nadoc_orphan")
             killed.append(pod.id)
             log.warning("runpod: reaped orphaned pod %s (%s)", pod.id, name)
     return killed, adoptable

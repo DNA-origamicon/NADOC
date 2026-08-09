@@ -55,6 +55,8 @@ def _mock_runpod(monkeypatch, handler):
     real_init = routes_runpod.RunpodClient.__init__
 
     def patched(self, api_key, **kw):
+        # Route tests use fake pod ids; never write them into the real workspace audit.
+        kw.pop("audit_dir", None)
         kw["transport"] = httpx.MockTransport(handler)
         real_init(self, api_key, **kw)
 
@@ -159,6 +161,73 @@ class TestConnect:
         asyncio.run(routes_runpod._SESSION.disconnect())  # noqa: SLF001
         assert old.closed is False
         assert routes_runpod._SESSION.client is None  # noqa: SLF001
+
+
+class TestVanishedPodReconciliation:
+    def _job(self, tmp_path):
+        from backend.core.md_job import MdStatus, new_job
+
+        job = new_job("d", "equilibrium_aware_namd", "d", "package/d")
+        job.execution_target = "runpod"
+        job.status = MdStatus.running
+        job.runpod_pod_id = "gone-pod"
+        job.save(tmp_path)
+        return job
+
+    def test_audited_external_disappearance_pauses_without_spending_again(
+        self, tmp_path, monkeypatch
+    ):
+        from backend.api import routes_md
+        from backend.core.md_job import MdJob, MdStatus
+        from backend.core.runpod_api import RunpodClient
+
+        monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+        job = self._job(tmp_path)
+        client = RunpodClient(
+            "key",
+            transport=httpx.MockTransport(lambda req: httpx.Response(200, json=[])),
+            audit_dir=tmp_path,
+        )
+        client.record_lifecycle("pod_created", pod_id="gone-pod", job_id=job.job_id)
+
+        assert routes_runpod._reconcile_vanished_jobs(client, []) == [job.job_id]  # noqa: SLF001
+        saved = MdJob.load(job.job_id, tmp_path)
+        assert saved.status == MdStatus.paused
+        assert saved.resumable is True
+        assert saved.runpod_pod_id is None
+        assert saved.runpod_last_pod_id == "gone-pod"
+        assert "No NADOC termination was recorded" in (saved.error or "")
+        assert not any(
+            e["event"] == "terminate_requested"
+            for e in client.lifecycle_events("gone-pod")
+        )
+        asyncio.run(client.aclose())
+
+    def test_local_delete_is_attributed_to_its_recorded_reason(
+        self, tmp_path, monkeypatch
+    ):
+        from backend.api import routes_md
+        from backend.core.md_job import MdJob
+        from backend.core.runpod_api import RunpodClient
+
+        monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+        job = self._job(tmp_path)
+        client = RunpodClient(
+            "key",
+            transport=httpx.MockTransport(lambda req: httpx.Response(200, json=[])),
+            audit_dir=tmp_path,
+        )
+        client.record_lifecycle("pod_created", pod_id="gone-pod", job_id=job.job_id)
+        client.record_lifecycle(
+            "terminate_requested",
+            pod_id="gone-pod",
+            job_id=job.job_id,
+            reason="explicit_job_stop",
+        )
+
+        routes_runpod._reconcile_vanished_jobs(client, [])  # noqa: SLF001
+        assert "explicit_job_stop" in (MdJob.load(job.job_id, tmp_path).error or "")
+        asyncio.run(client.aclose())
 
 
 class TestAutoconnect:
