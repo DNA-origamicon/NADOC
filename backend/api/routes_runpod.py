@@ -86,7 +86,20 @@ class _Session:
 
     async def disconnect(self) -> None:
         if self.client is not None:
-            await self.client.aclose()
+            # A supervisor keeps this exact client instance while a detached chain runs.
+            # Closing it during a UI reconnect/disconnect turns a harmless controller
+            # event into a polling failure. The task owns the retired instance until it
+            # finishes; provider terminateAfter bounds the bill if NADOC never returns.
+            from backend.core import runpod_supervisor
+
+            if not runpod_supervisor.running_job_ids():
+                await self.client.aclose()
+            else:
+                logger.info(
+                    "runpod: retiring session client without closing it; %d supervised "
+                    "job(s) still use it",
+                    len(runpod_supervisor.running_job_ids()),
+                )
         self.client = None
         self.api_key = None
         self.key_source = "none"
@@ -217,7 +230,9 @@ async def _adopt(
                 continue
             job.status = MdStatus.paused
             job.resumable = True
-            job.error = "Pod disappeared while NADOC was offline; automatically restarting."
+            job.error = (
+                "Pod disappeared while NADOC was offline; automatically restarting."
+            )
             job.runpod_pod_id = None
             job.runpod_pid = None
             job.save(_workspace())

@@ -192,7 +192,32 @@ async def _terminate_runpod_pods() -> None:
         if not session.is_connected():
             return
         live = runpod_supervisor.running_job_ids()
-        if live and under_reloader():
+        protected: list[str] = []
+        legacy: list[str] = []
+        from backend.core.md_job import MdJob
+
+        for job_id in live:
+            try:
+                job = MdJob.load(job_id, _WORKSPACE_DIR)
+            except Exception:  # noqa: BLE001
+                legacy.append(job_id)
+                continue
+            (protected if job.runpod_terminate_after else legacy).append(job_id)
+
+        if protected:
+            # These pods carry a provider-owned terminateAfter deadline. NADOC exiting
+            # is no longer authority to destroy healthy science; the next process adopts
+            # them, and RunPod itself enforces the worst-case bill if it never does.
+            from backend.core import runpod_api
+
+            runpod_api.set_handoff(True)
+            logger.warning(
+                "runpod: leaving %d provider-expiring pod(s) running across shutdown: %s",
+                len(protected),
+                ", ".join(protected),
+            )
+
+        if legacy and under_reloader():
             # Skipping the loop below is NOT enough. The pod dies in ``client.pod()``'s
             # finally, and that fires on the CancelledError every in-flight task gets at
             # process exit — so the run would be torn down on the unwind regardless. The
@@ -204,11 +229,11 @@ async def _terminate_runpod_pods() -> None:
                 "runpod: dev-server RELOAD — leaving %d pod(s) up for the next process to "
                 "adopt (%s). Reconnect to RunPod if it does not re-attach; an unadopted "
                 "pod bills until it is reaped.",
-                len(live),
-                ", ".join(live),
+                len(legacy),
+                ", ".join(legacy),
             )
             return
-        for job_id in live:
+        for job_id in legacy:
             with contextlib.suppress(Exception):
                 await runpod_supervisor.stop_job(job_id, client=session.client)
     except Exception:  # noqa: BLE001 — shutdown must not raise

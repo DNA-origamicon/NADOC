@@ -15,13 +15,14 @@ scheduler at all:
     Alpine   sbatch  → squeue/sacct → scancel
     RunPod   rent a machine → run a script → track a PID → DESTROY the machine
 
-⚠️ **The pod is the meter.** It bills from creation to termination regardless of whether
-it is computing. Every path here that creates a pod must destroy it; ``run_job_on_pod``
-does so in a ``finally`` via ``RunpodClient.pod``.
+⚠️ **The pod is the meter.** It bills from creation to termination. RunPod now owns the
+hard ``terminateAfter`` deadline; NADOC tears down terminal/pre-submit cases immediately
+but preserves a submitted chain across supervisor or SSH loss for later adoption.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import time
@@ -35,6 +36,7 @@ from backend.core.runpod_api import (
     RunpodError,
     build_create_payload,
     ssh_endpoint,
+    termination_deadline,
 )
 from backend.core.runpod_conn import RunpodConnection, RunpodSSHError
 from backend.core.slurm_script import LIVE_METRICS_NAME
@@ -183,7 +185,9 @@ async def _ensure_mdanalysis(conn: RunpodConnection) -> None:
     # retries: setup runs over a freshly-booted pod whose SSH sometimes drops a channel
     # (EU-RO-1 flake); a transient drop here once aborted the whole run. probe + pip are
     # idempotent, so reconnect-and-retry rather than crash.
-    probe = 'python3 -c "import MDAnalysis, numpy, scipy; print(MDAnalysis.__version__)"'
+    probe = (
+        'python3 -c "import MDAnalysis, numpy, scipy; print(MDAnalysis.__version__)"'
+    )
     res = await conn.run(probe, retries=3)
     if res.rc == 0:
         log.info("runpod: MDAnalysis %s already present", res.stdout.strip())
@@ -479,7 +483,12 @@ async def fetch_results(
 
 
 def pod_payloads_for(
-    job: MdJob, n_atoms: int, *, network_volume_id: str, interruptible: bool = True
+    job: MdJob,
+    n_atoms: int,
+    *,
+    network_volume_id: str,
+    interruptible: bool = False,
+    budget_usd: float = DEFAULT_BUDGET_USD,
 ) -> list[dict]:
     """Size the pod from the system (MEASURED VRAM model), cheapest tier first.
 
@@ -489,6 +498,11 @@ def pod_payloads_for(
     volume's region — which is why a hand-made pod silently lands on SECURE at ~2x the
     price ($0.69/hr vs $0.34). We try cheapest-first and walk down rather than fail.
     """
+    if interruptible:
+        raise RunpodError(
+            "Interruptible RunPod launches are disabled: provider-enforced "
+            "terminateAfter is available only on the on-demand creation path."
+        )
     plan = plan_execution(n_atoms)
     if plan["gpu"] is None:
         raise RunpodError(plan["reason"])
@@ -518,22 +532,32 @@ def pod_payloads_for(
     # pins us) it frequently has NO card at all — every COMMUNITY attempt so far returned
     # 500 "There are no instances currently available". For an unattended overnight run
     # the halved price is not worth the variance.
+    from backend.core.runpod_script import DEFAULT_MAX_USD_PER_HOUR, GPU_TYPES
+
+    # ``terminateAfter`` is a GraphQL creation field and that mutation accepts one GPU
+    # type. Try the ranked cards individually. Each gets a conservative provider-owned
+    # deadline; the on-pod timer is retained as a second, actual-rate-derived guard.
+    prices = {g.key: float(g.usd_per_hour) for g in GPU_TYPES}
     payloads = []
-    for cloud_type, spot in (("SECURE", interruptible), ("SECURE", False)):
+    for gpu_id in gpu_ids:
+        price_ceiling = max(DEFAULT_MAX_USD_PER_HOUR, prices.get(gpu_id, 0.0))
         payloads.append(
             build_create_payload(
                 name=name,
-                gpu_type_ids=gpu_ids,
+                gpu_type_ids=[gpu_id],
                 network_volume_id=network_volume_id,
-                interruptible=spot,
-                cloud_type=cloud_type,
+                interruptible=interruptible,
+                cloud_type="SECURE",
+                terminate_after=termination_deadline(
+                    lifetime_for_budget(budget_usd, price_ceiling)
+                ),
             )
         )
     return payloads
 
 
 def pod_payload_for(
-    job: MdJob, n_atoms: int, *, network_volume_id: str, interruptible: bool = True
+    job: MdJob, n_atoms: int, *, network_volume_id: str, interruptible: bool = False
 ) -> dict:
     """The preferred (cheapest) payload. See :func:`pod_payloads_for` for the fallbacks."""
     return pod_payloads_for(
@@ -552,22 +576,28 @@ async def run_job_on_pod(
     client_keys: Optional[list[str]] = None,
     poll_s: float = 30.0,
     sleep=None,
-    interruptible: bool = True,
+    interruptible: bool = False,
     on_pod: Optional[Callable[[str], None]] = None,
     budget_usd: float = DEFAULT_BUDGET_USD,
 ) -> MdStatus:
-    """Provision → stage → run → fetch → **destroy**. The pod cannot outlive this call.
+    """Provision → stage → run, with provider-owned expiry and explicit teardown.
 
-    A reclaimed interruptible pod is NOT a failure: the chain script is idempotent, so
-    the caller simply calls this again and every completed step is skipped. That is the
-    whole reason interruptible pods are the default.
+    The provider deadline is installed before the pod exists. Once the chain has been
+    submitted, controller/SSH failures leave it running for later adoption; terminal
+    outcomes and failures before submission still trigger immediate teardown.
     """
     import asyncio
 
     sleep = sleep or asyncio.sleep
     payloads = pod_payloads_for(
-        job, n_atoms, network_volume_id=network_volume_id, interruptible=interruptible
+        job,
+        n_atoms,
+        network_volume_id=network_volume_id,
+        interruptible=interruptible,
+        budget_usd=budget_usd,
     )
+    job.runpod_terminate_after = min(p["terminateAfter"] for p in payloads)
+    job.save(workspace_dir)
 
     # cheapest tier first; fall back when the volume's datacenter has no instances
     def _created(info):
@@ -579,55 +609,79 @@ async def run_job_on_pod(
         if on_pod is not None:
             on_pod(info.id)
 
-    async with client.pod(
-        payloads[0], fallbacks=payloads[1:], on_created=_created
-    ) as pod:  # terminates in a finally
-        job.runpod_pod_id = pod.id
-        # ...and PERSIST it the instant it exists, for exactly the same reason: a crash
-        # between here and the first save would leave a billing pod that no later process
-        # could even name, let alone reap.
-        job.save(workspace_dir)
-        if on_pod is not None:
-            # Register the pod id the INSTANT it exists. A caller that cannot name the
-            # pod cannot kill it, and an unkillable pod bills until a human notices.
-            on_pod(pod.id)
-        endpoint = ssh_endpoint(pod)
-        if endpoint is None:  # wait_for_ssh guarantees this, belt+braces
-            raise RunpodError(f"pod {pod.id} exposed no SSH endpoint")
-        host, port = endpoint
+    submitted = False
+    try:
+        async with client.pod(
+            payloads[0],
+            fallbacks=payloads[1:],
+            on_created=_created,
+            terminate_on_exit=False,
+        ) as pod:
+            job.runpod_pod_id = pod.id
+            # ...and PERSIST it the instant it exists, for exactly the same reason: a crash
+            # between here and the first save would leave a billing pod that no later process
+            # could even name, let alone reap.
+            job.save(workspace_dir)
+            if on_pod is not None:
+                # Register the pod id the INSTANT it exists. A caller that cannot name the
+                # pod cannot kill it, and an unkillable pod bills until a human notices.
+                on_pod(pod.id)
+            endpoint = ssh_endpoint(pod)
+            if endpoint is None:  # wait_for_ssh guarantees this, belt+braces
+                raise RunpodError(f"pod {pod.id} exposed no SSH endpoint")
+            host, port = endpoint
 
-        conn = RunpodConnection(
-            host=host, port=port, pod_id=pod.id, client_keys=client_keys
-        )
-        await conn.connect()
-        try:
-            vcpus = await _remote_vcpus(conn)
-            # Derive the kill-switch from the rate of the pod we ACTUALLY got — not a
-            # hardcoded duration. The fallback list means we may be on the $0.34 card or
-            # the $0.82 one, and the same budget buys very different wall-clocks.
-            lifetime_s = lifetime_for_budget(budget_usd, pod.cost_per_hr)
-            log.info(
-                "runpod: pod %s at $%s/hr, $%.2f budget -> kill-switch at %.1f h",
-                pod.id,
-                pod.cost_per_hr,
-                budget_usd,
-                lifetime_s / 3600,
+            conn = RunpodConnection(
+                host=host, port=port, pod_id=pod.id, client_keys=client_keys
             )
-            await submit_job(
-                job,
-                workspace_dir,
-                conn=conn,
-                min_name=min_name,
-                n_atoms=n_atoms,
-                vcpus=vcpus,
-                max_lifetime_s=lifetime_s,
-            )
+            await conn.connect()
+            try:
+                vcpus = await _remote_vcpus(conn)
+                # Derive the kill-switch from the rate of the pod we ACTUALLY got — not a
+                # hardcoded duration. The fallback list means we may be on the $0.34 card or
+                # the $0.82 one, and the same budget buys very different wall-clocks.
+                lifetime_s = lifetime_for_budget(budget_usd, pod.cost_per_hr)
+                log.info(
+                    "runpod: pod %s at $%s/hr, $%.2f budget -> kill-switch at %.1f h",
+                    pod.id,
+                    pod.cost_per_hr,
+                    budget_usd,
+                    lifetime_s / 3600,
+                )
+                await submit_job(
+                    job,
+                    workspace_dir,
+                    conn=conn,
+                    min_name=min_name,
+                    n_atoms=n_atoms,
+                    vcpus=vcpus,
+                    max_lifetime_s=lifetime_s,
+                )
+                submitted = True
 
-            await _supervise_run(
-                job, workspace_dir, conn=conn, pod_id=pod.id, poll_s=poll_s, sleep=sleep
-            )
-        finally:
-            await conn.close()
+                await _supervise_run(
+                    job,
+                    workspace_dir,
+                    conn=conn,
+                    pod_id=pod.id,
+                    poll_s=poll_s,
+                    sleep=sleep,
+                )
+            finally:
+                await conn.close()
+    except BaseException:
+        # A pod that never received the detached chain has nothing useful to preserve.
+        # Once submitted, however, SSH/NADOC loss must not kill healthy computation;
+        # RunPod's terminateAfter remains the hard bill boundary.
+        if job.runpod_pod_id and not submitted:
+            with contextlib.suppress(Exception):
+                await client.terminate_pod(job.runpod_pod_id)
+        raise
+
+    if job.runpod_pod_id and (
+        job.status in (MdStatus.completed, MdStatus.failed) or job.user_stopped
+    ):
+        await client.terminate_pod(job.runpod_pod_id)
 
     job.runpod_pid = None
     return job.status
@@ -771,7 +825,10 @@ async def reattach_job_on_pod(
     if not job.runpod_pod_id:
         raise RunpodError(f"job {job.job_id} has no pod to adopt")
 
-    async with client.adopt(job.runpod_pod_id) as pod:
+    async with client.adopt(
+        job.runpod_pod_id,
+        terminate_on_exit=not bool(job.runpod_terminate_after),
+    ) as pod:
         if on_pod is not None:
             on_pod(pod.id)  # registered = killable; do this before anything can fail
         endpoint = ssh_endpoint(pod)
@@ -800,6 +857,13 @@ async def reattach_job_on_pod(
             )
         finally:
             await conn.close()
+
+    if (
+        job.runpod_terminate_after
+        and job.runpod_pod_id
+        and (job.status in (MdStatus.completed, MdStatus.failed) or job.user_stopped)
+    ):
+        await client.terminate_pod(job.runpod_pod_id)
 
     job.runpod_pid = None
     job.save(workspace_dir)

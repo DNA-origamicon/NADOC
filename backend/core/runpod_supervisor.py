@@ -133,7 +133,7 @@ def start_job(
     client: RunpodClient,
     network_volume_id: str,
     client_keys: Optional[list[str]] = None,
-    interruptible: bool = True,
+    interruptible: bool = False,
     budget_usd: Optional[float] = None,
 ) -> None:
     """Launch the job on a pod in the background. Returns immediately.
@@ -150,11 +150,11 @@ def start_job(
     # default cap.  Routes reject non-positive caps now, but keep the core boundary
     # explicit too: callers outside FastAPI must never turn "$0" into "$15".
     configured_budget = (
-        job.runpod_budget_usd
-        if job.runpod_budget_usd is not None
-        else budget_usd
+        job.runpod_budget_usd if job.runpod_budget_usd is not None else budget_usd
     )
-    budget = DEFAULT_BUDGET_USD if configured_budget is None else float(configured_budget)
+    budget = (
+        DEFAULT_BUDGET_USD if configured_budget is None else float(configured_budget)
+    )
     if budget <= 0:
         raise ValueError("RunPod budget must be greater than $0.")
 
@@ -203,9 +203,7 @@ def start_job(
                 # made the cap "$N per retry" and could spend 20x what the wizard showed.
                 # Leave the checkpoint paused; a deliberate Start is the next authority.
                 budget_exhausted = bool(
-                    resumable
-                    and job.error
-                    and "maximum lifetime" in job.error.lower()
+                    resumable and job.error and "maximum lifetime" in job.error.lower()
                 )
                 if budget_exhausted:
                     break
@@ -255,7 +253,9 @@ def start_job(
             # spot reclaim.  The pod context has already torn down anything billable and
             # the volume holds completed checkpoints, so feed it through the same bounded
             # automatic-resume policy on the next supervisor pass.
-            log.warning("runpod job %s infrastructure interruption: %s", job.job_id, exc)
+            log.warning(
+                "runpod job %s infrastructure interruption: %s", job.job_id, exc
+            )
             job.status = MdStatus.paused
             job.resumable = True
             job.resubmit_count += 1
@@ -273,17 +273,19 @@ def start_job(
             if retry:
                 asyncio.get_running_loop().call_later(
                     RESUME_BACKOFF_S,
-                    lambda: start_job(
-                        job,
-                        workspace_dir,
-                        client=client,
-                        network_volume_id=network_volume_id,
-                        client_keys=client_keys,
-                        interruptible=interruptible,
-                        budget_usd=budget,
-                    )
-                    if _should_auto_resume(job) and not is_running(job.job_id)
-                    else None,
+                    lambda: (
+                        start_job(
+                            job,
+                            workspace_dir,
+                            client=client,
+                            network_volume_id=network_volume_id,
+                            client_keys=client_keys,
+                            interruptible=interruptible,
+                            budget_usd=budget,
+                        )
+                        if _should_auto_resume(job) and not is_running(job.job_id)
+                        else None
+                    ),
                 )
         except Exception as exc:  # noqa: BLE001 — a crash must not strand a pod
             log.exception("runpod job %s failed", job.job_id)

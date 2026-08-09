@@ -360,6 +360,9 @@ class MdJob:
     runpod_gpu_key: Optional[str] = None
     runpod_budget_usd: Optional[float] = None
     runpod_volume_id: Optional[str] = None
+    # RunPod-owned absolute expiration installed at pod creation. Unlike the on-pod
+    # watchdog, this destroys the rented resource even when NADOC and SSH are gone.
+    runpod_terminate_after: Optional[str] = None
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -447,6 +450,7 @@ class MdJob:
         data.setdefault("runpod_gpu_key", None)
         data.setdefault("runpod_budget_usd", None)
         data.setdefault("runpod_volume_id", None)
+        data.setdefault("runpod_terminate_after", None)
         return cls(**data)
 
     @classmethod

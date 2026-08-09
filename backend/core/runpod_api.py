@@ -1,4 +1,4 @@
-"""RunPod REST client — provision, poll and DESTROY a GPU pod.
+"""RunPod REST/GraphQL client — provision, poll and bound a GPU pod.
 
 Endpoint: ``https://rest.runpod.io/v1/pods`` (REST v1, not the legacy GraphQL API).
 
@@ -9,10 +9,9 @@ Split deliberately in two:
 * **``RunpodClient``** — a thin httpx wrapper. Its tests inject an httpx MockTransport,
   so the whole module is testable without renting anything.
 
-⚠️ **The pod is the meter.** A pod bills from creation to termination, whether it is
-computing or idle. Every code path that creates one MUST destroy it — see
-``RunpodClient.pod`` (an async context manager that terminates in a ``finally``). An
-orphaned pod costs $0.34–$2.39/hr until a human notices.
+⚠️ **The pod is the meter.** Budgeted GPU creation uses GraphQL ``terminateAfter`` so
+RunPod owns the hard deadline. NADOC still destroys pre-submit failures and terminal runs
+immediately, but a submitted chain may intentionally outlive NADOC and be adopted later.
 
 The API key is resolved by ``resolve_api_key`` — ``$RUNPOD_API_KEY`` first, then
 ``~/.runpod_key`` — which is the same order every script in
@@ -27,12 +26,14 @@ import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
 import httpx
 
 log = logging.getLogger(__name__)
+GRAPHQL_API = "https://api.runpod.io/graphql"
 
 # ── Hand-off (dev-server reload) ──────────────────────────────────────────────
 # A pod is destroyed in ``pod()``/``adopt()``'s ``finally``, and that is STRUCTURAL: at
@@ -143,13 +144,14 @@ def build_create_payload(
     name: str,
     gpu_type_ids: list[str],
     network_volume_id: str,
-    interruptible: bool = True,
+    interruptible: bool = False,
     gpu_count: int = 1,
     image: str = DEFAULT_IMAGE,
     container_disk_gb: int = DEFAULT_CONTAINER_DISK_GB,
     cloud_type: str = "COMMUNITY",
     env: Optional[dict[str, str]] = None,
     allowed_cuda_versions: Optional[list[str]] = None,
+    terminate_after: Optional[str] = None,
 ) -> dict[str, Any]:
     """Body for ``POST /v1/pods``.
 
@@ -161,8 +163,8 @@ def build_create_payload(
     * ``ports`` must include ``22/tcp`` or there is no direct-TCP SSH, and the SSH
       *proxy* (``ssh.runpod.io``) does not reliably carry ``rsync``/``scp`` — which is
       how we stage a 2 GB package.
-    * ``interruptible=True`` is the default because the chain script is idempotent: a
-      reclaim is a resume, not a failure. It is roughly half price.
+    * ``interruptible=False`` is the default for long scientific runs: provider-side
+      expiry bounds cost, while avoiding reclaims that can discard an unfinished segment.
     """
     payload: dict[str, Any] = {
         "name": name,
@@ -190,7 +192,20 @@ def build_create_payload(
     }
     if env:
         payload["env"] = dict(env)
+    if terminate_after:
+        payload["terminateAfter"] = str(terminate_after)
     return payload
+
+
+def termination_deadline(lifetime_s: int, *, now: Optional[datetime] = None) -> str:
+    """Absolute UTC deadline for RunPod's provider-owned ``terminateAfter`` guard."""
+    base = now or datetime.now(timezone.utc)
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=timezone.utc)
+    deadline = base.astimezone(timezone.utc) + timedelta(
+        seconds=max(1, int(lifetime_s))
+    )
+    return deadline.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def parse_pod(data: dict[str, Any]) -> PodInfo:
@@ -348,6 +363,7 @@ class RunpodClient:
         base_url: str = API_BASE,
         transport: Optional[httpx.AsyncBaseTransport] = None,
         timeout: float = 30.0,
+        graphql_url: str = GRAPHQL_API,
     ):
         if not isinstance(api_key, str):
             raise TypeError(
@@ -356,6 +372,8 @@ class RunpodClient:
             )
         if not api_key:
             raise RunpodError("A RunPod API key is required.")
+        self._api_key = api_key
+        self._graphql_url = graphql_url
         self._client = httpx.AsyncClient(
             base_url=base_url,
             headers={
@@ -433,7 +451,66 @@ class RunpodClient:
         await asyncio.sleep(delay)
 
     async def create_pod(self, payload: dict[str, Any]) -> PodInfo:
+        if payload.get("terminateAfter"):
+            return await self._create_pod_graphql(payload)
         return parse_pod(await self._request("POST", "/pods", json=payload) or {})
+
+    async def _create_pod_graphql(self, payload: dict[str, Any]) -> PodInfo:
+        """Create a GPU pod with provider-enforced expiry.
+
+        RunPod's REST create schema rejects ``terminateAfter``; its current CLI uses
+        this GraphQL mutation for GPU pods requiring that field.
+        """
+        gpu_ids = list(payload.get("gpuTypeIds") or [])
+        if len(gpu_ids) != 1:
+            raise RunpodError(
+                "provider-expiring pod creation requires exactly one GPU candidate"
+            )
+        gql_input = {
+            "cloudType": payload.get("cloudType", "SECURE"),
+            "containerDiskInGb": int(payload.get("containerDiskInGb", 30)),
+            "env": [
+                {"key": str(k), "value": str(v)}
+                for k, v in (payload.get("env") or {}).items()
+            ],
+            "gpuCount": int(payload.get("gpuCount", 1)),
+            "gpuTypeId": gpu_ids[0],
+            "imageName": payload.get("imageName"),
+            "minCudaVersion": (payload.get("allowedCudaVersions") or [None])[0],
+            "name": payload.get("name"),
+            "networkVolumeId": payload.get("networkVolumeId"),
+            "ports": ",".join(payload.get("ports") or []),
+            "startSsh": True,
+            "supportPublicIp": True,
+            "terminateAfter": payload["terminateAfter"],
+            "volumeMountPath": payload.get("volumeMountPath", "/workspace"),
+        }
+        gql_input = {k: v for k, v in gql_input.items() if v not in (None, "", [])}
+        query = """
+        mutation createPod($input: PodFindAndDeployOnDemandInput!) {
+          podFindAndDeployOnDemand(input: $input) {
+            id name desiredStatus costPerHr ports
+          }
+        }
+        """
+        try:
+            response = await self._client.post(
+                self._graphql_url,
+                params={"api_key": self._api_key},
+                json={"query": query, "variables": {"input": gql_input}},
+            )
+        except httpx.HTTPError as exc:
+            raise RunpodError(f"RunPod GraphQL create failed: {exc}") from exc
+        if response.status_code >= 400:
+            raise RunpodError(
+                f"RunPod GraphQL create failed ({response.status_code}): "
+                f"{response.text[:300]}"
+            )
+        body = response.json()
+        if body.get("errors"):
+            raise RunpodError(f"RunPod GraphQL create failed: {body['errors']}")
+        data = (body.get("data") or {}).get("podFindAndDeployOnDemand") or {}
+        return parse_pod(data)
 
     async def get_pod(self, pod_id: str) -> PodInfo:
         return parse_pod(await self._request("GET", f"/pods/{pod_id}") or {})
@@ -535,10 +612,12 @@ class RunpodClient:
         fallbacks: Optional[list[dict[str, Any]]] = None,
         wait_timeout_s: float = 600.0,
         on_created=None,
+        terminate_on_exit: bool = True,
     ):
-        """Create a pod, yield it ready-for-SSH, and ALWAYS terminate it.
+        """Create a pod, yield it ready-for-SSH, and optionally terminate on exit.
 
-        The `finally` is the cost model. Do not create pods any other way.
+        Provider-expiring jobs pass ``terminate_on_exit=False`` after installing
+        ``terminateAfter``. Other callers retain the legacy finally-teardown contract.
 
         ``on_created(PodInfo)`` fires the INSTANT the pod exists — before ``wait_for_ssh``.
         **This is not a nicety: billing starts at creation, not at the yield.** A pod that
@@ -562,12 +641,18 @@ class RunpodClient:
                     "not, this pod bills until it is reaped.",
                     info.id,
                 )
-            else:
+            elif terminate_on_exit:
                 with contextlib.suppress(Exception):
                     await self.terminate_pod(info.id)
 
     @contextlib.asynccontextmanager
-    async def adopt(self, pod_id: str, *, wait_timeout_s: float = 300.0):
+    async def adopt(
+        self,
+        pod_id: str,
+        *,
+        wait_timeout_s: float = 300.0,
+        terminate_on_exit: bool = True,
+    ):
         """Take ownership of an EXISTING pod, yield it ready-for-SSH, and ALWAYS terminate it.
 
         The counterpart to :meth:`pod` for a run this process did not start — a pod left up
@@ -590,6 +675,6 @@ class RunpodClient:
                     "(dev-server reload).",
                     pod_id,
                 )
-            else:
+            elif terminate_on_exit:
                 with contextlib.suppress(Exception):
                     await self.terminate_pod(pod_id)

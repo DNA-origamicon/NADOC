@@ -9,6 +9,8 @@ termination paths.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
+import json
 import re
 
 import httpx
@@ -27,6 +29,7 @@ from backend.core.runpod_api import (
     parse_pod,
     pod_is_ready,
     ssh_endpoint,
+    termination_deadline,
 )
 
 VOLUME = "77pnhye88p"  # the real volume: patched NAMD + packages + checkpoints
@@ -63,11 +66,9 @@ class TestCreatePayload:
         we stage ~2 GB packages. Direct TCP on 22 is mandatory."""
         assert "22/tcp" in self.payload()["ports"]
 
-    def test_defaults_to_interruptible_because_resume_is_free(self):
-        """The chain script skips completed steps, so a reclaim is a resume, not a
-        failure — and interruptible is ~half price."""
-        assert self.payload()["interruptible"] is True
-        assert self.payload(interruptible=False)["interruptible"] is False
+    def test_defaults_to_on_demand_because_reclaims_lose_segment_work(self):
+        assert self.payload()["interruptible"] is False
+        assert self.payload(interruptible=True)["interruptible"] is True
 
     def test_does_not_override_the_images_start_command(self):
         """REGRESSION. Setting `dockerStartCmd` replaces RunPod's own start script — and
@@ -80,6 +81,15 @@ class TestCreatePayload:
         """networkVolumeId already pins the pod to the volume's datacenter. Passing
         dataCenterIds as well can make the request unsatisfiable."""
         assert "dataCenterIds" not in self.payload()
+
+    def test_provider_deadline_is_absolute_utc(self):
+        now = datetime(2026, 8, 9, 0, 0, tzinfo=timezone.utc)
+        assert termination_deadline(3600, now=now) == "2026-08-09T01:00:00Z"
+
+    def test_provider_deadline_is_carried_separately_from_the_container(self):
+        p = self.payload(terminate_after="2026-08-10T00:00:00Z")
+        assert p["terminateAfter"] == "2026-08-10T00:00:00Z"
+        assert "dockerStartCmd" not in p
 
     def test_gpu_priority_order_is_preserved(self):
         p = build_create_payload(
@@ -226,6 +236,39 @@ class TestClient:
         pod, got = _run(go())
         assert pod.id == "p1"
         assert got.cost_per_hr == 0.34
+
+    def test_expiring_gpu_creation_uses_graphql_wire_format(self):
+        seen = {}
+
+        def handler(req):
+            seen["url"] = str(req.url)
+            seen["body"] = json.loads(req.content)
+            return httpx.Response(
+                200,
+                json={
+                    "data": {"podFindAndDeployOnDemand": _pod_json(pod_id="guarded")}
+                },
+            )
+
+        async def go():
+            c = _client(handler)
+            payload = build_create_payload(
+                name="n",
+                gpu_type_ids=["g"],
+                network_volume_id=VOLUME,
+                terminate_after="2026-08-10T00:00:00Z",
+            )
+            try:
+                return await c.create_pod(payload)
+            finally:
+                await c.aclose()
+
+        assert _run(go()).id == "guarded"
+        gql_input = seen["body"]["variables"]["input"]
+        assert gql_input["terminateAfter"] == "2026-08-10T00:00:00Z"
+        assert gql_input["gpuTypeId"] == "g"
+        assert gql_input["minCudaVersion"] == rp.DEFAULT_ALLOWED_CUDA[0]
+        assert "api_key=key" in seen["url"]
 
     def test_401_is_a_clear_message_not_a_stack_trace(self):
         async def go():
@@ -609,9 +652,7 @@ class TestResolveApiKey:
     def test_env_var_wins_over_the_file(self, tmp_path):
         f = tmp_path / "key"
         f.write_text("rpa_fromfile")
-        resolved = rp.resolve_api_key(
-            env={"RUNPOD_API_KEY": "rpa_fromenv"}, key_file=f
-        )
+        resolved = rp.resolve_api_key(env={"RUNPOD_API_KEY": "rpa_fromenv"}, key_file=f)
         assert (resolved.value, resolved.source) == ("rpa_fromenv", "env")
 
     def test_falls_back_to_the_key_file(self, tmp_path):
@@ -650,6 +691,8 @@ class TestResolveApiKey:
         f.write_text("rpa_fromfile")
         f.chmod(0o000)
         try:
-            assert rp.resolve_api_key(env={}, key_file=f) == rp.ResolvedApiKey(None, "none")
+            assert rp.resolve_api_key(env={}, key_file=f) == rp.ResolvedApiKey(
+                None, "none"
+            )
         finally:
             f.chmod(0o600)

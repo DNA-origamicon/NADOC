@@ -7,6 +7,9 @@ each failure falls.
 
 from __future__ import annotations
 
+import asyncio
+from types import SimpleNamespace
+
 from backend.core import dev_reload
 
 
@@ -89,6 +92,41 @@ def test_reload_handoff_is_armed_synchronously(monkeypatch):
     runpod_api.set_handoff(False)
     try:
         assert main._begin_runpod_reload_handoff() is True  # noqa: SLF001
+        assert runpod_api._handing_off() is True  # noqa: SLF001
+    finally:
+        runpod_api.set_handoff(False)
+
+
+def test_real_shutdown_preserves_a_provider_expiring_job(monkeypatch):
+    """NADOC death is safe once RunPod itself owns the hard billing deadline."""
+    from backend.api import main, routes_runpod
+    from backend.core import runpod_api, runpod_supervisor
+    from backend.core.md_job import MdJob
+
+    session = SimpleNamespace(
+        client=object(),
+        is_connected=lambda: True,
+    )
+    stopped = []
+
+    async def stop_job(job_id, *, client):
+        stopped.append(job_id)
+
+    monkeypatch.setattr(routes_runpod, "_SESSION", session)
+    monkeypatch.setattr(runpod_supervisor, "running_job_ids", lambda: ["protected"])
+    monkeypatch.setattr(runpod_supervisor, "stop_job", stop_job)
+    monkeypatch.setattr(
+        MdJob,
+        "load",
+        lambda *args, **kwargs: SimpleNamespace(
+            runpod_terminate_after="2026-08-10T00:00:00Z"
+        ),
+    )
+    monkeypatch.setattr(dev_reload, "under_reloader", lambda: False)
+    runpod_api.set_handoff(False)
+    try:
+        asyncio.run(main._terminate_runpod_pods())  # noqa: SLF001
+        assert stopped == []
         assert runpod_api._handing_off() is True  # noqa: SLF001
     finally:
         runpod_api.set_handoff(False)

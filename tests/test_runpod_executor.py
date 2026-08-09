@@ -116,6 +116,15 @@ def _conn(responses=None) -> RunpodConnection:
 
 
 class TestPodSizing:
+    def test_spot_is_rejected_when_it_cannot_carry_provider_expiry(self, tmp_path):
+        with pytest.raises(rx.RunpodError, match="Interruptible.*disabled"):
+            rx.pod_payloads_for(
+                _job(tmp_path),
+                225_504,
+                network_volume_id=VOLUME,
+                interruptible=True,
+            )
+
     def test_sizes_from_the_measured_vram_model(self, tmp_path):
         job = _job(tmp_path)
         payload = rx.pod_payload_for(job, 225_504, network_volume_id=VOLUME)
@@ -124,9 +133,11 @@ class TestPodSizing:
         # currently available" — a network volume pins the datacenter (EU-RO-1), and the
         # one card we asked for simply was not free there.
         assert payload["gpuTypeIds"][0] == "NVIDIA GeForce RTX 4090"
-        assert len(payload["gpuTypeIds"]) > 1, "must offer fallbacks, not one card"
+        assert len(payload["gpuTypeIds"]) == 1
+        assert len(rx.pod_payloads_for(job, 225_504, network_volume_id=VOLUME)) > 1
         assert payload["networkVolumeId"] == VOLUME
-        assert payload["interruptible"] is True
+        assert payload["interruptible"] is False
+        assert payload["terminateAfter"].endswith("Z")
 
     def test_never_offers_community_cloud(self, tmp_path):
         """SECURE only (user decision). Community is a pool of third-party hosts — cheaper,
@@ -150,11 +161,10 @@ class TestPodSizing:
         """
         job = _job(tmp_path)
         job.runpod_gpu_key = "NVIDIA RTX 6000 Ada Generation"
-        ids = rx.pod_payloads_for(job, 225_504, network_volume_id=VOLUME)[0][
-            "gpuTypeIds"
-        ]
+        payloads = rx.pod_payloads_for(job, 225_504, network_volume_id=VOLUME)
+        ids = payloads[0]["gpuTypeIds"]
         assert ids[0] == "NVIDIA RTX 6000 Ada Generation"
-        assert len(ids) > 1, "the choice is a PREFERENCE — fallbacks must survive"
+        assert len(payloads) > 1, "the choice is a PREFERENCE — fallbacks must survive"
         assert len(set(ids)) == len(ids), "the promoted card must not also appear later"
 
     def test_no_choice_leaves_the_order_untouched(self, tmp_path):
@@ -451,6 +461,38 @@ class TestRunJobOnPodAlwaysTerminates:
             )
         assert deleted == ["/v1/pods/pod1"], "a crash must not leak a billing GPU"
 
+    def test_controller_failure_after_submit_preserves_the_running_pod(
+        self, tmp_path, monkeypatch
+    ):
+        """Once detached NAMD is running, loss of NADOC is not authority to kill it."""
+        self._patch_conn(monkeypatch, {"nproc": (0, "8\n", "")})
+
+        async def submitted(*args, **kwargs):
+            args[0].runpod_pid = 9
+
+        async def controller_lost(*args, **kwargs):
+            raise RuntimeError("controller connection vanished")
+
+        monkeypatch.setattr(rx, "submit_job", submitted)
+        monkeypatch.setattr(rx, "_supervise_run", controller_lost)
+        deleted: list[str] = []
+        job = _job(tmp_path)
+        with pytest.raises(RuntimeError, match="controller connection vanished"):
+            _run(
+                rx.run_job_on_pod(
+                    job,
+                    tmp_path,
+                    client=_client_recording(deleted),
+                    network_volume_id=VOLUME,
+                    min_name="m",
+                    n_atoms=225_504,
+                    poll_s=0,
+                    sleep=_nosleep,
+                )
+            )
+        assert deleted == []
+        assert job.runpod_terminate_after
+
     def test_a_reclaimed_pod_becomes_resumable_not_failed(self, tmp_path, monkeypatch):
         """An interruptible pod vanishing is the EXPECTED case. The volume holds every
         completed step, so this is 'paused, resume me' — not 'failed, start over'."""
@@ -480,7 +522,8 @@ class TestRunJobOnPodAlwaysTerminates:
         )
         assert status == MdStatus.paused
         assert job.resumable is True
-        assert deleted == ["/v1/pods/pod1"]
+        assert deleted == [], "provider expiry preserves checkpoint-safe interruptions"
+        assert job.runpod_terminate_after
 
 
 async def _nosleep(_):

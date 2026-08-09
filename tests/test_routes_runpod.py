@@ -142,6 +142,24 @@ class TestConnect:
         assert client.post("/api/runpod/disconnect").json()["connected"] is False
         assert client.get("/api/runpod/pods").status_code == 400
 
+    def test_disconnect_does_not_close_a_client_used_by_a_running_job(
+        self, monkeypatch
+    ):
+        class Client:
+            closed = False
+
+            async def aclose(self):
+                self.closed = True
+
+        old = Client()
+        routes_runpod._SESSION.client = old  # noqa: SLF001
+        from backend.core import runpod_supervisor
+
+        monkeypatch.setattr(runpod_supervisor, "running_job_ids", lambda: ["job1"])
+        asyncio.run(routes_runpod._SESSION.disconnect())  # noqa: SLF001
+        assert old.closed is False
+        assert routes_runpod._SESSION.client is None  # noqa: SLF001
+
 
 class TestAutoconnect:
     """Startup resolves the stored key itself.

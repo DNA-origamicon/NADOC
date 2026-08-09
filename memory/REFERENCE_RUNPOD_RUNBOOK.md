@@ -122,6 +122,13 @@ difference between the run existing and not.**
 
 ## 2. Launch
 
+**App-managed launches now install RunPod's provider-side `terminateAfter` at pod
+creation (2026-08-09).** The deadline is budget-derived per candidate card, persisted as
+`MdJob.runpod_terminate_after`, and survives NADOC, SSH, the workstation and the container.
+The on-pod NAMD lifetime watchdog remains independent redundancy. App launches are
+on-demand; spot is refused because the provider-expiring GraphQL path is on-demand and a
+reclaim can discard an unfinished segment.
+
 ```bash
 python experiments/exp43_runpod_bench/prep_3x6x400.py     # free; ends in the gate
 python experiments/exp43_runpod_bench/preflight.py <job>  # refuses a bad package
@@ -142,9 +149,13 @@ RUNPOD_API_KEY=$(cat ~/.runpod_key) setsid nohup python .../launch_relax.py &
 - **ON-DEMAND, not spot.** A reclaim restarts the interrupted segment from its TOP (no
   `.coor` until it completes) and chunks are 120k–600k steps. One reclaim costs more hours
   than spot saves dollars.
-- **The launcher owns the pod.** Its `finally` destroys ONLY the pods it created
-  (`pod_seen`) — never a blanket sweep. If the launcher dies, the pod survives: THEN attach
-  `supervise.py`. See §4.
+- **App-managed pods are provider-bounded.** NADOC records the pod immediately and tears it
+  down on completion, failure, or an explicit Stop. Once detached NAMD has been submitted,
+  loss of NADOC/SSH is a handoff—not permission to kill healthy science. Reconnect adopts
+  the job; `terminateAfter` remains the hard billing boundary if adoption never happens.
+- **Legacy experiment launchers still own their pods.** Their `finally` destroys only pods
+  they created (`pod_seen`), never a blanket sweep. If one dies, attach `supervise.py` or
+  reap explicitly; do not assume it carries the app's provider deadline.
 - ⚠️ **`spend_ledger.HARD_CAP_USD` is a real gate, and a stale one is a silent saboteur.**
   `launch_production.py` sizes production from `ledger.remaining()` and `supervise.py`
   DESTROYS the pod when `spent > HARD_CAP_USD`. The cap was $15 while the 24hb 0xT run alone
@@ -186,10 +197,24 @@ python experiments/exp43_runpod_bench/reap.py           # list what is billing
 python experiments/exp43_runpod_bench/reap.py --kill    # destroy everything
 ```
 
-⚠️ **The on-pod kill-switch CANNOT stop the billing.** It runs on the pod with no API key:
-it can kill NAMD, never the pod. Destruction lives in the launcher's `finally`. **If the
-launcher dies, the pod bills an idle GPU forever** — and NAMD, being `setsid`-detached with
-output on the volume, carries on perfectly happily, so nothing looks wrong.
+⚠️ **The on-pod kill-switch CANNOT stop billing.** It kills NAMD without an API key. For
+current app-managed jobs the provider-side `terminateAfter` destroys the pod even if the
+launcher dies; legacy/ad-hoc launchers without that field still require an owning finally
+or explicit reaper.
+
+| event | app-managed pod behavior |
+|---|---|
+| provisioning/staging fails before NAMD submission | terminate immediately |
+| NAMD reports completed or failed | fetch when appropriate, then terminate immediately |
+| user presses Stop | terminate immediately |
+| NADOC reload, shutdown, API reconnect, or SSH/controller loss after submission | leave the pod running and adopt later |
+| NADOC never returns | RunPod terminates at persisted `runpod_terminate_after` |
+| on-pod lifetime expires first | kill NAMD; provider deadline still terminates the billing pod |
+
+Creation uses RunPod GraphQL because the REST create schema does not accept
+`terminateAfter`. Each ranked fallback GPU is attempted separately because the GraphQL
+mutation accepts one GPU type. The deadline uses the budget and a conservative per-card
+price ceiling; after allocation, the independent on-pod timer uses the pod's actual rate.
 
 This happened: a transient DNS blip (`Temporary failure in name resolution`) on a routine
 poll killed the launcher. `_request` now retries transient/5xx/429 (never 4xx). And the pod
