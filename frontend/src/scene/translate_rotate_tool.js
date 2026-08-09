@@ -209,10 +209,6 @@ export function initTranslateRotateTool(deps) {
 
     // ── Design mode: attach cluster gizmo ───────────────────────────────────
     const clusters = currentDesign?.cluster_transforms ?? []
-    if (!clusters.length) {
-      showToast('No movable clusters exist. Create a cluster first by multi-selecting strands, then using the Movable Clusters panel.', { severity: 'error' })
-      return
-    }
     setClusterDirty(false)
     setActive(true)
     document.getElementById('mode-indicator').textContent = 'MOVE/ROTATE — Esc: cancel'
@@ -230,13 +226,19 @@ export function initTranslateRotateTool(deps) {
       }
     }
 
-    // A design-mode target must come from the current selection or an explicit
-    // context-menu/joint action. Never fall back to an active/last cluster.
+    // With no target, arm the tool and wait. Selection remains independent from
+    // activation; the first compatible entity selected below becomes the target.
     const first = targetClusterId && clusters.find(c => c.id === targetClusterId)
     if (!first) {
-      setActive(false)
-      showToast('Select an entity to move, then press M.', { severity: 'warning' })
-      document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      _moveRotatePanel.setAssemblyCtx(null)
+      if (_mrPivotSel) _mrPivotSel.disabled = true
+      _mrSetPivotOptions([])
+      _mrSetSelectedPivot('centroid')
+      _mrRefreshCurrentSelection?.()
+      if (_mrPanel) _mrPanel.style.display = ''
+      _confirmBtn.style.display = 'flex'
+      document.getElementById('mode-indicator').textContent =
+        'MOVE/ROTATE — select an entity · Esc: cancel'
       return
     }
     await _refreshClusterPivotForAttach(first.id)
@@ -587,8 +589,8 @@ export function initTranslateRotateTool(deps) {
     if (action === 'retarget') {
       // attach() re-sets activeClusterId, which fires the active-cluster subscriber in
       // main.js (repopulates fields / pivot options / centroid constraint).
-      await _refreshClusterPivotForAttach(clusterId)
-      clusterGizmo.attach(clusterId, scene, camera, canvas)
+      const clusters = newState.currentDesign?.cluster_transforms ?? []
+      await _showClusterSingle(clusterId, clusters)
     }
   }
 

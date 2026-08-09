@@ -146,13 +146,15 @@ describe('initTranslateRotateTool — API + init side effects', () => {
 })
 
 describe('initTranslateRotateTool — activate (design mode)', () => {
-  it('no clusters → toast, tool stays inactive, no gizmo attach', async () => {
+  it('no clusters or selection → arms without attaching a gizmo', async () => {
     const ctx = makeDeps()
     const t = initTranslateRotateTool(ctx.deps)
     await t.activate()
-    expect(ctx.active).toBe(false)
+    expect(ctx.active).toBe(true)
     expect(ctx.clusterGizmo.attach).not.toHaveBeenCalled()
-    expect(toastCalls.length).toBe(1)
+    expect(toastCalls.length).toBe(0)
+    expect(ctx.deps.refreshCurrentSelection).toHaveBeenCalled()
+    expect(document.getElementById('mode-indicator').textContent).toContain('select an entity')
   })
 
   it('with clusters but no selected target → does not pick the last cluster', async () => {
@@ -162,9 +164,9 @@ describe('initTranslateRotateTool — activate (design mode)', () => {
     ], cluster_joints: [] } } })
     const t = initTranslateRotateTool(ctx.deps)
     await t.activate()
-    expect(ctx.active).toBe(false)
+    expect(ctx.active).toBe(true)
     expect(ctx.clusterGizmo.attach).not.toHaveBeenCalled()
-    expect(toastCalls.at(-1)?.[0]).toContain('Select an entity')
+    expect(toastCalls.length).toBe(0)
   })
 
   it('targetClusterId selects that cluster over the last', async () => {

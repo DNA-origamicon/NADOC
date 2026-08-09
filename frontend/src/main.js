@@ -6854,6 +6854,17 @@ async function main() {
     _mrRefreshCurrentSelection()
   })
 
+  // An armed design-mode session can acquire an individual nucleotide after M was
+  // pressed with no selection. Hand ownership to the residue gizmo at that moment.
+  store.subscribe(async (newState, prevState) => {
+    if (!newState.translateRotateActive) return
+    if (newState.multiSelectedBaseKeys === prevState.multiSelectedBaseKeys) return
+    if ((newState.multiSelectedBaseKeys ?? []).length !== 1) return
+    if (!_nucleotideTransformTool.canActivate()) return
+    await _translateRotateTool.cancel()
+    _nucleotideTransformTool.activate()
+  })
+
   // Selection→tool bridge: selection never activates Move/Rotate. While the tool is
   // explicitly active (M / toolbar / context menu), a cluster click can retarget it.
   // Logic + guards live in translate_rotate_tool.js; this is thin wiring.
