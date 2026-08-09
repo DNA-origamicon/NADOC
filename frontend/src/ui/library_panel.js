@@ -14,6 +14,27 @@ import { fetchActiveJobs, activeJobForPath, jobActivityTooltip, normPath } from 
 import { visibleWorkspaceEntries } from './sim_folders.js'
 
 const _JOB_POLL_MS = 4000   // welcome-screen activity-spinner refresh cadence
+const _LIBRARY_CACHE_KEY = 'nadoc:library-files:v1'
+
+export function readLibraryCache(storage = localStorage) {
+  try {
+    const cached = JSON.parse(storage.getItem(_LIBRARY_CACHE_KEY) || 'null')
+    return Array.isArray(cached) ? cached : []
+  } catch { return [] }
+}
+
+export function writeLibraryCache(entries, storage = localStorage) {
+  try { storage.setItem(_LIBRARY_CACHE_KEY, JSON.stringify(entries)); return true } catch { return false }
+}
+
+export function mergeLibraryDiskUsage(entries, usage) {
+  if (!usage || typeof usage !== 'object') return entries
+  return entries.map(entry => {
+    if (entry.type !== 'part') return entry
+    const simBytes = Number(usage[normPath(entry.path)] ?? 0)
+    return { ...entry, sim_bytes: simBytes, disk_bytes: (entry.size_bytes ?? 0) + simBytes }
+  })
+}
 
 function _relativeTime(isoString) {
   const ms  = Date.now() - new Date(isoString).getTime()
@@ -119,6 +140,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   let _sortDir = 'desc'
   let _query   = ''
   let _showSimFolders = false
+  let _refreshGeneration = 0
 
   // Per-design simulation activity: active MD/oxDNA jobs (polled) + a map from
   // workspace file path → the row's status <span>, so the spinner can be updated
@@ -225,16 +247,37 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
 
   // ── Refresh ─────────────────────────────────────────────────────────────────
 
+  function _saveCachedEntries() {
+    writeLibraryCache(_allEntries)
+  }
+
+  function _loadCachedEntries() {
+    _allEntries = readLibraryCache()
+  }
+
+  async function _refreshDiskUsage(generation) {
+    if (typeof api.libraryDiskUsage !== 'function') return
+    const usage = await api.libraryDiskUsage()
+    if (generation !== _refreshGeneration || !usage) return
+    _allEntries = mergeLibraryDiskUsage(_allEntries, usage)
+    _saveCachedEntries()
+    _render()
+  }
+
   async function refresh() {
-    treeEl.innerHTML = '<div class="lib-loading">Loading…</div>'
+    const generation = ++_refreshGeneration
+    if (!_allEntries.length) treeEl.innerHTML = '<div class="lib-loading">Loading…</div>'
     try {
       const files = await api.listLibraryFiles()
+      if (generation !== _refreshGeneration) return
       _allEntries = Array.isArray(files) ? files : []
     } catch {
-      treeEl.innerHTML = '<div class="lib-empty">Could not reach server.</div>'
+      if (!_allEntries.length) treeEl.innerHTML = '<div class="lib-empty">Could not reach server.</div>'
       return
     }
+    _saveCachedEntries()
     _render()
+    void _refreshDiskUsage(generation)
   }
 
   function _render() {
@@ -650,6 +693,8 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     document.body.appendChild(overlay)
   }
 
+  _loadCachedEntries()
+  if (_allEntries.length) _render()
   refresh()
   _startJobPolling()
   return { refresh, refreshJobStatuses: _refreshJobStatuses }

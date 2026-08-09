@@ -127,7 +127,7 @@ class TestRoutes:
         design_state.set_design(make_minimal_design(n_helices=2))
         return TestClient(app), tmp_path
 
-    def test_library_files_reports_disk_bytes(self, client) -> None:
+    def test_library_disk_usage_is_enriched_separately(self, client) -> None:
         c, ws = client
         (ws / "a.nadoc").write_text('{"x": 1}')
         job = new_md_job(
@@ -139,8 +139,23 @@ class TestRoutes:
         r = c.get("/api/library/files")
         assert r.status_code == 200
         entry = next(e for e in r.json() if e["path"] == "a.nadoc")
-        assert entry["sim_bytes"] >= 4096
-        assert entry["disk_bytes"] == entry["size_bytes"] + entry["sim_bytes"]
+        assert "sim_bytes" not in entry
+
+        usage = c.get("/api/library/disk-usage")
+        assert usage.status_code == 200
+        assert usage.json()["a.nadoc"] >= 4096
+
+    def test_library_listing_prunes_simulation_tree_contents(self, client) -> None:
+        c, ws = client
+        jobs = ws / "md_jobs"
+        (jobs / "job-1" / "nested").mkdir(parents=True)
+        (jobs / "job-1" / "nested" / "misleading.nadoc").write_text("{}")
+        (ws / "real.nadoc").write_text("{}")
+
+        paths = {entry["path"] for entry in c.get("/api/library/files").json()}
+        assert "md_jobs" in paths
+        assert "real.nadoc" in paths
+        assert not any(path.startswith("md_jobs/") for path in paths)
 
     def test_about_aggregates(self, client) -> None:
         c, ws = client

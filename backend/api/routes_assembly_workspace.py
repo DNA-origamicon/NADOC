@@ -38,7 +38,9 @@ URLs are unchanged from their previous home in assembly.py. Mounting is done in
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
+import threading
 from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path
 from typing import Optional
@@ -71,8 +73,32 @@ from backend.api.assembly import _safe_workspace_path, _assembly_response
 
 router = APIRouter()
 
+_SIM_TREE_NAMES = {
+    "autorefine",
+    "benchmark_runs",
+    "cando_autorefine",
+    "cando_jobs",
+    "lammps_jobs",
+    "live_sessions",
+    "md_chains",
+    "md_jobs",
+    "mrdna_jobs",
+    "oxdna_jobs",
+    "snupi_jobs",
+}
+_identity_audit_lock = threading.Lock()
+_identity_auditing: set[str] = set()
+_identity_audited: set[str] = set()
 
-def _audit_workspace_design_identities() -> None:
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    """Replace a workspace JSON file without exposing a partial background write."""
+    temporary = path.with_name(f".{path.name}.identity-{threading.get_ident()}.tmp")
+    temporary.write_text(content, encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def _audit_workspace_design_identities(workspace_dir: Path | None = None) -> None:
     """Resolve duplicate legacy UUIDs deterministically before library use."""
     from backend.core.design_identity import (
         fork_identity_for_copy,
@@ -80,16 +106,17 @@ def _audit_workspace_design_identities() -> None:
         reconcile_open_identity,
     )
 
+    workspace_dir = workspace_dir or _asm._WORKSPACE_DIR
     records: list[tuple[Path, str, Design]] = []
-    for path in sorted(_asm._WORKSPACE_DIR.rglob("*.nadoc")):
-        rel_parts = path.relative_to(_asm._WORKSPACE_DIR).parts
+    for path in sorted(workspace_dir.rglob("*.nadoc")):
+        rel_parts = path.relative_to(workspace_dir).parts
         if any(part.startswith(".") or part.startswith("__") for part in rel_parts):
             continue
         try:
             design = Design.from_json(path.read_text(encoding="utf-8"))
         except Exception:
             continue
-        rel = str(path.relative_to(_asm._WORKSPACE_DIR)).replace("\\", "/")
+        rel = str(path.relative_to(workspace_dir)).replace("\\", "/")
         records.append((path, rel, design))
 
     groups: dict[str, list[tuple[Path, str, Design]]] = {}
@@ -104,20 +131,103 @@ def _audit_workspace_design_identities() -> None:
         owner = (matching or group)[0]
         for path, rel, design in group:
             if path == owner[0]:
-                resolved, _, _ = reconcile_open_identity(
-                    design, rel, _asm._WORKSPACE_DIR
-                )
+                resolved, _, _ = reconcile_open_identity(design, rel, workspace_dir)
             else:
                 resolved = fork_identity_for_copy(design, rel)
             if resolved != design:
-                path.write_text(resolved.to_json(), encoding="utf-8")
+                _atomic_write_text(path, resolved.to_json())
                 if resolved.id != design.id:
                     reassign_job_snapshot_identity(
-                        _asm._WORKSPACE_DIR, rel, design.id, resolved.id
+                        workspace_dir, rel, design.id, resolved.id
                     )
 
 
-def _reconcile_nadoc_file(path: Path, rel_path: str) -> tuple[Design | None, str | None]:
+def _schedule_workspace_identity_audit() -> None:
+    """Run the legacy whole-workspace migration once, off the listing hot path."""
+    workspace_dir = _asm._WORKSPACE_DIR.resolve()
+    workspace = str(workspace_dir)
+    with _identity_audit_lock:
+        if workspace in _identity_audited or workspace in _identity_auditing:
+            return
+        _identity_auditing.add(workspace)
+
+    def run() -> None:
+        try:
+            _audit_workspace_design_identities(workspace_dir)
+            with _identity_audit_lock:
+                _identity_audited.add(workspace)
+        finally:
+            with _identity_audit_lock:
+                _identity_auditing.discard(workspace)
+
+    threading.Thread(target=run, name="nadoc-identity-audit", daemon=True).start()
+
+
+def _workspace_entries() -> list[dict]:
+    """List user-visible workspace metadata without walking engine job trees."""
+    entries: list[dict] = []
+    workspace = _asm._WORKSPACE_DIR
+    for root, dirs, files in os.walk(workspace):
+        root_path = Path(root)
+        rel_root = root_path.relative_to(workspace)
+        dirs[:] = sorted(d for d in dirs if not d.startswith((".", "__")))
+
+        # The root folder was emitted by its parent. Do not enumerate or descend
+        # any of its job/run children.
+        if rel_root.parts and (
+            rel_root.parts[0].endswith("_jobs") or rel_root.parts[0] in _SIM_TREE_NAMES
+        ):
+            dirs[:] = []
+            continue
+
+        for dirname in dirs:
+            p = root_path / dirname
+            rel = str(p.relative_to(workspace))
+            try:
+                stat = p.stat()
+            except OSError:
+                continue
+            entries.append(
+                {
+                    "name": dirname,
+                    "path": rel,
+                    "type": "folder",
+                    "mtime_iso": _dt.fromtimestamp(
+                        stat.st_mtime, tz=_tz.utc
+                    ).isoformat(),
+                    "size_bytes": 0,
+                }
+            )
+
+        for filename in files:
+            if filename.startswith((".", "__")):
+                continue
+            p = root_path / filename
+            if p.suffix not in (".nadoc", ".nass"):
+                continue
+            try:
+                stat = p.stat()
+            except OSError:
+                continue
+            rel = str(p.relative_to(workspace))
+            entries.append(
+                {
+                    "name": p.stem,
+                    "path": rel,
+                    "type": "assembly" if p.suffix == ".nass" else "part",
+                    "mtime_iso": _dt.fromtimestamp(
+                        stat.st_mtime, tz=_tz.utc
+                    ).isoformat(),
+                    "size_bytes": stat.st_size,
+                }
+            )
+    entries.sort(key=lambda e: e["mtime_iso"], reverse=True)
+    return entries
+
+
+def _reconcile_nadoc_file(
+    path: Path, rel_path: str
+) -> tuple[Design | None, str | None]:
     """Reconcile a persisted part's UUID/path signoff and write migrations in place."""
     if path.suffix.lower() != ".nadoc" or not path.is_file():
         return None, None
@@ -141,11 +251,17 @@ def _reconcile_nadoc_file(path: Path, rel_path: str) -> tuple[Design | None, str
     return resolved, disposition
 
 
-def _sign_managed_relocation(dest: Path, old_rel: str, new_rel: str, is_dir: bool) -> None:
+def _sign_managed_relocation(
+    dest: Path, old_rel: str, new_rel: str, is_dir: bool
+) -> None:
     """Update embedded path signoffs after a NADOC-managed rename/move."""
     from backend.core.design_identity import relocate_identity
 
-    files = dest.rglob("*.nadoc") if is_dir else ([dest] if dest.suffix.lower() == ".nadoc" else [])
+    files = (
+        dest.rglob("*.nadoc")
+        if is_dir
+        else ([dest] if dest.suffix.lower() == ".nadoc" else [])
+    )
     for file_path in files:
         try:
             design = Design.from_json(file_path.read_text(encoding="utf-8"))
@@ -226,55 +342,23 @@ def _patch_references(old_ref: str, new_ref: str) -> list[str]:
 
 @router.get("/library/files", status_code=200)
 def list_library_files() -> list:
-    """Scan workspace for .nadoc / .nass files and subdirectories, sorted by mtime desc.
+    """Quickly list design files and folders, excluding simulation-tree contents.
 
-    Each part also reports its simulation footprint on disk: ``sim_bytes`` is the
-    total size of every MD/oxDNA job folder tied back to that .nadoc file, and
-    ``disk_bytes`` is the file itself + ``sim_bytes`` — so the welcome screen can
-    surface which designs are carrying a lot of simulation data.
+    Disk usage is deliberately served by ``/library/disk-usage`` so this response
+    can paint the welcome screen without waiting for job-folder accounting.
     """
     _asm._WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
-    _audit_workspace_design_identities()
-    from backend.core.design_disk_usage import sim_bytes_by_source_path, _norm
-
-    sim_by_path = sim_bytes_by_source_path(_asm._WORKSPACE_DIR)
-    entries = []
-    for p in _asm._WORKSPACE_DIR.rglob("*"):
-        # Skip hidden files / system dirs
-        rel_parts = p.relative_to(_asm._WORKSPACE_DIR).parts
-        if any(part.startswith(".") or part.startswith("__") for part in rel_parts):
-            continue
-        try:
-            stat = p.stat()
-            rel = str(p.relative_to(_asm._WORKSPACE_DIR))
-            mtime = _dt.fromtimestamp(stat.st_mtime, tz=_tz.utc).isoformat()
-            if p.is_dir():
-                entries.append(
-                    {
-                        "name": p.name,
-                        "path": rel,
-                        "type": "folder",
-                        "mtime_iso": mtime,
-                        "size_bytes": 0,
-                    }
-                )
-            elif p.suffix in (".nadoc", ".nass"):
-                sim = sim_by_path.get(_norm(rel), 0) if p.suffix == ".nadoc" else 0
-                entries.append(
-                    {
-                        "name": p.stem,
-                        "path": rel,
-                        "type": "assembly" if p.suffix == ".nass" else "part",
-                        "mtime_iso": mtime,
-                        "size_bytes": stat.st_size,
-                        "sim_bytes": sim,
-                        "disk_bytes": stat.st_size + sim,
-                    }
-                )
-        except OSError:
-            continue
-    entries.sort(key=lambda e: e["mtime_iso"], reverse=True)
+    entries = _workspace_entries()
+    _schedule_workspace_identity_audit()
     return entries
+
+
+@router.get("/library/disk-usage", status_code=200)
+def library_disk_usage() -> dict[str, int]:
+    """Simulation bytes by design path, fetched after the fast file listing."""
+    from backend.core.design_disk_usage import sim_bytes_by_source_path
+
+    return sim_bytes_by_source_path(_asm._WORKSPACE_DIR)
 
 
 @router.get("/design/about", status_code=200)
@@ -423,7 +507,9 @@ def upload_library_file(body: UploadFileRequest) -> dict:
 
         try:
             uploaded = Design.from_json(content)
-            uploaded, identity_disposition, _ = prepare_workspace_save(uploaded, out_rel)
+            uploaded, identity_disposition, _ = prepare_workspace_save(
+                uploaded, out_rel
+            )
             content = uploaded.to_json()
         except Exception as exc:
             raise HTTPException(400, detail=f"Invalid .nadoc file: {exc}") from exc
@@ -444,7 +530,9 @@ def get_library_file_content(path: str) -> dict:
         raise HTTPException(404, detail=f"File not found in workspace: {path!r}")
     design, disposition = _reconcile_nadoc_file(dest, path)
     return {
-        "content": design.to_json() if design is not None else dest.read_text(encoding="utf-8"),
+        "content": design.to_json()
+        if design is not None
+        else dest.read_text(encoding="utf-8"),
         "identity_disposition": disposition,
     }
 
@@ -482,9 +570,7 @@ def library_rename(body: RenameRequest) -> dict:
     new_ref = new_rel + "/" if is_dir else new_rel
     patched = _patch_references(old_ref, new_ref)
     _sign_managed_relocation(dest, old_rel, new_rel, is_dir)
-    remap_design_source_paths(
-        _asm._WORKSPACE_DIR, old_rel, new_rel, old_is_dir=is_dir
-    )
+    remap_design_source_paths(_asm._WORKSPACE_DIR, old_rel, new_rel, old_is_dir=is_dir)
     return {"old_path": old_rel, "new_path": new_rel, "patched_assemblies": patched}
 
 
@@ -515,9 +601,7 @@ def library_move(body: MoveRequest) -> dict:
     new_ref = new_rel + "/" if is_dir else new_rel
     patched = _patch_references(old_ref, new_ref)
     _sign_managed_relocation(dest, old_rel, new_rel, is_dir)
-    remap_design_source_paths(
-        _asm._WORKSPACE_DIR, old_rel, new_rel, old_is_dir=is_dir
-    )
+    remap_design_source_paths(_asm._WORKSPACE_DIR, old_rel, new_rel, old_is_dir=is_dir)
     return {"old_path": old_rel, "new_path": new_rel, "patched_assemblies": patched}
 
 
@@ -647,11 +731,13 @@ def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
     if saved != design:
         design_state.set_design_silent(saved)
     response = _design_response(saved, validate_design(saved))
-    response.update({
-        "path": body.path,
-        "identity_disposition": disposition,
-        "previous_path": previous,
-    })
+    response.update(
+        {
+            "path": body.path,
+            "identity_disposition": disposition,
+            "previous_path": previous,
+        }
+    )
     return response
 
 

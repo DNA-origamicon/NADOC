@@ -3932,6 +3932,12 @@ export async function listLibraryFiles() {
   return _request('GET', '/library/files')   // returns array directly
 }
 
+/** Simulation bytes keyed by workspace-relative design path. Kept separate so
+ * the welcome screen can paint file metadata before disk accounting completes. */
+export async function libraryDiskUsage() {
+  return _request('GET', '/library/disk-usage')
+}
+
 /** Currently-busy (running/preparing) MD + oxDNA jobs across the workspace, for the
  *  welcome-screen activity spinner and the concurrent-job guard. See routes_jobs.py. */
 export async function listActiveJobs() {
