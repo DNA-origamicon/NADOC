@@ -108,13 +108,7 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onChevron,
   // Archive and status are stable columns: every row reserves the same space even
   // when it is not archived or active. This stops the important state glyphs from
   // wandering as variable-width job information changes.
-  if (m.compactColumns) {
-    const box = Object.assign(doc.createElement('span'), { textContent: m.archived ? '📦' : '' })
-    box.style.cssText = 'flex:0 0 14px;width:14px;text-align:center;font-size:10px'
-    box.setAttribute('aria-label', m.archived ? 'Archived' : 'Not archived')
-    if (m.archived) box.title = `Archived → ${m.archivePath}`
-    row.append(box)
-  } else if (m.archived) {
+  if (!m.compactColumns && m.archived) {
     const box = Object.assign(doc.createElement('span'), { textContent: '📦' })
     box.style.cssText = 'flex-shrink:0;font-size:10px'
     box.title = `Archived → ${m.archivePath}`
@@ -131,6 +125,12 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onChevron,
   }
   if (m.compactColumns) row.append(warningCol)
   if (m.compactColumns) {
+    const box = Object.assign(doc.createElement('span'), { textContent: m.archived ? '📦' : '' })
+    box.style.cssText = 'flex:0 0 10px;width:10px;text-align:center;font-size:10px'
+    box.setAttribute('aria-label', m.archived ? 'Archived' : 'Not archived')
+    if (m.archived) box.title = `Archived → ${m.archivePath}`
+    row.append(box)
+
     const statusCol = doc.createElement('span')
     statusCol.style.cssText = 'display:flex;align-items:center;justify-content:center;flex:0 0 14px;width:14px'
     statusCol.append(sym)
