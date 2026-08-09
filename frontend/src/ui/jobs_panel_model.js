@@ -74,7 +74,7 @@ export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0
   const archivePath = archived ? (ctx.archivePath ? ctx.archivePath(job) : (job?.archive_path || '')) : ''
   const label = isChild && ctx.childLabel
     ? ctx.childLabel(job, index)
-    : (ctx.displayName ? ctx.displayName(job) : '')
+    : (ctx.displayName ? ctx.displayName(job, { depth, index, listIndex }) : '')
   const indentBase = ctx.indentBase ?? 6
   const indentStep = ctx.indentStep ?? 14
   return {
@@ -84,7 +84,8 @@ export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0
     selected: job.job_id === ctx.selectedId,
     statusKey,
     isActive,
-    indexLabel: isChild ? '' : `[${listIndex}]`,
+    indexLabel: isChild || ctx.showIndex === false
+      || (typeof ctx.showIndex === 'function' && !ctx.showIndex(job)) ? '' : `[${listIndex}]`,
     label,
     title: isChild && ctx.childTitle ? ctx.childTitle(job) : null,
     timeStr: ctx.formatTime ? ctx.formatTime(job.created_at) : '',
@@ -113,6 +114,8 @@ export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0
       : null,
     postLabelMarkers: ctx.postLabelMarkers ? (ctx.postLabelMarkers(job, { childCount, collapsed }) || []) : [],
     symbolOverride: ctx.symbolOverride ? (ctx.symbolOverride(job) || null) : null,
+    compactColumns: typeof ctx.compactColumns === 'function'
+      ? !!ctx.compactColumns(job) : !!ctx.compactColumns,
     colors,
   }
 }

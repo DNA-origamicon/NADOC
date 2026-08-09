@@ -1071,6 +1071,15 @@ export function mdListSignature(jobs, selectedId) {
   return (jobs ?? []).map(mdJobRowSig).join('|') + `#${selectedId ?? ''}`
 }
 
+/** Compact NAMD list caption: run kind, its visible number, and execution site. */
+export function mdCompactJobLabel(job, number) {
+  const kind = mdIsProductionChild(job) || mdIsEnsembleReplica(job) ? 'P' : 'R'
+  const runNumber = Number.isInteger(job?.ensemble_index) ? job.ensemble_index + 1 : number
+  const target = job?.execution_target === 'alpine' ? 'Alpine'
+    : job?.execution_target === 'runpod' ? 'runpod' : 'local'
+  return `${kind}${runNumber} ${target}`
+}
+
 /** Pure: the canonical jobs-panel ctx for NAMD (U3 unified panel).  NAMD is the
  *  richest panel, so it drives every optional slot the shared model exposes: the
  *  parent/child TREE + expand/collapse chevron, post-label markers (collapsed-ensemble
@@ -1083,9 +1092,11 @@ export function mdJobRowCtx({ selectedId = null, collapsedIds = null, jobs = [],
     engine: 'namd',
     selectedId,
     hierarchical: true,
+    showIndex: false,
+    compactColumns: true,
     collapsedIds,
-    displayName: (job) => job.design_name,
-    childLabel: mdChildLabelFor,
+    displayName: (job, { listIndex = 1 } = {}) => mdCompactJobLabel(job, listIndex),
+    childLabel: (job, index) => mdCompactJobLabel(job, index + 1),
     childTitle: (job) => mdIsProductionChild(job)
       ? 'Production run branched from the relaxed parent (independent seed)'
       : mdIsEnsembleReplica(job) ? 'Ensemble production replica (independent seed)'
@@ -1103,28 +1114,7 @@ export function mdJobRowCtx({ selectedId = null, collapsedIds = null, jobs = [],
       ? `${formatBytes(job.dcd_size_bytes)} DCD / ${formatBytes(total)} total`
       : (total ? formatBytes(total) : ''),
     chevron: true,
-    postLabelMarkers: (job, { childCount, collapsed }) => {
-      const out = []
-      if (childCount > 0 && collapsed) {
-        const summary = ensembleChildSummary(job, jobs)
-        if (summary) out.push({ text: summary, css: 'font-size:9px;color:#8b949e;flex-shrink:0;margin-right:4px' })
-      }
-      const seeded = seededBadge(job)
-      if (seeded) out.push({
-        text: seeded,
-        title: job.seed_oxdna_job_id ? `Seeded from oxDNA job ${job.seed_oxdna_job_id}`
-             : job.seed_mrdna_job_id ? `Seeded from mrDNA job ${job.seed_mrdna_job_id}`
-                                     : `Seeded from BLADE job ${job.seed_blade_job_id}`,
-        css: 'font-size:9px;color:#4a9eff;border:1px solid #2a4a6a;border-radius:3px;padding:0 4px;flex-shrink:0;margin-right:4px',
-      })
-      const remote = remoteJobBadge(job)
-      if (remote) out.push({
-        text: remote,
-        title: job.slurm_job_id ? `Running on Alpine (SLURM ${job.slurm_job_id})` : 'Targeted at the Alpine cluster',
-        css: 'font-size:9px;color:#58a6ff;border:1px solid #1f4b78;border-radius:3px;padding:0 4px;flex-shrink:0;margin-right:4px',
-      })
-      return out
-    },
+    postLabelMarkers: () => [],
     symbolOverride: (job) => mdIsRemoteQueued(job)
       ? { glyph: '⧗', color: warnColor, title: mdQueueWaitLabel(job), dataset: { mdQueued: job.job_id } }
       : null,

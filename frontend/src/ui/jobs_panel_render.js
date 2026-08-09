@@ -29,8 +29,15 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onChevron,
   idx.textContent = m.indexLabel
   idx.style.cssText = `flex-shrink:0;color:${m.colors.dim};font-family:var(--font-mono)`
 
+  const info = doc.createElement('span')
+  info.style.cssText = 'display:block;flex:1;min-width:0;overflow:hidden;white-space:nowrap'
+  const infoTrack = doc.createElement('span')
+  infoTrack.style.cssText = 'display:inline-flex;align-items:center;gap:6px;white-space:nowrap'
+
   const label = doc.createElement('span')
-  label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+  label.style.cssText = m.compactColumns
+    ? 'flex-shrink:0;white-space:nowrap'
+    : 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
   label.textContent = m.label
   if (m.title) row.title = m.title
 
@@ -82,30 +89,55 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onChevron,
     if (t.title) tag.title = t.title
     row.append(tag)
   }
-  row.append(label)
+  const infoTarget = m.compactColumns ? infoTrack : row
+  infoTarget.append(label)
   // Optional post-label markers (NAMD's collapsed-ensemble summary + CG-seed / Alpine
   // badges) sit between the label and the timestamp. Empty for oxDNA/mrDNA/cando/lammps.
   for (const pm of m.postLabelMarkers) {
     const s = Object.assign(doc.createElement('span'), { textContent: pm.text })
     if (pm.css) s.style.cssText = pm.css
     if (pm.title) s.title = pm.title
-    row.append(s)
+    infoTarget.append(s)
   }
-  row.append(ts, size)
-  if (m.archived) {
+  infoTarget.append(ts, size)
+  if (m.compactColumns) {
+    info.append(infoTrack)
+    row.append(info)
+  }
+
+  // Archive and status are stable columns: every row reserves the same space even
+  // when it is not archived or active. This stops the important state glyphs from
+  // wandering as variable-width job information changes.
+  if (m.compactColumns) {
+    const box = Object.assign(doc.createElement('span'), { textContent: m.archived ? '📦' : '' })
+    box.style.cssText = 'flex:0 0 14px;width:14px;text-align:center;font-size:10px'
+    box.setAttribute('aria-label', m.archived ? 'Archived' : 'Not archived')
+    if (m.archived) box.title = `Archived → ${m.archivePath}`
+    row.append(box)
+  } else if (m.archived) {
     const box = Object.assign(doc.createElement('span'), { textContent: '📦' })
     box.style.cssText = 'flex-shrink:0;font-size:10px'
     box.title = `Archived → ${m.archivePath}`
     row.append(box)
   }
+  const warningCol = m.compactColumns ? doc.createElement('span') : row
+  if (m.compactColumns) warningCol.style.cssText = 'flex:0 0 12px;width:12px;text-align:center'
   if (m.stale) {
     const warn = Object.assign(doc.createElement('span'), { textContent: '⚠' })
     if (m.staleClass) warn.className = m.staleClass
     warn.style.cssText = `flex-shrink:0;color:${m.colors.warn};font-size:11px`
     warn.title = m.staleTitle
-    row.append(warn)
+    warningCol.append(warn)
   }
-  row.append(sym)
+  if (m.compactColumns) row.append(warningCol)
+  if (m.compactColumns) {
+    const statusCol = doc.createElement('span')
+    statusCol.style.cssText = 'display:flex;align-items:center;justify-content:center;flex:0 0 14px;width:14px'
+    statusCol.append(sym)
+    row.append(statusCol)
+  } else {
+    row.append(sym)
+  }
   // Optional trailing per-row control (e.g. LAMMPS Stop). Absent for oxDNA/mrDNA/
   // cando (m.action === null) → nothing appended, so their DOM is unchanged.
   if (m.action) {
@@ -117,6 +149,25 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onChevron,
     row.append(btn)
   }
   if (onClick) row.addEventListener('click', () => onClick(m.jobId))
+  // A clipped information strip makes one smooth side-to-side pass on hover, then
+  // returns to its starting point on leave. No animation is started when it fits.
+  let hoverAnimation = null
+  row.addEventListener('mouseenter', () => {
+    if (!m.compactColumns) return
+    const overflow = Math.max(0, infoTrack.scrollWidth - info.clientWidth)
+    if (overflow <= 0 || typeof infoTrack.animate !== 'function') return
+    hoverAnimation?.cancel()
+    hoverAnimation = infoTrack.animate(
+      [{ transform: 'translateX(0)' }, { transform: `translateX(-${overflow}px)` }],
+      { duration: Math.max(700, overflow * 18), easing: 'linear', fill: 'forwards' },
+    )
+  })
+  row.addEventListener('mouseleave', () => {
+    if (!m.compactColumns) return
+    hoverAnimation?.cancel()
+    hoverAnimation = null
+    infoTrack.style.transform = ''
+  })
   // Opt-in per-panel right-click. The HANDLER calls preventDefault, not this: the unified
   // Simulate list mixes engines and only offers a menu on some of them, so suppressing the
   // browser's here would leave the rest with no menu at all.

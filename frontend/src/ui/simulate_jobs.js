@@ -432,14 +432,14 @@ export function initSimulateJobs({
     return mdJobRowCtx({ jobs: nodes.filter((n) => n.engine === 'namd'),
                          selectedId: _sel.id, formatTime: formatJobTime })
   }
-  function _displayName(n, md, relaxNo) {
+  function _displayName(n, md, relaxNo, pos) {
     switch (n.engine) {
       case 'oxdna': case 'lammps': return relaxRowLabel(n, relaxNo.get(n.job_id))
       case 'mrdna': return mrdnaDisplayName(n)
       case 'cando': return candoDisplayName(n)
       case 'snupi': return snupiDisplayName(n)
       case 'blade': return bladeDisplayName(n)
-      case 'namd':  return md.displayName(n)
+      case 'namd':  return md.displayName(n, pos)
       default:      return n.job_id
     }
   }
@@ -479,7 +479,7 @@ export function initSimulateJobs({
       engineOf: (n) => (n.engine === 'lammps' ? 'lammps' : n.engine),
       selectedId: _sel.id,
       hierarchical: true,
-      displayName: (n) => _displayName(n, md, relaxNo),
+      displayName: (n, pos) => _displayName(n, md, relaxNo, pos),
       childLabel: (n, i) => _childLabel(n, i, md),
       childTitle: (n) => _childTitle(n, md),
       productionState: (n) => (n.engine === 'oxdna' ? n.production_state : null),
@@ -490,6 +490,8 @@ export function initSimulateJobs({
       tags: _tags,
       postLabelMarkers: (n, meta) => (n.engine === 'namd' ? md.postLabelMarkers(n, meta) : []),
       symbolOverride: (n) => (n.engine === 'namd' ? md.symbolOverride(n) : null),
+      showIndex: (n) => n.engine !== 'namd',
+      compactColumns: (n) => n.engine === 'namd',
       archived: (n) => !!n.archived,
       archivePath: (n) => n.archive_path || '',
       sizeBytes: (n) => n.size_bytes ?? null,

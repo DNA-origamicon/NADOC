@@ -1115,12 +1115,12 @@ describe('U3 slice 2b — NAMD canonical convergence (payload parity)', () => {
     jobs: JOBS, dimColor: '#8b949e', warnColor: '#e0a800', formatTime: fmt, ...over,
   })
 
-  it('models the parent/child TREE with a chevron on the parent (collapsed → summary marker)', () => {
+  it('models the parent/child TREE with a chevron and compact columns', () => {
     const model = buildJobListModel(JOBS, ctx({ collapsedIds: new Set(['p']) }))
     const p = model.rows.find(r => r.jobId === 'p')
     expect(p.chevron).toEqual({ childCount: 2, collapsed: true, title: 'Expand 2 child jobs' })
-    // Collapsed → the ensemble summary rides the leading post-label marker; children hidden.
-    expect(p.postLabelMarkers[0].text).toMatch(/⧉ 2 replicas/)
+    expect(p.postLabelMarkers).toEqual([])
+    expect(p.compactColumns).toBe(true)
     expect(model.rows.map(r => r.jobId)).not.toContain('r1')   // subtree hidden while collapsed
   })
 
@@ -1132,20 +1132,16 @@ describe('U3 slice 2b — NAMD canonical convergence (payload parity)', () => {
     const r1 = model.rows.find(r => r.jobId === 'r1')
     expect(r1.depth).toBe(1)
     expect(r1.indexLabel).toBe('')                  // children carry no list number
-    expect(r1.label).toBe('Replica 1 · seed 7001')
+    expect(r1.label).toBe('P1 Alpine')
     expect(r1.title).toBe('Ensemble production replica (independent seed)')
   })
 
-  it('emits the CG-seed + Alpine post-label badges the bespoke row showed', () => {
+  it('removes verbose seed and remote badges from compact rows', () => {
     const model = buildJobListModel(JOBS, ctx())
     const seed = model.rows.find(r => r.jobId === 'seed')
-    expect(seed.postLabelMarkers).toEqual([
-      expect.objectContaining({ text: 'oxDNA seeded', title: 'Seeded from oxDNA job ox42' }),
-    ])
+    expect(seed.postLabelMarkers).toEqual([])
     const r1 = model.rows.find(r => r.jobId === 'r1')
-    expect(r1.postLabelMarkers).toEqual([
-      expect.objectContaining({ text: 'SLURM 555 · acpu', title: 'Running on Alpine (SLURM 555)' }),
-    ])
+    expect(r1.postLabelMarkers).toEqual([])
   })
 
   it('overrides the status symbol for a remote-queued job (⧗ + live-refresh dataset)', () => {
