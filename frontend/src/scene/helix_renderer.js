@@ -431,9 +431,13 @@ export function orderStrandNucleotides(nucs) {
 
 export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null, lod = 'full') {
   const loopSet = new Set(loopStrandIds)
-  const independentlyPosed = new Set((design?.nucleotide_transforms ?? [])
+  const independentPoses = new Map((design?.nucleotide_transforms ?? [])
     .filter(t => t.kind === 'base')
-    .map(t => `${t.helix_id}:${t.bp_index}:${t.direction}:${t.copy_k ?? 0}`))
+    .map(t => [`${t.helix_id}:${t.bp_index}:${t.direction}:${t.copy_k ?? 0}`, t]))
+  const poseMatrix = (pose) => new THREE.Matrix4()
+    .makeTranslation(...pose.pivot.map((v, i) => v + pose.translation[i]))
+    .multiply(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion(...pose.rotation)))
+    .multiply(new THREE.Matrix4().makeTranslation(...pose.pivot.map(v => -v)))
 
   // LOD skip flags. Order matters: 'cylinders' implies 'beads' skips too.
   const _initialLodKey = lod === 'cylinders' ? 'cylinders' : (lod === 'beads' ? 'beads' : 'full')
@@ -1139,23 +1143,57 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     for (const nuc of assignedGeometry) {
       // Extension beads have no base-pair slabs.
       if (nuc.helix_id.startsWith('__ext_')) continue
-      const bnDir  = new THREE.Vector3(...nuc.base_normal)
-      const tanDir = new THREE.Vector3(...nuc.axis_tangent)
+      let bnDir  = new THREE.Vector3(...nuc.base_normal)
+      let tanDir = new THREE.Vector3(...nuc.axis_tangent)
       const color  = nucSlabColor(nuc, stapleColorMap, customColors, loopSet)
       const bbPos  = new THREE.Vector3(...nuc.backbone_position)
       // The backend frame supplies base position, normal, and axis tangent. The display
       // solver adds only the shared-plane and O5'-bead contact adjustment documented above.
-      const quat   = slabQuaternion(bnDir, tanDir)
+      let quat   = slabQuaternion(bnDir, tanDir)
       const mate   = slabMate.get(nuc)
-      const independentPose = independentlyPosed.has(
+      const pose = independentPoses.get(
         `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}:${nuc.copy ?? 0}`)
-      const center = pairedSlabCenter(
-        bbPos,
-        new THREE.Vector3(...nuc.base_position),
-        !independentPose && mate?.base_position ? new THREE.Vector3(...mate.base_position) : null,
-        tanDir,
-        bnDir,
-      )
+      const independentPose = !!pose
+      let center
+      if (pose) {
+        // Geometry already carries the saved nucleotide delta. Reconstruct the slab
+        // from the pre-pose residue + mate, then apply that SAME delta to the complete
+        // slab. Re-solving contact from the posed bead changed the bead↔slab distance
+        // after Apply (2hb_1xT: 0.35205 → 0.30000 nm).
+        const delta = poseMatrix(pose)
+        const inverse = delta.clone().invert()
+        const originalBb = bbPos.clone().applyMatrix4(inverse)
+        const originalBase = new THREE.Vector3(...nuc.base_position).applyMatrix4(inverse)
+        const originalBn = bnDir.clone().transformDirection(inverse)
+        const originalTan = tanDir.clone().transformDirection(inverse)
+        if (pose.display_slab_offset && pose.display_slab_rotation) {
+          center = originalBb.clone()
+            .add(new THREE.Vector3(...pose.display_slab_offset))
+            .applyMatrix4(delta)
+          quat = new THREE.Quaternion(...pose.rotation)
+            .multiply(new THREE.Quaternion(...pose.display_slab_rotation))
+        } else {
+        let originalMateBase = null
+        if (mate?.base_position) {
+          originalMateBase = new THREE.Vector3(...mate.base_position)
+          const matePose = independentPoses.get(
+            `${mate.helix_id}:${mate.bp_index}:${mate.direction}:${mate.copy ?? 0}`)
+          if (matePose) originalMateBase.applyMatrix4(poseMatrix(matePose).invert())
+        }
+        center = pairedSlabCenter(
+          originalBb, originalBase, originalMateBase, originalTan, originalBn,
+        ).applyMatrix4(delta)
+        quat = new THREE.Quaternion(...pose.rotation).multiply(slabQuaternion(originalBn, originalTan))
+        }
+      } else {
+        center = pairedSlabCenter(
+          bbPos,
+          new THREE.Vector3(...nuc.base_position),
+          mate?.base_position ? new THREE.Vector3(...mate.base_position) : null,
+          tanDir,
+          bnDir,
+        )
+      }
 
       _tMatrix.compose(center, quat,
         _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
@@ -1165,7 +1203,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       slabEntries.push({
         instMesh: iSlabs, id: slabId,
         connectorMesh: iSlabConnectors, connectorId: slabId,
-        nuc, mate, independentPose, quat, bnDir, bbPos, center, defaultColor: color,
+        nuc, mate, independentPose, pose, quat, bnDir, bbPos, center, defaultColor: color,
       })
       slabId++
     }
@@ -1184,6 +1222,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     _slabBaseS.copy(baseMap?.get(key) ?? _tPos.set(...n.base_position))
     const liveEntry = _nucToEntry.get(n)
     _slabCenterL.copy(beadMap?.get(key) ?? liveEntry?.pos ?? _tPos.set(...n.backbone_position))
+    if (slab.independentPose && slab.pose?.display_slab_offset) {
+      return out.copy(_slabCenterL).add(
+        _slabBaseS.set(...slab.pose.display_slab_offset)
+          .applyQuaternion(new THREE.Quaternion(...slab.pose.rotation)),
+      )
+    }
     let mateBase = null
     if (!slab.independentPose && slab.mate?.base_position) {
       const mate = slab.mate

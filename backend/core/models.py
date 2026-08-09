@@ -1240,6 +1240,10 @@ class NucleotideTransform(BaseModel):
     pivot: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0], min_length=3, max_length=3)
     translation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0], min_length=3, max_length=3)
     rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0], min_length=4, max_length=4)
+    # Full-representation source slab pose. Atomistic consumers ignore these;
+    # the CG renderer uses them to preserve the exact bead↔slab arrangement.
+    display_slab_offset: Optional[List[float]] = Field(None, min_length=3, max_length=3)
+    display_slab_rotation: Optional[List[float]] = Field(None, min_length=4, max_length=4)
 
     @model_validator(mode="after")
     def _validate_target_and_pose(self) -> "NucleotideTransform":
@@ -1253,13 +1257,19 @@ class NucleotideTransform(BaseModel):
                 raise ValueError("extra_base transform requires crossover_id and extra_base_k")
             if self.helix_id is not None or self.bp_index is not None or self.direction is not None:
                 raise ValueError("extra_base transform cannot carry ordinary-base identity")
-        values = [*self.pivot, *self.translation, *self.rotation]
+        values = [*self.pivot, *self.translation, *self.rotation,
+                  *(self.display_slab_offset or []), *(self.display_slab_rotation or [])]
         if not all(math.isfinite(float(v)) for v in values):
             raise ValueError("nucleotide transform values must be finite")
         norm = math.sqrt(sum(float(v) ** 2 for v in self.rotation))
         if norm < 1e-12:
             raise ValueError("nucleotide transform rotation must be a non-zero quaternion")
         self.rotation = [float(v) / norm for v in self.rotation]
+        if self.display_slab_rotation is not None:
+            slab_norm = math.sqrt(sum(float(v) ** 2 for v in self.display_slab_rotation))
+            if slab_norm < 1e-12:
+                raise ValueError("display slab rotation must be a non-zero quaternion")
+            self.display_slab_rotation = [float(v) / slab_norm for v in self.display_slab_rotation]
         return self
 
     def target_key(self) -> tuple:

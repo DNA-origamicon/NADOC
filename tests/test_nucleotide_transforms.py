@@ -98,6 +98,8 @@ def test_put_route_persists_one_undoable_pose_and_composes_followup_delta():
         "kind": "base", "helix_id": "h0", "bp_index": 4, "direction": "FORWARD",
         "copy_k": 0, "pivot": [0, 0, 0], "translation": [1, 0, 0],
         "rotation": [0, 0, 0, 1],
+        "display_slab_offset": [0.1, 0.2, 0.3],
+        "display_slab_rotation": [0, 0, 0, 1],
     }
     first = client.put("/api/design/nucleotide-transform", json=body)
     assert first.status_code == 200
@@ -112,6 +114,7 @@ def test_put_route_persists_one_undoable_pose_and_composes_followup_delta():
     assert len(stored2) == 1
     assert stored2[0]["id"] == stored[0]["id"]
     assert stored2[0]["translation"] == pytest.approx([1, 2, 0])
+    assert stored2[0]["display_slab_offset"] == [0.1, 0.2, 0.3]
 
     undo = client.post("/api/design/undo")
     assert undo.status_code == 200

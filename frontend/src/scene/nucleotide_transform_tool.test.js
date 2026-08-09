@@ -18,6 +18,21 @@ describe('transformBodyForTarget', () => {
     })
   })
 
+  it('captures the exact source bead-to-slab arrangement for full-representation rebuilds', () => {
+    const beadMatrix = new THREE.Matrix4().makeTranslation(1, 2, 3)
+    const slabQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.4)
+    const slabMatrix = new THREE.Matrix4().compose(
+      new THREE.Vector3(1.2, 2.3, 3.4), slabQ, new THREE.Vector3(0.3, 0.06, 0.7))
+    const body = transformBodyForTarget(
+      { helix_id: 'h1', bp_index: 7, direction: 'FORWARD' }, pivot, translation, q,
+      { beadMatrix, slabMatrix },
+    )
+    expect(body.display_slab_offset).toEqual(expect.arrayContaining([
+      expect.closeTo(0.2), expect.closeTo(0.3), expect.closeTo(0.4),
+    ]))
+    expect(body.display_slab_rotation).toHaveLength(4)
+  })
+
   it('serializes a crossover-extra-base identity', () => {
     expect(transformBodyForTarget(
       { helix_id: '__xb__', crossover_id: 'xo:with:colons', k: 1 },

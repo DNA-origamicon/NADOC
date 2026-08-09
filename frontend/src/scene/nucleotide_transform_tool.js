@@ -7,10 +7,17 @@ import { parseBaseKey } from './base_ref.js'
 import { putNucleotideTransform } from '../api/client.js'
 import { showToast } from '../ui/toast.js'
 
-export function transformBodyForTarget(target, pivot, translation, quaternion) {
+export function transformBodyForTarget(target, pivot, translation, quaternion, residueInfo = null) {
   const pose = {
     pivot: pivot.toArray(), translation: translation.toArray(),
     rotation: [quaternion.x, quaternion.y, quaternion.z, quaternion.w], compose: true,
+  }
+  if (target.helix_id !== '__xb__' && residueInfo?.slabMatrix && residueInfo?.beadMatrix) {
+    const bead = new THREE.Vector3().setFromMatrixPosition(residueInfo.beadMatrix)
+    const slab = new THREE.Vector3(), slabQ = new THREE.Quaternion(), slabScale = new THREE.Vector3()
+    residueInfo.slabMatrix.decompose(slab, slabQ, slabScale)
+    pose.display_slab_offset = slab.sub(bead).toArray()
+    pose.display_slab_rotation = [slabQ.x, slabQ.y, slabQ.z, slabQ.w]
   }
   return target.helix_id === '__xb__'
     ? { ...pose, kind: 'extra_base', crossover_id: target.crossover_id, extra_base_k: target.k }
@@ -118,7 +125,8 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
   async function confirm() {
     if (!tc) return
     const translation = dummy.position.clone().sub(pivot)
-    const body = transformBodyForTarget(target, pivot, translation, dummy.quaternion)
+    const body = transformBodyForTarget(target, pivot, translation, dummy.quaternion,
+      previewKind === 'abstract' ? abstractInfo : null)
     const committedPreviewKind = previewKind
     restorePreview()
     detach(false)
@@ -169,5 +177,9 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     }
   }
 
-  return { activate, confirm, cancel, reset, detach, canActivate, isActive: () => !!tc }
+  return {
+    activate, confirm, cancel, reset, detach, canActivate,
+    isActive: () => !!tc,
+    debugState: () => ({ active: !!tc, mode, pivot: pivot?.toArray() ?? null }),
+  }
 }

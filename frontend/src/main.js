@@ -169,6 +169,7 @@ import { initSubDomainGizmo } from './scene/sub_domain_gizmo.js'
 import { initInstanceGizmo }       from './scene/instance_gizmo.js'
 import { initMoveRotatePanel, moveRotateSelectionLabels } from './scene/move_rotate_panel.js'
 import { initTranslateRotateTool }  from './scene/translate_rotate_tool.js'
+import { parseBaseKey }             from './scene/base_ref.js'
 import { initForceCrossoverTool }   from './scene/force_crossover_tool.js'
 import { initOverhangOrientationPanel } from './ui/overhang_orientation_panel.js'
 import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
@@ -7526,6 +7527,38 @@ async function main() {
           })
         }
         return out
+      },
+      /** Live matrix probe for the selected standard nucleotide's bead/slab pair. */
+      getSelectedResidueArrangement() {
+        const keys = store.getState().multiSelectedBaseKeys ?? []
+        if (keys.length !== 1) return null
+        const target = parseBaseKey(keys[0])
+        const info = designRenderer.residueTransformInfo?.(target)
+        if (!info?.slabMatrix) return null
+        const bead = new THREE.Vector3().setFromMatrixPosition(info.beadMatrix)
+        const slab = new THREE.Vector3().setFromMatrixPosition(info.slabMatrix)
+        const savedPose = store.getState().currentDesign?.nucleotide_transforms?.find(t =>
+          t.kind === 'base' && t.helix_id === target.helix_id && t.bp_index === target.bp_index &&
+          t.direction === target.direction && (t.copy_k ?? 0) === (target.copy ?? 0))
+        return {
+          key: keys[0], bead: bead.toArray(), slab: slab.toArray(),
+          offset: slab.clone().sub(bead).toArray(), distance: slab.distanceTo(bead),
+          independentPose: !!info.slab?.independentPose,
+          savedDisplayOffset: savedPose?.display_slab_offset ?? null,
+        }
+      },
+      getNucleotideTransformScreenState() {
+        const state = _nucleotideTransformTool.debugState()
+        if (!state.pivot) return state
+        const rect = canvas.getBoundingClientRect()
+        const p = new THREE.Vector3(...state.pivot).project(camera)
+        return {
+          ...state,
+          screenPivot: {
+            x: rect.left + (p.x * 0.5 + 0.5) * rect.width,
+            y: rect.top + (-p.y * 0.5 + 0.5) * rect.height,
+          },
+        }
       },
       /** Screen {x,y} + strand-end identity of every visible 5′/3′ terminus bead.
        *  Gesture e2e for the End-level multi-select → forced-ligation ('x') flow:
