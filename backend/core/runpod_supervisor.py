@@ -25,6 +25,8 @@ from typing import Optional
 
 from backend.core.md_job import MdJob, MdStatus
 from backend.core.runpod_api import RunpodClient
+from backend.core.runpod_api import RunpodError
+from backend.core.runpod_conn import RunpodSSHError
 from backend.core.runpod_executor import reattach_job_on_pod, run_job_on_pod
 from backend.core.runpod_script import DEFAULT_BUDGET_USD
 
@@ -40,6 +42,18 @@ _NATOM_RE = re.compile(r"^\s*(\d+)\s*!NATOM", re.MULTILINE)
 # a pathologically unlucky run could thrash. Cap it, and say so.
 MAX_AUTO_RESUMES = 20
 RESUME_BACKOFF_S = 30.0  # let the region breathe before asking for another card
+
+
+def _should_auto_resume(job: MdJob) -> bool:
+    """True only for an unintended, checkpoint-safe interruption.
+
+    User Stop and the dollar lifetime are authority boundaries.  Everything else that
+    the executor classified paused+resumable is infrastructure loss and should recover
+    without waiting for a person to notice it.
+    """
+    if job.user_stopped or job.status != MdStatus.paused or not job.resumable:
+        return False
+    return not (job.error and "maximum lifetime" in job.error.lower())
 
 
 # ── Package introspection (what the sizing + chain need) ─────────────────────
@@ -169,7 +183,7 @@ def start_job(
         attempt = 0
         try:
             while True:
-                status = await run_job_on_pod(
+                await run_job_on_pod(
                     job,
                     workspace_dir,
                     client=client,
@@ -183,7 +197,7 @@ def start_job(
                 )
                 _PODS.pop(job.job_id, None)
 
-                resumable = status == MdStatus.paused and job.resumable
+                resumable = _should_auto_resume(job)
                 # A lifetime stop means the user-authorised spend cap was consumed.  It
                 # is technically resumable, but doing so automatically with a fresh cap
                 # made the cap "$N per retry" and could spend 20x what the wizard showed.
@@ -236,6 +250,41 @@ def start_job(
                 job.user_stopped = True
                 job.error = None
             raise
+        except (RunpodError, RunpodSSHError, OSError, asyncio.TimeoutError) as exc:
+            # Provisioning/API/transport loss is no more a scientific failure than a
+            # spot reclaim.  The pod context has already torn down anything billable and
+            # the volume holds completed checkpoints, so feed it through the same bounded
+            # automatic-resume policy on the next supervisor pass.
+            log.warning("runpod job %s infrastructure interruption: %s", job.job_id, exc)
+            job.status = MdStatus.paused
+            job.resumable = True
+            job.resubmit_count += 1
+            retry = job.resubmit_count <= MAX_AUTO_RESUMES
+            job.error = (
+                f"RunPod infrastructure interruption ({exc}); automatically retrying."
+                if retry
+                else f"RunPod infrastructure failed {job.resubmit_count} times; "
+                "automatic retry limit reached. Resume manually to try again."
+            )
+            with contextlib.suppress(Exception):
+                job.save(workspace_dir)
+            # This exception can occur outside run_job_on_pod's normal paused return.
+            # Relaunch via a fresh task after this one releases the registry.
+            if retry:
+                asyncio.get_running_loop().call_later(
+                    RESUME_BACKOFF_S,
+                    lambda: start_job(
+                        job,
+                        workspace_dir,
+                        client=client,
+                        network_volume_id=network_volume_id,
+                        client_keys=client_keys,
+                        interruptible=interruptible,
+                        budget_usd=budget,
+                    )
+                    if _should_auto_resume(job) and not is_running(job.job_id)
+                    else None,
+                )
         except Exception as exc:  # noqa: BLE001 — a crash must not strand a pod
             log.exception("runpod job %s failed", job.job_id)
             job.status = MdStatus.failed
@@ -352,6 +401,7 @@ def reattach_job(
     *,
     client: RunpodClient,
     client_keys: Optional[list[str]] = None,
+    network_volume_id: Optional[str] = None,
 ) -> None:
     """Resume supervision of a run already going on its pod. Returns immediately.
 
@@ -363,6 +413,7 @@ def reattach_job(
         return
 
     async def _main() -> None:
+        restart = False
         try:
             await reattach_job_on_pod(
                 job,
@@ -371,6 +422,7 @@ def reattach_job(
                 client_keys=client_keys,
                 on_pod=lambda pid: _PODS.__setitem__(job.job_id, pid),
             )
+            restart = _should_auto_resume(job)
         except Exception as exc:  # noqa: BLE001
             # An adopt that fails must not leave the job claiming a pod forever: the next
             # reconnect would try again and never reap it.
@@ -382,9 +434,19 @@ def reattach_job(
             )
             job.runpod_pod_id = None
             job.save(workspace_dir)
+            restart = _should_auto_resume(job)
         finally:
             _PODS.pop(job.job_id, None)
             _RUNNING.pop(job.job_id, None)
+        volume_id = job.runpod_volume_id or network_volume_id
+        if restart and volume_id:
+            start_job(
+                job,
+                workspace_dir,
+                client=client,
+                network_volume_id=volume_id,
+                client_keys=client_keys,
+            )
 
     _RUNNING[job.job_id] = asyncio.create_task(
         _main(), name=f"runpod-adopt:{job.job_id}"

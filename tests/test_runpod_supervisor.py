@@ -674,3 +674,57 @@ class TestReattach:
 
         asyncio.run(go())
         assert calls["n"] == 1
+
+    def test_dead_reattached_chain_automatically_restarts_on_a_fresh_pod(
+        self, tmp_path, monkeypatch
+    ):
+        """A reload can adopt the pod after its detached chain has died.  Pausing there
+        still strands an overnight run; the network-volume checkpoint must be relaunched."""
+        job = _job_with_package(tmp_path)
+        job.execution_target = "runpod"
+        job.runpod_pod_id = "pod-with-dead-chain"
+        job.runpod_volume_id = "volume1"
+        restarted = []
+
+        async def interrupted(j, ws, **kw):
+            j.status = MdStatus.paused
+            j.resumable = True
+            j.error = "Pod stopped mid-run; resume to continue from the checkpoint."
+            return MdStatus.paused
+
+        def capture_start(j, ws, **kw):
+            restarted.append((j.job_id, kw["network_volume_id"]))
+
+        monkeypatch.setattr(sup, "reattach_job_on_pod", interrupted)
+        monkeypatch.setattr(sup, "start_job", capture_start)
+
+        async def go():
+            sup.reattach_job(job, tmp_path, client=FakeClient())
+            await sup._RUNNING[job.job_id]  # noqa: SLF001
+
+        asyncio.run(go())
+        assert restarted == [(job.job_id, "volume1")]
+
+    def test_budget_exhaustion_after_reattach_is_not_automatically_restarted(
+        self, tmp_path, monkeypatch
+    ):
+        job = _job_with_package(tmp_path)
+        job.runpod_pod_id = "pod-at-budget"
+        job.runpod_volume_id = "volume1"
+        restarted = []
+
+        async def exhausted(j, ws, **kw):
+            j.status = MdStatus.paused
+            j.resumable = True
+            j.error = "Pod hit its maximum lifetime; resume to continue."
+            return MdStatus.paused
+
+        monkeypatch.setattr(sup, "reattach_job_on_pod", exhausted)
+        monkeypatch.setattr(sup, "start_job", lambda *a, **k: restarted.append(True))
+
+        async def go():
+            sup.reattach_job(job, tmp_path, client=FakeClient())
+            await sup._RUNNING[job.job_id]  # noqa: SLF001
+
+        asyncio.run(go())
+        assert restarted == []

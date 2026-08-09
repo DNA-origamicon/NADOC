@@ -178,7 +178,11 @@ async def _adopt(
     for job in adoptable:
         try:
             runpod_supervisor.reattach_job(
-                job, _workspace(), client=client, client_keys=_runpod_client_keys()
+                job,
+                _workspace(),
+                client=client,
+                client_keys=_runpod_client_keys(),
+                network_volume_id=keep_volume,
             )
             adopted.append(job.job_id)
         except Exception:  # noqa: BLE001 — one bad job must not block the connect
@@ -188,9 +192,48 @@ async def _adopt(
             "runpod: re-attached %d in-flight job(s): %s", len(adopted), adopted
         )
 
+    # A pod can disappear while NADOC itself is down (spot reclaim, host loss, account
+    # interruption).  Such a job is neither adoptable nor an orphan, so the old startup
+    # pass simply overlooked it and left the durable record "running" forever.  Relaunch
+    # it from the network-volume checkpoint.  Explicit Stop and terminal states are
+    # excluded; maximum-lifetime jobs are already PAUSED and require fresh spend consent.
+    live_ids = {p.id for p in live_pods if not p.is_destroyed}
+    restarted: list[str] = []
+    from backend.core.md_job import MdJob, MdStatus
+
+    for job in MdJob.list_jobs(_workspace()):
+        if (
+            job.execution_target == "runpod"
+            and job.status == MdStatus.running
+            and not job.user_stopped
+            and job.runpod_pod_id not in live_ids
+        ):
+            volume_id = job.runpod_volume_id or keep_volume
+            if not volume_id:
+                logger.error(
+                    "runpod: cannot auto-restart disrupted job %s: no network volume",
+                    job.job_id,
+                )
+                continue
+            job.status = MdStatus.paused
+            job.resumable = True
+            job.error = "Pod disappeared while NADOC was offline; automatically restarting."
+            job.runpod_pod_id = None
+            job.runpod_pid = None
+            job.save(_workspace())
+            runpod_supervisor.start_job(
+                job,
+                _workspace(),
+                client=client,
+                network_volume_id=volume_id,
+                client_keys=_runpod_client_keys(),
+            )
+            restarted.append(job.job_id)
+
     payload = _status_payload(live_pods=max(0, len(live_pods) - len(reaped)))
     payload["reaped_pods"] = reaped
     payload["adopted_jobs"] = adopted
+    payload["restarted_jobs"] = restarted
     return payload
 
 

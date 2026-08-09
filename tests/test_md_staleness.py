@@ -129,3 +129,48 @@ def test_list_md_jobs_size_is_cache_only_then_warms(monkeypatch, tmp_path):
     rows2 = asyncio.run(routes_md.list_md_jobs())
     row2 = next(r for r in rows2 if r["job_id"] == job.job_id)
     assert row2["size_bytes"] == expected  # filled in on the next poll
+
+
+def test_list_md_jobs_repairs_running_runpod_job_when_pod_is_gone(
+    monkeypatch, tmp_path
+):
+    """The MD panel must use RunPod liveness, not a stale persisted pod-id string."""
+    import asyncio
+
+    from backend.api import routes_runpod
+    from backend.core.md_job import MdJob
+
+    class EmptyRunpod:
+        async def list_pods(self):
+            return []
+
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(routes_runpod._SESSION, "client", EmptyRunpod())  # noqa: SLF001
+    restarted = []
+    from backend.core import runpod_supervisor
+
+    monkeypatch.setattr(
+        runpod_supervisor,
+        "start_job",
+        lambda j, ws, **kw: restarted.append((j.job_id, kw["network_volume_id"])),
+    )
+
+    job = new_job("6hb", "equilibrium_aware", "", "")
+    job.execution_target = "runpod"
+    job.status = MdStatus.running
+    job.runpod_pod_id = "pod-that-no-longer-exists"
+    job.runpod_volume_id = "volume1"
+    job.save(tmp_path)
+
+    rows = asyncio.run(routes_md.list_md_jobs())
+    row = next(r for r in rows if r["job_id"] == job.job_id)
+    assert row["status"] == "running"
+    assert row["resumable"] is False
+    assert row["runpod_pod_id"] is None
+    assert row["runpod_pod_connected"] is False
+    assert row["error"] is None
+    assert restarted == [(job.job_id, "volume1")]
+
+    saved = MdJob.load(job.job_id, tmp_path)
+    assert saved.status == MdStatus.running
+    assert saved.runpod_pod_id is None

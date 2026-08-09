@@ -3732,6 +3732,58 @@ async def list_md_jobs() -> list[dict]:
     ws = _workspace()
     jobs = MdJob.list_jobs(ws)
     jobs = [reconcile_job_status(j, ws) for j in jobs]
+    # A persisted pod id is only a handle, not proof that the pod still exists.  The
+    # cross-engine /jobs/active route used to perform this reconciliation, but the MD
+    # panel polls THIS endpoint; consequently a launcher/pod that disappeared left its
+    # row "running" forever.  Read RunPod once for the whole list and fail open when the
+    # service is unreachable (absence of evidence must not destroy a live run).
+    from backend.api import routes_runpod  # noqa: PLC0415
+
+    runpod_ids: set[str] | None = None
+    runpod_connected = routes_runpod._SESSION.is_connected()  # noqa: SLF001
+    if runpod_connected:
+        try:
+            pods = await routes_runpod._SESSION.require().list_pods()  # noqa: SLF001
+            runpod_ids = {p.id for p in pods if not p.is_destroyed}
+        except Exception:  # noqa: BLE001 — status listing must remain available
+            runpod_ids = None
+
+    if runpod_ids is not None:
+        from backend.core import runpod_supervisor  # noqa: PLC0415
+
+        for j in jobs:
+            if (
+                j.execution_target == "runpod"
+                and j.status == MdStatus.running
+                and not runpod_supervisor.is_running(j.job_id)
+                and j.runpod_pod_id not in runpod_ids
+            ):
+                j.status = MdStatus.paused
+                j.resumable = True
+                j.error = (
+                    "Remote pod is gone; progress on the network volume is safe. "
+                    "Resume to continue from the checkpoint."
+                )
+                j.runpod_pod_id = None
+                j.runpod_pid = None
+                j.save(ws)
+                volume_id = j.runpod_volume_id or routes_runpod._SESSION.network_volume_id  # noqa: SLF001
+                if volume_id:
+                    # The user already authorised this run and its per-pod budget.  A
+                    # vanished pod is an interruptible-infrastructure event, so resume
+                    # immediately from the volume checkpoint instead of making a panel
+                    # poll merely diagnose and strand it.
+                    runpod_supervisor.start_job(
+                        j,
+                        ws,
+                        client=routes_runpod._SESSION.require(),  # noqa: SLF001
+                        network_volume_id=volume_id,
+                        client_keys=_runpod_client_keys(),
+                    )
+                    j.status = MdStatus.running
+                    j.resumable = False
+                    j.error = None
+                    j.save(ws)
     current_fp = current_active_design_fingerprint()
     out: list[dict] = []
     to_warm: list = []
@@ -3768,11 +3820,9 @@ async def list_md_jobs() -> list[dict]:
             # Account connectivity and pod connectivity are separate. A valid API session
             # with no pod means we KNOW the run is disconnected; no API session means we
             # cannot verify it. Both deserve an explicit notice beside persisted progress.
-            from backend.api import routes_runpod  # noqa: PLC0415
-
-            d["runpod_connected"] = routes_runpod._SESSION.is_connected()  # noqa: SLF001
+            d["runpod_connected"] = runpod_connected
             d["runpod_pod_connected"] = bool(
-                d["runpod_connected"] and j.runpod_pod_id
+                runpod_ids is not None and j.runpod_pod_id in runpod_ids
             )
             if not d["runpod_connected"]:
                 d["runpod_sync_notice"] = (
