@@ -62,7 +62,7 @@ function makeDeps(overrides = {}) {
     assemblyRenderer: { rebuild: vi.fn(async () => {}), rebuildLinkers: vi.fn() },
     assemblyJointRenderer: { rebuild: vi.fn() },
     api: { skipNextResponseDelta: vi.fn(), editFeature: vi.fn(async () => {}), seekFeatures: vi.fn(async () => {}) },
-    moveRotatePanel: { setAssemblyCtx: vi.fn() },
+    moveRotatePanel: { setAssemblyCtx: vi.fn(), setSessionMode: vi.fn() },
     mrPanel: document.getElementById('__mrPanel'),
     mrPivotSel: document.getElementById('__mrPivotSel'),
     setTransformValues: vi.fn(),
@@ -154,6 +154,7 @@ describe('initTranslateRotateTool — activate (design mode)', () => {
     expect(ctx.clusterGizmo.attach).not.toHaveBeenCalled()
     expect(toastCalls.length).toBe(0)
     expect(ctx.deps.refreshCurrentSelection).toHaveBeenCalled()
+    expect(ctx.deps.moveRotatePanel.setSessionMode).toHaveBeenCalledWith('waiting')
     expect(document.getElementById('mode-indicator').textContent).toContain('select an entity')
   })
 
@@ -236,6 +237,7 @@ describe('initTranslateRotateTool — activate (assembly mode)', () => {
     expect(ctx.deps.createAssemblyTransformContext).toHaveBeenCalledWith('I1')
     expect(ctx.deps.moveRotatePanel.setAssemblyCtx).toHaveBeenCalled()
     expect(ctx.deps.attachGroupGizmo).toHaveBeenCalledWith('I1', expect.anything())
+    expect(ctx.deps.moveRotatePanel.setSessionMode).toHaveBeenCalledWith('assembly')
     expect(ctx.deps.refreshCurrentSelection).toHaveBeenCalled()
     const btn = [...document.body.children].find(el => el.textContent === '✓')
     expect(btn.style.display).toBe('none')

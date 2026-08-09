@@ -1,4 +1,4 @@
-/** Independent atomistic residue transform session. */
+/** Representation-independent single-nucleotide transform session. */
 
 import * as THREE from 'three'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
@@ -42,7 +42,7 @@ export function abstractPreviewUpdate(info, matrix) {
   }
 }
 
-export function initNucleotideTransformTool({ store, scene, camera, canvas, controls, designRenderer, atomisticRenderer, refreshAtomistic }) {
+export function initNucleotideTransformTool({ store, scene, camera, canvas, controls, designRenderer, atomisticRenderer, moveRotatePanel, refreshCurrentSelection, refreshAtomistic }) {
   let tc = null
   let helper = null
   let dummy = null
@@ -108,6 +108,11 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     })
     document.getElementById('mode-indicator').textContent =
       'NUCLEOTIDE MOVE/ROTATE — Tab: move/rotate · M: apply · Esc: cancel'
+    moveRotatePanel?.setAssemblyCtx(null)
+    moveRotatePanel?.setSessionMode?.('nucleotide')
+    moveRotatePanel?.setTransformValues?.(0, 0, 0, 0, 0, 0)
+    refreshCurrentSelection?.()
+    if (moveRotatePanel?.panel) moveRotatePanel.panel.style.display = ''
     document.addEventListener('keydown', onKey)
     return true
   }
@@ -129,6 +134,14 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     detach(false)
   }
 
+  function reset() {
+    if (!tc) return
+    restorePreview()
+    dummy.position.copy(pivot)
+    dummy.quaternion.identity()
+    tc.updateMatrixWorld?.()
+  }
+
   function restorePreview() {
     if (previewKind === 'atomistic' && target) atomisticRenderer.applyResidueMatrix(target, identity())
     else if (previewKind === 'abstract' && target?.helix_id === '__xb__') {
@@ -142,6 +155,7 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     dummy?.parent?.remove(dummy)
     document.removeEventListener('keydown', onKey)
     controls.enabled = true
+    if (moveRotatePanel?.panel) moveRotatePanel.panel.style.display = 'none'
     tc = helper = dummy = target = pivot = abstractInfo = null
     dragging = false
     previewKind = null
@@ -155,5 +169,5 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     }
   }
 
-  return { activate, confirm, cancel, detach, canActivate, isActive: () => !!tc }
+  return { activate, confirm, cancel, reset, detach, canActivate, isActive: () => !!tc }
 }

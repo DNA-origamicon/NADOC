@@ -190,6 +190,7 @@ export function initTranslateRotateTool(deps) {
       const ctx = _createAssemblyTransformContext(activeInstanceId)
       if (!ctx) return
       _moveRotatePanel.setAssemblyCtx(ctx)
+      _moveRotatePanel.setSessionMode?.('assembly')
       setActive(true)
       document.getElementById('mode-indicator').textContent = 'MOVE — Tab: move/rotate · click elsewhere: commit · Esc: cancel'
       _attachGroupGizmo(activeInstanceId, ctx)
@@ -231,6 +232,7 @@ export function initTranslateRotateTool(deps) {
     const first = targetClusterId && clusters.find(c => c.id === targetClusterId)
     if (!first) {
       _moveRotatePanel.setAssemblyCtx(null)
+      _moveRotatePanel.setSessionMode?.('waiting')
       if (_mrPivotSel) _mrPivotSel.disabled = true
       _mrSetPivotOptions([])
       _mrSetSelectedPivot('centroid')
@@ -248,6 +250,7 @@ export function initTranslateRotateTool(deps) {
 
     // Populate and show the right-sidebar move/rotate panel
     _moveRotatePanel.setAssemblyCtx(null)
+    _moveRotatePanel.setSessionMode?.('cluster')
     if (_mrPivotSel) _mrPivotSel.disabled = false
     _mrRefreshCurrentSelection?.()
     await _flexRelax.refreshFlexGates()
@@ -548,6 +551,7 @@ export function initTranslateRotateTool(deps) {
     document.getElementById('mode-indicator').textContent =
       `MOVE/ROTATE (${groupIds.length} clusters) — Tab: move/rotate · Esc: cancel`
     _moveRotatePanel.setAssemblyCtx(null)
+    _moveRotatePanel.setSessionMode?.('cluster')
     if (_mrPivotSel) _mrPivotSel.disabled = true       // pivot is the combined centroid
     _mrRefreshCurrentSelection?.()
     _mrSetPivotOptions([])
@@ -562,6 +566,7 @@ export function initTranslateRotateTool(deps) {
   // the number boxes / pivot options / centroid constraint (it early-outs while a group
   // is active, so it only runs once we're back in single mode).
   async function _showClusterSingle(clusterId, clusters) {
+    _moveRotatePanel.setSessionMode?.('cluster')
     if (_mrPivotSel) _mrPivotSel.disabled = false
     document.getElementById('mode-indicator').textContent = 'MOVE/ROTATE — Esc: cancel'
     _mrRefreshCurrentSelection?.()
@@ -667,12 +672,34 @@ export function initTranslateRotateTool(deps) {
   }
 
   _confirmBtn.addEventListener('click', _confirmTranslateRotateTool)
-  document.getElementById('mr-apply-btn')?.addEventListener('click', _confirmTranslateRotateTool)
-  document.getElementById('mr-cancel-btn')?.addEventListener('click', _cancelTranslateRotateTool)
-  document.getElementById('mr-reset-btn')?.addEventListener('click', _resetActiveClusterToSaved)
+  document.getElementById('mr-apply-btn')?.addEventListener('click', () => {
+    if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.confirm()
+    else _confirmTranslateRotateTool()
+  })
+  document.getElementById('mr-cancel-btn')?.addEventListener('click', () => {
+    if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.cancel()
+    else _cancelTranslateRotateTool()
+  })
+  document.getElementById('mr-reset-btn')?.addEventListener('click', () => {
+    if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.reset()
+    else _resetActiveClusterToSaved()
+  })
+
+  function _activateFromCurrentSelection() {
+    if (nucleotideTransformTool?.canActivate()) return nucleotideTransformTool.activate()
+    const st = store.getState()
+    const target = st.assemblyActive
+      ? null
+      : resolveSelectionClusterId(st.selectedObject, st.currentDesign)
+    return _activateTranslateRotateTool(target)
+  }
 
   document.getElementById('menu-tools-translate-rotate')?.addEventListener('click', () => {
-    _activateTranslateRotateTool()
+    if (nucleotideTransformTool?.isActive() || getActive()) {
+      if (_mrPanel) _mrPanel.style.display = ''
+      return
+    }
+    _activateFromCurrentSelection()
   })
 
   registerShortcut({
@@ -687,15 +714,7 @@ export function initTranslateRotateTool(deps) {
       if (getActive()) {
         _confirmTranslateRotateTool()
       } else {
-        if (nucleotideTransformTool?.canActivate()) {
-          nucleotideTransformTool.activate()
-          return
-        }
-        const st = store.getState()
-        const target = st.assemblyActive
-          ? null
-          : resolveSelectionClusterId(st.selectedObject, st.currentDesign)
-        _activateTranslateRotateTool(target)
+        _activateFromCurrentSelection()
       }
     },
   })

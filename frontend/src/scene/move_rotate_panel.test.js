@@ -11,6 +11,7 @@ import { initMoveRotatePanel, moveRotateSelectionLabels } from './move_rotate_pa
 const DOM = {
   'move-rotate-panel':      'div',
   'mr-current-selection':   'div',
+  'mr-session-hint':        'div',
   'mr-tx':                  'input',
   'mr-ty':                  'input',
   'mr-tz':                  'input',
@@ -29,7 +30,34 @@ const DOM = {
   'mr-rz-inc':              'button',
   'mr-snap-45':             'input',
   'mr-reset-btn':           'button',
+  'mr-apply-btn':           'button',
 }
+
+describe('session-mode UX', () => {
+  it('disables exact fields while armed empty and explains the next action', () => {
+    const els = mountPanelDom()
+    const panel = initMoveRotatePanel(makeDeps())
+    panel.setSessionMode('waiting')
+    expect(els['mr-tx'].disabled).toBe(true)
+    expect(els['mr-pivot-sel'].disabled).toBe(true)
+    expect(els['mr-reset-btn'].disabled).toBe(true)
+    expect(els['mr-apply-btn'].textContent).toBe('Done')
+    expect(els['mr-session-hint'].textContent).toContain('Select a cluster or nucleotide')
+  })
+
+  it('shows gizmo guidance for nucleotide sessions and restores cluster inputs', () => {
+    const els = mountPanelDom()
+    const panel = initMoveRotatePanel(makeDeps())
+    panel.setSessionMode('nucleotide')
+    expect(els['mr-tx'].disabled).toBe(true)
+    expect(els['mr-reset-btn'].disabled).toBe(false)
+    expect(els['mr-session-hint'].textContent).toContain('Press Tab')
+    panel.setSessionMode('cluster')
+    expect(els['mr-tx'].disabled).toBe(false)
+    expect(els['mr-pivot-sel'].disabled).toBe(false)
+    expect(els['mr-apply-btn'].textContent).toBe('Apply')
+  })
+})
 
 function mountPanelDom() {
   const els = mountIds(DOM)

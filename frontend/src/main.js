@@ -5216,6 +5216,8 @@ async function main() {
   // so it is injected lazily. Alias-consts keep every external call site verbatim.
   const _nucleotideTransformTool = initNucleotideTransformTool({
     store, scene, camera, canvas, controls, designRenderer, atomisticRenderer,
+    moveRotatePanel: _moveRotatePanel,
+    refreshCurrentSelection: _mrRefreshCurrentSelection,
     refreshAtomistic: _restoreDesignHeavy,
   })
 

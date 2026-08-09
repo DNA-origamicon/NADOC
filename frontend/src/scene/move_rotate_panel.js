@@ -67,6 +67,7 @@ export function initMoveRotatePanel({
 }) {
   const _mrPanel         = document.getElementById('move-rotate-panel')
   const _mrSelectionBox  = document.getElementById('mr-current-selection')
+  const _mrSessionHint   = document.getElementById('mr-session-hint')
   const _mrTxInp         = document.getElementById('mr-tx')
   const _mrTyInp         = document.getElementById('mr-ty')
   const _mrTzInp         = document.getElementById('mr-tz')
@@ -80,6 +81,28 @@ export function initMoveRotatePanel({
   const _mrSnapChk       = document.getElementById('mr-snap-45')
   let   _mrPivotIsJoint  = false
   let   _mrAssemblyCtx   = null
+
+  function _mrSetSessionMode(sessionMode = 'cluster') {
+    const gizmoOnly = sessionMode === 'nucleotide' || sessionMode === 'waiting'
+    const fieldIds = ['mr-tx', 'mr-ty', 'mr-tz', 'mr-rx', 'mr-ry', 'mr-rz', 'mr-ja',
+      'mr-rx-dec', 'mr-rx-inc', 'mr-ry-dec', 'mr-ry-inc', 'mr-rz-dec', 'mr-rz-inc',
+      'mr-snap-45', 'mr-pivot-sel']
+    for (const id of fieldIds) {
+      const el = document.getElementById(id)
+      if (el) el.disabled = gizmoOnly
+    }
+    const reset = document.getElementById('mr-reset-btn')
+    if (reset) reset.disabled = sessionMode === 'waiting'
+    const apply = document.getElementById('mr-apply-btn')
+    if (apply) apply.textContent = sessionMode === 'waiting' ? 'Done' : 'Apply'
+    if (_mrSessionHint) {
+      _mrSessionHint.textContent = sessionMode === 'waiting'
+        ? 'Select a cluster or nucleotide to attach the gizmo.'
+        : sessionMode === 'nucleotide'
+          ? 'Drag the gizmo. Press Tab to switch move/rotate.'
+          : 'Drag the gizmo or enter an exact transform below.'
+    }
+  }
 
 
   function _mrShowJointMode(on) {
@@ -359,6 +382,7 @@ export function initMoveRotatePanel({
     setPivotOptions:              _mrSetPivotOptions,
     setSelectedPivot:             _mrSetSelectedPivot,
     setCurrentSelection:          _mrSetCurrentSelection,
+    setSessionMode:               _mrSetSessionMode,
     showJointMode:                _mrShowJointMode,
     commitInputs:                 _mrCommitInputs,
     stepAxis:                     _mrStepAxis,
