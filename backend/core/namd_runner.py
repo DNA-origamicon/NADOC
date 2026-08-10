@@ -48,7 +48,11 @@ from backend.core.md_health import (
     run_health_check,
     append_health_jsonl,
 )
-from backend.core.namd_metrics import parse_namd_log, parse_namd_log_frames
+from backend.core.namd_metrics import (
+    last_namd_timestep_fast,
+    parse_namd_log,
+    parse_namd_log_frames,
+)
 from backend.core.md_cutoff import should_early_stop_stage
 from backend.core.md_protocols import minimization_status, segments_from_manifest
 from backend.core.md_vram import (
@@ -2115,8 +2119,34 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
 
     def _set_min_status(status: str) -> None:
         """Stamp the timeline's minimisation row and persist it (no-op on old jobs)."""
-        if job.minimization is not None and job.minimization.status != status:
-            job.minimization.status = status
+        if job.minimization is None:
+            return
+        changed = job.minimization.status != status
+        job.minimization.status = status
+        if status == "done" and job.minimization.percent != 100.0:
+            job.minimization.percent = 100.0
+            changed = True
+        elif status == "pending" and job.minimization.percent != 0.0:
+            job.minimization.percent = 0.0
+            changed = True
+        if changed:
+            job.save(workspace_dir)
+
+    min_log = package_dir / f"{min_name}.log"
+
+    def _update_min_progress() -> None:
+        """Persist bounded live progress from the latest complete ENERGY line."""
+        row = job.minimization
+        if row is None or row.steps <= 0:
+            return
+        step = last_namd_timestep_fast(min_log)
+        if step is None:
+            return
+        percent = min(99.9, max(0.0, 100.0 * step / row.steps))
+        # The disk guard ticks every 15 s. Avoid rewriting job.json when NAMD has
+        # not emitted another complete line during that interval.
+        if abs(percent - row.percent) >= 0.001:
+            row.percent = percent
             job.save(workspace_dir)
 
     # A minimisation can OUTLIVE its orchestrator (a dev-server --reload, a server
@@ -2134,10 +2164,11 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         job.status = MdStatus.running
         _set_min_status("running")
         job.save(workspace_dir)
-        # Guarded like a spawned minimisation.  Minimisation emits no health sample
-        # (there is no trajectory yet), so there is no on_tick here — but it writes
-        # just as much to disk, and used to run with no low-disk abort at all.
-        await _wait_for_segment_process(min_name, guard_dir=package_dir)
+        # Minimisation has no trajectory health sample yet, but its ENERGY timestep
+        # still drives durable timeline progress while an orphan is adopted.
+        await _wait_for_segment_process(
+            min_name, guard_dir=package_dir, on_tick=_update_min_progress
+        )
 
     if not min_coor.exists():
         if not _disk_floor_ok("minimization"):
@@ -2147,7 +2178,6 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         _set_min_status("running")
         job.save(workspace_dir)
 
-        min_log = package_dir / f"{min_name}.log"
         _free_host_ram_for_namd(job.job_id, "minimization")
         rc, pid = await _run_namd_async(
             namd_bin,
@@ -2158,6 +2188,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             run_devices,
             job.job_id,
             on_spawn=_persist_pid,
+            on_tick=_update_min_progress,
         )
         if rc != 0:
             logger.error(

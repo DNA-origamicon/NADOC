@@ -4018,7 +4018,10 @@ def minimization_status(manifest: dict):
     return MdSegmentStatus(
         name=str(name),
         stage=str(slot.get("stage") or DEFAULT_MINIMIZATION_STAGE),
-        percent=100.0,
+        # This is work remaining, not a completed timeline marker.  The runner
+        # advances it from NAMD's ENERGY timestep and stamps 100 only after the
+        # minimization output exists.
+        percent=0.0,
         steps=int(slot.get("steps") or 0),
         status="pending",
     )

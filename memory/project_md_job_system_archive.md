@@ -1166,8 +1166,27 @@ accelerator). The job record mirrored that, so the UI had nothing to draw.
   minimisation finished (the ladder chains from its `.coor`), which keeps Alpine/RunPod runs
   truthful without a second status-writing path on the cluster side.
 
-The master bar's **percentage** is unchanged — minimisation is not a segment, so it stays at 0 %
-until segment 1; the tooltip and the timeline row say what is running instead of faking progress.
+The master bar's percentage originally remained at 0% until segment 1. Live minimization
+progress was added later; see the update below.
+
+## Minimisation reports its real NAMD step progress (2026-08-10)
+
+**Symptom:** the minimization timeline row said `100%` for the entire run even though its status
+was still `running`. `minimization_status()` initialized the reusable status record with 100%,
+and the runner changed only its status string.
+
+- A pending minimization now starts at 0% and is stamped 100% only after its output coordinates
+  exist.
+- During a live run, the disk guard's 15-second `on_tick` callback reads the newest complete
+  `ENERGY:` timestep through `last_namd_timestep_fast()` and durably records
+  `100 * timestep / configured_steps` (bounded below 100 until completion).
+- The same callback is installed when adopting a minimization that survived a backend restart,
+  so reloads do not freeze its progress.
+- This deliberately tracks execution progress, not convergence. Trajectory health sampling still
+  begins with dynamics because minimization emits no trajectory.
+
+Validated on the live 135,000-step `24hb_1xT` minimization: the stale 100% record corrected to
+52.1% at approximately step 70,300 while the existing NAMD process continued uninterrupted.
 
 ## Health is now sampled DURING a segment, not only at its end (2026-07-29)
 

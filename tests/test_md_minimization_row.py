@@ -30,7 +30,7 @@ def test_minimization_status_reads_name_steps_and_label():
     assert row.steps == 9600
     assert row.stage == "Minimization ENM k=0.5"
     assert row.status == "pending"
-    assert row.percent == 100.0
+    assert row.percent == 0.0
 
 
 def test_minimization_status_keeps_a_replicas_own_label():
@@ -133,7 +133,7 @@ def test_to_dict_serialises_the_nested_record(tmp_path):
     assert d["minimization"] == {
         "name": "demo_00_min",
         "stage": "Minimization",
-        "percent": 100.0,
+        "percent": 0.0,
         "steps": 4800,
         "status": "pending",
         "skipped": False,

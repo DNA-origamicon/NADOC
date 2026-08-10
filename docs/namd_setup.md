@@ -56,6 +56,19 @@ NAMD. Base identity changes the exact CHARMM atom count, so the sequenced topolo
 first and its PSF/manifest count is propagated to disk, VRAM, throughput, and cluster/RunPod
 resource projections. Once preparation completes, **Run** launches that prepared package.
 
+## Minimization progress
+
+The pre-dynamics minimization is tracked separately from the relaxation segments. While
+NAMD is minimizing, NADOC reads the latest complete `ENERGY:` timestep from the live log
+every disk-guard tick (normally 15 seconds) and persists `step / configured steps` in the
+job record. The timeline therefore starts at 0%, advances during minimization, and reaches
+100% only after NAMD writes the completed minimization coordinates. The same tracking is
+used when NADOC adopts a minimization process that survived an application restart.
+
+Minimization does not yet produce trajectory-based health samples; those begin with the
+first dynamics segment. A moving minimization percentage, a growing log, and an active
+NAMD process indicate forward progress during this stage.
+
 ### Which build do I need?
 
 NADOC launches NAMD as:
