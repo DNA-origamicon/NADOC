@@ -269,8 +269,8 @@ export function mdJobIsRunning(job) {
  *
  *  `requested` is what the Job Wizard's step 1 put in the payload — the card the user
  *  actually picked from the ranked table, and the one every cost / ns-day / $-per-ns
- *  number they were shown was computed from.  `pickerKey` is the panel's older
- *  Clusters-card picker, kept only as a fallback for a launch that carries no choice.
+ *  number they were shown was computed from. The Clusters-card picker is deliberately
+ *  absent: that card browses availability and must not control a launch.
  *
  *  Both launch paths used to assign the panel's value UNCONDITIONALLY, after spreading
  *  the wizard's payload — so the wizard's card was overwritten, invariably with `null`
@@ -278,9 +278,9 @@ export function mdJobIsRunning(job) {
  *  headed its own ranked list. Cleared for every other target for the same reason the
  *  backend clears it: a leftover card on a run re-pointed at the local GPU must not
  *  resurface at launch. */
-export function mdRunpodGpuKeyFor({ runTarget = 'local', requested = null, pickerKey = null } = {}) {
+export function mdRunpodGpuKeyFor({ runTarget = 'local', requested = null } = {}) {
   if (runTarget !== 'runpod') return null
-  return requested ?? pickerKey ?? null
+  return requested ?? null
 }
 
 /** Pure: is this job holding THIS computer's GPU/cores/disk right now?
@@ -619,6 +619,17 @@ export function mdRemoteReconnectPrompt(jobs, clusterState, runpodState = 'conne
  *  the standard prep+relax (POST /md/jobs/{id}/prepare) from the seed's coordinates. */
 export function mdJobIsDraft(job) {
   return job?.status === 'draft' && !job?.awaiting_sequence
+}
+
+/** Resolve where a newly-created job runs.
+ *
+ * The Job Wizard owns this choice. Legacy/non-wizard callers default to local; the
+ * Clusters information card is intentionally not an input.
+ */
+export function mdRequestedRunTarget(request) {
+  const requested = String(request?.execution_target || '').toLowerCase()
+  if (['local', 'alpine', 'runpod'].includes(requested)) return requested
+  return 'local'
 }
 
 /** Pure: the run-button label for a selected draft — names the seed engine so the
@@ -3325,9 +3336,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     })
     if (!proceed) return null
 
-    // The Local/Alpine radio decides where THIS production runs, independent of where
-    // the relaxation ran. Local-resource guards apply only to a local run.
-    const runTarget = _currentRunTarget()
+    // The wizard decides where THIS production runs, independent of both its parent and
+    // whichever informational pane happens to be selected in the Clusters card.
+    const runTarget = mdRequestedRunTarget(body)
     const isLocalRun = mdIsLocalTarget(runTarget)
     if (isLocalRun && !(await confirmNoConcurrentJob({ excludeJobId: parentId }))) return null
 
@@ -3336,9 +3347,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       autostart: isLocalRun && body.autostart,
       execution_target: runTarget,
       cluster_name: runTarget === 'alpine' ? 'alpine' : null,
-      // The WIZARD's card wins — see mdRunpodGpuKeyFor for why this used to discard it.
+      // RunPod hardware is part of the wizard request. The Clusters-card picker is an
+      // information probe and must not alter the workflow being created.
       runpod_gpu_key: mdRunpodGpuKeyFor({
-        runTarget, requested: body?.runpod_gpu_key, pickerKey: _selectedRunpodGpu?.key }),
+        runTarget, requested: body?.runpod_gpu_key }),
       // Anchors on the PRODUCTION request. This card used to be read only by the relax
       // launch, so picking anchors and clicking Production silently discarded them — and
       // even an anchored parent lost them, because the replica builder never passed them
@@ -3423,18 +3435,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     getPartPath: () => _currentPartPath(),
     onJobCreated: jobId => { _reselectJob(jobId) },
     onOptimizeMount: mount => _wireOptimize(mount),
-    // The wizard now asks WHERE the job runs as its first step.  Mirror that answer onto
-    // the panel's run-target radios so there is one source of truth: every launch gate
-    // and payload site already reads `_currentRunTarget()`, and they keep working
-    // untouched.  Jobs launched from the Advanced form (not the wizard) still drive the
-    // radios directly.
-    onTargetChange: ({ target }) => {
-      const radio = { local: runTargetLocal, alpine: runTargetAlpine, runpod: runTargetRunpod }[target]
-      if (radio && !radio.checked) {
-        radio.checked = true
-        radio.dispatchEvent(new Event('change', { bubbles: true }))
-      }
-    },
   })
 
   /**
@@ -3454,7 +3454,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // Alpine runs on the remote cluster — it can't contend for the local GPU/disk,
     // so the local-resource guards (concurrent NADOC job, external GPU hog, local
     // disk space) don't apply and would wrongly block a submit while a local job runs.
-    const runTarget = _currentRunTarget()
+    const runTarget = mdRequestedRunTarget(protocolPayload)
     const isLocalRun = mdIsLocalTarget(runTarget)
 
     // The device string comes from whichever surface supplied the protocol settings, so
@@ -3487,11 +3487,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       design_source_path: _currentPartPath() || null,
       execution_target: runTarget,
       cluster_name:   runTarget === 'alpine' ? 'alpine' : null,
-      // The WIZARD's card wins; the Clusters-card picker is only a fallback. This used to
-      // be an unconditional assignment placed AFTER `...proto`, so it overwrote the key
-      // step 1 had just put there — see mdRunpodGpuKeyFor.
+      // RunPod hardware belongs to this wizard request. The Clusters card only browses
+      // availability/connectivity and cannot substitute a different GPU into the run.
       runpod_gpu_key: mdRunpodGpuKeyFor({
-        runTarget, requested: proto.runpod_gpu_key, pickerKey: _selectedRunpodGpu?.key }),
+        runTarget, requested: proto.runpod_gpu_key }),
       anchors:        anchors.length ? anchors : null,
       // The ladder pins hard regardless of the stiffness select (its constraints channel
       // is spent on the slow-release restraint), but the ATOM filter applies to both.

@@ -217,7 +217,7 @@ describe('newestCompletedForPart (cross-engine compare fallback)', () => {
   })
 })
 
-import { mdJobIsActive, mdJobIsRunning, mdJobOccupiesLocalMachine, mdRunpodGpuKeyFor, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle, mdQueueable, mdQueueRowLabel, mdRunpodStartable, mdRunpodPhase } from './md_jobs_panel.js'
+import { mdJobIsActive, mdJobIsRunning, mdJobOccupiesLocalMachine, mdRequestedRunTarget, mdRunpodGpuKeyFor, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle, mdQueueable, mdQueueRowLabel, mdRunpodStartable, mdRunpodPhase } from './md_jobs_panel.js'
 
 describe('mdJobIsDraft / mdDraftRunLabel (deferred-prep seed)', () => {
   it('mdJobIsDraft is true only for status "draft"', () => {
@@ -554,8 +554,8 @@ describe('mdRunpodGpuKeyFor — the wizard picks the card, not the old Clusters 
     // far more often, null, because nothing but that picker ever sets it.
     expect(mdRunpodGpuKeyFor({ runTarget: 'runpod', requested: H100, pickerKey: L40 })).toBe(H100)
   })
-  it('falls back to the Clusters-card picker when the launch carries no choice', () => {
-    expect(mdRunpodGpuKeyFor({ runTarget: 'runpod', pickerKey: L40 })).toBe(L40)
+  it('never falls back to the Clusters-card picker when the launch carries no choice', () => {
+    expect(mdRunpodGpuKeyFor({ runTarget: 'runpod', pickerKey: L40 })).toBe(null)
   })
   it('no choice anywhere → null, and the backend ranks for itself', () => {
     expect(mdRunpodGpuKeyFor({ runTarget: 'runpod' })).toBe(null)
@@ -564,6 +564,22 @@ describe('mdRunpodGpuKeyFor — the wizard picks the card, not the old Clusters 
     for (const runTarget of ['local', 'alpine', undefined]) {
       expect(mdRunpodGpuKeyFor({ runTarget, requested: H100, pickerKey: L40 })).toBe(null)
     }
+  })
+})
+
+describe('mdRequestedRunTarget — wizard choice is authoritative', () => {
+  it.each(['local', 'alpine', 'runpod'])(
+    'keeps explicit wizard target %s regardless of the Clusters-card selection',
+    (target) => {
+      for (const clusterPane of ['local', 'alpine', 'runpod']) {
+        expect(mdRequestedRunTarget({ execution_target: target }, clusterPane)).toBe(target)
+      }
+    },
+  )
+
+  it('defaults a legacy caller to local, never to the information-card selection', () => {
+    expect(mdRequestedRunTarget({}, 'runpod')).toBe('local')
+    expect(mdRequestedRunTarget({}, 'junk')).toBe('local')
   })
 })
 

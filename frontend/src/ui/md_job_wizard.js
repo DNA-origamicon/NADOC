@@ -1817,9 +1817,8 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       initialTarget: state.target,
       readOnly: () => readOnly,
       onChange: ({ target, partition }) => {
-        // A locked view must never write outwards: `onTargetChange` mirrors the answer
-        // onto the panel's run-target radios, so letting this through would move where the
-        // NEXT job runs just because someone looked at an old one.
+        // A locked view must never write outwards. In live mode this callback is only an
+        // optional observer; the wizard's own payload remains authoritative for launch.
         if (readOnly) return
         const targetMoved = state.target !== target
         // Fires on every resource keystroke too, so only a real move invalidates things.
