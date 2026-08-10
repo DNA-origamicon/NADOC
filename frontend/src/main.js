@@ -124,6 +124,7 @@ import { initNucleotideTransformTool } from './scene/nucleotide_transform_tool.j
 import { initCpdWeldOverlay }      from './scene/cpd_weld_overlay.js'
 import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { initAtomSurfaceDisplay }  from './scene/atom_surface_display.js'
+import { installAtomisticLoadingProbe } from './scene/debug/atomistic_loading_probe.js'
 import { overhangsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './scene/representation_overrides.js'
 import { initSpreadsheet } from './ui/spreadsheet.js'
 import { initExportMenu }          from './ui/export_menu.js'
@@ -2453,6 +2454,47 @@ async function main() {
     // with the new probe radius / colour mode (debounced; reapplyForRepr re-runs the fetch).
     onSurfaceParamsChanged: _regenOverlaySurfaceDebounced,
   })
+  // Temporary field diagnostic for the intermittent atomistic reload loop.
+  // It prints one paste-ready JSON line five seconds after the first loading
+  // request, with direct caller stacks plus live renderer/design state. Keep it
+  // active in production builds too: the reported bug is intermittent and may
+  // only occur in the user's ordinary packaged session.
+  window.nadocAtomisticLoadingProbe?.stop?.()
+  window.nadocAtomisticLoadingProbe = installAtomisticLoadingProbe({
+    context: () => {
+      const st = store.getState()
+      const transforms = st.currentDesign?.nucleotide_transforms ?? []
+      let atomCount = 0
+      let crossoverExtraAtomCount = 0
+      atomisticRenderer.visitAtoms(atom => {
+        atomCount++
+        if (atom.crossover_id != null && atom.extra_base_k != null) {
+          crossoverExtraAtomCount++
+        }
+      })
+      return {
+        url: location.href,
+        design: st.currentDesign ? {
+          id: st.currentDesign.id,
+          name: st.currentDesign.metadata?.name ?? null,
+          nucleotideTransformCount: transforms.length,
+          crossoverExtraTransforms: transforms.filter(t => t.kind === 'extra_base'),
+        } : null,
+        selectedObject: st.selectedObject ? {
+          type: st.selectedObject.type,
+          id: st.selectedObject.id,
+        } : null,
+        selectedBaseKeys: st.multiSelectedBaseKeys ?? [],
+        translateRotateActive: !!st.translateRotateActive,
+        atomLoad: _atomSurface.debugAtomLoadState(),
+        renderedAtoms: { atomCount, crossoverExtraAtomCount },
+      }
+    },
+  })
+  console.info(
+    '[atomistic-loading-probe] armed — reproduce the bug, wait five seconds, then copy '
+    + 'the NADOC_ATOMISTIC_LOADING_DIAGNOSTIC=... console line.',
+  )
   const _applySurfaceMode           = _atomSurface.applySurfaceMode
   const _applyAtomisticMode         = _atomSurface.applyAtomisticMode
   const _setCGVisible               = _atomSurface.setCGVisible

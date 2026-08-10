@@ -3926,14 +3926,25 @@ export async function saveAssemblyToWorkspace(filename) {
 
 export async function saveDesignToWorkspace(path) {
   const json = await _request('POST', '/design/save-workspace', { path, overwrite: true })
-  return json ? _syncFromDesignResponse(json, { skipGeometry: true }) : null
+  if (!json) return null
+  // A same-path save refreshes only the backend's identity_confirmed_at stamp.
+  // Feeding that response back through currentDesign creates an autosave loop:
+  // design ref changes → autosave → fresh timestamp/ref → autosave, and every
+  // turn also invalidates/reloads the atomistic model. The already-open frontend
+  // design is canonical for a "confirmed" save, so keep its object identity.
+  if (json.identity_disposition === 'confirmed') return json
+  // Initial path claims and Save As can change identity/path metadata (and Save
+  // As can mint a new UUID), so those responses still must enter the store.
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 /** Save current in-memory design to an explicit workspace path.
  *  Pass overwrite:false to get a 409 if the file already exists (for Save As confirm flow). */
 export async function saveDesignAs(path, overwrite = true) {
   const json = await _request('POST', '/design/save-workspace', { path, overwrite })
-  return json ? _syncFromDesignResponse(json, { skipGeometry: true }) : null
+  if (!json) return null
+  if (json.identity_disposition === 'confirmed') return json
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 /** Save current in-memory assembly to an explicit workspace path. */

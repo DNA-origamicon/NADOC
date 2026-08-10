@@ -459,7 +459,15 @@ export function initAtomSurfaceDisplay({
     _invalidateAtomData()           // different build → different atoms
     if (atomisticRenderer.getMode() === 'off') return
     showPersistentToast(next === null ? 'Loading atomistic model…'
-                                      : 'Building MD seed coordinates…')
+                                      : 'Building MD seed coordinates…', {
+      diagnostic: {
+        owner: 'atom_surface_display.setSeedLattice',
+        atomisticMode: atomisticRenderer.getMode(),
+        requestedSeedLattice: next,
+        atomLoadGeneration: _atomLoadGeneration,
+        atomLoadInFlight: !!_atomLoadPromise,
+      },
+    })
     try {
       await _refetchAtomistic()
     } finally {
@@ -510,7 +518,16 @@ export function initAtomSurfaceDisplay({
     if (_deferToOverlay) return
     if (mode !== 'off' && !_atomDataCache) {
       const toastToken = ++_atomToastToken
-      showPersistentToast('Loading atomistic model…')
+      showPersistentToast('Loading atomistic model…', {
+        diagnostic: {
+          owner: 'atom_surface_display.applyAtomisticMode',
+          atomisticMode: mode,
+          toastToken,
+          atomLoadGeneration: _atomLoadGeneration,
+          atomLoadInFlight: !!_atomLoadPromise,
+          atomCachePresent: !!_atomDataCache,
+        },
+      })
       try {
         const data = await _ensureAtomData()
         if (data) {
@@ -560,7 +577,16 @@ export function initAtomSurfaceDisplay({
           { severity: 'warn' })
         return
       }
-      if (e.detail.building) showPersistentToast(_BUSY_TEXT[kind])
+      if (e.detail.building) showPersistentToast(_BUSY_TEXT[kind], {
+        diagnostic: {
+          owner: 'atom_surface_display.heavyStatus',
+          eventName: _evt,
+          eventDetail: e.detail,
+          atomisticMode: atomisticRenderer.getMode(),
+          atomLoadGeneration: _atomLoadGeneration,
+          atomLoadInFlight: !!_atomLoadPromise,
+        },
+      })
       else dismissToast()
     })
   }
@@ -688,6 +714,14 @@ export function initAtomSurfaceDisplay({
     getRegionSurfaceRenderer:   () => regionSurfaceRenderer,
     getSurfaceMode: () => _surfaceMode,
     getSurfaceProbeRadius: () => _surfaceProbeRadius,
+    debugAtomLoadState: () => ({
+      atomisticMode: atomisticRenderer.getMode(),
+      atomLoadGeneration: _atomLoadGeneration,
+      atomLoadInFlight: !!_atomLoadPromise,
+      atomCachePresent: !!_atomDataCache,
+      atomToastToken: _atomToastToken,
+      seedLatticeNm: _seedLatticeNm,
+    }),
     // Live surface params for the sim-overlay surface fetch (so its mesh honours the
     // sidebar's probe radius + colour mode instead of the backend defaults).
     getSurfaceParams: () => ({ probe_radius: _surfaceProbeRadius, detail: _surfaceDetail,

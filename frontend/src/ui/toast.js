@@ -13,6 +13,7 @@
  *   loading:   true — prepend an animated activity spinner
  *   duration:  ms (default 2200; ignored by showPersistentToast)
  *   action:    { label, onClick }  — adds a button (e.g. "Undo")
+ *   diagnostic: JSON-safe caller context consumed by development probes
  *
  * Toasts stack vertically (newest below). Each is dismissible via × button.
  * Styling pulls from components.css (.toast / .toast--success/--warning/--error).
@@ -20,6 +21,27 @@
 
 const STACK_GAP_PX = 8
 const _toasts = []  // { el, timer }
+const ATOMISTIC_LOADING_TEXT = 'Loading atomistic model…'
+const ATOMISTIC_LOADING_CALL_EVENT = 'nadoc:atomistic-loading-toast-call'
+
+/** Capture the synchronous caller before MutationObserver loses the call stack. */
+function _traceAtomisticLoadingCall(msg, opts) {
+  if (msg !== ATOMISTIC_LOADING_TEXT || !window.__nadocAtomisticLoadingProbeCount) return
+  const existing = _toasts.find(t => t.timer === null && t.el.dataset.persistent === '1')
+  const stack = new Error('atomistic loading toast requested').stack
+    ?.split('\n').slice(2).join('\n') ?? null
+  window.dispatchEvent(new CustomEvent(ATOMISTIC_LOADING_CALL_EVENT, {
+    detail: {
+      atMs: performance.now(),
+      wallTime: new Date().toISOString(),
+      stack,
+      diagnostic: opts?.diagnostic ?? null,
+      loadingOption: !!opts?.loading,
+      documentVisibility: document.visibilityState,
+      persistentToastBefore: existing?.el.querySelector('.toast-message')?.textContent ?? null,
+    },
+  }))
+}
 
 // CSS owns the base top/right position (see .toast in components.css).
 // Stacking uses translateY so the base position stays under CSS control —
@@ -133,6 +155,7 @@ export function showToast(msg, optsOrDuration) {
  * @param {{ severity?: string, action?: {label, onClick} }} [opts]
  */
 export function showPersistentToast(msg, opts = {}) {
+  _traceAtomisticLoadingCall(msg, opts)
   // Find existing persistent toast (timer === null marks persistent)
   const existing = _toasts.find((t) => t.timer === null && t.el.dataset.persistent === '1')
   if (existing) {

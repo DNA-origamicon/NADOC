@@ -43,4 +43,21 @@ describe('persistent loading toast', () => {
     expect(returnToLatest).toHaveBeenCalledOnce()
     expect(oldAction).not.toHaveBeenCalled()
   })
+
+  it('emits a synchronous caller trace for the atomistic loading diagnostic', () => {
+    const calls = []
+    window.__nadocAtomisticLoadingProbeCount = 1
+    window.addEventListener('nadoc:atomistic-loading-toast-call', event => calls.push(event.detail), {
+      once: true,
+    })
+
+    showPersistentToast('Loading atomistic model…', {
+      diagnostic: { owner: 'unit-test-owner' },
+    })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0].diagnostic).toEqual({ owner: 'unit-test-owner' })
+    expect(calls[0].stack).toContain('showPersistentToast')
+    window.__nadocAtomisticLoadingProbeCount = 0
+  })
 })
